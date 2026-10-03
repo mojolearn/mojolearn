@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Host-side helpers every cluster-lane driver shares (lane/algos-cluster).
-Host code, compiled from this one source into both bindings; nothing here
-reaches a device."""
+"""Helpers every cluster-lane driver shares (lane/algos-cluster), compiled
+from this one source into both bindings; the n-sized work goes through
+`ClusterOps`."""
 from checks.numerics import ftz, identical_mul
 from x_cluster.bodies import SplitMix64
 from x_cluster.ops import ClusterOps
+from x_cluster.post_bodies import FM_PROD, FM_VAL
 
 
 def gather_rows(x: List[Float32], d: Int, idx: List[Int]) -> List[Float32]:
@@ -63,75 +64,45 @@ def greedy_kmeans_pp_indices[O: ClusterOps](
     the first center uniform, then `2 + int(log(k))` candidates per pick drawn
     by `searchsorted(cumsum(closest), u * pot)` (side left, clipped), each
     candidate's potential `sum(min(closest, d_cand))`, the lowest potential
-    under a strict `<`. Potentials and the cumulative sum are ascending
-    Float64 chains on the host; the distances are the device's. With sample
-    weights `w` (empty: unit) every potential and the cumulative sum weigh
-    each row, as sklearn's `closest_dist_sq @ sample_weight`."""
-    from checks.numerics import identical_mul64
-
+    under a strict `<`. Lane cgr2-cluster: everything n-sized is the
+    device's: the distances, the potentials (the float-float fold of
+    `post_bodies`), the search of the cumulative table (`kpp_search_cell`:
+    the chunk totals ascending, then the chunk's values), the closest
+    distances; the host draws the uniforms and keeps the k-sized picks. With
+    sample weights `w` (empty: unit) every potential and the cumulative sum
+    weigh each row, as sklearn's `closest_dist_sq @ sample_weight`."""
     var weighted = len(w) > 0
     from std.math import log
 
     var n_trials = 2 + Int(log(Float64(k)))
     var xs = ops.put(xs_host)
+    var ws = ops.put(w) if weighted else -1
     var picks = List[Int](capacity=k)
     var first = rng.below(m)
     picks.append(first)
-    var cslot = ops.put(gather_rows(xs_host, d, [first]))
-    var closest_s = ops.zeros(m)
-    ops.sqdist(cslot, 1, xs, m, d, closest_s)
-    var closest = ops.get(closest_s, m)
-    var pot = sum_f64(closest, m)
-    if weighted:
-        pot = Float64(0)
-        for t in range(m):
-            pot = pot + identical_mul64(Float64(w[t]), Float64(closest[t]))
-    var cand_s = ops.zeros(n_trials * d)
-    var dc_s = ops.zeros(n_trials * m)
+    var ids = ops.zeros_i(n_trials)
+    ops.set_i(ids, [Int32(first)])
+    var cslot = ops.alloc(n_trials * d)
+    ops.gather_rows(xs, d, ids, 1, cslot)
+    var closest = ops.alloc(m)
+    ops.sqdist(cslot, 1, xs, m, d, closest)
+    var pot = ops.sum_ff(closest, ws, -1, m, FM_PROD if weighted else FM_VAL)
+    var dc_s = ops.alloc(n_trials * m)
     for _c in range(1, k):
-        var cum = List[Float64](capacity=m)
-        var acc = Float64(0)
-        for t in range(m):
-            if weighted:
-                acc = acc + identical_mul64(Float64(w[t]), Float64(closest[t]))
-            else:
-                acc = acc + Float64(closest[t])
-            cum.append(acc)
-        var ids = List[Int](capacity=n_trials)
+        var vs = List[Float64](capacity=n_trials)
         for _t in range(n_trials):
-            var v = rng.unit() * pot
-            var lo = 0
-            var hi = m
-            while lo < hi:
-                var mid = (lo + hi) // 2
-                if cum[mid] < v:
-                    lo = mid + 1
-                else:
-                    hi = mid
-            ids.append(lo if lo < m else m - 1)
-        ops.set(cand_s, gather_rows(xs_host, d, ids))
-        ops.sqdist(cand_s, n_trials, xs, m, d, dc_s)
-        var dc = ops.get(dc_s, n_trials * m)
+            vs.append(rng.unit() * pot)
+        ops.kpp_search(closest, ws, m, vs, ids)
+        ops.gather_rows(xs, d, ids, n_trials, cslot)
+        ops.sqdist(cslot, n_trials, xs, m, d, dc_s)
+        var pots = ops.kpp_pots(dc_s, closest, ws, n_trials, m)
         var best = 0
-        var best_pot = Float64(0)
-        for t in range(n_trials):
-            var p = Float64(0)
-            for j in range(m):
-                var v = dc[t * m + j]
-                var mv = Float64(v if v < closest[j] else closest[j])
-                if weighted:
-                    p = p + identical_mul64(Float64(w[j]), mv)
-                else:
-                    p = p + mv
-            if t == 0 or p < best_pot:
-                best_pot = p
+        for t in range(1, n_trials):
+            if pots[t] < pots[best]:
                 best = t
-        for j in range(m):
-            var v = dc[best * m + j]
-            if v < closest[j]:
-                closest[j] = v
-        pot = best_pot
-        picks.append(ids[best])
+        ops.kpp_take(dc_s, closest, best, m)
+        pot = pots[best]
+        picks.append(Int(ops.get_i(ids, n_trials)[best]))
     return picks^
 
 

@@ -107,12 +107,24 @@ def _family_ctx() raises -> DeviceContext:
 
 from cholesky.estimator import (
     CholeskyFactor,
-    cholesky_factor_host,
-    cholesky_logdet_host,
     cholesky_profile_jitter,
-    cholesky_solve_host,
 )
-from cholesky.checks.potrf import chol_jitter_pinned
+from cholesky.checks.potrf import (
+    CHOL_ELEM_TPB,
+    CHOL_NB_PINNED,
+    CHOL_PANEL_TPB,
+    add_jitter,
+    chol_default_nb_hint,
+    chol_jitter_pinned,
+    chol_logdet,
+    chol_nb_for,
+    chol_validate_jitter,
+    chol_workspace_floats,
+    potrf_lower,
+)
+from cholesky.checks.trsm import cho_solve
+from core.device_zero import enqueue_fill
+from gaussian_process.gpc_items import gpc_fold_blocks, gpr_ydot_fin, gpr_ydot_part_item
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
 from core.identity_trace import IdentityTrace
 from gaussian_process.checks.gp_sabotage import (
@@ -146,10 +158,9 @@ from gemm.checks.gemm_identical import (
 )
 from gemm.contract import OP_NN, OP_TN
 from gaussian_process.checks.sample_y import (
-    gp_sample_y_add_mean,
     gp_sample_y_check_factor,
-    gp_sample_y_covariance,
-    gp_sample_y_normals,
+    gp_sample_y_key,
+    gp_sample_y_normal,
     gp_sample_y_validate,
 )
 from checks.numerics import (
@@ -575,29 +586,6 @@ def _download_i32(
     return out^
 
 
-def _ridged_diagonal_replay(
-    k: List[Float32], n: Int, alpha: Float32
-) -> List[Float32]:
-    """`K[diag] += alpha`, on the HOST, for the card stage `gp.ridged`.
-
-    This is a HOST REPLAY of `cholesky/checks/potrf.mojo::
-    jitter_diag_kernel` -- `ftz(d + jitter)` on each diagonal cell and
-    nothing else touched -- and it exists because the brief for this lane
-    requires the RIDGED matrix on this lane's card, while the device's own
-    copy of it is the Cholesky lane's `chol.jittered` stage, which appears
-    only when that lane's trace is enabled.
-
-    **A DIVERGENCE BETWEEN `gp.ridged` AND `chol.jittered` IN ONE CARD IS
-    ITSELF THE DIAGNOSIS**: it is a host-versus-device disagreement about a
-    single float add, which is either the flush policy (IDENTITY_PATHS row
-    10) or nothing.
-    """
-    var a = k.copy()
-    for i in range(n):
-        a[i * n + i] = ftz(ftz(a[i * n + i]) + alpha)
-    return a^
-
-
 # ===========================================================================
 # FIT
 # ===========================================================================
@@ -729,40 +717,74 @@ def gpr_fit_host(
         elem_tpb,
         sabotage,
     )
-    var k_host = _download(ctx, dk, n_train * n_train)
-    _ = dx^
-    _ = dls^
-    _ = dk^
-    _ = dstack^
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
-
-    trace.record_list_f32(
-        "gp.ridged", _ridged_diagonal_replay(k_host, n_train, alpha)
-    )
-
-    # --- L = cholesky(K + alpha I); alpha_ = cho_solve(L, y) -------------
-    # The ridge is applied INSIDE cholesky_factor_host, by the Cholesky
-    # lane's own kernel, because alpha IS its jitter (DEVIATION 1751).
-    var factor = cholesky_factor_host(k_host, n_train, alpha)
-    trace.record_list_f32("gp.factor", factor.l)
+    # MOJOLEARN_KERNEL_FAST_GPR_RESIDENT (lane/apple-fast-kernel, M3 A/B
+    # kernel-gpr-resident-ist: gpr istella 168.4 -> 132.8 ms, r2 .2354 same)
+    # is SUBSUMED here: main's resident chain below (lane/cgr-kernel) keeps
+    # K, L and the dual on the device in every mode and folds y.alpha on
+    # the device, which the lane arm did on the host. The define (and
+    # MOJOLEARN_KERNEL_FAST_GPR_RESIDENT_OFF) are accepted and change nothing.
+    # --- L = cholesky(K + alpha I); alpha_ = cho_solve(L, y), RESIDENT ----
+    # (lane/cgr-kernel) K, its factor and the dual never leave the device
+    # until the fit's outputs are read back. Before, K was downloaded, then
+    # uploaded again by `cholesky_factor_host`, its factor downloaded and
+    # uploaded again by `cholesky_solve_host`. The same Cholesky calls in
+    # the same order (alpha IS the profile's jitter, DEVIATION 1751), so
+    # the factor, the dual and the log-determinant keep their bits.
+    chol_validate_jitter(alpha)
+    var n = n_train
+    var nb_pin = chol_nb_for(n, CHOL_NB_PINNED)
+    var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
+    var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
+    ctx.synchronize()
+    var ctrace = IdentityTrace()
+    add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
+    trace.record_device(ctx, "gp.ridged", dk, n * n)
+    var run = potrf_lower(ctx, dk, ws, n, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
+    var dev_logdet = Float32(0.0)
+    if run.info == 0:
+        dev_logdet = chol_logdet(ctx, dk, dwork, n, ctrace, CHOL_ELEM_TPB)
+    var factor_l = _download(ctx, dk, n * n)
+    trace.record_list_f32("gp.factor", factor_l)
 
     var dual = List[Float32]()
     var logdet = Float32(0.0)
     var ydotalpha = Float32(0.0)
     var lml = Float32(0.0)
-    if factor.info == 0:
-        dual = cholesky_solve_host(factor, y, 1)
+    if run.info == 0:
+        var dy = _upload(ctx, y)
+        var ddual = _upload(ctx, y)
+        cho_solve(ctx, dk, ddual, n, 1, ctrace, CHOL_SOLVE_TPB)
+        dual = _download(ctx, ddual, n)
         trace.record_list_f32("gp.dual_coef", dual)
-        logdet = _logdet_of(factor, sabotage)
+        if sabotage == GP_SAB_LOGDET_RECOMPUTED:
+            var prod = Float32(1.0)
+            for j in range(n):
+                var d = factor_l[j * n + j]
+                prod = ftz(identical_mul(prod, ftz(identical_mul(d, d))))
+            logdet = ftz(identical_log(prod))
+        else:
+            logdet = dev_logdet
         trace.record_scalar_f32("gp.logdet", logdet)
-        ydotalpha = _y_dot_alpha(y, dual, n_train, sabotage)
+        if sabotage == GP_SAB_YALPHA_DESCENDING:
+            ydotalpha = _y_dot_alpha(y, dual, n, sabotage)
+        else:
+            ydotalpha = _gpr_ydot_device(ctx, dy, ddual, n)
         trace.record_scalar_f32("gp.ydotalpha", ydotalpha)
         lml = gp_log_marginal_likelihood_value(ydotalpha, logdet, n_train)
         trace.record_scalar_f32("gp.lml", lml)
+        _ = dy^
+        _ = ddual^
     else:
         for _i in range(n_train):
             dual.append(Float32(0.0))
+    _ = dx^
+    _ = dls^
+    _ = dk^
+    _ = dstack^
+    _ = ws^
+    _ = dwork^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
 
     return GPRegressor(
         x.copy(),
@@ -771,13 +793,13 @@ def gpr_fit_host(
         n_features,
         kernel.copy(),
         alpha,
-        factor.l.copy(),
+        factor_l^,
         dual^,
         logdet,
         ydotalpha,
         lml,
-        factor.info,
-        factor.nb,
+        run.info,
+        run.nb,
     )
 
 
@@ -794,62 +816,16 @@ def _length_scale_table(kernel: GPKernelSpec) -> List[Float32]:
     return one^
 
 
-def _logdet_of(factor: CholeskyFactor, sabotage: Int) raises -> Float32:
-    """`log |K + alpha I|`, **TAKEN FROM THE FACTOR AND NOT RECOMPUTED.**
-    DEVIATION 1757.
-
-    `cholesky_logdet_host` returns the value `chol_logdet` already computed
-    ON THE DEVICE, in one thread, ascending, through `identical_log`
-    (DEVIATION 1639). That entry point exists precisely so a Gaussian
-    process, a kernel-ridge solver and a Gaussian mixture cannot each invent
-    a fold order and a `log` for the same quantity, and this lane taking it
-    rather than computing its own is the whole point of it existing.
-
-    `GP_SAB_LOGDET_RECOMPUTED` is the arm that shows the gate can see a
-    recomputation, and it is written as the spelling a reader actually
-    reaches for: one `log` of the product of the squared diagonal. On any
-    correlation-shaped factor the diagonal entries are below one, so the
-    product underflows toward zero and the answer collapses -- which is not
-    a defect of the sabotage but the reason the sum-of-logs form exists.
-    """
-    if sabotage == GP_SAB_LOGDET_RECOMPUTED:
-        var prod = Float32(1.0)
-        for j in range(factor.n):
-            var d = factor.l[j * factor.n + j]
-            prod = ftz(identical_mul(prod, ftz(identical_mul(d, d))))
-        return ftz(identical_log(prod))
-    return cholesky_logdet_host(factor)
-
-
 def _y_dot_alpha(
     y: List[Float32], dual: List[Float32], n: Int, sabotage: Int
 ) -> Float32:
-    """`y^T alpha_`, scikit-learn's `einsum("ik,ik->k", y_train, alpha)`
-    (`_gpr.py:613`), on the HOST, `i` ASCENDING.
-
-    **ON THE HOST, DELIBERATELY, and the contrast with `chol_logdet` is the
-    argument.** Both `y` and `dual` are already on the host at this point --
-    `cholesky_solve_host` returned one of them -- so a device round trip
-    would upload two `n`-vectors and drain the queue to fold `n` products.
-    That is the shape of mistake `CONTRIBUTING.md`'s corollary
-    describes ("nine drains per level became two by DELETING our
-    inventions"). `chol_logdet` is on the DEVICE for the opposite reason:
-    its input is `diag(L)`, which is already there, and three lanes needed
-    one spelling of it.
-
-    The fold is identical across vendors regardless, and not by accident:
-    `identical_mul_add` is `std.math.fma`, which every host implements as
-    the correctly-rounded IEEE fused multiply-add, `ftz` is a pure function,
-    and the order is a serial ascending chain over `n`. Nothing here reads a
-    device, a block size or a thread index, because there are none.
-    """
+    """The GP_SAB_YALPHA_DESCENDING arm only: `y^T alpha_` as one serial
+    chain, i DESCENDING, on the host, so the gate can see a fold order that
+    is not the product's. The product folds on the device
+    (`_gpr_ydot_device`, lane/cgr-kernel)."""
     var acc = Float32(0.0)
-    if sabotage == GP_SAB_YALPHA_DESCENDING:
-        for ii in range(n):
-            var i = n - 1 - ii
-            acc = ftz(identical_mul_add(ftz(y[i]), ftz(dual[i]), acc))
-        return ftz(acc)
-    for i in range(n):
+    for ii in range(n):
+        var i = n - 1 - ii
         acc = ftz(identical_mul_add(ftz(y[i]), ftz(dual[i]), acc))
     return ftz(acc)
 
@@ -925,6 +901,92 @@ def gp_grad_fin_kernel(
         gp_grad_fin_item(p, part, Int(nb), half, dst)
 
 
+#: threads per block of the GPR y^T alpha_ fold and the identity fill
+comptime GP_YDOT_TPB = 256
+
+
+def gpr_ydot_part_kernel(
+    y: MutPointer[Float32, MutAnyOrigin], dual: MutPointer[Float32, MutAnyOrigin], n: Int32,
+    part: MutPointer[Float32, MutAnyOrigin], nb: Int32,
+):
+    var b = Int(_gb_idx.x) * GP_YDOT_TPB + Int(_gt_idx.x)
+    if b < Int(nb):
+        gpr_ydot_part_item(b, y, dual, Int(n), part)
+
+
+def gpr_ydot_fin_kernel(part: MutPointer[Float32, MutAnyOrigin], nb: Int32, dst: MutPointer[Float32, MutAnyOrigin]):
+    if Int(_gb_idx.x) == 0 and Int(_gt_idx.x) == 0:
+        dst.unsafe_store(0, gpr_ydot_fin(part, Int(nb)))
+
+
+def gp_eye_kernel(dst: MutPointer[Float32, MutAnyOrigin], n: Int32):
+    var i = Int(_gb_idx.x) * GP_YDOT_TPB + Int(_gt_idx.x)
+    if i < Int(n):
+        dst.unsafe_store(i * Int(n) + i, Float32(1.0))
+
+
+def gp_cov_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin], kss: MutPointer[Float32, MutAnyOrigin],
+    vtv: MutPointer[Float32, MutAnyOrigin], n: Int32,
+):
+    """`gp_sample_y_covariance`, one thread per cell: the lower cell's
+    `ftz(ftz(K**) - ftz(V^T V))`, mirrored to the upper."""
+    var t = Int(_gb_idx.x) * GP_YDOT_TPB + Int(_gt_idx.x)
+    var nn = Int(n)
+    if t < nn * nn:
+        var r = t // nn
+        var c = t - r * nn
+        var i = r if r >= c else c
+        var j = c if r >= c else r
+        dst.unsafe_store(t, ftz(ftz(kss.unsafe_load(i * nn + j)) - ftz(vtv.unsafe_load(i * nn + j))))
+
+
+def gp_normals_kernel(dst: MutPointer[Float32, MutAnyOrigin], n_star: Int32, n_samples: Int32, k0: UInt32, k1: UInt32):
+    """`gp_sample_y_normals`, one thread per draw `Z[i, s]`."""
+    var t = Int(_gb_idx.x) * GP_YDOT_TPB + Int(_gt_idx.x)
+    var ns = Int(n_samples)
+    if t < Int(n_star) * ns:
+        var key = SIMD[DType.uint32, 2](k0, k1)
+        dst.unsafe_store(t, ftz(gp_sample_y_normal(key, t - (t // ns) * ns, t // ns)))
+
+
+def gp_add_mean_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin], mean: MutPointer[Float32, MutAnyOrigin],
+    lz: MutPointer[Float32, MutAnyOrigin], n_star: Int32, n_samples: Int32,
+):
+    """`gp_sample_y_add_mean`, one thread per draw."""
+    var t = Int(_gb_idx.x) * GP_YDOT_TPB + Int(_gt_idx.x)
+    var ns = Int(n_samples)
+    if t < Int(n_star) * ns:
+        dst.unsafe_store(t, ftz(ftz(mean.unsafe_load(t // ns)) + ftz(lz.unsafe_load(t))))
+
+
+def _gpr_ydot_device(
+    ctx: DeviceContext, mut dy: DeviceBuffer[DType.float32], mut ddual: DeviceBuffer[DType.float32], n: Int
+) raises -> Float32:
+    """`y^T alpha_` on the device (lane/cgr-kernel): GPC_FOLD-row blocks,
+    each its fused multiply-add chain from zero ascending, the block
+    partials added ascending (`gpc_items.gpr_ydot_part_item` / `_fin`, the
+    host column's words). Only the scalar comes back."""
+    var nbf = gpc_fold_blocks(n)
+    var dpart = ctx.enqueue_create_buffer[DType.float32](max(nbf, 1))
+    var dyd = ctx.enqueue_create_buffer[DType.float32](1)
+    if nbf > 0:
+        ctx.enqueue_function[gpr_ydot_part_kernel](
+            _gp(dy), _gp(ddual), Int32(n), _gp(dpart), Int32(nbf),
+            grid_dim=(nbf + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
+        )
+    ctx.enqueue_function[gpr_ydot_fin_kernel](_gp(dpart), Int32(nbf), _gp(dyd), grid_dim=1, block_dim=1)
+    var h = ctx.enqueue_create_host_buffer[DType.float32](1)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=dyd)
+    ctx.synchronize()
+    var v = h.unsafe_ptr().unsafe_load(0)
+    _ = dpart^
+    _ = dyd^
+    _ = h^
+    return v
+
+
 def gpr_lml_grad_host(
     x: List[Float32],
     n_train: Int,
@@ -940,10 +1002,10 @@ def gpr_lml_grad_host(
     flagged one per postfix node (DEVIATION 2880).
 
         K, dK   = kernel(X, eval_gradient=True)   device, kernel_gradient.mojo
-        L       = cholesky(K + alpha I)           cholesky_factor_host
-        alpha_  = cho_solve(L, y)                 cholesky_solve_host
+        L       = cholesky(K + alpha I)           potrf_lower, resident
+        alpha_  = cho_solve(L, y)                 cho_solve, resident
         lml     = gp_log_marginal_likelihood_value, fit's own
-        K_inv   = cho_solve(L, eye)               cholesky_solve_host, n rhs
+        K_inv   = cho_solve(L, eye)               cho_solve, n rhs, resident
         grad    = gp_grad_part / fin kernels       gp_grad_items.mojo, on the device
 
     K here is bit for bit the K `gpr_fit_host` builds (the same value
@@ -970,30 +1032,43 @@ def gpr_lml_grad_host(
     _ = gp_kernel_matrix_grad(
         ctx, dk, dx, dls, dstack, dgrad, n, n_features, kernel, free, elem_tpb
     )
+    # L, alpha_ and K_inv RESIDENT (lane/cgr-kernel): the fit's Cholesky
+    # calls in the fit's order on K where the launch left it; before, K, L
+    # and K_inv each crossed to the host and back
+    chol_validate_jitter(alpha)
+    var nb_pin = chol_nb_for(n, CHOL_NB_PINNED)
+    var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
+    var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
     ctx.synchronize()
-    var k_host = _download(ctx, dk, cells)
-    _ = dx^
-    _ = dls^
-    _ = dk^
-    _ = dstack^
-
-    var factor = cholesky_factor_host(k_host, n, alpha)
-    if factor.info != 0:
+    var ctrace = IdentityTrace()
+    add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
+    var run = potrf_lower(ctx, dk, ws, n, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
+    if run.info != 0:
+        _ = dx^
+        _ = dls^
+        _ = dk^
+        _ = dstack^
+        _ = ws^
+        _ = dwork^
         _ = dgrad^
         _ = ctx^
         return GPLmlGrad(
             Float32(0.0),
             List[Float32](length=n_free, fill=Float32(0.0)),
-            factor.info,
+            run.info,
         )
-    var dual = cholesky_solve_host(factor, y, 1)
-    var logdet = cholesky_logdet_host(factor)
-    var ydotalpha = _y_dot_alpha(y, dual, n, GP_SAB_NONE)
+    var logdet = chol_logdet(ctx, dk, dwork, n, ctrace, CHOL_ELEM_TPB)
+    var dy = _upload(ctx, y)
+    var ddual = _upload(ctx, y)
+    cho_solve(ctx, dk, ddual, n, 1, ctrace, CHOL_SOLVE_TPB)
+    var ydotalpha = _gpr_ydot_device(ctx, dy, ddual, n)
     var lml = gp_log_marginal_likelihood_value(ydotalpha, logdet, n)
-    var eye = List[Float32](length=cells, fill=Float32(0.0))
-    for i in range(n):
-        eye[i * n + i] = Float32(1.0)
-    var kinv = cholesky_solve_host(factor, eye, n)
+    var dkinv = ctx.enqueue_create_buffer[DType.float32](cells)
+    enqueue_fill(ctx, dkinv, Float32(0.0))
+    ctx.enqueue_function[gp_eye_kernel](
+        _gp(dkinv), Int32(n), grid_dim=(n + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB
+    )
+    cho_solve(ctx, dk, dkinv, n, n, ctrace, CHOL_SOLVE_TPB)
     # the gradient fold on the device, dK_p where the launch left it
     # (gaussian_process/gp_grad_items.mojo, the host column's items;
     # cpu-gpu-cleanup c-gp-kernel: every dK_p was downloaded and folded on
@@ -1001,8 +1076,6 @@ def gpr_lml_grad_host(
     var grad = List[Float32](length=n_free, fill=Float32(0.0))
     if n_free > 0:
         var nb = gp_grad_blocks(n)
-        var ddual = _upload(ctx, dual)
-        var dkinv = _upload(ctx, kinv)
         var dpart = ctx.enqueue_create_buffer[DType.float32](max(n_free * nb, 1))
         var dout = ctx.enqueue_create_buffer[DType.float32](n_free)
         ctx.enqueue_function[gp_grad_part_kernel](
@@ -1015,10 +1088,18 @@ def gpr_lml_grad_host(
         )
         ctx.enqueue_copy(dst_ptr=grad.unsafe_ptr(), src_buf=dout)
         ctx.synchronize()
-        _ = ddual^
-        _ = dkinv^
         _ = dpart^
         _ = dout^
+    ctx.synchronize()
+    _ = dx^
+    _ = dls^
+    _ = dk^
+    _ = dstack^
+    _ = ws^
+    _ = dwork^
+    _ = dy^
+    _ = ddual^
+    _ = dkinv^
     _ = dgrad^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
@@ -1368,9 +1449,10 @@ def gpr_predict_cov_host(
     )
     var mean = _download(ctx, dmean, n_star)
     trsm_lower(ctx, dl, dkcross, n_train, n_star, trace, "gp.cov.v", solve_tpb)
-    # GEMM takes two mutable operands, so V crosses once more as B.
-    var v_host = _download(ctx, dkcross, n_train * n_star)
-    var dv2 = _upload(ctx, v_host)
+    # GEMM takes two mutable operands, so V is copied once more as B, on
+    # the device (lane/cgr-kernel; it crossed to the host and back)
+    var dv2 = ctx.enqueue_create_buffer[DType.float32](n_train * n_star)
+    ctx.enqueue_copy(dst_buf=dv2, src_buf=dkcross)
     var dvtv = ctx.enqueue_create_buffer[DType.float32](n_star * n_star)
     var dws2 = ctx.enqueue_create_buffer[DType.float32](
         identical_gemm_workspace_max_floats(n_star, n_star, n_train)
@@ -1383,12 +1465,20 @@ def gpr_predict_cov_host(
     identical_gemm_into(
         ctx, dvtv, dkcross, dv2, dws2, n_star, n_star, n_train, OP_TN
     )
-    var vtv = _download(ctx, dvtv, n_star * n_star)
     gp_kernel_matrix(
         ctx, dkss, dxs, dxs, dls, dstack2, n_star, n_star, d,
         model.kernel, True, trace, "gp.cov.kss", elem_tpb,
     )
-    var kss = _download(ctx, dkss, n_star * n_star)
+    # C = K** - V^T V on the device, one thread per cell (lane/cgr-kernel;
+    # both were downloaded and subtracted on the host)
+    var nn = n_star * n_star
+    var dcov = ctx.enqueue_create_buffer[DType.float32](nn)
+    ctx.enqueue_function[gp_cov_kernel](
+        _gp(dcov), _gp(dkss), _gp(dvtv), Int32(n_star),
+        grid_dim=(nn + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
+    )
+    var cov = _download(ctx, dcov, nn)
+    _ = dcov^
     _ = dx^
     _ = dxs^
     _ = dls^
@@ -1405,7 +1495,7 @@ def gpr_predict_cov_host(
     _ = dstack2^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
-    return GPPosteriorCov(mean^, gp_sample_y_covariance(kss, vtv, n_star))
+    return GPPosteriorCov(mean^, cov^)
 
 
 def gpr_sample_y_host(
@@ -1488,13 +1578,13 @@ def gpr_sample_y_host(
     identical_gemm_into(
         ctx, dmean, dkcross, ddual, dws, n_star, 1, n_train, OP_TN
     )
-    var mean = _download(ctx, dmean, n_star)
     trsm_lower(
         ctx, dl, dkcross, n_train, n_star, trace, "gp.sample_y.v", solve_tpb
     )
-    # GEMM takes two mutable operands, so V crosses once more as B.
-    var v_host = _download(ctx, dkcross, n_train * n_star)
-    var dv2 = _upload(ctx, v_host)
+    # GEMM takes two mutable operands, so V is copied once more as B, on
+    # the device (lane/cgr-kernel; it crossed to the host and back)
+    var dv2 = ctx.enqueue_create_buffer[DType.float32](n_train * n_star)
+    ctx.enqueue_copy(dst_buf=dv2, src_buf=dkcross)
     var dvtv = ctx.enqueue_create_buffer[DType.float32](n_star * n_star)
     var dws2 = ctx.enqueue_create_buffer[DType.float32](
         identical_gemm_workspace_max_floats(n_star, n_star, n_train)
@@ -1507,7 +1597,6 @@ def gpr_sample_y_host(
     identical_gemm_into(
         ctx, dvtv, dkcross, dv2, dws2, n_star, n_star, n_train, OP_TN
     )
-    var vtv = _download(ctx, dvtv, n_star * n_star)
     gp_kernel_matrix(
         ctx,
         dkss,
@@ -1524,7 +1613,49 @@ def gpr_sample_y_host(
         "gp.sample_y.kss",
         elem_tpb,
     )
-    var kss = _download(ctx, dkss, n_star * n_star)
+
+    # --- C, its identical Cholesky, Z, L_C Z and the mean, RESIDENT -------
+    # (lane/cgr-kernel) C was formed on the host from downloaded K** and
+    # V^T V, factored through a host round trip, Z drawn on the host and
+    # the mean added on the host; the same statements now run one thread
+    # per cell (gaussian_process/checks/sample_y.mojo's items)
+    var nn = n_star * n_star
+    var dcov = ctx.enqueue_create_buffer[DType.float32](nn)
+    ctx.enqueue_function[gp_cov_kernel](
+        _gp(dcov), _gp(dkss), _gp(dvtv), Int32(n_star),
+        grid_dim=(nn + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
+    )
+    var jit = chol_jitter_pinned()
+    chol_validate_jitter(jit)
+    var nb_pin = chol_nb_for(n_star, CHOL_NB_PINNED)
+    var cws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n_star, nb_pin))
+    ctx.synchronize()
+    var ctrace = IdentityTrace()
+    add_jitter(ctx, dcov, n_star, jit, CHOL_ELEM_TPB)
+    var run = potrf_lower(ctx, dcov, cws, n_star, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
+    gp_sample_y_check_factor(run.info, n_star)
+    var key = gp_sample_y_key(seed)
+    var nz = n_star * n_samples
+    var dz = ctx.enqueue_create_buffer[DType.float32](nz)
+    ctx.enqueue_function[gp_normals_kernel](
+        _gp(dz), Int32(n_star), Int32(n_samples), key[0], key[1],
+        grid_dim=(nz + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
+    )
+    var dlz = ctx.enqueue_create_buffer[DType.float32](nz)
+    var dws3 = ctx.enqueue_create_buffer[DType.float32](
+        identical_gemm_workspace_max_floats(n_star, n_samples, n_star)
+    )
+    ctx.synchronize()
+    identical_gemm_into(
+        ctx, dlz, dcov, dz, dws3, n_star, n_samples, n_star, OP_NN
+    )
+    trace.record_device(ctx, "gp.sample_y.lz", dlz, nz)
+    var dyo = ctx.enqueue_create_buffer[DType.float32](nz)
+    ctx.enqueue_function[gp_add_mean_kernel](
+        _gp(dyo), _gp(dmean), _gp(dlz), Int32(n_star), Int32(n_samples),
+        grid_dim=(nz + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
+    )
+    var out = _download(ctx, dyo, nz)
     _ = dx^
     _ = dxs^
     _ = dls^
@@ -1539,32 +1670,12 @@ def gpr_sample_y_host(
     _ = dws2^
     _ = dkss^
     _ = dstack2^
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
-
-    # --- C on the host, then its identical Cholesky ------------------------
-    var cov = gp_sample_y_covariance(kss, vtv, n_star)
-    var factor = cholesky_factor_host(cov, n_star, chol_jitter_pinned())
-    gp_sample_y_check_factor(factor.info, n_star)
-    var z = gp_sample_y_normals(n_star, n_samples, seed)
-
-    # --- L_C Z on the device -----------------------------------------------
-    var ctx2 = _family_ctx()
-    var dfl = _upload(ctx2, factor.l)
-    var dz = _upload(ctx2, z)
-    var dlz = ctx2.enqueue_create_buffer[DType.float32](n_star * n_samples)
-    var dws3 = ctx2.enqueue_create_buffer[DType.float32](
-        identical_gemm_workspace_max_floats(n_star, n_samples, n_star)
-    )
-    ctx2.synchronize()
-    identical_gemm_into(
-        ctx2, dlz, dfl, dz, dws3, n_star, n_samples, n_star, OP_NN
-    )
-    var lz = _download(ctx2, dlz, n_star * n_samples)
-    trace.record_list_f32("gp.sample_y.lz", lz)
-    _ = dfl^
+    _ = dcov^
+    _ = cws^
     _ = dz^
     _ = dlz^
     _ = dws3^
-    _ = ctx2^
-    return gp_sample_y_add_mean(mean, lz, n_star, n_samples)
+    _ = dyo^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return out^

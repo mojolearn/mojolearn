@@ -1,0 +1,8 @@
+CMD lane/apple-fast-trees-ensembles te-stackclf-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh te-stackclf-istella x_trees stacking-clf istella 1 2 "" "-D MOJOLEARN_TE_NATIVE_SPLITS"
+CMD lane/apple-fast-trees-ensembles te-stackreg-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh te-stackreg-istella x_trees stacking-reg istella 1 2 "" "-D MOJOLEARN_TE_NATIVE_SPLITS"
+CMD lane/apple-fast-trees-ensembles te-cal-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh te-cal-istella x_trees calibrated istella 1 2 "" "-D MOJOLEARN_TE_NATIVE_SPLITS"
+CMD lane/apple-fast-trees-ensembles te-ovr-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh te-ovr-istella x_trees ovr istella 1 2 "" "-D MOJOLEARN_TE_NATIVE_SPLITS"
+CMD lane/apple-fast-trees-ensembles te-moclf-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh te-moclf-istella x_trees multioutput-clf istella 1 2 "" "-D MOJOLEARN_TE_NATIVE_SPLITS"
+CMD lane/apple-fast-trees-ensembles te-adaclf-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh te-adaclf-taxi x_trees adaboost-clf taxi 1 2 "" "-D MOJOLEARN_TE_ADA_SESSION"
+CMD lane/apple-fast-trees-ensembles te-adareg-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh te-adareg-taxi x_trees adaboost-reg taxi 1 2 "" "-D MOJOLEARN_TE_ADA_SESSION"
+CMD lane/apple-fast-trees-ensembles te-adaclf-share-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh te-adaclf-share-taxi x_trees adaboost-clf taxi 1 2 "-D MOJOLEARN_TE_ADA_SESSION" "-D MOJOLEARN_TE_ADA_SESSION -D MOJOLEARN_TE_ADA_SESSION_SHARE"

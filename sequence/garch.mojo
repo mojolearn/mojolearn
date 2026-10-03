@@ -16,7 +16,50 @@ with the constraint's violators scored +1e30, restarted once from its optimum.
 The maximum is the same point when it is interior; the path is not."""
 from sequence.nm import Objective, nelder_mead
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
-from checks.numerics import ftz, identical_div, identical_log, identical_pow, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_log, identical_pow, identical_sqrt
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+
+#: lane/apple-fast-seq (2026-10-02). `GarchObj.eval` writes the n residuals
+#: to the thread's device scratch, `garch_sigma2` writes sigma2_t and reads
+#: sigma2_{t-1} and r_{t-1} back, and `garch_nll` reads both rows again, on
+#: a kernel of one thread per series (64 on taxi-hourly) inside two
+#: Nelder-Mead runs of up to 2000 iterations: every step is a round trip to
+#: device memory with nothing to hide the latency behind. For p, o, q <= 1
+#: (the board's GARCH(1, 1)) each step reads only the previous residual and
+#: variance, and the likelihood is a running sum, so
+#: `-D MOJOLEARN_SEQ_GARCH_REG=1` keeps the recursion in registers for the
+#: optimiser's evaluations (`garch_nll_reg`): the same operations in the
+#: same order, nothing stored; the final evaluation still stores sigma2
+#: (the sigma output and the forecast read it). FAST only. Default on FAST +
+#: Apple since the M3 A/B (lane/apple-fast-seq 8b3f1d90e, n=1, mean_llf
+#: identical): garch taxi-hourly 2,770 -> 968 ms. -D MOJOLEARN_SEQ_GARCH_REG_OFF
+#: restores the stored code; the old -D MOJOLEARN_SEQ_GARCH_REG=1 is harmless.
+comptime GARCH_REG = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SEQ_GARCH_REG_OFF"]()
+)
+#: lane/apple-fast-seq (2026-10-02). `op_garch`'s starting values are the
+#: best of arch's 4 x 4 x 4 grid, 64 serial `garch_nll` passes over the
+#: series per thread (`sequence/garch.mojo` op_garch, "starting_values")
+#: before the optimiser starts: 64 threads x 64 passes on taxi-hourly.
+#: `-D MOJOLEARN_SEQ_GARCH_GRID=1` runs the grid as one thread per (series,
+#: candidate) (`_garch_grid_cell`, scratch-free, p, o, q <= 1) in a launch
+#: of B x 64 elements before the fit, and the fit's thread takes the argmin
+#: over the 64 values in candidate order with the serial loop's strict `<`
+#: (the first lowest wins), so the chosen candidate and its bits are the
+#: serial loop's. FAST only; IDENTICAL compiles the serial grid. Default on
+#: FAST + Apple since the M3 A/B (lane/apple-fast-seq 8b3f1d90e, n=1, mean_llf
+#: identical): with GARCH_REG, taxi-hourly 2,769 -> 905 ms, synthetic 1,525 ->
+#: 528 ms. -D MOJOLEARN_SEQ_GARCH_GRID_OFF restores the serial grid; the old
+#: -D MOJOLEARN_SEQ_GARCH_GRID=1 is harmless.
+comptime GARCH_GRID = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SEQ_GARCH_GRID_OFF"]()
+)
+comptime GARCH_GRID_N = 64
 
 comptime LOG_2PI: Float32 = 1.8378770664093453
 #: floats at the end of each scratch row for Nelder-Mead's cycle snapshot:
@@ -139,6 +182,60 @@ def garch_nll(par: FP, r: FP, n: Int, p: Int, o: Int, q: Int, backcast: Float32,
     return ll
 
 
+@always_inline
+def _garch_step_reg(w: Float32, pa: Float32, pg: Float32, pb: Float32, p: Int, o: Int, q: Int,
+                    t: Int, rp: Float32, sp: Float32, backcast: Float32, lo: Float32, hi: Float32) -> Float32:
+    """One step of `garch_sigma2` for p, o, q <= 1 from registers: the
+    previous residual rp and variance sp, the bounds lo, hi of this step."""
+    var v = w
+    if p > 0:
+        if t < 1:
+            v = fma3(pa, backcast, v)
+        else:
+            v = fma3(pa, mul(rp, rp), v)
+    if o > 0:
+        if t < 1:
+            v = fma3(pg, mul(Float32(0.5), backcast), v)
+        elif rp < Float32(0.0):
+            v = fma3(pg, mul(rp, rp), v)
+    if q > 0:
+        if t < 1:
+            v = fma3(pb, backcast, v)
+        else:
+            v = fma3(pb, sp, v)
+    if not (v == v):
+        v = hi
+    if v < lo:
+        v = lo
+    elif v > hi:
+        v = add(hi, ftz(identical_log(div(v, hi))))
+    return v
+
+
+@always_inline
+def garch_nll_reg(w: Float32, pa: Float32, pg: Float32, pb: Float32, y: FP, mu: Float32, n: Int,
+                  p: Int, o: Int, q: Int, backcast: Float32, vb: FP) -> Float32:
+    """`GarchObj.eval`'s residuals + `garch_sigma2` + `garch_nll` for
+    p, o, q <= 1 with nothing stored (MOJOLEARN_SEQ_GARCH_REG): r_t = y_t -
+    mu is formed as it is used, r_{t-1} and sigma2_{t-1} stay in registers
+    and the log-likelihood terms are summed in the same pass; the same
+    operations in the same order. w, pa, pg, pb: omega, alpha, gamma, beta
+    (unused ones 0)."""
+    var ll = Float32(0.0)
+    var rp = Float32(0.0)
+    var sp = Float32(0.0)
+    for t in range(n):
+        var v = _garch_step_reg(w, pa, pg, pb, p, o, q, t, rp, sp, backcast, ld(vb, 2 * t), ld(vb, 2 * t + 1))
+        var x = sub(ld(y, t), mu)
+        ll = add(ll, add(add(LOG_2PI, ftz(identical_log(v))), div(mul(x, x), v)))
+        rp = x
+        sp = v
+    ll = mul(Float32(0.5), ll)
+    if not (ll <= Float32(3.0e38)):
+        return Float32(3.0e38)
+    return ll
+
+
 struct GarchObj(Objective):
     var y: FP
     var r: FP
@@ -167,6 +264,29 @@ struct GarchObj(Objective):
 
     @always_inline
     def eval(mut self, x: FP) -> Float32:
+        comptime if GARCH_REG:
+            if self.p <= 1 and self.o <= 1 and self.q <= 1:
+                var vol = x + 1 if self.has_mean else x
+                var s = Float32(0.0)
+                for j in range(self.p):
+                    s = add(s, ld(vol, 1 + j))
+                for j in range(self.o):
+                    s = fma3(Float32(0.5), ld(vol, 1 + self.p + j), s)
+                for j in range(self.q):
+                    s = add(s, ld(vol, 1 + self.p + self.o + j))
+                if s > Float32(1.0):
+                    return Float32(1e30)
+                var mu = ld(x, 0) if self.has_mean else Float32(0.0)
+                var pa = ld(vol, 1) if self.p > 0 else Float32(0.0)
+                var pg = ld(vol, 1 + self.p) if self.o > 0 else Float32(0.0)
+                var pb = ld(vol, 1 + self.p + self.o) if self.q > 0 else Float32(0.0)
+                return garch_nll_reg(ld(vol, 0), pa, pg, pb, self.y, mu, self.n, self.p, self.o, self.q,
+                                     self.backcast, self.vb)
+        return self.eval_stored(x)
+
+    @always_inline
+    def eval_stored(mut self, x: FP) -> Float32:
+        """The objective with the residuals and sigma2 left in r and s2."""
         var vol = x + 1 if self.has_mean else x
         var s = Float32(0.0)
         for j in range(self.p):
@@ -207,12 +327,121 @@ def _pers(i: Int) -> Float32:
     return Float32(0.98)
 
 
+@always_inline
+def _garch_grid_cell(t: Int, a: Args):
+    """MOJOLEARN_SEQ_GARCH_GRID: element t = b GARCH_GRID_N + c: the
+    negative log-likelihood of series b's starting-value candidate
+    c = 16 ia + 4 ig + ib (the serial grid's nesting order) into p6[t].
+    Scratch-free: the residuals, the backcast, the variance bounds, the
+    candidate and the recursion are formed from y in registers, the same
+    operations in the same order as op_garch's prologue, `_backcast`,
+    `_var_bounds`, the grid loop and `garch_nll_reg` (p, o, q <= 1)."""
+    var n = a.i0
+    var p = a.i2
+    var o = a.i3
+    var q = a.i4
+    var has_mean = a.i5 != 0
+    var b = t // GARCH_GRID_N
+    var c = t - b * GARCH_GRID_N
+    var ia = c // 16
+    var ig = (c - ia * 16) // 4
+    var ib = c - ia * 16 - ig * 4
+    var y = a.p0 + b * n
+    var mu0 = Float32(0.0)
+    if has_mean:
+        var s = Float32(0.0)
+        for i in range(n):
+            s = add(s, ld(y, i))
+        mu0 = div(s, Float32(n))
+    # _backcast over r_i = y_i - mu0
+    var tau = 75 if n > 75 else n
+    var w = Float32(1.0)
+    var sw = Float32(0.0)
+    var sb = Float32(0.0)
+    for i in range(tau):
+        var v = sub(ld(y, i), mu0)
+        sb = fma3(w, mul(v, v), sb)
+        sw = add(sw, w)
+        w = mul(w, Float32(0.94))
+    var backcast = div(sb, sw)
+    # _var_bounds' scalars
+    var s1 = Float32(0.0)
+    var mx = Float32(0.0)
+    for i in range(n):
+        var v = sub(ld(y, i), mu0)
+        s1 = add(s1, v)
+        var v2 = mul(v, v)
+        if v2 > mx:
+            mx = v2
+    var mean = div(s1, Float32(n))
+    var ss = Float32(0.0)
+    for i in range(n):
+        var d = sub(sub(ld(y, i), mu0), mean)
+        ss = fma3(d, d, ss)
+    var var_ = div(ss, Float32(n))
+    var lo_ = div(var_, Float32(1e8))
+    var up_min = add(Float32(1.0), mx)
+    var up_max = mul(Float32(1e7), up_min)
+    # target
+    var target = Float32(0.0)
+    for i in range(n):
+        var v = sub(ld(y, i), mu0)
+        target = fma3(v, v, target)
+    target = div(target, Float32(n))
+    # the candidate: the grid loop's cand[0 .. k - 1] (omega, alpha, gamma, beta)
+    var agb = _pers(ib)
+    var cw = mul(sub(Float32(1.0), agb), target)
+    var ca = Float32(0.0)
+    var cg = Float32(0.0)
+    var cb = Float32(0.0)
+    if p > 0:
+        ca = div(_grid(ia), Float32(p))
+        agb = sub(agb, _grid(ia))
+    if o > 0:
+        cg = div(_grid(ig), Float32(o))
+        agb = sub(agb, div(_grid(ig), Float32(2.0)))
+    if q > 0:
+        cb = div(agb, Float32(q))
+    # garch_nll_reg with _var_bounds' EWMA bounds formed per step
+    var ll = Float32(0.0)
+    var rp = Float32(0.0)
+    var sp = Float32(0.0)
+    var e = backcast
+    for tt in range(n):
+        if tt > 0:
+            e = fma3(Float32(0.06), mul(rp, rp), mul(Float32(0.94), e))
+        var b0 = div(e, Float32(1e6))
+        var b1 = mul(e, Float32(1e6))
+        if b0 < lo_:
+            b0 = lo_
+        if b1 < up_min:
+            b1 = up_min
+        if b1 > up_max:
+            b1 = up_max
+        var v = _garch_step_reg(cw, ca, cg, cb, p, o, q, tt, rp, sp, backcast, b0, b1)
+        var x = sub(ld(y, tt), mu0)
+        ll = add(ll, add(add(LOG_2PI, ftz(identical_log(v))), div(mul(x, x), v)))
+        rp = x
+        sp = v
+    ll = mul(Float32(0.5), ll)
+    if not (ll <= Float32(3.0e38)):
+        ll = Float32(3.0e38)
+    st(a.p6, t, ll)
+
+
 def op_garch(t: Int, a: Args):
     """Series t. p0 y [B, n]; p1 params out [B, 1 + 1 + p + o + q]
     (mu, omega, alpha, gamma, beta; mu 0 for a zero mean); p2 info [B, 4]
     out (loglik, iterations); p3 sigma [B, n] out (conditional
     volatility); p4 variance forecast [B, h] out; p5 scratch [B, stride].
-    i0 n, i1 h, i2 p, i3 o, i4 q, i5 constant mean, i6 stride."""
+    i0 n, i1 h, i2 p, i3 o, i4 q, i5 constant mean, i6 stride.
+    MOJOLEARN_SEQ_GARCH_GRID: i8 1 runs element t as a grid cell
+    (`_garch_grid_cell`, p6 [B, GARCH_GRID_N] out); i8 2 takes the
+    starting values from p6's argmin instead of the serial grid."""
+    comptime if GARCH_GRID:
+        if a.i8 == 1:
+            _garch_grid_cell(t, a)
+            return
     var n = a.i0
     var h = a.i1
     var p = a.i2
@@ -249,9 +478,23 @@ def op_garch(t: Int, a: Args):
         target = fma3(v, v, target)
     target = div(target, Float32(n))
     var best = Float32(3.0e38)
-    for ia in range(4):
-        for ig in range(4):
-            for ib in range(4):
+    var grid_done = False
+    comptime if GARCH_GRID:
+        if a.i8 == 2:
+            # the grid's values from p6, in candidate order, the serial
+            # loop's strict `<`: the first lowest candidate wins
+            grid_done = True
+            var nl = a.p6 + t * GARCH_GRID_N
+            var bc = -1
+            for c in range(GARCH_GRID_N):
+                var gv = ld(nl, c)
+                if gv < best:
+                    best = gv
+                    bc = c
+            if bc >= 0:
+                var ia = bc // 16
+                var ig = (bc - ia * 16) // 4
+                var ib = bc - ia * 16 - ig * 4
                 var agb = _pers(ib)
                 st(cand, 0, mul(sub(Float32(1.0), agb), target))
                 for j in range(k - 1):
@@ -267,11 +510,32 @@ def op_garch(t: Int, a: Args):
                 if q > 0:
                     for j in range(q):
                         st(cand, 1 + p + o + j, div(agb, Float32(q)))
-                var nll = garch_nll(cand, r, n, p, o, q, backcast, vb, s2)
-                if nll < best:
-                    best = nll
-                    for j in range(k):
-                        st(x, j + (1 if has_mean else 0), ld(cand, j))
+                for j in range(k):
+                    st(x, j + (1 if has_mean else 0), ld(cand, j))
+    if not grid_done:
+        for ia in range(4):
+            for ig in range(4):
+                for ib in range(4):
+                    var agb = _pers(ib)
+                    st(cand, 0, mul(sub(Float32(1.0), agb), target))
+                    for j in range(k - 1):
+                        st(cand, 1 + j, mul(sub(Float32(1.0), agb), target))
+                    if p > 0:
+                        for j in range(p):
+                            st(cand, 1 + j, div(_grid(ia), Float32(p)))
+                        agb = sub(agb, _grid(ia))
+                    if o > 0:
+                        for j in range(o):
+                            st(cand, 1 + p + j, div(_grid(ig), Float32(o)))
+                        agb = sub(agb, div(_grid(ig), Float32(2.0)))
+                    if q > 0:
+                        for j in range(q):
+                            st(cand, 1 + p + o + j, div(agb, Float32(q)))
+                    var nll = garch_nll(cand, r, n, p, o, q, backcast, vb, s2)
+                    if nll < best:
+                        best = nll
+                        for j in range(k):
+                            st(x, j + (1 if has_mean else 0), ld(cand, j))
     # box bounds (arch): mu free, omega [1e-8 v, 10 v], alpha, beta [0, 1],
     # gamma [-1, 2] under a matching alpha else [0, 2]
     var off = 0
@@ -307,7 +571,11 @@ def op_garch(t: Int, a: Args):
     # can stall short of the maximum
     it += nelder_mead(obj, x, lo, hi, np_, nm_scr, Float32(0.05), Float32(1e-4), 2000, Float32(1e-6), snap,
                       stall_iters=a.i7, stall_rel=a.f0)
-    var nll = obj.eval(x)
+    var nll = Float32(0.0)
+    comptime if GARCH_REG:
+        nll = obj.eval_stored(x)     # the sigma output and the forecast read r and s2
+    else:
+        nll = obj.eval(x)
     var outp = a.p1 + t * (1 + k)
     st(outp, 0, ld(x, 0) if has_mean else Float32(0.0))
     for j in range(k):

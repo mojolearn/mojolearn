@@ -16,8 +16,9 @@ from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
 from sequence.ets import ets_scratch
-from sequence.garch import GARCH_SNAP
+from sequence.garch import GARCH_GRID, GARCH_GRID_N, GARCH_SNAP
 from sequence.moe_tiled import TILE_P, TILE_Q
+from sequence.moe_reg import MOE_DEVGROUP
 from sequence.prophet import MEM, ProphetData, _dot, _fg_prior
 from sequence.prophet import div as _pdiv
 from sequence.ops import add as p_add, fma3 as p_fma3, ld as p_ld, mul as p_mul, st as p_st, sub as p_sub
@@ -1106,6 +1107,16 @@ def garch_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -
     a.i6 = stride
     a.i7 = ival(ip, 7) if len(ip) == 9 else GARCH_FAST_STALL_ITERS
     a.f0 = Float32(Float64(ival(ip, 8)) * 1e-9) if len(ip) == 9 else GARCH_FAST_STALL_REL
+    comptime if GARCH_GRID:
+        if m <= 1:
+            # lane/apple-fast-seq: the starting-value grid as one element per
+            # (series, candidate) before the fit (sequence/garch.mojo
+            # _garch_grid_cell); the fit reads its argmin (i8 2)
+            var G = ex.alloc(B * GARCH_GRID_N)
+            a.p6 = G
+            a.i8 = 1
+            ex.launch[OP_GARCH](a, B * GARCH_GRID_N)
+            a.i8 = 2
     ex.launch[OP_GARCH](a, B)
     ex.sync()
     ex.download(fptr(addrs[1], "params"), P, B * (1 + 1 + p + o + q))
@@ -1488,6 +1499,56 @@ def moe_forward_check(addrs: PythonObject, ip: PythonObject, n_ip: Int) raises -
     return (T, D, F, En, k)
 
 
+def _moe_devgroup_rest[E: Exec](
+    mut ex: E, addrs: PythonObject, T: Int, D: Int, F: Int, En: Int, k: Int,
+    X: FP, Gu: FP, Dn: FP, Sel: FP, W: FP, Y: FP, L: FP, H: FP,
+) raises -> PythonObject:
+    """`moe_forward_run` after the route with the grouping on the device
+    (MOJOLEARN_MOE_DEVGROUP): the same launches, the same words."""
+    if En > 127:
+        raise Error("moe_forward devgroup: E <= 127 (the grouping kernels' one block)")
+    var Order = ex.alloc(T * k)
+    var Poff = ex.alloc(En + 1)
+    var Cnt = ex.alloc(2 * En)
+    var S = ex.alloc(T * k * D)
+    var b = Args()
+    b.p0 = X
+    b.p1 = Gu
+    b.p2 = Sel
+    b.p3 = H
+    b.p4 = Order
+    b.p5 = Poff
+    b.p7 = Cnt
+    b.i0 = D
+    b.i1 = F
+    b.i2 = k
+    b.i3 = En
+    b.i4 = 1
+    b.i6 = 1
+    ex.launch[OP_MOE_HIDDEN](b, T * k * F)
+    var c = Args()
+    c.p0 = H
+    c.p1 = Dn
+    c.p2 = Sel
+    c.p3 = W
+    c.p4 = Y
+    c.p5 = S
+    c.p6 = Order
+    c.p7 = Poff
+    c.i0 = D
+    c.i1 = F
+    c.i2 = k
+    c.i3 = En
+    c.i4 = 1
+    ex.launch[OP_MOE_OUT](c, T * D)
+    ex.sync()
+    ex.download(fptr(addrs[4], "y"), Y, T * D)
+    ex.download(fptr(addrs[5], "logits"), L, T * En)
+    ex.download(fptr(addrs[6], "selected"), Sel, T * k)
+    ex.download(fptr(addrs[7], "weights"), W, T * k)
+    return PythonObject(T * D)
+
+
 def moe_forward_run[E: Exec](
     mut ex: E, addrs: PythonObject, T: Int, D: Int, F: Int, En: Int, k: Int, renorm: Int, Wg: FP, Gu: FP, Dn: FP,
 ) raises -> PythonObject:
@@ -1516,6 +1577,12 @@ def moe_forward_run[E: Exec](
     a.i2 = k
     a.i3 = renorm
     ex.launch[OP_MOE_ROUTE](a, T)
+    comptime if MOE_DEVGROUP:
+        # lane apple-fast-moespeed: the device groups the pairs by expert
+        # (sequence/moe_reg.mojo); no host round trip. The host executor
+        # runs the items and reads none of Order, Poff, Cnt.
+        if En <= 127:
+            return _moe_devgroup_rest(ex, addrs, T, D, F, En, k, X, Gu, Dn, Sel, W, Y, L, H)
     # The pairs (token, pick) grouped by expert for the tiled device
     # products (lane neural-pass29, sequence/moe_tiled.mojo): `order` the
     # pair indices sorted by expert (stable), `poff` each expert's first

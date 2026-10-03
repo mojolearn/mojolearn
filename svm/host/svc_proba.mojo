@@ -36,6 +36,8 @@ from svm.impl.svc_rows import (
     EPI_OVR,
     EPI_PROBA,
     GLUE_C_ROWS,
+    GLUE_FOLD,
+    GLUE_FOLD_FINISH,
     GLUE_GATHER,
     GLUE_SELECT,
     I32P,
@@ -47,6 +49,8 @@ from svm.impl.svc_rows import (
     c_row,
     epilogue_row,
     epilogue_scratch,
+    fold_finish_cell,
+    fold_split_cell,
     gather_cell,
     platt_channels,
     platt_solve,
@@ -203,6 +207,32 @@ def svc_pair_epilogue_binding(
             U32P(unsafe_from_address=cout if has_c else dst),
         )
         return PythonObject(count)
+    if mode == GLUE_FOLD:
+        var m = _ix(params[1])
+        var begin = _ix(params[2])
+        var end = _ix(params[3])
+        var lo = Int(py=params[4])
+        if begin > end or end > m:
+            raise Error("svc fold: bad fold range")
+        var npos = 0
+        if m > 0:
+            var idx = I32P(unsafe_from_address=Int(py=dec_addr))
+            var perm = I32P(unsafe_from_address=Int(py=pairs_addr))
+            var lab = U32P(unsafe_from_address=Int(py=ab_addr))
+            var lout = U32P(unsafe_from_address=lo if lo != 0 else dst)
+            for k in range(m):
+                npos += fold_split_cell(k, idx, perm, lab, m, begin, end, I32P(unsafe_from_address=dst), lout)
+        return PythonObject(npos)
+    if mode == GLUE_FOLD_FINISH:
+        var m = _ix(params[1])
+        var dp = U32P(unsafe_from_address=Int(py=dec_addr))
+        var perm = I32P(unsafe_from_address=Int(py=pairs_addr))
+        var lab = U32P(unsafe_from_address=Int(py=ab_addr))
+        var consts = U32P(unsafe_from_address=Int(py=params[2]))
+        var lbo = U64P(unsafe_from_address=Int(py=params[3]))
+        for k in range(m):
+            fold_finish_cell(k, dp, perm, lab, consts, m, U64P(unsafe_from_address=dst), lbo)
+        return PythonObject(m)
     if mode == GLUE_C_ROWS:
         var n = _ix(params[1])
         var k = _ix(params[2])

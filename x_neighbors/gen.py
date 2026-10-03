@@ -159,15 +159,6 @@ OPS = [
      [("a", "fin", "n * n"), ("lab", "iin", "n"), ("res", "iout", "n"), ("n", "int")]),
     ("graph_symmetry", "items", [("graph_symmetry_row_item", "n"), ("graph_symmetry_fin_item", "1")], None,
      [("a", "fin", "n * n"), ("flags", "iout", "2"), ("rf", "iscr", "2 * n"), ("n", "int")]),
-    ("svgp", "items",
-     [("svgp_init_item", "m * m"), ("svgp_chol2_item", "2 * m", "m"), ("svgp_fix2_item", "2 * m"),
-      ("svgp_solve_item", "4 * m + 1"), ("svgp_mid_item", "m * m"), ("svgp_qchol_item", "m", "m"),
-      ("svgp_qfix_item", "m * m"), ("svgp_ypart_item", "xn_fold_blocks(n)"), ("svgp_fin_item", "1")], None,
-     [("kuu", "fin", "m * m"), ("bmat", "fin", "m * m"), ("b", "fin", "m"), ("y", "fin", "n"), ("alpha", "fout", "m"),
-      ("cmat", "fout", "m * m"), ("qmu", "fout", "m"), ("qsqrt", "fout", "m * m"), ("info", "fout", "2"),
-      ("luu", "fscr", "m * m"), ("ls", "fscr", "m * m"), ("xs", "fscr", "(4 * m + 1) * m"), ("dv", "fscr", "3 * m"),
-      ("yp", "fscr", "xn_fold_blocks(n)"), ("fl", "iscr", "3"),
-      ("m", "int"), ("n", "int"), ("noise", "float"), ("jitter", "float"), ("kdiag", "float")]),
     ("svgp_var", "items", "svgp_var_item", "n",
      [("ksu", "fin", "n * m"), ("cmat", "fin", "m * m"), ("res", "fout", "n"), ("n", "int"), ("m", "int"), ("kdiag", "float")]),
     # cpu-gpu-cleanup w2-pyglue: NearestCentroid's manhattan medians by a
@@ -246,23 +237,31 @@ CUSTOM_OPS = [
      [("q", "fin", "n * d"), ("y", "fin", "m * d"), ("w", "fin", "m * c"), ("res", "fout", "n * c"),
       ("n", "int"), ("m", "int"), ("d", "int"), ("c", "int"), ("kind", "int"), ("degree", "int"),
       ("gamma", "float"), ("coef0", "float")]),
-    ("svgp_stats",
-     [("x", "fin", "n * d"), ("z", "fin", "m * d"), ("y", "fin", "n"), ("bmat", "fout", "m * m"), ("bvec", "fout", "m"),
-      ("n", "int"), ("m", "int"), ("d", "int"), ("gamma", "float"), ("variance", "float")]),
-    # lane/neural-pass106: SVGP's float-float fallback (x_neighbors/svgp_ff.mojo)
-    ("svgp_stats_ff",
-     [("x", "fin", "n * d"), ("z", "fin", "m * d"), ("y", "fin", "n"), ("bh", "fout", "m * m"), ("bl", "fout", "m * m"),
-      ("bvh", "fout", "m"), ("bvl", "fout", "m"),
-      ("n", "int"), ("m", "int"), ("d", "int"), ("gamma", "float"), ("variance", "float")]),
-    ("svgp_ff",
-     [("kuu", "fin", "m * m"), ("bh", "fin", "m * m"), ("bl", "fin", "m * m"), ("bvh", "fin", "m"), ("bvl", "fin", "m"),
-      ("y", "fin", "n"), ("alpha", "fout", "m"), ("cmat", "fout", "m * m"), ("qmu", "fout", "m"),
-      ("qsqrt", "fout", "m * m"), ("info", "fout", "2"),
-      ("m", "int"), ("n", "int"), ("noise", "float"), ("jitter", "float"), ("kdiag", "float")]),
+    # lane/neural-pass106 + lane/cgr-kernel: SVGP.fit in float-float
+    # (x_neighbors/svgp_ff.mojo) as one resident chain: Kuu, B and b stay on
+    # the device between the statistics and the solve
+    ("svgp_fit_ff",
+     [("x", "fin", "n * d"), ("z", "fin", "m * d"), ("y", "fin", "n"), ("alpha", "fout", "m"),
+      ("cmat", "fout", "m * m"), ("qmu", "fout", "m"), ("qsqrt", "fout", "m * m"), ("info", "fout", "2"),
+      ("n", "int"), ("m", "int"), ("d", "int"),
+      ("gamma", "float"), ("variance", "float"), ("noise", "float"), ("jitter", "float"), ("kdiag", "float")]),
     ("svgp_predict",
      [("q", "fin", "n * d"), ("z", "fin", "m * d"), ("alpha", "fin", "m"), ("cmat", "fin", "m * m"),
       ("mean", "fout", "n"), ("var_", "fout", "n"),
       ("n", "int"), ("m", "int"), ("d", "int"), ("gamma", "float"), ("variance", "float"), ("kdiag", "float")]),
+    # lane/apple-fast-neighbors2 (2026-10-02), FAST tier only: LabelPropagation
+    # / LabelSpreading's fit loop over the compact kNN graph (cols, vals of
+    # lp_knn_graph) resident on the device (MOJOLEARN_LP_FAST_RESIDENT=1)
+    ("lp_iterate_knn",
+     [("cols", "iin", "n * k"), ("vals", "fin", "n * k"), ("ld", "finout", "n * c"), ("ystatic", "fin", "n * c"),
+      ("unlabeled", "iin", "n"), ("info", "iout", "2"), ("n", "int"), ("k", "int"), ("c", "int"), ("max_iter", "int"),
+      ("variant", "int"), ("tol_hi", "int"), ("tol_lo", "int"), ("alpha", "float")]),
+    # lane/apple-fast-neighbors2, FAST tier only: `kernel` with x and y tiles
+    # staged in threadgroup memory (rbf; other kinds take `kernel`),
+    # MOJOLEARN_XN_FAST_TILED_RBF=1
+    ("kernel_tiled",
+     [("x", "fin", "n * d"), ("y", "fin", "m * d"), ("res", "fout", "n * m"), ("n", "int"), ("m", "int"), ("d", "int"),
+      ("kind", "int"), ("gamma", "float"), ("coef0", "float"), ("degree", "int")]),
 ]
 
 #: lane/neural-pass72: scratch ops whose item slices the scratch by its own
@@ -276,6 +275,16 @@ PAR_SCRATCH_OK = {"knn_impute", "knn_impute_cells", "pcs"}
 #: walk on GPU installs, `-D MOJOLEARN_XN_SERIAL_GPU` off, was removed in
 #: cpu-gpu-cleanup c-xneighbors).
 HOST_SERIAL = {"group_mean", "nc_std"}
+
+#: lane/apple-fast-neighbors2 (2026-10-02): a FAST + Apple alternate for a
+#: generated GPU driver, compiled only under its `-D <define>`
+#: (tools/afc_ab_def.sh), default off: op -> (module, function, define).
+#: The function takes op_<name>'s whole signature (no scratch) and replaces
+#: the body; the host driver keeps the item, IDENTICAL compiles the driver
+#: unchanged. (The svgp entry went with main's fused `svgp_fit_ff`, which
+#: replaced the staged svgp op it swapped.)
+FAST_ALT = {}
+
 
 HDR = "# SPDX-License-Identifier: Apache-2.0\n# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632\n"
 GEN = "# GENERATED by x_neighbors/gen.py from its OPS table; edit the table, not this file.\n"
@@ -296,6 +305,24 @@ OWN_DRIVERS = {
     "louvain": ("graph_dev", "graph_host",
                 [("a", "fin", "n * n"), ("labels", "iout", "n"), ("info", "fout", "2"),
                  ("n", "int"), ("max_level", "int"), ("resolution", "float"), ("threshold", "float")]),
+    # lane/apple-fast-kapprox (2026-10-02): the chi2 samplers' device fit and
+    # transform (x_neighbors/kapprox_dev.mojo, FAST + Apple only behind
+    # -D MOJOLEARN_KAPPROX_DEVICE; other builds refuse by name). The host
+    # module is the CPU binding's twin of the exports.
+    "kapprox_check": ("kapprox_dev", "kapprox_host",
+                      [("x", "fin", "n * d"), ("flag", "iinout", "1"), ("n", "int"), ("d", "int"),
+                       ("strict", "int"), ("floor", "float")]),
+    "kapprox_achi2": ("kapprox_dev", "kapprox_host",
+                      [("x", "fin", "n * d"), ("res", "fout", "n * d * (2 * steps - 1)"), ("flag", "iinout", "1"),
+                       ("n", "int"), ("d", "int"), ("steps", "int"), ("interval", "float")]),
+    "kapprox_skew_fit": ("kapprox_dev", "kapprox_host",
+                         [("w", "fout", "d * nc"), ("off", "fout", "nc"), ("d", "int"), ("nc", "int"), ("seed", "int")]),
+    "kapprox_skew_transform": ("kapprox_dev", "kapprox_host",
+                               [("x", "fin", "n * d"), ("w", "fin", "d * nc"), ("off", "fin", "nc"), ("res", "fout", "n * nc"),
+                                ("flag", "iinout", "1"), ("n", "int"), ("d", "int"), ("nc", "int"), ("skew", "float")]),
+    "kapprox_sparse_rp": ("kapprox_dev", "kapprox_host",
+                          [("res", "fout", "kc * d"), ("kc", "int"), ("d", "int"), ("seed", "int"),
+                           ("dens", "float"), ("scale", "float")]),
 }
 
 
@@ -334,7 +361,8 @@ def device():
          "from std.ffi import _Global\n",
          "from max.gpu.host import DeviceBuffer, DeviceContext\n",
          "from std.sys.compile import is_defined\n",
-         "from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL\n", imports("device"),
+         "from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST\n",
+         "from std.sys.info import has_apple_gpu_accelerator\n", imports("device"),
          """
 comptime BLOCK = 128
 
@@ -428,6 +456,12 @@ def _i(addr: Int) -> IP:
         dp = [f"{b[0]}: Int" for b in bufs if b[1] not in ("fscr", "iscr")]
         dp += [f"{p[0]}: {'Int' if p[1] == 'int' else 'Float32'}" for p in scal]
         body = "    var ctx = xn_ctx()\n"
+        if name in FAST_ALT:
+            am, af, ad = FAST_ALT[name]
+            al = ", ".join([b[0] for b in bufs if b[1] not in ("fscr", "iscr")] + [p[0] for p in scal])
+            body = (f"    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined[\"{ad}\"]():\n"
+                    f"        from x_neighbors.{am} import {af}\n"
+                    f"        {af}({al})\n        return\n" + body)
         for b in bufs:
             up = "True" if b[1] in ("fin", "finout", "iin", "iinout") else "False"
             addr = "0" if b[1] in ("fscr", "iscr") else b[0]
@@ -652,6 +686,8 @@ def gpu_binding():
             + BIND_HEAD % "eigh_device" + "from checks.vendor import COMPILED_VENDOR\n"
             + f"from x_neighbors.device_ops import {ops}\n"
             + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(0)
+            + "from x_neighbors.kapprox_dev import kapprox_fast_binding, kpca_resident_binding, sparse_rp_device_binding\n"
+            + "from x_neighbors.iter_device import lp_fast_resident_binding\n"
             + wrappers() + """
 
 def x_neighbors_vendor_binding() raises -> PythonObject:
@@ -664,6 +700,10 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_neighbors")
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
+        m.def_function[kapprox_fast_binding]("x_neighbors_kapprox_fast")
+        m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+        m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
+        m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors: ", e))
@@ -676,6 +716,8 @@ def host_binding():
             + BIND_HEAD % "eigh" + "from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name\n"
             + f"from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, {ops}\n"
             + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
+            + "from x_neighbors.kapprox_host import kapprox_fast_binding, kpca_resident_binding, sparse_rp_device_binding\n"
+            + "from x_neighbors.iter_host import lp_fast_resident_binding\n"
             + wrappers() + """
 
 def x_neighbors_host_numeric_mode_binding() raises -> PythonObject:
@@ -709,6 +751,10 @@ def PyInit__mojolearn_x_neighbors_host() abi("C") -> PythonObject:
         m.def_function[x_neighbors_host_sabotage_binding]("x_neighbors_host_sabotage")
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
+        m.def_function[kapprox_fast_binding]("x_neighbors_kapprox_fast")
+        m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+        m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
+        m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors_host: ", e))
@@ -726,7 +772,8 @@ if __name__ == "__main__":
     b = t.index("# END GENERATED EXPORTS")
     names = ["x_neighbors_host_numeric_mode", "x_neighbors_host_vendor", "x_neighbors_host_column",
              "x_neighbors_host_sabotage"] + [f"xn_{o[0]}" for o in OPS] + [f"xn_{c[0]}" for c in CUSTOM_OPS] + [f"xn_{k}" for k in OWN_DRIVERS] + ["xn_eigh", "x_neighbors_numeric_mode",
-                                                                            "x_neighbors_vendor"]
+                                                                            "x_neighbors_vendor", "x_neighbors_kapprox_fast",
+                                                                            "x_neighbors_kpca_resident", "x_neighbors_sparse_rp_device"]
     body = "# BEGIN GENERATED EXPORTS\n" + "".join(f'            "{x}",\n' for x in names) + "            "
     surf.write_text(t[:a] + body + t[b:])
     print(f"x_neighbors/gen.py: {len(OPS)} ops -> device_ops, host_ops and the two bindings")

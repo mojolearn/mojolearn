@@ -15,7 +15,9 @@ through the identical GEMM, DEVIATION 5110 revised 2026-09-29,
 `x_cluster/host/moments_gemm.mojo`). THE k-SIZED WORK IS HOST FLOAT64, one source in both
 bindings: the Wishart and Dirichlet(-process) updates, the d x d Cholesky and
 its triangular inverse, digamma and log-gamma (series on the portable
-`identical_log64`), the lower bound. Every host product that feeds an add is
+`identical_log64`), the lower bound (its n-sized sums, the entropy and the
+mean log-likelihood, are the device's float-float fold, lane cgr2-cluster;
+the start's one-hot or random responsibilities are written on the device). Every host product that feeds an add is
 `identical_mul64`. The k-means start is this library's KMeans through
 `ClusterOps.kmeans`. Only covariance_type='full' (NOT_IMPLEMENTED.tsv)."""
 from std.math import sqrt
@@ -23,9 +25,10 @@ from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_log64, identical_mul64
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS
-from x_cluster.bodies import SplitMix64
+from x_cluster.bodies import SPLITMIX_GAMMA, SplitMix64
 from x_cluster.common import greedy_kmeans_pp_indices
 from x_cluster.ops import ClusterOps
+from x_cluster.post_bodies import FM_PROD, FM_VAL
 
 # Lane cluster-apple3, FAST and the GPU binding only, OPT-IN while unproven
 # (`-D MOJOLEARN_BGMM_ENT=1`): the lower bound's entropy sum(resp * log_resp)
@@ -365,11 +368,36 @@ def bgmm_constants(pr: BgmmPriors, st: BgmmState) -> List[Float32]:
     return out^
 
 
-def _lower_bound(pr: BgmmPriors, st: BgmmState, resp: List[Float32], lr: List[Float32], n: Int) -> Float64:
-    var ent = Float64(0)
-    for t in range(n * pr.kc):
-        ent = ent + identical_mul64(Float64(resp[t]), Float64(lr[t]))
-    return _lower_bound_ent(pr, st, ent)
+def _distinct_rows(mut rng: SplitMix64, n: Int, kc: Int) -> List[Int]:
+    """'random_from_data': the first kc of a partial Fisher-Yates shuffle of
+    0 .. n - 1 (q swaps with q + below(n - q)), the moved positions kept in
+    a k-sized list instead of an n-sized pool."""
+    var pos = List[Int]()
+    var val = List[Int]()
+
+    def at(p: Int, pos: List[Int], val: List[Int]) -> Int:
+        for t in range(len(pos)):
+            if pos[t] == p:
+                return val[t]
+        return p
+
+    def put(p: Int, v: Int, mut pos: List[Int], mut val: List[Int]):
+        for t in range(len(pos)):
+            if pos[t] == p:
+                val[t] = v
+                return
+        pos.append(p)
+        val.append(v)
+
+    var picks = List[Int](capacity=kc)
+    for q in range(kc):
+        var r = q + rng.below(n - q)
+        var vq = at(q, pos, val)
+        var vr = at(r, pos, val)
+        put(q, vr, pos, val)
+        put(r, vq, pos, val)
+        picks.append(vr)
+    return picks^
 
 
 def _lower_bound_ent(pr: BgmmPriors, st: BgmmState, ent: Float64) -> Float64:
@@ -478,8 +506,9 @@ def bgmm_fit[O: ClusterOps](
     var converged_best = False
     var runs = 1 if warm else n_init
     for _init in range(runs):
-        # the start: one-hot k-means labels or normalized uniforms
-        var resp0 = List[Float32](length=n * kc, fill=Float32(0))
+        # the start, written on the device (lane cgr2-cluster): one-hot rows
+        # at the k-means labels or the picked rows, or normalized uniforms
+        var r0 = ops.zeros(n * kc)
         if warm:
             pass
         elif init_mode == 2 or init_mode == 3:
@@ -487,34 +516,21 @@ def bgmm_fit[O: ClusterOps](
             if init_mode == 2:
                 picks = greedy_kmeans_pp_indices(ops, x, n, d, kc, rng)
             else:
-                var pool = List[Int](capacity=n)
-                for t in range(n):
-                    pool.append(t)
-                picks = List[Int](capacity=kc)
-                for q in range(kc):
-                    var r = q + rng.below(n - q)
-                    var t = pool[q]
-                    pool[q] = pool[r]
-                    pool[r] = t
-                    picks.append(pool[q])
+                picks = _distinct_rows(rng, n, kc)
+            var pi = List[Int32](capacity=kc)
             for k in range(kc):
-                resp0[picks[k] * kc + k] = Float32(1)
+                pi.append(Int32(picks[k]))
+            ops.onehot(ops.put_i(pi), kc, kc, False, r0)
         elif init_mode == 1:
-            for i in range(n):
-                var row = List[Float64](capacity=kc)
-                var s = Float64(0)
-                for _k in range(kc):
-                    var u = rng.unit()
-                    row.append(u)
-                    s = s + u
-                for k in range(kc):
-                    resp0[i * kc + k] = Float32(row[k] / s)
+            # draw i * kc + k + 1 of the stream for cell (i, k), then the
+            # stream moves past all n * kc draws
+            ops.rand_resp(r0, n, kc, rng.state)
+            rng.state = rng.state + UInt64(n * kc) * SPLITMIX_GAMMA
         else:
             var c = List[Float32]()
             var l = List[Int32]()
             _ = ops.kmeans(x, n, d, kc, 300, 1e-4, rng.next() >> 1, 1, INIT_KMEANS_PLUS_PLUS, c, l)
-            for i in range(n):
-                resp0[i * kc + Int(l[i])] = Float32(1)
+            ops.onehot(ops.put_i(l), n, kc, True, r0)
         var st = BgmmState()
         var lb = Float64(0)
         var have_lb = False
@@ -523,8 +539,7 @@ def bgmm_fit[O: ClusterOps](
             lb = warm_lb
             have_lb = True
         else:
-            ops.set(rs, resp0)
-            ops.moments(rs, xs, n, d, kc, reg, nks, xks, sks)
+            ops.moments(r0, xs, n, d, kc, reg, nks, xks, sks)
             var mo = ops.gets([nks, xks, sks], [kc, kc * d, kc * d * d])
             _m_step_host(pr, mo[0], mo[1], mo[2], st, Float64(reg))
             # sklearn GaussianMixture._initialize: weights_init, means_init and
@@ -566,10 +581,8 @@ def bgmm_fit[O: ClusterOps](
             if ent_dev:
                 ops.dot_groups(rs, qs, n * kc, BGMM_ENT_G, es)
                 mo = ops.gets([nks, xks, sks, es], [kc, kc * d, kc * d * d, n_ent])
-            elif pr.variational:
-                mo = ops.gets([nks, xks, sks, rs, qs], [kc, kc * d, kc * d * d, n * kc, n * kc])
             else:
-                mo = ops.gets([nks, xks, sks, lpn], [kc, kc * d, kc * d * d, n])
+                mo = ops.gets([nks, xks, sks], [kc, kc * d, kc * d * d])
             _m_step_host(pr, mo[0], mo[1], mo[2], st, Float64(reg))
             if ent_dev:
                 var ent = Float64(0)
@@ -577,14 +590,12 @@ def bgmm_fit[O: ClusterOps](
                     ent = ent + Float64(mo[3][t])
                 lb = _lower_bound_ent(pr, st, ent)
             elif pr.variational:
-                lb = _lower_bound(pr, st, mo[3], mo[4], n)
+                # the entropy sum(resp * log_resp): the device's float-float fold
+                lb = _lower_bound_ent(pr, st, ops.sum_ff(rs, qs, -1, n * kc, FM_PROD))
             else:
-                # sklearn GaussianMixture: the mean log-likelihood of THIS E-step
-                var lp = mo[3].copy()
-                var acc = Float64(0)
-                for t in range(n):
-                    acc = acc + Float64(lp[t])
-                lb = acc / Float64(n)
+                # sklearn GaussianMixture: the mean log-likelihood of THIS
+                # E-step, the device's float-float fold
+                lb = ops.sum_ff(lpn, -1, -1, n, FM_VAL) / Float64(n)
             if have_lb:
                 var change = lb - prev
                 if abs(change) < tol:

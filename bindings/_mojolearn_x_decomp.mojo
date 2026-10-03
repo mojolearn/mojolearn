@@ -9,7 +9,7 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
 from x_decomp.api import (
-    cd_rows_py, chol_py, colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, knn_select_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py,
+    cd_rows_py, chol_py, colsum_py, eigh_py, eigh_batch_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, knn_select_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py,
     geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, als_cg_rows_py, gather_py, scatter_py, triu_nonzero_py, argsort_f32_py, iso_order_py,
     rowsum_py, sqdist_py, vendor_py,
 )
@@ -43,12 +43,17 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[knn_select_py[DevExec]]("x_decomp_knn_select")
         m.def_function[chol_py[DevExec]]("x_decomp_chol")
         m.def_function[eigh_py[DevExec]]("x_decomp_eigh")
+        m.def_function[eigh_batch_py[DevExec]]("x_decomp_eigh_batch")
+        m.def_function[lle_local_py[DevExec]]("x_decomp_lle_local")
+        m.def_function[lle_apply_py[DevExec]]("x_decomp_lle_apply")
         m.def_function[cd_rows_py[DevExec]]("x_decomp_cd_rows")
         m.def_function[orth_py[DevExec]]("x_decomp_orth")
         m.def_function[orth_diag_py[DevExec]]("x_decomp_orth_diag")
         m.def_function[svd_py[DevExec]]("x_decomp_svd")
         m.def_function[lasso_rows_py[DevExec]]("x_decomp_lasso_rows")
         m.def_function[omp_rows_py[DevExec]]("x_decomp_omp_rows")
+        m.def_function[lars_rows_py[DevExec]]("x_decomp_lars_rows")
+        m.def_function[lu_aux_py[DevExec]]("x_decomp_lu_aux")
         m.def_function[rand_gamma_py[DevExec]]("x_decomp_rand_gamma")
         m.def_function[lda_rows_py[DevExec]]("x_decomp_lda_rows")
         m.def_function[dijkstra_rows_py[DevExec]]("x_decomp_dijkstra_rows")
@@ -90,7 +95,7 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[dev_lda_rows_py]("x_decomp_dev_lda_rows")
         m.def_function[dev_lda_bound_py]("x_decomp_dev_lda_bound")
         comptime if LDA_FUSED_SS:
-            # lane apple-fast-nb: FAST + Apple + -D MOJOLEARN_LDA_FUSED_SS only (x_decomp/lda_fast.mojo)
+            # lane apple-fast-nb: FAST + Apple default (off: -D MOJOLEARN_LDA_FUSED_SS_OFF) (x_decomp/lda_fast.mojo)
             m.def_function[dev_lda_estep_ss_py]("x_decomp_dev_lda_estep_ss")
         m.def_function[dev_als_rows_py]("x_decomp_dev_als_rows")
         # Isomap / LLE graph builds (x_decomp/graph_device.mojo, lane hr2-graph-embed)

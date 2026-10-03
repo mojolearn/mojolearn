@@ -965,6 +965,13 @@ comptime GMM_ESTEP_STACK = (
     and not is_defined["MOJOLEARN_GMM_ESTEP_STACK_OFF"]()
 )
 comptime GMM_ESTEP_STACK_MAX_FLOATS = 1 << 28
+#: lane/apple-fast-linear (2026-10-02): `-D MOJOLEARN_GMM_FAST_ESTEP_STACK=1`
+#: takes the stacked form under FAST on Apple too (gmm_e_step below).
+comptime GMM_FAST_ESTEP_STACK = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GMM_FAST_ESTEP_STACK"]()
+)
 
 
 def stack_prec_kernel(
@@ -1161,6 +1168,21 @@ def gmm_e_step(
             and sabotage == GMM_SAB_NONE
             and n * ncomp * d <= GMM_ESTEP_STACK_MAX_FLOATS
         )
+    comptime if GMM_FAST_ESTEP_STACK:
+        # lane/apple-fast-linear (2026-10-02): -D MOJOLEARN_GMM_FAST_ESTEP_STACK
+        # takes the stacked form under FAST too, where it was IDENTICAL-only
+        # (GMM_ESTEP_STACK). Cause: past the fused kernel's d <= 32 (Istella
+        # is 100,000 x 200, K = 8) the FAST E-step is K GEMMs of X . P_k
+        # (n x d by d x d, MAX's matmul) and K `mahal_kernel` launches, each
+        # writing and re-reading an n x d scratch; stacked it is one GEMM
+        # against [P_1 .. P_K] (d x K d) and one fold a (row, component).
+        if (
+            not fused
+            and not stacked
+            and sabotage == GMM_SAB_NONE
+            and n * ncomp * d <= GMM_ESTEP_STACK_MAX_FLOATS
+        ):
+            stacked = True
     if stacked:
         var kd = ncomp * d
         var pstack = ctx.enqueue_create_buffer[DType.float32](d * kd)

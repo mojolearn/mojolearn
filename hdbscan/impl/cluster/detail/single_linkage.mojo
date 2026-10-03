@@ -57,7 +57,7 @@ from hdbscan.checks.mutual_reachability_dense import (
     mutual_reachability_dense,
     refuse_nonfinite_device,
 )
-from hdbscan.impl.cluster.detail.sparse_mr_mst import sparse_mr_mst
+from hdbscan.impl.cluster.detail.sparse_mr_mst import sparse_mr_mst_device
 from hdbscan.impl.detail.reachability import (
     CORE_TPB,
     compute_core_dists,
@@ -153,10 +153,9 @@ def build_mr_linkage(
     `graph` picks the arm (`MR_GRAPH_*`); both return the same tree, bit
     for bit (DEVIATION 1620, `hdbscan/checks/sparse_mr_check.mojo`).
 
-    `x_host` is the SAME data as `x`, on the host, because this tree's
-    k-NN entry takes host pointers (see `reachability.mojo`'s header) and
-    the dense distance step takes a device buffer. The caller owns both
-    and this function copies neither.
+    `x_host` is the SAME data as `x`, on the host. No step here reads it
+    any more (the k-NN and the sparse MST take the device buffer, lane
+    cgr3-hdbscan-mst); it stays in the signature for the callers.
     """
     if m < 2:
         raise Error(
@@ -226,7 +225,7 @@ def build_mr_linkage(
     var knn_dists = ctx.enqueue_create_buffer[DType.float32](m * min_samples)
     var knn_inds = ctx.enqueue_create_buffer[DType.int32](m * min_samples)
     compute_core_dists(
-        ctx, trace, x_host, core_dists, m, n, metric, min_samples,
+        ctx, trace, x, core_dists, m, n, metric, min_samples,
         knn_dists, knn_inds, core_tpb, sabotage,
     )
     trace.record_device[DType.float32](ctx, "hdbscan.core_dists", core_dists, m)
@@ -283,34 +282,10 @@ def build_mr_linkage(
     var rounds: Int
     if use_sparse:
         # DEVIATION 1620: the same tree, sorted and oriented, with no graph.
-        var sp = sparse_mr_mst(
-            ctx, x_host, x, core_dists, m, n, inv_alpha, sabotage
+        rounds = sparse_mr_mst_device(
+            ctx, x, core_dists, m, n, inv_alpha, mst_rows, mst_cols,
+            mst_weights, sabotage,
         )
-        var h_r = ctx.enqueue_create_host_buffer[DType.int32](m - 1)
-        var h_c = ctx.enqueue_create_host_buffer[DType.int32](m - 1)
-        var h_w = ctx.enqueue_create_host_buffer[DType.float32](m - 1)
-        ctx.synchronize()
-        for e in range(m - 1):
-            h_r.unsafe_ptr().unsafe_store(e, sp.lo[e])
-            h_c.unsafe_ptr().unsafe_store(e, sp.hi[e])
-            h_w.unsafe_ptr().unsafe_store(e, sp.w[e])
-        ctx.enqueue_copy(
-            dst_buf=mst_rows.create_sub_buffer[DType.int32](0, m - 1),
-            src_ptr=h_r.unsafe_ptr(),
-        )
-        ctx.enqueue_copy(
-            dst_buf=mst_cols.create_sub_buffer[DType.int32](0, m - 1),
-            src_ptr=h_c.unsafe_ptr(),
-        )
-        ctx.enqueue_copy(
-            dst_buf=mst_weights.create_sub_buffer[DType.float32](0, m - 1),
-            src_ptr=h_w.unsafe_ptr(),
-        )
-        ctx.synchronize()
-        rounds = sp.rounds
-        _ = h_r^
-        _ = h_c^
-        _ = h_w^
     elif use_fast:
         rounds = fast_euclidean_mst(
             ctx, x, m, n, True, mst_rows, mst_cols, mst_weights,

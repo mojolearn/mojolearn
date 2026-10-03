@@ -68,9 +68,23 @@ from checks.numerics import (
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 
 comptime WEAK_CC_TPB = 256
+comptime WEAK_CC_FAST_BATCH = 4
+"""Label passes per flag readback under `MOJOLEARN_DBSCAN_FAST_CC_BATCH=1`."""
+
+
+def weak_cc_fast_batch_on() -> Bool:
+    comptime if not (
+        GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+        and is_defined["MOJOLEARN_DBSCAN_FAST_CC_BATCH"]()
+    ):
+        return False
+    else:
+        return True
 comptime MAX_LABEL = Int32(2147483647)
 
 
@@ -196,24 +210,41 @@ def weak_cc_batched(
     )
     var passes = 0
     var converged = False
-    for _it in range(max_iterations):
+    # MOJOLEARN_DBSCAN_FAST_CC_BATCH=1 (lane/apple-fast-core, 2026-10-02,
+    # FAST + Apple only, default off): `WEAK_CC_FAST_BATCH` label passes
+    # are enqueued between two readbacks of the flag instead of one. Cause:
+    # the loop below drains the queue (`ctx.synchronize()`) after EVERY
+    # pass to read `changed`, so a propagation of P passes pays P host
+    # round trips; the fixed point is the same set of labels (a minimum
+    # over the same graph), reached with at most `WEAK_CC_FAST_BATCH - 1`
+    # extra no-op passes after it, and `passes` counts those too.
+    var per_sync = 1
+    if weak_cc_fast_batch_on():
+        per_sync = WEAK_CC_FAST_BATCH
+    var it = 0
+    while it < max_iterations:
+        var runs = per_sync
+        if runs > max_iterations - it:
+            runs = max_iterations - it
         h_changed.unsafe_ptr().unsafe_store(0, Int32(0))
         ctx.enqueue_copy(dst_buf=d_changed, src_ptr=h_changed.unsafe_ptr())
-        ctx.enqueue_function[weak_cc_label_kernel](
-            labels.unsafe_ptr(),
-            row_ind.unsafe_ptr(),
-            col_ind.unsafe_ptr(),
-            core.unsafe_ptr(),
-            d_changed.unsafe_ptr(),
-            Int32(start_vertex_id),
-            Int32(batch_size),
-            Int32(n_rows),
-            grid_dim=((batch_size + WEAK_CC_TPB - 1) // WEAK_CC_TPB, 1, 1),
-            block_dim=(WEAK_CC_TPB, 1, 1),
-        )
+        for _r in range(runs):
+            ctx.enqueue_function[weak_cc_label_kernel](
+                labels.unsafe_ptr(),
+                row_ind.unsafe_ptr(),
+                col_ind.unsafe_ptr(),
+                core.unsafe_ptr(),
+                d_changed.unsafe_ptr(),
+                Int32(start_vertex_id),
+                Int32(batch_size),
+                Int32(n_rows),
+                grid_dim=((batch_size + WEAK_CC_TPB - 1) // WEAK_CC_TPB, 1, 1),
+                block_dim=(WEAK_CC_TPB, 1, 1),
+            )
         ctx.enqueue_copy(dst_ptr=h_changed.unsafe_ptr(), src_buf=d_changed)
         ctx.synchronize()
-        passes += 1
+        passes += runs
+        it += runs
         if h_changed.unsafe_ptr().unsafe_load(0) == Int32(0):
             converged = True
             break

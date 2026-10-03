@@ -8,10 +8,13 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
-from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE
 from x_prep.folds import I32P, kfold_folds, strat_folds
 from x_prep.fastnb_csr import NB_TEXT_CSR, nb_csr_fit_py, nb_csr_jll_py
+from x_prep.calib import CALIB_FOLDS, CAL_ST, CAL_LS
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -145,6 +148,37 @@ def vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+#: lane/apple-fast-prep (2026-10-02): the encoders' category fit takes the
+#: chunked per-column run scan (uniq_count / uniq_scan / uniq_write, existing
+#: units) in place of the one-thread-per-column `unique_cols` on the FAST
+#: tier on Apple. DEFAULT since the M3 A/B (lane/apple-fast-prep 387211293,
+#: n=1, output digests identical: onehot taxi 69.7 -> 30.4 ms, ordinal taxi
+#: 67.2 -> 25.3 ms). It was the env switch MOJOLEARN_X_PREP_FAST_UNIQUE=1;
+#: now `x_prep_fast_unique` is registered only when this is on, the Python
+#: side probes it once per binding (no env read), and
+#: `-D MOJOLEARN_X_PREP_FAST_UNIQUE_OFF` restores main's path. The old env
+#: name stays harmless.
+comptime X_PREP_FAST_UNIQUE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_X_PREP_FAST_UNIQUE_OFF"]()
+)
+
+
+def fast_unique_binding() raises -> PythonObject:
+    """Lane apple-fast-prep: present only under X_PREP_FAST_UNIQUE."""
+    return PythonObject(1)
+
+
+def calib_folds_binding() raises -> PythonObject:
+    """Lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_CALIB_GNB_FOLDS_OFF turns it off):
+    the CalibratedClassifierCV(GaussianNB) program's constants [words per
+    Platt problem, line-search steps]; registered only when the ops exist."""
+    var out = Python.list()
+    out.append(PythonObject(CAL_ST))
+    out.append(PythonObject(CAL_LS))
+    return out
+
+
 
 @export
 def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
@@ -165,6 +199,10 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         m.def_function[kfold_folds_binding]("x_prep_kfold_folds")
         m.def_function[numeric_mode_binding]("x_prep_numeric_mode")
         m.def_function[vendor_binding]("x_prep_vendor")
+        comptime if X_PREP_FAST_UNIQUE:
+            m.def_function[fast_unique_binding]("x_prep_fast_unique")
+        comptime if CALIB_FOLDS:
+            m.def_function[calib_folds_binding]("x_prep_calib_folds")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_prep: ", e))

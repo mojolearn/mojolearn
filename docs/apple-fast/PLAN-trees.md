@@ -38,6 +38,10 @@ Rejected: threaded host `all_finite_f32` in the base binding: the no-host-routes
 | 54 | aft-ab-etb64 | `-D MOJOLEARN_ET_DEVICE_BATCH_65536` et taxi |
 | 55 | aft-ab-fin1 | VOID (see above) |
 | 80 | aft-ab-yreuse1 | lane/apple-fast-yetirank 098e89988: YetiRank estimation reuses the search derivatives (B, default) vs `-D MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF` (A), istellarank, 3 pairs |
+| 517 | aft-ab-ysort1 | lane/apple-fast-yetirank fc32c2a9c: YetiRank block-kernel sort as per-simdgroup register bitonic + 3 merge-path passes (B, `-D MOJOLEARN_YETI_FAST_SORT`) vs the ten-pass rank merge (A), istellarank, 3 pairs; same bits by construction (distinct composites) |
+| 84 | aft-ab-rffin | lane apple-fast-rfet-scan: RF device finite scan (item 4) vs `-D MOJOLEARN_FOREST_DEVICE_FINITE_OFF`, taxi + istella, then tools/aft_forest_refusal.py rf |
+| 85 | aft-ab-etfin | same for ET (scan in `upload_dataset`), then aft_forest_refusal.py et |
+| 86 | aft-ab-rfseg | RF block-total scan one 256-thread block per segment (item 5) vs `-D MOJOLEARN_SEG_SUMS_SERIAL`, taxi + istella |
 
 Owed: `lq add m3 ID lane/apple-fast-trees2 gbdt-lossguide,gbdt-depthwise,gbdt-rank-yetirank,iforest taxi,istella` (IDENTICAL device vs host at head; all changes are FAST-gated). Not queued.
 

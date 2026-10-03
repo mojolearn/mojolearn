@@ -123,6 +123,8 @@ from core.identity_trace import IdentityTrace
 from neighbors.impl.multi_gpu import knn_device_count, parallel_knn_rows
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.os import getenv
+from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from neighbors.impl.knn.knn import (
@@ -650,6 +652,100 @@ def knn_self_search_device_indices(
     _ = out_dist^
     _ = out_i32^
     return out_idx^
+
+
+def knn_self_search_resident(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut data: DeviceBuffer[DType.float32],
+    n: Int,
+    n_features: Int,
+    k: Int,
+    mut out_dist: DeviceBuffer[DType.float32],
+    mut out_idx: DeviceBuffer[DType.uint32],
+    return_sqrt: Bool = True,
+) raises -> Int:
+    """`knn_search_traced(data, data, ...)` with the data ALREADY ON THE
+    DEVICE and the result LEFT THERE (lane cgr3-hdbscan-mst, 2026-10-03):
+    `data` holds `n x n_features` row-major float32 (it may be longer),
+    `out_dist` / `out_idx` receive `n x k`, every row ascending by
+    (distance, index). The refusals, plan, norms, search, order pass and
+    trace records are `_knn_search_traced_retaining`'s statements on the
+    same bytes (L2 metrics only: the cosine zero-row refusal reads the host
+    data); only the host copies on either side are gone. Returns the query
+    tile that ran."""
+    if n <= 0 or n_features <= 0 or k <= 0:
+        raise Error(
+            "knn_self_search_resident: n, n_features and k must be positive,"
+            " got " + String(n) + ", " + String(n_features) + ", " + String(k)
+        )
+    if k > n:
+        raise Error(
+            "knn_search: k (" + String(k) + ") exceeds n_index (" + String(n)
+            + "); the upstream's short-index fill is not implemented"
+        )
+    var mtr = resolve_metric(METRIC_FROM_IS_SQRT, return_sqrt)
+    validate_metric_arg(mtr, Float32(2.0))
+    var devices = knn_device_count(n, KNN_METHOD_AUTO)
+    var query_tile = plan_query_tile(n, n, DEFAULT_QUERY_TILE)
+    var buf_len = tiled_radix_scratch_len(n, k)
+    var nd = n * n_features
+    var index = ctx.enqueue_create_buffer[DType.float32](nd)
+    var queries = ctx.enqueue_create_buffer[DType.float32](nd)
+    var index_norm = ctx.enqueue_create_buffer[DType.float32](n)
+    var query_norm = ctx.enqueue_create_buffer[DType.float32](n)
+    var dist_tile = ctx.enqueue_create_buffer[DType.float32](
+        tiled_distance_tile_cells(query_tile, n, n_features, k, mtr)
+    )
+    var buf_val = ctx.enqueue_create_buffer[DType.float32](query_tile * 2 * buf_len)
+    var buf_idx = ctx.enqueue_create_buffer[DType.uint32](query_tile * 2 * buf_len)
+    var out_i32 = ctx.enqueue_create_buffer[DType.int32](n * k)
+    var src = data.create_sub_buffer[DType.float32](0, nd)
+    ctx.enqueue_copy(dst_buf=index, src_buf=src)
+    ctx.enqueue_copy(dst_buf=queries, src_buf=src)
+    compute_norms_for_metric(ctx, index, index_norm, n, n_features, mtr)
+    compute_norms_for_metric(ctx, queries, query_norm, n, n_features, mtr)
+    ctx.synchronize()
+    if trace.enabled:
+        trace.header(
+            String("knn n_index=") + String(n) + " n_queries="
+            + String(n) + " d=" + String(n_features) + " k="
+            + String(k) + " method=" + String(KNN_METHOD_AUTO) + " sqrt="
+            + String(return_sqrt) + " metric=" + metric_value_name(mtr)
+            + " metric_arg=" + String(Float32(2.0))
+        )
+        if metric_uses_norms(mtr):
+            trace.record_device(ctx, "knn.index_norm", index_norm, n)
+            trace.record_device(ctx, "knn.query_norm", query_norm, n)
+    if devices > 1:
+        query_tile = parallel_knn_rows(ctx, queries, query_norm, index, index_norm,
+            out_dist, out_idx, n, n, n_features, k, query_tile, buf_len,
+            return_sqrt, KNN_METHOD_AUTO, mtr, Float32(2.0), devices)
+    else:
+        brute_force_knn_impl(
+            ctx, queries, query_norm, index, index_norm, dist_tile, buf_val,
+            buf_idx, out_dist, out_idx, out_i32, n, n, n_features, k,
+            query_tile, buf_len, return_sqrt, False, True, True,
+            KNN_METHOD_AUTO, mtr, Float32(2.0), KnnIndexCachePointer(None),
+        )
+    ctx.synchronize()
+    if trace.enabled:
+        trace.record_device(ctx, "knn.out_dist", out_dist, n * k)
+        trace.record_device(ctx, "knn.out_idx", out_idx, n * k)
+    _knn_order_rows_device(ctx, out_dist, out_idx, n, k)
+    if trace.enabled:
+        trace.record_device(ctx, "knn.sorted_dist", out_dist, n * k)
+        trace.record_device(ctx, "knn.sorted_idx", out_idx, n * k)
+    _ = src^
+    _ = index^
+    _ = queries^
+    _ = index_norm^
+    _ = query_norm^
+    _ = dist_tile^
+    _ = buf_val^
+    _ = buf_idx^
+    _ = out_i32^
+    return query_tile
 
 
 comptime _KO_TPB = 128
@@ -1744,6 +1840,63 @@ def _rbc_index_and_count(
     return nnz
 
 
+def _rbc_index_only(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut r: DeviceBuffer[DType.float32],
+    mut x_reordered: DeviceBuffer[DType.float32],
+    mut r_indptr: DeviceBuffer[DType.int32],
+    mut r_1nn_cols: DeviceBuffer[DType.int32],
+    mut r_1nn_dists: DeviceBuffer[DType.float32],
+    mut r_radius: DeviceBuffer[DType.float32],
+    n_index: Int,
+    n_features: Int,
+    n_landmarks: Int,
+    metric: Int = RBC_METRIC_DEFAULT,
+    metric_arg: Float32 = Float32(2.0),
+) raises:
+    """`_rbc_index_and_count`'s index build without its count pass
+    (lane/apple-fast-neighbors2, 2026-10-02): the same `rbc_build_index`
+    call over the same scratch, for a fill whose row offsets the caller
+    already holds."""
+    var landmark_ids = ctx.enqueue_create_buffer[DType.int32](n_landmarks)
+    var slot_cols = ctx.enqueue_create_buffer[DType.int32](n_index)
+    var slot_dists = ctx.enqueue_create_buffer[DType.float32](n_index)
+    var nearest = ctx.enqueue_create_buffer[DType.int32](n_index)
+    var nearest_dist = ctx.enqueue_create_buffer[DType.float32](n_index)
+    var counts = ctx.enqueue_create_buffer[DType.int32](n_landmarks)
+    ctx.synchronize()
+    rbc_build_index(
+        ctx,
+        x,
+        r,
+        x_reordered,
+        landmark_ids,
+        slot_cols,
+        slot_dists,
+        nearest,
+        nearest_dist,
+        r_indptr,
+        r_1nn_cols,
+        r_1nn_dists,
+        r_radius,
+        counts,
+        n_index,
+        n_features,
+        n_landmarks,
+        UInt64(12345),
+        metric,
+        metric_arg,
+    )
+    ctx.synchronize()
+    _ = landmark_ids^
+    _ = slot_cols^
+    _ = slot_dists^
+    _ = nearest^
+    _ = nearest_dist^
+    _ = counts^
+
+
 def _radius_check_shapes(
     n_index: Int, n_queries: Int, n_features: Int, radius: Float32, who: String
 ) raises:
@@ -1911,26 +2064,62 @@ def radius_neighbors_fill(
     ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
     ctx.synchronize()
 
-    var nnz = _rbc_index_and_count(
-        ctx,
-        x,
-        queries,
-        r,
-        x_reordered,
-        r_indptr,
-        r_1nn_cols,
-        r_1nn_dists,
-        r_radius,
-        adj_ia,
-        vd,
-        n_index,
-        n_queries,
-        n_features,
-        n_landmarks,
-        radius,
-        metric,
-        metric_arg,
-    )
+    var nnz = 0
+    var reuse_count = False
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator():
+        # MOJOLEARN_RADIUS_FAST_REUSE_COUNT=1 (lane/apple-fast-neighbors2,
+        # 2026-10-02; FAST + Apple only, default off): the fill pass takes
+        # the row offsets the count pass wrote into `out_indptr_ptr` (the
+        # same array, handed back by python/mojolearn/neighbors.py
+        # radius_neighbors) and `nnz_capacity` (the count pass's total)
+        # instead of re-running the count. Cause: `radius_neighbors_fill`
+        # rebuilt the ball-cover index AND ran the whole eps query a second
+        # time in counting mode (`_rbc_index_and_count` above) before its
+        # own fill query: three eps passes and two index builds per
+        # radius_neighbors call. Here the index is built once more (the
+        # fill needs it) and the count pass is skipped. Same CSR: the
+        # offsets are the count pass's own.
+        if String(getenv("MOJOLEARN_RADIUS_FAST_REUSE_COUNT")) == "1":
+            reuse_count = True
+            _rbc_index_only(
+                ctx,
+                x,
+                r,
+                x_reordered,
+                r_indptr,
+                r_1nn_cols,
+                r_1nn_dists,
+                r_radius,
+                n_index,
+                n_features,
+                n_landmarks,
+                metric,
+                metric_arg,
+            )
+            ctx.enqueue_copy(dst_buf=adj_ia, src_ptr=out_indptr_ptr)
+            ctx.synchronize()
+            nnz = nnz_capacity
+    if not reuse_count:
+        nnz = _rbc_index_and_count(
+            ctx,
+            x,
+            queries,
+            r,
+            x_reordered,
+            r_indptr,
+            r_1nn_cols,
+            r_1nn_dists,
+            r_radius,
+            adj_ia,
+            vd,
+            n_index,
+            n_queries,
+            n_features,
+            n_landmarks,
+            radius,
+            metric,
+            metric_arg,
+        )
     if nnz > nnz_capacity:
         raise Error(
             "radius_neighbors_fill: the search found "
