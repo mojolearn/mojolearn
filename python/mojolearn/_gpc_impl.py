@@ -75,8 +75,8 @@ box.
 
 from . import _backend, _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty
-from ._gp_impl import _MODE_CODE, ConstantKernel, Kernel, RBF
+from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
+from ._gp_impl import _MODE_CODE, ConstantKernel, Kernel, RBF, _gp_py2mojo
 from ._labels import (
     threshold_codes,
     classes_from_member,
@@ -306,15 +306,27 @@ class GaussianProcessClassifier(NumericModeMixin):
         kinds, kparams, ls_len, ls, n_ls = _kernel_arrays(self.kernel)
         ext = self._extension()
         columns = [1] if n_classes == 2 else list(range(n_classes))
+        codes32 = Array.from_list(codes, "<i4")
         fits = []
         for k in columns:
-            y01 = Array.from_list([1.0 if c == k else 0.0 for c in codes], "<f4")
-            fits.append(self._fit_binary(ext, x, y01, kinds, kparams, ls_len, ls, n_ls))
+            fits.append(self._fit_binary(ext, x, codes32, kinds, kparams, ls_len, ls, n_ls, k=k))
         self._set_fitted(x, classes, fits)
         return self
 
-    def _fit_binary(self, ext, x, y01, kinds, kparams, ls_len, ls, n_ls):
+    def _fit_binary(self, ext, x, y01, kinds, kparams, ls_len, ls, n_ls, k=None):
+        """With `k`, `y01` is the int32 class codes and the targets are
+        `code == k`: the binding builds them (lane apple-fast-py2mojo-cluster,
+        it was a Python loop per class) and writes them back for the model;
+        a `-D MOJOLEARN_PY2MOJO_cluster_OFF` build gets them from Python."""
         n_rows, n_cols = x.shape
+        extra_addrs, extra_params, codes = [], [], None
+        if k is not None:
+            if _gp_py2mojo(ext):
+                codes, _ = as_i32_c(y01, ndim=1, name="class codes")
+                y01 = empty((n_rows,), "<f4")
+                extra_addrs, extra_params = [addr(y01, name="y_out")], [int(k)]
+            else:
+                y01 = Array.from_list([1.0 if c == k else 0.0 for c in y01.tolist()], "<f4")
         l_out = empty((n_rows * n_rows,), "<f4")
         pi = empty((n_rows,), "<f4")
         wsr = empty((n_rows,), "<f4")
@@ -325,7 +337,7 @@ class GaussianProcessClassifier(NumericModeMixin):
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpc_fit_binding.
             [
                 addr_ro(x, name="x"),
-                addr_ro(y01, name="y"),
+                addr_ro(codes if codes is not None else y01, name="y"),
                 addr_ro(kinds, name="kinds"),
                 addr_ro(kparams, name="kparams"),
                 addr_ro(ls_len, name="ls_len"),
@@ -334,9 +346,9 @@ class GaussianProcessClassifier(NumericModeMixin):
                 addr(pi, name="pi_out"),
                 addr(wsr, name="wsr_out"),
                 addr(scalars, name="scalars_out"),
-            ],
-            # n_train, n_features, n_nodes, n_ls, max_iter_predict
-            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self.max_iter_predict],
+            ] + extra_addrs,
+            # n_train, n_features, n_nodes, n_ls, max_iter_predict (+ k)
+            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self.max_iter_predict] + extra_params,
         )
         return _BinaryLaplace(y01, l_out.reshape((n_rows, n_rows)), pi, wsr,
                               float(scalars[0]), int(n_iter), int(scalars[2]))
@@ -375,15 +387,23 @@ class GaussianProcessClassifier(NumericModeMixin):
             )
         return q
 
-    def _latent(self, ext, est, q, want_proba):
+    def _latent(self, ext, est, q, want_proba, out_kind=0):
         """(mean, var, proba) of one binary fit at the query rows; var and
-        proba are written only with `want_proba`."""
+        proba are written only with `want_proba`. `out_kind` 1 / 2 (lane
+        apple-fast-py2mojo-cluster): a fourth item, the int64 class codes of
+        `predict` / the float64 `[1 - p, p]` rows of `predict_proba`, from
+        the binding (`gaussian_process/unnorm.mojo::gpc_binary_out`)."""
         n_star = int(q.shape[0])
         n_train, n_features = self.X_train_.shape
         kinds, kparams, ls_len, ls, n_ls = _kernel_arrays(self.kernel)
         mean = empty((n_star,), "<f4")
         var = empty((n_star,), "<f4")
         proba = empty((n_star,), "<f8")
+        out = None
+        if out_kind == 1:
+            out = empty((n_star,), "<i8")
+        elif out_kind == 2:
+            out = empty((n_star, 2), "<f8")
         xt = self.X_train_
         y01 = est.y_train_
         pi = est.pi_
@@ -405,11 +425,13 @@ class GaussianProcessClassifier(NumericModeMixin):
                 addr(mean, name="mean_out"),
                 addr(var, name="var_out"),
                 addr(proba, name="proba_out"),
-            ],
-            # n_train, n_features, n_star, n_nodes, n_ls, want_proba
+            ] + ([addr(out, name="out")] if out is not None else []),
+            # n_train, n_features, n_star, n_nodes, n_ls, want_proba (+ out_kind)
             [int(n_train), int(n_features), n_star, int(kinds.shape[0]), n_ls,
-             1 if want_proba else 0],
+             1 if want_proba else 0] + ([out_kind] if out is not None else []),
         )
+        if out is not None:
+            return mean, var, proba, out
         return mean, var, proba
 
     def latent_mean_and_variance(self, X):
@@ -431,6 +453,8 @@ class GaussianProcessClassifier(NumericModeMixin):
         q = self._query(X)
         ext = self._extension()
         if self.n_classes_ == 2:
+            if _gp_py2mojo(ext):
+                return self._latent(ext, self.estimators_[0], q, True, 2)[3]
             _, _, p = self._latent(ext, self.estimators_[0], q, True)
             return Array.from_list([[1.0 - v, v] for v in p.tolist()], "<f8")
         cols = [self._latent(ext, e, q, True)[2] for e in self.estimators_]
@@ -444,6 +468,8 @@ class GaussianProcessClassifier(NumericModeMixin):
         q = self._query(X)
         ext = self._extension()
         if self.n_classes_ == 2:
+            if _gp_py2mojo(ext):
+                return decode_labels(self.classes_, self._latent(ext, self.estimators_[0], q, False, 1)[3])
             mean, _, _ = self._latent(ext, self.estimators_[0], q, False)
             codes = threshold_codes(mean)
         else:

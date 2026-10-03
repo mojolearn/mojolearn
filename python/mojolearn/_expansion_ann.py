@@ -14,7 +14,7 @@ first imported, after the package, so both may rely on every module existing:
                                import `_classical_host` INSIDE it and subclass
                                its `_HostBound`; never import it at module level
 """
-from ._buffer import addr, addr_ro, as_f32_c, empty
+from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._mode import NumericModeMixin
 
 __all__ = ["IVFPQIndex", "TSNE", "CagraIndex", "IVFSQIndex", "IVFRaBitQIndex", "refine"]
@@ -40,6 +40,15 @@ def _ann_mask(owner, filter, n):
     if f.shape != (n,) or f.dtype != np.bool_:
         raise ValueError(f"mojolearn {owner}: filter must be a boolean array of shape ({n},), one flag per indexed row")
     return np.ascontiguousarray(f.astype(np.int32))
+
+
+def _x_ann_py2mojo(b):
+    """True when the binding `b` builds TSNE's start, takes refine's
+    euclidean roots and compacts CAGRA's filtered results itself (lane
+    apple-fast-py2mojo-cluster). A `-D MOJOLEARN_PY2MOJO_cluster_OFF` build
+    answers 0 and the Python code below runs (the A/B switch)."""
+    fn = getattr(b, "x_ann_py2mojo", None)
+    return fn is not None and int(fn()) == 1
 
 
 def _ann_int(owner, name, v):
@@ -402,14 +411,35 @@ class TSNE(NumericModeMixin):
         else:
             lr = float(self.learning_rate)
         exploration = min(self._EXPLORATION_MAX_ITER, max_iter)
-        y0 = self._init(x, n, seed)
+        native = self._bind()
+        tail = []
+        init = self.init
+        if _x_ann_py2mojo(native) and isinstance(init, str) and init in ("random", "pca"):
+            # the binding builds the start (x_ann/tsne_init.mojo): mode 1
+            # random from random_state, mode 2 the PCA embedding scaled
+            if init == "random":
+                y0 = empty((2,), "<f4")
+                mode = 1
+            else:
+                from .decomposition import PCA
+                pca = PCA(n_components=2)
+                mode_name = getattr(self, "numeric_mode", None)
+                if mode_name is not None:
+                    pca.numeric_mode = mode_name
+                y0 = np.ascontiguousarray(np.asarray(pca.fit_transform(x), dtype=np.float32))
+                mode = 2
+            s64 = seed & ((1 << 64) - 1)
+            tail = [mode, s64 & 0xFFFFFFFF, s64 >> 32]
+        else:
+            y0 = self._init(x, n, seed)
         emb = empty((n * 2,), "<f4")
         kl = empty((1,), "<f4")
-        self._bind().x_ann_tsne_fit(
+        native.x_ann_tsne_fit(
             # x, y0, y_out, kl_out
             [addr_ro(x, name="X"), addr_ro(y0, name="init"), addr(emb, name="embedding_"), addr(kl, name="kl")],
             # n, d, max_iter, exploration_iters, perplexity, early_exaggeration, learning_rate
-            [n, d, max_iter, exploration, perplexity, exag, lr],
+            # (+ init mode, random_state low, high: the binding builds y0)
+            [n, d, max_iter, exploration, perplexity, exag, lr] + tail,
         )
         self.embedding_ = emb.reshape((n, 2))
         self.kl_divergence_ = float(np.asarray(kl)[0])
@@ -569,8 +599,27 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     def _search_filtered(self, queries, filter):
         from ._optional_numpy import require_numpy
         np = require_numpy('_expansion_ann')
-        keep = _ann_mask("CagraIndex", filter, self.n_rows_) != 0
         k = self._p("n_neighbors")
+        native = self._bind()
+        if _x_ann_py2mojo(native):
+            # the compaction in the binding (x_ann/filter_topk.mojo)
+            L = self._p("itopk_size")
+            keep32 = _ann_mask("CagraIndex", filter, self.n_rows_)
+            bd, bi = self._search_k(queries, L)
+            bd32, _ = as_f32_c(bd, ndim=2, name="itopk distances")
+            bi32, _ = as_i32_c(bi, ndim=2, name="itopk indices")
+            m = int(bd32.shape[0])
+            dist = empty((m * k,), "<f4")
+            idx = empty((m * k,), "<i4")
+            native.x_ann_filter_topk(
+                # itopk distances, itopk ids, keep, out_d, out_i
+                [addr_ro(bd32, name="bd"), addr_ro(bi32, name="bi"), addr_ro(keep32, name="filter"),
+                 addr(dist, name="distances"), addr(idx, name="indices")],
+                # m, n, itopk_size, k
+                [m, self.n_rows_, int(bd32.shape[1]), k],
+            )
+            return dist.reshape((m, k)), idx.reshape((m, k))
+        keep = _ann_mask("CagraIndex", filter, self.n_rows_) != 0
         bd, bi = self._search_k(queries, self._p("itopk_size"))
         bd = np.asarray(bd)
         bi = np.asarray(bi)
@@ -817,17 +866,25 @@ def refine(dataset, queries, candidates, k, numeric_mode=None, metric="sqeuclide
         raise ValueError(f"mojolearn refine: candidates must be an integer array of shape ({m}, k0)")
     k0 = int(c.shape[1])
     k = _ann_int("refine", "k", k)
-    c32 = np.ascontiguousarray(np.where((c >= 0) & (c < n), c, -1).astype(np.int32))
+    native = _backend.binding("_mojolearn_x_ann", numeric_mode)
+    mojo = _x_ann_py2mojo(native)
+    if mojo and c.dtype == np.int32:
+        # int32 ids go as they are: the kernel skips every id outside [0, n)
+        # (refine_core.refine_cell); other dtypes are narrowed here
+        c32 = np.ascontiguousarray(c)
+    else:
+        c32 = np.ascontiguousarray(np.where((c >= 0) & (c < n), c, -1).astype(np.int32))
     dist = empty((m * k,), "<f4")
     idx = empty((m * k,), "<i4")
-    _backend.binding("_mojolearn_x_ann", numeric_mode).x_ann_refine(
+    root = mojo and metric == "euclidean"
+    native.x_ann_refine(
         # dataset, queries, candidates, out_d, out_i
         [addr_ro(x, name="dataset"), addr_ro(q, name="queries"), addr_ro(c32, name="candidates"),
          addr(dist, name="distances"), addr(idx, name="indices")],
-        # n, d, m, k0, k
-        [n, d, m, k0, k],
+        # n, d, m, k0, k (+ root: the binding takes the euclidean roots)
+        [n, d, m, k0, k] + ([1] if root else []),
     )
     dist = dist.reshape((m, k))
-    if metric == "euclidean":
+    if metric == "euclidean" and not root:
         dist = np.sqrt(np.asarray(dist, dtype=np.float32)).astype(np.float32)
     return dist, idx.reshape((m, k))

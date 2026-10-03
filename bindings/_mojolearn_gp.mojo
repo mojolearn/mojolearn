@@ -82,6 +82,7 @@ THE GIL is released around every device call, and nothing inside a
 `GILReleased` block touches a `PythonObject`.
 """
 
+from gaussian_process.unnorm import GP_PY2MOJO, gpc_binary_out, gpc_ovr_targets
 from std.os import abort
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read_i32
 from gaussian_process.host.gp_theta import (
@@ -162,6 +163,14 @@ def gp_numeric_mode_binding() raises -> PythonObject:
     prevents, and a boolean could not do that job once a third tier
     existed, because DETERMINISTIC answered 0 and read back as "fast"."""
     return PythonObject(GLOBAL_NUMERIC_MODE)
+
+
+def gp_py2mojo_binding() raises -> PythonObject:
+    """1: normalize_y's un-normalization runs in this binding, on the device
+    (lane apple-fast-py2mojo-cluster); 0 under
+    `-D MOJOLEARN_PY2MOJO_cluster_OFF`, and `_gp_impl.py` applies it in
+    Python."""
+    return PythonObject(1 if GP_PY2MOJO else 0)
 
 
 def gp_vendor_binding() raises -> PythonObject:
@@ -449,13 +458,18 @@ def _gpr_predict_run(
     var_addr: Int,
     std_addr: Int,
     clamped_addr: Int,
+    unnorm: Bool = False,
+    y_std: Float32 = Float32(1.0),
+    y_mean: Float32 = Float32(0.0),
 ) raises -> Int:
     """The GIL-free half of `gpr_predict_binding`, for `_gpr_fit_run`'s
     reason. The variance/std/clamp addresses are taken as `Int` and only
     resolved inside the `return_std` arm, so a caller that asked for the
     mean alone never has them dereferenced -- "safe to write or skip", and
     this side skips."""
-    var pred = gpr_predict_host(model, x_star, n_star, return_std)
+    var pred = gpr_predict_host(
+        model, x_star, n_star, return_std, unnorm=unnorm, y_std=y_std, y_mean=y_mean
+    )
     var mp = _f32_ptr(mean_addr)
     for i in range(n_star):
         mp.unsafe_store(i, pred.mean[i])
@@ -531,10 +545,11 @@ def gpr_predict_binding(
             " std_out, clamped_out), got "
             + String(len(addrs))
         )
-    if len(params) != 7:
+    if len(params) != 7 and len(params) != 10:
         raise Error(
             "gpr_predict: params must contain 7 values (n_train,"
-            " n_features, n_star, n_nodes, n_ls, return_std, info), got "
+            " n_features, n_star, n_nodes, n_ls, return_std, info), or 10"
+            " (+ normalize_y, y_std, y_mean), got "
             + String(len(params))
         )
     var xtp = _f32_ptr(Int(py=addrs[0]))
@@ -552,6 +567,11 @@ def gpr_predict_binding(
     var n_ls = Int(py=params[4])
     var return_std = Int(py=params[5]) != 0
     var info = Int(py=params[6])
+    # params 7-9 (lane apple-fast-py2mojo-cluster): normalize_y's
+    # un-normalization of the mean and std, on the device (it ran in Python)
+    var unnorm = len(params) == 10 and Int(py=params[7]) != 0
+    var y_std = Float32(Float64(py=params[8])) if len(params) == 10 else Float32(1.0)
+    var y_mean = Float32(Float64(py=params[9])) if len(params) == 10 else Float32(0.0)
     # No positivity check on n_star here: `gpr_predict_host` refuses it by
     # name, after the failed-fit refusal, and both must stay reachable.
     var spec = _rebuild_kernel_spec(
@@ -598,6 +618,9 @@ def gpr_predict_binding(
             var_addr,
             std_addr,
             clamped_addr,
+            unnorm,
+            y_std,
+            y_mean,
         )
     return PythonObject(n_clamped)
 
@@ -609,9 +632,14 @@ def _gpr_sample_y_run(
     n_samples: Int,
     seed: UInt64,
     out_addr: Int,
+    unnorm: Bool = False,
+    y_std: Float32 = Float32(1.0),
+    y_mean: Float32 = Float32(0.0),
 ) raises:
     """The GIL-free half of `gpr_sample_y_binding`."""
-    var y = gpr_sample_y_host(model, x_star, n_star, n_samples, seed)
+    var y = gpr_sample_y_host(
+        model, x_star, n_star, n_samples, seed, unnorm=unnorm, y_std=y_std, y_mean=y_mean
+    )
     copy_f32(y.unsafe_ptr(), _f32_ptr(out_addr), n_star * n_samples)
 
 
@@ -657,12 +685,18 @@ def gpr_sample_y_binding(
             " xstar, kinds, kparams, ls_len, ls, y_out), got "
             + String(len(addrs))
         )
-    if len(params) != 9:
+    if len(params) != 9 and len(params) != 12:
         raise Error(
             "gpr_sample_y: params must contain 9 values (n_train, n_features,"
-            " n_star, n_nodes, n_ls, info, n_samples, seed_lo, seed_hi), got "
+            " n_star, n_nodes, n_ls, info, n_samples, seed_lo, seed_hi), or 12"
+            " (+ normalize_y, y_std, y_mean), got "
             + String(len(params))
         )
+    # params 9-11 (lane apple-fast-py2mojo-cluster): every draw un-normalized
+    # on the device (it ran in Python)
+    var unnorm = len(params) == 12 and Int(py=params[9]) != 0
+    var y_std = Float32(Float64(py=params[10])) if len(params) == 12 else Float32(1.0)
+    var y_mean = Float32(Float64(py=params[11])) if len(params) == 12 else Float32(0.0)
     var out_addr = Int(py=addrs[8])
     var n_train = Int(py=params[0])
     var n_features = Int(py=params[1])
@@ -702,7 +736,7 @@ def gpr_sample_y_binding(
         0,
     )
     with GILReleased(Python()):
-        _gpr_sample_y_run(model, x_star, n_star, n_samples, seed, out_addr)
+        _gpr_sample_y_run(model, x_star, n_star, n_samples, seed, out_addr, unnorm, y_std, y_mean)
     return PythonObject(n_samples)
 
 
@@ -712,9 +746,12 @@ def _gpr_predict_cov_run(
     n_star: Int,
     mean_addr: Int,
     cov_addr: Int,
+    unnorm: Bool = False,
+    y_std: Float32 = Float32(1.0),
+    y_mean: Float32 = Float32(0.0),
 ) raises:
     """The GIL-free half of `gpr_predict_cov_binding`."""
-    var r = gpr_predict_cov_host(model, x_star, n_star)
+    var r = gpr_predict_cov_host(model, x_star, n_star, unnorm=unnorm, y_std=y_std, y_mean=y_mean)
     copy_f32(r.mean.unsafe_ptr(), _f32_ptr(mean_addr), n_star)
     copy_f32(r.cov.unsafe_ptr(), _f32_ptr(cov_addr), n_star * n_star)
 
@@ -731,8 +768,13 @@ def gpr_predict_cov_binding(
     through). Returns n_star; both outputs in the normalized scale."""
     if len(addrs) != 10:
         raise Error("gpr_predict_cov: addrs must contain 10 addresses, got " + String(len(addrs)))
-    if len(params) != 6:
-        raise Error("gpr_predict_cov: params must contain 6 values, got " + String(len(params)))
+    if len(params) != 6 and len(params) != 9:
+        raise Error("gpr_predict_cov: params must contain 6 or 9 values, got " + String(len(params)))
+    # params 6-8 (lane apple-fast-py2mojo-cluster): the mean and every
+    # covariance cell un-normalized on the device (it ran in Python)
+    var unnorm = len(params) == 9 and Int(py=params[6]) != 0
+    var y_std = Float32(Float64(py=params[7])) if len(params) == 9 else Float32(1.0)
+    var y_mean = Float32(Float64(py=params[8])) if len(params) == 9 else Float32(0.0)
     var n_train = Int(py=params[0])
     var n_features = Int(py=params[1])
     var n_star = Int(py=params[2])
@@ -755,7 +797,7 @@ def gpr_predict_cov_binding(
         Float32(0.0), Float32(0.0), Float32(0.0), info, 0,
     )
     with GILReleased(Python()):
-        _gpr_predict_cov_run(model, x_star, n_star, mean_addr, cov_addr)
+        _gpr_predict_cov_run(model, x_star, n_star, mean_addr, cov_addr, unnorm, y_std, y_mean)
     return PythonObject(n_star)
 
 
@@ -978,16 +1020,17 @@ def gpc_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
     `params`, in this exact order: 0 n_train, 1 n_features, 2 n_nodes,
     3 n_ls, 4 max_iter_predict.
     """
-    if len(addrs) != 10:
+    if len(addrs) != 10 and not (len(addrs) == 11 and len(params) == 6):
         raise Error(
             "gpc_fit: addrs must contain 10 addresses (x, y, kinds, kparams,"
             " ls_len, ls, l_out, pi_out, wsr_out, scalars_out), got "
             + String(len(addrs))
         )
-    if len(params) != 5:
+    if len(params) != 5 and len(params) != 6:
         raise Error(
             "gpc_fit: params must contain 5 values (n_train, n_features,"
-            " n_nodes, n_ls, max_iter_predict), got "
+            " n_nodes, n_ls, max_iter_predict), or 6 (+ the one-vs-rest class"
+            " k, when addrs[1] is the n_train int32 class codes), got "
             + String(len(params))
         )
     var lp = _f32_ptr(Int(py=addrs[6]))
@@ -1009,7 +1052,18 @@ def gpc_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
         String("gpc_fit"),
     )
     var x = read_f32(Int(py=addrs[0]), max(0, n_train * n_features))
-    var y = read_f32(Int(py=addrs[1]), max(0, n_train))
+    # params[5] (lane apple-fast-py2mojo-cluster): addrs[1] holds the int32
+    # class codes and the targets are code == k, built here, not in Python
+    var y: List[Float32]
+    if len(params) == 6:
+        y = gpc_ovr_targets(read_i32(Int(py=addrs[1]), max(0, n_train)), n_train, Int(py=params[5]))
+        if len(addrs) == 11:
+            # addrs[10]: the targets, WRITTEN (the fitted model keeps them)
+            var yo = f32_ptr(Int(py=addrs[10]))
+            for i in range(n_train):
+                yo.unsafe_store(i, y[i])
+    else:
+        y = read_f32(Int(py=addrs[1]), max(0, n_train))
     var n_iter = 0
     with GILReleased(Python()):
         n_iter = _gpc_fit_run(
@@ -1076,14 +1130,17 @@ def gpc_predict_binding(
     `params`, in this exact order: 0 n_train, 1 n_features, 2 n_star,
     3 n_nodes, 4 n_ls, 5 want_proba.
     """
-    if len(addrs) != 13:
+    # addrs[13] + params[6] (lane apple-fast-py2mojo-cluster): an output the
+    # Python side computed from these, `gpc_binary_out`'s kind
+    var out_kind = Int(py=params[6]) if len(params) == 7 else 0
+    if len(addrs) != 13 and not (len(addrs) == 14 and out_kind != 0):
         raise Error(
             "gpc_predict: addrs must contain 13 addresses (xtrain, y, pi,"
             " wsr, l, xstar, kinds, kparams, ls_len, ls, mean_out, var_out,"
             " proba_out), got "
             + String(len(addrs))
         )
-    if len(params) != 6:
+    if len(params) != 6 and len(params) != 7:
         raise Error(
             "gpc_predict: params must contain 6 values (n_train, n_features,"
             " n_star, n_nodes, n_ls, want_proba), got "
@@ -1119,6 +1176,8 @@ def gpc_predict_binding(
             xt, y, pi, wsr, l, spec, x_star, n_train, n_features, n_star,
             want_proba, mean_addr, var_addr, proba_addr,
         )
+    if out_kind != 0:
+        gpc_binary_out(mean_addr, proba_addr, n_star, out_kind, Int(py=addrs[13]))
     return PythonObject(rc)
 
 
@@ -1387,6 +1446,7 @@ def PyInit__mojolearn_gp() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_gp")
         m.def_function[gp_parallel_available]("gp_parallel_available")
         m.def_function[gp_vendor_binding]("gp_vendor")
+        m.def_function[gp_py2mojo_binding]("gp_py2mojo")
         m.def_function[gp_numeric_mode_binding]("gp_numeric_mode")
         m.def_function[gpr_fit_binding]("gpr_fit")
         m.def_function[gpr_predict_binding]("gpr_predict")

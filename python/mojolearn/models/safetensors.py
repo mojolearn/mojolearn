@@ -32,7 +32,6 @@ Every other dtype (F64, F8_*, U8, I8, I16, U16, BOOL, ...) is refused BY
 NAME with the tensor's name; nothing is downcast. This reader moves no
 arithmetic bit, so it takes no DEVIATION number.
 """
-import array
 import json
 import mmap
 import os
@@ -88,44 +87,24 @@ class TensorInfo:
         return f"TensorInfo({self.name!r}, {self.dtype}, shape={self.shape})"
 
 
-def _f16_bits_to_f32(h):
-    """The float32 bit pattern of the float16 bit pattern `h`, exact.
-
-    A float16 is `sign:1 exponent:5 mantissa:10` with bias 15; a float32 is
-    `1:8:23` with bias 127. A normal value keeps its mantissa (shifted up
-    by 13) and rebiases the exponent by 112. A subnormal float16
-    (`exponent == 0`, mantissa nonzero) is `mantissa * 2^-24`, which is a
-    NORMAL float32: its leading one is found by shifting, the exponent
-    adjusted by the same count. Zero keeps its sign; the infinities and
-    every NaN keep theirs and their payload."""
-    s = (h & 0x8000) << 16
-    e = (h >> 10) & 0x1F
-    m = h & 0x03FF
-    if e == 0:
-        if m == 0:
-            return s
-        # renormalize: shift until the leading one sits at bit 10
-        shift = 0
-        while (m & 0x0400) == 0:
-            m <<= 1
-            shift += 1
-        m &= 0x03FF
-        return s | ((113 - shift) << 23) | (m << 13)
-    if e == 31:
-        return s | 0x7F800000 | (m << 13)
-    return s | ((e + 112) << 23) | (m << 13)
-
-
 def widen_f16(bits):
-    """A `'<f2'` Array of any rank to float32, by bit construction."""
-    h = array.array("H")
-    h.frombytes(bits.tobytes())
-    u = array.array("I", bytes(4 * len(h)))
-    for k in range(len(h)):
-        u[k] = _f16_bits_to_f32(h[k])
-    f = array.array("f")
-    f.frombytes(u.tobytes())
-    return Array._owned(f, tuple(bits.shape), "<f4", "C")
+    """A float16 Array of any rank (`'<f2'`, or its bits as `'<u2'`) to
+    float32, by bit construction: a normal value keeps its mantissa shifted
+    up by 13 and rebiases the exponent by 112, a subnormal is renormalized
+    into a normal float32, zero keeps its sign, and the infinities and
+    every NaN keep sign and payload. The construction is
+    `gemm/contract.mojo::f16_bits_to_f32`, run by the linalg binding's
+    `from_f16` (a device kernel on a GPU install, the linalg host binding
+    on a CPU-only one); the per-element Python loop is gone
+    (pyglue-text-io, Oct 3). Exact, so every column has the same bits."""
+    from .. import _linalg_impl
+    shape = tuple(bits.shape)
+    if bits.dtype != "<u2":
+        bits = frombytes(bits.tobytes(), "<u2", shape if shape else (1,))
+    if bits.size == 0:
+        return frombytes(b"", "<f4", shape)
+    out = _linalg_impl.from_f16(bits)
+    return out.reshape(shape) if shape != tuple(out.shape) else out
 
 
 def _parse_header(raw, path):
@@ -223,7 +202,7 @@ class SafetensorsFile:
                     # memoryview.cast("e") exists only from Python 3.12, and the
                     # wheel supports 3.10 up; float16 is widened from its bits
                     # below, so its bytes are copied as they are.
-                    owned = frombytes(raw.tobytes(), typestr, t.shape if t.shape else (1,))
+                    owned = frombytes(raw.tobytes(), "<u2", t.shape if t.shape else (1,))
                     if not t.shape:
                         owned = owned.reshape(())
                 else:

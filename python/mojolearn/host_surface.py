@@ -1895,6 +1895,7 @@ FAMILIES = (
             "lm_col_sums", "lm_center", "lm_scale_rows",
             "tsvd_explained",
             "dbscan_fit_core", "labeled_reference_predict",
+            "dbscan_core_arrays", "estimators_py2mojo_cluster",
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             # lane cpu (2026-09-27): PCA (whiten=False) and TruncatedSVD
@@ -2243,13 +2244,14 @@ FAMILIES = (
             "gaussian_process/host/gpc_steps.mojo",
             "cholesky/host/chol_oracle.mojo",
             "gemm/host/gemm_oracle.mojo",
+            "gaussian_process/unnorm.mojo",
         ),
         exports=(
             "gp_host_numeric_mode", "gp_host_vendor", "gp_host_column",
             "gp_host_sabotage", "gp_vendor", "gp_numeric_mode",
             "gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad", "gp_log64", "gp_theta_params", "gpr_predict_cov",
             "gp_restart_uniforms", "gpc_fit", "gpc_predict", "cholesky_profile_jitter",
-            "cholesky_factor", "cholesky_solve", "gpr_optimize",
+            "cholesky_factor", "cholesky_solve", "gpr_optimize", "gp_py2mojo",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2453,7 +2455,7 @@ FAMILIES = (
         exports=(
             "gp_infer_host_numeric_mode", "gp_infer_host_vendor",
             "gp_infer_host_column", "gp_infer_host_sabotage",
-            "gp_vendor", "gp_numeric_mode", "gpr_predict", "gpc_predict",
+            "gp_vendor", "gp_numeric_mode", "gpr_predict", "gpc_predict", "gp_py2mojo",
         ),
         gate="tools/classical_host_gate.py",
         wheel_note=(
