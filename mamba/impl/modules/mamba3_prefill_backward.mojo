@@ -107,9 +107,12 @@ struct _AfnM3Arena(Movable):
     and nothing else in every other build."""
 
     var id: Int
+    #: scratch the AFN arms enqueue work on, kept alive past the pass's wait
+    var keep: List[DeviceBuffer[DType.float32]]
 
     def __init__(out self) raises:
         self.id = -1
+        self.keep = List[DeviceBuffer[DType.float32]]()
         comptime if AFN_M3_BWD_ARENA:
             if not arena_active():
                 self.id = arena_begin()
@@ -333,8 +336,6 @@ def mamba3_prefill_backward_on(
     # declared here and initialized only under their defines.
     var afn_arena = _AfnM3Arena()
     var afn_own = afn_arena.own()
-    var afn_sums_a: DeviceBuffer[DType.float32]
-    var afn_sums_b: DeviceBuffer[DType.float32]
     # lane/neural-apple2: every scratch below is filled and used on the one
     # in-order `ctx` and kept alive to the final synchronize (the explicit
     # last uses at the end), so its allocation needs no wait of its own.
@@ -424,8 +425,9 @@ def mamba3_prefill_backward_on(
     var d_angle_raw=_m3_scratch(afn_own, ctx,m*M3_NUM_ROPE_ANGLES)
     var d_dt_angle=_m3_scratch(afn_own, ctx,head_cells)
     comptime if AFN_M3_BWD_CHUNK:
-        afn_sums_a = _m3_scratch(afn_own, ctx, b * dims.nheads * M3_NUM_ROPE_ANGLES * afn_m3_theta_chunks(l))
-        mamba3_afn_backward_angle_into(ctx,d_angle_rate,d_angle_raw,d_dt_angle,d_theta_rot,stages.dt_work,stages.in_proj,afn_sums_a,b,l,dims)
+        var afn_sums = _m3_scratch(afn_own, ctx, b * dims.nheads * M3_NUM_ROPE_ANGLES * afn_m3_theta_chunks(l))
+        mamba3_afn_backward_angle_into(ctx,d_angle_rate,d_angle_raw,d_dt_angle,d_theta_rot,stages.dt_work,stages.in_proj,afn_sums,b,l,dims)
+        afn_arena.keep.append(afn_sums^)
     else:
         mamba3_backward_angle_into(ctx,d_angle_rate,d_angle_raw,d_dt_angle,d_theta_rot,stages.dt_work,stages.in_proj,b,l,dims)
     _mtick(ctx, ton, tk, "angle")
@@ -475,8 +477,9 @@ def mamba3_prefill_backward_on(
     _mtick(ctx, ton, tk, "join_current")
     var d_angle_rate_join=_m3_scratch(afn_own, ctx,m*dims.nheads*M3_NUM_ROPE_ANGLES);var d_angle_raw_join=_m3_scratch(afn_own, ctx,m*M3_NUM_ROPE_ANGLES);var d_dt_angle_join=_m3_scratch(afn_own, ctx,head_cells)
     comptime if AFN_M3_BWD_CHUNK:
-        afn_sums_b = _m3_scratch(afn_own, ctx, b * dims.nheads * M3_NUM_ROPE_ANGLES * afn_m3_theta_chunks(l))
-        mamba3_afn_backward_angle_into(ctx,d_angle_rate_join,d_angle_raw_join,d_dt_angle_join,d_theta_join,stages.dt_work,stages.in_proj,afn_sums_b,b,l,dims)
+        var afn_sums = _m3_scratch(afn_own, ctx, b * dims.nheads * M3_NUM_ROPE_ANGLES * afn_m3_theta_chunks(l))
+        mamba3_afn_backward_angle_into(ctx,d_angle_rate_join,d_angle_raw_join,d_dt_angle_join,d_theta_join,stages.dt_work,stages.in_proj,afn_sums,b,l,dims)
+        afn_arena.keep.append(afn_sums^)
     else:
         mamba3_backward_angle_into(ctx,d_angle_rate_join,d_angle_raw_join,d_dt_angle_join,d_theta_join,stages.dt_work,stages.in_proj,b,l,dims)
     _mtick(ctx, ton, tk, "angle")
@@ -602,8 +605,5 @@ def mamba3_prefill_backward_on(
     _ = d_skip^
     _ = workspace^
     _ = d_gate^
-    comptime if AFN_M3_BWD_CHUNK:
-        _ = afn_sums_a^
-        _ = afn_sums_b^
     afn_arena.close()
     return gradients^
