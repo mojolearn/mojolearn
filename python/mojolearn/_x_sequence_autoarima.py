@@ -16,8 +16,8 @@ The search, as the reference's:
   3. `fit` refits every chosen order on its sub-batch.
 The information criterion is batched_arima.cu `information_criterion`'s:
 -2 loglike + 2N (aic), + 2N(N+1)/(n - N - 1) (aicc), log(n) N (bic), with
-n = n_obs - d - s D and N the model's parameter count, computed in float64 on
-the host from the fit's float32 log-likelihood.
+n = n_obs - d - s D and N the model's parameter count, computed in float64 in
+Mojo (`ic_running_min_f64`) from the fit's float32 log-likelihood.
 
 Layout: mojolearn's ARIMA layout, `(batch_size, n_obs)`, one series per row
 (cuML's AutoARIMA takes series in columns; transpose to call it the same way).
@@ -34,6 +34,7 @@ np = require_numpy('_x_sequence_autoarima')
 from . import _portable_math as _pm
 from ._arima_impl import ARIMA
 from ._tsa_impl import select_d
+from ._buffer import _native
 
 _IC = ("aic", "aicc", "bic")
 
@@ -123,37 +124,49 @@ class AutoARIMA:
             sub = np.ascontiguousarray(y[ids])
             k_opts = ([1 if d_ + D_ <= 1 else 0] if fit_intercept == "auto"
                       else _options("k", fit_intercept, 0, 1))
-            orders, ics = [], []
+            orders, nb = [], len(ids)
+            best_ic = np.empty(nb, dtype=np.float64)
+            best = np.empty(nb, dtype=np.int64)
+            ic_k = np.empty(nb, dtype=np.float64)
             for p_, q_, P_, Q_, k_ in itertools.product(p_opts, q_opts, P_opts, Q_opts, k_opts):
                 if p_ + q_ + P_ + Q_ + k_ == 0:
                     continue
                 s_ = s if (P_ + D_ + Q_) else 0
                 m = ARIMA(order=(p_, d_, q_), seasonal_order=(P_, D_, Q_, s_),
                           trend="c" if k_ else "n", maxiter=maxiter).fit(sub)
+                llf = np.ascontiguousarray(m.llf_, dtype=np.float32).reshape(-1)
+                # every series' criterion and the running first-minimum
+                # choice, in Mojo (lane cgr4-py-compute)
+                _native("ic_running_min_f64")(llf.ctypes.data, nb, self._penalty(m, ic, d_, D_, s_),
+                                              len(orders), ic_k.ctypes.data, best_ic.ctypes.data,
+                                              best.ctypes.data)
                 orders.append((p_, q_, P_, Q_, s_, k_))
-                ics.append(self._ic(m, ic, d_, D_, s_))
-            best = np.argmin(np.stack(ics, axis=1), axis=1)
+            if not orders:
+                raise ValueError("AutoARIMA: no (p, q, P, Q, k) order to try")
+            table = np.asarray([[p_, d_, q_, P_, D_, Q_, s_, k_] for (p_, q_, P_, Q_, s_, k_) in orders],
+                               dtype=np.int64)
+            self.order_[ids] = table[best]
+            self.ic_[ids] = best_ic
             for i, (p_, q_, P_, Q_, s_, k_) in enumerate(orders):
                 chosen = ids[best == i]
                 if len(chosen) == 0:
                     continue
                 self.models.append(((p_, d_, q_), (P_, D_, Q_, s_), k_))
                 self._ids.append(chosen)
-                self.order_[chosen] = [p_, d_, q_, P_, D_, Q_, s_, k_]
-                self.ic_[chosen] = ics[i][best == i]
         self._fitted = [None] * len(self.models)
         return self
 
-    def _ic(self, m, ic, d_, D_, s_):
-        llf = np.asarray(m.llf_, dtype=np.float64)
+    def _penalty(self, m, ic, d_, D_, s_):
+        """The criterion's parameter penalty (a scalar per order): 2N (aic),
+        + 2N(N+1)/(n - N - 1) (aicc), log(n) N (bic); the criterion is
+        -2 loglike + penalty, per series in `ic_running_min_f64`."""
         N = float(m.complexity_)
         n = float(self.n_obs - d_ - s_ * D_)
-        base = -2.0 * llf
         if ic == "aic":
-            return base + 2.0 * N
+            return 2.0 * N
         if ic == "aicc":
-            return base + 2.0 * N + 2.0 * N * (N + 1.0) / (n - N - 1.0)
-        return base + _pm.log(n) * N  # the pinned log, as ARIMA.bic_ (DEVIATION 6900)
+            return 2.0 * N + 2.0 * N * (N + 1.0) / (n - N - 1.0)
+        return _pm.log(n) * N  # the pinned log, as ARIMA.bic_ (DEVIATION 6900)
 
     def fit(self, h=1e-8, maxiter=1000, method="ml", truncate=0):
         if not self.models:

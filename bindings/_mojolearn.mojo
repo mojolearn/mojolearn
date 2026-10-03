@@ -99,6 +99,7 @@ from bindings.hotpath_helpers import (
     select_mask_u8_i64_binding,
     count_mask_u8_binding,
     next_combination_i64_binding,
+    ic_running_min_f64_binding,
 )
 from std.os import abort
 from std.math import isfinite
@@ -1760,6 +1761,7 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[select_mask_u8_i64_binding]("select_mask_u8_i64")
         m.def_function[count_mask_u8_binding]("count_mask_u8")
         m.def_function[next_combination_i64_binding]("next_combination_i64")
+        m.def_function[ic_running_min_f64_binding]("ic_running_min_f64")
         m.def_function[gather_i64_binding]("gather_i64")
         m.def_function[gather_f64_binding]("gather_f64")
         m.def_function[argmax_rows_f32_binding]("argmax_rows_f32")

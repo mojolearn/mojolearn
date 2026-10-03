@@ -938,3 +938,41 @@ def next_combination_i64_binding(addr: PythonObject, p: PythonObject, n: PythonO
     for j in range(i, k):
         cp.unsafe_store(j, v + Int64(j - i))
     return PythonObject(1)
+
+
+def ic_running_min_f64_binding(
+    llf_addr: PythonObject, n: PythonObject, penalty: PythonObject, order: PythonObject,
+    ic_addr: PythonObject, best_ic_addr: PythonObject, best_idx_addr: PythonObject,
+) raises -> PythonObject:
+    """AutoARIMA's information criterion and order choice per series (lane
+    cgr4-py-compute): ic[b] = -2 llf[b] + penalty in float64 from the fit's
+    float32 log-likelihood, written to `ic`; then the running argmin over
+    the orders tried so far, `np.argmin`'s rule: the FIRST minimum, a NaN
+    taken as the minimum (the first NaN wins). order 0 initialises."""
+    var count = Int(py=n)
+    var k = Int(py=order)
+    if count < 1 or k < 0:
+        raise Error("ic_running_min_f64: n must be positive and order non-negative")
+    var pen = Float64(py=penalty)
+    var lp = _ptr[DType.float32](Int(py=llf_addr))
+    var ip = _ptr[DType.float64](Int(py=ic_addr))
+    var bp = _ptr[DType.float64](Int(py=best_ic_addr))
+    var xp = _ptr[DType.int64](Int(py=best_idx_addr))
+    with GILReleased(Python()):
+        for b in range(count):
+            var v = -2.0 * Float64(lp.unsafe_load(b)) + pen
+            ip.unsafe_store(b, v)
+            if k == 0:
+                bp.unsafe_store(b, v)
+                xp.unsafe_store(b, 0)
+            else:
+                var cur = bp.unsafe_load(b)
+                var take = False
+                if cur == cur:
+                    take = (v != v) or v < cur
+                comptime if HOTPATH_SABOTAGE:
+                    take = not take
+                if take:
+                    bp.unsafe_store(b, v)
+                    xp.unsafe_store(b, Int64(k))
+    return PythonObject(0)
