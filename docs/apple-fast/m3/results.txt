@@ -1,4 +1,4 @@
-pos=723 lines=     931
+pos=726 lines=     931
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -862,3 +862,7 @@ pos=723 lines=     931
 970:CMD apple-fast-batch@3150d75c1 prep3-mlb-taxi-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=290.7 all=[291] quality=['{"output_shape":'] defines='-D MOJOLEARN_PREP3_LABELS'
 971:CMD apple-fast-batch@3150d75c1 prep3-spline-istella-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=11.8 all=[12] quality=['{"output_shape":'] defines='-D MOJOLEARN_PREP3_SPLINE'
 972:CMD apple-fast-batch@3150d75c1 shap-tree-tab-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=21.4 all=[21] quality=['{"max_additivity_error":'] defines='-D MOJOLEARN_SHAP_TREE_TAB'
+973:FBUILD lane/apple-fast@c48ede3c1 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+974:CMD apple-fast@c48ede3c1 retime-additive-chi2-istella-b rc=0 AFC-AB-SUMMARY retime-additive-chi2-istella-b arm=A lane=additive-chi2 ds=istella median_of_medians_ms=12.289708014577627 runs=[12.289708014577627 ] digest=de23b7de261581b8 
+975:CMD apple-fast@c48ede3c1 nofast-cross-val-score-istella-b rc=0 AFC-AB-SUMMARY nofast-cross-val-score-istella-b arm=A lane=cross-val-score ds=istella median_of_medians_ms=3074.8249589814804 runs=[ 3074.8249589814804 ] digest= digest=aad3c0e4356b5473 
+976:CMD apple-fast@c48ede3c1 nofast-cross-val-score-taxi-b rc=0 AFC-AB-SUMMARY nofast-cross-val-score-taxi-b arm=A lane=cross-val-score ds=taxi median_of_medians_ms=153.95991603145376 runs=[153.95991603145376 ] digest=0431fc4561fd23db 
