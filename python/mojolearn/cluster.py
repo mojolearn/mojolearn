@@ -497,7 +497,7 @@ class KMeans(NumericModeMixin):
                 f"reals, 9 and 5 are needed"
             )
         k, d, n_fit, n_iter, metric_code, init_code, max_iter, n_init, seed = (
-            int(meta[i]) for i in range(9)
+            int(meta[i]) for i in range(9)  # glue: unpacks the fixed meta vector
         )
         if k < 1 or d < 1:
             raise ValueError(f"mojolearn: {path!r} holds an empty model ({k} centers of {d} features)")

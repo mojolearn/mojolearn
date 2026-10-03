@@ -78,6 +78,9 @@ import numbers
 from . import _backend
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty
+
+#: `gaussian_process/gp_optim_items.mojo`'s stop words (GP_STOP_*).
+_OPT_STOPS = ("running", "pgtol", "no-descent", "line-search", "ftol", "max-iter", "nonfinite-start")
 from ._mode import NumericModeMixin
 from .linear_model import _flatten, _r2_sums, _round_f32, _shape_of
 from .preprocessing import StandardScaler
@@ -107,7 +110,7 @@ def _as_length_scale(length_scale, what):
     Mojo refusal unreachable from Python and therefore untestable."""
     if not _shape_of(length_scale):
         return [float(length_scale)]
-    ls = [float(v) for v in _flatten(length_scale)]
+    ls = [float(v) for v in _flatten(length_scale)]  # glue: converts the length-scale argument
     if len(ls) == 0:
         raise ValueError(
             f"mojolearn {what}: length_scale is an empty sequence; pass a "
@@ -120,12 +123,35 @@ def _as_length_scale(length_scale, what):
 _FLT_MIN = 1.1754943508222875e-38
 
 
+def _gp_py2mojo(ext):
+    """True when the binding `ext` applies normalize_y's un-normalization
+    itself (lane apple-fast-py2mojo-cluster: the mean, std, covariance and
+    sample_y draws, `gaussian_process/unnorm.mojo`). A
+    `-D MOJOLEARN_PY2MOJO_cluster_OFF` build answers 0 and the Python loops
+    below run (the A/B switch)."""
+    fn = getattr(ext, "gp_py2mojo", None)
+    return fn is not None and int(fn()) == 1
+
+
 def _ftz(x):
     """`checks/numerics.mojo::ftz` on a binary32 value held in a Python
     float: a subnormal becomes a zero of the same sign."""
     if x != 0.0 and abs(x) < _FLT_MIN:
         return math.copysign(0.0, x)
     return x
+
+def _scale_shift(arr, a, b, op):
+    """A new float32 Array of `scale_shift_ftz_f32` over `arr` (op 0
+    ftz(ftz(a v) + b), 1 ftz(sqrt(ftz(v a))), 2 ftz(v a)): each step one
+    binary32 rounding then `ftz`, the same bits the Python comprehension
+    gave, in Mojo (lane cgr4-py-compute)."""
+    from ._buffer import _native, as_f32_c, empty
+    src, _ = as_f32_c(arr, ndim=None, name="values")
+    out = empty(src.shape, "<f4")
+    if src.size:
+        _native("scale_shift_ftz_f32")(src._addr, src.size, float(a), float(b), int(op), out._addr)
+    return out
+
 
 
 #: scikit-learn's default hyperparameter bounds, `kernels.py` (every leaf).
@@ -143,14 +169,14 @@ def _as_bounds(bounds, n, what):
         return "fixed"
     shape = _shape_of(bounds)
     if shape == (2,):
-        pairs = [tuple(float(v) for v in _flatten(bounds))] * n
+        pairs = [tuple(float(v) for v in _flatten(bounds))] * n  # glue: converts the bounds argument
     elif shape == (n, 2):
-        flat = [float(v) for v in _flatten(bounds)]
+        flat = [float(v) for v in _flatten(bounds)]  # glue: converts the bounds argument
         pairs = list(zip(flat[0::2], flat[1::2]))
     else:
         raise ValueError(
             f"mojolearn {what}: bounds must be 'fixed', a (low, high) pair, or {n} pairs; got shape {shape}")
-    for lo, hi in pairs:
+    for lo, hi in pairs:  # glue: validates each hyperparameter bound pair
         if not (math.isfinite(lo) and math.isfinite(hi) and 0.0 < lo <= hi):
             raise ValueError(
                 f"mojolearn {what}: every bound must be finite and positive with low <= high, got "
@@ -193,18 +219,18 @@ class Kernel:
         raise NotImplementedError
 
     def _free_flags(self):
-        return [0 if h is None else 1 for h in self._hyper()]
+        return [0 if h is None else 1 for h in self._hyper()]  # glue: one flag per postfix node
 
     def _free_values(self):
-        return [v for h in self._hyper() if h is not None for v in h[0]]
+        return [v for h in self._hyper() if h is not None for v in h[0]]  # glue: collects free kernel hyperparameters (n_dims entries)
 
     def _free_bounds(self):
-        return [b for h in self._hyper() if h is not None for b in h[1]]
+        return [b for h in self._hyper() if h is not None for b in h[1]]  # glue: collects bounds of free kernel hyperparameters (n_dims entries)
 
     def _with_free_values(self, values, theta=None):
         out = self._replace(list(values))
         if theta is not None:
-            out._theta_fit = [float(t) for t in theta]
+            out._theta_fit = [float(t) for t in theta]  # glue: copies the fitted theta, kernel hyperparameters (n_dims entries)
         return out
 
     @property
@@ -216,11 +242,11 @@ class Kernel:
         fitted = getattr(self, "_theta_fit", None)
         if fitted is not None:
             return list(fitted)
-        return [math.log(v) for v in self._free_values()]
+        return [math.log(v) for v in self._free_values()]  # glue: sklearn theta API, log of free kernel hyperparameters (n_dims entries)
 
     @property
     def bounds(self):
-        return [[math.log(lo), math.log(hi)] for lo, hi in self._free_bounds()]
+        return [[math.log(lo), math.log(hi)] for lo, hi in self._free_bounds()]  # glue: sklearn bounds API, log of kernel hyperparameters (n_dims entries) bounds
 
     def __repr__(self):
         return self._name()
@@ -293,7 +319,7 @@ class RBF(Kernel):
     def _replace(self, values):
         ls = list(self.length_scale)
         if self.length_scale_bounds != "fixed":
-            ls = [values.pop(0) for _ in ls]
+            ls = [values.pop(0) for _ in ls]  # glue: consumes this leaf's length scales
         return RBF(ls, self.length_scale_bounds)
 
     def _name(self):
@@ -323,7 +349,7 @@ class Matern(Kernel):
     def _replace(self, values):
         ls = list(self.length_scale)
         if self.length_scale_bounds != "fixed":
-            ls = [values.pop(0) for _ in ls]
+            ls = [values.pop(0) for _ in ls]  # glue: consumes this leaf's length scales
         return Matern(ls, self.length_scale_bounds, nu=self.nu)
 
     def _name(self):
@@ -361,14 +387,14 @@ class _SavedKernel(Kernel):
     handed it (the neighbors and density inference lane, 2026-09-15)."""
 
     def __init__(self, nodes):
-        self.__nodes = [(int(k), float(p), [float(v) for v in ls]) for k, p, ls in nodes]
+        self.__nodes = [(int(k), float(p), [float(v) for v in ls]) for k, p, ls in nodes]  # glue: copies the kernel's postfix nodes
 
     def _nodes(self):
-        return [(k, p, list(ls)) for k, p, ls in self.__nodes]
+        return [(k, p, list(ls)) for k, p, ls in self.__nodes]  # glue: copies the kernel's postfix nodes
 
     def _hyper(self):
         # A saved kernel carries no bounds: every hyperparameter is fixed.
-        return [None for _ in self.__nodes]
+        return [None for _ in self.__nodes]  # glue: one None per postfix node
 
     def _replace(self, values):
         return _SavedKernel(self.__nodes)
@@ -424,7 +450,9 @@ class GaussianProcessRegressor(NumericModeMixin):
                                   hyperparameters with the identical gradient
                                   (DEVIATION 2880) and a projected L-BFGS
                                   whose every rule is pinned (DEVIATION 2881,
-                                  _gp_optimizer.py). scikit-learn's default is
+                                  gaussian_process/gp_optim_items.mojo, run
+                                  on the device in one binding call).
+                                  scikit-learn's default is
                                   'fmin_l_bfgs_b'; None stays the default so a
                                   fit that ran before runs the same bits. A
                                   callable is refused by name
@@ -673,10 +701,10 @@ class GaussianProcessRegressor(NumericModeMixin):
         nodes = kernel._nodes()
         # `Array.from_list(..., '<f4')` rounds each Python float to binary32
         # exactly as `np.array(dtype=np.float32)` did (DEVIATION 2376).
-        kinds = Array.from_list([int(k) for k, _, _ in nodes], "<i4")
-        params = Array.from_list([float(p) for _, p, _ in nodes], "<f4")
-        ls_len = Array.from_list([len(ls) for _, _, ls in nodes], "<i4")
-        table = [v for _, _, ls in nodes for v in ls]
+        kinds = Array.from_list([int(k) for k, _, _ in nodes], "<i4")  # glue: packs the kernel's postfix nodes
+        params = Array.from_list([float(p) for _, p, _ in nodes], "<f4")  # glue: packs the kernel's postfix nodes
+        ls_len = Array.from_list([len(ls) for _, _, ls in nodes], "<i4")  # glue: packs the kernel's postfix nodes
+        table = [v for _, _, ls in nodes for v in ls]  # glue: packs the kernel length-scale hyperparameters
         n_ls = len(table)
         # Never a zero-length buffer: mirror estimator.mojo's
         # _length_scale_table -- one unused 1.0 stands in, and n_ls says so.
@@ -792,46 +820,44 @@ class GaussianProcessRegressor(NumericModeMixin):
             # n_train, n_features, n_nodes, n_ls, alpha
             [n_rows, n_cols, int(kinds.shape[0]), n_ls, self.alpha],
         )
-        return int(info), float(scalars[1]), [float(grad[i]) for i in range(n_free)]
+        return int(info), float(scalars[1]), [float(grad[i]) for i in range(n_free)]  # glue: reads the gradient of kernel hyperparameters (n_dims entries)
 
     def _optimize(self, x, targets, n_rows, n_cols):
         """scikit-learn `_gpr.py:299-341`: optimize from the kernel's theta,
         then from `n_restarts_optimizer` log-uniform starts; the smallest
         negative likelihood wins and a tie goes to the earlier run
-        (`np.argmin`). Returns the fitted kernel, whose `theta` is the winning
-        run's. Every run is recorded in `_optimizer_runs` as
-        `(n_iter, n_eval, stop, -f)`."""
-        from . import _gp_optimizer
-        ext = self._extension()
+        (`np.argmin`). ONE binding call (`gpr_optimize`) runs every start on
+        the device (DEVIATION 2881, `gaussian_process/gp_optim_items.mojo`);
+        Python only hands the kernel over and reads the answer. Returns the
+        fitted kernel, whose `theta` is the winning run's. Every run is
+        recorded in `_optimizer_runs` as `(n_iter, n_eval, stop, -f)`."""
         base = self.kernel
-        bounds = base._free_bounds()
-        lo = [float(v) for v in ext.gp_log64([b[0] for b in bounds])]
-        hi = [float(v) for v in ext.gp_log64([b[1] for b in bounds])]
-        theta0 = [float(v) for v in ext.gp_log64(base._free_values())]
-
-        def fun(theta):
-            params = [float(v) for v in ext.gp_theta_params(theta)]
-            info, lml, grad = self._lml_grad(base._with_free_values(params), x, targets, n_rows, n_cols)
-            if info != 0 or not math.isfinite(lml) or not all(math.isfinite(g) for g in grad):
-                return math.inf, [0.0] * len(theta)
-            return -lml, [-g for g in grad]
-
-        starts = [theta0]
-        if self.n_restarts_optimizer > 0:
-            seed = self.random_state
-            u = [float(v) for v in ext.gp_restart_uniforms(
-                [self.n_restarts_optimizer, len(theta0), seed & 0xFFFFFFFF, seed >> 32])]
-            nd = len(theta0)
-            for r in range(self.n_restarts_optimizer):
-                starts.append([lo[j] + u[r * nd + j] * (hi[j] - lo[j]) for j in range(nd)])
-        best = None
-        for start in starts:
-            theta, f, n_iter, n_eval, stop = _gp_optimizer.minimize(fun, start, lo, hi)
-            self._optimizer_runs.append((n_iter, n_eval, stop, -f))
-            if best is None or f < best[1]:
-                best = (theta, f)
-        theta = best[0]
-        params = [float(v) for v in ext.gp_theta_params(theta)]
+        kinds, kparams, ls_len, ls, n_ls = self._kernel_arrays(base)
+        free = Array.from_list(base._free_flags(), "<i4")
+        n_theta = base.n_dims
+        bounds = Array.from_list([float(v) for b in base._free_bounds() for v in (b[0], b[1])], "<f4")  # glue: packs bounds of free kernel hyperparameters (n_dims entries)
+        n_runs = 1 + int(self.n_restarts_optimizer)
+        theta_out = empty((n_theta,), "<f8")
+        values_out = empty((n_theta,), "<f8")
+        runs_out = empty((n_runs * 4,), "<f8")
+        seed = int(self.random_state)
+        self._extension().gpr_optimize(
+            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_optimize_binding.
+            # x, y, kinds, kparams, ls_len, ls, free, bounds, theta_out,
+            # values_out, runs_out
+            [addr_ro(x, name="x"), addr_ro(targets, name="targets"), addr_ro(kinds, name="kinds"),
+             addr_ro(kparams, name="kparams"), addr_ro(ls_len, name="ls_len"), addr_ro(ls, name="ls"),
+             addr_ro(free, name="free"), addr_ro(bounds, name="bounds"), addr(theta_out, name="theta_out"),
+             addr(values_out, name="values_out"), addr(runs_out, name="runs_out")],
+            # n_train, n_features, n_nodes, n_ls, alpha, n_restarts, seed_lo, seed_hi
+            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self.alpha, n_runs - 1,
+             seed & 0xFFFFFFFF, (seed >> 32) & 0xFFFFFFFF],
+        )
+        for r in range(n_runs):  # glue: one record per optimizer restart
+            n_iter, n_eval, stop, f = (float(runs_out[r * 4 + j]) for j in range(4))  # glue: four fields per optimizer run
+            self._optimizer_runs.append((int(n_iter), int(n_eval), _OPT_STOPS[int(stop)], -f))
+        theta = [float(theta_out[i]) for i in range(n_theta)]  # glue: reads the fitted theta, kernel hyperparameters (n_dims entries)
+        params = [float(values_out[i]) for i in range(n_theta)]  # glue: reads fitted kernel hyperparameters (n_dims entries)
         return base._with_free_values(params, theta=theta)
 
     # -- predict ------------------------------------------------------------
@@ -878,7 +904,11 @@ class GaussianProcessRegressor(NumericModeMixin):
         xt = self.X_train_
         lf = self.L_
         dual = self.alpha_
-        n_clamped = self._extension().gpr_predict(
+        ext = self._extension()
+        norm = bool(getattr(self, "normalize_y_", False))
+        in_mojo = norm and _gp_py2mojo(ext)
+        tail = [1, float(self._y_train_std), float(self._y_train_mean)] if in_mojo else []
+        n_clamped = ext.gpr_predict(
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_binding.
             # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls,
             # mean_out, var_out, std_out, clamped_out
@@ -899,9 +929,9 @@ class GaussianProcessRegressor(NumericModeMixin):
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_binding.
             # n_train, n_features, n_star, n_nodes, n_ls, return_std, info
             [n_train, self.n_features_in_, n_star, int(kinds.shape[0]),
-             n_ls, 1 if return_std else 0, self.info_],
+             n_ls, 1 if return_std else 0, self.info_] + tail,
         )
-        if getattr(self, "normalize_y_", False):
+        if norm and not in_mojo:
             # sklearn `_gpr.py:450` and `:494`: y_mean = std * y_mean + mean;
             # y_var = y_var * std**2, then sqrt. Each is ONE correctly
             # rounded binary32 operation on the host (the product or sum of
@@ -911,13 +941,10 @@ class GaussianProcessRegressor(NumericModeMixin):
             # computes the same bits.
             s_ = self._y_train_std
             mu = self._y_train_mean
-            mean = Array.from_list(
-                [_ftz(_round_f32(_ftz(_round_f32(s_ * v)) + mu)) for v in mean.tolist()], "<f4")
+            mean = _scale_shift(mean, s_, mu, 0)
             if return_std:
                 s2 = _ftz(_round_f32(s_ * s_))
-                std = Array.from_list(
-                    [_ftz(_round_f32(math.sqrt(_ftz(_round_f32(v * s2))))) for v in var.tolist()],
-                    "<f4")
+                std = _scale_shift(var, s2, 0.0, 1)
         if return_std:
             self.clamped_ = clamped
             self.n_clamped_ = int(n_clamped)
@@ -955,6 +982,9 @@ class GaussianProcessRegressor(NumericModeMixin):
             )
         mean = empty((max(n_star, 1),), "<f4")
         cov = empty((max(n_star * n_star, 1),), "<f4")
+        norm = bool(getattr(self, "normalize_y_", False))
+        in_mojo = norm and _gp_py2mojo(ext)
+        tail = [1, float(self._y_train_std), float(self._y_train_mean)] if in_mojo else []
         xt = self.X_train_
         lf = self.L_
         dual = self.alpha_
@@ -974,15 +1004,15 @@ class GaussianProcessRegressor(NumericModeMixin):
                 addr(cov, name="cov"),
             ],
             # n_train, n_features, n_star, n_nodes, n_ls, info
-            [n_train, self.n_features_in_, n_star, int(kinds.shape[0]), n_ls, self.info_],
+            # (+ normalize_y, y_std, y_mean: the binding un-normalizes)
+            [n_train, self.n_features_in_, n_star, int(kinds.shape[0]), n_ls, self.info_] + tail,
         )
-        if getattr(self, "normalize_y_", False):
+        if norm and not in_mojo:
             s_ = self._y_train_std
             mu = self._y_train_mean
-            mean = Array.from_list(
-                [_ftz(_round_f32(_ftz(_round_f32(s_ * v)) + mu)) for v in mean.tolist()], "<f4")
+            mean = _scale_shift(mean, s_, mu, 0)
             s2 = _ftz(_round_f32(s_ * s_))
-            cov = Array.from_list([_ftz(_round_f32(v * s2)) for v in cov.tolist()], "<f4")
+            cov = _scale_shift(cov, s2, 0.0, 2)
         return mean[:n_star], cov[:n_star * n_star].reshape((n_star, n_star))
 
     # -- saved models -----------------------------------------------------------
@@ -994,7 +1024,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         from . import _serialize
         from .linear_model import _saved_mode
         nodes = self.kernel_._nodes()
-        table = [float(v) for _, _, ls in nodes for v in ls]
+        table = [float(v) for _, _, ls in nodes for v in ls]  # glue: packs the kernel length-scale hyperparameters
         n = int(self.X_train_.shape[0])
         return _serialize.write_npz(path, {
             "format": _GP_FORMAT,
@@ -1003,9 +1033,9 @@ class GaussianProcessRegressor(NumericModeMixin):
             "X_train": self.X_train_,
             "L": self.L_.reshape((n * n,)),
             "alpha": self.alpha_,
-            "kinds": Array.from_list([int(k) for k, _, _ in nodes], "<i4"),
-            "params": Array.from_list([float(p) for _, p, _ in nodes], "<f8"),
-            "ls_len": Array.from_list([len(ls) for _, _, ls in nodes], "<i4"),
+            "kinds": Array.from_list([int(k) for k, _, _ in nodes], "<i4"),  # glue: packs the kernel's postfix nodes
+            "params": Array.from_list([float(p) for _, p, _ in nodes], "<f8"),  # glue: packs the kernel's postfix nodes
+            "ls_len": Array.from_list([len(ls) for _, _, ls in nodes], "<i4"),  # glue: packs the kernel's postfix nodes
             "ls": Array.from_list(table if table else [1.0], "<f8"),
             "ints": Array.from_list([int(self.n_features_in_), int(self.info_),
                                      1 if getattr(self, "normalize_y_", False) else 0, len(table)], "<i8"),
@@ -1026,7 +1056,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         reals = _serialize.exact(arrays, "reals", "<f8")
         if ints.size != 4 or reals.size != 4:
             raise ValueError(f"mojolearn: {path!r} holds {ints.size} ints and {reals.size} reals, 4 and 4 are needed")
-        d, info, norm, n_ls = (int(ints[i]) for i in range(4))
+        d, info, norm, n_ls = (int(ints[i]) for i in range(4))  # glue: four saved meta fields
         x = _serialize.exact(arrays, "X_train", "<f4")
         if x.ndim != 2 or x.shape[1] != d or x.shape[0] < 1:
             raise ValueError(f"mojolearn: {path!r} X_train has shape {tuple(x.shape)}, ints say {d} features")
@@ -1041,12 +1071,12 @@ class GaussianProcessRegressor(NumericModeMixin):
         ls = _serialize.exact(arrays, "ls", "<f8")
         if not (kinds.size == params.size == ls_len.size) or kinds.size < 1:
             raise ValueError(f"mojolearn: {path!r} carries a malformed kernel spec")
-        lens = [int(ls_len[i]) for i in range(ls_len.size)]
-        if sum(lens) != n_ls or ls.size != max(n_ls, 1):
+        lens = [int(ls_len[i]) for i in range(ls_len.size)]  # glue: saved length-scale count per node
+        if sum(lens) != n_ls or ls.size != max(n_ls, 1):  # glue: checks the saved kernel node lengths
             raise ValueError(f"mojolearn: {path!r} length scale table does not match its node lengths")
         nodes, off = [], 0
-        for i in range(kinds.size):
-            nodes.append((int(kinds[i]), float(params[i]), [float(ls[off + j]) for j in range(lens[i])]))
+        for i in range(kinds.size):  # glue: rebuilds the kernel's postfix nodes
+            nodes.append((int(kinds[i]), float(params[i]), [float(ls[off + j]) for j in range(lens[i])]))  # glue: rebuilds the kernel's postfix nodes
             off += lens[i]
         obj = cls(kernel=_SavedKernel(nodes), alpha=float(reals[0]), normalize_y=bool(norm))
         _restore_mode(obj, arrays)
@@ -1081,13 +1111,13 @@ class GaussianProcessRegressor(NumericModeMixin):
             if eval_gradient not in (True, False):
                 raise TypeError("mojolearn GaussianProcessRegressor: eval_gradient must be a bool")
             kern = self.kernel_
-            theta = [float(t) for t in _flatten(theta)] if _shape_of(theta) else [float(theta)]
+            theta = [float(t) for t in _flatten(theta)] if _shape_of(theta) else [float(theta)]  # glue: converts the theta argument, kernel hyperparameters (n_dims entries)
             if len(theta) != kern.n_dims:
                 raise ValueError(
                     f"mojolearn GaussianProcessRegressor: theta has {len(theta)} entries, "
                     f"kernel_ has {kern.n_dims} free hyperparameters")
             ext = self._extension()
-            params = [float(v) for v in ext.gp_theta_params(theta)]
+            params = [float(v) for v in ext.gp_theta_params(theta)]  # glue: reads the binding's kernel hyperparameters (n_dims entries)
             n_rows, n_cols = self.X_train_.shape
             info, lml, grad = self._lml_grad(kern._with_free_values(params), self.X_train_,
                                              self.y_train_, n_rows, n_cols)
@@ -1169,7 +1199,11 @@ class GaussianProcessRegressor(NumericModeMixin):
         xt = self.X_train_
         lf = self.L_
         dual = self.alpha_
-        self._extension().gpr_sample_y(
+        ext = self._extension()
+        norm = bool(getattr(self, "normalize_y_", False))
+        in_mojo = norm and _gp_py2mojo(ext)
+        tail = [1, float(self._y_train_std), float(self._y_train_mean)] if in_mojo else []
+        ext.gpr_sample_y(
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_sample_y_binding.
             # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls, y_out
             [
@@ -1186,15 +1220,14 @@ class GaussianProcessRegressor(NumericModeMixin):
             # n_train, n_features, n_star, n_nodes, n_ls, info, n_samples,
             # random_state low 32 bits, random_state high 32 bits
             [n_train, self.n_features_in_, n_star, int(kinds.shape[0]), n_ls,
-             self.info_, n, seed & 0xFFFFFFFF, seed >> 32],
+             self.info_, n, seed & 0xFFFFFFFF, seed >> 32] + tail,
         )
-        if getattr(self, "normalize_y_", False):
+        if norm and not in_mojo:
             # predict's un-normalization of the mean, applied to every draw:
             # std * (mean + L z) + y_mean, so the covariance is std**2 C.
             s_ = self._y_train_std
             mu = self._y_train_mean
-            out = Array.from_list(
-                [_ftz(_round_f32(_ftz(_round_f32(s_ * v)) + mu)) for v in out.tolist()], "<f4")
+            out = _scale_shift(out, s_, mu, 0)
         return out.reshape((n_star, n))
 
     def score(self, X, y):

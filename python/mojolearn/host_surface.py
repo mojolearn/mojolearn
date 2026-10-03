@@ -1581,12 +1581,23 @@ FAMILIES = (
             # control is -D MOJOLEARN_BPE_TRAINER_SABOTAGE=1 (reversed
             # tie-break), which tokenizer_host_sabotage() also reads True for.
             "tokenizer/train/bpe_train.mojo",
+            # lane/pyglue-text-io (2026-10-03): the Python doors are glue;
+            # vocabulary build/checks, the Llama 3 / Qwen 2 cut, the
+            # pretrained-vocabulary tokenizer, rendering, the corpus cut and
+            # the batch row gather are compiled in.
+            "tokenizer/impl/vocab_build.mojo", "tokenizer/vocab.mojo",
+            "tokenizer/train/emit.mojo",
         ),
         exports=(
             "tokenizer_host_numeric_mode", "tokenizer_host_vendor",
             "tokenizer_host_column", "tokenizer_host_sabotage", "bpe_load",
             "bpe_n_vocab", "bpe_max_token_bytes", "bpe_encode", "bpe_encode_batch",
             "bpe_decode", "bpe_train", "bpe_trained_sizes", "bpe_trained_copy",
+            "bpe_load_tokens", "bpe_load_spelled", "bpe_ranks_text", "bpe_decode_seq",
+            "bpe_decode_batch", "bpe_render", "bpe_encode_corpus", "bpe_train_corpus",
+            "tokens_gather_rows", "tokenizer_pretokenize", "vocab_load_bytes",
+            "vocab_load_spelled", "vocab_info", "vocab_encode", "vocab_pretokenize",
+            "vocab_decode",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
         wheel_note=(
@@ -1884,6 +1895,7 @@ FAMILIES = (
             "lm_col_sums", "lm_center", "lm_scale_rows",
             "tsvd_explained",
             "dbscan_fit_core", "labeled_reference_predict",
+            "dbscan_core_arrays", "estimators_py2mojo_cluster",
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             # lane cpu (2026-09-27): PCA (whiten=False) and TruncatedSVD
@@ -2227,17 +2239,19 @@ FAMILIES = (
             "gaussian_process/host/gpr_oracle.mojo",
             "gaussian_process/host/gpr_grad_oracle.mojo",
             "gaussian_process/host/gp_theta.mojo",
+            "gaussian_process/gp_optim_items.mojo",
             "gaussian_process/host/gpc_oracle.mojo",
             "gaussian_process/host/gpc_steps.mojo",
             "cholesky/host/chol_oracle.mojo",
             "gemm/host/gemm_oracle.mojo",
+            "gaussian_process/unnorm.mojo",
         ),
         exports=(
             "gp_host_numeric_mode", "gp_host_vendor", "gp_host_column",
             "gp_host_sabotage", "gp_vendor", "gp_numeric_mode",
             "gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad", "gp_log64", "gp_theta_params", "gpr_predict_cov",
             "gp_restart_uniforms", "gpc_fit", "gpc_predict", "cholesky_profile_jitter",
-            "cholesky_factor", "cholesky_solve",
+            "cholesky_factor", "cholesky_solve", "gpr_optimize", "gp_py2mojo",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2441,7 +2455,7 @@ FAMILIES = (
         exports=(
             "gp_infer_host_numeric_mode", "gp_infer_host_vendor",
             "gp_infer_host_column", "gp_infer_host_sabotage",
-            "gp_vendor", "gp_numeric_mode", "gpr_predict", "gpc_predict",
+            "gp_vendor", "gp_numeric_mode", "gpr_predict", "gpc_predict", "gp_py2mojo",
         ),
         gate="tools/classical_host_gate.py",
         wheel_note=(

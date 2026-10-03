@@ -27,7 +27,6 @@ from . import _buffer as _buffers, _bufcheck as _checks
 from ._array import Array as _Array
 import hashlib
 import json
-import struct
 from pathlib import Path
 
 from . import _portable_math as math
@@ -73,7 +72,7 @@ class SambaConfig(object):
                  norm_eps=1e-5, dropout=0.0):
         self.vocab = int(vocab)
         self.d_model = int(d_model)
-        self.layers = tuple(str(k) for k in layers)
+        self.layers = tuple(str(k) for k in layers)  # glue: layer kind config names
         self.n_heads = None if n_heads is None else int(n_heads)
         self.n_kv_heads = (None if n_kv_heads is None else int(n_kv_heads))
         self.head_dim = None if head_dim is None else int(head_dim)
@@ -84,7 +83,7 @@ class SambaConfig(object):
         if self.vocab < 2 or self.d_model < 1 or not self.layers:
             raise ValueError("mojolearn.SambaConfig: vocab >= 2, d_model >= 1 "
                              "and at least one layer are required")
-        for k in self.layers:
+        for k in self.layers:  # glue: validates layer kind names
             if k not in _LAYER_KINDS:
                 raise ValueError("mojolearn.SambaConfig: layer kind %r; the "
                                  "kinds are %r" % (k, _LAYER_KINDS))
@@ -137,7 +136,7 @@ class SambaConfig(object):
                 "C_bias": (nh, _M3_D_STATE), "D": (nh,),
                 "out_proj.weight": (dm, di),
             }
-            return [(n, shapes[n]) for n in Mamba3Block._W_NAMES]
+            return [(n, shapes[n]) for n in Mamba3Block._W_NAMES]  # glue: weight names and shapes
         qw = self.n_heads * self.head_dim
         kw = self.n_kv_heads * self.head_dim
         it = self.intermediate
@@ -149,14 +148,14 @@ class SambaConfig(object):
             "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
             "down_proj.weight": (dm, it),
         }
-        return [(n, shapes[n]) for n in TransformerBlock._W_NAMES]
+        return [(n, shapes[n]) for n in TransformerBlock._W_NAMES]  # glue: weight names and shapes
 
     def registry(self):
         """`[(name, shape)]` in the clip's order."""
         out = [("embed.weight", (self.vocab, self.d_model))]
-        for i, kind in enumerate(self.layers):
+        for i, kind in enumerate(self.layers):  # glue: registry of named tensors
             out.extend(("layers.%d.%s" % (i, n), s)
-                       for n, s in self.block_shapes(kind))
+                       for n, s in self.block_shapes(kind))  # glue: registry of named tensors
         out.append(("norm_f.weight", (self.d_model,)))
         if not self.tie_embeddings:
             out.append(("lm_head.weight", (self.vocab, self.d_model)))
@@ -179,23 +178,14 @@ def _init_tensor(gen, name, shape):
     return _buffers.full(shape, 1.0, '<f4')
 
 
-_IGNORE_BYTES = struct.pack("<i", T._IGNORE_INDEX_DEFAULT)
 
 
 def _count_targets(y):
-    """How many int32 targets are not the ignore index: the Python
-    `sum(v != ignore ...)` it replaces, answered by `bytes.count` over the
-    raw little-endian words when every value lies in [-100, 2**24). In that
-    range the four ignore bytes `9c ff ff ff` can only match at a word
-    boundary: a straddling match needs a 0x9c byte at word offset 1, 2 or 3
-    followed by 0xff through the word's top byte, but a word whose top byte
-    is 0xff lies in [-100, -1] and holds 0xff at offsets 1 to 3, and every
-    other word's top byte is 0x00. So the count is exact. Outside it (an id the loss will refuse anyway) the Python
-    scan runs."""
-    n = int(y.size)
-    if n and y.min() >= T._IGNORE_INDEX_DEFAULT and y.max() < (1 << 24):
-        return n - bytes(_checks.flat_view(y, 'i')).count(_IGNORE_BYTES)
-    return sum(v != T._IGNORE_INDEX_DEFAULT for v in _checks.flat_view(y, 'i'))
+    """How many int32 targets are not the ignore index. The equality mask
+    and its integer sum run in the core Mojo helpers (`Array.__eq__` against
+    a scalar and `Array.sum`, bindings/hotpath_helpers.mojo); Python only
+    subtracts (pyglue-sweep 2026-10-03: the Python scan is gone)."""
+    return int(y.size) - int((y == T._IGNORE_INDEX_DEFAULT).sum())  # glue: mask and sum run in Mojo helpers
 
 
 class SambaState(object):
@@ -248,24 +238,24 @@ class SambaStack(object):
                              "weights= or generator=")
         self.config = config
         self.numeric_mode = numeric_mode
-        self.names = [n for n, _ in config.registry()]
-        self.shapes = {n: tuple(s) for n, s in config.registry()}
+        self.names = [n for n, _ in config.registry()]  # glue: registry of named tensors
+        self.shapes = {n: tuple(s) for n, s in config.registry()}  # glue: registry of named tensors
         self.offsets = [0]
-        for n in self.names:
-            self.offsets.append(self.offsets[-1] + int(math.prod(self.shapes[n])))
+        for n in self.names:  # glue: offsets over named tensors
+            self.offsets.append(self.offsets[-1] + int(math.prod(self.shapes[n])))  # glue: offsets over named tensors
         self.n_total = self.offsets[-1]
         self.flat = _buffers.zeros(self.n_total, '<f4')
         self.arrays = {}
-        for j, n in enumerate(self.names):
+        for j, n in enumerate(self.names):  # glue: views per named tensor
             self.arrays[n] = _Array.from_buffer(_checks.flat_view(self.flat, 'f')[self.offsets[j]:self.offsets[j + 1]]).reshape(self.shapes[n])
         self.generator = generator if generator is not None else T.Generator(0, numeric_mode)
         if weights is not None:
             self.load_weights(weights)
         else:
-            for n in self.names:
+            for n in self.names:  # glue: copies each named tensor
                 _checks.flat_view(self.arrays[n], 'f')[:] = _checks.flat_view(_init_tensor(self.generator, n, self.shapes[n]), 'f')
         self.max_norm = None if max_norm is None else float(max_norm)
-        self.optimizer = T.AdamW([self.arrays[n] for n in self.names], lr=lr,
+        self.optimizer = T.AdamW([self.arrays[n] for n in self.names], lr=lr,  # glue: optimizer gets named tensors
                                  betas=betas, eps=eps, weight_decay=weight_decay,
                                  lr_schedule=lr_schedule,
                                  accumulation_steps=accumulation_steps,
@@ -276,19 +266,19 @@ class SambaStack(object):
         # option validation, and also prevents TransformerBlock from reusing
         # its per-instance runtime resources.  Keep one wrapper per registry
         # block, just as SambaInference does.  No tensor is copied or cached.
-        self._blocks = [self._make_block(i) for i in range(len(config.layers))]
+        self._blocks = [self._make_block(i) for i in range(len(config.layers))]  # glue: builds one block per layer
         self.last_ = None
 
     # -- weights ----------------------------------------------------------
     def load_weights(self, weights):
         """Copy the registry's tensors in from a dict keyed by name, exact
         key set and exact shapes, float32 only."""
-        missing = [n for n in self.names if n not in weights]
-        extra = [n for n in weights if n not in self.shapes]
+        missing = [n for n in self.names if n not in weights]  # glue: checks weight dict names
+        extra = [n for n in weights if n not in self.shapes]  # glue: checks weight dict names
         if missing or extra:
             raise ValueError("mojolearn.SambaStack: weight dict mismatch; "
                              "missing %r, unknown %r" % (missing, extra))
-        for n in self.names:
+        for n in self.names:  # glue: checks each named tensor
             a = weights[n]
             pb = _checks.probe(a)
             if not _checks.is_native_f32(pb.format):
@@ -304,12 +294,12 @@ class SambaStack(object):
 
     def parameters(self):
         """The registry as `{name: array}` (views of the flat buffer)."""
-        return {n: self.arrays[n] for n in self.names}
+        return {n: self.arrays[n] for n in self.names}  # glue: dict of named tensors
 
     def _make_block(self, i):
         kind = self.config.layers[i]
         w = {n: self.arrays["layers.%d.%s" % (i, n)]
-             for n, _ in self.config.block_shapes(kind)}
+             for n, _ in self.config.block_shapes(kind)}  # glue: dict of named tensors
         if kind == "mamba3":
             return Mamba3Block(w, numeric_mode=self.numeric_mode)
         c = self.config
@@ -438,7 +428,7 @@ class SambaStack(object):
                                             offset=token_offset * c.d_model,
                                             stream=dropout_stream)
         xs = []
-        for i in range(len(c.layers)):
+        for i in range(len(c.layers)):  # glue: dispatches each layer block
             xs.append(x)
             x = self._block(i).forward(x)
         hn = None
@@ -498,7 +488,7 @@ class SambaStack(object):
             raise ValueError("mojolearn.SambaStack.allocate_state: batch_size "
                              "and max_tokens must be positive")
         layers = []
-        for i, kind in enumerate(self.config.layers):
+        for i, kind in enumerate(self.config.layers):  # glue: allocates state per layer
             blk = self._block(i)
             layers.append(blk.allocate_state(b) if kind == "mamba3"
                           else blk.allocate_state(b, smax))
@@ -539,7 +529,7 @@ class SambaStack(object):
                              % (what, state.batch_size, len(state.layers), b, len(c.layers)))
         x = T.embedding_forward(self.arrays["embed.weight"], ids.reshape(-1),
                                 self.numeric_mode).reshape((b, l, c.d_model))
-        for i in range(len(c.layers)):
+        for i in range(len(c.layers)):  # glue: dispatches each layer block
             blk = self._block(i)
             x = blk.step(x, state.layers[i]) if step else blk.forward(x, state.layers[i])
         hn = T.rms_norm_forward(x, self.arrays["norm_f.weight"], c.norm_eps,
@@ -556,7 +546,7 @@ class SambaStack(object):
 
     # -- backward -----------------------------------------------------------
     def _refuse_no_backward(self):
-        for i, kind in enumerate(self.config.layers):
+        for i, kind in enumerate(self.config.layers):  # glue: checks each layer kind
             if kind == "attention" and not callable(getattr(TransformerBlock, "backward", None)):
                 raise NotImplementedError(
                     "mojolearn.SambaStack: layer %d is an attention block and "
@@ -616,10 +606,10 @@ class SambaStack(object):
             dh, grads["norm_f.weight"] = T.rms_norm_backward(
                 dhn.reshape((b, l, c.d_model)), acts["h"], self.arrays["norm_f.weight"],
                 c.norm_eps, self.numeric_mode)
-        for i in reversed(range(len(c.layers))):
+        for i in reversed(range(len(c.layers))):  # glue: dispatches each layer backward
             g = self._block(i).backward(acts["xs"][i], dh)
             dh = g.pop("x")
-            for n, v in g.items():
+            for n, v in g.items():  # glue: renames gradient dict keys
                 grads["layers.%d.%s" % (i, n)] = v
         if acts["key"] is not None:
             dh = self.generator.dropout_backward(dh, acts["key"])
@@ -637,7 +627,7 @@ class SambaStack(object):
         if not c.tie_embeddings:
             grads["lm_head.weight"] = dw_head
         grads["embed.weight"] = d_emb
-        return float(loss), [grads[n] for n in self.names]
+        return float(loss), [grads[n] for n in self.names]  # glue: orders gradients by name
 
     def train_step(self, inputs, targets):
         """One optimizer step over `(B, L)` inputs and targets: the batch
@@ -667,7 +657,7 @@ class SambaStack(object):
                   if self.config.dropout > 0.0 else None)
         rows = b // a
         losses, parts = [], []
-        for k in range(a):
+        for k in range(a):  # glue: dispatches each microbatch binding call
             sl = slice(k * rows, (k + 1) * rows)
             loss_k, g_k = self.loss_and_grads(ids[sl], y[sl], num_items=count,
                                               dropout_stream=stream,
@@ -698,7 +688,7 @@ class SambaStack(object):
             "registry": [{"name": n, "shape": list(self.shapes[n]),
                           "offset": self.offsets[j],
                           "size": self.offsets[j + 1] - self.offsets[j]}
-                         for j, n in enumerate(self.names)],
+                         for j, n in enumerate(self.names)],  # glue: checkpoint registry of tensors
             "parameters": self.flat.copy() if _copy_arrays else self.flat,
             "exp_avg": o.exp_avg.copy() if _copy_arrays else o.exp_avg,
             "exp_avg_sq": o.exp_avg_sq.copy() if _copy_arrays else o.exp_avg_sq,
@@ -775,7 +765,7 @@ class SambaStack(object):
                  else T._Schedule.from_config(payload["schedule"]))
         weights = {}
         flat = _checks.flat_view(payload["parameters"], 'f')
-        for entry in payload["registry"]:
+        for entry in payload["registry"]:  # glue: views per checkpoint tensor
             weights[entry["name"]] = _Array.from_buffer(flat[
                 entry["offset"]:entry["offset"] + entry["size"]]).reshape(entry["shape"])
         stack = cls(config, weights=weights, lr=oc["lr"],
@@ -800,7 +790,7 @@ class SambaStack(object):
         payload = envelope["payload"]
         if hashlib.sha256(_canonical(payload)).hexdigest() != envelope["payload_sha256"]:
             raise ValueError("mojolearn.SambaStack: checkpoint integrity mismatch")
-        for key, dtype in cls._ARRAYS:
+        for key, dtype in cls._ARRAYS:  # glue: checks each checkpoint array
             d = payload[key]
             if d["dtype"] != dtype:
                 raise ValueError("mojolearn.SambaStack: checkpoint tensor dtype mismatch")

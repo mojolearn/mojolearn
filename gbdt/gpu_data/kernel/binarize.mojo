@@ -37,7 +37,7 @@ otherwise.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.memory import stack_allocation
+from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -77,6 +77,38 @@ def write_compressed_index_kernel(
 #: `BinarizeFloatFeature`'s launch shape (`binarize.cu:245-246`).
 comptime BINARIZE_BLOCK_SIZE = 1024
 comptime BINARIZE_DOCS_PER_THREAD = 8
+
+
+@always_inline
+def exact_f32_gt(a: Float32, b: Float32) -> Bool:
+    """IEEE `a > b` on float32, decided on the BIT PATTERNS, so a device
+    that flushes subnormal operands of a float compare (Metal) answers what
+    the host answers. gbdt-depthwise / denormal on an Apple M4 (0.8.35,
+    `verify --cross-check all`): a subnormal value against a subnormal
+    border compared as `0 > 0` on Metal and as the true order on the host,
+    so GPU and host predicts of the same saved model put rows in different
+    bins. The fit quantizes through this same kernel, so Metal fits on
+    subnormal inputs now see the order NVIDIA, AMD and the host already
+    saw.
+
+    Exactly the float `>`: NaN on either side is false; -0 and +0 are
+    equal (both map to key 0x80000000); every other pair compares by the
+    sign-magnitude total order of its bits."""
+    var ua = bitcast[DType.uint32](a)
+    var ub = bitcast[DType.uint32](b)
+    var ma = ua & UInt32(0x7FFFFFFF)
+    var mb = ub & UInt32(0x7FFFFFFF)
+    if ma > UInt32(0x7F800000) or mb > UInt32(0x7F800000):
+        return False
+    # a positive value's key is its bits with the sign set; a negative
+    # value's key is the bitwise NOT. A signed zero is canonicalised to +0.
+    var ka = (ua | UInt32(0x80000000)) if (ua >> 31) == 0 else ~ua
+    var kb = (ub | UInt32(0x80000000)) if (ub >> 31) == 0 else ~ub
+    if ma == 0:
+        ka = UInt32(0x80000000)
+    if mb == 0:
+        kb = UInt32(0x80000000)
+    return ka > kb
 
 
 def binarize_float_feature_kernel(
@@ -144,7 +176,8 @@ def binarize_float_feature_kernel(
 
         @parameter
         for j in range(BINARIZE_DOCS_PER_THREAD):
-            if feature_values[j] > border_value:
+            # bit-pattern compare, not the float `>`: see `exact_f32_gt`
+            if exact_f32_gt(feature_values[j], border_value):
                 index[j] += 1
 
     @parameter

@@ -43,6 +43,7 @@ comptime _DEVCTX_SLOT = "MojoEstimatorsContextIdentical" if _DEVCTX_MODE == _DEV
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.identity_trace import IdentityTrace
+from core.device_fold import device_sum_f32_fixed
 from kde.impl.kde import score_samples
 from kde.impl.neighbors.kernel_density import (
     KDE_ELEM_TPB,
@@ -198,13 +199,17 @@ def kde_score_samples_resident(
     elem_tpb: Int = KDE_ELEM_TPB,
     lse_tpb: Int = KDE_LSE_TPB,
     metric_arg: Float32 = Float32(2.0),
-) raises:
+    want_total: Bool = False,
+) raises -> Float32:
     """`kde_score_samples_host_ptr` after its fit-set work: the query count
     and rows are validated as there, the queries staged once into pinned
     memory and uploaded, `score_samples` runs over the handle's training
     rows and weights, and the scores come back through the pinned download
     into `scores`. The names, the bandwidth and the feature count must be
-    the handle's; a mismatch is refused rather than served."""
+    the handle's; a mismatch is refused rather than served. Returns the
+    scores' fixed-order float32 sum on the device (`device_sum_f32_fixed`)
+    when `want_total` (KernelDensity.score; lane pyglue-numeric: a host sum
+    of the downloaded scores), else 0."""
     var k = kernel_from_name(kernel)
     var m = metric_from_name(metric)
     var state = KDE_FIT_REGISTRY.get_or_create_ptr()
@@ -241,6 +246,9 @@ def kde_score_samples_resident(
         n_query, entry.n_train, n_features, bandwidth, entry.sum_w, k, m,
         metric_arg, trace, elem_tpb, lse_tpb,
     )
+    var total = Float32(0)
+    if want_total:
+        total = device_sum_f32_fixed(entry.ctx, dout, n_query)
     var hout = entry.ctx.enqueue_create_host_buffer[DType.float32](n_query)
     entry.ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=dout)
     entry.ctx.synchronize()
@@ -249,3 +257,4 @@ def kde_score_samples_resident(
     _ = host^
     _ = dquery^
     _ = dout^
+    return total

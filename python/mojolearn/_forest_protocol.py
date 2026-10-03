@@ -11,7 +11,6 @@ import weakref
 
 from ._array import Array
 from ._buffer import _materialize, full, as_f32_c
-from ._labels import flatten_labels
 from ._arrays import _addr, _addr_ro
 
 
@@ -32,13 +31,13 @@ class _ResidentForest:
             # leaves the binary's compiled default.
             params.append(1 if ordered else 0)
         self.handle = native.forest_prepare_gpu(
-            *(_addr_ro(a) for a in arrays), params)
+            *(_addr_ro(a) for a in arrays), params)  # glue: one address per model array (five)
         self._finalizer = weakref.finalize(self, native.forest_release_gpu, self.handle)
 
     def matches(self, native, arrays, dimensions, mode, ordered=None):
         return (native is self.native and dimensions == self.dimensions and mode == self.mode
                 and ordered == self.ordered
-                and all(a is b for a, b in zip(arrays, self.arrays)))
+                and all(a is b for a, b in zip(arrays, self.arrays)))  # glue: compares the five model arrays
 
 
 class ForestDataSession:
@@ -124,13 +123,13 @@ def forest_estimator(kind):
                 raise ValueError("numeric_mode must be fast, deterministic, identical or None")
             self._validate_inference_engine(bound.arguments.get("inference_engine", "sequential"))
             original(self, *args, **kwargs)
-            for name in cls._parameter_names:
+            for name in cls._parameter_names:  # glue: copies constructor parameter names
                 setattr(self, name, bound.arguments[name])
             self._has_constructor_parameters = True
 
         initialize.__signature__ = signature
         cls.__init__ = initialize
-        cls._parameter_names = tuple(p.name for p in parameters if p.name != "self")
+        cls._parameter_names = tuple(p.name for p in parameters if p.name != "self")  # glue: collects constructor parameter names
         cls._estimator_type = kind
         return cls
     return decorate
@@ -138,7 +137,7 @@ def forest_estimator(kind):
 
 class ForestProtocol:
     def get_params(self, deep=True):
-        for owner in type(self).__mro__:
+        for owner in type(self).__mro__:  # glue: walks the class hierarchy
             if "__init__" in owner.__dict__:
                 if "_parameter_names" not in owner.__dict__:
                     raise TypeError("Forest subclasses with a custom constructor must register "
@@ -147,13 +146,13 @@ class ForestProtocol:
         if not getattr(self, "_has_constructor_parameters", False):
             raise ValueError("This inference-only forest archive has no constructor "
                              "parameters; construct a new estimator for cloning/refitting")
-        return {name: getattr(self, name) for name in self._parameter_names}
+        return {name: getattr(self, name) for name in self._parameter_names}  # glue: returns constructor parameters by name
 
     def set_params(self, **params):
         if not params:
             return self
         values = self.get_params()
-        unknown = sorted(set(params) - values.keys())
+        unknown = sorted(set(params) - values.keys())  # glue: names unknown keyword parameters
         if unknown:
             raise ValueError(f"Invalid parameter(s) {unknown} for {type(self).__name__}")
         values.update(params)
@@ -303,10 +302,10 @@ class ForestProtocol:
         native = self._bind()
         rows, features = X.shape
         dimensions = (int(features), int(self._n_trees), int(self._num_outputs))
-        arrays = tuple(getattr(self, name) for name in _FOREST_ARRAYS)
+        arrays = tuple(getattr(self, name) for name in _FOREST_ARRAYS)  # glue: the five model arrays
         if engine == "sequential" and not self._ordered_resident_auto():
             return self._prediction_function(sequential_name)(
-                *(_addr_ro(a) for a in arrays), _addr_ro(X),
+                *(_addr_ro(a) for a in arrays), _addr_ro(X),  # glue: one address per model array (five)
                 _addr(out), [int(rows), *dimensions])
         resident = self._prepare_resident_forest(native)
         return self._resident_prediction_function(native)(
@@ -339,9 +338,9 @@ class ForestProtocol:
         if native is None:
             native = self._bind()
         dimensions = (int(self.n_features_in_), int(self._n_trees), int(self._num_outputs))
-        arrays = tuple(getattr(self, name) for name in _FOREST_ARRAYS)
+        arrays = tuple(getattr(self, name) for name in _FOREST_ARRAYS)  # glue: the five model arrays
         required = ("forest_prepare_gpu", "forest_predict_resident_reuse_gpu", "forest_release_gpu")
-        if any(not callable(getattr(native, name, None)) for name in required):
+        if any(not callable(getattr(native, name, None)) for name in required):  # glue: checks three binding entry points
             raise RuntimeError("rebuild the forest binding for resident parallel_groves inference")
         mode = self._effective_mode()
         ordered = self._resident_ordered_flag()
@@ -351,8 +350,8 @@ class ForestProtocol:
             # caller retaining an old mutable private-array alias cannot alter
             # the device snapshot or the host model used by save/sequential.
             dtypes = ("<i4", "<i4", "<f4", "<i4", "<f4")
-            arrays = tuple(_materialize(a, "forest model")[0] for a in arrays)
-            for a, dtype in zip(arrays, dtypes):
+            arrays = tuple(_materialize(a, "forest model")[0] for a in arrays)  # glue: materializes the five model arrays
+            for a, dtype in zip(arrays, dtypes):  # glue: checks the five model arrays
                 if not isinstance(a, Array) or a.dtype != dtype or a.ndim != 1:
                     raise ValueError("forest model arrays must have their original flat dtypes")
             nodes = arrays[1].size
@@ -361,9 +360,9 @@ class ForestProtocol:
                     or arrays[4].size != nodes * dimensions[2]
                     or int(arrays[0][-1]) != nodes):
                 raise ValueError("forest model array shapes do not match metadata")
-            frozen = tuple(Array.from_buffer(memoryview(a.tobytes()).cast("i" if a.dtype == "<i4" else "f")) for a in arrays)
+            frozen = tuple(Array.from_buffer(memoryview(a.tobytes()).cast("i" if a.dtype == "<i4" else "f")) for a in arrays)  # glue: freezes the five model arrays
             resident = _ResidentForest(native, frozen, dimensions, mode, ordered)
-            for name, a in zip(_FOREST_ARRAYS, frozen):
+            for name, a in zip(_FOREST_ARRAYS, frozen):  # glue: stores the five model arrays
                 setattr(self, name, a)
             self._resident_forest = resident
         return resident
@@ -403,22 +402,21 @@ class ForestProtocol:
         is given (scikit-learn's weighted accuracy and R² on the pinned-sum
         path of `metrics.accuracy_score` and `metrics.r2_score`).
 
-        Class labels are compared on the host without narrowing their values;
-        the GPU accuracy kernel receives exact integer equality indicators.
+        Class labels are compared without narrowing their values by the
+        x_metrics binding's grouped match count (`accuracy_fraction`).
         Regression scoring uses the same Float32 target domain as tree fitting.
         """
         from . import _metrics_impl as metrics
-        if getattr(y, "ndim", 1) != 1:
+        from ._expansion_metrics import accuracy_fraction
+        shape = metrics._shape_of(y)
+        if len(shape) != 1:
             raise ValueError("score requires one-dimensional targets")
-        target = flatten_labels(y)
         prediction = self.predict(X)
-        if len(prediction) != len(target):
+        if len(prediction) != int(shape[0]):
             raise ValueError("score target and prediction lengths differ")
         mode = self._effective_mode()
         if self._estimator_type == "classifier":
-            equal = Array.from_list([int(a == b) for a, b in zip(target, prediction)], "<i4")
-            return metrics.accuracy_score(full(equal.shape, 1, "<i4"), equal,
-                                          sample_weight=sample_weight, numeric_mode=mode)
+            return accuracy_fraction(y, prediction, sample_weight, mode)
         return metrics.r2_score(as_f32_c(y, ndim=1, name="y")[0],
                                 as_f32_c(prediction, ndim=1, name="prediction")[0],
                                 sample_weight=sample_weight, numeric_mode=mode)
@@ -446,24 +444,24 @@ def _export_fit_result(native, descriptor, *, compare_legacy=False):
             raise ValueError('native forest export descriptor requires five fields')
         _, trees, nodes, outputs, meta = descriptor
         counts = (trees, nodes, outputs)
-        if any(isinstance(v, bool) or not isinstance(v, numbers.Integral) for v in counts):
+        if any(isinstance(v, bool) or not isinstance(v, numbers.Integral) for v in counts):  # glue: checks three export counts
             raise ValueError('native forest export counts must be integers')
         if not (1 <= trees < 2147483647 and nodes >= trees and outputs >= 1
                 and nodes <= 2147483647 // outputs):
             raise ValueError('native forest export exceeds supported counts')
         if not isinstance(meta, (list, tuple)) or len(meta) < 2 or list(meta[:2]) != [trees, outputs]:
             raise ValueError('native forest export metadata disagrees with counts')
-        if any(isinstance(v, bool) or not isinstance(v, numbers.Integral) for v in meta):
+        if any(isinstance(v, bool) or not isinstance(v, numbers.Integral) for v in meta):  # glue: checks the export metadata integers
             raise ValueError('native forest export metadata must contain integers')
         dtypes = ('<i4', '<i4', '<f4', '<i4', '<f4')
         sizes = (trees + 1, nodes, nodes, nodes, nodes * outputs)
-        arrays = tuple(empty((size,), dtype) for size, dtype in zip(sizes, dtypes))
-        native.forest_export(handle, *(_addr(a) for a in arrays), list(counts))
+        arrays = tuple(empty((size,), dtype) for size, dtype in zip(sizes, dtypes))  # glue: allocates the five model arrays
+        native.forest_export(handle, *(_addr(a) for a in arrays), list(counts))  # glue: one address per model array (five)
         if compare_legacy:
             old = native.forest_export_legacy(handle)
             if len(old) != 6 or list(old[5]) != list(meta):
                 raise RuntimeError('forest export legacy metadata mismatch')
-            for name, actual, values, dtype in zip(_FOREST_ARRAYS, arrays, old[:5], dtypes):
+            for name, actual, values, dtype in zip(_FOREST_ARRAYS, arrays, old[:5], dtypes):  # glue: compares the five model arrays
                 expected = Array.from_list(values, dtype)
                 if actual.tobytes() != expected.tobytes():
                     raise RuntimeError('forest export byte mismatch: ' + name)
@@ -504,7 +502,7 @@ def _forest_fit_arrays(result):
         raise ValueError('forest fit must return five model fields and metadata')
     dtypes = ('<i4', '<i4', '<f4', '<i4', '<f4')
     arrays = []
-    for field, dtype in zip(fields, dtypes):
+    for field, dtype in zip(fields, dtypes):  # glue: checks the five model fields
         if isinstance(field, Array):
             if field.dtype != dtype or field.ndim != 1:
                 raise ValueError('forest fit exported an unexpected model dtype or shape')

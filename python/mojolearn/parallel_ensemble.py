@@ -58,7 +58,7 @@ def fit_forest(estimator, X, y, *, devices=(0,), trees_per_shard=1):
     if count < 1:
         raise ValueError('n_estimators must be positive')
     requests = []
-    for index, start in enumerate(range(0, count, trees_per_shard)):
+    for index, start in enumerate(range(0, count, trees_per_shard)):  # glue: one request per device shard
         shard_params = dict(params, n_estimators=min(trees_per_shard, count - start))
         # `driver_read_shift` is 0 unless the driver sabotage switch is on, and
         # 0 for the first shard whatever the switch says; the shard COUNT is
@@ -77,11 +77,11 @@ def fit_forest(estimator, X, y, *, devices=(0,), trees_per_shard=1):
         base = offsets[-1]
         offsets.extend(base + offset for offset in part._offsets.tolist()[1:])
     result._offsets = Array.from_list(offsets, parts[0]._offsets.dtype)
-    for name in ('_colid', '_quesval', '_left_child', '_leaves'):
-        arrays = [getattr(part, name) for part in parts]
-        merged = empty((sum(a.size for a in arrays),), arrays[0].dtype)
+    for name in ('_colid', '_quesval', '_left_child', '_leaves'):  # glue: the four node arrays by name
+        arrays = [getattr(part, name) for part in parts]  # glue: one buffer per device shard
+        merged = empty((sum(a.size for a in arrays),), arrays[0].dtype)  # glue: total size over device shards
         cursor = 0
-        for array in arrays:
+        for array in arrays:  # glue: one memcopy per device shard
             memcopy(addr(merged, name=name) + cursor, addr_ro(array, name=name), array.nbytes)
             cursor += array.nbytes
         setattr(result, name, merged)
@@ -91,7 +91,7 @@ def fit_forest(estimator, X, y, *, devices=(0,), trees_per_shard=1):
     result.n_estimators = count
     result._cfg['n_estimators'] = count
     if hasattr(result, 'depth_cap_bound_'):
-        result.depth_cap_bound_ = any(part.depth_cap_bound_ for part in parts)
+        result.depth_cap_bound_ = any(part.depth_cap_bound_ for part in parts)  # glue: one flag per device shard
     result._resident_forest = None
     estimator.__dict__ = result.__dict__.copy()
     return estimator
@@ -185,7 +185,7 @@ def _admit_forest_predictor(estimator):
     if type(estimator) not in (RandomForestClassifier, RandomForestRegressor,
                                ExtraTreesClassifier, ExtraTreesRegressor):
         raise TypeError('ParallelForestPredictor requires a mojolearn RandomForest or ExtraTrees estimator')
-    if not all(hasattr(estimator, name) for name in (
+    if not all(hasattr(estimator, name) for name in (  # glue: checks the fitted attribute names
             '_offsets', '_colid', '_quesval', '_left_child', '_leaves',
             '_n_trees', '_num_outputs', 'n_features_in_')):
         raise RuntimeError('ParallelForestPredictor requires a fitted estimator')

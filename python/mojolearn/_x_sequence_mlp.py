@@ -16,7 +16,8 @@ from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_mlp')
 
 from . import _backend
-from ._labels import unique_inverse
+from ._buffer import _native
+from ._labels import argmax_rows, threshold_codes, unique_inverse
 
 _ACT = {"identity": 0, "logistic": 1, "tanh": 2, "relu": 3}
 _SOLVER = {"adam": 0, "sgd": 1}
@@ -63,9 +64,9 @@ class _BaseMLP:
     def _hidden(self):
         h = self.hidden_layer_sizes
         h = [h] if isinstance(h, (int, np.integer)) else list(h)
-        if any(int(v) < 1 for v in h):
+        if any(int(v) < 1 for v in h):  # glue: hidden layer size arguments
             raise ValueError("hidden_layer_sizes must be > 0")
-        return [int(v) for v in h]
+        return [int(v) for v in h]  # glue: hidden layer size arguments
 
     def _check(self):
         if self.solver == "lbfgs":
@@ -76,7 +77,7 @@ class _BaseMLP:
             raise ValueError(f"activation must be one of {sorted(_ACT)}")
         if self.learning_rate not in _LR:
             raise ValueError(f"learning_rate must be one of {sorted(_LR)}")
-        for name in ("early_stopping", "warm_start", "verbose"):
+        for name in ("early_stopping", "warm_start", "verbose"):  # glue: three named flag arguments
             if getattr(self, name):
                 raise NotImplementedError(f"{name}=True is not implemented")
         if self.learning_rate_init <= 0 or self.max_iter < 1 or self.alpha < 0:
@@ -93,20 +94,25 @@ class _BaseMLP:
 
     def _init(self, sizes, rng):
         coefs, intercepts = [], []
-        for fi, fo in zip(sizes[:-1], sizes[1:]):
+        for fi, fo in zip(sizes[:-1], sizes[1:]):  # glue: one pair per layer
             factor = 2.0 if self.activation == "logistic" else 6.0
-            bound = np.sqrt(factor / (fi + fo))
-            coefs.append(rng.uniform(-bound, bound, (fi, fo)).astype(np.float32))
-            intercepts.append(rng.uniform(-bound, bound, fo).astype(np.float32))
+            bound = np.sqrt(factor / (fi + fo))  # glue: one scalar init bound per layer
+            # drawn in Mojo from the seeded stream (`_buffer.InitStream`)
+            w = np.empty((fi, fo), dtype=np.float32)
+            rng.fill_uniform(w.ctypes.data, w.size, -float(bound), float(bound))
+            b = np.empty(fo, dtype=np.float32)
+            rng.fill_uniform(b.ctypes.data, b.size, -float(bound), float(bound))
+            coefs.append(w)
+            intercepts.append(b)
         return coefs, intercepts
 
     def _pack(self):
-        return np.ascontiguousarray(np.concatenate(
-            [np.concatenate([w.ravel(), b]) for w, b in zip(self.coefs_, self.intercepts_)]), dtype=np.float32)
+        return np.ascontiguousarray(np.concatenate(  # glue: packs the per-layer weights into the flat buffer
+            [np.concatenate([w.ravel(), b]) for w, b in zip(self.coefs_, self.intercepts_)]), dtype=np.float32)  # glue: packs the per-layer weights into the flat buffer
 
     def _unpack(self, flat):
         off = 0
-        for i, (w, b) in enumerate(zip(self.coefs_, self.intercepts_)):
+        for i, (w, b) in enumerate(zip(self.coefs_, self.intercepts_)):  # glue: unpacks the flat buffer per layer
             self.coefs_[i] = flat[off:off + w.size].reshape(w.shape).copy()
             off += w.size
             self.intercepts_[i] = flat[off:off + b.size].copy()
@@ -119,10 +125,11 @@ class _BaseMLP:
         O = Y.shape[1]
         hidden = self._hidden()
         sizes = [D] + hidden + [O]
-        rng = np.random.RandomState(self.random_state)
+        from ._buffer import InitStream
+        rng = InitStream(None if self.random_state is None else int(self.random_state))
         self.coefs_, self.intercepts_ = self._init(sizes, rng)
-        seed = int(rng.randint(0, 2**31 - 1))
-        bs = min(200, N) if self.batch_size == "auto" else int(np.clip(self.batch_size, 1, N))
+        seed = rng.child_seed() % (2 ** 31 - 1)
+        bs = min(200, N) if self.batch_size == "auto" else int(np.clip(self.batch_size, 1, N))  # glue: scalar batch size clip
         self.n_outputs_ = O
         self.n_layers_ = len(sizes)
         self.out_activation_ = ["identity", "logistic", "tanh", "relu", "softmax"][out_act]
@@ -139,9 +146,10 @@ class _BaseMLP:
                                               curve.ctypes.data], ip, fp))
         self._unpack(params)
         self.n_iter_ = n_iter
-        self.loss_curve_ = [float(v) for v in curve[:n_iter]]
+        self.loss_curve_ = curve[:n_iter].tolist()
         self.loss_ = self.loss_curve_[-1]
-        self.best_loss_ = min(self.loss_curve_)
+        # the first-wins minimum of the curve in Mojo (`reduce_stat` 0)
+        self.best_loss_ = float(_native("reduce_stat")(curve.ctypes.data, 0, n_iter, 0))
         self.t_ = n_iter * N
         return self
 
@@ -149,7 +157,7 @@ class _BaseMLP:
         X = self._X(X)
         if X.shape[1] != self.n_features_in_:
             raise ValueError(f"X has {X.shape[1]} features, the model was fitted on {self.n_features_in_}")
-        hidden = [w.shape[1] for w in self.coefs_[:-1]]
+        hidden = [w.shape[1] for w in self.coefs_[:-1]]  # glue: hidden width per layer
         out = np.zeros((X.shape[0], self.n_outputs_), dtype=np.float32)
         params = self._pack()
         out_act = ["identity", "logistic", "tanh", "relu", "softmax"].index(self.out_activation_)
@@ -209,5 +217,7 @@ class MLPClassifier(_BaseMLP):
     def predict(self, X):
         p = self._forward(X)
         if p.shape[1] == 1:
-            return self.classes_[(p[:, 0] > 0.5).astype(np.int64)]
-        return self.classes_[np.argmax(p, axis=1)]
+            # p > 0.5 per row in Mojo (`threshold_codes`; NaN takes class 0)
+            return self.classes_[np.asarray(threshold_codes(np.ascontiguousarray(p[:, 0]), 0.5))]
+        # the first-max-wins row argmax in Mojo (`argmax_rows`)
+        return self.classes_[np.asarray(argmax_rows(p))]

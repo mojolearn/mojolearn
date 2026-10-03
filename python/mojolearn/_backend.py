@@ -1516,6 +1516,22 @@ _HOST_PY_ENTRIES = {
 }
 
 
+class NoCpuEntry(ImportError, AttributeError):
+    """The by-name refusal of an entry a built host binding does not export.
+
+    It is an ImportError, so every `except ImportError` refusal reads as
+    before, AND an AttributeError, so a PROBE is not a use:
+    `getattr(b, name, None)` answers None and `hasattr` answers False, and the
+    caller takes the route its own comment names for a binary without that
+    entry (the host column's route). Until 2026-10-03 a probe of a device-only
+    entry (`rf_device_finite_scan`, `trees_device_finite_scan`,
+    `iforest_device_scan`, `ridge_resident_default`, `x_trees_dart_open`)
+    raised here and took the whole CPU fit down (refcol host smoke at
+    811275d5b); `_mamba_impl._exports` and `_transformer_impl._exports` had
+    each worked around the same trap by hand. Calling the entry still raises
+    BY NAME, so a fit with no CPU implementation is still a refusal."""
+
+
 class _HostBinding(type(sys)):
     """Stands in for a GPU binding whose family HAS a host binding on a
     CPU-only install. An attribute the host binding exports is served from
@@ -1539,7 +1555,7 @@ class _HostBinding(type(sys)):
         module = load_host_module(self.__basename)
         fn = getattr(module, item, None)
         if fn is None:
-            raise ImportError(
+            raise NoCpuEntry(
                 _no_cpu_implementation(self.__name, item, self.__reason, self.__basename)
             )
         return fn

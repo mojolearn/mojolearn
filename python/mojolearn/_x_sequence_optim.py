@@ -32,7 +32,7 @@ _RESIDENT_ENV = "MOJOLEARN_OPTIMIZER_RESIDENT"
 def _resident_binding(b, entries):
     if os.environ.get(_RESIDENT_ENV, "1") == "0":
         return False
-    return all(callable(getattr(b, n, None)) for n in entries)
+    return all(callable(getattr(b, n, None)) for n in entries)  # glue: the named binding entry points
 
 
 _SEQ_RESIDENT = ("optimizer_resident_open", "optimizer_resident_close", "optimizer_resident_move",
@@ -61,7 +61,7 @@ class _ResidentState:
     @property
     def state(self):
         if self._res is not None and not self._host_fresh:
-            for k, s in enumerate(self._state):
+            for k, s in enumerate(self._state):  # glue: the optimizer state slots, at most three
                 self._res_b.optimizer_resident_move(self._res, k, s.ctypes.data, 0)
             self._host_fresh = True
         # a reader may write into the arrays it got: upload before the next step
@@ -87,7 +87,7 @@ class _ResidentState:
 
     def _res_upload(self):
         if self._host_owned:
-            for k, s in enumerate(self._state):
+            for k, s in enumerate(self._state):  # glue: the optimizer state slots, at most three
                 self._res_b.optimizer_resident_move(self._res, k, s.ctypes.data, 1)
             self._host_owned = False
         self._host_fresh = False
@@ -113,7 +113,7 @@ class _ResidentState:
         if len(grads) != len(self.params):
             raise ValueError(f"{type(self).__name__}: {len(grads)} grads, {len(self.params)} params")
         out = []
-        for a, p in zip(grads, self.params):
+        for a, p in zip(grads, self.params):  # glue: per parameter tensor, not elements
             if np.shape(a) != p.shape:
                 raise ValueError(f"{type(self).__name__}: a grads of shape {np.shape(a)} for a param {p.shape}")
             if np.asarray(a).dtype == np.float64:
@@ -122,12 +122,12 @@ class _ResidentState:
         return out
 
     def _check_params(self):
-        for k, p in enumerate(self.params):
+        for k, p in enumerate(self.params):  # glue: per parameter tensor, not elements
             if not isinstance(p, np.ndarray) or p.dtype != np.float32 or not p.flags.c_contiguous \
                     or not p.flags.writeable:
                 raise TypeError(f"{type(self).__name__}: params[{k}] must stay a writable C-contiguous "
                                 "float32 NumPy array (it is updated in place)")
-        if sum(p.size for p in self.params) != self.n_total:
+        if sum(p.size for p in self.params) != self.n_total:  # glue: sizes per parameter tensor, not elements
             raise ValueError(f"{type(self).__name__}: the params were resized under the optimizer")
 
 
@@ -138,7 +138,7 @@ class _SeqOptimizer(_ResidentState):
         if isinstance(params, np.ndarray):
             params = [params]
         self.params = list(params)
-        for k, p in enumerate(self.params):
+        for k, p in enumerate(self.params):  # glue: per parameter tensor, not elements
             if not isinstance(p, np.ndarray) or p.dtype != np.float32 or not p.flags.c_contiguous:
                 raise TypeError(f"{type(self).__name__}: params[{k}] must be a C-contiguous float32 "
                                 "NumPy array (it is updated in place)")
@@ -146,10 +146,10 @@ class _SeqOptimizer(_ResidentState):
         self.options = dict(options)
         self.numeric_mode = numeric_mode
         self._kind, self._flags, self._fp = optimizer_arguments(self._NAME, self.options)
-        self.n_total = int(sum(p.size for p in self.params))
+        self.n_total = int(sum(p.size for p in self.params))  # glue: sizes per parameter tensor, not elements
         if self.n_total < 1:
             raise ValueError(f"{type(self).__name__}: no parameters")
-        self._res_init([np.zeros(self.n_total, dtype=np.float32) for _ in range(3)])
+        self._res_init([np.zeros(self.n_total, dtype=np.float32) for _ in range(3)])  # glue: the three optimizer state slots
         init = self._fp[5]
         if init:
             self._state[1][:] = np.float32(init)
@@ -165,12 +165,12 @@ class _SeqOptimizer(_ResidentState):
             arrays = [arrays]
         if len(arrays) != len(self.params):
             raise ValueError(f"{type(self).__name__}: {len(arrays)} {what}, {len(self.params)} params")
-        for a, p in zip(arrays, self.params):
+        for a, p in zip(arrays, self.params):  # glue: per parameter tensor, not elements
             if np.shape(a) != p.shape:
                 raise ValueError(f"{type(self).__name__}: a {what} of shape {np.shape(a)} for a param {p.shape}")
             if np.asarray(a).dtype == np.float64:
                 raise TypeError(f"{type(self).__name__}: float64 {what} are refused")
-        return np.ascontiguousarray(np.concatenate([np.asarray(a, dtype=np.float32).ravel() for a in arrays]))
+        return np.ascontiguousarray(np.concatenate([np.asarray(a, dtype=np.float32).ravel() for a in arrays]))  # glue: packs tensors into the flat buffer, a copy
 
     def _flat_view(self, a):
         """`a` itself, flat, when it already IS the packed buffer (one
@@ -191,18 +191,18 @@ class _SeqOptimizer(_ResidentState):
         """The step with the state on the device (`_ResidentState`)."""
         self._check_params()
         gs = self._grad_list(grads)
-        fp = [self.lr] + [float(v) for v in self._fp[:5]]
+        fp = [self.lr] + [float(v) for v in self._fp[:5]]  # glue: the five optimizer float arguments
         if self._res is None:
             self._res_opened(b, b.optimizer_resident_open([self.n_total, self._kind, self._flags], fp),
                              init_zero=not self._fp[5])
         self._res_upload()
         # empty tensors hold nothing to move or update
-        keep = [k for k, p in enumerate(self.params) if p.size > 0]
-        ps = [self.params[k] for k in keep]
-        b.optimizer_resident_step(self._res, [p.ctypes.data for p in ps] + [gs[k].ctypes.data for k in keep]
+        keep = [k for k, p in enumerate(self.params) if p.size > 0]  # glue: per parameter tensor, not elements
+        ps = [self.params[k] for k in keep]  # glue: per parameter tensor, not elements
+        b.optimizer_resident_step(self._res, [p.ctypes.data for p in ps] + [gs[k].ctypes.data for k in keep]  # glue: addresses per parameter tensor, not elements
                                   + [self._sc.ctypes.data],
                                   [len(ps), self._kind, self._flags, self.t, self._sc_t]
-                                  + [int(p.size) for p in ps], fp)
+                                  + [int(p.size) for p in ps], fp)  # glue: sizes per parameter tensor, not elements
         del gs
 
     def step(self, grads):
@@ -236,26 +236,26 @@ class _SeqOptimizer(_ResidentState):
         if self._sc_t >= self.t:
             self._sc[:] = 1.0
             self._sc_t = 0
-        b.optimizer_step([flat.ctypes.data, g.ctypes.data] + [s.ctypes.data for s in self._state]
+        b.optimizer_step([flat.ctypes.data, g.ctypes.data] + [s.ctypes.data for s in self._state]  # glue: buffer addresses of the state slots
                          + [self._sc.ctypes.data],
                          [self.n_total, self._kind, self._flags, self.t, self._sc_t],
-                         [self.lr] + [float(v) for v in self._fp[:5]])
+                         [self.lr] + [float(v) for v in self._fp[:5]])  # glue: the five optimizer float arguments
         self._sc_t = self.t
         if not in_place:
             off = 0
-            for p in self.params:
+            for p in self.params:  # glue: unpacks the flat buffer per parameter tensor, not elements
                 p.ravel()[:] = flat[off:off + p.size]
                 off += p.size
         return self
 
     def state_dict(self):
-        return dict(t=self.t, lr=self.lr, state=[s.copy() for s in self.state], options=dict(getattr(self, "options", {})),
+        return dict(t=self.t, lr=self.lr, state=[s.copy() for s in self.state], options=dict(getattr(self, "options", {})),  # glue: copies of the state slots
                     scalars=(self._sc_t, self._sc.copy()))
 
     def load_state_dict(self, sd):
         self.t = int(sd["t"])
         self.lr = float(sd["lr"])
-        for dst, src in zip(self.state, sd["state"]):
+        for dst, src in zip(self.state, sd["state"]):  # glue: the optimizer state slots
             dst[:] = np.asarray(src, dtype=np.float32)
         # (reading `state` above marked the host copies for upload before
         # the next resident step)
@@ -353,7 +353,7 @@ class Adafactor:
         if isinstance(params, np.ndarray):
             params = [params]
         self.params = list(params)
-        for k, p in enumerate(self.params):
+        for k, p in enumerate(self.params):  # glue: per parameter tensor, not elements
             if not isinstance(p, np.ndarray) or p.dtype != np.float32 or not p.flags.c_contiguous:
                 raise TypeError(f"Adafactor: params[{k}] must be a C-contiguous float32 NumPy array")
             if p.ndim not in (1, 2):
@@ -369,7 +369,7 @@ class Adafactor:
         self.eps = (float(np.finfo(np.float32).eps) if eps1 is None else float(eps1), float(eps2))
         self.numeric_mode = numeric_mode
         self.state = []
-        for p in self.params:
+        for p in self.params:  # glue: per parameter tensor, not elements
             if p.ndim == 2:
                 self.state.append(dict(row_var=np.zeros(p.shape[0], np.float32),
                                        col_var=np.zeros(p.shape[1], np.float32)))
@@ -386,7 +386,7 @@ class Adafactor:
         if getattr(self, "lr_schedule", None) is not None:
             self.lr = float(self.lr_schedule.lr_at(self.t))
         b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
-        for p, g, st in zip(self.params, grads, self.state):
+        for p, g, st in zip(self.params, grads, self.state):  # glue: per parameter tensor, not elements
             g = np.asarray(g)
             if g.shape != p.shape or g.dtype == np.float64:
                 raise ValueError("Adafactor: a grad must be float32 of its param's shape")
@@ -416,7 +416,7 @@ class LAMB(_SeqOptimizer):
         if isinstance(params, np.ndarray):
             params = [params]
         self.params = list(params)
-        for k, p in enumerate(self.params):
+        for k, p in enumerate(self.params):  # glue: per parameter tensor, not elements
             if not isinstance(p, np.ndarray) or p.dtype != np.float32 or not p.flags.c_contiguous or p.size == 0:
                 raise TypeError(f"LAMB: params[{k}] must be a non-empty C-contiguous float32 NumPy array")
         b1, b2 = betas
@@ -427,8 +427,8 @@ class LAMB(_SeqOptimizer):
         self.flags = (int(bool(trust_clip)) | 2 * int(bool(always_adapt)) | 4 * int(bool(grad_averaging))
                       | 8 * int(bool(bias_correction)) | 16 * int(self.max_grad_norm is not None))
         self.numeric_mode = numeric_mode
-        self.n_total = int(sum(p.size for p in self.params))
-        self._res_init([np.zeros(self.n_total, dtype=np.float32) for _ in range(2)])
+        self.n_total = int(sum(p.size for p in self.params))  # glue: sizes per parameter tensor, not elements
+        self._res_init([np.zeros(self.n_total, dtype=np.float32) for _ in range(2)])  # glue: the two optimizer state slots
         self.t = 0
         self._sc = np.ones(2, dtype=np.float32)    # beta1^_sc_t, beta2^_sc_t
         self._sc_t = 0
@@ -446,7 +446,7 @@ class LAMB(_SeqOptimizer):
         if getattr(self, "lr_schedule", None) is not None:
             self.lr = float(self.lr_schedule.lr_at(self.t))
         offs = [0]
-        for p in self.params:
+        for p in self.params:  # glue: offsets per parameter tensor, not elements
             offs.append(offs[-1] + p.size)
         if self._sc_t >= self.t:
             self._sc[:] = 1.0
@@ -461,7 +461,7 @@ class LAMB(_SeqOptimizer):
                 if self._res is None:
                     self._res_opened(b, b.lamb_resident_open([len(self.params)] + offs))
                 self._res_upload()
-                b.lamb_resident_step(self._res, [p.ctypes.data for p in self.params] + [x.ctypes.data for x in gs]
+                b.lamb_resident_step(self._res, [p.ctypes.data for p in self.params] + [x.ctypes.data for x in gs]  # glue: addresses per parameter tensor, not elements
                                      + [self._sc.ctypes.data], [len(self.params), self.t, self.flags], fp)
             except BaseException:
                 self.t -= 1
@@ -476,7 +476,7 @@ class LAMB(_SeqOptimizer):
             self._sc_t = self.t
         if not resident:
             off = 0
-            for p in self.params:
+            for p in self.params:  # glue: unpacks the flat buffer per parameter tensor, not elements
                 p.ravel()[:] = flat[off:off + p.size]
                 off += p.size
         return self

@@ -27,6 +27,7 @@ import tempfile
 import threading
 
 from . import _backend, _linalg_impl, _training_impl
+from ._array import Array
 from ._buffer import (
     addr, addr_ro, all_finite, as_f32_c, as_i32_c, empty, frombytes, zeros,
 )
@@ -62,16 +63,16 @@ def _schedule(value):
         if depth > 8 or remaining[0] < 0:
             raise ValueError('SmallMLPTrainer data_schedule is too complex')
         if type(item) is dict:
-            if any(type(key) is not str for key in item):
+            if any(type(key) is not str for key in item):  # glue: validates schedule config keys
                 raise ValueError('SmallMLPTrainer data_schedule keys must be strings')
-            if len(item) > 128 or any(len(key) > 2048 for key in item):
+            if len(item) > 128 or any(len(key) > 2048 for key in item):  # glue: validates schedule config keys
                 raise ValueError('SmallMLPTrainer data_schedule object is too large')
-            for child in item.values():
+            for child in item.values():  # glue: walks schedule config tree
                 visit(child, depth + 1)
         elif type(item) is list:
             if len(item) > 128:
                 raise ValueError('SmallMLPTrainer data_schedule list is too large')
-            for child in item:
+            for child in item:  # glue: walks schedule config tree
                 visit(child, depth + 1)
         elif type(item) is str and len(item) > 2048:
             raise ValueError('SmallMLPTrainer data_schedule string is too large')
@@ -118,7 +119,7 @@ def _config(lr, betas, eps, weight_decay):
         beta1, beta2 = betas
     except (TypeError, ValueError) as exc:
         raise ValueError('SmallMLPTrainer betas must contain two scalars') from exc
-    result = {name: _scalar(value, name) for name, value in
+    result = {name: _scalar(value, name) for name, value in  # glue: validates five scalar hyperparameters
               (('lr', lr), ('beta1', beta1), ('beta2', beta2),
                ('eps', eps), ('weight_decay', weight_decay))}
     if result['lr'] <= 0 or result['eps'] <= 0 or result['weight_decay'] < 0:
@@ -190,9 +191,9 @@ def _targets(value, rows):
         raise ValueError('SmallMLPTrainer targets must have shape (batch,) with classes 0..2') from None
     if not copied:
         arr = arr.copy()
-    # A C-level scan of at most 256 labels (the permitted O(rows) loop).
-    labels = flat_view(arr, 'i')
-    if min(labels) < 0 or max(labels) >= 3:
+    # The range scan runs in the core Mojo helpers (Array.min/max).
+    labels = Array.from_buffer(arr)
+    if labels.min() < 0 or labels.max() >= 3:
         raise ValueError('SmallMLPTrainer targets must have shape (batch,) with classes 0..2')
     return arr
 
@@ -256,7 +257,7 @@ def _optimizer(parameters, config, state=None):
 def _state(weights, opt, config, schedule):
     return dict(schema=_STATE_SCHEMA, architecture=[8, 16, 3], numeric_mode=_require_mode(),
                 parameter_order=list(_NAMES),
-                weights={name: array.copy() for name, array in zip(_NAMES, weights)},
+                weights={name: array.copy() for name, array in zip(_NAMES, weights)},  # glue: copies each named weight
                 optimizer=dict(kind='AdamW', step=int(opt.t), m=opt.exp_avg.copy(),
                                v=opt.exp_avg_sq.copy(), flags=opt.buf_initialized.copy()),
                 config=dict(config), data_schedule=_schedule(schedule))
@@ -272,7 +273,7 @@ def _validate_state(state):
         raise ValueError('SmallMLPTrainer state schema/architecture/mode/order mismatch')
     if not isinstance(state['weights'], dict) or set(state['weights']) != set(_NAMES):
         raise ValueError('SmallMLPTrainer state requires all four named parameters')
-    weights = [_array(state['weights'][name], shape, name) for name, shape in zip(_NAMES, _SHAPES)]
+    weights = [_array(state['weights'][name], shape, name) for name, shape in zip(_NAMES, _SHAPES)]  # glue: validates each named weight
     cfg = state['config']
     if not isinstance(cfg, dict) or set(cfg) != {'lr', 'beta1', 'beta2', 'eps', 'weight_decay'}:
         raise ValueError('SmallMLPTrainer state optimizer configuration mismatch')
@@ -291,10 +292,10 @@ def _validate_state(state):
     moments = dict(step=step, m=_array(opt['m'], (_TOTAL,), 'm'),
                    v=_array(opt['v'], (_TOTAL,), 'v'),
                    flags=_array(opt['flags'], (4,), 'flags', '<i4'))
-    # DEVIATION 2425: `np.any(v < 0)` and the binary-flags test are C-level
-    # min/max scans over 195 floats and 4 ints.
-    flags = flat_view(moments['flags'], 'i')
-    if min(flat_view(moments['v'], 'f')) < 0 or min(flags) < 0 or max(flags) > 1:
+    # DEVIATION 2425: `np.any(v < 0)` and the binary-flags test are min/max
+    # scans in the core Mojo helpers (Array.min/max).
+    flags = Array.from_buffer(moments['flags'])
+    if Array.from_buffer(moments['v']).min() < 0 or flags.min() < 0 or flags.max() > 1:
         raise ValueError('SmallMLPTrainer state requires nonnegative v and binary flags')
     return weights, moments, config, _schedule(state['data_schedule'])
 
@@ -333,7 +334,7 @@ class SmallMLPTrainer:
 
     def __init__(self, weight1, bias1, weight2, bias2, *, data_schedule,
                  lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01):
-        weights = [_array(value, shape, name) for value, shape, name in
+        weights = [_array(value, shape, name) for value, shape, name in  # glue: validates each named weight
                    zip((weight1, bias1, weight2, bias2), _SHAPES, _NAMES)]
         config = _config(lr, betas, eps, weight_decay)
         schedule = _schedule(data_schedule)
@@ -500,7 +501,7 @@ class SmallMLPTrainer:
         if mode == 'identical':
             _linalg_impl.require_identical()
         binding = _training_impl._load(mode)
-        for name in ('mlp_bias_activation', 'mlp_relu_backward', 'mlp_sum_rows'):
+        for name in ('mlp_bias_activation', 'mlp_relu_backward', 'mlp_sum_rows'):  # glue: checks binding entry names
             if not callable(getattr(binding, name, None)):
                 raise ImportError('SmallMLPTrainer requires updated training binding: missing ' + name)
         return binding
@@ -575,7 +576,7 @@ class SmallMLPTrainer:
             raise RuntimeError('SmallMLPTrainer ReLU gradient returned an invalid result')
         dw1 = self._matmul(dhidden, x, transpose_a=True)
         db1 = self._sum(binding, dhidden)
-        grads = [_array(value, shape, name + ' gradient') for value, shape, name in
+        grads = [_array(value, shape, name + ' gradient') for value, shape, name in  # glue: validates each named gradient
                  zip((dw1, db1, dw2, db2), _SHAPES, _NAMES)]
         input_grad = self._matmul(dhidden, weights[0]) if return_input_grad else None
         if input_grad is not None and input_grad.shape != x.shape:
@@ -595,7 +596,7 @@ class SmallMLPTrainer:
         train = mode == _MODE_TRAIN
         loss = zeros((1,), '<f4')
         logits = empty((rows, 3), '<f4')
-        grads = [empty(shape, '<f4') for shape in _SHAPES]
+        grads = [empty(shape, '<f4') for shape in _SHAPES]  # glue: allocates each named gradient
         dx = empty((rows, 8), '<f4') if return_input_grad else zeros((1,), '<f4')
         info = zeros((3,), '<f4')
         if train:
@@ -614,10 +615,10 @@ class SmallMLPTrainer:
         # A silent reorder here is a WRONG ANSWER and not a crash. If you
         # change either list, change the binding's comment in the same edit.
         addresses = [addr_ro(x, name='X'), addr_ro(y, name='targets')]
-        addresses += [weight_addr(w, name=n) for w, n in zip(weights, _NAMES)]
+        addresses += [weight_addr(w, name=n) for w, n in zip(weights, _NAMES)]  # glue: one address per weight tensor
         addresses += [addr(m, name='m'), addr(v, name='v'), addr(flags, name='flags'),
                       addr(loss, name='loss'), addr(logits, name='logits')]
-        addresses += [addr(g, name=n + ' gradient') for g, n in zip(grads, _NAMES)]
+        addresses += [addr(g, name=n + ' gradient') for g, n in zip(grads, _NAMES)]  # glue: one address per gradient tensor
         addresses += [addr(dx, name='input_grad'), addr(info, name='info')]
         params = [int(rows), int(mode), int(t), float(config['lr']), float(config['beta1']),
                   float(config['beta2']), float(config['eps']), float(config['weight_decay']),
@@ -630,7 +631,7 @@ class SmallMLPTrainer:
         value = float(loss[0])
         if not math.isfinite(value):
             raise RuntimeError('SmallMLPTrainer loss is not finite')
-        for g in grads:
+        for g in grads:  # glue: finiteness check per tensor
             if not all_finite(g):
                 raise RuntimeError('SmallMLPTrainer step returned an invalid result')
         input_grad = None
@@ -670,7 +671,7 @@ class SmallMLPTrainer:
             if len(gradients) != len(_NAMES):
                 raise ValueError('SmallMLPTrainer requires exactly four gradients')
             grads = [_array(g, shape, name + ' gradient')
-                     for g, shape, name in zip(gradients, _SHAPES, _NAMES)]
+                     for g, shape, name in zip(gradients, _SHAPES, _NAMES)]  # glue: validates each named gradient
             self._session_sync_host()
             self._session_close()
             weights, moments, config, schedule = _validate_state(self.state_dict())
@@ -722,7 +723,7 @@ class SmallMLPTrainer:
                 raise RuntimeError('SmallMLPTrainer optimizer did not advance exactly one step')
             _require_mode()
             result = dict(step=int(working.t), loss=float(loss), logits=logits.copy(),
-                          gradients={name: value.copy() for name, value in zip(_NAMES, grads)})
+                          gradients={name: value.copy() for name, value in zip(_NAMES, grads)})  # glue: copies each named gradient
             if return_input_grad:
                 result['input_grad'] = input_grad.copy()
             self._opt = working
@@ -778,7 +779,7 @@ class SmallMLPTrainer:
 
 def _unique_object(pairs):
     result = {}
-    for key, value in pairs:
+    for key, value in pairs:  # glue: checkpoint json key pairs
         if key in result:
             raise ValueError('Duplicate checkpoint key')
         result[key] = value
@@ -801,8 +802,8 @@ def _encode_array(value):
 
 
 def _encode_state(state):
-    state['weights'] = {name: _encode_array(value) for name, value in state['weights'].items()}
-    for key in ('m', 'v', 'flags'):
+    state['weights'] = {name: _encode_array(value) for name, value in state['weights'].items()}  # glue: encodes each named weight
+    for key in ('m', 'v', 'flags'):  # glue: encodes three optimizer arrays
         state['optimizer'][key] = _encode_array(state['optimizer'][key])
     return state
 
@@ -812,7 +813,7 @@ def _decode_array(value, shape, dtype):
             or value['dtype'] != dtype or value['shape'] != list(shape)
             or not isinstance(value['hex'], str)):
         raise ValueError('SmallMLPTrainer checkpoint tensor descriptor mismatch')
-    cells = math.prod(shape)
+    cells = math.prod(shape)  # glue: product of shape dims
     if len(value['hex']) != cells * 8:
         raise ValueError('SmallMLPTrainer checkpoint tensor length mismatch')
     try:
@@ -835,8 +836,8 @@ def _decode_state(payload):
         if not isinstance(payload['weights'], dict) or set(payload['weights']) != set(_NAMES):
             raise ValueError('SmallMLPTrainer checkpoint parameter registry mismatch')
         payload['weights'] = {name: _decode_array(payload['weights'][name], shape, '<f4')
-                              for name, shape in zip(_NAMES, _SHAPES)}
-        for key in ('m', 'v', 'flags'):
+                              for name, shape in zip(_NAMES, _SHAPES)}  # glue: decodes each named weight
+        for key in ('m', 'v', 'flags'):  # glue: decodes three optimizer arrays
             payload['optimizer'][key] = _decode_array(
                 payload['optimizer'][key], (4,) if key == 'flags' else (_TOTAL,),
                 '<i4' if key == 'flags' else '<f4')

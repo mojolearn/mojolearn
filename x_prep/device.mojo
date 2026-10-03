@@ -13,6 +13,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.units import N_OPS, run_unit
+from x_prep.py2mojo import P2M_BASE, P2M_N, is_p2m_op, run_p2m_unit
 from x_prep.dsort import sort_cols_device, sort_scratch_words
 from x_prep.dradix import RADIX_SORT, RADIX_MIN_ROWS, radix_sort_cols_device, radix_scratch_words
 from x_prep.fastred import (
@@ -20,6 +21,12 @@ from x_prep.fastred import (
     ii_gram_fast_kernel,
 )
 from x_prep.dmi import mi_cd_device, mi_w_words, mi_scratch_words
+from x_prep.fastnb import NB_CAT_ATOMIC, cat_hist_atomic_kernel, cat_hist_convert_kernel
+from x_prep.select_fast import (
+    SELECT_FREG, SELECT_FCLS, OP_F_CLASSIF, OP_F_REGRESSION, program_has_op, select_scratch_words,
+    select_freg_device, select_fcls_device, select_cstats_device,
+)
+from x_prep.fastprep2 import PREP2_FAST, Prep2Switches, prep2_scratch_words, prep2_fast_stage
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
 from core.device_store import DeviceStore
 from x_linear.fast_gram import fast_sym_gram_into, fg_part_words
@@ -89,6 +96,9 @@ comptime OP_CLASS_STATS = 16
 comptime OP_II_MEAN = 53
 comptime OP_II_GRAM = 54
 comptime OP_PT_FOLD = 106
+#: x_prep/blocked.mojo's CategoricalNB histogram stages (x_prep/fastnb.mojo intercepts them)
+comptime OP_CAT_HPART = 133
+comptime OP_CAT_HFOLD = 134
 
 #: op 0 (`sort_cols`) runs as the device sort of x_prep/dsort.mojo, not as
 #: one heapsort thread per column: the same words (a sort under a total
@@ -174,6 +184,13 @@ def prep_kernel[OP: Int](f: FP, q: IP, total: Int32):
         run_unit[OP](t, f, q)
 
 
+def p2m_kernel[OP: Int](f: FP, q: IP, total: Int32):
+    """Lane apple-fast-py2mojo-prep: ops P2M_BASE .. (x_prep/py2mojo.mojo)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(total):
+        run_p2m_unit[OP](t, f, q)
+
+
 def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int, scratch_len: Int = 0,
                        out_addr: Int = 0, out_len: Int = 0) raises:
     run_program_device_ptr(
@@ -195,7 +212,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     no bit."""
     for s in range(stages):
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
-        if op < 0 or op >= N_OPS:
+        if (op < 0 or op >= N_OPS) and not is_p2m_op(op):
             raise Error(String("x_prep: unknown op ", op))
     # FAST on Apple (lane prep-apple3): sort_cols by radix (x_prep/dradix.mojo, the same words).
     # Default since request 1790627886703 (M3 Ultra, 16 columns x 1M rows: RobustScaler 0.141 ->
@@ -217,9 +234,23 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             scratch = max(scratch, sort_scratch_words(Int(sq[1]), units))
             if radix and Int(sq[1]) >= RADIX_MIN_ROWS:
                 scratch = max(scratch, radix_scratch_words(Int(sq[1]), units, radix_rows))
+    comptime if SELECT_FREG or SELECT_FCLS:
+        # FAST on Apple (lane/apple-fast-select, -D MOJOLEARN_SELECT_FREG / _FCLS): the
+        # f_regression / f_classif tiles' partials live in the sort scratch (x_prep/select_fast.mojo)
+        var sel_fcls = program_has_op(host_q, stages, OP_F_CLASSIF)
+        for s in range(stages):
+            var sq = host_q + (s * STAGE_INTS + 2)
+            scratch = max(scratch, select_scratch_words(Int(host_q.unsafe_load(s * STAGE_INTS)), Int(sq[1]),
+                                                        Int(sq[2]), Int(sq[4]), sel_fcls))
     # FAST: MOJOLEARN_XPREP_FAST_FOLDS=0 keeps the row-order units (the A/B arm of
     # bench/x_prep_quality.py and bench/x_prep_speed.py); unset or 1 folds by threadgroup
     var fast_folds = getenv("MOJOLEARN_XPREP_FAST_FOLDS", "1") != "0"
+    # lane/apple-fast-prep2 (2026-10-02): FAST + Apple paths behind env switches, each default OFF
+    # (x_prep/fastprep2.mojo: te_global / te_enc / ii_conv / ii_gram / eigh by threadgroups, the quantile
+    # stage by radix select). Every field is False outside FAST + Apple.
+    var p2 = Prep2Switches()
+    comptime if PREP2_FAST:
+        scratch = max(scratch, prep2_scratch_words(host_q, stages, p2))
     var mi_sorted = getenv("MOJOLEARN_XPREP_MI_SORTED", "1") != "0"
     var mi_ties = getenv("MOJOLEARN_XPREP_MI_TIES", "1") != "0"
     var mi_w = 1
@@ -316,6 +347,29 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 sort_cols_device(ctx, df, dw, total, Int(hq[0]), Int(hq[1]), Int(hq[2]),
                                  Int(hq[3]), Int(hq[4]))
             continue
+        comptime if SELECT_FREG:
+            # FAST on Apple (lane/apple-fast-select): f_regression as row x feature tiles
+            if op == OP_F_REGRESSION:
+                var hq = host_q + (s * STAGE_INTS + 2)
+                if select_freg_device(ctx, df, dw, Int(hq[0]), Int(hq[1]), Int(hq[2]), Int(hq[3]), Int(hq[4]),
+                                      Int(hq[5]), Int(hq[6]), Int(hq[7]), Int(hq[8])):
+                    continue
+        comptime if SELECT_FCLS:
+            # FAST on Apple (lane/apple-fast-select): f_classif, and the class_stats ahead of
+            # it in the same program, as row x feature tiles
+            if op == OP_F_CLASSIF:
+                var hq = host_q + (s * STAGE_INTS + 2)
+                if select_fcls_device(ctx, df, dw, Int(hq[0]), Int(hq[1]), Int(hq[2]), Int(hq[3]), Int(hq[4]),
+                                      Int(hq[5]), Int(hq[6]), Int(hq[7]), Int(hq[8])):
+                    continue
+            if op == OP_CLASS_STATS and program_has_op(host_q, stages, OP_F_CLASSIF):
+                var hq = host_q + (s * STAGE_INTS + 2)
+                if select_cstats_device(ctx, df, dw, Int(hq[0]), Int(hq[1]), Int(hq[2]), Int(hq[3]), Int(hq[4]),
+                                        Int(hq[5]), Int(hq[6]), Int(hq[7]), Int(hq[8]), Int(hq[9])):
+                    continue
+        comptime if PREP2_FAST:
+            if prep2_fast_stage(ctx, df, dw, host_q, s, op, total, IP(unsafe_from_address=Int(qp)), p2):
+                continue
         comptime if RR_EIGH:
             if op == OP_EIGH and Int(host_q.unsafe_load(s * STAGE_INTS + 2 + EIGH_CYCLIC_Q)) == 0:
                 # q = [A, m, astride, EVAL, EVEC, cyclic], one unit a matrix
@@ -411,9 +465,37 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             if fast_folds and op == OP_II_GRAM:
                 ctx.enqueue_function[ii_gram_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGR)
                 continue
+        comptime if NB_CAT_ATOMIC:
+            # lane apple-fast-nb: the (row, feature) atomic count table; W < 0 only
+            # (the weighted fold keeps the units). The dispatcher zeroes block 0
+            # of the histogram scratch, the kernel adds into it, and the fold
+            # stage copies it out (x_prep/fastnb.mojo).
+            if op == OP_CAT_HPART and host_q.unsafe_load(s * STAGE_INTS + 2 + 7) < 0:
+                var hq = host_q + (s * STAGE_INTS + 2)
+                var cells = Int(hq[1]) * Int(hq[2])
+                var words = Int(hq[2]) * Int(hq[4]) * Int(hq[6])
+                if cells > 0 and cells <= 2147483647 and words > 0:
+                    ctx.enqueue_memset(df.create_sub_buffer[DType.float32](Int(hq[8]), words), Float32(0))
+                    ctx.enqueue_function[cat_hist_atomic_kernel](
+                        df.unsafe_ptr(), qp, Int32(cells),
+                        grid_dim=(cells + BLOCK - 1) // BLOCK, block_dim=BLOCK,
+                    )
+                    continue
+            if op == OP_CAT_HFOLD and host_q.unsafe_load(s * STAGE_INTS + 2 + 6) < 0:
+                ctx.enqueue_function[cat_hist_convert_kernel](
+                    df.unsafe_ptr(), qp, Int32(total),
+                    grid_dim=(total + BLOCK - 1) // BLOCK, block_dim=BLOCK,
+                )
+                continue
         comptime for k in range(N_OPS):
             if op == k:
                 ctx.enqueue_function[prep_kernel[k]](
+                    df.unsafe_ptr(), qp, Int32(total),
+                    grid_dim=(total + BLOCK - 1) // BLOCK, block_dim=BLOCK,
+                )
+        comptime for k in range(P2M_BASE, P2M_BASE + P2M_N):
+            if op == k:
+                ctx.enqueue_function[p2m_kernel[k]](
                     df.unsafe_ptr(), qp, Int32(total),
                     grid_dim=(total + BLOCK - 1) // BLOCK, block_dim=BLOCK,
                 )

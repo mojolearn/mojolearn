@@ -51,7 +51,7 @@ from training.byte_lm_config import ByteConfig
 from training.byte_lm import (
     BYTE_PROFILE, ByteTrainer, byte_train_step, byte_train_step_resident,
     byte_eval_loss, byte_eval_loss_resident, byte_rollback,
-    byte_validate_state, byte_validate_optimizer,
+    byte_validate_state, byte_validate_device_state, byte_validate_optimizer,
     byte_validate_tokens, byte_lm_fault_inject_available,
     byte_attention_eager_cells, byte_lm_attn_bwd_corner_refuses,
     byte_lm_attn_kv_corner_guard,
@@ -514,7 +514,12 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
                         raise Error("byte LM eval changed momentum flags")
                 _btick(ton, tk, "step.bind_eval_readback")
                 _bbytes(ton, "step.bind_eval_readback_bytes", 3 * n * 4)
-            byte_validate_state(out_p, out_m, out_v, out_flags, result_step, shape)
+            # lane cgr4-download-loop: the returned state is validated where
+            # it lives (the trainer's device buffers it was downloaded from):
+            # device scans, the same predicates and messages, no host walk
+            ref tr = session.trainer.value()
+            byte_validate_device_state(ctx, tr.scan, tr.buffers.param, tr.buffers.m_state,
+                                       tr.buffers.v_state, out_flags, result_step, shape)
             if result_step != completed + action:
                 raise Error("byte LM: successful result has wrong completed step")
             if (bitcast[DType.uint32](loss) & UInt32(0x7F800000)) == UInt32(0x7F800000):
@@ -522,10 +527,9 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
             if action == 1:
                 if len(out_g) != n:
                     raise Error("byte LM: wrong gradient length")
-                for i in range(n):
-                    if (bitcast[DType.uint32](out_g[i]) & UInt32(0x7F800000)) == UInt32(0x7F800000):
-                        raise Error("byte LM: nonfinite returned gradient")
-            # Host scans of out_p/m/v (byte_validate_state) and out_g.
+                if tr.scan.first_nonfinite(ctx, tr.buffers.grad, n) >= 0:
+                    raise Error("byte LM: nonfinite returned gradient")
+            # Device scans of param/m/v (byte_validate_device_state) and grad.
             _btick(ton, tk, "step.bind_validate_outputs")
             ctx.synchronize()
             _btick(ton, tk, "step.bind_final_sync")
@@ -1066,9 +1070,13 @@ def byte_lm_session_export_gradients_binding(session: PythonObject, addresses: P
     ref ctx = owner[].ctx.value()
     var hg = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.synchronize()
+    var bad_g = -1
     owner[].busy = True
     try:
         with GILReleased(Python()):
+            # lane cgr4-download-loop: the finite scan runs on the device
+            bad_g = owner[].trainer.value().scan.first_nonfinite(
+                ctx, owner[].trainer.value().buffers.grad, n)
             _stage_download(ctx, hg, owner[].trainer.value().buffers.grad, n)
             ctx.synchronize()
             _btick(ton, tk, "export.download_gradients")
@@ -1078,9 +1086,8 @@ def byte_lm_session_export_gradients_binding(session: PythonObject, addresses: P
         _mark_if_lost(owner[])
         raise error
     owner[].busy = False
-    for i in range(n):
-        if _nonfinite(hg.unsafe_ptr().unsafe_load(i)):
-            raise Error("byte LM: nonfinite returned gradient")
+    if bad_g >= 0:
+        raise Error("byte LM: nonfinite returned gradient")
     copy_f32(hg.unsafe_ptr(), f32_ptr(addr[0]), n)
     _btick(ton, tk, "export.publish_gradients")
     _ = hg^

@@ -4,7 +4,7 @@
 
 from . import _mojolearn_estimators, _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, empty, frombytes, full, hotpath_enabled, zeros
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, empty, frombytes, full, zeros
 from ._mode import NumericModeMixin
 from .linear_model import _check_saved_by, _restore_mode, _saved_mode, _shape_of
 
@@ -381,36 +381,20 @@ class DBSCAN(NumericModeMixin):
 
     def _store_core(self, x, labels, core):
         """Keep the core rows, their training indices and their labels, in
-        ascending training index, from the fit's own core mask."""
+        ascending training index, from the fit's own core mask: the three
+        arrays in the binding (bindings/py2mojo_cluster_est.mojo, lane
+        apple-fast-py2mojo-cluster: the mask check, the compaction and the
+        row copies in one Mojo loop; lane pyglue-numeric deleted the Python
+        routes beside it)."""
         d = int(x.shape[1])
-        raw = bytes(x.tobytes())
-        width = 4 * d
-        if not hotpath_enabled():
-            # the reference arm (MOJOLEARN_HOTPATH=python): per-row Python loops
-            flags = core.tolist()
-            if any(f not in (0, 1) for f in flags):
-                raise RuntimeError("mojolearn DBSCAN: the fit's core mask holds a value other than 0 or 1")
-            idx = [i for i, f in enumerate(flags) if f]
-            lab = labels.tolist()
-            self.core_sample_indices_ = Array.from_list(idx, "<i4") if idx else empty((0,), "<i4")
-            self.components_ = frombytes(b"".join(raw[i * width:(i + 1) * width] for i in idx), "<f4", (len(idx), d))
-            self._core_labels = Array.from_list([lab[i] for i in idx], "<i4") if idx else empty((0,), "<i4")
-            return
-        # the same three arrays (lane cluster-apple3), every walk inside the
-        # interpreter's C iterators: `compress` keeps the items whose flag
-        # byte is nonzero
-        from itertools import compress
-        flags = bytes(core.tobytes())
-        n = len(flags)
-        if flags.count(0) + flags.count(1) != n:
-            raise RuntimeError("mojolearn DBSCAN: the fit's core mask holds a value other than 0 or 1")
-        idx = list(compress(range(n), flags))
-        rows = map(slice, compress(range(0, n * width, width), flags),
-                   compress(range(width, (n + 1) * width, width), flags))
-        self.core_sample_indices_ = Array.from_list(idx, "<i4") if idx else empty((0,), "<i4")
-        self.components_ = frombytes(b"".join(map(raw.__getitem__, rows)), "<f4", (len(idx), d))
-        self._core_labels = (Array.from_list(list(compress(labels.tolist(), flags)), "<i4")
-                             if idx else empty((0,), "<i4"))
+        b = self._bind("_mojolearn_estimators")
+        idx, comp, lab = b.dbscan_core_arrays(
+            addr_ro(x, name="x"), addr_ro(labels, name="labels"), addr_ro(core, name="core"),
+            [int(x.shape[0]), d])
+        m = len(idx)
+        self.core_sample_indices_ = frombytes(idx.tobytes(), "<i4", (m,)) if m else empty((0,), "<i4")
+        self.components_ = frombytes(comp.tobytes(), "<f4", (m, d))
+        self._core_labels = frombytes(lab.tobytes(), "<i4", (m,)) if m else empty((0,), "<i4")
 
     def fit_predict(self, X, y=None, sample_weight=None):
         return self.fit(X, y=y, sample_weight=sample_weight).labels_
@@ -813,6 +797,12 @@ class KernelDensity(NumericModeMixin):
         return self
 
     def score_samples(self, X):
+        return self._scores(X, False)
+
+    def _scores(self, X, want_total):
+        """score_samples(X), or with want_total their sum, folded in the
+        binding (on the device on a GPU install: `device_sum_f32_fixed`;
+        the host binding's `host_sum_f32_fixed`, the same order)."""
         if not hasattr(self, "_x"):
             raise ValueError("mojolearn KernelDensity: call fit() first")
         q, _ = as_f32_dense_c(X, ndim=2, name="X")
@@ -831,17 +821,17 @@ class KernelDensity(NumericModeMixin):
         # bytes. A binding without that entry takes the per-call path.
         handle = self._resident_fit_handle(binding)
         if handle is not None:
-            binding.kde_score_samples_resident(
+            got = binding.kde_score_samples_resident(
                 handle,
                 addr_ro(q, name="q"),
                 addr(out, name="out"),
                 # ORDER MATCHES bindings/_mojolearn_estimators.mojo::kde_score_samples_resident_binding.
-                [int(q.shape[0]), int(self.n_features_in_), float(self.bandwidth)],
+                [int(q.shape[0]), int(self.n_features_in_), float(self.bandwidth), 1 if want_total else 0],
                 self.kernel,
                 self.metric,
             )
-            return out
-        binding.kde_score_samples(
+            return float(got) if want_total else out
+        got = binding.kde_score_samples(
             addr_ro(self._x, name="_x"),
             addr_ro(q, name="q"),
             addr_ro(w, name="w") if w is not None else 0,
@@ -853,22 +843,19 @@ class KernelDensity(NumericModeMixin):
                 int(self.n_features_in_),
                 float(self.bandwidth),
                 1 if w is not None else 0,
+                1 if want_total else 0,
             ],
             self.kernel,
             self.metric,
         )
-        return out
+        return float(got) if want_total else out
 
     def score(self, X, y=None):
-        """The total log density: the float32 per-row scores summed
-        SEQUENTIALLY in Python float64. A host reduction outside the
-        identity claim (DEVIATION 2365); it was NumPy's pairwise
-        `np.sum(dtype=float64)`, so the last bits may differ from a value
-        recorded under it."""
-        total = 0.0
-        for v in self.score_samples(X).tolist():
-            total += v
-        return total
+        """The total log density: the float32 per-row scores summed in the
+        binding's fixed order (`core/device_fold.mojo`: on the device on a
+        GPU install, the same order on the host column; lane
+        pyglue-numeric, it was a host sum of the downloaded scores)."""
+        return self._scores(X, True)
 
     def sample(self, n_samples=1, random_state=None):
         raise NotImplementedError(

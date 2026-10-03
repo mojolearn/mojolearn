@@ -31,6 +31,7 @@ from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 
 from checks.numerics import ftz, identical_mul_add
 from x_ann.tsne_core import F32P, I32P, ts_ftz_nonneg, ts_knn_beats, ts_knn_cell, ts_knn_offer
+from x_ann.fast_env import FAST_KNN_BIGD
 
 #: rows per threadgroup (one thread each) and candidate rows per tile
 comptime KTB = 128
@@ -97,6 +98,76 @@ def knn_tiled_kernel[MAXD: Int](n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F3
                     li = Int(nn_i.unsafe_load(base + k - 1))
         barrier()
         j0 += KTJ
+
+
+#: the chunked arm (rows wider than 64 features): candidate rows per tile
+#: and features per staged chunk
+comptime KBJ = 32
+comptime KBC = 32
+
+
+def knn_tiled_bigd_kernel(n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F32P, nn_i: I32P):
+    """FAST on Apple default (off: `-D MOJOLEARN_ANN_FAST_KNN_BIGD_OFF`; lane/apple-fast-ann,
+    2026-10-02): the tiled k-NN for rows wider than 64 features. One thread
+    per row i (KTB per threadgroup); the candidate rows arrive in tiles of
+    KBJ rows, each tile staged KBC features at a time (a KBJ x KBC slab of
+    ftz(x) in threadgroup memory), and thread i keeps KBJ running sums, one
+    per candidate, folding feature c ascending across the chunks: the
+    cell's ascending fused fold on the same words, then the cell's own
+    `ts_knn_offer` per candidate in j order. Cause: rows wider than 64
+    features took `knn_cell_kernel` (`knn_enqueue`), one thread per row
+    reading every candidate row from device memory with nothing staged,
+    400,000 x 400,000 x 220 loads at CAGRA's Istella build. Same bits
+    expected (the same statements in the same order)."""
+    var t = Int(thread_idx.x)
+    var nr = Int(n)
+    var dd = Int(d)
+    var k = Int(nn)
+    var i = Int(block_idx.x) * KTB + t
+    var slab = stack_allocation[KBJ * KBC, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var live = i < nr
+    var base = i * k
+    var filled = 0
+    var ld = Float32(0.0)
+    var li = 0
+    var acc = InlineArray[Float32, KBJ](fill=Float32(0.0))
+    var j0 = 0
+    while j0 < nr:
+        var jn = KBJ if nr - j0 > KBJ else nr - j0
+        comptime for r in range(KBJ):
+            acc[r] = Float32(0.0)
+        var c0 = 0
+        while c0 < dd:
+            var cn = KBC if dd - c0 > KBC else dd - c0
+            for e in range(t, KBJ * KBC, KTB):
+                var r = e // KBC
+                var c = e % KBC
+                var v = Float32(0.0)
+                if r < jn and c < cn:
+                    v = ftz(x.unsafe_load((j0 + r) * dd + c0 + c))
+                slab[e] = v
+            barrier()
+            if live:
+                for c in range(cn):
+                    var xi = ftz(x.unsafe_load(i * dd + c0 + c))
+                    comptime for r in range(KBJ):
+                        var diff = ftz(xi - slab[r * KBC + c])
+                        acc[r] = ts_ftz_nonneg(identical_mul_add(diff, diff, acc[r]))
+            barrier()
+            c0 += KBC
+        if live:
+            for r in range(jn):
+                var j = j0 + r
+                if j == i:
+                    continue
+                var a = acc[r]
+                if filled == k and not ts_knn_beats(a, j, ld, li):
+                    continue
+                filled = ts_knn_offer(a, j, base, k, filled, nn_d, nn_i)
+                if filled == k:
+                    ld = nn_d.unsafe_load(base + k - 1)
+                    li = Int(nn_i.unsafe_load(base + k - 1))
+        j0 += KBJ
 
 
 # lane/gap-nv-classical2: rows wider than 64 features on NVIDIA and AMD.
@@ -208,6 +279,13 @@ def knn_enqueue(
 ) raises:
     """Enqueue the k-NN graph of the n x d rows in dx (no sync)."""
     var blocks = (n + KTB - 1) // KTB
+    # lane/apple-fast-ann: the chunked arm for wide rows, FAST+Apple default since the M3 A/B (CAGRA istella -88%)
+    comptime if FAST_KNN_BIGD:
+        if d > 64:
+            ctx.enqueue_function[knn_tiled_bigd_kernel](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn),
+                                                        dnd.unsafe_ptr(), dni.unsafe_ptr(), grid_dim=blocks,
+                                                        block_dim=KTB)
+            return
     # lane ann-apple2: the fold width is d rounded up to a multiple of 4 up
     # to 32 (fewer padded steps; a padded step is the identity, see above),
     # then 48 and 64

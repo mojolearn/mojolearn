@@ -137,7 +137,6 @@ def qn_coalesced_applies(d: Int, c: Int) -> Bool:
 from glm.impl.qn.glm_regularizer import tikhonov_reg_grad_kernel
 from glm.impl.qn.glm_softmax import (
     add_bias_multi_kernel,
-    mean_rows_multi_kernel,
     softmax_loss_dz_kernel,
     transpose_w_kernel,
     xtdz_multi_kernel,
@@ -279,7 +278,7 @@ def mean_kernel(
 
 
 # ---------------------------------------------------------------------------
-# lane/linear-apple3 (WIP, opt-in `-D MOJOLEARN_QN_FAST_BLOCKS=1`): FAST on
+# lane/linear-apple3 (`QN_FAST_BLOCKS`, FAST default, see below): FAST on
 # Apple, one class: the whole objective evaluation in TWO launches.
 #
 # An evaluation was nine launches: the gemv, the bias, the loss map, the
@@ -294,10 +293,14 @@ def mean_kernel(
 # kernels'; the grouping of every sum differs, so FAST words change.
 # ---------------------------------------------------------------------------
 
+# Default on (FAST + Apple) since the M3 A/B (istella n=1: logreg 3,893 ->
+# 3,612 ms, svc 773 -> 733, svr 913 -> 219, quality same). `-D
+# MOJOLEARN_QN_FAST_BLOCKS_OFF` keeps the nine-launch evaluation; the old
+# `-D MOJOLEARN_QN_FAST_BLOCKS` name is harmless.
 comptime QN_FAST_BLOCKS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_QN_FAST_BLOCKS"]()
+    and not is_defined["MOJOLEARN_QN_FAST_BLOCKS_OFF"]()
 )
 comptime QNB_ROWS = 1024
 comptime QNB_TPB = 256
@@ -550,6 +553,149 @@ def qnt_fold_kernel(
             slots.unsafe_store(0, s0)
 
 
+# lane/apple-fast-purity2 (2026-10-03): the loss sum and the bias mean that
+# still ran as ONE block of STATS_TPB lanes over all n rows (`sum_terms_kernel`
+# / `mean_kernel`: softmax `C > 1` in IDENTICAL, `C == 1` in FAST off Apple
+# or with QN_TILED off) now run in QN_TILED's tile order: pass 1 one chain
+# per QNT_ROWS-row tile (`ftz(acc + v[r])`, rows ascending from 0.0), pass 2
+# the pinned fold of the tile partials (lane t takes tiles t, t + 256, ...,
+# then the halving tree), the mean `ftz(s0 * (1 / n))`. The host column
+# (`glm/host/qn_oracle.mojo::host_qnt_sum`) folds the same tiles, so the
+# softmax loss word changes on every vendor and the host together.
+
+def qn_tile_sum_partial_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    tiles_in: Int32,
+    rows_in: Int32,
+):
+    """Pass 1: thread k sums tile k's rows (`rows_in` of them) ascending
+    into part[k]."""
+    var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if k >= Int(tiles_in):
+        return
+    var r0 = k * Int(rows_in)
+    var r1 = min(Int(n_in), r0 + Int(rows_in))
+    part.unsafe_store(k, strided_ftz_sum[1](v, 1, 0, r1, r0, Float32(0.0)))
+
+
+def qn_tile_sum_fold_kernel(
+    out_v: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    tiles_in: Int32,
+    n_in: Int32,
+    is_mean: Int32,
+):
+    """Pass 2: the pinned fold of the tile partials into out_v[0], times
+    `1 / n` (rounded) when `is_mean`."""
+    var tid = Int(thread_idx.x)
+    var acc = strided_ftz_sum[STATS_TPB](part, 1, 0, Int(tiles_in), tid, Float32(0.0))
+    var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
+    if tid == 0:
+        if is_mean != 0:
+            var ratio = Float32(1.0) / Float32(Int(n_in))
+            out_v.unsafe_store(0, ftz(s0 * ratio))
+        else:
+            out_v.unsafe_store(0, s0)
+
+
+def qn_tile_sum(
+    ctx: DeviceContext,
+    out_v: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    mut ws: DeviceBuffer[DType.float32],
+    n: Int,
+    is_mean: Bool,
+) raises:
+    """out_v[0] = sum(v[0:n]) (or its mean) in the tile order; partials in
+    ws[0, qnt_tiles(n)), which the caller sizes. FAST A/B arm: `-D
+    MOJOLEARN_PURITY2_2_OFF` folds the n rows as ONE tile (one chain, the
+    old one-block cost class); IDENTICAL ignores it (the host column folds
+    QNT_ROWS tiles)."""
+    var tiles = qnt_tiles(n)
+    var rows = QNT_ROWS
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_PURITY2_2_OFF"]():
+        tiles = 1
+        rows = max(n, 1)
+    ctx.enqueue_function[qn_tile_sum_partial_kernel](
+        ws.unsafe_ptr(), v, Int32(n), Int32(tiles), Int32(rows),
+        grid_dim=((tiles + QNT_TPB - 1) // QNT_TPB, 1, 1),
+        block_dim=(QNT_TPB, 1, 1),
+    )
+    ctx.enqueue_function[qn_tile_sum_fold_kernel](  # small-launch(n: the mean divisor only): folds the qnt_tiles(n) tile partials, never walks n
+        out_v, ws.unsafe_ptr(), Int32(tiles), Int32(n),
+        Int32(1) if is_mean else Int32(0),
+        grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+    )
+
+
+def qn_tile_sum_classes_partial_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    c_in: Int32,
+    tiles_in: Int32,
+):
+    """`qn_tile_sum_classes`' pass 1: thread (c, k), k fastest, sums class
+    c's column `v[c + C * r]` over tile k's rows ascending from 0.0 into
+    part[c * tiles + k] (`qn_tile_sum_partial_kernel` per class)."""
+    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var tiles = Int(tiles_in)
+    var C = Int(c_in)
+    var c = gid // tiles
+    var k = gid - c * tiles
+    if c >= C:
+        return
+    var r0 = k * QNT_ROWS
+    var r1 = min(Int(n_in), r0 + QNT_ROWS)
+    part.unsafe_store(gid, strided_ftz_sum[1](v, C, c, r1, r0, Float32(0.0)))
+
+
+def qn_tile_sum_classes_fold_kernel(
+    out_v: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    tiles_in: Int32,
+    ratio: Float32,
+):
+    """Pass 2, block c: `qn_tile_sum_fold_kernel`'s fold of class c's tile
+    partials, `out_v[c] = ftz(s0 * ratio)`."""
+    var c = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var tiles = Int(tiles_in)
+    var acc = strided_ftz_sum[STATS_TPB](part, 1, c * tiles, tiles, tid, Float32(0.0))
+    var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
+    if tid == 0:
+        out_v.unsafe_store(c, ftz(s0 * ratio))
+
+
+def qn_tile_sum_classes(
+    ctx: DeviceContext,
+    out_v: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    mut ws: DeviceBuffer[DType.float32],
+    n: Int,
+    C: Int,
+) raises:
+    """`out_v[c]` = the mean of class c's column of the row-major `n x C`
+    `v`, in `qn_tile_sum`'s tile order per class: C x qnt_tiles(n) tile
+    chains in one launch, then one block per class over its tile partials
+    (lane cgr5-owed2; it replaced `mean_rows_multi_kernel`, one block per
+    class walking all n rows). `ws` holds C * qnt_tiles(n) floats. The host
+    column is `glm/host/qn_oracle.mojo::host_qnt_sum_strided`."""
+    var tiles = qnt_tiles(n)
+    var cells = C * tiles
+    ctx.enqueue_function[qn_tile_sum_classes_partial_kernel](
+        ws.unsafe_ptr(), v, Int32(n), Int32(C), Int32(tiles),
+        grid_dim=((cells + QNT_TPB - 1) // QNT_TPB, 1, 1),
+        block_dim=(QNT_TPB, 1, 1),
+    )
+    ctx.enqueue_function[qn_tile_sum_classes_fold_kernel](
+        out_v, ws.unsafe_ptr(), Int32(tiles), Float32(1.0) / Float32(n),
+        grid_dim=(C, 1, 1), block_dim=(STATS_TPB, 1, 1),
+    )
+
+
 def linear_fwd(
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],
@@ -617,7 +763,7 @@ def linear_bwd(
     """`linearBwd(handle, G, X, dZ, setZero)`, `glm_base.cuh:63-94`. The
     `C > 1` arm (DEVIATION 706) is the same three steps with the class
     stride: `xtdz_multi_kernel` (one block per `(c, j)` cell), the same
-    cuBLAS epilogue over `C*D` cells, `mean_rows_multi_kernel` per class."""
+    cuBLAS epilogue over `C*D` cells, `qn_tile_sum_classes` for the bias."""
     var d = dims.D
     # `alpha = 1.0 / X.m`: a double narrowed to T. `beta = setZero ? 0 : 1`.
     var alpha = Float32(1.0 / Float64(n_rows))
@@ -648,10 +794,12 @@ def linear_bwd(
             block_dim=(VEC_ELEM_TPB, 1, 1),
         )
         if dims.fit_intercept:
-            ctx.enqueue_function[mean_rows_multi_kernel](
-                g.unsafe_ptr() + cd, dz.unsafe_ptr(), Int32(n_rows),
-                Int32(dims.C),
-                grid_dim=(dims.C, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            # per class in the tile order (`qn_tile_sum_classes`), not one
+            # block per class over n
+            qn_tile_sum_classes(
+                ctx, (g.unsafe_ptr() + cd).unsafe_origin_cast[MutAnyOrigin](),
+                dz.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), xtdz_ws,
+                n_rows, dims.C,
             )
         return
     var fast_done1 = False
@@ -677,9 +825,10 @@ def linear_bwd(
     if dims.fit_intercept:
         # `raft::stats::mean<true>(Gbias.data, dZ.data, dZ.m, dZ.n, false)`
         # -- the bias gradient is ASSIGNED, not accumulated, in both arms.
-        ctx.enqueue_function[mean_kernel](
-            g.unsafe_ptr() + d, dz.unsafe_ptr(), Int32(n_rows),
-            grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+        qn_tile_sum(
+            ctx, (g.unsafe_ptr() + d).unsafe_origin_cast[MutAnyOrigin](),
+            dz.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), xtdz_ws,
+            n_rows, True,
         )
 
 
@@ -756,6 +905,10 @@ struct GLMWithData(Movable):
                 ws_floats = max(ws_floats, ((n_rows + QNB_ROWS - 1) // QNB_ROWS) * (dims.D + 2))
         if qn_tiled_applies(dims.C):
             ws_floats = max(ws_floats, qnt_workspace_floats(n_rows, dims.D))
+        # qn_tile_sum's partials (the loss sum and the bias mean)
+        ws_floats = max(ws_floats, qnt_tiles(n_rows))
+        # qn_tile_sum_classes' partials (the C > 1 bias mean)
+        ws_floats = max(ws_floats, dims.C * qnt_tiles(n_rows))
         self.xtdz_ws = ctx.enqueue_create_buffer[DType.float32](ws_floats)
         self.w_weights = ctx.enqueue_create_buffer[DType.float32](dims.C * dims.D)
         self.scalar = ctx.enqueue_create_buffer[DType.float32](1)
@@ -845,9 +998,10 @@ struct GLMWithData(Movable):
             )
         if not with_sum:
             return  # the tiled objective folds the terms itself
-        ctx.enqueue_function[sum_terms_kernel](
-            out_v, self.loss_terms.unsafe_ptr(), Int32(n),
-            grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+        qn_tile_sum(
+            ctx, out_v,
+            self.loss_terms.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            self.xtdz_ws, n, False,
         )
 
     def loss_grad(

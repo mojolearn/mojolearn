@@ -308,8 +308,21 @@ def bayes_yvar(y: FP, n: Int) -> Float32:
     return fd(acc, i2f(n))
 
 
-def bayes_eig_prep(t: Team, fw: FP, fp: FP, d: Int, yvar: Float32,
-                   jtol: Float32 = Float32(1e-9)) -> Tuple[Float32, Float32]:
+#: Null-direction floor (FAST lane/apple-fast-bayesq, then every vendor,
+#: every mode and the host column in lane/fix-bayes-null, 2026-10-03):
+#: `bayes_eig_prep` drops the eigen-directions of the centered Gram below the
+#: float32 noise floor d * eps * max ev (ev and V'X'y set to 0). The float32
+#: Gram + Jacobi resolves eigenvalues only to about eps * max ev: on istella
+#: (35 of 220 directions below 1e-12 max ev in float64: 19 constant columns
+#: plus exact collinearities) the null directions came back as noise
+#: eigenvalues of a few units with noise V'X'y, so z_k = vty_k / (ev_k +
+#: lam/alpha) was huge there; the evidence iteration drove lambda to 1e-8 and
+#: held-out r2 was -4.2e4 IDENTICAL, -3.2e4 FAST (scikit-learn float64:
+#: 0.3287). See docs/apple-fast/notes/bayesq.md. One code path: the device
+#: team kernel and the host column (nt = 1) both run it, same order.
+
+
+def bayes_eig_prep(t: Team, fw: FP, fp: FP, d: Int, yvar: Float32) -> Tuple[Float32, Float32]:
     """The d x d half of `bayes_prep` (no row passes): the eigendecomposition
     of G on the team, the lead's eigenvalues and V'X'y, the starting alpha
     (the lead's, from yvar, when alpha_init is none) and lambda."""
@@ -320,9 +333,7 @@ def bayes_eig_prep(t: Team, fw: FP, fp: FP, d: Int, yvar: Float32,
     var old = vty + d
     var tmp = old + d
     var alpha = ld(fp, 5)
-    # jtol: the Jacobi's skip threshold (lane/apple-fast-kernel, FAST on Apple
-    # with ip[7]: 1e-7; the default is the old 1e-9, x_linear/tops.mojo)
-    t_jacobi_eig(t, fw, gg, fw, vv, d, 60, jtol)
+    t_jacobi_eig(t, fw, gg, fw, vv, d, 60)
     if t.lead():
         for j in range(d):
             var ev = ld(fw, gg + j * d + j)
@@ -331,6 +342,17 @@ def bayes_eig_prep(t: Team, fw: FP, fp: FP, d: Int, yvar: Float32,
             for k in range(d):
                 acc = fmad(ld(fw, vv + k * d + j), ld(fw, xty + k), acc)
             st(fw, vty + j, acc)
+        # eigenvalues below the float32 noise floor (d eps max ev, the
+        # pinv/matrix_rank cut) are null directions: ev 0 and V'X'y 0, so
+        # z_k = 0 at every lam/alpha and gamma takes nothing from them
+        var emax = Float32(0)
+        for j in range(d):
+            emax = fmax(emax, ld(fw, tmp + j))
+        var tau = fm(fm(emax, i2f(d)), Float32(1.1920929e-07))
+        for j in range(d):
+            if ld(fw, tmp + j) <= tau:
+                st(fw, tmp + j, Float32(0))
+                st(fw, vty + j, Float32(0))
         if alpha < 0:
             alpha = fd(Float32(1), fa(yvar, Float32(1.1920929e-07)))
     alpha = t.bcast(alpha, 2)
@@ -508,12 +530,7 @@ def bayes_prep(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
                 yvar = wyvar
         else:
             yvar = bayes_yvar(y, n)
-    var jtol = Float32(1e-9)
-    comptime if is_gpu() and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
-        # lane/apple-fast-kernel: ip[7] (MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1)
-        if ldi(ip, 7) != 0:
-            jtol = Float32(1e-7)
-    var al = bayes_eig_prep(t, fw, fp, d, yvar, jtol)
+    var al = bayes_eig_prep(t, fw, fp, d, yvar)
     var alpha = al[0]
     var lam = al[1]
     return (alpha, lam, ym, wsum)

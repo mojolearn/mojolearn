@@ -15,6 +15,8 @@
 # AFT_ROWS (driver --rows), AFT_SKIP_BUILD=1 reuses the builds in the out dir.
 set -u
 bind=$1; lane=$2; ds=$3; pairs=$4; defA=$5; defB=$6
+# One run per arm (Andrew, Oct 3): the pairs argument is ignored unless AB_MULTI_RUN=1.
+[ "${AB_MULTI_RUN:-0}" = 1 ] || pairs=1
 here=$(cd "$(dirname "$0")/.." && pwd); cd "$here"
 py=${AFT_PY:-python3}
 [ -z "${AFT_PY:-}" ] && [ -x "$HOME/board-0834/cache/venv/bin/python" ] && py=$HOME/board-0834/cache/venv/bin/python

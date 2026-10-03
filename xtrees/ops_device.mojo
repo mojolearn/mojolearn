@@ -21,6 +21,7 @@ reports the FIRST bad (tree, row) in the serial loop's order (tree, then
 row) from the per-cell codes it reads back, so the message is the one the
 serial loop raised.
 """
+from std.atomic import Atomic
 from std.ffi import _Global
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv
@@ -39,6 +40,7 @@ comptime OPS_MAX_BLOCKS = 65535
 comptime APPLY_BAD_COLUMN = Int32(-1)
 comptime APPLY_BAD_CHILD = Int32(-2)
 comptime APPLY_CYCLE = Int32(-3)
+comptime APPLY_NO_REFUSAL = Int32(2147483647)
 
 #: 2^-53 as a binary64 word: `ops.unit`'s scale (exact).
 comptime _TWO_M53 = UInt64(0x3CA0000000000000)
@@ -177,7 +179,8 @@ def apply_cells_kernel(
 ):
     """res[i * nt + (t - t0)] = the tree-relative leaf row i reaches in tree
     t, one thread per (row, tree), grid-stride; a walk the serial loop
-    refuses stores its code (`APPLY_*`) in the cell and raises `flag`."""
+    refuses stores its code (`APPLY_*`) in the cell and lowers `flag` to
+    its serial-order key `toff * n + i`."""
     var total = Int(n) * Int(nt)
     var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
@@ -209,7 +212,9 @@ def apply_cells_kernel(
                 break
         if code != Int32(0):
             res.unsafe_store(k, code)
-            flag.unsafe_store(0, Int32(1))
+            # the first refusal in the serial order (tree, then row): the
+            # smallest toff * n + i (lane/apple-fast-purity2)
+            _ = Atomic.min(flag, Int32(toff * Int(n) + i))
         else:
             res.unsafe_store(k, Int32(node))
         k += stride
@@ -246,7 +251,7 @@ def apply_trees_device(
         ctx.enqueue_copy(dst_buf=d_x, src_ptr=x)
     var d_res = ctx.enqueue_create_buffer[DType.int32](n * nt)
     var d_flag = ctx.enqueue_create_buffer[DType.int32](1)
-    d_flag.enqueue_fill(Int32(0))
+    d_flag.enqueue_fill(APPLY_NO_REFUSAL)
     ctx.enqueue_function[apply_cells_kernel](
         d_off.unsafe_ptr(), d_col.unsafe_ptr(), d_q.unsafe_ptr(), d_left.unsafe_ptr(),
         d_x.unsafe_ptr(), Int64(n), Int64(d), Int64(t0), Int64(nt),
@@ -257,7 +262,7 @@ def apply_trees_device(
     ctx.enqueue_copy(dst_buf=h_flag, src_buf=d_flag)
     ctx.enqueue_copy(dst_ptr=res, src_buf=d_res)
     ctx.synchronize()
-    var bad = h_flag.unsafe_ptr().unsafe_load(0) != Int32(0)
+    var first = h_flag.unsafe_ptr().unsafe_load(0)
     _ = d_off^
     _ = d_col^
     _ = d_q^
@@ -266,17 +271,17 @@ def apply_trees_device(
     _ = d_res^
     _ = d_flag^
     _ = h_flag^
-    if bad:
-        # error path only: the serial loop's first refusal, tree then row
-        for t in range(nt):
-            for i in range(n):
-                var code = res[unsafe_offset=i * nt + t]
-                if code == APPLY_BAD_COLUMN:
-                    raise Error("x_trees apply: split column out of range")
-                if code == APPLY_BAD_CHILD:
-                    raise Error("x_trees apply: child out of range")
-                if code == APPLY_CYCLE:
-                    raise Error("x_trees apply: cycle in tree")
+    if first != APPLY_NO_REFUSAL:
+        # the serial loop's first refusal, tree then row, found on the
+        # device (the kernel's atomic min of toff * n + i): one cell read
+        var t_bad = Int(first) // n
+        var i_bad = Int(first) - t_bad * n
+        var code = res[unsafe_offset=i_bad * nt + t_bad]
+        if code == APPLY_BAD_COLUMN:
+            raise Error("x_trees apply: split column out of range")
+        if code == APPLY_BAD_CHILD:
+            raise Error("x_trees apply: child out of range")
+        raise Error("x_trees apply: cycle in tree")
 
 
 def transpose_f32_device(

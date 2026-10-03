@@ -28,11 +28,25 @@ np = require_numpy('_x_sequence_prophet')
 from . import _backend
 
 
-def _days(t):
+def _bind(mode):
+    return _backend.binding("_mojolearn_x_sequence", mode)
+
+
+def _days(t, mode):
+    """(days float64 (N,), info [status, span, least spacing]): the time axis
+    in days, converted and checked in Mojo (`prophet_days`; numpy datetime64
+    is handed over as int64 nanoseconds since 1970)."""
     t = np.asarray(t)
     if np.issubdtype(t.dtype, np.datetime64):
-        return (t.astype("datetime64[ns]").astype(np.int64) / 86400e9).astype(np.float64)
-    return t.astype(np.float64)
+        src, kind = np.ascontiguousarray(t.astype("datetime64[ns]").view(np.int64)), 1
+    else:
+        src, kind = np.ascontiguousarray(t, dtype=np.float64).reshape(-1), 0
+    src = src.reshape(-1)
+    days = np.empty(len(src), dtype=np.float64)
+    info = np.zeros(3, dtype=np.float64)
+    if len(src):
+        _bind(mode).prophet_days([src.ctypes.data, days.ctypes.data, info.ctypes.data], [len(src), kind])
+    return days, info
 
 
 class ProphetForecaster:
@@ -82,20 +96,26 @@ class ProphetForecaster:
             self.seasonalities[name] = dict(period={"yearly": 365.25, "weekly": 7.0, "daily": 1.0}[name],
                                             fourier_order=order, prior_scale=self.seasonality_prior_scale)
 
-    def _frac(self, days):
-        """(t mod P) / P per seasonality, float64 (fmod is exact), one rounding
-        to float32."""
-        cols = [np.fmod(days, s["period"]) / s["period"] for s in self.seasonalities.values()]
-        cols = [np.where(c < 0, c + 1.0, c) for c in cols]
-        return np.ascontiguousarray(np.stack(cols, axis=1) if cols else np.zeros((len(days), 0)), dtype=np.float32)
+    def _features(self, days):
+        """(t scaled float32 (N,), frac float32 (N, max(ns, 1))): Prophet's
+        time scaling and (t mod P) / P per seasonality, in Mojo
+        (`prophet_features`: exact float64 fmod, one rounding to float32)."""
+        periods = np.ascontiguousarray([s["period"] for s in self.seasonalities.values()] or [1.0],  # glue: one period per user seasonality
+                                       dtype=np.float64)
+        ns = len(self.seasonalities)
+        tsc = np.empty(len(days), dtype=np.float32)
+        frac = np.empty((len(days), max(ns, 1)), dtype=np.float32)
+        _bind(self.numeric_mode).prophet_features(
+            [days.ctypes.data, periods.ctypes.data, tsc.ctypes.data, frac.ctypes.data], [len(days), ns],
+            [float(self.start_), float(self.t_scale_)])
+        return tsc, frac
 
     def fit(self, t, y, holidays=None):
-        days = _days(t)
-        # O(n), no sort (lane py-sequence); NaN refused by name (it used to
-        # pass the stable-argsort test when it sat at the end)
-        if np.isnan(days).any():
+        days, info = _days(t, self.numeric_mode)
+        status, span, dmin = int(info[0]), float(info[1]), float(info[2])
+        if status == 1:
             raise ValueError("ProphetForecaster: t must not hold NaN")
-        if not np.all(days[1:] >= days[:-1]):
+        if status == 2:
             raise ValueError("ProphetForecaster: t must be sorted ascending")
         y = np.asarray(y)
         if y.dtype == np.float64:
@@ -106,31 +126,33 @@ class ProphetForecaster:
         B, N = Y.shape
         if N != len(days) or N < 2:
             raise ValueError("ProphetForecaster: y and t lengths differ, or fewer than 2 points")
-        if not np.all(np.isfinite(Y)):
+        from ._buffer import _native
+        if int(_native("all_finite_f32")(Y.ctypes.data, Y.size)) != 1:
             raise ValueError("ProphetForecaster: y must be finite")
-        span = days[-1] - days[0]
-        dmin = np.min(np.diff(days)) if N > 1 else 0.0
         self._auto("yearly", self.yearly_seasonality, 10, span >= 730)
         self._auto("weekly", self.weekly_seasonality, 3, span >= 14 and dmin < 7)
         self._auto("daily", self.daily_seasonality, 4, span >= 2 and dmin < 1)
-        self.start_, self.t_scale_ = days[0], (span if span > 0 else 1.0)
-        tsc = np.ascontiguousarray((days - self.start_) / self.t_scale_, dtype=np.float32)
+        self.start_, self.t_scale_ = float(days[0]), (span if span > 0 else 1.0)
+        tsc, frac_ = self._features(days)
         if self.changepoints is not None:
-            cp = np.sort(_days(self.changepoints))
-            if len(cp) and (cp.min() < days[0] or cp.max() > days[-1]):
-                raise ValueError("Changepoints must fall within training data.")
+            user, _ = _days(self.changepoints, self.numeric_mode)
+            n_user, hist, n_cp = len(user), 0, 0
         else:
+            user, n_user = np.zeros(1, dtype=np.float64), -1
             hist = int(math.floor(N * self.changepoint_range))
-            n_cp = min(self.n_changepoints, hist - 1)
-            cp = days[np.linspace(0, hist - 1, n_cp + 1).round().astype(int)][1:] if n_cp > 0 else np.zeros(0)
-        cpt = (cp - self.start_) / self.t_scale_ if len(cp) else np.array([0.0])   # prophet's dummy changepoint
-        self.changepoints_t_ = np.ascontiguousarray(cpt, dtype=np.float32)
+            n_cp = max(min(self.n_changepoints, hist - 1), 0)
+        cpt = np.zeros(max(n_user, n_cp, 1), dtype=np.float32)
+        S = _bind(self.numeric_mode).prophet_changepoints(
+            [days.ctypes.data, user.ctypes.data, cpt.ctypes.data], [N, n_user, hist, n_cp],
+            [self.start_, self.t_scale_])
+        if S < 0:
+            raise ValueError("Changepoints must fall within training data.")
+        self.changepoints_t_ = np.ascontiguousarray(cpt[:S])
         self._nh = 0 if holidays is None else np.asarray(holidays).reshape(N, -1).shape[1]
         H = np.ascontiguousarray(np.asarray(holidays, dtype=np.float32).reshape(N, -1)) if self._nh else \
             np.zeros((N, 1), np.float32)
-        frac = self._frac(days)
-        orders = np.asarray([s["fourier_order"] for s in self.seasonalities.values()], dtype=np.float32)
-        sig = [s["prior_scale"] for s in self.seasonalities.values() for _ in range(2 * s["fourier_order"])]
+        orders = np.asarray([s["fourier_order"] for s in self.seasonalities.values()], dtype=np.float32)  # glue: one order per user seasonality
+        sig = [s["prior_scale"] for s in self.seasonalities.values() for _ in range(2 * s["fourier_order"])]  # glue: prior scale per Fourier parameter, model parameter count
         sig += [self.holidays_prior_scale] * self._nh
         self._K = len(sig)
         sig = np.ascontiguousarray(sig if sig else [1.0], dtype=np.float32)
@@ -139,8 +161,7 @@ class ProphetForecaster:
         self.params_ = np.zeros((B, P), dtype=np.float32)
         self.info_ = np.zeros((B, 4), dtype=np.float32)
         orders_ = orders if len(orders) else np.zeros(1, np.float32)
-        frac_ = frac if frac.shape[1] else np.zeros((N, 1), np.float32)
-        _backend.binding("_mojolearn_x_sequence", self.numeric_mode).prophet_fit(
+        _bind(self.numeric_mode).prophet_fit(
             [Y.ctypes.data, tsc.ctypes.data, frac_.ctypes.data, orders_.ctypes.data, H.ctypes.data,
              self.changepoints_t_.ctypes.data, sig.ctypes.data, self.params_.ctypes.data, self.info_.ctypes.data],
             [B, N, len(orders), self._nh, self._K, S, int(self.seasonality_mode == "multiplicative"),
@@ -152,24 +173,22 @@ class ProphetForecaster:
 
     def predict(self, t, holidays=None):
         """yhat (and `self.trend_`) at t: (M,) for one series, else (B, M)."""
-        days = _days(t)
+        days, _ = _days(t, self.numeric_mode)
         M = len(days)
-        tsc = np.ascontiguousarray((days - self.start_) / self.t_scale_, dtype=np.float32)
+        tsc, frac_ = self._features(days)
         if self._nh:
             if holidays is None:
                 raise ValueError("ProphetForecaster: the model has holiday columns; pass them for t")
             H = np.ascontiguousarray(np.asarray(holidays, dtype=np.float32).reshape(M, -1))
         else:
             H = np.zeros((M, 1), np.float32)
-        frac = self._frac(days)
-        orders = np.asarray([s["fourier_order"] for s in self.seasonalities.values()], dtype=np.float32)
+        orders = np.asarray([s["fourier_order"] for s in self.seasonalities.values()], dtype=np.float32)  # glue: one order per user seasonality
         orders_ = orders if len(orders) else np.zeros(1, np.float32)
-        frac_ = frac if frac.shape[1] else np.zeros((M, 1), np.float32)
         B = self.params_.shape[0]
         yhat = np.zeros((B, M), dtype=np.float32)
         trend = np.zeros((B, M), dtype=np.float32)
         S = len(self.changepoints_t_)
-        _backend.binding("_mojolearn_x_sequence", self.numeric_mode).prophet_predict(
+        _bind(self.numeric_mode).prophet_predict(
             [self.params_.ctypes.data, self.info_.ctypes.data, tsc.ctypes.data, frac_.ctypes.data,
              orders_.ctypes.data, H.ctypes.data, self.changepoints_t_.ctypes.data, yhat.ctypes.data,
              trend.ctypes.data],

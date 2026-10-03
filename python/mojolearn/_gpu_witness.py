@@ -44,7 +44,7 @@ def visible_gpu_inventory(vendor):
     uuid_type = C.c_ubyte * 16
     uuid_name = ('cuDeviceGetUuid_v2' if hasattr(lib, 'cuDeviceGetUuid_v2') else 'cuDeviceGetUuid') if cuda else 'hipDeviceGetUuid'
     devices = []
-    for ordinal in range(count.value):
+    for ordinal in range(count.value):  # glue: one record per visible device
         device = C.c_int(ordinal)
         if cuda:
             invoke('cuDeviceGet', [C.POINTER(C.c_int), C.c_int], C.byref(device), ordinal)
@@ -64,7 +64,7 @@ def visible_gpu_inventory(vendor):
                             name=name.value.decode('utf-8', errors='replace')))
     return dict(kind='visible-device-inventory', vendor=vendor, pid=os.getpid(),
                 driver_library=lib._name, devices=devices,
-                visibility={key: os.environ[key] for key in
+                visibility={key: os.environ[key] for key in  # glue: three named environment variables
                             ('CUDA_VISIBLE_DEVICES', 'HIP_VISIBLE_DEVICES', 'ROCR_VISIBLE_DEVICES')
                             if key in os.environ})
 
@@ -102,7 +102,7 @@ def require_distinct_processes(records, count):
     if len(records) != count:
         raise RuntimeError('worker inventory count differs from requested indices')
     pids = set()
-    for record in records:
+    for record in records:  # glue: one identity record per worker
         if record.get('kind') != 'worker-process-identity' or record.get('vendor') != 'cpu':
             raise RuntimeError('worker inventory has the wrong kind or vendor')
         pid, ppid = record.get('pid'), record.get('ppid')
@@ -125,7 +125,7 @@ def require_distinct_workers(records, vendor, count):
     if len(records) != count:
         raise RuntimeError('GPU worker inventory count differs from requested devices')
     uuids, buses, pids = set(), set(), set()
-    for record in records:
+    for record in records:  # glue: one identity record per worker
         if record.get('kind') != 'visible-device-inventory' or record.get('vendor') != vendor:
             raise RuntimeError('GPU worker inventory has the wrong kind or vendor')
         devices = record.get('devices', [])

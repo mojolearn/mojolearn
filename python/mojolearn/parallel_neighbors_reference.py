@@ -1,66 +1,38 @@
 # SPDX-License-Identifier: Apache-2.0
 """Reference partitions with the native IDENTICAL top-k composite ordering."""
+import array
 import copy
-import ctypes
-import heapq
-import struct
 
 from ._parallel_pool import DevicePool, driver_read_shift
-from ._buffer import as_f32_c, empty, addr, addr_ro
-from ._bufcheck import memcopy
+from ._buffer import _native, as_f32_c, empty, addr, addr_ro
 from .parallel_neighbors import _join
 
 
-def _key(bits, index):
-    # neighbors/checks/select_radix_identical.mojo::composite_key:
-    # preserve signed zero and NaN payload order, without float conversion.
-    twiddled = bits ^ (0xffffffff if bits & 0x80000000 else 0x80000000)
-    return (twiddled << 32) | index
-
-
 def _merge(parts, ranges, n_queries, k):
+    """The shards' candidates merged per query row in Mojo
+    (`shard_topk_merge_f32`, bindings/array_helpers.mojo): the native
+    IDENTICAL composite-key selection (distance bits, global index), then
+    estimator.mojo's host insertion sort, float bits unchanged from the
+    winning GPU slot."""
     distances = empty((n_queries, k), '<f4')
     indices = empty((n_queries, k), '<u4')
-    db = addr(distances, name='merged distances')
-    ib = addr(indices, name='merged indices')
-    values = [p[0].tobytes() for p in parts]
-    ids = [p[1].tolist() for p in parts]
-    for row in range(n_queries):
-        candidates = []
-        for rank, ((first, end), (dist, _)) in enumerate(zip(ranges, parts)):
-            width = dist.shape[1]
-            for j in range(width):
-                local_id = ids[rank][row][j]
-                if not 0 <= local_id < end - first:
-                    raise RuntimeError('reference worker returned an invalid neighbor index')
-                index = first + local_id
-                offset = (row * width + j) * 4
-                bits = struct.unpack_from('<I', values[rank], offset)[0]
-                candidates.append((_key(bits, index), rank, offset, index))
-        chosen = heapq.nsmallest(k, candidates)
-        if len(chosen) != k:
-            raise RuntimeError('reference shards returned too few neighbors')
-        # The native selector ranks composite keys, then estimator.mojo applies
-        # this host insertion sort. Its float comparisons intentionally differ
-        # from radix ordering for signed zero and NaNs. Preserve both stages.
-        for a in range(1, k):
-            token = chosen[a]
-            dv = struct.unpack_from('<f', values[token[1]], token[2])[0]
-            b = a - 1
-            while b >= 0:
-                previous = chosen[b]
-                dbits = struct.unpack_from('<f', values[previous[1]], previous[2])[0]
-                if dbits < dv or (dbits == dv and previous[3] <= token[3]):
-                    break
-                chosen[b+1] = previous
-                b -= 1
-            chosen[b+1] = token
-        for j, (_, rank, offset, index) in enumerate(chosen):
-            # Float bits travel unchanged from the winning GPU slot.
-            memcopy(db + (row * k + j) * 4,
-                    addr_ro(parts[rank][0], name='distance shard') + offset, 4)
-            packed = struct.pack('<I', index)
-            ctypes.memmove(ib + (row * k + j) * 4, packed, 4)
+    if not n_queries:
+        return distances, indices
+    table = array.array('q')
+    keep = []
+    for (first, end), (dist, ids) in zip(ranges, parts):  # glue: one address record per reference shard
+        dist = as_f32_c(dist, ndim=2, name='distance shard')[0]
+        ids = ids if ids.dtype == '<i8' else ids.astype('<i8')
+        keep.append((dist, ids))
+        table.extend((addr_ro(dist, name='distance shard'), addr_ro(ids, name='index shard'),
+                      first, end, dist.shape[1]))
+    rc = int(_native('shard_topk_merge_f32')(table.buffer_info()[0], len(keep), n_queries, k,
+                                             addr(distances, name='merged distances'),
+                                             addr(indices, name='merged indices')))
+    if rc == 1:
+        raise RuntimeError('reference worker returned an invalid neighbor index')
+    if rc == 2:
+        raise RuntimeError('reference shards returned too few neighbors')
     return distances, indices
 
 
@@ -125,7 +97,7 @@ class ReferenceShardedNeighbors:
             raise ValueError('reference sharding currently requires the IDENTICAL brute-force arm')
         if estimator.numeric_mode not in (None, 'identical'):
             raise ValueError('reference shards require IDENTICAL numeric mode')
-        for name, value in (('reference_rows_per_shard', reference_rows_per_shard),
+        for name, value in (('reference_rows_per_shard', reference_rows_per_shard),  # glue: validates two named arguments
                             ('query_rows_per_shard', query_rows_per_shard)):
             if value is None and name == 'reference_rows_per_shard':
                 continue
@@ -168,7 +140,7 @@ class ReferenceShardedNeighbors:
             width = min(cell_limit, (n + len(self._pool.devices) - 1) // len(self._pool.devices))
         if min(width, n) > cell_limit:
             raise ValueError('reference shard exceeds the native signed-int32 cell-count contract')
-        ranges = [(i, min(n, i + width)) for i in range(0, n, width)]
+        ranges = [(i, min(n, i + width)) for i in range(0, n, width)]  # glue: shard boundaries for the device pool
         params = dict(n_neighbors=k, query_tile=model.query_tile, metric=model.metric,
                       algorithm='brute', p=model.p, numeric_mode='identical')
         outputs, diagnostics = [], []
@@ -177,13 +149,13 @@ class ReferenceShardedNeighbors:
             vote_model = copy.copy(model)
             vote_model._index = None  # Never send the complete reference matrix.
             vote_model.numeric_mode = 'identical'
-        for first in range(0, data.shape[0], self.query_rows_per_shard):
+        for first in range(0, data.shape[0], self.query_rows_per_shard):  # glue: one query chunk per dispatch round
             end = min(data.shape[0], first + self.query_rows_per_shard)
             query = data[first:end]
             parts = []
             # Materialize only one device wave of reference slices on the host.
             # Retain just its small candidate output before staging the next.
-            for wave in range(0, len(ranges), len(self._pool.devices)):
+            for wave in range(0, len(ranges), len(self._pool.devices)):  # glue: one device wave per dispatch round
                 # The READ is shifted by `driver_read_shift` (0 unless the
                 # driver sabotage switch is on, and 0 for the first reference
                 # range either way); the merge below still folds by the true
@@ -193,7 +165,7 @@ class ReferenceShardedNeighbors:
                      (model._index[start - driver_read_shift(index, start, self._pool.devices):
                                    stop - driver_read_shift(index, start, self._pool.devices)],
                       query, min(k, stop-start)))
-                    for index, (start, stop) in enumerate(ranges[wave:wave+len(self._pool.devices)],
+                    for index, (start, stop) in enumerate(ranges[wave:wave+len(self._pool.devices)],  # glue: one worker request per reference shard
                                                           start=wave)]))
             distances, indices = _merge(parts, ranges, end-first, k)
             if method == 'kneighbors':
@@ -205,7 +177,7 @@ class ReferenceShardedNeighbors:
             diagnostics.extend(dict(query_start=first, query_end=end, reference_start=start,
                 reference_end=stop, reference_bytes=(stop-start)*model.n_features_in_*4,
                 device=self._pool.devices[i % len(self._pool.devices)])
-                for i, (start, stop) in enumerate(ranges))
+                for i, (start, stop) in enumerate(ranges))  # glue: one diagnostics record per shard
         result = _join(outputs)
         self.last_shards_ = diagnostics
         return result

@@ -8,8 +8,8 @@ not a distributed factorization of a single binary covariance matrix.
 __all__ = ['fit_gaussian_process_classifier', 'predict_gaussian_process_classifier']
 
 from ._parallel_pool import DevicePool
-from ._buffer import Array, as_f32_c
-from ._labels import encode_labels, decode_labels
+from ._buffer import as_f32_c
+from ._labels import encode_labels, decode_labels, threshold_codes
 
 
 def _validate(estimator):
@@ -50,15 +50,15 @@ def fit_gaussian_process_classifier(estimator, X, y, *, devices=(0,)):
     _validate(estimator)
     x, copied = as_f32_c(X, ndim=2, name='X')
     classes, codes = encode_labels(y)
-    codes = [int(c) for c in codes.tolist()]
-    if len(codes) != x.shape[0]:
+    if codes.size != x.shape[0]:
         raise ValueError('y length differs from X rows')
     if len(classes) < 2:
         raise ValueError('GaussianProcessClassifier requires at least two classes')
     columns = [1] if len(classes) == 2 else range(len(classes))
-    requests = [('gpc_class_fit', _fresh(estimator),
-                 (x, Array.from_list([1.0 if c == k else 0.0 for c in codes], '<f4')))
-                for k in columns]
+    # the class codes and the class: the worker's `_fit_binary` builds the
+    # 0/1 targets in the binding (lane apple-fast-py2mojo-cluster)
+    codes32 = Array.from_list(codes, '<i4')
+    requests = [('gpc_class_fit', _fresh(estimator), (x, codes32, k)) for k in columns]  # glue: one worker request per class fit
     fits = _run(requests, devices)
     result = _fresh(estimator)
     result.input_copied_ = copied
@@ -79,24 +79,27 @@ def predict_gaussian_process_classifier(estimator, X, *, devices=(0,), method='p
         raise ValueError('method must be predict or predict_proba')
     q = estimator._query(X)
     want_proba = method == 'predict_proba' or estimator.n_classes_ > 2
+    # a binary model's codes (1) or [1 - p, p] rows (2) come back finished
+    # from the worker (lane apple-fast-py2mojo-cluster)
+    out_kind = (2 if method == 'predict_proba' else 1) if estimator.n_classes_ == 2 else 0
     requests = []
     for fit in estimator.estimators_:
         part = _fresh(estimator)
         part.X_train_, part.kernel_ = estimator.X_train_, estimator.kernel_
         part.n_features_in_ = estimator.n_features_in_
-        requests.append(('gpc_class_predict', part, (fit, q, want_proba)))
+        args = (fit, q, want_proba, out_kind) if out_kind else (fit, q, want_proba)
+        requests.append(('gpc_class_predict', part, args))
     arrays = list(_run(requests, devices))
     if any(len(column) != q.shape[0] for column in arrays):
         raise ValueError('GPC worker returned an invalid row count')
     if estimator.n_classes_ == 2:
         if method == 'predict_proba':
-            return Array.from_list([[1.0 - v, v] for v in arrays[0].tolist()], '<f8')
-        codes = [1 if v > 0.0 else 0 for v in arrays[0].tolist()]
-        return decode_labels(estimator.classes_, Array.from_list(codes, '<i8'))
+            return arrays[0]
+        return decode_labels(estimator.classes_, arrays[0])
     # DEVIATION 2833's one-vs-rest combine on this process's device, the
     # single-device class's own call (cpu-gpu-cleanup c-gp-kernel).
     from ._gpc_impl import _ovr_combine
     proba, codes32 = _ovr_combine(estimator._extension(), arrays, int(q.shape[0]))
     if method == 'predict_proba':
         return proba
-    return decode_labels(estimator.classes_, Array.from_list(codes32.tolist(), '<i8'))
+    return decode_labels(estimator.classes_, codes32.astype('<i8'))

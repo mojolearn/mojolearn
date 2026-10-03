@@ -137,12 +137,12 @@ def _python_arm():
         _buffer._NATIVE_MISSING.update(saved_missing)
 
 
-def _both(fn, expect=()):
+def _both(fn, expect=(), ref_fn=None):
     """Run `fn` on the reference arm and the new arm. `expect` names the
     helpers the new arm must call; () means the new arm is a C builtin (or a
     deliberate fall back) and only the reference arm's silence is pinned."""
     with _python_arm():
-        ref = _outcome(fn)
+        ref = _outcome(fn if ref_fn is None else ref_fn)
         hot = {key for key in _HELPERS if key in _buffer._NATIVE}
     assert not hot, f"the reference arm reached a hotpath helper: {sorted(hot)}"
     with _Spy() as new_spy:
@@ -157,8 +157,11 @@ def _both(fn, expect=()):
 _DIVERGED = []
 
 
-def _same(fn, expect=(), group=""):
-    ref, new = _both(fn, expect)
+def _same(fn, expect=(), group="", ref_fn=None):
+    """ref_fn: the reference arm's own call, for a seam whose new route has
+    no Python fall back left (the default folds since lane cgr4-py-compute:
+    `_default_fold_arrays` is native only; `_default_folds` is its definition)."""
+    ref, new = _both(fn, expect, ref_fn)
     if _EXPECT_SABOTAGE:
         if ref != new:
             _DIVERGED.append(group)
@@ -216,7 +219,7 @@ def test_astype_matches_the_item_setter(src, dst):
         for n in (0, 1, 255, 256, 1001, _BIG):
             with np.errstate(all="ignore"):
                 a = _arr(_values_for(src, max(n, 64), flavor)[:n].copy())
-            native = n >= _array._NATIVE_MIN and src != dst
+            native = n >= 1 and src != dst  # every non-empty block (lane apple-fast-py2mojo-core)
             _same(lambda: a.astype(dst), ("cast_elements",) if native else (),
                   group="astype")
 
@@ -274,8 +277,8 @@ def _reduction_inputs():
 def test_reductions_match_python(what):
     for raw in _reduction_inputs():
         a = _arr(raw.copy())
-        native = (a.size >= _array._NATIVE_MIN
-                  and (what != "sum" or a.dtype in ("<f4", "<f8")))
+        # every non-empty block, the integer sum too (lane apple-fast-py2mojo-core)
+        native = a.size >= 1
         _same(lambda: getattr(a, what)(), ("reduce_stat",) if native else (),
               group="reduce")
     f = _arr(np.asfortranarray(_RNG.standard_normal((400, 5)).astype(np.float32)))
@@ -516,9 +519,19 @@ def test_classification_labels_match(name):
 def test_cluster_label_union_matches(name):
     y = _metric_label_inputs()[name]
     other = _RNG.integers(-2, 9, 3000)
-    native = name in _NATIVE_LABELS and name != "bool"  # a bool is not an integer label here
-    _same(lambda: M._prepare_cluster_labels(y, other[:len(y)]),
-          ("gather_i32", "encode_labels_i32") if native else (), group="metrics")
+    # lane apple-fast-py2mojo-core: the union is ONE `unique_inverse` of the
+    # two arrays laid end to end (no encoder, no gather), so the reference
+    # is the Python routine with the union seam declined
+    call = lambda: M._prepare_cluster_labels(y, other[:len(y)])
+    real = M._native_union_codes
+    M._native_union_codes = lambda *args, **kwargs: None
+    try:
+        ref = _outcome(call)
+    finally:
+        M._native_union_codes = real
+    new = _outcome(call)
+    if not _EXPECT_SABOTAGE:
+        assert new == ref, f"metrics: new arm {new!r:.300} != reference {ref!r:.300}"
     _same(lambda: M._as_i32_1d(y, "labels"), (), group="metrics")
 
 
@@ -575,7 +588,7 @@ def test_default_folds_match(name, classifier):
         # the two helpers, so only `fold_ids` is pinned for every case
         expect = () if python_only else ("fold_ids",)
         _same(lambda: _fold_lists(MS._default_fold_arrays(y, splits, classifier)), expect,
-              group="folds")
+              group="folds", ref_fn=lambda: _fold_lists(MS._default_folds(y, splits, classifier)))
         if not _EXPECT_SABOTAGE and not python_only:
             clean = _outcome(lambda: _fold_lists(MS._default_folds(y, splits, classifier)))
             fast = _outcome(lambda: _fold_lists(MS._default_fold_arrays(y, splits, classifier)))
@@ -586,7 +599,7 @@ def test_one_row_per_fold():
     y = _arr(_RNG.integers(0, 2, 300))
     for classifier in (True, False):
         _same(lambda: _fold_lists(MS._default_fold_arrays(y, 300, classifier)), ("fold_ids",),
-              group="folds")
+              group="folds", ref_fn=lambda: _fold_lists(MS._default_folds(y, 300, classifier)))
 
 
 def test_the_fold_sabotage_control_still_moves_the_folds():
@@ -611,6 +624,27 @@ def test_the_fold_sabotage_control_still_moves_the_folds():
             os.environ.pop("MOJOLEARN_HOST_ALLOW_SABOTAGE")
 
 
+def _indices_definition(value, n, name):
+    """`MS._indices`' definition in NumPy: its Python route was deleted (index
+    checks native only since d53d84a0f), so the reference arm runs this."""
+    a = np.asarray(value)
+    if a.ndim != 1 or a.dtype.kind not in "iu" or not a.size:
+        raise ValueError(f"{name} must be a nonempty 1-D integer index array")
+    a = a.astype(np.int64)
+    if ((a < 0) | (a >= n)).any():
+        raise ValueError(f"{name} contains an out-of-range index")
+    if np.unique(a).size != a.size:
+        raise ValueError(f"{name} contains duplicate indices")
+    return Array.from_list(a.tolist(), "<i8")
+
+
+def _overlap_definition(a, b, n):
+    """`MS._overlap`'s definition: two accepted index Arrays share a row."""
+    if not a.size or not b.size or n <= 0:
+        return False
+    return bool(np.intersect1d(np.frombuffer(a.tobytes(), "<i8"), np.frombuffer(b.tobytes(), "<i8")).size)
+
+
 def test_indices_and_overlap_match():
     n = 5000
     perm = _RNG.permutation(n)
@@ -628,11 +662,13 @@ def test_indices_and_overlap_match():
     for name, value in cases.items():
         native = name not in ("short", "floats", "two dim", "empty", "ok uint8")
         _same(lambda: MS._indices(value, n, "train"),
-              ("check_indices_i64",) if native else (), group="indices")
+              ("check_indices_i64",) if native else (), group="indices",
+              ref_fn=lambda: _indices_definition(value, n, "train"))
     a = MS._indices(perm[:2500], n, "train")
     for other, hit in ((perm[2500:], False), (perm[2499:], True), (perm[:2500], True)):
         b = MS._indices(other, n, "test")
-        ref = _same(lambda: MS._overlap(a, b, n), ("indices_overlap_i64",), group="indices")
+        ref = _same(lambda: MS._overlap(a, b, n), ("indices_overlap_i64",), group="indices",
+                    ref_fn=lambda: _overlap_definition(a, b, n))
         assert ref[0] == ("ok", ("bool", hit))
 
 

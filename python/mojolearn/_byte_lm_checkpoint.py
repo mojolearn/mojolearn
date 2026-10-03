@@ -86,7 +86,7 @@ def _raw(value, dtype):
 
 def _digest(raw):
     h = hashlib.sha256()
-    for start in range(0, len(raw), CHUNK):
+    for start in range(0, len(raw), CHUNK):  # glue: chunked checkpoint file hashing
         h.update(raw[start:start + CHUNK])
     return h.hexdigest()
 
@@ -107,7 +107,7 @@ def _counts(metadata):
     if (metadata.get('profile') != shape.profile
             or metadata.get('numeric_mode') != 'identical'
             or metadata.get('parameter_names') != list(shape.parameter_names)
-            or metadata.get('parameter_shapes') != [list(s) for s in shape.parameter_shapes]
+            or metadata.get('parameter_shapes') != [list(s) for s in shape.parameter_shapes]  # glue: compares parameter shape lists
             or metadata.get('parameter_offsets') != list(shape.offsets)):
         raise ValueError('Byte-LM checkpoint profile/registry/mode mismatch')
     return shape.n_total, shape.n_tensors
@@ -131,7 +131,7 @@ def _validate(metadata, entries):
         raise ValueError('Byte-LM checkpoint state metadata mismatch')
     if not isinstance(entries, list) or len(entries) != len(ARRAYS):
         raise ValueError('Byte-LM checkpoint array registry mismatch')
-    for entry, (name, dtype) in zip(entries, ARRAYS):
+    for entry, (name, dtype) in zip(entries, ARRAYS):  # glue: checks each checkpoint array descriptor
         count = n_tensors if name == 'flags' else n_total
         if (not isinstance(entry, dict)
                 or set(entry) != {'name', 'dtype', 'shape', 'nbytes', 'sha256'}
@@ -140,7 +140,7 @@ def _validate(metadata, entries):
                 or type(entry['nbytes']) is not int or entry['nbytes'] != 4 * count
                 or not isinstance(entry['sha256'], str)
                 or len(entry['sha256']) != 64
-                or any(c not in '0123456789abcdef' for c in entry['sha256'])):
+                or any(c not in '0123456789abcdef' for c in entry['sha256'])):  # glue: validates digest hex string
             raise ValueError('Byte-LM checkpoint array descriptor mismatch')
     return n_total, n_tensors
 
@@ -153,9 +153,9 @@ def save(path, state):
     actually written, and a disagreement raises rather than leaving a file
     that verifies against its own corrupted content.
     """
-    metadata = {key: value for key, value in state.items() if key not in dict(ARRAYS)}
+    metadata = {key: value for key, value in state.items() if key not in dict(ARRAYS)}  # glue: checkpoint metadata dict keys
     views, entries = [], []
-    for name, dtype in ARRAYS:
+    for name, dtype in ARRAYS:  # glue: views per checkpoint array
         raw = _raw(state[name], dtype)
         views.append(raw)
         entries.append(dict(name=name, dtype=dtype, shape=list(state[name].shape),
@@ -175,9 +175,9 @@ def save(path, state):
             if stream.write(prefix) != len(prefix):
                 raise OSError('Byte-LM checkpoint short header write')
             whole.update(prefix)
-            for raw, entry in zip(views, entries):
+            for raw, entry in zip(views, entries):  # glue: chunked checkpoint file write
                 written = hashlib.sha256()
-                for start in range(0, len(raw), CHUNK):
+                for start in range(0, len(raw), CHUNK):  # glue: chunked checkpoint file write
                     chunk = raw[start:start + CHUNK]
                     if stream.write(chunk) != len(chunk):
                         raise OSError('Byte-LM checkpoint short write')
@@ -225,14 +225,14 @@ def load(path):
             raise ValueError('Byte-LM checkpoint stream schema mismatch')
         state, entries = envelope['state'], envelope['arrays']
         _validate(state, entries)
-        size = len(MAGIC) + 8 + length + 32 + sum(e['nbytes'] for e in entries)
+        size = len(MAGIC) + 8 + length + 32 + sum(e['nbytes'] for e in entries)  # glue: file size over descriptors
         if os.fstat(stream.fileno()).st_size != size:
             raise ValueError('Byte-LM checkpoint truncated or trailing array data')
-        for entry in entries:
+        for entry in entries:  # glue: reads each checkpoint array
             value = buffers.empty(tuple(entry['shape']), entry['dtype'])
             raw = _raw(value, entry['dtype'])
             actual = hashlib.sha256()
-            for start in range(0, len(raw), CHUNK):
+            for start in range(0, len(raw), CHUNK):  # glue: chunked checkpoint file read
                 chunk = raw[start:start + CHUNK]
                 received = 0
                 while received < len(chunk):

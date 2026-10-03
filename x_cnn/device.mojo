@@ -45,7 +45,7 @@ from x_cnn.ops import (
     bn_stats_at, bn_eval_stats_at, bn_apply_at, bn_running_at, bn_bwd_red_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
     dropout2d_at, mul_at, spmm_at, gcn_deg_at, gcn_norm_at,
     pad_fwd_at, pad_bwd_at, adapt_avg_fwd_at, adapt_avg_bwd_at, adapt_max_fwd_at, adapt_max_bwd_at,
-    sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at, gather_rows_at,
+    sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at, gather_rows_at, argmax_row_at,
 )
 
 comptime TPB = 256
@@ -708,6 +708,26 @@ def res_gather(dst_addr: Int, src_addr: Int, rows: IP, n: Int, row: Int) raises:
     _ = dp^
     _ = src^
     _ = dst^
+    _ = ctx^
+
+
+def res_argmax(addr: Int, dst: IP, n: Int, k: Int) raises:
+    """dst[i] (int32, host) = row i's `argmax_row_at` of the resident n x k
+    block at `addr`: only the n labels come down."""
+    if n <= 0 or k <= 0:
+        return
+    var ctx = cnn_ctx()
+    var src = view(ctx, FP(unsafe_from_address=addr), n * k)
+    var out = ws_i(ctx, 0, n)
+    var prm: List[Int32] = [Int32(k)]
+    var dp = put_prm(ctx, 1, prm)
+    launch[argmax_row_at](ctx, fp(src), fp(src), fp(src), fp(src), ip(out), ip(dp), n)
+    down_i(ctx, out, dst, n)
+    ctx.synchronize()
+    _ = prm^
+    _ = dp^
+    _ = out^
+    _ = src^
     _ = ctx^
 
 

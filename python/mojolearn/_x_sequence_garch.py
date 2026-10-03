@@ -16,6 +16,7 @@ from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_garch')
 
 from . import _backend
+from ._buffer import _native
 
 
 class GARCH:
@@ -43,9 +44,9 @@ class GARCH:
             np.ascontiguousarray(y, dtype=np.float32)
         if Y.ndim != 2 or Y.shape[1] < 10:
             raise ValueError("GARCH: each series needs at least 10 observations")
-        bad = np.flatnonzero(~np.isfinite(Y.ravel()))
-        if bad.size:
-            raise ValueError(f"GARCH: y holds a non-finite value at flat index {int(bad[0])}")
+        # the finiteness scan in Mojo (the base binding's `all_finite_f32`)
+        if not int(_native("all_finite_f32")(Y.ctypes.data, Y.size)):
+            raise ValueError("GARCH: y holds a non-finite value")
         B, n = Y.shape
         h = max(1, int(horizon))
         k = 1 + self.p + self.o + self.q

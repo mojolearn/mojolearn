@@ -26,15 +26,11 @@ WHERE THE MATERIALIZATION RUNS. Through the linalg extension's conversion
 kernels on a GPU install (only there: a GPU install never converts on the
 host), through `_mojolearn_linalg_host` on a CPU-only install (the selector
 installs it under the linalg binding's canonical name, so `mojolearn.linalg`
-reaches it the same way), and through the pure-Python spelling below when neither is loaded (an
-install with no binding at all). All three are the same exact integer
-construction -- the pure-Python one is `checks/numerics.mojo`'s six seams
-(`ftz`, `f32_to_bf16_bits_rne`, `bf16_bits_to_f32`, `int8_row_exponent`,
-`quantize_int8_value`, `dequant_int8_pinned`) written over Python ints and
-`struct`, NOT a NumPy vectorization of them -- and the test asserts that
-where two are available they agree. The pure-Python spelling is a per-element
-Python loop and is the spelling of last resort: an install with no binding
-cannot run a block anyway, so nothing that matters is slow because of it.
+reaches it the same way). An install with no linalg binding at all refuses
+by name (pyglue-sweep, 2026-10-03: Python is glue only, so the per-element
+pure-Python spelling that used to run there is gone; the NumPy oracle in
+the test file still holds the kernels and the host binding to the
+`checks/numerics.mojo` seams).
 
 NUMPY-FREE (lane/model-loader, 2026-09-17). This module reaches no NumPy:
 packed tensors are `mojolearn.Array`s (`'<u2'` bits, `'<i1'` codes, `'<i4'`
@@ -59,10 +55,6 @@ the packed tensors up to the rounding `pack` performs, and
 `unpack(pack(unpack(p)[0], fmt))` is `unpack(p)` (`unpack` returns the
 materialized dict and its format).
 """
-import array
-from . import _portable_math as math
-import struct
-
 from ._array import Array
 from ._buffer import (
     as_f32_c, as_i8_c, as_i32_c, as_u16_c,
@@ -73,10 +65,6 @@ FORMATS = ("float32", "bfloat16", "int8")
 
 __all__ = ["FORMATS", "BF16Weight", "Int8Weight", "pack", "unpack", "materialize",
            "format_of", "is_packed", "pack_one", "materialize_one", "widen_bf16"]
-
-if array.array("I").itemsize != 4 or array.array("H").itemsize != 2:  # pragma: no cover
-    raise ImportError("mojolearn.lowbit: this platform's array('I')/('H') are not 32/16 bits")
-
 
 class BF16Weight:
     """A 2-D float32 weight stored as bf16 bits (uint16), contract L-2."""
@@ -138,7 +126,7 @@ def format_of(weights):
     stored one way."""
     fmts = set()
     values = weights.values() if hasattr(weights, "values") else weights
-    for v in values:
+    for v in values:  # glue: format tag per named tensor
         if is_packed(v):
             fmts.add(v.format)
     if not fmts:
@@ -162,165 +150,23 @@ def _f32_2d(value, name):
     return a
 
 
-def _conversion_backend():
-    """Which exact spelling materializes: "linalg" (the linalg binding this
-    install SELECTED: the GPU extension's kernels on a GPU install, the
-    linalg host binding installed under the same canonical name on a
-    CPU-only install) or "python" (an install with no linalg binding at all).
-    A GPU install never converts on the host (cpu-gpu-cleanup n-pyneural,
-    2026-10-02): a GPU binding that refuses, for instance a FAST tier, raises
-    by name from `linalg` rather than falling back to the host binding."""
+def _linalg():
+    """The linalg binding this install SELECTED: the GPU extension's kernels
+    on a GPU install, the linalg host binding installed under the same
+    canonical name on a CPU-only install. A GPU install never converts on
+    the host (cpu-gpu-cleanup n-pyneural, 2026-10-02): a GPU binding that
+    refuses, for instance a FAST tier, raises by name from `linalg`. An
+    install with no linalg binding refuses here: the conversion is Mojo
+    only (Python is glue only, pyglue-sweep 2026-10-03)."""
+    from . import _linalg_impl
     try:
-        from . import linalg
-        linalg._load()
-    except ImportError:
-        return "python"
-    return "linalg"
-
-
-# ------------------------------------------------- the pure-Python spelling
-#
-# Each function below is one seam of `checks/numerics.mojo`, written over
-# Python ints and `struct` so that it is the SAME integer construction and
-# not a library's. `_f32` is the one rounding primitive: a Python float (an
-# exact float64) to the nearest float32, ties to even, which is what the C
-# `(float)` cast inside `struct.pack('<f')` does; a magnitude the cast would
-# take to infinity is the infinity.
-
-
-def _f32(v):
-    try:
-        return struct.unpack("<f", struct.pack("<f", v))[0]
-    except OverflowError:
-        return math.inf if v > 0 else -math.inf
-
-
-def _u32_of(a):
-    """The float32 bits of a C-order float32 Array, as a uint32 array."""
-    u = array.array("I")
-    u.frombytes(a.tobytes())
-    return u
-
-
-def _ftz_bits(x):
-    """`ftz` on the bit pattern: a subnormal becomes its signed zero."""
-    if (x & 0x7F800000) == 0 and (x & 0x007FFFFF) != 0:
-        return x & 0x80000000
-    return x
-
-
-def _ftz(v):
-    """`ftz` on a float value: below the smallest normal is a signed zero."""
-    if v != 0.0 and abs(v) < 1.1754943508222875e-38 and not math.isinf(v) and v == v:
-        return math.copysign(0.0, v)
-    return v
-
-
-def _pow2_f32(e):
-    """`pow2_f32` (DEVIATION 2903): the infinity above 127, `+0.0` below -126."""
-    if e > 127:
-        return math.inf
-    if e < -126:
-        return 0.0
-    return math.ldexp(1.0, e)
-
-
-def _to_bf16_py(a):
-    """`f32_to_bf16_bits_rne` per element (DEVIATION 2901): flush, then a
-    NaN keeps its sign and top payload and is forced quiet, else round to
-    nearest even on the discarded 16 bits. Returns a `'<u2'` Array."""
-    u = _u32_of(a)
-    out = array.array("H", bytes(2 * len(u)))
-    for k in range(len(u)):
-        b = _ftz_bits(u[k])
-        if (b & 0x7F800000) == 0x7F800000 and (b & 0x007FFFFF) != 0:
-            out[k] = ((b >> 16) | 0x0040) & 0xFFFF
-        else:
-            out[k] = ((b + 0x7FFF + ((b >> 16) & 1)) >> 16) & 0xFFFF
-    return Array._owned(out, tuple(a.shape), "<u2", "C")
-
-
-def _from_bf16_py(bits):
-    """`bf16_bits_to_f32` per element (DEVIATION 2900): the shift, exact."""
-    h = array.array("H")
-    h.frombytes(bits.tobytes())
-    u = array.array("I", bytes(4 * len(h)))
-    for k in range(len(h)):
-        u[k] = h[k] << 16
-    f = array.array("f")
-    f.frombytes(u.tobytes())
-    return Array._owned(f, tuple(bits.shape), "<f4", "C")
-
-
-def _quantize_int8_py(a):
-    """`quantize_rows_int8` (DEVIATIONS 2902, 2903, 2905): per row the
-    absmax after the flush (a maximum, order-free; a NaN never wins it, an
-    infinity does), `e = floor(log2 absmax) - 6` (an all-zero row takes 0),
-    then `clamp(rne(ftz(ftz(x) * 2^-e)), -127, 127)` with a NaN quantizing
-    to zero. The rounding is ties-to-even on the exact value, which is what
-    the magic-constant spelling computes for `|s| <= 2^22`."""
-    rows, cols = a.shape
-    u = _u32_of(a)
-    for k in range(len(u)):
-        u[k] = _ftz_bits(u[k])
-    xf = array.array("f")
-    xf.frombytes(u.tobytes())
-    codes = array.array("b", bytes(rows * cols))
-    exps = array.array("i", bytes(4 * rows))
-    for r in range(rows):
-        base = r * cols
-        best = 0.0
-        for c in range(cols):
-            v = abs(xf[base + c])
-            if v > best:  # a NaN compares false, exactly as `row_absmax`'s `>`
-                best = v
-        if best == 0.0 or best != best:
-            e = 0
-        else:
-            # `f32_exponent(absmax) - INT8_TARGET_EXPONENT`, read off the
-            # exponent field of the float32 bits (the infinity reads 128)
-            bits = struct.unpack("<I", struct.pack("<f", best))[0] if not math.isinf(best) else 0x7F800000
-            e = (((bits >> 23) & 0xFF) - 127) - 6
-        exps[r] = e
-        scale = _pow2_f32(-e)
-        for c in range(cols):
-            x = xf[base + c]
-            if x != x:
-                codes[base + c] = 0
-                continue
-            s = _ftz(_f32(x * scale))
-            if s != s:  # 0 * inf on a row scaled by the infinity: the Mojo cast of a NaN is not defined; zero here
-                codes[base + c] = 0
-                continue
-            if math.isinf(s):
-                rr = 127.0 if s > 0 else -127.0
-            else:
-                rr = float(round(s))  # ties to even on the exact value
-            if rr > 127.0:
-                rr = 127.0
-            if rr < -127.0:
-                rr = -127.0
-            codes[base + c] = int(rr)
-    return (Array._owned(codes, (rows, cols), "<i1", "C"),
-            Array._owned(exps, (rows,), "<i4", "C"))
-
-
-def _dequantize_int8_py(codes, exponents):
-    """`dequant_int8_pinned` per element (DEVIATION 2904): `ftz(q * 2^e)`,
-    one multiply by a power of two, exact unless it lands below the smallest
-    normal, where the flush makes it a signed zero."""
-    rows, cols = codes.shape
-    q = array.array("b")
-    q.frombytes(codes.tobytes())
-    e = array.array("i")
-    e.frombytes(exponents.tobytes())
-    out = array.array("f", bytes(4 * rows * cols))
-    for r in range(rows):
-        scale = _pow2_f32(e[r])
-        base = r * cols
-        for c in range(cols):
-            out[base + c] = _ftz(_f32(float(q[base + c]) * scale))
-    return Array._owned(out, (rows, cols), "<f4", "C")
+        _linalg_impl._load()
+    except ImportError as e:
+        raise ImportError(
+            "mojolearn.lowbit: packing and materializing need the linalg binding "
+            f"(GPU extension or _mojolearn_linalg_host); none is loaded: {e}") from None
+    from . import linalg
+    return linalg
 
 
 def widen_bf16(bits):
@@ -329,10 +175,7 @@ def widen_bf16(bits):
     widens 1-D norm weights and the embedding table through this; the 2-D
     projections go through `BF16Weight` and `materialize_one`."""
     b, _ = as_u16_c(bits, ndim=None, name="bits")
-    if _conversion_backend() == "linalg":
-        from . import linalg
-        return linalg.from_bf16(b)
-    return _from_bf16_py(b)
+    return _linalg().from_bf16(b)
 
 
 def pack_one(value, fmt, name="weight"):
@@ -344,32 +187,19 @@ def pack_one(value, fmt, name="weight"):
         raise ValueError(f"mojolearn.lowbit: {name} must be 2-D to pack, got shape {a.shape}")
     if fmt == "float32":
         return a.copy()
-    where = _conversion_backend()
+    linalg = _linalg()
     if fmt == "bfloat16":
-        if where == "linalg":
-            from . import linalg
-            return BF16Weight(linalg.to_bf16(a))
-        return BF16Weight(_to_bf16_py(a))
-    if where == "linalg":
-        from . import linalg
-        q, e = linalg.quantize_int8(a)
-        return Int8Weight(q, e)
-    q, e = _quantize_int8_py(a)
+        return BF16Weight(linalg.to_bf16(a))
+    q, e = linalg.quantize_int8(a)
     return Int8Weight(q, e)
 
 
 def materialize_one(value, name="weight"):
     """A packed tensor as float32 (exact), or a float32 tensor as itself."""
     if isinstance(value, BF16Weight):
-        if _conversion_backend() == "linalg":
-            from . import linalg
-            return linalg.from_bf16(value.bits)
-        return _from_bf16_py(value.bits)
+        return _linalg().from_bf16(value.bits)
     if isinstance(value, Int8Weight):
-        if _conversion_backend() == "linalg":
-            from . import linalg
-            return linalg.dequantize_int8(value.codes, value.exponents)
-        return _dequantize_int8_py(value.codes, value.exponents)
+        return _linalg().dequantize_int8(value.codes, value.exponents)
     return value
 
 
@@ -392,7 +222,7 @@ def pack(weights, fmt):
     if not hasattr(weights, "keys"):
         raise TypeError("mojolearn.lowbit.pack: weights must be a dict keyed by name")
     out = {}
-    for name, value in weights.items():
+    for name, value in weights.items():  # glue: dispatches each named weight tensor
         if is_packed(value):
             # Repacking in the format it already has needs independent
             # storage (as the float32 arm below provides), but not a full
@@ -422,7 +252,7 @@ def unpack(weights, what="weights"):
     fmt = format_of(weights)
     if fmt == "float32":
         return weights, fmt
-    return {name: materialize_one(v, name) for name, v in weights.items()}, fmt
+    return {name: materialize_one(v, name) for name, v in weights.items()}, fmt  # glue: dispatches each named weight tensor
 
 
 materialize = unpack

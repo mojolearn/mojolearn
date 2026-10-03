@@ -6,9 +6,11 @@ from std.gpu import block_idx, block_dim, thread_idx
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_var_item
-from x_neighbors.sort_items import nc_median_init_item, nc_median_step_item, nc_median_pick_item, pos_count_item, pos_scan_item, pos_emit_item
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
+from std.sys.info import has_apple_gpu_accelerator
+from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_var_item, row_argmax_item
+from x_neighbors.sort_items import nc_median_init_item, nc_median_step_item, nc_median_pick_item, nc_med_std_init_item, nc_med_std_step_item, nc_med_std_pick_item, pos_count_item, pos_scan_item, pos_emit_item
+from x_neighbors.py2mojo_items import p2m_mask_value_item, p2m_zero_cols_item, p2m_nan_indicator_item, p2m_sign_label_item, p2m_relabel_init_item, p2m_relabel_first_item, p2m_relabel_count_item, p2m_relabel_scan_item, p2m_relabel_emit_item, p2m_relabel_map_item, p2m_ccount_zero_item, p2m_ccount_add_item, p2m_ccount_emit_item, p2m_const_init_item, p2m_const_cmp_item, p2m_lp_labels_item, p2m_fill_item, p2m_iota_item, p2m_negate_item, p2m_transpose_item, p2m_transpose_i_item, p2m_row_sort_init_item, p2m_row_sort_step_item, p2m_row_sort_emit_item
 
 comptime BLOCK = 128
 
@@ -1480,6 +1482,83 @@ def op_nc_median(x: Int, lab: Int, start: Int, cent: Int, n: Int, d: Int, n_clas
     _ = ctx^
 
 
+def row_argmax_kernel(a: FP, res: IP, n_: Int64, m_: Int64):
+    var n = Int(n_)
+    var m = Int(m_)
+    var t = _tid()
+    if t < n:
+        row_argmax_item(t, a, res, n, m)
+
+
+def op_row_argmax(a: Int, res: Int, n: Int, m: Int) raises:
+    var ctx = xn_ctx()
+    var d_a = _buf(ctx, a, n * m, True)
+    var d_res = _buf_i(ctx, res, n, False)
+    ctx.enqueue_function[row_argmax_kernel](
+        d_a.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(m),
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    _down_i(ctx, d_res, res, n)
+    ctx.synchronize()
+    _ = d_a^
+    _ = d_res^
+    _ = ctx^
+
+
+def nc_med_std_k0(std: FP, res: FP, key: FP, d_: Int64, p_: Int64, n_steps_: Int64):
+    var d = Int(d_)
+    var p = Int(p_)
+    var n_steps = Int(n_steps_)
+    var t = _tid()
+    if t < p:
+        nc_med_std_init_item(t, std, res, key, d, p, n_steps)
+
+
+def nc_med_std_k1(std: FP, res: FP, key: FP, d_: Int64, p_: Int64, n_steps_: Int64, lj_: Int64):
+    var d = Int(d_)
+    var p = Int(p_)
+    var n_steps = Int(n_steps_)
+    var lj = Int(lj_)
+    var t = _tid()
+    if t < p // 2:
+        nc_med_std_step_item(t, lj, std, res, key, d, p, n_steps)
+
+
+def nc_med_std_k2(std: FP, res: FP, key: FP, d_: Int64, p_: Int64, n_steps_: Int64):
+    var d = Int(d_)
+    var p = Int(p_)
+    var n_steps = Int(n_steps_)
+    var t = _tid()
+    if t < 1:
+        nc_med_std_pick_item(t, std, res, key, d, p, n_steps)
+
+
+def op_nc_med_std(std: Int, res: Int, d: Int, p: Int, n_steps: Int) raises:
+    var ctx = xn_ctx()
+    var d_std = _buf(ctx, std, d, True)
+    var d_res = _buf(ctx, res, 2, False)
+    var d_key = _buf(ctx, 0, p, False)
+    ctx.enqueue_function[nc_med_std_k0](
+        d_std.unsafe_ptr(), d_res.unsafe_ptr(), d_key.unsafe_ptr(), Int64(d), Int64(p), Int64(n_steps),
+        grid_dim=_grid(p), block_dim=(BLOCK if p > 1 else 1),
+    )
+    for lj in range(n_steps):
+        ctx.enqueue_function[nc_med_std_k1](
+            d_std.unsafe_ptr(), d_res.unsafe_ptr(), d_key.unsafe_ptr(), Int64(d), Int64(p), Int64(n_steps), Int64(lj),
+            grid_dim=_grid(p // 2), block_dim=(BLOCK if p // 2 > 1 else 1),
+        )
+    ctx.enqueue_function[nc_med_std_k2](
+        d_std.unsafe_ptr(), d_res.unsafe_ptr(), d_key.unsafe_ptr(), Int64(d), Int64(p), Int64(n_steps),
+        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
+    )
+    _down(ctx, d_res, res, 2)
+    ctx.synchronize()
+    _ = d_std^
+    _ = d_res^
+    _ = d_key^
+    _ = ctx^
+
+
 def pos_compact_k0(w: FP, rows: IP, vals: FP, info: IP, part: IP, n_: Int64):
     var n = Int(n_)
     var t = _tid()
@@ -1529,4 +1608,484 @@ def op_pos_compact(w: Int, rows: Int, vals: Int, info: Int, n: Int) raises:
     _ = d_vals^
     _ = d_info^
     _ = d_part^
+    _ = ctx^
+
+
+def p2m_mask_value_kernel(x: FP, res: FP, count_: Int64, want_: Float32):
+    var count = Int(count_)
+    var want = want_
+    var t = _tid()
+    if t < count:
+        p2m_mask_value_item(t, x, res, count, want)
+
+
+def op_p2m_mask_value(x: Int, res: Int, count: Int, want: Float32) raises:
+    var ctx = xn_ctx()
+    var d_x = _buf(ctx, x, count, True)
+    var d_res = _buf(ctx, res, count, False)
+    ctx.enqueue_function[p2m_mask_value_kernel](
+        d_x.unsafe_ptr(), d_res.unsafe_ptr(), Int64(count), want,
+        grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
+    )
+    _down(ctx, d_res, res, count)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_res^
+    _ = ctx^
+
+
+def p2m_zero_cols_kernel(x: FP, flags: IP, res: FP, n_: Int64, d_: Int64):
+    var n = Int(n_)
+    var d = Int(d_)
+    var t = _tid()
+    if t < n * d:
+        p2m_zero_cols_item(t, x, flags, res, n, d)
+
+
+def op_p2m_zero_cols(x: Int, flags: Int, res: Int, n: Int, d: Int) raises:
+    var ctx = xn_ctx()
+    var d_x = _buf(ctx, x, n * d, True)
+    var d_flags = _buf_i(ctx, flags, d, True)
+    var d_res = _buf(ctx, res, n * d, False)
+    ctx.enqueue_function[p2m_zero_cols_kernel](
+        d_x.unsafe_ptr(), d_flags.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(d),
+        grid_dim=_grid(n * d), block_dim=(BLOCK if n * d > 1 else 1),
+    )
+    _down(ctx, d_res, res, n * d)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_flags^
+    _ = d_res^
+    _ = ctx^
+
+
+def p2m_nan_indicator_kernel(src: FP, cur: FP, cols: IP, res: FP, n_: Int64, d_: Int64, c_: Int64, q_: Int64):
+    var n = Int(n_)
+    var d = Int(d_)
+    var c = Int(c_)
+    var q = Int(q_)
+    var t = _tid()
+    if t < n * (c + q):
+        p2m_nan_indicator_item(t, src, cur, cols, res, n, d, c, q)
+
+
+def op_p2m_nan_indicator(src: Int, cur: Int, cols: Int, res: Int, n: Int, d: Int, c: Int, q: Int) raises:
+    var ctx = xn_ctx()
+    var d_src = _buf(ctx, src, n * d, True)
+    var d_cur = _buf(ctx, cur, n * c, True)
+    var d_cols = _buf_i(ctx, cols, q, True)
+    var d_res = _buf(ctx, res, n * (c + q), False)
+    ctx.enqueue_function[p2m_nan_indicator_kernel](
+        d_src.unsafe_ptr(), d_cur.unsafe_ptr(), d_cols.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(d), Int64(c), Int64(q),
+        grid_dim=_grid(n * (c + q)), block_dim=(BLOCK if n * (c + q) > 1 else 1),
+    )
+    _down(ctx, d_res, res, n * (c + q))
+    ctx.synchronize()
+    _ = d_src^
+    _ = d_cur^
+    _ = d_cols^
+    _ = d_res^
+    _ = ctx^
+
+
+def p2m_sign_label_kernel(x: FP, res: IP, count_: Int64, mode_: Int64, thr_: Float32):
+    var count = Int(count_)
+    var mode = Int(mode_)
+    var thr = thr_
+    var t = _tid()
+    if t < count:
+        p2m_sign_label_item(t, x, res, count, mode, thr)
+
+
+def op_p2m_sign_label(x: Int, res: Int, count: Int, mode: Int, thr: Float32) raises:
+    var ctx = xn_ctx()
+    var d_x = _buf(ctx, x, count, True)
+    var d_res = _buf_i(ctx, res, count, False)
+    ctx.enqueue_function[p2m_sign_label_kernel](
+        d_x.unsafe_ptr(), d_res.unsafe_ptr(), Int64(count), Int64(mode), thr,
+        grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
+    )
+    _down_i(ctx, d_res, res, count)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_res^
+    _ = ctx^
+
+
+def p2m_relabel_k0(lab: IP, res: IP, info: IP, first: IP, rk: IP, part: IP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < n:
+        p2m_relabel_init_item(t, lab, res, info, first, rk, part, n)
+
+
+def p2m_relabel_k1(lab: IP, res: IP, info: IP, first: IP, rk: IP, part: IP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < n:
+        p2m_relabel_first_item(t, lab, res, info, first, rk, part, n)
+
+
+def p2m_relabel_k2(lab: IP, res: IP, info: IP, first: IP, rk: IP, part: IP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < xn_fold_blocks(n):
+        p2m_relabel_count_item(t, lab, res, info, first, rk, part, n)
+
+
+def p2m_relabel_k3(lab: IP, res: IP, info: IP, first: IP, rk: IP, part: IP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < 1:
+        p2m_relabel_scan_item(t, lab, res, info, first, rk, part, n)
+
+
+def p2m_relabel_k4(lab: IP, res: IP, info: IP, first: IP, rk: IP, part: IP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < xn_fold_blocks(n):
+        p2m_relabel_emit_item(t, lab, res, info, first, rk, part, n)
+
+
+def p2m_relabel_k5(lab: IP, res: IP, info: IP, first: IP, rk: IP, part: IP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < n:
+        p2m_relabel_map_item(t, lab, res, info, first, rk, part, n)
+
+
+def op_p2m_relabel(lab: Int, res: Int, info: Int, n: Int) raises:
+    var ctx = xn_ctx()
+    var d_lab = _buf_i(ctx, lab, n, True)
+    var d_res = _buf_i(ctx, res, n, False)
+    var d_info = _buf_i(ctx, info, 2, False)
+    var d_first = _buf_i(ctx, 0, n, False)
+    var d_rk = _buf_i(ctx, 0, n, False)
+    var d_part = _buf_i(ctx, 0, xn_fold_blocks(n), False)
+    ctx.enqueue_function[p2m_relabel_k0](
+        d_lab.unsafe_ptr(), d_res.unsafe_ptr(), d_info.unsafe_ptr(), d_first.unsafe_ptr(), d_rk.unsafe_ptr(), d_part.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    ctx.enqueue_function[p2m_relabel_k1](
+        d_lab.unsafe_ptr(), d_res.unsafe_ptr(), d_info.unsafe_ptr(), d_first.unsafe_ptr(), d_rk.unsafe_ptr(), d_part.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    ctx.enqueue_function[p2m_relabel_k2](
+        d_lab.unsafe_ptr(), d_res.unsafe_ptr(), d_info.unsafe_ptr(), d_first.unsafe_ptr(), d_rk.unsafe_ptr(), d_part.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(xn_fold_blocks(n)), block_dim=(BLOCK if xn_fold_blocks(n) > 1 else 1),
+    )
+    ctx.enqueue_function[p2m_relabel_k3](
+        d_lab.unsafe_ptr(), d_res.unsafe_ptr(), d_info.unsafe_ptr(), d_first.unsafe_ptr(), d_rk.unsafe_ptr(), d_part.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
+    )
+    ctx.enqueue_function[p2m_relabel_k4](
+        d_lab.unsafe_ptr(), d_res.unsafe_ptr(), d_info.unsafe_ptr(), d_first.unsafe_ptr(), d_rk.unsafe_ptr(), d_part.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(xn_fold_blocks(n)), block_dim=(BLOCK if xn_fold_blocks(n) > 1 else 1),
+    )
+    ctx.enqueue_function[p2m_relabel_k5](
+        d_lab.unsafe_ptr(), d_res.unsafe_ptr(), d_info.unsafe_ptr(), d_first.unsafe_ptr(), d_rk.unsafe_ptr(), d_part.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    _down_i(ctx, d_res, res, n)
+    _down_i(ctx, d_info, info, 2)
+    ctx.synchronize()
+    _ = d_lab^
+    _ = d_res^
+    _ = d_info^
+    _ = d_first^
+    _ = d_rk^
+    _ = d_part^
+    _ = ctx^
+
+
+def p2m_class_counts_k0(lab: IP, nk: FP, info: IP, cnt: IP, n_: Int64, n_classes_: Int64):
+    var n = Int(n_)
+    var n_classes = Int(n_classes_)
+    var t = _tid()
+    if t < n_classes:
+        p2m_ccount_zero_item(t, lab, nk, info, cnt, n, n_classes)
+
+
+def p2m_class_counts_k1(lab: IP, nk: FP, info: IP, cnt: IP, n_: Int64, n_classes_: Int64):
+    var n = Int(n_)
+    var n_classes = Int(n_classes_)
+    var t = _tid()
+    if t < n:
+        p2m_ccount_add_item(t, lab, nk, info, cnt, n, n_classes)
+
+
+def p2m_class_counts_k2(lab: IP, nk: FP, info: IP, cnt: IP, n_: Int64, n_classes_: Int64):
+    var n = Int(n_)
+    var n_classes = Int(n_classes_)
+    var t = _tid()
+    if t < n_classes:
+        p2m_ccount_emit_item(t, lab, nk, info, cnt, n, n_classes)
+
+
+def op_p2m_class_counts(lab: Int, nk: Int, info: Int, n: Int, n_classes: Int) raises:
+    var ctx = xn_ctx()
+    var d_lab = _buf_i(ctx, lab, n, True)
+    var d_nk = _buf(ctx, nk, n_classes, False)
+    var d_info = _buf_i(ctx, info, 1, False)
+    var d_cnt = _buf_i(ctx, 0, n_classes, False)
+    ctx.enqueue_function[p2m_class_counts_k0](
+        d_lab.unsafe_ptr(), d_nk.unsafe_ptr(), d_info.unsafe_ptr(), d_cnt.unsafe_ptr(), Int64(n), Int64(n_classes),
+        grid_dim=_grid(n_classes), block_dim=(BLOCK if n_classes > 1 else 1),
+    )
+    ctx.enqueue_function[p2m_class_counts_k1](
+        d_lab.unsafe_ptr(), d_nk.unsafe_ptr(), d_info.unsafe_ptr(), d_cnt.unsafe_ptr(), Int64(n), Int64(n_classes),
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    ctx.enqueue_function[p2m_class_counts_k2](
+        d_lab.unsafe_ptr(), d_nk.unsafe_ptr(), d_info.unsafe_ptr(), d_cnt.unsafe_ptr(), Int64(n), Int64(n_classes),
+        grid_dim=_grid(n_classes), block_dim=(BLOCK if n_classes > 1 else 1),
+    )
+    _down(ctx, d_nk, nk, n_classes)
+    _down_i(ctx, d_info, info, 1)
+    ctx.synchronize()
+    _ = d_lab^
+    _ = d_nk^
+    _ = d_info^
+    _ = d_cnt^
+    _ = ctx^
+
+
+def p2m_const_cols_k0(x: FP, flag: IP, n_: Int64, d_: Int64):
+    var n = Int(n_)
+    var d = Int(d_)
+    var t = _tid()
+    if t < 1:
+        p2m_const_init_item(t, x, flag, n, d)
+
+
+def p2m_const_cols_k1(x: FP, flag: IP, n_: Int64, d_: Int64):
+    var n = Int(n_)
+    var d = Int(d_)
+    var t = _tid()
+    if t < n * d:
+        p2m_const_cmp_item(t, x, flag, n, d)
+
+
+def op_p2m_const_cols(x: Int, flag: Int, n: Int, d: Int) raises:
+    var ctx = xn_ctx()
+    var d_x = _buf(ctx, x, n * d, True)
+    var d_flag = _buf_i(ctx, flag, 1, False)
+    ctx.enqueue_function[p2m_const_cols_k0](
+        d_x.unsafe_ptr(), d_flag.unsafe_ptr(), Int64(n), Int64(d),
+        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
+    )
+    ctx.enqueue_function[p2m_const_cols_k1](
+        d_x.unsafe_ptr(), d_flag.unsafe_ptr(), Int64(n), Int64(d),
+        grid_dim=_grid(n * d), block_dim=(BLOCK if n * d > 1 else 1),
+    )
+    _down_i(ctx, d_flag, flag, 1)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_flag^
+    _ = ctx^
+
+
+def p2m_lp_labels_kernel(codes: IP, ld: FP, ys: FP, unl: IP, n_: Int64, c_: Int64, skip_: Int64, a_: Float32):
+    var n = Int(n_)
+    var c = Int(c_)
+    var skip = Int(skip_)
+    var a = a_
+    var t = _tid()
+    if t < n * c:
+        p2m_lp_labels_item(t, codes, ld, ys, unl, n, c, skip, a)
+
+
+def op_p2m_lp_labels(codes: Int, ld: Int, ys: Int, unl: Int, n: Int, c: Int, skip: Int, a: Float32) raises:
+    var ctx = xn_ctx()
+    var d_codes = _buf_i(ctx, codes, n, True)
+    var d_ld = _buf(ctx, ld, n * c, False)
+    var d_ys = _buf(ctx, ys, n * c, False)
+    var d_unl = _buf_i(ctx, unl, n, False)
+    ctx.enqueue_function[p2m_lp_labels_kernel](
+        d_codes.unsafe_ptr(), d_ld.unsafe_ptr(), d_ys.unsafe_ptr(), d_unl.unsafe_ptr(), Int64(n), Int64(c), Int64(skip), a,
+        grid_dim=_grid(n * c), block_dim=(BLOCK if n * c > 1 else 1),
+    )
+    _down(ctx, d_ld, ld, n * c)
+    _down(ctx, d_ys, ys, n * c)
+    _down_i(ctx, d_unl, unl, n)
+    ctx.synchronize()
+    _ = d_codes^
+    _ = d_ld^
+    _ = d_ys^
+    _ = d_unl^
+    _ = ctx^
+
+
+def p2m_fill_kernel(res: FP, count_: Int64, value_: Float32):
+    var count = Int(count_)
+    var value = value_
+    var t = _tid()
+    if t < count:
+        p2m_fill_item(t, res, count, value)
+
+
+def op_p2m_fill(res: Int, count: Int, value: Float32) raises:
+    var ctx = xn_ctx()
+    var d_res = _buf(ctx, res, count, False)
+    ctx.enqueue_function[p2m_fill_kernel](
+        d_res.unsafe_ptr(), Int64(count), value,
+        grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
+    )
+    _down(ctx, d_res, res, count)
+    ctx.synchronize()
+    _ = d_res^
+    _ = ctx^
+
+
+def p2m_iota_kernel(res: IP, count_: Int64):
+    var count = Int(count_)
+    var t = _tid()
+    if t < count:
+        p2m_iota_item(t, res, count)
+
+
+def op_p2m_iota(res: Int, count: Int) raises:
+    var ctx = xn_ctx()
+    var d_res = _buf_i(ctx, res, count, False)
+    ctx.enqueue_function[p2m_iota_kernel](
+        d_res.unsafe_ptr(), Int64(count),
+        grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
+    )
+    _down_i(ctx, d_res, res, count)
+    ctx.synchronize()
+    _ = d_res^
+    _ = ctx^
+
+
+def p2m_negate_kernel(x: FP, res: FP, count_: Int64):
+    var count = Int(count_)
+    var t = _tid()
+    if t < count:
+        p2m_negate_item(t, x, res, count)
+
+
+def op_p2m_negate(x: Int, res: Int, count: Int) raises:
+    var ctx = xn_ctx()
+    var d_x = _buf(ctx, x, count, True)
+    var d_res = _buf(ctx, res, count, False)
+    ctx.enqueue_function[p2m_negate_kernel](
+        d_x.unsafe_ptr(), d_res.unsafe_ptr(), Int64(count),
+        grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
+    )
+    _down(ctx, d_res, res, count)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_res^
+    _ = ctx^
+
+
+def p2m_transpose_kernel(src: FP, res: FP, r_: Int64, c_: Int64):
+    var r = Int(r_)
+    var c = Int(c_)
+    var t = _tid()
+    if t < r * c:
+        p2m_transpose_item(t, src, res, r, c)
+
+
+def op_p2m_transpose(src: Int, res: Int, r: Int, c: Int) raises:
+    var ctx = xn_ctx()
+    var d_src = _buf(ctx, src, r * c, True)
+    var d_res = _buf(ctx, res, r * c, False)
+    ctx.enqueue_function[p2m_transpose_kernel](
+        d_src.unsafe_ptr(), d_res.unsafe_ptr(), Int64(r), Int64(c),
+        grid_dim=_grid(r * c), block_dim=(BLOCK if r * c > 1 else 1),
+    )
+    _down(ctx, d_res, res, r * c)
+    ctx.synchronize()
+    _ = d_src^
+    _ = d_res^
+    _ = ctx^
+
+
+def p2m_transpose_i_kernel(src: IP, res: IP, r_: Int64, c_: Int64):
+    var r = Int(r_)
+    var c = Int(c_)
+    var t = _tid()
+    if t < r * c:
+        p2m_transpose_i_item(t, src, res, r, c)
+
+
+def op_p2m_transpose_i(src: Int, res: Int, r: Int, c: Int) raises:
+    var ctx = xn_ctx()
+    var d_src = _buf_i(ctx, src, r * c, True)
+    var d_res = _buf_i(ctx, res, r * c, False)
+    ctx.enqueue_function[p2m_transpose_i_kernel](
+        d_src.unsafe_ptr(), d_res.unsafe_ptr(), Int64(r), Int64(c),
+        grid_dim=_grid(r * c), block_dim=(BLOCK if r * c > 1 else 1),
+    )
+    _down_i(ctx, d_res, res, r * c)
+    ctx.synchronize()
+    _ = d_src^
+    _ = d_res^
+    _ = ctx^
+
+
+def p2m_row_sort_k0(indptr: IP, cols: IP, dists: FP, out_cols: IP, out_d: FP, perm: IP, rowid: IP, nq_: Int64, nnz_: Int64, p_: Int64, n_steps_: Int64):
+    var nq = Int(nq_)
+    var nnz = Int(nnz_)
+    var p = Int(p_)
+    var n_steps = Int(n_steps_)
+    var t = _tid()
+    if t < p:
+        p2m_row_sort_init_item(t, indptr, cols, dists, out_cols, out_d, perm, rowid, nq, nnz, p, n_steps)
+
+
+def p2m_row_sort_k1(indptr: IP, cols: IP, dists: FP, out_cols: IP, out_d: FP, perm: IP, rowid: IP, nq_: Int64, nnz_: Int64, p_: Int64, n_steps_: Int64, lj_: Int64):
+    var nq = Int(nq_)
+    var nnz = Int(nnz_)
+    var p = Int(p_)
+    var n_steps = Int(n_steps_)
+    var lj = Int(lj_)
+    var t = _tid()
+    if t < p // 2:
+        p2m_row_sort_step_item(t, lj, indptr, cols, dists, out_cols, out_d, perm, rowid, nq, nnz, p, n_steps)
+
+
+def p2m_row_sort_k2(indptr: IP, cols: IP, dists: FP, out_cols: IP, out_d: FP, perm: IP, rowid: IP, nq_: Int64, nnz_: Int64, p_: Int64, n_steps_: Int64):
+    var nq = Int(nq_)
+    var nnz = Int(nnz_)
+    var p = Int(p_)
+    var n_steps = Int(n_steps_)
+    var t = _tid()
+    if t < nnz:
+        p2m_row_sort_emit_item(t, indptr, cols, dists, out_cols, out_d, perm, rowid, nq, nnz, p, n_steps)
+
+
+def op_p2m_row_sort(indptr: Int, cols: Int, dists: Int, out_cols: Int, out_d: Int, nq: Int, nnz: Int, p: Int, n_steps: Int) raises:
+    var ctx = xn_ctx()
+    var d_indptr = _buf_i(ctx, indptr, nq + 1, True)
+    var d_cols = _buf_i(ctx, cols, nnz, True)
+    var d_dists = _buf(ctx, dists, nnz, True)
+    var d_out_cols = _buf_i(ctx, out_cols, nnz, False)
+    var d_out_d = _buf(ctx, out_d, nnz, False)
+    var d_perm = _buf_i(ctx, 0, p, False)
+    var d_rowid = _buf_i(ctx, 0, nnz, False)
+    ctx.enqueue_function[p2m_row_sort_k0](
+        d_indptr.unsafe_ptr(), d_cols.unsafe_ptr(), d_dists.unsafe_ptr(), d_out_cols.unsafe_ptr(), d_out_d.unsafe_ptr(), d_perm.unsafe_ptr(), d_rowid.unsafe_ptr(), Int64(nq), Int64(nnz), Int64(p), Int64(n_steps),
+        grid_dim=_grid(p), block_dim=(BLOCK if p > 1 else 1),
+    )
+    for lj in range(n_steps):
+        ctx.enqueue_function[p2m_row_sort_k1](
+            d_indptr.unsafe_ptr(), d_cols.unsafe_ptr(), d_dists.unsafe_ptr(), d_out_cols.unsafe_ptr(), d_out_d.unsafe_ptr(), d_perm.unsafe_ptr(), d_rowid.unsafe_ptr(), Int64(nq), Int64(nnz), Int64(p), Int64(n_steps), Int64(lj),
+            grid_dim=_grid(p // 2), block_dim=(BLOCK if p // 2 > 1 else 1),
+        )
+    ctx.enqueue_function[p2m_row_sort_k2](
+        d_indptr.unsafe_ptr(), d_cols.unsafe_ptr(), d_dists.unsafe_ptr(), d_out_cols.unsafe_ptr(), d_out_d.unsafe_ptr(), d_perm.unsafe_ptr(), d_rowid.unsafe_ptr(), Int64(nq), Int64(nnz), Int64(p), Int64(n_steps),
+        grid_dim=_grid(nnz), block_dim=(BLOCK if nnz > 1 else 1),
+    )
+    _down_i(ctx, d_out_cols, out_cols, nnz)
+    _down(ctx, d_out_d, out_d, nnz)
+    ctx.synchronize()
+    _ = d_indptr^
+    _ = d_cols^
+    _ = d_dists^
+    _ = d_out_cols^
+    _ = d_out_d^
+    _ = d_perm^
+    _ = d_rowid^
     _ = ctx^

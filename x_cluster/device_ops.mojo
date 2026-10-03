@@ -14,7 +14,7 @@ from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_sqrt
 
 from x_cluster.bodies import (
@@ -55,8 +55,19 @@ from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_works
 from gemm.contract import OP_TN
 from mixture.checks.mstep import center_scale_kernel, cov_finish_kernel, means_divide_kernel
 from x_cluster.ops import ClusterOps
+from x_cluster.optics_xi_device import optics_xi_device
 from x_cluster.meanshift_fast import MEANSHIFT_FAST_GRID, meanshift_fast_grid
 from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV, minibatch_fast_steps
+from x_cluster.device_tree import (
+    agc_edges_mode_kernel,
+    count_ge_kernel,
+    tree_leaf_kernel,
+    tree_parent_init_kernel,
+    tree_parent_kernel,
+    tree_root_flag_kernel,
+    tree_root_rank_kernel,
+    tree_scatter_kernel,
+)
 from x_cluster.device_post import (
     PTPB,
     RTPB,
@@ -111,6 +122,7 @@ from x_cluster.device_post import (
     sign_side_kernel,
 )
 from x_cluster.post_bodies import FM_FF, FM_MIN, FM_PROD, FM_VAL, FM_WMIN, FOLD_CHUNK, ff_of_f64
+from x_cluster.bgmm_kernels import bgmm_launch
 from std.gpu import WARP_SIZE
 from std.gpu.primitives.warp import shuffle_idx
 from x_cluster.minibatch_cells import mb_center_wsum, mb_center_word
@@ -1095,6 +1107,113 @@ def _apf_update_kernel(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32,
     a[i * N + k] = ftz(ftz(identical_mul(old, damping)) + ftz(identical_mul(nw, one_minus)))
 
 
+# Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only.
+# BGMM_FAST_MOMENTS_GEMM stays OPT-IN (`-D MOJOLEARN_BGMM_FAST_MOMENTS_GEMM`,
+# its M3 repeat pending); OPTICS_FAST_DEVICE_ORDER is the default (below).
+comptime XC2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_COLUMN == COLUMN_APPLE
+comptime BGMM_FAST_MOMENTS_GEMM = XC2_FAST and is_defined["MOJOLEARN_BGMM_FAST_MOMENTS_GEMM"]()
+comptime OPTICS_FAST_DEVICE_ORDER = XC2_FAST and not is_defined["MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF"]()
+
+
+# Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only,
+# OPTICS_FAST_DEVICE_ORDER (DEFAULT ON since the M3 A/B: optics istella
+# 432.7 -> 260.7 ms, n=1, quality identical; off with
+# `-D MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF`; asked by x_cluster/optics.mojo): sklearn's
+# `compute_optics_graph` ordering loop on the device. The n steps stay serial
+# by construction (each pick depends on the last relaxation); every step is
+# ONE grid launch of ceil(n / OPT_ORD_PER) blocks, block b owning the rows
+# [b * OPT_ORD_PER, (b + 1) * OPT_ORD_PER): it folds the previous launch's
+# partial keys to the step's point (the min of `_opt_key`: the lowest
+# reachability, the lowest index on a tie, exactly the host's strict `<`
+# scan over `processed == 0`), marks the point processed and writes the
+# ordering, relaxes its own rows from the point's distance row (max(dist,
+# core) when it improves, the predecessor set), then scans its rows for
+# the next step's partial key. The partials are double-buffered (launch s
+# reads half s & 1, writes half (s + 1) & 1), so no block reads what
+# another writes in the same launch; the n + 1 launches (step -1 is the
+# init and the first scan) go out without a host wait. Nothing n^2 crosses
+# to the host. Same picks, same reachability and predecessors.
+comptime OPT_ORD_TPB = 256
+comptime OPT_ORD_PER = OPT_ORD_TPB * 2
+"""Rows per block (two per thread): 20 blocks at the board's 10,000 rows."""
+
+
+@always_inline
+def _opt_key(v: Float32, j: Int) -> UInt64:
+    """An integer whose order is the host loop's pick: the reachability's
+    bits in the high word (every reachability is >= +0 or +inf; -0.0 folded
+    onto +0.0), the index in the low word so the LOWEST index wins a tie."""
+    var b = bitcast[DType.uint32](v)
+    if b == UInt32(0x80000000):
+        b = UInt32(0)
+    return (UInt64(b) << 32) | UInt64(UInt32(j))
+
+
+@always_inline
+def _opt_pick(part: MutPointer[UInt64, MutAnyOrigin], nb: Int) -> UInt64:
+    """The min of the nb partial keys (every thread folds them itself: nb is
+    the block count, tens at the board's rows)."""
+    var k = UInt64(0xFFFFFFFFFFFFFFFF)
+    for b in range(nb):
+        k = min(k, part[b])
+    return k
+
+
+def _optics_step_kernel(
+    dist: FPtr, core: FPtr, n: Int32, max_eps: Float32, ordering: IPtr, reach: FPtr, pred: IPtr, proc: IPtr,
+    part: MutPointer[UInt64, MutAnyOrigin], nb: Int32, step: Int32,
+):
+    var tid = Int(thread_idx.x)
+    var b = Int(block_idx.x)
+    var N = Int(n)
+    var NB = Int(nb)
+    var s = Int(step)
+    var r0 = b * OPT_ORD_PER
+    var r1 = r0 + OPT_ORD_PER
+    if r1 > N:
+        r1 = N
+    var inf = Float32.MAX * Float32(2)
+    var red = stack_allocation[OPT_ORD_TPB, Scalar[DType.uint64], address_space = AddressSpace.SHARED]()
+    if s < 0:
+        for o in range(r0 + tid, r1, OPT_ORD_TPB):
+            reach[o] = inf
+            pred[o] = Int32(-1)
+            proc[o] = Int32(0)
+    else:
+        var key = _opt_pick(part + (s & 1) * NB, NB)
+        var point = Int(UInt32(key & UInt64(0xFFFFFFFF)))
+        if b == 0 and tid == 0:
+            ordering[s] = Int32(point)
+        var cp = core[point]
+        # the host's `core[point] != inf` after its clamp of core > max_eps
+        var relax = cp <= max_eps and cp != inf
+        for o in range(r0 + tid, r1, OPT_ORD_TPB):
+            if o == point:
+                proc[o] = Int32(1)
+            elif relax and proc[o] == Int32(0):
+                var dd = dist[point * N + o]
+                if dd <= max_eps:
+                    var rd = dd if dd > cp else cp
+                    if rd < reach[o]:
+                        reach[o] = rd
+                        pred[o] = Int32(point)
+    # this thread's rows again (the same stride): the next step's candidate
+    var mine = UInt64(0xFFFFFFFFFFFFFFFF)
+    for o in range(r0 + tid, r1, OPT_ORD_TPB):
+        if proc[o] == Int32(0):
+            mine = min(mine, _opt_key(reach[o], o))
+    red[tid] = mine
+    barrier()
+    var off = OPT_ORD_TPB // 2
+    while off > 0:
+        if tid < off:
+            red[tid] = min(red[tid], red[tid + off])
+        barrier()
+        off //= 2
+    if tid == 0:
+        part[((s + 1) & 1) * NB + b] = red[0]
+
+
 comptime WNN_TPB = 256
 
 
@@ -1841,6 +1960,21 @@ struct DeviceOps(ClusterOps):
             self._moments_gemm(resp, x, n, d, kc, reg, nk, means, cov)
             self._ph1("moments")
             return
+        # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple,
+        # `-D MOJOLEARN_BGMM_FAST_MOMENTS_GEMM=1` (BGMM_FAST_MOMENTS_GEMM):
+        # past MOM_MAX_D features
+        # (Istella-S: 200) FAST fell through every grid path below to the
+        # three ONE-THREAD-PER-CELL kernels (`_nk_kernel`, `_xk_kernel`,
+        # `_cov_kernel`: kc d^2 threads each walking all n rows, n kc d^2 =
+        # 3e10 dependent loads an iteration at 100,000 x 200 x 8). The
+        # IDENTICAL column's `_moments_gemm` (resp^T X and the kc centered
+        # Grams through `identical_gemm_into`, whose FAST arm is the vendor
+        # GEMM) is taken instead: the same addends, the GEMM's fold order.
+        comptime if BGMM_FAST_MOMENTS_GEMM:
+            if d > MOM_MAX_D:
+                self._moments_gemm(resp, x, n, d, kc, reg, nk, means, cov)
+                self._ph1("moments")
+                return
         comptime if MOMS:
             if d <= MOMS_MAX_D and n > 0:
                 var G = (n + MOMS_ROWS - 1) // MOMS_ROWS
@@ -2188,6 +2322,30 @@ struct DeviceOps(ClusterOps):
         )
         self._ph1("estep")
 
+    def optics_order_fast(
+        mut self, dm: Int, core: Int, n: Int, max_eps: Float32, ordering: Int, reach: Int, pred: Int, proc: Int
+    ) raises:
+        self._ph0()
+        comptime if OPTICS_FAST_DEVICE_ORDER:
+            var nb = (n + OPT_ORD_PER - 1) // OPT_ORD_PER
+            if nb < 1:
+                nb = 1
+            var part = self.ctx.enqueue_create_buffer[DType.uint64](2 * nb)
+            var p_part = part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            # step -1 initialises and scans; steps 0 .. n-1 pick, relax, scan
+            for s in range(-1, n):
+                self.ctx.enqueue_function[_optics_step_kernel](
+                    self._fp(dm), self._fp(core), Int32(n), max_eps, self._ip(ordering), self._fp(reach),
+                    self._ip(pred), self._ip(proc), p_part, Int32(nb), Int32(s), grid_dim=nb, block_dim=OPT_ORD_TPB,
+                )
+            # one wait per fit, after the whole loop: the driver reads the
+            # ordering next anyway, and the partials buffer goes out of scope
+            self.ctx.synchronize()
+            _ = part^
+        else:
+            raise Error("x_cluster: optics_order is the FAST Apple device path (MOJOLEARN_OPTICS_FAST_DEVICE_ORDER)")
+        self._ph1("optics_order")
+
     def minibatch_fast(
         mut self, xs: Int, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,
         ratio: Float64, seed: UInt64, mut rng: SplitMix64, mut c: List[Float32], mut w: List[Float32],
@@ -2307,11 +2465,20 @@ struct DeviceOps(ClusterOps):
             cnt = nch
             nch = (nch + FOLD_CHUNK - 1) // FOLD_CHUNK
 
-    def agglo_connect(mut self, edges: Int, n_edges: Int, n: Int, dm: Int, linkage: Int, adj: Int) raises -> Int:
+    def agglo_connect(
+        mut self, edges: Int, n_edges: Int, n: Int, dm: Int, linkage: Int, adj: Int, edge_mode: Int
+    ) raises -> Int:
         self._ph0()
         var bad = self.zeros_i(1)
         var pa = self._ip(adj)
-        if n_edges > 0:
+        if n_edges > 0 and edge_mode != 0:
+            # the dense matrix or the COO triples, filtered on the device
+            # (lane apple-fast-py2mojo-cluster; Python built the pair list)
+            self.ctx.enqueue_function[agc_edges_mode_kernel](
+                self._fp(edges), Int32(n_edges), Int32(n), Int32(edge_mode), pa, self._ip(bad),
+                grid_dim=pgrid(n_edges), block_dim=PTPB,
+            )
+        elif n_edges > 0:
             self.ctx.enqueue_function[agc_edges_kernel](
                 self._fp(edges), Int32(n_edges), Int32(n), pa, self._ip(bad), grid_dim=pgrid(n_edges), block_dim=PTPB,
             )
@@ -2376,6 +2543,57 @@ struct DeviceOps(ClusterOps):
         self._ph1("agglo_connect")
         return C
 
+    def tree_parent(mut self, children: Int, n: Int, m: Int, parent: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[tree_parent_init_kernel](
+            Int32(n + m), self._ip(parent), grid_dim=pgrid(n + m), block_dim=PTPB,
+        )
+        if m > 0:
+            self.ctx.enqueue_function[tree_parent_kernel](
+                self._ip(children), Int32(n), Int32(m), self._ip(parent), grid_dim=pgrid(m), block_dim=PTPB,
+            )
+        self._ph1("tree_parent")
+
+    def tree_roots(mut self, parent: Int, total: Int, rank1: Int) raises -> Int:
+        self._ph0()
+        var flags = self.zeros_i(total)
+        self.ctx.enqueue_function[tree_root_flag_kernel](
+            self._ip(parent), Int32(total), self._ip(flags), grid_dim=pgrid(total), block_dim=PTPB,
+        )
+        var sc = self._scan(self._ip(flags), total)
+        self.ctx.enqueue_function[tree_root_rank_kernel](
+            self._ip(flags), self._ip(sc[0]), Int32(total), self._ip(rank1), grid_dim=pgrid(total), block_dim=PTPB,
+        )
+        var c = self._int1(sc[1])
+        self._ph1("tree_roots")
+        return c
+
+    def tree_scatter(mut self, nodes: Int, c: Int, rank1: Int) raises:
+        self._ph0()
+        if c > 0:
+            self.ctx.enqueue_function[tree_scatter_kernel](
+                self._ip(nodes), Int32(c), self._ip(rank1), grid_dim=pgrid(c), block_dim=PTPB,
+            )
+        self._ph1("tree_scatter")
+
+    def tree_leaf_label(mut self, parent: Int, rank1: Int, n: Int, labels: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[tree_leaf_kernel](
+            self._ip(parent), self._ip(rank1), Int32(n), self._ip(labels), grid_dim=pgrid(n), block_dim=PTPB,
+        )
+        self._ph1("tree_leaf_label")
+
+    def count_ge(mut self, x: Int, n: Int, thr: Float32) raises -> Int:
+        self._ph0()
+        var cnt = self.zeros_i(1)
+        if n > 0:
+            self.ctx.enqueue_function[count_ge_kernel](
+                self._fp(x), Int32(n), thr, self._ip(cnt), grid_dim=pgrid(n), block_dim=PTPB,
+            )
+        var c = self._int1(cnt)
+        self._ph1("count_ge")
+        return c
+
     def check_nonneg(mut self, x: Int, n: Int) raises -> Bool:
         self._ph0()
         var bad = self.zeros_i(1)
@@ -2420,6 +2638,18 @@ struct DeviceOps(ClusterOps):
         )
         self._ph1("optics_dbscan")
 
+    def optics_xi(
+        mut self, ordering: Int, reach: Int, pred: Int, n: Int, xc: Float32, min_samples: Int,
+        min_cluster_size: Int, predecessor_correction: Bool, labels: Int,
+    ) raises -> List[Int32]:
+        self._ph0()
+        var cl = optics_xi_device(
+            self.ctx, self._ip(ordering), self._fp(reach), self._ip(pred), n, xc, min_samples, min_cluster_size,
+            predecessor_correction, self._ip(labels),
+        )
+        self._ph1("optics_xi")
+        return cl^
+
     def sum_ff(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int) raises -> Float64:
         self._ph0()
         var o = self.zeros(2)
@@ -2428,6 +2658,22 @@ struct DeviceOps(ClusterOps):
         var h = self.get(o, 2)
         self._ph1("sum_ff")
         return Float64(h[0]) + Float64(h[1])
+
+    def fold_into(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int, dst: Int) raises:
+        self._ph0()
+        var po = self._fp(dst)
+        self._fold(mode, self._fp(a), self._fp(b if b >= 0 else a), self._fp(c if c >= 0 else a), n, po, po + 1, 0)
+        self._ph1("fold_into")
+
+    def bgmm_step(
+        mut self, step: Int, kc: Int, d: Int, cfg: Int, aux: Int, w: Int, p1: Int, p2: Int, p3: Int
+    ) raises:
+        self._ph0()
+        bgmm_launch(
+            self.ctx, step, self._fp(w), self._fp(p1 if p1 >= 0 else w), self._fp(p2 if p2 >= 0 else w),
+            self._fp(p3 if p3 >= 0 else w), kc, d, cfg, aux,
+        )
+        self._ph1("bgmm_step")
 
     def bin_seeds(mut self, x: Int, n: Int, d: Int, bin_size: Float32, min_bin_freq: Int, dst: Int) raises -> Int:
         self._ph0()

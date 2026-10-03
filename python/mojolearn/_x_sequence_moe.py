@@ -24,6 +24,7 @@ from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_moe')
 
 from . import _backend
+from ._buffer import InitStream
 
 
 _WEIGHTS = ("router", "gate_up_proj", "down_proj")
@@ -72,14 +73,18 @@ class MoEBlock:
         self.D, self.F, self.E, self.k = int(hidden_size), int(intermediate_size), int(num_experts), int(top_k)
         self.norm_topk_prob = bool(norm_topk_prob)
         self.numeric_mode = numeric_mode
-        rng = np.random.default_rng(random_state)
-        std = np.float32(0.02)
-        self.router = (rng.standard_normal((self.E, self.D)) * std).astype(np.float32)
-        self.gate_up_proj = (rng.standard_normal((self.E, 2 * self.F, self.D)) * std).astype(np.float32)
-        self.down_proj = (rng.standard_normal((self.E, self.D, self.F)) * std).astype(np.float32)
+        # N(0, 0.02**2) weights drawn in Mojo (InitStream.fill_normal, the
+        # base binding's counter-based normal_init_f32; lane pyglue-numeric:
+        # numpy's Generator drew them in Python), one stream in this order
+        stream = InitStream(random_state)
+        for name, shape in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),
+                            ("down_proj", (self.E, self.D, self.F))):
+            a = np.empty(shape, np.float32)
+            stream.fill_normal(a.ctypes.data, a.size, 0.0, 0.02)
+            setattr(self, name, a)   # a read-only copy (__setattr__)
 
     def load_state_dict(self, sd):
-        for name, shape in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),
+        for name, shape in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),  # glue: the four named MoE parameter tensors
                             ("down_proj", (self.E, self.D, self.F))):
             a = np.asarray(sd[name], dtype=np.float32)
             if a.shape != shape:

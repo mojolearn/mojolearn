@@ -69,6 +69,7 @@ that). This lane loaded the synthetic checkpoints of
 `tests/test_models_loader.py` only, and it moves no arithmetic bit, so it
 takes no DEVIATION number.
 """
+import array as _pyarray
 import inspect
 import os
 
@@ -76,8 +77,8 @@ from .. import _backend
 from .. import _numeric_profile
 from .. import lowbit as _lowbit
 from .._array import Array
-from .._buffer import addr, addr_ro, all_finite, as_i32_c, empty, frombytes
-from .._bufcheck import flat_view, is_integer, probe
+from .._buffer import _native, addr, addr_ro, all_finite, as_i32_c, empty
+from .._bufcheck import is_integer, memcopy, probe
 from .config import (FIXED_TODAY, INTERFACE_DEFAULTS, POSITION_CEILING, HFConfig,
                      UnsupportedModel, plan_for)
 from .safetensors import Checkpoint
@@ -255,20 +256,44 @@ def _float_weight(a, name):
 
 
 def _argmax_last(logits, b, l, v):
-    """The argmax of row `b`'s LAST position, ties to the lowest index: a
-    sequential scan with a strict `>` (`_greedy_next_bytes`'s rule). The
-    scan runs in the base binding's `argmax_rows_f32` (DEVIATION 2500, the
-    same rule: strict `>` from index 0, so a NaN never replaces and a NaN at
-    index 0 stays); `_labels.argmax_rows` is its Python definition. At
-    `l > 1` the last-position rows are first copied out in C."""
+    """The argmax of row `b`'s LAST position, ties to the lowest index, as an
+    int32 `(b,)` Array: a sequential scan with a strict `>`
+    (`_greedy_next_bytes`'s rule). The scan runs in the base binding's
+    `argmax_rows_f32` (DEVIATION 2500, the same rule: strict `>` from index
+    0, so a NaN never replaces and a NaN at index 0 stays); at `l > 1` the
+    last-position rows are first gathered by the base binding's
+    `gather_rows_bytes` (pyglue-text-io: no Python loop over rows)."""
     from .._labels import argmax_rows
     if l == 1:
         rows = logits.reshape((b, v))
     else:
-        flat = flat_view(logits, "f")
-        last = b"".join(bytes(flat[((r * l) + l - 1) * v:((r * l) + l) * v]) for r in range(b))
-        rows = frombytes(last, "<f4", (b, v))
-    return [int(i) for i in flat_view(argmax_rows(rows), "q")]
+        rows = empty((b, v), "<f4")
+        index = _pyarray.array("q", range(l - 1, b * l, l))
+        _native("gather_rows_bytes")(addr_ro(logits, name="logits"), addr(rows, name="rows"),
+                                     index.buffer_info()[0], b * l, b, v * 4)
+    return argmax_rows(rows).astype("<i4")
+
+
+def _prompt_then_new(prompt, b, l, n_new, new_addr, new_step_major):
+    """`(b, l + n_new)` int32: each prompt row followed by its new ids, with
+    no Python loop over rows or tokens. The ids are assembled step-major
+    (`[l + n_new, b]`) by the base binding's `transpose_f32` (a pure 4-byte
+    move, every bit pattern unchanged, so int32 ids pass through it) and
+    transposed back to C order. `new_addr` holds the new ids as int32,
+    step-major `[n_new, b]` when `new_step_major`, else C-order
+    `[b, n_new]`."""
+    total = l + n_new
+    move = _native("transpose_f32")
+    steps = empty((total, b), "<i4")
+    at = addr(steps, name="ids")
+    move(addr_ro(prompt, name="ids"), at, b, l)
+    if new_step_major:
+        memcopy(at + l * b * 4, new_addr, n_new * b * 4)
+    else:
+        move(new_addr, at + l * b * 4, b, n_new)
+    out = empty((b, total), "<i4")
+    move(at, addr(out, name="ids_out"), total, b)
+    return out
 
 
 class CausalLM:
@@ -589,9 +614,8 @@ class CausalLM:
             raise ValueError(f"mojolearn {what}: max_new_tokens must be >= 0, got {max_new_tokens!r}")
         ids = self._ids(ids, what)
         b, l = int(ids.shape[0]), int(ids.shape[1])
-        rows = ids.tolist()
         if n_new == 0:
-            return Array.from_list(rows, "<i4")
+            return ids.copy()
         total = l + n_new
         if self.max_positions is not None and total > self.max_positions:
             raise ValueError(f"mojolearn {what}: {l} prompt + {n_new} new tokens exceed max_positions={self.max_positions}")
@@ -601,15 +625,15 @@ class CausalLM:
         state = self.allocate_state(b, total)
         logits = self._run(ids, state, False, what)
         nxt = _argmax_last(logits, b, l, self.vocab_size)
-        for k in range(n_new):
-            for row, v in zip(rows, nxt):
-                row.append(v)
+        new = empty((n_new, b), "<i4")
+        at = addr(new, name="new ids")
+        for k in range(n_new):  # decode steps: one native forward each, no per-row work
+            memcopy(at + k * b * 4, addr_ro(nxt, name="next ids"), b * 4)
             if k == n_new - 1:
                 break
-            step_ids = Array.from_list([[v] for v in nxt], "<i4")
-            lg = self._run(step_ids, state, True, what)
+            lg = self._run(nxt.reshape((b, 1)), state, True, what)
             nxt = _argmax_last(lg, b, 1, self.vocab_size)
-        return Array.from_list(rows, "<i4")
+        return _prompt_then_new(ids, b, l, n_new, at, True)
 
     def _generate_resident(self, ids, n_new, total, last_logits=None):
         """`generate`'s greedy loop in ONE native call (lane/py-lm,
@@ -674,10 +698,7 @@ class CausalLM:
             ext.causal_lm_session_close(lm)
             for ss in sessions:
                 ss.discard()
-        rows = ids.tolist()
-        for row, new in zip(rows, out.tolist()):
-            row.extend(new)
-        return Array.from_list(rows, "<i4")
+        return _prompt_then_new(ids, b, l, n_new, addr_ro(out, name="ids_out"), False)
 
     def __repr__(self):
         return (f"CausalLM(model_type={self.plan.model_type!r}, layers={self.n_layers}, d_model={self.d_model}, "
