@@ -1379,11 +1379,10 @@ class _RandomProjection(_Base):
         `x_decomp_grp_cls2`): the scan, the matrix and its download in one
         binding call with one wait (x_decomp/resident.mojo
         `grp_fit_fused_py`); the same words and the same fit-time refusal as
-        the DEVSCAN route. False (nothing done) where it does not apply:
-        not GaussianRandomProjection, 'auto' n_components, or
+        the DEVSCAN route, Gaussian and sparse. False (nothing done) where
+        it does not apply: 'auto' n_components or
         compute_inverse_components."""
-        if type(self) is not GaussianRandomProjection or self.n_components == "auto" \
-                or self.compute_inverse_components or not k._res():
+        if self.n_components == "auto" or self.compute_inverse_components or not k._res():
             return False
         a = as_f32_c(X, ndim=2, name="X")[0]
         if a.ndim != 2 or a.shape[0] == 0 or a.shape[1] == 0:
@@ -1392,13 +1391,22 @@ class _RandomProjection(_Base):
         kc = int(self.n_components)
         if kc <= 0:
             raise ValueError(f"n_components must be greater than 0, got {kc}")
+        if isinstance(self, SparseRandomProjection):
+            dens = 1.0 / math.sqrt(d) if self.density == "auto" else float(self.density)
+            if not 0 < dens <= 1:
+                raise ValueError(f"Expected density in range ]0, 1], got: {dens}")
+            mode, sc, thr = (2 if dens == 1 else 1), math.sqrt(1.0 / dens) / math.sqrt(kc), dens - 2.0 ** -25
+        else:
+            dens, mode, sc, thr = None, 0, 1.0 / math.sqrt(kc), 0.0
         C = k._dout(kc, d)
         res = array.array("f", [0.0]) * (kc * d)
         bad = int(k.b.x_decomp_grp_fit_fused(addr_ro(a, name="X"), a.size, C._d.id, res.buffer_info()[0],
-                                             [kc * d, int(_seed_of(self.random_state)) & 0xFFFFFFFF, 1, 1],
-                                             1.0 / math.sqrt(kc)))
+                                             [kc * d, int(_seed_of(self.random_state)) & 0xFFFFFFFF, mode],
+                                             [sc, thr]))
         if bad >= 0:
             raise ValueError("X: input must be finite; NaN/inf are unsupported")
+        if dens is not None:
+            self.density_ = dens
         self.n_components_ = kc
         self.n_features_in_ = d
         self.components_m_ = C

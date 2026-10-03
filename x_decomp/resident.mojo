@@ -26,7 +26,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
 
-from x_decomp.cells import F32Ptr, OP_SCALE, ew_cell, rand_cell
+from x_decomp.cells import F32Ptr, OP_SCALE, OP_SELECT, ew_cell, rand_cell
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import HostBuffer
 from core.device_scan import NONFINITE_NONE, SCAN_TPB, _scan_blocks, nonfinite_partial_kernel
@@ -592,12 +592,25 @@ def dev_move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: Pyth
 
 
 # ---- GRP_FAST_FUSED (lane apple-fast-gap-kapprox2)
-def grp_rand_scale_kernel(dst: F32Ptr, count: Int32, seed: UInt32, stream: UInt32, kind: Int32, s: Float32):
-    """`rand_kernel` then `ew_kernel(OP_SCALE)` with the unit operands in
-    one pass: dst[i] = ew_cell(OP_SCALE, rand_cell(i), 1, 1, s)."""
+def grp_rand_scale_kernel(dst: F32Ptr, count: Int32, seed: UInt32, mode: Int32, s: Float32, thr: Float32):
+    """The projection matrix in one pass. mode 0 (Gaussian): `rand_kernel`
+    (stream 1, kind 1) then `ew_kernel(OP_SCALE)` with unit operands. mode 1
+    (sparse, density < 1): the sign (stream 3, kind 2) scaled by s, kept
+    where the uniform (stream 2, kind 0) is not above thr, else 0: main's
+    `ew select(u, 0, scale(sign))`. mode 2: the scaled sign alone (density
+    1). The same `rand_cell` / `ew_cell` words as main's three launches."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(count):
-        dst.unsafe_store(i, ew_cell(OP_SCALE, rand_cell(i, seed, stream, Int(kind)), Float32(1), Float32(1), s))
+        var v: Float32
+        if mode == 0:
+            v = ew_cell(OP_SCALE, rand_cell(i, seed, UInt32(1), 1), Float32(1), Float32(1), s)
+        else:
+            var sg = ew_cell(OP_SCALE, rand_cell(i, seed, UInt32(3), 2), Float32(1), Float32(1), s)
+            if mode == 1:
+                v = ew_cell(OP_SELECT, rand_cell(i, seed, UInt32(2), 0), Float32(0), sg, thr)
+            else:
+                v = sg
+        dst.unsafe_store(i, v)
 
 
 struct _GrpStage(Defaultable, Movable):
@@ -616,17 +629,18 @@ comptime GRP_STAGE = _Global[StorageType=_GrpStage, name="MojoXDecompGrpFusedSta
 def grp_fit_fused_py(
     xaddr: PythonObject, n: PythonObject, dst: PythonObject, hout: PythonObject, p: PythonObject, s: PythonObject
 ) raises -> PythonObject:
-    """p = [count, seed, stream, kind]: the first flat index of a NaN or
-    infinity among the n floats at xaddr (or -1), the count-entry matrix
-    drawn and scaled by s into the device matrix dst, and its words copied
+    """p = [count, seed, mode], s = [scale, threshold]: the first flat
+    index of a NaN or infinity among the n floats at xaddr (or -1), the
+    count-entry matrix (`grp_rand_scale_kernel` mode) into the device
+    matrix dst, and its words copied
     to the host floats at out; one synchronize. Registered only under
     GRP_FAST_FUSED."""
     var cnt = Int(py=n)
     var count = _n(p, 0)
     var seed = UInt32(Int(py=p[1]) & 0xFFFFFFFF)
-    var stream = UInt32(Int(py=p[2]) & 0xFFFFFFFF)
-    var kind = Int(py=p[3])
-    var sc = Float32(Float64(py=s))
+    var mode = Int(py=p[2])
+    var sc = Float32(Float64(py=s[0]))
+    var thr = Float32(Float64(py=s[1]))
     var src = F32Ptr(unsafe_from_address=Int(py=xaddr))
     var host_out = F32Ptr(unsafe_from_address=Int(py=hout))
     var pd = _ptr(_id(dst), max(count, 1))
@@ -649,7 +663,7 @@ def grp_fit_fused_py(
                              src_buf=st[].part.value().create_sub_buffer[DType.int32](0, blocks))
         if count > 0:
             ctx.enqueue_function[grp_rand_scale_kernel](
-                pd, Int32(count), seed, stream, Int32(kind), sc, grid_dim=_blocks(count), block_dim=TPB
+                pd, Int32(count), seed, Int32(mode), sc, thr, grid_dim=_blocks(count), block_dim=TPB
             )
             ctx.enqueue_copy(dst_ptr=host_out, src_buf=_pool_buf_view(_id(dst), count))
         ctx.synchronize()
