@@ -97,18 +97,23 @@ comptime RIDGE_ALGO_EIG = 1
 comptime RIDGE_SMALL_THRESH = Float32(1.0e-10)
 
 
-#: Lane apple-fast-ridgespeed (2026-10-03), FAST on Apple only, opt-in
-#: `-D MOJOLEARN_RIDGE_NO_U`: `U^T b` is formed as `(V^T (A^T b)) / S`
+#: Lane apple-fast-ridgespeed (2026-10-03), FAST on Apple only: `U^T b` is formed as `(V^T (A^T b)) / S`
 #: (the same skip-zero rule on `|S| < 1e-10` as `U = A V / S`) instead of
 #: materializing the rows x cols `U = A V / S` and folding it against `b`.
 #: The same quantity in exact arithmetic; it drops one rows x cols x cols
 #: product, one rows x cols divide pass and a rows x cols buffer. Different
 #: rounding, so a different FAST Apple program; IDENTICAL and the other
-#: vendors keep `ridgeSolve`'s route.
+#: vendors keep `ridgeSolve`'s route. Default since the M3 A/B
+#: (lane/apple-fast-ridgespeed e3ef68416, n=1, r2 identical .909 / .3287:
+#: on top of RIDGE_RESIDENT, istella 729 -> 542 ms, taxi 21.7 -> 22.7 ms).
+#: Depends on RIDGE_RESIDENT: off with -D MOJOLEARN_RIDGE_NO_U_OFF or
+#: -D MOJOLEARN_RIDGE_RESIDENT_OFF; the old -D MOJOLEARN_RIDGE_NO_U define
+#: is now harmless.
 comptime RIDGE_NO_U = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_RIDGE_NO_U"]()
+    and not is_defined["MOJOLEARN_RIDGE_NO_U_OFF"]()
+    and not is_defined["MOJOLEARN_RIDGE_RESIDENT_OFF"]()
 )
 
 

@@ -803,8 +803,8 @@ class Ridge(NumericModeMixin):
         resident = getattr(b, "ridge_fit_resident", None)
         use_resident = q is not None and resident is not None and bool(q())
         if use_resident:
-            # lane apple-fast-ridgespeed: FAST Apple builds with -D
-            # MOJOLEARN_RIDGE_RESIDENT only: X and y uploaded once, the same
+            # lane apple-fast-ridgespeed: FAST Apple builds (default unless
+            # -D MOJOLEARN_RIDGE_RESIDENT_OFF): X and y uploaded once, the same
             # column sums, center and ridgeEig on the resident buffers (the
             # same words as the route below).
             self.coef_ = empty((cols,), "<f4")

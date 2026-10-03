@@ -36,14 +36,18 @@ comptime OLS_FAST_NORMAL_EQ = (
     and not is_defined["MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF"]()
 )
 
-#: Lane apple-fast-ridgespeed (2026-10-03), opt-in -D MOJOLEARN_RIDGE_RESIDENT:
-#: Ridge.fit with X and y uploaded once (`ridge_fit_resident`) instead of
-#: the four host trips of the Python centering route. FAST on Apple only;
-#: same kernels and words. Read by Python through `ridge_resident_default`.
+#: Lane apple-fast-ridgespeed (2026-10-03): Ridge.fit with X and y uploaded
+#: once (`ridge_fit_resident`) instead of the four host trips of the Python
+#: centering route. FAST on Apple only; same kernels and words. Read by
+#: Python through `ridge_resident_default`. Default since the M3 A/B
+#: (lane/apple-fast-ridgespeed e3ef68416, n=1, r2 identical .909 / .3287:
+#: taxi 57.1 -> 24.5 ms, istella 1,405 -> 724 ms). Off with
+#: -D MOJOLEARN_RIDGE_RESIDENT_OFF (which also turns RIDGE_NO_U off); the
+#: old -D MOJOLEARN_RIDGE_RESIDENT define is now harmless.
 comptime RIDGE_FAST_RESIDENT = (
     GLOBAL_NUMERIC_MODE == _OLS_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_RIDGE_RESIDENT"]()
+    and not is_defined["MOJOLEARN_RIDGE_RESIDENT_OFF"]()
 )
 
 from max.gpu.host import DeviceContext
@@ -700,7 +704,7 @@ def ridge_fit_resident_binding(
     n_features, alpha, center (0/1). With center, mu (float32 [n_features])
     and ymean (float64 [1]) are written. Returns 0."""
     comptime if not RIDGE_FAST_RESIDENT:
-        raise Error("ridge_fit_resident: only the FAST Apple build with -D MOJOLEARN_RIDGE_RESIDENT has this route")
+        raise Error("ridge_fit_resident: only the FAST Apple build without -D MOJOLEARN_RIDGE_RESIDENT_OFF has this route")
     if len(params) != 4:
         raise Error("ridge_fit_resident: params must contain n_rows, n_features, alpha, center")
     var xp = _f32_ptr(Int(py=x_addr))
