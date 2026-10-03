@@ -49,7 +49,7 @@ WHAT IS RESTATED, AND WHERE THE ORIGINAL IS.
   `host_svd_eig`           `svd_eig_traced`, `glm/impl/linalg/detail/svd.mojo:
                            89`: the Gram, the Jacobi, the descending
                            selection sort of indices under a strict `>`
-                           (`_descending_order`), the gathered basis and
+                           (`_descending_order_kernel`), the gathered basis and
                            its transpose, `seq_root_kernel` with
                            `set_neg_zero` (`a < 0 -> 0`, else
                            `ftz(identical_sqrt(ftz(a * 1.0)))`), `U <- A V`
@@ -84,6 +84,7 @@ from std.memory import bitcast
 
 from checks.numerics import ftz, identical_mul_add, identical_mul_add_simd, identical_sqrt
 from core.classical_host_predict import host_gemm_nt
+from decomposition.spectrum_order_device import spectrum_rank_desc
 from core.host_predict_threads import HostF32Ptr, host_list_ptr
 from decomposition.host.pca_oracle import (
     JACOBI_SWEEPS,
@@ -296,18 +297,12 @@ def host_svd_eig(
             + ". eigDC aborts here too (raft eig.cuh:149)."
         )
 
-    # `_descending_order`: a selection sort of indices, strict `>`.
-    var order = List[Int]()
+    # `_descending_order_kernel`: each index at its rank in the descending
+    # spectrum order, ties to the lower index (lane/apple-fast-purity2).
+    var order = List[Int](length=n_cols, fill=0)
+    var skp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(s_raw.unsafe_ptr()))
     for i in range(n_cols):
-        order.append(i)
-    for i in range(n_cols):
-        for j in range(i + 1, n_cols):
-            var vj = s_raw[order[j]]
-            var vi = s_raw[order[i]]
-            if vj > vi:
-                var t = order[i]
-                order[i] = order[j]
-                order[j] = t
+        order[spectrum_rank_desc(skp, n_cols, i)] = i
 
     # `gather_columns_kernel` and `gather_vector_kernel`: data movement.
     var cells = n_cols * n_cols
