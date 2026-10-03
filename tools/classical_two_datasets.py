@@ -2695,7 +2695,14 @@ def infer_summary(lane, ds, infer, rounds):
 
 def race(args):
     lane, ds = args.lane, args.dataset
-    arms = [a for a in (args.arms.split(",") if args.arms else ARMS[lane]) if a]
+    # Default: our GPU arm only (Andrew, Oct 3 2026). Opponents race only when
+    # --arms names them or --with-opponents asks for the lane's whole roster.
+    if args.arms:
+        arms = [a for a in args.arms.split(",") if a]
+    elif getattr(args, "with_opponents", False):
+        arms = list(ARMS[lane])
+    else:
+        arms = ["ours"]
     _probe().refuse_our_cpu_arms(arms, "classical_two_datasets")
     for a in arms:
         if (lane, a) not in BUILDERS:
@@ -2954,7 +2961,11 @@ def main():
     r.add_argument("--work", default="/root/ctd-work",
                    help="where arm outputs (labels, components) are saved; kept OUT of the fetched tree")
     r.add_argument("--root", default=REPO)
-    r.add_argument("--arms", default="")
+    r.add_argument("--arms", default="",
+                   help="comma list of arms (explicit; may name opponents). Default: our GPU "
+                        "arm only ('ours'); opponents are scored once and stored")
+    r.add_argument("--with-opponents", action="store_true",
+                   help="with no --arms: race every arm of the lane (ours and its opponents)")
     r.add_argument("--rounds", type=int, default=5)
     r.add_argument("--ours-python", default="pixi run python3")
     r.add_argument("--theirs-python", default=sys.executable)

@@ -49,6 +49,7 @@ from x_decomp.cells import F32Ptr
 from x_decomp.jacobi2 import dev_barrier
 from x_decomp.tsqr_core import (
     TS_LAUNCH_CELLS,
+    TS_LAUNCH_MIN_BLOCKS,
     TS_NB,
     TS_P,
     TS_ROWS,
@@ -439,8 +440,12 @@ def _wait_apple(ctx: DeviceContext) raises:
 
 
 def _per_launch(cells: Int) -> Int:
+    """Blocks (or pairs) per sliced launch: TS_LAUNCH_CELLS of work, never
+    fewer than TS_LAUNCH_MIN_BLOCKS. Bit-neutral: the blocks of one panel
+    launch and the pairs of one tree level are independent, and the launch
+    order (panel by panel, level by level) is unchanged."""
     var u = TS_LAUNCH_CELLS // (cells if cells > 0 else 1)
-    return u if u >= 1 else 1
+    return u if u >= TS_LAUNCH_MIN_BLOCKS else TS_LAUNCH_MIN_BLOCKS
 
 
 def _grid(count: Int) -> Int:
