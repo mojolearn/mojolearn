@@ -466,6 +466,11 @@ def _trees_arange(n):
 _TE_NATIVE_SPLITS = 1
 _TE_ADA_SESSION = 2
 _TE_ADA_SESSION_SHARE = 4
+#   MOJOLEARN_KSHAP_FAST_BATCH (lane apple-fast-gap-kapprox2, an experiment,
+#     off unless defined): Kernel/Permutation SHAP reuse one host buffer for
+#     the synthetic rows across chunks and KernelExplainer solves many rows
+#     per launch sweep (`x_trees_kshap_means` + `x_trees_kshap_solve_ey`).
+_KSHAP_FAST_BATCH = 8
 
 
 def _trees_fast_tier(est):
@@ -3170,6 +3175,9 @@ class KernelExplainer(_AgnosticExplainer):
         x0, f0, p0 = addr_ro(Xa, name="X"), addr_ro(fx, name="fx"), addr(phi, name="phi")
         fnull = self._fnull
         R = self._chunk(m * nb * d, n)
+        if m > 0 and _trees_switch(self, _KSHAP_FAST_BATCH):
+            self._batched(b, Xa, fx, taddr, phi, n, d, k, nb, m, nfixed, nfull, npaired, L, seed, wbits, R)
+            return self._shape(phi, n, d)
         for r0 in range(0, n, R):
             rows = min(R, n - r0)
             params = [rows, nb, d, nfixed, m, nfull, L, npaired, r0, seed, wbits]
@@ -3184,6 +3192,35 @@ class KernelExplainer(_AgnosticExplainer):
                                   addr_ro(fnull, name="fnull"), taddr, p0 + 8 * r0 * d * k,
                                   params + [k, 1 if self.link == "logit" else 0])
         return self._shape(phi, n, d)
+
+
+    def _batched(self, b, Xa, fx, taddr, phi, n, d, k, nb, m, nfixed, nfull, npaired, L, seed, wbits, R):
+        """MOJOLEARN_KSHAP_FAST_BATCH: one host buffer for every chunk's
+        synthetic rows, each chunk's linked background means into one
+        float64 (n, m, k) block, then the solve over as many rows per call
+        as the budget holds (the same words as the per-chunk solve)."""
+        link = 1 if self.link == "logit" else 0
+        ey = zeros((n * m * k,), "<f8")
+        e0 = addr(ey, name="ey")
+        x0, bg0 = addr_ro(Xa, name="X"), addr_ro(self._bg, name="data")
+        syn = empty((R * m * nb * d,), "<f4")
+        for r0 in range(0, n, R):
+            rows = min(R, n - r0)
+            if rows < R:
+                syn = empty((rows * m * nb * d,), "<f4")
+            b.x_trees_kshap_synth(x0 + 4 * r0 * d, bg0, taddr, addr(syn, name="synthetic"),
+                                  [rows, nb, d, nfixed, m, nfull, L, npaired, r0, seed, wbits])
+            out = self._model_rows(syn, rows * m * nb, d)
+            b.x_trees_kshap_means(addr_ro(out, name="y"), e0 + 8 * r0 * m * k, [rows, nb, m, k, link])
+            del out
+        del syn
+        f0, p0 = addr_ro(fx, name="fx"), addr(phi, name="phi")
+        nl = addr_ro(self._fnull, name="fnull")
+        S = self._chunk(m * d, n)
+        for s0 in range(0, n, S):
+            rows = min(S, n - s0)
+            b.x_trees_kshap_solve_ey(e0 + 8 * s0 * m * k, f0 + 4 * s0 * k, nl, taddr, p0 + 8 * s0 * d * k,
+                                     [rows, nb, d, nfixed, m, nfull, L, npaired, s0, seed, wbits, k, link])
 
 
 class PermutationExplainer(_AgnosticExplainer):
@@ -3211,13 +3248,18 @@ class PermutationExplainer(_AgnosticExplainer):
         mm = npm * (2 * d + 1)
         x0, p0 = addr_ro(Xa, name="X"), addr(phi, name="phi")
         R = self._chunk(mm * nb * d, n)
+        reuse = _trees_switch(self, _KSHAP_FAST_BATCH)   # one synthetic buffer for every chunk
+        syn = None
         for r0 in range(0, n, R):
             rows = min(R, n - r0)
             params = [rows, nb, d, npm, r0, seed]
-            syn = empty((rows * mm * nb * d,), "<f4")
+            if not reuse or syn is None or syn.size != rows * mm * nb * d:
+                syn = None
+                syn = empty((rows * mm * nb * d,), "<f4")
             b.x_trees_pshap_synth(x0 + 4 * r0 * d, addr_ro(self._bg, name="data"), addr(syn, name="synthetic"),
                                   params)
             out = self._model_rows(syn, rows * mm * nb, d)
-            del syn
+            if not reuse:
+                syn = None
             b.x_trees_pshap_values(addr_ro(out, name="y"), p0 + 8 * r0 * d * k, params + [k])
         return self._shape(phi, n, d)
