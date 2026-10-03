@@ -33,13 +33,8 @@ from std.sys import exit
 from checks.fixture_rng import u01_triple
 from core.identity_trace import IdentityTrace
 from training.maximize import maximize_negate
-from training.checks.optimizer_oracle import (
-    OPT_ADAM,
-    OPT_ADAMW,
-    OPT_SGD,
-    OptimizerConfig,
-    optimizer_step_oracle,
-)
+from training.checks.optimizer_contract import OPT_ADAM, OPT_ADAMW, OPT_SGD, OptimizerConfig
+from training.checks.optimizer_oracle import optimizer_step_oracle
 
 
 def oracle_negate(x: Float32) -> Float32:

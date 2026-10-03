@@ -300,40 +300,126 @@ def _glm_slot_cell(sl: Int, d: Int, m: Int) -> Int:
     return m + n_hd + (sl - r0)
 
 
+#: coefficients per partial of the Newton step's slope fold
+comptime GLM_SLOPE_BLK = 32
+
+
+@always_inline
+def glm_gmax_term(gj: Float32) -> Float32:
+    """|g_j| for the max (3e38 for a NaN, +0 for a zero): an order-free max
+    (cpu-gpu-cleanup c-linear: was fmax in j order, where a NaN counted only
+    when it came last)."""
+    var a = fabs(gj)
+    if a != a:
+        return Float32(3.0e38)
+    if a == Float32(0):
+        return Float32(0)
+    return a
+
+
+@always_inline
+def glm_g_item(j: Int, g: FP, step: FP, res: FP, d: Int, alpha: Float32, inv_n: Float32) -> Float32:
+    """Coefficient j's scaled gradient (stored), step_j = -g_j; returns
+    the gmax term."""
+    var gj = fm(ld(g, j), inv_n)
+    if j < d:
+        gj = fmad(alpha, ld(res, j), gj)
+    st(g, j, gj)
+    st(step, j, -gj)
+    return glm_gmax_term(gj)
+
+
+@always_inline
+def glm_h_item(t: Int, h: FP, m: Int, d: Int, alpha: Float32, inv_n: Float32):
+    """Cell t = j * m + k, k <= j: the scaled (ridged) Hessian cell, mirrored."""
+    var j = t // m
+    var k = t - j * m
+    if k > j:
+        return
+    var v = fm(ld(h, j * m + k), inv_n)
+    if j == k and j < d:
+        v = fa(v, alpha)
+    st(h, j * m + k, v)
+    st(h, k * m + j, v)
+
+
+@always_inline
+def glm_back_col(l: FP, m: Int, j: Int, i: Int, c: FP, x: FP):
+    """Back substitution L^T x = c, column j (descending), row i <= j:
+    x_j = c_j / L_jj (row j's item stores it); every row i < j forms the same
+    x_j and takes c_i = c_i - L_ji x_j. The column form, so the device runs
+    one launch per column (cpu-gpu-cleanup c-linear: the row form folded k
+    ascending)."""
+    var xj = fd(ld(c, j), ld(l, j * m + j))
+    if i == j:
+        st(x, j, xj)
+    else:
+        st(c, i, fs(ld(c, i), fm(ld(l, j * m + i), xj)))
+
+
+@always_inline
+def glm_fwd_col(l: FP, m: Int, j: Int, i: Int, b: FP, y: FP):
+    """Forward substitution L y = b, column j, row i >= j: the row form's
+    statements in the same order per row (`chol_solve`'s first half)."""
+    var yj = fd(ld(b, j), ld(l, j * m + j))
+    if i == j:
+        st(y, j, yj)
+    else:
+        st(b, i, fs(ld(b, i), fm(ld(l, i * m + j), yj)))
+
+
+@always_inline
+def glm_slope_part(g: FP, step: FP, m: Int, b: Int) -> Float32:
+    var lo = b * GLM_SLOPE_BLK
+    var hi = min(lo + GLM_SLOPE_BLK, m)
+    var s = Float32(0)
+    for j in range(lo, hi):
+        s = fmad(ld(g, j), ld(step, j), s)
+    return s
+
+
+@always_inline
+def glm_slope_blocks(m: Int) -> Int:
+    return (m + GLM_SLOPE_BLK - 1) // GLM_SLOPE_BLK
+
+
 def _glm_step(g: FP, h: FP, step: FP, res: FP, m: Int, d: Int, alpha: Float32, den: Float32, tol: Float32,
               it: Int, f: Float32) -> Tuple[Int, Float32]:
-    """The small dense Newton step (m x m) on one thread: (flag, slope), flag
-    0 continue, 1 converged, 2 stop (no descent). glm_fit's lead block,
-    shared with the device's host-driven form (lane/neural-pass89)."""
+    """The small dense Newton step (m x m): (flag, slope), flag 0 continue,
+    1 converged, 2 stop (no descent). The device runs the same statements
+    as parallel launches (x_linear/device.mojo `_glm_step_device`): the
+    gradient and Hessian cells, the order-free gmax, the Cholesky, the
+    column-form substitutions and the blocked slope fold."""
     var flag = 0
     var slope = Float32(0)
     var inv_n = fd(Float32(1), den)
     var gmax = Float32(0)
     for j in range(m):
-        var gj = fm(ld(g, j), inv_n)
-        if j < d:
-            gj = fmad(alpha, ld(res, j), gj)
-        st(g, j, gj)
-        gmax = fmax(gmax, fabs(gj))
+        gmax = fmax(gmax, glm_g_item(j, g, step, res, d, alpha, inv_n))
     comptime if is_defined["MOJOLEARN_GLM_TRACE"]() and not is_gpu():
         print("GLM_TRACE it", it, "f", f, "gmax", gmax, "tol", tol)
     if gmax <= tol:
         flag = 1
     else:
-        for j in range(m):
-            for k in range(j + 1):
-                var v = fm(ld(h, j * m + k), inv_n)
-                if j == k and j < d:
-                    v = fa(v, alpha)
-                st(h, j * m + k, v)
-                st(h, k * m + j, v)
-        for j in range(m):
-            st(step, j, -ld(g, j))
+        for t in range(m * m):
+            glm_h_item(t, h, m, d, alpha, inv_n)
         var ok = cholesky(h, 0, m)
         if ok:
-            chol_solve(h, 0, m, step, 0)
-        for j in range(m):
-            slope = fmad(ld(g, j), ld(step, j), slope)
+            var yv = List[Float32](length=m, fill=Float32(0))
+            var yp = FP(unsafe_from_address=Int(yv.unsafe_ptr()))
+            for j in range(m):
+                for i in range(j, m):
+                    glm_fwd_col(h, m, j, i, step, yp)
+            var j = m - 1
+            while j >= 0:
+                for i in range(j + 1):
+                    glm_back_col(h, m, j, i, yp, step)
+                j -= 1
+            _ = yv^
+        var acc = Float32(0)
+        for b in range(glm_slope_blocks(m)):
+            acc = fa(acc, glm_slope_part(g, step, m, b))
+        slope = acc
         comptime if is_defined["MOJOLEARN_GLM_TRACE"]() and not is_gpu():
             print("GLM_TRACE it", it, "slope", slope, "chol_ok", ok, "step0", ld(step, 0), "stepd", ld(step, m - 1))
         if not (slope < 0):

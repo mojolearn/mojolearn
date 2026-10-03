@@ -79,7 +79,7 @@ the reference divides zero by zero.
 """
 
 from std.math import fma, sqrt
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 
 from core.host_parallel import host_parallelize
 
@@ -97,10 +97,16 @@ from core.host_predict_threads import (
     host_predict_chunk,
     host_predict_task_count,
 )
+from gaussian_process.gpc_proba64 import gpc_ovr_combine_row
+from gaussian_process.gpc_items import (
+    gpc_weight_item, gpc_rhs_item, gpc_scale_item, gpc_a_item, gpc_residual_item, gpc_lml_part_item, gpc_lml_fin,
+    gpc_fold_blocks,
+)
 
-#: DEVIATION 2830: float32(1e-10), the reference's tolerance at this width.
-comptime GPC_LML_TOL_BITS: UInt32 = 0x2EDBE6FF
-comptime GPC_NEG_INF32_BITS: UInt32 = 0xFF800000
+
+@always_inline
+def _lp(l: List[Float32]) -> MutPointer[Float32, MutAnyOrigin]:
+    return MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(l.unsafe_ptr()))
 
 #: DEVIATION 2832: `_gpc.py:30-33` LAMBDAS and COEFS, by their float64 bits.
 comptime GPC_LAMBDA0_BITS: UInt64 = 0x3FDA3D70A3D70A3D
@@ -124,90 +130,10 @@ comptime GPC_ERFC_CF_LEVELS = 40
 
 
 @fieldwise_init
-struct GPCBinaryFit(Movable):
-    """One binary Laplace fit: sklearn's `L_`, `pi_`, `W_sr_` and
-    `log_marginal_likelihood_value_`, plus the iteration count (DEVIATION
-    2830) and the Cholesky panel width that ran."""
-
-    var l: List[Float32]
-    var pi: List[Float32]
-    var wsr: List[Float32]
-    var lml: Float32
-    var n_iter: Int
-    var nb: Int
-
-
-@fieldwise_init
-struct GPCLatent(Movable):
-    """`latent_mean_and_variance` at the query rows. `variance` is empty
-    when only the mean was asked for (`predict`)."""
-
-    var mean: List[Float32]
-    var variance: List[Float32]
-
-
-@fieldwise_init
 struct GPCWeights(Movable):
     var pi: List[Float32]
     var w: List[Float32]
     var wsr: List[Float32]
-
-
-def gpc_lml_tol() -> Float32:
-    return bitcast[DType.float32](GPC_LML_TOL_BITS)
-
-
-def gpc_neg_inf32() -> Float32:
-    return bitcast[DType.float32](GPC_NEG_INF32_BITS)
-
-
-# ===========================================================================
-# VALIDATION (host, before any launch)
-# ===========================================================================
-
-
-def gpc_validate_labels(y: List[Float32], n_train: Int) raises:
-    """The binary targets: `n_train` values, each exactly 0 or 1, both
-    present. The Python surface encodes labels (and one-vs-rest columns)
-    before this; a single class is refused by name there with the
-    reference's sentence (`_gpc.py:198-203`), and again here."""
-    if len(y) != n_train:
-        raise Error(
-            "gpc_fit_host: y holds "
-            + String(len(y))
-            + " values for "
-            + String(n_train)
-            + " training rows"
-        )
-    var zeros = 0
-    var ones = 0
-    for i in range(n_train):
-        var v = y[i]
-        if v == Float32(0.0):
-            zeros += 1
-        elif v == Float32(1.0):
-            ones += 1
-        else:
-            raise Error(
-                "gpc_fit_host: the binary target at index "
-                + String(i)
-                + " is not 0 or 1; the surface encodes the classes before"
-                " the binding is reached, so this boundary disagrees with it"
-            )
-    if zeros == 0 or ones == 0:
-        raise Error(
-            "gpc_fit_host: a binary Laplace fit requires 2 classes; got 1"
-            " class. scikit-learn refuses the same data (_gpc.py:207-212)"
-        )
-
-
-def gpc_validate_max_iter(max_iter_predict: Int) raises:
-    if max_iter_predict < 1:
-        raise Error(
-            "gpc_fit_host: max_iter_predict must be at least 1, got "
-            + String(max_iter_predict)
-            + " (scikit-learn's Interval(Integral, 1, None))"
-        )
 
 
 # ===========================================================================
@@ -218,16 +144,11 @@ def gpc_validate_max_iter(max_iter_predict: Int) raises:
 def gpc_weights(f: List[Float32]) -> GPCWeights:
     """`pi = expit(f)`, `W = pi (1 - pi)`, `W_sr = sqrt(W)`."""
     var n = len(f)
-    var pi = List[Float32](capacity=n)
-    var w = List[Float32](capacity=n)
-    var wsr = List[Float32](capacity=n)
+    var pi = List[Float32](length=n, fill=Float32(0))
+    var w = List[Float32](length=n, fill=Float32(0))
+    var wsr = List[Float32](length=n, fill=Float32(0))
     for i in range(n):
-        var p = ftz(identical_sigmoid(ftz(f[i])))
-        var one_minus = ftz(Float32(1.0) - p)
-        var wi = ftz(identical_mul(p, one_minus))
-        pi.append(p)
-        w.append(wi)
-        wsr.append(ftz(identical_sqrt(wi)))
+        gpc_weight_item(i, _lp(f), _lp(pi), _lp(w), _lp(wsr))
     return GPCWeights(pi^, w^, wsr^)
 
 
@@ -250,20 +171,18 @@ def gpc_newton_rhs(
 ) -> List[Float32]:
     """`b = W f + (y - pi)`."""
     var n = len(f)
-    var out = List[Float32](capacity=n)
+    var out = List[Float32](length=n, fill=Float32(0))
     for i in range(n):
-        var wf = ftz(identical_mul(ftz(w[i]), ftz(f[i])))
-        var r = ftz(ftz(y[i]) - ftz(pi[i]))
-        out.append(ftz(wf + r))
+        gpc_rhs_item(i, _lp(w), _lp(f), _lp(y), _lp(pi), _lp(out))
     return out^
 
 
 def gpc_scale(wsr: List[Float32], v: List[Float32]) -> List[Float32]:
     """`W_sr_i * v_i`."""
     var n = len(v)
-    var out = List[Float32](capacity=n)
+    var out = List[Float32](length=n, fill=Float32(0))
     for i in range(n):
-        out.append(ftz(identical_mul(ftz(wsr[i]), ftz(v[i]))))
+        gpc_scale_item(i, _lp(wsr), _lp(v), _lp(out))
     return out^
 
 
@@ -272,10 +191,9 @@ def gpc_a_vector(
 ) -> List[Float32]:
     """`a = b - W_sr x`, where `x = cho_solve(L, W_sr K b)`."""
     var n = len(b)
-    var out = List[Float32](capacity=n)
+    var out = List[Float32](length=n, fill=Float32(0))
     for i in range(n):
-        var s = ftz(identical_mul(ftz(wsr[i]), ftz(x[i])))
-        out.append(ftz(ftz(b[i]) - s))
+        gpc_a_item(i, _lp(b), _lp(wsr), _lp(x), _lp(out))
     return out^
 
 
@@ -283,26 +201,15 @@ def gpc_lml(
     a: List[Float32], f: List[Float32], y: List[Float32], logdet_b: Float32
 ) -> Float32:
     """`-0.5 a.f - sum log1p(exp(-(2y - 1) f)) - sum log diag L`
-    (`_gpc.py:483-487`) in DEVIATION 2831's order."""
+    (`_gpc.py:483-487`) in DEVIATION 2831's order; the two folds in
+    GPC_FOLD-row blocks (gaussian_process/gpc_items.mojo), the device's."""
     var n = len(a)
-    var dot = Float32(0.0)
-    for i in range(n):
-        dot = ftz(identical_mul_add(ftz(a[i]), ftz(f[i]), dot))
-    var t1 = ftz(identical_mul(Float32(-0.5), dot))
-    var t2 = Float32(0.0)
-    for i in range(n):
-        # -(2y - 1) f is -f for y = 1 and +f for y = 0, an exact negation.
-        var z = ftz(f[i])
-        if y[i] == Float32(1.0):
-            z = -z
-        t2 = ftz(t2 + ftz(identical_softplus(z)))
-    var t3 = ftz(identical_mul(Float32(0.5), ftz(logdet_b)))
-    return ftz(ftz(t1 - t2) - t3)
-
-
-def gpc_stop(lml: Float32, previous: Float32) -> Bool:
-    """DEVIATION 2830's test, `lml - previous < 1e-10` at float32."""
-    return ftz(lml - previous) < gpc_lml_tol()
+    var nb = gpc_fold_blocks(n)
+    var pdot = List[Float32](length=max(nb, 1), fill=Float32(0))
+    var pt2 = List[Float32](length=max(nb, 1), fill=Float32(0))
+    for b in range(nb):
+        gpc_lml_part_item(b, _lp(a), _lp(f), _lp(y), n, _lp(pdot), _lp(pt2))
+    return gpc_lml_fin(_lp(pdot), _lp(pt2), nb, logdet_b)
 
 
 # ===========================================================================
@@ -313,9 +220,9 @@ def gpc_stop(lml: Float32, previous: Float32) -> Bool:
 def gpc_residual(y: List[Float32], pi: List[Float32]) -> List[Float32]:
     """`y_train_ - pi_`, the right-hand side of the latent mean."""
     var n = len(y)
-    var out = List[Float32](capacity=n)
+    var out = List[Float32](length=n, fill=Float32(0))
     for i in range(n):
-        out.append(ftz(ftz(y[i]) - ftz(pi[i])))
+        gpc_residual_item(i, _lp(y), _lp(pi), _lp(out))
     return out^
 
 
@@ -419,8 +326,9 @@ def _coef64(k: Int) -> Float64:
 
 def gpc_pi_star(mean: Float32, variance: Float32) -> Float64:
     """The probability of class 1 at one query row, `_gpc.py:320-327`."""
-    var mu = Float64(mean)
-    var va = Float64(variance)
+    # flushed before the exact widening, gpc_proba64.mojo's rule
+    var mu = Float64(ftz(mean))
+    var va = Float64(ftz(variance))
     var pi64 = bitcast[DType.float64](GPC_PI64_BITS)
     var acc = Float64(0.0)
     for k in range(5):
@@ -476,3 +384,42 @@ def gpc_proba(mean: List[Float32], variance: List[Float32]) raises -> List[Float
     else:
         host_parallelize(_rows, tasks)
     return out^
+
+
+def gpc_ovr_combine_rows(col_addrs: List[Int], out_addr: Int, codes_addr: Int, n: Int) raises:
+    """The host column of `classifier.mojo::gpc_ovr_combine_host`: DEVIATION
+    2833's one-vs-rest combine, `gpc_proba64.mojo::gpc_ovr_combine_row` per
+    row (the device kernel's statements), the same address contract (the
+    columns staged class-major first)."""
+    var k = len(col_addrs)
+    if n <= 0 or k <= 0:
+        raise Error(
+            "gpc_ovr_combine: n and k must be positive, got n="
+            + String(n)
+            + " k="
+            + String(k)
+        )
+    var staged = List[UInt64](unsafe_uninit_length=n * k)
+    for c in range(k):
+        memcpy(
+            dest=staged.unsafe_ptr() + c * n,
+            src=MutPointer[UInt64, MutAnyOrigin](unsafe_from_address=col_addrs[c]),
+            count=n,
+        )
+    var cols = MutPointer[UInt64, MutAnyOrigin](unsafe_from_address=Int(staged.unsafe_ptr()))
+    var out = MutPointer[UInt64, MutAnyOrigin](unsafe_from_address=out_addr)
+    var codes = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=codes_addr)
+    var tasks = host_predict_task_count(n)
+    var chunk = host_predict_chunk(n, tasks)
+
+    def _rows(task: Int) {imm cols, imm out, imm codes, imm n, imm k, imm chunk}:
+        var lo = task * chunk
+        var hi = min(lo + chunk, n)
+        for t in range(lo, hi):
+            gpc_ovr_combine_row(cols, out, codes, t, n, k)
+
+    if tasks == 1:
+        _rows(0)
+    else:
+        host_parallelize(_rows, tasks)
+    _ = staged^

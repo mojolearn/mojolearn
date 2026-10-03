@@ -7,11 +7,13 @@ _binary_clf_curve, _group_same_scores, _calculate_area_under_curve; sklearn
 metrics/_ranking.py precision_recall_curve for no-positive and terminal policy.
 Deviations: existing stable 32-pass radix replaces CuPy argsort; exact integer
 scan replaces float group atomics. AUC uses the equivalent tie-aware pair-count
-formula with an ascending Int64 fold instead of floating trapezoids. This fixes
-summation order in all modes; ratios separately convert counts to Float32.
+formula with an exact Int64 tree fold instead of floating trapezoids. This fixes
+the result in all modes (integer sums); ratios separately convert counts to Float32.
 """
 from std.gpu import block_idx, block_dim, thread_idx
-from std.memory import bitcast
+from std.memory import bitcast, stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import ftz, identical_div
 from metrics.checks.device_io import download_f32
@@ -107,15 +109,22 @@ def ranking_groups_kernel[curve: Bool](
 
 
 # AUC contributions are integers, so their grouping does not affect the exact
-# result.  Collapse bounded contiguous runs in parallel before the final fold;
-# this avoids making one GPU lane walk every distinct score for large inputs.
+# result.  Collapse bounded contiguous runs in parallel, then fold the run
+# totals as a multi-block tree (`ranking_auc_level_kernel`, 256 per block per
+# level) whose last level carries the AUC epilogue: no lane walks the runs.
+comptime AUC_TPB = 256
+
+
 def ranking_auc_partial_kernel(
     size: MutPointer[Int32, MutAnyOrigin],
     contributions: MutPointer[Int64, MutAnyOrigin],
     partials: MutPointer[Int64, MutAnyOrigin],
+    chunks: Int32,
 ):
     comptime RUN = 256
     var chunk = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if chunk >= Int(chunks):
+        return
     var begin = chunk*RUN
     var end = min(begin+RUN,Int(size.unsafe_load(0)))
     var total = Int64(0)
@@ -124,21 +133,54 @@ def ranking_auc_partial_kernel(
     partials.unsafe_store(chunk,total)
 
 
+@always_inline
+def _block_sum_i64(value: Int64) -> Int64:
+    """Exact Int64 sum over the AUC_TPB threads of a block (shared-memory
+    halving tree). Every thread calls it; thread 0's return is the sum."""
+    var tid = Int(thread_idx.x)
+    var slab = stack_allocation[AUC_TPB, Scalar[DType.int64], address_space = AddressSpace.SHARED]()
+    slab[unsafe_offset = tid] = value
+    barrier()
+    var step = AUC_TPB // 2
+    while step > 0:
+        if tid < step:
+            slab[unsafe_offset = tid] = slab[unsafe_offset = tid] + slab[unsafe_offset = tid + step]
+        barrier()
+        step //= 2
+    var total = slab[unsafe_offset = 0]
+    barrier()
+    return total
+
+
+def ranking_auc_level_kernel(
+    src: MutPointer[Int64, MutAnyOrigin],
+    m: Int32,
+    dst: MutPointer[Int64, MutAnyOrigin],
+):
+    """One level: block `b` sums `src[b*AUC_TPB, (b+1)*AUC_TPB)` into `dst[b]`."""
+    var i = Int(block_idx.x)*AUC_TPB+Int(thread_idx.x)
+    var v = src.unsafe_load(i) if i < Int(m) else Int64(0)
+    var total = _block_sum_i64(v)
+    if Int(thread_idx.x) == 0:
+        dst.unsafe_store(Int(block_idx.x),total)
+
+
 def ranking_auc_partial_fold_kernel(
     labels: MutPointer[UInt32, MutAnyOrigin],
     prefix: MutPointer[Int32, MutAnyOrigin],
     partials: MutPointer[Int64, MutAnyOrigin],
-    chunks: Int32,
+    m: Int32,
     n_in: Int32,
     output: MutPointer[Float32, MutAnyOrigin],
 ):
-    if Int(thread_idx.x) == 0:
+    """The last level (`m <= AUC_TPB` partials) and the AUC epilogue."""
+    var t = Int(thread_idx.x)
+    var v = partials.unsafe_load(t) if t < Int(m) else Int64(0)
+    var total = _block_sum_i64(v)
+    if t == 0:
         var n = Int(n_in)
         var positives = Int64(prefix.unsafe_load(n-1))+Int64(labels.unsafe_load(n-1))
         var negatives = Int64(n)-positives
-        var total = Int64(0)
-        for chunk in range(Int(chunks)):
-            total += partials.unsafe_load(chunk)
         output.unsafe_store(0,ftz(identical_div(Float32(total),Float32(2*positives*negatives))))
 
 
@@ -165,6 +207,9 @@ def binary_ranking[curve: Bool](
     var contributions = ctx.enqueue_create_buffer[DType.int64](1 if curve else n)
     var auc_chunks = (n+255)//256
     var auc_partials = ctx.enqueue_create_buffer[DType.int64](1 if curve else auc_chunks)
+    var auc_scratch = (auc_chunks+AUC_TPB-1)//AUC_TPB
+    var auc_s0 = ctx.enqueue_create_buffer[DType.int64](1 if curve else auc_scratch)
+    var auc_s1 = ctx.enqueue_create_buffer[DType.int64](1 if curve else auc_scratch)
     ctx.enqueue_function[ranking_keys_kernel](
         y.unsafe_ptr(),
         scores.unsafe_ptr(),
@@ -243,18 +288,33 @@ def binary_ranking[curve: Bool](
             size.unsafe_ptr(),
             contributions.unsafe_ptr(),
             auc_partials.unsafe_ptr(),
+            Int32(auc_chunks),
             grid_dim=(auc_chunks+255)//256,
             block_dim=256,
         )
+        var src = rebind[MutPointer[Int64, MutAnyOrigin]](auc_partials.unsafe_ptr())
+        var p0 = rebind[MutPointer[Int64, MutAnyOrigin]](auc_s0.unsafe_ptr())
+        var p1 = rebind[MutPointer[Int64, MutAnyOrigin]](auc_s1.unsafe_ptr())
+        var m = auc_chunks
+        var flip = False
+        while m > AUC_TPB:
+            var next_m = (m+AUC_TPB-1)//AUC_TPB
+            var dst = p1 if flip else p0
+            ctx.enqueue_function[ranking_auc_level_kernel](
+                src, Int32(m), dst, grid_dim=next_m, block_dim=AUC_TPB,
+            )
+            src = dst
+            m = next_m
+            flip = not flip
         ctx.enqueue_function[ranking_auc_partial_fold_kernel](
             labels.unsafe_ptr(),
             prefix.unsafe_ptr(),
-            auc_partials.unsafe_ptr(),
-            Int32(auc_chunks),
+            src,
+            Int32(m),
             Int32(n),
             output.unsafe_ptr(),
-            grid_dim=1,
-            block_dim=32,
+            grid_dim=(m+AUC_TPB-1)//AUC_TPB,
+            block_dim=AUC_TPB,
         )
     var host = download_f32(ctx,output,output_size)
     var m = 0
@@ -262,6 +322,8 @@ def binary_ranking[curve: Bool](
         m = Int(h[0])
     _ = contributions^
     _ = auc_partials^
+    _ = auc_s0^
+    _ = auc_s1^
     _ = starts^
     _ = size^
     _ = output^

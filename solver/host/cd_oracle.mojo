@@ -83,7 +83,7 @@ from std.sys.compile import is_defined
 
 from gemm.host.identical_gemm import contract_leaf_size
 from checks.numerics import ftz, identical_mul_add
-from solver.checks.profile_dot import (
+from solver.host.profile_dot_host import (
     column_as_list,
     profile_dot_host,
     serial_dot_host,

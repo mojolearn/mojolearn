@@ -37,7 +37,11 @@ from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer
 
 from checks.numerics import ftz, identical_mul
-from decomposition.host.pca_oracle import tsvd_explained_finish
+from decomposition.tsvd_finish import TSVD_FIN_TPB, tsvd_slot_sum, tsvd_ratio
+from x_linear.ff import FF, ff_add, ff_f32
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from core.column_stats import (
     STATS_TPB,
     TRANSPOSE_TILE,
@@ -315,6 +319,41 @@ def _column_variance(
     )
 
 
+@always_inline
+def _mp(buf: DeviceBuffer[DType.float32]) -> MutPointer[Float32, MutAnyOrigin]:
+    return MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(buf.unsafe_ptr()))
+
+
+def tsvd_finish_kernel(
+    var_t: MutPointer[Float32, MutAnyOrigin], nc: Int32, var_x: MutPointer[Float32, MutAnyOrigin], nf: Int32,
+    explained: MutPointer[Float32, MutAnyOrigin], ratio: MutPointer[Float32, MutAnyOrigin],
+):
+    """`tsvd_finish_host` (decomposition/tsvd_finish.mojo) in one block of
+    TSVD_FIN_TPB threads: thread t's slot, the same halving tree, then the
+    divisions strided over the threads."""
+    var t = Int(thread_idx.x)
+    var sh = stack_allocation[TSVD_FIN_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var sl = stack_allocation[TSVD_FIN_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var s = tsvd_slot_sum(var_x, Int(nf), t)
+    sh[t] = s.hi
+    sl[t] = s.lo
+    barrier()
+    var half = TSVD_FIN_TPB // 2
+    while half > 0:
+        if t < half:
+            var u = ff_add(FF(sh[t], sl[t]), FF(sh[t + half], sl[t + half]))
+            sh[t] = u.hi
+            sl[t] = u.lo
+        barrier()
+        half //= 2
+    var full = ff_f32(FF(sh[0], sl[0]))
+    var i = t
+    while i < Int(nc):
+        explained.unsafe_store(i, var_t.unsafe_load(i))
+        ratio.unsafe_store(i, tsvd_ratio(var_t, i, full))
+        i += TSVD_FIN_TPB
+
+
 def tsvd_explained_host(
     ctx: DeviceContext,
     x_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -344,18 +383,20 @@ def tsvd_explained_host(
     gemm_nt(ctx, xt, x, components, n_rows, n_components, n_features)
     _column_variance(ctx, xt, mu_t, var_t, n_rows, n_components)
     _column_variance(ctx, x, mu_x, var_x, n_rows, n_features)
-    var ht = ctx.enqueue_create_host_buffer[DType.float32](n_components)
-    var hx = ctx.enqueue_create_host_buffer[DType.float32](n_features)
-    ctx.enqueue_copy(dst_ptr=ht.unsafe_ptr(), src_buf=var_t)
-    ctx.enqueue_copy(dst_ptr=hx.unsafe_ptr(), src_buf=var_x)
+    # the tail on the device (decomposition/tsvd_finish.mojo, the host
+    # column's statements; cpu-gpu-cleanup c-decomp)
+    var d_exp = ctx.enqueue_create_buffer[DType.float32](max(n_components, 1))
+    var d_rat = ctx.enqueue_create_buffer[DType.float32](max(n_components, 1))
+    ctx.enqueue_function[tsvd_finish_kernel](
+        _mp(var_t), Int32(n_components), _mp(var_x), Int32(n_features), _mp(d_exp), _mp(d_rat),
+        grid_dim=1, block_dim=TSVD_FIN_TPB,
+    )
+    if n_components > 0:
+        ctx.enqueue_copy(dst_ptr=explained_ptr, src_buf=d_exp)
+        ctx.enqueue_copy(dst_ptr=ratio_ptr, src_buf=d_rat)
     ctx.synchronize()
-    var lt = List[Float32]()
-    var lx = List[Float32]()
-    for i in range(n_components):
-        lt.append(ht.unsafe_ptr().unsafe_load(i))
-    for i in range(n_features):
-        lx.append(hx.unsafe_ptr().unsafe_load(i))
-    tsvd_explained_finish(lt, lx, explained_ptr, ratio_ptr)
+    _ = d_exp^
+    _ = d_rat^
 
 
 def tsvd_transform_host(

@@ -33,6 +33,7 @@ from x_decomp.graph_cells import (
     knn_select_row,
     knn_dense_row,
     radius_cell,
+    radius_geo_cell,
     lle_iw_row,
     rowbest_row,
     members_comp,
@@ -82,6 +83,12 @@ def xg_radius_kernel(d: F32Ptr, wout: F32Ptr, n: Int32, r: Float32):
     var t = _t()
     if t < Int(n) * Int(n):
         radius_cell(t, d, Int(n), r, wout)
+
+
+def xg_radius_geo_kernel(dq: F32Ptr, d: F32Ptr, g: F32Ptr, nq: Int32, n: Int32, r: Float32):
+    var t = _t()
+    if t < Int(nq) * Int(n):
+        radius_geo_cell(t, dq, d, Int(n), r, g)
 
 
 def xg_lle_iw_kernel(idx: F32Ptr, wb: F32Ptr, wout: F32Ptr, n: Int32, nn: Int32):
@@ -304,6 +311,23 @@ def dev_graph_radius_py(d: PythonObject, wout: PythonObject, p: PythonObject, r:
             grid_dim=_blocks(n * n), block_dim=TPB,
         )
     return PythonObject(n)
+
+
+def dev_graph_radius_geo_py(
+    dq: PythonObject, d: PythonObject, g: PythonObject, p: PythonObject, r: PythonObject
+) raises -> PythonObject:
+    """Isomap's radius transform (`radius_geo_cell`), one thread a cell of
+    the nq x n result."""
+    var nq = _n(p, 0)
+    var n = _n(p, 1)
+    if nq * n > 2147483647 or n * n > 2147483647:
+        raise Error("x_decomp: graph exceeds the Int32 index bound")
+    if nq > 0 and n > 0:
+        xd_ctx().enqueue_function[xg_radius_geo_kernel](
+            _ptr(_id(dq), nq * n), _ptr(_id(d), n * n), _ptr(_id(g), nq * n), Int32(nq), Int32(n),
+            Float32(Float64(py=r)), grid_dim=_blocks(nq * n), block_dim=TPB,
+        )
+    return PythonObject(nq)
 
 
 def dev_graph_lle_iw_py(idx: PythonObject, wb: PythonObject, wout: PythonObject, p: PythonObject) raises -> PythonObject:

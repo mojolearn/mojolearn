@@ -16,6 +16,7 @@ from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_mlp')
 
 from . import _backend
+from ._labels import unique_inverse
 
 _ACT = {"identity": 0, "logistic": 1, "tanh": 2, "relu": 3}
 _SOLVER = {"adam": 0, "sgd": 1}
@@ -183,7 +184,10 @@ class MLPClassifier(_BaseMLP):
         y = np.asarray(y)
         if y.ndim != 1:
             raise NotImplementedError("multilabel targets are not implemented")
-        self.classes_, inv = np.unique(y, return_inverse=True)
+        # sorted classes and inverse codes on the device (_labels.unique_inverse)
+        cls, inv = unique_inverse(y)
+        self.classes_ = np.asarray(cls).astype(y.dtype, copy=False) if y.dtype.kind in "biuf" else np.asarray(cls)
+        inv = np.asarray(inv)
         k = len(self.classes_)
         if k < 2:
             raise ValueError("MLPClassifier needs at least two classes")

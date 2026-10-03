@@ -188,7 +188,8 @@ from gemm.checks.gemm_identical import (
 )
 
 
-from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN, fold_balanced_tree, op_name
+from gemm.contract import OP_NN, OP_NT, OP_TN, op_name
+from gemm.checks.gemm_oracle import fold_balanced_tree
 from gemm.checks.gemm_step_arms import (
     GEMM_STEP_LM_CALLS,
     _value,

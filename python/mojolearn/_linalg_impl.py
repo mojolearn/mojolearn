@@ -921,49 +921,23 @@ def _out_or_new(out, m, n, who):
 #
 # `HostQR`-style second names do not exist and should not: a caller who
 # wants the host route on a GPU box is asking for the device/host
-# comparison, which is a verification job and reaches the host binding
-# directly through `_host_load()`.
-
-_LINALG_HOST_BASENAME = "_mojolearn_linalg_host"
-_host_binding_cache = None
-
-
-def _host_load():
-    """`_mojolearn_linalg_host`: THE VERIFIER, and the whole route only on a
-    box with no GPU.
-
-    This docstring used to say the host binding was the route these three
-    took everywhere, on purpose. It is not, and the ranking is the other way
-    round: **the device kernels are the product and the host oracles exist
-    to confirm what the device computed.** `decomposition/host/
-    linalg_public.mojo` and the oracles under it re-derive the device's
-    answer serially so the two can be diffed; that is what they are for.
-
-    A GPU install ships this binding beside the device one (it is in
-    `python/mojolearn/host_surface.py`'s families), which is why the
-    comparison can be made in ONE process on ONE box -- and why `qr`,
-    `eigh` and `svdvals` are checkable in a way an estimator that ships only
-    one route is not.
-    """
-    global _host_binding_cache
-    if _host_binding_cache is None:
-        _host_binding_cache = _backend.load_host_module(_LINALG_HOST_BASENAME)
-    return _host_binding_cache
+# comparison, which is a verification job and loads `_mojolearn_linalg_host`
+# itself (`_backend.load_host_module`, the verification side); this module
+# never loads a host binding (cpu-gpu-cleanup c-linear, 2026-10-02).
 
 
 def _door():
     """The module that serves `qr_r`, `eigh` and `svdvals` for THIS install:
-    the device binding where there is a GPU, the host binding where there is
-    not. Chosen by ROUTE, never probed -- `_cholesky_impl.Cholesky._door`'s
-    shape and its reason.
+    `_backend.binding`, which is the device binding where there is a GPU and,
+    on a CPU-only install, the host binding `_select_cpu_only` installed
+    under the canonical name (`_mojolearn_linalg_host`, host_surface's
+    linalg family). Chosen by ROUTE, never probed.
 
     The device binding is IDENTICAL-only (`_backend._IDENTICAL_ONLY`), so
     `numeric_mode='fast'` on a GPU box is refused here by name rather than
     quietly answered by the host. Before 2026-09-19 it was quietly answered
     by the host, which is the behaviour this door exists to end.
     """
-    if _backend._CPU_ONLY is not None:
-        return _host_load()
     return _load()
 
 

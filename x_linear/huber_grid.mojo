@@ -9,7 +9,6 @@ the weight total, the outlier count), a thread per task folding its
 blocks in order (`fold_parts`; the count as an integer sum); the folded
 sums home and `huber_finish`, the team lead's last statements. The same
 words. Board (team form): taxi 4.2 s MI325X vs sklearn 2.7.
-`MOJOLEARN_X_LINEAR_HUBER_GRID=0` restores the team fit.
 """
 from std.gpu import block_idx, thread_idx
 from std.ffi import _Global

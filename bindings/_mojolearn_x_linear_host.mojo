@@ -10,7 +10,8 @@ from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_linear.ops import FP, IP, X_LINEAR_HOST_SABOTAGE
-from x_linear.dispatch import fit_dispatch, decision_one, team_rows, team_own
+from x_linear.dispatch import fit_dispatch, decision_one, team_rows, team_own, ALGO_ISOTONIC
+from x_linear.isotonic_host import isotonic_fit_host
 from x_linear.team import team_work, solo
 
 
@@ -59,11 +60,18 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     for i in range(n_out):
         out.unsafe_store(i, Float32(0))
     with GILReleased(Python()):
-        fit_dispatch(
-            solo(FP(unsafe_from_address=Int(tw.unsafe_ptr())), n, bufs, own), a, x, y, n, d,
-            IP(unsafe_from_address=Int(ipl.unsafe_ptr())), FP(unsafe_from_address=Int(fpl.unsafe_ptr())),
-            out, FP(unsafe_from_address=Int(fw.unsafe_ptr())), IP(unsafe_from_address=Int(iw.unsafe_ptr())),
-        )
+        if a == ALGO_ISOTONIC:
+            isotonic_fit_host(
+                x, y, n, d,
+                IP(unsafe_from_address=Int(ipl.unsafe_ptr())), FP(unsafe_from_address=Int(fpl.unsafe_ptr())),
+                out, FP(unsafe_from_address=Int(fw.unsafe_ptr())), IP(unsafe_from_address=Int(iw.unsafe_ptr())),
+            )
+        else:
+            fit_dispatch(
+                solo(FP(unsafe_from_address=Int(tw.unsafe_ptr())), n, bufs, own), a, x, y, n, d,
+                IP(unsafe_from_address=Int(ipl.unsafe_ptr())), FP(unsafe_from_address=Int(fpl.unsafe_ptr())),
+                out, FP(unsafe_from_address=Int(fw.unsafe_ptr())), IP(unsafe_from_address=Int(iw.unsafe_ptr())),
+            )
     _ = ipl^
     _ = fpl^
     _ = fw^

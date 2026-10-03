@@ -50,9 +50,8 @@ from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
 
-from holtwinters.estimator import holtwinters_fit_ptr, holtwinters_forecast_ptr
+from holtwinters.estimator import holtwinters_fit_ptr, holtwinters_forecast_ptr, holtwinters_predict_ptr
 from tsa.estimator import kpss_test_host, select_d_host
-from bindings.holtwinters_host_predict import holtwinters_predict_binding
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -187,6 +186,50 @@ def holtwinters_forecast_binding(
     return PythonObject(written)
 
 
+def holtwinters_predict_binding(
+    comps_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+    seasonal: PythonObject,
+) raises -> PythonObject:
+    """The in-sample one-step predictions at times `[start, end)`, on the
+    device (`holtwinters/estimator.mojo::holtwinters_predict_ptr`). Returns
+    `(end - start) * batch_size`.
+
+    `params` is, in this exact order (mirrored in
+    `python/mojolearn/_tsa_impl.py` and the host binding):
+
+        0  n              the FIT's observations per series
+        1  batch_size
+        2  frequency      the FIT's seasonal_periods
+        3  start          0 <= start
+        4  end            start < end <= n
+
+    `comps_addr` reads the packed components as `holtwinters_forecast`
+    does; `out_addr` is written with `(end - start) * batch_size` float32,
+    TIME-MAJOR, the canonical quiet NaN where `t < 2 * frequency`.
+    """
+    if len(params) != 5:
+        raise Error(
+            "holtwinters_predict: params must contain 5 values (n,"
+            " batch_size, frequency, start, end), got " + String(len(params))
+        )
+    var cp = _f32_ptr(Int(py=comps_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var n = Int(py=params[0])
+    var batch_size = Int(py=params[1])
+    var frequency = Int(py=params[2])
+    var start = Int(py=params[3])
+    var end = Int(py=params[4])
+    var sname = String(py=seasonal)
+    var written = 0
+    with GILReleased(Python()):
+        written = holtwinters_predict_ptr(
+            cp, op, n, batch_size, frequency, sname, start, end
+        )
+    return PythonObject(written)
+
+
 def kpss_test_binding(
     y_addr: PythonObject,
     flags_addr: PythonObject,
@@ -294,9 +337,8 @@ def PyInit__mojolearn_tsa() abi("C") -> PythonObject:
         m.def_function[tsa_vendor_binding]("tsa_vendor")
         m.def_function[holtwinters_fit_binding]("holtwinters_fit")
         m.def_function[holtwinters_forecast_binding]("holtwinters_forecast")
-        # The in-sample prediction from the fitted components is host
-        # arithmetic on every install, one source with the host bindings
-        # (bindings/holtwinters_host_predict.mojo, lane/inference-holtwinters).
+        # The in-sample prediction runs on the device (one thread per cell);
+        # the host bindings keep bindings/holtwinters_host_predict.mojo.
         m.def_function[holtwinters_predict_binding]("holtwinters_predict")
         m.def_function[kpss_test_binding]("kpss_test")
         m.def_function[select_d_binding]("select_d")
