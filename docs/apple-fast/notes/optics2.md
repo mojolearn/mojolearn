@@ -43,12 +43,15 @@ Totals: ~20,009 launches, 4 synchronizes (1 upload, 3 readbacks), 6 memsets, 9 l
 
 ## Experiments (each its own define; docs/apple-fast/ab/optics2.md explains them for the manager)
 
-1. `MOJOLEARN_OPTICS_STEP_BATCH`: the ordering loop as ONE threadgroup of 1024 threads running 512 steps per
-   launch (`optics_batch_kernel`): thread t owns rows t, t+1024, ... (their reach, pred and done words are
-   written and read by that thread only), the step's point is a block-wide min of `order_key(reach, i)` (warp
-   shuffles then one 32-entry threadgroup pass: 3 barriers a step), the relaxation reads the point's distance
-   row coalesced. n/512 launches instead of 2n (20 vs 20,000 at 10k rows); each launch stays far under the 4 s
-   command-buffer cut (512 steps of a few us).
+1. `MOJOLEARN_OPTICS_STEP_BATCH`: the ordering loop as OBG = 8 co-resident threadgroups of 1024 threads running
+   512 steps per launch (`optics_batch_kernel`): thread g owns rows g, g + 8192, ... (their reach, pred and done
+   words are written and read by that thread only); each block reduces its min `order_key(reach, i)` (warp
+   shuffles, one 32-entry threadgroup pass), thread 0 writes it to the step's parity slot and RELEASE-stores the
+   block's epoch flag, the first warp ACQUIRE-spins on the 8 flags and takes the min (svm/impl/smoblocksolve.mojo's
+   protocol). The spin is bounded: a timeout sets a fail word, and `DeviceOps.optics_fast` reruns main's two
+   launches a step from a fresh init (time lost, never a word). n/512 launches instead of 2n (20 vs 20,000 at 10k
+   rows); each launch stays far under the 4 s command-buffer cut. (A one-threadgroup form was dropped: a one-block
+   launch over a runtime size is refused by tools/hooks/no_host_routes.py.)
 2. `MOJOLEARN_OPTICS_FRONTIER_DEVICE`: one launch per step (`optics_fused_kernel`): a block relaxes its 1024
    rows against the step's point AND emits the block's min key over its still unprocessed rows for the next
    step; the partials are double-buffered (step s reads part[s % 2], writes part[(s+1) % 2]) so no block can

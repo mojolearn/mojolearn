@@ -185,6 +185,9 @@ def optics_graph[O: ClusterOps](
     n x n distance matrix, negatives refused)."""
     var inf = Float32.MAX * Float32(2)
     var xs = ops.put(x)
+    var sq = False  # OPTICS_CORE_SQ: `dm` keeps squared distances (device, euclidean only)
+    comptime if OPTICS_CORE_SQ:
+        sq = metric < 0 and ops.fast_device()
     var dm: Int
     if metric == 5:
         if not ops.check_nonneg(xs, n * n):
@@ -196,11 +199,15 @@ def optics_graph[O: ClusterOps](
     else:
         dm = dist_slot(ops, n * n)
         ops.sqdist(xs, n, xs, n, d, dm)
-        comptime if not OPTICS_CORE_SQ:
+        # OPTICS_CORE_SQ on the device binding: the squared cells stay; `kth`
+        # below reads them (sqrt is monotone: the k-th smallest root is the
+        # root of the k-th smallest square), the n core values are rooted, the
+        # relaxation roots at use. The host column keeps main's sqrt pass.
+        comptime if OPTICS_CORE_SQ:
+            if not sq:
+                ops.sqrt(dm, n * n)
+        else:
             ops.sqrt(dm, n * n)
-        # OPTICS_CORE_SQ: the squared cells stay; `kth` below reads them (sqrt
-        # is monotone: the k-th smallest root is the root of the k-th smallest
-        # square), the n core values are rooted, the relaxation roots at use
     var cs: Int
     comptime if OPTICS_LIVEBUF:
         cs = ops.alloc(n)  # `kth` writes every row
@@ -208,12 +215,12 @@ def optics_graph[O: ClusterOps](
         cs = ops.zeros(n)
     ops.kth(dm, n, n, min_samples, cs)
     comptime if OPTICS_CORE_SQ:
-        if metric < 0:
+        if sq:
             ops.sqrt(cs, n)
     comptime if OPTICS_FAST_ANY:
         var oi2 = List[Int32]()
         var pi2 = List[Int32]()
-        if ops.optics_fast(dm, cs, n, max_eps, OPTICS_CORE_SQ and metric < 0, oi2, reach, core, pi2):
+        if ops.optics_fast(dm, cs, n, max_eps, sq, oi2, reach, core, pi2):
             ordering = List[Int](capacity=n)
             pred = List[Int](capacity=n)
             for q in range(n):
