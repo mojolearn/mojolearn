@@ -1,4 +1,4 @@
-pos=514 lines=     989
+pos=521 lines=    1229
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -631,3 +631,11 @@ pos=514 lines=     989
 733:FBUILD lane/apple-fast-gap-misc@5e2eec7a3 core=0 ibase=0 estimators=0 gbdt=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 x_sequence=0 
 734:CMD apple-fast-gap-misc@5e2eec7a3 gapmisc-fusedq-dwtaxi rc=0 AFT-MEDIAN arm=B n=2 median_ms=10782.8 all=[10872, 10694] hashes=['39866705d7cdce8f', '97cfe8f41f615e35'] acc={'logloss': [0.527784, 0.527878], 'auc': [0.632118, 0.632107]}
 735:CMD apple-fast-gap-misc@5e2eec7a3 gapmisc-skipfs-dwtaxi rc=0 AFT-MEDIAN arm=B n=2 median_ms=11047.9 all=[11035, 11060] hashes=['6ac6f35c64eb093e', 'bd69c59b8e183eec'] acc={'logloss': [0.527863, 0.527852], 'auc': [0.632401, 0.632465]}
+736:CMD apple-fast-gap-misc@5e2eec7a3 gapmisc-devscale-dwtaxi rc=0 AFT-MEDIAN arm=B n=2 median_ms=10779.4 all=[10778, 10781] hashes=['400a2d66414464e6', 'f75a5c86fd643c1b'] acc={'logloss': [0.528081, 0.528009], 'auc': [0.632156, 0.632314]}
+737:FBUILD lane/apple-fast-gap-arima@afa1c156a core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+738:CMD apple-fast-gap-arima@afa1c156a gaparima-noread-synthetic rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=28586.8 all=[28587] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_ARIMA_FAST_LS_NOREAD=1'
+739:CMD apple-fast-gap-arima@afa1c156a gaparima-async-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=24563.3 all=[24563] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_ARIMA_FAST_ASYNC=1'
+740:CMD apple-fast-gap-arima@afa1c156a gaparima-async-synthetic rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=14918.1 all=[14918] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_ARIMA_FAST_ASYNC=1'
+741:CMD apple-fast-gap-arima@afa1c156a gaparima-pfixasync-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=64830.3 all=[64830] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_ARIMA_FAST_P_FIX=1 -D MOJOLEARN_ARIMA_FAST_ASYNC=1'
+742:CMD apple-fast-gap-arima@afa1c156a gaparima-pfixasync-synthetic rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=34792.1 all=[34792] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_ARIMA_FAST_P_FIX=1 -D MOJOLEARN_ARIMA_FAST_ASYNC=1'
+743:CMD apple-fast-gap-arima@afa1c156a gaparima-pfix-taxi-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=104848.5 all=[104848] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_ARIMA_FAST_P_FIX=1'
