@@ -63,3 +63,11 @@ values, in one launch. Expected: no change on the board (`bootstrap_type='No'`);
 with a bootstrap. Risk: none.
 
 **SYM_FEAT_ALL.** All six together; they compose (PACK implies QUANT). The deciding line is istella.
+
+## Compile status (2026-10-03)
+
+No build of this branch completed on the laptop: the one queued build (FAST + `-D MOJOLEARN_SYM_FEAT_ALL`) never
+got a compile slot and was stopped on Andrew's instruction. Every build is **compile owed: peer**:
+FAST per define (QUANT_DEVICE, INDEX_PACK_DEVICE, EVAL_SKIP_EMPTY, PREDICT_PACKED, EVAL_FUSED, BOOT_DEVICE),
+FAST + SYM_FEAT_ALL, FAST with every define off, and IDENTICAL once. Python: `python/mojolearn/ensemble.py`
+passes `py_compile`. Build the ALL arm first: it instantiates every new kernel and every guarded branch.
