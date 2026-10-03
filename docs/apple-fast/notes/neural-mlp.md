@@ -145,3 +145,21 @@ process-cached (`ws`), the resident path keeps x, w and the outputs on the devic
 
 Compiled (no runs): FAST with each define on (one at a time) for the binding it touches, FAST
 with every define off, IDENTICAL once per binding; results in the lane's final reply.
+
+Results (head 5c48fd50e code, MOJOLEARN_COMPILE_JOBS=1, MOJOLEARN_SKIP_BUILD_GATE=1 so no kernel-launch
+smoke ran; logs in ~/mojolearn-evidence/afn-mlp/build-*.log, summary results.tsv):
+
+| build | mode | rc |
+|---|---|---|
+| training -D MOJOLEARN_AFN_MLP_FUSED_STEP | fast | 0 |
+| training -D MOJOLEARN_AFN_MLP_RESIDENT | fast | 0 |
+| training -D MOJOLEARN_AFN_MLP_MULTISTEP | fast | 0 |
+| training -D MOJOLEARN_AFN_MLP_ALL | fast | 0 |
+| training (no define) | fast | 0 |
+| training | identical | 0 |
+| embedding -D MOJOLEARN_AFN_EMB_ATOMIC_BWD | fast | 0 |
+| embedding (no define) | fast | 0 |
+| embedding | identical | 0 |
+| x_cnn -D MOJOLEARN_AFN_CNN_DIRECT | fast | 0 |
+| x_cnn (no define) | fast | 0 |
+| x_cnn | identical | 0 |
