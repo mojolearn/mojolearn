@@ -59,7 +59,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, as_f64_c, empty, zeros
 from ._labels import argmax_rows, classes_from_member, classes_member, decode_labels, encode_labels, sorted_classes
 from ._mode import NumericModeMixin
-from ._scale_gamma import scale_gamma
+from ._scale_gamma import scale_gamma, scale_gamma_x
 from .linear_model import (
     _accuracy_host,
     _check_saved_by,
@@ -768,7 +768,7 @@ class SVC(NumericModeMixin):
         if self.gamma == "auto":
             return 1.0 / float(x.shape[1])
         if self.gamma == "scale":
-            return scale_gamma(x.ravel().tolist(), x.shape[1])
+            return scale_gamma_x(self._bind(_EXT_NAME), x, x.shape[1])
         return float(self.gamma)
 
     def _solve(self, x, labels, gamma, c_rows):
