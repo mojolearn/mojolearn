@@ -83,8 +83,8 @@ def _put(block, ids, rows):
 def _options(name, value, lo, hi):
     """The reference's `_parse_sequence`: an int or an iterable, clipped to
     [lo, hi]; empty is refused."""
-    vals = [int(value)] if isinstance(value, (int, np.integer)) else [int(v) for v in value]
-    vals = [v for v in vals if lo <= v <= hi]
+    vals = [int(value)] if isinstance(value, (int, np.integer)) else [int(v) for v in value]  # glue: user order options, a few ints
+    vals = [v for v in vals if lo <= v <= hi]  # glue: user order options, a few ints
     if not vals:
         raise ValueError(f"AutoARIMA: no valid option for {name} in [{lo}, {hi}]")
     return vals
@@ -164,7 +164,7 @@ class AutoARIMA:
         # lane cgr4-py-compute), the groups in ascending d
         dw = np.ascontiguousarray(dser, dtype=np.int32)
         dcount = _counts(dw, 3)
-        for d_ in range(3):
+        for d_ in range(3):  # glue: the three differencing orders d
             if not dcount[d_]:
                 continue
             ids = _rows_where(dw, d_, int(dcount[d_]))
@@ -175,7 +175,7 @@ class AutoARIMA:
             best_ic = np.empty(nb, dtype=np.float64)
             best = np.empty(nb, dtype=np.int64)
             ic_k = np.empty(nb, dtype=np.float64)
-            for p_, q_, P_, Q_, k_ in itertools.product(p_opts, q_opts, P_opts, Q_opts, k_opts):
+            for p_, q_, P_, Q_, k_ in itertools.product(p_opts, q_opts, P_opts, Q_opts, k_opts):  # glue: the user order grid, bounded options
                 if p_ + q_ + P_ + Q_ + k_ == 0:
                     continue
                 s_ = s if (P_ + D_ + Q_) else 0
@@ -190,13 +190,13 @@ class AutoARIMA:
                 orders.append((p_, q_, P_, Q_, s_, k_))
             if not orders:
                 raise ValueError("AutoARIMA: no (p, q, P, Q, k) order to try")
-            table = np.asarray([[p_, d_, q_, P_, D_, Q_, s_, k_] for (p_, q_, P_, Q_, s_, k_) in orders],
+            table = np.asarray([[p_, d_, q_, P_, D_, Q_, s_, k_] for (p_, q_, P_, Q_, s_, k_) in orders],  # glue: one table row per tried order
                                dtype=np.int64)
             _put(self.order_, ids, _take(table, best))
             _put(self.ic_, ids, best_ic)
             bw = np.ascontiguousarray(best, dtype=np.int32)
             bcount = _counts(bw, len(orders))
-            for i, (p_, q_, P_, Q_, s_, k_) in enumerate(orders):
+            for i, (p_, q_, P_, Q_, s_, k_) in enumerate(orders):  # glue: tried orders, not series or observations
                 if not bcount[i]:
                     continue
                 chosen = _take(ids, _rows_where(bw, i, int(bcount[i])))
@@ -222,16 +222,16 @@ class AutoARIMA:
             raise RuntimeError("AutoARIMA: call search() before fit()")
         if h != 1e-8 or truncate or method != "ml":
             raise NotImplementedError("AutoARIMA.fit: method 'ml' with the default h only")
-        for i, (order, sorder, k) in enumerate(self.models):
+        for i, (order, sorder, k) in enumerate(self.models):  # glue: chosen order groups, at most the grid
             self._fitted[i] = ARIMA(order=order, seasonal_order=sorder, trend="c" if k else "n",
                                     maxiter=maxiter).fit(_take(self.endog, self._ids[i]))
         return self
 
     def _gather(self, fn, width):
-        if any(m is None for m in self._fitted):
+        if any(m is None for m in self._fitted):  # glue: chosen order groups, at most the grid
             raise RuntimeError("AutoARIMA: call fit() first")
         out = np.zeros((self.batch_size, width), dtype=np.float32)
-        for m, ids in zip(self._fitted, self._ids):
+        for m, ids in zip(self._fitted, self._ids):  # glue: chosen order groups, at most the grid
             _put(out, ids, np.asarray(fn(m), dtype=np.float32).reshape(len(ids), width))
         return out
 

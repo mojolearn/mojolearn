@@ -22,6 +22,7 @@ from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_ets')
 
 from . import _backend
+from ._buffer import _native
 
 
 class ETS:
@@ -67,7 +68,10 @@ class ETS:
         m = self.season_length
         if s != "N" and n <= m:
             s = "N"                                   # the reference drops the season (ets_f)
-        if (e == "M" or s == "M") and not np.all(self._y > 0):
+        # every value > 0, in Mojo: finite (`all_finite_f32`) and a minimum
+        # above zero (`reduce_stat` 0, the first-wins min)
+        if (e == "M" or s == "M") and not (int(_native("all_finite_f32")(self._y.ctypes.data, self._y.size))
+                                           and _native("reduce_stat")(self._y.ctypes.data, 0, self._y.size, 0) > 0):
             raise ValueError("ETS: Inappropriate model for data with negative or zero values")
         npars = 2 + 2 * (tr != "N") + 2 * (s != "N") + int(self.damped)
         if n <= npars + 4:
@@ -92,7 +96,7 @@ class ETS:
         ss = np.zeros((B, m), dtype=np.float32)
         mask = int(self.alpha is not None) | 2 * int(self.beta is not None) | 4 * int(self.phi is not None) \
             | 8 * int(self.gamma is not None)
-        fp = [0.0 if v is None else float(v) for v in (self.alpha, self.beta, self.phi, self.gamma)]
+        fp = [0.0 if v is None else float(v) for v in (self.alpha, self.beta, self.phi, self.gamma)]  # glue: the four smoothing parameter arguments
         ip = [B, n, int(h), "AM".index(self.model[0]), "NA".index(self.model[1]), int(self.damped), mask,
               "NAM".index(s), m]
         stall = getattr(self, "_fast_stall", None)    # (iterations, relative drop): the FAST stop's
@@ -103,7 +107,7 @@ class ETS:
         key = (tuple(ip), tuple(fp), self.numeric_mode)
         last = getattr(self, "_last", None)
         if last is not None and last[0] == key:
-            f, info, ss = (a.copy() for a in last[1:])
+            f, info, ss = (a.copy() for a in last[1:])  # glue: the three stored result arrays
         else:
             _backend.binding("_mojolearn_x_sequence", self.numeric_mode).ets(
                 [self._y.ctypes.data, f.ctypes.data, info.ctypes.data, ss.ctypes.data], ip, fp)

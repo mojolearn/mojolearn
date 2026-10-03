@@ -141,7 +141,7 @@ class _GammaPow:
         d = e - self.e
         if 0 <= d <= 64:
             lo, hi, X, M = self.lo, self.hi, self.X, self.M
-            for _ in range(d):
+            for _ in range(d):  # glue: one exponent step product, d at most 64, for one scalar lr
                 lo, hi, X = _trim(lo * M, hi * M, X, _P)
         else:
             lo, hi, X = _pow_iv(self.M, e, _P)
@@ -301,7 +301,7 @@ class OneCycleLR(_LrTable, _Sched):
         s1 = s0 + n - 1
         start = Fraction(0)
         last = len(self._phases) - 1
-        for i, (end, a, b) in enumerate(self._phases):
+        for i, (end, a, b) in enumerate(self._phases):  # glue: the at most three OneCycle phases
             if end != start:
                 # the phase's steps (`lr_at`'s membership), strictly inside
                 # (start, end)
@@ -358,7 +358,7 @@ class OneCycleLR(_LrTable, _Sched):
         if step > self.total_steps:
             raise ValueError(f"OneCycleLR: step {t} is beyond total_steps {self.total_steps} + 1 (torch refuses it too)")
         start = Fraction(0)
-        for i, (end, a, b) in enumerate(self._phases):
+        for i, (end, a, b) in enumerate(self._phases):  # glue: the at most three OneCycle phases
             if step <= end or i == len(self._phases) - 1:
                 if end == start:
                     return _f32_round(b)
@@ -412,8 +412,8 @@ class OneCycleLR(_LrTable, _Sched):
         c_lo += one
         c_hi += one
         prods = (dlo * c_lo, dlo * c_hi, dhi * c_lo, dhi * c_hi)
-        lo = blo + (min(prods) >> _F)
-        hi = bhi - ((-max(prods)) >> _F)
+        lo = blo + (min(prods) >> _F)  # glue: the four interval end products
+        hi = bhi - ((-max(prods)) >> _F)  # glue: the four interval end products
         return _iv_f32(lo, hi, -F2)
 
     def _exact_lr_at(self, t):
@@ -423,7 +423,7 @@ class OneCycleLR(_LrTable, _Sched):
         if step > self.total_steps:
             raise ValueError(f"OneCycleLR: step {t} is beyond total_steps {self.total_steps} + 1 (torch refuses it too)")
         start = Fraction(0)
-        for i, (end, a, b) in enumerate(self._phases):
+        for i, (end, a, b) in enumerate(self._phases):  # glue: the at most three OneCycle phases
             if step <= end or i == len(self._phases) - 1:
                 if end == start:
                     return _f32_round(b)

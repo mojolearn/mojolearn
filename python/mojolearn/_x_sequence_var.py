@@ -79,6 +79,6 @@ class VAR:
         code = _backend.binding("_mojolearn_x_sequence", self.numeric_mode).var_fit(
             [self.endog.ctypes.data, params.ctypes.data, sigma.ctypes.data, resid.ctypes.data], [n, K, p, kt])
         if int(code):
-            raise np.linalg.LinAlgError(
+            raise np.linalg.LinAlgError(  # glue: raises the numpy error class
                 f"VAR.fit: the lagged design is rank deficient (Cholesky pivot of column {int(code) - 1})")
         return VARResults(self.endog, params, sigma, resid, p, kt, self.numeric_mode)
