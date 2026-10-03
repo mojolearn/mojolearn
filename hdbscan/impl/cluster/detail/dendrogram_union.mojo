@@ -100,6 +100,7 @@ def _du_union_kernel(la: I32P, lb: I32P, par: I32P, cnt: Int32, s: Int32):
         if Atomic.compare_exchange[
             success_ordering = Ordering.RELAXED,
             failure_ordering = Ordering.RELAXED,
+            weak=True,  # Apple AIR has only weak CAS; a spurious fail retries
         ](par.unsafe_offset(Int(hi)), expected, lo):
             return
         a = ra
