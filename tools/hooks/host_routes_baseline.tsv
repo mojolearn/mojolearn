@@ -3,8 +3,6 @@
 # state debt = on main; inflight = pre-authorized lines of an open PR.
 rule	class	owner	state	path	occ	text
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_array.py	0	return (self[i] for i in range(self.shape[0]))
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_bufcheck.py	0	for s in range(n_rows):
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_bufcheck.py	1	for s in range(n_rows):
 py-sklearn	py-numpy	UNOWNED	debt	python/mojolearn/_mode.py	0	from sklearn.utils import ClassifierTags, RegressorTags, Tags, TargetTags
 py-threads	host-threads	UNOWNED	debt	python/mojolearn/_parallel_pool.py	0	from concurrent.futures import ThreadPoolExecutor
 py-threads	host-threads	UNOWNED	debt	python/mojolearn/_parallel_pool.py	0	self._threads = ThreadPoolExecutor(max_workers=len(self.devices))
