@@ -1,4 +1,4 @@
-pos=521 lines=    1229
+pos=529 lines=    1045
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -639,3 +639,14 @@ pos=521 lines=    1229
 741:CMD apple-fast-gap-arima@afa1c156a gaparima-pfixasync-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=64830.3 all=[64830] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_ARIMA_FAST_P_FIX=1 -D MOJOLEARN_ARIMA_FAST_ASYNC=1'
 742:CMD apple-fast-gap-arima@afa1c156a gaparima-pfixasync-synthetic rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=34792.1 all=[34792] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_ARIMA_FAST_P_FIX=1 -D MOJOLEARN_ARIMA_FAST_ASYNC=1'
 743:CMD apple-fast-gap-arima@afa1c156a gaparima-pfix-taxi-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=104848.5 all=[104848] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_ARIMA_FAST_P_FIX=1'
+750:FBUILD lane/apple-fast-purity@13fd82a23 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+751:CMD apple-fast-purity@13fd82a23 id-label-propagation-taxi rc=0 IDCHECK label-propagation taxi rows=small metal=1df386cec13515e1 host=none DIFFER
+752:FBUILD lane/apple-fast-gap-cls1@4e341dc41 prebuilt=m2 core=0 ibase=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 files=7
+753:CMD apple-fast-gap-cls1@4e341dc41 gapcls1-k64chk-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=357.3 all=[357] quality=['{"recall_at_k":'] defines=''
+754:CMD apple-fast-gap-cls1@4e341dc41 gapcls1-knnseed-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=342.7 all=[343] quality=['{"recall_at_k":'] defines='-D MOJOLEARN_KNN_FAST_CLS1_PRESEED'
+755:CMD apple-fast-gap-cls1@4e341dc41 gapcls1-knnsl2-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=421.4 all=[421] quality=['{"recall_at_k":'] defines='-D MOJOLEARN_KNN_FAST_CLS1_SLICES2'
+756:CMD apple-fast-gap-cls1@4e341dc41 gapcls1-knnall-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=385.3 all=[385] quality=['{"recall_at_k":'] defines='-D MOJOLEARN_KNN_FAST_CLS1_PRESEED -D MOJOLEARN_KNN_FAST_CLS1_SLICES2'
+757:CMD apple-fast-gap-cls1@4e341dc41 gapcls1-nclabels-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=20.9 all=[21] quality=['{"accuracy":'] defines='-D MOJOLEARN_NC_FAST_CLS1_LABELS'
+758:CMD apple-fast-gap-cls1@4e341dc41 gapcls1-ncpred-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=103.0 all=[103] quality=['{"accuracy":'] defines='-D MOJOLEARN_NC_FAST_CLS1_PREDICT'
+759:CMD apple-fast-gap-cls1@4e341dc41 gapcls1-ncall-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=27.1 all=[27] quality=['{"accuracy":'] defines='-D MOJOLEARN_NC_FAST_CLS1_LABELS -D MOJOLEARN_NC_FAST_CLS1_PREDICT'
+760:FBUILD lane/apple-fast-gap-tsa@5057bee75 prebuilt=m2 core=0 ibase=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 files=7
