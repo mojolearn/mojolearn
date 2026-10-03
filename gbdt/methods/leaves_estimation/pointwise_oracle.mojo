@@ -925,7 +925,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             var tri = hbs * (hbs + 1) // 2
             var width = eff + tri
             var ml_blocks = multilogit_blocks(self.n_rows)
-            self.times.begin(self.ctx)
+            # the caller opened "est.approx"
             launch_multilogit_est_fused(
                 self.ctx, self.num_classes, self.n_rows,
                 self.d_target, self.d_weights, self.has_weights,
