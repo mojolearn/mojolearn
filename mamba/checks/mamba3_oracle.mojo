@@ -119,13 +119,8 @@ from checks.numerics import (
     portable_cosf,
     portable_sinf,
 )
-from gemm.checks.gemm_oracle import (
-    OP_NN,
-    OP_NT,
-    OP_TN,
-    gemm_oracle,
-    gemm_oracle_right_zero_padded,
-)
+from gemm.contract import OP_NN, OP_NT, OP_TN
+from gemm.checks.gemm_oracle import gemm_oracle, gemm_oracle_right_zero_padded
 from std.math import min
 
 from std.time import perf_counter_ns

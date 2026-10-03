@@ -373,6 +373,20 @@ def exp_cell(src: FPtr, dst: FPtr, t: Int):
     dst[t] = ftz(identical_exp(src[t]))
 
 
+def argmax_row(src: FPtr, kc: Int, dst: IPtr, t: Int):
+    """`dst[t]` = the first column of row `t` (`kc` wide) holding its
+    largest value: a strict `>` walk from column 0, so a tie goes to the
+    lowest index (the fit's label rule and the Python `predict`'s)."""
+    var bk = 0
+    var bv = src[t * kc]
+    for k in range(1, kc):
+        var v = src[t * kc + k]
+        if v > bv:
+            bv = v
+            bk = k
+    dst[t] = Int32(bk)
+
+
 # DEVIATION 5110 (the M-step moments nk, means, covariances: every fold over
 # the rows ascending, one quotient). Row 119; moments_check. The per-row
 # steps and the finals below are the ONE spelling: the cells here (the host

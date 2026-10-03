@@ -28,17 +28,15 @@ THE SEAMS (IDENTITY_PATHS rows 160-165; the gate is
 xtrees/checks/glue_check.mojo, one sabotage arm each):
   DEVIATION 5600  draws: SplitMix64 as a counter, index = draw mod n.
   DEVIATION 5601  products meeting an add: `identical_mul64`.
-  DEVIATION 5602  folds: sequential in index order.
+  DEVIATION 5602  folds: sequential in index order (weighted_sample's cdf:
+                  sequential per WS_CHUNK, the chunks joined by a fixed
+                  Hillis-Steele tree, the device's order; w2-trees).
   DEVIATION 5603  exp / log / pow: the pinned binary64 polynomials.
   DEVIATION 5604  ties: the lower index; stable sorts.
   DEVIATION 5605  a zero row normalises to uniform 1 / k, never 0 / 0.
 """
 from std.sys.compile import is_defined
-from core.host_parallel import host_parallelize
 from checks.numerics import identical_mul64, identical_exp64, identical_log64, identical_pow64
-from ensemble.host_layout import (
-    HOST_LAYOUT_BLOCK_ROWS, HOST_LAYOUT_SERIAL_CELLS, colmajor_from_rowmajor_f32,
-)
 
 #: The host gate's negative control (`-D MOJOLEARN_HOST_SABOTAGE=1`, host builds
 #: only): `scale_f64` divides by a perturbed divisor, so every vote average moves.
@@ -98,57 +96,75 @@ def sample_indices(
         res[unsafe_offset=k] = perm[k]
 
 
+#: `weighted_sample`'s scan chunk: each chunk's cumulative sum is sequential
+#: in index order; the chunk totals are joined by `ws_tree_scan`'s fixed tree.
+#: `xtrees/ops_device.mojo::weighted_sample_device` uses the same chunk, so
+#: the CPU column and every GPU column build one cdf.
+comptime WS_CHUNK = 256
+
+
+def ws_tree_scan(mut tot: List[Float64]):
+    """Inclusive scan of the chunk totals in place, by the fixed Hillis-Steele
+    tree: pass s (s = 1, 2, 4, ...) sets t[j] = t_prev[j] + t_prev[j - s]
+    for j >= s. The device runs the same passes, one launch each."""
+    var m = len(tot)
+    var s = 1
+    while s < m:
+        var prev = tot.copy()
+        for j in range(s, m):
+            tot[j] = prev[j] + prev[j - s]
+        s *= 2
+
+
 def weighted_sample(
     w: MutPointer[Float64, MutUntrackedOrigin], n: Int,
     res: MutPointer[Int32, MutUntrackedOrigin], n_draw: Int, seed: Int, stream: Int,
 ) raises:
     """`n_draw` indices drawn with replacement with probability w[i] / sum(w)
-    (numpy's `choice(p=...)` question): the cumulative sum in index order,
-    then the first i with cdf[i] > u * total. A zero-weight row is never
-    drawn."""
-    var cdf = List[Float64](length=n, fill=0.0)
-    var total: Float64 = 0.0
+    (numpy's `choice(p=...)` question): the cumulative sum, then the first i
+    with cdf[i] > u * total. A zero-weight row is never drawn.
+
+    THE CDF (cpu-gpu-cleanup w2-trees; the old one was one sequential sum):
+    rows fall in chunks of `WS_CHUNK`; inside a chunk the sum is sequential
+    in index order; the chunk totals are scanned by `ws_tree_scan`'s fixed
+    tree; cdf[i] = scan[chunk - 1] + local[i] (chunk 0 adds nothing); the
+    total is cdf[n - 1]. This is the CPU column's spelling of
+    `ops_device.weighted_sample_device`, operation for operation."""
     for i in range(n):
         if not (w[unsafe_offset=i] >= 0.0):
             raise Error("x_trees weighted_sample: weights must be nonnegative")
-        total = total + w[unsafe_offset=i]
-        cdf[i] = total
+    var n_chunks = (n + WS_CHUNK - 1) // WS_CHUNK
+    var cdf = List[Float64](length=n, fill=0.0)
+    var tot = List[Float64](length=n_chunks, fill=0.0)
+    for c in range(n_chunks):
+        var run: Float64 = 0.0
+        for i in range(c * WS_CHUNK, min((c + 1) * WS_CHUNK, n)):
+            run = run + w[unsafe_offset=i]
+            cdf[i] = run
+        tot[c] = run
+    ws_tree_scan(tot)
+    for i in range(WS_CHUNK, n):
+        cdf[i] = tot[i // WS_CHUNK - 1] + cdf[i]
+    var total = cdf[n - 1]
     if not (total > 0.0):
         raise Error("x_trees weighted_sample: weights must have a positive total")
     var base = stream_base(seed, stream)
-    # DEVIATION 5607: the draws run across the host pool in blocks. Draw k is
-    # a pure function of (base, k, cdf, w) written to res[k] alone (no
-    # arithmetic crosses two draws), so the indices are the serial loop's
-    # whatever order the blocks run in. The cdf above stays one sequential
-    # sum. AdaBoostRegressor spent 81 ms of each 1,000,000-row member here
-    # on the M3 Ultra (2026-09-28, trees-apple profile).
     var cp = cdf.unsafe_ptr()
-    var wp = w
-    var rp = res
-
-    def _block(b: Int) {imm cp, imm wp, imm rp, imm base, imm total, imm n, imm n_draw}:
-        var k0 = b * HOST_LAYOUT_BLOCK_ROWS
-        var k1 = min(k0 + HOST_LAYOUT_BLOCK_ROWS, n_draw)
-        for k in range(k0, k1):
-            var u = identical_mul64(unit(draw(base, k)), total)
-            var lo = 0
-            var hi = n - 1
-            while lo < hi:
-                var mid = (lo + hi) // 2
-                if cp[unsafe_offset=mid] > u:
-                    hi = mid
-                else:
-                    lo = mid + 1
-            while lo > 0 and wp[unsafe_offset=lo] == 0.0:  # u landed on a flat step at the end
-                lo -= 1
-            rp[unsafe_offset=k] = Int32(lo)
-
-    var n_blocks = (n_draw + HOST_LAYOUT_BLOCK_ROWS - 1) // HOST_LAYOUT_BLOCK_ROWS
-    if n_blocks <= 1 or n_draw < HOST_LAYOUT_BLOCK_ROWS * 4:
-        for b in range(n_blocks):
-            _block(b)
-    else:
-        host_parallelize(_block, n_blocks)
+    for k in range(n_draw):
+        # Draw k is a pure function of (base, k, cdf, w); the device runs one
+        # thread per draw with this body (`ws_draw_kernel`).
+        var u = identical_mul64(unit(draw(base, k)), total)
+        var lo = 0
+        var hi = n - 1
+        while lo < hi:
+            var mid = (lo + hi) // 2
+            if cp[unsafe_offset=mid] > u:
+                hi = mid
+            else:
+                lo = mid + 1
+        while lo > 0 and w[unsafe_offset=lo] == 0.0:  # u landed on a flat step at the end
+            lo -= 1
+        res[unsafe_offset=k] = Int32(lo)
     _ = cdf^
 
 
@@ -160,44 +176,22 @@ def gather_f32(
 ) raises:
     """dst[r, c] = src[rows[r], cols[c]], both row-major. A copy, no arithmetic.
 
-    DEVIATION 5606: every index is range-checked first, in the calling
-    thread, then the rows are copied across the host pool in blocks (each
-    task owns its destination rows). The destination bytes are the serial
-    loop's; a bad index still raises before any cell is written."""
+    The CPU column's loop. Every index is range-checked first, so a bad
+    index raises before any cell is written. A GPU install runs
+    `xtrees/ops_device.mojo::gather_f32_device` (cpu-gpu-cleanup t-gbdt;
+    DEVIATION 5606's host-pool copy is gone)."""
     for r in range(n_rows):
         var i = Int(rows[unsafe_offset=r])
         if i < 0 or i >= n_src_rows:
             raise Error("x_trees gather: row index out of range")
-    var all_cols = n_cols == n_src_cols
     for c in range(n_cols):
         var j = Int(cols[unsafe_offset=c])
         if j < 0 or j >= n_src_cols:
             raise Error("x_trees gather: column index out of range")
-        if j != c:
-            all_cols = False
-    var sp = src
-    var dp = dst
-    var rp = rows
-    var cp = cols
-
-    def _block(b: Int) {imm sp, imm dp, imm rp, imm cp, imm n_rows, imm n_cols, imm n_src_cols, imm all_cols}:
-        var r0 = b * HOST_LAYOUT_BLOCK_ROWS
-        var r1 = min(r0 + HOST_LAYOUT_BLOCK_ROWS, n_rows)
-        for r in range(r0, r1):
-            var i = Int(rp[unsafe_offset=r])
-            if all_cols:
-                for c in range(n_cols):
-                    dp.unsafe_store(r * n_cols + c, sp.unsafe_load(i * n_src_cols + c))
-            else:
-                for c in range(n_cols):
-                    dp.unsafe_store(r * n_cols + c, sp.unsafe_load(i * n_src_cols + Int(cp[unsafe_offset=c])))
-
-    var n_blocks = (n_rows + HOST_LAYOUT_BLOCK_ROWS - 1) // HOST_LAYOUT_BLOCK_ROWS
-    if n_rows * n_cols < HOST_LAYOUT_SERIAL_CELLS or n_blocks == 1:
-        for b in range(n_blocks):
-            _block(b)
-        return
-    host_parallelize(_block, n_blocks)
+    for r in range(n_rows):
+        var i = Int(rows[unsafe_offset=r])
+        for c in range(n_cols):
+            dst.unsafe_store(r * n_cols + c, src.unsafe_load(i * n_src_cols + Int(cols[unsafe_offset=c])))
 
 
 def gather_i32(
@@ -544,32 +538,6 @@ def weighted_median(
 # t the nodes offsets[t] .. offsets[t+1]; a node is a leaf iff left == -1;
 # its children are left and left + 1 (tree-relative); `x[colid] <= quesval`
 # goes LEFT (decisiontree.cuh:379, equality left).
-def _apply_row(
-    colid: MutPointer[Int32, MutUntrackedOrigin], quesval: MutPointer[Float32, MutUntrackedOrigin],
-    left: MutPointer[Int32, MutUntrackedOrigin], x: MutPointer[Float32, MutUntrackedOrigin],
-    d: Int, lo: Int, count: Int, i: Int,
-) -> Int:
-    """The leaf row i reaches in the tree at `lo`, or -1 when the walk meets
-    what `apply_trees` refuses (a column or child out of range, a cycle)."""
-    var node = 0
-    var steps = 0
-    while left[unsafe_offset=lo + node] != -1:
-        var c = Int(colid[unsafe_offset=lo + node])
-        if c < 0 or c >= d:
-            return -1
-        var l = Int(left[unsafe_offset=lo + node])
-        if l < 1 or l + 1 >= count:
-            return -1
-        if x[unsafe_offset=i * d + c] <= quesval[unsafe_offset=lo + node]:
-            node = l
-        else:
-            node = l + 1
-        steps += 1
-        if steps > count:
-            return -1
-    return node
-
-
 def apply_trees(
     offsets: MutPointer[Int32, MutUntrackedOrigin], colid: MutPointer[Int32, MutUntrackedOrigin],
     quesval: MutPointer[Float32, MutUntrackedOrigin], left: MutPointer[Int32, MutUntrackedOrigin],
@@ -579,43 +547,19 @@ def apply_trees(
     """res[i * (t1 - t0) + (t - t0)] = the tree-relative leaf node row i
     reaches in tree t.
 
-    DEVIATION 5608 (2026-09-28): the rows of a tree walk across the host pool
-    in blocks. A row's walk reads the tree and its own row and writes its own
-    cell, with float COMPARES only (no arithmetic), so the leaves are the
-    serial loop's. A walk that meets a refusal marks the tree and the serial
-    loop below reruns it, so the error raised is the serial one, first row
-    first. DARTRegressor/Classifier applied every new tree to 1,000,000 rows
-    serially, 11 ms a tree on the M3 Ultra (2026-09-28, trees-apple)."""
+    The CPU column's loop, first row first. A GPU install runs
+    `xtrees/ops_device.mojo::apply_trees_device`, one thread per (row, tree)
+    with the same compares and the same refusals (cpu-gpu-cleanup t-gbdt;
+    DEVIATION 5608's host-pool walk is gone)."""
     var nt = t1 - t0
     for t in range(t0, t1):
         var lo = Int(offsets[unsafe_offset=t])
         var count = Int(offsets[unsafe_offset=t + 1]) - lo
         if count < 1:
             raise Error("x_trees apply: empty tree")
-        var bad = List[Int32](length=1, fill=Int32(0))
-        var bp = bad.unsafe_ptr()
-        var cp = colid
-        var qp = quesval
-        var lp = left
-        var xp = x
-        var rp = res
-        var toff = t - t0
-
-        def _block(b: Int) {imm cp, imm qp, imm lp, imm xp, imm rp, imm bp, imm d, imm lo, imm count, imm n, imm nt, imm toff}:
-            var r0 = b * HOST_LAYOUT_BLOCK_ROWS
-            var r1 = min(r0 + HOST_LAYOUT_BLOCK_ROWS, n)
-            for i in range(r0, r1):
-                var node = _apply_row(cp, qp, lp, xp, d, lo, count, i)
-                if node < 0:
-                    bp[0] = Int32(1)
-                    return
-                rp[unsafe_offset=i * nt + toff] = Int32(node)
-
-        var n_blocks = (n + HOST_LAYOUT_BLOCK_ROWS - 1) // HOST_LAYOUT_BLOCK_ROWS
-        if n_blocks > 1 and n >= HOST_LAYOUT_BLOCK_ROWS * 4:
-            host_parallelize(_block, n_blocks)
-            if bad[0] == Int32(0):
-                continue
+    for t in range(t0, t1):
+        var lo = Int(offsets[unsafe_offset=t])
+        var count = Int(offsets[unsafe_offset=t + 1]) - lo
         for i in range(n):
             var node = 0
             var steps = 0
@@ -767,6 +711,59 @@ def uniform(res: MutPointer[Float64, MutUntrackedOrigin], n: Int, seed: Int, str
         res[unsafe_offset=k] = unit(draw(base, k))
 
 
+def bag_rows(res: MutPointer[Int32, MutUntrackedOrigin], n: Int, seed: Int, stream: Int, frac: Float64) -> Int:
+    """The rows `i` (ascending) whose draw `unit(draw(base, i)) < frac`; none
+    kept: the one row with the smallest (draw, i). Returns the count (>= 1
+    for n >= 1). The CPU column's loop; a GPU install runs
+    `ops_device.bag_rows_device` (cpu-gpu-cleanup t-gbdt)."""
+    var base = stream_base(seed, stream)
+    var k = 0
+    var best = 0
+    var best_key = UInt64.MAX
+    for i in range(n):
+        var r = draw(base, i)
+        if unit(r) < frac:
+            res[unsafe_offset=k] = Int32(i)
+            k += 1
+        if (r >> 11) < best_key:
+            best_key = r >> 11
+            best = i
+    if k == 0 and n > 0:
+        res[unsafe_offset=0] = Int32(best)
+        k = 1
+    return k
+
+
+def unseen_rows(
+    rows: MutPointer[Int32, MutUntrackedOrigin], m: Int, n: Int, res: MutPointer[Int32, MutUntrackedOrigin],
+) raises -> Int:
+    """The rows of `[0, n)` absent from `rows[0, m)`, ascending (sklearn's
+    negated `indices_to_mask`); returns the count. The CPU column's loop; a
+    GPU install runs `ops_device.unseen_rows_device` (cpu-gpu-cleanup t-gbdt)."""
+    var seen = List[Bool](length=n, fill=False)
+    for r in range(m):
+        var i = Int(rows[unsafe_offset=r])
+        if i < 0 or i >= n:
+            raise Error("x_trees unseen_rows: row out of range")
+        seen[i] = True
+    var k = 0
+    for i in range(n):
+        if not seen[i]:
+            res[unsafe_offset=k] = Int32(i)
+            k += 1
+    return k
+
+
+def transpose_f64(
+    src: MutPointer[Float64, MutUntrackedOrigin], n: Int, d: Int, dst: MutPointer[Float64, MutUntrackedOrigin],
+):
+    """dst (d x n) = src (n x d)^T, a copy of each word. The CPU column's
+    loop; a GPU install runs `ops_device.transpose_f64_device`."""
+    for i in range(n):
+        for j in range(d):
+            dst.unsafe_store(j * n + i, src.unsafe_load(i * d + j))
+
+
 def onehot_leaves(
     nodes: MutPointer[Int32, MutUntrackedOrigin], tree_base: MutPointer[Int32, MutUntrackedOrigin],
     node_col: MutPointer[Int32, MutUntrackedOrigin], n: Int, n_trees: Int, n_cols: Int,
@@ -785,10 +782,12 @@ def onehot_leaves(
 def transpose_f32(
     src: MutPointer[Float32, MutUntrackedOrigin], n: Int, d: Int, dst: MutPointer[Float32, MutUntrackedOrigin],
 ):
-    """dst[j, i] = src[i, j]: a row-major n x d copied to column-major,
-    across the host pool above a million cells (DEVIATION 5606, the forest
-    boundary's `colmajor_from_rowmajor_f32`, DEVIATION 2637)."""
-    colmajor_from_rowmajor_f32(src, dst, n, d)
+    """dst[j, i] = src[i, j]: a row-major n x d copied to column-major. The
+    CPU column's loop; a GPU install runs `ops_device.transpose_f32_device`
+    (cpu-gpu-cleanup t-gbdt)."""
+    for i in range(n):
+        for j in range(d):
+            dst.unsafe_store(j * n + i, src.unsafe_load(i * d + j))
 
 
 # ------------------------------------------------------ wrappers' helpers

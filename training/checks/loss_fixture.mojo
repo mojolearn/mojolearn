@@ -132,7 +132,7 @@ from checks.numerics import (
     identical_log,
     numeric_mode_name,
 )
-from training.checks.loss_oracle import (
+from training.checks.loss_contract import (
     CE_NEG_INF_BITS,
     CeConfig,
     IGNORE_INDEX_DEFAULT,
@@ -141,10 +141,10 @@ from training.checks.loss_oracle import (
     REDUCTION_SUM,
     ce_count,
     ce_divisor,
-    ce_fold,
-    ce_ones,
     neg_by_bits,
 )
+from training.checks.loss_contract import ce_ones
+from training.checks.loss_oracle import ce_fold
 
 
 # ===========================================================================

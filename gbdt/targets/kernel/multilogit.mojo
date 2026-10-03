@@ -604,6 +604,122 @@ def launch_multilogit_second_der(
     )
 
 
+def multilogit_second_der_all_rows_kernel[
+    elements_per_thread: Int = MULTILOGIT_ELEMENTS_PER_THREAD
+](
+    num_classes_in: Int32,
+    size_in: Int32,
+    weights: MutPointer[Float32, MutAnyOrigin],
+    has_weights: Int32,
+    predictions: MutPointer[Float32, MutAnyOrigin],
+    predictions_align_size_in: Int32,
+    der2_align_size_in: Int32,
+    der2: MutPointer[Float32, MutAnyOrigin],
+):
+    """FAST Apple (`MULTICLASS_HESSIAN_BATCH`, lane apple-fast-pairlogit,
+    the plan's `trees-multiclass`): EVERY ROW of the lower triangle in one
+    launch, where `multilogit_second_der_row_kernel` takes one row per
+    launch. Per element the same arithmetic as that kernel, row by row:
+    `max_approx`, `sum_exp` and the weight computed once, then for each
+    row `r` of `numClasses` (the pinned class's row last, `:157-158`) the
+    `r + 1` columns at the LOWER-TRIANGLE column slot `r (r + 1) / 2 + k`
+    of `der2`, which is `lowTriangleMatrixSize` planes wide (the
+    reference's own `reducedHessianGpu` slices, `:135-157`). Element
+    values are the row kernel's bit for bit; only the plane layout and the
+    one reduce over all slots differ."""
+    var size = Int(size_in)
+    var num_classes = Int(num_classes_in)
+    var eff = num_classes - 1
+    var pred_align = Int(predictions_align_size_in)
+    var der2_align = Int(der2_align_size_in)
+    var tid = (
+        Int(block_idx.x) * MULTILOGIT_BLOCK_SIZE * elements_per_thread
+        + Int(thread_idx.x)
+    )
+
+    @parameter
+    for j in range(elements_per_thread):
+        var idx = tid + j * MULTILOGIT_BLOCK_SIZE
+        if idx < size:
+            var mx = Float32(0.0)
+            for k in range(eff):
+                var v = predictions.unsafe_load(idx + k * pred_align)
+                if v > mx:
+                    mx = v
+            var se = Float32(0.0)
+            for k in range(eff):
+                se += routed_exp(
+                    predictions.unsafe_load(idx + k * pred_align) - mx
+                )
+            se += routed_exp(Float32(0.0) - mx)
+            var weight = Float32(1.0)
+            if has_weights != Int32(0):
+                weight = weights.unsafe_load(idx)
+            var slot = 0
+            for der2_row in range(num_classes):
+                var p_row: Float32
+                if der2_row < eff:
+                    p_row = (
+                        routed_exp(
+                            predictions.unsafe_load(
+                                idx + der2_row * pred_align
+                            )
+                            - mx
+                        )
+                        / se
+                    )
+                else:
+                    # the PINNED class's probability (`:157-158`)
+                    p_row = routed_exp(-mx) / se
+                for k in range(der2_row):
+                    var pk = (
+                        routed_exp(
+                            predictions.unsafe_load(idx + k * pred_align)
+                            - mx
+                        )
+                        / se
+                    )
+                    der2.unsafe_store(
+                        idx + (slot + k) * der2_align, -weight * pk * p_row
+                    )
+                der2.unsafe_store(
+                    idx + (slot + der2_row) * der2_align,
+                    weight * (Float32(1.0) - p_row) * p_row,
+                )
+                slot += der2_row + 1
+
+
+def launch_multilogit_second_der_all_rows(
+    ctx: DeviceContext,
+    num_classes: Int,
+    size: Int,
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool,
+    mut predictions: DeviceBuffer[DType.float32],
+    predictions_align_size: Int,
+    mut der2: DeviceBuffer[DType.float32],
+    der2_align_size: Int,
+) raises:
+    """`MULTICLASS_HESSIAN_BATCH`: the whole lower triangle,
+    `num_classes (num_classes + 1) / 2` planes of `der2`, in one launch."""
+    var blocks = multilogit_blocks(size)
+    if blocks == 0:
+        return
+    ctx.enqueue_function[
+        multilogit_second_der_all_rows_kernel[
+            MULTILOGIT_ELEMENTS_PER_THREAD
+        ]
+    ](
+        Int32(num_classes), Int32(size),
+        weights.unsafe_ptr(), Int32(1) if has_weights else Int32(0),
+        predictions.unsafe_ptr(), Int32(predictions_align_size),
+        Int32(der2_align_size),
+        der2.unsafe_ptr(),
+        grid_dim=(blocks, 1, 1),
+        block_dim=(MULTILOGIT_BLOCK_SIZE, 1, 1),
+    )
+
+
 # =========================================================================
 # MultiClassOneVsAll: `numClasses` INDEPENDENT logistic regressions.
 #

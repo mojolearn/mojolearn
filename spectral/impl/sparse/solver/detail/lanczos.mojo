@@ -55,8 +55,8 @@ WHAT IS VENDOR-SHAPED IN THEIRS, and what stands where
   cublas axpy                     -> `axpy_kernel`: `y = ftz(fma(a, x, y))`.
   cusolver syevd                  -> `spectral/checks/symmetric_eig_host.
                                      mojo` (DEVIATIONS 770, 771).
-  the small host-read scalars     -> host, through `identical_*` /
-  (alpha_i + uu_i, clamps, res)      `gemm/checks/gemm_oracle.mojo`.
+  the small host-read scalars     -> host, through `identical_*`; `res`
+  (alpha_i + uu_i, clamps, res)      is the device `identical_gemm`.
 Every division is a single IEEE `/` (row 10: correct on normals on every
 column measured); every seam a kernel writes is flushed.
 
@@ -171,7 +171,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_NT, OP_TN, gemm_oracle
+from gemm.contract import OP_NT, OP_TN
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
@@ -1896,7 +1896,7 @@ def lanczos_smallest(
     var E = upload_f32(ctx, eigenvectors_k)
     identical_gemm(ctx, ritz, E, V, k, n, ncv, OP_TN)
     # s = E_k[ncv - 1, :]; beta_k = beta[ncv - 1] * s; res = ||beta_k||  (:509-533)
-    var res = _residual(beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
+    var res = _residual(ctx, beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
     var restarts = 0
     trace.record_list_f32("spectral.lanczos.restart0000.ritz", eigenvalues_k)
     trace.record_scalar_f32("spectral.lanczos.restart0000.res", res)
@@ -1927,7 +1927,7 @@ def lanczos_smallest(
                 )
                 var E3 = upload_f32(ctx, eigenvectors_k)
                 identical_gemm(ctx, ritz, E3, V, k, n, ncv, OP_TN)
-                res = _residual(beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
+                res = _residual(ctx, beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
                 _ = E3^
                 continue
         comptime if LANCZOS_ID_DEV:
@@ -1940,7 +1940,7 @@ def lanczos_smallest(
                 alpha, beta, beta_k, True, k, which, ncv, eigenvalues_k,
                 eigenvectors_k,
             )
-            res = _residual(beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
+            res = _residual(ctx, beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
             trace.record_list_f32(_restart_tag(restarts, "ritz"), eigenvalues_k)
             trace.record_scalar_f32(_restart_tag(restarts, "res"), res)
             trace.record_list_i32(_restart_tag(restarts, "sweeps"), _one_i32(sweeps))
@@ -2028,7 +2028,7 @@ def lanczos_smallest(
         )
         var E2 = upload_f32(ctx, eigenvectors_k)
         identical_gemm(ctx, ritz, E2, V, k, n, ncv, OP_TN)
-        res = _residual(beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
+        res = _residual(ctx, beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
         trace.record_list_f32(_restart_tag(restarts, "ritz"), eigenvalues_k)
         trace.record_scalar_f32(_restart_tag(restarts, "res"), res)
         trace.record_list_i32(_restart_tag(restarts, "sweeps"), _one_i32(sweeps))
@@ -2076,6 +2076,7 @@ def _restart_tag(r: Int, what: StringSlice) -> String:
 
 
 def _residual(
+    ctx: DeviceContext,
     beta_last: Float32,
     eigenvectors_k: List[Float32],
     k: Int,
@@ -2084,15 +2085,16 @@ def _residual(
 ) raises -> Float32:
     """`:509-533` / `:726-746`: `s = E_k[ncv - 1, :]`, `beta_k = fma(beta[ncv
     - 1], s, 0)` (an axpy into a zero fill: one rounding), `res = ||beta_k||`
-    -- `k <= 128` terms, so `gemm_oracle`'s one-leaf ascending chain IS the
-    v1 answer and the host computes it through the same function the
-    device contract is defined by."""
+    through the device GEMM (`_norm2`, `identical_gemm` `OP_NT` at
+    `1 x 1 x k`), the same pinned contract the oracle restates."""
     beta_k.clear()
     for c in range(k):
         var s = eigenvectors_k[(ncv - 1) * k + c]
         beta_k.append(ftz(identical_mul_add(beta_last, s, Float32(0.0))))
-    var sq = gemm_oracle(beta_k, beta_k, OP_NT, 1, 1, k)
-    return ftz(_host_sqrt(sq[0]))
+    var d_bk = upload_f32(ctx, beta_k)
+    var res = _norm2(ctx, d_bk, k)
+    _ = d_bk^
+    return res
 
 
 # ---------------------------------------------------------------------------
