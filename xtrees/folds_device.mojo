@@ -322,8 +322,8 @@ struct FoldScanWorkspace(Movable):
 
 def _exclusive_scan(
     ctx: DeviceContext,
-    values: DeviceBuffer[DType.int32],
-    scanned: DeviceBuffer[DType.int32],
+    mut values: DeviceBuffer[DType.int32],
+    mut scanned: DeviceBuffer[DType.int32],
     n: Int,
     mut ws: FoldScanWorkspace,
 ) raises:
