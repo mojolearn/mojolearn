@@ -128,6 +128,12 @@ struct TTreeStructureSearcherOptions(Copyable, Movable):
     `UpdateFeatureWeightsForBestSplits` leaves them at when there are no
     CTRs (`update_feature_weights.cpp:14-22`)."""
 
+    var unit_weight_plane: Bool
+    """Not theirs (lane apple-fast-gap-misc): the caller's search plane 0
+    is the constant weight 1 (no sample weights, no bootstrap, not
+    second-order) and the caller re-estimates every leaf value, so a leaf's
+    weight is its row count. Read only by DW_FAST_SKIP_FINAL_STATS."""
+
     def __init__(out self):
         """Their aggregate defaults, field for field."""
         self.score_function = SCORE_FUNCTION_COSINE
@@ -141,6 +147,7 @@ struct TTreeStructureSearcherOptions(Copyable, Movable):
         self.min_child_hessian = Float64(-1)
         self.random_strength = Float32(0.0)
         self.feature_weights = List[Float32]()
+        self.unit_weight_plane = False
 
     def check(self) raises:
         """What this LANE can honor, refused by name rather than ignored.

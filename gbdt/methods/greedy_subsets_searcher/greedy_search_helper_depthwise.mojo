@@ -357,6 +357,25 @@ comptime DW2_COPY_ZERO = (
 )
 
 
+# ---- lane apple-fast-gap-misc: FAST Apple candidates, default OFF ---------
+#: The end-of-tree partition-stats sweep (a gather of every stat plane
+#: through the row index, then a host wait) feeds only the searcher's leaf
+#: weights and values; the caller (`doc_parallel_boosting`, the
+#: non-symmetric arm) re-estimates every leaf value and replaces them. When
+#: the caller says the weight plane is all ones (no sample weights, no
+#: bootstrap, plane 0 = weight: `unit_weight_plane`), each leaf's weight
+#: is its row count exactly (integer sums below 2^24), so the sweep is
+#: skipped and the weights are the sizes. Depthwise only (not Lossguide),
+#: not under the identity trace or DW_TREE_SYNC. Same tree, same model
+#: weights, same leaf values after estimation.
+#: `-D MOJOLEARN_GBDT_DW_FAST_SKIP_FINAL_STATS`.
+comptime DW_FAST_SKIP_FINAL_STATS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GBDT_DW_FAST_SKIP_FINAL_STATS"]()
+)
+
+
 def _dw_dev_u32(
     buf: DeviceBuffer[DType.uint32], offset: Int
 ) -> MutPointer[UInt32, MutAnyOrigin]:
@@ -4630,7 +4649,26 @@ def fit_non_symmetric_tree[
             var psp = h_part_stats.unsafe_ptr().unsafe_origin_cast[
                 MutUntrackedOrigin
             ]()
-            if tree_sync:
+            var skip_final = False
+            comptime if DW_FAST_SKIP_FINAL_STATS:
+                skip_final = (
+                    options.unit_weight_plane
+                    and not lossguide
+                    and not tree_sync
+                    and not emit_digests
+                )
+                if skip_final:
+                    for i in range(len(leaves)):
+                        psp.unsafe_store(
+                            i * stat_count, Float32(leaves[i].size)
+                        )
+                        for st in range(1, stat_count):
+                            psp.unsafe_store(
+                                i * stat_count + st, Float32(0.0)
+                            )
+            if skip_final:
+                pass
+            elif tree_sync:
                 # DW_TREE_SYNC: swept over every slot and home already
                 psp = h_ts_part_stats.unsafe_ptr().unsafe_origin_cast[
                     MutUntrackedOrigin
@@ -4639,7 +4677,7 @@ def fit_non_symmetric_tree[
                 for i in range(len(leaves)):
                     h_ids.unsafe_ptr().unsafe_store(i, UInt32(i))
                 ctx.enqueue_copy(dst_buf=d_ids, src_ptr=h_ids.unsafe_ptr())
-            if tree_sync:
+            if tree_sync or skip_final:
                 pass
             elif use_ridx:
                 # DEVIATION 1902: phase 1 gathers the stationary plane
@@ -4656,7 +4694,7 @@ def fit_non_symmetric_tree[
                     d_ids, p_off, p_sz, stats, stat_partials, part_stats,
                     sm_count=sm_count,
                 )
-            if not tree_sync:
+            if not tree_sync and not skip_final:
                 mgr.stream_kernel()
                 ctx.enqueue_copy(
                     dst_ptr=h_part_stats.unsafe_ptr(), src_buf=part_stats

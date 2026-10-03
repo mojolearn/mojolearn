@@ -2600,6 +2600,20 @@ def fit_with_test(
             opts.min_leaf_size = Float64(min_data_in_leaf)
             opts.min_split_gain = min_split_gain
             opts.min_child_hessian = min_child_hessian
+            # lane apple-fast-gap-misc: plane 0 is the constant weight 1
+            # (the last arm of the stats chain above, no weights, no
+            # bootstrap); this arm re-estimates every leaf value below
+            opts.unit_weight_plane = (
+                not has_weights
+                and not bootstrap_on
+                and not second_order
+                and not is_querywise
+                and not is_pair_logit
+                and not is_yeti_rank
+                and objective != OBJECTIVE_MULTICLASS
+                and objective != OBJECTIVE_MULTICLASS_OVA
+                and objective != OBJECTIVE_MULTIRMSE
+            )
             # `options.RandomStrength *= randomStrengthMult`
             # (`greedy_subsets_searcher.h:76`), the same multiply the
             # greedy oblivious arm receives below
