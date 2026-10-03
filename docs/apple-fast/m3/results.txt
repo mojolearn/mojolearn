@@ -1,4 +1,4 @@
-pos=783 lines=     931
+pos=817 lines=     955
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -923,3 +923,38 @@ pos=783 lines=     931
 1031:CMD apple-fast@c48ede3c1 retime-multilabel-binarizer-istella-b rc=0 AFC-AB-SUMMARY retime-multilabel-binarizer-istella-b arm=A lane=multilabel-binarizer ds=istella median_of_medians_ms=163.4761670138687 runs=[163.4761670138687 ] digest=4d7dfa9ed0ed5702 
 1032:CMD apple-fast@c48ede3c1 retime-multilabel-binarizer-taxi-b rc=0 AFC-AB-SUMMARY retime-multilabel-binarizer-taxi-b arm=A lane=multilabel-binarizer ds=taxi median_of_medians_ms=283.855166984722 runs=[283.855166984722 ] digest=540a4834ba69361e 
 1033:CMD apple-fast@c48ede3c1 retime-multinomial-nb-text-b rc=0 AFC-AB-SUMMARY retime-multinomial-nb-text-b arm=A lane=multinomial-nb ds=text median_of_medians_ms=201.4209590270184 runs=[201.4209590270184 ] digest=d30c28c4bf2cdf4f 
+1034:CMD apple-fast@c48ede3c1 retime-nmf-istella-b rc=0 AFC-AB-SUMMARY retime-nmf-istella-b arm=A lane=nmf ds=istella median_of_medians_ms=8193.392375018448 runs=[8193.392375018448 ] digest=02eab58a92501384 
+1035:CMD apple-fast@c48ede3c1 retime-nystroem-taxi-b rc=0 AFC-AB-SUMMARY retime-nystroem-taxi-b arm=A lane=nystroem ds=taxi median_of_medians_ms=531.4540829858743 runs=[ 531.4540829858743 ] digest= digest=ad584104c1be7820 
+1036:CMD apple-fast@c48ede3c1 retime-pca-istella-b rc=0 AFC-AB-SUMMARY retime-pca-istella-b arm=A lane=pca ds=istella median_of_medians_ms=607.612167019397 runs=[607.612167019397 ] digest=f0b1f2c82459df92 
+1037:CMD apple-fast@c48ede3c1 retime-perceptron-istella-b rc=0 AFC-AB-SUMMARY retime-perceptron-istella-b arm=A lane=perceptron ds=istella median_of_medians_ms=4280.446958960965 runs=[4280.446958960965 ] digest=057633ea45b7b221 
+1038:CMD apple-fast@c48ede3c1 retime-permutation-shap-istella-b rc=0 AFC-AB-SUMMARY retime-permutation-shap-istella-b arm=A lane=permutation-shap ds=istella median_of_medians_ms=34209.7623340087 runs=[34209.7623340087 ] digest=0c4da76115b64b8a 
+1039:FBUILD lane/apple-fast-quality-glmfa@2e8321b00 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+1040:CMD apple-fast-quality-glmfa@2e8321b00 qglm-factor-analysis-istella rc=0 FA-DIAG ll_ours=99.4872 ll_constfix=99.4872
+1041:CMD apple-fast-quality-glmfa@2e8321b00 qglm-factor-analysis-taxi rc=0 AFC-AB-SUMMARY qglm-factor-analysis-taxi arm=A lane=factor-analysis ds=taxi median_of_medians_ms=307.62445798609406 runs=[307.62445798609406 ] digest=8bd8f03f03ce8d42 
+1042:CMD apple-fast@c48ede3c1 retime-qr-taxi-b rc=0 ENSURE-SO giving up after 3 rebuild rounds: x_decomp
+1043:CMD apple-fast@c48ede3c1 retime-randomized-svd-istella-b rc=0 AFC-AB-SUMMARY retime-randomized-svd-istella-b arm=A lane=randomized-svd ds=istella median_of_medians_ms=700.736875005532 runs=[700.736875005532 ] digest=6c077afd3b71dcd1 
+1044:CMD apple-fast@c48ede3c1 retime-randomized-svd-taxi-b rc=0 AFC-AB-SUMMARY retime-randomized-svd-taxi-b arm=A lane=randomized-svd ds=taxi median_of_medians_ms=204.77170799858868 runs=[204.77170799858868 ] digest=000380420b2ff578 
+1045:CMD apple-fast@c48ede3c1 retime-rbf-sampler-istella-b rc=0 AFC-AB-SUMMARY retime-rbf-sampler-istella-b arm=A lane=rbf-sampler ds=istella median_of_medians_ms=120.46541698509827 runs=[120.46541698509827 ] digest=c143519491a29eed 
+1046:CMD apple-fast@c48ede3c1 retime-sgd-ocsvm-istella-b rc=0 AFC-AB-SUMMARY retime-sgd-ocsvm-istella-b arm=A lane=sgd-ocsvm ds=istella median_of_medians_ms=75550.16275000526 runs=[75550.16275000526 ] digest=a6efebfc96264d8c 
+1047:CMD apple-fast@c48ede3c1 retime-sgd-ocsvm-taxi-b rc=0 AFC-AB-SUMMARY retime-sgd-ocsvm-taxi-b arm=A lane=sgd-ocsvm ds=taxi median_of_medians_ms=58339.45929200854 runs=[58339.45929200854 ] digest=4b11bb424817d11c 
+1048:CMD apple-fast@c48ede3c1 retime-skewed-chi2-istella-b rc=0 AFC-AB-SUMMARY retime-skewed-chi2-istella-b arm=A lane=skewed-chi2 ds=istella median_of_medians_ms=7.258541998453438 runs=[7.258541998453438 ] digest=aa7dc36f09c67044 
+1049:CMD apple-fast@c48ede3c1 retime-skewed-chi2-taxi-b rc=0 AFC-AB-SUMMARY retime-skewed-chi2-taxi-b arm=A lane=skewed-chi2 ds=taxi median_of_medians_ms=1.6127499984577298 runs=[1.6127499984577298 ] digest=9df3a1fcbd4ee98b 
+1050:CMD apple-fast@c48ede3c1 retime-sparse-rp-istella-b rc=0 AFC-AB-SUMMARY retime-sparse-rp-istella-b arm=A lane=sparse-rp ds=istella median_of_medians_ms=16.818625037558377 runs=[16.818625037558377 ] digest=d01cdcaa5dd4ef1c 
+1051:CMD apple-fast@c48ede3c1 retime-sparse-rp-taxi-b rc=0 AFC-AB-SUMMARY retime-sparse-rp-taxi-b arm=A lane=sparse-rp ds=taxi median_of_medians_ms=2.506125019863248 runs=[2.506125019863248 ] digest=4a01df496b5169cb 
+1052:CMD apple-fast@c48ede3c1 retime-spline-istella-b rc=0 AFC-AB-SUMMARY retime-spline-istella-b arm=A lane=spline ds=istella median_of_medians_ms=49.469291989225894 runs=[49.469291989225894 ] digest=8a05233eed2db82f 
+1053:CMD apple-fast@c48ede3c1 retime-spline-taxi-b rc=0 AFC-AB-SUMMARY retime-spline-taxi-b arm=A lane=spline ds=taxi median_of_medians_ms=33.59858301701024 runs=[33.59858301701024 ] digest=62d32939e3b30314 
+1054:CMD apple-fast@c48ede3c1 retime-svd-istella-b rc=0 ENSURE-SO giving up after 3 rebuild rounds: x_decomp
+1055:CMD apple-fast@c48ede3c1 retime-svd-taxi-b rc=0 ENSURE-SO giving up after 3 rebuild rounds: x_decomp
+1056:CMD apple-fast@c48ede3c1 retime-svgp-istella-b rc=0 AFC-AB-SUMMARY retime-svgp-istella-b arm=A lane=svgp ds=istella median_of_medians_ms=661.2290830234997 runs=[661.2290830234997 ] digest=9c8d419355d2f958 
+1057:CMD apple-fast@c48ede3c1 retime-target-encoder-istella-b rc=0 AFC-AB-SUMMARY retime-target-encoder-istella-b arm=A lane=target-encoder ds=istella median_of_medians_ms=267.2381660086103 runs=[267.2381660086103 ] digest=6b3d8967d553dbb0 
+1058:CMD apple-fast@c48ede3c1 retime-target-encoder-taxi-b rc=0 AFC-AB-SUMMARY retime-target-encoder-taxi-b arm=A lane=target-encoder ds=taxi median_of_medians_ms=278.4116250113584 runs=[278.4116250113584 ] digest=e662ed62eea3df89 
+1059:CMD apple-fast@c48ede3c1 retime-tree-shap-istella-b rc=0 AFC-AB-SUMMARY retime-tree-shap-istella-b arm=A lane=tree-shap ds=istella median_of_medians_ms=none runs=[ ] digest= 
+1060:CMD apple-fast@c48ede3c1 retime-tree-shap-taxi-b rc=0 AFC-AB-SUMMARY retime-tree-shap-taxi-b arm=A lane=tree-shap ds=taxi median_of_medians_ms=none runs=[ ] digest= 
+1061:CMD apple-fast-batch@3150d75c1 kap-grp-base-istella-x rc=0 AFC-AB-SUMMARY kap-grp-base-istella-x arm=A lane=gaussian-rp ds=istella median_of_medians_ms=59.70495898509398 runs=[59.70495898509398 ] digest=ce7dcd780f8e2868 
+1062:CMD apple-fast-batch@3150d75c1 nb-cnb-csr-text-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=41.3 all=[41] quality=['{"accuracy":'] defines='-D MOJOLEARN_NB_TEXT_CSR=1'
+1063:CMD apple-fast-batch@3150d75c1 robust-mcd-taxi-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=214.9 all=[215] quality=['{"n_features":'] defines='-D MOJOLEARN_MCD_DEVICE_CSTEPS=1'
+1064:CMD apple-fast-batch@3150d75c1 tier-rbf-pinned-b-x rc=0 AFC-AB-SUMMARY tier-rbf-pinned-b-x arm=B lane=rbf-sampler ds=istella median_of_medians_ms=none runs=[ ] digest= 
+1065:CMD apple-fast-batch@3150d75c1 linsvr-fused-taxi-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=115.8 all=[116] quality=['{"finite":'] defines='-D MOJOLEARN_LSVR_FUSED_GRAD'
+1066:CMD apple-fast-batch@3150d75c1 linsvr-slim-taxi-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=95.3 all=[95] quality=['{"finite":'] defines='-D MOJOLEARN_LSVR_EVAL_SLIM'
+1067:CMD apple-fast-batch@3150d75c1 linsvr-fix-istella-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=222.3 all=[222] quality=['{"finite":'] defines='-D MOJOLEARN_LSVR_FASTPATH_FIX'
+1068:CMD apple-fast-batch@3150d75c1 linsvr-all-istella-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=236.4 all=[236] quality=['{"finite":'] defines='-D MOJOLEARN_LSVR_ALL'
