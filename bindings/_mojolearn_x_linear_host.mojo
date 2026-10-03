@@ -12,7 +12,7 @@ from svm.host.scale_gamma_host import py2mojo_linear_flags_binding
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_linear.ops import FP, IP, X_LINEAR_HOST_SABOTAGE
-from x_linear.dispatch import fit_dispatch, decision_one, team_rows, team_own, ALGO_ISOTONIC, ALGO_LOGCV
+from x_linear.dispatch import fit_dispatch, decision_one, team_rows, team_own, ALGO_ISOTONIC, ALGO_LOGCV, isotonic_abi_check
 from x_linear.logcv import logcv_fold_ids
 from x_linear.isotonic_host import isotonic_fit_host
 from x_linear.team import team_work, solo
@@ -43,6 +43,7 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     var n_fp = Int(py=dims[8])
     if n <= 0 or d < 0 or n_out <= 0:
         raise Error("x_linear: positive dimensions required")
+    isotonic_abi_check(Int(py=algo), n, Int(py=dims[3]), n_out, n_fw, n_iw, n_ip)
     var ipl = List[Int32](capacity=max(n_ip, 1))
     for i in range(n_ip):
         ipl.append(Int32(Int(py=ip[i])))

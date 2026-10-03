@@ -21,6 +21,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
 from x_linear.ops import FP
 from x_linear.device import fit_device, decision_device
+from x_linear.dispatch import isotonic_abi_check
 from x_linear.cls1_fast import cls1_flags
 
 
@@ -72,6 +73,7 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     var n_fp = Int(py=dims[8])
     if n <= 0 or d < 0 or n_out <= 0:
         raise Error("x_linear: positive dimensions required")
+    isotonic_abi_check(Int(py=algo), n, n_y, n_out, n_fw, n_iw, n_ip)
     var ipl = List[Int32](capacity=n_ip)
     for i in range(n_ip):
         ipl.append(Int32(Int(py=ip[i])))
