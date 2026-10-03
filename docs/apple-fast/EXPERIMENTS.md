@@ -175,16 +175,16 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `BAYES_FAST_CLS1_STATS` | bayesian-ridge / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-brstats-taxi | bayesian-ridge taxi 99 -> 21.6 | OPEN | judged KEEP (-78%); cls1 merge pending |
 | `HUBER_DEVICE_LBFGS` | huber / taxi | lane/apple-fast-robust @ cfdb95e48 | robust-huber-dev-taxi | huber taxi 242 -> 225 | OPEN | candidate (-7%, n=1); merge waits on the other robust lines |
 | `HUBER_DEVICE_LBFGS + HUBER_FAST_BLOCK512` | huber / taxi | lane/apple-fast-robust @ cfdb95e48 | robust-huber-blk-taxi | huber taxi 226 -> 196 | OPEN | candidate (-13%); not merged yet |
-| `LSVR_ALL` | linearsvr / istella; linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 | linsvr-all-taxi, linsvr-all-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `LSVR_ALL` | linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 | linsvr-all-taxi-x (M2) | linearsvr taxi 292.2 -> 58.6 | KEPT lane/apple-fast-m2b1 | r2 .8998 rmse 5.041 identical; default, `-D MOJOLEARN_LSVR_ALL_OFF` reverts (includes FASTPATH_FIX, FUSED_GRAD, LINESEARCH_BATCH, EVAL_SLIM, DEVICE_CONVERGE) |
 | `LSVR_DEVICE_CONVERGE` | linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 | linsvr-dconv-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `LSVR_DEVICE_CONVERGE + LSVR_EVAL_SLIM + LSVR_LINESEARCH_BATCH` | linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 | linsvr-dconv-vs-batch-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `LSVR_DUAL_CD` | linearsvr / istella; linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 | linsvr-dualcd-taxi, linsvr-dualcd-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `LSVR_EVAL_SLIM` | linearsvr / istella; linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 | linsvr-slim-taxi, linsvr-slim-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `LSVR_FASTPATH_FIX` | linearsvr / istella; linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 | linsvr-fix-taxi, linsvr-fix-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `LSVR_DUAL_CD` | linearsvr / istella; linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 | linsvr-dualcd-taxi, linsvr-dualcd-istella | - | OPEN | no judged result; not merged (lsvr_dual.mojo stays on the branch) |
+| `LSVR_EVAL_SLIM` | linearsvr / istella | lane/apple-fast-linsvr @ c649076a4 | linsvr-slim-istella-x (M2) | -4.5% | KEPT lane/apple-fast-m2b1 | quality identical; kept as part of LSVR_ALL |
+| `LSVR_FASTPATH_FIX` | linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 | linsvr-fix-taxi-x (M2) | -0.2% | DROPPED-noise (alone) | no standalone define on main; its tiled objective ships only inside LSVR_ALL, the measured winning configuration |
 | `LSVR_FUSED_GRAD` | linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 | linsvr-fused-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `LSVR_LINESEARCH_BATCH` | linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 | linsvr-lsbatch-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `LSVR_LINESEARCH_BATCH` | linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 | linsvr-lsbatch-taxi-x (M2) | -38.8% | KEPT lane/apple-fast-m2b1 | quality identical; kept as part of LSVR_ALL |
 | `NB_CAT_ATOMIC` | categorical-nb / taxi | lane/apple-fast-nb @ be2ea3a05 | nb-cat-atomic-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `NB_TEXT_CSR` | complement-nb / text; multinomial-nb / text | lane/apple-fast-nb @ be2ea3a05 | nb-mnb-csr-text, nb-cnb-csr-text | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `NB_TEXT_CSR` | multinomial-nb / text | lane/apple-fast-nb @ be2ea3a05 | nb-mnb-csr-text-x (M2) | 221.7 -> 47.7 | KEPT lane/apple-fast-m2b1 | accuracy .9831 logloss .5595 identical; default, `-D MOJOLEARN_NB_TEXT_CSR_OFF` reverts (complement-nb shares the route) |
 | `RIDGE_FAST_CLS1_CODES` | ridge-clf / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-rccodes-taxi | ridge-clf taxi 120 -> 19.0 | OPEN | judged KEEP (-84%); merge pending |
 
 ## Neighbors (42)
@@ -198,7 +198,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `KNN_FAST_CLS1_PRESEED` | knn / istella | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-knnseed-istella | knn istella 357 -> 343 | DROPPED-noise | -3.9%, n=1, marginal |
 | `KNN_FAST_CLS1_PRESEED + KNN_FAST_CLS1_SLICES2` | knn / istella | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-knnall-istella | knn istella 357 -> 385 | DROPPED-slower | slower |
 | `KNN_FAST_CLS1_SLICES2` | knn / istella | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-knnsl2-istella | knn istella 357 -> 421 | DROPPED-slower | slower |
-| `LLE_FAST_KNN` | - | lane/apple-fast-isotonic-knn @ 7385fcfdd | ik-lle-knn-taxi | lle taxi 4,266 -> 4,289 | DROPPED-noise | +0.5% |
+| `LLE_FAST_KNN` | - | lane/apple-fast-isotonic-knn @ 7385fcfdd | ik-lle-knn-taxi | lle taxi 4,266 -> 4,289 | DROPPED-noise | +0.5%; M2 ik-lle-knn-taxi-b +0.4% slower: not merged |
 | `NC_FAST_CLS1_LABELS + NC_FAST_CLS1_PREDICT` | nearest-centroid / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-ncall-taxi | nearest-centroid taxi 105 -> 27 | DROPPED-noise | worse than LABELS alone |
 | `NC_FAST_CLS1_PREDICT` | nearest-centroid / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-ncpred-taxi | nearest-centroid taxi -4% | DROPPED-noise | <5% |
 | `RADIUS_FAST_REUSE_COUNT` | - | lane/apple-fast-neighbors2 @ 5fb6edd3f | n2-radius-reuse-taxi | radius-neighbors taxi 0.1 -> 0.1 | DROPPED-noise | ms-scale; code removed from main f9af6028e; recover at lane/apple-fast-neighbors2@5fb6edd3f |
@@ -216,7 +216,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `CAGRA_FAST_IVFG + CAGRA_FAST_IVFG_EXACTD` | cagra / istella | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-ivfgx-istella | 21,239 -> ? | OPEN | A/B queued, no judged result yet |
 | `CAGRA_FAST_IVFG + IVFG_EXACTD + IVFG_P8` | cagra / istella | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-ivfgx8-istella | 21,239 -> ? | OPEN | A/B queued, no judged result yet |
 | `CAGRA_FAST_IVFG + IVFG_EXACTD + SEEDS + ITERS` | cagra / istella | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-ivfgxsi-istella | 21,239 -> ? | OPEN | A/B queued, no judged result yet |
-| `ISOTONIC_FAST_PAIRMERGE + ISOTONIC_FAST_PAR` | isotonic / istella | lane/apple-fast-isotonic-knn @ 7385fcfdd | ik-iso-pair-istella | - | OPEN | A/B queued, no judged result yet |
+| `ISOTONIC_FAST_PAIRMERGE + ISOTONIC_FAST_PAR` | isotonic / istella | lane/apple-fast-isotonic-knn @ 7385fcfdd | ik-iso-pair-istella-b (M2) | PAR alone timed out -> 165.5 | KEPT lane/apple-fast-m2b1 | r2 .188; both default, `-D MOJOLEARN_ISOTONIC_FAST_PAR_OFF` / `-D MOJOLEARN_ISOTONIC_FAST_PAIRMERGE_OFF` revert |
 | `ISOTONIC_FAST_PAR` | isotonic / istella | lane/apple-fast-isotonic-knn @ 7385fcfdd | ik-iso-par-istella | - | OPEN | A/B queued, no judged result yet |
 | `IVFPQ_FAST_DEVICE_CODEBOOKS` | ivf-filter / istella; ivf-pq / istella; ivf-refine / istella | lane/apple-fast-ann @ 70833546a | ann-ivfpq-devcb-istella, ann-ivfrefine-devcb-istella, ann-ivffilter-devcb-istella | - | OPEN | A/B queued, no judged result yet |
 | `IVF_COARSE_RANDOM_INIT` | ivf / istella; ivf / taxi; ivf-pq / istella | lane/apple-fast-vsearch @ 86925aef9 | vsearch-pq-rinit-istella, vsearch-ivf-rinit-istella, vsearch-ivf-rinit-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
@@ -239,8 +239,8 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `PQ_SCAN_FUSED` | ivf-filter / istella; ivf-pq / istella; ivf-pq / taxi | lane/apple-fast-vsearch @ 86925aef9 | vsearch-pq-fused-istella, vsearch-filter-fused-istella, vsearch-pq-fused-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `TSNE_FAST_SPLIT` | tsne / istella | lane/apple-fast-ann @ 70833546a | ann-tsne-split-istella | - | OPEN | A/B queued, no judged result yet |
 | `VSEARCH_ALL` | ivf / istella; ivf / taxi; ivf-filter / istella; ivf-filter / taxi; ivf-pq / istella; i... | lane/apple-fast-vsearch @ 86925aef9 | vsearch-pq-all-istella, vsearch-ivf-all-istella, vsearch-ivf-all-taxi (+8) | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `XN_FAST_IMPUTE_TILED2` | knn-imputer / taxi | lane/apple-fast-isotonic-knn @ 7385fcfdd | ik-imp-t2-taxi | - | OPEN | A/B queued, no judged result yet |
-| `XN_FAST_MMA_ROUTE` | lle / taxi; lof / taxi | lane/apple-fast-isotonic-knn @ 7385fcfdd | ik-lle-mma-taxi, ik-lof-mma-taxi | - | OPEN | A/B queued, no judged result yet |
+| `XN_FAST_IMPUTE_TILED2` | knn-imputer / taxi | lane/apple-fast-isotonic-knn @ 7385fcfdd | ik-imp-t2-taxi-b (M2) | +1.5% | DROPPED-slower | not merged |
+| `XN_FAST_MMA_ROUTE` | lof / taxi; lle / taxi | lane/apple-fast-isotonic-knn @ 7385fcfdd | ik-lof-mma-taxi-b, ik-lle-mma-taxi-b (M2) | lof taxi 120.7 -> 2,659 (22x slower); lle -1.8% | DROPPED-slower | not merged; the fast_mma_knn route in x_neighbors/iter_device.mojo stays on the branch |
 | MOJOLEARN_XN_FAST_CLS2_OCSVM_RES | ocsvm / taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-res-ocsvm-taxi | -77% alone | KEEP, FAST+Apple default (`_OFF` off) | Gram formed and solved on the device, no 400 MB round trip; quality identical (n=1) |
 | MOJOLEARN_XN_FAST_CLS2_OCSVM_2L | ocsvm / taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-2l-ocsvm-taxi | -5% alone | KEEP, FAST+Apple default (`_OFF` off) | two launches per SMO iteration; same alpha bits |
 | MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256 | ocsvm / taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-{chunk256,all3}-ocsvm-taxi | 0% alone; all three 375.7 -> 65.0 | KEEP, FAST+Apple default (`_OFF` off) | kept with the combined A/B winner (fewer synchronizes) |
@@ -265,8 +265,8 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `MI_REG_SORTCOUNT + MI_REG_TIES` | select-mutual-info-reg / istella; select-mutual-info-reg / taxi | lane/apple-fast-mi @ 6944ebb57 | mi-reg-ties-istella, mi-reg-ties-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `MI_WORK` | - | lane/apple-fast-mi @ 6944ebb57 | mi-reg-work-istella, mi-reg-work-taxi, mi-clf-work-istella, mi-clf-work-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `PREP2_FAST_EIGH_BLOCK` | iterative-imputer / taxi | lane/apple-fast-prep2 @ 8762eb33f | prep2-ii-eigh-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `PREP3_LABELS` | label-binarizer / taxi; label-encoder / istella; multilabel-binarizer / taxi | lane/apple-fast-prep3 @ ec65873e3 | prep3-le-istella, prep3-lb-taxi, prep3-mlb-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `PREP3_MAXABS` | maxabs-scaler / istella | lane/apple-fast-prep3 @ ec65873e3 | prep3-maxabs-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `PREP3_LABELS` | label-binarizer / taxi | lane/apple-fast-prep3 @ ec65873e3 | prep3-lb-taxi-x (M2) | +1.0% | DROPPED-slower | not merged (x_prep/fastlabels.mojo stays on the branch) |
+| `PREP3_MAXABS` | maxabs-scaler / istella | lane/apple-fast-prep3 @ ec65873e3 | prep3-maxabs-istella-x (M2) | 133.0 -> 99.1 | KEPT lane/apple-fast-m2b1 | same max_abs_ / scale_ words; default, `-D MOJOLEARN_PREP3_MAXABS_OFF` reverts |
 | `PREP3_SPLINE` | spline / istella | lane/apple-fast-prep3 @ ec65873e3 | prep3-spline-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `PREP_FAST_CLS2_MINMAX_FUSED / _MINMAX_POOL` | minmax-scaler | lane/apple-fast-gap-cls2 @ 72602a339 | gapcls2-* | - | OPEN |  |
 | `PTIMPUTE_ALL` | power-transformer / istella; power-transformer / taxi | lane/apple-fast-ptimpute @ 9623cd7dc | ptimpute-pt-all-istella, ptimpute-pt-all-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
@@ -322,7 +322,10 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `FA_ITER_DEVICE + FA_LIVEBUF` | factor-analysis / istella; factor-analysis / taxi | lane/apple-fast-fa @ 3efbce2af | fa-livebuf-taxi, fa-livebuf-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `FA_TRANSFORM_FUSED` | factor-analysis / istella; factor-analysis / taxi | lane/apple-fast-fa @ 3efbce2af | fa-tr-taxi, fa-tr-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `LU_FAST_PIVOT_GRID` | lu-factor / synthetic; lu-solve / synthetic | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-lu-pivot-synthetic, dlin-lusolve-pivot-synthetic | lu-factor synthetic 1,377 -> 1,233; lu-solve 1,367 -> 1,234 | OPEN | candidate (-10%); merge waits on the other decomp-linalg lines |
-| `MCD_DEVICE_CSTEPS` | elliptic-envelope / taxi; min-cov-det / taxi | lane/apple-fast-robust @ cfdb95e48 | robust-mcd-taxi, robust-ee-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `MCD_DEVICE_CSTEPS` | elliptic-envelope / taxi | lane/apple-fast-robust @ cfdb95e48 | robust-ee-taxi-x (M2) | 64,578 -> 267.5 | KEPT lane/apple-fast-m2b1 | fraction_flagged .1024 -> .1027 (target .1); default, `-D MOJOLEARN_MCD_DEVICE_CSTEPS_OFF` reverts |
+| `ANN3_COARSE_SEED + IVF_FAST_SEED_DEVICE` | ivf-pq / istella | lane/apple-fast-fastonly2 @ eca3e33b6 | fastonly2-5-ivf-pq-istella (M2) | 18,555 -> 12,036 | KEPT lane/apple-fast-m2b1 | recall .5995 -> .6071; both default, `-D MOJOLEARN_ANN3_COARSE_SEED_OFF` / `-D MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF` revert |
+| `IVF_FAST_SEED_DEVICE` (on ANN3_COARSE_SEED) | ivf-pq / istella | lane/apple-fast-fastonly2 @ eca3e33b6 | fastonly2-3-ivf-pq-istella (M2) | -1.3% | KEPT lane/apple-fast-m2b1 | recall .6017 -> .6071 |
+| `ANN3_COARSE_SEED + IVF_FAST_SEED_DEVICE` | ivf / istella | lane/apple-fast-fastonly2 @ eca3e33b6 | fastonly2-4-ivf-istella (M2) | - | OPEN | the run failed (`--lane ivf` is not a bench_board_algos lane); the code ships with the ivf-pq win |
 | `QR_FAST_DEV` | qr / istella | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-qr-dev-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `SVD_FAST_CHOLQR` | svd / istella | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-svd-cholqr-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `XD_FAST_CLS2_GRP_DEVSCAN` | gaussian-rp / istella | lane/apple-fast-gap-cls2 @ 72602a339 | gapcls2-* | 54 -> 15.9 | OPEN | judged KEEP (-71%, keeps fit-time NaN refusal; beats sklearn 24.3); cls2 merge pending |
