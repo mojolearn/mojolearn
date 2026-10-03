@@ -42,3 +42,17 @@ comptime HDB_ONE_SYNC = HDB_FAST_APPLE and (
     is_defined["MOJOLEARN_HDB_ONE_SYNC"]() or HDB_ALL
 )
 """The extract's and the runner's output downloads under one wait each."""
+
+comptime HDB_LINKAGE_DEVICE = HDB_FAST_APPLE and (
+    is_defined["MOJOLEARN_HDB_LINKAGE_DEVICE"]() or HDB_ALL
+)
+"""The dendrogram's per-level hook loop as one lock-free union launch (no
+flag readback, dendrogram_union.mojo) and the condense with two status
+readbacks instead of eight waits (tree_device.mojo `_condensed_two_reads`)."""
+
+comptime HDB_SELECT_DEVICE = HDB_FAST_APPLE and (
+    is_defined["MOJOLEARN_HDB_SELECT_DEVICE"]() or HDB_ALL
+)
+"""Stabilities, selection, labels, scores and probabilities with no wait in
+between and ONE readback at the end (extract.mojo `_extract_one_read`);
+epsilon != 0 keeps main's route."""

@@ -77,7 +77,12 @@ from hierarchy.impl.cluster.detail.single_linkage import (
 )
 from checks.numerics import identical_div
 from hdbscan.impl.detail.core_tile import core_tile_applies
-from hdbscan.impl.detail.fast_apple import HDB_CORE_TILE, HDB_DEV_BORUVKA
+from hdbscan.impl.detail.fast_apple import (
+    HDB_CORE_TILE,
+    HDB_DEV_BORUVKA,
+    HDB_LINKAGE_DEVICE,
+)
+from hdbscan.impl.cluster.detail.dendrogram_union import build_dendrogram_union
 from hdbscan.impl.cluster.detail.fast_mr_mst_device import fast_mr_mst_device
 from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
 from std.os import getenv
@@ -406,10 +411,19 @@ def build_mr_linkage(
         print("HDB_STAGE edges_ms=" + String(Float64(now - st_t) / 1.0e6))
         st_t = now
     # `:107-117` Perform hierarchical labeling, on the device.
-    build_dendrogram_device(
-        ctx, mst_rows, mst_cols, mst_weights, n_edges,
-        out_dendrogram, out_distances, out_sizes,
-    )
+    # lane af-hdbscan2 (-D MOJOLEARN_HDB_LINKAGE_DEVICE): the same three
+    # outputs with one lock-free union launch per level and no flag
+    # readback (dendrogram_union.mojo).
+    comptime if HDB_LINKAGE_DEVICE:
+        build_dendrogram_union(
+            ctx, mst_rows, mst_cols, mst_weights, n_edges,
+            out_dendrogram, out_distances, out_sizes,
+        )
+    else:
+        build_dendrogram_device(
+            ctx, mst_rows, mst_cols, mst_weights, n_edges,
+            out_dendrogram, out_distances, out_sizes,
+        )
     trace.record_device[DType.int32](
         ctx, "hdbscan.dendrogram.children", out_dendrogram, n_edges * 2
     )
