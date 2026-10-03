@@ -16,6 +16,7 @@ every vendor, the Apple GPU has no float64): the IEEE `1.0 - float(p)` the
 Python row loop computed, so every vendor and the host agree word for word.
 A NaN p gives the quieted NaN operand (x86 and ARM `1.0 - nan`).
 """
+from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from checks.soft_f64 import SF64_ONE, sf64_sub
 from xtrees.ops_device import OPS_TPB, _blocks, _ctx
@@ -159,3 +160,166 @@ def binary_proba_device(
     ctx.synchronize()
     _ = d_p^
     _ = d_out^
+
+
+# ------------------------------------------------ DART / RTE bookkeeping --
+# lane apple-fast-py2mojo-trees: DART's class counts, its column-sampled
+# trees' colid remap, its binary predict codes, TreeExplainer's DART leaf
+# spread and RandomTreesEmbedding's leaf numbering. Integers, compares and
+# word copies only: every vendor and the host column agree.
+
+
+def class_counts_kernel(y: MutPointer[Float32, MutAnyOrigin], n: Int64, k: Int64,
+                        counts: MutPointer[Int32, MutAnyOrigin], bad: MutPointer[Int32, MutAnyOrigin]):
+    """counts[int(y[r])] += 1 (integer atomics); a code outside [0, k) or not
+    an integer sets bad[0]."""
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while r < Int(n):
+        var v = y.unsafe_load(r)
+        var c = Int(v) if (v >= 0.0 and v < Float32(Int(k))) else -1
+        if c < 0 or Float32(c) != v:
+            bad.unsafe_store(0, Int32(1))
+        else:
+            _ = Atomic.fetch_add(counts.unsafe_offset(c), Int32(1))
+        r += stride
+
+
+def class_counts_device(y: MutPointer[Float32, MutUntrackedOrigin], n: Int, k: Int,
+                        counts: MutPointer[Int32, MutUntrackedOrigin]) raises:
+    var ctx = _ctx()
+    var d_y = ctx.enqueue_create_buffer[DType.float32](max(1, n))
+    if n > 0:
+        ctx.enqueue_copy(dst_buf=d_y, src_ptr=y)
+    var d_c = ctx.enqueue_create_buffer[DType.int32](k)
+    d_c.enqueue_fill(Int32(0))
+    var d_bad = ctx.enqueue_create_buffer[DType.int32](1)
+    d_bad.enqueue_fill(Int32(0))
+    ctx.enqueue_function[class_counts_kernel](
+        d_y.unsafe_ptr(), Int64(n), Int64(k), d_c.unsafe_ptr(), d_bad.unsafe_ptr(),
+        grid_dim=_blocks(n), block_dim=OPS_TPB,
+    )
+    var h_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_buf=h_bad, src_buf=d_bad)
+    ctx.enqueue_copy(dst_ptr=counts, src_buf=d_c)
+    ctx.synchronize()
+    var is_bad = h_bad.unsafe_ptr().unsafe_load(0) != Int32(0)
+    _ = d_y^
+    _ = d_c^
+    _ = d_bad^
+    _ = h_bad^
+    if is_bad:
+        raise Error("x_trees class_counts: a class code outside [0, n_classes)")
+
+
+def remap_cols_kernel(colid: MutPointer[Int32, MutAnyOrigin], nn: Int64, cols: MutPointer[Int32, MutAnyOrigin],
+                      m: Int64, bad: MutPointer[Int32, MutAnyOrigin]):
+    """colid[g] = cols[colid[g]] for a split node (colid >= 0); a leaf (< 0)
+    keeps its word. A column outside [0, m) sets bad[0]."""
+    var g = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while g < Int(nn):
+        var v = Int(colid.unsafe_load(g))
+        if v >= 0:
+            if v >= Int(m):
+                bad.unsafe_store(0, Int32(1))
+            else:
+                colid.unsafe_store(g, cols.unsafe_load(v))
+        g += stride
+
+
+def remap_cols_device(colid: MutPointer[Int32, MutUntrackedOrigin], nn: Int,
+                      cols: MutPointer[Int32, MutUntrackedOrigin], m: Int) raises:
+    var ctx = _ctx()
+    var d_id = ctx.enqueue_create_buffer[DType.int32](nn)
+    ctx.enqueue_copy(dst_buf=d_id, src_ptr=colid)
+    var d_cols = ctx.enqueue_create_buffer[DType.int32](max(1, m))
+    if m > 0:
+        ctx.enqueue_copy(dst_buf=d_cols, src_ptr=cols)
+    var d_bad = ctx.enqueue_create_buffer[DType.int32](1)
+    d_bad.enqueue_fill(Int32(0))
+    ctx.enqueue_function[remap_cols_kernel](
+        d_id.unsafe_ptr(), Int64(nn), d_cols.unsafe_ptr(), Int64(m), d_bad.unsafe_ptr(),
+        grid_dim=_blocks(nn), block_dim=OPS_TPB,
+    )
+    var h_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_buf=h_bad, src_buf=d_bad)
+    ctx.synchronize()
+    var is_bad = h_bad.unsafe_ptr().unsafe_load(0) != Int32(0)
+    if not is_bad:
+        ctx.enqueue_copy(dst_ptr=colid, src_buf=d_id)
+        ctx.synchronize()
+    _ = d_id^
+    _ = d_cols^
+    _ = d_bad^
+    _ = h_bad^
+    if is_bad:
+        raise Error("x_trees remap_cols: a split column outside the sampled columns")
+
+
+def positive_codes_kernel(x: MutPointer[UInt64, MutAnyOrigin], n: Int64, codes: MutPointer[Int32, MutAnyOrigin]):
+    """codes[r] = 1 if x[r] > 0 else 0 (binary64 words; a NaN and -0.0 give 0)."""
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while r < Int(n):
+        var w = x.unsafe_load(r)
+        var is_nan = (w & UInt64(0x7FF0000000000000)) == UInt64(0x7FF0000000000000) and (w & UInt64(0x000FFFFFFFFFFFFF)) != 0
+        var pos = (w >> 63) == 0 and (w & UInt64(0x7FFFFFFFFFFFFFFF)) != 0 and not is_nan
+        codes.unsafe_store(r, Int32(1) if pos else Int32(0))
+        r += stride
+
+
+def positive_codes_device(x: MutPointer[Float64, MutUntrackedOrigin], n: Int,
+                          codes: MutPointer[Int32, MutUntrackedOrigin]) raises:
+    var ctx = _ctx()
+    var d_x = ctx.enqueue_create_buffer[DType.uint64](n)
+    ctx.enqueue_copy(dst_buf=d_x, src_ptr=x.bitcast[UInt64]())
+    var d_c = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_function[positive_codes_kernel](
+        d_x.unsafe_ptr(), Int64(n), d_c.unsafe_ptr(), grid_dim=_blocks(n), block_dim=OPS_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=codes, src_buf=d_c)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_c^
+
+
+def spread_leaves_kernel(vals: MutPointer[UInt32, MutAnyOrigin], offs: MutPointer[Int32, MutAnyOrigin], t: Int64,
+                         nn: Int64, k: Int64, dst: MutPointer[UInt32, MutAnyOrigin]):
+    """dst[g * k + c] = vals[g] when c == (tree of node g) mod k, else +0.0;
+    one thread per cell, the tree found by binary search over offs."""
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    var kk = Int(k)
+    while cell < Int(nn) * kk:
+        var g = cell // kk
+        var c = cell - g * kk
+        var lo = 0
+        var hi = Int(t)
+        while hi - lo > 1:
+            var mid = (lo + hi) // 2
+            if Int(offs.unsafe_load(mid)) <= g:
+                lo = mid
+            else:
+                hi = mid
+        dst.unsafe_store(cell, vals.unsafe_load(g) if c == lo % kk else UInt32(0))
+        cell += stride
+
+
+def spread_leaves_device(vals: MutPointer[Float32, MutUntrackedOrigin], offs: MutPointer[Int32, MutUntrackedOrigin],
+                         t: Int, nn: Int, k: Int, dst: MutPointer[Float32, MutUntrackedOrigin]) raises:
+    var ctx = _ctx()
+    var d_v = ctx.enqueue_create_buffer[DType.uint32](nn)
+    ctx.enqueue_copy(dst_buf=d_v, src_ptr=vals.bitcast[UInt32]())
+    var d_o = ctx.enqueue_create_buffer[DType.int32](t + 1)
+    ctx.enqueue_copy(dst_buf=d_o, src_ptr=offs)
+    var d_d = ctx.enqueue_create_buffer[DType.uint32](nn * k)
+    ctx.enqueue_function[spread_leaves_kernel](
+        d_v.unsafe_ptr(), d_o.unsafe_ptr(), Int64(t), Int64(nn), Int64(k), d_d.unsafe_ptr(),
+        grid_dim=_blocks(nn * k), block_dim=OPS_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=dst.bitcast[UInt32](), src_buf=d_d)
+    ctx.synchronize()
+    _ = d_v^
+    _ = d_o^
+    _ = d_d^

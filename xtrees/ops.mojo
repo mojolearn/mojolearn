@@ -1194,3 +1194,45 @@ def folds_serial(
                 rows[unsafe_offset=base + out_pos] = Int32(r)
                 out_pos += 1
     return 0
+
+
+# lane apple-fast-py2mojo-trees: the host column of glue_device's DART / RTE
+# bookkeeping (the same integers, compares and word copies).
+
+
+def class_counts(y: MutPointer[Float32, MutUntrackedOrigin], n: Int, k: Int,
+                 counts: MutPointer[Int32, MutUntrackedOrigin]) raises:
+    for c in range(k):
+        counts[unsafe_offset=c] = 0
+    for r in range(n):
+        var v = y[unsafe_offset=r]
+        var c = Int(v) if (v >= 0.0 and v < Float32(k)) else -1
+        if c < 0 or Float32(c) != v:
+            raise Error("x_trees class_counts: a class code outside [0, n_classes)")
+        counts[unsafe_offset=c] = counts[unsafe_offset=c] + 1
+
+
+def remap_cols(colid: MutPointer[Int32, MutUntrackedOrigin], nn: Int,
+               cols: MutPointer[Int32, MutUntrackedOrigin], m: Int) raises:
+    for g in range(nn):
+        var v = Int(colid[unsafe_offset=g])
+        if v >= m:
+            raise Error("x_trees remap_cols: a split column outside the sampled columns")
+    for g in range(nn):
+        var v = Int(colid[unsafe_offset=g])
+        if v >= 0:
+            colid[unsafe_offset=g] = cols[unsafe_offset=v]
+
+
+def positive_codes(x: MutPointer[Float64, MutUntrackedOrigin], n: Int, codes: MutPointer[Int32, MutUntrackedOrigin]):
+    for r in range(n):
+        codes[unsafe_offset=r] = Int32(1) if x[unsafe_offset=r] > 0.0 else Int32(0)
+
+
+def spread_leaves(vals: MutPointer[Float32, MutUntrackedOrigin], offs: MutPointer[Int32, MutUntrackedOrigin],
+                  t: Int, nn: Int, k: Int, dst: MutPointer[Float32, MutUntrackedOrigin]):
+    for j in range(t):
+        var c = j % k
+        for g in range(Int(offs[unsafe_offset=j]), Int(offs[unsafe_offset=j + 1])):
+            for q in range(k):
+                dst[unsafe_offset=g * k + q] = vals[unsafe_offset=g] if q == c else Float32(0.0)

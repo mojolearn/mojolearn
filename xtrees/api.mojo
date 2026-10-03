@@ -13,8 +13,11 @@ from checks.numerics import identical_log64, GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.python import Python
-from xtrees.folds_device import device_folds
-from xtrees.glue_device import binary_proba_device, indicator_codes_device, stack_w64_device
+from xtrees.folds_device import device_folds, leaf_numbering
+from xtrees.glue_device import (
+    binary_proba_device, indicator_codes_device, stack_w64_device, class_counts_device, remap_cols_device,
+    positive_codes_device, spread_leaves_device,
+)
 from xtrees.exact_sum import ES_FLAGS, ES_MAX_ROWS, exact_sum_device, exact_sum_host
 from xtrees.oob import (
     E64_MAX_ROWS, count_equal_device, count_equal_host, count_rows_device, count_rows_host, oob_r2_device, oob_r2_host,
@@ -40,7 +43,8 @@ from xtrees.ops import (
     samme_step, r2_step, weighted_median, apply_trees, gradients, leaf_newton, leaf_newton_rows, tree_score_add, uniform,
     onehot_leaves, transpose_f32, normalize_rows, exact_sum_f32, EXACT_SUM_LIMBS, logit, scatter, platt_fit, platt_apply, isotonic_fit,
     isotonic_predict, platt_apply_strided, isotonic_predict_strided, complement_pairs, indicator_codes, column_f64,
-    bag_rows, unseen_rows, transpose_f64, stack_w64, binary_proba,
+    bag_rows, unseen_rows, transpose_f64, stack_w64, binary_proba, class_counts, remap_cols, positive_codes,
+    spread_leaves,
 )
 
 
@@ -737,6 +741,79 @@ def oob_r2_binding(bufs: PythonObject, params: PythonObject) raises -> PythonObj
     return PythonObject(n)
 
 
+def class_counts_binding(y: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, k]: counts (int32, k) = the rows of each float32 class
+    code (DART's multiclass init; lane apple-fast-py2mojo-trees)."""
+    _need(params, 2, "x_trees_class_counts")
+    var n = _count(_i(params, 0), "x_trees_class_counts")
+    var k = _i(params, 1)
+    if k < 1:
+        raise Error("x_trees_class_counts: needs k >= 1")
+    var ya = Int(py=y)
+    var yp = f32_ptr(ya) if ya != 0 else f32_ptr(Int(py=counts))
+    comptime if XTREES_DEVICE_OPS:
+        class_counts_device(yp, n, k, i32_ptr(Int(py=counts)))
+    else:
+        class_counts(yp, n, k, i32_ptr(Int(py=counts)))
+    return PythonObject(k)
+
+
+def remap_cols_binding(colid: PythonObject, cols: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n_nodes, m]: in place colid[g] = cols[colid[g]] for a split
+    node (a column-sampled DART tree back to X's columns)."""
+    _need(params, 2, "x_trees_remap_cols")
+    var nn = _count(_i(params, 0), "x_trees_remap_cols")
+    var m = _count(_i(params, 1), "x_trees_remap_cols")
+    if nn > 0:
+        var ca = Int(py=cols)
+        var cp = i32_ptr(ca) if ca != 0 else i32_ptr(Int(py=colid))
+        comptime if XTREES_DEVICE_OPS:
+            remap_cols_device(i32_ptr(Int(py=colid)), nn, cp, m)
+        else:
+            remap_cols(i32_ptr(Int(py=colid)), nn, cp, m)
+    return PythonObject(nn)
+
+
+def positive_codes_binding(x: PythonObject, codes: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n]: codes (int32) = 1 where the float64 x > 0, else 0."""
+    _need(params, 1, "x_trees_positive_codes")
+    var n = _count(_i(params, 0), "x_trees_positive_codes")
+    if n > 0:
+        comptime if XTREES_DEVICE_OPS:
+            positive_codes_device(f64_ptr(Int(py=x)), n, i32_ptr(Int(py=codes)))
+        else:
+            positive_codes(f64_ptr(Int(py=x)), n, i32_ptr(Int(py=codes)))
+    return PythonObject(n)
+
+
+def spread_leaves_binding(vals: PythonObject, offs: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n_nodes, n_trees, k]: dst (float32, n_nodes x k) row g =
+    vals[g] in column (tree of g) mod k, zeros elsewhere (TreeExplainer's
+    multiclass DART forest)."""
+    _need(params, 3, "x_trees_spread_leaves")
+    var nn = _count(_i(params, 0), "x_trees_spread_leaves")
+    var t = _count(_i(params, 1), "x_trees_spread_leaves")
+    var k = _i(params, 2)
+    if k < 1 or t < 1:
+        raise Error("x_trees_spread_leaves: needs trees and k >= 1")
+    if nn > 0:
+        comptime if XTREES_DEVICE_OPS:
+            spread_leaves_device(f32_ptr(Int(py=vals)), i32_ptr(Int(py=offs)), t, nn, k, f32_ptr(Int(py=dst)))
+        else:
+            spread_leaves(f32_ptr(Int(py=vals)), i32_ptr(Int(py=offs)), t, nn, k, f32_ptr(Int(py=dst)))
+    return PythonObject(nn)
+
+
+def leaf_numbering_binding(left: PythonObject, node_col: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n_nodes]: node_col (int32) = each leaf's output column in node
+    order, -1 for a split node; returns the leaf count (RandomTreesEmbedding)."""
+    _need(params, 1, "x_trees_leaf_numbering")
+    var nn = _count(_i(params, 0), "x_trees_leaf_numbering")
+    if nn == 0:
+        return PythonObject(0)
+    return PythonObject(leaf_numbering(i32_ptr(Int(py=left)), nn, i32_ptr(Int(py=node_col))))
+
+
 #: lane apple-fast-py2mojo-trees (2026-10-03, Andrew: "everything is supposed
 #: to be in mojo"): 1 in every build, so python/mojolearn/_expansion_trees.py
 #: runs the wrappers' cv folds, OneVsRest targets, MultiOutputClassifier label
@@ -966,6 +1043,11 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[count_rows_binding]("x_trees_count_rows")
     m.def_function[count_equal_binding]("x_trees_count_equal")
     m.def_function[oob_r2_binding]("x_trees_oob_r2")
+    m.def_function[class_counts_binding]("x_trees_class_counts")
+    m.def_function[remap_cols_binding]("x_trees_remap_cols")
+    m.def_function[positive_codes_binding]("x_trees_positive_codes")
+    m.def_function[spread_leaves_binding]("x_trees_spread_leaves")
+    m.def_function[leaf_numbering_binding]("x_trees_leaf_numbering")
     m.def_function[block_mean_binding]("x_trees_block_mean")
     m.def_function[kshap_synth_binding]("x_trees_kshap_synth")
     m.def_function[kshap_solve_binding]("x_trees_kshap_solve")

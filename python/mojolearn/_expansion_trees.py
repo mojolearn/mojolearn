@@ -1425,6 +1425,11 @@ class _DARTBase(_TreesEnsembleBase):
             if not 0.0 < p < 1.0:
                 raise ValueError("y must hold both classes")
             inits = [float(b.x_trees_log64(p / (1.0 - p)))]
+        elif _trees_py2mojo(self):
+            # lane apple-fast-py2mojo-trees: the class counts in the binding
+            cnt = empty((K,), "<i4")
+            b.x_trees_class_counts(addr_ro(y32, name="y"), addr(cnt, name="counts"), [n, K])
+            inits = [float(b.x_trees_log64(max(1e-15, c / n))) for c in cnt.tolist()]
         else:
             counts = [0] * K
             for v in y32.tolist():
@@ -1479,6 +1484,7 @@ class _DARTBase(_TreesEnsembleBase):
         n, d = Xa.shape
         train_nodes = []
         sum_w = 0.0
+        native_glue = _trees_py2mojo(self)
         for it in range(int(self.n_estimators)):
             t = len(self.tree_weights_)
             u = empty((1 + t,), "<f8")
@@ -1515,8 +1521,12 @@ class _DARTBase(_TreesEnsembleBase):
             for c in range(K):
                 j = it * K + c
                 cols = self._cols(d, j)
-                tgt = target if K == 1 else self._gather_vec(target, Array.from_list(
-                    list(range(c * n, (c + 1) * n)), "<i4"))
+                if K == 1:
+                    tgt = target
+                elif native_glue:
+                    tgt = target[c * n:(c + 1) * n]
+                else:
+                    tgt = self._gather_vec(target, Array.from_list(list(range(c * n, (c + 1) * n)), "<i4"))
                 Xf, yf = Xa, tgt
                 if rows is not None or cols is not None:
                     Xf = self._gather(Xa, rows if rows is not None else _trees_arange(n),
@@ -1532,7 +1542,11 @@ class _DARTBase(_TreesEnsembleBase):
                     tree._fit_in_session(session, yf)
                 else:
                     tree.fit(Xf, yf)
-                if cols is not None:
+                if cols is not None and native_glue:
+                    cid = tree._colid.copy()
+                    b.x_trees_remap_cols(addr(cid, name="colid"), addr_ro(cols, name="cols"), [len(cid), len(cols)])
+                    tree._colid = cid
+                elif cols is not None:
                     cl = cols.tolist()
                     tree._colid = Array.from_list([cl[v] if v >= 0 else v for v in tree._colid.tolist()], "<i4")
                 nodes = self._tree_nodes(tree, Xa)
@@ -1760,6 +1774,15 @@ class DARTClassifier(_DARTBase):
             acc = acc.reshape((n * K,))
             self._bind().x_trees_softmax_rows(addr(acc, name="proba"), [n, K])
             return acc.reshape((n, K))
+        if _trees_py2mojo(self):
+            # lane apple-fast-py2mojo-trees: the (0, raw) rows stacked natively
+            raw = self._raw(X)
+            n = len(raw)
+            acc = empty((2 * n,), "<f8")
+            self._bind().x_trees_stack_w64([addr_ro(zeros((n,), "<f8"), name="zero"), addr_ro(raw, name="raw")],
+                                           addr(acc, name="proba"), [n])
+            self._bind().x_trees_softmax_rows(addr(acc, name="proba"), [n, 2])
+            return acc.reshape((n, 2))
         raw = self._raw(X).tolist()
         acc = Array.from_list([v for r in raw for v in (0.0, r)], "<f8")
         self._bind().x_trees_softmax_rows(addr(acc, name="proba"), [len(raw), 2])
@@ -1770,6 +1793,11 @@ class DARTClassifier(_DARTBase):
             acc = self._raw_rows(X)
             n, K = acc.shape
             return decode_labels(self.classes_, self._argmax(acc.reshape((n * K,)), n, K))
+        if _trees_py2mojo(self):
+            raw = self._raw(X)
+            codes = empty((len(raw),), "<i4")
+            self._bind().x_trees_positive_codes(addr_ro(raw, name="raw"), addr(codes, name="codes"), [len(raw)])
+            return decode_labels(self.classes_, codes)
         raw = self._raw(X).tolist()
         return decode_labels(self.classes_, Array.from_list([1 if r > 0 else 0 for r in raw], "<i4"))
 
@@ -1823,6 +1851,21 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
             max_leaf_nodes=self.max_leaf_nodes, min_impurity_decrease=self.min_impurity_decrease,
             random_state=seed, numeric_mode=self.numeric_mode).fit(Xa, yr)
         f = self.forest_
+        if _trees_py2mojo(self) and int(f._offsets[0]) == 0:
+            # lane apple-fast-py2mojo-trees: the leaf numbering in the binding
+            # (a parallel scan over the leaf flags in node order)
+            n_trees = len(f._offsets) - 1
+            nn = int(f._offsets[n_trees])
+            left = as_i32_c(f._left_child, ndim=1, name="left")[0]
+            node_col = empty((nn,), "<i4")
+            col = int(self._bind().x_trees_leaf_numbering(addr_ro(left, name="left"), addr(node_col, name="node_col"),
+                                                          [nn]))
+            self._tree_base = f._offsets[0:n_trees]
+            self._node_col = node_col
+            self.n_trees_ = n_trees
+            self.n_output_features_ = col
+            self.n_features_in_ = d
+            return self
         offsets, left = f._offsets.tolist(), f._left_child.tolist()
         n_trees = len(offsets) - 1
         node_col, col = [-1] * offsets[-1], 0
@@ -2996,6 +3039,39 @@ def _trees_forest_arrays(est):
             1.0 / int(est._n_trees))
 
 
+def _trees_dart_forest(b, model, K):
+    """(arrays, tscale) of a DART model as ONE flat forest, in boosting order:
+    the node arrays joined as bytes (memory copies, no per-node Python), a
+    multiclass tree's leaf values spread into column j % K natively
+    (x_trees_spread_leaves). The words the per-node Python lists built (lane
+    apple-fast-py2mojo-trees); O(trees) Python for the offsets and scales."""
+    offs = [0]
+    for tree in model.trees_:
+        to = tree._offsets
+        if len(to) != 2:
+            raise ValueError("a DART tree must hold one tree")
+        offs.append(offs[-1] + int(to[1]) - int(to[0]))
+
+    def join(arrs, conv, dtype):
+        raw = b"".join(conv(a, ndim=1, name="tree")[0].tobytes() for a in arrs)
+        return frombytes(raw, dtype, (len(raw) // 4,))
+
+    col = join([t._colid for t in model.trees_], as_i32_c, "<i4")
+    q = join([t._quesval for t in model.trees_], as_f32_c, "<f4")
+    lc = join([t._left_child for t in model.trees_], as_i32_c, "<i4")
+    vals = join(model.tree_values_, as_f32_c, "<f4")
+    if K > 1:
+        nn = len(vals)
+        lv = empty((nn * K,), "<f4")
+        offs_a = Array.from_list(offs, "<i4")
+        b.x_trees_spread_leaves(addr_ro(vals, name="values"), addr_ro(offs_a, name="offsets"), addr(lv, name="leaves"),
+                                [nn, len(model.trees_), K])
+    else:
+        lv = vals
+    tscale = Array.from_list([float(c) for c in model.tree_coefs_], "<f4")
+    return (Array.from_list(offs, "<i4"), col, q, lc, lv), tscale
+
+
 class TreeExplainer(_TreesEnsembleBase):
     """Exact TreeSHAP for this library's forests and DART models.
     `shap_values(X)` is (n, d) for one output, else (n, d, k), float32;
@@ -3031,8 +3107,11 @@ class TreeExplainer(_TreesEnsembleBase):
             # one forest of every boosted tree, in boosting order, each tree
             # scaled by its coefficient; a multiclass tree scores one class:
             # its leaf values in column j % K.
+            native = _trees_py2mojo(self)
+            if native:
+                arrays, tscale = _trees_dart_forest(self._bind(), model, K)
             offs, col, q, lc, lv, ts = [0], [], [], [], [], []
-            for j, (tree, values, coef) in enumerate(zip(model.trees_, model.tree_values_, model.tree_coefs_)):
+            for j, (tree, values, coef) in enumerate([] if native else zip(model.trees_, model.tree_values_, model.tree_coefs_)):
                 vals = values.tolist()
                 if K > 1:
                     c = j % K
@@ -3046,9 +3125,10 @@ class TreeExplainer(_TreesEnsembleBase):
                 lv += vals
                 offs.append(offs[-1] + to[1] - to[0])
                 ts.append(float(coef))
-            arrays = (Array.from_list(offs, "<i4"), Array.from_list(col, "<i4"), Array.from_list(q, "<f4"),
-                      Array.from_list(lc, "<i4"), Array.from_list(lv, "<f4"))
-            tscale = Array.from_list(ts, "<f4")
+            if not native:
+                arrays = (Array.from_list(offs, "<i4"), Array.from_list(col, "<i4"), Array.from_list(q, "<f4"),
+                          Array.from_list(lc, "<i4"), Array.from_list(lv, "<f4"))
+                tscale = Array.from_list(ts, "<f4")
             k = K
         else:
             fa = _trees_forest_arrays(model)
