@@ -53,9 +53,11 @@ is the CPU column's; it keeps the walk).
 
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.device_scan import device_first_nonfinite
+from std.memory import bitcast
+from hdbscan.impl.detail.fast_apple import HDB_LINKAGE_DEVICE
 from core.fast_radix_sort import (
     fast_radix_sort_pairs_u32,
     frs_counts_len,
@@ -177,6 +179,47 @@ def td_download_f32(
         out[i] = h.unsafe_ptr().unsafe_load(i)
     _ = h^
     _ = v^
+    return out^
+
+
+def td_stage_i32(
+    ctx: DeviceContext, buf: DeviceBuffer[DType.int32]
+) raises -> HostBuffer[DType.int32]:
+    """lane af-hdbscan2 (HDB_ONE_SYNC): the WHOLE device buffer copied into a
+    host buffer with NO wait; the caller synchronizes once for every staged
+    buffer and then takes the lists (`td_take_*`). No sub-buffer view is
+    made, so nothing is freed before the copy runs."""
+    var n = len(buf)
+    var h = ctx.enqueue_create_host_buffer[DType.int32](max(n, 1))
+    if n > 0:
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
+    return h^
+
+
+def td_stage_f32(
+    ctx: DeviceContext, buf: DeviceBuffer[DType.float32]
+) raises -> HostBuffer[DType.float32]:
+    """`td_stage_i32` for Float32."""
+    var n = len(buf)
+    var h = ctx.enqueue_create_host_buffer[DType.float32](max(n, 1))
+    if n > 0:
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
+    return h^
+
+
+def td_take_i32(h: HostBuffer[DType.int32], n: Int) -> List[Int32]:
+    """The first `n` words of a staged host buffer, after the wait."""
+    var out = List[Int32](length=max(n, 0), fill=Int32(0))
+    for i in range(n):
+        out[i] = h.unsafe_ptr().unsafe_load(i)
+    return out^
+
+
+def td_take_f32(h: HostBuffer[DType.float32], n: Int) -> List[Float32]:
+    """`td_take_i32` for Float32."""
+    var out = List[Float32](length=max(n, 0), fill=Float32(0.0))
+    for i in range(n):
+        out[i] = h.unsafe_ptr().unsafe_load(i)
     return out^
 
 
@@ -640,6 +683,351 @@ def _refuse_nonfinite_device(
         )
 
 
+# ---------------------------------------- lane af-hdbscan2, FAST Apple ---
+# `-D MOJOLEARN_HDB_LINKAGE_DEVICE`: the same tree as `build_condensed_device`
+# below (the same kernels, in the same order, on the same values) with the
+# host's reads gathered into TWO status readbacks instead of eight waits:
+#   read 1: max child id, out-of-range count, first non-finite delta, n_split
+#   read 2: max cluster depth, first non-finite condensed lambda
+# Main reads them as: device_first_nonfinite (1 wait), two td_read_i32 (2),
+# n_split (1), a wait after the rank (1), max_cdepth (1),
+# device_first_nonfinite (1), the closing synchronize (1).
+# The refusals are main's, in main's order, with main's messages and the
+# same first index (an integer Atomic.min over the flagged indices). Because
+# read 1 comes after the depth walk and the split scan, those kernels also
+# run on an invalid MST before it is refused: the merge kernel leaves every
+# pointer in range, and `cdf_split_flag_kernel` is `cd_split_flag_kernel`
+# with the children bounds-checked, so nothing reads out of range first.
+
+comptime CDF_NONE = Int32(0x7FFFFFFF)
+
+
+def cdf_first_nonfinite_kernel(buf: F32P, cell: I32P, n: Int32):
+    """cell = min over i of the indices whose bits are NaN or infinity."""
+    var i = _gid()
+    if i >= Int(n):
+        return
+    var au = bitcast[DType.uint32](buf[i]) & UInt32(0x7FFFFFFF)
+    if au >= UInt32(0x7F800000):
+        _ = Atomic.min(cell, Int32(i))
+
+
+def cdf_split_flag_kernel(
+    children: I32P, sizes: I32P, live: I32P, flag: I32P, n_in: Int32, mcs: Int32
+):
+    """`cd_split_flag_kernel` with out-of-range children flagged 0 (they
+    are refused by read 1 before anything consumes the flags)."""
+    var i = _gid()
+    var n = Int(n_in)
+    if i >= n:
+        return
+    if i == n - 1:
+        flag[i] = 0
+        return
+    var root = 2 * (n - 1)
+    var l = Int(children[2 * i])
+    var r = Int(children[2 * i + 1])
+    if l < 0 or r < 0 or l >= root or r >= root:
+        flag[i] = 0
+        return
+    var s = (
+        live[n + i] != 0
+        and _size_of(l, n, sizes) >= Int(mcs)
+        and _size_of(r, n, sizes) >= Int(mcs)
+    )
+    flag[i] = Int32(1) if s else Int32(0)
+
+
+def cdf_status1_kernel(
+    check: I32P, bad: I32P, off: I32P, status: I32P, n: Int32
+):
+    """Four scalars into one status buffer (a copy, one thread)."""
+    if _gid() != 0:
+        return
+    status[0] = check[0]
+    status[1] = check[1]
+    status[2] = bad[0]
+    status[3] = off[Int(n) - 1]
+
+
+def cdf_status2_kernel(mx: I32P, bad: I32P, status: I32P):
+    if _gid() != 0:
+        return
+    status[0] = mx[0]
+    status[1] = bad[0]
+
+
+def _condensed_two_reads(
+    ctx: DeviceContext,
+    mut children: DeviceBuffer[DType.int32],
+    mut delta: DeviceBuffer[DType.float32],
+    mut sizes: DeviceBuffer[DType.int32],
+    min_cluster_size: Int,
+    n_leaves: Int,
+    sabotage: Int32,
+) raises -> DeviceTree:
+    """`build_condensed_device` with two status readbacks (block comment
+    above). The caller has run the argument refusals."""
+    var n = n_leaves
+    var n_merges = n - 1
+    var n_nodes = 2 * n - 1
+    var root = n_nodes - 1
+
+    var par = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    var wdep = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    var wpre = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    var live = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    var side = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    var lam = ctx.enqueue_create_buffer[DType.float32](n_merges)
+    var check = ctx.enqueue_create_buffer[DType.int32](2)
+    var bad = ctx.enqueue_create_buffer[DType.int32](2)
+    var status = ctx.enqueue_create_buffer[DType.int32](4)
+    ctx.enqueue_memset(check, Int32(0))
+    ctx.enqueue_memset(bad, CDF_NONE)
+    ctx.enqueue_function[cdf_first_nonfinite_kernel](
+        delta.unsafe_ptr(), bad.unsafe_ptr(), Int32(n_merges),
+        grid_dim=(td_grid(n_merges), 1, 1), block_dim=(TD_TPB, 1, 1),
+    )
+    ctx.enqueue_function[cd_init_kernel](
+        par.unsafe_ptr(), wdep.unsafe_ptr(), wpre.unsafe_ptr(),
+        live.unsafe_ptr(), side.unsafe_ptr(), Int32(n_nodes),
+        grid_dim=(td_grid(n_nodes), 1, 1), block_dim=(TD_TPB, 1, 1),
+    )
+    ctx.enqueue_function[cd_merge_kernel](
+        children.unsafe_ptr(), delta.unsafe_ptr(), sizes.unsafe_ptr(),
+        par.unsafe_ptr(), wdep.unsafe_ptr(), wpre.unsafe_ptr(),
+        live.unsafe_ptr(), side.unsafe_ptr(), lam.unsafe_ptr(),
+        check.unsafe_ptr(), Int32(n), Int32(min_cluster_size),
+        Int32(1) if sabotage == HDB_SAB_LAMBDA_STD_DIV else Int32(0),
+        grid_dim=(td_grid(n_merges), 1, 1), block_dim=(TD_TPB, 1, 1),
+    )
+
+    # depth, preorder and live over the root path (main's rounds).
+    var par0 = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    ctx.enqueue_copy(dst_buf=par0, src_buf=par)
+    var pb = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    var db = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    var qb = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    var lb = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    var rounds = td_rounds(n_nodes)
+    for k in range(rounds):
+        if k % 2 == 0:
+            ctx.enqueue_function[cd_jump3_kernel](
+                par0.unsafe_ptr(), wdep.unsafe_ptr(), wpre.unsafe_ptr(),
+                live.unsafe_ptr(), pb.unsafe_ptr(), db.unsafe_ptr(),
+                qb.unsafe_ptr(), lb.unsafe_ptr(), Int32(n_nodes),
+                grid_dim=(td_grid(n_nodes), 1, 1), block_dim=(TD_TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[cd_jump3_kernel](
+                pb.unsafe_ptr(), db.unsafe_ptr(), qb.unsafe_ptr(),
+                lb.unsafe_ptr(), par0.unsafe_ptr(), wdep.unsafe_ptr(),
+                wpre.unsafe_ptr(), live.unsafe_ptr(), Int32(n_nodes),
+                grid_dim=(td_grid(n_nodes), 1, 1), block_dim=(TD_TPB, 1, 1),
+            )
+    if rounds % 2 == 1:
+        ctx.enqueue_copy(dst_buf=wdep, src_buf=db)
+        ctx.enqueue_copy(dst_buf=wpre, src_buf=qb)
+        ctx.enqueue_copy(dst_buf=live, src_buf=lb)
+
+    var off = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_function[cdf_split_flag_kernel](
+        children.unsafe_ptr(), sizes.unsafe_ptr(), live.unsafe_ptr(),
+        off.unsafe_ptr(), Int32(n), Int32(min_cluster_size),
+        grid_dim=(td_grid(n), 1, 1), block_dim=(TD_TPB, 1, 1),
+    )
+    td_exclusive_scan(ctx, off, n)
+
+    # READ 1: the MST check, the delta refusal and n_split, one wait.
+    ctx.enqueue_function[cdf_status1_kernel](
+        check.unsafe_ptr(), bad.unsafe_ptr(), off.unsafe_ptr(),
+        status.unsafe_ptr(), Int32(n),
+        grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+    )
+    var h1 = ctx.enqueue_create_host_buffer[DType.int32](4)
+    ctx.enqueue_copy(dst_ptr=h1.unsafe_ptr(), src_buf=status)
+    ctx.synchronize()
+    var first_bad_delta = Int(h1.unsafe_ptr()[2])
+    if sabotage != HDB_SAB_SKIP_GUARDS and first_bad_delta != Int(CDF_NONE):
+        raise Error(
+            "hdbscan.build_condensed_hierarchy: dendrogram deltas hold a NaN or"
+            " infinity, first at index " + String(first_bad_delta) + "; refused by"
+            " name (DEVIATION 1607, IDENTITY_PATHS row 39). Note that"
+            " lambda = FLT_MAX at delta == 0 is THEIR rule (condense.cuh"
+            ":149) and is finite, so it is not what this refusal is about"
+        )
+    var n_vertices = Int(h1.unsafe_ptr()[0]) + 1
+    var n_bad = Int(h1.unsafe_ptr()[1])
+    if n_vertices != root or n_bad != 0:
+        raise Error(
+            "hdbscan.build_condensed_hierarchy: Multiple components found"
+            " in MST or MST is invalid. Cannot find single-linkage"
+            " solution. Found " + String(n_vertices) + " vertices total"
+            " (expected " + String(root) + ")"
+        )
+    var n_split = Int(h1.unsafe_ptr()[3])
+    _ = h1^
+
+    var rank = ctx.enqueue_create_buffer[DType.int32](n_merges)
+    ctx.enqueue_memset(rank, Int32(-1))
+    if n_split > 0:
+        var skeys = ctx.enqueue_create_buffer[DType.uint32](n_split)
+        var svals = ctx.enqueue_create_buffer[DType.uint32](n_split)
+        ctx.enqueue_function[cd_split_compact_kernel](
+            off.unsafe_ptr(), wpre.unsafe_ptr(), skeys.unsafe_ptr(),
+            svals.unsafe_ptr(), Int32(n),
+            grid_dim=(td_grid(n), 1, 1), block_dim=(TD_TPB, 1, 1),
+        )
+        td_sort_pairs(ctx, skeys, svals, n_split)
+        if sabotage != HDB_SAB_CONDENSE_DFS:
+            ctx.enqueue_function[cd_gather_depth_kernel](
+                svals.unsafe_ptr(), wdep.unsafe_ptr(), skeys.unsafe_ptr(),
+                Int32(n_split),
+                grid_dim=(td_grid(n_split), 1, 1), block_dim=(TD_TPB, 1, 1),
+            )
+            td_sort_pairs(ctx, skeys, svals, n_split)
+        ctx.enqueue_function[cd_rank_kernel](
+            svals.unsafe_ptr(), rank.unsafe_ptr(), Int32(n), Int32(n_split),
+            grid_dim=(td_grid(n_split), 1, 1), block_dim=(TD_TPB, 1, 1),
+        )
+        # no wait: the scratch is released in queue order
+        _ = skeys^
+        _ = svals^
+
+    var lab = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    var ptrc = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    var ptrl = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    ctx.enqueue_function[cd_label_kernel](
+        par.unsafe_ptr(), side.unsafe_ptr(), live.unsafe_ptr(),
+        off.unsafe_ptr(), rank.unsafe_ptr(), lab.unsafe_ptr(),
+        ptrc.unsafe_ptr(), ptrl.unsafe_ptr(), Int32(n),
+        grid_dim=(td_grid(n_nodes), 1, 1), block_dim=(TD_TPB, 1, 1),
+    )
+    var in_b = td_find(ctx, ptrc, pb, n_nodes)
+    if in_b:
+        ctx.enqueue_copy(dst_buf=ptrc, src_buf=pb)
+    in_b = td_find(ctx, ptrl, pb, n_nodes)
+    if in_b:
+        ctx.enqueue_copy(dst_buf=ptrl, src_buf=pb)
+
+    var n_edges = n + 2 * n_split
+    var n_clusters = 1 + 2 * n_split
+    var ekey = ctx.enqueue_create_buffer[DType.uint32](n_edges)
+    var evals = ctx.enqueue_create_buffer[DType.uint32](n_edges)
+    var echild = ctx.enqueue_create_buffer[DType.int32](n_edges)
+    var elam = ctx.enqueue_create_buffer[DType.float32](n_edges)
+    var esize = ctx.enqueue_create_buffer[DType.int32](n_edges)
+    var indptr = ctx.enqueue_create_buffer[DType.int32](n_clusters + 1)
+    var cpar = ctx.enqueue_create_buffer[DType.int32](n_clusters)
+    var kids = ctx.enqueue_create_buffer[DType.int32](2 * n_clusters)
+    var csize = ctx.enqueue_create_buffer[DType.int32](n_clusters)
+    var clam = ctx.enqueue_create_buffer[DType.float32](n_clusters)
+    ctx.enqueue_memset(indptr, Int32(0))
+    ctx.enqueue_memset(kids, Int32(-1))
+    ctx.enqueue_memset(csize, Int32(0))
+    ctx.enqueue_memset(clam, Float32(0.0))
+    ctx.enqueue_function[cd_edges_kernel](
+        par.unsafe_ptr(), side.unsafe_ptr(), sizes.unsafe_ptr(),
+        lam.unsafe_ptr(), lab.unsafe_ptr(), ptrc.unsafe_ptr(),
+        ptrl.unsafe_ptr(), ekey.unsafe_ptr(), evals.unsafe_ptr(),
+        echild.unsafe_ptr(), elam.unsafe_ptr(), esize.unsafe_ptr(),
+        indptr.unsafe_ptr(), cpar.unsafe_ptr(), kids.unsafe_ptr(),
+        csize.unsafe_ptr(), clam.unsafe_ptr(), Int32(n),
+        grid_dim=(td_grid(n_nodes), 1, 1), block_dim=(TD_TPB, 1, 1),
+    )
+    td_sort_pairs(ctx, ekey, evals, n_edges)
+    var t_parents = ctx.enqueue_create_buffer[DType.int32](n_edges)
+    var t_children = ctx.enqueue_create_buffer[DType.int32](n_edges)
+    var t_lambdas = ctx.enqueue_create_buffer[DType.float32](n_edges)
+    var t_sizes = ctx.enqueue_create_buffer[DType.int32](n_edges)
+    ctx.enqueue_function[cd_gather_kernel](
+        ekey.unsafe_ptr(), evals.unsafe_ptr(), echild.unsafe_ptr(),
+        elam.unsafe_ptr(), esize.unsafe_ptr(), t_parents.unsafe_ptr(),
+        t_children.unsafe_ptr(), t_lambdas.unsafe_ptr(),
+        t_sizes.unsafe_ptr(), Int32(n), Int32(n_edges),
+        grid_dim=(td_grid(n_edges), 1, 1), block_dim=(TD_TPB, 1, 1),
+    )
+    td_exclusive_scan(ctx, indptr, n_clusters + 1)
+
+    var cdep = ctx.enqueue_create_buffer[DType.int32](n_clusters)
+    ctx.enqueue_function[cd_cluster_init_kernel](
+        cpar.unsafe_ptr(), cdep.unsafe_ptr(), Int32(n_clusters),
+        grid_dim=(td_grid(n_clusters), 1, 1), block_dim=(TD_TPB, 1, 1),
+    )
+    var cp_a = ctx.enqueue_create_buffer[DType.int32](n_clusters)
+    var cp_b = ctx.enqueue_create_buffer[DType.int32](n_clusters)
+    var cd_b = ctx.enqueue_create_buffer[DType.int32](n_clusters)
+    ctx.enqueue_copy(dst_buf=cp_a, src_buf=cpar)
+    in_b = td_path_reduce[True](ctx, cp_a, cdep, cp_b, cd_b, n_clusters)
+    if in_b:
+        ctx.enqueue_copy(dst_buf=cdep, src_buf=cd_b)
+    var mx = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(mx, Int32(0))
+    ctx.enqueue_function[cd_max_kernel](
+        cdep.unsafe_ptr(), mx.unsafe_ptr(), Int32(n_clusters),
+        grid_dim=(td_grid(n_clusters), 1, 1), block_dim=(TD_TPB, 1, 1),
+    )
+
+    # READ 2: max_cdepth and the lambda refusal, one wait.
+    var bad2 = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(bad2, CDF_NONE)
+    ctx.enqueue_function[cdf_first_nonfinite_kernel](
+        t_lambdas.unsafe_ptr(), bad2.unsafe_ptr(), Int32(n_edges),
+        grid_dim=(td_grid(n_edges), 1, 1), block_dim=(TD_TPB, 1, 1),
+    )
+    ctx.enqueue_function[cdf_status2_kernel](
+        mx.unsafe_ptr(), bad2.unsafe_ptr(), status.unsafe_ptr(),
+        grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+    )
+    var h2 = ctx.enqueue_create_host_buffer[DType.int32](4)
+    ctx.enqueue_copy(dst_ptr=h2.unsafe_ptr(), src_buf=status)
+    ctx.synchronize()
+    var max_cdepth = Int(h2.unsafe_ptr()[0])
+    var first_bad_lam = Int(h2.unsafe_ptr()[1])
+    _ = h2^
+    if sabotage != HDB_SAB_SKIP_GUARDS and first_bad_lam != Int(CDF_NONE):
+        raise Error(
+            "hdbscan.build_condensed_hierarchy: condensed tree lambdas hold a NaN or"
+            " infinity, first at index " + String(first_bad_lam) + "; refused by"
+            " name (DEVIATION 1607, IDENTITY_PATHS row 39). Note that"
+            " lambda = FLT_MAX at delta == 0 is THEIR rule (condense.cuh"
+            ":149) and is finite, so it is not what this refusal is about"
+        )
+    _ = par^
+    _ = wdep^
+    _ = wpre^
+    _ = live^
+    _ = side^
+    _ = lam^
+    _ = check^
+    _ = bad^
+    _ = bad2^
+    _ = status^
+    _ = par0^
+    _ = pb^
+    _ = db^
+    _ = qb^
+    _ = lb^
+    _ = off^
+    _ = rank^
+    _ = lab^
+    _ = ptrc^
+    _ = ptrl^
+    _ = ekey^
+    _ = evals^
+    _ = echild^
+    _ = elam^
+    _ = esize^
+    _ = cp_a^
+    _ = cp_b^
+    _ = cd_b^
+    _ = mx^
+    return DeviceTree(
+        n, n_edges, n_clusters, max_cdepth, t_parents^, t_children^,
+        t_lambdas^, t_sizes^, indptr^, cpar^, kids^, csize^, clam^, cdep^,
+    )
+
+
 def build_condensed_device(
     ctx: DeviceContext,
     mut children: DeviceBuffer[DType.int32],
@@ -674,6 +1062,12 @@ def build_condensed_device(
             " branch takes their case 2, nothing survives the size != -1"
             " filter and CondensedHierarchy.condense would read an empty"
             " minmax range"
+        )
+    # lane af-hdbscan2 (-D MOJOLEARN_HDB_LINKAGE_DEVICE): the same tree
+    # with two status readbacks instead of eight waits.
+    comptime if HDB_LINKAGE_DEVICE:
+        return _condensed_two_reads(
+            ctx, children, delta, sizes, min_cluster_size, n_leaves, sabotage
         )
     var n = n_leaves
     var n_merges = n - 1

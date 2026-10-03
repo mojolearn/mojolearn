@@ -59,6 +59,13 @@ from hdbscan.impl.detail.condense import (
     download_condensed,
 )
 from hdbscan.impl.detail.extract import ExtractOutput, extract_clusters
+from hdbscan.impl.detail.fast_apple import HDB_ONE_SYNC
+from hdbscan.impl.detail.tree_device import (
+    td_stage_f32,
+    td_stage_i32,
+    td_take_f32,
+    td_take_i32,
+)
 from hdbscan.impl.detail.reachability import CORE_TPB
 from hdbscan.impl.detail.select import (
     CLUSTER_SELECTION_EOM,
@@ -342,7 +349,34 @@ def fit_hdbscan(
         st_t = now
 
     # The outputs, downloaded once.
-    var tree = download_condensed(ctx, dtree)
+    var tree: CondensedHierarchy
+    var h_core: List[Float32]
+    # lane af-hdbscan2 (FAST on Apple, -D MOJOLEARN_HDB_ONE_SYNC): the tree's
+    # four arrays and the core distances staged, ONE wait; main's route
+    # (`download_condensed` + `_download_f32`) waits six times.
+    comptime if HDB_ONE_SYNC:
+        var s_par = td_stage_i32(ctx, dtree.parents)
+        var s_chi = td_stage_i32(ctx, dtree.children)
+        var s_lam = td_stage_f32(ctx, dtree.lambdas)
+        var s_siz = td_stage_i32(ctx, dtree.sizes)
+        var s_core = td_stage_f32(ctx, core_dists)
+        ctx.synchronize()
+        tree = CondensedHierarchy(
+            dtree.n_leaves, dtree.n_edges, dtree.n_clusters,
+            td_take_i32(s_par, dtree.n_edges),
+            td_take_i32(s_chi, dtree.n_edges),
+            td_take_f32(s_lam, dtree.n_edges),
+            td_take_i32(s_siz, dtree.n_edges),
+        )
+        h_core = td_take_f32(s_core, m)
+        _ = s_par^
+        _ = s_chi^
+        _ = s_lam^
+        _ = s_siz^
+        _ = s_core^
+    else:
+        tree = download_condensed(ctx, dtree)
+        h_core = _download_f32(ctx, core_dists, m)
     trace.record_list_i32("hdbscan.condensed.parents", tree.parents)
     trace.record_list_i32("hdbscan.condensed.children", tree.children)
     trace.record_list_f32("hdbscan.condensed.lambdas", tree.lambdas)
@@ -352,8 +386,6 @@ def fit_hdbscan(
     trace.record_list_i32("hdbscan.raw_labels", ext.labels)
     trace.record_list_i32("hdbscan.labels", ext.final_labels)
     trace.record_list_f32("hdbscan.stability_scores", ext.stability_scores)
-
-    var h_core = _download_f32(ctx, core_dists, m)
 
     _ = core_dists^
     _ = mst_rows^
