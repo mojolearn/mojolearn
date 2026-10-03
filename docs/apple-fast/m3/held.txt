@@ -1,3 +1,3 @@
-# M3 backlog: HELD 0 pending=160
+# M3 backlog: HELD 0 pending=153
 # The M3 runs one job at a time. Requests are queued while fewer than 40 jobs are pending; the lines below wait their turn.
 # M3 runs LIGHT A/Bs: FAST old vs FAST new only, one alternation (afc 1 rep x 2 rounds, aft 2 pairs); *-ident lines are skipped; opponents are never re-raced.

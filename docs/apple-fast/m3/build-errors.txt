@@ -1,5 +1,0 @@
-== lane_apple-fast-gram-fbuild-x_prep.log (08:51Z)
-./x_linear/fast_gram.mojo:312:20: error: expected argument name
-    part_g: FP, out: FP, div: FP, use_div: Bool,
-                   ^
-Imported from ~/mq/wt/lane_apple-fast-gram/bindings/_mojolearn_x_prep.mojo:12:
