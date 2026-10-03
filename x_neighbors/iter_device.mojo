@@ -1220,13 +1220,19 @@ def matmul_tn_acc_ff_kernel(a: FP, b: FP, rh: FP, rl: FP, rows_: Int64, n_: Int6
         matmul_tn_acc_ff_item(t, a, b, rh, rl, Int(rows_), Int(n_), Int(m_))
 
 
+#: lane apple-fast-gap-kapprox2: the FAST + Apple default since the M3 A/B
+#: kap2-svgp-symtile-taxi (svgp taxi 611 -> 463 ms, r2/rmse identical); -D
+#: MOJOLEARN_SVGP_FAST_SYMTILE_OFF reverts.
 comptime SVGP_FAST_SYMTILE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_SVGP_FAST_SYMTILE"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_SVGP_FAST_SYMTILE_OFF"]()
 )
 
 
+#: lane apple-fast-gap-kapprox2: the FAST + Apple default since the M3 A/B
+#: kap2-svgp-colsplit-taxi (svgp taxi 613 -> 438 ms, r2/rmse identical); -D
+#: MOJOLEARN_SVGP_FAST_COLSPLIT_OFF reverts.
 comptime SVGP_FAST_COLSPLIT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_SVGP_FAST_COLSPLIT"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_SVGP_FAST_COLSPLIT_OFF"]()
 )
 
 
