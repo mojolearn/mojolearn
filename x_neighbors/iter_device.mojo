@@ -1014,7 +1014,7 @@ def op_knn_sq_tiled(
             var a_ex = Int64(exclude_self)
             ctx.enqueue_function[knn_mma_finish_kernel](
                 p_cd, p_ci, p_dist, p_idx, a_n, a_k, a_kk, a_ex,
-                grid_dim=(n + KNN_TILE_TPB - 1) // KNN_TILE_TPB, block_dim=KNN_TILE_TPB,
+                grid_dim=((n + KNN_TILE_TPB - 1) // KNN_TILE_TPB, 1, 1), block_dim=(KNN_TILE_TPB, 1, 1),
             )
             ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=dist), src_buf=d_dist)
             _down_i(ctx, d_idx, idx, n * k)
