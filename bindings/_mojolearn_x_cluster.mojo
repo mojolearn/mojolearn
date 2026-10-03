@@ -11,11 +11,12 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import read_f32
+from bindings.hostptr import f32_ptr, read_f32
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from x_cluster.device_ops import DeviceOps
-from x_cluster.entries import run_entry
+from x_cluster.entries import ENTRY_MINIBATCH, run_entry
+from x_cluster.minibatch_ptr import MBK_ZEROCOPY, minibatch_entry_ptr
 from x_cluster.out import ClusterOut, py_floats, py_ints
 
 
@@ -26,6 +27,22 @@ def call_binding(
     var w = Int(py=which)
     var nx = Int(py=x_len)
     var na = Int(py=a_len)
+    # lane/apple-fast-mbkspeed, FAST on Apple, OPT-IN (-D MOJOLEARN_MBK_ZEROCOPY=1):
+    # MiniBatchKMeans uploads X from the caller's array, no host copy
+    # (x_cluster/minibatch_ptr.mojo); False falls through to the copy below
+    comptime if MBK_ZEROCOPY:
+        if w == ENTRY_MINIBATCH and nx > 0:
+            var a0 = read_f32(Int(py=a_addr), na) if na > 0 else List[Float32]()
+            var ints0 = py_ints(ip)
+            var floats0 = py_floats(fp)
+            var xp = f32_ptr(Int(py=x_addr))
+            var res0 = ClusterOut()
+            var took = False
+            with GILReleased(Python()):
+                var ops0 = DeviceOps()
+                took = minibatch_entry_ptr(ops0, xp, nx, a0, ints0, floats0, res0)
+            if took:
+                return res0.to_py()
     var x = read_f32(Int(py=x_addr), nx) if nx > 0 else List[Float32]()
     var a = read_f32(Int(py=a_addr), na) if na > 0 else List[Float32]()
     var ints = py_ints(ip)
