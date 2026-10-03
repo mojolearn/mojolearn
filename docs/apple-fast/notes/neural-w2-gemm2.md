@@ -54,3 +54,29 @@ UNCOMPILED (wave-2 order: the peer compiles). Builds owed: FAST linalg with
 each of the five defines alone, FAST linalg with none, IDENTICAL linalg, FAST
 transformer with `MOJOLEARN_AFN_GEMM2_ALL`. The linalg build gate RUNS
 matmuls; the wave-1 lane set `MOJOLEARN_SKIP_BUILD_GATE=1`.
+
+## Additions for the w2-lmgrad lane (gemm/afn_apple_fast.mojo, wave-1 kernel)
+
+No new define: the low-level launchers need only the FAST Apple tier; the
+entry points ride the wave-1 EPILOGUE and SPLITK switches. The wave-1 kernel
+gained one pointer argument `aux` (second output); `_afn_launch_tile` and
+`_afn_strides` keep their names and signatures (`aux` = `c`).
+
+| symbol | signature | gate |
+|---|---|---|
+| `afn_strides` | `(op, m, n, k) -> (a_si, a_sp, b_sp, b_sj)` | none (host arithmetic) |
+| `afn_launch_tile[AT, BT, SPLIT, EPI]` | `(ctx, tile, c, a, b, bias, resid, m, n, k, st, splits, k_split) raises` | FAST Apple (raises otherwise) |
+| `afn_launch_tile_aux[AT, BT, SPLIT, EPI]` | `(ctx, tile, c, a, b, bias, resid, aux, m, n, k, st, splits, k_split) raises` | none (callers' guards) |
+| `AFN_EPI_RESID` (5) | `C = A.B + resid[i, j]`, no bias; `c == resid` safe | kind |
+| `AFN_EPI_SWIGLU_BWD` (6) | `bias` = gate, `resid` = up, `c` = d_gate, `aux` = d_up | kind |
+| `afn_gemm_resid_ptr_into` | `(ctx, c, a, b, resid, m, n, k, op) raises -> Bool` | AFN_GEMM_EPILOGUE |
+| `afn_gemm_swiglu_bwd_ptr_into` | `(ctx, d_gate, d_up, a, b, gate, up, m, n, k, op) raises -> Bool` | AFN_GEMM_EPILOGUE |
+| `afn_gemm_accum_ptr_into` | `(ctx, c, a, b, m, n, k, op, k_split) raises -> Bool`: `C += A.B`, no zero launch, atomics onto the existing C; `k_split <= 0` takes the policy, no split = one atomic split | AFN_GEMM_SPLITK |
+| `afn_gemm_fused_into` | now also accepts `epi = AFN_EPI_RESID` | AFN_GEMM_EPILOGUE |
+
+SwiGLU backward formula (f32, `a` = the GEMM's d_gated cell, `g` = gate,
+`u` = up): `d = exp(-g) + 1; sg = 1/d; s = g/d; d_up = a s; dsi = a u;
+d_gate = dsi (sg (1 + g (1 - sg)))`, the S21 products plus the S20 SiLU VJP of
+transformer/checks/transformer_backward.mojo (sigmoid recomputed from `g`),
+in the same operation order, without its ftz and pinned-rounding helpers
+(FAST).

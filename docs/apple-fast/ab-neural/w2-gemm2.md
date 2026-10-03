@@ -28,3 +28,10 @@ small gain at large grids, none at small ones.
 **MOJOLEARN_AFN_GEMM2_ALL** (gemm, gemm-bf16, transformer-forward). All four:
 128x64, KB 24, two A pages, direct B, swizzle. transformer-forward checks the
 in-tree callers through `identical_gemm_into`.
+
+**For w2-lmgrad (no request lines here):** `AFN_EPI_RESID`,
+`AFN_EPI_SWIGLU_BWD`, `afn_gemm_resid_ptr_into`, `afn_gemm_swiglu_bwd_ptr_into`
+(behind `MOJOLEARN_AFN_GEMM_EPILOGUE`), `afn_gemm_accum_ptr_into` (C += A.B by
+split-K atomics onto the existing C, behind `MOJOLEARN_AFN_GEMM_SPLITK`),
+public `afn_launch_tile`, `afn_launch_tile_aux`, `afn_strides`. lmgrad's A/B
+lines measure them; nothing on the gemm board lanes changes.
