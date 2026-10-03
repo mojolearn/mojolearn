@@ -150,13 +150,15 @@ _LINE_RULES = [
 
 _RULE_CLASS = {r[0]: r[1] for r in _LINE_RULES}
 _RULE_CLASS.update({"host-call": "host-import", "serial-launch": "serial-gpu", "host-switch": "host-env/threshold",
-                    "d2h-loop": "d2h-roundtrip", "tid0-loop": "serial-gpu"})
+                    "d2h-loop": "d2h-roundtrip", "tid0-loop": "serial-gpu",
+                    "d2h-host-work": "d2h-roundtrip"})
 _RULE_WHY = {r[0]: r[4] for r in _LINE_RULES}
 _RULE_WHY.update({
     "host-call": "calls a host-only module from GPU code",
     "host-switch": "a switch or threshold in a function that calls host code",
     "d2h-loop": "downloads, synchronizes, loops on the host, then goes back to the device",
     "tid0-loop": "one thread loops over a runtime n",
+    "d2h-host-work": "copies device data to the host, then computes on it in a host loop over a data size",
     "serial-launch": "a one-block or one-thread launch over a runtime size",
 })
 
@@ -582,6 +584,72 @@ def _top_args(s):
     return out
 
 
+# any device->host copy: an explicit copy, a mapped buffer, or a download helper
+_D2H_ANY = re.compile(r"enqueue_copy\(\s*dst_ptr\s*=|\bmap_to_host\b|enqueue_copy_from_device|\bto_host\w*\("
+                      r"|\b\w*download\w*\s*\(|\b\w*readback\w*\s*\(")
+_KERNEL_TOK = re.compile(r"\b(thread_idx|block_idx|global_idx|lane_id|warp_id)\b|\bblock_dim\.")
+# a data-sized loop bound: rows, samples, queries, points, nonzeros, elements
+_DATA_SIZES = re.compile(r"\b" + _SIZES + r"\b|\b(n_queries|n_cand|n_todo|n_pooled|n_resamples|n_live"
+                         r"|n_vertices|n_labels_total|total_labels|n_pairs|self\.size|n_tokens|T)\b")
+# a loop body that computes (branches, folds, sorts), not a plain element copy
+_HOST_WORK = re.compile(r"^\s*(if|elif|while)\b|[-+*/]=|\b(min|max|abs|sqrt|exp|log)\s*\("
+                        r"|\bsort\w*\s*\(|\b_find\s*\(|\.insert\s*\(|[^<>=!]\s(<|>|<=|>=|==|!=)\s"
+                        r"|\b(?P<acc>\w+)\s*=\s*\w*\(?\s*(?P=acc)\s*[-+*/]")
+# debug-only blocks (identity traces, stage timers) are not the product path
+_DEBUG_IF = re.compile(r"^\s*(el)?if\b.*\b(trace\w*\.enabled|_st_on|_trace\w*|verbose|debug\w*|timing\w*"
+                       r"|phase_timing|STAGE_TIMES)\b")
+
+
+def _d2h_host_work(lines):
+    """[(line_no, text)] of host `for` loops over a data size that compute on
+    device data copied to the host earlier in the same (non-kernel) function."""
+    out = []
+    stack = []  # (indent, def index) of enclosing defs
+    kern = {}
+    owner = []
+    for i, (_, t) in enumerate(lines):
+        ind = len(t) - len(t.lstrip())
+        while stack and ind <= stack[-1][0] and not t.strip().startswith((")", "]", "@")):
+            stack.pop()
+        if re.match(r"\s*(def|fn)\s", t):
+            stack.append((ind, i))
+            kern[i] = False
+            owner.append(i)
+            continue
+        owner.append(stack[-1][1] if stack else None)
+        if stack and _KERNEL_TOK.search(t):
+            kern[stack[-1][1]] = True
+    armed = set()
+    ifs = []  # (indent, is_debug) of enclosing ifs
+    for i, (no, t) in enumerate(lines):
+        o = owner[i]
+        ind = len(t) - len(t.lstrip())
+        while ifs and ind <= ifs[-1][0] and not re.match(r"\s*(else|elif)\b", t):
+            ifs.pop()
+        if re.match(r"\s*(el)?if\b|\s*else\b", t):
+            if re.match(r"\s*(else|elif)\b", t) and ifs and ifs[-1][0] == ind:
+                ifs.pop()
+            ifs.append((ind, bool(_DEBUG_IF.match(t))))
+        if o is None or kern.get(o) or re.match(r"\s*(def|fn)\s", t):
+            continue
+        if _D2H_ANY.search(t):
+            armed.add(o)
+            continue
+        if o not in armed or any(d for _, d in ifs):
+            continue
+        m = _RUNTIME_RANGE.match(t.strip()) if t.lstrip().startswith("for ") else None
+        if not m or not _runtime_bound(m.group(1)) or not _DATA_SIZES.search(m.group(1)):
+            continue
+        body = []
+        for _, t2 in lines[i + 1:]:
+            if len(t2) - len(t2.lstrip()) <= ind:
+                break
+            body.append(t2)
+        if any(_HOST_WORK.search(b) for b in body):
+            out.append((no, t))
+    return out
+
+
 dm_def = re.compile(r"\s*(def|fn)\s")
 # a line none of the line rules can match is skipped quickly
 _PREFILTER = re.compile(r"host|HOST|Host|parallel|MOJOLEARN_|_MIN|np\.|sklearn|range\(|futures|Executor"
@@ -725,6 +793,11 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
                 if m and _runtime_bound(m.group(1)) and _SIZE_TOKEN.search(m.group(1)):
                     add("tid0-loop", no, t)
                     break
+    # download -> host loop over a data size that computes on the copy (the
+    # result never needs to go back to the device: OPTICS, agglomerative and
+    # HDBSCAN hid their host passes that way)
+    for no, t in _d2h_host_work(lines):
+        add("d2h-host-work", no, t)
     # one-block / one-thread launches over a runtime size
     for i, txt in _launch_statements(lines):
         g1, b1 = _GRID1.search(txt), _BLOCK1.search(txt)

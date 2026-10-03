@@ -12,6 +12,7 @@
 
 `rev` flags compute the unpinned spelling only to show a fixture separates."""
 
+from core.device_fold import host_sum_f32_fixed
 from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_mul, identical_mul_add
 
 
@@ -208,8 +209,6 @@ def to_fit(x: List[Float32], n: Int, d: Int, y0: List[Float32], perplexity: Floa
             var b = q if q > Float32(1.1920929e-07) else Float32(1.1920929e-07)
             acc = ftz(acc + ftz(identical_mul(pp, ftz(identical_log(ftz(identical_div(a, b)))))))
         kl[i] = acc
-    var total = Float32(0.0)
-    for i in range(n):
-        total = total + kl[i]
-    kl_out = total
+    # the device's fixed fold order (core/device_fold.mojo)
+    kl_out = host_sum_f32_fixed(kl, n)
     return y^

@@ -14,6 +14,7 @@ from std.atomic import Atomic, Ordering, fence
 from std.gpu import grid_dim
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 from x_ann.device_ctx import x_ann_ctx
+from core.device_fold import device_sum_f32_fixed
 from x_ann.stage_timer import AnnStages
 from x_ann.knn_device import knn_enqueue
 
@@ -532,11 +533,9 @@ def tsne_fit_device(
         y_out = download_f32(ctx, dy, 2 * n)
     else:
         y_out = download_f32(ctx, dy2, 2 * n)
-    var kl = download_f32(ctx, dkl, n)
-    var total = Float32(0.0)
-    for i in range(n):
-        total = total + kl[i]
-    kl_out = total
+    # lane cgr4-download-loop: the KL total folds on the device in the fixed
+    # order of core/device_fold.mojo (the host column folds the same order)
+    kl_out = device_sum_f32_fixed(ctx, dkl, n)
     st.host("kl_download")
     _ = dkl^
     _ = dz^
