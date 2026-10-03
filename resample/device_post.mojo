@@ -96,7 +96,7 @@ def obs_chunk_kernel(
             part_y.unsafe_store(c, ty)
 
 
-def chunk_chain_kernel(out: _F32P, part: _F32P, chunks_in: Int32):
+def chunk_chain_kernel(res: _F32P, part: _F32P, chunks_in: Int32):
     """`host_fold_partials`: the chunk totals ascending from +0.0, flushed.
     One thread over the chunk totals (n / PINNED_SUM_W of them), the chain
     each replicate block runs over its own chunks."""
@@ -105,21 +105,21 @@ def chunk_chain_kernel(out: _F32P, part: _F32P, chunks_in: Int32):
     var acc = Float32(0.0)
     for c in range(Int(chunks_in)):
         acc = ftz(acc + part.unsafe_load(c))
-    out.unsafe_store(0, acc)
+    res.unsafe_store(0, acc)
 
 
-def obs_finish_kernel(out: _F32P, sums: _F32P, n_x_in: Int32, n_y_in: Int32, stat: Int32):
+def obs_finish_kernel(res: _F32P, sums: _F32P, n_x_in: Int32, n_y_in: Int32, stat: Int32):
     """The observed statistic from its sums (sums[0] x, sums[1] y, sums[2]
     the squared deviations): `permutation_test_host`'s finishing lines."""
     if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
         return
     var n_x = Int(n_x_in)
     if Int(stat) == STAT_DIFF_MEANS:
-        out.unsafe_store(0, ftz(_mean_of_sum(sums.unsafe_load(0), n_x) - _mean_of_sum(sums.unsafe_load(1), Int(n_y_in))))
+        res.unsafe_store(0, ftz(_mean_of_sum(sums.unsafe_load(0), n_x) - _mean_of_sum(sums.unsafe_load(1), Int(n_y_in))))
     elif Int(stat) == STAT_MEAN:
-        out.unsafe_store(0, _mean_of_sum(sums.unsafe_load(0), n_x))
+        res.unsafe_store(0, _mean_of_sum(sums.unsafe_load(0), n_x))
     else:
-        out.unsafe_store(
+        res.unsafe_store(
             0, ftz(identical_sqrt(ftz(identical_div(sums.unsafe_load(2), Float32(n_x - 1)))))
         )
 
@@ -184,7 +184,7 @@ def count_kernel(part: _I32P, v: _F32P, n_in: Int32, a: Float32, b: Float32, mod
         part.unsafe_store(2 * Int(block_idx.x) + 1, c1[0])
 
 
-def count_fold_kernel(out: _I32P, part: _I32P, blocks_in: Int32):
+def count_fold_kernel(res: _I32P, part: _I32P, blocks_in: Int32):
     """The block counts added (integers: any order is exact)."""
     var c0 = stack_allocation[POST_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
     var c1 = stack_allocation[POST_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
@@ -205,8 +205,8 @@ def count_fold_kernel(out: _I32P, part: _I32P, blocks_in: Int32):
         barrier()
         h //= 2
     if tid == 0:
-        out.unsafe_store(0, c0[0])
-        out.unsafe_store(1, c1[0])
+        res.unsafe_store(0, c0[0])
+        res.unsafe_store(1, c1[0])
 
 
 def diff_map_kernel(dst: _F32P, a: _F32P, b: _F32P, n_in: Int32, c: Float32, mode: Int32):
@@ -241,22 +241,22 @@ def _read_f32(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int) 
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
     ctx.synchronize()
-    var out = List[Float32]()
+    var res = List[Float32]()
     for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
+        res.append(h.unsafe_ptr().unsafe_load(i))
     _ = h^
-    return out^
+    return res^
 
 
 def device_grid_sum_into(
-    ctx: DeviceContext, out: _F32P, vals: _F32P, n: Int,
+    ctx: DeviceContext, res: _F32P, vals: _F32P, n: Int,
     mut part: DeviceBuffer[DType.float32],
     mut s0: DeviceBuffer[DType.float32],
     mut s1: DeviceBuffer[DType.float32],
 ) raises:
     """`out[0]` = `host_grid_sum(vals, n)`'s words: the chunk trees into
     `part` (chunk_count(n) floats), the level tree over them (`s0`, `s1`:
-    fold_scratch_len(chunk_count(n)) floats each), the last level into out.
+    fold_scratch_len(chunk_count(n)) floats each), the last level into res.
     Enqueues only."""
     var chunks = chunk_count(n)
     var pp = part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
@@ -265,7 +265,7 @@ def device_grid_sum_into(
     )
     var lv = fold_partials_levels(ctx, pp, chunks, s0, s1)
     ctx.enqueue_function[fold_partials_level_kernel[PINNED_SUM_TPB]](
-        lv[0], Int32(lv[1]), out, grid_dim=chunk_count(lv[1]), block_dim=PINNED_SUM_TPB,
+        lv[0], Int32(lv[1]), res, grid_dim=chunk_count(lv[1]), block_dim=PINNED_SUM_TPB,
     )
 
 
@@ -278,7 +278,7 @@ def device_observed_statistic(
     var px = ctx.enqueue_create_buffer[DType.float32](chunks)
     var py = ctx.enqueue_create_buffer[DType.float32](chunks)
     var sums = ctx.enqueue_create_buffer[DType.float32](3)
-    var out = ctx.enqueue_create_buffer[DType.float32](1)
+    var res = ctx.enqueue_create_buffer[DType.float32](1)
     var sp = sums.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var pxp = px.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var pyp = py.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
@@ -297,14 +297,14 @@ def device_observed_statistic(
         )
         ctx.enqueue_function[chunk_chain_kernel](sp + 2, pxp, Int32(chunks), grid_dim=(1, 1, 1), block_dim=(1, 1, 1))
     ctx.enqueue_function[obs_finish_kernel](
-        out.unsafe_ptr(), sp, Int32(n_x), Int32(n_pooled - n_x), Int32(stat),
+        res.unsafe_ptr(), sp, Int32(n_x), Int32(n_pooled - n_x), Int32(stat),
         grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
     )
-    var r = _read_f32(ctx, out, 1)[0]
+    var r = _read_f32(ctx, res, 1)[0]
     _ = px^
     _ = py^
     _ = sums^
-    _ = out^
+    _ = res^
     return r
 
 
@@ -395,20 +395,20 @@ def device_counts(
     if blocks < 1:
         blocks = 1
     var part = ctx.enqueue_create_buffer[DType.int32](2 * blocks)
-    var out = ctx.enqueue_create_buffer[DType.int32](2)
+    var res = ctx.enqueue_create_buffer[DType.int32](2)
     ctx.enqueue_function[count_kernel](
         part.unsafe_ptr(), v.unsafe_ptr(), Int32(n), a, b, Int32(mode),
         grid_dim=(blocks, 1, 1), block_dim=(POST_TPB, 1, 1),
     )
     ctx.enqueue_function[count_fold_kernel](
-        out.unsafe_ptr(), part.unsafe_ptr(), Int32(blocks),
+        res.unsafe_ptr(), part.unsafe_ptr(), Int32(blocks),
         grid_dim=(1, 1, 1), block_dim=(POST_TPB, 1, 1),
     )
     var h = ctx.enqueue_create_host_buffer[DType.int32](2)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=out)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=res)
     ctx.synchronize()
     var r = (Int(h.unsafe_ptr().unsafe_load(0)), Int(h.unsafe_ptr().unsafe_load(1)))
     _ = h^
     _ = part^
-    _ = out^
+    _ = res^
     return r
