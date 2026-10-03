@@ -192,6 +192,30 @@ def _col_stats(pr, xo, n, d, out, var=True):
         pr.stage("colb_var", d, ss, nb, d, out)
 
 
+#: lane/apple-fast-prep2: the QSELECT switch, read once at import (not on a fit path)
+_X_PREP2_QSELECT = os.environ.get("MOJOLEARN_X_PREP_FAST_QSELECT") == "1"
+
+
+def _prep2_qselect(mode, nq):
+    """lane/apple-fast-prep2 (2026-10-02): MOJOLEARN_X_PREP_FAST_QSELECT=1 on
+    the FAST tier of a Metal binding (every other build ignores it) takes
+    SimpleImputer's median and RobustScaler's quantiles by a device radix
+    select over the unsorted columns (x_prep/fastprep2.mojo qselect_device:
+    the `quantile` stage with SELECT = 1 as its 8th parameter) instead of the
+    full radix sort of every column (sort_cols + quantile, x_prep/dradix.mojo:
+    four read + random-scatter passes over two n*d key blocks and the n*d
+    sorted block). The same order statistics, so the same words. At most 4
+    fractions per column (the select's histogram block carries two tasks
+    per fraction)."""
+    if nq > 4 or not _X_PREP2_QSELECT or str(mode).strip().lower() != "fast":
+        return False
+    b = _prep_binding(mode)
+    if _optional_prep_entry(b, "x_prep_host_column") is not None:
+        return False
+    vendor = _optional_prep_entry(b, "x_prep_vendor")
+    return vendor is not None and str(vendor()) == "metal"
+
+
 def _r3(name):
     """Whether the lane prep-apple3 change `name` is on."""
     def names(var):
@@ -609,17 +633,23 @@ class RobustScaler(_PrepBase):
         mode = _mode()
         pr = _Prog()
         xo = pr.put(arr)
-        so = pr.work(n * d)
+        qsel = _prep2_qselect(mode, 3)
+        so = pr.work(n * d) if not qsel else 0
         st = pr.alloc(6 * d)
         qf = pr.put_list([lo / 100.0, 0.5, hi / 100.0])
         q = pr.alloc(3 * d)
         center = pr.alloc(d)
         scale = pr.alloc(d)
-        pr.stage("sort_cols", d, xo, n, d, so, 0)
+        if not qsel:
+            pr.stage("sort_cols", d, xo, n, d, so, 0)
         # the quantile stage reads the count row only: an exact integer in
         # the blocked order too (lane gap-prep2), so the same words
         _col_stats(pr, xo, n, d, st, var=False)
-        pr.stage("quantile", 3 * d, so, n, d, qf, 3, q, st)
+        if qsel:
+            # the three quantiles by radix select over the unsorted X (`_prep2_qselect`)
+            pr.stage("quantile", 3 * d, xo, n, d, qf, 3, q, st, 1)
+        else:
+            pr.stage("quantile", 3 * d, so, n, d, qf, 3, q, st)
         pr.stage("scale_params", d, q, 3, d, center, scale, 0, 0, 2, 1)
         if self.unit_variance:
             pr.stage("robust_uv", d, scale, qf)
@@ -1596,8 +1626,10 @@ class SimpleImputer(_PrepBase):
         pr = _Prog()
         x_in = pr.put(arr)
         xo = _mark_missing(pr, x_in, n * d, self.missing_values)
-        # only the median and the mode read the sorted columns (lane prep-apple3, `imputer_nosort`)
-        sorts = self.strategy in ("median", "most_frequent") or not _r3("imputer_nosort")
+        # only the median and the mode read the sorted columns (lane prep-apple3, `imputer_nosort`);
+        # the median by radix select needs no sort (`_prep2_qselect`)
+        qsel = self.strategy == "median" and _prep2_qselect(mode, 1)
+        sorts = (self.strategy in ("median", "most_frequent") or not _r3("imputer_nosort")) and not qsel
         so = (pr.work(n * d) if self.strategy in ("median", "most_frequent") else pr.alloc(n * d)) if sorts else 0
         st = pr.alloc(6 * d)
         med = pr.alloc(d)
@@ -1606,7 +1638,9 @@ class SimpleImputer(_PrepBase):
         if sorts:
             pr.stage("sort_cols", d, xo, n, d, so, 0)
         pr.stage("col_stats", d, xo, n, d, st)
-        if self.strategy == "median":
+        if self.strategy == "median" and qsel:
+            pr.stage("quantile", d, xo, n, d, half, 1, med, st, 1)
+        elif self.strategy == "median":
             pr.stage("quantile", d, so, n, d, half, 1, med, st)
         if self.strategy == "most_frequent":
             pr.stage("mode_cols", d, so, n, d, mf, _NONE)
