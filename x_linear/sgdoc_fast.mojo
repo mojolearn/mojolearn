@@ -145,13 +145,13 @@ def sf_hist_kernel(sc: FP, n: Int32, sel: IP, parts: IP, shift: Int32, first: In
     var lo = Int(block_idx.x) * SF_SEL_ROWS
     var hi = min(nn, lo + SF_SEL_ROWS)
     var sft = UInt32(Int(shift))
-    var all = Int(first) != 0
+    var every = Int(first) != 0
     var prefix = bitcast[DType.uint32](sel.unsafe_load(0))
     var cnt = InlineArray[Int32, 16](fill=Int32(0))
     var i = lo + tid
     while i < hi:
         var k = _key(ld(sc, i))
-        if all or (k >> (sft + UInt32(4))) == prefix:
+        if every or (k >> (sft + UInt32(4))) == prefix:
             cnt[Int((k >> sft) & UInt32(15))] += 1
         i += SF_TPB
     var sh = stack_allocation[SF_TPB * 16, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
@@ -201,9 +201,9 @@ def sf_pick_kernel(parts: IP, nb: Int32, sel: IP, first: Int32, r_rank: Int32, s
 
 
 @always_inline
-def _cls(sc: FP, i: Int, tk: UInt32, all: Bool) -> Int:
+def _cls(sc: FP, i: Int, tk: UInt32, every: Bool) -> Int:
     """0: below tau (or every row when all), 1: at tau, 2: above."""
-    if all:
+    if every:
         return 0
     var k = _key(ld(sc, i))
     if k < tk:
@@ -217,8 +217,8 @@ def sf_colsum_kernel(x: FP, n: Int32, d: Int32, sc: FP, sel: IP, parts: FP, mode
     (parts[(2b + 1) d + j]); mode_all: every row in the first sum. d >= 128:
     a thread a column (columns tid, tid + SF_TPB, ...); else P = SF_TPB / d
     row phases a column, folded ascending."""
-    var all = Int(mode_all) != 0
-    if not all and _done(stt):
+    var every = Int(mode_all) != 0
+    if not every and _done(stt):
         return
     var nn = Int(n)
     var dd = Int(d)
@@ -233,7 +233,7 @@ def sf_colsum_kernel(x: FP, n: Int32, d: Int32, sc: FP, sel: IP, parts: FP, mode
             var a0 = Float32(0)
             var a1 = Float32(0)
             for i in range(lo, hi):
-                var c = _cls(sc, i, tk, all)
+                var c = _cls(sc, i, tk, every)
                 if c == 0:
                     a0 += ld(x, i * dd + j)
                 elif c == 1:
@@ -250,7 +250,7 @@ def sf_colsum_kernel(x: FP, n: Int32, d: Int32, sc: FP, sel: IP, parts: FP, mode
     if ph < p:
         var i = lo + ph
         while i < hi:
-            var c = _cls(sc, i, tk, all)
+            var c = _cls(sc, i, tk, every)
             if c == 0:
                 a0 += ld(x, i * dd + j)
             elif c == 1:
@@ -270,7 +270,7 @@ def sf_colsum_kernel(x: FP, n: Int32, d: Int32, sc: FP, sel: IP, parts: FP, mode
         st(parts, (2 * b + 1) * dd + tid, s1)
 
 
-def sf_fold_kernel(parts: FP, nb: Int32, d: Int32, out: FP, mode_all: Int32, stt: FP):
+def sf_fold_kernel(parts: FP, nb: Int32, d: Int32, dst_sums: FP, mode_all: Int32, stt: FP):
     """out[c d + j] = sum over blocks b ascending of parts[(2b + c) d + j]."""
     if Int(mode_all) == 0 and _done(stt):
         return
@@ -282,7 +282,7 @@ def sf_fold_kernel(parts: FP, nb: Int32, d: Int32, out: FP, mode_all: Int32, stt
         var s = Float32(0)
         for b in range(Int(nb)):
             s += ld(parts, (2 * b + c) * dd + j)
-        st(out, q, s)
+        st(dst_sums, q, s)
 
 
 def sf_step_kernel(sums: FP, d: Int32, n: Int32, nu: Float32, r_rank: Int32, u: FP, s: FP, sel: IP,
@@ -293,14 +293,14 @@ def sf_step_kernel(sums: FP, d: Int32, n: Int32, nu: Float32, r_rank: Int32, u: 
         return
     var dd = Int(d)
     var tid = Int(thread_idx.x)
-    var fn = i2f(Int(n))
+    var fnum = i2f(Int(n))
     if Int(init) != 0:
         var j = tid
         while j < dd:
-            st(u, j, ld(sums, j) / fn)
+            st(u, j, ld(sums, j) / fnum)
             j += SF_TPB
         return
-    var c = Float32(1) / (nu * fn)
+    var c = Float32(1) / (nu * fnum)
     var need = Int(sel.unsafe_load(1))
     var m_eq = Int(sel.unsafe_load(2))
     var m_less = Int(r_rank) - need
