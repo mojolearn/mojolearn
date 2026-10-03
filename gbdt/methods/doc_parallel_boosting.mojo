@@ -114,7 +114,10 @@ from checks.numerics import PIN_DETERMINISM
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 #: lane/apple-fast-trees-depthwise (2026-10-02, family `trees-ctr`),
-#: `-D MOJOLEARN_GBDT_CTR_PERM_BATCH=1`, FAST + Apple only, default OFF.
+#: FAST + Apple DEFAULT ON (2026-10-02); `-D MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF=1`
+#: restores the serial loop (the old `-D MOJOLEARN_GBDT_CTR_PERM_BATCH=1` is
+#: now harmless). M3 A/B tdw-cat-permbatch-tc (gbdt-categorical taxicat, n=2):
+#: 36,772 -> 35,780 ms (-2.7%, both B runs below both A), auc .6309 -> .6311.
 #: CAUSE: with CTR-bearing categorical features the fit keeps
 #: `permutation_count` (4) column sets, and the non-symmetric per-tree loop
 #: below (`for p in range(perm_count)`) runs each permutation's leaf
@@ -135,7 +138,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 comptime CTR_PERM_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_GBDT_CTR_PERM_BATCH"]()
+    and not is_defined["MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF"]()
 )
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.bootstrap import (
