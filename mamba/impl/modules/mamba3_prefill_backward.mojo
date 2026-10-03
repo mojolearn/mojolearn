@@ -100,6 +100,40 @@ comptime AFN_M3_BWD_ARENA = (
 )
 
 
+struct _AfnM3Arena(Movable):
+    """The pass's own arena under MOJOLEARN_AFN_MAMBA3_BWD_ARENA: opened
+    only when no arena is open, ended and released by `close` after the
+    pass's wait, or by the destructor when the pass raises. A plain -1
+    and nothing else in every other build."""
+
+    var id: Int
+
+    def __init__(out self) raises:
+        self.id = -1
+        comptime if AFN_M3_BWD_ARENA:
+            if not arena_active():
+                self.id = arena_begin()
+
+    def own(self) -> Bool:
+        return self.id >= 0
+
+    def close(mut self) raises:
+        comptime if AFN_M3_BWD_ARENA:
+            if self.id >= 0:
+                arena_end(self.id)
+                arena_release(self.id)
+                self.id = -1
+
+    def __deinit__(deinit self):
+        comptime if AFN_M3_BWD_ARENA:
+            if self.id >= 0:
+                try:
+                    arena_end(self.id)
+                    arena_release(self.id)
+                except:
+                    pass
+
+
 @always_inline
 def _m3_scratch(
     own: Bool, ctx: DeviceContext, n: Int
@@ -297,14 +331,10 @@ def mamba3_prefill_backward_on(
     var m = b * l
     # lane afn-samba: the arena bracket and the angle chains' chunk sums,
     # declared here and initialized only under their defines.
-    var afn_arena = -1
-    var afn_own = False
+    var afn_arena = _AfnM3Arena()
+    var afn_own = afn_arena.own()
     var afn_sums_a: DeviceBuffer[DType.float32]
     var afn_sums_b: DeviceBuffer[DType.float32]
-    comptime if AFN_M3_BWD_ARENA:
-        if not arena_active():
-            afn_arena = arena_begin()
-            afn_own = afn_arena >= 0
     # lane/neural-apple2: every scratch below is filled and used on the one
     # in-order `ctx` and kept alive to the final synchronize (the explicit
     # last uses at the end), so its allocation needs no wait of its own.
@@ -575,8 +605,5 @@ def mamba3_prefill_backward_on(
     comptime if AFN_M3_BWD_CHUNK:
         _ = afn_sums_a^
         _ = afn_sums_b^
-    comptime if AFN_M3_BWD_ARENA:
-        if afn_own:
-            arena_end(afn_arena)
-            arena_release(afn_arena)
+    afn_arena.close()
     return gradients^
