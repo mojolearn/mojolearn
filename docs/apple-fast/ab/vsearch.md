@@ -58,3 +58,11 @@ Risk: none to bits; same refusal contract.
 
 **MOJOLEARN_VSEARCH_ALL**: all six together (FUSED wins over TILED where both apply). The combination's FAST bits
 move only through COARSE_RANDOM_INIT.
+
+## Compile record (lane af-vsearch, M4 laptop, compile only; nothing run)
+
+All rc=0, no build owed (no "compile owed: peer"):
+- ivf (bindings/build_ivf.sh): FAST off; FAST VSEARCH_ALL; FAST IVF_KMEANS_LAZY_SHIFT; FAST IVF_COARSE_RANDOM_INIT;
+  FAST IVF_DEVICE_VALIDATE; IDENTICAL.
+- x_ann (bindings/build_x_ann.sh): FAST off; FAST VSEARCH_ALL; FAST PQ_LUT_TILED; FAST PQ_SCAN_FUSED;
+  FAST IVF_REFINE_TEAM; FAST IVF_KMEANS_LAZY_SHIFT; FAST IVF_COARSE_RANDOM_INIT; FAST IVF_DEVICE_VALIDATE; IDENTICAL.
