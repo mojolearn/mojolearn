@@ -92,6 +92,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.math import ceil, isfinite
 
 from core.column_stats import STATS_TPB
+from core.device_scan import device_first_nonfinite
 from core.pinned_reduce import pinned_block_sum
 from checks.numerics import ftz, identical_mul_add
 from tsa.impl.timeSeries.arima_helpers import prepare_data
@@ -490,25 +491,20 @@ def kpss_test(
 def _refuse_non_finite(
     ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int, name: String
 ) raises:
-    """Host scan of the input: a NaN or an infinity anywhere is a refusal
-    carrying the parameter name and the offending index."""
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n if n > 0 else 1)
-    if n > 0:
-        if n == len(buf):
-            ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
-        else:
-            var view = buf.create_sub_buffer[DType.float32](0, n)
-            ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
-    ctx.synchronize()
-    var p = h.unsafe_ptr()
-    for i in range(n):
-        var v = p.unsafe_load(i)
-        if not isfinite(v):
-            raise Error(
-                "kpss_test: " + name + " contains a non-finite value at index "
-                + String(i) + "; missing or infinite observations are refused by name"
-            )
-    _ = h^
+    """Device scan of the input: a NaN or an infinity anywhere is a refusal
+    carrying the parameter name and the FIRST offending index (lane
+    cgr4-download-loop: `core.device_scan.device_first_nonfinite`, an
+    integer minimum over block partials, was a download and a host walk)."""
+    if n <= 0:
+        return
+    var view = buf.create_sub_buffer[DType.float32](0, n)
+    var i = device_first_nonfinite(ctx, view, n)
+    _ = view^
+    if i >= 0:
+        raise Error(
+            "kpss_test: " + name + " contains a non-finite value at index "
+            + String(i) + "; missing or infinite observations are refused by name"
+        )
 
 
 def download_results(
