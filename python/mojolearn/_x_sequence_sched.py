@@ -33,6 +33,7 @@ Not carried (sequence/NOT_IMPLEMENTED.tsv): OneCycleLR's momentum cycling
 (cycle_momentum, base_momentum, max_momentum); per-group learning rates;
 `last_epoch` resumption (evaluate `lr_at` at the step you resume from)."""
 from . import _portable_math as _math
+import os as _os
 from fractions import Fraction
 
 from ._training_impl import (_F64_EPS, _LrTable, _PI_HI, _PI_LO, _cos_pi_interval, _cos_pi_run,
@@ -40,8 +41,20 @@ from ._training_impl import (_F64_EPS, _LrTable, _PI_HI, _PI_LO, _cos_pi_interva
 
 _F32_MIN_NORMAL_EXP = -126
 _F32_MAX_EXP = 127
+#: lane apple-fast-gap-optim (2026-10-03, docs/apple-fast/notes/gap-optim.md),
+#: default OFF, read once at import; the same bits by construction (an
+#: enclosure decides only when both its ends round alike, else the exact
+#: fallback decides):
+#:  MOJOLEARN_SCHED_FAST_INLINE=1: ExponentialLR's forward walk (t = the
+#:    last t + 1, base_lr > 0, gamma > 0) in one function body: one
+#:    enclosure product, both ends rounded inline, one ldexp; every other
+#:    call takes the path below.
+#:  MOJOLEARN_SCHED_FAST_P64=1: the enclosures 64 bits wide instead of 128
+#:    (narrower ints; a wider interval only sends more steps to the
+#:    fallback).
+_SCHED_INLINE = _os.environ.get("MOJOLEARN_SCHED_FAST_INLINE", "0") == "1"
 #: working width of the fast enclosures, in bits
-_P = 128
+_P = 64 if _os.environ.get("MOJOLEARN_SCHED_FAST_P64", "0") == "1" else 128
 #: fixed-point fraction bits of OneCycleLR's cosine
 _F = 160
 _PI_LO_FX = (_PI_LO.numerator << _F) // _PI_LO.denominator            # <= pi 2^F
@@ -200,9 +213,11 @@ class _PowSched(_Sched):
         self._pow = None
         self._last = (None, None)
         b, g = self.base_lr, self.gamma
+        self._walk = False
         if _math.isfinite(b) and _math.isfinite(g) and b != 0.0 and g != 0.0:
             self._pow = _GammaPow(g)
             self._Mb, self._Eb = _mag(b)
+            self._walk = _SCHED_INLINE and b > 0.0 and g > 0.0
 
     def _pow_value(self, e):
         if self._last[0] == e:
@@ -251,7 +266,68 @@ class ExponentialLR(_PowSched):
         self._init_pow()
 
     def lr_at(self, t):
+        if self._walk:
+            e = int(t) - 1
+            pw = self._pow
+            if e == pw.e + 1 and e > 0:
+                return self._walk_value(e, pw)
         return self._pow_value(self._t(t))
+
+    def _walk_value(self, e, pw):
+        """MOJOLEARN_SCHED_FAST_INLINE: `_pow_value(e)` for e = the carried
+        exponent + 1, base_lr and gamma > 0: `_GammaPow.at`'s one product and
+        `_iv_f32` / `_dy_f32` of both ends written out; an undecided or
+        out-of-range end hands over to `_pow_value` (whose `at(e)` is then a
+        no-op on the state carried here)."""
+        M = pw.M
+        lo = pw.lo * M
+        hi = pw.hi * M
+        X = pw.X
+        sh = hi.bit_length() - _P
+        if sh > 0:
+            lo >>= sh
+            hi = -((-hi) >> sh)
+            X += sh
+        pw.e, pw.lo, pw.hi, pw.X = e, lo, hi, X
+        E = self._Eb + X + pw.Eg * e
+        a = self._Mb * lo
+        b = self._Mb * hi
+        if a <= 0:
+            return self._pow_value(e)
+        # the low end, rounded to 24 bits, ties to even
+        s = a.bit_length() - 24
+        if s > 0:
+            ma = a >> s
+            r = a & ((1 << s) - 1)
+            h = 1 << (s - 1)
+            if r > h or (r == h and (ma & 1) == 1):
+                ma += 1
+        else:
+            ma = a << (-s)
+        ea = E + s
+        if ma == 16777216:
+            ma = 8388608
+            ea += 1
+        # the high end
+        s = b.bit_length() - 24
+        if s > 0:
+            mb = b >> s
+            r = b & ((1 << s) - 1)
+            h = 1 << (s - 1)
+            if r > h or (r == h and (mb & 1) == 1):
+                mb += 1
+        else:
+            mb = b << (-s)
+        eb = E + s
+        if mb == 16777216:
+            mb = 8388608
+            eb += 1
+        if ma != mb or ea != eb or ea + 23 < _F32_MIN_NORMAL_EXP or ea + 23 > _F32_MAX_EXP:
+            # apart, flushed or overflowing: the general path decides
+            return self._pow_value(e)
+        v = _math.ldexp(float(ma), ea)
+        self._last = (e, v)
+        return v
 
     def _exact_lr_at(self, t):
         return _f32_round(_q(self.base_lr, "base_lr") * _q(self.gamma, "gamma") ** self._t(t))
