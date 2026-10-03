@@ -28,6 +28,13 @@ from x_prep.select_fast import (
 )
 from x_prep.fastprep2 import PREP2_FAST, Prep2Switches, prep2_scratch_words, prep2_fast_stage
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
+from core.staged_download import download_f32_into
+
+#: lane/apple-fast-gap-manprep: MOJOLEARN_X_PREP_FAST_STAGED_OUT (FAST + Apple)
+#: downloads the program's output region through core/staged_download.mojo
+comptime X_PREP_STAGED_OUT = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                              and is_defined["MOJOLEARN_X_PREP_FAST_STAGED_OUT"]())
+comptime _XP_STAGE_POOL = "MojoXPrepDownloadStagesFast"
 from core.device_store import DeviceStore
 from x_linear.fast_gram import fast_sym_gram_into, fg_part_words
 from x_prep.rr_eigh import rr_eigh_into, rre_words
@@ -512,8 +519,20 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             ctx.enqueue_copy(dst_ptr=host_f, src_buf=df.create_sub_buffer[DType.float32](0, arena_len))
         else:
             ctx.enqueue_copy(dst_ptr=host_f, src_buf=df)
-    if out_n > 0:
-        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=out_addr), src_buf=df.create_sub_buffer[DType.float32](out_at, out_n))
+    comptime if X_PREP_STAGED_OUT:
+        if out_n > 0:
+            # lane/apple-fast-gap-manprep (2026-10-03): the output region
+            # (LabelBinarizer's 1M x 259 int32 words at the board, 1 GB)
+            # through the pooled pinned-stage pipeline instead of one raw
+            # host-pointer copy (~21 ms per 64 MB on Apple). Copies only.
+            ctx.synchronize()
+            var oview = df.create_sub_buffer[DType.float32](out_at, out_n)
+            download_f32_into[_XP_STAGE_POOL](ctx, oview, out_n,
+                                              MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_addr))
+            _ = oview^
+    else:
+        if out_n > 0:
+            ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=out_addr), src_buf=df.create_sub_buffer[DType.float32](out_at, out_n))
     ctx.synchronize()
     if prof:
         var now = perf_counter_ns()
