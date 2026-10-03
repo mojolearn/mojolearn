@@ -148,6 +148,7 @@ from std.sys.compile import is_defined
 from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
 
 from core.identity_trace import IdentityTrace
+from core.device_scan import device_first_nonfinite
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
@@ -2599,26 +2600,27 @@ def _lm_run(
             identical_gemm_into(ctx, logits, hn, s.embed.value(), ws, m, v, d, OP_NT)
         else:
             identical_gemm_into(ctx, logits, hn, s.head.value(), ws, m, v, d, OP_NT)
-        var h_x = ctx.enqueue_create_host_buffer[DType.float32](m * d)
-        var h_hn = ctx.enqueue_create_host_buffer[DType.float32](m * d)
-        ctx.enqueue_copy(dst_ptr=h_x.unsafe_ptr(), src_buf=x)
-        ctx.enqueue_copy(dst_ptr=h_hn.unsafe_ptr(), src_buf=hn)
         var rows = List[DeviceBuffer[DType.float32]]()
         for r in range(b):
             rows.append(logits.create_sub_buffer[DType.float32]((r * cur_l + cur_l - 1) * v, v))
             ctx.enqueue_copy(dst_ptr=h_last.unsafe_ptr() + r * v, src_buf=rows[r])
         ctx.synchronize()
         _ = rows^
-        _lm_refuse_nonfinite("rms_norm input", h_x.unsafe_ptr(), m * d)
-        _lm_refuse_nonfinite("linear input", h_hn.unsafe_ptr(), m * d)
+        # lane cgr4-download-loop: the two refusals scan on the device (the
+        # first index by an integer minimum), not two m x d downloads walked
+        # on the host
+        var bad_x = device_first_nonfinite(ctx, x, m * d)
+        if bad_x >= 0:
+            raise Error("mojolearn samba ops: non-finite rms_norm input at flat index " + String(bad_x))
+        var bad_hn = device_first_nonfinite(ctx, hn, m * d)
+        if bad_hn >= 0:
+            raise Error("mojolearn samba ops: non-finite linear input at flat index " + String(bad_hn))
         _ = ids^
         _ = x^
         _ = sumsq^
         _ = hn^
         _ = logits^
         _ = ws^
-        _ = h_x^
-        _ = h_hn^
         var hl = h_last.unsafe_ptr()
         for r in range(b):
             var base = r * v

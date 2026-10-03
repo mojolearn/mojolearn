@@ -501,7 +501,7 @@ def kmeans_plus_plus(
                     chunk_offsets.unsafe_ptr(), Int32(n_samples), Int32(chunk),
                     grid_dim=(n_chunks, 1, 1), block_dim=(PLUS_PLUS_TPB, 1, 1),
                 )
-                ctx.enqueue_function[binary_search_kernel](
+                ctx.enqueue_function[binary_search_kernel](  # small-launch(n_trials: k-means++ candidate trials): one thread per trial, each a binary search of log n steps
                     sel_index.unsafe_ptr(), csum.unsafe_ptr(),
                     d_all.unsafe_ptr().unsafe_offset(pk * n_trials),
                     Int32(n_samples), Int32(n_trials),
@@ -582,7 +582,7 @@ def kmeans_plus_plus(
             grid_dim=(n_chunks, 1, 1),
             block_dim=(PLUS_PLUS_TPB, 1, 1),
         )
-        ctx.enqueue_function[binary_search_kernel](
+        ctx.enqueue_function[binary_search_kernel](  # small-launch(n_trials: k-means++ candidate trials): one thread per trial, each a binary search of log n steps
             sel_index.unsafe_ptr(),
             csum.unsafe_ptr(),
             d_u01.unsafe_ptr(),

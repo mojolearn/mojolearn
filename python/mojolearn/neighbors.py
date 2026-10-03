@@ -21,6 +21,10 @@ from .linear_model import (
     _saved_mode, _shape_of,
 )
 
+#: the x_neighbors binding, which holds the p2m_* ops the data loops below
+#: run through (lane apple-fast-py2mojo-neighbors)
+_XN = "_mojolearn_x_neighbors"
+
 _DEFAULT_QUERY_TILE = 0  # Ask the compiled planner for its measured default.
 
 #: The model file format (the knn host inference lane, 2026-09-14). `save`
@@ -853,8 +857,16 @@ class NearestNeighbors(NumericModeMixin):
         if return_distance:
             if self._dist_params()[0] == _DIST_INNER_PRODUCT:
                 # the kernel selected the smallest NEGATED products; hand
-                # back the products themselves (a negation, exact)
-                dist = Array.from_list([[-v for v in row] for row in dist.tolist()], "<f4")
+                # back the products themselves (a negation, exact; on the
+                # device as `xn_p2m_negate`, lane apple-fast-py2mojo-neighbors)
+                from ._expansion_neighbors import _p2m
+                if dist.size and _p2m(self, _XN):
+                    neg = empty(dist.shape, "<f4")
+                    self._bind(_XN).xn_p2m_negate(
+                        [addr_ro(dist, name="dist"), addr(neg, name="neg")], [dist.size], [])
+                    dist = neg
+                else:
+                    dist = Array.from_list([[-v for v in row] for row in dist.tolist()], "<f4")
             return dist, ind.astype("<i8")
         return ind.astype("<i8")
 
@@ -1047,6 +1059,19 @@ class KNeighborsClassifier(NearestNeighbors):
             y32 = ya.reshape((n,)).astype("<i4")
             self._y_cols = y32.reshape((1, n))
             self._classes_list = [encode_labels(y32)[0]]
+            return self
+        from ._expansion_neighbors import _p2m
+        if n and _p2m(self, _XN):
+            # lane apple-fast-py2mojo-neighbors: the narrowing is a C-level
+            # copy (exact after the range check) and the transpose a device
+            # op (`xn_p2m_transpose_i`); the classes per output column from
+            # the native encoder, as the one-output path above
+            y32 = ya.astype("<i4")
+            yc = empty((n_out, n), "<i4")
+            self._bind(_XN).xn_p2m_transpose_i(
+                [addr_ro(y32, name="y"), addr(yc, name="y_cols")], [n, n_out], [])
+            self._y_cols = yc
+            self._classes_list = [encode_labels(yc[j])[0] for j in range(n_out)]
             return self
         rows = ya.tolist()
         cols = [[row[j] for row in rows] for j in range(n_out)]
@@ -1283,11 +1308,20 @@ class KNeighborsRegressor(NearestNeighbors):
         else:
             # The transpose is a Python loop over O(rows * n_outputs)
             # targets (DEVIATION 2374); the values are already float32, so
-            # `from_list` reproduces them exactly.
-            rows = ya.tolist()
-            self._y_cols = Array.from_list(
-                [[row[j] for row in rows] for j in range(n_out)], "<f4"
-            )
+            # `from_list` reproduces them exactly. lane
+            # apple-fast-py2mojo-neighbors: the same copy on the device
+            # (`xn_p2m_transpose`) unless built with the OFF define.
+            from ._expansion_neighbors import _p2m
+            if n and _p2m(self, _XN):
+                yc = empty((n_out, n), "<f4")
+                self._bind(_XN).xn_p2m_transpose(
+                    [addr_ro(ya, name="y"), addr(yc, name="y_cols")], [n, n_out], [])
+                self._y_cols = yc
+            else:
+                rows = ya.tolist()
+                self._y_cols = Array.from_list(
+                    [[row[j] for row in rows] for j in range(n_out)], "<f4"
+                )
         self.outputs_2d_ = len(shape) == 2 and shape[1] != 1
         return self
 
@@ -1613,6 +1647,15 @@ class RadiusNeighbors(NumericModeMixin):
         # LISTS of Arrays (int64 indices, float32 distances), one per query
         # row, where they were object-dtype ndarrays. Same per-row contents,
         # indexed with `[i]` as before; `len()` is the query count.
+        if sort_results and nnz:
+            from ._expansion_neighbors import _p2m, _p2m_sort_rows
+            if _p2m(self, _XN):
+                # lane apple-fast-py2mojo-neighbors: every row's stable sort
+                # by distance as one segmented sort on the device
+                # (`xn_p2m_row_sort`, key (row, distance, position)): the
+                # order the per-row `sorted` below produces
+                cols, dists = _p2m_sort_rows(self, indptr, cols, dists, _XN)
+                sort_results = False
         ptr = indptr.tolist()
         ind = []
         dst = []

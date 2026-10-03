@@ -1,0 +1,2 @@
+CMD lane/apple-fast-py2mojo-prep py2mojo-prep-qda-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh py2mojo-prep-qda-istella x_prep qda istella 1 2 "-D MOJOLEARN_PY2MOJO_prep_OFF" ""
+CMD lane/apple-fast-py2mojo-prep py2mojo-prep-qda-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh py2mojo-prep-qda-taxi x_prep qda taxi 1 2 "-D MOJOLEARN_PY2MOJO_prep_OFF" ""

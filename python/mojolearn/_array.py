@@ -67,26 +67,71 @@ for _ts, _c in _CODE.items():
 
 
 # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3102). dtype codes of the
-# core helpers in `bindings/hotpath_helpers.mojo`; float16 has no code and
-# keeps the Python routines. Below `_NATIVE_MIN` elements the Python routine
-# is as fast as the call and stays the only path, so scalars and metadata
-# never touch the binding.
+# core helpers in `bindings/hotpath_helpers.mojo`; float16, bf16 bits and the
+# 8/16-bit integers have no code and keep the Python routines. lane
+# apple-fast-py2mojo-core (2026-10-03): every non-empty block of a coded
+# dtype takes the helper, whatever its size (the `_NATIVE_MIN` cut that kept
+# blocks under 256 elements in Python is gone from `_helper`; `_block_store`
+# keeps it for its memcpy), and the integer sum is the helper's too
+# (`_REDUCE_ISUM`, an exact 128-bit accumulator). The Python routines stay
+# as the helpers' definitions: `_native_optional` answers None only for a
+# binary that lacks the helper, the state the differential test's reference
+# arm (`tests/test_hotpath_native.py`) plants.
 _NATIVE_CODE = {"<f4": 0, "<f8": 1, "<i4": 2, "<i8": 3, "<u4": 4, "<u1": 5}
 _NATIVE_MIN = 256
-_REDUCE_MIN, _REDUCE_MAX, _REDUCE_SUM, _REDUCE_ARGMAX, _REDUCE_INTEGRAL = range(5)
+_REDUCE_MIN, _REDUCE_MAX, _REDUCE_SUM, _REDUCE_ARGMAX, _REDUCE_INTEGRAL, _REDUCE_ISUM = range(6)
 _SCALAR_TYPES = frozenset((float, int, bool))
 _ROW_TYPES = frozenset((list, tuple))
 _NOT = bytes((1, 0)) + bytes(range(2, 256))
 
 
 def _helper(key, size):
-    """The core helper `key` for a block of `size` elements, or None when
-    the block is small or the binary lacks the helper; the caller then
-    runs its Python routine, which is the helper's definition."""
-    if size < _NATIVE_MIN:
+    """The core helper `key` for a non-empty block, or None for an empty
+    block (whose Python routine answers or refuses without a loop) or a
+    binary that lacks the helper."""
+    if size <= 0:
         return None
     from . import _buffer
     return _buffer._native_optional(key)
+
+
+_INT_BOUNDS = {"<i4": (-(1 << 31), (1 << 31) - 1), "<i8": (-(1 << 63), (1 << 63) - 1),
+               "<u4": (0, (1 << 32) - 1), "<u1": (0, 255)}
+
+
+def _exact_in(value, dtype):
+    """`value` (a Python int, float or bool) as an element of `dtype` that
+    compares equal to it EXACTLY under Python's `==`, or None when no
+    element of `dtype` can equal it."""
+    if isinstance(value, bool):
+        value = int(value)
+    if dtype in _INT_BOUNDS:
+        if isinstance(value, float):
+            if value != value or value in (float("inf"), float("-inf")) or value != int(value):
+                return None
+            value = int(value)
+        lo, hi = _INT_BOUNDS[dtype]
+        return value if lo <= value <= hi else None
+    # float dtypes: a float element x equals value iff float(x) == value
+    if isinstance(value, int):
+        try:
+            f = float(value)
+        except OverflowError:
+            return None
+        if f != value:
+            return None  # an int no double holds: no float element equals it
+        value = f
+    if value != value:
+        return None  # NaN equals nothing
+    if dtype == "<f4":
+        try:
+            g = struct.unpack("<f", struct.pack("<f", value))[0]
+        except OverflowError:
+            return None
+        if g != value:
+            return None
+        return g
+    return value
 
 
 def normalize_dtype(dtype):
@@ -735,6 +780,10 @@ class Array:
             fast = self._native_eq(other)
             if fast is not None:
                 return fast
+        elif isinstance(other, (int, float, bool)):
+            fast = self._native_eq_scalar(other)
+            if fast is not None:
+                return fast
         mine = self._as_c()._values()
         if isinstance(other, Array):
             if other.shape != self.shape:
@@ -764,6 +813,28 @@ class Array:
         b = other._as_c()
         store = array.array("B", bytes(self.size))
         fn(a._addr, b._addr, code, self.size, store.buffer_info()[0])
+        return Array._owned(store, self.shape, "<u1", "C")
+
+    def _native_eq_scalar(self, other):
+        """lane apple-fast-py2mojo-core: equality against a Python scalar
+        through `equal_elements`, the scalar repeated in C as this dtype, or
+        None. Python compares exactly (an int against a float included), so
+        the scalar is first taken to this dtype EXACTLY; a scalar no element
+        can equal (NaN, a non-integer against an integer dtype, a value out
+        of the dtype's range or not representable in float32) answers all
+        zeros without a pass."""
+        code = _NATIVE_CODE.get(self.dtype)
+        if code is None:
+            return None
+        fn = _helper("equal_elements", self.size)
+        if fn is None:
+            return None
+        v = _exact_in(other, self.dtype)
+        store = array.array("B", bytes(self.size))
+        if v is not None:
+            a = self._as_c()
+            fill = array.array(_CODE[self.dtype], [v]) * self.size
+            fn(a._addr, fill.buffer_info()[0], code, self.size, store.buffer_info()[0])
         return Array._owned(store, self.shape, "<u1", "C")
 
     def __ne__(self, other):
@@ -816,6 +887,13 @@ class Array:
             fast = self._native_reduce(_REDUCE_SUM)
             if fast is not None:
                 return fast
+        elif self.dtype in _NATIVE_CODE:
+            # lane apple-fast-py2mojo-core: the exact integer sum in the
+            # helper, (hi, lo >> 32, lo & 0xffffffff) of a 128-bit total
+            parts = self._native_reduce(_REDUCE_ISUM)
+            if parts is not None:
+                hi, mid, low = (int(v) for v in parts)
+                return (hi << 64) + (mid << 32) + low
         values = self._values()
         if self.dtype in _INT:
             return sum(values)
