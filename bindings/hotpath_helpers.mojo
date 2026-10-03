@@ -976,3 +976,32 @@ def ic_running_min_f64_binding(
                     bp.unsafe_store(b, v)
                     xp.unsafe_store(b, Int64(k))
     return PythonObject(0)
+
+
+@always_inline
+def _ftz_bits(v: Float32) -> Float32:
+    """A subnormal becomes a zero of the same sign (checks/numerics `ftz`)."""
+    var b = bitcast[DType.uint32](v)
+    if (b & UInt32(0x7F800000)) == 0 and (b & UInt32(0x007FFFFF)) != 0:
+        return bitcast[DType.float32](b & UInt32(0x80000000))
+    return v
+
+
+def fold_pair_f32_binding(dst_addr: PythonObject, src_addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    """cross_vendor's coordinator fold (lane cgr4-py-compute, out of the
+    Python element loop): dst[i] = ftz(ftz(dst[i]) + ftz(src[i])), one
+    float32 rounding per add, elementwise (no element depends on another)."""
+    var count = Int(py=n)
+    if count < 0:
+        raise Error("fold_pair_f32: n must be non-negative")
+    if count == 0:
+        return PythonObject(0)
+    var dp = _ptr[DType.float32](Int(py=dst_addr))
+    var sp = _ptr[DType.float32](Int(py=src_addr))
+    with GILReleased(Python()):
+        for i in range(count):
+            var s = _ftz_bits(_ftz_bits(dp.unsafe_load(i)) + _ftz_bits(sp.unsafe_load(i)))
+            comptime if HOTPATH_SABOTAGE:
+                s = -s
+            dp.unsafe_store(i, s)
+    return PythonObject(0)
