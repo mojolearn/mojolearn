@@ -1068,8 +1068,8 @@ class StratifiedGroupKFold(_KFoldBase):
         to_fold = array.array('i', bytes(4 * m))
         sizes = array.array('q', bytes(8 * self.n_splits))
         bad = int(_native('strat_group_assign_i32')(
-            _addr_ro(yenc), _addr_ro(gc.codes), n, k, m, self.n_splits,
-            perm.buffer_info()[0] if perm is not None else 0, to_fold.buffer_info()[0], sizes.buffer_info()[0]))
+            [_addr_ro(yenc), _addr_ro(gc.codes), perm.buffer_info()[0] if perm is not None else 0,
+             to_fold.buffer_info()[0], sizes.buffer_info()[0]], [n, k, m, self.n_splits]))
         if bad:
             raise ValueError(f'n_splits={self.n_splits} cannot be greater than the number of members in '
                              'each class.')

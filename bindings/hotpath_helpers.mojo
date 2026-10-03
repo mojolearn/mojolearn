@@ -1677,10 +1677,7 @@ def group_fold_assign_i32_binding(
     return PythonObject(0)
 
 
-def strat_group_assign_i32_binding(
-    yenc_addr: PythonObject, gidx_addr: PythonObject, n: PythonObject, k: PythonObject, m: PythonObject,
-    n_folds: PythonObject, perm_addr: PythonObject, dst_addr: PythonObject, sizes_addr: PythonObject,
-) raises -> PythonObject:
+def strat_group_assign_i32_binding(addrs: PythonObject, dims: PythonObject) raises -> PythonObject:
     """StratifiedGroupKFold's fold of each of the m groups (scikit-learn
     1.9 `_find_best_fold`): each group's class distribution, the groups
     (in code order, or permuted by `perm` int64 when nonzero) sorted by the
@@ -1690,18 +1687,21 @@ def strat_group_assign_i32_binding(
     fold). int32 dst[g]; int64 sizes[f] the rows of each fold. yenc: int32
     class codes in [0, k); gidx: int32 group codes in [0, m). Returns 1 when
     the largest class has fewer rows than n_folds (the caller refuses), else
-    0. Binary64 sums ascending (lane pyglue-numeric: the Python loops)."""
-    var nn = Int(py=n)
-    var kk = Int(py=k)
-    var mm = Int(py=m)
-    var K = Int(py=n_folds)
+    0. Binary64 sums ascending (lane pyglue-numeric: the Python loops).
+    addrs = [yenc, gidx, perm (0: none), dst, sizes]; dims = [n, k, m, n_folds]."""
+    if len(addrs) != 5 or len(dims) != 4:
+        raise Error("strat_group_assign_i32: addrs [yenc, gidx, perm, dst, sizes], dims [n, k, m, n_folds]")
+    var nn = Int(py=dims[0])
+    var kk = Int(py=dims[1])
+    var mm = Int(py=dims[2])
+    var K = Int(py=dims[3])
     if nn < 0 or kk < 1 or mm < 1 or K < 1:
         raise Error("strat_group_assign_i32: bad sizes")
-    var yp = _ptr[DType.int32](Int(py=yenc_addr))
-    var gp = _ptr[DType.int32](Int(py=gidx_addr))
-    var dp = _ptr[DType.int32](Int(py=dst_addr))
-    var sp = _ptr[DType.int64](Int(py=sizes_addr))
-    var pa = Int(py=perm_addr)
+    var yp = _ptr[DType.int32](Int(py=addrs[0]))
+    var gp = _ptr[DType.int32](Int(py=addrs[1]))
+    var pa = Int(py=addrs[2])
+    var dp = _ptr[DType.int32](Int(py=addrs[3]))
+    var sp = _ptr[DType.int64](Int(py=addrs[4]))
     var counts = List[Int](length=kk, fill=0)
     var dist = List[Int](length=mm * kk, fill=0)
     for i in range(nn):
