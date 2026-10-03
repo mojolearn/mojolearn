@@ -282,7 +282,7 @@ def cd_gram_blocks_kernel(
 # lane/apple-fast-linear (2026-10-02): THE CD_FAST_GRAM PRODUCT ON THE GRID
 # ===========================================================================
 #
-# Two build defines, FAST + Apple only (inside CD_FAST_GRAM), default off:
+# Two build defines, FAST + Apple only (inside CD_FAST_GRAM), default on:
 #
 #   -D MOJOLEARN_CD_FAST_GRID_GRAM=1   [X ; y]^T [X ; y] as 32 x 32 tiles over
 #       8192-row chunks (both operands staged in threadgroup memory, 4 cells
@@ -309,8 +309,15 @@ def cd_gram_blocks_kernel(
 #       host from the means read back beside the Gram. The sweeps are the
 #       Gram sweeps already here (the same words). Refused by name where
 #       CD_FAST_GRAM does not hold (IDENTICAL builds compile the old code).
-comptime CD_FAST_GRID_GRAM = CD_FAST_GRAM and is_defined["MOJOLEARN_CD_FAST_GRID_GRAM"]()
-comptime CD_FAST_ROWMAJOR = CD_FAST_GRAM and is_defined["MOJOLEARN_CD_FAST_ROWMAJOR"]()
+#
+# Default on (FAST + Apple) since the M3 A/B (istella n=1: lasso 264 -> 149
+# ms with both, enet 262 -> 143 ms, r2 .2616 -> .2609). `-D
+# MOJOLEARN_CD_FAST_GRID_GRAM_OFF` turns off both (the row-major arm reads
+# the grid Gram's tiles); `-D MOJOLEARN_CD_FAST_ROWMAJOR_OFF` the row-major
+# arm alone. The old `-D MOJOLEARN_CD_FAST_GRID_GRAM` / `_ROWMAJOR` names are
+# harmless.
+comptime CD_FAST_GRID_GRAM = CD_FAST_GRAM and not is_defined["MOJOLEARN_CD_FAST_GRID_GRAM_OFF"]()
+comptime CD_FAST_ROWMAJOR = CD_FAST_GRID_GRAM and not is_defined["MOJOLEARN_CD_FAST_ROWMAJOR_OFF"]()
 comptime CD_GG_TPB = 256
 comptime CD_GG_CH = 8192
 comptime CD_GG_TS = 32

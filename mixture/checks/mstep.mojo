@@ -863,7 +863,7 @@ def fused_precision_cholesky_kernel(
 # lane/apple-fast-linear (2026-10-02): THE ISTELLA SHAPE (d = 200, K = 8)
 # ===========================================================================
 #
-# Two build defines, FAST + Apple only, default off. Both arms above
+# Two build defines, FAST + Apple only (BIG_CHOL default on, GRID_COV off). Both arms above
 # (`fused_cov_partial_kernel`, `fused_precision_cholesky_kernel`) stop at
 # d = 32 (taxi, d = 16, takes them); Istella's 100,000 x 200 falls to:
 #
@@ -901,7 +901,11 @@ def _gmm_dev_barrier():
 
 
 comptime GMM_FAST_GRID_COV = GMM_FUSED_COV and is_defined["MOJOLEARN_GMM_FAST_GRID_COV"]()
-comptime GMM_FAST_BIG_CHOL = GMM_FUSED_CHOL and is_defined["MOJOLEARN_GMM_FAST_BIG_CHOL"]()
+# GMM_FAST_BIG_CHOL: default on (FAST + Apple) since the M3 A/B (istella
+# n=1: GMM 6,560 -> 5,894 ms, bic same). `-D MOJOLEARN_GMM_FAST_BIG_CHOL_OFF`
+# keeps the per-component chain; the old `-D MOJOLEARN_GMM_FAST_BIG_CHOL`
+# name is harmless. GMM_FAST_GRID_COV stays opt-in (measured slower).
+comptime GMM_FAST_BIG_CHOL = GMM_FUSED_CHOL and not is_defined["MOJOLEARN_GMM_FAST_BIG_CHOL_OFF"]()
 
 
 comptime GMM_GC_TPB = 256

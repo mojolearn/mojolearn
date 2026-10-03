@@ -376,7 +376,7 @@ def mean_kernel(
 
 
 # ---------------------------------------------------------------------------
-# lane/linear-apple3 (WIP, opt-in `-D MOJOLEARN_QN_FAST_BLOCKS=1`): FAST on
+# lane/linear-apple3 (`QN_FAST_BLOCKS`, FAST default, see below): FAST on
 # Apple, one class: the whole objective evaluation in TWO launches.
 #
 # An evaluation was nine launches: the gemv, the bias, the loss map, the
@@ -391,10 +391,14 @@ def mean_kernel(
 # kernels'; the grouping of every sum differs, so FAST words change.
 # ---------------------------------------------------------------------------
 
+# Default on (FAST + Apple) since the M3 A/B (istella n=1: logreg 3,893 ->
+# 3,612 ms, svc 773 -> 733, svr 913 -> 219, quality same). `-D
+# MOJOLEARN_QN_FAST_BLOCKS_OFF` keeps the nine-launch evaluation; the old
+# `-D MOJOLEARN_QN_FAST_BLOCKS` name is harmless.
 comptime QN_FAST_BLOCKS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_QN_FAST_BLOCKS"]()
+    and not is_defined["MOJOLEARN_QN_FAST_BLOCKS_OFF"]()
 )
 comptime QNB_ROWS = 1024
 comptime QNB_TPB = 256
