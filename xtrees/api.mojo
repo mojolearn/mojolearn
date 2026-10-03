@@ -669,6 +669,79 @@ def fast_switches_binding() raises -> PythonObject:
     return PythonObject(XTREES_FAST_SWITCHES)
 
 
+def _host_folds(
+    codes: MutPointer[Int32, MutUntrackedOrigin], n: Int, k: Int, n_splits: Int,
+    rows: MutPointer[Int32, MutUntrackedOrigin], counts: MutPointer[Int32, MutUntrackedOrigin],
+) -> Int:
+    """The host column's `device_folds` (lane cgr4-py-compute: the same law
+    and the same output layout, so a CPU-only install no longer runs the
+    Python fold routines): fold id per row (KFold when k == 0, else
+    StratifiedKFold over first-seen classes), then per fold the rows
+    outside it ascending, then inside it ascending; counts[f] = fold f's
+    size, counts[n_splits] = the status."""
+    var fold = List[Int](length=n, fill=0)
+    var sizes = List[Int](length=n_splits, fill=0)
+    if k == 0:
+        var off = 0
+        for f in range(n_splits):
+            var size = n // n_splits + (1 if f < n % n_splits else 0)
+            for r in range(off, off + size):
+                fold[r] = f
+            sizes[f] = size
+            off += size
+    else:
+        var cnt = List[Int](length=k, fill=0)
+        var order = List[Int]()
+        for r in range(n):
+            var c = Int(codes[r])
+            if c < 0 or c >= k:
+                counts[n_splits] = 2
+                return 2
+            if cnt[c] == 0:
+                order.append(c)
+            cnt[c] += 1
+        var mx = 0
+        for c in range(k):
+            mx = max(mx, cnt[c])
+        if n_splits > mx:
+            counts[n_splits] = 1
+            return 1
+        # alloc[c * n_splits + f]: positions p of class c's block [s, s + cnt)
+        # of the sorted labels with p mod n_splits == f
+        var alloc = List[Int](length=k * n_splits, fill=0)
+        var start = 0
+        for j in range(len(order)):
+            var c = order[j]
+            var e = start + cnt[c]
+            for f in range(n_splits):
+                alloc[c * n_splits + f] = (e - 1 - f) // n_splits - (start - 1 - f) // n_splits
+            start = e
+        var cur = List[Int](length=k, fill=0)
+        for r in range(n):
+            var c = Int(codes[r])
+            var f = cur[c]
+            while alloc[c * n_splits + f] == 0:
+                f += 1
+            alloc[c * n_splits + f] -= 1
+            cur[c] = f
+            fold[r] = f
+            sizes[f] += 1
+    for f in range(n_splits):
+        var base = f * n
+        var a = 0
+        var b = n - sizes[f]
+        for r in range(n):
+            if fold[r] == f:
+                rows[base + b] = Int32(r)
+                b += 1
+            else:
+                rows[base + a] = Int32(r)
+                a += 1
+        counts[f] = Int32(sizes[f])
+    counts[n_splits] = 0
+    return 0
+
+
 def device_folds_binding(codes: PythonObject, rows: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
     """params = [n, n_splits, n_classes]: the cv folds on the device
     (xtrees/folds_device.mojo; MOJOLEARN_TE_NATIVE_SPLITS, default on unless `-D MOJOLEARN_TE_NATIVE_SPLITS_OFF`, FAST + Apple
@@ -686,7 +759,12 @@ def device_folds_binding(codes: PythonObject, rows: PythonObject, counts: Python
         raise Error("x_trees_device_folds: n_splits must be >= 2")
     var status = 0
     if n > 0:
-        status = device_folds(i32_ptr(Int(py=codes)), n, k, n_splits, i32_ptr(Int(py=rows)), i32_ptr(Int(py=counts)))
+        comptime if XTREES_DEVICE_OPS:
+            status = device_folds(i32_ptr(Int(py=codes)), n, k, n_splits, i32_ptr(Int(py=rows)),
+                                  i32_ptr(Int(py=counts)))
+        else:
+            status = _host_folds(i32_ptr(Int(py=codes)), n, k, n_splits, i32_ptr(Int(py=rows)),
+                                 i32_ptr(Int(py=counts)))
     return PythonObject(status)
 
 
