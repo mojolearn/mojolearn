@@ -7,10 +7,6 @@
 rule	class	owner	state	path	occ	text
 # why: OWED (per-query path only: k > 32, dim > FIVF_MAX_DIM, traced, partial storage, or naming a query short of k): each query's candidates gathered on the host and uploaded; the batched scans plan on the device (ivf_group_device.mojo); a device candidate gather for this path is the remaining step
 d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo	0	for q in range(n_queries):
-# why: FAST tier only (GMM_FAST_MEANLL, the Apple FAST peer's): one 1024-thread block over n; IDENTICAL and default FAST without the define use the chunked-level device fold
-one-block-n	serial-gpu	UNOWNED	owed	mixture/checks/estep.mojo	0	ctx.enqueue_function[fast_meanll_kernel](
-# why: FAST tier only (GMM_FAST_MEANLL, the Apple FAST peer's): one 1024-thread block over n; IDENTICAL and default FAST without the define use the chunked-level device fold
-one-block-n	serial-gpu	UNOWNED	owed	mixture/checks/estep.mojo	1	ctx.enqueue_function[fast_meanll_kernel](
 # why: Array reference routines (eq of mixed dtypes, float16/bf16/int8 astype, ragged _flatten of user lists) kept for dtypes with no Mojo helper code and for tests/test_hotpath_native.py's reference arm; owed: give cast_elements/equal_elements f2/u2/i1 codes, then delete
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_array.py	0	bits = [1 if x == other else 0 for x in mine]
 # why: Array reference routines (eq of mixed dtypes, float16/bf16/int8 astype, ragged _flatten of user lists) kept for dtypes with no Mojo helper code and for tests/test_hotpath_native.py's reference arm; owed: give cast_elements/equal_elements f2/u2/i1 codes, then delete
@@ -25,9 +21,6 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_array.py	0	for v 
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_array.py	0	values = [int(v) for v in self._mv]
 # why: Array reference routines (eq of mixed dtypes, float16/bf16/int8 astype, ragged _flatten of user lists) kept for dtypes with no Mojo helper code and for tests/test_hotpath_native.py's reference arm; owed: give cast_elements/equal_elements f2/u2/i1 codes, then delete
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_array.py	0	values = [int(v) for v in values]
-# why: apple-fast-purity2 left it: the public Array's Python iteration protocol (a user's `for row in arr`), not fit/transform/predict work; each row is a view
-py-loop	py-numpy	apple-fast-purity2	debt	python/mojolearn/_array.py	0	return (self[i] for i in range(self.shape[0]))
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_array.py	0	return (self[i] for i in range(self.shape[0]))
 # why: min/max/sum fallbacks behind reduce_stat: only for dtypes without a helper code (f2, u2, i1) and the test reference arm that plants a missing helper; owed with the f2/u2/i1 helper codes
 py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_array.py	0	return max(self._reduce_values("max"))
 # why: min/max/sum fallbacks behind reduce_stat: only for dtypes without a helper code (f2, u2, i1) and the test reference arm that plants a missing helper; owed with the f2/u2/i1 helper codes
@@ -2076,7 +2069,6 @@ py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_metrics_impl.py	0	re
 py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_metrics_impl.py	0	selected = _selected_labels(labels, kind, sorted(_label_set(true)))
 # why: apple-fast-purity2 left it: scikit-learn estimator tag classes (metadata for sklearn's checks); no data is touched
 py-sklearn	py-numpy	apple-fast-purity2	debt	python/mojolearn/_mode.py	0	from sklearn.utils import ClassifierTags, RegressorTags, Tags, TargetTags
-py-sklearn	py-numpy	UNOWNED	debt	python/mojolearn/_mode.py	0	from sklearn.utils import ClassifierTags, RegressorTags, Tags, TargetTags
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	env[name] = ','.join(ids[d] for d in group)
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
@@ -2117,8 +2109,6 @@ py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.p
 py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	if max(self.devices) >= len(ids) or any(not ids[d] for d in self.devices):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	names = sorted({request[0] for request in requests})
-py-threads	host-threads	UNOWNED	debt	python/mojolearn/_parallel_pool.py	0	from concurrent.futures import ThreadPoolExecutor
-py-threads	host-threads	UNOWNED	debt	python/mojolearn/_parallel_pool.py	0	self._threads = ThreadPoolExecutor(max_workers=len(self.devices))
 # why: OWED A/B control only: reached solely in a -D MOJOLEARN_PY2MOJO_cluster_OFF build (gp_py2mojo() == 0); every default build takes the binding's targets/out_kind (gaussian_process/unnorm.mojo); delete with that define
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_parallel_worker.py	0	return Array.from_list([1 if v > 0.0 else 0 for v in mean.tolist()], '<i8')
 # why: OWED A/B control only: reached solely in a -D MOJOLEARN_PY2MOJO_cluster_OFF build (gp_py2mojo() == 0); every default build takes the binding's targets/out_kind (gaussian_process/unnorm.mojo); delete with that define
@@ -2439,7 +2429,6 @@ py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/lm_corpus.py	0	f
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/lm_corpus.py	0	token_ranges = {key: [boundaries[a], boundaries[b]] for key, (a, b) in ranges.items()}
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/lm_corpus.py	0	return sorted(points)
-py-threads	host-threads	gap-lm	debt	python/mojolearn/lm_corpus.py	0	worker = threading.Thread(target=produce, name="mojolearn-token-prefetch", daemon=True)
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	'fold_sizes': [[len(train), len(test)] for train, test in folds],
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -3026,7 +3015,6 @@ py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/tokenizer
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/tokenizer.py	0	self.bos_ids = tuple(int(i) for i in bos_ids)
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/tokenizer.py	0	self.eos_ids = tuple(int(i) for i in eos_ids)
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/models/tokenizer.py	0	loose = [i for i in range(n) if i not in made and len(tokens[i]) != 1]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/neighbors.py	0	[[row[j] for row in rows] for j in range(n_out)], "<f4"
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -3160,8 +3148,6 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/resample.py	0	retu
 # why: LinearSVC one-vs-rest: one _qn_fit_one_target call per class and a byte join of the k coefficient blocks (k-sized); owed: a multi-target qn fit entry in the estimators binding
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/svm.py	0	for cls in selected:
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	module = _backend.load_host_module(_EXTENSION)
-host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	module = _backend.load_host_module(_EXTENSION)
-host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	return _Entries(_backend.load_host_module(_EXTENSION))
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	return _Entries(_backend.load_host_module(_EXTENSION))
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/tokenizer.py	0	for b in range(256):
@@ -3185,15 +3171,10 @@ py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/tokenizer.py	0	i
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/tokenizer.py	0	n_tokens, arena_bytes, n_merges, n_ties, n_groups = (int(x) for x in module.bpe_trained_sizes(handle))
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/tokenizer.py	0	return [b.decode("utf-8", errors) for b in self.decode_bytes_batch(batch)]
-py-loop	py-numpy	gap-lm	debt	python/mojolearn/tokenizer.py	0	loose = [i for i in range(n) if i not in made and len(tokens[i]) != 1]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/tokenizer.py	0	cap = sum(map(len, seqs)) * self._max_token_bytes
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/tokenizer.py	0	if not 0 <= total <= n or sum(counts) != total:
-# why: OWED: the observed statistic folds the host input on the host with the replicate kernels' pinned tree; a device version needs a multi-block tree sum in that order (the replicate kernels fold one block per replicate)
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	resample/estimator.mojo	0	for j in range(n_pooled):
-# why: OWED: the observed statistic folds the host input on the host with the replicate kernels' pinned tree; a device version needs a multi-block tree sum in that order (the replicate kernels fold one block per replicate)
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	resample/estimator.mojo	1	for j in range(n_pooled):
 # why: OWED (sequence/neural lane): the MoE pair grouping by expert (a counting sort over T*k picks) runs on the host by default; the device grouping exists only behind -D MOJOLEARN_MOE_DEVGROUP with one-block kernels for E <= 127; needs a multi-block grouping op in the executor registry
 d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	sequence/pyapi.mojo	0	for i in range(T * k):
 # why: OWED (sequence/neural lane): the MoE pair grouping by expert (a counting sort over T*k picks) runs on the host by default; the device grouping exists only behind -D MOJOLEARN_MOE_DEVGROUP with one-block kernels for E <= 127; needs a multi-block grouping op in the executor registry
