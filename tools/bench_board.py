@@ -28,6 +28,11 @@ and every cell) and `BOARD.md` rendered from it.
     build. The wheel's sha256 is recorded.
   * Opponents are pinned from tools/opponent_wheels.sh; `--opponent-wheels DIR`
     installs them offline from a set staged out of R2.
+  * DEFAULT = OUR GPU ARM(S) ONLY (Andrew, Oct 3 2026). Opponents are scored
+    once and stored (the opponent store); a default run races only our arms
+    and joins the opponents the store already holds. An opponent missing from
+    the store is NOT raced unless `--with-opponents` (or `--retime-opponents`)
+    asks; the race records it under `skipped_opponents`.
   * Datasets: taxi and Istella-S, the decoded caches staged from R2
     (docs/REMOTE_DATA_R2.md). This script NEVER downloads data; a missing file
     is a refusal that prints the staging command. `--rows N` shrinks for a
@@ -2270,19 +2275,29 @@ def note_host_memory(rec, kills, arms):
 def run_race(ctx, race):
     """Run one race and return its record (status, rc, log, cells). Opponents
     the store already holds for this key are not run; their stored cells join
-    the race (tools/bench_board_store.py)."""
+    the race (tools/bench_board_store.py). Default is our arm(s) only: an
+    opponent the store does not hold is skipped unless ctx["with_opponents"]
+    (--with-opponents / --retime-opponents)."""
     stored = stored_opponents(ctx, race)
+    skipped = [] if ctx.get("with_opponents") else [
+        a for a in race.get("opponents") or [] if a not in stored]
     full = race
+    if stored or skipped:
+        drop = set(stored) | set(skipped)
+        race = dict(race, opponents=[a for a in race["opponents"] if a not in drop],
+                    arms=[a for a in race["arms"] if a not in drop])
     if stored:
-        race = dict(race, opponents=[a for a in race["opponents"] if a not in stored],
-                    arms=[a for a in race["arms"] if a not in stored])
         print("bench_board:   stored (not run): %s" % ", ".join(
             "%s [%s]" % (a, STORE.source_text(r)) for a, r in sorted(stored.items())), flush=True)
+    if skipped:
+        print("bench_board:   opponents not stored, not raced (ours-only default; "
+              "--with-opponents races them): %s" % ", ".join(skipped), flush=True)
     mark = len(HOST_MEMORY_KILLS)
     rec = _run_race(ctx, race)
     note_host_memory(rec, HOST_MEMORY_KILLS[mark:], race["arms"])
-    rec["arms"] = full["arms"]
+    rec["arms"] = [a for a in full["arms"] if a not in skipped]
     rec["stored_arms"] = sorted(stored)
+    rec["skipped_opponents"] = list(skipped)
     for c in rec["cells"]:
         if c.get("library") != "mojolearn":
             c["source"] = "measured this run"
@@ -3030,7 +3045,11 @@ def build_parser():
                         "opponent already measured for the same key is not run again; its stored "
                         "cell joins the race (tools/bench_board_store.py)")
     p.add_argument("--retime-opponents", action="store_true",
-                   help="measure every opponent again (and store the new measurement)")
+                   help="measure every opponent again (and store the new measurement); "
+                        "implies --with-opponents")
+    p.add_argument("--with-opponents", action="store_true",
+                   help="also race the opponents the store does not hold (default: our GPU "
+                        "arm(s) only; stored opponent cells still join the race)")
     p.add_argument("--invalidate-memory", default=None, metavar="PREFIXES",
                    help="before the run (or alone with --render-only): in the finished races whose "
                         "id starts with one of these (comma list, or all), withdraw every GPU memory "
@@ -3377,6 +3396,7 @@ def main(argv=None):
     box = box_fingerprint(ctx)
     ctx["box"] = box
     ctx["retime"] = args.retime_opponents
+    ctx["with_opponents"] = bool(args.with_opponents or args.retime_opponents)
     ctx["store_path"] = os.path.abspath(os.path.expanduser(
         args.opponent_store or os.path.join(os.path.dirname(out), "opponent-store.jsonl")))
     ctx["data_sha"] = {}
