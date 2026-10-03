@@ -392,6 +392,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 sort_cols_device(ctx, df, dw, total, Int(hq[0]), Int(hq[1]), Int(hq[2]),
                                  Int(hq[3]), Int(hq[4]))
             continue
+        comptime if PREP2_FAST:
+            if prep2_fast_stage(ctx, df, dw, host_q, s, op, total, qp.unsafe_origin_cast[MutAnyOrigin](), p2):
+                continue
         comptime if RR_EIGH:
             if op == OP_EIGH and Int(host_q.unsafe_load(s * STAGE_INTS + 2 + EIGH_CYCLIC_Q)) == 0:
                 # q = [A, m, astride, EVAL, EVEC, cyclic], one unit a matrix
@@ -500,9 +503,6 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 if select_cstats_device(ctx, df, dw, Int(hq[0]), Int(hq[1]), Int(hq[2]), Int(hq[3]), Int(hq[4]),
                                         Int(hq[5]), Int(hq[6]), Int(hq[7]), Int(hq[8]), Int(hq[9])):
                     continue
-        comptime if PREP2_FAST:
-            if prep2_fast_stage(ctx, df, dw, host_q, s, op, total, qp, p2):
-                continue
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
             if cov_grid and op == OP_QDA_COV:
                 # q = [X, n, d, Y, MEAN, CNT, COV]: class k's covariance
