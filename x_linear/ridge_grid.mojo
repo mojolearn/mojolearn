@@ -26,6 +26,7 @@ from x_linear.tops import fold_parts, fold_blocks, FOLD_BLOCK, t_cholesky, upper
 from x_linear.team import device_team, team_work, LINEAR_TPB
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.moments_grid import mg_means_kernel, mg_cross_kernel, mg_tiles, MG_NT, MOMENTS_GRID
+from x_linear.fast_gram import fast_gram_into, XL_RIDGE_FAST_GRAM
 from x_linear.ridge import (
     ridge_w_part, ridge_wgram_part, ridge_wxty_part, ridge_err_part, t_ridge_solve_best, _loo_rows,
     _chol_trusted, BIG_ERR,
@@ -276,6 +277,12 @@ def ridge_fit_grid(
             ctx.enqueue_function[rw_gram_fin_kernel](Int32(n), Int32(d), Int32(t_n), dgp.unsafe_ptr(), fwp,
                                                      wit.p(), Int32(wo), nonce, grid_dim=g_f, block_dim=RG_TPB)
             wo += g_f
+        elif XL_RIDGE_FAST_GRAM:
+            # lane/apple-fast-gram (FAST on Apple default; `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` restores main's path):
+            # the same words from the shared grid Gram (row chunks x 32 x 32
+            # tiles); it waits for its own launches (unwitnessed)
+            var fwf = FP(unsafe_from_address=Int(fwp))
+            fast_gram_into(ctx, xp, yp, 0, n, d, t_n, fi != 0, fwf + o[0], fwf + o[4], fwf + o[1], fwf + o[5])
         else:
             # the moments of [X | Y] (lane/neural-pass120): xm, G, ym, X'Y
             ctx.enqueue_function[mg_means_kernel](
