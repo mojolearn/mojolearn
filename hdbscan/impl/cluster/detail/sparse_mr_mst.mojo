@@ -390,7 +390,6 @@ def smr_fold_slices_kernel(
 
 
 @fieldwise_init
-@fieldwise_init
 struct SparseMst(Movable):
     """The m - 1 tree edges sorted by (weight key, lo, hi), oriented
     (lo, hi), and the dense solver's round count. A CHECK's view:
@@ -1287,7 +1286,6 @@ def sparse_mr_mst(
 ) raises -> SparseMst:
     """`sparse_mr_mst_device` read back for a CHECK (the comparison driver
     compares host lists). `x_host` is not read; the fit never calls this."""
-    _ = x_host
     var rows = ctx.enqueue_create_buffer[DType.int32](m - 1)
     var cols = ctx.enqueue_create_buffer[DType.int32](m - 1)
     var wts = ctx.enqueue_create_buffer[DType.float32](m - 1)
