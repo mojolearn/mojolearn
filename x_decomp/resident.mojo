@@ -22,6 +22,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 
 from x_decomp.cells import F32Ptr
+from x_decomp.moves import MOVE_FILL0, MOVE_TAKE_ROWS
+from x_decomp.moves_device import launch_move
 from x_decomp.device import (
     _down,
     _up_into,
@@ -479,3 +481,24 @@ def dev_als_rows_py(
     )
     pool_free(sid)
     return PythonObject(n)
+
+
+def dev_move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`x_decomp_move` on device ids, enqueued (no sync); p = [op, count, a1,
+    a2, a3, ist, ioff, nsrc, ndst, nidx] (lane apple-fast-py2mojo-decomp)."""
+    var op = Int(py=p[0])
+    var count = _n(p, 1)
+    var a1 = _n(p, 2)
+    var a2 = _n(p, 3)
+    var a3 = _n(p, 4)
+    var ist = _n(p, 5)
+    var ioff = _n(p, 6)
+    if op < MOVE_TAKE_ROWS or op > MOVE_FILL0:
+        raise Error("x_decomp: unknown move op")
+    if op != MOVE_FILL0 and a1 <= 0 and count > 0:
+        raise Error("x_decomp: move needs a positive width")
+    var ps = _ptr(_id(src), max(_n(p, 7), 1))
+    var pi = _ptr(_id(idx), max(_n(p, 9), 1))
+    var pd = _ptr(_id(dst), max(_n(p, 8), 1))
+    launch_move(xd_ctx(), op, ps, pi, pd, count, a1, a2, a3, ist, ioff)
+    return PythonObject(count)
