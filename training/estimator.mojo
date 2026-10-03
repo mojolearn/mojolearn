@@ -101,6 +101,22 @@ from std.time import perf_counter_ns
 from core.staged_download import download_f32_into
 from core.device_pool import pool_give, pool_take
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+# lane afn-optim (2026-10-03): the Apple FAST candidates (False aliases on
+# every other build, so IDENTICAL compiles this file's code unchanged).
+from training.afn_optim import (
+    AFN_LOSS_FUSED,
+    AFN_OPT_RESIDENT_STATE,
+    AFN_SF_DENOM,
+    AFN_SF_NORMS,
+    AFN_SF_OUT2,
+    AFN_SF_Q,
+    AFN_SF_SAB,
+    AFN_SF_SUMSQ,
+    AFN_SF_TOTAL,
+    AFN_SF_WS,
+    afn_ce_loss_resident,
+    afn_scratch_view,
+)
 from training.checks.loss import (
     identical_ce_backward_into,
     identical_ce_forward_into,
@@ -720,16 +736,35 @@ def identical_optimizer_step_resident_host(
     var record_n = 1
     comptime if OPT_RECORD_INTERMEDIATES:
         record_n = n_total
-    var denom_out = ctx.enqueue_create_buffer[DType.float32](record_n)
-    var q_out = ctx.enqueue_create_buffer[DType.float32](record_n)
-
-    var sumsq = ctx.enqueue_create_buffer[DType.float32](n_tensors)
-    var norms = ctx.enqueue_create_buffer[DType.float32](n_tensors)
-    var total_cell = ctx.enqueue_create_buffer[DType.float32](1)
-    var out2 = ctx.enqueue_create_buffer[DType.float32](2)
     var ws_floats = identical_optimizer_workspace_floats(offsets)
-    var ws = ctx.enqueue_create_buffer[DType.float32](ws_floats)
-    var sab_partials = ctx.enqueue_create_buffer[DType.float32](SAB_CHUNKS)
+    var denom_out: DeviceBuffer[DType.float32]
+    var q_out: DeviceBuffer[DType.float32]
+    var sumsq: DeviceBuffer[DType.float32]
+    var norms: DeviceBuffer[DType.float32]
+    var total_cell: DeviceBuffer[DType.float32]
+    var out2: DeviceBuffer[DType.float32]
+    var ws: DeviceBuffer[DType.float32]
+    var sab_partials: DeviceBuffer[DType.float32]
+    comptime if AFN_OPT_RESIDENT_STATE:
+        # lane afn-optim: views of pooled buffers, created once per shape;
+        # the step allocates nothing here.
+        denom_out = afn_scratch_view(ctx, AFN_SF_DENOM, record_n)
+        q_out = afn_scratch_view(ctx, AFN_SF_Q, record_n)
+        sumsq = afn_scratch_view(ctx, AFN_SF_SUMSQ, n_tensors)
+        norms = afn_scratch_view(ctx, AFN_SF_NORMS, n_tensors)
+        total_cell = afn_scratch_view(ctx, AFN_SF_TOTAL, 1)
+        out2 = afn_scratch_view(ctx, AFN_SF_OUT2, 2)
+        ws = afn_scratch_view(ctx, AFN_SF_WS, ws_floats)
+        sab_partials = afn_scratch_view(ctx, AFN_SF_SAB, SAB_CHUNKS)
+    else:
+        denom_out = ctx.enqueue_create_buffer[DType.float32](record_n)
+        q_out = ctx.enqueue_create_buffer[DType.float32](record_n)
+        sumsq = ctx.enqueue_create_buffer[DType.float32](n_tensors)
+        norms = ctx.enqueue_create_buffer[DType.float32](n_tensors)
+        total_cell = ctx.enqueue_create_buffer[DType.float32](1)
+        out2 = ctx.enqueue_create_buffer[DType.float32](2)
+        ws = ctx.enqueue_create_buffer[DType.float32](ws_floats)
+        sab_partials = ctx.enqueue_create_buffer[DType.float32](SAB_CHUNKS)
     if not piped:
         ctx.synchronize()
 
@@ -1254,6 +1289,14 @@ def identical_ce_loss_resident[pool: StaticString = ""](
     one) is written ON THE DEVICE and left there for the caller. `row_ptr`
     and `loss_ptr` are written on the host exactly as before. The caller has
     already run the refusals and `ce_count`."""
+    # lane afn-optim: FAST + Apple + MOJOLEARN_AFN_LOSS_FUSED takes the
+    # fused two-launch form; every other build runs the code below.
+    comptime if AFN_LOSS_FUSED:
+        afn_ce_loss_resident(
+            ctx, loss_ptr, row_ptr, dlogits, logits, targets, n_rows, count,
+            reduction, want_grad, cfg,
+        )
+        return
     var vocab = cfg.vocab
     var cells = n_rows * vocab
     var smoothing = cfg.smoothing_is_spelled()

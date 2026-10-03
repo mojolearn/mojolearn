@@ -10,6 +10,20 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
 from core.device_arena import arena_active, arena_take
+# lane afn-lm (2026-10-03): Apple FAST experiments, each False unless the
+# build is FAST, on Apple, and carries its own -D MOJOLEARN_AFN_LM_* define.
+from training.byte_lm_afn import AFN_LM_BWD_FUSE, AFN_LM_BWD_NOSYNC
+# lane w2-lmgrad (2026-10-03): the block backward on the merged Apple FAST
+# GEMM; each False unless FAST, Apple, and its own -D MOJOLEARN_AFN_LM_* define
+# (or MOJOLEARN_AFN_LMGRAD_ALL). IDENTICAL compiles none of their arms.
+from training.byte_lm_afn_grad import (
+    AFN_LM_BWD_EPILOGUE,
+    AFN_LM_BWD_NORM1_RESID,
+    AFN_LM_WGRAD_SPLIT,
+    afn_lm_gemm_resid_into,
+    afn_lm_wgrad_split_into,
+    afn_lm_zero_into,
+)
 from core.step_phase import (
     StepPhaseClock,
     step_count_d2h,
@@ -404,6 +418,11 @@ comptime BWD_ANY_SABOTAGE = (
     or SAB_B_FANIN_ZERO_SEED
     or SAB_B_FANIN_ORDER_QKV_REVERSED
 )
+
+# lane w2-lmgrad (2026-10-03): the FAST Apple arms, never in a sabotage build.
+comptime _AFN_WGRAD = AFN_LM_WGRAD_SPLIT and not BWD_ANY_SABOTAGE
+comptime _AFN_BWD_EPI = AFN_LM_BWD_EPILOGUE and not BWD_ANY_SABOTAGE
+comptime _AFN_NORM1_RESID = AFN_LM_BWD_NORM1_RESID and not BWD_ANY_SABOTAGE
 
 #: Evidence-only control for pricing the pre-fusion RMSNorm backward. A
 #: normal build never defines it. Sabotage builds also retain the split
@@ -1918,6 +1937,12 @@ def _route_b(
     plan sections 5.2 and 5.4, and the gate asserts the NEGATIVE property
     that these outputs MOVE under a change of batch composition."""
     var call = gemm_backward_b_call(op, m, n, k)
+    # lane w2-lmgrad WGRAD_SPLIT (FAST + Apple + define only): the weight
+    # gradient, whose `k'` is the token count and whose output is small,
+    # on the split-K simdgroup route; falls through when it does not split.
+    comptime if _AFN_WGRAD:
+        if _afn_wgrad(ctx, out_buf, dc, other, call):
+            return
     if call[4] == BWD_DC_LEFT:
         workspace.run(
             ctx, out_buf, dc, other, call[1], call[2], call[3], call[0]
@@ -1926,6 +1951,80 @@ def _route_b(
     workspace.run(
         ctx, out_buf, other, dc, call[1], call[2], call[3], call[0]
     )
+
+
+# lane w2-lmgrad (2026-10-03): FAST + Apple helpers, reached only from
+# `comptime if _AFN_*` arms; IDENTICAL never instantiates them.
+
+
+def _afn_ptr(mut buf: DeviceBuffer[DType.float32]) -> MutPointer[Float32, MutAnyOrigin]:
+    return buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+
+def _afn_wgrad(
+    ctx: DeviceContext,
+    mut out_buf: DeviceBuffer[DType.float32],
+    mut dc: DeviceBuffer[DType.float32],
+    mut other: DeviceBuffer[DType.float32],
+    call: Tuple[Int, Int, Int, Int, Int],
+) raises -> Bool:
+    """`_route_b`'s product (`call` from `gemm_backward_b_call`) on the
+    split-K route (WGRAD_SPLIT). False when it does not serve it."""
+    if call[4] == BWD_DC_LEFT:
+        return afn_lm_wgrad_split_into(
+            ctx, _afn_ptr(out_buf), _afn_ptr(dc), _afn_ptr(other),
+            call[1], call[2], call[3], call[0],
+        )
+    return afn_lm_wgrad_split_into(
+        ctx, _afn_ptr(out_buf), _afn_ptr(other), _afn_ptr(dc),
+        call[1], call[2], call[3], call[0],
+    )
+
+
+def _afn_route_a_resid_ok(op: Int, m: Int, n: Int, k: Int) -> Bool:
+    """Whether `_afn_route_a_resid` serves `dA` of a forward `op` at
+    `(m, n, k)`: `dC` on the left and a positive shape."""
+    if m <= 0 or n <= 0 or k <= 0:
+        return False
+    var call = gemm_backward_a_call(op, m, n, k)
+    return call[4] == BWD_DC_LEFT
+
+
+def _afn_bwd_epi_on(m: Int, it: Int, qw: Int, kw: Int, dm: Int, n_norm1: Int) -> Bool:
+    """Whether BWD_EPILOGUE serves both fan-ins (gate/up and q/k/v) of a
+    layer: every dA has dC on the left and `dw_norm1` holds `dm` zeros."""
+    return (
+        _afn_route_a_resid_ok(OP_NT, m, it, dm)
+        and _afn_route_a_resid_ok(OP_NT, m, qw, dm)
+        and _afn_route_a_resid_ok(OP_NT, m, kw, dm)
+        and n_norm1 >= dm
+    )
+
+
+def _afn_route_a_resid(
+    ctx: DeviceContext,
+    out_p: MutPointer[Float32, MutAnyOrigin],
+    dc_p: MutPointer[Float32, MutAnyOrigin],
+    other_p: MutPointer[Float32, MutAnyOrigin],
+    zero_bias_p: MutPointer[Float32, MutAnyOrigin],
+    resid_p: MutPointer[Float32, MutAnyOrigin],
+    op: Int,
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    """`out = dA + resid` for a forward `op` at `(m, n, k)` in ONE launch
+    (BWD_EPILOGUE): `_route_a`'s product with the residual-gradient add in
+    the store. `zero_bias_p` holds `dA`'s width (`k`) zeros. The caller
+    checked `_afn_route_a_resid_ok`; a decline here is a bug, so it raises."""
+    var call = gemm_backward_a_call(op, m, n, k)
+    if call[4] != BWD_DC_LEFT:
+        raise Error("w2-lmgrad BWD_EPILOGUE: dA with dC on the right is not served")
+    if not afn_lm_gemm_resid_into(
+        ctx, out_p, dc_p, other_p, zero_bias_p, resid_p,
+        call[1], call[2], call[3], call[0],
+    ):
+        raise Error("w2-lmgrad BWD_EPILOGUE: the fused dA route declined")
 
 
 # ===========================================================================
@@ -2833,14 +2932,14 @@ def _bwd_rms_norm_kernels[which: Int](
     comptime if (
         BWD_ANY_SABOTAGE
         or BWD_NORM_SPLIT_TRIAL
-        or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+        or (GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and not AFN_LM_BWD_FUSE)
     ):
         ctx.enqueue_function[bwd_norm_dh_kernel](
             dh.unsafe_ptr(), dy.unsafe_ptr(), weight.unsafe_ptr(), Int32(m),
             Int32(dm), grid_dim=(_grid(m * dm), 1, 1),
             block_dim=(BWD_TPB, 1, 1),
         )
-        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and not AFN_LM_BWD_NOSYNC:
             step_count_sync()
             ctx.synchronize()
         step_count_launch()
@@ -2882,7 +2981,7 @@ def _bwd_rms_norm_kernels[which: Int](
                 Int32(dm), eps, grid_dim=(dot_blocks, 1, 1),
                 block_dim=(dot_threads, 1, 1),
             )
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and not AFN_LM_BWD_NOSYNC:
         step_count_sync()
         ctx.synchronize()
     step_count_launch()
@@ -2902,7 +3001,7 @@ def _bwd_rms_norm_kernels[which: Int](
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and not AFN_LM_BWD_NOSYNC:
         step_count_sync()
         ctx.synchronize()
     comptime if which == 1:
@@ -2999,6 +3098,15 @@ def bwd_rms_norm_routed[which: Int](
         residual_out, residual_branch, fuse_residual, m, dm, eps,
     )
     var pc = StepPhaseClock(ctx)
+    # lane w2-lmgrad WGRAD_SPLIT (FAST + Apple + define only): `ones . dprod`
+    # at (1, dm, M) is a weight gradient over the tokens too; split-K, no
+    # env read, no workspace.
+    comptime if _AFN_WGRAD:
+        if afn_lm_wgrad_split_into(
+            ctx, _afn_ptr(dw_out), _afn_ptr(ones), _afn_ptr(dprod), 1, dm, m, OP_NN
+        ):
+            _bwd_rms_norm_dw_tick[which](ctx, pc)
+            return
     if _norm_dw_own_workspace():
         identical_gemm(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
     else:
@@ -3215,7 +3323,7 @@ def llama_decoder_layer_backward_device(
     # =====================================================================
     var fuse_gated_silu = False
     comptime if (
-        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL or AFN_LM_BWD_FUSE)
         and (
             TARGET_COLUMN == COLUMN_APPLE
             or TARGET_COLUMN == COLUMN_NVIDIA
@@ -3293,21 +3401,54 @@ def llama_decoder_layer_backward_device(
     )
     _rec(ctx, trace, prefix, 8, bst.dw_up, it * dm)
     pc.tick(ctx, "grad.up_dB", "gateup_dB")
-    _route_a(
-        ctx, bst.gemm_workspace, bst.tmp0, bst.d_gate_proj_out, w.w_gate, OP_NT, m, it, dm
-    )
-    pc.tick(ctx, "grad.gate_dA", "gateup_dA")
-    _route_a(ctx, bst.gemm_workspace, bst.tmp1, bst.d_up_proj_out, w.w_up, OP_NT, m, it, dm)
-    pc.tick(ctx, "grad.up_dA", "gateup_dA")
-    step_count_launch()
-    ctx.enqueue_function[bwd_add2_kernel](
-        bst.d_norm2_out.unsafe_ptr(),
-        bst.tmp0.unsafe_ptr(),
-        bst.tmp1.unsafe_ptr(),
-        Int32(m * dm),
-        grid_dim=(_grid(m * dm), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
+    # lane w2-lmgrad BWD_EPILOGUE (FAST + Apple + define only): the zero
+    # bias both fused fan-ins read is `dw_norm1` (d_model floats), zeroed
+    # here and overwritten whole by the norm1 weight GEMM (stage 34) before
+    # anything reads it as a gradient.
+    comptime if _AFN_BWD_EPI:
+        var afn_epi = _afn_bwd_epi_on(m, it, qw, kw, dm, len(bst.dw_norm1))
+        if afn_epi:
+            afn_lm_zero_into(ctx, _afn_ptr(bst.dw_norm1), dm)
+        _route_a(
+            ctx, bst.gemm_workspace, bst.tmp0, bst.d_gate_proj_out, w.w_gate, OP_NT, m, it, dm
+        )
+        pc.tick(ctx, "grad.gate_dA", "gateup_dA")
+        if afn_epi:
+            # d(norm2.out) = up_dA + gate_dA in the up GEMM's store.
+            _afn_route_a_resid(
+                ctx, _afn_ptr(bst.d_norm2_out), _afn_ptr(bst.d_up_proj_out),
+                _afn_ptr(w.w_up), _afn_ptr(bst.dw_norm1), _afn_ptr(bst.tmp0),
+                OP_NT, m, it, dm,
+            )
+            pc.tick(ctx, "grad.up_dA", "gateup_dA")
+        else:
+            _route_a(ctx, bst.gemm_workspace, bst.tmp1, bst.d_up_proj_out, w.w_up, OP_NT, m, it, dm)
+            pc.tick(ctx, "grad.up_dA", "gateup_dA")
+            step_count_launch()
+            ctx.enqueue_function[bwd_add2_kernel](
+                bst.d_norm2_out.unsafe_ptr(),
+                bst.tmp0.unsafe_ptr(),
+                bst.tmp1.unsafe_ptr(),
+                Int32(m * dm),
+                grid_dim=(_grid(m * dm), 1, 1),
+                block_dim=(BWD_TPB, 1, 1),
+            )
+    else:
+        _route_a(
+            ctx, bst.gemm_workspace, bst.tmp0, bst.d_gate_proj_out, w.w_gate, OP_NT, m, it, dm
+        )
+        pc.tick(ctx, "grad.gate_dA", "gateup_dA")
+        _route_a(ctx, bst.gemm_workspace, bst.tmp1, bst.d_up_proj_out, w.w_up, OP_NT, m, it, dm)
+        pc.tick(ctx, "grad.up_dA", "gateup_dA")
+        step_count_launch()
+        ctx.enqueue_function[bwd_add2_kernel](
+            bst.d_norm2_out.unsafe_ptr(),
+            bst.tmp0.unsafe_ptr(),
+            bst.tmp1.unsafe_ptr(),
+            Int32(m * dm),
+            grid_dim=(_grid(m * dm), 1, 1),
+            block_dim=(BWD_TPB, 1, 1),
+        )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -3322,7 +3463,7 @@ def llama_decoder_layer_backward_device(
     # =====================================================================
     var fuse_norm2_residual = False
     comptime if (
-        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL or AFN_LM_BWD_FUSE)
         and (
             TARGET_COLUMN == COLUMN_APPLE
             or TARGET_COLUMN == COLUMN_NVIDIA
@@ -3573,20 +3714,55 @@ def llama_decoder_layer_backward_device(
     pc.tick(ctx, "grad.v_dB", "proj_dB")
     _route_a(ctx, bst.gemm_workspace, bst.tmp0, bst.d_q_proj_out, w.w_q, OP_NT, m, qw, dm)
     pc.tick(ctx, "grad.q_dA", "proj_dA")
-    _route_a(ctx, bst.gemm_workspace, bst.tmp1, bst.d_k_proj_out, w.w_k, OP_NT, m, kw, dm)
-    pc.tick(ctx, "grad.k_dA", "proj_dA")
-    _route_a(ctx, bst.gemm_workspace, bst.tmp2, bst.d_v_proj_out, w.w_v, OP_NT, m, kw, dm)
-    pc.tick(ctx, "grad.v_dA", "proj_dA")
-    step_count_launch()
-    ctx.enqueue_function[bwd_add3_kernel](
-        bst.d_norm1_out.unsafe_ptr(),
-        bst.tmp0.unsafe_ptr(),
-        bst.tmp1.unsafe_ptr(),
-        bst.tmp2.unsafe_ptr(),
-        Int32(m * dm),
-        grid_dim=(_grid(m * dm), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
+    comptime if _AFN_BWD_EPI:
+        # the same predicate as the gate/up fan-in above (pure in the shapes),
+        # so dw_norm1 holds the zero bias exactly when it is true here
+        if _afn_bwd_epi_on(m, it, qw, kw, dm, len(bst.dw_norm1)):
+            # lane w2-lmgrad BWD_EPILOGUE: the forward-use order q, k, v kept,
+            # left associative: tmp1 = k_dA + q_dA, then
+            # d(norm1.out) = v_dA + (q_dA + k_dA), each add in a GEMM store.
+            _afn_route_a_resid(
+                ctx, _afn_ptr(bst.tmp1), _afn_ptr(bst.d_k_proj_out),
+                _afn_ptr(w.w_k), _afn_ptr(bst.dw_norm1), _afn_ptr(bst.tmp0),
+                OP_NT, m, kw, dm,
+            )
+            pc.tick(ctx, "grad.k_dA", "proj_dA")
+            _afn_route_a_resid(
+                ctx, _afn_ptr(bst.d_norm1_out), _afn_ptr(bst.d_v_proj_out),
+                _afn_ptr(w.w_v), _afn_ptr(bst.dw_norm1), _afn_ptr(bst.tmp1),
+                OP_NT, m, kw, dm,
+            )
+            pc.tick(ctx, "grad.v_dA", "proj_dA")
+        else:
+            _route_a(ctx, bst.gemm_workspace, bst.tmp1, bst.d_k_proj_out, w.w_k, OP_NT, m, kw, dm)
+            pc.tick(ctx, "grad.k_dA", "proj_dA")
+            _route_a(ctx, bst.gemm_workspace, bst.tmp2, bst.d_v_proj_out, w.w_v, OP_NT, m, kw, dm)
+            pc.tick(ctx, "grad.v_dA", "proj_dA")
+            step_count_launch()
+            ctx.enqueue_function[bwd_add3_kernel](
+                bst.d_norm1_out.unsafe_ptr(),
+                bst.tmp0.unsafe_ptr(),
+                bst.tmp1.unsafe_ptr(),
+                bst.tmp2.unsafe_ptr(),
+                Int32(m * dm),
+                grid_dim=(_grid(m * dm), 1, 1),
+                block_dim=(BWD_TPB, 1, 1),
+            )
+    else:
+        _route_a(ctx, bst.gemm_workspace, bst.tmp1, bst.d_k_proj_out, w.w_k, OP_NT, m, kw, dm)
+        pc.tick(ctx, "grad.k_dA", "proj_dA")
+        _route_a(ctx, bst.gemm_workspace, bst.tmp2, bst.d_v_proj_out, w.w_v, OP_NT, m, kw, dm)
+        pc.tick(ctx, "grad.v_dA", "proj_dA")
+        step_count_launch()
+        ctx.enqueue_function[bwd_add3_kernel](
+            bst.d_norm1_out.unsafe_ptr(),
+            bst.tmp0.unsafe_ptr(),
+            bst.tmp1.unsafe_ptr(),
+            bst.tmp2.unsafe_ptr(),
+            Int32(m * dm),
+            grid_dim=(_grid(m * dm), 1, 1),
+            block_dim=(BWD_TPB, 1, 1),
+        )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -3614,28 +3790,56 @@ def llama_decoder_layer_backward_device(
     # this argument. That is a one-line edit to a file this lane may not
     # touch.
     # =====================================================================
-    bwd_rms_norm_routed[1](
-        ctx,
-        bst.gemm_workspace,
-        bst.norm1_dot,
-        bst.norm1_dx,
-        bst.dw_norm1,
-        bst.dh,
-        bst.dprod,
-        bst.rstd,
-        bst.dvcoef,
-        bst.ones,
-        bst.d_norm1_out,
-        x_dev,
-        w.norm1_w,
-        fwd.norm1_sumsq,
-        bst.norm1_dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-        bst.norm1_dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-        False,
-        m,
-        dm,
-        w.eps,
-    )
+    # lane w2-lmgrad NORM1_RESID (FAST + Apple + define only): the dx
+    # kernel's fuse_residual arm also writes stage 36, d_x = dx + d_residual1
+    # (ftz(ftz(dx) + ftz(branch)), bwd_add2_kernel's arithmetic), so the
+    # final add2 launch below goes. norm1_dx is still written (stage 35).
+    comptime if _AFN_NORM1_RESID:
+        bwd_rms_norm_routed[1](
+            ctx,
+            bst.gemm_workspace,
+            bst.norm1_dot,
+            bst.norm1_dx,
+            bst.dw_norm1,
+            bst.dh,
+            bst.dprod,
+            bst.rstd,
+            bst.dvcoef,
+            bst.ones,
+            bst.d_norm1_out,
+            x_dev,
+            w.norm1_w,
+            fwd.norm1_sumsq,
+            bst.d_x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            bst.d_residual1.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            True,
+            m,
+            dm,
+            w.eps,
+        )
+    else:
+        bwd_rms_norm_routed[1](
+            ctx,
+            bst.gemm_workspace,
+            bst.norm1_dot,
+            bst.norm1_dx,
+            bst.dw_norm1,
+            bst.dh,
+            bst.dprod,
+            bst.rstd,
+            bst.dvcoef,
+            bst.ones,
+            bst.d_norm1_out,
+            x_dev,
+            w.norm1_w,
+            fwd.norm1_sumsq,
+            bst.norm1_dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            bst.norm1_dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            False,
+            m,
+            dm,
+            w.eps,
+        )
     _rec(ctx, trace, prefix, 33, bst.norm1_dot, m)
     _rec(ctx, trace, prefix, 34, bst.dw_norm1, dm)
     _rec(ctx, trace, prefix, 35, bst.norm1_dx, m * dm)
@@ -3645,15 +3849,16 @@ def llama_decoder_layer_backward_device(
     # STAGE 36. THE OUTPUT. `x` fans out into the norm (LDL:306) and into
     # the residual add (LDL:317); FORWARD-USE order puts the norm first.
     # =====================================================================
-    step_count_launch()
-    ctx.enqueue_function[bwd_add2_kernel](
-        bst.d_x.unsafe_ptr(),
-        bst.norm1_dx.unsafe_ptr(),
-        bst.d_residual1.unsafe_ptr(),
-        Int32(m * dm),
-        grid_dim=(_grid(m * dm), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
+    comptime if not _AFN_NORM1_RESID:
+        step_count_launch()
+        ctx.enqueue_function[bwd_add2_kernel](
+            bst.d_x.unsafe_ptr(),
+            bst.norm1_dx.unsafe_ptr(),
+            bst.d_residual1.unsafe_ptr(),
+            Int32(m * dm),
+            grid_dim=(_grid(m * dm), 1, 1),
+            block_dim=(BWD_TPB, 1, 1),
+        )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy

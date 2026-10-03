@@ -73,6 +73,16 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul
+#: lane afn-mamba (2026-10-03): FAST + Apple + `-D MOJOLEARN_AFN_MAMBA2_SSD_MMA`
+#: runs S12, S13/S14 and S15/S16 on simdgroup 8x8 tiles (afn_ssd_mma.mojo);
+#: every other build takes the three cell kernels below unchanged.
+from mamba.impl.modules.afn_defines import AFN_MAMBA2_SSD_MMA
+from mamba.impl.modules.afn_ssd_mma import (
+    afn_m2_cb_g_mma,
+    afn_m2_cstate_mma,
+    afn_m2_ydiag_mma,
+    afn_ssd_mma_applies,
+)
 from mamba.checks.mamba2_fixture import (
     M2_CHUNK_SIZE,
     M2_D_STATE,
@@ -886,32 +896,39 @@ def ssd_forward(
         grid_dim=(_grid(b * nc * nh * qv), 1, 1),
         block_dim=(MAMBA2_TPB, 1, 1),
     )
-    ctx.enqueue_function[m2_cb_g_kernel](
-        cb_g.unsafe_ptr(),
-        xbc_work.unsafe_ptr(),
-        Int32(b),
-        Int32(t_work),
-        Int32(di),
-        Int32(cd),
-        Int32(nc),
-        Int32(qv),
-        grid_dim=(_grid(b * nc * qv * qv), 1, 1),
-        block_dim=(MAMBA2_TPB, 1, 1),
-    )
-    ctx.enqueue_function[m2_ydiag_kernel](
-        ydiag.unsafe_ptr(),
-        cb_g.unsafe_ptr(),
-        seg_l.unsafe_ptr(),
-        xd.unsafe_ptr(),
-        dt_work.unsafe_ptr(),
-        Int32(b),
-        Int32(t_work),
-        Int32(nh),
-        Int32(nc),
-        Int32(qv),
-        grid_dim=(_grid(b * t_work * nh * M2_HEADDIM), 1, 1),
-        block_dim=(MAMBA2_TPB, 1, 1),
-    )
+    var mma = False
+    comptime if AFN_MAMBA2_SSD_MMA:
+        mma = afn_ssd_mma_applies(qv)
+    if mma:
+        afn_m2_cb_g_mma(ctx, cb_g, xbc_work, b, t_work, di, cd, nc, qv)
+        afn_m2_ydiag_mma(ctx, ydiag, cb_g, seg_l, xd, b, t_work, nh, nc, qv)
+    else:
+        ctx.enqueue_function[m2_cb_g_kernel](
+            cb_g.unsafe_ptr(),
+            xbc_work.unsafe_ptr(),
+            Int32(b),
+            Int32(t_work),
+            Int32(di),
+            Int32(cd),
+            Int32(nc),
+            Int32(qv),
+            grid_dim=(_grid(b * nc * qv * qv), 1, 1),
+            block_dim=(MAMBA2_TPB, 1, 1),
+        )
+        ctx.enqueue_function[m2_ydiag_kernel](
+            ydiag.unsafe_ptr(),
+            cb_g.unsafe_ptr(),
+            seg_l.unsafe_ptr(),
+            xd.unsafe_ptr(),
+            dt_work.unsafe_ptr(),
+            Int32(b),
+            Int32(t_work),
+            Int32(nh),
+            Int32(nc),
+            Int32(qv),
+            grid_dim=(_grid(b * t_work * nh * M2_HEADDIM), 1, 1),
+            block_dim=(MAMBA2_TPB, 1, 1),
+        )
     ctx.enqueue_function[m2_decay_kernel](
         decay.unsafe_ptr(),
         dacs.unsafe_ptr(),
@@ -920,22 +937,27 @@ def ssd_forward(
         grid_dim=(_grid(b * nh * nc * qv), 1, 1),
         block_dim=(MAMBA2_TPB, 1, 1),
     )
-    ctx.enqueue_function[m2_cstate_kernel](
-        cstate.unsafe_ptr(),
-        xbc_work.unsafe_ptr(),
-        decay.unsafe_ptr(),
-        xd.unsafe_ptr(),
-        dt_work.unsafe_ptr(),
-        Int32(b),
-        Int32(t_work),
-        Int32(nh),
-        Int32(di),
-        Int32(cd),
-        Int32(nc),
-        Int32(qv),
-        grid_dim=(_grid(b * nc * nh * M2_HEADDIM * M2_D_STATE), 1, 1),
-        block_dim=(MAMBA2_TPB, 1, 1),
-    )
+    if mma:
+        afn_m2_cstate_mma(
+            ctx, cstate, xbc_work, decay, xd, b, t_work, nh, di, cd, nc, qv
+        )
+    else:
+        ctx.enqueue_function[m2_cstate_kernel](
+            cstate.unsafe_ptr(),
+            xbc_work.unsafe_ptr(),
+            decay.unsafe_ptr(),
+            xd.unsafe_ptr(),
+            dt_work.unsafe_ptr(),
+            Int32(b),
+            Int32(t_work),
+            Int32(nh),
+            Int32(di),
+            Int32(cd),
+            Int32(nc),
+            Int32(qv),
+            grid_dim=(_grid(b * nc * nh * M2_HEADDIM * M2_D_STATE), 1, 1),
+            block_dim=(MAMBA2_TPB, 1, 1),
+        )
     ctx.enqueue_function[m2_statepass_kernel](
         pass_states.unsafe_ptr(),
         h_last.unsafe_ptr(),

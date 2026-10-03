@@ -19,10 +19,12 @@ and every cell) and `BOARD.md` rendered from it.
 
   * Vendor: detected (Metal on macOS; nvidia-smi / rocm-smi on Linux), or
     `--vendor`. Apple runs BOTH numeric modes, `fast` and `identical`,
-    interleaved in the same race, for trees and classical; NVIDIA and AMD run
-    `identical` ONLY. The neural family is `identical` ONLY on EVERY vendor
-    (the wheel builds its neural surface identical only), and `--modes fast`
-    with the neural family is refused by name.
+    interleaved in the same race, for trees, classical AND (since the Apple
+    FAST neural pass, 2026-10-03) the neural family's GPU lanes: the wheel
+    builds its neural surface FAST on Apple, and the neural FAST arm is
+    `ours-fast`. NVIDIA and AMD run `identical` ONLY, so `--modes fast` with
+    the neural family is refused by name there. The neural CPU lanes (the
+    *-infer lanes and lm-host-train-step) never race in any mode.
   * mojolearn comes from `pip install mojolearn==<V>` into a venv this script
     creates (or `--python-env` an interpreter that already has it). No source
     build. The wheel's sha256 is recorded.
@@ -69,7 +71,10 @@ WHAT IT REUSES (it re-implements no measurement)
              `opponents`). The torch models are the repo's twins
              (tools/torch_lm_step_opponent.py, tools/speed_torch_seq.py
              LlamaEager, mamba/corpus/gen_corpus.py). `--neural-shape full` is
-             the board; `small` is a smoke.
+             the board; `small` is a smoke. The Apple FAST arm is its
+             `ours-fast` arm (MOJOLEARN_NUMERIC_MODE=fast in that worker, the
+             same FAST binaries the wheel ships on Apple; quality columns
+             against `ours`, the IDENTICAL arm, like every opponent).
   inference  tools/bench_board_infer.py: the trees driver's `--infer` phase
              (FSPEED-INFER lines, batches `test` and `large`) and the classical
              racer's `race --infer` (kmeans/pca/ols/svc), each arm predicting
@@ -314,15 +319,19 @@ MORE_PINS = {
 }
 
 
-def check_neural_modes(families, modes):
-    """The neural surface is IDENTICAL only on every vendor
-    (mojolearn._backend._IDENTICAL_ONLY). FAST is trees and classical."""
-    if "neural" in families and "identical" not in modes:
+def check_neural_modes(families, modes, vendor="apple"):
+    """FAST for the neural family is the Apple tier (the Apple FAST neural
+    pass, 2026-10-03: the wheel builds its neural surface FAST on Apple and
+    the board races it as `ours-fast`). On NVIDIA and AMD the neural surface
+    is raced IDENTICAL only, so a neural plan without identical is refused
+    there by name. The neural CPU lanes never race FAST (or anything else)."""
+    if "neural" in families and "identical" not in modes and vendor != "apple":
         raise SystemExit(
-            "bench_board: REFUSING --modes %s for the neural family: the wheel's neural surface "
-            "(LanguageModelTrainer, linalg.matmul, the transformer and Mamba blocks) is IDENTICAL "
-            "only on every vendor, and FAST is the trees and classical tier. Pass --families "
-            "trees,classical for a FAST-only run, or add identical." % ",".join(modes))
+            "bench_board: REFUSING --modes %s for the neural family on %s: the wheel's neural "
+            "surface (LanguageModelTrainer, linalg.matmul, the transformer and Mamba blocks, the "
+            "Samba stack, the MLP) is raced IDENTICAL only on NVIDIA and AMD; its FAST tier is "
+            "the Apple tier (the `ours-fast` arm on an Apple box). Pass --families "
+            "trees,classical for a FAST-only run here, or add identical." % (",".join(modes), vendor))
 
 
 #: Per-round ceilings for the classical racer. A DBSCAN round on Istella-S is
@@ -506,7 +515,14 @@ def our_arms(family, modes, lane=None):
     """driver arm name -> numeric mode, for our arms in one race. Our GPU
     only: the board never races our CPU (Andrew, Oct 2 2026)."""
     if family == "neural":
-        return {"ours": "identical"}          # identical only, every vendor
+        # identical on every vendor; FAST (`ours-fast`) only where modes_for
+        # admits fast, which is the Apple box (the Apple FAST neural tier)
+        out = {}
+        if "identical" in modes:
+            out["ours"] = "identical"
+        if "fast" in modes:
+            out["ours-fast"] = "fast"
+        return out
     if family == "classical2" and lane and not MORE.has_fast(lane):
         # an estimator whose binding ships no FAST tier is identical only
         return {"ours": "identical"} if "identical" in modes else {}
@@ -564,7 +580,7 @@ def enforce_gpu_only(races):
 
 def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, rows=None,
                neural_shape="full"):
-    check_neural_modes(families, modes)
+    check_neural_modes(families, modes, vendor)
     races = []
     for fam in families:
         for lane in family_lanes(fam):
@@ -572,15 +588,19 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
                 continue
             if fam == "neural":
                 if NEURAL.DEVICE_OF.get(lane) == "cpu":
-                    continue                  # ours would run on the CPU: never raced
-                # one race per lane: its own data, not taxi/Istella; IDENTICAL only
+                    continue                  # ours would run on the CPU: never raced, no mode
+                # one race per lane: its own data, not taxi/Istella; IDENTICAL
+                # everywhere, plus the FAST arm (`ours-fast`) on Apple
                 ours = our_arms(fam, modes, lane)
+                if not ours:
+                    continue
                 opp = gpu_opponents_first(NEURAL_OPPONENTS[vendor][lane])
                 ds = NEURAL_DATA[lane]
                 races.append({
                     "id": race_id(fam, lane, ds, None, neural_shape),
                     "family": fam, "lane": lane, "dataset": ds, "rows": None,
-                    "shape": neural_shape, "modes": ["identical"], "our_arms": ours,
+                    "shape": neural_shape,
+                    "modes": sorted(set(ours.values()), key=MODES.index), "our_arms": ours,
                     "opponents": list(opp), "arms": list(ours) + list(opp),
                 })
                 continue
@@ -1850,7 +1870,10 @@ def race_settings(ctx, race):
              "interleaved": True, "rows_cap": race["rows"]}
         if race["family"] == "neural":
             s["driver"] = "tools/bench_board_neural.py"
-            s["numeric_mode"] = "identical (the only tier the neural surface builds)"
+            s["numeric_mode"] = (
+                "identical (`ours`); fast (`ours-fast`, the Apple FAST neural tier) on Apple"
+                if "fast" in (race.get("modes") or []) else
+                "identical (`ours`; the neural FAST tier is Apple only)")
             s["opponent_mode"] = ("torch at every fast setting it supports on this box, one arm "
                                   "each (eager/compile x fp32/tf32/bf16 autocast; "
                                   "tools/torch_lm_step_opponent.py COLUMNS); the arm name "
@@ -2811,7 +2834,8 @@ def cpu_not_covered(cfg):
     lanes = sorted(l for l in NEURAL_LANES if NEURAL.DEVICE_OF.get(l) == "cpu")
     if lanes:
         out.append("Neural, not planned: %s: ours runs the CPU binding, and our CPU is never "
-                   "raced." % ", ".join(lanes))
+                   "raced, in no numeric mode (the Apple FAST neural tier is the GPU lanes "
+                   "only)." % ", ".join(lanes))
     out.append("Memory: GPU memory on Apple has no per-process counter (Metal buffers are inside "
                "the host footprint); the trees driver runs every arm in one process, so its GPU "
                "figure is the process total; a figure taken at the round's end misses a buffer "
@@ -3156,8 +3180,9 @@ def print_plan(vendor, modes, races, args, rows, data):
     print("vendor=%s api=%s modes=%s rounds=%d warmup=1 seed=%d rows=%s"
           % (vendor, VENDOR_API[vendor], ",".join(modes), args.rounds, SEED, rows_tag(rows)))
     if any(r["family"] == "neural" for r in races):
-        print("neural: IDENTICAL only; opponents torch %s on the GPU, %s on the CPU for the "
+        print("neural: ours %s; opponents torch %s on the GPU, %s on the CPU for the "
               "*-infer lanes; shape %s (LM %s; GEMM %s)" % (
+                  "IDENTICAL + FAST (ours-fast, the Apple tier)" if "fast" in modes else "IDENTICAL",
                   "/".join(NEURAL.GPU_SETTINGS[vendor]), "/".join(NEURAL.CPU_SETTINGS),
                   args.neural_shape, NEURAL.shape_text("lm-train-step", args.neural_shape),
                   NEURAL.shape_text("gemm", args.neural_shape)))

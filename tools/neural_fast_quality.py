@@ -5,10 +5,21 @@
 
 The neural bindings (training, mamba, transformer, embedding) build FAST since
 2026-09-27 (lane neural). FAST is the same kernels with the pins in
-checks/numerics.mojo on the free schedule. This tool is the quality rule: at least 5 seeds on at least
-2 datasets, FAST against IDENTICAL from the SAME initial weights and the SAME
-batches, and both against torch eager float32 (TF32 off) from those same
-weights and batches.
+checks/numerics.mojo on the free schedule; since the Apple FAST neural pass
+(2026-10-03) FAST on Apple also carries the MOJOLEARN_AFN_* experiments
+(docs/apple-fast/PLAN-neural.md). This tool is the quality rule: FAST against
+IDENTICAL from the SAME initial weights and the SAME batches, and both against
+torch eager float32 (TF32 off) from those same weights and batches. The full
+rule wants at least 5 seeds on at least 2 datasets; ANDREW'S ONE-SEED DEFAULT
+(2026-10-03): an A/B of one experiment is judged at ONE seed (`--seeds 1`,
+`compare --min-seeds 1`, or `pair` on two runs), because every A/B runs once
+and the paired rule below degenerates to its tolerance terms at n = 1.
+
+WHICH PACKAGE IT JUDGES. Every subcommand that imports mojolearn puts ONE
+package directory first on sys.path: `--package-dir DIR` (DIR holds
+`mojolearn/`), else $MOJOLEARN_NFQ_PACKAGE_DIR, else this checkout's python/.
+A judge of a particular build (tools/afn_ab.sh: arm A, then arm B) installs
+that build's .so into the package it names and runs the subcommand twice.
 
 Subcommands (each writes one JSON; `compare` reads a directory of them):
 
@@ -32,7 +43,13 @@ Subcommands (each writes one JSON; `compare` reads a directory of them):
                reference algorithms) and TransformerBlock forward against a
                float64 NumPy restatement of HF's LlamaDecoderLayer at 5
                seeds x 2 shapes. Error = max|y - ref64| / max|ref64|.
-  compare      The verdict table over a directory of JSON files.
+  compare      The verdict table over a directory of JSON files
+               (`--min-seeds`, default 1 since 2026-10-03).
+  pair         Two runs of ONE subcommand (samba, mlp or blocks) from the
+               same seed and batches, `--ref A.json --cand B.json`: the
+               candidate judged against the reference by the same rule at
+               n = 1 (held-out loss, accuracy, or per-case block error).
+               Prints one `AFN-QUALITY <tag> ...` line (tools/afn_ab.sh).
 
 THE RULE `compare` APPLIES. For each (task, dataset): the paired difference
 d_s = FAST_s - IDENTICAL_s of the final held-out loss (lower is better) over
@@ -55,6 +72,18 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 CORPORA = ("enwik8", "pile_github", "tinyshakespeare")
 SCHEMA = "mojolearn.neural-fast-quality.v1"
+
+
+def package_dir(args):
+    """The directory whose `mojolearn/` this process judges (see the module
+    docstring): --package-dir, $MOJOLEARN_NFQ_PACKAGE_DIR, else ROOT/python."""
+    d = getattr(args, "package_dir", None) or os.environ.get("MOJOLEARN_NFQ_PACKAGE_DIR") \
+        or str(ROOT / "python")
+    d = str(Path(d).expanduser().resolve())
+    if not (Path(d) / "mojolearn" / "__init__.py").is_file():
+        sys.exit(f"neural_fast_quality: {d} holds no mojolearn package (--package-dir / "
+                 "MOJOLEARN_NFQ_PACKAGE_DIR names the directory that contains mojolearn/)")
+    return d
 
 
 def _sha(b):
@@ -115,7 +144,7 @@ def cmd_samba(args):
     env = os.environ.get("MOJOLEARN_NUMERIC_MODE", "").lower()
     if env != args.mode:
         sys.exit(f"neural_fast_quality samba: MOJOLEARN_NUMERIC_MODE={env!r} but --mode {args.mode}")
-    sys.path.insert(0, str(ROOT / "python"))
+    sys.path.insert(0, package_dir(args))
     import mojolearn
     from mojolearn.training import Generator, WarmupCosineLR, SambaConfig, SambaStack
     raw = corpus_bytes(args.corpus)
@@ -150,6 +179,7 @@ def cmd_samba(args):
     wall = time.perf_counter() - t0
     after = heldout()
     return dict(base(args, "samba"), mode=args.mode, dataset=args.corpus, seed=args.seed,
+                package_dir=package_dir(args),
                 numeric_mode_used=mojolearn.training.numeric_mode_used(),
                 init_sha256=_sha(init.tobytes()), n_parameters=int(init.size),
                 losses=losses, heldout_before=before, heldout_after=after,
@@ -276,7 +306,7 @@ def cmd_mlp(args):
     env = os.environ.get("MOJOLEARN_NUMERIC_MODE", "").lower()
     if env != args.mode:
         sys.exit(f"neural_fast_quality mlp: MOJOLEARN_NUMERIC_MODE={env!r} but --mode {args.mode}")
-    sys.path.insert(0, str(ROOT / "python"))
+    sys.path.insert(0, package_dir(args))
     from mojolearn.neural_network import SmallMLPTrainer
     X, y, tr, te, w, order = mlp_setup(args)
     m = SmallMLPTrainer(w["weight1"], w["bias1"], w["weight2"], w["bias2"],
@@ -290,7 +320,7 @@ def cmd_mlp(args):
             losses.append(float(r["loss"]))
     loss, acc = _softmax_loss_acc(np.asarray(m.predict_logits(np.ascontiguousarray(X[te]))), y[te])
     return dict(base(args, "mlp"), mode=args.mode, dataset=args.dataset, seed=args.seed,
-                losses=losses, heldout_after=loss, accuracy=acc)
+                package_dir=package_dir(args), losses=losses, heldout_after=loss, accuracy=acc)
 
 
 def cmd_mlp_torch(args):
@@ -364,7 +394,7 @@ def cmd_blocks(args):
     env = os.environ.get("MOJOLEARN_NUMERIC_MODE", "").lower()
     if env != args.mode:
         sys.exit(f"neural_fast_quality blocks: MOJOLEARN_NUMERIC_MODE={env!r} but --mode {args.mode}")
-    sys.path.insert(0, str(ROOT / "python"))
+    sys.path.insert(0, package_dir(args))
     sys.path.insert(0, str(ROOT / "python" / "mojolearn" / "tests"))
     from mojolearn import Mamba1Block, Mamba2Block, Mamba3Block, TransformerBlock
     import test_mamba_surface as tm
@@ -421,7 +451,7 @@ def cmd_blocks(args):
             scale = float(np.max(np.abs(r64)))
             cases.append(dict(family="transformer", case=f"d{dm}_h{nh}_l{l}_seed{seed}",
                               err=float(np.max(np.abs(y - r64))) / scale))
-    return dict(base(args, "blocks"), mode=args.mode, cases=cases)
+    return dict(base(args, "blocks"), mode=args.mode, package_dir=package_dir(args), cases=cases)
 
 
 # --------------------------------------------------------------- compare
@@ -450,7 +480,7 @@ def cmd_compare(args):
     lines.append("|---|---|---|---|---|---|---|---|---|")
     for (kind, ds), by in sorted(groups.items()):
         seeds = sorted(set(by.get("fast", {})) & set(by.get("identical", {})))
-        if len(seeds) < 5:
+        if len(seeds) < args.min_seeds:
             lines.append(f"| {kind} | {ds} | {len(seeds)} | | | | | | TOO FEW SEEDS |")
             bad += 1
             continue
@@ -492,6 +522,65 @@ def cmd_compare(args):
     text = "\n".join(lines) + f"\n\nVERDICT: {'PASS' if bad == 0 else 'FAIL (%d)' % bad}\n"
     sys.stdout.write(text)
     return 0 if bad == 0 else 1
+
+
+def _block_cases(run):
+    return {(c["family"], c["case"]): c for c in run.get("cases", [])}
+
+
+def cmd_pair(args):
+    """Candidate B against reference A, two runs of one subcommand at one seed.
+    samba/mlp: B's held-out loss may exceed A's by at most 1e-4 * |A| (the
+    paired rule's tolerance term at n = 1) and never by more than 1%; mlp
+    accuracy the same with the sign flipped. blocks: per case, B's error must
+    not exceed max(2 x A's error, the case's torch-float32 error, 1e-6)."""
+    a = json.loads(Path(args.ref).read_text())
+    b = json.loads(Path(args.cand).read_text())
+    ka, kb = a.get("kind"), b.get("kind")
+    if ka != kb:
+        sys.exit(f"pair: {args.ref} is {ka!r} but {args.cand} is {kb!r}")
+    tag = args.tag
+    if ka in ("samba", "mlp"):
+        for key in ("dataset", "seed"):
+            if a.get(key) != b.get(key):
+                sys.exit(f"pair: {key} differs ({a.get(key)!r} vs {b.get(key)!r}); same seed, same batches")
+        if ka == "samba" and a.get("init_sha256") != b.get("init_sha256"):
+            sys.exit("pair: samba initial weights differ; run the candidate with --init from the "
+                     "reference's --init-out")
+        la, lb = float(a["heldout_after"]), float(b["heldout_after"])
+        ok, mean, _se, worst = paired([lb], [la])
+        parts = [f"heldout_after={la:.6f} vs {lb:.6f}", f"rel={(lb - la) / abs(la) if la else 0.0:+.3e}"]
+        if ka == "mlp":
+            aa, ab_ = float(a["accuracy"]), float(b["accuracy"])
+            ok_a, _m, _s, _w = paired([ab_], [aa], lower_is_better=False)
+            ok = ok and ok_a
+            parts.append(f"accuracy={aa:.4f} vs {ab_:.4f}")
+        print(f"AFN-QUALITY {tag} kind={ka} dataset={a.get('dataset')} seed={a.get('seed')} "
+              f"{' '.join(parts)} status={'OK' if ok else 'DIFF'}", flush=True)
+        return 0 if ok else 1
+    if ka == "blocks":
+        ca, cb = _block_cases(a), _block_cases(b)
+        n = bad = 0
+        worst = (0.0, "-")
+        for k, c in ca.items():
+            f = cb.get(k, {})
+            if "err" not in c or "err" not in f:
+                if not ("skipped" in c and "skipped" in f):
+                    bad += 1
+                continue
+            n += 1
+            bound = max(2 * c["err"], c.get("torch32_err", 0.0), 1e-6)
+            ratio = f["err"] / bound if bound else 0.0
+            if ratio > worst[0]:
+                worst = (ratio, "%s/%s" % k)
+            if f["err"] > bound:
+                bad += 1
+                print(f"AFN-QUALITY-CASE {tag} {k[0]}/{k[1]} ref_err={c['err']:.3e} cand_err={f['err']:.3e} "
+                      f"bound={bound:.3e} status=DIFF", flush=True)
+        print(f"AFN-QUALITY {tag} kind=blocks cases={n} failed={bad} worst_err_over_bound={worst[0]:.3f} "
+              f"at={worst[1]} status={'OK' if bad == 0 and n > 0 else 'DIFF'}", flush=True)
+        return 0 if bad == 0 and n > 0 else 1
+    sys.exit(f"pair: kind {ka!r} is not samba, mlp or blocks")
 
 
 def main():
@@ -542,9 +631,23 @@ def main():
     p.add_argument("--out", type=Path, required=True)
     p = sub.add_parser("compare")
     p.add_argument("dir")
+    p.add_argument("--min-seeds", type=int, default=1,
+                   help="seeds a (task, dataset) pair needs before a verdict; 1 is Andrew's "
+                        "one-seed A/B default (2026-10-03), the full rule is 5")
+    p = sub.add_parser("pair")
+    p.add_argument("--ref", type=Path, required=True, help="arm A's JSON (the reference)")
+    p.add_argument("--cand", type=Path, required=True, help="arm B's JSON (the candidate)")
+    p.add_argument("--tag", default="pair")
+    for name, p in sub.choices.items():
+        if name in ("samba", "mlp", "blocks"):
+            p.add_argument("--package-dir", default=None,
+                           help="directory that contains the mojolearn/ package to judge "
+                                "(default $MOJOLEARN_NFQ_PACKAGE_DIR, else this checkout's python/)")
     args = ap.parse_args()
     if args.cmd == "compare":
         return cmd_compare(args)
+    if args.cmd == "pair":
+        return cmd_pair(args)
     if args.cmd == "mlp-data":
         cmd_mlp_data(args)
         return 0

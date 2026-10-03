@@ -1,0 +1,14 @@
+# Baselines: the tier itself, IDENTICAL (ours) vs FAST (ours-fast), no define, every GPU board lane.
+# Queue by hand after the afn lanes merge into lane/apple-fast-neural (README.md). lm-* need afn-lm's byte LM FAST build.
+CMD lane/apple-fast-neural afn-tier-base-gemm bash tools/afn_ab.sh afn-tier-base-gemm linalg gemm full 2 identical fast
+CMD lane/apple-fast-neural afn-tier-base-gemm-bf16 bash tools/afn_ab.sh afn-tier-base-gemm-bf16 linalg gemm-bf16 full 2 identical fast
+CMD lane/apple-fast-neural afn-tier-base-gemm-int8 bash tools/afn_ab.sh afn-tier-base-gemm-int8 linalg gemm-int8 full 2 identical fast
+CMD lane/apple-fast-neural afn-tier-base-transformer-forward bash tools/afn_ab.sh afn-tier-base-transformer-forward transformer transformer-forward full 2 identical fast
+CMD lane/apple-fast-neural afn-tier-base-mamba1-forward bash tools/afn_ab.sh afn-tier-base-mamba1-forward mamba mamba1-forward full 2 identical fast
+CMD lane/apple-fast-neural afn-tier-base-mamba2-forward bash tools/afn_ab.sh afn-tier-base-mamba2-forward mamba mamba2-forward full 2 identical fast
+CMD lane/apple-fast-neural afn-tier-base-mamba3-forward bash tools/afn_ab.sh afn-tier-base-mamba3-forward mamba mamba3-forward full 2 identical fast
+CMD lane/apple-fast-neural afn-tier-base-samba-forward bash tools/afn_ab.sh afn-tier-base-samba-forward training samba-forward full 2 identical fast
+CMD lane/apple-fast-neural afn-tier-base-samba-train-step bash tools/afn_ab.sh afn-tier-base-samba-train-step training samba-train-step full 2 identical fast
+CMD lane/apple-fast-neural afn-tier-base-mlp-train-step bash tools/afn_ab.sh afn-tier-base-mlp-train-step training mlp-train-step full 2 identical fast
+CMD lane/apple-fast-neural afn-tier-base-lm-forward bash tools/afn_ab.sh afn-tier-base-lm-forward byte_lm lm-forward full 2 identical fast
+CMD lane/apple-fast-neural afn-tier-base-lm-train-step bash tools/afn_ab.sh afn-tier-base-lm-train-step byte_lm lm-train-step full 2 identical fast

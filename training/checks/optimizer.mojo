@@ -154,6 +154,15 @@ from checks.numerics import (
     identical_rsqrt,
     identical_sqrt,
 )
+# lane afn-optim (2026-10-03): the Apple FAST candidates. Every alias is
+# False unless the build is FAST on an Apple host AND names a
+# MOJOLEARN_AFN_* define, so IDENTICAL compiles this file's code unchanged.
+from training.afn_optim import (
+    AFN_OPT_ANY,
+    AFN_OPT_CLIP_FUSE,
+    AFN_OPT_FUSE_SCAN,
+    afn_optimizer_step,
+)
 from training.checks.optimizer_contract import (
     OPT_ADAMW,
     OPT_SGD,
@@ -1556,6 +1565,38 @@ def identical_optimizer_step(
     # tick) with the bytes the scans READ ON THE DEVICE (0 downloaded), and
     # the rest of the step as `step.optimizer` (this entry waits before it
     # returns, so that tick's wait is a no-op).
+    # lane afn-optim: FAST + Apple + a MOJOLEARN_AFN_OPT_* define. Main's
+    # refusal scan and main's clip still run here when their fused forms
+    # are not named; the candidates' device half is `afn_optimizer_step`.
+    # Sabotage and recording builds take main's path below.
+    comptime if AFN_OPT_ANY and not ANY_SABOTAGE and not OPT_RECORD_INTERMEDIATES:
+        comptime if not AFN_OPT_FUSE_SCAN:
+            opt_refuse_device_inputs(
+                ctx, param, grad, m_state, v_state, offsets, cfg
+            )
+        var afn_j = len(offsets) - 1
+        if afn_j <= 0:
+            return
+        if offsets[afn_j] <= 0:
+            return
+        comptime if not AFN_OPT_CLIP_FUSE:
+            if cfg.max_norm > Float32(0.0):
+                _ = identical_clip_grad_norm(
+                    ctx, grad, sumsq, norms, total_cell, out2, ws,
+                    sab_partials, offsets, cfg.max_norm,
+                )
+        afn_optimizer_step(
+            ctx, param, grad, m_state, v_state, out2, buf_initialized,
+            offsets, cfg, device_step_scalars(cfg, t),
+        )
+        _ = denom_out
+        _ = q_out
+        _ = sumsq
+        _ = norms
+        _ = total_cell
+        _ = ws
+        _ = sab_partials
+        return
     var ton = _step_timing_on()
     var tk = Int(perf_counter_ns())
     opt_refuse_device_inputs(

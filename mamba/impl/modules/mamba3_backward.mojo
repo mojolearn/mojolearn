@@ -9,6 +9,8 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.os import getenv
 from std.time import perf_counter_ns
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
 
 from checks.numerics import ftz, identical_div, identical_exp, identical_mul_add, identical_rsqrt, identical_sigmoid, identical_silu, identical_tanh, portable_cosf, portable_sinf, identical_mul
@@ -1285,6 +1287,232 @@ def mamba3_backward_angle_into(
     ctx.enqueue_function[mamba3_angle_reduce_kernel](d_angle.unsafe_ptr(),d_dt.unsafe_ptr(),d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),in_proj.unsafe_ptr(),dt.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),Int32(0 if dt_shared else 1),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
     if dt_shared:
         ctx.enqueue_function[mamba3_angle_dt_shared_kernel](d_dt.unsafe_ptr(),d_theta.unsafe_ptr(),in_proj.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),grid_dim=(b*dims.nheads,1,1),block_dim=(M3_ANGLE_DT_TPB,1,1))
+
+
+# ===========================================================================
+# lane afn-samba (2026-10-03): MOJOLEARN_AFN_MAMBA3_BWD_CHUNK, Apple FAST only.
+# The angle stage's two reverse-time chains, chunk-parallel with a free fold
+# order (f32 throughout, no approximation):
+#   * `mamba3_theta_reverse_kernel` walks each (batch, head, angle) chain's
+#     whole sequence in one thread (768 chains of L dependent load-add-store
+#     steps at the board shape). Here two launches over (chain, chunk of
+#     AFN_M3_SCAN_CHUNK tokens): the chunk sums, then each chunk's own
+#     reverse walk seeded with the sum of the later chunks (at most
+#     L / chunk adds).
+#   * `mamba3_angle_dt_shared_kernel` folds, for every token and angle, the
+#     suffix of the staged column from its own index (L^2 / 2 dependent
+#     shared-memory adds per angle per block). Here each thread owns a
+#     contiguous token segment, scans it in place, publishes the segment
+#     total, and every token's suffix is its in-segment suffix plus the
+#     later segments' totals: O(L) per angle per block, two barriers.
+# Every line is inside the AFN_M3_BWD_CHUNK guard; IDENTICAL and the other
+# vendors compile the kernels above unchanged.
+# ===========================================================================
+comptime AFN_M3_APPLE_FAST = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+)
+comptime AFN_M3_BWD_CHUNK = AFN_M3_APPLE_FAST and (
+    is_defined["MOJOLEARN_AFN_MAMBA3_BWD_CHUNK"]()
+    or is_defined["MOJOLEARN_AFN_SAMBA_ALL"]()
+)
+comptime AFN_M3_SCAN_CHUNK = 64
+
+
+def afn_m3_theta_chunks(l: Int) -> Int:
+    return (l + AFN_M3_SCAN_CHUNK - 1) // AFN_M3_SCAN_CHUNK
+
+
+def afn_m3_theta_chunk_sum_kernel(
+    sums: MutPointer[Float32, MutAnyOrigin],
+    d_theta: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+):
+    """`sums[chain, c]`: the sum of `d_theta` over chunk `c` of chain
+    (batch, head, angle); one thread per (chain, chunk)."""
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nchunks = afn_m3_theta_chunks(l)
+    var chains = Int(b_in) * nh * M3_NUM_ROPE_ANGLES
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= chains * nchunks:
+        return
+    var c = cell % nchunks
+    var chain = cell // nchunks
+    var r = chain % M3_NUM_ROPE_ANGLES
+    var bh = chain // M3_NUM_ROPE_ANGLES
+    var h = bh % nh
+    var bb = bh // nh
+    var t0 = c * AFN_M3_SCAN_CHUNK
+    var t1 = t0 + AFN_M3_SCAN_CHUNK
+    if t1 > l:
+        t1 = l
+    var s = Float32(0.0)
+    for t in range(t0, t1):
+        s += d_theta.unsafe_load(((bb * l + t) * nh + h) * M3_NUM_ROPE_ANGLES + r)
+    sums.unsafe_store(cell, s)
+
+
+def afn_m3_theta_chunk_apply_kernel(
+    d_rate: MutPointer[Float32, MutAnyOrigin],
+    d_theta: MutPointer[Float32, MutAnyOrigin],
+    dt: MutPointer[Float32, MutAnyOrigin],
+    sums: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+):
+    """Chunk `c`'s reverse walk of its chain, seeded with the later chunks'
+    sums: `d_rate[t] = (sum_{u >= t} d_theta[u]) * dt[t]`."""
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nchunks = afn_m3_theta_chunks(l)
+    var chains = Int(b_in) * nh * M3_NUM_ROPE_ANGLES
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= chains * nchunks:
+        return
+    var c = cell % nchunks
+    var chain = cell // nchunks
+    var r = chain % M3_NUM_ROPE_ANGLES
+    var bh = chain // M3_NUM_ROPE_ANGLES
+    var h = bh % nh
+    var bb = bh // nh
+    var carry = Float32(0.0)
+    for cc in range(c + 1, nchunks):
+        carry += sums.unsafe_load(chain * nchunks + cc)
+    var t0 = c * AFN_M3_SCAN_CHUNK
+    var t = t0 + AFN_M3_SCAN_CHUNK - 1
+    if t > l - 1:
+        t = l - 1
+    while t >= t0:
+        var rowh = (bb * l + t) * nh + h
+        var at = rowh * M3_NUM_ROPE_ANGLES + r
+        carry += d_theta.unsafe_load(at)
+        d_rate.unsafe_store(at, carry * dt.unsafe_load(rowh))
+        t -= 1
+
+
+comptime AFN_M3_ANGLE_SEG = M3_ANGLE_DT_MAXL // M3_ANGLE_DT_TPB  # 16 tokens a thread
+
+
+def afn_m3_angle_dt_scan_kernel(
+    d_dt: MutPointer[Float32, MutAnyOrigin],
+    d_theta: MutPointer[Float32, MutAnyOrigin],
+    angle_raw: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+    dip_in: Int32,
+    col_angle_in: Int32,
+):
+    """`mamba3_angle_dt_shared_kernel`'s result by a segment scan: block
+    (batch, head); thread `tid` owns tokens `[tid * seglen, (tid + 1) *
+    seglen)`; per angle the column is staged, each thread scans its segment
+    in place (reverse), publishes its total, and token `t`'s suffix is its
+    in-segment suffix plus the totals of the later segments. `l` is at most
+    M3_ANGLE_DT_MAXL (the launcher's gate)."""
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var dip = Int(dip_in)
+    var ca = Int(col_angle_in)
+    var col = stack_allocation[
+        M3_ANGLE_DT_MAXL, Scalar[DType.float32], address_space=AddressSpace.SHARED
+    ]()
+    var segt = stack_allocation[
+        M3_ANGLE_DT_TPB, Scalar[DType.float32], address_space=AddressSpace.SHARED
+    ]()
+    var blk = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    if blk >= b * nh:
+        return
+    var h = blk % nh
+    var bb = blk // nh
+    var seglen = (l + M3_ANGLE_DT_TPB - 1) // M3_ANGLE_DT_TPB
+    var s0 = tid * seglen
+    var s1 = s0 + seglen
+    if s1 > l:
+        s1 = l
+    var acc = stack_allocation[AFN_M3_ANGLE_SEG, Scalar[DType.float32]]()
+    for i in range(AFN_M3_ANGLE_SEG):
+        acc[i] = Float32(0.0)
+    for r in range(M3_NUM_ROPE_ANGLES):
+        var u = tid
+        while u < l:
+            col[u] = d_theta.unsafe_load(((bb * l + u) * nh + h) * M3_NUM_ROPE_ANGLES + r)
+            u += M3_ANGLE_DT_TPB
+        barrier()
+        var carry = Float32(0.0)
+        var i = s1 - 1
+        while i >= s0:
+            carry += col[i]
+            col[i] = carry
+            i -= 1
+        segt[tid] = carry
+        barrier()
+        var cin = Float32(0.0)
+        for j in range(tid + 1, M3_ANGLE_DT_TPB):
+            cin += segt[j]
+        for t in range(s0, s1):
+            var token = bb * l + t
+            var raw = angle_raw.unsafe_load(token * dip + ca + r)
+            var rate = identical_tanh(raw) * M3_PI
+            acc[t - s0] += (col[t] + cin) * rate
+        barrier()
+    for t in range(s0, s1):
+        d_dt.unsafe_store((bb * l + t) * nh + h, acc[t - s0])
+
+
+def mamba3_afn_backward_angle_into(
+    ctx: DeviceContext,
+    mut d_rate: DeviceBuffer[DType.float32],
+    mut d_angle: DeviceBuffer[DType.float32],
+    mut d_dt: DeviceBuffer[DType.float32],
+    mut d_theta: DeviceBuffer[DType.float32],
+    mut dt: DeviceBuffer[DType.float32],
+    mut in_proj: DeviceBuffer[DType.float32],
+    mut sums: DeviceBuffer[DType.float32],
+    b: Int,
+    l: Int,
+    dims: Mamba3Dims,
+) raises:
+    """`mamba3_backward_angle_into` with the chunked chains. `sums` holds
+    `b * nheads * M3_NUM_ROPE_ANGLES * afn_m3_theta_chunks(l)` floats and
+    is the caller's (alive past its wait)."""
+    var chains = b * dims.nheads * M3_NUM_ROPE_ANGLES
+    var cells1 = chains * afn_m3_theta_chunks(l)
+    ctx.enqueue_function[afn_m3_theta_chunk_sum_kernel](
+        sums.unsafe_ptr(), d_theta.unsafe_ptr(), Int32(b), Int32(l), Int32(dims.nheads),
+        grid_dim=(_grid(cells1), 1, 1),
+        block_dim=(M3_BWD_TPB, 1, 1),
+    )
+    ctx.enqueue_function[afn_m3_theta_chunk_apply_kernel](
+        d_rate.unsafe_ptr(), d_theta.unsafe_ptr(), dt.unsafe_ptr(), sums.unsafe_ptr(),
+        Int32(b), Int32(l), Int32(dims.nheads),
+        grid_dim=(_grid(cells1), 1, 1),
+        block_dim=(M3_BWD_TPB, 1, 1),
+    )
+    var m = b * l
+    var cells = m * M3_NUM_ROPE_ANGLES
+    if m * dims.nheads > cells:
+        cells = m * dims.nheads
+    var dt_scan = l <= M3_ANGLE_DT_MAXL
+    ctx.enqueue_function[mamba3_angle_reduce_kernel](
+        d_angle.unsafe_ptr(), d_dt.unsafe_ptr(), d_rate.unsafe_ptr(), d_theta.unsafe_ptr(),
+        in_proj.unsafe_ptr(), dt.unsafe_ptr(), Int32(b), Int32(l), Int32(dims.nheads),
+        Int32(dims.d_in_proj()), Int32(dims.col_angle()), Int32(0 if dt_scan else 1),
+        grid_dim=(_grid(cells), 1, 1),
+        block_dim=(M3_BWD_TPB, 1, 1),
+    )
+    if dt_scan:
+        ctx.enqueue_function[afn_m3_angle_dt_scan_kernel](
+            d_dt.unsafe_ptr(), d_theta.unsafe_ptr(), in_proj.unsafe_ptr(),
+            Int32(b), Int32(l), Int32(dims.nheads), Int32(dims.d_in_proj()),
+            Int32(dims.col_angle()),
+            grid_dim=(b * dims.nheads, 1, 1),
+            block_dim=(M3_ANGLE_DT_TPB, 1, 1),
+        )
 
 
 def mamba3_dt_softplus_partial_kernel(

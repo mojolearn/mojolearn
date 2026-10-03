@@ -145,6 +145,11 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul
+#: lane afn-mamba (2026-10-03): FAST + Apple + `-D MOJOLEARN_AFN_MAMBA1_CHUNKSCAN`
+#: runs the scan as a chunked parallel scan (afn_selective_scan.mojo); every
+#: other build takes the kernel below unchanged.
+from mamba.impl.modules.afn_defines import AFN_MAMBA1_CHUNKSCAN
+from mamba.impl.ops.afn_selective_scan import afn_selective_scan_chunked
 
 
 # ===========================================================================
@@ -556,24 +561,29 @@ def selective_scan_fn(
 
     var total = batch * dim
     if total > 0:
-        comptime kern = selective_scan_fwd_kernel[MAX_DSTATE]
-        var grid = (total + block_size - 1) // block_size
-        ctx.enqueue_function[kern](
-            out.unsafe_ptr(),
-            y.unsafe_ptr(),
-            h_state.unsafe_ptr(),
-            u.unsafe_ptr(),
-            delta.unsafe_ptr(),
-            A.unsafe_ptr(),
-            B.unsafe_ptr(),
-            C.unsafe_ptr(),
-            D.unsafe_ptr(),
-            Int32(batch),
-            Int32(seqlen),
-            Int32(dim),
-            grid_dim=(grid, 1, 1),
-            block_dim=(block_size, 1, 1),
-        )
+        comptime if AFN_MAMBA1_CHUNKSCAN:
+            afn_selective_scan_chunked[MAX_DSTATE](
+                ctx, out, y, h_state, u, delta, A, B, C, D, batch, seqlen, dim
+            )
+        else:
+            comptime kern = selective_scan_fwd_kernel[MAX_DSTATE]
+            var grid = (total + block_size - 1) // block_size
+            ctx.enqueue_function[kern](
+                out.unsafe_ptr(),
+                y.unsafe_ptr(),
+                h_state.unsafe_ptr(),
+                u.unsafe_ptr(),
+                delta.unsafe_ptr(),
+                A.unsafe_ptr(),
+                B.unsafe_ptr(),
+                C.unsafe_ptr(),
+                D.unsafe_ptr(),
+                Int32(batch),
+                Int32(seqlen),
+                Int32(dim),
+                grid_dim=(grid, 1, 1),
+                block_dim=(block_size, 1, 1),
+            )
         ctx.synchronize()
 
     # CONTRACT SECTION 7's card order, exactly: scan.y, scan.h, skip.out.

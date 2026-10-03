@@ -352,6 +352,25 @@ from transformer.impl.llama.fused_attention import (
     fused_supported_head_dim,
 )
 from core.device_scan import DeviceNonfiniteBatch
+# lane afn-attn (2026-10-03): the Apple FAST forward candidates; every name
+# is reached only from `comptime if AFN_ATTN_ANY` arms below.
+from transformer.impl.llama.afn_apple_fast import (
+    AFN_ATTN_ANY,
+    AFN_ATTN_FLASH,
+    AFN_ATTN_FUSE_MLP,
+    AFN_ATTN_FUSE_PRE,
+    AFN_ATTN_NORM_SG,
+    AFN_ATTN_ROPE_CACHE,
+    afn_flash_forward,
+    afn_gemm_ok,
+    afn_proj_plain,
+    afn_proj_qkv_rope_cache,
+    afn_proj_residual,
+    afn_proj_swiglu,
+    afn_residual_rms_norm_sg,
+    afn_rms_norm_sg,
+    afn_rope_cache,
+)
 
 from checks.numerics import (
     identical_mul,
@@ -4988,6 +5007,459 @@ def llama_mlp_forward(
 
 
 # ===========================================================================
+# lane afn-attn (2026-10-03): the Apple FAST forward candidates. Every
+# function below is called ONLY from a `comptime if AFN_ATTN_ANY` arm of
+# `llama_decoder_layer_forward_planted`; the kernels and launchers live in
+# transformer/impl/llama/afn_apple_fast.mojo (its defines are FAST + Apple +
+# `-D MOJOLEARN_AFN_ATTN_<NAME>`). Every decision is a pure function of the
+# shape, the options record and the defines, so the helpers recompute them
+# rather than carrying state across the sections.
+# ===========================================================================
+
+
+def _afn_p(mut buf: DeviceBuffer[DType.float32]) -> MutPointer[Float32, MutAnyOrigin]:
+    return buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+
+def _afn_block_ok(
+    stages: LlamaDeviceStages,
+    w: LlamaDeviceWeights,
+    trace: IdentityTrace,
+    plant_at: Int,
+    materialize: Bool,
+    forward_only: Bool,
+) -> Bool:
+    """Whether this call may take the afn candidates: the default record,
+    no planes, no plant, no trace, no eager stages wanted, forward only,
+    `d_model % 4 == 0` (the vector-4 row loads)."""
+    comptime if BLOCK_ANY_SABOTAGE:
+        return False
+    if plant_at != PLANT_AT_NONE or materialize or trace.enabled or not forward_only:
+        return False
+    if stages.int15_on or Bool(w.int15):
+        return False
+    if not w.opts.is_default():
+        return False
+    return stages.dims.d_model % 4 == 0
+
+
+def _afn_pre_ok(stages: LlamaDeviceStages, kv: LlamaKVCache, rope: LlamaRopeTable) -> Bool:
+    """The fused QKV launch (FUSE_PRE): a fresh full-causal prefill with
+    head_dim 64 rotated fully and whole GEMM K windows."""
+    return (
+        kv.window == 0 and kv.s == 0 and stages.dims.head_dim == 64
+        and rope.rope_dim == 64
+        and afn_gemm_ok(stages.b * stages.l, stages.dims.q_width(), stages.dims.d_model)
+    )
+
+
+def _afn_fold2(stages: LlamaDeviceStages) -> Bool:
+    """Whether norm2 is folded into the gate/up projections (FUSE_PRE), so
+    `norm2_out` is never written and the MLP reads `residual1` + `norm2_sumsq`."""
+    comptime if AFN_ATTN_FUSE_PRE:
+        return afn_gemm_ok(stages.b * stages.l, stages.dims.intermediate, stages.dims.d_model)
+    return False
+
+
+def _afn_res1_done(stages: LlamaDeviceStages) -> Bool:
+    """Whether `residual1` comes from the o_proj epilogue (FUSE_MLP)."""
+    comptime if AFN_ATTN_FUSE_MLP:
+        return afn_gemm_ok(stages.b * stages.l, stages.dims.d_model, stages.dims.q_width())
+    return False
+
+
+def _afn_norm1(
+    ctx: DeviceContext,
+    mut stages: LlamaDeviceStages,
+    kv: LlamaKVCache,
+    rope: LlamaRopeTable,
+    mut w: LlamaDeviceWeights,
+    mut x: DeviceBuffer[DType.float32],
+    m: Int,
+    dm: Int,
+    mut trace: IdentityTrace,
+    plant_at: Int,
+    materialize: Bool,
+    forward_only: Bool,
+) raises -> Bool:
+    """norm1 by the simdgroup kernel; under FUSE_PRE at a fused-QKV shape
+    only its sum of squares (the QKV launch applies the normalization while
+    staging). False: the caller runs main's launch."""
+    if not _afn_block_ok(stages, w, trace, plant_at, materialize, forward_only):
+        return False
+    comptime if AFN_ATTN_FUSE_PRE:
+        if _afn_pre_ok(stages, kv, rope):
+            afn_rms_norm_sg(
+                ctx, _afn_p(stages.norm1_sumsq), _afn_p(stages.norm1_out), _afn_p(x),
+                _afn_p(w.norm1_w), m, dm, w.eps, False,
+            )
+            return True
+    comptime if AFN_ATTN_NORM_SG:
+        afn_rms_norm_sg(
+            ctx, _afn_p(stages.norm1_sumsq), _afn_p(stages.norm1_out), _afn_p(x),
+            _afn_p(w.norm1_w), m, dm, w.eps, True,
+        )
+        return True
+    return False
+
+
+def _afn_attention_forward(
+    ctx: DeviceContext,
+    mut stages: LlamaDeviceStages,
+    mut kv: LlamaKVCache,
+    mut rope: LlamaRopeTable,
+    mut w: LlamaDeviceWeights,
+    mut x: DeviceBuffer[DType.float32],
+    b: Int,
+    l: Int,
+    pos0: Int,
+    plant_at: Int,
+    materialize: Bool,
+    mut trace: IdentityTrace,
+    prefix: String,
+    norm1_ready: Bool,
+    forward_only: Bool,
+) raises -> Bool:
+    """`llama_attention_forward` with the candidates: FUSE_PRE (one QKV
+    launch with norm1 folded, RoPE and the cache append in its epilogue),
+    ROPE_CACHE (one launch for both RoPEs and the append, no wait), FLASH
+    (one online-softmax launch, no stash, no scan, no flag read), FUSE_MLP
+    (`residual1 = x + ctx . Wo^T` in the o_proj epilogue). Each falls back
+    to main's launches where its shape condition fails. False when the
+    call may not take any candidate (then the caller runs main's)."""
+    if not _afn_block_ok(stages, w, trace, plant_at, materialize, forward_only):
+        return False
+    var dims = stages.dims.copy()
+    var dm = dims.d_model
+    var qw = dims.q_width()
+    var kw = dims.kv_width()
+    var nh = dims.n_heads
+    var nkv = dims.n_kv
+    var hd = dims.head_dim
+    var m = b * l
+    var s_old = kv.s
+    var window = kv.window
+    var key_lo = llama_key_lo(s_old, window)
+    var s = llama_key_span(s_old, l, window)
+    var opts = w.opts.copy()
+
+    # ---- q_proj, k_proj, v_proj, RoPE, the cache append.
+    var pre_done = False
+    comptime if AFN_ATTN_FUSE_PRE:
+        if _afn_pre_ok(stages, kv, rope):
+            if norm1_ready:
+                afn_proj_qkv_rope_cache(
+                    ctx, _afn_p(stages.q_rope), _afn_p(stages.k_rope),
+                    _afn_p(stages.k_cache), _afn_p(kv.k), _afn_p(stages.v_cache),
+                    _afn_p(kv.v), _afn_p(stages.norm1_out), _afn_p(w.w_q), _afn_p(w.w_k),
+                    _afn_p(w.w_v), _afn_p(stages.norm1_sumsq), _afn_p(w.norm1_w),
+                    _afn_p(rope.cos), _afn_p(rope.sin), m, dm, w.eps, l, nh, nkv, pos0,
+                    False,
+                )
+            else:
+                afn_proj_qkv_rope_cache(
+                    ctx, _afn_p(stages.q_rope), _afn_p(stages.k_rope),
+                    _afn_p(stages.k_cache), _afn_p(kv.k), _afn_p(stages.v_cache),
+                    _afn_p(kv.v), _afn_p(x), _afn_p(w.w_q), _afn_p(w.w_k),
+                    _afn_p(w.w_v), _afn_p(stages.norm1_sumsq), _afn_p(w.norm1_w),
+                    _afn_p(rope.cos), _afn_p(rope.sin), m, dm, w.eps, l, nh, nkv, pos0,
+                    True,
+                )
+            pre_done = True
+    if not pre_done:
+        llama_proj(
+            ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_Q,
+            stages.q_proj, stages.norm1_out, w.w_q, m, qw, dm,
+        )
+        llama_proj(
+            ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_K,
+            stages.k_proj, stages.norm1_out, w.w_k, m, kw, dm,
+        )
+        llama_proj(
+            ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_V,
+            stages.v_proj, stages.norm1_out, w.w_v, m, kw, dm,
+        )
+        var rc_done = False
+        comptime if AFN_ATTN_ROPE_CACHE:
+            if window == 0 and s_old == 0:
+                afn_rope_cache(
+                    ctx, _afn_p(stages.q_rope), _afn_p(stages.k_rope),
+                    _afn_p(stages.k_cache), _afn_p(stages.v_cache), _afn_p(kv.k),
+                    _afn_p(kv.v), _afn_p(stages.q_proj), _afn_p(stages.k_proj),
+                    _afn_p(stages.v_proj), _afn_p(rope.cos), _afn_p(rope.sin), b, l,
+                    nh, nkv, hd, pos0, rope.rope_dim,
+                )
+                rc_done = True
+        if not rc_done:
+            # main's launches, the default record (no bias, no qk_norm).
+            apply_rotary_pos_emb(
+                ctx, stages.q_rope, stages.q_proj, rope.cos, rope.sin, m, l, nh, hd,
+                pos0, rope.rope_dim,
+            )
+            apply_rotary_pos_emb(
+                ctx, stages.k_rope, stages.k_proj, rope.cos, rope.sin, m, l, nkv, hd,
+                pos0, rope.rope_dim,
+            )
+            if window == 0:
+                step_count_launch()
+                ctx.enqueue_function[kv_append2_kernel](
+                    stages.k_cache.unsafe_ptr(), stages.v_cache.unsafe_ptr(),
+                    kv.k.unsafe_ptr(), kv.v.unsafe_ptr(), stages.k_rope.unsafe_ptr(),
+                    stages.v_proj.unsafe_ptr(), Int32(b), Int32(l), Int32(nkv),
+                    Int32(hd), Int32(s_old),
+                    grid_dim=(_grid(b * nkv * s * hd), 1, 1),
+                    block_dim=(LLAMA_TPB, 1, 1),
+                )
+                step_count_d2d()
+                ctx.enqueue_copy(dst_buf=kv.k, src_buf=stages.k_cache)
+                step_count_d2d()
+                ctx.enqueue_copy(dst_buf=kv.v, src_buf=stages.v_cache)
+            else:
+                step_count_launch()
+                ctx.enqueue_function[kv_window_gather_kernel](
+                    stages.k_cache.unsafe_ptr(), kv.k.unsafe_ptr(),
+                    stages.k_rope.unsafe_ptr(), Int32(b), Int32(l), Int32(nkv),
+                    Int32(hd), Int32(kv.cap), Int32(key_lo), Int32(s_old), Int32(s),
+                    grid_dim=(_grid(b * nkv * s * hd), 1, 1),
+                    block_dim=(LLAMA_TPB, 1, 1),
+                )
+                step_count_launch()
+                ctx.enqueue_function[kv_window_gather_kernel](
+                    stages.v_cache.unsafe_ptr(), kv.v.unsafe_ptr(),
+                    stages.v_proj.unsafe_ptr(), Int32(b), Int32(l), Int32(nkv),
+                    Int32(hd), Int32(kv.cap), Int32(key_lo), Int32(s_old), Int32(s),
+                    grid_dim=(_grid(b * nkv * s * hd), 1, 1),
+                    block_dim=(LLAMA_TPB, 1, 1),
+                )
+                step_count_launch()
+                ctx.enqueue_function[kv_ring_write_kernel](
+                    kv.k.unsafe_ptr(), stages.k_rope.unsafe_ptr(), Int32(b), Int32(l),
+                    Int32(nkv), Int32(hd), Int32(kv.cap), Int32(s_old),
+                    grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
+                    block_dim=(LLAMA_TPB, 1, 1),
+                )
+                step_count_launch()
+                ctx.enqueue_function[kv_ring_write_kernel](
+                    kv.v.unsafe_ptr(), stages.v_proj.unsafe_ptr(), Int32(b), Int32(l),
+                    Int32(nkv), Int32(hd), Int32(kv.cap), Int32(s_old),
+                    grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
+                    block_dim=(LLAMA_TPB, 1, 1),
+                )
+            step_count_sync()
+            ctx.synchronize()
+    kv.s = s_old + l
+
+    # ---- the attention core.
+    var core_done = False
+    comptime if AFN_ATTN_FLASH:
+        if hd == 64:
+            stages.attn_estash_cells = 0
+            afn_flash_forward(
+                ctx, _afn_p(stages.ctxv), _afn_p(stages.amax), _afn_p(stages.denom),
+                _afn_p(stages.q_rope), _afn_p(stages.k_cache), _afn_p(stages.v_cache),
+                b, l, nh, nkv, s, pos0, key_lo, window, llama_attention_scale(hd),
+            )
+            stages.attn_materialized = False
+            stages.attn_forward_status = FUSED_RAN
+            core_done = True
+    if not core_done:
+        _ = eager_attention_forward(
+            ctx, stages, b, l, s, pos0, key_lo, window, dims, PLANT_AT_NONE,
+            List[Int](), List[UInt32](), trace, prefix, False, opts.attn_softcap,
+        )
+
+    # ---- o_proj, with the residual add in its epilogue under FUSE_MLP.
+    var o_done = False
+    comptime if AFN_ATTN_FUSE_MLP:
+        if _afn_res1_done(stages):
+            afn_proj_residual(
+                ctx, _afn_p(stages.residual1), _afn_p(x), _afn_p(stages.ctxv),
+                _afn_p(w.w_o), m, dm, qw,
+            )
+            o_done = True
+    if not o_done:
+        llama_proj(
+            ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_O,
+            stages.o_proj, stages.ctxv, w.w_o, m, dm, qw,
+        )
+    return True
+
+
+def _afn_residual1_norm2(
+    ctx: DeviceContext,
+    mut stages: LlamaDeviceStages,
+    mut w: LlamaDeviceWeights,
+    mut x: DeviceBuffer[DType.float32],
+    m: Int,
+    dm: Int,
+    mut trace: IdentityTrace,
+    plant_at: Int,
+    materialize: Bool,
+    forward_only: Bool,
+) raises -> Bool:
+    """`residual1 = x + o_proj` and norm2. With FUSE_MLP residual1 is the
+    o_proj epilogue's, so only the norm runs (the simdgroup kernel under
+    NORM_SG or FUSE_PRE, main's row kernel otherwise); with FUSE_PRE at a
+    foldable shape only norm2's sum of squares is written. False: the
+    caller runs main's launches."""
+    if not _afn_block_ok(stages, w, trace, plant_at, materialize, forward_only):
+        return False
+    var write_out = not _afn_fold2(stages)
+    if _afn_res1_done(stages):
+        comptime if AFN_ATTN_NORM_SG or AFN_ATTN_FUSE_PRE:
+            afn_rms_norm_sg(
+                ctx, _afn_p(stages.norm2_sumsq), _afn_p(stages.norm2_out),
+                _afn_p(stages.residual1), _afn_p(w.norm2_w), m, dm, w.eps, write_out,
+            )
+        else:
+            llama_norm(
+                ctx, stages.norm2_sumsq, stages.norm2_out, stages.residual1, w.norm2_w,
+                w.norm2_b, m, dm, w.eps, w.opts.norm_kind, w.opts.norm_bias,
+            )
+        return True
+    comptime if AFN_ATTN_NORM_SG or AFN_ATTN_FUSE_PRE:
+        afn_residual_rms_norm_sg(
+            ctx, _afn_p(stages.residual1), _afn_p(stages.norm2_sumsq),
+            _afn_p(stages.norm2_out), _afn_p(x), _afn_p(stages.o_proj), _afn_p(w.norm2_w),
+            m, dm, w.eps, write_out,
+        )
+        return True
+    return False
+
+
+def _afn_mlp_and_residual2(
+    ctx: DeviceContext,
+    mut stages: LlamaDeviceStages,
+    mut w: LlamaDeviceWeights,
+    m: Int,
+    mut trace: IdentityTrace,
+    prefix: String,
+    plant_at: Int,
+    materialize: Bool,
+    forward_only: Bool,
+    next_norm_sumsq: Optional[MutPointer[Float32, MutAnyOrigin]],
+    next_norm_out: Optional[MutPointer[Float32, MutAnyOrigin]],
+    next_norm_weight: Optional[MutPointer[Float32, MutAnyOrigin]],
+    next_norm_eps: Optional[Float32],
+) raises -> Bool:
+    """The MLP and `residual2 = residual1 + down_proj` (and the next
+    layer's norm1 when asked). FUSE_MLP: one gate+up launch with the
+    SwiGLU epilogue, one down launch with the residual epilogue. FUSE_PRE
+    alone: gate and up with norm2 folded into their staging, then main's
+    SwiGLU launch and down projection. Otherwise main's MLP. The residual
+    add (+ next norm) is the simdgroup kernel under NORM_SG, main's
+    launches otherwise. False: the caller runs main's."""
+    if not _afn_block_ok(stages, w, trace, plant_at, materialize, forward_only):
+        return False
+    var dims = stages.dims.copy()
+    var dm = dims.d_model
+    var it = dims.intermediate
+    var fold2 = _afn_fold2(stages)
+    var res2_done = False
+    var mlp_done = False
+    comptime if AFN_ATTN_FUSE_MLP:
+        if afn_gemm_ok(m, it, dm) and afn_gemm_ok(m, dm, it):
+            if fold2:
+                afn_proj_swiglu(
+                    ctx, _afn_p(stages.gated), _afn_p(stages.residual1), _afn_p(w.w_gate),
+                    _afn_p(w.w_up), _afn_p(stages.norm2_sumsq), _afn_p(w.norm2_w), m, it,
+                    dm, w.eps, True,
+                )
+            else:
+                afn_proj_swiglu(
+                    ctx, _afn_p(stages.gated), _afn_p(stages.norm2_out), _afn_p(w.w_gate),
+                    _afn_p(w.w_up), _afn_p(stages.norm2_sumsq), _afn_p(w.norm2_w), m, it,
+                    dm, w.eps, False,
+                )
+            afn_proj_residual(
+                ctx, _afn_p(stages.residual2), _afn_p(stages.residual1), _afn_p(stages.gated),
+                _afn_p(w.w_down), m, dm, it,
+            )
+            mlp_done = True
+            res2_done = True
+    comptime if AFN_ATTN_FUSE_PRE:
+        if not mlp_done and fold2:
+            afn_proj_plain(
+                ctx, _afn_p(stages.gate_proj), _afn_p(stages.residual1), _afn_p(w.w_gate),
+                _afn_p(stages.norm2_sumsq), _afn_p(w.norm2_w), m, it, dm, w.eps, True,
+            )
+            afn_proj_plain(
+                ctx, _afn_p(stages.up_proj), _afn_p(stages.residual1), _afn_p(w.w_up),
+                _afn_p(stages.norm2_sumsq), _afn_p(w.norm2_w), m, it, dm, w.eps, True,
+            )
+            step_count_launch()
+            ctx.enqueue_function[swiglu_fused_kernel](
+                stages.gated.unsafe_ptr(), stages.gate_proj.unsafe_ptr(),
+                stages.up_proj.unsafe_ptr(), Int32(m * it),
+                grid_dim=(_grid(m * it), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
+            )
+            llama_proj(
+                ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_DOWN,
+                stages.down_proj, stages.gated, w.w_down, m, dm, it,
+            )
+            mlp_done = True
+    if not mlp_done:
+        llama_mlp_forward(ctx, stages, w, m, trace, prefix, forward_only=True)
+
+    # ---- residual2, and the next layer's norm1 when asked.
+    var want_next = (
+        next_norm_sumsq and next_norm_out and next_norm_weight and next_norm_eps
+    )
+    if res2_done:
+        if want_next:
+            comptime if AFN_ATTN_NORM_SG or AFN_ATTN_FUSE_PRE:
+                afn_rms_norm_sg(
+                    ctx, next_norm_sumsq.value(), next_norm_out.value(),
+                    _afn_p(stages.residual2), next_norm_weight.value(), m, dm,
+                    next_norm_eps.value(), True,
+                )
+            else:
+                step_count_launch()
+                ctx.enqueue_function[llama_rms_norm_kernel](
+                    next_norm_sumsq.value(), next_norm_out.value(),
+                    stages.residual2.unsafe_ptr(), next_norm_weight.value(), Int32(m),
+                    Int32(dm), next_norm_eps.value(),
+                    grid_dim=(_grid(m), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
+                )
+        return True
+    comptime if AFN_ATTN_NORM_SG:
+        if want_next:
+            afn_residual_rms_norm_sg(
+                ctx, _afn_p(stages.residual2), next_norm_sumsq.value(),
+                next_norm_out.value(), _afn_p(stages.residual1), _afn_p(stages.down_proj),
+                next_norm_weight.value(), m, dm, next_norm_eps.value(), True,
+            )
+        else:
+            step_count_launch()
+            ctx.enqueue_function[residual_add_kernel](
+                stages.residual2.unsafe_ptr(), stages.residual1.unsafe_ptr(),
+                stages.down_proj.unsafe_ptr(), Int32(m * dm),
+                grid_dim=(_grid(m * dm), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
+            )
+        return True
+    # main's residual2 launches.
+    var fuse_next_norm = (
+        want_next and residual_next_norm_fusion_enabled(m, NORM_RMSNORM, False)
+    )
+    step_count_launch()
+    if fuse_next_norm:
+        ctx.enqueue_function[residual_rms_norm_kernel](
+            stages.residual2.unsafe_ptr(), next_norm_sumsq.value(),
+            next_norm_out.value(), stages.residual1.unsafe_ptr(),
+            stages.down_proj.unsafe_ptr(), next_norm_weight.value(), Int32(m),
+            Int32(dm), next_norm_eps.value(), grid_dim=(_grid(m), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[residual_add_kernel](
+            stages.residual2.unsafe_ptr(), stages.residual1.unsafe_ptr(),
+            stages.down_proj.unsafe_ptr(), Int32(m * dm),
+            grid_dim=(_grid(m * dm), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
+        )
+    return True
+
+
+# ===========================================================================
 # `LlamaDecoderLayer.forward` (:295-324). THE ENTRY POINT.
 # ===========================================================================
 
@@ -5176,19 +5648,29 @@ def llama_decoder_layer_forward_planted(
     # unchanged) at the default record and the variant kernel otherwise
     # (DEVIATIONS 2936-2938).
     if not norm1_ready:
-        llama_norm(
-            ctx,
-            stages.norm1_sumsq,
-            stages.norm1_out,
-            x,
-            w.norm1_w,
-            w.norm1_b,
-            m,
-            dm,
-            w.eps,
-            w.opts.norm_kind,
-            w.opts.norm_bias,
-        )
+        comptime if AFN_ATTN_ANY:
+            if not _afn_norm1(
+                ctx, stages, kv, rope, w, x, m, dm, trace, plant_at, materialize,
+                forward_only,
+            ):
+                llama_norm(
+                    ctx, stages.norm1_sumsq, stages.norm1_out, x, w.norm1_w, w.norm1_b,
+                    m, dm, w.eps, w.opts.norm_kind, w.opts.norm_bias,
+                )
+        else:
+            llama_norm(
+                ctx,
+                stages.norm1_sumsq,
+                stages.norm1_out,
+                x,
+                w.norm1_w,
+                w.norm1_b,
+                m,
+                dm,
+                w.eps,
+                w.opts.norm_kind,
+                w.opts.norm_bias,
+            )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -5204,22 +5686,32 @@ def llama_decoder_layer_forward_planted(
     # ---- self.self_attn(...) (:308-316).
     pc.tick(ctx, "fwd.norm1")
     timing_tick(ctx, ton, tk, "block.norm1")
-    llama_attention_forward(
-        ctx,
-        stages,
-        kv,
-        rope,
-        w,
-        b,
-        l,
-        pos0,
-        plant_at,
-        plant_idx,
-        plant_bits,
-        trace,
-        prefix,
-        materialize,
-    )
+    comptime if AFN_ATTN_ANY:
+        if not _afn_attention_forward(
+            ctx, stages, kv, rope, w, x, b, l, pos0, plant_at, materialize, trace,
+            prefix, norm1_ready, forward_only,
+        ):
+            llama_attention_forward(
+                ctx, stages, kv, rope, w, b, l, pos0, plant_at, plant_idx, plant_bits,
+                trace, prefix, materialize,
+            )
+    else:
+        llama_attention_forward(
+            ctx,
+            stages,
+            kv,
+            rope,
+            w,
+            b,
+            l,
+            pos0,
+            plant_at,
+            plant_idx,
+            plant_bits,
+            trace,
+            prefix,
+            materialize,
+        )
     timing_tick(ctx, ton, tk, "block.attention_total")
     pc.mark(ctx)
 
@@ -5235,24 +5727,46 @@ def llama_decoder_layer_forward_planted(
             is_defined["MOJOLEARN_FUSE_RESIDUAL1_NORM2"]() or m <= 2048
         )
     )
-    step_count_launch()
-    if fused_residual_norm:
-        ctx.enqueue_function[residual_rms_norm_kernel](
-            stages.residual1.unsafe_ptr(), stages.norm2_sumsq.unsafe_ptr(),
-            stages.norm2_out.unsafe_ptr(), x.unsafe_ptr(),
-            stages.o_proj.unsafe_ptr(), w.norm2_w.unsafe_ptr(), Int32(m),
-            Int32(dm), w.eps, grid_dim=(_grid(m), 1, 1),
-            block_dim=(LLAMA_TPB, 1, 1),
-        )
+    comptime if AFN_ATTN_ANY:
+        if _afn_residual1_norm2(
+            ctx, stages, w, x, m, dm, trace, plant_at, materialize, forward_only,
+        ):
+            fused_residual_norm = True  # norm2 done above; main's second launch is skipped
+        else:
+            step_count_launch()
+            if fused_residual_norm:
+                ctx.enqueue_function[residual_rms_norm_kernel](
+                    stages.residual1.unsafe_ptr(), stages.norm2_sumsq.unsafe_ptr(),
+                    stages.norm2_out.unsafe_ptr(), x.unsafe_ptr(),
+                    stages.o_proj.unsafe_ptr(), w.norm2_w.unsafe_ptr(), Int32(m),
+                    Int32(dm), w.eps, grid_dim=(_grid(m), 1, 1),
+                    block_dim=(LLAMA_TPB, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[residual_add_kernel](
+                    stages.residual1.unsafe_ptr(), x.unsafe_ptr(),
+                    stages.o_proj.unsafe_ptr(), Int32(m * dm),
+                    grid_dim=(_grid(m * dm), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
+                )
     else:
-        ctx.enqueue_function[residual_add_kernel](
-            stages.residual1.unsafe_ptr(),
-            x.unsafe_ptr(),
-            stages.o_proj.unsafe_ptr(),
-            Int32(m * dm),
-            grid_dim=(_grid(m * dm), 1, 1),
-            block_dim=(LLAMA_TPB, 1, 1),
-        )
+        step_count_launch()
+        if fused_residual_norm:
+            ctx.enqueue_function[residual_rms_norm_kernel](
+                stages.residual1.unsafe_ptr(), stages.norm2_sumsq.unsafe_ptr(),
+                stages.norm2_out.unsafe_ptr(), x.unsafe_ptr(),
+                stages.o_proj.unsafe_ptr(), w.norm2_w.unsafe_ptr(), Int32(m),
+                Int32(dm), w.eps, grid_dim=(_grid(m), 1, 1),
+                block_dim=(LLAMA_TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[residual_add_kernel](
+                stages.residual1.unsafe_ptr(),
+                x.unsafe_ptr(),
+                stages.o_proj.unsafe_ptr(),
+                Int32(m * dm),
+                grid_dim=(_grid(m * dm), 1, 1),
+                block_dim=(LLAMA_TPB, 1, 1),
+            )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -5294,33 +5808,61 @@ def llama_decoder_layer_forward_planted(
     pc.tick(ctx, "fwd.norm2")
 
     # ---- self.mlp(...) (:322). S5, S20, S21.
-    llama_mlp_forward(ctx, stages, w, m, trace, prefix, forward_only=forward_only)
-    pc.mark(ctx)
-
-    # ---- residual + hidden_states (:323). S23, the same imported kernel.
-    var fuse_next_norm = (
-        next_norm_sumsq and next_norm_out and next_norm_weight
-        and next_norm_eps
-        and residual_next_norm_fusion_enabled(m, NORM_RMSNORM, False)
-    )
-    step_count_launch()
-    if fuse_next_norm:
-        ctx.enqueue_function[residual_rms_norm_kernel](
-            stages.residual2.unsafe_ptr(), next_norm_sumsq.value(),
-            next_norm_out.value(), stages.residual1.unsafe_ptr(),
-            stages.down_proj.unsafe_ptr(), next_norm_weight.value(), Int32(m),
-            Int32(dm), next_norm_eps.value(), grid_dim=(_grid(m), 1, 1),
-            block_dim=(LLAMA_TPB, 1, 1),
-        )
+    comptime if AFN_ATTN_ANY:
+        if not _afn_mlp_and_residual2(
+            ctx, stages, w, m, trace, prefix, plant_at, materialize, forward_only,
+            next_norm_sumsq, next_norm_out, next_norm_weight, next_norm_eps,
+        ):
+            llama_mlp_forward(ctx, stages, w, m, trace, prefix, forward_only=forward_only)
+            pc.mark(ctx)
+            var fuse_next_norm = (
+                next_norm_sumsq and next_norm_out and next_norm_weight
+                and next_norm_eps
+                and residual_next_norm_fusion_enabled(m, NORM_RMSNORM, False)
+            )
+            step_count_launch()
+            if fuse_next_norm:
+                ctx.enqueue_function[residual_rms_norm_kernel](
+                    stages.residual2.unsafe_ptr(), next_norm_sumsq.value(),
+                    next_norm_out.value(), stages.residual1.unsafe_ptr(),
+                    stages.down_proj.unsafe_ptr(), next_norm_weight.value(), Int32(m),
+                    Int32(dm), next_norm_eps.value(), grid_dim=(_grid(m), 1, 1),
+                    block_dim=(LLAMA_TPB, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[residual_add_kernel](
+                    stages.residual2.unsafe_ptr(), stages.residual1.unsafe_ptr(),
+                    stages.down_proj.unsafe_ptr(), Int32(m * dm),
+                    grid_dim=(_grid(m * dm), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
+                )
     else:
-        ctx.enqueue_function[residual_add_kernel](
-            stages.residual2.unsafe_ptr(),
-            stages.residual1.unsafe_ptr(),
-            stages.down_proj.unsafe_ptr(),
-            Int32(m * dm),
-            grid_dim=(_grid(m * dm), 1, 1),
-            block_dim=(LLAMA_TPB, 1, 1),
+        llama_mlp_forward(ctx, stages, w, m, trace, prefix, forward_only=forward_only)
+        pc.mark(ctx)
+
+        # ---- residual + hidden_states (:323). S23, the same imported kernel.
+        var fuse_next_norm = (
+            next_norm_sumsq and next_norm_out and next_norm_weight
+            and next_norm_eps
+            and residual_next_norm_fusion_enabled(m, NORM_RMSNORM, False)
         )
+        step_count_launch()
+        if fuse_next_norm:
+            ctx.enqueue_function[residual_rms_norm_kernel](
+                stages.residual2.unsafe_ptr(), next_norm_sumsq.value(),
+                next_norm_out.value(), stages.residual1.unsafe_ptr(),
+                stages.down_proj.unsafe_ptr(), next_norm_weight.value(), Int32(m),
+                Int32(dm), next_norm_eps.value(), grid_dim=(_grid(m), 1, 1),
+                block_dim=(LLAMA_TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[residual_add_kernel](
+                stages.residual2.unsafe_ptr(),
+                stages.residual1.unsafe_ptr(),
+                stages.down_proj.unsafe_ptr(),
+                Int32(m * dm),
+                grid_dim=(_grid(m * dm), 1, 1),
+                block_dim=(LLAMA_TPB, 1, 1),
+            )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy

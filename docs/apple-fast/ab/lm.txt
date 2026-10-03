@@ -1,0 +1,8 @@
+CMD lane/apple-fast-neural afn-lm-nosync-train bash tools/afn_ab.sh afn-lm-nosync-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_NOSYNC"
+CMD lane/apple-fast-neural afn-lm-bwd-nosync-train bash tools/afn_ab.sh afn-lm-bwd-nosync-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_BWD_NOSYNC"
+CMD lane/apple-fast-neural afn-lm-bwd-fuse-train bash tools/afn_ab.sh afn-lm-bwd-fuse-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_BWD_FUSE"
+CMD lane/apple-fast-neural afn-lm-param-views-train bash tools/afn_ab.sh afn-lm-param-views-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_PARAM_VIEWS"
+CMD lane/apple-fast-neural afn-lm-head-fuse-train bash tools/afn_ab.sh afn-lm-head-fuse-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_HEAD_FUSE"
+CMD lane/apple-fast-neural afn-lm-all-train bash tools/afn_ab.sh afn-lm-all-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_ALL"
+CMD lane/apple-fast-neural afn-lm-param-views-forward bash tools/afn_ab.sh afn-lm-param-views-forward byte_lm lm-forward full 2 "" "-D MOJOLEARN_AFN_LM_PARAM_VIEWS"
+CMD lane/apple-fast-neural afn-lm-all-forward bash tools/afn_ab.sh afn-lm-all-forward byte_lm lm-forward full 2 "" "-D MOJOLEARN_AFN_LM_ALL"

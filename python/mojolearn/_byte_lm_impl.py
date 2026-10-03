@@ -280,9 +280,19 @@ def _step(value):
     return value
 
 
+#: The tiers the byte LM ships and the code its binding reads back
+#: (`byte_lm_numeric_mode`). IDENTICAL is the default; FAST (afn-lm,
+#: 2026-10-03) runs the same device step with the pins on the free schedule
+#: and promises quality, never bits. DETERMINISTIC is the tree lanes' tier.
+_NATIVE_MODE_CODE = {'identical': 1, 'fast': 0}
+
+
 def _mode():
-    if _backend.default_mode() != 'identical' or _backend.numeric_mode() != 'identical':
-        raise RuntimeError('SmallByteLanguageModelTrainer requires process-selected IDENTICAL mode')
+    """The process-selected tier ('identical' or 'fast'), or raise."""
+    mode = _backend.default_mode()
+    if mode not in _NATIVE_MODE_CODE or _backend.numeric_mode() != mode:
+        raise RuntimeError('SmallByteLanguageModelTrainer requires process-selected IDENTICAL or FAST mode')
+    return mode
 
 
 def _timing_on():
@@ -309,8 +319,8 @@ def _tick(on, clock, name, n_bytes=None):
 
 def _load(shape=None):
     shape = require_shape(shape)
-    _mode()
-    binding = _backend.binding(_EXTENSION, 'identical')
+    mode = _mode()
+    binding = _backend.binding(_EXTENSION, mode)
     # On a process that loaded no GPU set, `_backend.binding` serves the
     # single-device entries from the CPU byte LM binding
     # (_byte_lm_trainer_host, lane/cpu-training-embedding-ivf, 2026-09-15),
@@ -319,10 +329,10 @@ def _load(shape=None):
     # the GPU vendors; the install decides, so this module never imports the
     # CPU trainer adapter (cpu-gpu-cleanup n-pyneural).
     vendors = ('cpu',) if _backend._CPU_ONLY is not None else ('cuda', 'hip', 'metal')
-    if (int(binding.byte_lm_numeric_mode()) != 1
+    if (int(binding.byte_lm_numeric_mode()) != _NATIVE_MODE_CODE[mode]
             or str(binding.byte_lm_profile()) != PROFILE
             or str(binding.byte_lm_vendor()) not in vendors):
-        raise RuntimeError('Byte-LM requires the exact native profile, IDENTICAL mode and CUDA/HIP/Metal vendor '
+        raise RuntimeError('Byte-LM requires the exact native profile, the selected IDENTICAL/FAST mode and CUDA/HIP/Metal vendor '
                            '(or, on a CPU-only install, the CPU byte LM binding)')
     if not callable(getattr(binding, 'byte_lm_run', None)):
         raise ImportError('Byte-LM binding is missing byte_lm_run; rebuild bindings/build_byte_lm.sh')
@@ -359,7 +369,7 @@ def _validate_state(value):
     if not isinstance(value, dict) or set(value) != keys:
         raise ValueError('Byte-LM state has missing or unknown fields')
     shape = state_shape(value)
-    if (value['schema'] != _SCHEMA or value['profile'] != shape.profile or value['numeric_mode'] != 'identical'
+    if (value['schema'] != _SCHEMA or value['profile'] != shape.profile or value['numeric_mode'] not in _NATIVE_MODE_CODE
             or value['parameter_names'] != list(shape.parameter_names)
             or value['parameter_shapes'] != [list(shape) for shape in shape.parameter_shapes]
             or value['parameter_offsets'] != list(shape.offsets)):
@@ -543,8 +553,8 @@ class SmallByteLanguageModelTrainer:
     ties going to the lowest byte value.
 
     train_step/evaluate require actual int32[B,L+1] IDs in [0, shape.vocab_size).
-    The first L positions predict the next L; loss averages B*L targets. All arithmetic runs in the native CUDA/HIP/Metal IDENTICAL
-    profile. The process must already select IDENTICAL mode.
+    The first L positions predict the next L; loss averages B*L targets. All arithmetic runs in the native CUDA/HIP/Metal
+    profile of the process-selected tier: IDENTICAL (default, same bits on every vendor) or FAST (quality, never bits).
 
     data_schedule is a bounded caller-supplied JSON descriptor. Retain corpus
     and actual token-order SHA256, batch offsets, and planned steps there.
@@ -627,11 +637,11 @@ class SmallByteLanguageModelTrainer:
         config = _configuration(lr, betas, eps, weight_decay)
         descriptor = _schedule(data_schedule)
         _require_schedule_vocabulary(descriptor, shape)
-        _mode()
+        mode = _mode()
         self._lock = threading.RLock()
         self._runtime = None
         self._runtime_binding = None
-        self._state = dict(schema=_SCHEMA, profile=shape.profile, numeric_mode='identical',
+        self._state = dict(schema=_SCHEMA, profile=shape.profile, numeric_mode=mode,
                            parameter_names=list(shape.parameter_names),
                            parameter_shapes=[list(shape) for shape in shape.parameter_shapes],
                            parameter_offsets=list(shape.offsets), parameters=flat,
