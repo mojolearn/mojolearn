@@ -28,7 +28,7 @@ Wolfe `dot(grad, drt)` is implemented and not reached from the Python surface.
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
-from glm.impl.qn.glm_base import GLMWithData
+from glm.impl.qn.glm_base import GLMWithData, QN_FAST_LS_BATCH, QNF_LS_K
 from glm.impl.qn.glm_linear import nrm1
 from glm.impl.qn.qn_util import (
     LBFGS_LS_BT_ARMIJO,
@@ -150,6 +150,14 @@ def ls_backtrack(
     many candidates were evaluated (for the card)."""
     if step <= Float32(0.0):
         return LS_INVALID_STEP
+    # lane/apple-fast-linsvr: FAST on Apple under QN_FAST_LS_BATCH (default; LSVR_ALL_OFF reverts),
+    # Armijo only (the Wolfe arms need a gradient dot per candidate)
+    comptime if QN_FAST_LS_BATCH:
+        if param.linesearch == LBFGS_LS_BT_ARMIJO and f.ls_batch_applies():
+            return ls_backtrack_batched(
+                ctx, param, f, fx, x, grad, step, drt, xp, n, scalar, ls_iters,
+                stage, fresh, gradp, dg_ready,
+            )
     var fx_init = fx
     # lane/linear-apple: dg_init's dot is enqueued and read home with the
     # first candidate's evaluate (one synchronize for both); see
@@ -185,6 +193,104 @@ def ls_backtrack(
             return LS_INVALID_STEP_MAX
         step *= width
     return LS_MAX_ITERS_REACHED
+
+
+def ls_backtrack_batched(
+    ctx: DeviceContext,
+    param: LBFGSParam,
+    mut f: GLMWithData,
+    mut fx: Float32,
+    mut x: DeviceBuffer[DType.float32],
+    mut grad: DeviceBuffer[DType.float32],
+    mut step: Float32,
+    mut drt: DeviceBuffer[DType.float32],
+    mut xp: DeviceBuffer[DType.float32],
+    n: Int,
+    mut scalar: DeviceBuffer[DType.float32],
+    mut ls_iters: Int,
+    mut stage: HostBuffer[DType.float32],
+    mut fresh: Bool,
+    mut gradp: DeviceBuffer[DType.float32],
+    dg_ready: Bool,
+) raises -> Int:
+    """`ls_backtrack` with the first QNF_LS_K candidates priced by ONE fused
+    pass (QN_FAST_LS_BATCH, `GLMWithData.evaluate_batch`): candidate 0 at
+    `step` is evaluated in full (its loss, gradient and norm, as `evaluate`
+    would), and the objectives at `step * ls_dec^c`, c = 1 .. K - 1, come
+    home behind the same synchronize. The host then walks the candidates
+    exactly as the loop in `ls_backtrack` does (Armijo on `fx_c`, the
+    min_step / max_step tests, `ls_iters`, `step *= ls_dec`), without a
+    launch or a synchronize per rejected step. Whichever candidate the walk
+    stops on is then materialized: `x = xp + step_c drt` and one full
+    `evaluate` for its gradient and its authoritative `fx` (candidate 0
+    needs nothing more). If all K are rejected with budget left, the walk
+    continues one candidate at a time as before. The decision for c >= 1 is
+    made on the batch's `fx_c` (z_c formed as `x . xp + step_c (x . drt)`),
+    which can differ from the full evaluation at that point in the last
+    bits; FAST promises no bits."""
+    comptime if not QN_FAST_LS_BATCH:
+        raise Error("qn: ls_backtrack_batched is compiled under FAST + Apple (QN_LSVR_ALL) only")
+    else:
+        var fx_init = fx
+        _dg_init_enqueue(ctx, grad, drt, n, scalar, stage, dg_ready)
+        # candidate 0 and the K - 1 next steps, one pass, one synchronize
+        axpy(ctx, x, step, drt, xp, n)
+        var fx0 = f.evaluate_batch(ctx, x, grad, xp, drt, step, param.ls_dec)
+        fresh = True
+        var dg_init = stage.unsafe_ptr().unsafe_load(0)
+        if dg_init > Float32(0.0):
+            _undo_candidate(ctx, f, x, xp, grad, gradp)
+            return LS_INVALID_DIR
+        var dg_test = param.ftol * dg_init
+        ls_iters = 0
+        var c = 0
+        var last = 0
+        var step_last = step
+        var ret = LS_MAX_ITERS_REACHED
+        var decided = False
+        while c < QNF_LS_K and ls_iters < param.max_linesearch:
+            fx = fx0 if c == 0 else f.batch_fx(c)
+            ls_iters += 1
+            last = c
+            step_last = step
+            if not (fx > identical_mul_add(step, dg_test, fx_init)):
+                ret = LS_SUCCESS
+                decided = True
+                break
+            if step < param.min_step:
+                ret = LS_INVALID_STEP_MIN
+                decided = True
+                break
+            if step > param.max_step:
+                ret = LS_INVALID_STEP_MAX
+                decided = True
+                break
+            step *= param.ls_dec
+            c += 1
+        if not decided and ls_iters < param.max_linesearch:
+            # every batch candidate rejected, budget left: the plain walk on
+            for _ in range(param.max_linesearch - ls_iters):
+                axpy(ctx, x, step, drt, xp, n)
+                fx = f.evaluate(ctx, x, grad)
+                ls_iters += 1
+                var width = Float32(0.0)
+                if ls_success(
+                    ctx, param, fx_init, dg_init, fx, dg_test, step, grad, drt, n,
+                    width, scalar,
+                ):
+                    return LS_SUCCESS
+                if step < param.min_step:
+                    return LS_INVALID_STEP_MIN
+                if step > param.max_step:
+                    return LS_INVALID_STEP_MAX
+                step *= width
+            return LS_MAX_ITERS_REACHED
+        if last != 0:
+            # the walk stopped on a priced candidate: its point, gradient and
+            # authoritative objective, one evaluation
+            axpy(ctx, x, step_last, drt, xp, n)
+            fx = f.evaluate(ctx, x, grad)
+        return ret
 
 
 # ===========================================================================
