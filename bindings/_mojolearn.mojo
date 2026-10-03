@@ -283,7 +283,7 @@ def knn_search_binding(
         var ctx = process_ctx[_DEVCTX_SLOT]()
         used = knn_search(
             ctx, ip, ni, qp, nq, nf, kk, dp, xp, sq, qt, KNN_METHOD_AUTO,
-            dt[0], dt[1],
+            dt[0], dt[1], True,
         )
         ctx.synchronize()
     return PythonObject(used)
@@ -351,7 +351,7 @@ def knn_search_resident_binding(
     with GILReleased(Python()):
         used = knn_index_search(
             h, ip, ni, qp, nq, nf, kk, dp, xp, sq, qt, KNN_METHOD_AUTO,
-            dt[0], dt[1],
+            dt[0], dt[1], True,
         )
     return PythonObject(used)
 

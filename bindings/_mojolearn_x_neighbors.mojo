@@ -11,7 +11,7 @@ from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_neighbors.eigh_device import op_eigh
 from checks.vendor import COMPILED_VENDOR
-from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_knn_sq, op_group_mean, op_take_rows, op_take_cols, op_variance, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink_d, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute, op_col_degree, op_ls_laplacian_deg, op_row_all_zero, op_pcs_sketch, op_pcs_conv, op_pcs_copy0, op_knn_impute_cells, op_pagerank_step, op_cc_step, op_graph_symmetry, op_svgp_var, op_nc_median, op_row_argmax, op_nc_med_std, op_pos_compact, op_p2m_mask_value, op_p2m_zero_cols, op_p2m_nan_indicator, op_p2m_sign_label, op_p2m_relabel, op_p2m_fill, op_p2m_iota, op_p2m_negate, op_p2m_transpose, op_p2m_transpose_i, op_p2m_row_sort
+from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_knn_sq, op_group_mean, op_take_rows, op_take_cols, op_variance, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink_d, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute, op_col_degree, op_ls_laplacian_deg, op_row_all_zero, op_pcs_sketch, op_pcs_conv, op_pcs_copy0, op_knn_impute_cells, op_pagerank_step, op_cc_step, op_graph_symmetry, op_svgp_var, op_nc_median, op_row_argmax, op_nc_med_std, op_pos_compact, op_p2m_mask_value, op_p2m_zero_cols, op_p2m_nan_indicator, op_p2m_sign_label, op_p2m_relabel, op_p2m_class_counts, op_p2m_const_cols, op_p2m_fill, op_p2m_iota, op_p2m_negate, op_p2m_transpose, op_p2m_transpose_i, op_p2m_row_sort
 from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn, op_kernel_tiled
 from x_neighbors.ocsvm_dev import op_ocsvm
 from x_neighbors.graph_dev import op_louvain
@@ -20,7 +20,6 @@ from x_neighbors.kapprox_dev import op_kapprox_achi2
 from x_neighbors.kapprox_dev import op_kapprox_skew_fit
 from x_neighbors.kapprox_dev import op_kapprox_skew_transform
 from x_neighbors.kapprox_dev import op_kapprox_sparse_rp
-from x_neighbors.nc_cls1 import op_nc_counts, nc_cls1_flags_binding
 from x_neighbors.kapprox_dev import kapprox_fast_binding, kpca_resident_binding, sparse_rp_device_binding
 from x_neighbors.iter_device import lp_fast_resident_binding
 from x_neighbors.sort_items import purity_flags_binding
@@ -695,17 +694,6 @@ def pos_compact_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) ra
     return PythonObject(None)
 
 
-def nc_counts_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    """lane/apple-fast-gap-cls1 NC_CLS1_LABELS: [lab int32, nk float32 out], [n, C]."""
-    var v_lab = _a(a_, 0)
-    var v_nk = _a(a_, 1)
-    var v_n = _n(i_, 0)
-    var v_c = _n(i_, 1)
-    with GILReleased(Python()):
-        op_nc_counts(v_lab, v_nk, v_n, v_c)
-    return PythonObject(None)
-
-
 def p2m_mask_value_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
     var v_x = _a(a_, 0)
     var v_res = _a(a_, 1)
@@ -759,6 +747,27 @@ def p2m_relabel_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) ra
     var v_n = _n(i_, 0)
     with GILReleased(Python()):
         op_p2m_relabel(v_lab, v_res, v_info, v_n)
+    return PythonObject(None)
+
+
+def p2m_class_counts_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_lab = _a(a_, 0)
+    var v_nk = _a(a_, 1)
+    var v_info = _a(a_, 2)
+    var v_n = _n(i_, 0)
+    var v_n_classes = _n(i_, 1)
+    with GILReleased(Python()):
+        op_p2m_class_counts(v_lab, v_nk, v_info, v_n, v_n_classes)
+    return PythonObject(None)
+
+
+def p2m_const_cols_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_x = _a(a_, 0)
+    var v_flag = _a(a_, 1)
+    var v_n = _n(i_, 0)
+    var v_d = _n(i_, 1)
+    with GILReleased(Python()):
+        op_p2m_const_cols(v_x, v_flag, v_n, v_d)
     return PythonObject(None)
 
 
@@ -1262,6 +1271,8 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[p2m_nan_indicator_binding]("xn_p2m_nan_indicator")
     m.def_function[p2m_sign_label_binding]("xn_p2m_sign_label")
     m.def_function[p2m_relabel_binding]("xn_p2m_relabel")
+    m.def_function[p2m_class_counts_binding]("xn_p2m_class_counts")
+    m.def_function[p2m_const_cols_binding]("xn_p2m_const_cols")
     m.def_function[p2m_fill_binding]("xn_p2m_fill")
     m.def_function[p2m_iota_binding]("xn_p2m_iota")
     m.def_function[p2m_negate_binding]("xn_p2m_negate")
@@ -1269,7 +1280,6 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[p2m_transpose_i_binding]("xn_p2m_transpose_i")
     m.def_function[p2m_row_sort_binding]("xn_p2m_row_sort")
     m.def_function[nc_stats_binding]("xn_nc_stats")
-    m.def_function[nc_counts_binding]("xn_nc_counts")
     m.def_function[lp_knn_graph_binding]("xn_lp_knn_graph")
     m.def_function[lp_knn_product_binding]("xn_lp_knn_product")
     m.def_function[lp_iterate_binding]("xn_lp_iterate")
@@ -1310,7 +1320,6 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
         m.def_function[kapprox_fast_binding]("x_neighbors_kapprox_fast")
-        m.def_function[nc_cls1_flags_binding]("x_neighbors_cls1_flags")
         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
         m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")

@@ -157,6 +157,7 @@ from cluster.host.kmeans_oracle import (
     host_kmeans_transform,
     host_kmeans_validate,
 )
+from neighbors.impl.distance.detail.distance_ops import DIST_INNER_PRODUCT
 from core.knn_host_predict import (
     KNN_HOST_SABOTAGE,
     host_rbc_radius_counts,
@@ -501,8 +502,12 @@ def knn_search_binding(
             index, ni, queries, nq, nf, kk, dt[0], sq, out_dist, out_idx,
             dt[1],
         )
+        # the inner-product search selected the NEGATED products: hand back
+        # the products (exact), as the GPU binding's device negation (lane
+        # pyglue-numeric: the Python wrapper negated them)
+        var neg = dt[0] == DIST_INNER_PRODUCT
         for i in range(nq * kk):
-            dp[i] = out_dist[i]
+            dp[i] = -out_dist[i] if neg else out_dist[i]
             xp[i] = out_idx[i]
     return PythonObject(KNN_HOST_QUERY_TILE)
 

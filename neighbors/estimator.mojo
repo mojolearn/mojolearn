@@ -346,6 +346,7 @@ def knn_search(
     knn_method: Int = KNN_METHOD_AUTO,
     metric: Int = METRIC_FROM_IS_SQRT,
     metric_arg: Float32 = Float32(2.0),
+    negate_products: Bool = False,
 ) raises -> Int:
     """Exact k nearest neighbours, index and queries row-major on the host.
 
@@ -375,6 +376,7 @@ def knn_search(
         knn_method,
         metric,
         metric_arg,
+        negate_products,
     )
 
 
@@ -394,6 +396,7 @@ def knn_search_traced(
     knn_method: Int = KNN_METHOD_AUTO,
     metric: Int = METRIC_FROM_IS_SQRT,
     metric_arg: Float32 = Float32(2.0),
+    negate_products: Bool = False,
 ) raises -> Int:
     """Host-output search; device-result retention is internal to classification."""
     var retained = List[DeviceBuffer[DType.uint32]]()
@@ -401,6 +404,7 @@ def knn_search_traced(
         ctx, trace, retained, False, index_ptr, n_index, queries_ptr,
         n_queries, n_features, k, out_dist_ptr, out_idx_ptr, return_sqrt,
         requested_query_tile, knn_method, metric, metric_arg,
+        negate_products,
     )
 
 
@@ -504,6 +508,7 @@ def _knn_search_traced_retaining(
     knn_method: Int = KNN_METHOD_AUTO,
     metric: Int = METRIC_FROM_IS_SQRT,
     metric_arg: Float32 = Float32(2.0),
+    negate_products: Bool = False,
 ) raises -> Int:
     """Exact k nearest neighbours, index and queries row-major on the host.
 
@@ -548,6 +553,7 @@ def _knn_search_traced_retaining(
         ctx, trace, retained_indices, keep_device_indices, index, n_index,
         queries_ptr, n_queries, n_features, k, out_dist_ptr, out_idx_ptr,
         return_sqrt, query_tile, knn_method, mtr, metric_arg, devices, buf_len,
+        None, negate_products,
     )
 
 
@@ -568,6 +574,7 @@ def knn_search_resident(
     metric: Int = METRIC_FROM_IS_SQRT,
     metric_arg: Float32 = Float32(2.0),
     cache: KnnIndexCachePointer = None,
+    negate_products: Bool = False,
 ) raises -> Int:
     """`knn_search` over an index ALREADY ON THE DEVICE (DEVIATION 2921,
     lane/infer-speed-classical, 2026-09-17): `index` holds the same
@@ -592,6 +599,7 @@ def knn_search_resident(
         ctx, trace, retained, False, index, n_index, queries_ptr, n_queries,
         n_features, k, out_dist_ptr, out_idx_ptr, return_sqrt, plan[2],
         knn_method, plan[0], metric_arg, plan[1], plan[3], cache,
+        negate_products,
     )
 
 
@@ -897,6 +905,28 @@ def _knn_order_rows_device(
     _ = state^
 
 
+def knn_negate_kernel(pd: _KFP, n_: Int32):
+    """One thread per entry: pd[t] = -pd[t] (exact)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(n_):
+        return
+    pd.unsafe_store(t, -pd.unsafe_load(t))
+
+
+def _knn_negate_device(ctx: DeviceContext, mut out_dist: DeviceBuffer[DType.float32], n: Int) raises:
+    """The inner-product search's products, in place on the device: the
+    selection ran over the NEGATED products, so a caller that asked for the
+    products (`negate_products`, `NearestNeighbors.kneighbors`) gets them
+    negated back before the readback (lane pyglue-numeric: the Python
+    wrapper negated the downloaded block on the host)."""
+    if n <= 0:
+        return
+    var pd = out_dist.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    ctx.enqueue_function[knn_negate_kernel](
+        pd, Int32(n), grid_dim=(n + _KO_TPB - 1) // _KO_TPB, block_dim=_KO_TPB,
+    )
+
+
 def _knn_search_on_device_index(
     ctx: DeviceContext,
     mut trace: IdentityTrace,
@@ -918,6 +948,7 @@ def _knn_search_on_device_index(
     devices: Int,
     buf_len: Int,
     cache: KnnIndexCachePointer = None,
+    negate_products: Bool = False,
 ) raises -> Int:
     """`cache` (DEVIATION 3061) is a resident index's derived buffers, None
     for a per-call index: with it the index norms are copied from the cache
@@ -1088,6 +1119,8 @@ def _knn_search_on_device_index(
         trace.record_device(ctx, "knn.out_idx", out_idx, n_queries * k)
 
     _knn_order_rows_device(ctx, out_dist, out_idx, n_queries, k)
+    if negate_products and mtr == DIST_INNER_PRODUCT:
+        _knn_negate_device(ctx, out_dist, n_queries * k)
     var hd = ctx.enqueue_create_host_buffer[DType.float32](n_queries * k)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_queries * k)
     ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=out_dist)
