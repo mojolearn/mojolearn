@@ -225,6 +225,22 @@ comptime KALMAN_LL_ONLY = (
 #: (-21.8%). The old `-D MOJOLEARN_ARIMA_FAST_LLONLY=1` /
 #: `-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1` stay harmless; `-D <NAME>_OFF=1` turns
 #: each off.
+#: lane/apple-fast-gap-arima (2026-10-03). `-D MOJOLEARN_ARIMA_FAST_P_FIX=1`:
+#: the Riccati recursion of `batched_kalman_loop_kernel` (steps 2, 3, 5, 6)
+#: is a pure function of `P` (T, Z, RQR are constant over the loop). Once a
+#: step leaves `P` BITWISE unchanged (every cell's bits equal and none NaN),
+#: every later step recomputes the same `P`, `F`, `log F`, `1/F`, `T P` and
+#: `K`, so the loop keeps those values and runs only the state update
+#: (pred, v, alpha) and the log-likelihood sums: the same statements on the
+#: same operands, the same bits, about rd^3 fewer FMAs per step. FAST on
+#: Apple only; default OFF until the M3 A/B.
+comptime KALMAN_FAST_P_FIX = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_ARIMA_FAST_P_FIX"]()
+    and not is_defined["MOJOLEARN_ARIMA_FAST_P_FIX_OFF"]()
+)
+
 comptime KALMAN_FAST_EVAL_WS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
@@ -596,6 +612,12 @@ def batched_kalman_loop_kernel[
     var info = Int32(0)
     var b_ys = bid * nobs
     var mu = ftz(d_mu.unsafe_load(bid)) if intercept_in != 0 else Float32(0.0)
+    # KALMAN_FAST_P_FIX: `p_fixed` once P is a bitwise fixed point; the
+    # cached F and log F of that P (TP and K stay in l_TP / l_K).
+    var p_fixed = False
+    var c_Fs = Float32(0.0)
+    var c_logF = Float32(0.0)
+    var l_Pold = InlineArray[Float32, RD2_MAX](fill=Float32(0.0))
 
     for it in range(nobs):
         # 1. v = y - Z*alpha
@@ -616,7 +638,9 @@ def batched_kalman_loop_kernel[
 
         # 2. F = Z*P*Z'
         var _Fs = Float32(0.0)
-        if n_diff == 0:
+        if p_fixed:
+            _Fs = c_Fs
+        elif n_diff == 0:
             _Fs = l_P[0]
         else:
             for i in range(rd):
@@ -634,25 +658,34 @@ def batched_kalman_loop_kernel[
             info = Int32(it + 1) if it >= n_diff else Int32(-(it + 1))
         if it >= n_diff:
             if _Fs > Float32(0.0):
-                b_sum_logFs = ftz(b_sum_logFs + ftz(identical_log(_Fs)))
+                var lf: Float32
+                if p_fixed:
+                    lf = c_logF
+                else:
+                    lf = ftz(identical_log(_Fs))
+                b_sum_logFs = ftz(b_sum_logFs + lf)
                 var v2 = ftz(vs_it * vs_it)
                 b_ll_s2 = ftz(b_ll_s2 + ftz(v2 / _Fs))
             n_obs_ll += 1
 
         # 3. K = 1/Fs * T*P*Z'
-        _mm(rd, l_T, l_P, False, l_TP)
-        var _1_Fs = ftz(Float32(1.0) / _Fs)
-        if n_diff == 0:
-            for i in range(rd):
-                l_K[i] = ftz(_1_Fs * l_TP[i])
-        else:
-            _mv(rd, _1_Fs, l_TP, l_Z, l_K)
+        if not p_fixed:
+            _mm(rd, l_T, l_P, False, l_TP)
+            var _1_Fs = ftz(Float32(1.0) / _Fs)
+            if n_diff == 0:
+                for i in range(rd):
+                    l_K[i] = ftz(_1_Fs * l_TP[i])
+            else:
+                _mv(rd, _1_Fs, l_TP, l_Z, l_K)
 
         # 4. alpha = T*alpha + K*vs + c
         _mv(rd, Float32(1.0), l_T, l_alpha, l_v)
         for i in range(rd):
             l_alpha[i] = ftz(identical_mul_add(l_K[i], vs_it, l_v[i]))
         l_alpha[n_diff] = ftz(l_alpha[n_diff] + mu)
+
+        if p_fixed:
+            continue
 
         # 5. L = T - K*Z
         for i in range(rd2):
@@ -666,10 +699,24 @@ def batched_kalman_loop_kernel[
                     l_tmp[j * rd + i] = ftz(identical_mul_add(-l_K[i], l_Z[j], l_tmp[j * rd + i]))
 
         # 6. P = T*P*L' + R*Q*R'
+        comptime if KALMAN_FAST_P_FIX:
+            for i in range(rd2):
+                l_Pold[i] = l_P[i]
         _mm(rd, l_TP, l_tmp, True, l_P)
         for i in range(rd2):
             l_P[i] = ftz(l_P[i] + l_RQR[i])
         _numerical_stability(rd, l_P)
+        comptime if KALMAN_FAST_P_FIX:
+            # bitwise fixed point, and only after a summed step, so the
+            # cached F / log F / 1/F are this P's own (the next step's)
+            var same = it >= n_diff
+            for i in range(rd2):
+                if bitcast[DType.uint32](l_P[i]) != bitcast[DType.uint32](l_Pold[i]) or not (l_P[i] == l_P[i]):
+                    same = False
+            if same and _Fs > Float32(0.0):
+                p_fixed = True
+                c_Fs = _Fs
+                c_logF = ftz(identical_log(_Fs))
 
     # THE FINAL P, written back (added 2026-08-24). Theirs never does: the
     # loop kernel loads `P` into registers and the caller never looks again.
