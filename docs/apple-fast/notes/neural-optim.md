@@ -53,7 +53,19 @@ Logs in ~/mojolearn-evidence/afn-optim/build-*.log (not committed). The training
 MOJOLEARN_SKIP_BUILD_GATE=1 itself, so no smoke runs. Results are listed in the lane's final reply and in
 the table below.
 
-BUILD_RESULTS_PLACEHOLDER
+| build | rc |
+|---|---|
+| OPTIM_ALL | 0 |
+| OPT_FUSE_SCAN | 0 |
+| OPT_CLIP_FUSE | 0 |
+| OPT_MULTITENSOR | 0 |
+| OPT_VEC4 | 0 |
+| OPT_RESIDENT_STATE | 0 |
+| LOSS_FUSED | 0 |
+| OFF | 0 |
+| IDENTICAL | 0 |
+
+FAST builds name one define each (`-D MOJOLEARN_AFN_<NAME>`); OFF is FAST with no define; IDENTICAL is the default mode.
 
 byte_lm (lm-train-step) is not compiled here: bindings/build_byte_lm.sh refuses FAST until the afn-lm lane
 lands; its request lines are written anyway (binding byte_lm, since byte_lm.mojo is what calls
