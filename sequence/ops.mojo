@@ -18,6 +18,8 @@ IDENTICAL by construction (IDENTITY_PATHS.md "The rule"):
     log reads a sum >= 1.
 """
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_div,
     identical_exp,
@@ -30,8 +32,20 @@ from checks.numerics import (
 )
 
 from std.sys.compile import is_defined
+from std.math import fma as _std_fma
 
 comptime FP = MutPointer[Float32, MutUntrackedOrigin]
+
+#: lane/apple-fast-tier (2026-10-02). Under FAST `identical_mul_add` is the
+#: unfused `a * b + c` (two roundings, two instructions); the board's theta
+#: row ran FAST 1,747 ms against IDENTICAL's 388 on taxi-hourly, one thread
+#: per series on fma chains, so the fused `fma` is the A/B arm:
+#: `-D MOJOLEARN_SEQ_FAST_FMA=1` makes every sequence `fma3` one fused
+#: multiply-add under FAST. IDENTICAL keeps its pinned contraction.
+comptime SEQ_FAST_FMA = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_SEQ_FAST_FMA"]()
+)
 
 #: The CPU identity gate's negative control (-D MOJOLEARN_HOST_SABOTAGE=1,
 #: host binding only): the GEMM reduction runs k DESCENDING, so every trained
@@ -237,6 +251,8 @@ def mul(a: Float32, b: Float32) -> Float32:
 
 @always_inline
 def fma3(a: Float32, b: Float32, c: Float32) -> Float32:
+    comptime if SEQ_FAST_FMA:
+        return ftz(_std_fma(a, b, c))
     return ftz(identical_mul_add(a, b, c))
 
 

@@ -45,7 +45,7 @@ comptime SVGP_FF_FOLD = 64
 
 
 def matmul_tn_acc_ff_item(t: Int, a: FP, b: FP, rh: FP, rl: FP, rows: Int, n: Int, m: Int):
-    """`matmul_tn_acc_item` in float-float: (rh, rl)[t] continued by
+    """A^T B carried over row tiles (`matmul_item`'s fold, p ascending) in float-float: (rh, rl)[t] continued by
     sum_p a[p, i] b[p, j] over `rows` rows, p ascending, t = i*m + j."""
     var i = t // m
     var j = t - i * m

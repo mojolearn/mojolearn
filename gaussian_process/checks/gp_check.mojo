@@ -1620,10 +1620,10 @@ def check_log_marginal_likelihood() raises:
         if e > worst:
             worst = e
             worst_name = gp_fixture_name(w)
-        # The oracle's y^T alpha must equal the estimator's BY BITS: both
-        # are host folds of the same values in the same order, so this is
-        # a two-spellings comparison and GP_SAB_YALPHA_DESCENDING is what
-        # shows it can fail.
+        # The oracle's y^T alpha must equal the estimator's BY BITS: the
+        # host blocks and the device blocks (lane/cgr-kernel), the same
+        # items in the same order; GP_SAB_YALPHA_DESCENDING is what shows
+        # it can fail.
         var oy = gp_oracle_ydotalpha(wy, m.dual_coef, wn)
         if not _same_bits(oy, m.ydotalpha):
             raise Error(

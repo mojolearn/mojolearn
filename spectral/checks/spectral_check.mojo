@@ -149,7 +149,7 @@ from spectral.impl.sparse.op.coo_ops import coo_remove_scalar, coo_sort
 from spectral.impl.sparse.solver.detail.lanczos import (
     clamp_down,
     clamp_down_vector_kernel,
-    lanczos_solve_ritz,
+    lanczos_which_first,
     spectral_sabotage_name,
     spmv_kernel,
 )
@@ -583,13 +583,8 @@ def check_spectral_refusals_host() raises:
     _ = host_laplacian[DType.float32](compacted, True)
     n_raised += 1
     # which = SM by name
-    var alpha: List[Float32] = [1.0, 2.0, 3.0, 4.0]
-    var beta: List[Float32] = [0.1, 0.2, 0.3, 0.0]
-    var bk = List[Float32]()
-    var ev = List[Float32]()
-    var evec = List[Float32]()
     try:
-        _ = lanczos_solve_ritz(alpha, beta, bk, False, 2, LANCZOS_SM, 4, ev, evec)
+        _ = lanczos_which_first(LANCZOS_SM, 4, 2)
         raise Error("which=SM was not refused")
     except e:
         if not String(e).startswith("lanczos: which=SM"):
