@@ -412,8 +412,11 @@ def bgmm_fit[O: ClusterOps](
 def bgmm_score[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, kc: Int, means: List[Float32], pchol: List[Float32],
     c: List[Float32], mut log_resp: List[Float32], mut lpn_out: List[Float32],
-    mut labels_out: List[Int32],
-) raises:
+    mut labels_out: List[Int32], mut proba_out: List[Float32],
+) raises -> Float64:
+    """The scores of `x`; returns the sum of log_prob_norm (the float-float
+    fold), proba_out the responsibilities (the pinned `exp`), both on the
+    device (lane pyglue-numeric: Python ran the exp and the sum)."""
     var xs = ops.put(x)
     var ms = ops.put(means)
     var ps = ops.put(pchol)
@@ -424,6 +427,11 @@ def bgmm_score[O: ClusterOps](
     ops.resp(qs, cs, n, kc, lpn)
     var ls = ops.zeros_i(n)
     ops.argmax_rows(qs, n, kc, ls)
+    var rs = ops.zeros(n * kc)
+    ops.exp(qs, rs, n * kc)
+    var total = ops.sum_ff(lpn, -1, -1, n, FM_VAL)
     log_resp = ops.get(qs, n * kc)
     lpn_out = ops.get(lpn, n)
     labels_out = ops.get_i(ls, n)
+    proba_out = ops.get(rs, n * kc)
+    return total

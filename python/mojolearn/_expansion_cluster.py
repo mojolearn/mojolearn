@@ -98,9 +98,10 @@ class _XCluster(NumericModeMixin):
         return x
 
     def _nearest(self, x, centers):
+        """(labels, squared distances, their sum: the device's fold)."""
         n, d = x.shape
-        f, i, _ = self._call(_E_NEAREST, x, centers, [n, centers.shape[0], d])
-        return Array._from_flat(i[0], (n,), "<i4"), f[0]
+        f, i, s = self._call(_E_NEAREST, x, centers, [n, centers.shape[0], d])
+        return Array._from_flat(i[0], (n,), "<i4"), f[0], s[0]
 
     def _distances(self, x, centers):
         n, d = x.shape
@@ -129,11 +130,7 @@ class _CentersMixin:
 
     def score(self, X, y=None, sample_weight=None):
         self._check_fitted("cluster_centers_")
-        _, d = self._nearest(self._input_like_fit(X), self.cluster_centers_)
-        total = 0.0
-        for v in d:
-            total += v
-        return -total
+        return -self._nearest(self._input_like_fit(X), self.cluster_centers_)[2]
 
 
 class MiniBatchKMeans(_CentersMixin, _XCluster):
@@ -742,27 +739,27 @@ class BayesianGaussianMixture(_XCluster):
         vals = []
         for arr in (self.means_, self._full_pchol, self._log_consts):
             vals += [float(v) for v in _buffer.flat_bytes(arr).cast("f")]
-        f, i, _ = self._call(_E_BGMM_SCORE, x, _f32([vals], "model"), [n, d, k])
-        return f[0], f[1], n, k, i[0]
+        f, i, s = self._call(_E_BGMM_SCORE, x, _f32([vals], "model"), [n, d, k])
+        return f[0], f[1], n, k, i[0], f[2], s[0]
 
     def predict(self, X):
         # the labels come from the device score (`bodies.argmax_row`: the
         # first largest log responsibility, the lowest index on a tie)
-        _, _, n, _, labels = self._score(X)
+        _, _, n, _, labels, _, _ = self._score(X)
         return Array._from_flat(labels, (n,), "<i4")
 
     def predict_proba(self, X):
-        lr, _, n, k, _ = self._score(X)
-        # DEVIATION 6900: the pinned exp (the fit's E-step exp is pinned too, 5109)
-        return Array._from_flat(_pm.exp_array(lr), (n, k), "<f4")
+        _, _, n, k, _, proba, _ = self._score(X)
+        # DEVIATION 6900: the pinned exp (the fit's E-step exp, 5109), on the device
+        return Array._from_flat(proba, (n, k), "<f4")
 
     def score_samples(self, X):
-        _, lpn, n, _, _ = self._score(X)
+        _, lpn, n, _, _, _, _ = self._score(X)
         return Array._from_flat(lpn, (n,), "<f4")
 
     def score(self, X, y=None):
-        s = self.score_samples(X)
-        return sum(float(v) for v in s) / len(s)
+        _, _, n, _, _, _, total = self._score(X)
+        return total / n
 
 
 
@@ -848,8 +845,7 @@ def _gmm_ext_fit(est, X):
     est.means_ = Array._from_flat(f[1], (k, d), "<f4")
     est.covariances_ = BayesianGaussianMixture._by_type(f[2], k, d, ct)
     est.precisions_cholesky_ = BayesianGaussianMixture._by_type(f[3], k, d, ct)
-    est.log_det_chol_ = Array._from_flat(
-        [_pm.nsum(_pm.log(f[3][c * d * d + j * d + j]) for j in range(d)) for c in range(k)], (k,), "<f4")
+    est.log_det_chol_ = Array._from_flat(f[12], (k,), "<f4")   # x_cluster bgmm_entry
     est.n_iter_ = int(s[1])
     est.converged_ = bool(s[2])
     est.lower_bound_ = float(s[0])
@@ -871,20 +867,17 @@ def _gmm_ext_score(est, X):
     vals = []
     for arr in (est.means_, ext["pchol"], ext["consts"]):
         vals += [float(v) for v in _buffer.flat_bytes(arr).cast("f")]
-    f, i, _ = ext["call"]._call(_E_BGMM_SCORE, x, _f32([vals], "model"), [n, d, k])
+    f, i, s = ext["call"]._call(_E_BGMM_SCORE, x, _f32([vals], "model"), [n, d, k])
     lr, lpn, labels = f[0], f[1], i[0]
-    return (lr, Array._from_flat(lpn, (n,), "<f4"), Array._from_flat(_pm.exp_array(lr), (n, k), "<f4"),
-            Array._from_flat(labels, (n,), "<i4"))
+    return (lr, Array._from_flat(lpn, (n,), "<f4"), Array._from_flat(f[2], (n, k), "<f4"),
+            Array._from_flat(labels, (n,), "<i4"), s[0])
 
 
 def _gmm_ext_bic_aic(est, X):
     """(score, bic, aic): sklearn `_n_parameters`, `bic`, `aic` on the ext fit;
     the mean log-likelihood an ascending float64 fold of score_samples."""
-    _, lpn, _, _ = _gmm_ext_score(est, X)
+    _, lpn, _, _, total = _gmm_ext_score(est, X)
     n = len(lpn)
-    total = 0.0
-    for v in lpn:
-        total += float(v)
     score = total / n
     k, d = est.means_.shape
     cov = {"full": k * d * (d + 1) / 2.0, "diag": k * d, "tied": d * (d + 1) / 2.0, "spherical": k}[est.covariance_type]

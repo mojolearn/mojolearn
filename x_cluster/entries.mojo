@@ -17,21 +17,31 @@ from x_cluster.minibatch import MiniBatchParams, minibatch_fit, minibatch_partia
 from x_cluster.ops import ClusterOps
 from x_cluster.optics import optics_dbscan_ops, optics_graph, optics_xi_ops
 from x_cluster.out import ClusterOut
+from x_cluster.post_bodies import FM_VAL
+from checks.numerics import portable_log64
 from x_cluster.spectral_assign import ASSIGN_CLUSTER_QR, ASSIGN_DISCRETIZE, cluster_qr_labels, discretize_labels
 
 
 def nearest_entry[O: ClusterOps](mut ops: O, x: List[Float32], c: List[Float32], ip: List[Int]) raises -> ClusterOut:
-    """ip = [n, k, d]. i = [labels], f = [squared distance to the nearest]."""
+    """ip = [n, k, d]. i = [labels], f = [squared distance to the nearest],
+    s = [their sum] (the float-float fold on the device, lane
+    pyglue-numeric: `score` summed the distances in Python)."""
     var n = ip[0]
     var k = ip[1]
     var d = ip[2]
     var xs = ops.put(x)
+    var cs = ops.put(c)
+    var ls = ops.zeros_i(n)
+    var ds = ops.zeros(n)
+    ops.nearest(xs, n, cs, k, d, ls, ds)
+    var total = ops.sum_ff(ds, -1, -1, n, FM_VAL)
     var labels = List[Int32]()
     var dist = List[Float32]()
-    nearest_all(ops, xs, n, c, k, d, labels, dist)
+    ops.get_if(ls, n, ds, n, labels, dist)
     var out = ClusterOut()
     out.i.append(labels^)
     out.f.append(dist^)
+    out.s.append(total)
     return out^
 
 
@@ -329,6 +339,16 @@ def bgmm_entry[O: ClusterOps](
     out.f.append(_f32_of(best.mean_prior))
     out.f.append(_f32_of(best.cov_prior))
     out.f.append(_f32_of(best.nk))
+    # f[12]: log_det_chol_, sum_j log(pchol[c, j, j]) per component (the
+    # portable log, ascending j; lane pyglue-numeric: a Python loop over
+    # the components and features)
+    var ld = List[Float32](capacity=kc)
+    for c in range(kc):
+        var acc = Float64(0)
+        for j in range(d):
+            acc += portable_log64(best.pchol[c * d * d + j * d + j])
+        ld.append(Float32(acc))
+    out.f.append(ld^)
     out.i.append(labels^)
     out.s.append(r.lower_bound)
     out.s.append(Float64(r.n_iter))
@@ -343,8 +363,10 @@ def bgmm_score_entry[O: ClusterOps](
     mut ops: O, x: List[Float32], a: List[Float32], ip: List[Int]
 ) raises -> ClusterOut:
     """ip = [n, d, n_components]; a = means (k x d), precisions_cholesky
-    (k x d x d), constants (k). f = [log_resp (n x k), log_prob_norm (n)];
-    i = [labels (n), each row's first largest log responsibility]."""
+    (k x d x d), constants (k). f = [log_resp (n x k), log_prob_norm (n),
+    the responsibilities exp(log_resp) (n x k)]; i = [labels (n), each
+    row's first largest log responsibility]; s = [the sum of log_prob_norm]
+    (the exp and the sum on the device, lane pyglue-numeric)."""
     var n = ip[0]
     var d = ip[1]
     var kc = ip[2]
@@ -359,12 +381,15 @@ def bgmm_score_entry[O: ClusterOps](
         c.append(a[kc * d + kc * d * d + t])
     var lr = List[Float32]()
     var lpn = List[Float32]()
+    var proba = List[Float32]()
     var labels = List[Int32]()
-    bgmm_score(ops, x, n, d, kc, means, pchol, c, lr, lpn, labels)
+    var total = bgmm_score(ops, x, n, d, kc, means, pchol, c, lr, lpn, labels, proba)
     var out = ClusterOut()
     out.f.append(lr^)
     out.f.append(lpn^)
+    out.f.append(proba^)
     out.i.append(labels^)
+    out.s.append(total)
     return out^
 
 
