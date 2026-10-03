@@ -377,7 +377,7 @@ def profiles():
                   "computes": None if v["computes"] is None else tuple(v["computes"]),
                   "default_for": None if v["default_for"] is None else tuple(v["default_for"]),
                   "quality": dict(v["quality"]), "measured": dict(MEASURED.get(k, {}))}
-                 for k, v in PROFILES.items())
+                 for k, v in PROFILES.items())  # glue: one record per numeric profile
 
 
 def state_field(profile):

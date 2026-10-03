@@ -13,6 +13,9 @@ copy, a compare or integer work: no float arithmetic, so no bit can move.
   p2m_relabel        connected_components / Louvain: labels renumbered by
                      first occurrence (an atomic min per label, a blocked
                      flag count, scan and emit)
+  p2m_class_counts   NearestCentroid's class counts (atomic adds per row)
+  p2m_const_cols     NearestCentroid's all-features-constant test
+  p2m_lp_labels      LabelPropagation / LabelSpreading's label rows
   p2m_fill, p2m_iota PageRank's uniform start vectors, the cc start labels
   p2m_negate         kneighbors' inner-product distances (exact negation)
   p2m_transpose(_i)  the k-NN multi-output label / target transposes
@@ -64,12 +67,15 @@ def p2m_nan_indicator_item(t: Int, src: FP, cur: FP, cols: IP, res: FP, n: Int, 
 # ------------------------------------------------------------------ LOF labels
 def p2m_sign_label_item(t: Int, x: FP, res: IP, count: Int, mode: Int, thr: Float32):
     """mode 0: -1 if x < thr else 1 (fit_predict); mode 1: 1 if x >= thr
-    else -1 (predict). Spelled as the Python they replace, so NaN agrees."""
+    else -1 (predict); mode 2: 1 if x > thr else -1 (OneClassSVM predict,
+    lane pyglue-numeric). Spelled as the Python they replace, so NaN agrees."""
     var v = x.unsafe_load(t)
     if mode == 0:
         res.unsafe_store(t, Int32(-1) if v < thr else Int32(1))
-    else:
+    elif mode == 1:
         res.unsafe_store(t, Int32(1) if v >= thr else Int32(-1))
+    else:
+        res.unsafe_store(t, Int32(1) if v > thr else Int32(-1))
 
 
 # ------------------------------------------------------------------ relabel
@@ -145,6 +151,60 @@ def p2m_relabel_map_item(t: Int, lab: IP, res: IP, info: IP, first: IP, rk: IP, 
 
 
 # ------------------------------------------------------------------ fills, copies
+# ------------------------------------------------------------------ NearestCentroid
+def p2m_ccount_zero_item(t: Int, lab: IP, nk: FP, info: IP, cnt: IP, n: Int, n_classes: Int):
+    """Stage 1: cnt[c] = 0; item 0 clears info."""
+    cnt.unsafe_store(t, Int32(0))
+    if t == 0:
+        info.unsafe_store(0, Int32(0))
+
+
+def p2m_ccount_add_item(t: Int, lab: IP, nk: FP, info: IP, cnt: IP, n: Int, n_classes: Int):
+    """Stage 2: one atomic add per row (integer: the counts are the same in
+    any order). A label outside [0, n_classes) sets info[0]."""
+    var v = Int(lab.unsafe_load(t))
+    if v < 0 or v >= n_classes:
+        info.unsafe_store(0, Int32(1))
+        return
+    _ = Atomic[DType.int32].fetch_add(cnt + v, Int32(1))
+
+
+def p2m_ccount_emit_item(t: Int, lab: IP, nk: FP, info: IP, cnt: IP, n: Int, n_classes: Int):
+    """Stage 3: nk[c] = cnt[c] as float32 (exact below 2**24 rows a class)."""
+    nk.unsafe_store(t, Float32(cnt.unsafe_load(t)))
+
+
+def p2m_const_init_item(t: Int, x: FP, flag: IP, n: Int, d: Int):
+    """Stage 1, one item: flag = 0."""
+    flag.unsafe_store(0, Int32(0))
+
+
+def p2m_const_cmp_item(t: Int, x: FP, flag: IP, n: Int, d: Int):
+    """Stage 2: flag = 1 when cell t differs from row 0 of its column (a NaN
+    differs from everything), so flag 0 means every column is constant
+    (sklearn's ptp == 0 over all features). Every writer stores the same 1."""
+    if x.unsafe_load(t) != x.unsafe_load(t % d):
+        flag.unsafe_store(0, Int32(1))
+
+
+# ------------------------------------------------------------------ LabelPropagation
+def p2m_lp_labels_item(t: Int, codes: IP, ld: FP, ys: FP, unl: IP, n: Int, c: Int, skip: Int, a: Float32):
+    """Item t = i*c + j: ld[t] = 1.0 when row i's class (its code, with the
+    unlabeled marker's code `skip` taken out of the numbering) is j, else
+    0.0; ys[t] = a * ld[t]; unl[i] = 1 for a row with code `skip` (written
+    by item j == 0). skip -1: no row is unlabeled."""
+    var i = t // c
+    var j = t - i * c
+    var code = Int(codes.unsafe_load(i))
+    var unlabeled = skip >= 0 and code == skip
+    var cls = code - 1 if (skip >= 0 and code > skip) else code
+    var v = Float32(1) if (not unlabeled and cls == j) else Float32(0)
+    ld.unsafe_store(t, v)
+    ys.unsafe_store(t, a * v)
+    if j == 0:
+        unl.unsafe_store(i, Int32(1) if unlabeled else Int32(0))
+
+
 def p2m_fill_item(t: Int, res: FP, count: Int, value: Float32):
     res.unsafe_store(t, value)
 

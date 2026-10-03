@@ -1218,6 +1218,33 @@ def croston_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises
     return PythonObject(B)
 
 
+def croston_forecast_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """Croston's flat forecast (pyglue-sweep, Oct 3: it was numpy's repeat).
+    addrs = [mean (B), forecast (B, h) out]; ip = [B, h]. Every cell of row b
+    is mean[b]: a fill of 1 then `op_rowscale` (1 * mean is mean exactly)."""
+    if len(addrs) != 2 or len(ip) != 2:
+        raise Error("croston_forecast: requires 2 addresses and 2 integer parameters")
+    var B = ival(ip, 0)
+    var h = ival(ip, 1)
+    if B < 1 or h < 1:
+        raise Error("croston_forecast: B >= 1 and h >= 1")
+    var M = ex.alloc(B)
+    ex.upload(M, fptr(addrs[0], "mean"), B)
+    var F = ex.alloc(B * h)
+    var f = Args()
+    f.p0 = F
+    f.f0 = Float32(1.0)
+    ex.launch[OP_FILL](f, B * h)
+    var a = Args()
+    a.p0 = F
+    a.p1 = M
+    a.i1 = h
+    ex.launch[OP_ROWSCALE](a, B * h)
+    ex.sync()
+    ex.download(fptr(addrs[1], "forecast"), F, B * h)
+    return PythonObject(B * h)
+
+
 #: ETS's FAST Nelder-Mead stall stop (sequence/nm.mojo): the fit ends once
 #: its best value has not dropped by more than ETS_FAST_STALL_REL |best| for
 #: ETS_FAST_STALL_ITERS iterations. FAST only; chosen by the paired quality

@@ -61,7 +61,7 @@ def _check_saved_by(arrays, path, cls):
     """The file's `estimator` must be `cls` or a base of it, so the host
     subclasses of `_classical_host.py` load the plain class's file."""
     saved_as = _serialize.scalar_str(arrays, "estimator")
-    if saved_as not in (c.__name__ for c in cls.__mro__):
+    if saved_as not in (c.__name__ for c in cls.__mro__):  # glue: walks the class hierarchy names
         raise ValueError(
             f"mojolearn: {path!r} was saved by {saved_as}, not {cls.__name__}"
         )
@@ -211,20 +211,16 @@ def _dtype_name(y):
 
 
 def _accuracy_host(pred, y):
-    """The fraction of rows where `pred == y`, a Python count over O(rows)
-    labels (DEVIATION 2365, a host reduction). `pred` is an Array or a
-    list, as the `predict` methods return."""
-    pred = pred.tolist() if isinstance(pred, Array) else list(pred)
-    labels, _ = _labels_1d(y)
-    if labels is None or len(labels) != len(pred):
+    """The fraction of rows where `pred == y`: the exact match count of the
+    x_metrics binding's grouped sums (`_expansion_metrics.accuracy_fraction`,
+    on the device on a GPU install) over the row count. Lane pyglue-sweep
+    (Oct 3): this was a Python count over O(rows) labels."""
+    from ._expansion_metrics import accuracy_fraction
+    if len(_shape_of(y)) != 1 or _shape_of(y)[0] != len(pred):
         raise ValueError(
             "mojolearn: y must be 1-D with one entry per row of X"
         )
-    hits = 0
-    for p, t in zip(pred, labels):
-        if p == t:
-            hits += 1
-    return hits / len(pred) if pred else float("nan")
+    return accuracy_fraction(y, pred)
 
 
 def _target_1d(y, n_rows, ndim_msg, length_msg):
@@ -239,33 +235,22 @@ def _target_1d(y, n_rows, ndim_msg, length_msg):
 
 
 def _r2_sums(pred, y):
-    """`(SS_res, SS_tot)` for scikit-learn's R^2, from float32 predictions
-    and a float64 target, accumulated SEQUENTIALLY in Python float64: the
-    target mean first, then both sums of squares in one pass in row order.
-
-    A HOST REDUCTION, OUTSIDE THE IDENTITY CLAIM (DEVIATION 2365). This
-    used to be NumPy's pairwise `np.sum`; a sequential fold rounds
-    differently in the last bits, so a fixture that recorded a `score()`
-    value under the NumPy-era code is RE-BASELINE OWED. The predictions
-    themselves are untouched: this is a summary of the answer, not the
-    answer. Callers apply their own convention for `SS_tot == 0`.
-    """
-    t, _ = as_f64_c(y, ndim=1, name="y")
-    tl = t.tolist()
-    pl = pred.tolist()
-    n = len(tl)
-    total = 0.0
-    for v in tl:
-        total += v
-    mean = total / n
-    ss_res = 0.0
-    ss_tot = 0.0
-    for v, p in zip(tl, pl):
-        r = v - p
-        ss_res += r * r
-        d = v - mean
-        ss_tot += d * d
-    return ss_res, ss_tot
+    """`(SS_res, SS_tot)` for scikit-learn's R^2 from float32 predictions
+    and the target cast once to float32: the x_metrics binding's grouped
+    sums (`_expansion_metrics`'s `reg_term` and pinned-sum stages, on the
+    device on a GPU install, the same words on the host column), the
+    target mean first, then both sums of squares, binary64 out. Lane
+    pyglue-sweep (Oct 3): these were sequential Python float64 loops over
+    the rows (DEVIATION 2365); the bits of `score()` move. Callers apply
+    their own convention for `SS_tot == 0`."""
+    from ._expansion_metrics import _Reg, _centered, _centered_sse, _diff_and_y_means
+    t, _ = as_f32_c(y, ndim=1, name="y")
+    p, _ = as_f32_c(pred, ndim=1, name="predictions")
+    r = _Reg(t, p, None, "uniform_average", "score", variance_ok=True)
+    ss_res = _centered_sse(r, None)[0]
+    _, y_mean = _diff_and_y_means(r, None)
+    ss_tot = _centered(r, "y", y_mean, None, mean=False)[0]
+    return float(ss_res), float(ss_tot)
 
 
 def _r2_host(pred, y):
@@ -384,12 +369,25 @@ def _shift(b, v, mu32):
     return _center(b, v, [mu32])
 
 
+def _sqrt_weights(b, weights):
+    """`fl32(sqrt(w_i))` per row of the float32 `weights`, in the binding
+    (`py2mojo_rows` ROWS_SQRT_F32: `portable_sqrtf`, on the device on a GPU
+    install, the same words on the host column). Lane pyglue-sweep (Oct 3):
+    this was a Python comprehension over the rows."""
+    n = int(weights.shape[0])
+    out = empty((n,), "<f4")
+    if n:
+        b.py2mojo_rows(_ROWS_SQRT_F32, addr_ro(weights, name="sample_weight"),
+                       addr(out, name="sqrt weights"), [n, 1])
+    return out
+
+
 def _scale_rows(b, x, root):
     """Row `i` of `x` times `root[i]` in float32 (`lm_scale_rows`): one
     binary32 multiplication per cell, operands and result flushed when
-    subnormal; `root` a list of `rows` float32-valued floats."""
+    subnormal; `root` a float32 Array of `rows` values."""
     rows, cols = _dims(x)
-    w = Array.from_list([float(r) for r in root], "<f4")
+    w = root
     out = _helper_output(x.shape, rows * cols)
     b.lm_scale_rows(addr_ro(x, name="X"), addr_ro(w, name="sqrt weights"),
                     addr(out, name="scaled X"), [int(rows), int(cols)])
@@ -549,13 +547,13 @@ class LinearRegression(NumericModeMixin):
     yet in place is a BINDING that can hand a weight pointer across
     (`bindings/_mojolearn_estimators.mojo::ols_fit_binding` takes a fixed
     `params` of length 2). Until it is, this class applies the same two
-    operations on the host and calls the unweighted entry.
+    operations through the estimators binding (`py2mojo_rows`
+    ROWS_SQRT_F32 for the roots, `lm_scale_rows` for the rows; on the
+    device on a GPU install) and calls the unweighted entry.
 
     That is defensible where a host reimplementation usually is not, and the
-    reason is arithmetic rather than convenience: `math.sqrt` of a float32
-    value in float64 followed by ONE float32 rounding IS the IEEE correctly
-    rounded float32 square root (double rounding is innocuous for sqrt when
-    the wide format carries at least 2p + 2 bits, and 53 >= 50), the row
+    reason is arithmetic rather than convenience: the root is the IEEE
+    correctly rounded float32 square root (`portable_sqrtf`), the row
     multiply is one float32 rounding of an exact float64 product, and both
     are the same operations the device kernels perform. The two routes are
     therefore expected to agree BIT FOR BIT except on denormals, where the
@@ -657,8 +655,8 @@ class LinearRegression(NumericModeMixin):
             # `olsFit`, ols.cuh:99-110, on the host. See SAMPLE WEIGHTS in
             # the class docstring for why this is here and not in the Mojo
             # layer, and for the bit-for-bit claim the gate checks.
-            root = [_round_f32(math.sqrt(v)) for v in weights.tolist()]
             b = self._bind("_mojolearn_estimators")
+            root = _sqrt_weights(b, weights)
             work_x = _scale_rows(b, work_x, root)
             work_y = _scale_rows(b, work_y, root)
         if not normal_eq:
@@ -923,41 +921,31 @@ def _coef_from_w(w, cols, n_targets, fit_intercept):
     """`coef_` and `intercept_` from the fitted `W` block. One target: the
     first `cols` entries and the last (a slice of an Array COPIES, the
     _array contract, so both are detached from `_w`). C targets: cuML's
-    column-major `w[c + C*j]`, the bias column at `j == cols`, unpacked by
-    an O(C * n_features) Python loop over the parameters, not the rows."""
+    column-major `w[c + C*j]`, the bias column at `j == cols`."""
     if n_targets == 1:
         coef = w[:cols].reshape((1, cols))
         intercept = w[cols:cols + 1] if fit_intercept else zeros((1,), "<f4")
         return coef, intercept
-    values = w.tolist()
-    coef = Array.from_list(
-        [[values[c + n_targets * j] for j in range(cols)] for c in range(n_targets)],
-        "<f4",
-    )
-    intercept = (Array.from_list([values[c + n_targets * cols] for c in range(n_targets)], "<f4")
-                 if fit_intercept else zeros((n_targets,), "<f4"))
+    # `w[c + C*j]` is the (c, j) entry of a column-major [C, n_param] block:
+    # one relabeled view and one C-order copy (`Array._as_c`), then two
+    # slices, instead of a Python loop over the parameters (lane
+    # pyglue-sweep, Oct 3).
+    n_param = cols + (1 if fit_intercept else 0)
+    full = Array._view_of(w, (n_targets, n_param), "F")._as_c()
+    coef = full[:, :cols]
+    intercept = full[:, cols] if fit_intercept else zeros((n_targets,), "<f4")
     return coef, intercept
 
 
 #: lane/apple-fast-py2mojo-linear: `py2mojo_rows` modes (core/py2mojo_rows.mojo)
 #: and the `py2mojo_linear_flags` bit that routes them
-_ROWS_LOG, _ROWS_SGD_PROBA, _ROWS_LRCV_PROBA = 1, 2, 3
+_ROWS_LOG, _ROWS_SGD_PROBA, _ROWS_LRCV_PROBA, _ROWS_SQRT_F32 = 1, 2, 3, 5
 _PY2MOJO_ROWS = 2
 
 
 def _py2mojo_flags(binding):
     fn = getattr(binding, "py2mojo_linear_flags", None)
     return int(fn()) if fn is not None else 0
-
-
-def _log_or_inf(p):
-    """`np.log` on one probability: `log(p)` for `p > 0`, `-inf` at exactly
-    zero (NumPy's answer, minus its warning), NaN for a negative."""
-    if p > 0.0:
-        return math.log(p)
-    if p == 0.0:
-        return float("-inf")
-    return float("nan")
 
 
 class LogisticRegression(NumericModeMixin):
@@ -1264,35 +1252,30 @@ class LogisticRegression(NumericModeMixin):
         return out
 
     def predict_log_proba(self, X):
-        """`log(predict_proba(X))`, float64 (n, 2), via `math.log` per
-        element, `-inf` at an exact zero as NumPy gave.
-
-        DEVIATION 2363 -- DEFECT, FLAGGED: this is an O(rows * 2) Python
-        loop over the probability matrix. Two columns keep it proportionate
-        to the O(rows) label loops the contract permits, but it is still a
-        host `log` in a predict path and belongs behind a binding
-        (`qn_sigmoid` could return the log form directly). Routed there
-        later; recorded here so it is not mistaken for a design.
+        """`log(predict_proba(X))`, float64 (n, 2): `log(p)` per element,
+        `-inf` at an exact zero as NumPy gave, NaN for a negative, in the
+        binding (`py2mojo_rows` ROWS_LOG, on the device on a GPU install).
         """
         proba = self.predict_proba(X)
         binding = self._bind("_mojolearn_estimators")
-        if _py2mojo_flags(binding) & _PY2MOJO_ROWS:
-            # lane/apple-fast-py2mojo-linear: `_log_or_inf` of every cell in
-            # the binding (core/py2mojo_rows.mojo ROWS_LOG, the same log)
-            out = empty(proba.shape, "<f8")
-            if proba.size:
-                binding.py2mojo_rows(_ROWS_LOG, addr_ro(proba, name="proba"),
-                                     addr(out, name="log proba"), [proba.size, 1])
-            return out
-        return Array.from_list(
-            [[_log_or_inf(p) for p in row]
-             for row in proba.tolist()],
-            "<f8",
-        )
+        # lane/apple-fast-py2mojo-linear: `_log_or_inf` of every cell in the
+        # binding (core/py2mojo_rows.mojo ROWS_LOG, the same log). Lane
+        # pyglue-sweep (Oct 3): the Python per-cell arm for a binary without
+        # the door is gone; such a binary refuses by name.
+        if not _py2mojo_flags(binding) & _PY2MOJO_ROWS:
+            raise RuntimeError(
+                "mojolearn: this estimators binding predates py2mojo_rows; "
+                "rebuild it (pixi run build)"
+            )
+        out = empty(proba.shape, "<f8")
+        if proba.size:
+            binding.py2mojo_rows(_ROWS_LOG, addr_ro(proba, name="proba"),
+                                 addr(out, name="log proba"), [proba.size, 1])
+        return out
 
     def score(self, X, y):
-        """Accuracy: the fraction of rows where `predict(X) == y`, a Python
-        count over O(rows) labels (DEVIATION 2365, a host reduction)."""
+        """Accuracy: the fraction of rows where `predict(X) == y`, the
+        x_metrics binding's exact match count (`_accuracy_host`)."""
         return _accuracy_host(self.predict(X), y)
 
     def save(self, path):
@@ -1384,7 +1367,7 @@ def _qn_scores(est, X, w, n_targets=1):
 def _check_qn_solver_fields(name, tol, max_iter, linesearch_max_iter, lbfgs_memory):
     if not tol > 0:
         raise ValueError(f"mojolearn {name}: tol must be positive, got {tol}")
-    for field, value in (("max_iter", max_iter),
+    for field, value in (("max_iter", max_iter),  # glue: three solver argument checks
                          ("linesearch_max_iter", linesearch_max_iter),
                          ("lbfgs_memory", lbfgs_memory)):
         if int(value) != value or value < 1:

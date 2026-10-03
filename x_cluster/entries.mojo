@@ -18,6 +18,7 @@ from x_cluster.ops import ClusterOps
 from x_cluster.optics import optics_dbscan_ops, optics_graph, optics_xi_ops
 from x_cluster.out import ClusterOut
 from x_cluster.post_bodies import FM_VAL
+from checks.numerics import portable_log64
 from x_cluster.tree_cut import tree_labels
 from x_cluster.spectral_assign import ASSIGN_CLUSTER_QR, ASSIGN_DISCRETIZE, cluster_qr_labels, discretize_labels
 
@@ -212,7 +213,8 @@ def affinity_entry[O: ClusterOps](
     """ip = [n, d, precomputed, pref_mode (0 median, 1 scalar, 2 array),
     max_iter, convergence_iter, seed]; fp = [damping, preference scalar].
     i = [cluster_centers_indices, labels], f = [affinity_matrix, the final
-    diagonals of A then R], s = [n_iter]."""
+    diagonals of A then R, the exemplar rows (none when precomputed)],
+    s = [n_iter]."""
     var centers = List[Int32]()
     var labels = List[Int32]()
     var n_iter = 0
@@ -222,11 +224,22 @@ def affinity_entry[O: ClusterOps](
         ops, x, ip[0], ip[1], ip[2] != 0, ip[3], Float32(fp[1]), pref, Float32(fp[0]), ip[4], ip[5],
         UInt64(ip[6]), centers, labels, n_iter, aff, ar_diag,
     )
+    # f[2]: the exemplar rows of x (cluster_centers_) unless precomputed, a
+    # row copy per exemplar (lane pyglue-numeric: a Python gather)
+    var d = ip[1]
+    var rows = List[Float32]()
+    if ip[2] == 0:
+        rows = List[Float32](capacity=len(centers) * d)
+        for c in centers:
+            var r = Int(c)
+            for f in range(d):
+                rows.append(x[r * d + f])
     var out = ClusterOut()
     out.i.append(centers^)
     out.i.append(labels^)
     out.f.append(aff^)
     out.f.append(ar_diag^)
+    out.f.append(rows^)
     out.s.append(Float64(n_iter))
     return out^
 
@@ -341,6 +354,16 @@ def bgmm_entry[O: ClusterOps](
     out.f.append(_f32_of(best.mean_prior))
     out.f.append(_f32_of(best.cov_prior))
     out.f.append(_f32_of(best.nk))
+    # f[12]: log_det_chol_, sum_j log(pchol[c, j, j]) per component (the
+    # portable log, ascending j; lane pyglue-numeric: a Python loop over
+    # the components and features)
+    var ld = List[Float32](capacity=kc)
+    for c in range(kc):
+        var acc = Float64(0)
+        for j in range(d):
+            acc += portable_log64(best.pchol[c * d * d + j * d + j])
+        ld.append(Float32(acc))
+    out.f.append(ld^)
     out.i.append(labels^)
     out.s.append(r.lower_bound)
     out.s.append(Float64(r.n_iter))

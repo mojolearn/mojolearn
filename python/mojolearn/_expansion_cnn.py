@@ -923,8 +923,18 @@ class CNNClassifier(_Layer):
                         else:
                             b.x_cnn_res_gather([a["x"], a["y"]], [xall, yall], rows.ctypes.data, [m, row, 1])
                     else:
-                        R.put(a["x"], np.ascontiguousarray(x[idx]))
-                        R.put(a["y"], np.ascontiguousarray(yi[idx]))
+                        # X above a GiB stays on the host: the batch rows into
+                        # one staging block by the base binding's byte gather
+                        # (lane pyglue-numeric: numpy fancy indexing), then up
+                        rows64 = idx.astype(np.int64)
+                        xb = np.empty((m,) + x.shape[1:], np.float32)
+                        yb = np.empty(m, np.int32)
+                        _native("gather_rows_bytes")(x.ctypes.data, xb.ctypes.data, rows64.ctypes.data,
+                                                     n, m, x.nbytes // n)
+                        _native("gather_rows_bytes")(yi.ctypes.data, yb.ctypes.data, rows64.ctypes.data,
+                                                     n, m, 4)
+                        R.put(a["x"], xb)
+                        R.put(a["y"], yb)
                     plans = self._forward_r(b, a, m)
                     loss = float(b.x_cnn_softmax_xent_r(a["logits"], a["y"], a["glog"], a["proba"], [m, k]))
                     hw, _, hgw, hgb = self._rw[id(self.head_)]
@@ -974,6 +984,12 @@ class CNNClassifier(_Layer):
         return self
 
     def predict_proba(self, X):
+        return self._run_predict(X, False)
+
+    def _run_predict(self, X, codes):
+        """predict_proba (n, k) float32, or with `codes` each row's class
+        index (int32), the argmax on the device (`x_cnn_res_argmax`; lane
+        pyglue-numeric: numpy's argmax on the downloaded probabilities)."""
         np = _np()
         x = self._images(X)
         n = x.shape[0]
@@ -982,7 +998,8 @@ class CNNClassifier(_Layer):
         # lane/cnn-apple2: at most _PREDICT_ROWS rows per pass on one set of
         # resident arrays (every op is per row: the same words)
         cap = n if _LEGACY_STEP else max(1, min(n, _PREDICT_ROWS))
-        proba = np.empty((n, k), np.float32)
+        proba = np.empty((n, k), np.float32) if not codes else None
+        lab = np.empty(n, np.int32) if codes else None
         with _Res(b) as R:
             self._rw = {}
             for layer in [c for c, _ in self._blocks] + [self.head_]:
@@ -997,13 +1014,28 @@ class CNNClassifier(_Layer):
                 R.put(a["x"], np.ascontiguousarray(x[s:s + m]))
                 self._forward_r(b, a, m)
                 b.x_cnn_softmax_xent_r(a["logits"], a["y"], a["glog"], a["proba"], [m, k])
-                b.x_cnn_res_download(a["proba"], proba[s:s + m].ctypes.data, m * k)
+                if codes:
+                    b.x_cnn_res_argmax(a["proba"], lab[s:s + m].ctypes.data, [m, k])
+                else:
+                    b.x_cnn_res_download(a["proba"], proba[s:s + m].ctypes.data, m * k)
             self._rw = {}
-        return proba
+        return lab if codes else proba
 
     def predict(self, X):
         np = _np()
-        return self.classes_[np.argmax(self.predict_proba(X), axis=1)]
+        codes = self._run_predict(X, True)
+        cls = self.classes_
+        if cls.dtype.kind in "iuf":
+            # classes_[codes] by the base binding's native gather (the decode
+            # half of label encoding)
+            from ._buffer import _native
+            table = np.ascontiguousarray(cls, dtype=np.float64 if cls.dtype.kind == "f" else np.int64)
+            out = np.empty(codes.shape[0], table.dtype)
+            c64 = codes.astype(np.int64)
+            _native("gather_f64" if cls.dtype.kind == "f" else "gather_i64")(
+                table.ctypes.data, table.shape[0], c64.ctypes.data, c64.shape[0], out.ctypes.data)
+            return out.astype(cls.dtype, copy=False)
+        return cls[codes]   # glue: label objects (str, bool) no native table holds
 
     def weights(self):
         """Every trained array, in layer order: [w0, b0, w1, b1, ...]."""

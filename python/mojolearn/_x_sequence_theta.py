@@ -69,7 +69,7 @@ class AutoTheta:
         info = np.zeros((B, 8), dtype=np.float32)
         mask = (int(self.initial_smoothed is not None) | 2 * int(self.alpha is not None)
                 | 4 * int(self.theta is not None))
-        fp = [0.0 if v is None else float(v) for v in (self.initial_smoothed, self.alpha, self.theta)]
+        fp = [0.0 if v is None else float(v) for v in (self.initial_smoothed, self.alpha, self.theta)]  # glue: the three smoothing parameter arguments
         _backend.binding("_mojolearn_x_sequence", self.numeric_mode).theta(
             [self._y.ctypes.data, f.ctypes.data, info.ctypes.data],
             [B, n, int(h), self.season_length, -1 if self.model is None else _MODELS[self.model],

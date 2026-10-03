@@ -74,15 +74,15 @@ class ParamsMixin:
         # `inspect.signature` follows `__wrapped__` (NumericModeMixin's
         # wrapper), so this is the class's own constructor signature.
         params = inspect.signature(init).parameters.values()
-        names = [p.name for p in params if p.name != "self"
+        names = [p.name for p in params if p.name != "self"  # glue: sklearn get_params parameter names
                  and p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)]
         if issubclass(cls, NumericModeMixin) and "numeric_mode" not in names:
             names.append("numeric_mode")
-        return sorted(names)
+        return sorted(names)  # glue: sklearn get_params parameter names
 
     def get_params(self, deep=True):
         out = {}
-        for name in self._get_param_names():
+        for name in self._get_param_names():  # glue: sklearn get_params parameter names
             try:
                 value = getattr(self, name)
             except AttributeError:
@@ -92,7 +92,7 @@ class ParamsMixin:
                     "estimator cannot report or clone its parameters"
                 ) from None
             if deep and not isinstance(value, type) and callable(getattr(value, "get_params", None)):
-                out.update((f"{name}__{k}", v) for k, v in value.get_params().items())
+                out.update((f"{name}__{k}", v) for k, v in value.get_params().items())  # glue: sklearn nested get_params plumbing
             out[name] = value
         return out
 
@@ -104,8 +104,8 @@ class ParamsMixin:
             return self
         values = self.get_params(deep=False)
         nested = {}
-        for key, value in params.items():
-            name, sep, sub = key.partition("__")
+        for key, value in params.items():  # glue: sklearn set_params keyword arguments
+            name, sep, sub = key.partition("__")  # glue: splits a parameter name string
             if name not in values:
                 raise ValueError(
                     f"Invalid parameter {name!r} for estimator {type(self).__name__}. "
@@ -115,7 +115,7 @@ class ParamsMixin:
                 nested.setdefault(name, {})[sub] = value
             else:
                 values[name] = value
-        for name, sub in nested.items():
+        for name, sub in nested.items():  # glue: sklearn nested set_params plumbing
             values[name].set_params(**sub)
         replacement = type(self)(**values)
         self.__dict__.clear()
@@ -172,7 +172,7 @@ class NumericModeMixin(ParamsMixin):
         # serve it (lane/cpu-training-par-wave2, 2026-09-15) it is guarded
         # like `fit`, so a CPU-only install trains a shard only inside
         # `reference_training()`.
-        for method_name in ("fit", "partial_fit", "fit_predict", "fit_transform", "_fit_with_tree_start"):
+        for method_name in ("fit", "partial_fit", "fit_predict", "fit_transform", "_fit_with_tree_start"):  # glue: wraps five estimator method names
             method = cls.__dict__.get(method_name)
             if method is not None:
                 setattr(cls, method_name, _guard_cpu_training(method))

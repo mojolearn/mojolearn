@@ -283,7 +283,7 @@ def _encode_labels_native(y):
         return None
     # `flatten_labels` reads the LOGICAL order; storage order equals it only
     # for a vector (rank 1, or every other axis of length 1).
-    if arr.size != max(arr.shape):
+    if arr.size != max(arr.shape):  # glue: largest axis of the shape
         return None
     key, fmt, py = spec
     try:
@@ -526,7 +526,7 @@ def unique_inverse(y):
     kind = 0 if arr.dtype.lstrip("<>|=")[:1] == "f" else 1
     if arr.size == 0:
         raise ValueError("mojolearn: y is empty")
-    if arr.size != max(arr.shape):
+    if arr.size != max(arr.shape):  # glue: largest axis of the shape
         raise ValueError("mojolearn: y must be a vector of labels")
     wide = arr.astype("<f8" if kind == 0 else "<i8")
     n = int(wide.size)

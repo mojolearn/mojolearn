@@ -405,13 +405,13 @@ class IsolationForest(NumericModeMixin):
         # IF_DEVICE_TRANSPOSE) or `iforest_device_finite_scan` (lane
         # apple-fast-trees2, IF_FAST_ROWMAJOR, FAST on Apple).
         b = self._bind("_mojolearn_svm")
-        scans = [getattr(b, n, None) for n in ("iforest_device_scan", "iforest_device_finite_scan")]
-        device_scan = any(f is not None and int(f()) == 1 for f in scans)
+        scans = [getattr(b, n, None) for n in ("iforest_device_scan", "iforest_device_finite_scan")]  # glue: looks up two binding entries
+        device_scan = any(f is not None and int(f()) == 1 for f in scans)  # glue: checks two binding entries
         if not device_scan and not all_finite(x):
             # was a bare Exception from the native fit; scikit-learn raises
             # ValueError for the same input
             raise ValueError("mojolearn IsolationForest: X contains NaN or infinity")
-        had = {k: self.__dict__[k] for k in ("_x", "n_features_in_") if k in self.__dict__}
+        had = {k: self.__dict__[k] for k in ("_x", "n_features_in_") if k in self.__dict__}  # glue: saves two attribute names
         self._x = x  # kept alive; every scoring call refits from it
         self.n_features_in_ = x.shape[1]
         try:
@@ -419,7 +419,7 @@ class IsolationForest(NumericModeMixin):
         except Exception as exc:  # noqa: BLE001
             msg = str(exc)
             if device_scan and ("Input X contains" in msg or "does not accept non-finite" in msg):
-                for k in ("_x", "n_features_in_"):
+                for k in ("_x", "n_features_in_"):  # glue: restores two attribute names
                     self.__dict__.pop(k, None)
                 self.__dict__.update(had)
                 raise ValueError(
@@ -479,8 +479,8 @@ class IsolationForest(NumericModeMixin):
                 f"{_IFOREST_INTS} and {_IFOREST_REALS} are needed"
             )
         (n_est, ms_mode, ms_int, depth, mf_mode, mf_int, boot, seed, c_auto, nf,
-         ms_resolved) = (int(ints[i]) for i in range(_IFOREST_INTS))
-        ms_frac, mf_frac, contamination, offset = (float(reals[i]) for i in range(_IFOREST_REALS))
+         ms_resolved) = (int(ints[i]) for i in range(_IFOREST_INTS))  # glue: unpacks the fixed int vector
+        ms_frac, mf_frac, contamination, offset = (float(reals[i]) for i in range(_IFOREST_REALS))  # glue: unpacks the fixed real vector
         if ms_mode not in (0, 1, 2) or mf_mode not in (0, 1) or c_auto not in (0, 1) or boot not in (0, 1):
             raise ValueError(f"mojolearn: {path!r} carries an unknown knob mode")
         obj = cls(

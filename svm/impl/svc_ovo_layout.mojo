@@ -203,10 +203,11 @@ def dual_kernel(sup: _I32P, dual: _F32P, m: Int32, ci: Int32, cj: Int32, colof: 
         dst[row * Int(n_sv) + Int(colof[Int(sup[e])])] = -d
 
 
-def gemv_kernel(dual: _F32P, sv: _F32P, n_sv: Int32, d: Int32, dst: _F32P):
+def gemv_kernel(dual: _F32P, sv: _F32P, n_sv: Int32, d: Int32, neg: Int32, dst: _F32P):
     var j = Int(block_idx.x) * OVO_TPB + Int(thread_idx.x)
     if j < Int(d):
-        dst[j] = dual_gemv_column(dual, sv, Int(n_sv), Int(d), j)
+        var v = dual_gemv_column(dual, sv, Int(n_sv), Int(d), j)
+        dst[j] = -v if neg != 0 else v
 
 
 # ---------------------------------------------------------------- drivers
@@ -385,10 +386,13 @@ def svc_dual_gemv_device_binding(
     ctx: DeviceContext, dual_addr: PythonObject, sv_addr: PythonObject, dims: PythonObject,
     out_addr: PythonObject,
 ) raises -> PythonObject:
-    """`svc_dual_gemv(dual, sv, [n_sv, d], out)`: coef_ = dual @ sv (one
-    row), float32 out of d. Returns d."""
+    """`svc_dual_gemv(dual, sv, [n_sv, d(, negate)], out)`: coef_ = dual @ sv
+    (one row), float32 out of d, negated (exact) when `negate` (the OvO
+    pair rows in scikit-learn's orientation; lane pyglue-numeric: Python
+    negated them). Returns d."""
     var n_sv = Int(py=dims[0])
     var d = Int(py=dims[1])
+    var neg = Int(py=dims[2]) if len(dims) > 2 else 0
     var oa = Int(py=out_addr)
     if n_sv < 0 or d < 0 or oa == 0:
         raise Error("svc_dual_gemv: bad dims or null output")
@@ -406,7 +410,7 @@ def svc_dual_gemv_device_binding(
                              src_ptr=_F32P(unsafe_from_address=sl))
         var d_out = ctx.enqueue_create_buffer[DType.float32](d)
         ctx.enqueue_function[gemv_kernel](
-            d_dual.unsafe_ptr(), d_sv.unsafe_ptr(), Int32(n_sv), Int32(d), d_out.unsafe_ptr(),
+            d_dual.unsafe_ptr(), d_sv.unsafe_ptr(), Int32(n_sv), Int32(d), Int32(neg), d_out.unsafe_ptr(),
             grid_dim=_blocks(d), block_dim=OVO_TPB,
         )
         ctx.enqueue_copy(dst_ptr=_F32P(unsafe_from_address=oa), src_buf=d_out)

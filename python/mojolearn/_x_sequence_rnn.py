@@ -20,7 +20,7 @@ from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_rnn')
 
 from . import _backend
-from ._labels import unique_inverse
+from ._labels import argmax_rows, unique_inverse
 
 _BINDING = "_mojolearn_x_sequence"
 
@@ -122,7 +122,7 @@ class _RecurrentBase:
         """[(torch name, shape)] in the binding's flat order."""
         G, H = GATES[self._cell()], int(self.hidden_size)
         out = []
-        for l in range(int(self.num_layers)):
+        for l in range(int(self.num_layers)):  # glue: one entry per recurrent layer
             din = self.n_features_in_ if l == 0 else H
             out += [(f"weight_ih_l{l}", (G * H, din)), (f"weight_hh_l{l}", (G * H, H)),
                     (f"bias_ih_l{l}", (G * H,)), (f"bias_hh_l{l}", (G * H,))]
@@ -132,8 +132,8 @@ class _RecurrentBase:
         """Every parameter U(-1/sqrt(H), 1/sqrt(H)) in layout order, one flat
         float32 block drawn in Mojo from the seeded stream (`_buffer.InitStream`;
         lane cgr4-py-compute: it was numpy's Generator)."""
-        k = 1.0 / float(np.sqrt(float(self.hidden_size)))
-        total = sum(int(np.prod(s)) for _, s in self._layout())
+        k = 1.0 / float(np.sqrt(float(self.hidden_size)))  # glue: scalar init bound from hidden_size
+        total = sum(int(np.prod(s)) for _, s in self._layout())  # glue: parameter tensor sizes of the layout
         out = np.empty(total, dtype=np.float32)
         rng.fill_uniform(out.ctypes.data, total, -k, k)
         return out
@@ -142,20 +142,20 @@ class _RecurrentBase:
         """{torch name: array}: `nn.LSTM`/`nn.GRU`/`nn.RNN` names for the
         recurrent layers, `head.weight` and `head.bias` for the `nn.Linear`."""
         out, off = {}, 0
-        for name, shape in self._layout():
-            n = int(np.prod(shape))
+        for name, shape in self._layout():  # glue: one view per parameter tensor
+            n = int(np.prod(shape))  # glue: product of the tensor shape dims
             out[name] = self.params_[off:off + n].reshape(shape).copy()
             off += n
         return out
 
     def load_state_dict(self, state):
         parts = []
-        for name, shape in self._layout():
+        for name, shape in self._layout():  # glue: one check per parameter tensor
             a = _f32(state[name], name)
             if a.shape != tuple(shape):
                 raise ValueError(f"{name}: shape {a.shape}, expected {tuple(shape)}")
             parts.append(a.ravel())
-        self.params_ = np.ascontiguousarray(np.concatenate(parts), dtype=np.float32)
+        self.params_ = np.ascontiguousarray(np.concatenate(parts), dtype=np.float32)  # glue: packs user weight tensors into the flat buffer
         return self
 
     # ------------------------------------------------------------ data
@@ -215,7 +215,7 @@ class _RecurrentBase:
         b = binding(self.numeric_mode)
         b.rnn_fit([X.ctypes.data, target.ctypes.data, order.ctypes.data, steps.ctypes.data,
                    self.params_.ctypes.data, losses.ctypes.data, lrs.ctypes.data],
-                  ip, [float(v) for v in fp])
+                  ip, [float(v) for v in fp])  # glue: the optimizer float arguments
         self.loss_curve_ = losses
         self.n_iter_ = n_steps
         self.n_timesteps_ = T
@@ -270,7 +270,8 @@ class _RecurrentClassifier(_RecurrentBase):
         return self._run(X)[0]
 
     def predict(self, X):
-        return self.classes_[np.argmax(self.predict_proba(X), axis=1)]
+        # the first-max-wins row argmax in Mojo (`argmax_rows`)
+        return self.classes_[np.asarray(argmax_rows(np.ascontiguousarray(self.predict_proba(X))))]
 
 
 class LSTMRegressor(_RecurrentRegressor):

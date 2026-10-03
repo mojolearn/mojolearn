@@ -88,7 +88,7 @@ class Embedding(NumericModeMixin):
 
     def __init__(self, num_embeddings, embedding_dim, padding_idx=None, max_norm=None,
                  norm_type=2.0, scale_grad_by_freq=False, sparse=False, weight=None, plan="scan"):
-        for name, v in (("num_embeddings", num_embeddings), ("embedding_dim", embedding_dim)):
+        for name, v in (("num_embeddings", num_embeddings), ("embedding_dim", embedding_dim)):  # glue: validates two int arguments
             if isinstance(v, bool) or not isinstance(v, int):
                 raise TypeError(f"mojolearn Embedding: {name} must be an int, got {type(v).__name__}")
             if v < 1:
@@ -148,7 +148,7 @@ class Embedding(NumericModeMixin):
                         scale_grad_by_freq=False, sparse=False, numeric_mode=None, plan="scan"):
         """torch's `Embedding.from_pretrained` without `freeze` (nothing here trains the table)."""
         w, _ = as_f32_c(embeddings, ndim=2, name="embeddings")
-        v, d = (int(s) for s in w.shape)
+        v, d = (int(s) for s in w.shape)  # glue: two shape dimensions only
         return cls(v, d, padding_idx=padding_idx, max_norm=max_norm, norm_type=norm_type,
                    scale_grad_by_freq=scale_grad_by_freq, sparse=sparse, weight=w,
                    numeric_mode=numeric_mode, plan=plan)
@@ -263,7 +263,7 @@ class Embedding(NumericModeMixin):
         meta = _serialize.exact(arrays, "meta", "<i8")
         if meta.size != 3:
             raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 3 are needed")
-        v, d, pad = (int(meta[i]) for i in range(3))
+        v, d, pad = (int(meta[i]) for i in range(3))  # glue: three metadata ints only
         weight = _serialize.exact(arrays, "weight", "<f4")
         if tuple(weight.shape) != (v, d):
             raise ValueError(f"mojolearn: {path!r} weight has shape {tuple(weight.shape)}, not {(v, d)}")

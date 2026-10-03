@@ -169,7 +169,7 @@ class Buf:
 
     def _fill(self, view):
         if view.suboffsets:
-            for k in range(view.ndim):
+            for k in range(view.ndim):  # glue: one check per buffer axis
                 if view.suboffsets[k] >= 0:
                     raise TypeError(
                         "mojolearn: indirect (suboffset) buffers are not "
@@ -187,12 +187,12 @@ class Buf:
             self.strides = ()
         else:
             if view.shape:
-                self.shape = tuple(int(view.shape[k]) for k in range(self.ndim))
+                self.shape = tuple(int(view.shape[k]) for k in range(self.ndim))  # glue: one entry per buffer axis
             else:
                 # ndim 1 without a shape array: a simple byte-like buffer
                 self.shape = (self.nbytes // max(self.itemsize, 1),)
             if view.strides:
-                self.strides = tuple(int(view.strides[k]) for k in range(self.ndim))
+                self.strides = tuple(int(view.strides[k]) for k in range(self.ndim))  # glue: one entry per buffer axis
             else:
                 self.strides = None
         self.c_contiguous, self.f_contiguous = _contiguity(
@@ -254,7 +254,7 @@ def _contiguity(shape, strides, itemsize):
     if not shape:
         return True, True
     n = 1
-    for s in shape:
+    for s in shape:  # glue: product of shape dimensions
         n *= s
     if n <= 1:
         return True, True
@@ -262,14 +262,14 @@ def _contiguity(shape, strides, itemsize):
         return True, False
     c_ok = True
     expect = itemsize
-    for k in range(len(shape) - 1, -1, -1):
+    for k in range(len(shape) - 1, -1, -1):  # glue: one stride check per axis
         if shape[k] != 1 and strides[k] != expect:
             c_ok = False
             break
         expect *= shape[k]
     f_ok = True
     expect = itemsize
-    for k in range(len(shape)):
+    for k in range(len(shape)):  # glue: one stride check per axis
         if shape[k] != 1 and strides[k] != expect:
             f_ok = False
             break
@@ -443,13 +443,14 @@ def _materialize(obj, name):
         kinds = set(map(type, flat))
         if kinds and kinds <= _SCALAR_TYPES:
             return Array._from_flat(flat, shape, "<f8" if float in kinds else "<i8"), True
-        if any(isinstance(v, float) for v in flat):
+        # The same questions asked of the distinct leaf TYPES (a handful),
+        # not of every leaf: isinstance(v, T) depends only on type(v).
+        if any(issubclass(t, float) for t in kinds):  # glue: the distinct leaf types of the input
             return Array._from_flat(flat, shape, "<f8"), True
-        for v in flat:
-            if not isinstance(v, (int, bool)):
-                raise TypeError(
-                    f"mojolearn: {name} holds a {type(v).__name__}, not a number"
-                )
+        bad = sorted(t.__name__ for t in kinds  # glue: the distinct leaf types of the input
+                     if not issubclass(t, (int, bool)))
+        if bad:
+            raise TypeError(f"mojolearn: {name} holds a {bad[0]}, not a number")
         return Array._from_flat(flat, shape, "<i8"), True
     with Buf(obj, name=name) as b:
         if b.format[:1] in (">", "!") and b.itemsize > 1:
@@ -981,6 +982,15 @@ class InitStream:
         if n:
             _native("uniform_init_f32")(int(address), n, float(low), float(high),
                                         self.seed & 0xFFFFFFFF, self.seed >> 32, self.offset)
+        self.offset += n
+
+    def fill_normal(self, address, n, mean, std):
+        """n float32 values N(mean, std**2) at `address` (the base binding's
+        counter-based Box-Muller `normal_init_f32`); advances the counter."""
+        n = int(n)
+        if n:
+            _native("normal_init_f32")(int(address), n, float(mean), float(std),
+                                       self.seed & 0xFFFFFFFF, self.seed >> 32, self.offset)
         self.offset += n
 
     def uniform(self, low, high, size):

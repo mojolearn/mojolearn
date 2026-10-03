@@ -121,7 +121,7 @@ from ._array import Array
 from ._buffer import (
     as_f32_forest_layout,
     addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_i64_c,
-    empty, frombytes, zeros,
+    empty, frombytes, zeros, _native,
 )
 from ._labels import argmax_rows, finite_integer_codes, flat_view, is_bool
 
@@ -737,7 +737,7 @@ def _has_nan(arr):
 
 def _f64_list(values):
     """A binding's list of floats as a float64 `Array`."""
-    return Array.from_list([float(v) for v in values], "<f8")
+    return Array.from_list(values, "<f8")
 
 
 def _one_string(member):
@@ -1312,7 +1312,7 @@ class GradientBoosting(NumericModeMixin):
         feature_fraction = parsed_fraction
         if feature_fraction < 1.0 and any(
             values is not None and len(values) > 0
-            for values in (cat_features, one_hot_features)
+            for values in (cat_features, one_hot_features)  # glue: the two feature-list arguments
         ):
             raise NotImplementedError(
                 "mojolearn: feature_fraction < 1 requires numeric features; "
@@ -1449,7 +1449,7 @@ class GradientBoosting(NumericModeMixin):
                 raise ValueError(
                     "mojolearn: class_weights is empty; pass None for none"
                 )
-            if any(not math.isfinite(float(w)) or float(w) < 0 for w in class_weights):
+            if any(not math.isfinite(float(w)) or float(w) < 0 for w in class_weights):  # glue: validates the class_weights argument
                 raise ValueError(
                     "mojolearn: class_weights must have finite nonnegative entries"
                 )
@@ -1503,7 +1503,7 @@ class GradientBoosting(NumericModeMixin):
         # and a Plain resolution with no cat_features refuses it there).
         # `cat_features` is checked rather than `one_hot_features` because a
         # one-hot column never grows CTRs either.
-        for _name, _val in (
+        for _name, _val in (  # glue: two permutation argument checks
             ("permutation_count", permutation_count),
             ("ctr_estimation_permutation_id", ctr_estimation_permutation_id),
         ):
@@ -1563,7 +1563,7 @@ class GradientBoosting(NumericModeMixin):
         self.border_build_max_samples = int(border_build_max_samples)
         self.class_weights = (
             None if class_weights is None
-            else [float(w) for w in class_weights]
+            else [float(w) for w in class_weights]  # glue: stores the class_weights argument
         )
         self.permutation_count = permutation_count
         self.ctr_estimation_permutation_id = ctr_estimation_permutation_id
@@ -1780,14 +1780,14 @@ class GradientBoosting(NumericModeMixin):
         # DEVIATION 2330: built as a Python list (O(features)) and packed
         # once; `Array` has no item assignment.
         flags = [0] * n_features
-        for i in cat or ():
+        for i in cat or ():  # glue: validates cat_features index arguments
             if not 0 <= i < n_features:
                 raise ValueError(
                     f"mojolearn: cat_features index {i} out of range for "
                     f"{n_features} features"
                 )
             flags[i] |= 1
-        for i in one_hot or ():
+        for i in one_hot or ():  # glue: validates one_hot_features index arguments
             if not 0 <= i < n_features:
                 raise ValueError(
                     f"mojolearn: one_hot_features index {i} out of range "
@@ -2044,12 +2044,11 @@ class GradientBoosting(NumericModeMixin):
             # `min`/`max` over the storage view -- C-driven, O(rows), no
             # Python loop body, but a host scan all the same; a native
             # min/max helper would retire them.
-            wv = flat_view(wa, "f")
-            if not all_finite(wa) or min(wv) < 0:
+            if not all_finite(wa) or wa.min() < 0:
                 raise ValueError(
                     "mojolearn: sample_weight must have finite nonnegative entries"
                 )
-            if not max(wv) > 0:
+            if not wa.max() > 0:
                 raise ValueError("mojolearn: sample_weight must have positive total weight")
             n_weights = n_rows
 
@@ -2067,8 +2066,7 @@ class GradientBoosting(NumericModeMixin):
         # read; `min`/`max` over the storage view (DEVIATION 2331's scan)
         eval_constant = False
         if n_eval_rows:
-            ev = flat_view(ea, "f")
-            eval_constant = min(ev) == max(ev)
+            eval_constant = ea.min() == ea.max()
         params = self._params(
             n_rows, n_features, n_flags, n_weights, n_eval_rows,
             eval_target_constant=eval_constant,
@@ -2213,11 +2211,13 @@ class GradientBoosting(NumericModeMixin):
         # from the text's BITS half so it round-trips exactly. 0.0 on
         # every fit without boost_from_average, exactly as theirs is.
         self.bias_ = 0.0
-        for _line in str(out[0]).split("\n"):
-            if _line.startswith("bias "):
-                _bits = int(_line.split()[1].split("/")[1], 16)
-                self.bias_ = _f64_bits_to_float(_bits)
-                break
+        _text = str(out[0])
+        _at = 0 if _text.startswith("bias ") else _text.find("\nbias ") + 1
+        if _at > 0 or _text.startswith("bias "):
+            _end = _text.find("\n", _at)
+            _line = _text[_at:] if _end < 0 else _text[_at:_end]
+            _bits = int(_line.split()[1].split("/")[1], 16)
+            self.bias_ = _f64_bits_to_float(_bits)
         self.best_iteration_ = int(out[1])
         self.stopped_early_ = bool(out[2])
         self.loss_curve_ = _f64_list(out[3])
@@ -2543,18 +2543,12 @@ class GradientBoosting(NumericModeMixin):
                     f"mojolearn: gbdt_sigmoid_pair wrote {wrote} of {n_rows} rows"
                 )
             return out
-        p1 = empty((n_rows,), "<f8")
-        binding.gbdt_sigmoid(
-            addr_ro(raw, name="raw"), addr(p1, name="p1"), n_rows
+        # Lane pyglue-sweep (Oct 3): the `[1 - p, p]` Python comprehension
+        # for a binary without `gbdt_sigmoid_pair` is gone; such a binary
+        # refuses by name (every GPU and host gbdt binding exports it).
+        raise RuntimeError(
+            "mojolearn: this gbdt binding predates gbdt_sigmoid_pair; rebuild it"
         )
-        # DEVIATION 2333, A DEFECT NAMED RATHER THAN HIDDEN: the
-        # `1 - p1` column is an O(rows) Python comprehension. There is no
-        # host arithmetic on `Array` and no native helper for it; the bits
-        # are exactly numpy's (one IEEE subtraction per element, order
-        # independent), only the time is wrong. This branch remains for a
-        # binary built before `gbdt_sigmoid_pair` existed.
-        pv = flat_view(p1, "d")
-        return Array.from_list([[1.0 - p, p] for p in pv], "<f8")
 
     def predict_classes(self, X):
         """The argmax of `predict_proba`, as dense class codes in an int64
@@ -2807,7 +2801,7 @@ def _has_ctr_records(text):
     records `gbdt_host_predict`'s parser refuses by name)?"""
     t = str(text)
     return any(("\n" + k + " ") in t or t.startswith(k + " ")
-               for k in ("ctr_columns", "ctr_table", "tensor_ctr_registry"))
+               for k in ("ctr_columns", "ctr_table", "tensor_ctr_registry"))  # glue: three fixed record names
 
 
 def _binding_vendor(binding):
@@ -2839,7 +2833,7 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
             random_state=random_state,
         )
         try:
-            parsed = tuple(int(i) for i in sources)
+            parsed = tuple(int(i) for i in sources)  # glue: parses the sources argument tuple
         except (TypeError, ValueError):
             raise ValueError("mojolearn: sources must be integer indices") from None
         if len(parsed) < 2 or len(set(parsed)) != len(parsed):
@@ -2851,7 +2845,7 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
         n_rows, n_features = Xa.shape
         if n_rows == 0 or n_features < 2:
             raise ValueError("mojolearn: experimental FeatureFreq needs rows and columns")
-        if any(i < 0 or i >= n_features for i in self.sources):
+        if any(i < 0 or i >= n_features for i in self.sources):  # glue: validates the sources argument indices
             raise ValueError(
                 f"mojolearn: sources {self.sources!r} outside {n_features} features"
             )
@@ -2859,34 +2853,42 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
             raise ValueError(
                 "mojolearn: experimental FeatureFreq X must be finite"
             )
-        # DEVIATION 2335, A DEFECT NAMED RATHER THAN HIDDEN: the per-column
-        # validation below is O(rows * features) on the host -- `set()`
-        # over each column's slice of the column-major storage (C-driven,
-        # no Python loop body, then Python over the DISTINCT values only).
-        # `np.unique` per column was the same order of work in C. This is
-        # the experimental one-tree estimator, but a native distinct-count
-        # helper would retire the scan.
-        xv = flat_view(Xa, "f")
-        for f in self.sources:
-            values = set(xv[f * n_rows:(f + 1) * n_rows])
-            if min(values) < 0 or any(v != math.floor(v) for v in values):
+        # DEVIATION 2335 retired (lane pyglue-sweep, Oct 3): each column of
+        # the column-major storage is checked by the base binding's helpers
+        # at its own address (`reduce_stat` min / max / integral,
+        # `cast_elements` + `bincount_i64` for the dense 0..k-1 coding)
+        # instead of `set()` / `sorted()` over the column in Python.
+        stat = _native("reduce_stat")
+        base = addr_ro(Xa, name="X")
+        for f in self.sources:  # glue: dispatches the named source columns
+            col = base + 4 * f * n_rows
+            hi = float(stat(col, 0, n_rows, 1))
+            if (not int(stat(col, 0, n_rows, 4)) or float(stat(col, 0, n_rows, 0)) < 0):
                 raise ValueError(
                     "mojolearn: experimental FeatureFreq source columns must "
                     "contain non-negative integer category codes"
                 )
-            ordered = sorted(values)
-            if len(ordered) < 2 or ordered != list(range(len(ordered))):
+            k = int(hi) + 1
+            dense = 2 <= k <= n_rows
+            if dense:
+                codes = empty((n_rows,), "<i8")
+                _native("cast_elements")(col, 0, addr(codes, name="codes"), 3, n_rows)
+                counts = empty((k,), "<i8")
+                _native("bincount_i64")(addr_ro(codes, name="codes"), 3, n_rows, k,
+                                        addr(counts, name="counts"), 0)
+                dense = counts.min() > 0
+            if not dense:
                 raise ValueError(
                     "mojolearn: every experimental FeatureFreq source must "
-                    f"be densely coded 0..k-1; column {f} has {ordered!r}"
+                    f"be densely coded 0..k-1; column {f} has codes up to {int(hi)} "
+                    "with at least one missing (or fewer than two codes)"
                 )
         source_set = set(self.sources)
         for f in range(n_features):
             if f in source_set:
                 continue
-            column = xv[f * n_rows:(f + 1) * n_rows]
-            first = column[0]
-            if not any(value != first for value in column[1:]):
+            col = base + 4 * f * n_rows
+            if float(stat(col, 0, n_rows, 0)) == float(stat(col, 0, n_rows, 1)):
                 raise ValueError(
                     "mojolearn: experimental FeatureFreq numeric columns "
                     f"must vary; column {f} is constant"
@@ -2903,15 +2905,14 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
                 raise ValueError(
                     "mojolearn: sample_weight must have one value per row"
                 )
-            wv = flat_view(weights, "f")  # DEVIATION 2331: builtin scans
-            if not all_finite(weights) or min(wv) < 0:
+            if not all_finite(weights) or weights.min() < 0:
                 raise ValueError(
                     "mojolearn: sample_weight must be finite and non-negative"
                 )
-            if not max(wv) > 0.0:
+            if not weights.max() > 0.0:
                 raise ValueError("mojolearn: sample_weight must have positive sum")
             n_weights = n_rows
-        source_array = Array.from_list([int(i) for i in self.sources], "<u4")
+        source_array = Array.from_list([int(i) for i in self.sources], "<u4")  # glue: packs the sources argument tuple
         self.model_ = self._bind(
             "_mojolearn_gbdt"
         ).gbdt_fit_two_level_feature_freq(
@@ -2968,7 +2969,7 @@ class OrderedRMSE(GradientBoosting):
     @staticmethod
     def _ordered_options(n_estimators, max_depth, border_count,
                          learning_rate, l2_leaf_reg):
-        for name, value, lower, upper in (
+        for name, value, lower, upper in (  # glue: four integer hyperparameter checks
             ("n_estimators", n_estimators, 1, 2**31 - 1),
             ("max_depth", max_depth, 1, 8),
             ("border_count", border_count, 1, 255),
@@ -2977,7 +2978,7 @@ class OrderedRMSE(GradientBoosting):
                     or not isinstance(value, numbers.Integral)
                     or not lower <= value <= upper):
                 raise ValueError(f"mojolearn: {name} must be an integer in {lower}..{upper}")
-        for name, value, positive in (
+        for name, value, positive in (  # glue: two real hyperparameter checks
             ("learning_rate", learning_rate, True),
             ("l2_leaf_reg", l2_leaf_reg, False),
         ):
@@ -3039,9 +3040,11 @@ class OrderedRMSE(GradientBoosting):
             order64, _ = as_i64_c(permutation, ndim=1, name="permutation")
         except (TypeError, ValueError, OverflowError):
             raise bijection_error from None
-        ov = flat_view(order64, "q")
-        if (order64.shape[0] != n_rows or min(ov) < 0 or max(ov) >= n_rows
-                or len(set(ov)) != n_rows):
+        # n distinct ids in [0, n) are a bijection: the base binding's
+        # `check_indices_i64` (range, then a bit set) answers both in one
+        # pass (lane pyglue-sweep, Oct 3: was min/max/set over the rows)
+        if order64.shape[0] != n_rows or n_rows < 1 or int(_native("check_indices_i64")(
+                addr_ro(order64, name="permutation"), n_rows, n_rows)) != 0:
             raise bijection_error
         order = order64.astype("<u4")
         if sample_weight is None:
@@ -3054,10 +3057,9 @@ class OrderedRMSE(GradientBoosting):
                 raise ValueError("mojolearn: sample_weight must have one value per row") from None
             if weights.shape[0] != n_rows:
                 raise ValueError("mojolearn: sample_weight must have one value per row")
-            wv = flat_view(weights, "f")  # DEVIATION 2331: builtin scans
-            if not all_finite(weights) or min(wv) < 0:
+            if not all_finite(weights) or weights.min() < 0:
                 raise ValueError("mojolearn: sample_weight must be finite and non-negative")
-            if not max(wv) > 0:
+            if not weights.max() > 0:
                 raise ValueError("mojolearn: sample_weight must have positive sum")
             n_weights = n_rows
         binding = self._bind("_mojolearn_gbdt")

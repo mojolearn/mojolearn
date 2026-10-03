@@ -624,6 +624,27 @@ def test_the_fold_sabotage_control_still_moves_the_folds():
             os.environ.pop("MOJOLEARN_HOST_ALLOW_SABOTAGE")
 
 
+def _indices_definition(value, n, name):
+    """`MS._indices`' definition in NumPy: its Python route was deleted (index
+    checks native only since d53d84a0f), so the reference arm runs this."""
+    a = np.asarray(value)
+    if a.ndim != 1 or a.dtype.kind not in "iu" or not a.size:
+        raise ValueError(f"{name} must be a nonempty 1-D integer index array")
+    a = a.astype(np.int64)
+    if ((a < 0) | (a >= n)).any():
+        raise ValueError(f"{name} contains an out-of-range index")
+    if np.unique(a).size != a.size:
+        raise ValueError(f"{name} contains duplicate indices")
+    return Array.from_list(a.tolist(), "<i8")
+
+
+def _overlap_definition(a, b, n):
+    """`MS._overlap`'s definition: two accepted index Arrays share a row."""
+    if not a.size or not b.size or n <= 0:
+        return False
+    return bool(np.intersect1d(np.frombuffer(a.tobytes(), "<i8"), np.frombuffer(b.tobytes(), "<i8")).size)
+
+
 def test_indices_and_overlap_match():
     n = 5000
     perm = _RNG.permutation(n)
@@ -641,11 +662,13 @@ def test_indices_and_overlap_match():
     for name, value in cases.items():
         native = name not in ("short", "floats", "two dim", "empty", "ok uint8")
         _same(lambda: MS._indices(value, n, "train"),
-              ("check_indices_i64",) if native else (), group="indices")
+              ("check_indices_i64",) if native else (), group="indices",
+              ref_fn=lambda: _indices_definition(value, n, "train"))
     a = MS._indices(perm[:2500], n, "train")
     for other, hit in ((perm[2500:], False), (perm[2499:], True), (perm[:2500], True)):
         b = MS._indices(other, n, "test")
-        ref = _same(lambda: MS._overlap(a, b, n), ("indices_overlap_i64",), group="indices")
+        ref = _same(lambda: MS._overlap(a, b, n), ("indices_overlap_i64",), group="indices",
+                    ref_fn=lambda: _overlap_definition(a, b, n))
         assert ref[0] == ("ok", ("bool", hit))
 
 

@@ -1,0 +1,2 @@
+CMD lane/apple-fast-bayesq bayesq-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh bayesq-istella x_linear bayesian-ridge istella 1 1 "-D MOJOLEARN_BAYES_FAST_Q_OFF" ""
+CMD lane/apple-fast-bayesq bayesq-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh bayesq-taxi x_linear bayesian-ridge taxi 1 1 "-D MOJOLEARN_BAYES_FAST_Q_OFF" ""

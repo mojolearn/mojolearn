@@ -32,6 +32,7 @@ THE GIL is released around every device call, and nothing inside a
 """
 
 from std.os import abort
+from std.math import sqrt
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read_i32
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -126,8 +127,10 @@ def kernel_ridge_fit_binding(
         1  y               n * t float32, row-major, read
         2  dual_out        n * t float32, WRITTEN (`dual_coef_`)
         3  scalars_out     1 float64, WRITTEN: info
-        4  sw              OPTIONAL: n float32, read, the per-row
-                           sqrt(sample_weight) factors (absent: unweighted)
+        4  sw              OPTIONAL: n float64 sample weights, read
+                           (checked finite and >= 0 by the caller); the
+                           binding takes the per-row sqrt factors (absent:
+                           unweighted)
 
     `params`, in this exact order:
 
@@ -171,7 +174,12 @@ def kernel_ridge_fit_binding(
     var y = read_f32(Int(yp), max(0, n * t))
     var sw = List[Float32]()
     if len(addrs) == 5:
-        sw = read_f32(Int(py=addrs[4]), max(0, n))
+        # the per-row factors sqrt(sample_weight): the binary64 square root
+        # of each weight rounded once to float32 (formerly Python's loop)
+        var wp = _f64_ptr(Int(py=addrs[4]))
+        sw.reserve(max(0, n))
+        for i in range(n):
+            sw.append(Float32(sqrt(wp[i])))
     var info = 0
     with GILReleased(Python()):
         info = _kernel_ridge_fit_run(x, y, n, d, t, kp, alpha, dp, sp, sw)

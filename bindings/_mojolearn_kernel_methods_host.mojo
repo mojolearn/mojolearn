@@ -37,6 +37,7 @@ kernel matrix, factorization, normalization and feature map this binary
 serves differs.
 """
 from std.os import abort
+from std.math import sqrt
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -157,7 +158,12 @@ def kernel_ridge_fit_binding(
     var y = read_f32(Int(py=addrs[1]), max(0, n * t))
     var sw = List[Float32]()
     if len(addrs) == 5:
-        sw = read_f32(Int(py=addrs[4]), max(0, n))
+        # the per-row factors sqrt(sample_weight): the binary64 square root
+        # of each weight rounded once to float32 (formerly Python's loop)
+        var wp = f64_ptr(Int(py=addrs[4]))
+        sw.reserve(max(0, n))
+        for i in range(n):
+            sw.append(Float32(sqrt(wp[i])))
     var info = 0
     with GILReleased(Python()):
         info = _kernel_ridge_fit_run(

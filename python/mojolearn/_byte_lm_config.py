@@ -24,7 +24,7 @@ class ByteLanguageModelConfig:
     vocab_size: int = 256
 
     def __post_init__(self):
-        for field in fields(self):
+        for field in fields(self):  # glue: validates config dataclass fields
             value = getattr(self, field.name)
             if isinstance(value, bool) or type(value).__name__ in ('bool', 'bool_'):
                 raise ValueError('Byte-LM shape requires integer dimensions')
@@ -41,12 +41,12 @@ class ByteLanguageModelConfig:
         b, l, dm, h, kv, hd, ff, layers, vocab = self.native_shape
         spans = (self.n_total, b * l * vocab, b * l * dm, b * l * ff,
                  b * h * l * l, b * kv * l * hd, b * (l + 1))
-        if max(spans) > 2147483647:
+        if max(spans) > 2147483647:  # glue: max over seven shape spans
             raise ValueError('Byte-LM shape exceeds signed 32-bit indexing')
 
     @property
     def native_shape(self):
-        return tuple(getattr(self, field.name) for field in fields(self))
+        return tuple(getattr(self, field.name) for field in fields(self))  # glue: config dataclass field values
 
     @property
     def profile(self):
@@ -71,13 +71,13 @@ class ByteLanguageModelConfig:
     @property
     def parameter_names(self):
         names = ('norm1_w', 'w_q', 'w_k', 'w_v', 'w_o', 'norm2_w', 'w_gate', 'w_up', 'w_down')
-        return ('embed', *(f'block{layer}.{name}' for layer in range(self.n_layers) for name in names), 'lm_head')
+        return ('embed', *(f'block{layer}.{name}' for layer in range(self.n_layers) for name in names), 'lm_head')  # glue: parameter names per layer
 
     @property
     def offsets(self):
         from ._portable_math import prod
         offsets = [0]
-        for shape in self.parameter_shapes:
+        for shape in self.parameter_shapes:  # glue: offsets over parameter shapes
             offsets.append(offsets[-1] + prod(shape))
         return tuple(offsets)
 
@@ -86,7 +86,7 @@ class ByteLanguageModelConfig:
         return self.offsets[-1]
 
     def to_dict(self):
-        return {field.name: getattr(self, field.name) for field in fields(self)}
+        return {field.name: getattr(self, field.name) for field in fields(self)}  # glue: config dataclass field values
 
 
 def require_shape(value=None):
@@ -101,7 +101,7 @@ def state_shape(state):
     if 'model_shape' not in state:
         return ByteLanguageModelConfig()
     value = state['model_shape']
-    expected = {field.name for field in fields(ByteLanguageModelConfig)}
+    expected = {field.name for field in fields(ByteLanguageModelConfig)}  # glue: config dataclass field names
     if not isinstance(value, dict) or set(value) not in (expected, expected - {'n_layers', 'vocab_size'}):
         raise ValueError('Byte-LM model_shape has missing or unknown dimensions')
     return ByteLanguageModelConfig(**value)

@@ -738,9 +738,13 @@ def ridge_fit_multi_binding(
     """Lane apple-fast-meta (MOJOLEARN_MULTIOUT_RIDGE): ridge on every column
     of Y (n_rows x n_targets, row-major) in one program; coef is n_targets x
     n_features, ymean the n_targets column means. params: n_rows,
-    n_features, n_targets, alpha, center_y (1 subtracts the column means)."""
-    if len(params) != 5:
-        raise Error("ridge_fit_multi: params must contain n_rows, n_features, n_targets, alpha, center_y")
+    n_features, n_targets, alpha, center_y (1 subtracts the column means),
+    and optionally xmean_addr, icpt_addr: then icpt[j] = ymean[j] - xmean .
+    coef[j, :] (binary64 products and sum, ascending features; lane
+    pyglue-numeric: a Python fsum per target)."""
+    if len(params) != 5 and len(params) != 7:
+        raise Error("ridge_fit_multi: params must contain n_rows, n_features, n_targets, alpha, center_y"
+                    " (, xmean_addr, icpt_addr)")
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
     var wp = _f32_ptr(Int(py=coef_addr))
@@ -754,6 +758,14 @@ def ridge_fit_multi_binding(
         var ctx = process_ctx[_DEVCTX_SLOT]()
         ridge_fit_multi_host(ctx, xp, yp, wp, mp, nr, nf, nt, alpha, center)
         ctx.synchronize()
+    if len(params) == 7:
+        var xm = _f32_ptr(Int(py=params[5]))
+        var ic = _f32_ptr(Int(py=params[6]))
+        for j in range(nt):
+            var dot = Float64(0)
+            for c in range(nf):
+                dot += Float64(xm[c]) * Float64(wp[j * nf + c])
+            ic[j] = Float32(Float64(mp[j]) - dot)
     return PythonObject(0)
 
 
@@ -1050,11 +1062,15 @@ def kde_score_samples_binding(
     n_query. Added 2026-08-23 by the identity lane on the kde lane's
     hand-off (kde/README.md).
     """
-    if len(params) != 5:
+    if len(params) != 5 and len(params) != 6:
         raise Error(
-            "kde_score_samples: params must contain 5 values, got "
+            "kde_score_samples: params must contain 5 or 6 values, got "
             + String(len(params))
         )
+    if len(params) == 6 and Int(py=params[5]) != 0:
+        # the sum folds on the device in `kde_score_samples_resident` (the
+        # route KernelDensity takes wherever `kde_fit_prepare` exists)
+        raise Error("kde_score_samples: want_total is served by kde_score_samples_resident on this binding")
     var tp = _f32_ptr(Int(py=train_addr))
     var qp = _f32_ptr(Int(py=query_addr))
     var op = _f32_ptr(Int(py=out_addr))
@@ -1137,13 +1153,16 @@ def kde_score_samples_resident_binding(
     metric: PythonObject,
 ) raises -> PythonObject:
     """`kde_score_samples` over a resident fit set (DEVIATION 3003).
-    `params`: [n_query, n_features, bandwidth]. Writes `n_query` float32
-    to `out_addr`; returns n_query."""
-    if len(params) != 3:
+    `params`: [n_query, n_features, bandwidth(, want_total)]. Writes
+    `n_query` float32 to `out_addr`; returns n_query, or with want_total the
+    scores' fixed-order float32 sum (on the device, `device_sum_f32_fixed`;
+    lane pyglue-numeric: KernelDensity.score summed them on the host)."""
+    if len(params) != 3 and len(params) != 4:
         raise Error(
-            "kde_score_samples_resident: params must contain 3 values, got "
+            "kde_score_samples_resident: params must contain 3 or 4 values, got "
             + String(len(params))
         )
+    var want_total = len(params) == 4 and Int(py=params[3]) != 0
     var h = Int(py=handle)
     var qp = _f32_ptr(Int(py=query_addr))
     var op = _f32_ptr(Int(py=out_addr))
@@ -1152,8 +1171,13 @@ def kde_score_samples_resident_binding(
     var bandwidth = Float32(Float64(py=params[2]))
     var kname = String(py=kernel)
     var mname = String(py=metric)
+    var total = Float32(0)
     with GILReleased(Python()):
-        kde_score_samples_resident(h, qp, n_query, n_features, bandwidth, kname, mname, op)
+        total = kde_score_samples_resident(
+            h, qp, n_query, n_features, bandwidth, kname, mname, op, want_total=want_total,
+        )
+    if want_total:
+        return PythonObject(Float64(total))
     return PythonObject(n_query)
 
 

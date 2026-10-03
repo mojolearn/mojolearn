@@ -150,11 +150,21 @@ def cd_fit_binding(
         6  tol                (float)
         7  shuffle            (0/1; 1 is REFUSED BY NAME, as on the device)
         8  has_sample_weight  (0/1; 1 is REFUSED BY NAME, as on the device)
+        9  row_major          (0/1, optional): `x_addr` is C-ORDER; the GPU
+                              binding transposes it on the device, this one
+                              reads it into the same column-major words
+                              before the oracle (the refcol host smoke at
+                              811275d5b refused every Lasso/ElasticNet fit
+                              here: Python passes 10 values since
+                              lane/gap-nv-classical2)
     """
-    if len(params) != 9:
+    if len(params) != 9 and len(params) != 10:
         raise Error(
-            "cd_fit: params must contain 9 values, got " + String(len(params))
+            "cd_fit: params must contain 9 or 10 values, got " + String(len(params))
         )
+    var row_major = False
+    if len(params) == 10:
+        row_major = _index(params[9]) != 0
     var x_address = _index(x_addr)
     var y_address = _index(y_addr)
     var cp = f32_ptr(_index(coef_addr))
@@ -216,6 +226,14 @@ def cd_fit_binding(
         if tol != tol:
             raise Error("Parameter tol: must not be NaN")
         var x = read_f32(x_address, n_rows * n_cols)
+        if row_major:
+            # C-order in, the oracle's column-major layout out: a copy of
+            # the same float32 words, no arithmetic.
+            var xc = x.copy()
+            for i in range(n_rows):
+                for j in range(n_cols):
+                    xc[j * n_rows + i] = x[i * n_cols + j]
+            x = xc^
         var y = read_f32(y_address, n_rows)
         # THE ONE CALL THAT COMPUTES ANYTHING. `coef` starts at zero inside
         # the oracle, as `cd_fit_host` zeroes it on the device.
