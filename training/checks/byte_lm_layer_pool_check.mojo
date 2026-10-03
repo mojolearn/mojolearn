@@ -8,7 +8,7 @@ from training.byte_lm import ByteTrainer, _pack_block
 from training.byte_lm_layer_pool import ByteLayerPool
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_parallel import _ordered_add_kernel
-from training.checks.optimizer_oracle import OptimizerConfig, OPT_ADAMW
+from training.checks.optimizer_contract import OptimizerConfig, OPT_ADAMW
 from training.checks.train_loop import _upload, _zeros, _copy_into, download_f32
 from transformer.impl.llama.modeling_llama import llama_decoder_layer_forward
 from transformer.checks.transformer_backward import llama_decoder_layer_backward_device

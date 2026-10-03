@@ -1,0 +1,5 @@
+CMD lane/apple-fast-trees-depthwise tdw-cat-scan AFT_OUT=$HOME/aft-ab/tdw-cat-scan bash tools/aft_ab.sh gbdt gbdt-categorical taxi 2 "" "-D MOJOLEARN_GBDT_CTR_FAST_SCAN=1"
+CMD lane/apple-fast-trees-depthwise tdw-cat-freq AFT_OUT=$HOME/aft-ab/tdw-cat-freq bash tools/aft_ab.sh gbdt gbdt-categorical taxi 2 "" "-D MOJOLEARN_GBDT_CTR_FAST_FREQ=1"
+CMD lane/apple-fast-trees-depthwise tdw-cat-both AFT_OUT=$HOME/aft-ab/tdw-cat-both bash tools/aft_ab.sh gbdt gbdt-categorical taxi 2 "" "-D MOJOLEARN_GBDT_CTR_FAST_SCAN=1 -D MOJOLEARN_GBDT_CTR_FAST_FREQ=1"
+CMD lane/apple-fast-trees-depthwise tdw-cat-permbatch AFT_OUT=$HOME/aft-ab/tdw-cat-permbatch bash tools/aft_ab.sh gbdt gbdt-categorical taxi 2 "" "-D MOJOLEARN_GBDT_CTR_PERM_BATCH=1"
+CMD lane/apple-fast-trees-depthwise tdw-cat-permptrs AFT_OUT=$HOME/aft-ab/tdw-cat-permptrs bash tools/aft_ab.sh gbdt gbdt-categorical taxi 2 "" "-D MOJOLEARN_GBDT_CTR_PERM_PTRS=1"

@@ -17,6 +17,7 @@ ascending and divided by k. Without an intercept nothing is centered.
 """
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, i2f, fill, cholesky, chol_solve, row_dot, par_rows
 from x_linear.ridge import chol_trusted, ridge_ff_unit, ridge_ff_units, ridge_ff_solve
+from x_linear.tops import FOLD_BLOCK
 
 
 @always_inline
@@ -114,23 +115,59 @@ def kf_pred(x: FP, i: Int, d: Int, w: FP, b: Float32) -> Float32:
     return fa(row_dot(x, i, d, w, 0), b)
 
 
-def kf_score(y: FP, p: FP, s: Int, e: Int) -> Float32:
-    """r2_score of p[0, e - s) against y[s, e) (their force_finite: a zero
-    total sum of squares scores 1 for a perfect fit, else 0)."""
+# the held-out r2 in the blocked order (cgr-linear): FOLD_BLOCK rows of the
+# held-out fold from zero, the block partials folded ascending; the device
+# runs a thread per (alpha, block), then a thread per alpha
+@always_inline
+def kf_blocks(s: Int, e: Int) -> Int:
+    return (e - s + FOLD_BLOCK - 1) // FOLD_BLOCK
+
+
+@always_inline
+def kf_ysum_part(y: FP, s: Int, e: Int, b: Int) -> Float32:
+    var lo = s + b * FOLD_BLOCK
     var acc = Float32(0)
-    for i in range(s, e):
+    for i in range(lo, min(lo + FOLD_BLOCK, e)):
         acc = fa(acc, ld(y, i))
-    var mt = fd(acc, i2f(e - s))
+    return acc
+
+
+@always_inline
+def kf_sq_part(y: FP, p: FP, s: Int, e: Int, mt: Float32, b: Int) -> Tuple[Float32, Float32]:
+    """(sum (y - p)^2, sum (y - mt)^2) over block b of [s, e) from zero."""
+    var lo = s + b * FOLD_BLOCK
     var ssr = Float32(0)
     var sst = Float32(0)
-    for i in range(s, e):
+    for i in range(lo, min(lo + FOLD_BLOCK, e)):
         var r = fs(ld(y, i), ld(p, i - s))
         ssr = fmad(r, r, ssr)
         var c = fs(ld(y, i), mt)
         sst = fmad(c, c, sst)
+    return (ssr, sst)
+
+
+@always_inline
+def kf_score_final(ssr: Float32, sst: Float32) -> Float32:
     if sst == 0:
         return Float32(1) if ssr == 0 else Float32(0)
     return fs(Float32(1), fd(ssr, sst))
+
+
+def kf_score(y: FP, p: FP, s: Int, e: Int) -> Float32:
+    """r2_score of p[0, e - s) against y[s, e) (their force_finite: a zero
+    total sum of squares scores 1 for a perfect fit, else 0), blocked."""
+    var nb = kf_blocks(s, e)
+    var acc = Float32(0)
+    for b in range(nb):
+        acc = fa(acc, kf_ysum_part(y, s, e, b))
+    var mt = fd(acc, i2f(e - s))
+    var ssr = Float32(0)
+    var sst = Float32(0)
+    for b in range(nb):
+        var q = kf_sq_part(y, p, s, e, mt, b)
+        ssr = fa(ssr, q[0])
+        sst = fa(sst, q[1])
+    return kf_score_final(ssr, sst)
 
 
 def kf_fw_words(n: Int, d: Int, k: Int, na: Int) -> Int:

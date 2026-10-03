@@ -33,7 +33,7 @@ import os
 from . import _portable_math as math
 from . import _mojolearn_rf, _mojolearn_x_trees  # noqa: F401  the bindings this door resolves; name NO other (lane_select counts > 3 as a registry)
 from ._array import Array
-from ._buffer import _materialize, addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_f64_c, as_i32_c, empty, full, zeros
+from ._buffer import _materialize, addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_f64_c, as_i32_c, empty, frombytes, full, zeros
 from ._labels import decode_labels, encode_labels, is_bool
 from ._mode import NumericModeMixin
 from ._forest_protocol import (forest_estimator, _forest_fit_arrays, _forest_fit_function,
@@ -442,6 +442,15 @@ def _trees_member_session(member, X, row_major, x_finite=False, default="0"):
                                     default=default)
 
 
+def _class_major_fill(inits, n):
+    """K * n float64, class c's block all `inits[c]` (class-major), built
+    from one native fill per class, not a Python loop over the rows."""
+    if len(inits) == 1:
+        return full((n,), inits[0], "<f8")
+    raw = b"".join(full((n,), float(v), "<f8").tobytes() for v in inits)
+    return frombytes(raw, "<f8", (len(inits) * n,))
+
+
 def _trees_arange(n):
     return Array.from_list(list(range(n)), "<i4")
 
@@ -674,17 +683,20 @@ class _BaggingBase(_TreesEnsembleBase):
             self.estimators_.append(est)
             self.estimators_features_.append(cols)
             if self.oob_score:
-                self._oob_rows.append(self._oob_of(rows, n))
+                self._oob_rows.append(self._oob_of(rows, n, self))
         self.n_features_in_ = d
         return self
 
     @staticmethod
-    def _oob_of(rows, n):
-        """The rows a member never drew, ascending (sklearn `indices_to_mask` negated)."""
-        seen = [False] * n
-        for r in rows.tolist():
-            seen[r] = True
-        return Array.from_list([i for i in range(n) if not seen[i]], "<i4")
+    def _oob_of(rows, n, est=None):
+        """The rows a member never drew, ascending (sklearn `indices_to_mask`
+        negated): one native pass (`x_trees_unseen_rows`, on the device in a
+        GPU build)."""
+        r = rows if isinstance(rows, Array) else Array.from_list(list(rows), "<i4")
+        out = empty((max(1, n),), "<i4")
+        k = int(_trees_x_bind(est).x_trees_unseen_rows(addr_ro(r, name="rows"), addr(out, name="oob"),
+                                                       [len(r), n]))
+        return out[:k]
 
     def _oob_outputs(self, Xa, k, member_out):
         """(sums n x k float64, per-row member count): each member's output on
@@ -760,9 +772,10 @@ class BaggingClassifier(_BaggingBase):
         acc, _ = self._oob_outputs(Xa, k, self._member_proba)
         self._bind().x_trees_normalize_rows(addr(acc, name="oob"), [n, k])
         self.oob_decision_function_ = acc.reshape((n, k))
-        pred = self._argmax(acc, n, k).tolist()
-        y = codes.tolist()
-        self.oob_score_ = sum(1 for i in range(n) if pred[i] == y[i]) / n
+        # the per-row match is the native elementwise compare (two int32
+        # Arrays), not a Python loop over the rows
+        hits = self._argmax(acc, n, k) == as_i32_c(codes, ndim=1, name="codes")[0]
+        self.oob_score_ = hits.sum() / n
 
     def predict_proba(self, X):
         Xa = self._check_X(X)
@@ -1197,13 +1210,12 @@ class _DARTBase(_TreesEnsembleBase):
         start = it - it % freq
         if getattr(self, "_bag_at", None) is not None and self._bag_at[0] == start:
             return self._bag_at[1]
-        u = empty((n,), "<f8")
-        self._bind().x_trees_uniform(addr(u, name="u"), [n, _trees_seed(self.bagging_seed), start])
-        uv = u.tolist()
-        rows = [i for i in range(n) if uv[i] < frac]
-        if not rows:
-            rows = [min(range(n), key=lambda i: (uv[i], i))]
-        self._bag_at = (start, Array.from_list(rows, "<i4"))
+        # the rows whose draw is below frac (none: the smallest draw's row),
+        # drawn and compacted natively (`x_trees_bag_rows`, on the device in
+        # a GPU build); the draws are `x_trees_uniform`'s stream
+        out = empty((max(1, n),), "<i4")
+        k = int(self._bind().x_trees_bag_rows(addr(out, name="bag"), [n, _trees_seed(self.bagging_seed), start, frac]))
+        self._bag_at = (start, out[:k])
         return self._bag_at[1]
 
     def _cols(self, d, t):
@@ -1236,8 +1248,7 @@ class _DARTBase(_TreesEnsembleBase):
                 counts[int(v)] += 1
             inits = [float(b.x_trees_log64(max(1e-15, cnt / n))) for cnt in counts]
         self.init_score_ = inits[0] if K == 1 else inits
-        score = (full((n,), inits[0], "<f8") if K == 1
-                 else Array.from_list([v for v in inits for _ in range(n)], "<f8"))
+        score = _class_major_fill(inits, n)
         g, h, target = empty((K * n,), "<f8"), empty((K * n,), "<f8"), empty((K * n,), "<f4")
         lr = float(self.learning_rate)
         l1, mds, lam = float(self.reg_alpha), float(self.max_delta_step), float(self.reg_lambda)
@@ -1481,17 +1492,19 @@ class _DARTBase(_TreesEnsembleBase):
             raise ValueError(f"X has {Xa.shape[1]} features, fit saw {self.n_features_in_}")
         n, K = Xa.shape[0], int(getattr(self, "n_classes_", 1))
         inits = [self.init_score_] if K == 1 else list(self.init_score_)
-        score = Array.from_list([v for v in inits for _ in range(n)], "<f8")
+        score = _class_major_fill(inits, n)
         for j, (tree, values, coef) in enumerate(zip(self.trees_, self.tree_values_, self.tree_coefs_)):
             self._add(score, self._tree_nodes(tree, Xa), values, coef, j % K)
         return score
 
     def _raw_rows(self, X):
         """The raw scores as (n, K) row-major, K >= 2."""
-        raw = self._raw(X).tolist()
+        raw = self._raw(X)
         K = self.n_classes_
         n = len(raw) // K
-        return Array.from_list([raw[c * n + i] for i in range(n) for c in range(K)], "<f8").reshape((n, K))
+        out = empty((n * K,), "<f8")
+        self._bind().x_trees_transpose_f64(addr_ro(raw, name="raw"), addr(out, name="raw rows"), [K, n])
+        return out.reshape((n, K))
 
 
 class DARTRegressor(_DARTBase):
@@ -2412,21 +2425,24 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         n, k = Xa.shape[0], len(self.classes_)
         S = self._scores(e, Xa)
         b = self._bind()
-        cols = []
+        # class-major (k, n): calibrator j writes row j in place (binary:
+        # the one calibrator writes row 1, the positive class)
+        cm = empty((k * n,), "<f8")
         for j, (kind, par) in enumerate(cals):
             f = self._column64(S, j)
-            out = empty((n,), "<f8")
+            dst = addr(cm, name="p") + 8 * (j + (1 if k == 2 else 0)) * n
             if kind == "sigmoid":
-                b.x_trees_platt_apply(addr_ro(f, name="f"), addr(out, name="p"), [n, par[0], par[1]])
+                b.x_trees_platt_apply(addr_ro(f, name="f"), dst, [n, par[0], par[1]])
             else:
                 kx, ky, m = par
                 b.x_trees_isotonic_predict(addr_ro(kx, name="kx"), addr_ro(ky, name="ky"), addr_ro(f, name="t"),
-                                           addr(out, name="p"), [m, n])
-            cols.append(out.tolist())
+                                           dst, [m, n])
+        acc = empty((n * k,), "<f8")
+        b.x_trees_transpose_f64(addr_ro(cm, name="p"), addr(acc, name="proba"), [k, n])
         if k == 2:
-            p = cols[0]
-            return Array.from_list([v for x in p for v in (1.0 - x, x)], "<f8")
-        acc = Array.from_list([cols[j][i] for i in range(n) for j in range(k)], "<f8")
+            # (1 - p, p) rows: the complement into the even cells
+            b.x_trees_complement_pairs(addr(acc, name="proba"), [n])
+            return acc
         b.x_trees_normalize_rows(addr(acc, name="proba"), [n, k])
         return acc
 

@@ -193,7 +193,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
 
-from gemm.checks.gemm_oracle import CONTRACT_MAX_LEAVES
+from gemm.contract import CONTRACT_MAX_LEAVES
 from gemm.checks.gemm_identical import (
     FLAT_TPB,
     PLAN_FLAT,

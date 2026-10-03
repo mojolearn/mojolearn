@@ -15,9 +15,9 @@ halves are public there: `fit` factors a GIVEN matrix (an inference answer,
 not a trained model, so `_CPU_FIT_IS_INFERENCE` exempts it from the CPU
 training refusal) and `solve` answers from a factor, including one written
 by `save` on a GPU box and read back by `load` (or `mojolearn.host_model`).
-`HostCholesky` is the same class bound to the host binding on a box that
-also has a GPU, which is how a GPU factor and a CPU solve meet in one
-process.
+`HostCholesky` (`_classical_host`, the CPU side) is the same class bound
+to the host binding on a box that also has a GPU, which is how a GPU factor
+and a CPU solve meet in one process.
 
 WHAT CROSSES. The matrix goes down as `n * n` float32 row-major and the
 factor comes back the same way, lower triangle `L` with the strict upper
@@ -61,7 +61,6 @@ _CHOLESKY_FORMAT = "mojolearn-cholesky-1"
 #: route because its host binding ships; the gp host binding does not.
 _GPU_BINDING = "_mojolearn_gp"
 _CPU_BINDING = "_mojolearn_linalg"
-_HOST_BASENAME = "_mojolearn_linalg_host"
 
 
 class Cholesky(NumericModeMixin):
@@ -301,29 +300,4 @@ class Cholesky(NumericModeMixin):
         return obj
 
 
-class HostCholesky(Cholesky):
-    """`Cholesky` bound to `_mojolearn_linalg_host` on any box, a GPU box
-    included, so a GPU factor and a CPU solve can be compared in one
-    process (`mojolearn.host_model` returns this for a saved factor).
-    IDENTICAL only."""
-
-    _HOST_INFERENCE_ONLY = True
-
-    def _door(self):
-        mode = getattr(self, "numeric_mode", None)
-        if mode is not None and mode != "identical":
-            raise ValueError(
-                f"mojolearn: HostCholesky runs IDENTICAL only on the host; this "
-                f"factor was saved {mode!r}"
-            )
-        return _backend.load_host_module(_HOST_BASENAME), "linalg_numeric_mode"
-
-    def _host_refusals(self):
-        """Nothing beyond `load`'s own checks: the host binding carries all
-        three door names."""
-
-    def vendor_used(self):
-        return "cpu"
-
-
-__all__ = ["Cholesky", "HostCholesky"]
+__all__ = ["Cholesky"]

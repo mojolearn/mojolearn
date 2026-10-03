@@ -20,6 +20,7 @@ from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_rnn')
 
 from . import _backend
+from ._labels import unique_inverse
 
 _BINDING = "_mojolearn_x_sequence"
 
@@ -246,7 +247,10 @@ class _RecurrentClassifier(_RecurrentBase):
 
     def fit(self, X, y):
         y = np.asarray(y)
-        self.classes_, inv = np.unique(y, return_inverse=True)
+        # sorted classes and inverse codes on the device (_labels.unique_inverse)
+        cls, inv = unique_inverse(y)
+        self.classes_ = np.asarray(cls).astype(y.dtype, copy=False) if y.dtype.kind in "biuf" else np.asarray(cls)
+        inv = np.asarray(inv)
         if len(self.classes_) < 2:
             raise ValueError("classification needs at least two classes")
         self.n_outputs_ = int(len(self.classes_))

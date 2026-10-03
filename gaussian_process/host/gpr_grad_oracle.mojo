@@ -11,7 +11,7 @@ CPU verifier of kernel hyperparameter optimization, 2026-09-15).
                rule's order (left gradients by the right value, right
                gradients by the left value, then the value product)
     L, alpha_  `chol_host_potrf`, `chol_host_solve`
-    lml        the factor's logdet, `y^T alpha_` i ascending, `gpr_host_lml`
+    lml        the factor's logdet, `y^T alpha_` in GPC_FOLD blocks, `gpr_host_lml`
     K^-1       `chol_host_solve` against the identity, n right-hand sides
     grad       `gp_theta.mojo::gp_lml_gradient_fold`, the one shared spelling
 
@@ -19,6 +19,7 @@ The distance under a length-scale gradient is `gpr_oracle.mojo`'s
 `_scaled_sqdist`, so the host sabotage define reaches it with the kernel.
 """
 
+from gaussian_process.gpc_items import gpr_ydot_host
 from checks.numerics import (
     ftz,
     identical_div,
@@ -216,10 +217,12 @@ def gpr_host_lml_grad(
             Float32(0.0), List[Float32](length=n_free, fill=Float32(0.0)), factor.info
         )
     var dual = chol_host_solve(factor, y, 1)
-    var acc = Float32(0.0)
-    for i in range(n):
-        acc = ftz(identical_mul_add(ftz(y[i]), ftz(dual[i]), acc))
-    var lml = gpr_host_lml(ftz(acc), factor.logdet, n)
+    var ydot = gpr_ydot_host(
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(y.unsafe_ptr())),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(dual.unsafe_ptr())),
+        n,
+    )
+    var lml = gpr_host_lml(ydot, factor.logdet, n)
     var eye = List[Float32](length=cells, fill=Float32(0.0))
     for i in range(n):
         eye[i * n + i] = Float32(1.0)

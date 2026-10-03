@@ -14,10 +14,11 @@ from core.step_phase import STEP_PHASE_TIMERS
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.clip_multi_gpu import parallel_clip_grad_norm_host
 from training.estimator import (
-    identical_optimizer_step_host, identical_clip_grad_norm_host,
+    identical_optimizer_step_host, identical_optimizer_step_resident_host,
+    identical_clip_grad_norm_host,
     _offsets_from_ptr, _refuse_hyperparameters,
 )
-from training.checks.optimizer_oracle import OptimizerConfig, OPT_SGD, OPT_ADAM, OPT_ADAMW
+from training.checks.optimizer_contract import OptimizerConfig, OPT_SGD, OPT_ADAM, OPT_ADAMW
 
 
 @fieldwise_init
@@ -121,13 +122,34 @@ def parallel_optimizer_step_host(
         imm eps, imm weight_decay, imm momentum, imm dampening}:
         try:
             var first = sp[rank].first
+            var count = sp[rank].count
             var unused = List[Float32](length=3,fill=Float32(0))
-            _ = identical_optimizer_step_host(cp[rank],pp+first,gp+first,mp+first,vp+first,
+            # This rank's host thread drives its own device: the shard's
+            # moments go up, the resident step runs, the moments come down.
+            var m_state = cp[rank].enqueue_create_buffer[DType.float32](count)
+            var v_state = cp[rank].enqueue_create_buffer[DType.float32](count)
+            cp[rank].enqueue_copy(dst_buf=m_state,src_ptr=mp+first)
+            cp[rank].enqueue_copy(dst_buf=v_state,src_ptr=vp+first)
+            var p_buf = cp[rank].enqueue_create_buffer[DType.float32](count)
+            var g_buf = cp[rank].enqueue_create_buffer[DType.float32](count)
+            var p_stage = cp[rank].enqueue_create_host_buffer[DType.float32](count)
+            var g_stage = cp[rank].enqueue_create_host_buffer[DType.float32](count)
+            _ = identical_optimizer_step_resident_host(cp[rank],pp+first,gp+first,
+                m_state,v_state,p_buf,g_buf,p_stage,g_stage,
                 rebind[MutPointer[Int32, MutUntrackedOrigin]](sp[rank].offsets.unsafe_ptr()),
                 rebind[MutPointer[Int32, MutUntrackedOrigin]](sp[rank].flags.unsafe_ptr()),
                 rebind[MutPointer[Float32, MutUntrackedOrigin]](unused.unsafe_ptr()),
                 len(sp[rank].flags),kind,t,nesterov,lr,beta1,beta2,eps,
                 weight_decay,momentum,dampening,Float32(0))
+            cp[rank].enqueue_copy(dst_ptr=mp+first,src_buf=m_state)
+            cp[rank].enqueue_copy(dst_ptr=vp+first,src_buf=v_state)
+            cp[rank].synchronize()
+            _ = m_state^
+            _ = v_state^
+            _ = p_buf^
+            _ = g_buf^
+            _ = p_stage^
+            _ = g_stage^
             _ = unused^
         except:
             fp[rank] = 1
