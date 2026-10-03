@@ -63,6 +63,7 @@ THE SABOTAGE. This file carries no arm of its own. Under
 """
 
 from std.memory import bitcast
+from cholesky.logdet_fold import logdet_serial
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -450,11 +451,13 @@ def chol_host_factor_lower(
         for i in range(n):
             for j in range(i + 1, n):
                 a[i * n + j] = Float32(0.0)
-        # copy_vector_from_matrix_diagonal_kernel, then logdet_kernel
-        var acc = Float32(0.0)
+        # copy_vector_from_matrix_diagonal_kernel, then the logdet order
+        # (logdet_part_kernel, logdet_kernel: cholesky/logdet_fold.mojo)
+        var dg = List[Float32](length=max(n, 1), fill=Float32(0.0))
         for j in range(n):
-            acc = ftz(acc + ftz(identical_log(ftz(a[j * n + j]))))
-        logdet = ftz(identical_mul(Float32(2.0), acc))
+            dg[j] = a[j * n + j]
+        logdet = logdet_serial(MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(dg.unsafe_ptr())), n)
+        _ = dg^
     return CholHostFactor(a^, n, info, logdet, nb, jitter)
 
 

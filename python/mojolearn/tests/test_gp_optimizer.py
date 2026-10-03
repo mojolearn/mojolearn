@@ -5,7 +5,7 @@ n_restarts_optimizer=k)` (2026-09-15). The reference is scikit-learn 1.9.0's
 `_gpr.py` (the log marginal likelihood and its gradient, the restarts) and
 `kernels.py` (theta, bounds, the gradient arms). The gradient is DEVIATION
 2880 (`gaussian_process/host/gp_theta.mojo`), the optimizer DEVIATION 2881
-(`python/mojolearn/_gp_optimizer.py`). On the GPU set it runs
+(`gaussian_process/gp_optim_items.mojo`, on the device). On the GPU set it runs
 `gaussian_process/estimator.mojo::gpr_lml_grad_host`; on a CPU-only install
 the gp host binding's `gpr_grad_oracle.mojo` (inside the reference context).
 
