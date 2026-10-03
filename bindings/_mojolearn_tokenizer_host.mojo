@@ -63,7 +63,7 @@ negative control; `tokenizer_host_sabotage()` reads True for either define.
 
 THE TRAINER ENTRIES (lane/bpe-builder-native, 2026-09-18). `bpe_train`
 runs `tokenizer/train/bpe_train.mojo::train_bpe` on documents passed like
-`bpe_encode_batch`'s (bytes back to back, int64 offsets) and returns an
+`bpe_encode_batch`'s (bytes back to back, int64 lengths) and returns an
 opaque `_BpeTrainedHandle`; `bpe_trained_sizes` and `bpe_trained_copy` read
 the vocabulary out. `BpeVocabularyTrainer` (backend "auto" or "mojo") calls
 them; `pixi run check-bpe-trainer` holds the trainer to the Python reference
@@ -320,9 +320,9 @@ def bpe_encode_batch_binding(
 ) raises -> PythonObject:
     """`BpeTokenizer.encode_batch` on the host: ONE crossing for many
     documents. `dims` is `[n_docs, n_bytes, out_cap, allow_endoftext]`.
-    Reads the concatenated `n_bytes` uint8 at `text_addr` and `n_docs + 1`
-    int64 offsets at `offsets_addr` (0 first, nondecreasing, `n_bytes`
-    last); document k is bytes [offsets[k], offsets[k + 1]). Each document
+    Reads the concatenated `n_bytes` uint8 at `text_addr` and the `n_docs`
+    int64 document LENGTHS at `offsets_addr` (summing to `n_bytes`; the
+    running offsets are taken here, lane/pyglue-text-io). Each document
     is encoded ALONE, by the same `encode_bytes` call `bpe_encode` makes on
     its own buffer, so its ids are those of `bpe_encode` on that document
     byte for byte. Writes every document's ids back to back as int32 at
@@ -504,9 +504,8 @@ def bpe_train_binding(
 
     `dims` is `[n_docs, n_bytes, vocab_size, min_frequency,
     break_ties_high]`. Reads the concatenated `n_bytes` uint8 at `text_addr`
-    and `n_docs + 1` int64 offsets at `offsets_addr` (0 first,
-    nondecreasing, `n_bytes` last); document k is bytes
-    [offsets[k], offsets[k + 1]), and each is pre-tokenized ALONE, exactly
+    and the `n_docs` int64 document LENGTHS at `offsets_addr` (summing to
+    `n_bytes`), and each document is pre-tokenized ALONE, exactly
     as `BpeVocabularyTrainer` hands them over. `break_ties_high` is the
     Python door's MOJOLEARN_BPE_TRAINER_SABOTAGE environment arm and must be
     False outside a negative control. Returns an opaque handle;
