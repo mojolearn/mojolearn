@@ -90,9 +90,10 @@ def svc_ovo_layout_host_binding(
 def svc_dual_gemv_host_binding(
     dual_addr: PythonObject, sv_addr: PythonObject, dims: PythonObject, out_addr: PythonObject,
 ) raises -> PythonObject:
-    """The CPU binding's `svc_dual_gemv`."""
+    """The CPU binding's `svc_dual_gemv` (dims [n_sv, d(, negate)])."""
     var n_sv = Int(py=dims[0])
     var d = Int(py=dims[1])
+    var neg = Int(py=dims[2]) if len(dims) > 2 else 0
     var oa = Int(py=out_addr)
     if n_sv < 0 or d < 0 or oa == 0:
         raise Error("svc_dual_gemv: bad dims or null output")
@@ -107,5 +108,6 @@ def svc_dual_gemv_host_binding(
         var dp = _F32P(unsafe_from_address=dl if n_sv > 0 else oa)
         var sp = _F32P(unsafe_from_address=sl if n_sv > 0 else oa)
         for j in range(d):
-            dst[j] = dual_gemv_column(dp, sp, n_sv, d, j)
+            var v = dual_gemv_column(dp, sp, n_sv, d, j)
+            dst[j] = -v if neg != 0 else v
     return PythonObject(d)
