@@ -40,6 +40,10 @@ which is what the gates and the card use.
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from bindings.hostptr import copy_f32
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from std.gpu import block_dim, block_idx, thread_idx
+from checks.numerics import NUMERIC_FAST
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import neural_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
@@ -66,6 +70,8 @@ from cholesky.checks.potrf import (
     chol_jitter_pinned,
     chol_logdet,
     chol_nb_for,
+    CHOL_FAST_NOSYNC,
+    chol_sym_rel_tol,
     chol_validate_jitter,
     chol_validate_matrix,
     chol_workspace_floats,
@@ -196,6 +202,120 @@ def cholesky_factor_host(
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
     return CholeskyFactor(l^, n, run.info, logdet, run.nb, jitter)
+
+
+# ---- lane/apple-fast-gap-linalg2 (2026-10-03): CHOL_FAST_DEVIO (default; _OFF reverts) ----
+#: FAST + Apple: `cholesky_factor_binding` without the host Lists and the
+#: host scans. Main's one-shot form copies the caller's n x n matrix into a
+#: List (read_f32), scans it twice on ONE host thread (finite, then the
+#: tiled symmetry test), copies the List into a staging buffer, and on the
+#: way out copies the device result into another staging buffer, then a
+#: List, then the caller's array: at n = 8192 that is five 256 MB host
+#: copies and two serial 64 M-cell scans around a ~200 ms factorization.
+#: Here the caller's matrix is copied once into the staging buffer, the
+#: finite and symmetry predicates run on the device (one thread per cell,
+#: the same predicate as `chol_validate_matrix`; a hit re-runs the host
+#: validator on the caller's matrix for the by-name error), and the factor
+#: comes back through one staging buffer straight into the caller's array.
+#: The factorization itself is `potrf_lower` unchanged: the same words.
+#: The FAST + Apple default since 2026-10-03 (M3 A/B, one run per arm:
+#: cholesky synthetic 435 -> 290 ms, residual the same 1.659e-07; tag
+#: gl2-chol-devio-synthetic). -D MOJOLEARN_CHOL_FAST_DEVIO_OFF restores
+#: main's host-List route (the A/B arm).
+comptime CHOL_FAST_DEVIO = (
+    _CTX_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_CHOL_FAST_DEVIO_OFF"]()
+)
+
+
+def chol_devio_check_kernel(a: MutPointer[Float32, MutAnyOrigin], bad: MutPointer[Int32, MutAnyOrigin], n: Int32, tol: Float32):
+    """Cell (i, j): non-finite, or (j < i) the relative symmetry test failed
+    -> bad[0] = 1."""
+    var nn = Int(n)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= nn * nn:
+        return
+    var i = t // nn
+    var j = t - i * nn
+    var v = a[t]
+    var fail = (v != v) or v > Float32(3.4028234663852886e38) or v < Float32(-3.4028234663852886e38)
+    if j < i and not fail:
+        var up = a[j * nn + i]
+        var d = abs(v - up)
+        var m = max(abs(v), abs(up))
+        fail = d > tol * m
+    if fail:
+        bad[0] = Int32(1)
+
+
+def cholesky_factor_devio(
+    ap: MutPointer[Float32, MutUntrackedOrigin],
+    lp: MutPointer[Float32, MutUntrackedOrigin],
+    sp: MutPointer[Float64, MutUntrackedOrigin],
+    n: Int,
+    jitter: Float32,
+) raises -> Int:
+    """`cholesky_factor_host` + the binding's copies, FAST IO (see above):
+    writes L into lp and info, nb, logdet, jitter into sp; returns info."""
+    if n <= 0:
+        raise Error("cholesky: the matrix must have a positive dimension, got n=" + String(n))
+    chol_validate_jitter(jitter)
+    var nb = chol_nb_for(n, CHOL_NB_PINNED)
+    var cells = n * n
+    var ctx = _binding_ctx()
+    var host = ctx.enqueue_create_host_buffer[DType.float32](cells)
+    var da = ctx.enqueue_create_buffer[DType.float32](cells)
+    var dbad = ctx.enqueue_create_buffer[DType.int32](1)
+    var hbad = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.synchronize()
+    copy_f32(ap, host.unsafe_ptr(), cells)
+    hbad.unsafe_ptr()[0] = Int32(0)
+    ctx.enqueue_copy(dst_buf=dbad, src_ptr=hbad.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=da, src_ptr=host.unsafe_ptr())
+    ctx.enqueue_function[chol_devio_check_kernel](
+        da.unsafe_ptr(), dbad.unsafe_ptr(), Int32(n), chol_sym_rel_tol(),
+        grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=hbad.unsafe_ptr(), src_buf=dbad)
+    var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb))
+    var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
+    ctx.synchronize()
+    if hbad.unsafe_ptr()[0] != Int32(0):
+        # the by-name refusal: the host validator on the caller's matrix
+        var a = List[Float32](unsafe_uninit_length=cells)
+        copy_f32(ap, a.unsafe_ptr(), cells)
+        chol_validate_matrix(a, n, "the matrix")
+    var trace = IdentityTrace()
+    add_jitter(ctx, da, n, jitter, CHOL_ELEM_TPB)
+    var run = potrf_lower(
+        ctx, da, ws, n, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB, defer_ok=True
+    )
+    comptime if CHOL_FAST_NOSYNC:
+        if run.info != 0:
+            # the deferred route left a full (not partial) sweep: redo it
+            # with the per-panel reads for LAPACK's partial factor
+            ctx.enqueue_copy(dst_buf=da, src_ptr=host.unsafe_ptr())
+            add_jitter(ctx, da, n, jitter, CHOL_ELEM_TPB)
+            run = potrf_lower(ctx, da, ws, n, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
+    var logdet = Float32(0.0)
+    if run.info == 0:
+        logdet = chol_logdet(ctx, da, dwork, n, trace, CHOL_ELEM_TPB)
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=da)
+    ctx.synchronize()
+    copy_f32(host.unsafe_ptr(), lp, cells)
+    sp.unsafe_store(0, Float64(run.info))
+    sp.unsafe_store(1, Float64(run.nb))
+    sp.unsafe_store(2, Float64(logdet))
+    sp.unsafe_store(3, Float64(jitter))
+    _ = host^
+    _ = da^
+    _ = dbad^
+    _ = hbad^
+    _ = ws^
+    _ = dwork^
+    _ = ctx^
+    return run.info
 
 
 def cholesky_solve_host(

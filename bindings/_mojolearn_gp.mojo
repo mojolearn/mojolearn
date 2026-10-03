@@ -134,6 +134,8 @@ from gaussian_process.classifier import (
 # linked into this binary because the GP factors through it; exposing the
 # one-shot host entries here adds no kernel and no second build.
 from cholesky.estimator import (
+    CHOL_FAST_DEVIO,
+    cholesky_factor_devio,
     CholeskyFactor,
     cholesky_factor_host,
     cholesky_profile_jitter,
@@ -888,8 +890,14 @@ def cholesky_factor_binding(
     var sp = _f64_ptr(Int(py=addrs[2]))
     var n = Int(py=params[0])
     var jitter = Float32(Float64(py=params[1]))
-    var a = read_f32(Int(ap), max(0, n * n))
     var info = 0
+    comptime if CHOL_FAST_DEVIO:
+        # CHOL_FAST_DEVIO (FAST + Apple default, cholesky/estimator.mojo;
+        # -D MOJOLEARN_CHOL_FAST_DEVIO_OFF reverts)
+        with GILReleased(Python()):
+            info = cholesky_factor_devio(ap, lp, sp, n, jitter)
+        return PythonObject(info)
+    var a = read_f32(Int(ap), max(0, n * n))
     with GILReleased(Python()):
         info = _cholesky_factor_run(a, n, jitter, lp, sp)
     return PythonObject(info)
