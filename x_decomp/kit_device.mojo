@@ -564,7 +564,8 @@ def fast_mcd_dev(
     same C-steps, the same draws and orders."""
     # FAST on Apple by default (-D MOJOLEARN_MCD_DEVICE_CSTEPS_OFF reverts):
     # every candidate's C-steps together on the device (x_decomp/mcd_fast.mojo,
-    # lane/apple-fast-robust; M2 A/B robust-ee-taxi-x 64,578 -> 267.5 ms)
+    # lane/apple-fast-robust; M3 A/B min-cov-det taxi 79,925 -> 215 ms,
+    # M2 robust-ee-taxi-x 64,578 -> 267.5 ms)
     comptime if MCD_DEVICE_CSTEPS:
         if fast_mcd_fast(X, p, loc_out, cov_out, sup_out, dist_out):
             return

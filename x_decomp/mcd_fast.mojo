@@ -3,8 +3,9 @@
 """MinCovDet's fast_mcd with every C-step of every candidate on the device
 (lane/apple-fast-robust, 2026-10-02; FAST + Apple only, ON by default,
 `-D MOJOLEARN_MCD_DEVICE_CSTEPS_OFF` reverts to the per-candidate kit route).
-M2 A/B robust-ee-taxi-x: elliptic-envelope taxi 64,578 -> 267.5 ms,
-fraction_flagged .1024 -> .1027 (contamination target .1).
+M3 A/B: min-cov-det taxi 79,925 -> 215 ms; M2 A/B robust-ee-taxi-x:
+elliptic-envelope taxi 64,578 -> 267.5 ms, fraction_flagged .1024 -> .1027
+(contamination target .1).
 
 x_decomp/kit_device.mojo's `fast_mcd_dev` runs x_decomp/mcd.mojo's search
 one candidate and one C-step at a time: each C-step is ten to fifteen kit
