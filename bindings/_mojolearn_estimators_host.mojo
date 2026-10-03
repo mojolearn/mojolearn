@@ -108,6 +108,7 @@ from glm.host.glm_oracle import host_ols_fit, host_ridge_fit
 from glm.host.qn_oracle import QN_ORACLE_HOST_SABOTAGE, host_qn_fit
 from core.host_predict_threads import HostF32Ptr, host_list_ptr, host_predict_task_count
 from kde.host.kde_oracle import KDE_ORACLE_HOST_SABOTAGE, oracle_score_samples_into
+from core.device_fold import host_sum_f32_fixed
 from kde.impl.neighbors.kernel_density import (
     kde_fit_validate,
     kde_validate_data_ptr,
@@ -216,11 +217,14 @@ def kde_score_samples_binding(
     `kernel` and `metric` are the sklearn/cuML names; every unimplemented
     one is refused BY NAME by `kernel_from_name` and `metric_from_name`, as
     on the device. Returns n_query."""
-    if len(params) != 5:
+    if len(params) != 5 and len(params) != 6:
         raise Error(
-            "kde_score_samples: params must contain 5 values, got "
+            "kde_score_samples: params must contain 5 or 6 values, got "
             + String(len(params))
         )
+    # params[5] want_total: return the scores' `host_sum_f32_fixed` (the
+    # GPU binding's device fold order; lane pyglue-numeric)
+    var want_total = len(params) == 6 and _index(params[5]) != 0
     var tp = f32_ptr(_index(train_addr))
     var qp = f32_ptr(_index(query_addr))
     var op = f32_ptr(_index(out_addr))
@@ -255,6 +259,11 @@ def kde_score_samples_binding(
             tp, qp, weights, has_weights, n_train, n_query, n_features,
             bandwidth, k, m, op, host_predict_task_count(n_query), Float32(2.0),
         )
+    if want_total:
+        var scores = List[Float32](capacity=n_query)
+        for i in range(n_query):
+            scores.append(op[i])
+        return PythonObject(Float64(host_sum_f32_fixed(scores, n_query)))
     return PythonObject(n_query)
 
 

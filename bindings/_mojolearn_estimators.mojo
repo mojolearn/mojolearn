@@ -1111,11 +1111,15 @@ def kde_score_samples_binding(
     n_query. Added 2026-08-23 by the identity lane on the kde lane's
     hand-off (kde/README.md).
     """
-    if len(params) != 5:
+    if len(params) != 5 and len(params) != 6:
         raise Error(
-            "kde_score_samples: params must contain 5 values, got "
+            "kde_score_samples: params must contain 5 or 6 values, got "
             + String(len(params))
         )
+    if len(params) == 6 and Int(py=params[5]) != 0:
+        # the sum folds on the device in `kde_score_samples_resident` (the
+        # route KernelDensity takes wherever `kde_fit_prepare` exists)
+        raise Error("kde_score_samples: want_total is served by kde_score_samples_resident on this binding")
     var tp = _f32_ptr(Int(py=train_addr))
     var qp = _f32_ptr(Int(py=query_addr))
     var op = _f32_ptr(Int(py=out_addr))
@@ -1198,13 +1202,16 @@ def kde_score_samples_resident_binding(
     metric: PythonObject,
 ) raises -> PythonObject:
     """`kde_score_samples` over a resident fit set (DEVIATION 3003).
-    `params`: [n_query, n_features, bandwidth]. Writes `n_query` float32
-    to `out_addr`; returns n_query."""
-    if len(params) != 3:
+    `params`: [n_query, n_features, bandwidth(, want_total)]. Writes
+    `n_query` float32 to `out_addr`; returns n_query, or with want_total the
+    scores' fixed-order float32 sum (on the device, `device_sum_f32_fixed`;
+    lane pyglue-numeric: KernelDensity.score summed them on the host)."""
+    if len(params) != 3 and len(params) != 4:
         raise Error(
-            "kde_score_samples_resident: params must contain 3 values, got "
+            "kde_score_samples_resident: params must contain 3 or 4 values, got "
             + String(len(params))
         )
+    var want_total = len(params) == 4 and Int(py=params[3]) != 0
     var h = Int(py=handle)
     var qp = _f32_ptr(Int(py=query_addr))
     var op = _f32_ptr(Int(py=out_addr))
@@ -1213,8 +1220,13 @@ def kde_score_samples_resident_binding(
     var bandwidth = Float32(Float64(py=params[2]))
     var kname = String(py=kernel)
     var mname = String(py=metric)
+    var total = Float32(0)
     with GILReleased(Python()):
-        kde_score_samples_resident(h, qp, n_query, n_features, bandwidth, kname, mname, op)
+        total = kde_score_samples_resident(
+            h, qp, n_query, n_features, bandwidth, kname, mname, op, want_total=want_total,
+        )
+    if want_total:
+        return PythonObject(Float64(total))
     return PythonObject(n_query)
 
 

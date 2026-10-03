@@ -813,6 +813,12 @@ class KernelDensity(NumericModeMixin):
         return self
 
     def score_samples(self, X):
+        return self._scores(X, False)
+
+    def _scores(self, X, want_total):
+        """score_samples(X), or with want_total their sum, folded in the
+        binding (on the device on a GPU install: `device_sum_f32_fixed`;
+        the host binding's `host_sum_f32_fixed`, the same order)."""
         if not hasattr(self, "_x"):
             raise ValueError("mojolearn KernelDensity: call fit() first")
         q, _ = as_f32_dense_c(X, ndim=2, name="X")
@@ -831,17 +837,17 @@ class KernelDensity(NumericModeMixin):
         # bytes. A binding without that entry takes the per-call path.
         handle = self._resident_fit_handle(binding)
         if handle is not None:
-            binding.kde_score_samples_resident(
+            got = binding.kde_score_samples_resident(
                 handle,
                 addr_ro(q, name="q"),
                 addr(out, name="out"),
                 # ORDER MATCHES bindings/_mojolearn_estimators.mojo::kde_score_samples_resident_binding.
-                [int(q.shape[0]), int(self.n_features_in_), float(self.bandwidth)],
+                [int(q.shape[0]), int(self.n_features_in_), float(self.bandwidth), 1 if want_total else 0],
                 self.kernel,
                 self.metric,
             )
-            return out
-        binding.kde_score_samples(
+            return float(got) if want_total else out
+        got = binding.kde_score_samples(
             addr_ro(self._x, name="_x"),
             addr_ro(q, name="q"),
             addr_ro(w, name="w") if w is not None else 0,
@@ -853,21 +859,19 @@ class KernelDensity(NumericModeMixin):
                 int(self.n_features_in_),
                 float(self.bandwidth),
                 1 if w is not None else 0,
+                1 if want_total else 0,
             ],
             self.kernel,
             self.metric,
         )
-        return out
+        return float(got) if want_total else out
 
     def score(self, X, y=None):
-        """The total log density: the float32 per-row scores summed
-        SEQUENTIALLY in float64 by the base binding (`Array.sum`). A host reduction outside the
-        identity claim (DEVIATION 2365); it was NumPy's pairwise
-        `np.sum(dtype=float64)`, so the last bits may differ from a value
-        recorded under it."""
-        # the base binding's sequential float sum (`Array.sum`, reduce_stat)
-        s = self.score_samples(X)
-        return s.sum() if s.size else 0.0
+        """The total log density: the float32 per-row scores summed in the
+        binding's fixed order (`core/device_fold.mojo`: on the device on a
+        GPU install, the same order on the host column; lane
+        pyglue-numeric, it was a host sum of the downloaded scores)."""
+        return self._scores(X, True)
 
     def sample(self, n_samples=1, random_state=None):
         raise NotImplementedError(
