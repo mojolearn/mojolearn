@@ -54,6 +54,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
+from gbdt.gpu_data.sym_feat_switches import GBDT_QUANT_DEVICE
 from gbdt.binary_prediction import binary_prediction_host
 
 from max.gpu.host import DeviceContext
@@ -910,11 +911,15 @@ def PyInit__mojolearn_gbdt() abi("C") -> PythonObject:
         m.def_function[gbdt_parallel_available_binding]("pointwise_parallel_available")
         m.def_function[gbdt_vendor_binding]("gbdt_vendor")
         m.def_function[gbdt_fit_binding]("gbdt_fit")
-        # lane/apple-fast-sym-feat: the row-major door and its probe
-        m.def_function[gbdt_fit_rowmajor_binding]("gbdt_fit_rowmajor")
-        m.def_function[gbdt_fit_row_major_available_binding](
-            "gbdt_fit_row_major_available"
-        )
+        # lane/apple-fast-sym-feat: the row-major door and its probe, only
+        # in a FAST Apple build with the device quantizer; every other
+        # binary registers main's functions (Python treats a missing probe
+        # as unavailable)
+        comptime if GBDT_QUANT_DEVICE:
+            m.def_function[gbdt_fit_rowmajor_binding]("gbdt_fit_rowmajor")
+            m.def_function[gbdt_fit_row_major_available_binding](
+                "gbdt_fit_row_major_available"
+            )
         m.def_function[gbdt_fit_ordered_rmse_binding]("gbdt_fit_ordered_rmse")
         m.def_function[gbdt_fit_two_level_feature_freq_binding](
             "gbdt_fit_two_level_feature_freq"

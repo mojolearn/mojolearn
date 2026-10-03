@@ -371,33 +371,35 @@ def make_test_arm(
     var max_leaves = 1 << max_depth
     var w = ctx.enqueue_create_buffer[DType.float32](n)
     enqueue_fill(ctx, w, Float32(1.0))
+    # main's sizes; only `GBDT_EVAL_FUSED` (FAST + Apple) widens them
+    var fv_n = 1
+    var h_fv_n = blocks
+    var vals_n = max_leaves * approx_dim
+    comptime if GBDT_EVAL_FUSED:
+        fv_n = _EVAL_FV_SLOTS
+        h_fv_n = max(blocks, _EVAL_FV_SLOTS)
+        vals_n = max_leaves * approx_dim + _EVAL_PACK_WORDS * max_depth
     return TestArm(
         n_rows,
         cindex^, targets^, w^,
         ctx.enqueue_create_buffer[DType.float32](approx_dim * n),
         ctx.enqueue_create_buffer[DType.float32](stat_count * n),
         ctx.enqueue_create_buffer[DType.float32](blocks),
-        ctx.enqueue_create_buffer[DType.float32](_EVAL_FV_SLOTS),
-        ctx.enqueue_create_host_buffer[DType.float32](
-            max(blocks, _EVAL_FV_SLOTS)
-        ),
+        ctx.enqueue_create_buffer[DType.float32](fv_n),
+        ctx.enqueue_create_host_buffer[DType.float32](h_fv_n),
         ctx.enqueue_create_buffer[DType.float32](2),
         ctx.enqueue_create_buffer[DType.uint32](max_depth),
         ctx.enqueue_create_buffer[DType.uint32](max_depth),
         ctx.enqueue_create_buffer[DType.uint32](max_depth),
         ctx.enqueue_create_buffer[DType.uint32](max_depth),
         ctx.enqueue_create_buffer[DType.uint8](max_depth),
-        ctx.enqueue_create_buffer[DType.float32](
-            max_leaves * approx_dim + _EVAL_PACK_WORDS * max_depth
-        ),
+        ctx.enqueue_create_buffer[DType.float32](vals_n),
         ctx.enqueue_create_host_buffer[DType.uint32](max_depth),
         ctx.enqueue_create_host_buffer[DType.uint32](max_depth),
         ctx.enqueue_create_host_buffer[DType.uint32](max_depth),
         ctx.enqueue_create_host_buffer[DType.uint32](max_depth),
         ctx.enqueue_create_host_buffer[DType.uint8](max_depth),
-        ctx.enqueue_create_host_buffer[DType.float32](
-            max_leaves * approx_dim + _EVAL_PACK_WORDS * max_depth
-        ),
+        ctx.enqueue_create_host_buffer[DType.float32](vals_n),
     )
 
 
