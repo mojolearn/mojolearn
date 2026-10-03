@@ -4,10 +4,11 @@
 PairLogit's pairs ENUMERATED ON THE DEVICE, one block per query group, the
 per-pair logistic gradient and the per-document sums in the same launch.
 
-Compiled only under `PAIRLOGIT_GROUP_FUSED` (`-D MOJOLEARN_PAIRLOGIT_GROUP_FUSED`
-on FAST + Apple); IDENTICAL compiles `gbdt/targets/kernel/pair_logit.mojo`'s
-path unchanged. `-D MOJOLEARN_PAIRLOGIT_EST_REUSE` (also FAST + Apple, needs
-the first) lets the leaf estimation's first evaluation reuse the search's
+Compiled under `PAIRLOGIT_GROUP_FUSED` (the FAST + Apple default since the
+M3 A/B 2026-10-03; `-D MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF` opts out);
+IDENTICAL compiles `gbdt/targets/kernel/pair_logit.mojo`'s path unchanged.
+`PAIRLOGIT_EST_REUSE` (also the FAST + Apple default, needs the first;
+`-D MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF` opts out) lets the leaf estimation's first evaluation reuse the search's
 sums, the YetiRank `YETI_EST_REUSE_SEARCH` model.
 
 WHAT MAIN DOES PER ITERATION. The reference's pair list is generated ONCE on
@@ -72,22 +73,30 @@ from gbdt.targets.kernel.pointwise_targets import (
 
 
 def pairlogit_group_fused_for[column: Int]() -> Bool:
-    """`-D MOJOLEARN_PAIRLOGIT_GROUP_FUSED`, FAST + Apple only (the A/B's B
-    arm); everything else compiles main's pair-list path."""
-    comptime if is_defined["MOJOLEARN_PAIRLOGIT_GROUP_FUSED"]():
+    """FAST + Apple default; everything else compiles main's pair-list path.
+    Default since the M3 A/B 2026-10-03 (gbdt-rank-pairlogit istellarank,
+    n=2, same hash, ndcg10 .71995, map .85455): 4,802 -> 3,760 ms.
+    `-D MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF` restores the pair-list path
+    (and turns `PAIRLOGIT_EST_REUSE` off with it); the old
+    `-D MOJOLEARN_PAIRLOGIT_GROUP_FUSED` is accepted and changes nothing."""
+    comptime if not is_defined["MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF"]():
         comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
             return True
     return False
 
 
 def pairlogit_est_reuse_for[column: Int]() -> Bool:
-    """`-D MOJOLEARN_PAIRLOGIT_EST_REUSE`: the leaf estimation's evaluation
+    """FAST + Apple default: the leaf estimation's evaluation
     at the tree's starting point reuses the search call's per-row sums and
     per-group value partials (scattered to bin order) instead of
     re-enumerating the pairs. Same point, same sample (PairLogit draws
     nothing), so only FAST bits move with the fold. Needs the group kernel
-    (the accumulators are its stores)."""
-    comptime if is_defined["MOJOLEARN_PAIRLOGIT_EST_REUSE"]():
+    (the accumulators are its stores), so `..._GROUP_FUSED_OFF` turns it
+    off too. Default since the M3 A/B 2026-10-03 (same data, same hash):
+    3,765 -> 3,480 ms on top of the group kernel.
+    `-D MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF` turns it off alone; the old
+    `-D MOJOLEARN_PAIRLOGIT_EST_REUSE` is accepted and changes nothing."""
+    comptime if not is_defined["MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF"]():
         return pairlogit_group_fused_for[column]()
     return False
 
