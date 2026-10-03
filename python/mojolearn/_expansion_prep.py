@@ -1710,9 +1710,18 @@ class SimpleImputer(_PrepBase):
             pr.stage("quantile", d, so, n, d, half, 1, med, st)
         if self.strategy == "most_frequent":
             pr.stage("mode_cols", d, so, n, d, mf, _NONE)
+        comp = None
+        if callable(self.strategy) and _p2m(mode):
+            # lane apple-fast-py2mojo-prep: each column's non-NaN words, ascending rows, at
+            # comp + j*n (p2m_sel_*), in place of the Python transpose and filter
+            comp = pr.alloc(n * d)
+            ctot = _p2m_sel(pr, xo, n, d, 0, comp)
         pr.run(mode)
         counts = [int(v) for v in pr.values(st, d)]
         empty = [c == 0 for c in counts]
+        if callable(self.strategy) and comp is not None:
+            ncol = pr.get_i32(ctot, d).tolist()
+            return self._fit_callable(None, counts, mode, [pr.get(comp + j * n, ncol[j]) for j in range(d)], n, d)
         if callable(self.strategy):
             # missing_values NaN: the marked block is the input itself, which never comes back
             return self._fit_callable(arr if xo == x_in else pr.get(xo, (n, d)), counts, mode)
@@ -1742,15 +1751,20 @@ class SimpleImputer(_PrepBase):
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
 
-    def _fit_callable(self, marked, counts, mode):
+    def _fit_callable(self, marked, counts, mode, kept=None, n=0, d=0):
         """strategy=<callable>: the reference's `strategy(masked_X[:, j].compressed())`
-        per column over the missing-marked X (NaN = missing)."""
-        n, d = marked.shape
-        cols = [list(c) for c in zip(*marked.tolist())]
+        per column over the missing-marked X (NaN = missing). kept (lane
+        apple-fast-py2mojo-prep): the columns' non-NaN words already compacted
+        by the program, one float32 Array per column; else the old transpose
+        and filter of `marked`."""
+        if kept is None:
+            n, d = marked.shape
+            cols = [list(c) for c in zip(*marked.tolist())]
+            kept = [Array.from_list([x for x in cols[j] if x == x], "<f4") if counts[j] else Array((0,), "<f4")
+                    for j in range(d)]
         stats = []
         for j in range(d):
-            v = Array.from_list([x for x in cols[j] if x == x], "<f4") if counts[j] else Array((0,), "<f4")
-            stats.append(float(self.strategy(v)))
+            stats.append(float(self.strategy(kept[j])))
         self.statistics_ = Array.from_list(stats, "<f4")
         self._fill = self.statistics_
         self._keep = [j for j in range(d) if self.keep_empty_features or stats[j] == stats[j]]
@@ -2493,10 +2507,20 @@ def _binary_difference(pr, src, rows, K, d_cols, out):
 
 
 def _class_counts(codes, K):
-    counts = [0] * K
-    for c in codes.tolist():
-        counts[c] += 1
-    return counts
+    """The count of each class code 0 .. K-1 of an int32 codes Array: one
+    program of p2m_ccount / p2m_cscan (lane apple-fast-py2mojo-prep), else
+    the old Python loop."""
+    mode = _mode()
+    n = int(codes.size)
+    if not _p2m(mode) or n == 0 or K <= 0:
+        counts = [0] * K
+        for c in codes.tolist():
+            counts[c] += 1
+        return counts
+    pr = _Prog()
+    _ro, tot = _p2m_class_rows(pr, pr.put_codes(codes), n, K, rows=False)
+    pr.run(mode)
+    return pr.get_i32(tot, K).tolist()
 
 
 def _shrinkage_value(shrinkage):
@@ -2518,11 +2542,28 @@ def _estimator_covs(est, arr, codes, K, who):
     Python on the class's float32 rows (a mojolearn Array); its covariance_
     is read as float32. Returns the (K, d, d) blocks as one flat list."""
     n, d = arr.shape
-    code_list = [0] * n if codes is None else [int(c) for c in codes.tolist()]
+    mode = _mode()
+    if codes is not None and _p2m(mode):
+        # lane apple-fast-py2mojo-prep: the rows grouped by class on the device
+        # (p2m_ccount .. p2m_cwrite, then p2m_rgather): class k's rows are one
+        # contiguous block, ascending, the words the Python gather copied
+        pr = _Prog()
+        xo = pr.put(arr)
+        ro, tot = _p2m_class_rows(pr, pr.put_codes(codes), n, K)
+        xg = pr.alloc(n * d)
+        pr.stage("p2m_rgather", n * d, xo, d, ro, xg)
+        pr.run(mode)
+        cnt = pr.get_i32(tot, K).tolist()
+        starts = [0] + list(itertools.accumulate(cnt))[:-1]
+        blocks = [pr.get(xg + starts[k] * d, (cnt[k], d)) for k in range(K)]
+    elif codes is None:
+        blocks = [arr.copy()]
+    else:
+        code_list = [int(c) for c in codes.tolist()]
+        blocks = [_gather_rows(arr, [i for i, c in enumerate(code_list) if c == k]) for k in range(K)]
     out = []
     for k in range(K):
-        rows = [i for i, c in enumerate(code_list) if c == k]
-        est.fit(_gather_rows(arr, rows))
+        est.fit(blocks[k])
         if not hasattr(est, "covariance_"):
             raise ValueError(f"mojolearn: {type(est).__name__} does not have a covariance_ attribute")
         cov = est.covariance_
