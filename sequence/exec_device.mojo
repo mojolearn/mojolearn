@@ -146,7 +146,7 @@ def team_kernel[OP: Int](
             # Apple FAST default (off: -D MOJOLEARN_ETS_TEAM_OFF; sequence/ets_team.mojo)
             ets_team(blk, team, a)
         elif PROPHET_COOP:
-            # Apple FAST, -D MOJOLEARN_PROPHET_COOP (sequence/prophet_coop.mojo)
+            # Apple FAST default (off: -D MOJOLEARN_PROPHET_COOP_OFF; sequence/prophet_coop.mojo)
             prophet_fit_coop(blk, team, a)
         else:
             prophet_fit_team(blk, team, a)

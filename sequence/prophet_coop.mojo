@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Prophet team fit with the WHOLE block on every step (Apple FAST,
-`-D MOJOLEARN_PROPHET_COOP`; lane apple-fast-prophetspeed).
+default; off: `-D MOJOLEARN_PROPHET_COOP_OFF`; lane apple-fast-prophetspeed).
 
 `prophet_fit_team` (sequence/fit_team.mojo) keeps op_prophet_fit's bits:
 each of the P + 1 likelihood accumulators is one thread's ascending chain
@@ -38,11 +38,15 @@ from sequence.fit_team import PT_DONE, TEAM_REC, SeqTeam, _ldi, _spend, _sti
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from sequence.prophet import MEM
 
-#: the switch: FAST on Apple, off by default until the M3 A/B
+#: the switch: FAST on Apple by default since the M3 A/B (lane
+#: apple-fast-prophetspeed 805207038, n=1: prophet synthetic 431 -> 45 ms,
+#: taxi-hourly 360 -> 43 ms; forecast_rmse 1.015 -> 1.015, 32.03 -> 32.04).
+#: -D MOJOLEARN_PROPHET_COOP_OFF turns it off; the old -D MOJOLEARN_PROPHET_COOP
+#: is harmless. IDENTICAL and every other vendor keep prophet_fit_team.
 comptime PROPHET_COOP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_PROPHET_COOP"]()
+    and not is_defined["MOJOLEARN_PROPHET_COOP_OFF"]()
 )
 #: threads of a series' block on the cooperative path
 comptime PROPHET_COOP_TPB = 256
