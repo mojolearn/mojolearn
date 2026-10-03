@@ -81,6 +81,16 @@ from max.gpu.primitives.block import prefix_sum
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from core.segmented_sort import SEG_SUMS_BLOCK_SCAN, SEG_SUMS_TPB
+from std.sys.compile import is_defined
+
+#: Gradient boosting keeps the one-thread block-total scan by default: the
+#: block scan is measured on the RF/ET sort only (M3 A/B, lane
+#: apple-fast-rfet-scan), and the GBDT A/B (aft-ab-gbseg) is not read yet.
+#: Opt in with `-D MOJOLEARN_GBDT_SEG_SUMS_BLOCK` (FAST on Apple only, and
+#: `-D MOJOLEARN_SEG_SUMS_SERIAL` still turns it off).
+comptime GBDT_SEG_SUMS_BLOCK_SCAN = (
+    SEG_SUMS_BLOCK_SCAN and is_defined["MOJOLEARN_GBDT_SEG_SUMS_BLOCK"]()
+)
 from std.gpu import block_dim, block_idx, thread_idx
 
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
@@ -210,8 +220,8 @@ def seg_scan_block_sums_block_kernel(
     blocks_wide_in: Int32,
 ):
     """`seg_scan_block_sums_kernel` with one SEG_SUMS_TPB-thread block per
-    segment (SEG_SUMS_BLOCK_SCAN, FAST on Apple; `-D
-    MOJOLEARN_SEG_SUMS_SERIAL` is the one-thread arm): chunks of block
+    segment (GBDT_SEG_SUMS_BLOCK_SCAN: FAST on Apple with `-D
+    MOJOLEARN_GBDT_SEG_SUMS_BLOCK`, opt-in): chunks of block
     totals scanned with the block prefix sum and carried. Exclusive and in
     place over the same `used` slots; Int32 adds, so the same values."""
     var seg = Int(block_idx.x)
@@ -405,7 +415,7 @@ def _seg_radix_pass(
         grid_dim=(blocks_wide, n_segments, 1),
         block_dim=(REORDER_BLOCK, 1, 1),
     )
-    comptime if SEG_SUMS_BLOCK_SCAN:
+    comptime if GBDT_SEG_SUMS_BLOCK_SCAN:
         ctx.enqueue_function[seg_scan_block_sums_block_kernel](
             block_sums.unsafe_ptr(), seg_sizes.unsafe_ptr(),
             Int32(blocks_wide),

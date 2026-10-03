@@ -103,6 +103,9 @@ comptime SORT_BLOCK = 512
 #: Int32 sums of the same values in a different association: the same
 #: offsets bit for bit. `-D MOJOLEARN_SEG_SUMS_SERIAL` keeps the one-thread
 #: scan (the A/B arm); IDENTICAL compiles the old path.
+#: Default since the M3 A/B (b272364e4, n=2, identical output hashes): RF
+#: istella 13,583 -> 10,116 ms (-25.5%), taxi neutral. GBDT's own copy
+#: (gbdt/gpu_util/kernel/segmented_sort.mojo) stays opt-in.
 comptime SEG_SUMS_BLOCK_SCAN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
