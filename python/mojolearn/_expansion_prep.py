@@ -90,6 +90,11 @@ _OPS = dict(
     cal_fold_part=142, cal_fold_scan=143, cal_fold_rank=144, cal_fold_assign=145, cal_lofo_merge=146,
     cal_eps_folds=147, cal_params_folds=148, cal_jll_folds=149, cal_platt_init=150, cal_platt_setup=151,
     cal_platt_part=152, cal_platt_step=153, cal_platt_ls_part=154, cal_platt_ls_pick=155, cal_sigmoid_avg=156,
+    # lane apple-fast-py2mojo-prep (x_prep/py2mojo.mojo, a range of its own): every binding
+    # that exports x_prep_py2mojo runs them; built with -D MOJOLEARN_PY2MOJO_prep_OFF it has
+    # none and `_p2m` routes to the old Python loops
+    p2m_ccount=200, p2m_cscan=201, p2m_cstart=202, p2m_cwrite=203, p2m_rgather=204, p2m_smrows=205,
+    p2m_sel_count=206, p2m_sel_scan=207, p2m_sel_write=208, p2m_transpose=209,
 )
 _PARAMS = 14
 _NONE = -1
@@ -109,6 +114,70 @@ def _optional_prep_entry(binding, name):
         return getattr(binding, name)
     except (AttributeError, ImportError):
         return None
+
+
+#: binding -> whether it exports `x_prep_py2mojo` (lane apple-fast-py2mojo-prep)
+_P2M = {}
+
+
+def _p2m(mode):
+    """Whether the binding of `mode` runs x_prep/py2mojo.mojo's units (every
+    build but -D MOJOLEARN_PY2MOJO_prep_OFF, the A/B arm A): the row grouping,
+    gathers, splitmix64 draws, column compaction and column-major copies that
+    were Python loops here. A cached probe per binding."""
+    b = _prep_binding(mode)
+    on = _P2M.get(id(b))
+    if on is None:
+        on = _P2M[id(b)] = _optional_prep_entry(b, "x_prep_py2mojo") is not None
+    return on
+
+
+def _p2m_chunks(n, per=1):
+    """(rows a chunk, chunks) for the chunk-parallel p2m units: at most
+    _II_CH chunks, and at most 2**24 count words when each chunk keeps `per`."""
+    ch = max(_II_CH, -(-n // _II_CH), -(-n * per // 2 ** 24), 1)
+    return ch, max(1, -(-n // ch))
+
+
+def _p2m_class_rows(pr, co, n, K, rows=True):
+    """Stages (p2m_ccount .. p2m_cwrite): the class counts of the float codes
+    at `co` (int32 words, TOT) and, with rows, the rows grouped by class,
+    ascending inside a class (int32 words, ROWS). Returns (ROWS or None, TOT)."""
+    ch, nch = _p2m_chunks(n, K)
+    cnt, tot = pr.alloc(nch * K), pr.alloc(K)
+    pr.stage("p2m_ccount", nch, co, n, K, ch, cnt)
+    pr.stage("p2m_cscan", K, cnt, nch, K, tot)
+    if not rows:
+        return None, tot
+    start, ro = pr.alloc(K), pr.alloc(n)
+    pr.stage("p2m_cstart", 1, tot, K, start, _NONE)
+    pr.stage("p2m_cwrite", nch, co, n, K, ch, cnt, start, ro)
+    return ro, tot
+
+
+def _p2m_sel(pr, xo, n, d, mode, dst):
+    """Stages (p2m_sel_count .. p2m_sel_write): per column j of the (n, d)
+    block at xo, the selected rows ascending at dst + j*n (mode 0: the
+    non-NaN words; mode 1: the indices of the positive rows). Returns the
+    offset of the d counts (int32 words)."""
+    ch, nch = _p2m_chunks(n)
+    cnt, tot = pr.alloc(d * nch), pr.alloc(d)
+    pr.stage("p2m_sel_count", d * nch, xo, n, d, ch, nch, mode, cnt)
+    pr.stage("p2m_sel_scan", d, cnt, nch, tot)
+    pr.stage("p2m_sel_write", d * nch, xo, n, d, ch, nch, mode, cnt, dst)
+    return tot
+
+
+def _p2m_positive_rows(pr, xo, arr, wo, n, d, m):
+    """Stages: the rows of the (n, d) block at xo whose weight (at wo) is
+    positive, as a new (m, d) block (the old `_gather_rows(arr, nz)`; m is
+    the count of positive weights). Returns its offset."""
+    ro = pr.alloc(n)
+    _p2m_sel(pr, wo, n, 1, 1, ro)
+    xz = pr.alloc(m * d)
+    if m:
+        pr.stage("p2m_rgather", m * d, xo, d, ro, xz)
+    return xz
 
 
 #: the smallest output (words) that `_Prog.output` keeps out of the arena
@@ -1256,44 +1325,19 @@ def _splitmix64(state):
     return state, z ^ (z >> 31)
 
 
-def _kfold_assignment(n, n_folds, seed, shuffle=True):
-    """Row -> fold for a shuffled K-fold: a Fisher-Yates permutation drawn
-    from splitmix64(seed) in integer arithmetic (the same on every machine),
-    then numpy KFold's split of the permuted order (the first n % k folds one
-    row longer)."""
-    perm = list(range(n))
-    state = int(seed) & 0xFFFFFFFFFFFFFFFF
-    for i in range(n - 1, 0, -1) if shuffle else ():
-        state, z = _splitmix64(state)
-        j = z % (i + 1)
-        perm[i], perm[j] = perm[j], perm[i]
-    fold = [0] * n
-    start = 0
-    for k in range(n_folds):
-        size = n // n_folds + (1 if k < n % n_folds else 0)
-        for r in perm[start:start + size]:
-            fold[r] = k
-        start += size
-    return fold
-
-
 def _native_folds(n, n_folds, seed, shuffle, codes=None, n_classes=0, as_array=False):
     """The fold assignment through the binding's host entry (x_prep/folds.mojo,
-    the same integers), or None when the binding has none. `codes` is a list
-    or an int32 Array; as_array returns the folds as an int32 Array."""
-    if os.environ.get("MOJOLEARN_XPREP_NATIVE_FOLDS", "1") == "0":
-        return None
+    the same integers; both the GPU and the CPU-only binding export it since
+    lane apple-fast-py2mojo-prep, which deleted the Python copies
+    `_kfold_assignment` / `_stratified_assignment`). `codes` is a list or an
+    int32 Array; as_array returns the folds as an int32 Array."""
     b = _prep_binding(_mode())
     s = int(seed) & 0xFFFFFFFFFFFFFFFF
     halves = (s & 0xFFFFFFFF, s >> 32)
     out = array.array("i", bytes(4 * max(n, 1)))
     if codes is None:
-        if _optional_prep_entry(b, "x_prep_kfold_folds") is None:
-            return None
         b.x_prep_kfold_folds(out.buffer_info()[0], (n, n_folds, 1 if shuffle else 0), halves)
     else:
-        if _optional_prep_entry(b, "x_prep_strat_folds") is None:
-            return None
         if isinstance(codes, Array) and codes.dtype == "<i4" and codes._has_order("C") and codes.size == n:
             cod, cod_addr = codes, addr_ro(codes, name="codes")
         else:
@@ -1305,45 +1349,6 @@ def _native_folds(n, n_folds, seed, shuffle, codes=None, n_classes=0, as_array=F
     if as_array:
         return Array._owned(out, (len(out),), "<i4", "C")
     return out[:n].tolist()
-
-
-def _stratified_assignment(codes, n_folds, seed, shuffle=True):
-    """Row -> fold for numpy StratifiedKFold (`_make_test_folds`): classes
-    renumbered by first appearance, each class's per-fold counts from the
-    round robin over the sorted codes, a class's rows taking its fold
-    indices in blocks; with shuffle each class's block is a Fisher-Yates
-    permutation from one splitmix64(seed) stream (the reference draws
-    numpy's)."""
-    first = {}
-    for c in codes:
-        first.setdefault(c, len(first))
-    enc = [first[c] for c in codes]
-    K = len(first)
-    counts = [0] * K
-    for e in enc:
-        counts[e] += 1
-    if all(n_folds > k for k in counts):
-        raise ValueError(f"mojolearn: n_splits={n_folds} cannot be greater than the number of members in each class")
-    order = sorted(enc)
-    alloc = [[0] * K for _ in range(n_folds)]
-    for f in range(n_folds):
-        for e in order[f::n_folds]:
-            alloc[f][e] += 1
-    rows = [[] for _ in range(K)]
-    for i, e in enumerate(enc):
-        rows[e].append(i)
-    fold = [0] * len(codes)
-    state = int(seed) & 0xFFFFFFFFFFFFFFFF
-    for k in range(K):
-        block = [f for f in range(n_folds) for _ in range(alloc[f][k])]
-        if shuffle:
-            for i in range(len(block) - 1, 0, -1):
-                state, z = _splitmix64(state)
-                j = z % (i + 1)
-                block[i], block[j] = block[j], block[i]
-        for r, f in zip(rows[k], block):
-            fold[r] = f
-    return fold
 
 
 def _target_binary_codes(y, target_type):
@@ -1374,6 +1379,40 @@ def _target_kind(y, target_type):
     for i, c in enumerate(codes):
         flat[i * K + c] = 1.0
     return "multiclass", classes, flat, K
+
+
+def _target_arrays(y, target_type):
+    """`_target_kind` without the per-label lists (lane apple-fast-py2mojo-prep):
+    (kind, classes, target, T) with `target` the float32 Array of a
+    continuous y, else the int32 class codes (binary: T = 1, the codes are
+    the column; multiclass: T = K, the program expands them to the one-hot
+    rows with a `label_binarize` stage). Only for a numeric VECTOR buffer
+    with every value finite; None otherwise, and `_target_kind` answers."""
+    from ._buffer import _has_buffer, _materialize, all_finite
+    if isinstance(y, (list, tuple, str, bytes)) or not (isinstance(y, Array) or _has_buffer(y)):
+        return None
+    try:
+        arr, _ = _materialize(y, "y")
+    except (TypeError, ValueError):
+        return None
+    kind = arr.dtype.lstrip("<>|=")[:1]
+    if arr.size == 0 or arr.size != max(arr.shape) or kind not in ("f", "i", "u"):
+        return None
+    if kind == "f" and (arr.dtype not in ("<f4", "<f8") or not all_finite(arr)):
+        return None
+    # the reference's continuous test: some label is not an integer (a C-speed map
+    # over the storage; an integer dtype holds integers)
+    cont = target_type == "continuous" or (
+        target_type == "auto" and kind == "f" and not all(map(float.is_integer, _labels.flat_view(arr))))
+    if cont:
+        vec = arr if arr.dtype == "<f4" and arr._has_order("C") else arr.astype("<f4")
+        return "continuous", None, Array._view_of(vec, (vec.size,)), 1
+    classes, codes = encode_labels(arr)
+    if not (isinstance(codes, Array) and codes.dtype == "<i4"):
+        return None
+    if target_type == "binary" or (target_type == "auto" and len(classes) <= 2):
+        return "binary", classes, codes, 1
+    return "multiclass", classes, codes, len(classes)
 
 
 class TargetEncoder(_PrepBase):
@@ -1411,13 +1450,21 @@ class TargetEncoder(_PrepBase):
         if isinstance(self.cv, numbers.Integral) and self.cv < 2:
             raise ValueError("mojolearn: TargetEncoder cv must be an integer >= 2, a splitter or an iterable")
 
-    def _run(self, arr, y, folds, n_folds, apply_rows_folds, binary=None):
+    def _run(self, arr, y, folds, n_folds, apply_rows_folds, binary=None, target=None):
         """binary (lane prep-apple3, `te_arrays`): (classes, int32 codes) of an
         explicit binary target, with `folds` an int32 Array: both cross as
         int32 words and become floats on the device (i2f), the same words the
-        lists gave."""
+        lists gave. target (lane apple-fast-py2mojo-prep): `_target_arrays`'
+        answer, the target's words as arrays (the one-hot rows built on the
+        device), the same words `_target_kind`'s lists gave."""
         n, d = arr.shape
-        if binary is None:
+        mode = _mode()
+        if binary is None and target is None and _p2m(mode):
+            target = _target_arrays(y, self.target_type)
+        if target is not None:
+            kind, classes, tgt, T = target
+            yflat, rows = None, tgt.size * T
+        elif binary is None:
             kind, classes, yflat, T = _target_kind(y, self.target_type)
             rows = len(yflat)
         else:
@@ -1425,14 +1472,28 @@ class TargetEncoder(_PrepBase):
             rows = binary[1].size
         if rows != n * T:
             raise ValueError("mojolearn: X and y have different numbers of rows")
-        mode = _mode()
         cats = (_fit_categories(mode, arr) if _is_auto(self.categories) else
                 _given_categories(self.categories, arr, mode, False, "TargetEncoder"))
         cmax = max(c.size for c in cats)
         F = n_folds
         pr = _Prog()
         codes, _neg = _codes(pr, arr, cats)
-        if binary is None:
+        if target is not None:
+            if kind == "continuous":
+                yo = pr.put(tgt)
+            elif T == 1:
+                yo = pr.put_codes(tgt)
+            else:
+                # the one-hot rows: word 1.0f (bits 0x3F800000) where row i's code is c, else 0.0f
+                co, yo = pr.put_codes(tgt), pr.alloc(n * T)
+                pr.stage("label_binarize", n * T, co, n, T, 0, 0, 0x3F800000, T, yo)
+            if isinstance(folds, Array):
+                fo = pr.put_codes(folds)
+            elif folds is not None:
+                fo = pr.put_list(folds)
+            else:
+                fo = pr.put(Array._owned(array.array("f", [-1.0]) * n, (n,), "<f4", "C"))
+        elif binary is None:
             yo = pr.put_list(yflat)
             fo = pr.put_list(folds if folds is not None else [-1] * n)
         else:
@@ -1539,19 +1600,24 @@ class TargetEncoder(_PrepBase):
             folds = _native_folds(n, cv, seed, bool(self.shuffle), binary[1], len(binary[0]), as_array=True)
             if folds is not None:
                 return self._run(arr, y, folds, cv, True, binary=binary)
+        target = _target_arrays(y, self.target_type) if _p2m(_mode()) else None
+        if target is not None:
+            # lane apple-fast-py2mojo-prep: the target and the folds as arrays
+            kind, classes, tgt, _T = target
+            if tgt.size != n:
+                raise ValueError("mojolearn: X and y have different numbers of rows")
+            folds = (_native_folds(n, cv, seed, bool(self.shuffle), as_array=True) if kind == "continuous" else
+                     _native_folds(n, cv, seed, bool(self.shuffle), tgt, len(classes), as_array=True))
+            return self._run(arr, y, folds, cv, True, target=target)
         kind, _classes, _yflat, _T = _target_kind(y, self.target_type)
         if kind == "continuous":
             folds = _native_folds(n, cv, seed, bool(self.shuffle))
-            if folds is None:
-                folds = _kfold_assignment(n, cv, seed, bool(self.shuffle))
         else:
             labels = flatten_labels(y)
             if len(labels) != n:
                 raise ValueError("mojolearn: X and y have different numbers of rows")
             classes, codes = encode_labels(labels)
             folds = _native_folds(n, cv, seed, bool(self.shuffle), codes.tolist(), len(classes))
-            if folds is None:
-                folds = _stratified_assignment(labels, cv, seed, bool(self.shuffle))
         return self._run(arr, y, folds, cv, True)
 
     def transform(self, X):
