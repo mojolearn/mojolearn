@@ -1,4 +1,4 @@
-pos=279 lines=     449
+pos=285 lines=     451
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -341,3 +341,11 @@ pos=279 lines=     449
 443:CMD apple-fast-pca-eig@9819970b1 pca-eig-tsvd-topk-istella rc=0 AFC-AB-SUMMARY pca-eig-tsvd-topk-istella arm=B lane=tsvd ds=istella median_of_medians_ms=406.348208518466 runs=[406.348208518466 ] digest=17200d78b09c6420 
 444:CMD apple-fast-pca-eig@9819970b1 pca-eig-ipca-istella rc=0 AFC-AB-SUMMARY pca-eig-ipca-istella arm=B lane=incremental-pca ds=istella median_of_medians_ms=961.9136455003172 runs=[961.9136455003172 ] digest=802371db83dad125 
 445:CMD apple-fast-pca-eig@9819970b1 pca-eig-ipca-taxi rc=0 AFC-AB-SUMMARY pca-eig-ipca-taxi arm=B lane=incremental-pca ds=taxi median_of_medians_ms=151.85666701290756 runs=[151.85666701290756 ] digest=414c9d227d06629a 
+446:FBUILD lane/apple-fast-seq@8b3f1d90e core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 x_sequence=0 
+447:CMD apple-fast-seq@8b3f1d90e seq-croston-fast rc=0 AFC-AB-SUMMARY seq-croston-fast arm=A lane=croston ds=taxi-hourly median_of_medians_ms=2.982833015266806 runs=[2.982833015266806 ] digest=9fb280e639617193 
+448:CMD apple-fast-seq@8b3f1d90e seq-croston-reg rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=2.4 all=[2] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_SEQ_CROSTON_REG=1'
+449:FBUILD lane/apple-fast-prophetspeed@805207038 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 x_sequence=0 
+450:CMD apple-fast-prophetspeed@805207038 ps-coop-synthetic rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=45.3 all=[45] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_PROPHET_COOP'
+451:CMD apple-fast-prophetspeed@805207038 ps-coop-taxi-hourly rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=43.1 all=[43] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_PROPHET_COOP'
+452:CMD apple-fast-seq@8b3f1d90e seq-croston-reg-syn rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1.8 all=[2] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_SEQ_CROSTON_REG=1'
+453:CMD apple-fast-seq@8b3f1d90e seq-garch-dev rc=0 AFC-AB-SUMMARY seq-garch-dev arm=A lane=garch ds=taxi-hourly median_of_medians_ms=2769.0836874826346 runs=[2769.0836874826346 ] digest=43a79f7d4c9a412c 

@@ -1,5 +1,0 @@
-== lane_apple-fast-select-fbuild-x_prep.log (06:48Z)
-./x_prep/device.mojo:263:68: error: invalid call to 'prep2_fast_stage': value passed to 'qp' cannot be converted from 'Pointer[Int32, origin_of(dq)]' to 'Pointer[Int32, MutAnyOrigin]'
-            if prep2_fast_stage(ctx, df, dw, host_q, s, op, total, qp, p2):
-               ~~~~~~~~~~~~~~~~                                    ^~
-Imported from ~/mq/wt/lane_apple-fast-select/bindings/_mojolearn_x_prep.mojo:12:
