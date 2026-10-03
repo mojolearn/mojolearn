@@ -3,7 +3,7 @@
 """FAST + Apple `select_d` (lane/apple-fast-select, 2026-10-02): every KPSS
 round on the device, one download.
 
-FAST ON APPLE ONLY, behind `-D MOJOLEARN_SELECT_D=1`; tsa/impl/auto_arima.mojo
+FAST ON APPLE ONLY, the FAST + Apple default (`-D MOJOLEARN_SELECT_D_OFF` turns it off); tsa/impl/auto_arima.mojo
 gates the one call on `SELECT_D_FAST` below, so the IDENTICAL binding, the
 other vendors and the host compile the host-controlled loop unchanged.
 
@@ -33,9 +33,11 @@ from tsa.impl.timeSeries.stationarity import (
     kpss_stationarity_check_kernel, kpss_lags, kpss_s2B_coefficients,
 )
 
-#: FAST on Apple only, behind its define (default off)
+#: FAST on Apple only. The FAST + Apple default since the M3 A/B (select-d taxi-hourly
+#: 7.8 -> 3.9 ms, -50%, digest identical); -D MOJOLEARN_SELECT_D_OFF turns it off
+#: (-D MOJOLEARN_SELECT_D is now harmless).
 comptime SELECT_D_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_SELECT_D"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_SELECT_D_OFF"]()
 )
 
 
