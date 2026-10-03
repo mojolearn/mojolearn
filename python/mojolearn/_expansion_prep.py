@@ -1893,8 +1893,12 @@ class KBinsDiscretizer(_PrepBase):
                     state, z = _splitmix64(state)
                     rows.append(min(bisect.bisect_right(cum, (z >> 11) * 2.0 ** -53 * acc), n - 1))
                 w = None
-            arr = _gather_rows(arr, rows)
-            n = arr.shape[0]
+            if _p2m(_mode()):
+                # lane apple-fast-py2mojo-prep: the weighted draw's rows gathered in the program
+                sub = (None, Array._owned(array.array("i", rows), (len(rows),), "<i4", "C"))
+            else:
+                arr = _gather_rows(arr, rows)
+                n = arr.shape[0]
         nb = [int(self.n_bins)] * d if isinstance(self.n_bins, numbers.Integral) else [int(b) for b in self.n_bins]
         if len(nb) != d or min(nb) < 2:
             raise ValueError("mojolearn: n_bins must be >= 2 per feature")
@@ -1906,7 +1910,12 @@ class KBinsDiscretizer(_PrepBase):
         mode = _mode()
         pr = _Prog()
         xo = pr.put(arr)
-        if sub is not None:
+        if sub is not None and sub[0] is None:
+            m = sub[1].size
+            xs = pr.alloc(m * d)
+            pr.stage("p2m_rgather", m * d, xo, d, pr.put_words(sub[1]), xs)
+            xo, n = xs, m
+        elif sub is not None:
             seed, m = sub
             lo, hi = seed & 0xFFFFFFFF, seed >> 32
             so_seed = pr.put_ints([lo - (1 << 32) if lo >= 1 << 31 else lo, hi - (1 << 32) if hi >= 1 << 31 else hi])
@@ -2995,15 +3004,28 @@ class QuantileTransformer(_PrepBase):
             raise ValueError(f"mojolearn: invalid output_distribution {self.output_distribution!r}")
         arr = _x2d(X)
         n, d = arr.shape
+        mode = _mode()
+        drawn = None
         if self.subsample is not None and n > self.subsample:
-            arr = _gather_rows(arr, _draw_without_replacement(
-                n, int(self.subsample), 0 if self.random_state is None else int(self.random_state)))
+            rows = _draw_without_replacement(
+                n, int(self.subsample), 0 if self.random_state is None else int(self.random_state))
+            if _p2m(mode):
+                # lane apple-fast-py2mojo-prep: the drawn rows gathered in the program (p2m_rgather)
+                drawn = Array._owned(array.array("i", rows), (len(rows),), "<i4", "C")
+            else:
+                arr = _gather_rows(arr, rows)
+        if drawn is not None:
+            n = drawn.size
+        elif self.subsample is not None and n > self.subsample:
             n = arr.shape[0]
         nq = max(1, min(int(self.n_quantiles), n))
         refs = [i / (nq - 1) if nq > 1 else 0.0 for i in range(nq)]
-        mode = _mode()
         pr = _Prog()
         xo = pr.put(arr)
+        if drawn is not None:
+            xs = pr.alloc(n * d)
+            pr.stage("p2m_rgather", n * d, xo, d, pr.put_words(drawn), xs)
+            xo = xs
         # the references are an input no stage writes: the fitted attribute is
         # the array that went up (the same float32 words the arena held)
         refs_arr = Array._from_flat([float(v) for v in refs], (nq,), "<f4")
@@ -5082,7 +5104,15 @@ class CategoricalNB(_DiscreteNB):
             q.stage("cat_hfold", d * K * cmax, hist, nbh, d, K, no, cmax, w, cc)
         else:
             q.stage("cat_counts", d * K * cmax, xo, n, d, yo, K, no, cmax, _NONE if wq is None else wq, cc)
-        if merge:
+        if merge and _p2m(mode):
+            # lane apple-fast-py2mojo-prep: the running counts re-strided to cmax on the
+            # device (colblock into zeroed words), in place of the Python pad copy
+            oc = self._cmax
+            pad, src, cc = q.alloc(d * K * cmax), cc, q.alloc(d * K * cmax)
+            if oc > 0:
+                q.stage("colblock", d * K * oc, q.put(self._cc), oc, pad, cmax, 0)
+            q.stage("add_arrays", d * K * cmax, pad, src, cc)
+        elif merge:
             old, oc = self._cc.tolist(), self._cmax
             pad = [0.0] * (d * K * cmax)
             for jk in range(d * K):
