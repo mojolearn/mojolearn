@@ -798,10 +798,31 @@ class Ridge(NumericModeMixin):
             "mojolearn Ridge currently requires one target",
             "mojolearn Ridge X and y lengths differ",
         )
-        if self.fit_intercept:
+        b = self._bind("_mojolearn_estimators")
+        q = getattr(b, "ridge_resident_default", None)
+        resident = getattr(b, "ridge_fit_resident", None)
+        use_resident = q is not None and resident is not None and bool(q())
+        if use_resident:
+            # lane apple-fast-ridgespeed: FAST Apple builds with -D
+            # MOJOLEARN_RIDGE_RESIDENT only: X and y uploaded once, the same
+            # column sums, center and ridgeEig on the resident buffers (the
+            # same words as the route below).
+            self.coef_ = empty((cols,), "<f4")
+            mu = empty((cols,), "<f4")
+            ymean = empty((1,), "<f8")
+            resident(addr_ro(x, name="X"), addr_ro(target, name="y"),
+                     addr(self.coef_, name="coef_"), addr(mu, name="column means"),
+                     addr(ymean, name="y mean"),
+                     [rows, cols, float(self.alpha), 1 if self.fit_intercept else 0])
+            if self.fit_intercept:
+                self._x_mean = mu
+                self._y_mean = float(ymean.tolist()[0])
+            else:
+                self._x_mean = zeros((cols,), "<f4")
+                self._y_mean = 0.0
+        elif self.fit_intercept:
             # The same centering as LinearRegression, for the same
             # reasons; read that class's fit.
-            b = self._bind("_mojolearn_estimators")
             mu32 = _column_means(b, x, None)
             self._x_mean = Array.from_list(mu32, "<f4")
             self._y_mean = _vector_mean(b, target, None)
@@ -811,12 +832,13 @@ class Ridge(NumericModeMixin):
             work_x, work_y = x, target
             self._x_mean = zeros((cols,), "<f4")
             self._y_mean = 0.0
-        self.coef_ = empty((cols,), "<f4")
-        self._bind("_mojolearn_estimators").ridge_fit(
-            addr_ro(work_x, name="X"), addr_ro(work_y, name="y"),
-            addr(self.coef_, name="coef_"),
-            [rows, cols, float(self.alpha)],
-        )
+        if not use_resident:
+            self.coef_ = empty((cols,), "<f4")
+            b.ridge_fit(
+                addr_ro(work_x, name="X"), addr_ro(work_y, name="y"),
+                addr(self.coef_, name="coef_"),
+                [rows, cols, float(self.alpha)],
+            )
         if self.fit_intercept:
             dot = math.fsum(
                 float(a) * float(b)
