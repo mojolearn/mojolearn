@@ -22,10 +22,10 @@ Sources: `~/mojolearn-evidence/apple-fast/LEDGER.md` (every KEEP / DROP / MERGED
 |---|---|---|
 | KEPT `<main sha>` | FAST + Apple default since that main commit | 85 |
 | DROPPED-slower | B slower than A | 19 |
-| DROPPED-noise | the difference is inside run-to-run spread (arms overlap, or under 5% at n=1), or the signs are mixed across datasets | 47 |
+| DROPPED-noise | the difference is inside run-to-run spread (arms overlap, or under 5% at n=1), or the signs are mixed across datasets | 48 |
 | DROPPED-quality | faster, but the quality metric got worse | 2 |
 | DROPPED-semantics | no longer matches main's code path: stale base, duplicate of a main change, a no-op, or a host step in the GPU path | 4 |
-| OPEN | not measured yet, measured but not judged, or the run did not finish | 270 |
+| OPEN | not measured yet, measured but not judged, or the run did not finish | 269 |
 
 Each row is one define, or one combination of defines, on one branch. Combination rows (`A + B`) are B arms that turn on several defines together. `(_OFF)` in a define name means the switch on main is the opt-out. Shas are `git rev-parse --short origin/<branch>` as of this record; the ledger's measured head is given where it differs.
 
@@ -395,7 +395,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `TSA2_KPSS` | kpss / synthetic; kpss / taxi-hourly | lane/apple-fast-gap-tsa @ e9da47064 | gaptsa-tsa2kpss-kpss-taxi-hourly, gaptsa-tsa2kpss-kpss-synthetic | kpss taxi-hourly -73%, synthetic -62% | DROPPED-noise | same gain as TSA_FAST_KPSS_PACK (kept); stays opt-in; code removed from main 7ff2caf99; recover at lane/apple-fast-gap-tsa@e9da47064 |
 | `TSA2_KPSS` | kpss / taxi-hourly | lane/apple-fast-tsa2 @ b27c8169b | tsa2-kpss-taxi-hourly | compile fail on this branch; on gap-tsa: kpss taxi-hourly -73%, synthetic -62% | DROPPED-noise | same gain as TSA_FAST_KPSS_PACK, which was kept instead; stays opt-in; code removed from main 7ff2caf99; recover at lane/apple-fast-tsa2@b27c8169b |
 | (baseline, no switch) | - | lane/apple-fast-seq @ b185f069f | seq-croston-ident, seq-croston-fast | - | OPEN | IDENTICAL / FAST baseline lines |
-| `SEQ_FAST_THETA_HOIST` | theta / taxi-hourly | lane/apple-fast-gap-tsa @ e9da47064 | gaptsa-thetahoist-theta-taxi-hourly | theta taxi-hourly 218 -> 58 | OPEN | -73% alone (at 976a585a0); combo gaptsa-spechoist-theta-taxi-hourly queued; on main, default off |
+| `SEQ_FAST_THETA_HOIST` | theta / taxi-hourly | lane/apple-fast-gap-tsa @ e9da47064 | gaptsa-thetahoist-theta-taxi-hourly | theta taxi-hourly 218 -> 58 | DROPPED-noise | -73% alone (at 976a585a0); on top of THETA_SPEC (default) gaptsa-spechoist-theta-taxi-hourly 21.8 -> 21.5 (-1%, noise); code removed from main 239fde86d; recover at lane/apple-fast-gap-tsa@e9da47064 |
 | `SEQ_GARCH_HOST_MAX` | - | lane/apple-fast-seq @ b185f069f | seq-garch-ident-dev, seq-garch-dev | - | OPEN | env-form line (no-op after define switch) |
 
 ## Kernel / GP (11)
