@@ -50,7 +50,7 @@ import time
 from . import _backend
 from . import _portable_math as _pm
 from ._array import Array
-from ._buffer import as_f32_c, addr_ro, addr as _addr_rw, _as_typed
+from ._buffer import as_f32_c, addr_ro, addr as _addr_rw, _as_typed, empty, full
 from . import _labels
 from . import _arena_io
 from ._labels import flatten_labels, sorted_classes, label_kind
@@ -1277,34 +1277,27 @@ def _kfold_assignment(n, n_folds, seed, shuffle=True):
     return fold
 
 
-def _native_folds(n, n_folds, seed, shuffle, codes=None, n_classes=0, as_array=False):
-    """The fold assignment through the binding's host entry (x_prep/folds.mojo,
-    the same integers), or None when the binding has none. `codes` is a list
-    or an int32 Array; as_array returns the folds as an int32 Array."""
-    if os.environ.get("MOJOLEARN_XPREP_NATIVE_FOLDS", "1") == "0":
-        return None
+def _native_folds(n, n_folds, seed, shuffle, codes=None, n_classes=0):
+    """TargetEncoder's fold of every row, by the binding's entry
+    (x_prep/folds.mojo; both columns), as an int32 Array. `codes` is None
+    (K-fold) or an int32 Array of class codes (stratified). Lane
+    cgr4-py-compute deleted the MOJOLEARN_XPREP_NATIVE_FOLDS switch and the
+    Python route it chose (`_kfold_assignment` / `_stratified_assignment`
+    stay below as the tests' definitions only)."""
     b = _prep_binding(_mode())
     s = int(seed) & 0xFFFFFFFFFFFFFFFF
     halves = (s & 0xFFFFFFFF, s >> 32)
-    out = array.array("i", bytes(4 * max(n, 1)))
+    entry = b.x_prep_kfold_folds if codes is None else b.x_prep_strat_folds
+    out = empty((max(n, 1),), "<i4")
     if codes is None:
-        if _optional_prep_entry(b, "x_prep_kfold_folds") is None:
-            return None
-        b.x_prep_kfold_folds(out.buffer_info()[0], (n, n_folds, 1 if shuffle else 0), halves)
+        entry(_addr_rw(out, name="folds"), (n, n_folds, 1 if shuffle else 0), halves)
     else:
-        if _optional_prep_entry(b, "x_prep_strat_folds") is None:
-            return None
-        if isinstance(codes, Array) and codes.dtype == "<i4" and codes._has_order("C") and codes.size == n:
-            cod, cod_addr = codes, addr_ro(codes, name="codes")
-        else:
-            cod = array.array("i", codes)
-            cod_addr = cod.buffer_info()[0]
-        if b.x_prep_strat_folds(cod_addr, out.buffer_info()[0],
+        if not (isinstance(codes, Array) and codes.dtype == "<i4" and codes._has_order("C") and codes.size == n):
+            raise ValueError("mojolearn: TargetEncoder fold codes must be n int32 codes")
+        if entry(addr_ro(codes, name="codes"), _addr_rw(out, name="folds"),
                                 (n, n_classes, n_folds, 1 if shuffle else 0), halves) != 0:
             raise ValueError(f"mojolearn: n_splits={n_folds} cannot be greater than the number of members in each class")
-    if as_array:
-        return Array._owned(out, (len(out),), "<i4", "C")
-    return out[:n].tolist()
+    return out if out.size == n else out[:n]
 
 
 def _stratified_assignment(codes, n_folds, seed, shuffle=True):
@@ -1434,7 +1427,7 @@ class TargetEncoder(_PrepBase):
         codes, _neg = _codes(pr, arr, cats)
         if binary is None:
             yo = pr.put_list(yflat)
-            fo = pr.put_list(folds if folds is not None else [-1] * n)
+            fo = pr.put_codes(folds if folds is not None else full((max(n, 1),), -1, "<i4"))
         else:
             yo = pr.put_codes(binary[1])
             fo = pr.put_codes(folds)
@@ -1536,22 +1529,17 @@ class TargetEncoder(_PrepBase):
         if binary is not None:
             if binary[1].size != n:
                 raise ValueError("mojolearn: X and y have different numbers of rows")
-            folds = _native_folds(n, cv, seed, bool(self.shuffle), binary[1], len(binary[0]), as_array=True)
-            if folds is not None:
-                return self._run(arr, y, folds, cv, True, binary=binary)
+            folds = _native_folds(n, cv, seed, bool(self.shuffle), binary[1], len(binary[0]))
+            return self._run(arr, y, folds, cv, True, binary=binary)
         kind, _classes, _yflat, _T = _target_kind(y, self.target_type)
         if kind == "continuous":
             folds = _native_folds(n, cv, seed, bool(self.shuffle))
-            if folds is None:
-                folds = _kfold_assignment(n, cv, seed, bool(self.shuffle))
         else:
             labels = flatten_labels(y)
             if len(labels) != n:
                 raise ValueError("mojolearn: X and y have different numbers of rows")
             classes, codes = encode_labels(labels)
-            folds = _native_folds(n, cv, seed, bool(self.shuffle), codes.tolist(), len(classes))
-            if folds is None:
-                folds = _stratified_assignment(labels, cv, seed, bool(self.shuffle))
+            folds = _native_folds(n, cv, seed, bool(self.shuffle), codes, len(classes))
         return self._run(arr, y, folds, cv, True)
 
     def transform(self, X):

@@ -12,6 +12,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_prep.common import X_PREP_HOST_SABOTAGE
 from x_prep.host.program import run_program_host
 from x_prep.user_host import F32P, F64P, I32P, ii_rows, ii_gather, ii_scatter, ii_conv
+from x_prep.folds import kfold_folds, strat_folds
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -124,6 +125,39 @@ def ii_conv_binding(a_addr: PythonObject, b_addr: PythonObject, ints: PythonObje
 
 
 @export
+def _seed(v: PythonObject) raises -> UInt64:
+    """(lo, hi) 32-bit halves -> the 64-bit seed."""
+    return (UInt64(Int(py=v[1])) << 32) | UInt64(Int(py=v[0]))
+
+
+def strat_folds_binding(codes_addr: PythonObject, out_addr: PythonObject, ints: PythonObject,
+                        seed: PythonObject) raises -> PythonObject:
+    """TargetEncoder's stratified fold assignment (x_prep/folds.mojo; the GPU
+    binding's entry, the same integers; lane cgr4-py-compute deleted the
+    Python copy the CPU-only install ran). ints = (n, n_classes, n_folds,
+    shuffle); seed = (lo, hi). Returns 0, or -1 when every class has fewer
+    rows than n_folds."""
+    var ca = Int(py=codes_addr)
+    var oa = Int(py=out_addr)
+    var n = Int(py=ints[0])
+    if ca == 0 or oa == 0 or n < 0:
+        raise Error("x_prep: invalid fold buffers")
+    var r = strat_folds(I32P(unsafe_from_address=ca), n, Int(py=ints[1]), Int(py=ints[2]), _seed(seed),
+                        Int(py=ints[3]) != 0, I32P(unsafe_from_address=oa))
+    return PythonObject(r)
+
+
+def kfold_folds_binding(out_addr: PythonObject, ints: PythonObject, seed: PythonObject) raises -> PythonObject:
+    """TargetEncoder's K-fold assignment (x_prep/folds.mojo). ints = (n,
+    n_folds, shuffle); seed = (lo, hi)."""
+    var oa = Int(py=out_addr)
+    var n = Int(py=ints[0])
+    if oa == 0 or n < 0:
+        raise Error("x_prep: invalid fold buffers")
+    kfold_folds(n, Int(py=ints[1]), _seed(seed), Int(py=ints[2]) != 0, I32P(unsafe_from_address=oa))
+    return PythonObject(0)
+
+
 def PyInit__mojolearn_x_prep_host() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_prep_host")
@@ -136,6 +170,8 @@ def PyInit__mojolearn_x_prep_host() abi("C") -> PythonObject:
         m.def_function[ii_gather_binding]("x_prep_ii_gather")
         m.def_function[ii_scatter_binding]("x_prep_ii_scatter")
         m.def_function[ii_conv_binding]("x_prep_ii_conv")
+        m.def_function[strat_folds_binding]("x_prep_strat_folds")
+        m.def_function[kfold_folds_binding]("x_prep_kfold_folds")
         m.def_function[x_prep_numeric_mode_binding]("x_prep_numeric_mode")
         m.def_function[x_prep_vendor_binding]("x_prep_vendor")
         return m.finalize()
