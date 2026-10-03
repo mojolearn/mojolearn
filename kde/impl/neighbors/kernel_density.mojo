@@ -103,6 +103,7 @@ is not this lane's.
 
 from std.math import log, pi, sqrt
 from std.memory import bitcast
+from std.sys.info import has_apple_gpu_accelerator
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
@@ -1548,6 +1549,15 @@ def _kde_score_samples_fused(
     # staged path does this inside `pairwise_distance`, which the fused
     # pass does not call.
     validate_metric_arg(metric, metric_arg)
+    if kde_fast_slices_on():
+        # MOJOLEARN_KDE_FAST_SLICES=1 (lane/apple-fast-core, 2026-10-02):
+        # the train rows split over `grid.y`, see `kde_fused_slice_kernel`.
+        _kde_score_samples_fused_sliced(
+            ctx, train, query, weights, has_weights, sum_weights,
+            n_train, n_query, n_features, bandwidth, kernel, metric,
+            metric_arg, scores, elem_tpb,
+        )
+        return
     var lse = ctx.enqueue_create_buffer[DType.float32](n_query)
     var logw: DeviceBuffer[DType.float32]
     if has_weights:
@@ -2756,3 +2766,482 @@ def kde_score_samples_device(
     _ = logk^
     _ = lse^
     _ = rowmax^
+
+
+# ---------------------------------------------------------------------------
+# MOJOLEARN_KDE_FAST_SLICES=1 (lane/apple-fast-core, 2026-10-02): THE FUSED
+# FAST PASS SPLIT OVER THE TRAIN ROWS
+# ---------------------------------------------------------------------------
+# Cause: `kde_fused_logsumexp_kernel` / `kde_fused_wide_kernel` are ONE
+# THREAD PER QUERY over EVERY train row (`_kde_fused_launch`,
+# `grid_dim=((n_query + 127) // 128, 1, 1)`): the board's KDE block is 2,000
+# queries x 100,000 fit rows, so 16 blocks of 128 threads each walk 100,000
+# rows serially while the rest of the M3 Ultra idles. Here the train rows
+# are cut into `slices` contiguous ranges along `grid.y` (about
+# KDE_SLICE_TARGET_BLOCKS blocks in all); each (query, slice) thread runs
+# the SAME online log-sum-exp over its range and writes its running
+# `(m, s)` pair, and `kde_slice_merge_kernel` folds the pairs per query:
+# `lse = M + log(sum_slice s_slice * exp(m_slice - M))`, `M = max m_slice`.
+# The per-cell arithmetic is the fused kernel's; only the fold association
+# changes, which FAST may do. FAST + Apple only; the two slice kernels are
+# the two fused kernels with slice bounds and partial outputs.
+# DEFAULT ON (FAST + Apple) since the M3 A/B core-kde-slices-istella: kde
+# 1,519 -> 141 ms, mean_log_likelihood -222.3 same. -D
+# MOJOLEARN_KDE_FAST_SLICES_OFF turns it off; the old -D
+# MOJOLEARN_KDE_FAST_SLICES name is accepted and changes nothing.
+comptime KDE_SLICE_TARGET_BLOCKS = 1024
+comptime KDE_SLICE_MAX = 256
+
+
+def kde_fast_slices_on() -> Bool:
+    comptime if not (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+        and not is_defined["MOJOLEARN_KDE_FAST_SLICES_OFF"]()
+    ):
+        return False
+    else:
+        return True
+
+
+def kde_fused_slice_kernel[DPAD: Int](
+    part_m: MutPointer[Float32, MutAnyOrigin],
+    part_s: MutPointer[Float32, MutAnyOrigin],
+    query: MutPointer[Float32, MutAnyOrigin],
+    train: MutPointer[Float32, MutAnyOrigin],
+    logw: MutPointer[Float32, MutAnyOrigin],
+    n_query_in: Int32,
+    n_train_in: Int32,
+    d_in: Int32,
+    has_weights_in: Int32,
+    bandwidth: Float32,
+    kernel_in: Int32,
+    metric_in: Int32,
+    metric_arg: Float32,
+    slice_rows_in: Int32,
+):
+    """`kde_fused_logsumexp_kernel` over train rows `[block_idx.y *
+    slice_rows, +slice_rows)`, writing the running `(m, s)` of each query
+    at `part_*[block_idx.y * n_query + q]` instead of the final lse."""
+    from std.math import exp, log, sqrt
+    comptime IN_REGS = DPAD > 0
+    var n_query = Int(n_query_in)
+    var n_train = Int(n_train_in)
+    var d = Int(d_in)
+    var has_weights = Int(has_weights_in) != 0
+    var kernel = Int(kernel_in)
+    var metric = Int(metric_in)
+    var tid = Int(thread_idx.x)
+    var q = Int(block_idx.x) * KDE_FUSED_TPB + tid
+    var active = q < n_query
+    var sl = Int(block_idx.y)
+    var t_lo = sl * Int(slice_rows_in)
+    var t_hi = t_lo + Int(slice_rows_in)
+    if t_hi > n_train:
+        t_hi = n_train
+    var tile = stack_allocation[
+        KDE_FUSED_TILE_FLOATS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tile_w = stack_allocation[
+        KDE_FUSED_TILE_ROWS_MAX,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var qreg = stack_allocation[
+        DPAD if IN_REGS else 1, Scalar[DType.float32]
+    ]()
+    var dp: Int
+    comptime if IN_REGS:
+        dp = DPAD
+    else:
+        dp = d
+    var rows = KDE_FUSED_TILE_FLOATS // dp
+    if rows > KDE_FUSED_TILE_ROWS_MAX:
+        rows = KDE_FUSED_TILE_ROWS_MAX
+    var qbase = q * d
+    var qnorm = Float32(0.0)
+    comptime if IN_REGS:
+        comptime for f in range(DPAD):
+            var v = Float32(0.0)
+            if active and f < d:
+                v = query.unsafe_load(qbase + f)
+            qreg.unsafe_store(f, v)
+            qnorm += v * v
+    else:
+        if active:
+            for f in range(d):
+                var v = query.unsafe_load(qbase + f)
+                qnorm += v * v
+    qnorm = sqrt(qnorm)
+    var neg_inv_2h2 = Float32(-1.0) / (Float32(2.0) * bandwidth * bandwidth)
+    var one_over_p = Float32(1.0) / metric_arg
+    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
+    var m = neg_inf
+    var s = Float32(0.0)
+    var t0 = t_lo
+    while t0 < t_hi:
+        var rows_here = t_hi - t0
+        if rows_here > rows:
+            rows_here = rows
+        barrier()
+        var total = rows_here * dp
+        var idx = tid
+        while idx < total:
+            var v = Float32(0.0)
+            comptime if IN_REGS:
+                var r = idx // DPAD
+                var f = idx - r * DPAD
+                if f < d:
+                    v = train.unsafe_load((t0 + r) * d + f)
+            else:
+                v = train.unsafe_load(t0 * d + idx)
+            tile.unsafe_store(idx, v)
+            idx += KDE_FUSED_TPB
+        if has_weights:
+            idx = tid
+            while idx < rows_here:
+                tile_w.unsafe_store(idx, logw.unsafe_load(t0 + idx))
+                idx += KDE_FUSED_TPB
+        barrier()
+        if active:
+            for j in range(rows_here):
+                var tnorm = Float32(0.0)
+                var acc = _kde_fused_cell_distance[DPAD](
+                    qreg, query, tile, qbase, j * dp, d, metric, metric_arg, tnorm
+                )
+                var v: Float32
+                if kernel == KDE_KERNEL_GAUSSIAN and metric == DIST_L2_SQRT_UNEXPANDED:
+                    v = acc * neg_inv_2h2
+                else:
+                    var x: Float32
+                    if metric == DIST_L2_SQRT_UNEXPANDED:
+                        x = sqrt(acc)
+                    elif metric == DIST_COSINE_EXPANDED:
+                        x = Float32(1.0) - acc / (qnorm * sqrt(tnorm))
+                    elif metric == DIST_LP_UNEXPANDED:
+                        x = Float32(0.0)
+                        if acc > Float32(0.0):
+                            x = exp(one_over_p * log(acc))
+                    else:
+                        x = acc
+                    v = compute_log_kernel(x, bandwidth, kernel)
+                if has_weights:
+                    v = v + tile_w.unsafe_load(j)
+                if v > m:
+                    s = s * exp(m - v) + Float32(1.0)
+                    m = v
+                elif v == m:
+                    s += Float32(1.0)
+                else:
+                    s += exp(v - m)
+        t0 += rows
+    if active:
+        part_m.unsafe_store(sl * n_query + q, m)
+        part_s.unsafe_store(sl * n_query + q, s)
+
+
+def kde_fused_wide_slice_kernel(
+    part_m: MutPointer[Float32, MutAnyOrigin],
+    part_s: MutPointer[Float32, MutAnyOrigin],
+    query: MutPointer[Float32, MutAnyOrigin],
+    train: MutPointer[Float32, MutAnyOrigin],
+    logw: MutPointer[Float32, MutAnyOrigin],
+    n_query_in: Int32,
+    n_train_in: Int32,
+    d_in: Int32,
+    has_weights_in: Int32,
+    bandwidth: Float32,
+    kernel_in: Int32,
+    metric_in: Int32,
+    metric_arg: Float32,
+    slice_rows_in: Int32,
+):
+    """`kde_fused_wide_kernel` (`d > KDE_FUSED_QREG`) over one train slice,
+    partial `(m, s)` out; see `kde_fused_slice_kernel`."""
+    from std.math import exp, log, sqrt
+    comptime Q = KDE_FUSED_QREG
+    var n_query = Int(n_query_in)
+    var n_train = Int(n_train_in)
+    var d = Int(d_in)
+    var has_weights = Int(has_weights_in) != 0
+    var kernel = Int(kernel_in)
+    var metric = Int(metric_in)
+    var tid = Int(thread_idx.x)
+    var q = Int(block_idx.x) * KDE_FUSED_TPB + tid
+    var active = q < n_query
+    var sl = Int(block_idx.y)
+    var t_lo = sl * Int(slice_rows_in)
+    var t_hi = t_lo + Int(slice_rows_in)
+    if t_hi > n_train:
+        t_hi = n_train
+    var tile = stack_allocation[
+        KDE_FUSED_TILE_FLOATS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tile_w = stack_allocation[
+        KDE_FUSED_WIDE_ROWS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var qreg = stack_allocation[Q, Scalar[DType.float32]]()
+    var acc = stack_allocation[KDE_FUSED_WIDE_ROWS, Scalar[DType.float32]]()
+    var tn = stack_allocation[KDE_FUSED_WIDE_ROWS, Scalar[DType.float32]]()
+    var rows = KDE_FUSED_TILE_FLOATS // d
+    if rows > KDE_FUSED_WIDE_ROWS:
+        rows = KDE_FUSED_WIDE_ROWS
+    var qbase = q * d
+    var qnorm = Float32(0.0)
+    if active:
+        for f in range(d):
+            var v = query.unsafe_load(qbase + f)
+            qnorm += v * v
+    qnorm = sqrt(qnorm)
+    var neg_inv_2h2 = Float32(-1.0) / (Float32(2.0) * bandwidth * bandwidth)
+    var one_over_p = Float32(1.0) / metric_arg
+    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
+    var m = neg_inf
+    var s = Float32(0.0)
+    var is_l2 = metric == DIST_L2_SQRT_UNEXPANDED or metric == DIST_L2_EXPANDED
+    var t0 = t_lo
+    while t0 < t_hi:
+        var rows_here = t_hi - t0
+        if rows_here > rows:
+            rows_here = rows
+        barrier()
+        var total = rows_here * d
+        var idx = tid
+        while idx < total:
+            tile.unsafe_store(idx, train.unsafe_load(t0 * d + idx))
+            idx += KDE_FUSED_TPB
+        if has_weights:
+            idx = tid
+            while idx < rows_here:
+                tile_w.unsafe_store(idx, logw.unsafe_load(t0 + idx))
+                idx += KDE_FUSED_TPB
+        barrier()
+        if active:
+            for j in range(rows_here):
+                acc.unsafe_store(j, Float32(0.0))
+                tn.unsafe_store(j, Float32(0.0))
+            var c0 = 0
+            while c0 < d:
+                var width = d - c0
+                if width > Q:
+                    width = Q
+                comptime for f in range(Q):
+                    var v = Float32(0.0)
+                    if f < width:
+                        v = query.unsafe_load(qbase + c0 + f)
+                    qreg.unsafe_store(f, v)
+                for j in range(rows_here):
+                    var tb = j * d + c0
+                    var a = acc.unsafe_load(j)
+                    if is_l2:
+                        comptime for f in range(Q):
+                            if f < width:
+                                var diff = qreg.unsafe_load(f) - tile.unsafe_load(tb + f)
+                                a += diff * diff
+                    elif metric == DIST_L1:
+                        comptime for f in range(Q):
+                            if f < width:
+                                a += abs(qreg.unsafe_load(f) - tile.unsafe_load(tb + f))
+                    elif metric == DIST_LINF:
+                        comptime for f in range(Q):
+                            if f < width:
+                                var x = abs(qreg.unsafe_load(f) - tile.unsafe_load(tb + f))
+                                if x > a:
+                                    a = x
+                    elif metric == DIST_COSINE_EXPANDED:
+                        var t2 = tn.unsafe_load(j)
+                        comptime for f in range(Q):
+                            if f < width:
+                                var t = tile.unsafe_load(tb + f)
+                                a += qreg.unsafe_load(f) * t
+                                t2 += t * t
+                        tn.unsafe_store(j, t2)
+                    else:
+                        comptime for f in range(Q):
+                            if f < width:
+                                var x = abs(qreg.unsafe_load(f) - tile.unsafe_load(tb + f))
+                                if x > Float32(0.0):
+                                    a += exp(metric_arg * log(x))
+                    acc.unsafe_store(j, a)
+                c0 += Q
+            for j in range(rows_here):
+                var a = acc.unsafe_load(j)
+                var v: Float32
+                if kernel == KDE_KERNEL_GAUSSIAN and metric == DIST_L2_SQRT_UNEXPANDED:
+                    v = a * neg_inv_2h2
+                else:
+                    var x: Float32
+                    if metric == DIST_L2_SQRT_UNEXPANDED:
+                        x = sqrt(a)
+                    elif metric == DIST_COSINE_EXPANDED:
+                        x = Float32(1.0) - a / (qnorm * sqrt(tn.unsafe_load(j)))
+                    elif metric == DIST_LP_UNEXPANDED:
+                        x = Float32(0.0)
+                        if a > Float32(0.0):
+                            x = exp(one_over_p * log(a))
+                    else:
+                        x = a
+                    v = compute_log_kernel(x, bandwidth, kernel)
+                if has_weights:
+                    v = v + tile_w.unsafe_load(j)
+                if v > m:
+                    s = s * exp(m - v) + Float32(1.0)
+                    m = v
+                elif v == m:
+                    s += Float32(1.0)
+                else:
+                    s += exp(v - m)
+        t0 += rows
+    if active:
+        part_m.unsafe_store(sl * n_query + q, m)
+        part_s.unsafe_store(sl * n_query + q, s)
+
+
+def kde_slice_merge_kernel(
+    lse: MutPointer[Float32, MutAnyOrigin],
+    part_m: MutPointer[Float32, MutAnyOrigin],
+    part_s: MutPointer[Float32, MutAnyOrigin],
+    n_query_in: Int32,
+    n_slices_in: Int32,
+):
+    """One thread per query: `lse = M + log(sum_slice s * exp(m - M))`,
+    `M` the largest slice maximum; `-inf` when every slice is `-inf`."""
+    from std.math import exp, log
+    var n_query = Int(n_query_in)
+    var n_slices = Int(n_slices_in)
+    var q = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if q >= n_query:
+        return
+    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
+    var big = neg_inf
+    for sl in range(n_slices):
+        var mv = part_m.unsafe_load(sl * n_query + q)
+        if mv > big:
+            big = mv
+    if big == neg_inf:
+        lse.unsafe_store(q, neg_inf)
+        return
+    var tot = Float32(0.0)
+    for sl in range(n_slices):
+        var mv = part_m.unsafe_load(sl * n_query + q)
+        if mv != neg_inf:
+            tot += part_s.unsafe_load(sl * n_query + q) * exp(mv - big)
+    lse.unsafe_store(q, log(tot) + big)
+
+
+def _kde_score_samples_fused_sliced(
+    ctx: DeviceContext,
+    mut train: DeviceBuffer[DType.float32],
+    mut query: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool,
+    sum_weights: Float32,
+    n_train: Int,
+    n_query: Int,
+    n_features: Int,
+    bandwidth: Float32,
+    kernel: Int,
+    metric: Int,
+    metric_arg: Float32,
+    mut scores: DeviceBuffer[DType.float32],
+    elem_tpb: Int,
+) raises:
+    """`_kde_score_samples_fused` with the train rows sliced over `grid.y`:
+    log-weights (if any), the slice pass, the merge, the normalization."""
+    var qblocks = (n_query + KDE_FUSED_TPB - 1) // KDE_FUSED_TPB
+    var slices = KDE_SLICE_TARGET_BLOCKS // qblocks
+    if slices < 1:
+        slices = 1
+    if slices > KDE_SLICE_MAX:
+        slices = KDE_SLICE_MAX
+    if slices > n_train:
+        slices = n_train
+    var slice_rows = (n_train + slices - 1) // slices
+    slices = (n_train + slice_rows - 1) // slice_rows
+    var part_m = ctx.enqueue_create_buffer[DType.float32](slices * n_query)
+    var part_s = ctx.enqueue_create_buffer[DType.float32](slices * n_query)
+    var lse = ctx.enqueue_create_buffer[DType.float32](n_query)
+    var logw: DeviceBuffer[DType.float32]
+    if has_weights:
+        logw = ctx.enqueue_create_buffer[DType.float32](n_train)
+        ctx.enqueue_function[log_weights_kernel](
+            logw.unsafe_ptr(),
+            weights.unsafe_ptr(),
+            Int32(n_train),
+            grid_dim=((n_train + elem_tpb - 1) // elem_tpb, 1, 1),
+            block_dim=(elem_tpb, 1, 1),
+        )
+    else:
+        logw = ctx.enqueue_create_buffer[DType.float32](1)
+    var dpad = ((n_features + 3) // 4) * 4
+    var launched = False
+    comptime for DP in [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64]:
+        if dpad == DP:
+            launched = True
+            ctx.enqueue_function[kde_fused_slice_kernel[DP]](
+                part_m.unsafe_ptr(),
+                part_s.unsafe_ptr(),
+                query.unsafe_ptr(),
+                train.unsafe_ptr(),
+                logw.unsafe_ptr(),
+                Int32(n_query),
+                Int32(n_train),
+                Int32(n_features),
+                Int32(1 if has_weights else 0),
+                bandwidth,
+                Int32(kernel),
+                Int32(metric),
+                metric_arg,
+                Int32(slice_rows),
+                grid_dim=(qblocks, slices, 1),
+                block_dim=(KDE_FUSED_TPB, 1, 1),
+            )
+    if not launched:
+        ctx.enqueue_function[kde_fused_wide_slice_kernel](
+            part_m.unsafe_ptr(),
+            part_s.unsafe_ptr(),
+            query.unsafe_ptr(),
+            train.unsafe_ptr(),
+            logw.unsafe_ptr(),
+            Int32(n_query),
+            Int32(n_train),
+            Int32(n_features),
+            Int32(1 if has_weights else 0),
+            bandwidth,
+            Int32(kernel),
+            Int32(metric),
+            metric_arg,
+            Int32(slice_rows),
+            grid_dim=(qblocks, slices, 1),
+            block_dim=(KDE_FUSED_TPB, 1, 1),
+        )
+    ctx.enqueue_function[kde_slice_merge_kernel](
+        lse.unsafe_ptr(),
+        part_m.unsafe_ptr(),
+        part_s.unsafe_ptr(),
+        Int32(n_query),
+        Int32(slices),
+        grid_dim=((n_query + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
+    var log_sw = ftz(identical_log(sum_weights))
+    var norm = log_kernel_norm(kernel, bandwidth, n_features)
+    ctx.enqueue_function[normalize_scores_kernel](
+        scores.unsafe_ptr(),
+        lse.unsafe_ptr(),
+        Int32(n_query),
+        log_sw,
+        norm,
+        grid_dim=((n_query + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
+    ctx.synchronize()
+    _ = part_m^
+    _ = part_s^
+    _ = lse^
+    _ = logw^

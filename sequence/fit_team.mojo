@@ -36,11 +36,12 @@ Slicing: the optimizers stop at an iteration boundary (`nm_steps`,
 `lbfgs_steps` with a budget) and keep their state in each thread's private
 row, so a resumed fit runs the same iterations as one call."""
 from std.memory import bitcast
-from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator, is_amd_gpu, is_apple_gpu, is_nvidia_gpu
 from x_linear.team import team_barrier
 
-from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_sqrt
-from sequence.garch import GARCH_SNAP, LOG_2PI, _backcast, _grid, _pers, _var_bounds, garch_sigma2
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_exp, identical_log, identical_sqrt
+from sequence.garch import GARCH_SNAP, LOG_2PI, _backcast, _garch_step_reg, _grid, _pers, _var_bounds, garch_sigma2
 from sequence.nm import NMState, Objective, nm_finish, nm_start, nm_steps
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from sequence.prophet import MEM, LBState, ProphetFG, _fg_prior_v, lbfgs_start, lbfgs_steps
@@ -99,6 +100,38 @@ def _spend(left: Int, c: Int) -> Int:
 #: 5 the outputs; 6 done
 comptime GT_DONE = 6
 
+#: lane apple-fast-garchspeed (2026-10-03). `garch_nll_team` runs the
+#: variance recursion on the lead thread alone (n dependent steps through
+#: device memory: r, s2 and the bounds read back, s2 stored), then deals
+#: out the n terms and has every thread fold all n of them: on the M3
+#: (FAST, GARCH_REG + GARCH_GRID default) garch synthetic 384 ms, taxi-hourly
+#: 581 ms against arch's 106 / 125 ms. For p, o, q <= 1 (the board's
+#: GARCH(1, 1)) the recursion without its bounds is AFFINE in the previous
+#: variance, sigma2_t = beta sigma2_{t-1} + c_t with c_t = omega +
+#: alpha r_{t-1}^2 + gamma r_{t-1}^2 [r_{t-1} < 0], so
+#: GARCH_COOP splits the series into one chunk of L points
+#: per thread, the ETS_TEAM shape (sequence/ets_team.mojo): pass 1 composes
+#: the chunk's map (A, C) from an unknown start, each thread takes its
+#: start from the maps before it (the exclusive prefix), and pass 2 walks
+#: the chunk from that start with the bounds (`_garch_step_reg`), summing
+#: its log-likelihood terms; the total is every thread's ascending fold over
+#: the per-chunk sums. A bound that fires (or a NaN) anywhere makes the map
+#: wrong past it, so the block then scores the point with the lead's exact
+#: recursion (`garch_nll_team`), the same for every thread. The 64-point
+#: start grid scores its candidates the same way; the final evaluation keeps
+#: the stored recursion (the sigma output and the forecast read r and s2).
+#: The fold orders differ, so the bits differ: FAST only, Apple only.
+#: Default on FAST + Apple since the M3 A/B (lane/apple-fast-garchspeed
+#: 5bc97d9d7, n=1): garch synthetic 383 -> 15.1 ms, taxi-hourly 582 -> 31.0
+#: ms; mean_llf -1938.2249 -> -1938.2239 and -1132.955 -> -1131.911 (equal
+#: or better). -D MOJOLEARN_GARCH_COOP_OFF restores the lead's recursion;
+#: the old -D MOJOLEARN_GARCH_COOP is harmless.
+comptime GARCH_COOP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_GARCH_COOP_OFF"]()
+)
+
 
 def garch_team_priv(h: Int, m: Int) -> Int:
     """Words of one thread's private row: the record, x / lo / hi / cand
@@ -109,7 +142,10 @@ def garch_team_priv(h: Int, m: Int) -> Int:
 
 def garch_team_shared(n: Int) -> Int:
     """Words of a series' shared row: r, s2, the variance bounds (2n), the
-    log-likelihood terms."""
+    log-likelihood terms; GARCH_COOP: then the chunk maps (2 words per
+    thread), the per-chunk sums and the bound flags."""
+    comptime if GARCH_COOP:
+        return 5 * n + 4 * SEQ_TEAM_TPB
     return 5 * n
 
 
@@ -135,6 +171,103 @@ def garch_nll_team(team: SeqTeam, par: FP, r: FP, n: Int, p: Int, o: Int, q: Int
     return ll
 
 
+@always_inline
+def garch_nll_coop(team: SeqTeam, w: Float32, pa: Float32, pg: Float32, pb: Float32, y: FP, mu: Float32,
+                   n: Int, p: Int, o: Int, q: Int, backcast: Float32, vb: FP, cs: FP) -> Tuple[Float32, Bool]:
+    """GARCH_COOP: -loglik of (omega, alpha, gamma, beta) = (w, pa, pg, pb)
+    (unused ones 0), p, o, q <= 1, r_t = y_t - mu, over the block as one
+    chunk per thread (the GARCH_COOP comment). cs: the maps [2 nt], the sums
+    [nt], the flags [nt]. Returns (value, ok); ok False (the same in every
+    thread) when a bound or a NaN fired, and the value is then unset."""
+    var tid = team.tid
+    var nt = team.nt
+    var L = (n + nt - 1) // nt
+    var t0 = tid * L
+    var t1 = t0 + L
+    if t1 > n:
+        t1 = n
+    if t0 > n:
+        t0 = n
+    # pass 1: sigma2_{t1 - 1} = A sigma2_{t0 - 1} + C, the bounds left out
+    var A = Float32(1.0)
+    var C = Float32(0.0)
+    for t in range(t0, t1):
+        if t < 1:
+            var v0 = w
+            if p > 0:
+                v0 = fma3(pa, backcast, v0)
+            if o > 0:
+                v0 = fma3(pg, mul(Float32(0.5), backcast), v0)
+            if q > 0:
+                v0 = fma3(pb, backcast, v0)
+            A = Float32(0.0)
+            C = v0
+        else:
+            var x = sub(ld(y, t - 1), mu)
+            var x2 = mul(x, x)
+            var c = fma3(pa, x2, w)
+            if x < Float32(0.0):
+                c = fma3(pg, x2, c)
+            A = mul(pb, A)
+            C = fma3(pb, C, c)
+    st(cs, 2 * tid, A)
+    st(cs, 2 * tid + 1, C)
+    team.sync()
+    # the exclusive prefix: sigma2_{t0 - 1} through the maps before this
+    # chunk (chunk 0's map starts at t = 0 with A = 0, so the seed is moot)
+    var sp = Float32(0.0)
+    for j in range(tid):
+        sp = fma3(ld(cs, 2 * j), sp, ld(cs, 2 * j + 1))
+    var rp = Float32(0.0)
+    if t0 > 0 and t0 < n:
+        rp = sub(ld(y, t0 - 1), mu)
+    # pass 2: the chunk with its bounds, its terms' sum
+    var part = Float32(0.0)
+    var bad = Float32(0.0)
+    for t in range(t0, t1):
+        var lo = ld(vb, 2 * t)
+        var hi = ld(vb, 2 * t + 1)
+        var v = w
+        if p > 0:
+            if t < 1:
+                v = fma3(pa, backcast, v)
+            else:
+                v = fma3(pa, mul(rp, rp), v)
+        if o > 0:
+            if t < 1:
+                v = fma3(pg, mul(Float32(0.5), backcast), v)
+            elif rp < Float32(0.0):
+                v = fma3(pg, mul(rp, rp), v)
+        if q > 0:
+            if t < 1:
+                v = fma3(pb, backcast, v)
+            else:
+                v = fma3(pb, sp, v)
+        if not (v >= lo and v <= hi):
+            # a bound (or a NaN): the chunks past this point started wrong
+            bad = Float32(1.0)
+            v = _garch_step_reg(w, pa, pg, pb, p, o, q, t, rp, sp, backcast, lo, hi)
+        var x = sub(ld(y, t), mu)
+        part = add(part, add(add(LOG_2PI, ftz(identical_log(v))), ftz(identical_div(mul(x, x), v))))
+        rp = x
+        sp = v
+    st(cs, 2 * nt + tid, part)
+    st(cs, 3 * nt + tid, bad)
+    team.sync()
+    var ll = Float32(0.0)
+    var nbad = Float32(0.0)
+    for j in range(nt):
+        ll = add(ll, ld(cs, 2 * nt + j))
+        nbad = add(nbad, ld(cs, 3 * nt + j))
+    # the sums and flags are read again only after the next pass 1's sync
+    if nbad != Float32(0.0):
+        return (Float32(0.0), False)
+    ll = mul(Float32(0.5), ll)
+    if not (ll <= Float32(3.0e38)):
+        return (Float32(3.0e38), True)
+    return (ll, True)
+
+
 struct GarchTeamObj(Objective):
     """GarchObj over a block (sequence/garch.mojo `GarchObj.eval`)."""
     var team: SeqTeam
@@ -149,6 +282,7 @@ struct GarchTeamObj(Objective):
     var vb: FP
     var s2: FP
     var terms: FP
+    var cs: FP
 
     @always_inline
     def __init__(out self, team: SeqTeam, y: FP, r: FP, n: Int, p: Int, o: Int, q: Int, has_mean: Bool,
@@ -165,9 +299,35 @@ struct GarchTeamObj(Objective):
         self.vb = vb
         self.s2 = s2
         self.terms = terms
+        self.cs = terms + n
 
     @always_inline
     def eval(mut self, x: FP) -> Float32:
+        comptime if GARCH_COOP:
+            if self.p <= 1 and self.o <= 1 and self.q <= 1:
+                var vol = x + 1 if self.has_mean else x
+                var s = Float32(0.0)
+                for j in range(self.p):
+                    s = add(s, ld(vol, 1 + j))
+                for j in range(self.o):
+                    s = fma3(Float32(0.5), ld(vol, 1 + self.p + j), s)
+                for j in range(self.q):
+                    s = add(s, ld(vol, 1 + self.p + self.o + j))
+                if s > Float32(1.0):
+                    return Float32(1e30)
+                var mu = ld(x, 0) if self.has_mean else Float32(0.0)
+                var pa = ld(vol, 1) if self.p > 0 else Float32(0.0)
+                var pg = ld(vol, 1 + self.p) if self.o > 0 else Float32(0.0)
+                var pb = ld(vol, 1 + self.p + self.o) if self.q > 0 else Float32(0.0)
+                var res = garch_nll_coop(self.team, ld(vol, 0), pa, pg, pb, self.y, mu, self.n, self.p, self.o,
+                                         self.q, self.backcast, self.vb, self.cs)
+                if res[1]:
+                    return res[0]
+        return self.eval_stored(x)
+
+    @always_inline
+    def eval_stored(mut self, x: FP) -> Float32:
+        """The objective with the residuals and sigma2 left in r and s2."""
         var vol = x + 1 if self.has_mean else x
         var s = Float32(0.0)
         for j in range(self.p):
@@ -285,7 +445,20 @@ def garch_team(slot: Int, team: SeqTeam, a: Args):
                         if q > 0:
                             for j in range(q):
                                 st(cand, 1 + p + o + j, ftz(identical_div(agb, Float32(q))))
-                        var nll = garch_nll_team(team, cand, r, n, p, o, q, backcast, vb, s2, terms)
+                        var nll = Float32(0.0)
+                        var done = False
+                        comptime if GARCH_COOP:
+                            if p <= 1 and o <= 1 and q <= 1:
+                                var res = garch_nll_coop(
+                                    team, ld(cand, 0), ld(cand, 1) if p > 0 else Float32(0.0),
+                                    ld(cand, 1 + p) if o > 0 else Float32(0.0),
+                                    ld(cand, 1 + p + o) if q > 0 else Float32(0.0),
+                                    y, mu0, n, p, o, q, backcast, vb, obj.cs)
+                                if res[1]:
+                                    nll = res[0]
+                                    done = True
+                        if not done:
+                            nll = garch_nll_team(team, cand, r, n, p, o, q, backcast, vb, s2, terms)
                         if nll < best:
                             best = nll
                             for j in range(k):
@@ -333,7 +506,8 @@ def garch_team(slot: Int, team: SeqTeam, a: Args):
             else:
                 left = 0
         else:
-            var nll = obj.eval(x)
+            # the sigma output and the forecast read r and s2
+            var nll = obj.eval_stored(x)
             if team.lead():
                 var outp = a.p1 + b * (1 + k)
                 st(outp, 0, ld(x, 0) if has_mean else Float32(0.0))

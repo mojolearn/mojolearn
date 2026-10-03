@@ -107,14 +107,39 @@ def svd_eig_traced(
     `n_cols x n_cols` with the right singular vectors as COLUMNS, descending.
     `tag` prefixes the card's stage names (`ridge.svd.*`).
     """
+    var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
+    var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
+    ctx.synchronize()
+    svd_eig_scratch_traced(ctx, a, n_rows, n_cols, s, u, v, gen_left_vec, xa, xa2, trace, tag)
+    _ = xa^
+    _ = xa2^
+
+
+def svd_eig_scratch_traced(
+    ctx: DeviceContext,
+    mut a: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+    mut s: DeviceBuffer[DType.float32],
+    mut u: DeviceBuffer[DType.float32],
+    mut v: DeviceBuffer[DType.float32],
+    gen_left_vec: Bool,
+    mut xa: DeviceBuffer[DType.float32],
+    mut xa2: DeviceBuffer[DType.float32],
+    mut trace: IdentityTrace,
+    tag: String,
+) raises:
+    """`svd_eig_traced` with the Gram's `gemm_tn` scratch (`xt`, `xt2`)
+    handed in by the caller (lane apple-fast-ridgespeed): a caller holding a
+    dead rows x cols buffer passes it instead of two fresh allocations. Same
+    kernels, same launch shapes, same words; `xa`/`xa2` carry `gemm_tn`'s
+    contracts (`k * m` floats where its arm reads them)."""
     var cov = ctx.enqueue_create_buffer[DType.float32](n_cols * n_cols)
     var v_raw = ctx.enqueue_create_buffer[DType.float32](n_cols * n_cols)
     var vt = ctx.enqueue_create_buffer[DType.float32](n_cols * n_cols)
     var s_raw = ctx.enqueue_create_buffer[DType.float32](n_cols)
     var info_buf = ctx.enqueue_create_buffer[DType.float32](3)
     enqueue_fill(ctx, info_buf, JACOBI_INFO_UNWRITTEN)
-    var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
-    var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
     ctx.synchronize()
 
     # in_cross_mult <- A^T A. `svd.cuh:132-144`. Through `gemm_tn`'s
@@ -240,6 +265,4 @@ def svd_eig_traced(
     _ = vt^
     _ = s_raw^
     _ = info_buf^
-    _ = xa^
-    _ = xa2^
     _ = d_order^
