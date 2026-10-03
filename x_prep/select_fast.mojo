@@ -30,7 +30,7 @@ float32), the scores' edge rules and the p-values are the units' own
 (`f_sf`, the force_finite words), so the only change is the fold ORDER of
 the sums: pairwise instead of row order, never less accurate.
 
-  -D MOJOLEARN_SELECT_FREG=1   f_regression / r_regression (op 64): pass 1
+  (default; _OFF off)          f_regression / r_regression (op 64): pass 1
                                the column sums (and y's) when centring,
                                pass 2 the centred cross and square sums,
                                then r, F and p per column.
@@ -54,9 +54,12 @@ from x_prep.common import FP, IP, STAGE_INTS, canonical_nan
 from x_prep.prims import add, sub, mul, div, sqrtf
 from x_prep.stats import f_sf, pos_inf, F32_MAX
 
-#: FAST on Apple only, each behind its define (default off)
+#: FAST on Apple only. SELECT_FREG is the FAST + Apple default since the M3 A/B
+#: (select-r-regression taxi 100.5 -> 10.1 ms, -90%, n_selected same);
+#: -D MOJOLEARN_SELECT_FREG_OFF turns it off (-D MOJOLEARN_SELECT_FREG is now harmless).
+#: SELECT_FCLS stays opt-in behind its define (its A/B has not run).
 comptime SELECT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime SELECT_FREG = SELECT_FAST_APPLE and is_defined["MOJOLEARN_SELECT_FREG"]()
+comptime SELECT_FREG = SELECT_FAST_APPLE and not is_defined["MOJOLEARN_SELECT_FREG_OFF"]()
 comptime SELECT_FCLS = SELECT_FAST_APPLE and is_defined["MOJOLEARN_SELECT_FCLS"]()
 
 #: the ops (python/mojolearn/_expansion_prep.py `_OPS`)
