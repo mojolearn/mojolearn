@@ -35,7 +35,7 @@ comptime PREP_FAST_MINMAX = (
 )
 from checks.numerics import ftz, identical_div, identical_mul
 
-#: lane/apple-fast-gap-cls2 (2026-10-03), FAST + Apple, default OFF:
+#: lane/apple-fast-gap-cls2 (2026-10-03), FAST + Apple, default ON (below):
 #: `-D MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED` folds the fit's nonfinite scan
 #: (core/device_scan.mojo device_first_nonfinite: a second full read of X, a
 #: partials buffer, a host buffer and its own synchronize) into the extrema
@@ -44,9 +44,12 @@ from checks.numerics import ftz, identical_div, identical_mul
 #: (preprocessing/estimator.mojo) takes the X buffer from a pool kept between
 #: fits instead of a fresh 880 MB allocation per fit at the board's Istella
 #: shape. Both need PREP_FAST_MINMAX. Same keys, same partials, same finalize:
-#: the same words.
-comptime PREP_CLS2_MINMAX_FUSED = PREP_FAST_MINMAX and is_defined["MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED"]()
-comptime PREP_CLS2_MINMAX_POOL = PREP_FAST_MINMAX and is_defined["MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL"]()
+#: the same words. Both are the FAST + Apple default since the M3 A/B (n=1,
+#: quality identical): minmax-scaler istella 104.7 -> 19.1 ms (FUSED+POOL;
+#: POOL alone 106 -> 21.9). `-D MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF` /
+#: `_POOL_OFF` turn them off; the old -D names stay harmless.
+comptime PREP_CLS2_MINMAX_FUSED = PREP_FAST_MINMAX and not is_defined["MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF"]()
+comptime PREP_CLS2_MINMAX_POOL = PREP_FAST_MINMAX and not is_defined["MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL_OFF"]()
 from metrics.checks.device_io import download_f32
 
 
