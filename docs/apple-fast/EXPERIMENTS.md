@@ -556,3 +556,10 @@ Fixes of UNOWNED rows of `tools/hooks/host_routes_baseline.tsv`. Arm A of each A
 | no switch | HDBSCAN / single linkage FAST (Boruvka, m > 4096) | lane/apple-fast-purity2 @ 6f1ad9cf7 | purity2-boruvka-check | - | merged | every Boruvka round on the device (atomic-min edge passes, scan, label propagation, radix sort); same MST by construction; correctness CMD queued |
 | no switch | x_trees apply refusal, tsqr NaN refusal | lane/apple-fast-purity2 @ 6f1ad9cf7 | none | - | merged | error-path scans on the device (atomic min of the first bad key) |
 | no switch | potrf panel / strip diag / sabotage arms, householder QR leaves | lane/apple-fast-purity2 @ 6f1ad9cf7 | none | - | merged | small-launch notes: the launches factor a w x w block (n is the row stride) or one TSQR leaf |
+
+## Gap linalg2, kernel-pca + incremental-pca (lane/apple-fast-gap-linalg2-kpca, Oct 3)
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `KPCA_FAST_LANCZOS_DEV` | kernel-pca / taxi; kernel-pca / istella | lane/apple-fast-gap-linalg2-kpca @ 134dca742 | gl2k-kpca-lzdev-taxi, gl2k-kpca-lzdev-istella | - | OPEN | Lanczos steps enqueued in Mojo (x_decomp/lanczos_dev.mojo), basis on the device; one host read per batch instead of ~4 drains + 2 basis uploads per step. Expect most of the fit's time gone |
+| `IPCA_FAST_DEV` | incremental-pca / taxi | lane/apple-fast-gap-linalg2-kpca @ 134dca742 | gl2k-ipca-dev-taxi | - | OPEN | each batch stacked on the device (no centered-batch download + re-upload) and public arrays read once after the last batch; same values |
