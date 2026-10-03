@@ -56,7 +56,7 @@ def _run(module, text, offsets, vocab_size, min_frequency):
     handle = module.bpe_train(
         _address(text) if text else 0,
         _address(offsets),
-        [len(offsets) - 1, len(text), vocab_size, min_frequency, False],
+        [len(offsets), len(text), vocab_size, min_frequency, False],
     )
     sizes = tuple(int(x) for x in module.bpe_trained_sizes(handle))
     n_tokens, arena_bytes, n_merges, _ties, _groups = sizes
@@ -87,9 +87,8 @@ def main():
 
     documents = _corpus(args.documents)
     text = bytearray(b"".join(documents))
-    offsets = array.array("q", [0])
-    for document in documents:
-        offsets.append(offsets[-1] + len(document))
+    # The binding takes the document LENGTHS (lane/pyglue-text-io).
+    offsets = array.array("q", map(len, documents))
     module = _load(os.path.abspath(args.binding))
     elapsed, digest, sizes = [], None, None
     for _ in range(args.repeats):
