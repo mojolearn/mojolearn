@@ -3638,7 +3638,7 @@ def _numeric_labels(values):
         # loop below, which a list this test cannot settle still takes
         try:
             fl = list(map(float, values)) if kinds != _FLOAT_ONLY else list(values)
-            if not any(map(math.isnan, fl)) and array.array("f", fl).tolist() == fl:
+            if not any(map(_pm.isnan, fl)) and array.array("f", fl).tolist() == fl:
                 return fl
         except OverflowError:
             pass
@@ -3766,8 +3766,14 @@ def _label_buffer(y):
 def _label_chunk(n):
     """Rows per chunk of the run scan and the unknown count (bookkeeping
     only: every chunking writes the same words)."""
-    from math import isqrt  # exact integer square root, no platform pow
-    return max(1024, isqrt(int(n)) + 1)
+    # exact integer square root by integer Newton steps (no platform math)
+    m = int(n)
+    r = m
+    if m > 1:
+        y = (r + 1) // 2
+        while y < r:
+            r, y = y, (y + m // y) // 2
+    return max(1024, r + 1)
 
 
 def _label_load(pr, lb):
@@ -4580,8 +4586,8 @@ class IterativeImputer(_PrepBase):
             return hi
         if not sigma > 0:
             return mu
-        pa = 0.0 if lo == -math.inf else _pm.normal_cdf((lo - mu) / sigma)
-        pb = 1.0 if hi == math.inf else _pm.normal_cdf((hi - mu) / sigma)
+        pa = 0.0 if lo == -_pm.inf else _pm.normal_cdf((lo - mu) / sigma)
+        pb = 1.0 if hi == _pm.inf else _pm.normal_cdf((hi - mu) / sigma)
         u = ((self._draw() >> 11) + 0.5) * 2.0 ** -53
         pu = pa + u * (pb - pa)
         if pu <= 0:
