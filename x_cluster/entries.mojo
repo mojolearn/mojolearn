@@ -18,19 +18,31 @@ from x_cluster.minibatch import MiniBatchParams, minibatch_fit, minibatch_partia
 from x_cluster.ops import ClusterOps
 from x_cluster.optics import optics_dbscan_ops, optics_graph, optics_xi_clusters, optics_xi_labels
 from x_cluster.out import ClusterOut
+from x_cluster.post_bodies import FM_VAL
+from x_cluster.tree_cut import tree_labels
 from x_cluster.spectral_assign import ASSIGN_CLUSTER_QR, ASSIGN_DISCRETIZE, cluster_qr_labels, discretize_labels
 
 
 def nearest_entry[O: ClusterOps](mut ops: O, x: List[Float32], c: List[Float32], ip: List[Int]) raises -> ClusterOut:
-    """ip = [n, k, d]. i = [labels], f = [squared distance to the nearest]."""
+    """ip = [n, k, d]. i = [labels], f = [squared distance to the nearest].
+    ip[3] = 1 (lane apple-fast-py2mojo-cluster: `score` summed them in
+    Python): s = [the float-float fold of the distances]."""
     var n = ip[0]
     var k = ip[1]
     var d = ip[2]
     var xs = ops.put(x)
     var labels = List[Int32]()
     var dist = List[Float32]()
-    nearest_all(ops, xs, n, c, k, d, labels, dist)
     var out = ClusterOut()
+    if len(ip) > 3 and ip[3] != 0:
+        var cs = ops.put(c)
+        var ls = ops.zeros_i(n)
+        var ds = ops.zeros(n)
+        ops.nearest(xs, n, cs, k, d, ls, ds)
+        out.s.append(ops.sum_ff(ds, -1, -1, n, FM_VAL))
+        ops.get_if(ls, n, ds, n, labels, dist)
+    else:
+        nearest_all(ops, xs, n, c, k, d, labels, dist)
     out.i.append(labels^)
     out.f.append(dist^)
     return out^
@@ -373,7 +385,10 @@ def bgmm_score_entry[O: ClusterOps](
 ) raises -> ClusterOut:
     """ip = [n, d, n_components]; a = means (k x d), precisions_cholesky
     (k x d x d), constants (k). f = [log_resp (n x k), log_prob_norm (n)];
-    i = [labels (n), each row's first largest log responsibility]."""
+    i = [labels (n), each row's first largest log responsibility].
+    ip[3] (optional, lane apple-fast-py2mojo-cluster): bit 0 adds f[2] =
+    predict_proba (the pinned exp of log_resp), bit 1 adds s = [the
+    float-float fold of log_prob_norm]."""
     var n = ip[0]
     var d = ip[1]
     var kc = ip[2]
@@ -389,10 +404,17 @@ def bgmm_score_entry[O: ClusterOps](
     var lr = List[Float32]()
     var lpn = List[Float32]()
     var labels = List[Int32]()
-    bgmm_score(ops, x, n, d, kc, means, pchol, c, lr, lpn, labels)
+    var flags = ip[3] if len(ip) > 3 else 0
+    var proba = List[Float32]()
+    var total = Float64(0)
+    bgmm_score(ops, x, n, d, kc, means, pchol, c, lr, lpn, labels, flags, proba, total)
     var out = ClusterOut()
     out.f.append(lr^)
     out.f.append(lpn^)
+    if flags & 1:
+        out.f.append(proba^)
+    if flags & 2:
+        out.s.append(total)
     out.i.append(labels^)
     return out^
 
@@ -450,15 +472,35 @@ def agglo_entry[O: ClusterOps](
     (-1 euclidean, 0-4 bodies.pdist_cell, 5 precomputed), n_edges (-1: no
     connectivity), n_merges]; fp = [minkowski p]; `edges` = the n_edges
     (row, col) pairs. i = [children (n_merges x 2)], f = [distances],
-    s = [n_connected_components]."""
+    s = [n_connected_components].
+
+    Optional (lane apple-fast-py2mojo-cluster, what `_hierarchy_impl.py`
+    computed in Python): ip[6] = edge_mode (0 the pairs above, 1 `edges` is
+    the dense n x n connectivity matrix, 2 its COO rows, columns and values
+    concatenated; n_edges counts the cells / entries), ip[7] = cut (-1 none;
+    0 a partial tree's roots; >= 1 `_hc_cut` with that n_clusters), ip[8] = 1
+    when the cut's n_clusters is the count of distances >= fp[1] plus one.
+    With a cut: i += [labels (n)], s += [n_clusters]."""
     var children = List[Int32]()
     var dist = List[Float32]()
     var n_cc = 1
-    agglo_tree(ops, x, ip[0], ip[1], ip[2], ip[3], Float32(fp[0]), edges, ip[4], ip[5], children, dist, n_cc)
+    var edge_mode = ip[6] if len(ip) > 6 else 0
+    agglo_tree(
+        ops, x, ip[0], ip[1], ip[2], ip[3], Float32(fp[0]), edges, ip[4], ip[5], children, dist, n_cc, edge_mode
+    )
     var out = ClusterOut()
+    var cut = ip[7] if len(ip) > 7 else -1
+    var labels = List[Int32]()
+    var k = 0
+    if cut >= 0:
+        var use_thr = len(ip) > 8 and ip[8] != 0
+        k = tree_labels(ops, children, dist, ip[0], ip[5], cut, fp[1] if use_thr else 0.0, use_thr, labels)
     out.i.append(children^)
     out.f.append(dist^)
     out.s.append(Float64(n_cc))
+    if cut >= 0:
+        out.i.append(labels^)
+        out.s.append(Float64(k))
     return out^
 
 

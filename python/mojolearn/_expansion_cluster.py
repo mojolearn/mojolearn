@@ -44,6 +44,16 @@ def _f32(X, name="X"):
     return x
 
 
+def _py2mojo(b):
+    """True when the binding `b` computes the steps this file and
+    `_hierarchy_impl.py` used to run in Python (lane
+    apple-fast-py2mojo-cluster: score sums, predict_proba's exp, the
+    agglomerative connectivity and labels). A `-D MOJOLEARN_PY2MOJO_cluster_OFF`
+    build answers 0 and the old Python path runs (the A/B switch)."""
+    fn = getattr(b, "x_cluster_py2mojo", None)
+    return fn is not None and int(fn()) == 1
+
+
 def _seed(random_state):
     if random_state is None:
         return 0
@@ -129,7 +139,13 @@ class _CentersMixin:
 
     def score(self, X, y=None, sample_weight=None):
         self._check_fitted("cluster_centers_")
-        _, d = self._nearest(self._input_like_fit(X), self.cluster_centers_)
+        x = self._input_like_fit(X)
+        if _py2mojo(self._bind()):
+            # the float-float fold of the distances, in the binding
+            n, d = x.shape
+            _, _, sc = self._call(_E_NEAREST, x, self.cluster_centers_, [n, self.cluster_centers_.shape[0], d, 1])
+            return -sc[0]
+        _, d = self._nearest(x, self.cluster_centers_)
         total = 0.0
         for v in d:
             total += v
@@ -733,7 +749,7 @@ class BayesianGaussianMixture(_XCluster):
             return Array._from_flat([flat[c * d * d + a * d + a] for c in range(k) for a in range(d)], (k, d), "<f4")
         return Array._from_flat([flat[c * d * d] for c in range(k)], (k,), "<f4")
 
-    def _score(self, X):
+    def _score(self, X, flags=0):
         self._check_fitted("means_")
         x = self._input_like_fit(X)
         n, d = x.shape
@@ -741,7 +757,10 @@ class BayesianGaussianMixture(_XCluster):
         vals = []
         for arr in (self.means_, self._full_pchol, self._log_consts):
             vals += [float(v) for v in _buffer.flat_bytes(arr).cast("f")]
-        f, i, _ = self._call(_E_BGMM_SCORE, x, _f32([vals], "model"), [n, d, k])
+        ip = [n, d, k, flags] if flags else [n, d, k]
+        f, i, sc = self._call(_E_BGMM_SCORE, x, _f32([vals], "model"), ip)
+        if flags:
+            return f, sc, n, k, i[0]
         return f[0], f[1], n, k, i[0]
 
     def predict(self, X):
@@ -751,6 +770,10 @@ class BayesianGaussianMixture(_XCluster):
         return Array._from_flat(labels, (n,), "<i4")
 
     def predict_proba(self, X):
+        if _py2mojo(self._bind()):
+            # the exp of every log responsibility in the binding (bodies.exp_cell)
+            f, _, n, k, _ = self._score(X, 1)
+            return Array._from_flat(f[2], (n, k), "<f4")
         lr, _, n, k, _ = self._score(X)
         # DEVIATION 6900: the pinned exp (the fit's E-step exp is pinned too, 5109)
         return Array._from_flat(_pm.exp_array(lr), (n, k), "<f4")
@@ -760,6 +783,10 @@ class BayesianGaussianMixture(_XCluster):
         return Array._from_flat(lpn, (n,), "<f4")
 
     def score(self, X, y=None):
+        if _py2mojo(self._bind()):
+            # the float-float fold of log_prob_norm in the binding
+            _, sc, n, _, _ = self._score(X, 2)
+            return sc[0] / n
         s = self.score_samples(X)
         return sum(float(v) for v in s) / len(s)
 
@@ -870,6 +897,12 @@ def _gmm_ext_score(est, X):
     vals = []
     for arr in (est.means_, ext["pchol"], ext["consts"]):
         vals += [float(v) for v in _buffer.flat_bytes(arr).cast("f")]
+    if _py2mojo(ext["call"]._bind()):
+        # predict_proba's exp and score's fold in the binding (flags 1 | 2);
+        # the fold rides as a fifth item for `_gmm_ext_bic_aic`
+        f, i, sc = ext["call"]._call(_E_BGMM_SCORE, x, _f32([vals], "model"), [n, d, k, 3])
+        return (f[0], Array._from_flat(f[1], (n,), "<f4"), Array._from_flat(f[2], (n, k), "<f4"),
+                Array._from_flat(i[0], (n,), "<i4"), sc[0])
     f, i, _ = ext["call"]._call(_E_BGMM_SCORE, x, _f32([vals], "model"), [n, d, k])
     lr, lpn, labels = f[0], f[1], i[0]
     return (lr, Array._from_flat(lpn, (n,), "<f4"), Array._from_flat(_pm.exp_array(lr), (n, k), "<f4"),
@@ -878,12 +911,17 @@ def _gmm_ext_score(est, X):
 
 def _gmm_ext_bic_aic(est, X):
     """(score, bic, aic): sklearn `_n_parameters`, `bic`, `aic` on the ext fit;
-    the mean log-likelihood an ascending float64 fold of score_samples."""
-    _, lpn, _, _ = _gmm_ext_score(est, X)
+    the mean log-likelihood an ascending float64 fold of score_samples (the
+    binding's float-float fold when it computes it)."""
+    got = _gmm_ext_score(est, X)
+    lpn = got[1]
     n = len(lpn)
-    total = 0.0
-    for v in lpn:
-        total += float(v)
+    if len(got) > 4:
+        total = got[4]
+    else:
+        total = 0.0
+        for v in lpn:
+            total += float(v)
     score = total / n
     k, d = est.means_.shape
     cov = {"full": k * d * (d + 1) / 2.0, "diag": k * d, "tied": d * (d + 1) / 2.0, "spherical": k}[est.covariance_type]
