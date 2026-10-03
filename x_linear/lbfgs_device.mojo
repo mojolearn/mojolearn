@@ -185,7 +185,7 @@ def lbfgs_device[O: LbObjective](
     """Minimizes from theta[0] (lbd_th(p, 0), set by the caller). Returns
     (lbfgs's iteration count, negative on max_iter; the parity holding
     the final theta)."""
-    var lp = lw.unsafe_ptr()
+    var lp = FP(unsafe_from_address=Int(lw.unsafe_ptr()))
     var ob = obj.blocks()
     var bt = lbd_blocks(p)
     var flags = List[Float32](length=2, fill=Float32(0))
