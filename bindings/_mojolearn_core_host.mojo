@@ -138,6 +138,7 @@ from bindings.array_helpers import (
     check_lengths_i64_binding,
     ragged_rows_bytes_binding,
     nsum_f64_binding,
+    shard_topk_merge_f32_binding,
 )
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, u32_ptr
 from core.dense_coo import (
@@ -1483,6 +1484,7 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[check_lengths_i64_binding]("check_lengths_i64")
         module.def_function[ragged_rows_bytes_binding]("ragged_rows_bytes")
         module.def_function[nsum_f64_binding]("nsum_f64")
+        module.def_function[shard_topk_merge_f32_binding]("shard_topk_merge_f32")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_core_host: ", error))

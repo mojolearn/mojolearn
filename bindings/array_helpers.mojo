@@ -12,6 +12,8 @@ same file is compiled into the base binding (`_mojolearn`) and the core
 host binding (`_mojolearn_core_host`), so a CPU-only install runs the same
 code.
 """
+from std.builtin.sort import sort
+from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
@@ -177,3 +179,81 @@ def nsum_f64_binding(addr: PythonObject, n: PythonObject) raises -> PythonObject
     if c != 0.0 and c - c == 0.0:
         total += c
     return PythonObject(total)
+
+
+def shard_topk_merge_f32_binding(
+    table_addr: PythonObject, n_shards: PythonObject, n_queries: PythonObject, k: PythonObject,
+    out_dist_addr: PythonObject, out_idx_addr: PythonObject,
+) raises -> PythonObject:
+    """`parallel_neighbors_reference._merge` (lane pyglue-sweep: out of the
+    Python per-query loop): per query row, every reference shard's
+    candidates as composite keys (neighbors/checks/select_radix_identical
+    `composite_key`: twiddled float32 distance bits << 32 | global index),
+    the k smallest keys, then estimator.mojo's host insertion sort on the
+    float distance (ties by index). `table` is int64[5 * n_shards]: per
+    shard the float32 distance address, the int64 local-id address, the
+    first and end global rows and the width (columns per query row).
+    Writes the winning float bits and uint32 global indices. Returns 0, 1
+    for a local id outside its shard, 2 for fewer than k candidates."""
+    var s_count = Int(py=n_shards)
+    var nq = Int(py=n_queries)
+    var kk = Int(py=k)
+    if s_count < 1 or nq < 0 or kk < 1:
+        raise Error("shard_topk_merge_f32: bad dimensions")
+    if nq == 0:
+        return PythonObject(0)
+    var tp = _addr_ptr[DType.int64](Int(py=table_addr))
+    var od = _addr_ptr[DType.uint32](Int(py=out_dist_addr))
+    var oi = _addr_ptr[DType.uint32](Int(py=out_idx_addr))
+    var rc = 0
+    with GILReleased(Python()):
+        var keys = List[UInt64]()
+        var cb = List[UInt32](length=kk, fill=0)
+        var ci = List[UInt32](length=kk, fill=0)
+        for row in range(nq):
+            keys.clear()
+            for r in range(s_count):
+                var dp = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(tp[5 * r]))
+                var ip = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(tp[5 * r + 1]))
+                var first = Int(tp[5 * r + 2])
+                var end = Int(tp[5 * r + 3])
+                var width = Int(tp[5 * r + 4])
+                for j in range(width):
+                    var local = Int(ip.unsafe_load(row * width + j))
+                    if local < 0 or local >= end - first:
+                        rc = 1
+                        break
+                    var bits = dp.unsafe_load(row * width + j)
+                    var tw = bits ^ (UInt32(0xFFFFFFFF) if (bits & UInt32(0x80000000)) != 0 else UInt32(0x80000000))
+                    keys.append((UInt64(tw) << 32) | UInt64(first + local))
+                if rc != 0:
+                    break
+            if rc != 0:
+                break
+            if len(keys) < kk:
+                rc = 2
+                break
+            sort(keys)
+            for a in range(kk):
+                var tw = UInt32(keys[a] >> 32)
+                cb[a] = tw ^ (UInt32(0x80000000) if (tw & UInt32(0x80000000)) != 0 else UInt32(0xFFFFFFFF))
+                ci[a] = UInt32(keys[a] & UInt64(0xFFFFFFFF))
+            # estimator.mojo's host insertion sort on the float distance
+            for a in range(1, kk):
+                var tb = cb[a]
+                var tix = ci[a]
+                var dv = bitcast[DType.float32](tb)
+                var b = a - 1
+                while b >= 0:
+                    var dprev = bitcast[DType.float32](cb[b])
+                    if dprev < dv or (dprev == dv and ci[b] <= tix):
+                        break
+                    cb[b + 1] = cb[b]
+                    ci[b + 1] = ci[b]
+                    b -= 1
+                cb[b + 1] = tb
+                ci[b + 1] = tix
+            for j in range(kk):
+                od.unsafe_store(row * kk + j, cb[j])
+                oi.unsafe_store(row * kk + j, ci[j])
+    return PythonObject(rc)

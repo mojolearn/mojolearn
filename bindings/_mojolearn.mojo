@@ -89,6 +89,7 @@ from bindings.array_helpers import (
     check_lengths_i64_binding,
     ragged_rows_bytes_binding,
     nsum_f64_binding,
+    shard_topk_merge_f32_binding,
 )
 from bindings.hotpath_helpers import (
     cast_elements_binding,
@@ -1806,6 +1807,7 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[check_lengths_i64_binding]("check_lengths_i64")
         m.def_function[ragged_rows_bytes_binding]("ragged_rows_bytes")
         m.def_function[nsum_f64_binding]("nsum_f64")
+        m.def_function[shard_topk_merge_f32_binding]("shard_topk_merge_f32")
         m.def_function[gather_i64_binding]("gather_i64")
         m.def_function[gather_f64_binding]("gather_f64")
         m.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
