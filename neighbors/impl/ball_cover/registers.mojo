@@ -141,13 +141,13 @@ from neighbors.impl.ball_cover.common import (
 )
 from neighbors.impl.ball_cover.fast_rbc_eps import FAST_RBC_EPS, fast_rbc_eps_pass
 from neighbors.impl.ball_cover.scan import (
-    rbc_exact_edge_total,
     rbc_exclusive_scan_launch,
     RBC_SCAN_TPB,
     rbc_clamp_kernel,
     rbc_exclusive_scan_kernel,
-    rbc_max_reduce_kernel,
+    rbc_max_reduce_launch,
 )
+from core.device_fold import device_sum_i32
 
 
 #: The lane group one query is walked by. `vote`, `shuffle_idx`, `warp_sum`
@@ -750,15 +750,13 @@ def rbc_eps_pass_count(
     # MOJOLEARN_DBSCAN_FAST_SCAN=1 (lane/apple-fast-core): the device-wide
     # scan instead of this one-block kernel (`scan.mojo`).
     rbc_exclusive_scan_launch(ctx, adj_ia, vd, n_queries)
-    ctx.synchronize()
-
-    var h = ctx.enqueue_create_host_buffer[DType.int32](n_queries + 1)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=adj_ia)
-    ctx.synchronize()
     # THE TRUE COUNT, NOT `ia[n]`: the int32 scan wraps past 2^31 edges and
     # can wrap back to a positive value past 2^32. The caller refuses or
-    # splits on this number, so it must never be the wrapped one.
-    var nnz = rbc_exact_edge_total(h, n_queries)
+    # splits on this number, so it must never be the wrapped one. Lane
+    # cgr4-download-loop: the degrees (`vd`, still the scan's input) are
+    # summed in Int64 on the device, the value `rbc_exact_edge_total` got
+    # from the downloaded offsets' wrapped differences, with no download.
+    var nnz = Int(device_sum_i32(ctx, vd, n_queries))
 
     # `vd + n_query_rows` stores the total number of edges, `:1486-1490`.
     var t = ctx.enqueue_create_host_buffer[DType.int32](1)
@@ -948,13 +946,7 @@ def rbc_eps_pass_max_k(
         grid_dim=((n_queries + RBC_QPB - 1) // RBC_QPB, 1, 1),
         block_dim=(RBC_TPB, 1, 1),
     )
-    ctx.enqueue_function[rbc_max_reduce_kernel](
-        scratch.unsafe_ptr(),
-        vd.unsafe_ptr(),
-        Int32(n_queries),
-        grid_dim=(1, 1, 1),
-        block_dim=(RBC_SCAN_TPB, 1, 1),
-    )
+    rbc_max_reduce_launch(ctx, scratch.unsafe_ptr(), vd.unsafe_ptr(), n_queries)
     ctx.synchronize()
 
     var h = ctx.enqueue_create_host_buffer[DType.int32](1)

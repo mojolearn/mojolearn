@@ -172,13 +172,66 @@ comptime RBC_PSCAN_CHUNK = RBC_SCAN_TPB * RBC_PSCAN_PER_THREAD
 
 
 def rbc_fast_scan_on() -> Bool:
-    comptime if not (
-        GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
-        and is_defined["MOJOLEARN_DBSCAN_FAST_SCAN"]()
-    ):
-        return False
-    else:
-        return True
+    """Always on (lane cgr4-download-loop, 2026-10-03): the device-wide scan
+    is the scan on every vendor and tier. Integer adds with the same Int32
+    wrap, so every offset and `ex_scan[n]` are the one-block kernel's values;
+    the one-block kernel only serves a scan of at most one chunk."""
+    return True
+
+
+comptime RBC_MAX_BLOCKS = 512
+"""`rbc_max_reduce_launch`'s grid cap: above this many blocks' worth of rows
+every thread grid-strides, and the second pass is one block over at most
+this many partials."""
+
+
+def rbc_max_partial_kernel(
+    part: MutPointer[Int32, MutAnyOrigin],
+    src: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """Block `b`: the maximum (floor 0) of its grid-stride slice of
+    `src[0 .. n)` into `part[b]`. An integer maximum, exact in any order."""
+    var n = Int(n_in)
+    var tid = Int(thread_idx.x)
+    var best = Int32(0)
+    var i = Int(block_idx.x) * RBC_SCAN_TPB + tid
+    var stride = RBC_MAX_BLOCKS * RBC_SCAN_TPB
+    while i < n:
+        var v = src.unsafe_load(i)
+        if v > best:
+            best = v
+        i += stride
+    var m = block_max[block_size=RBC_SCAN_TPB](best)
+    if tid == 0:
+        part.unsafe_store(Int(block_idx.x), m)
+
+
+def rbc_max_reduce_launch(
+    ctx: DeviceContext,
+    dst: MutPointer[Int32, MutAnyOrigin],
+    src: MutPointer[Int32, MutAnyOrigin],
+    n: Int,
+) raises:
+    """`rbc_max_reduce_kernel`'s `dst[0]` over the whole device (lane
+    cgr4-download-loop): per-block maxima of a grid-stride slice (at most
+    `RBC_MAX_BLOCKS` blocks, each slice strided by the full grid), then the
+    one-block kernel over those partials. The same integer maximum."""
+    if n <= RBC_SCAN_TPB * 8:
+        ctx.enqueue_function[rbc_max_reduce_kernel](
+            dst, src, Int32(n), grid_dim=(1, 1, 1), block_dim=(RBC_SCAN_TPB, 1, 1),
+        )
+        return
+    var part = ctx.enqueue_create_buffer[DType.int32](RBC_MAX_BLOCKS)
+    ctx.enqueue_function[rbc_max_partial_kernel](
+        part.unsafe_ptr(), src, Int32(n),
+        grid_dim=(RBC_MAX_BLOCKS, 1, 1), block_dim=(RBC_SCAN_TPB, 1, 1),
+    )
+    ctx.enqueue_function[rbc_max_reduce_kernel](
+        dst, part.unsafe_ptr(), Int32(RBC_MAX_BLOCKS),
+        grid_dim=(1, 1, 1), block_dim=(RBC_SCAN_TPB, 1, 1),
+    )
+    _ = part^
 
 
 def rbc_pscan_local_kernel(
@@ -275,10 +328,11 @@ def rbc_exclusive_scan_launch(
     mut counts: DeviceBuffer[DType.int32],
     n: Int,
 ) raises:
-    """`rbc_exclusive_scan_kernel` over `counts[0 .. n)` into `ex_scan[0 ..
-    n]`: the one-block kernel, or the three-launch device-wide scan under
-    `MOJOLEARN_DBSCAN_FAST_SCAN=1`."""
-    if rbc_fast_scan_on() and n > RBC_PSCAN_CHUNK:
+    """`rbc_exclusive_scan_kernel`'s result over `counts[0 .. n)` into
+    `ex_scan[0 .. n]`: the three-launch device-wide scan, or the one-block
+    kernel when n fits one chunk (lane cgr4-download-loop: the switch that
+    kept the one-block kernel over every n is gone)."""
+    if n > RBC_PSCAN_CHUNK:
         var n_chunks = (n + RBC_PSCAN_CHUNK - 1) // RBC_PSCAN_CHUNK
         var chunk_tot = ctx.enqueue_create_buffer[DType.int32](n_chunks + 1)
         ctx.enqueue_function[rbc_pscan_local_kernel](
