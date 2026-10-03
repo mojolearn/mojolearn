@@ -39,7 +39,7 @@ from gemm.checks.gemm_backward import (
 )
 from gemm.checks.gemm_identical import GemmWorkspace, identical_gemm
 from std.os import getenv
-from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
+from gemm.contract import OP_NN, OP_NT, OP_TN
 from checks.numerics import (
     identical_mul,
     GLOBAL_NUMERIC_MODE,

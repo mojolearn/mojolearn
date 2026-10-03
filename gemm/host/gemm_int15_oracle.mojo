@@ -65,7 +65,7 @@ from gemm.host.gemm_oracle import (
 #: it, so the bound is a number a reader can check. `int8i32.v1`'s bound
 #: (131072) does NOT carry over: it assumes a magnitude of 127, and a high
 #: piece reaches -128, whose square times 131072 is `2^31` exactly.
-comptime INT15_MAX_K = 65536
+from gemm.contract import INT15_MAX_K, INT15_PROFILE_VERSION  # the profile bound and version, shared with the device kernels
 
 #: The bound of clause W-4 (d) before the profile rounds it down: the
 #: largest `k` at which `HL + LH` cannot leave an Int32. The gate plants a
@@ -83,9 +83,6 @@ comptime INT15_PIECE_BOUND_K = 131071
 # Spelled on ONE LINE on purpose: test_host_surface greps each family's own
 # define as `is_defined["<NAME>"]`.
 comptime INT15_CONVERT_SABOTAGE = is_defined["MOJOLEARN_LOWBIT_CONVERT_SABOTAGE"]()
-
-#: The profile version the bindings read back.
-comptime INT15_PROFILE_VERSION = 1
 
 
 struct Int15Rows(Movable):

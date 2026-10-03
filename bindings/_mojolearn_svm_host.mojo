@@ -104,9 +104,9 @@ from svm.impl.svm_parameter import (
     KernelParams,
     SvmParameter,
     check_finite_list,
-    check_finite_ptr,
     check_rung1_scope,
 )
+from svm.host.finite_scan import check_finite_ptr
 
 
 def _index(value: PythonObject) raises -> Int:

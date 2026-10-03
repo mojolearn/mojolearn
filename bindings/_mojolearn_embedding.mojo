@@ -32,16 +32,18 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.memory import bitcast, memcpy
+from std.memory import bitcast
 from core.device_zero import enqueue_fill
-from core.host_lanes import HOST_FW, U32V
-from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_task_count
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
+from core.device_scan import device_first_nonfinite
+from core.staged_download import download_f32_into
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
 comptime _NEURAL_CTX = "MojoNeuralEmbeddingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralEmbeddingContextFast"
+# The pinned stages of this binding's downloads (core/staged_download.mojo),
+# one pool per binding and tier like the context above.
+comptime _STAGE_POOL = "MojoDownloadStagesEmbeddingIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDownloadStagesEmbeddingFast"
 from checks.vendor import COMPILED_VENDOR
 from embedding.checks.embedding_identical import (
     identical_embedding_backward_into,
@@ -53,7 +55,7 @@ from embedding.checks.embedding_oracle import (
     EmbConfig,
     emb_refuse_ids,
     emb_refuse_shape,
-    refuse_nonfinite,
+    nonfinite_refusal,
 )
 
 
@@ -78,6 +80,58 @@ def embedding_vendor_binding() raises -> PythonObject:
 # pinned memory and a read out over host tasks (one thread reads pinned
 # memory at ~3 GB/s, four or more at 10 GB/s and more). Copies: no bit moves.
 comptime EMB_COPY_TASKS_MAX = 16
+
+# ---- per-call overhead (lane neural-pass138, 2026-10-02) ---------------------------------
+# The board's embedding cell (V = 32,768, d = 1,024, T = 32,768; one forward
+# and one dense backward) read 208 ms on the L40S against torch eager's
+# 2.2 ms. Per call this binding paid, besides the PCIe copies the host
+# contract needs (W and dY up, Y and dW down, 128 MB each):
+#   * a NEW pinned host buffer of the whole output in every download
+#     (`_download_into`: 128 MB pinned, then freed, twice per cell); on CUDA
+#     a pinned allocation of that size costs tens of ms (lane neural-pass40
+#     measured 64 MB pinned allocations dominating the L40S layernorm cell);
+#   * a host scan of all of W (forward) and all of dY (backward) for
+#     non-finite values, 128 MB of host reads each.
+# Now: downloads go through `core/staged_download.mojo::download_f32_into`
+# (two pooled pinned stages, a chunk pipeline, the copy-out over host tasks;
+# MOJOLEARN_DOWNLOAD_STAGE=0 is the raw host-pointer copy), and the non-
+# finite scan runs ON THE DEVICE over the uploaded buffer
+# (`core/device_scan.device_first_nonfinite`); only a hit pays the host
+# scan, which raises the oracle's own message for the same first index, so
+# the refusal (name, index, order: dY before the carried dW) is unchanged.
+# Copies and a read-only scan: no bit moves. (The A/B switch back to the
+# per-call pinned download and the host scans is removed, lane
+# gap-neural-overhead2.)
+
+
+def _download_out(
+    ctx: DeviceContext,
+    mut buf: DeviceBuffer[DType.float32],
+    dst: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+) raises:
+    if n > 0:
+        download_f32_into[_STAGE_POOL](ctx, buf, n, dst)
+
+
+def _refuse_nonfinite_device(
+    ctx: DeviceContext,
+    name: String,
+    mut buf: DeviceBuffer[DType.float32],
+    p: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+) raises:
+    """The non-finite refusal of the caller's `p[0:n]`, scanned on its
+    device copy `buf`. A hit re-runs the host refusal on `p` (the same
+    bytes), so the error is the oracle's message at the same first index."""
+    var idx = device_first_nonfinite(ctx, buf, n)
+    if idx < 0:
+        return
+    nonfinite_refusal(name, idx, p.unsafe_load(idx))
+    raise Error(
+        String("embedding: the device scan found a non-finite value in ") + name
+        + " at flat index " + String(idx) + " that the host scan did not (a scan defect)"
+    )
 
 
 def _upload_f32_ptr(
@@ -119,97 +173,22 @@ def _upload_i32(
     return dev^
 
 
-def _parallel_copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Float32, MutUntrackedOrigin], n: Int):
-    """`memcpy(dst, src, n)` in contiguous chunks over host tasks: the read of pinned memory."""
-    var tasks = host_predict_task_count(1 << 30)
-    if tasks > EMB_COPY_TASKS_MAX:
-        tasks = EMB_COPY_TASKS_MAX
-    if n < (1 << 18) or tasks <= 1:
-        memcpy(dest=dst, src=src, count=n)
+def _refuse_nonfinite_upload(
+    name: String, p: MutPointer[Float32, MutUntrackedOrigin], n: Int
+) raises:
+    """The non-finite refusal of `p[0:n]` when no run uploads it (an empty
+    output): a device copy and the device scan, as the runs do."""
+    if n <= 0:
         return
-    var chunk = (n + tasks - 1) // tasks
-
-    def _piece(t: Int) {imm dst, imm src, imm n, imm chunk}:
-        var lo = t * chunk
-        var hi = min(lo + chunk, n)
-        if hi > lo:
-            memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
-
-    host_parallelize(_piece, tasks)
-
-
-def _all_finite_ptr(p: MutPointer[Float32, MutUntrackedOrigin], n: Int) -> Bool:
-    """`core.host_lanes.all_finite`'s bit test over the caller's n floats, the
-    ranges over host tasks: it reads bits and computes nothing."""
-    var tasks = host_predict_task_count(1 << 30)
-    if tasks > EMB_COPY_TASKS_MAX:
-        tasks = EMB_COPY_TASKS_MAX
-    if n < (1 << 18) or tasks <= 1:
-        tasks = 1
-    var chunk = (n + tasks - 1) // tasks
-    var bad = List[Int32](length=tasks, fill=Int32(0))
-    var bp = bad.unsafe_ptr()
-
-    def _scan(t: Int) {imm p, imm bp, imm n, imm chunk}:
-        var lo = t * chunk
-        var hi = min(lo + chunk, n)
-        var i = lo
-        var acc = U32V(0)
-        var expm = U32V(0x7F800000)
-        while i + HOST_FW <= hi:
-            var e = bitcast[DType.uint32](p.unsafe_load[width=HOST_FW](i)) & expm
-            acc = acc | e.eq(expm).select(U32V(1), U32V(0))
-            i += HOST_FW
-        var found = acc.reduce_or() != UInt32(0)
-        while i < hi and not found:
-            if (bitcast[DType.uint32](p.unsafe_load(i)) & UInt32(0x7F800000)) == UInt32(0x7F800000):
-                found = True
-            i += 1
-        if found:
-            bp.unsafe_store(t, Int32(1))
-
-    if tasks <= 1:
-        _scan(0)
-    else:
-        host_parallelize(_scan, tasks)
-    var ok = True
-    for t in range(tasks):
-        if bad[t] != Int32(0):
-            ok = False
-    _ = bad^
-    return ok
-
-
-def _refuse_nonfinite_ptr(name: String, p: MutPointer[Float32, MutUntrackedOrigin], n: Int) raises:
-    """`refuse_nonfinite` over the caller's floats: the parallel bit test
-    first; only a refusal pays the list copy, so the message and the index
-    it names are the oracle's own."""
-    if _all_finite_ptr(p, n):
-        return
-    var values = List[Float32](length=n if n > 0 else 1, fill=Float32(0.0))
-    if n > 0:
-        memcpy(dest=values.unsafe_ptr(), src=p, count=n)
-    refuse_nonfinite(name, values)
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    var d = _upload_f32_ptr(ctx, p, n)
+    _refuse_nonfinite_device(ctx, name, d, p, n)
+    _ = d^
+    _ = ctx^
 
 
 def _zeros_i32(n: Int) -> List[Int32]:
     return List[Int32](length=n if n > 0 else 1, fill=Int32(0))
-
-
-def _download_into(
-    ctx: DeviceContext,
-    mut buf: DeviceBuffer[DType.float32],
-    dst: MutPointer[Float32, MutUntrackedOrigin],
-    n: Int,
-) raises:
-    if n <= 0:
-        return
-    var host = ctx.enqueue_create_host_buffer[DType.float32](len(buf))
-    ctx.synchronize()
-    ctx.enqueue_copy(dst_buf=host, src_buf=buf)
-    ctx.synchronize()
-    _parallel_copy_out(dst, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(host.unsafe_ptr())), n)
-    _ = host^
 
 
 def _config(vocab: Int, width: Int, padding_idx: Int, accumulate: Bool) raises -> EmbConfig:
@@ -236,12 +215,13 @@ def _forward_run(
         return
     var ctx = neural_ctx[_NEURAL_CTX]()
     var d_w = _upload_f32_ptr(ctx, wp, cfg.vocab * cfg.width)
+    _refuse_nonfinite_device(ctx, String("W"), d_w, wp, cfg.vocab * cfg.width)
     var d_ids = _upload_i32(ctx, ids)
     var d_y = ctx.enqueue_create_buffer[DType.float32](cells)
     ctx.synchronize()
     identical_embedding_forward_into(ctx, d_y, d_w, d_ids, n_positions, cfg)
     ctx.synchronize()
-    _download_into(ctx, d_y, yp, cells)
+    _download_out(ctx, d_y, yp, cells)
     _ = d_w^
     _ = d_ids^
     _ = d_y^
@@ -268,6 +248,10 @@ def _backward_run(
     else:
         d_dw = _zero_f32(ctx, cells)
     var d_dy = _upload_f32_ptr(ctx, dyp, n_positions * cfg.width)
+    # dY first, then the carried dW: the host refusals' order
+    _refuse_nonfinite_device(ctx, String("dY"), d_dy, dyp, n_positions * cfg.width)
+    if cfg.accumulate:
+        _refuse_nonfinite_device(ctx, String("the carried dW"), d_dw, dwp, cells)
     var d_ids = _upload_i32(ctx, ids)
     var counts = _upload_i32(ctx, _zeros_i32(cfg.vocab))
     var run_begin = _upload_i32(ctx, _zeros_i32(cfg.vocab + 1))
@@ -276,7 +260,7 @@ def _backward_run(
         ctx, d_dw, d_dy, d_ids, counts, run_begin, perm, n_positions, cfg, plan
     )
     ctx.synchronize()
-    _download_into(ctx, d_dw, dwp, cells)
+    _download_out(ctx, d_dw, dwp, cells)
     _ = d_dw^
     _ = d_dy^
     _ = d_ids^
@@ -322,8 +306,12 @@ def embedding_forward_binding(
     var ids = read_i32(Int(py=addrs[1]), n_positions)
     emb_refuse_ids(ids, cfg)
     var yp = f32_ptr(Int(py=addrs[2]))
+    # the W scan runs on the device copy unless there is nothing to gather
+    # (then nothing is uploaded)
+    var no_run = n_positions * width <= 0
     with GILReleased(Python()):
-        _refuse_nonfinite_ptr(String("W"), wp, vocab * width)
+        if no_run:
+            _refuse_nonfinite_upload(String("W"), wp, vocab * width)
         _forward_run(wp, ids, n_positions, cfg, yp)
     return PythonObject(n_positions * width)
 
@@ -387,10 +375,12 @@ def embedding_backward_binding(
     var ids = read_i32(Int(py=addrs[1]), n_positions)
     emb_refuse_ids(ids, cfg)
     var dwp = f32_ptr(Int(py=addrs[2]))
+    var no_run = vocab * width <= 0
     with GILReleased(Python()):
-        _refuse_nonfinite_ptr(String("dY"), dyp, n_positions * width)
-        if cfg.accumulate:
-            _refuse_nonfinite_ptr(String("the carried dW"), dwp, vocab * width)
+        if no_run:
+            _refuse_nonfinite_upload(String("dY"), dyp, n_positions * width)
+            if cfg.accumulate:
+                _refuse_nonfinite_upload(String("the carried dW"), dwp, vocab * width)
         _backward_run(dyp, ids, n_positions, cfg, dwp, plan)
     return PythonObject(vocab * width)
 

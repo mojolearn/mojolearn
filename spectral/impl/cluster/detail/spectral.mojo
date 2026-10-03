@@ -29,7 +29,7 @@ copied from `kmeans_fit` line for line; `cluster/` is frozen for this lane
 and is READ, IMPORTED, not edited.
 """
 
-from bindings.hostptr import f32_ptr
+from core.device_zero import enqueue_fill
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from cluster.estimator import plan_sum_scale
@@ -44,7 +44,7 @@ from core.identity_trace import IdentityTrace
 from core.row_norms import NORM_TPB, row_norm_kernel
 from checks.fixed_point import choose_scale
 from spectral.checks.device_io import download_f32, download_u32, upload_f32
-from spectral.host.spectral_predict_host import SpectralPredictionState
+from spectral.impl.spectral_predict_common import SpectralPredictionState
 from spectral.impl.preprocessing.detail.spectral_embedding import (
     SpectralEmbeddingParams,
     _use_fast_graph,
@@ -143,17 +143,13 @@ def _cluster_embedding(
 
     # --- kmeans::fit_predict (:54-61), through cluster/'s implemented entry, with
     # the device setup `cluster/estimator.mojo::kmeans_fit` performs.
-    # DEVIATION 2487: this planning pass is host-only. Borrow the existing
-    # embedding list; its following upload keeps the owner live.
-    var sum_scale = plan_sum_scale(
-        f32_ptr(Int(embedding_out.unsafe_ptr())), n_samples, n_features)
+    # The scale from the uploaded embedding, on the device (`plan_sum_scale`).
+    var x = upload_f32(ctx, embedding_out)
+    var sum_scale = plan_sum_scale(ctx, x, n_samples, n_features)
     var weight_scale = choose_scale(Float64(n_samples), n_samples)
     var cd = config.n_clusters * n_features
-    var x = upload_f32(ctx, embedding_out)
-    var ones = List[Float32]()
-    for _ in range(n_samples):
-        ones.append(Float32(1.0))
-    var weights = upload_f32(ctx, ones)
+    var weights = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    enqueue_fill[DType.float32](ctx, weights, Float32(1.0))
     var centroids = ctx.enqueue_create_buffer[DType.float32](cd)
     var d_labels = ctx.enqueue_create_buffer[DType.uint32](n_samples)
     var x_norm = ctx.enqueue_create_buffer[DType.float32](n_samples)

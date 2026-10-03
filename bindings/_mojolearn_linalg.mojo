@@ -74,12 +74,24 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 comptime _DEVCTX_SLOT = "MojoLinalgContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoLinalgContextFast"
 
 
+from x_decomp.cells import F32Ptr
+from x_decomp.device import DevExec
 from decomposition.linalg_public_device import (
-    device_eigh,
     device_qr_r,
     device_svdvals,
 )
 from gemm.host_entry import identical_gemm_host
+from gemm.host_transport import (
+    GemmHostLease,
+    ROLE_A,
+    ROLE_B,
+    ROLE_C,
+    ROLE_X,
+    gemm_down_f32,
+    gemm_up_f32,
+    gemm_up_u16,
+)
+from std.ffi import _Global
 from gemm.checks.gemm_lowbit import (
     LowbitWorkspace,
     bf16_narrow,
@@ -89,15 +101,14 @@ from gemm.checks.gemm_lowbit import (
     identical_gemm_int8_into,
     quantize_rows_int8_device,
 )
-from gemm.host.gemm_lowbit_oracle import INT8_MAX_K, LOWBIT_PROFILE_VERSION
+from gemm.contract import INT8_MAX_K, LOWBIT_PROFILE_VERSION
 from gemm.checks.gemm_int15 import (
     Int15QuantWorkspace,
     dequantize_planes_int15_device,
     identical_gemm_int15_planes_into,
     quantize_planes_int15_parallel_device,
 )
-from gemm.host.gemm_int15_oracle import INT15_MAX_K, INT15_PROFILE_VERSION
-from gemm.host.identical_gemm import OP_NN, OP_NT, OP_TN
+from gemm.contract import INT15_MAX_K, INT15_PROFILE_VERSION, OP_NN, OP_NT, OP_TN
 from max.gpu.host import DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
@@ -281,6 +292,39 @@ def lowbit_profile_version_binding() raises -> PythonObject:
     return PythonObject(LOWBIT_PROFILE_VERSION)
 
 
+struct _LowbitSlot(Defaultable, Movable):
+    var work: Optional[LowbitWorkspace]
+
+    def __init__(out self):
+        self.work = Optional[LowbitWorkspace]()
+
+
+comptime _LOWBIT_POOL = _Global[StorageType=_LowbitSlot, name="MojoGemmLowbitPool", init_fn=_LowbitSlot.__init__]
+
+
+def _lowbit_run(
+    ctx: DeviceContext,
+    lease: GemmHostLease,
+    mut dc: DeviceBuffer[DType.float32],
+    mut da: DeviceBuffer[DType.float32],
+    mut db: DeviceBuffer[DType.uint16],
+    m: Int, n: Int, k: Int, op: Int,
+) raises:
+    """`identical_gemm_bf16w_into` then a wait, on the pooled workspace when
+    the lease holds the pool (only the lease holder touches the slot)."""
+    if lease.held:
+        var slot = _LOWBIT_POOL.get_or_create_ptr()
+        if not slot[].work:
+            slot[].work = LowbitWorkspace(ctx)
+        identical_gemm_bf16w_into(ctx, dc, da, db, slot[].work.value(), m, n, k, op)
+        ctx.synchronize()
+        return
+    var work = LowbitWorkspace(ctx)
+    identical_gemm_bf16w_into(ctx, dc, da, db, work, m, n, k, op)
+    ctx.synchronize()
+    _ = work^
+
+
 def gemm_bf16_binding(
     c_addr: PythonObject,
     a_addr: PythonObject,
@@ -313,27 +357,28 @@ def gemm_bf16_binding(
     _refuse_lowbit_shape(m, n, k, op, String("gemm_bf16"))
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        var db = _dev_u16(ctx, b_address, n * k)
-        var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
-        var work = LowbitWorkspace(ctx)
+        # lane/gap-neural-models (2026-10-02): pooled buffers and workspace,
+        # staged download (gemm/host_transport.mojo; MOJOLEARN_GEMM_POOL=0
+        # restores fresh buffers). Copies only, the same kernels.
+        var lease = GemmHostLease()
+        var db = lease.u16(ctx, ROLE_B, n * k)
+        gemm_up_u16(ctx, lease, db, u16_ptr(b_address), n * k)
+        var dc = lease.f32(ctx, ROLE_C, m * n)
+        var da = lease.f32(ctx, ROLE_X, m * k)
         if a_bf16:
-            var da_bits = _dev_u16(ctx, a_address, m * k)
-            var da = ctx.enqueue_create_buffer[DType.float32](m * k)
+            var da_bits = lease.u16(ctx, ROLE_A, m * k)
+            gemm_up_u16(ctx, lease, da_bits, u16_ptr(a_address), m * k)
             bf16_widen(ctx, da, da_bits, m * k)
-            identical_gemm_bf16w_into(ctx, dc, da, db, work, m, n, k, op)
-            ctx.synchronize()
+            _lowbit_run(ctx, lease, dc, da, db, m, n, k, op)
             _ = da_bits
-            _ = da
         else:
-            var da2 = _dev_f32(ctx, a_address, m * k)
-            identical_gemm_bf16w_into(ctx, dc, da2, db, work, m, n, k, op)
-            ctx.synchronize()
-            _ = da2
-        ctx.enqueue_copy(dst_ptr=f32_ptr(c_address), src_buf=dc)
-        ctx.synchronize()
+            gemm_up_f32(ctx, lease, da, f32_ptr(a_address), m * k)
+            _lowbit_run(ctx, lease, dc, da, db, m, n, k, op)
+        gemm_down_f32(ctx, lease, dc, f32_ptr(c_address), m * n)
+        lease.release()
         _ = db^
         _ = dc^
-        _ = work^
+        _ = da^
         # DEVIATION 3010: the buffers above are gone; DRAIN the frees they
         # enqueued before this block's end destroys the context. Without it
         # the MAX runtime allocator's lock is left held and the NEXT
@@ -752,34 +797,34 @@ def qr_r_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObje
 
 
 def eigh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """`device_eigh(a, n)`. `addrs`: 0 a, 1 w_out (n, ASCENDING), 2 v_out
-    (n x n, eigenvector i in COLUMN i), 3 scalars_out (converged, executed).
-    `params`: 0 n. Returns n."""
+    """numpy's eigh: x_decomp's round-robin Jacobi (`DevExec.eigh`, the one eigh
+    order of every column; cgr-decomp 2026-10-03 replaced the one-block cyclic
+    solver here). `addrs`: 0 a, 1 w_out (n, ASCENDING), 2 v_out (n x n,
+    eigenvector i in COLUMN i), 3 scalars_out (converged = 1, executed = 0:
+    an unconverged solve raises). `params`: 0 n, 1 (optional) UPLO: 0 the
+    whole matrix, 1 the lower triangle, 2 the upper. Returns n."""
     if len(addrs) != 4:
         raise Error(
             "eigh: addrs must contain 4 addresses (a, w_out, v_out,"
             " scalars_out), got "
             + String(len(addrs))
         )
-    if len(params) != 1:
+    if len(params) != 1 and len(params) != 2:
         raise Error(
-            "eigh: params must contain 1 value (n), got " + String(len(params))
+            "eigh: params must contain 1 or 2 values (n, UPLO), got " + String(len(params))
         )
-    var wp = f32_ptr(Int(py=addrs[1]))
-    var vp = f32_ptr(Int(py=addrs[2]))
-    var sp = f64_ptr(Int(py=addrs[3]))
     var n = Int(py=params[0])
-    var a = read_f32(Int(py=addrs[0]), max(0, n * n))
+    var uplo = Int(py=params[1]) if len(params) == 2 else 0
+    if n < 1 or uplo < 0 or uplo > 2:
+        raise Error("eigh: n must be >= 1 and UPLO 0, 1 or 2")
+    var ap = F32Ptr(unsafe_from_address=Int(f32_ptr(Int(py=addrs[0]))))
+    var wp = F32Ptr(unsafe_from_address=Int(f32_ptr(Int(py=addrs[1]))))
+    var vp = F32Ptr(unsafe_from_address=Int(f32_ptr(Int(py=addrs[2]))))
+    var sp = f64_ptr(Int(py=addrs[3]))
     with GILReleased(Python()):
-        var got = device_eigh(a, n)
-        for i in range(n):
-            wp.unsafe_store(i, got.w[i])
-        for i in range(n * n):
-            vp.unsafe_store(i, got.v[i])
-        sp.unsafe_store(0, Float64(1.0) if got.converged else Float64(0.0))
-        sp.unsafe_store(1, Float64(got.executed))
-        _ = got^
-    _ = a^
+        DevExec.eigh(ap, wp, vp, n, uplo)
+        sp.unsafe_store(0, Float64(1.0))
+        sp.unsafe_store(1, Float64(0.0))
     return PythonObject(n)
 
 

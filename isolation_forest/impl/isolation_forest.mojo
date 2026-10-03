@@ -59,6 +59,7 @@ Spelling only; gated by `check_if_refusals` over n = 1..4097.
 from std.math import log2
 from std.memory import bitcast
 from std.sys import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -74,6 +75,7 @@ from isolation_forest.impl.rng.xorwow import (
 )
 from isolation_forest.impl.isolation_tree_builder import (
     IF_BUILD_TPB,
+    IF_BUILD_TPB_MAX,
     IF_DECISION_WORDS,
     IF_PATH_TPB,
     IF_RNG_STATE_WORDS,
@@ -98,7 +100,6 @@ from checks.numerics import (
     identical_log64,
     identical_pow,
 )
-from ensemble.host_layout import colmajor_ftz_from_rowmajor_f32
 from std.os import getenv
 from core.host_parallel import host_parallelize
 from metrics.checks.device_io import upload_i32
@@ -387,28 +388,77 @@ def _raise_first_nonfinite_colmajor_view(
     raise Error("Input " + name + ": the threaded finite scan and the named scan disagree")
 
 
-def _upload_rowmajor_as_colmajor(
+#: Lane gap-trees-nv: the fit's training matrix goes to the device as the
+#: caller's ROW-major bytes, straight from the borrowed address, and one
+#: kernel writes the column-major plane (`ftz` per cell, the same function
+#: the host pass applied, so the same words) and raises a flag on a
+#: non-finite cell. The refusal's message still comes from the named host
+#: scan, which runs only after the flag is up (an error path, not the fit).
+#: cpu-gpu-cleanup t-forest: this is the only route on every vendor; the
+#: pinned-stage host transpose (`ensemble/host_layout.mojo`) and its
+#: `MOJOLEARN_IFOREST_DEVICE_TRANSPOSE` opt-in are gone. The name stays
+#: True for `iforest_device_scan` (bindings/_mojolearn_svm.mojo), which tells
+#: the Python layer that the fit's device scan refuses a non-finite X.
+comptime IF_DEVICE_TRANSPOSE = True
+
+
+def _if_transpose_ftz_kernel(
+    src: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
+    n_rows: Int64,
+    n_cols: Int32,
+    bad: MutPointer[Int32, MutAnyOrigin],
+):
+    """`dst[c * n_rows + r] = ftz(src[r * n_cols + c])`, one thread per row;
+    `bad[0] = 1` when any cell of the row is NaN or infinity."""
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nr = Int(n_rows)
+    if r >= nr:
+        return
+    var nc = Int(n_cols)
+    var flag = False
+    for c in range(nc):
+        var v = src.unsafe_load(r * nc + c)
+        if (bitcast[DType.uint32](v) & UInt32(0x7F800000)) == UInt32(0x7F800000):
+            flag = True
+        dst.unsafe_store(c * nr + r, ftz(v))
+    if flag:
+        bad.unsafe_store(0, Int32(1))
+
+
+def _upload_rowmajor_as_colmajor_device(
     ctx: DeviceContext, src_addr: Int, n_rows: Int, n_cols: Int, pad: Int, poison: Float32
 ) raises -> DeviceBuffer[DType.float32]:
-    """DEVIATION 2638: `_upload_f32` of the column-major transpose of a
-    borrowed ROW-major block, in one threaded pass into the pinned stage.
-    The stage holds exactly what `_upload_f32(x_col)` staged: `ftz` of every
-    cell at its column-major index (the same scalar `ftz`, DEVIATION 1942 row
-    10) and `poison` in the `pad` tail. DEVIATION 680's scan rides the same
-    pass; a non-finite cell raises `check_finite_by_name`'s message."""
+    """`_upload_f32` of the column-major transpose of a borrowed ROW-major
+    block (the same words: `ftz` per cell, `poison` in the `pad` tail),
+    transposed on the device. DEVIATION 680's scan rides the same kernel; a
+    non-finite cell raises `check_finite_by_name`'s message."""
     var n = n_rows * n_cols
     var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=src_addr)
+    var raw = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_copy(dst_buf=raw, src_ptr=src)
     var buf = ctx.enqueue_create_buffer[DType.float32](n + pad)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n + pad)
+    if pad > 0:
+        buf.enqueue_fill(poison)
+    var bad = ctx.enqueue_create_buffer[DType.int32](1)
+    bad.enqueue_fill(Int32(0))
+    ctx.enqueue_function[_if_transpose_ftz_kernel](
+        raw.unsafe_ptr(),
+        buf.unsafe_ptr(),
+        Int64(n_rows),
+        Int32(n_cols),
+        bad.unsafe_ptr(),
+        grid_dim=((n_rows + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+    var hb = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=bad)
     ctx.synchronize()
-    var hp = host.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-    for i in range(n, n + pad):
-        hp.unsafe_store(i, poison)
-    if not colmajor_ftz_from_rowmajor_f32(src, hp, n_rows, n_cols):
+    if hb.unsafe_ptr().unsafe_load(0) != Int32(0):
         _raise_first_nonfinite_colmajor_view("X", src, n_rows, n_cols)
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
+    _ = raw^
+    _ = bad^
+    _ = hb^
     return buf^
 
 
@@ -418,7 +468,7 @@ def _upload_rowmajor_fast(
     """IF_FAST_ROWMAJOR: the borrowed ROW-major block copied to the device
     as it is (one raw host-pointer copy, no host pass over the cells), the
     `pad` tail poisoned and DEVIATION 680's scan run on the device. A
-    non-finite cell raises `_upload_rowmajor_as_colmajor`'s message (the
+    non-finite cell raises `_upload_rowmajor_as_colmajor_device`'s message (the
     named host scan runs only then, to find the index)."""
     var n = n_rows * n_cols
     var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=src_addr)
@@ -708,6 +758,9 @@ struct IsolationForest(Movable):
 
         # build_isolation_forest_global (isolation_tree_builder.cuh:377-420)
         var data: DeviceBuffer[DType.float32]
+        # lane apple-fast-trees2: IF_FAST_ROWMAJOR (FAST on Apple) keeps X
+        # row-major on the device; every other build transposes on the
+        # device (lane gap-trees-nv, the default since cpu-gpu-cleanup).
         comptime if IF_FAST_ROWMAJOR:
             if src_addr != 0:
                 data = _upload_rowmajor_fast(ctx, src_addr, n_rows, n_cols, pad, poison)
@@ -721,14 +774,23 @@ struct IsolationForest(Movable):
                 data = _upload_f32(ctx, x_rows, n_rows * n_cols, pad, poison)
         else:
             if src_addr != 0:
-                data = _upload_rowmajor_as_colmajor(ctx, src_addr, n_rows, n_cols, pad, poison)
+                data = _upload_rowmajor_as_colmajor_device(
+                    ctx, src_addr, n_rows, n_cols, pad, poison
+                )
             else:
                 data = _upload_f32(ctx, input_colmajor, n_rows * n_cols, pad, poison)
         var subsample_buffer = _poisoned_f32(
             ctx, n_trees * n_sampled_rows * n_sampled_features, pad, poison
         )
         var sample_indices = _poisoned_i64(ctx, n_trees * n_sampled_rows, pad, poison)
-        var work_indices = _poisoned_i32(ctx, n_trees * n_sampled_rows, pad, poison)
+        # two halves per tree: the partition order and its scratch (the
+        # block-parallel stable partition, `isolation_tree_builder.mojo`)
+        var work_indices = _poisoned_i32(ctx, 2 * n_trees * n_sampled_rows, pad, poison)
+        if knobs.build_tpb < 1 or knobs.build_tpb > IF_BUILD_TPB_MAX:
+            raise Error(
+                "isolation forest: build_tpb must be in [1, "
+                + String(IF_BUILD_TPB_MAX) + "], got " + String(knobs.build_tpb)
+            )
         # One scratch buffer per tree carved into three disjoint slices
         # (stack, per-node decisions, final RNG state). ONE kernel argument:
         # Metal caps a kernel at 31 and this one stands at 25.

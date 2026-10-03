@@ -23,3 +23,9 @@ Datasets: taxi, istella (rows-full); identity copies in rows-small. The local se
 - Never time our CPU, never race `MOJOLEARN_VENDOR=cpu`.
 - FAST never lowers quality.
 - No new machines of any kind.
+
+## Reading results
+Branch `lane/apple-fast-results` holds `docs/apple-fast/m3/results.txt` (every M3 result line, numbered) and
+`docs/apple-fast/m3/queue.txt` (the queue with line numbers). It refreshes every 10 minutes:
+`git fetch origin lane/apple-fast-results && git show origin/lane/apple-fast-results:docs/apple-fast/m3/results.txt | grep <tag>`.
+New `docs/apple-fast/ab/*.txt` files on your `lane/apple-fast-*` branches are picked up automatically on the same cycle.

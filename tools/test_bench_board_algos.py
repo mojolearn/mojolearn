@@ -83,7 +83,7 @@ def test_every_opponent_has_a_pin_or_is_in_an_existing_set():
 
 @pytest.mark.parametrize("vendor", ["apple", "nvidia", "amd"])
 def test_plan_has_every_lane_with_our_arms(vendor):
-    races = bb.plan_races(vendor, bb.modes_for(vendor), ["algos"], cpu_arm=True)
+    races = bb.plan_races(vendor, bb.modes_for(vendor), ["algos"])
     assert {r["lane"] for r in races} == set(A.LANE_ORDER)
     want = {"ours": "identical"}          # the board never races our CPU (Oct 2 2026)
     if vendor == "apple":
@@ -250,3 +250,24 @@ def test_device_ndarray_is_copied_to_host():
     ctd = _load("classical_two_datasets")
     assert ctd._to_host(Dev()).tolist() == [[0, 1, 2], [3, 4, 5]]
     assert A._arr(Dev(), np.int64).tolist() == [[0, 1, 2], [3, 4, 5]]
+
+
+def test_bayesian_gmm_reg_covar_per_dataset(tmp_path, monkeypatch):
+    # Istella-S takes reg_covar 3e-3 on every arm (every arm refused at 1e-6);
+    # taxi keeps 1e-6. The dataset is the one _load_block read.
+    D = {"X": np.zeros((4, 3), np.float32)}
+    s = A.LANES["bayesian-gmm"]
+    for ds, want in (("istella", 3e-3), ("taxi", 1e-6)):
+        monkeypatch.setattr(A, "_DATASET", ds)
+        for params in (s["params"], s.get("sk_params", s["params"])):
+            assert A._derived_params("bayesian-gmm", D, params)["reg_covar"] == want
+    assert s["params"]["reg_covar"] == 1e-6          # the table itself is not changed
+    assert A.lane_config("bayesian-gmm")["dataset_params"] == {"istella": {"reg_covar": 3e-3}}
+    # _load_block records the dataset (the synthetic path needs no file)
+    monkeypatch.setattr(A, "block_file", lambda lane, ds: None)
+    A._load_block("bayesian-gmm", "istella", str(tmp_path))
+    assert A._DATASET == "istella"
+
+
+def test_no_other_lane_has_dataset_params():
+    assert sorted(k for k, s in A.LANES.items() if s.get("dataset_params")) == ["bayesian-gmm"]

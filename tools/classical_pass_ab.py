@@ -13,11 +13,13 @@ bug in that fix. The digests also compare across vendors.
 import argparse, hashlib, json, os, shutil, subprocess, sys, time
 from pathlib import Path
 
+# None: the old path's switch was deleted from the library (GPU-only rule),
+# so no old arm exists; the case runs the new path only.
 OLD_ENV = {
-    "lu": {"MOJOLEARN_XD_LU_PIVOT_SERIAL": "1", "MOJOLEARN_XD_LU_SOLVE_SERIAL": "1"},
-    "sgd-reg": {"MOJOLEARN_X_LINEAR_SGD_HOST": "0"},
-    "sgd-clf": {"MOJOLEARN_X_LINEAR_SGD_HOST": "0"},
-    "lars": {"MOJOLEARN_X_LINEAR_LARS_GRID_GRAM": "0"},
+    "lu": None,       # MOJOLEARN_XD_LU_PIVOT_SERIAL removed
+    "sgd-reg": None,  # MOJOLEARN_X_LINEAR_SGD_HOST removed
+    "sgd-clf": None,  # MOJOLEARN_X_LINEAR_SGD_HOST removed
+    "lars": None,     # MOJOLEARN_X_LINEAR_LARS_GRID_GRAM removed
     "ivf": {},  # compile time: the old arm swaps in the -D MOJOLEARN_IVF_IDENTICAL_SCAN_OFF binding
 }
 # (digest size, full size)
@@ -116,6 +118,8 @@ def main():
             tag = "%s-%s-%d" % (name, arm, size)
             env = dict(os.environ); swapped = None
             if arm == "old":
+                if OLD_ENV[name] is None:
+                    summary.append({"tag": tag, "status": "skipped: the old path no longer exists"}); continue
                 env.update(OLD_ENV[name])
                 if name == "ivf":
                     if not args.ivf_off_so or ivf_so is None:

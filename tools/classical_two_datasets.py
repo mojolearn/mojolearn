@@ -789,7 +789,7 @@ def _to_host(a):
 # ---- ours ----------------------------------------------------------------
 
 def _probe():
-    """tools/bench_board_probe.py (memory per round, the ours-cpu readback)."""
+    """tools/bench_board_probe.py (memory per round, the our-CPU refusal)."""
     here = os.path.dirname(os.path.abspath(__file__))
     if here not in sys.path:
         sys.path.insert(0, here)
@@ -819,8 +819,6 @@ def _ours_info(ml, est):
         except Exception as exc:  # noqa: BLE001
             info[name] = "unavailable (%r)" % (exc,)
     info["device"] = "gpu"
-    # an ours-cpu worker: the wheel must have loaded its CPU set (refuses by name)
-    info.update(_probe().ours_cpu_check(ml))
     # Which mojolearn answered: the installed wheel or an in-repo tree.
     info["module_path"] = getattr(ml, "__file__", None)
     # Ours fits INSIDE its clock: the public call is what is timed, upload and
@@ -1996,10 +1994,7 @@ for _lane in LANES:
         # MOJOLEARN_NUMERIC_MODE=fast (`_worker_env`), so the Apple board
         # interleaves FAST beside IDENTICAL round by round in one race.
         BUILDERS[(_lane, "ours-fast")] = BUILDERS[(_lane, "ours")]
-        # `ours-cpu`: the SAME estimator in a worker started under
-        # MOJOLEARN_VENDOR=cpu (the wheel's public CPU switch,
-        # tools/bench_board_probe.py), IDENTICAL, read back as vendor cpu.
-        BUILDERS[(_lane, "ours-cpu")] = BUILDERS[(_lane, "ours")]
+        # No `ours-cpu`: our CPU is never raced or timed (Andrew, Oct 2 2026).
 for _lane in LANES:
     # Same for a lane with no scikit-learn arm: there is
     # nothing to wrap in the CPU quota.
@@ -2382,10 +2377,8 @@ def _worker_env(arm, root):
     for k in THREAD_ENV:
         env.pop(k, None)
     apply_cpu_quota(env)
-    if arm in ("ours", "ours-base", "ours-fast", "ours-cpu"):
+    if arm in ("ours", "ours-base", "ours-fast"):
         env["MOJOLEARN_NUMERIC_MODE"] = "fast" if arm == "ours-fast" else "identical"
-        if arm == "ours-cpu":
-            _probe().ours_cpu_env(env)
         tree = os.path.join(root, "python")
         if arm == "ours-base":
             tree = os.environ.get("MOJOLEARN_CTD_BASE_PY", "")
@@ -2703,6 +2696,7 @@ def infer_summary(lane, ds, infer, rounds):
 def race(args):
     lane, ds = args.lane, args.dataset
     arms = [a for a in (args.arms.split(",") if args.arms else ARMS[lane]) if a]
+    _probe().refuse_our_cpu_arms(arms, "classical_two_datasets")
     for a in arms:
         if (lane, a) not in BUILDERS:
             raise SystemExit("no arm %r for lane %r" % (a, lane))
@@ -2718,7 +2712,7 @@ def race(args):
     tag = "%s-%s" % (lane, ds)
     workers = {}
     for arm in arms:
-        py = args.ours_python if arm in ("ours", "ours-base", "ours-fast", "ours-cpu") \
+        py = args.ours_python if arm in ("ours", "ours-base", "ours-fast") \
             else args.theirs_python
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm,
                                  "--lane", lane, "--dataset", ds, "--data", args.data]
@@ -2827,10 +2821,6 @@ def race(args):
         with np.load(block + ".npz") as z:
             data = {k: z[k] for k in z.files}
         result["quality"] = quality(lane, data, outs, rec)
-        # our CPU tier against our GPU IDENTICAL, bit for bit (the promise)
-        if "ours-cpu" in outs and "ours" in outs:
-            result["quality"].setdefault("ours-cpu", {})["bits_equal_vs_ours_identical"] = \
-                _probe().bits_equal(outs["ours-cpu"], outs["ours"])
     except Exception as exc:  # noqa: BLE001
         result["quality"] = {"error": repr(exc)}
         data = None

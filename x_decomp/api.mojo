@@ -15,6 +15,7 @@ from x_decomp.kit import mat_from
 from x_decomp.mcd import fast_mcd
 from x_decomp.lda_online import lda_online_pass
 from x_decomp.moves import argsort_f32, gather, iso_order, scatter, triu_nonzero
+from x_decomp.tsqr_core import TS_MAX_N
 
 
 def _f(addr: PythonObject) raises -> F32Ptr:
@@ -152,10 +153,28 @@ def trisolve_py[E: Exec](lu: PythonObject, idx: PythonObject, src: PythonObject,
     return PythonObject(n)
 
 
+def knn_select_py[E: Exec](dmat: PythonObject, dist: PythonObject, idx: PythonObject, p: PythonObject) raises -> PythonObject:
+    """p = [n, m, k, exclude_self]: `knn_select_row` for every row."""
+    var n = _n(p, 0)
+    var m = _n(p, 1)
+    var k = _n(p, 2)
+    var ex = _n(p, 3)
+    if m >= 1 << 24:
+        raise Error("x_decomp: knn_select columns exceed float32's exact integers")
+    var pd = _f(dmat)
+    var ps = _f(dist)
+    var pi = _f(idx)
+    with GILReleased(Python()):
+        E.knn_select(pd, ps, pi, n, m, k, ex)
+    return PythonObject(n)
+
+
 def lu_solve_py[E: Exec](lu: PythonObject, piv: PythonObject, b: PythonObject, p: PythonObject) raises -> PythonObject:
     var n = _n(p, 0)
     var nrhs = _n(p, 1)
     var trans = _n(p, 2) if len(p) > 2 else 0
+    if n >= 1 << 24:
+        raise Error("x_decomp: lu_solve row numbers exceed float32's exact integers")
     var pl = _f(lu)
     var pp = _i(piv)
     var pb = _f(b)
@@ -177,11 +196,80 @@ def eigh_py[E: Exec](a: PythonObject, w: PythonObject, v: PythonObject, p: Pytho
     var n = _n(p, 0)
     if n <= 0:
         raise Error("x_decomp: eigh needs n >= 1")
+    # p[1] (optional): numpy's UPLO, 1 the lower triangle, 2 the upper, 0
+    # (absent) the whole matrix; mirrored by the executor (on the device)
+    var uplo = 0
+    if len(p) > 1:
+        uplo = _n(p, 1)
+    if uplo < 0 or uplo > 2:
+        raise Error("x_decomp: eigh uplo is 0, 1 (L) or 2 (U)")
     var pa = _f(a)
     var pw = _f(w)
     var pv = _f(v)
-    E.eigh(pa, pw, pv, n)
+    E.eigh(pa, pw, pv, n, uplo)
     return PythonObject(n)
+
+
+def lle_apply_py[E: Exec](
+    wb: PythonObject, idx: PythonObject, emb: PythonObject, dst: PythonObject, p: PythonObject
+) raises -> PythonObject:
+    """p = [nq, nf, nn, nc]: LLE transform's out (nq x nc) = W E[idx]."""
+    var nq = _n(p, 0)
+    var nf = _n(p, 1)
+    var nn = _n(p, 2)
+    var nc = _n(p, 3)
+    if nq * nc > 2147483647 or nf * nc > 2147483647 or nq * nn > 2147483647:
+        raise Error("x_decomp: lle_apply exceeds the Int32 index bound")
+    var pw = _f(wb)
+    var pi = _f(idx)
+    var pe = _f(emb)
+    var po = _f(dst)
+    with GILReleased(Python()):
+        E.lle_apply(pw, pi, pe, po, nq, nf, nn, nc)
+    return PythonObject(nq)
+
+
+def lle_local_py[E: Exec](
+    x: PythonObject, idx: PythonObject, b: PythonObject, p: PythonObject, f: PythonObject
+) raises -> PythonObject:
+    """LocallyLinearEmbedding's stacked factor (x_decomp/lle_local.mojo).
+    p = [method (0 ltsa, 1 hessian, 2 modified), n, d, nn, nc]; f = [tol]
+    (hessian_tol / modified_tol). idx (n x nn) the neighbor indices as exact
+    floats; b zeroed, n nn x n (n (nn - 1 - nc) x n for hessian)."""
+    var method = _n(p, 0)
+    var n = _n(p, 1)
+    var d = _n(p, 2)
+    var nn = _n(p, 3)
+    var nc = _n(p, 4)
+    var tol = Float32(Float64(py=f[0]))
+    if method < 0 or method > 2 or n < 1 or d < 1 or nn < 1 or nc < 1 or (method == 1 and nn - 1 - nc < 1):
+        raise Error("x_decomp: lle_local needs method 0..2, n, d, n_neighbors, n_components >= 1 (hessian: n_neighbors > n_components + 1)")
+    if n * nn * n > 2147483647 or n * nn * nn > 2147483647 or n >= 16777216:
+        raise Error("x_decomp: lle_local exceeds the Int32 index bound")
+    var px = _f(x)
+    var pi = _f(idx)
+    var pb = _f(b)
+    with GILReleased(Python()):
+        E.lle_local(px, pi, pb, method, n, d, nn, nc, tol)
+    return PythonObject(n)
+
+
+def eigh_batch_py[E: Exec](a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
+    """p = [batch, n]: `batch` n x n symmetric problems stacked in `a`; w
+    (batch x n, ascending) and v (batch x n x n, vectors in columns), each
+    the words `eigh` gives it (x_decomp/rr_batch.mojo)."""
+    var batch = _n(p, 0)
+    var n = _n(p, 1)
+    if n <= 0 or batch < 0:
+        raise Error("x_decomp: eigh_batch needs n >= 1, batch >= 0")
+    if batch * n * n > 2147483647:
+        raise Error("x_decomp: eigh_batch exceeds the Int32 index bound")
+    var pa = _f(a)
+    var pw = _f(w)
+    var pv = _f(v)
+    with GILReleased(Python()):
+        E.eigh_batch(pa, pw, pv, batch, n)
+    return PythonObject(batch)
 
 
 def cd_rows_py[E: Exec](
@@ -251,6 +339,49 @@ def lasso_rows_py[E: Exec](
     with GILReleased(Python()):
         E.lasso_rows(pg, pq, pw, ph, pi, n, k, alpha, max_iter, tol, positive)
     _ = h^
+    return PythonObject(n)
+
+
+def lu_aux_py[E: Exec](
+    lu: PythonObject, piv: PythonObject, pm: PythonObject, im: PythonObject, diag: PythonObject,
+    stats: PythonObject, p: PythonObject,
+) raises -> PythonObject:
+    """p = [n, clamp]: an LU factor's row order (pm), its inverse (im), its
+    diagonal, (max |u_ii|, zero, negative pivots, swaps) and, with clamp,
+    the tiny pivots floored in lu."""
+    var n = _n(p, 0)
+    var clamp = _n(p, 1)
+    if n < 1 or n >= 16777216:
+        raise Error("x_decomp: lu_aux needs 1 <= n < 2^24")
+    var pl = _f(lu)
+    var pv = _i(piv)
+    var p1 = _f(pm)
+    var p2 = _f(im)
+    var pd = _f(diag)
+    var ps = _f(stats)
+    with GILReleased(Python()):
+        E.lu_aux(pl, pv, p1, p2, pd, ps, n, clamp)
+    return PythonObject(n)
+
+
+def lars_rows_py[E: Exec](
+    g: PythonObject, q: PythonObject, w: PythonObject, na: PythonObject, p: PythonObject
+) raises -> PythonObject:
+    """p = [n, k, m, nnz]: sparse_encode 'lars' on the Gram G (k x k) and Q =
+    X D^T (n x k), m the samples of each row's problem (x_decomp/cells.mojo
+    `lars_row`, one thread a row)."""
+    var n = _n(p, 0)
+    var k = _n(p, 1)
+    var m = _n(p, 2)
+    var nnz = _n(p, 3)
+    if n * (k * k + 7 * k) > 2147483647:
+        raise Error("x_decomp: lars_rows exceeds the Int32 index bound")
+    var pg = _f(g)
+    var pq = _f(q)
+    var pw = _f(w)
+    var pn = _f(na)
+    with GILReleased(Python()):
+        E.lars_rows(pg, pq, pw, pn, n, k, m, nnz)
     return PythonObject(n)
 
 
@@ -380,6 +511,42 @@ def qr_r_py[E: Exec](a: PythonObject, r: PythonObject, p: PythonObject) raises -
     return PythonObject(n)
 
 
+def tsqr_r_py[E: Exec](a: PythonObject, b: PythonObject, r: PythonObject, p: PythonObject) raises -> PythonObject:
+    """r (n x n, n = d + nrhs) = R of the blocked TSQR of [a | b] (a m x d,
+    b m x nrhs, row major; b is read only when nrhs > 0). p = [m, d, nrhs,
+    keep]: keep != 0 holds the factorization for `tsqr_q_py`."""
+    var m = _n(p, 0)
+    var d = _n(p, 1)
+    var nrhs = _n(p, 2)
+    var keep = Int(py=p[3]) != 0
+    var n = d + nrhs
+    if d < 1 or n > TS_MAX_N or m < n:
+        raise Error("x_decomp: tsqr_r needs 1 <= d, d + nrhs <= " + String(TS_MAX_N) + " and m >= d + nrhs")
+    if m * n > 2147483647:
+        raise Error("x_decomp: tsqr_r exceeds the Int32 index bound")
+    var pa = _f(a)
+    var pb = _f(b)
+    var pr = _f(r)
+    with GILReleased(Python()):
+        E.tsqr_factor(pa, pb, pr, m, d, nrhs, keep)
+    return PythonObject(n)
+
+
+def tsqr_q_py[E: Exec](c: PythonObject, q: PythonObject, p: PythonObject) raises -> PythonObject:
+    """q (m x k) = Q c (c n x k) for the factorization `tsqr_r_py` kept,
+    which is then released; p = [m, n, k], k == 0 releases it only."""
+    var m = _n(p, 0)
+    var n = _n(p, 1)
+    var k = _n(p, 2)
+    if k > 0 and m * k > 2147483647:
+        raise Error("x_decomp: tsqr_q exceeds the Int32 index bound")
+    var pc = _f(c)
+    var pq = _f(q)
+    with GILReleased(Python()):
+        E.tsqr_apply(pc, pq, m, n, k)
+    return PythonObject(k)
+
+
 def geqrf_py[E: Exec](a: PythonObject, tau: PythonObject, p: PythonObject) raises -> PythonObject:
     """In place: a (m x n, row major) becomes geqrf's factored form, tau
     (min(m, n)) its scalars."""
@@ -432,9 +599,9 @@ def als_cg_rows_py[E: Exec](
     return PythonObject(n)
 
 
-def mcd_py[E: Exec, S: Exec](
+def mcd_py[E: Exec](
     x: PythonObject, loc: PythonObject, cov: PythonObject, sup: PythonObject, dist: PythonObject,
-    p: PythonObject, dev: PythonObject,
+    p: PythonObject,
 ) raises -> PythonObject:
     """MinCovDet's fast_mcd (x_decomp/mcd.mojo): x (n x d) in; location
     (d), covariance (d x d), support (n int32 0/1) and distances (n) out.
@@ -448,7 +615,6 @@ def mcd_py[E: Exec, S: Exec](
         raise Error("x_decomp: mcd needs n >= 1, d >= 2 and 1 <= h <= n")
     if n > 500 and (q[4] < 1 or q[4] * q[5] > n or q[8] > n or q[8] < 1 or q[10] < 1):
         raise Error("x_decomp: mcd subset plan out of range")
-    var dv = Int(py=dev)
     var px = _f(x)
     var pl = _f(loc)
     var pc = _f(cov)
@@ -456,13 +622,12 @@ def mcd_py[E: Exec, S: Exec](
     var pd = _f(dist)
     with GILReleased(Python()):
         var X = mat_from(px, n, d)
-        fast_mcd[E, S](X, q, dv, pl, pc, ps, pd)
+        fast_mcd[E](X, q, pl, pc, ps, pd)
     return PythonObject(n)
 
 
-def lda_online_py[E: Exec, S: Exec](
-    x: PythonObject, comps: PythonObject, exp_dir: PythonObject, p: PythonObject, f: PythonObject,
-    dev: PythonObject,
+def lda_online_py[E: Exec](
+    x: PythonObject, comps: PythonObject, exp_dir: PythonObject, p: PythonObject, f: PythonObject
 ) raises -> PythonObject:
     """One online pass of LatentDirichletAllocation (x_decomp/lda_online.mojo)
     over x (n x v): comps and exp_dir (nc x v) updated in place.
@@ -482,7 +647,6 @@ def lda_online_py[E: Exec, S: Exec](
     var fv = List[Float64]()
     for i in range(6):
         fv.append(Float64(py=f[i]))
-    var dv = Int(py=dev)
     var px = _f(x)
     var pc = _f(comps)
     var pe = _f(exp_dir)
@@ -490,7 +654,7 @@ def lda_online_py[E: Exec, S: Exec](
         var X = mat_from(px, n, v)
         var C = mat_from(pc, nc, v)
         var ED = mat_from(pe, nc, v)
-        lda_online_pass[E, S](X, C, ED, bs, mdi, seed, draw, nbi, fv[0], fv[1], fv[2], fv[3], fv[4], fv[5], dv)
+        lda_online_pass[E](X, C, ED, bs, mdi, seed, draw, nbi, fv[0], fv[1], fv[2], fv[3], fv[4], fv[5])
         for i in range(nc * v):
             pc.unsafe_store(i, C.d[i])
             pe.unsafe_store(i, ED.d[i])

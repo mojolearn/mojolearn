@@ -20,10 +20,15 @@ from x_cnn.device import (
     batchnorm_forward_into, batchnorm_backward_into, dropout2d_into, spmm_into, pad2d_forward_into,
     pad2d_backward_into, conv_block_forward_into, conv_block_backward_into,
     res_alloc, res_free, res_upload, res_download, res_gather, res_gather_pair, opt_many_resident,
+    gemm_m, conv2d_forward_m, conv2d_backward_m, maxpool2d_forward_m, maxpool2d_backward_m,
+    avgpool2d_forward_m, avgpool2d_backward_m, map2_m, linear_forward_m, linear_backward_m,
+    batchnorm_forward_m, batchnorm_backward_m, dropout2d_m, spmm_m,
 )
+from x_cnn.ops import relu_fwd_at, relu_bwd_at, add_at, mul_at, bias_rows_at
 from x_cnn.device import graph_op_device as graph_op_impl
 from x_cnn.device import adaptive_pool_device as adaptive_pool_impl
 from x_cnn.device import gcn_norm_device as gcn_norm_impl
+from x_cnn.device import csr_build_device as csr_build_impl
 
 
 def _fp(addr: PythonObject) raises -> FP:
@@ -486,8 +491,8 @@ def _csr(csr_addr: PythonObject, params: PythonObject) raises -> Tuple[List[Int3
 
 
 def _csr_ints(csr_addr: PythonObject, n: Int, F: Int, nnz: Int, mode: Int) raises -> Tuple[List[Int32], List[Int32]]:
-    if n <= 0 or F <= 0 or nnz < 0 or mode < 0 or mode > 2:
-        raise Error("x_cnn spmm: positive n and F, nnz >= 0, mode in {0, 1, 2}")
+    if n <= 0 or F <= 0 or nnz < 0 or mode < 0 or mode > 3:
+        raise Error("x_cnn spmm: positive n and F, nnz >= 0, mode in {0, 1, 2, 3}")
     var csr = read_i32(Int(py=csr_addr), n + 1 + 2 * nnz)
     if Int(csr[0]) != 0 or Int(csr[n]) != nnz:
         raise Error("x_cnn spmm: rowptr must start at 0 and end at nnz")
@@ -714,6 +719,261 @@ def res_download_binding(h: PythonObject, dst_addr: PythonObject, n: PythonObjec
     return PythonObject(nn)
 
 
+# ------------------------------------------------------- mixed residency
+# lane gap-neural-overhead2 (2026-10-02): the `_m` entries (x_cnn/device.mojo
+# "mixed residency"). `addrs` lists the entry's arrays in the order its
+# docstring names; bit k of `dev` says addrs[k] is a resident device address
+# (`x_cnn_res_alloc`'s) instead of a host one. The same parameter checks as
+# the host entries; the same device bodies (the host entries are these with
+# `dev = 0`).
+
+
+def _addrs(addrs: PythonObject, k: Int) raises -> List[Int]:
+    if Int(py=len(addrs)) != k:
+        raise Error("x_cnn: this entry takes " + String(k) + " addresses")
+    var out = List[Int]()
+    for i in range(k):
+        out.append(Int(py=addrs[i]))
+    return out^
+
+
+def gemm_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs = [A, B, C]; params = [m, n, k, op]."""
+    var m = Int(py=params[0])
+    var n = Int(py=params[1])
+    var k = Int(py=params[2])
+    var op = Int(py=params[3])
+    if m <= 0 or n <= 0 or k <= 0 or op < 0 or op > 2:
+        raise Error("x_cnn gemm: positive m, n, k and op in {0, 1, 2} required")
+    var a = _addrs(addrs, 3)
+    var d = Int(py=dev)
+    with GILReleased(Python()):
+        gemm_m(a, d, m, n, k, op)
+    return PythonObject(m * n)
+
+
+def conv2d_forward_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs = [x, w, bias, out]."""
+    var prm = conv_params(_ints(params))
+    var a = _addrs(addrs, 4)
+    var d = Int(py=dev)
+    with GILReleased(Python()):
+        conv2d_forward_m(a, d, prm)
+    return PythonObject(Int(prm[CP_N]) * Int(prm[CP_OC]) * Int(prm[CP_OH]) * Int(prm[CP_OW]))
+
+
+def conv2d_backward_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs = [x, w, dout, dx, dW, db]."""
+    var prm = conv_params(_ints(params))
+    var a = _addrs(addrs, 6)
+    var d = Int(py=dev)
+    with GILReleased(Python()):
+        conv2d_backward_m(a, d, prm)
+    return PythonObject(Int(prm[CP_N]) * Int(prm[CP_C]) * Int(prm[CP_H]) * Int(prm[CP_W]))
+
+
+def maxpool2d_forward_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs = [x, out, idx (int32)]."""
+    var prm = _pool_prm(params)
+    var a = _addrs(addrs, 3)
+    var d = Int(py=dev)
+    with GILReleased(Python()):
+        maxpool2d_forward_m(a, d, prm)
+    return PythonObject(_pool_counts(prm)[1])
+
+
+def maxpool2d_backward_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs = [dout, idx (int32), dx]."""
+    var prm = _pool_prm(params)
+    var a = _addrs(addrs, 3)
+    var d = Int(py=dev)
+    with GILReleased(Python()):
+        maxpool2d_backward_m(a, d, prm)
+    return PythonObject(_pool_counts(prm)[0])
+
+
+def avgpool2d_forward_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs = [x, out]."""
+    var prm = _pool_prm(params)
+    var a = _addrs(addrs, 2)
+    var d = Int(py=dev)
+    with GILReleased(Python()):
+        avgpool2d_forward_m(a, d, prm)
+    return PythonObject(_pool_counts(prm)[1])
+
+
+def avgpool2d_backward_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs = [dout, dx]."""
+    var prm = _pool_prm(params)
+    var a = _addrs(addrs, 2)
+    var d = Int(py=dev)
+    with GILReleased(Python()):
+        avgpool2d_backward_m(a, d, prm)
+    return PythonObject(_pool_counts(prm)[0])
+
+
+def map2_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs = [a, b, out]; params = [kind, n] or [4, n, cols]: kind 0 ReLU
+    forward (a = x; b unused), 1 ReLU backward (a = x, b = g), 2 add, 3
+    multiply (`x_cnn_add`'s and `x_cnn_mul`'s element functions), 4 the
+    row bias add (a = y (n = rows * cols), b = bias (cols); `bias_rows_at`,
+    the linear forward's)."""
+    var kind = Int(py=params[0])
+    var n = Int(py=params[1])
+    if n <= 0 or kind < 0 or kind > 4:
+        raise Error("x_cnn map2: positive n and kind in 0..4")
+    var a = _addrs(addrs, 3)
+    var d = Int(py=dev)
+    if kind == 4:
+        var cols = Int(py=params[2])
+        if cols <= 0 or n % cols != 0:
+            raise Error("x_cnn map2: the row bias needs cols dividing n")
+        var prm: List[Int32] = [Int32(n // cols), Int32(0), Int32(cols)]
+        with GILReleased(Python()):
+            map2_m[bias_rows_at](a, d, n, cols, n, prm)
+        return PythonObject(n)
+    var prm: List[Int32] = [0, 0, 0]
+    with GILReleased(Python()):
+        if kind == 0:
+            map2_m[relu_fwd_at](a, d & ~2, n, 0, n, prm)
+        elif kind == 1:
+            map2_m[relu_bwd_at](a, d, n, n, n, prm)
+        elif kind == 2:
+            map2_m[add_at](a, d, n, n, n, prm)
+        else:
+            map2_m[mul_at](a, d, n, n, n, prm)
+    return PythonObject(n)
+
+
+def linear_forward_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs = [x, w, b, y]."""
+    var s = _lin(params)
+    var a = _addrs(addrs, 4)
+    var d = Int(py=dev)
+    with GILReleased(Python()):
+        linear_forward_m(a, d, s[0], s[1], s[2])
+    return PythonObject(s[0] * s[2])
+
+
+def linear_backward_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs = [x, w, g, dx, dW, db]."""
+    var s = _lin(params)
+    var a = _addrs(addrs, 6)
+    var d = Int(py=dev)
+    with GILReleased(Python()):
+        linear_backward_m(a, d, s[0], s[1], s[2])
+    return PythonObject(s[0])
+
+
+def batchnorm_forward_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs = [x, y, running, aux] (the host entry's order); params = [N, C, HW, training]."""
+    var prm = _bn_prm(params)
+    var training = Int(py=params[3]) != 0
+    if training and Int(prm[0]) * Int(prm[2]) < 2:
+        raise Error("x_cnn batchnorm: expected more than 1 value per channel when training")
+    var h = _addrs(addrs, 4)
+    var a: List[Int] = [h[0], h[2], h[3], h[1]]
+    var d0 = Int(py=dev)
+    # host order bits (x, y, running, aux) to the body's (x, running, aux, y)
+    var d = (d0 & 1) | (((d0 >> 2) & 1) << 1) | (((d0 >> 3) & 1) << 2) | (((d0 >> 1) & 1) << 3)
+    with GILReleased(Python()):
+        batchnorm_forward_m(a, d, prm, training)
+    return PythonObject(Int(prm[0]) * Int(prm[1]) * Int(prm[2]))
+
+
+def batchnorm_backward_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs = [x, g, dx, aux] (the host entry's order); params = [N, C, HW, training]."""
+    var prm = _bn_prm(params)
+    var training = Int(py=params[3]) != 0
+    var h = _addrs(addrs, 4)
+    var a: List[Int] = [h[0], h[1], h[3], h[2]]
+    var d0 = Int(py=dev)
+    var d = (d0 & 3) | (((d0 >> 3) & 1) << 2) | (((d0 >> 2) & 1) << 3)
+    with GILReleased(Python()):
+        batchnorm_backward_m(a, d, prm, training)
+    return PythonObject(Int(prm[0]) * Int(prm[1]) * Int(prm[2]))
+
+
+def dropout2d_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject, drop_p: PythonObject) raises -> PythonObject:
+    """addrs = [x, y, mask]; params as `x_cnn_dropout2d`'s."""
+    var N = Int(py=params[0])
+    var C = Int(py=params[1])
+    var HW = Int(py=params[2])
+    if N <= 0 or C <= 0 or HW <= 0:
+        raise Error("x_cnn dropout2d: positive N, C and H*W required")
+    var prm = List[Int32]()
+    for k in range(7):
+        var v = Int(py=params[k])
+        if v < 0:
+            raise Error("x_cnn dropout2d: negative parameter")
+        prm.append(Int32(Int64(v) - Int64(4294967296)) if v > 2147483647 else Int32(v))
+    var h: List[Float32] = [Float32(Float64(py=drop_p))]
+    var a = _addrs(addrs, 3)
+    var d = Int(py=dev)
+    var total = N * C * HW
+    with GILReleased(Python()):
+        dropout2d_m(a, d, total, prm, h)
+    return PythonObject(total)
+
+
+def csr_upload_binding(csr_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """A resident copy of a CSR block [rowptr | col | row] (params [n, F,
+    nnz, mode]), checked ONCE here as `x_cnn_spmm` checks it on every call;
+    its handle (free with `x_cnn_res_free`)."""
+    var t = _csr(csr_addr, params)
+    var csr = t[0].copy()
+    var words = len(csr)
+    var h = res_alloc(words)
+    var src = FP(unsafe_from_address=Int(csr.unsafe_ptr()))
+    with GILReleased(Python()):
+        res_upload(h, src, words)
+    _ = csr^
+    return PythonObject(h)
+
+
+def csr_build_binding(rows_addr: PythonObject, cols_addr: PythonObject, csr_addr: PythonObject, order_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """The CSR view of an edge list, on the device (x_cnn/device.mojo
+    csr_build_device): `rows`, `cols` int32 [nnz] in [0, n); `csr` int32
+    [n + 1 + 2 * nnz] gets [rowptr | col | row] in ascending (row, col) order,
+    ties in edge order; `order` int32 [nnz] the edge ids in that order.
+    params = [n, nnz]. Returns n + 1 + 2 * nnz."""
+    var n = Int(py=params[0])
+    var nnz = Int(py=params[1])
+    if n <= 0 or nnz < 0:
+        raise Error("x_cnn csr_build: positive n and nnz >= 0 required")
+    var pc = _ip(csr_addr)
+    var rows = _ip(rows_addr) if nnz > 0 else pc
+    var cols = _ip(cols_addr) if nnz > 0 else pc
+    var order = _ip(order_addr) if nnz > 0 else pc
+    with GILReleased(Python()):
+        csr_build_impl(rows, cols, nnz, n, pc, order)
+    return PythonObject(n + 1 + 2 * nnz)
+
+
+def spmm_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs = [vals, h, csr, out]; params = [n, F, nnz, mode]. A resident
+    csr (bit 2) is a `x_cnn_csr_upload` handle, checked when it was made; a
+    host one is checked here as `x_cnn_spmm` checks it."""
+    var n = Int(py=params[0])
+    var F = Int(py=params[1])
+    var nnz = Int(py=params[2])
+    var mode = Int(py=params[3])
+    var a = _addrs(addrs, 4)
+    var d = Int(py=dev)
+    if (d >> 2) & 1 == 0:
+        _ = _csr(addrs[2], params)
+    elif n <= 0 or F <= 0 or nnz < 0 or mode < 0 or mode > 3:
+        raise Error("x_cnn spmm: positive n and F, nnz >= 0, mode in {0, 1, 2, 3}")
+    var prm: List[Int32] = [Int32(n), Int32(F), Int32(nnz), Int32(mode)]
+    if nnz <= 0:
+        # the host entry's: no values are read, h stands in for them
+        a[0] = a[1]
+        d = (d & ~1) | ((d >> 1) & 1)
+    with GILReleased(Python()):
+        spmm_m(a, d, nnz, n + 1 + 2 * nnz, prm)
+    return PythonObject(n * F)
+
+
 # ------------------------------------------------------------ the fit epoch
 # lane/py-misc (2026-09-28, audit rank 10): CNNClassifier.fit's steps looped
 # HERE instead of in Python. `x_cnn_fit_epoch_r` runs a run of trainer steps
@@ -899,6 +1159,22 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[sgd_binding[True]]("x_cnn_sgd_r")
         m.def_function[adam_binding[True]]("x_cnn_adam_r")
         m.def_function[fit_epoch_r_binding]("x_cnn_fit_epoch_r")
+        m.def_function[gemm_m_binding]("x_cnn_gemm_m")
+        m.def_function[conv2d_forward_m_binding]("x_cnn_conv2d_forward_m")
+        m.def_function[conv2d_backward_m_binding]("x_cnn_conv2d_backward_m")
+        m.def_function[maxpool2d_forward_m_binding]("x_cnn_maxpool2d_forward_m")
+        m.def_function[maxpool2d_backward_m_binding]("x_cnn_maxpool2d_backward_m")
+        m.def_function[avgpool2d_forward_m_binding]("x_cnn_avgpool2d_forward_m")
+        m.def_function[avgpool2d_backward_m_binding]("x_cnn_avgpool2d_backward_m")
+        m.def_function[map2_m_binding]("x_cnn_map2_m")
+        m.def_function[linear_forward_m_binding]("x_cnn_linear_forward_m")
+        m.def_function[linear_backward_m_binding]("x_cnn_linear_backward_m")
+        m.def_function[batchnorm_forward_m_binding]("x_cnn_batchnorm_forward_m")
+        m.def_function[batchnorm_backward_m_binding]("x_cnn_batchnorm_backward_m")
+        m.def_function[dropout2d_m_binding]("x_cnn_dropout2d_m")
+        m.def_function[csr_upload_binding]("x_cnn_csr_upload")
+        m.def_function[csr_build_binding]("x_cnn_csr_build")
+        m.def_function[spmm_m_binding]("x_cnn_spmm_m")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_cnn: ", e))

@@ -138,7 +138,7 @@ from core.apple_air import simdgroup_load_legacy_air
 from std.ffi import _Global, external_call
 from std.time import perf_counter_ns
 
-from gemm.checks.gemm_oracle import (
+from gemm.contract import (
     CONTRACT_MAX_LEAVES,
     OP_NN,
     OP_NT,

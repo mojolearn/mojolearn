@@ -155,7 +155,21 @@ from gbdt.data.quantization import (
     nan_substitution,
     nan_value_treatment,
 )
+from gbdt.grid_creator.gls_borders import (
+    GLS_NAN_KEY,
+    border_key,
+    border_sample_row,
+    gls_column,
+    gls_log_table_entry,
+)
+from gbdt.grid_creator.border_types import (
+    border_table_entry,
+    border_type_column,
+    exact_i32_words,
+)
 from gbdt.grid_creator.binarization import (
+    BORDER_TYPE_MAX_LOG_SUM,
+    BORDER_TYPE_MIN_ENTROPY,
     TFeatureBin,
     _heap_pop,
     _heap_push,
@@ -783,6 +797,158 @@ def _calc_quantization_phase_b(
     return (borders^, nan_mode)
 
 
+def _gls_host_grid(
+    x_colmajor: List[Float32],
+    n_rows: Int,
+    n_features: Int,
+    border_count: Int,
+    sn: Int,
+    random_seed: UInt64,
+    nan_mode: Int,
+    border_type: Int = BORDER_TYPE_GREEDY_LOG_SUM,
+) raises -> GbdtHostGrid:
+    """`gbdt/grid_creator/gls_borders_device.mojo::device_float_borders` on
+    host memory, the same functions per column: the Feistel subsample
+    (`border_sample_row`), the flushed twiddled keys (`border_key`, NaN
+    last and counted), an ascending key sort, `ComputeNanMode` over the
+    column's NaN flag (the full column on the sampled path), and
+    `gls_column` over the soft-binary64 `log(w + 1e-8)` table; the six
+    other border types run `border_types.border_type_column` over the
+    type's `border_table_entry` table (cpu-gpu-cleanup w2-trees)."""
+    var sampled = sn < n_rows
+    var key = _generate_seed_for_borders(random_seed)
+    var logtab = List[UInt64](length=sn + 1, fill=UInt64(0))
+    var ltp = rebind[MutPointer[UInt64, MutAnyOrigin]](logtab.unsafe_ptr())
+    comptime LT_CHUNK = 4096
+    var lt_tasks = (sn + 1 + LT_CHUNK - 1) // LT_CHUNK
+
+    def _lt_task(t: Int) {imm ltp, imm sn, imm border_type}:
+        var lo = t * LT_CHUNK
+        var hi = min(lo + LT_CHUNK, sn + 1)
+        for w in range(lo, hi):
+            ltp[w] = border_table_entry(w, border_type)
+
+    host_parallelize_pool_env(_lt_task, lt_tasks)
+    var idx = List[UInt32](length=max(sn, 1), fill=UInt32(0))
+    if sampled:
+        for i in range(sn):
+            idx[i] = UInt32(border_sample_row(i, n_rows, key))
+    var out_cap = border_count + 1
+    var heap_cap = border_count + 2
+    var flat = List[Float32](length=n_features * out_cap, fill=Float32(0.0))
+    var counts = List[Int](length=n_features, fill=0)
+    var modes = List[Int](length=n_features, fill=0)
+    var xp = rebind[MutPointer[Float32, MutUntrackedOrigin]](x_colmajor.unsafe_ptr())
+    var ip = rebind[MutPointer[UInt32, MutUntrackedOrigin]](idx.unsafe_ptr())
+    var fp = rebind[MutPointer[Float32, MutAnyOrigin]](flat.unsafe_ptr())
+    var cp = rebind[MutPointer[Int, MutUntrackedOrigin]](counts.unsafe_ptr())
+    var mp = rebind[MutPointer[Int, MutUntrackedOrigin]](modes.unsafe_ptr())
+
+    var exact = (
+        border_type == BORDER_TYPE_MAX_LOG_SUM
+        or border_type == BORDER_TYPE_MIN_ENTROPY
+    )
+
+    def _col(f: Int) {imm xp, imm ip, imm fp, imm cp, imm mp, imm ltp, imm n_rows, imm sn, imm sampled, imm out_cap, imm heap_cap, imm border_count, imm nan_mode, imm border_type, imm exact}:
+        var keys = List[UInt32](capacity=sn)
+        var nan_s = 0
+        for i in range(sn):
+            var row = Int(ip[i]) if sampled else i
+            var k = border_key(xp[f * n_rows + row])
+            if k == GLS_NAN_KEY:
+                nan_s += 1
+            keys.append(k)
+        var has_nan = nan_s > 0
+        if sampled:
+            has_nan = False
+            for r in range(n_rows):
+                var v = xp[f * n_rows + r]
+                if v != v:
+                    has_nan = True
+                    break
+        sort(keys)
+        var m = NAN_MODE_FORBIDDEN
+        if has_nan:
+            if nan_mode == NAN_MODE_FORBIDDEN:
+                mp[f] = -1
+                return
+            m = nan_mode
+        var budget = border_count
+        if m != NAN_MODE_FORBIDDEN:
+            budget -= 1
+        var hs = List[Int32](length=heap_cap, fill=Int32(0))
+        var he = List[Int32](length=heap_cap, fill=Int32(0))
+        var hp = List[Int32](length=heap_cap, fill=Int32(0))
+        var hsc = List[UInt64](length=heap_cap, fill=UInt64(0))
+        var nb: Int
+        if border_type == BORDER_TYPE_GREEDY_LOG_SUM:
+            nb = gls_column(
+                rebind[MutPointer[UInt32, MutAnyOrigin]](keys.unsafe_ptr()),
+                sn - nan_s, budget, ltp,
+                rebind[MutPointer[Int32, MutAnyOrigin]](hs.unsafe_ptr()),
+                rebind[MutPointer[Int32, MutAnyOrigin]](he.unsafe_ptr()),
+                rebind[MutPointer[Int32, MutAnyOrigin]](hp.unsafe_ptr()),
+                rebind[MutPointer[UInt64, MutAnyOrigin]](hsc.unsafe_ptr()),
+                fp + f * out_cap,
+            )
+        else:
+            # the device kernel's scratch planes, sized as
+            # `device_float_borders` sizes them
+            var f64s = List[UInt64](length=max(1, 4 * sn if exact else 1), fill=UInt64(0))
+            var i32s = List[Int32](
+                length=max(1, exact_i32_words(sn, border_count) if exact else 1),
+                fill=Int32(0),
+            )
+            var uq = List[Float32](length=max(1, sn if exact else 1), fill=Float32(0.0))
+            nb = border_type_column(
+                border_type,
+                rebind[MutPointer[UInt32, MutAnyOrigin]](keys.unsafe_ptr()),
+                sn - nan_s, budget, ltp,
+                rebind[MutPointer[Int32, MutAnyOrigin]](hs.unsafe_ptr()),
+                rebind[MutPointer[Int32, MutAnyOrigin]](he.unsafe_ptr()),
+                rebind[MutPointer[Int32, MutAnyOrigin]](hp.unsafe_ptr()),
+                rebind[MutPointer[UInt64, MutAnyOrigin]](hsc.unsafe_ptr()),
+                rebind[MutPointer[UInt64, MutAnyOrigin]](f64s.unsafe_ptr()),
+                rebind[MutPointer[Int32, MutAnyOrigin]](i32s.unsafe_ptr()),
+                rebind[MutPointer[Float32, MutAnyOrigin]](uq.unsafe_ptr()),
+                fp + f * out_cap,
+            )
+            _ = len(f64s)
+            _ = len(i32s)
+            _ = len(uq)
+        _ = len(keys)
+        _ = len(hs)
+        _ = len(he)
+        _ = len(hp)
+        _ = len(hsc)
+        cp[f] = nb
+        mp[f] = m
+
+    host_parallelize_pool_env(_col, n_features)
+    _ = len(logtab)
+    _ = len(idx)
+    var borders = List[List[Float32]]()
+    var fold_counts = List[Int]()
+    var nan_treatment = List[Int]()
+    for f in range(n_features):
+        if modes[f] < 0:
+            raise Error(
+                "There are nan factors and nan values for float features are"
+                " not allowed. Set nan_mode != Forbidden."
+            )
+        var bs = List[Float32]()
+        if modes[f] == NAN_MODE_MIN:
+            bs.append(Float32(-3.4028234663852886e38))
+        for b in range(counts[f]):
+            bs.append(flat[f * out_cap + b])
+        if modes[f] == NAN_MODE_MAX:
+            bs.append(Float32(3.4028234663852886e38))
+        fold_counts.append(len(bs))
+        borders.append(bs^)
+        nan_treatment.append(nan_value_treatment(modes[f]))
+    return GbdtHostGrid(borders^, fold_counts^, nan_treatment^)
+
+
 def gbdt_host_grid(
     x_colmajor: List[Float32],
     n_rows: Int,
@@ -793,106 +959,18 @@ def gbdt_host_grid(
     nan_mode: Int,
     border_type: Int = BORDER_TYPE_GREEDY_LOG_SUM,
 ) raises -> GbdtHostGrid:
-    """`_quantize_training_columns` for an all-float, one-permutation fit
-    (`gbdt/train.mojo:1966-2241`). The full-data path hands
-    `calc_quantization` the device-sorted column; the sampled path hands it
-    the shared subsample, with the device's NaN seed into the sample
-    (`:2019-2034`). The per-column border search is
-    `_calc_quantization_phase_b`, not the imported `calc_quantization`: see
-    its docstring for the subnormal flush the device fit's phase B applies."""
+    """`_quantize_training_columns` for an all-float, one-permutation fit:
+    `_gls_host_grid`, the device border build (`device_float_borders`) on
+    host memory, for every `feature_border_type`."""
     var border_sample_n = n_rows
     if border_build_max_samples > 0 and border_build_max_samples < n_rows:
         border_sample_n = border_build_max_samples
-    var sample_idx = List[UInt32]()
-    if border_sample_n < n_rows:
-        sample_idx = _sample_indices_for_borders(
-            n_rows, border_sample_n, random_seed
-        )
-    # `_calc_quantization_phase_b` used to raise this public refusal while
-    # visiting features serially.  Preserve both its exact text and the first
-    # offending-feature order before worker exceptions are collapsed into the
-    # internal parallel-build error below.  The sampled path also checks the
-    # full learn column before injecting a NaN into its sample.
-    if nan_mode == NAN_MODE_FORBIDDEN:
-        for f in range(n_features):
-            for r in range(n_rows):
-                var v = x_colmajor[f * n_rows + r]
-                if v != v:
-                    raise Error(
-                        "There are nan factors and nan values for float features are"
-                        " not allowed. Set nan_mode != Forbidden."
-                    )
-    var out_cap = border_count + 1
-    var flat_borders = List[Float32](length=n_features * out_cap, fill=Float32(0.0))
-    var out_counts = List[Int](length=n_features, fill=0)
-    var out_modes = List[Int](length=n_features, fill=-1)
-    var xp = rebind[MutPointer[Float32, MutUntrackedOrigin]](x_colmajor.unsafe_ptr())
-    var sip = rebind[MutPointer[UInt32, MutUntrackedOrigin]](sample_idx.unsafe_ptr())
-    var obp = rebind[MutPointer[Float32, MutUntrackedOrigin]](flat_borders.unsafe_ptr())
-    var ocp = rebind[MutPointer[Int, MutUntrackedOrigin]](out_counts.unsafe_ptr())
-    var omp = rebind[MutPointer[Int, MutUntrackedOrigin]](out_modes.unsafe_ptr())
-
-    def _grid_column(f: Int) {imm xp, imm sip, imm obp, imm ocp, imm omp, imm n_rows, imm border_sample_n, imm out_cap, imm border_count, imm nan_mode, imm border_type}:
-        var col = List[Float32](capacity=border_sample_n)
-        if border_sample_n == n_rows:
-            var raw = List[Float32](capacity=n_rows)
-            for r in range(n_rows):
-                raw.append(xp.unsafe_load(f * n_rows + r))
-            col = _sorted_by_twiddled_key(raw)
-        else:
-            for i in range(border_sample_n):
-                col.append(xp.unsafe_load(f * n_rows + Int(sip.unsafe_load(i))))
-            var has_nan = False
-            for r in range(n_rows):
-                var v = xp.unsafe_load(f * n_rows + r)
-                if v != v:
-                    has_nan = True
-                    break
-            if has_nan:
-                var sample_has = False
-                for i in range(border_sample_n):
-                    var v2 = col[i]
-                    if v2 != v2:
-                        sample_has = True
-                        break
-                if not sample_has:
-                    col[0] = Float32(0.0) / Float32(0.0)
-        try:
-            var q = _calc_quantization_phase_b(col^, border_count, nan_mode, border_type)
-            var nb = len(q[0])
-            if nb > out_cap:
-                ocp.unsafe_store(f, -1)
-                return
-            for b in range(nb):
-                obp.unsafe_store(f * out_cap + b, q[0][b])
-            ocp.unsafe_store(f, nb)
-            omp.unsafe_store(f, nan_value_treatment(q[1]))
-        except:
-            ocp.unsafe_store(f, -1)
-
-    # Border searches own disjoint output slots and share only immutable X
-    # and sample indices.  Keep small fits serial to avoid pool overhead.
-    if n_features > 1 and n_rows * n_features >= (1 << 18):
-        host_parallelize_pool_env(_grid_column, n_features)
-    else:
-        for f in range(n_features):
-            _grid_column(f)
-    _ = sample_idx^
-
-    var borders = List[List[Float32]]()
-    var fold_counts = List[Int]()
-    var nan_treatment = List[Int]()
-    for f in range(n_features):
-        var nb = out_counts[f]
-        if nb < 0:
-            raise Error("parallel border build failed on float column " + String(f))
-        var fb = List[Float32](capacity=nb)
-        for b in range(nb):
-            fb.append(flat_borders[f * out_cap + b])
-        borders.append(fb^)
-        fold_counts.append(nb)
-        nan_treatment.append(out_modes[f])
-    return GbdtHostGrid(borders^, fold_counts^, nan_treatment^)
+    # lane hr2-gbdt-host (GreedyLogSum) and cpu-gpu-cleanup w2-trees (the
+    # six others): the device border build's definition, every type
+    return _gls_host_grid(
+        x_colmajor, n_rows, n_features, border_count, border_sample_n,
+        random_seed, nan_mode, border_type,
+    )
 
 
 def _binarize_columns(

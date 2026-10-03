@@ -1720,8 +1720,7 @@ FAMILIES = (
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
             "cast_colmajor_f64_to_f32", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
-            "argmax_rows_f64", "column_mean_f64", "center_columns_f32",
-            "scale_rows_f32", "probability_rows_f32",
+            "argmax_rows_f64", "probability_rows_f32",
             # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
             # of bindings/hotpath_helpers.mojo that stand in for per-row Python,
             # and the ORDER RULE's label encoder (DEVIATION 2500) a CPU-only
@@ -1866,6 +1865,7 @@ FAMILIES = (
         host_modules=(
             "kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo",
             "decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
+            "glm/host/center_host.mojo", "glm/impl/center_items.mojo",
             "dbscan/host/dbscan_oracle.mojo", "glm/host/qn_oracle.mojo",
             "decomposition/host/pca_full_oracle.mojo",
             "core/labeled_reference_host_predict.mojo",
@@ -1880,6 +1880,8 @@ FAMILIES = (
             "estimators_host_column", "estimators_host_sabotage",
             "estimators_vendor", "estimators_numeric_mode", "kde_score_samples",
             "pca_fit", "pca_fit_full", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit", "qn_fit",
+            # lane hr-small-passes (2026-10-02): the linear models' centering
+            "lm_col_sums", "lm_center", "lm_scale_rows",
             "tsvd_explained",
             "dbscan_fit_core", "labeled_reference_predict",
             "ols_predict", "tsvd_transform", "pca_transform",
@@ -2177,6 +2179,9 @@ FAMILIES = (
             "rf_classifier_fit_weighted", "rf_classifier_fit_weighted_export",
             "rf_classifier_fit_shard", "rf_regressor_fit_shard",
             "forest_prepare_gpu", "forest_predict_resident_reuse_gpu", "forest_release_gpu",
+            "rf_data_session_open", "rf_data_session_close",
+            "rf_regressor_fit_session_export", "rf_regressor_fit_session_rows_export",
+            "rf_classifier_fit_weighted_session_export",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(

@@ -343,13 +343,12 @@ _PREDICT_CLASSES = 4
 _PREDICT_CLASSES_PINNED = 5
 _PREDICT_CLASSES_OVA = 6
 
-#: DEVIATION 2980: the device-resident parsed model is the default door of
+#: DEVIATION 2980: the device-resident parsed model is THE door of
 #: `GradientBoosting.predict` and `predict_proba` wherever the loaded binding
-#: exports `gbdt_resident_prepare`. `MOJOLEARN_GBDT_RESIDENT=0` in the
-#: environment at import, or this name set to False at run time, takes the
-#: per-call parse (`gbdt_predict`, `gbdt_predict_multi`) instead; the speed
-#: harness flips it to interleave the two arms in one process.
-GBDT_RESIDENT = os.environ.get("MOJOLEARN_GBDT_RESIDENT", "1").strip() != "0"
+#: exports `gbdt_resident_prepare`. The env switch that took the per-call
+#: parse instead is gone (cpu-gpu-cleanup t-forest); the per-call parse
+#: (`gbdt_predict`, `gbdt_predict_multi`) serves only a binary without the
+#: resident entry points.
 
 #: Losses whose parameter CatBoost makes MANDATORY. Passing the loss without
 #: it raises here rather than in Mojo, so the message names the Python
@@ -404,56 +403,6 @@ BOOSTING_TYPES = ("Plain", "Ordered")
 #: `_ORDERED_MIN_ITERATIONS` iterations.
 _ORDERED_MAX_ROWS = 50000
 _ORDERED_MIN_ITERATIONS = 500
-#: The small-pool host route's bound, rows x features (`_small_pool_host`).
-_HOST_ROUTE_MAX_CELLS = 200_000
-#: auto (default), device or host (`_small_pool_host`).
-_HOST_ROUTE_ENV = "MOJOLEARN_GBDT_ROUTE"
-#: The device vendors whose BinaryFeatures histograms (a column with exactly
-#: one border) a recorded column has witnessed equal to the host binding's:
-#: the `gbdt-binary-columns` lane, Apple M4 Metal, NVIDIA RTX 4090 (CUDA),
-#: AMD MI325X (HIP) and the CPU host column (arm64 and x86-64) agree bit for
-#: bit on all nine fixtures (bench/results/identity_break/2026-09-22_gbdt-
-#: binary-columns). A vendor absent here trains such a pool on the device.
-_HOST_ONE_BORDER_VENDORS = ("metal", "cuda", "hip")
-#: THE CONFIGURATIONS THE SMALL-POOL ROUTE TAKES, keyed (resolved boosting
-#: type, loss, eval set given), each with the verifier lanes whose recorded
-#: columns (NVIDIA, AMD, Apple and CPU, all four, in
-#: `verify_reference/table.json`) hold the host fit of that configuration to
-#: the device fits. A configuration absent here trains on the device; the
-#: rest of the gate (SymmetricTree, unit weights, numeric columns, no groups)
-#: is `_small_pool_host`'s. `test_gbdt_small_pool_route.py` checks every lane
-#: named here has all four columns on every fixture.
-#:
-#: Left out on purpose: Plain RMSE with an eval set (the host binding refuses
-#: it by name, its test cursor is not restated), Ordered RMSE with an eval
-#: set (the host trains it, but no lane records it), a multiclass fit with an
-#: eval set (refused by the host by name, no lane), and Ordered multiclass
-#: (their GPU trains multiclass Plain only).
-_HOST_ROUTE_LANES = {
-    ("Plain", "Logloss", False): ("gbdt-symmetric", "gbdt-catboost-defaults"),
-    ("Plain", "RMSE", False): ("gbdt-rmse", "gbdt-stochastic-arms"),
-    ("Ordered", "Logloss", False): ("gbdt-ordered-bayesian-noise",),
-    ("Ordered", "RMSE", False): ("gbdt-ordered",),
-    # perf/gbdt-route-eval-multiclass (2026-09-22): the held-out arm
-    # (`gbdt/host/gbdt_oracle_eval.mojo`), with the Iter detector and
-    # use_best_model's shrink
-    ("Plain", "Logloss", True): ("gbdt-symmetric-eval",),
-    # the Ordered Logloss fit of gbdt-ordered has an eval set, the Iter
-    # detector and use_best_model (`GbdtOrderedHostEval`)
-    ("Ordered", "Logloss", True): ("gbdt-ordered",),
-    # `gbdt/host/gbdt_oracle_multiclass.mojo`: class weights (gbdt-multiclass,
-    # gbdt-onevsall), the public stochastic defaults, Bayesian bootstrap and
-    # random_strength 1 (gbdt-multiclass-defaults)
-    ("Plain", "MultiClass", False): ("gbdt-multiclass", "gbdt-multiclass-defaults"),
-    ("Plain", "MultiClassOneVsAll", False): ("gbdt-onevsall", "gbdt-multiclass-defaults"),
-}
-#: The configurations of `_HOST_ROUTE_LANES` the `gbdt-binary-columns` lane
-#: fits with one-border columns (no eval set, no multiclass): a pool with
-#: such a column routes only for these, and only on `_HOST_ONE_BORDER_VENDORS`.
-_HOST_ONE_BORDER_CONFIGS = (
-    ("Plain", "Logloss", False), ("Plain", "RMSE", False),
-    ("Ordered", "Logloss", False), ("Ordered", "RMSE", False),
-)
 
 #: The greedy searcher's ranking targets form grouped gradients first, then
 #: multiply both statistic planes by row bootstrap weights, as CatBoost's
@@ -1693,98 +1642,6 @@ class GradientBoosting(NumericModeMixin):
             self.loss, n_rows, int(self.n_estimators), use_best, bfa, table)
         return _CATBOOST_LEARNING_RATE if rate is None else rate
 
-    def _small_pool_host(self, n_rows, n_features, n_weights, n_flags,
-                         n_eval_rows, grouped, boosting=None):
-        """The CPU host binding when this fit should train on it, else None.
-
-        THE SMALL-POOL ROUTE (perf/gbdt-small-round2, 2026-09-22). On a
-        small pool the device fit is launch and sync bound (Apple M4, depth
-        6, 10 features: Ordered 14 to 18 ms a tree at 320 to 20,000 rows,
-        Plain 4 to 5 ms) while the host binding, the CPU column's IDENTICAL
-        restatement of the same fit, costs 1.2 ms (Ordered) and 1.6 ms
-        (Plain) a tree at 320 rows and grows with the pool: at 20,000 rows
-        11 and 4.5 ms, at 50,000 rows 21 and 7.8 ms. Crossover, M4, 10
-        features: Plain between 20,000 and 32,000 rows, Ordered between
-        25,000 (Logloss) and 50,000 (RMSE). Below `_HOST_ROUTE_MAX_CELLS`
-        (rows x features) an IDENTICAL fit therefore trains on the host.
-
-        THE BITS DO NOT MOVE. The host fit is the one the verifier's CPU
-        column checks against the GPU columns on every gbdt training lane
-        (`host_surface.py`), and the model text it returns is the device
-        fit's byte for byte (measured on this route at 320 to 50,000 rows,
-        RMSE and Logloss, Ordered and Plain). Only the configurations those
-        lanes cover are routed: SymmetricTree, unit weights, numeric
-        columns, no groups, and a (boosting type, loss, eval set) key of
-        `_HOST_ROUTE_LANES`, which names the lanes covering each one (since
-        perf/gbdt-route-eval-multiclass: Logloss with an eval set, Plain and
-        Ordered, and Plain MultiClass and MultiClassOneVsAll); anything the
-        host binding refuses by name falls back to the device. A column with
-        exactly one border (a 0/1 flag) routes on Metal only and only for
-        `_HOST_ONE_BORDER_CONFIGS` (`_host_one_border_admitted`,
-        perf/gbdt-host-one-border).
-
-        `MOJOLEARN_GBDT_ROUTE=device` pins the device fit (the identity
-        harness sets it, so the GPU columns keep measuring the GPU),
-        `host` forces the host route whatever the pool size, and `auto`
-        (the default) is the rule above. `fit_route_` says which ran."""
-        route = os.environ.get(_HOST_ROUTE_ENV, "auto").strip().lower()
-        if route not in ("auto", "device", "host"):
-            raise ValueError(
-                f"mojolearn: {_HOST_ROUTE_ENV} must be auto, device or host, "
-                f"got {route!r}"
-            )
-        if route == "device" or _backend._CPU_ONLY is not None:
-            return None
-        if "_bind" in vars(self):
-            # the caller put its own binding on this instance (a test double,
-            # a pinned module): the fit goes where the caller sent it
-            return None
-        requested = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        if str(requested).strip().lower() != "identical":
-            return None
-        if route == "auto" and n_rows * n_features > _HOST_ROUTE_MAX_CELLS:
-            return None
-        if boosting is None:
-            boosting = self._resolved_boosting_type(n_rows)
-        if (self.grow_policy != "SymmetricTree"
-                or (boosting, self.loss, bool(n_eval_rows)) not in _HOST_ROUTE_LANES
-                or n_weights or n_flags or grouped):
-            return None
-        path = _backend.host_module_path("_mojolearn_gbdt_host")
-        if not os.path.exists(path):
-            return None
-        try:
-            return _backend.load_host_module("_mojolearn_gbdt_host")
-        except ImportError:
-            return None
-
-    def _host_one_border_admitted(self, model_text, config=None):
-        """False when an AUTO-routed host fit must be discarded for the
-        device: the pool has a column with exactly one border (the
-        BinaryFeatures histogram policy, a model record `feature <f> folds 1`)
-        and this device's binary histograms have no recorded column to
-        witness them against the host's (`_HOST_ONE_BORDER_VENDORS`), or
-        `config` (boosting type, loss, eval set given) is not one the
-        `gbdt-binary-columns` lane fits (`_HOST_ONE_BORDER_CONFIGS`).
-
-        The host binding restates the binary policy since 2026-09-22
-        (perf/gbdt-host-one-border), and the `gbdt-binary-columns` lane holds
-        it to the Apple M4 Metal, NVIDIA and AMD fits bit for bit on all nine
-        fixtures, so on those devices the host result IS the device result. `MOJOLEARN_GBDT_ROUTE=
-        host` keeps whatever the host trained."""
-        route = os.environ.get(_HOST_ROUTE_ENV, "auto").strip().lower()
-        if route == "host":
-            return True
-        if (_backend.vendor() in _HOST_ONE_BORDER_VENDORS
-                and (config is None or config in _HOST_ONE_BORDER_CONFIGS)):
-            return True
-        for line in str(model_text).split("\n"):
-            fields = line.split()
-            if (len(fields) >= 4 and fields[0] == "feature"
-                    and fields[2] == "folds" and fields[3] == "1"):
-                return False
-        return True
-
     def _resolved_boosting_type(self, n_rows):
         """The boosting type a fit on `n_rows` rows uses (`boosting_type_`).
 
@@ -2350,27 +2207,7 @@ class GradientBoosting(NumericModeMixin):
             params,
             strs,
         )
-        out = None
-        #: 'host' when this fit trained on the CPU host route, 'device' otherwise
-        self.fit_route_ = "device"
-        host = self._small_pool_host(
-            n_rows, n_features, n_weights, n_flags, n_eval_rows,
-            group_id is not None or pairs is not None, boosting,
-        )
-        if host is not None:
-            try:
-                out = host.gbdt_fit(*fit_args)
-                self.fit_route_ = "host"
-            except Exception:
-                # a configuration the host binding refuses by name trains
-                # on the device, which also raises any genuine error
-                out = None
-            if out is not None and not self._host_one_border_admitted(
-                    out[0], (boosting, self.loss, bool(n_eval_rows))):
-                out = None
-                self.fit_route_ = "device"
-        if out is None:
-            out = self._bind("_mojolearn_gbdt").gbdt_fit(*fit_args)
+        out = self._bind("_mojolearn_gbdt").gbdt_fit(*fit_args)
         self.model_ = out[0]
         # the model's bias (CatBoost's `get_scale_and_bias()[1]`), parsed
         # from the text's BITS half so it round-trips exactly. 0.0 on
@@ -2390,9 +2227,8 @@ class GradientBoosting(NumericModeMixin):
         if _has_ctr_records(self.model_) and _binding_vendor(dim_binding) == "cpu":
             # a CPU fit with CTR categoricals (gbdt/host/gbdt_oracle_ctr.mojo):
             # the host binding's parser refuses CTR records by name, so the
-            # dim comes from HostGBDT's parse, the reader `predict` uses
-            from ._gbdt_host import parse_model_text
-            self.approx_dim_ = int(parse_model_text(self.model_)["dim"])
+            # dim comes from the CPU binding's CTR reader (_gbdt_host)
+            self.approx_dim_ = int(dim_binding.gbdt_ctr_model_dim(self.model_))
         else:
             self.approx_dim_ = dim_binding.gbdt_model_dim(self.model_)
         # MULTICLASS DROPS A CLASS AND ONEVSALL DOES NOT. `dim` is
@@ -2422,16 +2258,14 @@ class GradientBoosting(NumericModeMixin):
         the first call and reused while the text is the same bytes; None
         where the loaded binding has no `gbdt_resident_prepare` (a binary
         built before DEVIATION 2980, a CPU-only install's proxy, which
-        refuses an absent name with ImportError) or where `GBDT_RESIDENT`
-        is off, in which case the call takes the per-call parse.
+        refuses an absent name with ImportError), in which case the call
+        takes the per-call parse.
 
         The fast check is object identity on the text (`str` is
         immutable, and the entry keeps a reference so the id cannot be
         reused). A different object is hashed and compared to the sha256
         the entry was prepared from: the same text keeps the handle, a
         new text releases it and prepares again."""
-        if not GBDT_RESIDENT:
-            return None
         try:
             prepare = binding.gbdt_resident_prepare
         except (ImportError, AttributeError):
@@ -2537,12 +2371,11 @@ class GradientBoosting(NumericModeMixin):
         # expand_tensor_ctr_columns the device applies), the reader a CPU
         # column already uses for a GPU-saved CTR model.
         if _has_ctr_records(self.model_) and _binding_vendor(binding) == "cpu":
-            from ._gbdt_host import HostGBDT
-            return HostGBDT(
-                loss=self.loss, text=self.model_,
+            return binding.gbdt_ctr_predict(
+                X, loss=self.loss, text=self.model_,
                 n_features_in=self.n_features_in_, approx_dim=self.approx_dim_,
                 n_classes=self.n_classes_, estimator=type(self).__name__,
-            ).predict(X)
+            )
 
         # DEVIATION 2980: the parsed, packed and uploaded model stays on
         # the device between calls; the per-call parse below is the door
@@ -2945,9 +2778,8 @@ class GradientBoosting(NumericModeMixin):
         binding = obj._bind("_mojolearn_gbdt")
         if _has_ctr_records(obj.model_) and _binding_vendor(binding) == "cpu":
             # the host binding's parser refuses CTR records by name; the
-            # dim comes from HostGBDT's parse, the reader `predict` uses
-            from ._gbdt_host import parse_model_text
-            obj.approx_dim_ = int(parse_model_text(obj.model_)["dim"])
+            # dim comes from the CPU binding's CTR reader (_gbdt_host)
+            obj.approx_dim_ = int(binding.gbdt_ctr_model_dim(obj.model_))
         else:
             obj.approx_dim_ = int(binding.gbdt_model_dim(obj.model_))
         if obj.approx_dim_ != int(meta[1]):

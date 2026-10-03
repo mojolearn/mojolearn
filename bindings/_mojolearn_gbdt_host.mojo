@@ -103,6 +103,21 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, ftz, identical_exp64, identical_sigmoid
+from checks.soft_f64 import (
+    SF64_ONE,
+    SF64_ZERO,
+    sf64_add,
+    sf64_div,
+    sf64_exp,
+    sf64_from_f32,
+    sf64_ftz,
+    sf64_gt,
+    sf64_neg,
+    sf64_sigmoid_f32,
+    sf64_sigmoid_f64,
+    sf64_sub,
+    sf64_to_f32,
+)
 from core.gbdt_host_predict import GBDT_HOST_SABOTAGE, gbdt_host_predict
 from gbdt.data.quantization import (
     NAN_TREATMENT_AS_FALSE,
@@ -2135,21 +2150,25 @@ def gbdt_predict_multi_binding(
         elif mode == 1:
             var eff = dim
             for r in range(n_rows):
-                var mx = Float64(0.0)
+                # lane hr2-gbdt-host: `resident_link_kernel`'s softmax row,
+                # in soft binary64 (checks/soft_f64.mojo), so this column
+                # and every GPU column compute the same words
+                var mx = SF64_ZERO
                 for k in range(eff):
-                    var v = Float64(out[r * eff + k])
-                    if v > mx:
+                    var v = sf64_from_f32(out[r * eff + k])
+                    if sf64_gt(v, mx):
                         mx = v
-                var se = Float64(0.0)
+                var se = SF64_ZERO
                 for k in range(eff):
-                    se += identical_exp64(Float64(out[r * eff + k]) - mx)
-                se += identical_exp64(-mx)
+                    se = sf64_add(se, sf64_exp(sf64_sub(sf64_from_f32(out[r * eff + k]), mx)))
+                var e_pin = sf64_exp(sf64_neg(mx))
+                se = sf64_add(se, e_pin)
                 for k in range(eff):
-                    op[r * (eff + 1) + k] = Float32(identical_exp64(Float64(out[r * eff + k]) - mx) / se)
-                op[r * (eff + 1) + eff] = Float32(identical_exp64(-mx) / se)
+                    op[r * (eff + 1) + k] = ftz(sf64_to_f32(sf64_div(sf64_exp(sf64_sub(sf64_from_f32(out[r * eff + k]), mx)), se)))
+                op[r * (eff + 1) + eff] = ftz(sf64_to_f32(sf64_div(e_pin, se)))
         else:
             for i in range(n_rows * dim):
-                op[i] = Float32(1.0 / (1.0 + identical_exp64(-Float64(out[i]))))
+                op[i] = ftz(sf64_to_f32(sf64_sigmoid_f32(out[i])))
     return PythonObject(width)
 
 
@@ -2277,7 +2296,7 @@ def gbdt_sigmoid_binding(
     var count = Int(py=n)
     for i in range(count):
         var r = rp.unsafe_load(i)
-        op.unsafe_store(i, 1.0 / (1.0 + identical_exp64(-r)))
+        op.unsafe_store(i, bitcast[DType.float64](sf64_sigmoid_f64(bitcast[DType.uint64](r))))
     return PythonObject(count)
 
 
@@ -2298,12 +2317,15 @@ def gbdt_sigmoid_pair_binding(
         raise Error("gbdt_sigmoid_pair: n must be non-negative")
     for i in range(count):
         var r = rp.unsafe_load(i)
-        var p = 1.0 / (1.0 + identical_exp64(-r))
+        # lane hr2-gbdt-host: `resident_link_kernel`'s pair, soft binary64
+        var pb = sf64_ftz(sf64_sigmoid_f64(bitcast[DType.uint64](r)))
+        var p = bitcast[DType.float64](pb)
+        var q = bitcast[DType.float64](sf64_sub(SF64_ONE, pb))
         comptime if GBDT_HOST_SABOTAGE:
             op.unsafe_store(2 * i, p)
-            op.unsafe_store(2 * i + 1, 1.0 - p)
+            op.unsafe_store(2 * i + 1, q)
         else:
-            op.unsafe_store(2 * i, 1.0 - p)
+            op.unsafe_store(2 * i, q)
             op.unsafe_store(2 * i + 1, p)
     return PythonObject(count)
 

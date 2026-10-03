@@ -23,7 +23,7 @@ from core.step_phase import STEP_PHASE_TIMERS
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from checks.rtf_seam import rtf_mul_add
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
-from gemm.checks.gemm_oracle import OP_TN
+from gemm.contract import OP_TN
 
 
 def pinned_gemm_nt_gram_kernel(

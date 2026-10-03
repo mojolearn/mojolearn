@@ -55,10 +55,12 @@ from extratrees.checks.fixtures import (
 from extratrees.checks.fixture_parity_check import const_heavy_shapes
 from extratrees.impl.decisiontree.decisiontree import DecisionTreeParams
 from extratrees.impl.randomforest.randomforest import (
-    fit_classification,
-    fit_regression,
     predict_class_forest,
     predict_regression_forest,
+)
+from extratrees.impl.randomforest.host_forest import (
+    fit_classification,
+    fit_regression,
 )
 
 

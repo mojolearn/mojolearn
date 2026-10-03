@@ -77,14 +77,14 @@ class ForestDataSession:
             self.handle, _addr_ro(y32), params, criterion, _addr_ro(weights)))
 
 
-def forest_data_session_choice(mode):
+def forest_data_session_choice(mode, default="0"):
     """What `MOJOLEARN_FOREST_SESSION` asks for: None (no session: every
     member stages X itself), 'exact' (the session; each member draws its own
     quantile sample, so its forest is the one its own fit returns) or
     'share' (FAST only: later members reuse the first member's tables).
     OPT-IN (trees-apple3, unproven): unset means no session."""
     import os
-    choice = os.environ.get("MOJOLEARN_FOREST_SESSION", "0").strip().lower()
+    choice = os.environ.get("MOJOLEARN_FOREST_SESSION", default).strip().lower()
     if choice in ("", "0", "off", "no"):
         return None
     if choice in ("1", "on", "exact"):
@@ -94,11 +94,11 @@ def forest_data_session_choice(mode):
     raise ValueError("MOJOLEARN_FOREST_SESSION must be 0, 1 (exact) or share")
 
 
-def open_forest_data_session(native, X, *, row_major, mode):
+def open_forest_data_session(native, X, *, row_major, mode, default="0"):
     """A `ForestDataSession` for X on this binding, or None when the choice
     is off or the binary has no session entry (a CPU host build, an older
     binding)."""
-    choice = forest_data_session_choice(mode)
+    choice = forest_data_session_choice(mode, default)
     if choice is None or not callable(getattr(native, "rf_data_session_open", None)):
         return None
     return ForestDataSession(native, X, row_major, choice == "share")
@@ -236,18 +236,17 @@ class ForestProtocol:
         return engine
 
     def _ordered_resident_auto(self):
-        """IDENTICAL `auto` on a binary whose strict increasing-tree resident
-        route is compiled (`forest_ordered_resident`): predict through a
-        device-resident snapshot with the sequential route's bits. A host
-        binding (CPU-only install) has no such route; its proxy raises
-        ImportError by name for any function it lacks, so a missing export
-        is an absence here, never a refusal of the whole prediction."""
-        if getattr(self, "inference_engine", "sequential") != "auto":
+        """The `sequential` engine on a GPU binding (one with the
+        `forest_ordered_resident` export): predict through a device-resident
+        snapshot prepared with the strict increasing-tree kernel, the
+        sequential route's arithmetic (cpu-gpu-cleanup t-forest: the GPU
+        install no longer walks the trees on host threads). A host binding
+        (CPU-only install) has no such route; its proxy raises ImportError
+        by name for any function it lacks, so a missing export is an absence
+        here and the host walk runs."""
+        if self._prediction_engine() != "sequential":
             return False
-        if self._effective_mode() != "identical":
-            return False
-        selected = self._ordered_resident_export()
-        return selected is not None and int(selected()) == 1
+        return self._ordered_resident_export() is not None
 
     def _ordered_resident_export(self):
         """The binding's `forest_ordered_resident`, or None where it has none:
@@ -262,18 +261,21 @@ class ForestProtocol:
     def _resident_ordered_flag(self):
         """The aggregation a resident snapshot is prepared with: True strict
         increasing-tree, False the 32-grove graph, None the compiled
-        default. IDENTICAL names it explicitly so the recorded bits do not
-        depend on a vendor build default: `auto` (served resident only by
-        `_ordered_resident_auto`) is strict, `parallel_groves` is the grove
+        default. The `sequential` engine (served resident by
+        `_ordered_resident_auto` on a GPU binding) is always strict. IDENTICAL
+        names the groves explicitly so the recorded bits do not depend on a
+        vendor build default: `parallel_groves` is the grove
         fold that the CPU host groves engine and the recorded GPU columns
         compute. FAST and DETERMINISTIC keep the binary's default, and so
         does a binary older than the per-snapshot choice (no
         `forest_ordered_resident` export), whose resident route is groves."""
-        if self._effective_mode() != "identical":
-            return None
         if self._ordered_resident_export() is None:
             return None
-        return self._prediction_engine() == "sequential"
+        if self._prediction_engine() == "sequential":
+            return True
+        if self._effective_mode() != "identical":
+            return None
+        return False
 
     def _prediction_function(self, sequential_name):
         engine = self._prediction_engine()
@@ -390,12 +392,11 @@ class ForestProtocol:
         return hasattr(self, "_offsets")
 
     def __sklearn_tags__(self):
-        from sklearn.utils import Tags, TargetTags, ClassifierTags, RegressorTags
-        classifier = self._estimator_type == "classifier"
-        return Tags(estimator_type=self._estimator_type,
-                    target_tags=TargetTags(required=True),
-                    classifier_tags=ClassifierTags() if classifier else None,
-                    regressor_tags=None if classifier else RegressorTags())
+        """scikit-learn's tag protocol, read only by scikit-learn: the shared
+        `_mode.ParamsMixin` answer (estimator type, required target, the
+        classifier or regressor tags), which is what this protocol returned."""
+        from ._mode import ParamsMixin
+        return ParamsMixin.__sklearn_tags__(self)
 
     def score(self, X, y, sample_weight=None):
         """Mode-aware GPU accuracy or Float32 R², weighted when `sample_weight`

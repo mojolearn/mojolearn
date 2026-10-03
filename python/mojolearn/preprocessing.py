@@ -13,6 +13,12 @@ from ._arrays import _addr, _addr_ro
 
 __all__ = ['MinMaxScaler', 'StandardScaler']
 
+
+class NotFittedError(ValueError, AttributeError):
+    """Raised by transform before fit, with scikit-learn's `NotFittedError`
+    bases (ValueError and AttributeError), so callers that catch either keep
+    working without this module importing scikit-learn."""
+
 #: The saved-model format of both scalers (lane/inference-linear-svm,
 #: 2026-09-15): `mojolearn.host_model(path)` transforms from it on a CPU.
 _SCALER_FORMAT = "mojolearn-scaler-1"
@@ -162,6 +168,21 @@ def _write_back(copy, copied, values, X, output):
     return X
 
 
+def _direct_entry(binding, name):
+    """The binding's direct fit entry (lane gap-prep2: X goes up from its own
+    buffer and the device scans it for a nonfinite value; the same kernels
+    and words as the List route), or None: an older binary, the host
+    binding, or MOJOLEARN_SCALER_DIRECT=0 (the A/B switch: the host scan and
+    the binding's List copies, as before)."""
+    import os
+    if os.environ.get("MOJOLEARN_SCALER_DIRECT", "1").strip() == "0":
+        return None
+    try:
+        return getattr(binding, name)
+    except (AttributeError, ImportError):
+        return None
+
+
 def _per_feature_int(seen, d):
     if isinstance(seen, Array):
         return [int(v) for v in seen.tolist()]
@@ -170,7 +191,7 @@ def _per_feature_int(seen, d):
 
 class _ScalerProtocol:
     @staticmethod
-    def _input(X, allow_nan=False, with_copied=False):
+    def _input(X, allow_nan=False, with_copied=False, scan=True):
         """A float32 C-contiguous Array of X. `allow_nan`: NaN passes (the
         reference's `ensure_all_finite='allow-nan'`) and the second value
         says whether every entry is finite; +-inf is refused by the NaN path's
@@ -183,7 +204,9 @@ class _ScalerProtocol:
             raise ValueError('Scaler requires a nonempty two-dimensional input')
         if values.size > 2147483647:
             raise ValueError('Scaler exceeds the native Int32 indexing bound')
-        finite = all_finite(values)
+        # scan=False (a direct fit, lane gap-prep2): the device scans X for
+        # a NaN or an infinity, so `finite` is None (not known here)
+        finite = all_finite(values) if scan or not allow_nan else None
         if not finite and not allow_nan:
             raise ValueError('Scaler input must be finite; NaN/inf are unsupported')
         values, c2 = as_f32_c(values, ndim=values.ndim, name="values")
@@ -222,9 +245,14 @@ class _ScalerProtocol:
         return hasattr(self, 'scale_') and hasattr(self, 'numeric_mode_')
 
     def __sklearn_tags__(self):
-        from sklearn.utils import Tags, TargetTags, TransformerTags
-        return Tags(estimator_type=None, target_tags=TargetTags(required=False),
-                    transformer_tags=TransformerTags(preserves_dtype=['float32']))
+        """scikit-learn's tag protocol, read only by scikit-learn: the shared
+        `_mode.ParamsMixin` answer (no estimator type, no required target),
+        with float32-preserving transformer tags from the same tag module."""
+        import sys
+        from ._mode import ParamsMixin
+        tags = ParamsMixin.__sklearn_tags__(self)
+        tags.transformer_tags = sys.modules[type(tags).__module__].TransformerTags(preserves_dtype=['float32'])
+        return tags
 
 
 class MinMaxScaler(_ScalerProtocol):
@@ -290,6 +318,11 @@ class MinMaxScaler(_ScalerProtocol):
         output = empty((5, d), '<f4')
         binding.minmax_fit(_addr_ro(values), _addr(output),
                            [n, d, float(lower), float(upper)])
+        self._keep_extrema(output, colnan)
+
+    def _keep_extrema(self, output, colnan):
+        """The five fitted rows from `output` (5, d), NaN for the columns in
+        `colnan`."""
         if not all_finite(output) or output[3].min() <= 0:
             raise ValueError('MinMaxScaler fitted statistics overflowed or scale is not positive in Float32')
         rows = [output[i].tolist() for i in range(5)]
@@ -310,17 +343,27 @@ class MinMaxScaler(_ScalerProtocol):
                 del self.__dict__[name]
         if sample_weight is not None:
             raise NotImplementedError('MinMaxScaler does not support sample_weight')
-        values, finite = self._input(X, allow_nan=True)
-        n, d = values.shape
         mode = (self.numeric_mode if self.numeric_mode is not None else _backend.default_mode()).strip().lower()
         binding = self._binding(mode)
+        direct = _direct_entry(binding, "minmax_fit_direct")
+        values, finite = self._input(X, allow_nan=True, scan=direct is None)
+        n, d = values.shape
         colnan = [False] * d
+        if finite is None:
+            output = empty((5, d), '<f4')
+            if int(direct(_addr_ro(values), _addr(output), [n, d, float(lower), float(upper)])):
+                self._keep_extrema(output, colnan)
+                finite = True
+            else:
+                finite = False
+        elif finite:
+            self._fit_extrema(binding, values, lower, upper, colnan)
         if not finite:
             # NaN -> the column's own minimum: min and max are those of its
             # non-NaN entries, and the binding's arithmetic is unchanged.
             values, counts = _nan_scan_fill(mode, values, 3)
             colnan = [c == 0 for c in counts]
-        self._fit_extrema(binding, values, lower, upper, colnan)
+            self._fit_extrema(binding, values, lower, upper, colnan)
         self.n_features_in_ = d
         self.n_samples_seen_ = n
         self.numeric_mode_ = mode
@@ -359,10 +402,6 @@ class MinMaxScaler(_ScalerProtocol):
 
     def _transform(self, X, inverse):
         if not self.__sklearn_is_fitted__():
-            try:
-                from sklearn.exceptions import NotFittedError
-            except ImportError:
-                NotFittedError = RuntimeError
             raise NotFittedError('MinMaxScaler is not fitted')
         values, finite, copied = self._input(X, allow_nan=True, with_copied=True)
         n, d = values.shape
@@ -503,13 +542,20 @@ class StandardScaler(_ScalerProtocol):
         for name in list(self.__dict__):
             if name.endswith('_'):
                 del self.__dict__[name]
-        values, finite = self._input(X, allow_nan=True)
-        n, d = values.shape
         mode = (self.numeric_mode if self.numeric_mode is not None else _backend.default_mode()).strip().lower()
-        if finite and sample_weight is None:
+        direct = _direct_entry(self._binding(mode), "standard_fit_direct") if sample_weight is None else None
+        values, finite = self._input(X, allow_nan=True, scan=direct is None)
+        n, d = values.shape
+        output = None
+        if finite is None:
+            output = empty((3, d), '<f4')
+            finite = bool(int(direct(_addr_ro(values), _addr(output),
+                                     [n, d, int(self.with_mean), int(self.with_std)])))
+        elif finite and sample_weight is None:
             output = empty((3, d), '<f4')
             self._binding(mode).standard_fit(_addr_ro(values), _addr(output),
                 [n, d, int(self.with_mean), int(self.with_std)])
+        if finite and sample_weight is None:
             if not all_finite(output) or output[1].min() < 0 or output[2].min() <= 0:
                 raise ValueError('StandardScaler statistics are nonfinite, variance negative, or scale nonpositive in Float32')
             self._keep(output[0].copy(), output[1].copy(), output[2].copy(), n, d, mode)
@@ -580,10 +626,6 @@ class StandardScaler(_ScalerProtocol):
             raise ValueError('StandardScaler transform copy must be a bool or None')
         copy = self.copy if copy is None else copy
         if not self.__sklearn_is_fitted__():
-            try:
-                from sklearn.exceptions import NotFittedError
-            except ImportError:
-                NotFittedError = RuntimeError
             raise NotFittedError('StandardScaler is not fitted')
         values, finite, copied = self._input(X, allow_nan=True, with_copied=True)
         n, d = values.shape

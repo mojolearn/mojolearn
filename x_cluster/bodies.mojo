@@ -21,7 +21,7 @@ from std.memory import bitcast
 
 from std.bit import count_leading_zeros
 
-from checks.numerics import ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
+from checks.numerics import ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_pow, identical_sqrt
 
 comptime FPtr = MutPointer[Float32, MutAnyOrigin]
 comptime IPtr = MutPointer[Int32, MutAnyOrigin]
@@ -373,6 +373,20 @@ def exp_cell(src: FPtr, dst: FPtr, t: Int):
     dst[t] = ftz(identical_exp(src[t]))
 
 
+def argmax_row(src: FPtr, kc: Int, dst: IPtr, t: Int):
+    """`dst[t]` = the first column of row `t` (`kc` wide) holding its
+    largest value: a strict `>` walk from column 0, so a tie goes to the
+    lowest index (the fit's label rule and the Python `predict`'s)."""
+    var bk = 0
+    var bv = src[t * kc]
+    for k in range(1, kc):
+        var v = src[t * kc + k]
+        if v > bv:
+            bv = v
+            bk = k
+    dst[t] = Int32(bk)
+
+
 # DEVIATION 5110 (the M-step moments nk, means, covariances: every fold over
 # the rows ascending, one quotient). Row 119; moments_check. The per-row
 # steps and the finals below are the ONE spelling: the cells here (the host
@@ -552,15 +566,18 @@ comptime LINK_AVERAGE = 2
 comptime LINK_SINGLE = 3
 
 
-# DEVIATION 5117 (the Lance-Williams update of agglomerative linkage: Float64
-# arithmetic from the Float32 matrix; ward as three pinned products summed
-# LEFT TO RIGHT, minus last, then ONE quotient by the three sizes summed
-# left to right; average as two pinned products, one add, one quotient;
-# complete/single exact max/min; a result below zero clamped to +0; the
-# Float32 rounding then flushed). Row 120; agglo_check.
+# DEVIATION 5117 (the Lance-Williams update of agglomerative linkage, in
+# FLOAT32 on every column since lane hr2-mds-agglo, 2026-10-02: the merge loop
+# runs on the device and Apple's GPU has no Float64; it was Float64 from the
+# Float32 matrix before): ward as three pinned products summed LEFT TO RIGHT,
+# minus last, then ONE quotient by the three sizes summed left to right;
+# average as two pinned products, one add, one quotient; complete/single
+# exact max/min; a result below zero clamped to +0; every operand and result
+# flushed. The sizes are cluster counts, exact in Float32 below 2^24 rows.
+# Row 120; agglo_check.
 @always_inline
 def lance_williams(
-    linkage: Int, dak: Float32, dbk: Float32, dab: Float32, na: Float64, nb: Float64, nk: Float64,
+    linkage: Int, dak: Float32, dbk: Float32, dab: Float32, na: Float32, nb: Float32, nk: Float32,
     has_a: Bool, has_b: Bool,
 ) -> Float32:
     """The dissimilarity of the merged cluster (a u b) to cluster k.
@@ -573,11 +590,12 @@ def lance_williams(
     pairs that are EDGES exist (scikit-learn `_hierarchical_fast.max_merge` /
     `average_merge`): an edge from one side alone keeps its value."""
     if linkage == LINK_WARD:
-        var t1 = identical_mul64(na + nk, Float64(dak))
-        var t2 = identical_mul64(nb + nk, Float64(dbk))
-        var t3 = identical_mul64(nk, Float64(dab))
-        var w = ((t1 + t2) - t3) / ((na + nb) + nk)
-        return ftz(Float32(w)) if w > Float64(0) else Float32(0)
+        var t1 = identical_mul(ftz(na + nk), ftz(dak))
+        var t2 = identical_mul(ftz(nb + nk), ftz(dbk))
+        var t3 = identical_mul(nk, ftz(dab))
+        var num = ftz(ftz(ftz(t1) + ftz(t2)) - ftz(t3))
+        var w = ftz(identical_div(num, ftz(ftz(na + nb) + nk)))
+        return w if w > Float32(0) else Float32(0)
     if not has_b:
         return dak
     if not has_a:
@@ -586,5 +604,5 @@ def lance_williams(
         return dak if dak >= dbk else dbk
     if linkage == LINK_SINGLE:
         return dak if dak <= dbk else dbk
-    var v = (identical_mul64(na, Float64(dak)) + identical_mul64(nb, Float64(dbk))) / (na + nb)
-    return ftz(Float32(v))
+    var s = ftz(ftz(identical_mul(na, ftz(dak))) + ftz(identical_mul(nb, ftz(dbk))))
+    return ftz(identical_div(s, ftz(na + nb)))

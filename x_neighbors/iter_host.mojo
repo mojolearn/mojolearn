@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The CPU column of `x_neighbors/iter_device.mojo`: the same loop over the
 same items. HOST ONLY."""
+from x_neighbors.svgp_ff import matmul_tn_acc_ff_item, svgp_ff_solve
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
@@ -9,7 +10,6 @@ from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
 from x_neighbors.nan_cells import nan_cells_host
 from core.host_lanes import host_row_tasks
 from core.host_parallel import host_parallelize
-from x_neighbors.pr_sparse import PrGraph, pr_graph_from_dense, pagerank_dangling_sum, pagerank_step_sparse_item
 from x_neighbors.items import (
     FP, IP, absdiff_sum_item, matmul_item, lp_clamp_item, ls_clamp_item,
     pagerank_step_item, cc_step_item, pcs_item, knn_sq_item, nc_stats_item,
@@ -18,7 +18,7 @@ from x_neighbors.items import (
 from x_neighbors.host_ops import op_knn_impute_cells, X_NEIGHBORS_HOST_SABOTAGE
 from x_neighbors.items import (
     kernel_item, rowsum_item, scale_div_item, kpca_center_item, unary_item, svgp_var_item,
-    matmul_tn_acc_item, K_RBF, U_IDENTITY,
+    K_RBF, U_IDENTITY,
 )
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
@@ -131,55 +131,13 @@ def op_pr_iterate_sparse(
     a: Int, x: Int, p: Int, dw: Int, info: Int,
     n: Int, max_iter: Int, thr_hi: Int, thr_lo: Int, binary: Int, alpha: Float32,
 ) raises:
-    """`op_pr_iterate` over the nonzero cells of the dense adjacency
-    (x_neighbors/pr_sparse.mojo), the nodes of a step over host tasks."""
+    """`op_pr_iterate` over the column lists of the dense adjacency: the
+    host column of the device's items in the same order
+    (x_neighbors/graph_par.mojo `pr_drive`, lane hr-graph)."""
+    from x_neighbors.graph_host import pr_iterate_cpu
+
     var thr = bitcast[DType.float64]((UInt64(thr_hi) << UInt64(32)) | UInt64(thr_lo))
-    var g = pr_graph_from_dense(FP(unsafe_from_address=a), n, binary != 0)
-    var va = List[Float32](length=n if n > 0 else 1, fill=Float32(0))
-    var vb = List[Float32](length=n if n > 0 else 1, fill=Float32(0))
-    var s = List[Float32](length=1, fill=Float32(0))
-    var px = FP(unsafe_from_address=x)
-    for i in range(n):
-        va[i] = px.unsafe_load(i)
-    var cur = FP(unsafe_from_address=Int(va.unsafe_ptr()))
-    var nxt = FP(unsafe_from_address=Int(vb.unsafe_ptr()))
-    var ps = FP(unsafe_from_address=Int(s.unsafe_ptr()))
-    var pp = FP(unsafe_from_address=p)
-    var pdw = FP(unsafe_from_address=dw)
-    var pip = IP(unsafe_from_address=Int(g.indptr.unsafe_ptr()))
-    var prow = IP(unsafe_from_address=Int(g.rows.unsafe_ptr()))
-    var pval = FP(unsafe_from_address=Int(g.vals.unsafe_ptr()))
-    var pdg = IP(unsafe_from_address=Int(g.dangling.unsafe_ptr()))
-    var tasks = host_row_tasks(n, 4 * (g.nnz // max(n, 1) + 1))
-    var chunk = (n + tasks - 1) // tasks
-    var n_iter = 0
-    var converged = False
-    for it in range(max_iter):
-        var dsum = pagerank_dangling_sum(cur, pdg, n)
-        def _step(task: Int) {imm pip, imm prow, imm pval, imm cur, imm pp, imm pdw, imm dsum, imm nxt, imm alpha, imm n, imm chunk}:
-            for t in range(task * chunk, min((task + 1) * chunk, n)):
-                pagerank_step_sparse_item(t, pip, prow, pval, cur, pp, pdw, dsum, nxt, alpha)
-        if tasks <= 1:
-            _step(0)
-        else:
-            host_parallelize(_step, tasks)
-        absdiff_sum_item(0, nxt, cur, ps, n)
-        var tmp = cur
-        cur = nxt
-        nxt = tmp
-        n_iter = it + 1
-        if Float64(ps.unsafe_load(0)) < thr:
-            converged = True
-            break
-    for i in range(n):
-        px.unsafe_store(i, cur.unsafe_load(i))
-    var inf = IP(unsafe_from_address=info)
-    inf.unsafe_store(0, Int32(n_iter))
-    inf.unsafe_store(1, Int32(1 if converged else 0))
-    _ = va^
-    _ = vb^
-    _ = s^
-    _ = g^
+    pr_iterate_cpu(a, x, p, dw, info, n, max_iter, thr, binary, alpha)
 
 def op_nan_cells(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int) raises:
     """lane/neural-pass71: the NaN cells of x (n x d): flat indices
@@ -398,36 +356,54 @@ def _scaled_rbf_rows(q: FP, z: FP, kp: FP, ksp: FP, rows: Int, m: Int, d: Int, g
     _cells(f, rows * m)
 
 
-def op_svgp_stats(
-    x: Int, z: Int, y: Int, bmat: Int, bvec: Int, n: Int, m: Int, d: Int, gamma: Float32, variance: Float32,
+def op_svgp_fit_ff(
+    x: Int, z: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int, n: Int, m: Int, d: Int,
+    gamma: Float32, variance: Float32, noise: Float32, jitter: Float32, kdiag: Float32,
 ) raises:
-    var tr = _tile_rows(n, m)
+    """The device op's chain on the host: Kuu, the float-float statistics
+    over the same tiles, cells and order, then the same solve items."""
+    var mm = m * m
+    var tr = max(_tile_rows(n, m), m)
     var kb = List[Float32](length=max(tr * m, 1), fill=Float32(0))
     var ksb = List[Float32](length=max(tr * m, 1), fill=Float32(0))
+    var kuub = List[Float32](length=max(mm, 1), fill=Float32(0))
+    var bhb = List[Float32](length=max(mm, 1), fill=Float32(0))
+    var blb = List[Float32](length=max(mm, 1), fill=Float32(0))
+    var vhb = List[Float32](length=max(m, 1), fill=Float32(0))
+    var vlb = List[Float32](length=max(m, 1), fill=Float32(0))
     var kp = FP(unsafe_from_address=Int(kb.unsafe_ptr()))
     var ksp = FP(unsafe_from_address=Int(ksb.unsafe_ptr()))
-    var bp = FP(unsafe_from_address=bmat)
-    var bvp = FP(unsafe_from_address=bvec)
-    for t in range(m * m):
-        bp.unsafe_store(t, Float32(0))
-    for t in range(m):
-        bvp.unsafe_store(t, Float32(0))
+    var kuup = FP(unsafe_from_address=Int(kuub.unsafe_ptr()))
+    var bhp = FP(unsafe_from_address=Int(bhb.unsafe_ptr()))
+    var blp = FP(unsafe_from_address=Int(blb.unsafe_ptr()))
+    var vhp = FP(unsafe_from_address=Int(vhb.unsafe_ptr()))
+    var vlp = FP(unsafe_from_address=Int(vlb.unsafe_ptr()))
+    var zp = FP(unsafe_from_address=z)
+    if mm > 0:
+        _scaled_rbf_rows(zp, zp, kp, kuup, m, m, d, gamma, variance)
+    var tile = _tile_rows(n, m)
     var r0 = 0
     while r0 < n:
-        var rows = min(tr, n - r0)
-        _scaled_rbf_rows(FP(unsafe_from_address=x) + r0 * d, FP(unsafe_from_address=z), kp, ksp, rows, m, d, gamma,
-                         variance)
+        var rows = min(tile, n - r0)
+        _scaled_rbf_rows(FP(unsafe_from_address=x) + r0 * d, zp, kp, ksp, rows, m, d, gamma, variance)
         var yp = FP(unsafe_from_address=y) + r0
 
-        def bb(t: Int) {imm ksp, imm bp, imm rows, imm m}:
-            matmul_tn_acc_item(t, ksp, ksp, bp, rows, m, m)
-        _cells(bb, m * m)
+        def bb(t: Int) {imm ksp, imm bhp, imm blp, imm rows, imm m}:
+            matmul_tn_acc_ff_item(t, ksp, ksp, bhp, blp, rows, m, m)
+        _cells(bb, mm)
         for t in range(m):
-            matmul_tn_acc_item(t, ksp, yp, bvp, rows, m, 1)
+            matmul_tn_acc_ff_item(t, ksp, yp, vhp, vlp, rows, m, 1)
         r0 += rows
-    _hsab(bmat, m * m)
+    svgp_ff_solve(kuup, bhp, blp, vhp, vlp, FP(unsafe_from_address=y),
+                  FP(unsafe_from_address=alpha), FP(unsafe_from_address=cmat), FP(unsafe_from_address=qmu),
+                  FP(unsafe_from_address=qsqrt), FP(unsafe_from_address=info), m, n, noise, jitter, kdiag)
     _ = kb^
     _ = ksb^
+    _ = kuub^
+    _ = bhb^
+    _ = blb^
+    _ = vhb^
+    _ = vlb^
 
 
 def op_svgp_predict(

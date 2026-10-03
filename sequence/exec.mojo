@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""WHERE AN OPERATION RUNS. `Exec` is the one interface the lane's algorithms
+"""WHERE AN OPERATION RUNS. `Exec` (`sequence/exec_trait.mojo`) is the one interface the lane's algorithms
 are written against (`sequence/recurrent.mojo`); `HostExec` (here, no GPU
 import) runs each operation as an ascending host loop over its elements and
 `DeviceExec` (`sequence/exec_device.mojo`) as one GPU thread per element.
@@ -26,6 +26,7 @@ from std.memory import memcpy, memset_zero
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from sequence.dispatch import apply
+from sequence.exec_trait import Exec
 from sequence.host_gemm import host_gemm_pack, host_gemm_rows
 from sequence.ops import (
     FP,
@@ -52,7 +53,12 @@ from sequence.ops import (
     OP_LN_BWD_W,
     OP_SEG_SUMSQ,
     OP_CHUNK_SUMSQ,
+    OP_AF_BLK_SUMSQ,
     OP_LAMB_RATIO,
+    OP_LAMB_BLK,
+    OP_LAMB_SEGFOLD,
+    OP_LAMB_CLIP,
+    OP_LAMB_TRUST,
     OP_STL,
     OP_THETA,
     OP_CROSTON,
@@ -93,6 +99,12 @@ def _element_weight[OP: Int](a: Args) -> Int:
         return max(a.i0, 1)
     elif OP == OP_LN_BWD_W:
         return max(a.i0, 1)
+    elif OP == OP_AF_BLK_SUMSQ:
+        return max(a.i1, 1)
+    elif OP == OP_LAMB_BLK:
+        return max(a.i2, 1) * (2 if a.i1 != 0 else 1)
+    elif OP == OP_LAMB_SEGFOLD or OP == OP_LAMB_CLIP or OP == OP_LAMB_TRUST:
+        return _HEAVY
     elif (
         OP == OP_STL or OP == OP_THETA or OP == OP_CROSTON or OP == OP_ETS
         or OP == OP_GARCH or OP == OP_PROPHET_FIT or OP == OP_CHOLSOLVE
@@ -130,39 +142,6 @@ def host_launch_tasks(n: Int, weight: Int, workers: Int) -> Int:
     if t < 1:
         t = 1
     return t
-
-
-trait Exec:
-    def alloc(mut self, n: Int) raises -> FP:
-        """A zero-filled buffer of n floats that lives as long as the Exec."""
-        ...
-
-    def upload(mut self, dst: FP, src: FP, n: Int) raises:
-        """Host memory `src` -> this Exec's buffer `dst` (n floats)."""
-        ...
-
-    def download(mut self, dst: FP, src: FP, n: Int) raises:
-        """This Exec's buffer `src` -> host memory `dst` (n floats)."""
-        ...
-
-    def download_async(mut self, dst: FP, src: FP, n: Int) raises:
-        """`download`, except that `dst` is written by the next `sync()`
-        (the device queues its copy; several then share one wait)."""
-        ...
-
-    def bind(mut self, src: FP, n: Int) raises -> FP:
-        """A buffer of this Exec holding host memory `src`'s n floats, for an
-        entry that updates the caller's arrays in place: the device
-        allocates and uploads; the host returns `src` itself (no copy), so
-        a later `download(src, buf, n)` is the identity."""
-        ...
-
-    def launch[OP: Int](mut self, a: Args, n: Int) raises:
-        """Run operation OP over elements 0..n-1."""
-        ...
-
-    def sync(mut self) raises:
-        ...
 
 
 struct HostExec(Exec):

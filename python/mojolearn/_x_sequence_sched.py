@@ -35,7 +35,8 @@ Not carried (sequence/NOT_IMPLEMENTED.tsv): OneCycleLR's momentum cycling
 from . import _portable_math as _math
 from fractions import Fraction
 
-from ._training_impl import _PI_HI, _PI_LO, _cos_pi_interval, _decide_f32, _f32_round
+from ._training_impl import (_F64_EPS, _LrTable, _PI_HI, _PI_LO, _cos_pi_interval, _cos_pi_run,
+                             _decide_f32, _f32_round)
 
 _F32_MIN_NORMAL_EXP = -126
 _F32_MAX_EXP = 127
@@ -256,7 +257,7 @@ class ExponentialLR(_PowSched):
         return _f32_round(_q(self.base_lr, "base_lr") * _q(self.gamma, "gamma") ** self._t(t))
 
 
-class OneCycleLR(_Sched):
+class OneCycleLR(_LrTable, _Sched):
     """torch's OneCycleLR learning rate: from max_lr / div_factor up to
     max_lr over pct_start of total_steps, then down to
     initial_lr / final_div_factor (or the three-phase form), by cosine or
@@ -284,6 +285,58 @@ class OneCycleLR(_Sched):
         else:
             self._phases = [(p1, init, mx), (Fraction(self.total_steps - 1), mx, low)]
         self._fixed = {}
+        # lane gap-train-utils: the block table of `_training_impl._LrTable`
+        # over steps 1 .. total_steps + 1 (no constant tail; beyond it the
+        # exact route refuses, as torch does)
+        self._table_setup(self.total_steps + 2, None)
+
+    def _fast_values(self, t0, t1):
+        """binary64 values and error bounds of steps t0 .. t1 - 1 (zeros where
+        the exact route answers: a phase's two ends, its extra step, an empty
+        phase, a step angle over 1/2)."""
+        n = t1 - t0
+        vs = [0.0] * n
+        es = [0.0] * n
+        s0 = t0 - 1                 # torch's step of index 0
+        s1 = s0 + n - 1
+        start = Fraction(0)
+        last = len(self._phases) - 1
+        for i, (end, a, b) in enumerate(self._phases):
+            if end != start:
+                # the phase's steps (`lr_at`'s membership), strictly inside
+                # (start, end)
+                lo = s0 if i == 0 else max(s0, start.numerator // start.denominator + 1)
+                hi = s1 if i == last else min(s1, end.numerator // end.denominator)
+                lo = max(lo, start.numerator // start.denominator + 1)
+                hi = min(hi, -((-end.numerator) // end.denominator) - 1)
+                if lo <= hi:
+                    self._fill(vs, es, lo - s0, lo, hi - lo + 1, float(start), float(end),
+                               float(a), float(b))
+            start = end
+        return vs, es
+
+    def _fill(self, vs, es, at, st0, count, start_f, end_f, af, bf):
+        den = end_f - start_f
+        scale = 16.0 * _F64_EPS
+        if self.anneal_strategy == "linear":
+            # (st - start) / den, (b - a), the product, + a: under 2^-53 of
+            # |a| + |b| + |v| each; bound 2^-48 of that sum
+            d = bf - af
+            for k in range(count):
+                v = d * ((st0 + k - start_f) / den) + af
+                vs[at + k] = v
+                es[at + k] = scale * (abs(af) + abs(bf) + abs(v))
+            return
+        got = _cos_pi_run(st0 - start_f, den, count)
+        if got is None:
+            return
+        cs, ce = got
+        hd = abs(af - bf)
+        for k in range(count):
+            # torch's form: end + (start - end) / 2 (cos + 1)
+            v = bf + (af - bf) / 2.0 * (cs[k] + 1.0)
+            vs[at + k] = v
+            es[at + k] = hd * ce[k] + scale * (abs(af) + abs(bf) + abs(v))
 
     def _phase_fx(self, i, a, b):
         """Per phase fixed-point constants: F2 and the floor/ceil of b and of
@@ -300,7 +353,7 @@ class OneCycleLR(_Sched):
             self._fixed[i] = fx
         return self._fixed[i]
 
-    def lr_at(self, t):
+    def _lr_at_slow(self, t):
         step = self._t(t)
         if step > self.total_steps:
             raise ValueError(f"OneCycleLR: step {t} is beyond total_steps {self.total_steps} + 1 (torch refuses it too)")

@@ -46,7 +46,8 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_floats,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_NN, gemm_oracle
+from gemm.contract import OP_NN
+from gemm.checks.gemm_oracle import gemm_oracle
 
 
 def _words() -> List[UInt32]:

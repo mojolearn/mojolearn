@@ -12,7 +12,8 @@ from checks.numerics import (
     identical_sigmoid,
     identical_silu,
 )
-from gemm.checks.gemm_oracle import OP_NN, OP_TN, gemm_oracle
+from gemm.contract import OP_NN, OP_TN
+from gemm.checks.gemm_oracle import gemm_oracle
 from gemm.host.gemm_host_rows import gemm_host_rows
 from mamba.checks.mamba_fixture import (
     D_CONV,

@@ -98,6 +98,30 @@ trait ClusterOps(Movable):
         bit for bit. Returns the inertia; `centers` k x d and `labels` n."""
         ...
 
+    def gather_rows(mut self, src: Int, d: Int, idx: Int, m: Int, dst: Int) raises:
+        """dst[t * d + f] = src[idx[t] * d + f], t < m (lane/neural-pass108)."""
+        ...
+
+    def kmeans_rows(
+        mut self, sub: Int, x: List[Float32], rows: List[Int], d: Int, k: Int, max_iter: Int,
+        tol: Float64, seed: UInt64, n_init: Int, init: Int, mut centers: List[Float32],
+        mut labels: List[Int32],
+    ) raises -> Float64:
+        """`kmeans` (unit weights) of the rows `rows` of the host matrix `x`
+        in that order, whose gathered copy is the slot `sub` (the device
+        fits it in place; the host gathers `x`). The same words as `kmeans`
+        on the gathered list (lane/neural-pass108)."""
+        ...
+
+    def shrink(mut self, slot: Int) raises:
+        """Releases a float slot's storage (its index stays valid, one word)."""
+        ...
+
+    def empty(mut self, n: Int) raises -> Int:
+        """A float slot of n words with no defined contents (the caller
+        writes every word before reading one)."""
+        ...
+
     def gauss_q(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
         """dst (n x kc) = the Mahalanobis squares (`bodies.gauss_q_cell`)."""
         ...
@@ -108,6 +132,10 @@ trait ClusterOps(Movable):
         ...
 
     def exp(mut self, src: Int, dst: Int, n: Int) raises:
+        ...
+
+    def argmax_rows(mut self, src: Int, n: Int, kc: Int, labels: Int) raises:
+        """labels (int, n) = each row's `bodies.argmax_row` of src (n x kc)."""
         ...
 
     def moments(
@@ -167,4 +195,44 @@ trait ClusterOps(Movable):
         """`gauss_q`, `resp` and `exp` of one E-step as ONE primitive: row i's
         kc Mahalanobis squares, its log-sum-exp and its responsibilities by
         the same bodies in the same order (the same values)."""
+        ...
+
+    def set_i(mut self, slot: Int, v: List[Int32]) raises:
+        """Writes v into the first len(v) words of the int slot (lane/neural-pass133)."""
+        ...
+
+    def mb_update(mut self, b: Int, batch: Int, labels: Int, c: Int, w: Int, k: Int, d: Int) raises:
+        """MiniBatchKMeans' `update_center_dense` with unit weights for every
+        center, in place: the centers `c` (k x d) and counts `w` (k) from the
+        batch rows `b` (batch x d) and their labels, each center's chain the
+        host loop's (`c * w`, `+ x` in batch order, `w += wsum`, `* (1 / w)`),
+        a center without rows untouched (lane/neural-pass133)."""
+        ...
+
+    def mb_assign(mut self, src: Int, d: Int, idx: Int, m: Int, c: Int, k: Int, labels: Int, dist: Int, dst: Int) raises:
+        """`gather_rows(src, d, idx, m, dst)` then `nearest(dst, m, c, k, d,
+        labels, dist)`: the device fuses them into one launch (the same words;
+        lane/neural-pass133)."""
+        ...
+
+    def agglo_on_device(self) -> Bool:
+        """True on the GPU column: `agglo_merge` runs the unconstrained
+        agglomerative merge loop on the device (lane hr2-mds-agglo). The
+        host column answers False and `agglo.agglo_tree` runs its loop."""
+        ...
+
+    def agglo_mirror(mut self, x: Int, n: Int, dst: Int) raises:
+        """dst (n x n) = the precomputed matrix x's UPPER triangle mirrored
+        below the diagonal, a zero diagonal; raises unless every upper value
+        is finite and non-negative."""
+        ...
+
+    def agglo_merge(
+        mut self, dm: Int, n: Int, linkage: Int, n_merges: Int, mut children: List[Int32], mut dist: List[Float32]
+    ) raises:
+        """The first n_merges merges of the unconstrained agglomerative loop
+        (`agglo.agglo_tree`'s order: the live row with the lowest nearest
+        value, the lowest row on a tie; its nearest partner, the lowest
+        column on a tie; Lance-Williams by `bodies.lance_williams`) on the
+        n x n dissimilarity slot `dm`, which it overwrites."""
         ...

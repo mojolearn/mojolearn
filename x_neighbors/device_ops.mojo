@@ -6,13 +6,9 @@ from std.gpu import block_idx, block_dim, thread_idx
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
-from bindings.hostptr import copy_f32
-from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_item, louvain_item, svgp_item, svgp_var_item
-from x_neighbors.louvain_sparse import louvain_item_sparse
-from x_neighbors.block_ops import ocsvm_smo_block, OCSVM_TPB
+from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_var_item
+from x_neighbors.sort_items import nc_median_init_item, nc_median_step_item, nc_median_pick_item, pos_count_item, pos_scan_item, pos_emit_item
 
 comptime BLOCK = 128
 
@@ -56,28 +52,6 @@ def _grid(count: Int) -> Int:
 def _buf(ctx: DeviceContext, addr: Int, count: Int, upload: Bool) raises -> DeviceBuffer[DType.float32]:
     var buf = ctx.enqueue_create_buffer[DType.float32](count if count > 0 else 1)
     if upload and count > 0:
-        comptime if is_defined["MOJOLEARN_XN_MAPPED_UP"]():
-            # lane neighbors-apple3, OPT-IN: a large input copied into the
-            # mapped device buffer over the host cores. A copy.
-            if count >= XN_STAGED_MIN:
-                ctx.synchronize()
-                with buf.map_to_host() as hm:
-                    var mdst = rebind[MutPointer[Float32, MutUntrackedOrigin]](hm.unsafe_ptr())
-                    var msrc = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
-                    var mtasks = host_predict_task_count(count)
-                    var mpart = host_predict_chunk(count, mtasks)
-
-                    def _mpart(task: Int) {imm msrc, imm mdst, imm count, imm mpart}:
-                        var lo = task * mpart
-                        var hi = min(lo + mpart, count)
-                        if hi > lo:
-                            copy_f32(msrc.unsafe_offset(lo), mdst.unsafe_offset(lo), hi - lo)
-
-                    if mtasks == 1:
-                        _mpart(0)
-                    else:
-                        host_parallelize(_mpart, mtasks)
-                return buf^
         ctx.enqueue_copy(dst_buf=buf, src_ptr=FP(unsafe_from_address=addr))
     return buf^
 
@@ -89,73 +63,10 @@ def _buf_i(ctx: DeviceContext, addr: Int, count: Int, upload: Bool) raises -> De
     return buf^
 
 
-#: lane neighbors-apple2: a large float output comes back through a host
-#: staging buffer of XN_OUT_CHUNK floats and is copied into the caller's
-#: array over the host cores (the first touch of the caller's fresh pages
-#: dominates a plain copy; kernel_methods/estimator.mojo `_download_into`,
-#: round one). A copy: no arithmetic. `-D MOJOLEARN_XN_PLAIN_DOWN` keeps the
-#: one enqueue_copy.
-comptime XN_OUT_CHUNK = 1 << 24
-comptime XN_STAGED_MIN = 1 << 22
-
-
 def _down(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], addr: Int, count: Int) raises:
-    if count <= 0:
-        return
-    comptime if is_defined["MOJOLEARN_XN_PLAIN_DOWN"]():
+    # one device-to-host DMA of the result; no host-thread staging copy
+    if count > 0:
         ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=addr), src_buf=buf)
-        return
-    if count < XN_STAGED_MIN:
-        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=addr), src_buf=buf)
-        return
-    comptime if is_defined["MOJOLEARN_XN_MAPPED_DOWN"]():
-        # lane neighbors-apple3, OPT-IN: the device buffer mapped into the
-        # host (Apple's memory is unified) and copied once, over the host
-        # cores, instead of once into the staging buffer and once out of it.
-        ctx.synchronize()
-        with buf.map_to_host() as hm:
-            var msrc = rebind[MutPointer[Float32, MutUntrackedOrigin]](hm.unsafe_ptr())
-            var mdst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
-            var mtasks = host_predict_task_count(count)
-            var mpart = host_predict_chunk(count, mtasks)
-
-            def _mpart(task: Int) {imm msrc, imm mdst, imm count, imm mpart}:
-                var lo = task * mpart
-                var hi = min(lo + mpart, count)
-                if hi > lo:
-                    copy_f32(msrc.unsafe_offset(lo), mdst.unsafe_offset(lo), hi - lo)
-
-            if mtasks == 1:
-                _mpart(0)
-            else:
-                host_parallelize(_mpart, mtasks)
-        return
-    var c = min(count, XN_OUT_CHUNK)
-    var h = ctx.enqueue_create_host_buffer[DType.float32](c)
-    var off = 0
-    while off < count:
-        var m = min(c, count - off)
-        var sub = buf.create_sub_buffer[DType.float32](off, m)
-        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=sub)
-        ctx.synchronize()
-        var src_p = rebind[MutPointer[Float32, MutUntrackedOrigin]](h.unsafe_ptr())
-        var dst_p = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr + off * 4)
-        var tasks = host_predict_task_count(m)
-        var part = host_predict_chunk(m, tasks)
-
-        def _part(task: Int) {imm src_p, imm dst_p, imm m, imm part}:
-            var lo = task * part
-            var hi = min(lo + part, m)
-            if hi > lo:
-                copy_f32(src_p.unsafe_offset(lo), dst_p.unsafe_offset(lo), hi - lo)
-
-        if tasks == 1:
-            _part(0)
-        else:
-            host_parallelize(_part, tasks)
-        _ = sub^
-        off += m
-    _ = h^
 
 
 def _down_i(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], addr: Int, count: Int) raises:
@@ -447,10 +358,6 @@ def group_mean_kernel(x: FP, labels: IP, res: FP, n_: Int64, d_: Int64, g_: Int6
 
 
 def op_group_mean(x: Int, labels: Int, res: Int, n: Int, d: Int, g: Int) raises:
-    comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
-        for t in range(g * d):
-            group_mean_item(t, _f(x), _i(labels), _f(res), n, d, g)
-        return
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d, True)
     var d_labels = _buf_i(ctx, labels, n, True)
@@ -519,67 +426,60 @@ def op_take_cols(src: Int, cols: Int, res: Int, n: Int, src_c: Int, c: Int) rais
     _ = ctx^
 
 
-def variance_kernel(x: FP, res: FP, count_: Int64):
+def variance_k0(x: FP, res: FP, part: FP, count_: Int64):
+    var count = Int(count_)
+    var t = _tid()
+    if t < xn_fold_blocks(count):
+        variance_part_item(t, x, res, part, count)
+
+
+def variance_k1(x: FP, res: FP, part: FP, count_: Int64):
     var count = Int(count_)
     var t = _tid()
     if t < 1:
-        variance_item(t, x, res, count)
+        variance_mean_item(t, x, res, part, count)
+
+
+def variance_k2(x: FP, res: FP, part: FP, count_: Int64):
+    var count = Int(count_)
+    var t = _tid()
+    if t < xn_fold_blocks(count):
+        variance_ss_part_item(t, x, res, part, count)
+
+
+def variance_k3(x: FP, res: FP, part: FP, count_: Int64):
+    var count = Int(count_)
+    var t = _tid()
+    if t < 1:
+        variance_fin_item(t, x, res, part, count)
 
 
 def op_variance(x: Int, res: Int, count: Int) raises:
-    comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
-        for t in range(1):
-            variance_item(t, _f(x), _f(res), count)
-        return
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, count, True)
     var d_res = _buf(ctx, res, 1, False)
-    ctx.enqueue_function[variance_kernel](
-        d_x.unsafe_ptr(), d_res.unsafe_ptr(), Int64(count),
+    var d_part = _buf(ctx, 0, xn_fold_blocks(count), False)
+    ctx.enqueue_function[variance_k0](
+        d_x.unsafe_ptr(), d_res.unsafe_ptr(), d_part.unsafe_ptr(), Int64(count),
+        grid_dim=_grid(xn_fold_blocks(count)), block_dim=(BLOCK if xn_fold_blocks(count) > 1 else 1),
+    )
+    ctx.enqueue_function[variance_k1](
+        d_x.unsafe_ptr(), d_res.unsafe_ptr(), d_part.unsafe_ptr(), Int64(count),
+        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
+    )
+    ctx.enqueue_function[variance_k2](
+        d_x.unsafe_ptr(), d_res.unsafe_ptr(), d_part.unsafe_ptr(), Int64(count),
+        grid_dim=_grid(xn_fold_blocks(count)), block_dim=(BLOCK if xn_fold_blocks(count) > 1 else 1),
+    )
+    ctx.enqueue_function[variance_k3](
+        d_x.unsafe_ptr(), d_res.unsafe_ptr(), d_part.unsafe_ptr(), Int64(count),
         grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
     )
     _down(ctx, d_res, res, 1)
     ctx.synchronize()
     _ = d_x^
     _ = d_res^
-    _ = ctx^
-
-
-def ocsvm_kernel(q: FP, cv: FP, alpha: FP, g: FP, info: FP, iters: IP, n_: Int64, eps_: Float32, max_iter_: Int64):
-    var n = Int(n_)
-    var eps = eps_
-    var max_iter = Int(max_iter_)
-    comptime if is_defined["MOJOLEARN_XN_SERIAL_SMO"]():
-        var t = _tid()
-        if t < 1:
-            ocsvm_smo_item(t, q, cv, alpha, g, info, iters, n, eps, max_iter)
-    else:
-        ocsvm_smo_block(q, cv, alpha, g, info, iters, n, eps, max_iter)
-
-
-def op_ocsvm(q: Int, cv: Int, alpha: Int, info: Int, iters: Int, n: Int, eps: Float32, max_iter: Int) raises:
-    var ctx = xn_ctx()
-    var d_q = _buf(ctx, q, n * n, True)
-    var d_cv = _buf(ctx, cv, n, True)
-    var d_alpha = _buf(ctx, alpha, n, True)
-    var d_g = _buf(ctx, 0, n, False)
-    var d_info = _buf(ctx, info, 1, False)
-    var d_iters = _buf_i(ctx, iters, 1, False)
-    comptime tpb = 1 if is_defined["MOJOLEARN_XN_SERIAL_SMO"]() else OCSVM_TPB
-    ctx.enqueue_function[ocsvm_kernel](
-        d_q.unsafe_ptr(), d_cv.unsafe_ptr(), d_alpha.unsafe_ptr(), d_g.unsafe_ptr(), d_info.unsafe_ptr(), d_iters.unsafe_ptr(), Int64(n), eps, Int64(max_iter),
-        grid_dim=1, block_dim=tpb,
-    )
-    _down(ctx, d_alpha, alpha, n)
-    _down(ctx, d_info, info, 1)
-    _down_i(ctx, d_iters, iters, 1)
-    ctx.synchronize()
-    _ = d_q^
-    _ = d_cv^
-    _ = d_alpha^
-    _ = d_g^
-    _ = d_info^
-    _ = d_iters^
+    _ = d_part^
     _ = ctx^
 
 
@@ -748,10 +648,6 @@ def nc_std_kernel(x: FP, lab: IP, cent: FP, std: FP, n_: Int64, d_: Int64, n_cla
 
 
 def op_nc_std(x: Int, lab: Int, cent: Int, std: Int, n: Int, d: Int, n_classes: Int) raises:
-    comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
-        for t in range(d):
-            nc_std_item(t, _f(x), _i(lab), _f(cent), _f(std), n, d, n_classes)
-        return
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d, True)
     var d_lab = _buf_i(ctx, lab, n, True)
@@ -1027,24 +923,32 @@ def op_skew_transform(lx: Int, w: Int, off: Int, res: Int, n: Int, d: Int, nc: I
     _ = ctx^
 
 
-def absdiff_sum_kernel(a: FP, b: FP, res: FP, count_: Int64):
+def absdiff_sum_k0(a: FP, b: FP, res: FP, part: FP, count_: Int64):
+    var count = Int(count_)
+    var t = _tid()
+    if t < xn_fold_blocks(count):
+        absdiff_part_item(t, a, b, res, part, count)
+
+
+def absdiff_sum_k1(a: FP, b: FP, res: FP, part: FP, count_: Int64):
     var count = Int(count_)
     var t = _tid()
     if t < 1:
-        absdiff_sum_item(t, a, b, res, count)
+        absdiff_fin_item(t, a, b, res, part, count)
 
 
 def op_absdiff_sum(a: Int, b: Int, res: Int, count: Int) raises:
-    comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
-        for t in range(1):
-            absdiff_sum_item(t, _f(a), _f(b), _f(res), count)
-        return
     var ctx = xn_ctx()
     var d_a = _buf(ctx, a, count, True)
     var d_b = _buf(ctx, b, count, True)
     var d_res = _buf(ctx, res, 1, False)
-    ctx.enqueue_function[absdiff_sum_kernel](
-        d_a.unsafe_ptr(), d_b.unsafe_ptr(), d_res.unsafe_ptr(), Int64(count),
+    var d_part = _buf(ctx, 0, xn_fold_blocks(count), False)
+    ctx.enqueue_function[absdiff_sum_k0](
+        d_a.unsafe_ptr(), d_b.unsafe_ptr(), d_res.unsafe_ptr(), d_part.unsafe_ptr(), Int64(count),
+        grid_dim=_grid(xn_fold_blocks(count)), block_dim=(BLOCK if xn_fold_blocks(count) > 1 else 1),
+    )
+    ctx.enqueue_function[absdiff_sum_k1](
+        d_a.unsafe_ptr(), d_b.unsafe_ptr(), d_res.unsafe_ptr(), d_part.unsafe_ptr(), Int64(count),
         grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
     )
     _down(ctx, d_res, res, 1)
@@ -1052,6 +956,7 @@ def op_absdiff_sum(a: Int, b: Int, res: Int, count: Int) raises:
     _ = d_a^
     _ = d_b^
     _ = d_res^
+    _ = d_part^
     _ = ctx^
 
 
@@ -1450,140 +1355,38 @@ def op_cc_step(a: Int, lab: Int, res: Int, n: Int) raises:
     _ = ctx^
 
 
-def graph_symmetry_kernel(a: FP, flags: IP, n_: Int64):
+def graph_symmetry_k0(a: FP, flags: IP, rf: IP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < n:
+        graph_symmetry_row_item(t, a, flags, rf, n)
+
+
+def graph_symmetry_k1(a: FP, flags: IP, rf: IP, n_: Int64):
     var n = Int(n_)
     var t = _tid()
     if t < 1:
-        graph_symmetry_item(t, a, flags, n)
+        graph_symmetry_fin_item(t, a, flags, rf, n)
 
 
 def op_graph_symmetry(a: Int, flags: Int, n: Int) raises:
-    comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
-        for t in range(1):
-            graph_symmetry_item(t, _f(a), _i(flags), n)
-        return
     var ctx = xn_ctx()
     var d_a = _buf(ctx, a, n * n, True)
     var d_flags = _buf_i(ctx, flags, 2, False)
-    ctx.enqueue_function[graph_symmetry_kernel](
-        d_a.unsafe_ptr(), d_flags.unsafe_ptr(), Int64(n),
+    var d_rf = _buf_i(ctx, 0, 2 * n, False)
+    ctx.enqueue_function[graph_symmetry_k0](
+        d_a.unsafe_ptr(), d_flags.unsafe_ptr(), d_rf.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    ctx.enqueue_function[graph_symmetry_k1](
+        d_a.unsafe_ptr(), d_flags.unsafe_ptr(), d_rf.unsafe_ptr(), Int64(n),
         grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
     )
     _down_i(ctx, d_flags, flags, 2)
     ctx.synchronize()
     _ = d_a^
     _ = d_flags^
-    _ = ctx^
-
-
-def louvain_kernel(a: FP, labels: IP, info: FP, w: FP, w2: FP, comm: IP, node_of: IP, deg: FP, stot: FP, k2c: FP, tmp: FP, n_: Int64, max_level_: Int64, resolution_: Float32, threshold_: Float32):
-    var n = Int(n_)
-    var max_level = Int(max_level_)
-    var resolution = resolution_
-    var threshold = threshold_
-    var t = _tid()
-    if t < 1:
-        louvain_item(t, a, labels, info, w, w2, comm, node_of, deg, stot, k2c, tmp, n, max_level, resolution, threshold)
-
-
-def op_louvain(a: Int, labels: Int, info: Int, n: Int, max_level: Int, resolution: Float32, threshold: Float32) raises:
-    comptime if not is_defined["MOJOLEARN_XN_LOUVAIN_GPU"]():
-        louvain_item_sparse(_f(a), _i(labels), _f(info), n, max_level, resolution, threshold)
-        return
-    var ctx = xn_ctx()
-    var d_a = _buf(ctx, a, n * n, True)
-    var d_labels = _buf_i(ctx, labels, n, False)
-    var d_info = _buf(ctx, info, 2, False)
-    var d_w = _buf(ctx, 0, n * n, False)
-    var d_w2 = _buf(ctx, 0, n * n, False)
-    var d_comm = _buf_i(ctx, 0, n, False)
-    var d_node_of = _buf_i(ctx, 0, n, False)
-    var d_deg = _buf(ctx, 0, n, False)
-    var d_stot = _buf(ctx, 0, n, False)
-    var d_k2c = _buf(ctx, 0, n, False)
-    var d_tmp = _buf(ctx, 0, n, False)
-    ctx.enqueue_function[louvain_kernel](
-        d_a.unsafe_ptr(), d_labels.unsafe_ptr(), d_info.unsafe_ptr(), d_w.unsafe_ptr(), d_w2.unsafe_ptr(), d_comm.unsafe_ptr(), d_node_of.unsafe_ptr(), d_deg.unsafe_ptr(), d_stot.unsafe_ptr(), d_k2c.unsafe_ptr(), d_tmp.unsafe_ptr(), Int64(n), Int64(max_level), resolution, threshold,
-        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
-    )
-    _down_i(ctx, d_labels, labels, n)
-    _down(ctx, d_info, info, 2)
-    ctx.synchronize()
-    _ = d_a^
-    _ = d_labels^
-    _ = d_info^
-    _ = d_w^
-    _ = d_w2^
-    _ = d_comm^
-    _ = d_node_of^
-    _ = d_deg^
-    _ = d_stot^
-    _ = d_k2c^
-    _ = d_tmp^
-    _ = ctx^
-
-
-def svgp_kernel(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, e: FP, col: FP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32):
-    var m = Int(m_)
-    var n = Int(n_)
-    var noise = noise_
-    var jitter = jitter_
-    var kdiag = kdiag_
-    var t = _tid()
-    if t < 1:
-        svgp_item(t, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, e, col, m, n, noise, jitter, kdiag)
-
-
-def op_svgp(kuu: Int, bmat: Int, b: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int, m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32) raises:
-    comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
-        var s_luu = List[Float32](length=(m * m) if (m * m) > 0 else 1, fill=Float32(0))
-        var s_ls = List[Float32](length=(m * m) if (m * m) > 0 else 1, fill=Float32(0))
-        var s_e = List[Float32](length=(m) if (m) > 0 else 1, fill=Float32(0))
-        var s_col = List[Float32](length=(m) if (m) > 0 else 1, fill=Float32(0))
-        for t in range(1):
-            svgp_item(t, _f(kuu), _f(bmat), _f(b), _f(y), _f(alpha), _f(cmat), _f(qmu), _f(qsqrt), _f(info), FP(unsafe_from_address=Int(s_luu.unsafe_ptr())), FP(unsafe_from_address=Int(s_ls.unsafe_ptr())), FP(unsafe_from_address=Int(s_e.unsafe_ptr())), FP(unsafe_from_address=Int(s_col.unsafe_ptr())), m, n, noise, jitter, kdiag)
-        _ = s_luu^
-        _ = s_ls^
-        _ = s_e^
-        _ = s_col^
-        return
-    var ctx = xn_ctx()
-    var d_kuu = _buf(ctx, kuu, m * m, True)
-    var d_bmat = _buf(ctx, bmat, m * m, True)
-    var d_b = _buf(ctx, b, m, True)
-    var d_y = _buf(ctx, y, n, True)
-    var d_alpha = _buf(ctx, alpha, m, False)
-    var d_cmat = _buf(ctx, cmat, m * m, False)
-    var d_qmu = _buf(ctx, qmu, m, False)
-    var d_qsqrt = _buf(ctx, qsqrt, m * m, False)
-    var d_info = _buf(ctx, info, 2, False)
-    var d_luu = _buf(ctx, 0, m * m, False)
-    var d_ls = _buf(ctx, 0, m * m, False)
-    var d_e = _buf(ctx, 0, m, False)
-    var d_col = _buf(ctx, 0, m, False)
-    ctx.enqueue_function[svgp_kernel](
-        d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_e.unsafe_ptr(), d_col.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag,
-        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
-    )
-    _down(ctx, d_alpha, alpha, m)
-    _down(ctx, d_cmat, cmat, m * m)
-    _down(ctx, d_qmu, qmu, m)
-    _down(ctx, d_qsqrt, qsqrt, m * m)
-    _down(ctx, d_info, info, 2)
-    ctx.synchronize()
-    _ = d_kuu^
-    _ = d_bmat^
-    _ = d_b^
-    _ = d_y^
-    _ = d_alpha^
-    _ = d_cmat^
-    _ = d_qmu^
-    _ = d_qsqrt^
-    _ = d_info^
-    _ = d_luu^
-    _ = d_ls^
-    _ = d_e^
-    _ = d_col^
+    _ = d_rf^
     _ = ctx^
 
 
@@ -1610,4 +1413,120 @@ def op_svgp_var(ksu: Int, cmat: Int, res: Int, n: Int, m: Int, kdiag: Float32) r
     _ = d_ksu^
     _ = d_cmat^
     _ = d_res^
+    _ = ctx^
+
+
+def nc_median_k0(x: FP, lab: IP, start: IP, cent: FP, perm: IP, n_: Int64, d_: Int64, n_classes_: Int64, p_: Int64, n_steps_: Int64):
+    var n = Int(n_)
+    var d = Int(d_)
+    var n_classes = Int(n_classes_)
+    var p = Int(p_)
+    var n_steps = Int(n_steps_)
+    var t = _tid()
+    if t < d * p:
+        nc_median_init_item(t, x, lab, start, cent, perm, n, d, n_classes, p, n_steps)
+
+
+def nc_median_k1(x: FP, lab: IP, start: IP, cent: FP, perm: IP, n_: Int64, d_: Int64, n_classes_: Int64, p_: Int64, n_steps_: Int64, lj_: Int64):
+    var n = Int(n_)
+    var d = Int(d_)
+    var n_classes = Int(n_classes_)
+    var p = Int(p_)
+    var n_steps = Int(n_steps_)
+    var lj = Int(lj_)
+    var t = _tid()
+    if t < d * (p // 2):
+        nc_median_step_item(t, lj, x, lab, start, cent, perm, n, d, n_classes, p, n_steps)
+
+
+def nc_median_k2(x: FP, lab: IP, start: IP, cent: FP, perm: IP, n_: Int64, d_: Int64, n_classes_: Int64, p_: Int64, n_steps_: Int64):
+    var n = Int(n_)
+    var d = Int(d_)
+    var n_classes = Int(n_classes_)
+    var p = Int(p_)
+    var n_steps = Int(n_steps_)
+    var t = _tid()
+    if t < n_classes * d:
+        nc_median_pick_item(t, x, lab, start, cent, perm, n, d, n_classes, p, n_steps)
+
+
+def op_nc_median(x: Int, lab: Int, start: Int, cent: Int, n: Int, d: Int, n_classes: Int, p: Int, n_steps: Int) raises:
+    var ctx = xn_ctx()
+    var d_x = _buf(ctx, x, n * d, True)
+    var d_lab = _buf_i(ctx, lab, n, True)
+    var d_start = _buf_i(ctx, start, n_classes + 1, True)
+    var d_cent = _buf(ctx, cent, n_classes * d, False)
+    var d_perm = _buf_i(ctx, 0, d * p, False)
+    ctx.enqueue_function[nc_median_k0](
+        d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_start.unsafe_ptr(), d_cent.unsafe_ptr(), d_perm.unsafe_ptr(), Int64(n), Int64(d), Int64(n_classes), Int64(p), Int64(n_steps),
+        grid_dim=_grid(d * p), block_dim=(BLOCK if d * p > 1 else 1),
+    )
+    for lj in range(n_steps):
+        ctx.enqueue_function[nc_median_k1](
+            d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_start.unsafe_ptr(), d_cent.unsafe_ptr(), d_perm.unsafe_ptr(), Int64(n), Int64(d), Int64(n_classes), Int64(p), Int64(n_steps), Int64(lj),
+            grid_dim=_grid(d * (p // 2)), block_dim=(BLOCK if d * (p // 2) > 1 else 1),
+        )
+    ctx.enqueue_function[nc_median_k2](
+        d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_start.unsafe_ptr(), d_cent.unsafe_ptr(), d_perm.unsafe_ptr(), Int64(n), Int64(d), Int64(n_classes), Int64(p), Int64(n_steps),
+        grid_dim=_grid(n_classes * d), block_dim=(BLOCK if n_classes * d > 1 else 1),
+    )
+    _down(ctx, d_cent, cent, n_classes * d)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_lab^
+    _ = d_start^
+    _ = d_cent^
+    _ = d_perm^
+    _ = ctx^
+
+
+def pos_compact_k0(w: FP, rows: IP, vals: FP, info: IP, part: IP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < xn_fold_blocks(n):
+        pos_count_item(t, w, rows, vals, info, part, n)
+
+
+def pos_compact_k1(w: FP, rows: IP, vals: FP, info: IP, part: IP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < 1:
+        pos_scan_item(t, w, rows, vals, info, part, n)
+
+
+def pos_compact_k2(w: FP, rows: IP, vals: FP, info: IP, part: IP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < xn_fold_blocks(n):
+        pos_emit_item(t, w, rows, vals, info, part, n)
+
+
+def op_pos_compact(w: Int, rows: Int, vals: Int, info: Int, n: Int) raises:
+    var ctx = xn_ctx()
+    var d_w = _buf(ctx, w, n, True)
+    var d_rows = _buf_i(ctx, rows, n, False)
+    var d_vals = _buf(ctx, vals, n, False)
+    var d_info = _buf_i(ctx, info, 1, False)
+    var d_part = _buf_i(ctx, 0, xn_fold_blocks(n), False)
+    ctx.enqueue_function[pos_compact_k0](
+        d_w.unsafe_ptr(), d_rows.unsafe_ptr(), d_vals.unsafe_ptr(), d_info.unsafe_ptr(), d_part.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(xn_fold_blocks(n)), block_dim=(BLOCK if xn_fold_blocks(n) > 1 else 1),
+    )
+    ctx.enqueue_function[pos_compact_k1](
+        d_w.unsafe_ptr(), d_rows.unsafe_ptr(), d_vals.unsafe_ptr(), d_info.unsafe_ptr(), d_part.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
+    )
+    ctx.enqueue_function[pos_compact_k2](
+        d_w.unsafe_ptr(), d_rows.unsafe_ptr(), d_vals.unsafe_ptr(), d_info.unsafe_ptr(), d_part.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(xn_fold_blocks(n)), block_dim=(BLOCK if xn_fold_blocks(n) > 1 else 1),
+    )
+    _down_i(ctx, d_rows, rows, n)
+    _down(ctx, d_vals, vals, n)
+    _down_i(ctx, d_info, info, 1)
+    ctx.synchronize()
+    _ = d_w^
+    _ = d_rows^
+    _ = d_vals^
+    _ = d_info^
+    _ = d_part^
     _ = ctx^

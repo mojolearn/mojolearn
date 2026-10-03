@@ -69,11 +69,12 @@ is to not write the cell at all.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
-from std.math import isfinite
+from std.math import inf, isfinite, isinf
 from std.memory import bitcast
 
 from arima.impl.batched_kalman import (
     KalmanWorkspace,
+    _read_info,
     batched_kalman_filter_x,
     kalman_raise_info_init,
     kalman_raise_info_loop,
@@ -172,6 +173,7 @@ def batched_loglike_x(
     fc_steps: Int = 0,
     kalman_tpb: Int = 32,
     check_finite: Bool = True,
+    infeasible_inf: Bool = False,
 ) raises -> LoglikeResult:
     """`:393-469`, the `MLE` arm with `host_loglike = true`: the Jones
     transform when `trans`, the Kalman filter, the host copy of the
@@ -196,7 +198,8 @@ def batched_loglike_x(
         # non-transformed case: just use original parameters (:447-452)
         _copy_params(ctx, params, t_params, order, batch_size)
     var ws = batched_kalman_filter_x(
-        ctx, d_y, d_exog, d_exog_fut, n_obs, t_params, order, batch_size, fc_steps, kalman_tpb
+        ctx, d_y, d_exog, d_exog_fut, n_obs, t_params, order, batch_size, fc_steps, kalman_tpb,
+        infeasible_inf,
     )
     var h = ctx.enqueue_create_host_buffer[DType.float32](batch_size)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=ws.loglike)
@@ -205,7 +208,29 @@ def batched_loglike_x(
     for i in range(batch_size):
         ll.append(h.unsafe_ptr().unsafe_load(i))
     _ = h^
+    if infeasible_inf:
+        # INFEASIBLE, NOT REFUSED (the optimizer's and the fitted point's
+        # caller): a series whose initial-state system is singular or whose
+        # innovation variance F <= 0 (float32 P0 at a near-unit-root AR) gets
+        # the CONSTANT -inf, never the kernel's computed NaN. cuML hands
+        # its NaN to the line search, whose Armijo test fails and halves the
+        # step; -inf does the same here with no vendor payload. The host
+        # column (`arima_oracle._kalman`, refuse = False) marks the same set.
+        _mark_infeasible(
+            _read_info(ctx, ws.info_init, batch_size),
+            _read_info(ctx, ws.info_loop, batch_size), batch_size, ll,
+        )
     return LoglikeResult(ws=ws^, t_params=t_params^, loglike=ll^)
+
+
+def _mark_infeasible(
+    info0: List[Int32], info1: List[Int32], batch_size: Int, mut ll: List[Float32]
+):
+    """Series `j % batch_size` of a (possibly stacked) batch whose Kalman
+    refusal code is set gets the log-likelihood -inf."""
+    for j in range(len(info0)):
+        if info0[j] != Int32(0) or info1[j] != Int32(0):
+            ll[j % batch_size] = -inf[DType.float32]()
 
 
 def _refuse_non_finite(
@@ -279,6 +304,7 @@ def batched_loglike_packed_x(
     trans: Bool,
     mut params: ARIMAParams,
     check_finite: Bool = True,
+    infeasible_inf: Bool = False,
 ) raises -> LoglikeResult:
     """`:471-513`: unpack the packed vector into `params`, then the overload
     above (`fc_steps = 0`, so the future exogenous input is a placeholder).
@@ -286,10 +312,39 @@ def batched_loglike_packed_x(
     unpack(ctx, params, order, batch_size, d_params)
     var fut = _placeholder(ctx)
     var r = batched_loglike_x(
-        ctx, d_y, d_exog, fut, batch_size, n_obs, order, params, trans, 0, 32, check_finite
+        ctx, d_y, d_exog, fut, batch_size, n_obs, order, params, trans, 0, 32, check_finite,
+        infeasible_inf,
     )
     _ = fut^
     return r^
+
+
+def loglike_ws_packed(
+    ctx: DeviceContext,
+    mut d_y: DeviceBuffer[DType.float32],
+    mut d_exog: DeviceBuffer[DType.float32],
+    mut d_fut: DeviceBuffer[DType.float32],
+    batch_size: Int,
+    n_obs: Int,
+    order: ARIMAOrder,
+    mut d_params: DeviceBuffer[DType.float32],
+    mut params: ARIMAParams,
+) raises -> LoglikeResult:
+    """`batched_loglike_packed_x` with `trans = True`, `fc_steps = 0` and the
+    Kalman refusals DEFERRED, the log-likelihood LEFT ON THE DEVICE: the
+    optimizer's evaluation (`batched_fit.mojo::eval_batch_device`) marks an
+    infeasible series from `ws.info_init`, `ws.info_loop` and `ws.loglike`
+    in a kernel, so nothing here reads back or waits (cpu-gpu-cleanup n-seq,
+    2026-10-02). `loglike` is left empty. `d_fut` is the caller's
+    placeholder, alive until the caller's wait."""
+    unpack(ctx, params, order, batch_size, d_params)
+    validate_order(order)
+    var t_params = ARIMAParams(ctx, order, batch_size)
+    batched_jones_transform(ctx, order, batch_size, False, params, t_params)
+    var ws = batched_kalman_filter_x(
+        ctx, d_y, d_exog, d_fut, n_obs, t_params, order, batch_size, 0, 32, True,
+    )
+    return LoglikeResult(ws=ws^, t_params=t_params^, loglike=List[Float32]())
 
 
 # ---------------------------------------------------------------------------
@@ -651,7 +706,7 @@ def _batched_loglike_grad_stacked(
         )
     var p_ext = ARIMAParams(ctx, order, eb)
     var r = batched_loglike_packed_x(
-        ctx, y_ext, d_exog, eb, n_obs, order, x_ext, trans, p_ext, check_finite
+        ctx, y_ext, d_exog, eb, n_obs, order, x_ext, trans, p_ext, check_finite, True
     )
     for i in range(N):
         ctx.enqueue_function[grad_kernel](
@@ -672,6 +727,10 @@ def _batched_loglike_grad_stacked(
     var ll = List[Float32](capacity=batch_size)
     for b in range(batch_size):
         ll.append(r.loglike[b])
+    # infeasible at the base OR at any forward-difference point
+    for j in range(batch_size, eb):
+        if isinf(r.loglike[j]) and r.loglike[j] < Float32(0.0):
+            ll[j % batch_size] = -inf[DType.float32]()
     _ = y_ext^
     _ = x_ext^
     _ = p_ext^
@@ -770,10 +829,11 @@ def batched_loglike_grad_host(
     for b in range(eb):
         i0.append(h_i0.unsafe_ptr()[b])
         i1.append(h_i1.unsafe_ptr()[b])
-    kalman_raise_info_init(i0)
-    kalman_raise_info_loop(i1, order.n_diff())
     for b in range(batch_size):
         ll_out[b] = h_ll.unsafe_ptr()[b]
+    # infeasible at the base or any forward-difference point: -inf, not a
+    # raise (`batched_loglike_x`, infeasible_inf)
+    _mark_infeasible(i0, i1, batch_size, ll_out)
     for t in range(nb_x):
         g_out[t] = h_g.unsafe_ptr()[t]
     _ = y_ext^
@@ -826,8 +886,9 @@ def batched_loglike_grad_x(
             )
     ctx.enqueue_copy(dst_buf=d_x_pert.create_sub_buffer[DType.float32](0, N * batch_size), src_buf=d_x.create_sub_buffer[DType.float32](0, N * batch_size))
     var base = batched_loglike_packed_x(
-        ctx, d_y, d_exog, batch_size, n_obs, order, d_x, trans, params, check_finite
+        ctx, d_y, d_exog, batch_size, n_obs, order, d_x, trans, params, check_finite, True
     )
+    var bad = List[Bool](length=batch_size, fill=False)
     comptime TPB = 128
     var grid = (batch_size + TPB - 1) // TPB
     for i in range(N):
@@ -836,8 +897,11 @@ def batched_loglike_grad_x(
             grid_dim=(grid, 1, 1), block_dim=(TPB, 1, 1),
         )
         var pert = batched_loglike_packed_x(
-            ctx, d_y, d_exog, batch_size, n_obs, order, d_x_pert, trans, params, check_finite
+            ctx, d_y, d_exog, batch_size, n_obs, order, d_x_pert, trans, params, check_finite, True
         )
+        for b in range(batch_size):
+            if isinf(pert.loglike[b]) and pert.loglike[b] < Float32(0.0):
+                bad[b] = True
         ctx.enqueue_function[grad_kernel](
             d_grad.unsafe_ptr(), pert.ws.loglike.unsafe_ptr(), base.ws.loglike.unsafe_ptr(),
             Int32(batch_size), Int32(N), Int32(i), h,
@@ -851,5 +915,9 @@ def batched_loglike_grad_x(
         _ = pert^
     ctx.synchronize()
     var ll = base.loglike.copy()
+    # infeasible at the base or any forward-difference point: -inf
+    for b in range(batch_size):
+        if bad[b]:
+            ll[b] = -inf[DType.float32]()
     _ = base^
     return ll^

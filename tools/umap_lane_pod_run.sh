@@ -5,11 +5,10 @@
 #   bash tools/umap_lane_pod_run.sh bootstrap   pixi + mojo version
 #   bash tools/umap_lane_pod_run.sh cuml        cuML venv (background-safe)
 #   bash tools/umap_lane_pod_run.sh build       the IDENTICAL phase bench in
-#                                               three launch widths + the host
-#                                               arm, the two stage-identity
-#                                               fixtures
+#                                               three launch widths, the two
+#                                               stage-identity fixtures
 #   bash tools/umap_lane_pod_run.sh gate        launch-width bit gate at 20k,
-#                                               stage fixtures, host-arm bits
+#                                               stage fixtures
 #   bash tools/umap_lane_pod_run.sh price       100k x 3 rounds (+ dump), 5k dump
 #   bash tools/umap_lane_pod_run.sh million     1M rows, one round
 #   bash tools/umap_lane_pod_run.sh quality     ours vs cuML neighborhood_quality
@@ -67,11 +66,8 @@ build)
     build umap-phase bench/umap_phase_price_main.mojo
     build umap-phase-tpb64 bench/umap_phase_price_main.mojo -D MOJOLEARN_UMAP_IDENTICAL_OPT_TPB_64=1
     build umap-phase-tpb256 bench/umap_phase_price_main.mojo -D MOJOLEARN_UMAP_IDENTICAL_OPT_TPB_256=1
-    build umap-phase-host bench/umap_phase_price_main.mojo -D MOJOLEARN_UMAP_IDENTICAL_HOST_OPTIMIZER=1
     build umap-identity umap/checks/identity_check.mojo
     build umap-identity-broader umap/checks/identity_broader_check.mojo
-    build umap-identity-host umap/checks/identity_check.mojo -D MOJOLEARN_UMAP_IDENTICAL_HOST_OPTIMIZER=1
-    build umap-identity-broader-host umap/checks/identity_broader_check.mojo -D MOJOLEARN_UMAP_IDENTICAL_HOST_OPTIMIZER=1
     ls -l "$OUT/bin" > "$OUT/bin.txt"
     finish ;;
 gate)
@@ -79,27 +75,22 @@ gate)
     for w in umap-phase umap-phase-tpb64 umap-phase-tpb256; do
         run "gate-20k-$w" env MOJOLEARN_UMAP_ROWS=20000 MOJOLEARN_UMAP_DUMP="$OUT/dump/20k-$w.f32" "$OUT/bin/$w"
     done
-    run gate-20k-host env MOJOLEARN_UMAP_ROWS=20000 MOJOLEARN_UMAP_DUMP="$OUT/dump/20k-host.f32" "$OUT/bin/umap-phase-host"
     (cd "$OUT/dump" && sha256sum 20k-*.f32) > "$OUT/gate-20k-sha256.txt"
     grep -h "embedding_fnv1a64" "$OUT"/gate-20k-*.log | sed 's/.*embedding_fnv1a64/embedding_fnv1a64/' > "$OUT/gate-20k-fingerprints.txt"
     run identity "$OUT/bin/umap-identity"
     run identity-broader "$OUT/bin/umap-identity-broader"
-    run identity-host "$OUT/bin/umap-identity-host"
-    run identity-broader-host "$OUT/bin/umap-identity-broader-host"
     finish ;;
 price)
     mkdir -p "$OUT/dump"
     run price-100k env MOJOLEARN_UMAP_ROWS=100000 MOJOLEARN_UMAP_ROUNDS=3 MOJOLEARN_UMAP_DUMP="$OUT/dump/100k.f32" "$OUT/bin/umap-phase"
     run price-20k env MOJOLEARN_UMAP_ROWS=20000 MOJOLEARN_UMAP_ROUNDS=3 "$OUT/bin/umap-phase"
     run price-5k env MOJOLEARN_UMAP_ROWS=5000 MOJOLEARN_UMAP_ROUNDS=1 MOJOLEARN_UMAP_DUMP="$OUT/dump/5k.f32" "$OUT/bin/umap-phase"
-    run price-5k-host env MOJOLEARN_UMAP_ROWS=5000 MOJOLEARN_UMAP_ROUNDS=1 MOJOLEARN_UMAP_DUMP="$OUT/dump/5k-host.f32" "$OUT/bin/umap-phase-host"
     finish ;;
 million)
     run price-1m env MOJOLEARN_UMAP_ROWS=1000000 MOJOLEARN_UMAP_ROUNDS=1 timeout 1500 "$OUT/bin/umap-phase"
     finish ;;
 quality)
     run quality-5k /root/cuml-venv/bin/python tools/umap_quality_vs_cuml.py --rows 5000 --ours-dump "$OUT/dump/5k.f32" --out "$OUT/quality-5k.json"
-    run quality-5k-host /root/cuml-venv/bin/python tools/umap_quality_vs_cuml.py --rows 5000 --ours-dump "$OUT/dump/5k-host.f32" --out "$OUT/quality-5k-host.json"
     finish ;;
 cuml1m)
     run cuml-1m /root/cuml-venv/bin/python tools/umap_cuml_reference.py --rows 1000000 --rounds 5 --out "$OUT/cuml-umap-1m.json"

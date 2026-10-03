@@ -94,6 +94,7 @@ from metrics.host.metrics_oracle import (
     METRICS_ORACLE_HOST_SABOTAGE,
     PINNED_SUM_W,
     host_canonicalize_nan,
+    host_fold_partials,
     host_l2sqrt_unexpanded,
     host_tree_sum,
 )
@@ -215,9 +216,7 @@ def host_regression_error(
                 slab[t] = ftz(slab[t] + slab[t + step])
             step //= 2
         partials[c] = slab[0]
-    var total = Float32(0.0)
-    for c in range(chunks):
-        total = ftz(total + partials[c])
+    var total = host_fold_partials(partials, chunks)
     var value = ftz(identical_div(total, Float32(n)))
     if root:
         value = portable_sqrtf(value)
@@ -229,7 +228,7 @@ def host_regression_error_ptr(
     prediction: MutPointer[Float32, MutUntrackedOrigin],
     n: Int, absolute: Bool, root: Bool,
 ) raises -> Float32:
-    """Pointer/parallel partials with the original ascending final fold."""
+    """Pointer/parallel partials with the device partial tree as the final fold."""
     if n <= 0 or n > 2147483647:
         raise Error("regression_error: invalid input length")
     var chunks = (n + PINNED_SUM_W - 1) // PINNED_SUM_W
@@ -263,9 +262,7 @@ def host_regression_error_ptr(
         _chunks(0)
     else:
         host_parallelize(_chunks, tasks)
-    var total = Float32(0.0)
-    for c in range(chunks):
-        total = ftz(total + partials[c])
+    var total = host_fold_partials(partials, chunks)
     var value = ftz(identical_div(total, Float32(n)))
     if root:
         value = portable_sqrtf(value)
