@@ -49,3 +49,12 @@ copy, two GEMM launches and the n x nc intermediate. Counts in infer_ms, not the
 
 **MOJOLEARN_FA_ALL.** Every define above (they compose: GRAM_ONCE + ITER_DEVICE + EIG_SMALL + LIVEBUF + LL_DEVICE +
 TRANSFORM_FUSED). The first request line per dataset.
+
+## Compile status (2026-10-03, laptop, head of this commit's parent code)
+- FAST, `-D MOJOLEARN_FA_ALL` (bindings/build_x_decomp.sh, gate skipped): rc=0.
+- FAST per define (GRAM_ONCE, ITER_DEVICE, ITER_DEVICE + EIG_SMALL, ITER_DEVICE + LIVEBUF, ITER_DEVICE + EIG_SMALL +
+  LL_DEVICE, TRANSFORM_FUSED): not run, compile owed: peer (the slots were stopped; ALL compiles each define's kernels,
+  but not ITER_DEVICE's grid-eigh and host-ll branches, which only the single-define builds instantiate).
+- FAST with every define off: not run, compile owed: peer.
+- IDENTICAL: not run, compile owed: peer (the new module is imported but every entry is registered only under
+  FA_FAST_APPLE).
