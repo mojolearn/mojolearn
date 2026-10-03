@@ -18,6 +18,7 @@ from x_neighbors.svgp_ff import (
     matmul_tn_acc_ff_item, svgp_ff_init_item, svgp_ff_chol_item, svgp_ff_chol_s_item, svgp_ff_column_item,
     svgp_ff_x_item, svgp_ff_qmu_item, svgp_ff_qsqrt_item, svgp_ff_part_item, svgp_ff_fin_item, svgp_ff_nbn,
     svgp_ff_nbm, svgp_ff_ws_size, matmul_tn_sym_ff_tile_item, svgp_sym_nb,
+    svgp_ff_col_solve_item, svgp_ff_col_fin_item,
 )
 from x_neighbors.svgp_ff import (
     SVGP_TREE, SVGP_TREE_ON, SV8, svgp_ff_tree_comb, svgp_ff_tree_slot, svgp_ff_bound, svgp_ff_failed,
@@ -1224,6 +1225,23 @@ comptime SVGP_FAST_SYMTILE = (
 )
 
 
+comptime SVGP_FAST_COLSPLIT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_SVGP_FAST_COLSPLIT"]()
+)
+
+
+def svgp_ff_col_solve_kernel(kuu: FP, bh: FP, bl: FP, w: FP, xb: FP, m_: Int64, n_: Int64, jitter: Float32):
+    var t = _tid()
+    if t < 4 * Int(m_):
+        svgp_ff_col_solve_item(t, kuu, bh, bl, w, xb, Int(m_), Int(n_), jitter)
+
+
+def svgp_ff_col_fin_kernel(kuu: FP, cmat: FP, w: FP, m_: Int64, n_: Int64, jitter: Float32):
+    var t = _tid()
+    if t < Int(m_) * Int(m_):
+        svgp_ff_col_fin_item(t, kuu, cmat, w, Int(m_), Int(n_), jitter)
+
+
 def matmul_tn_sym_ff_kernel(a: FP, rh: FP, rl: FP, rows_: Int64, m_: Int64):
     var t = _tid()
     var nb = svgp_sym_nb(Int(m_))
@@ -1387,6 +1405,7 @@ def op_svgp_fit_ff(
     var d_w = ctx.enqueue_create_buffer[DType.float32](max(svgp_ff_ws_size(m, n), 1))
     enqueue_fill(ctx, d_w, Float32(0))
     var wp = _p(d_w)
+    var d_xb = ctx.enqueue_create_buffer[DType.float32](max(2 * mm, 1) if SVGP_FAST_COLSPLIT else 1)
     if mm > 0:
         ctx.enqueue_function[svgp_ff_init_kernel](
             _p(d_kuu), _p(d_bh), _p(d_bl), wp, Int64(m), Int64(n), noise, jitter,
@@ -1396,10 +1415,19 @@ def op_svgp_fit_ff(
         ctx.enqueue_function[svgp_ff_chol_kernel](wp, Int64(m), Int64(n), Int64(j),
                                                   grid_dim=_grid(2 * (m - j)), block_dim=BLOCK)
     if m > 0:
-        ctx.enqueue_function[svgp_ff_column_kernel](
-            _p(d_kuu), _p(d_bh), _p(d_bl), _p(d_c), wp, Int64(m), Int64(n), jitter,
-            grid_dim=_grid(m), block_dim=BLOCK,
-        )
+        comptime if SVGP_FAST_COLSPLIT:
+            ctx.enqueue_function[svgp_ff_col_solve_kernel](
+                _p(d_kuu), _p(d_bh), _p(d_bl), wp, _p(d_xb), Int64(m), Int64(n), jitter,
+                grid_dim=_grid(4 * m), block_dim=BLOCK,
+            )
+            ctx.enqueue_function[svgp_ff_col_fin_kernel](
+                _p(d_kuu), _p(d_c), wp, Int64(m), Int64(n), jitter, grid_dim=_grid(mm), block_dim=BLOCK,
+            )
+        else:
+            ctx.enqueue_function[svgp_ff_column_kernel](
+                _p(d_kuu), _p(d_bh), _p(d_bl), _p(d_c), wp, Int64(m), Int64(n), jitter,
+                grid_dim=_grid(m), block_dim=BLOCK,
+            )
         ctx.enqueue_function[svgp_ff_x_kernel](
             _p(d_bvh), _p(d_bvl), _p(d_alpha), wp, Int64(m), Int64(n), noise, grid_dim=_grid(m), block_dim=BLOCK,
         )
@@ -1449,6 +1477,7 @@ def op_svgp_fit_ff(
     _ = d_qs^
     _ = d_info^
     _ = d_w^
+    _ = d_xb^
     _ = ctx^
 
 

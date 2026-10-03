@@ -282,6 +282,59 @@ def svgp_ff_column_item(j: Int, kuu: FP, bh: FP, bl: FP, cmat: FP, w: FP, m: Int
     ff_st(tp, tp + m, j, ff_ld(uh, ul, j))
 
 
+def svgp_ff_col_solve_item(t: Int, kuu: FP, bh: FP, bl: FP, w: FP, xb: FP, m: Int, n: Int, jitter: Float32):
+    """MOJOLEARN_SVGP_FAST_COLSPLIT (lane apple-fast-gap-kapprox2-svgp): the
+    four independent triangular solves of `svgp_ff_column_item` as four
+    items per column, t = which * m + j: 0 Kuu'^-1 e_j (scratch u), 1
+    Sigma^-1 e_j (scratch v), 2 Sigma^-1 Kuu'[:, j] (scratch k), 3 Kuu'^-1
+    B[:, j] into xb (its entry j is the trace term). The same operations in
+    the same order per solve: the same words, a quarter of the chain per
+    thread and four times the threads."""
+    var which = t // m
+    var j = t - which * m
+    var base = _scratch(w, m, n) + j * 6 * m
+    if which == 0:
+        for i in range(m):
+            ff_st(base, base + m, i, ff_of(Float32(1) if i == j else Float32(0)))
+        ff_chol_solve(_mat(w, m, n, 4), _mat(w, m, n, 5), m, base, base + m)
+    elif which == 1:
+        var vh = base + 2 * m
+        for i in range(m):
+            ff_st(vh, vh + m, i, ff_of(Float32(1) if i == j else Float32(0)))
+        ff_chol_solve(_mat(w, m, n, 6), _mat(w, m, n, 7), m, vh, vh + m)
+    elif which == 2:
+        var kh = base + 4 * m
+        for i in range(m):
+            ff_st(kh, kh + m, i, _kj(kuu, m, i, j, jitter))
+        ff_chol_solve(_mat(w, m, n, 6), _mat(w, m, n, 7), m, kh, kh + m)
+    else:
+        var xh = xb + j * 2 * m
+        for i in range(m):
+            ff_st(xh, xh + m, i, ff_ld(bh, bl, i * m + j))
+        ff_chol_solve(_mat(w, m, n, 4), _mat(w, m, n, 5), m, xh, xh + m)
+        var tp = _vec(w, m, n, 4)
+        ff_st(tp, tp + m, j, ff_ld(xh, xh + m, j))
+
+
+def svgp_ff_col_fin_item(t: Int, kuu: FP, cmat: FP, w: FP, m: Int, n: Int, jitter: Float32):
+    """MOJOLEARN_SVGP_FAST_COLSPLIT: t = i * m + j, entry (i, j) of
+    `svgp_ff_column_item`'s outputs from the solves: C, Sigma^-1 and S =
+    Kuu' (Sigma^-1 Kuu'[:, j]) (k ascending)."""
+    var i = t // m
+    var j = t - i * m
+    var base = _scratch(w, m, n) + j * 6 * m
+    var u = ff_ld(base, base + m, i)
+    var vh = base + 2 * m
+    var v = ff_ld(vh, vh + m, i)
+    cmat.unsafe_store(i * m + j, ff_f32(ff_sub(u, v)))
+    ff_st(_mat(w, m, n, 12), _mat(w, m, n, 13), i * m + j, v)
+    var kh = base + 4 * m
+    var s = ff_of(Float32(0))
+    for k in range(m):
+        s = ff_add(s, ff_mul(_kj(kuu, m, i, k, jitter), ff_ld(kh, kh + m, k)))
+    ff_st(_mat(w, m, n, 8), _mat(w, m, n, 9), i * m + j, s)
+
+
 def svgp_ff_x_item(i: Int, bvh: FP, bvl: FP, alpha: FP, w: FP, m: Int, n: Int, noise: Float32):
     """x[i] = sum_k Sigma^-1[i, k] b[k] (k ascending); alpha[i] = x[i] / noise."""
     var vih = _mat(w, m, n, 12)
