@@ -19,6 +19,7 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.units import N_OPS, run_unit
+from x_prep.py2mojo import P2M_BASE, P2M_N, is_p2m_op, run_p2m_unit
 from x_prep.host.sort import sort_cols_host_unit
 from x_prep.host.power import pt_fit_host_unit
 from x_prep.kbins import kbins_edges
@@ -64,6 +65,8 @@ def _host_unit[K: Int](t: Int, f: FP, q: IP):
         qda_dec_host_unit(t, f, q)
     elif K == OP_KBINS_EDGES:
         kbins_edges[True](t, f, q)
+    elif K >= P2M_BASE:
+        run_p2m_unit[K](t, f, q)
     else:
         run_unit[K](t, f, q)
 
@@ -142,12 +145,15 @@ def _run_stage[K: Int](total: Int, f: FP, q: IP):
 def run_program_host_ptr(f: FP, arena_len: Int, qbase: IP, stages: Int) raises:
     for s in range(stages):
         var op = Int(qbase.unsafe_load(s * STAGE_INTS))
-        if op < 0 or op >= N_OPS:
+        if (op < 0 or op >= N_OPS) and not is_p2m_op(op):
             raise Error(String("x_prep: unknown op ", op))
     for s in range(stages):
         var op = Int(qbase.unsafe_load(s * STAGE_INTS))
         var total = Int(qbase.unsafe_load(s * STAGE_INTS + 1))
         var q = qbase + (s * STAGE_INTS + 2)
         comptime for k in range(N_OPS):
+            if op == k:
+                _run_stage[k](total, f, q)
+        comptime for k in range(P2M_BASE, P2M_BASE + P2M_N):
             if op == k:
                 _run_stage[k](total, f, q)
