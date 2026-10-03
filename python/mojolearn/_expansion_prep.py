@@ -486,18 +486,33 @@ def _mode():
     return _backend.default_mode()
 
 
-#: lane/apple-fast-prep (2026-10-02): the A/B switches
-#: MOJOLEARN_X_PREP_FAST_UNIQUE=1 / MOJOLEARN_X_PREP_FAST_NONEG=1, read once
-#: at import (never on a fit / transform path).
+#: lane/apple-fast-prep (2026-10-02): the A/B switch
+#: MOJOLEARN_X_PREP_FAST_NONEG=1 (opt-in; measured noise), read once at
+#: import (never on a fit / transform path).
 _X_PREP_FAST = frozenset(
-    name for name in ("UNIQUE", "NONEG") if os.environ.get("MOJOLEARN_X_PREP_FAST_" + name, "0") == "1")
+    name for name in ("NONEG",) if os.environ.get("MOJOLEARN_X_PREP_FAST_" + name, "0") == "1")
+
+#: binding -> whether it exports `x_prep_fast_unique` (FAST + Apple default,
+#: bindings/_mojolearn_x_prep.mojo X_PREP_FAST_UNIQUE; built with
+#: -D MOJOLEARN_X_PREP_FAST_UNIQUE_OFF it does not), probed once per binding
+_FAST_UNIQUE = {}
 
 
 def _fast_on(name, mode):
     """Whether the switch `name` is on for the FAST tier (`mode` is the
-    estimator's numeric mode, `_backend.default_mode`): a set lookup. Off,
+    estimator's numeric mode, `_backend.default_mode`). UNIQUE is the
+    binding's comptime default (a cached probe); NONEG a set lookup. Off,
     or on another tier, every route below is the old one."""
-    return name in _X_PREP_FAST and mode == "fast"
+    if mode != "fast":
+        return False
+    if name == "UNIQUE":
+        binding = _prep_binding(mode)
+        key = id(binding)
+        on = _FAST_UNIQUE.get(key)
+        if on is None:
+            on = _FAST_UNIQUE[key] = _optional_prep_entry(binding, "x_prep_fast_unique") is not None
+        return on
+    return name in _X_PREP_FAST
 
 
 def encode_labels(y):
@@ -680,7 +695,8 @@ def _fit_categories(mode, arr):
     co = pr.alloc(d)
     pr.stage("sort_cols", d, xo, n, d, so, 1)
     if _fast_on("UNIQUE", mode):
-        # lane/apple-fast-prep (2026-10-02), MOJOLEARN_X_PREP_FAST_UNIQUE=1:
+        # lane/apple-fast-prep (2026-10-02), X_PREP_FAST_UNIQUE (FAST + Apple
+        # default since the M3 A/B; -D MOJOLEARN_X_PREP_FAST_UNIQUE_OFF):
         # `unique_cols` (x_prep/prims.mojo unique_cols_unit) is ONE thread per
         # column walking every sorted row (taxi onehot / ordinal fit: 5
         # threads over 1M rows each, after a parallel sort). Here each column

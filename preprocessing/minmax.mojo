@@ -23,12 +23,15 @@ from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 #: lane/apple-fast-prep (2026-10-02): the row-tiled extrema kernel below is
-#: the fit's extrema pass only on the FAST tier on Apple with
-#: `-D MOJOLEARN_PREP_FAST_MINMAX` (default OFF); every other build takes
+#: the fit's extrema pass (and `minmax_transform_direct` the transform entry)
+#: on the FAST tier on Apple. DEFAULT since the M3 A/B (lane/apple-fast-prep
+#: 387211293, n=1, output digests identical: minmax-scaler istella 152 ->
+#: 106 ms). `-D MOJOLEARN_PREP_FAST_MINMAX_OFF` restores main's path; the old
+#: `-D MOJOLEARN_PREP_FAST_MINMAX` stays harmless. Every other build takes
 #: `extrema_chunks_kernel`, so IDENTICAL compiles main's code unchanged.
 comptime PREP_FAST_MINMAX = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_PREP_FAST_MINMAX"]()
+    and not is_defined["MOJOLEARN_PREP_FAST_MINMAX_OFF"]()
 )
 from checks.numerics import ftz, identical_div, identical_mul
 from metrics.checks.device_io import download_f32
@@ -110,7 +113,7 @@ def extrema_rows_fast_kernel(
     lows: MutPointer[UInt32, MutAnyOrigin], highs: MutPointer[UInt32, MutAnyOrigin],
 ):
     """lane/apple-fast-prep (2026-10-02), `PREP_FAST_MINMAX` (FAST on Apple,
-    -D MOJOLEARN_PREP_FAST_MINMAX) only, from `minmax_fit_fast`. Block
+    default; -D MOJOLEARN_PREP_FAST_MINMAX_OFF turns it off) only, from `minmax_fit_fast`. Block
     (chunk, column group): thread t owns column group*tpb + t over the
     chunk's FAST_ROWS rows, so a simdgroup reads consecutive words of one
     row. `extrema_chunks_kernel` (above) gives

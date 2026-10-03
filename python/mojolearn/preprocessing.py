@@ -407,8 +407,8 @@ class MinMaxScaler(_ScalerProtocol):
         if not self.__sklearn_is_fitted__():
             raise NotFittedError('MinMaxScaler is not fitted')
         binding = self._binding(self.numeric_mode_)
-        # lane apple-fast-prep: the FAST Apple binding built with
-        # -D MOJOLEARN_PREP_FAST_MINMAX has `minmax_transform_direct` (X up from
+        # lane apple-fast-prep: the FAST Apple binding (default; built with
+        # -D MOJOLEARN_PREP_FAST_MINMAX_OFF it has none) has `minmax_transform_direct` (X up from
         # its own buffer, the device scans the output); any other binding, the
         # List route with the host scans, as before
         direct = _direct_entry(binding, "minmax_transform_direct")
