@@ -4491,6 +4491,19 @@ def _mi_discrete_mask(discrete_features, d):
     return mask
 
 
+#: lane/apple-fast-mi (2026-10-03): the A/B switch MOJOLEARN_MI_WORK=1 (opt-in,
+#: FAST only, read once at import): `_mutual_info` keeps the noised columns, their
+#: noise words and the per-point terms (3 n d words) as device-only scratch
+#: (`_Prog.work`) instead of arena words that the host zeroes and the device
+#: copies back (265 MB on Istella). Where a word lives moves no bit.
+_MI_WORK = os.environ.get("MOJOLEARN_MI_WORK", "0") == "1"
+
+
+def _plus1(off):
+    """off + 1 for an arena offset or a `_Scratch` (the units' offset + 1 noise words)."""
+    return _Scratch(off.off + 1, off.kind) if isinstance(off, _Scratch) else off + 1
+
+
 def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_state):
     """The reference's `_estimate_mi`: continuous columns are scaled and
     noised (row-major over the continuous columns only, as the reference's
@@ -4511,6 +4524,7 @@ def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_s
     mode = _mode()
     seed = 0 if random_state is None else int(random_state) & 0x3FFFFFFF
     pr = _Prog()
+    work = pr.work if (_MI_WORK and mode == "fast") else pr.alloc
     if discrete_target:
         classes, codes = encode_labels(y)
         if codes.size != n:
@@ -4528,24 +4542,24 @@ def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_s
     if cont:
         dc = len(cont)
         xo = pr.put(arr if not disc else _gather(arr, cont, mode))
-        st, sc, ma, z, zs = pr.alloc(6 * dc), pr.alloc(dc), pr.alloc(dc), pr.alloc(n * dc), pr.alloc(n * dc)
+        st, sc, ma, z, zs = pr.alloc(6 * dc), pr.alloc(dc), pr.alloc(dc), work(n * dc), work(n * dc)
         pr.stage("col_stats", dc, xo, n, dc, st)
         pr.stage("mi_colscale", dc, xo, n, dc, st, sc, ma)
-        pr.stage("mi_noise", n * dc, xo, n, dc, sc, ma, 2 * seed, z, zs + 1)
+        pr.stage("mi_noise", n * dc, xo, n, dc, sc, ma, 2 * seed, z, _plus1(zs))
     if not discrete_target:
         yo = pr.put(yv)
-        sty, scy, may, zy, zys = pr.alloc(6), pr.alloc(1), pr.alloc(1), pr.alloc(n), pr.alloc(n)
+        sty, scy, may, zy, zys = pr.alloc(6), pr.alloc(1), pr.alloc(1), work(n), work(n)
         pr.stage("col_stats", 1, yo, n, 1, sty)
         pr.stage("mi_colscale", 1, yo, n, 1, sty, scy, may)
-        pr.stage("mi_noise", n, yo, n, 1, scy, may, 2 * seed + 1, zy, zys + 1)
+        pr.stage("mi_noise", n, yo, n, 1, scy, may, 2 * seed + 1, zy, _plus1(zys))
     if cont:
-        term, outc = pr.alloc(n * dc), pr.alloc(dc)
+        term, outc = work(n * dc), pr.alloc(dc)
         if discrete_target:
             used = sum(c for c in counts if c > 1)
-            pr.stage("mi_cd", n * dc, z, n, dc, yo, lc, k, term, zs + 1)
+            pr.stage("mi_cd", n * dc, z, n, dc, yo, lc, k, term, _plus1(zs))
             pr.stage("mi_reduce", dc, term, n, dc, 1, k, used, outc)
         else:
-            pr.stage("mi_cc", n * dc, z, n, dc, zy, k, term, zs + 1, zys + 1)
+            pr.stage("mi_cc", n * dc, z, n, dc, zy, k, term, _plus1(zs), _plus1(zys))
             pr.stage("mi_reduce", dc, term, n, dc, 0, k, n, outc)
     if disc:
         dd = len(disc)
@@ -4564,10 +4578,10 @@ def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_s
             tb = pr.alloc(dd * stride)
             pr.stage("mi_dd", dd, xc, n, dd, yo, ky, pr.put_list(kx), tb, stride, outd)
         else:
-            cnti, cntf, term = pr.alloc(dd * kmax), pr.alloc(dd * kmax), pr.alloc(n * dd)
+            cnti, cntf, term = pr.alloc(dd * kmax), pr.alloc(dd * kmax), work(n * dd)
             pr.stage("code_counts", dd, xc, n, dd, kmax, cnti)
             pr.stage("i2f", dd * kmax, cnti, cntf)
-            pr.stage("mi_dc", n * dd, zy, n, dd, xc, cntf, kmax, k, term, zys + 1)
+            pr.stage("mi_dc", n * dd, zy, n, dd, xc, cntf, kmax, k, term, _plus1(zys))
             pr.stage("mi_reduce", dd, term, n, dd, 2, k, 0, outd, cntf, kmax)
     pr.run(mode)
     if not disc:
