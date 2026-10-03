@@ -1552,6 +1552,228 @@ def first_seen_i32_binding(
     return PythonObject(m)
 
 
+@always_inline
+def _floor_div_pos(a: Int, b: Int) -> Int:
+    """floor(a / b) for b > 0 and any a (Python's `//`)."""
+    if a >= 0:
+        return a // b
+    return -((-a + b - 1) // b)
+
+
+def strat_alloc_i64_binding(
+    counts_addr: PythonObject, k: PythonObject, n_folds: PythonObject, dst_addr: PythonObject,
+) raises -> PythonObject:
+    """StratifiedKFold's allocation table (sklearn _make_test_folds):
+    dst[i * k + c] (int64, n_folds x k) = how many positions p of class c's
+    run [s, e) in the class-sorted labels have p % n_folds == i, i.e.
+    (e - 1 - i) // K - (s - 1 - i) // K with floor division (lane
+    pyglue-numeric: a Python double loop over the folds and classes).
+    `counts` int64, k of them."""
+    var kk = Int(py=k)
+    var K = Int(py=n_folds)
+    if kk < 1 or K < 1:
+        raise Error("strat_alloc_i64: k and n_folds must be >= 1")
+    var cp = _ptr[DType.int64](Int(py=counts_addr))
+    var dp = _ptr[DType.int64](Int(py=dst_addr))
+    var s = 0
+    for c in range(kk):
+        var e = s + Int(cp.unsafe_load(c))
+        for i in range(K):
+            dp.unsafe_store(i * kk + c, Int64(_floor_div_pos(e - 1 - i, K) - _floor_div_pos(s - 1 - i, K)))
+        s = e
+    return PythonObject(0)
+
+
+def _stable_order_f64(keys: List[Float64]) -> List[Int]:
+    """The indices 0 .. len(keys) - 1 sorted ascending by key, ties in index
+    order (a bottom-up merge sort: stable, O(m log m))."""
+    var m = len(keys)
+    var a = List[Int](capacity=m)
+    for i in range(m):
+        a.append(i)
+    var b = List[Int](length=m, fill=0)
+    var width = 1
+    while width < m:
+        var lo = 0
+        while lo < m:
+            var mid = min(lo + width, m)
+            var hi = min(lo + 2 * width, m)
+            var i = lo
+            var j = mid
+            var t = lo
+            while i < mid and j < hi:
+                if keys[a[j]] < keys[a[i]]:
+                    b[t] = a[j]
+                    j += 1
+                else:
+                    b[t] = a[i]
+                    i += 1
+                t += 1
+            while i < mid:
+                b[t] = a[i]
+                i += 1
+                t += 1
+            while j < hi:
+                b[t] = a[j]
+                j += 1
+                t += 1
+            lo = hi
+        var tmp = a.copy()
+        a = b.copy()
+        b = tmp^
+        width *= 2
+    return a^
+
+
+def group_fold_assign_i32_binding(
+    counts_addr: PythonObject, m: PythonObject, n_folds: PythonObject, perm_addr: PythonObject,
+    dst_addr: PythonObject, sizes_addr: PythonObject,
+) raises -> PythonObject:
+    """GroupKFold's fold of each of the m groups (scikit-learn 1.9), int32
+    dst[g], and each fold's row count, int64 sizes[f] (from the int64 group
+    row counts). With `perm` (int64, nonzero address) the permuted groups
+    split into K nearly equal runs (the first m % K one longer); without,
+    the groups by row count descending (ties: the higher group code first)
+    each to the lightest fold (ties: the lower fold). Lane pyglue-numeric:
+    both were Python loops over the groups."""
+    var mm = Int(py=m)
+    var K = Int(py=n_folds)
+    if mm < 0 or K < 1:
+        raise Error("group_fold_assign_i32: m >= 0 and n_folds >= 1")
+    var cp = _ptr[DType.int64](Int(py=counts_addr))
+    var dp = _ptr[DType.int32](Int(py=dst_addr))
+    var sp = _ptr[DType.int64](Int(py=sizes_addr))
+    var pa = Int(py=perm_addr)
+    for f in range(K):
+        sp.unsafe_store(f, Int64(0))
+    if pa != 0:
+        var pp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=pa)
+        var start = 0
+        for f in range(K):
+            var size = mm // K + (1 if f < mm % K else 0)
+            for j in range(start, start + size):
+                var g = Int(pp.unsafe_load(j))
+                if g < 0 or g >= mm:
+                    raise Error("group_fold_assign_i32: a permuted group is out of range")
+                dp.unsafe_store(g, Int32(f))
+            start += size
+    else:
+        var keys = List[Float64](capacity=mm)
+        for g in range(mm):
+            keys.append(Float64(Int(cp.unsafe_load(g))))
+        var asc = _stable_order_f64(keys)
+        var load = List[Int](length=K, fill=0)
+        for t in range(mm - 1, -1, -1):
+            var g = asc[t]
+            var best = 0
+            for f in range(1, K):
+                if load[f] < load[best]:
+                    best = f
+            load[best] += Int(cp.unsafe_load(g))
+            dp.unsafe_store(g, Int32(best))
+    for g in range(mm):
+        var f = Int(dp.unsafe_load(g))
+        sp.unsafe_store(f, sp.unsafe_load(f) + cp.unsafe_load(g))
+    return PythonObject(0)
+
+
+def strat_group_assign_i32_binding(
+    yenc_addr: PythonObject, gidx_addr: PythonObject, n: PythonObject, k: PythonObject, m: PythonObject,
+    n_folds: PythonObject, perm_addr: PythonObject, dst_addr: PythonObject, sizes_addr: PythonObject,
+) raises -> PythonObject:
+    """StratifiedGroupKFold's fold of each of the m groups (scikit-learn
+    1.9 `_find_best_fold`): each group's class distribution, the groups
+    (in code order, or permuted by `perm` int64 when nonzero) sorted by the
+    standard deviation of their distribution, descending and stable, each
+    to the fold whose per-class fold shares it perturbs least (the mean over
+    classes of the across-fold std; ties: the fewer rows, then the lower
+    fold). int32 dst[g]; int64 sizes[f] the rows of each fold. yenc: int32
+    class codes in [0, k); gidx: int32 group codes in [0, m). Returns 1 when
+    the largest class has fewer rows than n_folds (the caller refuses), else
+    0. Binary64 sums ascending (lane pyglue-numeric: the Python loops)."""
+    var nn = Int(py=n)
+    var kk = Int(py=k)
+    var mm = Int(py=m)
+    var K = Int(py=n_folds)
+    if nn < 0 or kk < 1 or mm < 1 or K < 1:
+        raise Error("strat_group_assign_i32: bad sizes")
+    var yp = _ptr[DType.int32](Int(py=yenc_addr))
+    var gp = _ptr[DType.int32](Int(py=gidx_addr))
+    var dp = _ptr[DType.int32](Int(py=dst_addr))
+    var sp = _ptr[DType.int64](Int(py=sizes_addr))
+    var pa = Int(py=perm_addr)
+    var counts = List[Int](length=kk, fill=0)
+    var dist = List[Int](length=mm * kk, fill=0)
+    for i in range(nn):
+        var c = Int(yp.unsafe_load(i))
+        var g = Int(gp.unsafe_load(i))
+        if c < 0 or c >= kk or g < 0 or g >= mm:
+            raise Error("strat_group_assign_i32: a code is out of range")
+        counts[c] += 1
+        dist[g * kk + c] += 1
+    var most = 0
+    for c in range(kk):
+        most = max(most, counts[c])
+    if most < K:
+        return PythonObject(1)
+    var order = List[Int](capacity=mm)
+    if pa != 0:
+        var pp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=pa)
+        for j in range(mm):
+            order.append(Int(pp.unsafe_load(j)))
+    else:
+        for j in range(mm):
+            order.append(j)
+    # -std per group in `order`'s positions, stably sorted ascending
+    var keys = List[Float64](capacity=mm)
+    for j in range(mm):
+        var g = order[j]
+        var tot = Float64(0)
+        for c in range(kk):
+            tot += Float64(dist[g * kk + c])
+        var mu = tot / Float64(kk)
+        var ss = Float64(0)
+        for c in range(kk):
+            var dv = Float64(dist[g * kk + c]) - mu
+            ss += dv * dv
+        keys.append(-sqrt(ss / Float64(kk)))
+    var pos = _stable_order_f64(keys)
+    var fold_dist = List[Int](length=K * kk, fill=0)
+    var fold_n = List[Int](length=K, fill=0)
+    var col = List[Float64](length=K, fill=0)
+    for t in range(mm):
+        var g = order[pos[t]]
+        var best = -1
+        var best_score = Float64(0)
+        var best_n = 0
+        for f in range(K):
+            var score = Float64(0)
+            for c in range(kk):
+                var mu = Float64(0)
+                for j in range(K):
+                    var v = fold_dist[j * kk + c] + (dist[g * kk + c] if j == f else 0)
+                    col[j] = Float64(v) / Float64(counts[c])
+                    mu += col[j]
+                mu = mu / Float64(K)
+                var ss = Float64(0)
+                for j in range(K):
+                    var dv = col[j] - mu
+                    ss += dv * dv
+                score += sqrt(ss / Float64(K))
+            score = score / Float64(kk)
+            if best < 0 or score < best_score or (score == best_score and fold_n[f] < best_n):
+                best = f
+                best_score = score
+                best_n = fold_n[f]
+        for c in range(kk):
+            fold_dist[best * kk + c] += dist[g * kk + c]
+            fold_n[best] += dist[g * kk + c]
+        dp.unsafe_store(g, Int32(best))
+    for f in range(K):
+        sp.unsafe_store(f, Int64(fold_n[f]))
+    return PythonObject(0)
+
+
 def strat_fold_assign_i32_binding(
     enc_addr: PythonObject, n: PythonObject, k: PythonObject, n_folds: PythonObject,
     alloc_addr: PythonObject, perms_addr: PythonObject, counts_addr: PythonObject, dst_addr: PythonObject,
