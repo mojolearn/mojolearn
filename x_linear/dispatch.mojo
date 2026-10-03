@@ -37,6 +37,23 @@ comptime ALGO_ISOTONIC = 11
 comptime ALGO_ISOTONIC_PREDICT = 12
 comptime ALGO_RIDGE_KFOLD = 13
 
+
+def isotonic_abi_check(algo: Int, n: Int, n_y: Int, n_out: Int, n_fw: Int, n_iw: Int, n_ip: Int) raises:
+    """The isotonic fit's buffer contract, checked by both columns' bindings
+    before a word is written: ip [increasing, has_y_min, has_y_max,
+    has_weights], y n (2 n weighted), res 3 + 2 n, float work 6 n, int work
+    3 n (x_linear/isotonic_host.mojo). A caller on an older ABI (non-metric
+    MDS passed 3 flags and 3 n / n work words until 2026-10-03) wrote past
+    both work buffers: NaN on the device columns, a segfault on the host."""
+    if algo != ALGO_ISOTONIC:
+        return
+    if n_ip < 4 or n_fw < 6 * n or n_iw < 3 * n or n_out < 3 + 2 * n or n_y < n:
+        raise Error(
+            "x_linear isotonic: need ip >= 4 flags, y >= n, out >= 3 + 2n, float work >= 6n and"
+            " int work >= 3n; got ip " + String(n_ip) + ", y " + String(n_y) + ", out " + String(n_out)
+            + ", float work " + String(n_fw) + ", int work " + String(n_iw) + " at n = " + String(n)
+        )
+
 comptime LINK_IDENTITY = 0
 comptime LINK_EXP = 1
 comptime LINK_SIGMOID = 2
@@ -109,6 +126,27 @@ def fit_dispatch(t: Team, algo: Int, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: F
         # the device binding runs this on the grid (x_linear/device.mojo)
         comptime if not is_gpu():
             ridge_kfold_fit(x, y, n, d, ip, fp, res, fw)
+
+
+def decision_code_row(s: FP, i: Int, k: Int, strict: Int, below: Int, above: Int) -> Int32:
+    """Row i's class code of the decision block s (n x k): k == 1 `above`
+    when s > 0 (`strict`) or s >= 0, else `below` (NaN: below); k > 1 the
+    first largest column (a NaN never replaces). The classifiers' predict
+    (lane pyglue-numeric: the host threshold / argmax of the downloaded
+    scores)."""
+    if k == 1:
+        var v = s.unsafe_load(i)
+        var up = v > Float32(0) if strict != 0 else v >= Float32(0)
+        return Int32(above if up else below)
+    var base = i * k
+    var best = 0
+    var bv = s.unsafe_load(base)
+    for c in range(1, k):
+        var v = s.unsafe_load(base + c)
+        if v > bv:
+            best = c
+            bv = v
+    return Int32(best)
 
 
 def decision_one(x: FP, i: Int, d: Int, wb: FP, c: Int, link: Int) -> Float32:

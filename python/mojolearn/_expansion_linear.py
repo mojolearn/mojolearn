@@ -27,7 +27,7 @@ from . import _backend
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty, full, zeros
 from ._bufcheck import memcopy
-from ._labels import argmax_rows, decode_labels, encode_labels, threshold_codes
+from ._labels import decode_labels, encode_labels
 from ._mode import NumericModeMixin
 
 __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor", "TweedieRegressor",
@@ -89,6 +89,40 @@ def _run(est, algo, X, n, d, y, ip, fp, n_out, n_fw, n_iw):
     return out.tolist()
 
 
+def _decision_codes(est, X, coef, intercept, strict=True, below=0, above=1):
+    """Each row's class code (int32 Array) of X @ coef^T + intercept on the
+    binding (`x_linear_decision_codes`: one class the threshold at 0, else
+    the first largest score), so only the codes come down (lane
+    pyglue-numeric: the host threshold / argmax of the downloaded scores)."""
+    a, n, d = _matrix(X)
+    if d != est.n_features_in_:
+        raise ValueError(
+            f"mojolearn {type(est).__name__}: X has {d} features, the model was fitted with {est.n_features_in_}")
+    wb = _coef_block(coef, intercept)
+    k = wb.size // (d + 1)
+    out = empty((n,), "<i4")
+    est._bind(_BINDING).x_linear_decision_codes(
+        addr_ro(a, name="X"), addr_ro(wb, name="coef"), [n, d, k, LINK_IDENTITY, 1 if strict else 0, below, above],
+        addr(out, name="codes"))
+    return out
+
+
+def _coef_block(coef, intercept):
+    """[coef row | intercept] per class as one float32 Array (k rows of d + 1):
+    byte copies of the fitted Arrays."""
+    c = as_f32_c(coef, ndim=None, name="coef_")[0]
+    b = as_f32_c(intercept, ndim=None, name="intercept_")[0]
+    k = b.size
+    d = c.size // max(k, 1)
+    out = empty((k * (d + 1),), "<f4")
+    o = addr(out, name="coef")
+    ca, ba = addr_ro(c, name="coef_"), addr_ro(b, name="intercept_")
+    for j in range(k):                  # glue: one row copy per class
+        memcopy(o + 4 * j * (d + 1), ca + 4 * j * d, 4 * d)
+        memcopy(o + 4 * (j * (d + 1) + d), ba + 4 * j, 4)
+    return out
+
+
 def _decision(est, X, coef_rows, intercepts, link=LINK_IDENTITY):
     """link(X @ W^T + b) through the binding, as an (n, k) float32 Array."""
     a, n, d = _matrix(X)
@@ -140,36 +174,18 @@ def _with_weights(yv, sample_weight, n):
 
 #: lane/apple-fast-py2mojo-linear: `py2mojo_rows` modes (core/py2mojo_rows.mojo)
 _ROWS_SGD_PROBA, _ROWS_LRCV_PROBA, _ROWS_HUBER_OUT = 2, 3, 4
-_PY2MOJO_ROWS = 2
 
 
 def _py2mojo_proba(est, mode, scores, k):
-    """predict_proba's per-row glue in the binding (the same words), or None
-    when the binary predates it or was built with
-    -D MOJOLEARN_PY2MOJO_linear_OFF (the old Python rows)."""
+    """predict_proba's per-row glue in the binding (on the device on a GPU
+    install; lane pyglue-numeric deleted the Python rows it replaced)."""
     b = est._bind(_BINDING)
-    fn = getattr(b, "py2mojo_linear_flags", None)
-    if fn is None or not (int(fn()) & _PY2MOJO_ROWS) or scores.dtype != "<f4":
-        return None
+    scores = as_f32_c(scores, ndim=None, name="scores")[0]
     n = scores.shape[0]
     out = empty((n, 2 if k == 1 else k), "<f4")
     if n:
         b.py2mojo_rows(mode, addr_ro(scores, name="scores"), addr(out, name="proba"), [n, k])
     return out
-
-
-_CLS1_RIDGE_CODES = 1
-
-
-def _cls1_flags(est):
-    """lane/apple-fast-gap-cls1: the bound binary's build-time switches
-    (`x_linear_cls1_flags`; 0 on IDENTICAL, the host binding or a build
-    without them, which is main's path)."""
-    try:
-        fn = getattr(est._bind(_BINDING), "x_linear_cls1_flags", None)
-        return int(fn()) if fn is not None else 0
-    except Exception:  # noqa: BLE001  (a binary without the entry: main's path)
-        return 0
 
 
 def _rows(values, k, d):
@@ -215,9 +231,8 @@ class _LinearClassifierMixin:
         return out
 
     def predict(self, X):
-        scores = self.decision_function(X)
-        codes = threshold_codes(scores) if scores.ndim == 1 else argmax_rows(scores)
-        return decode_labels(self.classes_, codes)
+        _check_fitted(self)
+        return decode_labels(self.classes_, _decision_codes(self, X, self.coef_, self.intercept_))
 
     def score(self, X, y):
         from ._expansion_metrics import accuracy_fraction
@@ -383,17 +398,7 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
             raise AttributeError("probability estimates are not available for loss=%r" % self.loss)
         _check_fitted(self)
         p = _decision(self, X, self.coef_.tolist(), self.intercept_.tolist(), LINK_SIGMOID)
-        out = _py2mojo_proba(self, _ROWS_SGD_PROBA, p, len(self.intercept_))
-        if out is not None:
-            return out
-        rows = p.tolist()
-        if len(self.intercept_) == 1:
-            return Array.from_list([[1.0 - r[0], r[0]] for r in rows], "<f4")
-        out = []
-        for r in rows:
-            s = sum(r)
-            out.append([v / s for v in r] if s > 0 else [1.0 / len(r)] * len(r))
-        return Array.from_list(out, "<f4")
+        return _py2mojo_proba(self, _ROWS_SGD_PROBA, p, len(self.intercept_))
 
 
 class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
@@ -580,19 +585,15 @@ class HuberRegressor(_LinearRegressorMixin, NumericModeMixin):
         pred_a = self.predict(a)
         thr = self.scale_ * self.epsilon
         b = self._bind(_BINDING)
-        fn = getattr(b, "py2mojo_linear_flags", None)
-        if (fn is not None and int(fn()) & _PY2MOJO_ROWS and yv.dtype == "<f4"
-                and pred_a.dtype == "<f4"):
-            # lane/apple-fast-py2mojo-linear: |y - pred| > thr in the binding
-            # (core/py2mojo_rows.mojo ROWS_HUBER_OUT, the same binary64 test)
-            flags = empty((n,), "<u1")
-            if n:
-                b.py2mojo_rows(_ROWS_HUBER_OUT, addr_ro(yv, name="y"), addr(flags, name="outliers_"),
-                               [n, 1, addr_ro(pred_a, name="pred"), float(thr)])
-            self.outliers_ = list(map(bool, flags.tolist()))
-        else:
-            pred = pred_a.tolist()
-            self.outliers_ = [abs(t - q) > thr for t, q in zip(yv.tolist(), pred)]
+        # |y - pred| > thr in the binding (core/py2mojo_rows.mojo
+        # ROWS_HUBER_OUT, a binary64 test)
+        yv = as_f32_c(yv, ndim=None, name="y")[0]
+        pred_a = as_f32_c(pred_a, ndim=None, name="pred")[0]
+        flags = empty((n,), "<u1")
+        if n:
+            b.py2mojo_rows(_ROWS_HUBER_OUT, addr_ro(yv, name="y"), addr(flags, name="outliers_"),
+                           [n, 1, addr_ro(pred_a, name="pred"), float(thr)])
+        self.outliers_ = list(map(bool, flags.tolist()))   # glue: scikit-learn's bool mask, as a list
         return self
 
 
@@ -931,7 +932,9 @@ class SGDOneClassSVM(NumericModeMixin):
         return out.reshape((out.shape[0],))
 
     def predict(self, X):
-        return threshold_codes(self.decision_function(X), 0.0, strict=False, below=-1, above=1)
+        _check_fitted(self)
+        icpt = Array.from_list([-self.offset_.tolist()[0]], "<f4")
+        return _decision_codes(self, X, self.coef_, icpt, strict=False, below=-1, above=1).astype("<i8")
 
 
 # ------------------------------------------------------------------- Ridge
@@ -979,12 +982,10 @@ class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
         if not self.alpha >= 0:
             raise ValueError("mojolearn RidgeClassifier: alpha must be >= 0")
         a, n, d = _matrix(X)
-        if (sample_weight is None and self.class_weight is None
-                and _cls1_flags(self) & _CLS1_RIDGE_CODES):
-            # lane/apple-fast-gap-cls1 RIDGE_FAST_CLS1_CODES (FAST + Apple
-            # default, off with -D MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF): the
-            # int32 codes go to the binding as they are and the
-            # +-1 targets are built on the device (x_linear/cls1_fast.mojo)
+        if self.class_weight is None:
+            # the int32 codes go to the binding as they are and the +-1
+            # targets are built in it (x_linear/cls1_fast.mojo's kernel on
+            # every column; lane pyglue-numeric: Python lists over the rows)
             classes, icodes = encode_labels(y)
             if icodes.size != n:
                 raise ValueError("mojolearn RidgeClassifier: X and y lengths differ")
@@ -992,12 +993,13 @@ class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
                 raise ValueError("mojolearn RidgeClassifier: y has one class")
             k = len(classes)
             T = 1 if k == 2 else k
-            vals = _ridge_run(self, a, n, d, icodes, T, [self.alpha], None, codes_mode=True)
+            vals = _ridge_run(self, a, n, d, icodes, T, [self.alpha], sample_weight, codes_mode=True)
             self.classes_ = classes
             self.coef_ = Array.from_list(_rows(vals, T, d), "<f4")
             self.intercept_ = Array.from_list(vals[T * d:T * d + T], "<f4")
             self.n_features_in_ = d
             return self
+        # class_weight: the per-row weights (owed: still Python lists over the rows)
         classes, codes = _classes(self, y, n)
         k = len(classes)
         T = 1 if k == 2 else k
@@ -1276,24 +1278,7 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         # DEVIATION 6900: the pinned exp (was the platform exp) and the
         # CPython 3.12+ sum spelled out (`_pm.nsum`), the same bits on every host
         sc = self.decision_function(X)
-        out = _py2mojo_proba(self, _ROWS_LRCV_PROBA, sc, len(self.intercept_))
-        if out is not None:
-            return out
-        scores = sc.tolist()
-        if len(self.intercept_) == 1:
-            es = _pm.exp_array([-z if z >= 0 else z for z in scores])
-            out = []
-            for z, e in zip(scores, es):
-                p = 1.0 / (1.0 + e) if z >= 0 else e / (1.0 + e)
-                out.append([1.0 - p, p])
-            return Array.from_list(out, "<f4")
-        out = []
-        for row in scores:
-            m = max(row)
-            e = _pm.exp_array([v - m for v in row])
-            s = _pm.nsum(e)
-            out.append([v / s for v in e])
-        return Array.from_list(out, "<f4")
+        return _py2mojo_proba(self, _ROWS_LRCV_PROBA, sc, len(self.intercept_))
 
 
 # --------------------------------------------------------------- Isotonic

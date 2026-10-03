@@ -290,7 +290,7 @@ def load_differ():
     try:
         mod = importlib.import_module(
             __name__.rsplit(".", 1)[0] + "._identity_trace_diff")
-    except ImportError:
+    except (ImportError, AttributeError):
         tried.append("<package>._identity_trace_diff (not in this install)")
     else:
         if _differ_is_whole(mod):
@@ -416,7 +416,7 @@ def _mode_report():
     gb = sys.modules.get(pkg_name + "._mojolearn_gbdt")
     try:
         _readable = gb is not None and hasattr(gb, "gbdt_numeric_mode")
-    except ImportError:
+    except (ImportError, AttributeError):
         # A stub raises ImportError from __getattr__, and `hasattr` only
         # swallows AttributeError. See `_backend.numeric_mode`.
         _readable = False

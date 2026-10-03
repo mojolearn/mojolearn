@@ -115,7 +115,7 @@ and `glm_softmax.mojo`:
   `linear_bwd`             `xtdz_multi_kernel` (one STATS_TPB block per `(c,
                            j)` cell over the rows, `fma` with no flush
                            inside), `gemm_epilogue_kernel` over `C*D` cells,
-                           `mean_rows_multi_kernel` per class.
+                           `qn_tile_sum_classes` per class.
   `evaluate`               Tikhonov over the first `C*D` entries, the bias
                            column left alone.
 
@@ -185,6 +185,15 @@ def host_qnt_sum(v: List[Float32], n: Int) -> Float32:
             acc = ftz(acc + v[r])
         part[k] = acc
     return host_qnt_fold(part, 0, tiles)
+
+
+def host_qnt_sum_strided(v: List[Float32], n: Int, stride: Int, off: Int) -> Float32:
+    """`host_qnt_sum` of the column `v[off + stride * r]`, r in [0, n)
+    (`qn_tile_sum_classes` per class)."""
+    var col = List[Float32](capacity=n)
+    for r in range(n):
+        col.append(v[off + stride * r])
+    return host_qnt_sum(col, n)
 
 
 def host_qnt_xty(x: List[Float32], dz: List[Float32], n: Int, d: Int) -> List[Float32]:
@@ -533,7 +542,6 @@ struct HostGLM(Movable):
             # part[(t*C + cc)*D + j], so each sees the same terms in the
             # same order, in one pass over the rows.
             var part = List[Float32](length=STATS_TPB * cd, fill=Float32(0.0))
-            var bpart = List[Float32](length=STATS_TPB * C, fill=Float32(0.0))
             var pp = host_list_ptr(part)
             var xp = host_list_ptr(self.x)
             for r in range(n):
@@ -541,8 +549,6 @@ struct HostGLM(Movable):
                 for cc in range(C):
                     var zc = self.z[cc + C * r]
                     host_fma_row_into(pp + (t * C + cc) * D, xp + r * D, zc, D)
-                    if self.fit_intercept:
-                        bpart[t * C + cc] = ftz(bpart[t * C + cc] + zc)
             var partials = List[Float32](length=STATS_TPB, fill=Float32(0.0))
             for b in range(cd):
                 var cc = b % C
@@ -558,10 +564,8 @@ struct HostGLM(Movable):
             if self.fit_intercept:
                 var ratio = Float32(1.0) / Float32(n)
                 for cc in range(C):
-                    for t in range(STATS_TPB):
-                        partials[t] = bpart[t * C + cc]
-                    var s0 = ftz(host_halving_sum(partials))
-                    g[cd + cc] = ftz(s0 * ratio)
+                    # `qn_tile_sum_classes`' tile order (lane cgr5-owed2)
+                    g[cd + cc] = ftz(host_qnt_sum_strided(self.z, n, C, cc) * ratio)
             return
         comptime if HOST_QN_TILED:
             var xt = host_qnt_xty(self.x, self.z, n, self.d)

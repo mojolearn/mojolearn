@@ -192,7 +192,7 @@ def _exports(ext, name):
     same reason; a probe is not a use."""
     try:
         return hasattr(ext, name)
-    except ImportError:
+    except (ImportError, AttributeError):
         return False
 
 
@@ -206,7 +206,7 @@ def _private_copy(a):
     here, in a buffer of this process, which is the same promise with the
     same visibility and the same refresh door (`load_state`)."""
     pb = probe(a)
-    out = empty(tuple(int(d) for d in pb.shape), "<f4")
+    out = empty(tuple(int(d) for d in pb.shape), "<f4")  # glue: shape tuple of ints
     memcopy(addr(out, name="copy"), addr_ro(a, name="source"), 4 * int(out.size))
     return out
 
@@ -286,8 +286,8 @@ def _take(weights, what, names):
             "(numpy arrays or mojolearn Arrays) keyed by the upstream "
             f"parameter names {names}"
         )
-    missing = [n for n in names if n not in weights]
-    extra = [n for n in weights if n not in names]
+    missing = [n for n in names if n not in weights]  # glue: checks weight dict names
+    extra = [n for n in weights if n not in names]  # glue: checks weight dict names
     if missing or extra:
         raise ValueError(
             f"mojolearn {what}: weight dict mismatch"
@@ -296,7 +296,7 @@ def _take(weights, what, names):
             + f". The exact key set is {list(names)} -- the corpus/HF "
             "parameter names (mamba/corpus/README.md)"
         )
-    return [weights[n] for n in names]
+    return [weights[n] for n in names]  # glue: orders weight tensors by name
 
 
 class Mamba1State:
@@ -412,11 +412,11 @@ class _MambaBase(NumericModeMixin):
         native = self._backward_native(extension, entry, native)
         # DEVIATION 2409: the gradients are fresh `mojolearn.Array`s.
         gradients = ([empty(x.shape, "<f4")]
-                     + [empty(w.shape, "<f4") for w in weights])
+                     + [empty(w.shape, "<f4") for w in weights])  # glue: allocates one gradient per weight
         addresses = ([addr_ro(x, name="x")]
-                     + [addr_ro(w, name="weight") for w in weights]
+                     + [addr_ro(w, name="weight") for w in weights]  # glue: one address per weight tensor
                      + [addr_ro(dy, name="grad_output")]
-                     + [addr(g, name="gradient") for g in gradients])
+                     + [addr(g, name="gradient") for g in gradients])  # glue: one address per gradient tensor
         params = [b, l, self.d_model]
         if entry == "mamba2_backward":
             params.extend(checked.dt_limit)
@@ -569,7 +569,7 @@ class Mamba1Block(_MambaBase):
             # dt_proj.bias, A_log, D, out_proj.weight, conv_window, h,
             # y_out
             [addr_ro(x, name="x")]
-            + [addr_ro(a, name="weight") for a in w]
+            + [addr_ro(a, name="weight") for a in w]  # glue: one address per weight tensor
             + [addr(win, name="conv_window"), addr(h, name="h"),
                addr(y, name="y")]
         )
@@ -648,11 +648,11 @@ class Mamba1Block(_MambaBase):
             )
         # DEVIATION 2409: the gradients are fresh `mojolearn.Array`s.
         gradients = ([empty(x.shape, "<f4")]
-                     + [empty(w.shape, "<f4") for w in weights])
+                     + [empty(w.shape, "<f4") for w in weights])  # glue: allocates one gradient per weight
         addresses = ([addr_ro(x, name="x")]
-                     + [addr_ro(w, name="weight") for w in weights]
+                     + [addr_ro(w, name="weight") for w in weights]  # glue: one address per weight tensor
                      + [addr_ro(dy, name="grad_output")]
-                     + [addr(g, name="gradient") for g in gradients])
+                     + [addr(g, name="gradient") for g in gradients])  # glue: one address per gradient tensor
         native(addresses, [b, l, self.d_model])
         return dict(zip(("x",) + self._W_NAMES, gradients))
 
@@ -749,7 +749,7 @@ class Mamba1DecodeSession:
             # The CPU-only stand-in raises ImportError BY NAME from
             # __getattr__ (_backend.py::_HostBinding); a probe is not a use.
             create = getattr(ext, "mamba1_session_create", None)
-        except ImportError:
+        except (ImportError, AttributeError):
             create = None
         # THE HOST ARM. No device session entry, but the decode entry the
         # session would have run is right there under its per-call name.
@@ -781,12 +781,12 @@ class Mamba1DecodeSession:
             # The ten weights and the two state pieces COPIED, which is the
             # ownership clause the device arm satisfies with an upload.
             self._native = None
-            self._hw = [_private_copy(a) for a in w]
+            self._hw = [_private_copy(a) for a in w]  # glue: private copy per weight tensor
             self._win = _private_copy(win)
             self._h = _private_copy(h)
         else:
             self._native = create()
-            addrs = ([addr_ro(a, name="weight") for a in w]
+            addrs = ([addr_ro(a, name="weight") for a in w]  # glue: one address per weight tensor
                      + [addr(win, name="conv_window"), addr(h, name="h")])
             ext.mamba1_session_open(self._native, addrs, [b, block.d_model])
         self._open = True
@@ -821,7 +821,7 @@ class Mamba1DecodeSession:
             hw = self._hw
             self._ext.mamba1_decode_step(
                 [addr_ro(x, name="x")]
-                + [addr_ro(a, name="weight") for a in hw]
+                + [addr_ro(a, name="weight") for a in hw]  # glue: one address per weight tensor
                 + [addr(self._win, name="conv_window"), addr(self._h, name="h"),
                    addr(y, name="y")],
                 [b, blk.d_model])
@@ -1080,7 +1080,7 @@ class Mamba2Block(_MambaBase):
             # D, gated norm.weight, out_proj.weight, conv_window, h,
             # buffer_xbc, buffer_dtraw, y_out, h_last_out
             [addr_ro(x, name="x")]
-            + [addr_ro(a, name="weight") for a in w]
+            + [addr_ro(a, name="weight") for a in w]  # glue: one address per weight tensor
             + [addr(win, name="conv_window"), addr(h, name="h"),
                addr(bx, name="buffer_xbc"), addr(bd, name="buffer_dtraw"),
                addr(y, name="y"), addr(h_last, name="h_last")]
@@ -1204,7 +1204,7 @@ class _Mamba2DecodeSession:
         ext = block._extension()
         try:
             create = getattr(ext, "mamba2_session_create", None)
-        except ImportError:
+        except (ImportError, AttributeError):
             create = None
         host = create is None and _exports(ext, "mamba2_decode_step")
         if create is None and not host:
@@ -1224,15 +1224,15 @@ class _Mamba2DecodeSession:
         self._b, self._open = b, False
         if host:
             self._native = None
-            self._hw = [_private_copy(a) for a in block._w]
-            self._parts = [_private_copy(a) for a in (win, h, bx, bd)]
+            self._hw = [_private_copy(a) for a in block._w]  # glue: private copy per weight tensor
+            self._parts = [_private_copy(a) for a in (win, h, bx, bd)]  # glue: private copy per state tensor
             self._q = int(state.buffered_tokens)
         else:
             self._native = create()
             lo, hi = block.dt_limit
             ext.mamba2_session_open(
                 self._native,
-                [addr_ro(a, name="weight") for a in block._w]
+                [addr_ro(a, name="weight") for a in block._w]  # glue: one address per weight tensor
                 + [addr(win, name="conv_window"), addr(h, name="h"),
                    addr(bx, name="buffer_xbc"), addr(bd, name="buffer_dtraw")],
                 [b, block.d_model, int(state.buffered_tokens), lo, hi])
@@ -1269,8 +1269,8 @@ class _Mamba2DecodeSession:
         report = empty((self._b, blk.nheads, _M2_HEADDIM, _M2_D_STATE), "<f4")
         if self._native is None:
             addrs = ([addr_ro(x, name="x")]
-                     + [addr_ro(a, name="weight") for a in self._hw]
-                     + [addr(a, name="state") for a in self._parts]
+                     + [addr_ro(a, name="weight") for a in self._hw]  # glue: one address per weight tensor
+                     + [addr(a, name="state") for a in self._parts]  # glue: one address per state tensor
                      + [addr(y, name="y"), addr(report, name="h_last")])
             lo, hi = blk.dt_limit
             self._q = int(self._ext.mamba2_decode_step(
@@ -1287,12 +1287,12 @@ class _Mamba2DecodeSession:
         self._require_open(what)
         parts = self._state_parts(what)
         if self._native is None:
-            for dst, src in zip(parts, self._parts):
+            for dst, src in zip(parts, self._parts):  # glue: memcopy per state tensor
                 memcopy(addr(dst, name="state"), addr_ro(src, name="resident"), 4 * int(src.size))
             q = self._q
         else:
             q = int(self._ext.mamba2_session_export_state(
-                self._native, [addr(a, name="state") for a in parts]))
+                self._native, [addr(a, name="state") for a in parts]))  # glue: one address per state tensor
         self._state.buffered_tokens = q
         return self._state
 
@@ -1302,12 +1302,12 @@ class _Mamba2DecodeSession:
         parts = self._state_parts(what)
         q = int(self._state.buffered_tokens)
         if self._native is None:
-            for dst, src in zip(self._parts, parts):
+            for dst, src in zip(self._parts, parts):  # glue: memcopy per state tensor
                 memcopy(addr(dst, name="resident"), addr_ro(src, name="state"), 4 * int(dst.size))
             self._q = q
         else:
             self._ext.mamba2_session_load_state(
-                self._native, [addr(a, name="state") for a in parts], [q])
+                self._native, [addr(a, name="state") for a in parts], [q])  # glue: one address per state tensor
         return self._state
 
     def _release(self):
@@ -1398,7 +1398,7 @@ class Mamba3State:
         at buffered_tokens 0), which this method deliberately does not
         respell (DEVIATION 794)."""
         what = "Mamba3State.set_input_states"
-        for name, dst, src in (("theta", self.theta, theta),
+        for name, dst, src in (("theta", self.theta, theta),  # glue: checks four named state arguments
                                ("h", self.h, h),
                                ("k", self.pending_k, k),
                                ("v", self.pending_v, v)):
@@ -1586,7 +1586,7 @@ class Mamba3Block(_MambaBase):
         k_last = _buffers.empty((b, nh, _M3_D_STATE), '<f4')
         v_last = _buffers.empty((b, nh, _M3_HEADDIM), '<f4')
         theta_last = _buffers.empty((b, nh, _M3_NUM_ROPE_ANGLES), '<f4')
-        addrs = ([_addr_ro(x)] + [_addr_ro(w) for w in self._w]
+        addrs = ([_addr_ro(x)] + [_addr_ro(w) for w in self._w]  # glue: one address per weight tensor
                  + [_addr(y), _addr(h_last), _addr(k_last), _addr(v_last),
                     _addr(theta_last)])
         # lane/neural-net-experiment (2026-09-30): the session keeps the
@@ -1595,7 +1595,7 @@ class Mamba3Block(_MambaBase):
         session_forward = None
         try:
             session_forward = getattr(ext, "mamba3_prefill_session_forward", None)
-        except ImportError:
+        except (ImportError, AttributeError):
             session_forward = None
         if session_forward is not None and os.environ.get("MOJOLEARN_MAMBA3_LEGACY_SETUP") != "1":
             if getattr(self, "_prefill_session", None) is None or getattr(self, "_prefill_binding", None) is not ext:
@@ -1621,7 +1621,7 @@ class Mamba3Block(_MambaBase):
         session_backward = None
         try:
             session_backward = getattr(extension, "mamba3_prefill_session_backward", None)
-        except ImportError:
+        except (ImportError, AttributeError):
             session_backward = None
         if session_backward is None or os.environ.get("MOJOLEARN_MAMBA3_LEGACY_SETUP") == "1":
             return native
@@ -1643,11 +1643,11 @@ class Mamba3Block(_MambaBase):
         values = list(info(session))
         keys = ("weight_uploads", "weight_recopies", "weight_reuses",
                 "backward_reuses", "backward_recomputes", "stages_held")
-        return dict(zip(keys, (int(v) for v in values)))
+        return dict(zip(keys, (int(v) for v in values)))  # glue: names six counter values
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        for name in ("_prefill_session", "_prefill_binding"):
+        for name in ("_prefill_session", "_prefill_binding"):  # glue: drops two cached attributes
             state.pop(name, None)
         return state
 
@@ -1710,7 +1710,7 @@ class Mamba3Block(_MambaBase):
             # pending_k, pending_v, y_out, h_last_out, k_last_out,
             # v_last_out, theta_last_out
             [addr_ro(x, name="x")]
-            + [addr_ro(a, name="weight") for a in w]
+            + [addr_ro(a, name="weight") for a in w]  # glue: one address per weight tensor
             + [addr(theta, name="theta"), addr(h, name="h"),
                addr(bq, name="buffer_qrot"), addr(bk, name="buffer_krot"),
                addr(bv, name="buffer_v"), addr(bd, name="buffer_dt"),
@@ -1818,7 +1818,7 @@ class _Mamba3DecodeSession:
         ext = block._extension()
         try:
             create = getattr(ext, "mamba3_session_create", None)
-        except ImportError:
+        except (ImportError, AttributeError):
             create = None
         host = create is None and _exports(ext, "mamba3_decode_step")
         if create is None and not host:
@@ -1834,16 +1834,16 @@ class _Mamba3DecodeSession:
         parts = self._state_parts(what)
         if host:
             self._native = None
-            self._hw = [_private_copy(a) for a in block._w]
-            self._parts = [_private_copy(a) for a in parts]
+            self._hw = [_private_copy(a) for a in block._w]  # glue: private copy per weight tensor
+            self._parts = [_private_copy(a) for a in parts]  # glue: private copy per state tensor
             self._q = int(state.buffered_tokens)
             self._pending = bool(state.pending)
         else:
             self._native = create()
             ext.mamba3_session_open(
                 self._native,
-                [addr_ro(a, name="weight") for a in block._w]
-                + [addr(a, name=name) for a, name in zip(parts, self._STATE_NAMES)],
+                [addr_ro(a, name="weight") for a in block._w]  # glue: one address per weight tensor
+                + [addr(a, name=name) for a, name in zip(parts, self._STATE_NAMES)],  # glue: one address per state tensor
                 [self._b, block.d_model, int(state.buffered_tokens),
                  1 if state.pending else 0])
         self._open = True
@@ -1870,7 +1870,7 @@ class _Mamba3DecodeSession:
             (b, nh, _M3_D_STATE), (b, nh, _M3_HEADDIM),
         )
         return tuple(_state_buf(getattr(st, name), what, name, shape)
-                     for name, shape in zip(self._STATE_NAMES, shapes))
+                     for name, shape in zip(self._STATE_NAMES, shapes))  # glue: checks each named state buffer
 
     def step(self, x):
         what = "Mamba3DecodeSession.step"
@@ -1889,17 +1889,17 @@ class _Mamba3DecodeSession:
         )
         if self._native is None:
             addrs = ([addr_ro(x, name="x")]
-                     + [addr_ro(a, name="weight") for a in self._hw]
-                     + [addr(a, name="state") for a in self._parts]
+                     + [addr_ro(a, name="weight") for a in self._hw]  # glue: one address per weight tensor
+                     + [addr(a, name="state") for a in self._parts]  # glue: one address per state tensor
                      + [addr(y, name="y")]
-                     + [addr(a, name="report") for a in reports])
+                     + [addr(a, name="report") for a in reports])  # glue: one address per report buffer
             self._q = int(self._ext.mamba3_decode_step(
                 addrs, [b, blk.d_model, self._q, 1 if self._pending else 0]))
             self._pending = False
         else:
             self._q = int(self._ext.mamba3_session_step(
                 self._native, [addr_ro(x, name="x"), addr(y, name="y")]
-                + [addr(a, name="report") for a in reports]))
+                + [addr(a, name="report") for a in reports]))  # glue: one address per report buffer
         blk.h_last_, blk.k_last_, blk.v_last_, blk.theta_last_ = reports
         return y
 
@@ -1908,12 +1908,12 @@ class _Mamba3DecodeSession:
         self._require_open(what)
         parts = self._state_parts(what)
         if self._native is None:
-            for dst, src in zip(parts, self._parts):
+            for dst, src in zip(parts, self._parts):  # glue: memcopy per state tensor
                 memcopy(addr(dst, name="state"), addr_ro(src, name="resident"), 4 * int(src.size))
             q, pending = self._q, self._pending
         else:
             q, pending = self._ext.mamba3_session_export_state(
-                self._native, [addr(a, name="state") for a in parts])
+                self._native, [addr(a, name="state") for a in parts])  # glue: one address per state tensor
             q, pending = int(q), bool(pending)
         self._state.buffered_tokens = q
         self._state.pending = pending
@@ -1925,12 +1925,12 @@ class _Mamba3DecodeSession:
         parts = self._state_parts(what)
         q, pending = int(self._state.buffered_tokens), bool(self._state.pending)
         if self._native is None:
-            for dst, src in zip(self._parts, parts):
+            for dst, src in zip(self._parts, parts):  # glue: memcopy per state tensor
                 memcopy(addr(dst, name="resident"), addr_ro(src, name="state"), 4 * int(dst.size))
             self._q, self._pending = q, pending
         else:
             self._ext.mamba3_session_load_state(
-                self._native, [addr(a, name="state") for a in parts],
+                self._native, [addr(a, name="state") for a in parts],  # glue: one address per state tensor
                 [q, 1 if pending else 0])
         return self._state
 

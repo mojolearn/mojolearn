@@ -433,3 +433,69 @@ def ivf_merge_shards_binding(addrs: PythonObject, params: PythonObject) raises -
     out.append(PythonObject(status))
     out.append(PythonObject(bad_row))
     return out
+
+
+# ===========================================================================
+# ivf_shard_plan (pyglue-sweep, 2026-10-03): `DistributedIVFIndex.from_index`'s
+# validation and row split, which was Python over every stored row (a sort of
+# the original ids, a dict of local ids, a list per shard). Shard p holds the
+# stored rows [lo_p, hi_p), lo_p = p * n // shards.
+#   addrs   0 indices (n int32, read: original row id of each stored row)
+#           1 offsets (n_lists + 1 int32, read)
+#           2 shard_offsets_out (shards * (n_lists + 1) int32): offsets
+#             clipped to the shard, max(0, min(o, hi) - lo)
+#           3 local_out (n int32): each stored row's rank among its shard's
+#             original ids (the shard's list_indices_)
+#           4 map_out (n int32): shard p's original ids ascending at [lo_p, hi_p)
+#   params  0 n, 1 n_lists, 2 shards
+#   returns status: 0 planned, 1 the ids are not a permutation of 0..n-1,
+#           2 the offsets are not 0 .. n nondecreasing
+# ===========================================================================
+
+
+def ivf_shard_plan_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    var n = Int(py=params[0])
+    var n_lists = Int(py=params[1])
+    var shards = Int(py=params[2])
+    if n < 0 or n_lists < 1 or shards < 1 or len(addrs) != 5:
+        raise Error("ivf_shard_plan: needs 5 addresses, n >= 0, n_lists >= 1 and shards >= 1")
+    var ind = i32_ptr(Int(py=addrs[0]))
+    var off = i32_ptr(Int(py=addrs[1]))
+    var soff = i32_ptr(Int(py=addrs[2]))
+    var loc = i32_ptr(Int(py=addrs[3]))
+    var mp = i32_ptr(Int(py=addrs[4]))
+    var L1 = n_lists + 1
+    if Int(off.unsafe_load(0)) != 0 or Int(off.unsafe_load(n_lists)) != n:
+        return PythonObject(2)
+    for j in range(n_lists):
+        if off.unsafe_load(j) > off.unsafe_load(j + 1):
+            return PythonObject(2)
+    # owner shard of every original id; a repeat or an id out of range is
+    # not a permutation
+    var owner = List[Int32](length=n, fill=Int32(-1))
+    for p in range(shards):
+        var lo = p * n // shards
+        var hi = (p + 1) * n // shards
+        for i in range(lo, hi):
+            var v = Int(ind.unsafe_load(i))
+            if v < 0 or v >= n or owner[v] != -1:
+                return PythonObject(1)
+            owner[v] = Int32(p)
+    # ids ascending: each shard's map and every id's rank in its shard
+    var cnt = List[Int](length=shards, fill=0)
+    var rank = List[Int32](length=n, fill=Int32(0))
+    for v in range(n):
+        var p = Int(owner[v])
+        var r = cnt[p]
+        mp.unsafe_store(p * n // shards + r, Int32(v))
+        rank[v] = Int32(r)
+        cnt[p] = r + 1
+    for i in range(n):
+        loc.unsafe_store(i, rank[Int(ind.unsafe_load(i))])
+    for p in range(shards):
+        var lo = p * n // shards
+        var hi = (p + 1) * n // shards
+        for j in range(L1):
+            var o = Int(off.unsafe_load(j))
+            soff.unsafe_store(p * L1 + j, Int32(max(0, min(o, hi) - lo)))
+    return PythonObject(0)

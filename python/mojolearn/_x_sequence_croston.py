@@ -38,7 +38,15 @@ class _Croston:
     def predict(self, h, X=None, level=None):
         if level is not None:
             raise NotImplementedError("Croston: prediction intervals are not implemented")
-        f = np.repeat(self.mean_[:, None], int(h), axis=1)
+        h = int(h)
+        if h < 0:
+            raise ValueError("Croston: h must be >= 0")
+        B = self.mean_.shape[0]
+        f = np.empty((B, h), dtype=np.float32)
+        # every row its series' mean, in Mojo (`croston_forecast`)
+        if h:
+            _backend.binding("_mojolearn_x_sequence", self.numeric_mode).croston_forecast(
+                [self.mean_.ctypes.data, f.ctypes.data], [B, h])
         return {"mean": f[0] if self._one else f}
 
     def forecast(self, y, h, X=None, X_future=None, level=None, fitted=False):

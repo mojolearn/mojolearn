@@ -21,7 +21,7 @@ from ._arrays import _addr, _addr_ro
 from ._labels import is_bool, flatten_labels
 # The splitters' random draws (lane/metrics): a module-level import, so the
 # lane selector sees model_selection reach the x_metrics binding.
-from ._expansion_metrics import CounterRng, _mix64, fold_rows, stratified_fold_rows, _py2mojo
+from ._expansion_metrics import CounterRng, _mix64, fold_rows, stratified_fold_rows
 
 #: The binding the splitters' permutations and the scorers' added metrics run
 #: on (python/mojolearn/_expansion_metrics.py `_BINDING`). Named here because
@@ -771,7 +771,7 @@ class _GroupCodes:
     def mapped(self, table):
         """Each row's `table[code]` as int32 words (kept alive by the caller)."""
         from ._buffer import _output_store
-        tbl = array.array('i', table)
+        tbl = table if isinstance(table, array.array) and table.typecode == 'i' else array.array('i', table)
         dst = _output_store('i', self.n)
         self._gather(tbl.buffer_info()[0], len(tbl), _addr_ro(self.codes), self.n, dst.buffer_info()[0])
         return dst
@@ -799,14 +799,11 @@ class _GroupCodes:
             raise RuntimeError('mojolearn: select_fold_i64 disagrees with the group counts')
         return out
 
-    def split_by_fold(self, to_fold, k):
-        """[(train, test)] per fold f < k from each group's fold `to_fold[g]`."""
+    def split_by_fold(self, to_fold, k, sizes):
+        """[(train, test)] per fold f < k from each group's fold `to_fold[g]`
+        (int32 words) and each fold's row count `sizes[f]`."""
         words = self.mapped(to_fold)
-        sizes = [0] * k
-        for g, f in enumerate(to_fold):
-            if 0 <= f < k:
-                sizes[f] += self.counts[g]
-        return [self.rows(words, f, sizes[f]) for f in range(k)]
+        return [self.rows(words, f, int(sizes[f])) for f in range(k)]
 
 
 _LITTLE_ENDIAN = __import__('sys').byteorder == 'little'
@@ -940,7 +937,7 @@ class StratifiedKFold(_KFoldBase):
         The x_metrics first-rows route (`_first_seen_native`), else the
         labels encoded by `encode_labels` and renumbered by first appearance
         in Mojo (`first_seen_i32`): no per-row Python either way."""
-        fs = _first_seen_native(y) if _py2mojo(None) else None
+        fs = _first_seen_native(y)
         if fs is not None:
             enc, k, counts = fs
         else:
@@ -958,15 +955,12 @@ class StratifiedKFold(_KFoldBase):
             warnings.warn(f'The least populated class in y has only {min(counts)} members, which is less '
                           f'than n_splits={self.n_splits}.', UserWarning, stacklevel=3)
         # alloc[i][c] = the positions p of class c in sorted(enc) (the run
-        # [s, e)) with p % n_splits == i, counted by floor division (k x K)
+        # [s, e)) with p % n_splits == i: an int64 (K, k) Array from the base
+        # binding's `strat_alloc_i64` (lane pyglue-numeric: a Python table)
         K = self.n_splits
-        alloc = [[0] * k for _ in range(K)]
-        s = 0
-        for c in range(k):
-            e = s + counts[c]
-            for i in range(K):
-                alloc[i][c] = (e - 1 - i) // K - (s - 1 - i) // K
-            s = e
+        alloc = empty((K, k), '<i8')
+        cnt = array.array('q', counts)
+        _native('strat_alloc_i64')(cnt.buffer_info()[0], k, K, _addr(alloc))
         return enc, k, counts, alloc
 
     def _fold_of_rows(self, enc, k, counts, alloc, rng):
@@ -974,7 +968,6 @@ class StratifiedKFold(_KFoldBase):
         _make_test_folds; with `rng`, each class's fold sequence permuted by
         its draw), by `strat_fold_assign_i32`."""
         n, K = enc.size, self.n_splits
-        flat = array.array('q', [alloc[f][c] for f in range(K) for c in range(k)])
         cnt = array.array('q', counts)
         perms = None
         if rng is not None:
@@ -982,7 +975,7 @@ class StratifiedKFold(_KFoldBase):
             for p in rng.permutation_rows(counts):
                 perms.frombytes(p.tobytes())
         out = empty((n,), '<i4')
-        _native('strat_fold_assign_i32')(_addr_ro(enc), n, k, K, flat.buffer_info()[0],
+        _native('strat_fold_assign_i32')(_addr_ro(enc), n, k, K, _addr_ro(alloc),
                                          perms.buffer_info()[0] if perms is not None and len(perms) else 0,
                                          cnt.buffer_info()[0], _addr(out))
         return out
@@ -1003,26 +996,17 @@ class GroupKFold(_KFoldBase):
         if self.n_splits > m:
             raise ValueError(f'Cannot have number of splits n_splits={self.n_splits} greater than the '
                              f'number of groups: {m}.')
-        # each group's fold as a table, gathered per row (lane/py-misc-msel);
-        # the same assignment `_test_folds` makes
-        to_fold = [0] * m
-        if self.shuffle:
-            perm = _rng(self.random_state).permutation(m)
-            start = 0
-            for f in range(self.n_splits):
-                size = m // self.n_splits + (f < m % self.n_splits)
-                for gi in perm[start:start + size]:
-                    to_fold[gi] = f
-                start += size
-        else:
-            sizes = gc.counts
-            order = sorted(range(m), key=lambda i: (sizes[i], i))[::-1]
-            load = [0] * self.n_splits
-            for gi in order:
-                f = min(range(self.n_splits), key=lambda j: (load[j], j))
-                load[f] += sizes[gi]
-                to_fold[gi] = f
-        yield from gc.split_by_fold(to_fold, self.n_splits)
+        # each group's fold and each fold's row count by the base binding's
+        # `group_fold_assign_i32` (the assignment `_test_folds` makes; lane
+        # pyglue-numeric: Python loops over the groups), gathered per row
+        perm = _rng(self.random_state).permutation_rows([m])[0] if self.shuffle else None
+        to_fold = array.array('i', bytes(4 * m))
+        sizes = array.array('q', bytes(8 * self.n_splits))
+        counts = array.array('q', gc.counts)
+        _native('group_fold_assign_i32')(counts.buffer_info()[0], m, self.n_splits,
+                                         perm.buffer_info()[0] if perm is not None and m else 0,
+                                         to_fold.buffer_info()[0], sizes.buffer_info()[0])
+        yield from gc.split_by_fold(to_fold, self.n_splits, sizes)
 
     def _test_folds(self, X, y, groups):
         g = _labels_list(groups, 'groups')
@@ -1062,19 +1046,34 @@ class StratifiedGroupKFold(_KFoldBase):
 
     def split(self, X, y=None, groups=None):
         n = _n_samples(X)
-        labels = _labels_list(y)
         gc = _GroupCodes.get(groups, n, 'groups')
-        if gc is None or len(labels) != n:
-            yield from super().split(X, y, groups)
+        if gc is None:
+            yield from super().split(X, y, groups)      # the sabotage control's route
             return
-        # the group codes natively, each group's fold as a table gathered
-        # per row (lane/py-misc-msel); the assignment is `_assign`'s
-        fold_groups = self._assign(labels, gc.codes.tolist(), gc.m)
-        to_fold = [-1] * gc.m
-        for f, chosen in enumerate(fold_groups):
-            for gi in chosen:
-                to_fold[gi] = f
-        yield from gc.split_by_fold(to_fold, self.n_splits)
+        # the class codes in first-seen order (natively; the dict encoder for
+        # labels the native encoder refuses: glue over label objects), each
+        # group's fold and each fold's rows by the base binding's
+        # `strat_group_assign_i32` (lane pyglue-numeric: `_assign`'s Python
+        # loops over the rows and groups), gathered per row
+        fs = _first_seen_native(y)
+        if fs is not None:
+            yenc, k = fs[0], fs[1]
+        else:
+            codes, k = _encode_first_seen(_labels_list(y))
+            yenc = Array._owned(array.array('i', codes), (len(codes),), '<i4', 'C')
+        if yenc.size != n:
+            raise ValueError(f'y has {yenc.size} labels for {n} samples')
+        m = gc.m
+        perm = _rng(self.random_state).permutation_rows([m])[0] if self.shuffle else None
+        to_fold = array.array('i', bytes(4 * m))
+        sizes = array.array('q', bytes(8 * self.n_splits))
+        bad = int(_native('strat_group_assign_i32')(
+            [_addr_ro(yenc), _addr_ro(gc.codes), perm.buffer_info()[0] if perm is not None else 0,
+             to_fold.buffer_info()[0], sizes.buffer_info()[0]], [n, k, m, self.n_splits]))
+        if bad:
+            raise ValueError(f'n_splits={self.n_splits} cannot be greater than the number of members in '
+                             'each class.')
+        yield from gc.split_by_fold(to_fold, self.n_splits, sizes)
 
     def _test_folds(self, X, y, groups):
         labels = _labels_list(y)
@@ -1971,31 +1970,7 @@ def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None, n_jobs=None
     _require_serial(n_jobs, 'raise', 'cross_val_predict')
     X, y, folds = _cv_folds(estimator, X, y, cv, groups)
     n = len(X)
-    if _py2mojo(None):
-        return _cross_val_predict_native(estimator, X, y, folds, n, method)
-    seen = [0] * n
-    for _, test in folds:
-        for i in test.tolist():
-            seen[i] += 1
-    if any(v != 1 for v in seen):
-        raise ValueError('cross_val_predict only works for partitions')
-    rows = [None] * n
-    width = None
-    for train, test in folds:
-        est = _clone(estimator)
-        est.fit(_take_rows(X, train), None if y is None else _take_rows(y, train))
-        pred = getattr(est, method)(_take_rows(X, test))
-        vals = pred.tolist() if hasattr(pred, 'tolist') else list(pred)
-        for i, v in zip(test.tolist(), vals):
-            rows[i] = v
-        width = getattr(pred, 'shape', (0,))[1:] if hasattr(pred, 'shape') else ()
-    if width:
-        return Array.from_list([float(v) for row in rows for v in row], '<f8').reshape((n,) + tuple(width))
-    if all(isinstance(v, numbers.Integral) for v in rows):
-        return Array.from_list(rows, '<i8')
-    if all(isinstance(v, numbers.Real) for v in rows):
-        return Array.from_list(rows, '<f8')
-    return rows
+    return _cross_val_predict_native(estimator, X, y, folds, n, method)
 
 
 def _cross_val_predict_native(estimator, X, y, folds, n, method):
@@ -2373,33 +2348,23 @@ def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.5
     # scikit-learn permutes each fold's training rows ONCE (in fold order)
     # and takes nested prefixes of that one order for every size
     rng = _rng(random_state) if shuffle else None
-    p2m = _py2mojo(None)
     orders = []
-    if p2m:
-        # lane apple-fast-py2mojo-core: the same draws, in fold order, as
-        # Int64 rows from one device program, and each fold's training rows
-        # reordered by the core gather; no Python int per row
-        perms = rng.permutation_rows([int(tr.size) for tr, _ in folds]) if rng is not None else None
-        for f, (train, _) in enumerate(folds):
-            tr = train if train.dtype == '<i8' and train._has_order('C') else train.astype('<i8')._as_c()
-            if perms is not None and tr.size:
-                perm = Array._owned(perms[f], (tr.size,), '<i8', 'C')
-                out = empty((tr.size,), '<i8')
-                _native('gather_i64')(_addr_ro(tr), tr.size, _addr_ro(perm), tr.size, _addr(out))
-                tr = out
-            orders.append(tr)
-    else:
-        for train, _ in folds:
-            tr_idx = train.tolist()
-            if rng is not None:
-                perm = rng.permutation(len(tr_idx))
-                tr_idx = [tr_idx[j] for j in perm]
-            orders.append(tr_idx)
+    # the draws, in fold order, as Int64 rows from one device program,
+    # and each fold's training rows reordered by the core gather
+    perms = rng.permutation_rows([int(tr.size) for tr, _ in folds]) if rng is not None else None
+    for f, (train, _) in enumerate(folds):
+        tr = train if train.dtype == '<i8' and train._has_order('C') else train.astype('<i8')._as_c()
+        if perms is not None and tr.size:
+            perm = Array._owned(perms[f], (tr.size,), '<i8', 'C')
+            out = empty((tr.size,), '<i8')
+            _native('gather_i64')(_addr_ro(tr), tr.size, _addr_ro(perm), tr.size, _addr(out))
+            tr = out
+        orders.append(tr)
     tr_s, te_s, ft, st = [], [], [], []
     for a in sizes:
         row_tr, row_te, row_ft, row_st = [], [], [], []
         for (train, test), tr_idx in zip(folds, orders):
-            sub = tr_idx[0:a] if p2m else _as_index(tr_idx[:a])
+            sub = tr_idx[0:a]
             est = _clone(estimator)
             t0 = time.perf_counter()
             est.fit(_take_rows(X, sub), _take_rows(y, sub))

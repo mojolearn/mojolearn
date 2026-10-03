@@ -54,7 +54,7 @@ class STL:
         if low_pass is None:
             low_pass = period + 1
             low_pass += (low_pass % 2) == 0
-        for name, v in (("seasonal_deg", seasonal_deg), ("trend_deg", trend_deg), ("low_pass_deg", low_pass_deg)):
+        for name, v in (("seasonal_deg", seasonal_deg), ("trend_deg", trend_deg), ("low_pass_deg", low_pass_deg)):  # glue: the three named degree arguments
             if v not in (0, 1):
                 raise ValueError(f"{name} must be 0 or 1")
         self.endog = y
@@ -80,12 +80,12 @@ class STL:
         if outer_iter is None:
             outer_iter = 15 if self.robust else 0
         B, n = self.endog.shape
-        outs = [np.zeros((B, n), dtype=np.float32) for _ in range(4)]
+        outs = [np.zeros((B, n), dtype=np.float32) for _ in range(4)]  # glue: the four output buffers
         b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
-        b.stl([self.endog.ctypes.data] + [o.ctypes.data for o in outs],
+        b.stl([self.endog.ctypes.data] + [o.ctypes.data for o in outs],  # glue: the four output buffer addresses
               [B, n, self.period, self.seasonal, self.trend, self.low_pass,
                self.seasonal_deg + 2 * self.trend_deg + 4 * self.low_pass_deg,
                self.seasonal_jump, self.trend_jump, self.low_pass_jump, int(inner_iter), int(outer_iter)])
-        season, trend, weights, resid = (o[0] if self._one else o for o in outs)
+        season, trend, weights, resid = (o[0] if self._one else o for o in outs)  # glue: the four output buffers
         observed = self.endog[0] if self._one else self.endog
         return DecomposeResult(observed, season, trend, resid, weights)

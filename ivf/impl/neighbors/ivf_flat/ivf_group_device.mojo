@@ -349,3 +349,87 @@ def ivf_list_layout_device(
     _ = tv^
     _ = cnt^
     return (offsets^, list_indices^, list_data^, max_label)
+
+
+def _unlayout_labels_kernel(off: _I32P, ind: _U32P, n_lists_in: Int32, n_slots_in: Int32, labels: _U32P):
+    """Slot s: labels[ind[s]] = its list (off[l] <= s < off[l + 1])."""
+    var s = Int(block_idx.x) * _TPB + Int(thread_idx.x)
+    if s < Int(n_slots_in):
+        labels[Int(ind[s])] = UInt32(_upper_bound(off, Int(n_lists_in) + 1, s) - 1)
+
+
+def _unlayout_rows_kernel(ind: _U32P, data: MutPointer[Float32, MutAnyOrigin], n_slots_in: Int32, dim_in: Int32,
+                          x: MutPointer[Float32, MutAnyOrigin]):
+    """x[ind[s], :] = data[s, :], one thread per element: a copy."""
+    var t = Int(block_idx.x) * _TPB + Int(thread_idx.x)
+    var dim = Int(dim_in)
+    if t < Int(n_slots_in) * dim:
+        var s = t // dim
+        var f = t - s * dim
+        x[Int(ind[s]) * dim + f] = data[t]
+
+
+def ivf_extend_layout_device(
+    ctx: DeviceContext,
+    offsets: List[Int32],
+    list_indices: List[UInt32],
+    list_data: List[Float32],
+    n_rows: Int,
+    dim: Int,
+    n_lists: Int,
+    mut new_labels: DeviceBuffer[DType.uint32],
+    new_x: List[Float32],
+    n_new: Int,
+) raises -> Tuple[List[Int32], List[UInt32], List[Float32]]:
+    """`extend_list_layout` on the device (lane cgr5-owed): the stored rows
+    put back in id order with their list as label, the new rows appended
+    under the ids n_rows, n_rows + 1, ..., then `ivf_list_layout_device`
+    over all of them (stable by label, ascending id within a list). The
+    result is `build_list_layout` over the concatenated rows and labels,
+    which is what `extend_list_layout` returns. Integers and copies only."""
+    if len(offsets) != n_lists + 1 or len(list_indices) != n_rows or len(list_data) != n_rows * dim:
+        raise Error("extend_list_layout: the index arrays disagree with n_rows, dim and n_lists")
+    if len(new_labels) < n_new or len(new_x) != n_new * dim:
+        raise Error(
+            "extend_list_layout: new_labels has " + String(len(new_labels))
+            + " entries and new_x " + String(len(new_x)) + " values, expected "
+            + String(n_new) + " and " + String(n_new * dim)
+        )
+    var total = n_rows + n_new
+    var d_off = ctx.enqueue_create_buffer[DType.int32](n_lists + 1)
+    var d_ind = ctx.enqueue_create_buffer[DType.uint32](max(n_rows, 1))
+    var d_data = ctx.enqueue_create_buffer[DType.float32](max(n_rows * dim, 1))
+    var labels = ctx.enqueue_create_buffer[DType.uint32](max(total, 1))
+    var x = ctx.enqueue_create_buffer[DType.float32](max(total * dim, 1))
+    ctx.enqueue_copy(dst_buf=d_off, src_ptr=offsets.unsafe_ptr())
+    if n_rows > 0:
+        ctx.enqueue_copy(dst_buf=d_ind.create_sub_buffer[DType.uint32](0, n_rows), src_ptr=list_indices.unsafe_ptr())
+        ctx.enqueue_function[_unlayout_labels_kernel](
+            d_off.unsafe_ptr(), d_ind.unsafe_ptr(), Int32(n_lists), Int32(n_rows), labels.unsafe_ptr(),
+            grid_dim=_grid(n_rows), block_dim=_TPB,
+        )
+        if dim > 0:
+            ctx.enqueue_copy(dst_buf=d_data.create_sub_buffer[DType.float32](0, n_rows * dim), src_ptr=list_data.unsafe_ptr())
+            ctx.enqueue_function[_unlayout_rows_kernel](
+                d_ind.unsafe_ptr(), d_data.unsafe_ptr(), Int32(n_rows), Int32(dim), x.unsafe_ptr(),
+                grid_dim=_grid(n_rows * dim), block_dim=_TPB,
+            )
+    if n_new > 0:
+        ctx.enqueue_copy(
+            dst_buf=labels.create_sub_buffer[DType.uint32](n_rows, n_new),
+            src_buf=new_labels.create_sub_buffer[DType.uint32](0, n_new),
+        )
+        if dim > 0:
+            ctx.enqueue_copy(dst_buf=x.create_sub_buffer[DType.float32](n_rows * dim, n_new * dim), src_ptr=new_x.unsafe_ptr())
+    var r = ivf_list_layout_device(ctx, labels, x, total, dim, n_lists, True)
+    if total > 0 and Int(r[3]) >= n_lists:
+        raise Error(
+            "extend_list_layout: a new row carries label " + String(Int(r[3]))
+            + ", outside [0, " + String(n_lists) + ")"
+        )
+    _ = d_off^
+    _ = d_ind^
+    _ = d_data^
+    _ = labels^
+    _ = x^
+    return (r[0].copy(), r[1].copy(), r[2].copy())

@@ -156,23 +156,28 @@ def kept(a: Int, fps: Int, tps: Int, keep: Int, c: Int, drop: Bool) -> List[Int]
 
 def roc_arrays(a: Int, fps: Int, tps: Int, thr: Int, keep: Int, c: Int, drop: Bool,
                out_fpr: Int, out_tpr: Int, out_thr: Int) raises -> Int:
-    """`roc_curve`'s three Float64 arrays for fps[c-1] > 0 and tps[c-1] > 0
-    (the caller checks): the kept points after a leading (0, 0, +inf).
+    """`roc_curve`'s three Float64 arrays: the kept points after a leading
+    (0, 0, +inf). fps[c-1] <= 0 (no negatives) makes every fpr NaN and
+    tps[c-1] <= 0 (no positives) every tpr NaN, scikit-learn's values (the
+    caller warns; lane pyglue-sweep moved that case here from Python).
     Returns their length."""
+    if c <= 0:
+        raise Error("x_metrics epilogue: an empty curve")
     var F = _w(a, fps + c - 1)
     var T = _w(a, tps + c - 1)
-    if not (F > 0.0 and T > 0.0):
-        raise Error("x_metrics epilogue: an empty class goes the Python way")
+    var nan = bitcast[DType.float64](UInt64(0x7FF8000000000000))
+    var f_ok = F > 0.0
+    var t_ok = T > 0.0
     var ks = kept(a, fps, tps, keep, c, drop)
     var pf = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=out_fpr)
     var pt = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=out_tpr)
     var ph = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=out_thr)
-    pf[0] = 0.0
-    pt[0] = 0.0
+    pf[0] = 0.0 if f_ok else nan
+    pt[0] = 0.0 if t_ok else nan
     ph[0] = bitcast[DType.float64](UInt64(0x7FF0000000000000))
     for j in range(len(ks)):
-        pf[j + 1] = _w(a, fps + ks[j]) / F
-        pt[j + 1] = _w(a, tps + ks[j]) / T
+        pf[j + 1] = _w(a, fps + ks[j]) / F if f_ok else nan
+        pt[j + 1] = _w(a, tps + ks[j]) / T if t_ok else nan
         ph[j + 1] = _w(a, thr + ks[j])
     return len(ks) + 1
 
@@ -565,14 +570,15 @@ def _pr_keep(a: Int, tps: Int, c: Int, drop: Bool) -> List[Int]:
 
 def pr_arrays(a: Int, fps: Int, tps: Int, thr: Int, c: Int, drop: Bool,
               out_prec: Int, out_rec: Int, out_thr: Int) raises -> Int:
-    """`precision_recall_curve_options` for tps[c-1] != 0 (the caller
-    checks): precision (m + 1, the last 1.0), recall (m + 1, the last 0.0),
-    thresholds (m), each reversed, m = the kept points. Returns m."""
+    """`precision_recall_curve_options`: precision (m + 1, the last 1.0),
+    recall (m + 1, the last 0.0), thresholds (m), each reversed, m = the
+    kept points. tps[c-1] == 0 (no positives) makes every recall 1.0,
+    scikit-learn's value (the caller warns; lane pyglue-sweep moved that
+    case here from Python). Returns m."""
     if c <= 0:
-        raise Error("x_metrics epilogue: an empty curve goes the Python way")
+        raise Error("x_metrics epilogue: an empty curve")
     var T = _w(a, tps + c - 1)
-    if not (T != 0.0):
-        raise Error("x_metrics epilogue: no positives goes the Python way")
+    var t_ok = T != 0.0
     var ks = _pr_keep(a, tps, c, drop)
     var m = len(ks)
     var pp = _dp(out_prec)
@@ -584,7 +590,7 @@ def pr_arrays(a: Int, fps: Int, tps: Int, thr: Int, c: Int, drop: Bool,
         var d = t + _w(a, fps + i)
         var r = m - 1 - j
         pp[r] = t / d if d != 0.0 else 0.0
-        pr[r] = t / T
+        pr[r] = t / T if t_ok else 1.0
         ph[r] = _w(a, thr + i)
     pp[m] = 1.0
     pr[m] = 0.0
@@ -725,7 +731,16 @@ def auc_xy(x_addr: Int, y_addr: Int, n: Int) raises -> Float64:
     var terms = List[Float64](capacity=n - 1)
     for i in range(1, n):
         terms.append(pinned_mul_f64(X[i] - X[i - 1], Y[i] + Y[i - 1]) / 2.0)
-    return direction * fsum_strict(terms)
+    try:
+        return direction * fsum_strict(terms)
+    except:
+        # a non-finite term or a possible overflow (lane pyglue-sweep: this
+        # was the Python trapezoid's portable route): the IEEE left-to-right
+        # sum, whose inf or NaN is the answer
+        var s: Float64 = 0.0
+        for i in range(len(terms)):
+            s = s + terms[i]
+        return direction * s
 
 
 def mi_contingency(c_addr: Int, ka: Int, kb: Int) raises -> Float64:
@@ -965,3 +980,79 @@ def ovo_pair(codes_addr: Int, s_addr: Int, n: Int, k: Int, a: Int, b: Int,
         fb[at] = Int32(1) if c == b else Int32(0)
         at += 1
     return at
+
+
+# ---------------------------------------------------------------------------
+# lane pyglue-sweep (2026-10-03): the clustering metrics' contingency
+# epilogue, which was Python over the contingency cells and the classes.
+# ---------------------------------------------------------------------------
+
+def _entropy_of(counts: List[Int]) -> Float64:
+    """`_entropy_counts`: 1.0 for a zero total, else -fsum of (c / total) *
+    (log c - log total) over the nonzero counts in order."""
+    var total = 0
+    for i in range(len(counts)):
+        total += counts[i]
+    if total == 0:
+        return 1.0
+    var ft = Float64(total)
+    var lt = portable_log_c(ft)
+    var terms = List[Float64]()
+    for i in range(len(counts)):
+        var c = counts[i]
+        if c != 0:
+            terms.append(pinned_mul_f64(Float64(c) / ft, portable_log_c(Float64(c)) - lt))
+    return -fsum(terms)
+
+
+def contingency_stats(o_addr: Int, ka: Int, kb: Int, kk: Int, eps: Float64, c_out: Int, f_out: Int,
+                      rows_out: Int, cols_out: Int, pairs_out: Int, ent_out: Int) raises:
+    """From the device grouping's Int32 offsets (`kk * kk + 1` words, row i
+    of the contingency at word i * kk): the ka x kb Int64 counts C (row
+    major) at c_out; C + eps as Float64 at f_out (0 = none); the row and
+    column sums (Int64) at rows_out / cols_out; scikit-learn's pair
+    confusion [c00, c01, c10, c11] (Int64) at pairs_out; the row and column
+    entropies (`_entropy_counts`, Float64) at ent_out. Every count is an
+    exact integer below 2^31, every pair count below 2^62."""
+    if ka < 0 or kb < 0 or kk < ka or kk < kb:
+        raise Error("x_metrics contingency_stats: invalid sizes")
+    var o = IP(unsafe_from_address=o_addr)
+    var C = _qp(c_out)
+    var R = _qp(rows_out)
+    var K = _qp(cols_out)
+    var rows = List[Int](length=ka, fill=0)
+    var cols = List[Int](length=kb, fill=0)
+    var n = 0
+    var sq = 0
+    for i in range(ka):
+        for j in range(kb):
+            var v = Int(o[i * kk + j + 1]) - Int(o[i * kk + j])
+            C[i * kb + j] = Int64(v)
+            rows[i] += v
+            cols[j] += v
+            n += v
+            sq += v * v
+    if f_out != 0:
+        var F = _dp(f_out)
+        for q in range(ka * kb):
+            F[q] = Float64(C[q]) + eps
+    var c01 = 0
+    var c10 = 0
+    for i in range(ka):
+        R[i] = Int64(rows[i])
+        for j in range(kb):
+            var v = Int(C[i * kb + j])
+            c01 += v * cols[j]
+            c10 += v * rows[i]
+    for j in range(kb):
+        K[j] = Int64(cols[j])
+    c01 -= sq
+    c10 -= sq
+    var P = _qp(pairs_out)
+    P[0] = Int64(n * n - c01 - c10 - sq)
+    P[1] = Int64(c01)
+    P[2] = Int64(c10)
+    P[3] = Int64(sq - n)
+    var E = _dp(ent_out)
+    E[0] = _entropy_of(rows)
+    E[1] = _entropy_of(cols)

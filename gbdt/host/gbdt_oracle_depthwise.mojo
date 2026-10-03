@@ -142,6 +142,7 @@ from gbdt.host.gbdt_oracle import (
     _binarize_columns,
     _deterministic_sum_lanes,
     _estimate_leaves,
+    _binary_block,
     _half_byte_block,
     _logloss_search_pass,
     _logloss_value,
@@ -575,7 +576,13 @@ def _grow_non_symmetric_tree(
                 var total = 0
                 for k in range(blk.count()):
                     total += Int(blk.folds[k])
-                if blk.policy == POLICY_HALF_BYTE:
+                if blk.policy == POLICY_BINARY:
+                    _binary_block(
+                        blk, block_first_bin, hist_cells, compute, depth_arg,
+                        p_off, p_sz, row_index, stats, cindex, n_rows,
+                        fixed_scale, hist,
+                    )
+                elif blk.policy == POLICY_HALF_BYTE:
                     _half_byte_block(
                         blk, block_first_bin, hist_cells, compute, depth_arg,
                         p_off, p_sz, row_index, stats, cindex, n_rows,
@@ -984,6 +991,7 @@ def gbdt_host_fit_non_symmetric(
     n_features: Int,
     params: GbdtHostTreeParams,
     start: Float64 = 0.0,
+    weights: List[Float32] = List[Float32](),
 ) raises -> GbdtHostNsModel:
     """`train` then `fit_with_test`'s non-symmetric arm on the covered
     configuration (see the module docstring).
@@ -1026,16 +1034,6 @@ def gbdt_host_fit_non_symmetric(
     var one_hot = List[Bool](length=n_features, fill=False)
     var layout = build_layout(grid.fold_counts, one_hot)
     var blocks = blocks_for(layout, n_rows)
-    for b in range(len(blocks)):
-        if blocks[b].policy == POLICY_BINARY:
-            raise Error(
-                "no CPU implementation of _mojolearn_gbdt.gbdt_fit for a"
-                " feature with exactly one border (the BinaryFeatures"
-                " histogram policy, feature "
-                + String(blocks[b].feature_ids[0])
-                + "); the gbdt host binding restates the half-byte and"
-                " one-byte policies only (gbdt/host/gbdt_oracle_depthwise.mojo)"
-            )
     var cindex = _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
     var hist_cells = layout.hist_cells
     var bf_feature = List[Int](length=hist_cells, fill=0)
@@ -1067,6 +1065,14 @@ def gbdt_host_fit_non_symmetric(
         is_logloss and params.loss.method == GBDT_LEAF_NEWTON
         and not bootstrap_on
     )
+    if len(weights) > 0 and not plain_newton:
+        raise Error(
+            "no CPU implementation of _mojolearn_gbdt.gbdt_fit for class_weights"
+            " outside Logloss with Newton leaves and no bootstrap on a"
+            " Depthwise or Lossguide tree"
+        )
+    if len(weights) > 0 and len(weights) != n_rows:
+        raise Error("weights size mismatch")
 
     var losses = List[Float64]()
     var tree_node_offsets = List[Int]()
@@ -1095,12 +1101,6 @@ def gbdt_host_fit_non_symmetric(
             )
             t_layout = build_layout(tree_folds, one_hot)
             t_blocks = blocks_for(t_layout, n_rows)
-            for b in range(len(t_blocks)):
-                if t_blocks[b].policy == POLICY_BINARY:
-                    raise Error(
-                        "no CPU implementation of _mojolearn_gbdt.gbdt_fit for a"
-                        " sampled feature with exactly one border"
-                    )
             t_cindex = List[UInt32](length=n_rows * t_layout.columns, fill=UInt32(0))
             for f in range(n_features):
                 if tree_folds[f] <= 0:
@@ -1124,9 +1124,9 @@ def gbdt_host_fit_non_symmetric(
         if not is_logloss:
             _loss_search_pass(params.loss, y, cursor, n_rows, stats, fv_part, mag_part)
         elif newton:
-            logloss_search_pass_newton(y, cursor, n_rows, border, stats, fv_part, mag_part)
+            logloss_search_pass_newton(y, cursor, n_rows, border, stats, fv_part, mag_part, weights)
         else:
-            _logloss_search_pass(y, cursor, n_rows, border, stats, fv_part, mag_part)
+            _logloss_search_pass(y, cursor, n_rows, border, stats, fv_part, mag_part, weights)
         var fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
         var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
         # `calc_score_model_length_mult` (`random_score_helper.mojo:
@@ -1195,7 +1195,7 @@ def gbdt_host_fit_non_symmetric(
         if plain_newton:
             estimated = _estimate_leaves(
                 y, cursor, row_index, offsets, sizes, n_rows, border,
-                base.l2_leaf_reg, base.leaf_estimation_iterations,
+                base.l2_leaf_reg, base.leaf_estimation_iterations, weights,
             )
         else:
             estimated = _estimate_leaves_for_loss(
@@ -1228,7 +1228,7 @@ def gbdt_host_fit_non_symmetric(
                 losses.append(-Float64(fv) / Float64(n_rows))
 
     if is_logloss:
-        losses.append(-Float64(_logloss_value(y, cursor, n_rows, border)) / Float64(n_rows))
+        losses.append(-Float64(_logloss_value(y, cursor, n_rows, border, weights)) / Float64(n_rows))
     else:
         losses.append(-Float64(_loss_value(params.loss, y, cursor, n_rows)) / Float64(n_rows))
     return GbdtHostNsModel(

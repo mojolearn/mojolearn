@@ -337,13 +337,9 @@ def gbdt_pointwise_host_fit(
     var helpers = List[_PwHelper]()
     for b in range(len(blocks)):
         ref blk = blocks[b]
-        if blk.policy != POLICY_ONE_BYTE and blk.policy != POLICY_HALF_BYTE:
-            raise Error(
-                "no CPU implementation of _mojolearn_gbdt.gbdt_fit for a"
-                " feature with exactly one border under"
-                " use_pointwise_searcher=True (the BinaryFeatures histogram"
-                " policy, feature " + String(blk.feature_ids[0]) + ")"
-            )
+        # every policy, BinaryFeatures included: `_ordered_tree_structure`
+        # builds the binary cells (`_pw_binary_cells`, the
+        # `pw_hb_binary_sum` writeback) for a one-border feature
         var gids = List[Int]()
         var offs = List[Int]()
         var firsts = List[Int]()

@@ -61,7 +61,7 @@ import time
 
 try:
     from ._buffer import flat_bytes
-except ImportError:  # loaded by file path outside the package (tools/tests do this
+except (ImportError, AttributeError):  # loaded by file path outside the package (tools/tests do this
     # for the host fold, which needs only the standard library): a memoryview
     # is enough there, since the package's Array never reaches such a caller
     def flat_bytes(obj, *, name="array"):
@@ -125,9 +125,9 @@ def ordered_fold(gradients, *, prefix=None):
         total = bytes(_f32(prefix).cast("B"))
         rest = gradients
     n = len(_f32(total))
-    if any(len(_f32(g)) != n for g in rest):
+    if any(len(_f32(g)) != n for g in rest):  # glue: length check per shard gradient buffer
         raise ValueError("ordered_fold: gradients differ in length")
-    for g in rest:
+    for g in rest:  # glue: one native fold_pair per shard buffer
         total = fold_pair(total, g)
     return total
 
@@ -135,7 +135,7 @@ def ordered_fold(gradients, *, prefix=None):
 def state_hash(state):
     """sha256 over parameters, m, v and flags, in that order."""
     h = hashlib.sha256()
-    for key in ("parameters", "m", "v", "flags"):
+    for key in ("parameters", "m", "v", "flags"):  # glue: four named state arrays
         h.update(flat_bytes(state[key], name=key))
     return h.hexdigest()
 
@@ -202,7 +202,7 @@ class Coordinator:
         self.ready = threading.Event()  # set once listening; `bound_port` is then the real port
 
     def _refuse(self, reason):
-        for p in self.peers:
+        for p in self.peers:  # glue: one socket per worker peer
             try:
                 _send(p["sock"], {"cmd": "refuse", "reason": reason})
             except OSError:
@@ -222,48 +222,48 @@ class Coordinator:
                 self.peers.append(dict(sock=sock, where=where, **hello))
             return self._drive()
         finally:
-            for p in self.peers:
+            for p in self.peers:  # glue: one socket per worker peer
                 p["sock"].close()
             srv.close()
 
     def _drive(self):
-        names = [p["name"] for p in self.peers]
-        if any(p.get("protocol") != PROTOCOL for p in self.peers):
-            self._refuse("protocol mismatch: " + str({p["name"]: p.get("protocol") for p in self.peers}))
-        owned = sorted(k for p in self.peers for k in p["shards"])
+        names = [p["name"] for p in self.peers]  # glue: names of the worker peers
+        if any(p.get("protocol") != PROTOCOL for p in self.peers):  # glue: protocol check per worker peer
+            self._refuse("protocol mismatch: " + str({p["name"]: p.get("protocol") for p in self.peers}))  # glue: error message over worker peers
+        owned = sorted(k for p in self.peers for k in p["shards"])  # glue: shard ids the workers own
         if owned != list(range(self.K)):
             self._refuse("workers must own shards 0..%d exactly once; got %s"
-                         % (self.K - 1, {p["name"]: p["shards"] for p in self.peers}))
-        for key in ("state", "completed", "n_total"):
-            if len({json.dumps(p[key]) for p in self.peers}) != 1:
-                self._refuse("workers start from different %s: %s" % (key, {p["name"]: p[key] for p in self.peers}))
+                         % (self.K - 1, {p["name"]: p["shards"] for p in self.peers}))  # glue: error message over worker peers
+        for key in ("state", "completed", "n_total"):  # glue: three named protocol fields
+            if len({json.dumps(p[key]) for p in self.peers}) != 1:  # glue: protocol field per worker peer
+                self._refuse("workers start from different %s: %s" % (key, {p["name"]: p[key] for p in self.peers}))  # glue: error message over worker peers
         n_total = int(self.peers[0]["n_total"])
         if self.chained:
             # Contiguous blocks in shard order, so that each worker's fold of
             # its own shards is a run of the flat left fold.
             self.peers.sort(key=lambda p: p["shards"][0])
-            for p in self.peers:
+            for p in self.peers:  # glue: one socket per worker peer
                 if p["shards"] != list(range(p["shards"][0], p["shards"][0] + len(p["shards"]))):
                     self._refuse("chained fold: %s must own a contiguous block, got %s" % (p["name"], p["shards"]))
-            if any(not p.get("chained") for p in self.peers):
+            if any(not p.get("chained") for p in self.peers):  # glue: protocol check per worker peer
                 self._refuse("chained fold: every worker must be started with chained=True")
         rows = []
-        for step in range(int(self.peers[0]["completed"]), self.steps):
+        for step in range(int(self.peers[0]["completed"]), self.steps):  # glue: coordinator protocol loop, one message round per step
             timing = {"step_sent": time.monotonic()}
-            for i, p in enumerate(self.peers):
+            for i, p in enumerate(self.peers):  # glue: one socket per worker peer
                 # `first`: this worker's block opens the fold (no prefix will come)
                 _send(p["sock"], {"cmd": "step", "step": step, "chained": self.chained, "first": self.chained and i == 0})
             grads, losses = {}, {}
             if self.chained:
-                for p in self.peers:
+                for p in self.peers:  # glue: one socket per worker peer
                     head, _ = _recv(p["sock"], 0)
                     if head.get("step") != step or head.get("shards") != p["shards"]:
                         self._refuse("%s answered the wrong step or shards" % p["name"])
-                    for i, k in enumerate(p["shards"]):
+                    for i, k in enumerate(p["shards"]):  # glue: one gradient buffer per owned shard
                         losses[k] = head["losses"][i]
                     timing["gradients_" + p["name"]] = round(time.monotonic() - timing["step_sent"], 3)
                 prefix = b""
-                for p in self.peers:
+                for p in self.peers:  # glue: one socket per worker peer
                     t0 = time.monotonic()
                     _send(p["sock"], {"cmd": "fold", "step": step}, prefix)
                     head, prefix = _recv(p["sock"], n_total * 4)
@@ -273,29 +273,29 @@ class Coordinator:
                     timing["fold_" + p["name"]] = round(time.monotonic() - t0, 3)
                 total = prefix
                 last = self.peers[-1]["name"]
-                all_losses = [losses[k] for k in range(self.K)]
-                for p in self.peers:
+                all_losses = [losses[k] for k in range(self.K)]  # glue: per-shard scalar losses for the record
+                for p in self.peers:  # glue: one socket per worker peer
                     # the last folder already holds the total; send it the hash only
                     _send(p["sock"], {"cmd": "apply", "step": step, "total_sha256": hashlib.sha256(total).hexdigest(),
                                       "losses": all_losses}, b"" if p["name"] == last else total)
             else:
-                for p in self.peers:
+                for p in self.peers:  # glue: one socket per worker peer
                     head, payload = _recv(p["sock"], len(p["shards"]) * n_total * 4)
                     if head.get("step") != step or head.get("shards") != p["shards"]:
                         self._refuse("%s answered the wrong step or shards" % p["name"])
                     if len(payload) != len(p["shards"]) * n_total * 4:
                         self._refuse("%s sent %d gradient bytes" % (p["name"], len(payload)))
-                    for i, k in enumerate(p["shards"]):
+                    for i, k in enumerate(p["shards"]):  # glue: one gradient buffer per owned shard
                         grads[k] = payload[i * n_total * 4:(i + 1) * n_total * 4]
                         losses[k] = head["losses"][i]
-                total = ordered_fold(grads[k] for k in range(self.K))
-                all_losses = [losses[k] for k in range(self.K)]
-                for p in self.peers:
+                total = ordered_fold(grads[k] for k in range(self.K))  # glue: shard gradient buffers in shard order
+                all_losses = [losses[k] for k in range(self.K)]  # glue: per-shard scalar losses for the record
+                for p in self.peers:  # glue: one socket per worker peer
                     _send(p["sock"], {"cmd": "apply", "step": step, "total_sha256": hashlib.sha256(total).hexdigest(),
                                       "losses": all_losses}, total)
             timing["apply_sent"] = round(time.monotonic() - timing["step_sent"], 3)
             hashes = {}
-            for p in self.peers:
+            for p in self.peers:  # glue: one socket per worker peer
                 head, _ = _recv(p["sock"], 0)
                 if head.get("completed") != step + 1:
                     self._refuse("%s did not commit step %d" % (p["name"], step + 1))
@@ -304,15 +304,15 @@ class Coordinator:
             timing["step_seconds"] = round(time.monotonic() - timing.pop("step_sent"), 3)
             if len(set(hashes.values())) != 1:
                 self._refuse("replicas disagree after step %d: %s" % (step + 1, hashes))
-            row = dict(step=step + 1, losses=[losses[k] for k in range(self.K)],
+            row = dict(step=step + 1, losses=[losses[k] for k in range(self.K)],  # glue: per-shard scalar losses for the record
                        state=next(iter(hashes.values())), workers=hashes,
-                       vendors={p["name"]: p.get("vendor") for p in self.peers},
+                       vendors={p["name"]: p.get("vendor") for p in self.peers},  # glue: vendor name per worker peer
                        total_sha256=hashlib.sha256(total).hexdigest(), protocol="chained" if self.chained else "gathered",
                        timing=timing)
             rows.append(row)
             if self.on_step:
                 self.on_step(row)
-        for p in self.peers:
+        for p in self.peers:  # glue: one socket per worker peer
             _send(p["sock"], {"cmd": "done"})
         return rows
 
@@ -333,7 +333,7 @@ class Worker:
             from .parallel_training import ParallelByteLanguageModelTrainer
             trainer = ParallelByteLanguageModelTrainer(state, devices=(device,), logical_shards=1,
                                                        pool_optimizer=False)
-        self.trainer, self.shards, self.batches = trainer, sorted(int(k) for k in shards), batches
+        self.trainer, self.shards, self.batches = trainer, sorted(int(k) for k in shards), batches  # glue: validates the shard ids argument
         self.address, self.connect_timeout, self.timeout = tuple(address), connect_timeout, timeout
         self.name = name or socket.gethostname()
         self.chained = bool(chained)
@@ -405,11 +405,11 @@ class Worker:
                         # the first block: fold on the device as the shards are
                         # computed; nothing is downloaded until the prefix goes out
                         tr.fold_reset(None)
-                        for k in self.shards:
+                        for k in self.shards:  # glue: one device gradient call per owned shard
                             losses.append(tr.shard_gradient_fold(self.batches(head["step"], k)))
                         held, total, on_device = [], None, True
                     else:
-                        for k in self.shards:
+                        for k in self.shards:  # glue: one device gradient call per owned shard
                             loss, g = tr.shard_gradient(self.batches(head["step"], k))
                             losses.append(loss)
                             parts.append(flat_bytes(g, name="shard gradient").tobytes())
@@ -428,7 +428,7 @@ class Worker:
                     elif bool(getattr(tr, "has_device_fold", False)):
                         # a prefix arrived: continue the fold on the device from it
                         tr.fold_reset(payload if payload else None)
-                        for g in held:
+                        for g in held:  # glue: one device fold call per held shard
                             tr.fold_add(g)
                         total = tr.fold_export()
                     else:
@@ -479,7 +479,7 @@ def main(argv=None):
 
     def on_step(row):
         line = json.dumps(row, sort_keys=True)
-        print("step %d state %s %s" % (row["step"], row["state"][:16], sorted(row["vendors"].items())), flush=True)
+        print("step %d state %s %s" % (row["step"], row["state"][:16], sorted(row["vendors"].items())), flush=True)  # glue: vendor names in the log line
         if args.log:
             with open(args.log, "a") as fh:
                 fh.write(line + "\n")

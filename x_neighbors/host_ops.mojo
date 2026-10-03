@@ -8,7 +8,7 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_var_item, row_argmax_item
 from x_neighbors.sort_items import nc_median_init_item, nc_median_step_item, nc_median_pick_item, nc_med_std_init_item, nc_med_std_step_item, nc_med_std_pick_item, pos_count_item, pos_scan_item, pos_emit_item
-from x_neighbors.py2mojo_items import p2m_mask_value_item, p2m_zero_cols_item, p2m_nan_indicator_item, p2m_sign_label_item, p2m_relabel_init_item, p2m_relabel_first_item, p2m_relabel_count_item, p2m_relabel_scan_item, p2m_relabel_emit_item, p2m_relabel_map_item, p2m_fill_item, p2m_iota_item, p2m_negate_item, p2m_transpose_item, p2m_transpose_i_item, p2m_row_sort_init_item, p2m_row_sort_step_item, p2m_row_sort_emit_item
+from x_neighbors.py2mojo_items import p2m_mask_value_item, p2m_zero_cols_item, p2m_nan_indicator_item, p2m_sign_label_item, p2m_relabel_init_item, p2m_relabel_first_item, p2m_relabel_count_item, p2m_relabel_scan_item, p2m_relabel_emit_item, p2m_relabel_map_item, p2m_ccount_zero_item, p2m_ccount_add_item, p2m_ccount_emit_item, p2m_const_init_item, p2m_const_cmp_item, p2m_lp_labels_item, p2m_fill_item, p2m_iota_item, p2m_negate_item, p2m_transpose_item, p2m_transpose_i_item, p2m_row_sort_init_item, p2m_row_sort_step_item, p2m_row_sort_emit_item
 
 #: the host gate's negative control (`MOJOLEARN_HOST_SABOTAGE`): every op's
 #: first float output moves by 1e-3 in its first element
@@ -751,6 +751,40 @@ def op_p2m_relabel(lab: Int, res: Int, info: Int, n: Int) raises:
     _ = s_first^
     _ = s_rk^
     _ = s_part^
+
+
+def op_p2m_class_counts(lab: Int, nk: Int, info: Int, n: Int, n_classes: Int) raises:
+    var s_cnt = List[Int32](length=(n_classes) if (n_classes) > 0 else 1, fill=Int32(0))
+    for t in range(n_classes):
+        p2m_ccount_zero_item(t, _i(lab), _f(nk), _i(info), IP(unsafe_from_address=Int(s_cnt.unsafe_ptr())), n, n_classes)
+    for t in range(n):
+        p2m_ccount_add_item(t, _i(lab), _f(nk), _i(info), IP(unsafe_from_address=Int(s_cnt.unsafe_ptr())), n, n_classes)
+    for t in range(n_classes):
+        p2m_ccount_emit_item(t, _i(lab), _f(nk), _i(info), IP(unsafe_from_address=Int(s_cnt.unsafe_ptr())), n, n_classes)
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        if (n_classes) > 0:
+            _f(nk).unsafe_store(0, _f(nk).unsafe_load(0) + Float32(1e-3))
+    _ = s_cnt^
+
+
+def op_p2m_const_cols(x: Int, flag: Int, n: Int, d: Int) raises:
+    for t in range(1):
+        p2m_const_init_item(t, _f(x), _i(flag), n, d)
+    for t in range(n * d):
+        p2m_const_cmp_item(t, _f(x), _i(flag), n, d)
+
+
+def op_p2m_lp_labels(codes: Int, ld: Int, ys: Int, unl: Int, n: Int, c: Int, skip: Int, a: Float32) raises:
+    var p_codes = _i(codes)
+    var p_ld = _f(ld)
+    var p_ys = _f(ys)
+    var p_unl = _i(unl)
+    def _item(t: Int) {imm p_codes, imm p_ld, imm p_ys, imm p_unl, imm n, imm c, imm skip, imm a}:
+        p2m_lp_labels_item(t, p_codes, p_ld, p_ys, p_unl, n, c, skip, a)
+    _items(_item, n * c)
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        if (n * c) > 0:
+            _f(ld).unsafe_store(0, _f(ld).unsafe_load(0) + Float32(1e-3))
 
 
 def op_p2m_fill(res: Int, count: Int, value: Float32) raises:

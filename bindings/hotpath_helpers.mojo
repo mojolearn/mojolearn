@@ -44,6 +44,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 from sequence.schedule import fill_epoch_order, splitmix64
+from checks.numerics import portable_cosf, portable_log64
 
 
 
@@ -1392,6 +1393,41 @@ def uniform_init_f32_binding(
     return PythonObject(0)
 
 
+def normal_init_f32_binding(
+    dst_addr: PythonObject, n: PythonObject, mean: PythonObject, std: PythonObject,
+    seed_lo: PythonObject, seed_hi: PythonObject, offset: PythonObject,
+) raises -> PythonObject:
+    """dst[i] = float32(mean + std * z_i), z_i a standard normal draw at
+    counter c = offset + i of the seed: Box-Muller over the two splitmix64
+    uniforms at counters 2c and 2c + 1 (u1 = 1 - U(2c) in (0, 1], the angle
+    2 pi U(2c + 1)), z = sqrt(-2 log u1) cos(angle), with the portable log
+    and cos (checks/numerics.mojo) so every column writes the same bytes.
+    Counter-based as `uniform_init_f32`: a caller drawing several arrays
+    from one seed advances `offset` by each array's size. Weight
+    initialisation (lane pyglue-numeric: MoEBlock drew numpy normals)."""
+    var count = Int(py=n)
+    if count < 0:
+        raise Error("normal_init_f32: n must be non-negative")
+    if count == 0:
+        return PythonObject(0)
+    var mu = Float64(py=mean)
+    var sd = Float64(py=std)
+    var seed = (UInt64(Int(py=seed_hi)) << 32) | UInt64(Int(py=seed_lo))
+    var off = UInt64(Int(py=offset))
+    var dp = _ptr[DType.float32](Int(py=dst_addr))
+    with GILReleased(Python()):
+        for i in range(count):
+            var c = (off + UInt64(i)) * UInt64(2)
+            var s1 = seed + c * UInt64(0x9E3779B97F4A7C15)
+            var s2 = seed + (c + UInt64(1)) * UInt64(0x9E3779B97F4A7C15)
+            var u1 = 1.0 - Float64(splitmix64(s1) >> 11) * 1.1102230246251565e-16
+            var u2 = Float64(splitmix64(s2) >> 11) * 1.1102230246251565e-16
+            var r = sqrt(-2.0 * portable_log64(u1))
+            var cz = portable_cosf(Float32(6.283185307179586 * u2))
+            dp.unsafe_store(i, Float32(mu + sd * (r * Float64(cz))))
+    return PythonObject(0)
+
+
 def epoch_order_i32_binding(
     dst_addr: PythonObject, n: PythonObject, shuffle: PythonObject, state_addr: PythonObject,
 ) raises -> PythonObject:
@@ -1514,6 +1550,389 @@ def first_seen_i32_binding(
     if bad:
         raise Error("first_seen_i32: code out of range")
     return PythonObject(m)
+
+
+@always_inline
+def _floor_div_pos(a: Int, b: Int) -> Int:
+    """floor(a / b) for b > 0 and any a (Python's `//`)."""
+    if a >= 0:
+        return a // b
+    return -((-a + b - 1) // b)
+
+
+def strat_alloc_i64_binding(
+    counts_addr: PythonObject, k: PythonObject, n_folds: PythonObject, dst_addr: PythonObject,
+) raises -> PythonObject:
+    """StratifiedKFold's allocation table (sklearn _make_test_folds):
+    dst[i * k + c] (int64, n_folds x k) = how many positions p of class c's
+    run [s, e) in the class-sorted labels have p % n_folds == i, i.e.
+    (e - 1 - i) // K - (s - 1 - i) // K with floor division (lane
+    pyglue-numeric: a Python double loop over the folds and classes).
+    `counts` int64, k of them."""
+    var kk = Int(py=k)
+    var K = Int(py=n_folds)
+    if kk < 1 or K < 1:
+        raise Error("strat_alloc_i64: k and n_folds must be >= 1")
+    var cp = _ptr[DType.int64](Int(py=counts_addr))
+    var dp = _ptr[DType.int64](Int(py=dst_addr))
+    var s = 0
+    for c in range(kk):
+        var e = s + Int(cp.unsafe_load(c))
+        for i in range(K):
+            dp.unsafe_store(i * kk + c, Int64(_floor_div_pos(e - 1 - i, K) - _floor_div_pos(s - 1 - i, K)))
+        s = e
+    return PythonObject(0)
+
+
+def _stable_order_f64(keys: List[Float64]) -> List[Int]:
+    """The indices 0 .. len(keys) - 1 sorted ascending by key, ties in index
+    order (a bottom-up merge sort: stable, O(m log m))."""
+    var m = len(keys)
+    var a = List[Int](capacity=m)
+    for i in range(m):
+        a.append(i)
+    var b = List[Int](length=m, fill=0)
+    var width = 1
+    while width < m:
+        var lo = 0
+        while lo < m:
+            var mid = min(lo + width, m)
+            var hi = min(lo + 2 * width, m)
+            var i = lo
+            var j = mid
+            var t = lo
+            while i < mid and j < hi:
+                if keys[a[j]] < keys[a[i]]:
+                    b[t] = a[j]
+                    j += 1
+                else:
+                    b[t] = a[i]
+                    i += 1
+                t += 1
+            while i < mid:
+                b[t] = a[i]
+                i += 1
+                t += 1
+            while j < hi:
+                b[t] = a[j]
+                j += 1
+                t += 1
+            lo = hi
+        var tmp = a.copy()
+        a = b.copy()
+        b = tmp^
+        width *= 2
+    return a^
+
+
+def group_fold_assign_i32_binding(
+    counts_addr: PythonObject, m: PythonObject, n_folds: PythonObject, perm_addr: PythonObject,
+    dst_addr: PythonObject, sizes_addr: PythonObject,
+) raises -> PythonObject:
+    """GroupKFold's fold of each of the m groups (scikit-learn 1.9), int32
+    dst[g], and each fold's row count, int64 sizes[f] (from the int64 group
+    row counts). With `perm` (int64, nonzero address) the permuted groups
+    split into K nearly equal runs (the first m % K one longer); without,
+    the groups by row count descending (ties: the higher group code first)
+    each to the lightest fold (ties: the lower fold). Lane pyglue-numeric:
+    both were Python loops over the groups."""
+    var mm = Int(py=m)
+    var K = Int(py=n_folds)
+    if mm < 0 or K < 1:
+        raise Error("group_fold_assign_i32: m >= 0 and n_folds >= 1")
+    var cp = _ptr[DType.int64](Int(py=counts_addr))
+    var dp = _ptr[DType.int32](Int(py=dst_addr))
+    var sp = _ptr[DType.int64](Int(py=sizes_addr))
+    var pa = Int(py=perm_addr)
+    for f in range(K):
+        sp.unsafe_store(f, Int64(0))
+    if pa != 0:
+        var pp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=pa)
+        var start = 0
+        for f in range(K):
+            var size = mm // K + (1 if f < mm % K else 0)
+            for j in range(start, start + size):
+                var g = Int(pp.unsafe_load(j))
+                if g < 0 or g >= mm:
+                    raise Error("group_fold_assign_i32: a permuted group is out of range")
+                dp.unsafe_store(g, Int32(f))
+            start += size
+    else:
+        var keys = List[Float64](capacity=mm)
+        for g in range(mm):
+            keys.append(Float64(Int(cp.unsafe_load(g))))
+        var asc = _stable_order_f64(keys)
+        var load = List[Int](length=K, fill=0)
+        for t in range(mm - 1, -1, -1):
+            var g = asc[t]
+            var best = 0
+            for f in range(1, K):
+                if load[f] < load[best]:
+                    best = f
+            load[best] += Int(cp.unsafe_load(g))
+            dp.unsafe_store(g, Int32(best))
+    for g in range(mm):
+        var f = Int(dp.unsafe_load(g))
+        sp.unsafe_store(f, sp.unsafe_load(f) + cp.unsafe_load(g))
+    return PythonObject(0)
+
+
+def strat_group_assign_i32_binding(addrs: PythonObject, dims: PythonObject) raises -> PythonObject:
+    """StratifiedGroupKFold's fold of each of the m groups (scikit-learn
+    1.9 `_find_best_fold`): each group's class distribution, the groups
+    (in code order, or permuted by `perm` int64 when nonzero) sorted by the
+    standard deviation of their distribution, descending and stable, each
+    to the fold whose per-class fold shares it perturbs least (the mean over
+    classes of the across-fold std; ties: the fewer rows, then the lower
+    fold). int32 dst[g]; int64 sizes[f] the rows of each fold. yenc: int32
+    class codes in [0, k); gidx: int32 group codes in [0, m). Returns 1 when
+    the largest class has fewer rows than n_folds (the caller refuses), else
+    0. Binary64 sums ascending (lane pyglue-numeric: the Python loops).
+    addrs = [yenc, gidx, perm (0: none), dst, sizes]; dims = [n, k, m, n_folds]."""
+    if len(addrs) != 5 or len(dims) != 4:
+        raise Error("strat_group_assign_i32: addrs [yenc, gidx, perm, dst, sizes], dims [n, k, m, n_folds]")
+    var nn = Int(py=dims[0])
+    var kk = Int(py=dims[1])
+    var mm = Int(py=dims[2])
+    var K = Int(py=dims[3])
+    if nn < 0 or kk < 1 or mm < 1 or K < 1:
+        raise Error("strat_group_assign_i32: bad sizes")
+    var yp = _ptr[DType.int32](Int(py=addrs[0]))
+    var gp = _ptr[DType.int32](Int(py=addrs[1]))
+    var pa = Int(py=addrs[2])
+    var dp = _ptr[DType.int32](Int(py=addrs[3]))
+    var sp = _ptr[DType.int64](Int(py=addrs[4]))
+    var counts = List[Int](length=kk, fill=0)
+    var dist = List[Int](length=mm * kk, fill=0)
+    for i in range(nn):
+        var c = Int(yp.unsafe_load(i))
+        var g = Int(gp.unsafe_load(i))
+        if c < 0 or c >= kk or g < 0 or g >= mm:
+            raise Error("strat_group_assign_i32: a code is out of range")
+        counts[c] += 1
+        dist[g * kk + c] += 1
+    var most = 0
+    for c in range(kk):
+        most = max(most, counts[c])
+    if most < K:
+        return PythonObject(1)
+    var order = List[Int](capacity=mm)
+    if pa != 0:
+        var pp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=pa)
+        for j in range(mm):
+            order.append(Int(pp.unsafe_load(j)))
+    else:
+        for j in range(mm):
+            order.append(j)
+    # -std per group in `order`'s positions, stably sorted ascending
+    var keys = List[Float64](capacity=mm)
+    for j in range(mm):
+        var g = order[j]
+        var tot = Float64(0)
+        for c in range(kk):
+            tot += Float64(dist[g * kk + c])
+        var mu = tot / Float64(kk)
+        var ss = Float64(0)
+        for c in range(kk):
+            var dv = Float64(dist[g * kk + c]) - mu
+            ss += dv * dv
+        keys.append(-sqrt(ss / Float64(kk)))
+    var pos = _stable_order_f64(keys)
+    var fold_dist = List[Int](length=K * kk, fill=0)
+    var fold_n = List[Int](length=K, fill=0)
+    var col = List[Float64](length=K, fill=0)
+    for t in range(mm):
+        var g = order[pos[t]]
+        var best = -1
+        var best_score = Float64(0)
+        var best_n = 0
+        for f in range(K):
+            var score = Float64(0)
+            for c in range(kk):
+                var mu = Float64(0)
+                for j in range(K):
+                    var v = fold_dist[j * kk + c] + (dist[g * kk + c] if j == f else 0)
+                    col[j] = Float64(v) / Float64(counts[c])
+                    mu += col[j]
+                mu = mu / Float64(K)
+                var ss = Float64(0)
+                for j in range(K):
+                    var dv = col[j] - mu
+                    ss += dv * dv
+                score += sqrt(ss / Float64(K))
+            score = score / Float64(kk)
+            if best < 0 or score < best_score or (score == best_score and fold_n[f] < best_n):
+                best = f
+                best_score = score
+                best_n = fold_n[f]
+        for c in range(kk):
+            fold_dist[best * kk + c] += dist[g * kk + c]
+            fold_n[best] += dist[g * kk + c]
+        dp.unsafe_store(g, Int32(best))
+    for f in range(K):
+        sp.unsafe_store(f, Int64(fold_n[f]))
+    return PythonObject(0)
+
+
+@always_inline
+def _sm64_next(mut state: UInt64) -> UInt64:
+    """Python `_splitmix64`: state += golden, then the splitmix64 mix of it."""
+    state = state + UInt64(0x9E3779B97F4A7C15)
+    var z = state
+    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
+    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
+    return z ^ (z >> 31)
+
+
+def draw_rows_without_replacement_i32_binding(
+    n: PythonObject, k: PythonObject, seed_lo: PythonObject, seed_hi: PythonObject, dst_addr: PythonObject,
+) raises -> PythonObject:
+    """k distinct rows of n, ascending, int32 at dst: a splitmix64 partial
+    Fisher-Yates (swap i with i + z % (n - i), i < k) then the first k
+    sorted (QuantileTransformer's subsample; lane pyglue-numeric: the
+    Python `_draw_without_replacement`, the same integers)."""
+    var nn = Int(py=n)
+    var kk = Int(py=k)
+    if nn < 0 or kk < 0 or kk > nn:
+        raise Error("draw_rows_without_replacement_i32: 0 <= k <= n")
+    var state = (UInt64(Int(py=seed_hi)) << 32) | UInt64(Int(py=seed_lo))
+    var dp = _ptr[DType.int32](Int(py=dst_addr))
+    with GILReleased(Python()):
+        var perm = List[Int](capacity=nn)
+        for i in range(nn):
+            perm.append(i)
+        for i in range(kk):
+            var z = _sm64_next(state)
+            var j = i + Int(z % UInt64(nn - i))
+            var t = perm[i]
+            perm[i] = perm[j]
+            perm[j] = t
+        var mark = List[Bool](length=nn, fill=False)
+        for i in range(kk):
+            mark[perm[i]] = True
+        var at = 0
+        for r in range(nn):
+            if mark[r]:
+                dp.unsafe_store(at, Int32(r))
+                at += 1
+    return PythonObject(0)
+
+
+def weighted_draw_rows_i32_binding(
+    w_addr: PythonObject, n: PythonObject, k: PythonObject, seed_lo: PythonObject, seed_hi: PythonObject,
+    dst_addr: PythonObject,
+) raises -> PythonObject:
+    """k rows drawn with replacement in proportion to the float32 weights:
+    row = the first whose binary64 running sum exceeds u * total, u the
+    53-bit uniform of the next splitmix64 draw, clipped to n - 1 (KBins'
+    weighted subsample; lane pyglue-numeric: the Python `bisect` loop, the
+    same arithmetic). int32 rows at dst, in draw order."""
+    var nn = Int(py=n)
+    var kk = Int(py=k)
+    if nn < 1 or kk < 0:
+        raise Error("weighted_draw_rows_i32: n >= 1, k >= 0")
+    var state = (UInt64(Int(py=seed_hi)) << 32) | UInt64(Int(py=seed_lo))
+    var wp = _ptr[DType.float32](Int(py=w_addr))
+    var dp = _ptr[DType.int32](Int(py=dst_addr))
+    with GILReleased(Python()):
+        var cum = List[Float64](capacity=nn)
+        var acc = Float64(0)
+        for i in range(nn):
+            acc += Float64(wp.unsafe_load(i))
+            cum.append(acc)
+        for t in range(kk):
+            var z = _sm64_next(state)
+            var target = Float64(z >> 11) * 1.1102230246251565e-16 * acc
+            # bisect_right: the first index whose running sum exceeds target
+            var lo = 0
+            var hi = nn
+            while lo < hi:
+                var mid = (lo + hi) // 2
+                if target < cum[mid]:
+                    hi = mid
+                else:
+                    lo = mid + 1
+            dp.unsafe_store(t, Int32(min(lo, nn - 1)))
+    return PythonObject(0)
+
+
+def weighted_pick_i32_binding(
+    m_addr: PythonObject, dk: PythonObject, col: PythonObject, k: PythonObject, state_addr: PythonObject,
+    dst_addr: PythonObject,
+) raises -> PythonObject:
+    """IterativeImputer's n_nearest_features draw for feature `col`: k of
+    the dk features drawn without replacement with probability M[:, col]
+    (float32, row-major dk x dk): each draw u = the 53-bit uniform of the
+    next splitmix64 word (`state`, uint64, advanced in place) times the
+    binary64 total of the positive weights not yet drawn, the first such
+    feature whose running sum exceeds u (the last one when none does). The
+    k picks ascending, int32 at dst (lane pyglue-numeric: a Python loop)."""
+    var n = Int(py=dk)
+    var j = Int(py=col)
+    var kk = Int(py=k)
+    if n < 1 or j < 0 or j >= n or kk < 0:
+        raise Error("weighted_pick_i32: bad sizes")
+    var mp = _ptr[DType.float32](Int(py=m_addr))
+    var sp = _ptr[DType.uint64](Int(py=state_addr))
+    var dp = _ptr[DType.int32](Int(py=dst_addr))
+    var state = sp.unsafe_load(0)
+    var chosen = List[Bool](length=n, fill=False)
+    for _ in range(kk):
+        var tot = Float64(0)
+        var last = -1
+        for a in range(n):
+            var w = Float64(mp.unsafe_load(a * n + j))
+            if not chosen[a] and w > 0:
+                tot += w
+                last = a
+        if last < 0:
+            raise Error("weighted_pick_i32: no feature left to draw")
+        var u = Float64(_sm64_next(state) >> 11) * 1.1102230246251565e-16 * tot
+        var pick = last
+        var cum = Float64(0)
+        for a in range(n):
+            var w = Float64(mp.unsafe_load(a * n + j))
+            if not chosen[a] and w > 0:
+                cum += w
+                if cum > u:
+                    pick = a
+                    break
+        chosen[pick] = True
+    sp.unsafe_store(0, state)
+    var at = 0
+    for a in range(n):
+        if chosen[a]:
+            dp.unsafe_store(at, Int32(a))
+            at += 1
+    return PythonObject(at)
+
+
+def ocsvm_alpha_init_f32_binding(
+    c_addr: PythonObject, m: PythonObject, nu: PythonObject, weighted: PythonObject, dst_addr: PythonObject,
+) raises -> PythonObject:
+    """libsvm's solve_one_class start: nu_l = nu * m (or, `weighted`, the
+    sum of C_i * nu in sample order, binary64), then alpha_i = min(C_i,
+    nu_l) while nu_l > 0, nu_l reduced by each (the rest 0). float32 C_i
+    in, float32 alpha out (lane pyglue-numeric: a Python loop over the
+    samples, the same arithmetic)."""
+    var mm = Int(py=m)
+    if mm < 0:
+        raise Error("ocsvm_alpha_init_f32: m >= 0")
+    var v = Float64(py=nu)
+    var cp = _ptr[DType.float32](Int(py=c_addr))
+    var dp = _ptr[DType.float32](Int(py=dst_addr))
+    var nl = v * Float64(mm)
+    if Int(py=weighted) != 0:
+        nl = Float64(0)
+        for i in range(mm):
+            nl += Float64(cp.unsafe_load(i)) * v
+    for i in range(mm):
+        var a = Float64(0)
+        if nl > 0:
+            a = min(Float64(cp.unsafe_load(i)), nl)
+            nl -= a
+        dp.unsafe_store(i, Float32(a))
+    return PythonObject(0)
 
 
 def strat_fold_assign_i32_binding(

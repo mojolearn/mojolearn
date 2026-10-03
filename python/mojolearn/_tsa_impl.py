@@ -294,7 +294,7 @@ def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
                 f"D={seasonal}), refused by name")
         chosen = [limit] * batch_size
         decided = [False] * batch_size
-        for order in range(limit):
+        for order in range(limit):  # glue: the at most two differencing orders
             if all(decided):
                 break
             flags = kpss_test(y, d=order, D=seasonal, s=int(s),
@@ -652,7 +652,7 @@ class ExponentialSmoothing:
         # USE (`__getattr__` below; `get_level(index)` slices one series),
         # not at every fit and load: at a million series each was 0.17 s of
         # strided copies that forecast() never reads. Same bytes when read.
-        for name in self._LAZY_COMPONENTS:
+        for name in self._LAZY_COMPONENTS:  # glue: the named lazy component attributes
             self.__dict__.pop(name, None)
         self._comp_layout = (cl, b, num_rows)
         self._time_major = {
@@ -758,7 +758,7 @@ class ExponentialSmoothing:
             )
         n, b = int(self.n), int(self.ts_num)
         end = n if end is None else end
-        for label, value in (("start", start), ("end", end)):
+        for label, value in (("start", start), ("end", end)):  # glue: the two start and end arguments
             if not isinstance(value, int) or isinstance(value, bool):
                 raise TypeError(
                     f"mojolearn ExponentialSmoothing: {label} must be int, got {type(value)}"
@@ -858,7 +858,7 @@ class ExponentialSmoothing:
         meta = _serialize.exact(arrays, "meta", "<i8")
         if meta.size != 4:
             raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 4 are needed")
-        n, b, f, sp = (int(meta[i]) for i in range(4))
+        n, b, f, sp = (int(meta[i]) for i in range(4))  # glue: the four metadata ints
         eps = _serialize.exact(arrays, "eps", "<f8")
         if eps.size != 1:
             raise ValueError(f"mojolearn: {path!r} eps holds {eps.size} values, 1 is needed")
@@ -875,7 +875,7 @@ class ExponentialSmoothing:
                   "beta": ("<f4", (b,)), "gamma": ("<f4", (b,)), "n_iter": ("<i4", (b,)),
                   "criterion": ("<i4", (b,))}
         got = {}
-        for name, (dtype, shape) in shapes.items():
+        for name, (dtype, shape) in shapes.items():  # glue: one entry per named array
             value = _serialize.exact(arrays, name, dtype)
             if tuple(value.shape) != shape:
                 raise ValueError(f"mojolearn: {path!r} {name} has shape {tuple(value.shape)}, not {shape}")

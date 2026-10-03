@@ -395,7 +395,7 @@ class SpectralClustering:
                 f"mojolearn SpectralClustering: prediction_data with affinity={affinity!r} "
                 "is refused; the Nystrom predict (DEVIATION 2860) carries the "
                 "'nearest_neighbors' and 'precomputed' affinities only")
-        for name, value in (
+        for name, value in (  # glue: checks keyword argument values
             ("degree", degree),
             ("coef0", coef0),
             ("kernel_params", kernel_params),
@@ -501,7 +501,7 @@ class SpectralClustering:
                 "mojolearn SpectralClustering: prediction_data must be a bool, "
                 f"got {type(self.prediction_data).__name__}"
             )
-        for name in _PREDICTION_ATTRS:
+        for name in _PREDICTION_ATTRS:  # glue: drops cached attribute names
             self.__dict__.pop(name, None)
         k = self._n_components()
         labels_out = None
@@ -575,7 +575,7 @@ class SpectralClustering:
                     [addr_ro(rows, name="rows"), addr_ro(cols, name="cols"),
                      addr_ro(vals, name="vals"), addr(labels, name="labels"),
                      addr(embedding, name="embedding")]
-                    + [addr(a, name="prediction data") for a in state],
+                    + [addr(a, name="prediction data") for a in state],  # glue: addresses of prediction-state buffers
                     params,
                 ))
             else:
@@ -626,7 +626,7 @@ class SpectralClustering:
                 n_out = int(_get_binding().spectral_fit_predict_dataset_state(
                     [addr_ro(x, name="x"), addr(labels, name="labels"),
                      addr(embedding, name="embedding")]
-                    + [addr(a, name="prediction data") for a in state],
+                    + [addr(a, name="prediction data") for a in state],  # glue: addresses of prediction-state buffers
                     params,
                 ))
                 # A borrowed input is copied so a caller's later write cannot
@@ -874,7 +874,7 @@ class SpectralClustering:
         meta = _serialize.exact(arrays, "meta", "<i8")
         if meta.size != 8:
             raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 8 are needed")
-        n_clusters, k, n_neighbors, n_init, seed, seed_none, n_train, nf = (int(v) for v in meta.tolist())
+        n_clusters, k, n_neighbors, n_init, seed, seed_none, n_train, nf = (int(v) for v in meta.tolist())  # glue: unpacks the fixed meta vector
         tol = _serialize.exact(arrays, "eigen_tol", "<f8")
         if tol.size != 1:
             raise ValueError(f"mojolearn: {path!r} eigen_tol must hold one value")
@@ -1206,7 +1206,7 @@ class SpectralEmbedding:
              addr_ro(vals, name="data") if sp and nnz else 0,
              A.addr, addr(status, name="status")],
             [n, k, nnz, 1 if sp else 0])
-        code, row = (int(v) for v in status.tolist())
+        code, row = (int(v) for v in status.tolist())  # glue: unpacks the two-field status
         if code == 1:
             raise ValueError("mojolearn SpectralEmbedding: a precomputed distance is negative or NaN")
         if code == 2:
@@ -1242,7 +1242,7 @@ def spectral_embedding(
     class fixes: `norm_laplacian` (the symmetric normalized Laplacian) and
     `drop_first` (drop the trivial eigenvector). Reference: cuML's
     `manifold.spectral_embedding`."""
-    for name, value in (("norm_laplacian", norm_laplacian), ("drop_first", drop_first)):
+    for name, value in (("norm_laplacian", norm_laplacian), ("drop_first", drop_first)):  # glue: checks two boolean flags
         if not isinstance(value, bool):
             raise TypeError(
                 f"mojolearn spectral_embedding: {name} must be a bool, got "

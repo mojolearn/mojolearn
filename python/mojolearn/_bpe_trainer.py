@@ -102,7 +102,7 @@ import sys
 
 try:  # as a package module
     from . import _tokenizer_synthetic as _syn
-except ImportError:  # run by path, as the Mojo gate runs it
+except (ImportError, AttributeError):  # run by path, as the Mojo gate runs it
     import importlib.util
 
     _spec = importlib.util.spec_from_file_location(

@@ -22,6 +22,11 @@ Python line did, in its order, so the outputs keep their bits:
   ROWS_HUBER_OUT (4): HuberRegressor.outliers_, |y - pred| > thr in
       binary64 (y, pred float32; thr = scale_ * epsilon, a float64), uint8
       out (n). params [n, 1, pred address, thr].
+  ROWS_SQRT_F32 (5): `fl32(sqrt(w))` over n float32 (LinearRegression's
+      sample-weight roots, cuML olsFit's sqrt(w) row scale): one correctly
+      rounded binary32 square root (`portable_sqrtf`, subnormals flushed
+      to zero). float32 out (n). Lane pyglue-sweep (Oct 3): this was a
+      Python comprehension over the rows.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
@@ -30,6 +35,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from max.gpu.host import DeviceContext
 
+from checks.numerics import portable_sqrtf
 from checks.soft_f64 import (
     SF64_NAN,
     SF64_ONE,
@@ -53,6 +59,7 @@ comptime ROWS_LOG = 1
 comptime ROWS_SGD_PROBA = 2
 comptime ROWS_LRCV_PROBA = 3
 comptime ROWS_HUBER_OUT = 4
+comptime ROWS_SQRT_F32 = 5
 
 comptime ROWS_TPB = 256
 comptime ROWS_MAX_BLOCKS = 4096
@@ -129,7 +136,10 @@ def log_or_inf(p: UInt64) -> UInt64:
 @always_inline
 def rows_one(mode: Int, src32: _F32P, src64: _U64P, k: Int, i: Int, dst32: _F32P, dst64: _U64P,
              src2: _F32P, scal: UInt64, dst8: _U8P):
-    """Row (or element, for ROWS_LOG and ROWS_HUBER_OUT) i."""
+    """Row (or element, for ROWS_LOG, ROWS_HUBER_OUT and ROWS_SQRT_F32) i."""
+    if mode == ROWS_SQRT_F32:
+        dst32[i] = portable_sqrtf(src32[i])
+        return
     if mode == ROWS_HUBER_OUT:
         var r = _abs(sf64_sub(sf64_from_f32(src32[i]), sf64_from_f32(src2[i])))
         var out_ = sf64_gt(r, scal) and not sf64_is_nan(r) and not sf64_is_nan(scal)
@@ -200,10 +210,12 @@ struct RowsCall(Copyable, Movable):
     var scal: UInt64
 
     def src_count(self) -> Int:
-        return self.n if self.mode == ROWS_LOG or self.mode == ROWS_HUBER_OUT else self.n * self.k
+        if self.mode == ROWS_LOG or self.mode == ROWS_HUBER_OUT or self.mode == ROWS_SQRT_F32:
+            return self.n
+        return self.n * self.k
 
     def dst_count(self) -> Int:
-        if self.mode == ROWS_LOG or self.mode == ROWS_HUBER_OUT:
+        if self.mode == ROWS_LOG or self.mode == ROWS_HUBER_OUT or self.mode == ROWS_SQRT_F32:
             return self.n
         return self.n * (2 if self.k == 1 else self.k)
 
@@ -211,7 +223,7 @@ struct RowsCall(Copyable, Movable):
 def rows_call_from_python(mode: PythonObject, src_addr: PythonObject, dst_addr: PythonObject,
                           params: PythonObject) raises -> RowsCall:
     var md = Int(py=mode)
-    if md < ROWS_LOG or md > ROWS_HUBER_OUT:
+    if md < ROWS_LOG or md > ROWS_SQRT_F32:
         raise Error("py2mojo_rows: unknown mode")
     var want = 4 if md == ROWS_HUBER_OUT else 2
     if len(params) != want:

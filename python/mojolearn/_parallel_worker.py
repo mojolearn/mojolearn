@@ -97,7 +97,7 @@ def execute(request):
         if int(os.environ.get('MOJOLEARN_OPTIMIZER_DEVICE_COUNT', '1')) > 1:
             from ._training_impl import _load
             binding = _load('identical')
-            for name in ('optimizer_parallel_available', 'accumulate_parallel_available', 'clip_parallel_available'):
+            for name in ('optimizer_parallel_available', 'accumulate_parallel_available', 'clip_parallel_available'):  # glue: checks three binding entry points
                 function = getattr(binding, name, None)
                 if not callable(function):
                     raise ImportError('rebuild training binding for pooled neural gradients and updates')
@@ -112,7 +112,7 @@ def execute(request):
             return model.loss_and_grads(*args)
         from .parallel_training import ordered_sum_gradients
         gradients = ordered_sum_gradients(args)
-        retained = [g.copy() for g in gradients]
+        retained = [g.copy() for g in gradients]  # glue: copies each parameter gradient buffer
         step = model.apply_gradients(gradients)
         return model.state_dict(), retained, step
     if operation in ('samba_gradient', 'samba_update'):
@@ -126,7 +126,7 @@ def execute(request):
             return model.loss_and_grads(inputs, targets, dropout_stream=stream, token_offset=offset)
         from .parallel_training import ordered_sum_gradients
         gradients = ordered_sum_gradients(args)
-        retained = [g.copy() for g in gradients]
+        retained = [g.copy() for g in gradients]  # glue: copies each parameter gradient buffer
         model.optimizer.step(gradients, max_norm=model.max_norm)
         return model.state_dict(), retained, model.optimizer.t
     if operation == 'forest_fit':
@@ -434,7 +434,7 @@ def execute(request):
         if method not in _methods(state):
             raise ValueError('invalid neighbors/density query operation')
         result = getattr(state, method)(X, **kwargs)
-        diagnostics = {name: getattr(state, name) for name in
+        diagnostics = {name: getattr(state, name) for name in  # glue: two named diagnostic attributes
                        ('used_query_tile_', 'n_candidate_distances_')
                        if hasattr(state, name)}
         return result, diagnostics

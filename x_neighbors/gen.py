@@ -199,6 +199,22 @@ OPS = [
       ("p2m_relabel_scan_item", "1"), ("p2m_relabel_emit_item", "xn_fold_blocks(n)"), ("p2m_relabel_map_item", "n")], None,
      [("lab", "iin", "n"), ("res", "iout", "n"), ("info", "iout", "2"), ("first", "iscr", "n"), ("rk", "iscr", "n"),
       ("part", "iscr", "xn_fold_blocks(n)"), ("n", "int")]),
+    # lane pyglue-numeric: NearestCentroid's class counts (an int32 atomic
+    # add per row: the same counts in any order) and the all-columns
+    # constant test (sklearn's ptp == 0) without a Python pass over X
+    ("p2m_class_counts", "py2mojo_items",
+     [("p2m_ccount_zero_item", "n_classes"), ("p2m_ccount_add_item", "n"), ("p2m_ccount_emit_item", "n_classes")], None,
+     [("lab", "iin", "n"), ("nk", "fout", "n_classes"), ("info", "iout", "1"), ("cnt", "iscr", "n_classes"),
+      ("n", "int"), ("n_classes", "int")]),
+    ("p2m_const_cols", "py2mojo_items",
+     [("p2m_const_init_item", "1"), ("p2m_const_cmp_item", "n * d")], None,
+     [("x", "fin", "n * d"), ("flag", "iout", "1"), ("n", "int"), ("d", "int")]),
+    # lane pyglue-numeric: LabelPropagation / LabelSpreading's label rows (the
+    # one-hot rows without the unlabeled marker's code, the spreading rows
+    # scaled by 1 - alpha, the unlabeled flags) from the native codes
+    ("p2m_lp_labels", "py2mojo_items", "p2m_lp_labels_item", "n * c",
+     [("codes", "iin", "n"), ("ld", "fout", "n * c"), ("ys", "fout", "n * c"), ("unl", "iout", "n"),
+      ("n", "int"), ("c", "int"), ("skip", "int"), ("a", "float")]),
     ("p2m_fill", "py2mojo_items", "p2m_fill_item", "count",
      [("res", "fout", "count"), ("count", "int"), ("value", "float")]),
     ("p2m_iota", "py2mojo_items", "p2m_iota_item", "count",

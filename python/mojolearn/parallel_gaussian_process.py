@@ -8,8 +8,8 @@ not a distributed factorization of a single binary covariance matrix.
 __all__ = ['fit_gaussian_process_classifier', 'predict_gaussian_process_classifier']
 
 from ._parallel_pool import DevicePool
-from ._buffer import Array, as_f32_c
-from ._labels import encode_labels, decode_labels
+from ._buffer import as_f32_c
+from ._labels import encode_labels, decode_labels, threshold_codes
 
 
 def _validate(estimator):
@@ -50,8 +50,7 @@ def fit_gaussian_process_classifier(estimator, X, y, *, devices=(0,)):
     _validate(estimator)
     x, copied = as_f32_c(X, ndim=2, name='X')
     classes, codes = encode_labels(y)
-    codes = [int(c) for c in codes.tolist()]
-    if len(codes) != x.shape[0]:
+    if codes.size != x.shape[0]:
         raise ValueError('y length differs from X rows')
     if len(classes) < 2:
         raise ValueError('GaussianProcessClassifier requires at least two classes')
@@ -59,7 +58,7 @@ def fit_gaussian_process_classifier(estimator, X, y, *, devices=(0,)):
     # the class codes and the class: the worker's `_fit_binary` builds the
     # 0/1 targets in the binding (lane apple-fast-py2mojo-cluster)
     codes32 = Array.from_list(codes, '<i4')
-    requests = [('gpc_class_fit', _fresh(estimator), (x, codes32, k)) for k in columns]
+    requests = [('gpc_class_fit', _fresh(estimator), (x, codes32, k)) for k in columns]  # glue: one worker request per class fit
     fits = _run(requests, devices)
     result = _fresh(estimator)
     result.input_copied_ = copied
@@ -103,4 +102,4 @@ def predict_gaussian_process_classifier(estimator, X, *, devices=(0,), method='p
     proba, codes32 = _ovr_combine(estimator._extension(), arrays, int(q.shape[0]))
     if method == 'predict_proba':
         return proba
-    return decode_labels(estimator.classes_, Array.from_list(codes32.tolist(), '<i8'))
+    return decode_labels(estimator.classes_, codes32.astype('<i8'))

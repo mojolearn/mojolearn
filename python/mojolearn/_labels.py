@@ -253,7 +253,7 @@ def _encode_label_list_native(y):
         return None  # an int outside int64: a class only Python can hold
     try:
         return _encode_labels_native(Array._owned(store, (len(store),), dtype, "C"))
-    except ImportError:
+    except (ImportError, AttributeError):
         # a GPU install whose base binding predates DEVIATION 2500 raises
         # here by design for a BUFFER; a list has its Python routine
         return None
@@ -283,12 +283,12 @@ def _encode_labels_native(y):
         return None
     # `flatten_labels` reads the LOGICAL order; storage order equals it only
     # for a vector (rank 1, or every other axis of length 1).
-    if arr.size != max(arr.shape):
+    if arr.size != max(arr.shape):  # glue: largest axis of the shape
         return None
     key, fmt, py = spec
     try:
         fn = _native(key)
-    except ImportError:
+    except (ImportError, AttributeError):
         # A CPU-ONLY INSTALL whose base host binding does not carry the
         # native encoder (the CPU training lane, et-clf, 2026-09-14:
         # bindings/_mojolearn_core_host.mojo exports the converters, the
@@ -372,7 +372,7 @@ def _decode_labels_native(classes, codes, kind):
         # Python arm ANSWERS it) sends the call back to the Python arm.
         try:
             return _decode_labels_native(classes, codes.astype("<i8"), kind)
-        except ImportError:
+        except (ImportError, AttributeError):
             raise
         except Exception:
             return None
@@ -526,7 +526,7 @@ def unique_inverse(y):
     kind = 0 if arr.dtype.lstrip("<>|=")[:1] == "f" else 1
     if arr.size == 0:
         raise ValueError("mojolearn: y is empty")
-    if arr.size != max(arr.shape):
+    if arr.size != max(arr.shape):  # glue: largest axis of the shape
         raise ValueError("mojolearn: y must be a vector of labels")
     wide = arr.astype("<f8" if kind == 0 else "<i8")
     n = int(wide.size)

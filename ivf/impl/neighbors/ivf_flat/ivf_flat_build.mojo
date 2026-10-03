@@ -75,7 +75,7 @@ from cluster.impl.kmeans_params import (
 from core.identity_trace import IdentityTrace
 from core.row_norms import NORM_TPB, row_norm_kernel
 from ivf.checks.list_layout import ListLayout, build_list_layout, extend_list_layout
-from ivf.impl.neighbors.ivf_flat.ivf_group_device import ivf_list_layout_device
+from ivf.impl.neighbors.ivf_flat.ivf_group_device import ivf_extend_layout_device, ivf_list_layout_device
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     IvfFlatIndex,
     IvfFlatIndexParams,
@@ -626,18 +626,20 @@ def ivf_flat_extend(
     _ = dx^
     _ = x_norm^
     _ = centroids^
-    _ = labels^
     _ = min_dist^
 
-    var layout = extend_list_layout(
-        index.list_offsets, index.list_indices, index.list_data, index.n_rows,
-        dim, n_lists, new_labels, new_x, n_new,
+    # the extended layout on the device (lane cgr5-owed): the same offsets,
+    # ids and rows `extend_list_layout` builds on the host column
+    var lay = ivf_extend_layout_device(
+        ctx, index.list_offsets, index.list_indices, index.list_data, index.n_rows,
+        dim, n_lists, labels, new_x, n_new,
     )
+    _ = labels^
     var all_labels = index.labels.copy()
     for j in range(n_new):
         all_labels.append(new_labels[j])
     return IvfFlatIndex(
         n_lists, dim, index.n_rows + n_new, index.metric, index.centers.copy(),
-        index.center_norms.copy(), layout.offsets.copy(), layout.list_indices.copy(),
-        layout.list_data.copy(), all_labels^,
+        index.center_norms.copy(), lay[0].copy(), lay[1].copy(),
+        lay[2].copy(), all_labels^,
     )

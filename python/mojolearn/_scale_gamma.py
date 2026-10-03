@@ -28,8 +28,14 @@ def scale_gamma_x(binding, x, n_features):
     binding's `scale_gamma_limbs` (the device grid, or the host column on a
     CPU-only install), the one rounding here. The same rational as
     `scale_gamma`, so the same bits."""
-    if not (py2mojo_linear_flags(binding) & _PY2MOJO_SCALE_GAMMA) or x.dtype != "<f4":
-        return scale_gamma(x.ravel().tolist(), n_features)
+    if x.dtype != "<f4":
+        raise TypeError("gamma='scale' reads the float32 X the kernel estimators fit on")
+    if not py2mojo_linear_flags(binding) & _PY2MOJO_SCALE_GAMMA:
+        # lane pyglue-sweep (Oct 3): no Python pass over the cells any more
+        raise RuntimeError(
+            "mojolearn: this binding has no scale_gamma_limbs (an older binary or a "
+            "-D MOJOLEARN_PY2MOJO_linear_OFF build); rebuild it"
+        )
     from ._buffer import addr, addr_ro, empty
 
     n = int(x.size)
@@ -41,10 +47,10 @@ def scale_gamma_x(binding, x, n_features):
     if w[_SG_L1 + _SG_L2] != 0:
         raise ValueError("gamma='scale' needs finite input: X holds a NaN or an infinity")
     s1 = 0
-    for i in range(_SG_L1):
+    for i in range(_SG_L1):  # glue: assembles nine fixed limb words
         s1 += int(w[i]) << (32 * i)
     s2 = 0
-    for i in range(_SG_L2):
+    for i in range(_SG_L2):  # glue: assembles eighteen fixed limb words
         s2 += int(w[_SG_L1 + i]) << (32 * i)
     # var * N^2 = (N * S2 - S1^2) * 2^-298
     spread = n * s2 - s1 * s1
@@ -54,7 +60,8 @@ def scale_gamma_x(binding, x, n_features):
 
 
 def scale_gamma(values, n_features):
-    """scikit-learn's `gamma='scale'`, `1 / (n_features * X.var())` (1.0 when
+    """THE REFERENCE DEFINITION (tests only since lane pyglue-sweep, Oct 3:
+    no runtime path calls it; `scale_gamma_x` is the binding's). scikit-learn's `gamma='scale'`, `1 / (n_features * X.var())` (1.0 when
     the variance is 0), CORRECTLY ROUNDED from the exact variance of `values`
     (the cells of X, each a finite float32 or float64).
 

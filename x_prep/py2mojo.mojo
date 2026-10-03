@@ -24,19 +24,22 @@ construction.
   p2m_transpose
       a row-major (n, w) block written column-major (SplineTransformer
       order='F').
+  p2m_rowflag
+      per row, whether a code equals a refused value (the inverse_transform
+      refusals' rows, then compacted by p2m_sel).
 
 Ops P2M_BASE .. P2M_BASE + P2M_N - 1 are a separate range, outside the
-0 .. N_OPS - 1 table other lanes grow; built with
--D MOJOLEARN_PY2MOJO_prep_OFF there are none (P2M_N = 0), the binding does not
-export `x_prep_py2mojo`, and Python takes its old loops (the A/B arm A).
+0 .. N_OPS - 1 table other lanes grow. Every build carries them (lane
+pyglue-numeric deleted the -D MOJOLEARN_PY2MOJO_prep_OFF arm and the Python
+loops it restored).
 """
 from std.memory import bitcast
-from std.sys.compile import is_defined
-from x_prep.common import FP, IP, p, raw, ldi, sti, ld
+from std.math import sqrt
+from x_prep.common import FP, IP, p, raw, ldi, sti, ld, st
 
-comptime PY2MOJO_PREP = not is_defined["MOJOLEARN_PY2MOJO_prep_OFF"]()
+comptime PY2MOJO_PREP = True
 comptime P2M_BASE = 200
-comptime P2M_N = 10 if PY2MOJO_PREP else 0
+comptime P2M_N = 13
 
 
 @always_inline
@@ -225,6 +228,60 @@ def p2m_transpose_unit(t: Int, f: FP, q: IP):
     f.unsafe_store(p(q, 3) + t, raw(f, p(q, 0) + i * p(q, 2) + j))
 
 
+# ---------------------------------------------------------------- row flags
+def p2m_rowflag_unit(t: Int, f: FP, q: IP):
+    """q = [CODES, n, d, BAD, STRICT, OUT]; t = row: OUT[t] = 1.0 when some
+    column j of the row's float codes equals BAD (an int) and STRICT is -1
+    or STRICT[j] != 0, else 0.0 (the inverse_transform refusals' rows; lane
+    pyglue-numeric: a Python scan of the downloaded codes)."""
+    var d = p(q, 2)
+    var bad = Float32(p(q, 3))
+    var strict = p(q, 4)
+    var hit = False
+    for j in range(d):
+        if ld(f, p(q, 0) + t * d + j) == bad and (strict < 0 or ld(f, strict + j) != Float32(0)):
+            hit = True
+    f.unsafe_store(p(q, 5) + t, Float32(1) if hit else Float32(0))
+
+
+# ---------------------------------------------------------------- IterativeImputer |corr|
+def p2m_abscorr_cell_unit(t: Int, f: FP, q: IP):
+    """q = [G, dk, M]; t = a*dk + b: the reference's `_get_abs_corr_mat` cell
+    of the centred Gram G: |G[a,b] / sqrt(G[a,a] G[b,b])| (NaN when either
+    diagonal is not positive), NaN -> 1e-6, clipped to [1e-6, 1], a zero
+    diagonal (lane pyglue-numeric: Python float64 over the dk x dk cells)."""
+    var dk = p(q, 1)
+    var a = t // dk
+    var b = t - a * dk
+    var G = p(q, 0)
+    if a == b:
+        st(f, p(q, 2) + t, Float32(0))
+        return
+    var ga = ld(f, G + a * dk + a)
+    var gb = ld(f, G + b * dk + b)
+    var v = Float32(1e-6)
+    if ga > Float32(0) and gb > Float32(0):
+        var den = sqrt(ga * gb)
+        if den > Float32(0):
+            var r = abs(ld(f, G + a * dk + b) / den)
+            if r == r:
+                v = min(r, Float32(1))
+    st(f, p(q, 2) + t, max(v, Float32(1e-6)))
+
+
+def p2m_abscorr_norm_unit(t: Int, f: FP, q: IP):
+    """q = [M, dk]; t = column b: M[:, b] divided by its sum (ascending
+    rows) when the sum is positive."""
+    var dk = p(q, 1)
+    var M = p(q, 0)
+    var col = Float32(0)
+    for a in range(dk):
+        col = col + ld(f, M + a * dk + t)
+    if col > Float32(0):
+        for a in range(dk):
+            st(f, M + a * dk + t, ld(f, M + a * dk + t) / col)
+
+
 @always_inline
 def run_p2m_unit[OP: Int](t: Int, f: FP, q: IP):
     comptime if PY2MOJO_PREP:
@@ -248,3 +305,9 @@ def run_p2m_unit[OP: Int](t: Int, f: FP, q: IP):
             p2m_sel_write_unit(t, f, q)
         comptime if OP == P2M_BASE + 9:
             p2m_transpose_unit(t, f, q)
+        comptime if OP == P2M_BASE + 10:
+            p2m_rowflag_unit(t, f, q)
+        comptime if OP == P2M_BASE + 11:
+            p2m_abscorr_cell_unit(t, f, q)
+        comptime if OP == P2M_BASE + 12:
+            p2m_abscorr_norm_unit(t, f, q)

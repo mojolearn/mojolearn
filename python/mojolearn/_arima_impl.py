@@ -82,7 +82,7 @@ from . import _portable_math as math
 
 from . import _backend
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty
+from ._buffer import _native, addr, addr_ro, as_f32_c, empty
 from ._bufcheck import nelems, probe
 from ._mode import NumericModeMixin
 
@@ -199,7 +199,7 @@ def _exog_array(exog, batch_size, n_rows, y_ndim, name):
                 f"numbers, got {type(exog).__name__}"
             ) from None
         pb = probe(exog)
-    shape = tuple(int(v) for v in pb.shape)
+    shape = tuple(int(v) for v in pb.shape)  # glue: shape dims of the argument
     if len(shape) == 3:
         want = (batch_size, n_rows)
         got = shape[:2]
@@ -657,17 +657,22 @@ class ARIMA(NumericModeMixin):
         self.fx_ = stats[batch_size:]
         # DEVIATION 991: the host half of cuML's information_criterion.
         # `T` is n_samples AFTER differencing, which is the number their
-        # caller passes (`n_obs - order.n_diff()`). Two float64 host
-        # expressions per series, written out in Python over the
-        # batch (O(batch_size), no part of any identity claim).
+        # caller passes (`n_obs - order.n_diff()`). Per series
+        # -2 llf + penalty in float64 from the float32 llf, in Mojo (the base
+        # binding's `ic_running_min_f64` at order 0, whose running choice is
+        # scratch here); pen + (-2 v) is pen - 2 v exactly, the old bits.
         T = n_obs - (d + s * D)
         n_par = float(N)
         log_t = math.log(T) if T > 0 else 0.0
-        llf_list = llf.tolist()
-        self.aic_ = Array.from_list(
-            [2.0 * n_par - 2.0 * v for v in llf_list], "<f8")
-        self.bic_ = Array.from_list(
-            [log_t * n_par - 2.0 * v for v in llf_list], "<f8")
+        self.aic_ = empty((batch_size,), "<f8")
+        self.bic_ = empty((batch_size,), "<f8")
+        if batch_size:
+            best_ic = empty((batch_size,), "<f8")
+            best_at = empty((batch_size,), "<i8")
+            ic = _native("ic_running_min_f64")
+            for out, pen in ((self.aic_, 2.0 * n_par), (self.bic_, log_t * n_par)):  # glue: the two criteria aic and bic
+                ic(addr_ro(stats, name="stats"), batch_size, pen, 0, addr(out, name="ic"),
+                   addr(best_ic, name="best_ic"), addr(best_at, name="best_at"))
         return self
 
     # -- the named views into params_ ---------------------------------------
@@ -924,7 +929,7 @@ class ARIMA(NumericModeMixin):
         want = 13 if with_exog else 12
         if meta.size != want:
             raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, {want} are needed")
-        p, d, q, P, D, Q, s, k, b, n, maxiter, copied = (int(meta[i]) for i in range(12))
+        p, d, q, P, D, Q, s, k, b, n, maxiter, copied = (int(meta[i]) for i in range(12))  # glue: the twelve metadata ints
         n_exog = int(meta[12]) if with_exog else 0
         if with_exog and n_exog < 1:
             raise ValueError(f"mojolearn: {path!r} is {_ARIMA_FORMAT_EXOG!r} with n_exog={n_exog}")
@@ -945,7 +950,7 @@ class ARIMA(NumericModeMixin):
         if with_exog:
             shapes["exog"] = ("<f4", (b, n, n_exog))
         got = {}
-        for name, (dtype, shape) in shapes.items():
+        for name, (dtype, shape) in shapes.items():  # glue: one entry per named array
             value = _serialize.exact(arrays, name, dtype)
             if tuple(value.shape) != shape:
                 raise ValueError(f"mojolearn: {path!r} {name} has shape {tuple(value.shape)}, not {shape}")
@@ -977,7 +982,7 @@ class ARIMA(NumericModeMixin):
 
 def _plain_order(value, normalized):
     """True when `value` already IS `normalized`: a tuple of Python ints."""
-    return (type(value) is tuple and all(type(v) is int for v in value)
+    return (type(value) is tuple and all(type(v) is int for v in value)  # glue: entries of the order tuple
             and value == normalized)
 
 
@@ -1002,7 +1007,7 @@ def _as_order(value, width, name):
             f"{len(t)} ({value!r})"
         )
     out = []
-    for v in t:
+    for v in t:  # glue: entries of the order tuple
         i = int(v)
         if i != v or i < 0:
             raise ValueError(
