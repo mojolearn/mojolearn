@@ -39,6 +39,47 @@ from ._buffer import _native
 _IC = ("aic", "aicc", "bic")
 
 
+def _rows_where(words, want, count):
+    """The ascending positions whose int32 word is `want` (int64, `count`
+    of them), by the base binding's select_fold_i64."""
+    n = len(words)
+    out = np.empty(max(count, 1), dtype=np.int64)
+    scratch = np.empty(max(n, 1), dtype=np.int64)
+    got = int(_native("select_fold_i64")(words.ctypes.data, n, int(want),
+                                         out.ctypes.data if count else scratch.ctypes.data, scratch.ctypes.data))
+    if got != count:
+        raise RuntimeError("AutoARIMA: select_fold_i64 disagrees with the counts")
+    return out[:count]
+
+
+def _counts(words, k):
+    """Rows per int32 word value in [0, k) (bincount)."""
+    out = np.zeros(k, dtype=np.int64)
+    if len(words):
+        _native("bincount_i64")(words.ctypes.data, 2, len(words), k, out.ctypes.data, 0)
+    return out
+
+
+def _take(block, ids):
+    """block[ids] for a C-contiguous 2-D (or 1-D) block, a byte gather."""
+    out = np.empty((len(ids),) + block.shape[1:], dtype=block.dtype)
+    if len(ids):
+        ids = np.ascontiguousarray(ids, dtype=np.int64)
+        _native("gather_rows_bytes")(block.ctypes.data, out.ctypes.data, ids.ctypes.data, block.shape[0],
+                                     len(ids), block.itemsize * (block.size // max(block.shape[0], 1)))
+    return out
+
+
+def _put(block, ids, rows):
+    """block[ids] = rows, a byte scatter."""
+    rows = np.ascontiguousarray(rows, dtype=block.dtype)
+    if len(ids):
+        ids = np.ascontiguousarray(ids, dtype=np.int64)
+        _native("scatter_rows_bytes")(rows.ctypes.data, ids.ctypes.data, len(ids),
+                                      block.itemsize * (block.size // max(block.shape[0], 1)),
+                                      block.ctypes.data, block.shape[0])
+
+
 def _options(name, value, lo, hi):
     """The reference's `_parse_sequence`: an int or an iterable, clipped to
     [lo, hi]; empty is refused."""
@@ -119,9 +160,15 @@ class AutoARIMA:
         self.models, self._ids = [], []
         self.order_ = np.zeros((self.batch_size, 8), dtype=np.int64)
         self.ic_ = np.zeros(self.batch_size, dtype=np.float64)
-        for d_ in sorted(set(dser.tolist())):
-            ids = np.flatnonzero(dser == d_)
-            sub = np.ascontiguousarray(y[ids])
+        # the series of each d by the base binding (bincount, select, gather;
+        # lane cgr4-py-compute), the groups in ascending d
+        dw = np.ascontiguousarray(dser, dtype=np.int32)
+        dcount = _counts(dw, 3)
+        for d_ in range(3):
+            if not dcount[d_]:
+                continue
+            ids = _rows_where(dw, d_, int(dcount[d_]))
+            sub = _take(y, ids)
             k_opts = ([1 if d_ + D_ <= 1 else 0] if fit_intercept == "auto"
                       else _options("k", fit_intercept, 0, 1))
             orders, nb = [], len(ids)
@@ -145,12 +192,14 @@ class AutoARIMA:
                 raise ValueError("AutoARIMA: no (p, q, P, Q, k) order to try")
             table = np.asarray([[p_, d_, q_, P_, D_, Q_, s_, k_] for (p_, q_, P_, Q_, s_, k_) in orders],
                                dtype=np.int64)
-            self.order_[ids] = table[best]
-            self.ic_[ids] = best_ic
+            _put(self.order_, ids, _take(table, best))
+            _put(self.ic_, ids, best_ic)
+            bw = np.ascontiguousarray(best, dtype=np.int32)
+            bcount = _counts(bw, len(orders))
             for i, (p_, q_, P_, Q_, s_, k_) in enumerate(orders):
-                chosen = ids[best == i]
-                if len(chosen) == 0:
+                if not bcount[i]:
                     continue
+                chosen = _take(ids, _rows_where(bw, i, int(bcount[i])))
                 self.models.append(((p_, d_, q_), (P_, D_, Q_, s_), k_))
                 self._ids.append(chosen)
         self._fitted = [None] * len(self.models)
@@ -175,7 +224,7 @@ class AutoARIMA:
             raise NotImplementedError("AutoARIMA.fit: method 'ml' with the default h only")
         for i, (order, sorder, k) in enumerate(self.models):
             self._fitted[i] = ARIMA(order=order, seasonal_order=sorder, trend="c" if k else "n",
-                                    maxiter=maxiter).fit(np.ascontiguousarray(self.endog[self._ids[i]]))
+                                    maxiter=maxiter).fit(_take(self.endog, self._ids[i]))
         return self
 
     def _gather(self, fn, width):
@@ -183,7 +232,7 @@ class AutoARIMA:
             raise RuntimeError("AutoARIMA: call fit() first")
         out = np.zeros((self.batch_size, width), dtype=np.float32)
         for m, ids in zip(self._fitted, self._ids):
-            out[ids] = np.asarray(fn(m), dtype=np.float32).reshape(len(ids), width)
+            _put(out, ids, np.asarray(fn(m), dtype=np.float32).reshape(len(ids), width))
         return out
 
     def predict(self, start=0, end=None, level=None):
