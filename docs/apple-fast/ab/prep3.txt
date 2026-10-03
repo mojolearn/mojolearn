@@ -1,0 +1,5 @@
+CMD lane/apple-fast-prep3 prep3-le-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh prep3-le-istella x_prep label-encoder istella 1 2 "" "-D MOJOLEARN_PREP3_LABELS"
+CMD lane/apple-fast-prep3 prep3-lb-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh prep3-lb-taxi x_prep label-binarizer taxi 1 2 "" "-D MOJOLEARN_PREP3_LABELS"
+CMD lane/apple-fast-prep3 prep3-mlb-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh prep3-mlb-taxi x_prep multilabel-binarizer taxi 1 2 "" "-D MOJOLEARN_PREP3_LABELS"
+CMD lane/apple-fast-prep3 prep3-maxabs-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh prep3-maxabs-istella x_prep maxabs-scaler istella 1 2 "" "-D MOJOLEARN_PREP3_MAXABS"
+CMD lane/apple-fast-prep3 prep3-spline-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh prep3-spline-istella x_prep spline istella 1 2 "" "-D MOJOLEARN_PREP3_SPLINE"

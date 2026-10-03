@@ -27,6 +27,10 @@ from x_prep.fastpt import (
     pt_colbatch_fold, pt_spec_fold, cs_tile_stats, ptimpute_part_words, fused_tail_pair,
 )
 from x_prep.dmi_fast import mi_cc_device, mi_cd_device_rank, mi_colscale_fast_kernel, mi_reduce_fast_kernel, TGF
+from x_prep.prep3 import PREP3_LABELS
+from x_prep.fastlabels import (
+    TGL, uniq_count_fast_kernel, uniq_scan_fast_kernel, uniq_write_fast_kernel, chunk_neg_fast_kernel,
+)
 from x_prep.fastnb import NB_CAT_ATOMIC, cat_hist_atomic_kernel, cat_hist_convert_kernel
 from x_prep.select_fast import (
     SELECT_FREG, SELECT_FCLS, OP_F_CLASSIF, OP_F_REGRESSION, program_has_op, select_scratch_words,
@@ -125,6 +129,13 @@ comptime OP_PT_FOLD = 106
 #: x_prep/blocked.mojo's CategoricalNB histogram stages (x_prep/fastnb.mojo intercepts them)
 comptime OP_CAT_HPART = 133
 comptime OP_CAT_HFOLD = 134
+
+#: FAST on Apple with -D MOJOLEARN_PREP3_LABELS only: the labels' run scan and
+#: chunk_neg by flag-and-scan threadgroups (x_prep/fastlabels.mojo, the same words)
+comptime OP_UNIQ_COUNT = 120
+comptime OP_UNIQ_SCAN = 121
+comptime OP_UNIQ_WRITE = 122
+comptime OP_CHUNK_NEG = 123
 
 #: op 0 (`sort_cols`) runs as the device sort of x_prep/dsort.mojo, not as
 #: one heapsort thread per column: the same words (a sort under a total
@@ -550,6 +561,21 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             if fast_folds and op == OP_II_GRAM:
                 ctx.enqueue_function[ii_gram_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGR)
                 continue
+            comptime if PREP3_LABELS:
+                # lane/apple-fast-prep3: one threadgroup per chunk (uniq_scan: one
+                # threadgroup over the chunk counts), the serial units' words
+                if op == OP_UNIQ_COUNT:
+                    ctx.enqueue_function[uniq_count_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGL)
+                    continue
+                if op == OP_UNIQ_SCAN:
+                    ctx.enqueue_function[uniq_scan_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGL)
+                    continue
+                if op == OP_UNIQ_WRITE:
+                    ctx.enqueue_function[uniq_write_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGL)
+                    continue
+                if op == OP_CHUNK_NEG:
+                    ctx.enqueue_function[chunk_neg_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGL)
+                    continue
         comptime if NB_CAT_ATOMIC:
             # lane apple-fast-nb: the (row, feature) atomic count table; W < 0 only
             # (the weighted fold keeps the units). The dispatcher zeroes block 0

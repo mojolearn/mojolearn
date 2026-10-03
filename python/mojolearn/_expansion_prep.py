@@ -703,6 +703,17 @@ class MaxAbsScaler(_PrepBase):
         arr = _x2d(X)
         n, d = arr.shape
         mode = _mode()
+        # lane/apple-fast-prep3: `x_prep_maxabs_fit_direct` exists in the FAST
+        # Apple build with -D MOJOLEARN_PREP3_MAXABS only (x_prep/fastmaxabs.mojo):
+        # X up once from its own buffer, the same max_abs_ and scale_ words
+        direct = _optional_prep_entry(_prep_binding(mode), "x_prep_maxabs_fit_direct")
+        if direct is not None:
+            out = Array((2 * d,), "<f4")
+            direct(addr_ro(arr, name="X"), out._addr, [n, d])
+            self.max_abs_ = Array._from_flat(out.tolist()[:d], (d,), "<f4")
+            self.scale_ = Array._from_flat(out.tolist()[d:], (d,), "<f4")
+            self.numeric_mode_, self.n_features_in_, self.n_samples_seen_ = mode, d, n
+            return self
         pr = _Prog()
         xo = pr.put(arr)
         scale = pr.alloc(d)
@@ -3224,6 +3235,12 @@ def _weighted_levels(pr, ug, ucnt, n, d, levels, average, out):
     pr.stage("kbins_wq", d, ug, n, d, ucnt, pr.put_list(nb), nbmax, pr.put_list(flat), int(average), out)
 
 
+def _spline_prep3(mode):
+    """Whether the binding is the FAST Apple build with -D MOJOLEARN_PREP3_SPLINE
+    (lane/apple-fast-prep3): it alone exports `x_prep_prep3_spline`."""
+    return _optional_prep_entry(_prep_binding(mode), "x_prep_prep3_spline") is not None
+
+
 class SplineTransformer(_PrepBase):
     """sklearn.preprocessing.SplineTransformer: per feature, B-splines of
     `degree` on `n_knots` base knots ('uniform' over the training range,
@@ -3304,9 +3321,20 @@ class SplineTransformer(_PrepBase):
         pr = _Prog()
         xo = pr.put(arr)
         sorts = not given and self.knots == "quantile" and w is None
-        so, st = (pr.work(n * d) if sorts else pr.alloc(n * d)), pr.alloc(6 * d)
+        # lane/apple-fast-prep3: `x_prep_prep3_spline` exists in the FAST Apple
+        # build with -D MOJOLEARN_PREP3_SPLINE only. There: no n*d arena block
+        # when nothing sorts (it came back from the device unread), and the
+        # count / min / max rows by the blocked units (`_col_stats`, one unit per
+        # row block and column) instead of one threadgroup per column folding
+        # every row twice. Exact rows either way: the same knots.
+        fast3 = _spline_prep3(mode)
+        so = pr.work(n * d) if sorts else (None if fast3 else pr.alloc(n * d))
+        st = pr.alloc(6 * d)
         knots = pr.alloc(d * (nk + 2 * k))
-        pr.stage("col_stats", d, xo, n, d, st)
+        if fast3:
+            _col_stats(pr, xo, n, d, st, var=False)
+        else:
+            pr.stage("col_stats", d, xo, n, d, st)
         uniform, kst = 0, st
         if given:
             base = pr.put_list([v for col in cols for v in col])
@@ -3354,7 +3382,10 @@ class SplineTransformer(_PrepBase):
         st = pr.alloc(6 * d)
         check = self.extrapolation == "error" or self.handle_missing == "error"
         if check:
-            pr.stage("col_stats", d, xo, n, d, st)
+            if _spline_prep3(self.numeric_mode_):
+                _col_stats(pr, xo, n, d, st, var=False)
+            else:
+                pr.stage("col_stats", d, xo, n, d, st)
         pr.stage("spline_apply", n * d, xo, n, d, ko, self._nk, self._k, self._EXTRAP[self.extrapolation], W,
                  1 if self.include_bias else 0, out)
         pr.run(self.numeric_mode_)
