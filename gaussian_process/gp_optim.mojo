@@ -379,7 +379,6 @@ def gpr_optimize_device(
     var ctrace = IdentityTrace()
     # the likelihood's `n` (its `(n/2) log(2 pi)` term and log|K|'s slot in
     # dwork): a constant of the step's scalar combine, never a loop bound
-    var lml_n = Int32(n)
     var eval_cap = GP_OPT_MAX_ITER * (GP_OPT_MAX_LS + 1) + 2
     for run in range(n_runs):
         ctx.enqueue_function[gp_opt_init_kernel](
@@ -431,7 +430,7 @@ def gpr_optimize_device(
                     grid_dim=(nt + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
                 )
             ctx.enqueue_function[gp_opt_step_kernel](
-                _gp(dst), _gi(dsi), _gi(dtmap), _gp(dpar), _gp(dls), _gp(dyd), _gp(dwork), lml_n,
+                _gp(dst), _gi(dsi), _gi(dtmap), _gp(dpar), _gp(dls), _gp(dyd), _gp(dwork), Int32(n),
                 _gp(dlml), _gp(dgraw), Int32(nt), Int32(info),
                 grid_dim=1, block_dim=GP_OPT_TPB,
             )
