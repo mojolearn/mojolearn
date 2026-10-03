@@ -62,6 +62,7 @@ the thing a reader can check against a textbook.
 from std.math import log, sqrt
 
 from core.identity_trace import IdentityTrace
+from cholesky.logdet_fold import logdet_serial
 from cholesky.checks.potrf import chol_panel_tag
 from gemm.checks.gemm_oracle import OP_NT, gemm_oracle
 from checks.numerics import (
@@ -284,10 +285,8 @@ def oracle_logdet(
     for j in range(n):
         diag.append(l[j * n + j])
     _record_matrix(trace, "chol.diag", diag, n)
-    var acc = Float32(0.0)
-    for j in range(n):
-        acc = ftz(acc + ftz(identical_log(ftz(diag[j]))))
-    var out = ftz(identical_mul(Float32(2.0), acc))
+    var out = logdet_serial(MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(diag.unsafe_ptr())), n)
+    _ = diag^
     var one = List[Float32]()
     one.append(out)
     _record_matrix(trace, "chol.logdet", one, 1)

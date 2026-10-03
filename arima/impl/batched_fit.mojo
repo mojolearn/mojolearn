@@ -119,6 +119,11 @@ from arima.impl.batched_arima import (
 from arima.impl.batched_kalman import KALMAN_FAST_EVAL_WS
 from arima.impl.estimate_x0 import StartParamsResult, estimate_x0_x
 from arima.impl.fast_eval_ws import FastEvalWS
+from arima.impl.fast_lbfgs_async import (
+    ARIMA_FAST_ASYNC,
+    ARIMA_FAST_LS_NOREAD,
+    async_min_lbfgs,
+)
 from arima.impl.lbfgs_device import (
     LBFGS_TPB,
     arima_eval_finish_kernel,
@@ -492,6 +497,24 @@ def batched_min_lbfgs(
     comptime if KALMAN_FAST_EVAL_WS:
         if order_kf.n_exog == 0:
             ews = FastEvalWS(ctx, d_y_kf, bs, n_obs_kf, order_kf)
+    comptime if ARIMA_FAST_ASYNC:
+        # every series on its own schedule (fast_lbfgs_async.mojo); the
+        # per-iteration card needs the lock-step shape, so a trace keeps it
+        if ews and not trace.enabled:
+            var ar = async_min_lbfgs(ctx, ews.value(), bs, scale, order_kf, x0, param, h)
+            trace.record_list_f32("fit.x", ar.x)
+            trace.record_list_f32("fit.loss", ar.fx)
+            trace.record_list_i32("fit.n_iter", ar.n_iter)
+            trace.record_list_i32("fit.retcode", ar.retcode)
+            _ = d_x^
+            _ = d_grad^
+            _ = d_x_pert^
+            _ = scratch^
+            _ = ews^
+            return BatchedLBFGSResult(
+                x=ar.x.copy(), fx=ar.fx.copy(), n_iter=ar.n_iter.copy(),
+                retcode=ar.retcode.copy(), n_eval=ar.n_eval,
+            )
     var x = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
     var xp = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
     var grad = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
@@ -591,7 +614,12 @@ def batched_min_lbfgs(
 
         # THE SHARED LINE SEARCH (`ls_backtrack:109-121`, B at a time)
         for _t in range(param.max_linesearch):
-            if not _read_flag(ctx, any_searching, flag_host):
+            var read_it = True
+            comptime if ARIMA_FAST_LS_NOREAD:
+                # the prelude's word is "yes" whenever a series is active
+                # (fast_lbfgs_async.mojo banner); an extra round changes nothing
+                read_it = _t > 0
+            if read_it and not _read_flag(ctx, any_searching, flag_host):
                 break
             ctx.enqueue_memset(any_searching, Int32(0))
             ctx.enqueue_function[lbfgs_candidate_kernel](

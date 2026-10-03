@@ -5356,7 +5356,7 @@ def run_tree_layout_traced[
         ws[0].scale_dev.unsafe_ptr()
     )
     if mags_dev:
-        ctx.enqueue_function[choose_scale_kernel](
+        ctx.enqueue_function[choose_scale_kernel](  # small-launch(n_rows: a scalar operand of the scale snap): one thread of control plane reading two magnitudes, no walk
             rebind[MutPointer[Float32, MutAnyOrigin]](
                 mags_dev.value().unsafe_ptr()
             ),

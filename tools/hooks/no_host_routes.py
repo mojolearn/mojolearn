@@ -60,14 +60,12 @@ _verify_small.py _verify_worker.py _verification_catalog.py
 _verification_coverage.py _verification_ctr_models.py
 _verification_evidence_data.py _verification_profiles.py
 _forest_host.py _gbdt_host.py _byte_lm_host.py _byte_lm_trainer_host.py
-_classical_host.py _serialize.py _gp_optimizer.py
+_classical_host.py _serialize.py
 neural_inference.py _causal_lm_fixtures.py
 """.split())
 # neural_inference.py: the public CPU inference product.
 # _causal_lm_fixtures.py: verification fixtures (_verify_causal_lm and tests only).
 # _serialize.py: model save/load (no fit, transform or predict).
-# _gp_optimizer.py: L-BFGS over the kernel's few hyperparameters (its loops
-# run over parameters, not samples); the kernel matrix work is on the GPU.
 
 # The host thread pool's own implementation: its contents are the CPU-only
 # executor. Every USE of it in GPU code is still a finding.
@@ -150,13 +148,16 @@ _LINE_RULES = [
 
 _RULE_CLASS = {r[0]: r[1] for r in _LINE_RULES}
 _RULE_CLASS.update({"host-call": "host-import", "serial-launch": "serial-gpu", "host-switch": "host-env/threshold",
-                    "d2h-loop": "d2h-roundtrip", "tid0-loop": "serial-gpu"})
+                    "d2h-loop": "d2h-roundtrip", "tid0-loop": "serial-gpu",
+                    "d2h-host-work": "d2h-roundtrip", "one-block-n": "serial-gpu"})
 _RULE_WHY = {r[0]: r[4] for r in _LINE_RULES}
 _RULE_WHY.update({
     "host-call": "calls a host-only module from GPU code",
     "host-switch": "a switch or threshold in a function that calls host code",
     "d2h-loop": "downloads, synchronizes, loops on the host, then goes back to the device",
     "tid0-loop": "one thread loops over a runtime n",
+    "d2h-host-work": "copies device data to the host, then computes on it in a host loop over a data size",
+    "one-block-n": "a one-block launch (grid_dim=(1, 1, 1)) over a runtime size",
     "serial-launch": "a one-block or one-thread launch over a runtime size",
 })
 
@@ -554,6 +555,34 @@ def _launch_statements(lines):
 
 
 _GRID1 = re.compile(r"\bgrid_dim\s*=\s*(1\b(?!\s*[.\w])|\(\s*1\s*,\s*1\s*\)|\(\s*1\s*\))")
+# THE REVIEWED EXEMPTION. A one-block or one-thread launch (or an
+# `if tid == 0:` walk) that works over d- or k-sized data, never rows, says so
+# on the launch statement (or the `if` line) with a trailing comment
+#     # small-launch(<arg>: <what it counts>): <why it is bounded>
+# naming the launch argument that bounds the work and what it counts. A
+# reviewer reads the annotation in the diff; the checker requires the named
+# argument to appear in the launch and a reason of at least a few words, so a
+# lane annotates instead of renaming arguments to dodge the rule.
+_SMALL_LAUNCH = re.compile(r"#\s*small-launch\(\s*([^:()]+?)\s*:\s*([^()]+?)\s*\)\s*:\s*(.+)$")
+
+
+def _small_launch_ok(txt, first=None):
+    """`first`: the statement's first physical line, which carries the note
+    (the note runs to the end of that line); `txt` the joined statement."""
+    first = txt if first is None else first
+    m = _SMALL_LAUNCH.search(first)
+    if not m:
+        return False
+    arg, what, why = m.group(1), m.group(2), m.group(3)
+    code = txt.replace(first[m.start():].strip(), " ")
+    # the named argument appears in the code, not only in the note
+    is_if = code.lstrip().startswith("if ")
+    if not is_if and not re.search(r"\b" + re.escape(arg) + r"\b", code):
+        return False
+    return len(what.split()) >= 1 and len(why.split()) >= 3
+
+
+_GRID1_3D = re.compile(r"\bgrid_dim\s*=\s*(\(\s*1\s*,\s*1\s*,\s*1\s*\)|Dim\(\s*1\s*\))")
 _BLOCK1 = re.compile(r"\bblock_dim\s*=\s*(1\b(?!\s*[.\w])|\(\s*1\s*\))")
 # a runtime size among the launch arguments (rows, samples, elements, nnz)
 _SIZES = (r"(n|m|n_rows|rows|n_samples|nnz|n_nodes|n_points|n_q|numel|n_elems|n_obs|n_train"
@@ -579,6 +608,76 @@ def _top_args(s):
         else:
             cur += ch
     out.append(cur)
+    return out
+
+
+# any device->host copy: an explicit copy, a mapped buffer, or a download helper
+_D2H_ANY = re.compile(r"enqueue_copy\(\s*dst_ptr\s*=|\bmap_to_host\b|enqueue_copy_from_device|\bto_host\w*\("
+                      r"|\b\w*download\w*\s*\(|\b\w*readback\w*\s*\(")
+_KERNEL_TOK = re.compile(r"\b(thread_idx|block_idx|global_idx|lane_id|warp_id)\b|\bblock_dim\.")
+# a data-sized loop bound: rows, samples, queries, points, nonzeros, elements
+_DATA_SIZES = re.compile(r"(?<![.\w])(" + _SIZES + r"|n_queries|n_cand|n_todo|n_pooled|n_resamples"
+                         r"|n_vertices|total_labels|n_pairs|n_tokens|T)\b|\bself\.size\b")
+# a loop body that computes (branches, folds, sorts), not a plain element copy
+_HOST_WORK = re.compile(r"^\s*(if|elif|while)\b|[-+*/]=|\b(min|max|abs|sqrt|exp|log)\s*\("
+                        r"|\bsort\w*\s*\(|\b_find\s*\(|\.insert\s*\(|[^<>=!]\s(<|>|<=|>=|==|!=)\s"
+                        r"|\b(?P<acc>\w+)\s*=\s*\w*\(?\s*(?P=acc)\s*[-+*/]")
+# debug-only blocks (identity traces, stage timers) are not the product path
+_DEBUG_IF = re.compile(r"^\s*(comptime\s+)?(el)?if\b.*(\b(trace\w*\.enabled|_st_on|_trace\w*|verbose|debug\w*"
+                       r"|timing\w*|phase_timing)\b|STAGE_TIMES|TIMERS?\b|TIMING\b)")
+# a function that returns at once unless tracing is on is a trace recorder
+_TRACE_ONLY = re.compile(r"^\s*if\s+not\s+\w*trace\w*\.enabled\s*:")
+
+
+def _d2h_host_work(lines):
+    """[(line_no, text)] of host `for` loops over a data size that compute on
+    device data copied to the host earlier in the same (non-kernel) function."""
+    out = []
+    stack = []  # (indent, def index) of enclosing defs
+    kern = {}
+    owner = []
+    for i, (_, t) in enumerate(lines):
+        ind = len(t) - len(t.lstrip())
+        while stack and ind <= stack[-1][0] and not t.strip().startswith((")", "]", "@")):
+            stack.pop()
+        if re.match(r"\s*(def|fn)\s", t):
+            stack.append((ind, i))
+            kern[i] = False
+            owner.append(i)
+            continue
+        owner.append(stack[-1][1] if stack else None)
+        if stack and _KERNEL_TOK.search(t):
+            kern[stack[-1][1]] = True
+    armed = set()
+    ifs = []  # (indent, is_debug) of enclosing ifs
+    for i, (no, t) in enumerate(lines):
+        o = owner[i]
+        ind = len(t) - len(t.lstrip())
+        while ifs and ind <= ifs[-1][0] and not re.match(r"\s*(else|elif)\b", t):
+            ifs.pop()
+        if o is not None and _TRACE_ONLY.match(t):
+            kern[o] = True  # not product work: skip the rest of the function
+        if re.match(r"\s*(comptime\s+)?(el)?if\b|\s*else\b", t):
+            if re.match(r"\s*(else|elif)\b", t) and ifs and ifs[-1][0] == ind:
+                ifs.pop()
+            ifs.append((ind, bool(_DEBUG_IF.match(t))))
+        if o is None or kern.get(o) or re.match(r"\s*(def|fn)\s", t):
+            continue
+        if _D2H_ANY.search(t):
+            armed.add(o)
+            continue
+        if o not in armed or any(d for _, d in ifs):
+            continue
+        m = _RUNTIME_RANGE.match(t.strip()) if t.lstrip().startswith("for ") else None
+        if not m or not _runtime_bound(m.group(1)) or not _DATA_SIZES.search(m.group(1)):
+            continue
+        body = []
+        for _, t2 in lines[i + 1:]:
+            if len(t2) - len(t2.lstrip()) <= ind:
+                break
+            body.append(t2)
+        if any(_HOST_WORK.search(b) for b in body):
+            out.append((no, t))
     return out
 
 
@@ -715,7 +814,7 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
                 state, d2h = 0, None
         # if tid == 0: for i in range(<runtime>)
         for k, (no, t) in enumerate(body):
-            if not _TID0.match(t):
+            if not _TID0.match(t) or _small_launch_ok(t):
                 continue
             ind = len(t) - len(t.lstrip())
             for no2, t2 in body[k + 1:]:
@@ -725,10 +824,24 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
                 if m and _runtime_bound(m.group(1)) and _SIZE_TOKEN.search(m.group(1)):
                     add("tid0-loop", no, t)
                     break
+    # download -> host loop over a data size that computes on the copy (the
+    # result never needs to go back to the device: OPTICS, agglomerative and
+    # HDBSCAN hid their host passes that way)
+    for no, t in _d2h_host_work(lines):
+        add("d2h-host-work", no, t)
     # one-block / one-thread launches over a runtime size
     for i, txt in _launch_statements(lines):
         g1, b1 = _GRID1.search(txt), _BLOCK1.search(txt)
+        if _small_launch_ok(txt, lines[i][1]):
+            continue
         if not g1:
+            # the 3-D spelling serial-launch's pattern never matched
+            g3 = _GRID1_3D.search(txt)
+            if g3:
+                args = txt[:g3.start()]
+                args = args[args.find("(", args.find("enqueue_function")) + 1:] if "(" in args else args
+                if any(_SIZE_ARG.match(a) for a in _top_args(args)):
+                    add("one-block-n", lines[i][0], lines[i][1])
             continue
         args = txt[:g1.start()]
         args = args[args.find("(", args.find("enqueue_function")) + 1:] if "(" in args else args
@@ -756,19 +869,36 @@ def tree_findings(tree, paths=None):
 # ------------------------------------------------------------- baseline ----
 
 _HDR = "rule\tclass\towner\tstate\tpath\tocc\ttext"
+# `owed` is `debt` for a rule added after the 2026-10-02 hooks were
+# installed: those hooks skip a state they do not know, so the row neither
+# fails them as stale nor needs them to know the rule.
+_DEBT_STATES = ("debt", "owed")
+# rules added after the baseline was first written; a baseline with no row of
+# one predates it (see check_tree)
+_LATE_RULES = ("d2h-host-work", "one-block-n")
 
 
 def load_baseline(text):
+    """Rows of the baseline. A `# why: ...` comment line gives the reason for
+    the row right after it (required for d2h-host-work rows); older readers
+    skip it as a comment."""
     rows = []
+    why = ""
     for ln in text.splitlines():
+        if ln.startswith("# why:"):
+            why = ln[len("# why:"):].strip()
+            continue
         if not ln.strip() or ln.startswith("#") or ln.startswith("rule\t"):
             continue
         c = ln.split("\t")
         if len(c) != 7:
             raise SystemExit(f"no_host_routes: bad baseline row: {ln[:120]}")
         rule, cls, owner, state, path, occ, text = c
+        if rule in _LATE_RULES and not why:
+            raise SystemExit(f"no_host_routes: a {rule} row needs a `# why:` line above it: {ln[:120]}")
         rows.append(dict(rule=rule, cls=cls, owner=owner, state=state, path=path,
-                         occ=int(occ), text=text))
+                         occ=int(occ), text=text, why=why))
+        why = ""
     return rows
 
 
@@ -776,10 +906,13 @@ def dump_baseline(rows):
     rows = sorted(rows, key=lambda r: (r["path"], r["rule"], r["text"], r["occ"]))
     head = ("# no_host_routes baseline: CPU work in GPU code that main still carries.\n"
             "# It only shrinks. A fix deletes its rows (no_host_routes.py --prune-baseline).\n"
-            "# state debt = on main; inflight = pre-authorized lines of an open PR.\n")
+            "# state debt = on main; inflight = pre-authorized lines of an open PR; owed = debt of a rule\n"
+            "# newer than the installed hooks (they skip it).\n"
+            "# A `# why: ...` line gives the reason the next row stays (required for d2h-host-work).\n")
     return head + _HDR + "\n" + "".join(
-        "\t".join([r["rule"], r["cls"], r["owner"], r["state"], r["path"], str(r["occ"]),
-                   r["text"]]) + "\n" for r in rows)
+        (f"# why: {r['why']}\n" if r.get("why") else "")
+        + "\t".join([r["rule"], r["cls"], r["owner"], r["state"], r["path"], str(r["occ"]),
+                     r["text"]]) + "\n" for r in rows)
 
 
 def _key(r):
@@ -802,7 +935,7 @@ def _inflight_ok(state, ref):
 
 
 def summary(rows, out=sys.stderr):
-    debt = [r for r in rows if r["state"] == "debt"]
+    debt = [r for r in rows if r["state"] in _DEBT_STATES]
     by_cls = collections.Counter(r["cls"] for r in debt)
     by_owner = collections.Counter(r["owner"] for r in debt)
     infl = collections.Counter(r["owner"] for r in rows if r["state"].startswith("inflight"))
@@ -834,17 +967,22 @@ def check_tree(ref, baseline_path=None, overlay=None, quiet=False):
     rows = load_baseline(btext)
     tree = Tree(ref, overlay)
     found = tree_findings(tree)
-    debt_keys = collections.Counter(_key(r) for r in rows if r["state"] == "debt")
+    debt_keys = collections.Counter(_key(r) for r in rows if r["state"] in _DEBT_STATES)
     infl_keys = collections.Counter(_key(r) for r in rows if _inflight_ok(r["state"], ref))
     allowed_extra = collections.Counter()
-    if not own:
+    # a rule newer than the tree's baseline (no row of it, so the baseline was
+    # written before the rule) is judged like a tree that predates the
+    # baseline, for that rule only: what the branch adds over its merge-base
+    late = {r for r in _LATE_RULES if not any(x["rule"] == r for x in rows)} if own else set()
+    if not own or late:
         # the tree predates the baseline: judge only what the branch adds over
         # its merge-base with main (main's later fixes are not charged to it)
         mb = _git("merge-base", "refs/remotes/origin/main", ref)
         if mb.returncode != 0:
             mb = _git("merge-base", "origin/main", ref)
         if mb.returncode == 0:
-            allowed_extra = collections.Counter(k for k, _ in tree_findings(Tree(mb.stdout.strip())))
+            allowed_extra = collections.Counter(k for k, _ in tree_findings(Tree(mb.stdout.strip()))
+                                                if not own or k[0] in late)
     found_keys = collections.Counter(k for k, _ in found)
     new, matched_infl = [], []
     for k, no in found:

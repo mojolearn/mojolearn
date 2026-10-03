@@ -29,6 +29,7 @@ THE FIXED-ORDER DESIGN
 """
 
 from std.memory import bitcast
+from core.device_fold import host_sum_f32_fixed
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_exp, identical_log, identical_mul,
     identical_mul_add,
@@ -256,9 +257,9 @@ def _tsne_symmetrize_distinct(
             indices.append(j)
             values.append(ftz(a + b))
         indptr.append(Int32(len(indices)))
-    var total = Float32(0.0)
-    for e in range(len(values)):
-        total = ftz(total + values[e])
+    # lane cgr4-download-loop: the device's fixed fold order
+    # (core/device_fold.mojo); the device symmetrization folds the same
+    var total = host_sum_f32_fixed(values, len(values))
     if total < Float32(1.1920929e-07):
         total = Float32(1.1920929e-07)
     for e in range(len(values)):
@@ -312,9 +313,9 @@ def tsne_symmetrize(
             indices.append(Int32(j))
             values.append(ftz(a + b))
         indptr.append(Int32(len(indices)))
-    var total = Float32(0.0)
-    for e in range(len(values)):
-        total = ftz(total + values[e])
+    # lane cgr4-download-loop: the device's fixed fold order
+    # (core/device_fold.mojo); the device symmetrization folds the same
+    var total = host_sum_f32_fixed(values, len(values))
     if total < Float32(1.1920929e-07):
         total = Float32(1.1920929e-07)
     for e in range(len(values)):

@@ -8,15 +8,14 @@ hand the `ClusterOut` back. The integer and float parameter lists are
 documented per entry and mirrored in `python/mojolearn/_x_cluster_impl.py`."""
 from x_cluster.affinity import affinity_fit
 from x_cluster.agglo import agglo_tree
-from x_cluster.bgmm import BgmmPriors, BgmmState, bgmm_constants, bgmm_fit, bgmm_score, bgmm_weights
+from x_cluster.bgmm import BgmmPriors, BgmmState, bgmm_fit, bgmm_score
 from x_cluster.bisect import BisectTree, bisect_fit, bisect_predict
-from checks.numerics import identical_mul64
 from x_cluster.common import distances_to, nearest_all
 from x_cluster.meanshift import meanshift_fit
 from x_cluster.bodies import SplitMix64
 from x_cluster.minibatch import MiniBatchParams, minibatch_fit, minibatch_partial
 from x_cluster.ops import ClusterOps
-from x_cluster.optics import optics_dbscan_ops, optics_graph, optics_xi_clusters, optics_xi_labels
+from x_cluster.optics import optics_dbscan_ops, optics_graph, optics_xi_ops
 from x_cluster.out import ClusterOut
 from x_cluster.spectral_assign import ASSIGN_CLUSTER_QR, ASSIGN_DISCRETIZE, cluster_qr_labels, discretize_labels
 
@@ -177,12 +176,12 @@ def optics_entry[O: ClusterOps](mut ops: O, x: List[Float32], ip: List[Int], fp:
     var pred = List[Int]()
     var metric = ip[6] if len(ip) > 6 else -1
     var pw = Float32(fp[3]) if len(fp) > 3 else Float32(2)
-    optics_graph(ops, x, n, d, ip[2], Float32(fp[0]), ordering, core, reach, pred, metric, pw)
-    var labels: List[Int32]
-    var clusters = List[Int]()
+    var slots = List[Int]()
+    optics_graph(ops, x, n, d, ip[2], Float32(fp[0]), ordering, core, reach, pred, slots, metric, pw)
+    var labels = List[Int32]()
+    var clusters = List[Int32]()
     if ip[4] == 0:
-        clusters = optics_xi_clusters(reach, pred, ordering, fp[1], ip[2], ip[3], ip[5] != 0)
-        labels = optics_xi_labels(ordering, clusters)
+        clusters = optics_xi_ops(ops, slots, n, fp[1], ip[2], ip[3], ip[5] != 0, labels)
     else:
         labels = optics_dbscan_ops(ops, ordering, reach, core, Float32(fp[2]))
     var out = ClusterOut()
@@ -191,7 +190,7 @@ def optics_entry[O: ClusterOps](mut ops: O, x: List[Float32], ip: List[Int], fp:
     out.i.append(_i32(ordering))
     out.i.append(_i32(pred))
     out.i.append(labels^)
-    out.i.append(_i32(clusters))
+    out.i.append(clusters^)
     return out^
 
 
@@ -247,47 +246,19 @@ def bgmm_entry[O: ClusterOps](
     var n = ip[0]
     var d = ip[1]
     var kc = ip[2]
+    # the caller's priors; the defaults (X's mean, np.cov(X.T), its mean
+    # variance times I when spherical) are the device's (`bgmm_fit`)
     var off = 0
-    var mean_prior = List[Float64](capacity=d)
+    var mean_prior = List[Float64]()
     if ip[8] != 0:
         for f in range(d):
             mean_prior.append(Float64(a[f]))
         off = d
-    else:
-        for f in range(d):
-            var acc = Float64(0)
-            for r in range(n):
-                acc = acc + Float64(x[r * d + f])
-            mean_prior.append(acc / Float64(n))
-    var cov_prior = List[Float64](length=d * d, fill=0)
+    var cov_prior = List[Float64]()
     if ip[9] != 0:
         for t in range(d * d):
-            cov_prior[t] = Float64(a[off + t])
-    else:
-        # np.cov(X.T): ddof 1, one ascending Float64 chain per cell
-        var mean = List[Float64](capacity=d)
-        for f in range(d):
-            var acc = Float64(0)
-            for r in range(n):
-                acc = acc + Float64(x[r * d + f])
-            mean.append(acc / Float64(n))
-        for p in range(d):
-            for q in range(d):
-                var acc = Float64(0)
-                for r in range(n):
-                    acc = acc + identical_mul64(Float64(x[r * d + p]) - mean[p], Float64(x[r * d + q]) - mean[q])
-                cov_prior[p * d + q] = acc / Float64(n - 1 if n > 1 else 1)
+            cov_prior.append(Float64(a[off + t]))
     var cov_type = ip[10] if len(ip) > 10 else 0
-    if cov_type == 3 and ip[9] == 0:
-        # spherical: var(X, ddof=1).mean(), as s * I
-        var sph = Float64(0)
-        for f in range(d):
-            sph = sph + cov_prior[f * d + f]
-        sph = sph / Float64(d)
-        for t in range(d * d):
-            cov_prior[t] = Float64(0)
-        for f in range(d):
-            cov_prior[f * d + f] = sph
     var wcp = fp[0] if fp[0] >= 0 else 1.0 / Float64(kc)
     var mpp = fp[1] if fp[1] >= 0 else 1.0
     var dofp = fp[2] if fp[2] >= 0 else Float64(d)
@@ -346,7 +317,7 @@ def bgmm_entry[O: ClusterOps](
         w_init, m_init, p_init,
     )
     var out = ClusterOut()
-    out.f.append(_f32_of(bgmm_weights(pr, best)))
+    out.f.append(_f32_of(best.weights))
     out.f.append(_f32_of(best.means))
     out.f.append(_f32_of(best.cov))
     out.f.append(_f32_of(best.pchol))
@@ -354,9 +325,9 @@ def bgmm_entry[O: ClusterOps](
     out.f.append(_f32_of(best.wc1))
     out.f.append(_f32_of(best.mean_prec))
     out.f.append(_f32_of(best.dof))
-    out.f.append(bgmm_constants(pr, best))
-    out.f.append(_f32_of(mean_prior))
-    out.f.append(_f32_of(cov_prior))
+    out.f.append(best.consts.copy())
+    out.f.append(_f32_of(best.mean_prior))
+    out.f.append(_f32_of(best.cov_prior))
     out.f.append(_f32_of(best.nk))
     out.i.append(labels^)
     out.s.append(r.lower_bound)

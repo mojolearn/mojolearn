@@ -34,6 +34,13 @@ Every Claude session and subagent in this repo reads this file. Lane briefs add 
 
   No narrative, no pasted diffs.
 
+## Experiments (Apple FAST and every speed lane)
+
+- Every experiment is a `-D MOJOLEARN_<AREA>_FAST_<NAME>` define, default off, measured by an A/B on the box.
+- A winner (faster, quality equal) becomes the FAST default with a `_OFF` define and a code comment citing the A/B numbers.
+- A loser (slower, noise, quality or semantics change) never reaches main: delete its code from the lane before merging. It stays recoverable at the lane's recorded sha.
+- Every experiment, kept or dropped, gets one row in `docs/apple-fast/EXPERIMENTS.md` (define, algorithm/dataset, branch@sha, A/B tag, before -> after ms, verdict, reason). Search it before writing a new experiment.
+
 ## Briefs
 
 The orchestrator saves every lane brief as `~/mojolearn-evidence/briefs-<date>/<lane>.md` before launching the lane. After a crash, a lane is relaunched from that file plus `git status` and `git log origin/main..HEAD` in its worktree.

@@ -229,7 +229,7 @@ def _c_rows(binding, C, n_rows, sample_weight, class_weight=None, y=None, who="S
         return None
     sw = None
     if sample_weight is not None:
-        sw = as_f64_c(sample_weight, ndim=1, name="sample_weight")
+        sw, _ = as_f64_c(sample_weight, ndim=1, name="sample_weight")
         if sw.shape[0] != n_rows:
             raise ValueError(
                 f"mojolearn {who}: sample_weight has {sw.shape[0]} entries, X has {n_rows} rows"
