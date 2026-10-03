@@ -151,7 +151,7 @@ _LINE_RULES = [
 _RULE_CLASS = {r[0]: r[1] for r in _LINE_RULES}
 _RULE_CLASS.update({"host-call": "host-import", "serial-launch": "serial-gpu", "host-switch": "host-env/threshold",
                     "d2h-loop": "d2h-roundtrip", "tid0-loop": "serial-gpu",
-                    "d2h-host-work": "d2h-roundtrip"})
+                    "d2h-host-work": "d2h-roundtrip", "one-block-n": "serial-gpu"})
 _RULE_WHY = {r[0]: r[4] for r in _LINE_RULES}
 _RULE_WHY.update({
     "host-call": "calls a host-only module from GPU code",
@@ -159,6 +159,7 @@ _RULE_WHY.update({
     "d2h-loop": "downloads, synchronizes, loops on the host, then goes back to the device",
     "tid0-loop": "one thread loops over a runtime n",
     "d2h-host-work": "copies device data to the host, then computes on it in a host loop over a data size",
+    "one-block-n": "a one-block launch (grid_dim=(1, 1, 1)) over a runtime size",
     "serial-launch": "a one-block or one-thread launch over a runtime size",
 })
 
@@ -556,6 +557,7 @@ def _launch_statements(lines):
 
 
 _GRID1 = re.compile(r"\bgrid_dim\s*=\s*(1\b(?!\s*[.\w])|\(\s*1\s*,\s*1\s*\)|\(\s*1\s*\))")
+_GRID1_3D = re.compile(r"\bgrid_dim\s*=\s*(\(\s*1\s*,\s*1\s*,\s*1\s*\)|Dim\(\s*1\s*\))")
 _BLOCK1 = re.compile(r"\bblock_dim\s*=\s*(1\b(?!\s*[.\w])|\(\s*1\s*\))")
 # a runtime size among the launch arguments (rows, samples, elements, nnz)
 _SIZES = (r"(n|m|n_rows|rows|n_samples|nnz|n_nodes|n_points|n_q|numel|n_elems|n_obs|n_train"
@@ -806,6 +808,13 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
     for i, txt in _launch_statements(lines):
         g1, b1 = _GRID1.search(txt), _BLOCK1.search(txt)
         if not g1:
+            # the 3-D spelling serial-launch's pattern never matched
+            g3 = _GRID1_3D.search(txt)
+            if g3:
+                args = txt[:g3.start()]
+                args = args[args.find("(", args.find("enqueue_function")) + 1:] if "(" in args else args
+                if any(_SIZE_ARG.match(a) for a in _top_args(args)):
+                    add("one-block-n", lines[i][0], lines[i][1])
             continue
         args = txt[:g1.start()]
         args = args[args.find("(", args.find("enqueue_function")) + 1:] if "(" in args else args
@@ -839,7 +848,7 @@ _HDR = "rule\tclass\towner\tstate\tpath\tocc\ttext"
 _DEBT_STATES = ("debt", "owed")
 # rules added after the baseline was first written; a baseline with no row of
 # one predates it (see check_tree)
-_LATE_RULES = ("d2h-host-work",)
+_LATE_RULES = ("d2h-host-work", "one-block-n")
 
 
 def load_baseline(text):
@@ -858,8 +867,8 @@ def load_baseline(text):
         if len(c) != 7:
             raise SystemExit(f"no_host_routes: bad baseline row: {ln[:120]}")
         rule, cls, owner, state, path, occ, text = c
-        if rule == "d2h-host-work" and not why:
-            raise SystemExit(f"no_host_routes: a d2h-host-work row needs a `# why:` line above it: {ln[:120]}")
+        if rule in _LATE_RULES and not why:
+            raise SystemExit(f"no_host_routes: a {rule} row needs a `# why:` line above it: {ln[:120]}")
         rows.append(dict(rule=rule, cls=cls, owner=owner, state=state, path=path,
                          occ=int(occ), text=text, why=why))
         why = ""

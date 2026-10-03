@@ -238,14 +238,15 @@ def _colsum32_partial_kernel(x: _F32P, part: _F32P, n_in: Int32, k_in: Int32):
         part.unsafe_store(Int(block_idx.x) * 32 + tid, t)
 
 
-def _colmean32_fold_kernel(part: _F32P, mean: _F32P, blocks_in: Int32, n_in: Int32, k_in: Int32):
-    """Thread f < k: the block partials of column f added ascending, over n."""
+def _colmean32_fold_kernel(part: _F32P, mean: _F32P, blocks_in: Int32, rows: Float32, k_in: Int32):
+    """Thread f < k: the block partials of column f added ascending, over
+    the row count (passed as a float: this pass walks blocks, not rows)."""
     var f = Int(thread_idx.x)
     if f < Int(k_in):
         var t = Float32(0.0)
         for b in range(Int(blocks_in)):
             t = t + part.unsafe_load(b * 32 + f)
-        mean.unsafe_store(f, t / Float32(Int(n_in)))
+        mean.unsafe_store(f, t / rows)
 
 
 # ------------------------------------------------------------ host side ----
@@ -517,7 +518,7 @@ def device_column_means32(
         grid_dim=(blocks, 1, 1), block_dim=(256, 1, 1),
     )
     ctx.enqueue_function[_colmean32_fold_kernel](
-        part.unsafe_ptr(), mean, Int32(blocks), Int32(n), Int32(k),
+        part.unsafe_ptr(), mean, Int32(blocks), Float32(n), Int32(k),
         grid_dim=(1, 1, 1), block_dim=(32, 1, 1),
     )
     _ = part^
