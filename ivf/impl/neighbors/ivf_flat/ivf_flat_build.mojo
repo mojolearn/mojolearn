@@ -109,14 +109,18 @@ comptime IVF_FAST_SEED = (
     and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
 )
-"""FAST on Apple, OPT-IN (lane ann-apple3, `-D MOJOLEARN_ANN3_COARSE_SEED`):
+"""FAST on Apple, DEFAULT (lane ann-apple3; `-D MOJOLEARN_ANN3_COARSE_SEED_OFF` reverts):
 the coarse quantizer is seeded by `x_ann/kpp_seed.mojo` (host k-means++ over
 a stride sample of its training rows) and cluster/'s k-means starts from
 those seeds (`INIT_ARRAY`). An untraced build only."""
 
-comptime IVF_FAST_SEED_DEVICE = IVF_FAST_SEED and is_defined["MOJOLEARN_IVF_FAST_SEED_DEVICE"]()
-"""Lane apple-fast-fastonly2, OPT-IN for the A/B (`-D
-MOJOLEARN_IVF_FAST_SEED_DEVICE`, with `-D MOJOLEARN_ANN3_COARSE_SEED`): the
+comptime IVF_FAST_SEED_DEVICE = IVF_FAST_SEED and not is_defined["MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF"]()
+"""Lane apple-fast-fastonly2, FAST + Apple DEFAULT (`-D
+MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF` reverts to the host k-means++). M2 A/Bs:
+fastonly2-5-ivf-pq-istella (no seed -> seed+device) 18,555 -> 12,036 ms,
+recall .5995 -> .6071; fastonly2-3-ivf-pq-istella (host seed -> device seed)
+-1.3%, recall .6017 -> .6071. (fastonly2-4-ivf-istella recorded nothing: bad
+lane name.) The
 IVF_FAST_SEED k-means++ runs on the device (`x_ann/kpp_seed_device.mojo`: a
 distance-update grid plus a fold/selection launch per seed, same HostRng
 stream) over the training rows already on the device, instead of on one host
