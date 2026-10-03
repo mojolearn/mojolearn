@@ -41,6 +41,7 @@ differ from the step loop's. IDENTICAL compiles none of this.
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
+from std.sys import llvm_intrinsic
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -64,8 +65,36 @@ comptime MBF_MAX_KD = 4096
 comptime MBF_MAX_K = 256
 comptime MBF_MAX_BATCH = 4096
 """The reassignment's pool lives in threadgroup memory (16 KB)."""
-comptime MBF_GROUP = 32
+comptime MBF_GROUP_MAIN = 32
 """Steps enqueued between two reads of the batch inertias."""
+
+# lane/apple-fast-gap-cls2 (2026-10-03), FAST + Apple, default OFF. Board (M3
+# FAST): minibatch-kmeans istella 257 ms vs scikit-learn 124, taxi 44.9 vs
+# 43.9. The step loop below is four launches a step and a synchronize per
+# MBF_GROUP steps (up to 24,414 steps at 1M rows, batch 4096, max_iter 100).
+#   MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_G128: 128 steps between two reads of the
+#     batch inertias (a quarter of the synchronizes; the steps enqueued past a
+#     stop are computed into history slots nobody reads, as now within a group).
+#   MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN: `_mbf_finish_kernel` and
+#     `_mbf_reassign_kernel` as ONE launch (`_mbf_finish_reassign_kernel`, one
+#     block whose 256 threads stride the k x d cells, then the reassignment as
+#     before after a device-memory barrier): three launches a step. Same cell
+#     arithmetic, same draws: the same words.
+#   MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL (x_cluster/minibatch_ptr.mojo): X's
+#     device buffer from a pool kept between fits, not a fresh 880 MB
+#     allocation per fit at Istella's shape.
+comptime _MBK_CLS2_FA = MINIBATCH_FAST_DEV
+comptime MBK_CLS2_G128 = _MBK_CLS2_FA and is_defined["MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_G128"]()
+comptime MBK_CLS2_FIN = _MBK_CLS2_FA and is_defined["MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN"]()
+comptime MBK_CLS2_POOL = _MBK_CLS2_FA and is_defined["MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL"]()
+comptime MBF_GROUP = 128 if MBK_CLS2_G128 else MBF_GROUP_MAIN
+
+
+@always_inline
+def _mbf_dev_barrier():
+    """A threadgroup barrier that also orders device memory on Apple
+    (x_neighbors/ocsvm_dev.mojo `_xn_barrier`)."""
+    llvm_intrinsic["llvm.air.wg.barrier", NoneType](Int32(3), Int32(1))
 
 comptime UPtr = MutPointer[UInt64, MutAnyOrigin]
 
@@ -284,6 +313,126 @@ def _mbf_reassign_kernel(
                 q += 1
 
 
+
+def _mbf_finish_reassign_kernel(
+    c_in: FPtr, w_in: FPtr, part: FPtr, cpart: IPtr, nchunk: Int32, k: Int32, d: Int32,
+    c_out: FPtr, w_out: FPtr, ipart: FPtr, nblk: Int32, inertia: FPtr,
+    x: FPtr, idx: IPtr, batch: Int32, ratio: Float32, rng: UPtr, since: IPtr,
+):
+    """MBK_CLS2_FIN: `_mbf_finish_kernel` over every cell (the block's
+    threads stride the k x d cells), a device-memory barrier, then
+    `_mbf_reassign_kernel` on (c_out, w_in, w_out) exactly as its own launch."""
+    var tid = Int(thread_idx.x)
+    var D = Int(d)
+    var NC = Int(nchunk)
+    var K = Int(k)
+    if tid == 0:
+        var acc = Float32(0)
+        for b in range(Int(nblk)):
+            acc = acc + ipart[b]
+        inertia[0] = acc
+    for cell in range(tid, K * D, MBF_TPB):
+        var j = cell // D
+        var f = cell - j * D
+        var wsum = Float32(0)
+        for c in range(NC):
+            wsum = ftz(wsum + Float32(cpart[j * NC + c]))
+        if wsum > Float32(0):
+            var s = Float32(0)
+            for c in range(NC):
+                s = ftz(s + part[(j * NC + c) * D + f])
+            var v = ftz(identical_mul(c_in[cell], w_in[j]))
+            v = ftz(v + s)
+            var wn = ftz(w_in[j] + wsum)
+            var alpha = ftz(identical_div(Float32(1), wn))
+            c_out[cell] = ftz(identical_mul(v, alpha))
+            if f == 0:
+                w_out[j] = wn
+        else:
+            c_out[cell] = c_in[cell]
+            if f == 0:
+                w_out[j] = w_in[j]
+    _mbf_dev_barrier()
+    # ---- `_mbf_reassign_kernel`'s body (c = c_out, w = w_out) ----------
+    var c = c_out
+    var w = w_out
+    var B = Int(batch)
+    var pool = stack_allocation[MBF_MAX_BATCH, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var to = stack_allocation[MBF_MAX_K, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var picked = stack_allocation[MBF_MAX_K, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var st = stack_allocation[2, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    for t in range(tid, B, MBF_TPB):
+        pool[t] = Int32(t)
+    for j in range(tid, K, MBF_TPB):
+        to[j] = Int32(0)
+    _mbf_dev_barrier()
+    if tid == 0:
+        var sc = Int(since[0]) + B
+        var any_empty = False
+        for j in range(K):
+            if w_in[j] == Float32(0):
+                any_empty = True
+        var reassign = any_empty or sc >= 10 * K
+        if reassign:
+            sc = 0
+        since[0] = Int32(sc)
+        var nre = 0
+        if reassign and ratio > Float32(0):
+            var wmax = w[0]
+            for j in range(1, K):
+                if w[j] > wmax:
+                    wmax = w[j]
+            var thr = ratio * wmax
+            for j in range(K):
+                if w[j] < thr:
+                    to[j] = Int32(1)
+                    nre += 1
+            var half = B // 2
+            if 2 * nre > B:
+                for j in range(K):
+                    picked[j] = Int32(j)
+                for a in range(1, K):
+                    var b = a
+                    while b > 0 and w[Int(picked[b - 1])] > w[Int(picked[b])]:
+                        var tmp = picked[b - 1]
+                        picked[b - 1] = picked[b]
+                        picked[b] = tmp
+                        b -= 1
+                for q in range(half, K):
+                    to[Int(picked[q])] = Int32(0)
+                nre = 0
+                for j in range(K):
+                    if to[j] != Int32(0):
+                        nre += 1
+            if nre > 0:
+                for q in range(nre):
+                    var r = q + Int(_sm_next(rng) % UInt64(B - q))
+                    var tmp = pool[q]
+                    pool[q] = pool[r]
+                    pool[r] = tmp
+                    picked[q] = pool[q]
+                var wmin = Float32(0)
+                var have = False
+                for j in range(K):
+                    if to[j] == Int32(0) and (not have or w[j] < wmin):
+                        wmin = w[j]
+                        have = True
+                st[1] = wmin
+        st[0] = Float32(nre)
+    _mbf_dev_barrier()
+    var nre = Int(st[0])
+    if nre > 0:
+        var q = 0
+        for j in range(K):
+            if to[j] != Int32(0):
+                var p = Int(idx[Int(picked[q])])
+                for f in range(tid, D, MBF_TPB):
+                    c[j * D + f] = x[p * D + f]
+                if tid == 0:
+                    w[j] = st[1]
+                q += 1
+
+
 def minibatch_fast_steps(
     ctx: DeviceContext, x: FPtr, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,
     ratio: Float64, seed: UInt64, mut rng: SplitMix64, mut c: List[Float32], mut w: List[Float32],
@@ -367,14 +516,21 @@ def minibatch_fast_steps(
                     x, pi, Int32(batch), p_lab, Int32(k), Int32(d), Int32(nchunk), p_part, p_cpart,
                     grid_dim=k * nchunk, block_dim=MBF_TPB,
                 )
-                ctx.enqueue_function[_mbf_finish_kernel](
-                    ci, wi, p_part, p_cpart, Int32(nchunk), Int32(k), Int32(d), co, wo, p_ipart, Int32(nblk),
-                    p_in + g, grid_dim=ncell_blk, block_dim=MBF_TPB,
-                )
-                ctx.enqueue_function[_mbf_reassign_kernel](
-                    x, pi, Int32(batch), co, wi, wo, Int32(k), Int32(d), Float32(ratio), p_rng, p_since,
-                    grid_dim=1, block_dim=MBF_TPB,
-                )
+                comptime if MBK_CLS2_FIN:
+                    ctx.enqueue_function[_mbf_finish_reassign_kernel](
+                        ci, wi, p_part, p_cpart, Int32(nchunk), Int32(k), Int32(d), co, wo, p_ipart, Int32(nblk),
+                        p_in + g, x, pi, Int32(batch), Float32(ratio), p_rng, p_since,
+                        grid_dim=1, block_dim=MBF_TPB,
+                    )
+                else:
+                    ctx.enqueue_function[_mbf_finish_kernel](
+                        ci, wi, p_part, p_cpart, Int32(nchunk), Int32(k), Int32(d), co, wo, p_ipart, Int32(nblk),
+                        p_in + g, grid_dim=ncell_blk, block_dim=MBF_TPB,
+                    )
+                    ctx.enqueue_function[_mbf_reassign_kernel](
+                        x, pi, Int32(batch), co, wi, wo, Int32(k), Int32(d), Float32(ratio), p_rng, p_since,
+                        grid_dim=1, block_dim=MBF_TPB,
+                    )
             ctx.enqueue_copy(dst_ptr=h_in.unsafe_ptr(), src_buf=d_in)
             ctx.synchronize()
             _ = h_idx^
