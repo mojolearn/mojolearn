@@ -36,6 +36,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from tsa.impl.stationarity import kpss_test
 from tsa.impl.timeSeries.stationarity import download_results
+from tsa.impl.select_d_fast import SELECT_D_FAST, select_d_fast
 
 
 def select_d(
@@ -55,6 +56,10 @@ def select_d(
             "select_d: d_max must satisfy 0 <= d_max <= 2 - D (d_max="
             + String(d_max) + ", D=" + String(D) + "), refused by name"
         )
+    comptime if SELECT_D_FAST:
+        # FAST on Apple (lane/apple-fast-select, -D MOJOLEARN_SELECT_D): every round on the
+        # device, one download (tsa/impl/select_d_fast.mojo)
+        return select_d_fast(ctx, d_y, batch_size, n_obs, D, s, d_max, pval_threshold)
     var chosen = List[Int32]()
     var decided = List[Bool]()
     for _ in range(batch_size):

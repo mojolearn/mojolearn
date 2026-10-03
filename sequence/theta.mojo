@@ -41,6 +41,33 @@ comptime THETA_REG = (
     and not is_defined["MOJOLEARN_SEQ_THETA_REG_OFF"]()
 )
 
+#: lane apple-fast-regress (2026-10-03; docs/apple-fast/notes/regress-oct3.md).
+#: Since SEQ_FAST_FMA became the FAST + Apple default (95a09d1fd), the
+#: board's dynamic-optimized-theta taxi-hourly row went 727 -> 2,087 ms
+#: while synthetic went 485 -> 377: the fused fmas move the objective's
+#: last bits; the likely cause (the -D MOJOLEARN_SEQ_FAST_FMA_OFF arm
+#: confirms it) is that on taxi-hourly Nelder-Mead's simplex no longer
+#: settles on a fixed point and a series runs on toward the 1,000-iteration
+#: cap, cycling.
+#: MOJOLEARN_SEQ_FAST_THETA_SNAP hands the theta fits the cycle watch GARCH
+#: already uses (sequence/nm.mojo, `snap`): a state that returns bit for bit
+#: to an earlier one runs only the iterations left of its last lap, the
+#: same final state, best vertex and iteration count as running them all
+#: (no result moves). The snapshot is 16 floats of the 64 the row reserves
+#: for Nelder-Mead (k <= 3 coordinates use at most 28). Default on FAST +
+#: Apple since the M3 A/B (n=3, digests identical): dynamic-optimized-theta
+#: taxi-hourly 2,087.7 -> 561.9 ms, rmse the same. SEQ_FAST_FMA stays on.
+#: -D MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF restores the plain run; the old
+#: -D MOJOLEARN_SEQ_FAST_THETA_SNAP=1 is harmless.
+comptime THETA_SNAP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF"]()
+)
+#: the snapshot's offset in the Nelder-Mead scratch (after the (k + 1) k +
+#: (k + 1) + 4 k <= 28 floats of k <= 3; (k + 1) k + (k + 1) <= 16 floats)
+comptime THETA_SNAP_OFF = 32
+
 comptime STM = 0
 comptime OTM = 1
 comptime DSTM = 2
@@ -461,7 +488,11 @@ def op_theta(t: Int, a: Args):
             k += 1
         var it = 0
         if k > 0:
-            it = nelder_mead(obj, x, lo, hi, k, nm_scr, Float32(0.05), Float32(1e-4), 1000, Float32(1e-4))
+            comptime if THETA_SNAP:
+                it = nelder_mead(obj, x, lo, hi, k, nm_scr, Float32(0.05), Float32(1e-4), 1000, Float32(1e-4),
+                                 nm_scr + THETA_SNAP_OFF)
+            else:
+                it = nelder_mead(obj, x, lo, hi, k, nm_scr, Float32(0.05), Float32(1e-4), 1000, Float32(1e-4))
         var p = obj.params(x)
         var mse = Float32(0.0)
         comptime if THETA_REG:

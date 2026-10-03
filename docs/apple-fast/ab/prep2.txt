@@ -1,0 +1,7 @@
+CMD lane/apple-fast-prep2 prep2-te-global-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep2-te-global-taxi target-encoder taxi 1 2 - MOJOLEARN_X_PREP_FAST_TE_GLOBAL=1
+CMD lane/apple-fast-prep2 prep2-te-enc-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep2-te-enc-taxi target-encoder taxi 1 2 - MOJOLEARN_X_PREP_FAST_TE_ENC=1
+CMD lane/apple-fast-prep2 prep2-si-qsel-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep2-si-qsel-istella simple-imputer istella 1 2 - MOJOLEARN_X_PREP_FAST_QSELECT=1
+CMD lane/apple-fast-prep2 prep2-rs-qsel-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep2-rs-qsel-istella robust-scaler istella 1 2 - MOJOLEARN_X_PREP_FAST_QSELECT=1
+CMD lane/apple-fast-prep2 prep2-ii-eigh-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh prep2-ii-eigh-taxi x_prep iterative-imputer taxi 1 2 "" "-D MOJOLEARN_PREP2_FAST_EIGH_BLOCK"
+CMD lane/apple-fast-prep2 prep2-ii-gram-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep2-ii-gram-taxi iterative-imputer taxi 1 2 - MOJOLEARN_X_PREP_FAST_II_GRAM_TILE=1
+CMD lane/apple-fast-prep2 prep2-ii-conv-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep2-ii-conv-taxi iterative-imputer taxi 1 2 - MOJOLEARN_X_PREP_FAST_II_CONV=1
