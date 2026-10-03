@@ -78,7 +78,7 @@ comptime MBK_CLS2_POOL = MINIBATCH_FAST_DEV and not is_defined["MOJOLEARN_X_CLUS
 comptime UPtr = MutPointer[UInt64, MutAnyOrigin]
 
 # lane/apple-fast-gap-clus3 (2026-10-03): -D MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP
-# (default off until the M3 A/B). Cause: `_mbf_assign_kernel` is a thread per
+# (now the FAST + Apple default, see below). Cause: `_mbf_assign_kernel` is a thread per
 # batch row, so a 4096-row batch is 16 blocks on an 80-core M3 Ultra, and each
 # thread walks its own 880-byte row k times (uncoalesced across the
 # simdgroup). With the switch a batch row is a 32-thread group (8 rows a
@@ -86,7 +86,10 @@ comptime UPtr = MutPointer[UInt64, MutAnyOrigin]
 # coalesced), keeps the k partial distances in registers, and the group folds
 # them lane by lane in threadgroup memory. k <= MBF_RG_MAXK, else the old
 # kernel. FAST: the distance's summation order changes (quality, not bits).
-comptime MBK_CLS3_ROWGRP = MINIBATCH_FAST_DEV and is_defined["MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP"]()
+# FAST + Apple default since the M3 A/B clus3-mbk-rowgrp-istella (n=1):
+# minibatch-kmeans istella 172 -> 148 ms (-14.0%), silhouette .1182 identical;
+# -D MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF turns it off.
+comptime MBK_CLS3_ROWGRP = MINIBATCH_FAST_DEV and not is_defined["MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP_OFF"]()
 comptime MBF_RG_W = 32
 """Threads per batch row."""
 comptime MBF_RG_ROWS = MBF_TPB // MBF_RG_W

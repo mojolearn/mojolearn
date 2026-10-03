@@ -46,8 +46,8 @@ def call_binding(
                 took = minibatch_entry_ptr(ops0, xp, nx, a0, ints0, floats0, res0)
             if took:
                 return res0.to_py()
-    # lane/apple-fast-gap-clus3, FAST on Apple, -D MOJOLEARN_BISECT_FAST_ZEROCOPY
-    # (default off until the M3 A/B): BisectingKMeans uploads X from the
+    # lane/apple-fast-gap-clus3, FAST on Apple, DEFAULT since the M3 A/B
+    # (off: -D MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF): BisectingKMeans uploads X from the
     # caller's array and centers it on the device (x_cluster/bisect_fast.mojo);
     # False falls through to the copy below
     comptime if BISECT_FAST_ZEROCOPY:

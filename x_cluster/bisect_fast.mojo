@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """BisectingKMeans, FAST on Apple: X uploaded from the caller's array and
 centered on the device (lane/apple-fast-gap-clus3, 2026-10-03). Switch:
-`BISECT_FAST_ZEROCOPY` below, `-D MOJOLEARN_BISECT_FAST_ZEROCOPY` (default
-off until the M3 A/B); taken by bindings/_mojolearn_x_cluster.mojo for
+`BISECT_FAST_ZEROCOPY` below, default on in FAST on
+Apple (`-D MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF` turns it off); taken by bindings/_mojolearn_x_cluster.mojo for
 ENTRY_BISECT. IDENTICAL compiles none of this.
 
 Cause (x_cluster/bisect.mojo `bisect_fit`, board shape Istella 1M x 220
@@ -44,8 +44,10 @@ from x_cluster.out import ClusterOut
 
 comptime BISECT_FAST_ZEROCOPY = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_BISECT_FAST_ZEROCOPY"]()
-)
+    and not is_defined["MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF"]()
+)  # FAST + Apple default since the M3 A/B clus3-bisect-zc-istella (n=1):
+# bisecting-kmeans istella 2033 -> 848 ms (-58.3%), silhouette .1183 identical;
+# -D MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF turns it off (the old -D name is harmless)
 
 comptime XPtr = MutPointer[Float32, MutUntrackedOrigin]
 comptime BFZ_TPB = 256
