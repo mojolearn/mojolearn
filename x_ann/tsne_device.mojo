@@ -482,9 +482,9 @@ def tsne_fit_device(
     var graph = tsne_symmetrize_device(ctx, dni, dp, n, nn)
     st.host("symmetrize")
 
-    var dptr = graph.indptr^
-    var dind = graph.indices^
-    var dval = graph.values^
+    ref dptr = graph.indptr
+    ref dind = graph.indices
+    ref dval = graph.values
     var dy = upload_f32(ctx, y0)
     var dy2 = upload_f32(ctx, y0)
     var dupd = upload_f32(ctx, List[Float32](length=2 * n, fill=Float32(0.0)))
@@ -545,9 +545,7 @@ def tsne_fit_device(
     _ = dupd^
     _ = dy2^
     _ = dy^
-    _ = dval^
-    _ = dind^
-    _ = dptr^
+    _ = graph^
     _ = dp^
     _ = dni^
     _ = dnd^
