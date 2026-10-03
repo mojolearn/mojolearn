@@ -108,3 +108,21 @@ nondeterministic order across splits. No approximation anywhere.
   tier it loaded; this lane did not change that default (a public contract).
 * The `gemm` AIR-blob floor (>= 8 `gemm`-prefixed kernels) still counts the
   IDENTICAL plans, which stay compiled under FAST.
+
+## Compile results (2026-10-03, linalg binding, compile only, nothing run)
+
+| build | defines | rc |
+|---|---|---|
+| FAST | `MOJOLEARN_AFN_GEMM_ALL` | 0 |
+| FAST | `MOJOLEARN_AFN_GEMM_SIMDGROUP` | 0 |
+| FAST | `MOJOLEARN_AFN_GEMM_SPLITK` | 0 |
+| FAST | `MOJOLEARN_AFN_GEMM_TILESHAPE` | 0 |
+| FAST | `MOJOLEARN_AFN_GEMM_BF16_MMA` | 0 |
+| FAST | `MOJOLEARN_AFN_GEMM_INT8_MMA` | 0 |
+| FAST | `MOJOLEARN_AFN_GEMM_EPILOGUE` | 0 |
+| FAST | none | 0 |
+| IDENTICAL | none | 0 |
+
+The first ALL build failed on `DeviceBuffer.unsafe_ptr()` origins at the
+entry points (gemm/afn_apple_fast.mojo ~643-723); fixed with
+`unsafe_origin_cast[MutAnyOrigin]()`.
