@@ -1,15 +1,15 @@
 # M3 FAST board refresh (lane/apple-fast)
 
-Our FAST arm on the M3 Ultra Metal GPU at head 0e743cac9, 24ed76679, 2dcdd949f, 37c65a3af, 4198d5a9c, 42b6db46c, 4b1311c12, 550806bc0, 5990c5946, 69f7a41fd, 6c54b7e87, 6d4d55c99, 73f3a856d, 829c3fb4a, 94cb5ba59, 9722e5a2b, a7b8b9513, b2dd5dfe5, c55b8c377, c5e1bbeb6, d1fa9223b, e2bfb8422, eb3fca1ac, ed49f2b11, f419ea9f1, f6a9e7c04, 1 warm-up + 3 timed rounds at board size (rows-full; trees MOJOLEARN_SPEED_SIZE=shipped). Opponents are not re-raced: classical times come from the M3 0.8.34 board (`~/mojolearn-evidence/board-0834-times.tsv`, quality from its board.json), trees from the 2026-09-29 M3 board (older tree params on some lanes); an opponent marked (fill) comes from the M3 opponent fill on the 0.8.34 kit. Ratio = our FAST ms / best opponent ms; below 1 is faster. Rows sort worst ratio after first. Written by `tools/af_board_merge.py`.
+Our FAST arm on the M3 Ultra Metal GPU at head 0e743cac9, 24ed76679, 2dcdd949f, 37c65a3af, 4198d5a9c, 42b6db46c, 4b1311c12, 550806bc0, 5990c5946, 69f7a41fd, 6c54b7e87, 6d4d55c99, 73f3a856d, 829c3fb4a, 94cb5ba59, 9722e5a2b, a7b8b9513, b2dd5dfe5, c55b8c377, c5e1bbeb6, d1fa9223b, e2bfb8422, eb3fca1ac, ed49f2b11, f419ea9f1, f6a9e7c04, fc6c6837f, 1 warm-up + 3 timed rounds at board size (rows-full; trees MOJOLEARN_SPEED_SIZE=shipped). Opponents are not re-raced: classical times come from the M3 0.8.34 board (`~/mojolearn-evidence/board-0834-times.tsv`, quality from its board.json), trees from the 2026-09-29 M3 board (older tree params on some lanes); an opponent marked (fill) comes from the M3 opponent fill on the 0.8.34 kit. Ratio = our FAST ms / best opponent ms; below 1 is faster. Rows sort worst ratio after first. Written by `tools/af_board_merge.py`.
 
 Summary: 174 rows, 165 with a ratio, 128 faster than the best opponent after (bayesian-ridge istella excluded: NaN), geometric-mean ratio 0.36. Flips to faster: lasso-lars istella, onehot istella, ordinal istella, multioutput-reg taxi, qda taxi, iforest istella, dart-reg istella, gpr taxi, dart istella, minmax-scaler taxi, lr-onecycle synthetic, nearest-centroid istella, enet-cv taxi, meanshift istella, select-f-regression taxi, gbdt-rank-yetirank istella, bayesian-ridge istella, gbdt-categorical taxi, lasso-cv taxi, select-f-classif taxi, knn-clf istella, lasso-lars taxi, knn-reg istella, lars taxi, elasticnet taxi, gbdt-lossguide istella, select-r-regression taxi, ridge-clf istella, lasso taxi, lda-clf istella, lasso-cv istella, damped-ets synthetic, damped-ets taxi-hourly, calibrated taxi, enet-cv istella, ard istella, lda taxi-zones, qda istella, stl taxi-hourly. Flips to slower: adafactor synthetic.
 
 | lane | dataset | family | FAST before ms | FAST after ms | best opponent | opp ms | ratio before | ratio after | flip | quality after (FAST) | quality before (FAST) | opponent quality | status |
 |---|---|---|---:|---:|---|---:|---:|---:|---|---|---|---|---|
 | layernorm | synthetic | algos | 26.8 | 52.2 | torch-eager-bf16 | 2.8 | 9.57 | 18.64 |  | - | - | max_rel_diff_vs_torch_eager_fp32=0, rel_fro_vs_torch_eager_fp32=0 | ok |
-| autoarima | taxi-hourly | algos | - | 39298 | statsforecast-cpu | 2844 | - | 13.82 |  | forecast_rmse=74.6591 | - | forecast_rmse=68.21 | ok |
+| autoarima | taxi-hourly | algos | - | 39639 | statsforecast-cpu | 2844 | - | 13.94 |  | forecast_rmse=74.6591 | - | forecast_rmse=68.21 | ok |
 | adagrad | synthetic | algos | 131 | 196 | torch-eager-fp32 | 14.2 | 9.25 | 13.81 |  | - | - | - | ok |
-| autoarima | synthetic | algos | - | 28504 | statsforecast-cpu | 2880 | - | 9.90 |  | forecast_rmse=2.62412 | - | forecast_rmse=17.55 | ok |
+| autoarima | synthetic | algos | - | 28578 | statsforecast-cpu | 2880 | - | 9.92 |  | forecast_rmse=2.62412 | - | forecast_rmse=17.55 | ok |
 | rmsprop | synthetic | algos | 129 | 195 | torch-eager-fp32 | 25.2 | 5.13 | 7.74 |  | - | - | - | ok |
 | adamax | synthetic | algos | 176 | 205 | torch-eager-fp32 | 27.7 | 6.37 | 7.39 |  | - | - | - | ok |
 | nadam | synthetic | algos | 178 | 204 | torch-eager-fp32 | 32.9 | 5.40 | 6.20 |  | - | - | - | ok |
@@ -40,7 +40,7 @@ Summary: 174 rows, 165 with a ratio, 128 faster than the best opponent after (ba
 | select-d | synthetic | algos | 6.6 | 6.2 | statsmodels-cpu | 5.1 | 1.29 | 1.22 |  | - | - | d_agreement_vs_statsmodels=1 | ok |
 | select-d | taxi-hourly | algos | 7.0 | 3.9 | statsmodels-cpu | 3.4 | 2.06 | 1.16 |  | - | - | d_agreement_vs_statsmodels=1 | ok |
 | adafactor | synthetic | algos | 184 | 393 | torch-eager-fp32 | 344 | 0.54 | 1.15 | FLIP slower | - | - | - | ok |
-| gbdt-depthwise | taxi | trees | 13994 | 11123 | xgboost-cpu (fill) | 10435 | 1.34 | 1.07 |  | logloss=0.527847, auc=0.63232 | auc=0.6258, logloss=0.53 | auc=0.631 | ok |
+| gbdt-depthwise | taxi | trees | 13994 | 10812 | xgboost-cpu (fill) | 10435 | 1.34 | 1.04 |  | logloss=0.527929, auc=0.632351 | auc=0.6258, logloss=0.53 | auc=0.631 | ok |
 | minibatch-kmeans | taxi | algos | 106 | 44.9 | sklearn-cpu | 43.9 | 2.40 | 1.02 |  | n_clusters=8, silhouette=0.138023 | ari_vs_ours=1, n_clusters=8, silhouette=0.1381 | ari_vs_ours=0.5252, n_clusters=8, silhouette=0.1655 | ok |
 | lasso-lars | istella | algos | 1016 | 227 | sklearn-cpu | 228 | 4.45 | 1.00 | FLIP faster | r2=0.310837, rmse=0.69346 | r2=0.3103, rmse=0.6937 | r2=0.3111, rmse=0.6933 | ok |
 | onehot | istella | algos | 78.8 | 36.5 | sklearn-cpu | 36.7 | 2.15 | 0.99 | FLIP faster | - | - | - | ok |
@@ -181,7 +181,7 @@ Summary: 174 rows, 165 with a ratio, 128 faster than the best opponent after (ba
 | linearsvr | istella | classical2 | 940 | 217 | - | - | - | - |  | r2=-0.106761, rmse=0.878794 | r2=-0.1067, rmse=0.8788 | - | ok |
 | lion | synthetic | algos | 137 | 201 | - | - | - | - |  | - | - | - | ok |
 
-Sources: before = M3 0.8.34 board (classical), M3 2026-09-29 board FAST cells (trees); job tags afb-eighscope, afb10-ols, afb11-arima-c2, afb12-seq-algos-1, afb12-seq-algos-2, afb12-seq-algos-3, afb12-seq-algos-4, afb13-forest, afb14-lossguide, afb15-prophet, afb16-garch-croston, afb17-gram-algos, afb18-cluster, afb19-prep, afb2-algos-2, afb2-classical-4, afb2-trees-1b, afb20-eigh, afb21-garch, afb22-mbk, afb23-opt, afb24-knn, afb25-kde, afb26-moe, afb27-ridge, afb28-linear, afb29-lp, afb3-cat-taxicat, afb3-trees-fast, afb30-cat, afb31-yeti, afb4-grp-ocsvm-main, afb5-merged-algos, afb5-merged-trees, afb5b-dart, afb6-te-algos, afb9-dw2, nb-lda-fused-zones, regress-adafactor-pipe, regress-dotm-snap, regress-layernorm-pipe, sel-d-hourly, sel-fcls-taxi, sel-freg-taxi-b, sel-rreg-taxi, tsa2-stl-taxi-hourly, tsa2-var-taxi-hourly.
+Sources: before = M3 0.8.34 board (classical), M3 2026-09-29 board FAST cells (trees); job tags afb-eighscope, afb10-ols, afb11-arima-c2, afb12-seq-algos-1, afb12-seq-algos-2, afb12-seq-algos-3, afb12-seq-algos-4, afb13-forest, afb14-lossguide, afb15-prophet, afb16-garch-croston, afb17-gram-algos, afb18-cluster, afb19-prep, afb2-algos-2, afb2-classical-4, afb2-trees-1b, afb20-eigh, afb21-garch, afb22-mbk, afb23-opt, afb24-knn, afb25-kde, afb26-moe, afb27-ridge, afb28-linear, afb29-lp, afb3-cat-taxicat, afb3-trees-fast, afb30-cat, afb31-yeti, afb4-grp-ocsvm-main, afb5-merged-algos, afb5-merged-trees, afb5b-dart, afb6-te-algos, afb9-dw2, gap-dwtaxi, gaparima-async-taxi, gaparima-noread-synthetic, nb-lda-fused-zones, regress-adafactor-pipe, regress-dotm-snap, regress-layernorm-pipe, sel-d-hourly, sel-fcls-taxi, sel-freg-taxi-b, sel-rreg-taxi, tsa2-stl-taxi-hourly, tsa2-var-taxi-hourly.
 
 ## Quality flags (M3 manager, 2026-10-02, updated 2026-10-03 refresh 9 + A/B updates)
 
@@ -234,3 +234,6 @@ Sources: before = M3 0.8.34 board (classical), M3 2026-09-29 board FAST cells (t
 - select-f-classif taxi from A/B sel-fcls-taxi, main e2bfb8422 (SELECT_FCLS default): new row, 128.2 (0.8.34 FAST) -> 17.5 ms (arm B, digest c1217e86bd2c518f, n_selected 5).
 - select-f-regression taxi from A/B sel-freg-taxi-b, main e2bfb8422 (SELECT_FREG default since 4198d5a9c): new row, 102.8 (0.8.34 FAST) -> 15.0 ms (arm B, digest 14ef58d0e8f1bcee, n_selected 5).
 - select-d taxi-hourly from A/B sel-d-hourly, main e2bfb8422 (SELECT_D default): 7.0 -> 3.9 ms (arm B, digest a9b53cf12395d554).
+- gbdt-depthwise taxi: fresh main time from gap A/B arm A, gapmisc-fusedq-dwtaxi, gapmisc-skipfs-dwtaxi, gapmisc-devscale-dwtaxi (arm A medians 10673 / 11108 / 10812): 11123 -> 10812 ms; logloss/auc = median of the 6 arm-A runs.
+- autoarima synthetic: fresh main time from gap A/B arm A, gaparima-noread-synthetic: 28504 -> 28578 ms (digest 9bdde6d5440d1cb6 unchanged).
+- autoarima taxi-hourly: fresh main time from gap A/B arm A, gaparima-async-taxi: 39298 -> 39639 ms (digest 345eb06e29edb8f1 unchanged).
