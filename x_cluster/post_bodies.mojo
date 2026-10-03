@@ -15,9 +15,10 @@ binary tree (lane q takes lane q + off, off = FOLD_LANES / 2 .. 1); the chunk
 totals fold the same way again until one value is left. The device runs a
 chunk as one block; the host column walks the same lanes and the same tree,
 so the words are the same on every vendor and on the host."""
+from std.math import floor
 from std.memory import bitcast
 
-from checks.numerics import ftz, identical_sqrt
+from checks.numerics import ftz, identical_div, identical_mul, identical_sqrt
 from x_cluster.bodies import FPtr, IPtr, splitmix_at
 from x_linear.ff import FF, ff_add, ff_div, ff_f32, two_prod, two_sum
 
@@ -263,3 +264,27 @@ def rand_resp_row(state: UInt64, kc: Int, dst: FPtr, i: Int):
     for k in range(kc):
         var u = unit_ff(splitmix_at(state, UInt64(i * kc + k + 1)))
         dst[i * kc + k] = ff_f32(ff_div(u, s))
+
+
+@always_inline
+def round_half_even(v: Float32) -> Float32:
+    """np.round: to the nearest integer, a half to the even one."""
+    var r = floor(v)
+    var diff = v - r
+    if diff > Float32(0.5):
+        return r + Float32(1)
+    if diff < Float32(0.5):
+        return r
+    var half = r * Float32(0.5)
+    return r if floor(half) == half else r + Float32(1)
+
+
+@always_inline
+def bin_key(v: Float32, bin_size: Float32) -> Float32:
+    """sklearn `get_bin_seeds`' bin of one coordinate: round(x / bin_size)."""
+    return round_half_even(ftz(identical_div(ftz(v), bin_size)))
+
+
+@always_inline
+def bin_value(key: Float32, bin_size: Float32) -> Float32:
+    return ftz(identical_mul(key, bin_size))
