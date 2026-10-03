@@ -10,7 +10,9 @@ from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_linear.ops import FP, IP, X_LINEAR_HOST_SABOTAGE
-from x_linear.dispatch import fit_dispatch, decision_one, team_rows, team_own
+from x_linear.dispatch import fit_dispatch, decision_one, team_rows, team_own, ALGO_ISOTONIC, ALGO_LOGCV
+from x_linear.logcv import logcv_fold_ids
+from x_linear.isotonic_host import isotonic_fit_host
 from x_linear.team import team_work, solo
 
 
@@ -58,17 +60,35 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     _finite(y, Int(py=dims[3]), "y")
     for i in range(n_out):
         out.unsafe_store(i, Float32(0))
+    # LogisticRegressionCV: the caller's fold ids are zeros; its StratifiedKFold
+    # ids are built here from the labels (cgr-linear), into a copy of y
+    var ycopy = List[Float32]()
+    if a == ALGO_LOGCV:
+        var ny = Int(py=dims[3])
+        ycopy = List[Float32](length=max(ny, 1), fill=Float32(0))
+        for i in range(ny):
+            ycopy[i] = y.unsafe_load(i)
+        y = FP(unsafe_from_address=Int(ycopy.unsafe_ptr()))
+        logcv_fold_ids(y, n, IP(unsafe_from_address=Int(ipl.unsafe_ptr())))
     with GILReleased(Python()):
-        fit_dispatch(
-            solo(FP(unsafe_from_address=Int(tw.unsafe_ptr())), n, bufs, own), a, x, y, n, d,
-            IP(unsafe_from_address=Int(ipl.unsafe_ptr())), FP(unsafe_from_address=Int(fpl.unsafe_ptr())),
-            out, FP(unsafe_from_address=Int(fw.unsafe_ptr())), IP(unsafe_from_address=Int(iw.unsafe_ptr())),
-        )
+        if a == ALGO_ISOTONIC:
+            isotonic_fit_host(
+                x, y, n, d,
+                IP(unsafe_from_address=Int(ipl.unsafe_ptr())), FP(unsafe_from_address=Int(fpl.unsafe_ptr())),
+                out, FP(unsafe_from_address=Int(fw.unsafe_ptr())), IP(unsafe_from_address=Int(iw.unsafe_ptr())),
+            )
+        else:
+            fit_dispatch(
+                solo(FP(unsafe_from_address=Int(tw.unsafe_ptr())), n, bufs, own), a, x, y, n, d,
+                IP(unsafe_from_address=Int(ipl.unsafe_ptr())), FP(unsafe_from_address=Int(fpl.unsafe_ptr())),
+                out, FP(unsafe_from_address=Int(fw.unsafe_ptr())), IP(unsafe_from_address=Int(iw.unsafe_ptr())),
+            )
     _ = ipl^
     _ = fpl^
     _ = fw^
     _ = iw^
     _ = tw^
+    _ = ycopy^
     return PythonObject(n_out)
 
 

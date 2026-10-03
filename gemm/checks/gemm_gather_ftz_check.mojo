@@ -17,7 +17,8 @@ from gemm.checks.gemm_identical import (
     GEMM_KPACK_KS, GEMM_KPACK_FS, GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, TUNED_STAGE_FTZ,
 )
 from gemm.checks.gemm_identical import PLAN_FLAT
-from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN, gemm_oracle
+from gemm.contract import OP_NN, OP_NT, OP_TN
+from gemm.checks.gemm_oracle import gemm_oracle
 
 
 def _small(outer: Int, p: Int) -> Float32:

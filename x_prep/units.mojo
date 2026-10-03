@@ -11,7 +11,7 @@ from x_prep.prims import (
     label_binarize_unit, scatter_ones_unit, gather_cols_unit, var_ptp_unit,
     sqsum_cols_unit, block_argmax_unit, ord_inverse_unit, cat_gather_unit, where_code_unit,
     class_stats_w_unit, indicator_unit, code_counts_unit, remap_codes_unit, add_arrays_unit,
-    scaler_stats_unit, std_scale_unit, nan_keep_unit,
+    scaler_stats_unit, std_scale_unit, nan_keep_unit, hcat_unit, colblock_unit,
 )
 from x_prep.eigh import eigh_unit
 from x_prep.target import (
@@ -33,6 +33,7 @@ from x_prep.spline import spline_knots_unit, spline_apply_unit
 from x_prep.iterative import (
     ii_mean_unit, ii_gram_unit, ii_sub_unit, ii_br_unit, ii_predict_unit, ii_snapshot_unit, ii_conv_unit,
     nan_mask_unit, ii_sigma_unit, ii_post_unit, ii_rowabs_unit,
+    ii_rcount_unit, ii_rwrite_unit, ii_gather_unit, ii_scatter_unit,
 )
 from x_prep.labels import lab_load_unit, uniq_count_unit, uniq_scan_unit, uniq_write_unit, chunk_neg_unit, row_ones_unit
 from x_prep.stats import f_classif_unit, f_regression_unit, chi2_unit
@@ -45,8 +46,16 @@ from naive_bayes.da import (
     lda_prep_unit, lda_w_unit, lda_stage2_unit, lda_stage3_unit, qda_cov_unit, qda_prep_unit, qda_dec_unit,
     da_shrink_unit, da_pool_unit, sym_fn_unit, da_intercept_unit, evr_unit,
 )
+from x_prep.calib import (
+    CALIB_FOLDS, cal_fold_part_unit, cal_fold_scan_unit, cal_fold_rank_unit, cal_fold_assign_unit,
+    cal_lofo_merge_unit, cal_eps_folds_unit, cal_params_folds_unit, cal_jll_folds_unit, cal_platt_init_unit,
+    cal_platt_setup_unit, cal_platt_part_unit, cal_platt_step_unit, cal_platt_ls_part_unit, cal_platt_ls_pick_unit,
+    cal_sigmoid_avg_unit,
+)
 
-comptime N_OPS = 136
+#: ops 142-156 (x_prep/calib.mojo) exist only under CALIB_FOLDS (FAST + Apple,
+#: default on, -D MOJOLEARN_CALIB_GNB_FOLDS_OFF off); every other binding keeps the 142-op table.
+comptime N_OPS = 157 if CALIB_FOLDS else 142
 
 
 @always_inline
@@ -323,3 +332,46 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         cat_hfold_unit(t, f, q)
     comptime if OP == 135:
         row_ones_unit(t, f, q)
+    comptime if OP == 136:
+        ii_rcount_unit(t, f, q)
+    comptime if OP == 137:
+        ii_rwrite_unit(t, f, q)
+    comptime if OP == 138:
+        ii_gather_unit(t, f, q)
+    comptime if OP == 139:
+        ii_scatter_unit(t, f, q)
+    comptime if OP == 140:
+        hcat_unit(t, f, q)
+    comptime if OP == 141:
+        colblock_unit(t, f, q)
+    comptime if CALIB_FOLDS:
+        comptime if OP == 142:
+            cal_fold_part_unit(t, f, q)
+        comptime if OP == 143:
+            cal_fold_scan_unit(t, f, q)
+        comptime if OP == 144:
+            cal_fold_rank_unit(t, f, q)
+        comptime if OP == 145:
+            cal_fold_assign_unit(t, f, q)
+        comptime if OP == 146:
+            cal_lofo_merge_unit(t, f, q)
+        comptime if OP == 147:
+            cal_eps_folds_unit(t, f, q)
+        comptime if OP == 148:
+            cal_params_folds_unit(t, f, q)
+        comptime if OP == 149:
+            cal_jll_folds_unit(t, f, q)
+        comptime if OP == 150:
+            cal_platt_init_unit(t, f, q)
+        comptime if OP == 151:
+            cal_platt_setup_unit(t, f, q)
+        comptime if OP == 152:
+            cal_platt_part_unit(t, f, q)
+        comptime if OP == 153:
+            cal_platt_step_unit(t, f, q)
+        comptime if OP == 154:
+            cal_platt_ls_part_unit(t, f, q)
+        comptime if OP == 155:
+            cal_platt_ls_pick_unit(t, f, q)
+        comptime if OP == 156:
+            cal_sigmoid_avg_unit(t, f, q)

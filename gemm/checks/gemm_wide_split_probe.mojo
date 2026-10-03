@@ -7,7 +7,7 @@ from gemm.checks.gemm_identical import (
     PLAN_SPLIT_64_4X4, PLAN_SPLIT_128_8X8, identical_gemm_with_plan,
     identical_gemm_workspace_floats, choose_gemm_plan,
 )
-from gemm.checks.gemm_oracle import OP_TN
+from gemm.contract import OP_TN
 
 
 def main() raises:

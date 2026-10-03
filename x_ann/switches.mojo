@@ -21,9 +21,9 @@ from std.sys.compile import is_defined
 #: Host code, no arithmetic changed.
 #: ON since job 2 (m3ultra-b 1790627848135): every digest equal in both
 #: tiers; FAST fits IVF-Flat 0.58 -> 0.49 s, IVF-SQ 0.61 -> 0.52, IVF-RaBitQ
-#: 0.53 -> 0.46, IVF-PQ 1.78 -> 1.73. `-D MOJOLEARN_ANN3_HOST_PASSES_OFF`
-#: reverts.
-comptime ANN3_HOST_PASSES = not is_defined["MOJOLEARN_ANN3_HOST_PASSES_OFF"]()
+#: 0.53 -> 0.46, IVF-PQ 1.78 -> 1.73. The OFF define was deleted
+#: (cpu-gpu-cleanup c-ann, 2026-10-02): no switch.
+comptime ANN3_HOST_PASSES = True
 
 #: Index preparation: the IVF-Flat prepare moves the admitted arrays and
 #: copies the host layout only when a per-query search needs it; a resident
@@ -44,12 +44,6 @@ comptime ANN3_PQ_SEED = is_defined["MOJOLEARN_ANN3_PQ_SEED"]()
 #: FAST on Apple: the same for the IVF coarse quantizer (all four IVF
 #: indexes). Moves FAST bits: paired recall check.
 comptime ANN3_COARSE_SEED = is_defined["MOJOLEARN_ANN3_COARSE_SEED"]()
-
-#: FAST: when the PQ codebooks train on a sample, the sampled rows'
-#: residuals are formed on the host (one subtraction each, the device
-#: kernel's statement) and the n x rot_dim residual matrix is not downloaded;
-#: it stays on the device for the encode. Expected to move no bit.
-comptime ANN3_PQ_HOST_RESIDUALS = is_defined["MOJOLEARN_ANN3_PQ_HOST_RESIDUALS"]()
 
 #: FAST on Apple: rows per threadgroup of the t-SNE repulsion (128 in a
 #: default build). At 10,000 rows 128 makes 79 threadgroups, and the M3 Ultra
@@ -82,11 +76,6 @@ comptime ANN3_ROW_THREADS = is_defined["MOJOLEARN_ANN3_ROW_THREADS"]()
 #: so the k least are the same entries: expected to move no bit.
 comptime ANN3_SCAN_SELECT = is_defined["MOJOLEARN_ANN3_SCAN_SELECT"]()
 
-#: FAST on Apple, t-SNE: Z (the sum of the rows' repulsion sums) as 128
-#: stripe sums joined by a halving tree in one threadgroup (one thread
-#: adding the n values in order otherwise). Moves FAST bits (the order of a
-#: float sum): paired trustworthiness and KL check.
-comptime ANN3_TSNE_ZSUM = is_defined["MOJOLEARN_ANN3_TSNE_ZSUM"]()
 
 #: FAST on Apple, t-SNE: the step launch runs one thread per ROW, which
 #: forms each neighbor's q once for both coordinates (one thread per

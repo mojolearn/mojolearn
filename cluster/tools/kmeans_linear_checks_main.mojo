@@ -12,7 +12,7 @@
 #   ./kls_checks blocked ; ./kls_checks scale ; ./kls_checks privatized
 from std.sys import argv
 
-from cluster.checks.estimator_check import check_plan_sum_scale_certified
+from cluster.checks.estimator_check import check_plan_sum_scale_device
 from cluster.checks.kmeans_check import (
     check_blocked_accumulate,
     check_privatized_accumulate,
@@ -27,7 +27,7 @@ def main() raises:
     if which == "blocked":
         check_blocked_accumulate()
     elif which == "scale":
-        check_plan_sum_scale_certified()
+        check_plan_sum_scale_device()
     elif which == "privatized":
         check_privatized_accumulate()
     else:

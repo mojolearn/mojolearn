@@ -43,7 +43,7 @@ full contract. In short:
   --vendor apple` (or `nvidia`, `amd`). On 2026-09-29 the plan has 464
   races on every vendor (21 trees, 16 classical, 44 classical2, 20 neural,
   363 algos). That comes to 2,033 fit cells on Apple, 1,774 on NVIDIA and
-  1,600 on AMD, 456 of them our CPU tier (below). Inference adds 1,326 cells
+  1,600 on AMD (counts from before our CPU left the board). Inference adds 1,326 cells
   on Apple, 1,156 on NVIDIA and 1,050 on AMD; `--no-infer` times training
   only. `bench/results/bench_board/COVERAGE.md` maps every public algorithm
   to its races.
@@ -84,7 +84,14 @@ whose full key, read-back included, is in the store is not run (one that does
 not construct runs normally): its stored cell joins the race and
 BOARD.md marks it `stored (measured <UTC> on <box>, <device>)`; an opponent
 measured in this run is marked `measured this run`. When every opponent is
-stored, only our arms run. Any key field that differs means a new
+stored, only our arms run. The DEFAULT is our GPU arm(s) only: an opponent
+the store does not hold is not raced (the race lists it under
+`skipped_opponents`) unless `--with-opponents` or `--retime-opponents` asks.
+The same default holds in `bench/speed/forest_speed_arm.py` (opponents only
+with `--with-opponents`, `--arms` or `--opponents-first`) and
+`tools/classical_two_datasets.py race` (opponents only with `--arms` or
+`--with-opponents`); `bench_board_algos.py` and `bench_board_more.py` take an
+explicit `--arms`. Any key field that differs means a new
 measurement. A refused or failed opponent is stored as what it was; a
 PARTIAL one is never reused. `--retime-opponents` measures every opponent
 again, and `--backfill-store <board.json>` imports an existing board's
@@ -179,53 +186,25 @@ louvain, faiss HNSW) or through a seeded function argument (SelectKBest's
 mutual information) keeps an EXCEPTIONS row with its reason. An arm that
 has a seed parameter holding anything but the lane's seed refuses the race.
 
-## Our CPU tier (`ours-cpu`)
+## Our CPU is never raced or reported
 
-mojolearn trains and predicts on a CPU-only install through its host
-bindings. The public switch is `MOJOLEARN_VENDOR=cpu` before import
-(`python/mojolearn/_backend.py`): no GPU set loads, and the host bindings
-under `mojolearn/host/` answer. They build IDENTICAL only. The board races
-this tier on every vendor as the arm `ours-cpu`. It is the same public
-estimator as `ours`, run in a worker process started under the switch, and
-it races the CPU opponents already on the board (scikit-learn, the CPU
-learners of XGBoost, LightGBM and CatBoost, statsmodels, umap-learn,
-faiss-cpu). The worker reads back `mojolearn.vendor()` and the binding's tier
-before it times anything. If the installed wheel did not load its CPU set,
-the cell is REFUSED by name, so a Metal or CUDA fit is never labelled CPU.
-`--no-cpu-arm` (leg knob `MOJOLEARN_BOARD_NO_CPU_ARM=1`) turns the arm off.
+Hard rule (Andrew, Oct 2 2026): the board races only our GPU. Our CPU (the
+host bindings under `MOJOLEARN_VENDOR=cpu`) is for same-bits digests,
+CPU-only installs and inference. It never appears in a race line, a race
+JSON's timed arms, a board table, a ratio or a best-arm pick.
 
-- Planned on all 12 trees races, all 16 classical and all 44 classical2
-  races, and the 10 neural lanes that run on the GPU: 82 cells on every
-  vendor. Each of these estimators routes to a host family
-  (`host_surface.routed_modules`). A GBDT configuration that the host side
-  does not restate (`host_surface.NO_CPU_PATH`) is refused by name in its
-  cell.
-- Not planned on the six neural `*-infer` lanes, whose `ours` arm already is
-  the CPU path (the `*Inference` classes), and not on a FAST-only run. The
-  dry run and the board's "Not covered" name both.
-- Trees: the trees driver runs every arm in one process, and the switch
-  applies to a whole process. So `forest_speed_arm.py --ours-cpu` adds a
-  proxy arm (`bench/speed/forest_board_arms.py`) whose worker loads the same
-  rows through the same loader and builds the same estimator. The proxy takes
-  its turn in the round-robin like every other arm. The conductor's clock
-  covers the worker's fit plus one pipe round trip, and the worker's own
-  clock is printed beside it (`FSPEED-CPU-ROUND`). Predictions and scores
-  come back after the clock. The classical, classical2 and neural racers
-  already run one worker per arm, so there `ours-cpu` is just one more
-  worker.
-- Quality: `bits_equal_vs_ours_identical` on the `ours-cpu` cell compares
-  its output with our GPU IDENTICAL arm's in the same race. The classical,
-  classical2 and neural drivers compare the saved output arrays byte for
-  byte, including every training step's loss. Trees compare the prediction
-  hash of the last timed round, and in the inference phase they compare the
-  prediction vectors (`FSPEED-INFER-AGREE arms=ours,ours-cpu`).
-- `ours CPU / arm` is its median over each opponent's median. Our CPU and GPU
-  times are never divided by each other. "Our CPU tier at a glance" lists
-  each race's CPU median, the bit check and the CPU opponents.
-- The macOS wheel ignored `MOJOLEARN_VENDOR=cpu` through 0.8.22 (the flat
-  layout returned before reading it). Main fixes this in `_backend._layout`.
-  On a 0.8.22 Mac, `ours-cpu` is therefore REFUSED by name. On the Linux
-  wheel the switch works from 0.8.22.
+- There is no `ours-cpu` arm. Every race driver refuses an arm of ours on the
+  host by name (`bench_board_probe.refuse_our_cpu_arms`), and the neural
+  driver refuses `ours` on its host lanes (`*-infer`, `lm-host-train-step`).
+  The planner stops the board if a plan would time our CPU
+  (`enforce_gpu_only`). `forest_speed_arm.py --ours-cpu` refuses by name.
+- An old `board.json` may hold `ours-cpu` cells or `ratio_ours_cpu_over`.
+  `strip_our_cpu` drops them, and any race whose only arm of ours ran on the
+  CPU, on load and before rendering.
+- The host digest for a same-bits check comes from a separate process that
+  prints hashes and no time: `lq add <box> ID ...`, and for trees
+  `forest_speed_arm.py --ours-only --host-digest` under `MOJOLEARN_VENDOR=cpu`
+  (`FSPEED-DIGEST` lines; `tools/aft_idcheck.sh`, `tools/gap_trees_race.sh`).
 
 ## Memory
 
@@ -467,7 +446,7 @@ clock for a float64 NumPy quality pass in the conductor) with two additions:
   `not built yet: SKIPPED` from the source tree's `_expansion_<lane>.py`
   `__all__` lists (a hint only; the board asks the wheel).
 
-Our arms are `ours` (IDENTICAL), `ours-fast` (FAST, Apple) and `ours-cpu`
+Our arms are `ours` (IDENTICAL) and `ours-fast` (FAST, Apple), our GPU only,
 on every lane, neural and CNN included (every expansion binding builds FAST
 and IDENTICAL). Opponents, fastest real implementation per box:
 
@@ -712,7 +691,6 @@ Values contain no spaces, and lists are separated by commas.
 | `MOJOLEARN_BOARD_LANES` / `_FAMILIES` / `_DATASETS` / `_ROUNDS` | narrow the plan |
 | `MOJOLEARN_BOARD_NEURAL_SHAPE` | `full` (default) or `small` for a neural smoke |
 | `MOJOLEARN_BOARD_NO_INFER` | `1` times training only (no inference cells) |
-| `MOJOLEARN_BOARD_NO_CPU_ARM` | `1` leaves out our CPU tier (`ours-cpu`) |
 | `MOJOLEARN_BOARD_OUT`, `MOJOLEARN_BOARD_CACHE` | result directory (fetched) and cache (not fetched; the classical and classical2 blocks live here) |
 
 A smoke leg, for example:
@@ -722,10 +700,10 @@ A smoke leg, for example:
 
 `BOARD.md` gives times, ratios and quality, and never states a direction. A
 ratio column is our median divided by the opponent's median (`ours IDENTICAL /
-arm`, `ours FAST / arm`, `ours CPU / arm`). Our FAST, IDENTICAL and CPU arms
+arm`, `ours FAST / arm`). Our FAST and IDENTICAL arms
 are never divided by each other, because the FAST ratio is the cost of
 identity and not a result (ENGINEERING_RULES 0b-iii). The "Quality at a
-glance" table puts our FAST value, our IDENTICAL value, our CPU value and each
+glance" table puts our FAST value, our IDENTICAL value and each
 opponent's
 value side by side for every lane and dataset; "Inference at a glance" does
 the same for the inference medians per batch, with whether our FAST and
