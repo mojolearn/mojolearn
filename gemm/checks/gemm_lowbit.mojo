@@ -95,7 +95,8 @@ from gemm.checks.gemm_int8_mma import (
     identical_gemm_int8_mma_into,
     int8_mma_admits,
 )
-from gemm.contract import INT8_MAX_K, OP_NN, OP_NT, OP_TN, f16_bits_to_f32, gemm_oracle_sabotage_value_flip
+from gemm.contract import INT8_MAX_K, OP_NN, OP_NT, OP_TN, gemm_oracle_sabotage_value_flip
+from gemm.f16_widen import f16_bits_to_f32
 
 #: DEVIATION 2908, the value arm. Off in every build that does not name it.
 comptime LOWBIT_SABOTAGE = is_defined["MOJOLEARN_LOWBIT_SABOTAGE"]()

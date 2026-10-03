@@ -60,7 +60,8 @@ from gemm.host.gemm_oracle import (
 #: up to 133,152; the profile stops at the power of two below it, contract
 #: L-7) and the profile version: in gemm/contract.mojo, which the device
 #: kernels import instead of this oracle.
-from gemm.contract import INT8_MAX_K, LOWBIT_PROFILE_VERSION, f16_bits_to_f32
+from gemm.contract import INT8_MAX_K, LOWBIT_PROFILE_VERSION
+from gemm.f16_widen import f16_bits_to_f32
 
 #: THE CONVERSION SEAMS' OWN NEGATIVE CONTROL (lane/laneless-public-classes,
 #: 2026-09-19). The four functions below -- `widen_bf16`, `narrow_bf16`,
