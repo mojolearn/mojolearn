@@ -26,7 +26,7 @@ from x_linear.ops import (
 from std.sys.info import is_gpu, has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_linear.team import Team
-from x_linear.tops import fold_parts, fold_blocks, fold_fa_blocked, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS, upper_cell, t_col_means, t_centered_gram, t_centered_xty, t_sum, t_mean, fold_sq, chain_cfmad, t_jacobi_eig, t_cholesky
+from x_linear.tops import fold_parts, fold_blocks, fold_fa_blocked, FOLD_BLOCK, upper_cell, t_col_means, t_centered_gram, t_centered_xty, t_sum, t_mean, fold_sq, chain_cfmad, t_jacobi_eig, t_cholesky
 
 
 def _center(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, iw: IP) -> Float32:
@@ -79,8 +79,7 @@ def _sse_blocked(rb: FP, y: FP, n: Int, sw: Bool) -> Float32:
 
 def _sse(x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int, sc: FP) -> Float32:
     _resid_rows(x, y, n, d, fw, xm, ym, coef, coff, sc)
-    comptime if not X_LINEAR_SERIAL_FOLDS:
-        return _sse_blocked(sc, y, n, False)
+    return _sse_blocked(sc, y, n, False)
     var acc = Float32(0)
     for i in range(n):
         var r = ld(sc, i)
@@ -114,8 +113,7 @@ def _wmean_center(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, wsum:
 def _wsse(x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int, sc: FP) -> Float32:
     """sum_i w_i r_i^2: their sse on the sqrt(w)-rescaled data."""
     _resid_rows(x, y, n, d, fw, xm, ym, coef, coff, sc)
-    comptime if not X_LINEAR_SERIAL_FOLDS:
-        return _sse_blocked(sc, y, n, True)
+    return _sse_blocked(sc, y, n, True)
     var acc = Float32(0)
     for i in range(n):
         var r = ld(sc, i)
@@ -138,18 +136,17 @@ def _t_sse(t: Team, x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, 
         st(rb, i, fs(fs(ld(y, i), ym), p))
     t.sync()
     var acc = Float32(0)
-    comptime if not X_LINEAR_SERIAL_FOLDS:
-        # the blocked order (lane/neural-pass97): the block partials across the
-        # team into row 1, then the lead folds them
-        var nb = fold_blocks(n)
-        var pr = t.row(1)
-        for bk in range(t.tid, nb, t.nt):
-            var lo = bk * FOLD_BLOCK
-            st(pr, bk, _sse_part(rb, y, n, sw, lo, min(FOLD_BLOCK, n - lo)))
-        t.sync()
-        if t.lead():
-            acc = fold_parts(pr, 0, nb)
-        return t.bcast(acc)
+    # the blocked order (lane/neural-pass97): the block partials across the
+    # team into row 1, then the lead folds them
+    var nb = fold_blocks(n)
+    var pr = t.row(1)
+    for bk in range(t.tid, nb, t.nt):
+        var lo = bk * FOLD_BLOCK
+        st(pr, bk, _sse_part(rb, y, n, sw, lo, min(FOLD_BLOCK, n - lo)))
+    t.sync()
+    if t.lead():
+        acc = fold_parts(pr, 0, nb)
+    return t.bcast(acc)
     if t.lead():
         if sw:
             for i in range(n):
@@ -237,6 +234,57 @@ def bayes_ymean(y: FP, n: Int, fi: Bool) -> Float32:
     return fd(fold_fa_blocked(y, 0, 1, n), i2f(n))
 
 
+# the weighted statistics' row-block partials (cgr-linear): w at y + n,
+# each from zero over rows [lo, lo + cnt) ascending
+@always_inline
+def bayes_wy_part(y: FP, n: Int, lo: Int, cnt: Int) -> Float32:
+    """sum w_i y_i."""
+    var acc = Float32(0)
+    for i in range(lo, lo + cnt):
+        acc = fmad(ld(y, n + i), ld(y, i), acc)
+    return acc
+
+
+@always_inline
+def bayes_wx_part(x: FP, y: FP, n: Int, d: Int, j: Int, lo: Int, cnt: Int) -> Float32:
+    """sum w_i x_ij."""
+    var acc = Float32(0)
+    for i in range(lo, lo + cnt):
+        acc = fmad(ld(y, n + i), ld(x, i * d + j), acc)
+    return acc
+
+
+@always_inline
+def bayes_wgram_part(x: FP, y: FP, n: Int, d: Int, fw: FP, j: Int, k: Int, lo: Int, cnt: Int) -> Float32:
+    """sum (w_i (x_ij - xm_j)) (x_ik - xm_k), the means at fw[0, d)."""
+    var mj = ld(fw, j)
+    var mk = ld(fw, k)
+    var acc = Float32(0)
+    for i in range(lo, lo + cnt):
+        acc = fmad(fm(ld(y, n + i), fs(ld(x, i * d + j), mj)), fs(ld(x, i * d + k), mk), acc)
+    return acc
+
+
+@always_inline
+def bayes_wxty_part(x: FP, y: FP, n: Int, d: Int, fw: FP, j: Int, ym: Float32, lo: Int, cnt: Int) -> Float32:
+    """sum (y_i - ym) (w_i (x_ij - xm_j))."""
+    var mj = ld(fw, j)
+    var acc = Float32(0)
+    for i in range(lo, lo + cnt):
+        acc = fmad(fs(ld(y, i), ym), fm(ld(y, n + i), fs(ld(x, i * d + j), mj)), acc)
+    return acc
+
+
+@always_inline
+def bayes_wvar_part(y: FP, n: Int, m: Float32, lo: Int, cnt: Int) -> Float32:
+    """sum w_i (y_i - m)^2."""
+    var acc = Float32(0)
+    for i in range(lo, lo + cnt):
+        var r = fs(ld(y, i), m)
+        acc = fmad(fm(ld(y, n + i), r), r, acc)
+    return acc
+
+
 @always_inline
 def bayes_yvar_part(y: FP, m: Float32, lo: Int, cnt: Int) -> Float32:
     """sum (y_i - m)^2 over rows [lo, lo + cnt) from zero, rows ascending."""
@@ -251,8 +299,6 @@ def bayes_yvar(y: FP, n: Int) -> Float32:
     """`_var` (the starting alpha's target variance) in the blocked order:
     the blocked mean, each block's squared deviations from zero, the
     partials folded blocks ascending."""
-    comptime if X_LINEAR_SERIAL_FOLDS:
-        return _var(y, n)
     var m = fd(fold_fa_blocked(y, 0, 1, n), i2f(n))
     var acc = Float32(0)
     var lo = 0
@@ -262,7 +308,8 @@ def bayes_yvar(y: FP, n: Int) -> Float32:
     return fd(acc, i2f(n))
 
 
-def bayes_eig_prep(t: Team, fw: FP, fp: FP, d: Int, yvar: Float32) -> Tuple[Float32, Float32]:
+def bayes_eig_prep(t: Team, fw: FP, fp: FP, d: Int, yvar: Float32,
+                   jtol: Float32 = Float32(1e-9)) -> Tuple[Float32, Float32]:
     """The d x d half of `bayes_prep` (no row passes): the eigendecomposition
     of G on the team, the lead's eigenvalues and V'X'y, the starting alpha
     (the lead's, from yvar, when alpha_init is none) and lambda."""
@@ -273,7 +320,9 @@ def bayes_eig_prep(t: Team, fw: FP, fp: FP, d: Int, yvar: Float32) -> Tuple[Floa
     var old = vty + d
     var tmp = old + d
     var alpha = ld(fp, 5)
-    t_jacobi_eig(t, fw, gg, fw, vv, d, 60)
+    # jtol: the Jacobi's skip threshold (lane/apple-fast-kernel, FAST on Apple
+    # with ip[7]: 1e-7; the default is the old 1e-9, x_linear/tops.mojo)
+    t_jacobi_eig(t, fw, gg, fw, vv, d, 60, jtol)
     if t.lead():
         for j in range(d):
             var ev = ld(fw, gg + j * d + j)
@@ -319,6 +368,7 @@ def bayes_prep(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
     var sw = ldi(ip, 2) != 0
     var wsum = i2f(n)
     var ym = Float32(0)
+    var wyvar = Float32(0)
     comptime if is_gpu():
         if sw:
             wsum = t_sum(t, y + n, n)
@@ -381,66 +431,112 @@ def bayes_prep(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
     else:
         # the host's row passes: one pass per statistic, vector accumulators
         if sw:
-            wsum = Float32(0)
-            for i in range(n):
-                wsum = fa(wsum, ld(y, n + i))
-            ym = _wmean_center(x, y, n, d, fi, fw, xm, wsum)
-            for j in range(d):
-                fill(fw, gg + j * d + j, d - j, Float32(0))
-            for i in range(n):
-                var wi = ld(y, n + i)
+            # cgr-linear: the weighted statistics in the blocked order (each
+            # FOLD_BLOCK rows from zero, the blocks folded ascending), the
+            # order the grid driver folds them (x_linear/device.mojo)
+            wsum = fold_fa_blocked(y, n, 1, n)
+            var scr = List[Float32](length=d * d + d, fill=Float32(0))
+            var sp = FP(unsafe_from_address=Int(scr.unsafe_ptr()))
+            var ywm = Float32(0)
+            fill(fw, xm, d, Float32(0))
+            var lo = 0
+            while lo < n:
+                var hi = min(lo + FOLD_BLOCK, n)
+                ywm = fa(ywm, bayes_wy_part(y, n, lo, hi - lo))
+                if fi:
+                    fill(sp, 0, d, Float32(0))
+                    for i in range(lo, hi):
+                        axpy_acc(sp, 0, ld(y, n + i), x, i * d, d)
+                    add_acc(fw, xm, sp, 0, d)
+                lo = hi
+            ywm = fd(ywm, wsum)
+            if fi:
+                ym = ywm
                 for j in range(d):
-                    var a = fm(wi, fs(ld(x, i * d + j), ld(fw, xm + j)))
-                    axpy_centered(fw, gg + j * d + j, a, x, i * d + j, fw, xm + j, d - j)
+                    st(fw, xm + j, fd(ld(fw, xm + j), wsum))
+            fill(fw, gg, d * d, Float32(0))
+            fill(fw, xty, d, Float32(0))
+            lo = 0
+            while lo < n:
+                var hi = min(lo + FOLD_BLOCK, n)
+                fill(sp, 0, d * d + d, Float32(0))
+                for i in range(lo, hi):
+                    var wi = ld(y, n + i)
+                    for j in range(d):
+                        var a = fm(wi, fs(ld(x, i * d + j), ld(fw, xm + j)))
+                        axpy_centered(sp, j * d + j, a, x, i * d + j, fw, xm + j, d - j)
+                    axpy_centered[True](sp, d * d, fs(ld(y, i), ym), x, i * d, fw, xm, d, wi)
+                add_acc(fw, gg, sp, 0, d * d)
+                add_acc(fw, xty, sp, d * d, d)
+                lo = hi
             for j in range(d):
                 for k in range(j + 1, d):
                     st(fw, gg + k * d + j, ld(fw, gg + j * d + k))
+            if ld(fp, 5) < 0:
+                # np.average((y - y_mean) ** 2, weights=sample_weight), blocked
+                var acc = Float32(0)
+                lo = 0
+                while lo < n:
+                    acc = fa(acc, bayes_wvar_part(y, n, ywm, lo, min(FOLD_BLOCK, n - lo)))
+                    lo += FOLD_BLOCK
+                wyvar = fd(acc, wsum)
         else:
             _ = _center(x, y, n, d, fi, fw, xm, iw)
             ym = bayes_ymean(y, n, fi)
             centered_gram(x, n, d, fw, xm, fw, gg)
-        var yc = ym
-        # X'y on centered data
-        fill(fw, xty, d, Float32(0))
-        for i in range(n):
-            var b = fs(ld(y, i), yc)
-            if sw:
-                axpy_centered[True](fw, xty, b, x, i * d, fw, xm, d, ld(y, n + i))
-            else:
+            var yc = ym
+            # X'y on centered data
+            fill(fw, xty, d, Float32(0))
+            for i in range(n):
+                var b = fs(ld(y, i), yc)
                 axpy_centered(fw, xty, b, x, i * d, fw, xm, d)
     var yvar = Float32(0)
     if t.lead() and ld(fp, 5) < 0:
         if sw:
-            # np.average((y - y_mean) ** 2, weights=sample_weight)
-            var m = Float32(0)
-            for i in range(n):
-                m = fmad(ld(y, n + i), ld(y, i), m)
-            m = fd(m, wsum)
-            var acc = Float32(0)
-            for i in range(n):
-                var r = fs(ld(y, i), m)
-                acc = fmad(fm(ld(y, n + i), r), r, acc)
-            yvar = fd(acc, wsum)
+            comptime if is_gpu():
+                # np.average((y - y_mean) ** 2, weights=sample_weight)
+                var m = Float32(0)
+                for i in range(n):
+                    m = fmad(ld(y, n + i), ld(y, i), m)
+                m = fd(m, wsum)
+                var acc = Float32(0)
+                for i in range(n):
+                    var r = fs(ld(y, i), m)
+                    acc = fmad(fm(ld(y, n + i), r), r, acc)
+                yvar = fd(acc, wsum)
+            else:
+                yvar = wyvar
         else:
             yvar = bayes_yvar(y, n)
-    var al = bayes_eig_prep(t, fw, fp, d, yvar)
+    var jtol = Float32(1e-9)
+    comptime if is_gpu() and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        # lane/apple-fast-kernel: ip[7] (MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1)
+        if ldi(ip, 7) != 0:
+            jtol = Float32(1e-7)
+    var al = bayes_eig_prep(t, fw, fp, d, yvar, jtol)
     var alpha = al[0]
     var lam = al[1]
     return (alpha, lam, ym, wsum)
 
 
-def bayes_coef(fw: FP, res: FP, d: Int, lam: Float32, alpha: Float32):
-    """coef = V diag(1/(ev + lam/alpha)) V' X'y (the lead's)."""
-    var xty = d + d * d
-    var vv = xty + d
+@always_inline
+def bayes_coef_one(fw: FP, d: Int, j: Int, ratio: Float32) -> Float32:
+    """coef_j = sum_k V_jk vty_k / (ev_k+ + ratio), k ascending."""
+    var vv = d + d * d + d
     var vty = vv + d * d
     var tmp = vty + 2 * d
+    var acc = Float32(0)
+    for k in range(d):
+        acc = fmad(ld(fw, vv + j * d + k), fd(ld(fw, vty + k), fa(ld(fw, tmp + k), ratio)), acc)
+    return acc
+
+
+def bayes_coef(fw: FP, res: FP, d: Int, lam: Float32, alpha: Float32):
+    """coef = V diag(1/(ev + lam/alpha)) V' X'y (the lead's); the grid driver
+    runs `bayes_coef_one` a thread a coefficient."""
     var ratio = fd(lam, alpha)
     for j in range(d):
-        var acc = Float32(0)
-        for k in range(d):
-            acc = fmad(ld(fw, vv + j * d + k), fd(ld(fw, vty + k), fa(ld(fw, tmp + k), ratio)), acc)
-        st(res, j, acc)
+        st(res, j, bayes_coef_one(fw, d, j, ratio))
 
 
 def bayes_step(fw: FP, res: FP, d: Int, fp: FP, lam_in: Float32, alpha_in: Float32, sse: Float32, wsum: Float32,
@@ -677,128 +773,121 @@ def _ard_coef(d: Int, dk: Int, fw: FP, sg: Int, xty: Int, alpha: Float32, iw: IP
         st(res, ldi(iw, keep + d + a), fm(alpha, acc))
 
 
-def ard_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
-    """ip: [max_iter, fit_intercept]; fp: [tol, alpha_1, alpha_2, lambda_1,
-    lambda_2, threshold_lambda].
-    res: coef d, intercept, alpha_, lambda_ d, n_iter.
-    fw: xm d | G d*d | xty d | A d*d | sigma d*d | lambda d | old d | sse scratch n (the host's).
-    iw: keep d | kept index d.
-    Team form: the row passes across the team, sigma, the coefficients and
-    the pruning on the lead."""
-    var max_iter = ldi(ip, 0)
-    var fi = ldi(ip, 1) != 0
+def ard_update(fw: FP, res: FP, iw: IP, d: Int, nf: Float32, dk: Int, sse: Float32, alpha_in: Float32,
+               fp: FP, it: Int) -> Tuple[Float32, Int, Bool]:
+    """One ARD iteration's lead update after its sse (nf = the row count):
+    the lambdas, alpha, the pruning, the stop rule. Returns (alpha, stop,
+    any_kept); the host loop and the grid driver (x_linear/ard_grid.mojo)
+    run these statements."""
     var tol = ld(fp, 0)
     var a1 = ld(fp, 1)
     var a2 = ld(fp, 2)
     var l1 = ld(fp, 3)
     var l2 = ld(fp, 4)
     var thr = ld(fp, 5)
-    var xm = 0
-    var gg = d
-    var xty = gg + d * d
-    var aa = xty + d
-    var sg = aa + d * d
-    var lamo = sg + d * d
-    var old = lamo + d
+    var o = ard_layout(d)
+    var sg = o[4]
+    var lamo = o[5]
+    var old = o[6]
     var keep = 0
-    var ym = Float32(0)
-    comptime if is_gpu():
-        if fi:
-            t_col_means(t, x, n, d, fw, xm)
-            ym = t_mean(t, y, n, 1)
+    var stop = 0
+    var gsum = Float32(0)
+    for a in range(dk):
+        var j = ldi(iw, keep + d + a)
+        var gam = fs(Float32(1), fm(ld(fw, lamo + j), ld(fw, sg + a * dk + a)))
+        gsum = fa(gsum, gam)
+        var cj = ld(res, j)
+        st(fw, lamo + j, fd(fa(gam, fm(Float32(2), l1)), fa(fm(cj, cj), fm(Float32(2), l2))))
+    var alpha = fd(fa(fs(nf, gsum), fm(Float32(2), a1)), fa(sse, fm(Float32(2), a2)))
+    var any_kept = False
+    for j in range(d):
+        var k = 1 if ld(fw, lamo + j) < thr else 0
+        sti(iw, keep + j, k)
+        if k == 0:
+            st(res, j, Float32(0))
         else:
-            if t.lead():
-                fill(fw, xm, d, Float32(0))
-            t.sync()
-        # ip[4] (device only, lane/neural-pass87): the grid's Gram is already in fw
-        if ldi(ip, 4) == 0:
-            t_centered_gram(t, x, n, d, fw, xm, fw, gg)
-        t_centered_xty(t, x, y, n, d, fw, xm, ym, fw, xty)
-    else:
-        ym = _center(x, y, n, d, fi, fw, xm, iw)
-        centered_gram(x, n, d, fw, xm, fw, gg)
-        centered_xty(x, y, n, d, fw, xm, ym, fw, xty)
-    var alpha = Float32(0)
-    if t.lead():
-        alpha = fd(Float32(1), fa(_var(y, n), Float32(1.1920929e-07)))
-        fill(fw, lamo, d, Float32(1))
-        fill(res, 0, d, Float32(0))
+            any_kept = True
+    if it > 0:
+        var delta = Float32(0)
         for j in range(d):
-            sti(iw, keep + j, 1)
-    alpha = t.bcast(alpha, 2)
-    var gram_sse = False
-    var have_ref = False
-    var s0 = Float32(0)  # the reference row pass's sse, at w0
-    var w0 = 3 * d * d + 4 * d  # the host's sse scratch (n >= d words), unused on the device
-    comptime if is_gpu() and X_LINEAR_GRAM_SSE:
-        if ldi(ip, 5) != 0 and n >= d:
-            gram_sse = True
+            delta = fa(delta, fabs(fs(ld(fw, old + j), ld(res, j))))
+        if delta < tol:
+            stop = 1
+    if stop == 0:
+        copy(fw, old, res, 0, d)
+        if not any_kept:
+            stop = 1
+    return (alpha, stop, any_kept)
+
+
+@always_inline
+def ard_layout(d: Int) -> InlineArray[Int, 8]:
+    """fw: xm d | G d*d | xty d | A d*d | sigma d*d | lambda d | old d | sse scratch n."""
+    var o = InlineArray[Int, 8](fill=0)
+    o[0] = 0
+    o[1] = d
+    o[2] = d + d * d
+    o[3] = o[2] + d
+    o[4] = o[3] + d * d
+    o[5] = o[4] + d * d
+    o[6] = o[5] + d
+    o[7] = o[6] + d
+    return o^
+
+
+def ard_finish(fw: FP, res: FP, d: Int, fi: Bool, ym: Float32, alpha: Float32, any_kept: Bool, iters: Int):
+    """The result words after the last sigma and coefficients."""
+    var o = ard_layout(d)
+    if not any_kept:
+        fill(res, 0, d, Float32(0))
+    st(res, d, _intercept(d, fw, 0, ym, res, 0) if fi else Float32(0))
+    st(res, d + 1, alpha)
+    copy(res, d + 2, fw, o[5], d)
+    st(res, d + 2 + d, i2f(iters))
+
+
+def ard_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+    """ip: [max_iter, fit_intercept]; fp: [tol, alpha_1, alpha_2, lambda_1,
+    lambda_2, threshold_lambda].
+    res: coef d, intercept, alpha_, lambda_ d, n_iter.
+    fw: xm d | G d*d | xty d | A d*d | sigma d*d | lambda d | old d | sse scratch n (the host's).
+    iw: keep d | kept index d.
+    The host column (a team of one); the device binding runs
+    x_linear/ard_grid.mojo (the row passes on the grid, sigma and the
+    coefficients on one block team, `ard_update` on its lead)."""
+    var max_iter = ldi(ip, 0)
+    var fi = ldi(ip, 1) != 0
+    var o = ard_layout(d)
+    var xm = 0
+    var gg = o[1]
+    var xty = o[2]
+    var aa = o[3]
+    var sg = o[4]
+    var lamo = o[5]
+    var keep = 0
+    var ym = _center(x, y, n, d, fi, fw, xm, iw)
+    centered_gram(x, n, d, fw, xm, fw, gg)
+    centered_xty(x, y, n, d, fw, xm, ym, fw, xty)
+    # the starting alpha from the target variance in the blocked order
+    # (cgr-linear: the grid driver folds the same partials)
+    var alpha = fd(Float32(1), fa(bayes_yvar(y, n), Float32(1.1920929e-07)))
+    fill(fw, lamo, d, Float32(1))
+    fill(res, 0, d, Float32(0))
+    for j in range(d):
+        sti(iw, keep + j, 1)
     var iters = 0
     var any_kept = True
     for it in range(max_iter):
         iters = it + 1
         var dk = _t_ard_sigma(t, d, fw, gg, aa, sg, lamo, alpha, iw, keep)
         _t_ard_coef(t, d, dk, fw, sg, xty, alpha, iw, keep, res)
-        var sse: Float32
-        comptime if is_gpu() and X_LINEAR_GRAM_SSE:
-            if gram_sse:
-                var s = Float32(-1)
-                if have_ref:
-                    s = _t_sse_delta(t, fw, gg, xty, res, w0, d, s0)
-                if s >= 0:
-                    sse = s
-                else:
-                    sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, False, fw + 3 * d * d + 4 * d)
-                    s0 = sse
-                    have_ref = True
-                    if t.lead():
-                        copy(fw, w0, res, 0, d)
-                    t.sync()
-            else:
-                sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, False, fw + 3 * d * d + 4 * d)
-        else:
-            sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, False, fw + 3 * d * d + 4 * d)
-        var stop = 0
-        if t.lead():
-            var gsum = Float32(0)
-            for a in range(dk):
-                var j = ldi(iw, keep + d + a)
-                var gam = fs(Float32(1), fm(ld(fw, lamo + j), ld(fw, sg + a * dk + a)))
-                gsum = fa(gsum, gam)
-                var cj = ld(res, j)
-                st(fw, lamo + j, fd(fa(gam, fm(Float32(2), l1)), fa(fm(cj, cj), fm(Float32(2), l2))))
-            alpha = fd(fa(fs(i2f(n), gsum), fm(Float32(2), a1)), fa(sse, fm(Float32(2), a2)))
-            any_kept = False
-            for j in range(d):
-                var k = 1 if ld(fw, lamo + j) < thr else 0
-                sti(iw, keep + j, k)
-                if k == 0:
-                    st(res, j, Float32(0))
-                else:
-                    any_kept = True
-            if it > 0:
-                var delta = Float32(0)
-                for j in range(d):
-                    delta = fa(delta, fabs(fs(ld(fw, old + j), ld(res, j))))
-                if delta < tol:
-                    stop = 1
-            if stop == 0:
-                copy(fw, old, res, 0, d)
-                if not any_kept:
-                    stop = 1
-        alpha = t.bcast(alpha, 2)
-        if t.bcast_int(stop, 3) == 1:
+        var sse = _sse(x, y, n, d, fw, xm, ym, res, 0, fw + 3 * d * d + 4 * d)
+        var r = ard_update(fw, res, iw, d, i2f(n), dk, sse, alpha, fp, it)
+        alpha = r[0]
+        any_kept = r[2]
+        if r[1] == 1:
             break
-    # the lead's any_kept (the other threads never computed it)
-    any_kept = t.bcast_int(1 if any_kept else 0, 0) == 1
     if any_kept:
         var dk = _t_ard_sigma(t, d, fw, gg, aa, sg, lamo, alpha, iw, keep)
         _t_ard_coef(t, d, dk, fw, sg, xty, alpha, iw, keep, res)
-    if not t.lead():
-        return
-    if not any_kept:
-        fill(res, 0, d, Float32(0))
-    st(res, d, _intercept(d, fw, xm, ym, res, 0) if fi else Float32(0))
-    st(res, d + 1, alpha)
-    copy(res, d + 2, fw, lamo, d)
-    st(res, d + 2 + d, i2f(iters))
+    ard_finish(fw, res, d, fi, ym, alpha, any_kept, iters)

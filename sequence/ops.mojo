@@ -17,10 +17,10 @@ IDENTICAL by construction (IDENTITY_PATHS.md "The rule"):
   * no computed NaN reaches an output: the softmax subtracts the row max, the
     log reads a sum >= 1.
 """
-from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_div,
     identical_exp,
@@ -33,25 +33,49 @@ from checks.numerics import (
 )
 
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from std.math import fma as _std_fma
 
 comptime FP = MutPointer[Float32, MutUntrackedOrigin]
+
+#: lane/apple-fast-tier (2026-10-02). Under FAST `identical_mul_add` is the
+#: unfused `a * b + c` (two roundings, two instructions); the board's theta
+#: row ran FAST 1,747 ms against IDENTICAL's 388 on taxi-hourly, one thread
+#: per series on fma chains, so the fused `fma` is the A/B arm:
+#: every sequence `fma3` is one fused multiply-add under FAST on Apple.
+#: Default since the M3 A/B (lane/apple-fast-tier 78d5b99d1, theta
+#: taxi-hourly, n=1): with MOJOLEARN_SEQ_THETA_REG, 1,769 -> 220 ms,
+#: forecast_rmse 49.28 -> 49.02. It reaches every x_sequence lane that calls
+#: `fma3` (theta, nm, ets, ets_team, croston, garch, stl, prophet, vecar,
+#: mlp, moe, layernorm, adafactor, coop, fit_team), FAST + Apple only.
+#: -D MOJOLEARN_SEQ_FAST_FMA_OFF restores the unfused form; the old
+#: -D MOJOLEARN_SEQ_FAST_FMA=1 is harmless. IDENTICAL keeps its pinned
+#: contraction.
+comptime SEQ_FAST_FMA = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SEQ_FAST_FMA_OFF"]()
+)
 
 #: The CPU identity gate's negative control (-D MOJOLEARN_HOST_SABOTAGE=1,
 #: host binding only): the GEMM reduction runs k DESCENDING, so every trained
 #: model this binary returns differs from the device's.
 comptime SEQUENCE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
-#: Apple FAST switches of lane/apple-fast-tsa2 (default OFF, FAST + Apple
-#: only; IDENTICAL compiles the code above and below unchanged):
-#: `-D MOJOLEARN_TSA2_VAR`: VAR's fit queues every launch behind one upload
+#: Apple FAST switches of lane/apple-fast-tsa2. Default ON for FAST + Apple
+#: since the M3 A/B (n=1, quality same; STL taxi-hourly 359.0 -> 7.0 ms,
+#: VAR 7.6 -> 5.0 ms); `-D <NAME>_OFF` restores main's path; the old
+#: `-D MOJOLEARN_TSA2_VAR` / `-D MOJOLEARN_TSA2_STL` are now harmless.
+#: IDENTICAL compiles the code above and below unchanged.
+#: TSA2_VAR: VAR's fit queues every launch behind one upload
 #: and ends on one wait (sequence/pyapi.mojo::var_fit_py); the residual
 #: and sigma_u products fuse their epilogues (sequence/vecar.mojo).
-#: `-D MOJOLEARN_TSA2_STL`: STL's LOESS passes as one thread per output
+#: TSA2_STL: STL's LOESS passes as one thread per output
 #: point over every series (sequence/stl_grid.mojo), the inner iterations
 #: queued, one wait per fit (sequence/pyapi.mojo::stl_py).
 comptime _TSA2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime TSA2_VAR = _TSA2_FAST_APPLE and is_defined["MOJOLEARN_TSA2_VAR"]()
-comptime TSA2_STL = _TSA2_FAST_APPLE and is_defined["MOJOLEARN_TSA2_STL"]()
+comptime TSA2_VAR = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_VAR_OFF"]()
+comptime TSA2_STL = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_STL_OFF"]()
 
 # ------------------------------------------------------------------ op codes
 comptime OP_GEMM = 1
@@ -260,6 +284,8 @@ def mul(a: Float32, b: Float32) -> Float32:
 
 @always_inline
 def fma3(a: Float32, b: Float32, c: Float32) -> Float32:
+    comptime if SEQ_FAST_FMA:
+        return ftz(_std_fma(a, b, c))
     return ftz(identical_mul_add(a, b, c))
 
 

@@ -16,6 +16,7 @@ from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
 from x_linear.ops import fz as _fz
 from x_linear.ops import xmad
 from checks.numerics import identical_mul
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 
 @always_inline
@@ -398,10 +399,9 @@ def t_fold_fa_staged(t: Team, v: FP, off: Int, n: Int, init: Float32 = Float32(0
 # fold ran, over the block's rows), then the block partials folded ascending
 # with `fa` (from the fold's init). The same words on the host and every
 # device, and a device may compute the partials at once. The bits are not the
-# serial fold's (new baselines); `-D MOJOLEARN_X_LINEAR_SERIAL_FOLDS=1`
-# restores the serial order for the A/B.
+# serial fold's (new baselines). The serial-order A/B define is gone
+# (cgr-linear, 2026-10-03): the blocked order is the only one.
 comptime FOLD_BLOCK = 4096
-comptime X_LINEAR_SERIAL_FOLDS = is_defined["MOJOLEARN_X_LINEAR_SERIAL_FOLDS"]()
 
 
 @always_inline
@@ -420,8 +420,6 @@ def fold_parts(p: FP, off: Int, nb: Int, init: Float32 = Float32(0)) -> Float32:
 
 def fold_fa_blocked(v: FP, off: Int, step: Int, n: Int, init: Float32 = Float32(0)) -> Float32:
     """`fold_fa` in the blocked order."""
-    comptime if X_LINEAR_SERIAL_FOLDS:
-        return fold_fa(v, off, step, n, init)
     var acc = _fz(init)
     var lo = 0
     while lo < n:
@@ -433,8 +431,6 @@ def fold_fa_blocked(v: FP, off: Int, step: Int, n: Int, init: Float32 = Float32(
 
 def chain_fmad_blocked(a: FP, aoff: Int, astep: Int, b: FP, boff: Int, bstep: Int, n: Int) -> Float32:
     """`chain_fmad` (from zero) in the blocked order."""
-    comptime if X_LINEAR_SERIAL_FOLDS:
-        return chain_fmad(a, aoff, astep, b, boff, bstep, n)
     var acc = Float32(0)
     var lo = 0
     while lo < n:
@@ -446,8 +442,6 @@ def chain_fmad_blocked(a: FP, aoff: Int, astep: Int, b: FP, boff: Int, bstep: In
 
 def chain_fmad_scaled_blocked(h: FP, x: FP, j: Int, k: Int, d: Int, n: Int) -> Float32:
     """`chain_fmad_scaled` in the blocked order."""
-    comptime if X_LINEAR_SERIAL_FOLDS:
-        return chain_fmad_scaled(h, x, j, k, d, n)
     var acc = Float32(0)
     var lo = 0
     while lo < n:
@@ -461,8 +455,6 @@ def t_fold_fa_blocked(t: Team, v: FP, n: Int, scratch: FP) -> Float32:
     """`fold_fa_blocked(v, 0, 1, n)` on the team: the partials one block a
     thread into scratch (fold_blocks(n) words), then the lead folds them.
     The value is the lead's."""
-    comptime if X_LINEAR_SERIAL_FOLDS:
-        return t_fold_fa_staged(t, v, 0, n)
     var nb = fold_blocks(n)
     for b in range(t.tid, nb, t.nt):
         var lo = b * FOLD_BLOCK
@@ -505,7 +497,8 @@ def t_cholesky(t: Team, a: FP, aoff: Int, m: Int) -> Bool:
     return True
 
 
-def t_jacobi_eig(t: Team, a: FP, aoff: Int, v: FP, voff: Int, m: Int, max_sweeps: Int):
+def t_jacobi_eig(t: Team, a: FP, aoff: Int, v: FP, voff: Int, m: Int, max_sweeps: Int,
+                 skip_tol: Float32 = Float32(1e-9)):
     """`jacobi_eig` (x_linear/ops.mojo) on the team (lane/neural-pass85,
     2026-10-01). A rotation (p, q) is three element-wise passes over k: the
     columns p, q of A, then its rows p, q, then the columns p, q of V; in each
@@ -539,7 +532,17 @@ def t_jacobi_eig(t: Team, a: FP, aoff: Int, v: FP, voff: Int, m: Int, max_sweeps
                 var app = ld(a, aoff + p * m + p)
                 var aqq = ld(a, aoff + q * m + q)
                 var scale = fsqrt(fabs(fm(app, aqq)))
-                if fabs(apq) <= fm(Float32(1e-9), scale) or apq == 0:
+                # lane/apple-fast-kernel (2026-10-02): FAST may pass a skip
+                # threshold (`skip_tol`, BayesianRidge/ARD under
+                # MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1: 1e-7). Float32
+                # roundoff leaves every |a_pq| near 6e-8 * scale, above the
+                # 1e-9 test, so the serial sweeps never stopped early and
+                # the 220 x 220 solve ran all 60 sweeps on one block (about
+                # 5x the sweeps the diagonal needs). IDENTICAL keeps 1e-9.
+                var thr = fm(Float32(1e-9), scale)
+                comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+                    thr = fm(skip_tol, scale)
+                if fabs(apq) <= thr or apq == 0:
                     continue
                 rotated = True
                 var theta = fd(fs(aqq, app), fm(Float32(2), apq))

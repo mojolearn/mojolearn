@@ -14,7 +14,7 @@ from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fexp, fabs, ld, st, ldi, 
 from std.sys.info import is_gpu
 from x_linear.lbfgs import lbfgs, lbfgs_work, Objective
 from x_linear.team import Team
-from x_linear.tops import chain_fmad, fold_fa, fold_parts, fold_blocks, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS
+from x_linear.tops import chain_fmad, fold_fa, fold_parts, fold_blocks, FOLD_BLOCK
 from std.memory import bitcast
 from std.gpu import WARP_SIZE
 
@@ -193,49 +193,25 @@ def _huber_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP,
     var ntask = cells + 5
     var scr = t.row(2)
     var fits = ntask * nbk <= n
-    comptime if X_LINEAR_SERIAL_FOLDS:
-        for c in range(t.tid, cells, t.nt):
-            var acc: Float32
-            if c < d:
-                acc = chain_fmad(cr, 0, 1, x, c, d, n)
-            else:
-                acc = fold_fa(cr, 0, 1, n)
-            st(g, goff + c, acc)
-        if roles and t.tid >= base and (t.tid - base) % WARP_SIZE == 0:
-            var role = (t.tid - base) // WARP_SIZE
-            if role == 0:
-                st(sl, 8, _fold_inliers(rr, y, n, thr, sw))
-            elif role == 1:
-                var o = _fold_outliers(rr, y, n, thr, sw)
-                st(sl, 9, o[0])
-                st(sl, 10, bitcast[DType.float32](Int32(o[1])))
-                st(sl, 11, o[2])
-            elif role == 2 and sw:
-                var w_all = Float32(0)
-                for i in range(n):
-                    w_all = fa(w_all, ld(y, n + i))
-                st(sl, 12, w_all)
+    # the blocked order (lane/neural-pass97): (task, block) work across the
+    # team into team row 2, then each gradient cell's partials folded
+    if fits:
+        for q in range(t.tid, ntask * nbk, t.nt):
+            var bk = q // ntask
+            var o = q - bk * ntask
+            var lo = bk * FOLD_BLOCK
+            st(scr, o * nbk + bk, _huber_part(o, cells, d, x, y, n, cr, rr, thr, sw, lo, min(FOLD_BLOCK, n - lo)))
         t.sync()
+        for o in range(t.tid, cells, t.nt):
+            st(g, goff + o, fold_parts(scr, o * nbk, nbk))
     else:
-        # the blocked order (lane/neural-pass97): (task, block) work across the
-        # team into team row 2, then each gradient cell's partials folded
-        if fits:
-            for q in range(t.tid, ntask * nbk, t.nt):
-                var bk = q // ntask
-                var o = q - bk * ntask
+        for o in range(t.tid, cells, t.nt):
+            var accb = Float32(0)
+            for bk in range(nbk):
                 var lo = bk * FOLD_BLOCK
-                st(scr, o * nbk + bk, _huber_part(o, cells, d, x, y, n, cr, rr, thr, sw, lo, min(FOLD_BLOCK, n - lo)))
-            t.sync()
-            for o in range(t.tid, cells, t.nt):
-                st(g, goff + o, fold_parts(scr, o * nbk, nbk))
-        else:
-            for o in range(t.tid, cells, t.nt):
-                var accb = Float32(0)
-                for bk in range(nbk):
-                    var lo = bk * FOLD_BLOCK
-                    accb = fa(accb, _huber_part(o, cells, d, x, y, n, cr, rr, thr, sw, lo, min(FOLD_BLOCK, n - lo)))
-                st(g, goff + o, accb)
-        t.sync()
+                accb = fa(accb, _huber_part(o, cells, d, x, y, n, cr, rr, thr, sw, lo, min(FOLD_BLOCK, n - lo)))
+            st(g, goff + o, accb)
+    t.sync()
     var out = Float32(0)
     if t.lead():
         var sq: Float32
@@ -243,50 +219,32 @@ def _huber_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP,
         var n_out: Int
         var w_out: Float32
         var w_all = Float32(0)
-        comptime if X_LINEAR_SERIAL_FOLDS:
-            if roles:
-                sq = ld(sl, 8)
-                out_abs = ld(sl, 9)
-                n_out = Int(bitcast[DType.int32](ld(sl, 10)))
-                w_out = ld(sl, 11)
-                if sw:
-                    w_all = ld(sl, 12)
+        var p0 = Float32(0)
+        var p1 = Float32(0)
+        var p2 = Float32(0)
+        var p3 = Float32(0)
+        var kn = 0
+        for bk in range(nbk):
+            var lo = bk * FOLD_BLOCK
+            var cnt = min(FOLD_BLOCK, n - lo)
+            if fits:
+                p0 = fa(p0, ld(scr, cells * nbk + bk))
+                p1 = fa(p1, ld(scr, (cells + 1) * nbk + bk))
+                p2 = fa(p2, ld(scr, (cells + 2) * nbk + bk))
+                p3 = fa(p3, ld(scr, (cells + 3) * nbk + bk))
+                kn += Int(bitcast[DType.int32](ld(scr, (cells + 4) * nbk + bk)))
             else:
-                sq = _fold_inliers(rr, y, n, thr, sw)
-                var o = _fold_outliers(rr, y, n, thr, sw)
-                out_abs = o[0]
-                n_out = o[1]
-                w_out = o[2]
-                if sw:
-                    for i in range(n):
-                        w_all = fa(w_all, ld(y, n + i))
-        else:
-            var p0 = Float32(0)
-            var p1 = Float32(0)
-            var p2 = Float32(0)
-            var p3 = Float32(0)
-            var kn = 0
-            for bk in range(nbk):
-                var lo = bk * FOLD_BLOCK
-                var cnt = min(FOLD_BLOCK, n - lo)
-                if fits:
-                    p0 = fa(p0, ld(scr, cells * nbk + bk))
-                    p1 = fa(p1, ld(scr, (cells + 1) * nbk + bk))
-                    p2 = fa(p2, ld(scr, (cells + 2) * nbk + bk))
-                    p3 = fa(p3, ld(scr, (cells + 3) * nbk + bk))
-                    kn += Int(bitcast[DType.int32](ld(scr, (cells + 4) * nbk + bk)))
-                else:
-                    p0 = fa(p0, _huber_part(cells, cells, d, x, y, n, cr, rr, thr, sw, lo, cnt))
-                    p1 = fa(p1, _huber_part(cells + 1, cells, d, x, y, n, cr, rr, thr, sw, lo, cnt))
-                    p2 = fa(p2, _huber_part(cells + 2, cells, d, x, y, n, cr, rr, thr, sw, lo, cnt))
-                    p3 = fa(p3, _huber_part(cells + 3, cells, d, x, y, n, cr, rr, thr, sw, lo, cnt))
-                    kn += Int(bitcast[DType.int32](_huber_part(cells + 4, cells, d, x, y, n, cr, rr, thr, sw, lo, cnt)))
-            sq = p0
-            out_abs = p1
-            w_out = p2
-            if sw:
-                w_all = p3
-            n_out = kn
+                p0 = fa(p0, _huber_part(cells, cells, d, x, y, n, cr, rr, thr, sw, lo, cnt))
+                p1 = fa(p1, _huber_part(cells + 1, cells, d, x, y, n, cr, rr, thr, sw, lo, cnt))
+                p2 = fa(p2, _huber_part(cells + 2, cells, d, x, y, n, cr, rr, thr, sw, lo, cnt))
+                p3 = fa(p3, _huber_part(cells + 3, cells, d, x, y, n, cr, rr, thr, sw, lo, cnt))
+                kn += Int(bitcast[DType.int32](_huber_part(cells + 4, cells, d, x, y, n, cr, rr, thr, sw, lo, cnt)))
+        sq = p0
+        out_abs = p1
+        w_out = p2
+        if sw:
+            w_all = p3
+        n_out = kn
         out = huber_finish(g, goff, th, toff, d, p, n, eps, alpha, sigma, two_eps, sw, sq, out_abs, n_out, w_out, w_all)
     return t.bcast(out)
 
@@ -317,86 +275,59 @@ def _huber_objective_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, 
             st(sc, i, fs(fs(ld(y, i), ld(sc, i)), b))
 
     par_rows(rows_map, n)
-    comptime if X_LINEAR_SERIAL_FOLDS:
-        for i in range(n):
-            var r = ld(sc, i)
-            var ar = fabs(r)
-            var coefv: Float32
-            if sw:
-                # their weighted form: each term times w_i, n becomes sum w
-                var wi = ld(y, n + i)
-                w_all = fa(w_all, wi)
-                if ar > thr:
-                    w_out = fa(w_out, wi)
-                    out_abs = fmad(wi, ar, out_abs)
-                    coefv = fm(wi, -two_eps if r > 0 else two_eps)
-                else:
-                    sq = fmad(fm(wi, r), r, sq)
-                    coefv = fm(-two_over_sigma, fm(wi, r))
-            elif ar > thr:
-                n_out += 1
-                out_abs = fa(out_abs, ar)
-                coefv = -two_eps if r > 0 else two_eps
-            else:
-                sq = fmad(r, r, sq)
-                coefv = fm(-two_over_sigma, r)
-            axpy_acc(g, goff, coefv, x, i * d, d)
-            if fi:
-                st(g, goff + d, fa(ld(g, goff + d), coefv))
-    else:
-        # the blocked order (lane/neural-pass97): every sum from zero over
-        # FOLD_BLOCK rows, folded into its total at the block's end
-        var cells = d + 1 if fi else d
-        var pl = List[Float32](length=max(cells, 1), fill=Float32(0))
-        var pg = FP(unsafe_from_address=Int(pl.unsafe_ptr()))
-        var psq = Float32(0)
-        var pout = Float32(0)
-        var pwo = Float32(0)
-        var pwa = Float32(0)
-        for i in range(n):
-            if i > 0 and i % FOLD_BLOCK == 0:
-                for o in range(cells):
-                    st(g, goff + o, fa(ld(g, goff + o), ld(pg, o)))
-                    st(pg, o, Float32(0))
-                sq = fa(sq, psq)
-                out_abs = fa(out_abs, pout)
-                w_out = fa(w_out, pwo)
-                w_all = fa(w_all, pwa)
-                psq = Float32(0)
-                pout = Float32(0)
-                pwo = Float32(0)
-                pwa = Float32(0)
-            var r = ld(sc, i)
-            var ar = fabs(r)
-            var coefv: Float32
-            if sw:
-                var wi = ld(y, n + i)
-                pwa = fa(pwa, wi)
-                if ar > thr:
-                    pwo = fa(pwo, wi)
-                    pout = fmad(wi, ar, pout)
-                    coefv = fm(wi, -two_eps if r > 0 else two_eps)
-                else:
-                    psq = fmad(fm(wi, r), r, psq)
-                    coefv = fm(-two_over_sigma, fm(wi, r))
-            elif ar > thr:
-                n_out += 1
-                pout = fa(pout, ar)
-                coefv = -two_eps if r > 0 else two_eps
-            else:
-                psq = fmad(r, r, psq)
-                coefv = fm(-two_over_sigma, r)
-            axpy_acc(pg, 0, coefv, x, i * d, d)
-            if fi:
-                st(pg, d, fa(ld(pg, d), coefv))
-        if n > 0:
+    # the blocked order (lane/neural-pass97): every sum from zero over
+    # FOLD_BLOCK rows, folded into its total at the block's end
+    var cells = d + 1 if fi else d
+    var pl = List[Float32](length=max(cells, 1), fill=Float32(0))
+    var pg = FP(unsafe_from_address=Int(pl.unsafe_ptr()))
+    var psq = Float32(0)
+    var pout = Float32(0)
+    var pwo = Float32(0)
+    var pwa = Float32(0)
+    for i in range(n):
+        if i > 0 and i % FOLD_BLOCK == 0:
             for o in range(cells):
                 st(g, goff + o, fa(ld(g, goff + o), ld(pg, o)))
+                st(pg, o, Float32(0))
             sq = fa(sq, psq)
             out_abs = fa(out_abs, pout)
             w_out = fa(w_out, pwo)
             w_all = fa(w_all, pwa)
-        _ = pl^
+            psq = Float32(0)
+            pout = Float32(0)
+            pwo = Float32(0)
+            pwa = Float32(0)
+        var r = ld(sc, i)
+        var ar = fabs(r)
+        var coefv: Float32
+        if sw:
+            var wi = ld(y, n + i)
+            pwa = fa(pwa, wi)
+            if ar > thr:
+                pwo = fa(pwo, wi)
+                pout = fmad(wi, ar, pout)
+                coefv = fm(wi, -two_eps if r > 0 else two_eps)
+            else:
+                psq = fmad(fm(wi, r), r, psq)
+                coefv = fm(-two_over_sigma, fm(wi, r))
+        elif ar > thr:
+            n_out += 1
+            pout = fa(pout, ar)
+            coefv = -two_eps if r > 0 else two_eps
+        else:
+            psq = fmad(r, r, psq)
+            coefv = fm(-two_over_sigma, r)
+        axpy_acc(pg, 0, coefv, x, i * d, d)
+        if fi:
+            st(pg, d, fa(ld(pg, d), coefv))
+    if n > 0:
+        for o in range(cells):
+            st(g, goff + o, fa(ld(g, goff + o), ld(pg, o)))
+        sq = fa(sq, psq)
+        out_abs = fa(out_abs, pout)
+        w_out = fa(w_out, pwo)
+        w_all = fa(w_all, pwa)
+    _ = pl^
     var wn = Float32(0)
     for j in range(d):
         var w = ld(th, toff + j)

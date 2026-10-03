@@ -4299,9 +4299,34 @@ def _cmd_emit_reference(args):
     return EXIT_VERIFIED
 
 
+def _emit_model_pairs(args, harness):
+    """(lane, fixture) pairs `--emit-models` saves. `--lanes` names the lanes
+    and `--fixtures` their fixtures (default base). Without `--lanes` it is
+    every model the shipped bundle carries (so a regeneration never drops one)
+    plus DEFAULT_MODEL_LANES on base."""
+    asked = [x for x in (getattr(args, "lanes", "") or "").split(",") if x]
+    fixtures = [x for x in (getattr(args, "fixtures", "") or "").split(",") if x] or ["base"]
+    unknown = sorted(set(asked) - set(harness.LANES)) + sorted(set(fixtures) - set(harness.FIXTURES))
+    if unknown:
+        raise CannotRun(f"--emit-models: unknown lanes or fixtures {unknown}")
+    if asked:
+        return [(lane, f) for lane in asked for f in fixtures]
+    pairs = [(lane, "base") for lane in DEFAULT_MODEL_LANES]
+    shipped = os.path.join(_pkg_dir(), vref.TABLE_DIR, MODELS_DIR, MODELS_MANIFEST)
+    try:
+        with open(shipped, "r", encoding="utf-8") as fh:
+            for m in json.load(fh).get("models") or []:
+                pair = (m.get("lane"), m.get("fixture"))
+                if pair[0] in harness.LANES and pair[1] in harness.FIXTURES and pair not in pairs:
+                    pairs.append(pair)
+    except (OSError, ValueError, AttributeError):
+        pass
+    return pairs
+
+
 def _cmd_emit_models(args, ml):
-    """Save the DEFAULT_MODEL_LANES base-fixture models on THIS box (a GPU
-    install), and write the manifest only for models whose file bytes equal
+    """Save the bundle's portable models (`_emit_model_pairs`) on THIS box (a
+    GPU install), and write the manifest only for models whose file bytes equal
     the table's model reference, so a shipped file is the file every
     recorded vendor wrote."""
     from . import _backend
@@ -4313,15 +4338,21 @@ def _cmd_emit_models(args, ml):
     table = vref.load_table(getattr(args, "reference_table", None) or vref.table_path())
     harness = load_harness()
     os.makedirs(out_dir, exist_ok=True)
-    fixture = "base"
-    X, yc, yr = harness.fixture(fixture)
-    Xh = harness.heldout(fixture)
     models, problems = [], []
-    for lane in [x for x in (getattr(args, "lanes", "") or "").split(",") if x] or DEFAULT_MODEL_LANES:
+    data = {}
+    try:
+        pairs = _emit_model_pairs(args, harness)
+    except CannotRun as exc:
+        _emit(f"USAGE: {exc}", sys.stderr)
+        return EXIT_USAGE
+    for lane, fixture in pairs:
+        if fixture not in data:
+            data[fixture] = (harness.fixture(fixture), harness.heldout(fixture))
+        (X, yc, yr), Xh = data[fixture]
         fit = harness.LANES[lane](ml, X, yc, yr, Xh.copy())
         sl = harness._save_load(fit.est)
         if sl is None:
-            problems.append(f"{lane}: the estimator has no save/load")
+            problems.append(f"{lane}/{fixture}: the estimator has no save/load")
             continue
         save, load, suffix = sl
         name = f"{lane}.{fixture}{suffix}"
@@ -4331,10 +4362,10 @@ def _cmd_emit_models(args, ml):
         ent = vref.entry(table, lane, fixture, "model")
         bent = vref.entry(table, lane, fixture, "batch")
         if ent is None or ent.get("ref") != h:
-            problems.append(f"{lane}: file hash {h}, table model reference {(ent or {}).get('ref')}")
+            problems.append(f"{lane}/{fixture}: file hash {h}, table model reference {(ent or {}).get('ref')}")
             continue
         if bent is None or not isinstance(bent.get("ref"), str) or bent["ref"].startswith("n/a"):
-            problems.append(f"{lane}: the table has no batch reference")
+            problems.append(f"{lane}/{fixture}: the table has no batch reference")
             continue
         models.append(dict(lane=lane, fixture=fixture, file=name, bytes=os.path.getsize(path),
                            model_hash=h, batch_hash=bent["ref"], load=load,

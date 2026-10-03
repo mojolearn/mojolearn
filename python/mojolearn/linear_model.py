@@ -442,6 +442,26 @@ def _ols_tsqr_on(rows, cols):
     return _tsqr_lstsq_on(rows, cols, 1)
 
 
+def _ols_normal_eq_default(b):
+    """Whether this binding's build routes LinearRegression.fit to the
+    equilibrated normal equations instead of the TSQR (lane
+    apple-fast-olsne: FAST on Apple, the comptime OLS_FAST_NORMAL_EQ read
+    back through `ols_normal_eq_default`; False on a binding without it)."""
+    q = _optional_export(b, "ols_normal_eq_default")
+    return bool(q()) if q is not None else False
+
+
+def _optional_export(b, name):
+    """`name` from binding `b`, or None when it does not export it. A host
+    binding's stand-in raises ImportError (by name) for a missing export
+    rather than AttributeError, so a plain getattr default never applies on a
+    CPU-only install, and LinearRegression.fit raised there."""
+    try:
+        return getattr(b, name, None)
+    except ImportError:
+        return None
+
+
 def _ols_tsqr(x, y, rows, cols, mode):
     """coef_ (float32, cols) of min ||x w - y|| (x and y already centered and
     weighted as `fit` prepares them) through the blocked TSQR of [x | y]
@@ -451,13 +471,39 @@ def _ols_tsqr(x, y, rows, cols, mode):
     matrix, so the condition number is not squared. A singular value at or
     below cols * eps32 * s_max is dropped (the dependent directions of a
     rank-deficient design, a constant column centered to zero among them,
-    get no weight: the minimum-norm solution). DEVIATION from the normal
-    equations route (DEVIATIONS 2620, 2621): no column equilibration, so a
-    column's units can move that cutoff where they could not before; the
-    cutoff is on singular values, not on squared ones."""
+    get no weight: the minimum-norm solution). The columns are equilibrated
+    first as the normal equations route does (DEVIATION 2620, lane
+    apple-fast-tsqr): R's column j is scaled by the exact power of two that
+    rule picks for ||x e_j||^2 before the SVD and coef_ is scaled by it
+    after, so a column's units do not move the cutoff (istella's columns
+    span seven orders of magnitude; unequilibrated, real directions fell
+    under it). DEVIATION 2621 still differs: the cutoff is on singular
+    values, not on squared ones."""
     from ._expansion_decomp import _F32_EPS, _Kit, _mode, _tsqr_lstsq_core
     k = _Kit(_mode(mode))
-    X, _, _, _ = _tsqr_lstsq_core(k, x, y, rows, cols, 1, _F32_EPS * cols)
+    X, _, _, _ = _tsqr_lstsq_core(k, x, y, rows, cols, 1, _F32_EPS * cols, equilibrate=True)
+    return X.out((cols,))
+
+
+def _ols_fast_tsqr_r(r_aug, cols, mode):
+    """coef_ (float32, cols) from the TSQR's R_aug ((cols + 1) square) that
+    `ols_center_tsqr_r` formed on the device from the raw X and y
+    (-D MOJOLEARN_OLS_FAST_DEVICE_CENTER, lane/apple-fast-core; FAST + Apple
+    only). The small-R solve is `_expansion_decomp._tsqr_lstsq_core`'s after
+    its `x_decomp_tsqr_r` call, line for line, with nrhs = 1 and
+    `_ols_tsqr`'s cutoff `_F32_EPS * cols`: repeated here rather than split
+    out of that shared function so the switch touches only this FAST-only
+    branch; when it wins, `_tsqr_lstsq_core` gains the R entry and this goes."""
+    from ._expansion_decomp import _F32_EPS, _Kit, _M, _f32, _mode
+    from ._linalg_impl import _svd_tall
+    k = _Kit(_mode(mode))
+    n = cols + 1
+    top = r_aug.rows(0, cols)
+    R, C = top.cols(0, cols), top.cols(cols, n)
+    Ur, S, Vt = _svd_tall(k, R, False)
+    cut = _f32(S.s[0] * (_F32_EPS * cols))
+    inv = k.ew("recip", k.ew("select", S, S, _M.zeros(1, 1), s=cut))
+    X = k.mm(Vt, k.ew("mul", k.mm(Ur, C, ta=True), inv.T), ta=True)
     return X.out((cols,))
 
 
@@ -579,6 +625,67 @@ class LinearRegression(NumericModeMixin):
             "mojolearn LinearRegression X and y lengths differ",
         )
         weights = _check_sample_weight(sample_weight, rows, "LinearRegression")
+        b = self._bind("_mojolearn_estimators")
+        fast_ne = _ols_normal_eq_default(b)
+        normal_eq = not _ols_tsqr_on(rows, cols) or fast_ne
+        resident = _optional_export(b, "ols_fit_resident")
+        if fast_ne and weights is None and resident is not None:
+            # lane apple-fast-olsne: FAST Apple builds only (the binding's
+            # compiled OLS_FAST_NORMAL_EQ): the normal equations with X and y
+            # uploaded once. Every other build keeps main's route below.
+            self.coef_ = empty((cols,), "<f4")
+            mu = empty((cols,), "<f4")
+            ymean = empty((1,), "<f8")
+            resident(addr_ro(x, name="X"), addr_ro(target, name="y"),
+                     addr(self.coef_, name="coef_"), addr(mu, name="column means"),
+                     addr(ymean, name="y mean"),
+                     [rows, cols, 1 if self.fit_intercept else 0])
+            if self.fit_intercept:
+                self._x_mean = mu
+                self._y_mean = float(ymean.tolist()[0])
+            else:
+                self._x_mean = zeros((cols,), "<f4")
+                self._y_mean = 0.0
+            self._set_intercept(cols)
+            return self
+        if self.fit_intercept and weights is None and self._fast_device_center():
+            # -D MOJOLEARN_OLS_FAST_DEVICE_CENTER (lane/apple-fast-core,
+            # 2026-10-02, FAST + Apple only, default off): the three device
+            # trips below (`_column_means` -> `lm_col_sums`, `_center` ->
+            # `lm_center`, then the solve's own upload of the centered copy)
+            # become ONE upload of the raw X and y with the centering on the
+            # device (`glm/estimator.mojo`). The solve is the same one this
+            # layer would pick: the TSQR's R comes back and `_ols_fast_tsqr_r`
+            # finishes it exactly as `_ols_tsqr` does; off the TSQR it is
+            # `ols_fit` on the device-centered data. The intercept is formed
+            # here as below from the means the device hands back.
+            b = self._bind("_mojolearn_estimators")
+            means = empty((cols,), "<f4")
+            if _ols_tsqr_on(rows, cols):
+                from ._expansion_decomp import _M
+                n = cols + 1
+                r_aug = _M.zeros(n, n)
+                y_mean = b.ols_center_tsqr_r(
+                    addr_ro(x, name="X"), addr_ro(target, name="y"),
+                    r_aug.addr, addr(means, name="means"), [rows, cols],
+                )
+                self.coef_ = _ols_fast_tsqr_r(r_aug, cols, getattr(self, "numeric_mode", None))
+            else:
+                self.coef_ = empty((cols,), "<f4")
+                y_mean = b.ols_fit_centered(
+                    addr_ro(x, name="X"), addr_ro(target, name="y"),
+                    addr(self.coef_, name="coef_"), addr(means, name="means"),
+                    [rows, cols],
+                )
+            self._x_mean = means
+            self._y_mean = float(y_mean)
+            dot = math.fsum(
+                float(a) * float(b)
+                for a, b in zip(self._x_mean.tolist(), self.coef_.tolist())
+            )
+            self.intercept_ = float(self._y_mean - dot)
+            self.n_features_in_ = cols
+            return self
         if self.fit_intercept:
             # float64 column means -> float32, then a float32 subtraction.
             # The means come from exact column sums rounded once to float64
@@ -614,10 +721,10 @@ class LinearRegression(NumericModeMixin):
             b = self._bind("_mojolearn_estimators")
             work_x = _scale_rows(b, work_x, root)
             work_y = _scale_rows(b, work_y, root)
-        if _ols_tsqr_on(rows, cols):
+        if not normal_eq:
             # lane neural-pass140: the blocked TSQR of [X | y] and the SVD of
-            # its small R (_ols_tsqr); MOJOLEARN_LINALG_TSQR=0 keeps the
-            # normal equations below
+            # its small R (_ols_tsqr); MOJOLEARN_LINALG_TSQR=0 (and FAST on
+            # Apple, `_ols_normal_eq_default`) keeps the normal equations below
             self.coef_ = _ols_tsqr(work_x, work_y, rows, cols, getattr(self, "numeric_mode", None))
         else:
             self.coef_ = empty((cols,), "<f4")
@@ -626,6 +733,10 @@ class LinearRegression(NumericModeMixin):
                 addr(self.coef_, name="coef_"),
                 [rows, cols],
             )
+        self._set_intercept(cols)
+        return self
+
+    def _set_intercept(self, cols):
         if self.fit_intercept:
             dot = math.fsum(
                 float(a) * float(b)
@@ -635,7 +746,18 @@ class LinearRegression(NumericModeMixin):
         else:
             self.intercept_ = 0.0
         self.n_features_in_ = cols
-        return self
+
+    def _fast_device_center(self):
+        """Whether `fit` takes the device-centering entries: the loaded
+        binding registers `ols_center_tsqr_r` only when it was built FAST
+        on Apple with -D MOJOLEARN_OLS_FAST_DEVICE_CENTER
+        (`bindings/_mojolearn_estimators.mojo`), so the name's presence is
+        the whole switch: no env read, and the host binding has not got it
+        (its proxy raises ImportError for a missing name)."""
+        try:
+            return getattr(self._bind("_mojolearn_estimators"), "ols_center_tsqr_r", None) is not None
+        except (AttributeError, ImportError):
+            return False
 
     def predict(self, X):
         if not hasattr(self, "coef_"):
@@ -759,10 +881,31 @@ class Ridge(NumericModeMixin):
             "mojolearn Ridge currently requires one target",
             "mojolearn Ridge X and y lengths differ",
         )
-        if self.fit_intercept:
+        b = self._bind("_mojolearn_estimators")
+        q = getattr(b, "ridge_resident_default", None)
+        resident = getattr(b, "ridge_fit_resident", None)
+        use_resident = q is not None and resident is not None and bool(q())
+        if use_resident:
+            # lane apple-fast-ridgespeed: FAST Apple builds (default unless
+            # -D MOJOLEARN_RIDGE_RESIDENT_OFF): X and y uploaded once, the same
+            # column sums, center and ridgeEig on the resident buffers (the
+            # same words as the route below).
+            self.coef_ = empty((cols,), "<f4")
+            mu = empty((cols,), "<f4")
+            ymean = empty((1,), "<f8")
+            resident(addr_ro(x, name="X"), addr_ro(target, name="y"),
+                     addr(self.coef_, name="coef_"), addr(mu, name="column means"),
+                     addr(ymean, name="y mean"),
+                     [rows, cols, float(self.alpha), 1 if self.fit_intercept else 0])
+            if self.fit_intercept:
+                self._x_mean = mu
+                self._y_mean = float(ymean.tolist()[0])
+            else:
+                self._x_mean = zeros((cols,), "<f4")
+                self._y_mean = 0.0
+        elif self.fit_intercept:
             # The same centering as LinearRegression, for the same
             # reasons; read that class's fit.
-            b = self._bind("_mojolearn_estimators")
             mu32 = _column_means(b, x, None)
             self._x_mean = Array.from_list(mu32, "<f4")
             self._y_mean = _vector_mean(b, target, None)
@@ -772,12 +915,13 @@ class Ridge(NumericModeMixin):
             work_x, work_y = x, target
             self._x_mean = zeros((cols,), "<f4")
             self._y_mean = 0.0
-        self.coef_ = empty((cols,), "<f4")
-        self._bind("_mojolearn_estimators").ridge_fit(
-            addr_ro(work_x, name="X"), addr_ro(work_y, name="y"),
-            addr(self.coef_, name="coef_"),
-            [rows, cols, float(self.alpha)],
-        )
+        if not use_resident:
+            self.coef_ = empty((cols,), "<f4")
+            b.ridge_fit(
+                addr_ro(work_x, name="X"), addr_ro(work_y, name="y"),
+                addr(self.coef_, name="coef_"),
+                [rows, cols, float(self.alpha)],
+            )
         if self.fit_intercept:
             dot = math.fsum(
                 float(a) * float(b)

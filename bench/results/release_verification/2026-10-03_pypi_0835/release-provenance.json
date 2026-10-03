@@ -1,0 +1,33 @@
+{
+  "schema": "mojolearn.release-provenance.v1",
+  "version": "0.8.35",
+  "source_commit": "8897404daf6b4727c81602b707e9119d7686711a",
+  "workflow": "https://github.com/mojolearn/mojolearn/actions/runs/37125108509",
+  "candidate_tag": "alpha-api-0.8.35-main-20261003",
+  "validation_profile": "preverified",
+  "macos_build": "local, packaging/macos/build_release_wheel.sh --build-only",
+  "linux_build": "GitHub runners (release.py --build-backend github): sm_90a, sm_89, gfx942",
+  "published_files": [
+    {
+      "filename": "mojolearn-0.8.35-py3-none-macosx_11_0_arm64.whl",
+      "sha256": "cb970bd093c20991a0a419fc2dae3e57be0b6f75da7ab7642fc76db72452c58b",
+      "matches_manifest": true
+    },
+    {
+      "filename": "mojolearn-0.8.35-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "5a1c02bfbd91bf39dc4acb08561133c8ac5a85413f83f8ac34d1cd3d40f32dce",
+      "matches_manifest": true
+    },
+    {
+      "filename": "mojolearn_nvidia-0.8.35-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "9c41ab78852609b951d6609f4779e5fb7a3d79c454d67d73897336cb5e9795ab",
+      "matches_manifest": true
+    },
+    {
+      "filename": "mojolearn_amd-0.8.35-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "cfc64f7606f8598297f407ddfad5462204bb61b7ec537fd44e85d7f775b6a253",
+      "matches_manifest": true
+    }
+  ],
+  "finish_line": "pip install mojolearn==0.8.35 from PyPI on the release Mac: import and KMeans fit OK"
+}

@@ -21,7 +21,7 @@ comptime MAX_SWEEPS = 64
 
 
 def eigh_unit(t: Int, f: FP, q: IP):
-    """q = [A, m, astride, EVAL, EVEC]; t = batch index. A[t*astride :] is an
+    """q = [A, m, astride, EVAL, EVEC, cyclic] (cyclic: x_prep/device.mojo EIGH_CYCLIC_Q); t = batch index. A[t*astride :] is an
     m x m symmetric matrix, DESTROYED. EVAL[t*m + r] the eigenvalues
     descending; EVEC[t*m*m + c*m + r] the component c of eigenvector r
     (column r, as numpy's eigh returns it)."""

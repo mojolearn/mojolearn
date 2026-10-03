@@ -142,6 +142,7 @@ from neighbors.impl.ball_cover.common import (
 from neighbors.impl.ball_cover.fast_rbc_eps import FAST_RBC_EPS, fast_rbc_eps_pass
 from neighbors.impl.ball_cover.scan import (
     rbc_exact_edge_total,
+    rbc_exclusive_scan_launch,
     RBC_SCAN_TPB,
     rbc_clamp_kernel,
     rbc_exclusive_scan_kernel,
@@ -746,13 +747,9 @@ def rbc_eps_pass_count(
         grid_dim=((n_queries + RBC_QPB - 1) // RBC_QPB, 1, 1),
         block_dim=(RBC_TPB, 1, 1),
     )
-    ctx.enqueue_function[rbc_exclusive_scan_kernel](
-        adj_ia.unsafe_ptr(),
-        vd.unsafe_ptr(),
-        Int32(n_queries),
-        grid_dim=(1, 1, 1),
-        block_dim=(RBC_SCAN_TPB, 1, 1),
-    )
+    # MOJOLEARN_DBSCAN_FAST_SCAN=1 (lane/apple-fast-core): the device-wide
+    # scan instead of this one-block kernel (`scan.mojo`).
+    rbc_exclusive_scan_launch(ctx, adj_ia, vd, n_queries)
     ctx.synchronize()
 
     var h = ctx.enqueue_create_host_buffer[DType.int32](n_queries + 1)
@@ -974,13 +971,9 @@ def rbc_eps_pass_max_k(
             block_dim=(RBC_SCAN_TPB, 1, 1),
         )
 
-    ctx.enqueue_function[rbc_exclusive_scan_kernel](
-        adj_ia.unsafe_ptr(),
-        vd.unsafe_ptr(),
-        Int32(n_queries),
-        grid_dim=(1, 1, 1),
-        block_dim=(RBC_SCAN_TPB, 1, 1),
-    )
+    # MOJOLEARN_DBSCAN_FAST_SCAN=1 (lane/apple-fast-core): the device-wide
+    # scan instead of this one-block kernel (`scan.mojo`).
+    rbc_exclusive_scan_launch(ctx, adj_ia, vd, n_queries)
     ctx.enqueue_function[block_rbc_kernel_eps_max_k_copy](
         Int32(max_k),
         adj_ia.unsafe_ptr(),

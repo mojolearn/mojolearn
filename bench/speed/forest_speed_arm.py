@@ -948,7 +948,8 @@ def build_parser():
                    help="comma-separated opponent arm names to keep (a subset "
                         "of the lane's roster, e.g. catboost-cpu,xgboost-gpu); "
                         "a name asked for and not built is REFUSED by name. "
-                        "`ours` always runs; the filter reads opponents only.")
+                        "`ours` always runs; the filter reads opponents only. "
+                        "Naming opponents here races them (default: ours only).")
     p.add_argument("--ours-ab", default=None, metavar="PARAM=VALUE",
                    help="add a second ours arm, `ours-ab`, equal to `ours` "
                         "except one estimator keyword (a Python literal, "
@@ -969,8 +970,12 @@ def build_parser():
                         "LOAD and not of two problems. Every line carries "
                         "the row count in shape=.")
     p.add_argument("--ours-only", action="store_true",
-                   help="skip the opponents; use when two CUDA runtimes in "
-                        "one process will not coexist")
+                   help="skip the opponents. This is now the DEFAULT (Andrew, "
+                        "Oct 3 2026: opponents are scored once and stored); the "
+                        "flag is kept so existing callers still parse")
+    p.add_argument("--with-opponents", action="store_true",
+                   help="also race the lane's whole opponent roster (default: our "
+                        "arm(s) only; --arms or --opponents-first also ask for them)")
     p.add_argument("--params-only", action="store_true",
                    help="construct every arm, print its parameters (BOARD-PARAMS) and library "
                         "(FSPEED-LIBRARY) and stop before the warm-up (the board's opponent "
@@ -1019,6 +1024,12 @@ def main(argv=None):
     started = time.time()
     args = build_parser().parse_args(argv)
     lane = args.lane
+    # Default: our arm(s) only. Opponents race only on an explicit ask:
+    # --with-opponents, an --arms list, or --opponents-first.
+    if not (args.with_opponents or args.arms or args.opponents_first):
+        args.ours_only = True
+    elif args.ours_only and args.with_opponents:
+        raise SystemExit("forest_speed_arm: --ours-only and --with-opponents contradict")
     if args.ours_cpu:
         raise SystemExit("forest_speed_arm: --ours-cpu is removed: our CPU is never raced or "
                          "timed (Andrew, Oct 2 2026); use --host-digest for a same-bits digest")

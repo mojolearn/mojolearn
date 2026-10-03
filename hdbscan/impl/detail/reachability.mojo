@@ -39,11 +39,11 @@ takes its distances from `neighbors/checks/pinned_distance_tile.mojo`
 That is theirs plus an index tie-break, and the tie-break is DEVIATION
 1602 below.
 
-WHERE IT RUNS. Theirs takes device pointers; `knn_search_traced`'s
-boundary is host pointers (`MutUntrackedOrigin`), so `compute_knn` below
-copies through host buffers. This moves the boundary, not the algorithm:
-`metrics/impl/stats/detail/trustworthiness_score.mojo:193-214` reaches
-the same entry the same way and says so for the same reason.
+WHERE IT RUNS. Theirs takes device pointers, and so does ours:
+`compute_knn` calls `knn_self_search_resident`, the same statements as
+`knn_search_traced` with the data and the result left on the device
+(lane cgr3-hdbscan-mst, 2026-10-03; before, X and the result went
+through host buffers).
 
 ======================================================================
 DEVIATION BLOCK -- DEVIATION 1602. THE CORE DISTANCE IS A k-TH ORDER
@@ -113,7 +113,7 @@ from hdbscan.checks.mutual_reachability_dense import refuse_nonfinite_device
 from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
 )
-from neighbors.estimator import knn_search_traced
+from neighbors.estimator import knn_self_search_resident
 
 
 comptime CORE_TPB = 256
@@ -185,10 +185,22 @@ def core_distances(
     ctx.synchronize()
 
 
+def knn_inds_to_i32_kernel(
+    dst: MutPointer[Int32, MutAnyOrigin],
+    src: MutPointer[UInt32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """`knn_search`'s `UInt32` indices narrowed to `Int32` (their
+    `thrust::transform`, `cuml .../reachability.cuh:111-116`)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        dst[i] = Int32(Int(src[i]))
+
+
 def compute_knn(
     ctx: DeviceContext,
     mut trace: IdentityTrace,
-    mut x_host: List[Float32],
+    mut x: DeviceBuffer[DType.float32],
     m: Int,
     n: Int,
     k: Int,
@@ -197,52 +209,35 @@ def compute_knn(
 ) raises:
     """`reachability.cuh:80-94`: "perform knn", index and queries both X.
 
-    Theirs converts FAISS's `int64_t` indices down to `value_idx` in a
-    `thrust::transform` (`cuml .../reachability.cuh:111-116`); ours
-    converts `knn_search`'s `UInt32` to `Int32` in the same host pass that
-    moves the result to the device, which is the same narrowing at the
-    same point in the pipeline.
+    Device in, device out (lane cgr3-hdbscan-mst, 2026-10-03):
+    `knn_self_search_resident` runs `knn_search_traced`'s statements on the
+    device copy of X and leaves the rows, ascending by (distance, index), on
+    the device; the `UInt32` to `Int32` narrowing is a kernel. Before, X
+    went through host buffers into the host-pointer entry and the result
+    came back through the host.
 
     `trace` is threaded in rather than constructed here so the k-NN's own
     `knn.*` stages land in the SAME card as this lane's, with one
     increasing `seq` (`core/identity_trace.mojo`'s uniqueness invariant;
     the DEVIATION 518 lesson, restated at `neighbors/estimator.mojo:190`).
     """
-    var h_dist = ctx.enqueue_create_host_buffer[DType.float32](m * k)
-    var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](m * k)
-    var h_x = ctx.enqueue_create_host_buffer[DType.float32](m * n)
-    ctx.synchronize()
-    for i in range(m * n):
-        h_x.unsafe_ptr().unsafe_store(i, x_host[i])
-    _ = knn_search_traced(
-        ctx,
-        trace,
-        h_x.unsafe_ptr(),
-        m,
-        h_x.unsafe_ptr(),
-        m,
-        n,
-        k,
-        h_dist.unsafe_ptr(),
-        h_idx.unsafe_ptr(),
-        True,
+    var idx_u32 = ctx.enqueue_create_buffer[DType.uint32](m * k)
+    _ = knn_self_search_resident(
+        ctx, trace, x, m, n, k, out_dists, idx_u32, True,
     )
-    var i32 = List[Int32](capacity=m * k)
-    for i in range(m * k):
-        i32.append(Int32(Int(h_idx.unsafe_ptr().unsafe_load(i))))
-    ctx.enqueue_copy(dst_buf=out_dists, src_ptr=h_dist.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=out_inds, src_ptr=i32.unsafe_ptr())
+    var blocks = (m * k + CORE_TPB - 1) // CORE_TPB if m * k > 0 else 1
+    ctx.enqueue_function[knn_inds_to_i32_kernel](
+        out_inds.unsafe_ptr(), idx_u32.unsafe_ptr(), Int32(m * k),
+        grid_dim=(blocks, 1, 1), block_dim=(CORE_TPB, 1, 1),
+    )
     ctx.synchronize()
-    _ = h_dist^
-    _ = h_idx^
-    _ = h_x^
-    _ = i32^
+    _ = idx_u32^
 
 
 def compute_core_dists(
     ctx: DeviceContext,
     mut trace: IdentityTrace,
-    mut x_host: List[Float32],
+    mut x: DeviceBuffer[DType.float32],
     mut core_dists: DeviceBuffer[DType.float32],
     m: Int,
     n: Int,
@@ -275,7 +270,7 @@ def compute_core_dists(
             " distance step first, because the dense mutual reachability"
             " graph reads that matrix"
         )
-    compute_knn(ctx, trace, x_host, m, n, min_samples, knn_dists, knn_inds)
+    compute_knn(ctx, trace, x, m, n, min_samples, knn_dists, knn_inds)
     # `:121` Slice core distances (distances to kth nearest neighbor)
     core_distances(
         ctx, knn_dists, min_samples, min_samples, m, core_dists,

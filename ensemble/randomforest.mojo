@@ -65,7 +65,7 @@ from core.segmented_sort import (
     SORT_BLOCK,
     seg_add_block_carry_kernel,
     seg_reorder_one_bit_kernel,
-    seg_scan_block_sums_kernel,
+    enqueue_seg_scan_block_sums,
     seg_scan_key_bit_kernel,
 )
 from std.math import isfinite, isinf, sqrt
@@ -1834,13 +1834,7 @@ def sort_selected_rows[
             block_dim=(SORT_BLOCK, 1, 1),
         )
         log_launch_ctx(ctx, "rows_sort_block_sums")
-        ctx.enqueue_function[seg_scan_block_sums_kernel](
-            block_sums_p,
-            Int32(n),
-            Int32(blocks_wide),
-            grid_dim=(1, 1, 1),
-            block_dim=(1, 1, 1),
-        )
+        enqueue_seg_scan_block_sums(ctx, block_sums_p, n, blocks_wide, 1)
         log_launch_ctx(ctx, "rows_sort_carry")
         ctx.enqueue_function[seg_add_block_carry_kernel](
             offsets_p,

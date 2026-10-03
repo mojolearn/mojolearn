@@ -11,6 +11,43 @@ publishes without running CPU certification or new installed GPU/CPU smoke.
 Do not manufacture fresh passing test receipts. Use `packaging/macos/build_release_wheel.sh --build-only` to compile and pack
 without the Mac builder's automatic post-build runtime tests.
 
+The verifier self-test gate still applies to a preverified macOS wheel: on the
+Mac, before dispatching its publication, run
+
+```sh
+python3 tools/wheel_self_test.py <prepared macOS wheel> --out <dir> --python python3.12
+```
+
+It installs the wheel into a fresh venv and runs
+`python -m mojolearn verify --self-test --cpu-threads 3`. Anything but
+`WHEEL-SELF-TEST PASSED` (receipt `<dir>/results.json`, keyed to the wheel's
+sha256) blocks publication: the bundled reference table does not reproduce
+the wheel's own bits. Regenerate it (below) and rebuild.
+
+## Regenerate the reference table whenever a release changes bits
+
+A release that changes any digest (a new fold order, a parallel kernel that
+replaces a serial chain, a changed default) must ship a reference table
+(`python/mojolearn/verify_reference/table.json`) and portable models
+regenerated at its source commit. 0.8.35 did not: `verify --quick` on the PyPI
+wheel stopped at the comparator self-test (ols/base `23eecb87d9e84cc7` against
+the table's `3d1d7c30b12d9872`). In order, from one pushed commit:
+
+1. On each box (NVIDIA, AMD, the Apple M2, and once with `cpu` for the host
+   column), in a checkout with every binding built:
+   `tools/record_identity_column.sh <vendor-label> <absolute outdir>`
+   (shard with `SHARD=i/N` when a job has a time limit).
+2. On this Mac: `tools/admit_identity_columns.sh --build-host <outdir>...`
+   places the records under `bench/results/identity_break/<date>-<REF_TAG>/` (REF_TAG, e.g. 0836),
+   regenerates the table, and runs `verify --self-test` and `verify --coverage`
+   against it. Commit and push.
+3. On one GPU box, at that pushed commit:
+   `tools/record_identity_column.sh <gpu-label> <outdir> --models`; then here
+   `tools/admit_identity_columns.sh --models <outdir>/models`. Commit and push.
+
+The macos-self-test step below fails a wheel whose table is stale; it cannot
+regenerate one.
+
 ## The one command
 
 ```sh
@@ -26,7 +63,9 @@ version files, runs `write-docs-facts`, commits and pushes exactly those files,
 freezes HEAD, runs the rehearsal (step 0) and the reuse plan, and then runs
 FOUR PIPELINES AT ONCE, each publishing as soon as its own gates pass:
 
-- **macos**: macos-build, macos-smoke, `release-check` (the Apple column,
+- **macos**: macos-build, macos-smoke, macos-self-test (the built wheel in a
+  fresh venv, `verify --self-test --cpu-threads 3`; publish-macos refuses
+  without its PASSED receipt), `release-check` (the Apple column,
   step 5b), publish-macos. These share the Mac and run one at a time.
   publish-macos first diffs the Apple column against the newest earlier
   release's recorded NVIDIA and AMD columns on this machine (seconds, nothing

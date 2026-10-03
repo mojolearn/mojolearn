@@ -65,13 +65,18 @@ no equivalent), and `n_alpha > 1` (their signature carries an array and
 reads `alpha[0]` only: `ridge.cuh:67`).
 """
 
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from core.gram_splitk import gram_splitk_applies
 
 from core.xtdz_coalesced import xty_launch
 from core.column_stats import STATS_TPB, xty_kernel
 from core.gemm import gemv_n
 from core.identity_trace import IdentityTrace
-from glm.impl.linalg.detail.svd import svd_eig_traced
+from glm.impl.linalg.detail.svd import svd_eig_scratch_traced, svd_eig_traced
 from glm.impl.matrix.math import (
     MATRIX_ELEM_TPB,
     add_scalar_kernel,
@@ -90,6 +95,26 @@ comptime RIDGE_ALGO_EIG = 1
 #: written is the one place a check reads. ABSOLUTE, on a singular value;
 #: see the module docstring and `glm/NOT_IMPLEMENTED.tsv`.
 comptime RIDGE_SMALL_THRESH = Float32(1.0e-10)
+
+
+#: Lane apple-fast-ridgespeed (2026-10-03), FAST on Apple only: `U^T b` is formed as `(V^T (A^T b)) / S`
+#: (the same skip-zero rule on `|S| < 1e-10` as `U = A V / S`) instead of
+#: materializing the rows x cols `U = A V / S` and folding it against `b`.
+#: The same quantity in exact arithmetic; it drops one rows x cols x cols
+#: product, one rows x cols divide pass and a rows x cols buffer. Different
+#: rounding, so a different FAST Apple program; IDENTICAL and the other
+#: vendors keep `ridgeSolve`'s route. Default since the M3 A/B
+#: (lane/apple-fast-ridgespeed e3ef68416, n=1, r2 identical .909 / .3287:
+#: on top of RIDGE_RESIDENT, istella 729 -> 542 ms, taxi 21.7 -> 22.7 ms).
+#: Depends on RIDGE_RESIDENT: off with -D MOJOLEARN_RIDGE_NO_U_OFF or
+#: -D MOJOLEARN_RIDGE_RESIDENT_OFF; the old -D MOJOLEARN_RIDGE_NO_U define
+#: is now harmless.
+comptime RIDGE_NO_U = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_RIDGE_NO_U_OFF"]()
+    and not is_defined["MOJOLEARN_RIDGE_RESIDENT_OFF"]()
+)
 
 
 def _elem_grid(n: Int) -> Int:
@@ -183,6 +208,112 @@ def _record_nnz(
     _ = hs^
 
 
+def ridge_solve_no_u_traced(
+    ctx: DeviceContext,
+    mut s: DeviceBuffer[DType.float32],
+    mut v: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+    mut b: DeviceBuffer[DType.float32],
+    alpha: Float32,
+    mut w: DeviceBuffer[DType.float32],
+    mut trace: IdentityTrace,
+) raises:
+    """`ridgeSolve` with `U^T b` formed without `U` (`RIDGE_NO_U`):
+    `A^T b` (one fold over rows, `xty_launch`), `V^T (A^T b)` (the same fold
+    over `n_cols` rows of `V`), then divided by the RAW `S` with the
+    skip-zero rule `svdEig` applies to `U`'s columns. From there the six
+    ops of `ridge_solve_traced` in their order. `s`, `v` are consumed."""
+    var atb = ctx.enqueue_create_buffer[DType.float32](n_cols)
+    var s_nnz = ctx.enqueue_create_buffer[DType.float32](n_cols)
+    var utb = ctx.enqueue_create_buffer[DType.float32](n_cols)
+    ctx.synchronize()
+    xty_launch(ctx, atb, a, b, n_rows, n_cols)
+    ctx.synchronize()
+    xty_launch(ctx, utb, v, atb, n_cols, n_cols)
+    ctx.synchronize()
+    # U = A V / S leaves a column with |S| < 1e-10 undivided: the same here.
+    ctx.enqueue_function[matrix_vector_binary_div_skip_zero_kernel](
+        utb.unsafe_ptr(), s.unsafe_ptr(), Int32(1), Int32(n_cols), Int32(0),
+        grid_dim=(_elem_grid(n_cols), 1, 1), block_dim=(MATRIX_ELEM_TPB, 1, 1),
+    )
+    ctx.enqueue_function[set_small_values_zero_kernel](
+        s.unsafe_ptr(), Int32(n_cols), RIDGE_SMALL_THRESH,
+        grid_dim=(_elem_grid(n_cols), 1, 1), block_dim=(MATRIX_ELEM_TPB, 1, 1),
+    )
+    ctx.enqueue_function[power_kernel](
+        s_nnz.unsafe_ptr(), s.unsafe_ptr(), Int32(n_cols), Float32(1.0),
+        grid_dim=(_elem_grid(n_cols), 1, 1), block_dim=(MATRIX_ELEM_TPB, 1, 1),
+    )
+    ctx.enqueue_function[add_scalar_kernel](
+        s_nnz.unsafe_ptr(), Int32(n_cols), alpha,
+        grid_dim=(_elem_grid(n_cols), 1, 1), block_dim=(MATRIX_ELEM_TPB, 1, 1),
+    )
+    ctx.enqueue_function[matrix_vector_binary_div_skip_zero_kernel](
+        s.unsafe_ptr(), s_nnz.unsafe_ptr(), Int32(1), Int32(n_cols), Int32(1),
+        grid_dim=(_elem_grid(n_cols), 1, 1), block_dim=(MATRIX_ELEM_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    trace.record_device[DType.float32](ctx, "ridge.solve.S_over", s, n_cols)
+    _record_nnz(ctx, trace, s, n_cols)
+    ctx.enqueue_function[matrix_vector_binary_mult_kernel](
+        v.unsafe_ptr(), s.unsafe_ptr(), Int32(n_cols), Int32(n_cols),
+        grid_dim=(_elem_grid(n_cols * n_cols), 1, 1),
+        block_dim=(MATRIX_ELEM_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    trace.record_device[DType.float32](ctx, "ridge.solve.Utb", utb, n_cols)
+    gemv_n(ctx, w, v, utb, n_cols, n_cols)
+    ctx.synchronize()
+    _ = atb^
+    _ = s_nnz^
+    _ = utb^
+
+
+def ridge_eig_scratch_traced(
+    ctx: DeviceContext,
+    mut a: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+    mut b: DeviceBuffer[DType.float32],
+    alpha: Float32,
+    mut w: DeviceBuffer[DType.float32],
+    mut xa: DeviceBuffer[DType.float32],
+    mut trace: IdentityTrace,
+) raises:
+    """`ridgeEig` with `xa` (a rows x cols buffer the caller no longer
+    needs, `ridge_fit_resident_host`'s raw X) as the Gram's `gemm_tn`
+    scratch, and `U` as its second scratch (written only after the Gram).
+    Same kernels and words as `ridge_eig_traced` (lane apple-fast-ridgespeed)."""
+    if n_cols <= 1:
+        raise Error("ridgeEig: number of columns cannot be less than two")
+    if n_rows <= 1:
+        raise Error("ridgeEig: number of rows cannot be less than two")
+    var s = ctx.enqueue_create_buffer[DType.float32](n_cols)
+    var v = ctx.enqueue_create_buffer[DType.float32](n_cols * n_cols)
+    comptime if RIDGE_NO_U:
+        var xa2_n = 1 if gram_splitk_applies(n_cols, n_cols, n_rows) else n_rows * n_cols
+        var xa2 = ctx.enqueue_create_buffer[DType.float32](xa2_n)
+        var u0 = ctx.enqueue_create_buffer[DType.float32](1)
+        ctx.synchronize()
+        svd_eig_scratch_traced(ctx, a, n_rows, n_cols, s, u0, v, False, xa, xa2, trace, "ridge.svd")
+        ridge_solve_no_u_traced(ctx, s, v, a, n_rows, n_cols, b, alpha, w, trace)
+        _ = xa2^
+        _ = u0^
+    else:
+        var u = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
+        var u_scratch = u
+        ctx.synchronize()
+        svd_eig_scratch_traced(ctx, a, n_rows, n_cols, s, u, v, True, xa, u_scratch, trace, "ridge.svd")
+        ridge_solve_traced(ctx, s, v, u, n_rows, n_cols, b, alpha, w, trace)
+        _ = u_scratch^
+        _ = u^
+    ctx.synchronize()
+    _ = s^
+    _ = v^
+
+
 def ridge_eig_traced(
     ctx: DeviceContext,
     mut a: DeviceBuffer[DType.float32],
@@ -202,14 +333,21 @@ def ridge_eig_traced(
         raise Error("ridgeEig: number of rows cannot be less than two")
     var s = ctx.enqueue_create_buffer[DType.float32](n_cols)
     var v = ctx.enqueue_create_buffer[DType.float32](n_cols * n_cols)
-    var u = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
-    ctx.synchronize()
-    svd_eig_traced(ctx, a, n_rows, n_cols, s, u, v, True, trace, "ridge.svd")
-    ridge_solve_traced(ctx, s, v, u, n_rows, n_cols, b, alpha, w, trace)
+    comptime if RIDGE_NO_U:
+        var u0 = ctx.enqueue_create_buffer[DType.float32](1)
+        ctx.synchronize()
+        svd_eig_traced(ctx, a, n_rows, n_cols, s, u0, v, False, trace, "ridge.svd")
+        ridge_solve_no_u_traced(ctx, s, v, a, n_rows, n_cols, b, alpha, w, trace)
+        _ = u0^
+    else:
+        var u = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
+        ctx.synchronize()
+        svd_eig_traced(ctx, a, n_rows, n_cols, s, u, v, True, trace, "ridge.svd")
+        ridge_solve_traced(ctx, s, v, u, n_rows, n_cols, b, alpha, w, trace)
+        _ = u^
     ctx.synchronize()
     _ = s^
     _ = v^
-    _ = u^
 
 
 def ridge_fit(
