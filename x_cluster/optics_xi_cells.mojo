@@ -504,9 +504,8 @@ def _mark_host(mut on: List[Int32], mut jmp: List[Int32], m: Int):
             var pd = _ipp(j2)
             for i in range(m + 1):
                 xi_jump_cell(pj, pd, i)
-            var tmp = jmp^
-            jmp = j2^
-            j2 = tmp^
+            for i in range(m + 1):
+                jmp[i] = j2[i]
 
 
 def optics_xi_host(

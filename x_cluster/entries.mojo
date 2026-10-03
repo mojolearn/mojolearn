@@ -16,7 +16,7 @@ from x_cluster.meanshift import meanshift_fit
 from x_cluster.bodies import SplitMix64
 from x_cluster.minibatch import MiniBatchParams, minibatch_fit, minibatch_partial
 from x_cluster.ops import ClusterOps
-from x_cluster.optics import optics_dbscan_ops, optics_graph, optics_xi_clusters, optics_xi_labels
+from x_cluster.optics import optics_dbscan_ops, optics_graph, optics_xi_ops
 from x_cluster.out import ClusterOut
 from x_cluster.spectral_assign import ASSIGN_CLUSTER_QR, ASSIGN_DISCRETIZE, cluster_qr_labels, discretize_labels
 
@@ -177,12 +177,12 @@ def optics_entry[O: ClusterOps](mut ops: O, x: List[Float32], ip: List[Int], fp:
     var pred = List[Int]()
     var metric = ip[6] if len(ip) > 6 else -1
     var pw = Float32(fp[3]) if len(fp) > 3 else Float32(2)
-    optics_graph(ops, x, n, d, ip[2], Float32(fp[0]), ordering, core, reach, pred, metric, pw)
-    var labels: List[Int32]
-    var clusters = List[Int]()
+    var slots = List[Int]()
+    optics_graph(ops, x, n, d, ip[2], Float32(fp[0]), ordering, core, reach, pred, slots, metric, pw)
+    var labels = List[Int32]()
+    var clusters = List[Int32]()
     if ip[4] == 0:
-        clusters = optics_xi_clusters(reach, pred, ordering, fp[1], ip[2], ip[3], ip[5] != 0)
-        labels = optics_xi_labels(ordering, clusters)
+        clusters = optics_xi_ops(ops, slots, n, fp[1], ip[2], ip[3], ip[5] != 0, labels)
     else:
         labels = optics_dbscan_ops(ops, ordering, reach, core, Float32(fp[2]))
     var out = ClusterOut()
@@ -191,7 +191,7 @@ def optics_entry[O: ClusterOps](mut ops: O, x: List[Float32], ip: List[Int], fp:
     out.i.append(_i32(ordering))
     out.i.append(_i32(pred))
     out.i.append(labels^)
-    out.i.append(_i32(clusters))
+    out.i.append(clusters^)
     return out^
 
 

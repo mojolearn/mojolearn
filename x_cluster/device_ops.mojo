@@ -55,6 +55,7 @@ from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_works
 from gemm.contract import OP_TN
 from mixture.checks.mstep import center_scale_kernel, cov_finish_kernel, means_divide_kernel
 from x_cluster.ops import ClusterOps
+from x_cluster.optics_xi_device import optics_xi_device
 from x_cluster.meanshift_fast import MEANSHIFT_FAST_GRID, meanshift_fast_grid
 from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV, minibatch_fast_steps
 from x_cluster.device_post import (
@@ -2419,6 +2420,18 @@ struct DeviceOps(ClusterOps):
             self._ip(labels), grid_dim=pgrid(n), block_dim=PTPB,
         )
         self._ph1("optics_dbscan")
+
+    def optics_xi(
+        mut self, ordering: Int, reach: Int, pred: Int, n: Int, xc: Float32, min_samples: Int,
+        min_cluster_size: Int, predecessor_correction: Bool, labels: Int,
+    ) raises -> List[Int32]:
+        self._ph0()
+        var cl = optics_xi_device(
+            self.ctx, self._ip(ordering), self._fp(reach), self._ip(pred), n, xc, min_samples, min_cluster_size,
+            predecessor_correction, self._ip(labels),
+        )
+        self._ph1("optics_xi")
+        return cl^
 
     def sum_ff(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int) raises -> Float64:
         self._ph0()
