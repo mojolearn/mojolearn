@@ -289,13 +289,14 @@ def limb_reduce_kernel(part: MutPointer[Int64, MutAnyOrigin], total: MutPointer[
         total.unsafe_store(k, s)
 
 
-def mean_kernel(total: MutPointer[Int64, MutAnyOrigin], n: Int64, words: MutPointer[UInt64, MutAnyOrigin],
+def mean_kernel(total: MutPointer[Int64, MutAnyOrigin], count_word: UInt64, words: MutPointer[UInt64, MutAnyOrigin],
                 flags: MutPointer[Int32, MutAnyOrigin]):
-    """One thread: words[0] = fsum(y), words[3] = fsum(y) / n."""
+    """One thread, O(1) work (the limbs are E64_LIMBS words): words[0] =
+    fsum(y), words[3] = fsum(y) / count (count_word: the row count as binary64)."""
     if _thread() == 0:
         var s = e64_round(total, flags)
         words.unsafe_store(0, s)
-        words.unsafe_store(3, sf64_div(s, sf64_from_int(Int(n))))
+        words.unsafe_store(3, sf64_div(s, count_word))
 
 
 def round_kernel(total: MutPointer[Int64, MutAnyOrigin], words: MutPointer[UInt64, MutAnyOrigin], slot: Int64,
@@ -332,7 +333,7 @@ def oob_r2_device(
         d_p1.unsafe_ptr(), d_flags.unsafe_ptr(), grid_dim=grid, block_dim=OPS_TPB,
     )
     ctx.enqueue_function[limb_reduce_kernel](d_p1.unsafe_ptr(), d_t1.unsafe_ptr(), grid_dim=1, block_dim=E64_LIMBS)
-    ctx.enqueue_function[mean_kernel](d_t1.unsafe_ptr(), Int64(n), d_words.unsafe_ptr(), d_flags.unsafe_ptr(),
+    ctx.enqueue_function[mean_kernel](d_t1.unsafe_ptr(), sf64_from_int(n), d_words.unsafe_ptr(), d_flags.unsafe_ptr(),
                                       grid_dim=1, block_dim=1)
     var d_mean = d_words.create_sub_buffer[DType.uint64](3, 1)
     ctx.enqueue_function[oob_sq_kernel](
