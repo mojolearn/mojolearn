@@ -308,23 +308,18 @@ def bayes_yvar(y: FP, n: Int) -> Float32:
     return fd(acc, i2f(n))
 
 
-#: FAST on Apple (lane/apple-fast-bayesq, 2026-10-03): `bayes_eig_prep`
-#: drops the eigen-directions of the centered Gram below the float32 noise
-#: floor d * eps * max ev (ev and V'X'y set to 0). The float32 Gram + Jacobi
-#: resolves eigenvalues only to about eps * max ev: on istella (35 of 220
-#: directions below 1e-12 max ev in float64: 19 constant columns plus exact
-#: collinearities) the null directions came back as noise eigenvalues of a
-#: few units with noise V'X'y, so z_k = vty_k / (ev_k + lam/alpha) was huge
-#: there; their eigenvectors mix about noise/gap (1e-2) into the real
-#: directions of ev 300-8000, the evidence iteration drove lambda to 1e-8 and
-#: held-out r2 was -3.2e4 (scikit-learn float64: 0.3287; float32: -890). See
-#: docs/apple-fast/notes/bayesq.md. `-D MOJOLEARN_BAYES_FAST_Q_OFF` is the
-#: A/B arm. IDENTICAL and the other vendors never compile it.
-comptime BAYES_FAST_Q = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_BAYES_FAST_Q_OFF"]()
-)
+#: Null-direction floor (FAST lane/apple-fast-bayesq, then every vendor,
+#: every mode and the host column in lane/fix-bayes-null, 2026-10-03):
+#: `bayes_eig_prep` drops the eigen-directions of the centered Gram below the
+#: float32 noise floor d * eps * max ev (ev and V'X'y set to 0). The float32
+#: Gram + Jacobi resolves eigenvalues only to about eps * max ev: on istella
+#: (35 of 220 directions below 1e-12 max ev in float64: 19 constant columns
+#: plus exact collinearities) the null directions came back as noise
+#: eigenvalues of a few units with noise V'X'y, so z_k = vty_k / (ev_k +
+#: lam/alpha) was huge there; the evidence iteration drove lambda to 1e-8 and
+#: held-out r2 was -4.2e4 IDENTICAL, -3.2e4 FAST (scikit-learn float64:
+#: 0.3287). See docs/apple-fast/notes/bayesq.md. One code path: the device
+#: team kernel and the host column (nt = 1) both run it, same order.
 
 
 def bayes_eig_prep(t: Team, fw: FP, fp: FP, d: Int, yvar: Float32) -> Tuple[Float32, Float32]:
@@ -347,18 +342,17 @@ def bayes_eig_prep(t: Team, fw: FP, fp: FP, d: Int, yvar: Float32) -> Tuple[Floa
             for k in range(d):
                 acc = fmad(ld(fw, vv + k * d + j), ld(fw, xty + k), acc)
             st(fw, vty + j, acc)
-        comptime if BAYES_FAST_Q:
-            # eigenvalues below the float32 noise floor (d eps max ev, the
-            # pinv/matrix_rank cut) are null directions: ev 0 and V'X'y 0, so
-            # z_k = 0 at every lam/alpha and gamma takes nothing from them
-            var emax = Float32(0)
-            for j in range(d):
-                emax = fmax(emax, ld(fw, tmp + j))
-            var tau = fm(fm(emax, i2f(d)), Float32(1.1920929e-07))
-            for j in range(d):
-                if ld(fw, tmp + j) <= tau:
-                    st(fw, tmp + j, Float32(0))
-                    st(fw, vty + j, Float32(0))
+        # eigenvalues below the float32 noise floor (d eps max ev, the
+        # pinv/matrix_rank cut) are null directions: ev 0 and V'X'y 0, so
+        # z_k = 0 at every lam/alpha and gamma takes nothing from them
+        var emax = Float32(0)
+        for j in range(d):
+            emax = fmax(emax, ld(fw, tmp + j))
+        var tau = fm(fm(emax, i2f(d)), Float32(1.1920929e-07))
+        for j in range(d):
+            if ld(fw, tmp + j) <= tau:
+                st(fw, tmp + j, Float32(0))
+                st(fw, vty + j, Float32(0))
         if alpha < 0:
             alpha = fd(Float32(1), fa(yvar, Float32(1.1920929e-07)))
     alpha = t.bcast(alpha, 2)
