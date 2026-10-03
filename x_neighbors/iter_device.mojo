@@ -528,18 +528,6 @@ def pcs_conv_row_kernel(acc: FP, sk: FP, res: FP, n_: Int64, nc_: Int64, degree_
         h0 += PCS_ROW_TPB * 4
 
 
-#: lane neighbors-apple3 (2026-09-28), FAST on Apple, OPT-IN until its A/B
-#: and quality check pass (`-D MOJOLEARN_XN_PCS_SPARSE`): the convolution
-#: over the running product's NONZERO components only. A count sketch of a
-#: row of d features has at most d nonzero components (each feature lands in
-#: one), so at degree 2 a row's 500 outputs fold about 8 terms each, not
-#: 500. The skipped terms are products with a zero; FAST's words can differ
-#: from the full fold's only in the sign of a zero.
-comptime PCS_SPARSE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_XN_PCS_SPARSE"]()
-)
 
 def op_pcs_resident(
     x: Int, hidx: Int, hbit: Int, res: Int,
@@ -550,9 +538,6 @@ def op_pcs_resident(
     one sketch per (row, degree), then per degree p >= 1 one thread per
     output cell folding the convolution in the same ascending order, the
     running product ping-ponging on the device."""
-    # The loop keeps its compile-time guard; only import placement changes.
-    from x_neighbors.pcs_sparse import PCS_SPARSE_MAX_NC, pcs_conv_row_sparse_kernel
-
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d_in, True)
     var d_hi = _buf_i(ctx, hidx, degree * nf, True)
@@ -578,17 +563,7 @@ def op_pcs_resident(
         var row_kernel = nc <= PCS_ROW_MAX_NC
         comptime if is_defined["MOJOLEARN_XN_PCS_CELL"]():
             row_kernel = False
-        var sparse_kernel = False
-        comptime if PCS_SPARSE:
-            sparse_kernel = row_kernel and nc <= PCS_SPARSE_MAX_NC
-            if sparse_kernel:
-                ctx.enqueue_function[pcs_conv_row_sparse_kernel](
-                    cur, d_sk.unsafe_ptr(), nxt, Int64(n), Int64(nc), Int64(degree), Int64(p),
-                    grid_dim=n, block_dim=PCS_ROW_TPB,
-                )
-        if sparse_kernel:
-            pass
-        elif row_kernel:
+        if row_kernel:
             ctx.enqueue_function[pcs_conv_row_kernel](
                 cur, d_sk.unsafe_ptr(), nxt, Int64(n), Int64(nc), Int64(degree), Int64(p),
                 grid_dim=n, block_dim=PCS_ROW_TPB,
