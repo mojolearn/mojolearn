@@ -471,6 +471,11 @@ _TE_ADA_SESSION_SHARE = 4
 #     the synthetic rows across chunks and KernelExplainer solves many rows
 #     per launch sweep (`x_trees_kshap_means` + `x_trees_kshap_solve_ey`).
 _KSHAP_FAST_BATCH = 8
+#   MOJOLEARN_PSHAP_FAST_SHARED (lane apple-fast-gap-kapprox2, an experiment,
+#     off unless defined): PermutationExplainer's synthetic rows are a
+#     zero-copy Array over the binding's pooled host-visible buffer, which
+#     the device writes directly (no download).
+_PSHAP_FAST_SHARED = 16
 
 
 def _trees_fast_tier(est):
@@ -3249,11 +3254,17 @@ class PermutationExplainer(_AgnosticExplainer):
         x0, p0 = addr_ro(Xa, name="X"), addr(phi, name="phi")
         R = self._chunk(mm * nb * d, n)
         reuse = _trees_switch(self, _KSHAP_FAST_BATCH)   # one synthetic buffer for every chunk
+        shared = _trees_switch(self, _PSHAP_FAST_SHARED)   # the device writes host-visible memory
         syn = None
         for r0 in range(0, n, R):  # glue: chunk loop (one model call per chunk)
             rows = min(R, n - r0)
             params = [rows, nb, d, npm, r0, seed]
-            if not reuse or syn is None or syn.size != rows * mm * nb * d:
+            if shared and (syn is None or syn.size != rows * mm * nb * d):
+                syn = None
+                cnt = rows * mm * nb * d
+                at = int(b.x_trees_pshap_shared([cnt]))
+                syn = Array.from_buffer(memory_at(at, 4 * cnt, writable=True).cast("f"))
+            elif not shared and (not reuse or syn is None or syn.size != rows * mm * nb * d):
                 syn = None
                 syn = empty((rows * mm * nb * d,), "<f4")
             b.x_trees_pshap_synth(x0 + 4 * r0 * d, addr_ro(self._bg, name="data"), addr(syn, name="synthetic"),
