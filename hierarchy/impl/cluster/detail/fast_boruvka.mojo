@@ -8,13 +8,14 @@ the distances computed on the fly:
   * `fb_nearest_other_kernel`: for every point, the nearest point in a
     DIFFERENT component, over the whole data in shared-memory tiles
     (`O(m^2 d)` work, `O(m)` memory), ties to the lower index;
-  * the host takes each component's cheapest outgoing edge under the total
-    order (squared distance, min(i, j), max(i, j)) -- the per-point choice
-    above is consistent with it, so no round can close a cycle -- joins the
-    components with a union-find and relabels the points.
+  * the device takes each component's cheapest outgoing edge under the
+    total order (squared distance, min(i, j), max(i, j)) -- the per-point
+    choice above is consistent with it, so no round can close a cycle --
+    and joins the components by hooking and pointer jumping
+    (`fast_euclidean_mst`'s banner).
 
 Rounds at least halve the component count. The edges come back sorted by
-(weight, src, dst) for the dendrogram, the weight rooted for
+(weight, lo, hi) for the dendrogram, the weight rooted for
 L2SqrtExpanded. FAST arithmetic: direct sums of squared differences.
 """
 
@@ -25,10 +26,19 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.math import sqrt
 from std.memory import bitcast
-from std.builtin.sort import sort
 from std.os import getenv
 from std.time import perf_counter_ns
+from std.atomic import Atomic
 from hierarchy.impl.cluster.detail.fast_mma_boruvka import MmaBoruvka
+from hierarchy.checks.edge_order import WEIGHT_KEY_SENTINEL, weight_order_key
+from hdbscan.impl.cluster.detail.sparse_mr_mst import (
+    SMR_DEV_TPB, SMR_ERR_BAD, SMR_LIST_A, SMR_LIST_B, SMR_ST_ADDED, SMR_ST_COUNT,
+    SMR_ST_ERR, SMR_ST_ERR_ROW, SMR_ST_LEN, _compact, smr_arg_idx_kernel,
+    smr_assign_kernel, smr_classify_kernel, smr_cmin_hi_kernel, smr_cmin_key_kernel,
+    smr_cmin_lo_kernel, smr_drop_arg_kernel, smr_drop_b_kernel, smr_edge_rank_kernel,
+    smr_edge_scatter_kernel, smr_hook_kernel, smr_init_kernel, smr_jump_kernel,
+    smr_relabel_kernel, smr_round_reset_kernel, smr_winner_kernel,
+)
 
 comptime FB_TPB = 128
 comptime FB_TILE = 64
@@ -140,19 +150,15 @@ def _fb_search(
     inv_alpha: Float32,
     mut comp_d: DeviceBuffer[DType.int32],
     mut todo_d: DeviceBuffer[DType.int32],
-    list_h: HostBuffer[DType.int32],
     n_todo: Int,
     mut bd_d: DeviceBuffer[DType.float32],
     mut bj_d: DeviceBuffer[DType.int32],
 ) raises:
     """The nearest other-component point of the `n_todo` listed points
-    into `bd_d` / `bj_d` (their entries only)."""
+    (`todo_d[0:n_todo]`, on the device) into `bd_d` / `bj_d` (their
+    entries only)."""
     if n_todo <= 0:
         return
-    ctx.enqueue_copy(
-        dst_buf=todo_d.create_sub_buffer[DType.int32](0, n_todo),
-        src_ptr=list_h.unsafe_ptr(),
-    )
     if mb.ok:
         mb.enqueue(
             ctx, x, m, n, mutual_reach, core_ptr, inv_alpha, comp_d,
@@ -187,27 +193,77 @@ def _fb_search(
                 )
 
 
-def _find(mut parent: List[Int32], a: Int) -> Int:
-    var r = a
-    while Int(parent[r]) != r:
-        r = Int(parent[r])
-    var c = a
-    while Int(parent[c]) != r:
-        var nx = Int(parent[c])
-        parent[c] = Int32(r)
-        c = nx
-    return r
+def fb_keys_kernel(
+    bd: MutPointer[Float32, MutAnyOrigin],
+    bj: MutPointer[Int32, MutAnyOrigin],
+    todo: MutPointer[Int32, MutAnyOrigin],
+    pk: MutPointer[Int32, MutAnyOrigin],
+    pj: MutPointer[Int32, MutAnyOrigin],
+    st: MutPointer[Int32, MutAnyOrigin],
+    n_todo_in: Int32,
+):
+    """A searched point's nearest (value, j) as the round's (key, j): the
+    value's order key (`weight_order_key`, its bits for a non-negative
+    value), the same j. A non-finite value (j == -2) is reported in `st`
+    with its row."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(n_todo_in):
+        return
+    var i = Int(todo[t])
+    var j = bj[i]
+    if j == Int32(-2):
+        _ = Atomic.max(st.unsafe_offset(SMR_ST_ERR), SMR_ERR_BAD)
+        _ = Atomic.min(st.unsafe_offset(SMR_ST_ERR_ROW), Int32(i))
+        pk[i] = WEIGHT_KEY_SENTINEL
+        pj[i] = Int32(-1)
+        return
+    pk[i] = weight_order_key(bd[i]) if j >= 0 else WEIGHT_KEY_SENTINEL
+    pj[i] = j
 
 
-@always_inline
-def _edge_less(
-    d1: Float32, a1: Int, b1: Int, d2: Float32, a2: Int, b2: Int
-) -> Bool:
-    if d1 != d2:
-        return d1 < d2
-    if a1 != a2:
-        return a1 < a2
-    return b1 < b2
+def fb_sqrt_kernel(w: MutPointer[Float32, MutAnyOrigin], n_in: Int32):
+    """The L2SqrtExpanded root of the sorted squared weights."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(n_in):
+        w[t] = sqrt(w[t])
+
+
+def _fb_status(
+    ctx: DeviceContext,
+    mut st_d: DeviceBuffer[DType.int32],
+    mut st_h: HostBuffer[DType.int32],
+) raises:
+    """Drain, read the status words, refuse a non-finite distance by name."""
+    ctx.enqueue_copy(dst_ptr=st_h.unsafe_ptr(), src_buf=st_d)
+    ctx.synchronize()
+    if st_h.unsafe_ptr().unsafe_load(SMR_ST_ERR) == SMR_ERR_BAD:
+        raise Error(
+            "hierarchy.pairwise_distances: a distance from row "
+            + String(Int(st_h.unsafe_ptr().unsafe_load(SMR_ST_ERR_ROW)))
+            + " is NaN or overflows Float32 (a non-finite input"
+            " row, or rows whose squared difference overflows);"
+            " refused by name (DEVIATION 623, IDENTITY_PATHS row 39)"
+        )
+
+
+def _fb_keys(
+    ctx: DeviceContext,
+    mut bd_d: DeviceBuffer[DType.float32],
+    mut bj_d: DeviceBuffer[DType.int32],
+    mut todo_d: DeviceBuffer[DType.int32],
+    mut pk_d: DeviceBuffer[DType.int32],
+    mut pj_d: DeviceBuffer[DType.int32],
+    mut st_d: DeviceBuffer[DType.int32],
+    n_todo: Int,
+) raises:
+    if n_todo <= 0:
+        return
+    ctx.enqueue_function[fb_keys_kernel](
+        bd_d.unsafe_ptr(), bj_d.unsafe_ptr(), todo_d.unsafe_ptr(),
+        pk_d.unsafe_ptr(), pj_d.unsafe_ptr(), st_d.unsafe_ptr(), Int32(n_todo),
+        grid_dim=((n_todo + SMR_DEV_TPB - 1) // SMR_DEV_TPB, 1, 1),
+        block_dim=(SMR_DEV_TPB, 1, 1),
+    )
 
 
 def fast_euclidean_mst(
@@ -223,238 +279,237 @@ def fast_euclidean_mst(
     core_ptr: MutPointer[Float32, MutAnyOrigin],
     inv_alpha: Float32 = 1.0,
 ) raises -> Int:
-    """`m - 1` edges into the three buffers, ascending by (weight, src,
-    dst): weight, then discovery order. Returns the Boruvka round count. `x` is `m x n` row-major,
-    `n <= 64`."""
+    """`m - 1` edges into the three buffers, ascending by the total order
+    (weight, lo, hi), oriented (lo, hi). Returns the Boruvka round count.
+    `x` is `m x n` row-major, `n <= 64`.
+
+    THE ROUND ON THE DEVICE (lane cgr5-owed, 2026-10-03; the bookkeeping was
+    a host pass over the m points per round): the plan (classify, the
+    phase-A / phase-B lower-bound pruning, the list compaction), each
+    component's cheapest edge (integer atomic minimums over (key, lo, hi)),
+    hooking and pointer jumping are `hdbscan/impl/cluster/detail/
+    sparse_mr_mst.mojo`'s kernels on this file's search; a status word per
+    phase (list sizes, the join count, the non-finite refusal) comes back.
+    The tree is the minimum spanning tree under that total order, so the
+    edges are the host plan's; the ORDER among equal weights is now (lo,
+    hi) where it was discovery order (FAST: no bit promise)."""
     if n > 64:
         raise Error("fast_euclidean_mst: n_cols > 64 is not taken here")
-    var parent = List[Int32](capacity=m)
-    var comp_h = ctx.enqueue_create_host_buffer[DType.int32](m)
-    for i in range(m):
-        parent.append(Int32(i))
-        comp_h.unsafe_ptr().unsafe_store(i, Int32(i))
+    if m < 2:
+        ctx.synchronize()
+        return 0
+    var g = (m + SMR_DEV_TPB - 1) // SMR_DEV_TPB
     var comp_d = ctx.enqueue_create_buffer[DType.int32](m)
     var bd_d = ctx.enqueue_create_buffer[DType.float32](m)
     var bj_d = ctx.enqueue_create_buffer[DType.int32](m)
-    var bd_h = ctx.enqueue_create_host_buffer[DType.float32](m)
-    var bj_h = ctx.enqueue_create_host_buffer[DType.int32](m)
-    var es = List[Int32]()
-    var ed = List[Int32]()
-    var ew = List[Float32]()
-    # Per-component best edge (indexed by root id).
-    var cb_d = List[Float32](length=m, fill=Float32.MAX)
-    var cb_a = List[Int32](length=m, fill=Int32(-1))
-    var cb_b = List[Int32](length=m, fill=Int32(-1))
-    var n_comp = m
-    var rounds = 0
-    # Only points whose nearest other-component point joined their own
-    # component are searched again: components only merge, so a surviving
-    # nearest (lowest index on a tie) is still the nearest.
-    var todo_h = ctx.enqueue_create_host_buffer[DType.int32](m)
     var todo_d = ctx.enqueue_create_buffer[DType.int32](m)
-    for i in range(m):
-        todo_h.unsafe_ptr().unsafe_store(i, Int32(i))
-    var n_todo = m
-    # Two phases per round. A: for each component, its listed point with
-    # the smallest lower bound. B: the other listed points, after A's exact
-    # values have tightened the component bound (see `_boruvka_plan`).
-    var listed = List[Bool](length=m, fill=True)
-    var dropped = List[Bool](length=m, fill=False)
-    var ub = List[Float32](length=m, fill=Float32.MAX)
-    var minlb = List[Float32](length=m, fill=Float32.MAX)
-    var arg = List[Int32](length=m, fill=Int32(-1))
-    var defer_h = List[Int32](capacity=m)
-    var listb_h = ctx.enqueue_create_host_buffer[DType.int32](m)
+    var pk_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var pj_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var lb_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var state_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var ub_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var amin_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var aidx_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var ckey_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var clo_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var chi_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var nxt_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var win_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var par_a = ctx.enqueue_create_buffer[DType.int32](m)
+    var par_b = ctx.enqueue_create_buffer[DType.int32](m)
+    var e_key = ctx.enqueue_create_buffer[DType.int32](m)
+    var e_lo = ctx.enqueue_create_buffer[DType.int32](m)
+    var e_hi = ctx.enqueue_create_buffer[DType.int32](m)
+    var rank_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var bcount_d = ctx.enqueue_create_buffer[DType.int32](g)
+    var boff_d = ctx.enqueue_create_buffer[DType.int32](g)
+    var st_d = ctx.enqueue_create_buffer[DType.int32](SMR_ST_LEN)
+    var st_h = ctx.enqueue_create_host_buffer[DType.int32](SMR_ST_LEN)
+    ctx.enqueue_function[smr_init_kernel](
+        comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
+        e_key.unsafe_ptr(), e_lo.unsafe_ptr(), e_hi.unsafe_ptr(),
+        st_d.unsafe_ptr(), Int32(m),
+        grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+    )
+    var jumps = 1
+    while (1 << jumps) < m:
+        jumps += 1
+    jumps += 1
+    var _st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
     # FAST, Apple, n <= 32: the matrix-unit search with the same answer
     # (`fast_mma_boruvka.mojo`); `mb.ok` is False when it declines.
-    var _st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
     var mb = MmaBoruvka(ctx, x, m, n, mutual_reach, core_ptr, inv_alpha)
+    var n_comp = m
+    var rounds = 0
     while n_comp > 1:
         rounds += 1
-        ctx.enqueue_copy(dst_buf=comp_d, src_ptr=comp_h.unsafe_ptr())
+        if rounds > 64:
+            raise Error("fast_euclidean_mst: Boruvka did not converge")
         var _tq0 = 0
         if _st_on:
             ctx.synchronize()
             _tq0 = Int(perf_counter_ns())
+        ctx.enqueue_function[smr_round_reset_kernel](
+            ub_d.unsafe_ptr(), amin_d.unsafe_ptr(), aidx_d.unsafe_ptr(),
+            ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(), chi_d.unsafe_ptr(),
+            nxt_d.unsafe_ptr(), win_d.unsafe_ptr(), st_d.unsafe_ptr(),
+            Int32(m), grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        ctx.enqueue_function[smr_classify_kernel](
+            comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
+            ub_d.unsafe_ptr(), lb_d.unsafe_ptr(), state_d.unsafe_ptr(),
+            Int32(m), grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        ctx.enqueue_function[smr_drop_arg_kernel](
+            comp_d.unsafe_ptr(), lb_d.unsafe_ptr(), ub_d.unsafe_ptr(),
+            state_d.unsafe_ptr(), amin_d.unsafe_ptr(), Int32(m),
+            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        ctx.enqueue_function[smr_arg_idx_kernel](
+            comp_d.unsafe_ptr(), lb_d.unsafe_ptr(), state_d.unsafe_ptr(),
+            amin_d.unsafe_ptr(), aidx_d.unsafe_ptr(), Int32(m),
+            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        ctx.enqueue_function[smr_assign_kernel](
+            comp_d.unsafe_ptr(), state_d.unsafe_ptr(), aidx_d.unsafe_ptr(),
+            Int32(m), grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        # phase A: each component's listed point with the smallest bound
+        _compact(ctx, state_d, SMR_LIST_A, bcount_d, boff_d, todo_d, st_d, m)
+        _fb_status(ctx, st_d, st_h)
+        var n_a = Int(st_h.unsafe_ptr().unsafe_load(SMR_ST_COUNT))
         _fb_search(
             ctx, mb, x, m, n, mutual_reach, core_ptr, inv_alpha, comp_d,
-            todo_d, todo_h, n_todo, bd_d, bj_d,
+            todo_d, n_a, bd_d, bj_d,
         )
-        var n_b = 0
-        var n_drop_b = 0
-        if len(defer_h) > 0:
-            ctx.enqueue_copy(dst_ptr=bd_h.unsafe_ptr(), src_buf=bd_d)
-            ctx.enqueue_copy(dst_ptr=bj_h.unsafe_ptr(), src_buf=bj_d)
-            ctx.synchronize()
-            for t in range(n_todo):
-                var i = Int(todo_h.unsafe_ptr().unsafe_load(t))
-                if Int(bj_h.unsafe_ptr().unsafe_load(i)) >= 0:
-                    var ri = Int(comp_h.unsafe_ptr().unsafe_load(i))
-                    ub[ri] = min(ub[ri], bd_h.unsafe_ptr().unsafe_load(i))
-            for t in range(len(defer_h)):
-                var i = Int(defer_h[t])
-                var ri = Int(comp_h.unsafe_ptr().unsafe_load(i))
-                var lb = Float32(0)
-                if Int(bj_h.unsafe_ptr().unsafe_load(i)) >= 0:
-                    lb = bd_h.unsafe_ptr().unsafe_load(i)
-                if lb > ub[ri]:
-                    dropped[i] = True
-                    n_drop_b += 1
-                else:
-                    listb_h.unsafe_ptr().unsafe_store(n_b, Int32(i))
-                    n_b += 1
-            _fb_search(
-                ctx, mb, x, m, n, mutual_reach, core_ptr, inv_alpha, comp_d,
-                todo_d, listb_h, n_b, bd_d, bj_d,
-            )
-        if _st_on:
-            ctx.synchronize()
-            print("BORUVKA round=" + String(rounds) + " phaseA=" + String(n_todo)
-                  + " phaseB=" + String(n_b) + " droppedB=" + String(n_drop_b)
-                  + " ms=" + String((Int(perf_counter_ns()) - _tq0) // 1000000))
-        ctx.enqueue_copy(dst_ptr=bd_h.unsafe_ptr(), src_buf=bd_d)
-        ctx.enqueue_copy(dst_ptr=bj_h.unsafe_ptr(), src_buf=bj_d)
-        ctx.synchronize()
-        for i in range(m):
-            var j = Int(bj_h.unsafe_ptr().unsafe_load(i))
-            if j == -2:
-                raise Error(
-                    "hierarchy.pairwise_distances: a distance from row "
-                    + String(i)
-                    + " is NaN or overflows Float32 (a non-finite input"
-                    " row, or rows whose squared difference overflows);"
-                    " refused by name (DEVIATION 623, IDENTITY_PATHS row 39)"
+        _fb_keys(ctx, bd_d, bj_d, todo_d, pk_d, pj_d, st_d, n_a)
+        # phase B: A's exact values tighten the bounds
+        ctx.enqueue_function[smr_ub_from_a_kernel](
+            comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
+            state_d.unsafe_ptr(), ub_d.unsafe_ptr(), Int32(m),
+            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        ctx.enqueue_function[smr_drop_b_kernel](
+            comp_d.unsafe_ptr(), lb_d.unsafe_ptr(), ub_d.unsafe_ptr(),
+            state_d.unsafe_ptr(), Int32(m),
+            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        _compact(ctx, state_d, SMR_LIST_B, bcount_d, boff_d, todo_d, st_d, m)
+        _fb_status(ctx, st_d, st_h)
+        var n_b = Int(st_h.unsafe_ptr().unsafe_load(SMR_ST_COUNT))
+        _fb_search(
+            ctx, mb, x, m, n, mutual_reach, core_ptr, inv_alpha, comp_d,
+            todo_d, n_b, bd_d, bj_d,
+        )
+        _fb_keys(ctx, bd_d, bj_d, todo_d, pk_d, pj_d, st_d, n_b)
+        # each component's cheapest edge under (key, lo, hi), then the join
+        ctx.enqueue_function[smr_cmin_key_kernel](
+            comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
+            state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), Int32(m),
+            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        ctx.enqueue_function[smr_cmin_lo_kernel](
+            comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
+            state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(),
+            Int32(m), grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        ctx.enqueue_function[smr_cmin_hi_kernel](
+            comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
+            state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(),
+            chi_d.unsafe_ptr(), Int32(m),
+            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        ctx.enqueue_function[smr_winner_kernel](
+            comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
+            state_d.unsafe_ptr(), ckey_d.unsafe_ptr(), clo_d.unsafe_ptr(),
+            chi_d.unsafe_ptr(), nxt_d.unsafe_ptr(), win_d.unsafe_ptr(),
+            Int32(m), grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        ctx.enqueue_function[smr_hook_kernel](
+            comp_d.unsafe_ptr(), pk_d.unsafe_ptr(), pj_d.unsafe_ptr(),
+            nxt_d.unsafe_ptr(), win_d.unsafe_ptr(), par_a.unsafe_ptr(),
+            e_key.unsafe_ptr(), e_lo.unsafe_ptr(), e_hi.unsafe_ptr(),
+            st_d.unsafe_ptr(), Int32(m),
+            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        for q in range(jumps):
+            if q % 2 == 0:
+                ctx.enqueue_function[smr_jump_kernel](
+                    comp_d.unsafe_ptr(), par_a.unsafe_ptr(),
+                    par_b.unsafe_ptr(), Int32(m),
+                    grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
                 )
-            if j < 0 or dropped[i]:
-                continue
-            var c = Int(comp_h.unsafe_ptr().unsafe_load(i))
-            var dd = bd_h.unsafe_ptr().unsafe_load(i)
-            var a = min(i, j)
-            var b = max(i, j)
-            if cb_a[c] < 0 or _edge_less(
-                dd, a, b, cb_d[c], Int(cb_a[c]), Int(cb_b[c])
-            ):
-                cb_d[c] = dd
-                cb_a[c] = Int32(a)
-                cb_b[c] = Int32(b)
-        for c in range(m):
-            if cb_a[c] < 0:
-                continue
-            var a = Int(cb_a[c])
-            var b = Int(cb_b[c])
-            var ra = _find(parent, a)
-            var rb = _find(parent, b)
-            if ra != rb:
-                parent[max(ra, rb)] = Int32(min(ra, rb))
-                es.append(Int32(a))
-                ed.append(Int32(b))
-                ew.append(cb_d[c])
-                n_comp -= 1
-            cb_d[c] = Float32.MAX
-            cb_a[c] = Int32(-1)
-            cb_b[c] = Int32(-1)
-        # Next round's plan. A listed point (its nearest other-component
-        # point joined its own component, or it was never searched) has a
-        # LOWER BOUND: its last value, since the other-component set only
-        # shrinks (0 if never searched). A component's BOUND is its
-        # unlisted members' values, which are still exact. A listed point
-        # whose lower bound exceeds its component's bound cannot give the
-        # component's cheapest edge (strictly: a tie that could win on the
-        # index is still searched); it sits the round out, ignored by the
-        # edge pass above and listed again the next round. Phase B repeats
-        # the test after phase A's exact values join the bound.
-        for i in range(m):
-            ub[Int(comp_h.unsafe_ptr().unsafe_load(i))] = Float32.MAX
-        for i in range(m):
-            var ri = _find(parent, i)
-            comp_h.unsafe_ptr().unsafe_store(i, Int32(ri))
-            var bj = Int(bj_h.unsafe_ptr().unsafe_load(i))
-            dropped[i] = False
-            if bj < 0 or _find(parent, bj) == ri:
-                listed[i] = True
             else:
-                listed[i] = False
-                ub[ri] = min(ub[ri], bd_h.unsafe_ptr().unsafe_load(i))
-        var n_drop = 0
-        for i in range(m):
-            if not listed[i]:
-                continue
-            var ri = Int(comp_h.unsafe_ptr().unsafe_load(i))
-            var lb = Float32(0)
-            if Int(bj_h.unsafe_ptr().unsafe_load(i)) >= 0:
-                lb = bd_h.unsafe_ptr().unsafe_load(i)
-            if lb > ub[ri]:
-                dropped[i] = True
-                n_drop += 1
-            elif arg[ri] < 0 or lb < minlb[ri]:
-                minlb[ri] = lb
-                arg[ri] = Int32(i)
-        n_todo = 0
-        defer_h.clear()
-        for i in range(m):
-            if not listed[i] or dropped[i]:
-                continue
-            var ri = Int(comp_h.unsafe_ptr().unsafe_load(i))
-            if Int(arg[ri]) == i:
-                todo_h.unsafe_ptr().unsafe_store(n_todo, Int32(i))
-                n_todo += 1
-            else:
-                defer_h.append(Int32(i))
-        for i in range(m):
-            var ri = Int(comp_h.unsafe_ptr().unsafe_load(i))
-            minlb[ri] = Float32.MAX
-            arg[ri] = Int32(-1)
+                ctx.enqueue_function[smr_jump_kernel](
+                    comp_d.unsafe_ptr(), par_b.unsafe_ptr(),
+                    par_a.unsafe_ptr(), Int32(m),
+                    grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+                )
+        if jumps % 2 == 1:
+            ctx.enqueue_function[smr_relabel_kernel](
+                comp_d.unsafe_ptr(), par_b.unsafe_ptr(), Int32(m),
+                grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[smr_relabel_kernel](
+                comp_d.unsafe_ptr(), par_a.unsafe_ptr(), Int32(m),
+                grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+            )
+        _fb_status(ctx, st_d, st_h)
+        var added = Int(st_h.unsafe_ptr().unsafe_load(SMR_ST_ADDED))
         if _st_on:
-            print("BORUVKA plan dropped=" + String(n_drop) + " deferred="
-                  + String(len(defer_h)))
-        if rounds > 64:
-            raise Error("fast_euclidean_mst: Boruvka did not converge")
-    # Sort the edges by weight (non-negative float bits order as the
-    # floats do), ties by the order Boruvka found them.
-    var ne = len(es)
-    var keys = List[UInt64](capacity=ne)
-    for e in range(ne):
-        var wb = UInt64(Int(bitcast[DType.uint32](ew[e])))
-        keys.append((wb << 32) | UInt64(e))
-    sort(keys)
-    var order = List[Int](capacity=ne)
-    for t in range(ne):
-        order.append(Int(keys[t] & 0xFFFFFFFF))
-    var hr = ctx.enqueue_create_host_buffer[DType.int32](max(ne, 1))
-    var hc = ctx.enqueue_create_host_buffer[DType.int32](max(ne, 1))
-    var hw = ctx.enqueue_create_host_buffer[DType.float32](max(ne, 1))
-    for t in range(ne):
-        var e = order[t]
-        hr.unsafe_ptr().unsafe_store(t, es[e])
-        hc.unsafe_ptr().unsafe_store(t, ed[e])
-        var w = ew[e]
-        if is_sqrt and not mutual_reach:
-            w = sqrt(w)
-        hw.unsafe_ptr().unsafe_store(t, w)
-    if ne > 0:
-        ctx.enqueue_copy(
-            dst_buf=mst_rows.create_sub_buffer[DType.int32](0, ne),
-            src_ptr=hr.unsafe_ptr(),
-        )
-        ctx.enqueue_copy(
-            dst_buf=mst_cols.create_sub_buffer[DType.int32](0, ne),
-            src_ptr=hc.unsafe_ptr(),
-        )
-        ctx.enqueue_copy(
-            dst_buf=mst_weights.create_sub_buffer[DType.float32](0, ne),
-            src_ptr=hw.unsafe_ptr(),
+            print("BORUVKA round=" + String(rounds) + " phaseA=" + String(n_a)
+                  + " phaseB=" + String(n_b) + " joined=" + String(added)
+                  + " ms=" + String((Int(perf_counter_ns()) - _tq0) // 1000000))
+        if added == 0:
+            raise Error(
+                "fast_euclidean_mst: a Boruvka round joined nothing with "
+                + String(n_comp) + " components left"
+            )
+        n_comp -= added
+    # the m - 1 recorded slots (the one empty slot sorts last) by rank
+    ctx.enqueue_function[smr_edge_rank_kernel](
+        e_key.unsafe_ptr(), e_lo.unsafe_ptr(), e_hi.unsafe_ptr(),
+        rank_d.unsafe_ptr(), Int32(m),
+        grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+    )
+    ctx.enqueue_function[smr_edge_scatter_kernel](
+        e_key.unsafe_ptr(), e_lo.unsafe_ptr(), e_hi.unsafe_ptr(),
+        rank_d.unsafe_ptr(), mst_rows.unsafe_ptr(), mst_cols.unsafe_ptr(),
+        mst_weights.unsafe_ptr(), Int32(m),
+        grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+    )
+    if is_sqrt and not mutual_reach:
+        ctx.enqueue_function[fb_sqrt_kernel](
+            mst_weights.unsafe_ptr(), Int32(m - 1),
+            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
         )
     ctx.synchronize()
     _ = mb^
-    _ = todo_h^
-    _ = todo_d^
     _ = comp_d^
     _ = bd_d^
     _ = bj_d^
-    _ = comp_h^
-    _ = bd_h^
-    _ = bj_h^
-    _ = hr^
-    _ = hc^
-    _ = hw^
+    _ = todo_d^
+    _ = pk_d^
+    _ = pj_d^
+    _ = lb_d^
+    _ = state_d^
+    _ = ub_d^
+    _ = amin_d^
+    _ = aidx_d^
+    _ = ckey_d^
+    _ = clo_d^
+    _ = chi_d^
+    _ = nxt_d^
+    _ = win_d^
+    _ = par_a^
+    _ = par_b^
+    _ = e_key^
+    _ = e_lo^
+    _ = e_hi^
+    _ = rank_d^
+    _ = bcount_d^
+    _ = boff_d^
+    _ = st_d^
+    _ = st_h^
     return rounds
