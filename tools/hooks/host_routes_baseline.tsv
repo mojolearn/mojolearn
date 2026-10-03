@@ -64,16 +64,8 @@ d2h-host-work	d2h-roundtrip	UNOWNED	owed	hierarchy/impl/cluster/detail/fast_boru
 d2h-host-work	d2h-roundtrip	UNOWNED	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	3	for i in range(m):
 # why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
 d2h-host-work	d2h-roundtrip	UNOWNED	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	0	for t in range(n_todo):
-# why: OWED (large rewrite): IVF search plans on the host per query (probe sort, candidate counts, list grouping counting sort, per-query fallback gather); needs a device probe sort per query, device stable grouping by list (core/fast_radix_sort) and a device candidate gather for the k > 32 / wide-dim fallback
+# why: OWED (per-query path only: k > 32, dim > FIVF_MAX_DIM, traced, partial storage, or naming a query short of k): each query's candidates gathered on the host and uploaded; the batched scans plan on the device (ivf_group_device.mojo); a device candidate gather for this path is the remaining step
 d2h-host-work	d2h-roundtrip	UNOWNED	owed	ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo	0	for q in range(n_queries):
-# why: OWED (large rewrite): IVF search plans on the host per query (probe sort, candidate counts, list grouping counting sort, per-query fallback gather); needs a device probe sort per query, device stable grouping by list (core/fast_radix_sort) and a device candidate gather for the k > 32 / wide-dim fallback
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo	1	for q in range(n_queries):
-# why: OWED (large rewrite): IVF search plans on the host per query (probe sort, candidate counts, list grouping counting sort, per-query fallback gather); needs a device probe sort per query, device stable grouping by list (core/fast_radix_sort) and a device candidate gather for the k > 32 / wide-dim fallback
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo	2	for q in range(n_queries):
-# why: OWED (large rewrite): IVF search plans on the host per query (probe sort, candidate counts, list grouping counting sort, per-query fallback gather); needs a device probe sort per query, device stable grouping by list (core/fast_radix_sort) and a device candidate gather for the k > 32 / wide-dim fallback
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo	3	for q in range(n_queries):
-# why: OWED (large rewrite): IVF search plans on the host per query (probe sort, candidate counts, list grouping counting sort, per-query fallback gather); needs a device probe sort per query, device stable grouping by list (core/fast_radix_sort) and a device candidate gather for the k > 32 / wide-dim fallback
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo	4	for q in range(n_queries):
 # why: FAST tier only (GMM_FAST_MEANLL, the Apple FAST peer's): one 1024-thread block over n; IDENTICAL and default FAST without the define use the chunked-level device fold
 one-block-n	serial-gpu	UNOWNED	owed	mixture/checks/estep.mojo	0	ctx.enqueue_function[fast_meanll_kernel](
 # why: FAST tier only (GMM_FAST_MEANLL, the Apple FAST peer's): one 1024-thread block over n; IDENTICAL and default FAST without the define use the chunked-level device fold
