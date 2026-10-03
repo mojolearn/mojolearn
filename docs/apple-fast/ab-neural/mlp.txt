@@ -1,0 +1,6 @@
+CMD lane/apple-fast-neural afn-mlp-fused bash tools/afn_ab.sh afn-mlp-fused training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_MLP_FUSED_STEP"
+CMD lane/apple-fast-neural afn-mlp-resident bash tools/afn_ab.sh afn-mlp-resident training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_MLP_RESIDENT"
+CMD lane/apple-fast-neural afn-mlp-multistep bash tools/afn_ab.sh afn-mlp-multistep training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_MLP_MULTISTEP"
+CMD lane/apple-fast-neural afn-mlp-all bash tools/afn_ab.sh afn-mlp-all training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_MLP_ALL"
+CMD lane/apple-fast-neural afn-mlp-emb-atomic bash tools/afn_ab.sh afn-mlp-emb-atomic embedding custom full 2 "" "-D MOJOLEARN_AFN_EMB_ATOMIC_BWD"
+CMD lane/apple-fast-neural afn-mlp-cnn-direct bash tools/afn_ab.sh afn-mlp-cnn-direct x_cnn custom full 2 "" "-D MOJOLEARN_AFN_CNN_DIRECT"
