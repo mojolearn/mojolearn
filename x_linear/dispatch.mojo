@@ -111,6 +111,27 @@ def fit_dispatch(t: Team, algo: Int, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: F
             ridge_kfold_fit(x, y, n, d, ip, fp, res, fw)
 
 
+def decision_code_row(s: FP, i: Int, k: Int, strict: Int, below: Int, above: Int) -> Int32:
+    """Row i's class code of the decision block s (n x k): k == 1 `above`
+    when s > 0 (`strict`) or s >= 0, else `below` (NaN: below); k > 1 the
+    first largest column (a NaN never replaces). The classifiers' predict
+    (lane pyglue-numeric: the host threshold / argmax of the downloaded
+    scores)."""
+    if k == 1:
+        var v = s.unsafe_load(i)
+        var up = v > Float32(0) if strict != 0 else v >= Float32(0)
+        return Int32(above if up else below)
+    var base = i * k
+    var best = 0
+    var bv = s.unsafe_load(base)
+    for c in range(1, k):
+        var v = s.unsafe_load(base + c)
+        if v > bv:
+            best = c
+            bv = v
+    return Int32(best)
+
+
 def decision_one(x: FP, i: Int, d: Int, wb: FP, c: Int, link: Int) -> Float32:
     var woff = c * (d + 1)
     # DEVIATION 5007 (IDENTITY_PATHS row 107): the fold first, the intercept last

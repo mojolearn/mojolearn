@@ -19,8 +19,8 @@ from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
-from x_linear.ops import FP
-from x_linear.device import fit_device, decision_device
+from x_linear.ops import FP, IP
+from x_linear.device import fit_device, decision_device, decision_codes_device
 from x_linear.cls1_fast import cls1_flags
 
 
@@ -105,6 +105,28 @@ def decision_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonOb
     return PythonObject(n * k)
 
 
+def decision_codes_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
+                           out_addr: PythonObject) raises -> PythonObject:
+    """Each row's class code (int32) of link(X W^T + b): dims = [n, d, k,
+    link, strict, below, above] (k == 1: the threshold at 0; k > 1: the
+    argmax), on the device (lane pyglue-numeric)."""
+    var n = Int(py=dims[0])
+    var d = Int(py=dims[1])
+    var k = Int(py=dims[2])
+    var link = Int(py=dims[3])
+    var strict = Int(py=dims[4])
+    var below = Int(py=dims[5])
+    var above = Int(py=dims[6])
+    if n < 0 or d < 0 or k <= 0:
+        raise Error("x_linear: positive dimensions required")
+    var x = _fp(Int(py=x_addr))
+    var wb = _fp(Int(py=wb_addr))
+    var out = IP(unsafe_from_address=Int(py=out_addr))
+    with GILReleased(Python()):
+        decision_codes_device(x, wb, n, d, k, link, strict, below, above, out)
+    return PythonObject(n)
+
+
 def cls1_flags_binding() raises -> PythonObject:
     return PythonObject(cls1_flags())
 
@@ -135,6 +157,7 @@ def PyInit__mojolearn_x_linear() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_linear")
         m.def_function[fit_binding]("x_linear_fit")
         m.def_function[decision_binding]("x_linear_decision")
+        m.def_function[decision_codes_binding]("x_linear_decision_codes")
         m.def_function[numeric_mode_binding]("x_linear_numeric_mode")
         m.def_function[cls1_flags_binding]("x_linear_cls1_flags")
         m.def_function[vendor_binding]("x_linear_vendor")

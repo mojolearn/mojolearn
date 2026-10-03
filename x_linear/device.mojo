@@ -23,7 +23,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
-from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM, ALGO_RIDGE_KFOLD, ALGO_ENETCV, ALGO_RIDGE, ALGO_BAYES, ALGO_ARD
+from x_linear.dispatch import fit_dispatch, decision_one, decision_code_row, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM, ALGO_RIDGE_KFOLD, ALGO_ENETCV, ALGO_RIDGE, ALGO_BAYES, ALGO_ARD
 from x_linear.cd_grid import enetcv_fit_grid
 from x_linear.moments_grid import MOMENTS_GRID, MG_NT, mg_means_kernel, mg_cross_kernel, mg_tiles
 from x_linear.ops import ld, st, ldi, fd, i2f, fa, fs, fm, fabs, shuffle, fmad, flog, fill, copy, row_dot, mean_of
@@ -136,19 +136,23 @@ def _ridge_device(
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
     var dxp = FP(unsafe_from_address=Int(dx.unsafe_ptr()))
     var dyp = FP(unsafe_from_address=Int(dy.unsafe_ptr()))
-    # lane/apple-fast-gap-cls1 RIDGE_CLS1_CODES: ip[4] == 1 means y holds the
-    # n int32 class codes (RidgeClassifier, unweighted); the +-1 targets are
-    # built here on the device (x_linear/cls1_fast.mojo)
+    # ip[4] == 1 means y holds the n int32 class codes (RidgeClassifier),
+    # then the n sample weights when ip[3]; the +-1 targets are built here on
+    # the device (x_linear/cls1_fast.mojo), the weights copied after them
+    # (every column since lane pyglue-numeric: Python built the targets)
     var dyt = ctx.enqueue_create_buffer[DType.float32](1)
-    comptime if RIDGE_CLS1_CODES:
-        if len(ip) > 4 and Int(ip[4]) == 1 and n > 0:
-            var t_c = Int(ip[0])
-            dyt = ctx.enqueue_create_buffer[DType.float32](n * t_c)
-            ctx.enqueue_function[c1_codes_targets_kernel](
-                dy.unsafe_ptr().bitcast[Int32](), Int32(n), Int32(t_c), dyt.unsafe_ptr(),
-                grid_dim=(n + C1_TPB - 1) // C1_TPB, block_dim=C1_TPB,
-            )
-            dyp = FP(unsafe_from_address=Int(dyt.unsafe_ptr()))
+    if len(ip) > 4 and Int(ip[4]) == 1 and n > 0:
+        var t_c = Int(ip[0])
+        var has_sw = Int(ip[3]) != 0
+        dyt = ctx.enqueue_create_buffer[DType.float32](n * t_c + (n if has_sw else 0))
+        ctx.enqueue_function[c1_codes_targets_kernel](
+            dy.unsafe_ptr().bitcast[Int32](), Int32(n), Int32(t_c), dyt.unsafe_ptr(),
+            grid_dim=(n + C1_TPB - 1) // C1_TPB, block_dim=C1_TPB,
+        )
+        if has_sw:
+            ctx.enqueue_copy(dst_buf=dyt.create_sub_buffer[DType.float32](n * t_c, n),
+                             src_buf=dy.create_sub_buffer[DType.float32](n, n))
+        dyp = FP(unsafe_from_address=Int(dyt.unsafe_ptr()))
     ridge_fit_grid(ctx.copy(), dxp, dyp, n, d, ip, fp, n_out, res)
     # lane/neural-pass93: the float-float refit on the grid
     var t_n = Int(ip[0])
@@ -3868,6 +3872,43 @@ def fit_device(
     _ = dmparts^
     _ = dgparts^
     _ = wit^
+    _ = ctx^
+
+
+def decision_codes_kernel(s: FP, n: Int32, k: Int32, strict: Int32, below: Int32, above: Int32, codes: IP):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        codes.unsafe_store(i, decision_code_row(s, i, Int(k), Int(strict), Int(below), Int(above)))
+
+
+def decision_codes_device(
+    x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, strict: Int, below: Int, above: Int, codes: IP
+) raises:
+    """`decision_device`'s block, then each row's class code on the device
+    (`decision_code_row`); only the n int32 codes come down."""
+    var ctx = linear_ctx()
+    var dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
+    var dwb = ctx.enqueue_create_buffer[DType.float32](k * (d + 1))
+    var dout = ctx.enqueue_create_buffer[DType.float32](max(n * k, 1))
+    var dc = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    if n * d > 0:
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    ctx.enqueue_copy(dst_buf=dwb, src_ptr=wb)
+    if n > 0:
+        ctx.enqueue_function[decision_kernel](
+            dx.unsafe_ptr(), dwb.unsafe_ptr(), Int32(n), Int32(d), Int32(k), Int32(link), dout.unsafe_ptr(),
+            grid_dim=(n * k + 127) // 128, block_dim=128,
+        )
+        ctx.enqueue_function[decision_codes_kernel](
+            dout.unsafe_ptr(), Int32(n), Int32(k), Int32(strict), Int32(below), Int32(above), dc.unsafe_ptr(),
+            grid_dim=(n + 127) // 128, block_dim=128,
+        )
+        ctx.enqueue_copy(dst_ptr=codes, src_buf=dc.create_sub_buffer[DType.int32](0, n))
+    ctx.synchronize()
+    _ = dx^
+    _ = dwb^
+    _ = dout^
+    _ = dc^
     _ = ctx^
 
 
