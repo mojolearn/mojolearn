@@ -35,7 +35,6 @@ user `estimator` otherwise runs its data-sized plumbing as x_prep units
 the clipped float32 store; the stop is `ii_rowabs` / `ii_conv`).
 """
 import array
-import bisect
 import copy
 import ctypes
 import inspect
@@ -91,8 +90,7 @@ _OPS = dict(
     cal_eps_folds=147, cal_params_folds=148, cal_jll_folds=149, cal_platt_init=150, cal_platt_setup=151,
     cal_platt_part=152, cal_platt_step=153, cal_platt_ls_part=154, cal_platt_ls_pick=155, cal_sigmoid_avg=156,
     # lane apple-fast-py2mojo-prep (x_prep/py2mojo.mojo, a range of its own): every binding
-    # that exports x_prep_py2mojo runs them; built with -D MOJOLEARN_PY2MOJO_prep_OFF it has
-    # none and `_p2m` routes to the old Python loops
+    # runs them (lane pyglue-numeric deleted the OFF arm and its Python loops)
     p2m_ccount=200, p2m_cscan=201, p2m_cstart=202, p2m_cwrite=203, p2m_rgather=204, p2m_smrows=205,
     p2m_sel_count=206, p2m_sel_scan=207, p2m_sel_write=208, p2m_transpose=209,
 )
@@ -120,22 +118,6 @@ def _optional_prep_entry(binding, name):
         return getattr(binding, name)
     except (AttributeError, ImportError):
         return None
-
-
-#: binding -> whether it exports `x_prep_py2mojo` (lane apple-fast-py2mojo-prep)
-_P2M = {}
-
-
-def _p2m(mode):
-    """Whether the binding of `mode` runs x_prep/py2mojo.mojo's units (every
-    build but -D MOJOLEARN_PY2MOJO_prep_OFF, the A/B arm A): the row grouping,
-    gathers, splitmix64 draws, column compaction and column-major copies that
-    were Python loops here. A cached probe per binding."""
-    b = _prep_binding(mode)
-    on = _P2M.get(id(b))
-    if on is None:
-        on = _P2M[id(b)] = _optional_prep_entry(b, "x_prep_py2mojo") is not None
-    return on
 
 
 def _p2m_chunks(n, per=1):
@@ -1407,6 +1389,12 @@ def _target_kind(y, target_type):
     return "multiclass", classes, codes, len(classes)
 
 
+def _all_integral(arr):
+    """Whether every value of a float Array is an integer (`reduce_stat`)."""
+    vec = arr if arr._has_order("C") else arr._as_c()
+    return bool(_native_helper("reduce_stat")(vec._addr, 0 if vec.dtype == "<f4" else 1, vec.size, 4))
+
+
 def _target_arrays(y, target_type):
     """`_target_kind` without the per-label lists (lane apple-fast-py2mojo-prep):
     (kind, classes, target, T) with `target` the float32 Array of a
@@ -1428,8 +1416,9 @@ def _target_arrays(y, target_type):
         return None
     # the reference's continuous test: some label is not an integer (a C-speed map
     # over the storage; an integer dtype holds integers)
+    # (the base binding's `reduce_stat` integral test; an integer dtype holds integers)
     cont = target_type == "continuous" or (
-        target_type == "auto" and kind == "f" and not all(map(float.is_integer, _labels.flat_view(arr))))
+        target_type == "auto" and kind == "f" and not _all_integral(arr))
     if cont:
         vec = arr if arr.dtype == "<f4" and arr._has_order("C") else arr.astype("<f4")
         return "continuous", None, Array._view_of(vec, (vec.size,)), 1
@@ -1485,7 +1474,7 @@ class TargetEncoder(_PrepBase):
         device), the same words `_target_kind`'s lists gave."""
         n, d = arr.shape
         mode = _mode()
-        if binary is None and target is None and _p2m(mode):
+        if binary is None and target is None:
             target = _target_arrays(y, self.target_type)
         if target is not None:
             kind, classes, tgt, T = target
@@ -1629,7 +1618,7 @@ class TargetEncoder(_PrepBase):
         # the target and the folds as arrays (`_target_arrays`, lane
         # apple-fast-py2mojo-prep; else `_target_kind`'s arrays, lane
         # cgr4-py-compute): no per-row Python either way
-        target = _target_arrays(y, self.target_type) if _p2m(_mode()) else None
+        target = _target_arrays(y, self.target_type)
         if target is None:
             target = _target_kind(y, self.target_type)
         kind, classes, tgt, _T = target
@@ -1730,8 +1719,8 @@ class SimpleImputer(_PrepBase):
         if self.strategy == "most_frequent":
             pr.stage("mode_cols", d, so, n, d, mf, _NONE)
         comp = None
-        if callable(self.strategy) and _p2m(mode):
-            # lane apple-fast-py2mojo-prep: each column's non-NaN words, ascending rows, at
+        if callable(self.strategy):
+            # each column's non-NaN words, ascending rows, at
             # comp + j*n (p2m_sel_*), in place of the Python transpose and filter
             comp = pr.alloc(n * d)
             ctot = _p2m_sel(pr, xo, n, d, 0, comp)
@@ -1838,20 +1827,6 @@ def join_column_blocks(parts, ranges, n, d, mode=None):
 
 
 # ---------------------------------------------------------------- discretizer
-def _gather_rows(arr, rows):
-    """A new float32 Array of the given rows of a C-order 2-D Array (a byte
-    copy per row; no arithmetic)."""
-    n, d = arr.shape
-    if not (isinstance(rows, Array) and rows.dtype == "<i8"):
-        store = array.array("q", rows)
-        rows = Array._owned(store, (len(store),), "<i8", "C")
-    out = Array((rows.size, d), "<f4")
-    if rows.size and d:
-        _native_helper("gather_rows_bytes")(addr_ro(arr, name="X"), out._addr, addr_ro(rows, name="rows"),
-                                            n, rows.size, 4 * d)
-    return out
-
-
 class KBinsDiscretizer(_PrepBase):
     """sklearn.preprocessing.KBinsDiscretizer: strategy 'uniform', 'quantile'
     (every numpy quantile_method: 'averaged_inverted_cdf', the default,
@@ -1898,36 +1873,24 @@ class KBinsDiscretizer(_PrepBase):
         if sample_weight is not None:
             w, wl = _check_weights(sample_weight, n, "KBinsDiscretizer")
         sub = None
-        if self.subsample is not None and n > self.subsample and w is None and _p2m(_mode()):
-            # lane apple-fast-py2mojo-prep: the draws (p2m_smrows, splitmix64's closed form, one
-            # thread a draw) and the gather (p2m_rgather) run in the fit's program below
+        if self.subsample is not None and n > self.subsample and w is None:
+            # the draws (p2m_smrows, splitmix64's closed form, one thread a draw) and the
+            # gather (p2m_rgather) run in the fit's program below
             sub = ((0 if self.random_state is None else int(self.random_state)) & 0xFFFFFFFFFFFFFFFF,
                    int(self.subsample))
         elif self.subsample is not None and n > self.subsample:
-            state = 0 if self.random_state is None else int(self.random_state)
-            rows = []
-            if w is None:
-                for _ in range(int(self.subsample)):
-                    state, z = _splitmix64(state)
-                    rows.append(z % n)
-            else:
-                # the reference's weighted resample with replacement (its weights are then
-                # spent): row = the first whose cumulative weight exceeds u * total, u a
-                # 53-bit splitmix64 uniform; cumulative sums in Python float64
-                cum, acc = [], 0.0
-                for v in wl:
-                    acc += v
-                    cum.append(acc)
-                for _ in range(int(self.subsample)):
-                    state, z = _splitmix64(state)
-                    rows.append(min(bisect.bisect_right(cum, (z >> 11) * 2.0 ** -53 * acc), n - 1))
-                w = None
-            if _p2m(_mode()):
-                # lane apple-fast-py2mojo-prep: the weighted draw's rows gathered in the program
-                sub = (None, Array._owned(array.array("i", rows), (len(rows),), "<i4", "C"))
-            else:
-                arr = _gather_rows(arr, rows)
-                n = arr.shape[0]
+            # the reference's weighted resample with replacement (its weights are then
+            # spent): row = the first whose cumulative weight exceeds u * total, u a
+            # 53-bit splitmix64 uniform, binary64 running sums: the base binding's
+            # `weighted_draw_rows_i32` (lane pyglue-numeric: a Python bisect loop),
+            # the rows gathered in the program
+            seed = (0 if self.random_state is None else int(self.random_state)) & 0xFFFFFFFFFFFFFFFF
+            k = int(self.subsample)
+            rows = Array((k,), "<i4")
+            _native_helper("weighted_draw_rows_i32")(addr_ro(w, name="sample_weight"), n, k, seed & 0xFFFFFFFF,
+                                                     seed >> 32, _addr_rw(rows, name="rows"))
+            w = None
+            sub = (None, rows)
         nb = [int(self.n_bins)] * d if isinstance(self.n_bins, numbers.Integral) else [int(b) for b in self.n_bins]
         if len(nb) != d or min(nb) < 2:
             raise ValueError("mojolearn: n_bins must be >= 2 per feature")
@@ -1968,21 +1931,13 @@ class KBinsDiscretizer(_PrepBase):
             if strat in (0, 3):
                 # the min / max over the rows of nonzero weight (the reference's nnz mask)
                 stw = pr.alloc(6 * d)
-                if _p2m(mode):
-                    # lane apple-fast-py2mojo-prep: the rows selected and gathered on the device
-                    # (the weights are validated nonnegative: v > 0 is v != 0)
-                    m = n - wl.count(0.0)
-                    if m < n:
-                        pr.stage("col_stats", d, _p2m_positive_rows(pr, xo, pr.put(w), n, d, m), m, d, stw)
-                    else:
-                        stw = st
+                # the rows selected and gathered on the device (the weights are
+                # validated nonnegative: v > 0 is v != 0)
+                m = wl
+                if m < n:
+                    pr.stage("col_stats", d, _p2m_positive_rows(pr, xo, pr.put(w), n, d, m), m, d, stw)
                 else:
-                    nz = [i for i, v in enumerate(wl) if v > 0]
-                    if len(nz) < n:
-                        xz = pr.put(_gather_rows(arr, nz))
-                        pr.stage("col_stats", d, xz, len(nz), d, stw)
-                    else:
-                        stw = st
+                    stw = st
             if strat == 0:
                 pr.stage("kbins_edges", d, so, n, d, nbo, nbmax, 0, stw, edges, ne, 0, 0)
             else:
@@ -2568,18 +2523,11 @@ def _binary_difference(pr, src, rows, K, d_cols, out):
 
 def _class_counts(codes, K):
     """The count of each class code 0 .. K-1 of an int32 codes Array: one
-    program of p2m_ccount / p2m_cscan (lane apple-fast-py2mojo-prep), else
-    the old Python loop."""
+    program of p2m_ccount / p2m_cscan (lane apple-fast-py2mojo-prep)."""
     mode = _mode()
     n = int(codes.size)
-    if not _p2m(mode) or n == 0 or K <= 0:
-        # the base binding's bincount (lane cgr4-py-compute)
-        c32, _ = as_i32_c(codes, ndim=1, name="codes")
-        cnt = Array((max(K, 1),), "<i8")
-        if K > 0:
-            _native_helper("bincount_i64")(addr_ro(c32, name="codes"), 2, c32.size, K,
-                                           _addr_rw(cnt, name="counts"), 0)
-        return cnt.tolist()[:K]
+    if n == 0 or K <= 0:
+        return [0] * max(K, 0)
     pr = _Prog()
     _ro, tot = _p2m_class_rows(pr, pr.put_codes(codes), n, K, rows=False)
     pr.run(mode)
@@ -2606,7 +2554,7 @@ def _estimator_covs(est, arr, codes, K, who):
     is read as float32. Returns the (K, d, d) blocks as one flat list."""
     n, d = arr.shape
     mode = _mode()
-    if codes is not None and _p2m(mode):
+    if codes is not None:
         # lane apple-fast-py2mojo-prep: the rows grouped by class on the device
         # (p2m_ccount .. p2m_cwrite, then p2m_rgather): class k's rows are one
         # contiguous block, ascending, the words the Python gather copied
@@ -2619,21 +2567,8 @@ def _estimator_covs(est, arr, codes, K, who):
         cnt = pr.get_i32(tot, K).tolist()
         starts = [0] + list(itertools.accumulate(cnt))[:-1]
         blocks = [pr.get(xg + starts[k] * d, (cnt[k], d)) for k in range(K)]
-    elif codes is None:
-        blocks = [arr.copy()]
     else:
-        # each class's ascending rows by the base binding's select, then one
-        # byte gather (lane cgr4-py-compute)
-        c32, _ = as_i32_c(codes, ndim=1, name="codes")
-        sizes = _class_counts(c32, K)
-        select = _native_helper("select_fold_i64")
-        scratch = Array((max(n, 1),), "<i8")
-        blocks = []
-        for k in range(K):
-            rows = Array((sizes[k],), "<i8")
-            select(addr_ro(c32, name="codes"), n, k, _addr_rw(rows, name="rows") if sizes[k] else
-                   _addr_rw(scratch, name="rows"), _addr_rw(scratch, name="rows"))
-            blocks.append(_gather_rows(arr, rows))
+        blocks = [arr.copy()]
     out = []
     for k in range(K):
         est.fit(blocks[k])
@@ -2943,7 +2878,7 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         # the program's own class counts (class_stats `cnt`, exact integers) right after the
         # run, before anything else is read or raised; an estimator fits per class inside the
         # build, so its check stays first (`_class_counts`, a p2m program)
-        late = est is None and _p2m(mode)
+        late = est is None
         if not late and min(_class_counts(codes, K)) < 2:
             raise ValueError("mojolearn: y has only 1 sample in a class, covariance is ill defined")
         pr = _Prog()
@@ -3013,18 +2948,6 @@ class QuadraticDiscriminantAnalysis(_Classifier):
 
 
 # ---------------------------------------------------------------- additions: transformers
-def _draw_without_replacement(n, k, seed):
-    """k distinct rows of n, from a splitmix64 partial Fisher-Yates (integer
-    arithmetic, the same on every machine); the reference draws numpy's."""
-    perm = list(range(n))
-    state = int(seed) & 0xFFFFFFFFFFFFFFFF
-    for i in range(k):
-        state, z = _splitmix64(state)
-        j = i + z % (n - i)
-        perm[i], perm[j] = perm[j], perm[i]
-    return sorted(perm[:k])
-
-
 class QuantileTransformer(_PrepBase):
     """sklearn.preprocessing.QuantileTransformer: per-column numpy linear
     percentiles of the non-NaN entries at n_quantiles evenly spaced
@@ -3055,17 +2978,16 @@ class QuantileTransformer(_PrepBase):
         mode = _mode()
         drawn = None
         if self.subsample is not None and n > self.subsample:
-            rows = _draw_without_replacement(
-                n, int(self.subsample), 0 if self.random_state is None else int(self.random_state))
-            if _p2m(mode):
-                # lane apple-fast-py2mojo-prep: the drawn rows gathered in the program (p2m_rgather)
-                drawn = Array._owned(array.array("i", rows), (len(rows),), "<i4", "C")
-            else:
-                arr = _gather_rows(arr, rows)
+            # the base binding's `draw_rows_without_replacement_i32` (a splitmix64
+            # partial Fisher-Yates, ascending; lane pyglue-numeric: the Python draw),
+            # the rows gathered in the program (p2m_rgather)
+            seed = (0 if self.random_state is None else int(self.random_state)) & 0xFFFFFFFFFFFFFFFF
+            k = int(self.subsample)
+            drawn = Array((k,), "<i4")
+            _native_helper("draw_rows_without_replacement_i32")(n, k, seed & 0xFFFFFFFF, seed >> 32,
+                                                                 _addr_rw(drawn, name="rows"))
         if drawn is not None:
             n = drawn.size
-        elif self.subsample is not None and n > self.subsample:
-            n = arr.shape[0]
         nq = max(1, min(int(self.n_quantiles), n))
         refs = [i / (nq - 1) if nq > 1 else 0.0 for i in range(nq)]
         pr = _Prog()
@@ -3323,21 +3245,16 @@ class PolynomialFeatures(_PrepBase):
         pr.run(self.numeric_mode_)
         if fo is not None:
             return _p2m_f_get(pr, fo, n, nout)
-        if self.order == "F":
-            pr._check(out, n * nout)
-            seg = pr.arena[out:out + n * nout]
-            store = array.array("f")
-            for j in range(nout):
-                store.extend(seg[j::nout])
-            return Array._owned(store, (n, nout), "<f4", "F")
+        if self.order == "F":       # an empty block
+            return Array._owned(array.array("f"), (n, nout), "<f4", "F")
         return pr.get(out, (n, nout))
 
 
 def _p2m_f_stage(pr, off, n, w):
     """Lane apple-fast-py2mojo-prep: a p2m_transpose stage writing the (n, w)
     block at off column-major into the program's output; read it back with
-    `_p2m_f_get`. None when the binding has no p2m units."""
-    if n * w <= 0 or not _p2m(_mode()):
+    `_p2m_f_get`. None for an empty block."""
+    if n * w <= 0:
         return None
     fo = pr.output(n * w)
     pr.stage("p2m_transpose", n * w, off, n, w, fo)
@@ -3349,27 +3266,27 @@ def _p2m_f_get(pr, fo, n, w):
     return Array._view_of(pr.get(fo, (n * w,)), (n, w), "F")
 
 
-def _f_order(pr, off, n, w):
-    """An (n, w) arena block as a Fortran-ordered Array (the same words)."""
-    pr._check(off, n * w)
-    seg = pr.arena[off:off + n * w]
-    store = array.array("f")
-    for j in range(w):
-        store.extend(seg[j::w])
-    return Array._owned(store, (n, w), "<f4", "F")
-
-
 def _check_weights(sample_weight, n, who):
-    """sample_weight as float32 words (nonnegative, length n) and their list."""
+    """sample_weight as float32 words (nonnegative, length n) and the count
+    of its positive entries: one device program (p2m_sel_count / scan over
+    the weights, col_stats for the minimum; lane pyglue-numeric: Python
+    passes over the weight list)."""
     w = as_f32_c(sample_weight, ndim=1, name="sample_weight")[0]
     if w.size != n:
         raise ValueError(f"mojolearn: sample_weight has {w.size} entries; X has {n} rows")
-    wl = w.tolist()
-    if any(not v >= 0 for v in wl):
+    pr = _Prog()
+    wo = pr.put(w)
+    st = pr.alloc(6)
+    pr.stage("col_stats", 1, wo, n, 1, st)
+    pos = _p2m_sel(pr, wo, n, 1, 1, pr.alloc(n))
+    pr.run(_mode())
+    cnt, lo = pr.values(st, 1)[0], pr.values(st + 3, 1)[0]
+    m = int(pr.get_i32(pos, 1).tolist()[0])
+    if int(cnt) != n or lo < 0:            # a NaN is not counted by col_stats
         raise ValueError(f"mojolearn: {who} sample_weight must be nonnegative")
-    if not any(v > 0 for v in wl):
+    if m == 0:
         raise ValueError(f"mojolearn: {who} sample_weight is all zero")
-    return w, wl
+    return w, m
 
 
 def _weighted_groups(pr, arr, w, n, d):
@@ -3496,15 +3413,10 @@ class SplineTransformer(_PrepBase):
                 _weighted_levels(pr, ug, ucnt, n, d, [lv] * d, False, base)
         else:
             base, uniform = pr.alloc(d * nk), 1
-            if w is not None and _p2m(mode) and wl.count(0.0):
-                # lane apple-fast-py2mojo-prep: the positive-weight rows on the device
+            if w is not None and wl < n:
+                # the positive-weight rows on the device
                 kst = pr.alloc(6 * d)
-                m = n - wl.count(0.0)
-                pr.stage("col_stats", d, _p2m_positive_rows(pr, xo, pr.put(w), n, d, m), m, d, kst)
-            elif w is not None and any(v == 0 for v in wl):
-                kst = pr.alloc(6 * d)
-                nz = [i for i, v in enumerate(wl) if v > 0]
-                pr.stage("col_stats", d, pr.put(_gather_rows(arr, nz)), len(nz), d, kst)
+                pr.stage("col_stats", d, _p2m_positive_rows(pr, xo, pr.put(w), n, d, wl), wl, d, kst)
         pr.stage("spline_knots", d, base, nk, d, k, knots, uniform, kst, int(periodic))
         pr.run(mode)
         self._no_nan(pr, st, d, n)
@@ -3545,8 +3457,8 @@ class SplineTransformer(_PrepBase):
                 raise ValueError("mojolearn: X contains values beyond the limits of the knots")
         if fo is not None:
             return _p2m_f_get(pr, fo, n, W)
-        if self.order == "F":
-            return _f_order(pr, out, n, W)
+        if self.order == "F":       # an empty block
+            return Array._owned(array.array("f"), (n, W), "<f4", "F")
         return pr.get(out, (n, W))
 
 
@@ -5152,21 +5064,14 @@ class CategoricalNB(_DiscreteNB):
             q.stage("cat_hfold", d * K * cmax, hist, nbh, d, K, no, cmax, w, cc)
         else:
             q.stage("cat_counts", d * K * cmax, xo, n, d, yo, K, no, cmax, _NONE if wq is None else wq, cc)
-        if merge and _p2m(mode):
-            # lane apple-fast-py2mojo-prep: the running counts re-strided to cmax on the
-            # device (colblock into zeroed words), in place of the Python pad copy
+        if merge:
+            # the running counts re-strided to cmax on the device (colblock into
+            # zeroed words)
             oc = self._cmax
             pad, src, cc = q.alloc(d * K * cmax), cc, q.alloc(d * K * cmax)
             if oc > 0:
                 q.stage("colblock", d * K * oc, q.put(self._cc), oc, pad, cmax, 0)
             q.stage("add_arrays", d * K * cmax, pad, src, cc)
-        elif merge:
-            old, oc = self._cc.tolist(), self._cmax
-            pad = [0.0] * (d * K * cmax)
-            for jk in range(d * K):
-                pad[jk * cmax:jk * cmax + oc] = old[jk * oc:(jk + 1) * oc]
-            src, cc = cc, q.alloc(d * K * cmax)
-            q.stage("add_arrays", d * K * cmax, q.put_list(pad), src, cc)
         flp = q.alloc(d * K * cmax)
         q.stage("cat_flp", d * K * cmax, cc, K, no, cmax, co, a, flp)
         q.run(mode)

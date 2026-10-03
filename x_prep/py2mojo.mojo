@@ -26,17 +26,16 @@ construction.
       order='F').
 
 Ops P2M_BASE .. P2M_BASE + P2M_N - 1 are a separate range, outside the
-0 .. N_OPS - 1 table other lanes grow; built with
--D MOJOLEARN_PY2MOJO_prep_OFF there are none (P2M_N = 0), the binding does not
-export `x_prep_py2mojo`, and Python takes its old loops (the A/B arm A).
+0 .. N_OPS - 1 table other lanes grow. Every build carries them (lane
+pyglue-numeric deleted the -D MOJOLEARN_PY2MOJO_prep_OFF arm and the Python
+loops it restored).
 """
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from x_prep.common import FP, IP, p, raw, ldi, sti, ld
 
-comptime PY2MOJO_PREP = not is_defined["MOJOLEARN_PY2MOJO_prep_OFF"]()
+comptime PY2MOJO_PREP = True
 comptime P2M_BASE = 200
-comptime P2M_N = 10 if PY2MOJO_PREP else 0
+comptime P2M_N = 10
 
 
 @always_inline

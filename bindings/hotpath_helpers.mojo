@@ -1774,6 +1774,88 @@ def strat_group_assign_i32_binding(
     return PythonObject(0)
 
 
+@always_inline
+def _sm64_next(mut state: UInt64) -> UInt64:
+    """Python `_splitmix64`: state += golden, then the splitmix64 mix of it."""
+    state = state + UInt64(0x9E3779B97F4A7C15)
+    var z = state
+    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
+    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
+    return z ^ (z >> 31)
+
+
+def draw_rows_without_replacement_i32_binding(
+    n: PythonObject, k: PythonObject, seed_lo: PythonObject, seed_hi: PythonObject, dst_addr: PythonObject,
+) raises -> PythonObject:
+    """k distinct rows of n, ascending, int32 at dst: a splitmix64 partial
+    Fisher-Yates (swap i with i + z % (n - i), i < k) then the first k
+    sorted (QuantileTransformer's subsample; lane pyglue-numeric: the
+    Python `_draw_without_replacement`, the same integers)."""
+    var nn = Int(py=n)
+    var kk = Int(py=k)
+    if nn < 0 or kk < 0 or kk > nn:
+        raise Error("draw_rows_without_replacement_i32: 0 <= k <= n")
+    var state = (UInt64(Int(py=seed_hi)) << 32) | UInt64(Int(py=seed_lo))
+    var dp = _ptr[DType.int32](Int(py=dst_addr))
+    with GILReleased(Python()):
+        var perm = List[Int](capacity=nn)
+        for i in range(nn):
+            perm.append(i)
+        for i in range(kk):
+            var z = _sm64_next(state)
+            var j = i + Int(z % UInt64(nn - i))
+            var t = perm[i]
+            perm[i] = perm[j]
+            perm[j] = t
+        var mark = List[Bool](length=nn, fill=False)
+        for i in range(kk):
+            mark[perm[i]] = True
+        var at = 0
+        for r in range(nn):
+            if mark[r]:
+                dp.unsafe_store(at, Int32(r))
+                at += 1
+    return PythonObject(0)
+
+
+def weighted_draw_rows_i32_binding(
+    w_addr: PythonObject, n: PythonObject, k: PythonObject, seed_lo: PythonObject, seed_hi: PythonObject,
+    dst_addr: PythonObject,
+) raises -> PythonObject:
+    """k rows drawn with replacement in proportion to the float32 weights:
+    row = the first whose binary64 running sum exceeds u * total, u the
+    53-bit uniform of the next splitmix64 draw, clipped to n - 1 (KBins'
+    weighted subsample; lane pyglue-numeric: the Python `bisect` loop, the
+    same arithmetic). int32 rows at dst, in draw order."""
+    var nn = Int(py=n)
+    var kk = Int(py=k)
+    if nn < 1 or kk < 0:
+        raise Error("weighted_draw_rows_i32: n >= 1, k >= 0")
+    var state = (UInt64(Int(py=seed_hi)) << 32) | UInt64(Int(py=seed_lo))
+    var wp = _ptr[DType.float32](Int(py=w_addr))
+    var dp = _ptr[DType.int32](Int(py=dst_addr))
+    with GILReleased(Python()):
+        var cum = List[Float64](capacity=nn)
+        var acc = Float64(0)
+        for i in range(nn):
+            acc += Float64(wp.unsafe_load(i))
+            cum.append(acc)
+        for t in range(kk):
+            var z = _sm64_next(state)
+            var target = Float64(z >> 11) * 1.1102230246251565e-16 * acc
+            # bisect_right: the first index whose running sum exceeds target
+            var lo = 0
+            var hi = nn
+            while lo < hi:
+                var mid = (lo + hi) // 2
+                if target < cum[mid]:
+                    hi = mid
+                else:
+                    lo = mid + 1
+            dp.unsafe_store(t, Int32(min(lo, nn - 1)))
+    return PythonObject(0)
+
+
 def strat_fold_assign_i32_binding(
     enc_addr: PythonObject, n: PythonObject, k: PythonObject, n_folds: PythonObject,
     alloc_addr: PythonObject, perms_addr: PythonObject, counts_addr: PythonObject, dst_addr: PythonObject,
