@@ -43,7 +43,7 @@ def _scaler_header(arrays, path, cls, fields):
     """The format, estimator, numeric mode and `meta` checks both loads
     share; returns `(mode, meta)`."""
     saved_as = _serialize.scalar_str(arrays, "estimator")
-    if saved_as not in (c.__name__ for c in cls.__mro__):
+    if saved_as not in (c.__name__ for c in cls.__mro__):  # glue: walks the class hierarchy names
         raise ValueError(f"mojolearn: {path!r} was saved by {saved_as}, not {cls.__name__}")
     mode = _serialize.scalar_str(arrays, "numeric_mode")
     if mode not in ("fast", "deterministic", "identical"):
@@ -203,7 +203,7 @@ class _ScalerProtocol:
         values, copied = materialize_f32_lists(X, "input")
         if values.dtype != "<f4":
             raise TypeError('Scaler input must have dtype float32')
-        if values.ndim != 2 or min(values.shape) == 0:
+        if values.ndim != 2 or min(values.shape) == 0:  # glue: smallest axis of the shape
             raise ValueError('Scaler requires a nonempty two-dimensional input')
         if values.size > 2147483647:
             raise ValueError('Scaler exceeds the native Int32 indexing bound')
@@ -229,13 +229,13 @@ class _ScalerProtocol:
         return self.fit(X, y, **fit_params).transform(X)
 
     def get_params(self, deep=True):
-        return {name: getattr(self, name) for name in self._parameters}
+        return {name: getattr(self, name) for name in self._parameters}  # glue: collects the estimator parameters
 
     def set_params(self, **params):
         values = self.get_params()
         if not params:
             return self
-        unknown = sorted(set(params) - values.keys())
+        unknown = sorted(set(params) - values.keys())  # glue: sorts unknown parameter names
         if unknown:
             raise ValueError(f'Invalid {type(self).__name__} parameters: {unknown}')
         values.update(params)
@@ -301,15 +301,15 @@ class MinMaxScaler(_ScalerProtocol):
             raise ValueError('feature_range must contain two numeric endpoints') from None
         if len(endpoints) != 2 or any(
                 is_bool(x) or
-                not isinstance(x, numbers.Real) for x in endpoints):
+                not isinstance(x, numbers.Real) for x in endpoints):  # glue: checks the two feature_range endpoints
             raise ValueError('feature_range must contain two numeric endpoints')
         try:
-            values = [float(x) for x in endpoints]
+            values = [float(x) for x in endpoints]  # glue: converts the two feature_range endpoints
         except (OverflowError, ValueError):
             raise ValueError('feature_range endpoints must be finite Float32 values') from None
-        if any(not math.isfinite(x) or abs(x) > 3.4028234663852886e+38 for x in values):
+        if any(not math.isfinite(x) or abs(x) > 3.4028234663852886e+38 for x in values):  # glue: checks the two feature_range endpoints
             raise ValueError('feature_range endpoints must be finite Float32 values')
-        lower, upper = (struct.unpack("<f", struct.pack("<f", x))[0] for x in values)
+        lower, upper = (struct.unpack("<f", struct.pack("<f", x))[0] for x in values)  # glue: rounds the two feature_range endpoints
         if not lower < upper:
             raise ValueError('feature_range must have lower < upper after Float32 conversion')
         return lower, upper
@@ -334,14 +334,14 @@ class MinMaxScaler(_ScalerProtocol):
                 for c, gone in enumerate(colnan):
                     if gone:
                         r[c] = float('nan')
-        for i, name in enumerate(('data_min_', 'data_max_', 'data_range_', 'scale_', 'min_')):
+        for i, name in enumerate(('data_min_', 'data_max_', 'data_range_', 'scale_', 'min_')):  # glue: sets five fitted attribute names
             setattr(self, name, Array.from_list(rows[i], '<f4') if any(colnan) else output[i].copy())
 
     def fit(self, X, y=None, sample_weight=None):
         _require_training(self)
         lower, upper = self._configuration()
         # Once a new fit begins, a failed fit cannot expose stale statistics.
-        for name in list(self.__dict__):
+        for name in list(self.__dict__):  # glue: drops stale fitted attributes
             if name.endswith('_'):
                 del self.__dict__[name]
         if sample_weight is not None:
@@ -417,7 +417,7 @@ class MinMaxScaler(_ScalerProtocol):
         if d != self.n_features_in_:
             raise ValueError('MinMaxScaler input feature count differs from fit')
         stats = {}
-        for name in ("scale_", "min_"):
+        for name in ("scale_", "min_"):  # glue: checks two fitted attribute names
             statistic = getattr(self, name)
             if (not isinstance(statistic, Array) or statistic.dtype != "<f4"
                     or statistic.shape != (d,) or not statistic.flags["C_CONTIGUOUS"]):
@@ -478,7 +478,7 @@ class MinMaxScaler(_ScalerProtocol):
             "data_range": self.data_range_,
             "scale": self.scale_,
             "min": self.min_,
-            "feature_range": Array.from_list([float(v) for v in self.feature_range_], "<f8"),
+            "feature_range": Array.from_list([float(v) for v in self.feature_range_], "<f8"),  # glue: packs the two feature_range endpoints
             "meta": Array.from_list(
                 [int(self.n_features_in_), int(self.n_samples_seen_), int(self.clip_)], "<i8"),
         }
@@ -495,7 +495,7 @@ class MinMaxScaler(_ScalerProtocol):
             raise ValueError(f"mojolearn: {path!r} feature_range must hold two values")
         obj = cls(feature_range=(float(bounds[0]), float(bounds[1])), clip=bool(int(meta[2])))
         d = int(meta[0])
-        for name in ("data_min", "data_max", "data_range", "scale", "min"):
+        for name in ("data_min", "data_max", "data_range", "scale", "min"):  # glue: loads five saved statistic names
             setattr(obj, name + "_", _saved_statistic(arrays, name, d, path))
         obj.n_features_in_ = d
         obj.n_samples_seen_ = int(meta[1])
@@ -558,7 +558,7 @@ class StandardScaler(_ScalerProtocol):
     def fit(self, X, y=None, sample_weight=None):
         _require_training(self)
         self._configuration()
-        for name in list(self.__dict__):
+        for name in list(self.__dict__):  # glue: drops stale fitted attributes
             if name.endswith('_'):
                 del self.__dict__[name]
         mode = (self.numeric_mode if self.numeric_mode is not None else _backend.default_mode()).strip().lower()
@@ -656,7 +656,7 @@ class StandardScaler(_ScalerProtocol):
             raise ValueError('StandardScaler scale_ is missing for a scaled transform')
         mean = self.mean_ if self.mean_ is not None else zeros((d,), "<f4")
         scale = self.scale_ if self.scale_ is not None else full((d,), 1, "<f4")
-        for name, statistic in (('mean_', mean), ('scale_', scale)):
+        for name, statistic in (('mean_', mean), ('scale_', scale)):  # glue: checks two fitted statistic names
             if (not isinstance(statistic, Array) or statistic.dtype != "<f4"
                     or statistic.shape != (d,) or not statistic.flags["C_CONTIGUOUS"]):
                 raise ValueError(f'StandardScaler {name} must remain a finite contiguous Float32 feature vector')
@@ -665,7 +665,7 @@ class StandardScaler(_ScalerProtocol):
         if any(colnan):
             mean = Array.from_list([0.0 if colnan[c] else mv[c] for c in range(d)], '<f4')
             scale = Array.from_list([1.0 if colnan[c] else sv[c] for c in range(d)], '<f4')
-        for name, statistic in (('mean_', mean), ('scale_', scale)):
+        for name, statistic in (('mean_', mean), ('scale_', scale)):  # glue: checks two fitted statistic names
             if not all_finite(statistic):
                 raise ValueError(f'StandardScaler {name} must remain finite (NaN: a feature never seen)')
         if scale.min() <= 0:
@@ -711,7 +711,7 @@ class StandardScaler(_ScalerProtocol):
             seen = self.n_samples_seen_
             arrays["n_samples_seen"] = (seen if isinstance(seen, Array)
                                         else Array.from_list([float(seen)], "<f4"))
-        for name in ("mean", "var", "scale"):
+        for name in ("mean", "var", "scale"):  # glue: saves three statistic names
             value = getattr(self, name + "_")
             if value is not None:
                 arrays[name] = value
@@ -727,7 +727,7 @@ class StandardScaler(_ScalerProtocol):
         obj = cls(with_mean=with_mean, with_std=with_std)
         d = int(meta[0])
         kept = {"mean": with_mean or with_std, "var": with_std, "scale": with_std}
-        for name, present in kept.items():
+        for name, present in kept.items():  # glue: checks three saved member names
             if present != (name in arrays):
                 raise ValueError(f"mojolearn: {path!r} {name} does not match with_mean and with_std")
             setattr(obj, name + "_", _saved_statistic(arrays, name, d, path) if present else None)
