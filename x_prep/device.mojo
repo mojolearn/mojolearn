@@ -20,6 +20,12 @@ from x_prep.fastred import (
     ii_gram_fast_kernel,
 )
 from x_prep.dmi import mi_cd_device, mi_w_words, mi_scratch_words
+#: lane af-ptimpute (2026-10-03), FAST + Apple + define only (x_prep/fastpt.mojo): the import
+#: instantiates nothing; every launch below sits inside `comptime if PT_* / SI_*`
+from x_prep.fastpt import (
+    PT_COLBATCH, PT_SPEC, PT_FUSED_TRANSFORM, SI_ONEPASS, OP_PT_MAP, OP_PT_SMAP, OP_PT_SFOLD, OP_PT_APPLY,
+    pt_colbatch_fold, pt_spec_fold, cs_tile_stats, ptimpute_part_words, fused_tail_pair,
+)
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
 from core.device_store import DeviceStore
 from x_linear.fast_gram import fast_sym_gram_into, fg_part_words
@@ -248,7 +254,12 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 var en = Int(host_q.unsafe_load(s * STAGE_INTS + 3))
                 if eb > 0 and en > 0:
                     rre_scr = max(rre_scr, rre_words(en, eb))
+    # lane af-ptimpute: the row-tiled folds' per-(chunk, column) partials, sized over the program
+    var ptw = 1
+    comptime if PT_COLBATCH or PT_FUSED_TRANSFORM or SI_ONEPASS:
+        ptw = ptimpute_part_words(host_q, stages)
     var ctx = x_prep_ctx()
+    var dpt = ctx.enqueue_create_buffer[DType.float32](ptw)
     var dcg = ctx.enqueue_create_buffer[DType.float32](cov_words)
     var dre = ctx.enqueue_create_buffer[DType.float32](rre_scr)
     var dmw = ctx.enqueue_create_buffer[DType.uint64](mi_w if mi_sorted else 1)
@@ -357,6 +368,46 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                     ctx.enqueue_function[qda_dec_tile_kernel](df.unsafe_ptr(), qp, grid_dim=((nn + DT - 1) // DT) * kk,
                                                               block_dim=DT_TPB)
                     continue
+        comptime if PT_COLBATCH:
+            # the (pt_map, pt_fold) pair as one tiled evaluation: pt_map is skipped (nothing reads T or
+            # LG; the Python layer shrinks both to a word by `x_prep_ptimpute_flags`)
+            if op == OP_PT_MAP:
+                continue
+            if op == OP_PT_FOLD:
+                pt_colbatch_fold(ctx, FP(unsafe_from_address=Int(df.unsafe_ptr())),
+                                 FP(unsafe_from_address=Int(dpt.unsafe_ptr())), host_q + (s * STAGE_INTS + 2),
+                                 IP(unsafe_from_address=Int(dq.unsafe_ptr())) + (s * STAGE_INTS + 2))
+                continue
+        comptime if PT_SPEC:
+            # the speculated round's (pt_smap, pt_sfold) likewise; pt_spts and pt_sres stay units
+            if op == OP_PT_SMAP:
+                continue
+            if op == OP_PT_SFOLD:
+                pt_spec_fold(ctx, FP(unsafe_from_address=Int(df.unsafe_ptr())),
+                             FP(unsafe_from_address=Int(dpt.unsafe_ptr())), host_q + (s * STAGE_INTS + 2),
+                             IP(unsafe_from_address=Int(dq.unsafe_ptr())) + (s * STAGE_INTS + 2))
+                continue
+        comptime if PT_FUSED_TRANSFORM:
+            # the standardize tail: pt_apply whose output only feeds the next col_stats runs as the
+            # tiled stats of the transform (no TX block), and that col_stats stage is skipped
+            if op == OP_PT_APPLY and fused_tail_pair(host_q, s, stages):
+                var hq = host_q + (s * STAGE_INTS + 2)
+                var hq2 = host_q + ((s + 1) * STAGE_INTS + 2)
+                cs_tile_stats(ctx, FP(unsafe_from_address=Int(df.unsafe_ptr())),
+                              FP(unsafe_from_address=Int(dpt.unsafe_ptr())), Int(hq[0]), Int(hq[1]), Int(hq[2]),
+                              Int(hq[3]), Int(hq[4]), Int(hq2[3]))
+                continue
+            if op == OP_COL_STATS and s > 0 and fused_tail_pair(host_q, s - 1, stages):
+                continue
+        comptime if SI_ONEPASS:
+            # every col_stats as the one-pass tiled fold (the imputer's statistics, the power
+            # transformer's opening col_stats)
+            if op == OP_COL_STATS:
+                var hq = host_q + (s * STAGE_INTS + 2)
+                cs_tile_stats(ctx, FP(unsafe_from_address=Int(df.unsafe_ptr())),
+                              FP(unsafe_from_address=Int(dpt.unsafe_ptr())), Int(hq[0]), Int(hq[1]), Int(hq[2]),
+                              -1, 0, Int(hq[3]))
+                continue
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
             if cov_grid and op == OP_QDA_COV:
                 # q = [X, n, d, Y, MEAN, CNT, COV]: class k's covariance
@@ -435,6 +486,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     _ = dmu^
     _ = dcg^
     _ = dre^
+    _ = dpt^
     _ = dq^
     _ = df^
     _ = ctx^
