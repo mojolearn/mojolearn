@@ -1146,7 +1146,7 @@ comptime LG_EXACT_BATCH = (
 #: `-D MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF` is the A/B arm (back to 64); the
 #: old `-D MOJOLEARN_GBDT_LG_EXACT_BATCH128` stays harmless. FAST elsewhere:
 #: width 64 (arms 32|128). IDENTICAL (`LG_EXACT_ID`) keeps main's width 32
-#: (arms 16|64). Lossguide only; depthwise never reads the width.
+#: (arm 64). Lossguide only; depthwise never reads the width.
 comptime _LG_EXACT_BATCH128 = (
     is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH128"]()
     or (
@@ -1159,9 +1159,7 @@ comptime LG_EXACT_BATCH_WIDTH = (
         32 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]() else 64
     )
 ) if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else (
-    64 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH64"]() else (
-        16 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH16"]() else 32
-    )
+    64 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH64"]() else 32
 )
 
 #: FAST on Apple (trees-apple3): THE ESTIMATOR INHERITS THE SEARCHER'S
