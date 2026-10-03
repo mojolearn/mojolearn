@@ -860,12 +860,14 @@ comptime XTREES_FAST_SWITCHES = (
     (1 if _XT_NATIVE_SPLITS else 0)
     + (2 if _XT_ADA_SESSION else 0)
     + (4 if _XT_ADA_SESSION_SHARE else 0)
+    + (8 if agn_dev.KSHAP_FAST_BATCH else 0)
 )
 
 
 def fast_switches_binding() raises -> PythonObject:
     """`XTREES_FAST_SWITCHES`: bit 1 MOJOLEARN_TE_NATIVE_SPLITS, bit 2
-    MOJOLEARN_TE_ADA_SESSION, bit 4 MOJOLEARN_TE_ADA_SESSION_SHARE."""
+    MOJOLEARN_TE_ADA_SESSION, bit 4 MOJOLEARN_TE_ADA_SESSION_SHARE, bit 8
+    MOJOLEARN_KSHAP_FAST_BATCH (xtrees/agnostic_device.mojo)."""
     return PythonObject(XTREES_FAST_SWITCHES)
 
 
@@ -1154,6 +1156,38 @@ def kshap_solve_binding(yout: PythonObject, fx: PythonObject, fnull: PythonObjec
     return PythonObject(p[0])
 
 
+def kshap_means_binding(yout: PythonObject, ey: PythonObject, params: PythonObject) raises -> PythonObject:
+    """MOJOLEARN_KSHAP_FAST_BATCH: a chunk's linked background means, ey
+    float64 R x m x k; params = [R, nb, m, k, link]. Refused in a build
+    without the define (x_trees_fast_switches bit 8 is 0 there)."""
+    var p = _agn_ints(params, 5, "x_trees_kshap_means")
+    if p[0] < 0 or p[1] < 1 or p[2] < 0 or p[3] < 1:
+        raise Error("x_trees_kshap_means: bad counts")
+    comptime if agn_dev.KSHAP_FAST_BATCH:
+        agn_dev.kshap_means(Int(py=yout), Int(py=ey), p[0], p[1], p[3], p[2], p[4] != 0)
+    else:
+        raise Error("x_trees_kshap_means: built without MOJOLEARN_KSHAP_FAST_BATCH")
+    return PythonObject(p[0])
+
+
+def kshap_solve_ey_binding(ey: PythonObject, fx: PythonObject, fnull: PythonObject, tables: PythonObject,
+                           phi: PythonObject, params: PythonObject) raises -> PythonObject:
+    """MOJOLEARN_KSHAP_FAST_BATCH: `x_trees_kshap_solve` from the rows'
+    means (`x_trees_kshap_means`); params as x_trees_kshap_solve's (nb is
+    unused)."""
+    var p = _agn_ints(params, 13, "x_trees_kshap_solve_ey")
+    _kshap_check(p, "x_trees_kshap_solve_ey")
+    if p[11] < 1:
+        raise Error("x_trees_kshap_solve_ey: needs outputs")
+    comptime if agn_dev.KSHAP_FAST_BATCH:
+        agn_dev.kshap_solve_ey(Int(py=ey), Int(py=fx), Int(py=fnull), Int(py=tables[0]), Int(py=tables[1]),
+                               Int(py=tables[2]), Int(py=phi), p[0], p[2], p[11], p[4], p[3], p[5], p[7], p[6],
+                               p[9], p[8], UInt64(p[10]), p[12] != 0)
+    else:
+        raise Error("x_trees_kshap_solve_ey: built without MOJOLEARN_KSHAP_FAST_BATCH")
+    return PythonObject(p[0])
+
+
 def pshap_synth_binding(x: PythonObject, bg: PythonObject, syn: PythonObject, params: PythonObject) raises -> PythonObject:
     """PermutationExplainer's synthetic rows of a chunk: syn Float32
     (R np (2d + 1) nb) x d; params = [R, nb, d, np, row0, seed]."""
@@ -1246,5 +1280,7 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[normalized_weights_binding]("x_trees_normalized_weights")
     m.def_function[kshap_synth_binding]("x_trees_kshap_synth")
     m.def_function[kshap_solve_binding]("x_trees_kshap_solve")
+    m.def_function[kshap_means_binding]("x_trees_kshap_means")
+    m.def_function[kshap_solve_ey_binding]("x_trees_kshap_solve_ey")
     m.def_function[pshap_synth_binding]("x_trees_pshap_synth")
     m.def_function[pshap_values_binding]("x_trees_pshap_values")
