@@ -262,8 +262,8 @@ def _rows_per_chunk(n: Int, n_trees: Int, slots: Int, k: Int) -> Int:
     return max(1, min(r, UNITS_MAX // n_trees))
 
 
-def _tab_values(ctx: DeviceContext, fo: _Forest, cover: DeviceBuffer[DType.int32], dx: DeviceBuffer[DType.float32],
-                dphi: DeviceBuffer[DType.float32], n: Int, d: Int, n_trees: Int, k: Int, n_nodes: Int,
+def _tab_values(ctx: DeviceContext, mut fo: _Forest, mut cover: DeviceBuffer[DType.int32],
+                mut dx: DeviceBuffer[DType.float32], mut dphi: DeviceBuffer[DType.float32], n: Int, d: Int, n_trees: Int, k: Int, n_nodes: Int,
                 sl: Int) raises -> Bool:
     """`tree_shap_values` through the tabulated units (SHAP_TREE_TAB):
     rank, leaf path and pattern table once, then per row chunk the row

@@ -708,13 +708,14 @@ def _cindex_from_device_columns(
             ctx.enqueue_copy(dst_buf=d_meta, src_ptr=h_meta.unsafe_ptr())
             ctx.enqueue_copy(dst_buf=d_sub, src_ptr=h_sub.unsafe_ptr())
             comptime PACK_ROWS = PACK_BLOCK * PACK_DOCS
+            var pm = d_meta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
             ctx.enqueue_function[pack_cindex_words_kernel](
                 dev, Int32(n_rows),
                 d_ws.unsafe_ptr(),
-                d_meta.unsafe_ptr(),
-                d_meta.unsafe_ptr() + ne,
-                d_meta.unsafe_ptr() + 2 * ne,
-                d_meta.unsafe_ptr() + 3 * ne,
+                pm,
+                pm + ne,
+                pm + 2 * ne,
+                pm + 3 * ne,
                 d_sub.unsafe_ptr(),
                 d_slab.unsafe_ptr(),
                 cindex.unsafe_ptr(),
