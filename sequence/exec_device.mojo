@@ -23,6 +23,7 @@ from sequence.moe_reg import (
     moe_reg_blocks,
     moe_route_tail_kernel,
 )
+from sequence.moe_mma import MM_BNH, MM_BNO, MM_NT, MOE_MMA, moe_hidden_mma_kernel, moe_mma_blocks, moe_out_mma_kernel
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
@@ -593,6 +594,16 @@ struct DeviceExec(Exec):
                             a.p2, a.p7, a.p5, a.p4, Int32(npairs), Int32(a.i3),
                             grid_dim=((npairs + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
                         )
+                comptime if MOE_MMA:
+                    # lane apple-fast-gap-misc: simdgroup matrix products
+                    # (sequence/moe_mma.mojo), MOJOLEARN_MOE_FAST_MMA*
+                    if a.i6 == 1:
+                        self.ctx.enqueue_function[moe_hidden_mma_kernel](
+                            a.p0, a.p1, a.p4, a.p5, a.p3,
+                            Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3),
+                            grid_dim=(moe_mma_blocks(npairs, a.i3, a.i1, MM_BNH), 1, 1), block_dim=(MM_NT, 1, 1),
+                        )
+                        return
                 self.ctx.enqueue_function[moe_hidden_reg_kernel](
                     a.p0, a.p1, a.p4, a.p5, a.p3,
                     Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3),
@@ -602,11 +613,21 @@ struct DeviceExec(Exec):
         comptime if MOE_REGTILE and OP == OP_MOE_OUT:
             if a.i4 > 0:
                 var npairs = (n // a.i0) * a.i2
-                self.ctx.enqueue_function[moe_out_reg_kernel](
-                    a.p0, a.p1, a.p6, a.p7, a.p5,
-                    Int32(a.i0), Int32(a.i1), Int32(a.i3),
-                    grid_dim=(moe_reg_blocks(npairs, a.i3, a.i0), 1, 1), block_dim=(MOE_RT, 1, 1),
-                )
+                var mma_done = False
+                comptime if MOE_MMA:
+                    if a.i6 == 1:
+                        self.ctx.enqueue_function[moe_out_mma_kernel](
+                            a.p0, a.p1, a.p6, a.p7, a.p5,
+                            Int32(a.i0), Int32(a.i1), Int32(a.i3),
+                            grid_dim=(moe_mma_blocks(npairs, a.i3, a.i0, MM_BNO), 1, 1), block_dim=(MM_NT, 1, 1),
+                        )
+                        mma_done = True
+                if not mma_done:
+                    self.ctx.enqueue_function[moe_out_reg_kernel](
+                        a.p0, a.p1, a.p6, a.p7, a.p5,
+                        Int32(a.i0), Int32(a.i1), Int32(a.i3),
+                        grid_dim=(moe_reg_blocks(npairs, a.i3, a.i0), 1, 1), block_dim=(MOE_RT, 1, 1),
+                    )
                 self.ctx.enqueue_function[moe_combine_kernel](
                     a.p3, a.p5, a.p4, Int32(a.i0), Int32(a.i2), Int32(n),
                     grid_dim=((n + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),

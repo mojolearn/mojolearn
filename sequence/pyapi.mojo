@@ -1540,6 +1540,7 @@ def _moe_devgroup_rest[E: Exec](
     c.i2 = k
     c.i3 = En
     c.i4 = 1
+    c.i6 = 1  # grouped on the device (moe_mma's out product reads this)
     ex.launch[OP_MOE_OUT](c, T * D)
     ex.sync()
     ex.download(fptr(addrs[4], "y"), Y, T * D)
