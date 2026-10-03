@@ -2008,7 +2008,7 @@ def train(
             ctx, column_ptrs, qd_col_of, qd_n_float, n_rows, n_features,
             x_row_major, x_src,
         )
-        qd_cols = Optional(mat.unsafe_ptr())
+        qd_cols = Optional(mat.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
         qd_mat = Optional(mat^)
     else:
         if x_row_major:
