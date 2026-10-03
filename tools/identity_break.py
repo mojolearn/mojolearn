@@ -3153,6 +3153,115 @@ def _lowbit_operands(A):
     return np.ascontiguousarray(A[:LOWBIT_ROWS, :LOWBIT_COLS]).astype(np.float32)
 
 
+# The pure-Python spelling of the four low-bit seams, `checks/numerics.mojo`
+# written over Python ints, per element. It lived in `mojolearn.lowbit` as a
+# host fallback until pyglue-sweep (2026-10-03) made the conversion Mojo only;
+# the oracle stays here, in the harness, so `lowbit-conversions` still checks
+# the compiled seam against an independent construction and never NumPy.
+def _lbpy_f32(v):
+    import math
+    import struct
+    try:
+        return struct.unpack("<f", struct.pack("<f", v))[0]
+    except OverflowError:
+        return math.inf if v > 0 else -math.inf
+
+
+def _lbpy_ftz_bits(x):
+    if (x & 0x7F800000) == 0 and (x & 0x007FFFFF) != 0:
+        return x & 0x80000000
+    return x
+
+
+def _lbpy_ftz(v):
+    import math
+    if v != 0.0 and abs(v) < 1.1754943508222875e-38 and not math.isinf(v) and v == v:
+        return math.copysign(0.0, v)
+    return v
+
+
+def _lbpy_pow2_f32(e):
+    import math
+    if e > 127:
+        return math.inf
+    if e < -126:
+        return 0.0
+    return math.ldexp(1.0, e)
+
+
+def _lbpy_to_bf16(a):
+    """`f32_to_bf16_bits_rne` per element (DEVIATION 2901)."""
+    u = [int(v) for v in np.ascontiguousarray(a, dtype=np.float32).view(np.uint32).ravel()]
+    out = []
+    for b in u:
+        b = _lbpy_ftz_bits(b)
+        if (b & 0x7F800000) == 0x7F800000 and (b & 0x007FFFFF) != 0:
+            out.append(((b >> 16) | 0x0040) & 0xFFFF)
+        else:
+            out.append(((b + 0x7FFF + ((b >> 16) & 1)) >> 16) & 0xFFFF)
+    return np.array(out, dtype="<u2").reshape(np.shape(a))
+
+
+def _lbpy_from_bf16(bits):
+    """`bf16_bits_to_f32` per element (DEVIATION 2900): the shift, exact."""
+    h = [int(v) for v in np.ascontiguousarray(bits, dtype="<u2").ravel()]
+    return np.array([v << 16 for v in h], dtype="<u4").view("<f4").reshape(np.shape(bits))
+
+
+def _lbpy_quantize_int8(a):
+    """`quantize_rows_int8` (DEVIATIONS 2902, 2903, 2905)."""
+    import math
+    import struct
+    a = np.ascontiguousarray(a, dtype=np.float32)
+    rows, cols = a.shape
+    u = np.array([_lbpy_ftz_bits(int(v)) for v in a.view(np.uint32).ravel()], dtype="<u4")
+    xf = [float(v) for v in u.view("<f4")]
+    codes = [0] * (rows * cols)
+    exps = [0] * rows
+    for r in range(rows):
+        base = r * cols
+        best = 0.0
+        for c in range(cols):
+            v = abs(xf[base + c])
+            if v > best:
+                best = v
+        if best == 0.0 or best != best:
+            e = 0
+        else:
+            bits = struct.unpack("<I", struct.pack("<f", best))[0] if not math.isinf(best) else 0x7F800000
+            e = (((bits >> 23) & 0xFF) - 127) - 6
+        exps[r] = e
+        scale = _lbpy_pow2_f32(-e)
+        for c in range(cols):
+            x = xf[base + c]
+            if x != x:
+                continue
+            s = _lbpy_ftz(_lbpy_f32(x * scale))
+            if s != s:
+                continue
+            if math.isinf(s):
+                rr = 127.0 if s > 0 else -127.0
+            else:
+                rr = float(round(s))
+            rr = min(127.0, max(-127.0, rr))
+            codes[base + c] = int(rr)
+    return (np.array(codes, dtype="<i1").reshape(rows, cols), np.array(exps, dtype="<i4"))
+
+
+def _lbpy_dequantize_int8(codes, exponents):
+    """`dequant_int8_pinned` per element (DEVIATION 2904): `ftz(q * 2^e)`."""
+    q = np.ascontiguousarray(codes, dtype="<i1")
+    rows, cols = q.shape
+    e = [int(v) for v in np.ascontiguousarray(exponents, dtype="<i4")]
+    qf = [int(v) for v in q.ravel()]
+    out = []
+    for r in range(rows):
+        scale = _lbpy_pow2_f32(e[r])
+        for c in range(cols):
+            out.append(_lbpy_ftz(_lbpy_f32(float(qf[r * cols + c]) * scale)))
+    return np.array(out, dtype="<f4").reshape(rows, cols)
+
+
 @lane("lowbit-conversions")
 def _(ml, X, yc, yr, Xh=None):
     """THE LOW-BIT CONVERSION SEAMS THEMSELVES (`python/mojolearn/lowbit.py`,
@@ -3182,20 +3291,14 @@ def _(ml, X, yc, yr, Xh=None):
     format each packed object reports, the refusals `pack_one` owes, and
     the four AGREEMENTS BETWEEN SPELLINGS below.
 
-    THE THREE SPELLINGS, AND THE SILENT FALLBACK. `lowbit.py` materializes
-    through the linalg extension's kernels on a GPU column, through
-    `_mojolearn_linalg_host` on a CPU column, and through a pure-Python
-    integer construction when neither loads -- and `_conversion_backend()`
-    SWALLOWS the exception that chooses the third. So a column whose linalg
-    binding refused to load (a sabotage build outside the gate, a missing
-    .so) computes every conversion in Python and reads exactly like a
-    column that ran the compiled seam. `flags` therefore carries
-    `_conversion_backend() == "python"` as a number: it is 0 on a GPU column
-    and 0 on a CPU column with the binding, so it is vendor-independent, and
-    a column that fell back reads DIVERGENT against every other. The four
-    agreement flags hold the spelling that RAN to the pure-Python one, which
-    is the equality `python/mojolearn/tests/test_lowbit_weights.py` asserts
-    on one box and this cell asserts on every column.
+    THE TWO SPELLINGS, AND NO FALLBACK. `lowbit.py` converts through the
+    linalg extension's kernels on a GPU column and through
+    `_mojolearn_linalg_host` on a CPU column; with neither loaded it
+    refuses by name (pyglue-sweep 2026-10-03 removed the pure-Python host
+    fallback). The pure-Python integer construction now lives in this
+    harness as `_lbpy_*`, and the four agreement flags hold the spelling
+    that RAN to it. The old silent-fallback slot in `flags` is a constant 0
+    so the vector, and this cell's bits, did not move.
 
     SABOTAGE, AND THE ARM THAT DID NOT EXIST UNTIL THIS LANE.
     `-D MOJOLEARN_HOST_SABOTAGE=1` on the linalg family reaches
@@ -3225,7 +3328,6 @@ def _(ml, X, yc, yr, Xh=None):
     `gemm-transposed`, `cholesky` and the ten `*-bf16w`/`*-int8w` lanes) hash
     exactly what the pre-edit prebuilt binding hashed, base fixture, measured
     in the same directory."""
-    from mojolearn import lowbit as _lb
     a2 = _lowbit_operands(X)
     bf = ml.lowbit.pack_one(a2, "bfloat16")
     q8 = ml.lowbit.pack_one(a2, "int8")
@@ -3237,14 +3339,14 @@ def _(ml, X, yc, yr, Xh=None):
     w1 = np.asarray(ml.lowbit.widen_bf16(bf.bits.reshape((LOWBIT_ROWS * LOWBIT_COLS,))))
     w3 = np.asarray(ml.lowbit.widen_bf16(bf.bits.reshape((4, LOWBIT_ROWS // 4, LOWBIT_COLS))))
     lin = np.asarray(ml.linalg.from_bf16(bf.bits))
-    # The pure-Python spelling of the same four seams, from the module's own
-    # private functions; it is `checks/numerics.mojo` written over Python
+    # The pure-Python spelling of the same four seams, the harness's own
+    # `_lbpy_*` oracle above; it is `checks/numerics.mojo` written over Python
     # ints and never a NumPy vectorization, so agreeing with it is a claim
     # about the compiled seam and not about NumPy.
-    py_bits = np.asarray(_lb._to_bf16_py(a2))
-    py_wide = np.asarray(_lb._from_bf16_py(bits))
-    py_codes, py_exps = _lb._quantize_int8_py(a2)
-    py_deq = np.asarray(_lb._dequantize_int8_py(q8.codes, q8.exponents))
+    py_bits = _lbpy_to_bf16(a2)
+    py_wide = _lbpy_from_bf16(bits)
+    py_codes, py_exps = _lbpy_quantize_int8(a2)
+    py_deq = _lbpy_dequantize_int8(np.asarray(q8.codes), np.asarray(q8.exponents))
 
     def _refuses(fn, text):
         try:
@@ -3277,8 +3379,11 @@ def _(ml, X, yc, yr, Xh=None):
         np.asarray(py_codes).tobytes() == codes.tobytes(),
         np.asarray(py_exps).tobytes() == exps.tobytes(),
         py_deq.tobytes() == mq8.tobytes(),
-        # THE SILENT-FALLBACK TRIPWIRE: 0 on every column that has a binding
-        _lb._conversion_backend() == "python",
+        # THE SILENT-FALLBACK TRIPWIRE: 0 on every column. The host fallback
+        # it watched for no longer exists (pyglue-sweep 2026-10-03: the
+        # conversion is Mojo only), so the slot is a constant 0 that keeps
+        # the flags vector, and the cell's bits, unchanged.
+        False,
     ], dtype=np.int64)
     return _fit(dict(bf16_bits=_h(bits), int8=_h(codes, exps),
                      materialized=_h(mbf, mq8), widened=_h(w1, w3),
