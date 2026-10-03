@@ -1,4 +1,4 @@
-pos=475 lines=     740
+pos=487 lines=     746
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -580,3 +580,18 @@ pos=475 lines=     740
 682:FBUILD lane/apple-fast-nb@9f2b71471 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=1 
 683:CMD apple-fast-nb@9f2b71471 nb-cat-atomic-taxi rc=1 ~/mq/wt/lane_apple-fast-nb/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
 684:CMD apple-fast-nb@9f2b71471 nb-lda-fused-zones rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1509.4 all=[1509] quality=['{"perplexity":'] defines='-D MOJOLEARN_LDA_FUSED_SS=1'
+685:FBUILD lane/apple-fast-prep3@ec65873e3 core=0 ibase=0 estimators=1 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=1 
+686:CMD apple-fast-prep3@ec65873e3 prep3-le-istella rc=1 ~/mq/wt/lane_apple-fast-prep3/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+687:CMD apple-fast-prep3@ec65873e3 prep3-lb-taxi rc=1 ~/mq/wt/lane_apple-fast-prep3/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+688:CMD apple-fast-prep3@ec65873e3 prep3-mlb-taxi rc=1 ~/mq/wt/lane_apple-fast-prep3/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+689:CMD apple-fast-prep3@ec65873e3 prep3-maxabs-istella rc=1 ~/mq/wt/lane_apple-fast-prep3/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+690:CMD apple-fast-prep3@ec65873e3 prep3-spline-istella rc=1 ~/mq/wt/lane_apple-fast-prep3/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+691:FBUILD lane/apple-fast-robust@cfdb95e48 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=1 x_linear=0 x_neighbors=0 x_prep=0 
+692:CMD apple-fast-robust@cfdb95e48 robust-huber-dev-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=225.3 all=[225] quality=['{"finite":'] defines='-D MOJOLEARN_HUBER_DEVICE_LBFGS=1'
+693:FBUILD lane/apple-fast-regress@c97c2b3a0 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 x_sequence=0 
+694:CMD apple-fast-regress@c97c2b3a0 regress-layernorm-pipe rc=0 AFC-DEF-SUMMARY arm=B n=3 median_ms=52.2 all=[52, 52, 52] quality=['{}'] defines='-D MOJOLEARN_SEQ_FAST_PIPE_UP -D MOJOLEARN_SEQ_FAST_PIPE_DOWN'
+695:CMD apple-fast-regress@c97c2b3a0 regress-adafactor-pipe rc=0 AFC-DEF-SUMMARY arm=B n=3 median_ms=393.4 all=[393, 393, 395] quality=['{}'] defines='-D MOJOLEARN_SEQ_FAST_PIPE_UP -D MOJOLEARN_SEQ_FAST_PIPE_DOWN'
+696:CMD apple-fast-regress@c97c2b3a0 regress-adafactor-down rc=0 AFC-DEF-SUMMARY arm=B n=3 median_ms=390.0 all=[390, 390, 389] quality=['{}'] defines='-D MOJOLEARN_SEQ_FAST_PIPE_DOWN'
+697:CMD apple-fast-regress@c97c2b3a0 regress-adagrad-pipe rc=0 AFC-DEF-SUMMARY arm=B n=3 median_ms=199.1 all=[199, 199, 199] quality=['{}'] defines='-D MOJOLEARN_SEQ_FAST_PIPE_UP -D MOJOLEARN_SEQ_FAST_PIPE_DOWN'
+698:CMD apple-fast-regress@c97c2b3a0 regress-dotm-fmaoff rc=0 AFC-DEF-SUMMARY arm=B n=3 median_ms=539.7 all=[540, 539, 540] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_SEQ_FAST_FMA_OFF'
+699:CMD apple-fast-regress@c97c2b3a0 regress-dotm-snap rc=0 AFC-DEF-SUMMARY arm=B n=3 median_ms=561.9 all=[562, 562, 562] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_SEQ_FAST_THETA_SNAP'

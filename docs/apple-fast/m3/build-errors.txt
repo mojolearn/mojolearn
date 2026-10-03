@@ -1,3 +1,18 @@
+== lane_apple-fast-robust-fbuild-x_decomp.log (14:35Z)
+./x_decomp/mcd_fast.mojo:536:49: error: expected argument name
+def mf_any_kernel(active: I32Ptr, nc: Int32, out: I32Ptr):
+                                                ^
+Imported from ~/mq/wt/lane_apple-fast-robust/bindings/_mojolearn_x_decomp.mojo:16:
+== lane_apple-fast-prep3-fbuild-x_prep.log (14:34Z)
+./x_prep/fastnb_csr.mojo:229:29: error: expected argument name
+    sizes: PythonObject, out: PythonObject,
+                            ^
+~/mq/wt/lane_apple-fast-prep3/bindings/_mojolearn_x_prep.mojo:35:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'x'
+== lane_apple-fast-prep3-fbuild-estimators.log (14:33Z)
+./glm/impl/ridge_multi.mojo:66:8: error: expected argument name
+    out: MutPointer[Float32, MutAnyOrigin],
+       ^
+Imported from ~/mq/wt/lane_apple-fast-prep3/bindings/_mojolearn_estimators.mojo:32:
 == lane_apple-fast-nb-fbuild-x_prep.log (14:30Z)
 ./x_prep/fastnb_csr.mojo:229:29: error: expected argument name
     sizes: PythonObject, out: PythonObject,
@@ -23,23 +38,3 @@ Imported from ~/mq/wt/lane_apple-fast-decomp-linalg/bindings/_mojolearn_x_decomp
 """CHOL_FAST_APPLE: the panel solve `L21 = A21 L11^{-T}` as `L11^{-1}`
 ^
 ~/mq/wt/lane_apple-fast-decomp-linalg/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
-== lane_apple-fast-prep2-fbuild-x_prep.log (12:08Z)
-./x_prep/device.mojo:231:68: error: invalid call to 'prep2_fast_stage': value passed to 'qp' cannot be converted from 'Pointer[Int32, origin_of(dq)]' to 'Pointer[Int32, MutAnyOrigin]'
-            if prep2_fast_stage(ctx, df, dw, host_q, s, op, total, qp, p2):
-               ~~~~~~~~~~~~~~~~                                    ^~
-Imported from ~/mq/wt/lane_apple-fast-prep2/bindings/_mojolearn_x_prep.mojo:12:
-== lane_apple-fast-decomp-sparse-fbuild-x_neighbors.log (11:59Z)
-~/mq/wt/lane_apple-fast-decomp-sparse/./x_decomp/device.mojo:3127:38: error: use of unknown declaration 'geqrf_scale_kernel'
-                ctx.enqueue_function[geqrf_scale_kernel](
-                                     ^~~~~~~~~~~~~~~~~~
-Imported from ~/mq/wt/lane_apple-fast-decomp-sparse/bindings/_mojolearn_x_neighbors.mojo:11:
-== lane_apple-fast-decomp-sparse-fbuild-x_decomp.log (11:58Z)
-./x_decomp/fast_gemm.mojo:46:30: error: expected argument name
-    a: F32Ptr, b: F32Ptr, out: F32Ptr, m: Int32, k: Int32, n: Int32, ta: Int32, tb: Int32, nb: Int32
-                             ^
-Imported from ~/mq/wt/lane_apple-fast-decomp-sparse/bindings/_mojolearn_x_decomp.mojo:16:
-== lane_apple-fast-decomp-sparse-fbuild-gp.log (11:58Z)
-~/mq/wt/lane_apple-fast-decomp-sparse/./cholesky/checks/potrf.mojo:422:1: error: expressions must not appear at file scope; move this into a function body
-"""CHOL_FAST_APPLE: the panel solve `L21 = A21 L11^{-T}` as `L11^{-1}`
-^
-~/mq/wt/lane_apple-fast-decomp-sparse/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
