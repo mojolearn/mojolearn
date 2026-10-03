@@ -17,6 +17,19 @@ from std.python.bindings import PythonModuleBuilder
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
+from checks.numerics import NUMERIC_FAST as _OLS_FAST
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+
+#: Lane apple-fast-olsne (2026-10-03): LinearRegression.fit takes the
+#: equilibrated normal equations (DEVIATION 2620) instead of the blocked TSQR
+#: under FAST on Apple. A/B define for now; IDENTICAL, DETERMINISTIC and the
+#: other vendors keep the TSQR. Read by Python through `ols_normal_eq_default`.
+comptime OLS_FAST_NORMAL_EQ = (
+    GLOBAL_NUMERIC_MODE == _OLS_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_FAST_OLS_NORMAL_EQ"]()
+)
 
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
@@ -48,6 +61,7 @@ from decomposition.estimator import (
 )
 from glm.estimator import (
     ols_fit_host,
+    ols_fit_resident_host,
     ols_predict_host,
     qn_decision_function_host,
     qn_fit_host,
@@ -515,6 +529,43 @@ def ols_fit_binding(
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         ols_fit_host(ctx, xp, yp, wp, nr, nf)
+        ctx.synchronize()
+    return PythonObject(0)
+
+
+def ols_normal_eq_default_binding() raises -> PythonObject:
+    """True when this build routes LinearRegression.fit to the normal
+    equations by default (`OLS_FAST_NORMAL_EQ`, lane apple-fast-olsne)."""
+    return PythonObject(OLS_FAST_NORMAL_EQ)
+
+
+def ols_fit_resident_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    coef_addr: PythonObject,
+    mu_addr: PythonObject,
+    ymean_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Lane apple-fast-olsne: the unweighted normal-equations fit with X
+    and y uploaded once (glm/estimator.mojo `ols_fit_resident_host`).
+    params: n_rows, n_features, center (0/1). With center, mu (float32
+    [n_features]) and ymean (float64 [1]) are written. Returns 0."""
+    if len(params) != 3:
+        raise Error("ols_fit_resident: params must contain n_rows, n_features, center")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var yp = _f32_ptr(Int(py=y_addr))
+    var wp = _f32_ptr(Int(py=coef_addr))
+    var mp = _f32_ptr(Int(py=mu_addr))
+    var ymp = _f64_ptr(Int(py=ymean_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var center = Int(py=params[2]) != 0
+    if nr <= 0 or nf <= 0:
+        raise Error("ols_fit_resident: n_rows and n_features must be positive")
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        ols_fit_resident_host(ctx, xp, yp, wp, mp, ymp, nr, nf, center)
         ctx.synchronize()
     return PythonObject(0)
 
@@ -1090,6 +1141,8 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[tsvd_explained_binding]("tsvd_explained")
         m.def_function[inverse_transform_binding]("inverse_transform")
         m.def_function[ols_fit_binding]("ols_fit")
+        m.def_function[ols_fit_resident_binding]("ols_fit_resident")
+        m.def_function[ols_normal_eq_default_binding]("ols_normal_eq_default")
         m.def_function[lm_col_sums_binding]("lm_col_sums")
         m.def_function[lm_center_binding]("lm_center")
         m.def_function[lm_scale_rows_binding]("lm_scale_rows")
