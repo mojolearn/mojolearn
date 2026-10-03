@@ -283,7 +283,7 @@ def label_map_kernel(
 
 def _negate(
     ctx: DeviceContext,
-    tree: DeviceTree,
+    mut tree: DeviceTree,
     mut fr: DeviceBuffer[DType.int32],
     mut isc: DeviceBuffer[DType.int32],
 ) raises:
@@ -330,7 +330,7 @@ def count_selected(
 
 def excess_of_mass(
     ctx: DeviceContext,
-    tree: DeviceTree,
+    mut tree: DeviceTree,
     mut stability: DeviceBuffer[DType.float32],
     mut is_cluster: DeviceBuffer[DType.int32],
     max_cluster_size: Int,
@@ -367,7 +367,7 @@ def excess_of_mass(
 
 def cluster_epsilon_search(
     ctx: DeviceContext,
-    tree: DeviceTree,
+    mut tree: DeviceTree,
     mut is_cluster: DeviceBuffer[DType.int32],
     cluster_selection_epsilon: Float32,
     allow_single_cluster: Bool,
@@ -412,7 +412,7 @@ def cluster_epsilon_search(
 
 def select_clusters(
     ctx: DeviceContext,
-    tree: DeviceTree,
+    mut tree: DeviceTree,
     mut tree_stabilities: DeviceBuffer[DType.float32],
     mut is_cluster: DeviceBuffer[DType.int32],
     mut label_map: DeviceBuffer[DType.int32],

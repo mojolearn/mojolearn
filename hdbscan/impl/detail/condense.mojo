@@ -208,7 +208,7 @@ def build_condensed_hierarchy(
 
 
 def download_condensed(
-    ctx: DeviceContext, tree: DeviceTree
+    ctx: DeviceContext, mut tree: DeviceTree
 ) raises -> CondensedHierarchy:
     """The device tree as host lists, once, for the fit's outputs."""
     return CondensedHierarchy(

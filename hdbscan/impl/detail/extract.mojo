@@ -266,7 +266,7 @@ def label_points_kernel(
 
 def do_labelling_device(
     ctx: DeviceContext,
-    tree: DeviceTree,
+    mut tree: DeviceTree,
     mut is_cluster: DeviceBuffer[DType.int32],
     n_selected: Int,
     allow_single_cluster: Bool,
@@ -348,7 +348,7 @@ def do_labelling_device(
 def remap_labels_kernel(
     raw: MutPointer[Int32, MutAnyOrigin],
     label_map: MutPointer[Int32, MutAnyOrigin],
-    out: MutPointer[Int32, MutAnyOrigin],
+    dst: MutPointer[Int32, MutAnyOrigin],
     n_out: MutPointer[Int32, MutAnyOrigin],
     n_leaves: Int32,
 ):
@@ -361,7 +361,7 @@ def remap_labels_kernel(
     var v = Int32(-1)
     if l != -1:
         v = label_map[l]
-    out[i] = v
+    dst[i] = v
     if v == Int32(-1):
         _ = Atomic.fetch_add(n_out, Int32(1))
 
@@ -387,7 +387,7 @@ def probabilities_kernel(
     lambdas: MutPointer[Float32, MutAnyOrigin],
     raw: MutPointer[Int32, MutAnyOrigin],
     dkey: MutPointer[Int32, MutAnyOrigin],
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
     n_leaves: Int32,
     n_edges: Int32,
 ):
@@ -407,15 +407,15 @@ def probabilities_kernel(
         death = weight_order_unkey(k)
     var lam = lambdas[e]
     if death == Float32(0.0) or isnan(lam) or isinf(lam):
-        out[child] = Float32(1.0)
+        dst[child] = Float32(1.0)
     else:
         var lo = lam if lam < death else death
-        out[child] = ftz(identical_div(lo, death))
+        dst[child] = ftz(identical_div(lo, death))
 
 
 def extract_clusters(
     ctx: DeviceContext,
-    tree: DeviceTree,
+    mut tree: DeviceTree,
     cluster_selection_method: Int,
     allow_single_cluster: Bool,
     max_cluster_size_in: Int,

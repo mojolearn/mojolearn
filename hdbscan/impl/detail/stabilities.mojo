@@ -352,7 +352,7 @@ def stability_fold_host(
 
 def compute_stabilities(
     ctx: DeviceContext,
-    tree: DeviceTree,
+    mut tree: DeviceTree,
     mut stabilities: DeviceBuffer[DType.float32],
     sabotage: Int32 = HDB_SAB_NONE,
 ) raises:
@@ -455,7 +455,7 @@ def stability_score_kernel(
 
 def get_stability_scores_device(
     ctx: DeviceContext,
-    tree: DeviceTree,
+    mut tree: DeviceTree,
     mut labels: DeviceBuffer[DType.int32],
     mut stability: DeviceBuffer[DType.float32],
     mut label_map: DeviceBuffer[DType.int32],

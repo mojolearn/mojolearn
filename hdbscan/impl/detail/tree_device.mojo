@@ -611,11 +611,11 @@ def cd_cluster_init_kernel(
         wdep[q] = 1
 
 
-def cd_max_kernel(vals: I32P, out: I32P, n: Int32):
+def cd_max_kernel(vals: I32P, res: I32P, n: Int32):
     var q = _gid()
     if q >= Int(n):
         return
-    _ = Atomic.max(out, vals[q])
+    _ = Atomic.max(res, vals[q])
 
 
 def _refuse_nonfinite_device(
