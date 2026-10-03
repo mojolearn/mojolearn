@@ -15,12 +15,8 @@ from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kerne
 from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn, op_kernel_tiled
 from x_neighbors.ocsvm_dev import op_ocsvm
 from x_neighbors.graph_dev import op_louvain
-from x_neighbors.kapprox_dev import op_kapprox_check
-from x_neighbors.kapprox_dev import op_kapprox_achi2
-from x_neighbors.kapprox_dev import op_kapprox_skew_fit
-from x_neighbors.kapprox_dev import op_kapprox_skew_transform
 from x_neighbors.kapprox_dev import op_kapprox_sparse_rp
-from x_neighbors.kapprox_dev import kapprox_fast_binding, kpca_resident_binding, sparse_rp_device_binding
+from x_neighbors.kapprox_dev import kpca_resident_binding, sparse_rp_device_binding
 from x_neighbors.iter_device import lp_fast_resident_binding
 from x_neighbors.sort_items import purity_flags_binding
 
@@ -1129,57 +1125,6 @@ def louvain_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises
     return PythonObject(None)
 
 
-def kapprox_check_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_x = _a(a_, 0)
-    var v_flag = _a(a_, 1)
-    var v_n = _n(i_, 0)
-    var v_d = _n(i_, 1)
-    var v_strict = _n(i_, 2)
-    var v_floor = _f(f_, 0)
-    with GILReleased(Python()):
-        op_kapprox_check(v_x, v_flag, v_n, v_d, v_strict, v_floor)
-    return PythonObject(None)
-
-
-def kapprox_achi2_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_x = _a(a_, 0)
-    var v_res = _a(a_, 1)
-    var v_flag = _a(a_, 2)
-    var v_n = _n(i_, 0)
-    var v_d = _n(i_, 1)
-    var v_steps = _n(i_, 2)
-    var v_interval = _f(f_, 0)
-    with GILReleased(Python()):
-        op_kapprox_achi2(v_x, v_res, v_flag, v_n, v_d, v_steps, v_interval)
-    return PythonObject(None)
-
-
-def kapprox_skew_fit_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_w = _a(a_, 0)
-    var v_off = _a(a_, 1)
-    var v_d = _n(i_, 0)
-    var v_nc = _n(i_, 1)
-    var v_seed = _n(i_, 2)
-    with GILReleased(Python()):
-        op_kapprox_skew_fit(v_w, v_off, v_d, v_nc, v_seed)
-    return PythonObject(None)
-
-
-def kapprox_skew_transform_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_x = _a(a_, 0)
-    var v_w = _a(a_, 1)
-    var v_off = _a(a_, 2)
-    var v_res = _a(a_, 3)
-    var v_flag = _a(a_, 4)
-    var v_n = _n(i_, 0)
-    var v_d = _n(i_, 1)
-    var v_nc = _n(i_, 2)
-    var v_skew = _f(f_, 0)
-    with GILReleased(Python()):
-        op_kapprox_skew_transform(v_x, v_w, v_off, v_res, v_flag, v_n, v_d, v_nc, v_skew)
-    return PythonObject(None)
-
-
 def kapprox_sparse_rp_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
     var v_res = _a(a_, 0)
     var v_kc = _n(i_, 0)
@@ -1276,10 +1221,6 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[kernel_tiled_binding]("xn_kernel_tiled")
     m.def_function[ocsvm_binding]("xn_ocsvm")
     m.def_function[louvain_binding]("xn_louvain")
-    m.def_function[kapprox_check_binding]("xn_kapprox_check")
-    m.def_function[kapprox_achi2_binding]("xn_kapprox_achi2")
-    m.def_function[kapprox_skew_fit_binding]("xn_kapprox_skew_fit")
-    m.def_function[kapprox_skew_transform_binding]("xn_kapprox_skew_transform")
     m.def_function[kapprox_sparse_rp_binding]("xn_kapprox_sparse_rp")
     m.def_function[eigh_binding]("xn_eigh")
     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
@@ -1296,7 +1237,6 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_neighbors")
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
-        m.def_function[kapprox_fast_binding]("x_neighbors_kapprox_fast")
         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
         m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
