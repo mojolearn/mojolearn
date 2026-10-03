@@ -35,12 +35,12 @@ build_one() {  # $1 binding $2 defines -> $outroot/.cache/<key>.so
   cp "$so" "$dst"
 }
 # builds sorted by binding so one binding's arms compile back to back
-while IFS=$'\t' read -r tag tool bind dA dB outdir; do
+while IFS=$'\037' read -r tag tool bind dA dB outdir; do
   [ "$tag" = tag ] && continue
   [ "$tool" = afcenv ] && continue
-  printf '%s\t%s\t%s\t%s\n' "$bind" "$dA" "$dB" "$tag"
-done < "$plan" | sort > "$outroot/.cache/rows.tsv"
-while IFS=$'\t' read -r bind dA dB tag; do
+  printf '%s\037%s\037%s\037%s\n' "$bind" "$dA" "$dB" "$tag"
+done < <(tr '\t' '\037' < "$plan") | sort > "$outroot/.cache/rows.tsv"
+while IFS=$'\037' read -r bind dA dB tag; do  # \037 is not IFS whitespace: empty define fields survive
   okA=1; okB=1
   build_one "$bind" "$dA" || okA=0
   build_one "$bind" "$dB" || okB=0
