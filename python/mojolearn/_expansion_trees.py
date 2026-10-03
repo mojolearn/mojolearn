@@ -3081,60 +3081,20 @@ class KernelExplainer(_AgnosticExplainer):
             self._bind().x_trees_logit(addr(a, name="linked"), [len(a)])
         return a
 
-    @staticmethod
-    def _binom(n, r):
-        from ._portable_math import comb
-        return comb(n, r)
-
     def _schedule(self, M, nsamples):
-        """shap `KernelExplainer.explain`'s coalition schedule as the device
-        builds it (xtrees/agnostic.mojo kshap_mask_unit): (m, nfixed, nfull,
-        npaired, size_off, size_w, cdf, wrand). The O(M) scalar bookkeeping
-        over subset SIZES stays here; every mask is made on the device."""
-        num_subset_sizes = (M - 1 + 1) // 2 if M > 1 else 0
-        num_paired = (M - 1) // 2
-        wv = [(M - 1.0) / (i * (M - i)) for i in range(1, num_subset_sizes + 1)]
-        for i in range(num_paired):
-            wv[i] *= 2
-        tot = math.fsum(wv)
-        wv = [w / tot for w in wv]
-        num_full = 0
-        left = nsamples
-        rem = list(wv)
-        size_off, size_w = [0], []
-        for size in range(1, num_subset_sizes + 1):
-            nsub = self._binom(M, size) * (2 if size <= num_paired else 1)
-            if left * rem[size - 1] / nsub >= 1.0 - 1e-8:
-                num_full += 1
-                left -= nsub
-                if rem[size - 1] < 1.0:
-                    r0 = rem[size - 1]
-                    rem = [v / (1 - r0) for v in rem]
-                w = wv[size - 1] / self._binom(M, size)
-                if size <= num_paired:
-                    w /= 2.0
-                size_off.append(size_off[-1] + nsub)
-                size_w.append(w)
-            else:
-                break
-        nfixed = size_off[-1]
-        samples_left = nsamples - nfixed
-        cdf, wrand = [], 0.0
-        if num_full != num_subset_sizes and samples_left > 0:
-            rw = list(wv)
-            for i in range(num_paired):
-                rw[i] /= 2
-            rw = rw[num_full:]
-            t = math.fsum(rw)
-            rw = [v / t for v in rw]
-            run = 0.0
-            for v in rw:
-                run += v
-                cdf.append(run)
-            wrand = 1.0 * (math.fsum(wv[num_full:]) / samples_left)
-        else:
-            samples_left = 0
-        return nfixed + samples_left, nfixed, num_full, num_paired, size_off, size_w, cdf, wrand
+        """shap `KernelExplainer.explain`'s coalition schedule, built in Mojo
+        (`x_trees_kshap_schedule`, xtrees/api.mojo; lane cgr4-py-compute):
+        (m, nfixed, nfull, npaired, tables, L, wrand_bits) with tables =
+        (size_off Int64, size_w float64, cdf float64). Every mask is made on
+        the device from these (xtrees/agnostic.mojo kshap_mask_unit)."""
+        h = max(1, M // 2)
+        tables = (zeros((h + 1,), "<i8"), zeros((h,), "<f8"), zeros((h,), "<f8"))
+        out = zeros((6,), "<i8")
+        if M > 1:
+            self._bind().x_trees_kshap_schedule(tuple(addr(t, name="schedule") for t in tables),
+                                                addr(out, name="schedule"), [M, nsamples])
+        m, nfixed, nfull, npaired, L, wbits = out.tolist()
+        return m, nfixed, nfull, npaired, tables, L, wbits
 
     def shap_values(self, X, nsamples="auto", l1_reg="auto"):
         if l1_reg not in ("auto", False, 0):
@@ -3149,10 +3109,7 @@ class KernelExplainer(_AgnosticExplainer):
         k = self.n_outputs_
         b = self._bind()
         nb = self._bg.shape[0]
-        m, nfixed, nfull, npaired, size_off, size_w, cdf, wrand = self._schedule(M, max(ns, 0)) if M > 1 \
-            else (0, 0, 0, 0, [0], [], [], 0.0)
-        tables = (Array.from_list(size_off, "<i8"), Array.from_list(size_w or [0.0], "<f8"),
-                  Array.from_list(cdf or [0.0], "<f8"))
+        m, nfixed, nfull, npaired, tables, L, wbits = self._schedule(M, max(ns, 0))
         taddr = tuple(addr_ro(t, name="schedule") for t in tables)
         phi = zeros((max(n * d * k, 1),), "<f8")
         if n == 0:
@@ -3163,7 +3120,7 @@ class KernelExplainer(_AgnosticExplainer):
         R = self._chunk(m * nb * d, n)
         for r0 in range(0, n, R):
             rows = min(R, n - r0)
-            params = [rows, nb, d, nfixed, m, nfull, len(cdf), npaired, r0, seed, _f64_word(wrand)]
+            params = [rows, nb, d, nfixed, m, nfull, L, npaired, r0, seed, wbits]
             out = None
             if m > 0:
                 syn = empty((rows * m * nb * d,), "<f4")

@@ -13,6 +13,7 @@ from checks.numerics import identical_log64, GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.python import Python
+from std.memory import bitcast
 from xtrees.folds_device import device_folds
 from xtrees import agnostic_device as agn_dev
 from xtrees import agnostic_host as agn_host
@@ -723,6 +724,96 @@ def _kshap_check(p: List[Int], who: String) raises:
         raise Error(who + ": sampled coalitions need a size distribution")
 
 
+def _kshap_binom(M: Int, r: Int) -> Float64:
+    """C(M, r) in float64 by the multiplicative recurrence; every step is an
+    exact integer while C(M, r) * M < 2^53, which holds for every size the
+    schedule enumerates in full (nsub <= nsamples)."""
+    var c = Float64(1)
+    for i in range(r):
+        c = c * Float64(M - i) / Float64(i + 1)
+    return c
+
+
+def kshap_schedule_binding(tables: PythonObject, out: PythonObject, params: PythonObject) raises -> PythonObject:
+    """KernelExplainer's coalition schedule (shap `KernelExplainer.explain`
+    over subset SIZES; lane cgr4-py-compute moved it out of Python): params
+    = [M, nsamples] with M > 1; tables = (size_off Int64 M // 2 + 1, size_w
+    float64 max(1, M // 2), cdf float64 max(1, M // 2)); out = Int64 6:
+    [m, nfixed, nfull, npaired, L, wrand_bits]. The sums run in index
+    order (one fixed fold, the same on every column)."""
+    _need(params, 2, "x_trees_kshap_schedule")
+    var M = _i(params, 0)
+    var nsamples = _count(_i(params, 1), "x_trees_kshap_schedule")
+    if M < 2:
+        raise Error("x_trees_kshap_schedule: needs M > 1")
+    var off = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=tables[0]))
+    var sw = f64_ptr(Int(py=tables[1]))
+    var cdf = f64_ptr(Int(py=tables[2]))
+    var res = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=out))
+    var nss = M // 2
+    var npaired = (M - 1) // 2
+    var wv = List[Float64](length=nss, fill=0.0)
+    var tot = Float64(0)
+    for i in range(1, nss + 1):
+        var w = Float64(M - 1) / Float64(i * (M - i))
+        if i - 1 < npaired:
+            w *= 2.0
+        wv[i - 1] = w
+        tot += w
+    for i in range(nss):
+        wv[i] = wv[i] / tot
+    var rem = wv.copy()
+    var nfull = 0
+    var left = nsamples
+    var acc = 0
+    off[0] = 0
+    for size in range(1, nss + 1):
+        var b = _kshap_binom(M, size)
+        var nsub = b * (2.0 if size <= npaired else 1.0)
+        if Float64(left) * rem[size - 1] / nsub >= 1.0 - 1e-8:
+            var nsub_i = Int(nsub)
+            nfull += 1
+            left -= nsub_i
+            if rem[size - 1] < 1.0:
+                var r0 = rem[size - 1]
+                for j in range(nss):
+                    rem[j] = rem[j] / (1.0 - r0)
+            var w = wv[size - 1] / b
+            if size <= npaired:
+                w /= 2.0
+            acc += nsub_i
+            off[size] = Int64(acc)
+            sw[size - 1] = w
+        else:
+            break
+    var nfixed = acc
+    var samples_left = nsamples - nfixed
+    var L = 0
+    var wrand = Float64(0)
+    if nfull != nss and samples_left > 0:
+        var t = Float64(0)
+        for i in range(nfull, nss):
+            t += wv[i] / 2.0 if i < npaired else wv[i]
+        var run = Float64(0)
+        for i in range(nfull, nss):
+            run += (wv[i] / 2.0 if i < npaired else wv[i]) / t
+            cdf[L] = run
+            L += 1
+        var tail = Float64(0)
+        for i in range(nfull, nss):
+            tail += wv[i]
+        wrand = tail / Float64(samples_left)
+    else:
+        samples_left = 0
+    res[0] = Int64(nfixed + samples_left)
+    res[1] = Int64(nfixed)
+    res[2] = Int64(nfull)
+    res[3] = Int64(npaired)
+    res[4] = Int64(L)
+    res[5] = bitcast[DType.int64](wrand)
+    return PythonObject(nfull)
+
+
 def kshap_synth_binding(x: PythonObject, bg: PythonObject, tables: PythonObject, syn: PythonObject,
                         params: PythonObject) raises -> PythonObject:
     """KernelExplainer's synthetic rows of a chunk (lane cgr2-metrics-shap):
@@ -837,6 +928,7 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[fast_switches_binding]("x_trees_fast_switches")
     m.def_function[device_folds_binding]("x_trees_device_folds")
     m.def_function[block_mean_binding]("x_trees_block_mean")
+    m.def_function[kshap_schedule_binding]("x_trees_kshap_schedule")
     m.def_function[kshap_synth_binding]("x_trees_kshap_synth")
     m.def_function[kshap_solve_binding]("x_trees_kshap_solve")
     m.def_function[pshap_synth_binding]("x_trees_pshap_synth")
