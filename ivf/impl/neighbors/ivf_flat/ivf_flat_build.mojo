@@ -76,12 +76,15 @@ from core.identity_trace import IdentityTrace
 from core.row_norms import NORM_TPB, row_norm_kernel
 from ivf.checks.list_layout import build_list_layout, extend_list_layout
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
+    IVF_MAGNITUDE_BOUND,
     IvfFlatIndex,
     IvfFlatIndexParams,
     ivf_index_params_validate,
     ivf_metric_name,
     ivf_validate_data,
 )
+from std.memory import bitcast
+from std.gpu import block_dim, block_idx, thread_idx
 from checks.fixed_point import choose_scale
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
@@ -111,6 +114,54 @@ comptime IVF_FAST_SEED = (
 the coarse quantizer is seeded by `x_ann/kpp_seed.mojo` (host k-means++ over
 a stride sample of its training rows) and cluster/'s k-means starts from
 those seeds (`INIT_ARRAY`). An untraced build only."""
+
+
+comptime IVF_FAST_RANDOM_INIT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and (is_defined["MOJOLEARN_IVF_COARSE_RANDOM_INIT"]() or is_defined["MOJOLEARN_VSEARCH_ALL"]())
+)
+"""FAST on Apple, OPT-IN (lane af-vsearch, 2026-10-03, `-D
+MOJOLEARN_IVF_COARSE_RANDOM_INIT`): the coarse quantizer starts from n_lists
+DISTINCT training rows drawn with the fit's seed (FAISS's `Clustering`
+rule) and handed to cluster/'s k-means as INIT_ARRAY, so its scalable
+k-means|| seeding (8 rounds of every-row-to-candidate distances, each with
+host readbacks and waits, then the candidates' own Lloyd loop) does not run.
+Untraced builds only; an INIT_ARRAY set by `IVF_FAST_SEED` wins. Moves FAST
+bits (another start): paired recall check."""
+
+comptime IVF_FAST_DEVICE_VALIDATE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and (is_defined["MOJOLEARN_IVF_DEVICE_VALIDATE"]() or is_defined["MOJOLEARN_VSEARCH_ALL"]())
+)
+"""FAST on Apple, OPT-IN (lane af-vsearch, `-D MOJOLEARN_IVF_DEVICE_VALIDATE`):
+`ivf_validate_data`'s word scan of the n x dim dataset (one host pass over
+352 MB on Istella) runs on the device after the upload (`ivf_refused_words_kernel`,
+one flag word read back); a refused dataset then runs the host scan, which
+raises its own message naming the first offender. The same words accepted
+and refused: no bit moves."""
+comptime IVF_VALIDATE_BLOCKS = 1024
+comptime IVF_VALIDATE_TPB = 256
+
+
+def ivf_refused_words_kernel(
+    x: MutPointer[Float32, MutAnyOrigin], count: Int32, flag: MutPointer[Int32, MutAnyOrigin]
+):
+    """`ivf_validate_data`'s test per word (`IVF_FAST_DEVICE_VALIDATE`): a word
+    whose low 31 bits are at or above 2^63's (NaN, an infinity, |v| >= 2^63)
+    sets the flag. A grid-stride loop over IVF_VALIDATE_BLOCKS blocks; every
+    writer stores the same 1."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var step = Int(block_dim.x) * IVF_VALIDATE_BLOCKS
+    var bound = bitcast[DType.uint32](IVF_MAGNITUDE_BOUND)
+    var bad = False
+    while i < Int(count):
+        if (bitcast[DType.uint32](x.unsafe_load(i)) & UInt32(0x7FFFFFFF)) >= bound:
+            bad = True
+        i += step
+    if bad:
+        flag.unsafe_store(0, Int32(1))
 
 
 def ivf_trainset_rows(n_rows: Int, n_train: Int, seed: UInt64) -> List[Int]:
@@ -347,7 +398,13 @@ def ivf_flat_build(
     # (off: no sync, no print)
     var st = AnnStages("ivf_flat_build")
     ivf_index_params_validate(params, n_rows, dim)
-    ivf_validate_data(x, n_rows, dim, "dataset")
+    comptime if IVF_FAST_DEVICE_VALIDATE:
+        # lane af-vsearch: the extent refusal now (it raises before any scan);
+        # the word test runs on the device after the upload below
+        if len(x) != n_rows * dim:
+            ivf_validate_data(x, n_rows, dim, "dataset")
+    else:
+        ivf_validate_data(x, n_rows, dim, "dataset")
     st.host("validate")
 
     var n_lists = params.n_lists
@@ -402,6 +459,22 @@ def ivf_flat_build(
     st.host("trainset_scale")
 
     var dx = upload_f32(ctx, x)
+    comptime if IVF_FAST_DEVICE_VALIDATE:
+        var dflag = ctx.enqueue_create_buffer[DType.int32](1)
+        dflag.enqueue_fill(Int32(0))
+        ctx.enqueue_function[ivf_refused_words_kernel](
+            dx.unsafe_ptr(), Int32(n_rows * dim), dflag.unsafe_ptr(),
+            grid_dim=(IVF_VALIDATE_BLOCKS, 1, 1), block_dim=(IVF_VALIDATE_TPB, 1, 1),
+        )
+        var hflag = ctx.enqueue_create_host_buffer[DType.int32](1)
+        ctx.enqueue_copy(dst_ptr=hflag.unsafe_ptr(), src_buf=dflag)
+        ctx.synchronize()
+        if hflag.unsafe_ptr().unsafe_load(0) != Int32(0):
+            # the host scan names the first offender with its own message
+            ivf_validate_data(x, n_rows, dim, "dataset")
+        _ = hflag^
+        _ = dflag^
+        st.host("device_validate")
     if n_train == n_rows:
         xt.append(Float32(0.0))
     var dxt = upload_f32(ctx, xt)
@@ -448,6 +521,25 @@ def ivf_flat_build(
             _ = seeds^
             kp.init = INIT_ARRAY
             st.host("seed")
+
+    comptime if IVF_FAST_RANDOM_INIT:
+        # lane af-vsearch: FAISS's coarse start, n_lists distinct training rows
+        # (a seeded draw) as INIT_ARRAY; the k-means|| rounds do not run
+        if not trace.enabled and kp.init == INIT_KMEANS_PLUS_PLUS and n_train >= n_lists:
+            var pick = ivf_trainset_rows(n_train, n_lists, UInt64(params.seed) ^ UInt64(0xD1B54A32D192ED03))
+            var seeds = List[Float32](length=n_lists * dim, fill=Float32(0.0))
+            if n_train < n_rows:
+                for l in range(n_lists):
+                    memcpy(dest=seeds.unsafe_ptr() + l * dim, src=xt.unsafe_ptr() + pick[l] * dim, count=dim)
+            else:
+                for l in range(n_lists):
+                    memcpy(dest=seeds.unsafe_ptr() + l * dim, src=x.unsafe_ptr() + pick[l] * dim, count=dim)
+            ctx.enqueue_copy(dst_buf=centroids, src_ptr=seeds.unsafe_ptr())
+            ctx.synchronize()
+            _ = seeds^
+            _ = pick^
+            kp.init = INIT_ARRAY
+            st.host("random_init")
 
     if n_train < n_rows:
         _ = kmeans_fit_main_traced(
