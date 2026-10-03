@@ -831,7 +831,10 @@ class _BaggingBase(_TreesEnsembleBase):
         its out-of-bag rows, added in member order (sklearn `_set_oob_score`)."""
         n = Xa.shape[0]
         acc = zeros((n * k,), "<f8")
-        counts = [0] * n
+        native = _trees_py2mojo(self)
+        # lane apple-fast-py2mojo-trees: the member counts in the binding
+        # (x_trees_count_rows, int32 per row), not a Python row loop
+        counts = zeros((n,), "<i4") if native else [0] * n
         for est, cols, oob in zip(self.estimators_, self.estimators_features_, self._oob_rows):
             m = len(oob)
             if m == 0:
@@ -839,8 +842,11 @@ class _BaggingBase(_TreesEnsembleBase):
             out = member_out(est, self._gather(Xa, oob, cols), m)
             self._bind().x_trees_accumulate_rows(addr(acc, name="oob"), addr_ro(out, name="member"),
                                                  addr_ro(oob, name="rows"), [n, k, m])
-            for i in oob.tolist():
-                counts[i] += 1
+            if native:
+                self._bind().x_trees_count_rows(addr(counts, name="counts"), addr_ro(oob, name="rows"), [n, m])
+            else:
+                for i in oob.tolist():
+                    counts[i] += 1
         return acc, counts
 
     def _check_X(self, X):
@@ -902,7 +908,14 @@ class BaggingClassifier(_BaggingBase):
         self.oob_decision_function_ = acc.reshape((n, k))
         # the per-row match is the native elementwise compare (two int32
         # Arrays), not a Python loop over the rows
-        hits = self._argmax(acc, n, k) == as_i32_c(codes, ndim=1, name="codes")[0]
+        pred, truth = self._argmax(acc, n, k), as_i32_c(codes, ndim=1, name="codes")[0]
+        if _trees_py2mojo(self):
+            # lane apple-fast-py2mojo-trees: the hit count in the binding
+            hit_count = int(self._bind().x_trees_count_equal(addr_ro(pred, name="pred"), addr_ro(truth, name="codes"),
+                                                             [n]))
+            self.oob_score_ = hit_count / n
+            return
+        hits = pred == truth
         self.oob_score_ = hits.sum() / n
 
     def predict_proba(self, X):
@@ -956,11 +969,29 @@ class BaggingRegressor(_BaggingBase):
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         n = Xa.shape[0]
 
+        native = _trees_py2mojo(self)
+
         def member_out(est, Xs, m):
             p, _ = as_f32_c(est.predict(Xs), ndim=1, name="prediction")
-            return Array.from_list(p.tolist(), "<f8")
+            return p.astype("<f8") if native else Array.from_list(p.tolist(), "<f8")
 
         acc, counts = self._oob_outputs(Xa, 1, member_out)
+        if native:
+            # lane apple-fast-py2mojo-trees: the oob prediction and the three
+            # exactly rounded sums in the binding (x_trees_oob_r2, the device
+            # in a GPU build): fsum's words, the same R^2. A non-finite term
+            # or an overflowing sum takes the Python rows, which own those.
+            y32, _ = as_f32_c(y32, ndim=1, name="y")
+            pred, words, flags = empty((n,), "<f8"), empty((4,), "<f8"), empty((4,), "<i4")
+            self._bind().x_trees_oob_r2([addr_ro(acc, name="oob"), addr_ro(counts, name="counts"),
+                                         addr_ro(y32, name="y"), addr(pred, name="pred"), addr(words, name="sums"),
+                                         addr(flags, name="flags")], [n])
+            if not (flags[0] or flags[1]):
+                self.oob_prediction_ = pred
+                ss_tot, ss_res = words[1], words[2]
+                self.oob_score_ = 1.0 - ss_res / ss_tot if ss_tot > 0 else (1.0 if ss_res == 0 else 0.0)
+                return
+            counts = counts.tolist()
         pred = [v / max(c, 1) for v, c in zip(acc.tolist(), counts)]
         self.oob_prediction_ = Array.from_list(pred, "<f8")
         y = y32.tolist()

@@ -16,6 +16,9 @@ from std.python import Python
 from xtrees.folds_device import device_folds
 from xtrees.glue_device import binary_proba_device, indicator_codes_device, stack_w64_device
 from xtrees.exact_sum import ES_FLAGS, ES_MAX_ROWS, exact_sum_device, exact_sum_host
+from xtrees.oob import (
+    E64_MAX_ROWS, count_equal_device, count_equal_host, count_rows_device, count_rows_host, oob_r2_device, oob_r2_host,
+)
 from xtrees import agnostic_device as agn_dev
 from xtrees import agnostic_host as agn_host
 from xtrees.ops_device import (
@@ -688,6 +691,52 @@ def exact_sum_binding(x: PythonObject, res: PythonObject, flags: PythonObject, p
     return PythonObject(ES_FLAGS)
 
 
+def count_rows_binding(counts: PythonObject, rows: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, m]: counts (int32, n) += 1 at each of the m rows (int32)
+    (Bagging's out-of-bag member counts; xtrees/oob.mojo)."""
+    _need(params, 2, "x_trees_count_rows")
+    var n = _count(_i(params, 0), "x_trees_count_rows")
+    var m = _count(_i(params, 1), "x_trees_count_rows")
+    if n > 0 and m > 0:
+        comptime if XTREES_DEVICE_OPS:
+            count_rows_device(i32_ptr(Int(py=counts)), n, i32_ptr(Int(py=rows)), m)
+        else:
+            count_rows_host(i32_ptr(Int(py=counts)), n, i32_ptr(Int(py=rows)), m)
+    return PythonObject(m)
+
+
+def count_equal_binding(a: PythonObject, b: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n]: #{r : a[r] == b[r]} of two int32 vectors (xtrees/oob.mojo)."""
+    _need(params, 1, "x_trees_count_equal")
+    var n = _count(_i(params, 0), "x_trees_count_equal")
+    if n == 0:
+        return PythonObject(0)
+    comptime if XTREES_DEVICE_OPS:
+        return PythonObject(count_equal_device(i32_ptr(Int(py=a)), i32_ptr(Int(py=b)), n))
+    else:
+        return PythonObject(count_equal_host(i32_ptr(Int(py=a)), i32_ptr(Int(py=b)), n))
+
+
+def oob_r2_binding(bufs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """bufs = [acc f64 n, counts i32 n, y f32 n, pred f64 n (out), words f64 4
+    (out), flags i32 4 (out)], params = [n]: pred = acc / max(counts, 1),
+    words = [fsum(y), fsum((y - mean)^2), fsum((y - pred)^2), mean], flags
+    [non-finite term, overflow] (BaggingRegressor's oob R^2; xtrees/oob.mojo)."""
+    _need(params, 1, "x_trees_oob_r2")
+    if len(bufs) != 6:
+        raise Error("x_trees_oob_r2: bufs must hold 6 addresses")
+    var n = _count(_i(params, 0), "x_trees_oob_r2")
+    if n < 1 or n > E64_MAX_ROWS:
+        raise Error("x_trees_oob_r2: needs 1 <= n <= 2^30")
+    comptime if XTREES_DEVICE_OPS:
+        oob_r2_device(f64_ptr(Int(py=bufs[0])), i32_ptr(Int(py=bufs[1])), f32_ptr(Int(py=bufs[2])), n,
+                      f64_ptr(Int(py=bufs[3])), f64_ptr(Int(py=bufs[4])), i32_ptr(Int(py=bufs[5])))
+    else:
+        oob_r2_host(f64_ptr(Int(py=bufs[0])), i32_ptr(Int(py=bufs[1])), f32_ptr(Int(py=bufs[2])), n,
+                    f64_ptr(Int(py=bufs[3])), f64_ptr(Int(py=bufs[4])), i32_ptr(Int(py=bufs[5])))
+    return PythonObject(n)
+
+
 #: lane apple-fast-py2mojo-trees (2026-10-03, Andrew: "everything is supposed
 #: to be in mojo"): 1 in every build, so python/mojolearn/_expansion_trees.py
 #: runs the wrappers' cv folds, OneVsRest targets, MultiOutputClassifier label
@@ -914,6 +963,9 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[binary_proba_binding]("x_trees_binary_proba")
     m.def_function[py2mojo_binding]("x_trees_py2mojo")
     m.def_function[exact_sum_binding]("x_trees_exact_sum")
+    m.def_function[count_rows_binding]("x_trees_count_rows")
+    m.def_function[count_equal_binding]("x_trees_count_equal")
+    m.def_function[oob_r2_binding]("x_trees_oob_r2")
     m.def_function[block_mean_binding]("x_trees_block_mean")
     m.def_function[kshap_synth_binding]("x_trees_kshap_synth")
     m.def_function[kshap_solve_binding]("x_trees_kshap_solve")
