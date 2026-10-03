@@ -66,33 +66,47 @@ a caller who wants per-sequence gradients runs the sequences as their own
 calls and accumulates.
 """
 
-from ._buffer import addr, addr_ro, empty, memory_at
+import array
+import operator
+
+from ._buffer import _native, addr, addr_ro, empty
 
 __all__ = []
 
 
-def lengths_for(lengths, batch, length, what):
-    """`lengths` as a tuple of `batch` Python ints, each in [1, length],
-    refused by name otherwise."""
+def _lengths_array(lengths, batch, length, what):
+    """`lengths` as an int64 array of `batch` entries, each in [1, length],
+    refused by name otherwise. The per-entry range test runs in Mojo
+    (`check_lengths_i64`); Python converts the sequence with C builtins."""
     try:
         values = list(lengths)
     except TypeError:
         raise TypeError(f"mojolearn {what}: lengths must be a sequence of {batch} integers") from None
     if len(values) != batch:
         raise ValueError(f"mojolearn {what}: lengths has {len(values)} entries but the batch has B = {batch}")
-    out = []
-    for i, v in enumerate(values):
-        if isinstance(v, bool) or type(v).__name__ in ("bool", "bool_"):
-            raise TypeError(f"mojolearn {what}: lengths[{i}] is a bool, not an integer")
-        try:
-            n = v.__index__()
-        except AttributeError:
-            raise TypeError(f"mojolearn {what}: lengths[{i}] = {v!r} is not an integer") from None
-        if n < 1 or n > length:
-            raise ValueError(f"mojolearn {what}: lengths[{i}] = {n} is outside [1, L = {length}] "
+    kinds = set(map(type, values))
+    bad = sorted(t.__name__ for t in kinds  # glue: the distinct Python types of the argument
+                 if issubclass(t, bool) or t.__name__ in ("bool", "bool_"))
+    if bad:
+        raise TypeError(f"mojolearn {what}: a lengths entry is a bool ({bad[0]}), not an integer")
+    try:
+        arr = array.array("q", map(operator.index, values))
+    except (TypeError, AttributeError):
+        raise TypeError(f"mojolearn {what}: a lengths entry is not an integer") from None
+    except OverflowError:
+        raise ValueError(f"mojolearn {what}: a length is outside [1, L = {length}]") from None
+    if batch:
+        at = int(_native("check_lengths_i64")(arr.buffer_info()[0], batch, length))
+        if at >= 0:
+            raise ValueError(f"mojolearn {what}: lengths[{at}] = {arr[at]} is outside [1, L = {length}] "
                              "(right padding: a row has at least one real position and at most L)")
-        out.append(int(n))
-    return tuple(out)
+    return arr
+
+
+def lengths_for(lengths, batch, length, what):
+    """`lengths` as a tuple of `batch` Python ints, each in [1, length],
+    refused by name otherwise."""
+    return tuple(_lengths_array(lengths, batch, length, what))
 
 
 def _row_bytes(arr):
@@ -102,33 +116,34 @@ def _row_bytes(arr):
     return per_pos * l, per_pos
 
 
+def _lens(lengths):
+    return lengths if isinstance(lengths, array.array) else array.array("q", lengths)
+
+
 def padded_copy(src, lengths, dtype, what):
     """A new C-order Array with the bytes of `src` (B, L, ...) at every real
-    position and zero bytes at every padding position."""
-    shape = tuple(int(s) for s in src.shape)
+    position and zero bytes at every padding position (one Mojo pass,
+    `ragged_rows_bytes` mode 0)."""
+    shape = tuple(int(s) for s in src.shape)  # glue: validates the shape argument
     out = empty(shape, dtype)
     row, pos = _row_bytes(out)
     if row == 0:
         return out
-    total = out.nbytes
-    s = memory_at(addr_ro(src, name=what), total, writable=False)
-    d = memory_at(addr(out, name=what), total, writable=True)
-    for i, n in enumerate(lengths):
-        base = i * row
-        d[base:base + n * pos] = s[base:base + n * pos]
+    lens = _lens(lengths)
+    _native("ragged_rows_bytes")(addr_ro(src, name=what), addr(out, name=what), lens.buffer_info()[0],
+                                 len(lens), row, pos, 0)
     return out
 
 
 def zero_padding(out, lengths, what):
     """Overwrite every padding position of `out` (B, L, ...) with zero bytes,
-    in place."""
+    in place (one Mojo pass, `ragged_rows_bytes` mode 1)."""
     row, pos = _row_bytes(out)
     if row == 0:
         return out
-    d = memory_at(addr(out, name=what), out.nbytes, writable=True)
-    for i, n in enumerate(lengths):
-        if n * pos < row:
-            d[i * row + n * pos:(i + 1) * row] = bytes(row - n * pos)
+    lens = _lens(lengths)
+    a = addr(out, name=what)
+    _native("ragged_rows_bytes")(a, a, lens.buffer_info()[0], len(lens), row, pos, 1)
     return out
 
 
@@ -144,8 +159,8 @@ def ragged_forward(run, x, state, lengths, dtype, what):
             "continuation of a ragged batch would need a position per row, which no state here has. "
             "Run the ragged prefill with state=None, or continue each sequence as its own batch")
     b, l = int(x.shape[0]), int(x.shape[1])
-    lens = lengths_for(lengths, b, l, what)
-    return zero_padding(run(padded_copy(x, lens, dtype, what)), lens, what), lens
+    arr = _lengths_array(lengths, b, l, what)
+    return zero_padding(run(padded_copy(x, arr, dtype, what)), arr, what), tuple(arr)
 
 
 def last_real_rows(logits, lengths, what):
@@ -154,9 +169,9 @@ def last_real_rows(logits, lengths, what):
     b, l = int(logits.shape[0]), int(logits.shape[1])
     v = int(logits.shape[2])
     out = empty((b, 1, v), "<f4")
-    s = memory_at(addr_ro(logits, name=what), logits.nbytes, writable=False)
-    d = memory_at(addr(out, name=what), out.nbytes, writable=True)
-    for i, n in enumerate(lengths):
-        at = (i * l + n - 1) * v * 4
-        d[i * v * 4:(i + 1) * v * 4] = s[at:at + v * 4]
+    if b and v:
+        lens = _lens(lengths)
+        # mode 2: out row i = logits position lengths[i] - 1 of row i
+        _native("ragged_rows_bytes")(addr_ro(logits, name=what), addr(out, name=what),
+                                     lens.buffer_info()[0], len(lens), v * 4, l * v * 4, 2)
     return out
