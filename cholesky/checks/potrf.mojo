@@ -1689,7 +1689,7 @@ def fast_diag_factor(
     var s0 = 0
     while s0 < w:
         var sw = min(CHOL_INNER_NB, w - s0)
-        ctx.enqueue_function[panel_factor_kernel](
+        ctx.enqueue_function[panel_factor_kernel](  # small-launch(n: leading dimension only): factors the w x w diagonal panel block, columns serial, rows across the block; n is the row stride
             a.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), Int32(j0 + s0),
             Int32(sw),
             grid_dim=(1, 1, 1), block_dim=(panel_tpb, 1, 1),
@@ -1775,7 +1775,7 @@ def _potrf_lower_strips(
         while q0 < s_end:
             var w = min(CS_NB, n - q0)
             var n_trail = n - q0 - w
-            ctx.enqueue_function[chol_strip_diag_kernel](
+            ctx.enqueue_function[chol_strip_diag_kernel](  # small-launch(n: leading dimension only): factors the w x w diagonal block (w <= CS_NB) in threadgroup memory, n is the row stride
                 a.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), Int32(q0), Int32(w),
                 grid_dim=(1, 1, 1), block_dim=(CS_DIAG_TPB, 1, 1),
             )
@@ -2004,7 +2004,7 @@ def potrf_lower(
 
         # ---- the panel ------------------------------------------------
         if chol_sabotage_is_kernel_arm(sabotage):
-            ctx.enqueue_function[sabotage_panel_factor_kernel](
+            ctx.enqueue_function[sabotage_panel_factor_kernel](  # small-launch(n: leading dimension only): the negative-control copy of the w x w panel factor, reached only with a sabotage id
                 a.unsafe_ptr(),
                 dinfo.unsafe_ptr(),
                 Int32(n),
@@ -2020,7 +2020,7 @@ def potrf_lower(
                 inv_shape, panel_tpb, elem_tpb,
             )
         elif defer:
-            ctx.enqueue_function[panel_factor_guarded_kernel](
+            ctx.enqueue_function[panel_factor_guarded_kernel](  # small-launch(n: leading dimension only): factors the w x w diagonal panel block, columns serial, rows across the block; n is the row stride
                 a.unsafe_ptr(),
                 dinfo.unsafe_ptr(),
                 Int32(n),
@@ -2030,7 +2030,7 @@ def potrf_lower(
                 block_dim=(panel_tpb, 1, 1),
             )
         else:
-            ctx.enqueue_function[panel_factor_kernel](
+            ctx.enqueue_function[panel_factor_kernel](  # small-launch(n: leading dimension only): factors the w x w diagonal panel block, columns serial, rows across the block; n is the row stride
                 a.unsafe_ptr(),
                 dinfo.unsafe_ptr(),
                 Int32(n),
@@ -2405,7 +2405,7 @@ def chol_logdet(
             n,
         )
     else:
-        ctx.enqueue_function[sabotage_logdet_kernel](
+        ctx.enqueue_function[sabotage_logdet_kernel](  # small-launch(n: sabotage arm only): the negative control of the log-det fold, reached only with a sabotage id, never by a fit
             diag.unsafe_ptr(),
             scalar.unsafe_ptr(),
             Int32(n),

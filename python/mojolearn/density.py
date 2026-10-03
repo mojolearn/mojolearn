@@ -381,33 +381,20 @@ class DBSCAN(NumericModeMixin):
 
     def _store_core(self, x, labels, core):
         """Keep the core rows, their training indices and their labels, in
-        ascending training index, from the fit's own core mask: the base
-        binding's natives (`select_fold_i64` over the mask's int32 words,
-        `gather_rows_bytes`, `gather_i32`; lane pyglue-numeric: Python walks
-        of the mask, and the MOJOLEARN_HOTPATH=python arm, deleted)."""
-        from ._buffer import _native
-        n, d = int(x.shape[0]), int(x.shape[1])
-        flags = core.astype("<i4")
-        if n and (flags.min() < 0 or flags.max() > 1):
-            raise RuntimeError("mojolearn DBSCAN: the fit's core mask holds a value other than 0 or 1")
-        k = int(flags.sum()) if n else 0
-        idx = empty((max(k, 1),), "<i8")
-        rest = empty((max(n - k, 1),), "<i8")
-        if n:
-            _native("select_fold_i64")(addr_ro(flags, name="core"), n, 1, addr(idx, name="core rows"),
-                                       addr(rest, name="other rows"))
-        idx = idx[:k]
-        self.core_sample_indices_ = idx.astype("<i4") if k else empty((0,), "<i4")
-        comp = empty((k, d), "<f4")
-        lab = empty((k,), "<i4")
-        if k:
-            _native("gather_rows_bytes")(addr_ro(x, name="x"), addr(comp, name="components_"),
-                                         addr_ro(idx, name="core rows"), n, k, 4 * d)
-            i32 = self.core_sample_indices_
-            _native("gather_i32")(addr_ro(labels, name="labels"), n, addr_ro(i32, name="core rows"), k,
-                                  addr(lab, name="core labels"))
-        self.components_ = comp
-        self._core_labels = lab
+        ascending training index, from the fit's own core mask: the three
+        arrays in the binding (bindings/py2mojo_cluster_est.mojo, lane
+        apple-fast-py2mojo-cluster: the mask check, the compaction and the
+        row copies in one Mojo loop; lane pyglue-numeric deleted the Python
+        routes beside it)."""
+        d = int(x.shape[1])
+        b = self._bind("_mojolearn_estimators")
+        idx, comp, lab = b.dbscan_core_arrays(
+            addr_ro(x, name="x"), addr_ro(labels, name="labels"), addr_ro(core, name="core"),
+            [int(x.shape[0]), d])
+        m = len(idx)
+        self.core_sample_indices_ = frombytes(idx.tobytes(), "<i4", (m,)) if m else empty((0,), "<i4")
+        self.components_ = frombytes(comp.tobytes(), "<f4", (m, d))
+        self._core_labels = frombytes(lab.tobytes(), "<i4", (m,)) if m else empty((0,), "<i4")
 
     def fit_predict(self, X, y=None, sample_weight=None):
         return self.fit(X, y=y, sample_weight=sample_weight).labels_

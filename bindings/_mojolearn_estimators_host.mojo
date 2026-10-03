@@ -58,6 +58,7 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from bindings.py2mojo_cluster_est import dbscan_core_arrays_binding, estimators_py2mojo_cluster_binding
 from core.py2mojo_rows import py2mojo_rows_host_binding
 from svm.host.scale_gamma_host import py2mojo_linear_flags_binding
 
@@ -1410,6 +1411,8 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[ridge_fit_binding]("ridge_fit")
         module.def_function[dbscan_fit_binding]("dbscan_fit")
         module.def_function[dbscan_fit_core_binding]("dbscan_fit_core")
+        module.def_function[dbscan_core_arrays_binding]("dbscan_core_arrays")
+        module.def_function[estimators_py2mojo_cluster_binding]("estimators_py2mojo_cluster")
         module.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         module.def_function[qn_fit_binding]("qn_fit")
         module.def_function[ols_predict_binding]("ols_predict")

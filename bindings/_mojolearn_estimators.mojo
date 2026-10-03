@@ -14,6 +14,7 @@ from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from bindings.py2mojo_cluster_est import dbscan_core_arrays_binding, estimators_py2mojo_cluster_binding
 from core.py2mojo_rows import py2mojo_rows_device_binding
 from core.py2mojo_linear import py2mojo_linear_flags
 
@@ -1290,6 +1291,8 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         m.def_function[dbscan_fit_binding]("dbscan_fit")
         m.def_function[dbscan_fit_core_binding]("dbscan_fit_core")
+        m.def_function[dbscan_core_arrays_binding]("dbscan_core_arrays")
+        m.def_function[estimators_py2mojo_cluster_binding]("estimators_py2mojo_cluster")
         m.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         m.def_function[kde_score_samples_binding]("kde_score_samples")
         m.def_function[kde_fit_prepare_binding]("kde_fit_prepare")

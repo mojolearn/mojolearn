@@ -62,7 +62,7 @@ the thing a reader can check against a textbook.
 from std.math import log, sqrt
 
 from core.identity_trace import IdentityTrace
-from cholesky.logdet_fold import logdet_serial
+from cholesky.logdet_fold import logdet_serial, sqsum_serial
 from cholesky.checks.potrf import chol_panel_tag
 from gemm.checks.gemm_oracle import OP_NT, gemm_oracle
 from checks.numerics import (
@@ -312,11 +312,11 @@ def oracle_rank1_update(
         var y = oracle_trsm_lower(l, x, m, 1, ld)
         for k in range(m):
             l[(n - 1) * ld + k] = y[k]
-        var acc = Float32(0.0)
-        for k in range(m):
-            var v = ftz(y[k])
-            acc = ftz(identical_mul_add(v, v, acc))
-        s = acc
+        # the device's blocked-then-tree dot (lane/apple-fast-purity2)
+        s = sqsum_serial(
+            MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(y.unsafe_ptr())), m
+        )
+        _ = y^
     var a22 = ftz(l[(n - 1) * ld + n - 1])
     var v = ftz(a22 - ftz(s))
     if not (v > Float32(0.0)):

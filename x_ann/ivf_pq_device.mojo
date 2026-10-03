@@ -619,7 +619,7 @@ def refine_device(
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     ctx.enqueue_function[refine_kernel](Int32(m), dx.unsafe_ptr(), Int32(n), Int32(d), dq.unsafe_ptr(),
                                         dcand.unsafe_ptr(), Int32(k0), Int32(k), dd.unsafe_ptr(), di.unsafe_ptr(),
-                                        Int32(1 if root else 0), grid_dim=_grid(m), block_dim=TPB)
+                                        Int32(1) if root else Int32(0), grid_dim=_grid(m), block_dim=TPB)
     ctx.synchronize()
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)

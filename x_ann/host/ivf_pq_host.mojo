@@ -526,7 +526,8 @@ def refine_host(
     x: F32P, n: Int, d: Int, queries: F32P, m: Int, cand: I32P, k0: Int, k: Int, out_d: F32P, out_i: I32P,
     root: Bool = False,
 ):
-    """`refine_cell` per query, on the caller's arrays."""
+    """`refine_cell` per query, on the caller's arrays (`root`: the
+    euclidean metric's square roots, as the device)."""
     var tasks = ann_task_count(m, k0 * (d + k0))
 
     def task(t: Int) {imm}:

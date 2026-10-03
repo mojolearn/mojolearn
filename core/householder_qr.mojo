@@ -679,7 +679,7 @@ def qr_factor(
         if qr_split():
             qr_factor_split(ctx, a, r_out, n_rows, n_cols, n_cols, 1)
         else:
-            ctx.enqueue_function[qr_panel_kernel](
+            ctx.enqueue_function[qr_panel_kernel](  # small-launch(n_rows: below 2 * QR_SLICE_ROWS_PER_COL * n_cols when ns == 1): a d-sized matrix; a taller one takes the multi-block TSQR leaves
                 a.unsafe_ptr(),
                 r_out.unsafe_ptr(),
                 Int32(n_rows),
@@ -769,7 +769,7 @@ def qr_parallel_panels(ctx: DeviceContext, mut a: DeviceBuffer[DType.float32],
         var rank = panel%count
         var first = panel*m//ns
         var rows = (panel+1)*m//ns-first
-        devices[rank].enqueue_function[qr_panel_kernel](panels[panel].unsafe_ptr(),outputs[panel].unsafe_ptr(),
+        devices[rank].enqueue_function[qr_panel_kernel](panels[panel].unsafe_ptr(),outputs[panel].unsafe_ptr(),  # small-launch(rows: one TSQR leaf slice): a block per slice as the one-device grid=(ns, 1, 1) launch, the slices spread over the devices
             Int32(rows),Int32(n),Int32(n),Int32(1),
             grid_dim=(1,1,1),block_dim=(QR_TPB,1,1))
     for panel in range(ns):

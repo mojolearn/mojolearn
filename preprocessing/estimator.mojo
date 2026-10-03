@@ -11,6 +11,8 @@ comptime _DEVCTX_SLOT = "MojoPreprocessingContextIdentical" if _DEVCTX_MODE == _
 
 from metrics.checks.device_io import upload_f32
 from core.device_scan import device_first_nonfinite
+from core.device_pool import pool_give, pool_take
+from preprocessing.minmax import PREP_CLS2_MINMAX_FUSED, PREP_CLS2_MINMAX_POOL, minmax_fit_flagged
 from preprocessing.minmax import PREP_FAST_MINMAX, minmax_fit, minmax_fit_fast, minmax_transform, minmax_transform_into
 from preprocessing.standard import standard_fit, standard_transform, standard_transform_into
 
@@ -212,6 +214,8 @@ def minmax_fit_direct(
     """`minmax_fit_host`'s five rows of d into `output`, X read from the
     caller's buffer; 0 (nothing written) when X holds a NaN or an infinity."""
     validate_dimensions(n,d,lower,upper)
+    comptime if PREP_CLS2_MINMAX_FUSED or PREP_CLS2_MINMAX_POOL:
+        return _minmax_fit_direct_cls2(x,n,d,lower,upper,output)
     var ctx = process_ctx[_DEVCTX_SLOT]()
     var dx = _upload_direct(ctx,x,n*d)
     if device_first_nonfinite(ctx,dx,n*d) >= 0:
@@ -223,6 +227,52 @@ def minmax_fit_direct(
     _ = dx^
     _ = ctx^
     finite_values(result)
+    for c in range(d):
+        if result[3*d+c] <= 0:
+            raise Error("MinMaxScaler: Float32 scale underflow")
+    for i in range(5*d):
+        output[i] = result[i]
+    return 1
+
+
+def _minmax_fit_direct_cls2(
+    x: MutPointer[Float32, MutUntrackedOrigin], n: Int, d: Int, lower: Float32, upper: Float32,
+    output: MutPointer[Float32, MutUntrackedOrigin],
+) raises -> Int:
+    """lane/apple-fast-gap-cls2: `minmax_fit_direct` with X's device buffer
+    from a pool kept between fits (PREP_CLS2_MINMAX_POOL) and/or the
+    nonfinite scan folded into the extrema pass (PREP_CLS2_MINMAX_FUSED).
+    The same kernels' keys and finalize: the same five rows."""
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var dx: DeviceBuffer[DType.float32]
+    comptime if PREP_CLS2_MINMAX_POOL:
+        dx = pool_take["MojoPrepCls2MinmaxX"](ctx,n*d)
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    else:
+        dx = _upload_direct(ctx,x,n*d)
+    var result: List[Float32]
+    var ok = True
+    comptime if PREP_CLS2_MINMAX_FUSED:
+        result = minmax_fit_flagged(ctx,dx,n,d,lower,upper)
+        for c in range(d):
+            if result[5*d+c] != 0:
+                ok = False
+    else:
+        if device_first_nonfinite(ctx,dx,n*d) >= 0:
+            ok = False
+            result = List[Float32]()
+        else:
+            result = minmax_fit_fast(ctx,dx,n,d,lower,upper)
+    comptime if PREP_CLS2_MINMAX_POOL:
+        pool_give["MojoPrepCls2MinmaxX"](dx^)
+    else:
+        _ = dx^
+    _ = ctx^
+    if not ok:
+        return 0
+    for i in range(5*d):
+        if not isfinite(result[i]):
+            raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
     for c in range(d):
         if result[3*d+c] <= 0:
             raise Error("MinMaxScaler: Float32 scale underflow")

@@ -731,7 +731,11 @@ class OneClassSVM(_XNeighbors):
         else:
             self._gamma = _f32_scalar(_resolve_gamma(self.gamma, self.kernel, X, self))
             Xw = X if rows is None else self._take_rows(X, rows)
-            Q = self._kernel(Xw, Xw, self.kernel, self._gamma, self.coef0, self.degree)
+            # lane/apple-fast-gap-cls2 (FAST + Apple default; -D MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF off):
+            # the binding forms the same Gram on the device and solves over it
+            # there (no 400 MB download into a fresh host array and upload back)
+            res_fn = getattr(self._bind(), "x_neighbors_ocsvm_resident", None) if self._fast_tier() else None
+            Q = None if res_fn is not None else self._kernel(Xw, Xw, self.kernel, self._gamma, self.coef0, self.degree)
         # libsvm's start (solve_one_class) by the base binding's
         # `ocsvm_alpha_init_f32` (lane pyglue-numeric: a Python loop)
         from ._buffer import _native
@@ -741,7 +745,15 @@ class OneClassSVM(_XNeighbors):
         info = _empty_out((1,), "<f4")
         iters = empty((1,), "<i4")
         cap = 10_000_000 if int(self.max_iter) < 0 else int(self.max_iter)
-        self._op("ocsvm", [(Q, 0), (cv, 0), (alpha, 1), (info, 1), (iters, 1)], (m, cap), (_f32_scalar(self.tol),), )
+        if Q is None:
+            tiled = 1 if (_FAST_TILED_RBF and self.kernel == "rbf") else 0
+            res_fn([addr_ro(Xw, name="xn_ocsvm X"), addr_ro(cv, name="xn_ocsvm cv"),
+                    addr(alpha, name="xn_ocsvm alpha"), addr(info, name="xn_ocsvm info"),
+                    addr(iters, name="xn_ocsvm iters")],
+                   [m, d, _KERNELS[self.kernel], int(self.degree), tiled, cap],
+                   [float(self._gamma), float(_f32_scalar(self.coef0)), float(_f32_scalar(self.tol))])
+        else:
+            self._op("ocsvm", [(Q, 0), (cv, 0), (alpha, 1), (info, 1), (iters, 1)], (m, cap), (_f32_scalar(self.tol),), )
         # the op's scalar order is (n, eps, max_iter): ints (n, max_iter), floats (eps,)
         rho = info.tolist()[0]
         # the support (alpha > 0, in order) and its coefficients by the

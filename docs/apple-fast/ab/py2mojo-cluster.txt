@@ -1,0 +1,4 @@
+CMD lane/apple-fast-py2mojo-cluster py2mojo-cluster-gpc-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=classical2 bash tools/afc_ab_def.sh py2mojo-cluster-gpc-taxi gp gpc taxi 1 2 "-D MOJOLEARN_PY2MOJO_cluster_OFF" ""
+CMD lane/apple-fast-py2mojo-cluster py2mojo-cluster-gpc-istella bash ~/mq/ensure_so.sh AFC_FAMILY=classical2 bash tools/afc_ab_def.sh py2mojo-cluster-gpc-istella gp gpc istella 1 2 "-D MOJOLEARN_PY2MOJO_cluster_OFF" ""
+CMD lane/apple-fast-py2mojo-cluster py2mojo-cluster-ivf-refine-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh py2mojo-cluster-ivf-refine-taxi x_ann ivf-refine taxi 1 2 "-D MOJOLEARN_PY2MOJO_cluster_OFF" ""
+CMD lane/apple-fast-py2mojo-cluster py2mojo-cluster-ivf-refine-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh py2mojo-cluster-ivf-refine-istella x_ann ivf-refine istella 1 2 "-D MOJOLEARN_PY2MOJO_cluster_OFF" ""
