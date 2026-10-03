@@ -17,6 +17,7 @@ on the second GPU call of a process). Each entry's buffers are released
 before it returns; the context stays.
 """
 from std.gpu import block_idx, block_dim, thread_idx
+from std.gpu.primitives.warp import shuffle_idx, shuffle_xor
 from std.ffi import _Global
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -1315,6 +1316,236 @@ def _sgd_ps_kernel_body(
         sti(pt, c, t)
 
 
+# lane/apple-fast-gap-clus3 (2026-10-03): SGD_FAST_PS_SIMD, FAST + Apple default
+# for d <= SPS_MAX_D (off: -D MOJOLEARN_SGD_FAST_PS_SIMD_OFF). M3 A/Bs (n=1):
+# sgd-ocsvm taxi (d 11) 58,334 -> 42,252 ms (-27.6%), fraction_flagged .05557
+# identical (clus3-sgdoc-simd-taxi); sgd-ocsvm istella (d 220) 75,506 ->
+# 106,443 ms (+41%, clus3-sgdoc-simd-istella), hence the small-d gate. Cause: the per-sample fit above runs a
+# whole block per problem and, per SAMPLE, writes the MB_DBLK block partials
+# to device memory, crosses a device-memory `team_barrier`, re-reads them and
+# reloads/stores every weight from device memory: ~3.7 us a sample on the M3,
+# 75 s for SGDOneClassSVM's 20 epochs of a million Istella rows (0.8.34's
+# warp form, since deleted, was ~1.8x scikit-learn). Here a problem is ONE
+# simdgroup (SPS_W threads): lane l keeps weights l, l + 32, ... (and their
+# q) in registers for the whole launch, the predictor and the penalty norms
+# are a butterfly over the simdgroup with lane 0's word broadcast (uniform
+# scalars in every lane, no barrier: a lane only touches its own columns),
+# and the weights go back to device memory once a launch. d <= SPS_W *
+# SPS_MAXC, else the block form. FAST: the predictor's fold order changes.
+comptime SGD_FAST_PS_SIMD = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SGD_FAST_PS_SIMD_OFF"]()
+)
+comptime SPS_W = 32
+comptime SPS_MAXC = 8
+comptime SPS_MAX_D = 32
+"""The simdgroup form wins at taxi's d = 11 and loses at Istella's 220."""
+
+
+@always_inline
+def _sps_sum(v: Float32) -> Float32:
+    var a = v
+    comptime for k in range(5):
+        a = fa(a, shuffle_xor(a, UInt32(16 >> k)))
+    return shuffle_idx(a, UInt32(0))
+
+
+def _sgd_ps_simd_body(
+    x: FP, lab: FP, swp: FP, idx: IP, w: FP, q: FP, sqp: FP, part: FP,
+    ps: FP, pt: IP, act: IP, pf: FP, ci: IP, cf: FP, start: Int32, cnt: Int32,
+):
+    """ci: n, d, loss, penalty, lr, fit_intercept, need_obj, one_class, has_sw,
+    has_cw, k, has_sq; cf: alpha, l1_ratio (the penalty's), eta0, power_t,
+    eps, optimal_init, decay_factor; per problem c: pf[3c..] eta, wpos, wneg;
+    ps[SGD_PS_ST c..] intercept, u, objective, intercept lo (one-class), wscale hi, lo; pt[c] t; act[c] 1 while it trains."""
+    var c = Int(block_idx.x)
+    if ldi(act, c) == 0:
+        return
+    var nn = ldi(ci, 0)
+    var d = ldi(ci, 1)
+    var loss = ldi(ci, 2)
+    var penalty = ldi(ci, 3)
+    var lr = ldi(ci, 4)
+    var fi = ldi(ci, 5) != 0
+    var need_obj = ldi(ci, 6) != 0
+    var one_class = ldi(ci, 7) != 0
+    var has_sw = ldi(ci, 8) != 0
+    var has_cw = ldi(ci, 9) != 0
+    var k = ldi(ci, 10)
+    var alpha = ld(cf, 0)
+    var l1_ratio = ld(cf, 1)
+    var eta0 = ld(cf, 2)
+    var power_t = ld(cf, 3)
+    var eps = ld(cf, 4)
+    var optimal_init = ld(cf, 5)
+    var decay_factor = ld(cf, 6)
+    var pa_rate = lr == LR_PA1 or lr == LR_PA2
+    var tid = Int(thread_idx.x)
+    var nt = Int(block_dim.x)
+    var nb = (d + MB_DBLK - 1) // MB_DBLK
+    var need_reg = need_obj and penalty != P_NONE and not pa_rate
+    var ntask = 2 * nb if need_reg else nb
+    var woff = c * d
+    var poff = c * 3 * nb
+    var do_decay = penalty == P_L2 or penalty == P_EN
+    var do_l1 = penalty == P_L1 or penalty == P_EN
+    var intercept = ld(ps, SGD_PS_ST * c)
+    var u = ld(ps, SGD_PS_ST * c + 1)
+    var objective = Float32(0) if Int(start) == 0 else ld(ps, SGD_PS_ST * c + 2)
+    var il = ld(ps, SGD_PS_ST * c + 3)
+    var whi = ld(ps, SGD_PS_ST * c + 4)
+    var wlo = ld(ps, SGD_PS_ST * c + 5)
+    var t = ldi(pt, c)
+    var eta = ld(pf, 3 * c)
+    var wpos = ld(pf, 3 * c + 1)
+    var wneg = ld(pf, 3 * c + 2)
+    var wv = SIMD[DType.float32, SPS_MAXC](0)
+    var qv = SIMD[DType.float32, SPS_MAXC](0)
+    comptime for uu in range(SPS_MAXC):
+        var j = tid + uu * SPS_W
+        if j < d:
+            wv[uu] = ld(w, woff + j)
+            if do_l1:
+                qv[uu] = ld(q, woff + j)
+    for r in range(Int(start), Int(start) + Int(cnt)):
+        var i = ldi(idx, c * nn + r)
+        # A: lane l's columns l, l + 32, ... from the registers, the row's
+        # loads coalesced; the simdgroup's butterfly, lane 0's word broadcast
+        var ixd = i * d
+        var accd = Float32(0)
+        comptime for ua in range(SPS_MAXC):
+            var j = tid + ua * SPS_W
+            if j < d:
+                accd = fmad(ld(x, ixd + j), wv[ua], accd)
+        var dot = _sps_sum(accd)
+        var y = _sgd_target(k, c, ld(lab, i))
+        var dotw = ws_mul(dot, whi, wlo)
+        var p = fa(fa(dotw, il), intercept) if one_class else fa(dotw, intercept)
+        if lr == LR_OPTIMAL:
+            eta = fd(Float32(1), fm(alpha, fs(fa(optimal_init, i2f(t)), Float32(1))))
+        elif lr == LR_INVSCALING:
+            eta = fd(eta0, identical_pow(i2f(t), power_t))
+        var oc = one_class and loss == L_HINGE
+        var och = oc_hinge(dotw, intercept, il)
+        var cur = och[0] if oc else sgd_loss(loss, y, p, eps)
+        if need_obj:
+            objective = fa(objective, cur)
+            if not pa_rate:
+                if penalty != P_NONE:
+                    var a2 = Float32(0)
+                    var a1 = Float32(0)
+                    comptime for ub in range(SPS_MAXC):
+                        if tid + ub * SPS_W < d:
+                            a2 = fmad(wv[ub], wv[ub], a2)
+                            a1 = fa(a1, fabs(wv[ub]))
+                    var n2 = _sps_sum(a2)
+                    var n1 = _sps_sum(a1)
+                    n2 = fm(fm(whi, whi), n2)
+                    n1 = fm(whi, n1)
+                    var reg = fa(fm(fm(fs(Float32(1), l1_ratio), Float32(0.5)), n2), fm(l1_ratio, n1))
+                    objective = fa(objective, fm(alpha, reg))
+                if one_class:
+                    objective = fa(objective, fm(intercept, alpha))
+        var skip = False
+        var update = Float32(0)
+        if pa_rate:
+            var sq = ld(sqp, i)
+            if lr == LR_PA1:
+                if sq == 0:
+                    skip = True
+                else:
+                    update = fmin(eta0, fd(cur, sq))
+            else:
+                update = fd(cur, fa(sq, fd(Float32(0.5), eta0)))
+            if not skip:
+                if loss == L_HINGE:
+                    update = fm(update, y)
+                elif fs(y, p) < 0:
+                    update = -update
+        else:
+            var dl = och[1] if oc else sgd_dloss(loss, y, p, eps)
+            if dl < Float32(-1e12):
+                dl = Float32(-1e12)
+            elif dl > Float32(1e12):
+                dl = Float32(1e12)
+            update = fm(-eta, dl)
+        if not skip:
+            if has_cw or has_sw:
+                var cwv = Float32(1)
+                if has_cw:
+                    cwv = wpos if y > 0 else wneg
+                var swi = ld(swp, i) if has_sw else Float32(1)
+                update = fm(update, fm(cwv, swi))
+            # their w.scale on wscale, the fold into v below 1e-9 (C)
+            var fold = False
+            var fhi = Float32(1)
+            var flo = Float32(0)
+            if do_decay:
+                var ws = ws_decay(whi, wlo, fm(decay_factor, eta))
+                whi = ws[0]
+                wlo = ws[1]
+                if whi < WS_RESET:
+                    fold = True
+                    fhi = whi
+                    flo = wlo
+                    whi = Float32(1)
+                    wlo = Float32(0)
+            var cu = Float32(0)
+            if update != 0:
+                cu = ws_div(update, whi, wlo)
+            if fi:
+                var iu = update
+                if one_class:
+                    iu = fs(iu, fm(eta, alpha))
+                if iu != 0:
+                    if one_class:
+                        var ia = ff_add(intercept, il, iu)
+                        intercept = ia[0]
+                        il = ia[1]
+                    else:
+                        intercept = fa(intercept, iu)
+            if do_l1:
+                u = fa(u, fm(fm(l1_ratio, eta), alpha))
+            # C: the weights, thread j
+            comptime for uu in range(SPS_MAXC):
+                var j = tid + uu * SPS_W
+                if j < d:
+                    var wj = wv[uu]
+                    if fold:
+                        wj = ws_mul(wj, fhi, flo)
+                    if update != 0:
+                        wj = fmad(cu, ld(x, ixd + j), wj)
+                    if do_l1:
+                        var rq = ws_clip(wj, u, qv[uu], whi)
+                        qv[uu] = rq[1]
+                        wj = rq[0]
+                    wv[uu] = wj
+            t += 1
+    comptime for uu in range(SPS_MAXC):
+        var j = tid + uu * SPS_W
+        if j < d:
+            st(w, woff + j, wv[uu])
+            if do_l1:
+                st(q, woff + j, qv[uu])
+    if tid == 0:
+        st(ps, SGD_PS_ST * c, intercept)
+        st(ps, SGD_PS_ST * c + 1, u)
+        st(ps, SGD_PS_ST * c + 2, objective)
+        st(ps, SGD_PS_ST * c + 3, il)
+        st(ps, SGD_PS_ST * c + 4, whi)
+        st(ps, SGD_PS_ST * c + 5, wlo)
+        sti(pt, c, t)
+
+
+def sgd_ps_simd_kernel(
+    x: FP, lab: FP, swp: FP, idx: IP, w: FP, q: FP, sqp: FP, part: FP,
+    ps: FP, pt: IP, act: IP, pf: FP, ci: IP, cf: FP, start: Int32, cnt: Int32,
+    wf: IP, woff: Int32, nonce: Int32,
+):
+    _sgd_ps_simd_body(x, lab, swp, idx, w, q, sqp, part, ps, pt, act, pf, ci, cf, start, cnt)
+    witness_end(wf, woff, nonce)
+
+
 def sgd_ps_kernel(
     x: FP, lab: FP, swp: FP, idx: IP, w: FP, q: FP, sqp: FP, part: FP,
     ps: FP, pt: IP, act: IP, pf: FP, ci: IP, cf: FP, start: Int32, cnt: Int32,
@@ -1358,6 +1589,9 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var optimal_init = mb_optimal_init(loss, alpha, eps) if lr == LR_OPTIMAL else Float32(0)
     var decay_factor = fm(fs(Float32(1), l1_ratio), alpha)
     var chunk = SGD_PS_CHUNK
+    var sps = False
+    comptime if SGD_FAST_PS_SIMD:
+        sps = d >= 1 and d <= SPS_MAX_D
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
     var dlab = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     var dsw = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
@@ -1467,12 +1701,20 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
             var start = 0
             while start < n:
                 var cnt = min(chunk, n - start)
-                ctx.enqueue_function[sgd_ps_kernel](
-                    dx.unsafe_ptr(), dlab.unsafe_ptr(), dsw.unsafe_ptr(), didx.unsafe_ptr(), dw.unsafe_ptr(),
-                    dq.unsafe_ptr(), dsq.unsafe_ptr(), dpart.unsafe_ptr(), dps.unsafe_ptr(), dpt.unsafe_ptr(),
-                    dact.unsafe_ptr(), dpf.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), Int32(start), Int32(cnt),
-                    wit.p(), Int32(wo), nonce, grid_dim=problems, block_dim=XG_TPB,
-                )
+                if sps:
+                    ctx.enqueue_function[sgd_ps_simd_kernel](
+                        dx.unsafe_ptr(), dlab.unsafe_ptr(), dsw.unsafe_ptr(), didx.unsafe_ptr(), dw.unsafe_ptr(),
+                        dq.unsafe_ptr(), dsq.unsafe_ptr(), dpart.unsafe_ptr(), dps.unsafe_ptr(), dpt.unsafe_ptr(),
+                        dact.unsafe_ptr(), dpf.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), Int32(start), Int32(cnt),
+                        wit.p(), Int32(wo), nonce, grid_dim=problems, block_dim=SPS_W,
+                    )
+                else:
+                    ctx.enqueue_function[sgd_ps_kernel](
+                        dx.unsafe_ptr(), dlab.unsafe_ptr(), dsw.unsafe_ptr(), didx.unsafe_ptr(), dw.unsafe_ptr(),
+                        dq.unsafe_ptr(), dsq.unsafe_ptr(), dpart.unsafe_ptr(), dps.unsafe_ptr(), dpt.unsafe_ptr(),
+                        dact.unsafe_ptr(), dpf.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), Int32(start), Int32(cnt),
+                        wit.p(), Int32(wo), nonce, grid_dim=problems, block_dim=XG_TPB,
+                    )
                 wo += problems
                 start += cnt
             if wit.ok(ctx, wo, "SGD per-sample epoch"):
