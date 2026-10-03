@@ -1283,14 +1283,18 @@ comptime ORACLE_SCRATCH_POOLED = oracle_scratch_pooled_for[TARGET_COLUMN]()
 
 def multiclass_hessian_batch_for[column: Int]() -> Bool:
     """FAST Apple (lane apple-fast-pairlogit, the plan's `trees-multiclass`),
-    `-D MOJOLEARN_MULTICLASS_HESSIAN_BATCH`: the MultiClass Hessian's
+    the FAST + Apple default: the MultiClass Hessian's
     `numClasses` rows in ONE launch, one partition reduce, one copy and one
     wait per estimation iteration, where main's DEVIATION 75 loop launches,
     reduces, copies and waits per row (`_write_blocked_second_derivatives`). The
     reference's own layout (`reducedHessianGpu` slices, one `ReadReduce`).
     Element values are the row kernel's; the reduce over more columns can
-    move FAST bits. Off by default; IDENTICAL compiles main's loop."""
-    comptime if is_defined["MOJOLEARN_MULTICLASS_HESSIAN_BATCH"]():
+    move FAST bits. IDENTICAL compiles main's loop.
+    Default since the M3 A/B 2026-10-03 (gbdt-multiclass taximc, n=2,
+    mlogloss 1.012595, acc .59938 identical): 18,603 -> 17,857 ms (-4.0%).
+    `-D MOJOLEARN_MULTICLASS_HESSIAN_BATCH_OFF` restores main's loop; the old
+    `-D MOJOLEARN_MULTICLASS_HESSIAN_BATCH` is accepted and changes nothing."""
+    comptime if not is_defined["MOJOLEARN_MULTICLASS_HESSIAN_BATCH_OFF"]():
         comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
             return True
     return False
