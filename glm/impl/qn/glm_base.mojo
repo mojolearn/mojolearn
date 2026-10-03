@@ -491,7 +491,18 @@ comptime QNT_TPB = 256
 #   -D MOJOLEARN_LSVR_EVAL_SLIM        memset g + Tikhonov + the gradient norm
 #                                      (+ the OWL-QN l1 term) as ONE launch
 #                                      after the fold (`qn_slim_epilogue_kernel`).
-#   -D MOJOLEARN_LSVR_ALL              all four.
+#   -D MOJOLEARN_LSVR_DEVICE_CONVERGE  the line search's decision and the
+#                                      convergence test run on the device
+#                                      (`qn_dconv.mojo`); the host reads one
+#                                      state block every QN_DCONV_POLL
+#                                      iterations; implies LINESEARCH_BATCH
+#                                      and EVAL_SLIM's kernels.
+#   -D MOJOLEARN_LSVR_DUAL_CD          a damped parallel dual coordinate
+#                                      descent warm start (`lsvr_dual.mojo`),
+#                                      then the shipped L-BFGS to its own
+#                                      tolerance. NOT in ALL (it changes the
+#                                      solver's starting point, not a kernel).
+#   -D MOJOLEARN_LSVR_ALL              the first four plus DEVICE_CONVERGE.
 # ---------------------------------------------------------------------------
 
 comptime QN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
@@ -499,14 +510,22 @@ comptime QN_LSVR_ALL = is_defined["MOJOLEARN_LSVR_ALL"]()
 comptime QN_FAST_TILED = QN_FAST_APPLE and (
     is_defined["MOJOLEARN_LSVR_FASTPATH_FIX"]() or QN_LSVR_ALL
 )
+#: lane/apple-fast-linsvr: device-side line-search decision + convergence
+#: test, one host read per QN_DCONV_POLL iterations (`qn_dconv.mojo`)
+comptime QN_FAST_DCONV = QN_FAST_APPLE and (
+    is_defined["MOJOLEARN_LSVR_DEVICE_CONVERGE"]() or QN_LSVR_ALL
+)
+#: lane/apple-fast-linsvr: the dual coordinate-descent warm start
+#: (`lsvr_dual.mojo`); deliberately not part of ALL
+comptime QN_FAST_DUAL_CD = QN_FAST_APPLE and is_defined["MOJOLEARN_LSVR_DUAL_CD"]()
 comptime QN_FAST_LS_BATCH = QN_FAST_APPLE and (
-    is_defined["MOJOLEARN_LSVR_LINESEARCH_BATCH"]() or QN_LSVR_ALL
+    is_defined["MOJOLEARN_LSVR_LINESEARCH_BATCH"]() or QN_LSVR_ALL or QN_FAST_DCONV
 )
 comptime QN_FAST_FUSED = QN_FAST_APPLE and (
     is_defined["MOJOLEARN_LSVR_FUSED_GRAD"]() or QN_FAST_LS_BATCH
 )
 comptime QN_FAST_SLIM = QN_FAST_APPLE and (
-    is_defined["MOJOLEARN_LSVR_EVAL_SLIM"]() or QN_LSVR_ALL
+    is_defined["MOJOLEARN_LSVR_EVAL_SLIM"]() or QN_LSVR_ALL or QN_FAST_DCONV
 )
 #: the fused pass: threads per block, rows per thread, the register bound on d
 comptime QNF_TPB = 256
@@ -592,7 +611,22 @@ def _qn_row_lz(loss: Int, yi: Float32, zi: Float32, svr_eps: Float32) -> Float32
     return svr_l2_lz(yi, zi, svr_eps)
 
 
-def qnf_partial_kernel[DMAX: Int, K: Int](
+@always_inline
+def _dc_skip(gate: MutPointer[Float32, MutAnyOrigin], need_word: Int32) -> Bool:
+    """QN_FAST_DCONV's gate (`qn_dconv.mojo` state block): word 0 != 0 is a
+    stopped or handed-off device solver, so every later launch of the batch
+    is a no-op and the iterate stays frozen; `need_word >= 0` also skips
+    while that word is 0 (the materialize pass runs only when the device
+    line search picked a candidate past the first)."""
+    if gate.unsafe_load(0) != Float32(0.0):
+        return True
+    if Int(need_word) >= 0 and gate.unsafe_load(Int(need_word)) == Float32(0.0):
+        return True
+    return False
+
+
+@always_inline
+def _qnf_partial_body[DMAX: Int, K: Int](
     part: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin],
     y: MutPointer[Float32, MutAnyOrigin],
@@ -694,7 +728,62 @@ def qnf_partial_kernel[DMAX: Int, K: Int](
             part.unsafe_store((d + 1 + c) * tiles + tile, acc_c[c])
 
 
-def qnf_fold_kernel(
+def qnf_partial_kernel[DMAX: Int, K: Int](
+    part: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    xp: MutPointer[Float32, MutAnyOrigin],
+    drt: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    loss_in: Int32,
+    fit_intercept: Int32,
+    normalization: Float32,
+    svr_eps: Float32,
+    step0: Float32,
+    ls_dec: Float32,
+    tiles_in: Int32,
+):
+    """The kernel entry of `_qnf_partial_body` (its docstring says what it computes)."""
+    _qnf_partial_body[DMAX, K](
+        part, x, y, w, xp, drt, n_in, d_in, loss_in, fit_intercept,
+        normalization, svr_eps, step0, ls_dec, tiles_in,
+    )
+
+
+def qnf_partial_gated_kernel[DMAX: Int, K: Int](
+    gate: MutPointer[Float32, MutAnyOrigin],
+    need_word: Int32,
+    part: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    xp: MutPointer[Float32, MutAnyOrigin],
+    drt: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    loss_in: Int32,
+    fit_intercept: Int32,
+    normalization: Float32,
+    svr_eps: Float32,
+    step0: Float32,
+    ls_dec: Float32,
+    tiles_in: Int32,
+):
+    """QN_FAST_DCONV: `qnf_partial_kernel`, a no-op when the device solver state `gate`
+    says stop (word 0 != 0) or, `need_word >= 0`, when `gate[need_word]`
+    is 0 (`_dc_skip`). The test is uniform across the grid."""
+    if _dc_skip(gate, need_word):
+        return
+    _qnf_partial_body[DMAX, K](
+        part, x, y, w, xp, drt, n_in, d_in, loss_in, fit_intercept,
+        normalization, svr_eps, step0, ls_dec, tiles_in,
+    )
+
+
+@always_inline
+def _qnf_fold_body(
     g: MutPointer[Float32, MutAnyOrigin],
     slots: MutPointer[Float32, MutAnyOrigin],
     part: MutPointer[Float32, MutAnyOrigin],
@@ -750,7 +839,60 @@ def qnf_fold_kernel(
             slots.unsafe_store(4 + c - 1, ftz(s0 + reg))
 
 
-def qn_slim_epilogue_kernel(
+def qnf_fold_kernel(
+    g: MutPointer[Float32, MutAnyOrigin],
+    slots: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    xp: MutPointer[Float32, MutAnyOrigin],
+    drt: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    tiles_in: Int32,
+    alpha: Float32,
+    beta_is_one: Int32,
+    fit_intercept: Int32,
+    l2: Float32,
+    step0: Float32,
+    ls_dec: Float32,
+):
+    """The kernel entry of `_qnf_fold_body` (its docstring says what it computes)."""
+    _qnf_fold_body(
+        g, slots, part, xp, drt, n_in, d_in, tiles_in, alpha, beta_is_one,
+        fit_intercept, l2, step0, ls_dec,
+    )
+
+
+def qnf_fold_gated_kernel(
+    gate: MutPointer[Float32, MutAnyOrigin],
+    need_word: Int32,
+    g: MutPointer[Float32, MutAnyOrigin],
+    slots: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    xp: MutPointer[Float32, MutAnyOrigin],
+    drt: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    tiles_in: Int32,
+    alpha: Float32,
+    beta_is_one: Int32,
+    fit_intercept: Int32,
+    l2: Float32,
+    step0: Float32,
+    ls_dec: Float32,
+):
+    """QN_FAST_DCONV: `qnf_fold_kernel`, a no-op when the device solver state `gate`
+    says stop (word 0 != 0) or, `need_word >= 0`, when `gate[need_word]`
+    is 0 (`_dc_skip`). The test is uniform across the grid."""
+    if _dc_skip(gate, need_word):
+        return
+    _qnf_fold_body(
+        g, slots, part, xp, drt, n_in, d_in, tiles_in, alpha, beta_is_one,
+        fit_intercept, l2, step0, ls_dec,
+    )
+
+
+@always_inline
+def _qn_slim_epilogue_body(
     slots: MutPointer[Float32, MutAnyOrigin],
     g: MutPointer[Float32, MutAnyOrigin],
     w: MutPointer[Float32, MutAnyOrigin],
@@ -816,6 +958,44 @@ def qn_slim_epilogue_kernel(
         slots.unsafe_store(2, norm)
         if pl > 0:
             slots.unsafe_store(3, pen)
+
+
+def qn_slim_epilogue_kernel(
+    slots: MutPointer[Float32, MutAnyOrigin],
+    g: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    n_weights_in: Int32,
+    n_param_in: Int32,
+    l2: Float32,
+    gnorm_kind: Int32,
+    pen_len_in: Int32,
+):
+    """The kernel entry of `_qn_slim_epilogue_body` (its docstring says what it computes)."""
+    _qn_slim_epilogue_body(
+        slots, g, w, n_weights_in, n_param_in, l2, gnorm_kind, pen_len_in,
+    )
+
+
+def qn_slim_epilogue_gated_kernel(
+    gate: MutPointer[Float32, MutAnyOrigin],
+    need_word: Int32,
+    slots: MutPointer[Float32, MutAnyOrigin],
+    g: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    n_weights_in: Int32,
+    n_param_in: Int32,
+    l2: Float32,
+    gnorm_kind: Int32,
+    pen_len_in: Int32,
+):
+    """QN_FAST_DCONV: `qn_slim_epilogue_kernel`, a no-op when the device solver state `gate`
+    says stop (word 0 != 0) or, `need_word >= 0`, when `gate[need_word]`
+    is 0 (`_dc_skip`). The test is uniform across the grid."""
+    if _dc_skip(gate, need_word):
+        return
+    _qn_slim_epilogue_body(
+        slots, g, w, n_weights_in, n_param_in, l2, gnorm_kind, pen_len_in,
+    )
 
 
 def qnt_tiles(n: Int) -> Int:
@@ -1527,6 +1707,99 @@ struct GLMWithData(Movable):
                 return loss_host
             var reg_host = self.stage.unsafe_ptr().unsafe_load(1)
             return ftz(loss_host + reg_host)
+
+    def dconv_applies(self) -> Bool:
+        """QN_FAST_DCONV serves this objective: the fused pass with batch
+        candidates and the slim epilogue both hold it."""
+        comptime if QN_FAST_DCONV:
+            return (
+                qn_fused_applies(self.dims.D, self.dims.C)
+                and self.dims.n_param <= STATS_TPB
+            )
+        return False
+
+    def enqueue_dconv_eval(
+        mut self,
+        ctx: DeviceContext,
+        mut w: DeviceBuffer[DType.float32],
+        mut g: DeviceBuffer[DType.float32],
+        mut xp: DeviceBuffer[DType.float32],
+        mut drt: DeviceBuffer[DType.float32],
+        gate: MutPointer[Float32, MutAnyOrigin],
+        need_word: Int,
+        ls_dec: Float32,
+        batch: Bool,
+    ) raises:
+        """QN_FAST_DCONV: `evaluate_batch`'s launches (batch: the objective
+        and gradient at `w`, the QNF_LS_K - 1 next candidates' objectives
+        from `xp`, `drt` at step 1) or `evaluate`'s fused + slim launches
+        (not batch: the materialize pass), every one gated on the device
+        solver state `gate` (`_dc_skip`), with NO synchronize: slots 0..2
+        (and 4.. under batch) stay on the device for `qn_dconv.mojo`'s
+        kernels. Never counted in `n_evals` (nothing on this path reads it)."""
+        comptime if not QN_FAST_DCONV:
+            raise Error("qn: enqueue_dconv_eval is compiled under MOJOLEARN_LSVR_DEVICE_CONVERGE only")
+        else:
+            var n = self.n_rows
+            var d = self.dims.D
+            var tiles = qnf_tiles(n)
+            var nb = qnf_blocks(n)
+            var fi = Int32(1) if self.dims.fit_intercept else Int32(0)
+            var normalization = Float32(1.0 / Float64(n))
+            var nw = Int32(need_word)
+            var step0 = Float32(1.0)
+            var xp_p = xp.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            var drt_p = drt.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            var outputs = d + 2
+            if batch:
+                outputs = d + 1 + QNF_LS_K
+                if d <= 16:
+                    ctx.enqueue_function[qnf_partial_gated_kernel[16, QNF_LS_K]](
+                        gate, nw, self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(),
+                        self.y.unsafe_ptr(), w.unsafe_ptr(), xp_p, drt_p,
+                        Int32(n), Int32(d), Int32(self.loss), fi, normalization,
+                        self.svr_eps, step0, ls_dec, Int32(tiles),
+                        grid_dim=(nb, 1, 1), block_dim=(QNF_TPB, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[qnf_partial_gated_kernel[QNF_MAX_D, QNF_LS_K]](
+                        gate, nw, self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(),
+                        self.y.unsafe_ptr(), w.unsafe_ptr(), xp_p, drt_p,
+                        Int32(n), Int32(d), Int32(self.loss), fi, normalization,
+                        self.svr_eps, step0, ls_dec, Int32(tiles),
+                        grid_dim=(nb, 1, 1), block_dim=(QNF_TPB, 1, 1),
+                    )
+            else:
+                if d <= 16:
+                    ctx.enqueue_function[qnf_partial_gated_kernel[16, 1]](
+                        gate, nw, self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(),
+                        self.y.unsafe_ptr(), w.unsafe_ptr(), xp_p, drt_p,
+                        Int32(n), Int32(d), Int32(self.loss), fi, normalization,
+                        self.svr_eps, step0, ls_dec, Int32(tiles),
+                        grid_dim=(nb, 1, 1), block_dim=(QNF_TPB, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[qnf_partial_gated_kernel[QNF_MAX_D, 1]](
+                        gate, nw, self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(),
+                        self.y.unsafe_ptr(), w.unsafe_ptr(), xp_p, drt_p,
+                        Int32(n), Int32(d), Int32(self.loss), fi, normalization,
+                        self.svr_eps, step0, ls_dec, Int32(tiles),
+                        grid_dim=(nb, 1, 1), block_dim=(QNF_TPB, 1, 1),
+                    )
+            # set_zero (beta 0): the slim epilogue adds the Tikhonov half
+            ctx.enqueue_function[qnf_fold_gated_kernel](
+                gate, nw, g.unsafe_ptr(), self.slots.unsafe_ptr(),
+                self.xtdz_ws.unsafe_ptr(), xp_p, drt_p,
+                Int32(n), Int32(d), Int32(tiles), Float32(1.0 / Float64(n)),
+                Int32(0), fi, self.l2, step0, ls_dec,
+                grid_dim=(outputs, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
+            ctx.enqueue_function[qn_slim_epilogue_gated_kernel](
+                gate, nw, self.slots.unsafe_ptr(), g.unsafe_ptr(), w.unsafe_ptr(),
+                Int32(self.dims.C * self.dims.D), Int32(self.dims.n_param),
+                self.l2, Int32(self._gnorm_kind()), Int32(0),
+                grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
 
     def enqueue_tiled(
         mut self,
