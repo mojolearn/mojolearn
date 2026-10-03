@@ -131,8 +131,16 @@ QUALITY (the conductor, float64 NumPy)
 SHAPES (`--shape`): see SHAPES below; `full` is the board, `small` a smoke.
 The CPU lanes cap the sequence length at 512 in `full`.
 
-IDENTICAL ONLY. The neural surface builds `identical` only; an `ours` worker
-refuses to start under any other MOJOLEARN_NUMERIC_MODE.
+OUR TWO ARMS. `ours` is the IDENTICAL tier (every vendor; the worker starts
+under MOJOLEARN_NUMERIC_MODE=identical and refuses any other). `ours-fast` is
+the Apple FAST neural tier (2026-10-03): the same public classes under
+MOJOLEARN_NUMERIC_MODE=fast, the FAST binaries the wheel ships on Apple; its
+worker refuses to start under any other mode and refuses a binary that reads
+back another tier. Quality columns of `ours-fast` are against `ours` like an
+opponent's (loss differences on the train lanes, max abs / rel output
+difference on the forward lanes). Neither arm runs on a CPU lane. The A/B tool
+tools/afn_ab.sh races `ours-fast` alone (`--arms ours-fast`) and keeps each
+arm's outputs (`--keep-outputs`) for its own judge.
 """
 import argparse
 import glob
@@ -208,7 +216,10 @@ CPU_SETTINGS = ("eager-fp32", "compile-fp32", "eager-bf16", "compile-bf16")
 NO_COMPILE = ("mamba1-forward", "mamba1-infer")
 VENDORS = ("apple", "nvidia", "amd")
 
-ARMS = ("ours",) + tuple("torch-" + s for s in TORCH_SETTINGS) \
+#: Our arms: `ours` IDENTICAL, `ours-fast` the Apple FAST neural tier.
+OUR_ARMS = ("ours", "ours-fast")
+OUR_MODE = {"ours": "identical", "ours-fast": "fast"}
+ARMS = OUR_ARMS + tuple("torch-" + s for s in TORCH_SETTINGS) \
     + tuple("torch-cpu-" + s for s in CPU_SETTINGS) + ("torch-eager-int8", "torch-compile-int8")
 #: gemm-int8's torch settings: torch._int_mm (int8 x int8 -> int32), no autocast, no TF32
 INT8_COLUMNS = {"eager_int8": dict(tf32=False, compile=False, autocast=None),
@@ -677,16 +688,26 @@ def _weights(data):
 # Workers: ours (one process per arm)
 # ---------------------------------------------------------------------------
 
-def _ours_module():
+def _ours_mode():
+    """The tier this `ours*` worker was started for: `ours` is identical,
+    `ours-fast` fast (the conductor's _worker_env sets the variable per arm).
+    Deterministic is not a neural tier and is refused by name."""
     want = os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical").strip().lower()
-    if want != "identical":
-        raise RuntimeError("REFUSED: the neural surface is IDENTICAL only; this worker was started "
-                           "under MOJOLEARN_NUMERIC_MODE=%s" % want)
+    if want not in ("identical", "fast"):
+        raise RuntimeError("REFUSED: the neural surface races identical (ours) and fast "
+                           "(ours-fast, the Apple tier) only; this worker was started under "
+                           "MOJOLEARN_NUMERIC_MODE=%s" % want)
+    return want
+
+
+def _ours_module():
+    _ours_mode()
     import mojolearn
     return mojolearn
 
 
 def _ours_info(ml, module_path, mode_used, device="gpu"):
+    want = _ours_mode()
     info = {"library": "mojolearn", "version": getattr(ml, "__version__", "unknown"),
             "numeric_mode_env": os.environ.get("MOJOLEARN_NUMERIC_MODE"),
             "numeric_mode_used": mode_used, "device": device,
@@ -696,8 +717,11 @@ def _ours_info(ml, module_path, mode_used, device="gpu"):
         info["vendor_used"] = ml.vendor()
     except Exception as exc:  # noqa: BLE001
         info["vendor_used"] = "unavailable (%r)" % (exc,)
-    if mode_used != "identical":
-        raise RuntimeError("ours is not IDENTICAL: read back %r" % (mode_used,))
+    if mode_used != want:
+        raise RuntimeError("ours is not %s: read back %r" % (want.upper(), mode_used))
+    if want == "fast" and info["vendor_used"] != "apple":
+        raise RuntimeError("REFUSED: ours-fast is the Apple FAST neural tier; this box's vendor "
+                           "reads back %r" % (info["vendor_used"],))
     return info
 
 
@@ -792,8 +816,9 @@ class OursLM(Ours):
             lr=ADAMW["lr"], betas=ADAMW["betas"], eps=ADAMW["eps"],
             weight_decay=ADAMW["weight_decay"])
         meta = self.trainer.run_metadata()
-        mode = "identical" if int(meta.get("native_numeric_mode", -1)) == 1 else \
-            "native_numeric_mode=%s" % meta.get("native_numeric_mode")
+        mode = {0: "fast", 1: "identical", 2: "deterministic"}.get(
+            int(meta.get("native_numeric_mode", -1)),
+            "native_numeric_mode=%s" % meta.get("native_numeric_mode"))
         self.info = _ours_info(ml, meta.get("binding_file"), mode)
         self.info.update(profile=meta.get("native_profile"), native_vendor=meta.get("native_vendor"),
                          call=LANE_TEXT[lane][0], config=json.dumps(meta.get("config"), sort_keys=True))
@@ -1363,7 +1388,10 @@ def _load_speed_torch_seq(torch, info):
 
 
 def build_runner(lane, arm, shape, data):
-    if arm in ("ours",):
+    if arm in OUR_ARMS:
+        if os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical").strip().lower() != OUR_MODE[arm]:
+            raise RuntimeError("REFUSED: arm %s runs under MOJOLEARN_NUMERIC_MODE=%s, not %r"
+                               % (arm, OUR_MODE[arm], os.environ.get("MOJOLEARN_NUMERIC_MODE")))
         return OURS[MODEL_OF[lane]](lane, shape, data)
     return TorchArm(lane, shape, data, arm)
 
@@ -1504,8 +1532,8 @@ def _worker_env(arm):
     for k in ctd.THREAD_ENV:
         env.pop(k, None)
     ctd.apply_cpu_quota(env)
-    if arm in ("ours",):
-        env["MOJOLEARN_NUMERIC_MODE"] = "identical"
+    if arm in OUR_ARMS:
+        env["MOJOLEARN_NUMERIC_MODE"] = OUR_MODE[arm]     # ours identical, ours-fast fast
         if os.environ.get("MOJOLEARN_BENCH_INSTALLED", "0").strip() in ("", "0"):
             tree = os.path.join(REPO, "python")
             env["PYTHONPATH"] = tree + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
@@ -1524,9 +1552,11 @@ def race(args):
     probe = _load("bench_board_probe")
     probe.refuse_our_cpu_arms(arms, "bench_board_neural")
     if DEVICE_OF.get(lane) == "cpu" and any(a.startswith("ours") for a in arms):
-        # ours IS the host binding on this lane (a *-infer or host train lane)
-        raise SystemExit("bench_board_neural: refused ours on %s (it runs on the CPU): %s"
-                         % (lane, probe.OUR_CPU_RULE))
+        # ours IS the host binding on this lane (a *-infer or host train lane);
+        # ours-fast is refused here too: the Apple FAST neural tier is GPU only
+        raise SystemExit("bench_board_neural: refused %s on %s (it runs on the CPU, in no numeric "
+                         "mode): %s" % (",".join(a for a in arms if a.startswith("ours")), lane,
+                                        probe.OUR_CPU_RULE))
     for a in arms:
         if a not in ARMS:
             raise SystemExit("no arm %r for lane %r" % (a, lane))
@@ -1544,7 +1574,7 @@ def race(args):
               "commit": os.environ.get("MOJOLEARN_REPO_COMMIT", "unknown")}
     workers = {}
     for arm in arms:
-        py = args.ours_python if arm in ("ours",) else args.theirs_python
+        py = args.ours_python if arm in OUR_ARMS else args.theirs_python
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm,
                                  "--lane", lane, "--shape", shape, "--data", data_path]
         workers[arm] = ctd.Worker(arm, cmd, _worker_env(arm),
@@ -1623,7 +1653,13 @@ def race(args):
             if msg is not None and msg.get("event") == "saved":
                 with np.load(path) as z:
                     outs[arm] = {k: z[k] for k in z.files}
-                os.remove(path)
+                if getattr(args, "keep_outputs", False):
+                    # tools/afn_ab.sh's judge compares two builds' outputs
+                    keep = os.path.join(args.out, "%s-%s.outputs.npz" % (tag, arm))
+                    os.replace(path, keep)
+                    result["arms"][arm]["outputs_npz"] = keep
+                else:
+                    os.remove(path)
             else:
                 result["arms"][arm].update(status="save_failed", error=msg)
         w.close()
@@ -1676,6 +1712,10 @@ def build_parser():
                         "and stop before the warm-up (the board's opponent-store lookup)")
     r.add_argument("--warmup-seconds", type=int, default=1800)
     r.add_argument("--round-seconds", type=int, default=1800)
+    r.add_argument("--keep-outputs", action="store_true",
+                   help="keep every arm's saved outputs as <out>/<lane>-<data>-<arm>.outputs.npz "
+                        "(y for a forward lane, losses for a train lane): tools/afn_ab.sh's judge "
+                        "compares two builds from these")
     w = sub.add_parser("worker")
     w.add_argument("--arm", required=True, choices=ARMS)
     w.add_argument("--lane", required=True, choices=LANES)
