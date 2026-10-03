@@ -111,6 +111,7 @@ from x_cluster.device_post import (
     sign_side_kernel,
 )
 from x_cluster.post_bodies import FM_FF, FM_MIN, FM_PROD, FM_VAL, FM_WMIN, FOLD_CHUNK, ff_of_f64
+from x_cluster.bgmm_kernels import bgmm_launch
 from std.gpu import WARP_SIZE
 from std.gpu.primitives.warp import shuffle_idx
 from x_cluster.minibatch_cells import mb_center_wsum, mb_center_word
@@ -2428,6 +2429,22 @@ struct DeviceOps(ClusterOps):
         var h = self.get(o, 2)
         self._ph1("sum_ff")
         return Float64(h[0]) + Float64(h[1])
+
+    def fold_into(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int, dst: Int) raises:
+        self._ph0()
+        var po = self._fp(dst)
+        self._fold(mode, self._fp(a), self._fp(b if b >= 0 else a), self._fp(c if c >= 0 else a), n, po, po + 1, 0)
+        self._ph1("fold_into")
+
+    def bgmm_step(
+        mut self, step: Int, kc: Int, d: Int, cfg: Int, aux: Int, w: Int, p1: Int, p2: Int, p3: Int
+    ) raises:
+        self._ph0()
+        bgmm_launch(
+            self.ctx, step, self._fp(w), self._fp(p1 if p1 >= 0 else w), self._fp(p2 if p2 >= 0 else w),
+            self._fp(p3 if p3 >= 0 else w), kc, d, cfg, aux,
+        )
+        self._ph1("bgmm_step")
 
     def bin_seeds(mut self, x: Int, n: Int, d: Int, bin_size: Float32, min_bin_freq: Int, dst: Int) raises -> Int:
         self._ph0()
