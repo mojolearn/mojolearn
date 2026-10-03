@@ -27,11 +27,11 @@ def _addr_ptr[dt: DType](addr: Int) raises -> MutPointer[Scalar[dt], MutUntracke
 
 def _strided_copy[dt: DType](
     src: Int, dst: Int, dims: MutPointer[Int64, MutUntrackedOrigin], nd: Int, total: Int
-) raises:
+):
     """Walk the index space of `shape` in C order; element (i_0..i_k) moves
     from src[src_base + sum i_j * s_j] to dst[dst_base + sum i_j * d_j]."""
-    var sp = _addr_ptr[dt](src)
-    var dp = _addr_ptr[dt](dst)
+    var sp = MutPointer[Scalar[dt], MutUntrackedOrigin](unsafe_from_address=src)
+    var dp = MutPointer[Scalar[dt], MutUntrackedOrigin](unsafe_from_address=dst)
     var sbase = Int(dims[3 * nd])
     var dbase = Int(dims[3 * nd + 1])
     var inner = Int(dims[nd - 1])
@@ -84,6 +84,10 @@ def strided_copy_bytes_binding(
         return PythonObject(0)
     var src = Int(py=src_addr)
     var dst = Int(py=dst_addr)
+    if src == 0 or dst == 0:
+        raise Error("strided_copy_bytes: null buffer address")
+    if isz != 1 and isz != 2 and isz != 4 and isz != 8:
+        raise Error("strided_copy_bytes: itemsize must be 1, 2, 4 or 8")
     with GILReleased(Python()):
         if isz == 1:
             _strided_copy[DType.uint8](src, dst, dp, nd, total)
@@ -91,10 +95,8 @@ def strided_copy_bytes_binding(
             _strided_copy[DType.uint16](src, dst, dp, nd, total)
         elif isz == 4:
             _strided_copy[DType.uint32](src, dst, dp, nd, total)
-        elif isz == 8:
-            _strided_copy[DType.uint64](src, dst, dp, nd, total)
         else:
-            raise Error("strided_copy_bytes: itemsize must be 1, 2, 4 or 8")
+            _strided_copy[DType.uint64](src, dst, dp, nd, total)
     return PythonObject(total)
 
 
@@ -104,9 +106,9 @@ def check_lengths_i64_binding(
     """The first i whose length is outside [1, length], or -1."""
     var n = Int(py=b)
     var hi = Int64(Int(py=length))
-    var lp = _addr_ptr[DType.int64](Int(py=lengths_addr)) if n > 0 else MutPointer[
-        Int64, MutUntrackedOrigin
-    ]()
+    if n <= 0:
+        return PythonObject(-1)
+    var lp = _addr_ptr[DType.int64](Int(py=lengths_addr))
     for i in range(n):
         var v = lp.unsafe_load(i)
         if v < 1 or v > hi:
@@ -133,9 +135,9 @@ def ragged_rows_bytes_binding(
         return PythonObject(0)
     var lp = _addr_ptr[DType.int64](Int(py=lengths_addr))
     var dp = _addr_ptr[DType.uint8](Int(py=dst_addr))
+    var sp = _addr_ptr[DType.uint8](Int(py=src_addr))
     with GILReleased(Python()):
         if m == 0:
-            var sp = _addr_ptr[DType.uint8](Int(py=src_addr))
             for i in range(n):
                 var keep = Int(lp.unsafe_load(i)) * pos
                 var base = i * row
@@ -150,7 +152,6 @@ def ragged_rows_bytes_binding(
                 for k in range(keep, row):
                     dp.unsafe_store(base + k, 0)
         else:
-            var sp = _addr_ptr[DType.uint8](Int(py=src_addr))
             for i in range(n):
                 var at = i * pos + (Int(lp.unsafe_load(i)) - 1) * row
                 for k in range(row):
