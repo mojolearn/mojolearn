@@ -62,6 +62,10 @@ struct ProphetData(ImplicitlyCopyable, Movable):
     var tau: Float32
     var mult: Bool
 
+    # Metal: pointer-taking callees on a kernel path must inline (an
+    # out-of-line call can mis-read the t/X/cp/sig pointers; lane
+    # apple-fast-prophetfix, prophet_fit_team quit L-BFGS at iteration 1)
+    @always_inline
     def __init__(out self, t: FP, X: FP, cp: FP, sig: FP, N: Int, K: Int, S: Int, tau: Float32, mult: Bool):
         self.t = t
         self.X = X
@@ -154,6 +158,7 @@ def _fg_prior(d: ProphetData, th: FP, g: FP, sse: Float32) -> Float32:
     return f
 
 
+@always_inline
 def prophet_fg(d: ProphetData, y: FP, th: FP, g: FP) -> Float32:
     """-log posterior (up to a constant) at th and its gradient into g.
     th = [k, m, delta (S), log sigma, beta (K)]. (apple2: the likelihood
@@ -383,6 +388,7 @@ def lbfgs_steps[F: ProphetFG](mut fg: F, mut s: LBState, P: Int, th: FP, w: FP,
     return steps
 
 
+@always_inline
 def lbfgs_prophet(d: ProphetData, y: FP, th: FP, w: FP, max_iter: Int) -> Tuple[Float32, Int]:
     """Minimise prophet_fg from th (in place). w: scratch of
     (6 + 2 MEM) P + 2 MEM floats. Returns (f, iterations)."""

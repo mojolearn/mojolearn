@@ -496,6 +496,7 @@ struct TeamFG(ProphetFG):
         return _fg_prior(self.d, th, g, ld(self.gs, P))
 
 
+@always_inline
 def prophet_fit_team(slot: Int, team: SeqTeam, a: Args):
     """op_prophet_fit for series a.i8 + slot over a block. Arguments as
     op_prophet_fit (p0..p6, i0..i3, i5, f0) and: p7 the shared rows [G, i11];
