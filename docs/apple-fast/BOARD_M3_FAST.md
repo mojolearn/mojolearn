@@ -2,7 +2,7 @@
 
 Our FAST arm on the M3 Ultra Metal GPU at head 0e743cac9, 24ed76679, 2dcdd949f, 37c65a3af, 42b6db46c, 4b1311c12, 5990c5946, 69f7a41fd, 6c54b7e87, 6d4d55c99, 73f3a856d, 829c3fb4a, 94cb5ba59, 9722e5a2b, b2dd5dfe5, c55b8c377, c5e1bbeb6, d1fa9223b, eb3fca1ac, ed49f2b11, f419ea9f1, 1 warm-up + 3 timed rounds at board size (rows-full; trees MOJOLEARN_SPEED_SIZE=shipped). Opponents are not re-raced: classical times come from the M3 0.8.34 board (`~/mojolearn-evidence/board-0834-times.tsv`, quality from its board.json), trees from the 2026-09-29 M3 board (older tree params on some lanes); an opponent marked (fill) comes from the M3 opponent fill on the 0.8.34 kit. Ratio = our FAST ms / best opponent ms; below 1 is faster. Rows sort worst ratio after first. Written by `tools/af_board_merge.py`.
 
-Summary: 171 rows, 161 with a ratio, 122 faster than the best opponent after (bayesian-ridge istella excluded: NaN), geometric-mean ratio 0.38. Flips to faster: lasso-lars istella, onehot istella, ordinal istella, multioutput-reg taxi, qda taxi, iforest istella, dart-reg istella, gpr taxi, dart istella, gbdt-categorical taxi, minmax-scaler taxi, lr-onecycle synthetic, nearest-centroid istella, enet-cv taxi, meanshift istella, bayesian-ridge istella, lasso-cv taxi, knn-clf istella, lasso-lars taxi, knn-reg istella, lars taxi, elasticnet taxi, gbdt-lossguide istella, ridge-clf istella, lasso taxi, lda-clf istella, lda taxi-zones, lasso-cv istella, damped-ets synthetic, damped-ets taxi-hourly, calibrated taxi, enet-cv istella, ard istella, qda istella. Flips to slower: adafactor synthetic, dynamic-optimized-theta taxi-hourly.
+Summary: 171 rows, 162 with a ratio, 123 faster than the best opponent after (bayesian-ridge istella excluded: NaN), geometric-mean ratio 0.38. Flips to faster: lasso-lars istella, onehot istella, ordinal istella, multioutput-reg taxi, qda taxi, iforest istella, dart-reg istella, gpr taxi, dart istella, minmax-scaler taxi, lr-onecycle synthetic, nearest-centroid istella, enet-cv taxi, meanshift istella, gbdt-rank-yetirank istella, bayesian-ridge istella, gbdt-categorical taxi, lasso-cv taxi, knn-clf istella, lasso-lars taxi, knn-reg istella, lars taxi, elasticnet taxi, gbdt-lossguide istella, ridge-clf istella, lasso taxi, lda-clf istella, lda taxi-zones, lasso-cv istella, damped-ets synthetic, damped-ets taxi-hourly, calibrated taxi, enet-cv istella, ard istella, qda istella. Flips to slower: adafactor synthetic, dynamic-optimized-theta taxi-hourly.
 
 | lane | dataset | family | FAST before ms | FAST after ms | best opponent | opp ms | ratio before | ratio after | flip | quality after (FAST) | quality before (FAST) | opponent quality | status |
 |---|---|---|---:|---:|---|---:|---:|---:|---|---|---|---|---|
@@ -68,7 +68,6 @@ Summary: 171 rows, 161 with a ratio, 122 faster than the best opponent after (ba
 | dart | istella | algos | 69424 | 23014 | lightgbm-cpu | 35425 | 1.96 | 0.65 | FLIP faster | accuracy=0.9486, logloss=0.134461 | accuracy=0.9487, logloss=0.1341 | accuracy=0.9519, logloss=0.1237 | ok |
 | knn | taxi | classical | 224 | 257 | sklearn-cpu | 426 | 0.53 | 0.60 |  | recall_at_k=0.999754, rows_with_repeated_ids=0 | recall_at_k=0.9998, rows_with_repeated_ids=0 | recall_at_k=1, rows_with_repeated_ids=0 | ok |
 | gbdt-ordered | taxi | trees | - | 56105 | catboost-cpu (fill) | 99253 | - | 0.57 |  | logloss=0.52928, auc=0.628294 | - | auc=0.6277 | ok |
-| gbdt-categorical | taxi | trees | 63398 | 32925 | lightgbm-cpu (fill) | 58904 | 1.08 | 0.56 | FLIP faster | logloss=0.528426, auc=0.63103 | auc=0.6302, logloss=0.5286 | auc=0.6327 | ok |
 | gru-clf | taxi-hourly | algos | 1632 | 1650 | torch-eager-fp32 (fill) | 3099 | 0.53 | 0.53 |  | accuracy=0.865668, logloss=0.305841 | accuracy=0.8657, logloss=0.3058 | - | ok |
 | gru-reg | synthetic | algos | 1630 | 1629 | torch-eager-fp32 (fill) | 3060 | 0.53 | 0.53 |  | r2=0.981946, rmse=0.155672 | r2=0.9819, rmse=0.1557 | - | ok |
 | label-propagation | istella | algos | - | 7714 | sklearn-cpu | 14552 | - | 0.53 |  | accuracy=0.9055 | - | accuracy=0.9055 | ok |
@@ -80,7 +79,9 @@ Summary: 171 rows, 161 with a ratio, 122 faster than the best opponent after (ba
 | enet-cv | taxi | algos | 3173 | 105 | sklearn-cpu | 211 | 15.03 | 0.50 | FLIP faster | r2=0.909004, rmse=4.80449 | r2=0.909, rmse=4.804 | r2=0.909, rmse=4.804 | ok |
 | meanshift | istella | algos | 5834 | 214 | sklearn-cpu | 444 | 13.13 | 0.48 | FLIP faster | n_clusters=12, silhouette=0.403452 | ari_vs_ours=1, n_clusters=12, silhouette=0.4034 | ari_vs_ours=1, n_clusters=12, silhouette=0.4034 | ok |
 | lda | text | algos | - | 34671 | sklearn-cpu | 72657 | - | 0.48 |  | perplexity=266.719 | - | perplexity=266.9 | ok |
+| gbdt-rank-yetirank | istella | trees | 25773 | 3350 | lightgbm-cpu (fill) | 7083 | 3.64 | 0.47 | FLIP faster | ndcg10=0.680466, ndcg5=0.614035, map=0.814182 | map=0.8149, ndcg10=0.681, ndcg5=0.6151 | map=0.8584 | ok |
 | bayesian-ridge | istella | algos | 92368 | 3163 | sklearn-cpu | 6831 | 13.52 | 0.46 | FLIP faster | r2=nan, rmse=nan | r2=-4.169e+04, rmse=170.6 | r2=-890.2, rmse=24.94 | ok |
+| gbdt-categorical | taxi | trees | 63398 | 27206 | lightgbm-cpu (fill) | 58904 | 1.08 | 0.46 | FLIP faster | logloss=0.528361, auc=0.631219 | auc=0.6302, logloss=0.5286 | auc=0.6327 | ok |
 | lasso-cv | taxi | algos | 3170 | 104 | sklearn-cpu | 226 | 14.00 | 0.46 | FLIP faster | r2=0.909038, rmse=4.80359 | r2=0.9091, rmse=4.803 | r2=0.909, rmse=4.804 | ok |
 | ridge | taxi | classical2 | 31.5 | 16.2 | sklearn-cpu | 35.7 | 0.88 | 0.45 |  | r2=0.908983, rmse=4.80505 | r2=0.909, rmse=4.805 | r2=0.909, rmse=4.805 | ok |
 | iterative-imputer | istella | algos | 4605 | 4596 | sklearn-cpu | 10351 | 0.44 | 0.44 |  | masked_rmse=799041 | masked_rmse=7.99e+05 | masked_rmse=8.024e+05 | ok |
@@ -170,7 +171,6 @@ Summary: 171 rows, 161 with a ratio, 122 faster than the best opponent after (ba
 | adaboost-clf | istella | algos | 15452 | 4763 | - | - | - | - |  | accuracy=0.93715, logloss=0.431913 | accuracy=0.935, logloss=0.4387 | - | ok |
 | gbdt-categorical | taxicat | trees | - | 37105 | - | - | - | - |  | logloss=0.528399, auc=0.630905 | - | - | ok |
 | gbdt-ordered | istella | trees | - | 75359 | - | - | - | - |  | logloss=0.190603, auc=0.979518 | - | - | ok |
-| gbdt-rank-yetirank | istella | trees | 25773 | - | lightgbm-cpu (fill) | 7083 | 3.64 | - |  | - | map=0.8149, ndcg10=0.681, ndcg5=0.6151 | map=0.8584 | refused |
 | gmm | taxi | classical2 | - | - | - | - | - | - |  | - | - | - | error: GaussianMixture ill-defined empirical covariance (no prior FAST time; sklearn refuses too) |
 | lamb | synthetic | algos | - | 213 | - | - | - | - |  | - | - | - | ok |
 | lars | istella | algos | 5583 | 845 | - | - | - | - |  | r2=0.328662, rmse=0.684433 | r2=0.2157, rmse=0.7398 | - | ok |
@@ -178,17 +178,19 @@ Summary: 171 rows, 161 with a ratio, 122 faster than the best opponent after (ba
 | linearsvr | istella | classical2 | 940 | 217 | - | - | - | - |  | r2=-0.106761, rmse=0.878794 | r2=-0.1067, rmse=0.8788 | - | ok |
 | lion | synthetic | algos | 137 | 201 | - | - | - | - |  | - | - | - | ok |
 
-Sources: before = M3 0.8.34 board (classical), M3 2026-09-29 board FAST cells (trees); job tags afb-eighscope, afb10-ols, afb11-arima-c2, afb12-seq-algos-1, afb12-seq-algos-2, afb12-seq-algos-3, afb12-seq-algos-4, afb13-forest, afb14-lossguide, afb15-prophet, afb16-garch-croston, afb17-gram-algos, afb18-cluster, afb19-prep, afb2-algos-2, afb2-classical-4, afb2-trees-1b, afb20-eigh, afb21-garch, afb22-mbk, afb23-opt, afb24-knn, afb25-kde, afb26-moe, afb27-ridge, afb28-linear, afb29-lp, afb3-cat-taxicat, afb3-trees-fast, afb4-grp-ocsvm-main, afb5-merged-algos, afb5-merged-trees, afb5b-dart, afb6-te-algos, afb9-dw2.
+Sources: before = M3 0.8.34 board (classical), M3 2026-09-29 board FAST cells (trees); job tags afb-eighscope, afb10-ols, afb11-arima-c2, afb12-seq-algos-1, afb12-seq-algos-2, afb12-seq-algos-3, afb12-seq-algos-4, afb13-forest, afb14-lossguide, afb15-prophet, afb16-garch-croston, afb17-gram-algos, afb18-cluster, afb19-prep, afb2-algos-2, afb2-classical-4, afb2-trees-1b, afb20-eigh, afb21-garch, afb22-mbk, afb23-opt, afb24-knn, afb25-kde, afb26-moe, afb27-ridge, afb28-linear, afb29-lp, afb3-cat-taxicat, afb3-trees-fast, afb30-cat, afb31-yeti, afb4-grp-ocsvm-main, afb5-merged-algos, afb5-merged-trees, afb5b-dart, afb6-te-algos, afb9-dw2.
 
-## Quality flags (M3 manager, 2026-10-02, updated 2026-10-03 refresh 8)
+## Quality flags (M3 manager, 2026-10-02, updated 2026-10-03 refresh 9)
 
 - **bayesian-ridge istella: NaN in this table.** The time comes from a run before the guard fix: the Gram sse shortcut
   cancels in f32 on istella. The guard (`MOJOLEARN_BAYES_GRID_GUARD`, default on Apple) is merged in main 6d4d55c99
   (istella NaN -> finite, job bayes-br-guard-istella); the board re-time is owed. Not counted as a win.
 - **ard istella: r2 -0.139 vs sklearn 0.327.** FAST was already below sklearn before this pass (-0.124); the row-pass arm
   gives -0.122. Speed is real, quality is not at the opponent's level: open.
-- **gbdt-rank-yetirank:** the refresh asked for dataset istella; the lane races on istellarank, so the driver refused.
-  YetiRank's M3 FAST time on istellarank is 5.6 s (LEDGER), vs LightGBM 6.8 s on the board.
+- gbdt-rank-yetirank istella re-timed in refresh 9 (job afb31-yeti, head eb3fca1ac, YetiRank sort): 3350 ms, was refused;
+  ratio 0.47 vs lightgbm-cpu (fill) 7083 ms; ndcg10 0.6805 vs 0.681 before.
+- gbdt-categorical taxi re-timed in refresh 9 (job afb30-cat, head eb3fca1ac, categorical CTR freq): 27206 ms, was 32925 ms;
+  ratio 0.46 vs lightgbm-cpu (fill) 58904 ms; auc 0.6312 (was 0.6310).
 - Slower than before within this refresh: knn istella 1592 -> 1805 ms, ocsvm taxi 246 -> 372 ms. Before cells come
   from older boards (Sept 29 trees, 0.8.34 classical); not yet re-checked.
 - Forest scans (main 69f7a41fd, job afb13-forest): rf taxi 11364 -> 10708 ms, rf istella 14232 -> 10162 ms,
