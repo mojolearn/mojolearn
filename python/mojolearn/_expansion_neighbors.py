@@ -586,7 +586,8 @@ class NearestCentroid(_XNeighbors):
         n, d = X.shape
         lab = None
         if _nc_cls1_flags(self) & 1:
-            # lane/apple-fast-gap-cls1 (-D MOJOLEARN_NC_FAST_CLS1_LABELS): the
+            # lane/apple-fast-gap-cls1 NC_FAST_CLS1_LABELS (FAST + Apple
+            # default, off with -D MOJOLEARN_NC_FAST_CLS1_LABELS_OFF): the
             # native encoder's int32 codes as they are, the class counts from
             # the device (x_neighbors/nc_cls1.mojo); no Python pass over the rows
             from ._labels import encode_labels
@@ -709,11 +710,6 @@ class NearestCentroid(_XNeighbors):
         if self._uniform():
             D = self._sqdist(Q, self.centroids_) if self.metric == "euclidean" else self._l1dist(Q, self.centroids_)
             _, idx = self._knn_select(D, 1, False)
-            if _nc_cls1_flags(self) & 2:
-                # lane/apple-fast-gap-cls1 (-D MOJOLEARN_NC_FAST_CLS1_PREDICT):
-                # the int32 indices to the native gather, no per-row list
-                from ._labels import decode_labels
-                return decode_labels(self.classes_, idx.reshape((Q.shape[0],)))
             return _class_array(self.classes_, [r[0] for r in idx.tolist()])
         return _argmax_labels(self, self.classes_, self.decision_function(Q))
 

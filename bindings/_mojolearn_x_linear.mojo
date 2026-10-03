@@ -19,8 +19,8 @@ from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
-from x_linear.ops import FP, IP
-from x_linear.device import fit_device, decision_device, decision_codes_device
+from x_linear.ops import FP
+from x_linear.device import fit_device, decision_device
 from x_linear.cls1_fast import cls1_flags
 
 
@@ -105,25 +105,6 @@ def decision_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonOb
     return PythonObject(n * k)
 
 
-def decision_codes_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
-                           out_addr: PythonObject) raises -> PythonObject:
-    """lane/apple-fast-gap-cls1: the int32 class code per row (dims [n, d, k])."""
-    var n = Int(py=dims[0])
-    var d = Int(py=dims[1])
-    var k = Int(py=dims[2])
-    if n < 0 or d < 0 or k <= 0:
-        raise Error("x_linear: positive dimensions required")
-    var x = _fp(Int(py=x_addr))
-    var wb = _fp(Int(py=wb_addr))
-    var oa = Int(py=out_addr)
-    if oa == 0:
-        raise Error("x_linear: null int32 buffer address")
-    var out = IP(unsafe_from_address=oa)
-    with GILReleased(Python()):
-        decision_codes_device(x, wb, n, d, k, out)
-    return PythonObject(n)
-
-
 def cls1_flags_binding() raises -> PythonObject:
     return PythonObject(cls1_flags())
 
@@ -155,7 +136,6 @@ def PyInit__mojolearn_x_linear() abi("C") -> PythonObject:
         m.def_function[fit_binding]("x_linear_fit")
         m.def_function[decision_binding]("x_linear_decision")
         m.def_function[numeric_mode_binding]("x_linear_numeric_mode")
-        m.def_function[decision_codes_binding]("x_linear_decision_codes")
         m.def_function[cls1_flags_binding]("x_linear_cls1_flags")
         m.def_function[vendor_binding]("x_linear_vendor")
         m.def_function[py2mojo_rows_binding]("py2mojo_rows")

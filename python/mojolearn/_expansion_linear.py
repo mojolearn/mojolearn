@@ -158,7 +158,7 @@ def _py2mojo_proba(est, mode, scores, k):
     return out
 
 
-_CLS1_RIDGE_CODES, _CLS1_RIDGE_PREDICT = 1, 2
+_CLS1_RIDGE_CODES = 1
 
 
 def _cls1_flags(est):
@@ -981,8 +981,9 @@ class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
         a, n, d = _matrix(X)
         if (sample_weight is None and self.class_weight is None
                 and _cls1_flags(self) & _CLS1_RIDGE_CODES):
-            # lane/apple-fast-gap-cls1 (-D MOJOLEARN_RIDGE_FAST_CLS1_CODES, FAST
-            # + Apple): the int32 codes go to the binding as they are and the
+            # lane/apple-fast-gap-cls1 RIDGE_FAST_CLS1_CODES (FAST + Apple
+            # default, off with -D MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF): the
+            # int32 codes go to the binding as they are and the
             # +-1 targets are built on the device (x_linear/cls1_fast.mojo)
             classes, icodes = encode_labels(y)
             if icodes.size != n:
@@ -1017,27 +1018,6 @@ class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
         self.n_features_in_ = d
         return self
 
-
-    def predict(self, X):
-        if _cls1_flags(self) & _CLS1_RIDGE_PREDICT:
-            # lane/apple-fast-gap-cls1 (-D MOJOLEARN_RIDGE_FAST_CLS1_PREDICT):
-            # the class code of every row on the device, then the native gather
-            _check_fitted(self)
-            xa, n, d = _matrix(X)
-            if d != self.n_features_in_:
-                raise ValueError(
-                    f"mojolearn RidgeClassifier: X has {d} features, the model was fitted with {self.n_features_in_}")
-            flat = []
-            for row, b in zip(self.coef_.tolist(), self.intercept_.tolist()):
-                flat.extend(row)
-                flat.append(b)
-            wb = Array.from_list(flat, "<f4")
-            codes = empty((n,), "<i4")
-            self._bind(_BINDING).x_linear_decision_codes(
-                addr_ro(xa, name="X"), addr_ro(wb, name="coef"), [n, d, len(self.intercept_)],
-                addr(codes, name="codes"))
-            return decode_labels(self.classes_, codes)
-        return _LinearClassifierMixin.predict(self, X)
 
 
 class RidgeCV(_LinearRegressorMixin, NumericModeMixin):

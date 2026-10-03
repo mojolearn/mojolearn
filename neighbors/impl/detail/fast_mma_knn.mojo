@@ -80,29 +80,6 @@ comptime FAST_MMA_KNN_ENABLED = (
     and not is_defined["MOJOLEARN_KNN_FAST_MMA_OFF"]()
 )
 
-#: lane/apple-fast-gap-cls1 (2026-10-03), FAST + Apple, default OFF.
-#: -D MOJOLEARN_KNN_FAST_CLS1_PRESEED (chunked arm, more than MQ_MAX_D
-#: features): a first pass over the index's first MQ_SEED_ROWS rows gives
-#: each query the k-th distance among them, an upper bound on its true k-th
-#: distance; the main pass starts every lane's admission threshold there
-#: instead of at MQ_BIG, so the K-slot insertions of the early tiles (every
-#: candidate admitted until a lane's list fills) mostly vanish. Exact: every
-#: true neighbour lies at or below the bound (the bound gets a 2^-16 relative
-#: slack). -D MOJOLEARN_KNN_FAST_CLS1_SLICES2: twice the index slices
-#: (grid.y) per query block.
-comptime KNN_CLS1_PRESEED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_KNN_FAST_CLS1_PRESEED"]()
-)
-comptime KNN_CLS1_SLICES2 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_KNN_FAST_CLS1_SLICES2"]()
-)
-comptime MQ_SEED_ROWS = 4096
-"""Index rows of the PRESEED pass (a multiple of MQ_T)."""
-
 comptime _M64 = SIMD[DType.float32, 64]
 comptime _V2 = SIMD[DType.int64, 2]
 
@@ -423,8 +400,6 @@ def fast_mma_bigd_kernel[K: Int, A: Int](
     d_in: Int32,
     k_in: Int32,
     slice_rows_in: Int32,
-    seed: MutPointer[Float32, MutAnyOrigin],
-    seed_mode: Int32,
 ):
     """`fast_mma_partial_kernel` past MQ_MAX_D features (lane/apple-fast-
     classical, 2026-10-02): the shared tile holds MQ_T index rows by MQ_DC
@@ -455,13 +430,6 @@ def fast_mma_bigd_kernel[K: Int, A: Int](
     var bi = SIMD[DType.uint32, K * A](0xFFFFFFFF)
     var worst = SIMD[DType.float32, A](MQ_BIG)
     var thr = SIMD[DType.float32, A](MQ_BIG)
-    if Int(seed_mode) == 2:
-        # KNN_CLS1_PRESEED: start at the query's seeded bound (raw units)
-        comptime for a in range(A):
-            var qs = q0 + 8 * a + frow
-            if qs < Int(n_queries_in):
-                var b0 = seed[unsafe_offset = qs]
-                thr[a] = min(MQ_BIG, b0 + abs(b0) * Float32(1.52587890625e-05) + Float32(1.0e-30))
 
     var lo = s * Int(slice_rows_in)
     var hi = min(ni, lo + Int(slice_rows_in))
@@ -585,17 +553,6 @@ def fast_mma_bigd_kernel[K: Int, A: Int](
                                 bi[a * K + t] = bi[a * K + t + st]
                                 bd[a * K + t + st] = td
                                 bi[a * K + t + st] = ti
-    if Int(seed_mode) == 1:
-        # KNN_CLS1_PRESEED's first pass: the k-th raw distance of the folded list
-        comptime for a in range(A):
-            var q = q0 + 8 * a + frow
-            if q < nq and sub == 0:
-                var kth = MQ_BIG
-                comptime for t in range(K):
-                    if t == k - 1:
-                        kth = bd[a * K + t]
-                seed[unsafe_offset = q] = kth
-        return
     comptime for a in range(A):
         var q = q0 + 8 * a + frow
         if q < nq and sub == 0:
@@ -717,10 +674,7 @@ def fast_mma_knn(
         a_sel = 1
     var QPB = MQ_SG * 8 * a_sel
     var qblocks = (n_queries + QPB - 1) // QPB
-    var slice_target = 480
-    comptime if KNN_CLS1_SLICES2:
-        slice_target = 960
-    var slices = slice_target // qblocks
+    var slices = 480 // qblocks
     if slices < 1:
         slices = 1
     if slices > 64:
@@ -736,68 +690,34 @@ def fast_mma_knn(
     var part_d = ctx.enqueue_create_buffer[DType.float32](slices * n_queries * k)
     var part_i = ctx.enqueue_create_buffer[DType.uint32](slices * n_queries * k)
     var inorm = ctx.enqueue_create_buffer[DType.float32](max(n_index, 1))
-    var seed_mode = 0
-    var seed = ctx.enqueue_create_buffer[DType.float32](max(n_queries, 1) if KNN_CLS1_PRESEED else 1)
     if n_features > MQ_MAX_D:
         ctx.enqueue_function[fast_mma_norms_kernel](
             index.unsafe_ptr(), inorm.unsafe_ptr(), Int32(n_index), Int32(n_features),
             grid_dim=((n_index + 255) // 256, 1, 1), block_dim=(256, 1, 1),
         )
-        comptime if KNN_CLS1_PRESEED:
-            if k <= 64 and n_index >= 4 * MQ_SEED_ROWS:
-                # the seed pass: rows [0, MQ_SEED_ROWS) as one slice
-                if k <= 8:
-                    ctx.enqueue_function[fast_mma_bigd_kernel[8, 1]](
-                        queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
-                        part_i.unsafe_ptr(), Int32(n_queries), Int32(MQ_SEED_ROWS), Int32(n_features), Int32(k),
-                        Int32(MQ_SEED_ROWS), seed.unsafe_ptr(), Int32(1), grid_dim=(qblocks, 1, 1), block_dim=(MQ_TPB, 1, 1),
-                    )
-                elif k <= 16:
-                    ctx.enqueue_function[fast_mma_bigd_kernel[16, 1]](
-                        queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
-                        part_i.unsafe_ptr(), Int32(n_queries), Int32(MQ_SEED_ROWS), Int32(n_features), Int32(k),
-                        Int32(MQ_SEED_ROWS), seed.unsafe_ptr(), Int32(1), grid_dim=(qblocks, 1, 1), block_dim=(MQ_TPB, 1, 1),
-                    )
-                elif k <= 32:
-                    ctx.enqueue_function[fast_mma_bigd_kernel[32, 1]](
-                        queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
-                        part_i.unsafe_ptr(), Int32(n_queries), Int32(MQ_SEED_ROWS), Int32(n_features), Int32(k),
-                        Int32(MQ_SEED_ROWS), seed.unsafe_ptr(), Int32(1), grid_dim=(qblocks, 1, 1), block_dim=(MQ_TPB, 1, 1),
-                    )
-                else:
-                    ctx.enqueue_function[fast_mma_bigd_kernel[64, 1]](
-                        queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
-                        part_i.unsafe_ptr(), Int32(n_queries), Int32(MQ_SEED_ROWS), Int32(n_features), Int32(k),
-                        Int32(MQ_SEED_ROWS), seed.unsafe_ptr(), Int32(1), grid_dim=(qblocks, 1, 1), block_dim=(MQ_TPB, 1, 1),
-                    )
-                seed_mode = 2
         if k <= 8:
             ctx.enqueue_function[fast_mma_bigd_kernel[8, 1]](
                 queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
                 part_i.unsafe_ptr(), Int32(n_queries), Int32(n_index), Int32(n_features), Int32(k),
-                Int32(slice_rows), seed.unsafe_ptr(), Int32(seed_mode), grid_dim=(qblocks, slices, 1),
-                block_dim=(MQ_TPB, 1, 1),
+                Int32(slice_rows), grid_dim=(qblocks, slices, 1), block_dim=(MQ_TPB, 1, 1),
             )
         elif k <= 16:
             ctx.enqueue_function[fast_mma_bigd_kernel[16, 1]](
                 queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
                 part_i.unsafe_ptr(), Int32(n_queries), Int32(n_index), Int32(n_features), Int32(k),
-                Int32(slice_rows), seed.unsafe_ptr(), Int32(seed_mode), grid_dim=(qblocks, slices, 1),
-                block_dim=(MQ_TPB, 1, 1),
+                Int32(slice_rows), grid_dim=(qblocks, slices, 1), block_dim=(MQ_TPB, 1, 1),
             )
         elif k <= 32:
             ctx.enqueue_function[fast_mma_bigd_kernel[32, 1]](
                 queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
                 part_i.unsafe_ptr(), Int32(n_queries), Int32(n_index), Int32(n_features), Int32(k),
-                Int32(slice_rows), seed.unsafe_ptr(), Int32(seed_mode), grid_dim=(qblocks, slices, 1),
-                block_dim=(MQ_TPB, 1, 1),
+                Int32(slice_rows), grid_dim=(qblocks, slices, 1), block_dim=(MQ_TPB, 1, 1),
             )
         else:
             ctx.enqueue_function[fast_mma_bigd_kernel[64, 1]](
                 queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
                 part_i.unsafe_ptr(), Int32(n_queries), Int32(n_index), Int32(n_features), Int32(k),
-                Int32(slice_rows), seed.unsafe_ptr(), Int32(seed_mode), grid_dim=(qblocks, slices, 1),
-                block_dim=(MQ_TPB, 1, 1),
+                Int32(slice_rows), grid_dim=(qblocks, slices, 1), block_dim=(MQ_TPB, 1, 1),
             )
     elif n_features <= 8:
         if k <= 8:
@@ -841,4 +761,3 @@ def fast_mma_knn(
     _ = part_d^
     _ = part_i^
     _ = inorm^
-    _ = seed^

@@ -1,17 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""lane/apple-fast-gap-cls1 (2026-10-03), FAST + Apple, default OFF:
-NearestCentroid without the Python passes over every row.
+"""lane/apple-fast-gap-cls1 (2026-10-03): NearestCentroid without the
+Python passes over every row.
 
-  * -D MOJOLEARN_NC_FAST_CLS1_LABELS: `fit` takes the native label encoder's
-    int32 codes as they are and the class counts from the device
-    (`op_nc_counts`: a block per NCC1_ROWS rows, a thread per class, then a
-    thread per class over the blocks) instead of `_labels_of` (tolist, a dict
-    lookup per row) and a Python counting loop.
-  * -D MOJOLEARN_NC_FAST_CLS1_PREDICT: `predict` hands the nearest centroid's
-    int32 index to the native gather (`decode_labels`) instead of tolist and a
-    Python list per row.
-The Python side reads the switches from `x_neighbors_cls1_flags`."""
+  * NC_CLS1_LABELS (FAST + Apple default, off with
+    -D MOJOLEARN_NC_FAST_CLS1_LABELS_OFF; default since the M3 A/B, n=1,
+    nearest-centroid taxi 105 -> 20.9 ms, quality identical): `fit` takes the
+    native label encoder's int32 codes as they are and the class counts from
+    the device (`op_nc_counts`: a block per NCC1_ROWS rows, a thread per class,
+    then a thread per class over the blocks) instead of `_labels_of` (tolist,
+    a dict lookup per row) and a Python counting loop.
+The Python side reads the switch from `x_neighbors_cls1_flags` (bit 1)."""
 from std.gpu import block_idx, thread_idx
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -21,19 +20,16 @@ from x_neighbors.items import FP, IP
 from x_neighbors.device_ops import xn_ctx, _buf, _buf_i, _down
 
 comptime NC_CLS1_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime NC_CLS1_LABELS = NC_CLS1_FAST_APPLE and is_defined["MOJOLEARN_NC_FAST_CLS1_LABELS"]()
-comptime NC_CLS1_PREDICT = NC_CLS1_FAST_APPLE and is_defined["MOJOLEARN_NC_FAST_CLS1_PREDICT"]()
+comptime NC_CLS1_LABELS = NC_CLS1_FAST_APPLE and not is_defined["MOJOLEARN_NC_FAST_CLS1_LABELS_OFF"]()
 comptime NCC1_ROWS = 4096
 comptime NCC1_MAX_C = 256
 
 
 def nc_cls1_flags_binding() raises -> PythonObject:
-    """Bit 1: NC_CLS1_LABELS; bit 2: NC_CLS1_PREDICT."""
+    """Bit 1: NC_CLS1_LABELS."""
     var f = 0
     comptime if NC_CLS1_LABELS:
         f |= 1
-    comptime if NC_CLS1_PREDICT:
-        f |= 2
     return PythonObject(f)
 
 
@@ -65,7 +61,7 @@ def nc_counts_red_kernel(parts: IP, nb: Int64, c_n: Int64, nk: FP):
 def op_nc_counts(lab: Int, nk: Int, n: Int, n_classes: Int) raises:
     """nk[c] = rows whose int32 label is c (exact below 2**24 rows a class)."""
     comptime if not NC_CLS1_LABELS:
-        raise Error("nc_counts needs -D MOJOLEARN_NC_FAST_CLS1_LABELS (FAST, Apple)")
+        raise Error("nc_counts needs NC_CLS1_LABELS (FAST, Apple, no -D MOJOLEARN_NC_FAST_CLS1_LABELS_OFF)")
     else:
         if n_classes < 1 or n_classes > NCC1_MAX_C:
             raise Error("nc_counts: 1 to 256 classes")

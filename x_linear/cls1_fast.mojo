@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """lane/apple-fast-gap-cls1 (2026-10-03): FAST + Apple build-time candidates
-for the M3 FAST board rows where we trail the best opponent (bayesian-ridge,
-ard, ridge-clf taxi). Every switch is default OFF and compiles to nothing
-on IDENTICAL or off Apple. Notes: docs/apple-fast/notes/gap-cls1.md.
+for the M3 FAST board rows where we trailed the best opponent
+(bayesian-ridge, ard, ridge-clf taxi). Every switch is the FAST + Apple
+default since the M3 A/B (n=1, quality identical: bayesian-ridge taxi
+102 -> 15.3 ms with all three BAYES switches, ard taxi 14.4 -> 8.3 ms with
+all three ARD switches, ridge-clf taxi 120 -> 19.0 ms with CODES), off with
+-D <NAME>_OFF, and compiles to nothing on IDENTICAL or off Apple. Notes:
+docs/apple-fast/notes/gap-cls1.md.
 
   * MOJOLEARN_BAYES_FAST_CLS1_STATS: BayesianRidge's means, Gram and X'y
     from the shared grid Gram (x_linear/fast_gram.mojo) in place of the
@@ -25,9 +29,6 @@ on IDENTICAL or off Apple. Notes: docs/apple-fast/notes/gap-cls1.md.
   * MOJOLEARN_RIDGE_FAST_CLS1_CODES: RidgeClassifier hands the int32 class
     codes; the +-1 targets are built on the device (`c1_codes_targets_kernel`)
     instead of two Python list passes over every row.
-  * MOJOLEARN_RIDGE_FAST_CLS1_PREDICT: RidgeClassifier.predict takes the class
-    code of each row from the device (`x_linear_decision_codes`) instead of a
-    Python threshold / argmax loop over the scores.
 
 FAST promises quality, not bits: the block trees are pairwise sums.
 """
@@ -44,14 +45,13 @@ from x_linear.witness import witness_end
 
 comptime C1_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 
-comptime BAYES_CLS1_STATS = C1_FAST_APPLE and is_defined["MOJOLEARN_BAYES_FAST_CLS1_STATS"]()
-comptime BAYES_CLS1_PARTS = C1_FAST_APPLE and is_defined["MOJOLEARN_BAYES_FAST_CLS1_PARTS"]()
-comptime BAYES_CLS1_BATCH = C1_FAST_APPLE and is_defined["MOJOLEARN_BAYES_FAST_CLS1_BATCH"]()
-comptime ARD_CLS1_STATS = C1_FAST_APPLE and is_defined["MOJOLEARN_ARD_FAST_CLS1_STATS"]()
-comptime ARD_CLS1_PARTS = C1_FAST_APPLE and is_defined["MOJOLEARN_ARD_FAST_CLS1_PARTS"]()
-comptime ARD_CLS1_BATCH = C1_FAST_APPLE and is_defined["MOJOLEARN_ARD_FAST_CLS1_BATCH"]()
-comptime RIDGE_CLS1_CODES = C1_FAST_APPLE and is_defined["MOJOLEARN_RIDGE_FAST_CLS1_CODES"]()
-comptime RIDGE_CLS1_PREDICT = C1_FAST_APPLE and is_defined["MOJOLEARN_RIDGE_FAST_CLS1_PREDICT"]()
+comptime BAYES_CLS1_STATS = C1_FAST_APPLE and not is_defined["MOJOLEARN_BAYES_FAST_CLS1_STATS_OFF"]()
+comptime BAYES_CLS1_PARTS = C1_FAST_APPLE and not is_defined["MOJOLEARN_BAYES_FAST_CLS1_PARTS_OFF"]()
+comptime BAYES_CLS1_BATCH = C1_FAST_APPLE and not is_defined["MOJOLEARN_BAYES_FAST_CLS1_BATCH_OFF"]()
+comptime ARD_CLS1_STATS = C1_FAST_APPLE and not is_defined["MOJOLEARN_ARD_FAST_CLS1_STATS_OFF"]()
+comptime ARD_CLS1_PARTS = C1_FAST_APPLE and not is_defined["MOJOLEARN_ARD_FAST_CLS1_PARTS_OFF"]()
+comptime ARD_CLS1_BATCH = C1_FAST_APPLE and not is_defined["MOJOLEARN_ARD_FAST_CLS1_BATCH_OFF"]()
+comptime RIDGE_CLS1_CODES = C1_FAST_APPLE and not is_defined["MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF"]()
 
 comptime C1_TPB = 256
 comptime C1_LOG_TPB = 8
@@ -62,13 +62,11 @@ comptime C1_BAYES_STATE = 16
 
 
 def cls1_flags() -> Int:
-    """Bit 1: RIDGE_CLS1_CODES; bit 2: RIDGE_CLS1_PREDICT (the Python side
-    reads these from the binding, so an A/B of two builds needs no env)."""
+    """Bit 1: RIDGE_CLS1_CODES (the Python side reads it from the binding,
+    so an A/B of two builds needs no env)."""
     var f = 0
     comptime if RIDGE_CLS1_CODES:
         f |= 1
-    comptime if RIDGE_CLS1_PREDICT:
-        f |= 2
     return f
 
 
