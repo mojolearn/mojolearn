@@ -87,4 +87,10 @@ Candidates (x_neighbors/ocsvm_dev.mojo OCSVM_CLS2_*):
 
 ## Compiles (M2, m2compile.sh) and queued A/Bs
 
-See the final reply / LEDGER for rcs and M3 tags (prefix `gapcls2-`).
+M2 compiles, all rc=0 (~/mojolearn-evidence/gap-cls2/m2c_*.log): fast + every define set (combined and
+single), fast default, identical for x_decomp, x_cluster, x_prep, x_neighbors, preprocessing.
+
+M3 queue lines 990-1013 (afc_ab_def.sh, 1 rep x 2 rounds, A = main FAST, B = the define[s]):
+gapcls2-{noscan,noscanlazy,devscan}-grp-{istella,taxi}; gapcls2-{g128,fin,pool}-mbk-{istella,taxi},
+gapcls2-all3-mbk-istella; gapcls2-{fused,pool,fusedpool}-minmax-istella;
+gapcls2-{pack,present}-{onehot,ordinal}-taxi; gapcls2-{res,2l,chunk256,all3}-ocsvm-taxi.
