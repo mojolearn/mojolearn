@@ -1,8 +1,0 @@
-CMD lane/apple-fast-neural-w2-lmgrad afn-w2-lmgrad-wgrad-split-train bash tools/afn_ab.sh afn-w2-lmgrad-wgrad-split-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_WGRAD_SPLIT"
-CMD lane/apple-fast-neural-w2-lmgrad afn-w2-lmgrad-bwd-epilogue-train bash tools/afn_ab.sh afn-w2-lmgrad-bwd-epilogue-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_BWD_EPILOGUE"
-CMD lane/apple-fast-neural-w2-lmgrad afn-w2-lmgrad-norm1-resid-train bash tools/afn_ab.sh afn-w2-lmgrad-norm1-resid-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_BWD_NORM1_RESID"
-CMD lane/apple-fast-neural-w2-lmgrad afn-w2-lmgrad-all-train bash tools/afn_ab.sh afn-w2-lmgrad-all-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LMGRAD_ALL"
-CMD lane/apple-fast-neural-w2-lmgrad afn-w2-lmgrad-wgrad-vs-gemmsplitk-train bash tools/afn_ab.sh afn-w2-lmgrad-wgrad-vs-gemmsplitk-train byte_lm lm-train-step full 2 "-D MOJOLEARN_AFN_GEMM_SPLITK" "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_LM_WGRAD_SPLIT"
-CMD lane/apple-fast-neural-w2-lmgrad afn-w2-lmgrad-all-on-stack-train bash tools/afn_ab.sh afn-w2-lmgrad-all-on-stack-train byte_lm lm-train-step full 2 "-D MOJOLEARN_AFN_LM_ALL -D MOJOLEARN_AFN_GEMM_SIMDGROUP" "-D MOJOLEARN_AFN_LM_ALL -D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_LMGRAD_ALL"
-CMD lane/apple-fast-neural-w2-lmgrad afn-w2-lmgrad-fwd-fusemlp-forward bash tools/afn_ab.sh afn-w2-lmgrad-fwd-fusemlp-forward byte_lm lm-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_FUSE_MLP"
-CMD lane/apple-fast-neural-w2-lmgrad afn-w2-lmgrad-fwd-attnall-forward bash tools/afn_ab.sh afn-w2-lmgrad-fwd-attnall-forward byte_lm lm-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_ALL"
