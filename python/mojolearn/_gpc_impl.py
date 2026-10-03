@@ -78,6 +78,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._gp_impl import _MODE_CODE, ConstantKernel, Kernel, RBF, _gp_py2mojo
 from ._labels import (
+    threshold_codes,
     classes_from_member,
     classes_member,
     decode_labels,
@@ -470,12 +471,12 @@ class GaussianProcessClassifier(NumericModeMixin):
             if _gp_py2mojo(ext):
                 return decode_labels(self.classes_, self._latent(ext, self.estimators_[0], q, False, 1)[3])
             mean, _, _ = self._latent(ext, self.estimators_[0], q, False)
-            codes = [1 if v > 0.0 else 0 for v in mean.tolist()]
+            codes = threshold_codes(mean)
         else:
             cols = [self._latent(ext, e, q, True)[2] for e in self.estimators_]
             _, codes32 = _ovr_combine(ext, cols, int(q.shape[0]))
-            codes = codes32.tolist()
-        return decode_labels(self.classes_, Array.from_list(codes, "<i8"))
+            codes = codes32.astype("<i8")
+        return decode_labels(self.classes_, codes)
 
     def log_marginal_likelihood(self, theta=None, eval_gradient=False, clone_kernel=True):
         """`_gpc.py:279-353`, the `theta is None` arm only."""

@@ -337,7 +337,7 @@ class TSNE(NumericModeMixin):
         float64 with math.fsum (one correctly rounded sum, so no platform's
         summation order enters) and applied as one float32 divide and one
         float32 multiply per element.
-        'random' is uniform(-5e-5, 5e-5) from numpy's default_rng(random_state),
+        'random' is uniform(-5e-5, 5e-5) from the seeded Mojo stream (uniform_init_f32),
         whose integer-to-double draw is exact on every platform.
     random_state : int, default 0
     """
@@ -361,8 +361,14 @@ class TSNE(NumericModeMixin):
         from ._optional_numpy import require_numpy
         np = require_numpy('_expansion_ann')
         init = self.init
+        from ._buffer import _native
         if isinstance(init, str) and init == "random":
-            return ((np.random.default_rng(seed).random((n, 2)) - 0.5) * 1e-4).astype(np.float32)
+            # U(-0.5e-4, 0.5e-4) from the seeded splitmix64 stream, in Mojo
+            # (`uniform_init_f32`; lane cgr4-py-compute)
+            y0 = np.empty((n, 2), dtype=np.float32)
+            s = int(seed) & 0xFFFFFFFFFFFFFFFF
+            _native("uniform_init_f32")(y0.ctypes.data, 2 * n, -0.5e-4, 0.5e-4, s & 0xFFFFFFFF, s >> 32, 0)
+            return y0
         if isinstance(init, str) and init == "pca":
             from .decomposition import PCA
             pca = PCA(n_components=2)
@@ -370,12 +376,16 @@ class TSNE(NumericModeMixin):
             if mode is not None:
                 pca.numeric_mode = mode
             emb = np.ascontiguousarray(np.asarray(pca.fit_transform(x), dtype=np.float32))
-            col = [float(v) for v in emb[:, 0]]
-            mean = math.fsum(col) / n
-            std = math.sqrt(math.fsum((v - mean) * (v - mean) for v in col) / n)
+            ms = np.zeros(2, dtype=np.float64)
+            _native("mean_std_f32")(emb.ctypes.data, n, emb.shape[1], ms.ctypes.data)
+            std = float(ms[1])
             if not std > 0.0:
                 raise ValueError("mojolearn TSNE: init='pca' gave a constant first component; pass init='random'")
-            return np.ascontiguousarray((emb / np.float32(std)) * np.float32(1e-4), dtype=np.float32)
+            # emb * (1e-4 / std), one float32 rounding then ftz, in Mojo
+            out = np.empty_like(emb)
+            _native("scale_shift_ftz_f32")(emb.ctypes.data, emb.size, float(np.float32(1e-4 / std)), 0.0, 2,
+                                           out.ctypes.data)
+            return out
         if isinstance(init, str):
             raise ValueError(f"mojolearn TSNE: init must be 'pca', 'random' or an array, got {init!r}")
         y0 = np.ascontiguousarray(np.asarray(init, dtype=np.float32))

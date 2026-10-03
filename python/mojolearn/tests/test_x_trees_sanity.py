@@ -198,15 +198,24 @@ def test_voting():
 
 
 def test_stacking_folds_match_sklearn():
+    """The int-cv folds (`x_trees_device_folds`: the device kernel, or its
+    host twin on a CPU-only install) are sklearn's unshuffled folds."""
     from sklearn.model_selection import StratifiedKFold, KFold
-    from mojolearn._expansion_trees import _trees_stratified_folds, _trees_kfolds
+    from mojolearn._expansion_trees import _trees_native_folds, _trees_x_bind
+    from mojolearn._buffer import as_i32_c
+
+    class _Est:
+        def _bind(self):
+            return _trees_x_bind()
+
     y = np.random.RandomState(0).randint(0, 4, size=103)
-    ours = _trees_stratified_folds(y.tolist(), 5)
-    for i, (_, te) in enumerate(StratifiedKFold(5).split(np.zeros((103, 1)), y)):
-        assert sorted(te.tolist()) == [r for r, f in enumerate(ours) if f == i]
-    ours = _trees_kfolds(103, 4)
-    for i, (_, te) in enumerate(KFold(4).split(np.zeros((103, 1)))):
-        assert te.tolist() == [r for r, f in enumerate(ours) if f == i]
+    codes = as_i32_c(y.astype(np.int32), ndim=1, name="y")[0]
+    ours = _trees_native_folds(_Est(), 5, 103, codes, 4)
+    for (_, te), (_, ref) in zip(ours, StratifiedKFold(5).split(np.zeros((103, 1)), y)):
+        assert list(te) == sorted(ref.tolist())
+    ours = _trees_native_folds(_Est(), 4, 103, None)
+    for (_, te), (_, ref) in zip(ours, KFold(4).split(np.zeros((103, 1)))):
+        assert list(te) == ref.tolist()
 
 
 def test_stacking():

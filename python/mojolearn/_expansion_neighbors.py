@@ -28,6 +28,7 @@ from . import _portable_math as math
 import os
 import struct
 
+from ._labels import threshold_codes
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, zeros
 from ._lazy_out import _empty_out
@@ -82,16 +83,11 @@ def _prefixed_names(est, count):
 
 
 def _accuracy(y_true, y_pred, sample_weight=None):
-    """sklearn's accuracy_score: the (weighted) fraction of exact label matches,
-    in IEEE double on labels compared exactly."""
-    t = y_true.tolist() if hasattr(y_true, "tolist") else list(y_true)
-    p = y_pred.tolist() if hasattr(y_pred, "tolist") else list(y_pred)
-    if len(t) != len(p):
-        raise ValueError("y_true and y_pred have different lengths")
-    if sample_weight is None:
-        return math.fsum(1.0 for a, b in zip(t, p) if a == b) / len(t)
-    w = [float(v) for v in (sample_weight.tolist() if hasattr(sample_weight, "tolist") else sample_weight)]
-    return math.fsum(wi for a, b, wi in zip(t, p, w) if a == b) / math.fsum(w)
+    """sklearn's accuracy_score: the (weighted) fraction of exact label
+    matches (`_expansion_metrics.accuracy_fraction`: grouped sums in the
+    x_metrics binding, no per-row Python)."""
+    from ._expansion_metrics import accuracy_fraction
+    return accuracy_fraction(y_true, y_pred, sample_weight)
 
 
 def _f32_1d(x, name):
@@ -185,6 +181,16 @@ def _labels_of(y):
     classes = sorted(set(y))
     code = {c: i for i, c in enumerate(classes)}
     return classes, [code[v] for v in y]
+
+
+def _nc_cls1_flags(est):
+    """lane/apple-fast-gap-cls1: the bound binary's NearestCentroid switches
+    (`x_neighbors_cls1_flags`; 0 without them: main's path)."""
+    try:
+        fn = getattr(est._bind(), "x_neighbors_cls1_flags", None)
+        return int(fn()) if fn is not None else 0
+    except Exception:  # noqa: BLE001
+        return 0
 
 
 def _purity_flags(est):
@@ -520,7 +526,7 @@ class LocalOutlierFactor(_XNeighbors):
             lab = empty((score.size,), "<i4")
             self._op("p2m_sign_label", [(score, 0), (lab, 1)], (score.size, 0), (off,))
             return lab.astype("<i8")
-        return Array.from_list([-1 if s < off else 1 for s in score.tolist()], "<i8")
+        return threshold_codes(score, off, strict=False, below=-1, above=1)
 
     def _novelty(self, what):
         if not self.novelty:
@@ -549,7 +555,7 @@ class LocalOutlierFactor(_XNeighbors):
             lab = empty((dec.size,), "<i4")
             self._op("p2m_sign_label", [(dec, 0), (lab, 1)], (dec.size, 1), (0.0,))
             return lab.astype("<i8")
-        return Array.from_list([1 if v >= 0 else -1 for v in dec.tolist()], "<i8")
+        return threshold_codes(dec, 0.0, strict=False, below=-1, above=1)
 
 
 # ====================================================================== NearestCentroid
@@ -578,15 +584,36 @@ class NearestCentroid(_XNeighbors):
             raise ValueError("NearestCentroid: metric must be 'euclidean' or 'manhattan'")
         X = _f32(X)
         n, d = X.shape
-        classes, codes = _labels_of(y)
-        if len(codes) != n:
-            raise ValueError("X and y have different numbers of rows")
-        C = len(classes)
-        if C < 2:
-            raise ValueError(f"The number of classes has to be greater than one; got {C} class")
-        counts = [0] * C
-        for c in codes:
-            counts[c] += 1
+        lab = None
+        if _nc_cls1_flags(self) & 1:
+            # lane/apple-fast-gap-cls1 NC_FAST_CLS1_LABELS (FAST + Apple
+            # default, off with -D MOJOLEARN_NC_FAST_CLS1_LABELS_OFF): the
+            # native encoder's int32 codes as they are, the class counts from
+            # the device (x_neighbors/nc_cls1.mojo); no Python pass over the rows
+            from ._labels import encode_labels
+            classes, lab = encode_labels(y)
+            if lab.size != n:
+                raise ValueError("X and y have different numbers of rows")
+            C = len(classes)
+            if C < 2:
+                raise ValueError(f"The number of classes has to be greater than one; got {C} class")
+            if C <= 256:
+                nkc = _empty_out((C,), "<f4")
+                self._op("nc_counts", [(lab, 0), (nkc, 1)], (n, C))
+                counts = [int(v) for v in nkc.tolist()]
+            else:
+                lab = None
+        if lab is None:
+            classes, codes = _labels_of(y)
+            if len(codes) != n:
+                raise ValueError("X and y have different numbers of rows")
+            C = len(classes)
+            if C < 2:
+                raise ValueError(f"The number of classes has to be greater than one; got {C} class")
+            counts = [0] * C
+            for c in codes:
+                counts[c] += 1
+            lab = _i32(codes, "y")
         if self.priors == "empirical":
             prior = [c / float(n) for c in counts]
         elif self.priors == "uniform":
@@ -601,7 +628,6 @@ class NearestCentroid(_XNeighbors):
             if not math.isclose(tot, 1.0, rel_tol=1e-5, abs_tol=1e-8):
                 prior = [p / tot for p in prior]
         self.class_prior_ = Array.from_list(prior, "<f8")
-        lab = _i32(codes, "y")
         if self.metric == "euclidean":
             cent = _empty_out((C, d), "<f4")
             if os.environ.get("MOJOLEARN_NC_SPLIT_OPS", "") == "1":
@@ -872,7 +898,7 @@ class OneClassSVM(_XNeighbors):
         return self._unary(self.score_samples(X), _U_IDENTITY, 1.0, -self.offset_)
 
     def predict(self, X):
-        return Array.from_list([1 if v > 0 else -1 for v in self.decision_function(X).tolist()], "<i8")
+        return threshold_codes(self.decision_function(X), 0.0, strict=True, below=-1, above=1)
 
     def fit_predict(self, X, y=None):
         return self.fit(X).predict(X)

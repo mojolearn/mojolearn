@@ -19,11 +19,9 @@ forest entry points (the rf and gbdt bindings), which carry the
 identical contract on the GPU and on their CPU host bindings. The numeric glue
 between fits (votes, weights, drops, calibration) runs in `xtrees/ops.mojo`
 (rows 160-169); Python keeps only O(estimators) scalars in fixed order.
-NOT YET TRUE, owed to the trees family (python_work_audit trees items 3, 9,
-10), and NOT covered by any ledger row: Kernel/PermutationExplainer's per-row
-coalition weights and marginals, Bagging's oob R^2 (`_portable_math.fsum` over
-n) and AdaBoost's sample_weight normalization are still binary64 Python over
-rows. CalibratedClassifierCV's per-class epilogue moved to xtrees on lane
+KernelExplainer's coalition schedule, Bagging's oob R^2 and AdaBoost's
+sample_weight normalization are Mojo (lane cgr4-py-compute).
+CalibratedClassifierCV's per-class epilogue moved to xtrees on lane
 py-misc-prep (strided platt/isotonic apply, `complement_pairs`, native class
 columns and 0/1 targets; its Python reference arm is deleted).
 """
@@ -1030,16 +1028,18 @@ def _trees_normalized_weights(sample_weight, n, est=None):
     if est is not None and _trees_py2mojo(est):
         return _trees_normalized_weights_native(est, sample_weight, n)
     if sample_weight is None:
-        return Array.from_list([1.0 / n] * n, "<f8")
-    sw = [float(v) for v in as_f32_c(sample_weight, ndim=1, name="sample_weight")[0].tolist()]
-    if len(sw) != n:
-        raise ValueError(f"sample_weight has {len(sw)} entries, X has {n} rows")
-    if any(not math.isfinite(v) or v < 0 for v in sw):
+        return full((n,), 1.0 / n, "<f8")
+    sw, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
+    if sw.shape[0] != n:
+        raise ValueError(f"sample_weight has {sw.shape[0]} entries, X has {n} rows")
+    out = zeros((max(n, 1),), "<f8")
+    status = int(_trees_x_bind(est).x_trees_normalized_weights(addr_ro(sw, name="sample_weight"),
+                                                               addr(out, name="weights"), [n]))
+    if status == 1:
         raise ValueError("sample_weight must be finite and nonnegative")
-    total = math.fsum(sw)
-    if not total > 0:
+    if status == 2:
         raise ValueError("sample_weight must have a positive total")
-    return Array.from_list([v / total for v in sw], "<f8")
+    return out
 
 
 def _trees_normalized_weights_native(est, sample_weight, n):
@@ -1434,9 +1434,12 @@ class _DARTBase(_TreesEnsembleBase):
             b.x_trees_class_counts(addr_ro(y32, name="y"), addr(cnt, name="counts"), [n, K])
             inits = [float(b.x_trees_log64(max(1e-15, c / n))) for c in cnt.tolist()]
         else:
-            counts = [0] * K
-            for v in y32.tolist():
-                counts[int(v)] += 1
+            # the class counts by the base binding's bincount (lane cgr4-py-compute)
+            from ._buffer import _native
+            cnt = zeros((K,), "<i8")
+            yc = y32.astype("<i4")
+            _native("bincount_i64")(addr_ro(yc, name="y"), 2, n, K, addr(cnt, name="counts"), 0)
+            counts = cnt.tolist()
             inits = [float(b.x_trees_log64(max(1e-15, cnt / n))) for cnt in counts]
         self.init_score_ = inits[0] if K == 1 else inits
         score = _class_major_fill(inits, n)
@@ -1913,49 +1916,6 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
 
 
 # ------------------------------------------------------ wrappers: helpers
-def _trees_stratified_folds(codes, n_splits):
-    """sklearn StratifiedKFold(n_splits, shuffle=False)._make_test_folds:
-    classes in order of first appearance, per-class fold allocation from the
-    sorted labels dealt round robin. Returns the test fold of each row."""
-    first = {}
-    for c in codes:
-        if c not in first:
-            first[c] = len(first)
-    enc = [first[c] for c in codes]
-    k = len(first)
-    counts = [0] * k
-    for e in enc:
-        counts[e] += 1
-    if n_splits > max(counts) and min(counts) < n_splits and max(counts) < n_splits:
-        raise ValueError(f"n_splits={n_splits} cannot be greater than the number of members in each class")
-    order = sorted(enc)
-    alloc = [[0] * k for _ in range(n_splits)]
-    for i in range(n_splits):
-        for e in order[i::n_splits]:
-            alloc[i][e] += 1
-    folds = [0] * len(enc)
-    for c in range(k):
-        seq = [i for i in range(n_splits) for _ in range(alloc[i][c])]
-        pos = 0
-        for r, e in enumerate(enc):
-            if e == c:
-                folds[r] = seq[pos]
-                pos += 1
-    return folds
-
-
-def _trees_kfolds(n, n_splits):
-    """sklearn KFold(n_splits, shuffle=False): contiguous folds, the first
-    n % n_splits one row longer."""
-    folds, start = [0] * n, 0
-    for i in range(n_splits):
-        size = n // n_splits + (1 if i < n % n_splits else 0)
-        for r in range(start, start + size):
-            folds[r] = i
-        start += size
-    return folds
-
-
 def _trees_cv(cv, default=5):
     """An int number of folds (None: `default`), or `cv` itself when it is a
     splitter (has `split`) or an iterable of (train, test) index pairs."""
@@ -1969,12 +1929,6 @@ def _trees_cv(cv, default=5):
     return int(cv)
 
 
-def _trees_fold_rows(folds, i):
-    tr = [r for r, f in enumerate(folds) if f != i]
-    te = [r for r, f in enumerate(folds) if f == i]
-    return Array.from_list(tr, "<i4"), Array.from_list(te, "<i4")
-
-
 class _FoldRows(list):
     """The [(train rows, test rows)] of `_trees_native_folds`: int32 views into
     the one buffer the device filled, kept alive here."""
@@ -1985,8 +1939,8 @@ def _trees_native_folds(est, n_splits, n, codes, n_classes=0):
     """`_trees_splits` for an int cv with the fold assignment and the fold
     row lists made on the device (xtrees/folds_device.mojo through
     `x_trees_device_folds`: sklearn's unshuffled StratifiedKFold / KFold law,
-    the same folds `_trees_stratified_folds` / `_trees_kfolds` build, no
-    Python row loop and no host row loop), under MOJOLEARN_TE_NATIVE_SPLITS (FAST + Apple default; `-D ..._OFF`)
+    sklearn's unshuffled StratifiedKFold / KFold law; the host column runs
+    the same law in Mojo (lane cgr4-py-compute), every tier
     (lane/apple-fast-trees-ensembles, 2026-10-02). `codes` is an int32 code
     Array in [0, n_classes) (stratified) or None (KFold). The lists are
     zero-copy int32 views into one downloaded buffer: fold i's rows outside
@@ -2028,29 +1982,44 @@ def _trees_splits(cv, X, y, n, codes=None, partition=False, native=None, n_class
     [0, n_classes)), else None."""
     c = _trees_cv(cv)
     if isinstance(c, int):
-        if native is not None:
-            return _trees_native_folds(native, c, n, codes, n_classes)
-        folds = _trees_stratified_folds(codes, c) if codes is not None else _trees_kfolds(n, c)
-        return [_trees_fold_rows(folds, i) for i in range(max(folds) + 1)]
+        if native is None:
+            raise ValueError("mojolearn: an int cv needs the estimator whose binding builds the folds")
+        return _trees_native_folds(native, c, n, codes, n_classes)
+    from ._buffer import _native
     pairs = c.split(X, y) if hasattr(c, "split") else c
-    out, seen = [], [0] * n
+    out = []
+    seen = zeros((max(n, 1),), "<i8")
+    check = _native("check_indices_i64")
     for pair in pairs:
-        tr, te = pair
-        tr = [int(v) for v in (tr.tolist() if hasattr(tr, "tolist") else tr)]
-        te = [int(v) for v in (te.tolist() if hasattr(te, "tolist") else te)]
-        for v in tr + te:
-            if not 0 <= v < n:
-                raise ValueError(f"cv index {v} is outside [0, {n})")
-        if not tr or not te:
+        tr, te = (_trees_index_i64(v) for v in pair)
+        if tr.size == 0 or te.size == 0:
             raise ValueError("every cv split needs train and test rows")
-        for v in te:
-            seen[v] += 1
-        out.append((Array.from_list(tr, "<i4"), Array.from_list(te, "<i4")))
+        for v in (tr, te):
+            # range only: a repeated index is the splitter's to give
+            if int(check(addr_ro(v, name="cv rows"), v.size, n)) == 1:
+                raise ValueError(f"a cv index is outside [0, {n})")
+        _native("bincount_i64")(addr_ro(te, name="cv rows"), 3, te.size, n, addr(seen, name="seen"), 1)
+        out.append((tr.astype("<i4"), te.astype("<i4")))
     if not out:
         raise ValueError("cv produced no splits")
-    if partition and any(v != 1 for v in seen):
+    if partition and (seen.min() != 1 or seen.max() != 1):
         raise ValueError("cross_val_predict only works for partitions: every row must be in exactly one test set")
     return out
+
+
+def _trees_index_i64(v):
+    """A cv index list as an int64 Array (the native cast of an array; a
+    Python list goes in through array('q'), in C)."""
+    if isinstance(v, Array):
+        return v.astype("<i8") if v.dtype != "<i8" else v
+    try:
+        from ._buffer import _materialize
+        a, _ = _materialize(v, "cv rows")
+        return a.astype("<i8") if a.dtype != "<i8" else a
+    except (TypeError, ValueError):
+        import array as _array
+        store = _array.array("q", v)
+        return Array._owned(store, (len(store),), "<i8", "C")
 
 
 def _trees_estimators(estimators):
@@ -2338,7 +2307,7 @@ class StackingClassifier(_StackingBase):
         self.classes_, codes = encode_labels(y)
         self._binary = len(self.classes_) == 2
         nat = _trees_native_glue(self)
-        splits = _trees_splits(self.cv, X, y, len(codes), codes=codes if nat is not None else codes.tolist(),
+        splits = _trees_splits(self.cv, X, y, len(codes), codes=codes,
                                partition=True, native=nat, n_classes=len(self.classes_))
         final = self.final_estimator
         if final is None:
@@ -2860,7 +2829,7 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         if consts is not None:
             return self._fit_fast(Xa, codes, base, consts)
         nat = _trees_native_glue(self)
-        splits = _trees_splits(self.cv, X, y, n, codes=codes if nat is not None else codes.tolist(),
+        splits = _trees_splits(self.cv, X, y, n, codes=codes,
                                partition=not self.ensemble, native=nat, n_classes=len(self.classes_))
         cols = _trees_arange(d)
         self.calibrated_classifiers_ = []
@@ -3268,60 +3237,20 @@ class KernelExplainer(_AgnosticExplainer):
             self._bind().x_trees_logit(addr(a, name="linked"), [len(a)])
         return a
 
-    @staticmethod
-    def _binom(n, r):
-        from ._portable_math import comb
-        return comb(n, r)
-
     def _schedule(self, M, nsamples):
-        """shap `KernelExplainer.explain`'s coalition schedule as the device
-        builds it (xtrees/agnostic.mojo kshap_mask_unit): (m, nfixed, nfull,
-        npaired, size_off, size_w, cdf, wrand). The O(M) scalar bookkeeping
-        over subset SIZES stays here; every mask is made on the device."""
-        num_subset_sizes = (M - 1 + 1) // 2 if M > 1 else 0
-        num_paired = (M - 1) // 2
-        wv = [(M - 1.0) / (i * (M - i)) for i in range(1, num_subset_sizes + 1)]
-        for i in range(num_paired):
-            wv[i] *= 2
-        tot = math.fsum(wv)
-        wv = [w / tot for w in wv]
-        num_full = 0
-        left = nsamples
-        rem = list(wv)
-        size_off, size_w = [0], []
-        for size in range(1, num_subset_sizes + 1):
-            nsub = self._binom(M, size) * (2 if size <= num_paired else 1)
-            if left * rem[size - 1] / nsub >= 1.0 - 1e-8:
-                num_full += 1
-                left -= nsub
-                if rem[size - 1] < 1.0:
-                    r0 = rem[size - 1]
-                    rem = [v / (1 - r0) for v in rem]
-                w = wv[size - 1] / self._binom(M, size)
-                if size <= num_paired:
-                    w /= 2.0
-                size_off.append(size_off[-1] + nsub)
-                size_w.append(w)
-            else:
-                break
-        nfixed = size_off[-1]
-        samples_left = nsamples - nfixed
-        cdf, wrand = [], 0.0
-        if num_full != num_subset_sizes and samples_left > 0:
-            rw = list(wv)
-            for i in range(num_paired):
-                rw[i] /= 2
-            rw = rw[num_full:]
-            t = math.fsum(rw)
-            rw = [v / t for v in rw]
-            run = 0.0
-            for v in rw:
-                run += v
-                cdf.append(run)
-            wrand = 1.0 * (math.fsum(wv[num_full:]) / samples_left)
-        else:
-            samples_left = 0
-        return nfixed + samples_left, nfixed, num_full, num_paired, size_off, size_w, cdf, wrand
+        """shap `KernelExplainer.explain`'s coalition schedule, built in Mojo
+        (`x_trees_kshap_schedule`, xtrees/api.mojo; lane cgr4-py-compute):
+        (m, nfixed, nfull, npaired, tables, L, wrand_bits) with tables =
+        (size_off Int64, size_w float64, cdf float64). Every mask is made on
+        the device from these (xtrees/agnostic.mojo kshap_mask_unit)."""
+        h = max(1, M // 2)
+        tables = (zeros((h + 1,), "<i8"), zeros((h,), "<f8"), zeros((h,), "<f8"))
+        out = zeros((6,), "<i8")
+        if M > 1:
+            self._bind().x_trees_kshap_schedule(tuple(addr(t, name="schedule") for t in tables),
+                                                addr(out, name="schedule"), [M, nsamples])
+        m, nfixed, nfull, npaired, L, wbits = out.tolist()
+        return m, nfixed, nfull, npaired, tables, L, wbits
 
     def shap_values(self, X, nsamples="auto", l1_reg="auto"):
         if l1_reg not in ("auto", False, 0):
@@ -3336,10 +3265,7 @@ class KernelExplainer(_AgnosticExplainer):
         k = self.n_outputs_
         b = self._bind()
         nb = self._bg.shape[0]
-        m, nfixed, nfull, npaired, size_off, size_w, cdf, wrand = self._schedule(M, max(ns, 0)) if M > 1 \
-            else (0, 0, 0, 0, [0], [], [], 0.0)
-        tables = (Array.from_list(size_off, "<i8"), Array.from_list(size_w or [0.0], "<f8"),
-                  Array.from_list(cdf or [0.0], "<f8"))
+        m, nfixed, nfull, npaired, tables, L, wbits = self._schedule(M, max(ns, 0))
         taddr = tuple(addr_ro(t, name="schedule") for t in tables)
         phi = zeros((max(n * d * k, 1),), "<f8")
         if n == 0:
@@ -3350,7 +3276,7 @@ class KernelExplainer(_AgnosticExplainer):
         R = self._chunk(m * nb * d, n)
         for r0 in range(0, n, R):
             rows = min(R, n - r0)
-            params = [rows, nb, d, nfixed, m, nfull, len(cdf), npaired, r0, seed, _f64_word(wrand)]
+            params = [rows, nb, d, nfixed, m, nfull, L, npaired, r0, seed, wbits]
             out = None
             if m > 0:
                 syn = empty((rows * m * nb * d,), "<f4")

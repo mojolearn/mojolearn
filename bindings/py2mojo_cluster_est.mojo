@@ -1,19 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""What `density.py` computed in Python after a DBSCAN fit or a KernelDensity
-score (lane apple-fast-py2mojo-cluster, 2026-10-03), exported by both
+"""What `density.py` computed in Python after a DBSCAN fit (lane apple-fast-py2mojo-cluster, 2026-10-03), exported by both
 `_mojolearn_estimators` and `_mojolearn_estimators_host` with one contract:
 
   dbscan_core_arrays(x_addr, labels_addr, core_addr, [n, d])
       -> [core_sample_indices array('i'), components array('f') (n_core x d,
          row-major), core labels array('i')], ascending training index, from
          the fit's own uint8 core mask (a byte other than 0 or 1 raises).
-  kde_score_total(scores_addr, n) -> the float32 scores summed sequentially
-         in float64 (`KernelDensity.score`'s fold, the same bits).
   estimators_py2mojo_cluster() -> 1, or 0 under
          `-D MOJOLEARN_PY2MOJO_cluster_OFF` (Python takes its old path).
 
-Both act on the host arrays the fit and the score already returned (their
+It acts on the host arrays the fit already returned (its
 outputs), so the two columns run the same loops."""
 from std.memory import memcpy
 from std.python import Python, PythonObject
@@ -73,10 +70,3 @@ def dbscan_core_arrays_binding(
     out.append(lab)
     return out
 
-
-def kde_score_total_binding(scores_addr: PythonObject, n: PythonObject) raises -> PythonObject:
-    var sp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=scores_addr))
-    var total = Float64(0.0)
-    for i in range(Int(py=n)):
-        total += Float64(sp.unsafe_load(i))
-    return PythonObject(total)

@@ -639,8 +639,8 @@ class ExponentialSmoothing:
         # is done ONCE, on first use of `level_` / `trend_` / `season_`
         # (lane py-sequence: no longer at every fit and load; one series
         # through `get_level(index)` is its single strided slice), into a
-        # C-contiguous `(ts_num, num_rows)` Array per component, by `ts_num` strided memoryview slice
-        # copies (`_bufcheck.strided_rows`; C-level loops, no Python
+        # C-contiguous `(ts_num, num_rows)` Array per component, by one Mojo
+        # transpose (`_bufcheck.strided_rows` -> `transpose_f32`; no Python
         # element loop). The same bytes land at the same [s, i]. The
         # time-major blocks are ALSO kept, as C-order `(num_rows,
         # ts_num)` views, because that shape IS cuML's `get_level()`
