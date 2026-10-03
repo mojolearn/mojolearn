@@ -6,3 +6,7 @@ CMD lane/apple-fast-linsvr linsvr-all-taxi AFC_FAMILY=classical2 bash tools/afc_
 CMD lane/apple-fast-linsvr linsvr-fix-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linsvr-fix-istella estimators linearsvr istella 1 2 "" "-D MOJOLEARN_LSVR_FASTPATH_FIX"
 CMD lane/apple-fast-linsvr linsvr-slim-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linsvr-slim-istella estimators linearsvr istella 1 2 "" "-D MOJOLEARN_LSVR_EVAL_SLIM"
 CMD lane/apple-fast-linsvr linsvr-all-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linsvr-all-istella estimators linearsvr istella 1 2 "" "-D MOJOLEARN_LSVR_ALL"
+CMD lane/apple-fast-linsvr linsvr-dconv-taxi AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linsvr-dconv-taxi estimators linearsvr taxi 1 2 "" "-D MOJOLEARN_LSVR_DEVICE_CONVERGE"
+CMD lane/apple-fast-linsvr linsvr-dconv-vs-batch-taxi AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linsvr-dconv-vs-batch-taxi estimators linearsvr taxi 1 2 "-D MOJOLEARN_LSVR_LINESEARCH_BATCH -D MOJOLEARN_LSVR_EVAL_SLIM" "-D MOJOLEARN_LSVR_DEVICE_CONVERGE"
+CMD lane/apple-fast-linsvr linsvr-dualcd-taxi AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linsvr-dualcd-taxi estimators linearsvr taxi 1 2 "" "-D MOJOLEARN_LSVR_DUAL_CD"
+CMD lane/apple-fast-linsvr linsvr-dualcd-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linsvr-dualcd-istella estimators linearsvr istella 1 2 "" "-D MOJOLEARN_LSVR_DUAL_CD"

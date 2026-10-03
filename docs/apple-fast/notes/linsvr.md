@@ -51,8 +51,7 @@ direction's verdict (`read_scalars`, 4 words). Every rejected candidate adds `ax
 + one synchronize. The convergence test (`check_convergence`) runs on the host on numbers that
 already came home with that one synchronize: there is no separate per-iteration readback to move
 to the device. A device-side convergence or line search would have to run whole iterations without
-the host, which the host-driven L-BFGS structure does not allow cheaply; not attempted (see
-docs/apple-fast/ab/linsvr.md).
+the host: that is what MOJOLEARN_LSVR_DEVICE_CONVERGE does (candidate 5 below).
 
 Per fit, fixed: `qn_fit_host` uploads X (44 MB) and y, memsets w, synchronizes (`glm/estimator.mojo
 ~511`); `GLMWithData.__init__` creates 8 buffers and synchronizes; `min_lbfgs` creates 10 buffers
@@ -77,15 +76,36 @@ final copy of w home. About 35 live Metal buffers per fit: launch cost growth is
 4. `MOJOLEARN_LSVR_EVAL_SLIM`: the four one-block launches around the objective (memset g,
    Tikhonov gradient + value, gradient norm, OWL-QN l1 term) become one launch after the fold:
    g += l2 w, reg value, norm, l1 term, all from one block.
-5. `MOJOLEARN_LSVR_ALL`: 1 + 2 + 3 + 4.
-
-Not done: `MOJOLEARN_LSVR_DEVICE_CONVERGE` (no separate readback exists, section 2) and
-`MOJOLEARN_LSVR_DUAL_CD` (liblinear's dual coordinate descent is sequential per coordinate; a
-parallel block variant changes the solution path and would need its own convergence proof against
-the primal tolerance; not simple, not attempted).
+5. `MOJOLEARN_LSVR_DEVICE_CONVERGE` (`glm/impl/qn/qn_dconv.mojo`): the device runs whole
+   L-BFGS iterations from iteration 2: direction (`end`/`n_vec` in a device state block),
+   candidate 0 axpy, the fused batch pass, the Armijo walk (`dc_ls_kernel`), a gated
+   materialize pass, `update_and_check` + `check_convergence` (`dc_check_kernel`). The host
+   reads the 32-word state block every k = 8 iterations (QN_DCONV_POLL). Why 8: a poll
+   costs one synchronize (~0.2 ms plus the idle bubble on Apple); after the stop at most 7
+   iterations of gated launches follow, about 70 launches that return at their first line,
+   so a larger k buys little and wastes more launches; a smaller k pays more syncs. Freeze:
+   state word 0 is the stop flag and every kernel of the loop returns on it, so x, fx, k
+   stay at the stopping iterate (`glm_base._dc_skip`). Undecided cases hand the iteration
+   back to the host before its start state is touched. Per device iteration: 9 to 11
+   launches (4 of them gated no-ops when step 1 is accepted), zero synchronizes.
+   Section 2 above said there was no separate readback to move: correct, so the define
+   moves the line-search decision too, which is what removes the per-evaluation sync.
+6. `MOJOLEARN_LSVR_DUAL_CD` (`glm/impl/qn/lsvr_dual.mojo`): 16 rounds of a damped parallel
+   dual CD (per-thread liblinear steps over 16-row tiles against a register copy of w, tile
+   fold, global step from 2^0 .. 2^-18 and 1/K picked by the dual change), then the shipped
+   L-BFGS from that point. Why not plain parallel liblinear CD, the convergence argument,
+   the intercept and why no shrinking: docs/apple-fast/ab/linsvr.md. SVR L1 / L2, l2 > 0,
+   d <= 32 (taxi; istella's d = 220 falls through). Not in ALL.
+7. `MOJOLEARN_LSVR_ALL`: 1 + 2 + 3 + 4 + 5 (not 6).
 
 ## Compile results (2026-10-03, head 5e6f8e319 code, bindings/build_estimators.sh, compile only)
 FAST + MOJOLEARN_LSVR_FASTPATH_FIX rc=0; FAST + MOJOLEARN_LSVR_FUSED_GRAD rc=0;
 FAST + MOJOLEARN_LSVR_LINESEARCH_BATCH rc=0; FAST + MOJOLEARN_LSVR_EVAL_SLIM rc=0;
 FAST + MOJOLEARN_LSVR_ALL rc=0; FAST, no define rc=0; IDENTICAL rc=0.
 Logs: ~/mojolearn-evidence/af-linsvr/build-*.log (not in git).
+
+## Compile owed: peer (2026-10-03)
+DEVICE_CONVERGE (commit f80495c18), DUAL_CD and the ALL change are uncompiled: Andrew's
+instruction 2026-10-03, compile slots jammed, the M3 peer compiles. Owed: FAST +
+MOJOLEARN_LSVR_DEVICE_CONVERGE, FAST + MOJOLEARN_LSVR_DUAL_CD, FAST + MOJOLEARN_LSVR_ALL,
+FAST no define, IDENTICAL (bindings/build_estimators.sh). The results above predate them.
