@@ -33,3 +33,22 @@ comptime FAST_KNN_BIGD = ANN_FAST_APPLE and not is_defined["MOJOLEARN_ANN_FAST_K
 #: .6527 -> .801). `-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF` restores
 #: the host codebooks.
 comptime FAST_IVFPQ_DEVICE_CODEBOOKS = ANN_FAST_APPLE and not is_defined["MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF"]()
+
+#: lane/apple-fast-gap-cagra (2026-10-03), OPT-IN A/B arms for the CAGRA
+#: build's k-NN graph on rows wider than 64 features (x_ann/cagra_fast_knn.mojo,
+#: docs/apple-fast/notes/gap-cagra.md):
+#:   WIDE  the NVIDIA/AMD register-tiled difference kernel (`knn_wide_kernel`,
+#:         64 x 64 tile, 4 x 4 cells per thread) on Apple; the cell's chain.
+#:   DOT   a 64 x 64 tile of dot products, 4 x 4 per thread, distances
+#:         |x_i - mu|^2 + |x_j - mu|^2 - 2 (x_i - mu).(x_j - mu) clamped at 0
+#:         (mu a sample mean). Exact neighbor set up to FAST rounding.
+#:   IVFG  an approximate k-NN graph: device Lloyd k-means (n / 384 lists),
+#:         each row's candidates the rows of its list's IVFG_PROBES nearest
+#:         lists (the DOT tile), as cuVS builds CAGRA's graph from an IVF
+#:         index. Falls back to the exact graph when a list's probe pool
+#:         holds fewer than intermediate_graph_degree + 1 rows.
+#:   IVFG_P32  IVFG with 32 probe lists instead of 16.
+comptime CAGRA_FAST_WIDE = ANN_FAST_APPLE and is_defined["MOJOLEARN_CAGRA_FAST_WIDE"]()
+comptime CAGRA_FAST_DOT = ANN_FAST_APPLE and is_defined["MOJOLEARN_CAGRA_FAST_DOT"]()
+comptime CAGRA_FAST_IVFG = ANN_FAST_APPLE and is_defined["MOJOLEARN_CAGRA_FAST_IVFG"]()
+comptime CAGRA_FAST_IVFG_PROBES = 32 if is_defined["MOJOLEARN_CAGRA_FAST_IVFG_P32"]() else 16
