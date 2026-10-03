@@ -361,12 +361,7 @@ def bayes_eig_kernel(fw: FP, fp: FP, res: FP, ip: IP, d: Int32, nb: Int32, ypart
     var t = device_team(tw, 0, team_rows(a, ip), team_own(a, dd))
     var wsum = ld(state, 3)
     var yvar = fd(fold_parts(vparts, 0, Int(nb)), wsum)
-    var jtol = Float32(1e-9)
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
-        # lane/apple-fast-kernel: ip[7] (MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1)
-        if ldi(ip, 7) != 0:
-            jtol = Float32(1e-7)
-    var al = bayes_eig_prep(t, fw, fp, dd, yvar, jtol)
+    var al = bayes_eig_prep(t, fw, fp, dd, yvar)
     var ratio = fd(al[1], al[0])
     for j in range(t.tid, dd, t.nt):
         st(res, j, bayes_coef_one(fw, dd, j, ratio))
@@ -3326,9 +3321,7 @@ def fit_device(
     # mean / variance passes on one block (after the 2026-10-02 merge: in
     # place of main's moments grid, one block per 16-column tile pair with
     # one serial chain per cell, and main's `bayes_xty_kernel`; the y
-    # partials stay main's). -D MOJOLEARN_KERNEL_FAST_BAYES_JACOBI (ip[7]): the team Jacobi
-    # skips rotations below 1e-7 * sqrt(a_pp a_qq) instead of 1e-9, a
-    # threshold float32 roundoff never reaches, so it ran all 60 sweeps.
+    # partials stay main's).
     var kstats = False
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
         if bayes_like:
@@ -3338,9 +3331,6 @@ def fit_device(
                 kstats = True
                 grid_gram = True
                 hip[4] = Int32(1)
-            while len(hip) < 8:
-                hip.append(Int32(0))
-            hip[7] = Int32(1 if is_defined["MOJOLEARN_KERNEL_FAST_BAYES_JACOBI"]() else 0)
     var dip = ctx.enqueue_create_buffer[DType.int32](max(len(hip), 1))
     var dtw = ctx.enqueue_create_buffer[DType.float32](team_work(0, 3, 0))
     var hfp = fp.copy()
