@@ -612,14 +612,17 @@ def op_ocsvm_x(
         var ctx = xn_ctx()
         var d_x = _buf(ctx, x, n * d, True)
         var d_q = _buf(ctx, 0, n * n, False)
+        # x and y are the same rows: one pointer passed twice (not two
+        # mutable borrows of one buffer)
+        var px = d_x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         if tiled != 0 and kind == K_RBF and d >= 1 and d <= KT_MAX_D:
             ctx.enqueue_function[kernel_rbf_tiled_kernel](
-                d_x.unsafe_ptr(), d_x.unsafe_ptr(), d_q.unsafe_ptr(), Int64(n), Int64(n), Int64(d), gamma,
+                px, px, d_q.unsafe_ptr(), Int64(n), Int64(n), Int64(d), gamma,
                 grid_dim=((n + KT_T - 1) // KT_T, (n + KT_T - 1) // KT_T, 1), block_dim=(KT_TPB, 1, 1),
             )
         else:
             ctx.enqueue_function[kernel_kernel](
-                d_x.unsafe_ptr(), d_x.unsafe_ptr(), d_q.unsafe_ptr(), Int64(n), Int64(n), Int64(d), Int64(kind),
+                px, px, d_q.unsafe_ptr(), Int64(n), Int64(n), Int64(d), Int64(kind),
                 gamma, coef0, Int64(degree),
                 grid_dim=_grid(n * n), block_dim=(BLOCK if n * n > 1 else 1),
             )
