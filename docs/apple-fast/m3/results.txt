@@ -1,4 +1,4 @@
-pos=202 lines=     412
+pos=205 lines=     419
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -241,3 +241,6 @@ pos=202 lines=     412
 325:CMD apple-fast@42b6db46c afb5b-dart rc=0 afb done tag=afb5b-dart pairs=8 ok=4
 326:CMD apple-fast@42b6db46c ols-tsqr-check rc=0 AFC-AB-SUMMARY ols-tsqr-check arm=B lane=ols ds=istella median_of_medians_ms=2175.2457710099407 runs=[2175.2457710099407 ] digest=272ed0debbbe3446 
 327:FBUILD lane/apple-fast-dwgap@23cbc3195 core=0 ibase=0 estimators=0 gbdt=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+328:CMD apple-fast-dwgap@23cbc3195 dwgap-modeskip-taxi rc=0 AFT-MEDIAN arm=B n=2 median_ms=12930.4 all=[12454, 13406] hashes=['832c8ee519c2bb24', '9dd3a408560cc4c4'] acc={'logloss': [0.527847, 0.527897], 'auc': [0.63238, 0.632465]}
+329:CMD apple-fast-dwgap@23cbc3195 dwgap-modeskip-istella rc=0 AFT-MEDIAN arm=B n=2 median_ms=16974.9 all=[16954, 16996] hashes=['7e881e83684b7d7d', 'aac71cb0d7e134dc'] acc={'logloss': [0.156913, 0.156869], 'auc': [0.983231, 0.983206]}
+330:CMD apple-fast@42b6db46c afb6-te-algos rc=0 afb done tag=afb6-te-algos pairs=28 ok=26
