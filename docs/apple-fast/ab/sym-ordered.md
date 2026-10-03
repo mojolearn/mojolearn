@@ -79,3 +79,8 @@ The fold derivatives (2F launches; the one-launch arm `MOJOLEARN_ORDERED_FOLD_DE
 opt-in), the structure search's level kernels (shared with the Plain fit), the device partition sorts (7 launches per
 permutation), the batched estimation's grid, the learn-loss and held-out drains. The brief's candidates 2 (permutations
 in one launch) and 5 (derivatives fused into the apply) are declined in the notes file with the reason.
+Candidate 1 (all folds' histograms in one launch) is already main's design: the fold id sits in the low bits of every
+document's bin, so one `compute_hist2` set per level covers every fold (see the notes file). Candidate 3 (plan on the
+device) is taken where the fit re-uploaded per tree: `ORD_FOLD_BINS_ONE` uploads the partition-start table once a fit.
+Candidate 4 (estimation fused across folds) is what main's batched estimation already does within a permutation; the
+remaining loop is over the 3 learn permutations, the same blocker as candidate 2.
