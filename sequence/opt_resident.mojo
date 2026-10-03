@@ -20,15 +20,49 @@ statements on the same values: no bit moves against the per-call entries.
 `load_state_dict`. Storage is `std.ffi._Global`, one slot per tier; a
 handle indexes the pool and a closed handle's slot is reused."""
 from std.ffi import _Global
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from std.python import Python, PythonObject
 from max.gpu.host import DeviceBuffer
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from sequence.exec_device import DeviceExec, sequence_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from sequence.exec_device import DeviceExec, X_SEQUENCE_POOL, _pool_host, _pool_release_host, sequence_ctx
 from sequence.ops import FP
 from sequence.recurrent import OptState, opt_scalars, opt_step
 from sequence.pyapi import fptr, fval, ival, lamb_bias, lamb_core, lamb_offsets, lamb_table, opt_of, opt_slots
+
+#: Apple FAST transport switches of the resident step (lane
+#: apple-fast-optspeed, 2026-10-03). At the board's one tensor of 16,777,216
+#: floats a step is three 64 MB transfers around one ~1 ms element-wise
+#: launch, and the time is the transport: each upload was a single-thread
+#: memcpy into a pinned stage plus its DMA (a raw host-pointer copy is
+#: faster on Metal, memory metal-transfer-costs-on-apple), and the download
+#: was one DMA into a pinned stage, then one single-thread read of that
+#: write-combined memory (~15-25 ms per 64 MB, the step's largest cost since
+#: cpu-gpu-cleanup n-seq made `_pcopy` one memcpy). Copies only: no bit
+#: moves, the same launches on the same values.
+#:  MOJOLEARN_OPT_RAW_UP: the parameter and gradient uploads are raw
+#:    host-pointer copies straight into the device buffers (no stage).
+#:  MOJOLEARN_OPT_PIPE_DOWN: the parameter download goes in OPT_PIPE_CH
+#:    chunks through two pinned halves: the DMA of chunk i overlaps the read
+#:    of chunk i - 1.
+#:  MOJOLEARN_OPT_ZERO_OPEN: the open reports its slots zero filled on the
+#:    device (a third return value), so the Python side skips uploading its
+#:    still untouched zero host copies on the first step.
+#: IDENTICAL and the other vendors compile the main path unchanged.
+comptime _OPT_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime OPT_RAW_UP = _OPT_APPLE_FAST and is_defined["MOJOLEARN_OPT_RAW_UP"]()
+#: PIPE_DOWN and ZERO_OPEN are the FAST+Apple default since the M3 A/B of
+#: lane/apple-fast-optspeed f2b6491a8 (n=1, synthetic, output digest
+#: identical): all three switches adagrad 317 -> 187 ms, lamb 340 -> 206,
+#: adamax 326 -> 195; PIPE_DOWN alone 318 -> 191. Off with
+#: MOJOLEARN_OPT_PIPE_DOWN_OFF / MOJOLEARN_OPT_ZERO_OPEN_OFF; the old
+#: -D names are harmless. RAW_UP measured noise (310 -> 307): opt-in.
+comptime OPT_PIPE_DOWN = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_PIPE_DOWN_OFF"]()
+comptime OPT_ZERO_OPEN = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_ZERO_OPEN_OFF"]()
+#: the pipelined download's chunk, floats (8 MB)
+comptime OPT_PIPE_CH = 1 << 21
 
 #: the handle kinds
 comptime RES_ELEMENTWISE = 1
@@ -143,6 +177,10 @@ def _pair(a: Int, b: Int) raises -> PythonObject:
     var out = Python.list()
     out.append(PythonObject(a))
     out.append(PythonObject(b))
+    comptime if OPT_ZERO_OPEN:
+        # the slots are zero filled on the device (`_slot_buf`): a caller
+        # whose host copies are still the zeros it built need not upload them
+        out.append(PythonObject(1))
     return out
 
 
@@ -249,6 +287,21 @@ def _tensors(addrs: PythonObject, J: Int, sizes: List[Int], n: Int) raises -> Tu
 
 
 def _upload_all(mut ex: DeviceExec, P: FP, G: FP, ps: List[Int], gs: List[Int], sizes: List[Int]) raises:
+    comptime if OPT_RAW_UP:
+        # raw host-pointer copies into the executor's buffers, queued; the
+        # caller's arrays live until the download's wait ends the call
+        var o = 0
+        for j in range(len(sizes)):
+            var fp_ = ex._find(P + o, sizes[j])
+            var vp = ex._sub(fp_[0], fp_[1], sizes[j])
+            ex.ctx.enqueue_copy(dst_buf=vp, src_ptr=FP(unsafe_from_address=ps[j]))
+            _ = vp^
+            var fg = ex._find(G + o, sizes[j])
+            var vg = ex._sub(fg[0], fg[1], sizes[j])
+            ex.ctx.enqueue_copy(dst_buf=vg, src_ptr=FP(unsafe_from_address=gs[j]))
+            _ = vg^
+            o += sizes[j]
+        return
     var off = 0
     for j in range(len(sizes)):
         ex.upload(P + off, FP(unsafe_from_address=ps[j]), sizes[j])
@@ -256,7 +309,55 @@ def _upload_all(mut ex: DeviceExec, P: FP, G: FP, ps: List[Int], gs: List[Int], 
         off += sizes[j]
 
 
+def _pipe_download(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) raises:
+    """`_download_all` through two pinned halves of OPT_PIPE_CH floats: the
+    DMA of chunk i runs into one half while the host reads chunk i - 1 out
+    of the other. Every chunk's wait comes before its half is reused (the
+    half of chunk i was last read for chunk i - 2, before the previous
+    wait). Returns with every byte in the caller's arrays."""
+    var h0 = _pool_host(ex.ctx, OPT_PIPE_CH)
+    var h1 = _pool_host(ex.ctx, OPT_PIPE_CH)
+    var pool = X_SEQUENCE_POOL.get_or_create_ptr()
+    var st0 = FP(unsafe_from_address=Int(pool[].host[h0].unsafe_ptr()))
+    var st1 = FP(unsafe_from_address=Int(pool[].host[h1].unsafe_ptr()))
+    var have_prev = False
+    var prev_dst = 0
+    var prev_cnt = 0
+    var prev_half = 0
+    var half = 0
+    var off = 0
+    for j in range(len(sizes)):
+        var done = 0
+        while done < sizes[j]:
+            var cnt = min(OPT_PIPE_CH, sizes[j] - done)
+            var f = ex._find(P + off + done, cnt)
+            var v = ex._sub(f[0], f[1], cnt)
+            ex.ctx.enqueue_copy(dst_ptr=st0 if half == 0 else st1, src_buf=v)
+            _ = v^
+            if have_prev:
+                # overlaps the DMA just queued, into the other half
+                memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1,
+                       count=prev_cnt)
+            ex.ctx.synchronize()
+            have_prev = True
+            prev_dst = ps[j] + done * 4
+            prev_cnt = cnt
+            prev_half = half
+            half = 1 - half
+            done += cnt
+        off += sizes[j]
+    if have_prev:
+        memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1, count=prev_cnt)
+    _pool_release_host(h0)
+    _pool_release_host(h1)
+    # the executor's own bookkeeping (no copy is pending: the queue is empty)
+    ex.sync()
+
+
 def _download_all(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) raises:
+    comptime if OPT_PIPE_DOWN:
+        _pipe_download(ex, P, ps, sizes)
+        return
     var off = 0
     for j in range(len(sizes)):
         ex.download_async(FP(unsafe_from_address=ps[j]), P + off, sizes[j])
