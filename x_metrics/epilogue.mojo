@@ -731,7 +731,16 @@ def auc_xy(x_addr: Int, y_addr: Int, n: Int) raises -> Float64:
     var terms = List[Float64](capacity=n - 1)
     for i in range(1, n):
         terms.append(pinned_mul_f64(X[i] - X[i - 1], Y[i] + Y[i - 1]) / 2.0)
-    return direction * fsum_strict(terms)
+    try:
+        return direction * fsum_strict(terms)
+    except:
+        # a non-finite term or a possible overflow (lane pyglue-sweep: this
+        # was the Python trapezoid's portable route): the IEEE left-to-right
+        # sum, whose inf or NaN is the answer
+        var s: Float64 = 0.0
+        for i in range(len(terms)):
+            s = s + terms[i]
+        return direction * s
 
 
 def mi_contingency(c_addr: Int, ka: Int, kb: Int) raises -> Float64:

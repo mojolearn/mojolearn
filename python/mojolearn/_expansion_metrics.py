@@ -1872,17 +1872,16 @@ def _trapezoid(x, y):
 
 def auc(x, y):
     """scikit-learn 1.9 `auc`: the trapezoid rule over a monotonic x (host
-    binary64, a correctly rounded `fsum`), in the binding
-    (x_metrics/epilogue.mojo auc_xy, lane py-misc-metrics) for every input:
-    a list or an integer buffer is converted to Float64 first (lane
-    apple-fast-py2mojo-core). The Python trapezoid below it runs only where
-    the binding refuses: a non-finite or overflowing term, whose fsum the
-    portable route decides."""
+    binary64, a correctly rounded `fsum`; a non-finite term's IEEE sum), in
+    the binding (x_metrics/epilogue.mojo auc_xy, lane py-misc-metrics) for
+    every input: a list or an integer buffer is converted to Float64 first
+    (lane apple-fast-py2mojo-core; the Python trapezoid route is gone, lane
+    pyglue-sweep)."""
     xa, ya = _auc_f64(x), _auc_f64(y)
     if xa is None:
-        xa = Array.from_list([float(v) for v in flatten_mo(x)], "<f8")
+        xa = Array.from_list(flatten_mo(x), "<f8")
     if ya is None:
-        ya = Array.from_list([float(v) for v in flatten_mo(y)], "<f8")
+        ya = Array.from_list(flatten_mo(y), "<f8")
     if xa.size != ya.size:
         raise ValueError("x and y must have the same length")
     if xa.size < 2:
@@ -1892,17 +1891,7 @@ def auc(x, y):
     except Exception as exc:
         if "non-monotonic" in str(exc):
             raise ValueError(f"x is neither increasing nor decreasing : {xa.tolist()}.") from None
-        if "Python way" not in str(exc):
-            raise
-    x, y = xa.tolist(), ya.tolist()
-    dx = [x[i] - x[i - 1] for i in range(1, len(x))]
-    direction = 1
-    if any(d < 0 for d in dx):
-        if all(d <= 0 for d in dx):
-            direction = -1
-        else:
-            raise ValueError(f"x is neither increasing nor decreasing : {x}.")
-    return float(direction * _trapezoid(x, y))
+        raise
 
 
 def _auc_f64(v):
@@ -2694,24 +2683,8 @@ def _cluster_inputs(X, labels, caller):
     return Xa, _codes(lab, classes), len(classes)
 
 
-def _centroids(Xa, codes, k, numeric_mode):
-    """(per-cluster sums (k x d), counts, global sum) from device PairSums."""
-    n, d = Xa.shape
-    prog = _Prog()
-    X = prog.put(Xa)
-    L = prog.put_i32(codes)
-    off, sums = _group(prog, L, n, k, values=X, vstride=d, width=d)
-    zero = prog.scratch(n)
-    prog.stage("pair_key", n, 0, 0, zero, 1, 2)
-    _, gsum = _group(prog, zero, n, 1, values=X, vstride=d, width=d)
-    _execute(prog, numeric_mode)
-    o = prog.ints(off, k + 1)
-    counts = [o[i + 1] - o[i] for i in range(k)]
-    return prog.floats(sums, k * d), counts, prog.floats(gsum, d)
-
-
 class _Cents:
-    """lane py-misc-metrics: `_centroids`' program left in place for the
+    """lane py-misc-metrics: the centroid program left in place for the
     host epilogue (x_metrics/epilogue.mojo centroids_f32, ch_extra,
     db_score), which reads the per-cluster sums and the global sum words in
     the arena instead of Python lists of k * d floats."""
@@ -2745,17 +2718,15 @@ class _Cents:
 
 
 def _cluster_native(Xa, codes, k, numeric_mode, name):
-    """(_Cents, the centroid entry, the score entry) when the binding has
-    them, else None."""
-    cfn = _epilogue("x_metrics_centroids", numeric_mode)
-    sfn = _epilogue(name, numeric_mode)
-    if cfn is None or sfn is None:
-        return None
-    return _Cents(Xa, codes, k, numeric_mode), cfn, sfn
+    """(_Cents, the centroid entry, the score entry): every install's
+    binding carries both (the Python centroid fallback is gone, lane
+    pyglue-sweep: a present cluster's count is never 0)."""
+    return (_Cents(Xa, codes, k, numeric_mode), _epilogue("x_metrics_centroids", numeric_mode),
+            _epilogue(name, numeric_mode))
 
 
 def _row_dists_f32(Xa, codes, C32, k, root, numeric_mode):
-    """`_row_dists` given the Float32 centroid words."""
+    """Per-cluster sums of the row distances to the Float32 centroid words."""
     n, d = Xa.shape
     prog = _Prog()
     X = prog.put(Xa)
@@ -2768,81 +2739,30 @@ def _row_dists_f32(Xa, codes, C32, k, root, numeric_mode):
     return prog.floats(per, k)
 
 
-def _row_dists(Xa, codes, cents, root, numeric_mode):
-    n, d = Xa.shape
-    k = len(cents) // d
-    prog = _Prog()
-    X = prog.put(Xa)
-    L = prog.put_i32(codes)
-    C = prog.put(Array.from_list([_f32(v) for v in cents], "<f4"))
-    out = prog.scratch(n)
-    prog.stage("row_centroid_dist", n, X, d, L, C, out, 1 if root else 0)
-    off, per = _group(prog, L, n, k, values=out)
-    _execute(prog, numeric_mode)
-    return prog.floats(per, k)
-
-
 def calinski_harabasz_score(X, labels, *, numeric_mode=None):
     """scikit-learn 1.9 `calinski_harabasz_score`: the between- over the
-    within-cluster dispersion, scaled by (n - k) / (k - 1)."""
+    within-cluster dispersion, scaled by (n - k) / (k - 1)
+    (x_metrics/epilogue.mojo centroids_f32 and ch_extra, lane
+    py-misc-metrics)."""
     Xa, codes, k = _cluster_inputs(X, labels, "calinski_harabasz_score")
     n, d = Xa.shape
-    nat = _cluster_native(Xa, codes, k, numeric_mode, "x_metrics_ch_extra")
-    if nat is not None:
-        cen, cfn, sfn = nat
-        try:
-            # x_metrics/epilogue.mojo ch_extra (lane py-misc-metrics)
-            C32 = cen.f32(cfn)
-            extra = float(sfn(*cen.args(), cen.gsum, cen.q.buffer_info()[0], k, d, n))
-        except Exception:
-            C32 = None
-        if C32 is not None:
-            intra = _fsum(_row_dists_f32(Xa, codes, C32, k, False, numeric_mode))
-            return float(1.0 if intra == 0.0 else extra * (n - k) / (intra * (k - 1.0)))
-    sums, counts, gsum = _centroids(Xa, codes, k, numeric_mode)
-    cents = [sums[i * d + c] / counts[i] for i in range(k) for c in range(d)]
-    mean = [v / n for v in gsum]
-    extra = _fsum([counts[i] * _fsum([_sq(cents[i * d + c] - mean[c]) for c in range(d)])
-                        for i in range(k)])
-    intra = _fsum(_row_dists(Xa, codes, cents, False, numeric_mode))
+    cen, cfn, sfn = _cluster_native(Xa, codes, k, numeric_mode, "x_metrics_ch_extra")
+    C32 = cen.f32(cfn)
+    extra = float(sfn(*cen.args(), cen.gsum, cen.q.buffer_info()[0], k, d, n))
+    intra = _fsum(_row_dists_f32(Xa, codes, C32, k, False, numeric_mode))
     return float(1.0 if intra == 0.0 else extra * (n - k) / (intra * (k - 1.0)))
 
 
 def davies_bouldin_score(X, labels, *, numeric_mode=None):
     """scikit-learn 1.9 `davies_bouldin_score`: the mean over clusters of the
-    worst (s_i + s_j) / d(c_i, c_j)."""
+    worst (s_i + s_j) / d(c_i, c_j) (x_metrics/epilogue.mojo centroids_f32
+    and db_score, lane py-misc-metrics)."""
     Xa, codes, k = _cluster_inputs(X, labels, "davies_bouldin_score")
     n, d = Xa.shape
-    nat = _cluster_native(Xa, codes, k, numeric_mode, "x_metrics_db_score")
-    if nat is not None:
-        cen, cfn, sfn = nat
-        try:
-            C32 = cen.f32(cfn)
-        except Exception:
-            C32 = None
-        if C32 is not None:
-            per = array.array("d", _row_dists_f32(Xa, codes, C32, k, True, numeric_mode))
-            try:
-                # x_metrics/epilogue.mojo db_score (lane py-misc-metrics)
-                return float(sfn(*cen.args(), cen.q.buffer_info()[0], k, d, per.buffer_info()[0]))
-            except Exception:
-                pass
-    sums, counts, _ = _centroids(Xa, codes, k, numeric_mode)
-    cents = [sums[i * d + c] / counts[i] for i in range(k) for c in range(d)]
-    intra = [v / counts[i] for i, v in enumerate(_row_dists(Xa, codes, cents, True, numeric_mode))]
-    dist = [[pmath.sqrt(_fsum([_sq(cents[i * d + c] - cents[j * d + c]) for c in range(d)]))
-             for j in range(k)] for i in range(k)]
-    close = lambda v: abs(v) <= 1e-8
-    if all(close(v) for v in intra) or all(close(v) for row in dist for v in row):
-        return 0.0
-    scores = []
-    for i in range(k):
-        best = float("-inf")
-        for j in range(k):
-            den = dist[i][j] if dist[i][j] != 0 else float("inf")
-            best = max(best, (intra[i] + intra[j]) / den)
-        scores.append(best)
-    return float(_fsum(scores) / k)
+    cen, cfn, sfn = _cluster_native(Xa, codes, k, numeric_mode, "x_metrics_db_score")
+    C32 = cen.f32(cfn)
+    per = array.array("d", _row_dists_f32(Xa, codes, C32, k, True, numeric_mode))
+    return float(sfn(*cen.args(), cen.q.buffer_info()[0], k, d, per.buffer_info()[0]))
 
 
 # ---------------------------------------------------------------------------
