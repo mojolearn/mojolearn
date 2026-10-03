@@ -16,6 +16,7 @@ the j == i step leaves the lane's folds as they were, as the cell's
 `continue` does. So every row's sums are the cell's."""
 
 from checks.numerics import ftz, identical_log
+from core.device_fold import host_sum_f32_fixed
 from x_ann.tsne_core import (
     F32P, I32P, ts_kl_cell, ts_perplexity_cell, ts_step_cell,
     ts_sum_cell, tsne_nn, tsne_symmetrize, tsne_validate,
@@ -187,10 +188,8 @@ def tsne_fit_host(
         y_out = ya.copy()
     else:
         y_out = yb.copy()
-    var total = Float32(0.0)
-    for i in range(n):
-        total = total + kl[i]
-    kl_out = total
+    # the device's fixed fold order (core/device_fold.mojo)
+    kl_out = host_sum_f32_fixed(kl, n)
     _ = x^
     _ = nn_d^
     _ = nn_i^

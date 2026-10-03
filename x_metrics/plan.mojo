@@ -78,6 +78,10 @@ comptime OP_STRAT_CODES = 45
 comptime OP_CURVE_FOLD = 46
 comptime OP_CF_CHUNK = 47
 comptime OP_CF_FINAL = 48
+#: the label layout units (x_metrics/onehot.mojo; lane apple-fast-py2mojo-core)
+comptime OP_ONEHOT = 52
+comptime OP_REP_ROWS = 53
+comptime OP_PAIR_COLS = 54
 comptime OP_WPCT_CSUM = 49
 comptime OP_WPCT_COFF = 50
 comptime OP_WPCT_CFILL = 51
@@ -91,9 +95,10 @@ comptime CURVE_CHUNK = 1024
 comptime IOTA_EXACT = 1 << 24
 @always_inline
 def is_user_op(op: Int) -> Bool:
-    """An op a caller may name: 0..N_USER_OPS-1, fold_rows, rows64, strat_codes and curve_fold."""
+    """An op a caller may name: 0..N_USER_OPS-1, fold_rows, rows64, strat_codes, curve_fold and the
+    label layout units onehot, rep_rows and pair_cols."""
     return ((op >= 0 and op < N_USER_OPS) or op == OP_FOLD_ROWS or op == OP_ROWS64 or op == OP_STRAT_CODES
-            or op == OP_CURVE_FOLD)
+            or op == OP_CURVE_FOLD or op == OP_ONEHOT or op == OP_REP_ROWS or op == OP_PAIR_COLS)
 #: the chunk length the counting sort aims for, and the bound on its
 #: (groups x chunks) count table
 comptime CS_CHUNK = 256

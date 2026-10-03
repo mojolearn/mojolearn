@@ -37,8 +37,8 @@ def test_cross_fit_uses_fold_encodings():
     X, y = _data(3)
     m = ml.TargetEncoder(random_state=7)
     out = np.asarray(m.fit_transform(X, y))
-    from mojolearn._expansion_prep import _kfold_assignment
-    folds = np.asarray(_kfold_assignment(len(y), 5, 7))
+    from mojolearn._expansion_prep import _native_folds
+    folds = np.asarray(_native_folds(len(y), 5, 7, True))
     for k in range(5):
         tr, te = folds != k, folds == k
         r = SkTE().fit(X[tr], y[tr])
@@ -47,7 +47,12 @@ def test_cross_fit_uses_fold_encodings():
 
 def test_stratified_folds_unshuffled_are_the_reference():
     from sklearn.model_selection import StratifiedKFold
-    from mojolearn._expansion_prep import _stratified_assignment
+    from mojolearn._expansion_prep import _native_folds, encode_labels
+
+    def _stratified_assignment(labels, k, seed, shuffle):
+        # the binding's fold entry (x_prep/folds.mojo), the one route since lane apple-fast-py2mojo-prep
+        cl, codes = encode_labels(labels)
+        return _native_folds(len(labels), k, seed, shuffle, codes, len(cl))
     X, y = _data(4)
     yb = (y > 0.8).astype(np.int64)
     ym = np.digitize(y, [0.0, 1.0]).astype(np.int64)[::-1].copy()
