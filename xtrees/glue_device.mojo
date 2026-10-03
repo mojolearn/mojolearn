@@ -129,20 +129,20 @@ def stack_w64_device(cols: List[Int], n: Int, dst: MutPointer[UInt64, MutUntrack
 
 
 def binary_proba_kernel(
-    p: MutPointer[UInt32, MutAnyOrigin], n: Int64, out: MutPointer[UInt64, MutAnyOrigin],
+    p: MutPointer[UInt32, MutAnyOrigin], n: Int64, res: MutPointer[UInt64, MutAnyOrigin],
 ):
-    """out[2 r + 1] = p[r] widened, out[2 r] = 1 - that, one thread per row."""
+    """res[2 r + 1] = p[r] widened, res[2 r] = 1 - that, one thread per row."""
     var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     while r < Int(n):
         var w = widen_f32_word(p.unsafe_load(r))
-        out.unsafe_store(2 * r + 1, w)
-        out.unsafe_store(2 * r, one_minus_word(w))
+        res.unsafe_store(2 * r + 1, w)
+        res.unsafe_store(2 * r, one_minus_word(w))
         r += stride
 
 
 def binary_proba_device(
-    p: MutPointer[Float32, MutUntrackedOrigin], n: Int, out: MutPointer[Float64, MutUntrackedOrigin],
+    p: MutPointer[Float32, MutUntrackedOrigin], n: Int, res: MutPointer[Float64, MutUntrackedOrigin],
 ) raises:
     """`ops.binary_proba` on the device."""
     if n <= 0:
@@ -155,7 +155,7 @@ def binary_proba_device(
         d_p.unsafe_ptr(), Int64(n), d_out.unsafe_ptr(),
         grid_dim=_blocks(n), block_dim=OPS_TPB,
     )
-    ctx.enqueue_copy(dst_ptr=out.bitcast[UInt64](), src_buf=d_out)
+    ctx.enqueue_copy(dst_ptr=res.bitcast[UInt64](), src_buf=d_out)
     ctx.synchronize()
     _ = d_p^
     _ = d_out^

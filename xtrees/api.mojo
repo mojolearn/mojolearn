@@ -15,6 +15,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from std.python import Python
 from xtrees.folds_device import device_folds
 from xtrees.glue_device import binary_proba_device, indicator_codes_device, stack_w64_device
+from xtrees.exact_sum import ES_FLAGS, ES_MAX_ROWS, exact_sum_device, exact_sum_host
 from xtrees import agnostic_device as agn_dev
 from xtrees import agnostic_host as agn_host
 from xtrees.ops_device import (
@@ -652,17 +653,39 @@ def stack_w64_binding(cols: PythonObject, dst: PythonObject, params: PythonObjec
     return PythonObject(n * len(addrs))
 
 
-def binary_proba_binding(p: PythonObject, out: PythonObject, params: PythonObject) raises -> PythonObject:
-    """p float32 (n); out float64 (n x 2) = rows (1 - p, p), p widened
+def binary_proba_binding(p: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    """p float32 (n); res float64 (n x 2) = rows (1 - p, p), p widened
     exactly; params = [n] (lane apple-fast-py2mojo-trees)."""
     _need(params, 1, "x_trees_binary_proba")
     var n = _count(_i(params, 0), "x_trees_binary_proba")
     if n > 0:
         comptime if XTREES_DEVICE_OPS:
-            binary_proba_device(f32_ptr(Int(py=p)), n, f64_ptr(Int(py=out)))
+            binary_proba_device(f32_ptr(Int(py=p)), n, f64_ptr(Int(py=res)))
         else:
-            binary_proba(f32_ptr(Int(py=p)), n, f64_ptr(Int(py=out)))
+            binary_proba(f32_ptr(Int(py=p)), n, f64_ptr(Int(py=res)))
     return PythonObject(n)
+
+
+def exact_sum_binding(x: PythonObject, res: PythonObject, flags: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, want_div]: res[0] = the exactly rounded sum of the float32
+    x (`_portable_math.fsum`'s word), flags (int32, 8) = [NaN, +inf, -inf,
+    negative finite, positive, 0, 0, 0]; want_div != 0: res holds n + 1
+    float64 and res[1:] = x / sum when no entry is NaN, infinite or negative
+    and one is positive (AdaBoost's normalized sample weights). The device on
+    every GPU build, the host loop on the CPU column (xtrees/exact_sum.mojo;
+    lane apple-fast-py2mojo-trees)."""
+    _need(params, 2, "x_trees_exact_sum")
+    var n = _count(_i(params, 0), "x_trees_exact_sum")
+    if n > ES_MAX_ROWS:
+        raise Error("x_trees_exact_sum: more than 2^30 entries")
+    var want = _i(params, 1) != 0
+    var xa = Int(py=x)
+    var xp = f32_ptr(xa) if xa != 0 else f32_ptr(Int(py=res))
+    comptime if XTREES_DEVICE_OPS:
+        exact_sum_device(xp, n, f64_ptr(Int(py=res)), i32_ptr(Int(py=flags)), want)
+    else:
+        exact_sum_host(xp, n, f64_ptr(Int(py=res)), i32_ptr(Int(py=flags)), want)
+    return PythonObject(ES_FLAGS)
 
 
 #: lane apple-fast-py2mojo-trees (2026-10-03, Andrew: "everything is supposed
@@ -890,6 +913,7 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[stack_w64_binding]("x_trees_stack_w64")
     m.def_function[binary_proba_binding]("x_trees_binary_proba")
     m.def_function[py2mojo_binding]("x_trees_py2mojo")
+    m.def_function[exact_sum_binding]("x_trees_exact_sum")
     m.def_function[block_mean_binding]("x_trees_block_mean")
     m.def_function[kshap_synth_binding]("x_trees_kshap_synth")
     m.def_function[kshap_solve_binding]("x_trees_kshap_solve")

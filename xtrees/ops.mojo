@@ -1104,14 +1104,14 @@ def stack_w64(cols: List[Int], n: Int, dst: MutPointer[UInt64, MutUntrackedOrigi
             dst[unsafe_offset=r * m + j] = src[unsafe_offset=r]
 
 
-def binary_proba(p: MutPointer[Float32, MutUntrackedOrigin], n: Int, out: MutPointer[Float64, MutUntrackedOrigin]):
-    """out (n x 2) rows (1 - p, p), p widened exactly: the Python
+def binary_proba(p: MutPointer[Float32, MutUntrackedOrigin], n: Int, res: MutPointer[Float64, MutUntrackedOrigin]):
+    """res (n x 2) rows (1 - p, p), p widened exactly: the Python
     `[[1.0 - v, v] for v in p.tolist()]` (lane apple-fast-py2mojo-trees; the
     host column of `glue_device.binary_proba_device`)."""
     for r in range(n):
         var w = Float64(p[unsafe_offset=r])
-        out[unsafe_offset=2 * r + 1] = w
-        out[unsafe_offset=2 * r] = 1.0 - w
+        res[unsafe_offset=2 * r + 1] = w
+        res[unsafe_offset=2 * r] = 1.0 - w
 
 
 def folds_serial(

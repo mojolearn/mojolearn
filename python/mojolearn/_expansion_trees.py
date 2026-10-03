@@ -131,6 +131,16 @@ def _trees_fsum_f32(b, arr):
     2026-09-28, trees-apple profile)."""
     from ._portable_math import _scaled_integer
     arr, _ = as_f32_c(arr, ndim=1, name="y")
+    q = getattr(b, "x_trees_py2mojo", None)
+    if callable(q) and int(q()) != 0:
+        # lane apple-fast-py2mojo-trees: the sum AND its one rounding in the
+        # binding (x_trees_exact_sum, on the device in a GPU build); a NaN or
+        # an infinity still takes the Python fsum, which owns those cases
+        out, flags = empty((1,), "<f8"), empty((8,), "<i4")
+        b.x_trees_exact_sum(addr_ro(arr, name="y"), addr(out, name="sum"), addr(flags, name="flags"), [arr.size, 0])
+        if flags[0] or flags[1] or flags[2]:
+            return math.fsum(arr.tolist())
+        return out[0]
     limbs = b.x_trees_exact_sum_f32(addr_ro(arr, name="y"), [arr.size])
     if limbs is None:
         return math.fsum(arr.tolist())
@@ -982,7 +992,9 @@ class BaggingRegressor(_BaggingBase):
 # the estimator weight and the weighted median are `xtrees/ops.mojo`
 # (`samme_step`, `r2_step`, `weighted_median`); R2's weighted bootstrap is the
 # lane's counter RNG, not numpy's `choice`.
-def _trees_normalized_weights(sample_weight, n):
+def _trees_normalized_weights(sample_weight, n, est=None):
+    if est is not None and _trees_py2mojo(est):
+        return _trees_normalized_weights_native(est, sample_weight, n)
     if sample_weight is None:
         return Array.from_list([1.0 / n] * n, "<f8")
     sw = [float(v) for v in as_f32_c(sample_weight, ndim=1, name="sample_weight")[0].tolist()]
@@ -994,6 +1006,26 @@ def _trees_normalized_weights(sample_weight, n):
     if not total > 0:
         raise ValueError("sample_weight must have a positive total")
     return Array.from_list([v / total for v in sw], "<f8")
+
+
+def _trees_normalized_weights_native(est, sample_weight, n):
+    """`_trees_normalized_weights` in the binding (lane
+    apple-fast-py2mojo-trees): the checks, the exactly rounded total
+    (`fsum`'s word) and every v / total in one x_trees_exact_sum call, the
+    same refusals in the same order and the same float64 words."""
+    if sample_weight is None:
+        return full((n,), 1.0 / n, "<f8")
+    sw, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
+    if len(sw) != n:
+        raise ValueError(f"sample_weight has {len(sw)} entries, X has {n} rows")
+    out, flags = empty((n + 1,), "<f8"), empty((8,), "<i4")
+    est._bind().x_trees_exact_sum(addr_ro(sw, name="sample_weight"), addr(out, name="weights"),
+                                  addr(flags, name="flags"), [n, 1])
+    if flags[0] or flags[1] or flags[2] or flags[3]:
+        raise ValueError("sample_weight must be finite and nonnegative")
+    if not flags[4]:
+        raise ValueError("sample_weight must have a positive total")
+    return out[1:n + 1]
 
 
 class _AdaBoostBase(_TreesEnsembleBase):
@@ -1049,7 +1081,7 @@ class AdaBoostClassifier(_AdaBoostBase):
             raise ValueError("y has fewer than 2 classes")
         seed = _trees_seed(self.random_state)
         base = self.estimator if self.estimator is not None else DecisionTreeClassifier(max_depth=1)
-        w = _trees_normalized_weights(sample_weight, n)
+        w = _trees_normalized_weights(sample_weight, n, self)
         stats = zeros((4,), "<f8")
         self.estimators_, self.estimator_weights_, self.estimator_errors_ = [], [], []
         b = self._bind()
@@ -1174,7 +1206,7 @@ class AdaBoostRegressor(_AdaBoostBase):
             raise ValueError(f"y has {len(y32)} rows, X has {n}")
         seed = _trees_seed(self.random_state)
         base = self.estimator if self.estimator is not None else DecisionTreeRegressor(max_depth=3)
-        w = _trees_normalized_weights(sample_weight, n)
+        w = _trees_normalized_weights(sample_weight, n, self)
         stats = zeros((4,), "<f8")
         cols = _trees_arange(d)
         self.estimators_, self.estimator_weights_, self.estimator_errors_ = [], [], []
