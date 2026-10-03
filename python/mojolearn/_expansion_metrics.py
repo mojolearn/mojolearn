@@ -25,9 +25,9 @@ left-to-right order (and `_portable_math` for the rare logarithm), and only on
 O(classes), O(outputs) or O(candidates x folds) scalars; `**`, `pow` and libm
 transcendentals are not allowed. Any epilogue whose term count scales with
 rows, curve points, contingency cells or k^2 * d runs in
-x_metrics/epilogue.mojo under the same operation rules; its Python spelling
-here is only the fallback and the MOJOLEARN_METRICS_EPILOGUE=python reference
-arm. That is bitwise the same on every machine by the IEEE standard, and it
+x_metrics/epilogue.mojo under the same operation rules, the only route (lane
+pyglue-sweep, 2026-10-03: the Python fallbacks and the
+MOJOLEARN_METRICS_EPILOGUE=python reference arm are gone). That is bitwise the same on every machine by the IEEE standard, and it
 is scikit-learn's own precision for the same step.
 """
 import array
