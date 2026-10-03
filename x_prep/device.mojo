@@ -360,7 +360,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                                         Int(hq[5]), Int(hq[6]), Int(hq[7]), Int(hq[8]), Int(hq[9])):
                     continue
         comptime if PREP2_FAST:
-            if prep2_fast_stage(ctx, df, dw, host_q, s, op, total, qp, p2):
+            if prep2_fast_stage(ctx, df, dw, host_q, s, op, total, IP(unsafe_from_address=Int(qp)), p2):
                 continue
         comptime if RR_EIGH:
             if op == OP_EIGH and Int(host_q.unsafe_load(s * STAGE_INTS + 2 + EIGH_CYCLIC_Q)) == 0:

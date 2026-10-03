@@ -681,8 +681,8 @@ def prep2_fast_stage(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mu
     """Enqueue stage s the lane's way when its switch is on and the stage
     fits; False leaves the stage to x_prep/device.mojo's own dispatch."""
     var hq = host_q + (s * STAGE_INTS + 2)
-    var f = df.unsafe_ptr()
-    var w = dw.unsafe_ptr()
+    var f = FP(unsafe_from_address=Int(df.unsafe_ptr()))
+    var w = RUP(unsafe_from_address=Int(dw.unsafe_ptr()))
     if op == OP_QUANTILE and Int(hq[7]) == 1:
         # SELECT is set by Python only on the FAST tier of a Metal binding
         if 2 * Int(hq[4]) > QS_MAXT:
