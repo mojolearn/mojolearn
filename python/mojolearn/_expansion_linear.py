@@ -158,6 +158,20 @@ def _py2mojo_proba(est, mode, scores, k):
     return out
 
 
+_CLS1_RIDGE_CODES = 1
+
+
+def _cls1_flags(est):
+    """lane/apple-fast-gap-cls1: the bound binary's build-time switches
+    (`x_linear_cls1_flags`; 0 on IDENTICAL, the host binding or a build
+    without them, which is main's path)."""
+    try:
+        fn = getattr(est._bind(_BINDING), "x_linear_cls1_flags", None)
+        return int(fn()) if fn is not None else 0
+    except Exception:  # noqa: BLE001  (a binary without the entry: main's path)
+        return 0
+
+
 def _rows(values, k, d):
     return [values[c * d:(c + 1) * d] for c in range(k)]
 
@@ -924,13 +938,14 @@ class SGDOneClassSVM(NumericModeMixin):
 # Reference: scikit-learn sklearn/linear_model/_ridge.py (`_solve_cholesky`,
 # `_RidgeGCV`); kernel x_linear/ridge.mojo.
 
-def _ridge_run(est, a, n, d, Y, T, alphas, sample_weight=None):
+def _ridge_run(est, a, n, d, Y, T, alphas, sample_weight=None, codes_mode=False):
     A = len(alphas)
     has_sw = 0
     if sample_weight is not None:
         Y = _concat_f32(Y, _weights_f32(sample_weight, n))
         has_sw = 1
-    vals = _run(est, ALGO_RIDGE, a, n, d, Y, [T, int(bool(est.fit_intercept)), A, has_sw], list(alphas),
+    ip = [T, int(bool(est.fit_intercept)), A, has_sw] + ([1] if codes_mode else [])
+    vals = _run(est, ALGO_RIDGE, a, n, d, Y, ip, list(alphas),
                 T * d + T + 2 + A + 1, 3 * d * d + 3 * d + T + d * T + 2 * n, 1)
     # lane/neural-pass93: status 2 = X'X + alpha I does not factor even in
     # float-float (x_linear/ridge.mojo); 1 never leaves a binding
@@ -964,6 +979,25 @@ class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
         if not self.alpha >= 0:
             raise ValueError("mojolearn RidgeClassifier: alpha must be >= 0")
         a, n, d = _matrix(X)
+        if (sample_weight is None and self.class_weight is None
+                and _cls1_flags(self) & _CLS1_RIDGE_CODES):
+            # lane/apple-fast-gap-cls1 RIDGE_FAST_CLS1_CODES (FAST + Apple
+            # default, off with -D MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF): the
+            # int32 codes go to the binding as they are and the
+            # +-1 targets are built on the device (x_linear/cls1_fast.mojo)
+            classes, icodes = encode_labels(y)
+            if icodes.size != n:
+                raise ValueError("mojolearn RidgeClassifier: X and y lengths differ")
+            if len(classes) < 2:
+                raise ValueError("mojolearn RidgeClassifier: y has one class")
+            k = len(classes)
+            T = 1 if k == 2 else k
+            vals = _ridge_run(self, a, n, d, icodes, T, [self.alpha], None, codes_mode=True)
+            self.classes_ = classes
+            self.coef_ = Array.from_list(_rows(vals, T, d), "<f4")
+            self.intercept_ = Array.from_list(vals[T * d:T * d + T], "<f4")
+            self.n_features_in_ = d
+            return self
         classes, codes = _classes(self, y, n)
         k = len(classes)
         T = 1 if k == 2 else k
@@ -983,6 +1017,7 @@ class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
         self.intercept_ = Array.from_list(vals[T * d:T * d + T], "<f4")
         self.n_features_in_ = d
         return self
+
 
 
 class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
