@@ -19,7 +19,7 @@ order-free and the array is `m` ints.
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from hierarchy.checks.edge_order import LINK_SAB_NONE
-from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index
+from core.device_fold import device_count_distinct_keys
 from hierarchy.impl.cluster.detail.dendrogram_device import coo_sort_by_weight_device
 from hierarchy.impl.sparse.solver.mst_solver import Graph_COO, mst
 from hierarchy.impl.sparse.solver.detail.mst_kernels import (
@@ -32,22 +32,11 @@ def get_n_components(
     ctx: DeviceContext, mut color: DeviceBuffer[DType.int32], m: Int
 ) raises -> Int:
     """`cross_component_nn.cuh:44-47`: the number of distinct colors."""
-    var h = ctx.enqueue_create_host_buffer[DType.int32](m)
-    ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=color)
-    ctx.synchronize()
-    var keys = List[UInt64](capacity=m)
-    var idx = List[Int](capacity=m)
-    for i in range(m):
-        keys.append(UInt64(Int(h.unsafe_ptr().unsafe_load(i)) & 0x7FFFFFFF))
-        idx.append(i)
-    merge_sort_u64_with_index(keys, idx)
-    var n = 0
-    for i in range(m):
-        if i == 0 or keys[i] != keys[i - 1]:
-            n += 1
-    _ = h^
-    return n
+    # lane cgr4-download-loop: one flag per color set on the device, then
+    # counted there (exact); was a download, a host sort and a host walk.
+    # A color is a vertex id (`& 0x7FFFFFFF` drops the MST's flag bit), so
+    # it lies in [0, m).
+    return device_count_distinct_keys(ctx, color, m, m, Int32(0x7FFFFFFF))
 
 
 def connect_knn_graph(

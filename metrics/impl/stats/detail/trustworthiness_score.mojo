@@ -74,6 +74,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from core.identity_trace import IdentityTrace
+from core.device_fold import device_sum_i32
 from metrics.checks.pinned_distance import l2sqrt_unexpanded
 from metrics.checks.pinned_sum import (
     PINNED_SUM_TPB,
@@ -239,12 +240,9 @@ def trustworthiness_rank_sum(
             Int32(k1), partials.unsafe_ptr(),
             grid_dim=(gx, gy, 1), block_dim=(PINNED_SUM_TPB, 1, 1),
         )
-    var h = ctx.enqueue_create_host_buffer[DType.int32](n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=partials)
-    ctx.synchronize()
-    var total = Int64(0)
-    for i in range(n):
-        total += Int64(h.unsafe_ptr().unsafe_load(i))
+    # lane cgr4-download-loop: the rank sum folds on the device (an exact
+    # integer sum, so the same value the host loop gave)
+    var total = device_sum_i32(ctx, partials, n)
     if trace.enabled:
         var tmp_idx = out_idx.copy()
         trace.record_host("trust.emb_ind", tmp_idx.unsafe_ptr(), n * k1)
@@ -253,7 +251,6 @@ def trustworthiness_rank_sum(
         one.append(total)
         trace.record_host("trust.rank_sum", one.unsafe_ptr(), 1)
         _ = one^
-    _ = h^
     _ = partials^
     _ = emb^
     _ = x_dev^

@@ -74,7 +74,8 @@ from cluster.impl.kmeans_params import (
 )
 from core.identity_trace import IdentityTrace
 from core.row_norms import NORM_TPB, row_norm_kernel
-from ivf.checks.list_layout import build_list_layout, extend_list_layout
+from ivf.checks.list_layout import ListLayout, build_list_layout, extend_list_layout
+from ivf.impl.neighbors.ivf_flat.ivf_group_device import ivf_list_layout_device
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     IvfFlatIndex,
     IvfFlatIndexParams,
@@ -518,7 +519,17 @@ def ivf_flat_build(
     var lay_data = True
     comptime if ANN3_HOST_PASSES:
         lay_data = with_list_data or trace.enabled
-    var layout = build_list_layout(host_labels, x, n_rows, dim, n_lists, with_data=lay_data)
+    # lane cgr4-download-loop: the CSR is built on the device (stable radix
+    # sort by label, histogram, scan, gather); the host pass is kept only to
+    # name a bad label's first row (an error path)
+    var dev_layout = ivf_list_layout_device(ctx, labels, dx, n_rows, dim, n_lists, lay_data)
+    if n_rows > 0 and Int(dev_layout[3]) >= n_lists:
+        _ = build_list_layout(host_labels, x, n_rows, dim, n_lists, with_data=False)
+        raise Error("build_list_layout: a label lies outside [0, n_lists)")
+    var layout = ListLayout(
+        n_lists, n_rows, dim, dev_layout[0].copy(), dev_layout[1].copy(), dev_layout[2].copy()
+    )
+    _ = dev_layout^
     st.host("layout")
 
     if trace.enabled:

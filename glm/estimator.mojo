@@ -733,6 +733,22 @@ def qn_decision_function_host(
     _ = hs^
 
 
+def _positive_code_kernel(
+    scores: MutPointer[Float32, MutAnyOrigin],
+    codes: MutPointer[Int64, MutAnyOrigin],
+    n_in: Int32,
+):
+    """codes[i] = 1 if scores[i] > 0 else 0, decided BY BITS (Metal flushes
+    compare operands): sign clear, magnitude nonzero and not a NaN. That is
+    the host's `score > 0.0` for every float, subnormals included."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        var b = bitcast[DType.uint32](scores.unsafe_load(i))
+        var mag = b & UInt32(0x7FFFFFFF)
+        var pos = (b >> 31) == UInt32(0) and mag != UInt32(0) and mag <= UInt32(0x7F800000)
+        codes.unsafe_store(i, Int64(1) if pos else Int64(0))
+
+
 def qn_predict_binary_host(
     ctx: DeviceContext,
     x_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -755,15 +771,19 @@ def qn_predict_binary_host(
     pams.loss = QN_LOSS_LOGISTIC
     pams.fit_intercept = fit_intercept
     qn_decision_function(ctx, pams, x, n_rows, n_features, w, scores)
-    var hs = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=scores)
+    # lane cgr4-download-loop: the threshold runs on the device and the codes
+    # download straight into the caller's buffer (was a host loop over rows)
+    if n_rows <= 0:
+        return
+    var codes = ctx.enqueue_create_buffer[DType.int64](n_rows)
+    ctx.enqueue_function[_positive_code_kernel](
+        scores.unsafe_ptr(), codes.unsafe_ptr(), Int32(n_rows),
+        grid_dim=((n_rows + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=codes)
     ctx.synchronize()
-    for i in range(n_rows):
-        out_ptr.unsafe_store(
-            i, Int64(1) if hs.unsafe_ptr().unsafe_load(i) > Float32(0.0)
-            else Int64(0),
-        )
-    _ = hs^
+    _ = codes^
+    _ = scores^
 # ---------------------------------------------------------------------------
 # -D MOJOLEARN_OLS_FAST_DEVICE_CENTER (lane/apple-fast-core, 2026-10-02): THE
 # INTERCEPT'S CENTERING ON THE DEVICE, ONE UPLOAD

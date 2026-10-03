@@ -29,6 +29,7 @@ WHERE THIS IS CALLED FROM
 
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from core.device_fold import device_sorted_unique_i32
 
 
 comptime LABEL_TPB = 256
@@ -69,28 +70,10 @@ def getUniquelabels(
     Returned as a host list rather than a resized device vector; the caller
     uploads it where a kernel needs it (`make_monotonic`, `class_vote`).
     """
-    var host = ctx.enqueue_create_host_buffer[DType.int32](n)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=y)
-    ctx.synchronize()
-    var uniq = List[Int32]()
-    for i in range(n):
-        var v = host.unsafe_ptr().unsafe_load(i)
-        # Binary search for the insertion point; skip if present.
-        var lo = 0
-        var hi = len(uniq)
-        while lo < hi:
-            var mid = (lo + hi) // 2
-            if uniq[mid] < v:
-                lo = mid + 1
-            else:
-                hi = mid
-        if lo < len(uniq) and uniq[lo] == v:
-            continue
-        uniq.insert(lo, v)
-    # `[[mojo-buffer-freed-at-last-use]]`: keep the host buffer alive past
-    # its last read.
-    _ = host^
-    return uniq^
+    # lane cgr4-download-loop: sorted and deduplicated on the device
+    # (core/device_fold.mojo); only the distinct values come back. Was a
+    # download of y and a host insertion walk over n.
+    return device_sorted_unique_i32(ctx, y, n)
 
 
 def map_label_kernel(
