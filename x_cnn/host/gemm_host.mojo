@@ -60,15 +60,15 @@ from core.host_parallel import host_parallelize
 
 from checks.numerics import ftz, identical_mul_add, identical_mul_add_simd
 from core.host_predict_threads import host_predict_task_count
-from gemm.host.identical_gemm import (
+from gemm.contract import (
     GEMM_ORACLE_HOST_SABOTAGE,
     OP_NN,
     OP_NT,
     OP_TN,
     contract_leaf_size,
-    gemm_oracle,
     leaf_count,
 )
+from gemm.host.identical_gemm import gemm_oracle
 from x_cnn.ops import FP
 
 comptime GW = simd_width_of[DType.float32]()

@@ -16,7 +16,7 @@ one GEMM over the whole sequence plus b_ih; each step adds h @ W_hh^T + b_hh
 over (time, batch) rows in ascending order; bias gradients are column sums in
 the same row order.
 """
-from sequence.exec import Exec
+from sequence.exec_trait import Exec
 from sequence.ops import (
     FP,
     Args,

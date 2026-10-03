@@ -25,6 +25,10 @@ every column alike.
                    drops explicit zeros, the edge must stay); W zero first.
   radius_cell      W[i, j] = D[i, j] (GRAPH_TINY for 0) when j != i and
                    D[i, j] <= r, else 0.
+  radius_geo_cell  Isomap's radius transform: G[i, c] = the min over training
+                   rows j (ascending) with Dq[i, j] <= r of D[j, c] + Dq[i, j]
+                   (the kit's `adds` then `min` words); 0 when row i has no
+                   such j (the caller refuses that row).
   lle_iw_row       I - W on the kNN lists: IW[i, i] = 1, IW[i, j] = 0 - w.
   components       min-label fixed point (every node labelled by the lowest
                    node of its weak component, W nonzero either way), then
@@ -34,7 +38,7 @@ every column alike.
                    to the lower i then the lower j, gets the edge D[i, j].
 """
 from checks.numerics import ftz
-from x_decomp.cells import F32Ptr, I32Ptr, sub
+from x_decomp.cells import F32Ptr, I32Ptr, add, sub
 
 comptime GRAPH_TINY = Float32(1.0e-10)
 
@@ -97,6 +101,24 @@ def radius_cell(t: Int, D: F32Ptr, n: Int, r: Float32, W: F32Ptr):
     if j != i and ftz(v) <= r:
         o = v if ftz(v) != Float32(0) else GRAPH_TINY
     W.unsafe_store(t, o)
+
+
+@always_inline
+def radius_geo_cell(t: Int, Dq: F32Ptr, D: F32Ptr, n: Int, r: Float32, G: F32Ptr):
+    var i = t // n
+    var c = t - i * n
+    var best = Float32(0)
+    var found = False
+    for j in range(n):
+        var q = Dq.unsafe_load(i * n + j)
+        if ftz(q) <= r:
+            var cand = add(D.unsafe_load(j * n + c), q)
+            if not found:
+                best = cand
+                found = True
+            else:
+                best = best if best < cand else cand
+    G.unsafe_store(t, best)
 
 
 @always_inline

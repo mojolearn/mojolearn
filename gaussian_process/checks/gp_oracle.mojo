@@ -66,6 +66,7 @@ replay OF THE SAME float32 matrix the device factored. Each check then names
 one thing.
 """
 
+from gaussian_process.gpc_items import gpr_ydot_host
 from std.math import exp, log, sqrt
 
 from cholesky.checks.cholesky_oracle import (
@@ -280,19 +281,23 @@ def gp_oracle_mean(
 def gp_oracle_ydotalpha(
     y: List[Float32], dual: List[Float32], n: Int
 ) -> Float32:
-    """`einsum("ik,ik->k", y_train, alpha)`, `_gpr.py:613`, ascending.
-
-    A second spelling of `gaussian_process/estimator.mojo::_y_dot_alpha`.
-    Both are host folds, so this comparison establishes that the two
-    spellings agree and not that a device matches a host; the value of it
-    is that the estimator's loop could have been written descending by
-    accident, and `GP_SAB_YALPHA_DESCENDING` is the arm that shows this
-    comparison would see it.
+    """`einsum("ik,ik->k", y_train, alpha)`, `_gpr.py:613`, in the
+    product's order: GPC_FOLD-row blocks, each its chain from zero
+    ascending, the partials added ascending (lane/cgr-kernel; the device
+    fold `_gpr_ydot_device` and the host column use the same items).
+    `GP_SAB_YALPHA_DESCENDING` is the arm that shows this comparison would
+    see a different order.
     """
-    var acc = Float32(0.0)
-    for i in range(n):
-        acc = ftz(identical_mul_add(ftz(y[i]), ftz(dual[i]), acc))
-    return ftz(acc)
+    var copy_y = y.copy()
+    var copy_d = dual.copy()
+    var v = gpr_ydot_host(
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(copy_y.unsafe_ptr())),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(copy_d.unsafe_ptr())),
+        n,
+    )
+    _ = copy_y^
+    _ = copy_d^
+    return v
 
 
 def gp_oracle_variance(

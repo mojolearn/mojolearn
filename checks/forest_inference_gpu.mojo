@@ -161,7 +161,7 @@ def cancellation(ctx: DeviceContext) raises:
     assert_equal(len(zero),0)
 
 
-def invalid_graph() raises:
+def invalid_graph(ctx: DeviceContext) raises:
     var offsets: List[Int32] = [0,3]
     var cols: List[Int32] = [0,0,0]
     var thresholds: List[Float32] = [0,0,0]
@@ -185,7 +185,8 @@ def invalid_graph() raises:
     x[0] = bitcast[DType.float32](UInt32(0x7f800000))
     caught = False
     try:
-        validate_flat_forest(offsets,cols,thresholds,children,leaves,x,1,1,1)
+        # a non-finite input row is refused by the device scan in the predict
+        _ = forest_predict_gpu[False,False](ctx,offsets,cols,thresholds,children,leaves,x,1,1,1)
     except:
         caught = True
     assert_true(caught)
@@ -194,8 +195,8 @@ def invalid_graph() raises:
 
 def main() raises:
     print("numeric_mode",numeric_mode_name())
-    invalid_graph()
     var ctx = DeviceContext()
+    invalid_graph(ctx)
     var counts: List[Int] = [1,31,32,33]
     var widths: List[Int] = [1,2,3,7,8,9]
     for outputs in widths:

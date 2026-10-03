@@ -9,7 +9,8 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from preprocessing.estimator import validate_dimensions, minmax_fit_host, minmax_transform_host_into, validate_standard, standard_fit_host, standard_transform_host_into, minmax_fit_direct, standard_fit_direct
+from preprocessing.estimator import validate_dimensions, minmax_fit_host, minmax_transform_host_into, validate_standard, standard_fit_host, standard_transform_host_into, minmax_fit_direct, standard_fit_direct, minmax_transform_direct
+from preprocessing.minmax import PREP_FAST_MINMAX
 
 
 def ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -139,6 +140,33 @@ def standard_fit_direct_binding(x_addr: PythonObject, out_addr: PythonObject, pa
     return PythonObject(ok)
 
 
+def transform_direct_binding(
+    x_addr: PythonObject, scale_addr: PythonObject, min_addr: PythonObject,
+    out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """minmax_transform from the caller's own buffers (lane apple-fast-prep,
+    registered only under PREP_FAST_MINMAX): 1 when the n*d words were
+    written, 0 when the output holds a nonfinite word (nothing written; the
+    caller tells an overflow from its NaN route). The same kernel and words."""
+    if len(params) != 6:
+        raise Error("minmax_transform_direct: requires 6 parameters")
+    var n = Int(py=params[0])
+    var d = Int(py=params[1])
+    var inverse = Int(py=params[2])
+    var clip = Int(py=params[3])
+    var lower = Float32(Float64(py=params[4]))
+    var upper = Float32(Float64(py=params[5]))
+    validate_dimensions(n,d,lower,upper)
+    var x = ptr(Int(py=x_addr))
+    var scale = ptr(Int(py=scale_addr))
+    var offset = ptr(Int(py=min_addr))
+    var output = ptr(Int(py=out_addr))
+    var ok = 0
+    with GILReleased(Python()):
+        ok = minmax_transform_direct(x,scale,offset,output,n,d,inverse,clip,lower,upper)
+    return PythonObject(ok)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -157,6 +185,8 @@ def PyInit__mojolearn_preprocessing() abi("C") -> PythonObject:
         m.def_function[transform_binding]("minmax_transform")
         m.def_function[fit_direct_binding]("minmax_fit_direct")
         m.def_function[standard_fit_direct_binding]("standard_fit_direct")
+        comptime if PREP_FAST_MINMAX:
+            m.def_function[transform_direct_binding]("minmax_transform_direct")
         m.def_function[numeric_mode_binding]("preprocessing_numeric_mode")
         m.def_function[vendor_binding]("preprocessing_vendor")
         return m.finalize()

@@ -31,7 +31,7 @@ from training.byte_lm import (
 from training.byte_lm_optimizer_pool import pool_snapshot, pool_update, pool_restore, pool_maybe_fault
 from training.checks.optimizer import OPT_RECORD_INTERMEDIATES
 from training.byte_lm_config import ByteConfig
-from training.checks.optimizer_oracle import OptimizerConfig
+from training.checks.optimizer_contract import OptimizerConfig
 from training.checks.train_loop import _copy_into, _upload, download_f32, download_f32_into
 from core.multi_gpu import transfer_bytes
 
@@ -371,11 +371,15 @@ struct ByteParallelTrainer(Movable, Writable):
                 var fp = rebind[MutPointer[Int, MutUntrackedOrigin]](failed.unsafe_ptr())
                 var base = start
 
+                # One host thread per device: each rank's thread drives only
+                # its own context (the multi-GPU dispatch), no host compute.
                 def _gradient_task(rank: Int) {imm cp, imm tp, imm sp, imm lp, imm fp, imm base, imm n}:
                     try:
-                        lp[base + rank] = byte_gradient_device(cp[rank], tp[rank], sp[base + rank])
-                        _require_device_finite(cp[rank], tp[rank].scan,
+                        ref ctx = cp[rank]
+                        lp[base + rank] = byte_gradient_device(ctx, tp[rank], sp[base + rank])
+                        _require_device_finite(ctx, tp[rank].scan,
                             tp[rank].buffers.grad, n, "shard gradients")
+                        ctx.synchronize()
                     except:
                         fp[rank] = 1
 

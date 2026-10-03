@@ -87,10 +87,31 @@ from core.launch_log import log_launch
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.primitives.block import prefix_sum
 from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast
+from std.memory import bitcast, stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 #: Threads per block for every kernel here. See PORTABILITY above.
 comptime SORT_BLOCK = 512
+
+#: FAST on Apple (lane apple-fast-rfet-scan): the exclusive scan of each
+#: segment's block totals runs as one 256-thread block per segment
+#: (`seg_scan_block_sums_block_kernel`) instead of one thread per segment.
+#: Int32 sums of the same values in a different association: the same
+#: offsets bit for bit. `-D MOJOLEARN_SEG_SUMS_SERIAL` keeps the one-thread
+#: scan (the A/B arm); IDENTICAL compiles the old path.
+#: Default since the M3 A/B (b272364e4, n=2, identical output hashes): RF
+#: istella 13,583 -> 10,116 ms (-25.5%), taxi neutral. GBDT's own copy
+#: (gbdt/gpu_util/kernel/segmented_sort.mojo) stays opt-in.
+comptime SEG_SUMS_BLOCK_SCAN = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SEG_SUMS_SERIAL"]()
+)
+comptime SEG_SUMS_TPB = 256
 
 #: `8 * sizeof(T)` for `T = float`, i.e. their `end_bit`
 #: (`quantiles.cuh:253`). Their `begin_bit` is `0`.
@@ -198,6 +219,67 @@ def seg_scan_block_sums_kernel(
         var v = block_sums.unsafe_load(seg * wide + b)
         block_sums.unsafe_store(seg * wide + b, acc)
         acc += v
+
+
+def seg_scan_block_sums_block_kernel(
+    block_sums: MutPointer[Int32, MutAnyOrigin],
+    seg_size_in: Int32,
+    blocks_wide_in: Int32,
+):
+    """`seg_scan_block_sums_kernel` with one SEG_SUMS_TPB-thread block per
+    segment (SEG_SUMS_BLOCK_SCAN): chunks of SEG_SUMS_TPB block totals are
+    scanned with the block prefix sum and carried. Exclusive and in place
+    over the same `used` slots; Int32 adds, so the same values."""
+    var seg = Int(block_idx.x)
+    var wide = Int(blocks_wide_in)
+    var used = (Int(seg_size_in) + SORT_BLOCK - 1) // SORT_BLOCK
+    var tid = Int(thread_idx.x)
+    var total = stack_allocation[
+        1, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var carry = Int32(0)
+    var c0 = 0
+    while c0 < used:
+        var b = c0 + tid
+        var v = Int32(0)
+        if b < used:
+            v = block_sums.unsafe_load(seg * wide + b)
+        var ex = prefix_sum[block_size=SEG_SUMS_TPB, exclusive=True](v)
+        if b < used:
+            block_sums.unsafe_store(seg * wide + b, carry + ex)
+        if tid == SEG_SUMS_TPB - 1:
+            total[0] = ex + v
+        barrier()
+        carry += total[0]
+        barrier()
+        c0 += SEG_SUMS_TPB
+
+
+def enqueue_seg_scan_block_sums(
+    ctx: DeviceContext,
+    block_sums: MutPointer[Int32, MutAnyOrigin],
+    seg_size: Int,
+    blocks_wide: Int,
+    n_segments: Int,
+) raises:
+    """Launch the per-segment exclusive scan of block totals: the block
+    kernel under SEG_SUMS_BLOCK_SCAN, else the one-thread kernel."""
+    comptime if SEG_SUMS_BLOCK_SCAN:
+        ctx.enqueue_function[seg_scan_block_sums_block_kernel](
+            block_sums,
+            Int32(seg_size),
+            Int32(blocks_wide),
+            grid_dim=(n_segments, 1, 1),
+            block_dim=(SEG_SUMS_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[seg_scan_block_sums_kernel](
+            block_sums,
+            Int32(seg_size),
+            Int32(blocks_wide),
+            grid_dim=(n_segments, 1, 1),
+            block_dim=(1, 1, 1),
+        )
 
 
 def seg_add_block_carry_kernel(
@@ -385,12 +467,9 @@ def _seg_radix_pass(
         block_dim=(SORT_BLOCK, 1, 1),
     )
     log_launch("seg_sort_scan_block_sums")
-    ctx.enqueue_function[seg_scan_block_sums_kernel](
-        block_sums.unsafe_ptr(),
-        Int32(seg_size),
-        Int32(blocks_wide),
-        grid_dim=(n_segments, 1, 1),
-        block_dim=(1, 1, 1),
+    enqueue_seg_scan_block_sums(
+        ctx, block_sums.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        seg_size, blocks_wide, n_segments,
     )
     log_launch("seg_sort_add_block_carry")
     ctx.enqueue_function[seg_add_block_carry_kernel](

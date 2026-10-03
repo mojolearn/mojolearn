@@ -7,20 +7,21 @@ from std.memory import bitcast
 from std.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
 from std.memory import memcpy
-from core.host_parallel import host_parallelize
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from sequence.moe_tiled import MOE_TPB, moe_combine_kernel, moe_hidden_tiled_kernel, moe_out_tiled_kernel
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
-from sequence.exec import Exec
+from sequence.exec_trait import Exec
 from sequence.dispatch import apply
 from sequence.ops import OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
 from sequence.coop import COOP_W, apply_coop
 from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST
 from sequence.vecar_block import VAR_SMEM, VAR_TPB, var_chol_block_kernel, var_forecast_block_kernel
 from sequence.fit_team import SeqTeam, garch_team, prophet_fit_team
-from sequence.ops import OP_GARCH
+from sequence.ets_team import ETS_TEAM, ets_team
+from sequence.prophet_coop import PROPHET_COOP, prophet_fit_coop
+from sequence.ops import OP_ETS, OP_GARCH
 from x_linear.ops import IP
 from x_linear.witness import witness_end
 from std.sys.info import has_apple_gpu_accelerator
@@ -141,32 +142,24 @@ def team_kernel[OP: Int](
         var team = SeqTeam(Int(thread_idx.x), Int(block_dim.x))
         comptime if OP == OP_GARCH:
             garch_team(blk, team, a)
+        elif ETS_TEAM and OP == OP_ETS:
+            # Apple FAST default (off: -D MOJOLEARN_ETS_TEAM_OFF; sequence/ets_team.mojo)
+            ets_team(blk, team, a)
+        elif PROPHET_COOP:
+            # Apple FAST default (off: -D MOJOLEARN_PROPHET_COOP_OFF; sequence/prophet_coop.mojo)
+            prophet_fit_coop(blk, team, a)
         else:
             prophet_fit_team(blk, team, a)
     witness_end(wf, woff, nonce)
 
 
 
-#: host copies of at least two grains are split over threads (apple2: the
-#: optimizer steps moved ~150 MB a step through one memcpy); data movement
-#: only, the bytes are the same
-comptime PCOPY_GRAIN = 1 << 20
-
-
 def _pcopy(dst: FP, src: FP, n: Int):
-    if n < 2 * PCOPY_GRAIN:
+    """A host transport copy: one memcpy on the calling thread (no host task
+    pool on a GPU install; cpu-gpu-cleanup n-seq, 2026-10-02). Data movement
+    only, the bytes are the same."""
+    if n > 0:
         memcpy(dest=dst, src=src, count=n)
-        return
-    var tasks = min(8, n // PCOPY_GRAIN)
-    var chunk = (n + tasks - 1) // tasks
-
-    def _c(i: Int) {imm dst, imm src, imm chunk, imm n}:
-        var lo = i * chunk
-        var hi = min(lo + chunk, n)
-        if hi > lo:
-            memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
-
-    host_parallelize(_c, tasks)
 
 
 def coop_kernel[OP: Int](

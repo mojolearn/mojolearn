@@ -46,8 +46,6 @@ and the card use.
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from bindings.hostptr import copy_f32
-from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
@@ -91,7 +89,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_NN, OP_NT
+from gemm.contract import OP_NN, OP_NT
 from kernel_methods.checks.km_sabotage import (
     KMSAB_BASIS_FROM_LAUNCH,
     KMSAB_EIGEN_ORDER_ASCENDING,
@@ -168,81 +166,21 @@ def _upload(
     return buf^
 
 
-#: lane/neighbors-apple (2026-09-28): a device result bound for the CALLER'S
-#: memory goes through a reused pinned staging buffer in 64 MB chunks and a
-#: host copy, instead of one `enqueue_copy` into unregistered memory, which
-#: ran at about 2.2 GB/s on the M3 Ultra (RBFSampler 1M x 500: 905 of the
-#: transform's 1,140 ms). Same words. `-D MOJOLEARN_KM_DIRECT_OUT` keeps the
-#: direct copy.
-comptime KM_OUT_CHUNK = 16 * 1024 * 1024
-
-
 def _download_into[out_origin: MutOrigin, //](
     ctx: DeviceContext,
     mut src: DeviceBuffer[DType.float32],
     output: MutPointer[Float32, out_origin],
     n: Int,
 ) raises:
-    comptime if is_defined["MOJOLEARN_KM_DIRECT_OUT"]():
-        ctx.enqueue_copy(dst_ptr=output, src_buf=src)
-        ctx.synchronize()
-        return
+    """A device result into the caller's memory: one device-to-host copy
+    (cpu-gpu-cleanup c-gp-kernel: the staged copy over host threads and
+    the opt-in mapped copy are gone)."""
     if n <= 0:
         return
-    comptime if is_defined["MOJOLEARN_KM_MAPPED_OUT"]():
-        # lane neighbors-apple3, OPT-IN: the device buffer mapped into the
-        # host (Apple's memory is unified) and copied once, over the host
-        # cores, instead of once into the staging buffer and once out of it.
-        ctx.synchronize()
-        with src.map_to_host() as hm:
-            var msrc = rebind[MutPointer[Float32, MutUntrackedOrigin]](hm.unsafe_ptr())
-            var mdst = rebind[MutPointer[Float32, MutUntrackedOrigin]](output)
-            var mtasks = host_predict_task_count(n)
-            if n < 262144:
-                mtasks = 1
-            var mpart = host_predict_chunk(n, mtasks)
-
-            def _mpart(task: Int) {imm msrc, imm mdst, imm n, imm mpart}:
-                var lo = task * mpart
-                var hi = min(lo + mpart, n)
-                if hi > lo:
-                    copy_f32(msrc.unsafe_offset(lo), mdst.unsafe_offset(lo), hi - lo)
-
-            if mtasks == 1:
-                _mpart(0)
-            else:
-                host_parallelize(_mpart, mtasks)
-        return
-    var c = min(n, KM_OUT_CHUNK)
-    var h = ctx.enqueue_create_host_buffer[DType.float32](c)
-    var off = 0
-    while off < n:
-        var m = min(c, n - off)
-        var sub = src.create_sub_buffer[DType.float32](off, m)
-        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=sub)
-        ctx.synchronize()
-        # The first touch of the caller's fresh pages dominates this copy;
-        # split it over the host cores (a copy: no arithmetic, no FP env).
-        var src_p = rebind[MutPointer[Float32, MutUntrackedOrigin]](h.unsafe_ptr())
-        var dst_p = rebind[MutPointer[Float32, MutUntrackedOrigin]](output.unsafe_offset(off))
-        var tasks = host_predict_task_count(m)
-        if m < 262144:
-            tasks = 1
-        var part = host_predict_chunk(m, tasks)
-
-        def _part(task: Int) {imm src_p, imm dst_p, imm m, imm part}:
-            var lo = task * part
-            var hi = min(lo + part, m)
-            if hi > lo:
-                copy_f32(src_p.unsafe_offset(lo), dst_p.unsafe_offset(lo), hi - lo)
-
-        if tasks == 1:
-            _part(0)
-        else:
-            host_parallelize(_part, tasks)
-        _ = sub^
-        off += m
-    _ = h^
+    var sub = src.create_sub_buffer[DType.float32](0, n)
+    ctx.enqueue_copy(dst_ptr=output, src_buf=sub)
+    ctx.synchronize()
+    _ = sub^
 
 
 def _download(

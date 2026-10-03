@@ -74,13 +74,8 @@ from checks.numerics import (
     identical_silu,
     identical_softplus,
 )
-from gemm.checks.gemm_oracle import (
-    OP_NN,
-    OP_NT,
-    OP_TN,
-    gemm_oracle,
-    gemm_oracle_right_zero_padded,
-)
+from gemm.contract import OP_NN, OP_NT, OP_TN
+from gemm.checks.gemm_oracle import gemm_oracle, gemm_oracle_right_zero_padded
 from gemm.host.gemm_host_rows import gemm_host_rows, gemm_host_rows_right_zero_padded
 from mamba.checks.mamba_oracle import refuse_nonfinite
 from mamba.checks.mamba2_fixture import (

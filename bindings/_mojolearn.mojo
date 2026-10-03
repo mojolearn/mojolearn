@@ -81,8 +81,9 @@ from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
 from core.dense_coo import (
     nonzero_f32_count as dense_nonzero_f32_count,
     nonzero_f32_fill as dense_nonzero_f32_fill,
-    knn_affinity_f32 as dense_knn_affinity_f32,
 )
+from core.dense_coo_device import knn_affinity_f32_device
+from core.label_encode_device import device_unique_inverse
 from bindings.hotpath_helpers import (
     cast_elements_binding,
     check_indices_i64_binding,
@@ -1639,22 +1640,55 @@ def knn_affinity_f32_binding(addrs: PythonObject, params: PythonObject) raises -
     var sparse = Int(py=params[3]) != 0
     if n < 1 or k < 0 or nnz < 0:
         raise Error("knn_affinity_f32: n must be positive, k and nnz non-negative")
-    var aff = f32_ptr(Int(py=addrs[4]))
-    var status = i32_ptr(Int(py=addrs[5]))
-    var dense = aff
-    var rp = status
-    var cp = status
-    var vp = aff
+    var aff = Int(f32_ptr(Int(py=addrs[4])))
+    var status = Int(i32_ptr(Int(py=addrs[5])))
+    var dense = 0
+    var rp = 0
+    var cp = 0
+    var vp = 0
     if sparse:
         if nnz > 0:
-            rp = i32_ptr(Int(py=addrs[1]))
-            cp = i32_ptr(Int(py=addrs[2]))
-            vp = f32_ptr(Int(py=addrs[3]))
+            rp = Int(i32_ptr(Int(py=addrs[1])))
+            cp = Int(i32_ptr(Int(py=addrs[2])))
+            vp = Int(f32_ptr(Int(py=addrs[3])))
     else:
-        dense = f32_ptr(Int(py=addrs[0]))
+        dense = Int(f32_ptr(Int(py=addrs[0])))
+    # the GPU binding's work on the device (core/dense_coo_device.mojo,
+    # cpu-gpu-cleanup c-core); the CPU route keeps core/dense_coo.mojo
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     with GILReleased(Python()):
-        dense_knn_affinity_f32(dense, rp, cp, vp, nnz, sparse, n, k, aff, status)
+        knn_affinity_f32_device(ctx, dense, rp, cp, vp, nnz, sparse, n, k, aff, status)
     return PythonObject(0)
+
+
+def unique_inverse_binding(
+    src_addr: PythonObject, n: PythonObject, kind: PythonObject,
+    classes_addr: PythonObject, codes_addr: PythonObject,
+) raises -> PythonObject:
+    """`np.unique(y, return_inverse=True)` for `n` 64-bit labels at
+    `src_addr` (`kind` 0: float64, 1: int64) on the device
+    (`core/label_encode_device.mojo`, cpu-gpu-cleanup w2-pyglue): the sorted
+    distinct values' 64 bits land at `classes_addr` (n slots), one int32
+    code per row at `codes_addr`. Returns the class count. A NaN label
+    raises the ORDER RULE's message. The core host binding runs the host
+    twin (`core/label_encode.mojo`) under this name."""
+    var count = Int(py=n)
+    var k_ind = Int(py=kind)
+    if count < 1:
+        raise Error("unique_inverse: n must be positive, got " + String(count))
+    if k_ind != 0 and k_ind != 1:
+        raise Error("unique_inverse: kind must be 0 (float64) or 1 (int64)")
+    if Int(py=src_addr) == 0 or Int(py=classes_addr) == 0 or Int(py=codes_addr) == 0:
+        raise Error("unique_inverse: null buffer address")
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var k: Int
+    with GILReleased(Python()):
+        k = device_unique_inverse(
+            ctx, Int(py=src_addr), count, k_ind, Int(py=classes_addr), Int(py=codes_addr)
+        )
+    if k == -2:
+        raise Error("mojolearn: y contains a NaN label; NaN is not a class")
+    return PythonObject(k)
 
 
 @export
@@ -1691,6 +1725,7 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[nonzero_f32_count_binding]("nonzero_f32_count")
         m.def_function[nonzero_f32_fill_binding]("nonzero_f32_fill")
         m.def_function[knn_affinity_f32_binding]("knn_affinity_f32")
+        m.def_function[unique_inverse_binding]("unique_inverse")
         # DEVIATION 2325: the three host helpers of DEVIATION 2303.
         m.def_function[all_finite_f32_binding]("all_finite_f32")
         m.def_function[all_finite_f64_binding]("all_finite_f64")

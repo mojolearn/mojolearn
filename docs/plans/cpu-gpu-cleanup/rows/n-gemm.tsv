@@ -1,0 +1,48 @@
+rule	class	owner	state	path	occ	text
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_linalg.mojo	0	import bindings/hostptr.mojo:read_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_linalg.mojo	0	var a = read_f32(Int(py=addrs[0]), max(0, n * n))
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_linalg.mojo	0	var a = read_f32(Int(py=addrs[0]), max(0, n_rows * n_cols))
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_linalg.mojo	1	var a = read_f32(Int(py=addrs[0]), max(0, n_rows * n_cols))
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:fold_balanced_tree
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:fold_level_base
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:fold_level_count
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:fold_node_addr
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:fold_node_total
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_at_leaf
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_cell
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_right_zero_padded
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_serial
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_serial_cell
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:oracle_leaf_partial
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:oracle_leaf_partial_right_zero_padded
+host-call	host-import	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle
+host-call	host-import	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_right_zero_padded
+host-call	host-import	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	out = gemm_oracle(la, lb, op, m, n, k)
+host-call	host-import	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	out = gemm_oracle_right_zero_padded(la, lb, op, m, n, k, real_k)
+host-call	host-import	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	return gemm_oracle(a, b, op, m, n, k)
+host-call	host-import	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	1	return gemm_oracle(a, b, op, m, n, k)
+host-call	host-import	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	return gemm_oracle_right_zero_padded(a, b, op, m, n, k, real_k)
+host-env	host-env/threshold	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	comptime GHR_SABOTAGE_NO_REDO = is_defined["MOJOLEARN_GEMM_HOST_ROWS_SABOTAGE"]()
+host-threads	host-threads	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	host_parallelize(_cells, tasks)
+host-threads	host-threads	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	host_parallelize(_cols, stasks)
+host-threads	host-threads	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	host_parallelize(_pack, tasks)
+host-call	host-import	gap-neural-models	debt	gemm/host/gemm_int15_oracle.mojo	0	import gemm/host/gemm_lowbit_oracle.mojo:row_absmax
+host-call	host-import	gap-neural-models	debt	gemm/host/gemm_int15_oracle.mojo	0	var ex = int15_row_exponent(row_absmax(x, r, cols))
+host-call	host-import	gap-neural-models	debt	gemm/host/gemm_lowbit_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle
+host-call	host-import	gap-neural-models	debt	gemm/host/gemm_lowbit_oracle.mojo	0	return gemm_oracle(a, b, op, m, n, k)
+host-call	host-import	gap-neural-models	debt	gemm/host/gemm_lowbit_oracle.mojo	1	return gemm_oracle(a, b, op, m, n, k)
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:fold_balanced_tree
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:fold_level_base
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:fold_level_count
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:fold_node_addr
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:fold_node_total
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_at_leaf
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_cell
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_right_zero_padded
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_serial
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_serial_cell
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:oracle_leaf_partial
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:oracle_leaf_partial_right_zero_padded

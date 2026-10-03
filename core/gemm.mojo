@@ -20,6 +20,7 @@ from core.gram_splitk import (
 )
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
     NUMERIC_IDENTICAL,
     ftz,
     identical_mul_add,
@@ -37,6 +38,8 @@ from gemm.checks.gemm_identical import (
 )
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
+from std.os import getenv
+from std.math import fma
 from core.gram_multi_gpu import pinned_gemm_nt_gram_kernel, parallel_gram_outputs
 from core.strided_walk import NV_AMD_IDENTICAL_STEPS
 
@@ -45,7 +48,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_NT, OP_TN
+from gemm.contract import OP_NT, OP_TN
 
 
 
@@ -103,10 +106,45 @@ and gives each thread RM x RN cells. Every cell is still ONE chain,
 order, closed by `ftz(0 + ftz(acc))`: the pinned kernel's bits exactly.
 Only which thread owns a chain and where its operands are read from move."""
 
+#: lane/apple-fast-tier (2026-10-02). FAST on Apple sent `gemm_nt`,
+#: `gemm_nt_gram` and the past-split-K `gemm_tn` to the vendor matmul, and
+#: the M3 board shows FAST slower than IDENTICAL where that matmul runs
+#: (pca Istella FAST 988 ms vs IDENTICAL 814; rbf-sampler Istella). Two env
+#: switches, read on the host at dispatch and compiled under FAST + Apple
+#: only, let FAST take an Apple kernel of its own instead; each defaults
+#: OFF, so the shipped FAST path is unchanged until an M3 A/B keeps one.
+#: IDENTICAL never compiles this block (its bits do not move).
+#:   MOJOLEARN_APPLE_FAST_GEMM_NT_TILED=1  gemm_nt / gemm_nt_gram: the
+#:       threadgroup-tiled kernel below with plain fma chains (no rtf pins)
+#:   MOJOLEARN_APPLE_FAST_GEMM_TN_V1       gemm_tn past split-K: IDENTICAL's
+#:       `gemm_tn_identical_v1` arm (the pinned OP_TN plan, no transpose).
+#:       NOW THE FAST + Apple DEFAULT (comptime, no env read): see
+#:       APPLE_FAST_GEMM_TN_V1 below. The old env/-D name is harmless.
+comptime APPLE_FAST_GEMM_SWITCHES = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+)
+
+#: Default since the M3 A/B tier-ols-tnv1b (lane/apple-fast-tier 0a2048a44,
+#: ols istella, n=1): 2,219 -> 935 ms (-58%), r2 0.3211 -> 0.3319 (square
+#: gemm_tn past split-K takes IDENTICAL's kernel). FAST + Apple only;
+#: -D MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF restores the vendor-matmul arm.
+#: IDENTICAL never reads it (its branch returns before this point).
+comptime APPLE_FAST_GEMM_TN_V1 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF"]()
+)
+
+
+def apple_fast_switch_on(name: String) -> Bool:
+    """`<name>=1` in the process environment turns a FAST Apple arm on."""
+    return String(getenv(name)) == "1"
+
+
 comptime GNT_KT = 16
 
 
-def apple_gemm_nt_tiled_kernel[TM: Int, TN: Int, RM: Int, RN: Int](
+def apple_gemm_nt_tiled_kernel[TM: Int, TN: Int, RM: Int, RN: Int, pinned: Bool = True](
     z: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin],
     y: MutPointer[Float32, MutAnyOrigin],
@@ -158,7 +196,10 @@ def apple_gemm_nt_tiled_kernel[TM: Int, TN: Int, RM: Int, RN: Int](
                 b[cc] = ys[(tx_ * RN + cc) * GNT_KT + pp]
             comptime for rr in range(RM):
                 comptime for cc in range(RN):
-                    acc[rr * RN + cc] = rtf_mul_add(a[rr], b[cc], acc[rr * RN + cc])
+                    comptime if pinned:
+                        acc[rr * RN + cc] = rtf_mul_add(a[rr], b[cc], acc[rr * RN + cc])
+                    else:
+                        acc[rr * RN + cc] = fma(a[rr], b[cc], acc[rr * RN + cc])
         barrier()
         p0 += GNT_KT
     comptime for rr in range(RM):
@@ -445,10 +486,47 @@ def gemm_nt(
             block_dim=(PINNED_GEMM_TPB, 1, 1),
         )
         return
+    comptime if APPLE_FAST_GEMM_SWITCHES:
+        if n > 4 and apple_fast_switch_on("MOJOLEARN_APPLE_FAST_GEMM_NT_TILED"):
+            _apple_fast_gemm_nt_tiled(
+                ctx,
+                z.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                m,
+                n,
+                k,
+            )
+            return
     var tz = TileTensor(z, row_major(m, n))
     var tx = TileTensor(x, row_major(m, k))
     var ty = TileTensor(y, row_major(n, k))
     matmul[transpose_b=True, target="gpu"](tz, tx, ty, ctx)
+
+
+def _apple_fast_gemm_nt_tiled(
+    ctx: DeviceContext,
+    z: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    """FAST Apple arm of `gemm_nt` (MOJOLEARN_APPLE_FAST_GEMM_NT_TILED=1):
+    the tiled kernel with plain fma chains, the IDENTICAL geometry."""
+    if n <= 16:
+        ctx.enqueue_function[apple_gemm_nt_tiled_kernel[256, 16, 4, 4, False]](
+            z, x, y, Int32(m), Int32(n), Int32(k),
+            grid_dim=((m + 255) // 256, (n + 15) // 16, 1),
+            block_dim=(256, 1, 1),
+        )
+        return
+    ctx.enqueue_function[apple_gemm_nt_tiled_kernel[64, 64, 4, 4, False]](
+        z, x, y, Int32(m), Int32(n), Int32(k),
+        grid_dim=((m + 63) // 64, (n + 63) // 64, 1),
+        block_dim=(256, 1, 1),
+    )
 
 
 def gemm_nt_gram(
@@ -483,6 +561,19 @@ def gemm_nt_gram(
             block_dim=(PINNED_GEMM_TPB, 1, 1),
         )
         return
+    comptime if APPLE_FAST_GEMM_SWITCHES:
+        if apple_fast_switch_on("MOJOLEARN_APPLE_FAST_GEMM_NT_TILED"):
+            var xtm = xt
+            _apple_fast_gemm_nt_tiled(
+                ctx,
+                z.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                xtm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                xtm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                m,
+                n,
+                k,
+            )
+            return
     var tz = TileTensor(z, row_major(m, n))
     var tx = TileTensor(xt, row_major(m, k))
     var ty = TileTensor(xt, row_major(n, k))
@@ -527,6 +618,10 @@ def gemm_tn(
     if gram_splitk_applies(m, n, k):
         gemm_tn_splitk_into(ctx, z, x, xt, m, k)
         return
+    comptime if APPLE_FAST_GEMM_TN_V1:
+        if m == n:
+            gemm_tn_identical_v1(ctx, z, x, xt2, m, k)
+            return
     gemm_tn_via_transpose(ctx, z, x, xt, xt2, m, n, k)
 
 

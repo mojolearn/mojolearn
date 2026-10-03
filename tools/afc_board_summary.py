@@ -35,7 +35,10 @@ def main(path):
         lane = rec.get("lane") or ""
         if fam in SKIP_FAMILIES or any(w in lane for w in TREE_WORDS):
             continue
-        cells = rec.get("cells") or []
+        # our CPU is never reported (Andrew, Oct 2 2026): drop any cell of ours on the CPU
+        cells = [c for c in rec.get("cells") or []
+                 if not (c.get("library") == "mojolearn" and (c.get("device") == "cpu"
+                                                              or c.get("arm") == "ours-cpu"))]
         fast = next((c for c in cells if c.get("library") == "mojolearn" and c.get("mode") == "fast"), None)
         ident = next((c for c in cells if c.get("library") == "mojolearn" and c.get("mode") == "identical"), None)
         opps = [c for c in cells if c.get("library") != "mojolearn" and c.get("status") == "ok" and c.get("median_ms")]

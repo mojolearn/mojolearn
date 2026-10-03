@@ -11,7 +11,7 @@ enqueued launch, with no sync:
 
 - the launch sequences are DevExec's own (`launch_ew`, `launch_gemm`,
   `launch_colsum`, `launch_rowsum`, `launch_lu`, `rand_kernel`,
-  `gamma_kernel`, `lda_rows_kernel`, `DevExec._eigh2_on`), so every value
+  `gamma_kernel`, `lda_rows_kernel`, `DevExec._eigh_par_on`), so every value
   is the same bits as `Kit[DevExec]`, which is the same bits as the CPU
   column's kit (every x-decomp lane's GPU == CPU claim);
 - the host reads a value only where the search branches on it: a C-step's
@@ -36,20 +36,19 @@ from x_decomp.api import _f, _i, _n
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.device import (
     DevExec,
+    LU_SCAL_LEN,
     TPB,
     _blocks,
     _down,
     colsum_scratch,
     gamma_kernel,
     gemm_scratch,
-    jacobi2_eigh_on,
     launch_colsum,
     launch_ew,
     launch_gemm,
     launch_lu,
     launch_rowsum,
     lda_rows_kernel,
-    pj_eigh_min,
     rand_kernel,
     rowsum_scratch,
     xd_ctx,
@@ -347,19 +346,16 @@ struct DKit(Movable):
         var n = A.r
         var wh = Mat(1, n)
         var vh = Mat(n, n)
-        if pj_eigh_min() > 0 or not jacobi2_eigh_on():
-            # the opt-in A/B solvers take host memory: the same DevExec.eigh
-            var ah = self.get(A)
-            self.sync()
-            DevExec.eigh(ah.p(), wh.p(), vh.p(), n)
-        else:
-            var da = self.ctx.enqueue_create_buffer[DType.float32](max(n * n, 1))
-            if n > 0:
-                self.ctx.enqueue_copy(dst_buf=da.create_sub_buffer[DType.float32](0, n * n), src_buf=self._sub(A))
-            DevExec._eigh2_on(self.ctx, da, wh.p(), vh.p(), n)
-            _ = da^
-            self.hold_f.clear()
-            self.hold_i.clear()
+        # DevExec.eigh's round-robin solve on a device copy of A (one sync a
+        # sweep inside the solve); cgr-decomp: the one-block jacobi2 route
+        # this took is deleted, so the resident kit and DevExec agree
+        var da = self.ctx.enqueue_create_buffer[DType.float32](max(n * n, 1))
+        if n > 0:
+            self.ctx.enqueue_copy(dst_buf=da.create_sub_buffer[DType.float32](0, n * n), src_buf=self._sub(A))
+        _ = DevExec._eigh_par_on(self.ctx, da, wh.p(), vh.p(), n)
+        _ = da^
+        self.hold_f.clear()
+        self.hold_i.clear()
         var wd = self.upload(wh)
         var vd = self.upload(vh)
         return _Eig(wh^, wd^, vd^)
@@ -372,10 +368,10 @@ struct DKit(Movable):
         var lu = self.copy(A)
         var pid = pool_alloc(max(n, 1))
         var iid = pool_alloc(1)
-        var sid = pool_alloc(2)
+        var sid = pool_alloc(LU_SCAL_LEN)
         var aid = pool_alloc(max(n, 1))
         launch_lu(
-            self.ctx, lu.p(), I32Ptr(unsafe_from_address=Int(_ptr(pid, max(n, 1)))), _ptr(iid, 1), _ptr(sid, 2),
+            self.ctx, lu.p(), I32Ptr(unsafe_from_address=Int(_ptr(pid, max(n, 1)))), _ptr(iid, 1), _ptr(sid, LU_SCAL_LEN),
             _ptr(aid, max(n, 1)), n,
         )
         var diag = DMat(1, n)
