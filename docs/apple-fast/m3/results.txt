@@ -1,4 +1,4 @@
-pos=252 lines=     441
+pos=256 lines=     443
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -307,3 +307,9 @@ pos=252 lines=     441
 397:CMD apple-fast-optfix@ea3c917de afb-optfix rc=0 afb done tag=afb-optfix pairs=6 ok=6
 398:FBUILD lane/apple-fast-moefix@baa5d967a core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
 399:CMD apple-fast-moefix@baa5d967a afb-moefix rc=0 afb done tag=afb-moefix pairs=1 ok=1
+400:FBUILD lane/apple-fast@fd3856531 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+401:CMD apple-fast@fd3856531 prophet-fma-check rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=33.8 all=[34] quality=['{"forecast_rmse":'] defines=''
+402:CMD apple-fast-rfet-scan@b272364e4 aft-ab-etfin rc=0 AFT-REFUSAL device_scan trees_device_finite_scan 1
+403:FBUILD lane/apple-fast@5f5eadcde core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+404:CMD apple-fast@5f5eadcde prophet-ets-check rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=32.2 all=[32] quality=['{"forecast_rmse":'] defines=''
+405:CMD apple-fast@5f5eadcde prophet-theta-check rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=32.3 all=[32] quality=['{"forecast_rmse":'] defines=''
