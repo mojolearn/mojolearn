@@ -522,7 +522,11 @@ comptime GRP_CLS2_DEVSCAN = (
     and not GRP_CLS2_NOSCAN
 )
 comptime GRP_CLS2_LAZY = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_LAZY"]()
-#: lane apple-fast-gap-kapprox2 (2026-10-03), FAST + Apple, opt-in: the
+#: lane apple-fast-gap-kapprox2 (2026-10-03), the FAST + Apple default since
+#: the M3 A/Bs kap2-grp-fused-{taxi,istella}, kap2-srp-fused-{taxi,istella}
+#: (gaussian-rp taxi 3.4 -> 2.1 ms, istella -4.6%; sparse-rp taxi -10.7%,
+#: istella -8.5%; distortion identical; `-D MOJOLEARN_XD_FAST_GRP_FUSED_OFF`
+#: reverts): the
 #: random projections' whole fit in ONE binding call and ONE synchronize
 #: (`grp_fit_fused_py`): X up into the pooled scan buffer, the nonfinite
 #: partials into a pooled device buffer, the matrix drawn AND scaled by one
@@ -532,7 +536,7 @@ comptime GRP_CLS2_LAZY = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2
 #: download), allocates the partials and a pinned host buffer per fit and
 #: launches rand and scale separately. Refusal stays in fit; bit 8 of
 #: `x_decomp_grp_cls2`. Needs DEVSCAN (not NOSCAN).
-comptime GRP_FAST_FUSED = GRP_CLS2_DEVSCAN and is_defined["MOJOLEARN_XD_FAST_GRP_FUSED"]()
+comptime GRP_FAST_FUSED = GRP_CLS2_DEVSCAN and not is_defined["MOJOLEARN_XD_FAST_GRP_FUSED_OFF"]()
 comptime GRP_CLS2_ANY = GRP_CLS2_NOSCAN or GRP_CLS2_DEVSCAN or GRP_CLS2_LAZY
 
 
