@@ -3271,14 +3271,38 @@ class LatentDirichletAllocation(_Base):
         else:
             Dt = k.const(1.0, n, nc)
         Et = k.ew("exp", _dirichlet_expectation_2d(k, Dt))
-        Dt, Et = k.lda_rows(X, self._exp_dir, Dt, Et, self.doc_topic_prior_, self.max_doc_update_iter,
-                            self.mean_change_tol)
         ss = None
         if cal_sstats:
+            ss = self._fused_estep_ss(k, X, Dt, Et)     # FAST + Apple + define only, else None
+        if ss is None:
+            Dt, Et = k.lda_rows(X, self._exp_dir, Dt, Et, self.doc_topic_prior_, self.max_doc_update_iter,
+                                self.mean_change_tol)
+        if cal_sstats and ss is None:
             norm_phi = k.ew("adds", k.mm(Et, self._exp_dir), s=_F64_EPS)
             R = k.ew("div", X, norm_phi)
             ss = k.ew("mul", k.mm(Et, R, ta=True), self._exp_dir)
         return Dt, ss
+
+    def _fused_estep_ss(self, k, X, Dt, Et):
+        """FAST only (lane apple-fast-nb): the E-step's document loop and the
+        sufficient statistics in one launch, `x_decomp_dev_lda_estep_ss`
+        (x_decomp/lda_fast.mojo), exported by the GPU binding only when built
+        FAST on Apple with -D MOJOLEARN_LDA_FUSED_SS. Dt and Et are updated in
+        place on the device as `lda_rows` does. None (the caller runs main's
+        chain) under IDENTICAL, without the export, off the resident path, or
+        past the kernel's caps."""
+        if k.mode != "fast" or not X.r or not k._use(X, self._exp_dir, Dt, Et):
+            return None
+        try:
+            fn = getattr(k._raw(), "x_decomp_dev_lda_estep_ss")
+        except Exception:       # the host proxy raises ImportError for an absent export
+            return None
+        nc, v = self._exp_dir.r, self._exp_dir.c
+        ss = k._dout(nc, v)
+        ok = fn(k._did(X), k._did(self._exp_dir), k._did(Dt), k._did(Et), ss._d.id,
+                [X.r, nc, v, int(self.max_doc_update_iter)],
+                [float(self.doc_topic_prior_), float(self.mean_change_tol)])
+        return ss if int(ok) else None
 
     def _em_step(self, k, X, total_samples, batch_update):
         _, ss = self._e_step(k, X, True, True)
@@ -3470,6 +3494,60 @@ def _dist(k, A, B, kind, pw, same=False):
     return D
 
 
+#: FAST on Apple (lane/apple-fast-isotonic-knn, 2026-10-02): LLE's neighbour
+#: lists from the x_neighbors lane's fused k-NN. Main selects them with the
+#: `graph_knn` cell over the n x n squared-distance matrix (`_knn_mats`,
+#: lane hr2-graph-embed); MOJOLEARN_LLE_FAST_KNN=1 takes `xn_knn_sq_tiled`
+#: instead: ascending by (squared distance, index), the query's own row
+#: dropped, no n x n matrix (with `-D MOJOLEARN_XN_FAST_MMA_ROUTE=1` the
+#: binding routes it through fast_mma_knn). FAST tier only; the same lists
+#: up to the distance rounding of the fused item.
+_LLE_FAST_KNN = _os.environ.get("MOJOLEARN_LLE_FAST_KNN", "") == "1"
+
+
+def _knn_fused_device(k, Q, X, n_neighbors, exclude_self):
+    """(indices array('i'), squared distances array('f')), n x n_neighbors
+    row-major, from the x_neighbors binding's `xn_knn_sq_tiled`; None when
+    the binding or the shape is not there (the caller runs main's path)."""
+    try:
+        fn = getattr(_backend.binding("_mojolearn_x_neighbors", k.mode), "xn_knn_sq_tiled")
+    except Exception:
+        return None
+    n, d = Q.r, Q.c
+    m = X.r
+    nn = int(n_neighbors)
+    if X.c != d or nn < 1 or nn + (1 if exclude_self else 0) > m:
+        return None
+    dist = array.array("f", [0.0]) * (n * nn)
+    idx = array.array("i", [0]) * (n * nn)
+    fn([Q.addr, X.addr, dist.buffer_info()[0], idx.buffer_info()[0]],
+       [n, m, d, nn, 1 if exclude_self else 0], [])
+    return idx, dist
+
+
+def _knn_mats_device(k, Q, X, n_neighbors, exclude_self):
+    """`_knn_mats` (kind 0) through `_knn_fused_device`: the index matrix
+    holds the column numbers as exact floats, as `graph_knn` writes them
+    (one C-level cast of the int32 store, no Python loop); None when the
+    fused k-NN is not there."""
+    got = _knn_fused_device(k, Q, X, n_neighbors, exclude_self)
+    if got is None:
+        return None
+    nn = int(n_neighbors)
+    return _M(array.array("f", got[0]), Q.r, nn), _M(got[1], Q.r, nn)
+
+
+def _knn_lists_device(k, Q, X, n_neighbors, exclude_self):
+    """`_knn_lists` (kind 0) through `_knn_fused_device`."""
+    got = _knn_fused_device(k, Q, X, n_neighbors, exclude_self)
+    if got is None:
+        return None
+    nn = int(n_neighbors)
+    il = got[0].tolist()
+    dl = got[1].tolist()
+    return ([il[i * nn:(i + 1) * nn] for i in range(Q.r)], [dl[i * nn:(i + 1) * nn] for i in range(Q.r)])
+
+
 def _knn_mats(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
     """`_knn_lists` as two matrices (indices as exact floats, distances),
     n x n_neighbors, selected by the `graph_knn` cell (resident on the GPU
@@ -3478,12 +3556,16 @@ def _knn_mats(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
     return k.graph_knn(D, n_neighbors, exclude_self)
 
 
-def _knn_lists(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
+def _knn_lists(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0, device_ok=False):
     """(indices, distances) of the n_neighbors nearest rows of X for every
     row of Q, ascending, ties to the lower index; `exclude_self` drops the
     query's own index (queries ARE the training rows). kind 0 returns
     SQUARED Euclidean distances (the callers take the root); any other kind
     the `_dist` distances themselves."""
+    if kind == 0 and device_ok and _LLE_FAST_KNN and k.mode == "fast":
+        got = _knn_lists_device(k, Q, X, n_neighbors, exclude_self)
+        if got is not None:
+            return got
     im, dm = _knn_mats(k, Q, X, n_neighbors, exclude_self, kind, pw)
     nn = n_neighbors
     iv, dv = im.s, dm.s
@@ -3972,6 +4054,60 @@ _LLE_NULL_GUARD = 1e-3
 #: constant, and any basis of it is the answer (sklearn's ARPACK returns
 #: its own); the iteration stops there from its third step.
 _LLE_NULL_FLOOR = 8.0
+#: FAST on Apple (lane/apple-fast-lle, 2026-10-02): an x_decomp binding
+#: built with `-D MOJOLEARN_LLE_SPARSE_EIG` registers
+#: `x_decomp_dev_lle_sparse_eig` (x_decomp/lle_sparse.mojo): the smallest
+#: eigenpairs of M = (I - W)^T (I - W) past the constant by LOBPCG on the
+#: SPARSE factor (F x and F^T y as launches over the kNN lists and their
+#: device CSC, the Rayleigh-Ritz on the device), no n x n matrix built, no
+#: LU. The block holds n_components + _LLE_SPARSE_EXTRA vectors; the host
+#: reads one fold every _LLE_SPARSE_EVERY iterations for main's stopping
+#: rules (_LLE_SUBSPACE_TOL, _LLE_STALL_TOL, _LLE_NULL_FLOOR); not settled
+#: in _LLE_SPARSE_ITERS iterations, the fit runs main's dense route. The
+#: FAST tier only: an IDENTICAL kit never has the entry.
+_LLE_SPARSE_EXTRA = 4
+_LLE_SPARSE_ITERS = 600
+_LLE_SPARSE_EVERY = 5
+
+
+def _lle_sparse_entry(k):
+    """The kit's sparse LLE eigensolver entry (the FAST GPU binding built
+    with -D MOJOLEARN_LLE_SPARSE_EIG), None otherwise; asked once per kit."""
+    fn = k.__dict__.get("_lle_sparse")
+    if fn is None:
+        fn = False
+        if k.mode == "fast" and k._res():
+            try:
+                fn = getattr(k._raw(), "x_decomp_dev_lle_sparse_eig")
+            except Exception:
+                fn = False
+        k._lle_sparse = fn
+    return fn or None
+
+
+def _lle_sparse_eig(k, fn, idm, wb, n, nn, nc, seed):
+    """`_lle_smallest`'s answer ((V n x nc, unit columns ascending, each
+    signed so its largest-|.| entry is positive; S 1 x nc) from the sparse
+    device solver on the kNN index matrix `idm` and barycenter weights `wb`
+    (n x nn); None when it did not settle or its columns are not unit (the
+    caller runs the dense route: an unconverged embedding is not returned
+    as one)."""
+    b = min(nc + _LLE_SPARSE_EXTRA, 12)
+    if nc < 1 or b < nc or b >= n:
+        return None
+    V = k._dout(n, nc)
+    lam = k._dout(1, nc)
+    its = int(fn(k._did(idm), k._did(wb), V._d.id, lam._d.id,
+                 [n, nn, nc, b, _LLE_SPARSE_ITERS, _LLE_SPARSE_EVERY, int(seed) & 0xFFFFFFFF],
+                 [_LLE_SUBSPACE_TOL, _LLE_STALL_TOL, _LLE_NULL_FLOOR * _F32_EPS]))
+    if its < 0:
+        return None
+    lv = [float(v) for v in lam.s]
+    sq = k.colsum(k.ew("sq", V)).s
+    if not all(0.9 <= float(v) <= 1.1 for v in sq) or not all(math.isfinite(v) for v in lv):
+        return None
+    sv = _M.of([math.sqrt(max(v, 0.0)) for v in lv], 1, nc)
+    return V.neg_cols(k.absmax_flags(V, True)), sv
 
 
 def _lle_orth(k, Z):
@@ -4154,9 +4290,25 @@ class LocallyLinearEmbedding(_Base):
         # as cells, I - W resident on the GPU binding; cgr-decomp: the LTSA,
         # Hessian and modified factors as cells too (x_decomp/lle_local.mojo,
         # the local eigensolves batched), no Python loop over the samples
-        idm, _ = _knn_mats(k, M, M, nn, True)
+        iterative = (self.method == "standard" and self.eigen_solver == "auto" and n > _LLE_ITER_MIN_N
+                     and nc + 1 < _LLE_ITER_MAX_K)
+        got = None
+        idm = None
+        if self.method == "standard" and _LLE_FAST_KNN and k.mode == "fast":
+            # FAST on Apple (lane/apple-fast-isotonic-knn): the fused
+            # k-NN's index matrix, no n x n distance matrix built
+            kn = _knn_mats_device(k, M, M, nn, True)
+            idm = kn[0] if kn is not None else None
+        if idm is None:
+            idm, _ = _knn_mats(k, M, M, nn, True)
         if self.method == "standard":
-            IW = k.graph_lle_iw(idm, k.barycenter(M, M, idm, self.reg), n)
+            wb = k.barycenter(M, M, idm, self.reg)
+            fn = _lle_sparse_entry(k) if iterative else None
+            if fn is not None:
+                # FAST on Apple (lane/apple-fast-lle): the null space on the
+                # sparse factor; the dense I - W is not built when it settles
+                got = _lle_sparse_eig(k, fn, idm, wb, n, nn, nc, _seed_of(self.random_state))
+            IW = None if got is not None else k.graph_lle_iw(idm, wb, n)
         elif self.method == "ltsa":
             IW = k.lle_local(M, idm, 0, nn, nc, 0.0)
         elif self.method == "hessian":
@@ -4169,9 +4321,7 @@ class LocallyLinearEmbedding(_Base):
         # float32 resolution next to M's largest, so the dense eigh of M
         # cannot order them; the one-sided Jacobi SVD of I - W resolves its
         # small singular values to high RELATIVE accuracy.
-        got = None
-        if (self.method == "standard" and self.eigen_solver == "auto" and n > _LLE_ITER_MIN_N
-                and nc + 1 < _LLE_ITER_MAX_K):
+        if got is None and iterative:
             got = _lle_smallest(k, IW, nc, int(self.max_iter), _seed_of(self.random_state))
         if got is not None:
             self.embedding_m_, sv = got

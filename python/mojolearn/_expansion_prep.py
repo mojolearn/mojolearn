@@ -50,7 +50,7 @@ import time
 from . import _backend
 from . import _portable_math as _pm
 from ._array import Array
-from ._buffer import as_f32_c, addr_ro
+from ._buffer import as_f32_c, addr_ro, addr as _addr_rw, _as_typed
 from . import _labels
 from . import _arena_io
 from ._labels import flatten_labels, sorted_classes, label_kind
@@ -215,6 +215,30 @@ def _ptimpute_flags(mode):
         entry = _optional_prep_entry(binding, "x_prep_ptimpute_flags")
         v = _PTIMPUTE_FLAGS[key] = int(entry()) if entry is not None else 0
     return v
+
+
+#: lane/apple-fast-prep2: the QSELECT switch, read once at import (not on a fit path)
+_X_PREP2_QSELECT = os.environ.get("MOJOLEARN_X_PREP_FAST_QSELECT") == "1"
+
+
+def _prep2_qselect(mode, nq):
+    """lane/apple-fast-prep2 (2026-10-02): MOJOLEARN_X_PREP_FAST_QSELECT=1 on
+    the FAST tier of a Metal binding (every other build ignores it) takes
+    SimpleImputer's median and RobustScaler's quantiles by a device radix
+    select over the unsorted columns (x_prep/fastprep2.mojo qselect_device:
+    the `quantile` stage with SELECT = 1 as its 8th parameter) instead of the
+    full radix sort of every column (sort_cols + quantile, x_prep/dradix.mojo:
+    four read + random-scatter passes over two n*d key blocks and the n*d
+    sorted block). The same order statistics, so the same words. At most 4
+    fractions per column (the select's histogram block carries two tasks
+    per fraction)."""
+    if nq > 4 or not _X_PREP2_QSELECT or str(mode).strip().lower() != "fast":
+        return False
+    b = _prep_binding(mode)
+    if _optional_prep_entry(b, "x_prep_host_column") is not None:
+        return False
+    vendor = _optional_prep_entry(b, "x_prep_vendor")
+    return vendor is not None and str(vendor()) == "metal"
 
 
 def _r3(name):
@@ -634,17 +658,23 @@ class RobustScaler(_PrepBase):
         mode = _mode()
         pr = _Prog()
         xo = pr.put(arr)
-        so = pr.work(n * d)
+        qsel = _prep2_qselect(mode, 3)
+        so = pr.work(n * d) if not qsel else 0
         st = pr.alloc(6 * d)
         qf = pr.put_list([lo / 100.0, 0.5, hi / 100.0])
         q = pr.alloc(3 * d)
         center = pr.alloc(d)
         scale = pr.alloc(d)
-        pr.stage("sort_cols", d, xo, n, d, so, 0)
+        if not qsel:
+            pr.stage("sort_cols", d, xo, n, d, so, 0)
         # the quantile stage reads the count row only: an exact integer in
         # the blocked order too (lane gap-prep2), so the same words
         _col_stats(pr, xo, n, d, st, var=False)
-        pr.stage("quantile", 3 * d, so, n, d, qf, 3, q, st)
+        if qsel:
+            # the three quantiles by radix select over the unsorted X (`_prep2_qselect`)
+            pr.stage("quantile", 3 * d, xo, n, d, qf, 3, q, st, 1)
+        else:
+            pr.stage("quantile", 3 * d, so, n, d, qf, 3, q, st)
         pr.stage("scale_params", d, q, 3, d, center, scale, 0, 0, 2, 1)
         if self.unit_variance:
             pr.stage("robust_uv", d, scale, qf)
@@ -1621,8 +1651,10 @@ class SimpleImputer(_PrepBase):
         pr = _Prog()
         x_in = pr.put(arr)
         xo = _mark_missing(pr, x_in, n * d, self.missing_values)
-        # only the median and the mode read the sorted columns (lane prep-apple3, `imputer_nosort`)
-        sorts = self.strategy in ("median", "most_frequent") or not _r3("imputer_nosort")
+        # only the median and the mode read the sorted columns (lane prep-apple3, `imputer_nosort`);
+        # the median by radix select needs no sort (`_prep2_qselect`)
+        qsel = self.strategy == "median" and _prep2_qselect(mode, 1)
+        sorts = (self.strategy in ("median", "most_frequent") or not _r3("imputer_nosort")) and not qsel
         so = (pr.work(n * d) if self.strategy in ("median", "most_frequent") else pr.alloc(n * d)) if sorts else 0
         st = pr.alloc(6 * d)
         med = pr.alloc(d)
@@ -1631,7 +1663,9 @@ class SimpleImputer(_PrepBase):
         if sorts:
             pr.stage("sort_cols", d, xo, n, d, so, 0)
         pr.stage("col_stats", d, xo, n, d, st)
-        if self.strategy == "median":
+        if self.strategy == "median" and qsel:
+            pr.stage("quantile", d, xo, n, d, half, 1, med, st, 1)
+        elif self.strategy == "median":
             pr.stage("quantile", d, so, n, d, half, 1, med, st)
         if self.strategy == "most_frequent":
             pr.stage("mode_cols", d, so, n, d, mf, _NONE)
@@ -1927,6 +1961,11 @@ class _Classifier(_PrepBase):
         # the joint log likelihood stays on the device unless it is the answer
         jll = pr.work(n * K) if want else pr.alloc(n * K)
         self._jll_stages(pr, xo, n, d, jll)
+        return self._score_tail(pr, n, d, K, jll, want, chk)
+
+    def _score_tail(self, pr, n, d, K, jll, want, chk):
+        """The scoring program after the joint log likelihood: its softmax
+        and argmax stages, the run, the input refusals, the offsets."""
         lp = pr.alloc(n * K) if "log" in want else _NONE
         pp = pr.alloc(n * K) if "proba" in want else _NONE
         am = pr.alloc(n) if "predict" in want else _NONE
@@ -2157,12 +2196,104 @@ class GaussianNB(_Classifier):
         pr.stage("gnb_jll", n * K, xo, n, d, th, va, co, K, out)
 
 
+def _csr_input(X):
+    """(indptr, indices, data, n, d) of a scipy.sparse matrix as int32, int32
+    and float32 C Arrays (its CSR form), or None for anything else."""
+    if not (hasattr(X, "tocsr") and hasattr(X, "nnz") and hasattr(X, "shape")):
+        return None
+    X = X.tocsr()
+    n, d = (int(v) for v in X.shape)
+    ip = _as_typed(X.indptr, "<i4", "C", 1, "indptr")[0]
+    ix = _as_typed(X.indices, "<i4", "C", 1, "indices")[0]
+    dv = _as_typed(X.data, "<f4", "C", 1, "data")[0]
+    return ip, ix, dv, n, d
+
+
 def _check_nonnegative(pr_values, who):
     if any(v < 0 for v in pr_values):
         raise ValueError(f"mojolearn: Negative values in data passed to {who}")
 
 
 class _DiscreteNB(_Classifier):
+    #: MultinomialNB and ComplementNB take a CSR input on the FAST CSR path
+    _csr_ok = False
+
+    @classmethod
+    def _nb_csr_ready(cls):
+        """Whether this class fits a scipy.sparse CSR matrix without
+        densifying it: FAST mode and the x_prep binding built on Apple with
+        -D MOJOLEARN_NB_TEXT_CSR (lane apple-fast-nb; it exports
+        `x_prep_nb_csr_fit`). The bench hands such a build the text block as
+        CSR. False everywhere else: IDENTICAL, other vendors, no define."""
+        if not cls._csr_ok or _mode() != "fast":
+            return False
+        try:
+            return _optional_prep_entry(_prep_binding("fast"), "x_prep_nb_csr_fit") is not None
+        except Exception:
+            return False
+
+    def _csr_fast(self, X):
+        """X's CSR parts when it is a scipy.sparse matrix and the FAST CSR
+        path is on, else None (a dense input keeps main's program)."""
+        if not type(self)._nb_csr_ready():
+            return None
+        return _csr_input(X)
+
+    def _fit_counts_csr(self, csr, y):
+        """`_fit_counts` on a CSR matrix (FAST + Apple + define only): the
+        (class, feature) count table and the class counts from ONE upload of
+        the CSR arrays (x_prep/fastnb_csr.mojo), then main's epilogue on them
+        (the column-stats row is zero words, so `_params`' minimum check
+        passes; a negative value is refused here from the kernel's flag)."""
+        ip, ix, dv, n, d = csr
+        codes = self._encode_y(y, n)
+        K = len(self.classes_)
+        mode = _mode()
+        fit_csr = _optional_prep_entry(_prep_binding(mode), "x_prep_nb_csr_fit")
+        fc = Array._from_flat([0.0] * (K * d), (K, d), "<f4")
+        cnt = Array._from_flat([0.0] * K, (K,), "<f4")
+        flag = Array.from_list([0], "<i4")
+        fit_csr(addr_ro(ip, name="indptr"), addr_ro(ix, name="indices"), addr_ro(dv, name="data"),
+                addr_ro(codes, name="y"), [n, d, K, dv.size],
+                _addr_rw(fc, name="feature_count"), _addr_rw(cnt, name="class_count"), _addr_rw(flag, name="flag"))
+        if int(flag.tolist()[0]) != 0:
+            raise ValueError(f"mojolearn: Negative values in data passed to {type(self).__name__} (input X)")
+        pr = _Prog()
+        st = pr.alloc(6 * d)
+        z = pr.put_list([0.0] * (K * d))
+        cnt_o, fc_o, clp = pr.alloc(K), pr.alloc(K * d), pr.alloc(K)
+        pr.stage("add_arrays", K, pr.put(cnt), z, cnt_o)
+        pr.stage("add_arrays", K * d, pr.put(fc), z, fc_o)
+        self._prior_stages(pr, K, cnt_o, clp)
+        return pr, mode, n, d, K, st, cnt_o, fc_o, clp
+
+    def _csr_bias(self):
+        """The class log prior the CSR scoring adds (None for none)."""
+        return self.class_log_prior_
+
+    def _scores(self, X, want):
+        csr = self._csr_fast(X)
+        if csr is None:
+            return super()._scores(X, want)
+        self._check_fitted()
+        ip, ix, dv, n, d = csr
+        if d != self.n_features_in_:
+            raise ValueError(f"mojolearn: X has {d} features, but {type(self).__name__} was fitted with "
+                             f"{self.n_features_in_}")
+        K = len(self.classes_)
+        jll_csr = _optional_prep_entry(_prep_binding(self.numeric_mode_), "x_prep_nb_csr_jll")
+        jll_h = Array._from_flat([0.0] * (n * K), (n, K), "<f4")
+        bias = self._csr_bias()
+        jll_csr(addr_ro(ip, name="indptr"), addr_ro(ix, name="indices"), addr_ro(dv, name="data"),
+                addr_ro(self.feature_log_prob_, name="feature_log_prob_"),
+                0 if bias is None else addr_ro(bias, name="class_log_prior_"),
+                [n, d, K, dv.size], _addr_rw(jll_h, name="jll"))
+        pr = _Prog()
+        z = pr.put_list([0.0] * (n * K))
+        jll = pr.alloc(n * K)
+        pr.stage("add_arrays", n * K, pr.put(jll_h), z, jll)
+        return self._score_tail(pr, n, d, K, jll, want, None)
+
     def _fit_counts(self, X, y, binarize=None, sample_weight=None):
         arr = _x2d(X)
         n, d = arr.shape
@@ -2193,6 +2324,9 @@ class _DiscreteNB(_Classifier):
 
     def fit(self, X, y, sample_weight=None):
         _check_alpha(self)
+        csr = self._csr_fast(X) if sample_weight is None else None
+        if csr is not None:
+            return self._params(*self._fit_counts_csr(csr, y))
         return self._params(*self._fit_counts(X, y, getattr(self, "binarize", None), sample_weight))
 
     def partial_fit(self, X, y, classes=None, sample_weight=None):
@@ -2246,6 +2380,7 @@ class MultinomialNB(_DiscreteNB):
     class_prior as given (its log); sample_weight weights the counts, as the
     reference; partial_fit adds each batch's counts, as the reference."""
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior")
+    _csr_ok = True
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None):
         self.alpha = alpha
@@ -4728,6 +4863,7 @@ class ComplementNB(_DiscreteNB):
     required; class_prior as given (its log); sample_weight weights the counts, as the
     reference; partial_fit adds each batch's counts, as the reference."""
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "norm")
+    _csr_ok = True
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, norm=False):
         self.alpha = alpha
@@ -4751,6 +4887,9 @@ class ComplementNB(_DiscreteNB):
         w = pr.put(self.feature_log_prob_)
         b = pr.put(self.class_log_prior_) if K == 1 else _NONE
         pr.stage("matmul", n * K, xo, d, 1, w, 1, d, out, K, d, b, _NONE)
+
+    def _csr_bias(self):
+        return self.class_log_prior_ if len(self.classes_) == 1 else None
 
 
 class CategoricalNB(_DiscreteNB):

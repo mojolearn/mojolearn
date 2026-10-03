@@ -16,10 +16,12 @@ from x_decomp.api import (
 from x_decomp.device import DevExec
 from x_decomp.fa_fast import FA_FAST_APPLE, fa_defines_py, fa_em_py, fa_gram_py, fa_transform_py
 from x_decomp.kit_device import lda_online_dev_py, mcd_dev_py
+from x_decomp.lda_fast import LDA_FUSED_SS, dev_lda_estep_ss_py
 from x_decomp.graph_device import (
     dev_graph_knn_py, dev_graph_knn_dense_py, dev_graph_radius_py, dev_graph_radius_geo_py, dev_graph_lle_iw_py, dev_graph_components_py,
     dev_graph_join_py, dev_graph_dijkstra_py,
 )
+from x_decomp.lle_sparse import LLE_SPARSE_EIG, dev_lle_sparse_eig_py
 from x_decomp.resident import (
     dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_gemm_py, dev_project_py, dev_rand_py, dev_trisolve_py, dev_knn_select_py, dev_rowsum_py,
     dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_lda_rows_py,
@@ -94,6 +96,15 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[dev_orth_diag_py]("x_decomp_dev_orth_diag")
         m.def_function[dev_lda_rows_py]("x_decomp_dev_lda_rows")
         m.def_function[dev_lda_bound_py]("x_decomp_dev_lda_bound")
+        comptime if LDA_FUSED_SS:
+            # lane apple-fast-nb: FAST + Apple + -D MOJOLEARN_LDA_FUSED_SS only (x_decomp/lda_fast.mojo)
+            m.def_function[dev_lda_estep_ss_py]("x_decomp_dev_lda_estep_ss")
+        # FAST on Apple (lane/apple-fast-lle, 2026-10-02): the sparse LLE
+        # eigensolver entry exists only in a build with
+        # -D MOJOLEARN_LLE_SPARSE_EIG (x_decomp/lle_sparse.mojo); the Python
+        # kit takes the route when the entry is there.
+        comptime if LLE_SPARSE_EIG:
+            m.def_function[dev_lle_sparse_eig_py]("x_decomp_dev_lle_sparse_eig")
         m.def_function[dev_als_rows_py]("x_decomp_dev_als_rows")
         # Isomap / LLE graph builds (x_decomp/graph_device.mojo, lane hr2-graph-embed)
         m.def_function[dev_graph_knn_py]("x_decomp_dev_graph_knn")

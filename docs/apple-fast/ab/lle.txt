@@ -1,0 +1,1 @@
+CMD lane/apple-fast-lle lle-sparse-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh lle-sparse-taxi x_decomp lle taxi 1 2 "" "-D MOJOLEARN_LLE_SPARSE_EIG=1"

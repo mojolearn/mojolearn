@@ -1,0 +1,4 @@
+CMD lane/apple-fast-select sel-freg-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-freg-taxi x_prep select-f-regression taxi 1 2 "" "-D MOJOLEARN_SELECT_FREG=1"
+CMD lane/apple-fast-select sel-rreg-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-rreg-taxi x_prep select-r-regression taxi 1 2 "" "-D MOJOLEARN_SELECT_FREG=1"
+CMD lane/apple-fast-select sel-fcls-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-fcls-taxi x_prep select-f-classif taxi 1 2 "" "-D MOJOLEARN_SELECT_FCLS=1"
+CMD lane/apple-fast-select sel-d-hourly AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-d-hourly tsa select-d taxi-hourly 1 2 "" "-D MOJOLEARN_SELECT_D=1"
