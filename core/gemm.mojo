@@ -20,6 +20,7 @@ from core.gram_splitk import (
 )
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
     NUMERIC_IDENTICAL,
     ftz,
     identical_mul_add,
@@ -115,10 +116,23 @@ Only which thread owns a chain and where its operands are read from move."""
 #: IDENTICAL never compiles this block (its bits do not move).
 #:   MOJOLEARN_APPLE_FAST_GEMM_NT_TILED=1  gemm_nt / gemm_nt_gram: the
 #:       threadgroup-tiled kernel below with plain fma chains (no rtf pins)
-#:   MOJOLEARN_APPLE_FAST_GEMM_TN_V1=1     gemm_tn past split-K: IDENTICAL's
-#:       `gemm_tn_identical_v1` arm (the pinned OP_TN plan, no transpose)
+#:   MOJOLEARN_APPLE_FAST_GEMM_TN_V1       gemm_tn past split-K: IDENTICAL's
+#:       `gemm_tn_identical_v1` arm (the pinned OP_TN plan, no transpose).
+#:       NOW THE FAST + Apple DEFAULT (comptime, no env read): see
+#:       APPLE_FAST_GEMM_TN_V1 below. The old env/-D name is harmless.
 comptime APPLE_FAST_GEMM_SWITCHES = (
     GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+)
+
+#: Default since the M3 A/B tier-ols-tnv1b (lane/apple-fast-tier 0a2048a44,
+#: ols istella, n=1): 2,219 -> 935 ms (-58%), r2 0.3211 -> 0.3319 (square
+#: gemm_tn past split-K takes IDENTICAL's kernel). FAST + Apple only;
+#: -D MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF restores the vendor-matmul arm.
+#: IDENTICAL never reads it (its branch returns before this point).
+comptime APPLE_FAST_GEMM_TN_V1 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_APPLE_FAST_GEMM_TN_V1_OFF"]()
 )
 
 
@@ -604,8 +618,8 @@ def gemm_tn(
     if gram_splitk_applies(m, n, k):
         gemm_tn_splitk_into(ctx, z, x, xt, m, k)
         return
-    comptime if APPLE_FAST_GEMM_SWITCHES:
-        if m == n and apple_fast_switch_on("MOJOLEARN_APPLE_FAST_GEMM_TN_V1"):
+    comptime if APPLE_FAST_GEMM_TN_V1:
+        if m == n:
             gemm_tn_identical_v1(ctx, z, x, xt2, m, k)
             return
     gemm_tn_via_transpose(ctx, z, x, xt, xt2, m, n, k)
