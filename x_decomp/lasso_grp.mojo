@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Row-parallel Lasso CD with a 32-thread group per row, FAST on Apple
 (lane/apple-fast-gap-clus3, 2026-10-03). Switch: `DECOMP_FAST_LASSO_GRP`,
-`-D MOJOLEARN_DECOMP_FAST_LASSO_GRP` (default off until the M3 A/B); taken by
+default on in FAST on Apple (`-D MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF` turns it off); taken by
 x_decomp/device.mojo `DevExec.lasso_rows`. IDENTICAL compiles none of this.
 
 Cause: `lasso_rows_kernel` is a thread per row (`cells.lasso_row`): at
@@ -32,8 +32,10 @@ from x_decomp.cells import F32Ptr, div0, mul, sub
 
 comptime DECOMP_FAST_LASSO_GRP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_DECOMP_FAST_LASSO_GRP"]()
-)
+    and not is_defined["MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF"]()
+)  # FAST + Apple default since the M3 A/B clus3-mbdl-lassogrp-istella (n=1):
+# mb-dict-learning istella 6827 -> 3185 ms (-53%), sparsity .08636 and
+# reconstruction error .6483 identical; -D MOJOLEARN_DECOMP_FAST_LASSO_GRP_OFF turns it off
 comptime LG_TPB = 32
 comptime LG_MAXK = 64
 

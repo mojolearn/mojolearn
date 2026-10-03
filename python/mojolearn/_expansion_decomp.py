@@ -465,7 +465,7 @@ class _Kit:
 
     def _dict_dev(self):
         """`x_decomp_dev_dict_update` when this binding exports it (a FAST
-        Apple build with -D MOJOLEARN_DECOMP_FAST_DICT_DEV), else None."""
+        Apple build without -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF), else None."""
         if "_dd_fn" not in self.__dict__:
             fn = None
             if self._res():
@@ -2884,7 +2884,7 @@ def _update_dict(k, D, Y, code, A=None, B=None, positive=False, seed=0, counter=
     if B is None:
         B = k.mm(Y, code, ta=True)
     # lane/apple-fast-gap-clus3: the atom loop on the device when the build
-    # exports it (-D MOJOLEARN_DECOMP_FAST_DICT_DEV, x_decomp/dict_fast.mojo);
+    # exports it (FAST + Apple default, off: -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF, x_decomp/dict_fast.mojo);
     # an unused atom (the Philox resample) or positive_dict keep the loop
     fn = k._dict_dev() if not positive and D.r * D.c else None
     if fn is not None:
