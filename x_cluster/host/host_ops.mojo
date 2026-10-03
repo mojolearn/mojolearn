@@ -686,6 +686,46 @@ struct HostOps(ClusterOps):
         self.resp(q, c, n, kc, lpn)
         self.exp(q, r, n * kc)
 
+    def optics_order_fast(
+        mut self, dm: Int, core: Int, n: Int, max_eps: Float32, ordering: Int, reach: Int, pred: Int, proc: Int
+    ) raises:
+        # the host column never takes the FAST device paths (`fast_device`):
+        # the driver's serial loop over the slots, for the trait's sake
+        var inf = Float32.MAX * Float32(2)
+        var pd = self._fp(dm)
+        var pcore = self._fp(core)
+        var po = self._ip(ordering)
+        var pr = self._fp(reach)
+        var pp = self._ip(pred)
+        var pq = self._ip(proc)
+        for j in range(n):
+            pr[j] = inf
+            pp[j] = Int32(-1)
+            pq[j] = Int32(0)
+        for step in range(n):
+            var point = -1
+            var best = inf
+            for j in range(n):
+                if pq[j] != Int32(0):
+                    continue
+                if point < 0 or pr[j] < best:
+                    point = j
+                    best = pr[j]
+            pq[point] = Int32(1)
+            po[step] = Int32(point)
+            var cp = pcore[point]
+            if cp <= max_eps and cp != inf:
+                for o in range(n):
+                    if pq[o] != Int32(0):
+                        continue
+                    var dd = pd[point * n + o]
+                    if not (dd <= max_eps):
+                        continue
+                    var rd = dd if dd > cp else cp
+                    if rd < pr[o]:
+                        pr[o] = rd
+                        pp[o] = Int32(point)
+
     def minibatch_fast(
         mut self, xs: Int, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,
         ratio: Float64, seed: UInt64, mut rng: SplitMix64, mut c: List[Float32], mut w: List[Float32],

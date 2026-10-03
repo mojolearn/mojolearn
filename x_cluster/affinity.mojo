@@ -20,6 +20,7 @@ exemplar refinement and the labels are device primitives too (lane
 cgr2-cluster; the host column runs the reference's loops)."""
 from std.sys.compile import is_defined
 
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul
 from x_cluster.ops import ClusterOps
 from x_cluster.optics import dist_slot
@@ -33,7 +34,11 @@ from x_cluster.optics import dist_slot
 # define changes nothing. `-D MOJOLEARN_AP_SPLIT=1`: the availability column
 # sums folded over row slices (bits move; the paired quality check).
 comptime AP_EXACT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_AP_EXACT"]()
-comptime AP_SPLIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_AP_SPLIT"]()
+# AP_SPLIT is the FAST + Apple DEFAULT since the M3 A/B (lane
+# apple-fast-cluster2: affinity-prop istella 394.8 -> 264.8 ms, n=1, quality
+# identical); off with `-D MOJOLEARN_AP_SPLIT_OFF`. The old
+# `-D MOJOLEARN_AP_SPLIT=1` is harmless; other FAST columns stay as before.
+comptime AP_SPLIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_COLUMN == COLUMN_APPLE and not is_defined["MOJOLEARN_AP_SPLIT_OFF"]()
 
 
 def affinity_fit[O: ClusterOps](

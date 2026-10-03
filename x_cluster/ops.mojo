@@ -198,6 +198,15 @@ trait ClusterOps(Movable):
         the same bodies in the same order (the same values)."""
         ...
 
+    def optics_order_fast(
+        mut self, dm: Int, core: Int, n: Int, max_eps: Float32, ordering: Int, reach: Int, pred: Int, proc: Int
+    ) raises:
+        """FAST (lane cluster2): the OPTICS ordering loop over the resident
+        n x n distances `dm` and core distances `core`: ordering (n ints),
+        reachability (n floats, +inf unreached), predecessor (n ints, -1
+        none); `proc` n ints of scratch. The host loop's picks and updates."""
+        ...
+
     def minibatch_fast(
         mut self, xs: Int, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,
         ratio: Float64, seed: UInt64, mut rng: SplitMix64, mut c: List[Float32], mut w: List[Float32],
