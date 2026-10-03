@@ -8,8 +8,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
-from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_var_item
-from x_neighbors.sort_items import nc_median_init_item, nc_median_step_item, nc_median_pick_item, pos_count_item, pos_scan_item, pos_emit_item
+from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_var_item, row_argmax_item
+from x_neighbors.sort_items import nc_median_init_item, nc_median_step_item, nc_median_pick_item, nc_med_std_init_item, nc_med_std_step_item, nc_med_std_pick_item, pos_count_item, pos_scan_item, pos_emit_item
 from x_neighbors.py2mojo_items import p2m_mask_value_item, p2m_zero_cols_item, p2m_nan_indicator_item, p2m_sign_label_item, p2m_relabel_init_item, p2m_relabel_first_item, p2m_relabel_count_item, p2m_relabel_scan_item, p2m_relabel_emit_item, p2m_relabel_map_item, p2m_fill_item, p2m_iota_item, p2m_negate_item, p2m_transpose_item, p2m_transpose_i_item, p2m_row_sort_init_item, p2m_row_sort_step_item, p2m_row_sort_emit_item
 
 comptime BLOCK = 128
@@ -1479,6 +1479,83 @@ def op_nc_median(x: Int, lab: Int, start: Int, cent: Int, n: Int, d: Int, n_clas
     _ = d_start^
     _ = d_cent^
     _ = d_perm^
+    _ = ctx^
+
+
+def row_argmax_kernel(a: FP, res: IP, n_: Int64, m_: Int64):
+    var n = Int(n_)
+    var m = Int(m_)
+    var t = _tid()
+    if t < n:
+        row_argmax_item(t, a, res, n, m)
+
+
+def op_row_argmax(a: Int, res: Int, n: Int, m: Int) raises:
+    var ctx = xn_ctx()
+    var d_a = _buf(ctx, a, n * m, True)
+    var d_res = _buf_i(ctx, res, n, False)
+    ctx.enqueue_function[row_argmax_kernel](
+        d_a.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(m),
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    _down_i(ctx, d_res, res, n)
+    ctx.synchronize()
+    _ = d_a^
+    _ = d_res^
+    _ = ctx^
+
+
+def nc_med_std_k0(std: FP, res: FP, key: FP, d_: Int64, p_: Int64, n_steps_: Int64):
+    var d = Int(d_)
+    var p = Int(p_)
+    var n_steps = Int(n_steps_)
+    var t = _tid()
+    if t < p:
+        nc_med_std_init_item(t, std, res, key, d, p, n_steps)
+
+
+def nc_med_std_k1(std: FP, res: FP, key: FP, d_: Int64, p_: Int64, n_steps_: Int64, lj_: Int64):
+    var d = Int(d_)
+    var p = Int(p_)
+    var n_steps = Int(n_steps_)
+    var lj = Int(lj_)
+    var t = _tid()
+    if t < p // 2:
+        nc_med_std_step_item(t, lj, std, res, key, d, p, n_steps)
+
+
+def nc_med_std_k2(std: FP, res: FP, key: FP, d_: Int64, p_: Int64, n_steps_: Int64):
+    var d = Int(d_)
+    var p = Int(p_)
+    var n_steps = Int(n_steps_)
+    var t = _tid()
+    if t < 1:
+        nc_med_std_pick_item(t, std, res, key, d, p, n_steps)
+
+
+def op_nc_med_std(std: Int, res: Int, d: Int, p: Int, n_steps: Int) raises:
+    var ctx = xn_ctx()
+    var d_std = _buf(ctx, std, d, True)
+    var d_res = _buf(ctx, res, 2, False)
+    var d_key = _buf(ctx, 0, p, False)
+    ctx.enqueue_function[nc_med_std_k0](
+        d_std.unsafe_ptr(), d_res.unsafe_ptr(), d_key.unsafe_ptr(), Int64(d), Int64(p), Int64(n_steps),
+        grid_dim=_grid(p), block_dim=(BLOCK if p > 1 else 1),
+    )
+    for lj in range(n_steps):
+        ctx.enqueue_function[nc_med_std_k1](
+            d_std.unsafe_ptr(), d_res.unsafe_ptr(), d_key.unsafe_ptr(), Int64(d), Int64(p), Int64(n_steps), Int64(lj),
+            grid_dim=_grid(p // 2), block_dim=(BLOCK if p // 2 > 1 else 1),
+        )
+    ctx.enqueue_function[nc_med_std_k2](
+        d_std.unsafe_ptr(), d_res.unsafe_ptr(), d_key.unsafe_ptr(), Int64(d), Int64(p), Int64(n_steps),
+        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
+    )
+    _down(ctx, d_res, res, 2)
+    ctx.synchronize()
+    _ = d_std^
+    _ = d_res^
+    _ = d_key^
     _ = ctx^
 
 

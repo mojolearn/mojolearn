@@ -82,6 +82,8 @@ FAMILIES = (
             "xn_graph_symmetry",
             "xn_svgp_var",
             "xn_nc_median",
+            "xn_row_argmax",
+            "xn_nc_med_std",
             "xn_pos_compact",
             "xn_p2m_mask_value",
             "xn_p2m_zero_cols",
@@ -126,6 +128,7 @@ FAMILIES = (
             "x_neighbors_kapprox_fast",
             "x_neighbors_kpca_resident",
             "x_neighbors_sparse_rp_device",
+            "x_neighbors_purity_flags",
             # END GENERATED EXPORTS
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",

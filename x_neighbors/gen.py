@@ -169,6 +169,14 @@ OPS = [
       ("nc_median_pick_item", "n_classes * d")], None,
      [("x", "fin", "n * d"), ("lab", "iin", "n"), ("start", "iin", "n_classes + 1"), ("cent", "fout", "n_classes * d"),
       ("perm", "iscr", "d * p"), ("n", "int"), ("d", "int"), ("n_classes", "int"), ("p", "int"), ("n_steps", "int")]),
+    # lane apple-fast-purity: LabelPropagation / NearestCentroid's per-row
+    # argmax and NearestCentroid's median within-class std on the device
+    ("row_argmax", "items", "row_argmax_item", "n",
+     [("a", "fin", "n * m"), ("res", "iout", "n"), ("n", "int"), ("m", "int")]),
+    ("nc_med_std", "sort_items",
+     [("nc_med_std_init_item", "p"), ("nc_med_std_step_item", "p // 2", "n_steps"),
+      ("nc_med_std_pick_item", "1")], None,
+     [("std", "fin", "d"), ("res", "fout", "2"), ("key", "fscr", "p"), ("d", "int"), ("p", "int"), ("n_steps", "int")]),
     ("pos_compact", "sort_items",
      [("pos_count_item", "xn_fold_blocks(n)"), ("pos_scan_item", "1"), ("pos_emit_item", "xn_fold_blocks(n)")], None,
      [("w", "fin", "n"), ("rows", "iout", "n"), ("vals", "fout", "n"), ("info", "iout", "1"),
@@ -729,6 +737,7 @@ def gpu_binding():
             + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(0)
             + "from x_neighbors.kapprox_dev import kapprox_fast_binding, kpca_resident_binding, sparse_rp_device_binding\n"
             + "from x_neighbors.iter_device import lp_fast_resident_binding\n"
+            + "from x_neighbors.sort_items import purity_flags_binding\n"
             + wrappers() + """
 
 def x_neighbors_vendor_binding() raises -> PythonObject:
@@ -743,6 +752,7 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
         m.def_function[kapprox_fast_binding]("x_neighbors_kapprox_fast")
         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+        m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
         m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
         return m.finalize()
@@ -759,6 +769,7 @@ def host_binding():
             + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
             + "from x_neighbors.kapprox_host import kapprox_fast_binding, kpca_resident_binding, sparse_rp_device_binding\n"
             + "from x_neighbors.iter_host import lp_fast_resident_binding\n"
+            + "from x_neighbors.sort_items import purity_flags_binding\n"
             + wrappers() + """
 
 def x_neighbors_host_numeric_mode_binding() raises -> PythonObject:
@@ -794,6 +805,7 @@ def PyInit__mojolearn_x_neighbors_host() abi("C") -> PythonObject:
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
         m.def_function[kapprox_fast_binding]("x_neighbors_kapprox_fast")
         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+        m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
         m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
         return m.finalize()
@@ -814,7 +826,8 @@ if __name__ == "__main__":
     names = ["x_neighbors_host_numeric_mode", "x_neighbors_host_vendor", "x_neighbors_host_column",
              "x_neighbors_host_sabotage"] + [f"xn_{o[0]}" for o in OPS] + [f"xn_{c[0]}" for c in CUSTOM_OPS] + [f"xn_{k}" for k in OWN_DRIVERS] + ["xn_eigh", "x_neighbors_numeric_mode", "x_neighbors_py2mojo_off",
                                                                             "x_neighbors_vendor", "x_neighbors_kapprox_fast",
-                                                                            "x_neighbors_kpca_resident", "x_neighbors_sparse_rp_device"]
+                                                                            "x_neighbors_kpca_resident", "x_neighbors_sparse_rp_device",
+                                                                            "x_neighbors_purity_flags"]
     body = "# BEGIN GENERATED EXPORTS\n" + "".join(f'            "{x}",\n' for x in names) + "            "
     surf.write_text(t[:a] + body + t[b:])
     print(f"x_neighbors/gen.py: {len(OPS)} ops -> device_ops, host_ops and the two bindings")
