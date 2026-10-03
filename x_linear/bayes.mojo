@@ -308,7 +308,8 @@ def bayes_yvar(y: FP, n: Int) -> Float32:
     return fd(acc, i2f(n))
 
 
-def bayes_eig_prep(t: Team, fw: FP, fp: FP, d: Int, yvar: Float32) -> Tuple[Float32, Float32]:
+def bayes_eig_prep(t: Team, fw: FP, fp: FP, d: Int, yvar: Float32,
+                   jtol: Float32 = Float32(1e-9)) -> Tuple[Float32, Float32]:
     """The d x d half of `bayes_prep` (no row passes): the eigendecomposition
     of G on the team, the lead's eigenvalues and V'X'y, the starting alpha
     (the lead's, from yvar, when alpha_init is none) and lambda."""
@@ -319,7 +320,9 @@ def bayes_eig_prep(t: Team, fw: FP, fp: FP, d: Int, yvar: Float32) -> Tuple[Floa
     var old = vty + d
     var tmp = old + d
     var alpha = ld(fp, 5)
-    t_jacobi_eig(t, fw, gg, fw, vv, d, 60)
+    # jtol: the Jacobi's skip threshold (lane/apple-fast-kernel, FAST on Apple
+    # with ip[7]: 1e-7; the default is the old 1e-9, x_linear/tops.mojo)
+    t_jacobi_eig(t, fw, gg, fw, vv, d, 60, jtol)
     if t.lead():
         for j in range(d):
             var ev = ld(fw, gg + j * d + j)
@@ -505,7 +508,12 @@ def bayes_prep(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
                 yvar = wyvar
         else:
             yvar = bayes_yvar(y, n)
-    var al = bayes_eig_prep(t, fw, fp, d, yvar)
+    var jtol = Float32(1e-9)
+    comptime if is_gpu() and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        # lane/apple-fast-kernel: ip[7] (MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1)
+        if ldi(ip, 7) != 0:
+            jtol = Float32(1e-7)
+    var al = bayes_eig_prep(t, fw, fp, d, yvar, jtol)
     var alpha = al[0]
     var lam = al[1]
     return (alpha, lam, ym, wsum)

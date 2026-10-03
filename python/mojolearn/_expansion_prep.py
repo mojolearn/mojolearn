@@ -50,7 +50,7 @@ import time
 from . import _backend
 from . import _portable_math as _pm
 from ._array import Array
-from ._buffer import as_f32_c, addr_ro
+from ._buffer import as_f32_c, addr_ro, addr as _addr_rw, _as_typed
 from . import _labels
 from . import _arena_io
 from ._labels import flatten_labels, sorted_classes, label_kind
@@ -510,6 +510,35 @@ def _mode():
     return _backend.default_mode()
 
 
+#: lane/apple-fast-prep (2026-10-02): the A/B switch
+#: MOJOLEARN_X_PREP_FAST_NONEG=1 (opt-in; measured noise), read once at
+#: import (never on a fit / transform path).
+_X_PREP_FAST = frozenset(
+    name for name in ("NONEG",) if os.environ.get("MOJOLEARN_X_PREP_FAST_" + name, "0") == "1")
+
+#: binding -> whether it exports `x_prep_fast_unique` (FAST + Apple default,
+#: bindings/_mojolearn_x_prep.mojo X_PREP_FAST_UNIQUE; built with
+#: -D MOJOLEARN_X_PREP_FAST_UNIQUE_OFF it does not), probed once per binding
+_FAST_UNIQUE = {}
+
+
+def _fast_on(name, mode):
+    """Whether the switch `name` is on for the FAST tier (`mode` is the
+    estimator's numeric mode, `_backend.default_mode`). UNIQUE is the
+    binding's comptime default (a cached probe); NONEG a set lookup. Off,
+    or on another tier, every route below is the old one."""
+    if mode != "fast":
+        return False
+    if name == "UNIQUE":
+        binding = _prep_binding(mode)
+        key = id(binding)
+        on = _FAST_UNIQUE.get(key)
+        if on is None:
+            on = _FAST_UNIQUE[key] = _optional_prep_entry(binding, "x_prep_fast_unique") is not None
+        return on
+    return name in _X_PREP_FAST
+
+
 def encode_labels(y):
     """(classes, int32 codes) under `_labels`' order rule: `_labels.encode_labels`,
     the native encoder (the base binding, or `_mojolearn_core_host` on a
@@ -695,7 +724,25 @@ def _fit_categories(mode, arr):
     uo = pr.alloc(n * d)
     co = pr.alloc(d)
     pr.stage("sort_cols", d, xo, n, d, so, 1)
-    pr.stage("unique_cols", d, so, n, d, uo, co)
+    if _fast_on("UNIQUE", mode):
+        # lane/apple-fast-prep (2026-10-02), X_PREP_FAST_UNIQUE (FAST + Apple
+        # default since the M3 A/B; -D MOJOLEARN_X_PREP_FAST_UNIQUE_OFF):
+        # `unique_cols` (x_prep/prims.mojo unique_cols_unit) is ONE thread per
+        # column walking every sorted row (taxi onehot / ordinal fit: 5
+        # threads over 1M rows each, after a parallel sort). Here each column
+        # takes the labels' chunked run scan (x_prep/labels.mojo uniq_count /
+        # uniq_scan / uniq_write, ~sqrt(n) rows a thread): the same words
+        # (`key` equality on the sorted column, the first word of every run,
+        # the count as a float at co[c]).
+        ch = _label_chunk(n)
+        nch = -(-n // ch)
+        for c in range(d):
+            cnt, off = pr.work(nch), pr.work(nch)
+            pr.stage("uniq_count", nch, so + c * n, n, ch, cnt)
+            pr.stage("uniq_scan", 1, cnt, nch, off, co + c)
+            pr.stage("uniq_write", nch, so + c * n, n, ch, off, uo + c * n)
+    else:
+        pr.stage("unique_cols", d, so, n, d, uo, co)
     pr.run(mode)
     counts = [int(v) for v in pr.values(co, d)]
     return [pr.get(uo + c * n, counts[c]) for c in range(d)]
@@ -743,16 +790,24 @@ def _category_block(pr, categories):
     return pr.put_list(block), kmax
 
 
-def _codes(pr, arr, categories):
+def _codes(pr, arr, categories, neg=True):
     """Stages that write each element's category index (or -1) and each
-    column's unknown count. Returns (codes offset, unknown-count offset)."""
+    column's unknown count. Returns (codes offset, unknown-count offset).
+    neg=False (lane apple-fast-prep, MOJOLEARN_X_PREP_FAST_NONEG=1): no
+    count, the offset None. `count_neg` (x_prep/prims.mojo count_neg_unit)
+    is ONE thread per column over every row; the encoders read it only under
+    handle_unknown='error' / 'warn' or with a drop, so the board's
+    OneHotEncoder(handle_unknown='ignore') and
+    OrdinalEncoder(handle_unknown='use_encoded_value') never did."""
     n, d = arr.shape
     xo = pr.put(arr)
     uo, kmax = _category_block(pr, categories)
     co = pr.put_list([c.size for c in categories])
     codes = pr.alloc(n * d)
-    neg = pr.alloc(d)
     pr.stage("lookup", n * d, xo, n, d, uo, kmax, co, codes)
+    if not neg:
+        return codes, None
+    neg = pr.alloc(d)
     pr.stage("count_neg", d, codes, n, d, neg)
     return codes, neg
 
@@ -986,7 +1041,8 @@ class OrdinalEncoder(_PrepBase):
         self._check_width(arr)
         n, d = arr.shape
         pr = _Prog()
-        codes, neg = _codes(pr, arr, self.categories_)
+        codes, neg = _codes(pr, arr, self.categories_,
+                            neg=self.handle_unknown == "error" or not _fast_on("NONEG", self.numeric_mode_))
         out = codes
         if self._grouping is not None:
             out = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping), _NONE)
@@ -1139,7 +1195,9 @@ class OneHotEncoder(_PrepBase):
         starts = [sum(widths[:j]) for j in range(d)]
         W = sum(widths)
         pr = _Prog()
-        codes, neg = _codes(pr, arr, self.categories_)
+        codes, neg = _codes(pr, arr, self.categories_,
+                            neg=self.handle_unknown in ("error", "warn") or self.drop is not None
+                            or not _fast_on("NONEG", self.numeric_mode_))
         if self._grouping is not None:
             unk = self._unknown_to()
             codes = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping),
@@ -1878,6 +1936,11 @@ class _Classifier(_PrepBase):
         # the joint log likelihood stays on the device unless it is the answer
         jll = pr.work(n * K) if want else pr.alloc(n * K)
         self._jll_stages(pr, xo, n, d, jll)
+        return self._score_tail(pr, n, d, K, jll, want, chk)
+
+    def _score_tail(self, pr, n, d, K, jll, want, chk):
+        """The scoring program after the joint log likelihood: its softmax
+        and argmax stages, the run, the input refusals, the offsets."""
         lp = pr.alloc(n * K) if "log" in want else _NONE
         pp = pr.alloc(n * K) if "proba" in want else _NONE
         am = pr.alloc(n) if "predict" in want else _NONE
@@ -2108,12 +2171,104 @@ class GaussianNB(_Classifier):
         pr.stage("gnb_jll", n * K, xo, n, d, th, va, co, K, out)
 
 
+def _csr_input(X):
+    """(indptr, indices, data, n, d) of a scipy.sparse matrix as int32, int32
+    and float32 C Arrays (its CSR form), or None for anything else."""
+    if not (hasattr(X, "tocsr") and hasattr(X, "nnz") and hasattr(X, "shape")):
+        return None
+    X = X.tocsr()
+    n, d = (int(v) for v in X.shape)
+    ip = _as_typed(X.indptr, "<i4", "C", 1, "indptr")[0]
+    ix = _as_typed(X.indices, "<i4", "C", 1, "indices")[0]
+    dv = _as_typed(X.data, "<f4", "C", 1, "data")[0]
+    return ip, ix, dv, n, d
+
+
 def _check_nonnegative(pr_values, who):
     if any(v < 0 for v in pr_values):
         raise ValueError(f"mojolearn: Negative values in data passed to {who}")
 
 
 class _DiscreteNB(_Classifier):
+    #: MultinomialNB and ComplementNB take a CSR input on the FAST CSR path
+    _csr_ok = False
+
+    @classmethod
+    def _nb_csr_ready(cls):
+        """Whether this class fits a scipy.sparse CSR matrix without
+        densifying it: FAST mode and the x_prep binding built on Apple with
+        -D MOJOLEARN_NB_TEXT_CSR (lane apple-fast-nb; it exports
+        `x_prep_nb_csr_fit`). The bench hands such a build the text block as
+        CSR. False everywhere else: IDENTICAL, other vendors, no define."""
+        if not cls._csr_ok or _mode() != "fast":
+            return False
+        try:
+            return _optional_prep_entry(_prep_binding("fast"), "x_prep_nb_csr_fit") is not None
+        except Exception:
+            return False
+
+    def _csr_fast(self, X):
+        """X's CSR parts when it is a scipy.sparse matrix and the FAST CSR
+        path is on, else None (a dense input keeps main's program)."""
+        if not type(self)._nb_csr_ready():
+            return None
+        return _csr_input(X)
+
+    def _fit_counts_csr(self, csr, y):
+        """`_fit_counts` on a CSR matrix (FAST + Apple + define only): the
+        (class, feature) count table and the class counts from ONE upload of
+        the CSR arrays (x_prep/fastnb_csr.mojo), then main's epilogue on them
+        (the column-stats row is zero words, so `_params`' minimum check
+        passes; a negative value is refused here from the kernel's flag)."""
+        ip, ix, dv, n, d = csr
+        codes = self._encode_y(y, n)
+        K = len(self.classes_)
+        mode = _mode()
+        fit_csr = _optional_prep_entry(_prep_binding(mode), "x_prep_nb_csr_fit")
+        fc = Array._from_flat([0.0] * (K * d), (K, d), "<f4")
+        cnt = Array._from_flat([0.0] * K, (K,), "<f4")
+        flag = Array.from_list([0], "<i4")
+        fit_csr(addr_ro(ip, name="indptr"), addr_ro(ix, name="indices"), addr_ro(dv, name="data"),
+                addr_ro(codes, name="y"), [n, d, K, dv.size],
+                _addr_rw(fc, name="feature_count"), _addr_rw(cnt, name="class_count"), _addr_rw(flag, name="flag"))
+        if int(flag.tolist()[0]) != 0:
+            raise ValueError(f"mojolearn: Negative values in data passed to {type(self).__name__} (input X)")
+        pr = _Prog()
+        st = pr.alloc(6 * d)
+        z = pr.put_list([0.0] * (K * d))
+        cnt_o, fc_o, clp = pr.alloc(K), pr.alloc(K * d), pr.alloc(K)
+        pr.stage("add_arrays", K, pr.put(cnt), z, cnt_o)
+        pr.stage("add_arrays", K * d, pr.put(fc), z, fc_o)
+        self._prior_stages(pr, K, cnt_o, clp)
+        return pr, mode, n, d, K, st, cnt_o, fc_o, clp
+
+    def _csr_bias(self):
+        """The class log prior the CSR scoring adds (None for none)."""
+        return self.class_log_prior_
+
+    def _scores(self, X, want):
+        csr = self._csr_fast(X)
+        if csr is None:
+            return super()._scores(X, want)
+        self._check_fitted()
+        ip, ix, dv, n, d = csr
+        if d != self.n_features_in_:
+            raise ValueError(f"mojolearn: X has {d} features, but {type(self).__name__} was fitted with "
+                             f"{self.n_features_in_}")
+        K = len(self.classes_)
+        jll_csr = _optional_prep_entry(_prep_binding(self.numeric_mode_), "x_prep_nb_csr_jll")
+        jll_h = Array._from_flat([0.0] * (n * K), (n, K), "<f4")
+        bias = self._csr_bias()
+        jll_csr(addr_ro(ip, name="indptr"), addr_ro(ix, name="indices"), addr_ro(dv, name="data"),
+                addr_ro(self.feature_log_prob_, name="feature_log_prob_"),
+                0 if bias is None else addr_ro(bias, name="class_log_prior_"),
+                [n, d, K, dv.size], _addr_rw(jll_h, name="jll"))
+        pr = _Prog()
+        z = pr.put_list([0.0] * (n * K))
+        jll = pr.alloc(n * K)
+        pr.stage("add_arrays", n * K, pr.put(jll_h), z, jll)
+        return self._score_tail(pr, n, d, K, jll, want, None)
+
     def _fit_counts(self, X, y, binarize=None, sample_weight=None):
         arr = _x2d(X)
         n, d = arr.shape
@@ -2144,6 +2299,9 @@ class _DiscreteNB(_Classifier):
 
     def fit(self, X, y, sample_weight=None):
         _check_alpha(self)
+        csr = self._csr_fast(X) if sample_weight is None else None
+        if csr is not None:
+            return self._params(*self._fit_counts_csr(csr, y))
         return self._params(*self._fit_counts(X, y, getattr(self, "binarize", None), sample_weight))
 
     def partial_fit(self, X, y, classes=None, sample_weight=None):
@@ -2197,6 +2355,7 @@ class MultinomialNB(_DiscreteNB):
     class_prior as given (its log); sample_weight weights the counts, as the
     reference; partial_fit adds each batch's counts, as the reference."""
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior")
+    _csr_ok = True
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None):
         self.alpha = alpha
@@ -3972,7 +4131,7 @@ class IterativeImputer(_PrepBase):
                 pr.stage("ii_gram", dk * dk, fo, n, dk, mo, j, means, g, flag)
                 if pp > 0:
                     pr.stage("ii_sub", 1, g, dk, j, gs, flag, nb1)
-                    pr.stage("eigh", 1, gs, pp, 0, eig, vec)
+                    pr.stage("eigh", 1, gs, pp, 0, eig, vec, 1)  # q[5]=1: cyclic eigh_unit, not round-robin
                 pr.stage("ii_br", 1, g, dk, j, eig, vec, means, cnt, coef, inter, flag, w, nb1, al + 1)
                 if self.sample_posterior:
                     sig = pr.alloc(max(pp, 1) ** 2)
@@ -4644,6 +4803,7 @@ class ComplementNB(_DiscreteNB):
     required; class_prior as given (its log); sample_weight weights the counts, as the
     reference; partial_fit adds each batch's counts, as the reference."""
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "norm")
+    _csr_ok = True
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, norm=False):
         self.alpha = alpha
@@ -4667,6 +4827,9 @@ class ComplementNB(_DiscreteNB):
         w = pr.put(self.feature_log_prob_)
         b = pr.put(self.class_log_prior_) if K == 1 else _NONE
         pr.stage("matmul", n * K, xo, d, 1, w, 1, d, out, K, d, b, _NONE)
+
+    def _csr_bias(self):
+        return self.class_log_prior_ if len(self.classes_) == 1 else None
 
 
 class CategoricalNB(_DiscreteNB):

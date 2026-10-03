@@ -33,6 +33,7 @@ from ensemble.device_layout import device_has_nan_f32, upload_forest_x
 from ensemble.nan_refusal import RF_NAN_REFUSAL
 
 from std.os import abort
+from ensemble.device_finite import FOREST_DEVICE_FINITE, ForestFiniteScan
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -476,15 +477,24 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         # The builder's host view of X (`host_x_addr`, DEVIATION 2484) is the
         # caller's column-major block when it lent one, else none.
         var dx = upload_forest_x(ctx, xp, n_rows, n_cols, ROWMAJOR)
-        if device_has_nan_f32(ctx, dx, n_rows * n_cols):
-            raise Error("rf_classifier_fit: " + RF_NAN_REFUSAL)
+        # FAST on Apple (lane apple-fast-rfet-scan): the NaN-and-inf device
+        # scan below (ensemble/device_finite.mojo) stands in for this NaN scan.
+        comptime if not FOREST_DEVICE_FINITE:
+            if device_has_nan_f32(ctx, dx, n_rows * n_cols):
+                raise Error("rf_classifier_fit: " + RF_NAN_REFUSAL)
         var host_x = 0 if ROWMAJOR else Int(xp)
         var dy = ctx.enqueue_create_buffer[CLT](n_rows)
         ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
         # The host weights drive sampling; non-bootstrap objectives read the
         # device weights at original row IDs. Keep both alive through fitting.
         var dsw = ctx.enqueue_create_buffer[DT](max(1, len(weights)))
-        ctx.synchronize()
+        comptime if FOREST_DEVICE_FINITE:
+            var fscan = ForestFiniteScan(ctx)
+            fscan.enqueue(ctx, dx, n_rows * n_cols)
+            ctx.synchronize()
+            fscan.refuse_if_bad("rf_classifier_fit: ")
+        else:
+            ctx.synchronize()
         bt.stop_host("bind_h2d", t_s)
         if len(weights) > 0:
             ctx.enqueue_copy(dst_buf=dsw, src_ptr=weights.unsafe_ptr())
@@ -1037,13 +1047,22 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         # cpu-gpu-cleanup t-forest, as in the classifier: device upload,
         # device transpose, device NaN scan.
         var dx = upload_forest_x(ctx, xp, n_rows, n_cols, ROWMAJOR)
-        if device_has_nan_f32(ctx, dx, n_rows * n_cols):
-            raise Error("rf_regressor_fit: " + RF_NAN_REFUSAL)
+        # FAST on Apple (lane apple-fast-rfet-scan): the NaN-and-inf device
+        # scan below (ensemble/device_finite.mojo) stands in for this NaN scan.
+        comptime if not FOREST_DEVICE_FINITE:
+            if device_has_nan_f32(ctx, dx, n_rows * n_cols):
+                raise Error("rf_regressor_fit: " + RF_NAN_REFUSAL)
         var host_x = 0 if ROWMAJOR else Int(xp)
         var dy = ctx.enqueue_create_buffer[RLT](n_rows)
         ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
         var dsw = ctx.enqueue_create_buffer[DT](1)
-        ctx.synchronize()
+        comptime if FOREST_DEVICE_FINITE:
+            var fscan = ForestFiniteScan(ctx)
+            fscan.enqueue(ctx, dx, n_rows * n_cols)
+            ctx.synchronize()
+            fscan.refuse_if_bad("rf_regressor_fit: ")
+        else:
+            ctx.synchronize()
         bt.stop_host("bind_h2d", t_s)
         # THE LABEL SCALE IS NOT OPTIONAL. `RegressionBin` accumulates
         # `label_sum` in fixed point through `BinScales.label_scale`
@@ -1403,6 +1422,13 @@ def rf_predict_reg_gpu_parallel_binding(
         leaves_addr, x_addr, out_addr, params,
     )
 
+def rf_device_finite_scan_binding() raises -> PythonObject:
+    """1 when this build's RF fits refuse a non-finite X cell through a
+    device scan (FOREST_DEVICE_FINITE, FAST on Apple), so the Python fit
+    skips its host scan of the same cells; 0 otherwise."""
+    return PythonObject(1 if FOREST_DEVICE_FINITE else 0)
+
+
 def rf_numeric_mode_binding() raises -> PythonObject:
     """Read the numeric policy compiled into this RF binding."""
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
@@ -1442,6 +1468,7 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_rf")
         m.def_function[rf_vendor_binding]("rf_vendor")
         m.def_function[rf_numeric_mode_binding]("rf_numeric_mode")
+        m.def_function[rf_device_finite_scan_binding]("rf_device_finite_scan")
         m.def_function[rf_fused_bootstrap_gather_binding](
             "rf_fused_bootstrap_gather"
         )

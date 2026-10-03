@@ -66,6 +66,8 @@ comptime MQ_T = 128
 """Index rows per shared tile."""
 comptime MQ_MAX_D = 32
 comptime MQ_MAX_K = 32
+comptime MQ_K64_MAX = 64
+"""The widest `k` the `MOJOLEARN_KNN_FAST_MMA_K64=1` arm admits."""
 comptime MQ_BIG = Float32(3.0e38)
 """Empty list slot and starting threshold (finite: FAST may fold
 infinities away)."""
@@ -94,12 +96,39 @@ def _bigd_on() -> Bool:
     return getenv("MOJOLEARN_KNN_FAST_MMA_BIGD") != "0"
 
 
+def _k64_on() -> Bool:
+    """MOJOLEARN_KNN_FAST_MMA_K64=1 (lane/apple-fast-core, 2026-10-02, FAST +
+    Apple only): admit `32 < k <= 64` to this arm with `K = 64`
+    instantiations. Cause: `MQ_MAX_K` is 32, so the board's k-NN lane
+    (k = 64, `tools/classical_two_datasets.py` KNN_K) never reaches the
+    matrix-unit kernels and falls to the generic tiled arm
+    (`knn_brute_force.mojo::brute_force_knn_impl`, the dispatch after the
+    FAST arms). The lists are the same sorted (distance, index) insertions,
+    twice as long per thread; the bitonic fold gets a sixth level (a no-op
+    for `K <= 32`).
+
+    DEFAULT ON (FAST + Apple) since the M3 A/B core-knn-k64-istella: knn
+    1,581 -> 352 ms, recall .9766 same. -D MOJOLEARN_KNN_FAST_MMA_K64_OFF
+    turns it off; the old -D MOJOLEARN_KNN_FAST_MMA_K64 name is accepted and
+    changes nothing."""
+    comptime if not (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+        and not is_defined["MOJOLEARN_KNN_FAST_MMA_K64_OFF"]()
+    ):
+        return False
+    else:
+        return True
+
+
 def fast_mma_knn_applies(n_features: Int, k: Int) -> Bool:
     """Whether this build and shape take the matrix-unit arm."""
     comptime if not FAST_MMA_KNN_ENABLED:
         return False
-    if k < 1 or k > MQ_MAX_K or n_features < 1:
+    if k < 1 or n_features < 1:
         return False
+    if k > MQ_MAX_K:
+        if k > MQ_K64_MAX or not _k64_on():
+            return False
     if n_features <= MQ_MAX_D:
         return True
     return n_features <= MQ_BIGD_MAX and _bigd_on()
@@ -314,7 +343,7 @@ def fast_mma_partial_kernel[D: Int, K: Int, A: Int, B: Int](
                     bd[a * K + t] = pd
                     bi[a * K + t] = pi
             comptime h = K // 2
-            comptime for lv in range(5):
+            comptime for lv in range(6):
                 comptime st = h >> lv
                 comptime if st >= 1:
                     comptime for t in range(K):
@@ -509,7 +538,7 @@ def fast_mma_bigd_kernel[K: Int, A: Int](
                     bd[a * K + t] = pd
                     bi[a * K + t] = pi
             comptime h = K // 2
-            comptime for lv in range(5):
+            comptime for lv in range(6):
                 comptime st = h >> lv
                 comptime if st >= 1:
                     comptime for t in range(K):
@@ -678,8 +707,14 @@ def fast_mma_knn(
                 part_i.unsafe_ptr(), Int32(n_queries), Int32(n_index), Int32(n_features), Int32(k),
                 Int32(slice_rows), grid_dim=(qblocks, slices, 1), block_dim=(MQ_TPB, 1, 1),
             )
-        else:
+        elif k <= 32:
             ctx.enqueue_function[fast_mma_bigd_kernel[32, 1]](
+                queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
+                part_i.unsafe_ptr(), Int32(n_queries), Int32(n_index), Int32(n_features), Int32(k),
+                Int32(slice_rows), grid_dim=(qblocks, slices, 1), block_dim=(MQ_TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[fast_mma_bigd_kernel[64, 1]](
                 queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
                 part_i.unsafe_ptr(), Int32(n_queries), Int32(n_index), Int32(n_features), Int32(k),
                 Int32(slice_rows), grid_dim=(qblocks, slices, 1), block_dim=(MQ_TPB, 1, 1),
@@ -689,28 +724,36 @@ def fast_mma_knn(
             _launch_partial[8, 8, MQ_A, MQ_B](ctx, queries, index, part_d, part_i, n_queries, n_index, n_features, k, slice_rows, qblocks, slices)
         elif k <= 16:
             _launch_partial[8, 16, MQ_A16, MQ_B](ctx, queries, index, part_d, part_i, n_queries, n_index, n_features, k, slice_rows, qblocks, slices)
-        else:
+        elif k <= 32:
             _launch_partial[8, 32, 1, MQ_B](ctx, queries, index, part_d, part_i, n_queries, n_index, n_features, k, slice_rows, qblocks, slices)
+        else:
+            _launch_partial[8, 64, 1, MQ_B](ctx, queries, index, part_d, part_i, n_queries, n_index, n_features, k, slice_rows, qblocks, slices)
     elif n_features <= 16:
         if k <= 8:
             _launch_partial[16, 8, MQ_A, MQ_B](ctx, queries, index, part_d, part_i, n_queries, n_index, n_features, k, slice_rows, qblocks, slices)
         elif k <= 16:
             _launch_partial[16, 16, MQ_A16, MQ_B](ctx, queries, index, part_d, part_i, n_queries, n_index, n_features, k, slice_rows, qblocks, slices)
-        else:
+        elif k <= 32:
             _launch_partial[16, 32, 1, MQ_B](ctx, queries, index, part_d, part_i, n_queries, n_index, n_features, k, slice_rows, qblocks, slices)
+        else:
+            _launch_partial[16, 64, 1, MQ_B](ctx, queries, index, part_d, part_i, n_queries, n_index, n_features, k, slice_rows, qblocks, slices)
     else:
         if k <= 8:
             _launch_partial[32, 8, MQ_A, MQ_B](ctx, queries, index, part_d, part_i, n_queries, n_index, n_features, k, slice_rows, qblocks, slices)
         elif k <= 16:
             _launch_partial[32, 16, MQ_A16, MQ_B](ctx, queries, index, part_d, part_i, n_queries, n_index, n_features, k, slice_rows, qblocks, slices)
-        else:
+        elif k <= 32:
             _launch_partial[32, 32, 1, MQ_B](ctx, queries, index, part_d, part_i, n_queries, n_index, n_features, k, slice_rows, qblocks, slices)
+        else:
+            _launch_partial[32, 64, 1, MQ_B](ctx, queries, index, part_d, part_i, n_queries, n_index, n_features, k, slice_rows, qblocks, slices)
     if k <= 8:
         _launch_merge[8](ctx, part_d, part_i, out_dist, out_idx, n_queries, k, slices, take_sqrt)
     elif k <= 16:
         _launch_merge[16](ctx, part_d, part_i, out_dist, out_idx, n_queries, k, slices, take_sqrt)
-    else:
+    elif k <= 32:
         _launch_merge[32](ctx, part_d, part_i, out_dist, out_idx, n_queries, k, slices, take_sqrt)
+    else:
+        _launch_merge[64](ctx, part_d, part_i, out_dist, out_idx, n_queries, k, slices, take_sqrt)
     ctx.synchronize()
     if st_on:
         print("FAST_MMA_KNN ms=" + String((Int(perf_counter_ns()) - t0) // 1000000)

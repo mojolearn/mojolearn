@@ -13,7 +13,30 @@ Difference: the golden section also stops after 200 iterations (the
 reference's |b - a| >= 1e-12 is below float32 resolution near alpha, so the
 float32 loop ends at the fc == fd exit or the cap)."""
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
-from checks.numerics import ftz, identical_div, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+
+#: lane/apple-fast-seq (2026-10-02). `op_croston` compacts the positive
+#: demands and the intervals into the thread's device scratch (2 n floats
+#: written, `sequence/croston.mojo` op_croston's first loop) and
+#: `ses_forecast` reads them back, on a kernel of one thread per series
+#: (64 series on taxi-hourly): every element is a round trip to device
+#: memory with nothing to hide the latency behind. The classic and SBA
+#: variants read each compacted value exactly once, in order, and the
+#: smoothing is a running recurrence, so `-D MOJOLEARN_SEQ_CROSTON_REG=1`
+#: folds the smoothing into the scan over y: the same operations in the
+#: same order, nothing stored. The optimized variant (golden section,
+#: repeated passes) keeps the stored path. FAST only; IDENTICAL compiles
+#: the stored code. Default on FAST + Apple since the M3 A/B
+#: (lane/apple-fast-seq 8b3f1d90e, n=1, quality identical): croston taxi-hourly
+#: 3.0 -> 2.4 ms, synthetic 2.7 -> 1.8 ms. -D MOJOLEARN_SEQ_CROSTON_REG_OFF
+#: restores the stored code; the old -D MOJOLEARN_SEQ_CROSTON_REG=1 is harmless.
+comptime CROSTON_REG = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SEQ_CROSTON_REG_OFF"]()
+)
 
 comptime CROSTON_CLASSIC = 0
 comptime CROSTON_OPTIMIZED = 1
@@ -76,9 +99,62 @@ def golden_section_ses(x: FP, n: Int, lower: Float32, upper: Float32) -> Float32
     return div(add(b, a), Float32(2.0))
 
 
+@always_inline
+def _croston_reg(t: Int, a: Args):
+    """`op_croston` for the classic and SBA variants with the two
+    exponential smoothings folded into the scan over y
+    (MOJOLEARN_SEQ_CROSTON_REG): `ses_forecast`'s step at the k-th compacted
+    value is f = alpha x[k - 1] + (1 - alpha) f, so each smoothing keeps its
+    state and the previous value in registers; the same operations in the
+    same order as the compacted arrays, none stored."""
+    var n = a.i0
+    var y = a.p0 + t * n
+    var alpha = Float32(0.1)
+    var c = sub(Float32(1.0), alpha)
+    var nd = 0
+    var ni = 0
+    var prev = 0
+    var fd = Float32(0.0)     # ses state over the demands
+    var xd = Float32(0.0)     # the last demand
+    var fi = Float32(0.0)     # ses state over the intervals
+    var xi = Float32(0.0)     # the last interval
+    for i in range(n):
+        var v = ld(y, i)
+        if v > Float32(0.0):
+            if nd == 0:
+                fd = v
+            else:
+                fd = fma3(alpha, xd, mul(c, fd))
+            xd = v
+            nd += 1
+        if v != Float32(0.0):
+            var w = Float32(i + 1 - prev)
+            if ni == 0:
+                fi = w
+            else:
+                fi = fma3(alpha, xi, mul(c, fi))
+            xi = w
+            prev = i + 1
+            ni += 1
+    var mean: Float32
+    if nd == 0:
+        mean = ld(y, n - 1)
+    else:
+        var ydp = xd if nd == 1 else fma3(alpha, xd, mul(c, fd))
+        var yip = xi if ni == 1 else fma3(alpha, xi, mul(c, fi))
+        mean = div(ydp, yip) if yip != Float32(0.0) else ydp
+        if a.i1 == CROSTON_SBA:
+            mean = mul(mean, Float32(0.95))
+    st(a.p1, t, mean)
+
+
 def op_croston(t: Int, a: Args):
     """Series t: p0 y [B, n]; p1 mean [B] out; p2 scratch [B, 2 n].
     i0 n, i1 variant (0 classic, 1 optimized, 2 SBA)."""
+    comptime if CROSTON_REG:
+        if a.i1 != CROSTON_OPTIMIZED:
+            _croston_reg(t, a)
+            return
     var n = a.i0
     var y = a.p0 + t * n
     var dem = a.p2 + t * 2 * n

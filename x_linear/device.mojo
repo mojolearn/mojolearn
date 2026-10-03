@@ -53,6 +53,7 @@ from x_linear.logcv_grid import logcv_fit_grid, lcv_fold_ids_device
 from x_linear.huber_grid import huber_fit_grid
 from x_linear.dispatch import ALGO_HUBER, ALGO_ENETCV
 from x_linear.enetcv_fast import enetcv_fast
+from x_linear.fast_gram import fast_gram_into, XL_RIDGE_FAST_GRAM
 from x_linear.dispatch import ALGO_LOGCV
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo, team_barrier
 from x_linear.dispatch import ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ALGO_QUANTILE
@@ -357,7 +358,12 @@ def bayes_eig_kernel(fw: FP, fp: FP, res: FP, ip: IP, d: Int32, nb: Int32, ypart
     var t = device_team(tw, 0, team_rows(a, ip), team_own(a, dd))
     var wsum = ld(state, 3)
     var yvar = fd(fold_parts(vparts, 0, Int(nb)), wsum)
-    var al = bayes_eig_prep(t, fw, fp, dd, yvar)
+    var jtol = Float32(1e-9)
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        # lane/apple-fast-kernel: ip[7] (MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1)
+        if ldi(ip, 7) != 0:
+            jtol = Float32(1e-7)
+    var al = bayes_eig_prep(t, fw, fp, dd, yvar, jtol)
     var ratio = fd(al[1], al[0])
     for j in range(t.tid, dd, t.nt):
         st(res, j, bayes_coef_one(fw, dd, j, ratio))
@@ -528,6 +534,35 @@ def bayes_finish_kernel(fw: FP, res: FP, d: Int32, fi: Int32, state: FP, iters: 
 #: Apple: the longest a guarded x_linear launch runs, in chain steps (the
 #: grid Gram's row slices; x_linear/witness.mojo, lane/neural-pass131).
 comptime XL_APPLE_SLICE_MACS = 1 << 27
+
+
+#: lane/apple-fast-gram (2026-10-02), FAST on Apple, build-time switches
+#: (`-D MOJOLEARN_X_LINEAR_LARS_FAST_GRAM`, `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM`;
+#: no env read on the fit path). Both are the FAST + Apple default since the M3
+#: A/B (lane/apple-fast-gram 47ab9b791) and the re-A/B on lane head c338b88dd
+#: (n=1, taxi, quality the same: lars 59.1 -> 15.1 ms, lasso-lars 59.1 ->
+#: 14.2 ms, ridge-clf 168 -> 122 ms, ridge-cv 3,614 -> 37 ms); `-D MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF` /
+#: `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` restore main's path, and the old
+#: on-defines stay harmless:
+#: LARS_FAST_GRAM builds Lars / LassoLars' means, centered Gram, X'y and y mean
+#: with x_linear/fast_gram.mojo (row chunks x 32 x 32 tiles on the grid) instead
+#: of main's moments grid (one block per 16-column tile pair, one serial chain
+#: per cell: ONE block at taxi's 16 features) or the sliced `xg_gram_kernel`;
+#: RIDGE_FAST_GRAM does the same for RidgeClassifier / RidgeCV's means, centered
+#: Gram and X'Y, and for k-fold RidgeCV's fold Grams instead of `kf_cells_kernel`
+#: (one thread per cell walking the fold's rows). Unweighted fits only.
+comptime XL_LARS_FAST_GRAM = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                              and not is_defined["MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF"]())
+
+
+@always_inline
+def _lars_fast_gram() -> Bool:
+    return XL_LARS_FAST_GRAM
+
+
+@always_inline
+def _ridge_fast_gram() -> Bool:
+    return XL_RIDGE_FAST_GRAM
 
 
 # ------------------------------------------------ minibatch SGD on the grid (lane/neural-pass103)
@@ -2111,6 +2146,16 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
                    + _xg_blocks(kbm) + _xg_blocks(na * kbm))
     var wit = Witness(ctx, wcap)
     var dsum_save = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
+    # lane/apple-fast-gram (2026-10-02), FAST on Apple (default since the M3 A/B;
+    # `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` restores `kf_cells_kernel`)
+    # builds each fold's means, centered Gram and X'y with the shared grid
+    # Gram (x_linear/fast_gram.mojo; the same dxm / dg / dxty words) instead
+    # of `kf_cells_kernel`, one thread per cell walking the fold's rows
+    # (136 threads at taxi's 16 features). Its launches are not witnessed
+    # (it waits for them itself); the unit's solve that follows is.
+    var fold_fast_gram = False
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        fold_fast_gram = _ridge_fast_gram() and d > 0
     for f in range(k):
         var s = Int32(kf_start(n, k, f))
         var e = Int32(kf_end(n, k, f))
@@ -2118,14 +2163,20 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
         while True:
             var nonce = wit.begin()
             var wo = 0
-            ctx.enqueue_function[kf_means_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), s, e, Int32(fi),
-                                                  dxm.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                  grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB)
-            wo += _xg_blocks(d + 1)
-            ctx.enqueue_function[kf_cells_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), s, e, dxm.unsafe_ptr(),
-                                                  dg.unsafe_ptr(), dxty.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                  grid_dim=_xg_blocks(cells + d), block_dim=XG_TPB)
-            wo += _xg_blocks(cells + d)
+            if fold_fast_gram:
+                var pxm = FP(unsafe_from_address=Int(dxm.unsafe_ptr()))
+                fast_gram_into(ctx, FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())),
+                               Int(s), Int(e) - Int(s), d, 1, fi != 0, pxm, pxm + d,
+                               FP(unsafe_from_address=Int(dg.unsafe_ptr())), FP(unsafe_from_address=Int(dxty.unsafe_ptr())))
+            else:
+                ctx.enqueue_function[kf_means_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), s, e, Int32(fi),
+                                                      dxm.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                      grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB)
+                wo += _xg_blocks(d + 1)
+                ctx.enqueue_function[kf_cells_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), s, e, dxm.unsafe_ptr(),
+                                                      dg.unsafe_ptr(), dxty.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                      grid_dim=_xg_blocks(cells + d), block_dim=XG_TPB)
+                wo += _xg_blocks(cells + d)
             ctx.enqueue_function[kf_solve_kernel](dg.unsafe_ptr(), dxty.unsafe_ptr(), dxm.unsafe_ptr(), Int32(d), dal.unsafe_ptr(),
                                                   Int32(na), Int32(fi), daw.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(),
                                                   dtr.unsafe_ptr(), wit.p(), Int32(wo), nonce,
@@ -3255,6 +3306,7 @@ def fit_device(
         while len(hip) < 7:
             hip.append(Int32(0))
         hip[6] = Int32(n)
+    var fast_gram = False
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
         # x_linear/bayes.mojo `X_LINEAR_GRAM_SSE`: ip[5], the sse from the
         # normal equations (lane/apple-fast-classical); `=0` is the A/B arm
@@ -3262,6 +3314,39 @@ def fit_device(
             while len(hip) < 6:
                 hip.append(Int32(0))
             hip[5] = Int32(0 if String(getenv("MOJOLEARN_X_LINEAR_GRAM_SSE")) == "0" else 1)
+        # lane/apple-fast-gram: the shared grid Gram (x_linear/fast_gram.mojo,
+        # row chunks across the grid) fills the words main's moments grid
+        # fills on one block per tile pair (taxi's 16 features: ONE block);
+        # `lars_path_kernel` reads the same words, so lars_pre is off.
+        # (Ridge's switch lives in x_linear/ridge_grid.mojo `ridge_fit_grid`.)
+        if algo == ALGO_LARS and d > 0 and n > 0:
+            fast_gram = _lars_fast_gram()
+            if fast_gram:
+                grid_gram = False
+                lars_pre = False
+    # lane/apple-fast-kernel (2026-10-02), FAST on Apple only, both default
+    # off, build-time. -D MOJOLEARN_KERNEL_FAST_BAYES_STATS: the means, the centered Gram,
+    # X'y from x_linear/fast_gram.mojo (the gram lane's shared grid Gram,
+    # chunked tiles on the grid) instead of `xg_means_kernel` + `xg_gram_kernel`
+    # (one serial million-row chain per cell) and the team's own X'y /
+    # mean / variance passes on one block (after the 2026-10-02 merge: in
+    # place of main's moments grid, one block per 16-column tile pair with
+    # one serial chain per cell, and main's `bayes_xty_kernel`; the y
+    # partials stay main's). -D MOJOLEARN_KERNEL_FAST_BAYES_JACOBI (ip[7]): the team Jacobi
+    # skips rotations below 1e-7 * sqrt(a_pp a_qq) instead of 1e-9, a
+    # threshold float32 roundoff never reaches, so it ran all 60 sweeps.
+    var kstats = False
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        if bayes_like:
+            # STATS: BayesianRidge (unweighted) on main's grid driver only;
+            # ARD keeps main's moments grid (its X'y pass is the team's)
+            if algo == ALGO_BAYES and n > 0 and d > 0 and is_defined["MOJOLEARN_KERNEL_FAST_BAYES_STATS"]():
+                kstats = True
+                grid_gram = True
+                hip[4] = Int32(1)
+            while len(hip) < 8:
+                hip.append(Int32(0))
+            hip[7] = Int32(1 if is_defined["MOJOLEARN_KERNEL_FAST_BAYES_JACOBI"]() else 0)
     var dip = ctx.enqueue_create_buffer[DType.int32](max(len(hip), 1))
     var dtw = ctx.enqueue_create_buffer[DType.float32](team_work(0, 3, 0))
     var hfp = fp.copy()
@@ -3295,6 +3380,8 @@ def fit_device(
     bayes_w = algo == ALGO_BAYES and n > 0 and d > 0 and len(ip) > 2 and ip[2] != 0
     if bayes_w:
         bayes_grid = True
+    # lane/apple-fast-kernel BAYES_STATS: unweighted BayesianRidge on the grid only
+    kstats = kstats and bayes_grid and not bayes_w
     var ynb = fold_blocks(n)
     var prep_blocks = 2 * _xg_blocks(ynb) + _xg_blocks(d) + 1
     if bayes_w:
@@ -3313,6 +3400,29 @@ def fit_device(
         diw.enqueue_fill(Int32(0))
         dtw.enqueue_fill(Float32(0))
         var good = True
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+            if fast_gram:
+                # lane/apple-fast-gram: the shared grid Gram (row chunks x 32 x
+                # 32 tiles, x_linear/fast_gram.mojo) fills the words the moments
+                # grid would (lars_pre is off); it waits for its
+                # own launches (unwitnessed), the witnessed fit follows
+                var pfw = FP(unsafe_from_address=Int(dfw.unsafe_ptr()))
+                var px = FP(unsafe_from_address=Int(dx.unsafe_ptr()))
+                var py = FP(unsafe_from_address=Int(dy.unsafe_ptr()))
+                # lars_fit's fw: xm 0 | G d | xty d + d*d | prev = 2d + d*d
+                # holds the y mean (lars_fit zeroes it)
+                var xty_o = d + d * d
+                fast_gram_into(ctx, px, py, 0, n, d, 1, hip[1] != 0, pfw, pfw + (xty_o + d), pfw + d, pfw + xty_o)
+            elif kstats:
+                # BayesianRidge on main's grid driver: xm at 0, G at d, X'y at
+                # d + d*d; the y mean parked at the `old` offset (3d + 2d^2),
+                # scratch until the first step (the driver's own y partials
+                # give it ym). Waits for its own launches (unwitnessed); the
+                # witnessed eig unit follows
+                var pfw = FP(unsafe_from_address=Int(dfw.unsafe_ptr()))
+                var px = FP(unsafe_from_address=Int(dx.unsafe_ptr()))
+                var py = FP(unsafe_from_address=Int(dy.unsafe_ptr()))
+                fast_gram_into(ctx, px, py, 0, n, d, 1, hip[1] != 0, pfw, pfw + (3 * d + 2 * d * d), pfw + d, pfw + (d + d * d))
         if lars_pre:
             # lane/neural-pass120's moments of [X | y] (fw: xm 0, G d, X'y
             # d + d*d, y's mean parked in prev = 2d + d*d)
@@ -3325,6 +3435,8 @@ def fit_device(
                 dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1), dfw.unsafe_ptr(),
                 Int32(0), Int32(2 * d + d * d), Int32(d), Int32(d + d * d), grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
             )
+        elif kstats:
+            pass
         elif grid_gram and bayes_like:
             # lane/neural-pass130: BayesianRidge / ARD's means and centered Gram
             # from the staged moments kernels (no Y columns), into the layout
@@ -3423,11 +3535,13 @@ def fit_device(
                         wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(ynb), block_dim=XG_TPB,
                     )
                     wo += _xg_blocks(ynb)
-                    ctx.enqueue_function[bayes_xty_kernel](
-                        dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(hip[1]), dfw.unsafe_ptr(),
-                        dyparts.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(d), block_dim=XG_TPB,
-                    )
-                    wo += _xg_blocks(d)
+                    if not kstats:
+                        # BAYES_STATS: X'y came from the fast grid Gram
+                        ctx.enqueue_function[bayes_xty_kernel](
+                            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(hip[1]), dfw.unsafe_ptr(),
+                            dyparts.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(d), block_dim=XG_TPB,
+                        )
+                        wo += _xg_blocks(d)
                 ctx.enqueue_function[bayes_eig_kernel](
                     dfw.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dip.unsafe_ptr(), Int32(d), Int32(ynb),
                     dyparts.unsafe_ptr(), dvparts.unsafe_ptr(), dtw.unsafe_ptr(), dstate.unsafe_ptr(),

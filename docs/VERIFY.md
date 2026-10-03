@@ -975,12 +975,40 @@ from the release artifacts before treating them as release qualification.
 
 The portable models are saved on a GPU install and kept only when their file
 bytes equal the table's model reference, so a shipped file is byte for byte
-the file every recorded vendor wrote:
+the file every recorded vendor wrote. Without `--lanes` it saves every model
+the shipped bundle carries, on its own fixture, plus the four default lanes on
+`base`; `--lanes` with `--fixtures` (default `base`) names others:
 
 ```sh
 MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify \
   --emit-models python/mojolearn/verify_reference/models
 ```
+
+### The scripted regeneration
+
+Three scripts carry the whole procedure from one pushed commit:
+
+| step | where | command |
+|---|---|---|
+| column records | each box, every binding built: NVIDIA, AMD, Apple, and `cpu` for the host column | `tools/record_identity_column.sh <vendor-label> <absolute outdir>` |
+| admission | the Mac, this checkout | `tools/admit_identity_columns.sh --build-host <outdir>...` |
+| portable models | one GPU box, after the new table is pushed | `tools/record_identity_column.sh <gpu-label> <outdir> --models`, then `tools/admit_identity_columns.sh --models <outdir>/models` |
+
+`record_identity_column.sh` runs `tools/identity_break.py --json` with the
+identical tier, the backend the label names (`--require-backend`), the default
+fixture size on one device, every part and every fixture, `--repeats 2`, and
+CPU pools at 3 threads, over the routine profile's lanes (`SCOPE=all` adds
+neural training; `SHARD=i/N` splits the lanes into records that are each
+admissible alone). It refuses harness overrides, sabotage switches and a tree
+whose sources differ from its commit, and ends with the
+`tools/identity_columns.py check` verdict, which is `admit()` itself.
+`admit_identity_columns.sh` refuses any record `admit()` refuses or records of
+more than one commit, copies them under
+`bench/results/identity_break/<date>-<tag>/`, regenerates the table from every
+committed column, reports which routine reference parts still rest on an older
+commit (`reference-report.json`), and runs `verify --self-test` and
+`verify --coverage` against the new table on the host column. `--check-only`
+does the same on a scratch table and changes nothing.
 
 ## The pinned k-means card
 

@@ -17,8 +17,9 @@ reference computes nmse-step forecasts and uses only the first for the
 objective); the ACF, the decomposition and the objective are float32."""
 from sequence.nm import Objective, nelder_mead
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 #: lane/apple-fast-tier (2026-10-02). `theta_run` writes five state words
 #: and one error per step to the thread's device scratch and reads the
@@ -27,13 +28,45 @@ from std.sys.compile import is_defined
 #: threads to hide it behind, inside Nelder-Mead's up to 1000 evaluations
 #: (board: theta taxi-hourly FAST 1,747 ms, IDENTICAL 388). Only row n - 1
 #: is ever read after the run (by the forecast) and the error sum is a
-#: running fma, so `-D MOJOLEARN_SEQ_THETA_REG=1` keeps the recurrence in
-#: registers: the same operations in the same order, four words written.
-#: FAST only; IDENTICAL compiles the stored-row code.
+#: running fma, so THETA_REG keeps the recurrence in registers: the same
+#: operations in the same order, four words written. Default on FAST + Apple
+#: since the M3 A/B (lane/apple-fast-tier 78d5b99d1, theta taxi-hourly, n=1):
+#: alone 1,770 -> 1,326 ms; with MOJOLEARN_SEQ_FAST_FMA 1,769 -> 220 ms,
+#: forecast_rmse 49.28 -> 49.02. -D MOJOLEARN_SEQ_THETA_REG_OFF restores the
+#: stored-row code; the old -D MOJOLEARN_SEQ_THETA_REG=1 is harmless.
+#: IDENTICAL compiles the stored-row code.
 comptime THETA_REG = (
-    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_SEQ_THETA_REG"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SEQ_THETA_REG_OFF"]()
 )
+
+#: lane apple-fast-regress (2026-10-03; docs/apple-fast/notes/regress-oct3.md).
+#: Since SEQ_FAST_FMA became the FAST + Apple default (95a09d1fd), the
+#: board's dynamic-optimized-theta taxi-hourly row went 727 -> 2,087 ms
+#: while synthetic went 485 -> 377: the fused fmas move the objective's
+#: last bits; the likely cause (the -D MOJOLEARN_SEQ_FAST_FMA_OFF arm
+#: confirms it) is that on taxi-hourly Nelder-Mead's simplex no longer
+#: settles on a fixed point and a series runs on toward the 1,000-iteration
+#: cap, cycling.
+#: MOJOLEARN_SEQ_FAST_THETA_SNAP hands the theta fits the cycle watch GARCH
+#: already uses (sequence/nm.mojo, `snap`): a state that returns bit for bit
+#: to an earlier one runs only the iterations left of its last lap, the
+#: same final state, best vertex and iteration count as running them all
+#: (no result moves). The snapshot is 16 floats of the 64 the row reserves
+#: for Nelder-Mead (k <= 3 coordinates use at most 28). Default on FAST +
+#: Apple since the M3 A/B (n=3, digests identical): dynamic-optimized-theta
+#: taxi-hourly 2,087.7 -> 561.9 ms, rmse the same. SEQ_FAST_FMA stays on.
+#: -D MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF restores the plain run; the old
+#: -D MOJOLEARN_SEQ_FAST_THETA_SNAP=1 is harmless.
+comptime THETA_SNAP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF"]()
+)
+#: the snapshot's offset in the Nelder-Mead scratch (after the (k + 1) k +
+#: (k + 1) + 4 k <= 28 floats of k <= 3; (k + 1) k + (k + 1) <= 16 floats)
+comptime THETA_SNAP_OFF = 32
 
 comptime STM = 0
 comptime OTM = 1
@@ -455,7 +488,11 @@ def op_theta(t: Int, a: Args):
             k += 1
         var it = 0
         if k > 0:
-            it = nelder_mead(obj, x, lo, hi, k, nm_scr, Float32(0.05), Float32(1e-4), 1000, Float32(1e-4))
+            comptime if THETA_SNAP:
+                it = nelder_mead(obj, x, lo, hi, k, nm_scr, Float32(0.05), Float32(1e-4), 1000, Float32(1e-4),
+                                 nm_scr + THETA_SNAP_OFF)
+            else:
+                it = nelder_mead(obj, x, lo, hi, k, nm_scr, Float32(0.05), Float32(1e-4), 1000, Float32(1e-4))
         var p = obj.params(x)
         var mse = Float32(0.0)
         comptime if THETA_REG:

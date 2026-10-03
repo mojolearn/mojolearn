@@ -21,6 +21,7 @@ from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul, identical_mul64
 from x_cluster.bodies import SplitMix64
 from x_cluster.common import gather_rows, greedy_kmeans_pp, nearest_all, sum_f64, weighted_draw
+from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV
 from x_cluster.ops import ClusterOps
 
 
@@ -174,6 +175,23 @@ def minibatch_fit[O: ClusterOps](
     var wslot = ops.zeros(k)
     ops.set(cslot, c)
     var steps_done = 0
+    # lane/apple-fast-cluster (2026-10-02), FAST on Apple, ON by default
+    # (`-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF=1` turns it off; see
+    # x_cluster/minibatch_fast.mojo for the M3 A/B): MINIBATCH_FAST_DEV runs the
+    # steps resident on the device (x_cluster/minibatch_fast.mojo: no upload,
+    # read-back or host center fold per step; the loop below pays all three
+    # every step). Unit weights and tol <= 0 only (the board's shape); `c`,
+    # `w` and `steps_done` come back as the loop would leave them, the loop
+    # is skipped (n_steps = 0) and `cslot` holds the final centers for the
+    # readback after the loop (else it would hand back the centers uploaded
+    # above).
+    comptime if MINIBATCH_FAST_DEV:
+        if not weighted and p.tol <= 0:
+            if ops.minibatch_fast(
+                xs, n, d, k, batch, n_steps, p.max_no_improvement, p.reassignment_ratio, p.seed, rng, c, w, steps_done
+            ):
+                n_steps = 0
+                ops.set(cslot, c)
     for step in range(n_steps):
         var bidx = List[Int](capacity=batch)
         for _t in range(batch):

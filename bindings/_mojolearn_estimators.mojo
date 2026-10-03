@@ -36,6 +36,20 @@ comptime OLS_FAST_NORMAL_EQ = (
     and not is_defined["MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF"]()
 )
 
+#: Lane apple-fast-ridgespeed (2026-10-03): Ridge.fit with X and y uploaded
+#: once (`ridge_fit_resident`) instead of the four host trips of the Python
+#: centering route. FAST on Apple only; same kernels and words. Read by
+#: Python through `ridge_resident_default`. Default since the M3 A/B
+#: (lane/apple-fast-ridgespeed e3ef68416, n=1, r2 identical .909 / .3287:
+#: taxi 57.1 -> 24.5 ms, istella 1,405 -> 724 ms). Off with
+#: -D MOJOLEARN_RIDGE_RESIDENT_OFF (which also turns RIDGE_NO_U off); the
+#: old -D MOJOLEARN_RIDGE_RESIDENT define is now harmless.
+comptime RIDGE_FAST_RESIDENT = (
+    GLOBAL_NUMERIC_MODE == _OLS_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_RIDGE_RESIDENT_OFF"]()
+)
+
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
@@ -65,6 +79,9 @@ from decomposition.estimator import (
     tsvd_transform_host,
 )
 from glm.estimator import (
+    OLS_FAST_DEVICE_CENTER,
+    ols_center_tsqr_r_host,
+    ols_fit_centered_host,
     ols_fit_host,
     ols_fit_resident_host,
     ols_predict_host,
@@ -72,6 +89,7 @@ from glm.estimator import (
     qn_fit_host,
     qn_predict_binary_host,
     ridge_fit_host,
+    ridge_fit_resident_host,
 )
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from checks.soft_f64 import (
@@ -625,6 +643,65 @@ def lm_scale_rows_binding(x_addr: PythonObject, w_addr: PythonObject, out_addr: 
     return PythonObject(0)
 
 
+def ols_center_tsqr_r_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    r_addr: PythonObject,
+    means_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """R of the blocked TSQR of [X - mu | y - mu_y] with RAW X and y uploaded
+    once and centered on the device (-D MOJOLEARN_OLS_FAST_DEVICE_CENTER,
+    lane/apple-fast-core, 2026-10-02; `glm/estimator.mojo::
+    ols_center_tsqr_r_host`). params: n_rows, n_features. `r_addr` receives
+    the (n_features + 1) square float32 R, `means_addr` the n_features
+    float32 column means; returns the mean of y. Registered under FAST +
+    Apple with the define only."""
+    if len(params) != 2:
+        raise Error("ols_center_tsqr_r: params must contain n_rows, n_features")
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var xa = Int(py=x_addr)
+    var ya = Int(py=y_addr)
+    var ra = Int(py=r_addr)
+    var ma = Int(py=means_addr)
+    var y_mean = Float64(0.0)
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        y_mean = ols_center_tsqr_r_host(ctx, xa, ya, ra, ma, nr, nf)
+        ctx.synchronize()
+    return PythonObject(y_mean)
+
+
+def ols_fit_centered_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    coef_addr: PythonObject,
+    means_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ols_fit` on RAW X and y with the intercept's centering on the device
+    (-D MOJOLEARN_OLS_FAST_DEVICE_CENTER, lane/apple-fast-core, 2026-10-02;
+    `glm/estimator.mojo::ols_fit_centered_host`): the route for the designs
+    the Python layer keeps off the TSQR. params: n_rows, n_features.
+    `means_addr` receives the n_features float32 column means; returns the
+    mean of y. Registered under FAST + Apple with the define only."""
+    if len(params) != 2:
+        raise Error("ols_fit_centered: params must contain n_rows, n_features")
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var xa = Int(py=x_addr)
+    var ya = Int(py=y_addr)
+    var ca = Int(py=coef_addr)
+    var ma = Int(py=means_addr)
+    var y_mean = Float64(0.0)
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        y_mean = ols_fit_centered_host(ctx, xa, ya, ca, ma, nr, nf)
+        ctx.synchronize()
+    return PythonObject(y_mean)
+
+
 def ols_predict_binding(
     x_addr: PythonObject,
     coef_addr: PythonObject,
@@ -666,6 +743,46 @@ def ridge_fit_binding(
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         ridge_fit_host(ctx, xp, yp, wp, nr, nf, alpha)
+        ctx.synchronize()
+    return PythonObject(0)
+
+
+def ridge_resident_default_binding() raises -> PythonObject:
+    """True when this build routes Ridge.fit through `ridge_fit_resident`
+    (`RIDGE_FAST_RESIDENT`, lane apple-fast-ridgespeed)."""
+    return PythonObject(RIDGE_FAST_RESIDENT)
+
+
+def ridge_fit_resident_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    coef_addr: PythonObject,
+    mu_addr: PythonObject,
+    ymean_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Lane apple-fast-ridgespeed: Ridge's fit with X and y uploaded once
+    (glm/estimator.mojo `ridge_fit_resident_host`). params: n_rows,
+    n_features, alpha, center (0/1). With center, mu (float32 [n_features])
+    and ymean (float64 [1]) are written. Returns 0."""
+    comptime if not RIDGE_FAST_RESIDENT:
+        raise Error("ridge_fit_resident: only the FAST Apple build without -D MOJOLEARN_RIDGE_RESIDENT_OFF has this route")
+    if len(params) != 4:
+        raise Error("ridge_fit_resident: params must contain n_rows, n_features, alpha, center")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var yp = _f32_ptr(Int(py=y_addr))
+    var wp = _f32_ptr(Int(py=coef_addr))
+    var mp = _f32_ptr(Int(py=mu_addr))
+    var ymp = _f64_ptr(Int(py=ymean_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var alpha = Float32(Float64(py=params[2]))
+    var center = Int(py=params[3]) != 0
+    if nr <= 0 or nf <= 0:
+        raise Error("ridge_fit_resident: n_rows and n_features must be positive")
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        ridge_fit_resident_host(ctx, xp, yp, wp, mp, ymp, nr, nf, alpha, center)
         ctx.synchronize()
     return PythonObject(0)
 
@@ -1153,8 +1270,15 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[lm_col_sums_binding]("lm_col_sums")
         m.def_function[lm_center_binding]("lm_center")
         m.def_function[lm_scale_rows_binding]("lm_scale_rows")
+        comptime if OLS_FAST_DEVICE_CENTER:
+            # -D MOJOLEARN_OLS_FAST_DEVICE_CENTER, FAST + Apple: the Python
+            # layer takes the device-centering route when these names exist.
+            m.def_function[ols_center_tsqr_r_binding]("ols_center_tsqr_r")
+            m.def_function[ols_fit_centered_binding]("ols_fit_centered")
         m.def_function[ols_predict_binding]("ols_predict")
         m.def_function[ridge_fit_binding]("ridge_fit")
+        m.def_function[ridge_fit_resident_binding]("ridge_fit_resident")
+        m.def_function[ridge_resident_default_binding]("ridge_resident_default")
         comptime if MULTIOUT_RIDGE:
             m.def_function[ridge_fit_multi_binding]("ridge_fit_multi")
             m.def_function[ridge_predict_multi_binding]("ridge_predict_multi")

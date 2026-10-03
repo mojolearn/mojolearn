@@ -1,0 +1,6 @@
+CMD lane/apple-fast-trees-yeti yeti-task16k AFT_OUT=$HOME/aft-ab/yeti-task16k bash tools/aft_ab.sh gbdt gbdt-rank-yetirank istellarank 3 "" "-D MOJOLEARN_YETI_SEARCH_TASK16K=1"
+CMD lane/apple-fast-trees-yeti yeti-symhist AFT_OUT=$HOME/aft-ab/yeti-symhist bash tools/aft_ab.sh gbdt gbdt-rank-yetirank istellarank 3 "" "-D MOJOLEARN_SYM_HIST_FAST=1"
+CMD lane/apple-fast-trees-yeti yeti-both AFT_OUT=$HOME/aft-ab/yeti-both bash tools/aft_ab.sh gbdt gbdt-rank-yetirank istellarank 3 "" "-D MOJOLEARN_YETI_SEARCH_TASK16K=1 -D MOJOLEARN_SYM_HIST_FAST=1"
+CMD lane/apple-fast-trees-yeti yeti-symhist-sym-taxi AFT_OUT=$HOME/aft-ab/yeti-symhist-sym-taxi bash tools/aft_ab.sh gbdt gbdt-symmetric taxi 3 "" "-D MOJOLEARN_SYM_HIST_FAST=1"
+CMD lane/apple-fast-trees-yeti yeti-symhist-sym-istella AFT_OUT=$HOME/aft-ab/yeti-symhist-sym-istella bash tools/aft_ab.sh gbdt gbdt-symmetric istella 3 "" "-D MOJOLEARN_SYM_HIST_FAST=1"
+CMD lane/apple-fast-trees-yeti yeti-symhist-ordered-taxi AFT_OUT=$HOME/aft-ab/yeti-symhist-ordered-taxi bash tools/aft_ab.sh gbdt gbdt-ordered taxi 3 "" "-D MOJOLEARN_SYM_HIST_FAST=1"
