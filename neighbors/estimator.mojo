@@ -124,8 +124,6 @@ from core.device_fold import device_sum_i32
 from neighbors.impl.multi_gpu import knn_device_count, parallel_knn_rows
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from std.os import getenv
-from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from neighbors.impl.knn.knn import (
@@ -1841,63 +1839,6 @@ def _rbc_index_and_count(
     return nnz
 
 
-def _rbc_index_only(
-    ctx: DeviceContext,
-    mut x: DeviceBuffer[DType.float32],
-    mut r: DeviceBuffer[DType.float32],
-    mut x_reordered: DeviceBuffer[DType.float32],
-    mut r_indptr: DeviceBuffer[DType.int32],
-    mut r_1nn_cols: DeviceBuffer[DType.int32],
-    mut r_1nn_dists: DeviceBuffer[DType.float32],
-    mut r_radius: DeviceBuffer[DType.float32],
-    n_index: Int,
-    n_features: Int,
-    n_landmarks: Int,
-    metric: Int = RBC_METRIC_DEFAULT,
-    metric_arg: Float32 = Float32(2.0),
-) raises:
-    """`_rbc_index_and_count`'s index build without its count pass
-    (lane/apple-fast-neighbors2, 2026-10-02): the same `rbc_build_index`
-    call over the same scratch, for a fill whose row offsets the caller
-    already holds."""
-    var landmark_ids = ctx.enqueue_create_buffer[DType.int32](n_landmarks)
-    var slot_cols = ctx.enqueue_create_buffer[DType.int32](n_index)
-    var slot_dists = ctx.enqueue_create_buffer[DType.float32](n_index)
-    var nearest = ctx.enqueue_create_buffer[DType.int32](n_index)
-    var nearest_dist = ctx.enqueue_create_buffer[DType.float32](n_index)
-    var counts = ctx.enqueue_create_buffer[DType.int32](n_landmarks)
-    ctx.synchronize()
-    rbc_build_index(
-        ctx,
-        x,
-        r,
-        x_reordered,
-        landmark_ids,
-        slot_cols,
-        slot_dists,
-        nearest,
-        nearest_dist,
-        r_indptr,
-        r_1nn_cols,
-        r_1nn_dists,
-        r_radius,
-        counts,
-        n_index,
-        n_features,
-        n_landmarks,
-        UInt64(12345),
-        metric,
-        metric_arg,
-    )
-    ctx.synchronize()
-    _ = landmark_ids^
-    _ = slot_cols^
-    _ = slot_dists^
-    _ = nearest^
-    _ = nearest_dist^
-    _ = counts^
-
-
 def _radius_check_shapes(
     n_index: Int, n_queries: Int, n_features: Int, radius: Float32, who: String
 ) raises:
@@ -2065,62 +2006,26 @@ def radius_neighbors_fill(
     ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
     ctx.synchronize()
 
-    var nnz = 0
-    var reuse_count = False
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator():
-        # MOJOLEARN_RADIUS_FAST_REUSE_COUNT=1 (lane/apple-fast-neighbors2,
-        # 2026-10-02; FAST + Apple only, default off): the fill pass takes
-        # the row offsets the count pass wrote into `out_indptr_ptr` (the
-        # same array, handed back by python/mojolearn/neighbors.py
-        # radius_neighbors) and `nnz_capacity` (the count pass's total)
-        # instead of re-running the count. Cause: `radius_neighbors_fill`
-        # rebuilt the ball-cover index AND ran the whole eps query a second
-        # time in counting mode (`_rbc_index_and_count` above) before its
-        # own fill query: three eps passes and two index builds per
-        # radius_neighbors call. Here the index is built once more (the
-        # fill needs it) and the count pass is skipped. Same CSR: the
-        # offsets are the count pass's own.
-        if String(getenv("MOJOLEARN_RADIUS_FAST_REUSE_COUNT")) == "1":
-            reuse_count = True
-            _rbc_index_only(
-                ctx,
-                x,
-                r,
-                x_reordered,
-                r_indptr,
-                r_1nn_cols,
-                r_1nn_dists,
-                r_radius,
-                n_index,
-                n_features,
-                n_landmarks,
-                metric,
-                metric_arg,
-            )
-            ctx.enqueue_copy(dst_buf=adj_ia, src_ptr=out_indptr_ptr)
-            ctx.synchronize()
-            nnz = nnz_capacity
-    if not reuse_count:
-        nnz = _rbc_index_and_count(
-            ctx,
-            x,
-            queries,
-            r,
-            x_reordered,
-            r_indptr,
-            r_1nn_cols,
-            r_1nn_dists,
-            r_radius,
-            adj_ia,
-            vd,
-            n_index,
-            n_queries,
-            n_features,
-            n_landmarks,
-            radius,
-            metric,
-            metric_arg,
-        )
+    var nnz = _rbc_index_and_count(
+        ctx,
+        x,
+        queries,
+        r,
+        x_reordered,
+        r_indptr,
+        r_1nn_cols,
+        r_1nn_dists,
+        r_radius,
+        adj_ia,
+        vd,
+        n_index,
+        n_queries,
+        n_features,
+        n_landmarks,
+        radius,
+        metric,
+        metric_arg,
+    )
     if nnz > nnz_capacity:
         raise Error(
             "radius_neighbors_fill: the search found "
