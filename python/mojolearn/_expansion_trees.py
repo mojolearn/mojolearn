@@ -19,13 +19,11 @@ forest entry points (the rf and gbdt bindings), which carry the
 identical contract on the GPU and on their CPU host bindings. The numeric glue
 between fits (votes, weights, drops, calibration) runs in `xtrees/ops.mojo`
 (rows 160-169); Python keeps only O(estimators) scalars in fixed order.
-NOT YET TRUE, owed to the trees family (python_work_audit trees items 3, 9,
-10), and NOT covered by any ledger row: Kernel/PermutationExplainer's per-row
-coalition weights and marginals, Bagging's oob R^2 (`_portable_math.fsum` over
-n) and AdaBoost's sample_weight normalization are still binary64 Python over
-rows. CalibratedClassifierCV's per-class epilogue moved to xtrees on lane
+KernelExplainer's coalition schedule, Bagging's oob R^2 and AdaBoost's
+sample_weight normalization are Mojo (lane cgr4-py-compute).
+CalibratedClassifierCV's per-class epilogue moved to xtrees on lane
 py-misc-prep (strided platt/isotonic apply, `complement_pairs`, native class
-columns and 0/1 targets); `_CAL_NATIVE = False` is its Python reference.
+columns and 0/1 targets).
 """
 import numbers
 import os
@@ -2478,14 +2476,8 @@ class OneVsRestClassifier(_TreesWrapperBase):
 # backtracking (xtrees/ops.mojo platt_fit) on sklearn's objective, not
 # L-BFGS; the default estimator is this library's LinearSVC as sklearn's.
 #: lane py-misc-prep: CalibratedClassifierCV's per-class epilogue in
-#: xtrees (strided calibrators, native columns and 0/1 targets); False (or
-#: MOJOLEARN_HOTPATH=python) is the Python reference route (the before arm).
-_CAL_NATIVE = True
-
-
-def _cal_native(est):
-    from ._buffer import hotpath_enabled
-    return _CAL_NATIVE and hotpath_enabled() and hasattr(est._bind(), "x_trees_platt_apply_strided")
+#: xtrees (strided calibrators, native columns and 0/1 targets); lane
+#: cgr4-py-compute deleted the Python reference route.
 
 
 #: lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_CALIB_GNB_FOLDS_OFF turns it off):
@@ -2557,34 +2549,7 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         return acc.reshape((n, k))
 
     def _fit_calibrators(self, S, codes):
-        if _cal_native(self):
-            return self._fit_calibrators_native(S, codes)
-        n, c = S.shape
-        b = self._bind()
-        cl = codes.tolist()
-        cals = []
-        for j in range(c):
-            cls = 1 if c == 1 else j
-            f = self._column64(S, j)
-            yj = Array.from_list([1 if v == cls else 0 for v in cl], "<i4")
-            if self.method == "sigmoid":
-                ab = zeros((2,), "<f8")
-                b.x_trees_platt_fit(addr_ro(f, name="f"), addr_ro(yj, name="y"), addr(ab, name="ab"), [n])
-                cals.append(("sigmoid", tuple(ab.tolist())))
-            else:
-                y64 = Array.from_list([float(v) for v in yj.tolist()], "<f8")
-                kx, ky = empty((n,), "<f8"), empty((n,), "<f8")
-                m = int(b.x_trees_isotonic_fit(addr_ro(f, name="x"), addr_ro(y64, name="y"), addr(kx, name="kx"),
-                                               addr(ky, name="ky"), [n]))
-                cals.append(("isotonic", (kx[0:m], ky[0:m], m)))
-        return cals
-
-    def _column64(self, S, j):
-        n, c = S.shape
-        if c == 1:
-            return S.reshape((n,))
-        v = S.tolist()
-        return Array.from_list([row[j] for row in v], "<f8")
+        return self._fit_calibrators_native(S, codes)
 
     def _fit_calibrators_native(self, S, codes):
         """`_fit_calibrators` with the class column and its 0/1 target made
@@ -2646,31 +2611,7 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         return acc
 
     def _calibrated(self, e, cals, Xa):
-        if _cal_native(self):
-            return self._calibrated_native(e, cals, Xa)
-        n, k = Xa.shape[0], len(self.classes_)
-        S = self._scores(e, Xa)
-        b = self._bind()
-        # class-major (k, n): calibrator j writes row j in place (binary:
-        # the one calibrator writes row 1, the positive class)
-        cm = empty((k * n,), "<f8")
-        for j, (kind, par) in enumerate(cals):
-            f = self._column64(S, j)
-            dst = addr(cm, name="p") + 8 * (j + (1 if k == 2 else 0)) * n
-            if kind == "sigmoid":
-                b.x_trees_platt_apply(addr_ro(f, name="f"), dst, [n, par[0], par[1]])
-            else:
-                kx, ky, m = par
-                b.x_trees_isotonic_predict(addr_ro(kx, name="kx"), addr_ro(ky, name="ky"), addr_ro(f, name="t"),
-                                           dst, [m, n])
-        acc = empty((n * k,), "<f8")
-        b.x_trees_transpose_f64(addr_ro(cm, name="p"), addr(acc, name="proba"), [k, n])
-        if k == 2:
-            # (1 - p, p) rows: the complement into the even cells
-            b.x_trees_complement_pairs(addr(acc, name="proba"), [n])
-            return acc
-        b.x_trees_normalize_rows(addr(acc, name="proba"), [n, k])
-        return acc
+        return self._calibrated_native(e, cals, Xa)
 
     def fit(self, X, y, sample_weight=None):
         if sample_weight is not None:
