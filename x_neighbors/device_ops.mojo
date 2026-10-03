@@ -6,12 +6,9 @@ from std.gpu import block_idx, block_dim, thread_idx
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
-from bindings.hostptr import copy_f32
-from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_init_item, svgp_chol2_item, svgp_fix2_item, svgp_solve_item, svgp_mid_item, svgp_qchol_item, svgp_qfix_item, svgp_ypart_item, svgp_fin_item, svgp_var_item
-from x_neighbors.block_ops import ocsvm_smo_block, OCSVM_TPB
+from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_var_item
+from x_neighbors.sort_items import nc_median_init_item, nc_median_step_item, nc_median_pick_item, pos_count_item, pos_scan_item, pos_emit_item
 
 comptime BLOCK = 128
 
@@ -55,28 +52,6 @@ def _grid(count: Int) -> Int:
 def _buf(ctx: DeviceContext, addr: Int, count: Int, upload: Bool) raises -> DeviceBuffer[DType.float32]:
     var buf = ctx.enqueue_create_buffer[DType.float32](count if count > 0 else 1)
     if upload and count > 0:
-        comptime if is_defined["MOJOLEARN_XN_MAPPED_UP"]():
-            # lane neighbors-apple3, OPT-IN: a large input copied into the
-            # mapped device buffer over the host cores. A copy.
-            if count >= XN_STAGED_MIN:
-                ctx.synchronize()
-                with buf.map_to_host() as hm:
-                    var mdst = rebind[MutPointer[Float32, MutUntrackedOrigin]](hm.unsafe_ptr())
-                    var msrc = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
-                    var mtasks = host_predict_task_count(count)
-                    var mpart = host_predict_chunk(count, mtasks)
-
-                    def _mpart(task: Int) {imm msrc, imm mdst, imm count, imm mpart}:
-                        var lo = task * mpart
-                        var hi = min(lo + mpart, count)
-                        if hi > lo:
-                            copy_f32(msrc.unsafe_offset(lo), mdst.unsafe_offset(lo), hi - lo)
-
-                    if mtasks == 1:
-                        _mpart(0)
-                    else:
-                        host_parallelize(_mpart, mtasks)
-                return buf^
         ctx.enqueue_copy(dst_buf=buf, src_ptr=FP(unsafe_from_address=addr))
     return buf^
 
@@ -88,73 +63,10 @@ def _buf_i(ctx: DeviceContext, addr: Int, count: Int, upload: Bool) raises -> De
     return buf^
 
 
-#: lane neighbors-apple2: a large float output comes back through a host
-#: staging buffer of XN_OUT_CHUNK floats and is copied into the caller's
-#: array over the host cores (the first touch of the caller's fresh pages
-#: dominates a plain copy; kernel_methods/estimator.mojo `_download_into`,
-#: round one). A copy: no arithmetic. `-D MOJOLEARN_XN_PLAIN_DOWN` keeps the
-#: one enqueue_copy.
-comptime XN_OUT_CHUNK = 1 << 24
-comptime XN_STAGED_MIN = 1 << 22
-
-
 def _down(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], addr: Int, count: Int) raises:
-    if count <= 0:
-        return
-    comptime if is_defined["MOJOLEARN_XN_PLAIN_DOWN"]():
+    # one device-to-host DMA of the result; no host-thread staging copy
+    if count > 0:
         ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=addr), src_buf=buf)
-        return
-    if count < XN_STAGED_MIN:
-        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=addr), src_buf=buf)
-        return
-    comptime if is_defined["MOJOLEARN_XN_MAPPED_DOWN"]():
-        # lane neighbors-apple3, OPT-IN: the device buffer mapped into the
-        # host (Apple's memory is unified) and copied once, over the host
-        # cores, instead of once into the staging buffer and once out of it.
-        ctx.synchronize()
-        with buf.map_to_host() as hm:
-            var msrc = rebind[MutPointer[Float32, MutUntrackedOrigin]](hm.unsafe_ptr())
-            var mdst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
-            var mtasks = host_predict_task_count(count)
-            var mpart = host_predict_chunk(count, mtasks)
-
-            def _mpart(task: Int) {imm msrc, imm mdst, imm count, imm mpart}:
-                var lo = task * mpart
-                var hi = min(lo + mpart, count)
-                if hi > lo:
-                    copy_f32(msrc.unsafe_offset(lo), mdst.unsafe_offset(lo), hi - lo)
-
-            if mtasks == 1:
-                _mpart(0)
-            else:
-                host_parallelize(_mpart, mtasks)
-        return
-    var c = min(count, XN_OUT_CHUNK)
-    var h = ctx.enqueue_create_host_buffer[DType.float32](c)
-    var off = 0
-    while off < count:
-        var m = min(c, count - off)
-        var sub = buf.create_sub_buffer[DType.float32](off, m)
-        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=sub)
-        ctx.synchronize()
-        var src_p = rebind[MutPointer[Float32, MutUntrackedOrigin]](h.unsafe_ptr())
-        var dst_p = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr + off * 4)
-        var tasks = host_predict_task_count(m)
-        var part = host_predict_chunk(m, tasks)
-
-        def _part(task: Int) {imm src_p, imm dst_p, imm m, imm part}:
-            var lo = task * part
-            var hi = min(lo + part, m)
-            if hi > lo:
-                copy_f32(src_p.unsafe_offset(lo), dst_p.unsafe_offset(lo), hi - lo)
-
-        if tasks == 1:
-            _part(0)
-        else:
-            host_parallelize(_part, tasks)
-        _ = sub^
-        off += m
-    _ = h^
 
 
 def _down_i(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], addr: Int, count: Int) raises:
@@ -446,10 +358,6 @@ def group_mean_kernel(x: FP, labels: IP, res: FP, n_: Int64, d_: Int64, g_: Int6
 
 
 def op_group_mean(x: Int, labels: Int, res: Int, n: Int, d: Int, g: Int) raises:
-    comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
-        for t in range(g * d):
-            group_mean_item(t, _f(x), _i(labels), _f(res), n, d, g)
-        return
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d, True)
     var d_labels = _buf_i(ctx, labels, n, True)
@@ -572,44 +480,6 @@ def op_variance(x: Int, res: Int, count: Int) raises:
     _ = d_x^
     _ = d_res^
     _ = d_part^
-    _ = ctx^
-
-
-def ocsvm_kernel(q: FP, cv: FP, alpha: FP, g: FP, info: FP, iters: IP, n_: Int64, eps_: Float32, max_iter_: Int64):
-    var n = Int(n_)
-    var eps = eps_
-    var max_iter = Int(max_iter_)
-    comptime if is_defined["MOJOLEARN_XN_SERIAL_SMO"]():
-        var t = _tid()
-        if t < 1:
-            ocsvm_smo_item(t, q, cv, alpha, g, info, iters, n, eps, max_iter)
-    else:
-        ocsvm_smo_block(q, cv, alpha, g, info, iters, n, eps, max_iter)
-
-
-def op_ocsvm(q: Int, cv: Int, alpha: Int, info: Int, iters: Int, n: Int, eps: Float32, max_iter: Int) raises:
-    var ctx = xn_ctx()
-    var d_q = _buf(ctx, q, n * n, True)
-    var d_cv = _buf(ctx, cv, n, True)
-    var d_alpha = _buf(ctx, alpha, n, True)
-    var d_g = _buf(ctx, 0, n, False)
-    var d_info = _buf(ctx, info, 1, False)
-    var d_iters = _buf_i(ctx, iters, 1, False)
-    comptime tpb = 1 if is_defined["MOJOLEARN_XN_SERIAL_SMO"]() else OCSVM_TPB
-    ctx.enqueue_function[ocsvm_kernel](
-        d_q.unsafe_ptr(), d_cv.unsafe_ptr(), d_alpha.unsafe_ptr(), d_g.unsafe_ptr(), d_info.unsafe_ptr(), d_iters.unsafe_ptr(), Int64(n), eps, Int64(max_iter),
-        grid_dim=1, block_dim=tpb,
-    )
-    _down(ctx, d_alpha, alpha, n)
-    _down(ctx, d_info, info, 1)
-    _down_i(ctx, d_iters, iters, 1)
-    ctx.synchronize()
-    _ = d_q^
-    _ = d_cv^
-    _ = d_alpha^
-    _ = d_g^
-    _ = d_info^
-    _ = d_iters^
     _ = ctx^
 
 
@@ -778,10 +648,6 @@ def nc_std_kernel(x: FP, lab: IP, cent: FP, std: FP, n_: Int64, d_: Int64, n_cla
 
 
 def op_nc_std(x: Int, lab: Int, cent: Int, std: Int, n: Int, d: Int, n_classes: Int) raises:
-    comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
-        for t in range(d):
-            nc_std_item(t, _f(x), _i(lab), _f(cent), _f(std), n, d, n_classes)
-        return
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d, True)
     var d_lab = _buf_i(ctx, lab, n, True)
@@ -1524,186 +1390,6 @@ def op_graph_symmetry(a: Int, flags: Int, n: Int) raises:
     _ = ctx^
 
 
-def svgp_k0(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32):
-    var m = Int(m_)
-    var n = Int(n_)
-    var noise = noise_
-    var jitter = jitter_
-    var kdiag = kdiag_
-    var t = _tid()
-    if t < m * m:
-        svgp_init_item(t, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, xs, dv, yp, fl, m, n, noise, jitter, kdiag)
-
-
-def svgp_k1(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32, lj_: Int64):
-    var m = Int(m_)
-    var n = Int(n_)
-    var noise = noise_
-    var jitter = jitter_
-    var kdiag = kdiag_
-    var lj = Int(lj_)
-    var t = _tid()
-    if t < 2 * m:
-        svgp_chol2_item(t, lj, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, xs, dv, yp, fl, m, n, noise, jitter, kdiag)
-
-
-def svgp_k2(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32):
-    var m = Int(m_)
-    var n = Int(n_)
-    var noise = noise_
-    var jitter = jitter_
-    var kdiag = kdiag_
-    var t = _tid()
-    if t < 2 * m:
-        svgp_fix2_item(t, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, xs, dv, yp, fl, m, n, noise, jitter, kdiag)
-
-
-def svgp_k3(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32):
-    var m = Int(m_)
-    var n = Int(n_)
-    var noise = noise_
-    var jitter = jitter_
-    var kdiag = kdiag_
-    var t = _tid()
-    if t < 4 * m + 1:
-        svgp_solve_item(t, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, xs, dv, yp, fl, m, n, noise, jitter, kdiag)
-
-
-def svgp_k4(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32):
-    var m = Int(m_)
-    var n = Int(n_)
-    var noise = noise_
-    var jitter = jitter_
-    var kdiag = kdiag_
-    var t = _tid()
-    if t < m * m:
-        svgp_mid_item(t, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, xs, dv, yp, fl, m, n, noise, jitter, kdiag)
-
-
-def svgp_k5(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32, lj_: Int64):
-    var m = Int(m_)
-    var n = Int(n_)
-    var noise = noise_
-    var jitter = jitter_
-    var kdiag = kdiag_
-    var lj = Int(lj_)
-    var t = _tid()
-    if t < m:
-        svgp_qchol_item(t, lj, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, xs, dv, yp, fl, m, n, noise, jitter, kdiag)
-
-
-def svgp_k6(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32):
-    var m = Int(m_)
-    var n = Int(n_)
-    var noise = noise_
-    var jitter = jitter_
-    var kdiag = kdiag_
-    var t = _tid()
-    if t < m * m:
-        svgp_qfix_item(t, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, xs, dv, yp, fl, m, n, noise, jitter, kdiag)
-
-
-def svgp_k7(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32):
-    var m = Int(m_)
-    var n = Int(n_)
-    var noise = noise_
-    var jitter = jitter_
-    var kdiag = kdiag_
-    var t = _tid()
-    if t < xn_fold_blocks(n):
-        svgp_ypart_item(t, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, xs, dv, yp, fl, m, n, noise, jitter, kdiag)
-
-
-def svgp_k8(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32):
-    var m = Int(m_)
-    var n = Int(n_)
-    var noise = noise_
-    var jitter = jitter_
-    var kdiag = kdiag_
-    var t = _tid()
-    if t < 1:
-        svgp_fin_item(t, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, xs, dv, yp, fl, m, n, noise, jitter, kdiag)
-
-
-def op_svgp(kuu: Int, bmat: Int, b: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int, m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32) raises:
-    var ctx = xn_ctx()
-    var d_kuu = _buf(ctx, kuu, m * m, True)
-    var d_bmat = _buf(ctx, bmat, m * m, True)
-    var d_b = _buf(ctx, b, m, True)
-    var d_y = _buf(ctx, y, n, True)
-    var d_alpha = _buf(ctx, alpha, m, False)
-    var d_cmat = _buf(ctx, cmat, m * m, False)
-    var d_qmu = _buf(ctx, qmu, m, False)
-    var d_qsqrt = _buf(ctx, qsqrt, m * m, False)
-    var d_info = _buf(ctx, info, 2, False)
-    var d_luu = _buf(ctx, 0, m * m, False)
-    var d_ls = _buf(ctx, 0, m * m, False)
-    var d_xs = _buf(ctx, 0, (4 * m + 1) * m, False)
-    var d_dv = _buf(ctx, 0, 3 * m, False)
-    var d_yp = _buf(ctx, 0, xn_fold_blocks(n), False)
-    var d_fl = _buf_i(ctx, 0, 3, False)
-    ctx.enqueue_function[svgp_k0](
-        d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_xs.unsafe_ptr(), d_dv.unsafe_ptr(), d_yp.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag,
-        grid_dim=_grid(m * m), block_dim=(BLOCK if m * m > 1 else 1),
-    )
-    for lj in range(m):
-        ctx.enqueue_function[svgp_k1](
-            d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_xs.unsafe_ptr(), d_dv.unsafe_ptr(), d_yp.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag, Int64(lj),
-            grid_dim=_grid(2 * m), block_dim=(BLOCK if 2 * m > 1 else 1),
-        )
-    ctx.enqueue_function[svgp_k2](
-        d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_xs.unsafe_ptr(), d_dv.unsafe_ptr(), d_yp.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag,
-        grid_dim=_grid(2 * m), block_dim=(BLOCK if 2 * m > 1 else 1),
-    )
-    ctx.enqueue_function[svgp_k3](
-        d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_xs.unsafe_ptr(), d_dv.unsafe_ptr(), d_yp.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag,
-        grid_dim=_grid(4 * m + 1), block_dim=(BLOCK if 4 * m + 1 > 1 else 1),
-    )
-    ctx.enqueue_function[svgp_k4](
-        d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_xs.unsafe_ptr(), d_dv.unsafe_ptr(), d_yp.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag,
-        grid_dim=_grid(m * m), block_dim=(BLOCK if m * m > 1 else 1),
-    )
-    for lj in range(m):
-        ctx.enqueue_function[svgp_k5](
-            d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_xs.unsafe_ptr(), d_dv.unsafe_ptr(), d_yp.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag, Int64(lj),
-            grid_dim=_grid(m), block_dim=(BLOCK if m > 1 else 1),
-        )
-    ctx.enqueue_function[svgp_k6](
-        d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_xs.unsafe_ptr(), d_dv.unsafe_ptr(), d_yp.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag,
-        grid_dim=_grid(m * m), block_dim=(BLOCK if m * m > 1 else 1),
-    )
-    ctx.enqueue_function[svgp_k7](
-        d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_xs.unsafe_ptr(), d_dv.unsafe_ptr(), d_yp.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag,
-        grid_dim=_grid(xn_fold_blocks(n)), block_dim=(BLOCK if xn_fold_blocks(n) > 1 else 1),
-    )
-    ctx.enqueue_function[svgp_k8](
-        d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_xs.unsafe_ptr(), d_dv.unsafe_ptr(), d_yp.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag,
-        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
-    )
-    _down(ctx, d_alpha, alpha, m)
-    _down(ctx, d_cmat, cmat, m * m)
-    _down(ctx, d_qmu, qmu, m)
-    _down(ctx, d_qsqrt, qsqrt, m * m)
-    _down(ctx, d_info, info, 2)
-    ctx.synchronize()
-    _ = d_kuu^
-    _ = d_bmat^
-    _ = d_b^
-    _ = d_y^
-    _ = d_alpha^
-    _ = d_cmat^
-    _ = d_qmu^
-    _ = d_qsqrt^
-    _ = d_info^
-    _ = d_luu^
-    _ = d_ls^
-    _ = d_xs^
-    _ = d_dv^
-    _ = d_yp^
-    _ = d_fl^
-    _ = ctx^
-
-
 def svgp_var_kernel(ksu: FP, cmat: FP, res: FP, n_: Int64, m_: Int64, kdiag_: Float32):
     var n = Int(n_)
     var m = Int(m_)
@@ -1727,4 +1413,120 @@ def op_svgp_var(ksu: Int, cmat: Int, res: Int, n: Int, m: Int, kdiag: Float32) r
     _ = d_ksu^
     _ = d_cmat^
     _ = d_res^
+    _ = ctx^
+
+
+def nc_median_k0(x: FP, lab: IP, start: IP, cent: FP, perm: IP, n_: Int64, d_: Int64, n_classes_: Int64, p_: Int64, n_steps_: Int64):
+    var n = Int(n_)
+    var d = Int(d_)
+    var n_classes = Int(n_classes_)
+    var p = Int(p_)
+    var n_steps = Int(n_steps_)
+    var t = _tid()
+    if t < d * p:
+        nc_median_init_item(t, x, lab, start, cent, perm, n, d, n_classes, p, n_steps)
+
+
+def nc_median_k1(x: FP, lab: IP, start: IP, cent: FP, perm: IP, n_: Int64, d_: Int64, n_classes_: Int64, p_: Int64, n_steps_: Int64, lj_: Int64):
+    var n = Int(n_)
+    var d = Int(d_)
+    var n_classes = Int(n_classes_)
+    var p = Int(p_)
+    var n_steps = Int(n_steps_)
+    var lj = Int(lj_)
+    var t = _tid()
+    if t < d * (p // 2):
+        nc_median_step_item(t, lj, x, lab, start, cent, perm, n, d, n_classes, p, n_steps)
+
+
+def nc_median_k2(x: FP, lab: IP, start: IP, cent: FP, perm: IP, n_: Int64, d_: Int64, n_classes_: Int64, p_: Int64, n_steps_: Int64):
+    var n = Int(n_)
+    var d = Int(d_)
+    var n_classes = Int(n_classes_)
+    var p = Int(p_)
+    var n_steps = Int(n_steps_)
+    var t = _tid()
+    if t < n_classes * d:
+        nc_median_pick_item(t, x, lab, start, cent, perm, n, d, n_classes, p, n_steps)
+
+
+def op_nc_median(x: Int, lab: Int, start: Int, cent: Int, n: Int, d: Int, n_classes: Int, p: Int, n_steps: Int) raises:
+    var ctx = xn_ctx()
+    var d_x = _buf(ctx, x, n * d, True)
+    var d_lab = _buf_i(ctx, lab, n, True)
+    var d_start = _buf_i(ctx, start, n_classes + 1, True)
+    var d_cent = _buf(ctx, cent, n_classes * d, False)
+    var d_perm = _buf_i(ctx, 0, d * p, False)
+    ctx.enqueue_function[nc_median_k0](
+        d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_start.unsafe_ptr(), d_cent.unsafe_ptr(), d_perm.unsafe_ptr(), Int64(n), Int64(d), Int64(n_classes), Int64(p), Int64(n_steps),
+        grid_dim=_grid(d * p), block_dim=(BLOCK if d * p > 1 else 1),
+    )
+    for lj in range(n_steps):
+        ctx.enqueue_function[nc_median_k1](
+            d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_start.unsafe_ptr(), d_cent.unsafe_ptr(), d_perm.unsafe_ptr(), Int64(n), Int64(d), Int64(n_classes), Int64(p), Int64(n_steps), Int64(lj),
+            grid_dim=_grid(d * (p // 2)), block_dim=(BLOCK if d * (p // 2) > 1 else 1),
+        )
+    ctx.enqueue_function[nc_median_k2](
+        d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_start.unsafe_ptr(), d_cent.unsafe_ptr(), d_perm.unsafe_ptr(), Int64(n), Int64(d), Int64(n_classes), Int64(p), Int64(n_steps),
+        grid_dim=_grid(n_classes * d), block_dim=(BLOCK if n_classes * d > 1 else 1),
+    )
+    _down(ctx, d_cent, cent, n_classes * d)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_lab^
+    _ = d_start^
+    _ = d_cent^
+    _ = d_perm^
+    _ = ctx^
+
+
+def pos_compact_k0(w: FP, rows: IP, vals: FP, info: IP, part: IP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < xn_fold_blocks(n):
+        pos_count_item(t, w, rows, vals, info, part, n)
+
+
+def pos_compact_k1(w: FP, rows: IP, vals: FP, info: IP, part: IP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < 1:
+        pos_scan_item(t, w, rows, vals, info, part, n)
+
+
+def pos_compact_k2(w: FP, rows: IP, vals: FP, info: IP, part: IP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < xn_fold_blocks(n):
+        pos_emit_item(t, w, rows, vals, info, part, n)
+
+
+def op_pos_compact(w: Int, rows: Int, vals: Int, info: Int, n: Int) raises:
+    var ctx = xn_ctx()
+    var d_w = _buf(ctx, w, n, True)
+    var d_rows = _buf_i(ctx, rows, n, False)
+    var d_vals = _buf(ctx, vals, n, False)
+    var d_info = _buf_i(ctx, info, 1, False)
+    var d_part = _buf_i(ctx, 0, xn_fold_blocks(n), False)
+    ctx.enqueue_function[pos_compact_k0](
+        d_w.unsafe_ptr(), d_rows.unsafe_ptr(), d_vals.unsafe_ptr(), d_info.unsafe_ptr(), d_part.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(xn_fold_blocks(n)), block_dim=(BLOCK if xn_fold_blocks(n) > 1 else 1),
+    )
+    ctx.enqueue_function[pos_compact_k1](
+        d_w.unsafe_ptr(), d_rows.unsafe_ptr(), d_vals.unsafe_ptr(), d_info.unsafe_ptr(), d_part.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
+    )
+    ctx.enqueue_function[pos_compact_k2](
+        d_w.unsafe_ptr(), d_rows.unsafe_ptr(), d_vals.unsafe_ptr(), d_info.unsafe_ptr(), d_part.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(xn_fold_blocks(n)), block_dim=(BLOCK if xn_fold_blocks(n) > 1 else 1),
+    )
+    _down_i(ctx, d_rows, rows, n)
+    _down(ctx, d_vals, vals, n)
+    _down_i(ctx, d_info, info, 1)
+    ctx.synchronize()
+    _ = d_w^
+    _ = d_rows^
+    _ = d_vals^
+    _ = d_info^
+    _ = d_part^
     _ = ctx^

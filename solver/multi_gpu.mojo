@@ -20,7 +20,7 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.multi_gpu import peer_clone
-from gemm.checks.gemm_oracle import contract_leaf_size
+from gemm.contract import contract_leaf_size
 from gemm.checks.gemm_identical import (
     identical_gemm_leaf_kernel, identical_gemm_fold_kernel,
     SPLITK_LEAF_TPB, SPLITK_FOLD_TPB,

@@ -16,7 +16,7 @@ has converged, turns every later stage of the program into a no-op, so a
 whole max_iter program runs in one binding call.
 """
 from checks.numerics import identical_ndtr, identical_ndtri, ftz
-from x_prep.common import FP, IP, p, ld, st, ldi, raw, RUN, run_block
+from x_prep.common import FP, IP, p, ld, st, ldi, sti, raw, RUN, run_block
 from x_prep.prims import add, acc_add, sub, mul, div, logf, sqrtf
 from x_prep.mutual_info import _splitmix
 
@@ -420,3 +420,88 @@ def nan_mask_unit(t: Int, f: FP, q: IP):
     var c = Int(ld(f, p(q, 3) + t % dout))
     var x = f.unsafe_load(p(q, 0) + i * p(q, 2) + c)
     st(f, p(q, 5) + t, Float32(1) if x != x else Float32(0))
+
+
+# ---------------------------------------------------------------------------
+# IterativeImputer with a user `estimator` (cpu-gpu-cleanup c-metrics-prep):
+# the plumbing around the estimator's own fit / predict, as units, so a GPU
+# install runs it on the device and a CPU-only install runs the same units on
+# the host. It replaces x_prep/user_host.mojo's host walks. Word copies and
+# integer work only, plus the clip's two float32 compares.
+# ---------------------------------------------------------------------------
+
+
+@always_inline
+def _ii_hit(f: FP, M: Int, dk: Int, j: Int, i: Int, missing: Bool) -> Bool:
+    return (raw(f, M + i * dk + j) != Float32(0)) == missing
+
+
+def ii_rcount_unit(t: Int, f: FP, q: IP):
+    """q = [MASK, n, dk, j, MISSING, CH, CNT]; t = chunk of CH rows: how many
+    of its rows have (MASK[i, j] != 0) == MISSING, int32 bits (`uniq_scan`
+    then gives each chunk its first slot)."""
+    var M = p(q, 0)
+    var n = p(q, 1)
+    var dk = p(q, 2)
+    var j = p(q, 3)
+    var missing = p(q, 4) != 0
+    var ch = p(q, 5)
+    var lo = t * ch
+    var hi = min(lo + ch, n)
+    var k = 0
+    for i in range(lo, hi):
+        if _ii_hit(f, M, dk, j, i, missing):
+            k += 1
+    sti(f, p(q, 6) + t, k)
+
+
+def ii_rwrite_unit(t: Int, f: FP, q: IP):
+    """q = [MASK, n, dk, j, MISSING, CH, OFF, ROWS]; t = chunk: the chunk's
+    matching rows, ascending, at ROWS[OFF[t] ..] (int32 bits). Over every
+    chunk: the ascending rows `[i for i in range(n) if mask[i][j]]` (or its
+    complement)."""
+    var M = p(q, 0)
+    var n = p(q, 1)
+    var dk = p(q, 2)
+    var j = p(q, 3)
+    var missing = p(q, 4) != 0
+    var ch = p(q, 5)
+    var R = p(q, 7)
+    var lo = t * ch
+    var hi = min(lo + ch, n)
+    var k = ldi(f, p(q, 6) + t)
+    for i in range(lo, hi):
+        if _ii_hit(f, M, dk, j, i, missing):
+            sti(f, R + k, i)
+            k += 1
+
+
+def ii_gather_unit(t: Int, f: FP, q: IP):
+    """q = [X, dk, ROWS, TOT, COLS, nc, DST]; t = r * nc + c: DST[t] =
+    X[ROWS[r], COLS[c]] (the word as it is) for r below the row count TOT (a
+    float, `uniq_scan`'s total); ROWS int32 bits, COLS float words."""
+    var nc = p(q, 5)
+    var r = t // nc
+    if r >= Int(ld(f, p(q, 3))):
+        return
+    var c = Int(ld(f, p(q, 4) + t % nc))
+    var i = ldi(f, p(q, 2) + r)
+    f.unsafe_store(p(q, 6) + t, raw(f, p(q, 0) + i * p(q, 1) + c))
+
+
+def ii_scatter_unit(t: Int, f: FP, q: IP):
+    """q = [X, dk, ROWS, j, V, LOHI, CLIP]; t = r: X[ROWS[r], j] = V[r], with
+    CLIP != 0 first Python's `min(max(v, lo), hi)` on the float32 words (max
+    keeps v unless lo > v, min keeps it unless hi < it, so a NaN passes).
+    The caller rounds the binary64 predictions and bounds to float32 once;
+    rounding is monotone, so it commutes with that clip."""
+    var v = raw(f, p(q, 4) + t)
+    if p(q, 6) != 0:
+        var lo = raw(f, p(q, 5))
+        var hi = raw(f, p(q, 5) + 1)
+        if lo > v:
+            v = lo
+        if hi < v:
+            v = hi
+    var i = ldi(f, p(q, 2) + t)
+    f.unsafe_store(p(q, 0) + i * p(q, 1) + p(q, 3), v)

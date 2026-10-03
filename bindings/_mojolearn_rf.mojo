@@ -28,16 +28,12 @@ sampler's first Python caller.
 """
 
 from std.memory import memcpy
-from hostptr import copy_f32, read_f32
-from core.forest_host_predict import rf_host_predict, rf_host_trees
-from ensemble.host_layout import (
-    colmajor_from_rowmajor_f32,
-    copy_f32_threaded,
-    has_nan_f32_threaded,
-    RF_NAN_REFUSAL,
-)
+from hostptr import copy_f32
+from ensemble.device_layout import device_has_nan_f32, upload_forest_x
+from ensemble.nan_refusal import RF_NAN_REFUSAL
 
 from std.os import abort
+from ensemble.device_finite import FOREST_DEVICE_FINITE, ForestFiniteScan
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -50,12 +46,15 @@ from forest_inference_binding import (
     forest_pool_available, forest_pool_fault_available,
 )
 from core.forest_inference import forest_predict_gpu
+from core.forest_inference_model import (
+    resident_prepare, resident_predict_into, resident_release,
+)
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
-from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 
@@ -429,8 +428,6 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _i32_ptr(Int(py=y_addr))
     var crit = Int(py=criterion)
-    if has_nan_f32_threaded(xp, n_rows * n_cols):
-        raise Error("rf_classifier_fit: " + RF_NAN_REFUSAL)
     _check_criterion("rf_classifier_fit", crit, _cls_criteria())
     var rf_params = _rf_params_from(params, crit)
 
@@ -463,37 +460,41 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         var ctx = process_ctx[_DEVCTX_SLOT]()
         bt.stop_host("bind_ctx_create", t_s)
         t_s = bt.start()
-        var hx = ctx.enqueue_create_host_buffer[DT](n_rows * n_cols)
         var hy = ctx.enqueue_create_host_buffer[CLT](n_rows)
         ctx.synchronize()
         bt.stop_host("bind_pinned_alloc", t_s)
         t_s = bt.start()
         # DEVIATION 2481: bulk typed copies preserve every input bit while
         # avoiding scalar stores into pinned memory.
-        # DEVIATION 2637: X lands in the pinned stage across the host pool,
-        # transposed there when the caller lent its ROW-major C-order block
-        # (ROWMAJOR), so Python no longer transposes 1 thread and this no
-        # longer copies a second time. Pure moves: the stage bytes are the
-        # column-major bytes the old path staged. The builder's host view
-        # of X (`host_x_addr`, DEVIATION 2484) is then the stage itself.
-        var hxp = hx.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-        var host_x = Int(xp)
-        comptime if ROWMAJOR:
-            colmajor_from_rowmajor_f32(xp, hxp, n_rows, n_cols)
-            host_x = Int(hxp)
-        else:
-            copy_f32_threaded(xp, hxp, n_rows * n_cols)
         memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
         bt.stop_host("bind_host_copy", t_s)
         t_s = bt.start()
-        var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
+        # cpu-gpu-cleanup t-forest: X goes to the device as the caller's
+        # bytes and is transposed there when the caller lent its ROW-major
+        # C-order block (ROWMAJOR); the NaN refusal is a device scan
+        # (`ensemble/device_layout.mojo`). No host pass over X: the threaded
+        # pinned-stage transpose and host NaN scan (DEVIATION 2637) are gone.
+        # The builder's host view of X (`host_x_addr`, DEVIATION 2484) is the
+        # caller's column-major block when it lent one, else none.
+        var dx = upload_forest_x(ctx, xp, n_rows, n_cols, ROWMAJOR)
+        # FAST on Apple (lane apple-fast-rfet-scan): the NaN-and-inf device
+        # scan below (ensemble/device_finite.mojo) stands in for this NaN scan.
+        comptime if not FOREST_DEVICE_FINITE:
+            if device_has_nan_f32(ctx, dx, n_rows * n_cols):
+                raise Error("rf_classifier_fit: " + RF_NAN_REFUSAL)
+        var host_x = 0 if ROWMAJOR else Int(xp)
         var dy = ctx.enqueue_create_buffer[CLT](n_rows)
         ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
         # The host weights drive sampling; non-bootstrap objectives read the
         # device weights at original row IDs. Keep both alive through fitting.
         var dsw = ctx.enqueue_create_buffer[DT](max(1, len(weights)))
-        ctx.synchronize()
+        comptime if FOREST_DEVICE_FINITE:
+            var fscan = ForestFiniteScan(ctx)
+            fscan.enqueue(ctx, dx, n_rows * n_cols)
+            ctx.synchronize()
+            fscan.refuse_if_bad("rf_classifier_fit: ")
+        else:
+            ctx.synchronize()
         bt.stop_host("bind_h2d", t_s)
         if len(weights) > 0:
             ctx.enqueue_copy(dst_buf=dsw, src_ptr=weights.unsafe_ptr())
@@ -518,7 +519,6 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         _ = dx^
         _ = dy^
         _ = dsw^
-        _ = hx^
         _ = hy^
         bt.stop_host("bind_release_buffers", t_s)
         t_s = bt.start()
@@ -599,7 +599,6 @@ def rf_regressor_fit_binding[EXPORT: Bool = False](
 # One thread uses a session at a time.
 struct RfDataSession(Movable):
     var id: Int
-    var hx: HostBuffer[DT]
     var dx: DeviceBuffer[DT]
     var n_rows: Int
     var n_cols: Int
@@ -610,7 +609,6 @@ struct RfDataSession(Movable):
     def __init__(
         out self,
         id: Int,
-        var hx: HostBuffer[DT],
         var dx: DeviceBuffer[DT],
         n_rows: Int,
         n_cols: Int,
@@ -618,7 +616,6 @@ struct RfDataSession(Movable):
         share_tables: Bool,
     ):
         self.id = id
-        self.hx = hx^
         self.dx = dx^
         self.n_rows = n_rows
         self.n_cols = n_cols
@@ -670,27 +667,25 @@ def rf_data_session_open_binding(
                 " option; an IDENTICAL member draws its own sample"
             )
     var xp = _f32_ptr(Int(py=x_addr))
-    if has_nan_f32_threaded(xp, n_rows * n_cols):
-        raise Error("rf_data_session_open: " + RF_NAN_REFUSAL)
     var made = List[RfDataSession]()
+    var has_nan = False
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        var hx = ctx.enqueue_create_host_buffer[DT](n_rows * n_cols)
-        ctx.synchronize()
-        var hxp = hx.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-        if row_major:
-            colmajor_from_rowmajor_f32(xp, hxp, n_rows, n_cols)
+        # cpu-gpu-cleanup t-forest: the caller's bytes go to the device as
+        # they are, the transpose and the NaN scan run there. The session
+        # keeps no host copy of X (`host_x` 0: the borrow ends with this
+        # call), so a member's OOB pass reads the device plane.
+        var dx = upload_forest_x(ctx, xp, n_rows, n_cols, row_major)
+        has_nan = device_has_nan_f32(ctx, dx, n_rows * n_cols)
+        if has_nan:
+            _ = dx^
         else:
-            copy_f32_threaded(xp, hxp, n_rows * n_cols)
-        var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
-        ctx.synchronize()
-        made.append(
-            RfDataSession(
-                0, hx^, dx^, n_rows, n_cols, Int(hxp), share_tables
+            made.append(
+                RfDataSession(0, dx^, n_rows, n_cols, 0, share_tables)
             )
-        )
         _ = ctx^
+    if has_nan:
+        raise Error("rf_data_session_open: " + RF_NAN_REFUSAL)
     var reg = RF_SESSIONS.get_or_create_ptr()
     var id = reg[].next_id
     reg[].next_id += 1
@@ -1028,8 +1023,6 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
     var crit = Int(py=criterion)
-    if has_nan_f32_threaded(xp, n_rows * n_cols):
-        raise Error("rf_regressor_fit: " + RF_NAN_REFUSAL)
     _check_criterion("rf_regressor_fit", crit, _reg_criteria())
     var rf_params = _rf_params_from(params, crit)
 
@@ -1042,30 +1035,34 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         var ctx = process_ctx[_DEVCTX_SLOT]()
         bt.stop_host("bind_ctx_create", t_s)
         t_s = bt.start()
-        var hx = ctx.enqueue_create_host_buffer[DT](n_rows * n_cols)
         var hy = ctx.enqueue_create_host_buffer[RLT](n_rows)
         ctx.synchronize()
         bt.stop_host("bind_pinned_alloc", t_s)
         t_s = bt.start()
         # DEVIATION 2481: bulk typed copies preserve every input bit while
         # avoiding scalar stores into pinned memory.
-        # DEVIATION 2637, as in the classifier.
-        var hxp = hx.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-        var host_x = Int(xp)
-        comptime if ROWMAJOR:
-            colmajor_from_rowmajor_f32(xp, hxp, n_rows, n_cols)
-            host_x = Int(hxp)
-        else:
-            copy_f32_threaded(xp, hxp, n_rows * n_cols)
         copy_f32(yp, hy.unsafe_ptr(), n_rows)
         bt.stop_host("bind_host_copy", t_s)
         t_s = bt.start()
-        var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
+        # cpu-gpu-cleanup t-forest, as in the classifier: device upload,
+        # device transpose, device NaN scan.
+        var dx = upload_forest_x(ctx, xp, n_rows, n_cols, ROWMAJOR)
+        # FAST on Apple (lane apple-fast-rfet-scan): the NaN-and-inf device
+        # scan below (ensemble/device_finite.mojo) stands in for this NaN scan.
+        comptime if not FOREST_DEVICE_FINITE:
+            if device_has_nan_f32(ctx, dx, n_rows * n_cols):
+                raise Error("rf_regressor_fit: " + RF_NAN_REFUSAL)
+        var host_x = 0 if ROWMAJOR else Int(xp)
         var dy = ctx.enqueue_create_buffer[RLT](n_rows)
         ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
         var dsw = ctx.enqueue_create_buffer[DT](1)
-        ctx.synchronize()
+        comptime if FOREST_DEVICE_FINITE:
+            var fscan = ForestFiniteScan(ctx)
+            fscan.enqueue(ctx, dx, n_rows * n_cols)
+            ctx.synchronize()
+            fscan.refuse_if_bad("rf_regressor_fit: ")
+        else:
+            ctx.synchronize()
         bt.stop_host("bind_h2d", t_s)
         # THE LABEL SCALE IS NOT OPTIONAL. `RegressionBin` accumulates
         # `label_sum` in fixed point through `BinScales.label_scale`
@@ -1093,7 +1090,6 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         _ = dx^
         _ = dy^
         _ = dsw^
-        _ = hx^
         _ = hy^
         bt.stop_host("bind_release_buffers", t_s)
         t_s = bt.start()
@@ -1215,36 +1211,74 @@ def rf_predict_proba_binding(
     var xp = _f32_ptr(Int(py=x_addr))
     var op = _f32_ptr(Int(py=out_addr))
 
-    # DEVIATION 2900 (lane/infer-speed-trees, 2026-09-17): the walk is
-    # `core/forest_host_predict.mojo`'s, which is `RandomForest.predict_proba`
-    # row for row (zero, `predict_one` per tree in tree order, divide by
-    # `n_trees`) with the rows spread over host threads
-    # (`MOJOLEARN_CPU_THREADS`), the tree rebuild bounds-checked, and the
-    # input copied as one memcpy instead of an element loop. The CPU
-    # training column runs this same function, so the two columns share
-    # every bit of this path by construction.
+    # cpu-gpu-cleanup t-forest: the `sequential` engine runs on the device.
+    # The host walk (`core/forest_host_predict.mojo`'s `rf_host_predict`,
+    # DEVIATION 2900) is the CPU-only install's (`_mojolearn_rf_host`); here
+    # the same arithmetic -- zero, add every tree's leaf in increasing tree
+    # order, divide by `n_trees` -- is `forest_ordered_kernel`, one thread
+    # per (row, output), through a one-call ordered snapshot.
     if n_rows == 0:
         return PythonObject(0)
+    _ = xp
+    _ = op
+    return _rf_predict_ordered(
+        "rf_predict_proba", offsets_p, colid_p, quesval_p, left_p, leaves_p,
+        Int(py=x_addr), Int(py=out_addr), n_rows, n_cols, n_trees, num_outputs,
+    )
+
+
+def _rf_predict_ordered(
+    name: String,
+    offsets_p: MutPointer[Int32, MutUntrackedOrigin],
+    colid_p: MutPointer[Int32, MutUntrackedOrigin],
+    quesval_p: MutPointer[Float32, MutUntrackedOrigin],
+    left_p: MutPointer[Int32, MutUntrackedOrigin],
+    leaves_p: MutPointer[Float32, MutUntrackedOrigin],
+    x_address: Int,
+    out_address: Int,
+    n_rows: Int,
+    n_cols: Int,
+    n_trees: Int,
+    num_outputs: Int,
+) raises -> PythonObject:
+    """The `sequential` engine on the device: the flat model goes into an
+    ordered resident snapshot (`forest_ordered_kernel`: increasing-tree
+    association, the host walk's fold), the borrowed rows are predicted into
+    the borrowed output, and the snapshot is released. The GIL stays held,
+    as `forest_inference_binding` requires for the registry."""
     var n_nodes = Int(offsets_p[n_trees])
     if Int(offsets_p[0]) != 0 or n_nodes < n_trees:
-        raise Error("rf_predict_proba: tree_offsets must start at 0 and hold at least one node per tree")
-    # X's address is read while the GIL is held: `Int(py=...)` calls
-    # into the interpreter, which is not safe inside GILReleased.
-    var x_address = Int(py=x_addr)
-    var wrote = 0
-    with GILReleased(Python()):
-        var rows = read_f32(x_address, n_rows * n_cols)
-        var probs = List[Float32](length=n_rows * num_outputs, fill=Float32(0.0))
-        var trees = rf_host_trees(
-            offsets_p, colid_p, quesval_p, left_p, leaves_p,
-            n_trees, n_nodes, n_cols, num_outputs,
+        raise Error(name + ": tree_offsets must start at 0 and hold at least one node per tree")
+    if n_nodes > 2147483647 // num_outputs:
+        raise Error(name + ": node/output count exceeds Int32")
+    var offsets = List[Int32](capacity=n_trees + 1)
+    var columns = List[Int32](capacity=n_nodes)
+    var thresholds = List[Float32](capacity=n_nodes)
+    var left = List[Int32](capacity=n_nodes)
+    var leaves = List[Float32](capacity=n_nodes * num_outputs)
+    for i in range(n_trees + 1):
+        offsets.append(offsets_p[i])
+    for i in range(n_nodes):
+        columns.append(colid_p[i])
+        thresholds.append(quesval_p[i])
+        left.append(left_p[i])
+    for i in range(n_nodes * num_outputs):
+        leaves.append(leaves_p[i])
+    var handle = resident_prepare[True](
+        offsets, columns, thresholds, left, leaves, n_cols, num_outputs, True
+    )
+    try:
+        resident_predict_into[True](
+            handle,
+            _f32_ptr(x_address).unsafe_origin_cast[MutAnyOrigin](),
+            _f32_ptr(out_address).unsafe_origin_cast[MutAnyOrigin](),
+            n_rows, n_cols, num_outputs, True,
         )
-        rf_host_predict(trees, rows, n_rows, n_cols, n_trees, num_outputs, probs)
-        for i in range(n_rows * num_outputs):
-            op[i] = probs[i]
-        wrote = n_rows
-    _ = xp
-    return PythonObject(wrote)
+    except e:
+        resident_release[True](handle)
+        raise e
+    resident_release[True](handle)
+    return PythonObject(n_rows)
 
 
 def rf_predict_reg_binding(
@@ -1282,30 +1316,17 @@ def rf_predict_reg_binding(
     var xp = _f32_ptr(Int(py=x_addr))
     var op = _f32_ptr(Int(py=out_addr))
 
-    # DEVIATION 2900: the same shared walk as `rf_predict_proba` above, read
-    # at output 0 of a one-output vote, which is what `RandomForest.predict`'s
-    # REGRESSION branch does (`ensemble/randomforest.mojo:1033-1074`).
+    # cpu-gpu-cleanup t-forest: the same device route as `rf_predict_proba`
+    # above, read at output 0 of a one-output vote, which is what
+    # `RandomForest.predict`'s REGRESSION branch does.
     if n_rows == 0:
         return PythonObject(0)
-    var n_nodes = Int(offsets_p[n_trees])
-    if Int(offsets_p[0]) != 0 or n_nodes < n_trees:
-        raise Error("rf_predict_reg: tree_offsets must start at 0 and hold at least one node per tree")
-    # X's address is read while the GIL is held: `Int(py=...)` calls
-    # into the interpreter, which is not safe inside GILReleased.
-    var x_address = Int(py=x_addr)
-    var wrote = 0
-    with GILReleased(Python()):
-        var rows = read_f32(x_address, n_rows * n_cols)
-        var preds = List[Float32](length=n_rows, fill=Float32(0.0))
-        var trees = rf_host_trees(
-            offsets_p, colid_p, quesval_p, left_p, leaves_p, n_trees, n_nodes, n_cols, 1
-        )
-        rf_host_predict(trees, rows, n_rows, n_cols, n_trees, 1, preds)
-        for i in range(n_rows):
-            op[i] = preds[i]
-        wrote = n_rows
     _ = xp
-    return PythonObject(wrote)
+    _ = op
+    return _rf_predict_ordered(
+        "rf_predict_reg", offsets_p, colid_p, quesval_p, left_p, leaves_p,
+        Int(py=x_addr), Int(py=out_addr), n_rows, n_cols, n_trees, 1,
+    )
 
 
 def _rf_predict_gpu_parallel(
@@ -1401,6 +1422,13 @@ def rf_predict_reg_gpu_parallel_binding(
         leaves_addr, x_addr, out_addr, params,
     )
 
+def rf_device_finite_scan_binding() raises -> PythonObject:
+    """1 when this build's RF fits refuse a non-finite X cell through a
+    device scan (FOREST_DEVICE_FINITE, FAST on Apple), so the Python fit
+    skips its host scan of the same cells; 0 otherwise."""
+    return PythonObject(1 if FOREST_DEVICE_FINITE else 0)
+
+
 def rf_numeric_mode_binding() raises -> PythonObject:
     """Read the numeric policy compiled into this RF binding."""
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
@@ -1440,6 +1468,7 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_rf")
         m.def_function[rf_vendor_binding]("rf_vendor")
         m.def_function[rf_numeric_mode_binding]("rf_numeric_mode")
+        m.def_function[rf_device_finite_scan_binding]("rf_device_finite_scan")
         m.def_function[rf_fused_bootstrap_gather_binding](
             "rf_fused_bootstrap_gather"
         )

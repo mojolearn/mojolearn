@@ -11,6 +11,7 @@ from x_decomp.graph_cells import (
     knn_select_row,
     knn_dense_row,
     radius_cell,
+    radius_geo_cell,
     lle_iw_row,
     rowbest_row,
     members_comp,
@@ -127,6 +128,21 @@ def graph_radius_py(d: PythonObject, wout: PythonObject, p: PythonObject, r: Pyt
         for t in range(n * n):
             radius_cell(t, pd, n, rr, po)
     return PythonObject(n)
+
+
+def graph_radius_geo_py(
+    dq: PythonObject, d: PythonObject, g: PythonObject, p: PythonObject, r: PythonObject
+) raises -> PythonObject:
+    var nq = _ni(p, 0)
+    var n = _ni(p, 1)
+    var rr = Float32(Float64(py=r))
+    var pq = _f(dq)
+    var pd = _f(d)
+    var pg = _f(g)
+    with GILReleased(Python()):
+        for t in range(nq * n):
+            radius_geo_cell(t, pq, pd, n, rr, pg)
+    return PythonObject(nq)
 
 
 def graph_lle_iw_py(idx: PythonObject, wb: PythonObject, wout: PythonObject, p: PythonObject) raises -> PythonObject:

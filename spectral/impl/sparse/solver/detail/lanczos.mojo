@@ -55,8 +55,8 @@ WHAT IS VENDOR-SHAPED IN THEIRS, and what stands where
   cublas axpy                     -> `axpy_kernel`: `y = ftz(fma(a, x, y))`.
   cusolver syevd                  -> `spectral/checks/symmetric_eig_host.
                                      mojo` (DEVIATIONS 770, 771).
-  the small host-read scalars     -> host, through `identical_*` /
-  (alpha_i + uu_i, clamps, res)      `gemm/checks/gemm_oracle.mojo`.
+  the small host-read scalars     -> host, through `identical_*`; `res`
+  (alpha_i + uu_i, clamps, res)      is the device `identical_gemm`.
 Every division is a single IEEE `/` (row 10: correct on normals on every
 column measured); every seam a kernel writes is flushed.
 
@@ -171,7 +171,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_NT, OP_TN, gemm_oracle
+from gemm.contract import OP_NT, OP_TN
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
@@ -185,8 +185,9 @@ from spectral.checks.symmetric_eig_host import (
     SAB_ROTATE_UNFUSED,
     SAB_SWEEP_CAP,
     SAB_TIE_REVERSE,
-    symmetric_eig_host,
 )
+from x_decomp.cells import F32Ptr
+from x_decomp.device import DevExec
 from spectral.impl.sparse.linalg.detail.laplacian import DeviceCoo
 from spectral.impl.sparse.matrix.detail.diagonal import SAB_LAPLACIAN_SEAM
 from spectral.impl.sparse.solver.lanczos_types import (
@@ -1733,7 +1734,22 @@ def _step_tag(step: Int, what: StringSlice) -> String:
 # ---------------------------------------------------------------------------
 
 
+def lanczos_which_first(which: Int, ncv: Int, k: Int) raises -> Int:
+    """The first of the k ascending Ritz values `which` selects (SA 0, LA
+    ncv - k); `SM`/`LM` are refused by name (`:196-243`)."""
+    if which == LANCZOS_SA:
+        return 0
+    if which == LANCZOS_LA:
+        return ncv - k
+    raise Error(
+        "lanczos: which=" + lanczos_which_name(which)
+        + " is not implemented (a thrust sort by magnitude cuVS never reaches);"
+        " LA and SA are"
+    )
+
+
 def lanczos_solve_ritz(
+    ctx: DeviceContext,
     alpha: List[Float32],
     beta: List[Float32],
     beta_k: List[Float32],
@@ -1746,8 +1762,13 @@ def lanczos_solve_ritz(
 ) raises -> Int:
     """`lanczos_solve_ritz`: the projected matrix (`alpha` on the diagonal,
     `beta[0..ncv-2]` on both off-diagonals, `beta_k[0..k)` in row `k` and
-    column `k` after a restart, `:148-169`), `eig_dc` (here the host solve,
-    DEVIATION 771), then the `which` slice (`:182-195`). `eigenvectors_k`
+    column `k` after a restart, `:148-169`), `eig_dc` (here x_decomp's
+    round-robin Jacobi ON THE DEVICE, `DevExec._eigh_par_on`: every round's
+    disjoint rotations at once; cgr-decomp 2026-10-03 replaced the host solve
+    of DEVIATION 771, and the column signs are now `sign_flip_kernel`'s rule,
+    the largest |component| positive, in place of DEVIATION 770's first
+    nonzero; the host column's oracle runs the same rounds and rule,
+    x_decomp/rr_solve.mojo), then the `which` slice (`:182-195`). `eigenvectors_k`
     comes back `ncv x k` ROW-MAJOR (`E[j * k + c]` = component `j` of
     selected vector `c`), `eigenvalues_k` ascending. Returns the solver's
     sweep count. `SM`/`LM` are refused by name: they are a `thrust::sort`
@@ -1769,20 +1790,15 @@ def lanczos_solve_ritz(
         for tid in range(k):
             t[k * ncv + tid] = beta_k[tid]
             t[tid * ncv + k] = beta_k[tid]
-    var evals = List[Float32]()
-    var evecs = List[Float32]()
-    var sweeps = symmetric_eig_host[DType.float32](t, ncv, evals, evecs)
-    var first: Int
-    if which == LANCZOS_SA:
-        first = 0
-    elif which == LANCZOS_LA:
-        first = ncv - k
-    else:
-        raise Error(
-            "lanczos: which=" + lanczos_which_name(which)
-            + " is not implemented (a thrust sort by magnitude cuVS never reaches);"
-            " LA and SA are"
-        )
+    var first = lanczos_which_first(which, ncv, k)
+    var evals = List[Float32](length=ncv, fill=Float32(0.0))
+    var evecs = List[Float32](length=ncv * ncv, fill=Float32(0.0))
+    var dt = upload_f32(ctx, t)
+    var sweeps = DevExec._eigh_par_on(
+        ctx, dt, F32Ptr(unsafe_from_address=Int(evals.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(evecs.unsafe_ptr())),
+        ncv,
+    )
+    _ = dt^
     eigenvalues_k.clear()
     eigenvectors_k.clear()
     for c in range(k):
@@ -1886,7 +1902,7 @@ def lanczos_smallest(
     for _ in range(k):
         beta_k.append(Float32(0.0))
     var sweeps = lanczos_solve_ritz(
-        alpha, beta, beta_k, False, k, which, ncv, eigenvalues_k, eigenvectors_k
+        ctx, alpha, beta, beta_k, False, k, which, ncv, eigenvalues_k, eigenvectors_k
     )
 
     # ritz = V^T E_k  (:501-507): ours `E_k^T V`, k x n row-major
@@ -1896,7 +1912,7 @@ def lanczos_smallest(
     var E = upload_f32(ctx, eigenvectors_k)
     identical_gemm(ctx, ritz, E, V, k, n, ncv, OP_TN)
     # s = E_k[ncv - 1, :]; beta_k = beta[ncv - 1] * s; res = ||beta_k||  (:509-533)
-    var res = _residual(beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
+    var res = _residual(ctx, beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
     var restarts = 0
     trace.record_list_f32("spectral.lanczos.restart0000.ritz", eigenvalues_k)
     trace.record_scalar_f32("spectral.lanczos.restart0000.res", res)
@@ -1922,12 +1938,12 @@ def lanczos_smallest(
                 )
                 iter += ncv - k
                 sweeps = lanczos_solve_ritz(
-                    alpha, beta, beta_k, True, k, which, ncv, eigenvalues_k,
+                    ctx, alpha, beta, beta_k, True, k, which, ncv, eigenvalues_k,
                     eigenvectors_k,
                 )
                 var E3 = upload_f32(ctx, eigenvectors_k)
                 identical_gemm(ctx, ritz, E3, V, k, n, ncv, OP_TN)
-                res = _residual(beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
+                res = _residual(ctx, beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
                 _ = E3^
                 continue
         comptime if LANCZOS_ID_DEV:
@@ -1937,10 +1953,10 @@ def lanczos_smallest(
             )
             iter += ncv - k
             sweeps = lanczos_solve_ritz(
-                alpha, beta, beta_k, True, k, which, ncv, eigenvalues_k,
+                ctx, alpha, beta, beta_k, True, k, which, ncv, eigenvalues_k,
                 eigenvectors_k,
             )
-            res = _residual(beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
+            res = _residual(ctx, beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
             trace.record_list_f32(_restart_tag(restarts, "ritz"), eigenvalues_k)
             trace.record_scalar_f32(_restart_tag(restarts, "res"), res)
             trace.record_list_i32(_restart_tag(restarts, "sweeps"), _one_i32(sweeps))
@@ -2024,11 +2040,11 @@ def lanczos_smallest(
         iter += ncv - k
         # solve_ritz with beta_k  (:703-716)
         sweeps = lanczos_solve_ritz(
-            alpha, beta, beta_k, True, k, which, ncv, eigenvalues_k, eigenvectors_k
+            ctx, alpha, beta, beta_k, True, k, which, ncv, eigenvalues_k, eigenvectors_k
         )
         var E2 = upload_f32(ctx, eigenvectors_k)
         identical_gemm(ctx, ritz, E2, V, k, n, ncv, OP_TN)
-        res = _residual(beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
+        res = _residual(ctx, beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
         trace.record_list_f32(_restart_tag(restarts, "ritz"), eigenvalues_k)
         trace.record_scalar_f32(_restart_tag(restarts, "res"), res)
         trace.record_list_i32(_restart_tag(restarts, "sweeps"), _one_i32(sweeps))
@@ -2076,6 +2092,7 @@ def _restart_tag(r: Int, what: StringSlice) -> String:
 
 
 def _residual(
+    ctx: DeviceContext,
     beta_last: Float32,
     eigenvectors_k: List[Float32],
     k: Int,
@@ -2084,15 +2101,16 @@ def _residual(
 ) raises -> Float32:
     """`:509-533` / `:726-746`: `s = E_k[ncv - 1, :]`, `beta_k = fma(beta[ncv
     - 1], s, 0)` (an axpy into a zero fill: one rounding), `res = ||beta_k||`
-    -- `k <= 128` terms, so `gemm_oracle`'s one-leaf ascending chain IS the
-    v1 answer and the host computes it through the same function the
-    device contract is defined by."""
+    through the device GEMM (`_norm2`, `identical_gemm` `OP_NT` at
+    `1 x 1 x k`), the same pinned contract the oracle restates."""
     beta_k.clear()
     for c in range(k):
         var s = eigenvectors_k[(ncv - 1) * k + c]
         beta_k.append(ftz(identical_mul_add(beta_last, s, Float32(0.0))))
-    var sq = gemm_oracle(beta_k, beta_k, OP_NT, 1, 1, k)
-    return ftz(_host_sqrt(sq[0]))
+    var d_bk = upload_f32(ctx, beta_k)
+    var res = _norm2(ctx, d_bk, k)
+    _ = d_bk^
+    return res
 
 
 # ---------------------------------------------------------------------------

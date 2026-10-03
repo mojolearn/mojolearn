@@ -199,64 +199,37 @@ def partition_from_bins(
     n_rows: Int,
     n_leaves: Int,
 ) raises -> LeafPartition:
-    """Group rows by leaf. DEVIATION 90: this is a HOST counting sort.
+    """Group rows by leaf, ON THE DEVICE (cpu-gpu-cleanup t-gbdt).
 
-    Their oracle partitions on the device, off the same `bins` buffer it is
-    handed. Ours needs the grouping before the oracle exists, so the bins
-    come back to the host, are counted into `n_leaves` buckets, and the row
-    order goes out again.
-
-    It is a STABLE counting sort -- rows keep their ascending order within a
-    leaf -- because an unstable one would make the leaf sums depend on the
-    scatter order, and a float sum that depends on scheduling is a number
-    that changes between runs of the same fit.
-
-    The cost is two host passes over `n_rows` plus a round trip each way,
-    per permutation per tree. It is real and it is on the fixed-cost side of
-    `ms/tree`; the device alternative is a radix sort by a `depth`-bit key,
-    which this repository already has the pieces for and which nothing has
-    measured a need for yet.
-    """
+    DEVIATION 90 was a HOST counting sort here: the bins came back to the
+    host, two host passes over `n_rows` counted and scattered them, and the
+    row order went out again, per permutation per tree. That round trip is
+    gone. This is `DeviceLeafPartitioner.partition` (DEVIATION 2551) over a
+    partitioner made for this one call: a stable LSD radix sort of (leaf,
+    row) from the identity row order, so rows keep their ascending order
+    within a leaf -- the order the host counting sort produced, so the
+    integer partition is the same -- then one kernel marks each leaf's
+    bounds and the host reads back `2 * n_leaves + 1` words. A leaf at or
+    above `n_leaves` is refused, as before. The fit's pooled partitioner
+    (`DEVICE_LEAF_PARTITION`) skips the per-call allocation."""
     if n_leaves <= 0:
         raise Error("partition_from_bins: n_leaves must be positive")
-
-    var h_bins = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
-    ctx.enqueue_copy(dst_ptr=h_bins.unsafe_ptr(), src_buf=bins)
+    if n_rows <= 0:
+        var offsets = List[Int](length=n_leaves, fill=0)
+        var sizes = List[Int](length=n_leaves, fill=0)
+        var empty = ctx.enqueue_create_buffer[DType.uint32](1)
+        ctx.synchronize()
+        return LeafPartition(empty^, offsets^, sizes^)
+    var parts = DeviceLeafPartitioner(ctx, n_rows, n_leaves)
+    var copy_blocks = (n_rows + COPY_BLOCK - 1) // COPY_BLOCK
+    ctx.enqueue_function[copy_u32_kernel](
+        parts.bins.unsafe_ptr(), bins.unsafe_ptr(), Int32(n_rows),
+        grid_dim=copy_blocks, block_dim=COPY_BLOCK,
+    )
+    var part = parts.partition(ctx, n_rows, n_leaves)
     ctx.synchronize()
-
-    var sizes = List[Int]()
-    for _ in range(n_leaves):
-        sizes.append(0)
-    for r in range(n_rows):
-        var b = Int(h_bins.unsafe_ptr().unsafe_load(r))
-        if b < 0 or b >= n_leaves:
-            raise Error(
-                "partition_from_bins: row " + String(r) + " fell in leaf "
-                + String(b) + " of " + String(n_leaves)
-            )
-        sizes[b] += 1
-
-    var offsets = List[Int]()
-    var running = 0
-    for i in range(n_leaves):
-        offsets.append(running)
-        running += sizes[i]
-
-    var fill = List[Int]()
-    for i in range(n_leaves):
-        fill.append(offsets[i])
-    var h_rows = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
-    for r in range(n_rows):
-        var b = Int(h_bins.unsafe_ptr().unsafe_load(r))
-        h_rows.unsafe_ptr().unsafe_store(fill[b], UInt32(r))
-        fill[b] += 1
-
-    var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=h_rows.unsafe_ptr())
-    ctx.synchronize()
-    _ = h_rows^  # past the drain (step-33 race class)
-
-    return LeafPartition(row_index^, offsets^, sizes^)
+    _ = parts^  # past the drain; `part.row_index` keeps its own handle
+    return part^
 
 
 def leaf_bounds_kernel(
@@ -375,6 +348,78 @@ struct DeviceLeafPartitioner(Movable):
         )
         ctx.enqueue_copy(dst_ptr=hb, src_buf=self.d_bounds)
         ctx.synchronize()
+        if hb.unsafe_load(2 * n_leaves) != UInt32(0):
+            raise Error(
+                "DeviceLeafPartitioner: a row fell in a leaf at or above "
+                + String(n_leaves)
+            )
+        var sizes = List[Int]()
+        var offsets = List[Int]()
+        var running = 0
+        for leaf in range(n_leaves):
+            var first = Int(hb.unsafe_load(leaf))
+            var past = Int(hb.unsafe_load(n_leaves + leaf))
+            var size = past - first if past > first else 0
+            offsets.append(running)
+            sizes.append(size)
+            running += size
+        if running != n_rows:
+            raise Error(
+                "DeviceLeafPartitioner: leaf sizes sum to " + String(running)
+                + " for " + String(n_rows) + " rows"
+            )
+        return LeafPartition(self.vals.copy(), offsets^, sizes^)
+
+    def partition_enqueue(
+        mut self, ctx: DeviceContext, n_rows: Int, n_leaves: Int
+    ) raises:
+        """`partition` up to its drain, ENQUEUED (lane/apple-fast-trees-depthwise,
+        CTR_PERM_BATCH): the same launches in the same order, the bounds
+        read-back enqueued and NOT settled. `partition_collect` is the rest,
+        after the caller's own `ctx.synchronize()`; so several partitioners
+        (one per permutation, each with its own `h_bounds`) share one drain.
+        Reached only from the FAST + Apple arm; IDENTICAL calls `partition`."""
+        if n_rows <= 0 or n_rows > self.n_rows_cap:
+            raise Error(
+                "DeviceLeafPartitioner: n_rows " + String(n_rows)
+                + " outside capacity " + String(self.n_rows_cap)
+            )
+        if n_leaves <= 0 or n_leaves > self.n_leaves_cap:
+            raise Error(
+                "DeviceLeafPartitioner: n_leaves " + String(n_leaves)
+                + " outside capacity " + String(self.n_leaves_cap)
+            )
+        var copy_blocks = (n_rows + COPY_BLOCK - 1) // COPY_BLOCK
+        ctx.enqueue_function[copy_u32_kernel](
+            self.keys.unsafe_ptr(), self.bins.unsafe_ptr(), Int32(n_rows),
+            grid_dim=copy_blocks, block_dim=COPY_BLOCK,
+        )
+        launch_make_sequence(ctx, UInt32(0), self.vals, n_rows)
+        var bits = 0
+        while (1 << bits) < n_leaves:
+            bits += 1
+        launch_radix_sort_bins(
+            ctx, n_rows, 0, bits, self.keys, self.vals, self.tkeys,
+            self.tvals, self.offsets, self.bsums,
+        )
+        var hb = self.h_bounds.unsafe_ptr()
+        for i in range(2 * n_leaves + 1):
+            hb.unsafe_store(i, UInt32(0))
+        ctx.enqueue_copy(dst_buf=self.d_bounds, src_ptr=hb)
+        ctx.enqueue_function[leaf_bounds_kernel](
+            self.keys.unsafe_ptr(), self.d_bounds.unsafe_ptr(),
+            Int32(n_rows), Int32(n_leaves),
+            grid_dim=copy_blocks, block_dim=COPY_BLOCK,
+        )
+        ctx.enqueue_copy(dst_ptr=hb, src_buf=self.d_bounds)
+
+    def partition_collect(
+        self, ctx: DeviceContext, n_rows: Int, n_leaves: Int
+    ) raises -> LeafPartition:
+        """The rest of `partition` after `partition_enqueue` and the caller's
+        drain: the same checks, the same `sizes` / `offsets` from the same
+        bounds."""
+        var hb = self.h_bounds.unsafe_ptr()
         if hb.unsafe_load(2 * n_leaves) != UInt32(0):
             raise Error(
                 "DeviceLeafPartitioner: a row fell in a leaf at or above "

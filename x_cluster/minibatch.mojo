@@ -21,6 +21,7 @@ from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul, identical_mul64
 from x_cluster.bodies import SplitMix64
 from x_cluster.common import gather_rows, greedy_kmeans_pp, nearest_all, sum_f64, weighted_draw
+from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV
 from x_cluster.ops import ClusterOps
 
 
@@ -169,13 +170,28 @@ def minibatch_fit[O: ClusterOps](
     # (`minibatch_step`'s unit-weight update_center_dense, the same words),
     # and reads back the batch distances and the k counts for the early stop
     # and the reassignment, which stay host code (a reassignment patches the
-    # slots). `-D MOJOLEARN_MINIBATCH_HOST_STEP=1` restores minibatch_step.
-    comptime MB_DEVICE_STEP = not is_defined["MOJOLEARN_MINIBATCH_HOST_STEP"]()
+    # slots).
     var islot = ops.zeros_i(batch)
     var wslot = ops.zeros(k)
-    comptime if MB_DEVICE_STEP:
-        ops.set(cslot, c)
+    ops.set(cslot, c)
     var steps_done = 0
+    # lane/apple-fast-cluster (2026-10-02), FAST on Apple, ON by default
+    # (`-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF=1` turns it off; see
+    # x_cluster/minibatch_fast.mojo for the M3 A/B): MINIBATCH_FAST_DEV runs the
+    # steps resident on the device (x_cluster/minibatch_fast.mojo: no upload,
+    # read-back or host center fold per step; the loop below pays all three
+    # every step). Unit weights and tol <= 0 only (the board's shape); `c`,
+    # `w` and `steps_done` come back as the loop would leave them, the loop
+    # is skipped (n_steps = 0) and `cslot` holds the final centers for the
+    # readback after the loop (else it would hand back the centers uploaded
+    # above).
+    comptime if MINIBATCH_FAST_DEV:
+        if not weighted and p.tol <= 0:
+            if ops.minibatch_fast(
+                xs, n, d, k, batch, n_steps, p.max_no_improvement, p.reassignment_ratio, p.seed, rng, c, w, steps_done
+            ):
+                n_steps = 0
+                ops.set(cslot, c)
     for step in range(n_steps):
         var bidx = List[Int](capacity=batch)
         for _t in range(batch):
@@ -195,38 +211,31 @@ def minibatch_fit[O: ClusterOps](
             reassign = True
         var c_new = List[Float32]()
         var batch_inertia: Float64
-        comptime if MB_DEVICE_STEP:
-            var bi32 = List[Int32](capacity=batch)
-            for t in range(batch):
-                bi32.append(Int32(bidx[t]))
-            ops.set_i(islot, bi32)
-            ops.mb_assign(xs, d, islot, batch, cslot, k, lslot, dslot, bslot)
-            ops.mb_update(bslot, batch, lslot, cslot, wslot, k, d)
-            var got = ops.gets([dslot, wslot], [batch, k])
-            batch_inertia = sum_f64(got[0], batch)
-            w = got[1].copy()
-            var need_c = p.tol > 0
-            var to = List[Bool]()
-            var nre = 0
-            if reassign and p.reassignment_ratio > 0:
-                to = mb_reassign_marks(w, k, batch, p.reassignment_ratio)
-                for j in range(k):
-                    if to[j]:
-                        nre += 1
-            if need_c or nre > 0:
-                c_new = ops.get(cslot, k * d)
-            if nre > 0:
-                mb_reassign_apply(c_new, w, to, nre, x, bidx, batch, k, d, rng)
-                ops.set(cslot, c_new)
-                ops.set(wslot, w)
-            if not need_c:
-                c_new = c.copy()
-        else:
-            var bx = gather_rows(x, d, bidx)
-            batch_inertia = minibatch_step(
-                ops, bx, List[Float32](), batch, k, d, c, w, rng, reassign, p.reassignment_ratio,
-                bslot, cslot, lslot, dslot, c_new,
-            )
+        var bi32 = List[Int32](capacity=batch)
+        for t in range(batch):
+            bi32.append(Int32(bidx[t]))
+        ops.set_i(islot, bi32)
+        ops.mb_assign(xs, d, islot, batch, cslot, k, lslot, dslot, bslot)
+        ops.mb_update(bslot, batch, lslot, cslot, wslot, k, d)
+        var got = ops.gets([dslot, wslot], [batch, k])
+        batch_inertia = sum_f64(got[0], batch)
+        w = got[1].copy()
+        var need_c = p.tol > 0
+        var to = List[Bool]()
+        var nre = 0
+        if reassign and p.reassignment_ratio > 0:
+            to = mb_reassign_marks(w, k, batch, p.reassignment_ratio)
+            for j in range(k):
+                if to[j]:
+                    nre += 1
+        if need_c or nre > 0:
+            c_new = ops.get(cslot, k * d)
+        if nre > 0:
+            mb_reassign_apply(c_new, w, to, nre, x, bidx, batch, k, d, rng)
+            ops.set(cslot, c_new)
+            ops.set(wslot, w)
+        if not need_c:
+            c_new = c.copy()
         var diff = Float64(0)
         if p.tol > 0:
             for t in range(k * d):
@@ -257,8 +266,7 @@ def minibatch_fit[O: ClusterOps](
         if p.max_no_improvement >= 0 and no_improvement >= p.max_no_improvement:
             break
 
-    comptime if MB_DEVICE_STEP:
-        c = ops.get(cslot, k * d)
+    c = ops.get(cslot, k * d)
     var dist = List[Float32]()
     nearest_all(ops, xs, n, c, k, d, labels, dist)
     centers = c^

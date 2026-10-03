@@ -1,0 +1,33 @@
+rule	class	owner	state	path	occ	text
+host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	dg_init[b] = dot_at(grad, b * n, drt, b * n, n)
+host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	endv[b] = lbfgs_search_dir_at(
+host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	gnorm[b] = nrm_max_at(grad, b * n, n)
+host-call	host-import	gap-neural-overhead2	debt	arima/impl/batched_fit.mojo	1	gnorm[b] = nrm_max_at(grad, b * n, n)
+host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	import arima/impl/lbfgs_host.mojo:dot_at
+host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	import arima/impl/lbfgs_host.mojo:lbfgs_search_dir_at
+host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	import arima/impl/lbfgs_host.mojo:nrm2_at
+host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	import arima/impl/lbfgs_host.mojo:nrm_max_at
+host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	step[b] = ftz(Float32(1.0) / nrm2_at(drt, b * n, n))
+tid0-loop	serial-gpu	UNOWNED	debt	arima/impl/fast_arma_ls.mojo	0	if tid == 0:
+host-call	host-import	UNOWNED	debt	bindings/arima_exog_layout.mojo	0	import bindings/hostptr.mojo:read_f32
+host-call	host-import	UNOWNED	debt	bindings/arima_exog_layout.mojo	0	var src = read_f32(address, n)
+host-call	host-import	UNOWNED	debt	bindings/holtwinters_host_predict.mojo	0	import holtwinters/host/hw_predict.mojo:hw_forecast_from_state_ptr
+host-call	host-import	UNOWNED	debt	bindings/holtwinters_host_predict.mojo	0	import holtwinters/host/hw_predict.mojo:hw_predict_in_sample_ptr
+host-call	host-import	UNOWNED	debt	bindings/holtwinters_host_predict.mojo	0	var fc = hw_forecast_from_state_ptr(
+host-call	host-import	UNOWNED	debt	bindings/holtwinters_host_predict.mojo	0	var out = hw_predict_in_sample_ptr(
+host-threads	host-threads	UNOWNED	debt	holtwinters/host/hw_predict.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	UNOWNED	debt	holtwinters/host/hw_predict.mojo	0	host_parallelize(_cells, tasks)
+host-threads	host-threads	UNOWNED	debt	holtwinters/host/hw_predict.mojo	0	host_parallelize(_steps, tasks)
+py-numpy	py-numpy	gap-neural-models	debt	python/mojolearn/_x_sequence_mlp.py	0	self.classes_, inv = np.unique(y, return_inverse=True)
+py-numpy	py-numpy	UNOWNED	debt	python/mojolearn/_x_sequence_prophet.py	0	cp = np.sort(_days(self.changepoints))
+py-numpy	py-numpy	gap-train-utils	debt	python/mojolearn/_x_sequence_rnn.py	0	self.classes_, inv = np.unique(y, return_inverse=True)
+host-call	host-import	UNOWNED	debt	sequence/exec.mojo	0	host_gemm_pack(a, self.panel)
+host-call	host-import	UNOWNED	debt	sequence/exec.mojo	0	host_gemm_rows(a, bp, ldb, 0, M)
+host-call	host-import	UNOWNED	debt	sequence/exec.mojo	0	host_gemm_rows(a, bp, ldb, lo, min(lo + chunk, M))
+host-call	host-import	UNOWNED	debt	sequence/exec.mojo	0	import sequence/host_gemm.mojo:host_gemm_pack
+host-call	host-import	UNOWNED	debt	sequence/exec.mojo	0	import sequence/host_gemm.mojo:host_gemm_rows
+host-threads	host-threads	UNOWNED	debt	sequence/exec.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	UNOWNED	debt	sequence/exec.mojo	0	host_parallelize(_chunk, tasks)
+host-threads	host-threads	UNOWNED	debt	sequence/exec.mojo	0	host_parallelize(_rows, tasks)
+host-threads	host-threads	gap-neural-models	debt	sequence/exec_device.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	gap-neural-models	debt	sequence/exec_device.mojo	0	host_parallelize(_c, tasks)

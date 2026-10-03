@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 """Executable CPU checks for the chunked LM-head v2 foundation."""
-from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN, gemm_oracle
+from gemm.contract import OP_NN, OP_NT, OP_TN
+from gemm.checks.gemm_oracle import gemm_oracle
 from checks.numerics import ftz, identical_div, identical_exp, identical_fmax, identical_log
 from training.checks.chunked_lm_head_oracle import (
     chunked_lm_head_v2_oracle,
     chunked_lm_head_v2_peak_scratch_floats,
 )
-from training.checks.loss_oracle import CE_NEG_INF_BITS, CeConfig, ce_backward_oracle, ce_forward_oracle, neg_by_bits
+from training.checks.loss_contract import CE_NEG_INF_BITS, CeConfig, neg_by_bits
+from training.checks.loss_oracle import ce_backward_oracle, ce_forward_oracle
 from std.memory import bitcast
 
 
