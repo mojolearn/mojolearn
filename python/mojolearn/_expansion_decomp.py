@@ -742,8 +742,10 @@ class _Kit:
         m, n = A.r, A.c
         s, v = _M.zeros(1, n), _M.zeros(n, n)
         self.b.x_decomp_svd(A.addr, s.addr, v.addr, [m, n])
-        order = sorted(range(n), key=lambda j: (-s.s[j], j))
-        return s.take_cols(order), v.take_cols(order).T
+        # descending by value, ties to the lower index: the stable ascending
+        # order of -s (an exact negation), and the gathers, in Mojo
+        o = self.order(self.ew("scale", s, s=-1.0))
+        return self.take_rows(s.T, o).T, self.take_rows(v.T, o)
 
     def orth(self, A):
         """A copy of A with its columns orthonormalized: two passes of the
@@ -947,12 +949,8 @@ class _Kit:
 
     def barycenter(self, X, Y, nbr, reg):
         """sklearn barycenter_weights: (n x k) weights of each row of X on
-        its k neighbors in Y (`nbr`: n lists of k indices)."""
-        if isinstance(nbr, _M):
-            n, k, idx = X.r, nbr.c, nbr
-        else:
-            n, k = X.r, len(nbr[0])
-            idx = _M.of([float(j) for row in nbr for j in row], n, k)
+        its k neighbors in Y (`nbr`: an n x k _M of exact float indices)."""
+        n, k, idx = X.r, nbr.c, nbr
         W, flags = _M.zeros(n, k), _M.zeros(n, 1)
         self.b.x_decomp_barycenter_rows(X.addr, Y.addr, idx.addr, W.addr, flags.addr, [n, Y.r, X.c, k], float(reg))
         return W
