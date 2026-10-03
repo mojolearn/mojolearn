@@ -306,8 +306,6 @@ def ivf_pq_build_device(
         dev_cb = pq_len <= PQK_LEN_MAX and n_codes <= PQK_CODES_MAX
     var codebooks = List[Float32]()
     var dcb: DeviceBuffer[DType.float32]
-    var codebooks = List[Float32]()
-    var dcb: DeviceBuffer[DType.float32]
     if dev_cb:
         var n_train = n
         comptime if PQ_FAST_TRAINSET:
