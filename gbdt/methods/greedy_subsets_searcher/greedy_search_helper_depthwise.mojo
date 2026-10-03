@@ -116,10 +116,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.dw2_level import (
     DW2_PART_BLOCK,
     DW2_SCAN_BLOCK,
     DW2_SCAN_FT,
-    DW2_ZERO_FLAG,
-    DW2_ID_MASK,
     dw2_copy_back_kernel,
-    dw2_copy_zero_kernel,
     dw2_flags_count_kernel,
     dw2_part_max_chunks,
     dw2_place_scatter_kernel,
@@ -344,16 +341,6 @@ comptime DW2_SCAN_SMEM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_GBDT_DW2_SCAN_SMEM_OFF"]()
-)
-#: Opt-in (measured slower on the M3).
-#: DEVIATION 1903's deferred copy and the dirty-slot zero pass in one
-#: launch. Same bytes in every slot.
-comptime DW2_COPY_ZERO = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and DEFER_HIST_COPY_1903
-    and not DW_TREE_SYNC
-    and is_defined["MOJOLEARN_GBDT_DW2_COPY_ZERO"]()
 )
 
 
@@ -2961,8 +2948,6 @@ def fit_non_symmetric_tree[
                         plan_slots.append(IDS_SLOT_COPY_DST)
             # the ZERO set (DEVIATION 1903: dirty slots only on the FAST arm)
             var zero_count = 0
-            # DW2_COPY_ZERO: the zero set rides the copy launch this level
-            var copy_zero_fused = False
             if len(plan.compute_ids) > 0:
                 comptime if not DEFER_HIST_COPY_1903:
                     for i in range(len(plan.compute_ids)):
@@ -2977,33 +2962,6 @@ def fit_non_symmetric_tree[
                                 zero_count, plan.compute_ids[i]
                             )
                             zero_count += 1
-                    comptime if DW2_COPY_ZERO:
-                        # lane apple-fast-dwgap2: a copy source in the zero
-                        # set is zeroed by its copy thread (bit 31 of its
-                        # id); the rest of the set rides the same launch
-                        if (
-                            n_copy > 0
-                            and zero_count > 0
-                            and (hist_cells_per_leaf * stat_count) % 4 == 0
-                        ):
-                            copy_zero_fused = True
-                            var kept = 0
-                            for i in range(zero_count):
-                                var zid = h_zero_ids.unsafe_ptr().unsafe_load(i)
-                                var is_src = False
-                                for c in range(n_copy):
-                                    var cw = h_copy_src.unsafe_ptr().unsafe_load(c)
-                                    if (cw & DW2_ID_MASK) == zid:
-                                        h_copy_src.unsafe_ptr().unsafe_store(
-                                            c, cw | DW2_ZERO_FLAG
-                                        )
-                                        is_src = True
-                                if not is_src:
-                                    h_zero_ids.unsafe_ptr().unsafe_store(
-                                        kept, zid
-                                    )
-                                    kept += 1
-                            zero_count = kept
                 if zero_count > 0:
                     plan_slots.append(IDS_SLOT_ZERO)
             # the BUILD set
@@ -3198,25 +3156,7 @@ def fit_non_symmetric_tree[
                         # with the plan-time lists above
                         # WIDTH DISPATCH, the same kernels the split-time copy
                         # ran, over the reduced pair list.
-                        if copy_zero_fused:
-                            # DW2_COPY_ZERO: copies, then the zero set, one
-                            # launch (the zero launch below is skipped)
-                            ctx.enqueue_function[dw2_copy_zero_kernel](
-                                d_copy_src.unsafe_ptr(),
-                                d_copy_dst.unsafe_ptr(),
-                                Int32(n_copy),
-                                d_zero_ids.unsafe_ptr(),
-                                Int32(hist_cells_per_leaf * stat_count),
-                                hist.unsafe_ptr(),
-                                grid_dim=(
-                                    (hist_cells_per_leaf * stat_count // 4 + 255)
-                                    // 256,
-                                    n_copy + zero_count,
-                                    1,
-                                ),
-                                block_dim=(256, 1, 1),
-                            )
-                        elif (hist_cells_per_leaf * stat_count) % 4 == 0:
+                        if (hist_cells_per_leaf * stat_count) % 4 == 0:
                             ctx.enqueue_function[copy_histograms_vec4_kernel](
                                 d_copy_src.unsafe_ptr(),
                                 d_copy_dst.unsafe_ptr(),
@@ -3262,7 +3202,7 @@ def fit_non_symmetric_tree[
                 # False) -- writing zeros over zeros is the one launch in this
                 # step that can be deleted without an argument about the build.
                 # (the ZERO set and its count were staged above)
-                if zero_count > 0 and not tree_sync and not copy_zero_fused:
+                if zero_count > 0 and not tree_sync:
                     stage_times.begin(ctx)
                     ctx.enqueue_function[zero_histograms_kernel](
                         d_zero_ids.unsafe_ptr(),
