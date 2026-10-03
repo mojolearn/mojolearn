@@ -305,18 +305,13 @@ def _():
 @case("logistic-cv")
 def _():
     from sklearn import linear_model as sk
-    from sklearn.model_selection import StratifiedKFold
-    from mojolearn._expansion_linear import _stratified_kfold_ids
     X, yr, yc, y3 = _data(noise=1.0)
     rng = np.random.default_rng(3)
     flip = rng.random(len(yc)) < 0.15
     ycn = np.where(flip, 1 - yc, yc)
     ok = True
-    ids = _stratified_kfold_ids(list(y3), 5)
-    ref = np.empty(len(y3), int)
-    for f, (_, te) in enumerate(StratifiedKFold(5).split(X, y3)):
-        ref[te] = f
-    ok &= _close("stratified fold ids", ids, ref, 0)
+    # the StratifiedKFold ids are built inside the binding (cgr-linear); the
+    # per-fold scores_ below check them against scikit-learn's folds
     for y in (ycn, y3):
         # tol 1e-6: at the default 1e-4 both stop far from the multinomial
         # optimum (weak penalty), each in its own place

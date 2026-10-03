@@ -68,8 +68,8 @@ def corpus_pieces():
     rng = _lcg(20260915)
     pieces = []
     for _ in range(900):
-        n = 1 + next(rng) % 3
-        word = "".join(_SYLLABLES[next(rng) % len(_SYLLABLES)] for _ in range(n))
+        n_syllables = 1 + next(rng) % 3
+        word = "".join(_SYLLABLES[next(rng) % len(_SYLLABLES)] for _ in range(n_syllables))
         if next(rng) % 5 == 0:
             word = word.capitalize()
         if next(rng) % 2 == 0:

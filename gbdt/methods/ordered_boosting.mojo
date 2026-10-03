@@ -123,11 +123,19 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 from core.device_zero import enqueue_fill
 from core.identity_trace import IdentityTrace
 from checks.fixed_point import choose_scale
-from checks.numerics import ftz, identical_mul, identical_mul64
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
+    ftz,
+    identical_mul,
+    identical_mul64,
+    identical_mul_add,
+)
 from gbdt.data.ordered_plan import (
     ORDERED_BOOTSTRAP_SALT,
     ORDERED_MIN_FOLD_SIZE,
@@ -164,6 +172,7 @@ from gbdt.methods.dynamic_boosting import (
     _ordered_apply_kernel,
     _ordered_gather_kernel,
 )
+from gbdt.options.catboost_options import LEAF_ESTIMATION_GRADIENT
 from gbdt.methods.dynamic_boosting_folds import (
     EBoostingType,
     IQueriesGrouping,
@@ -192,9 +201,25 @@ from gbdt.methods.kernel.pointwise_scores import (
 )
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
+    OBJECTIVE_CROSSENTROPY,
+    OBJECTIVE_EXPECTILE,
+    OBJECTIVE_HUBER,
+    OBJECTIVE_LOGLINQUANTILE,
+    OBJECTIVE_LOGLOSS,
+    OBJECTIVE_LQ,
+    OBJECTIVE_MAE,
+    OBJECTIVE_MAPE,
+    OBJECTIVE_POISSON,
+    OBJECTIVE_QUANTILE,
+    OBJECTIVE_RMSE,
+    OBJECTIVE_TWEEDIE,
     REDUCE_LANES_BLOCK,
     deterministic_sum_lanes_kernel,
     launch_approximate,
+    pinned_block_sum,
+    routed_exp,
+    target_der,
+    target_der2,
 )
 
 comptime ORDERED_BLOCK = 256
@@ -1328,6 +1353,587 @@ def _ordered_estimate_complete(
 
 
 # ===========================================================================
+# APPLE FAST (lane/apple-fast-ordered, 2026-10-02): the per-fold loops of a
+# tree as one launch per stage. Compiled only under FAST on an Apple GPU;
+# IDENTICAL compiles the code above unchanged. FOLD_DERIVS is opt-in
+# (measured slower, 282 -> 287 s); BATCH_EST is the default (see below).
+#
+#   -D MOJOLEARN_ORDERED_FOLD_DERIVS  step 2 (the fold derivatives): one
+#       launch over the concatenated fold layout instead of two per fold
+#       (`launch_approximate` + `_ord_scatter_planes_kernel`), reading the
+#       learn permutation's cursors as ONE buffer (`fast_cat`, fold
+#       `f` at `offsets[f]`; the per-fold cursors are views of it). Also
+#       drops the per-iteration `MOJOLEARN_ORD_STD_SPLIT` env read (a host
+#       step): the split noise fold is the only arm.
+#   ORDERED_BATCH_EST (default; -D MOJOLEARN_ORDERED_BATCH_EST_OFF to
+#       disable) step 6 (the fold models and the
+#       estimation model): every task of the tree in one reduce launch per
+#       cursor buffer (grid over tasks x leaves x chunks, reading the
+#       device partition's sorted runs and snapshots directly), one leaf
+#       kernel over every (task, leaf), one apply launch per cursor buffer;
+#       no host leaf arithmetic, no per-task uploads, no partition
+#       readback (`_PermPartition.settle` and its drain are skipped), no
+#       lock-step walk drains. The estimation task's leaves come home on
+#       the learn-loss drain. The statements per (task, leaf) are the one
+#       Newton / Gradient step the walker takes at `leaf_iterations == 1`
+#       (`estimate_advance` phase 0 -> `_diagonal_direction`, `_move` at
+#       step 1 from zero, `regularize`): `leaf = G / (H + l2 + 1e-20)` when
+#       `H + l2 > 0` else 0, with `H = sum w * Der2` (Newton) or `sum w`
+#       (Gradient), zeroed when `sum w < 1e-20`; `G = sum w * Der`. The
+#       sums are float32 block folds (the oracle's are
+#       `compute_partition_stats` folds widened to float64): same
+#       statements, FAST bits.
+# ===========================================================================
+
+comptime ORDERED_FOLD_DERIVS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_ORDERED_FOLD_DERIVS"]()
+)
+#: ORDERED_BATCH_EST is the FAST + Apple default since the M3 A/B of
+#: 2026-10-02 (gbdt-ordered taxi 275.9 -> 264.1 s, auc .6289 -> .6285).
+#: `-D MOJOLEARN_ORDERED_BATCH_EST_OFF` restores the per-task walk;
+#: `-D MOJOLEARN_ORDERED_BATCH_EST` is still accepted and changes nothing.
+#: IDENTICAL and non-Apple FAST keep the code above (the flag is False).
+comptime ORDERED_BATCH_EST = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_ORDERED_BATCH_EST_OFF"]()
+)
+#: either switch keeps a learn permutation's fold cursors in one buffer
+comptime ORDERED_CAT_CURSORS = ORDERED_FOLD_DERIVS or ORDERED_BATCH_EST
+#: chunks per (task, leaf) run in the batched reduce
+comptime ORDERED_BAT_CHUNKS = 8
+
+
+def _ord_point[objective: Int](
+    relev: Float32, val: Float32, weight: Float32, alpha: Float32, border: Float32
+) -> SIMD[DType.float32, 2]:
+    """`(weight * Der, weight * Der2)` at one row: `pointwise_target_kernel`'s
+    and `cross_entropy_kernel`'s per-element statements (estimation mode),
+    the same flushes."""
+    comptime if objective == OBJECTIVE_LOGLOSS or objective == OBJECTIVE_CROSSENTROPY:
+        var exp_val = routed_exp(val)
+        var p = Float32(1.0)
+        if isfinite(exp_val):
+            p = exp_val / (Float32(1.0) + exp_val)
+        p = max(min(p, Float32(1.0) - Float32(1e-40)), Float32(1e-40))
+        var c = relev
+        comptime if objective == OBJECTIVE_LOGLOSS:
+            c = Float32(1.0) if relev > border else Float32(0.0)
+        var direction = ftz(c - p)
+        var scale = ftz(p * (Float32(1.0) - p))
+        return SIMD[DType.float32, 2](
+            ftz(weight * direction), ftz(weight * scale)
+        )
+    else:
+        return SIMD[DType.float32, 2](
+            ftz(weight * target_der[objective](relev, val, alpha)),
+            ftz(weight * target_der2[objective](relev, val, alpha)),
+        )
+
+
+def _ord_fast_segment(
+    off: MutPointer[UInt32, MutAnyOrigin], n: Int, p: Int
+) -> Int:
+    """The last segment `s` in `[0, n)` with `off[s] <= p` (`off` ascending,
+    `off[0] == 0`): `_ord_segment_rows_kernel`'s search."""
+    var lo = 0
+    var hi = n - 1
+    while lo < hi:
+        var mid = (lo + hi + 1) >> 1
+        if Int(off.unsafe_load(mid)) <= p:
+            lo = mid
+        else:
+            hi = mid - 1
+    return lo
+
+
+def _ord_fold_planes_kernel[objective: Int, second_order: Bool](
+    y_p: MutPointer[Float32, MutAnyOrigin],
+    w_p: MutPointer[Float32, MutAnyOrigin],
+    cursor_cat: MutPointer[Float32, MutAnyOrigin],
+    fold_off: MutPointer[UInt32, MutAnyOrigin],
+    n_folds_in: Int32,
+    total_in: Int32,
+    alpha: Float32,
+    border: Float32,
+    sw: MutPointer[Float32, MutAnyOrigin],
+    sg: MutPointer[Float32, MutAnyOrigin],
+):
+    """Every fold's two search planes in one pass over the concatenated
+    layout: position `p` is fold `f`'s position `i = p - fold_off[f]`, at
+    that fold's cursor (`cursor_cat[p]`) over the learn permutation's
+    own-order target and weight (`y_p[i]`, `w_p[i]`). Plane 0 is the weight
+    (Cosine) or `weight * Der2` (NewtonCosine, `second_der_as_weights`),
+    plane 1 `weight * Der`: `launch_approximate[False, second_order]`'s
+    stores, scattered where `_ord_scatter_planes_kernel` put them."""
+    var p = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if p < Int(total_in):
+        var f = _ord_fast_segment(fold_off, Int(n_folds_in), p)
+        var i = p - Int(fold_off.unsafe_load(f))
+        var val = cursor_cat.unsafe_load(p)
+        var relev = y_p.unsafe_load(i)
+        var weight = w_p.unsafe_load(i)
+        var d = _ord_point[objective](relev, val, weight, alpha, border)
+        var plane0 = weight
+        comptime if second_order:
+            plane0 = d[1]
+        sw.unsafe_store(p, plane0)
+        sg.unsafe_store(p, d[0])
+
+
+def _ord_bat_reduce_kernel[objective: Int](
+    y_p: MutPointer[Float32, MutAnyOrigin],
+    w_p: MutPointer[Float32, MutAnyOrigin],
+    cursor: MutPointer[Float32, MutAnyOrigin],
+    cur_off: MutPointer[UInt32, MutAnyOrigin],
+    task_k: MutPointer[UInt32, MutAnyOrigin],
+    sorted_rows: MutPointer[UInt32, MutAnyOrigin],
+    seg_start: MutPointer[UInt32, MutAnyOrigin],
+    snap: MutPointer[UInt32, MutAnyOrigin],
+    n_leaves_in: Int32,
+    leaf_cap_in: Int32,
+    n_chunks_in: Int32,
+    task_base_in: Int32,
+    alpha: Float32,
+    border: Float32,
+    partials: MutPointer[Float32, MutAnyOrigin],
+):
+    """Block `(c, t * n_leaves + b)`: chunk `c` of task `t`'s leaf-`b` run
+    in the permutation's stable partition (`_PermPartition`: the first
+    `snap[k_t][b]` entries of leaf `b`'s run, from `seg_start[b]`), folded
+    to `(sum w * Der, sum w * Der2, sum w)` at that task's cursor
+    (`cursor[cur_off[t] + j]` for permutation position `j`) into
+    `partials[((task_base + t) * leaf_cap + b) * n_chunks + c]` (three
+    floats each). The oracle's `d_eval_stats` + `compute_partition_stats`
+    and its deferred weight fold, for every task of the tree at once."""
+    var nl = Int(n_leaves_in)
+    var c = Int(block_idx.x)
+    var tb = Int(block_idx.y)
+    var tl = tb // nl
+    var b = tb - tl * nl
+    var k = Int(task_k.unsafe_load(tl))
+    var seg = Int(seg_start.unsafe_load(b))
+    var cnt = Int(snap.unsafe_load(k * nl + b))
+    var nc = Int(n_chunks_in)
+    var lo = seg + (cnt * c) // nc
+    var hi = seg + (cnt * (c + 1)) // nc
+    var coff = Int(cur_off.unsafe_load(tl))
+    var a0 = Float32(0.0)
+    var a1 = Float32(0.0)
+    var a2 = Float32(0.0)
+    var idx = lo + Int(thread_idx.x)
+    while idx < hi:
+        var j = Int(sorted_rows.unsafe_load(idx))
+        var weight = w_p.unsafe_load(j)
+        var d = _ord_point[objective](
+            y_p.unsafe_load(j), cursor.unsafe_load(coff + j), weight,
+            alpha, border,
+        )
+        a0 += d[0]
+        a1 += d[1]
+        a2 += weight
+        idx += Int(block_dim.x)
+    var s0 = pinned_block_sum[block_size=ORDERED_BLOCK](a0)
+    var s1 = pinned_block_sum[block_size=ORDERED_BLOCK](a1)
+    var s2 = pinned_block_sum[block_size=ORDERED_BLOCK](a2)
+    if Int(thread_idx.x) == 0:
+        var at = 3 * (
+            ((Int(task_base_in) + tl) * Int(leaf_cap_in) + b) * nc + c
+        )
+        partials.unsafe_store(at, s0)
+        partials.unsafe_store(at + 1, s1)
+        partials.unsafe_store(at + 2, s2)
+
+
+def _ord_bat_leaves_kernel(
+    partials: MutPointer[Float32, MutAnyOrigin],
+    leaves: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    leaf_cap_in: Int32,
+    n_leaves_in: Int32,
+    n_chunks_in: Int32,
+    lambda_reg: Float32,
+    gradient_in: Int32,
+):
+    """Every (task, leaf): the chunk partials folded, then the walker's one
+    step (see the section comment). Leaves past the tree's `n_leaves` are
+    0 (never read by the apply)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        var cap = Int(leaf_cap_in)
+        var b = i - (i // cap) * cap
+        var out = Float32(0.0)
+        if b < Int(n_leaves_in):
+            var nc = Int(n_chunks_in)
+            var g = Float32(0.0)
+            var h = Float32(0.0)
+            var w = Float32(0.0)
+            for c in range(nc):
+                var at = 3 * (i * nc + c)
+                g += partials.unsafe_load(at)
+                h += partials.unsafe_load(at + 1)
+                w += partials.unsafe_load(at + 2)
+            var hess = h + lambda_reg
+            if gradient_in != Int32(0):
+                hess = w + lambda_reg
+            if hess > Float32(0.0):
+                out = g / (hess + Float32(1e-20))
+            if w < Float32(1e-20):
+                out = Float32(0.0)
+        leaves.unsafe_store(i, out)
+
+
+def _ord_bat_apply_kernel(
+    permutation: MutPointer[UInt32, MutAnyOrigin],
+    bins: MutPointer[UInt32, MutAnyOrigin],
+    leaves: MutPointer[Float32, MutAnyOrigin],
+    cursor: MutPointer[Float32, MutAnyOrigin],
+    off: MutPointer[UInt32, MutAnyOrigin],
+    n_tasks_in: Int32,
+    total_in: Int32,
+    task_base_in: Int32,
+    leaf_cap_in: Int32,
+    rate: Float32,
+):
+    """`_ordered_apply_kernel` for every task sharing one cursor buffer:
+    position `p` belongs to the task `t` with `off[t] <= p`, at that
+    task's permutation position `j = p - off[t]`."""
+    var p = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if p < Int(total_in):
+        var t = _ord_fast_segment(off, Int(n_tasks_in), p)
+        var j = p - Int(off.unsafe_load(t))
+        var row = Int(permutation.unsafe_load(j))
+        var leaf = Int(bins.unsafe_load(row))
+        var at = (Int(task_base_in) + t) * Int(leaf_cap_in) + leaf
+        cursor.unsafe_store(
+            p,
+            identical_mul_add(leaves.unsafe_load(at), rate, cursor.unsafe_load(p)),
+        )
+
+
+def _launch_ord_fold_planes[second_order: Bool](
+    ctx: DeviceContext,
+    objective: Int,
+    mut y_p: DeviceBuffer[DType.float32],
+    mut w_p: DeviceBuffer[DType.float32],
+    mut cursor_cat: DeviceBuffer[DType.float32],
+    mut fold_off: DeviceBuffer[DType.uint32],
+    n_folds: Int,
+    total: Int,
+    alpha: Float32,
+    border: Float32,
+    mut sw: DeviceBuffer[DType.float32],
+    mut sg: DeviceBuffer[DType.float32],
+) raises:
+    """`launch_pointwise_target_kernel`'s objective switch, for
+    `_ord_fold_planes_kernel`."""
+
+    @parameter
+    def _go[obj: Int]() raises:
+        ctx.enqueue_function[_ord_fold_planes_kernel[obj, second_order]](
+            y_p.unsafe_ptr(), w_p.unsafe_ptr(), cursor_cat.unsafe_ptr(),
+            fold_off.unsafe_ptr(), Int32(n_folds), Int32(total), alpha,
+            border, sw.unsafe_ptr(), sg.unsafe_ptr(),
+            grid_dim=(_grid(total), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
+        )
+
+    if objective == OBJECTIVE_RMSE:
+        _go[OBJECTIVE_RMSE]()
+    elif objective == OBJECTIVE_LOGLOSS:
+        _go[OBJECTIVE_LOGLOSS]()
+    elif objective == OBJECTIVE_CROSSENTROPY:
+        _go[OBJECTIVE_CROSSENTROPY]()
+    elif objective == OBJECTIVE_QUANTILE:
+        _go[OBJECTIVE_QUANTILE]()
+    elif objective == OBJECTIVE_MAE:
+        _go[OBJECTIVE_MAE]()
+    elif objective == OBJECTIVE_LOGLINQUANTILE:
+        _go[OBJECTIVE_LOGLINQUANTILE]()
+    elif objective == OBJECTIVE_MAPE:
+        _go[OBJECTIVE_MAPE]()
+    elif objective == OBJECTIVE_POISSON:
+        _go[OBJECTIVE_POISSON]()
+    elif objective == OBJECTIVE_LQ:
+        _go[OBJECTIVE_LQ]()
+    elif objective == OBJECTIVE_EXPECTILE:
+        _go[OBJECTIVE_EXPECTILE]()
+    elif objective == OBJECTIVE_TWEEDIE:
+        _go[OBJECTIVE_TWEEDIE]()
+    elif objective == OBJECTIVE_HUBER:
+        _go[OBJECTIVE_HUBER]()
+    else:
+        raise Error(
+            "ordered fold planes: objective " + String(objective)
+            + " is not a pointwise loss"
+        )
+
+
+def _launch_ord_bat_reduce(
+    ctx: DeviceContext,
+    objective: Int,
+    mut y_p: DeviceBuffer[DType.float32],
+    mut w_p: DeviceBuffer[DType.float32],
+    mut cursor: DeviceBuffer[DType.float32],
+    mut cur_off: DeviceBuffer[DType.uint32],
+    mut task_k: DeviceBuffer[DType.uint32],
+    mut part: _PermPartition,
+    n_tasks: Int,
+    n_leaves: Int,
+    leaf_cap: Int,
+    task_base: Int,
+    alpha: Float32,
+    border: Float32,
+    mut partials: DeviceBuffer[DType.float32],
+) raises:
+    """The objective switch for `_ord_bat_reduce_kernel`: `n_tasks` tasks
+    on one cursor buffer, grid `(chunks, n_tasks * n_leaves)`."""
+
+    @parameter
+    def _go[obj: Int]() raises:
+        ctx.enqueue_function[_ord_bat_reduce_kernel[obj]](
+            y_p.unsafe_ptr(), w_p.unsafe_ptr(), cursor.unsafe_ptr(),
+            cur_off.unsafe_ptr(), task_k.unsafe_ptr(),
+            part.d_sorted.unsafe_ptr(), part.d_seg.unsafe_ptr(),
+            part.d_snap.unsafe_ptr(), Int32(n_leaves), Int32(leaf_cap),
+            Int32(ORDERED_BAT_CHUNKS), Int32(task_base), alpha, border,
+            partials.unsafe_ptr(),
+            grid_dim=(ORDERED_BAT_CHUNKS, n_tasks * n_leaves, 1),
+            block_dim=(ORDERED_BLOCK, 1, 1),
+        )
+
+    if objective == OBJECTIVE_RMSE:
+        _go[OBJECTIVE_RMSE]()
+    elif objective == OBJECTIVE_LOGLOSS:
+        _go[OBJECTIVE_LOGLOSS]()
+    elif objective == OBJECTIVE_CROSSENTROPY:
+        _go[OBJECTIVE_CROSSENTROPY]()
+    elif objective == OBJECTIVE_QUANTILE:
+        _go[OBJECTIVE_QUANTILE]()
+    elif objective == OBJECTIVE_MAE:
+        _go[OBJECTIVE_MAE]()
+    elif objective == OBJECTIVE_LOGLINQUANTILE:
+        _go[OBJECTIVE_LOGLINQUANTILE]()
+    elif objective == OBJECTIVE_MAPE:
+        _go[OBJECTIVE_MAPE]()
+    elif objective == OBJECTIVE_POISSON:
+        _go[OBJECTIVE_POISSON]()
+    elif objective == OBJECTIVE_LQ:
+        _go[OBJECTIVE_LQ]()
+    elif objective == OBJECTIVE_EXPECTILE:
+        _go[OBJECTIVE_EXPECTILE]()
+    elif objective == OBJECTIVE_TWEEDIE:
+        _go[OBJECTIVE_TWEEDIE]()
+    elif objective == OBJECTIVE_HUBER:
+        _go[OBJECTIVE_HUBER]()
+    else:
+        raise Error(
+            "ordered batched estimation: objective " + String(objective)
+            + " is not a pointwise loss"
+        )
+
+
+def _ord_fast_init_cursors(
+    ctx: DeviceContext,
+    offsets: List[Int],
+    total: Int,
+    folds: List[TFold],
+    learn_count: Int,
+    start_value: Float32,
+    mut cursors: List[List[DeviceBuffer[DType.float32]]],
+    mut fast_cat: List[DeviceBuffer[DType.float32]],
+    mut fast_fold_off: List[DeviceBuffer[DType.uint32]],
+) raises:
+    """`ORDERED_CAT_CURSORS`: per learn permutation, every fold's cursor in
+    ONE buffer at the concatenated fold offsets (`fast_cat`), filled with
+    the starting point, and the per-fold VIEWS of it into `cursors` (the
+    buffers the rest of the fit reads and writes, as before); the fold
+    offset table `offsets + [total]` (`fast_fold_off`, one entry)."""
+    for _ in range(learn_count):
+        var cat = ctx.enqueue_create_buffer[DType.float32](total)
+        enqueue_fill(ctx, cat, start_value)
+        var per = List[DeviceBuffer[DType.float32]]()
+        for f in range(len(folds)):
+            per.append(
+                cat.create_sub_buffer[DType.float32](
+                    offsets[f], folds[f].quality_evaluate_samples.right
+                )
+            )
+        cursors.append(per^)
+        fast_cat.append(cat^)
+    var n_folds = len(folds)
+    var h = ctx.enqueue_create_host_buffer[DType.uint32](n_folds + 1)
+    for f in range(n_folds):
+        h.unsafe_ptr().unsafe_store(f, UInt32(offsets[f]))
+    h.unsafe_ptr().unsafe_store(n_folds, UInt32(total))
+    var d = ctx.enqueue_create_buffer[DType.uint32](n_folds + 1)
+    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
+    ctx.synchronize()
+    _ = h^
+    fast_fold_off.append(d^)
+
+
+def _ord_fast_init_tasks(
+    ctx: DeviceContext,
+    mut arena: BufferArena,
+    folds: List[TFold],
+    parts: List[_PermPartition],
+    learn_count: Int,
+    est_p: Int,
+    n_rows: Int,
+    leaf_cap: Int,
+    mut fast_task_k: List[DeviceBuffer[DType.uint32]],
+    mut fast_est_off: List[DeviceBuffer[DType.uint32]],
+    mut fast_est_k: List[DeviceBuffer[DType.uint32]],
+    mut fast_partials: List[DeviceBuffer[DType.float32]],
+    mut fast_leaves: List[DeviceBuffer[DType.float32]],
+    mut fast_est_view: List[DeviceBuffer[DType.float32]],
+    mut fast_h_leaves: List[HostBuffer[DType.float32]],
+) raises:
+    """`ORDERED_BATCH_EST`, once the partitions exist: the task tables
+    (fold `f`'s snapshot index in a learn permutation's partition; the
+    estimation task's `[0, n_rows]` offsets and its snapshot index), the
+    chunk partials, the leaves (task `lp * n_folds + f`, the estimation
+    task last, `leaf_cap` each) with the estimation task's view, and its
+    host readback. Each list gets its one entry."""
+    var n_folds = len(folds)
+    var n_tasks = learn_count * n_folds + 1
+    var hk = ctx.enqueue_create_host_buffer[DType.uint32](n_folds)
+    for f in range(n_folds):
+        var est = folds[f].estimate_samples.right
+        comptime if ORDERED_SABOTAGE:
+            est = folds[f].quality_evaluate_samples.right
+        var k = -1
+        for i in range(len(parts[0].bounds)):
+            if parts[0].bounds[i] == est:
+                k = i
+        if k < 0:
+            raise Error("ordered fast: no snapshot at a fold's prefix")
+        hk.unsafe_ptr().unsafe_store(f, UInt32(k))
+    var dk = ctx.enqueue_create_buffer[DType.uint32](n_folds)
+    ctx.enqueue_copy(dst_buf=dk, src_ptr=hk.unsafe_ptr())
+    var ke = -1
+    for i in range(len(parts[est_p].bounds)):
+        if parts[est_p].bounds[i] == n_rows:
+            ke = i
+    if ke < 0:
+        raise Error("ordered fast: no snapshot at every row")
+    var he = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    he.unsafe_ptr().unsafe_store(0, UInt32(0))
+    he.unsafe_ptr().unsafe_store(1, UInt32(n_rows))
+    var de = ctx.enqueue_create_buffer[DType.uint32](2)
+    ctx.enqueue_copy(dst_buf=de, src_ptr=he.unsafe_ptr())
+    var hke = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    hke.unsafe_ptr().unsafe_store(0, UInt32(ke))
+    var dke = ctx.enqueue_create_buffer[DType.uint32](1)
+    ctx.enqueue_copy(dst_buf=dke, src_ptr=hke.unsafe_ptr())
+    ctx.synchronize()
+    _ = hk^
+    _ = he^
+    _ = hke^
+    fast_task_k.append(dk^)
+    fast_est_off.append(de^)
+    fast_est_k.append(dke^)
+    fast_partials.append(
+        arena.device[DType.float32](
+            ctx, 3 * n_tasks * leaf_cap * ORDERED_BAT_CHUNKS
+        )
+    )
+    # its own allocation, so the estimation task's view is a plain
+    # sub-buffer (not a view of an arena view)
+    var leaves = ctx.enqueue_create_buffer[DType.float32](n_tasks * leaf_cap)
+    fast_est_view.append(
+        leaves.create_sub_buffer[DType.float32](
+            (n_tasks - 1) * leaf_cap, leaf_cap
+        )
+    )
+    fast_leaves.append(leaves^)
+    fast_h_leaves.append(ctx.enqueue_create_host_buffer[DType.float32](leaf_cap))
+
+
+def _ord_fast_estimate_tree(
+    ctx: DeviceContext,
+    n_folds: Int,
+    n_leaves: Int,
+    leaf_cap: Int,
+    total: Int,
+    n_rows: Int,
+    learn_count: Int,
+    est_p: Int,
+    mut dys: List[DeviceBuffer[DType.float32]],
+    mut dws: List[DeviceBuffer[DType.float32]],
+    mut dperms: List[DeviceBuffer[DType.uint32]],
+    mut parts: List[_PermPartition],
+    mut est_cursor: DeviceBuffer[DType.float32],
+    mut bins: DeviceBuffer[DType.uint32],
+    opts: OrderedBoostingOptions,
+    mut fast_cat: List[DeviceBuffer[DType.float32]],
+    mut fast_fold_off: List[DeviceBuffer[DType.uint32]],
+    mut fast_task_k: List[DeviceBuffer[DType.uint32]],
+    mut fast_est_off: List[DeviceBuffer[DType.uint32]],
+    mut fast_est_k: List[DeviceBuffer[DType.uint32]],
+    mut fast_partials: List[DeviceBuffer[DType.float32]],
+    mut fast_leaves: List[DeviceBuffer[DType.float32]],
+    mut fast_est_view: List[DeviceBuffer[DType.float32]],
+    mut fast_h_leaves: List[HostBuffer[DType.float32]],
+) raises:
+    """Step 6 of a tree under `ORDERED_BATCH_EST`, enqueued: the reduce per
+    cursor buffer (each learn permutation's folds, then the estimation
+    task), the leaves, the apply per cursor buffer, and the estimation
+    task's leaves to `fast_h_leaves[0]` (read after the learn-loss drain
+    by `_ord_fast_take_leaves`)."""
+    var n_tasks = learn_count * n_folds + 1
+    var est_task = learn_count * n_folds
+    for lp in range(learn_count):
+        _launch_ord_bat_reduce(
+            ctx, opts.objective, dys[lp], dws[lp], fast_cat[lp],
+            fast_fold_off[0], fast_task_k[0], parts[lp], n_folds, n_leaves,
+            leaf_cap, lp * n_folds, opts.kernel_alpha, opts.logloss_border,
+            fast_partials[0],
+        )
+    _launch_ord_bat_reduce(
+        ctx, opts.objective, dys[est_p], dws[est_p], est_cursor,
+        fast_est_off[0], fast_est_k[0], parts[est_p], 1, n_leaves, leaf_cap,
+        est_task, opts.kernel_alpha, opts.logloss_border, fast_partials[0],
+    )
+    var n = n_tasks * leaf_cap
+    ctx.enqueue_function[_ord_bat_leaves_kernel](
+        fast_partials[0].unsafe_ptr(), fast_leaves[0].unsafe_ptr(),
+        Int32(n), Int32(leaf_cap), Int32(n_leaves), Int32(ORDERED_BAT_CHUNKS),
+        opts.l2_leaf_reg,
+        Int32(1) if opts.leaf_method == LEAF_ESTIMATION_GRADIENT else Int32(0),
+        grid_dim=(_grid(n), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
+    )
+    for lp in range(learn_count):
+        ctx.enqueue_function[_ord_bat_apply_kernel](
+            dperms[lp].unsafe_ptr(), bins.unsafe_ptr(),
+            fast_leaves[0].unsafe_ptr(), fast_cat[lp].unsafe_ptr(),
+            fast_fold_off[0].unsafe_ptr(), Int32(n_folds), Int32(total),
+            Int32(lp * n_folds), Int32(leaf_cap), opts.learning_rate,
+            grid_dim=(_grid(total), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
+        )
+    ctx.enqueue_function[_ord_bat_apply_kernel](
+        dperms[est_p].unsafe_ptr(), bins.unsafe_ptr(),
+        fast_leaves[0].unsafe_ptr(), est_cursor.unsafe_ptr(),
+        fast_est_off[0].unsafe_ptr(), Int32(1), Int32(n_rows),
+        Int32(est_task), Int32(leaf_cap), opts.learning_rate,
+        grid_dim=(_grid(n_rows), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
+    )
+    ctx.enqueue_copy(dst_buf=fast_h_leaves[0], src_buf=fast_est_view[0])
+
+
+def _ord_fast_take_leaves(
+    fast_h_leaves: List[HostBuffer[DType.float32]], n_leaves: Int
+) -> List[Float32]:
+    """The estimation task's leaves, after the drain that ran the copy."""
+    var out = List[Float32]()
+    for leaf in range(n_leaves):
+        out.append(fast_h_leaves[0].unsafe_ptr().unsafe_load(leaf))
+    return out^
+
+
+# ===========================================================================
 # THE FIT
 # ===========================================================================
 
@@ -1433,15 +2039,32 @@ def fit_ordered(
     # cursors: [learn permutation][fold], each over [0, R_f); the
     # estimation cursor over every row in the estimation permutation's order
     var cursors = List[List[DeviceBuffer[DType.float32]]]()
-    for _ in range(learn_count):
-        var per = List[DeviceBuffer[DType.float32]]()
-        for f in range(n_folds):
-            var c = arena.device[DType.float32](
-                ctx, folds[f].quality_evaluate_samples.right
-            )
-            enqueue_fill(ctx, c, opts.start_value)
-            per.append(c^)
-        cursors.append(per^)
+    # the Apple FAST state (see the section above): empty lists unless a
+    # switch is on, one entry each when it is
+    var fast_cat = List[DeviceBuffer[DType.float32]]()
+    var fast_fold_off = List[DeviceBuffer[DType.uint32]]()
+    var fast_task_k = List[DeviceBuffer[DType.uint32]]()
+    var fast_est_off = List[DeviceBuffer[DType.uint32]]()
+    var fast_est_k = List[DeviceBuffer[DType.uint32]]()
+    var fast_partials = List[DeviceBuffer[DType.float32]]()
+    var fast_leaves = List[DeviceBuffer[DType.float32]]()
+    var fast_est_view = List[DeviceBuffer[DType.float32]]()
+    var fast_h_leaves = List[HostBuffer[DType.float32]]()
+    comptime if ORDERED_CAT_CURSORS:
+        _ord_fast_init_cursors(
+            ctx, offsets, total, folds, learn_count, opts.start_value,
+            cursors, fast_cat, fast_fold_off,
+        )
+    else:
+        for _ in range(learn_count):
+            var per = List[DeviceBuffer[DType.float32]]()
+            for f in range(n_folds):
+                var c = arena.device[DType.float32](
+                    ctx, folds[f].quality_evaluate_samples.right
+                )
+                enqueue_fill(ctx, c, opts.start_value)
+                per.append(c^)
+            cursors.append(per^)
     var est_cursor = ctx.enqueue_create_buffer[DType.float32](n_rows)
     enqueue_fill(ctx, est_cursor, opts.start_value)
 
@@ -1545,11 +2168,16 @@ def fit_ordered(
     var batch = estimate_can_batch(
         opts.objective, opts.leaf_method, opts.leaf_iterations
     )
+    # the batched estimation (`_ord_fast_estimate_tree`): the batchable tasks, no
+    # per-task trace records wanted
+    var fast_on = False
+    comptime if ORDERED_BATCH_EST:
+        fast_on = batch and not trace.enabled
     var n_slots = learn_count * n_folds + 1 if batch else n_folds + 1
     for _ in range(n_slots):
         est_pools.append(List[TEstimationWorkspace]())
     var slots = List[_OrderedSlot]()
-    if batch:
+    if batch and not fast_on:
         for _ in range(learn_count):
             for f in range(n_folds):
                 var est = folds[f].estimate_samples.right
@@ -1575,6 +2203,13 @@ def fit_ordered(
                 bounds.append(n_rows)
             parts.append(
                 _PermPartition(ctx, arena, bounds^, 1 << max_depth)
+            )
+    comptime if ORDERED_BATCH_EST:
+        if fast_on:
+            _ord_fast_init_tasks(
+                ctx, arena, folds, parts, learn_count, est_p, n_rows,
+                1 << max_depth, fast_task_k, fast_est_off, fast_est_k,
+                fast_partials, fast_leaves, fast_est_view, fast_h_leaves,
             )
     var part_counts = arena.device[DType.uint32](ctx, ORDERED_PART_CELLS if batch else 1)
     var part_prefix = arena.device[DType.uint32](ctx, ORDERED_PART_CELLS if batch else 1)
@@ -1618,33 +2253,48 @@ def fit_ordered(
         times.begin(ctx)
         var sw = ctx.enqueue_create_buffer[DType.float32](total)
         var sg = ctx.enqueue_create_buffer[DType.float32](total)
-        for f in range(n_folds):
-            var r = folds[f].quality_evaluate_samples.right
-            # the prefix [0, r) of the learn permutation's own-order copies
-            ref gy = dys[learn_p]
-            ref gw = dws[learn_p]
-            ref stats = der_stats[f]
-            ref part = der_part[f]
-            var blocks = (r + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+        comptime if ORDERED_FOLD_DERIVS:
+            # every fold's planes in one launch (`_ord_fold_planes_kernel`)
             if second_order:
-                launch_approximate[False, True](
-                    ctx, opts.objective, gy, gw, Int32(r),
-                    cursors[learn_p][f], Int32(1), opts.kernel_alpha,
-                    opts.logloss_border, stats, part, Int32(0),
-                    dummy_mag, Int32(0), blocks,
+                _launch_ord_fold_planes[True](
+                    ctx, opts.objective, dys[learn_p], dws[learn_p],
+                    fast_cat[learn_p], fast_fold_off[0], n_folds, total,
+                    opts.kernel_alpha, opts.logloss_border, sw, sg,
                 )
             else:
-                launch_approximate[False](
-                    ctx, opts.objective, gy, gw, Int32(r),
-                    cursors[learn_p][f], Int32(1), opts.kernel_alpha,
-                    opts.logloss_border, stats, part, Int32(0),
-                    dummy_mag, Int32(0), blocks,
+                _launch_ord_fold_planes[False](
+                    ctx, opts.objective, dys[learn_p], dws[learn_p],
+                    fast_cat[learn_p], fast_fold_off[0], n_folds, total,
+                    opts.kernel_alpha, opts.logloss_border, sw, sg,
                 )
-            ctx.enqueue_function[_ord_scatter_planes_kernel](
-                stats.unsafe_ptr(), sw.unsafe_ptr(), sg.unsafe_ptr(),
-                Int32(r), Int32(offsets[f]), grid_dim=(_grid(r), 1, 1),
-                block_dim=(ORDERED_BLOCK, 1, 1),
-            )
+        else:
+            for f in range(n_folds):
+                var r = folds[f].quality_evaluate_samples.right
+                # the prefix [0, r) of the learn permutation's own-order copies
+                ref gy = dys[learn_p]
+                ref gw = dws[learn_p]
+                ref stats = der_stats[f]
+                ref part = der_part[f]
+                var blocks = (r + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+                if second_order:
+                    launch_approximate[False, True](
+                        ctx, opts.objective, gy, gw, Int32(r),
+                        cursors[learn_p][f], Int32(1), opts.kernel_alpha,
+                        opts.logloss_border, stats, part, Int32(0),
+                        dummy_mag, Int32(0), blocks,
+                    )
+                else:
+                    launch_approximate[False](
+                        ctx, opts.objective, gy, gw, Int32(r),
+                        cursors[learn_p][f], Int32(1), opts.kernel_alpha,
+                        opts.logloss_border, stats, part, Int32(0),
+                        dummy_mag, Int32(0), blocks,
+                    )
+                ctx.enqueue_function[_ord_scatter_planes_kernel](
+                    stats.unsafe_ptr(), sw.unsafe_ptr(), sg.unsafe_ptr(),
+                    Int32(r), Int32(offsets[f]), grid_dim=(_grid(r), 1, 1),
+                    block_dim=(ORDERED_BLOCK, 1, 1),
+                )
 
         times.end(ctx, "ord.derivatives")
         # 3. the score noise, from the UNBOOTSTRAPPED quality slices
@@ -1670,7 +2320,10 @@ def fit_ordered(
         var held_h = List[HostBuffer[DType.float32]]()
         if fused_sums:
             var part = ctx.enqueue_create_buffer[DType.float32](3 * REDUCE_LANES_BLOCK)
-            if String(getenv("MOJOLEARN_ORD_STD_SPLIT")) != "0":
+            var std_split = True
+            comptime if not ORDERED_FOLD_DERIVS:
+                std_split = String(getenv("MOJOLEARN_ORD_STD_SPLIT")) != "0"
+            if std_split:
                 ctx.enqueue_function[_ord_std_lanes_kernel](
                     sw.unsafe_ptr(), sg.unsafe_ptr(), quality.unsafe_ptr(),
                     Int32(total), part.unsafe_ptr(),
@@ -1844,9 +2497,10 @@ def fit_ordered(
                 parts[p].enqueue_sort(
                     ctx, bins, dperms[p], n_leaves, part_counts, part_prefix
                 )
-            ctx.synchronize()
-            for p in range(perm_count):
-                parts[p].settle(n_leaves)
+            if not fast_on:
+                ctx.synchronize()
+                for p in range(perm_count):
+                    parts[p].settle(n_leaves)
         else:
             # the tree's bins on the host ONCE, for every task's partition
             # (`_partition_from_host_bins`)
@@ -1862,7 +2516,16 @@ def fit_ordered(
         # they are held here instead and released after the learn-loss
         # drain below, which then covers both (one drain, not two).
         var pend_held = List[_OrderedPending]()
-        if batch:
+        if fast_on:
+            comptime if ORDERED_BATCH_EST:
+                _ord_fast_estimate_tree(
+                    ctx, n_folds, n_leaves, 1 << max_depth, total, n_rows,
+                    learn_count, est_p, dys, dws, dperms, parts, est_cursor,
+                    bins, opts, fast_cat, fast_fold_off, fast_task_k,
+                    fast_est_off, fast_est_k, fast_partials, fast_leaves,
+                    fast_est_view, fast_h_leaves,
+                )
+        elif batch:
             var pend = List[_OrderedPending]()
             for lp in range(learn_count):
                 for f in range(n_folds):
@@ -1944,10 +2607,15 @@ def fit_ordered(
         var structure = TObliviousTreeStructure()
         structure.splits = splits^
         var weak = TObliviousTreeModel(structure^)
-        for leaf in range(n_leaves):
-            weak.leaf_values.append(identical_mul(leaves[leaf], opts.learning_rate))
-        model.add_weak_model(weak^)
-        trace.record_device(ctx, tag + ".estimation_cursor", est_cursor)
+        var weak_later = List[TObliviousTreeModel]()
+        if fast_on:
+            # its leaves come home on the learn-loss drain below
+            weak_later.append(weak^)
+        else:
+            for leaf in range(n_leaves):
+                weak.leaf_values.append(identical_mul(leaves[leaf], opts.learning_rate))
+            model.add_weak_model(weak^)
+            trace.record_device(ctx, tag + ".estimation_cursor", est_cursor)
 
         times.end(ctx, "ord.estimation_estimate")
         # 7. the learn loss at the estimation cursor
@@ -1965,6 +2633,15 @@ def fit_ordered(
         ctx.synchronize()
         _ = pend_held^
         losses.append(-Float64(h_fv[0]) / Float64(n_rows))
+        if fast_on:
+            comptime if ORDERED_BATCH_EST:
+                leaves = _ord_fast_take_leaves(fast_h_leaves, n_leaves)
+                var weak_fast = weak_later.pop()
+                for leaf in range(n_leaves):
+                    weak_fast.leaf_values.append(
+                        identical_mul(leaves[leaf], opts.learning_rate)
+                    )
+                model.add_weak_model(weak_fast^)
         times.end(ctx, "ord.learn_loss")
         _ = bins^
         # 8. the held-out cursor, its loss, the detector
@@ -1990,6 +2667,15 @@ def fit_ordered(
     _ = h_part_rows^
     _ = slots^
     _ = parts^
+    _ = fast_cat^
+    _ = fast_fold_off^
+    _ = fast_task_k^
+    _ = fast_est_off^
+    _ = fast_est_k^
+    _ = fast_partials^
+    _ = fast_leaves^
+    _ = fast_est_view^
+    _ = fast_h_leaves^
     _ = part_counts^
     _ = part_prefix^
     _ = dys^
