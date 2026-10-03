@@ -31,8 +31,8 @@
 #   (ALLOW_MODEL_DROP=1 overrides) or names a hash the table does not carry,
 #   then reruns the self-test and coverage.
 #
-# Needs the host bindings `estimators` (ols) and the portable math library in
-# this checkout; --build-host builds exactly those (through
+# Needs the host bindings `estimators` and `x_decomp` (ols and its TSQR) and
+# the portable math library in this checkout; --build-host builds exactly those (through
 # ~/mojolearn-evidence/compile_slot.sh when present, -j 1).
 #
 # Environment: PYTHON (default `pixi run -e default python`, else python3),
@@ -75,8 +75,13 @@ MODELDIR=python/mojolearn/verify_reference/models
 # --- the host bindings the CLI import and the self-test need ---------------
 if [ "$(uname -s)" = Darwin ]; then MATH=python/mojolearn/.dylibs/libMojolearnMath.dylib
 else MATH=python/mojolearn/.libs/libMojolearnMath.so; fi
-HOSTSO=python/mojolearn/host/_mojolearn_estimators_host.so
-if [ ! -f "$HOSTSO" ] || [ ! -f "$MATH" ]; then
+# ols on the host column: LinearRegression (estimators) + its TSQR (x_decomp)
+HOST_FAMILIES=(estimators x_decomp)
+missing=()
+for fam in "${HOST_FAMILIES[@]}"; do
+    [ -f "python/mojolearn/host/_mojolearn_${fam}_host.so" ] || missing+=("$fam")
+done
+if [ ${#missing[@]} -gt 0 ] || [ ! -f "$MATH" ]; then
     if [ $BUILD_HOST = 1 ]; then
         SLOT=(); [ -x "$HOME/mojolearn-evidence/compile_slot.sh" ] && SLOT=(bash "$HOME/mojolearn-evidence/compile_slot.sh")
         if [ ! -f "$MATH" ]; then
@@ -84,15 +89,15 @@ if [ ! -f "$HOSTSO" ] || [ ! -f "$MATH" ]; then
                 "import pathlib, stage; stage.build(pathlib.Path('$ROOT/$MATH'))" > "$EVID/build-math.log" 2>&1 \
                 || die "portable math build failed; see $EVID/build-math.log"
         fi
-        if [ ! -f "$HOSTSO" ]; then
+        for fam in "${missing[@]}"; do
             "${SLOT[@]}" env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_COMPILE_JOBS=1 \
-                sh bindings/build_estimators_host.sh > "$EVID/build-estimators-host.log" 2>&1
-            rc=$?; [ $rc = 0 ] || { grep -m 5 -B 2 -A 8 error "$EVID/build-estimators-host.log"; die "estimators host build rc=$rc"; }
-        fi
+                sh "bindings/build_${fam}_host.sh" > "$EVID/build-${fam}-host.log" 2>&1
+            rc=$?; [ $rc = 0 ] || { grep -m 5 -B 2 -A 8 error "$EVID/build-${fam}-host.log"; die "$fam host build rc=$rc"; }
+        done
     else
-        die "missing $HOSTSO or $MATH. Build them (or pass --build-host):
+        die "missing host bindings (${missing[*]}) or $MATH. Build them (or pass --build-host):
     PYTHONPATH=packaging/portable_math python -c \"import pathlib, stage; stage.build(pathlib.Path('$MATH'))\"
-    bash ~/mojolearn-evidence/compile_slot.sh env MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_COMPILE_JOBS=1 sh bindings/build_estimators_host.sh"
+    for f in ${HOST_FAMILIES[*]}; do bash ~/mojolearn-evidence/compile_slot.sh env MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_COMPILE_JOBS=1 sh bindings/build_\${f}_host.sh; done"
     fi
 fi
 
