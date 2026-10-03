@@ -43,6 +43,7 @@ from x_cluster.bodies import (
     kth_smallest_row,
     meanshift_seed,
     nearest_row,
+    SplitMix64,
     sqdist_cell,
     sqrt_cell,
     tree_descend,
@@ -628,6 +629,14 @@ struct HostOps(ClusterOps):
         self.gauss_q(x, n, d, means, pchol, kc, q)
         self.resp(q, c, n, kc, lpn)
         self.exp(q, r, n * kc)
+
+    def minibatch_fast(
+        mut self, xs: Int, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,
+        ratio: Float64, seed: UInt64, mut rng: SplitMix64, mut c: List[Float32], mut w: List[Float32],
+        mut steps_done: Int,
+    ) raises -> Bool:
+        # the host column never takes the FAST device paths (`fast_device`)
+        return False
 
     def set_i(mut self, slot: Int, v: List[Int32]) raises:
         if len(v) > len(self.i[slot]):

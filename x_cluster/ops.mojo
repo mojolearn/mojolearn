@@ -10,6 +10,7 @@ itself (sampling, sorting, the sequential loops) is host code compiled once per
 binding from the same source. Arrays live in numbered SLOTS so the device keeps
 them resident between primitives.
 """
+from x_cluster.bodies import SplitMix64
 
 
 trait ClusterOps(Movable):
@@ -195,6 +196,18 @@ trait ClusterOps(Movable):
         """`gauss_q`, `resp` and `exp` of one E-step as ONE primitive: row i's
         kc Mahalanobis squares, its log-sum-exp and its responsibilities by
         the same bodies in the same order (the same values)."""
+        ...
+
+    def minibatch_fast(
+        mut self, xs: Int, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,
+        ratio: Float64, seed: UInt64, mut rng: SplitMix64, mut c: List[Float32], mut w: List[Float32],
+        mut steps_done: Int,
+    ) raises -> Bool:
+        """FAST on Apple (lane/apple-fast-cluster): `minibatch_fit`'s step
+        loop resident on the device (x_cluster/minibatch_fast.mojo); `c`,
+        `w` in and out. False when the column does not take it (the host,
+        every IDENTICAL build, a shape past its caps): the caller runs the
+        step loop."""
         ...
 
     def set_i(mut self, slot: Int, v: List[Int32]) raises:
