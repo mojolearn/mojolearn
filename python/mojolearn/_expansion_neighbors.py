@@ -187,6 +187,36 @@ def _labels_of(y):
     return classes, [code[v] for v in y]
 
 
+def _purity_flags(est):
+    """lane apple-fast-purity: the bound binary's switches
+    (`x_neighbors_purity_flags`; 0 without them: the Python passes).
+    Bit 1: per-row argmax on the device; bit 2: NearestCentroid's median
+    within-class std on the device."""
+    try:
+        fn = getattr(est._bind(), "x_neighbors_purity_flags", None)
+        return int(fn()) if fn is not None else 0
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _argmax_labels(est, classes, M):
+    """`_class_array(classes, [_argmax(r) for r in M.tolist()])` with the
+    argmax on the device (`row_argmax`, the same first-max-wins rule) and the
+    labels from the native gather where that gives the same array (int or
+    float classes, no bools); otherwise the codes go through `_class_array`."""
+    if not (_purity_flags(est) & 1):
+        return _class_array(classes, [_argmax(r) for r in M.tolist()])
+    n, C = M.shape
+    codes = empty((n,), "<i4")
+    if n > 0:
+        est._op("row_argmax", [(M, 0), (codes, 1)], (n, C))
+    if not any(isinstance(v, bool) for v in classes) and (
+            all(isinstance(v, int) for v in classes) or all(isinstance(v, (int, float)) for v in classes)):
+        from ._labels import decode_labels
+        return decode_labels(classes, codes)
+    return _class_array(classes, codes.tolist())
+
+
 def _class_array(classes, codes):
     vals = [classes[c] for c in codes]
     if all(isinstance(v, bool) or isinstance(v, int) for v in classes):
@@ -530,11 +560,26 @@ class NearestCentroid(_XNeighbors):
             self._op("nc_stats", [(X, 0), (lab, 0), (nk, 0), (cent, 1), (stats, 1), (dsc, 1)], (n, d, C))
         else:
             self._op("nc_std", [(X, 0), (lab, 0), (cent, 0), (stats, 1)], (n, d, C))
-        std = stats.tolist()
-        if all(v == 0.0 for v in std) and self._ptp_zero(X):
-            raise ValueError("All features have zero variance. Division by zero.")
-        std_sorted = sorted(std)
-        med_std = _f32_scalar(_median(std_sorted))
+        if _purity_flags(self) & 2:
+            # lane apple-fast-purity: the median of the d stds and the
+            # all-zero test on the device (x_neighbors/sort_items.mojo
+            # nc_med_std: a bitonic sort, then the middle value(s)); two
+            # floats come back instead of a Python sort over the features
+            p = 1
+            while p < d:
+                p *= 2
+            lg = p.bit_length() - 1
+            ms = _empty_out((2,), "<f4")
+            self._op("nc_med_std", [(stats, 0), (ms, 1)], (d, p, lg * (lg + 1) // 2))
+            med_std, all_zero = ms.tolist()
+            if all_zero and self._ptp_zero(X):
+                raise ValueError("All features have zero variance. Division by zero.")
+        else:
+            std = stats.tolist()
+            if all(v == 0.0 for v in std) and self._ptp_zero(X):
+                raise ValueError("All features have zero variance. Division by zero.")
+            std_sorted = sorted(std)
+            med_std = _f32_scalar(_median(std_sorted))
         shrink = float(self.shrink_threshold) if self.shrink_threshold else 0.0
         if dsc is not None:
             self._op("nc_shrink_d", [(dsc, 0), (cent, 0), (nk, 0), (stats, 0), (new_cent, 1), (devs, 1)],
@@ -565,7 +610,7 @@ class NearestCentroid(_XNeighbors):
             D = self._sqdist(Q, self.centroids_) if self.metric == "euclidean" else self._l1dist(Q, self.centroids_)
             _, idx = self._knn_select(D, 1, False)
             return _class_array(self.classes_, [r[0] for r in idx.tolist()])
-        return _class_array(self.classes_, [_argmax(r) for r in self.decision_function(Q).tolist()])
+        return _argmax_labels(self, self.classes_, self.decision_function(Q))
 
     def decision_function(self, X):
         if self.metric != "euclidean":
@@ -1355,7 +1400,7 @@ class _LabelPropagationBase(_XNeighbors):
         self.classes_ = classes
         self.label_distributions_ = final
         self.n_iter_ = n_iter
-        self.transduction_ = _class_array(classes, [_argmax(r) for r in final.tolist()])
+        self.transduction_ = _argmax_labels(self, classes, final)
         self.n_features_in_ = X.shape[1]
         return self
 
@@ -1375,7 +1420,7 @@ class _LabelPropagationBase(_XNeighbors):
         return out
 
     def predict(self, X):
-        return _class_array(self.classes_, [_argmax(r) for r in self.predict_proba(X).tolist()])
+        return _argmax_labels(self, self.classes_, self.predict_proba(X))
 
     def score(self, X, y, sample_weight=None):
         return _accuracy(y, self.predict(X), sample_weight)

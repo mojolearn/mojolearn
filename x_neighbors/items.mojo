@@ -1443,3 +1443,17 @@ def svgp_var_item(t: Int, ksu: FP, cmat: FP, res: FP, n: Int, m: Int, kdiag: Flo
             s = ftz(identical_mul_add(cmat.unsafe_load(i * m + j), ksu.unsafe_load(t * m + j), s))
         acc = ftz(identical_mul_add(ksu.unsafe_load(t * m + i), s, acc))
     res.unsafe_store(t, _sub(kdiag, acc))
+
+
+def row_argmax_item(t: Int, a: FP, res: IP, n: Int, m: Int):
+    """Row t's first maximum (lane apple-fast-purity): `_argmax` in
+    _expansion_neighbors.py, strictly greater replaces, so ties and a
+    leading NaN keep the earlier column. Exact: no arithmetic."""
+    var best = a.unsafe_load(t * m)
+    var at = 0
+    for j in range(1, m):
+        var v = a.unsafe_load(t * m + j)
+        if v > best:
+            best = v
+            at = j
+    res.unsafe_store(t, Int32(at))
