@@ -74,6 +74,15 @@ comptime QH_MODE_SKIP = (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_GBDT_DW_MODE_SKIP_OFF"]()
 )
+#: lane apple-fast-gap-misc, FAST Apple candidate, default OFF: when the
+#: level's policy blocks hold ONE feature group (taxi's 16 features), the
+#: skip build quantizes each row's pair itself (`qh_hist_skip_kernel`'s
+#: `fq` arm) and `quantize_pair_kernel` is not launched: one launch and an
+#: 8-byte write + read per row per level fewer. Same pairs, same bits.
+#: `-D MOJOLEARN_GBDT_QH_FAST_FUSED_Q`.
+comptime QH_FAST_FUSED_Q = QH_MODE_SKIP and is_defined[
+    "MOJOLEARN_GBDT_QH_FAST_FUSED_Q"
+]()
 
 
 def quantized_hist_shape_ok(
@@ -205,23 +214,32 @@ def launch_quantized_histograms[ridx_stats: Bool = False](
 
     # ---- DEV 1911: the packed-pair plane, for exactly the compute
     # partitions. Grid-stride on x, one row of blocks per compute leaf.
+    var fused_q = False
+    comptime if QH_FAST_FUSED_Q:
+        var n_groups = 0
+        for b in range(len(blocks)):
+            n_groups += (
+                blocks[b].n_features + QH_GROUP_FEATURES - 1
+            ) // QH_GROUP_FEATURES
+        fused_q = n_groups == 1
     var qx = (n_rows + QH_BLOCK - 1) // QH_BLOCK
     if qx > 4 * sm_count:
         qx = 4 * sm_count
     if qx < 1:
         qx = 1
-    ctx.enqueue_function[quantize_pair_kernel[ridx_stats]](
-        stats.unsafe_ptr(),
-        Int32(n_rows),
-        p_off.unsafe_ptr(),
-        p_sz.unsafe_ptr(),
-        ids.unsafe_ptr(),
-        row_index.unsafe_ptr(),
-        q_stats.unsafe_ptr(),
-        fixed_scale,
-        grid_dim=(qx, n_live, 1),
-        block_dim=(QH_BLOCK, 1, 1),
-    )
+    if not fused_q:
+        ctx.enqueue_function[quantize_pair_kernel[ridx_stats]](
+            stats.unsafe_ptr(),
+            Int32(n_rows),
+            p_off.unsafe_ptr(),
+            p_sz.unsafe_ptr(),
+            ids.unsafe_ptr(),
+            row_index.unsafe_ptr(),
+            q_stats.unsafe_ptr(),
+            fixed_scale,
+            grid_dim=(qx, n_live, 1),
+            block_dim=(QH_BLOCK, 1, 1),
+        )
 
     # ---- DEV 1912/1913/1914: one launch per policy block, exactly as
     # `launch_histograms_for_blocks` walks them, advancing the flat bin
@@ -254,45 +272,99 @@ def launch_quantized_histograms[ridx_stats: Bool = False](
 
         comptime if QH_MODE_SKIP:
             if depth == 0:
-                ctx.enqueue_function[qh_hist_skip_kernel[False]](
-                    blk.folds.unsafe_ptr(),
-                    blk.fold_off.unsafe_ptr(),
-                    Int32(blk.n_features),
-                    cindex.unsafe_ptr(),
-                    Int32(line),
-                    Int32(base),
-                    row_index.unsafe_ptr(),
-                    q_stats.unsafe_ptr(),
-                    p_off.unsafe_ptr(),
-                    p_sz.unsafe_ptr(),
-                    ids.unsafe_ptr(),
-                    q_acc.unsafe_ptr(),
-                    Int32(block_first_bin),
-                    Int32(hist_cells_per_leaf),
-                    q_skip + block_first_feature,
-                    grid_dim=(groups * replicas, n_live, 1),
-                    block_dim=(QH_BLOCK, 1, 1),
-                )
+                if fused_q:
+                    ctx.enqueue_function[qh_hist_skip_kernel[False, True, ridx_stats]](
+                        blk.folds.unsafe_ptr(),
+                        blk.fold_off.unsafe_ptr(),
+                        Int32(blk.n_features),
+                        cindex.unsafe_ptr(),
+                        Int32(line),
+                        Int32(base),
+                        row_index.unsafe_ptr(),
+                        q_stats.unsafe_ptr(),
+                        p_off.unsafe_ptr(),
+                        p_sz.unsafe_ptr(),
+                        ids.unsafe_ptr(),
+                        q_acc.unsafe_ptr(),
+                        Int32(block_first_bin),
+                        Int32(hist_cells_per_leaf),
+                        q_skip + block_first_feature,
+                        stats.unsafe_ptr(),
+                        Int32(n_rows),
+                        fixed_scale,
+                        grid_dim=(groups * replicas, n_live, 1),
+                        block_dim=(QH_BLOCK, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[qh_hist_skip_kernel[False]](
+                        blk.folds.unsafe_ptr(),
+                        blk.fold_off.unsafe_ptr(),
+                        Int32(blk.n_features),
+                        cindex.unsafe_ptr(),
+                        Int32(line),
+                        Int32(base),
+                        row_index.unsafe_ptr(),
+                        q_stats.unsafe_ptr(),
+                        p_off.unsafe_ptr(),
+                        p_sz.unsafe_ptr(),
+                        ids.unsafe_ptr(),
+                        q_acc.unsafe_ptr(),
+                        Int32(block_first_bin),
+                        Int32(hist_cells_per_leaf),
+                        q_skip + block_first_feature,
+                        stats.unsafe_ptr(),
+                        Int32(n_rows),
+                        fixed_scale,
+                        grid_dim=(groups * replicas, n_live, 1),
+                        block_dim=(QH_BLOCK, 1, 1),
+                    )
             else:
-                ctx.enqueue_function[qh_hist_skip_kernel[True]](
-                    blk.folds.unsafe_ptr(),
-                    blk.fold_off.unsafe_ptr(),
-                    Int32(blk.n_features),
-                    cindex.unsafe_ptr(),
-                    Int32(line),
-                    Int32(base),
-                    row_index.unsafe_ptr(),
-                    q_stats.unsafe_ptr(),
-                    p_off.unsafe_ptr(),
-                    p_sz.unsafe_ptr(),
-                    ids.unsafe_ptr(),
-                    q_acc.unsafe_ptr(),
-                    Int32(block_first_bin),
-                    Int32(hist_cells_per_leaf),
-                    q_skip + block_first_feature,
-                    grid_dim=(groups * replicas, n_live, 1),
-                    block_dim=(QH_BLOCK, 1, 1),
-                )
+                if fused_q:
+                    ctx.enqueue_function[qh_hist_skip_kernel[True, True, ridx_stats]](
+                        blk.folds.unsafe_ptr(),
+                        blk.fold_off.unsafe_ptr(),
+                        Int32(blk.n_features),
+                        cindex.unsafe_ptr(),
+                        Int32(line),
+                        Int32(base),
+                        row_index.unsafe_ptr(),
+                        q_stats.unsafe_ptr(),
+                        p_off.unsafe_ptr(),
+                        p_sz.unsafe_ptr(),
+                        ids.unsafe_ptr(),
+                        q_acc.unsafe_ptr(),
+                        Int32(block_first_bin),
+                        Int32(hist_cells_per_leaf),
+                        q_skip + block_first_feature,
+                        stats.unsafe_ptr(),
+                        Int32(n_rows),
+                        fixed_scale,
+                        grid_dim=(groups * replicas, n_live, 1),
+                        block_dim=(QH_BLOCK, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[qh_hist_skip_kernel[True]](
+                        blk.folds.unsafe_ptr(),
+                        blk.fold_off.unsafe_ptr(),
+                        Int32(blk.n_features),
+                        cindex.unsafe_ptr(),
+                        Int32(line),
+                        Int32(base),
+                        row_index.unsafe_ptr(),
+                        q_stats.unsafe_ptr(),
+                        p_off.unsafe_ptr(),
+                        p_sz.unsafe_ptr(),
+                        ids.unsafe_ptr(),
+                        q_acc.unsafe_ptr(),
+                        Int32(block_first_bin),
+                        Int32(hist_cells_per_leaf),
+                        q_skip + block_first_feature,
+                        stats.unsafe_ptr(),
+                        Int32(n_rows),
+                        fixed_scale,
+                        grid_dim=(groups * replicas, n_live, 1),
+                        block_dim=(QH_BLOCK, 1, 1),
+                    )
             block_first_bin += blk.total_folds
             block_first_feature += blk.n_features
             continue

@@ -547,7 +547,7 @@ def qh_add_row_skip(
                     )
 
 
-def qh_hist_skip_kernel[gather: Bool](
+def qh_hist_skip_kernel[gather: Bool, fq: Bool = False, ridx_stats: Bool = False](
     feature_folds: MutPointer[UInt32, MutAnyOrigin],
     feature_fold_offset: MutPointer[UInt32, MutAnyOrigin],
     f_count_in32: Int32,
@@ -563,12 +563,27 @@ def qh_hist_skip_kernel[gather: Bool](
     hist_block_offset_in: Int32,
     hist_cell_count_in: Int32,
     skip_bins: MutPointer[UInt32, MutAnyOrigin],
+    stats: MutPointer[Float32, MutAnyOrigin],
+    stat_line_size_in: Int32,
+    fixed_scale_ptr: MutPointer[Float32, MutAnyOrigin],
 ):
     """QH_MODE_SKIP's build: `qh_hist_kernel` (gather False, depth 0) or
     `qh_hist_gather_kernel` (gather True) with the skip test and the
     skip-cell fix-up before the unchanged flush. `skip_bins` is this
-    policy block's slice of the table (block-local feature index)."""
+    policy block's slice of the table (block-local feature index).
+
+    `fq` (lane apple-fast-gap-misc, QH_FAST_FUSED_Q): the row's pair is
+    quantized here, `quantize_pair_kernel`'s exact expression (the same
+    `hist2_quantize(value, scale, hist2_dither(pos))`, the value gathered
+    through the row id under `ridx_stats`), instead of read back from
+    `q_stats`; the launcher takes it only when the level has ONE feature
+    group, so every row is quantized once. Same pairs, same totals.
+    `stats` / `stat_line_size_in` / `fixed_scale_ptr` are read only then."""
     var tid = Int(thread_idx.x)
+    var fixed_scale = Float32(0.0)
+    comptime if fq:
+        fixed_scale = fixed_scale_ptr.unsafe_load(0)
+    var stat_line_size = Int(stat_line_size_in)
     var f_count_in = Int(f_count_in32)
     var bins_line_size = Int(bins_line_size_in)
 
@@ -629,7 +644,23 @@ def qh_hist_skip_kernel[gather: Bool](
         var row = pos
         comptime if gather:
             row = Int(ldg(indices + pos))
-        var pair = bitcast[DType.int32, 2](ldg(q_stats + pos))
+        var pair: SIMD[DType.int32, 2]
+        comptime if fq:
+            var u = hist2_dither(pos)
+            var src = pos
+            comptime if ridx_stats:
+                comptime if gather:
+                    src = row
+                else:
+                    src = Int(ldg(indices + pos))
+            pair = SIMD[DType.int32, 2](
+                hist2_quantize(ldg(stats + src), fixed_scale, u),
+                hist2_quantize(
+                    ldg(stats + (stat_line_size + src)), fixed_scale, u
+                ),
+            )
+        else:
+            pair = bitcast[DType.int32, 2](ldg(q_stats + pos))
         tot += pair
         qh_add_row_skip(
             pair, words, row, bins_line_size, bins_p, rot_skip, smem, tid
