@@ -100,9 +100,9 @@ def nb_csr_count_kernel(
 
 
 def nb_csr_jll_kernel(
-    indptr: IP, indices: IP, data: FP, flp: FP, clp: FP, out: FP, n: Int32, d: Int32, K: Int32, has_clp: Int32
+    indptr: IP, indices: IP, data: FP, flp: FP, clp: FP, dst: FP, n: Int32, d: Int32, K: Int32, has_clp: Int32
 ):
-    """out[i*K + k] = (clp[k] +) sum_j data[j] * flp[k*d + indices[j]] over
+    """dst[i*K + k] = (clp[k] +) sum_j data[j] * flp[k*d + indices[j]] over
     row i's nonzeros ascending, each product rounded before its add."""
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var kk = Int(K)
@@ -119,7 +119,7 @@ def nb_csr_jll_kernel(
             acc = add(acc, mul(data.unsafe_load(j), flp.unsafe_load(base + c)))
     if has_clp != 0:
         acc = add(acc, clp.unsafe_load(k))
-    out.unsafe_store(t, acc)
+    dst.unsafe_store(t, acc)
 
 
 def _up_i32(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.int32]:
@@ -226,9 +226,9 @@ def _nb_csr_jll(
 
 def nb_csr_jll_py(
     indptr: PythonObject, indices: PythonObject, data: PythonObject, flp: PythonObject, clp: PythonObject,
-    sizes: PythonObject, out: PythonObject,
+    sizes: PythonObject, dst: PythonObject,
 ) raises -> PythonObject:
-    """`x_prep_nb_csr_jll`: the joint log likelihood (n x K float32 at out)
+    """`x_prep_nb_csr_jll`: the joint log likelihood (n x K float32 at dst)
     of a CSR matrix; flp = feature_log_prob_ (K x d), clp = class_log_prior_
     (K) or address 0 for none; sizes = [n, d, K, nnz]. Returns 1."""
     var n = Int(py=sizes[0])
@@ -240,7 +240,7 @@ def nb_csr_jll_py(
     var da = Int(py=data)
     var wa = Int(py=flp)
     var ba = Int(py=clp)
-    var oa = Int(py=out)
+    var oa = Int(py=dst)
     if n < 1 or d < 1 or K < 1 or nnz < 0 or pa == 0 or wa == 0 or oa == 0:
         raise Error("x_prep: invalid CSR scoring buffers")
     if nnz > 0 and (ia == 0 or da == 0):
