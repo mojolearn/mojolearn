@@ -28,10 +28,6 @@ one-block-n	serial-gpu	apple-fast-purity2	owed	core/householder_qr.mojo	0	device
 d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	glm/impl/linalg/detail/svd.mojo	0	for i in range(n):
 # why: k-sized: a selection sort of the n_cols eigenvalues (n = n_cols, not rows); index-only, no float op
 d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	glm/impl/linalg/detail/svd.mojo	0	for j in range(i + 1, n):
-# why: CROSS-LANE (glm QN / x_linear logcv, cgr4-device-optim): one-block pinned folds over n (loss value, bias mean, vector norms); the multi-block qn_grid_sum exists behind QN_GRID_SUMS; making it the IDENTICAL default changes the loss bits and the host column must fold the same grid
-one-block-n	serial-gpu	apple-fast-purity2	owed	glm/impl/qn/glm_base.mojo	0	ctx.enqueue_function[mean_kernel](
-# why: CROSS-LANE (glm QN / x_linear logcv, cgr4-device-optim): one-block pinned folds over n (loss value, bias mean, vector norms); the multi-block qn_grid_sum exists behind QN_GRID_SUMS; making it the IDENTICAL default changes the loss bits and the host column must fold the same grid
-one-block-n	serial-gpu	apple-fast-purity2	owed	glm/impl/qn/glm_base.mojo	0	ctx.enqueue_function[sum_terms_kernel](
 # why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
 d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	0	for c in range(m):
 # why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
