@@ -98,4 +98,28 @@ committed): `MOJOLEARN_NUMERIC_MODE=<mode> MOJOLEARN_COMPILE_JOBS=1
 MOJOLEARN_MOJO_BUILD_FLAGS="<defines>" bash bindings/build_transformer.sh`
 through compile_slot.sh. The script exports MOJOLEARN_SKIP_BUILD_GATE=1, so
 its Python smoke never runs; only the strings/otool binary checks do.
-Results are in the final section.
+Results are in the table below.
+
+## Compile table (2026-10-03)
+
+The orchestrator stopped local compiles mid-lane (the M3 manager peer
+compiles everything); only one build ran here.
+
+| build | defines | rc | state |
+|---|---|---|---|
+| FAST | `-D MOJOLEARN_AFN_ATTN_ALL` | 1 | compiled here at 1316a219c..ARENA head; the only errors were the three instantiations (GROUP 1, 2, 4) of `afn_flash_forward_kernel` at afn_apple_fast.mojo:609-610 (`SIMD[...](negmax)` / `(False)` splats need `fill=`). Fixed in the next commit, NOT recompiled. The failure was in the offload (GPU) pass, so kernels after it may not have been fully elaborated. |
+| FAST | `ALL` (after the fill= fix) | - | UNCOMPILED (peer compiles) |
+| FAST | `NORM_SG` | - | UNCOMPILED (peer compiles) |
+| FAST | `ROPE_CACHE` | - | UNCOMPILED (peer compiles) |
+| FAST | `FLASH` | - | UNCOMPILED (peer compiles) |
+| FAST | `GQA_TILE` | - | UNCOMPILED (peer compiles) |
+| FAST | `FUSE_PRE` | - | UNCOMPILED (peer compiles) |
+| FAST | `FUSE_MLP` | - | UNCOMPILED (peer compiles) |
+| FAST | `ARENA` | - | UNCOMPILED (peer compiles) |
+| FAST | none | - | UNCOMPILED (peer compiles) |
+| IDENTICAL | none | - | UNCOMPILED (peer compiles) |
+
+IDENTICAL note: every kernel change is behind `comptime if` on the FAST +
+Apple aliases. The binding gains one always-present field
+(`TransformerWorkspace.arena_id`, -1 and never read off ARENA) and a
+`__deinit__` whose body is empty off ARENA; no kernel, launch or byte moves.
