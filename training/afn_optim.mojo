@@ -806,8 +806,6 @@ def afn_optimizer_step(
         keep_h.append(ctx.enqueue_create_host_buffer[DType.int32](AFN_CELLS))
         part = keep_i[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         cells = keep_i[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        psum = keep_f[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        pflag = keep_i[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         table = keep_i[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         sums = keep_f[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         fcells = keep_f[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
@@ -1538,6 +1536,8 @@ def afn_ce_loss_resident(
         loss = keep_f[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         bad = keep_i[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         cells = keep_i[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        psum = keep_f[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        pflag = keep_i[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         host = keep_h[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
     # ---- the two launches: a 32-thread block per row when the vocabulary
