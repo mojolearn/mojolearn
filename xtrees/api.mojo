@@ -861,15 +861,13 @@ comptime XTREES_FAST_SWITCHES = (
     + (2 if _XT_ADA_SESSION else 0)
     + (4 if _XT_ADA_SESSION_SHARE else 0)
     + (8 if agn_dev.KSHAP_FAST_BATCH else 0)
-    + (16 if agn_dev.PSHAP_FAST_SHARED else 0)
 )
 
 
 def fast_switches_binding() raises -> PythonObject:
     """`XTREES_FAST_SWITCHES`: bit 1 MOJOLEARN_TE_NATIVE_SPLITS, bit 2
     MOJOLEARN_TE_ADA_SESSION, bit 4 MOJOLEARN_TE_ADA_SESSION_SHARE, bit 8
-    MOJOLEARN_KSHAP_FAST_BATCH, bit 16 MOJOLEARN_PSHAP_FAST_SHARED
-    (xtrees/agnostic_device.mojo)."""
+    MOJOLEARN_KSHAP_FAST_BATCH (xtrees/agnostic_device.mojo)."""
     return PythonObject(XTREES_FAST_SWITCHES)
 
 
@@ -1190,17 +1188,6 @@ def kshap_solve_ey_binding(ey: PythonObject, fx: PythonObject, fnull: PythonObje
     return PythonObject(p[0])
 
 
-def pshap_shared_binding(params: PythonObject) raises -> PythonObject:
-    """MOJOLEARN_PSHAP_FAST_SHARED: the address of the pooled host-visible
-    synthetic buffer holding >= params[0] floats."""
-    _need(params, 1, "x_trees_pshap_shared")
-    var total = _count(_i(params, 0), "x_trees_pshap_shared")
-    comptime if agn_dev.PSHAP_FAST_SHARED:
-        return PythonObject(agn_dev.shared_syn_addr(total))
-    else:
-        raise Error("x_trees_pshap_shared: built without MOJOLEARN_PSHAP_FAST_SHARED")
-
-
 def pshap_synth_binding(x: PythonObject, bg: PythonObject, syn: PythonObject, params: PythonObject) raises -> PythonObject:
     """PermutationExplainer's synthetic rows of a chunk: syn Float32
     (R np (2d + 1) nb) x d; params = [R, nb, d, np, row0, seed]."""
@@ -1295,6 +1282,5 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[kshap_solve_binding]("x_trees_kshap_solve")
     m.def_function[kshap_means_binding]("x_trees_kshap_means")
     m.def_function[kshap_solve_ey_binding]("x_trees_kshap_solve_ey")
-    m.def_function[pshap_shared_binding]("x_trees_pshap_shared")
     m.def_function[pshap_synth_binding]("x_trees_pshap_synth")
     m.def_function[pshap_values_binding]("x_trees_pshap_values")

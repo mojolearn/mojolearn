@@ -9,7 +9,7 @@ same draws instead of keeping them, so nothing waits on the host between
 the calls but the model. The host column (xtrees/agnostic_host.mojo) runs
 the same units in the same stage order: the same words."""
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from max.gpu.host import DeviceBuffer, DeviceContext
 from std.ffi import _Global
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -36,12 +36,6 @@ comptime AGN_TPB = 128
 #:   (-43.3%), rel_error_vs_exact 4.378e-09 both arms.
 comptime _AGN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime KSHAP_FAST_BATCH = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_KSHAP_FAST_BATCH_OFF"]()
-#: lane apple-fast-gap-kapprox2 (2026-10-03), FAST + Apple experiment, off
-#: unless defined: MOJOLEARN_PSHAP_FAST_SHARED  PermutationExplainer's
-#: synthetic matrix is written by the device straight into one pooled
-#: host-visible buffer (Apple unified memory) that the Python glue hands the
-#: model as a zero-copy Array: no device buffer, no download pass. Bit-inert.
-comptime PSHAP_FAST_SHARED = _AGN_FAST_APPLE and is_defined["MOJOLEARN_PSHAP_FAST_SHARED"]()
 comptime AGN_MAX_BLOCKS = 65535 * 16
 comptime _CTX = "MojoXTreesAgnosticIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXTreesAgnosticFast"
 
@@ -242,40 +236,6 @@ def _pool_down(ctx: DeviceContext, dst: Int, total: Int) raises:
                      src_buf=slot[].syn.value().create_sub_buffer[DType.float32](0, total))
 
 
-struct _AgnHostPool(Defaultable, Movable):
-    """The process's pooled host-visible synthetic buffer
-    (MOJOLEARN_PSHAP_FAST_SHARED): grown on demand, never shrunk."""
-    var buf: Optional[HostBuffer[DType.float32]]
-    var cap: Int
-
-    def __init__(out self):
-        self.buf = Optional[HostBuffer[DType.float32]]()
-        self.cap = 0
-
-
-comptime AGN_HOST_POOL = _Global[StorageType=_AgnHostPool, name="MojoXTreesAgnosticSharedPoolFast",
-                                 init_fn=_AgnHostPool.__init__]
-
-
-def shared_syn_addr(total: Int) raises -> Int:
-    """The address of >= total floats of the pooled host-visible buffer. A
-    regrow frees the old one: the caller holds no view of it across calls
-    that ask for more."""
-    var ctx = _ctx()
-    var slot = AGN_HOST_POOL.get_or_create_ptr()
-    if slot[].cap < total:
-        slot[].buf = Optional[HostBuffer[DType.float32]]()
-        slot[].buf = ctx.enqueue_create_host_buffer[DType.float32](max(total, 1))
-        ctx.synchronize()
-        slot[].cap = total
-    return Int(slot[].buf.value().unsafe_ptr())
-
-
-def _is_shared(addr: Int) raises -> Bool:
-    var slot = AGN_HOST_POOL.get_or_create_ptr()
-    return slot[].cap > 0 and addr == Int(slot[].buf.value().unsafe_ptr())
-
-
 def kshap_synth(x: Int, bg: Int, size_off: Int, size_w: Int, cdf: Int, syn: Int, R: Int, nb: Int, d: Int, m: Int,
                 nfixed: Int, nfull: Int, npaired: Int, L: Int, seed: Int, row0: Int, wrand: UInt64) raises:
     """The chunk's synthetic rows ((row, sample, background row) x d)."""
@@ -472,18 +432,6 @@ def pshap_synth(x: Int, bg: Int, syn: Int, R: Int, nb: Int, d: Int, np: Int, see
     _perms(ctx, R, d, np, seed, row0, perm, inv)
     var dx = _up_f32(ctx, x, R * d)
     var dbg = _up_f32(ctx, bg, nb * d)
-    comptime if PSHAP_FAST_SHARED:
-        if _is_shared(syn):
-            ctx.enqueue_function[psynth_kernel](
-                Int64(total), Int32(nb), Int32(d), Int32(np), dx.unsafe_ptr(), dbg.unsafe_ptr(), inv.unsafe_ptr(),
-                F32P(unsafe_from_address=syn), grid_dim=_blocks(total), block_dim=AGN_TPB,
-            )
-            ctx.synchronize()
-            _ = perm^
-            _ = inv^
-            _ = dx^
-            _ = dbg^
-            return
     comptime if KSHAP_FAST_BATCH:
         var ps = _pool_syn(ctx, total)
         ctx.enqueue_function[psynth_kernel](
