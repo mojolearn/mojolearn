@@ -4,11 +4,6 @@
 contract (one item = one device thread; the host driver runs the same
 items):
 
-  any_below    the input-domain checks of AdditiveChi2Sampler (X < 0) and
-               SkewedChi2Sampler (X <= -skewedness) as a device flag
-               instead of a serial host `X.min()` pass
-               (MOJOLEARN_ACHI2_FAST_DEVCHECK). Every writer stores 1, so
-               the unordered stores agree. A NaN is never below.
   schi2_draw   SkewedChi2Sampler's weights and offsets from a counter
                stream on the device (MOJOLEARN_SCHI2_FAST_DEVRNG): the same
                laws as scikit-learn's (u uniform in (0, 1), w = log(tan(pi/2
@@ -21,14 +16,6 @@ from x_neighbors.items import PI_F32
 
 comptime FP = MutPointer[Float32, MutAnyOrigin]
 comptime IP = MutPointer[Int32, MutAnyOrigin]
-
-
-def any_below_item(t: Int, x: FP, res: IP, count: Int, incl: Int, thr: Float32):
-    """res[0] = 1 when x[t] < thr (incl == 0) or x[t] <= thr (incl == 1)."""
-    var v = x.unsafe_load(t)
-    var hit = v < thr if incl == 0 else v <= thr
-    if hit:
-        res.unsafe_store(0, Int32(1))
 
 
 @always_inline

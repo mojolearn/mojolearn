@@ -113,8 +113,6 @@ OPS = [
       ("interval", "float")]),
     # lane apple-fast-gap-kapprox2 (2026-10-03): FAST + Apple experiments
     # (x_neighbors/kap2_items.mojo; read back as x_neighbors_kap2_flags)
-    ("any_below", "kap2_items", "any_below_item", "count",
-     [("x", "fin", "count"), ("res", "iinout", "1"), ("count", "int"), ("incl", "int"), ("thr", "float")]),
     ("schi2_draw", "kap2_items", "schi2_draw_item", "d * nc + nc",
      [("w", "fout", "d * nc"), ("off", "fout", "nc"), ("d", "int"), ("nc", "int"), ("seed", "int")]),
     ("skew_weights", "items", "skew_weights_item", "count",
@@ -745,14 +743,11 @@ def x_neighbors_vendor_binding() raises -> PythonObject:
 
 
 #: lane apple-fast-gap-kapprox2 (2026-10-03): FAST + Apple experiments, off
-#: unless defined. bit 1 MOJOLEARN_ACHI2_FAST_DEVCHECK (the chi2 samplers'
-#: input checks as the xn_any_below device flag, not a host X.min() pass);
-#: bit 2 MOJOLEARN_SCHI2_FAST_DEVRNG (SkewedChi2Sampler's weights and
+#: unless defined. bit 2 MOJOLEARN_SCHI2_FAST_DEVRNG (SkewedChi2Sampler's weights and
 #: offsets drawn on the device, xn_schi2_draw).
 comptime _KAP2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime KAP2_FLAGS = (
-    (1 if _KAP2_FAST_APPLE and is_defined["MOJOLEARN_ACHI2_FAST_DEVCHECK"]() else 0)
-    + (2 if _KAP2_FAST_APPLE and is_defined["MOJOLEARN_SCHI2_FAST_DEVRNG"]() else 0)
+    (2 if _KAP2_FAST_APPLE and is_defined["MOJOLEARN_SCHI2_FAST_DEVRNG"]() else 0)
 )
 
 

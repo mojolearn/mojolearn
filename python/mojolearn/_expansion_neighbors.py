@@ -242,19 +242,11 @@ class _XNeighbors(NumericModeMixin):
     def _kap2(self, bit):
         """lane/apple-fast-gap-kapprox2: True on the FAST tier when the
         binding was built with the experiment `bit` stands for
-        (`x_neighbors_kap2_flags`: 1 MOJOLEARN_ACHI2_FAST_DEVCHECK, 2
-        MOJOLEARN_SCHI2_FAST_DEVRNG); 0 in every other build."""
+        (`x_neighbors_kap2_flags`: 2 MOJOLEARN_SCHI2_FAST_DEVRNG); 0 in every other build."""
         if not self._fast_tier():
             return False
         query = getattr(self._bind(), "x_neighbors_kap2_flags", None)
         return callable(query) and (int(query()) & bit) != 0
-
-    def _any_below(self, X, thr, incl):
-        """Whether some entry of X is < thr (incl 0) or <= thr (incl 1): one
-        device flag (xn_any_below), no host pass over X."""
-        flag = zeros((1,), "<i4")
-        self._op("any_below", [(X, 0), (flag, 1)], (X.size, incl), (thr,))
-        return flag.tolist()[0] != 0
 
     def _kernel(self, A, B, kind, gamma, coef0, degree):
         n, d = A.shape
@@ -1147,16 +1139,9 @@ class AdditiveChi2Sampler(_XNeighbors):
             raise ValueError("If sample_steps is not in [1, 2, 3], you need to provide sample_interval")
         return table[self.sample_steps]
 
-    def _negative(self, X):
-        if not X.size:
-            return False
-        if self._kap2(1):   # MOJOLEARN_ACHI2_FAST_DEVCHECK
-            return self._any_below(X, 0.0, 0)
-        return X.min() < 0
-
     def fit(self, X, y=None):
         X = _f32(X)
-        if self._negative(X):
+        if X.size and X.min() < 0:
             raise ValueError("Negative values in data passed to AdditiveChi2Sampler")
         self._interval()
         self.n_features_in_ = X.shape[1]
@@ -1168,7 +1153,7 @@ class AdditiveChi2Sampler(_XNeighbors):
         n, d = X.shape
         steps = int(self.sample_steps)
         out = _empty_out((n, d * (2 * steps - 1)), "<f4")
-        if self._negative(X):
+        if X.size and X.min() < 0:
             raise ValueError("Negative values in data passed to AdditiveChi2Sampler")
         self._op("achi2", [(X, 0), (out, 1)], (n, d, steps), (_f32_scalar(self._interval()),))
         if sparse is not None:
@@ -1238,12 +1223,7 @@ class SkewedChi2Sampler(_XNeighbors):
     def transform(self, X):
         X = _f32(X)
         n, d = X.shape
-        thr = -float(self.skewedness)
-        if X.size and self._kap2(1) and _f32_scalar(thr) == thr:   # MOJOLEARN_ACHI2_FAST_DEVCHECK
-            below = self._any_below(X, thr, 1)
-        else:
-            below = X.size and X.min() <= thr
-        if below:
+        if X.size and X.min() <= -float(self.skewedness):
             raise ValueError("X may not contain entries smaller than -skewedness.")
         nc = int(self.n_components)
         lx = self._unary(X, _U_LOG, 1.0, _f32_scalar(self.skewedness))
