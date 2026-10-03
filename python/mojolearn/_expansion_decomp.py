@@ -212,7 +212,7 @@ class _M:
         if _is_sparse(X):
             X = X.toarray()
         a = as_f32_c(X, ndim=2, name=name)[0]
-        if a.ndim != 2 or min(a.shape) == 0:
+        if a.ndim != 2 or min(a.shape) == 0:  # glue: smaller of two shape dims
             raise ValueError(f"{name}: a nonempty two-dimensional input is required")
         fin = _host_all_finite(a)
         if fin is False:
@@ -226,7 +226,7 @@ class _M:
         if _is_sparse(X):
             X = X.toarray()          # a scipy.sparse matrix/array: densified (exact)
         a = as_f32_c(X, ndim=2, name=name)[0]
-        if a.ndim != 2 or min(a.shape) == 0:
+        if a.ndim != 2 or min(a.shape) == 0:  # glue: smaller of two shape dims
             raise ValueError(f"{name}: a nonempty two-dimensional input is required")
         s = array.array("f")
         mv = getattr(a, "_mv", None)
@@ -808,7 +808,7 @@ class _Kit:
         pm, im, diag, st = _M.zeros(n, 1), _M.zeros(n, 1), _M.zeros(1, n), _M.zeros(1, 4)
         self.b.x_decomp_lu_aux(lu.addr, piv.buffer_info()[0], pm.addr, im.addr, diag.addr, st.addr,
                                [n, int(bool(clamp))])
-        return [float(v) for v in st.s], diag, pm, im
+        return [float(v) for v in st.s], diag, pm, im  # glue: the four-field lu_aux status
 
     def lars_rows(self, G, Q, m, nnz):
         """Row-parallel Lars on the Gram (x_decomp/cells.mojo `lars_row`): the
@@ -1068,10 +1068,10 @@ class _Base:
     _parameters = ()
 
     def get_params(self, deep=True):
-        return {name: getattr(self, name) for name in self._parameters}
+        return {name: getattr(self, name) for name in self._parameters}  # glue: estimator parameter names (get_params)
 
     def set_params(self, **params):
-        for k, v in params.items():
+        for k, v in params.items():  # glue: estimator keyword arguments (set_params)
             if k not in self._parameters:
                 raise ValueError(f"Invalid {type(self).__name__} parameter: {k}")
             setattr(self, k, v)
@@ -1107,7 +1107,7 @@ class IncrementalPCA(_Base):
 
     def fit(self, X, y=None):
         self.numeric_mode_ = _mode(self.numeric_mode)
-        for a in ("components_", "n_samples_seen_"):
+        for a in ("components_", "n_samples_seen_"):  # glue: drops two fitted attribute names
             if hasattr(self, a):
                 delattr(self, a)
         if _is_sparse(X):
@@ -1358,7 +1358,7 @@ class _RandomProjection(_Base):
         if not k._res():
             return None
         a = as_f32_c(X, ndim=2, name="X")[0]
-        if a.ndim != 2 or min(a.shape) == 0:
+        if a.ndim != 2 or min(a.shape) == 0:  # glue: smaller of two shape dims
             raise ValueError("X: a nonempty two-dimensional input is required")
         m, d = a.shape
         if d != self.n_features_in_:
@@ -1443,7 +1443,7 @@ class SparseRandomProjection(_RandomProjection):
         if b is None:
             return None
         a = as_f32_c(X, ndim=2, name="X")[0]
-        if a.ndim != 2 or min(a.shape) == 0:
+        if a.ndim != 2 or min(a.shape) == 0:  # glue: smaller of two shape dims
             raise ValueError("X: a nonempty two-dimensional input is required")
         n, d = a.shape
         kc = int(self.n_components)
@@ -2296,7 +2296,7 @@ def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
     pa = as_i32_c(piv, ndim=1, name="piv")[0]
     pv = array.array("i")
     pv.frombytes(pa.tobytes())
-    if len(pv) != n or any(not 0 <= p < n for p in pv):
+    if len(pv) != n or any(not 0 <= p < n for p in pv):  # glue: validates the piv argument's row indices
         raise ValueError("piv must hold one row index in [0, n) per row")
     vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
     B = _M.from_input(_row_of(b), "b").T if vec else _M.from_input(b, "b")
@@ -2414,7 +2414,7 @@ def _f32_input(X, name, ndim):
     if _is_sparse(X):
         X = X.toarray()
     a = as_f32_c(X, ndim=ndim, name=name)[0]
-    if min(a.shape) == 0:
+    if min(a.shape) == 0:  # glue: smaller of two shape dims
         raise ValueError(f"{name}: a nonempty input is required")
     fin = _host_all_finite(a)
     if fin is False:
@@ -2688,7 +2688,7 @@ class _PLS(_Base):
         coef = k.mm(self.x_rotations_m_, self.y_loadings_m_, tb=True)          # p x q
         coef = k.ew("div", k.ew("mul", coef, self._y_std), self._x_std.T).T     # q x p
         self.coef_m_ = coef
-        for name in ("x_weights", "y_weights", "x_loadings", "y_loadings", "x_rotations", "y_rotations"):
+        for name in ("x_weights", "y_weights", "x_loadings", "y_loadings", "x_rotations", "y_rotations"):  # glue: loops over six attribute names
             setattr(self, name + "_", getattr(self, name + "_m_").out())
         self.coef_ = coef.out()
         self.intercept_ = self._y_mean.out((q,))
@@ -3811,7 +3811,7 @@ class MDS(_Base):
             out = array.array("f", [0.0]) * max(n_out, 1)
             lin.x_linear_fit(int(algo), X.buffer_info()[0], Y.buffer_info()[0],
                              [rows, 1, rows, len(Y), n_out, max(n_fw, 1), max(n_iw, 1), len(ip), len(fp)],
-                             [int(v) for v in ip], [float(v) for v in fp], out.buffer_info()[0])
+                             [int(v) for v in ip], [float(v) for v in fp], out.buffer_info()[0])  # glue: small x_linear parameter lists
             return out
 
         def disparities(d, first):
