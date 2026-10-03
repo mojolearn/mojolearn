@@ -58,6 +58,12 @@ comptime DEC_TILE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accel
                      and not is_defined["MOJOLEARN_LDAQDA_DEC_TILE_OFF"]())
 comptime RR_EIGH = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
                     and not is_defined["MOJOLEARN_LDAQDA_RR_EIGH_OFF"]())
+#: eigh q[5] != 0 keeps that stage on `eigh_unit`'s cyclic path under RR_EIGH.
+#: IterativeImputer sets it (python/mojolearn/_expansion_prep.py, one small
+#: eigh per feature per round): M3, iterative-imputer istella, main b2dd5dfe5,
+#: RR_EIGH off 4,593 ms vs on 8,821 ms, masked_rmse unchanged. LDA / QDA leave
+#: it 0 and keep the round-robin path.
+comptime EIGH_CYCLIC_Q = 5
 
 #: op 69 (`mi_cd`) runs as the sorted neighbour search of x_prep/dmi.mojo
 #: (the host's argument, x_prep/host/mutual_info.mojo: the same words)
@@ -243,7 +249,8 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     var rre_scr = 1
     comptime if RR_EIGH:
         for s in range(stages):
-            if Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_EIGH:
+            if (Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_EIGH
+                    and Int(host_q.unsafe_load(s * STAGE_INTS + 2 + EIGH_CYCLIC_Q)) == 0):
                 var eb = Int(host_q.unsafe_load(s * STAGE_INTS + 1))
                 var en = Int(host_q.unsafe_load(s * STAGE_INTS + 3))
                 if eb > 0 and en > 0:
@@ -310,8 +317,8 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                                  Int(hq[3]), Int(hq[4]))
             continue
         comptime if RR_EIGH:
-            if op == OP_EIGH:
-                # q = [A, m, astride, EVAL, EVEC], one unit a matrix
+            if op == OP_EIGH and Int(host_q.unsafe_load(s * STAGE_INTS + 2 + EIGH_CYCLIC_Q)) == 0:
+                # q = [A, m, astride, EVAL, EVEC, cyclic], one unit a matrix
                 var hq = host_q + (s * STAGE_INTS + 2)
                 var pf = FP(unsafe_from_address=Int(df.unsafe_ptr()))
                 var pr = FP(unsafe_from_address=Int(dre.unsafe_ptr()))

@@ -3996,7 +3996,7 @@ class IterativeImputer(_PrepBase):
                 pr.stage("ii_gram", dk * dk, fo, n, dk, mo, j, means, g, flag)
                 if pp > 0:
                     pr.stage("ii_sub", 1, g, dk, j, gs, flag, nb1)
-                    pr.stage("eigh", 1, gs, pp, 0, eig, vec)
+                    pr.stage("eigh", 1, gs, pp, 0, eig, vec, 1)  # q[5]=1: cyclic eigh_unit, not round-robin
                 pr.stage("ii_br", 1, g, dk, j, eig, vec, means, cnt, coef, inter, flag, w, nb1, al + 1)
                 if self.sample_posterior:
                     sig = pr.alloc(max(pp, 1) ** 2)
