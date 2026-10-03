@@ -2878,3 +2878,27 @@ host-call	host-import	PR#86	debt	x_linear/ridge.mojo	0	par_rows(rows_loo, n)
 host-call	host-import	PR#86	debt	x_linear/sgd.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	debt	x_linear/sgd.mojo	0	par_rows(run_problems, problems, 1)
 host-env	host-env/threshold	PR#85	inflight@6a483da91d76ae2560b5316910738e7b3328e375	x_linear/sgd.mojo	0	and not is_defined["MOJOLEARN_SGD_HOST_LEGACY"]()
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cluster.py	0	arrs = [_buffer.as_f32_c(p, ndim=None, name="aux")[0] for p in parts if p is not None]
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_decomp.py	0	m = max((abs(float(v)) for v in A.s), default=0.0)
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_decomp.py	0	m = max((abs(float(v)) for v in A.s), default=0.0)
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	if all(isinstance(v, (bool, int)) for v in classes):
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	return decode_labels([float(v) for v in classes], codes)
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	skip = next((i for i, c in enumerate(allc) if c == -1 and not isinstance(c, str)), -1)   # glue: k classes
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	classes = [c for i, c in enumerate(allc) if i != skip]
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_prep.py	0	for j in range(d)]
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_x_sequence_moe.py	0	for name, shape in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	return [self.rows(words, f, int(sizes[f])) for f in range(k)]
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/neighbors.py	0	ind = [cols64[ptr[i]:ptr[i + 1]] for i in range(nq)]
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/neighbors.py	0	dst = [dists[ptr[i]:ptr[i + 1]] for i in range(nq)]
