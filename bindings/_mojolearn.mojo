@@ -112,11 +112,19 @@ from bindings.hotpath_helpers import (
     split_table_i32_binding,
     scatter_rows_bytes_binding,
     uniform_init_f32_binding,
+    normal_init_f32_binding,
     epoch_order_i32_binding,
     adam_hyper_f64_binding,
     mean_std_f32_binding,
     first_seen_i32_binding,
     strat_fold_assign_i32_binding,
+    strat_alloc_i64_binding,
+    ocsvm_alpha_init_f32_binding,
+    weighted_pick_i32_binding,
+    draw_rows_without_replacement_i32_binding,
+    weighted_draw_rows_i32_binding,
+    group_fold_assign_i32_binding,
+    strat_group_assign_i32_binding,
 )
 from std.os import abort
 from std.math import isfinite
@@ -282,7 +290,7 @@ def knn_search_binding(
         var ctx = process_ctx[_DEVCTX_SLOT]()
         used = knn_search(
             ctx, ip, ni, qp, nq, nf, kk, dp, xp, sq, qt, KNN_METHOD_AUTO,
-            dt[0], dt[1],
+            dt[0], dt[1], True,
         )
         ctx.synchronize()
     return PythonObject(used)
@@ -350,7 +358,7 @@ def knn_search_resident_binding(
     with GILReleased(Python()):
         used = knn_index_search(
             h, ip, ni, qp, nq, nf, kk, dp, xp, sq, qt, KNN_METHOD_AUTO,
-            dt[0], dt[1],
+            dt[0], dt[1], True,
         )
     return PythonObject(used)
 
@@ -1791,11 +1799,19 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[split_table_i32_binding]("split_table_i32")
         m.def_function[scatter_rows_bytes_binding]("scatter_rows_bytes")
         m.def_function[uniform_init_f32_binding]("uniform_init_f32")
+        m.def_function[normal_init_f32_binding]("normal_init_f32")
         m.def_function[epoch_order_i32_binding]("epoch_order_i32")
         m.def_function[adam_hyper_f64_binding]("adam_hyper_f64")
         m.def_function[mean_std_f32_binding]("mean_std_f32")
         m.def_function[first_seen_i32_binding]("first_seen_i32")
         m.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
+        m.def_function[strat_alloc_i64_binding]("strat_alloc_i64")
+        m.def_function[ocsvm_alpha_init_f32_binding]("ocsvm_alpha_init_f32")
+        m.def_function[weighted_pick_i32_binding]("weighted_pick_i32")
+        m.def_function[draw_rows_without_replacement_i32_binding]("draw_rows_without_replacement_i32")
+        m.def_function[weighted_draw_rows_i32_binding]("weighted_draw_rows_i32")
+        m.def_function[group_fold_assign_i32_binding]("group_fold_assign_i32")
+        m.def_function[strat_group_assign_i32_binding]("strat_group_assign_i32")
         m.def_function[gather_i64_binding]("gather_i64")
         m.def_function[gather_f64_binding]("gather_f64")
         m.def_function[argmax_rows_f32_binding]("argmax_rows_f32")

@@ -19,7 +19,7 @@ from x_cnn.device import (
     linear_forward_into, linear_backward_into, softmax_xent_into, sgd_into, adam_into,
     batchnorm_forward_into, batchnorm_backward_into, dropout2d_into, spmm_into, pad2d_forward_into,
     pad2d_backward_into, conv_block_forward_into, conv_block_backward_into,
-    res_alloc, res_free, res_upload, res_download, res_gather, res_gather_pair, opt_many_resident,
+    res_alloc, res_free, res_upload, res_download, res_argmax, res_gather, res_gather_pair, opt_many_resident,
     gemm_m, conv2d_forward_m, conv2d_backward_m, maxpool2d_forward_m, maxpool2d_backward_m,
     avgpool2d_forward_m, avgpool2d_backward_m, map2_m, linear_forward_m, linear_backward_m,
     batchnorm_forward_m, batchnorm_backward_m, dropout2d_m, spmm_m,
@@ -710,6 +710,19 @@ def res_gather_binding(dst: PythonObject, src: PythonObject, rows_addr: PythonOb
     return PythonObject(n)
 
 
+def res_argmax_binding(h: PythonObject, dst_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """dst (int32, n) = each row's first largest column of the resident
+    n x k block h (params [n, k]), computed on the device; only the labels
+    come down (lane pyglue-numeric: the classifier's numpy argmax)."""
+    var n = Int(py=params[0])
+    var k = Int(py=params[1])
+    var hh = Int(py=h)
+    var dst = _ip(dst_addr)
+    with GILReleased(Python()):
+        res_argmax(hh, dst, n, k)
+    return PythonObject(n)
+
+
 def res_download_binding(h: PythonObject, dst_addr: PythonObject, n: PythonObject) raises -> PythonObject:
     var dst = _fp(dst_addr)
     var nn = Int(py=n)
@@ -1150,6 +1163,7 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[res_free_binding]("x_cnn_res_free")
         m.def_function[res_upload_binding]("x_cnn_res_upload")
         m.def_function[res_download_binding]("x_cnn_res_download")
+        m.def_function[res_argmax_binding]("x_cnn_res_argmax")
         m.def_function[conv_block_forward_r_binding]("x_cnn_conv_block_forward_r")
         m.def_function[conv_block_backward_r_binding]("x_cnn_conv_block_backward_r")
         m.def_function[res_gather_binding]("x_cnn_res_gather")

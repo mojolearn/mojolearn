@@ -14,7 +14,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_cnn.ops import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, conv_params
 from x_cnn.ops import PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW, pool_params
 from x_cnn.host.ops_host import X_CNN_HOST_SABOTAGE
-from x_cnn.ops import FP, IP
+from x_cnn.ops import FP, IP, argmax_row_at
 from x_cnn.host.gemm_host import gemm_host_into
 from x_cnn.host.ops_host import conv2d_forward_into, conv2d_backward_into
 from x_cnn.host.ops_host import conv_block_forward_into, conv_block_backward_into
@@ -743,6 +743,21 @@ def res_upload_binding(h: PythonObject, src_addr: PythonObject, n: PythonObject)
     return PythonObject(nn)
 
 
+def res_argmax_binding(h: PythonObject, dst_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """The GPU binding's `x_cnn_res_argmax` on host memory: the same item."""
+    var n = Int(py=params[0])
+    var k = Int(py=params[1])
+    if n > 0 and k > 0:
+        var src = FP(unsafe_from_address=Int(py=h))
+        var dst = IP(unsafe_from_address=Int(py=dst_addr))
+        var prm = List[Int32](length=1, fill=Int32(k))
+        var pp = prm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        for i in range(n):
+            argmax_row_at(i, src, src, src, src, dst, pp)
+        _ = prm^
+    return PythonObject(n)
+
+
 def res_download_binding(h: PythonObject, dst_addr: PythonObject, n: PythonObject) raises -> PythonObject:
     var nn = Int(py=n)
     if nn > 0:
@@ -1026,6 +1041,7 @@ def PyInit__mojolearn_x_cnn_host() abi("C") -> PythonObject:
         m.def_function[res_free_binding]("x_cnn_res_free")
         m.def_function[res_upload_binding]("x_cnn_res_upload")
         m.def_function[res_download_binding]("x_cnn_res_download")
+        m.def_function[res_argmax_binding]("x_cnn_res_argmax")
         m.def_function[conv_block_forward_r_binding]("x_cnn_conv_block_forward_r")
         m.def_function[conv_block_backward_r_binding]("x_cnn_conv_block_backward_r")
         m.def_function[res_gather_binding]("x_cnn_res_gather")
