@@ -34,6 +34,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
+    ftz,
     identical_exp64,
     identical_log2_64,
     identical_mul,
@@ -237,23 +238,34 @@ def ug_row_sigma(
 @always_inline
 def ug_member(delta: Float32, sigma: Float32) -> Float32:
     """One directed membership: 1 at or below rho, else
-    `Float32(exp(-delta / sigma))` in binary64."""
-    if delta > Float32(0.0):
-        return sf64_to_f32(
-            sf64_exp(sf64_div(sf64_neg(sf64_from_f32(delta)), sf64_from_f32(sigma)))
-        )
+    `Float32(exp(-delta / sigma))` in binary64, FLUSHED: a membership that
+    rounds to a subnormal is 0 on every column. Unflushed, the Apple GPU's
+    merge (`a + b`) and the adapter's `weight > 0` read it as zero where every
+    other column kept the edge, which shifted every later edge's ordinal and
+    so its negative samples (umap / x-decomp-umap-options / par-graph-umap on
+    `ties`, the 0.8.36 reference recording: tied distances drive sigma to
+    its floor, and the far memberships underflow)."""
+    var d = ftz(delta)
+    if d > Float32(0.0):
+        return ftz(sf64_to_f32(
+            sf64_exp(sf64_div(sf64_neg(sf64_from_f32(d)), sf64_from_f32(sigma)))
+        ))
     return Float32(1.0)
 
 
 @always_inline
 def ug_merge_weight(a: Float32, b: Float32, mix: Float32) -> Float32:
     """`mix * (a + b - a b) + (1 - mix) * a b` with every product pinned and
-    ONE rounding on the intersection's product (the fma)."""
-    var intersection = identical_mul(a, b)
-    var union = (a + b) - intersection
-    return identical_mul_add(
-        Float32(1.0) - mix, intersection, identical_mul(mix, union)
-    )
+    ONE rounding on the intersection's product (the fma). Operands, the
+    product and the result are flushed, so no subnormal reaches an Apple
+    add or compare (`ug_member`'s note)."""
+    var fa = ftz(a)
+    var fb = ftz(b)
+    var intersection = ftz(identical_mul(fa, fb))
+    var union = ftz((fa + fb) - intersection)
+    return ftz(identical_mul_add(
+        Float32(1.0) - mix, intersection, ftz(identical_mul(mix, union))
+    ))
 
 
 # ---------------------------------------------------------------------------

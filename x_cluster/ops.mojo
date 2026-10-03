@@ -60,6 +60,10 @@ trait ClusterOps(Movable):
     def sqrt(mut self, x: Int, n: Int) raises:
         ...
 
+    def flush(mut self, x: Int, n: Int) raises:
+        """x[i] = ftz(x[i]) for the first n values (`bodies.flush_cell`)."""
+        ...
+
     def kth(mut self, m: Int, n_rows: Int, n_cols: Int, k: Int, dst: Int) raises:
         """out[r] = k-th smallest of row r (`bodies.kth_smallest_row`)."""
         ...

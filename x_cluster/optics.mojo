@@ -178,6 +178,11 @@ def optics_graph[O: ClusterOps](
     if metric == 5:
         if not ops.check_nonneg(xs, n * n):
             raise Error("OPTICS: a precomputed distance matrix must be non-negative")
+        # Flushed once on the device, as every computed distance already is:
+        # the ordering compares reachabilities as floats, and the Apple GPU
+        # reads a subnormal operand as zero where every other target does
+        # not (x-cluster-optics-metrics/denormal pre_order, 0.8.36 record).
+        ops.flush(xs, n * n)
         dm = xs
     elif metric >= 0:
         dm = dist_slot(ops, n * n)
