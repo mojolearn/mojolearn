@@ -104,6 +104,38 @@ wait on an idle queue. FAST off makes about 62, and IDENTICAL about 14.
   measured D2H rate). The API returns the logits, so this lane leaves it.
 
 ## Compile record
-See the commit messages and the lane's final reply: FAST per define, FAST off, and
-IDENTICAL once, all through `~/mojolearn-evidence/compile_slot.sh` with
-`MOJOLEARN_COMPILE_JOBS=1`.
+On 2026-10-03 the orchestrator stopped local compiles: the M3 manager peer compiles
+everything. The one FAST build this lane queued waited for a slot and was killed
+before it started, so no Mojo build compiled here. The Python files passed
+`python3 -m py_compile`.
+
+| Build | rc here |
+|---|---|
+| `py_compile` of `_byte_lm_impl.py` and `_backend.py` | 0 |
+| `sh -n bindings/build_byte_lm.sh` (syntax) | 0 |
+| FAST, no define (item 0) | UNCOMPILED (peer compiles) |
+| FAST `-D MOJOLEARN_AFN_LM_NOSYNC` | UNCOMPILED (peer compiles) |
+| FAST `-D MOJOLEARN_AFN_LM_BWD_NOSYNC` | UNCOMPILED (peer compiles) |
+| FAST `-D MOJOLEARN_AFN_LM_BWD_FUSE` | UNCOMPILED (peer compiles) |
+| FAST `-D MOJOLEARN_AFN_LM_PARAM_VIEWS` | UNCOMPILED (peer compiles) |
+| FAST `-D MOJOLEARN_AFN_LM_HEAD_FUSE` | UNCOMPILED (peer compiles) |
+| FAST `-D MOJOLEARN_AFN_LM_ALL` | UNCOMPILED (peer compiles) |
+| IDENTICAL (default) | UNCOMPILED (peer compiles) |
+
+Build command (from the worktree root):
+
+    MOJOLEARN_COMPILE_JOBS=1 MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_SKIP_BUILD_GATE=1 \
+      MOJOLEARN_BYTE_LM_OUTDIR=<fresh dir> MOJOLEARN_MOJO_BUILD_FLAGS="-D MOJOLEARN_AFN_LM_<X>" \
+      sh bindings/build_byte_lm.sh
+
+Compile risks to check first (code that was written without a compiler):
+- `Atomic[DType.int32].min` and the f32 `Atomic.fetch_add` in training/byte_lm_afn.mojo.
+  Both are used elsewhere on Apple (x_decomp/graph_device.mojo,
+  ensemble/checks/atomic_width_probe.mojo).
+- The `return` inside a `comptime if` that has code after it: `_unpack_block`,
+  `_byte_step_device`, and the deferred loss return in `_byte_forward_loss`.
+- `training/byte_lm_host_kernels.mojo` has `comptime assert ... IDENTICAL builds only` in
+  `_identical_build_only()`. If a FAST build reaches it through the binding's imports,
+  the FAST build fails there. The fix belongs in that file, which this lane owns
+  (`training/byte_lm*.mojo`): admit `BYTE_LM_FAST_APPLE`, or keep the host kernels out
+  of the device binding.
