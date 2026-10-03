@@ -257,6 +257,37 @@ comptime HP_MAX = 1
 comptime HP_SUM = 2
 comptime HP_ARGMAX = 3
 comptime HP_INTEGRAL = 4
+#: lane apple-fast-py2mojo-core: Python's exact integer `sum`.
+comptime HP_ISUM = 5
+
+
+def _isum[dt: DType](addr: Int, n: Int) raises -> PythonObject:
+    """Python's exact `sum` of `n` integers: a 128-bit two's complement
+    accumulator (lo unsigned, hi signed), so no sum of fewer than 2**63
+    int64 values can overflow it, in any order. Returns the tuple (hi,
+    lo >> 32, lo & 0xFFFFFFFF); the caller's total is
+    (hi << 64) + (mid << 32) + low. Under the sabotage define the total is
+    one too large."""
+    var p = _ptr[dt](addr)
+    var lo = UInt64(0)
+    var hi = Int64(0)
+    with GILReleased(Python()):
+        for i in range(n):
+            var v = p.unsafe_load(i).cast[DType.int64]()
+            var nlo = lo + bitcast[DType.uint64](v)
+            if nlo < lo:
+                hi += 1
+            if v < 0:
+                hi -= 1
+            lo = nlo
+        comptime if HOTPATH_SABOTAGE:
+            var bumped = lo + UInt64(1)
+            if bumped < lo:
+                hi += 1
+            lo = bumped
+    return Python.tuple(
+        PythonObject(Int(hi)), PythonObject(Int(lo >> 32)), PythonObject(Int(lo & UInt64(0xFFFFFFFF)))
+    )
 
 
 def _reduce[dt: DType](addr: Int, n: Int, what: Int) raises -> PythonObject:
@@ -325,15 +356,26 @@ def reduce_stat_binding(
 ) raises -> PythonObject:
     """Python's `min`, `max`, left-to-right float `sum` or first-max-wins
     argmax over `n >= 1` elements in storage order (DEVIATION 3101), or
-    (what = 4) whether every float is finite and integer valued."""
+    (what = 4) whether every float is finite and integer valued, or (what =
+    5, lane apple-fast-py2mojo-core) the exact integer sum as (hi, mid, low)."""
     var count = Int(py=n)
     if count < 1:
         raise Error("reduce_stat: n must be positive, got " + String(count))
     var w = Int(py=what)
-    if w < HP_MIN or w > HP_INTEGRAL:
+    if w < HP_MIN or w > HP_ISUM:
         raise Error("reduce_stat: unknown reduction " + String(w))
     var c = Int(py=code)
     var a = Int(py=addr)
+    if w == HP_ISUM:
+        if c == HP_I32:
+            return _isum[DType.int32](a, count)
+        if c == HP_I64:
+            return _isum[DType.int64](a, count)
+        if c == HP_U32:
+            return _isum[DType.uint32](a, count)
+        if c == HP_U8:
+            return _isum[DType.uint8](a, count)
+        raise Error("reduce_stat: the integer sum takes an integer buffer")
     if w == HP_SUM and c != HP_F32 and c != HP_F64:
         raise Error("reduce_stat: the float sum takes a float buffer")
     if c == HP_F32:

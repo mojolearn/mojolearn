@@ -21,7 +21,7 @@ from ._arrays import _addr, _addr_ro
 from ._labels import is_bool, flatten_labels
 # The splitters' random draws (lane/metrics): a module-level import, so the
 # lane selector sees model_selection reach the x_metrics binding.
-from ._expansion_metrics import CounterRng, _mix64, fold_rows, stratified_fold_rows
+from ._expansion_metrics import CounterRng, _mix64, fold_rows, stratified_fold_rows, _py2mojo
 
 #: The binding the splitters' permutations and the scorers' added metrics run
 #: on (python/mojolearn/_expansion_metrics.py `_BINDING`). Named here because
@@ -604,6 +604,35 @@ def _encode_first_seen(values):
     return list(map(index.__getitem__, values)), len(index)
 
 
+def _first_seen_native(y):
+    """`_encode_first_seen` and the class counts with no per-row Python (lane
+    apple-fast-py2mojo-core): (int32 codes `Array` in first-seen order, k,
+    counts), or None (y None, fewer than `_NATIVE_MIN_ROWS` rows, labels the
+    native encoder refuses: str, mixed or NaN labels keep the dict route).
+    The order rule's codes and counts come from `_GroupCodes` (the native
+    encoder and `fold_ids`), each class's first row from the x_metrics
+    binding's `first_rows`, and the codes are renumbered by first row
+    through the core gather: the same classes (both group by numeric
+    equality) in the same first-seen order."""
+    if y is None:
+        return None
+    try:
+        n = _n_samples(y)
+        gc = _GroupCodes.get(y, n, 'y')
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if gc is None or gc.m < 1:
+        return None
+    first = array.array('q', bytes(8 * gc.m))
+    _expansion_metrics_binding().x_metrics_first_rows(_addr_ro(gc.codes), n, gc.m, first.buffer_info()[0])
+    order = sorted(range(gc.m), key=first.__getitem__)
+    table = [0] * gc.m
+    for rank, c in enumerate(order):
+        table[c] = rank
+    words = gc.mapped(table)
+    return Array._owned(words, (n,), '<i4', 'C'), gc.m, [gc.counts[c] for c in order]
+
+
 def _encode_sorted(values):
     # the order rule's classes and codes by the native encoder (lane
     # py-shared); `sorted_classes` stays its definition and fallback
@@ -908,15 +937,20 @@ class StratifiedKFold(_KFoldBase):
     def _fold_plan(self, y):
         """(first-seen int32 codes Array, classes, class counts, alloc):
         alloc[i][c] = class c's rows in fold i (sklearn's _make_test_folds).
-        The labels are encoded by `encode_labels` and renumbered by first
-        appearance in Mojo (`first_seen_i32`)."""
-        from ._labels import encode_labels
-        classes, codes = encode_labels(y)
-        n = codes.size
-        enc = empty((n,), '<i4')
-        cnt = _zeros_i64(max(len(classes), 1))
-        k = int(_native('first_seen_i32')(_addr_ro(codes), n, max(len(classes), 1), _addr(enc), _addr(cnt)))
-        counts = cnt.tolist()[:k]
+        The x_metrics first-rows route (`_first_seen_native`), else the
+        labels encoded by `encode_labels` and renumbered by first appearance
+        in Mojo (`first_seen_i32`): no per-row Python either way."""
+        fs = _first_seen_native(y) if _py2mojo(None) else None
+        if fs is not None:
+            enc, k, counts = fs
+        else:
+            from ._labels import encode_labels
+            classes, codes = encode_labels(y)
+            n = codes.size
+            enc = empty((n,), '<i4')
+            cnt = _zeros_i64(max(len(classes), 1))
+            k = int(_native('first_seen_i32')(_addr_ro(codes), n, max(len(classes), 1), _addr(enc), _addr(cnt)))
+            counts = cnt.tolist()[:k]
         if not counts or max(counts) < self.n_splits:
             raise ValueError(f'n_splits={self.n_splits} cannot be greater than the number of members in '
                              'each class.')
@@ -1937,6 +1971,8 @@ def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None, n_jobs=None
     _require_serial(n_jobs, 'raise', 'cross_val_predict')
     X, y, folds = _cv_folds(estimator, X, y, cv, groups)
     n = len(X)
+    if _py2mojo(None):
+        return _cross_val_predict_native(estimator, X, y, folds, n, method)
     seen = [0] * n
     for _, test in folds:
         for i in test.tolist():
@@ -1960,6 +1996,74 @@ def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None, n_jobs=None
     if all(isinstance(v, numbers.Real) for v in rows):
         return Array.from_list(rows, '<f8')
     return rows
+
+
+def _cross_val_predict_native(estimator, X, y, folds, n, method):
+    """`cross_val_predict` with no per-row Python (lane apple-fast-py2mojo-core):
+    the partition test is `check_indices_i64` over every fold's test rows
+    laid end to end (each row held out exactly once: n rows in all, none
+    twice; the folds' rows are already in range), and each fold's
+    predictions are put back in row order by the x_metrics binding's
+    `scatter_rows` byte copy into one int64 (integer predictions) or
+    float64 (real predictions, or any prediction with columns) block. A
+    fold whose predictions are not a numeric `Array` (str labels come back
+    as a Python list) sends the placement to the label loop below it."""
+    import ctypes
+    from ._buffer import _output_store
+    total = sum(int(test.size) for _, test in folds)
+    if total != n:
+        raise ValueError('cross_val_predict only works for partitions')
+    held = _output_store('q', n)
+    at = 0
+    keep = []
+    for _, test in folds:
+        t = test if test.dtype == '<i8' and test._has_order('C') else test.astype('<i8')._as_c()
+        ctypes.memmove(held.buffer_info()[0] + 8 * at, _addr_ro(t), 8 * t.size)
+        at += t.size
+        keep.append(t)
+    if int(_native('check_indices_i64')(held.buffer_info()[0], n, n)) != 0:
+        raise ValueError('cross_val_predict only works for partitions')
+    preds = []
+    for (train, test), t in zip(folds, keep):
+        est = _clone(estimator)
+        est.fit(_take_rows(X, train), None if y is None else _take_rows(y, train))
+        preds.append((getattr(est, method)(_take_rows(X, test)), t))
+    numeric = all(isinstance(p, Array) and p.dtype in ('<f4', '<f8', '<i4', '<i8', '<u4', '<u1')
+                  and p.ndim >= 1 and p.shape[0] == t.size for p, t in preds)
+    width = tuple(preds[-1][0].shape[1:]) if numeric else ()
+    if numeric and all(tuple(p.shape[1:]) == width for p, _ in preds):
+        integral = not width and all(p.dtype[1] in 'iu' for p, _ in preds)
+        dtype = '<i8' if integral else '<f8'
+        out = empty((n,) + width, dtype)
+        row_bytes = 8
+        for w in width:
+            row_bytes *= int(w)
+        scatter = _expansion_metrics_binding().x_metrics_scatter_rows
+        for p, t in preds:
+            src = p.astype(dtype)._as_c() if p.dtype != dtype else p._as_c()
+            if row_bytes and t.size:
+                scatter(_addr_ro(src), _addr(out), _addr_ro(t), t.size, n, row_bytes)
+        return out
+    rows = [None] * n
+    width = None
+    for pred, t in preds:
+        vals = pred.tolist() if hasattr(pred, 'tolist') else list(pred)
+        for i, v in zip(t.tolist(), vals):
+            rows[i] = v
+        width = getattr(pred, 'shape', (0,))[1:] if hasattr(pred, 'shape') else ()
+    if width:
+        return Array.from_list([float(v) for row in rows for v in row], '<f8').reshape((n,) + tuple(width))
+    if all(isinstance(v, numbers.Integral) for v in rows):
+        return Array.from_list(rows, '<i8')
+    if all(isinstance(v, numbers.Real) for v in rows):
+        return Array.from_list(rows, '<f8')
+    return rows
+
+
+def _expansion_metrics_binding():
+    """The x_metrics binding of the running tier (its host epilogues)."""
+    from ._expansion_metrics import _binding
+    return _binding(None)
 
 
 class ParameterGrid:
@@ -2269,18 +2373,33 @@ def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.5
     # scikit-learn permutes each fold's training rows ONCE (in fold order)
     # and takes nested prefixes of that one order for every size
     rng = _rng(random_state) if shuffle else None
+    p2m = _py2mojo(None)
     orders = []
-    for train, _ in folds:
-        tr_idx = train.tolist()
-        if rng is not None:
-            perm = rng.permutation(len(tr_idx))
-            tr_idx = [tr_idx[j] for j in perm]
-        orders.append(tr_idx)
+    if p2m:
+        # lane apple-fast-py2mojo-core: the same draws, in fold order, as
+        # Int64 rows from one device program, and each fold's training rows
+        # reordered by the core gather; no Python int per row
+        perms = rng.permutation_rows([int(tr.size) for tr, _ in folds]) if rng is not None else None
+        for f, (train, _) in enumerate(folds):
+            tr = train if train.dtype == '<i8' and train._has_order('C') else train.astype('<i8')._as_c()
+            if perms is not None and tr.size:
+                perm = Array._owned(perms[f], (tr.size,), '<i8', 'C')
+                out = empty((tr.size,), '<i8')
+                _native('gather_i64')(_addr_ro(tr), tr.size, _addr_ro(perm), tr.size, _addr(out))
+                tr = out
+            orders.append(tr)
+    else:
+        for train, _ in folds:
+            tr_idx = train.tolist()
+            if rng is not None:
+                perm = rng.permutation(len(tr_idx))
+                tr_idx = [tr_idx[j] for j in perm]
+            orders.append(tr_idx)
     tr_s, te_s, ft, st = [], [], [], []
     for a in sizes:
         row_tr, row_te, row_ft, row_st = [], [], [], []
         for (train, test), tr_idx in zip(folds, orders):
-            sub = _as_index(tr_idx[:a])
+            sub = tr_idx[0:a] if p2m else _as_index(tr_idx[:a])
             est = _clone(estimator)
             t0 = time.perf_counter()
             est.fit(_take_rows(X, sub), _take_rows(y, sub))

@@ -13,6 +13,7 @@ from x_prep.common import X_PREP_HOST_SABOTAGE
 from x_prep.host.program import run_program_host
 from x_prep.user_host import F32P, F64P, I32P, ii_rows, ii_gather, ii_scatter, ii_conv
 from x_prep.folds import kfold_folds, strat_folds
+from x_prep.py2mojo import PY2MOJO_PREP
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -124,7 +125,6 @@ def ii_conv_binding(a_addr: PythonObject, b_addr: PythonObject, ints: PythonObje
     return PythonObject(r)
 
 
-@export
 def _seed(v: PythonObject) raises -> UInt64:
     """(lo, hi) 32-bit halves -> the 64-bit seed."""
     return (UInt64(Int(py=v[1])) << 32) | UInt64(Int(py=v[0]))
@@ -132,11 +132,9 @@ def _seed(v: PythonObject) raises -> UInt64:
 
 def strat_folds_binding(codes_addr: PythonObject, out_addr: PythonObject, ints: PythonObject,
                         seed: PythonObject) raises -> PythonObject:
-    """TargetEncoder's stratified fold assignment (x_prep/folds.mojo; the GPU
-    binding's entry, the same integers; lane cgr4-py-compute deleted the
-    Python copy the CPU-only install ran). ints = (n, n_classes, n_folds,
-    shuffle); seed = (lo, hi). Returns 0, or -1 when every class has fewer
-    rows than n_folds."""
+    """TargetEncoder's stratified fold assignment (x_prep/folds.mojo), the GPU
+    binding's entry (lane apple-fast-py2mojo-prep: the CPU-only install ran
+    Python's copy). ints = (n, n_classes, n_folds, shuffle); seed = (lo, hi)."""
     var ca = Int(py=codes_addr)
     var oa = Int(py=out_addr)
     var n = Int(py=ints[0])
@@ -148,8 +146,7 @@ def strat_folds_binding(codes_addr: PythonObject, out_addr: PythonObject, ints: 
 
 
 def kfold_folds_binding(out_addr: PythonObject, ints: PythonObject, seed: PythonObject) raises -> PythonObject:
-    """TargetEncoder's K-fold assignment (x_prep/folds.mojo). ints = (n,
-    n_folds, shuffle); seed = (lo, hi)."""
+    """TargetEncoder's K-fold assignment (x_prep/folds.mojo). ints = (n, n_folds, shuffle)."""
     var oa = Int(py=out_addr)
     var n = Int(py=ints[0])
     if oa == 0 or n < 0:
@@ -158,6 +155,12 @@ def kfold_folds_binding(out_addr: PythonObject, ints: PythonObject, seed: Python
     return PythonObject(0)
 
 
+def py2mojo_binding() raises -> PythonObject:
+    """Lane apple-fast-py2mojo-prep: present unless -D MOJOLEARN_PY2MOJO_prep_OFF."""
+    return PythonObject(1)
+
+
+@export
 def PyInit__mojolearn_x_prep_host() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_prep_host")
@@ -170,10 +173,12 @@ def PyInit__mojolearn_x_prep_host() abi("C") -> PythonObject:
         m.def_function[ii_gather_binding]("x_prep_ii_gather")
         m.def_function[ii_scatter_binding]("x_prep_ii_scatter")
         m.def_function[ii_conv_binding]("x_prep_ii_conv")
-        m.def_function[strat_folds_binding]("x_prep_strat_folds")
-        m.def_function[kfold_folds_binding]("x_prep_kfold_folds")
         m.def_function[x_prep_numeric_mode_binding]("x_prep_numeric_mode")
         m.def_function[x_prep_vendor_binding]("x_prep_vendor")
+        m.def_function[strat_folds_binding]("x_prep_strat_folds")
+        m.def_function[kfold_folds_binding]("x_prep_kfold_folds")
+        comptime if PY2MOJO_PREP:
+            m.def_function[py2mojo_binding]("x_prep_py2mojo")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_prep_host: ", e))

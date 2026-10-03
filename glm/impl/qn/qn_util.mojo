@@ -475,7 +475,7 @@ def lbfgs_search_dir_enqueue(
     # xp / gradp saves and (do_dot) the line search's dg_init into scalar
     # word 0: see lbfgs_dir_kernel. `pseudo` is the direction's source when
     # use_pseudo (OWL-QN), else any distinct buffer (unread).
-    ctx.enqueue_function[lbfgs_dir_kernel](
+    ctx.enqueue_function[lbfgs_dir_kernel](  # small-launch(n: parameter count n_param, the coefficient vector): the L-BFGS two-loop direction over d-sized vectors, never rows
         drt.unsafe_ptr(), pseudo.unsafe_ptr(), s_all.unsafe_ptr(), y_all.unsafe_ptr(),
         hist.unsafe_ptr(), hist_alpha.unsafe_ptr(), verdict.unsafe_ptr(),
         x.unsafe_ptr(), xp.unsafe_ptr(), grad.unsafe_ptr(), gradp.unsafe_ptr(),

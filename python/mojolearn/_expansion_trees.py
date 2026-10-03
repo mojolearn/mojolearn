@@ -23,7 +23,7 @@ KernelExplainer's coalition schedule, Bagging's oob R^2 and AdaBoost's
 sample_weight normalization are Mojo (lane cgr4-py-compute).
 CalibratedClassifierCV's per-class epilogue moved to xtrees on lane
 py-misc-prep (strided platt/isotonic apply, `complement_pairs`, native class
-columns and 0/1 targets).
+columns and 0/1 targets; its Python reference arm is deleted).
 """
 import numbers
 import os
@@ -129,6 +129,16 @@ def _trees_fsum_f32(b, arr):
     2026-09-28, trees-apple profile)."""
     from ._portable_math import _scaled_integer
     arr, _ = as_f32_c(arr, ndim=1, name="y")
+    q = getattr(b, "x_trees_py2mojo", None)
+    if callable(q) and int(q()) != 0:
+        # lane apple-fast-py2mojo-trees: the sum AND its one rounding in the
+        # binding (x_trees_exact_sum, on the device in a GPU build); a NaN or
+        # an infinity still takes the Python fsum, which owns those cases
+        out, flags = empty((1,), "<f8"), empty((8,), "<i4")
+        b.x_trees_exact_sum(addr_ro(arr, name="y"), addr(out, name="sum"), addr(flags, name="flags"), [arr.size, 0])
+        if flags[0] or flags[1] or flags[2]:
+            return math.fsum(arr.tolist())
+        return out[0]
     limbs = b.x_trees_exact_sum_f32(addr_ro(arr, name="y"), [arr.size])
     if limbs is None:
         return math.fsum(arr.tolist())
@@ -492,11 +502,25 @@ def _trees_switch(est, bit):
     return callable(query) and (int(query()) & bit) != 0
 
 
+def _trees_py2mojo(est):
+    """True when `est`'s x_trees binding runs the wrapper glue (cv folds,
+    OneVsRest targets, MultiOutputClassifier columns, binary (1 - p, p)
+    rows) itself: `x_trees_py2mojo`, 1 in every build unless `-D
+    MOJOLEARN_PY2MOJO_trees_OFF` (lane apple-fast-py2mojo-trees, the A/B
+    arm A that restores main's Python row loops)."""
+    query = getattr(est._bind(), "x_trees_py2mojo", None)
+    return callable(query) and int(query()) != 0
+
+
 def _trees_native_glue(est):
-    """`est`: the cv fold bookkeeping is `x_trees_device_folds` on every
-    tier and column (the device kernel on a GPU binding, its host twin on a
-    CPU-only one; lane cgr4-py-compute deleted the Python fold route)."""
-    return est
+    """`est` when its binding builds the cv bookkeeping (`_trees_py2mojo`,
+    or MOJOLEARN_TE_NATIVE_SPLITS on the FAST tier with a binding that
+    carries `x_trees_device_folds`), else None."""
+    if _trees_py2mojo(est):
+        return est
+    if not _trees_switch(est, _TE_NATIVE_SPLITS):
+        return None
+    return est if callable(getattr(est._bind(), "x_trees_device_folds", None)) else None
 
 
 def _trees_ada_session_default(est):
@@ -507,6 +531,46 @@ def _trees_ada_session_default(est):
     if _trees_switch(est, _TE_ADA_SESSION_SHARE):
         return "share"
     return "1" if _trees_switch(est, _TE_ADA_SESSION) else "0"
+
+
+def _trees_label_words(Y):
+    """A numeric 2-D label buffer as a C-order (n, m) Array of 8-byte words
+    whose `tolist()` labels are the Python ones: float64 for a float dtype,
+    int64 for a signed or unsigned int dtype that fits it; None for anything
+    else (bool, str, object, nested lists, uint64), which keeps the Python
+    rows (lane apple-fast-py2mojo-trees)."""
+    d = getattr(Y, "dtype", None)
+    if getattr(Y, "ndim", None) != 2:
+        return None
+    kind = getattr(d, "kind", None)
+    if kind is None:
+        if not isinstance(d, str):
+            return None
+        kind = d.lstrip("<>=|")[:1]
+    if kind not in ("f", "i", "u"):
+        return None
+    try:
+        if kind == "f":
+            return as_f64_c(Y, ndim=2, name="Y")[0]
+        arr, _ = _materialize(Y, "Y")
+        if arr.ndim != 2 or arr.dtype not in ("<i1", "<i2", "<i4", "<i8", "|i1", "|u1", "<u1", "<u2", "<u4"):
+            return None
+        if arr.dtype != "<i8":
+            arr = arr.astype("<i8")
+        return arr._as_c()
+    except (TypeError, ValueError):
+        return None  # the Python rows name the refusal
+
+
+def _trees_binary_proba(est, p, n):
+    """(n, 2) float64 rows (1 - p, p) of a float32 positive-class column, in
+    the binding (x_trees_binary_proba: the exact widening and one IEEE
+    subtract, the Python `[[1.0 - v, v] for v in p.tolist()]` word for word;
+    lane apple-fast-py2mojo-trees)."""
+    p = as_f32_c(p, ndim=1, name="p")[0]
+    out = empty((2 * n,), "<f8")
+    est._bind().x_trees_binary_proba(addr_ro(p, name="p"), addr(out, name="proba"), [n])
+    return out.reshape((n, 2))
 
 
 def _trees_float_dtype(Y):
@@ -768,19 +832,22 @@ class _BaggingBase(_TreesEnsembleBase):
         its out-of-bag rows, added in member order (sklearn `_set_oob_score`)."""
         n = Xa.shape[0]
         acc = zeros((n * k,), "<f8")
-        counts = zeros((n,), "<f8")
-        b = self._bind()
+        native = _trees_py2mojo(self)
+        # lane apple-fast-py2mojo-trees: the member counts in the binding
+        # (x_trees_count_rows, int32 per row), not a Python row loop
+        counts = zeros((n,), "<i4") if native else [0] * n
         for est, cols, oob in zip(self.estimators_, self.estimators_features_, self._oob_rows):
             m = len(oob)
             if m == 0:
                 continue
             out = member_out(est, self._gather(Xa, oob, cols), m)
-            b.x_trees_accumulate_rows(addr(acc, name="oob"), addr_ro(out, name="member"),
-                                      addr_ro(oob, name="rows"), [n, k, m])
-            # each out-of-bag row's member count, added by the same binding
-            ones = full((m,), 1.0, "<f8")
-            b.x_trees_accumulate_rows(addr(counts, name="oob"), addr_ro(ones, name="member"),
-                                      addr_ro(oob, name="rows"), [n, 1, m])
+            self._bind().x_trees_accumulate_rows(addr(acc, name="oob"), addr_ro(out, name="member"),
+                                                 addr_ro(oob, name="rows"), [n, k, m])
+            if native:
+                self._bind().x_trees_count_rows(addr(counts, name="counts"), addr_ro(oob, name="rows"), [n, m])
+            else:
+                for i in oob.tolist():
+                    counts[i] += 1
         return acc, counts
 
     def _check_X(self, X):
@@ -842,7 +909,14 @@ class BaggingClassifier(_BaggingBase):
         self.oob_decision_function_ = acc.reshape((n, k))
         # the per-row match is the native elementwise compare (two int32
         # Arrays), not a Python loop over the rows
-        hits = self._argmax(acc, n, k) == as_i32_c(codes, ndim=1, name="codes")[0]
+        pred, truth = self._argmax(acc, n, k), as_i32_c(codes, ndim=1, name="codes")[0]
+        if _trees_py2mojo(self):
+            # lane apple-fast-py2mojo-trees: the hit count in the binding
+            hit_count = int(self._bind().x_trees_count_equal(addr_ro(pred, name="pred"), addr_ro(truth, name="codes"),
+                                                             [n]))
+            self.oob_score_ = hit_count / n
+            return
+        hits = pred == truth
         self.oob_score_ = hits.sum() / n
 
     def predict_proba(self, X):
@@ -896,18 +970,36 @@ class BaggingRegressor(_BaggingBase):
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         n = Xa.shape[0]
 
+        native = _trees_py2mojo(self)
+
         def member_out(est, Xs, m):
             p, _ = as_f32_c(est.predict(Xs), ndim=1, name="prediction")
-            return p.astype("<f8")
+            return p.astype("<f8") if native else Array.from_list(p.tolist(), "<f8")
 
         acc, counts = self._oob_outputs(Xa, 1, member_out)
-        y, _ = as_f32_c(y32, ndim=1, name="y")
-        pred = zeros((n,), "<f8")
-        # per-row predictions and R^2 in Mojo (lane cgr4-py-compute)
-        score = self._bind().x_trees_oob_r2(addr_ro(acc, name="oob"), addr_ro(counts, name="oob"),
-                                            addr_ro(y, name="y"), addr(pred, name="oob"), [n])
-        self.oob_prediction_ = pred
-        self.oob_score_ = float(score)
+        if native:
+            # lane apple-fast-py2mojo-trees: the oob prediction and the three
+            # exactly rounded sums in the binding (x_trees_oob_r2, the device
+            # in a GPU build): fsum's words, the same R^2. A non-finite term
+            # or an overflowing sum takes the Python rows, which own those.
+            y32, _ = as_f32_c(y32, ndim=1, name="y")
+            pred, words, flags = empty((n,), "<f8"), empty((4,), "<f8"), empty((4,), "<i4")
+            self._bind().x_trees_oob_r2([addr_ro(acc, name="oob"), addr_ro(counts, name="counts"),
+                                         addr_ro(y32, name="y"), addr(pred, name="pred"), addr(words, name="sums"),
+                                         addr(flags, name="flags")], [n])
+            if not (flags[0] or flags[1]):
+                self.oob_prediction_ = pred
+                ss_tot, ss_res = words[1], words[2]
+                self.oob_score_ = 1.0 - ss_res / ss_tot if ss_tot > 0 else (1.0 if ss_res == 0 else 0.0)
+                return
+            counts = counts.tolist()
+        pred = [v / max(c, 1) for v, c in zip(acc.tolist(), counts)]
+        self.oob_prediction_ = Array.from_list(pred, "<f8")
+        y = y32.tolist()
+        mean = math.fsum(y) / n
+        ss_tot = math.fsum((v - mean) * (v - mean) for v in y)
+        ss_res = math.fsum((a - b) * (a - b) for a, b in zip(y, pred))
+        self.oob_score_ = 1.0 - ss_res / ss_tot if ss_tot > 0 else (1.0 if ss_res == 0 else 0.0)
 
     def predict(self, X):
         Xa = self._check_X(X)
@@ -933,8 +1025,8 @@ class BaggingRegressor(_BaggingBase):
 # (`samme_step`, `r2_step`, `weighted_median`); R2's weighted bootstrap is the
 # lane's counter RNG, not numpy's `choice`.
 def _trees_normalized_weights(sample_weight, n, est=None):
-    """sample_weight / its total as float64 (uniform 1 / n without), checked
-    and divided in Mojo (`x_trees_normalized_weights`; lane cgr4-py-compute)."""
+    if est is not None and _trees_py2mojo(est):
+        return _trees_normalized_weights_native(est, sample_weight, n)
     if sample_weight is None:
         return full((n,), 1.0 / n, "<f8")
     sw, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
@@ -948,6 +1040,26 @@ def _trees_normalized_weights(sample_weight, n, est=None):
     if status == 2:
         raise ValueError("sample_weight must have a positive total")
     return out
+
+
+def _trees_normalized_weights_native(est, sample_weight, n):
+    """`_trees_normalized_weights` in the binding (lane
+    apple-fast-py2mojo-trees): the checks, the exactly rounded total
+    (`fsum`'s word) and every v / total in one x_trees_exact_sum call, the
+    same refusals in the same order and the same float64 words."""
+    if sample_weight is None:
+        return full((n,), 1.0 / n, "<f8")
+    sw, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
+    if len(sw) != n:
+        raise ValueError(f"sample_weight has {len(sw)} entries, X has {n} rows")
+    out, flags = empty((n + 1,), "<f8"), empty((8,), "<i4")
+    est._bind().x_trees_exact_sum(addr_ro(sw, name="sample_weight"), addr(out, name="weights"),
+                                  addr(flags, name="flags"), [n, 1])
+    if flags[0] or flags[1] or flags[2] or flags[3]:
+        raise ValueError("sample_weight must be finite and nonnegative")
+    if not flags[4]:
+        raise ValueError("sample_weight must have a positive total")
+    return out[1:n + 1]
 
 
 class _AdaBoostBase(_TreesEnsembleBase):
@@ -1316,6 +1428,11 @@ class _DARTBase(_TreesEnsembleBase):
             if not 0.0 < p < 1.0:
                 raise ValueError("y must hold both classes")
             inits = [float(b.x_trees_log64(p / (1.0 - p)))]
+        elif _trees_py2mojo(self):
+            # lane apple-fast-py2mojo-trees: the class counts in the binding
+            cnt = empty((K,), "<i4")
+            b.x_trees_class_counts(addr_ro(y32, name="y"), addr(cnt, name="counts"), [n, K])
+            inits = [float(b.x_trees_log64(max(1e-15, c / n))) for c in cnt.tolist()]
         else:
             # the class counts by the base binding's bincount (lane cgr4-py-compute)
             from ._buffer import _native
@@ -1373,6 +1490,7 @@ class _DARTBase(_TreesEnsembleBase):
         n, d = Xa.shape
         train_nodes = []
         sum_w = 0.0
+        native_glue = _trees_py2mojo(self)
         for it in range(int(self.n_estimators)):
             t = len(self.tree_weights_)
             u = empty((1 + t,), "<f8")
@@ -1409,8 +1527,12 @@ class _DARTBase(_TreesEnsembleBase):
             for c in range(K):
                 j = it * K + c
                 cols = self._cols(d, j)
-                tgt = target if K == 1 else self._gather_vec(target, Array.from_list(
-                    list(range(c * n, (c + 1) * n)), "<i4"))
+                if K == 1:
+                    tgt = target
+                elif native_glue:
+                    tgt = target[c * n:(c + 1) * n]
+                else:
+                    tgt = self._gather_vec(target, Array.from_list(list(range(c * n, (c + 1) * n)), "<i4"))
                 Xf, yf = Xa, tgt
                 if rows is not None or cols is not None:
                     Xf = self._gather(Xa, rows if rows is not None else _trees_arange(n),
@@ -1426,14 +1548,13 @@ class _DARTBase(_TreesEnsembleBase):
                     tree._fit_in_session(session, yf)
                 else:
                     tree.fit(Xf, yf)
-                if cols is not None:
-                    # each split's feature id through the column table, leaves kept
-                    from ._buffer import _native
-                    tbl, _ = as_i32_c(cols, ndim=1, name="cols")
-                    cid = empty((tree._colid.size,), "<i4")
-                    _native("gather_keep_neg_i32")(addr_ro(tbl, name="cols"), tbl.size,
-                                                   addr_ro(tree._colid, name="colid"), cid.size, addr(cid, name="colid"))
+                if cols is not None and native_glue:
+                    cid = tree._colid.copy()
+                    b.x_trees_remap_cols(addr(cid, name="colid"), addr_ro(cols, name="cols"), [len(cid), len(cols)])
                     tree._colid = cid
+                elif cols is not None:
+                    cl = cols.tolist()
+                    tree._colid = Array.from_list([cl[v] if v >= 0 else v for v in tree._colid.tolist()], "<i4")
                 nodes = self._tree_nodes(tree, Xa)
                 n_nodes = int(tree._offsets.tolist()[1])
                 values = empty((n_nodes,), "<f4")
@@ -1659,6 +1780,15 @@ class DARTClassifier(_DARTBase):
             acc = acc.reshape((n * K,))
             self._bind().x_trees_softmax_rows(addr(acc, name="proba"), [n, K])
             return acc.reshape((n, K))
+        if _trees_py2mojo(self):
+            # lane apple-fast-py2mojo-trees: the (0, raw) rows stacked natively
+            raw = self._raw(X)
+            n = len(raw)
+            acc = empty((2 * n,), "<f8")
+            self._bind().x_trees_stack_w64([addr_ro(zeros((n,), "<f8"), name="zero"), addr_ro(raw, name="raw")],
+                                           addr(acc, name="proba"), [n])
+            self._bind().x_trees_softmax_rows(addr(acc, name="proba"), [n, 2])
+            return acc.reshape((n, 2))
         raw = self._raw(X).tolist()
         acc = Array.from_list([v for r in raw for v in (0.0, r)], "<f8")
         self._bind().x_trees_softmax_rows(addr(acc, name="proba"), [len(raw), 2])
@@ -1669,6 +1799,11 @@ class DARTClassifier(_DARTBase):
             acc = self._raw_rows(X)
             n, K = acc.shape
             return decode_labels(self.classes_, self._argmax(acc.reshape((n * K,)), n, K))
+        if _trees_py2mojo(self):
+            raw = self._raw(X)
+            codes = empty((len(raw),), "<i4")
+            self._bind().x_trees_positive_codes(addr_ro(raw, name="raw"), addr(codes, name="codes"), [len(raw)])
+            return decode_labels(self.classes_, codes)
         raw = self._raw(X).tolist()
         return decode_labels(self.classes_, Array.from_list([1 if r > 0 else 0 for r in raw], "<i4"))
 
@@ -1722,6 +1857,21 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
             max_leaf_nodes=self.max_leaf_nodes, min_impurity_decrease=self.min_impurity_decrease,
             random_state=seed, numeric_mode=self.numeric_mode).fit(Xa, yr)
         f = self.forest_
+        if _trees_py2mojo(self) and int(f._offsets[0]) == 0:
+            # lane apple-fast-py2mojo-trees: the leaf numbering in the binding
+            # (a parallel scan over the leaf flags in node order)
+            n_trees = len(f._offsets) - 1
+            nn = int(f._offsets[n_trees])
+            left = as_i32_c(f._left_child, ndim=1, name="left")[0]
+            node_col = empty((nn,), "<i4")
+            col = int(self._bind().x_trees_leaf_numbering(addr_ro(left, name="left"), addr(node_col, name="node_col"),
+                                                          [nn]))
+            self._tree_base = f._offsets[0:n_trees]
+            self._node_col = node_col
+            self.n_trees_ = n_trees
+            self.n_output_features_ = col
+            self.n_features_in_ = d
+            return self
         offsets, left = f._offsets.tolist(), f._left_child.tolist()
         n_trees = len(offsets) - 1
         node_col, col = [-1] * offsets[-1], 0
@@ -2322,6 +2472,10 @@ class MultiOutputClassifier(_TreesWrapperBase):
 
     def fit(self, X, Y, sample_weight=None):
         Xa, _ = as_f32_c(X, ndim=2, name="X")
+        if _trees_py2mojo(self):
+            W = _trees_label_words(Y)
+            if W is not None:
+                return self._fit_words(Xa, W, sample_weight)
         Ya = None
         if _trees_native_glue(self) is not None and _trees_float_dtype(Y):
             # a float Y: each column natively (x_trees_column_f64), the same
@@ -2353,13 +2507,59 @@ class MultiOutputClassifier(_TreesWrapperBase):
         self._fitted = True
         return self
 
+    def _fit_words(self, Xa, W, sample_weight):
+        """`fit` for a numeric Y (`_trees_label_words`): the label columns are
+        one native transpose (x_trees_transpose_f64 moves the 8-byte words of
+        an int64 or float64 Y), each encoded natively; the same classes and
+        codes the Python `tolist()` columns gave (lane apple-fast-py2mojo-trees)."""
+        n, m = W.shape
+        if n != Xa.shape[0]:
+            raise ValueError(f"Y has {n} rows, X has {Xa.shape[0]}")
+        T = empty((m * n,), W.dtype)
+        self._bind().x_trees_transpose_f64(addr_ro(W, name="Y"), addr(T, name="Y^T"), [n, m])
+        T = T.reshape((m, n))
+        self.estimators_, self.classes_ = [], []
+        for j in range(m):
+            classes, codes = encode_labels(T[j])
+            e = _trees_clone(self.estimator)
+            e.fit(Xa, codes) if sample_weight is None else e.fit(Xa, codes, sample_weight=sample_weight)
+            self.estimators_.append(e)
+            self.classes_.append(classes)
+        self.n_features_in_ = Xa.shape[1]
+        self._fitted = True
+        return self
+
     def predict(self, X):
         """(n, n_outputs): an int64 or float64 Array for numeric labels."""
         Xa = self._check_X(X)
+        if _trees_py2mojo(self):
+            out = self._predict_stacked(Xa)
+            if out is not None:
+                return out
         cols = [decode_labels(c, as_i32_c(e.predict(Xa), ndim=1, name="codes")[0]).tolist()
                 for e, c in zip(self.estimators_, self.classes_)]
         kind = "<i8" if all(isinstance(v, int) for col in cols for v in col[:1]) else "<f8"
         return Array.from_list([list(r) for r in zip(*cols)], kind)
+
+    def _predict_stacked(self, Xa):
+        """`predict` with the decoded columns stacked natively
+        (x_trees_stack_w64), or None when some output's classes are not all
+        int or all float (labels no Array holds take the Python rows). The
+        dtype rule is the Python one: int64 when every column is int64, else
+        float64 with the int columns widened exactly as `Array.from_list`
+        did (lane apple-fast-py2mojo-trees)."""
+        n = Xa.shape[0]
+        cols = []
+        for e, c in zip(self.estimators_, self.classes_):
+            col = decode_labels(c, as_i32_c(e.predict(Xa), ndim=1, name="codes")[0])
+            if not isinstance(col, Array) or col.dtype not in ("<i8", "<f8"):
+                return None
+            cols.append(col)
+        kind = "<i8" if all(col.dtype == "<i8" for col in cols) else "<f8"
+        cols = [col if col.dtype == kind else col.astype(kind) for col in cols]
+        out = empty((n * len(cols),), kind)
+        self._bind().x_trees_stack_w64([addr_ro(col, name="column") for col in cols], addr(out, name="Y"), [n])
+        return out.reshape((n, len(cols)))
 
     def predict_proba(self, X):
         """A list, one (n, n_classes_j) float64 Array per output."""
@@ -2456,6 +2656,8 @@ class OneVsRestClassifier(_TreesWrapperBase):
         acc = zeros((n * k,), "<f8")
         rows = _trees_arange(n)
         if k == 2:
+            if _trees_py2mojo(self):
+                return _trees_binary_proba(self, self._proba_positive(self.estimators_[0], Xa), n)
             p = self._proba_positive(self.estimators_[0], Xa).tolist()
             return Array.from_list([[1.0 - v, v] for v in p], "<f8")
         for j, e in enumerate(self.estimators_):
@@ -2475,9 +2677,10 @@ class OneVsRestClassifier(_TreesWrapperBase):
 # column when binary). DEVIATIONS: Platt's minimiser is Newton with
 # backtracking (xtrees/ops.mojo platt_fit) on sklearn's objective, not
 # L-BFGS; the default estimator is this library's LinearSVC as sklearn's.
-#: lane py-misc-prep: CalibratedClassifierCV's per-class epilogue in
-#: xtrees (strided calibrators, native columns and 0/1 targets); lane
-#: cgr4-py-compute deleted the Python reference route.
+#: CalibratedClassifierCV's per-class epilogue runs in xtrees (strided
+#: calibrators, native columns and 0/1 targets); the Python reference route
+#: (an [fb] arm no install reached: every x_trees binding carries the strided
+#: entries) is deleted (lane apple-fast-py2mojo-trees).
 
 
 #: lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_CALIB_GNB_FOLDS_OFF turns it off):
@@ -2549,26 +2752,25 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         return acc.reshape((n, k))
 
     def _fit_calibrators(self, S, codes):
-        return self._fit_calibrators_native(S, codes)
-
-    def _fit_calibrators_native(self, S, codes):
-        """`_fit_calibrators` with the class column and its 0/1 target made
-        natively (x_trees_column_f64, x_trees_indicator_codes): the same
-        float64 and int32 words the list comprehensions built."""
+        """One calibrator per class column, the column and its 0/1 target
+        made natively (one x_trees_transpose_f64 of the score block,
+        x_trees_indicator_codes): the same float64 and int32 words the old
+        list comprehensions built."""
         n, c = S.shape
         b = self._bind()
         codes = as_i32_c(codes, ndim=1, name="codes")[0]
-        Sa = as_f64_c(S, ndim=2, name="scores")[0] if c > 1 else None
+        St = None
+        if c > 1:
+            Sa = as_f64_c(S, ndim=2, name="scores")[0]
+            St = empty((c * n,), "<f8")
+            b.x_trees_transpose_f64(addr_ro(Sa, name="S"), addr(St, name="S^T"), [n, c])
+            St = St.reshape((c, n))
         yj = empty((n,), "<i4")
         y64 = empty((n,), "<f8") if self.method != "sigmoid" else None
         cals = []
         for j in range(c):
             cls = 1 if c == 1 else j
-            if c == 1:
-                f = S.reshape((n,))
-            else:
-                f = empty((n,), "<f8")
-                b.x_trees_column_f64(addr_ro(Sa, name="S"), addr(f, name="f"), [n, c, j])
+            f = S.reshape((n,)) if c == 1 else St[j]
             b.x_trees_indicator_codes(addr_ro(codes, name="codes"), addr(yj, name="y"),
                                       addr(y64, name="y64") if y64 is not None else 0, [n, cls])
             if self.method == "sigmoid":
@@ -2582,8 +2784,8 @@ class CalibratedClassifierCV(_TreesWrapperBase):
                 cals.append(("isotonic", (kx[0:m], ky[0:m], m)))
         return cals
 
-    def _calibrated_native(self, e, cals, Xa):
-        """`_calibrated` with each calibrator reading its column of the score
+    def _calibrated(self, e, cals, Xa):
+        """The (n, k) probabilities: each calibrator reading its column of the score
         block in place and writing its column of the (n, k) block (binary:
         column 1, then column 0 = 1 - column 1, one IEEE subtract), then the
         same x_trees_normalize_rows: no per-class list and no Python
@@ -2609,9 +2811,6 @@ class CalibratedClassifierCV(_TreesWrapperBase):
             return acc
         b.x_trees_normalize_rows(addr(acc, name="proba"), [n, k])
         return acc
-
-    def _calibrated(self, e, cals, Xa):
-        return self._calibrated_native(e, cals, Xa)
 
     def fit(self, X, y, sample_weight=None):
         if sample_weight is not None:
@@ -2812,6 +3011,39 @@ def _trees_forest_arrays(est):
             1.0 / int(est._n_trees))
 
 
+def _trees_dart_forest(b, model, K):
+    """(arrays, tscale) of a DART model as ONE flat forest, in boosting order:
+    the node arrays joined as bytes (memory copies, no per-node Python), a
+    multiclass tree's leaf values spread into column j % K natively
+    (x_trees_spread_leaves). The words the per-node Python lists built (lane
+    apple-fast-py2mojo-trees); O(trees) Python for the offsets and scales."""
+    offs = [0]
+    for tree in model.trees_:
+        to = tree._offsets
+        if len(to) != 2:
+            raise ValueError("a DART tree must hold one tree")
+        offs.append(offs[-1] + int(to[1]) - int(to[0]))
+
+    def join(arrs, conv, dtype):
+        raw = b"".join(conv(a, ndim=1, name="tree")[0].tobytes() for a in arrs)
+        return frombytes(raw, dtype, (len(raw) // 4,))
+
+    col = join([t._colid for t in model.trees_], as_i32_c, "<i4")
+    q = join([t._quesval for t in model.trees_], as_f32_c, "<f4")
+    lc = join([t._left_child for t in model.trees_], as_i32_c, "<i4")
+    vals = join(model.tree_values_, as_f32_c, "<f4")
+    if K > 1:
+        nn = len(vals)
+        lv = empty((nn * K,), "<f4")
+        offs_a = Array.from_list(offs, "<i4")
+        b.x_trees_spread_leaves(addr_ro(vals, name="values"), addr_ro(offs_a, name="offsets"), addr(lv, name="leaves"),
+                                [nn, len(model.trees_), K])
+    else:
+        lv = vals
+    tscale = Array.from_list([float(c) for c in model.tree_coefs_], "<f4")
+    return (Array.from_list(offs, "<i4"), col, q, lc, lv), tscale
+
+
 class TreeExplainer(_TreesEnsembleBase):
     """Exact TreeSHAP for this library's forests and DART models.
     `shap_values(X)` is (n, d) for one output, else (n, d, k), float32;
@@ -2847,8 +3079,11 @@ class TreeExplainer(_TreesEnsembleBase):
             # one forest of every boosted tree, in boosting order, each tree
             # scaled by its coefficient; a multiclass tree scores one class:
             # its leaf values in column j % K.
+            native = _trees_py2mojo(self)
+            if native:
+                arrays, tscale = _trees_dart_forest(self._bind(), model, K)
             offs, col, q, lc, lv, ts = [0], [], [], [], [], []
-            for j, (tree, values, coef) in enumerate(zip(model.trees_, model.tree_values_, model.tree_coefs_)):
+            for j, (tree, values, coef) in enumerate([] if native else zip(model.trees_, model.tree_values_, model.tree_coefs_)):
                 vals = values.tolist()
                 if K > 1:
                     c = j % K
@@ -2862,9 +3097,10 @@ class TreeExplainer(_TreesEnsembleBase):
                 lv += vals
                 offs.append(offs[-1] + to[1] - to[0])
                 ts.append(float(coef))
-            arrays = (Array.from_list(offs, "<i4"), Array.from_list(col, "<i4"), Array.from_list(q, "<f4"),
-                      Array.from_list(lc, "<i4"), Array.from_list(lv, "<f4"))
-            tscale = Array.from_list(ts, "<f4")
+            if not native:
+                arrays = (Array.from_list(offs, "<i4"), Array.from_list(col, "<i4"), Array.from_list(q, "<f4"),
+                          Array.from_list(lc, "<i4"), Array.from_list(lv, "<f4"))
+                tscale = Array.from_list(ts, "<f4")
             k = K
         else:
             fa = _trees_forest_arrays(model)

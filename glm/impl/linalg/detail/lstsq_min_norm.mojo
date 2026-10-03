@@ -266,7 +266,7 @@ def lstsq_min_norm_traced(
     var info_buf = ctx.enqueue_create_buffer[DType.float32](3)
     enqueue_fill(ctx, info_buf, JACOBI_INFO_UNWRITTEN)
     ctx.synchronize()
-    ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
+    ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](  # small-launch(n_rows: Gram side, taken only when n_rows < n_cols): Jacobi eigh of a small square Gram in the minimum-norm branch
         gram.unsafe_ptr(),
         q.unsafe_ptr(),
         info_buf.unsafe_ptr(),
