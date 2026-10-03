@@ -945,3 +945,16 @@ def _host_native(key):
         except (ImportError, AttributeError):
             pass
     return None
+
+
+def as_index_i64(values, *, name="indices"):
+    """Row indices (an Array, any buffer or a list of ints) as a 1-D int64
+    Array: the native cast of a numeric buffer; a list goes in through
+    `array('q', ...)`, in C. No per-index Python arithmetic."""
+    if not isinstance(values, Array):
+        if isinstance(values, (list, tuple, range)):
+            store = array.array("q", values)
+            return Array._owned(store, (len(store),), "<i8", "C")
+        values, _ = _materialize(values, name)
+    values = values.reshape((values.size,))
+    return values if values.dtype == "<i8" else values.astype("<i8")

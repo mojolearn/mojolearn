@@ -1357,22 +1357,41 @@ def _target_binary_codes(y, target_type):
     return classes, codes
 
 
+def _numeric_target(y):
+    """y as a flat numeric Array, or None for labels that are not numbers
+    (strings, objects, bools)."""
+    from ._buffer import _materialize
+    try:
+        arr, _ = _materialize(y, "y")
+    except (TypeError, ValueError):
+        return None
+    if arr.dtype not in ("<f4", "<f8", "<i4", "<i8", "<u4", "<u1", "<i2", "<u2", "<i1"):
+        return None
+    return arr.reshape((arr.size,))
+
+
 def _target_kind(y, target_type):
-    """(kind, classes, Y rows as a flat float list with T columns, T)."""
-    labels = flatten_labels(y)
-    if target_type == "continuous" or (target_type == "auto" and labels and all(
-            isinstance(v, numbers.Real) and not isinstance(v, bool) for v in labels)
-            and any(float(v) != int(float(v)) for v in labels)):
-        return "continuous", None, [float(v) for v in labels], 1
-    classes, codes = encode_labels(labels)
-    codes = [int(c) for c in codes]
+    """(kind, classes, targets, T): targets are a float32 Array (continuous)
+    or the int32 class codes (binary, multiclass; the device makes their
+    float and one-hot words). Lane cgr4-py-compute: the kind test (any
+    non-integer value) is the base binding's `reduce_stat` integral check,
+    not a per-label Python test, and no per-row target list is built."""
+    num = _numeric_target(y)
+    continuous = target_type == "continuous"
+    if not continuous and target_type == "auto" and num is not None and num.size \
+            and num.dtype in ("<f4", "<f8"):
+        continuous = not bool(_native_helper("reduce_stat")(num._addr, 0 if num.dtype == "<f4" else 1,
+                                                            num.size, 4))
+    if continuous:
+        if num is None:
+            raise ValueError("mojolearn: a continuous TargetEncoder target must be numeric")
+        return "continuous", None, num.astype("<f4") if num.dtype != "<f4" else num, 1
+    classes, codes = encode_labels(y if num is None else num)
+    if not (isinstance(codes, Array) and codes.dtype == "<i4"):
+        codes = as_i32_c(codes, ndim=1, name="codes")[0]
     if target_type == "binary" or (target_type == "auto" and len(classes) <= 2):
-        return "binary", classes, [float(c) for c in codes], 1
-    K = len(classes)
-    flat = [0.0] * (len(codes) * K)
-    for i, c in enumerate(codes):
-        flat[i * K + c] = 1.0
-    return "multiclass", classes, flat, K
+        return "binary", classes, codes, 1
+    return "multiclass", classes, codes, len(classes)
 
 
 class TargetEncoder(_PrepBase):
@@ -1418,10 +1437,9 @@ class TargetEncoder(_PrepBase):
         n, d = arr.shape
         if binary is None:
             kind, classes, yflat, T = _target_kind(y, self.target_type)
-            rows = len(yflat)
         else:
-            kind, classes, yflat, T = "binary", binary[0], None, 1
-            rows = binary[1].size
+            kind, classes, yflat, T = "binary", binary[0], binary[1], 1
+        rows = yflat.size * T
         if rows != n * T:
             raise ValueError("mojolearn: X and y have different numbers of rows")
         mode = _mode()
@@ -1431,12 +1449,16 @@ class TargetEncoder(_PrepBase):
         F = n_folds
         pr = _Prog()
         codes, _neg = _codes(pr, arr, cats)
-        if binary is None:
-            yo = pr.put_list(yflat)
-            fo = pr.put_codes(folds if folds is not None else full((max(n, 1),), -1, "<i4"))
+        if kind == "continuous":
+            yo = pr.put(yflat)
+        elif kind == "binary":
+            yo = pr.put_codes(yflat)
         else:
-            yo = pr.put_codes(binary[1])
-            fo = pr.put_codes(folds)
+            # the one-hot target block made on the device from the codes
+            co = pr.put_codes(yflat)
+            yo = pr.alloc(n * T)
+            pr.stage("onehot", n, co, n, 1, pr.put_list([0.0]), _NONE, T, yo)
+        fo = pr.put_codes(folds if folds is not None else full((max(n, 1),), -1, "<i4"))
         nco = pr.put_list([c.size for c in cats])
         meta = pr.alloc(2 * (F + 1) * T)
         smo = pr.put_scalar(-1.0 if self.smooth == "auto" else float(self.smooth))
@@ -1491,31 +1513,37 @@ class TargetEncoder(_PrepBase):
         return self
 
     def _splitter_folds(self, X, y, n):
-        """Row -> fold from a splitter object or (train, test) iterable."""
+        """Row -> fold (an int32 Array) from a splitter object or (train,
+        test) iterable, checked by the base binding's helpers (lane
+        cgr4-py-compute: no per-row Python): the test folds cover every row
+        exactly once, and each fold's training rows are every other row."""
+        from ._buffer import as_index_i64
         splits = list(self.cv.split(X, y) if hasattr(self.cv, "split") else self.cv)
-        idx = lambda a: [int(i) for i in (a.tolist() if hasattr(a, "tolist") else a)]
-        fold = [-1] * n
-        for k, (_train, test) in enumerate(splits):
-            for i in idx(test):
-                if not 0 <= i < n or fold[i] != -1:
-                    fold = None
-                    break
-                fold[i] = k
-            if fold is None:
-                break
-        if fold is None or -1 in fold or len(splits) < 1:
-            raise ValueError("mojolearn: Validation indices from `cv` must cover each sample index exactly once "
-                             "with no overlap. Pass a splitter with non-overlapping validation folds as `cv`.")
-        sizes = [0] * len(splits)
-        for k in fold:
-            sizes[k] += 1
-        for k, (train, _test) in enumerate(splits):
-            # the training rows are every row outside fold k exactly once: as
-            # many as there are, distinct, in range and none in fold k (the
-            # folds already cover each row once)
-            tr = idx(train)
-            if (len(tr) != n - sizes[k] or len(set(tr)) != len(tr)
-                    or any(not 0 <= i < n or fold[i] == k for i in tr)):
+        cover = ("mojolearn: Validation indices from `cv` must cover each sample index exactly once "
+                 "with no overlap. Pass a splitter with non-overlapping validation folds as `cv`.")
+        if len(splits) < 1:
+            raise ValueError(cover)
+        fold = full((n,), -1, "<i4")
+        assign = _native_helper("assign_fold_i64")
+        trains = []
+        for k, (train, test) in enumerate(splits):
+            te = as_index_i64(test, name="test")
+            if int(assign(addr_ro(te, name="test") if te.size else 0, te.size, n, k,
+                          _addr_rw(fold, name="folds"))) != 0:
+                raise ValueError(cover)
+            trains.append(as_index_i64(train, name="train"))
+        if fold.min() < 0:
+            raise ValueError(cover)
+        sizes = _class_counts(fold, len(splits))
+        check = _native_helper("check_indices_i64")
+        hits = _native_helper("count_fold_hits_i64")
+        for k, tr in enumerate(trains):
+            # every row outside fold k exactly once: as many as there are,
+            # distinct, in range and none in fold k
+            if (tr.size != n - sizes[k]
+                    or tr.size and (int(check(addr_ro(tr, name="train"), tr.size, n)) != 0
+                                    or int(hits(addr_ro(tr, name="train"), tr.size, addr_ro(fold, name="folds"),
+                                                n, k)) != 0)):
                 raise NotImplementedError("mojolearn: TargetEncoder cv folds whose training rows are not every "
                                           "row outside the test fold are not implemented")
         return fold, len(splits)
@@ -1537,15 +1565,13 @@ class TargetEncoder(_PrepBase):
                 raise ValueError("mojolearn: X and y have different numbers of rows")
             folds = _native_folds(n, cv, seed, bool(self.shuffle), binary[1], len(binary[0]))
             return self._run(arr, y, folds, cv, True, binary=binary)
-        kind, _classes, _yflat, _T = _target_kind(y, self.target_type)
+        kind, classes, targets, _T = _target_kind(y, self.target_type)
         if kind == "continuous":
             folds = _native_folds(n, cv, seed, bool(self.shuffle))
         else:
-            labels = flatten_labels(y)
-            if len(labels) != n:
+            if targets.size != n:
                 raise ValueError("mojolearn: X and y have different numbers of rows")
-            classes, codes = encode_labels(labels)
-            folds = _native_folds(n, cv, seed, bool(self.shuffle), codes, len(classes))
+            folds = _native_folds(n, cv, seed, bool(self.shuffle), targets, len(classes))
         return self._run(arr, y, folds, cv, True)
 
     def transform(self, X):
