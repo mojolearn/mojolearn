@@ -123,7 +123,7 @@ def _with_weights(yv, sample_weight, n):
 
 
 #: lane/apple-fast-py2mojo-linear: `py2mojo_rows` modes (core/py2mojo_rows.mojo)
-_ROWS_SGD_PROBA, _ROWS_LRCV_PROBA = 2, 3
+_ROWS_SGD_PROBA, _ROWS_LRCV_PROBA, _ROWS_HUBER_OUT = 2, 3, 4
 _PY2MOJO_ROWS = 2
 
 
@@ -553,9 +553,22 @@ class HuberRegressor(_LinearRegressorMixin, NumericModeMixin):
         self.scale_ = float(vals[d + 1])
         self.n_iter_ = int(vals[d + 2])
         self.n_features_in_ = d
-        pred = self.predict(a).tolist()
+        pred_a = self.predict(a)
         thr = self.scale_ * self.epsilon
-        self.outliers_ = [abs(t - q) > thr for t, q in zip(yv.tolist(), pred)]
+        b = self._bind(_BINDING)
+        fn = getattr(b, "py2mojo_linear_flags", None)
+        if (fn is not None and int(fn()) & _PY2MOJO_ROWS and yv.dtype == "<f4"
+                and pred_a.dtype == "<f4"):
+            # lane/apple-fast-py2mojo-linear: |y - pred| > thr in the binding
+            # (core/py2mojo_rows.mojo ROWS_HUBER_OUT, the same binary64 test)
+            flags = empty((n,), "<u1")
+            if n:
+                b.py2mojo_rows(_ROWS_HUBER_OUT, addr_ro(yv, name="y"), addr(flags, name="outliers_"),
+                               [n, 1, addr_ro(pred_a, name="pred"), float(thr)])
+            self.outliers_ = list(map(bool, flags.tolist()))
+        else:
+            pred = pred_a.tolist()
+            self.outliers_ = [abs(t - q) > thr for t, q in zip(yv.tolist(), pred)]
         return self
 
 

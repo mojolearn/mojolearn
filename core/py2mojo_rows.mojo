@@ -19,6 +19,9 @@ Python line did, in its order, so the outputs keep their bits:
   ROWS_LRCV_PROBA (3): LogisticRegressionCV.predict_proba from the float32
       scores (n, k): k == 1 the two-branch sigmoid over the pinned exp; k > 1
       exp(v - max) over the row divided by their nsum. float32 out.
+  ROWS_HUBER_OUT (4): HuberRegressor.outliers_, |y - pred| > thr in
+      binary64 (y, pred float32; thr = scale_ * epsilon, a float64), uint8
+      out (n). params [n, 1, pred address, thr].
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
@@ -49,12 +52,14 @@ from checks.soft_f64 import (
 comptime ROWS_LOG = 1
 comptime ROWS_SGD_PROBA = 2
 comptime ROWS_LRCV_PROBA = 3
+comptime ROWS_HUBER_OUT = 4
 
 comptime ROWS_TPB = 256
 comptime ROWS_MAX_BLOCKS = 4096
 
 comptime _F32P = MutPointer[Float32, MutAnyOrigin]
 comptime _U64P = MutPointer[UInt64, MutAnyOrigin]
+comptime _U8P = MutPointer[UInt8, MutAnyOrigin]
 comptime _NEG_INF = UInt64(0xFFF0000000000000)
 
 
@@ -122,8 +127,14 @@ def log_or_inf(p: UInt64) -> UInt64:
 
 
 @always_inline
-def rows_one(mode: Int, src32: _F32P, src64: _U64P, k: Int, i: Int, dst32: _F32P, dst64: _U64P):
-    """Row (or element, for ROWS_LOG) i."""
+def rows_one(mode: Int, src32: _F32P, src64: _U64P, k: Int, i: Int, dst32: _F32P, dst64: _U64P,
+             src2: _F32P, scal: UInt64, dst8: _U8P):
+    """Row (or element, for ROWS_LOG and ROWS_HUBER_OUT) i."""
+    if mode == ROWS_HUBER_OUT:
+        var r = _abs(sf64_sub(sf64_from_f32(src32[i]), sf64_from_f32(src2[i])))
+        var out_ = sf64_gt(r, scal) and not sf64_is_nan(r) and not sf64_is_nan(scal)
+        dst8[i] = UInt8(1) if out_ else UInt8(0)
+        return
     if mode == ROWS_LOG:
         dst64[i] = log_or_inf(src64[i])
         return
@@ -169,11 +180,12 @@ def rows_one(mode: Int, src32: _F32P, src64: _U64P, k: Int, i: Int, dst32: _F32P
         dst32[i * k + c] = sf64_to_f32(sf64_div(e, s))
 
 
-def rows_kernel(mode: Int32, src32: _F32P, src64: _U64P, k: Int32, n: Int64, dst32: _F32P, dst64: _U64P):
+def rows_kernel(mode: Int32, src32: _F32P, src64: _U64P, k: Int32, n: Int64, dst32: _F32P, dst64: _U64P,
+                src2: _F32P, scal: UInt64, dst8: _U8P):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     while i < Int(n):
-        rows_one(Int(mode), src32, src64, Int(k), i, dst32, dst64)
+        rows_one(Int(mode), src32, src64, Int(k), i, dst32, dst64, src2, scal, dst8)
         i += stride
 
 
@@ -184,12 +196,14 @@ struct RowsCall(Copyable, Movable):
     var k: Int
     var src: Int
     var dst: Int
+    var src2: Int
+    var scal: UInt64
 
     def src_count(self) -> Int:
-        return self.n if self.mode == ROWS_LOG else self.n * self.k
+        return self.n if self.mode == ROWS_LOG or self.mode == ROWS_HUBER_OUT else self.n * self.k
 
     def dst_count(self) -> Int:
-        if self.mode == ROWS_LOG:
+        if self.mode == ROWS_LOG or self.mode == ROWS_HUBER_OUT:
             return self.n
         return self.n * (2 if self.k == 1 else self.k)
 
@@ -197,14 +211,20 @@ struct RowsCall(Copyable, Movable):
 def rows_call_from_python(mode: PythonObject, src_addr: PythonObject, dst_addr: PythonObject,
                           params: PythonObject) raises -> RowsCall:
     var md = Int(py=mode)
-    if md < ROWS_LOG or md > ROWS_LRCV_PROBA:
+    if md < ROWS_LOG or md > ROWS_HUBER_OUT:
         raise Error("py2mojo_rows: unknown mode")
-    if len(params) != 2:
-        raise Error("py2mojo_rows: params must contain n, k")
-    var call = RowsCall(md, Int(py=params[0]), Int(py=params[1]), Int(py=src_addr), Int(py=dst_addr))
+    var want = 4 if md == ROWS_HUBER_OUT else 2
+    if len(params) != want:
+        raise Error("py2mojo_rows: params must contain n, k (and, for HUBER_OUT, the pred address and thr)")
+    var src2 = 0
+    var scal = UInt64(0)
+    if md == ROWS_HUBER_OUT:
+        src2 = Int(py=params[2])
+        scal = bitcast[DType.uint64](Float64(py=params[3]))
+    var call = RowsCall(md, Int(py=params[0]), Int(py=params[1]), Int(py=src_addr), Int(py=dst_addr), src2, scal)
     if call.n < 0 or call.k < 1:
         raise Error("py2mojo_rows: n >= 0 and k >= 1 required")
-    if call.n > 0 and (call.src == 0 or call.dst == 0):
+    if call.n > 0 and (call.src == 0 or call.dst == 0 or (md == ROWS_HUBER_OUT and call.src2 == 0)):
         raise Error("py2mojo_rows: null buffer")
     return call^
 
@@ -215,10 +235,15 @@ def rows_device(ctx: DeviceContext, call: RowsCall) raises:
     var nsrc = call.src_count()
     var ndst = call.dst_count()
     var wide = call.mode == ROWS_LOG
+    var huber = call.mode == ROWS_HUBER_OUT
     var d_s32 = ctx.enqueue_create_buffer[DType.float32](1 if wide else nsrc)
     var d_s64 = ctx.enqueue_create_buffer[DType.uint64](nsrc if wide else 1)
-    var d_d32 = ctx.enqueue_create_buffer[DType.float32](1 if wide else ndst)
+    var d_d32 = ctx.enqueue_create_buffer[DType.float32](1 if wide or huber else ndst)
     var d_d64 = ctx.enqueue_create_buffer[DType.uint64](ndst if wide else 1)
+    var d_s2 = ctx.enqueue_create_buffer[DType.float32](nsrc if huber else 1)
+    var d_d8 = ctx.enqueue_create_buffer[DType.uint8](ndst if huber else 1)
+    if huber:
+        ctx.enqueue_copy(dst_buf=d_s2, src_ptr=_F32P(unsafe_from_address=call.src2))
     if wide:
         ctx.enqueue_copy(dst_buf=d_s64, src_ptr=_U64P(unsafe_from_address=call.src))
     else:
@@ -226,9 +251,12 @@ def rows_device(ctx: DeviceContext, call: RowsCall) raises:
     var blocks = max(1, min(ROWS_MAX_BLOCKS, (call.n + ROWS_TPB - 1) // ROWS_TPB))
     ctx.enqueue_function[rows_kernel](
         Int32(call.mode), d_s32.unsafe_ptr(), d_s64.unsafe_ptr(), Int32(call.k), Int64(call.n),
-        d_d32.unsafe_ptr(), d_d64.unsafe_ptr(), grid_dim=blocks, block_dim=ROWS_TPB,
+        d_d32.unsafe_ptr(), d_d64.unsafe_ptr(), d_s2.unsafe_ptr(), call.scal, d_d8.unsafe_ptr(),
+        grid_dim=blocks, block_dim=ROWS_TPB,
     )
-    if wide:
+    if huber:
+        ctx.enqueue_copy(dst_ptr=_U8P(unsafe_from_address=call.dst), src_buf=d_d8)
+    elif wide:
         ctx.enqueue_copy(dst_ptr=_U64P(unsafe_from_address=call.dst), src_buf=d_d64)
     else:
         ctx.enqueue_copy(dst_ptr=_F32P(unsafe_from_address=call.dst), src_buf=d_d32)
@@ -237,6 +265,8 @@ def rows_device(ctx: DeviceContext, call: RowsCall) raises:
     _ = d_s64^
     _ = d_d32^
     _ = d_d64^
+    _ = d_s2^
+    _ = d_d8^
 
 
 def py2mojo_rows_device_binding(
@@ -255,8 +285,10 @@ def rows_host(call: RowsCall):
     var s64 = _U64P(unsafe_from_address=call.src)
     var d32 = _F32P(unsafe_from_address=call.dst)
     var d64 = _U64P(unsafe_from_address=call.dst)
+    var s2 = _F32P(unsafe_from_address=call.src2 if call.src2 != 0 else call.src)
+    var d8 = _U8P(unsafe_from_address=call.dst)
     for i in range(call.n):
-        rows_one(call.mode, s32, s64, call.k, i, d32, d64)
+        rows_one(call.mode, s32, s64, call.k, i, d32, d64, s2, call.scal, d8)
 
 
 def py2mojo_rows_host_binding(
