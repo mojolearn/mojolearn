@@ -130,6 +130,8 @@ from bindings.hotpath_helpers import (
     epoch_order_i32_binding,
     adam_hyper_f64_binding,
     mean_std_f32_binding,
+    first_seen_i32_binding,
+    strat_fold_assign_i32_binding,
 )
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, u32_ptr
 from core.dense_coo import (
@@ -1469,6 +1471,8 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[epoch_order_i32_binding]("epoch_order_i32")
         module.def_function[adam_hyper_f64_binding]("adam_hyper_f64")
         module.def_function[mean_std_f32_binding]("mean_std_f32")
+        module.def_function[first_seen_i32_binding]("first_seen_i32")
+        module.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_core_host: ", error))

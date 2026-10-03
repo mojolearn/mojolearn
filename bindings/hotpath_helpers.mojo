@@ -1439,3 +1439,88 @@ def mean_std_f32_binding(
     dp.unsafe_store(0, mean)
     dp.unsafe_store(1, sqrt(q / Float64(count)))
     return PythonObject(0)
+
+
+def first_seen_i32_binding(
+    codes_addr: PythonObject, n: PythonObject, k: PythonObject, enc_addr: PythonObject, counts_addr: PythonObject,
+) raises -> PythonObject:
+    """Renumber n int32 class codes in [0, k) by first appearance: enc[i] =
+    the first-seen rank of codes[i]; counts[r] (int64) = rows of rank r.
+    Returns the number of classes present (StratifiedKFold's encoding)."""
+    var rows = Int(py=n)
+    var kk = Int(py=k)
+    if rows < 0 or kk < 1:
+        raise Error("first_seen_i32: n >= 0, k >= 1")
+    var cp = _ptr[DType.int32](Int(py=codes_addr)) if rows > 0 else MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=enc_addr))
+    var ep = _ptr[DType.int32](Int(py=enc_addr))
+    var np = _ptr[DType.int64](Int(py=counts_addr))
+    var rank = List[Int](length=kk, fill=-1)
+    var m = 0
+    var bad = False
+    for j in range(kk):
+        np.unsafe_store(j, 0)
+    for i in range(rows):
+        var c = Int(cp.unsafe_load(i))
+        if c < 0 or c >= kk:
+            bad = True
+            break
+        if rank[c] < 0:
+            rank[c] = m
+            m += 1
+        ep.unsafe_store(i, Int32(rank[c]))
+        np.unsafe_store(rank[c], np.unsafe_load(rank[c]) + 1)
+    if bad:
+        raise Error("first_seen_i32: code out of range")
+    return PythonObject(m)
+
+
+def strat_fold_assign_i32_binding(
+    enc_addr: PythonObject, n: PythonObject, k: PythonObject, n_folds: PythonObject,
+    alloc_addr: PythonObject, perms_addr: PythonObject, counts_addr: PythonObject, dst_addr: PythonObject,
+) raises -> PythonObject:
+    """StratifiedKFold's test fold of every row (sklearn _make_test_folds):
+    class c's fold sequence is fold f repeated alloc[f * k + c] times (int64)
+    in fold order; with `perms` (int64, nonzero address) it is permuted,
+    seq'[j] = seq[perm_c[j]], perm_c the segment of class c (classes in
+    order, `counts` int64 rows each); the r-th row of class c (row order)
+    takes seq'[r]. enc: int32 first-seen class ranks in [0, k)."""
+    var rows = Int(py=n)
+    var kk = Int(py=k)
+    var K = Int(py=n_folds)
+    if rows < 1 or kk < 1 or K < 1:
+        raise Error("strat_fold_assign_i32: n, k, n_folds >= 1")
+    var ep = _ptr[DType.int32](Int(py=enc_addr))
+    var ap = _ptr[DType.int64](Int(py=alloc_addr))
+    var cp = _ptr[DType.int64](Int(py=counts_addr))
+    var dp = _ptr[DType.int32](Int(py=dst_addr))
+    var pa = Int(py=perms_addr)
+    var off = List[Int](length=kk + 1, fill=0)
+    for c in range(kk):
+        off[c + 1] = off[c] + Int(cp.unsafe_load(c))
+    if off[kk] != rows:
+        raise Error("strat_fold_assign_i32: counts do not sum to n")
+    var seq = List[Int32](length=rows, fill=0)
+    for c in range(kk):
+        var at = off[c]
+        for f in range(K):
+            for _ in range(Int(ap.unsafe_load(f * kk + c))):
+                if at >= off[c + 1]:
+                    raise Error("strat_fold_assign_i32: alloc exceeds the class count")
+                seq[at] = Int32(f)
+                at += 1
+    var seen = List[Int](length=kk, fill=0)
+    var pp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=pa)
+    for i in range(rows):
+        var c = Int(ep.unsafe_load(i))
+        if c < 0 or c >= kk:
+            raise Error("strat_fold_assign_i32: class out of range")
+        var j = seen[c]
+        seen[c] = j + 1
+        var src = j
+        if pa != 0:
+            src = Int(pp.unsafe_load(off[c] + j))
+        var f = seq[off[c] + src]
+        comptime if HOTPATH_SABOTAGE:
+            f = Int32((Int(f) + 1) % K)
+        dp.unsafe_store(i, f)
+    return PythonObject(0)
