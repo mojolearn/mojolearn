@@ -509,6 +509,8 @@ struct DeviceExec(Exec):
                 return
         comptime if MOE_REGTILE and OP == OP_MOE_HIDDEN:
             if a.i4 > 0:
+                if n % a.i1 != 0:
+                    raise Error("moe_reg hidden: the cell count is not pairs x F")
                 var npairs = n // a.i1
                 comptime if MOE_DEVGROUP:
                     if a.i6 == 1:

@@ -1505,6 +1505,8 @@ def _moe_devgroup_rest[E: Exec](
 ) raises -> PythonObject:
     """`moe_forward_run` after the route with the grouping on the device
     (MOJOLEARN_MOE_DEVGROUP): the same launches, the same words."""
+    if En > 127:
+        raise Error("moe_forward devgroup: E <= 127 (the grouping kernels' one block)")
     var Order = ex.alloc(T * k)
     var Poff = ex.alloc(En + 1)
     var Cnt = ex.alloc(2 * En)
