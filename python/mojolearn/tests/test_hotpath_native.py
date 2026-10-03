@@ -216,7 +216,7 @@ def test_astype_matches_the_item_setter(src, dst):
         for n in (0, 1, 255, 256, 1001, _BIG):
             with np.errstate(all="ignore"):
                 a = _arr(_values_for(src, max(n, 64), flavor)[:n].copy())
-            native = n >= _array._NATIVE_MIN and src != dst
+            native = n >= 1 and src != dst  # every non-empty block (lane apple-fast-py2mojo-core)
             _same(lambda: a.astype(dst), ("cast_elements",) if native else (),
                   group="astype")
 
@@ -274,8 +274,8 @@ def _reduction_inputs():
 def test_reductions_match_python(what):
     for raw in _reduction_inputs():
         a = _arr(raw.copy())
-        native = (a.size >= _array._NATIVE_MIN
-                  and (what != "sum" or a.dtype in ("<f4", "<f8")))
+        # every non-empty block, the integer sum too (lane apple-fast-py2mojo-core)
+        native = a.size >= 1
         _same(lambda: getattr(a, what)(), ("reduce_stat",) if native else (),
               group="reduce")
     f = _arr(np.asfortranarray(_RNG.standard_normal((400, 5)).astype(np.float32)))

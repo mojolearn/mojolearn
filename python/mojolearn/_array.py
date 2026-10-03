@@ -67,23 +67,29 @@ for _ts, _c in _CODE.items():
 
 
 # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3102). dtype codes of the
-# core helpers in `bindings/hotpath_helpers.mojo`; float16 has no code and
-# keeps the Python routines. Below `_NATIVE_MIN` elements the Python routine
-# is as fast as the call and stays the only path, so scalars and metadata
-# never touch the binding.
+# core helpers in `bindings/hotpath_helpers.mojo`; float16, bf16 bits and the
+# 8/16-bit integers have no code and keep the Python routines. lane
+# apple-fast-py2mojo-core (2026-10-03): every non-empty block of a coded
+# dtype takes the helper, whatever its size (the `_NATIVE_MIN` cut that kept
+# blocks under 256 elements in Python is gone from `_helper`; `_block_store`
+# keeps it for its memcpy), and the integer sum is the helper's too
+# (`_REDUCE_ISUM`, an exact 128-bit accumulator). The Python routines stay
+# as the helpers' definitions: `_native_optional` answers None only for a
+# binary that lacks the helper, the state the differential test's reference
+# arm (`tests/test_hotpath_native.py`) plants.
 _NATIVE_CODE = {"<f4": 0, "<f8": 1, "<i4": 2, "<i8": 3, "<u4": 4, "<u1": 5}
 _NATIVE_MIN = 256
-_REDUCE_MIN, _REDUCE_MAX, _REDUCE_SUM, _REDUCE_ARGMAX, _REDUCE_INTEGRAL = range(5)
+_REDUCE_MIN, _REDUCE_MAX, _REDUCE_SUM, _REDUCE_ARGMAX, _REDUCE_INTEGRAL, _REDUCE_ISUM = range(6)
 _SCALAR_TYPES = frozenset((float, int, bool))
 _ROW_TYPES = frozenset((list, tuple))
 _NOT = bytes((1, 0)) + bytes(range(2, 256))
 
 
 def _helper(key, size):
-    """The core helper `key` for a block of `size` elements, or None when
-    the block is small or the binary lacks the helper; the caller then
-    runs its Python routine, which is the helper's definition."""
-    if size < _NATIVE_MIN:
+    """The core helper `key` for a non-empty block, or None for an empty
+    block (whose Python routine answers or refuses without a loop) or a
+    binary that lacks the helper."""
+    if size <= 0:
         return None
     from . import _buffer
     return _buffer._native_optional(key)
@@ -816,6 +822,13 @@ class Array:
             fast = self._native_reduce(_REDUCE_SUM)
             if fast is not None:
                 return fast
+        elif self.dtype in _NATIVE_CODE:
+            # lane apple-fast-py2mojo-core: the exact integer sum in the
+            # helper, (hi, lo >> 32, lo & 0xffffffff) of a 128-bit total
+            parts = self._native_reduce(_REDUCE_ISUM)
+            if parts is not None:
+                hi, mid, low = (int(v) for v in parts)
+                return (hi << 64) + (mid << 32) + low
         values = self._values()
         if self.dtype in _INT:
             return sum(values)
