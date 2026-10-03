@@ -352,22 +352,22 @@ comptime DART_SESSIONS = _Global[StorageType=DartRegistry, name="MojoXTreesDartS
 
 @always_inline
 def _f(b: DeviceBuffer[DType.float32]) -> F32P:
-    return b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    return b.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
 
 
 @always_inline
 def _i(b: DeviceBuffer[DType.int32]) -> I32P:
-    return b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    return b.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
 
 
 @always_inline
 def _i64(b: DeviceBuffer[DType.int64]) -> I64P:
-    return b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    return b.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
 
 
 @always_inline
 def _u16(b: DeviceBuffer[DType.uint16]) -> U16P:
-    return b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    return b.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
 
 
 def dart_open(
