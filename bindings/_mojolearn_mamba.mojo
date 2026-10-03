@@ -173,6 +173,14 @@ from mamba.impl.modeling.modeling_mamba import (
     MambaDeviceWeights,
 )
 from mamba.impl.modules.mamba_simple import mamba_step
+#: lane afn-mamba (2026-10-03): under FAST + Apple + `-D MOJOLEARN_AFN_MAMBA_ARENA`
+#: every block call's device buffers are views of ONE arena and the caller's
+#: arrays are copied in with no per-buffer wait (`_mamba{1,2,3}_run_arena`).
+from mamba.impl.modules.afn_defines import AFN_MAMBA_ARENA
+from mamba.impl.modules.afn_arena import MambaArena
+from mamba.impl.modeling.modeling_mamba import mamba1_arena_floats
+from mamba.impl.modules.mamba2 import mamba2_arena_floats
+from mamba.impl.modules.mamba3 import mamba3_arena_floats
 from mamba.checks.mamba2_fixture import (
     M2_CHUNK_SIZE,
     M2_D_CONV,
@@ -334,6 +342,9 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, decode: Bool = False) rai
     still alive when `mamba_block_forward` returns because that function
     synchronizes before it does, and the explicit transfers at the end
     hold them past the last download anyway."""
+    comptime if AFN_MAMBA_ARENA:
+        _mamba1_run_arena(a, b, l, dm, decode)
+        return
     var dims = MambaDims.of(dm)
     var di = dims.d_inner
     var r = dims.dt_rank
@@ -386,6 +397,55 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, decode: Bool = False) rai
     _ = dstate^
     _ = dstages^
     _ = dx^
+    _ = ctx^
+
+
+def _mamba1_run_arena(a: List[Int], b: Int, l: Int, dm: Int, decode: Bool) raises:
+    """`_mamba1_run` under MOJOLEARN_AFN_MAMBA_ARENA (lane afn-mamba): one
+    arena allocation, every weight / state piece / stage / x a view of it,
+    the caller's arrays copied in directly (they outlive the call), ONE
+    wait at the end. The same certified entry point runs."""
+    var dims = MambaDims.of(dm)
+    var di = dims.d_inner
+    var r = dims.dt_rank
+    var xr = dims.x_proj_rows()
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    var arena = MambaArena(ctx, mamba1_arena_floats(b, l, dims), MAMBA_GUARD)
+    var dw = MambaDeviceWeights(ctx, dims, arena)
+    mamba_copy_in(ctx, dw.norm_w, _f32_ptr(a[1]), dm)
+    mamba_copy_in(ctx, dw.w_in, _f32_ptr(a[2]), 2 * di * dm)
+    mamba_copy_in(ctx, dw.conv_w, _f32_ptr(a[3]), di * D_CONV)
+    mamba_copy_in(ctx, dw.conv_b, _f32_ptr(a[4]), di)
+    mamba_copy_in(ctx, dw.w_x, _f32_ptr(a[5]), xr * di)
+    mamba_copy_in(ctx, dw.w_dt, _f32_ptr(a[6]), di * r)
+    mamba_copy_in(ctx, dw.b_dt, _f32_ptr(a[7]), di)
+    mamba_copy_in(ctx, dw.a_log, _f32_ptr(a[8]), di * D_STATE)
+    mamba_copy_in(ctx, dw.d_skip, _f32_ptr(a[9]), di)
+    mamba_copy_in(ctx, dw.w_out, _f32_ptr(a[10]), dm * di)
+    var dstate = MambaDeviceState(ctx, b, dims, arena)
+    mamba_copy_in(ctx, dstate.conv_win, _f32_ptr(a[11]), b * di * D_CONV)
+    mamba_copy_in(ctx, dstate.h, _f32_ptr(a[12]), b * di * D_STATE)
+    var dstages = MambaDeviceStages(ctx, b, l, dims, arena)
+    var dx = arena.take(ctx, b * l * dm)
+    mamba_copy_in(ctx, dx, _f32_ptr(a[0]), b * l * dm)
+
+    var trace = IdentityTrace.disabled()
+    if decode:
+        mamba_step(ctx, dstages, dstate, dw, dx, b, trace, String("py"))
+    else:
+        mamba_block_forward(
+            ctx, dstages, dstate, dw, dx, b, l, trace, String("py")
+        )
+
+    _m3_download_addr[False](ctx, dstages.residual_out, b * l * dm, a[13])
+    _m3_download_addr[False](ctx, dstate.conv_win, b * di * D_CONV, a[11])
+    _m3_download_addr[False](ctx, dstate.h, b * di * D_STATE, a[12])
+    ctx.synchronize()
+    _ = dw^
+    _ = dstate^
+    _ = dstages^
+    _ = dx^
+    _ = arena^
     _ = ctx^
 
 
@@ -844,6 +904,8 @@ def _mamba2_run(
     """The GIL-free half of the two Mamba-2 entry points. Returns the
     post-call `buf_len` (DEVIATION 792: the one integer piece of the
     three-piece state)."""
+    comptime if AFN_MAMBA_ARENA:
+        return _mamba2_run_arena(a, b, l, dm, q0, dt_lo, dt_hi)
     # Mamba2Dims.of REFUSES a d_model that is not a multiple of 32, by
     # name, with the profile rule -- reached BEFORE any buffer size below
     # is computed from it, which is why nothing here pre-judges dm.
@@ -924,6 +986,77 @@ def _mamba2_run(
     _ = dstate^
     _ = dstages^
     _ = dx^
+    _ = ctx^
+    return out_len
+
+
+def _mamba2_run_arena(
+    a: List[Int],
+    b: Int,
+    l: Int,
+    dm: Int,
+    q0: Int,
+    dt_lo: Float32,
+    dt_hi: Float32,
+) raises -> Int:
+    """`_mamba2_run` under MOJOLEARN_AFN_MAMBA_ARENA (lane afn-mamba): one
+    arena, views, direct copies in, ONE wait at the end."""
+    var dims = Mamba2Dims.of(dm)
+    var di = dims.d_inner
+    var cd = dims.conv_dim()
+    var dip = dims.d_in_proj()
+    var nh = dims.nheads
+    if q0 < 0 or q0 >= M2_CHUNK_SIZE:
+        raise Error(
+            String("mamba2: buf_len must be in [0, ")
+            + String(M2_CHUNK_SIZE)
+            + "), got "
+            + String(q0)
+            + "; the open-chunk buffer holds at most CHUNK_SIZE - 1 rows"
+            " between calls (contract section 5), so the two sides of this"
+            " boundary disagree about the state"
+        )
+    var h_n = b * nh * M2_HEADDIM * M2_D_STATE
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    var arena = MambaArena(ctx, mamba2_arena_floats(b, l, q0, dims), MAMBA_GUARD)
+    var dw = Mamba2DeviceWeights(ctx, dims, arena)
+    mamba_copy_in(ctx, dw.norm_w, _f32_ptr(a[1]), dm)
+    mamba_copy_in(ctx, dw.w_in, _f32_ptr(a[2]), dip * dm)
+    mamba_copy_in(ctx, dw.conv_w, _f32_ptr(a[3]), cd * M2_D_CONV)
+    mamba_copy_in(ctx, dw.conv_b, _f32_ptr(a[4]), cd)
+    mamba_copy_in(ctx, dw.dt_bias, _f32_ptr(a[5]), nh)
+    mamba_copy_in(ctx, dw.a_log, _f32_ptr(a[6]), nh)
+    mamba_copy_in(ctx, dw.d_skip, _f32_ptr(a[7]), nh)
+    mamba_copy_in(ctx, dw.gnorm_w, _f32_ptr(a[8]), di)
+    mamba_copy_in(ctx, dw.w_out, _f32_ptr(a[9]), dm * di)
+    var dstate = Mamba2DeviceState(ctx, b, dims, arena)
+    mamba_copy_in(ctx, dstate.conv_win, _f32_ptr(a[10]), b * cd * M2_D_CONV)
+    mamba_copy_in(ctx, dstate.h, _f32_ptr(a[11]), h_n)
+    mamba_copy_in(ctx, dstate.buf_xbc, _f32_ptr(a[12]), b * M2_CHUNK_SIZE * cd)
+    mamba_copy_in(ctx, dstate.buf_dtraw, _f32_ptr(a[13]), b * M2_CHUNK_SIZE * nh)
+    dstate.buf_len = q0
+    var dstages = Mamba2DeviceStages(ctx, b, l, q0, dims, arena)
+    var dx = arena.take(ctx, b * l * dm)
+    mamba_copy_in(ctx, dx, _f32_ptr(a[0]), b * l * dm)
+
+    var trace = IdentityTrace.disabled()
+    mamba2_block_forward(
+        ctx, dstages, dstate, dw, dx, b, l, dt_lo, dt_hi, trace, String("py")
+    )
+
+    _m3_download_addr[False](ctx, dstages.residual_out, b * l * dm, a[14])
+    _m3_download_addr[False](ctx, dstages.h_last, h_n, a[15])
+    _m3_download_addr[False](ctx, dstate.conv_win, b * cd * M2_D_CONV, a[10])
+    _m3_download_addr[False](ctx, dstate.h, h_n, a[11])
+    _m3_download_addr[False](ctx, dstate.buf_xbc, b * M2_CHUNK_SIZE * cd, a[12])
+    _m3_download_addr[False](ctx, dstate.buf_dtraw, b * M2_CHUNK_SIZE * nh, a[13])
+    ctx.synchronize()
+    var out_len = dstate.buf_len
+    _ = dw^
+    _ = dstate^
+    _ = dstages^
+    _ = dx^
+    _ = arena^
     _ = ctx^
     return out_len
 
@@ -1340,6 +1473,8 @@ def _mamba3_run[discard_state: Bool = False](
     """The GIL-free half of the two Mamba-3 entry points. Returns the
     post-call `buf_len` (DEVIATION 794: `pending` needs no return slot
     because a shipped binding always consumes it)."""
+    comptime if AFN_MAMBA_ARENA:
+        return _mamba3_run_arena[discard_state](a, b, l, dm, q0, pend)
     # Mamba3Dims.of REFUSES a d_model that is not a multiple of 32, by
     # name -- reached BEFORE any buffer size below is computed from it.
     var dims = Mamba3Dims.of(dm)
@@ -1447,6 +1582,109 @@ def _mamba3_run[discard_state: Bool = False](
     _ = ctx^
     comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
         print("M3_PHASE", "surface.context_destruction", Float64(Int(perf_counter_ns()) - phase_tick) / 1e6)
+    return out_len
+
+
+def _mamba3_run_arena[discard_state: Bool = False](
+    a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int
+) raises -> Int:
+    """`_mamba3_run` under MOJOLEARN_AFN_MAMBA_ARENA (lane afn-mamba): one
+    arena, views, direct copies in, ONE wait at the end."""
+    var dims = Mamba3Dims.of(dm)
+    var di = dims.d_inner
+    var dip = dims.d_in_proj()
+    var nh = dims.nheads
+    if q0 < 0 or q0 > M3_CHUNK_SIZE:
+        raise Error(
+            String("mamba3: buf_len must be in [0, ")
+            + String(M3_CHUNK_SIZE)
+            + "] (INCLUSIVE -- the buffer never empties, DEVIATION"
+            " 832(i): r in [1, Q] after every call, 0 only before the"
+            " first token), got "
+            + String(q0)
+            + "; the two sides of this boundary disagree about the state"
+        )
+    if pend != 0 and pend != 1:
+        raise Error(
+            "mamba3: pending must be 0 or 1, got "
+            + String(pend)
+            + "; the two sides of this boundary disagree about the state"
+        )
+    var theta_n = b * nh * M3_NUM_ROPE_ANGLES
+    var h_n = b * nh * M3_HEADDIM * M3_D_STATE
+    var qrow_n = b * M3_CHUNK_SIZE * nh
+    var k_n = b * nh * M3_D_STATE
+    var v_n = b * nh * M3_HEADDIM
+
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    var arena = MambaArena(ctx, mamba3_arena_floats(b, l, q0, dims), MAMBA_GUARD)
+    var dw = Mamba3DeviceWeights(ctx, dims, arena)
+    mamba_copy_in(ctx, dw.norm_w, _f32_ptr(a[1]), dm)
+    mamba_copy_in(ctx, dw.w_in, _f32_ptr(a[2]), dip * dm)
+    mamba_copy_in(ctx, dw.dt_bias, _f32_ptr(a[3]), nh)
+    mamba_copy_in(ctx, dw.bnorm_w, _f32_ptr(a[4]), M3_D_STATE)
+    mamba_copy_in(ctx, dw.cnorm_w, _f32_ptr(a[5]), M3_D_STATE)
+    mamba_copy_in(ctx, dw.b_bias, _f32_ptr(a[6]), nh * M3_D_STATE)
+    mamba_copy_in(ctx, dw.c_bias, _f32_ptr(a[7]), nh * M3_D_STATE)
+    mamba_copy_in(ctx, dw.d_skip, _f32_ptr(a[8]), nh)
+    mamba_copy_in(ctx, dw.w_out, _f32_ptr(a[9]), dm * di)
+    var dstate = Mamba3DeviceState(ctx, b, dims, arena)
+    comptime if not discard_state:
+        mamba_copy_in(ctx, dstate.buf_qrot, _f32_ptr(a[12]), qrow_n * M3_D_STATE)
+        mamba_copy_in(ctx, dstate.buf_krot, _f32_ptr(a[13]), qrow_n * M3_D_STATE)
+        mamba_copy_in(ctx, dstate.buf_v, _f32_ptr(a[14]), qrow_n * M3_HEADDIM)
+        mamba_copy_in(ctx, dstate.buf_dt, _f32_ptr(a[15]), qrow_n)
+        mamba_copy_in(ctx, dstate.buf_sig, _f32_ptr(a[16]), qrow_n)
+        mamba_copy_in(ctx, dstate.buf_adt, _f32_ptr(a[17]), qrow_n)
+        dstate.buf_len = q0
+        if pend == 1:
+            # THROUGH the lane's own helper (its fresh-state refusal fires
+            # by the lane's own words); it copies into the views.
+            dstate.set_input_states(
+                ctx,
+                _m3_read_f32(a[10], theta_n),
+                _m3_read_f32(a[11], h_n),
+                _m3_read_f32(a[18], k_n),
+                _m3_read_f32(a[19], v_n),
+            )
+        else:
+            mamba_copy_in(ctx, dstate.theta, _f32_ptr(a[10]), theta_n)
+            mamba_copy_in(ctx, dstate.h, _f32_ptr(a[11]), h_n)
+            mamba_copy_in(ctx, dstate.pend_k, _f32_ptr(a[18]), k_n)
+            mamba_copy_in(ctx, dstate.pend_v, _f32_ptr(a[19]), v_n)
+    var dstages = Mamba3DeviceStages(ctx, b, l, q0, dims, arena)
+    var dx = arena.take(ctx, b * l * dm)
+    mamba_copy_in(ctx, dx, _f32_ptr(a[0]), b * l * dm)
+
+    var trace = IdentityTrace.disabled()
+    mamba3_block_forward(
+        ctx, dstages, dstate, dw, dx, b, l, trace, String("py")
+    )
+
+    _m3_download_addr[False](ctx, dstages.residual_out, b * l * dm, a[20])
+    _m3_download_addr[False](ctx, dstages.h_last, h_n, a[21])
+    _m3_download_addr[False](ctx, dstages.k_last, k_n, a[22])
+    _m3_download_addr[False](ctx, dstages.v_last, v_n, a[23])
+    _m3_download_addr[False](ctx, dstages.theta_last, theta_n, a[24])
+    comptime if not discard_state:
+        _m3_download_addr[False](ctx, dstate.theta, theta_n, a[10])
+        _m3_download_addr[False](ctx, dstate.h, h_n, a[11])
+        _m3_download_addr[False](ctx, dstate.buf_qrot, qrow_n * M3_D_STATE, a[12])
+        _m3_download_addr[False](ctx, dstate.buf_krot, qrow_n * M3_D_STATE, a[13])
+        _m3_download_addr[False](ctx, dstate.buf_v, qrow_n * M3_HEADDIM, a[14])
+        _m3_download_addr[False](ctx, dstate.buf_dt, qrow_n, a[15])
+        _m3_download_addr[False](ctx, dstate.buf_sig, qrow_n, a[16])
+        _m3_download_addr[False](ctx, dstate.buf_adt, qrow_n, a[17])
+        _m3_download_addr[False](ctx, dstate.pend_k, k_n, a[18])
+        _m3_download_addr[False](ctx, dstate.pend_v, v_n, a[19])
+    ctx.synchronize()
+    var out_len = dstate.buf_len
+    _ = dw^
+    _ = dstate^
+    _ = dstages^
+    _ = dx^
+    _ = arena^
+    _ = ctx^
     return out_len
 
 
