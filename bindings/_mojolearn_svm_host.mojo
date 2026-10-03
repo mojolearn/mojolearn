@@ -110,6 +110,7 @@ from svm.host.finite_scan import check_finite_ptr
 
 
 from svm.host.scale_gamma_host import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
+from svm.host.svc_ovo_host import svc_ovo_layout_host_binding, svc_dual_gemv_host_binding
 
 def _index(value: PythonObject) raises -> Int:
     var type_name = String(py=value.__class__.__name__)
@@ -850,6 +851,8 @@ def PyInit__mojolearn_svm_host() abi("C") -> PythonObject:
         module.def_function[iforest_run_binding]("iforest_run")
         module.def_function[scale_gamma_limbs_host_binding]("scale_gamma_limbs")
         module.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
+        module.def_function[svc_ovo_layout_host_binding]("svc_ovo_layout")
+        module.def_function[svc_dual_gemv_host_binding]("svc_dual_gemv")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_svm_host: ", error))
