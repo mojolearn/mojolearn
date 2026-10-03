@@ -1,4 +1,4 @@
-pos=256 lines=     443
+pos=262 lines=     445
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -313,3 +313,9 @@ pos=256 lines=     443
 403:FBUILD lane/apple-fast@5f5eadcde core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
 404:CMD apple-fast@5f5eadcde prophet-ets-check rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=32.2 all=[32] quality=['{"forecast_rmse":'] defines=''
 405:CMD apple-fast@5f5eadcde prophet-theta-check rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=32.3 all=[32] quality=['{"forecast_rmse":'] defines=''
+406:CMD apple-fast-rfet-scan@b272364e4 aft-ab-rfseg rc=0 AFT-MEDIAN arm=B n=2 median_ms=10116.1 all=[10028, 10204] hashes=['46ef5c27f84cf904'] acc={'logloss': [0.182017, 0.182017], 'auc': [0.945385, 0.945385]}
+413:CMD apple-fast-rfet-scan@b272364e4 id-rf-taxi rc=0 IDCHECK rf taxi rows=small metal=none host=none ERROR
+414:CMD apple-fast-rfet-scan@b272364e4 id-rf-istella rc=0 IDCHECK rf istella rows=small metal=none host=none ERROR
+415:CMD apple-fast-rfet-scan@b272364e4 id-et-taxi rc=0 IDCHECK et taxi rows=small metal=none host=none ERROR
+416:CMD apple-fast-rfet-scan@b272364e4 id-et-istella rc=0 IDCHECK et istella rows=small metal=none host=none ERROR
+417:CMD apple-fast@5f5eadcde aft-ab-lgw128 rc=0 AFT-MEDIAN arm=B n=2 median_ms=12921.2 all=[12884, 12958] hashes=['8b5d8aa764049a8f', 'e6ff604f5b14bba4'] acc={'logloss': [0.528077, 0.528071], 'auc': [0.631876, 0.631971]}
