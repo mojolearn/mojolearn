@@ -640,9 +640,9 @@ def afn_gemm_fp32_into(
     comptime if not AFN_GEMM_FP32_MMA:
         return False
     else:
-        var cp = c.unsafe_ptr()
+        var cp = c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         return _afn_dispatch[DType.float32, DType.float32, AFN_EPI_NONE](
-            ctx, cp, a.unsafe_ptr(), b.unsafe_ptr(), cp, cp, m, n, k, op
+            ctx, cp, a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), cp, cp, m, n, k, op
         )
 
 
@@ -661,9 +661,9 @@ def afn_gemm_bf16_into(
     comptime if not AFN_GEMM_BF16_MMA:
         return False
     else:
-        var cp = c.unsafe_ptr()
+        var cp = c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         return _afn_dispatch[DType.float32, DType.uint16, AFN_EPI_NONE](
-            ctx, cp, a.unsafe_ptr(), b.unsafe_ptr(), cp, cp, m, n, k, op
+            ctx, cp, a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), cp, cp, m, n, k, op
         )
 
 
@@ -682,9 +682,9 @@ def afn_gemm_bf16_bits_into(
     comptime if not AFN_GEMM_BF16_MMA:
         return False
     else:
-        var cp = c.unsafe_ptr()
+        var cp = c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         return _afn_dispatch[DType.uint16, DType.uint16, AFN_EPI_NONE](
-            ctx, cp, a.unsafe_ptr(), b.unsafe_ptr(), cp, cp, m, n, k, op
+            ctx, cp, a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), cp, cp, m, n, k, op
         )
 
 
@@ -716,11 +716,11 @@ def afn_gemm_fused_into(
             return False
         var st = _afn_strides(op, m, n, k)
         var tile = afn_gemm_tile(m, n)
-        var cp = c.unsafe_ptr()
-        var ap = a.unsafe_ptr()
-        var bp = b.unsafe_ptr()
-        var biasp = bias.unsafe_ptr()
-        var residp = resid.unsafe_ptr()
+        var cp = c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var ap = a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var bp = b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var biasp = bias.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var residp = resid.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         if epi == AFN_EPI_NONE:
             _afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_NONE](
                 ctx, tile, cp, ap, bp, biasp, residp, m, n, k, st, 1, k
