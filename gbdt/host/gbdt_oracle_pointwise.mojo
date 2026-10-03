@@ -91,6 +91,7 @@ from gbdt.host.gbdt_oracle_ordered import (
     _partition_stat_n,
 )
 from gbdt.host.gbdt_oracle_rmse import GbdtRmseHostFit, gbdt_rmse_host_model_text
+from gbdt.metrics.optimal_const_for_loss import calculate_weighted_target_average
 from gbdt.overfitting_detector.overfitting_detector import (
     OD_ITER,
     make_overfitting_detector,
@@ -374,14 +375,10 @@ def gbdt_pointwise_host_fit(
         want_best_model = 0 if eval_const else 1
 
     # ---- boost from average (`calc_one_dimensional_optimum_const_approx`) ----
-    var summary_weight = Float64(0.0)
-    for i in range(n_rows):
-        summary_weight += Float64(w[i])
-    var target_sum = Float64(0.0)
-    for i in range(n_rows):
-        # one rounding, as the default (contract=fast) build fused it
-        target_sum = fma(Float64(y[i]), Float64(w[i]), target_sum)
-    var best_probability = Float64(Float32(target_sum / summary_weight))
+    # the shared weighted arm: `bfa_tree_sum`'s fold order, the device's
+    var best_probability = Float64(
+        calculate_weighted_target_average(y, w, True)
+    )
     if best_probability <= 0.0 or best_probability >= 1.0:
         raise Error(
             "boost_from_average: the weighted mean target is "

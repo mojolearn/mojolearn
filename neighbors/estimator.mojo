@@ -116,9 +116,8 @@ The host sort below is unchanged and still does its own job: it fixes the
 ORDER of the set, which is a different property from WHICH set.
 """
 
-from std.builtin.sort import sort
-from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu.sync import barrier
 from std.memory import bitcast
 from core.identity_trace import IdentityTrace
 from neighbors.impl.multi_gpu import knn_device_count, parallel_knn_rows
@@ -653,101 +652,152 @@ def knn_self_search_device_indices(
     return out_idx^
 
 
-def _knn_host_order_rows(
-    pd: MutPointer[Float32, MutUntrackedOrigin],
-    pi: MutPointer[UInt32, MutUntrackedOrigin],
-    n_queries: Int,
-    k: Int,
-) -> Bool:
-    """`_knn_search_on_device_index`'s host order pass (the reasoning is at
-    its call site), rows split over the host cores; each row's statements
-    are the ones that ran there. Returns whether any row's order changed."""
-    var tasks = host_predict_task_count(n_queries)
-    if n_queries * k < 262144:
-        tasks = 1
-    comptime if is_defined["MOJOLEARN_KNN_SERIAL_ORDER"]():
-        tasks = 1
-    var part = host_predict_chunk(n_queries, tasks)
-    var flags = List[Int](length=tasks if tasks > 0 else 1, fill=0)
-    var fp = flags.unsafe_ptr()
+comptime _KO_TPB = 128
+comptime _KFP = MutPointer[Float32, MutAnyOrigin]
+comptime _KUP = MutPointer[UInt32, MutAnyOrigin]
+comptime _KKP = MutPointer[UInt64, MutAnyOrigin]
+comptime _KIP = MutPointer[Int32, MutAnyOrigin]
 
-    def _rows(task: Int) {imm pd, imm pi, imm fp, imm k, imm part, imm n_queries}:
-        var order_changed = False
-        var keys = List[UInt64](capacity=k)
-        var lo = task * part
-        var hi_q = min(lo + part, n_queries)
-        for i in range(lo, hi_q):
-            var base = i * k
-            # Already in (distance, index) order: nothing to do. Otherwise, when
-            # no distance is a NaN or a -0.0, the insertion sort below has ONE
-            # answer -- the ascending (distance, index) order, indices being
-            # distinct -- and a composite-key sort reaches it in O(k log k)
-            # instead of O(k^2) (k = 1,000 per query in SpectralEmbedding's
-            # graph made this loop 10 s at 10,000 rows). Rows with a NaN or a
-            # -0.0 keep the insertion sort's exact semantics.
-            var sorted_already = True
-            var plain = True
-            for a in range(k):
-                var dv = pd.unsafe_load(base + a)
-                var db = bitcast[DType.uint32](dv)
-                if dv != dv or db == UInt32(0x80000000):
-                    plain = False
-                if a > 0:
-                    var dp = pd.unsafe_load(base + a - 1)
-                    var ip = pi.unsafe_load(base + a - 1)
-                    var iv = pi.unsafe_load(base + a)
-                    if not (dp < dv or (dp == dv and ip <= iv)):
-                        sorted_already = False
-            if sorted_already:
-                continue
-            if plain and k > 32:
-                order_changed = True
-                keys.clear()
-                for a in range(k):
-                    var ub = bitcast[DType.uint32](pd.unsafe_load(base + a))
-                    # the monotone float -> uint map (negatives flipped whole)
-                    var tw = ub ^ UInt32(0xFFFFFFFF) if (ub >> 31) == 1 else ub | UInt32(0x80000000)
-                    keys.append(
-                        (UInt64(tw) << 32)
-                        | UInt64(pi.unsafe_load(base + a))
-                    )
-                sort(keys)
-                for a in range(k):
-                    var kk = keys[a]
-                    var tw = UInt32(kk >> 32)
-                    var ub = tw ^ UInt32(0x80000000) if (tw >> 31) == 1 else tw ^ UInt32(0xFFFFFFFF)
-                    pd.unsafe_store(base + a, bitcast[DType.float32](ub))
-                    pi.unsafe_store(base + a, UInt32(kk & 0xFFFFFFFF))
-                continue
-            for a in range(1, k):
-                var dv = pd.unsafe_load(base + a)
-                var iv = pi.unsafe_load(base + a)
-                var b = a - 1
-                while b >= 0:
-                    var db = pd.unsafe_load(base + b)
-                    var ib = pi.unsafe_load(base + b)
-                    if db < dv or (db == dv and ib <= iv):
-                        break
-                    order_changed = True
-                    pd.unsafe_store(base + b + 1, db)
-                    pi.unsafe_store(base + b + 1, ib)
-                    b -= 1
-                pd.unsafe_store(base + b + 1, dv)
-                pi.unsafe_store(base + b + 1, iv)
 
-        if order_changed:
-            fp.unsafe_store(task, 1)
+@always_inline
+def _knn_order_key(dv: Float32, iv: UInt32) -> UInt64:
+    """(distance, index) as one key: the monotone float -> uint map
+    (negatives flipped whole) above the index."""
+    var ub = bitcast[DType.uint32](dv)
+    var tw = ub ^ UInt32(0xFFFFFFFF) if (ub >> 31) == 1 else ub | UInt32(0x80000000)
+    return (UInt64(tw) << 32) | UInt64(iv)
 
-    if tasks == 1:
-        _rows(0)
-    else:
-        host_parallelize(_rows, tasks)
-    var any_changed = False
-    for t in range(tasks):
-        if flags[t] != 0:
-            any_changed = True
-    _ = flags^
-    return any_changed
+
+def knn_order_scan_kernel(pd: _KFP, pi: _KUP, keys: _KKP, state: _KIP, n_q: Int32, k_: Int32, pad_: Int32):
+    """One thread per query row. state 0: already in (distance, index)
+    order. state 1: no NaN and no -0.0, so the order has ONE answer, the
+    ascending (distance, index) order (indices are distinct): the row's keys
+    go to `keys` (padded with the largest key) for the block sort. state 2:
+    a NaN or a -0.0: the insertion sort's exact statements, in place."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_q):
+        return
+    var k = Int(k_)
+    var pad = Int(pad_)
+    var base = i * k
+    var sorted_already = True
+    var plain = True
+    for a in range(k):
+        var dv = pd.unsafe_load(base + a)
+        var db = bitcast[DType.uint32](dv)
+        if dv != dv or db == UInt32(0x80000000):
+            plain = False
+        if a > 0:
+            var dp = pd.unsafe_load(base + a - 1)
+            var ip = pi.unsafe_load(base + a - 1)
+            var iv = pi.unsafe_load(base + a)
+            if not (dp < dv or (dp == dv and ip <= iv)):
+                sorted_already = False
+    if sorted_already:
+        state.unsafe_store(i, Int32(0))
+        return
+    if plain:
+        state.unsafe_store(i, Int32(1))
+        for a in range(pad):
+            keys.unsafe_store(i * pad + a, _knn_order_key(pd.unsafe_load(base + a), pi.unsafe_load(base + a))
+                              if a < k else UInt64(0xFFFFFFFFFFFFFFFF))
+        return
+    state.unsafe_store(i, Int32(2))
+    for a in range(1, k):
+        var dv = pd.unsafe_load(base + a)
+        var iv = pi.unsafe_load(base + a)
+        var b = a - 1
+        while b >= 0:
+            var db = pd.unsafe_load(base + b)
+            var ib = pi.unsafe_load(base + b)
+            if db < dv or (db == dv and ib <= iv):
+                break
+            pd.unsafe_store(base + b + 1, db)
+            pi.unsafe_store(base + b + 1, ib)
+            b -= 1
+        pd.unsafe_store(base + b + 1, dv)
+        pi.unsafe_store(base + b + 1, iv)
+
+
+def knn_order_sort_kernel(keys: _KKP, state: _KIP, pad_: Int32):
+    """One block per state-1 row: a bitonic sort of its `pad` (a power of
+    two) keys in place. The keys are distinct, so every sort gives the one
+    ascending order."""
+    var i = Int(block_idx.x)
+    if state.unsafe_load(i) != Int32(1):
+        return
+    var pad = Int(pad_)
+    var row = keys + i * pad
+    var tid = Int(thread_idx.x)
+    var size = 2
+    while size <= pad:
+        var stride = size // 2
+        while stride > 0:
+            var j = tid
+            while j < pad // 2:
+                var lo = 2 * stride * (j // stride) + (j % stride)
+                var hi = lo + stride
+                var a = row.unsafe_load(lo)
+                var b = row.unsafe_load(hi)
+                if (a > b) == ((lo & size) == 0):
+                    row.unsafe_store(lo, b)
+                    row.unsafe_store(hi, a)
+                j += _KO_TPB
+            barrier()
+            stride //= 2
+        size *= 2
+
+
+def knn_order_store_kernel(pd: _KFP, pi: _KUP, keys: _KKP, state: _KIP, n_q: Int32, k_: Int32, pad_: Int32):
+    """One thread per (row, rank): a state-1 row's sorted keys back to
+    (distance, index)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var k = Int(k_)
+    if t >= Int(n_q) * k:
+        return
+    var i = t // k
+    if state.unsafe_load(i) != Int32(1):
+        return
+    var kk = keys.unsafe_load(i * Int(pad_) + (t - i * k))
+    var tw = UInt32(kk >> 32)
+    var ub = tw ^ UInt32(0x80000000) if (tw >> 31) == 1 else tw ^ UInt32(0xFFFFFFFF)
+    pd.unsafe_store(t, bitcast[DType.float32](ub))
+    pi.unsafe_store(t, UInt32(kk & 0xFFFFFFFF))
+
+
+def _knn_order_rows_device(
+    ctx: DeviceContext, mut out_dist: DeviceBuffer[DType.float32], mut out_idx: DeviceBuffer[DType.uint32],
+    n_queries: Int, k: Int,
+) raises:
+    """`_knn_search_on_device_index`'s order pass (the reasoning is at its
+    call site) on the device, in place: every row ends in ascending
+    (distance, index) order; a row with a NaN or a -0.0 gets the insertion
+    sort's exact statements. cpu-gpu-cleanup c-xneighbors (2026-10-02):
+    before, the rows were downloaded and ordered over the host cores, and a
+    changed order uploaded again."""
+    if n_queries <= 0 or k <= 1:
+        return
+    var pad = 1
+    while pad < k:
+        pad *= 2
+    var keys = ctx.enqueue_create_buffer[DType.uint64](n_queries * pad)
+    var state = ctx.enqueue_create_buffer[DType.int32](n_queries)
+    var pd = out_dist.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pi = out_idx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pk = keys.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var ps = state.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    ctx.enqueue_function[knn_order_scan_kernel](
+        pd, pi, pk, ps, Int32(n_queries), Int32(k), Int32(pad),
+        grid_dim=(n_queries + _KO_TPB - 1) // _KO_TPB, block_dim=_KO_TPB,
+    )
+    ctx.enqueue_function[knn_order_sort_kernel](pk, ps, Int32(pad), grid_dim=n_queries, block_dim=_KO_TPB)
+    ctx.enqueue_function[knn_order_store_kernel](
+        pd, pi, pk, ps, Int32(n_queries), Int32(k), Int32(pad),
+        grid_dim=(n_queries * k + _KO_TPB - 1) // _KO_TPB, block_dim=_KO_TPB,
+    )
+    ctx.synchronize()
+    _ = keys^
+    _ = state^
 
 
 def _knn_search_on_device_index(
@@ -940,6 +990,7 @@ def _knn_search_on_device_index(
         trace.record_device(ctx, "knn.out_dist", out_dist, n_queries * k)
         trace.record_device(ctx, "knn.out_idx", out_idx, n_queries * k)
 
+    _knn_order_rows_device(ctx, out_dist, out_idx, n_queries, k)
     var hd = ctx.enqueue_create_host_buffer[DType.float32](n_queries * k)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_queries * k)
     ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=out_dist)
@@ -973,21 +1024,12 @@ def _knn_search_on_device_index(
     # scikit-learn's `kneighbors` returns neighbours sorted by ascending
     # distance, so a drop-in has to as well.
     #
-    # Cost is `n_queries * k^2` host comparisons -- 400,000 at the benchmark
-    # shape against a 756 ms fit, so it does not move the number. The key is
-    # (distance, index), a TOTAL order, so the ORDER is reproducible given
-    # the set. It cannot repair the separate issue of WHICH of
-    # several equidistant neighbours lands in the set at all.
-    # lane neighbors-apple2: the rows are independent, so the per-row
-    # check / sort below runs over the host cores on raw pointers (it was
-    # one core through the buffer accessor: 145 ms of a 190 ms kneighbors
-    # at 2,000 x 2,000, k = 2,000, on the M4 Pro). Every row gets exactly the
-    # statements it got before; `order_changed` is the OR of the tasks'.
-    var order_changed = _knn_host_order_rows(
-        rebind[MutPointer[Float32, MutUntrackedOrigin]](hd.unsafe_ptr()),
-        rebind[MutPointer[UInt32, MutUntrackedOrigin]](hi.unsafe_ptr()),
-        n_queries, k,
-    )
+    # The key is (distance, index), a TOTAL order, so the ORDER is
+    # reproducible given the set. It cannot repair the separate issue of
+    # WHICH of several equidistant neighbours lands in the set at all.
+    # cpu-gpu-cleanup c-xneighbors (2026-10-02): the sort runs on the device
+    # before the readback (`_knn_order_rows_device`, above), so the readback
+    # is already sorted and the retained device indices need no re-upload.
 
     # THE CALLER-VISIBLE STAGES, added 2026-08-23. Everything above the sort
     # is an arm's internal order; THIS is what `kneighbors` returns, and it
@@ -1022,10 +1064,6 @@ def _knn_search_on_device_index(
     # host permutation must be uploaded; an already-sorted result needs no
     # index H2D copy at all. Host outputs and weighted arithmetic stay intact.
     if keep_device_indices:
-        if order_changed:
-            ctx.enqueue_copy(dst_buf=out_idx, src_ptr=hi.unsafe_ptr())
-            ctx.synchronize()
-            _ = hi^
         retained_indices.append(out_idx^)
     return query_tile
 

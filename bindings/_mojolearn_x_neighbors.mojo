@@ -8,10 +8,11 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_neighbors.eigh import op_eigh
+from x_neighbors.eigh_device import op_eigh
 from checks.vendor import COMPILED_VENDOR
-from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_knn_sq, op_group_mean, op_take_rows, op_take_cols, op_variance, op_ocsvm, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink_d, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute, op_col_degree, op_ls_laplacian_deg, op_row_all_zero, op_pcs_sketch, op_pcs_conv, op_pcs_copy0, op_knn_impute_cells, op_pagerank_step, op_cc_step, op_graph_symmetry, op_svgp, op_svgp_var
-from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_stats, op_svgp_stats_ff, op_svgp_ff, op_svgp_predict
+from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_knn_sq, op_group_mean, op_take_rows, op_take_cols, op_variance, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink_d, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute, op_col_degree, op_ls_laplacian_deg, op_row_all_zero, op_pcs_sketch, op_pcs_conv, op_pcs_copy0, op_knn_impute_cells, op_pagerank_step, op_cc_step, op_graph_symmetry, op_svgp_var, op_nc_median, op_pos_compact
+from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict
+from x_neighbors.ocsvm_dev import op_ocsvm
 from x_neighbors.graph_dev import op_louvain
 
 
@@ -216,20 +217,6 @@ def variance_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raise
     var v_count = _n(i_, 0)
     with GILReleased(Python()):
         op_variance(v_x, v_res, v_count)
-    return PythonObject(None)
-
-
-def ocsvm_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_q = _a(a_, 0)
-    var v_cv = _a(a_, 1)
-    var v_alpha = _a(a_, 2)
-    var v_info = _a(a_, 3)
-    var v_iters = _a(a_, 4)
-    var v_n = _n(i_, 0)
-    var v_eps = _f(f_, 0)
-    var v_max_iter = _n(i_, 1)
-    with GILReleased(Python()):
-        op_ocsvm(v_q, v_cv, v_alpha, v_info, v_iters, v_n, v_eps, v_max_iter)
     return PythonObject(None)
 
 
@@ -633,26 +620,6 @@ def graph_symmetry_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject)
     return PythonObject(None)
 
 
-def svgp_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_kuu = _a(a_, 0)
-    var v_bmat = _a(a_, 1)
-    var v_b = _a(a_, 2)
-    var v_y = _a(a_, 3)
-    var v_alpha = _a(a_, 4)
-    var v_cmat = _a(a_, 5)
-    var v_qmu = _a(a_, 6)
-    var v_qsqrt = _a(a_, 7)
-    var v_info = _a(a_, 8)
-    var v_m = _n(i_, 0)
-    var v_n = _n(i_, 1)
-    var v_noise = _f(f_, 0)
-    var v_jitter = _f(f_, 1)
-    var v_kdiag = _f(f_, 2)
-    with GILReleased(Python()):
-        op_svgp(v_kuu, v_bmat, v_b, v_y, v_alpha, v_cmat, v_qmu, v_qsqrt, v_info, v_m, v_n, v_noise, v_jitter, v_kdiag)
-    return PythonObject(None)
-
-
 def svgp_var_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
     var v_ksu = _a(a_, 0)
     var v_cmat = _a(a_, 1)
@@ -662,6 +629,32 @@ def svgp_var_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raise
     var v_kdiag = _f(f_, 0)
     with GILReleased(Python()):
         op_svgp_var(v_ksu, v_cmat, v_res, v_n, v_m, v_kdiag)
+    return PythonObject(None)
+
+
+def nc_median_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_x = _a(a_, 0)
+    var v_lab = _a(a_, 1)
+    var v_start = _a(a_, 2)
+    var v_cent = _a(a_, 3)
+    var v_n = _n(i_, 0)
+    var v_d = _n(i_, 1)
+    var v_n_classes = _n(i_, 2)
+    var v_p = _n(i_, 3)
+    var v_n_steps = _n(i_, 4)
+    with GILReleased(Python()):
+        op_nc_median(v_x, v_lab, v_start, v_cent, v_n, v_d, v_n_classes, v_p, v_n_steps)
+    return PythonObject(None)
+
+
+def pos_compact_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_w = _a(a_, 0)
+    var v_rows = _a(a_, 1)
+    var v_vals = _a(a_, 2)
+    var v_info = _a(a_, 3)
+    var v_n = _n(i_, 0)
+    with GILReleased(Python()):
+        op_pos_compact(v_w, v_rows, v_vals, v_info, v_n)
     return PythonObject(None)
 
 
@@ -880,59 +873,25 @@ def kernel_matmul_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) 
     return PythonObject(None)
 
 
-def svgp_stats_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+def svgp_fit_ff_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
     var v_x = _a(a_, 0)
     var v_z = _a(a_, 1)
     var v_y = _a(a_, 2)
-    var v_bmat = _a(a_, 3)
-    var v_bvec = _a(a_, 4)
+    var v_alpha = _a(a_, 3)
+    var v_cmat = _a(a_, 4)
+    var v_qmu = _a(a_, 5)
+    var v_qsqrt = _a(a_, 6)
+    var v_info = _a(a_, 7)
     var v_n = _n(i_, 0)
     var v_m = _n(i_, 1)
     var v_d = _n(i_, 2)
     var v_gamma = _f(f_, 0)
     var v_variance = _f(f_, 1)
+    var v_noise = _f(f_, 2)
+    var v_jitter = _f(f_, 3)
+    var v_kdiag = _f(f_, 4)
     with GILReleased(Python()):
-        op_svgp_stats(v_x, v_z, v_y, v_bmat, v_bvec, v_n, v_m, v_d, v_gamma, v_variance)
-    return PythonObject(None)
-
-
-def svgp_stats_ff_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_x = _a(a_, 0)
-    var v_z = _a(a_, 1)
-    var v_y = _a(a_, 2)
-    var v_bh = _a(a_, 3)
-    var v_bl = _a(a_, 4)
-    var v_bvh = _a(a_, 5)
-    var v_bvl = _a(a_, 6)
-    var v_n = _n(i_, 0)
-    var v_m = _n(i_, 1)
-    var v_d = _n(i_, 2)
-    var v_gamma = _f(f_, 0)
-    var v_variance = _f(f_, 1)
-    with GILReleased(Python()):
-        op_svgp_stats_ff(v_x, v_z, v_y, v_bh, v_bl, v_bvh, v_bvl, v_n, v_m, v_d, v_gamma, v_variance)
-    return PythonObject(None)
-
-
-def svgp_ff_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_kuu = _a(a_, 0)
-    var v_bh = _a(a_, 1)
-    var v_bl = _a(a_, 2)
-    var v_bvh = _a(a_, 3)
-    var v_bvl = _a(a_, 4)
-    var v_y = _a(a_, 5)
-    var v_alpha = _a(a_, 6)
-    var v_cmat = _a(a_, 7)
-    var v_qmu = _a(a_, 8)
-    var v_qsqrt = _a(a_, 9)
-    var v_info = _a(a_, 10)
-    var v_m = _n(i_, 0)
-    var v_n = _n(i_, 1)
-    var v_noise = _f(f_, 0)
-    var v_jitter = _f(f_, 1)
-    var v_kdiag = _f(f_, 2)
-    with GILReleased(Python()):
-        op_svgp_ff(v_kuu, v_bh, v_bl, v_bvh, v_bvl, v_y, v_alpha, v_cmat, v_qmu, v_qsqrt, v_info, v_m, v_n, v_noise, v_jitter, v_kdiag)
+        op_svgp_fit_ff(v_x, v_z, v_y, v_alpha, v_cmat, v_qmu, v_qsqrt, v_info, v_n, v_m, v_d, v_gamma, v_variance, v_noise, v_jitter, v_kdiag)
     return PythonObject(None)
 
 
@@ -951,6 +910,20 @@ def svgp_predict_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) r
     var v_kdiag = _f(f_, 2)
     with GILReleased(Python()):
         op_svgp_predict(v_q, v_z, v_alpha, v_cmat, v_mean, v_var_, v_n, v_m, v_d, v_gamma, v_variance, v_kdiag)
+    return PythonObject(None)
+
+
+def ocsvm_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_q = _a(a_, 0)
+    var v_cv = _a(a_, 1)
+    var v_alpha = _a(a_, 2)
+    var v_info = _a(a_, 3)
+    var v_iters = _a(a_, 4)
+    var v_n = _n(i_, 0)
+    var v_eps = _f(f_, 0)
+    var v_max_iter = _n(i_, 1)
+    with GILReleased(Python()):
+        op_ocsvm(v_q, v_cv, v_alpha, v_info, v_iters, v_n, v_eps, v_max_iter)
     return PythonObject(None)
 
 
@@ -982,7 +955,6 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[take_rows_binding]("xn_take_rows")
     m.def_function[take_cols_binding]("xn_take_cols")
     m.def_function[variance_binding]("xn_variance")
-    m.def_function[ocsvm_binding]("xn_ocsvm")
     m.def_function[lof_lrd_binding]("xn_lof_lrd")
     m.def_function[lof_score_binding]("xn_lof_score")
     m.def_function[kpca_center_binding]("xn_kpca_center")
@@ -1016,8 +988,9 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[pagerank_step_binding]("xn_pagerank_step")
     m.def_function[cc_step_binding]("xn_cc_step")
     m.def_function[graph_symmetry_binding]("xn_graph_symmetry")
-    m.def_function[svgp_binding]("xn_svgp")
     m.def_function[svgp_var_binding]("xn_svgp_var")
+    m.def_function[nc_median_binding]("xn_nc_median")
+    m.def_function[pos_compact_binding]("xn_pos_compact")
     m.def_function[nc_stats_binding]("xn_nc_stats")
     m.def_function[lp_knn_graph_binding]("xn_lp_knn_graph")
     m.def_function[lp_knn_product_binding]("xn_lp_knn_product")
@@ -1032,10 +1005,9 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[nan_cells_binding]("xn_nan_cells")
     m.def_function[kpca_transform_binding]("xn_kpca_transform")
     m.def_function[kernel_matmul_binding]("xn_kernel_matmul")
-    m.def_function[svgp_stats_binding]("xn_svgp_stats")
-    m.def_function[svgp_stats_ff_binding]("xn_svgp_stats_ff")
-    m.def_function[svgp_ff_binding]("xn_svgp_ff")
+    m.def_function[svgp_fit_ff_binding]("xn_svgp_fit_ff")
     m.def_function[svgp_predict_binding]("xn_svgp_predict")
+    m.def_function[ocsvm_binding]("xn_ocsvm")
     m.def_function[louvain_binding]("xn_louvain")
     m.def_function[eigh_binding]("xn_eigh")
     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")

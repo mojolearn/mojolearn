@@ -109,12 +109,9 @@ from gemm.checks.gemm_lowbit_check import (
     _upload_i8,
 )
 from gemm.checks.quantize_int8_par_check import Tally, _diff, _verdict
-from gemm.host.gemm_lowbit_oracle import (
-    INT8_MAX_K,
-    gemm_int8_oracle,
-    quantize_rows_int8,
-)
-from gemm.host.gemm_oracle import OP_NT
+from gemm.contract import INT8_MAX_K
+from gemm.host.gemm_lowbit_oracle import gemm_int8_oracle, quantize_rows_int8
+from gemm.contract import OP_NT
 
 #: Whether this build has the unit, and the direct kernel (NVIDIA only).
 comptime HAS_UNIT = lib_int8_matrix_unit_for[TARGET_COLUMN]()

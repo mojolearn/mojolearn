@@ -88,14 +88,24 @@ from ._mode import NumericModeMixin
 #: The saved-model format tag.
 _GPC_FORMAT = "mojolearn.gpc.v1"
 _ESTIMATOR = "GaussianProcessClassifier"
-_HOST_BASENAME = "_mojolearn_gp_host"
-#: The inference-only gp binding a wheel ships (the neighbors and density
-#: inference lane, 2026-09-15): `gpc_predict` with no Laplace fit. A saved
-#: classifier predicts through it when it is built (every wheel), and
-#: through the reference binding otherwise (a source build of the routed
-#: families, as the CPU identity gate makes).
-_HOST_INFERENCE_BASENAME = "_mojolearn_gp_infer_host"
 _NAME = "mojolearn GaussianProcessClassifier"
+
+
+def _ovr_combine(ext, cols, n_star):
+    """DEVIATION 2833 on the binding (`gpc_ovr_combine`, the device on a GPU
+    install): the k unnormalized class-1 probability columns normalized per
+    row and the first strictly largest column per row. Returns the
+    (n_star, k) float64 probabilities and the n_star int32 codes."""
+    k = len(cols)
+    proba = empty((n_star, k), "<f8")
+    codes = empty((n_star,), "<i4")
+    ext.gpc_ovr_combine(
+        # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpc_ovr_combine_binding.
+        [addr(proba, name="proba_out"), addr(codes, name="codes_out")]
+        + [addr_ro(c, name=f"class_{i}") for i, c in enumerate(cols)],
+        [int(n_star)],
+    )
+    return proba, codes
 
 
 def _kernel_arrays(kernel):
@@ -422,17 +432,9 @@ class GaussianProcessClassifier(NumericModeMixin):
         if self.n_classes_ == 2:
             _, _, p = self._latent(ext, self.estimators_[0], q, True)
             return Array.from_list([[1.0 - v, v] for v in p.tolist()], "<f8")
-        cols = [self._latent(ext, e, q, True)[2].tolist() for e in self.estimators_]
-        rows = []
-        for t in range(int(q.shape[0])):
-            vals = [c[t] for c in cols]
-            total = 0.0
-            for v in vals:
-                total += v
-            if total != 0.0:
-                vals = [v / total for v in vals]
-            rows.append(vals)
-        return Array.from_list(rows, "<f8")
+        cols = [self._latent(ext, e, q, True)[2] for e in self.estimators_]
+        proba, _ = _ovr_combine(ext, cols, int(q.shape[0]))
+        return proba
 
     def predict(self, X):
         """Two classes: `classes_[1]` where the latent mean is positive
@@ -444,14 +446,9 @@ class GaussianProcessClassifier(NumericModeMixin):
             mean, _, _ = self._latent(ext, self.estimators_[0], q, False)
             codes = [1 if v > 0.0 else 0 for v in mean.tolist()]
         else:
-            cols = [self._latent(ext, e, q, True)[2].tolist() for e in self.estimators_]
-            codes = []
-            for t in range(int(q.shape[0])):
-                best, best_k = cols[0][t], 0
-                for k in range(1, len(cols)):
-                    if cols[k][t] > best:
-                        best, best_k = cols[k][t], k
-                codes.append(best_k)
+            cols = [self._latent(ext, e, q, True)[2] for e in self.estimators_]
+            _, codes32 = _ovr_combine(ext, cols, int(q.shape[0]))
+            codes = codes32.tolist()
         return decode_labels(self.classes_, Array.from_list(codes, "<i8"))
 
     def log_marginal_likelihood(self, theta=None, eval_gradient=False, clone_kernel=True):
@@ -584,38 +581,4 @@ class GaussianProcessClassifier(NumericModeMixin):
         return obj
 
 
-class HostGaussianProcessClassifier(GaussianProcessClassifier):
-    """`GaussianProcessClassifier` bound to `_mojolearn_gp_infer_host` (or,
-    when only the reference set is built, `_mojolearn_gp_host`) on any box,
-    a GPU box included, so a GPU fit and a CPU prediction compare in one
-    process (`mojolearn.host_model` returns this for a saved classifier).
-    IDENTICAL only; fit refuses outside `reference_training()`."""
-
-    _HOST_INFERENCE_ONLY = True
-
-    def _bind(self, name=None):
-        name = name or self._BINDING
-        if name != self._BINDING:
-            raise ImportError(
-                f"mojolearn: the host {type(self).__name__} serves {self._BINDING} only, not {name}"
-            )
-        mode = getattr(self, "numeric_mode", None)
-        if mode is not None and mode != "identical":
-            raise ValueError(
-                f"mojolearn: {type(self).__name__} runs IDENTICAL only on the host; "
-                f"this model was saved {mode!r}"
-            )
-        import os
-        if os.path.exists(_backend.host_module_path(_HOST_INFERENCE_BASENAME)):
-            return _backend.load_host_module(_HOST_INFERENCE_BASENAME)
-        return _backend.load_host_module(_HOST_BASENAME)
-
-    def _host_refusals(self):
-        """Nothing beyond `load`'s checks: the host binding exports both
-        classification entries."""
-
-    def vendor_used(self):
-        return "cpu"
-
-
-__all__ = ["GaussianProcessClassifier", "HostGaussianProcessClassifier"]
+__all__ = ["GaussianProcessClassifier"]

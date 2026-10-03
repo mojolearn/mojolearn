@@ -31,21 +31,23 @@ from cholesky.host.chol_oracle import (
     chol_host_solve,
     chol_host_trsm_lower,
 )
-from gaussian_process.host.gpc_steps import (
+from gaussian_process.gpc_common import (
     GPCBinaryFit,
     GPCLatent,
+    gpc_neg_inf32,
+    gpc_stop,
+    gpc_validate_labels,
+    gpc_validate_max_iter,
+)
+from gaussian_process.host.gpc_steps import (
     gpc_a_vector,
     gpc_b_matrix,
     gpc_latent_var,
     gpc_lml,
-    gpc_neg_inf32,
     gpc_newton_rhs,
     gpc_residual,
     gpc_scale,
     gpc_scale_rows,
-    gpc_stop,
-    gpc_validate_labels,
-    gpc_validate_max_iter,
     gpc_weights,
 )
 from gaussian_process.host.gpr_oracle import (
@@ -160,4 +162,4 @@ def gpc_host_predict(
         var v = gpc_scale_rows(kcross, wsr, n_train, n_star)
         chol_host_trsm_lower(l, v, n_train, n_star)
         variance = gpc_latent_var(v, n_train, n_star, kss)
-    return GPCLatent(mean^, variance^)
+    return GPCLatent(mean^, variance^, List[Float64]())

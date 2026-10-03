@@ -37,7 +37,11 @@ from gbdt.ctrs.ctr_binarization import (
     build_target_borders,
     compute_ctr_borders,
 )
-from gbdt.ctrs.ctr_calcers import compute_simple_ctrs, compute_simple_ctrs_gpu
+from gbdt.ctrs.ctr_calcers import (
+    compute_simple_ctrs,
+    compute_simple_ctrs_device,
+    compute_simple_ctrs_gpu,
+)
 from gbdt.data.permutation import (
     DEFAULT_PERMUTATION_COUNT,
     ctrs_estimation_permutation,
@@ -60,9 +64,8 @@ from std.os import getenv
 
 # DEVIATION 258: the probability links (double, as CatBoost computes them)
 # go through the host-portable exp64 under IDENTICAL; FAST is the stdlib
-from checks.numerics import identical_exp64
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_exp64
 from checks.numerics import ftz as _hr2_ftz
-from std.os import getenv as _hr2_getenv
 from gbdt.grid_creator.gls_borders_device import device_float_borders
 from checks.soft_f64 import (
     SF64_ZERO,
@@ -88,19 +91,52 @@ from gbdt.data.ordered_plan import (
     ORDERED_MIN_FOLD_SIZE,
     ordered_permutation_block_size,
 )
-from gbdt.metrics.optimal_const_for_loss import (
-    calc_one_dimensional_optimum_const_approx,
-)
+from gbdt.metrics.optimal_const_device import optimum_const_approx_device
 from gbdt.overfitting_detector.overfitting_detector import (
     OD_NONE,
     od_type_from_name,
 )
-from gbdt.gpu_util.kernel.radix_sort import DeviceFloatSorter
 from std.memory import memcpy
-from core.host_parallel import host_parallelize_pool_env
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.feature_sampling import check_feature_fraction
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+
+#: lane/apple-fast-trees-depthwise (2026-10-02), `-D MOJOLEARN_GBDT_CTR_FAST_FREQ=1`,
+#: FAST + Apple only, default OFF. The permutation-INDEPENDENT simple CTR
+#: (the GPU default's FeatureFreq / Counter column) was computed on the
+#: HOST inside the fit: `compute_simple_ctrs` (`ctrs/ctr_calcers.mojo:81`)
+#: runs `TCtrBinBuilder`'s host stable sort of every row by category and
+#: the host frequency calcer, once per cat feature, at the categorical
+#: lane's 4.1M taxi rows. The arm takes `compute_simple_ctrs_device`
+#: (`ctrs/ctr_calcers.mojo:1065`, their own device calcer, wired here as
+#: its docstring asks) under the default `counter_calc_method` (SkipTest);
+#: the `Full` method keeps the host calcer (no device arm). Same columns:
+#: the device freq calcer's sums are integer counts, exact in any order.
+comptime CTR_FAST_FREQ = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GBDT_CTR_FAST_FREQ"]()
+)
+
+#: lane/apple-fast-trees-depthwise (2026-10-02, family `trees-ctr`),
+#: `-D MOJOLEARN_GBDT_CTR_PERM_PTRS=1`, FAST + Apple only, default OFF.
+#: CAUSE: with permutation-dependent CTR columns every permutation's
+#: cindex is built from a HOST FLAT PACK (`flat.append` over
+#: `n_columns x n_rows`, the loop before `_build_cindex_from_floats` in
+#: `train`): at taxi 4.1M rows x 4 permutations that is four 200M-element
+#: host copies of columns the device could read in place. EFFECT: the
+#: permutation's column set is handed to `_build_cindex_from_columns` as
+#: POINTERS (the dependent columns into `dep_by_perm[p]`, the rest the
+#: `column_ptrs` the no-dependent path already uses), the builder that is
+#: bit-identical to the flat path and drains once per staging ring
+#: instead of once per feature. IDENTICAL compiles the flat pack unchanged.
+comptime CTR_PERM_PTRS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GBDT_CTR_PERM_PTRS"]()
+)
 from gbdt.gpu_util.kernel.bootstrap import (
     BOOTSTRAP_KERNEL_BAYESIAN,
     BOOTSTRAP_KERNEL_BERNOULLI,
@@ -149,48 +185,45 @@ numeric fit reads changes, so model bits cannot move. `-D
 MOJOLEARN_2634_CTR_PREP_OFF=1` restores the unconditional build (the A/B
 arm)."""
 
-comptime CINDEX_PARALLEL_STAGING_2636 = is_defined[
-    "MOJOLEARN_2636_PARALLEL_STAGING"
-]()
-"""DEVIATION 2636 (2026-09-11, gbdt-finish lane), ours, host staging only.
-MEASURED AND NOT FLIPPED: OPT-IN, the serial fill below is the default.
+def nan_substitute_kernel(
+    x: MutPointer[Float32, MutAnyOrigin], n_in: Int32, sub: Float32
+):
+    """`BinarizeFloats<UseNanSubstitution=true>`'s prologue on the device
+    (cpu-gpu-cleanup t-gbdt): every NaN of one staged column becomes the
+    treatment's substitute (`nan_substitution`), every other value is left
+    alone. The host loop it replaces tested `v != v` per row and stored the
+    same constant; one thread per value, grid-stride, no arithmetic, so the
+    column the binarize kernel reads is the same words."""
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while i < n:
+        var v = x.unsafe_load(i)
+        if v != v:
+            x.unsafe_store(i, sub)
+        i += stride
 
-`_build_cindex_from_columns` (every fit without permutation-dependent
-columns) copies each float column into a pinned staging slot of an
-8-slot ring, one column after another on one thread, and uploads it to the
-device binarize kernel. At Istella-S's 220 x 1,000,000 that is 880 MB of
-single-thread memcpy inside the ~100 ms `train_cindex_build` stage. Under
-the switch the fills of one ring revolution (up to 8 columns, disjoint
-slots, host memory only, the device untouched inside the parallel region)
-run in `sync_parallelize`, and then the revolution's uploads and binarize
-kernels are enqueued in the serial loop's order with the same drain before
-the ring is reused. Same bytes into the same kernels in the same order, so
-the compressed index and the model cannot move.
 
-WHY IT IS NOT THE DEFAULT. Timed on an H100 (pod n2ltmel2optel5,
-2026-09-12, 1M rows, our IDENTICAL arm, 3 rounds alternating processes over
-the sets, `both` -> `all` so the ONLY difference is this define) it costs
-`after/before` 1.0006 as the geometric mean of six (policy, dataset) cells,
-with gbdt-depthwise a clear loss at 1.012: symmetric taxi 0.9746, depthwise
-taxi 1.0092, lossguide taxi 0.9723, symmetric Istella-S 1.0248, depthwise
-Istella-S 1.0148, lossguide Istella-S 1.0093. Quality is equal in every
-cell and no model bit moves either way, so this is a pure time verdict and
-CONTRIBUTING.md (Performance claims) refuses it. The reason the parallelism does not
-pay is in the shape: the fills are parallelized but the uploads and the
-binarize kernels still enqueue serially in the same order, so the device
-stays the bottleneck and the host memcpy it removes was not on the critical
-path. DEVIATIONS 2634 and 2635 carry the lane's win without it
-(`baseline` -> `both` is 0.9603 x 0.9913, essentially all of the 0.9526
-measured from `baseline` -> `all`).
+comptime NAN_SUB_BLOCK = 256
+comptime NAN_SUB_MAX_BLOCKS = 4096
 
-`-D MOJOLEARN_2636_PARALLEL_STAGING=1` selects the parallel ring fill (the
-measurement arm). Re-measuring it needs a host whose staging IS on the
-critical path -- more host threads against a slower device than an H100, or
-a column count well above 220."""
 
-comptime BORROW_X_COLUMNS = not is_defined["MOJOLEARN_2550_HOST_COPY"]()
-"""DEVIATION 2550 (2026-09-11), DEFAULT ON in both tiers since 2026-09-11
-(flipped on one dataset, Istella-S on the MI325X; taxi owed). `-D MOJOLEARN_2550_HOST_COPY=1` restores the two host copies below.
+def _enqueue_nan_substitute(
+    ctx: DeviceContext, mut x: DeviceBuffer[DType.float32], n_rows: Int, sub: Float32
+) raises:
+    ctx.enqueue_function[nan_substitute_kernel](
+        x.unsafe_ptr(), Int32(n_rows), sub,
+        grid_dim=min(
+            (n_rows + NAN_SUB_BLOCK - 1) // NAN_SUB_BLOCK, NAN_SUB_MAX_BLOCKS
+        ),
+        block_dim=NAN_SUB_BLOCK,
+    )
+
+
+comptime BORROW_X_COLUMNS = True
+"""DEVIATION 2550 (2026-09-11), the only path since cpu-gpu-cleanup t-gbdt
+(the `-D MOJOLEARN_2550_HOST_COPY=1` arm that restored the two host copies
+below is deleted; the name stays for `gbdt_per_round_paths`).
 Ours, host bookkeeping only. `gbdt_fit` copied the caller's column-major X
 into a `List` (`gbdt/estimator.mojo`) and `train` copied every raw column
 again into its own `List` before quantization, so a 1M x 220 fit paid two
@@ -224,9 +257,9 @@ from gbdt.data.pairs import (
     order_pairs_by_winner,
     prepare_pairs,
 )
+from gbdt.targets.kernel.pair_logit_group import PAIRLOGIT_GROUP_FUSED
 from gbdt.data.quantization import (
     NAN_TREATMENT_AS_IS,
-    calc_quantization,
     nan_substitution,
     nan_value_treatment,
 )
@@ -408,16 +441,16 @@ def _build_cindex_from_floats(
                     )
             memcpy(dest=hx, src=src, count=n_rows)
         else:
-            for r in range(n_rows):
-                var v = src.unsafe_load(r)
-                if v != v:
-                    v = sub
-                hx.unsafe_store(r, v)
+            # a substituting treatment copies the raw bytes and substitutes
+            # on the device after the upload (cpu-gpu-cleanup t-gbdt)
+            memcpy(dest=hx, src=src, count=n_rows)
         hbo.unsafe_store(0, Float32(len(borders[f])))
         for b in range(len(borders[f])):
             hbo.unsafe_store(1 + b, borders[f][b])
         ctx.enqueue_copy(dst_buf=xdevs[slot], src_ptr=hx)
         ctx.enqueue_copy(dst_buf=bdevs[slot], src_ptr=hbo)
+        if treat != NAN_TREATMENT_AS_IS:
+            _enqueue_nan_substitute(ctx, xdevs[slot], n_rows, sub)
         ctx.enqueue_function[binarize_float_feature_kernel](
             Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
             xdevs[slot].unsafe_ptr(), Int32(n_rows),
@@ -453,17 +486,6 @@ def _resolve_column_ptrs(
             + String(len(columns)) + " columns"
         )
     return column_ptrs.copy()
-
-
-def _column_list_copy(
-    src: MutPointer[Float32, MutUntrackedOrigin], n: Int
-) -> List[Float32]:
-    """DEVIATION 2550: an owned copy of one column, the bytes `List.copy()`
-    of the owned column held."""
-    var out = List[Float32]()
-    out.resize(n, Float32(0.0))
-    memcpy(dest=out.unsafe_ptr(), src=src, count=n)
-    return out^
 
 
 def _build_cindex_from_columns(
@@ -512,82 +534,6 @@ def _build_cindex_from_columns(
         bdevs.append(ctx.enqueue_create_buffer[DType.float32](256))
     ctx.synchronize()
     comptime BIN_GRID = BINARIZE_BLOCK_SIZE * BINARIZE_DOCS_PER_THREAD
-    comptime if CINDEX_PARALLEL_STAGING_2636:
-        # DEVIATION 2636 (see `CINDEX_PARALLEL_STAGING_2636`): one ring
-        # revolution at a time, the host fills of its slots run in
-        # parallel, then the revolution's uploads and kernels are enqueued
-        # in the serial loop's order, one feature at a time. The drain
-        # before a revolution reuses slot 0 stands where the serial loop
-        # had it.
-        var active = List[Int](capacity=n_features)
-        var treats = List[Int](capacity=n_features)
-        for f in range(n_features):
-            if len(borders[f]) == 0:
-                continue
-            active.append(f)
-            if len(nan_treatment) == n_features:
-                treats.append(nan_treatment[f])
-            else:
-                treats.append(NAN_TREATMENT_AS_IS)
-        var n_active = len(active)
-        var base = 0
-        while base < n_active:
-            var width = n_active - base
-            if width > _CINDEX_SLOTS:
-                width = _CINDEX_SLOTS
-            if base > 0:
-                # one drain per revolution frees every slot in the ring
-                ctx.synchronize()
-            var hxp = hxs.unsafe_ptr()
-            var colp = cps.unsafe_ptr()
-            var ap = active.unsafe_ptr()
-            var tp = treats.unsafe_ptr()
-            var nr = n_rows
-            var b0 = base
-
-            def _stage_task(
-                j: Int
-            ) {imm hxp, imm colp, imm ap, imm tp, imm nr, imm b0}:
-                var k = b0 + j
-                var dst = hxp[j].unsafe_ptr()
-                var src = colp[ap[k]]
-                var treat = tp[k]
-                if treat == NAN_TREATMENT_AS_IS:
-                    # the serial loop's AS_IS reasoning holds per column
-                    memcpy(dest=dst, src=src, count=nr)
-                else:
-                    var sub = nan_substitution(treat)
-                    for r in range(nr):
-                        var v = src.unsafe_load(r)
-                        if v != v:
-                            v = sub
-                        dst.unsafe_store(r, v)
-
-            host_parallelize_pool_env(_stage_task, width)
-            # the tasks read these planes; they must outlive the join
-            _ = len(active)
-            _ = len(treats)
-            _ = len(cps)
-            for j in range(width):
-                var f = active[base + j]
-                ref cf = lay.features[f]
-                var hbo = hbos[j].unsafe_ptr()
-                hbo.unsafe_store(0, Float32(len(borders[f])))
-                for b in range(len(borders[f])):
-                    hbo.unsafe_store(1 + b, borders[f][b])
-                ctx.enqueue_copy(dst_buf=xdevs[j], src_ptr=hxs[j].unsafe_ptr())
-                ctx.enqueue_copy(dst_buf=bdevs[j], src_ptr=hbo)
-                ctx.enqueue_function[binarize_float_feature_kernel](
-                    Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
-                    xdevs[j].unsafe_ptr(), Int32(n_rows),
-                    bdevs[j].unsafe_ptr(), cindex.unsafe_ptr(),
-                    grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
-                    block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
-                )
-            base += width
-        ctx.synchronize()
-        _ = len(hxs)
-        return cindex^
     var staged = 0
     for f in range(n_features):
         if len(borders[f]) == 0:
@@ -604,24 +550,19 @@ def _build_cindex_from_columns(
         var hx = hxs[slot].unsafe_ptr()
         var hbo = hbos[slot].unsafe_ptr()
         var src = cps[f]
-        if treat == NAN_TREATMENT_AS_IS:
-            # AS_IS means the border build's full-column NaN scan (the
-            # sampled draw's explicit scan, or the full path's
-            # calc_quantization over every value) saw none in THIS SAME
-            # buffer, so a NaN here is unreachable and the checked
-            # element-wise copy is a straight memcpy
-            memcpy(dest=hx, src=src, count=n_rows)
-        else:
-            for r in range(n_rows):
-                var v = src.unsafe_load(r)
-                if v != v:
-                    v = sub
-                hx.unsafe_store(r, v)
+        # the raw column is a byte move into the pinned slot; a treatment
+        # that substitutes NaNs does so on the device after the upload
+        # (cpu-gpu-cleanup t-gbdt). AS_IS means the border build's
+        # full-column NaN scan saw none in THIS SAME buffer, so it needs no
+        # pass at all.
+        memcpy(dest=hx, src=src, count=n_rows)
         hbo.unsafe_store(0, Float32(len(borders[f])))
         for b in range(len(borders[f])):
             hbo.unsafe_store(1 + b, borders[f][b])
         ctx.enqueue_copy(dst_buf=xdevs[slot], src_ptr=hx)
         ctx.enqueue_copy(dst_buf=bdevs[slot], src_ptr=hbo)
+        if treat != NAN_TREATMENT_AS_IS:
+            _enqueue_nan_substitute(ctx, xdevs[slot], n_rows, sub)
         ctx.enqueue_function[binarize_float_feature_kernel](
             Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
             xdevs[slot].unsafe_ptr(), Int32(n_rows),
@@ -804,9 +745,8 @@ def train(
     min_child_hessian: Float64 = -1.0,
     feature_fraction: Float64 = 1.0,
     # DEVIATION 2550: the caller's column-major X read in place, with
-    # `x_colmajor` empty. The binding entry (`gbdt_fit`) passes it by
-    # default (`-D MOJOLEARN_2550_HOST_COPY=1` opts out); every other
-    # caller passes the List.
+    # `x_colmajor` empty. The binding entry (`gbdt_fit`) passes it; every
+    # other caller passes the List.
     x_borrow: Optional[MutPointer[Float32, MutUntrackedOrigin]] = None,
     # THE POOL'S GROUPING, their `TQueriesGrouping` sizes in row order: one
     # entry per query, each the number of CONSECUTIVE rows carrying that
@@ -1287,9 +1227,15 @@ def train(
                 group_sizes, n_rows,
             )
         else:
-            pair_list = order_pairs_by_winner(
-                generate_pairs(group_sizes, y, sample_weight), group_sizes, n_rows
-            )
+            comptime if PAIRLOGIT_GROUP_FUSED:
+                # FAST Apple: the pairs are enumerated on the device from
+                # the grades (`gbdt/targets/kernel/pair_logit_group.mojo`),
+                # no host list; its refusals are raised at the device setup
+                pass
+            else:
+                pair_list = order_pairs_by_winner(
+                    generate_pairs(group_sizes, y, sample_weight), group_sizes, n_rows
+                )
     # Validate dense class codes before class-weight indexing or allocating
     # prediction planes. The later objective check was too late to protect
     # MakeClassificationWeights (reference data_providers.cpp:162-168).
@@ -1559,19 +1505,8 @@ def train(
             # place from the caller's buffer; the default copies it, one
             # flat memcpy per column (the append loop that replaced was
             # ~0.5 s of every train() at 400k x 500).
-            comptime if BORROW_X_COLUMNS:
-                columns.append(List[Float32]())
-                column_src_feature.append(f)
-            else:
-                var raw = List[Float32]()
-                raw.resize(n_rows, Float32(0.0))
-                memcpy(
-                    dest=raw.unsafe_ptr(),
-                    src=x_src + f * n_rows,
-                    count=n_rows,
-                )
-                columns.append(raw^)
-                column_src_feature.append(-1)
+            columns.append(List[Float32]())
+            column_src_feature.append(f)
             column_one_hot.append(flagged_one_hot)
             column_ctr_grid.append(-1)
             continue
@@ -1629,13 +1564,24 @@ def train(
         if len(independent_configs) > 0:
             # their `writeCtrs(..., permutationIndependent)` (`:229`),
             # over the identity `ctrEstimationOrder` (`:206`)
-            var indep = compute_simple_ctrs(
-                codes,
-                unique_values,
-                independent_configs,
-                List[UInt8](),
-                cat_params.counter_calc_method == COUNTER_CALC_FULL,
-            )
+            var indep: List[List[Float32]]
+            var indep_on_device = False
+            comptime if CTR_FAST_FREQ:
+                indep_on_device = (
+                    cat_params.counter_calc_method != COUNTER_CALC_FULL
+                )
+            if indep_on_device:
+                indep = compute_simple_ctrs_device(
+                    ctx, codes, unique_values, independent_configs
+                )
+            else:
+                indep = compute_simple_ctrs(
+                    codes,
+                    unique_values,
+                    independent_configs,
+                    List[UInt8](),
+                    cat_params.counter_calc_method == COUNTER_CALC_FULL,
+                )
             for c in range(len(independent_slots)):
                 ctr_columns[independent_slots[c]] = indep[c].copy()
 
@@ -1774,6 +1720,34 @@ def train(
                 )
             )
             continue
+        comptime if CTR_PERM_PTRS:
+            # the permutation's column set as pointers: the dependent
+            # columns point into `dep_by_perm[p]`, the rest are the owned
+            # or borrowed columns `column_ptrs` already resolves
+            var ptrs_p = List[MutPointer[Float32, MutUntrackedOrigin]](
+                capacity=n_columns
+            )
+            for c in range(n_columns):
+                var ord_p = dep_ordinal_of_column[c]
+                if ord_p >= 0:
+                    ptrs_p.append(
+                        rebind[MutPointer[Float32, MutUntrackedOrigin]](
+                            dep_by_perm[p][ord_p].unsafe_ptr()
+                        )
+                    )
+                else:
+                    ptrs_p.append(column_ptrs[c])
+            cindexes.append(
+                _build_cindex_from_columns(
+                    ctx, columns, n_rows, borders, fold_counts,
+                    column_nan_treatment,
+                    column_ptrs=ptrs_p,
+                )
+            )
+            # DEVIATION 2550: `ptrs_p` points into `dep_by_perm` and
+            # `columns`; the builder drains before it returns
+            _ = len(ptrs_p)
+            continue
         var flat = List[Float32]()
         for c in range(n_columns):
             var ord = dep_ordinal_of_column[c]
@@ -1870,14 +1844,25 @@ def train(
     for i in range(n_rows, n_rows * target_dim):
         ht.unsafe_ptr().unsafe_store(i, y[i])
     if is_pair_logit:
-        # `InitPairLogit` (`targets/querywise_targets_impl.h:326-346`): the
-        # target weights become the per-row sums of the pair weights, folded
-        # in the pinned endpoint order (`gbdt/data/pairs.mojo::prepare_pairs`)
-        var pair_prep = prepare_pairs(
-            pair_list.winners, pair_list.losers, pair_list.weights, n_rows
-        )
-        for r in range(n_rows):
-            hw.unsafe_ptr().unsafe_store(r, pair_prep.row_weights[r])
+        comptime if PAIRLOGIT_GROUP_FUSED:
+            # generated pairs (empty list): the device setup rewrites the
+            # weights with the per-row pair weights; a caller's pairs keep
+            # the host fold
+            if len(pair_list.winners) > 0:
+                var pair_prep = prepare_pairs(
+                    pair_list.winners, pair_list.losers, pair_list.weights, n_rows
+                )
+                for r in range(n_rows):
+                    hw.unsafe_ptr().unsafe_store(r, pair_prep.row_weights[r])
+        else:
+            # `InitPairLogit` (`targets/querywise_targets_impl.h:326-346`): the
+            # target weights become the per-row sums of the pair weights, folded
+            # in the pinned endpoint order (`gbdt/data/pairs.mojo::prepare_pairs`)
+            var pair_prep = prepare_pairs(
+                pair_list.winners, pair_list.losers, pair_list.weights, n_rows
+            )
+            for r in range(n_rows):
+                hw.unsafe_ptr().unsafe_store(r, pair_prep.row_weights[r])
     ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()
@@ -2174,24 +2159,14 @@ def train(
         var o_model = TAdditiveModel()
         var o_start = Float64(0.0)
         if bfa:
-            var h_t = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-            var h_w = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-            ctx.enqueue_copy(dst_ptr=h_t.unsafe_ptr(), src_buf=targets)
-            ctx.enqueue_copy(dst_ptr=h_w.unsafe_ptr(), src_buf=weights)
-            ctx.synchronize()
-            var t_host = List[Float32](capacity=n_rows)
-            var w_host = List[Float32](capacity=n_rows)
-            for i in range(n_rows):
-                t_host.append(h_t.unsafe_ptr().unsafe_load(i))
-                w_host.append(h_w.unsafe_ptr().unsafe_load(i))
             # `StartingPoint = CalcOptimumConstApprox(...)`
-            # (`dynamic_boosting.h:563-573`), the plain fit's own helper
-            o_start = calc_one_dimensional_optimum_const_approx(
-                objective, t_host, w_host, True, Float64(loss_desc.get_alpha())
+            # (`dynamic_boosting.h:563-573`), the plain fit's own device
+            # helper (gbdt/metrics/optimal_const_device.mojo)
+            o_start = optimum_const_approx_device(
+                ctx, objective, targets, weights, True, n_rows,
+                Float64(loss_desc.get_alpha()),
             )
             o_model.bias = o_start
-            _ = h_t^
-            _ = h_w^
         var o_opts = OrderedBoostingOptions(
             objective,
             loss_desc.kernel_alpha(),
@@ -2388,9 +2363,6 @@ def _quantize_training_columns(
     var cps = _resolve_column_ptrs(columns, column_ptrs)
     var borders = List[List[Float32]]()
     var fold_counts = List[Int]()
-    # their ComputeBorders' device RadixSort, scratch hoisted once for
-    # every float column below (see DeviceFloatSorter's docstring for the
-    # churn crash that makes the hoist load-bearing)
     # THEIR CPU QUANTIZER'S SUBSAMPLE, adopted for the user-facing path.
     #
     # CORRECTED 2026-08-22, DEVIATION 135. The three sentences that stood
@@ -2432,42 +2404,26 @@ def _quantize_training_columns(
         border_sample_n = border_build_max_samples
     var nan_mode_opt_early = nan_mode_from_name(nan_mode)
 
-    # phase-A/B scratch: which columns are float, and one flat buffer
-    # holding every sorted float column back to back
     var n_float_prescan = 0
     var float_idx = List[Int]()
     for f in range(n_columns):
         if not column_one_hot[f] and column_ctr_grid[f] < 0:
             float_idx.append(f)
             n_float_prescan += 1
-    var float_cols = List[Int]()
-    # only the full-data path stages sorted columns here; the sampled path's
-    # phase B reads `predrawn` directly
-    var sorted_flat = List[Float32]()
-    if border_sample_n == n_rows:
-        sorted_flat.resize(n_float_prescan * border_sample_n, Float32(0.0))
 
-    # PHASE 0, sampling only. ONE index subset for the whole dataset,
-    # drawn WITHOUT REPLACEMENT, then every float column gathers through
-    # it -- their `GetSubsetForBuildBorders`
-    # (`libs/data/quantization.cpp:118-141`), which builds
-    # `subsetIndexing` ONCE and hands the same one to every feature. The
-    # per-column GATHER stays parallel (it is `n_float * 200k` loads);
-    # only the DRAW is serial, because it is one draw now and not one
-    # per feature. Per-slot error flags re-raised after the join.
-    # LANE hr2-gbdt-host: the float columns' GreedyLogSum grids on the
-    # device (`gbdt/grid_creator/gls_borders.mojo`: a parallel Feistel
-    # subsample, device keys, a segmented sort, one search thread per
-    # column). `MOJOLEARN_HR2_OLD_BORDERS=1` takes the host draw and the
-    # host phase B below (the A/B arm; deleted once the gates pass).
-    var use_dev = (
-        border_type == BORDER_TYPE_GREEDY_LOG_SUM
-        and n_float_prescan > 0
-        and _hr2_getenv("MOJOLEARN_HR2_OLD_BORDERS") != "1"
-    )
+    # ONE index subset for the whole dataset, drawn WITHOUT REPLACEMENT,
+    # shared by every float column -- their `GetSubsetForBuildBorders`
+    # (`libs/data/quantization.cpp:118-141`). LANE hr2-gbdt-host put the
+    # GreedyLogSum grids on the device (`gbdt/grid_creator/gls_borders.mojo`:
+    # a parallel Feistel subsample, device keys, a segmented sort, one
+    # search thread per column); cpu-gpu-cleanup w2-trees put the six other
+    # `feature_border_type`s on the same pipeline
+    # (`gbdt/grid_creator/border_types.mojo`), so the host draw
+    # (`_draw_task`), the host phase B (`_dp_task`) and the
+    # `MOJOLEARN_HR2_OLD_BORDERS` arm are gone.
     var dev_borders = List[List[Float32]]()
     var dev_modes = List[Int]()
-    if use_dev:
+    if n_float_prescan > 0:
         var dcols = List[MutPointer[Float32, MutUntrackedOrigin]](
             capacity=n_float_prescan
         )
@@ -2475,67 +2431,16 @@ def _quantize_training_columns(
             dcols.append(cps[float_idx[k]])
         var got = device_float_borders(
             ctx, dcols, n_rows, border_sample_n, border_count, nan_mode_opt_early,
-            generate_seed_for_borders(random_seed),
+            generate_seed_for_borders(random_seed), border_type,
         )
         dev_borders = got[0].copy()
         dev_modes = got[1].copy()
         _ = len(cps)
-    var predrawn = List[Float32]()
-    if not use_dev and border_sample_n < n_rows and n_float_prescan > 0:
-        predrawn.resize(n_float_prescan * border_sample_n, Float32(0.0))
-        var pd = predrawn.unsafe_ptr()
-        var fi = float_idx.unsafe_ptr()
-        var colp = cps.unsafe_ptr()
-        var sn = border_sample_n
-        var nrr = n_rows
-        var sd0 = random_seed
-        var flags = List[Int]()
-        flags.resize(n_float_prescan, 0)
-        var flg = flags.unsafe_ptr()
-
-        var sample_idx = sample_indices_for_borders(nrr, sn, sd0)
-        var sidx = sample_idx.unsafe_ptr()
-
-        def _draw_task(
-            k: Int
-        ) {imm pd, imm fi, imm colp, imm sn, imm nrr, imm sidx, imm flg}:
-            var fcol = fi.unsafe_load(k)
-            var src = colp[fcol]
-            for i in range(sn):
-                pd.unsafe_store(
-                    k * sn + i,
-                    src.unsafe_load(Int(sidx.unsafe_load(i))),
-                )
-            var has_nan = False
-            for r in range(nrr):
-                var v = src.unsafe_load(r)
-                if v != v:
-                    has_nan = True
-                    break
-            if has_nan:
-                var sample_has = False
-                for i in range(sn):
-                    var v2 = pd.unsafe_load(k * sn + i)
-                    if v2 != v2:
-                        sample_has = True
-                        break
-                if not sample_has:
-                    pd.unsafe_store(k * sn, Float32(0.0) / Float32(0.0))
-                flg.unsafe_store(k, 1)
-
-        host_parallelize_pool_env(_draw_task, n_float_prescan)
-        _ = flags^
-        _ = sample_idx^
-        _ = len(cps)  # DEVIATION 2550: the task read `cps`; past the join
-    var border_sorter = DeviceFloatSorter(
-        ctx, n_rows if (border_sample_n == n_rows and not use_dev) else 1
-    )
     var dev_k = 0
     # their `TFloatFeature::NanValueTreatment`, one per COLUMN. One-hot and
     # CTR columns stay `AsIs`: a one-hot column holds dense codes and a CTR
     # column holds a computed statistic, and a NaN in either is a caller
     # error rather than a value to bin.
-    var nan_mode_opt = nan_mode_from_name(nan_mode)
     var column_nan_treatment = List[Int]()
     for _ in range(n_columns):
         column_nan_treatment.append(NAN_TREATMENT_AS_IS)
@@ -2590,157 +2495,17 @@ def _quantize_training_columns(
         else:
             # `CalcQuantization` (`libs/data/quantization.cpp:300-346`):
             # the column decides its own NaN mode, and a column that has
-            # NaNs spends ONE of `border_count` on the sentinel.
-            #
-            # SORTED ON THE DEVICE FIRST, which is their own GPU
-            # pipeline's design (`ComputeBorders`,
-            # `gpu_binarization_helpers.cpp:10-16`: RadixSort on the
-            # device, grid builder on the sorted readback). Measured
-            # 2026-08-21 (PREP_BILL results): the host sort inside
-            # `best_split` was 34 of 45.9 ms per 400k column, 74% of the
-            # whole 24-second preparation bill at 400k x 500; on
-            # presorted input the same call is 11.8 ms. The sorted
-            # multiset is identical, so every border -- and the fit's
-            # mse -- is bit-for-bit unchanged, which the quantize-cost
-            # probe's recorded mse gates.
-            # PHASE A OF THE SPLIT BORDER BUILD: the device pipeline
-            # sorts this column (the previous float column's prefetch
-            # already enqueued it; the next one is enqueued before the
-            # host copy below, so the device stays busy), and the DP is
-            # DEFERRED to phase B, which runs every float column's grid
-            # builder in parallel on the host -- their per-feature
-            # executor design (`calcBordersAndNanMode` on
-            # `NPar::LocalExecutor`), with the device never touched
-            # inside the parallel region (the sync_parallelize deadlock
-            # rule mojotrees recorded).
-            if use_dev:
-                column_nan_treatment[f] = nan_value_treatment(dev_modes[dev_k])
-                fold_counts.append(len(dev_borders[dev_k]))
-                borders.append(dev_borders[dev_k].copy())
-                dev_k += 1
-                continue
-            if border_sample_n == n_rows:
-                # full-data path only: their GPU ComputeBorders device
-                # RadixSort. The SAMPLED path skips the device entirely --
-                # the subsample is their CPU quantizer's design, and their
-                # CPU DP (`calcBordersAndNanMode`) sorts on the host inside
-                # `BestSplit`; at 100k samples the device sort is
-                # launch-floor-bound (measured 1.8 s for 500 columns) while
-                # the host sort rides inside phase B's parallel region.
-                if not border_sorter.has_pending:
-                    border_sorter.begin(
-                        ctx, _column_list_copy(cps[f], n_rows)
-                    )
-                var col = border_sorter.finish(ctx)
-                var g = f + 1
-                while g < n_columns:
-                    if not column_one_hot[g] and column_ctr_grid[g] < 0:
-                        border_sorter.begin(
-                            ctx, _column_list_copy(cps[g], n_rows)
-                        )
-                        break
-                    g += 1
-                var slot = len(float_cols)
-                var sfp = sorted_flat.unsafe_ptr()
-                var cp2 = col.unsafe_ptr()
-                for r in range(border_sample_n):
-                    sfp.unsafe_store(
-                        slot * border_sample_n + r, cp2.unsafe_load(r)
-                    )
-                _ = col^
-            float_cols.append(f)
-            fold_counts.append(0)  # placeholder, phase B fills it
-            borders.append(List[Float32]())  # placeholder
+            # NaNs spends ONE of `border_count` on the sentinel. The grid
+            # was built on the device above (`device_float_borders`).
+            column_nan_treatment[f] = nan_value_treatment(dev_modes[dev_k])
+            fold_counts.append(len(dev_borders[dev_k]))
+            borders.append(dev_borders[dev_k].copy())
+            dev_k += 1
 
     # one-hot features occupy folds+? -- for ordered features CatBoost's
     # fold count IS the border count; a one-hot feature has k categories
     # = k bins reached by k-1 synthetic borders, and its fold count must
     # cover bin k-1 for the equality candidates, hence len+1 above.
-
-    # PHASE B: every float column's calc_quantization in parallel, disjoint
-    # flat output slots, errors carried out through a per-slot flag and
-    # re-raised after the join.
-    var n_float = len(float_cols)
-    if n_float > 0 and not use_dev:
-        var out_cap = border_count + 1
-        var out_borders = List[Float32](capacity=n_float * out_cap)
-        out_borders.resize(n_float * out_cap, Float32(0.0))
-        var out_counts = List[Int](capacity=n_float)
-        out_counts.resize(n_float, 0)
-        var out_modes = List[Int](capacity=n_float)
-        out_modes.resize(n_float, -1)
-        # full path: device-sorted columns; sampled path: the raw parallel
-        # draws (calc_quantization's BestSplit filters NaNs and sorts on the
-        # host itself -- same multiset, bit-identical borders)
-        var sfp2 = sorted_flat.unsafe_ptr()
-        if border_sample_n < n_rows:
-            sfp2 = rebind[type_of(sfp2)](predrawn.unsafe_ptr())
-        var obp = out_borders.unsafe_ptr()
-        var ocp = out_counts.unsafe_ptr()
-        var omp = out_modes.unsafe_ptr()
-        var nr2 = border_sample_n
-        var bc2 = border_count
-        var nm2 = nan_mode_opt
-        var cap2 = out_cap
-        var bt2 = border_type
-
-        def _dp_task(
-            k: Int
-        ) {imm sfp2, imm obp, imm ocp, imm omp, imm nr2, imm bc2, imm nm2, imm cap2, imm bt2}:
-            try:
-                var col2 = List[Float32]()
-                col2.resize(nr2, Float32(0.0))
-                memcpy(dest=col2.unsafe_ptr(), src=sfp2 + k * nr2, count=nr2)
-                # DEVIATION 5900: the worker's FTZ+DAZ search BY BITS, so
-                # the borders do not depend on the thread's FP environment
-                # (a host_parallelize task runs IEEE; this pool's workers
-                # run FTZ+DAZ; the host oracle restates the flushed search)
-                var q2 = calc_quantization(
-                    col2^, bc2, nm2, bt2, flush_subnormals=True
-                )
-                var nb = len(q2[0])
-                if nb > cap2:
-                    ocp.unsafe_store(k, -2)
-                    return
-                for j in range(nb):
-                    obp.unsafe_store(k * cap2 + j, q2[0][j])
-                ocp.unsafe_store(k, nb)
-                omp.unsafe_store(k, q2[1])
-            except:
-                ocp.unsafe_store(k, -1)
-
-        host_parallelize_pool_env(_dp_task, n_float)
-        # ==================== THE STEP-33 RACE, FOUND =====================
-        # The plane the tasks read must outlive the JOIN, not its last
-        # textual use: `sfp2 = predrawn.unsafe_ptr()` above was
-        # `predrawn`'s last use, so Mojo freed the whole drawn-sample
-        # plane BEFORE the pool ran -- and each task's own `col2`
-        # allocation (border_sample_n floats) could land inside the freed
-        # pages and OVERWRITE them under a sibling task's read. Thread
-        # scheduling decides who reads garbage: nondeterministic on a
-        # QUIET box, dependent on allocator size classes (which is why
-        # 8.8M-row fits diverged where 2M-row fits never did), and the
-        # fork lands in the BORDERS, which is why divergent models differ
-        # from tree 0 with coherent-but-wrong AUCs. Full record:
-        # PREP_BILL_2026-08-22 steps 33-34.
-        _ = sorted_flat^
-        _ = predrawn^
-        # ==================================================================
-
-        for k in range(n_float):
-            var nb = out_counts[k]
-            if nb < 0:
-                raise Error(
-                    "parallel border build failed on float column "
-                    + String(float_cols[k])
-                )
-            var f2 = float_cols[k]
-            var bs2 = List[Float32](capacity=nb)
-            for j in range(nb):
-                bs2.append(out_borders[k * out_cap + j])
-            column_nan_treatment[f2] = nan_value_treatment(out_modes[k])
-            fold_counts[f2] = nb
-            borders[f2] = bs2^
 
     return (borders^, fold_counts^, column_nan_treatment^)
 
