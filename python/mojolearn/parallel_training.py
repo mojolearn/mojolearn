@@ -58,7 +58,7 @@ class ParallelByteLanguageModelTrainer:
         if (type(logical_shards) is not int or not 1 <= logical_shards <= 1024
                 or not 1 <= len(devices) <= logical_shards):
             raise ValueError('require 1 <= device count <= logical_shards <= 1024')
-        if any(type(i) is not int or i < 0 for i in devices) or len(set(devices)) != len(devices):
+        if any(type(i) is not int or i < 0 for i in devices) or len(set(devices)) != len(devices):  # glue: validates the devices argument
             raise ValueError('devices must be distinct nonnegative integer indices')
         if type(pool_optimizer) is not bool:
             raise ValueError("pool_optimizer must be bool")
@@ -87,7 +87,7 @@ class ParallelByteLanguageModelTrainer:
         helper = SmallByteLanguageModelTrainer(seed['parameters'],
             data_schedule=seed['data_schedule'], shape=self._shape)
         binding = helper._binding()
-        for name in ('create', 'open', 'close', 'step', 'export', 'rollback'):
+        for name in ('create', 'open', 'close', 'step', 'export', 'rollback'):  # glue: binds six binding entry points
             if not callable(getattr(binding, 'byte_lm_parallel_' + name, None)):
                 raise ImportError('rebuild bindings/build_byte_lm.sh for parallel training')
         open_name = 'byte_lm_parallel_open_pooled' if self.pool_optimizer else 'byte_lm_parallel_open'
@@ -105,7 +105,7 @@ class ParallelByteLanguageModelTrainer:
         session = binding.byte_lm_parallel_create()
         try:
             completed = opener(session,
-                [addr_ro(seed[k], name=k) for k in ('parameters', 'm', 'v', 'flags')],
+                [addr_ro(seed[k], name=k) for k in ('parameters', 'm', 'v', 'flags')],  # glue: four named state arrays
                 params, list(self._shape.native_shape), list(self.devices), self.logical_shards)
             if completed != self.step_:
                 raise RuntimeError('parallel admission returned wrong step')
@@ -126,13 +126,13 @@ class ParallelByteLanguageModelTrainer:
             if len(shards) != self.logical_shards:
                 raise ValueError('logical shard count mismatch')
             shape = (self._shape.batch, self._shape.length + 1)
-            tokens = [_array(x, shape, 'shard', '<i4') for x in shards]
+            tokens = [_array(x, shape, 'shard', '<i4') for x in shards]  # glue: one token buffer per shard
             self._open()
             before = self.step_
             # Native failures already recover this transaction. An admission
             # refusal must never roll back the preceding successful step.
             losses = self._binding.byte_lm_parallel_step(self._session,
-                [addr_ro(x, name='shard') for x in tokens], before)
+                [addr_ro(x, name='shard') for x in tokens], before)  # glue: one address per shard buffer
             try:
                 if len(losses) != self.logical_shards:
                     raise RuntimeError('parallel step returned wrong loss count')
@@ -155,11 +155,11 @@ class ParallelByteLanguageModelTrainer:
         with self._lock:
             self._open()
             state = dict(self._state)
-            for key in ('parameters', 'm', 'v'):
+            for key in ('parameters', 'm', 'v'):  # glue: three named state arrays
                 state[key] = empty((self._shape.n_total,), '<f4')
             state['flags'] = empty((self._shape.n_tensors,), '<i4')
             step = self._binding.byte_lm_parallel_export(self._session,
-                [addr(state[k], name=k) for k in ('parameters', 'm', 'v', 'flags')], rank, False)
+                [addr(state[k], name=k) for k in ('parameters', 'm', 'v', 'flags')], rank, False)  # glue: four named state arrays
             if step != self.step_:
                 raise RuntimeError('parallel export returned wrong step')
             return _validate_state(state)
@@ -181,14 +181,14 @@ class ParallelByteLanguageModelTrainer:
         form's (`_export_target` says what is refused)."""
         with self._lock:
             if into is None:
-                out = {key: empty((self._shape.n_total,), '<f4') for key in ('parameters', 'm', 'v')}
+                out = {key: empty((self._shape.n_total,), '<f4') for key in ('parameters', 'm', 'v')}  # glue: three named state arrays
                 out['flags'] = empty((self._shape.n_tensors,), '<i4')
             else:
                 if not isinstance(into, dict) or set(into) != set(STATE_ARRAYS):
                     raise ValueError('mojolearn: into must be a dict with keys %s' % (STATE_ARRAYS,))
                 out = into
             addresses = [_export_target(out[k], self._shape.n_tensors if k == 'flags' else self._shape.n_total,
-                                        '<i4' if k == 'flags' else '<f4', k) for k in STATE_ARRAYS]
+                                        '<i4' if k == 'flags' else '<f4', k) for k in STATE_ARRAYS]  # glue: the named state arrays
             self._open()
             step = self._binding.byte_lm_parallel_export(self._session, addresses, rank, False)
             if step != self.step_:
@@ -340,7 +340,7 @@ class ParallelByteLanguageModelTrainer:
             return tuple(dict(device=device, first=int(row[0]), count=int(row[1]),
                               moment_bytes=int(row[2]), rollback_bytes=int(row[3]),
                               reduction_bytes=int(row[4]))
-                         for device, row in zip(self.devices, rows))
+                         for device, row in zip(self.devices, rows))  # glue: one record per device
 
     def checkpoint(self):
         """Portable state plus the logical reduction contract required for replay."""
@@ -392,8 +392,8 @@ def ordered_sum_gradients(parts):
     parts = list(parts)
     if not parts:
         raise ValueError('ordered reduction needs at least one shard')
-    total = [x.copy() for x in parts[0]]
-    for part in parts[1:]:
+    total = [x.copy() for x in parts[0]]  # glue: copies each parameter tensor buffer
+    for part in parts[1:]:  # glue: one native accumulate call per shard
         total = accumulate_grads([total, part], tokens=None, numeric_mode='identical')
     return total
 
@@ -455,19 +455,19 @@ class ParallelNeuralTrainer:
                     stream = (self.model.generator.next_stream()
                               if self.model.config.dropout > 0 else None)
                     offset = 0
-                    for inputs, targets in shards:
+                    for inputs, targets in shards:  # glue: one worker request per shard
                         inputs = self.model._ids(inputs, 'inputs')
                         targets = self.model._ids(targets, 'targets')
                         requests.append((self._operation, snapshot, (inputs, targets, stream, offset)))
                         offset += inputs.size
                 else:
                     from ._mlp_impl import _batch, _targets
-                    for inputs, targets in shards:
+                    for inputs, targets in shards:  # glue: one worker request per shard
                         inputs = _batch(inputs)
                         targets = _targets(targets, len(inputs))
                         requests.append((self._operation, snapshot, (inputs, targets)))
                 results = self._pool.map(requests)
-                losses = tuple(part[0] for part in results)
+                losses = tuple(part[0] for part in results)  # glue: one scalar loss per shard
                 update_state = snapshot
                 if self._operation == 'samba_gradient':
                     update_state = dict(snapshot, rng=self.model.generator.state_dict())
@@ -475,7 +475,7 @@ class ParallelNeuralTrainer:
                 # tensors and update ranges, retaining the original norm tree.
                 updated, retained, step = self._update_pool.map([(
                     self._operation.replace('_gradient', '_update'), update_state,
-                    [part[1] for part in results])])[0]
+                    [part[1] for part in results])])[0]  # glue: one gradient list per shard
                 result = dict(losses=losses, completed_steps=step,
                               logical_shards=self.logical_shards, reduction='ordered_sum')
                 self.model.load_state_dict(updated)
@@ -489,7 +489,7 @@ class ParallelNeuralTrainer:
         with self._lock:
             if self._gradients is None:
                 raise RuntimeError('no committed parallel gradient')
-            return [g.copy() for g in self._gradients]
+            return [g.copy() for g in self._gradients]  # glue: copies each parameter gradient buffer
 
     def checkpoint(self):
         with self._lock:
