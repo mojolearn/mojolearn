@@ -8,10 +8,10 @@ nothing is retained after the call."""
 from std.python import PythonObject
 
 from std.math import sqrt
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec_trait import Exec
-from sequence.ops import TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
+from sequence.ops import SEQ_FAST_VAR_ONECOPY, TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
 from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LAMB_BLK, OP_LAMB_SEGFOLD, OP_LAMB_CLIP, OP_LAMB_TRUST, OP_LAMB_APPLY_ALL, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_PROPHET_FG_PART, OP_PROPHET_FG_SUM, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
@@ -565,6 +565,20 @@ def _var_fit_queued[E: Exec](
     f.p1 = sc
     f.i1 = K
     ex.launch[OP_ROWSCALE](f, m * K)
+    comptime if SEQ_FAST_VAR_ONECOPY:
+        # lane/apple-fast-gap-tsa: params | resid | sigma_u | status lie in one
+        # span of the workspace: one device-to-host copy replaces four
+        var span = m * K + R * K + K * K + 1
+        var tmp = List[Float32](length=span, fill=Float32(0.0))
+        var tp = FP(unsafe_from_address=Int(tmp.unsafe_ptr()))
+        ex.download_async(tp, Bm, span)
+        ex.sync()
+        memcpy(dest=fptr(addrs[1], "params"), src=tp, count=m * K)
+        memcpy(dest=fptr(addrs[3], "resid"), src=tp + m * K, count=R * K)
+        memcpy(dest=fptr(addrs[2], "sigma_u"), src=tp + m * K + R * K, count=K * K)
+        var code = Int(tp.unsafe_load(m * K + R * K + K * K))
+        _ = tmp^
+        return PythonObject(code)
     var st = List[Float32](length=1, fill=Float32(0.0))
     ex.download_async(FP(unsafe_from_address=Int(st.unsafe_ptr())), status, 1)
     ex.download_async(fptr(addrs[1], "params"), Bm, m * K)
