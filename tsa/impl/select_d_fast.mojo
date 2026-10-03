@@ -129,7 +129,7 @@ def select_d_fast(
         var ratio = Float32(1.0) / nd_f
         var elem_grid = (tot + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB
         var series_grid = (batch_size + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB
-        var wp = w.unsafe_ptr()
+        var wp = w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         ctx.enqueue_function[sum_kernel](
             wp + means_at, wp + y_at, Int32(nd), ratio,
             grid_dim=(batch_size, 1, 1), block_dim=(STATS_TPB, 1, 1),

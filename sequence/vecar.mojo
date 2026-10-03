@@ -15,7 +15,7 @@ status word, never as a NaN.
 """
 from std.memory import bitcast
 
-from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
+from sequence.ops import FP, Args, add, fma3, gemm_dot, ld, mul, st, sub
 from checks.numerics import ftz, identical_div, identical_sqrt
 
 
@@ -154,3 +154,34 @@ def op_sub(t: Int, a: Args):
 def op_scale(t: Int, a: Args):
     """p0[t] *= f0."""
     st(a.p0, t, mul(ld(a.p0, t), a.f0))
+
+
+# ---- lane/apple-fast-tsa2 (-D MOJOLEARN_TSA2_VAR; FAST + Apple only).
+# The two epilogues of the fit fused into the products that feed them, so
+# the fit queues two launches fewer and keeps no F buffer. Each cell's chain
+# is the unfused pair's: `gemm_dot` from zero, then the same `sub` or `mul`.
+
+
+def op_var_resid(t: Int, a: Args):
+    """Cell t of Rs [R, K] = Ys[r, c] - sum_k Z[r, k] Bm[k, c] (k ascending,
+    the GEMM chain, then one subtraction: `op_gemm` into F followed by
+    `op_sub`). p0 Z [R, m], p1 Bm [m, K], p2 Ys [R, K], p3 Rs [R, K];
+    i0 K, i1 m."""
+    var K = a.i0
+    var m = a.i1
+    var r = t // K
+    var c = t - r * K
+    var f = gemm_dot(a.p0, r * m, 1, a.p1, c, K, m, Float32(0.0))
+    st(a.p3, t, sub(ld(a.p2, t), ftz(f)))
+
+
+def op_var_sigma(t: Int, a: Args):
+    """Cell t of S [K, K] = f0 * sum_r Rs[r, i] Rs[r, j] (r ascending, the
+    GEMM chain, then one product: `op_gemm` followed by `op_scale`).
+    p0 Rs [R, K], p1 S [K, K]; i0 K, i1 R; f0 the 1 / (R - m) factor."""
+    var K = a.i0
+    var R = a.i1
+    var i = t // K
+    var j = t - i * K
+    var s = gemm_dot(a.p0, i, K, a.p0, j, K, R, Float32(0.0))
+    st(a.p1, t, mul(ftz(s), a.f0))
