@@ -12,18 +12,6 @@ one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_fun
 d2h-host-work	d2h-roundtrip	UNOWNED	owed	glm/impl/linalg/detail/svd.mojo	0	for i in range(n):
 # why: k-sized: a selection sort of the n_cols eigenvalues (n = n_cols, not rows); index-only, no float op
 d2h-host-work	d2h-roundtrip	UNOWNED	owed	glm/impl/linalg/detail/svd.mojo	0	for j in range(i + 1, n):
-# why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	0	for c in range(m):
-# why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	0	for i in range(m):
-# why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	1	for i in range(m):
-# why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	2	for i in range(m):
-# why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	3	for i in range(m):
-# why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	0	for t in range(n_todo):
 # why: OWED (per-query path only: k > 32, dim > FIVF_MAX_DIM, traced, partial storage, or naming a query short of k): each query's candidates gathered on the host and uploaded; the batched scans plan on the device (ivf_group_device.mojo); a device candidate gather for this path is the remaining step
 d2h-host-work	d2h-roundtrip	UNOWNED	owed	ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo	0	for q in range(n_queries):
 # why: FAST tier only (GMM_FAST_MEANLL, the Apple FAST peer's): one 1024-thread block over n; IDENTICAL and default FAST without the define use the chunked-level device fold
