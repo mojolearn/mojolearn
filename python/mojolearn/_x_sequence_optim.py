@@ -78,7 +78,7 @@ class _ResidentState:
 
     def _res_opened(self, b, ret, init_zero=True):
         """Keep the handle an open returned ([handle, used] or, from a
-        binding built with MOJOLEARN_OPT_ZERO_OPEN, [handle, used, 1]: the
+        FAST+Apple binding (OPT_ZERO_OPEN, the default there), [handle, used, 1]: the
         device slots are zero filled, so host copies that are still the
         constructor's zeros need no upload)."""
         self._res, self._res_b, self._res_used = int(ret[0]), b, int(ret[1])

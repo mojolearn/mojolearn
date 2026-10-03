@@ -53,8 +53,14 @@ from sequence.pyapi import fptr, fval, ival, lamb_bias, lamb_core, lamb_offsets,
 #: IDENTICAL and the other vendors compile the main path unchanged.
 comptime _OPT_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime OPT_RAW_UP = _OPT_APPLE_FAST and is_defined["MOJOLEARN_OPT_RAW_UP"]()
-comptime OPT_PIPE_DOWN = _OPT_APPLE_FAST and is_defined["MOJOLEARN_OPT_PIPE_DOWN"]()
-comptime OPT_ZERO_OPEN = _OPT_APPLE_FAST and is_defined["MOJOLEARN_OPT_ZERO_OPEN"]()
+#: PIPE_DOWN and ZERO_OPEN are the FAST+Apple default since the M3 A/B of
+#: lane/apple-fast-optspeed f2b6491a8 (n=1, synthetic, output digest
+#: identical): all three switches adagrad 317 -> 187 ms, lamb 340 -> 206,
+#: adamax 326 -> 195; PIPE_DOWN alone 318 -> 191. Off with
+#: MOJOLEARN_OPT_PIPE_DOWN_OFF / MOJOLEARN_OPT_ZERO_OPEN_OFF; the old
+#: -D names are harmless. RAW_UP measured noise (310 -> 307): opt-in.
+comptime OPT_PIPE_DOWN = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_PIPE_DOWN_OFF"]()
+comptime OPT_ZERO_OPEN = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_ZERO_OPEN_OFF"]()
 #: the pipelined download's chunk, floats (8 MB)
 comptime OPT_PIPE_CH = 1 << 21
 
