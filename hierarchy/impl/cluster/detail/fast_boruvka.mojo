@@ -264,6 +264,12 @@ def fbr_iota_kernel(a: _FI, b: _FI, n: Int32):
         b[i] = Int32(i)
 
 
+def fbr_iota1_kernel(a: _FI, n: Int32):
+    var i = _fbr_tid()
+    if i < Int(n):
+        a[i] = Int32(i)
+
+
 def fbr_phase_b_bound_kernel(todo: _FI, n_todo: Int32, comp: _FI, bd: _FF, bj: _FI, ub: _FI):
     """Phase A's exact values join their component's bound."""
     var t = _fbr_tid()
@@ -617,7 +623,7 @@ def fast_euclidean_mst(
         if kept <= 0 or n_edges + kept > m - 1:
             raise Error("fast_euclidean_mst: a Boruvka round joined " + String(kept) + " components")
         var lab_p = lab_d.unsafe_ptr()
-        ctx.enqueue_function[fbr_iota_kernel](lab_p, lab_p, mi, grid_dim=mg, block_dim=FBR_TPB)
+        ctx.enqueue_function[fbr_iota1_kernel](lab_p, mi, grid_dim=mg, block_dim=FBR_TPB)
         var passes = 0
         while True:
             passes += 1
