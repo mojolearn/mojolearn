@@ -1,20 +1,20 @@
-CMD lane/apple-fast-mi mi-reg-sortcount-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-sortcount-istella x_prep select-mutual-info-reg istella 1 2 "" "-D MOJOLEARN_MI_REG_SORTCOUNT"
-CMD lane/apple-fast-mi mi-reg-ties-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-ties-istella x_prep select-mutual-info-reg istella 1 2 "-D MOJOLEARN_MI_REG_SORTCOUNT" "-D MOJOLEARN_MI_REG_TIES"
-CMD lane/apple-fast-mi mi-reg-rankmajor-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-rankmajor-istella x_prep select-mutual-info-reg istella 1 2 "-D MOJOLEARN_MI_REG_SORTCOUNT" "-D MOJOLEARN_MI_REG_RANKMAJOR"
-CMD lane/apple-fast-mi mi-reg-folds-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-folds-istella x_prep select-mutual-info-reg istella 1 2 "" "-D MOJOLEARN_MI_FAST_FOLDS"
-CMD lane/apple-fast-mi mi-reg-all-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-all-istella x_prep select-mutual-info-reg istella 1 2 "" "-D MOJOLEARN_MI_ALL"
-CMD lane/apple-fast-mi mi-reg-work-istella AFC_FAMILY=algos bash tools/afc_ab.sh mi-reg-work-istella select-mutual-info-reg istella 1 2 - MOJOLEARN_MI_WORK=1
-CMD lane/apple-fast-mi mi-reg-sortcount-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-sortcount-taxi x_prep select-mutual-info-reg taxi 1 2 "" "-D MOJOLEARN_MI_REG_SORTCOUNT"
-CMD lane/apple-fast-mi mi-reg-ties-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-ties-taxi x_prep select-mutual-info-reg taxi 1 2 "-D MOJOLEARN_MI_REG_SORTCOUNT" "-D MOJOLEARN_MI_REG_TIES"
-CMD lane/apple-fast-mi mi-reg-rankmajor-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-rankmajor-taxi x_prep select-mutual-info-reg taxi 1 2 "-D MOJOLEARN_MI_REG_SORTCOUNT" "-D MOJOLEARN_MI_REG_RANKMAJOR"
-CMD lane/apple-fast-mi mi-reg-folds-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-folds-taxi x_prep select-mutual-info-reg taxi 1 2 "" "-D MOJOLEARN_MI_FAST_FOLDS"
-CMD lane/apple-fast-mi mi-reg-all-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-all-taxi x_prep select-mutual-info-reg taxi 1 2 "" "-D MOJOLEARN_MI_ALL"
-CMD lane/apple-fast-mi mi-reg-work-taxi AFC_FAMILY=algos bash tools/afc_ab.sh mi-reg-work-taxi select-mutual-info-reg taxi 1 2 - MOJOLEARN_MI_WORK=1
-CMD lane/apple-fast-mi mi-clf-rankmajor-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-clf-rankmajor-istella x_prep select-mutual-info istella 1 2 "" "-D MOJOLEARN_MI_CLF_RANKMAJOR"
-CMD lane/apple-fast-mi mi-clf-folds-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-clf-folds-istella x_prep select-mutual-info istella 1 2 "" "-D MOJOLEARN_MI_FAST_FOLDS"
-CMD lane/apple-fast-mi mi-clf-all-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-clf-all-istella x_prep select-mutual-info istella 1 2 "" "-D MOJOLEARN_MI_ALL"
-CMD lane/apple-fast-mi mi-clf-work-istella AFC_FAMILY=algos bash tools/afc_ab.sh mi-clf-work-istella select-mutual-info istella 1 2 - MOJOLEARN_MI_WORK=1
-CMD lane/apple-fast-mi mi-clf-rankmajor-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-clf-rankmajor-taxi x_prep select-mutual-info taxi 1 2 "" "-D MOJOLEARN_MI_CLF_RANKMAJOR"
-CMD lane/apple-fast-mi mi-clf-folds-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-clf-folds-taxi x_prep select-mutual-info taxi 1 2 "" "-D MOJOLEARN_MI_FAST_FOLDS"
-CMD lane/apple-fast-mi mi-clf-all-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-clf-all-taxi x_prep select-mutual-info taxi 1 2 "" "-D MOJOLEARN_MI_ALL"
-CMD lane/apple-fast-mi mi-clf-work-taxi AFC_FAMILY=algos bash tools/afc_ab.sh mi-clf-work-taxi select-mutual-info taxi 1 2 - MOJOLEARN_MI_WORK=1
+CMD lane/apple-fast-af-all mi-reg-sortcount-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-sortcount-istella x_prep select-mutual-info-reg istella 1 2 "" "-D MOJOLEARN_MI_REG_SORTCOUNT"
+CMD lane/apple-fast-af-all mi-reg-ties-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-ties-istella x_prep select-mutual-info-reg istella 1 2 "-D MOJOLEARN_MI_REG_SORTCOUNT" "-D MOJOLEARN_MI_REG_TIES"
+CMD lane/apple-fast-af-all mi-reg-rankmajor-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-rankmajor-istella x_prep select-mutual-info-reg istella 1 2 "-D MOJOLEARN_MI_REG_SORTCOUNT" "-D MOJOLEARN_MI_REG_RANKMAJOR"
+CMD lane/apple-fast-af-all mi-reg-folds-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-folds-istella x_prep select-mutual-info-reg istella 1 2 "" "-D MOJOLEARN_MI_FAST_FOLDS"
+CMD lane/apple-fast-af-all mi-reg-all-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-all-istella x_prep select-mutual-info-reg istella 1 2 "" "-D MOJOLEARN_MI_ALL"
+CMD lane/apple-fast-af-all mi-reg-work-istella AFC_FAMILY=algos bash tools/afc_ab.sh mi-reg-work-istella select-mutual-info-reg istella 1 2 - MOJOLEARN_MI_WORK=1
+CMD lane/apple-fast-af-all mi-reg-sortcount-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-sortcount-taxi x_prep select-mutual-info-reg taxi 1 2 "" "-D MOJOLEARN_MI_REG_SORTCOUNT"
+CMD lane/apple-fast-af-all mi-reg-ties-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-ties-taxi x_prep select-mutual-info-reg taxi 1 2 "-D MOJOLEARN_MI_REG_SORTCOUNT" "-D MOJOLEARN_MI_REG_TIES"
+CMD lane/apple-fast-af-all mi-reg-rankmajor-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-rankmajor-taxi x_prep select-mutual-info-reg taxi 1 2 "-D MOJOLEARN_MI_REG_SORTCOUNT" "-D MOJOLEARN_MI_REG_RANKMAJOR"
+CMD lane/apple-fast-af-all mi-reg-folds-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-folds-taxi x_prep select-mutual-info-reg taxi 1 2 "" "-D MOJOLEARN_MI_FAST_FOLDS"
+CMD lane/apple-fast-af-all mi-reg-all-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-reg-all-taxi x_prep select-mutual-info-reg taxi 1 2 "" "-D MOJOLEARN_MI_ALL"
+CMD lane/apple-fast-af-all mi-reg-work-taxi AFC_FAMILY=algos bash tools/afc_ab.sh mi-reg-work-taxi select-mutual-info-reg taxi 1 2 - MOJOLEARN_MI_WORK=1
+CMD lane/apple-fast-af-all mi-clf-rankmajor-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-clf-rankmajor-istella x_prep select-mutual-info istella 1 2 "" "-D MOJOLEARN_MI_CLF_RANKMAJOR"
+CMD lane/apple-fast-af-all mi-clf-folds-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-clf-folds-istella x_prep select-mutual-info istella 1 2 "" "-D MOJOLEARN_MI_FAST_FOLDS"
+CMD lane/apple-fast-af-all mi-clf-all-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-clf-all-istella x_prep select-mutual-info istella 1 2 "" "-D MOJOLEARN_MI_ALL"
+CMD lane/apple-fast-af-all mi-clf-work-istella AFC_FAMILY=algos bash tools/afc_ab.sh mi-clf-work-istella select-mutual-info istella 1 2 - MOJOLEARN_MI_WORK=1
+CMD lane/apple-fast-af-all mi-clf-rankmajor-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-clf-rankmajor-taxi x_prep select-mutual-info taxi 1 2 "" "-D MOJOLEARN_MI_CLF_RANKMAJOR"
+CMD lane/apple-fast-af-all mi-clf-folds-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-clf-folds-taxi x_prep select-mutual-info taxi 1 2 "" "-D MOJOLEARN_MI_FAST_FOLDS"
+CMD lane/apple-fast-af-all mi-clf-all-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh mi-clf-all-taxi x_prep select-mutual-info taxi 1 2 "" "-D MOJOLEARN_MI_ALL"
+CMD lane/apple-fast-af-all mi-clf-work-taxi AFC_FAMILY=algos bash tools/afc_ab.sh mi-clf-work-taxi select-mutual-info taxi 1 2 - MOJOLEARN_MI_WORK=1
