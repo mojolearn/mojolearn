@@ -1,4 +1,4 @@
-pos=186 lines=     399
+pos=189 lines=     399
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -220,3 +220,7 @@ pos=186 lines=     399
 304:CMD apple-fast-trees-ensembles@e9803ee25 te-adaclf-taxi rc=1 ~/mq/wt/lane_apple-fast-trees-ensembles/.pixi/envs/default/bin/mojo: error: failed to run the pass manager
 305:CMD apple-fast-trees-ensembles@e9803ee25 te-adareg-taxi rc=1 ~/mq/wt/lane_apple-fast-trees-ensembles/.pixi/envs/default/bin/mojo: error: failed to run the pass manager
 306:FBUILD lane/apple-fast-tsa@9ee4a2ed2 core=0 ibase=0 embedding=0 estimators=0 gbdt=0 gp=0 training=0 x_ann=0 x_cluster=0 x_cnn=0 x_decomp=0 x_linear=0 x_metrics=0 x_neighbors=0 x_prep=0 x_sequence=0
+307:CMD apple-fast-tsa@9ee4a2ed2 tsa-llonly-autoarima rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=47022.7 all=[47023] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_ARIMA_FAST_LLONLY=1'
+308:FBUILD lane/apple-fast-trees-ensembles@09a978f4c core=0 ibase=0 embedding=0 estimators=0 gbdt=0 gp=0 training=0 x_ann=0 x_cluster=0 x_cnn=0 x_decomp=0 x_linear=0 x_metrics=0 x_neighbors=0 x_prep=0 x_sequence=0
+309:CMD apple-fast-trees-ensembles@09a978f4c te-stackclf-istella-c rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=9370.2 all=[9370] quality=['{"accuracy":'] defines='-D MOJOLEARN_TE_NATIVE_SPLITS'
+310:CMD apple-fast-trees-ensembles@09a978f4c te-stackreg-istella-c rc=0 AFC-DEF-SUMMARY arm=B n=0 median_ms=None all=[] quality=[] defines='-D MOJOLEARN_TE_NATIVE_SPLITS'
