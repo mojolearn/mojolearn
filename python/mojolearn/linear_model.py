@@ -993,8 +993,7 @@ def _coef_from_w(w, cols, n_targets, fit_intercept):
     """`coef_` and `intercept_` from the fitted `W` block. One target: the
     first `cols` entries and the last (a slice of an Array COPIES, the
     _array contract, so both are detached from `_w`). C targets: cuML's
-    column-major `w[c + C*j]`, the bias column at `j == cols`, unpacked by
-    an O(C * n_features) Python loop over the parameters, not the rows."""
+    column-major `w[c + C*j]`, the bias column at `j == cols`."""
     if n_targets == 1:
         coef = w[:cols].reshape((1, cols))
         intercept = w[cols:cols + 1] if fit_intercept else zeros((1,), "<f4")
@@ -1007,14 +1006,6 @@ def _coef_from_w(w, cols, n_targets, fit_intercept):
     full = Array._view_of(w, (n_targets, n_param), "F")._as_c()
     coef = full[:, :cols]
     intercept = full[:, cols] if fit_intercept else zeros((n_targets,), "<f4")
-    return coef, intercept
-    values = w.tolist()
-    coef = Array.from_list(
-        [[values[c + n_targets * j] for j in range(cols)] for c in range(n_targets)],
-        "<f4",
-    )
-    intercept = (Array.from_list([values[c + n_targets * cols] for c in range(n_targets)], "<f4")
-                 if fit_intercept else zeros((n_targets,), "<f4"))
     return coef, intercept
 
 
