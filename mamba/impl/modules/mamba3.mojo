@@ -141,6 +141,13 @@ from mamba.impl.modules.afn_defines import (
 from mamba.impl.modules.afn_arena import MambaArena
 from mamba.impl.modules.afn_refusal import AfnRefusalBatch
 from mamba.impl.ops.afn_mamba3_fused import afn_m3_prep
+#: lane w2-epi (2026-10-03): in_proj/out_proj on the FAST matrix-unit kernel,
+#: the residual folded into out_proj; other arm = main's spelling unchanged.
+from mamba.impl.modules.afn_proj_gemm import (
+    AFN_MAMBA_PROJ_ROUTE,
+    afn_proj_gemm_into,
+    afn_proj_gemm_resid_into,
+)
 
 
 def _grid(n: Int) -> Int:
@@ -1353,9 +1360,19 @@ def mamba3_block_forward(
 
     m3_phase_tick(ctx, phase_tick, String("block.norm"))
     # ---- S4: in_proj (mamba3.py:176), gemm v1 OP_NT, k = d_model.
-    identical_gemm[False](
-        ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
-    )
+    #      lane w2-epi (MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE / _SPLITK): the
+    #      FAST matrix-unit kernel, main's GEMM if it declines.
+    comptime if AFN_MAMBA_PROJ_ROUTE:
+        if not afn_proj_gemm_into(
+            ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
+        ):
+            identical_gemm[False](
+                ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
+            )
+    else:
+        identical_gemm[False](
+            ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
+        )
 
     m3_phase_tick(ctx, phase_tick, String("block.in_proj"))
     # ---- S5 + S6.
@@ -1621,20 +1638,44 @@ def mamba3_block_forward(
     m3_phase_tick(ctx, phase_tick, String("block.core_and_buffer"))
     # ---- S4: out_proj (mamba3.py:277), gemm v1 OP_NT, k = d_inner. The
     #      gate output IS the [M, d_inner] row (d = h*P + p, a copy).
-    identical_gemm[False](
-        ctx, stages.out_proj, stages.gate_out, w.w_out, m, dm, di, OP_NT
-    )
-
-    m3_phase_tick(ctx, phase_tick, String("block.out_proj"))
     # ---- S23: residual (block.py:52/:67), the REUSED Mamba-1 kernel.
-    ctx.enqueue_function[residual_add_kernel](
-        stages.residual_out.unsafe_ptr(),
-        x.unsafe_ptr(),
-        stages.out_proj.unsafe_ptr(),
-        Int32(m * dm),
-        grid_dim=(_grid(m * dm), 1, 1),
-        block_dim=(MAMBA3_TPB, 1, 1),
-    )
+    #      lane w2-epi (MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE / _SPLITK): an
+    #      untraced call runs out_proj and the residual as ONE matrix-unit
+    #      launch seeded with `x` (`residual_out = x + gate_out . w_out^T`;
+    #      the out_proj stage is not written); a traced call, or a declined
+    #      shape, runs main's two (the card records `out_proj.out`).
+    comptime if AFN_MAMBA_PROJ_ROUTE:
+        if trace.enabled or not afn_proj_gemm_resid_into(
+            ctx, stages.residual_out, x, stages.gate_out, w.w_out, m, dm, di, OP_NT
+        ):
+            identical_gemm[False](
+                ctx, stages.out_proj, stages.gate_out, w.w_out, m, dm, di, OP_NT
+            )
+            m3_phase_tick(ctx, phase_tick, String("block.out_proj"))
+            ctx.enqueue_function[residual_add_kernel](
+                stages.residual_out.unsafe_ptr(),
+                x.unsafe_ptr(),
+                stages.out_proj.unsafe_ptr(),
+                Int32(m * dm),
+                grid_dim=(_grid(m * dm), 1, 1),
+                block_dim=(MAMBA3_TPB, 1, 1),
+            )
+        else:
+            m3_phase_tick(ctx, phase_tick, String("block.out_proj"))
+    else:
+        identical_gemm[False](
+            ctx, stages.out_proj, stages.gate_out, w.w_out, m, dm, di, OP_NT
+        )
+
+        m3_phase_tick(ctx, phase_tick, String("block.out_proj"))
+        ctx.enqueue_function[residual_add_kernel](
+            stages.residual_out.unsafe_ptr(),
+            x.unsafe_ptr(),
+            stages.out_proj.unsafe_ptr(),
+            Int32(m * dm),
+            grid_dim=(_grid(m * dm), 1, 1),
+            block_dim=(MAMBA3_TPB, 1, 1),
+        )
     _m3_stage_sync(ctx, trace)
 
     # ---- the card, contract section 7's order (input.x recorded above).
