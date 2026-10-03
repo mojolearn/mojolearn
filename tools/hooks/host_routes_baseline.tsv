@@ -6,7 +6,6 @@ py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_array.py	0	return (self[i] for i
 py-sklearn	py-numpy	UNOWNED	debt	python/mojolearn/_mode.py	0	from sklearn.utils import ClassifierTags, RegressorTags, Tags, TargetTags
 py-threads	host-threads	UNOWNED	debt	python/mojolearn/_parallel_pool.py	0	from concurrent.futures import ThreadPoolExecutor
 py-threads	host-threads	UNOWNED	debt	python/mojolearn/_parallel_pool.py	0	self._threads = ThreadPoolExecutor(max_workers=len(self.devices))
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/cross_vendor.py	0	for i in range(n):
 py-threads	host-threads	gap-lm	debt	python/mojolearn/lm_corpus.py	0	worker = threading.Thread(target=produce, name="mojolearn-token-prefetch", daemon=True)
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/models/tokenizer.py	0	loose = [i for i in range(n) if i not in made and len(tokens[i]) != 1]
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	module = _backend.load_host_module(_EXTENSION)
