@@ -126,6 +126,7 @@ from kernel_methods.impl.kernel_ridge.kernel_ridge import (
 )
 from checks.numerics import ftz, identical_div, identical_sqrt
 from checks.numerics import NUMERIC_FAST as _NUMERIC_FAST
+from core.device_scan import device_classify_nonfinite, device_first_nonfinite
 from std.sys.info import has_apple_gpu_accelerator
 from svm.impl.svm_parameter import KernelParams
 from x_decomp.cells import F32Ptr
@@ -173,6 +174,40 @@ def _upload(
     ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
     ctx.synchronize()
     _ = host^
+    return buf^
+
+
+#: lane apple-fast-gap-kapprox2 (2026-10-03), FAST + Apple, OPT-IN until its
+#: M3 A/B (`-D MOJOLEARN_KM_FAST_PTR_IN`): the transforms' X goes to the
+#: device straight from the caller's memory (one raw host-pointer copy,
+#: 1.6-2.4 ms per 64 MB on Apple) and its finiteness is scanned there
+#: (`device_first_nonfinite`), instead of an owned host copy of X
+#: (`read_f32`, fresh pages), a serial host finiteness walk and a second
+#: copy into a fresh pinned stage (`_upload`). The same X words reach the
+#: same kernels: bit-inert; the same refusal text.
+comptime KM_FAST_PTR_IN = (
+    _CTX_MODE == _NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_KM_FAST_PTR_IN"]()
+)
+
+
+def _upload_checked(ctx: DeviceContext, xaddr: Int, n_rows: Int, n_cols: Int, what: String) raises -> DeviceBuffer[
+    DType.float32
+]:
+    """`km_validate_matrix` + `_upload` for X at a caller's host address
+    (KM_FAST_PTR_IN): shape refused on the host, NaN / infinity on the
+    device, with `km_validate_matrix`'s messages."""
+    if n_rows <= 0 or n_cols <= 0:
+        raise Error(what + ": need positive dimensions, got " + String(n_rows) + " x " + String(n_cols))
+    var n = n_rows * n_cols
+    var buf = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_copy(dst_buf=buf, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=xaddr))
+    var bad = device_first_nonfinite(ctx, buf, n)
+    if bad >= 0:
+        if device_classify_nonfinite(ctx, buf, bad):
+            raise Error(what + ": NaN at flat index " + String(bad) + "; refused by name (DEVIATION 1686)")
+        raise Error(what + ": infinity at flat index " + String(bad) + "; refused by name (DEVIATION 1686)")
     return buf^
 
 
@@ -1263,14 +1298,48 @@ def nystroem_transform_host_into[out_origin: MutOrigin, //](
 ) raises:
     """The public transform written directly to caller-owned host storage."""
     km_validate_matrix(x, n_rows, model.n_features, "nystroem transform X")
+    var t0 = Int(perf_counter_ns())
+    var ctx = _family_ctx()
+    var dx = _upload(ctx, x)
+    _nystroem_transform_dev(ctx, dx, model, n_rows, output, trace, elem_tpb, sabotage, t0)
+    _ = dx^
+    _ = ctx^
+
+
+def nystroem_transform_ptr_into[out_origin: MutOrigin, //](
+    model: NystroemModel,
+    xaddr: Int,
+    n_rows: Int,
+    output: MutPointer[Float32, out_origin],
+    mut trace: IdentityTrace,
+) raises:
+    """KM_FAST_PTR_IN: `nystroem_transform_host_into` with X read from the
+    caller's address on the device (`_upload_checked`)."""
+    var t0 = Int(perf_counter_ns())
+    var ctx = _family_ctx()
+    var dx = _upload_checked(ctx, xaddr, n_rows, model.n_features, "nystroem transform X")
+    _nystroem_transform_dev(ctx, dx, model, n_rows, output, trace, KM_EPILOGUE_TPB, KMSAB_NONE, t0)
+    _ = dx^
+    _ = ctx^
+
+
+def _nystroem_transform_dev[out_origin: MutOrigin, //](
+    ctx: DeviceContext,
+    mut dx: DeviceBuffer[DType.float32],
+    model: NystroemModel,
+    n_rows: Int,
+    output: MutPointer[Float32, out_origin],
+    mut trace: IdentityTrace,
+    elem_tpb: Int,
+    sabotage: Int,
+    t0: Int,
+) raises:
+    """The transform from X on the device (`dx`, n_rows x n_features)."""
     var kp = nystroem_params(model)
     var q = model.n_components
     var d = model.n_features
     # MOJOLEARN_STAGE_TIMES=1: wall per phase (each phase already drains).
     var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
-    var t0 = Int(perf_counter_ns())
-    var ctx = _family_ctx()
-    var dx = _upload(ctx, x)
     var dc = _upload(ctx, model.components)
     var dnorm = _upload(ctx, model.normalization)
     var dk = ctx.enqueue_create_buffer[DType.float32](n_rows * q)
@@ -1303,7 +1372,6 @@ def nystroem_transform_host_into[out_origin: MutOrigin, //](
         print("NYS_TRANSFORM_STAGES rows=" + String(n_rows) + " alloc_upload_ms=" + String((t1 - t0) // 1000000)
               + " kernel_ms=" + String((t2 - t1) // 1000000) + " gemm_ms=" + String((t3 - t2) // 1000000)
               + " copy_out_ms=" + String((Int(perf_counter_ns()) - t3) // 1000000))
-    _ = dx^
     _ = dc^
     _ = dnorm^
     _ = dk^
@@ -1312,7 +1380,6 @@ def nystroem_transform_host_into[out_origin: MutOrigin, //](
     _ = kws^
     _ = demb^
     _ = gws^
-    _ = ctx^
 
 
 # ===========================================================================
@@ -1493,12 +1560,46 @@ def rbf_sampler_transform_host_into[out_origin: MutOrigin, //](
 ) raises:
     """The public transform written directly to caller-owned host storage."""
     km_validate_matrix(x, n_rows, model.n_features, "rbf_sampler transform X")
-    var d = model.n_features
-    var dd = model.n_components
-    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
     var t0 = Int(perf_counter_ns())
     var ctx = _family_ctx()
     var dx = _upload(ctx, x)
+    _rbf_transform_dev(ctx, dx, model, n_rows, output, trace, tpb, sabotage, t0)
+    _ = dx^
+    _ = ctx^
+
+
+def rbf_sampler_transform_ptr_into[out_origin: MutOrigin, //](
+    model: RBFSamplerModel,
+    xaddr: Int,
+    n_rows: Int,
+    output: MutPointer[Float32, out_origin],
+    mut trace: IdentityTrace,
+) raises:
+    """KM_FAST_PTR_IN: `rbf_sampler_transform_host_into` with X read from
+    the caller's address on the device (`_upload_checked`)."""
+    var t0 = Int(perf_counter_ns())
+    var ctx = _family_ctx()
+    var dx = _upload_checked(ctx, xaddr, n_rows, model.n_features, "rbf_sampler transform X")
+    _rbf_transform_dev(ctx, dx, model, n_rows, output, trace, KM_RF_TPB, KMSAB_NONE, t0)
+    _ = dx^
+    _ = ctx^
+
+
+def _rbf_transform_dev[out_origin: MutOrigin, //](
+    ctx: DeviceContext,
+    mut dx: DeviceBuffer[DType.float32],
+    model: RBFSamplerModel,
+    n_rows: Int,
+    output: MutPointer[Float32, out_origin],
+    mut trace: IdentityTrace,
+    tpb: Int,
+    sabotage: Int,
+    t0: Int,
+) raises:
+    """The transform from X on the device (`dx`, n_rows x n_features)."""
+    var d = model.n_features
+    var dd = model.n_components
+    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
     var dw = _upload(ctx, model.random_weights)
     var db = _upload(ctx, model.random_offset)
     var dp = ctx.enqueue_create_buffer[DType.float32](n_rows * dd)
@@ -1536,9 +1637,7 @@ def rbf_sampler_transform_host_into[out_origin: MutOrigin, //](
         print("RBF_TRANSFORM_STAGES rows=" + String(n_rows) + " alloc_upload_ms=" + String((t1 - t0) // 1000000)
               + " gemm_ms=" + String((t2 - t1) // 1000000) + " epilogue_ms=" + String((t3 - t2) // 1000000)
               + " copy_out_ms=" + String((Int(perf_counter_ns()) - t3) // 1000000))
-    _ = dx^
     _ = dw^
     _ = db^
     _ = dp^
     _ = gws^
-    _ = ctx^
