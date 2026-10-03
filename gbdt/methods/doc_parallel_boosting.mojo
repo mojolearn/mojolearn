@@ -178,6 +178,35 @@ comptime CTR_PERM_BATCH = (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF"]()
 )
+
+#: lane/apple-fast-sym-ctr (2026-10-03, family `sym-ctr`),
+#: `-D MOJOLEARN_SYM_CTR_PERM_BATCH=1` (or `-D MOJOLEARN_SYM_CTR_ALL=1`),
+#: FAST + Apple only, default OFF. CAUSE: `CTR_PERM_BATCH` above batches the
+#: per-tree permutation loop of the NON-symmetric policies only; the
+#: SYMMETRIC estimation loop (`if need_estimation and not non_symmetric`,
+#: `for p in range(perm_count)`) still runs the four permutations' tasks one
+#: after another: per permutation a fresh `d_bins` allocation, a
+#: `partition_from_bins` (device sort + bounds readback + drain) and an
+#: `_estimate_and_apply` with its own drains. gbdt-categorical on taxicat is
+#: SymmetricTree, Logloss, 4 permutations, 500 trees, and the plain symmetric
+#: fit (1 permutation) is 11.25 s against 37.1 s. EFFECT: the other
+#: permutations' bins + partitions enqueued back to back behind ONE drain
+#: (`DeviceLeafPartitioner`, held across trees in `perm_leaf_parts`), the four
+#: Newton walks in lock step through `_estimate_prepare` / `estimate_advance`
+#: / `_estimate_complete` (one drain per walker round for all four, one
+#: closing drain per tree), per-permutation estimation workspaces held across
+#: trees. Same kernels, same partitions, same leaf values per permutation:
+#: only the host interleaving changes. Taken when `estimate_can_batch` holds
+#: (pointwise loss, Newton or Gradient), `approx_dim == 1` and no ranking
+#: target; else the serial loop. IDENTICAL compiles the serial loop unchanged.
+comptime SYM_CTR_PERM_BATCH = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and (
+        is_defined["MOJOLEARN_SYM_CTR_PERM_BATCH"]()
+        or is_defined["MOJOLEARN_SYM_CTR_ALL"]()
+    )
+)
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.bootstrap import (
     bootstrap_grid_blocks,
@@ -3517,7 +3546,136 @@ def fit_with_test(
             # partition; the others compute their own, because a row's leaf
             # depends on that permutation's CTR columns and the searcher
             # never looked at them.
-            for p in range(perm_count):
+            var sym_batched = False
+            comptime if SYM_CTR_PERM_BATCH:
+                if (
+                    perm_count > 1
+                    and approx_dim == 1
+                    and not is_querywise
+                    and not is_pair_logit
+                    and not is_yeti_rank
+                    and estimate_can_batch(
+                        objective, leaf_estimation_method,
+                        leaf_estimation_iterations,
+                    )
+                ):
+                    # SYM_CTR_PERM_BATCH: the shape of the CTR_PERM_BATCH
+                    # block of the non-symmetric branch, on the oblivious
+                    # structure. The learn permutation keeps the searcher's
+                    # partition (`sizes`, `leaf_offsets`, `row_index`); every
+                    # other permutation's bins and partition are enqueued
+                    # back to back and settled by ONE drain.
+                    sym_batched = True
+                    var n_leaves_sym = len(sizes)
+                    if (
+                        len(perm_leaf_parts) != perm_count
+                        or perm_leaf_parts[0].n_rows_cap != n_rows
+                        or perm_leaf_parts[0].n_leaves_cap < n_leaves_sym
+                    ):
+                        perm_leaf_parts.clear()
+                        for _ in range(perm_count):
+                            perm_leaf_parts.append(
+                                DeviceLeafPartitioner(
+                                    ctx, n_rows, n_leaves_sym
+                                )
+                            )
+                    while len(perm_est_ws) < perm_count:
+                        perm_est_ws.append(List[TEstimationWorkspace]())
+                    for p in range(perm_count):
+                        if p != learn_p:
+                            ref lp = perm_leaf_parts[p]
+                            # DEPTH IS `len(splits)`, NOT `max_depth`: a tree
+                            # that stopped early has fewer splits, and
+                            # `len(sizes)` is `1 << len(splits)` either way.
+                            compute_bins_for_model(
+                                ctx, layout_for_test, splits, len(splits),
+                                perm_cindexes[p], n_rows, lp.bins,
+                            )
+                            lp.partition_enqueue(ctx, n_rows, n_leaves_sym)
+                    # ONE drain settles every other permutation's leaf bounds
+                    ctx.synchronize()
+                    var parts = List[LeafPartition]()
+                    var part_slot = List[Int]()
+                    for p in range(perm_count):
+                        if p == learn_p:
+                            part_slot.append(-1)
+                        else:
+                            part_slot.append(len(parts))
+                            parts.append(
+                                perm_leaf_parts[p].partition_collect(
+                                    ctx, n_rows, n_leaves_sym
+                                )
+                            )
+                    # the walks: prepared back to back, advanced in lock
+                    # step behind one drain per round, completed in order
+                    var pend = List[PendingEstimation]()
+                    for p in range(perm_count):
+                        if part_slot[p] < 0:
+                            pend.append(
+                                _estimate_prepare(
+                                    ctx, n_rows, n_leaves_sym, sizes,
+                                    leaf_offsets, row_index, targets,
+                                    weights, has_weights, cursors[p],
+                                    objective, alpha, estimator_alpha,
+                                    logloss_border, l2_leaf_reg, est_sm,
+                                    leaf_estimation_method,
+                                    perm_est_ws[p], perm_arena, stage_times,
+                                    iterations=leaf_estimation_iterations,
+                                )
+                            )
+                        else:
+                            var s = part_slot[p]
+                            pend.append(
+                                _estimate_prepare(
+                                    ctx, n_rows, len(parts[s].sizes),
+                                    parts[s].sizes, parts[s].offsets,
+                                    parts[s].row_index, targets, weights,
+                                    has_weights, cursors[p],
+                                    objective, alpha, estimator_alpha,
+                                    logloss_border, l2_leaf_reg, est_sm,
+                                    leaf_estimation_method,
+                                    perm_est_ws[p], perm_arena, stage_times,
+                                    iterations=leaf_estimation_iterations,
+                                )
+                            )
+                    var walking = True
+                    while walking:
+                        ctx.synchronize()
+                        walking = False
+                        for p in range(perm_count):
+                            if pend[p].phase != 2:
+                                if estimate_advance(pend[p]):
+                                    walking = True
+                    for p in range(perm_count):
+                        var pv_b = List[Float32]()
+                        var tag_b = (
+                            _tree_tag(iteration) + ".perm" + String(p)
+                            + ".leaves.estimated"
+                        )
+                        if part_slot[p] < 0:
+                            _estimate_complete(
+                                ctx, pend[p], row_index, cursors[p],
+                                learning_rate, pv_b, not_pd_total, trace,
+                                stage_times, tag_b, perm_est_ws[p],
+                            )
+                        else:
+                            var s = part_slot[p]
+                            _estimate_complete(
+                                ctx, pend[p], parts[s].row_index, cursors[p],
+                                learning_rate, pv_b, not_pd_total, trace,
+                                stage_times, tag_b, perm_est_ws[p],
+                            )
+                        # the EXPORTED ensemble is the estimation
+                        # permutation's (`doc_parallel_boosting.h:526-528`)
+                        if p == est_p:
+                            leaf_values.clear()
+                            for i in range(len(pv_b)):
+                                leaf_values.append(pv_b[i])
+                    # the batch's closing drain: one per tree
+                    ctx.synchronize()
+                    _ = parts^  # past the drain (step-33 race class)
+                    _ = pend^  # past the drain (step-33 race class)
+            for p in range(0 if sym_batched else perm_count):
                 var pv = List[Float32]()
                 if sym_leaf_device and p == learn_p:
                     # lane/apple-fast-sym-iter, SYM_LEAF_FROM_STATS: the
