@@ -745,9 +745,9 @@ def meanll_kernel(
 # (`mixture/meanll_order.mojo`), one thread a chunk of GMM_MEANLL_CHUNK
 # values per level, then one thread folds the last <= GMM_MEANLL_CHUNK
 # partials and divides. The host column folds the same levels. The one-thread
-# `meanll_kernel` walked all n values each EM iteration;
-# `MOJOLEARN_GMM_MEANLL_SERIAL=1` restores it (A/B arm only: the host column
-# folds the levels).
+# `meanll_kernel` walked all n values each EM iteration. Lane
+# cgr4-download-loop (2026-10-03) removed its `MOJOLEARN_GMM_MEANLL_SERIAL=1`
+# A/B arm: an env switch to a one-thread walk over n on the GPU path.
 def meanll_chunk_kernel(
     src: MutPointer[Float32, MutAnyOrigin],
     src_off: Int32,
@@ -803,10 +803,6 @@ def meanll_finish_kernel(
     out_scalar.unsafe_store(0, ftz(identical_div(acc, nf)))
 
 
-def gmm_meanll_serial() -> Bool:
-    return String(getenv("MOJOLEARN_GMM_MEANLL_SERIAL")) == "1"
-
-
 def gmm_meanll_launch(
     ctx: DeviceContext,
     mut lse: DeviceBuffer[DType.float32],
@@ -817,15 +813,6 @@ def gmm_meanll_launch(
     """`mean(lse[0, n))` into meanll[0] in the chunked levels. scratch holds
     at least `gmm_meanll_levels_floats(n)` floats and nothing the stream
     still reads (the E-step's `y`, consumed by then)."""
-    if gmm_meanll_serial():
-        ctx.enqueue_function[meanll_kernel](
-            lse.unsafe_ptr(),
-            meanll.unsafe_ptr(),
-            Int32(n),
-            grid_dim=(1, 1, 1),
-            block_dim=(1, 1, 1),
-        )
-        return
     if len(scratch) < gmm_meanll_levels_floats(n):
         raise Error("gmm_meanll_launch: scratch below gmm_meanll_levels_floats")
     var in_scratch = False

@@ -68,6 +68,7 @@ is to not write the cell at all.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_scan import device_first_nonfinite
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import inf, isfinite, isinf
 from std.memory import bitcast
@@ -240,20 +241,20 @@ def _refuse_non_finite(
     (`detect_missing`, the `isnan(yt)` arms) because NaN MEANS missing
     there; missing observations are not implemented, so a non-finite input is
     refused by name instead of silently taking the missing-data arms."""
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n if n > 0 else 1)
-    if n > 0:
-        var view = buf.create_sub_buffer[DType.float32](0, n)
-        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
-    ctx.synchronize()
-    for i in range(n):
-        var v = h.unsafe_ptr().unsafe_load(i)
-        if not isfinite(v):
-            raise Error(
-                "batched_loglike: " + name + " contains a non-finite value at index "
-                + String(i)
-                + "; missing observations are not implemented and are refused by name (arima/NOT_IMPLEMENTED.tsv)"
-            )
-    _ = h^
+    # lane cgr4-download-loop: the scan runs on the device
+    # (`core.device_scan.device_first_nonfinite`, the first index by an
+    # integer minimum), not as a download and a host walk
+    if n <= 0:
+        return
+    var view = buf.create_sub_buffer[DType.float32](0, n)
+    var i = device_first_nonfinite(ctx, view, n)
+    _ = view^
+    if i >= 0:
+        raise Error(
+            "batched_loglike: " + name + " contains a non-finite value at index "
+            + String(i)
+            + "; missing observations are not implemented and are refused by name (arima/NOT_IMPLEMENTED.tsv)"
+        )
 
 
 def _copy_params(ctx: DeviceContext, mut src: ARIMAParams, mut dst: ARIMAParams, order: ARIMAOrder, batch_size: Int) raises:

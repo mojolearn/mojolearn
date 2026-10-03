@@ -169,10 +169,51 @@ OPS = [
       ("nc_median_pick_item", "n_classes * d")], None,
      [("x", "fin", "n * d"), ("lab", "iin", "n"), ("start", "iin", "n_classes + 1"), ("cent", "fout", "n_classes * d"),
       ("perm", "iscr", "d * p"), ("n", "int"), ("d", "int"), ("n_classes", "int"), ("p", "int"), ("n_steps", "int")]),
+    # lane apple-fast-purity: LabelPropagation / NearestCentroid's per-row
+    # argmax and NearestCentroid's median within-class std on the device
+    ("row_argmax", "items", "row_argmax_item", "n",
+     [("a", "fin", "n * m"), ("res", "iout", "n"), ("n", "int"), ("m", "int")]),
+    ("nc_med_std", "sort_items",
+     [("nc_med_std_init_item", "p"), ("nc_med_std_step_item", "p // 2", "n_steps"),
+      ("nc_med_std_pick_item", "1")], None,
+     [("std", "fin", "d"), ("res", "fout", "2"), ("key", "fscr", "p"), ("d", "int"), ("p", "int"), ("n_steps", "int")]),
     ("pos_compact", "sort_items",
      [("pos_count_item", "xn_fold_blocks(n)"), ("pos_scan_item", "1"), ("pos_emit_item", "xn_fold_blocks(n)")], None,
      [("w", "fin", "n"), ("rows", "iout", "n"), ("vals", "fout", "n"), ("info", "iout", "1"),
       ("part", "iscr", "xn_fold_blocks(n)"), ("n", "int")]),
+    # lane apple-fast-py2mojo-neighbors (2026-10-03): the Python data loops
+    # of _expansion_neighbors.py / neighbors.py as items
+    # (x_neighbors/py2mojo_items.mojo); -D MOJOLEARN_PY2MOJO_neighbors_OFF
+    # (read back as x_neighbors_py2mojo_off) restores the Python loops
+    ("p2m_mask_value", "py2mojo_items", "p2m_mask_value_item", "count",
+     [("x", "fin", "count"), ("res", "fout", "count"), ("count", "int"), ("want", "float")]),
+    ("p2m_zero_cols", "py2mojo_items", "p2m_zero_cols_item", "n * d",
+     [("x", "fin", "n * d"), ("flags", "iin", "d"), ("res", "fout", "n * d"), ("n", "int"), ("d", "int")]),
+    ("p2m_nan_indicator", "py2mojo_items", "p2m_nan_indicator_item", "n * (c + q)",
+     [("src", "fin", "n * d"), ("cur", "fin", "n * c"), ("cols", "iin", "q"), ("res", "fout", "n * (c + q)"),
+      ("n", "int"), ("d", "int"), ("c", "int"), ("q", "int")]),
+    ("p2m_sign_label", "py2mojo_items", "p2m_sign_label_item", "count",
+     [("x", "fin", "count"), ("res", "iout", "count"), ("count", "int"), ("mode", "int"), ("thr", "float")]),
+    ("p2m_relabel", "py2mojo_items",
+     [("p2m_relabel_init_item", "n"), ("p2m_relabel_first_item", "n"), ("p2m_relabel_count_item", "xn_fold_blocks(n)"),
+      ("p2m_relabel_scan_item", "1"), ("p2m_relabel_emit_item", "xn_fold_blocks(n)"), ("p2m_relabel_map_item", "n")], None,
+     [("lab", "iin", "n"), ("res", "iout", "n"), ("info", "iout", "2"), ("first", "iscr", "n"), ("rk", "iscr", "n"),
+      ("part", "iscr", "xn_fold_blocks(n)"), ("n", "int")]),
+    ("p2m_fill", "py2mojo_items", "p2m_fill_item", "count",
+     [("res", "fout", "count"), ("count", "int"), ("value", "float")]),
+    ("p2m_iota", "py2mojo_items", "p2m_iota_item", "count",
+     [("res", "iout", "count"), ("count", "int")]),
+    ("p2m_negate", "py2mojo_items", "p2m_negate_item", "count",
+     [("x", "fin", "count"), ("res", "fout", "count"), ("count", "int")]),
+    ("p2m_transpose", "py2mojo_items", "p2m_transpose_item", "r * c",
+     [("src", "fin", "r * c"), ("res", "fout", "r * c"), ("r", "int"), ("c", "int")]),
+    ("p2m_transpose_i", "py2mojo_items", "p2m_transpose_i_item", "r * c",
+     [("src", "iin", "r * c"), ("res", "iout", "r * c"), ("r", "int"), ("c", "int")]),
+    ("p2m_row_sort", "py2mojo_items",
+     [("p2m_row_sort_init_item", "p"), ("p2m_row_sort_step_item", "p // 2", "n_steps"), ("p2m_row_sort_emit_item", "nnz")], None,
+     [("indptr", "iin", "nq + 1"), ("cols", "iin", "nnz"), ("dists", "fin", "nnz"), ("out_cols", "iout", "nnz"),
+      ("out_d", "fout", "nnz"), ("perm", "iscr", "p"), ("rowid", "iscr", "nnz"), ("nq", "int"), ("nnz", "int"),
+      ("p", "int"), ("n_steps", "int")]),
 ]
 
 #: Hand-written resident drivers (x_neighbors/iter_device.mojo on the GPU,
@@ -634,6 +675,12 @@ def eigh_binding(a: PythonObject, i: PythonObject, f: PythonObject) raises -> Py
 
 def x_neighbors_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
+
+
+def x_neighbors_py2mojo_off_binding() raises -> PythonObject:
+    \"\"\"1 when built with -D MOJOLEARN_PY2MOJO_neighbors_OFF: Python runs its
+    old data loops instead of the p2m_* ops (lane apple-fast-py2mojo-neighbors).\"\"\"
+    return PythonObject(1 if is_defined["MOJOLEARN_PY2MOJO_neighbors_OFF"]() else 0)
 """]
     for name, params in [(o[0], o[4]) for o in OPS] + CUSTOM_OPS + [(k, v[2]) for k, v in OWN_DRIVERS.items()]:
         bufs, scal = split(params)
@@ -662,6 +709,7 @@ def x_neighbors_numeric_mode_binding() raises -> PythonObject:
 def _add_ops(mut m: PythonModuleBuilder) raises:
 {reg}    m.def_function[eigh_binding]("xn_eigh")
     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
+    m.def_function[x_neighbors_py2mojo_off_binding]("x_neighbors_py2mojo_off")
 """)
     return "".join(s)
 
@@ -670,6 +718,7 @@ BIND_HEAD = """from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_neighbors.%s import op_eigh
 """
@@ -689,6 +738,7 @@ def gpu_binding():
             + "from x_neighbors.kapprox_dev import kapprox_fast_binding, kpca_resident_binding, sparse_rp_device_binding\n"
             + "from x_neighbors.iter_device import lp_fast_resident_binding\n"
             + "from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES, ocsvm_resident_binding\n"
+            + "from x_neighbors.sort_items import purity_flags_binding\n"
             + wrappers() + """
 
 def x_neighbors_vendor_binding() raises -> PythonObject:
@@ -703,6 +753,7 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
         m.def_function[kapprox_fast_binding]("x_neighbors_kapprox_fast")
         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+        m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
         m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
         # lane/apple-fast-gap-cls2: OneClassSVM's Gram kept on the device
@@ -723,6 +774,7 @@ def host_binding():
             + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
             + "from x_neighbors.kapprox_host import kapprox_fast_binding, kpca_resident_binding, sparse_rp_device_binding\n"
             + "from x_neighbors.iter_host import lp_fast_resident_binding\n"
+            + "from x_neighbors.sort_items import purity_flags_binding\n"
             + wrappers() + """
 
 def x_neighbors_host_numeric_mode_binding() raises -> PythonObject:
@@ -758,6 +810,7 @@ def PyInit__mojolearn_x_neighbors_host() abi("C") -> PythonObject:
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
         m.def_function[kapprox_fast_binding]("x_neighbors_kapprox_fast")
         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+        m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
         m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
         return m.finalize()
@@ -776,9 +829,10 @@ if __name__ == "__main__":
     a = t.index("# BEGIN GENERATED EXPORTS")
     b = t.index("# END GENERATED EXPORTS")
     names = ["x_neighbors_host_numeric_mode", "x_neighbors_host_vendor", "x_neighbors_host_column",
-             "x_neighbors_host_sabotage"] + [f"xn_{o[0]}" for o in OPS] + [f"xn_{c[0]}" for c in CUSTOM_OPS] + [f"xn_{k}" for k in OWN_DRIVERS] + ["xn_eigh", "x_neighbors_numeric_mode",
+             "x_neighbors_host_sabotage"] + [f"xn_{o[0]}" for o in OPS] + [f"xn_{c[0]}" for c in CUSTOM_OPS] + [f"xn_{k}" for k in OWN_DRIVERS] + ["xn_eigh", "x_neighbors_numeric_mode", "x_neighbors_py2mojo_off",
                                                                             "x_neighbors_vendor", "x_neighbors_kapprox_fast",
-                                                                            "x_neighbors_kpca_resident", "x_neighbors_sparse_rp_device"]
+                                                                            "x_neighbors_kpca_resident", "x_neighbors_sparse_rp_device",
+                                                                            "x_neighbors_purity_flags"]
     body = "# BEGIN GENERATED EXPORTS\n" + "".join(f'            "{x}",\n' for x in names) + "            "
     surf.write_text(t[:a] + body + t[b:])
     print(f"x_neighbors/gen.py: {len(OPS)} ops -> device_ops, host_ops and the two bindings")

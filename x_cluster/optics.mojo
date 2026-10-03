@@ -14,15 +14,17 @@ next point is the unprocessed one with the lowest reachability, THE LOWEST
 INDEX ON A TIE (`np.argmin` over the unprocessed indices in order), a
 min-reduction over the rows; its unprocessed neighbors within `max_eps` get
 `max(dist, core)` when that is strictly lower, one thread a row. The dbscan
-extraction is the device's (`optics_dbscan`). The xi extraction is the
-reference's sequential steep-region walk (a data-dependent state machine over
-the n-length plot, run once on the fitted reachability the fit returns),
-the ratios in Float64 from the Float32 plot. sklearn's `np.around(...,
+extraction is the device's (`optics_dbscan`). So is the xi extraction
+(lane cgr4-device-optim-optics, `ops.optics_xi`): the reference's
+steep-region walk as parallel scans, sparse tables and pointer doubling over
+the plot, no serial walk (`x_cluster/optics_xi_cells.mojo` has the
+formulation; xc in Float32 with exact product tests, a bit change against the
+old Float64 ratios at ties only). sklearn's `np.around(...,
 decimals=precision)` of the core and reach distances is not carried
 (NOT_IMPLEMENTED.tsv)."""
 from std.sys.compile import is_defined
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_mul64
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_cluster.bodies import FPtr, IPtr
 from x_cluster.ops import ClusterOps
 
@@ -151,11 +153,13 @@ def _order_simd(
 def optics_graph[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, min_samples: Int, max_eps: Float32,
     mut ordering: List[Int], mut core: List[Float32], mut reach: List[Float32], mut pred: List[Int],
-    metric: Int = -1, p: Float32 = Float32(2),
+    mut slots: List[Int], metric: Int = -1, p: Float32 = Float32(2),
 ) raises:
     """metric -1: euclidean through the squared distance (the recorded
     default); 0-4 the `bodies.pdist_cell` metrics; 5 precomputed (`x` is the
-    n x n distance matrix, negatives refused)."""
+    n x n distance matrix, negatives refused). `slots` gets the int slot of
+    the ordering, the float slot of the reachability and the int slot of the
+    predecessors (resident for `optics_xi_ops`)."""
     var inf = Float32.MAX * Float32(2)
     var xs = ops.put(x)
     var dm: Int
@@ -180,6 +184,12 @@ def optics_graph[O: ClusterOps](
                     core[i] = inf
             var dist = ops.get(dm, n * n)
             _order_simd(dist, core, n, max_eps, ordering, reach, pred)
+            var o32 = List[Int32](capacity=n)
+            var p32 = List[Int32](capacity=n)
+            for q in range(n):
+                o32.append(Int32(ordering[q]))
+                p32.append(Int32(pred[q]))
+            slots = [ops.put_i(o32), ops.put(reach), ops.put_i(p32)]
             return
     # THE ORDERING ON THE DEVICE (lane cgr2-cluster): the distances stay
     # resident; each step is a min-reduction of (reachability, index) over
@@ -200,6 +210,7 @@ def optics_graph[O: ClusterOps](
     for q in range(n):
         ordering.append(Int(oi[q]))
         pred.append(Int(pi[q]))
+    slots = [os_, rs, ps]
 
 
 def optics_dbscan_ops[O: ClusterOps](
@@ -219,159 +230,15 @@ def optics_dbscan_ops[O: ClusterOps](
     return ops.get_i(ls, n)
 
 
-def _extend_region(steep: List[Bool], xward: List[Bool], start: Int, min_samples: Int) -> Int:
-    var n = len(steep)
-    var non_xward = 0
-    var index = start
-    var end = start
-    while index < n:
-        if steep[index]:
-            non_xward = 0
-            end = index
-        elif not xward[index]:
-            non_xward += 1
-            if non_xward > min_samples:
-                break
-        else:
-            return end
-        index += 1
-    return end
-
-
-@fieldwise_init
-struct _Sda(Copyable, Movable):
-    var start: Int
-    var end: Int
-    var mib: Float64
-
-
-def _update_filter_sdas(sdas: List[_Sda], mib: Float64, xc: Float64, plot: List[Float64]) -> List[_Sda]:
-    var out = List[_Sda]()
-    if mib == Float64.MAX * 2:
-        return out^
-    for s in sdas:
-        if mib <= identical_mul64(plot[s.start], xc):
-            var t = s.copy()
-            if mib > t.mib:
-                t.mib = mib
-            out.append(t^)
-    return out^
-
-
-def optics_xi_clusters(
-    reach: List[Float32], pred: List[Int], ordering: List[Int], xi: Float64,
-    min_samples: Int, min_cluster_size: Int, predecessor_correction: Bool,
-) -> List[Int]:
-    """`_xi_cluster`: the (start, end) pairs, flattened, in the reference's order."""
-    var n = len(ordering)
-    var inf = Float64.MAX * 2
-    var plot = List[Float64](capacity=n + 1)
-    var pplot = List[Int](capacity=n)
-    for q in range(n):
-        var r = reach[ordering[q]]
-        plot.append(inf if r == Float32.MAX * Float32(2) else Float64(r))
-        pplot.append(pred[ordering[q]])
-    plot.append(inf)
-    var xc = 1 - xi
-    var inv_xc = 1 / xc
-    var steep_up = List[Bool](capacity=n)
-    var steep_down = List[Bool](capacity=n)
-    var down = List[Bool](capacity=n)
-    var up = List[Bool](capacity=n)
-    for q in range(n):
-        var ratio = plot[q] / plot[q + 1]  # inf / inf is a NaN here, which compares false
-        steep_up.append(ratio <= xc)
-        steep_down.append(ratio >= inv_xc)
-        down.append(ratio > 1)
-        up.append(ratio < 1)
-    var sdas = List[_Sda]()
-    var clusters = List[Int]()
-    var index = 0
-    var mib = Float64(0)
-    for steep_index in range(n):
-        if not (steep_up[steep_index] or steep_down[steep_index]):
-            continue
-        if steep_index < index:
-            continue
-        for q in range(index, steep_index + 1):
-            if plot[q] > mib:
-                mib = plot[q]
-        if steep_down[steep_index]:
-            sdas = _update_filter_sdas(sdas, mib, xc, plot)
-            var d_end = _extend_region(steep_down, up, steep_index, min_samples)
-            sdas.append(_Sda(steep_index, d_end, Float64(0)))
-            index = d_end + 1
-            mib = plot[index]
-        else:
-            sdas = _update_filter_sdas(sdas, mib, xc, plot)
-            var u_start = steep_index
-            var u_end = _extend_region(steep_up, down, u_start, min_samples)
-            index = u_end + 1
-            mib = plot[index]
-            var u_clusters = List[Int]()
-            for s in sdas:
-                var c_start = s.start
-                var c_end = u_end
-                if identical_mul64(plot[c_end + 1], xc) < s.mib:
-                    continue
-                var d_max = plot[s.start]
-                if identical_mul64(d_max, xc) >= plot[c_end + 1]:
-                    while plot[c_start + 1] > plot[c_end + 1] and c_start < s.end:
-                        c_start += 1
-                elif identical_mul64(plot[c_end + 1], xc) >= d_max:
-                    while plot[c_end - 1] > d_max and c_end > u_start:
-                        c_end -= 1
-                if predecessor_correction:
-                    var ok = False
-                    while c_start < c_end:
-                        if plot[c_start] > plot[c_end]:
-                            ok = True
-                            break
-                        var p_e = pplot[c_end]
-                        var hit = False
-                        for i in range(c_start, c_end):
-                            if p_e == ordering[i]:
-                                hit = True
-                                break
-                        if hit:
-                            ok = True
-                            break
-                        c_end -= 1
-                    if not ok:
-                        continue
-                if c_end - c_start + 1 < min_cluster_size:
-                    continue
-                if c_start > s.end:
-                    continue
-                if c_end < u_start:
-                    continue
-                u_clusters.append(c_start)
-                u_clusters.append(c_end)
-            var m = len(u_clusters) // 2
-            for q in range(m):
-                clusters.append(u_clusters[(m - 1 - q) * 2])
-                clusters.append(u_clusters[(m - 1 - q) * 2 + 1])
-    return clusters^
-
-
-def optics_xi_labels(ordering: List[Int], clusters: List[Int]) -> List[Int32]:
-    """`_extract_xi_labels`."""
-    var n = len(ordering)
-    var lab = List[Int32](length=n, fill=Int32(-1))
-    var label = 0
-    for c in range(len(clusters) // 2):
-        var a = clusters[c * 2]
-        var b = clusters[c * 2 + 1]
-        var free = True
-        for q in range(a, b + 1):
-            if lab[q] != Int32(-1):
-                free = False
-                break
-        if free:
-            for q in range(a, b + 1):
-                lab[q] = Int32(label)
-            label += 1
-    var out = List[Int32](length=n, fill=Int32(-1))
-    for q in range(n):
-        out[ordering[q]] = lab[q]
-    return out^
+def optics_xi_ops[O: ClusterOps](
+    mut ops: O, slots: List[Int], n: Int, xi: Float64, min_samples: Int, min_cluster_size: Int,
+    predecessor_correction: Bool, mut labels: List[Int32],
+) raises -> List[Int32]:
+    """`cluster_optics_xi` by the device (`ops.optics_xi`; the host column
+    runs the same cells): the clusters (start, end) flattened, in the
+    reference's order, and the labels. xc = 1 - xi, rounded to Float32 once."""
+    var xc = Float32(Float64(1) - xi)
+    var ls = ops.zeros_i(n)
+    var cl = ops.optics_xi(slots[0], slots[1], slots[2], n, xc, min_samples, min_cluster_size, predecessor_correction, ls)
+    labels = ops.get_i(ls, n)
+    return cl^

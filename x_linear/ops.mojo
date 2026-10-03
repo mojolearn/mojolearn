@@ -422,6 +422,54 @@ def shuffle(idx: IP, n: Int, mut s: UInt64):
         i -= 1
 
 
+@always_inline
+def _mix64(v: UInt64) -> UInt64:
+    var z = v
+    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
+    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
+    return z ^ (z >> 31)
+
+
+@always_inline
+def perm_key(seed: UInt64, epoch: Int) -> UInt64:
+    """The epoch's permutation key: splitmix64's step and mix of the problem
+    seed and the epoch (lane cgr4-device-optim)."""
+    return _mix64(seed + UInt64(epoch + 1) * UInt64(0x9E3779B97F4A7C15))
+
+
+@always_inline
+def perm_at(i: Int, n: Int, key: UInt64) -> Int:
+    """DEVIATION 5004 (revised, lane cgr4-device-optim): the SGD epoch order
+    is a keyed permutation, each position independent of the others, so the
+    device fills it a thread a row: a 4-round balanced Feistel network over
+    [0, 4^h), 4^h >= n (h >= 1 bits a half, round function splitmix64's mix
+    of the half and the round key), cycle-walked back into [0, n) (it is a
+    bijection, so the walk ends at the cycle's next point inside). A fresh
+    permutation of 0..n-1 each epoch, not Fisher-Yates over the last one."""
+    var h = 1
+    while (1 << (2 * h)) < n:
+        h += 1
+    var mask = UInt64((1 << h) - 1)
+    var v = UInt64(i)
+    while True:
+        var l = v >> UInt64(h)
+        var r = v & mask
+        for rnd in range(4):
+            var f = _mix64(r ^ (key + UInt64(rnd) * UInt64(0xD1B54A32D192ED03))) & mask
+            var nl = r
+            r = l ^ f
+            l = nl
+        v = (l << UInt64(h)) | r
+        if v < UInt64(n):
+            return Int(v)
+
+
+def perm_fill(idx: IP, n: Int, key: UInt64):
+    """idx[i] = perm_at(i, n, key): the host column's epoch order."""
+    for i in range(n):
+        sti(idx, i, perm_at(i, n, key))
+
+
 # ------------------------------------------------------ dense linear algebra
 
 def cholesky(a: FP, aoff: Int, m: Int) -> Bool:

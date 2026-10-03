@@ -171,8 +171,8 @@ def _conversion_backend():
     2026-10-02): a GPU binding that refuses, for instance a FAST tier, raises
     by name from `linalg` rather than falling back to the host binding."""
     try:
-        from . import linalg
-        linalg._load()
+        from . import _linalg_impl
+        _linalg_impl._load()
     except ImportError:
         return "python"
     return "linalg"

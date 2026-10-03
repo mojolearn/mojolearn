@@ -216,7 +216,7 @@ def test_astype_matches_the_item_setter(src, dst):
         for n in (0, 1, 255, 256, 1001, _BIG):
             with np.errstate(all="ignore"):
                 a = _arr(_values_for(src, max(n, 64), flavor)[:n].copy())
-            native = n >= _array._NATIVE_MIN and src != dst
+            native = n >= 1 and src != dst  # every non-empty block (lane apple-fast-py2mojo-core)
             _same(lambda: a.astype(dst), ("cast_elements",) if native else (),
                   group="astype")
 
@@ -274,8 +274,8 @@ def _reduction_inputs():
 def test_reductions_match_python(what):
     for raw in _reduction_inputs():
         a = _arr(raw.copy())
-        native = (a.size >= _array._NATIVE_MIN
-                  and (what != "sum" or a.dtype in ("<f4", "<f8")))
+        # every non-empty block, the integer sum too (lane apple-fast-py2mojo-core)
+        native = a.size >= 1
         _same(lambda: getattr(a, what)(), ("reduce_stat",) if native else (),
               group="reduce")
     f = _arr(np.asfortranarray(_RNG.standard_normal((400, 5)).astype(np.float32)))
@@ -516,9 +516,19 @@ def test_classification_labels_match(name):
 def test_cluster_label_union_matches(name):
     y = _metric_label_inputs()[name]
     other = _RNG.integers(-2, 9, 3000)
-    native = name in _NATIVE_LABELS and name != "bool"  # a bool is not an integer label here
-    _same(lambda: M._prepare_cluster_labels(y, other[:len(y)]),
-          ("gather_i32", "encode_labels_i32") if native else (), group="metrics")
+    # lane apple-fast-py2mojo-core: the union is ONE `unique_inverse` of the
+    # two arrays laid end to end (no encoder, no gather), so the reference
+    # is the Python routine with the union seam declined
+    call = lambda: M._prepare_cluster_labels(y, other[:len(y)])
+    real = M._native_union_codes
+    M._native_union_codes = lambda *args, **kwargs: None
+    try:
+        ref = _outcome(call)
+    finally:
+        M._native_union_codes = real
+    new = _outcome(call)
+    if not _EXPECT_SABOTAGE:
+        assert new == ref, f"metrics: new arm {new!r:.300} != reference {ref!r:.300}"
     _same(lambda: M._as_i32_1d(y, "labels"), (), group="metrics")
 
 
