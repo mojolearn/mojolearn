@@ -140,14 +140,14 @@ def huber_map_row(i: Int, x: FP, y: FP, n: Int, d: Int, th: FP, toff: Int, b: Fl
     st(cr, i, coefv)
 
 
-def huber_finish_t(v: Team, g: FP, goff: Int, th: FP, toff: Int, d: Int, p: Int, nrows: Float32, eps: Float32,
+def huber_finish_t(v: Team, g: FP, goff: Int, th: FP, toff: Int, d: Int, p: Int, n: Int, eps: Float32,
                    alpha: Float32, sigma: Float32, two_eps: Float32, sw: Bool, sq: Float32, out_abs: Float32,
                    n_out: Int, w_out: Float32, w_all: Float32, parts: FP) -> Float32:
     """The objective's last statements on the folded sums, on a team (the
     device L-BFGS's finish block) or a team of one: ||w||^2 in the vfold
     order (lane cgr4-device-optim; it was one ascending chain), the penalty
     gradient a thread a weight, the sigma cell by the lead. Every thread
-    returns f. nrows: the row count as float32 (i2f)."""
+    returns f."""
     var wn = vdot(v, th, toff, th, toff, d, parts)
     for j in range(v.tid, d, v.nt):
         var w = ld(th, toff + j)
@@ -155,7 +155,7 @@ def huber_finish_t(v: Team, g: FP, goff: Int, th: FP, toff: Int, d: Int, p: Int,
     var squared_loss = fd(sq, sigma)
     var eps2 = fm(eps, eps)
     var cnt_out = w_out if sw else i2f(n_out)
-    var cnt = w_all if sw else nrows
+    var cnt = w_all if sw else i2f(n)
     var outlier_loss = fs(fm(two_eps, out_abs), fm(fm(sigma, cnt_out), eps2))
     var gsigma = fs(fs(cnt, fm(cnt_out, eps2)), fd(squared_loss, sigma))
     if v.lead():
@@ -168,7 +168,7 @@ def huber_finish(g: FP, goff: Int, th: FP, toff: Int, d: Int, p: Int, n: Int, ep
                  sigma: Float32, two_eps: Float32, sw: Bool, sq: Float32, out_abs: Float32, n_out: Int,
                  w_out: Float32, w_all: Float32) -> Float32:
     """`huber_finish_t` on one thread."""
-    return huber_finish_t(team_at(0, 1, g, 0, 0, 0), g, goff, th, toff, d, p, i2f(n), eps, alpha, sigma, two_eps, sw,
+    return huber_finish_t(team_at(0, 1, g, 0, 0, 0), g, goff, th, toff, d, p, n, eps, alpha, sigma, two_eps, sw,
                           sq, out_abs, n_out, w_out, w_all, g)
 
 

@@ -87,7 +87,7 @@ def hg_fold_kernel(scr: FP, nbk: Int32, cells: Int32, g: FP, sums: FP, wf: IP, w
     witness_end(wf, woff, nonce)
 
 
-def hg_finish_kernel(th: FP, g: FP, f: FP, sums: FP, nrows: Float32, d: Int32, fi: Int32, eps: Float32, alpha: Float32,
+def hg_finish_kernel(th: FP, g: FP, f: FP, sums: FP, n: Int32, d: Int32, fi: Int32, eps: Float32, alpha: Float32,
                      sw: Int32, parts: FP, wf: IP, woff: Int32, nonce: Int32):
     """One block: `huber_finish_t` on the folded sums; f[0] by the lead."""
     var t = team_at(Int(thread_idx.x), Int(block_dim.x), parts, 0, 0, 0)
@@ -97,7 +97,7 @@ def hg_finish_kernel(th: FP, g: FP, f: FP, sums: FP, nrows: Float32, d: Int32, f
     var swb = sw != 0
     var w_all = ld(sums, 3) if swb else Float32(0)
     var n_out = Int(bitcast[DType.int32](ld(sums, 4)))
-    var fv = huber_finish_t(t, g, 0, th, 0, dd, p, nrows, eps, alpha, sigma, fm(Float32(2), eps), swb,
+    var fv = huber_finish_t(t, g, 0, th, 0, dd, p, Int(n), eps, alpha, sigma, fm(Float32(2), eps), swb,
                             ld(sums, 0), ld(sums, 1), n_out, ld(sums, 2), w_all, parts)
     if t.lead():
         st(f, 0, fv)
@@ -188,7 +188,7 @@ struct HuberObjective(LbObjective):
             nonce, grid_dim=b3, block_dim=HG_TPB,
         )
         ctx.enqueue_function[hg_finish_kernel](
-            th, g, f, self.sums.unsafe_ptr(), i2f(n), Int32(d), fi, self.eps, self.alpha, sw,
+            th, g, f, self.sums.unsafe_ptr(), Int32(n), Int32(d), fi, self.eps, self.alpha, sw,
             self.parts.unsafe_ptr(), wf, Int32(woff + b1 + b2 + b3), nonce, grid_dim=1, block_dim=LBD_TPB,
         )
 
