@@ -253,10 +253,12 @@ def kshap_solve(yout: Int, fx: Int, fnull: Int, size_off: Int, size_w: Int, cdf:
             ey.unsafe_ptr(), dfx.unsafe_ptr(), dnull.unsafe_ptr(), dB.unsafe_ptr(),
             grid_dim=_blocks(R * q * k), block_dim=AGN_TPB,
         )
+    var pa = p0.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pb = p1.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var in0 = True
     for col in range(q):
-        var pin = p0.unsafe_ptr() if in0 else p1.unsafe_ptr()
-        var pout = p1.unsafe_ptr() if in0 else p0.unsafe_ptr()
+        var pin = pa if in0 else pb
+        var pout = pb if in0 else pa
         ctx.enqueue_function[pivot_kernel](Int64(R), Int32(q), Int32(col), dA.unsafe_ptr(), pin, pout,
                                            grid_dim=_blocks(R), block_dim=AGN_TPB)
         var nr = q - 1 - col
@@ -265,7 +267,7 @@ def kshap_solve(yout: Int, fx: Int, fnull: Int, size_off: Int, size_w: Int, cdf:
             ctx.enqueue_function[elim_kernel](Int64(units), Int32(q), Int32(k), Int32(col), dA.unsafe_ptr(),
                                               dB.unsafe_ptr(), pout, grid_dim=_blocks(units), block_dim=AGN_TPB)
         in0 = not in0
-    var pfin = p0.unsafe_ptr() if in0 else p1.unsafe_ptr()
+    var pfin = pa if in0 else pb
     ctx.enqueue_function[back_kernel](
         Int64(R * k), Int32(d), Int32(k), dA.unsafe_ptr(), dB.unsafe_ptr(), pfin, dfx.unsafe_ptr(),
         dnull.unsafe_ptr(), sol.unsafe_ptr(), dphi.unsafe_ptr(), grid_dim=_blocks(R * k), block_dim=AGN_TPB,
@@ -287,7 +289,7 @@ def kshap_solve(yout: Int, fx: Int, fnull: Int, size_off: Int, size_w: Int, cdf:
 
 
 def _perms(ctx: DeviceContext, R: Int, d: Int, np: Int, seed: Int, row0: Int,
-           perm: DeviceBuffer[DType.int32], inv: DeviceBuffer[DType.int32]) raises:
+           mut perm: DeviceBuffer[DType.int32], mut inv: DeviceBuffer[DType.int32]) raises:
     ctx.enqueue_function[perm_kernel](
         Int64(R * np), Int32(d), Int32(np), Int64(seed), Int64(row0), perm.unsafe_ptr(), inv.unsafe_ptr(),
         grid_dim=_blocks(R * np), block_dim=AGN_TPB,
