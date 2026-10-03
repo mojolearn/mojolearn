@@ -2400,14 +2400,17 @@ class CalibratedClassifierCV(_TreesWrapperBase):
 # count of BACKGROUND rows (`data`, required) reaching each node, since the
 # flat forest stores no instance counts. KernelExplainer and
 # PermutationExplainer: cuML's `explainer/kernel_shap.cu` and
-# `permutation_shap.cu` build the coalition datasets (xtrees/shap.mojo
-# `mask_expand`); the sampling and the solve follow `shap`'s
-# KernelExplainer (`_kernel.py`: full enumeration of the small coalition
-# sizes, then weighted sampling of the rest, the efficiency-constrained
-# weighted least squares) and PermutationExplainer (`_permutation.py`:
-# forward then backward passes over each permutation). DEVIATIONS: draws
-# come from the lane's counter RNG; KernelExplainer carries no l1 feature
-# selection (`l1_reg` is refused) and treats every feature as varying.
+# `permutation_shap.cu` build the coalition datasets; the sampling and the
+# solve follow `shap`'s KernelExplainer (`_kernel.py`: full enumeration of
+# the small coalition sizes, then weighted sampling of the rest, the
+# efficiency-constrained weighted least squares) and PermutationExplainer
+# (`_permutation.py`: forward then backward passes over each permutation).
+# Lane cgr2-metrics-shap: every step but the model call runs on the device
+# over a chunk of rows at once (xtrees/agnostic*.mojo). DEVIATIONS: draws
+# come from the lane's counter RNG; KernelExplainer's sampled coalitions are
+# pairs (a draw and its complement) without de-duplication (cuML's
+# schedule), carries no l1 feature selection (`l1_reg` is refused) and
+# treats every feature as varying.
 def _trees_forest_arrays(est):
     """(offsets, colid, quesval, left, leaves, k, scale) of a fitted flat
     forest, or None."""
@@ -2521,6 +2524,16 @@ class TreeExplainer(_TreesEnsembleBase):
         return phi.reshape((n, d)) if k == 1 else phi.reshape((n, d, k))
 
 
+#: xtrees/agnostic.mojo AGN_BUDGET: synthetic words per explainer chunk
+_AGN_BUDGET = 1 << 25
+
+
+def _f64_word(x):
+    """The binary64 bits of x as a signed int (a binding param word)."""
+    import struct
+    return struct.unpack("<q", struct.pack("<d", float(x)))[0]
+
+
 def _trees_model_fn(model):
     """The function an agnostic explainer explains: a callable as given, a
     classifier's predict_proba, else predict."""
@@ -2556,47 +2569,14 @@ class _AgnosticExplainer(_TreesEnsembleBase):
         n = X.shape[0]
         return _trees_output_2d(out, n)
 
-    def _coalitions(self, x_row, masks_list):
-        """Mean model output over the background for each coalition mask:
-        float64 (m, k)."""
-        bg = self._bg
-        nb, d = bg.shape
-        m = len(masks_list)
-        masks = Array.from_list([v for mk in masks_list for v in mk], "<i4")
-        syn = empty((m * nb * d,), "<f4")
-        b = self._bind()
-        b.x_trees_mask_expand(addr_ro(x_row, name="x"), addr_ro(bg, name="data"), addr_ro(masks, name="masks"),
-                              addr(syn, name="synthetic"), [nb, d, m])
-        out = self._eval(syn.reshape((m * nb, d)))
-        k = out.shape[1]
-        ey = empty((m * k,), "<f8")
-        b.x_trees_block_mean(addr_ro(out, name="y"), addr(ey, name="ey"), [m, nb, k])
-        return masks, ey
+    def _chunk(self, per_row, n):
+        """Rows per chunk: as many as keep a chunk's synthetic matrix under
+        the budget (xtrees/agnostic.mojo AGN_BUDGET words), at least one."""
+        return max(1, min(n, _AGN_BUDGET // max(1, per_row)))
 
-    def _perm_synthetic(self, x_row, inv, n_perm, syn):
-        """Every permutation coalition over every background row, written on
-        the device (`xtrees/perm_device.mojo`) into `syn` (allocated on the
-        first row, reused after)."""
-        bg = self._bg
-        nb, d = bg.shape
-        total = n_perm * (2 * d + 1) * nb * d
-        if syn is None or syn.shape[0] != total:
-            syn = empty((total,), "<f4")
-        inv_a = Array.from_list(inv, "<i4")
-        self._bind().x_trees_perm_synthetic(addr_ro(x_row, name="x"), addr_ro(bg, name="data"),
-                                            addr_ro(inv_a, name="inv"), addr(syn, name="synthetic"),
-                                            [nb, d, n_perm])
-        return syn
-
-    def _mean_over_background(self, syn, m):
-        """`_coalitions`'s model call and background mean over a written
-        synthetic matrix of m coalitions."""
-        nb, d = self._bg.shape
-        out = self._eval(syn.reshape((m * nb, d)))
-        k = out.shape[1]
-        ey = empty((m * k,), "<f8")
-        self._bind().x_trees_block_mean(addr_ro(out, name="y"), addr(ey, name="ey"), [m, nb, k])
-        return ey
+    def _model_rows(self, syn, rows, d):
+        """The model on a chunk's synthetic matrix: float32 (rows, k)."""
+        return self._eval(syn.reshape((rows, d)))
 
     def _check(self, X):
         Xa, _ = as_f32_c(X, ndim=2, name="X")
@@ -2604,10 +2584,9 @@ class _AgnosticExplainer(_TreesEnsembleBase):
             raise ValueError(f"X has {Xa.shape[1]} features, data has {self.n_features_in_}")
         return Xa
 
-    def _shape(self, rows, n, d):
+    def _shape(self, phi, n, d):
         k = self.n_outputs_
-        flat = Array.from_list([v for r in rows for v in r], "<f8")
-        return flat.reshape((n, d)) if k == 1 else flat.reshape((n, d, k))
+        return phi.reshape((n, d)) if k == 1 else phi.reshape((n, d, k))
 
 
 class KernelExplainer(_AgnosticExplainer):
@@ -2636,10 +2615,11 @@ class KernelExplainer(_AgnosticExplainer):
         from ._portable_math import comb
         return comb(n, r)
 
-    def _masks(self, M, nsamples, seed, row):
-        """shap `KernelExplainer.explain`'s coalition schedule: (masks, weights)."""
-        import itertools
-        masks, weights = [], []
+    def _schedule(self, M, nsamples):
+        """shap `KernelExplainer.explain`'s coalition schedule as the device
+        builds it (xtrees/agnostic.mojo kshap_mask_unit): (m, nfixed, nfull,
+        npaired, size_off, size_w, cdf, wrand). The O(M) scalar bookkeeping
+        over subset SIZES stays here; every mask is made on the device."""
         num_subset_sizes = (M - 1 + 1) // 2 if M > 1 else 0
         num_paired = (M - 1) // 2
         wv = [(M - 1.0) / (i * (M - i)) for i in range(1, num_subset_sizes + 1)]
@@ -2650,6 +2630,7 @@ class KernelExplainer(_AgnosticExplainer):
         num_full = 0
         left = nsamples
         rem = list(wv)
+        size_off, size_w = [0], []
         for size in range(1, num_subset_sizes + 1):
             nsub = self._binom(M, size) * (2 if size <= num_paired else 1)
             if left * rem[size - 1] / nsub >= 1.0 - 1e-8:
@@ -2661,19 +2642,13 @@ class KernelExplainer(_AgnosticExplainer):
                 w = wv[size - 1] / self._binom(M, size)
                 if size <= num_paired:
                     w /= 2.0
-                for inds in itertools.combinations(range(M), size):
-                    mk = [0] * M
-                    for i in inds:
-                        mk[i] = 1
-                    masks.append(mk)
-                    weights.append(w)
-                    if size <= num_paired:
-                        masks.append([1 - v for v in mk])
-                        weights.append(w)
+                size_off.append(size_off[-1] + nsub)
+                size_w.append(w)
             else:
                 break
-        nfixed = len(masks)
+        nfixed = size_off[-1]
         samples_left = nsamples - nfixed
+        cdf, wrand = [], 0.0
         if num_full != num_subset_sizes and samples_left > 0:
             rw = list(wv)
             for i in range(num_paired):
@@ -2681,50 +2656,14 @@ class KernelExplainer(_AgnosticExplainer):
             rw = rw[num_full:]
             t = math.fsum(rw)
             rw = [v / t for v in rw]
-            cdf, run = [], 0.0
+            run = 0.0
             for v in rw:
                 run += v
                 cdf.append(run)
-            n_draw = 4 * samples_left
-            u = empty((n_draw * (1 + M),), "<f8")
-            self._bind().x_trees_uniform(addr(u, name="u"), [n_draw * (1 + M), seed, row])
-            uv = u.tolist()
-            used = {}
-            pos = 0
-            while samples_left > 0 and pos < n_draw:
-                base = pos * (1 + M)
-                c = uv[base] * cdf[-1]
-                ind = next((i for i, v in enumerate(cdf) if c < v), len(cdf) - 1)
-                pos += 1
-                size = ind + num_full + 1
-                perm = list(range(M))
-                for i in range(M - 1, 0, -1):
-                    j = int(uv[base + 1 + i] * (i + 1))
-                    perm[i], perm[j] = perm[j], perm[i]
-                mk = [0] * M
-                for i in perm[:size]:
-                    mk[i] = 1
-                key = tuple(mk)
-                new = key not in used
-                if new:
-                    used[key] = len(masks)
-                    samples_left -= 1
-                    masks.append(mk)
-                    weights.append(1.0)
-                else:
-                    weights[used[key]] += 1.0
-                if samples_left > 0 and size <= num_paired:
-                    if new:
-                        samples_left -= 1
-                        masks.append([1 - v for v in mk])
-                        weights.append(1.0)
-                    else:
-                        weights[used[key] + 1] += 1.0
-            weight_left = math.fsum(wv[num_full:])
-            s = math.fsum(weights[nfixed:])
-            if s > 0:
-                weights[nfixed:] = [w * (weight_left / s) for w in weights[nfixed:]]
-        return masks, weights
+            wrand = 1.0 * (math.fsum(wv[num_full:]) / samples_left)
+        else:
+            samples_left = 0
+        return nfixed + samples_left, nfixed, num_full, num_paired, size_off, size_w, cdf, wrand
 
     def shap_values(self, X, nsamples="auto", l1_reg="auto"):
         if l1_reg not in ("auto", False, 0):
@@ -2738,27 +2677,33 @@ class KernelExplainer(_AgnosticExplainer):
         seed = _trees_seed(self.random_state)
         k = self.n_outputs_
         b = self._bind()
-        rows = []
-        cols = _trees_arange(d)
-        for i in range(n):
-            x_row = self._gather(Xa, Array.from_list([i], "<i4"), cols).reshape((d,))
-            fx = zeros((k,), "<f8")
-            fx32 = self._eval(x_row.reshape((1, d)))   # held: the call reads its address
-            b.x_trees_block_mean(addr_ro(fx32, name="fx"), addr(fx, name="fx"), [1, 1, k])
-            self._link(fx)
-            phi = zeros((d * k,), "<f8")
-            if M == 1 or ns < 1:
-                phi = Array.from_list([fx.tolist()[j] - self._fnull.tolist()[j] for j in range(k)], "<f8")
-            else:
-                mlist, wlist = self._masks(M, ns, seed, i)
-                masks, ey = self._coalitions(x_row, mlist)
-                self._link(ey)
-                w = Array.from_list(wlist, "<f8")
-                b.x_trees_kernel_solve(addr_ro(masks, name="masks"), addr_ro(w, name="w"), addr_ro(ey, name="ey"),
-                                       addr_ro(fx, name="fx"), addr_ro(self._fnull, name="fnull"),
-                                       addr(phi, name="phi"), [len(mlist), d, k])
-            rows.append(phi.tolist())
-        return self._shape(rows, n, d)
+        nb = self._bg.shape[0]
+        m, nfixed, nfull, npaired, size_off, size_w, cdf, wrand = self._schedule(M, max(ns, 0)) if M > 1 \
+            else (0, 0, 0, 0, [0], [], [], 0.0)
+        tables = (Array.from_list(size_off, "<i8"), Array.from_list(size_w or [0.0], "<f8"),
+                  Array.from_list(cdf or [0.0], "<f8"))
+        taddr = tuple(addr_ro(t, name="schedule") for t in tables)
+        phi = zeros((max(n * d * k, 1),), "<f8")
+        if n == 0:
+            return self._shape(zeros((0,), "<f8"), 0, d)
+        fx = self._eval(Xa)                       # the explained rows, one model call
+        x0, f0, p0 = addr_ro(Xa, name="X"), addr_ro(fx, name="fx"), addr(phi, name="phi")
+        fnull = self._fnull
+        R = self._chunk(m * nb * d, n)
+        for r0 in range(0, n, R):
+            rows = min(R, n - r0)
+            params = [rows, nb, d, nfixed, m, nfull, len(cdf), npaired, r0, seed, _f64_word(wrand)]
+            out = None
+            if m > 0:
+                syn = empty((rows * m * nb * d,), "<f4")
+                b.x_trees_kshap_synth(x0 + 4 * r0 * d, addr_ro(self._bg, name="data"), taddr,
+                                      addr(syn, name="synthetic"), params)
+                out = self._model_rows(syn, rows * m * nb, d)
+                del syn
+            b.x_trees_kshap_solve(addr_ro(out, name="y") if out is not None else 0, f0 + 4 * r0 * k,
+                                  addr_ro(fnull, name="fnull"), taddr, p0 + 8 * r0 * d * k,
+                                  params + [k, 1 if self.link == "logit" else 0])
+        return self._shape(phi, n, d)
 
 
 class PermutationExplainer(_AgnosticExplainer):
@@ -2775,43 +2720,24 @@ class PermutationExplainer(_AgnosticExplainer):
         n, d = Xa.shape
         k = self.n_outputs_
         seed = _trees_seed(self.random_state)
-        rows = []
-        cols = _trees_arange(d)
-        syn = None
-        for i in range(n):
-            x_row = self._gather(Xa, Array.from_list([i], "<i4"), cols).reshape((d,))
-            u = empty((max(1, npermutations * d),), "<f8")
-            self._bind().x_trees_uniform(addr(u, name="u"), [npermutations * d, seed, i])
-            uv = u.tolist()
-            perms, inv = [], []
-            for p in range(int(npermutations)):
-                perm = list(range(d))
-                for a in range(d - 1, 0, -1):
-                    j = int(uv[p * d + a] * (a + 1))
-                    perm[a], perm[j] = perm[j], perm[a]
-                perms.append(perm)
-                iv = [0] * d
-                for pos, f in enumerate(perm):
-                    iv[f] = pos
-                inv.extend(iv)
-            # lane/gap-nv-classical2: the coalitions (all features off, the
-            # forward walk adding perm's features, the backward walk removing
-            # them) are written on the device from the inverses, into one
-            # buffer reused across rows; the same words as the mask lists
-            # through `mask_expand`.
-            syn = self._perm_synthetic(x_row, inv, int(npermutations), syn)
-            ey = self._mean_over_background(syn, int(npermutations) * (2 * d + 1))
-            e = ey.tolist()
-            val = [0.0] * (d * k)
-            step = 2 * d + 1
-            for p, perm in enumerate(perms):
-                o = p * step
-                for jj, f in enumerate(perm):
-                    for c in range(k):
-                        val[f * k + c] += e[(o + jj + 1) * k + c] - e[(o + jj) * k + c]
-                for jj, f in enumerate(perm):
-                    for c in range(k):
-                        val[f * k + c] += e[(o + d + jj) * k + c] - e[(o + d + jj + 1) * k + c]
-            den = 2.0 * npermutations
-            rows.append([v / den for v in val])
-        return self._shape(rows, n, d)
+        npm = int(npermutations)
+        if npm < 1:
+            raise ValueError("npermutations must be >= 1")
+        nb = self._bg.shape[0]
+        b = self._bind()
+        phi = zeros((max(n * d * k, 1),), "<f8")
+        if n == 0:
+            return self._shape(zeros((0,), "<f8"), 0, d)
+        mm = npm * (2 * d + 1)
+        x0, p0 = addr_ro(Xa, name="X"), addr(phi, name="phi")
+        R = self._chunk(mm * nb * d, n)
+        for r0 in range(0, n, R):
+            rows = min(R, n - r0)
+            params = [rows, nb, d, npm, r0, seed]
+            syn = empty((rows * mm * nb * d,), "<f4")
+            b.x_trees_pshap_synth(x0 + 4 * r0 * d, addr_ro(self._bg, name="data"), addr(syn, name="synthetic"),
+                                  params)
+            out = self._model_rows(syn, rows * mm * nb, d)
+            del syn
+            b.x_trees_pshap_values(addr_ro(out, name="y"), p0 + 8 * r0 * d * k, params + [k])
+        return self._shape(phi, n, d)

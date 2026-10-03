@@ -11,8 +11,8 @@ from std.python.bindings import PythonModuleBuilder
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr
 from checks.numerics import identical_log64
 from std.python import Python
-from xtrees.shap import mask_expand, block_mean, kernel_solve
-from xtrees.perm_device import perm_synthetic
+from xtrees import agnostic_device as agn_dev
+from xtrees import agnostic_host as agn_host
 from xtrees.ops_device import (
     apply_trees_device, bag_rows_device, gather_f32_device, transpose_f32_device, transpose_f64_device,
     unseen_rows_device, weighted_sample_device,
@@ -637,56 +637,102 @@ def column_f64_binding(src: PythonObject, dst: PythonObject, params: PythonObjec
     return PythonObject(n)
 
 
-def mask_expand_binding(
-    x: PythonObject, bg: PythonObject, masks: PythonObject, res: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """params = [nb, d, m]; res float32 (m * nb) * d."""
-    _need(params, 3, "x_trees_mask_expand")
-    var m = _count(_i(params, 2), "x_trees_mask_expand")
-    if m > 0:
-        mask_expand(f32_ptr(Int(py=x)), f32_ptr(Int(py=bg)), _i(params, 0), _i(params, 1), i32_ptr(Int(py=masks)), m,
-                    f32_ptr(Int(py=res)))
-    return PythonObject(m)
-
-
-def perm_synthetic_binding(
-    x: PythonObject, bg: PythonObject, inv: PythonObject, res: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """params = [nb, d, n_perm]; inv int32 n_perm x d (each permutation's
-    inverse); res float32 (n_perm (2d + 1) nb) * d, on the device
-    (`xtrees/perm_device.mojo`)."""
-    _need(params, 3, "x_trees_perm_synthetic")
-    var n_perm = _count(_i(params, 2), "x_trees_perm_synthetic")
-    if n_perm > 0:
-        perm_synthetic(f32_ptr(Int(py=x)), f32_ptr(Int(py=bg)), i32_ptr(Int(py=inv)), f32_ptr(Int(py=res)),
-                       _i(params, 0), _i(params, 1), n_perm)
-    return PythonObject(n_perm)
+def _agn_ints(params: PythonObject, n: Int, who: String) raises -> List[Int]:
+    _need(params, n, who)
+    var out = List[Int]()
+    for i in range(n):
+        out.append(_i(params, i))
+    return out^
 
 
 def block_mean_binding(y: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [m, nb, k]."""
+    """params = [m, nb, k]; res float64 m x k (on the device in a GPU build,
+    xtrees/agnostic_device.mojo; the same words)."""
     _need(params, 3, "x_trees_block_mean")
     var m = _count(_i(params, 0), "x_trees_block_mean")
     var nb = _i(params, 1)
     if nb < 1:
         raise Error("x_trees_block_mean: nb must be >= 1")
     if m > 0:
-        block_mean(f32_ptr(Int(py=y)), m, nb, _i(params, 2), f64_ptr(Int(py=res)))
+        comptime if XTREES_DEVICE_OPS:
+            agn_dev.bg_mean(Int(py=y), Int(py=res), m, nb, _count(_i(params, 2), "x_trees_block_mean"))
+        else:
+            agn_host.bg_mean(Int(py=y), Int(py=res), m, nb, _count(_i(params, 2), "x_trees_block_mean"))
     return PythonObject(m)
 
 
-def kernel_solve_binding(
-    masks: PythonObject, w: PythonObject, ey: PythonObject, fx: PythonObject, fnull: PythonObject,
-    phi: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """params = [m, d, k]; phi float64 d*k."""
-    _need(params, 3, "x_trees_kernel_solve")
-    var d = _i(params, 1)
-    if d < 1:
-        raise Error("x_trees_kernel_solve: d must be >= 1")
-    kernel_solve(i32_ptr(Int(py=masks)), f64_ptr(Int(py=w)), _count(_i(params, 0), "x_trees_kernel_solve"), d,
-                 f64_ptr(Int(py=ey)), _i(params, 2), f64_ptr(Int(py=fx)), f64_ptr(Int(py=fnull)), f64_ptr(Int(py=phi)))
-    return PythonObject(d)
+def _kshap_check(p: List[Int], who: String) raises:
+    for i in range(9):
+        if p[i] < 0:
+            raise Error(who + ": negative count")
+    if p[1] < 1 or p[2] < 1 or p[4] < p[3]:
+        raise Error(who + ": needs background rows, features and samples >= fixed samples")
+    if p[4] > p[3] and p[6] < 1:
+        raise Error(who + ": sampled coalitions need a size distribution")
+
+
+def kshap_synth_binding(x: PythonObject, bg: PythonObject, tables: PythonObject, syn: PythonObject,
+                        params: PythonObject) raises -> PythonObject:
+    """KernelExplainer's synthetic rows of a chunk (lane cgr2-metrics-shap):
+    x Float32 R x d, bg Float32 nb x d, tables = (size_off Int64 nfull+1,
+    size_w float64 nfull, cdf float64 L), syn Float32 (R m nb) x d; params =
+    [R, nb, d, nfixed, m, nfull, L, npaired, row0, seed, wrand_bits]."""
+    var p = _agn_ints(params, 11, "x_trees_kshap_synth")
+    _kshap_check(p, "x_trees_kshap_synth")
+    comptime if XTREES_DEVICE_OPS:
+        agn_dev.kshap_synth(Int(py=x), Int(py=bg), Int(py=tables[0]), Int(py=tables[1]), Int(py=tables[2]),
+                            Int(py=syn), p[0], p[1], p[2], p[4], p[3], p[5], p[7], p[6], p[9], p[8], UInt64(p[10]))
+    else:
+        agn_host.kshap_synth(Int(py=x), Int(py=bg), Int(py=tables[0]), Int(py=tables[1]), Int(py=tables[2]),
+                             Int(py=syn), p[0], p[1], p[2], p[4], p[3], p[5], p[7], p[6], p[9], p[8], UInt64(p[10]))
+    return PythonObject(p[0])
+
+
+def kshap_solve_binding(out: PythonObject, fx: PythonObject, fnull: PythonObject, tables: PythonObject,
+                        phi: PythonObject, params: PythonObject) raises -> PythonObject:
+    """KernelExplainer's values of a chunk: out Float32 (R m nb) x k (the
+    model on the synthetic rows), fx Float32 R x k (the model on the rows),
+    fnull float64 k (linked), phi float64 R x d x k; params = [R, nb, d,
+    nfixed, m, nfull, L, npaired, row0, seed, wrand_bits, k, link]."""
+    var p = _agn_ints(params, 13, "x_trees_kshap_solve")
+    _kshap_check(p, "x_trees_kshap_solve")
+    if p[11] < 1:
+        raise Error("x_trees_kshap_solve: needs outputs")
+    comptime if XTREES_DEVICE_OPS:
+        agn_dev.kshap_solve(Int(py=out), Int(py=fx), Int(py=fnull), Int(py=tables[0]), Int(py=tables[1]),
+                            Int(py=tables[2]), Int(py=phi), p[0], p[1], p[2], p[11], p[4], p[3], p[5], p[7], p[6],
+                            p[9], p[8], UInt64(p[10]), p[12] != 0)
+    else:
+        agn_host.kshap_solve(Int(py=out), Int(py=fx), Int(py=fnull), Int(py=tables[0]), Int(py=tables[1]),
+                             Int(py=tables[2]), Int(py=phi), p[0], p[1], p[2], p[11], p[4], p[3], p[5], p[7], p[6],
+                             p[9], p[8], UInt64(p[10]), p[12] != 0)
+    return PythonObject(p[0])
+
+
+def pshap_synth_binding(x: PythonObject, bg: PythonObject, syn: PythonObject, params: PythonObject) raises -> PythonObject:
+    """PermutationExplainer's synthetic rows of a chunk: syn Float32
+    (R np (2d + 1) nb) x d; params = [R, nb, d, np, row0, seed]."""
+    var p = _agn_ints(params, 6, "x_trees_pshap_synth")
+    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 0 or p[4] < 0:
+        raise Error("x_trees_pshap_synth: bad counts")
+    comptime if XTREES_DEVICE_OPS:
+        agn_dev.pshap_synth(Int(py=x), Int(py=bg), Int(py=syn), p[0], p[1], p[2], p[3], p[5], p[4])
+    else:
+        agn_host.pshap_synth(Int(py=x), Int(py=bg), Int(py=syn), p[0], p[1], p[2], p[3], p[5], p[4])
+    return PythonObject(p[0])
+
+
+def pshap_values_binding(out: PythonObject, phi: PythonObject, params: PythonObject) raises -> PythonObject:
+    """PermutationExplainer's values of a chunk: out Float32 (R np (2d + 1)
+    nb) x k, phi float64 R x d x k; params = [R, nb, d, np, row0, seed, k]."""
+    var p = _agn_ints(params, 7, "x_trees_pshap_values")
+    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 1 or p[4] < 0 or p[6] < 1:
+        raise Error("x_trees_pshap_values: bad counts")
+    comptime if XTREES_DEVICE_OPS:
+        agn_dev.pshap_values(Int(py=out), Int(py=phi), p[0], p[1], p[2], p[6], p[3], p[5], p[4])
+    else:
+        agn_host.pshap_values(Int(py=out), Int(py=phi), p[0], p[1], p[2], p[6], p[3], p[5], p[4])
+    return PythonObject(p[0])
 
 
 def register(mut m: PythonModuleBuilder) raises:
@@ -736,7 +782,8 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[complement_pairs_binding]("x_trees_complement_pairs")
     m.def_function[indicator_codes_binding]("x_trees_indicator_codes")
     m.def_function[column_f64_binding]("x_trees_column_f64")
-    m.def_function[mask_expand_binding]("x_trees_mask_expand")
     m.def_function[block_mean_binding]("x_trees_block_mean")
-    m.def_function[perm_synthetic_binding]("x_trees_perm_synthetic")
-    m.def_function[kernel_solve_binding]("x_trees_kernel_solve")
+    m.def_function[kshap_synth_binding]("x_trees_kshap_synth")
+    m.def_function[kshap_solve_binding]("x_trees_kshap_solve")
+    m.def_function[pshap_synth_binding]("x_trees_pshap_synth")
+    m.def_function[pshap_values_binding]("x_trees_pshap_values")
