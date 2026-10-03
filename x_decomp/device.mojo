@@ -1907,7 +1907,8 @@ def launch_lu(
         # steps in order through tiles. The same cells in the same
         # order as the per-step route below.
         var k0 = 0
-        # -D MOJOLEARN_LU_FAST_STEP1 (FAST + Apple, x_decomp/lu_fast.mojo):
+        # LU_FAST_STEP1 (FAST + Apple default, x_decomp/lu_fast.mojo; -D
+        # MOJOLEARN_LU_FAST_STEP1_OFF reverts):
         # each panel column one launch instead of five; the same cells.
         var step1 = False
         comptime if LU_FAST_STEP1:

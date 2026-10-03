@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""lane/apple-fast-gap-linalg2 (2026-10-03): -D MOJOLEARN_LU_FAST_STEP1, the
+"""lane/apple-fast-gap-linalg2 (2026-10-03): LU_FAST_STEP1 (default; _OFF reverts), the
 blocked LU's panel steps as ONE launch per column (FAST on Apple only).
 
 `launch_lu`'s blocked route runs five launches per column of a panel (the
@@ -40,10 +40,15 @@ from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
 from x_decomp.cells import F32Ptr, I32Ptr, div0
 
+#: The FAST + Apple default since 2026-10-03 (M3 A/B, one run per arm:
+#: lu-factor synthetic 1,369 -> 977 ms, lu-solve 1,422 -> 971 ms, relative
+#: residual the same 3.256e-06; tags gl2-lu-step1-synthetic,
+#: gl2-lusolve-step1-synthetic). -D MOJOLEARN_LU_FAST_STEP1_OFF restores the
+#: five-launch panel step (the A/B arm).
 comptime LU_FAST_STEP1 = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_LU_FAST_STEP1"]()
+    and not is_defined["MOJOLEARN_LU_FAST_STEP1_OFF"]()
 )
 comptime LFS_TPB = 256
 
