@@ -518,7 +518,7 @@ one launch) instead of zero + histogram + find_best_splits."""
 
 comptime SMALL_NODE_ROWS = 256 if is_defined[
     "MOJOLEARN_RF_SMALL_NODE_256"
-]() else (1024 if is_defined["MOJOLEARN_RF_SMALL_NODE_1024"]() else 4096)
+]() else 4096
 """The largest node `small_node_split_kernel` takes."""
 
 comptime HIST_ZERO_AFTER_READ_DEFAULT = (
