@@ -53,7 +53,7 @@ is the CPU column's; it keeps the walk).
 
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.device_scan import device_first_nonfinite
 from core.fast_radix_sort import (
@@ -177,6 +177,47 @@ def td_download_f32(
         out[i] = h.unsafe_ptr().unsafe_load(i)
     _ = h^
     _ = v^
+    return out^
+
+
+def td_stage_i32(
+    ctx: DeviceContext, buf: DeviceBuffer[DType.int32]
+) raises -> HostBuffer[DType.int32]:
+    """lane af-hdbscan2 (HDB_ONE_SYNC): the WHOLE device buffer copied into a
+    host buffer with NO wait; the caller synchronizes once for every staged
+    buffer and then takes the lists (`td_take_*`). No sub-buffer view is
+    made, so nothing is freed before the copy runs."""
+    var n = len(buf)
+    var h = ctx.enqueue_create_host_buffer[DType.int32](max(n, 1))
+    if n > 0:
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
+    return h^
+
+
+def td_stage_f32(
+    ctx: DeviceContext, buf: DeviceBuffer[DType.float32]
+) raises -> HostBuffer[DType.float32]:
+    """`td_stage_i32` for Float32."""
+    var n = len(buf)
+    var h = ctx.enqueue_create_host_buffer[DType.float32](max(n, 1))
+    if n > 0:
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
+    return h^
+
+
+def td_take_i32(h: HostBuffer[DType.int32], n: Int) -> List[Int32]:
+    """The first `n` words of a staged host buffer, after the wait."""
+    var out = List[Int32](length=max(n, 0), fill=Int32(0))
+    for i in range(n):
+        out[i] = h.unsafe_ptr().unsafe_load(i)
+    return out^
+
+
+def td_take_f32(h: HostBuffer[DType.float32], n: Int) -> List[Float32]:
+    """`td_take_i32` for Float32."""
+    var out = List[Float32](length=max(n, 0), fill=Float32(0.0))
+    for i in range(n):
+        out[i] = h.unsafe_ptr().unsafe_load(i)
     return out^
 
 

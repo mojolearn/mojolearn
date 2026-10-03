@@ -58,12 +58,17 @@ from hdbscan.impl.detail.stabilities import (
     compute_stabilities,
     get_stability_scores_device,
 )
+from hdbscan.impl.detail.fast_apple import HDB_ONE_SYNC
 from hdbscan.impl.detail.tree_device import (
     DeviceTree,
     td_download_f32,
     td_download_i32,
     td_find,
     td_read_i32,
+    td_stage_f32,
+    td_stage_i32,
+    td_take_f32,
+    td_take_i32,
 )
 from hierarchy.checks.edge_order import weight_order_key, weight_order_unkey
 from std.math import isinf, isnan
@@ -487,14 +492,52 @@ def extract_clusters(
         grid_dim=(g_edges, 1, 1), block_dim=(LABEL_TPB, 1, 1),
     )
 
-    var h_raw = td_download_i32(ctx, raw, n_leaves)
-    var h_final = td_download_i32(ctx, final, n_leaves)
-    var h_isc = td_download_i32(ctx, is_cluster, n_clusters)
-    var h_stab = td_download_f32(ctx, stabilities, n_clusters)
-    var h_map = td_download_i32(ctx, label_map, n_clusters)
-    var h_inv = td_download_i32(ctx, inverse, n_selected)
-    var h_probs = td_download_f32(ctx, probs, n_leaves)
-    var n_outliers = td_read_i32(ctx, n_out, 0)
+    var h_raw: List[Int32]
+    var h_final: List[Int32]
+    var h_isc: List[Int32]
+    var h_stab: List[Float32]
+    var h_map: List[Int32]
+    var h_inv: List[Int32]
+    var h_probs: List[Float32]
+    var n_outliers: Int
+    # lane af-hdbscan2 (FAST on Apple, -D MOJOLEARN_HDB_ONE_SYNC): the seven
+    # downloads and the scalar staged, ONE wait, then taken; main's route
+    # below waits eight times.
+    comptime if HDB_ONE_SYNC:
+        var s_raw = td_stage_i32(ctx, raw)
+        var s_final = td_stage_i32(ctx, final)
+        var s_isc = td_stage_i32(ctx, is_cluster)
+        var s_stab = td_stage_f32(ctx, stabilities)
+        var s_map = td_stage_i32(ctx, label_map)
+        var s_inv = td_stage_i32(ctx, inverse)
+        var s_probs = td_stage_f32(ctx, probs)
+        var s_out = td_stage_i32(ctx, n_out)
+        ctx.synchronize()
+        h_raw = td_take_i32(s_raw, n_leaves)
+        h_final = td_take_i32(s_final, n_leaves)
+        h_isc = td_take_i32(s_isc, n_clusters)
+        h_stab = td_take_f32(s_stab, n_clusters)
+        h_map = td_take_i32(s_map, n_clusters)
+        h_inv = td_take_i32(s_inv, n_selected)
+        h_probs = td_take_f32(s_probs, n_leaves)
+        n_outliers = Int(s_out.unsafe_ptr().unsafe_load(0))
+        _ = s_raw^
+        _ = s_final^
+        _ = s_isc^
+        _ = s_stab^
+        _ = s_map^
+        _ = s_inv^
+        _ = s_probs^
+        _ = s_out^
+    else:
+        h_raw = td_download_i32(ctx, raw, n_leaves)
+        h_final = td_download_i32(ctx, final, n_leaves)
+        h_isc = td_download_i32(ctx, is_cluster, n_clusters)
+        h_stab = td_download_f32(ctx, stabilities, n_clusters)
+        h_map = td_download_i32(ctx, label_map, n_clusters)
+        h_inv = td_download_i32(ctx, inverse, n_selected)
+        h_probs = td_download_f32(ctx, probs, n_leaves)
+        n_outliers = td_read_i32(ctx, n_out, 0)
     _ = stabilities^
     _ = is_cluster^
     _ = label_map^
