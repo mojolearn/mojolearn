@@ -1633,38 +1633,27 @@ def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds
         keep = prog.scratch(N)
         CF = prog.alloc(3 * N)
         CM = prog.want(prog.alloc(problems), problems)
-        for t in range(problems):
-            for b in range(3 if thresholds else 2):
+        for t in range(problems):  # glue: declares each problem's output ranges
+            for b in range(3 if thresholds else 2):  # glue: declares each curve output range
                 prog.want(CF + b * N + t * n, n, count=CM + t)
     else:
         if flagged:
             keep = prog.alloc(N)
-        for t in range(problems):
-            for b in (fps, tps) + ((thr,) if thresholds else ()) + ((keep,) if flagged else ()):
+        for t in range(problems):  # glue: declares each problem's output ranges
+            for b in (fps, tps) + ((thr,) if thresholds else ()) + ((keep,) if flagged else ()):  # glue: declares each curve output range
                 prog.want(b + t * n, n, count=cnt + t)
     prog.stage("bin_curve", problems, S, stride, POS, W, n, order, fps, tps, thr, cnt,
                keep, 1 if flagged else 0, CF, CM)
     _execute(prog, numeric_mode)
-    out = []
     counts = prog.ints(CM if compact else cnt, problems)
     if compact:
         return [_DevCurve(prog, CF + t * n, CF + N + t * n, CF + 2 * N + t * n if thresholds else _NONE,
-                          -2, counts[t], numeric_mode) for t in range(problems)]
-    view = _arena_view(prog.arena).cast("B") if flagged else None
-    for t in range(problems):
-        c = counts[t]
-        if lazy:
-            out.append(_DevCurve(prog, fps + t * n, tps + t * n, thr + t * n if thresholds else _NONE,
-                                 keep + t * n if flagged else _NONE, c, numeric_mode))
-            continue
-        cur = _Curve((prog.floats(fps + t * n, c), prog.floats(tps + t * n, c),
-                      prog.floats(thr + t * n, c) if thresholds else None))
-        if view is not None:
-            prog._check(keep + t * n, c)
-            lo = 4 * (keep + t * n)
-            cur.keep = bytes(view[lo + (0 if _LITTLE else 3):lo + 4 * c:4])
-        out.append(cur)
-    return out
+                          -2, counts[t], numeric_mode) for t in range(problems)]  # glue: one result handle per problem
+    # every caller is lazy (lane pyglue-sweep: the curve lists never come
+    # back to Python whole; the epilogues read the arena words)
+    return [_DevCurve(prog, fps + t * n, tps + t * n, thr + t * n if thresholds else _NONE,
+                      keep + t * n if flagged else _NONE, counts[t], numeric_mode)
+            for t in range(problems)]  # glue: one result handle per problem
 
 
 #: words per problem of the curve fold (x_metrics/par.mojo CF_OUT) and its
@@ -1720,7 +1709,7 @@ def _fold_curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, fold=
                                   keep_flags=auc, lazy=True, compact=auc)
         return holder["c"]
 
-    return [_FoldCurve(prog, out + _CF_OUT * t, max_fpr, redo, t) for t in range(problems)]
+    return [_FoldCurve(prog, out + _CF_OUT * t, max_fpr, redo, t) for t in range(problems)]  # glue: one result handle per problem
 
 
 class _FoldCurve:
@@ -2858,7 +2847,7 @@ def _fold_rows_run(prog, n, k, code, order, numeric_mode):
     _execute(prog, numeric_mode)
     sizes = prog.ints(sz, k)
     res = []
-    for f in range(k):
+    for f in range(k):  # glue: wraps each fold's result views
         c = sizes[f]
         base = out + 2 * n * f
         test = prog.words(base, 2 * c, "q")
@@ -2887,7 +2876,7 @@ def stratified_fold_rows(enc, counts, alloc, k, rng, numeric_mode=None):
     PB = _NONE
     if rng is not None:
         at = 0
-        for c in range(m):
+        for c in range(m):  # glue: one permutation stage per class
             o = rng.permute_stage(prog, counts[c])
             if c == 0:
                 PB = o
