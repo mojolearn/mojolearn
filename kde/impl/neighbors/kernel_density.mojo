@@ -3171,7 +3171,7 @@ def _kde2_enqueue(
             + String(n_train) + ", " + String(n_features)
         )
     validate_metric_arg(metric, metric_arg)
-    var logw_p = weights.unsafe_ptr()
+    var logw_p: MutPointer[Float32, MutAnyOrigin] = weights.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     if has_weights:
         var logw = ctx.enqueue_create_buffer[DType.float32](n_train)
         ctx.enqueue_function[log_weights_kernel](
@@ -3181,7 +3181,7 @@ def _kde2_enqueue(
             grid_dim=((n_train + elem_tpb - 1) // elem_tpb, 1, 1),
             block_dim=(elem_tpb, 1, 1),
         )
-        logw_p = logw.unsafe_ptr()
+        logw_p = logw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         keep.append(logw^)
     var log_sw = ftz(identical_log(sum_weights))
     var norm = log_kernel_norm(kernel, bandwidth, n_features)
@@ -3229,8 +3229,8 @@ def _kde2_enqueue(
     comptime if KDE2_NORM_FUSED:
         if metric == DIST_L2_SQRT_UNEXPANDED or metric == DIST_L2_EXPANDED:
             need_norms = True
-    var qn_p = query.unsafe_ptr()
-    var tn_p = train.unsafe_ptr()
+    var qn_p: MutPointer[Float32, MutAnyOrigin] = query.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var tn_p: MutPointer[Float32, MutAnyOrigin] = train.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     if need_norms:
         var qn = ctx.enqueue_create_buffer[DType.float32](n_query)
         var tn = ctx.enqueue_create_buffer[DType.float32](n_train)
@@ -3250,8 +3250,8 @@ def _kde2_enqueue(
             grid_dim=((n_train + elem_tpb - 1) // elem_tpb, 1, 1),
             block_dim=(elem_tpb, 1, 1),
         )
-        qn_p = qn.unsafe_ptr()
-        tn_p = tn.unsafe_ptr()
+        qn_p = qn.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        tn_p = tn.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         keep.append(qn^)
         keep.append(tn^)
     comptime if KDE2_KERNEL_VARIANTS:
