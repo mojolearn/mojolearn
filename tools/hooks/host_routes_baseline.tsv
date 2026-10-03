@@ -38,8 +38,6 @@ d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	sequence/pyapi.mojo	0	for i 
 d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	sequence/pyapi.mojo	1	for i in range(T * k):
 # why: CROSS-LANE (training/LM): ce_serial_fold over the n_rows per-row losses in one block (the LM loss value's pinned order); a multi-block fold changes the loss bits on every vendor and the host column together
 one-block-n	serial-gpu	UNOWNED	owed	training/checks/loss.mojo	0	ctx.enqueue_function[ce_serial_fold_kernel](
-# why: k-sized: a NaN check of the n_cols x n_cols R factor the caller receives on the host anyway
-d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	x_decomp/tsqr_device.mojo	0	for t in range(n * n):
 host-call	host-import	PR#86	debt	x_linear/bayes.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	debt	x_linear/bayes.mojo	0	par_rows(rows_map, n)
 host-call	host-import	PR#86	debt	x_linear/glm.mojo	0	import x_linear/ops.mojo:par_rows
