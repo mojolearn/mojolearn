@@ -192,7 +192,7 @@ comptime YETI_EST_REUSE_SEARCH = yeti_est_reuse_search_for[TARGET_COLUMN]()
 
 
 def yeti_fast_sort_for[column: Int]() -> Bool:
-    """FAST Apple (lane apple-fast-yetirank, opt-in): the block kernel's
+    """FAST Apple (lane apple-fast-yetirank, default): the block kernel's
     per-round 1024-key sort as (1) a bitonic sort of 128 keys per simdgroup
     in registers (32 lanes x 4 contiguous keys, `shuffle_xor` across lanes,
     no shared memory and no barrier), then (2) three merge-path passes
@@ -206,8 +206,11 @@ def yeti_fast_sort_for[column: Int]() -> Bool:
     no float is computed. Apple simdgroups are 32 lanes and the block is
     256 threads = 8 simdgroups x 128 keys = YETI_TASK_POSITIONS.
 
-    `-D MOJOLEARN_YETI_FAST_SORT=1` turns it on (B arm); default off."""
-    comptime if not is_defined["MOJOLEARN_YETI_FAST_SORT"]():
+    Default on FAST Apple since the M3 A/B aft-ab-ysort1 (gbdt-rank-yetirank
+    istellarank, n=2, same hash): 5,303 -> 3,350 ms (-37%).
+    `-D MOJOLEARN_YETI_FAST_SORT_OFF` is the A arm; the old
+    `-D MOJOLEARN_YETI_FAST_SORT` is harmless."""
+    comptime if is_defined["MOJOLEARN_YETI_FAST_SORT_OFF"]():
         return False
     comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
         return True
