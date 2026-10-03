@@ -442,6 +442,15 @@ def _ols_tsqr_on(rows, cols):
     return _tsqr_lstsq_on(rows, cols, 1)
 
 
+def _ols_normal_eq_default(b):
+    """Whether this binding's build routes LinearRegression.fit to the
+    equilibrated normal equations instead of the TSQR (lane
+    apple-fast-olsne: FAST on Apple, the comptime OLS_FAST_NORMAL_EQ read
+    back through `ols_normal_eq_default`; False on a binding without it)."""
+    q = getattr(b, "ols_normal_eq_default", None)
+    return bool(q()) if q is not None else False
+
+
 def _ols_tsqr(x, y, rows, cols, mode):
     """coef_ (float32, cols) of min ||x w - y|| (x and y already centered and
     weighted as `fit` prepares them) through the blocked TSQR of [x | y]
@@ -583,6 +592,27 @@ class LinearRegression(NumericModeMixin):
             "mojolearn LinearRegression X and y lengths differ",
         )
         weights = _check_sample_weight(sample_weight, rows, "LinearRegression")
+        b = self._bind("_mojolearn_estimators")
+        normal_eq = not _ols_tsqr_on(rows, cols) or _ols_normal_eq_default(b)
+        resident = getattr(b, "ols_fit_resident", None)
+        if normal_eq and weights is None and resident is not None:
+            # lane apple-fast-olsne: the normal equations with X and y
+            # uploaded once; the same kernels and words as the route below.
+            self.coef_ = empty((cols,), "<f4")
+            mu = empty((cols,), "<f4")
+            ymean = empty((1,), "<f8")
+            resident(addr_ro(x, name="X"), addr_ro(target, name="y"),
+                     addr(self.coef_, name="coef_"), addr(mu, name="column means"),
+                     addr(ymean, name="y mean"),
+                     [rows, cols, 1 if self.fit_intercept else 0])
+            if self.fit_intercept:
+                self._x_mean = mu
+                self._y_mean = float(ymean.tolist()[0])
+            else:
+                self._x_mean = zeros((cols,), "<f4")
+                self._y_mean = 0.0
+            self._set_intercept(cols)
+            return self
         if self.fit_intercept:
             # float64 column means -> float32, then a float32 subtraction.
             # The means come from exact column sums rounded once to float64
@@ -618,10 +648,10 @@ class LinearRegression(NumericModeMixin):
             b = self._bind("_mojolearn_estimators")
             work_x = _scale_rows(b, work_x, root)
             work_y = _scale_rows(b, work_y, root)
-        if _ols_tsqr_on(rows, cols):
+        if not normal_eq:
             # lane neural-pass140: the blocked TSQR of [X | y] and the SVD of
-            # its small R (_ols_tsqr); MOJOLEARN_LINALG_TSQR=0 keeps the
-            # normal equations below
+            # its small R (_ols_tsqr); MOJOLEARN_LINALG_TSQR=0 (and FAST on
+            # Apple, `_ols_normal_eq_default`) keeps the normal equations below
             self.coef_ = _ols_tsqr(work_x, work_y, rows, cols, getattr(self, "numeric_mode", None))
         else:
             self.coef_ = empty((cols,), "<f4")
@@ -630,6 +660,10 @@ class LinearRegression(NumericModeMixin):
                 addr(self.coef_, name="coef_"),
                 [rows, cols],
             )
+        self._set_intercept(cols)
+        return self
+
+    def _set_intercept(self, cols):
         if self.fit_intercept:
             dot = math.fsum(
                 float(a) * float(b)
@@ -639,7 +673,6 @@ class LinearRegression(NumericModeMixin):
         else:
             self.intercept_ = 0.0
         self.n_features_in_ = cols
-        return self
 
     def predict(self, X):
         if not hasattr(self, "coef_"):
