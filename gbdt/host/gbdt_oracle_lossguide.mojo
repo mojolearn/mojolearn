@@ -90,14 +90,18 @@ def logloss_search_pass_newton(
     mut stats: List[Float32],
     mut fv_partials: List[Float32],
     mut mag_partials: List[Float32],
+    weights: List[Float32] = List[Float32](),
 ):
     """`launch_approximate[False, True]` on Logloss with `compute_fv` and
     `compute_magnitudes` set (`doc_parallel_boosting.mojo:1531-1543`,
     `pointwise_targets.mojo:1003-1054`): plane 0 `ftz(weight * scale)`,
     plane 1 `ftz(weight * direction)`, one score partial and two magnitude
     partials (|plane 0| and |weight * direction| unflushed) per 256-thread
-    block through the halving tree. Out-of-range threads add 0.0."""
+    block through the halving tree. Out-of-range threads add 0.0. `weights`
+    empty is the unit weight, else one weight per row (binary class
+    weights)."""
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
+    var has_weights = len(weights) > 0
     var weight = Float32(1.0)
     for b in range(blocks):
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
@@ -106,6 +110,8 @@ def logloss_search_pass_newton(
         for t in range(GBDT_MSE_BLOCK):
             var i = b * GBDT_MSE_BLOCK + t
             if i < n_rows:
+                if has_weights:
+                    weight = weights[i]
                 var r = _cross_entropy_row(targets[i], cursor[i], border, weight)
                 var plane0 = r.weighted_scale
                 stats[i] = plane0

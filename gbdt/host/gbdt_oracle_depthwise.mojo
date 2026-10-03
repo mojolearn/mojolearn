@@ -991,6 +991,7 @@ def gbdt_host_fit_non_symmetric(
     n_features: Int,
     params: GbdtHostTreeParams,
     start: Float64 = 0.0,
+    weights: List[Float32] = List[Float32](),
 ) raises -> GbdtHostNsModel:
     """`train` then `fit_with_test`'s non-symmetric arm on the covered
     configuration (see the module docstring).
@@ -1064,6 +1065,14 @@ def gbdt_host_fit_non_symmetric(
         is_logloss and params.loss.method == GBDT_LEAF_NEWTON
         and not bootstrap_on
     )
+    if len(weights) > 0 and not plain_newton:
+        raise Error(
+            "no CPU implementation of _mojolearn_gbdt.gbdt_fit for class_weights"
+            " outside Logloss with Newton leaves and no bootstrap on a"
+            " Depthwise or Lossguide tree"
+        )
+    if len(weights) > 0 and len(weights) != n_rows:
+        raise Error("weights size mismatch")
 
     var losses = List[Float64]()
     var tree_node_offsets = List[Int]()
@@ -1115,9 +1124,9 @@ def gbdt_host_fit_non_symmetric(
         if not is_logloss:
             _loss_search_pass(params.loss, y, cursor, n_rows, stats, fv_part, mag_part)
         elif newton:
-            logloss_search_pass_newton(y, cursor, n_rows, border, stats, fv_part, mag_part)
+            logloss_search_pass_newton(y, cursor, n_rows, border, stats, fv_part, mag_part, weights)
         else:
-            _logloss_search_pass(y, cursor, n_rows, border, stats, fv_part, mag_part)
+            _logloss_search_pass(y, cursor, n_rows, border, stats, fv_part, mag_part, weights)
         var fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
         var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
         # `calc_score_model_length_mult` (`random_score_helper.mojo:
@@ -1186,7 +1195,7 @@ def gbdt_host_fit_non_symmetric(
         if plain_newton:
             estimated = _estimate_leaves(
                 y, cursor, row_index, offsets, sizes, n_rows, border,
-                base.l2_leaf_reg, base.leaf_estimation_iterations,
+                base.l2_leaf_reg, base.leaf_estimation_iterations, weights,
             )
         else:
             estimated = _estimate_leaves_for_loss(
@@ -1219,7 +1228,7 @@ def gbdt_host_fit_non_symmetric(
                 losses.append(-Float64(fv) / Float64(n_rows))
 
     if is_logloss:
-        losses.append(-Float64(_logloss_value(y, cursor, n_rows, border)) / Float64(n_rows))
+        losses.append(-Float64(_logloss_value(y, cursor, n_rows, border, weights)) / Float64(n_rows))
     else:
         losses.append(-Float64(_loss_value(params.loss, y, cursor, n_rows)) / Float64(n_rows))
     return GbdtHostNsModel(

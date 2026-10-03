@@ -1265,8 +1265,24 @@ def gbdt_fit_binding(
             _refuse("bootstrap_type='" + bootstrap_type + "' under loss='" + loss + "'")
     if n_weights != 0:
         _refuse("sample_weight")
-    if n_class_weights != 0 and (not is_multi or is_multi_rmse):
-        _refuse("class_weights outside MultiClass and MultiClassOneVsAll")
+    # binary class weights (lane/fix-cpu-column2): Logloss on a plain
+    # SymmetricTree, Depthwise or Lossguide fit, `train`'s weight column
+    # `class_weights[y > 0.5]` threaded through the search planes, the leaf
+    # estimation and the learn loss (gbdt/host/gbdt_oracle.mojo)
+    var binary_class_weights = (
+        n_class_weights != 0 and loss == String("Logloss") and n_flags == 0
+    )
+    if n_class_weights != 0 and (not is_multi or is_multi_rmse) and not binary_class_weights:
+        _refuse(
+            "class_weights outside MultiClass, MultiClassOneVsAll and Logloss"
+            " without categorical columns"
+        )
+    if binary_class_weights and n_class_weights != 2:
+        # `train`'s words (gbdt/train.mojo)
+        raise Error(
+            "class_weights takes 2 entries for loss 'Logloss', got "
+            + String(n_class_weights)
+        )
     if n_flags != 0 and (is_rmse or grow_code != 0 or is_pointwise or is_multi):
         _refuse("cat_features or one_hot_features outside SymmetricTree with Logloss")
     # the HELD-OUT arm (lane/close-no-cpu-path-gbdt, 2026-09-20): their
@@ -1535,6 +1551,14 @@ def gbdt_fit_binding(
         var x = read_f32(x_address, n_rows * n_features)
         # MultiRMSE's `target_dim` dim-major planes; one per row otherwise
         var y = read_f32(y_address, n_rows * target_dim)
+        # `train`'s weight column for binary class weights: `1.0 *
+        # class_weights[cls]`, cls the binarized target (y > 0.5)
+        var row_weights = List[Float32]()
+        if binary_class_weights:
+            row_weights = List[Float32](length=n_rows, fill=Float32(0.0))
+            for r in range(n_rows):
+                var cls = 1 if y[r] > Float32(0.5) else 0
+                row_weights[r] = Float32(1.0) * class_weights[cls]
         if is_multi:
             # gbdt/host/gbdt_oracle_multiclass.mojo
             var multi_objective = GBDT_OBJ_MULTICLASS_OVA
@@ -1647,6 +1671,7 @@ def gbdt_fit_binding(
             var r = gbdt_host_fit_eval(
                 x, y, n_rows, n_features, p, List[Bool](),
                 sym_boot_kind, sym_boot_param, random_strength, ev^,
+                row_weights,
             )
             text = gbdt_host_model_text(r.model)
             losses = r.model.losses.copy()
@@ -1666,7 +1691,7 @@ def gbdt_fit_binding(
             if is_rmse and boost_from_average != 0:
                 ns_start = _rmse_starting_approx(y, n_rows)
             var ns_model = gbdt_host_fit_non_symmetric(
-                x, y, n_rows, n_features, tp, ns_start
+                x, y, n_rows, n_features, tp, ns_start, row_weights
             )
             text = gbdt_text_with_bias(
                 gbdt_host_ns_model_text(ns_model), len(ns_model.losses), ns_start
