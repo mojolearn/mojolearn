@@ -202,10 +202,16 @@ comptime KALMAN_TIME_SCAN_MIN_OBS = 4096
 #: log-likelihood bits, three stores per step gone. FAST on Apple only;
 #: IDENTICAL compiles the storing kernel, as does every launch that
 #: reads the rows (predict, forecast, the card).
+#: DEFAULT ON since the M3 A/B (lane/apple-fast-tsa 9ee4a2ed2, autoarima
+#: taxi-hourly n=1, forecast_rmse 74.66 identical in every arm): LLONLY
+#: 50,459 -> 47,023 ms, EVAL_WS 50,299 -> 42,921 ms, both 50,500 -> 39,504 ms
+#: (-21.8%). The old `-D MOJOLEARN_ARIMA_FAST_LLONLY=1` /
+#: `-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1` stay harmless; `-D <NAME>_OFF=1` turns
+#: each off.
 comptime KALMAN_LL_ONLY = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_ARIMA_FAST_LLONLY"]()
+    and not is_defined["MOJOLEARN_ARIMA_FAST_LLONLY_OFF"]()
 )
 
 #: lane/apple-fast-tsa (2026-10-02). `-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1`:
@@ -213,10 +219,16 @@ comptime KALMAN_LL_ONLY = (
 #: (`arima/impl/fast_eval_ws.mojo`, `fast_kalman_into` below) instead of
 #: allocating about 45 device buffers and copying the series N + 1 times
 #: at every candidate point. FAST on Apple only.
+#: DEFAULT ON since the M3 A/B (lane/apple-fast-tsa 9ee4a2ed2, autoarima
+#: taxi-hourly n=1, forecast_rmse 74.66 identical in every arm): LLONLY
+#: 50,459 -> 47,023 ms, EVAL_WS 50,299 -> 42,921 ms, both 50,500 -> 39,504 ms
+#: (-21.8%). The old `-D MOJOLEARN_ARIMA_FAST_LLONLY=1` /
+#: `-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1` stay harmless; `-D <NAME>_OFF=1` turns
+#: each off.
 comptime KALMAN_FAST_EVAL_WS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_ARIMA_FAST_EVAL_WS"]()
+    and not is_defined["MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF"]()
 )
 
 
