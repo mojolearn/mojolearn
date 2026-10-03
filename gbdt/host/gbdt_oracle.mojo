@@ -29,7 +29,8 @@ outside it (bindings/_mojolearn_gbdt_host.mojo, `_refuse`):
 
   grow_policy SymmetricTree, loss Logloss (any loss_border),
   score_function Cosine, leaf_estimation_method Newton (any iteration count),
-  no bootstrap, no sample_weight, no class_weights, no CTR categorical
+  no bootstrap, no sample_weight, binary class_weights on Logloss (the
+  weight column `class_weights[y > 0.5]`, since 2026-10-03), no CTR categorical
   column (one-hot columns are carried, `one_hot_in` below and
   gbdt/host/gbdt_oracle_onehot.mojo), no eval_set and no overfitting detector,
   random_strength 0, the greedy searcher (use_pointwise_searcher False),
@@ -439,13 +440,18 @@ def _logloss_search_pass(
     mut stats: List[Float32],
     mut fv_partials: List[Float32],
     mut mag_partials: List[Float32],
+    weights: List[Float32] = List[Float32](),
 ):
     """`launch_approximate[False]` on Logloss with `compute_fv` and
     `compute_magnitudes` set (`doc_parallel_boosting.mojo:1544-1552`): the
     SEARCH planes (plane 0 the unit weight, plane 1 `ftz(weight * (c - p))`),
     one score partial and two magnitude partials per 256-thread block
-    through the halving tree. Out-of-range threads add 0.0."""
+    through the halving tree. Out-of-range threads add 0.0. `weights`
+    empty is the unit weight; otherwise one weight per row, the kernel's
+    `has_weights` arm (plane 0 the row's weight, the direction and score
+    scaled by it): binary class weights, `train`'s weight column."""
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
+    var has_weights = len(weights) > 0
     var weight = Float32(1.0)
     for b in range(blocks):
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
@@ -454,6 +460,8 @@ def _logloss_search_pass(
         for t in range(GBDT_MSE_BLOCK):
             var i = b * GBDT_MSE_BLOCK + t
             if i < n_rows:
+                if has_weights:
+                    weight = weights[i]
                 var r = _cross_entropy_row(targets[i], cursor[i], border, weight)
                 var plane0 = weight
                 stats[i] = plane0
@@ -467,19 +475,23 @@ def _logloss_search_pass(
 
 
 def _logloss_value(
-    targets: List[Float32], cursor: List[Float32], n_rows: Int, border: Float32
+    targets: List[Float32], cursor: List[Float32], n_rows: Int, border: Float32,
+    weights: List[Float32] = List[Float32](),
 ) -> Float32:
     """The final learn loss pass (`doc_parallel_boosting.mojo:2199-2211`):
     the same kernel's score partials, folded by
     `deterministic_sum_lanes_kernel[1]`."""
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var fv_partials = List[Float32](length=blocks, fill=Float32(0.0))
+    var has_weights = len(weights) > 0
     var weight = Float32(1.0)
     for b in range(blocks):
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         for t in range(GBDT_MSE_BLOCK):
             var i = b * GBDT_MSE_BLOCK + t
             if i < n_rows:
+                if has_weights:
+                    weight = weights[i]
                 s_score[t] = _cross_entropy_row(
                     targets[i], cursor[i], border, weight
                 ).score
@@ -1434,10 +1446,11 @@ def _binary_one_block(
     return stage2^
 
 
-def _binary_block(
+def _binary_block_n(
     blk: PolicyBlock,
     block_first_bin: Int,
     hist_cells: Int,
+    stat_count: Int,
     compute_ids: List[Int],
     depth: Int,
     p_off: List[Int],
@@ -1467,6 +1480,10 @@ def _binary_block(
                           ftz(Float32(Int(q)) / scale) when q != 0, else 0.0
       one active block    val when |val| > 1e-20, else 0.0
       none (empty leaf)   0.0
+
+    At `stat_count` planes (the multi-output and pointwise oracles) the
+    replication base is `groups * n_compute * stat_count` (`replication_for`)
+    and every plane is its own grid z, as `_half_byte_block_n`.
     """
     var n_f = blk.count()
     var n_compute = len(compute_ids)
@@ -1474,7 +1491,7 @@ def _binary_block(
     var max_active_blocks = 2 * GBDT_PINNED_SM
     if depth > 0:
         max_active_blocks = 2 * max_active_blocks
-    var base_count = groups * n_compute * 2
+    var base_count = groups * n_compute * stat_count
     if base_count < 1:
         base_count = 1
     var replicas = (max_active_blocks + base_count - 1) // base_count
@@ -1490,7 +1507,7 @@ def _binary_block(
         var active_block_count = (p_size + min_docs_per_block - 1) // min_docs_per_block
         if active_block_count > replicas:
             active_block_count = replicas
-        for z in range(2):
+        for z in range(stat_count):
             for g in range(groups):
                 var feature_offset = g * 32
                 var f_count = n_f - feature_offset
@@ -1529,9 +1546,31 @@ def _binary_block(
                         if active_block_count > 1 and q != Int32(0):
                             cell = ftz(Float32(Int(q)) / fixed_scale)
                     hist[
-                        slot * 2 * hist_cells + z * hist_cells
+                        slot * stat_count * hist_cells + z * hist_cells
                         + block_first_bin + fold_off
                     ] = cell
+
+
+def _binary_block(
+    blk: PolicyBlock,
+    block_first_bin: Int,
+    hist_cells: Int,
+    compute_ids: List[Int],
+    depth: Int,
+    p_off: List[Int],
+    p_sz: List[Int],
+    row_index: List[Int],
+    stats: List[Float32],
+    cindex: List[UInt32],
+    n_rows: Int,
+    fixed_scale: Float32,
+    mut hist: List[Float32],
+):
+    """`_binary_block_n` at the two search planes."""
+    _binary_block_n(
+        blk, block_first_bin, hist_cells, 2, compute_ids, depth, p_off, p_sz,
+        row_index, stats, cindex, n_rows, fixed_scale, hist,
+    )
 
 
 def _partition_stat(
@@ -1940,6 +1979,7 @@ def _oracle_eval(
     mut value: Float64,
     mut gradient: List[Float64],
     mut cached_der2: List[Float64],
+    g_weights: List[Float32] = List[Float32](),
 ):
     """`write_value_and_first_derivatives`' single-dimensional arm
     (`pointwise_oracle.mojo:458-573`): `cross_entropy_kernel[True, True]`
@@ -1950,12 +1990,15 @@ def _oracle_eval(
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var stats = List[Float32](length=2 * n_rows, fill=Float32(0.0))
     var fv = List[Float32](length=blocks, fill=Float32(0.0))
+    var has_weights = len(g_weights) > 0
     var weight = Float32(1.0)
     for b in range(blocks):
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         for t in range(GBDT_MSE_BLOCK):
             var i = b * GBDT_MSE_BLOCK + t
             if i < n_rows:
+                if has_weights:
+                    weight = g_weights[i]
                 var r = _cross_entropy_row(g_target[i], g_cursor[i], border, weight)
                 stats[i] = r.weighted_direction
                 stats[n_rows + i] = r.weighted_scale
@@ -2019,6 +2062,7 @@ def _estimate_leaves(
     border: Float32,
     l2_leaf_reg: Float32,
     iterations: Int,
+    weights: List[Float32] = List[Float32](),
 ) raises -> List[Float32]:
     """`_estimate_and_apply`'s estimate (`doc_parallel_boosting.mojo:
     698-797`): the gathers by the row index, the oracle, and
@@ -2030,14 +2074,29 @@ def _estimate_leaves(
     for pos in range(n_rows):
         g_target[pos] = targets[row_index[pos]]
         g_cursor[pos] = cursor[row_index[pos]]
+    # the weighted arm gathers the weights in the same bin order
+    var has_weights = len(weights) > 0
+    var g_weights = List[Float32]()
+    if has_weights:
+        g_weights = List[Float32](length=n_rows, fill=Float32(0.0))
+        for pos in range(n_rows):
+            g_weights[pos] = weights[row_index[pos]]
     # `fill_bins_from_partition_kernel` (`kernel_add_model_value.mojo:186-204`)
     var bins = List[Int](length=n_rows, fill=0)
     for leaf in range(n_leaves):
         for k in range(sizes[leaf]):
             bins[offsets[leaf] + k] = leaf
+    # WeightsCpu (`pointwise_oracle.mojo`, `make_bin_optimized_oracle`): the
+    # exact leaf sizes unweighted; weighted, `compute_partition_stats` of the
+    # gathered weights at ONE stat, (2 * 32 + 1 - 1) // 1 = 64 chunks
     var weights_cpu = List[Float64]()
     for leaf in range(n_leaves):
-        weights_cpu.append(Float64(sizes[leaf]))
+        if has_weights:
+            weights_cpu.append(Float64(_pinned_partition_stat(
+                g_weights, offsets[leaf], sizes[leaf], 2 * GBDT_PINNED_SM
+            )))
+        else:
+            weights_cpu.append(Float64(sizes[leaf]))
     var lambda_reg = Float64(l2_leaf_reg)
     comptime if GBDT_ORACLE_HOST_SABOTAGE:
         lambda_reg = lambda_reg + 1.0
@@ -2050,7 +2109,7 @@ def _estimate_leaves(
     _oracle_move_to(cur_point, current_point, bins, g_cursor, n_rows)
     _oracle_eval(
         g_target, g_cursor, offsets, sizes, n_rows, border, lambda_reg,
-        cur_value, cur_grad, cached_der2,
+        cur_value, cur_grad, cached_der2, g_weights,
     )
     var cur_hess = cached_der2.copy()
     var direction = _diagonal_direction(cur_grad, cur_hess)
@@ -2074,7 +2133,7 @@ def _estimate_leaves(
             _oracle_move_to(next_point, current_point, bins, g_cursor, n_rows)
             _oracle_eval(
                 g_target, g_cursor, offsets, sizes, n_rows, border, lambda_reg,
-                next_value, next_grad, cached_der2,
+                next_value, next_grad, cached_der2, g_weights,
             )
             if function_value <= next_value:
                 cur_hess = cached_der2.copy()
@@ -2189,6 +2248,7 @@ def gbdt_host_fit_eval(
     bootstrap_param: Float32,
     random_strength: Float32,
     eval: GbdtHostEval,
+    weights: List[Float32] = List[Float32](),
 ) raises -> GbdtHostFitWithEval:
     """`train` then `fit_with_test` on the covered configuration (see the
     module docstring for what that is and what mirrors what).
@@ -2276,6 +2336,7 @@ def gbdt_host_fit_eval(
     return gbdt_host_boost(
         cindexes, 0, y, n_rows, n_features, grid^, layout, params,
         bootstrap_kind, bootstrap_param, random_strength, eval, test_cindex,
+        weights,
     )
 
 
@@ -2293,6 +2354,7 @@ def gbdt_host_boost(
     random_strength: Float32,
     eval: GbdtHostEval,
     test_cindex: List[UInt32],
+    weights: List[Float32] = List[Float32](),
 ) raises -> GbdtHostFitWithEval:
     """`fit_with_test`'s Plain SymmetricTree Logloss loop over ONE compressed
     index PER PERMUTATION (`gbdt/methods/doc_parallel_boosting.mojo:1821-1860`,
@@ -2397,7 +2459,8 @@ def gbdt_host_boost(
         ref cindex = cindexes[learn_p]
         # ---- the gradients, the learn loss and the magnitudes ----
         _logloss_search_pass(
-            y, cursors[learn_p], n_rows, border, stats, fv_part, mag_part
+            y, cursors[learn_p], n_rows, border, stats, fv_part, mag_part,
+            weights,
         )
         var fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
         var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
@@ -2667,6 +2730,7 @@ def gbdt_host_boost(
                 est_p_leaves = _estimate_leaves(
                     y, cursors[p], row_index, offsets, sizes, n_rows, border,
                     params.l2_leaf_reg, params.leaf_estimation_iterations,
+                    weights,
                 )
                 for leaf in range(n_live):
                     for k in range(sizes[leaf]):
@@ -2682,7 +2746,7 @@ def gbdt_host_boost(
                 est_p_leaves = _estimate_leaves(
                     y, cursors[p], part.row_index, part.offsets, part.sizes,
                     n_rows, border, params.l2_leaf_reg,
-                    params.leaf_estimation_iterations,
+                    params.leaf_estimation_iterations, weights,
                 )
                 for leaf in range(len(part.sizes)):
                     for k in range(part.sizes[leaf]):
@@ -2740,7 +2804,7 @@ def gbdt_host_boost(
     # (the ESTIMATION permutation's cursor, `doc_parallel_boosting.mojo:
     # 3001-3052`, which is the only cursor when there is one permutation)
     losses.append(
-        -Float64(_logloss_value(y, cursors[est_p], n_rows, border))
+        -Float64(_logloss_value(y, cursors[est_p], n_rows, border, weights))
         / Float64(n_rows)
     )
 

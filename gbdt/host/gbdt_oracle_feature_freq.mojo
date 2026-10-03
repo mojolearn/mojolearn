@@ -18,9 +18,10 @@ device staging entry.
 THE CONFIGURATION THIS COVERS, by name (tools/identity_break.py
 `gbdt-feature-freq`: `sources=[0, 1]`, `random_state=7`, the defaults
 `learning_rate=0.03`, `l2_leaf_reg=3.0`, on `_coded(X)`). The binding refuses
-by name: `sample_weight` (the weighted arm is not measured), a feature whose
+by name `sample_weight` (the weighted arm is not measured). A feature whose
 histogram policy is BinaryFeatures (a numeric column whose Uniform-3 grid
-collapses to one border; the symmetric oracle does not restate that policy).
+collapses to one border) is carried since 2026-10-03 through the symmetric
+oracle's `_binary_block`.
 A level whose winner is the FeatureFreq tensor column itself (the
 gbdt-tensor-ctr-tables lane) is covered: its table is registered at a stable
 model column with its canonical tensor hash (restated below, because
@@ -117,6 +118,7 @@ from gbdt.host.gbdt_oracle import (
     GBDT_ORACLE_HOST_SABOTAGE,
     GBDT_SENTINEL,
     _cosine_gain,
+    _binary_block,
     _half_byte_block,
     _one_byte_block,
     _partition_stat,
@@ -515,13 +517,6 @@ def _ff_level(
     var n_features = len(layout.features)
     var hist_cells = layout.hist_cells
     var blocks = blocks_for(layout, n_rows)
-    for b in range(len(blocks)):
-        if blocks[b].policy == POLICY_BINARY:
-            _refuse_ff(
-                "a feature with exactly one border (the BinaryFeatures"
-                " histogram policy, feature "
-                + String(blocks[b].feature_ids[0]) + ")"
-            )
     var compute = List[Int]()
     for j in range(n_live):
         compute.append(j)
@@ -532,7 +527,13 @@ def _ff_level(
         var total = 0
         for k in range(blk.count()):
             total += Int(blk.folds[k])
-        if blk.policy == POLICY_HALF_BYTE:
+        if blk.policy == POLICY_BINARY:
+            _binary_block(
+                blk, block_first_bin, hist_cells, compute, level,
+                p_off, p_sz, row_index, stats, words, n_rows, fixed_scale,
+                hist,
+            )
+        elif blk.policy == POLICY_HALF_BYTE:
             _half_byte_block(
                 blk, block_first_bin, hist_cells, compute, level,
                 p_off, p_sz, row_index, stats, words, n_rows, fixed_scale,
