@@ -1,0 +1,3 @@
+CMD lane/apple-fast-pairlogit pl-groupfused AFT_OUT=$HOME/aft-ab/pl-groupfused bash tools/aft_ab.sh gbdt gbdt-rank-pairlogit istellarank 2 "" "-D MOJOLEARN_PAIRLOGIT_GROUP_FUSED=1"
+CMD lane/apple-fast-pairlogit pl-estreuse AFT_OUT=$HOME/aft-ab/pl-estreuse bash tools/aft_ab.sh gbdt gbdt-rank-pairlogit istellarank 2 "-D MOJOLEARN_PAIRLOGIT_GROUP_FUSED=1" "-D MOJOLEARN_PAIRLOGIT_GROUP_FUSED=1 -D MOJOLEARN_PAIRLOGIT_EST_REUSE=1"
+CMD lane/apple-fast-pairlogit mc-hessbatch-taxi AFT_OUT=$HOME/aft-ab/mc-hessbatch-taxi bash tools/aft_ab.sh gbdt gbdt-multiclass taximc 2 "" "-D MOJOLEARN_MULTICLASS_HESSIAN_BATCH=1"

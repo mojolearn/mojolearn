@@ -44,7 +44,7 @@ from core.neural_context import neural_ctx
 comptime _NEURAL_CTX = "MojoNeuralByteLMContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralByteLMContextFast"
 from checks.vendor import COMPILED_VENDOR
 from gemm.checks.gemm_identical import TUNED_STAGE_FTZ, GEMM_REUSE_GROUP_WS
-from training.checks.optimizer_oracle import OptimizerConfig
+from training.checks.optimizer_contract import OptimizerConfig
 from training.checks.train_loop import download_f32, download_f32_into
 from training.byte_lm_config import ByteConfig
 from training.byte_lm import (

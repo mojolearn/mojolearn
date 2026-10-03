@@ -11,9 +11,7 @@ from std.math import isfinite
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from gbdt.methods.kernel_add_model_value import add_model_value_kernel
-from gbdt.metrics.optimal_const_for_loss import (
-    calc_one_dimensional_optimum_const_approx,
-)
+from gbdt.metrics.optimal_const_device import optimum_const_approx_device
 
 from gbdt.gpu_lib.gpu_manager import TCudaManager
 from gbdt.gpu_util.kernel.transform import (
@@ -202,9 +200,11 @@ from gbdt.targets.kernel.pointwise_targets import (
 from gbdt.targets.kernel.pair_logit import (
     PairwiseTargetBuffers,
     launch_pair_logit_with,
+    make_pairwise_group_buffers,
     make_pairwise_target_buffers,
     pair_blocks,
 )
+from gbdt.targets.kernel.pair_logit_group import PAIRLOGIT_GROUP_FUSED
 from gbdt.targets.kernel.yeti_rank import (
     YetiRankTargetBuffers,
     launch_yeti_rank_with,
@@ -219,15 +219,6 @@ from gbdt.targets.kernel.query_rmse import (
 from gbdt.gpu_data.kernel.query_helper import launch_inverse_permutation
 
 
-comptime FAST_DEPTHWISE_DEVICE_PARTITION = not is_defined[
-    "MOJOLEARN_GBDT_FAST_DEPTHWISE_HOST_PARTITION"
-]()
-"""Use the existing stable device leaf partition for FAST Depthwise and
-Lossguide fits.
-
-The define restores the former host materialization for performance A/Bs;
-it is not a second production policy.
-"""
 
 
 @fieldwise_init
@@ -1817,28 +1808,17 @@ def fit_with_test(
                 "boost_from_average is one-dimensional here; their ENSURE"
                 " list has no MultiClass either"
             )
-        var h_t = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-        ctx.enqueue_copy(dst_ptr=h_t.unsafe_ptr(), src_buf=targets)
-        var h_w = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-        if has_weights:
-            ctx.enqueue_copy(dst_ptr=h_w.unsafe_ptr(), src_buf=weights)
-        ctx.synchronize()
-        var t_host = List[Float32](capacity=n_rows)
-        var w_host = List[Float32](capacity=n_rows)
-        for i in range(n_rows):
-            t_host.append(h_t.unsafe_ptr().unsafe_load(i))
-        if has_weights:
-            for i in range(n_rows):
-                w_host.append(h_w.unsafe_ptr().unsafe_load(i))
-        starting_approx = calc_one_dimensional_optimum_const_approx(
-            objective, t_host, w_host, has_weights, Float64(estimator_alpha)
+        # on the device: the targets and weights stay put, every row sum
+        # is a fixed-order grid fold (gbdt/metrics/optimal_const_device.mojo,
+        # cpu-gpu-cleanup t-gbdt; was a download and a host loop)
+        starting_approx = optimum_const_approx_device(
+            ctx, objective, targets, weights, has_weights, n_rows,
+            Float64(estimator_alpha),
         )
         # their `modelToExport.SetBias` (`:434`), set here so an early
         # stop or a raise mid-fit cannot produce a seeded-cursor model
         # that forgot to say so.
         model.bias = starting_approx
-        _ = h_t^
-        _ = h_w^
     var start_value = Float32(starting_approx)
     var cursor = ctx.enqueue_create_buffer[DType.float32](
         approx_dim * n_rows
@@ -1913,6 +1893,11 @@ def fit_with_test(
     # PairLogit's value partials are per 256 PAIRS (`pair_logit.mojo`)
     if objective == OBJECTIVE_PAIR_LOGIT and pair_blocks(len(pair_winners)) > part_blocks:
         part_blocks = pair_blocks(len(pair_winners))
+    comptime if PAIRLOGIT_GROUP_FUSED:
+        # the group layout (`pair_logit_group.mojo`): one value partial and
+        # two magnitudes per GROUP
+        if objective == OBJECTIVE_PAIR_LOGIT and len(group_sizes) > part_blocks:
+            part_blocks = len(group_sizes)
     var fv_part = ctx.enqueue_create_buffer[DType.float32](part_blocks)
     var mag_part = ctx.enqueue_create_buffer[DType.float32](
         2 * part_blocks
@@ -1953,11 +1938,28 @@ def fit_with_test(
                 " searcher at one permutation with no eval set; this fit asked"
                 " for another arm"
             )
-        pair_buffers = Optional(
-            make_pairwise_target_buffers(
-                ctx, pair_winners, pair_losers, pair_weights, n_rows
+        comptime if PAIRLOGIT_GROUP_FUSED:
+            if len(pair_winners) == 0:
+                # generated pairs: the group layout, enumerated on the device
+                # from the grades, no pair list (`pair_logit_group.mojo`);
+                # `train` left the sample weights in `weights` for it
+                pair_buffers = Optional(
+                    make_pairwise_group_buffers(
+                        ctx, group_sizes, n_rows, targets, weights
+                    )
+                )
+            else:
+                pair_buffers = Optional(
+                    make_pairwise_target_buffers(
+                        ctx, pair_winners, pair_losers, pair_weights, n_rows
+                    )
+                )
+        else:
+            pair_buffers = Optional(
+                make_pairwise_target_buffers(
+                    ctx, pair_winners, pair_losers, pair_weights, n_rows
+                )
             )
-        )
         # `ComputeStats`' PairLogit weight (`querywise_targets_impl.h:98-101`)
         loss_norm = pair_buffers.value().pairs_total_weight
     # ---- the SAMPLED-PERMUTATION querywise target (YetiRank) ----
@@ -2173,10 +2175,12 @@ def fit_with_test(
     # integer partitions and is already the IDENTICAL default. Symmetric
     # routing is unchanged (its learn permutation keeps the searcher's own
     # partition).
+    # (cpu-gpu-cleanup t-gbdt: the host-partition A/B define is gone;
+    # `partition_from_bins` itself now partitions on the device, so the
+    # flag only picks the fit's pooled partitioner over a per-call one.)
     var device_leaf_partition = DEVICE_LEAF_PARTITION or (
         HIST_BUILD_MODE == NUMERIC_FAST
         and (grow_policy == GROW_DEPTHWISE or grow_policy == GROW_LOSSGUIDE)
-        and FAST_DEPTHWISE_DEVICE_PARTITION
     )
 
     # `secondDerAsWeights = IsSecondOrderScoreFunction(scoreFunction)`.
@@ -2398,6 +2402,10 @@ def fit_with_test(
         var mag_blocks = fv_blocks
         if is_pair_logit:
             fv_blocks = pair_buffers.value().blocks()
+            comptime if PAIRLOGIT_GROUP_FUSED:
+                # the group layout's magnitudes are per group too
+                if pair_buffers.value().n_pairs < 0:
+                    mag_blocks = fv_blocks
         ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
             fv_part.unsafe_ptr(), Int32(fv_blocks), fv.unsafe_ptr(),
             grid_dim=1, block_dim=256,

@@ -134,8 +134,8 @@ from gemm.checks.gemm_int8_mma import _imma_m16n8k32, _pack4, int8_mma_admits
 from gemm.checks.gemm_identical import step_count_sync
 from gemm.checks.gemm_int15_epilogue import int15_store_cell
 from gemm.checks.quantize_int8_par import _absmax_step, _code
-from gemm.host.gemm_lowbit_oracle import INT8_MAX_K
-from gemm.host.gemm_oracle import gemm_oracle_sabotage_value_flip
+from gemm.contract import INT8_MAX_K
+from gemm.contract import gemm_oracle_sabotage_value_flip
 
 #: The scheduling arm: a staging load wholly outside the operand stores
 #: nothing. Off in every build that does not name it.
