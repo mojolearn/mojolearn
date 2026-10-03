@@ -426,7 +426,7 @@ def dconv_run(
         var outcome = 0
         while outcome == 0:
             for _ in range(QN_DCONV_POLL):
-                ctx.enqueue_function[dc_dir_kernel](
+                ctx.enqueue_function[dc_dir_kernel](  # small-launch(n: L-BFGS coefficients): n is the weight vector (d * C + bias, d <= QNF_MAX_D under dconv_applies), never rows; the two-loop over m history pairs, threads across n
                     dst.unsafe_ptr(), drt.unsafe_ptr(), s_all.unsafe_ptr(),
                     y_all.unsafe_ptr(), hist.unsafe_ptr(), scalar.unsafe_ptr(),
                     x.unsafe_ptr(), xp.unsafe_ptr(), grad.unsafe_ptr(),
@@ -451,7 +451,7 @@ def dconv_run(
                     grid_dim=(vgrid, 1, 1), block_dim=(VEC_ELEM_TPB, 1, 1),
                 )
                 f.enqueue_dconv_eval(ctx, x, grad, xp, drt, gate, DC_MAT, param.ls_dec, False)
-                ctx.enqueue_function[dc_check_kernel](
+                ctx.enqueue_function[dc_check_kernel](  # small-launch(n: L-BFGS coefficients): n is the weight vector (d * C + bias, d <= QNF_MAX_D under dconv_applies), never rows; norms over n by the block
                     dst.unsafe_ptr(), f.slots.unsafe_ptr(), x.unsafe_ptr(),
                     xp.unsafe_ptr(), grad.unsafe_ptr(), gradp.unsafe_ptr(),
                     Int32(n), l2nz, half, param.epsilon, Int32(param.past),
