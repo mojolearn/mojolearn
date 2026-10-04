@@ -948,3 +948,10 @@ or timing admission by itself. Next timing contract under source review.
 G5compiledsource495c30c3 core/estimators A/B builds started onM2 after removing
 only finished G1/resident build trees; manifests/artifacts/source refs retained.
 Future submissions follow the new efficient execution section inEXPERIMENT_PROCESS.
+
+MCD ordered covariance f35a57bd4: mcd-ordered-direct-q-r3 HOLD. B repeats
+bitwise, but deterministic reduction does not guarantee no-worse accuracy.
+For batch_4_1, maximum error0.0398175029 ->0.0710675029 and relativeL2
+1.2517670343e-7 ->1.6478564181e-7; resident_3 relativeL2 also regresses.
+Several other cases improve. Preserve strict all-field no-regression failure;
+no fitted-model tests, speed measurements or default promotion admitted.
