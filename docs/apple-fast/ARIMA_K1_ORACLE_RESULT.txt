@@ -1,0 +1,111 @@
+K1 full Gaussian reference result: HOLD, 2026-10-04
+================================================
+Source 53bc5d6435aa7046772e09784576fe9b92e88e18; saved M3 report
+arima-k1-oracle-v1.json. NumPy reference only, not actual main, shader
+execution, actual initialization, optimizer, forecast or GPU quality.
+68 cases: math failures 6, float32 failures 48, gradient failures 14.
+Twelve additional short/odd scan boundaries have zero math failures.
+Keep all gates, cases and thresholds. No timing or promotion authorized.
+
+What actually failed
+--------------------
+Only ma-near-pair-n1393 fails the base float64 filter comparison. The other
+five failed math cases arise in parameter perturbations: sigma for
+ grid-p0-q3, grid-p1-q3, grid-p3-q3, ma-order3-n1393;
+intercept for ma-repeated-n1393. Thus "six math failures" does not prove
+six general associativity failures or six base-state bugs.
+
+The near-pair case has prediction max difference .0131157 at reference
+scale 3637.72, variance/covariance difference .889063 at scales around
+1e6, and loglike difference .000213722. These exceed existing bounds.
+The repeated-MA intercept perturbation has loglike difference .00140525
+at scale 2205.19 and float64 finite-difference gradient discrepancy
+.00103378 versus bound .0000742543. These are not excused as noise.
+Grid q3 sigma perturbations differ at roughly 6e-9 to 2e-8 in final state
+or predictions; ma-order3 sigma prediction difference is 1.27905e-7.
+
+Source-level model issue before blaming inverses
+-----------------------------------------------
+The full K1 harness receives the same rounded Q32/P0/alpha0 arrays as the
+serial reference, but receiving the same inputs is not enough to make
+the recurrences the same mathematical model:
+
+1. Q32 is constructed as (R*sigma)[:,None]*R[None,:], with rounding between
+multiplications. In real arithmetic it is rank-one symmetric PSD; lifted
+Q32 need not be exactly symmetric, rank one or positive semidefinite.
+2. K1 leaves follow the Metal source's pz*pz^T convention. For nonsymmetric
+Q this is not even Q - Q[:,0]*Q[0,:]/Q00. The formula assumes symmetry.
+3. The serial reference, deliberately mirroring production layout,
+symmetrizes every predictive P and replaces every diagonal by abs(diag).
+The scan performs neither per-time repair. A general Gaussian monoid
+presumes a valid covariance model; it does not represent arbitrary
+nonlinear covariance repair at each original time step.
+
+These are concrete source differences. The four sigma-only math failures
+are consistent with changed Q rounding/symmetry. The near-pair failure
+and repeated-MA sensitivity also make conditioning/indefinite covariance
+plausible, but saved reports do not contain Q asymmetry, eigenvalues,
+repair counts or solve condition/residual diagnostics. Do NOT claim that
+conditioning, abs repairs or asymmetry has been experimentally isolated.
+A malformed covariance model can amplify both scan and serial numerical
+error. Neither diagonal jitter nor relaxed thresholds resolves model match.
+
+Comparison with earlier rank-one report (all metrics retained)
+-------------------------------------------------------------
+Rank-one v1: math0, float32 47, gradient9 failures. Full K1: math6,
+float32 48, gradient14. Algebra gates differ in their reference model:
+rank-one math deliberately used exact rank-one Q64; K1 math uses rounded
+Q32 and repaired serial recurrence. The counts therefore cannot rank the
+pure algebra's correctness on an identical model.
+
+Full K1 does repair one earlier identified model sensitivity in float64:
+ma-near-positive intercept gradient reference 14052096.865146656 versus
+K1 math 14052096.865134545; the rank-one math model was about 14005812.24.
+For constant input the MA derivative reference is -41.744355890237784,
+K1 math -41.74435593002636. Yet float32 K1 yields -32.783203125, worse
+than serial emulation -38.6171875. This directly separates model agreement
+in double from remaining float32 instability/cancellation; fixing rank-one
+assumptions has not made the float32 implementation safe.
+
+Across base-case stages, float32 degradation counts are prediction30,
+innovation31, alpha22, variance8, covariance8, loglike10 (case verdicts also
+include perturbations). Full K1 retains ascending likelihood reduction,
+so these failures cannot all be blamed on a newly parallel reduction tree.
+Scalar grid-p1-q0 intercept gradient still worsens: ref .0038662690331,
+serial .00390625, scan .0037841796875. Objective subtraction precision
+remains a separate issue even where covariance algebra is trivial.
+
+Next sound step: diagnostic reference controls, not a product kernel
+-------------------------------------------------------------------
+Run diagnostic extensions on M3 only, keeping the complete original corpus
+and its unchanged pass/fail results. Add distinctly labelled controls:
+
+A. Valid symmetric PSD model control: exact Q64=sigma*R*R^T and shared
+valid symmetric prior, Gaussian serial without per-step repair versus K1.
+This tests algebra in its domain; it cannot replace rounded-model admission.
+B. Same rounded-Q model audit: report Q asymmetry, smallest eigenvalue of
+its symmetric part, initial and leaf conditional covariance spectra;
+track serial symmetrization magnitude, negative diagonal occurrences and
+abs correction magnitude before repair. Compare symmetric-Q and exact-Q
+controls separately without silently changing the production model.
+C. Per scan level: maxima of cond(I+Ci Jj), both solve backward residuals,
+asymmetry/negative spectrum of C and J, and state errors. Capture earliest
+mismatch. For the six failed cases and their perturbations, distinguish
+model disagreement from floating arithmetic error using a higher precision
+reference if float64 diagnostics remain inconclusive. NumPy linalg.solve
+is not bit replay of Metal's pivoted inverse or its 1e-20 pivot heuristic.
+D. Keep objective and each finite-difference gradient gate separate; audit
+per-observation likelihood differences before final objective rounding as
+a new candidate, rather than selecting only improved objective metrics.
+
+Only after a valid model control and model-match audit pass should we
+choose a stable GPU design. A square-root/QR Gaussian representation or
+compensated small-matrix scan is a possible separate experiment, not an
+assumed fix. K2 blocked scans B8/B16/B32 could reduce the length of unstable
+composition but cannot automatically reproduce serial abs repairs; they
+must pass the same full gates. Do not code a full GPU K1 production path
+from this HOLD. Any later success still requires actual-main binding,
+optimizer and forecast no-regression plus a parallel GPU likelihood reduce.
+
+This review only reads saved metrics and source. No oracle reruns, local
+numerical experiments, builds, GPU calls or scored timings were performed.

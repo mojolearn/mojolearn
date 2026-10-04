@@ -797,3 +797,16 @@ See [PT_SCORE_STABLE.md](PT_SCORE_STABLE.md) for code scope and exact owed check
 | `MOJOLEARN_ARIMA_FAST_ASSOC_SCAN` (reference prototype only) | 68 scalar/ARMA near-unit, repeated-root, odd-length and signal-scale fixtures | lane/apple-fast-arima-scan-oracle @45b61672db3075e106c27917d971da0641ecbe2b | arima-assoc-oracle-v1 | no timings | HOLD-quality | f64 algebra0 failures; f32 field47 failures; gradient9 failures. Compared with NumPy serial emulation, not actual main. Exact-rank elimination changes rounded-Q model derivatives; see ARIMA_SCAN_ORACLE_RESULT.txt. Do not promote or relax gates. |
 
 | K1 full Gaussian scan (reference prototype only) | fixed 68-case ARIMA v1 corpus plus 12 scan boundaries | lane/apple-fast-arima-k1-oracle; Metal equations from9ab2d3d3fb770498ef025db08f595a0149792bb7 | arima-k1-oracle-v1 (proposed) | unmeasured | OPEN-reference-only | Retains full conditional C and original rounded Q; compares full-monoid64 to rounded-model serial64 before float32 field/gradient viability, unchanged strict thresholds. No local execution, GPU implementation, timing, or actual-main quality claim. tools/arima_gaussian_scan_oracle.py. |
+
+## ARIMA K1 full Gaussian oracle result (2026-10-04)
+
+Source 53bc5d6435aa7046772e09784576fe9b92e88e18, M3 reference-only
+arima-k1-oracle-v1: HOLD, 68 cases, math6/float32 48/gradient14 failures;
+12 boundary math controls pass. Only one base filter math failure; five
+arise in parameter perturbations. Full conditional C does not guarantee
+model match: rounded Q may violate symmetric PSD assumptions while serial
+reference symmetrizes/abs-repairs covariance per time step. Saved metrics
+do not isolate conditioning versus model disagreement. No threshold changes,
+case removal, product kernel or GPU-quality claim. Next: explicitly separate
+valid-Gaussian algebra control, rounded-Q/repair audit and per-level solve
+conditioning diagnostics. See ARIMA_K1_ORACLE_RESULT.txt for full evidence.
