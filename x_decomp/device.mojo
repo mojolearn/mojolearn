@@ -925,8 +925,8 @@ comptime XD_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_a
 #: (`cholqr_guard_kernel`) and the host reads one flag a pass instead of
 #: downloading the l x l factor and scanning its diagonal on the host.
 comptime SVD_FAST_CHOLQR = XD_FAST_APPLE and is_defined["MOJOLEARN_SVD_FAST_CHOLQR"]()
-#: Recovered candidate (lane/apple-fast-rec-decomp, 2026-10-04), default OFF,
-#: FAST + Apple only. Source lane/apple-fast-decomp-linalg@74d52352b
+#: Recovered candidate (lane/apple-fast-rec-decomp, 2026-10-04), default ON
+#: since 2026-10-04 (OUTCOME below), FAST + Apple only. Source lane/apple-fast-decomp-linalg@74d52352b
 #: (50d12a950). What it does: `DevExec.qr_r` uploads the caller's floats
 #: straight to the device and runs `qr_factor` there, R downloaded once,
 #: instead of copying all m x n values into a host List one `append` at a
@@ -937,7 +937,11 @@ comptime SVD_FAST_CHOLQR = XD_FAST_APPLE and is_defined["MOJOLEARN_SVD_FAST_CHOL
 #: result or failure. The factor-analysis lane's bigger levers are the
 #: lane/apple-fast-fa candidates (lane apple-fast-rec-fa-robust), which may
 #: drop the qr_r call; this keeps only the decomp-linalg part.
-comptime FA_FAST_QRR = XD_FAST_APPLE and is_defined["MOJOLEARN_FA_FAST_QRR"]()
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+#: apple-fast-rec-ab3 @ 0ca521cc5): factor-analysis istella 10391.5 -> 10254.8
+#: ms; output digest identical. KEEP: the FAST + Apple default since then;
+#: rollback -D MOJOLEARN_FA_FAST_QRR_OFF (the old -D name is harmless).
+comptime FA_FAST_QRR = XD_FAST_APPLE and not is_defined["MOJOLEARN_FA_FAST_QRR_OFF"]()
 comptime CQ_TPB = 256
 #: 2^8: the largest diagonal span CholeskyQR2 takes (cond(A) about its square)
 comptime CQ_SPAN = Float32(256.0)

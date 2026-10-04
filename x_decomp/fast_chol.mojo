@@ -62,6 +62,9 @@ column; the define below includes it."""
 #: window. A non-positive pivot sets info = k + 1 and continues with the
 #: pivot taken as 1 (x_decomp `chol_serial`'s rule), so a failed factor's
 #: tail differs from potrf's stopped one.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+#: apple-fast-rec-ab3 @ 0ca521cc5): cholesky synthetic 259.4 -> 330.7 ms and
+#: relative_residual 1.66e-7 -> 1.98e-6. DROPPED-slower+quality: stays off.
 comptime CHOL_FAST_BLOCKED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()

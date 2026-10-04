@@ -3,7 +3,8 @@
 """HuberRegressor with the L-BFGS line search batched on the device
 (lane/apple-fast-robust@cfdb95e48, 2026-10-02; recovered onto main
 2026-10-04 by lane/apple-fast-rec-fa-robust; FAST + Apple only, behind
-`-D MOJOLEARN_HUBER_DEVICE_LBFGS`, default OFF).
+the FAST + Apple default since 2026-10-04; rollback
+`-D MOJOLEARN_HUBER_DEVICE_LBFGS_OFF`).
 
 Main's x_linear/huber_grid.mojo now runs the minimizer on the device too
 (x_linear/lbfgs_device.mojo), but the host still drives the line search:
@@ -47,7 +48,7 @@ from x_linear.huber import huber_map_row, _huber_part
 from x_linear.huber_grid import hg_fold_kernel, HG_TPB
 from x_linear.lbfgs import LBFGS_M
 
-#: (FAST + Apple, default OFF) HuberRegressor's fit with the line search,
+#: (FAST + Apple, default ON since 2026-10-04) HuberRegressor's fit with the line search,
 #: the pair ring and the stop test in one device step kernel per evaluation
 #: (`hf_step_kernel`), HF_BATCH evaluations enqueued per host read of the
 #: stop word, units after the stop no-ops. Source lane/apple-fast-robust@
@@ -59,9 +60,14 @@ from x_linear.lbfgs import LBFGS_M
 #: gone from main (local `_hf_dot`, the same ascending fmad chain), the
 #: X_LINEAR_SERIAL_FOLDS guard is gone (that define was deleted), and the
 #: result also carries theta after n_iter (main's huber_fit layout).
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+#: apple-fast-rec-ab3 @ 0ca521cc5): huber taxi 219.8 -> 189.9 ms; r2/rmse
+#: identical, output digest identical. KEEP: the FAST + Apple default since
+#: then; rollback -D MOJOLEARN_HUBER_DEVICE_LBFGS_OFF (the old -D name is
+#: harmless; HUBER_FAST_BLOCK512 still forces it on).
 comptime HUBER_DEVICE_LBFGS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and (is_defined["MOJOLEARN_HUBER_DEVICE_LBFGS"]() or is_defined["MOJOLEARN_HUBER_FAST_BLOCK512"]())
+    and (not is_defined["MOJOLEARN_HUBER_DEVICE_LBFGS_OFF"]() or is_defined["MOJOLEARN_HUBER_FAST_BLOCK512"]())
 )
 #: (FAST + Apple, default OFF; implies HUBER_DEVICE_LBFGS) the partials of
 #: the fast fit over 512-row blocks instead of FOLD_BLOCK: eight times the

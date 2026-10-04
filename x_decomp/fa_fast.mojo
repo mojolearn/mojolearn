@@ -79,6 +79,12 @@ comptime FA_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_a
 #: (FAST + Apple, default OFF) every FA define below at once. Source
 #: lane/apple-fast-fa@3efbce2af; built rc=0 there, never timed as one arm.
 #: Recovered 2026-10-04 (lane/apple-fast-rec-fa-robust): READY-AB.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+#: apple-fast-rec-ab3 @ 0ca521cc5): FA_GRAM_ONCE, FA_ITER_DEVICE and FA_ALL each:
+#: factor-analysis istella 10.4 s -> 1.95-2.0 s (GRAM, ITER; ALL 9.54 s) but
+#: mean_log_likelihood 99.487 -> 92.898 (worse); taxi -14.82365 -> -14.82371
+#: (noise) at 358 -> 30.4 ms (ALL), 192 ms (ITER), 325 ms (GRAM).
+#: HOLD-quality: all stay off; a fix lane is working on the istella loss.
 comptime FA_ALL = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_ALL"]()
 #: (FAST + Apple, default OFF) FactorAnalysis.fit forms the centred Gram G
 #: (d x d) in ONE tiled pass over the resident X (`fa_gram_tile_kernel` +

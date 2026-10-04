@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """FAST + Apple device paths of lane/apple-fast-prep2 (2026-10-02), one per
-switch, every switch default OFF. x_prep/device.mojo calls `prep2_fast_stage`
+switch, default OFF except EIGH_BLOCK, TE_GLOBAL and TE_ENC (FAST + Apple
+defaults since 2026-10-04). x_prep/device.mojo calls `prep2_fast_stage`
 for every stage; it enqueues the stage when its switch is on and the stage
 fits, else returns False and the stage runs as before. PREP2_FAST gates every
 call, so the IDENTICAL binding and the other vendors compile none of this.
@@ -9,18 +10,18 @@ call, so the IDENTICAL binding and the other vendors compile none of this.
 Switches (`Prep2Switches`; build defines where marked -D, else env read on
 the host at dispatch time):
 
-  -D MOJOLEARN_X_PREP_FAST_TE_GLOBAL  (a build define since 2026-10-04) te_global by a threadgroup per (fold,
+  -D MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF  (default ON since 2026-10-04; rollback define) te_global by a threadgroup per (fold,
       target) with a tree, instead of ONE thread per (fold, target) walking
       every row twice (x_prep/target.mojo te_global_unit: (F+1)*T = 5
       threads for a 1M-row fit).
-  -D MOJOLEARN_X_PREP_FAST_TE_ENC  (a build define since 2026-10-04) te_enc by a threadgroup per (fold, column,
+  -D MOJOLEARN_X_PREP_FAST_TE_ENC_OFF  (default ON since 2026-10-04; rollback define) te_enc by a threadgroup per (fold, column,
       category, target) over the category's gathered bucket, instead of ONE
       thread walking the bucket (x_prep/target.mojo te_enc_unit: the largest
       category's rows, hundreds of thousands on taxi, on one thread).
   MOJOLEARN_X_PREP_FAST_II_CONV=1  ii_conv's max over the row sums by one
       threadgroup tree instead of one thread over every row
       (x_prep/iterative.mojo ii_conv_unit; a max is exact, the same word).
-  -D MOJOLEARN_PREP2_FAST_EIGH_BLOCK  (a build define, `PREP2_FAST_EIGH_BLOCK`;
+  -D MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF  (default ON since 2026-10-04; `PREP2_FAST_EIGH_BLOCK`;
       the kernel compiles only under it)  eigh (one cyclic Jacobi per matrix,
       x_prep/eigh.mojo eigh_unit on ONE thread: IterativeImputer's
       BayesianRidge runs it once per feature per round, ~465 rotations x 4
@@ -61,7 +62,7 @@ from x_prep.dradix import RUP, radix_word, radix_load_kernel
 
 #: FAST on Apple only
 comptime PREP2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-#: (FAST + Apple, default OFF) IterativeImputer's eigh stage (one cyclic
+#: (FAST + Apple, default ON since 2026-10-04) IterativeImputer's eigh stage (one cyclic
 #: Jacobi per matrix, `eigh_unit` on ONE thread, run once per feature per
 #: round by BayesianRidge) on a 32-thread threadgroup per matrix
 #: (`eigh_block_fast_kernel`): the same sweeps and rotations in the same
@@ -73,8 +74,13 @@ comptime PREP2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_acce
 #: the lane already wins, ratio 0.21); EXPERIMENTS row OPEN, no judged A/B.
 #: No failure recorded. Recovery 2026-10-04 (lane/apple-fast-rec-fa-robust):
 #: re-read against main's eigh_unit, no change needed; READY-AB.
-comptime PREP2_FAST_EIGH_BLOCK = PREP2_FAST and is_defined["MOJOLEARN_PREP2_FAST_EIGH_BLOCK"]()
-#: (FAST + Apple, default OFF) TargetEncoder's te_global stage by one
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+#: apple-fast-rec-ab3 @ 0ca521cc5): iterative-imputer taxi 218.6 -> 185.3 ms;
+#: masked_rmse identical, output digest identical. KEEP: the FAST + Apple
+#: default since then; rollback -D MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF (the
+#: old -D name is harmless).
+comptime PREP2_FAST_EIGH_BLOCK = PREP2_FAST and not is_defined["MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF"]()
+#: (FAST + Apple, default ON since 2026-10-04) TargetEncoder's te_global stage by one
 #: threadgroup per (fold, target), each thread a strided share of the rows,
 #: then a tree (`te_global_fast_kernel`), in place of ONE thread per (fold,
 #: target) walking every row twice ((F + 1) T = 5 threads on a 1M-row fit).
@@ -85,8 +91,14 @@ comptime PREP2_FAST_EIGH_BLOCK = PREP2_FAST and is_defined["MOJOLEARN_PREP2_FAST
 #: 2026-10-04 (lane/apple-fast-rec-fa-robust): a build define instead of the
 #: env read, so the A/B is the ordinary prebuilt -D pair, and the row counts
 #: as Int32 (a float32 count stops being exact past 2^24 rows).
-comptime X_PREP_FAST_TE_GLOBAL = PREP2_FAST and is_defined["MOJOLEARN_X_PREP_FAST_TE_GLOBAL"]()
-#: (FAST + Apple, default OFF) TargetEncoder's te_enc stage by one
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+#: apple-fast-rec-ab3 @ 0ca521cc5): target-encoder taxi 201.4 -> 90.2 ms; output
+#: digest identical. KEEP: the FAST + Apple default since then; rollback
+#: -D MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF (the old -D name is harmless).
+#: Measured apart from TE_ENC (a different stage, OP_TE_GLOBAL vs OP_TE_ENC;
+#: the two compose, both on by default; the pair was not timed together).
+comptime X_PREP_FAST_TE_GLOBAL = PREP2_FAST and not is_defined["MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF"]()
+#: (FAST + Apple, default ON since 2026-10-04) TargetEncoder's te_enc stage by one
 #: threadgroup per (fold, column, category, target) over the category's
 #: gathered bucket (`te_enc_fast_kernel`), in place of ONE thread walking
 #: the bucket (taxi's largest category is hundreds of thousands of rows on
@@ -95,7 +107,12 @@ comptime X_PREP_FAST_TE_GLOBAL = PREP2_FAST and is_defined["MOJOLEARN_X_PREP_FAS
 #: later prebuilt B-only run timed target-encoder taxi at 359.6 ms
 #: with no A arm (the lane's board ratio: 1.38). Fixed as
 #: TE_GLOBAL: a build define, Int32 counts.
-comptime X_PREP_FAST_TE_ENC = PREP2_FAST and is_defined["MOJOLEARN_X_PREP_FAST_TE_ENC"]()
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+#: apple-fast-rec-ab3 @ 0ca521cc5): target-encoder taxi 203.1 -> 148.7 ms; output
+#: digest identical. KEEP: the FAST + Apple default since then; rollback
+#: -D MOJOLEARN_X_PREP_FAST_TE_ENC_OFF (the old -D name is harmless).
+#: Measured apart from TE_GLOBAL (a different stage; both on by default).
+comptime X_PREP_FAST_TE_ENC = PREP2_FAST and not is_defined["MOJOLEARN_X_PREP_FAST_TE_ENC_OFF"]()
 comptime TGR = 256
 comptime OP_QUANTILE = 2
 comptime OP_TE_GLOBAL = 20
