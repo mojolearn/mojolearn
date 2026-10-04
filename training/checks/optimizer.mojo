@@ -163,6 +163,18 @@ from training.afn_optim import (
     AFN_OPT_FUSE_SCAN,
     afn_optimizer_step,
 )
+# lane nr-small D4/D12 (IDENTICAL): the gated refusal scan, the SGD
+# one-launch table and the batched clip in the step.
+from training.opt_gate import (
+    OPT_CLIP_BATCHED,
+    OPT_GATE_CELL,
+    OPT_SGD_ONE_LAUNCH,
+    opt_gate_begin,
+    opt_gate_cells_ptr,
+    opt_gate_finish,
+    opt_gate_wanted,
+    opt_sgd_table_upload,
+)
 from training.checks.optimizer_contract import (
     OPT_ADAMW,
     OPT_SGD,
@@ -530,6 +542,76 @@ def adam_update_kernel(
     bc1: Float32,
     bc2: Float32,
 ):
+    """Contract 7.2, one thread per element: `_adam_update_body` (the
+    seams O1 through O14 and their docstring). The body moved into an
+    inlined helper (lane nr-small D4) so `adam_update_gated_kernel` runs
+    the SAME arithmetic behind the device gate; this kernel's signature
+    and bits are unchanged."""
+    _adam_update_body(
+        param, grad, m_state, v_state, denom_out, q_out, n_in, is_adamw_in,
+        beta1, beta2, eps, weight_decay, c1, c2, step_size, rt_bc2,
+        decay_mul, lr, bc1, bc2,
+    )
+
+
+def adam_update_gated_kernel(
+    gate: MutPointer[Int32, MutAnyOrigin],
+    param: MutPointer[Float32, MutAnyOrigin],
+    grad: MutPointer[Float32, MutAnyOrigin],
+    m_state: MutPointer[Float32, MutAnyOrigin],
+    v_state: MutPointer[Float32, MutAnyOrigin],
+    denom_out: MutPointer[Float32, MutAnyOrigin],
+    q_out: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    is_adamw_in: Int32,
+    beta1: Float32,
+    beta2: Float32,
+    eps: Float32,
+    weight_decay: Float32,
+    c1: Float32,
+    c2: Float32,
+    step_size: Float32,
+    rt_bc2: Float32,
+    decay_mul: Float32,
+    lr: Float32,
+    bc1: Float32,
+    bc2: Float32,
+):
+    """MOJOLEARN_IDN_OPT_GATE_SCAN: `adam_update_kernel` behind the device
+    gate (`training/opt_gate.mojo`). Every thread reads the gate cell
+    first and writes nothing when the step is refused."""
+    if gate.unsafe_load(OPT_GATE_CELL) != Int32(0):
+        return
+    _adam_update_body(
+        param, grad, m_state, v_state, denom_out, q_out, n_in, is_adamw_in,
+        beta1, beta2, eps, weight_decay, c1, c2, step_size, rt_bc2,
+        decay_mul, lr, bc1, bc2,
+    )
+
+
+@always_inline
+def _adam_update_body(
+    param: MutPointer[Float32, MutAnyOrigin],
+    grad: MutPointer[Float32, MutAnyOrigin],
+    m_state: MutPointer[Float32, MutAnyOrigin],
+    v_state: MutPointer[Float32, MutAnyOrigin],
+    denom_out: MutPointer[Float32, MutAnyOrigin],
+    q_out: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    is_adamw_in: Int32,
+    beta1: Float32,
+    beta2: Float32,
+    eps: Float32,
+    weight_decay: Float32,
+    c1: Float32,
+    c2: Float32,
+    step_size: Float32,
+    rt_bc2: Float32,
+    decay_mul: Float32,
+    lr: Float32,
+    bc1: Float32,
+    bc2: Float32,
+):
     """Contract 7.2, seams O1 through O14, one thread per element.
 
     Every argument after `n_in` is a HOST scalar (contract 7.1). This
@@ -809,6 +891,105 @@ def sgd_update_kernel(
         return
     var i = Int(begin_in) + local
 
+    _sgd_update_element(
+        param, grad, buf, dir_out, i, buf_initialized_in, nesterov_in,
+        momentum, c_damp, weight_decay, neg_lr,
+    )
+
+
+def sgd_update_gated_kernel(
+    gate: MutPointer[Int32, MutAnyOrigin],
+    param: MutPointer[Float32, MutAnyOrigin],
+    grad: MutPointer[Float32, MutAnyOrigin],
+    buf: MutPointer[Float32, MutAnyOrigin],
+    dir_out: MutPointer[Float32, MutAnyOrigin],
+    begin_in: Int32,
+    count_in: Int32,
+    buf_initialized_in: Int32,
+    nesterov_in: Int32,
+    momentum: Float32,
+    c_damp: Float32,
+    weight_decay: Float32,
+    neg_lr: Float32,
+):
+    """MOJOLEARN_IDN_OPT_GATE_SCAN: `sgd_update_kernel` behind the device
+    gate. Nothing is written when the step is refused."""
+    if gate.unsafe_load(OPT_GATE_CELL) != Int32(0):
+        return
+    var count = Int(count_in)
+    var local = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if local >= count:
+        return
+    var i = Int(begin_in) + local
+    _sgd_update_element(
+        param, grad, buf, dir_out, i, buf_initialized_in, nesterov_in,
+        momentum, c_damp, weight_decay, neg_lr,
+    )
+
+
+def sgd_update_multi_kernel[GATED: Bool](
+    gate: MutPointer[Int32, MutAnyOrigin],
+    table: MutPointer[Int32, MutAnyOrigin],
+    param: MutPointer[Float32, MutAnyOrigin],
+    grad: MutPointer[Float32, MutAnyOrigin],
+    buf: MutPointer[Float32, MutAnyOrigin],
+    dir_out: MutPointer[Float32, MutAnyOrigin],
+    j_count_in: Int32,
+    n_in: Int32,
+    nesterov_in: Int32,
+    momentum: Float32,
+    c_damp: Float32,
+    weight_decay: Float32,
+    neg_lr: Float32,
+):
+    """MOJOLEARN_IDN_OPT_SGD_ONE_LAUNCH: `sgd_update_kernel` as ONE launch
+    over the flat model. `table[0..J]` holds the tensor offsets
+    (ascending, `table[J] == n`) and `table[J+1..2J]` the per-tensor
+    momentum flags; a thread finds its tensor `j` (the largest `j` with
+    `table[j] <= i`, so empty tensors are skipped) by a binary search and
+    takes flag `j`, so the flag stays a per-TENSOR value (contract 7.3b).
+    Same per-element body, same bits. Under `GATED` the device gate is
+    read first; otherwise `gate` is never read."""
+    comptime if GATED:
+        if gate.unsafe_load(OPT_GATE_CELL) != Int32(0):
+            return
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= n:
+        return
+    var j_count = Int(j_count_in)
+    var lo = 0
+    var hi = j_count
+    while hi - lo > 1:
+        var mid = (lo + hi) // 2
+        if Int(table.unsafe_load(mid)) <= i:
+            lo = mid
+        else:
+            hi = mid
+    var buf_initialized_in = table.unsafe_load(j_count + 1 + lo)
+    _sgd_update_element(
+        param, grad, buf, dir_out, i, buf_initialized_in, nesterov_in,
+        momentum, c_damp, weight_decay, neg_lr,
+    )
+
+
+@always_inline
+def _sgd_update_element(
+    param: MutPointer[Float32, MutAnyOrigin],
+    grad: MutPointer[Float32, MutAnyOrigin],
+    buf: MutPointer[Float32, MutAnyOrigin],
+    dir_out: MutPointer[Float32, MutAnyOrigin],
+    i: Int,
+    buf_initialized_in: Int32,
+    nesterov_in: Int32,
+    momentum: Float32,
+    c_damp: Float32,
+    weight_decay: Float32,
+    neg_lr: Float32,
+):
+    """Contract 7.3, seams S1 through S5, for element `i` (the body of
+    `sgd_update_kernel`, moved into an inlined helper by lane nr-small so
+    the gated and one-launch kernels run the same arithmetic)."""
     var g = ftz(grad.unsafe_load(i))  # S1
     var p = ftz(param.unsafe_load(i))  # S2
 
@@ -1599,9 +1780,34 @@ def identical_optimizer_step(
         return
     var ton = _step_timing_on()
     var tk = Int(perf_counter_ns())
-    opt_refuse_device_inputs(
-        ctx, param, grad, m_state, v_state, offsets, cfg
-    )
+    # MOJOLEARN_IDN_OPT_GATE_SCAN (lane nr-small D4, training/opt_gate.mojo):
+    # one scan launch and one fold launch write a DEVICE gate; the update
+    # kernels read it and write nothing on a refused step; the cells come
+    # back behind the update under the step's one wait and the refusal is
+    # raised for THIS step, before phase 4. With clipping on the gate is
+    # read first (the clip reads and rescales `grad` and refuses its own
+    # scalar), which is the one wait the old scan paid.
+    var gate_on = opt_gate_wanted(offsets)
+    var gate_pending = False
+    var gate_dev = List[DeviceBuffer[DType.int32]]()
+    var gate_host = List[HostBuffer[DType.int32]]()
+    var is_sgd_step = cfg.kind == OPT_SGD
+    if gate_on:
+        opt_gate_begin(
+            ctx, gate_dev, gate_host, param, grad, m_state, v_state,
+            offsets[len(offsets) - 1], is_sgd_step,
+        )
+        if cfg.max_norm > Float32(0.0):
+            opt_gate_finish(
+                ctx, gate_dev, gate_host, param, grad, m_state, v_state,
+                is_sgd_step,
+            )
+        else:
+            gate_pending = True
+    else:
+        opt_refuse_device_inputs(
+            ctx, param, grad, m_state, v_state, offsets, cfg
+        )
     _step_timing_tick(ctx, ton, tk, "step.opt_refuse_scan")
     if ton:
         # Two four-token lines (`timing <name> <value> bytes`, the shape
@@ -1622,20 +1828,37 @@ def identical_optimizer_step(
     if n_total <= 0:
         return
 
-    # PHASE 1.
+    # PHASE 1. MOJOLEARN_IDN_OPT_CLIP_BATCHED (lane nr-small D12): the
+    # batched launcher, the same GEMMs in the same order without the J
+    # per-tensor waits; the update below is ordered after its scale launch
+    # by the one in-order queue.
     if cfg.max_norm > Float32(0.0):
-        _ = identical_clip_grad_norm(
-            ctx,
-            grad,
-            sumsq,
-            norms,
-            total_cell,
-            out2,
-            ws,
-            sab_partials,
-            offsets,
-            cfg.max_norm,
-        )
+        comptime if OPT_CLIP_BATCHED:
+            _ = identical_clip_grad_norm_batched(
+                ctx,
+                grad,
+                sumsq,
+                norms,
+                total_cell,
+                out2,
+                ws,
+                sab_partials,
+                offsets,
+                cfg.max_norm,
+            )
+        else:
+            _ = identical_clip_grad_norm(
+                ctx,
+                grad,
+                sumsq,
+                norms,
+                total_cell,
+                out2,
+                ws,
+                sab_partials,
+                offsets,
+                cfg.max_norm,
+            )
 
     # PHASE 2. The oracle's own function (or, under the two pow arms, the
     # sabotage wrapper). Contract 7.1's ban on recomputing these inside a
@@ -1666,36 +1889,113 @@ def identical_optimizer_step(
 
     # PHASE 3.
     if cfg.kind == OPT_SGD:
-        for j in range(j_count):
-            var begin = offsets[j]
-            var count = offsets[j + 1] - begin
-            if count <= 0:
-                continue
-            var init_flag = Int32(0)
-            if buf_initialized[j]:
-                init_flag = Int32(1)
-            var nest = Int32(0)
-            if cfg.nesterov:
-                nest = Int32(1)
-            step_count_launch()
-            ctx.enqueue_function[sgd_update_kernel](
-                param.unsafe_ptr(),
-                grad.unsafe_ptr(),
-                m_state.unsafe_ptr(),
-                denom_out.unsafe_ptr(),
-                Int32(begin),
-                Int32(count),
-                init_flag,
-                nest,
-                cfg.momentum,
-                sc.c_damp,
-                cfg.weight_decay,
-                sc.neg_lr,
-                grid_dim=(_grid_for(count), 1, 1),
-                block_dim=(OPT_TPB, 1, 1),
+        var sgd_dev = List[DeviceBuffer[DType.int32]]()
+        var sgd_host = List[HostBuffer[DType.int32]]()
+        var nest_all = Int32(1) if cfg.nesterov else Int32(0)
+        comptime if OPT_SGD_ONE_LAUNCH:
+            # MOJOLEARN_IDN_OPT_SGD_ONE_LAUNCH (lane nr-small D12): one
+            # launch over the flat model, the per-tensor flags in a table.
+            var table = opt_sgd_table_upload(
+                ctx, sgd_dev, sgd_host, offsets, buf_initialized
             )
-        step_count_sync()
-        ctx.synchronize()
+            step_count_launch()
+            if gate_on:
+                comptime k_g = sgd_update_multi_kernel[True]
+                ctx.enqueue_function[k_g](
+                    opt_gate_cells_ptr(gate_dev),
+                    table,
+                    param.unsafe_ptr(),
+                    grad.unsafe_ptr(),
+                    m_state.unsafe_ptr(),
+                    denom_out.unsafe_ptr(),
+                    Int32(j_count),
+                    Int32(n_total),
+                    nest_all,
+                    cfg.momentum,
+                    sc.c_damp,
+                    cfg.weight_decay,
+                    sc.neg_lr,
+                    grid_dim=(_grid_for(n_total), 1, 1),
+                    block_dim=(OPT_TPB, 1, 1),
+                )
+            else:
+                comptime k_p = sgd_update_multi_kernel[False]
+                ctx.enqueue_function[k_p](
+                    table,
+                    table,
+                    param.unsafe_ptr(),
+                    grad.unsafe_ptr(),
+                    m_state.unsafe_ptr(),
+                    denom_out.unsafe_ptr(),
+                    Int32(j_count),
+                    Int32(n_total),
+                    nest_all,
+                    cfg.momentum,
+                    sc.c_damp,
+                    cfg.weight_decay,
+                    sc.neg_lr,
+                    grid_dim=(_grid_for(n_total), 1, 1),
+                    block_dim=(OPT_TPB, 1, 1),
+                )
+        else:
+            for j in range(j_count):
+                var begin = offsets[j]
+                var count = offsets[j + 1] - begin
+                if count <= 0:
+                    continue
+                var init_flag = Int32(0)
+                if buf_initialized[j]:
+                    init_flag = Int32(1)
+                var nest = Int32(0)
+                if cfg.nesterov:
+                    nest = Int32(1)
+                step_count_launch()
+                if gate_on:
+                    ctx.enqueue_function[sgd_update_gated_kernel](
+                        opt_gate_cells_ptr(gate_dev),
+                        param.unsafe_ptr(),
+                        grad.unsafe_ptr(),
+                        m_state.unsafe_ptr(),
+                        denom_out.unsafe_ptr(),
+                        Int32(begin),
+                        Int32(count),
+                        init_flag,
+                        nest,
+                        cfg.momentum,
+                        sc.c_damp,
+                        cfg.weight_decay,
+                        sc.neg_lr,
+                        grid_dim=(_grid_for(count), 1, 1),
+                        block_dim=(OPT_TPB, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[sgd_update_kernel](
+                        param.unsafe_ptr(),
+                        grad.unsafe_ptr(),
+                        m_state.unsafe_ptr(),
+                        denom_out.unsafe_ptr(),
+                        Int32(begin),
+                        Int32(count),
+                        init_flag,
+                        nest,
+                        cfg.momentum,
+                        sc.c_damp,
+                        cfg.weight_decay,
+                        sc.neg_lr,
+                        grid_dim=(_grid_for(count), 1, 1),
+                        block_dim=(OPT_TPB, 1, 1),
+                    )
+        if gate_pending:
+            # the one wait, then the refusal for THIS step (before phase 4)
+            opt_gate_finish(
+                ctx, gate_dev, gate_host, param, grad, m_state, v_state,
+                True,
+            )
+        else:
+            step_count_sync()
+            ctx.synchronize()
+        _ = sgd_dev^
+        _ = sgd_host^
         # PHASE 4. Per TENSOR, after the launches, never per element.
         if cfg.momentum != Float32(0.0):
             for j in range(j_count):
@@ -1705,32 +2005,66 @@ def identical_optimizer_step(
         if cfg.kind == OPT_ADAMW:
             is_adamw = Int32(1)
         step_count_launch()
-        ctx.enqueue_function[adam_update_kernel](
-            param.unsafe_ptr(),
-            grad.unsafe_ptr(),
-            m_state.unsafe_ptr(),
-            v_state.unsafe_ptr(),
-            denom_out.unsafe_ptr(),
-            q_out.unsafe_ptr(),
-            Int32(n_total),
-            is_adamw,
-            cfg.beta1,
-            cfg.beta2,
-            cfg.eps,
-            cfg.weight_decay,
-            sc.c1,
-            sc.c2,
-            sc.step_size,
-            sc.rt_bc2,
-            sc.decay_mul,
-            cfg.lr,
-            sc.bc1,
-            sc.bc2,
-            grid_dim=(_grid_for(n_total), 1, 1),
-            block_dim=(OPT_TPB, 1, 1),
-        )
-        step_count_sync()
-        ctx.synchronize()
+        if gate_on:
+            ctx.enqueue_function[adam_update_gated_kernel](
+                opt_gate_cells_ptr(gate_dev),
+                param.unsafe_ptr(),
+                grad.unsafe_ptr(),
+                m_state.unsafe_ptr(),
+                v_state.unsafe_ptr(),
+                denom_out.unsafe_ptr(),
+                q_out.unsafe_ptr(),
+                Int32(n_total),
+                is_adamw,
+                cfg.beta1,
+                cfg.beta2,
+                cfg.eps,
+                cfg.weight_decay,
+                sc.c1,
+                sc.c2,
+                sc.step_size,
+                sc.rt_bc2,
+                sc.decay_mul,
+                cfg.lr,
+                sc.bc1,
+                sc.bc2,
+                grid_dim=(_grid_for(n_total), 1, 1),
+                block_dim=(OPT_TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[adam_update_kernel](
+                param.unsafe_ptr(),
+                grad.unsafe_ptr(),
+                m_state.unsafe_ptr(),
+                v_state.unsafe_ptr(),
+                denom_out.unsafe_ptr(),
+                q_out.unsafe_ptr(),
+                Int32(n_total),
+                is_adamw,
+                cfg.beta1,
+                cfg.beta2,
+                cfg.eps,
+                cfg.weight_decay,
+                sc.c1,
+                sc.c2,
+                sc.step_size,
+                sc.rt_bc2,
+                sc.decay_mul,
+                cfg.lr,
+                sc.bc1,
+                sc.bc2,
+                grid_dim=(_grid_for(n_total), 1, 1),
+                block_dim=(OPT_TPB, 1, 1),
+            )
+        if gate_pending:
+            # the one wait, then the refusal for THIS step
+            opt_gate_finish(
+                ctx, gate_dev, gate_host, param, grad, m_state, v_state,
+                False,
+            )
+        else:
+            step_count_sync()
+            ctx.synchronize()
     _step_timing_tick(ctx, ton, tk, "step.optimizer")
 
     # `[[mojo-buffer-freed-at-last-use]]`: keep every caller buffer alive
@@ -1749,3 +2083,5 @@ def identical_optimizer_step(
     _ = out2
     _ = ws
     _ = sab_partials
+    _ = gate_dev^
+    _ = gate_host^

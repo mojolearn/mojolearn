@@ -18,7 +18,8 @@ Seams (DEVIATION numbers, lane sequence 5500-5599):
   5502 LSTM cell state: c = fma(f, c_prev, i*g)                     alt: fma(i, g, f*c_prev)
   5503 GRU update: h = n + z (h_prev - n), one fma                  alt: (1 - z) n + z h_prev
   5504 BPTT weight gradient: ONE fold over (step, batch) rows
-       ascending after the reverse sweep                            alt: per-step, steps descending
+       ascending after the reverse sweep (IDENTICAL, K > 512: the
+       blocked order of sequence/recurrent.mojo)                     alt: per-step, steps descending
   5505 softmax cross entropy: the exp-sum in column order           alt: reversed
   5506 Adam denominator: sqrt(v) / sqrt(1 - b2^t) + eps (torch)     alt: sqrt(v / (1 - b2^t)) + eps
   5507 torch.lerp: two branches at w = 0.5 (Adamax, NAdam, Adafactor) alt: s + w (e - s) always
@@ -64,6 +65,8 @@ from checks.numerics import (
     identical_tanh,
 )
 from checks.fixture_rng import splitmix64_next
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
 
 
 @always_inline
@@ -180,11 +183,41 @@ def o_gru(gx: List[Float32], gh: List[Float32], h_prev: List[Float32], B: Int, H
 
 
 # ---------------------------------------------------------------- 5504
+def _o_wgrad_block(K: Int) -> Int:
+    """Restated (sequence/recurrent.mojo `wgrad_block`): K itself when the
+    blocked order is off, else the smallest power of two R >= 512 with
+    R R >= K."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+        return K
+    var r = 512
+    while r * r < K:
+        r *= 2
+    return r
+
+
 def o_bptt_dw(dgx: List[Float32], x: List[Float32], T: Int, B: Int, GH: Int, D: Int, alt: Bool) -> List[Float32]:
     """dW_ih [GH, D] = sum over rows r = s B + b of dgx[r, g] x[r, d]:
-    pinned, r ascending in one fold; alt, the steps descending (the order a
-    per-step accumulation during the reverse sweep folds them)."""
+    pinned, r ascending in one fold (under IDENTICAL since nr-small D3:
+    the blocked order, blocks of `_o_wgrad_block(T B)` rows each folded
+    from zero, the partials added ascending from zero; one block is the one
+    fold); alt, the steps descending (the order a per-step accumulation
+    during the reverse sweep folds them)."""
     var out = List[Float32](capacity=GH * D)
+    var K = T * B
+    var KB = _o_wgrad_block(K)
+    if not alt and KB < K:
+        for g in range(GH):
+            for d in range(D):
+                var tot = Float32(0.0)
+                var lo = 0
+                while lo < K:
+                    var part = Float32(0.0)
+                    for r in range(lo, min(lo + KB, K)):
+                        part = _f(dgx[r * GH + g], x[r * D + d], part)
+                    tot = _a(tot, part)
+                    lo += KB
+                out.append(tot)
+        return out^
     for g in range(GH):
         for d in range(D):
             var acc = Float32(0.0)

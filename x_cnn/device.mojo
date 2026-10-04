@@ -25,7 +25,10 @@ from gemm.checks.gemm_identical import (
     PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, PLAN_TUNED_32_2X2, PLAN_SPLITK, apple_mma_applies, apple_mma_applies_one_leaf, PLAN_APPLE_MMA_SPLIT, PLAN_APPLE_MMA_SPLIT_BIG,
     identical_gemm_splitk_fits, choose_gemm_plan,
 )
-from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
+from gemm.checks.gemm_identical import (
+    GEMM_FOLD_SLOTS, _fold_drain, _fold_push, _rtf_leaf_partial, contract_partition, gemm_operand_strides,
+)
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_AMD, COLUMN_NVIDIA
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from core.staged_download import download_f32_into
@@ -264,9 +267,22 @@ def _im2col(
 # weights sit flushed in threadgroup memory; the NCHW store is
 # `conv_out_val` of that cell. No GEMM launch, no y2 round trip, no
 # conv_out launch. `-D MOJOLEARN_XCNN_NO_DIRECT_CONV` is the before arm.
-#: Apple only: measured there (the other columns keep their GEMM path until
-#: their own runs time it).
-comptime DIRECT_CONV = TARGET_COLUMN == COLUMN_APPLE and not is_defined["MOJOLEARN_XCNN_NO_DIRECT_CONV"]()
+#: Apple since lane/cnn-apple2; NVIDIA and AMD since nr-small D6
+#: (2026-10-04, roadmap D6 / review "ALREADY WRITTEN, gated"): the cell is
+#: the pinned contract's one-leaf chain on every column (k <= DC_MAXK is one
+#: leaf; the leaf bound is 128, DC_MAXK = 32 is the register staging of the
+#: taps), and the kernel uses only `barrier()` over threadgroup memory, so
+#: the words are the GEMM path's. Needs the NV/AMD ID check.
+#: IDENTICAL only on NV/AMD (FAST keeps its AFN direct path there).
+#: -D MOJOLEARN_IDN_DIRECT_CONV_NVAMD_OFF (or MOJOLEARN_IDN_ALL_OFF)
+#: restores Apple only.
+comptime DIRECT_CONV_NVAMD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_DIRECT_CONV_NVAMD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime DIRECT_CONV = (
+    TARGET_COLUMN == COLUMN_APPLE
+    or (DIRECT_CONV_NVAMD and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD))
+) and not is_defined["MOJOLEARN_XCNN_NO_DIRECT_CONV"]()
 comptime DC_MAXK = 32
 comptime DC_MAXW = 2048  # 8 KB of threadgroup memory: four blocks fit a core
 comptime DC_TPB = 256
@@ -584,6 +600,78 @@ def ws_i(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType.int
 #: `-D MOJOLEARN_XCNN_ONES_CACHE_OFF` is the before arm (a fill per call).
 comptime ONES_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_XCNN_ONES_CACHE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 comptime ONES_WS_SLOT = 30
+
+
+#: nr-small D8 (2026-10-04): THE BIAS GRADIENT AS A COLUMN FOLD. gb[oc] =
+#: sum over the rows of G[row, oc] was the pinned GEMM (OP_TN, n = 1)
+#: against the ones vector, on a split plan sized for a matrix. It is now
+#: two launches that ARE that GEMM's cell: one thread per (leaf, oc) runs
+#: `_rtf_leaf_partial` (the contract's leaf, the exact rtf step, against the
+#: same ones words), then one thread per oc pushes the leaf partials in
+#: order through `_fold_push` / `_fold_drain` (the contract's tree) and
+#: stores ftz of the root: `_rtf_cell`'s arithmetic, which every plan equals
+#: (contract 7), with the partition from `contract_partition(k)` alone. Same
+#: bits on every column (the host keeps its pinned host GEMM). Needs the
+#: NV/AMD ID check. -D MOJOLEARN_IDN_XCNN_BIAS_FOLD_OFF (or
+#: MOJOLEARN_IDN_ALL_OFF) restores the GEMM. IDENTICAL, NVIDIA and AMD
+#: (Apple keeps its measured plan pick; `_rtf_leaf_partial` is not inlined).
+comptime XCNN_BIAS_FOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_APPLE and not (
+    is_defined["MOJOLEARN_IDN_XCNN_BIAS_FOLD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime BIAS_WS_SLOT = 29
+comptime BIAS_TPB = 128
+
+
+def bias_leaf_kernel(g: FP, ones: FP, part: FP, m_oc: Int32, k_rows: Int32, leaf: Int32, p_count: Int32):
+    """Thread t = l OC + oc: part[t] = leaf l of cell (oc, 0) of G^T ones."""
+    var OC = Int(m_oc)
+    var P = Int(p_count)
+    var t = Int(block_idx.x) * BIAS_TPB + Int(thread_idx.x)
+    if t >= OC * P:
+        return
+    var l = t // OC
+    var oc = t - l * OC
+    var k = Int(k_rows)
+    var sd = gemm_operand_strides(OP_TN, OC, 1, k)
+    part.unsafe_store(t, _rtf_leaf_partial(g, ones, oc, 0, l, P, Int(leaf), k, sd[0], sd[1], sd[2], sd[3]))
+
+
+def bias_fold_kernel(part: FP, gb: FP, m_oc: Int32, p_count: Int32):
+    """Thread oc: gb[oc] = ftz(the contract tree over part[l OC + oc], l ascending)."""
+    var OC = Int(m_oc)
+    var oc = Int(block_idx.x) * BIAS_TPB + Int(thread_idx.x)
+    if oc >= OC:
+        return
+    var stack = SIMD[DType.float32, GEMM_FOLD_SLOTS](0.0)
+    var occ = 0
+    for l in range(Int(p_count)):
+        _ = _fold_push(stack, occ, part.unsafe_load(l * OC + oc))
+    gb.unsafe_store(oc, ftz(_fold_drain(stack, occ)))
+
+
+def bias_grad_gemm(
+    ctx: DeviceContext, mut gb: DeviceBuffer[DType.float32], mut g: DeviceBuffer[DType.float32],
+    mut ones: DeviceBuffer[DType.float32], OC: Int, rows: Int,
+) raises:
+    """gb = G^T ones (OC x 1 over `rows`): the pinned GEMM TN's words, by
+    XCNN_BIAS_FOLD's two launches when it is on."""
+    comptime if XCNN_BIAS_FOLD:
+        if rows > 0 and OC > 0:
+            var lp = contract_partition(rows)
+            var leaf = lp[0]
+            var P = lp[1]
+            var part = ws(ctx, BIAS_WS_SLOT, OC * P)
+            ctx.enqueue_function[bias_leaf_kernel](
+                fp(g), fp(ones), fp(part), Int32(OC), Int32(rows), Int32(leaf), Int32(P),
+                grid_dim=((OC * P + BIAS_TPB - 1) // BIAS_TPB, 1, 1), block_dim=(BIAS_TPB, 1, 1),
+            )
+            ctx.enqueue_function[bias_fold_kernel](
+                fp(part), fp(gb), Int32(OC), Int32(P),
+                grid_dim=((OC + BIAS_TPB - 1) // BIAS_TPB, 1, 1), block_dim=(BIAS_TPB, 1, 1),
+            )
+            _ = part^
+            return
+    device_gemm(ctx, gb, g, ones, OC, 1, rows, OP_TN)
 
 
 def ones_buf(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
@@ -959,7 +1047,7 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     # DEVIATION 5701: the weight gradient's reduction over the N*OH*OW rows is
     # the pinned GEMM's (leaves + balanced fold), never an atomic accumulation.
     device_gemm(ctx, gw, g, cols, OC, ckk, rows, OP_TN)
-    device_gemm(ctx, gb, g, ones, OC, 1, rows, OP_TN)
+    bias_grad_gemm(ctx, gb, g, ones, OC, rows)
     device_gemm(ctx, dcols, g, dw, rows, ckk, OC, OP_NN)
     launch[col2im_at](ctx, fp(dcols), fp(gx), fp(gx), fp(gx), ip(dp), ip(dp), nx)
     m_fetch(ctx, gx, a[3], nx, isdev(dev, 3))
@@ -1204,7 +1292,7 @@ def linear_backward_m(a: List[Int], dev: Int, n: Int, d_in: Int, d_out: Int) rai
     var gw = m_out(ctx, 5, a[4], d_out * d_in, isdev(dev, 4))
     var gb = m_out(ctx, 6, a[5], d_out, isdev(dev, 5))
     device_gemm(ctx, gw, dg, dx, d_out, d_in, n, OP_TN)
-    device_gemm(ctx, gb, dg, dones, d_out, 1, n, OP_TN)
+    bias_grad_gemm(ctx, gb, dg, dones, d_out, n)
     device_gemm(ctx, gx, dg, dw, n, d_in, d_out, OP_NN)
     m_fetch(ctx, gx, a[3], n * d_in, isdev(dev, 3))
     m_fetch(ctx, gw, a[4], d_out * d_in, isdev(dev, 4))
@@ -2559,7 +2647,7 @@ def conv_block_backward_into[resident: Bool = False](
         launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the pinned GEMM's fold over the rows, never an atomic.
     device_gemm(ctx, gw, grow, cols, OC, ckk, rows, OP_TN)
-    device_gemm(ctx, gb, grow, ones, OC, 1, rows, OP_TN)
+    bias_grad_gemm(ctx, gb, grow, ones, OC, rows)
     if need_dx:
         var dcols = ws(ctx, 16, rows * ckk)
         var gx = outb[resident](ctx, 17, gx_out, nx)

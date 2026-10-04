@@ -37,7 +37,9 @@ from sequence.exec_trait import Exec
 from sequence.dispatch import apply
 from sequence.ops import OP_MOE_ROUTE, OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
 from sequence.coop import COOP_W, apply_coop
+from sequence.gemm_tiled import GT_TPB, SEQ_GEMM_TILED, seq_gemm_tiled_blocks, seq_gemm_tiled_kernel, seq_gemm_tiled_on
 from sequence.ops import OP_THETA
+from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, OP_AF_RMEAN, OP_AF_ROW
 from sequence.theta_spec import THETA_SPEC
 from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST, TSA2_VAR
 from sequence.vecar_block import VAR_SMEM, VAR_TPB, var_chol_block_kernel, var_forecast_block_kernel
@@ -50,8 +52,33 @@ from x_linear.ops import IP
 from x_linear.witness import witness_end
 from std.sys.info import has_apple_gpu_accelerator
 
-#: the simdgroup-cooperative long folds (sequence/coop.mojo): Apple only
-comptime SEQ_COOP = has_apple_gpu_accelerator()
+#: the simdgroup-cooperative long folds (sequence/coop.mojo): Apple, and
+#: since nr-small D1/D11 (2026-10-04) NVIDIA and AMD in IDENTICAL. The
+#: cooperative fold is the one-thread op's chain (same fmas, same values,
+#: same order; only the loads are spread over the warp), so no bit moves on
+#: any column; `coop_bcast` keeps a cell inside its 32-lane half of a CDNA
+#: wavefront. -D MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF (or MOJOLEARN_IDN_ALL_OFF)
+#: restores Apple only.
+comptime SEQ_COOP_NVAMD = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+comptime SEQ_COOP = has_apple_gpu_accelerator() or SEQ_COOP_NVAMD
+#: nr-small D10: LayerNorm forward / backward-x rows on a simdgroup (the
+#: same chains over broadcast words, coalesced loads; sequence/coop.mojo),
+#: IDENTICAL on every GPU. -D MOJOLEARN_IDN_SEQ_LN_COOP_OFF (or
+#: MOJOLEARN_IDN_ALL_OFF) restores one thread per row.
+#: nr-small D11: Adafactor's row factor (op_af_row) and row-var mean
+#: (op_af_rmean, one thread) on a simdgroup, the same chains; IDENTICAL.
+#: -D MOJOLEARN_IDN_SEQ_AF_COOP_OFF (or MOJOLEARN_IDN_ALL_OFF).
+comptime SEQ_AF_COOP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_IDN_SEQ_AF_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+comptime SEQ_LN_COOP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_IDN_SEQ_LN_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
 
 comptime TPB = 128
 
@@ -753,11 +780,15 @@ struct DeviceExec(Exec):
                     grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
                 )
                 return
-        comptime if SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ
-                                  or OP == OP_LAMB_RATIO or OP == OP_GEMM or OP == OP_AF_BLK_SUMSQ
-                                  or (THETA_SPEC and OP == OP_THETA)):
+        comptime if (SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ
+                                   or OP == OP_LAMB_RATIO or OP == OP_GEMM or OP == OP_AF_BLK_SUMSQ
+                                   or (THETA_SPEC and OP == OP_THETA))) or (
+                SEQ_LN_COOP and (OP == OP_LN_FWD or OP == OP_LN_BWD_X)) or (
+                SEQ_AF_COOP and (OP == OP_AF_ROW or OP == OP_AF_RMEAN)):
             var coop = True
-            comptime if OP == OP_GEMM:
+            comptime if OP == OP_LN_FWD or OP == OP_LN_BWD_X or OP == OP_AF_ROW or OP == OP_AF_RMEAN:
+                coop = a.i0 >= COOP_W
+            elif OP == OP_GEMM:
                 coop = a.i0 * a.i1 <= 1024 and a.i2 >= 32768
             elif OP == OP_AF_ALPHA or OP == OP_AF_DENOM:
                 coop = a.i0 >= 4096
@@ -770,6 +801,19 @@ struct DeviceExec(Exec):
                     Int64(n),
                     grid_dim=((n * COOP_W + TPB - 1) // TPB, 1, 1),
                     block_dim=(TPB, 1, 1),
+                )
+                return
+        # nr-small D1: op_gemm's chain with the A/B slabs staged in
+        # threadgroup memory (sequence/gemm_tiled.mojo), same words
+        comptime if SEQ_GEMM_TILED and OP == OP_GEMM:
+            if seq_gemm_tiled_on(a.i0, a.i1):
+                self.ctx.enqueue_function[seq_gemm_tiled_kernel](
+                    a.p0, a.p1, a.p2,
+                    Int32(a.i0), Int32(a.i1), Int32(a.i2),
+                    Int32(a.i3), Int32(a.i4), Int32(a.i5), Int32(a.i6),
+                    Int32(a.i7), Int32(a.i8),
+                    grid_dim=(seq_gemm_tiled_blocks(a.i0, a.i1), 1, 1),
+                    block_dim=(GT_TPB, 1, 1),
                 )
                 return
         comptime if OP != OP_CELL_FWD_SCAN and OP != OP_CELL_BWD_SCAN:

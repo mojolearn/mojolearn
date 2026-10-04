@@ -48,6 +48,10 @@ comptime IDN_PAD_BWD_BOUNDED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not 
 #: adaptive pool backward (avg and max): the output cells whose window can
 #: hold the pixel instead of all OH x OW. `-D MOJOLEARN_IDN_ADAPT_BWD_BOUNDED_OFF`.
 comptime IDN_ADAPT_BWD_BOUNDED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_ADAPT_BWD_BOUNDED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+#: nr-small D9 (2026-10-04): `softmax_xent_row_at` computes each exp once
+#: and parks it in the proba row (same words, every column and the host).
+#: -D MOJOLEARN_IDN_XCNN_SOFTMAX_ONE_EXP_OFF (or MOJOLEARN_IDN_ALL_OFF).
+comptime XCNN_SOFTMAX_ONE_EXP = not (is_defined["MOJOLEARN_IDN_XCNN_SOFTMAX_ONE_EXP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 
 
 # ---------------------------------------------------------------- conv params
@@ -657,6 +661,26 @@ def softmax_xent_row_at(i: Int, logits: FP, grad: FP, proba: FP, rowloss: FP, la
             rowloss.unsafe_store(i, Float32(0) if ftz(logits.unsafe_load(base + y)) == inf else inf)
         return
     var s = Float32(0)
+    comptime if XCNN_SOFTMAX_ONE_EXP:
+        # nr-small D9: each exp once, parked in the proba row (the same word
+        # the second exp gave), the label's logit read first (proba may be
+        # the logits buffer)
+        var ly0 = Float32(0)
+        if y >= 0:
+            ly0 = ftz(ftz(logits.unsafe_load(base + y)) - mx)
+        for j in range(k):
+            var e = ftz(identical_exp(ftz(ftz(logits.unsafe_load(base + j)) - mx)))
+            proba.unsafe_store(base + j, e)
+            s = ftz(s + e)
+        for j in range(k):
+            var pr = canon(ftz(identical_div(proba.unsafe_load(base + j), s)))
+            proba.unsafe_store(base + j, pr)
+            if y >= 0:
+                var t = ftz(pr - Float32(1)) if j == y else pr
+                grad.unsafe_store(base + j, canon(ftz(identical_div(t, Float32(n)))))
+        if y >= 0:
+            rowloss.unsafe_store(i, canon(ftz(ftz(identical_log(s)) - ly0)))
+        return
     for j in range(k):
         s = ftz(s + ftz(identical_exp(ftz(ftz(logits.unsafe_load(base + j)) - mx))))
     for j in range(k):

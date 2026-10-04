@@ -47,6 +47,37 @@ from sequence.ops import (
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, SEQ_LSTM_WGRAD, scan_applies
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div, identical_mul, identical_pow64, identical_sqrt, ftz
 
+from std.sys.compile import is_defined
+
+#: nr-small D3 (2026-10-04): under IDENTICAL the recurrent weight and bias
+#: gradients (C = A B over the K = T B time x batch rows, M N cells of one
+#: K-long chain each, and the bias column sums as ones^T dG, one fma by 1.0
+#: per term = the colsum add) are THE BLOCKED ORDER: K is cut into
+#: consecutive blocks of wgrad_block(K) rows (a function of K alone), each
+#: block folded from +0.0 by `gemm_dot`'s chain (`OP_GEMM_SPLITK` stage 0),
+#: then each cell adds its block partials ascending from +0.0 (stage 1).
+#: Device and host run the same ops, so the bits move on every column
+#: together; the oracle (`sequence/checks/oracle.mojo::o_bptt_dw`) states
+#: the same blocks. One block (K <= WGRAD_MIN_BLOCK) is the old chain.
+#: -D MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF (or MOJOLEARN_IDN_ALL_OFF).
+comptime SEQ_WGRAD_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime WGRAD_MIN_BLOCK = 512
+#: partial floats one launch pair may hold (rows of cells are chunked to
+#: fit; chunking moves no bit, every cell's blocks are the same)
+comptime WGRAD_IDN_SCRATCH = 1 << 22
+
+
+def wgrad_block(K: Int) -> Int:
+    """Rows per block: the smallest power of two R >= WGRAD_MIN_BLOCK with
+    R * R >= K (so at most R blocks)."""
+    var r = WGRAD_MIN_BLOCK
+    while r * r < K:
+        r *= 2
+    return r
+
+
 comptime TASK_MSE = 0
 comptime TASK_CE = 1
 
@@ -177,6 +208,51 @@ def wgrad_gemm[E: Exec](
     gemm(ex, A, B, C, M, N, K, sam, sak, sbk, sbn, False, ldc)
 
 
+def wgrad_blocked[E: Exec](
+    mut ex: E, A: FP, B: FP, C: FP, M: Int, N: Int, K: Int,
+    sam: Int, sak: Int, sbk: Int, sbn: Int, ldc: Int, scratch: FP,
+) raises:
+    """SEQ_WGRAD_BLOCKED: C = A B (no accumulate) in the blocked K order;
+    `gemm` when K is one block. scratch holds WGRAD_IDN_SCRATCH floats."""
+    var KB = wgrad_block(K)
+    var S = (K + KB - 1) // KB
+    if S <= 1:
+        gemm(ex, A, B, C, M, N, K, sam, sak, sbk, sbn, False, ldc)
+        return
+    # cell chunks of at most WGRAD_IDN_SCRATCH / S cells (S <= 2^16 since
+    # K < 2^31, so a chunk holds at least 64 cells)
+    var Nc = min(N, WGRAD_IDN_SCRATCH // S)
+    var Mc = max(1, WGRAD_IDN_SCRATCH // (S * Nc))
+    var m0 = 0
+    while m0 < M:
+        var mc = min(Mc, M - m0)
+        var n0 = 0
+        while n0 < N:
+            var nc = min(Nc, N - n0)
+            var a = Args()
+            a.p0 = A + m0 * sam
+            a.p1 = B + n0 * sbn
+            a.p2 = C + m0 * ldc + n0
+            a.p3 = scratch
+            a.i0 = mc
+            a.i1 = nc
+            a.i2 = K
+            a.i3 = sam
+            a.i4 = sak
+            a.i5 = sbk
+            a.i6 = sbn
+            a.i7 = 0
+            a.i8 = ldc
+            a.i9 = S
+            a.i10 = KB
+            a.i11 = 0
+            ex.launch[OP_GEMM_SPLITK](a, S * mc * nc)
+            a.i11 = 1
+            ex.launch[OP_GEMM_SPLITK](a, mc * nc)
+            n0 += nc
+        m0 += mc
+
+
 def bias_rows[E: Exec](mut ex: E, X: FP, b: FP, Y: FP, R: Int, C: Int) raises:
     var a = Args()
     a.p0 = X
@@ -288,11 +364,14 @@ struct Work(Movable):
         self.yhat = ex.alloc(B * net.O)
         self.dy = ex.alloc(B * net.O)
         self.sq = ex.alloc(B * net.O)
-        comptime if SEQ_LSTM_WGRAD:
+        comptime if SEQ_LSTM_WGRAD or SEQ_WGRAD_BLOCKED:
             # the bias sums as ones^T dG (one fma by 1.0 per term, exact)
             self.one = ex.alloc(1)
             fill(ex, self.one, 1, Float32(1.0))
-            self.wsplit = ex.alloc(WGRAD_SCRATCH if train else 1)
+            comptime if SEQ_WGRAD_BLOCKED:
+                self.wsplit = ex.alloc(WGRAD_IDN_SCRATCH if train else 1)
+            else:
+                self.wsplit = ex.alloc(WGRAD_SCRATCH if train else 1)
         else:
             self.one = self.sq
             self.wsplit = self.sq
@@ -442,6 +521,15 @@ def backward[E: Exec](mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int,
             wgrad_gemm(ex, w.dgh, w.hall[l], Gr + net.w_hh(l), GH, H, T * B, 1, GH, H, 1, H, w.wsplit)
             wgrad_gemm(ex, w.one, w.dgx, Gr + net.b_ih(l), 1, GH, T * B, 0, 0, GH, 1, GH, w.wsplit)
             wgrad_gemm(ex, w.one, w.dgh, Gr + net.b_hh(l), 1, GH, T * B, 0, 0, GH, 1, GH, w.wsplit)
+        elif SEQ_WGRAD_BLOCKED:
+            wgrad_blocked(ex, w.dgx, inp, Gr + net.w_ih(l), GH, din, T * B, 1, GH, din, 1, din, w.wsplit)
+            wgrad_blocked(ex, w.dgh, w.hall[l], Gr + net.w_hh(l), GH, H, T * B, 1, GH, H, 1, H, w.wsplit)
+            if wgrad_block(T * B) < T * B:
+                wgrad_blocked(ex, w.one, w.dgx, Gr + net.b_ih(l), 1, GH, T * B, 0, 0, GH, 1, GH, w.wsplit)
+                wgrad_blocked(ex, w.one, w.dgh, Gr + net.b_hh(l), 1, GH, T * B, 0, 0, GH, 1, GH, w.wsplit)
+            else:
+                colsum(ex, w.dgx, Gr + net.b_ih(l), T * B, GH)
+                colsum(ex, w.dgh, Gr + net.b_hh(l), T * B, GH)
         else:
             gemm(ex, w.dgx, inp, Gr + net.w_ih(l), GH, din, T * B, 1, GH, din, 1, False, din)
             gemm(ex, w.dgh, w.hall[l], Gr + net.w_hh(l), GH, H, T * B, 1, GH, H, 1, False, H)
