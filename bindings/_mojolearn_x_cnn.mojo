@@ -38,6 +38,69 @@ from x_cnn.device import (
     epoch_rows_download, res_gather_pair_perm, adam_hyper_resident, adam_hyper_download, opt_many_resident_h,
     softmax_xent_res_loss,
 )
+from x_cnn.device import cnn_ctx
+from core.device_zero import enqueue_fill
+from std.gpu import block_dim, block_idx, thread_idx
+
+
+# ------------------------------------------------ cpu3-bindings: input checks on the device
+# The host entries' label and CSR refusals, as one bulk upload, one check
+# launch and two flag words read back (the host walks they replace read
+# every label, rowptr entry and edge on the CPU). Same predicates, same
+# messages in the same priority; every writer of a flag stores the same 1.
+comptime _CHK_TPB = 256
+
+
+def _label_bad_kernel(labels: IP, n: Int32, k: Int32, flag: IP):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        if labels.unsafe_load(i) >= k:
+            flag.unsafe_store(0, Int32(1))
+
+
+def _csr_bad_kernel(csr: IP, n: Int32, nnz: Int32, flag: IP):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        if csr.unsafe_load(i + 1) < csr.unsafe_load(i):
+            flag.unsafe_store(0, Int32(1))
+    if i < Int(nnz):
+        var c = csr.unsafe_load(Int(n) + 1 + i)
+        var r = csr.unsafe_load(Int(n) + 1 + Int(nnz) + i)
+        if c < Int32(0) or c >= n or r < Int32(0) or r >= n:
+            flag.unsafe_store(1, Int32(1))
+
+
+def _device_int_check(src: IP, words: Int, n: Int, m: Int, csr: Bool) raises -> Tuple[Int32, Int32]:
+    """`words` int32 of the caller's `src` checked on the device: the
+    label check (`m` = classes) or the CSR check (`m` = nnz). Returns the
+    two flag words."""
+    var ctx = cnn_ctx()
+    var d = ctx.enqueue_create_buffer[DType.int32](max(words, 1))
+    if words > 0:
+        ctx.enqueue_copy(dst_buf=d, src_ptr=src)
+    var flag = ctx.enqueue_create_buffer[DType.int32](2)
+    enqueue_fill(ctx, flag, Int32(0))
+    var span = max(n, m) if csr else n
+    if span > 0:
+        if csr:
+            ctx.enqueue_function[_csr_bad_kernel](
+                d.unsafe_ptr(), Int32(n), Int32(m), flag.unsafe_ptr(),
+                grid_dim=((span + _CHK_TPB - 1) // _CHK_TPB, 1, 1), block_dim=(_CHK_TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[_label_bad_kernel](
+                d.unsafe_ptr(), Int32(n), Int32(m), flag.unsafe_ptr(),
+                grid_dim=((span + _CHK_TPB - 1) // _CHK_TPB, 1, 1), block_dim=(_CHK_TPB, 1, 1),
+            )
+    var host = ctx.enqueue_create_host_buffer[DType.int32](2)
+    ctx.enqueue_copy(dst_buf=host, src_buf=flag)
+    ctx.synchronize()
+    var f0 = host.unsafe_ptr().unsafe_load(0)
+    var f1 = host.unsafe_ptr().unsafe_load(1)
+    _ = d^
+    _ = flag^
+    _ = host^
+    return (f0, f1)
 
 
 def _fp(addr: PythonObject) raises -> FP:
@@ -350,9 +413,8 @@ def softmax_xent_binding[resident: Bool = False](
         raise Error("x_cnn softmax: positive rows and classes required")
     var py_labels = _ip(labels_addr)
     comptime if not resident:  # a resident label array is on the device; its caller checked it
-        for i in range(n):
-            if Int(py_labels[i]) >= k:
-                raise Error("x_cnn softmax: a label is not a class index")
+        if _device_int_check(py_labels, n, n, k, False)[0] != Int32(0):
+            raise Error("x_cnn softmax: a label is not a class index")
     var logits = _fp(logits_addr)
     var pg = _fp(grad_addr)
     var pp = _fp(proba_addr)
@@ -377,7 +439,7 @@ def _many(ws_: PythonObject, gs: PythonObject, bs: PythonObject, params: PythonO
     var b = List[Int]()
     var c = List[Int]()
     var n = List[Int]()
-    for j in range(k):
+    for j in range(k):  # small-loop(k: parameter tensors of the model): one handle triple per tensor, not data
         a.append(Int(py=ws_[j]))
         b.append(Int(py=gs[j]))
         c.append(Int(py=bs[j]))
@@ -505,14 +567,13 @@ def _csr_ints(csr_addr: PythonObject, n: Int, F: Int, nnz: Int, mode: Int) raise
     var csr = read_i32(Int(py=csr_addr), n + 1 + 2 * nnz)
     if Int(csr[0]) != 0 or Int(csr[n]) != nnz:
         raise Error("x_cnn spmm: rowptr must start at 0 and end at nnz")
-    for r in range(n):
-        if csr[r + 1] < csr[r]:
-            raise Error("x_cnn spmm: rowptr must be non-decreasing")
-    for e in range(nnz):
-        var c = Int(csr[n + 1 + e])
-        var rr = Int(csr[n + 1 + nnz + e])
-        if c < 0 or c >= n or rr < 0 or rr >= n:
-            raise Error("x_cnn spmm: a column or row index is out of range")
+    var bad = _device_int_check(
+        csr.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), len(csr), n, nnz, True
+    )
+    if bad[0] != Int32(0):
+        raise Error("x_cnn spmm: rowptr must be non-decreasing")
+    if bad[1] != Int32(0):
+        raise Error("x_cnn spmm: a column or row index is out of range")
     var prm: List[Int32] = [Int32(n), Int32(F), Int32(nnz), Int32(mode)]
     return (csr^, prm^)
 
@@ -754,7 +815,7 @@ def _addrs(addrs: PythonObject, k: Int) raises -> List[Int]:
     if Int(py=len(addrs)) != k:
         raise Error("x_cnn: this entry takes " + String(k) + " addresses")
     var out = List[Int]()
-    for i in range(k):
+    for i in range(k):  # small-loop(k: arrays of one entry, at most nine): reads address list, not data
         out.append(Int(py=addrs[i]))
     return out^
 
@@ -1169,7 +1230,7 @@ def _epoch_plan(
     var c = List[List[Int32]]()
     var p = List[List[Int32]]()
     var o = List[Bool]()
-    for j in range(nb):
+    for j in range(nb):  # small-loop(nb: conv blocks of the network): one plan entry per block, not data
         var t = _block_prms(obj[j][0], obj[j][1])
         c.append(t[0].copy())
         p.append(t[1].copy())
@@ -1200,7 +1261,7 @@ def fit_epoch_r_binding(
     var blocks = spec["blocks"]
     var nb = Int(py=len(blocks))
     var bh = List[List[Int]]()
-    for j in range(nb):
+    for j in range(nb):  # small-loop(nb: conv blocks of the network): one handle list per block, not data
         var h = _ints(blocks[j])
         if len(h) != 9:
             raise Error("x_cnn fit epoch: a block is [w, b, gw, gb, out, idx, gout, cols, conv out]")
@@ -1224,7 +1285,7 @@ def fit_epoch_r_binding(
     var hyp = f64_ptr(Int(py=hyper_addr))
     var losses = f64_ptr(Int(py=losses_addr))
     with GILReleased(Python()):
-        for st in range(steps):
+        for st in range(steps):  # small-loop(steps: optimizer steps of one epoch): orchestration that launches device work per step
             var s0 = st * batch
             var m = min(batch, n - s0)
             var q = 0 if m == batch else 1
@@ -1254,7 +1315,7 @@ def fit_epoch_r_binding(
                     bh[j][8],
                 )
             var h = List[Float32]()
-            for e in range(nh):
+            for e in range(nh):  # small-loop(nh: optimizer scalars of one step, six or nine): builds one launch parameter list, not data
                 h.append(Float32(hyp[st * nh + e]))
             if adam:
                 opt_many_resident[True](t[0], t[1], t[2], t[3], h)
@@ -1320,7 +1381,7 @@ def adam_hyper_d_binding(dst_addr: PythonObject, params: PythonObject, fparams: 
     with GILReleased(Python()):
         adam_hyper_download(base, step0, nsteps, po)
     var dst = f64_ptr(Int(py=dst_addr))
-    for e in range(nsteps * AH_ROW):
+    for e in range(nsteps * AH_ROW):  # small-loop(nsteps: optimizer steps, AH_ROW scalars each): widens per step optimizer scalars, not row data
         dst[e] = Float64(out[e])
     _ = base^
     _ = out^
@@ -1347,7 +1408,7 @@ def fit_epoch_d_binding(
     var blocks = spec["blocks"]
     var nb = Int(py=len(blocks))
     var bh = List[List[Int]]()
-    for j in range(nb):
+    for j in range(nb):  # small-loop(nb: conv blocks of the network): one handle list per block, not data
         var h = _ints(blocks[j])
         if len(h) != 9:
             raise Error("x_cnn fit epoch: a block is [w, b, gw, gb, out, idx, gout, cols, conv out]")
@@ -1422,7 +1483,7 @@ def fit_epoch_d_binding(
         res_download(lbuf, l32.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), steps)
         res_free(hbuf)
         res_free(lbuf)
-    for st in range(steps):
+    for st in range(steps):  # small-loop(steps: optimizer steps of one epoch): widens one loss scalar per step, not row data
         losses[st] = Float64(l32[st])
     _ = base^
     _ = l32^
