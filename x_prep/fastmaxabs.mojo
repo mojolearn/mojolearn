@@ -25,7 +25,8 @@ from checks.numerics import ftz
 from x_prep.common import FP, is_nan
 from x_prep.prims import zero_to_one
 from x_prep.device import x_prep_ctx
-from x_prep.prep3 import PREP3_MAXABS
+from x_prep.prep3 import PREP3_MAXABS, PREP3_MAXABS_POOL
+from core.device_pool import pool_give, pool_take
 
 #: threads per block: one column each, consecutive columns of one row
 comptime MA_TPB = 256
@@ -85,6 +86,28 @@ def maxabs_fit_direct(x_addr: Int, n: Int, d: Int, out_addr: Int) raises:
     var nch = (n + rows - 1) // rows
     var cg = (d + MA_TPB - 1) // MA_TPB
     var ctx = x_prep_ctx()
+    comptime if PREP3_MAXABS_POOL:
+        # lane/apple-fast-w4-small: pooled buffers, the same launches
+        var px = pool_take["MojoXPrepMaxAbsX"](ctx, n * d)
+        var pp = pool_take["MojoXPrepMaxAbsPart"](ctx, nch * d)
+        var po = pool_take["MojoXPrepMaxAbsOut"](ctx, 2 * d)
+        ctx.enqueue_copy(dst_buf=px, src_ptr=FP(unsafe_from_address=x_addr))
+        ctx.enqueue_function[maxabs_part_kernel](
+            FP(unsafe_from_address=Int(px.unsafe_ptr())), FP(unsafe_from_address=Int(pp.unsafe_ptr())),
+            Int32(n), Int32(d), Int32(rows), Int32(cg),
+            grid_dim=nch * cg, block_dim=MA_TPB,
+        )
+        ctx.enqueue_function[maxabs_fold_kernel](
+            FP(unsafe_from_address=Int(pp.unsafe_ptr())), FP(unsafe_from_address=Int(po.unsafe_ptr())),
+            Int32(d), Int32(nch), grid_dim=cg, block_dim=MA_TPB,
+        )
+        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=out_addr), src_buf=po)
+        ctx.synchronize()
+        pool_give["MojoXPrepMaxAbsX"](px^)
+        pool_give["MojoXPrepMaxAbsPart"](pp^)
+        pool_give["MojoXPrepMaxAbsOut"](po^)
+        _ = ctx^
+        return
     var dx = ctx.enqueue_create_buffer[DType.float32](n * d)
     ctx.enqueue_copy(dst_buf=dx, src_ptr=FP(unsafe_from_address=x_addr))
     var dp = ctx.enqueue_create_buffer[DType.float32](nch * d)
