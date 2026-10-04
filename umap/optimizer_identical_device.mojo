@@ -596,12 +596,13 @@ def umap_csr_count_kernel(
     counts.unsafe_store(head, c)
 
 
-def umap_csr_fill_kernel(
+def umap_csr_fill_kernel[SCALE: Bool](
     offs: _UC_I32P, idx: _UC_U32P, vals: _UC_F32P, out_off: _UC_I32P,
     row_offsets: _UC_U32P, tails: _UC_U32P, scaled: _UC_F32P, max_weight: Float32, n_: Int32,
 ):
     """Row `head`'s kept edges written at its scanned offset, in edge order;
-    thread n writes the terminal offset."""
+    thread n writes the terminal offset. `SCALE` (IDENTICAL) stores the
+    weight over the maximum, flushed; FAST stores the raw weight."""
     var head = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var n = Int(n_)
     if head > n:
@@ -616,8 +617,443 @@ def umap_csr_fill_kernel(
         if head == tail or not (w > Float32(0.0)):
             continue
         tails.unsafe_store(at, UInt32(tail))
-        scaled.unsafe_store(at, ftz(identical_div(w, max_weight)))
+        comptime if SCALE:
+            scaled.unsafe_store(at, ftz(identical_div(w, max_weight)))
+        else:
+            scaled.unsafe_store(at, w)
         at += 1
+
+
+# ---------------------------------------------------------------------------
+# The optimizer's graph preparation on the device (lane cpu3-neighbors,
+# 2026-10-04), every mode. Before, the callers walked the graph on one host
+# thread: `validate_sparse_weights` (every edge), the FAST CSR compaction
+# with a binary search per edge, the dense n x n validation and compaction,
+# the initial embedding's finiteness walk and element-by-element staging.
+# Here the graph goes up once and the refusals are decided from device
+# words: a per-row first-error code with the smallest erring row (an integer
+# min, so the first refusal of the serial walk), the maximum weight as an
+# integer max over the bits of non-negative floats (exact, order-free),
+# the init finiteness flag, the symmetry flag and the kept-edge count.
+# The kept edges, their order and their scaled words are the host walk's, so
+# no bit moves; the messages and their order are each caller's own.
+# ---------------------------------------------------------------------------
+
+comptime _UC_I64P = MutPointer[Int64, MutAnyOrigin]
+comptime UMAP_NO_ROW = Int32(0x7FFFFFFF)
+
+
+@always_inline
+def _uc_finite(w: Float32) -> Bool:
+    return (bitcast[DType.uint32](w) & UInt32(0x7F800000)) != UInt32(0x7F800000)
+
+
+def umap_csr_validate_kernel(
+    offs64: _UC_I64P, idx: _UC_U32P, vals: _UC_F32P, offs: _UC_I32P, codes: _UC_I32P,
+    err_row: _UC_I32P, maxbits: _UC_I32P, n_: Int32, nnz_: Int32,
+):
+    """`validate_sparse_weights`'s row walk, one thread per row: code 1 for
+    an offset out of range, 2 for a column out of order, out of range or
+    the diagonal, 3 for a non-finite or negative weight, the first in edge
+    order; the smallest erring row goes to `err_row`. Every positive weight
+    raises `maxbits`. Thread `head` also narrows its offset to Int32 (thread
+    n the terminal one)."""
+    var head = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var n = Int(n_)
+    if head > n:
+        return
+    var begin64 = offs64.unsafe_load(head)
+    offs.unsafe_store(head, begin64.cast[DType.int32]())
+    if head == n:
+        return
+    var end64 = offs64.unsafe_load(head + 1)
+    var code = Int32(0)
+    if begin64 < Int64(0) or end64 < begin64 or end64 > Int64(Int(nnz_)):
+        code = Int32(1)
+    else:
+        var previous = -1
+        for e in range(Int(begin64), Int(end64)):
+            var col = Int(idx.unsafe_load(e))
+            if col <= previous or col >= n or col == head:
+                code = Int32(2)
+                break
+            previous = col
+            var w = vals.unsafe_load(e)
+            if not _uc_finite(w) or w < Float32(0.0):
+                code = Int32(3)
+                break
+            if w > Float32(0.0):
+                _ = Atomic.max(maxbits, bitcast[DType.int32](w))
+    codes.unsafe_store(head, code)
+    if code != Int32(0):
+        _ = Atomic.min(err_row, Int32(head))
+
+
+def umap_dense_scan_kernel(
+    w: _UC_F32P, counts: _UC_I32P, codes: _UC_I32P, err_row: _UC_I32P,
+    flags: _UC_I32P, maxbits: _UC_I32P, n_: Int32,
+):
+    """Row `head` of a dense n x n graph in the serial walks' (head, tail)
+    order: code 1 at the first invalid weight (non-finite or negative), 2 at
+    the first weight its transpose cell differs from, whichever is first;
+    the smallest erring row to `err_row`; `flags[0]` any invalid weight,
+    `flags[1]` any asymmetric kept edge; kept edges (off the diagonal,
+    positive) counted; every positive weight raises `maxbits`."""
+    var head = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var n = Int(n_)
+    if head >= n:
+        return
+    var base = head * n
+    var c = Int32(0)
+    var code = Int32(0)
+    for tail in range(n):
+        var x = w.unsafe_load(base + tail)
+        if not _uc_finite(x) or x < Float32(0.0):
+            flags.unsafe_store(0, Int32(1))
+            if code == Int32(0):
+                code = Int32(1)
+            continue
+        if x > Float32(0.0):
+            _ = Atomic.max(maxbits, bitcast[DType.int32](x))
+        var kept = head != tail and x > Float32(0.0)
+        if x != w.unsafe_load(tail * n + head):
+            if code == Int32(0):
+                code = Int32(2)
+            if kept:
+                flags.unsafe_store(1, Int32(1))
+        if kept:
+            c += 1
+    counts.unsafe_store(head, c)
+    codes.unsafe_store(head, code)
+    if code != Int32(0):
+        _ = Atomic.min(err_row, Int32(head))
+
+
+def umap_dense_fill_kernel[SCALE: Bool](
+    w: _UC_F32P, out_off: _UC_I32P, row_offsets: _UC_U32P, tails: _UC_U32P,
+    weights: _UC_F32P, max_weight: Float32, n_: Int32,
+):
+    """Row `head`'s kept dense edges at its scanned offset in tail order;
+    thread n writes the terminal offset."""
+    var head = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var n = Int(n_)
+    if head > n:
+        return
+    row_offsets.unsafe_store(head, UInt32(out_off.unsafe_load(head)))
+    if head == n:
+        return
+    var at = Int(out_off.unsafe_load(head))
+    var base = head * n
+    for tail in range(n):
+        var x = w.unsafe_load(base + tail)
+        if head == tail or not (x > Float32(0.0)):
+            continue
+        tails.unsafe_store(at, UInt32(tail))
+        comptime if SCALE:
+            weights.unsafe_store(at, ftz(identical_div(x, max_weight)))
+        else:
+            weights.unsafe_store(at, x)
+        at += 1
+
+
+def umap_init_prep_kernel(v: _UC_F32P, flag: _UC_I32P, n_: Int32, flush: Int32):
+    """The initial embedding on the device: `flag[0]` set by a non-finite
+    value; flushed in place when `flush` (IDENTICAL stages `ftz(x)`)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_):
+        return
+    var x = v.unsafe_load(i)
+    if not _uc_finite(x):
+        flag.unsafe_store(0, Int32(1))
+    if flush != Int32(0):
+        v.unsafe_store(i, ftz(x))
+
+
+def _uc_read_i32(ctx: DeviceContext, mut buf: DeviceBuffer[DType.int32], at: Int, n: Int) raises -> List[Int32]:
+    """`n` words of `buf` from `at` (a handful of refusal and sizing words)."""
+    var out = List[Int32](length=n, fill=Int32(0))
+    var view = buf.create_sub_buffer[DType.int32](at, n)
+    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
+    ctx.synchronize()
+    _ = view^
+    return out^
+
+
+struct UmapDeviceGraph(Movable):
+    """A prepared optimizer graph on the device: the initial embedding, the
+    kept-edge CSR (UInt32 offsets and tails) and its weights (scaled for
+    IDENTICAL, raw for FAST), the maximum weight and the kept-edge count."""
+
+    var first: DeviceBuffer[DType.float32]
+    var offsets: DeviceBuffer[DType.uint32]
+    var tails: DeviceBuffer[DType.uint32]
+    var weights: DeviceBuffer[DType.float32]
+    var max_weight: Float32
+    var n_edges: Int
+
+    def __init__(
+        out self,
+        var first: DeviceBuffer[DType.float32],
+        var offsets: DeviceBuffer[DType.uint32],
+        var tails: DeviceBuffer[DType.uint32],
+        var weights: DeviceBuffer[DType.float32],
+        max_weight: Float32,
+        n_edges: Int,
+    ):
+        self.first = first^
+        self.offsets = offsets^
+        self.tails = tails^
+        self.weights = weights^
+        self.max_weight = max_weight
+        self.n_edges = n_edges
+
+
+def _uc_upload_initial(ctx: DeviceContext, initial: List[Float32]) raises -> DeviceBuffer[DType.float32]:
+    """The initial embedding up once (a bulk copy through pinned memory)."""
+    var n_init = len(initial)
+    var h = ctx.enqueue_create_host_buffer[DType.float32](n_init)
+    ctx.synchronize()
+    memcpy(dest=h.unsafe_ptr(), src=initial.unsafe_ptr(), count=n_init)
+    var first = ctx.enqueue_create_buffer[DType.float32](n_init)
+    ctx.enqueue_copy(dst_buf=first, src_ptr=h.unsafe_ptr())
+    ctx.synchronize()
+    _ = h^
+    return first^
+
+
+def umap_sparse_graph_to_device(
+    ctx: DeviceContext,
+    initial: List[Float32],
+    offsets: List[Int],
+    indices: List[UInt32],
+    values: List[Float32],
+    n_samples: Int,
+    fast: Bool,
+) raises -> UmapDeviceGraph:
+    """`validate_sparse_weights`, the kept-edge compaction with its symmetry
+    refusal and the init check, on the device. IDENTICAL (`fast` False)
+    refuses in `optimize_sparse_layout_identical_on_device`'s order (graph,
+    no positive edge, init, symmetry, no kept edge) and stores scaled
+    weights; FAST in `optimize_sparse_layout_fast`'s (graph, symmetry, no
+    positive edge, no kept edge, init) and stores raw ones."""
+    var n = n_samples
+    var nnz = len(indices)
+    if n < 2 or len(offsets) != n + 1 or nnz != len(values):
+        raise Error("UMAP sparse graph shape mismatch")
+    if offsets[0] != 0 or offsets[n] != len(values):
+        raise Error("UMAP sparse graph terminal offset mismatch")
+    if n > 2147483646 or nnz > 2147483647 or len(initial) > 2147483647 or len(initial) < 1:
+        raise Error("UMAP sparse graph exceeds the kernel Int32 range")
+    var cap = max(nnz, 1)
+    var n_init = len(initial)
+    var first = _uc_upload_initial(ctx, initial)
+    var h_off = ctx.enqueue_create_host_buffer[DType.int64](n + 1)
+    var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](cap)
+    var h_val = ctx.enqueue_create_host_buffer[DType.float32](cap)
+    ctx.synchronize()
+    memcpy(dest=h_off.unsafe_ptr(), src=offsets.unsafe_ptr().bitcast[Int64](), count=n + 1)
+    if nnz > 0:
+        memcpy(dest=h_idx.unsafe_ptr(), src=indices.unsafe_ptr(), count=nnz)
+        memcpy(dest=h_val.unsafe_ptr(), src=values.unsafe_ptr(), count=nnz)
+    var g_off64 = ctx.enqueue_create_buffer[DType.int64](n + 1)
+    var g_off = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var g_idx = ctx.enqueue_create_buffer[DType.uint32](cap)
+    var g_val = ctx.enqueue_create_buffer[DType.float32](cap)
+    var codes = ctx.enqueue_create_buffer[DType.int32](n)
+    var err = ctx.enqueue_create_buffer[DType.int32](1)
+    # words: [0] max weight bits, [1] init not finite, [2] asymmetric kept edge
+    var words = ctx.enqueue_create_buffer[DType.int32](3)
+    ctx.enqueue_copy(dst_buf=g_off64, src_ptr=h_off.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=g_idx, src_ptr=h_idx.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=g_val, src_ptr=h_val.unsafe_ptr())
+    ctx.enqueue_memset(err, UMAP_NO_ROW)
+    ctx.enqueue_memset(words, Int32(0))
+    ctx.enqueue_function[umap_csr_validate_kernel](
+        g_off64.unsafe_ptr(), g_idx.unsafe_ptr(), g_val.unsafe_ptr(), g_off.unsafe_ptr(),
+        codes.unsafe_ptr(), err.unsafe_ptr(), words.unsafe_ptr(), Int32(n), Int32(nnz),
+        grid_dim=((n + 1 + _UC_TPB - 1) // _UC_TPB, 1, 1), block_dim=(_UC_TPB, 1, 1),
+    )
+    ctx.enqueue_function[umap_init_prep_kernel](
+        first.unsafe_ptr(), words.unsafe_ptr().unsafe_offset(1), Int32(n_init),
+        Int32(0) if fast else Int32(1),
+        grid_dim=((n_init + _UC_TPB - 1) // _UC_TPB, 1, 1), block_dim=(_UC_TPB, 1, 1),
+    )
+    var er = _uc_read_i32(ctx, err, 0, 1)[0]
+    if er != UMAP_NO_ROW:
+        var code = _uc_read_i32(ctx, codes, Int(er), 1)[0]
+        if code == Int32(1):
+            raise Error("UMAP sparse graph offset out of range")
+        if code == Int32(2):
+            raise Error("UMAP sparse graph needs unique sorted nonself columns")
+        raise Error("UMAP sparse graph weight is invalid")
+    var w0 = _uc_read_i32(ctx, words, 0, 2)
+    var max_weight = bitcast[DType.float32](w0[0])
+    var init_bad = w0[1] != Int32(0)
+    if not fast:
+        if not (max_weight > Float32(0.0)):
+            raise Error("UMAP optimizer graph has no positive edges")
+        if init_bad:
+            raise Error("UMAP optimizer initialization is not finite")
+    var counts = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_function[umap_csr_count_kernel](
+        g_off.unsafe_ptr(), g_idx.unsafe_ptr(), g_val.unsafe_ptr(), counts.unsafe_ptr(),
+        words.unsafe_ptr().unsafe_offset(2), Int32(n),
+        grid_dim=((n + _UC_TPB - 1) // _UC_TPB, 1, 1), block_dim=(_UC_TPB, 1, 1),
+    )
+    var out_off = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var bs = ctx.enqueue_create_buffer[DType.int32](scan_blocks_needed(n) + 1)
+    exclusive_scan(ctx, out_off, counts, bs, n)
+    var n_edges = Int(_uc_read_i32(ctx, out_off, n, 1)[0])
+    var asym = _uc_read_i32(ctx, words, 2, 1)[0] != Int32(0)
+    if fast:
+        if asym:
+            raise Error("UMAP FAST optimizer requires symmetric weights")
+        if not (max_weight > Float32(0.0)):
+            raise Error("UMAP FAST optimizer graph has no positive edges")
+        if n_edges == 0:
+            raise Error("UMAP FAST optimizer graph has no non-self edges")
+        if init_bad:
+            raise Error("UMAP FAST optimizer initialization is invalid")
+    else:
+        if asym:
+            raise Error("UMAP device optimizer requires symmetric weights")
+        if n_edges == 0:
+            raise Error("UMAP device optimizer graph has no non-self edges")
+    var d_offsets = ctx.enqueue_create_buffer[DType.uint32](n + 1)
+    var d_tails = ctx.enqueue_create_buffer[DType.uint32](n_edges)
+    var d_w = ctx.enqueue_create_buffer[DType.float32](n_edges)
+    if fast:
+        ctx.enqueue_function[umap_csr_fill_kernel[False]](
+            g_off.unsafe_ptr(), g_idx.unsafe_ptr(), g_val.unsafe_ptr(), out_off.unsafe_ptr(),
+            d_offsets.unsafe_ptr(), d_tails.unsafe_ptr(), d_w.unsafe_ptr(), max_weight, Int32(n),
+            grid_dim=((n + 1 + _UC_TPB - 1) // _UC_TPB, 1, 1), block_dim=(_UC_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[umap_csr_fill_kernel[True]](
+            g_off.unsafe_ptr(), g_idx.unsafe_ptr(), g_val.unsafe_ptr(), out_off.unsafe_ptr(),
+            d_offsets.unsafe_ptr(), d_tails.unsafe_ptr(), d_w.unsafe_ptr(), max_weight, Int32(n),
+            grid_dim=((n + 1 + _UC_TPB - 1) // _UC_TPB, 1, 1), block_dim=(_UC_TPB, 1, 1),
+        )
+    # the launches above hold raw pointers into the staging buffers
+    ctx.synchronize()
+    _ = h_off^
+    _ = h_idx^
+    _ = h_val^
+    _ = g_off64^
+    _ = g_off^
+    _ = g_idx^
+    _ = g_val^
+    _ = codes^
+    _ = err^
+    _ = words^
+    _ = counts^
+    _ = out_off^
+    _ = bs^
+    return UmapDeviceGraph(first^, d_offsets^, d_tails^, d_w^, max_weight, n_edges)
+
+
+def umap_dense_graph_to_device(
+    ctx: DeviceContext,
+    initial: List[Float32],
+    weights: List[Float32],
+    n_samples: Int,
+    fast: Bool,
+) raises -> UmapDeviceGraph:
+    """The dense n x n graph's validation, compaction and init check on the
+    device. IDENTICAL (`fast` False) refuses in
+    `optimize_layout_identical_on_device`'s order (any invalid weight, no
+    positive edge, init, asymmetric kept edge, no kept edge) and stores
+    scaled weights; FAST in `optimize_layout_fast`'s (the first invalid or
+    asymmetric cell in (head, tail) order, no positive edge, no kept edge,
+    init) and stores raw ones."""
+    var n = n_samples
+    if n < 2 or len(weights) != n * n:
+        raise Error("UMAP optimizer input shape mismatch")
+    if n > 46340 or len(initial) > 2147483647 or len(initial) < 1:
+        raise Error("UMAP dense graph exceeds the kernel Int32 range")
+    var nn = n * n
+    var n_init = len(initial)
+    var first = _uc_upload_initial(ctx, initial)
+    var h_w = ctx.enqueue_create_host_buffer[DType.float32](nn)
+    ctx.synchronize()
+    memcpy(dest=h_w.unsafe_ptr(), src=weights.unsafe_ptr(), count=nn)
+    var g_w = ctx.enqueue_create_buffer[DType.float32](nn)
+    var counts = ctx.enqueue_create_buffer[DType.int32](n)
+    var codes = ctx.enqueue_create_buffer[DType.int32](n)
+    var err = ctx.enqueue_create_buffer[DType.int32](1)
+    # flags: [0] any invalid, [1] asymmetric kept edge, [2] init not finite
+    var flags = ctx.enqueue_create_buffer[DType.int32](3)
+    var maxbits = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_buf=g_w, src_ptr=h_w.unsafe_ptr())
+    ctx.enqueue_memset(err, UMAP_NO_ROW)
+    ctx.enqueue_memset(flags, Int32(0))
+    ctx.enqueue_memset(maxbits, Int32(0))
+    ctx.enqueue_function[umap_dense_scan_kernel](
+        g_w.unsafe_ptr(), counts.unsafe_ptr(), codes.unsafe_ptr(), err.unsafe_ptr(),
+        flags.unsafe_ptr(), maxbits.unsafe_ptr(), Int32(n),
+        grid_dim=((n + _UC_TPB - 1) // _UC_TPB, 1, 1), block_dim=(_UC_TPB, 1, 1),
+    )
+    ctx.enqueue_function[umap_init_prep_kernel](
+        first.unsafe_ptr(), flags.unsafe_ptr().unsafe_offset(2), Int32(n_init),
+        Int32(0) if fast else Int32(1),
+        grid_dim=((n_init + _UC_TPB - 1) // _UC_TPB, 1, 1), block_dim=(_UC_TPB, 1, 1),
+    )
+    var out_off = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var bs = ctx.enqueue_create_buffer[DType.int32](scan_blocks_needed(n) + 1)
+    exclusive_scan(ctx, out_off, counts, bs, n)
+    var f = _uc_read_i32(ctx, flags, 0, 3)
+    var er = _uc_read_i32(ctx, err, 0, 1)[0]
+    var max_weight = bitcast[DType.float32](_uc_read_i32(ctx, maxbits, 0, 1)[0])
+    var n_edges = Int(_uc_read_i32(ctx, out_off, n, 1)[0])
+    var init_bad = f[2] != Int32(0)
+    if fast:
+        if er != UMAP_NO_ROW:
+            if _uc_read_i32(ctx, codes, Int(er), 1)[0] == Int32(1):
+                raise Error("UMAP FAST optimizer graph weight is invalid")
+            raise Error("UMAP FAST optimizer requires symmetric weights")
+        if not (max_weight > Float32(0.0)):
+            raise Error("UMAP FAST optimizer graph has no positive edges")
+        if n_edges == 0:
+            raise Error("UMAP FAST optimizer graph has no non-self edges")
+        if init_bad:
+            raise Error("UMAP FAST optimizer initialization is invalid")
+    else:
+        if f[0] != Int32(0):
+            raise Error("UMAP optimizer graph weight is invalid")
+        if not (max_weight > Float32(0.0)):
+            raise Error("UMAP optimizer graph has no positive edges")
+        if init_bad:
+            raise Error("UMAP optimizer initialization is not finite")
+        if f[1] != Int32(0):
+            raise Error("UMAP device optimizer requires symmetric weights")
+        if n_edges == 0:
+            raise Error("UMAP device optimizer graph has no non-self edges")
+    var d_offsets = ctx.enqueue_create_buffer[DType.uint32](n + 1)
+    var d_tails = ctx.enqueue_create_buffer[DType.uint32](n_edges)
+    var d_w = ctx.enqueue_create_buffer[DType.float32](n_edges)
+    if fast:
+        ctx.enqueue_function[umap_dense_fill_kernel[False]](
+            g_w.unsafe_ptr(), out_off.unsafe_ptr(), d_offsets.unsafe_ptr(), d_tails.unsafe_ptr(),
+            d_w.unsafe_ptr(), max_weight, Int32(n),
+            grid_dim=((n + 1 + _UC_TPB - 1) // _UC_TPB, 1, 1), block_dim=(_UC_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[umap_dense_fill_kernel[True]](
+            g_w.unsafe_ptr(), out_off.unsafe_ptr(), d_offsets.unsafe_ptr(), d_tails.unsafe_ptr(),
+            d_w.unsafe_ptr(), max_weight, Int32(n),
+            grid_dim=((n + 1 + _UC_TPB - 1) // _UC_TPB, 1, 1), block_dim=(_UC_TPB, 1, 1),
+        )
+    ctx.synchronize()
+    _ = h_w^
+    _ = g_w^
+    _ = counts^
+    _ = codes^
+    _ = err^
+    _ = flags^
+    _ = maxbits^
+    _ = out_off^
+    _ = bs^
+    return UmapDeviceGraph(first^, d_offsets^, d_tails^, d_w^, max_weight, n_edges)
 
 
 def _optimize_sparse_layout_device_csr(
@@ -626,7 +1062,6 @@ def _optimize_sparse_layout_device_csr(
     offsets: List[Int],
     indices: List[UInt32],
     values: List[Float32],
-    max_weight: Float32,
     n_samples: Int,
     n_components: Int,
     n_epochs: Int,
@@ -638,103 +1073,30 @@ def _optimize_sparse_layout_device_csr(
     seed: UInt64,
 ) raises -> List[Float32]:
     """UMAP_IDN_DEVICE_CSR: `optimize_sparse_layout_identical_device` with
-    the compaction on the device; the refusals of
-    `optimize_csr_layout_identical_device` in its order."""
-    var nnz = len(indices)
+    the validation, the compaction and the init check on the device
+    (`umap_sparse_graph_to_device`), then the device epochs."""
     if n_samples < 2 or (n_components < 1 or n_components > 32):
         raise Error("UMAP device optimizer supports 1 to 32 dimensions")
-    if len(initial_embedding) != n_samples * n_components or len(offsets) != n_samples + 1:
+    if len(initial_embedding) != n_samples * n_components:
         raise Error("UMAP device optimizer input shape mismatch")
-    if nnz != len(values) or nnz == 0:
-        raise Error("UMAP device optimizer graph has no non-self edges")
     if n_samples > 2147483647 or n_epochs > 2147483647 or negative_rate > 2147483647:
         raise Error("UMAP device optimizer scalar exceeds kernel Int32 range")
-    if nnz > 2147483647:
-        raise Error("UMAP device optimizer edge count exceeds CSR UInt32 range")
     if n_epochs < 1 or not (learning_rate > Float32(0.0)) or negative_rate < 0:
         raise Error("UMAP device optimizer parameters are invalid")
     var neg2ab = -Float32(2.0) * a * b
     var rep2b = Float32(2.0) * repulsion * b
     var n_init = len(initial_embedding)
-    var h_initial = ctx.enqueue_create_host_buffer[DType.float32](n_init)
-    var h_off = ctx.enqueue_create_host_buffer[DType.int32](n_samples + 1)
-    var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](nnz)
-    var h_val = ctx.enqueue_create_host_buffer[DType.float32](nnz)
-    for i in range(n_init):
-        h_initial.unsafe_ptr().unsafe_store(i, ftz(initial_embedding[i]))
-    for i in range(n_samples + 1):
-        h_off.unsafe_ptr().unsafe_store(i, Int32(offsets[i]))
-    memcpy(dest=h_idx.unsafe_ptr(), src=indices.unsafe_ptr(), count=nnz)
-    memcpy(dest=h_val.unsafe_ptr(), src=values.unsafe_ptr(), count=nnz)
-    var first = ctx.enqueue_create_buffer[DType.float32](n_init)
+    var g = umap_sparse_graph_to_device(
+        ctx, initial_embedding, offsets, indices, values, n_samples, False
+    )
     var second = ctx.enqueue_create_buffer[DType.float32](n_init)
-    var g_off = ctx.enqueue_create_buffer[DType.int32](n_samples + 1)
-    var g_idx = ctx.enqueue_create_buffer[DType.uint32](nnz)
-    var g_val = ctx.enqueue_create_buffer[DType.float32](nnz)
-    var d_counts = ctx.enqueue_create_buffer[DType.int32](n_samples)
-    var d_flag = ctx.enqueue_create_buffer[DType.int32](1)
-    ctx.enqueue_copy(dst_buf=first, src_ptr=h_initial.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=g_off, src_ptr=h_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=g_idx, src_ptr=h_idx.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=g_val, src_ptr=h_val.unsafe_ptr())
-    ctx.enqueue_memset(d_flag, Int32(0))
-    ctx.enqueue_function[umap_csr_count_kernel](
-        g_off.unsafe_ptr(), g_idx.unsafe_ptr(), g_val.unsafe_ptr(), d_counts.unsafe_ptr(),
-        d_flag.unsafe_ptr(), Int32(n_samples),
-        grid_dim=((n_samples + _UC_TPB - 1) // _UC_TPB, 1, 1), block_dim=(_UC_TPB, 1, 1),
-    )
-    var out_off = ctx.enqueue_create_buffer[DType.int32](n_samples + 1)
-    var d_bs = ctx.enqueue_create_buffer[DType.int32](scan_blocks_needed(n_samples) + 1)
-    exclusive_scan(ctx, out_off, d_counts, d_bs, n_samples)
-    # two integers come back: the kept edge count and the symmetry refusal
-    var h_total = List[Int32](length=1, fill=Int32(0))
-    var h_flag = List[Int32](length=1, fill=Int32(0))
-    ctx.enqueue_copy(
-        dst_ptr=h_total.unsafe_ptr(), src_buf=out_off.create_sub_buffer[DType.int32](n_samples, 1)
-    )
-    ctx.enqueue_copy(dst_ptr=h_flag.unsafe_ptr(), src_buf=d_flag)
-    ctx.synchronize()
-    var n_edges = Int(h_total[0])
-    var asym = h_flag[0] != Int32(0)
-    _ = h_total^
-    _ = h_flag^
-    if asym:
-        raise Error("UMAP device optimizer requires symmetric weights")
-    if n_edges == 0:
-        raise Error("UMAP device optimizer graph has no non-self edges")
-    var d_offsets = ctx.enqueue_create_buffer[DType.uint32](n_samples + 1)
-    var d_tails = ctx.enqueue_create_buffer[DType.uint32](n_edges)
-    var d_scaled = ctx.enqueue_create_buffer[DType.float32](n_edges)
-    ctx.enqueue_function[umap_csr_fill_kernel](
-        g_off.unsafe_ptr(), g_idx.unsafe_ptr(), g_val.unsafe_ptr(), out_off.unsafe_ptr(),
-        d_offsets.unsafe_ptr(), d_tails.unsafe_ptr(), d_scaled.unsafe_ptr(), max_weight, Int32(n_samples),
-        grid_dim=((n_samples + 1 + _UC_TPB - 1) // _UC_TPB, 1, 1), block_dim=(_UC_TPB, 1, 1),
-    )
     var out = _umap_epochs_download(
-        ctx, first, second, d_offsets, d_tails, d_scaled, n_init, n_samples, n_components,
+        ctx, g.first, second, g.offsets, g.tails, g.weights, n_init, n_samples, n_components,
         n_epochs, learning_rate, negative_rate, neg2ab, rep2b, a, b, seed,
     )
-    _ = h_initial^
-    _ = h_off^
-    _ = h_idx^
-    _ = h_val^
-    _ = first^
     _ = second^
-    _ = g_off^
-    _ = g_idx^
-    _ = g_val^
-    _ = d_counts^
-    _ = d_flag^
-    _ = out_off^
-    _ = d_bs^
-    _ = d_offsets^
-    _ = d_tails^
-    _ = d_scaled^
+    _ = g^
     return out^
-
-
-def _scaled_weight(weight: Float32, max_weight: Float32) -> Float32:
-    return ftz(Float32(Float64(weight) / Float64(max_weight)))
 
 
 def optimize_sparse_layout_identical_device(
@@ -743,7 +1105,6 @@ def optimize_sparse_layout_identical_device(
     offsets: List[Int],
     indices: List[UInt32],
     values: List[Float32],
-    max_weight: Float32,
     n_samples: Int,
     n_components: Int,
     n_epochs: Int,
@@ -754,9 +1115,13 @@ def optimize_sparse_layout_identical_device(
     b: Float32,
     seed: UInt64,
 ) raises -> List[Float32]:
-    """CSR adapter: the caller has validated the graph (`validate_sparse_weights`) and its scalars; this compacts the positive non-self edges in row-major order (the serial loops' edge ordinals), checks symmetry, and runs the device epochs."""
+    """CSR adapter: the caller has checked its scalars; this validates the
+    graph (`validate_sparse_weights`'s refusals) and the initial embedding,
+    compacts the positive non-self edges in row-major order (the serial
+    loops' edge ordinals), checks symmetry, all on the device
+    (`umap_sparse_graph_to_device`), and runs the device epochs."""
     return _optimize_sparse_layout_device_csr(
-        ctx, initial_embedding, offsets, indices, values, max_weight, n_samples,
+        ctx, initial_embedding, offsets, indices, values, n_samples,
         n_components, n_epochs, initial_learning_rate, negative_sample_rate,
         repulsion_strength, a, b, seed,
     )
@@ -766,7 +1131,6 @@ def optimize_dense_layout_identical_device(
     ctx: DeviceContext,
     initial_embedding: List[Float32],
     weights: List[Float32],
-    max_weight: Float32,
     n_samples: Int,
     n_components: Int,
     n_epochs: Int,
@@ -777,23 +1141,22 @@ def optimize_dense_layout_identical_device(
     b: Float32,
     seed: UInt64,
 ) raises -> List[Float32]:
-    """Dense adapter (the `umap/optimizer.mojo` surface and the stage-identity fixtures): the same row-major positive-edge compaction from an n x n weight matrix."""
-    var row_offsets = List[UInt32]()
-    var tails = List[UInt32]()
-    var scaled = List[Float32]()
-    row_offsets.append(UInt32(0))
-    for head in range(n_samples):
-        for tail in range(n_samples):
-            var weight = weights[head * n_samples + tail]
-            if head == tail or not (weight > Float32(0.0)):
-                continue
-            if weight != weights[tail * n_samples + head]:
-                raise Error("UMAP device optimizer requires symmetric weights")
-            tails.append(UInt32(tail))
-            scaled.append(_scaled_weight(weight, max_weight))
-        row_offsets.append(UInt32(len(tails)))
-    return optimize_csr_layout_identical_device(
-        ctx, initial_embedding, row_offsets^, tails^, scaled^, n_samples,
-        n_components, n_epochs, initial_learning_rate, negative_sample_rate,
-        repulsion_strength, a, b, seed,
+    """Dense adapter (the `umap/optimizer.mojo` surface and the stage-identity
+    fixtures): the dense graph's validation, its row-major positive-edge
+    compaction and the init check on the device
+    (`umap_dense_graph_to_device`), then the device epochs. The caller has
+    checked its scalars."""
+    if n_samples > 2147483647 or n_epochs > 2147483647 or negative_sample_rate > 2147483647:
+        raise Error("UMAP device optimizer scalar exceeds kernel Int32 range")
+    var neg2ab = -Float32(2.0) * a * b
+    var rep2b = Float32(2.0) * repulsion_strength * b
+    var n_init = len(initial_embedding)
+    var g = umap_dense_graph_to_device(ctx, initial_embedding, weights, n_samples, False)
+    var second = ctx.enqueue_create_buffer[DType.float32](n_init)
+    var out = _umap_epochs_download(
+        ctx, g.first, second, g.offsets, g.tails, g.weights, n_init, n_samples, n_components,
+        n_epochs, initial_learning_rate, negative_sample_rate, neg2ab, rep2b, a, b, seed,
     )
+    _ = second^
+    _ = g^
+    return out^
