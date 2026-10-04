@@ -4396,7 +4396,7 @@ class MDS(_Base):
             # sm, wt, end, prv, last, hf, hd0, hd1, gv: G values each
             work = [k._dout(1, max(G, 1)) for _ in range(9)]  # glue: nine scratch matrices
             hold = (keys, idx, gid, gst, work)
-            ids = [keys._d.id, idx._d.id, gid._d.id, gst._d.id] + [w._d.id for w in work]  # glue: buffer ids
+            ids = [keys._d.id, idx._d.id, gid._d.id, gst._d.id] + [w._d.id for w in work]  # glue: the scratch buffer ids
 
             def run(d, first):
                 _ = hold                # the buffers live as long as this function
@@ -4413,9 +4413,9 @@ class MDS(_Base):
                                           gid.buffer_info()[0], gst.buffer_info()[0], [n])
             m, G = int(m), int(G)
             gw = max(G, 1)
-            work = [array.array("f", [0.0]) * gw] + [array.array("i", [0]) * gw for _ in range(5)] \
-                + [array.array("f", [0.0]) * gw]  # glue: seven scratch buffers
-            addrs = [a.buffer_info()[0] for a in [keys, idx, gid, gst] + work]  # glue: buffer addresses
+            ints = [array.array("i", [0]) * gw for _ in range(5)]  # glue: five int32 scratch buffers
+            work = [array.array("f", [0.0]) * gw] + ints + [array.array("f", [0.0]) * gw]
+            addrs = [a.buffer_info()[0] for a in [keys, idx, gid, gst] + work]  # glue: the scratch buffer addresses
 
             def run(d, first):
                 _ = (keys, idx, gid, gst, work)     # alive as long as this function
