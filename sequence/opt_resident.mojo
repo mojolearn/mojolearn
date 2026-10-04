@@ -53,13 +53,18 @@ from sequence.pyapi import adafactor_core, fptr, fval, ival, lamb_bias, lamb_cor
 #:    still untouched zero host copies on the first step.
 #: IDENTICAL and the other vendors compile the main path unchanged.
 comptime _OPT_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime OPT_RAW_UP = _OPT_APPLE_FAST and is_defined["MOJOLEARN_OPT_RAW_UP"]()
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+#: apple-fast-rec-ab2 @ 40027eb8e): RAW_UP measured as a pair with
+#: OPT_FAST_STREAM below (see there): KEEP, the FAST + Apple default since
+#: then; rollback -D MOJOLEARN_OPT_RAW_UP_OFF (the old -D name is harmless).
+comptime OPT_RAW_UP = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_RAW_UP_OFF"]()
 #: PIPE_DOWN and ZERO_OPEN are the FAST+Apple default since the M3 A/B of
 #: lane/apple-fast-optspeed f2b6491a8 (n=1, synthetic, output digest
 #: identical): all three switches adagrad 317 -> 187 ms, lamb 340 -> 206,
 #: adamax 326 -> 195; PIPE_DOWN alone 318 -> 191. Off with
 #: MOJOLEARN_OPT_PIPE_DOWN_OFF / MOJOLEARN_OPT_ZERO_OPEN_OFF; the old
-#: -D names are harmless. RAW_UP measured noise (310 -> 307): opt-in.
+#: -D names are harmless. RAW_UP alone measured noise (310 -> 307); it is
+#: the default since 2026-10-04 as the pair with OPT_FAST_STREAM (below).
 comptime OPT_PIPE_DOWN = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_PIPE_DOWN_OFF"]()
 comptime OPT_ZERO_OPEN = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_ZERO_OPEN_OFF"]()
 #: the pipelined download's chunk, floats (8 MB; lane apple-fast-gap-optim:
@@ -99,10 +104,19 @@ comptime AF_RESIDENT = _OPT_APPLE_FAST and is_defined["MOJOLEARN_AF_FAST_RESIDEN
 #: Chunk = OPT_PIPE_CH (8 MB; -D MOJOLEARN_OPT_FAST_PIPE_CH sets it): a transfer
 #: granularity, not a board-size window. Uploads follow OPT_RAW_UP (raw host
 #: pointers) when that is named, else a memcpy into two pinned stage pairs.
-#: Prior: none (new). Source: this branch. Not compiled or measured yet.
+#: Prior: none (new). Source: this branch.
 #: Wins over the reference only on the host-bound transport; the floor stays
 #: the single-thread read of write-combined pinned memory (~13 ms / 64 MB).
-comptime OPT_STREAM = _OPT_APPLE_FAST and is_defined["MOJOLEARN_OPT_FAST_STREAM"]()
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+#: apple-fast-rec-ab2 @ 40027eb8e): STREAM together with OPT_RAW_UP (the pair):
+#: rmsprop 185.3 -> 179.1 ms, adagrad 185.6 -> 179.3, adamax 194.8 -> 190.1,
+#: nadam 194.8 -> 185.7; output digests identical A == B. STREAM alone (staged
+#: uploads) was slower: rmsprop 185.6 -> 187.3, adagrad 185.5 -> 195.6, adamax
+#: 192.4 -> 217.3, nadam 192.7 -> 201.9. KEEP the pair: both are the FAST + Apple
+#: default since then; rollback -D MOJOLEARN_OPT_FAST_STREAM_OFF and
+#: -D MOJOLEARN_OPT_RAW_UP_OFF, each on its own (STREAM_OFF alone leaves the
+#: measured-noise RAW_UP; RAW_UP_OFF alone leaves the slower staged STREAM).
+comptime OPT_STREAM = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_FAST_STREAM_OFF"]()
 
 #: the handle kinds
 comptime RES_ELEMENTWISE = 1

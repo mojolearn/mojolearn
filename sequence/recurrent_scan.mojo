@@ -37,9 +37,17 @@ from x_linear.team import team_barrier
 from sequence.ops import FP, Args, add, fma3, gates_of, ld, op_cell_bwd, op_cell_bwd_h, op_cell_fwd, op_cell_fwd_h, st
 
 comptime _APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-# MERGED-UNMEASURED, source0d6cbc821, gaplstm-{scan,smem,all,wgrad}-*.
-# SCAN/SCAN_SMEM/WGRAD remain opt-in; no judged A/B timing or quality result.
-# See docs/apple-fast/EXPERIMENTS.md (SEQ_FAST_LSTM_*); neural lane owns validation.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+#: apple-fast-rec-ab2 @ 40027eb8e), the bundle SCAN + SCAN_SMEM + WGRAD:
+#: lstm-clf 1877.4 -> 1315.5 ms but accuracy 0.9608 -> 0.5002, logloss 0.0954
+#: -> 0.6931; lstm-reg 1876.9 -> 1312.2 ms but r2 0.9804 -> -0.1043. BROKEN, the
+#: model does not train: DROPPED-quality, all three stay off. Symptom: logloss
+#: = ln 2 and r2 ~ 0 are a constant predictor, so the recurrence contributes
+#: nothing (h_T or the recurrent/weight gradients come out zero or unused).
+#: The cause is not evident from reading the code (the step pointers in
+#: fwd_step / bwd_step match the per-step launches, team_barrier orders device
+#: memory on Apple); not fixed here. Next: an ID check of SCAN alone against the
+#: per-step path (it claims the same bits), then SMEM, then WGRAD.
 comptime SEQ_LSTM_SCAN = _APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN"]()
 comptime SEQ_LSTM_SCAN_SMEM = SEQ_LSTM_SCAN and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM"]()
 comptime SEQ_LSTM_WGRAD = _APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_WGRAD"]()

@@ -36,7 +36,11 @@ from std.sys.info import has_apple_gpu_accelerator
 #:  MOJOLEARN_LN_FAST_NOFILL: LayerNorm's x and dy likewise.
 comptime _PY_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime AF_NOFILL = _PY_APPLE_FAST and is_defined["MOJOLEARN_AF_FAST_NOFILL"]()
-comptime LN_NOFILL = _PY_APPLE_FAST and is_defined["MOJOLEARN_LN_FAST_NOFILL"]()
+#: LN_FAST_NOFILL OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
+#: 2026-10-04, lane/apple-fast-rec-ab2 @ 40027eb8e): layernorm 48.2 -> 45.5 ms,
+#: output digest identical A == B. KEEP: the FAST + Apple default since then;
+#: rollback -D MOJOLEARN_LN_FAST_NOFILL_OFF (the old -D name is harmless).
+comptime LN_NOFILL = _PY_APPLE_FAST and not is_defined["MOJOLEARN_LN_FAST_NOFILL_OFF"]()
 
 
 def fptr(addr: PythonObject, what: String) raises -> FP:

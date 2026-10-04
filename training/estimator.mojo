@@ -648,8 +648,13 @@ def opt_pipe_download(
 #: -> 191 ms), run ~20 ms a step on the same three 64 MB transfers. Copies only:
 #: the same bytes, no bit moves. Prior: none on this path (MOJOLEARN_OPT_PIPE=1
 #: pipelines both directions with STAGED uploads, never measured on Apple).
-#: Source: this branch. Not compiled or measured yet.
-comptime TRAIN_OPT_PIPE_DOWN = AFN_APPLE_FAST and is_defined["MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN"]()
+#: Source: this branch.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+#: apple-fast-rec-ab2 @ 40027eb8e): sgd 330.3 -> 208.7 ms, adam 337.5 -> 209.6,
+#: adamw 332.1 -> 209.8; output digests identical A == B (the quality evidence:
+#: the lane has no quality metric). KEEP: the FAST + Apple default since then;
+#: rollback -D MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF (the old -D name is harmless).
+comptime TRAIN_OPT_PIPE_DOWN = AFN_APPLE_FAST and not is_defined["MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF"]()
 
 
 def identical_optimizer_step_resident_host(
