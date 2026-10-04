@@ -36,10 +36,14 @@ loops it restored).
 from std.memory import bitcast
 from std.math import sqrt
 from x_prep.common import FP, IP, p, raw, ldi, sti, ld, st
+from x_prep.proba64 import q64_softmax_unit
 
 comptime PY2MOJO_PREP = True
 comptime P2M_BASE = 200
-comptime P2M_N = 13
+comptime P2M_N = 14
+#: P2M_BASE + 13 is lane apple-fast-q-clf's `q64_softmax_unit` (x_prep/proba64.mojo):
+#: carried by every build, staged by Python only when the binding exports
+#: `x_prep_proba64` (PROBA64: FAST, not -D MOJOLEARN_PROBA64_QOLD)
 
 
 @always_inline
@@ -311,3 +315,5 @@ def run_p2m_unit[OP: Int](t: Int, f: FP, q: IP):
             p2m_abscorr_cell_unit(t, f, q)
         comptime if OP == P2M_BASE + 12:
             p2m_abscorr_norm_unit(t, f, q)
+        comptime if OP == P2M_BASE + 13:
+            q64_softmax_unit(t, f, q)
