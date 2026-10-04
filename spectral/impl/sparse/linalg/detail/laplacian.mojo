@@ -83,15 +83,10 @@ comptime LAPLACIAN_TPB = 256
 #: Integer keys and a stable sort give the host's permutation, so no bit
 #: moves and the host column is unchanged. The host walks remain only as
 #: the error path (they raise the same messages when a device flag is set).
-#: `-D MOJOLEARN_IDN_SPECTRAL_LAP_DEVICE_OFF=1` restores the host
-#: preparation.
-comptime IDN_SPECTRAL_LAP_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_SPECTRAL_LAP_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: lane cpu2-l9-neighbors (2026-10-04): every mode (FAST too, the same
+#: bits) and no _OFF arm (owner rule: the host preparation is not a GPU
+#: route), so `MOJOLEARN_IDN_SPECTRAL_LAP_DEVICE_OFF` is retired.
+comptime IDN_SPECTRAL_LAP_DEVICE = True
 
 
 struct DeviceCoo(Movable):
@@ -562,22 +557,7 @@ def compute_graph_laplacian(
     the index refusal."""
     if g.n <= 0:
         raise Error("compute_graph_laplacian: n must be positive")
-    comptime if IDN_SPECTRAL_LAP_DEVICE:
-        return compute_graph_laplacian_prepared_device(ctx, g, check_values, tpb)
-    else:
-        if check_values:
-            refuse_bad_values(g)
-        refuse_out_of_range(g)
-        var sorted_g = _mark_and_insert_diagonal(g)
-        var nnz = sorted_g.nnz()
-        var indptr_h = sorted_coo_to_csr(sorted_g)
-        var rows = upload_i32(ctx, sorted_g.rows)
-        var cols = upload_i32(ctx, sorted_g.cols)
-        var vals = upload_f32(ctx, sorted_g.vals)
-        var indptr = upload_i32(ctx, indptr_h)
-        return laplacian_from_sorted_device(
-            ctx, g.n, nnz, rows^, cols^, vals^, indptr^, tpb
-        )
+    return compute_graph_laplacian_prepared_device(ctx, g, check_values, tpb)
 
 
 def laplacian_from_sorted_device(

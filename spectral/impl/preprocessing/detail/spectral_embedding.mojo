@@ -462,8 +462,8 @@ def transform_graph_keep(
     if n <= 0:
         raise Error("spectral: connectivity_graph must have n > 0")
     # The value refusal (finite, non-negative) is raised inside
-    # `compute_graph_laplacian`, first: on the device under
-    # `IDN_SPECTRAL_LAP_DEVICE`, by the host walk otherwise.
+    # `compute_graph_laplacian`, first, from a device flag (the host walk
+    # only names the entry once the flag is set).
     var diagonal = ctx.enqueue_create_buffer[DType.float32](n)
     ctx.synchronize()
     var lap = create_laplacian(ctx, params, connectivity_graph, diagonal, laplacian_tpb, True)
