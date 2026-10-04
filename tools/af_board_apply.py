@@ -4,6 +4,7 @@
 """Apply A/B winners that became FAST defaults to docs/apple-fast/BOARD_M3_FAST.md in place.
 
     python3 tools/af_board_apply.py WINNERS.tsv [--board PATH] [--date YYYY-MM-DD] [--dry-run]
+                                    [--allow-quality-drop REASON]
 
 Laptop, text only. WINNERS.tsv has a header row with columns
     lane  dataset  new_ms  quality  source  [family]
@@ -18,6 +19,16 @@ input (default "algos"), opponent columns "-" and a note in status. The table is
 then stable-sorted worst ratio after first (rows without a ratio last), which also
 puts back any hand-edited row that sat out of order.
 
+Quality gate (CLAUDE.md: FAST passes only if quality does not go down). Before a row
+is applied, its new quality is compared (tools/af_quality.py, rel_tol 1e-3, abs_tol 1e-6)
+against the row's "quality after (FAST)" (current main; "quality before (FAST)" when the
+after cell is empty) and against "opponent quality". A row WORSE than either is REFUSED
+and the reason printed; the other rows still apply, and the exit code is 2. Pass
+--allow-quality-drop "REASON" to apply it anyway; the reason goes into its status.
+Every applied row gets one status tag, replacing an older one: "Q: =main >=opp" (or
+">main"), "Q: < opp", "Q: < main" (only with --allow-quality-drop) or "Q: unknown" when
+either side has no comparable metric (unknown metrics are never passed silently).
+
 Headline: the "Canonical full-board summary" paragraph counts the full page (this
 table plus the original board), which this file alone cannot rebuild. So the
 apply updates it by delta: rows += added rows; each changed row leaves the
@@ -28,6 +39,9 @@ The rest of the paragraph is kept; a dated bullet listing this apply's changes i
 inserted after it. --dry-run prints the changed rows and the new headline only.
 """
 import argparse, math, os, re, sys, time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import af_quality as afq
 
 BOARD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs", "apple-fast", "BOARD_M3_FAST.md")
 HEAD_RE = re.compile(r"^Canonical full-board summary \((?P<date>[^)]*)\): (?P<rows>\d+) FAST rows, (?P<el>\d+) eligible "
@@ -96,6 +110,31 @@ class Table:
         return ra is not None and ra > 0 and "HOLD" not in st and "excluded" not in st.lower()
 
 
+Q_TAG_RE = re.compile(r"(;\s*)?Q: [^;]*")
+
+
+def quality_gate(t, row, new_q):
+    """(main compare, opp compare, tag) for new quality new_q against an existing row (or None)."""
+    if row is None:
+        none = afq.compare(new_q, "-")
+        return none, none, "Q: unknown"
+    main_q = t.get(row, "quality after (FAST)")
+    if main_q in ("", "-") and "quality before (FAST)" in t.ix:
+        main_q = t.get(row, "quality before (FAST)")
+    opp_q = t.get(row, "opponent quality") if "opponent quality" in t.ix else "-"
+    cm, co = afq.compare(new_q, main_q), afq.compare(new_q, opp_q)
+    vm, vo = cm["verdict"], co["verdict"]
+    if vo == afq.WORSE:
+        tag = "Q: < opp" + (" < main" if vm == afq.WORSE else "")
+    elif vm == afq.WORSE:
+        tag = "Q: < main"
+    elif afq.UNKNOWN in (vm, vo):
+        tag = "Q: unknown"
+    else:
+        tag = "Q: %smain >=opp" % (">" if vm == afq.BETTER else "=")
+    return cm, co, tag
+
+
 def _sort_key(t, r):
     ra = _num(t.get(r, "ratio after"))
     return (ra is None, -(ra or 0.0))
@@ -107,6 +146,8 @@ def main():
     ap.add_argument("--board", default=BOARD)
     ap.add_argument("--date", default=time.strftime("%Y-%m-%d"))
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--allow-quality-drop", metavar="REASON", default=None,
+                    help="apply rows whose quality is WORSE than main or the opponent; REASON goes into status")
     a = ap.parse_args()
 
     lines = open(a.board).read().split("\n")
@@ -125,13 +166,27 @@ def main():
     n_rows, n_el, n_fast, gm = int(m["rows"]), int(m["el"]), int(m["fast"]), float(m["gm"])
     logsum = n_el * math.log(gm)
 
-    changed, notes = [], []
+    if a.allow_quality_drop is not None and not a.allow_quality_drop.strip():
+        sys.exit("--allow-quality-drop needs a reason")
+    changed, notes, refused = [], [], []
     for w in wins:
         lane, ds, new_ms = w["lane"], w["dataset"], _num(w["new_ms"])
         if new_ms is None or new_ms <= 0:
             sys.exit("bad new_ms for %s %s: %r" % (lane, ds, w["new_ms"]))
         src = w["source"]
         row = next((r for r in t.rows if t.get(r, "lane") == lane and t.get(r, "dataset") == ds), None)
+        cm, co, qtag = quality_gate(t, row, w["quality"])
+        drop = [(who, c) for who, c in (("main", cm), ("opponent", co)) if c["verdict"] == afq.WORSE]
+        if drop:
+            why = "; ".join("vs %s %s" % (who, afq.describe(c)) for who, c in drop)
+            if a.allow_quality_drop is None:
+                refused.append("%s %s: %s" % (lane, ds, why))
+                print("REFUSED %s %s: quality WORSE %s. Pass --allow-quality-drop REASON to apply it anyway."
+                      % (lane, ds, why), file=sys.stderr)
+                continue
+            print("QUALITY DROP ALLOWED %s %s: %s (reason: %s)" % (lane, ds, why, a.allow_quality_drop),
+                  file=sys.stderr)
+            src = "%s; quality drop allowed: %s" % (src, a.allow_quality_drop)
         added = row is None
         if added:
             row = ["-"] * len(t.cols)
@@ -158,17 +213,22 @@ def main():
             keep = flip_old if flip_old and not flip_old.startswith("FLIP") else ""
             flip = "FLIP faster" if rb > 1 > ra else ("FLIP slower" if rb < 1 < ra else "")
             t.put(row, "flip", "; ".join(x for x in (flip, keep) if x))
-        st = t.get(row, "status")
-        t.put(row, "status", "%s; %s" % (st, src) if st and st != "-" else src)
+        st = Q_TAG_RE.sub("", t.get(row, "status")).strip("; ").strip()
+        st = "%s; %s" % (st, src) if st and st != "-" else src
+        t.put(row, "status", "%s; %s" % (st, qtag))
         if t.eligible(row):
             n_el += 1
             n_fast += t.ratio(row) < 1
             logsum += math.log(t.ratio(row))
         changed.append(row)
         f = t.get(row, "flip")
-        notes.append("%s %s %s -> %s ms (ratio %s -> %s%s; %s)%s" % (
+        notes.append("%s %s %s -> %s ms (ratio %s -> %s%s; %s; %s)%s" % (
             lane, ds, _fmt_ms(old_ms), _fmt_ms(new_ms), _fmt_r(old_ra), _fmt_r(ra),
-            ", " + f if f.startswith("FLIP") else "", src, " [new row]" if added else ""))
+            ", " + f if f.startswith("FLIP") else "", src, qtag, " [new row]" if added else ""))
+
+    if not changed:
+        print("nothing applied: %d row(s) refused on quality" % len(refused), file=sys.stderr)
+        sys.exit(2 if refused else 0)
 
     # worst ratio after first, rows without a ratio last; stable, so ties keep their order
     t.rows.sort(key=lambda r: _sort_key(t, r))
@@ -186,6 +246,9 @@ def main():
         print("\nHEADLINE (was %s rows / %s eligible / %s faster / gm %s):" % (m["rows"], m["el"], m["fast"], m["gm"]))
         print(new_head[:m.end() - m.start() + 40] + " ...")
         print("\nAPPLY LINE:\n" + bullet)
+        if refused:
+            print("\nREFUSED ON QUALITY (%d):\n  %s" % (len(refused), "\n  ".join(refused)))
+            sys.exit(2)
         return
     lines[t.start:t.end] = [_join(r) for r in t.rows]
     lines[head_i] = new_head
@@ -200,6 +263,9 @@ def main():
         fh.write("\n".join(lines))
     print("wrote %s: %d rows changed, headline %d rows / %d eligible / %d faster / gm %.3f" % (
         a.board, len(changed), n_rows, n_el, n_fast, new_gm))
+    if refused:
+        print("REFUSED ON QUALITY (%d):\n  %s" % (len(refused), "\n  ".join(refused)))
+        sys.exit(2)
 
 
 if __name__ == "__main__":
