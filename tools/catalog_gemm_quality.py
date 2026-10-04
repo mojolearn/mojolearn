@@ -103,6 +103,7 @@ def main():
         if not good:
             failures.append(name)
         row = dict(case=name, shape=[m, n, k], nt=nt, alias=alias, metrics=metrics,
+                   incumbent='gpu-zero-contract' if k == 0 else ('core-nt' if nt else 'sdk-nn'),
                    direct_shared_exact=same, status='PASS' if good else 'FAIL')
         records.append(row)
         print('CATALOG-GEMM-QUALITY ' + json.dumps(row, sort_keys=True), flush=True)

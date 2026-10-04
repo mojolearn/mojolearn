@@ -33,8 +33,10 @@ G1/G5 must have exactly equal output bytes, finite outputs and scaled FP64
 oracle error <=5e-6; both must also have error <=incumbent with zero added
 tolerance. Bounds fixed before any run. Every call increments only its chosen
 completed-arm counter. Full arrays and raw metrics retained; exact PASS.json
-only if every shape meets the criteria. Unsupported SDK K0 or private ABI
-failure is infrastructure evidence to repair under a new tag, not a pass.
+only if every shape meets the criteria. K0 incumbent is explicitly a parallel GPU zero-fill contract, not an SDK
+zero-extent matmul; G1/G5 still execute their own zero-K kernels. Zero-length
+inputs are never uploaded or dereferenced. Private ABI failures are
+infrastructure evidence to repair under a new tag, not a pass.
 
 G1/G5 differ from current decomposition K16 and LU dbuf: the catalog uses
 SDK SIMD2 fragments, scalar lane loads, no prefetch, and single shared page
