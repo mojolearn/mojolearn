@@ -11,8 +11,9 @@ cd "$(dirname "$0")/.."
 # the FAST bindings this smoke imports; build any the queue did not
 for b in ivf estimators x_ann x_prep; do
     [ -f "python/mojolearn/_mojolearn_$b.so" ] || {
-        MOJOLEARN_NUMERIC_MODE=fast bash "bindings/build_$b.sh" > "/tmp/m2b1m3_build_$b.log" 2>&1
-        echo "M2B1M3 build $b rc=$?"
+        MOJOLEARN_NUMERIC_MODE=fast pixi run bash "bindings/build_$b.sh" > "/tmp/m2b1m3_build_$b.log" 2>&1
+        rc=$?; echo "M2B1M3 build $b rc=$rc"
+        [ $rc = 0 ] || grep -m 5 -B 2 -A 6 -i 'error' "/tmp/m2b1m3_build_$b.log" | head -20
     }
 done
 cd python
