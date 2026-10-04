@@ -12,7 +12,7 @@ from x_decomp.cells import F32Ptr, I32Ptr, sub, mul, add
 
 def mc_center_kernel(
     x: F32Ptr, rows: I32Ptr, selected: I32Ptr, loc0: F32Ptr, loc1: F32Ptr,
-    out: F32Ptr, active: I32Ptr, fin: I32Ptr, nc: Int32, r: Int32, d: Int32,
+    dst: F32Ptr, active: I32Ptr, fin: I32Ptr, nc: Int32, r: Int32, d: Int32,
     per: Int32, ident: Int32, count: Int32, compact: Int32, par: Int32, use_fin: Int32,
 ):
     var t = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
@@ -29,13 +29,13 @@ def mc_center_kernel(
     # MMA calls for inactive candidates may still run; zero their source
     # and guard destination publication, retaining frozen fit state.
     if use_fin == 0 and active.unsafe_load(c) == 0:
-        out.unsafe_store(target, Float32(0))
+        dst.unsafe_store(target, Float32(0))
         return
     var source_i = Int(selected.unsafe_load(c*rr+i)) if compact != 0 else i
     var source = source_i if ident != 0 else Int(rows.unsafe_load((c//Int(per))*rr+source_i))
     var parity = Int(fin.unsafe_load(c)) if use_fin != 0 else Int(par)
     var mean = loc1.unsafe_load(c*dd+j) if parity == 1 else loc0.unsafe_load(c*dd+j)
-    out.unsafe_store(target, sub(x.unsafe_load(source*dd+j), mean))
+    dst.unsafe_store(target, sub(x.unsafe_load(source*dd+j), mean))
 
 
 def mc_publish_matrix_kernel(src: F32Ptr, dst: F32Ptr, active: I32Ptr, nc: Int32, d: Int32, scale: Float32):
