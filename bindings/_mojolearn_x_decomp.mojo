@@ -15,6 +15,17 @@ from x_decomp.api import (
     rowsum_py, sqdist_py, vendor_py,
 )
 from x_decomp.device import DevExec
+from x_decomp.mcd_bmma import MCD_G1_GRAM, MCD_G1_AUDIT, mcd_g1_count, mcd_g1_last
+
+def mcd_g1_gram_on_py() raises -> PythonObject:
+    return PythonObject(Int(MCD_G1_GRAM))
+
+def mcd_g1_gram_count_py(index: PythonObject) raises -> PythonObject:
+    return PythonObject(mcd_g1_count(Int(py=index)))
+
+def mcd_g1_gram_last_py(index: PythonObject) raises -> PythonObject:
+    return PythonObject(mcd_g1_last(Int(py=index)))
+
 from x_decomp.kit_device import lda_online_dev_py, mcd_dev_py
 from x_decomp.lda_fast import LDA_FUSED_SS, dev_lda_estep_ss_py
 from x_decomp.dict_fast import DECOMP_FAST_DICT_DEV, dev_dict_update_py
@@ -35,6 +46,10 @@ from x_decomp.lanczos_dev import dev_lanczos_py, ipca_dev_on_py, kpca_lanczos_de
 def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_decomp")
+        comptime if MCD_G1_AUDIT:
+            m.def_function[mcd_g1_gram_on_py]("mcd_g1_gram_on")
+            m.def_function[mcd_g1_gram_count_py]("mcd_g1_gram_count")
+            m.def_function[mcd_g1_gram_last_py]("mcd_g1_gram_last")
         m.def_function[gemm_py[DevExec]]("x_decomp_gemm")
         m.def_function[ew_py[DevExec]]("x_decomp_ew")
         m.def_function[colsum_py[DevExec]]("x_decomp_colsum")
