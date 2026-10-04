@@ -25,6 +25,7 @@ from gemm.afn_apple_fast import (
     afn_strides,
     afn_zero_kernel,
 )
+from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
 from gemm.contract import OP_TN
 
 #: lane/apple-fast-gap-linalg2-pca (2026-10-03): PCA_FAST_GRAM_MMA, the FAST +
@@ -112,10 +113,13 @@ def compute_covariance(
             var per = (n_rows + splits - 1) // splits
             per = ((per + AFN_GEMM_KB - 1) // AFN_GEMM_KB) * AFN_GEMM_KB
             splits = (n_rows + per - 1) // per
-            afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
-                ctx, AFN_TILE_SQUARE, cp, xp, xp, cp, cp,
-                n_cols, n_cols, n_rows, afn_strides(OP_TN, n_cols, n_cols, n_rows), splits, per,
-            )
+            if not try_scoped_gemm[True, 2](
+                ctx, cp, xp, xp, n_cols, n_cols, n_rows, 1, n_cols, n_cols, 1, splits, per,
+            ):
+                afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
+                    ctx, AFN_TILE_SQUARE, cp, xp, xp, cp, cp,
+                    n_cols, n_cols, n_rows, afn_strides(OP_TN, n_cols, n_cols, n_rows), splits, per,
+                )
             ctx.enqueue_function[scale_in_place_kernel](
                 cov.unsafe_ptr(),
                 Int32(n_cols * n_cols),

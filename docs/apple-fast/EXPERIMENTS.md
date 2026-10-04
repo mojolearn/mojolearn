@@ -988,3 +988,10 @@ pass; seveninnovation andthirteenlikelihood checks fail. No timing or promotion.
 Compensated residual/likelihood lowword reference candidate planned; no change
 to fixed finite-difference step or thresholds. Fixture supplies common states;
 it does not certify production initializer/Jones transformation equivalence.
+## 2026-10-04 scoped decomp/PCA direct G1/G2 — OPEN, default OFF
+
+Source-only strided adapter and actual-caller quality probe, based on resident
+catalog per-shape leads. No compilation/runtime or quality/speed claim yet.
+Separate operation flags, split and PCA permissions; original split/zero/center/
+scale/restore policies retained. Baseline is current AFN, not SDK screen G0.
+See [scoped adapter contract](ab/scoped-gemm.md). M2/M3 manager gates required.
