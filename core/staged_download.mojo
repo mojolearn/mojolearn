@@ -135,16 +135,20 @@ def _stage_enqueue(
     mut stage: HostBuffer[DType.float32],
 ) raises:
     """Chunk `k` of the first `n` elements of `buf` onto `stage` (`chunk`
-    floats long). A full chunk goes buffer to buffer; when the device buffer
-    ends inside the chunk, the shorter view lands on the stage's pointer."""
+    floats long). A full chunk the stage's exact length goes buffer to
+    buffer; otherwise the chunk's view (at most `chunk`, ending at `n`) lands
+    on the stage's pointer. The pool hands out stages of ITS length, longer
+    than `chunk` when an earlier call used a larger chunk (an output of 1M to
+    2M floats after a larger one): the buffer-to-buffer copy then raised
+    "not enough data in src" (lane/apple-fast-batchv, 2026-10-03)."""
     var lo = k * chunk
     step_count_d2h()
-    if lo + chunk <= len(buf):
+    if lo + chunk <= len(buf) and len(stage) == chunk:
         var view = buf.create_sub_buffer[DType.float32](lo, chunk)
         ctx.enqueue_copy(dst_buf=stage, src_buf=view)
         _ = view^
     else:
-        var view = buf.create_sub_buffer[DType.float32](lo, n - lo)
+        var view = buf.create_sub_buffer[DType.float32](lo, min(chunk, n - lo))
         ctx.enqueue_copy(dst_ptr=stage.unsafe_ptr(), src_buf=view)
         _ = view^
 
