@@ -10,7 +10,7 @@ resolve), and the three are uploaded in order by separate jobs. Two
 subcommands:
 
   precheck --index testpypi|pypi --version V
-      On the Mac, before anything is rented: all three projects serve V on
+      On the Mac, before anything is rented: all release projects serve V on
       the index (the JSON API), each with a manylinux x86_64 wheel, none
       yanked, and where the index reports Requires-Dist, the exact pins of
       the cycle. Refuses by project name.
@@ -267,7 +267,7 @@ def main(argv=None):
         for problem in problems:
             print("REFUSED: " + problem, file=sys.stderr)
         if not problems:
-            print(f"index precheck PASSED: all three projects serve {args.version} on {args.index}")
+            print(f"index precheck PASSED: all release projects serve {args.version} on {args.index}")
         return int(bool(problems))
     return verify(args.index, args.version, args.vendor, args.report, args.out)
 

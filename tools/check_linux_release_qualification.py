@@ -25,7 +25,7 @@ import compare_ordered_python
 import verify_linux_surface_qualification as surface
 
 require = surface.require
-EXTENSION = re.compile(r'mojolearn/(cuda|hip)/(sm_[0-9]+a?|gfx[0-9a-f]+)/'
+EXTENSION = re.compile(r'mojolearn/(cuda|hip)(?:_native)?/(sm_[0-9]+a?|gfx[0-9a-f]+)/'
                        r'(?:(deterministic|identical)/)?(_mojolearn[^/]*)\.so')
 # DEVIATION 2680: the CPU TRAINING binding. One vendor-neutral copy per wheel,
 # beside the architecture trees rather than inside one, because it targets no
@@ -531,6 +531,10 @@ def split_combined(wheels, out_dir):
     require(packed and given == packed,
             'Stage every plugin the core was packed with: packed ' + ','.join(sorted(packed))
             + ', staged ' + (','.join(sorted(given)) or 'none'))
+    expected_roles = {plugins.CORE_PROFILE}
+    expected_roles.update(plugins.plugin(v)['profile'] for v in packed)
+    expected_roles.update(plugins.payload_for(*key.split('/'))['profile'] for key in payload.get('sets', {}))
+    require(set(roles) == expected_roles, 'Stage every architecture payload and vendor aggregate')
     members = {}
     for wheel in wheels:
         with zipfile.ZipFile(wheel) as archive:

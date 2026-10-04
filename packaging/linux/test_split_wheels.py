@@ -11,7 +11,7 @@ host bindings and a runtime closure, all inert bytes -- are packed twice by
 the real `pack_wheel.main`: once as the combined wheel (`--profile generic`)
 and once as the split (the default). Then the wheels are opened as zip files.
 
-THE IDENTITY PROOF is `test_the_three_wheels_are_the_combined_wheel`: every
+THE IDENTITY PROOF is `test_the_six_wheels_are_the_combined_wheel`: every
 member of the combined wheel outside its .dist-info is in exactly one split
 wheel, at the same archive path, with the same bytes, and the split wheels
 carry nothing else. `_gates=False` skips portable_math/wheel.py and the API
@@ -113,7 +113,7 @@ class SplitWheels(unittest.TestCase):
         return sorted(out.glob("*.whl"))
 
     # ---- the partition ------------------------------------------------------
-    def test_the_three_wheels_are_the_combined_wheel(self):
+    def test_the_six_wheels_are_the_combined_wheel(self):
         """Identity: same members, same paths, same bytes; only .dist-info differs."""
         single = {pw.gpu_plugins.installed_member(n): b for n, b in members(self.single).items() if ".dist-info/" not in n}
         union = {}
@@ -132,6 +132,33 @@ class SplitWheels(unittest.TestCase):
                 for name in pw.tier_names(tier):
                     rel = f"mojolearn/{pw.gpu_plugins.native_directory(vendor)}/{arch}/" + ("" if tier == "fast" else tier + "/") + name + ".so"
                     self.assertEqual(union[rel], f"{vendor}/{arch}/{tier}/{name}".encode())
+
+    def test_qualification_requires_payloads_as_well_as_aggregates(self):
+        import check_linux_release_qualification as qualification
+        staged = Path(tempfile.mkdtemp(dir=self.root))
+        wheels = []
+        for name, wheel in self.split.items():
+            row = next((r for r in pw.gpu_plugins.distribution_rows() if r['wheel_name'] == name), None)
+            profile = row['profile'] if row else pw.gpu_plugins.CORE_PROFILE
+            data = members(wheel)
+            dist = dist_info(wheel)
+            data.pop(dist + '/RECORD')
+            data[dist + '/LINUX_PAYLOAD.json'] = json.dumps({
+                'assembly_profile': 'release-split',
+                'sets': {v + '/' + a: {} for v, a in SETS},
+                'split': {'role': profile},
+            }).encode()
+            wheels.append(pw.write_wheel(staged / wheel.name, {}, data, dist))
+        output = staged / 'combined'
+        output.mkdir()
+        combined, vendors = qualification.split_combined(wheels, output)
+        self.assertEqual(vendors, ('cuda', 'hip'))
+        self.assertEqual({n: b for n, b in members(combined).items() if '.dist-info/' not in n},
+                         {pw.gpu_plugins.installed_member(n): b for n, b in members(self.single).items()
+                          if '.dist-info/' not in n})
+        incomplete = [w for w in wheels if not w.name.startswith('mojolearn_nvidia_sm90-')]
+        with self.assertRaisesRegex(ValueError, 'every architecture payload'):
+            qualification.split_combined(incomplete, output)
 
     def test_file_names_and_tags(self):
         self.assertEqual(sorted(p.name for p in self.split.values()), sorted([

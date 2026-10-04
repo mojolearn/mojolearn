@@ -333,7 +333,7 @@ for _p in ${PLUGINS[@]+"${PLUGINS[@]}"}; do
     _p=$(cd "$(dirname "$_p")" && pwd)/$(basename "$_p")
     _b=$(basename "$_p")
     case "$_b" in
-        "mojolearn_nvidia-$VERSION-"*-manylinux*_x86_64.whl|"mojolearn_amd-$VERSION-"*-manylinux*_x86_64.whl) ;;
+        "mojolearn_nvidia-$VERSION-"*-manylinux*_x86_64.whl|"mojolearn_amd-$VERSION-"*-manylinux*_x86_64.whl|"mojolearn_nvidia_sm89-$VERSION-"*-manylinux*_x86_64.whl|"mojolearn_nvidia_sm90-$VERSION-"*-manylinux*_x86_64.whl|"mojolearn_amd_gfx942-$VERSION-"*-manylinux*_x86_64.whl) ;;
         *) die "$_b is not a mojolearn_nvidia/mojolearn_amd $VERSION manylinux x86_64 plugin (the $_pfx plugin of --vendor $VENDOR is required)" ;;
     esac
     case " $PLUGIN_BASES " in *" ${_b%%-*}-"*) die "two --plugin wheels of ${_b%%-*}" ;; esac
@@ -649,12 +649,12 @@ echo "== release_wheel_smoke: $([ -n "$SSH_GIVEN" ] && echo "EXISTING BOX $SSH_G
 if [ -n "$FROM_INDEX" ]; then
 echo "  index    $FROM_INDEX  version $VERSION  vendor $VENDOR  commit ${COMMIT:-not pinned, the installed package records its own}"
 echo "  install  pip install --report $RDIR/pip_report.json $INDEX_ARGS 'mojolearn==$VERSION' (fresh venv, no local wheel)"
-echo "  judges   tools/index_release_check.py verify: all three at $VERSION, each from its index host, the $VENDOR set loaded from its plugin"
+echo "  judges   tools/index_release_check.py verify: all release projects at $VERSION, each from its index host, the $VENDOR set loaded from its plugin"
 echo "  ships    tools/qualify_verifier_wheel.py (sha256 $(printf %s "$QUALIFY_SHA" | cut -c1-16)...) + tools/index_release_check.py (sha256 $(printf %s "$INDEX_CHECK_SHA" | cut -c1-16)...), no wheel"
 echo "  smoke    qualify_verifier_wheel.py --installed-python --scope expanded, bounded ${SMOKE_SECONDS}s"
 [ -z "$LANES" ] || echo "  column   $LANES from the installed package; references: ${#REFS[@]}"
 echo "  out      $OUT"
-# BEFORE ANYTHING IS RENTED: the index serves all three projects at V.
+# BEFORE ANYTHING IS RENTED: the index serves all release projects at V.
 python3 "$INDEX_CHECK" precheck --index "$FROM_INDEX" --version "$VERSION" \
     || die "the index precheck refused (above): pip install mojolearn==$VERSION cannot resolve from $FROM_INDEX; nothing was rented"
 else

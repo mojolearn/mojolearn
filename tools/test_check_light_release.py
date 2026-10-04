@@ -102,7 +102,8 @@ class LightReleaseTests(unittest.TestCase):
             z.writestr('mojolearn-0.8.7.dist-info/gpu_plugins.json', '{}')
         plugin = {'cuda': 'mojolearn_nvidia', 'hip': 'mojolearn_amd'}[vendor] + '-0.8.7-py3-none-manylinux_2_35_x86_64.whl'
         with zipfile.ZipFile(self.root / plugin, 'w') as z:
-            z.writestr(f'mojolearn/{vendor}/x/_mojolearn_knn.so', 'inert')
+            z.writestr(plugin.split('-')[0] + '-0.8.7.dist-info/LINUX_PAYLOAD.json',
+                       json.dumps({'source_commit': self.commit}))
         digests = {w: gate.digest(self.root / w) for w in (core, plugin)}
         published = core if publish == 'core' else plugin
         (self.root / (plugin if publish == 'core' else core)).unlink()
@@ -165,6 +166,23 @@ class LightReleaseTests(unittest.TestCase):
         self.write()
         with self.assertRaisesRegex(ValueError, 'another version'):
             gate.check(self.root, self.commit, 'linux')
+
+    def test_native_payload_requires_its_own_architecture_receipt(self):
+        old = self.split('nvidia', 'cuda')
+        name = old.replace('mojolearn_nvidia-', 'mojolearn_nvidia_sm90-')
+        (self.root / old).rename(self.root / name)
+        self.manifest['files'] = {name: gate.digest(self.root / name)}
+        report = self.reports['cuda']
+        report['plugins'][0]['wheel'] = '/box/' + name
+        for arch in (None, 'sm_89', 'sm_80'):
+            report['installed']['gpu_arch'] = arch
+            self.write()
+            with self.assertRaisesRegex(ValueError, 'another GPU architecture'):
+                gate.check(self.root, self.commit, 'linux')
+        for arch in ('sm_90', 'sm_90a'):
+            report['installed']['gpu_arch'] = arch
+            self.write()
+            self.assertEqual(gate.check(self.root, self.commit, 'linux')['status'], 'PASSED_LIGHT_RELEASE')
 
     def test_the_combined_linux_wheel_still_needs_the_nvidia_receipt(self):
         self.reports.pop('metal')

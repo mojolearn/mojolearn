@@ -28,7 +28,11 @@ def digest(path):
 
 #: THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py): wheel-name
 #: prefix of each GPU plugin -> the runtime vendor its receipt must report.
-PLUGIN_VENDORS = {'mojolearn_nvidia': 'cuda', 'mojolearn_amd': 'hip'}
+from verify_linux_surface_qualification import load_gpu_plugins
+_GPU_PACKAGES = load_gpu_plugins()
+PLUGIN_ROWS = {r['wheel_name']: r for r in _GPU_PACKAGES.distribution_rows()}
+PLUGIN_VENDORS = {name: _GPU_PACKAGES.by_profile(row['profile'])
+                  for name, row in PLUGIN_ROWS.items()}
 #: The marker the split core carries in its .dist-info (gpu_plugins.CORE_MARKER).
 CORE_MARKER = 'gpu_plugins.json'
 
@@ -95,8 +99,16 @@ def check(directory, source_commit, platform="all"):
         require(('macosx' in wheel) if vendor == 'metal' else ('manylinux' in wheel), 'vendor/platform mismatch')
         if role == 'plugin':
             require(plugins[wheel] == wheels[wheel] == digest(directory / wheel), 'wheel digest mismatch')
-            # A plugin holds no Python and no source witness; it is bound to
-            # the receipt by sha256 and to its core by the exact version pin.
+            # Bind every package to its exact source and installed bytes. A
+            # payload also needs a smoke of the architecture it contains.
+            with zipfile.ZipFile(directory / wheel) as archive:
+                inventories = [n for n in archive.namelist() if n.endswith('.dist-info/LINUX_PAYLOAD.json')]
+                require(len(inventories) == 1 and json.loads(archive.read(inventories[0])).get('source_commit') == source_commit,
+                        'plugin packaged source mismatch')
+            row = PLUGIN_ROWS[wheel.split('-', 1)[0]]
+            if row['role'] == 'payload':
+                require(report.get('installed', {}).get('gpu_arch') in row['arches'],
+                        'payload receipt loaded another GPU architecture')
             require(core.split('-')[:2] == ['mojolearn', wheel.split('-')[1]],
                     'plugin receipt installed a core of another version')
         else:
