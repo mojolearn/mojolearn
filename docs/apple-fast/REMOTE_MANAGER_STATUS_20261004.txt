@@ -25,3 +25,11 @@ No new timings, board promotions, or default activation from these jobs.
 Source recovery and harness work committed to remote M2 bare repository.
 GitHub publication of new remote commits is blocked by missing write
 credentials on M2; M2 bare pushes do not imply GitHub publication.
+
+Follow-up checkpoint:
+Resample fresh quality resample-gpu-recovered-q-r2-20261004 PASS on M3
+with repaired harness 7d66c0a052cd55d97b984caf521af32f5d12e229.
+PCA saved outputs indicate HOLD; no fit rerun or timing admitted.
+K3 source fe5df7ab075883123c57f561fb35e9cc6838a71a compiled both
+probe-enabled B and default-off A on M2. Hash manifest saved with artifacts;
+GPU quality is still owed. No board promotion.
