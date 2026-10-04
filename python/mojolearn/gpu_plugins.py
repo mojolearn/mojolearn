@@ -1,62 +1,44 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Linux GPU distributions and file ownership, shared by packer and loader.
+"""Linux vendor distributions and native architecture file ownership.
 
-The core requires both vendor aggregates; each aggregate requires its native
-architecture payloads. Payloads require the exact core version. Thus ordinary
-``pip install mojolearn`` still installs every released GPU target. A payload
-owns only its architecture, and aggregates own no kernel files.
-
-Native payloads use cuda_native/ and hip_native/ rather than the old vendor
-wheel roots. Upgrading an old vendor wheel cannot uninstall the new payload's
-files. Directory depth is unchanged, preserving each binding's relative RUNPATH.
-Experimental PTX is deliberately absent from the released payload registry.
+The core pins mojolearn-nvidia and mojolearn-amd automatically. Each vendor
+wheel contains its registered native architecture sets; architecture selection
+still happens in the loader. Experimental PTX remains a separate opt-in artifact.
+Native directory depth stays unchanged to preserve binding RUNPATHs.
 """
 
-#: vendor directory -> the plugin that ships it. `vendor` is the directory
-#: name under mojolearn/ and the string `<prefix>_vendor()` answers.
 PLUGINS = {
-    "cuda": {
-        "distribution": "mojolearn-nvidia",
-        "wheel_name": "mojolearn_nvidia",
-        "profile": "nvidia",
-        "label": "NVIDIA (CUDA)",
-        "role": "aggregate",
-    },
-    "hip": {
-        "distribution": "mojolearn-amd",
-        "wheel_name": "mojolearn_amd",
-        "profile": "amd",
-        "label": "AMD (ROCm/HIP)",
-        "role": "aggregate",
-    },
+    "cuda": dict(distribution="mojolearn-nvidia", wheel_name="mojolearn_nvidia",
+        profile="nvidia", label="NVIDIA (CUDA)", vendor="cuda", role="vendor",
+        arches=("sm_89", "sm_90", "sm_90a"), slots=(("sm_89",), ("sm_90", "sm_90a")),
+        directory="cuda_native", code_format="native", release_enabled=True),
+    "hip": dict(distribution="mojolearn-amd", wheel_name="mojolearn_amd",
+        profile="amd", label="AMD (ROCm/HIP)", vendor="hip", role="vendor",
+        arches=("gfx942",), slots=(("gfx942",),), directory="hip_native",
+        code_format="native", release_enabled=True),
 }
-
-# Payload project names are centralized; external project registration is a
-# separate release prerequisite, not implied by this registry.
-PAYLOADS = {
-    "nvidia-sm89": dict(distribution="mojolearn-nvidia-sm89", wheel_name="mojolearn_nvidia_sm89",
-        profile="nvidia-sm89", label="NVIDIA Ada native", vendor="cuda", arches=("sm_89",),
-        directory="cuda_native", code_format="native", role="payload"),
-    "nvidia-sm90": dict(distribution="mojolearn-nvidia-sm90", wheel_name="mojolearn_nvidia_sm90",
-        profile="nvidia-sm90", label="NVIDIA Hopper native", vendor="cuda", arches=("sm_90", "sm_90a"),
-        directory="cuda_native", code_format="native", role="payload"),
-    "amd-gfx942": dict(distribution="mojolearn-amd-gfx942", wheel_name="mojolearn_amd_gfx942",
-        profile="amd-gfx942", label="AMD gfx942 native", vendor="hip", arches=("gfx942",),
-        directory="hip_native", code_format="native", role="payload"),
-}
-
-
-for _row in (*PLUGINS.values(), *PAYLOADS.values()):
-    _row["release_enabled"] = True
+PAYLOADS = {row["profile"]: row for row in PLUGINS.values()}  # glue: index vendor package metadata by release profile
 PAYLOADS["nvidia-ptx80"] = dict(distribution="mojolearn-nvidia-ptx80", wheel_name="mojolearn_nvidia_ptx80",
     profile="nvidia-ptx80", label="NVIDIA experimental PTX baseline", vendor="cuda", arches=("sm_80",),
-    directory="cuda_ptx", code_format="ptx-baseline", role="payload", release_enabled=False)
+    slots=(("sm_80",),), directory="cuda_ptx", code_format="ptx-baseline", role="payload", release_enabled=False)
 
 
 def distribution_rows(include_experimental=False):
-    return tuple(row for row in (*PLUGINS.values(), *PAYLOADS.values())  # glue: filter package registry records for release metadata
+    return tuple(row for row in PAYLOADS.values()  # glue: filter package registry records for release metadata
                  if include_experimental or row["release_enabled"])
+
+
+def valid_arches(profile, arches):
+    row = PAYLOADS[profile]
+    return (len(arches) == len(set(arches)) and set(arches) <= set(row["arches"])
+            and all(len(set(slot) & set(arches)) == 1 for slot in row["slots"]))  # glue: validate one installed set per registered hardware slot
+
+
+def wheel_size_limit(distribution):
+    # Requested project allowance, not evidence that PyPI has granted it.
+    # Publication must confirm mojolearn-nvidia's 250 MiB allowance first.
+    return (250 if distribution == "mojolearn-nvidia" else 100) * 1024**2
 
 
 def package(profile):
@@ -75,8 +57,8 @@ def native_directory(vendor):
 
 
 def payload_requirements(vendor, version):
-    return [f"{row['distribution']}=={version}" for row in PAYLOADS.values()  # glue: generate exact package dependency strings from registry records
-            if row["vendor"] == vendor and row["release_enabled"]]
+    """Vendor projects have no architecture-package dependencies."""
+    return []
 
 
 def member_payload(arcname):
@@ -111,8 +93,8 @@ CORE_MARKER = "gpu_plugins.json"
 #: The same, in each plugin's .dist-info: which vendor and architectures it
 #: carries and the core version it was packed with.
 PLUGIN_MARKER = "gpu_plugin.json"
-CORE_SCHEMA = "mojolearn.gpu-plugins.v2"
-PLUGIN_SCHEMA = "mojolearn.gpu-plugin.v2"
+CORE_SCHEMA = "mojolearn.gpu-plugins.v3"
+PLUGIN_SCHEMA = "mojolearn.gpu-plugin.v3"
 PAYLOAD_MARKER = "gpu_payload.json"
 PAYLOAD_SCHEMA = "mojolearn.gpu-payload.v1"
 
@@ -173,10 +155,10 @@ def core_marker(version):
 
 
 def plugin_marker(vendor, version, arches):
-    return {"schema": PLUGIN_SCHEMA, "role": "aggregate", "vendor": vendor, "version": version,
-            "distribution": PLUGINS[vendor]["distribution"],
-            "requires": payload_requirements(vendor, version), "arches": [],
-            "payloads": [r["distribution"] for r in PAYLOADS.values() if r["vendor"] == vendor and r["release_enabled"]]}  # glue: serialize aggregate dependency package names
+    row = PLUGINS[vendor]
+    return {"schema": PLUGIN_SCHEMA, "role": "vendor", "vendor": vendor, "version": version,
+            "distribution": row["distribution"], "requires": f"{CORE_DISTRIBUTION}=={version}",
+            "arches": sorted(arches), "directory": row["directory"], "code_format": "native"}  # glue: canonicalize architecture identifiers in metadata
 
 
 def payload_marker(profile, version, arches):
@@ -190,16 +172,14 @@ def payload_marker(profile, version, arches):
 def package_requirements(profile, version):
     if profile == CORE_PROFILE:
         return core_requirements(version)
-    row = package(profile)
-    if row["role"] == "aggregate":
-        return payload_requirements(by_profile(profile), version)
+    package(profile)  # Validate that the profile is registered.
     return [f"{CORE_DISTRIBUTION}=={version}"]
 
 
 def package_marker(profile, version, arches=()):
     if profile == CORE_PROFILE:
         return core_marker(version)
-    if package(profile)["role"] == "aggregate":
+    if package(profile)["role"] == "vendor":
         return plugin_marker(by_profile(profile), version, arches)
     return payload_marker(profile, version, arches)
 

@@ -1178,8 +1178,8 @@ jobs:
           skip-existing: false
   publish_alpha_plugins:
     name: Publish alpha mojolearn-${{ matrix.plugin }} to ${{ inputs.publish }}
-    # SECOND: wait for any native payloads in this dispatch and check the
-    # exact dependency versions on the index before uploading the aggregate.
+    # Native vendor packages publish before the core. Architecture sets stay
+    # together in each vendor wheel; experimental PTX is not release-enabled.
     needs: [alpha_stage, cpu_certification, publish_alpha_payloads]
     if: >-
       always() && !cancelled() && inputs.publish != 'none' && inputs.alpha_candidate_tag != '' &&

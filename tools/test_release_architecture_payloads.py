@@ -24,11 +24,10 @@ def test_registry_parity_and_no_experimental_publication():
 
 
 def test_payloads_cannot_publish_before_own_architecture_checks():
-    for payload, column in release.PAYLOAD_COLUMNS.items():
-        assert 'gpu-column-' + column in release.NEEDS['publish-' + payload]
-        assert 'linux-joint-diff' in release.NEEDS['publish-' + payload]
-    assert {'publish-nvidia-sm89', 'publish-nvidia-sm90'} <= set(release.NEEDS['publish-nvidia'])
-    assert 'publish-amd-gfx942' in release.NEEDS['publish-amd']
+    for vendor, columns in release.NATIVE_COLUMNS.items():
+        for column in columns:
+            assert 'gpu-column-' + column in release.NEEDS['publish-' + vendor]
+        assert 'linux-joint-diff' in release.NEEDS['publish-' + vendor]
     assert {'publish-nvidia', 'publish-amd'} <= set(release.NEEDS['publish-core-linux'])
     assert 'gpu-column-nvidia-hopper' in release.AFTER['linux-joint-diff']
 
@@ -45,7 +44,7 @@ def test_target_admission_requires_actual_installed_arch(tmp_path):
 
 def test_synthetic_reuse_normalizes_roots_without_changing_bytes(tmp_path):
     core = tmp_path / 'mojolearn-1-py3-none-manylinux.whl'
-    payload = tmp_path / 'mojolearn_nvidia_sm89-1-py3-none-manylinux.whl'
+    payload = tmp_path / 'mojolearn_nvidia-1-py3-none-manylinux.whl'
     with zipfile.ZipFile(core, 'w') as z:
         z.writestr('mojolearn/__init__.py', b'core')
         z.writestr('mojolearn-1.dist-info/LINUX_PAYLOAD.json', json.dumps({
@@ -62,5 +61,5 @@ def test_synthetic_reuse_normalizes_roots_without_changing_bytes(tmp_path):
 
 def test_missing_payload_index_release_is_refused():
     from test_index_release_check import run
-    _, errors = run(missing=('mojolearn-nvidia-sm90',))
-    assert len(errors) == 1 and 'mojolearn-nvidia-sm90' in errors[0]
+    _, errors = run(missing=('mojolearn-nvidia',))
+    assert len(errors) == 1 and 'mojolearn-nvidia' in errors[0]

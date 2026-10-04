@@ -110,7 +110,7 @@ class LightReleaseTests(unittest.TestCase):
         self.manifest = {'files': {published: digests[published]},
                          'light_smoke': {'source_commit': self.commit, 'receipts': {}}}
         self.reports = {vendor: dict(status='PASSED', scope='expanded', source_commit=self.commit,
-            release_qualified=False, installed={'vendor': vendor}, wheel='/box/' + core, wheel_sha256=digests[core],
+            release_qualified=False, installed={'vendor': vendor, 'gpu_arch': 'sm_89' if vendor=='cuda' else 'gfx942'}, wheel='/box/' + core, wheel_sha256=digests[core],
             plugins=[dict(wheel='/box/' + plugin, wheel_sha256=digests[plugin])],
             jobs=[dict(name=name, exit_code=0) for name in sorted(gate.JOBS)], expanded={'scope': 'expanded'})}
         self.write()
@@ -167,19 +167,15 @@ class LightReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'another version'):
             gate.check(self.root, self.commit, 'linux')
 
-    def test_native_payload_requires_its_own_architecture_receipt(self):
-        old = self.split('nvidia', 'cuda')
-        name = old.replace('mojolearn_nvidia-', 'mojolearn_nvidia_sm90-')
-        (self.root / old).rename(self.root / name)
-        self.manifest['files'] = {name: gate.digest(self.root / name)}
+    def test_vendor_receipt_requires_a_registered_native_architecture(self):
+        self.split('nvidia', 'cuda')
         report = self.reports['cuda']
-        report['plugins'][0]['wheel'] = '/box/' + name
-        for arch in (None, 'sm_89', 'sm_80'):
+        for arch in (None, 'sm_80', 'gfx942'):
             report['installed']['gpu_arch'] = arch
             self.write()
             with self.assertRaisesRegex(ValueError, 'another GPU architecture'):
                 gate.check(self.root, self.commit, 'linux')
-        for arch in ('sm_90', 'sm_90a'):
+        for arch in ('sm_89', 'sm_90', 'sm_90a'):
             report['installed']['gpu_arch'] = arch
             self.write()
             self.assertEqual(gate.check(self.root, self.commit, 'linux')['status'], 'PASSED_LIGHT_RELEASE')

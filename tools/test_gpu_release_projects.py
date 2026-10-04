@@ -57,7 +57,7 @@ class ProjectClassification(unittest.TestCase):
         result = projects.classify(wheels, version='1.2.3', require_complete=True)
         self.assertTrue(result['core'])
         self.assertEqual(result['plugins'], ['amd', 'nvidia'])
-        self.assertEqual(result['payloads'], ['amd-gfx942', 'nvidia-sm89', 'nvidia-sm90'])
+        self.assertEqual(result['payloads'], [])
         parsed = {key: json.loads(value) for key, value in
                   (line.split('=', 1) for line in projects.github_outputs(result).splitlines())}
         self.assertEqual(parsed['payloads'], result['payloads'])
@@ -67,7 +67,7 @@ class ProjectClassification(unittest.TestCase):
         self.assertEqual(output.read_text(), projects.github_outputs(result))
 
     def test_partial_payload_and_aggregate_dispatches(self):
-        for profile, role in (('nvidia-sm89', 'payloads'), ('nvidia', 'plugins')):
+        for profile, role in (('amd', 'plugins'), ('nvidia', 'plugins')):
             wheel = self.wheel(profile)
             result = projects.classify([wheel])
             self.assertFalse(result['core'])
@@ -91,7 +91,7 @@ class ProjectClassification(unittest.TestCase):
             projects.classify([self.root / 'other-1.2.3-py3-none-any.whl'])
         with self.assertRaisesRegex(ValueError, 'no wheels'):
             projects.classify([])
-        one = self.wheel('nvidia-sm89')
+        one = self.wheel('nvidia')
         with self.assertRaisesRegex(ValueError, 'duplicate'):
             projects.classify([one, one])
         with self.assertRaisesRegex(ValueError, 'versions disagree'):
@@ -99,13 +99,21 @@ class ProjectClassification(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'expected version'):
             projects.classify([one], version='9.0.0')
 
+    def test_vendor_budgets_and_architecture_projects_not_released(self):
+        self.assertEqual(projects.gpu_plugins.wheel_size_limit('mojolearn-nvidia'), 250 * 1024**2)
+        self.assertEqual(projects.gpu_plugins.wheel_size_limit('mojolearn-amd'), 100 * 1024**2)
+        self.assertEqual(projects.gpu_plugins.wheel_size_limit('mojolearn'), 100 * 1024**2)
+        for profile in ('nvidia-sm89', 'nvidia-sm90', 'amd-gfx942'):
+            with self.assertRaisesRegex(ValueError, 'unknown'):
+                projects.wheel_prefix(profile)
+
     def test_names_are_registry_normalized_and_metadata_bound(self):
-        self.assertEqual(projects.wheel_prefix('nvidia-sm89'), 'mojolearn_nvidia_sm89')
-        self.assertEqual(projects.wheel_prefix('amd-gfx942'), 'mojolearn_amd_gfx942')
+        self.assertEqual(projects.wheel_prefix('nvidia'), 'mojolearn_nvidia')
+        self.assertEqual(projects.wheel_prefix('amd'), 'mojolearn_amd')
         with self.assertRaisesRegex(ValueError, 'unknown'):
             projects.wheel_prefix('../nvidia')
         with self.assertRaisesRegex(ValueError, 'metadata disagree'):
-            projects.classify([self.wheel('nvidia-sm89', name='mojolearn-nvidia-sm90')])
+            projects.classify([self.wheel('nvidia', name='mojolearn-amd')])
 
 
 class PublishingGraph(unittest.TestCase):

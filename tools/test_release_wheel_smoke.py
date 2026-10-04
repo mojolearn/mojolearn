@@ -537,15 +537,11 @@ runpy.run_path(str(pathlib.Path(__file__).with_name('timeout.real')), run_name='
 # ---------------------------------------------------------------- --from-index
 IV = '0.9.0'
 PROJECTS = {name: name.replace('-', '_') for name in (
-    'mojolearn', 'mojolearn-nvidia', 'mojolearn-amd', 'mojolearn-nvidia-sm89',
-    'mojolearn-nvidia-sm90', 'mojolearn-amd-gfx942')}
+    'mojolearn', 'mojolearn-nvidia', 'mojolearn-amd')}
 PROJECT_REQUIRES = {
     'mojolearn': ('mojolearn-nvidia', 'mojolearn-amd'),
-    'mojolearn-nvidia': ('mojolearn-nvidia-sm89', 'mojolearn-nvidia-sm90'),
-    'mojolearn-amd': ('mojolearn-amd-gfx942',),
-    'mojolearn-nvidia-sm89': ('mojolearn',),
-    'mojolearn-nvidia-sm90': ('mojolearn',),
-    'mojolearn-amd-gfx942': ('mojolearn',),
+    'mojolearn-nvidia': ('mojolearn',),
+    'mojolearn-amd': ('mojolearn',),
 }
 
 
@@ -592,7 +588,7 @@ FAKE_BOX = r'''import json, os, pathlib
 d = pathlib.Path(os.environ['FAKE_BOX_DIR']); v = os.environ['FAKE_VERSION']
 vendor = os.environ.get('FAKE_VENDOR', 'cuda'); index = os.environ.get('FAKE_INDEX', 'testpypi')
 (d / 'install.exit').write_text('0\n'); (d / 'box.txt').write_text('fake box\n')
-projects = ('mojolearn', 'mojolearn-nvidia', 'mojolearn-amd', 'mojolearn-nvidia-sm89', 'mojolearn-nvidia-sm90', 'mojolearn-amd-gfx942')
+projects = ('mojolearn', 'mojolearn-nvidia', 'mojolearn-amd')
 (d / 'install.log').write_text('Successfully installed ' + ' '.join(projects) + ' numpy\n')
 (d / 'pip_report.json').write_text(json.dumps({'install': []}))
 (d / 'dists.txt').write_text(''.join(n + '==' + v + '\n' for n in projects))
@@ -614,6 +610,7 @@ if vendor == 'hip':  # the column the AMD leg ran from the same install
 
 class FromIndexTests(unittest.TestCase):
     def setUp(self):
+        self.cloud = None
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = pathlib.Path(self.tmp.name)
         self.index = None
@@ -660,11 +657,11 @@ class FromIndexTests(unittest.TestCase):
         self.assertFalse((self.dir / 'o').exists())
 
     def test_missing_native_payload_is_refused_before_renting(self):
-        env = self.serve(missing=('mojolearn-nvidia-sm90',))
+        env = self.serve(missing=('mojolearn-nvidia',))
         r = self.run_smoke('--from-index', 'testpypi', '--version', IV, '--rent',
                            '--out', str(self.dir / 'o'), env=env)
         self.assertEqual(r.returncode, 1)
-        self.assertIn(f'mojolearn-nvidia-sm90=={IV} is not on testpypi (HTTP 404)', r.stderr)
+        self.assertIn(f'mojolearn-nvidia=={IV} is not on testpypi (HTTP 404)', r.stderr)
         self.assertIn('nothing was rented', r.stderr)
         self.assertFalse((self.dir / 'o').exists())
 

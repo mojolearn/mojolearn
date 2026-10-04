@@ -556,93 +556,79 @@ python3 tools/strip_wheel_dir_entries.py <dist>/audit/repaired/mojolearn-*-manyl
   --receipt <dist>/final/dir-entry-strip.json
 ```
 
-### 3b. Architecture payloads and vendor aggregates
+### 3b. Vendor GPU packages
 
-The Linux release is six projects at one exact version. Package ownership and
-pins come from `python/mojolearn/gpu_plugins.py`:
+The Linux release uses three existing projects at one exact version. Ownership
+and pins come from `python/mojolearn/gpu_plugins.py`:
 
 | Project | Contents | Exact-version dependencies |
 |---|---|---|
-| `mojolearn` | Python, host bindings, shared runtime | Both vendor aggregates |
-| `mojolearn-nvidia` | Metadata only | `mojolearn-nvidia-sm89`, `mojolearn-nvidia-sm90` |
-| `mojolearn-amd` | Metadata only | `mojolearn-amd-gfx942` |
-| `mojolearn-nvidia-sm89` | `mojolearn/cuda_native/sm_89/` | `mojolearn` |
-| `mojolearn-nvidia-sm90` | `mojolearn/cuda_native/sm_90a/` (or `sm_90`) | `mojolearn` |
-| `mojolearn-amd-gfx942` | `mojolearn/hip_native/gfx942/` | `mojolearn` |
+| `mojolearn` | Python, host bindings, shared runtime | `mojolearn-nvidia`, `mojolearn-amd` |
+| `mojolearn-nvidia` | Native Ada `cuda_native/sm_89/` and Hopper `cuda_native/sm_90a/` (or `sm_90`) | `mojolearn` |
+| `mojolearn-amd` | Native AMD `hip_native/gfx942/` | `mojolearn` |
 
-Ordinary `pip install mojolearn` still installs all released native payloads;
-pip does not select a wheel by GPU model. The runtime selects the installed
-native target. This split reduces each uploaded file, not the total download.
-It adds no new native GPU support. The macOS package stays separate.
+Ordinary `pip install mojolearn` installs both vendor packages automatically.
+The loader selects the installed architecture for the detected GPU. Packaging
+by vendor does not make machine code portable across GPU generations or add
+new supported architectures. The macOS wheel remains separate.
 
-The payloads preserve binary bytes. Their new directories have the same depth
-as the old vendor directories, preserving relative RUNPATHs while preventing
-pip's uninstall of an old vendor wheel from deleting a newly installed payload.
-`packaging/linux/test_plugin_upgrade.py` exercises the actual pip uninstall with
-inert fixtures; `test_split_wheels.py` checks the byte-preserving partition.
+Binary bytes and architecture directory depth are preserved, including relative
+RUNPATHs. `test_split_wheels.py` checks that the three wheels partition the
+combined package without changing a native member. `test_plugin_upgrade.py`
+checks pip's actual uninstall of the prior vendor-directory layout.
 
 ```sh
-# All six distributions, with the same native source/build proof requirements.
 pixi run -e pkg pack-linux-wheel --profile release-split \
   --set <sm89>/build/sets/cuda --set <sm90a>/build/sets/cuda --set <hip>/build/sets/hip \
   --build-proof ... --out <dist>
-# NVIDIA aggregate expands to both NVIDIA architecture payloads.
-pixi run -e pkg pack-linux-wheel --profile release-split --wheels core-linux,nvidia \
-  --set <sm89>/build/sets/cuda --set <sm90a>/build/sets/cuda --build-proof ... --out <dist>
 python3 tools/wheel_api_audit.py --split <dist>/*.whl
 python3 tools/gpu_release_projects.py <dist> --require-complete
 ```
 
-Run `packaging/linux/audit.sh` for each wheel with the core beside the payloads.
-Native payloads exclude the runtime libraries owned by the core. Metadata-only
-aggregates take a structural audit and Twine check without ELF repair. Every
-artifact must remain within the 100 MiB upload limit.
+NVIDIA requires both Ada and Hopper sets; a vendor-only pack cannot silently
+omit one. Audit every wheel with the core beside the vendor packages. Native
+vendor wheels exclude the runtime libraries owned by the core.
 
-Release columns install all six packages. Ada, Hopper, and AMD each need their
-own actual loaded-architecture receipt. An Ada smoke cannot qualify a Hopper
-payload. The release workflow publishes native payloads first, then vendor
-aggregates, then the core. Aggregate/core upload gates verify their dependencies
-already exist on the selected index. Experimental packages are refused. Full
-staging requires all six wheels; prepared alpha dispatches can upload individual
-packages once their dependencies are available.
+The NVIDIA project needs a **250 MiB per-file PyPI allowance**. The packer and
+structural audit use this requested NVIDIA budget, while core and AMD retain
+100 MiB budgets. These checks do not grant a server-side allowance: confirm the
+increase on the target index before uploading a NVIDIA wheel above 100 MiB.
+No architecture-specific PyPI project or trusted publisher is required.
 
-Every wheel's inventory names the frozen source commit, and the core carries
-that same identity-column COMMIT. Freeze the integrated, tested commit before
-building. Do not rewrite older wheel inventories or receipts to call them the
-current main. Full split qualification checks the entire installed set and binds
-its records to a digest over every wheel name and hash.
+Release columns install all three wheels. Ada, Hopper, and AMD still require
+separate actual-architecture receipts. NVIDIA publication waits for both Ada
+and Hopper; vendors publish before the core. The core upload checks that both
+exact vendor versions are available on the selected index. Experimental PTX
+remains excluded from publication.
+
+Inventories retain the frozen source commit and build origins. Do not relabel
+older artifacts or receipts as a newer main commit. Historical six-wheel `5c`
+candidate evidence remains tied to those files and can still be exercised with
+its frozen harness; it is not a receipt for these new three-wheel bundles.
 
 #### Index installation and trusted publishers
 
 Test local artifacts before upload, then resolve the actual dependency graph
 from TestPyPI before PyPI. `tools/index_install_check.sh <v> <index>` is a dry
-run; `--rent` runs the NVIDIA/AMD index-install checks. Its precheck requires all
-six projects, exact dependency pins, and non-yanked manylinux files. Each receipt
-must show all six installed versions and their downloads from the intended index.
-The release's separate Hopper column is still required.
-
-Existing vendor project reservations do not reserve the new payload names.
-Before the first architecture release, verify the following publishers and
-matching protected GitHub environments on both PyPI and TestPyPI:
+run; `--rent` runs the NVIDIA/AMD installed-index checks. The precheck requires
+all three projects, exact pins, and non-yanked manylinux wheels. The separate
+Hopper qualification column is still required.
 
 | Project | PyPI environment | TestPyPI environment |
 |---|---|---|
 | `mojolearn` | `pypi` | `testpypi` |
 | `mojolearn-nvidia` | `pypi-nvidia` | `testpypi-nvidia` |
 | `mojolearn-amd` | `pypi-amd` | `testpypi-amd` |
-| `mojolearn-nvidia-sm89` | `pypi-nvidia-sm89` | `testpypi-nvidia-sm89` |
-| `mojolearn-nvidia-sm90` | `pypi-nvidia-sm90` | `testpypi-nvidia-sm90` |
-| `mojolearn-amd-gfx942` | `pypi-amd-gfx942` | `testpypi-amd-gfx942` |
 
-These names are the repository configuration, not evidence of external
-registration. Each publisher uses repository `mojolearn/mojolearn` and workflow
-`release-provenance.yml`. Keep the existing project publishers; add the three
-payload publishers and protected environments. Each workflow job uploads only
-its own project's files.
+Keep the existing project publishers for repository `mojolearn/mojolearn`,
+workflow `release-provenance.yml`. Each job uploads only its project's files.
 
 #### Experimental NVIDIA PTX baseline
 
-`mojolearn-nvidia-ptx80` is a local experimental payload, excluded from default
+See [the NVIDIA PTX identity contract](NVIDIA_PTX_IDENTITY.md). A future
+qualified baseline may be bundled inside `mojolearn-nvidia`; no permanent
+separate PyPI project is required. For current local experiments only,
+`mojolearn-nvidia-ptx80` is a release-disabled payload, excluded from default
 dependencies and publication. Build it explicitly with
 `MOJOLEARN_CUDA_CODE_FORMAT=ptx-baseline MOJOLEARN_GPU_ARCHS=sm_80` through
 `packaging/linux/build_sets.sh`; pack with `--profile split --wheels nvidia-ptx80`.

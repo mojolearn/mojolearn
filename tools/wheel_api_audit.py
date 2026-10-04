@@ -134,7 +134,7 @@ def _wheel_facts(wheel):
 
 
 def split_audit(wheels):
-    """Check core, vendor aggregates and architecture payload ownership.
+    """Check core, vendor bundles and experimental payload ownership.
 
     This is file inspection, not numerical qualification. Experimental payloads
     may be inspected here; the publisher independently refuses them.
@@ -160,7 +160,7 @@ def split_audit(wheels):
         row = dict(wheel=wheel.name, path=str(wheel), distribution=name, version=version,
                    tags=sorted(tags), members=len(payload),
                    binaries=sum(m.endswith('.so') for m in payload))
-        if wheel.stat().st_size > 100 * 1024**2:
+        if wheel.stat().st_size > plugins.wheel_size_limit(name):
             problems.append(f'{wheel.name}: exceeds the PyPI per-file size limit')
         if name == plugins.CORE_DISTRIBUTION:
             row['role'] = plugins.CORE_PROFILE
@@ -188,28 +188,23 @@ def split_audit(wheels):
             if metadata.get_all('Provides-Extra', []):
                 problems.append(f'{wheel.name}: GPU package must not declare extras')
             arches = []
-            if package['role'] == 'aggregate':
-                if payload:
-                    problems.append(f'{wheel.name}: aggregate must carry metadata only')
-                marker_name = plugins.PLUGIN_MARKER
-            else:
-                stray = []
-                for member in payload:
-                    try:
-                        valid = plugins.member_payload(member) == profile and member == plugins.installed_member(member)
-                    except ValueError:
-                        valid = False
-                    if not valid:
-                        stray.append(member)
-                if stray:
-                    problems.append(f'{wheel.name}: members outside its architecture payload: {stray[0]}')
-                if not row['binaries'] or any(m.endswith('.py') for m in payload):
-                    problems.append(f'{wheel.name}: payload must contain binaries and no Python')
-                arches = sorted({m.split('/')[2] for m in payload if m.endswith('.so')})
-                if len(arches) != 1 or not set(arches) <= set(package['arches']):
-                    problems.append(f'{wheel.name}: payload must contain exactly its registered architecture')
-                marker_name = plugins.PAYLOAD_MARKER
-                row['arches'] = arches
+            stray = []
+            for member in payload:
+                try:
+                    valid = plugins.member_payload(member) == profile and member == plugins.installed_member(member)
+                except ValueError:
+                    valid = False
+                if not valid:
+                    stray.append(member)
+            if stray:
+                problems.append(f'{wheel.name}: members outside its architecture payload: {stray[0]}')
+            if not row['binaries'] or any(m.endswith('.py') for m in payload):
+                problems.append(f'{wheel.name}: payload must contain binaries and no Python')
+            arches = sorted({m.split('/')[2] for m in payload if m.endswith('.so')})
+            if not plugins.valid_arches(profile, arches):
+                problems.append(f'{wheel.name}: GPU wheel must contain one set per registered architecture slot')
+            marker_name = plugins.PLUGIN_MARKER if package['role'] == 'vendor' else plugins.PAYLOAD_MARKER
+            row['arches'] = arches
             expected = plugins.package_marker(profile, version, arches)
         else:
             problems.append(f'{wheel.name}: unknown distribution {name!r}')
@@ -273,8 +268,6 @@ def plugins_on_index(wheels, index, files=None, attempts=6, sleep=None):
         packages = {r['distribution']: r for r in plugins.distribution_rows()}
         if name == plugins.CORE_DISTRIBUTION and dist + '/' + plugins.CORE_MARKER in read:
             required = plugins.core_requirements(version)
-        elif name in packages and packages[name]['role'] == 'aggregate':
-            required = plugins.package_requirements(packages[name]['profile'], version)
         else:
             continue
         for requirement in required:
@@ -301,17 +294,17 @@ def main():
     parser.add_argument('--require-complete', action='store_true',
                         help='fail for missing public exports or missing/stale source Python or reference payload')
     parser.add_argument('--split', action='store_true',
-                        help='the wheels are split Linux core, vendor aggregates, or architecture payloads: '
+                        help='the wheels are split Linux core, vendor bundles, or experimental payloads: '
                              'run split_audit over all and the API audit over the core alone')
     parser.add_argument('--plugins-on-index', choices=sorted(INDEX_JSON),
-                        help='require each core/vendor aggregate exact GPU dependencies on the selected index')
+                        help='require each core exact vendor dependencies on the selected index')
     args = parser.parse_args()
     if args.plugins_on_index:
         problems = plugins_on_index(args.wheels, args.plugins_on_index)
         for problem in problems:
             print('::error::' + problem)
         if not problems:
-            print(f'GPU dependencies of core/vendor aggregates are available on {args.plugins_on_index}')
+            print(f'GPU dependencies of the core are available on {args.plugins_on_index}')
         return int(bool(problems))
     if args.split:
         split = split_audit(args.wheels)

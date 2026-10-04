@@ -38,11 +38,10 @@ import urllib.request
 #: spelled here because this file ships to the box without the package).
 CORE = "mojolearn"
 PLUGINS = {"cuda": "mojolearn-nvidia", "hip": "mojolearn-amd"}
-PAYLOADS = {"cuda": ("mojolearn-nvidia-sm89", "mojolearn-nvidia-sm90"),
-            "hip": ("mojolearn-amd-gfx942",)}
-PROJECTS = (CORE, *PLUGINS.values(), *(p for rows in PAYLOADS.values() for p in rows))
-REQUIRES = {CORE: tuple(PLUGINS.values()), **{PLUGINS[v]: rows for v, rows in PAYLOADS.items()},
-            **{p: (CORE,) for rows in PAYLOADS.values() for p in rows}}
+PAYLOADS = {vendor: (project,) for vendor, project in PLUGINS.items()}
+PROJECTS = (CORE, *PLUGINS.values())
+REQUIRES = {CORE: tuple(PLUGINS.values()), **{project: (CORE,) for project in PLUGINS.values()}}
+
 
 #: index -> (simple index, JSON API root, file host of OUR three projects)
 INDEXES = {
@@ -204,7 +203,7 @@ def load_check(vendor, version):
     if plugin.get("distribution") != PLUGINS[vendor] or plugin.get("version") != version:
         problems.append(f"the loaded GPU set is not from {PLUGINS[vendor]} {version} (gpu_plugin() = {facts['plugin']})")
     if set(plugin.get("payloads") or []) != set(PAYLOADS[vendor]):
-        problems.append(f"loaded vendor aggregate has missing or unexpected native payloads: {plugin}")
+        problems.append(f"loaded vendor package has unexpected native ownership: {plugin}")
     want_dir = os.path.join(facts["package"], {"cuda": "cuda_native", "hip": "hip_native"}[vendor]) + os.sep
     if not (facts["tier_dir"] + os.sep).startswith(want_dir):
         problems.append(f"the loaded tier directory {facts['tier_dir']} is not under {want_dir}")

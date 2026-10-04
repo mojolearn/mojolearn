@@ -10,12 +10,12 @@
         --out python/dist
 
 SIX NATIVE WHEELS BY DEFAULT (python/mojolearn/gpu_plugins.py):
-core, two metadata-only vendor aggregates, and three architecture payloads.
-The core requires both aggregates; aggregates require all their native payloads;
-payloads pin the core exactly. Default pip installation still includes all GPUs.
+core and two vendor packages. NVIDIA carries Ada and Hopper together; AMD
+carries gfx942. The core requires both vendors, which pin the core exactly.
+Default pip installation still includes every released native target.
 
-`--wheels nvidia` includes its aggregate and native payloads; `--wheels
-nvidia-sm89` emits just that architecture payload. The experimental `nvidia-ptx80`
+`--wheels nvidia` emits the complete NVIDIA native vendor wheel.
+The experimental `nvidia-ptx80`
 payload must be explicitly requested and cannot use a release profile.
 Kernel bytes are unchanged. Native roots move to cuda_native/ and hip_native/
 at the same directory depth, preserving RUNPATH while avoiding ownership overlap
@@ -570,7 +570,7 @@ def core_project(proj, version):
 
 
 def plugin_project(proj, vendor, version, arches):
-    """Project metadata for an aggregate or architecture payload profile."""
+    """Project metadata for a vendor or experimental payload profile."""
     row = gpu_plugins.package(vendor)
     out = {k: proj[k] for k in ("authors", "maintainers", "license", "urls", "keywords",
                                 "classifiers", "requires-python", "license-files") if k in proj}
@@ -580,8 +580,8 @@ def plugin_project(proj, vendor, version, arches):
                dependencies=gpu_plugins.package_requirements(vendor, version))
     readme = (f"# {row['distribution']}\n\n"
               f"{row['label']} {row['role']} for mojolearn {version}. "
-              "The default Linux install includes both vendor aggregates and all released native targets. "
-              "Payloads contain one architecture slot; aggregates contain only dependency metadata.\n")
+              "The default Linux install includes both vendor packages and all released native targets. "
+              "Each vendor wheel contains its native architecture sets; the loader selects the matching set.\n")
     return out, readme
 
 
@@ -1016,7 +1016,7 @@ def main(argv=None, _gates=True):
         if any(not gpu_plugins.package(k)["release_enabled"] for k in kinds if k != gpu_plugins.CORE_PROFILE):
             raise SystemExit("pack_wheel: experimental payloads cannot use the release profile")
         plugin_vendors = {gpu_plugins.by_profile(k) for k in kinds
-                          if k != gpu_plugins.CORE_PROFILE and gpu_plugins.package(k)["role"] == "aggregate"}
+                          if k != gpu_plugins.CORE_PROFILE and gpu_plugins.package(k)["role"] == "vendor"}
         # A plugin is packed from its own vendor's sets and nothing else; the
         # core alone (host bindings and runtime) from whichever release sets
         # were given. Either way every set given is proven like release-linux3's.
@@ -1296,9 +1296,11 @@ def main(argv=None, _gates=True):
                 "distribution": (gpu_plugins.package(vendor)["distribution"] if vendor
                                  else gpu_plugins.CORE_DISTRIBUTION),
                 "compressed_bytes": size, "compressed_mb": round(size / 1e6, 2),
-                "over_limit": size > PYPI_LIMIT}
+                "pypi_limit_bytes": gpu_plugins.wheel_size_limit(gpu_plugins.package(vendor)["distribution"] if vendor else gpu_plugins.CORE_DISTRIBUTION),
+                "over_limit": size > gpu_plugins.wheel_size_limit(gpu_plugins.package(vendor)["distribution"] if vendor else gpu_plugins.CORE_DISTRIBUTION)}
         sizes = {
-            "wheels": wheels, "pypi_limit_bytes": PYPI_LIMIT,
+            "wheels": wheels, "pypi_default_limit_bytes": PYPI_LIMIT,
+            "nvidia_requested_limit_bytes": gpu_plugins.wheel_size_limit("mojolearn-nvidia"),
             "over_limit": any(w["over_limit"] for w in wheels.values()),
             "libs_layout": "shared mojolearn/.libs (core)", "sets": per_set, "tag": tag,
             "profile": a.profile,
@@ -1306,8 +1308,8 @@ def main(argv=None, _gates=True):
     (out / f"SIZES-{version}-linux.json").write_text(json.dumps(sizes, indent=2))
     print(json.dumps(sizes, indent=2))
     if sizes["over_limit"]:
-        print(f"\nOVER PyPI's {PYPI_LIMIT/1e6:.0f} MB LIMIT. STOP. Report the numbers "
-              "above; do not split the name without them.", file=sys.stderr)
+        print("\nOVER the configured project upload budget. STOP. Confirm the target index allowance "
+              "and review the per-wheel report.", file=sys.stderr)
         return 1
     return 0
 
@@ -1329,27 +1331,20 @@ def split_kinds(text, vendors_given, keys=None):
         if kind != gpu_plugins.CORE_PROFILE and gpu_plugins.by_profile(kind) not in vendors_given:
             raise SystemExit(f"pack_wheel: --wheels names {kind} but no "
                              f"{gpu_plugins.by_profile(kind)} set was given")
-    # Asking for a vendor includes its payload wheels; publishing the aggregate
-    # alone before those exist would create an uninstallable release.
-    for kind in tuple(kinds):
-        if kind != gpu_plugins.CORE_PROFILE and gpu_plugins.package(kind)["role"] == "aggregate":
-            vendor = gpu_plugins.by_profile(kind)
-            kinds += [r["profile"] for r in gpu_plugins.PAYLOADS.values()
-                      if r["vendor"] == vendor and r["release_enabled"]]
     if keys is not None:
         for kind in kinds:
             if kind in gpu_plugins.PAYLOADS:
                 row = gpu_plugins.PAYLOADS[kind]
-                matches = [(v, a) for v, a in keys if v == row["vendor"] and a in row["arches"]]
-                if len(matches) != 1:
-                    raise SystemExit(f"pack_wheel: {kind} requires exactly one architecture set; found {matches}")
+                arches = [a for v, a in keys if v == row["vendor"] and a in row["arches"]]
+                if not gpu_plugins.valid_arches(kind, arches):
+                    raise SystemExit(f"pack_wheel: {kind} requires one set per registered architecture slot; found {arches}")
     return tuple(k for k in WHEEL_KINDS if k in kinds)
 
 
 def split_payload(entries, generated, dist):
     """Partition by payload profile, remapping legacy roots at equal depth.
 
-    None owns the core; aggregate distributions have no payload members.
+    None owns core files; each vendor profile owns its architecture sets.
     """
     parts = {}
     for arc, src in entries.items():
@@ -1398,10 +1393,10 @@ def write_split(out, kinds, entries, generated, dist, proj, version, tag, invent
             vendor = gpu_plugins.by_profile(kind)
             row = gpu_plugins.package(kind)
             ventries, vpayload = parts.get(kind, ({}, {}))
-            if row["role"] == "payload" and not ventries:
+            if row["role"] in ("vendor", "payload") and not ventries:
                 raise SystemExit(f"pack_wheel: {row['distribution']} would be empty; no {vendor} set")
             arches = sorted({s.arch for s in sets if s.vendor == vendor and
-                             (row["role"] == "aggregate" or s.arch in row["arches"])})
+                             (s.arch in row["arches"])})
             pproj, preadme = plugin_project(proj, kind, version, arches)
             pdist = f"{row['wheel_name']}-{version}.dist-info"
             pgen = {
@@ -1412,7 +1407,7 @@ def write_split(out, kinds, entries, generated, dist, proj, version, tag, invent
                 pgen[f"{pdist}/LINUX_PAYLOAD.json"] = payload_doc(kind, row["distribution"], ventries)
             for arc, data in licenses.items():
                 pgen[pdist + arc[len(dist):]] = data
-            marker_name = gpu_plugins.PLUGIN_MARKER if row["role"] == "aggregate" else gpu_plugins.PAYLOAD_MARKER
+            marker_name = gpu_plugins.PLUGIN_MARKER if row["role"] == "vendor" else gpu_plugins.PAYLOAD_MARKER
             pgen[f"{pdist}/{marker_name}"] = (json.dumps(
                 gpu_plugins.package_marker(kind, version, arches), sort_keys=True, indent=2) + "\n").encode()
             pgen.update(vpayload)

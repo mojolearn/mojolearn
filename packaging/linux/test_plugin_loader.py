@@ -101,11 +101,6 @@ class PluginLoader(unittest.TestCase):
         self.dist_info(gp.plugin(vendor)["distribution"], version,
                        (gp.PLUGIN_MARKER, json.dumps(gp.plugin_marker(vendor, version, arches))))
         self.sets(vendor, arches)
-        for row in gp.PAYLOADS.values():
-            found = [a for a in arches if a in row["arches"]]
-            if row["vendor"] == vendor and found:
-                self.dist_info(row["distribution"], version,
-                    (gp.PAYLOAD_MARKER, json.dumps(gp.payload_marker(row["profile"], version, found))))
 
     def host_binding(self):
         (self.pkg / "host").mkdir(exist_ok=True)
@@ -302,21 +297,21 @@ class PluginLoader(unittest.TestCase):
 class ArchitecturePayloadLoader(PluginLoader):
     """Inheritance re-runs the existing native compatibility cases alongside new refusals."""
 
-    def test_missing_architecture_payload_cannot_hide_behind_aggregate(self):
+    def test_missing_native_architecture_refuses_vendor_bundle(self):
         self.split_core()
         self.plugin("cuda", ["sm_89", "sm_90a"])
         import shutil
-        shutil.rmtree(self.site / f"mojolearn_nvidia_sm89-{self.version}.dist-info")
-        self.assertIn("mojolearn-nvidia-sm89", str(self.refusal(cuda=True)))
+        shutil.rmtree(self.pkg / "cuda_native/sm_89")
+        self.assertIn("missing or unexpected", str(self.refusal(cuda=True)))
 
     def test_payload_marker_cannot_claim_another_architecture(self):
         self.split_core()
         self.plugin("cuda", ["sm_89", "sm_90a"])
-        path = self.site / f"mojolearn_nvidia_sm89-{self.version}.dist-info" / self.B.gpu_plugins.PAYLOAD_MARKER
+        path = self.site / f"mojolearn_nvidia-{self.version}.dist-info" / self.B.gpu_plugins.PLUGIN_MARKER
         doc = json.loads(path.read_text())
         doc["arches"] = ["sm_90a"]
         path.write_text(json.dumps(doc))
-        self.assertIn("invalid gpu_payload.json", str(self.refusal(cuda=True)))
+        self.assertIn("invalid gpu_plugin.json", str(self.refusal(cuda=True)))
 
     def test_legacy_roots_cannot_override_new_payloads(self):
         self.split_core()
