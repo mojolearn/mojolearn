@@ -98,6 +98,15 @@ comptime IDN_MAMBA_ALLOC_NOWAIT = _IDN_MAMBA_DEVICE and not is_defined[
 comptime IDN_MAMBA3_REPORTS_ON_REQUEST = _IDN_MAMBA_DEVICE and not is_defined[
     "MOJOLEARN_IDN_MAMBA3_REPORTS_ON_REQUEST_OFF"
 ]()
+#: lane/fam2-lm (2026-10-04) IDN_M3_SESSION_STAGE_REUSE (default ON;
+#: `-D MOJOLEARN_IDN_M3_SESSION_STAGE_REUSE_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
+#: rebuilds per call): a Mamba-3 prefill session forward at the (B, L,
+#: d_model) of the stages it retained refills those 43 buffers with zeros
+#: instead of freeing them and allocating 43 new ones. The forward starts
+#: from the same zeros, so no bit moves.
+comptime IDN_M3_SESSION_STAGE_REUSE = _IDN_MAMBA_DEVICE and not is_defined[
+    "MOJOLEARN_IDN_M3_SESSION_STAGE_REUSE_OFF"
+]()
 comptime IDN_MAMBA_ARENA = _IDN_MAMBA_DEVICE and not is_defined["MOJOLEARN_IDN_MAMBA_ARENA_OFF"]()
 comptime IDN_MAMBA_DEVICE_REFUSAL = _IDN_MAMBA_DEVICE and not is_defined[
     "MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF"

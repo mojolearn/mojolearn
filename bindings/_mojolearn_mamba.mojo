@@ -178,6 +178,7 @@ from mamba.impl.modules.mamba_simple import mamba_step
 #: arrays are copied in with no per-buffer wait (`_mamba{1,2,3}_run_arena`).
 from mamba.impl.modules.afn_defines import AFN_MAMBA_ARENA, IDN_MAMBA_ALLOC_NOWAIT
 from mamba.impl.modules.afn_defines import IDN_MAMBA3_REPORTS_ON_REQUEST
+from mamba.impl.modules.afn_defines import IDN_M3_SESSION_STAGE_REUSE
 from mamba.impl.modules.afn_arena import MambaArena
 from mamba.impl.modeling.modeling_mamba import mamba1_arena_floats
 from mamba.impl.modules.mamba2 import mamba2_arena_floats
@@ -2216,14 +2217,37 @@ def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, d
     comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
         phase_tick = Int(perf_counter_ns())
     _m3_prefill_weights(s, a, dims)
+    # lane/fam2-lm (IDN_M3_SESSION_STAGE_REUSE): the retained stages and
+    # state serve this call when they have its shape; they are refilled with
+    # zeros below. (`stages_valid` is not asked: stale VALUES do not matter,
+    # every buffer is refilled.)
+    var reuse = False
+    comptime if IDN_M3_SESSION_STAGE_REUSE and MAMBA_GUARD == 0:
+        if s.stages and s.state:
+            reuse = (
+                s.stages_b == b
+                and s.stages_l == l
+                and s.stages.value().dims.d_model == dm
+            )
     # The previous forward's stages go before this call's are built.
-    s.drop_stages()
+    if not reuse:
+        s.drop_stages()
     ref ctx = s.ctx.value()
     ref dw = s.w.value()
     m3_phase_tick(ctx, phase_tick, String("surface.weight_upload"))
-    # The certified zero state and this call's stages, built per call.
-    var dstate = Mamba3DeviceState(ctx, b, dims)
-    var dstages = Mamba3DeviceStages(ctx, b, l, 0, dims)
+    # The certified zero state and this call's stages, built per call (or
+    # the retained ones, zeroed).
+    var dstate: Mamba3DeviceState
+    var dstages: Mamba3DeviceStages
+    if reuse:
+        dstate = s.state.take()
+        dstages = s.stages.take()
+        s.stages_valid = False
+        dstate.rezero()
+        dstages.rezero()
+    else:
+        dstate = Mamba3DeviceState(ctx, b, dims)
+        dstages = Mamba3DeviceStages(ctx, b, l, 0, dims)
     m3_phase_tick(ctx, phase_tick, String("surface.stage_allocations"))
     var n_x = b * l * dm
     var have_dx = False
