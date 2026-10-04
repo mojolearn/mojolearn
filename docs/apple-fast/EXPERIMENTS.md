@@ -706,3 +706,13 @@ Detailed isolation audit and six identified scan-window tags: [MEASUREMENT_AUDIT
 | Experiment | Measured source / tags | A → B ms | Quality | Verdict / remaining gate |
 |---|---|---|---|---|
 | `ARIMA_ORDER_BATCH` → default + `ARIMA_ORDER_BATCH_OFF` | 7ba385b30; gap26-orders-current-synthetic / taxi-hourly | synthetic13780.316917 →9287.286750 (-32.6%); taxi-hourly22706.248042 →13747.215083 (-39.5%) | Fitted/order/likelihood/forecast full-quality PASS before timing; both board digests and RMSE identical (2.624119555 /74.659122441). Existing fused tail enabled in BOTH arms | KEEP, default merged on main dc2285bc0; manager default/OFF builds both rc0. Source review against main d1871643b preserved accepted fused tail. Taxi opponent-quality HOLD remains (74.6591 vs68.21). [Raw evidence and review](ab/arima-orders-default.md) |
+
+## SVGP wave 2 candidates (lane apple-fast-w2-svgp, 2026-10-04, OPEN)
+
+Base b2b1c22bc. Rows: svgp istella 661 vs gpytorch-cpu 307 ms, taxi 437 vs 248 ms. Binding x_neighbors (`x_neighbors/iter_device.mojo`). FAST + Apple only; RBFTILE is default (rollback `MOJOLEARN_SVGP_FAST_RBFTILE_OFF`), the others are off unless defined. Quality gate `tools/svgp_fast_quality.py` (r2, rmse, elbo one-sided 1e-4, fixed before results); quality-gated pair `tools/svgp_fast_pair.py`.
+
+| define | hypothesis | bits | verdict |
+|---|---|---|---|
+| `SVGP_FAST_BLKCHOL` | 3 float-float Cholesky factors (m = 512) took 1,024 dependent column launches; one launch per 16-column panel (64 launches), diag block factored in threadgroup memory, each entry the same chain as `_chol_col` | same chains (FAST contraction only) | OPEN, A/B owed |
+| `SVGP_FAST_RBFTILE` | scaled rbf (Kuu, Kfu, Ksu) was one thread per cell reading 2 d floats from global (istella d ~220: 51M cells); 64 x 64 block tiles, 16 features staged in threadgroup memory, 4 x 4 cells per thread, variance scale fused (no kbuf pass) | same per-cell fold (FAST contraction only) | DEFAULT (FAST+Apple), rollback `MOJOLEARN_SVGP_FAST_RBFTILE_OFF`: M3 one run per arm istella 336.3 -> 299.1 ms, taxi 285.9 -> 283.9 ms; w2-svgp-rbftile-q SVGP-FAST-PAIR PASS (r2/rmse/elbo; A r2 taxi -0.19498, istella -0.10602) |
+| `SVGP_FAST_BSPLIT` | SYMTILE's B launch keeps only 8,256 threads busy (32,768 rows deep each) and b = Kuf y only m threads; 4 (B) / 32 (b) row-slice float-float partials, summed slice-ascending | changes (float-float re-association, ~1e-14 rel) | OPEN, A/B owed |
