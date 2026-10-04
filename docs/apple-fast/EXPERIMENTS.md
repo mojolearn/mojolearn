@@ -972,7 +972,9 @@ stride/split-aware decomposition/PCA adapters are in source preparation; no
 production GEMM default promoted and no dataset-specific dispatch introduced.
 
 Resident GEMM66recordscreen completed with alloutputsexact, no qualityreview
-flags. See RESIDENT_GEMM_RESULTS_2026-10-04.md: G1tall6.826875->3.524167ms,
-G1Gram3.563291->2.027875ms, G2narrow1.203750->0.865583ms. SquareNNincumbent
+flags. See RESIDENT_GEMM_RESULTS_2026-10-04.md: G1tall6.826875->3.524209ms,
+G1Gram3.563291->2.027875ms, G2narrow1.203750->0.865625ms. SquareNNincumbent
 remainsbest. These individualleads guide scopedcallerwork; no universalwinner
 required, no broadregime/defaultclaim. Allmeasuredrecordsretained, noreplay.
+
+G5same-source495c30c3+harnessf40649e0: OLS65/PCA65/wide-kKNN65/KMeans65 all M3qualityPASS under g5-downstream-*-d65-q-v1. The KMeans IDENTICAL base prerequisite was verified before fits, resolving the missingbinding infrastructureissue without changing math. No actualcaller speed claim yet.
