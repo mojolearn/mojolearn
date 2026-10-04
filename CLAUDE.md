@@ -4,11 +4,15 @@ Every Claude session and subagent in this repo reads this file. Lane briefs add 
 
 ## Logs and output
 
+- These context rules also apply to Codex and all delegated lanes; see `AGENTS.md`.
+- Include the log/context reminder from `AGENTS.md` in every lane brief, spawn prompt and resumed assignment, and propagate it to nested subagents.
+- Prefer targeted `rg` searches with bounded context and line lengths (`-m 20 -C 3 --max-columns 240 --max-columns-preview`); use `grep` when `rg` is unavailable. Narrow to relevant files first, and parse large JSON reports for selected fields instead of dumping them.
 - Never print a whole log, race output or build output. Use `tail -n 20`, `grep -m 20`, or `grep -E 'error|FAIL|DISAGREE|status='`.
 - For a build, read only its exit code and the first error: `... > build.log 2>&1; echo rc=$?; grep -m 5 -B 2 -A 8 'error' build.log`.
 - For a race directory, read the one-line summary (`ALGOS lane=... status=... median_ms=...`), not the race log.
 - Never read a subagent transcript or a `tasks/*.output` file.
 - Put long results in a file under `~/mojolearn-evidence/` and report the path plus a few lines.
+- Keep the original exit status and expected coverage. Filtered output is not proof of success; report failures, skipped/incomplete work, and expand the relevant diagnostic block when necessary.
 
 ## Lane subagents
 
