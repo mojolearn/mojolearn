@@ -151,6 +151,7 @@ from core.device_zero import enqueue_fill
 from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
 from decomposition.spectrum_order_device import enqueue_eigh_ascending
 from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
+from x_decomp.eigh_tridiag import EIGH_FAST_TRIDIAG, TD_MIN_N, eigh_td_on, td_copy_kernel
 
 
 #: rounds enqueued between two synchronize() calls
@@ -2420,7 +2421,55 @@ struct DevExec(Exec):
             ctx.enqueue_function[sym_from_triangle_kernel](
                 da.unsafe_ptr(), Int32(n), Int32(uplo), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
             )
+        # FAST Apple; -D MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF rolls back.
+        # Householder tridiagonalization + df64 bisection + twisted
+        # vectors (x_decomp/eigh_tridiag.mojo) from n = TD_MIN_N; a refusal
+        # (clustered spectrum, nonfinite T) falls through to the Jacobi on
+        # the untouched `da`.
+        comptime if EIGH_FAST_TRIDIAG:
+            if n >= TD_MIN_N:
+                if DevExec._eigh_td_try(ctx, da, w, v, n):
+                    _ = da^
+                    ctx.synchronize()
+                    _ = ctx^
+                    return
         _ = DevExec._eigh_par_on(ctx, da, w, v, n)
+
+    @staticmethod
+    def _eigh_td_try(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int) raises -> Bool:
+        """x_decomp/eigh_tridiag.mojo on a device copy of `da` (left
+        untouched for the fallback); on success the same tail as
+        `_eigh_par_on` (sign_flip_kernel, the ascending permutation) and w, v
+        out to host memory. False: refused, nothing written."""
+        var dwork = ctx.enqueue_create_buffer[DType.float32](n * n)
+        ctx.enqueue_function[td_copy_kernel](
+            da.unsafe_ptr(), dwork.unsafe_ptr(), Int32(n * n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
+        )
+        var dz = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var dwt = ctx.enqueue_create_buffer[DType.float32](n)
+        var ok = eigh_td_on(ctx, dwork, n, dz, dwt)
+        _ = dwork^
+        if not ok:
+            ctx.synchronize()
+            _ = dz^
+            _ = dwt^
+            return False
+        ctx.enqueue_function[sign_flip_kernel](
+            dz.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1)
+        )
+        var dw = ctx.enqueue_create_buffer[DType.float32](n)
+        var dvo = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var dpos = ctx.enqueue_create_buffer[DType.int32](n)
+        enqueue_eigh_ascending(ctx, _p(dwt), 1, _p(dz), n, dpos, _p(dw), _p(dvo))
+        _down(ctx, dw, w, n)
+        _down(ctx, dvo, v, n * n)
+        ctx.synchronize()
+        _ = dw^
+        _ = dvo^
+        _ = dpos^
+        _ = dz^
+        _ = dwt^
+        return True
 
     @staticmethod
     def _eigh_par_on(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int) raises -> Int:
