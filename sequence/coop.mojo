@@ -10,9 +10,12 @@ same chain over them in order, element k broadcast from its lane
 (`shuffle_idx`): the same fmas on the same values in the same order as the
 one-thread fold, so the bits are those of `sumsq_fold` / `gemm_dot`. Lane 0
 stores. Launched by `DeviceExec` (`coop_kernel`, one simdgroup per cell)
-for the ops below on an Apple GPU only; every other column (and the host)
-runs the one-thread op."""
+for the ops below on an Apple GPU, and (nr-small D1/D11, IDENTICAL,
+`MOJOLEARN_IDN_SEQ_COOP_NVAMD`) on NVIDIA and AMD; the host runs the
+one-thread op, the same chain."""
+from std.gpu.primitives.id import lane_id
 from std.gpu.primitives.warp import shuffle_idx
+from checks.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
 
 from sequence.ops import (
     FP,
@@ -35,6 +38,22 @@ from sequence.adafactor import af_alpha_tail, af_denom_tail, lamb_ratio_tail, op
 comptime COOP_W = 32
 #: blocks of COOP_W each lane loads ahead of the fold
 comptime COOP_R = 8
+#: nr-small D1/D11 (2026-10-04): on a 64-lane CDNA wavefront one wave holds
+#: TWO cells of COOP_W lanes, and `shuffle_idx` names a PHYSICAL source
+#: lane, so lane j of the upper cell must read physical lane 32 + j (the
+#: `neighbors/impl/topk/logical_warp32.mojo` form, masked to the half).
+#: Communication scope only: the fold is the same chain on the same values.
+comptime COOP_ON64 = lib_lane_width_for[TARGET_COLUMN]() == 64
+
+
+@always_inline
+def coop_bcast(v: Float32, j: Int) -> Float32:
+    """Element j of the cell's COOP_W lanes, on every lane of the cell."""
+    comptime if COOP_ON64:
+        var half = UInt32(lane_id()) & UInt32(0xffffffe0)
+        var mask = UInt(0xffffffff) << UInt(half)
+        return shuffle_idx(mask, v, half | UInt32(j))
+    return shuffle_idx(v, UInt32(j))
 
 
 @always_inline
@@ -48,14 +67,14 @@ def coop_sumsq(p: FP, start: Int, n: Int, lane: Int) -> Float32:
             v[r] = ld(p, start + k + r * COOP_W + lane)
         comptime for r in range(COOP_R):
             comptime for j in range(COOP_W):
-                var x = shuffle_idx(v[r], UInt32(j))
+                var x = coop_bcast(v[r], j)
                 acc = fma3(x, x, acc)
         k += COOP_W * COOP_R
     while k < n:
         var m = min(COOP_W, n - k)
         var x0 = ld(p, start + k + lane) if lane < m else Float32(0.0)
         for j in range(m):
-            var x = shuffle_idx(x0, UInt32(j))
+            var x = coop_bcast(x0, j)
             acc = fma3(x, x, acc)
         k += COOP_W
     return acc
@@ -77,7 +96,7 @@ def coop_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
             vb[r] = ld(pb, kk * sbk + bbase)
         comptime for r in range(COOP_R):
             comptime for j in range(COOP_W):
-                acc = fma3(shuffle_idx(va[r], UInt32(j)), shuffle_idx(vb[r], UInt32(j)), acc)
+                acc = fma3(coop_bcast(va[r], j), coop_bcast(vb[r], j), acc)
         k += COOP_W * COOP_R
     while k < K:
         var m = min(COOP_W, K - k)
@@ -85,7 +104,7 @@ def coop_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
         var x0 = ld(pa, abase + kk * sak) if lane < m else Float32(0.0)
         var y0 = ld(pb, kk * sbk + bbase) if lane < m else Float32(0.0)
         for j in range(m):
-            acc = fma3(shuffle_idx(x0, UInt32(j)), shuffle_idx(y0, UInt32(j)), acc)
+            acc = fma3(coop_bcast(x0, j), coop_bcast(y0, j), acc)
         k += COOP_W
     return acc
 

@@ -50,8 +50,18 @@ from x_linear.ops import IP
 from x_linear.witness import witness_end
 from std.sys.info import has_apple_gpu_accelerator
 
-#: the simdgroup-cooperative long folds (sequence/coop.mojo): Apple only
-comptime SEQ_COOP = has_apple_gpu_accelerator()
+#: the simdgroup-cooperative long folds (sequence/coop.mojo): Apple, and
+#: since nr-small D1/D11 (2026-10-04) NVIDIA and AMD in IDENTICAL. The
+#: cooperative fold is the one-thread op's chain (same fmas, same values,
+#: same order; only the loads are spread over the warp), so no bit moves on
+#: any column; `coop_bcast` keeps a cell inside its 32-lane half of a CDNA
+#: wavefront. -D MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF (or MOJOLEARN_IDN_ALL_OFF)
+#: restores Apple only.
+comptime SEQ_COOP_NVAMD = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+comptime SEQ_COOP = has_apple_gpu_accelerator() or SEQ_COOP_NVAMD
 
 comptime TPB = 128
 
