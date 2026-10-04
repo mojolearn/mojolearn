@@ -522,8 +522,6 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linea
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	for i in range(A):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	for row, b in zip(coef_rows, intercepts):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	fp = [est.eps, est.tol] + [float(r) for r in l1_ratios] + (values if explicit else [])
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	fp = [float(v) for v in fp]
