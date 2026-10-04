@@ -25,7 +25,7 @@ from std.math import fma  # only a sabotage arm (seam 5709) spells the fused for
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from core.philox import philox4x32_10
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt, identical_sqrt
 
 comptime FP = MutPointer[Float32, MutAnyOrigin]
 comptime IP = MutPointer[Int32, MutAnyOrigin]
@@ -1568,8 +1568,13 @@ def l2norm_bwd_at(r: Int, y: FP, g: FP, aux: FP, dst: FP, q: IP, p: IP):
 #   about 2^-45 relative before the final rounding to float32. Both change
 #   bits, on every column together. `-D MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF`.
 comptime _FAM2_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-comptime IDN_XENT_DEV_FOLD = _FAM2_IDN and not is_defined["MOJOLEARN_IDN_XENT_DEV_FOLD_OFF"]()
-comptime IDN_CNN_EPOCH_DEV = IDN_XENT_DEV_FOLD and not is_defined["MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF"]()
+# cpu2-l11-neural (2026-10-04): FAST takes the same device forms on every
+# vendor (no host epoch order, Adam scalars, loss fold or GCN loops on a GPU
+# route). FAST promises quality, never bits, and has no `_OFF` arm here; the
+# `_OFF` defines keep their meaning for the IDENTICAL A/B only.
+comptime _FAM2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+comptime IDN_XENT_DEV_FOLD = _FAM2_FAST or (_FAM2_IDN and not is_defined["MOJOLEARN_IDN_XENT_DEV_FOLD_OFF"]())
+comptime IDN_CNN_EPOCH_DEV = _FAM2_FAST or (IDN_XENT_DEV_FOLD and not is_defined["MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF"]())
 # IDN_GCN_LOOPS_DEV (lane fix-n1-lm-neural, audit F7 `gcn_self_loops`):
 #   GCNConv's add_remaining_self_loops (drop every existing loop, append one
 #   loop per node carrying the LAST existing loop's weight, else the fill)
@@ -1579,7 +1584,7 @@ comptime IDN_CNN_EPOCH_DEV = IDN_XENT_DEV_FOLD and not is_defined["MOJOLEARN_IDN
 #   device (`gcn_loops_device`), the host twin `gcn_loops_host` on a CPU-only
 #   install. Selection and copies only: no arithmetic, so no bit moves on any
 #   column. `-D MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF` restores the NumPy form.
-comptime IDN_GCN_LOOPS_DEV = _FAM2_IDN and not is_defined["MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF"]()
+comptime IDN_GCN_LOOPS_DEV = _FAM2_FAST or (_FAM2_IDN and not is_defined["MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF"]())
 #: CANDIDATE ARM (default OFF): `-D MOJOLEARN_IDN_XENT_FOLD_BLOCK_256` folds
 #: blocks of 256 (one level up to 256 rows, two up to 65,536) instead of 32
 #: (one level up to 32 rows, two up to 1,024): fewer launches per loss, a

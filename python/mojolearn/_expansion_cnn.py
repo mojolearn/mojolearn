@@ -621,6 +621,10 @@ class Conv2d(_Layer):
         if x.shape[1] != self.in_channels:
             raise ValueError(f"mojolearn: input has {x.shape[1]} channels, the layer {self.in_channels}")
         b = self._binding()
+        if self._group_dev(b):
+            out = self._forward_t(DeviceTensor._wrap(b, x)).numpy()
+            self._x, self._xp = x, None
+            return out
         xp = x
         if self._explicit:
             xp = np.empty(self._padded_shape(x.shape), np.float32)
@@ -653,10 +657,25 @@ class Conv2d(_Layer):
             self._binding().x_cnn_pad2d_forward(x.ctypes.data, xp.ctypes.data, self._pad_params(x.shape))
         self._x, self._xp = x, xp
 
+    def _group_dev(self, b):
+        """cpu2-l11-neural (2026-10-04): whether a GROUPED conv on host
+        arrays runs on the resident `_m` forms (one upload of each input,
+        the per-group channel slices on the device, one download), instead
+        of NumPy slicing every group on the host."""
+        return (self.groups > 1 and _mixed(b) and _idn(b, _F_GROUP)
+                and (not self._explicit or _idn(b, _F_PAD)))
+
     def backward(self, grad_out, x=None):
         np = _np()
         if _is_t(grad_out) or _is_t(x) or (x is None and _is_t(self.__dict__.get("_x"))):
             return self._backward_t(grad_out, x)
+        if self._group_dev(self._binding()):
+            b = self._binding()
+            xs = _f32(self._x if x is None else x, "x")
+            dx = self._backward_t(DeviceTensor._wrap(b, _f32(grad_out, "grad_out")),
+                                  DeviceTensor._wrap(b, xs)).numpy()
+            self._x, self._xp = xs, None
+            return dx
         if x is not None:
             # lane gap-neural-overhead2: the backward needs x and its padded
             # form only; the forward this ran (a conv, its upload and its
