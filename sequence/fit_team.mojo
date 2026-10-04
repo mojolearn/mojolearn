@@ -43,7 +43,7 @@ from x_linear.team import team_barrier
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_exp, identical_log, identical_sqrt
 from sequence.fold32 import FOLD_L, tree32
-from sequence.garch import GARCH_COOP_IDN, GARCH_FOLD32, GARCH_SNAP, LOG_2PI, _backcast, _garch_step_reg, _grid, _pers, _var_bounds, garch_sigma2
+from sequence.garch import GARCH_CHUNKS, GARCH_COOP_IDN, GARCH_FOLD32, GARCH_SNAP, LOG_2PI, _backcast, _garch_step_reg, _grid, _pers, _var_bounds, garch_sigma2
 from sequence.nm import NMState, Objective, nm_finish, nm_start, nm_steps
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from sequence.prophet import MEM, LBState, ProphetFG, _fg_prior_v, lbfgs_start, lbfgs_steps
@@ -122,17 +122,23 @@ comptime GT_DONE = 6
 #: recursion (`garch_nll_team`), the same for every thread. The 64-point
 #: start grid scores its candidates the same way; the final evaluation keeps
 #: the stored recursion (the sigma output and the forecast read r and s2).
-#: The fold orders differ, so the bits differ: FAST only, Apple only.
+#: The fold orders differ, so the bits differ: FAST on Apple, and IDENTICAL
+#: everywhere with the host column's replay (below).
 #: Default on FAST + Apple since the M3 A/B (lane/apple-fast-garchspeed
 #: 5bc97d9d7, n=1): garch synthetic 383 -> 15.1 ms, taxi-hourly 582 -> 31.0
 #: ms; mean_llf -1938.2249 -> -1938.2239 and -1132.955 -> -1131.911 (equal
 #: or better). -D MOJOLEARN_GARCH_COOP_OFF restores the lead's recursion;
 #: the old -D MOJOLEARN_GARCH_COOP is harmless.
+#: IDENTICAL (lane fix-t1-seq): GARCH_COOP_IDN (sequence/garch.mojo) turns
+#: the same chunked likelihood on for NVIDIA, AMD and Apple, and the host
+#: column replays it (garch.mojo garch_nll_chunks, GARCH_CHUNKS =
+#: SEQ_TEAM_TPB chunks); -D MOJOLEARN_IDN_GARCH_COOP_OFF restores the lead's
+#: recursion there. FAST off Apple is unchanged.
 comptime GARCH_COOP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_GARCH_COOP_OFF"]()
-)
+) or GARCH_COOP_IDN
 
 
 def garch_team_priv(h: Int, m: Int) -> Int:
@@ -146,6 +152,9 @@ def garch_team_shared(n: Int) -> Int:
     """Words of a series' shared row: r, s2, the variance bounds (2n), the
     log-likelihood terms; GARCH_COOP: then the chunk maps (2 words per
     thread), the per-chunk sums and the bound flags."""
+    # the host column's replay of the chunked likelihood assumes one chunk
+    # per team thread (sequence/garch.mojo GARCH_COOP_IDN)
+    comptime assert SEQ_TEAM_TPB == GARCH_CHUNKS, "GARCH_CHUNKS must be the team's threads"
     var w = 5 * n
     comptime if GARCH_COOP:
         w += 4 * SEQ_TEAM_TPB

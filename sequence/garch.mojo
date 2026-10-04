@@ -281,6 +281,108 @@ def garch_nll_reg(w: Float32, pa: Float32, pg: Float32, pb: Float32, y: FP, mu: 
     return ll
 
 
+@always_inline
+def garch_nll_chunks(w: Float32, pa: Float32, pg: Float32, pb: Float32, y: FP, mu: Float32, n: Int,
+                     p: Int, o: Int, q: Int, backcast: Float32, vb: FP) -> Tuple[Float32, Bool]:
+    """GARCH_COOP_IDN's host column: sequence/fit_team.mojo
+    `garch_nll_coop` with its GARCH_CHUNKS threads run one after another,
+    the same statements per chunk. Chunk j's start is the maps of chunks
+    0 .. j - 1 folded from 0 in ascending order (the thread's exclusive
+    prefix loop), carried here from chunk to chunk: the same fma3 chain.
+    The per-chunk sums fold in ascending chunk order from 0. Returns
+    (value, ok); ok False when a bound or a NaN fired in any chunk (the
+    caller then scores the stored recursion, as the team does)."""
+    comptime nt = GARCH_CHUNKS
+    var L = (n + nt - 1) // nt
+    var sp0 = Float32(0.0)
+    var ll = Float32(0.0)
+    var bad = False
+    for tid in range(nt):
+        var t0 = tid * L
+        var t1 = t0 + L
+        if t1 > n:
+            t1 = n
+        if t0 > n:
+            t0 = n
+        # pass 2 of this chunk from the prefix of the maps before it
+        var sp = sp0
+        var rp = Float32(0.0)
+        if t0 > 0 and t0 < n:
+            rp = sub(ld(y, t0 - 1), mu)
+        var part = Float32(0.0)
+        for t in range(t0, t1):
+            var lo = ld(vb, 2 * t)
+            var hi = ld(vb, 2 * t + 1)
+            var v = w
+            if p > 0:
+                if t < 1:
+                    v = fma3(pa, backcast, v)
+                else:
+                    v = fma3(pa, mul(rp, rp), v)
+            if o > 0:
+                if t < 1:
+                    v = fma3(pg, mul(Float32(0.5), backcast), v)
+                elif rp < Float32(0.0):
+                    v = fma3(pg, mul(rp, rp), v)
+            if q > 0:
+                if t < 1:
+                    v = fma3(pb, backcast, v)
+                else:
+                    v = fma3(pb, sp, v)
+            if not (v >= lo and v <= hi):
+                bad = True
+                v = _garch_step_reg(w, pa, pg, pb, p, o, q, t, rp, sp, backcast, lo, hi)
+            var x = sub(ld(y, t), mu)
+            part = add(part, add(add(LOG_2PI, ftz(identical_log(v))), div(mul(x, x), v)))
+            rp = x
+            sp = v
+        ll = add(ll, part)
+        # pass 1 of this chunk: its map (A, C), folded into the next start
+        var A = Float32(1.0)
+        var C = Float32(0.0)
+        for t in range(t0, t1):
+            if t < 1:
+                var v0 = w
+                if p > 0:
+                    v0 = fma3(pa, backcast, v0)
+                if o > 0:
+                    v0 = fma3(pg, mul(Float32(0.5), backcast), v0)
+                if q > 0:
+                    v0 = fma3(pb, backcast, v0)
+                A = Float32(0.0)
+                C = v0
+            else:
+                var xm = sub(ld(y, t - 1), mu)
+                var x2 = mul(xm, xm)
+                var c = fma3(pa, x2, w)
+                if xm < Float32(0.0):
+                    c = fma3(pg, x2, c)
+                A = mul(pb, A)
+                C = fma3(pb, C, c)
+        sp0 = fma3(A, sp0, C)
+    if bad:
+        return (Float32(0.0), False)
+    ll = mul(Float32(0.5), ll)
+    if not (ll <= Float32(3.0e38)):
+        return (Float32(3.0e38), True)
+    return (ll, True)
+
+
+@always_inline
+def _garch_vol_ok(x: FP, p: Int, o: Int, q: Int, has_mean: Bool) -> Bool:
+    """GarchObj's constraint test: sum(alpha) + sum(gamma) / 2 + sum(beta)
+    <= 1, the same statements as eval_stored's."""
+    var vol = x + 1 if has_mean else x
+    var s = Float32(0.0)
+    for j in range(p):
+        s = add(s, ld(vol, 1 + j))
+    for j in range(o):
+        s = fma3(Float32(0.5), ld(vol, 1 + p + j), s)
+    for j in range(q):
+        s = add(s, ld(vol, 1 + p + o + j))
+    return not (s > Float32(1.0))
+
+
 struct GarchObj(Objective):
     var y: FP
     var r: FP
@@ -309,6 +411,20 @@ struct GarchObj(Objective):
 
     @always_inline
     def eval(mut self, x: FP) -> Float32:
+        comptime if GARCH_COOP_IDN:
+            # the team's chunked likelihood (fit_team.mojo GarchTeamObj.eval)
+            if self.p <= 1 and self.o <= 1 and self.q <= 1:
+                if not _garch_vol_ok(x, self.p, self.o, self.q, self.has_mean):
+                    return Float32(1e30)
+                var vol = x + 1 if self.has_mean else x
+                var mu = ld(x, 0) if self.has_mean else Float32(0.0)
+                var pa = ld(vol, 1) if self.p > 0 else Float32(0.0)
+                var pg = ld(vol, 1 + self.p) if self.o > 0 else Float32(0.0)
+                var pb = ld(vol, 1 + self.p + self.o) if self.q > 0 else Float32(0.0)
+                var res = garch_nll_chunks(ld(vol, 0), pa, pg, pb, self.y, mu, self.n, self.p, self.o,
+                                           self.q, self.backcast, self.vb)
+                if res[1]:
+                    return res[0]
         comptime if GARCH_REG:
             if self.p <= 1 and self.o <= 1 and self.q <= 1:
                 var vol = x + 1 if self.has_mean else x
@@ -576,7 +692,21 @@ def op_garch(t: Int, a: Args):
                     if q > 0:
                         for j in range(q):
                             st(cand, 1 + p + o + j, div(agb, Float32(q)))
-                    var nll = garch_nll(cand, r, n, p, o, q, backcast, vb, s2)
+                    var nll = Float32(0.0)
+                    var done = False
+                    comptime if GARCH_COOP_IDN:
+                        # the team's grid (fit_team.mojo garch_team phase 0)
+                        if p <= 1 and o <= 1 and q <= 1:
+                            var res = garch_nll_chunks(
+                                ld(cand, 0), ld(cand, 1) if p > 0 else Float32(0.0),
+                                ld(cand, 1 + p) if o > 0 else Float32(0.0),
+                                ld(cand, 1 + p + o) if q > 0 else Float32(0.0),
+                                y, mu0, n, p, o, q, backcast, vb)
+                            if res[1]:
+                                nll = res[0]
+                                done = True
+                    if not done:
+                        nll = garch_nll(cand, r, n, p, o, q, backcast, vb, s2)
                     if nll < best:
                         best = nll
                         for j in range(k):
@@ -617,7 +747,8 @@ def op_garch(t: Int, a: Args):
     it += nelder_mead(obj, x, lo, hi, np_, nm_scr, Float32(0.05), Float32(1e-4), 2000, Float32(1e-6), snap,
                       stall_iters=a.i7, stall_rel=a.f0)
     var nll = Float32(0.0)
-    comptime if GARCH_REG:
+    comptime if GARCH_REG or GARCH_COOP_IDN:
+        # (the team's final evaluation is always eval_stored)
         nll = obj.eval_stored(x)     # the sigma output and the forecast read r and s2
     else:
         nll = obj.eval(x)
