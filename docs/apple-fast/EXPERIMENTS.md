@@ -847,3 +847,22 @@ cases and IDENTICAL remain on fresh allocation. `_OFF` restores the original
 allocation policy. Pending M2 default/OFF compile and promotion validation;
 no local compilation or timing was run. Broader shapes and modes were not
 newly measured by this quality fixture.
+
+Stored PCA reconstruction values (same X, same seed across all three fits):
+A = [0.2964381628654726, 0.2964381628635881, 0.29643816285693114];
+B = [0.296438162864011, 0.29643816286408387, 0.29643816286171426].
+Lower is better. B fit1 and fit2 worsen by about 5e-13 and 4.8e-12,
+within the observed A repeated-fit range of 8.54e-12. All three B values
+also lie inside that A range. This supports noise-level differences on
+this fixture only; three repetitions do not establish a general noise
+bound. The unchanged split MMA atomic accumulation permits such variation.
+Quality call times A [277.8, 248.0, 247.1] ms, B [264.4, 222.2, 221.9] ms;
+all first reads round to 0.0 ms (not asserted literally zero).
+
+Related candidates remain unpromoted: RSVD Istella 517.3 -> 501.3 ms and
+taxi 200.8 -> 198.5 ms are under 5% at n=1, HOLD-speed/noise. LLE taxi
+1783.8 -> 1039 ms is useful speed, but trustworthiness worsened from
+0.7490329563692009 to 0.7490198410032471 (1.31154e-5); Istella improved
+from 0.5841975142761169 to 0.584208390251185. LLE remains HOLD-quality:
+an absolute-difference PASS alone cannot establish no regression and no
+same-arm noise evidence is yet recorded. No LLE default proposal prepared.
