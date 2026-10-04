@@ -21,7 +21,9 @@ python3 $W/packaging/linux/amd_portable_payload.py audit $E/payload > $E/audit.l
 cd $W/python && MOJOLEARN_AMD_PORTABLE_CACHE=$E/cache python3 - > $E/materialize.log 2>&1 <<'PY'
 import json, hashlib
 from pathlib import Path
-from mojolearn import amd_portable as ap
+import importlib.util  # the module alone: importing the package would load bindings
+spec = importlib.util.spec_from_file_location("amd_portable", "mojolearn/amd_portable.py")
+ap = importlib.util.module_from_spec(spec); spec.loader.exec_module(ap)
 root = Path("/root/lq/amd-portable/e2e/payload")
 raw = (root / ap.MANIFEST).read_bytes()
 actual = {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()

@@ -234,8 +234,11 @@ def cmd_audit(args):
     doc = json.loads((payload / MANIFEST).read_text())
     actual = {p.relative_to(payload).as_posix(): _sha(p) for p in sorted(payload.rglob("*"))
               if p.is_file() and p.name != MANIFEST}
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
-    from mojolearn import amd_portable
+    import importlib.util  # the runtime module alone: importing the package would load bindings
+    spec = importlib.util.spec_from_file_location(
+        "amd_portable", Path(__file__).resolve().parents[2] / "python/mojolearn/amd_portable.py")
+    amd_portable = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(amd_portable)
     amd_portable.validate_manifest(doc, actual)
     for rel, row in doc["bindings"].items():
         native = embedded_kernels((payload / rel).read_bytes())
