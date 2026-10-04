@@ -619,18 +619,18 @@ def reduce_stat_binding(
     the float sum take the host helper. The exact integer sum (what = 5) is a
     device tile fold under IDN_HPDEV_ISUM (any order is exact)."""
     comptime if IDN_HPDEV_ISUM:
-        var count = Int(py=n)
-        var c = Int(py=code)
-        var a = Int(py=addr)
+        var icount = Int(py=n)
+        var ic = Int(py=code)
+        var ia = Int(py=addr)
         if (
-            Int(py=what) == _RS_ISUM and count >= 1 and count <= HPD_MAX_N and a != 0
-            and (c == HPD_I32 or c == HPD_I64 or c == HPD_U32 or c == HPD_U8)
+            Int(py=what) == _RS_ISUM and icount >= 1 and icount <= HPD_MAX_N and ia != 0
+            and (ic == HPD_I32 or ic == HPD_I64 or ic == HPD_U32 or ic == HPD_U8)
         ):
-            var ctx = process_ctx[_HPDEV_SLOT]()
+            var ictx = process_ctx[_HPDEV_SLOT]()
             var hi_w = UInt64(0)
             var lo_w = UInt64(0)
             with GILReleased(Python()):
-                var t = device_isum(ctx, a, c, count)
+                var t = device_isum(ictx, ia, ic, icount)
                 hi_w = t[0]
                 lo_w = t[1]
             return Python.tuple(
