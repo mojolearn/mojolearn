@@ -56,8 +56,15 @@ def main():
         ok = factor.info_ == bad + 1
         try:
             factor.solve(np.ones(n, dtype=np.float32))
-        except ValueError:
-            pass
+        except Exception as exc:
+            # Mojo's Python bridge exposes this documented refusal as a
+            # generic Exception, not ValueError (gap26-chol-quality).
+            # Accept only the failed-factorization message and expected minor;
+            # unrelated bridge/runtime errors must still fail the probe.
+            expected = ('cholesky_solve_host: refusing to solve against a '
+                        f'FAILED factorization (info={bad + 1})')
+            if not str(exc).startswith(expected):
+                raise
         else:
             ok = False
         passed &= ok
