@@ -810,6 +810,17 @@ class OneClassSVM(_XNeighbors):
 
 
 # ====================================================================== KernelPCA
+def _kpca_clamp_count(kit, w):
+    """KernelPCA's eigenvalue tail on the kit's cells (lane
+    cpu2-l9-neighbors): `w` (1 x c, descending) clamped at zero (`maxs`,
+    `x if x > 0 else 0`), and the count of positive clamped values (`gts`
+    flags folded by `total`; 0/1 sums are exact in float32 below 2^24).
+    Returns (clamped 1 x c matrix, count); only the count word is read."""
+    wc = kit.ew("maxs", w, s=0.0)
+    npos = int(kit.total(kit.ew("gts", wc, s=0.0)).s[0])
+    return wc, npos
+
+
 class KernelPCA(_XNeighbors):
     """Kernel principal component analysis.
 
@@ -917,11 +928,17 @@ class KernelPCA(_XNeighbors):
         if result is not None:
             values, vectors = result
             vectors = vectors.neg_cols(kit.absmax_flags(vectors, True))
-            vals = [max(float(v), 0.0) for v in values.s]
-            keep = [i for i, v in enumerate(vals) if not self.remove_zero_eig or v > 0]
-            vectors = vectors.take_cols(keep)
-            self.eigenvalues_ = Array._from_flat([vals[i] for i in keep], (len(keep),), "<f4")
-            self.eigenvectors_ = Array._from_flat(vectors.s, (n, len(keep)), "<f4")
+            # lane cpu2-l9-neighbors: the clamp and the positive count on the
+            # kit's cells (values come back descending, so the kept set is a
+            # prefix); one count word read back, no host list of the values
+            nv = values.r * values.c
+            vals_m, npos = _kpca_clamp_count(kit, values if values.r == 1 else values.reshape(1, nv))
+            kept = npos if self.remove_zero_eig else nv
+            if kept < nv:
+                vectors = vectors.cols(0, kept)
+                vals_m = vals_m.cols(0, kept)
+            self.eigenvalues_ = vals_m.out((kept,))
+            self.eigenvectors_ = Array._from_flat(vectors.s, (n, kept), "<f4")
             self._fit_X, self._fit_cols, self._fit_all = X, cols, all_
             self.n_features_in_ = d
             return self
@@ -939,15 +956,21 @@ class KernelPCA(_XNeighbors):
             store.frombytes(Kc.tobytes())
             Kc_M = _M(store, n, n)
         wm, Vm = kit.eigh(Kc_M)
-        wl = list(wm.s)
-        order = list(range(n - 1, -1, -1))           # descending; equal values: higher index first
-        order = order[:c]
-        vals = [max(wl[i], 0.0) for i in order]
-        if self.n_components is None or self.remove_zero_eig:
-            keep = [j for j in range(c) if vals[j] > 0]
-            order = [order[j] for j in keep]
-            vals = [vals[j] for j in keep]
-        self.eigenvalues_ = Array.from_list(vals, "<f4")
+        # descending (eigh is ascending; equal values: higher index first);
+        # lane cpu2-l9-neighbors: only the top c values are taken, and the
+        # clamp and the positive count run on the kit's cells (a prefix of
+        # the descending order is kept); one count word read back
+        order = range(n - 1, n - 1 - c, -1)
+        kept = c
+        vals_m = _M(array.array("f"), 1, 0)
+        if c:
+            vals_m, npos = _kpca_clamp_count(kit, wm.take_cols(order))  # wm is 1 x n
+            if self.n_components is None or self.remove_zero_eig:
+                kept = npos
+            if kept < c:
+                vals_m = vals_m.cols(0, kept)
+        order = list(range(n - 1, n - 1 - kept, -1))  # glue: the kept column indices
+        self.eigenvalues_ = vals_m.out((kept,))
         # sklearn's svd_flip(u, None) on the kept columns: each column's
         # largest-|.| entry (ties to the lower row) made positive
         vecs = Vm.take_cols(order)
