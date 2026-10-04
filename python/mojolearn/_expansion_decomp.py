@@ -2377,7 +2377,7 @@ class FastICA(_Base):
                     break
             its.append(it)
             k.place_rows(Wall, w, j)
-        return Wall, max(its)
+        return Wall, max(its)  # glue: the largest of nc iteration counts
 
     def fit_transform(self, X, y=None):
         return self._fit(X, True).out()
@@ -3408,7 +3408,7 @@ def _update_dict(k, D, Y, code, A=None, B=None, positive=False, seed=0, counter=
     # used/unused decision is one word, read only when some atom is unused.
     Dm = k.copy(D)
     zero_cols = []
-    for j in range(nc):
+    for j in range(nc):  # glue: sklearn's atom order, each atom a chain of kit cells on the resident D
         ajj = dg.cols(j, j + 1)
         if used == nc or k.word(ajj) > 1e-6:
             upd = k.ew("sub", B.cols(j, j + 1).T, k.mm(A.rows(j, j + 1), Dm))
