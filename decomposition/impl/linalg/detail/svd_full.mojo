@@ -461,17 +461,10 @@ def pca_fit_full(
     # lane fam2-decomp: through `column_mean_launch` in IDENTICAL builds, the
     # covariance arm's own launch (pca.mojo `compute_covariance`): the same
     # words, read row-coalesced where that form applies
-    comptime if SVD_FULL_MEAN_LAUNCH:
-        column_mean_launch(ctx, mu, x, n_rows, n_cols)
-    else:
-        ctx.enqueue_function[column_mean_kernel](
-            mu.unsafe_ptr(),
-            x.unsafe_ptr(),
-            Int32(n_rows),
-            Int32(n_cols),
-            grid_dim=(n_cols, 1, 1),
-            block_dim=(STATS_TPB, 1, 1),
-        )
+    # merge of fam2-shared: `column_mean_launch` is called in every build; it
+    # carries the old launch itself for FAST and the _OFF arms, so this file
+    # holds no one-block-per-column launch of its own.
+    column_mean_launch(ctx, mu, x, n_rows, n_cols)
     var cells = n_rows * n_cols
     ctx.enqueue_function[shift_columns_kernel](
         x.unsafe_ptr(),
