@@ -214,13 +214,14 @@ trait ClusterOps(Movable):
     def minibatch_fast(
         mut self, xs: Int, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,
         ratio: Float64, seed: UInt64, mut rng: SplitMix64, mut c: List[Float32], mut w: List[Float32],
-        mut steps_done: Int,
+        mut steps_done: Int, tol: Float64, cum_w: List[Float64],
     ) raises -> Bool:
         """FAST on Apple (lane/apple-fast-cluster): `minibatch_fit`'s step
         loop resident on the device (x_cluster/minibatch_fast.mojo); `c`,
         `w` in and out. False when the column does not take it (the host,
         every IDENTICAL build, a shape past its caps): the caller runs the
-        step loop."""
+        step loop. `tol > 0` stops on the squared center shift; `cum_w`
+        (cumulative sample weights, empty: unit) draws the batch rows."""
         ...
 
     def set_i(mut self, slot: Int, v: List[Int32]) raises:

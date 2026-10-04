@@ -62,13 +62,17 @@ def minibatch_entry_ptr(
 ) raises -> Bool:
     """`entries.minibatch_entry` with X read from `xp` (nx values, alive for
     the call). False (nothing done, `out` untouched) outside the switch or
-    for weights, tol > 0, or a shape the device steps refuse before any
+    for weights (tol > 0 only under the GENERAL_OFF define), or a shape the device steps refuse before any
     work (the binding then copies X and runs `minibatch_entry`)."""
     comptime if MBK_ZEROCOPY:
         var n = ip[0]
         var d = ip[1]
         var has_w = len(ip) > 11 and ip[11] != 0
-        if has_w or fp[0] > 0 or n * d != nx:
+        # lane/no-bench-tuning-2: tol > 0 runs here too (the device steps
+        # stop on the squared center shift); weights take `minibatch_entry`,
+        # whose weighted init and draws run the same device steps
+        var tol_ok = fp[0] <= 0 or not is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF"]()
+        if has_w or not tol_ok or n * d != nx:
             return False
         var p = MiniBatchParams(
             k=ip[2], max_iter=ip[3], batch_size=ip[4], tol=fp[0], max_no_improvement=ip[5],
@@ -160,7 +164,7 @@ def minibatch_entry_ptr(
         if n_steps > 0:
             if not ops.minibatch_fast(
                 xs, n, d, k, batch, n_steps, p.max_no_improvement, p.reassignment_ratio, p.seed, rng, c, w,
-                steps_done,
+                steps_done, p.tol, List[Float64](),
             ):
                 raise Error("MiniBatchKMeans: the device steps refused a shape the zero-copy path admitted")
         var labels = List[Int32]()

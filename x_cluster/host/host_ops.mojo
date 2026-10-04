@@ -745,7 +745,7 @@ struct HostOps(ClusterOps):
     def minibatch_fast(
         mut self, xs: Int, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,
         ratio: Float64, seed: UInt64, mut rng: SplitMix64, mut c: List[Float32], mut w: List[Float32],
-        mut steps_done: Int,
+        mut steps_done: Int, tol: Float64, cum_w: List[Float64],
     ) raises -> Bool:
         # the host column never takes the FAST device paths (`fast_device`)
         return False

@@ -362,7 +362,9 @@ from transformer.impl.llama.afn_apple_fast import (
     AFN_ATTN_NORM_SG,
     AFN_ATTN_ROPE_CACHE,
     afn_flash_forward,
+    afn_flash_head_class,
     afn_gemm_ok,
+    afn_pre_head_ok,
     afn_proj_plain,
     afn_proj_qkv_rope_cache,
     afn_proj_residual,
@@ -5106,10 +5108,12 @@ def _afn_block_ok(
 
 def _afn_pre_ok(stages: LlamaDeviceStages, kv: LlamaKVCache, rope: LlamaRopeTable) -> Bool:
     """The fused QKV launch (FUSE_PRE): a fresh full-causal prefill with
-    head_dim 64 rotated fully and whole GEMM K windows."""
+    the head rotated fully (`rope_dim == head_dim`) and whole GEMM K windows.
+    lane/no-bench-tuning-2: every head size that fits one GEMM column tile
+    (`afn_pre_head_ok`), not head_dim 64 only."""
     return (
-        kv.window == 0 and kv.s == 0 and stages.dims.head_dim == 64
-        and rope.rope_dim == 64
+        kv.window == 0 and kv.s == 0 and afn_pre_head_ok(stages.dims.head_dim)
+        and rope.rope_dim == stages.dims.head_dim
         and afn_gemm_ok(stages.b * stages.l, stages.dims.q_width(), stages.dims.d_model)
     )
 
@@ -5215,7 +5219,7 @@ def _afn_attention_forward(
                     _afn_p(kv.v), _afn_p(stages.norm1_out), _afn_p(w.w_q), _afn_p(w.w_k),
                     _afn_p(w.w_v), _afn_p(stages.norm1_sumsq), _afn_p(w.norm1_w),
                     _afn_p(rope.cos), _afn_p(rope.sin), m, dm, w.eps, l, nh, nkv, pos0,
-                    False,
+                    False, hd,
                 )
             else:
                 afn_proj_qkv_rope_cache(
@@ -5224,7 +5228,7 @@ def _afn_attention_forward(
                     _afn_p(kv.v), _afn_p(x), _afn_p(w.w_q), _afn_p(w.w_k),
                     _afn_p(w.w_v), _afn_p(stages.norm1_sumsq), _afn_p(w.norm1_w),
                     _afn_p(rope.cos), _afn_p(rope.sin), m, dm, w.eps, l, nh, nkv, pos0,
-                    True,
+                    True, hd,
                 )
             pre_done = True
     if not pre_done:
@@ -5313,12 +5317,14 @@ def _afn_attention_forward(
     # ---- the attention core.
     var core_done = False
     comptime if AFN_ATTN_FLASH:
-        if hd == 64:
+        # lane/no-bench-tuning-2: every head size with a padded head class
+        # (hd <= 80, hd % 4 == 0; `afn_flash_head_class`), not hd == 64 only.
+        if afn_flash_head_class(hd) != 0:
             stages.attn_estash_cells = 0
             afn_flash_forward(
                 ctx, _afn_p(stages.ctxv), _afn_p(stages.amax), _afn_p(stages.denom),
                 _afn_p(stages.q_rope), _afn_p(stages.k_cache), _afn_p(stages.v_cache),
-                b, l, nh, nkv, s, pos0, key_lo, window, llama_attention_scale(hd),
+                b, l, nh, nkv, s, pos0, key_lo, window, llama_attention_scale(hd), hd,
             )
             stages.attn_materialized = False
             stages.attn_forward_status = FUSED_RAN

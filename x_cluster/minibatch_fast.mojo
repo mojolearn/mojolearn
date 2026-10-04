@@ -48,6 +48,7 @@ from max.gpu.sync import barrier
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul, identical_mul64
 from x_cluster.bodies import FPtr, IPtr, SplitMix64
+from x_cluster.common import weighted_draw
 
 # Default in FAST on Apple since the M3 A/B (lane/apple-fast-cluster aaef7b261,
 # n=1, Istella): minibatch-kmeans 388 -> 352 ms, silhouette .1167 -> .1182.
@@ -490,14 +491,48 @@ def _mbf_reassign_kernel(
                 q += 1
 
 
+def _mbf_shift_kernel(c_old: FPtr, c_new: FPtr, kd: Int32, out: FPtr):
+    """lane/no-bench-tuning-2: the step's squared center shift
+    `sum (c_new - c_old)^2` (the fit's `tol` early stop), one block of
+    MBF_TPB threads: a strided partial per thread, then a tree. Float32 (FAST
+    on Apple has no Float64; the host column keeps its Float64 sum)."""
+    var tid = Int(thread_idx.x)
+    var red = stack_allocation[MBF_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var a = Float32(0)
+    for q in range(tid, Int(kd), MBF_TPB):
+        var e = c_new[q] - c_old[q]
+        a = a + e * e
+    red[tid] = a
+    barrier()
+    var off = MBF_TPB // 2
+    while off > 0:
+        if tid < off:
+            red[tid] = red[tid] + red[tid + off]
+        barrier()
+        off //= 2
+    if tid == 0:
+        out[0] = red[0]
+
+
 def minibatch_fast_steps(
     ctx: DeviceContext, x: FPtr, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,
     ratio: Float64, seed: UInt64, mut rng: SplitMix64, mut c: List[Float32], mut w: List[Float32],
-    mut steps_done: Int,
+    mut steps_done: Int, tol: Float64, cum_w: List[Float64],
 ) raises -> Bool:
-    """The step loop of `minibatch_fit` (unit weights, tol <= 0) on the
-    device: `c` (k x d) and `w` (k) in and out, `steps_done` the steps run.
-    False (nothing done) outside FAST on Apple or past the shape caps."""
+    """The step loop of `minibatch_fit` on the device: `c` (k x d) and `w`
+    (k) in and out, `steps_done` the steps run. False (nothing done) outside
+    FAST on Apple or past the shape caps (threadgroup capacity).
+
+    lane/no-bench-tuning-2 (2026-10-04): was unit weights and tol <= 0 only
+    (the board's configuration). `cum_w` (the ascending cumulative sample
+    weights, empty: unit) draws each batch row as the host loop does
+    (`weighted_draw`; the update is the loop's unit-weight
+    `update_center_dense` either way). `tol > 0`: each step also writes its
+    squared center shift (`_mbf_shift_kernel`, after the reassignment, as the
+    loop measures it) and the convergence check stops at the first step past
+    0 whose shift is `<= tol`, before the no-improvement count, as the loop
+    does. `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF=1` restores the
+    unit / tol <= 0 gate in the drivers."""
     comptime if MINIBATCH_FAST_DEV:
         if k * d > MBF_MAX_KD or k > MBF_MAX_K or batch > MBF_MAX_BATCH or batch < 1 or n_steps < 1 or k < 1:
             return False
@@ -520,6 +555,9 @@ def minibatch_fast_steps(
         var d_c = ctx.enqueue_create_buffer[DType.float32]((G + 1) * kd)
         var d_w = ctx.enqueue_create_buffer[DType.float32]((G + 1) * k)
         var d_in = ctx.enqueue_create_buffer[DType.float32](G)
+        var d_shift = ctx.enqueue_create_buffer[DType.float32](G)
+        var use_tol = tol > 0
+        var weighted = len(cum_w) > 0
         var d_rng = ctx.enqueue_create_buffer[DType.uint64](1)
         var d_since = ctx.enqueue_create_buffer[DType.int32](1)
         ctx.enqueue_memset(d_since, Int32(0))
@@ -539,6 +577,8 @@ def minibatch_fast_steps(
         var p_c = d_c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var p_w = d_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var p_in = d_in.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_shift = d_shift.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var h_shift = List[Float32](length=G, fill=Float32(0))
         var p_rng = d_rng.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var p_since = d_since.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var h_in = List[Float32](length=G, fill=Float32(0))
@@ -559,7 +599,10 @@ def minibatch_fast_steps(
             var h_idx = List[Int32](capacity=gsz * batch)
             for _s in range(gsz):
                 for _t in range(batch):
-                    h_idx.append(Int32(rng.below(n)))
+                    if weighted:
+                        h_idx.append(Int32(weighted_draw(cum_w, rng)))
+                    else:
+                        h_idx.append(Int32(rng.below(n)))
             var iv = d_idx.create_sub_buffer[DType.int32](0, gsz * batch)
             ctx.enqueue_copy(dst_buf=iv, src_ptr=h_idx.unsafe_ptr())
             for g in range(gsz):
@@ -598,7 +641,13 @@ def minibatch_fast_steps(
                     x, pi, Int32(batch), co, wi, wo, Int32(k), Int32(d), Float32(ratio), p_rng, p_since,
                     grid_dim=1, block_dim=MBF_TPB,
                 )
+                if use_tol:
+                    ctx.enqueue_function[_mbf_shift_kernel](
+                        ci, co, Int32(kd), p_shift + g, grid_dim=1, block_dim=MBF_TPB,
+                    )
             ctx.enqueue_copy(dst_ptr=h_in.unsafe_ptr(), src_buf=d_in)
+            if use_tol:
+                ctx.enqueue_copy(dst_ptr=h_shift.unsafe_ptr(), src_buf=d_shift)
             ctx.synchronize()
             _ = h_idx^
             final_slot = gsz
@@ -615,6 +664,11 @@ def minibatch_fast_steps(
                     if alpha > 1:
                         alpha = 1
                     ewa = identical_mul64(ewa, 1 - alpha) + identical_mul64(bi, alpha)
+                if use_tol and Float64(h_shift[g]) <= tol:
+                    stopped = True
+                    final_slot = g + 1
+                    step0 = step + 1
+                    break
                 if not have_min or ewa < ewa_min:
                     no_improvement = 0
                     ewa_min = ewa
@@ -645,6 +699,8 @@ def minibatch_fast_steps(
         _ = d_c^
         _ = d_w^
         _ = d_in^
+        _ = d_shift^
+        _ = h_shift^
         _ = d_rng^
         _ = d_since^
         _ = h_rng^
