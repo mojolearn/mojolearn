@@ -326,63 +326,6 @@ def resample_indices(n, n_samples=None, replace=True, random_state=0, numeric_mo
     return idx
 
 
-class _PooledOut:
-    """Owner of one pooled output buffer while a caller holds the array
-    viewing it (lane apple-fast-w2-clres, `RESAMPLE_W2_OUTPOOL`). NumPy keeps
-    this object as the returned array's base, so it lives exactly as long as
-    the array or any view of it; its finalizer hands the buffer back."""
-
-    __slots__ = ("__array_interface__", "_buf", "__weakref__")
-
-    def __init__(self, buf):
-        self._buf = buf
-        self.__array_interface__ = buf.__array_interface__
-
-
-#: `RESAMPLE_W2_OUTPOOL`'s idle output buffers, keyed by (shape, dtype).
-_OUT_POOL = {}
-_OUT_POOL_KEEP = 2
-_OUT_POOL_MAX_BYTES = 2 << 30
-
-
-def _pool_give(key, buf):
-    idle = _OUT_POOL.setdefault(key, [])
-    total = sum(b.nbytes for v in _OUT_POOL.values() for b in v)  # glue: a few buffers
-    if len(idle) < _OUT_POOL_KEEP and total + buf.nbytes <= _OUT_POOL_MAX_BYTES:
-        idle.append(buf)
-
-
-def _pool_take(np, shape, dtype):
-    import weakref
-    key = (shape, dtype.str)
-    idle = _OUT_POOL.get(key)
-    buf = idle.pop() if idle else np.empty(shape, dtype)
-    owner = _PooledOut(buf)
-    weakref.finalize(owner, _pool_give, key, buf)
-    return np.asarray(owner)
-
-
-def _fast_flags(numeric_mode):
-    fn = getattr(_extension(numeric_mode), "resample_fast_flags", None)
-    return int(fn()) if fn is not None else 0
-
-
-def _take_fast(a, idx, flags):
-    """`_take` for a C-contiguous NumPy array under RESAMPLE_W2_TAKE /
-    _OUTPOOL: the same rows by `numpy.take(..., mode='clip')`, whose
-    indices are the device draw's (always in range); None: the old path."""
-    from ._optional_numpy import require_numpy
-    np = require_numpy('resample')
-    if not isinstance(a, np.ndarray) or a.ndim < 1 or not a.flags.c_contiguous:
-        return None
-    ix = np.asarray(idx)
-    if flags & 2:
-        out = _pool_take(np, (ix.shape[0],) + a.shape[1:], a.dtype)
-        np.take(a, ix, axis=0, mode="clip", out=out)
-        return out
-    return np.take(a, ix, axis=0, mode="clip")
-
-
 def _take(a, idx):
     if hasattr(a, "__array__") and hasattr(a, "shape"):
         from ._optional_numpy import require_numpy
@@ -412,11 +355,7 @@ def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=Non
             raise ValueError(f"mojolearn {where}: Found input variables with inconsistent numbers of samples: "
                              f"{[len(x) for x in arrays]}")
     idx = resample_indices(n, n_samples, replace, random_state, numeric_mode)
-    flags = _fast_flags(numeric_mode) if len(idx) else 0
-    out = []
-    for a in arrays:  # glue: dispatches one gather per argument array
-        r = _take_fast(a, idx, flags) if flags else None
-        out.append(_take(a, idx) if r is None else r)
+    out = [_take(a, idx) for a in arrays]  # glue: dispatches one gather per argument array
     return out[0] if len(out) == 1 else out
 
 
