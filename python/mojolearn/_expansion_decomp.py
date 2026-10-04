@@ -2727,49 +2727,28 @@ _LOG2, _LOGPI, _LOG2PI_D = 0.6931471805599453, 1.1447298858494002, 1.83787706640
 
 def _pca_mle_rank(spectrum, n_samples, mode):
     """scikit-learn `_pca.py::_infer_dimension` / `_assess_dimension`
-    (Minka's MLE of the PCA rank) over the full explained-variance spectrum.
-    Every log and gammaln of data runs in the cells (float32 results, one
-    call per rank); the sums and products are IEEE double in sklearn's order
-    and the constants log 2, log pi and log 2 pi are literals, so the rank is
-    the same on every column. The argmax takes the first maximum, as numpy."""
+    (Minka's MLE of the PCA rank) over the full explained-variance spectrum,
+    in software binary64 on the device on every vendor (x_decomp/pca_mle.mojo,
+    lane cpu3-python): the spectrum goes up once as binary64 words, the rank
+    comes back as one word. The host binding (CPU-only installs, the host
+    column) runs the same phases on the host. The argmax takes the first
+    maximum, as numpy."""
     k = _Kit(mode)
     d = len(spectrum)
-    sp = [float(v) for v in spectrum]
-    tiny = 1.1754943508222875e-38
-
-    def logs(values):
-        return k.ew("logs", _M.of(values, 1, len(values)), s=tiny).s if values else []
-
-    lsp = logs(sp)
-    lg = k.ew("lgamma", _M.of([(d - i + 1) / 2.0 for i in range(1, d + 1)], 1, d)).s
-    logn = logs([float(n_samples)])[0]
-    best, arg = -math.inf, 0
-    if d > 1:
-        spd = array.array("d", sp)
-        spa = spd.buffer_info()[0]
-        tbuf = _M.zeros(1, max(d * (d - 1) // 2, 1))
-    for rank in range(1, d):
-        if sp[rank - 1] < 1e-15:
-            continue
-        pu = -rank * _LOG2
-        for i in range(1, rank + 1):
-            pu += lg[i - 1] - _LOGPI * (d - i + 1) / 2.0
-        pl = -_dsum(lsp[:rank]) * n_samples / 2.0
-        v = max(1e-15, _dsum(sp[rank:]) / (d - rank))
-        logv = logs([v])[0]
-        pv = -logv * n_samples * (d - rank) / 2.0
-        m = d * rank - rank * (rank + 1.0) / 2.0
-        pp = _LOG2PI_D * (m + rank) / 2.0
-        # the rank * (2d - rank - 1) / 2 cross terms and their in-order
-        # sum in x_decomp/moves.mojo (pca_mle_terms / pca_mle_pa): the
-        # same double expressions, rounded to float32 as _M.of stores them
-        cnt = int(k.b.x_decomp_pca_mle_terms(spa, [d, rank], float(v), tbuf.addr))
-        tl = k.ew("logs", _M(tbuf.s[:cnt], 1, cnt), s=tiny)
-        pa = float(k.b.x_decomp_pca_mle_pa(tl.addr, cnt, float(logn)))
-        ll = pu + pl + pv + pp - pa / 2.0 - rank * logn / 2.0
-        if ll > best:
-            best, arg = ll, rank
-    return arg
+    if d < 2:
+        return 0
+    words = array.array("f")
+    words.frombytes(array.array("d", spectrum).tobytes())   # glue: the binary64 words, as bytes
+    if k._res():
+        raw = k._raw()
+        sp = _DevBuf(raw, 2 * d)
+        raw.x_decomp_dev_upload(sp.id, words.buffer_info()[0], 2 * d)
+        out = _DevBuf(raw, 1)
+        raw.x_decomp_dev_pca_mle_rank(sp.id, out.id, [d, int(n_samples)])
+        got = array.array("f", [0.0])
+        raw.x_decomp_dev_download(out.id, got.buffer_info()[0], 1)
+        return int(got[0])
+    return int(k.b.x_decomp_pca_mle_rank(words.buffer_info()[0], [d, int(n_samples)]))  # cpu-route: host column binding, CPU-only installs without device entries
 
 
 # ================================================================ LU

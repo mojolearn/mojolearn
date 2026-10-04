@@ -255,30 +255,6 @@ def accuracy(y: F64Ptr, pred: I32Ptr, w: F64Ptr, weighted: Bool, m: Int) raises 
     return (hit, tw)
 
 
-def pca_mle_terms(sp: F64Ptr, d: Int, rank: Int, v: Float64, dst: F32Ptr) -> Int:
-    """`[(sp[i] - sp[j]) * (1.0 / spv[j] - 1.0 / spv[i]) for i in range(rank)
-    for j in range(i + 1, d)]` with spv = sp[:rank] + [v] * (d - rank), each
-    term rounded to float32 (as `_M.of` stores it); returns the count."""
-    var c = 0
-    for i in range(rank):
-        var si = sp.unsafe_load(i)
-        var ivi = Float64(1) / si
-        for j in range(i + 1, d):
-            var sj = sp.unsafe_load(j)
-            var vj = sj if j < rank else v
-            dst.unsafe_store(c, Float32(pinned_mul_f64(si - sj, Float64(1) / vj - ivi)))
-            c += 1
-    return c
-
-
-def pca_mle_pa(lt: F32Ptr, m: Int, logn: Float64) -> Float64:
-    """`pa = 0.0; for t in lt: pa += t + logn` (IEEE double, in order)."""
-    var pa = Float64(0)
-    for a in range(m):
-        pa += Float64(lt.unsafe_load(a)) + logn
-    return pa
-
-
 def topn_desc(x: F32Ptr, m: Int, skip: F32Ptr, has_skip: Bool, n: Int, dst: I32Ptr) raises -> Int:
     """`sorted((i for i in range(m) if not skip[i]), key=lambda i: (-x[i], i))[:n]`
     (skip[i] = a nonzero entry of the skip row); returns the count written."""

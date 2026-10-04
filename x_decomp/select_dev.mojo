@@ -18,6 +18,10 @@ from x_decomp.cells import F32Ptr
 from x_decomp.device import TPB, _blocks, xd_ctx
 from x_decomp.resident import _id, _n, _ptr, pool_alloc, pool_free
 from x_decomp.select_ops import SEL_LAST, SEL_ORDER_MAX, SEL_SLICE, order_rank, sel_fold
+from x_decomp.pca_mle import (
+    MLE_P, mle_base_kernel, mle_cand_kernel, mle_ll_kernel, mle_part_kernel, mle_pick_kernel, mle_prep_kernel,
+    mle_scratch_words,
+)
 
 
 def sel_slice_kernel(src: F32Ptr, dst: F32Ptr, count: Int32, op: Int32):
@@ -84,3 +88,30 @@ def dev_order_small_py(a: PythonObject, dst: PythonObject, p: PythonObject) rais
     var pd = _ptr(_id(dst), n)
     xd_ctx().enqueue_function[order_small_kernel](ps, pd, Int32(n), grid_dim=_blocks(n), block_dim=TPB)
     return PythonObject(n)
+
+
+def dev_pca_mle_rank_py(sp: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+    """dst (one exact float, device) = Minka's MLE rank of the spectrum in
+    the device matrix sp (d binary64 values, 2 d float32 words), p = [d,
+    n_samples]: x_decomp/pca_mle.mojo's six phases, enqueued with no sync
+    (lane cpu3-python). The host column is `x_decomp_pca_mle_rank`."""
+    var d = _n(p, 0)
+    var n = _n(p, 1)
+    if d < 2:
+        raise Error("x_decomp: pca_mle needs at least two spectrum values")
+    var psp = _ptr(_id(sp), 2 * d)
+    var pd = _ptr(_id(dst), 1)
+    var words = mle_scratch_words(d)
+    var sid = pool_alloc(words)
+    var ps = _ptr(sid, words)
+    var ctx = xd_ctx()
+    var d32 = Int32(d)
+    var n32 = Int32(n)
+    ctx.enqueue_function[mle_prep_kernel](psp, d32, ps, grid_dim=_blocks(d), block_dim=TPB)
+    ctx.enqueue_function[mle_base_kernel](psp, d32, n32, ps, grid_dim=_blocks(d - 1), block_dim=TPB)
+    ctx.enqueue_function[mle_part_kernel](psp, d32, n32, ps, grid_dim=_blocks((d - 1) * MLE_P), block_dim=TPB)
+    ctx.enqueue_function[mle_ll_kernel](psp, d32, n32, ps, grid_dim=_blocks(d), block_dim=TPB)
+    ctx.enqueue_function[mle_cand_kernel](d32, ps, grid_dim=_blocks(MLE_P), block_dim=TPB)
+    ctx.enqueue_function[mle_pick_kernel](d32, ps, pd, grid_dim=1, block_dim=1)
+    pool_free(sid)      # the context runs in order: a reuse comes after these reads
+    return PythonObject(1)
