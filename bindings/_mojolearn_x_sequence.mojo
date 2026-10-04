@@ -92,6 +92,14 @@ def stl_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     return stl_py(ex, addrs, ip)
 
 
+def var_fused_binding() raises -> PythonObject:
+    """1 when this binary fits VAR as one launch (lane/apple-fast-w4-small
+    SEQ_FAST_VAR_FUSED): the quality pair's reach."""
+    comptime if SEQ_FAST_VAR_FUSED:
+        return PythonObject(1)
+    return PythonObject(0)
+
+
 def var_fit_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
     comptime if SEQ_FAST_VAR_FUSED:
@@ -233,6 +241,7 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_sequence")
         m.def_function[numeric_mode_binding]("x_sequence_numeric_mode")
         m.def_function[vendor_binding]("x_sequence_vendor")
+        m.def_function[var_fused_binding]("x_sequence_var_fused")
         m.def_function[rnn_fit_binding]("rnn_fit")
         m.def_function[rnn_predict_binding]("rnn_predict")
         m.def_function[rnn_n_params_binding]("rnn_n_params")
