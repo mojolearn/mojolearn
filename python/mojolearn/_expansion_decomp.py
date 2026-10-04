@@ -538,7 +538,7 @@ class _Kit:
 
     def _dict_dev(self):
         """`x_decomp_dev_dict_update` when this binding exports it (a FAST
-        Apple build without -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF), else None."""
+        GPU build without -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF), else None."""
         if "_dd_fn" not in self.__dict__:
             fn = None
             if self._res():
@@ -2339,33 +2339,35 @@ class FastICA(_Base):
             W1 = _sym_decorrelation(k, k.ew("sub", k.ew("scale", k.mm(gx, X1, tb=True), s=1.0 / p),
                                             k.ew("mul", W, gp)))
             dots = k.rowsum(k.ew("mul", W1, W))
-            lim = None
-            if k.maxabs_on(64):     # lane fix-d1-decomp: one word down (IDN_ICA_LIM_DEV)
-                lim = k.maxabs_dev(k.ew("abs", k.ew("adds", k.ew("abs", dots), s=-1.0)), 64)
-            if lim is None:
-                lim = max(k.ew("abs", k.ew("adds", k.ew("abs", dots), s=-1.0)).s)
+            # lane fix-d1-decomp: one word down; lane cpu2-l8-decomp: in every
+            # mode (the select reduction of x_decomp/select_*.mojo)
+            lim = k.word(k.reduce(k.ew("adds", k.ew("abs", dots), s=-1.0), k._SEL_MAXABS))
             W = W1
             if lim < self.tol:
                 break
         return W, it
 
     def _def(self, k, X1, Winit):
+        # lane cpu2-l8-decomp (re-audit L8, FastICA `_vstack`): the unmixing
+        # rows found so far live in ONE matrix where the kit keeps it (the
+        # device for a GPU kit), row j written in place once it converges;
+        # Wp is a view of its first j rows: the same values as the host stack
+        # of the downloaded rows, with no download
         nc = Winit.r
         p = X1.c
-        rows = []
+        Wall = k.copy(Winit)
         its = []
         for j in range(nc):
             w = Winit.rows(j, j + 1)
-            if rows:
-                Wp = _vstack(*rows)
+            Wp = Wall.rows(0, j) if j else None
+            if j:
                 w = k.ew("sub", w, k.mm(k.mm(w, Wp, tb=True), Wp))
             w = k.ew("scale", w, s=1.0 / _norm(k, w) if _norm(k, w) else 0.0)
             it = 0
             for it in range(1, self.max_iter + 1):
                 gx, gp = self._g(k, k.mm(w, X1))
                 w1 = k.ew("sub", k.ew("scale", k.mm(gx, X1, tb=True), s=1.0 / p), k.ew("mul", w, gp))
-                if rows:
-                    Wp = _vstack(*rows)
+                if j:
                     w1 = k.ew("sub", w1, k.mm(k.mm(w1, Wp, tb=True), Wp))
                 nw = _norm(k, w1)
                 w1 = k.ew("scale", w1, s=1.0 / nw if nw else 0.0)
@@ -2374,8 +2376,8 @@ class FastICA(_Base):
                 if lim < self.tol:
                     break
             its.append(it)
-            rows.append(w)
-        return _vstack(*rows), max(its)
+            k.place_rows(Wall, w, j)
+        return Wall, max(its)
 
     def fit_transform(self, X, y=None):
         return self._fit(X, True).out()
@@ -2532,9 +2534,8 @@ def _polar(k, A):
     reference's `wide` fixture, columns up to 1e4) cubed them into an A whose
     A^T A was inf in float32, and eigh refused it (DEVIATION 590) on every
     column. A is n_components x n_components: the max is a k x k host read."""
-    m = k.maxabs_dev(A, 128)     # lane fix-d1-decomp: one word down (IDN_POLAR_MAX_DEV)
-    if m is None:
-        m = max((abs(float(v)) for v in A.s), default=0.0)
+    # lane fix-d1-decomp: one word down; lane cpu2-l8-decomp: in every mode
+    m = k.word(k.reduce(A, k._SEL_MAXABS)) if A.r * A.c else 0.0
     # clamped so 2^-e stays a normal float32 in the device's scale
     e = max(-120, min(120, math.frexp(m)[1])) if m > 0.0 and math.isfinite(m) else 0
     if e:
@@ -3386,39 +3387,48 @@ def _update_dict(k, D, Y, code, A=None, B=None, positive=False, seed=0, counter=
         A = k.mm(code, code, ta=True)
     if B is None:
         B = k.mm(Y, code, ta=True)
-    # lane/apple-fast-gap-clus3: the atom loop on the device when the build
-    # exports it (FAST + Apple default, off: -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF, x_decomp/dict_fast.mojo);
-    # an unused atom (the Philox resample) or positive_dict keep the loop
+    # lane/apple-fast-gap-clus3: the atom loop in one fused device entry when
+    # the build exports it (FAST on every vendor since lane cpu2-l8-decomp;
+    # off: -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF, x_decomp/dict_fast.mojo); an
+    # unused atom (the Philox resample) or positive_dict keep the loop below
+    nc = D.r
+    dg = k.diag(A)                       # A's diagonal, 1 x nc, where A lives
+    used = k.count_gt(dg, 1e-6)          # one word: every atom used?
     fn = k._dict_dev() if not positive and D.r * D.c else None
-    if fn is not None:
-        As = A.s
-        if all(As[j * A.c + j] > 1e-6 for j in range(D.r)):  # glue: the nc diagonal reads the loop made
-            Dn = k._dout(D.r, D.c)
-            fn(k._did(D), k._did(A), k._did(B), Dn._d.id, [D.r, D.c])
-            return Dn, code
-    rows = [D.rows(j, j + 1) for j in range(D.r)]
+    if fn is not None and used == nc:
+        Dn = k._dout(D.r, D.c)
+        fn(k._did(D), k._did(A), k._did(B), Dn._d.id, [D.r, D.c])
+        return Dn, code
+    # lane cpu2-l8-decomp (re-audit L8, `_update_dict`): the loop keeps the
+    # dictionary as ONE matrix where the kit keeps it (on the device for a
+    # GPU kit) and writes atom j's new row into it in place: the same values
+    # the per-atom host stack of the rows gave (rows before j updated), with
+    # no download of an atom, of A or of B. A[j, j] is a 1 x 1 operand of the
+    # division (the same cell as the old host constant); the per-atom
+    # used/unused decision is one word, read only when some atom is unused.
+    Dm = k.copy(D)
     zero_cols = []
-    for j in range(D.r):
-        ajj = A.s[j * A.c + j]
-        if ajj > 1e-6:
-            Dcur = _vstack(*rows)
-            upd = k.ew("sub", B.cols(j, j + 1).T, k.mm(A.rows(j, j + 1), Dcur))
-            rows[j] = k.ew("add", rows[j], k.ew("div", upd, k.const(ajj)))
+    for j in range(nc):
+        ajj = dg.cols(j, j + 1)
+        if used == nc or k.word(ajj) > 1e-6:
+            upd = k.ew("sub", B.cols(j, j + 1).T, k.mm(A.rows(j, j + 1), Dm))
+            row = k.ew("add", Dm.rows(j, j + 1), k.ew("div", upd, ajj))
         else:
             c = counter[0] if counter is not None else 0
-            rows[j] = _resample_atom(k, Y, seed, c)
+            row = _resample_atom(k, Y, seed, c)
             if counter is not None:
                 counter[0] += 1
             zero_cols.append(j)
         if positive:
-            rows[j] = k.ew("maxs", rows[j], s=0.0)
-        nrm = k.ew("sqrt", k.total(k.ew("sq", rows[j])))
-        rows[j] = k.ew("div", rows[j], k.ew("maxs", nrm, s=1.0))
+            row = k.ew("maxs", row, s=0.0)
+        nrm = k.ew("sqrt", k.total(k.ew("sq", row)))
+        row = k.ew("div", row, k.ew("maxs", nrm, s=1.0))
+        k.place_rows(Dm, row, j)
     if zero_cols:
         code = k.copy(code)
         for j in zero_cols:
             k.fill0(code, j, code.c, code.r)
-    return _vstack(*rows), code
+    return Dm, code
 
 
 def _cost(k, X, code, D, alpha):
@@ -4072,11 +4082,10 @@ def _kdot(k, a, b):
     return float(k.mm(a, b, ta=True).s[0])
 
 
-def _lanczos_dev_batch(k, aid, Qd, ABd, ab, n, j, m, cap, alphas, betas):
-    """Steps j .. m-1 on the device, then their alphas and betas appended up to
+def _lanczos_batch(run, ab, n, j, m, cap, alphas, betas):
+    """Steps j .. m-1 (`run`), then their alphas and betas appended up to
     the first stop (`_lanczos_top`'s breakdown test). Returns (j, stop)."""
-    k.b.x_decomp_dev_lanczos(aid, Qd._d.id, ABd._d.id, [n, j, m, cap])
-    k.b.x_decomp_dev_download(ABd._d.id, ab.buffer_info()[0], 2 * cap)
+    run(j, m)
     for jj in range(j, m):  # glue: per-step scalars, at most _LANCZOS_MAX_M
         a, b = float(ab[jj]), float(ab[cap + jj])
         alphas.append(a)
@@ -4086,62 +4095,62 @@ def _lanczos_dev_batch(k, aid, Qd, ABd, ab, n, j, m, cap, alphas, betas):
     return m, False
 
 
+#: the Lanczos basis cap in floats ((cap + 1) * n): past it the exact dense solve runs
+_LANCZOS_DEV_MAX_FLOATS = 1 << 26
+
+
 def _lanczos_top(k, A, nc):
     """The nc largest eigenpairs of symmetric A by Lanczos with full
-    reorthogonalization (classical Gram-Schmidt, twice), every product on
-    the kit: A q, the basis projections and the updates. The basis starts at
+    reorthogonalization (classical Gram-Schmidt, twice). The basis starts at
     max(2 nc + 1, 20) vectors (ARPACK's ncv) and doubles until every wanted
     Ritz pair's residual estimate beta_m |y_m| is at most _LANCZOS_TOL times
     the largest |Ritz value|. Returns None when that has not happened by
     _LANCZOS_MAX_M vectors (the caller then runs the exact solve), so the
     route never returns a less converged answer than it promises. The start
     vector is a seeded uniform draw centred at 0 (a constant vector is
-    orthogonal to a centred kernel's spectrum)."""
+    orthogonal to a centred kernel's spectrum).
+
+    Lane cpu2-l8-decomp (re-audit L8, `_lanczos_top`): the steps run in Mojo
+    in every mode, the basis in ONE matrix that never leaves where the kit
+    keeps it: on a GPU kit `x_decomp_dev_lanczos` (x_decomp/lanczos_dev.mojo,
+    enqueued, the alphas and betas read once a batch), on the host column
+    `x_decomp_lanczos` (x_decomp/lanczos_host.mojo, the same steps and
+    words). The Python step that downloaded q and re-uploaded the basis twice
+    a step is deleted, and the Ritz test reads two words (max |theta| and
+    max |beta y|, reduced where they live)."""
     n = A.r
+    cap = min(n, _LANCZOS_MAX_M)
+    if (cap + 1) * n > _LANCZOS_DEV_MAX_FLOATS:
+        return None
     q = k.ew("adds", k.rand(n, 1, 0x1A2C05, 91, 0), s=-0.5)
     q = k.ew("scale", q, s=1.0 / math.sqrt(_kdot(k, q, q)))
-    QT = array.array("f")
+    ab = array.array("f", [0.0]) * (2 * cap)
+    if k._res():
+        Qd = k._dout(cap + 1, n)
+        k.place_rows(Qd, q.reshape(1, n), 0)
+        ABd = k._dout(1, 2 * cap)
+        aid = k._did(A)
+
+        def run(j0, j1):
+            k.b.x_decomp_dev_lanczos(aid, Qd._d.id, ABd._d.id, [n, j0, j1, cap])
+            k.b.x_decomp_dev_download(ABd._d.id, ab.buffer_info()[0], 2 * cap)
+    else:
+        Qd = _M.zeros(cap + 1, n)
+        k.place_rows(Qd, q.reshape(1, n), 0)
+
+        def run(j0, j1):
+            k.b.x_decomp_lanczos(A.addr, Qd.addr, ab.buffer_info()[0], [n, j0, j1, cap])
     alphas, betas = [], []
     m = min(n, max(2 * nc + 1, 20))
     j = 0
     stop = False
-    dev = _lanczos_dev_on(k, A)
-    if dev:
-        # lane/apple-fast-gap-linalg2-kpca (-D MOJOLEARN_KPCA_FAST_LANCZOS_DEV,
-        # x_decomp/lanczos_dev.mojo): the basis on the device (row j = q_j),
-        # each batch of steps enqueued in Mojo and its alphas and betas read
-        # in ONE download; the restart test and the Ritz extraction below
-        # are this route's
-        cap = min(n, _LANCZOS_MAX_M)
-        Qd = k._dout(cap + 1, n)
-        qs = q.s
-        k.b.x_decomp_dev_upload(Qd._d.id, qs.buffer_info()[0], n)
-        ABd = k._dout(1, 2 * cap)
-        aid = k._did(A)
-        ab = array.array("f", [0.0]) * (2 * cap)
     while True:
-        if dev and j < m and not stop:
-            j, stop = _lanczos_dev_batch(k, aid, Qd, ABd, ab, n, j, m, cap, alphas, betas)
-        while j < m and not stop:
-            QT.extend(q.s)
-            w = k.mm(A, q)
-            Qj = _M(QT[:], j + 1, n)
-            c = k.mm(Qj, w)
-            a = float(c.s[j])
-            w = k.ew("sub", w, k.mm(Qj, c, ta=True))
-            c = k.mm(Qj, w)
-            a += float(c.s[j])
-            w = k.ew("sub", w, k.mm(Qj, c, ta=True))
-            alphas.append(a)
-            b = math.sqrt(max(_kdot(k, w, w), 0.0))
-            betas.append(b)
-            j += 1
-            if b <= 1e-30 * max(1.0, abs(a)) or j == n:
-                stop = True
-                break
-            q = k.ew("scale", w, s=1.0 / b)
+        if j < m and not stop:
+            j, stop = _lanczos_batch(run, ab, n, j, m, cap, alphas, betas)
+        # the tridiagonal T from the per-step scalars the batch read (m-sized
+        # scalar control, at most _LANCZOS_MAX_M squared words)
         T = [0.0] * (j * j)
-        for i in range(j):
+        for i in range(j):  # glue: the batch's own alphas and betas into T
             T[i * j + i] = alphas[i]
             if i + 1 < j:
                 T[i * j + i + 1] = T[(i + 1) * j + i] = betas[i]
@@ -4149,36 +4158,17 @@ def _lanczos_top(k, A, nc):
         top = list(range(j - 1, max(j - 1 - nc, -1), -1))
         if len(top) < nc:
             return None
-        big = max(abs(th.s[i]) for i in top) or 1.0
-        res = [abs(betas[j - 1] * Y.s[(j - 1) * j + i]) for i in top]
-        if stop or max(res) <= _LANCZOS_TOL * big:
+        big = k.word(k.reduce(th.take_cols(top), k._SEL_MAXABS)) or 1.0
+        res = k.word(k.reduce(k.ew("scale", Y.rows(j - 1, j).take_cols(top), s=betas[j - 1]), k._SEL_MAXABS))
+        if stop or res <= _LANCZOS_TOL * big:
             break
-        if m >= min(n, _LANCZOS_MAX_M):
+        if m >= cap:
             return None
         m = min(n, 2 * m, _LANCZOS_MAX_M)
     Yt = Y.take_cols(top)
-    QM = _M._on_device(Qd._d, j, n) if dev else _M(QT[:j * n], j, n)
+    QM = _M._on_device(Qd._d, j, n) if Qd._d is not None else _M(Qd.s[:j * n], j, n)
     V = k.mm(QM, Yt, ta=True)
     return th.take_cols(top), V
-
-
-#: the device Lanczos basis cap in floats ((cap + 1) * n): past it the host loop runs
-_LANCZOS_DEV_MAX_FLOATS = 1 << 26
-
-
-def _lanczos_dev_on(k, A):
-    """lane/apple-fast-gap-linalg2-kpca: whether this kit's binding carries
-    the device Lanczos (`-D MOJOLEARN_KPCA_FAST_LANCZOS_DEV`, FAST + Apple,
-    x_decomp/lanczos_dev.mojo), read back from its compile-time constant (no
-    env read), and the basis fits its cap."""
-    if not k._res():
-        return False
-    try:
-        on = int(k._raw().x_decomp_lanczos_dev_on())
-    except Exception:
-        return False
-    n = A.r
-    return on == 1 and (min(n, _LANCZOS_MAX_M) + 1) * n <= _LANCZOS_DEV_MAX_FLOATS
 
 
 def _top_eig(k, A, nc, topk=False):
