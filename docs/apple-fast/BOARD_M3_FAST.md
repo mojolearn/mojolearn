@@ -38,7 +38,7 @@ Summary: 287 rows, 280 with a ratio, 222 faster than the best opponent after (FA
 | lu-factor | synthetic | algos | 2323 | 849 | scipy-cpu | 428 | 5.43 | 1.98 |  | relative_residual=3.2563e-06 | relative_residual=3.248e-06 | relative_residual=3.246e-06 | ok |
 | svgp | istella | algos | 1495 | 228 | gpytorch-cpu | 307 | 4.86 | 0.74 | FLIP faster | r2=-0.106016, rmse=0.878373 | r2=-0.106, rmse=0.8784 | r2=-0.106, rmse=0.8784 | ok |
 | lle | taxi | algos | 17885 | 2570 | sklearn-cpu | 1247 | 14.35 | 2.06 |  | trustworthiness_k15=0.826083 | trustworthiness_k15=0.8398 | trustworthiness_k15=0.7708 | ok |
-| kernel-pca | taxi | algos | 847 | 921 | sklearn-cpu | 460 | 1.84 | 2.00 |  | - | - | subspace_cos_vs_sklearn=1 | ok |
+| kernel-pca | taxi | algos | 847 | 127.5 | sklearn-cpu | 460 | 1.84 | 0.28 | FLIP faster | - | - | subspace_cos_vs_sklearn=1 | ok |
 | kernel-shap | istella | algos | 14386 | 15325 | shap-cpu | 7696 | 1.87 | 1.99 |  | rel_error_vs_exact=4.37806e-09 | rel_error_vs_exact=4.179e-09 | rel_error_vs_exact=1.405e-14 | ok |
 | rbf-sampler | istella | algos | 85.7 | 57.1 | sklearn-cpu | 47.6 | 1.80 | 1.20 |  | kernel_rel_error=0.14198 | kernel_rel_error=0.142 | kernel_rel_error=0.1374 | ok |
 | skewed-chi2 | istella | algos | 6.8 | 0.9 | sklearn-cpu | 3.7 | 1.84 | 0.24 | FLIP faster | kernel_rel_error=0.671898 | kernel_rel_error=0.6719 | kernel_rel_error=0.6719 | ok |
@@ -48,7 +48,7 @@ Summary: 287 rows, 280 with a ratio, 222 faster than the best opponent after (FA
 | sparse-rp | taxi | algos | 8.0 | 3.4 | sklearn-cpu | 1.8 | 4.44 | 1.90 |  | mean_abs_distortion=0.264 (seed 7; 40-seed mean 0.233) | mean_abs_distortion=0.1472 | mean_abs_distortion=0.381 | ok |
 | var | taxi-hourly | algos | 14.5 | 5.1 | statsmodels-cpu | 2.8 | 5.18 | 1.82 |  | forecast_rmse=33.168 | forecast_rmse=33.17 | forecast_rmse=33.17 | ok |
 | svgp | taxi | algos | - | 207 | gpytorch-cpu | 248 | - | 0.83 | FLIP faster | r2=-0.194982, rmse=17.7235 | - | r2=-0.2093, rmse=17.83 | ok |
-| kernel-pca | istella | algos | 1049 | 979 | sklearn-cpu | 560 | 1.87 | 1.75 |  | - | - | subspace_cos_vs_sklearn=1 | ok |
+| kernel-pca | istella | algos | 1049 | 201.0 | sklearn-cpu | 560 | 1.87 | 0.36 | FLIP faster | - | - | subspace_cos_vs_sklearn=1 | ok |
 | additive-chi2 | taxi | algos | 0.6 | 0.7 | sklearn-cpu | 0.4 | 1.50 | 1.69 |  | kernel_rel_error=0.0938923 | kernel_rel_error=0.09389 | kernel_rel_error=0.09389 | ok |
 | knn-imputer | taxi | algos | 73.6 | 2.7 | sklearn-cpu | 1.7 | 43.29 | 1.61 |  | masked_rmse=5.1086 | masked_rmse=6.152 | masked_rmse=5.257 | ok |
 | multilabel-binarizer | taxi | algos | 727 | 168 | sklearn-cpu | 129 | 5.62 | 1.30 |  | output_shape=20000x489 | - | - | ok |
@@ -434,3 +434,5 @@ Sources: before = M3 0.8.34 board (classical), M3 2026-09-29 board FAST cells (t
 - Dropped/held this round: GBDT_DW_FLAT_GRID slower (11054.9 -> 11822.4 ms, quality PASS); ARIMA_SLAB bit-exact but within noise (synthetic -1.3%, taxi-hourly -1.8%), HOLD.
 
 - Codex wave-4 promotion (2026-10-04): MaxAbs pooling, measured source `74d233862`, `w2-w4s-maxabs-istella` A 104.6 -> B 17.0 ms; `w2-w4s-maxabs-q` PASS (12 arrays byte-identical). Promotion `033fbbe10`, M2 default and `MOJOLEARN_PREP3_MAXABS_POOL_OFF` both rc=0; identical kernels and synchronized caller-owned output. Istella flips versus sklearn 99.7 ms.
+
+- Codex wave-4 RBF KernelPCA promotion (2026-10-04): measured source `34b4f6c72`, `w2-w4d-kpca-taxi` 850.7 -> 127.5 ms and `w2-w4d-kpca-istella` 919.5 -> 201.0 ms; quality PASS with unchanged eigenvalue/subspace limits. Quality fixture first reads remain 0.1 ms for both arms. Promotion `0bcc7202d`, M2 default and `MOJOLEARN_KPCA_RESIDENT_OFF` both rc=0; Python import PASS. Scope RBF/auto, n>200, 1–9 components; both rows flip.
