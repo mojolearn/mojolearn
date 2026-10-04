@@ -48,6 +48,7 @@ from x_cnn.ops import (
     bn_blk_red_at, bn_blk_red_fin_at, DROPOUT2D_CH_MASK, dropout2d_chan_at, dropout2d_apply_at,
     pad_fwd_at, pad_bwd_at, adapt_avg_fwd_at, adapt_avg_bwd_at, adapt_max_fwd_at, adapt_max_bwd_at,
     sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at, gather_rows_at, argmax_row_at,
+    chan_slice_at, chan_place_at,
 )
 
 comptime TPB = 256
@@ -1783,6 +1784,225 @@ def graph_op_device(a: List[Float32], b: List[Float32], aux: List[Float32], csr:
     if kind == 2:
         return graph4_device[l2norm_fwd_at](a, b, aux, csr, prm, n, n * F)
     return graph4_device[l2norm_bwd_at](a, b, aux, csr, prm, n, n * F)
+
+
+# ------------------------------------------------ lane fam-neural: `_m` forms
+# lane fam-neural (2026-10-04). The entries above this line that had no
+# mixed-residency form (adaptive pooling, the graph element ops, gcn_norm,
+# padding, a grouped convolution's channel slice) took Lists: the binding
+# copied each host array into a List, the entry uploaded it into fresh device
+# buffers, downloaded the result into another List, and the binding copied
+# that out; a layer chain crossed the bus both ways around each of them. The
+# `_m` forms below are the same launches of the same element functions on the
+# same words through the workspace slots, each argument a host address or a
+# resident one (`isdev`), so they sit in a resident chain with no transfer
+# and, on host addresses, copy once each way with no List. Plumbing only: no
+# kernel, operand or order changes, so no bit moves on any column.
+# IDENTICAL only. The entries are always compiled; `idn_flags()` tells the
+# Python glue which of them to use (bit k = switch k is on), so each has its
+# own before arm and all are off under MOJOLEARN_IDN_ALL_OFF.
+comptime _FAM_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+#: bit 0: adaptive pooling through `adaptive_pool_m`. `-D MOJOLEARN_IDN_ADAPT_M_OFF`.
+comptime IDN_ADAPT_M = _FAM_IDN and not is_defined["MOJOLEARN_IDN_ADAPT_M_OFF"]()
+#: bit 1: SAGE max / L2 normalize / gcn_norm through `graph_op_m`, `gcn_norm_m`. `-D MOJOLEARN_IDN_GRAPH_M_OFF`.
+comptime IDN_GRAPH_M = _FAM_IDN and not is_defined["MOJOLEARN_IDN_GRAPH_M_OFF"]()
+#: bit 2: an explicitly padded convolution stays resident (`pad2d_m`). `-D MOJOLEARN_IDN_PAD_M_OFF`.
+comptime IDN_PAD_M = _FAM_IDN and not is_defined["MOJOLEARN_IDN_PAD_M_OFF"]()
+#: bit 3: a grouped convolution stays resident (`chan_copy_m`). `-D MOJOLEARN_IDN_GROUP_M_OFF`.
+comptime IDN_GROUP_M = _FAM_IDN and not is_defined["MOJOLEARN_IDN_GROUP_M_OFF"]()
+#: bit 4: BatchNorm, Dropout2d and ReLU take and return resident tensors
+#: (glue only; the entries are the existing `_m` ones). `-D MOJOLEARN_IDN_LAYER_DEV_IO_OFF`.
+comptime IDN_LAYER_DEV_IO = _FAM_IDN and not is_defined["MOJOLEARN_IDN_LAYER_DEV_IO_OFF"]()
+
+
+def idn_flags() -> Int:
+    """The lane fam-neural switches this build has on, one bit each."""
+    var f = 0
+    comptime if IDN_ADAPT_M:
+        f |= 1
+    comptime if IDN_GRAPH_M:
+        f |= 2
+    comptime if IDN_PAD_M:
+        f |= 4
+    comptime if IDN_GROUP_M:
+        f |= 8
+    comptime if IDN_LAYER_DEV_IO:
+        f |= 16
+    return f
+
+
+def _adapt_idx(ctx: DeviceContext, addr: Int, n: Int, d: Bool, kind: Int) raises -> DeviceBuffer[DType.int32]:
+    """The adaptive entry's winners: read by the max backward, written by
+    the max forward, a one-word placeholder for the average kinds."""
+    if kind == 3:
+        return m_in_i(ctx, 3, addr, n, d)
+    if kind == 2:
+        return m_out_i(ctx, 3, addr, n, d)
+    return ws_i(ctx, 3, 1)
+
+
+def adaptive_pool_m(a: List[Int], dev: Int, prm: List[Int32], kind: Int) raises:
+    """a = [in, out, idx (int32)]; prm = [N, C, H, W, OH, OW]. kind 0 avg
+    forward (in x, out y), 1 avg backward (in g, out dx), 2 max forward
+    (idx written), 3 max backward (idx read): `adaptive_pool_device`'s
+    launches. The average kinds never touch a[2]."""
+    var nc = Int(prm[0]) * Int(prm[1])
+    var nin = nc * Int(prm[2]) * Int(prm[3])
+    var nout = nc * Int(prm[4]) * Int(prm[5])
+    var fwd = kind == 0 or kind == 2
+    var n_read = nin if fwd else nout
+    var n_write = nout if fwd else nin
+    var ctx = cnn_ctx()
+    var da = m_in(ctx, 0, a[0], n_read, isdev(dev, 0))
+    var dp = put_prm(ctx, 1, prm)
+    var dout = m_out(ctx, 2, a[1], n_write, isdev(dev, 1))
+    var di = _adapt_idx(ctx, a[2], nout, isdev(dev, 2), kind)
+    if kind == 0:
+        launch[adapt_avg_fwd_at](ctx, fp(da), fp(da), fp(dout), fp(dout), ip(di), ip(dp), n_write)
+    elif kind == 1:
+        launch[adapt_avg_bwd_at](ctx, fp(da), fp(da), fp(dout), fp(dout), ip(di), ip(dp), n_write)
+    elif kind == 2:
+        launch[adapt_max_fwd_at](ctx, fp(da), fp(da), fp(dout), fp(dout), ip(di), ip(dp), n_write)
+    else:
+        launch[adapt_max_bwd_at](ctx, fp(da), fp(da), fp(dout), fp(dout), ip(di), ip(dp), n_write)
+    m_fetch(ctx, dout, a[1], n_write, isdev(dev, 1))
+    if kind == 2:
+        m_fetch_i(ctx, di, a[2], nout, isdev(dev, 2))
+    ctx.synchronize()
+    _ = da^
+    _ = dp^
+    _ = dout^
+    _ = di^
+    _ = ctx^
+
+
+def _graph_in(ctx: DeviceContext, slot: Int, addr: Int, n: Int, d: Bool, used: Bool) raises -> DeviceBuffer[DType.float32]:
+    """A graph-op float argument the kind reads, or a one-word placeholder."""
+    if used:
+        return m_in(ctx, slot, addr, n, d)
+    return ws(ctx, slot, 1)
+
+
+def _graph_aux(ctx: DeviceContext, addr: Int, n: Int, d: Bool, read: Bool) raises -> DeviceBuffer[DType.float32]:
+    """The graph op's aux block: read by a backward, written by a forward."""
+    if read:
+        return m_in(ctx, 2, addr, n, d)
+    return m_out(ctx, 2, addr, n, d)
+
+
+def _graph_csr(ctx: DeviceContext, addr: Int, n: Int, d: Bool, used: Bool) raises -> DeviceBuffer[DType.int32]:
+    if used:
+        return m_in_i(ctx, 3, addr, n, d)
+    return ws_i(ctx, 3, 1)
+
+
+def graph_op_m(a: List[Int], dev: Int, prm: List[Int32], kind: Int) raises:
+    """a = [a, b, aux, out, csr (int32, n + 1 + 2 * nnz words)]; prm = [n, F,
+    nnz, 0]. kind 0 SAGE max forward (a = h; aux 2nF written), 1 its
+    backward (a = h, b = g, aux read; the TRANSPOSED csr), 2 row L2
+    normalize forward (a = x; aux n written), 3 its backward (a = y, b = g,
+    aux read): `graph_op_device`'s launches. b is touched only by the
+    backwards, csr only by the SAGE kinds."""
+    var n = Int(prm[0])
+    var F = Int(prm[1])
+    var nnz = Int(prm[2])
+    var nf = n * F
+    var naux = 2 * nf if kind < 2 else n
+    var bwd = kind == 1 or kind == 3
+    var ctx = cnn_ctx()
+    var da = m_in(ctx, 0, a[0], nf, isdev(dev, 0))
+    var db = _graph_in(ctx, 1, a[1], nf, isdev(dev, 1), bwd)
+    var dx = _graph_aux(ctx, a[2], naux, isdev(dev, 2), bwd)
+    var dq = _graph_csr(ctx, a[4], n + 1 + 2 * nnz, isdev(dev, 4), kind < 2)
+    var dp = put_prm(ctx, 4, prm)
+    var dout = m_out(ctx, 5, a[3], nf, isdev(dev, 3))
+    if kind == 0:
+        launch[sage_max_fwd_at](ctx, fp(da), fp(db), fp(dx), fp(dout), ip(dq), ip(dp), nf)
+    elif kind == 1:
+        launch[sage_max_bwd_at](ctx, fp(da), fp(db), fp(dx), fp(dout), ip(dq), ip(dp), nf)
+    elif kind == 2:
+        launch[l2norm_fwd_at](ctx, fp(da), fp(db), fp(dx), fp(dout), ip(dq), ip(dp), n)
+    else:
+        launch[l2norm_bwd_at](ctx, fp(da), fp(db), fp(dx), fp(dout), ip(dq), ip(dp), n)
+    m_fetch(ctx, dout, a[3], nf, isdev(dev, 3))
+    if not bwd:
+        m_fetch(ctx, dx, a[2], naux, isdev(dev, 2))
+    ctx.synchronize()
+    _ = da^
+    _ = db^
+    _ = dx^
+    _ = dq^
+    _ = dp^
+    _ = dout^
+    _ = ctx^
+
+
+def gcn_norm_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
+    """a = [w (nnz), vals (nnz), csr (int32, n + 1 + 2 * nnz words)]; prm =
+    [n, F, nnz, mode]: `gcn_norm_device`'s two launches."""
+    var n = Int(prm[0])
+    var nnz = Int(prm[2])
+    var ctx = cnn_ctx()
+    var dw = m_in(ctx, 0, a[0], nnz, isdev(dev, 0))
+    var dq = m_in_i(ctx, 1, a[2], n + 1 + 2 * nnz, isdev(dev, 2))
+    var dp = put_prm(ctx, 2, prm)
+    var dis = ws(ctx, 3, n)
+    var vals = m_out(ctx, 4, a[1], nnz, isdev(dev, 1))
+    launch[gcn_deg_at](ctx, fp(dw), fp(dis), fp(dis), fp(dis), ip(dq), ip(dp), n)
+    launch[gcn_norm_at](ctx, fp(dw), fp(dis), fp(vals), fp(vals), ip(dq), ip(dp), nnz)
+    m_fetch(ctx, vals, a[1], nnz, isdev(dev, 1))
+    ctx.synchronize()
+    _ = dw^
+    _ = dq^
+    _ = dp^
+    _ = dis^
+    _ = vals^
+    _ = ctx^
+
+
+def pad2d_m(a: List[Int], dev: Int, prm: List[Int32], backward: Bool) raises:
+    """a = [in, out]; prm = [N, C, H, W, top, bottom, left, right, mode].
+    Forward: in x (N, C, H, W), out the padded tensor; backward: in the
+    padded gradient, out dx. `pad2d_forward_into` / `pad2d_backward_into`'s
+    launch (`map2_m` with the second operand unused)."""
+    var nc = Int(prm[0]) * Int(prm[1])
+    var nx = nc * Int(prm[2]) * Int(prm[3])
+    var np_ = nc * (Int(prm[2]) + Int(prm[4]) + Int(prm[5])) * (Int(prm[3]) + Int(prm[6]) + Int(prm[7]))
+    # map2's addresses are [a, b (unused, nb == 0), dst]: bit 0 stays the
+    # input's, the output's bit moves from 1 to 2, the unused b is a host slot
+    var d3 = (dev & 1) | (((dev >> 1) & 1) << 2)
+    if backward:
+        map2_m[pad_bwd_at]([a[0], a[0], a[1]], d3, np_, 0, nx, prm)
+    else:
+        map2_m[pad_fwd_at]([a[0], a[0], a[1]], d3, nx, 0, np_, prm)
+
+
+def chan_copy_m(a: List[Int], dev: Int, prm: List[Int32], place: Bool) raises:
+    """a = [src, dst]; prm = [N, C, HW, cg, c0] (x_cnn/ops.mojo "channel
+    groups"). Slice: src the full (N, C, HW) tensor, dst the (N, cg, HW)
+    part. Place: src the part, dst the full tensor, which must be resident
+    (only the group's words are written; a host dst has no full copy to
+    download)."""
+    var N = Int(prm[0])
+    var hw = Int(prm[2])
+    var full = N * Int(prm[1]) * hw
+    var part = N * Int(prm[3]) * hw
+    if place and not isdev(dev, 1):
+        raise Error("x_cnn chan place: the destination must be a resident array")
+    var ctx = cnn_ctx()
+    var ds = m_in(ctx, 0, a[0], part if place else full, isdev(dev, 0))
+    var dp = put_prm(ctx, 1, prm)
+    var dd = m_out(ctx, 2, a[1], full if place else part, isdev(dev, 1))
+    if place:
+        launch[chan_place_at](ctx, fp(ds), fp(ds), fp(dd), fp(dd), ip(dp), ip(dp), part)
+    else:
+        launch[chan_slice_at](ctx, fp(ds), fp(ds), fp(dd), fp(dd), ip(dp), ip(dp), part)
+        m_fetch(ctx, dd, a[1], part, isdev(dev, 1))
+    ctx.synchronize()
+    _ = ds^
+    _ = dp^
+    _ = dd^
+    _ = ctx^
 
 
 def adam_into[resident: Bool = False](w: FP, g: FP, mv: FP, hyper: List[Float32], n: Int) raises:

@@ -1237,6 +1237,36 @@ def pad_bwd_at(i: Int, g: FP, f1: FP, dx: FP, f3: FP, q: IP, p: IP):
 
 
 
+# ---------------------------------------------------------------- channel groups
+# lane fam-neural (2026-10-04): a grouped convolution's channel slice and its
+# inverse as device word copies (the host path slices with NumPy and uploads
+# each group). p = [N, C, HW, cg, c0]: the group is channels [c0, c0 + cg) of
+# an (N, C, HW) tensor; the part is (N, cg, HW). Words are copied, never
+# converted, so no float value changes.
+
+
+@always_inline
+def chan_slice_at(i: Int, src: FP, f1: FP, dst: FP, f3: FP, q: IP, p: IP):
+    """part[i] = full[n, c0 + c, s] for i = (n * cg + c) * HW + s."""
+    var C = _g(p, 1); var HW = _g(p, 2); var cg = _g(p, 3); var c0 = _g(p, 4)
+    var per = cg * HW
+    var n = _ud(i, per)
+    var rem = i - n * per
+    dst.unsafe_store(i, src.unsafe_load((n * C + c0) * HW + rem))
+
+
+@always_inline
+def chan_place_at(i: Int, src: FP, f1: FP, dst: FP, f3: FP, q: IP, p: IP):
+    """full[n, c0 + c, s] = part[i]: each part word has its own full word,
+    so the launch's writes never collide."""
+    var C = _g(p, 1); var HW = _g(p, 2); var cg = _g(p, 3); var c0 = _g(p, 4)
+    var per = cg * HW
+    var n = _ud(i, per)
+    var rem = i - n * per
+    dst.unsafe_store((n * C + c0) * HW + rem, src.unsafe_load(i))
+
+
+
 # ---------------------------------------------------------------- adaptive pooling
 # p = [N, C, H, W, OH, OW]; output cell (oh, ow) reads rows
 # [floor(oh*H/OH), ceil((oh+1)*H/OH)) and the columns likewise

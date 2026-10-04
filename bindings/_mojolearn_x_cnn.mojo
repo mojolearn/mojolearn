@@ -29,6 +29,8 @@ from x_cnn.device import graph_op_device as graph_op_impl
 from x_cnn.device import adaptive_pool_device as adaptive_pool_impl
 from x_cnn.device import gcn_norm_device as gcn_norm_impl
 from x_cnn.device import csr_build_device as csr_build_impl
+# lane fam-neural (2026-10-04): the `_m` forms of the entries that had none
+from x_cnn.device import idn_flags, adaptive_pool_m, graph_op_m, gcn_norm_m, pad2d_m, chan_copy_m
 
 
 def _fp(addr: PythonObject) raises -> FP:
@@ -987,6 +989,121 @@ def spmm_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject)
     return PythonObject(n * F)
 
 
+# ------------------------------------------------- lane fam-neural `_m` forms
+# lane fam-neural (2026-10-04): x_cnn/device.mojo "lane fam-neural: `_m`
+# forms". New entries only; no existing entry changes. The same parameter
+# checks as the host entries they stand beside. `x_cnn_idn_flags` reports
+# which of the lane's switches this build has on (the glue uses an entry
+# only when its bit is set; the CPU twin has no such entry, so its glue
+# keeps the host entries).
+
+
+def idn_flags_binding() raises -> PythonObject:
+    return PythonObject(idn_flags())
+
+
+def adaptive_pool_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs = [in, out, idx (int32)]; params = [N, C, H, W, OH, OW, kind]
+    as `x_cnn_adaptive_pool`'s. The average kinds (0, 1) never touch idx."""
+    var prm = List[Int32]()
+    for k in range(6):
+        var v = Int(py=params[k])
+        if v <= 0:
+            raise Error("x_cnn adaptive pool: positive N, C, H, W, OH, OW required")
+        prm.append(Int32(v))
+    var kind = Int(py=params[6])
+    if kind < 0 or kind > 3:
+        raise Error("x_cnn adaptive pool: kind in 0..3")
+    var nc = Int(prm[0]) * Int(prm[1])
+    var nin = nc * Int(prm[2]) * Int(prm[3])
+    var nout = nc * Int(prm[4]) * Int(prm[5])
+    var a = _addrs(addrs, 3)
+    var d = Int(py=dev)
+    with GILReleased(Python()):
+        adaptive_pool_m(a, d, prm, kind)
+    return PythonObject(nout if kind == 0 or kind == 2 else nin)
+
+
+def graph_op_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs = [a, b, aux, out, csr]; params = [n, F, nnz, kind] as
+    `x_cnn_graph_op`'s. A resident csr (bit 4) is a `x_cnn_csr_upload`
+    handle, checked when it was made; a host one is checked here. b is read
+    only by the backward kinds (1, 3), csr only by the SAGE kinds (0, 1)."""
+    var kind = Int(py=params[3])
+    if kind < 0 or kind > 3:
+        raise Error("x_cnn graph op: kind in 0..3")
+    var n = Int(py=params[0])
+    var F = Int(py=params[1])
+    var nnz = Int(py=params[2])
+    var a = _addrs(addrs, 5)
+    var d = Int(py=dev)
+    if kind < 2 and (d >> 4) & 1 == 0:
+        _ = _csr_ints(addrs[4], n, F, nnz, 0)
+    elif n <= 0 or F <= 0 or nnz < 0:
+        raise Error("x_cnn graph op: positive n and F, nnz >= 0")
+    var prm: List[Int32] = [Int32(n), Int32(F), Int32(nnz), Int32(0)]
+    with GILReleased(Python()):
+        graph_op_m(a, d, prm, kind)
+    return PythonObject(n * F)
+
+
+def gcn_norm_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs = [w, vals, csr]; params = [n, F, nnz, mode] as `x_cnn_gcn_norm`'s."""
+    var n = Int(py=params[0])
+    var F = Int(py=params[1])
+    var nnz = Int(py=params[2])
+    var mode = Int(py=params[3])
+    var a = _addrs(addrs, 3)
+    var d = Int(py=dev)
+    if (d >> 2) & 1 == 0:
+        _ = _csr(addrs[2], params)
+    elif n <= 0 or F <= 0 or nnz < 0 or mode < 0 or mode > 3:
+        raise Error("x_cnn spmm: positive n and F, nnz >= 0, mode in {0, 1, 2, 3}")
+    if nnz <= 0:
+        raise Error("x_cnn gcn_norm: at least one edge (the self loops) is required")
+    var prm: List[Int32] = [Int32(n), Int32(F), Int32(nnz), Int32(mode)]
+    with GILReleased(Python()):
+        gcn_norm_m(a, d, prm)
+    return PythonObject(nnz)
+
+
+def pad2d_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs = [in, out]; params = `x_cnn_pad2d_forward`'s nine and a tenth,
+    0 the forward (in x, out padded) or 1 the backward (in the padded
+    gradient, out dx)."""
+    var prm = _pad_prm(params)
+    var back = Int(py=params[9]) != 0
+    var nc = Int(prm[0]) * Int(prm[1])
+    var nx = nc * Int(prm[2]) * Int(prm[3])
+    var no = nc * (Int(prm[2]) + Int(prm[4]) + Int(prm[5])) * (Int(prm[3]) + Int(prm[6]) + Int(prm[7]))
+    var a = _addrs(addrs, 2)
+    var d = Int(py=dev)
+    with GILReleased(Python()):
+        pad2d_m(a, d, prm, back)
+    return PythonObject(nx if back else no)
+
+
+def chan_copy_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
+    """addrs = [src, dst]; params = [N, C, HW, cg, c0, place]: place 0 copies
+    channels [c0, c0 + cg) of the (N, C, HW) src into the (N, cg, HW) dst;
+    place 1 copies the (N, cg, HW) src into those channels of the resident
+    (N, C, HW) dst."""
+    var N = Int(py=params[0])
+    var C = Int(py=params[1])
+    var HW = Int(py=params[2])
+    var cg = Int(py=params[3])
+    var c0 = Int(py=params[4])
+    var place = Int(py=params[5]) != 0
+    if N <= 0 or C <= 0 or HW <= 0 or cg <= 0 or c0 < 0 or c0 + cg > C:
+        raise Error("x_cnn chan copy: positive N, C, HW, cg and a group inside [0, C)")
+    var prm: List[Int32] = [Int32(N), Int32(C), Int32(HW), Int32(cg), Int32(c0)]
+    var a = _addrs(addrs, 2)
+    var d = Int(py=dev)
+    with GILReleased(Python()):
+        chan_copy_m(a, d, prm, place)
+    return PythonObject(N * cg * HW)
+
+
 # ------------------------------------------------------------ the fit epoch
 # lane/py-misc (2026-09-28, audit rank 10): CNNClassifier.fit's steps looped
 # HERE instead of in Python. `x_cnn_fit_epoch_r` runs a run of trainer steps
@@ -1188,6 +1305,12 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[dropout2d_m_binding]("x_cnn_dropout2d_m")
         m.def_function[csr_upload_binding]("x_cnn_csr_upload")
         m.def_function[csr_build_binding]("x_cnn_csr_build")
+        m.def_function[idn_flags_binding]("x_cnn_idn_flags")
+        m.def_function[adaptive_pool_m_binding]("x_cnn_adaptive_pool_m")
+        m.def_function[graph_op_m_binding]("x_cnn_graph_op_m")
+        m.def_function[gcn_norm_m_binding]("x_cnn_gcn_norm_m")
+        m.def_function[pad2d_m_binding]("x_cnn_pad2d_m")
+        m.def_function[chan_copy_m_binding]("x_cnn_chan_copy_m")
         m.def_function[spmm_m_binding]("x_cnn_spmm_m")
         return m.finalize()
     except e:
