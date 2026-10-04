@@ -58,15 +58,15 @@ class Switch(SplitBase):
 
     def test_the_split_pipelines(self):
         r = self.release()
-        self.assertEqual(list(r.PIPELINES), ["macos", "core-linux", "nvidia", "amd"])
+        self.assertEqual(list(r.PIPELINES), ["macos", "core-linux", "nvidia", "amd", "nvidia-sm89", "nvidia-sm90", "amd-gfx942"])
         for p in r.PIPELINES.values():
             for s in p["builds"] + p["checks"] + [p["publish"]]:
                 self.assertIn(s, r.STEPS)
         # THE PLUGINS FIRST, THE CORE LAST: the core requires both plugins
-        self.assertEqual(set(r.NEEDS["publish-nvidia"]), {"gpu-column-nvidia", "linux-joint-diff"})
-        self.assertEqual(set(r.NEEDS["publish-amd"]), {"gpu-column-amd", "linux-joint-diff"})
+        self.assertEqual(set(r.NEEDS["publish-nvidia"]), {"gpu-column-nvidia", "linux-joint-diff", "publish-nvidia-sm89", "publish-nvidia-sm90"})
+        self.assertEqual(set(r.NEEDS["publish-amd"]), {"gpu-column-amd", "linux-joint-diff", "publish-amd-gfx942"})
         self.assertEqual(set(r.NEEDS["publish-core-linux"]), {"linux-joint-diff", "publish-nvidia", "publish-amd"})
-        self.assertEqual(set(r.AFTER["linux-joint-diff"]), {"gpu-column-nvidia", "gpu-column-amd"})
+        self.assertEqual(set(r.AFTER["linux-joint-diff"]), {"gpu-column-nvidia", "gpu-column-nvidia-hopper", "gpu-column-amd"})
 
 
 class Gates(SplitBase):
@@ -100,7 +100,7 @@ class Gates(SplitBase):
     def test_everything_passing_publishes_the_three_packages_and_macos(self):
         r, order = self.staged()
         self.assertEqual(r.go(), 0)
-        self.assertEqual(self.published(r), ["amd", "linux", "macos", "nvidia"])
+        self.assertEqual(self.published(r), ["amd", "amd-gfx942", "linux", "macos", "nvidia", "nvidia-sm89", "nvidia-sm90"])
         # the plugins first, the core last: pip resolves mojolearn==<v> only
         # once both plugins at <v> are on the index
         self.assertGreater(order.index("publish-core-linux"), order.index("publish-nvidia"))
@@ -110,15 +110,22 @@ class Gates(SplitBase):
         r, order = self.staged(fail={"gpu-column-amd"})
         self.assertEqual(r.go(), 1)
         # the NVIDIA plugin may upload (unresolvable alone, it requires the core)
-        self.assertEqual(self.published(r), ["macos", "nvidia"])
+        self.assertEqual(self.published(r), ["macos", "nvidia", "nvidia-sm89", "nvidia-sm90"])
         self.assertNotIn("publish-core-linux", order)
         self.assertIn("amd: FAILED at gpu-column-amd", "\n".join(r.lines))
 
     def test_a_failed_nvidia_column_holds_nvidia_and_the_core(self):
         r, order = self.staged(fail={"gpu-column-nvidia"})
         self.assertEqual(r.go(), 1)
-        self.assertEqual(self.published(r), ["amd", "macos"])
+        self.assertEqual(self.published(r), ["amd", "amd-gfx942", "macos", "nvidia-sm90"])
         self.assertNotIn("publish-core-linux", order)
+
+    def test_failed_hopper_holds_its_payload_vendor_aggregate_and_core(self):
+        r, order = self.staged(fail={"gpu-column-nvidia-hopper"})
+        self.assertEqual(r.go(), 1)
+        self.assertEqual(self.published(r), ["amd", "amd-gfx942", "macos", "nvidia-sm89"])
+        for step in ("publish-nvidia-sm90", "publish-nvidia", "publish-core-linux"):
+            self.assertNotIn(step, order)
 
     def test_a_divergent_joint_diff_holds_all_three(self):
         r, order = self.staged(fail={"linux-joint-diff"})
@@ -130,19 +137,19 @@ class Gates(SplitBase):
     def test_a_failed_nvidia_publish_holds_the_core(self):
         r, order = self.staged(fail={"publish-nvidia"})
         self.assertEqual(r.go(), 1)
-        self.assertEqual(self.published(r), ["amd", "macos"])
+        self.assertEqual(self.published(r), ["amd", "amd-gfx942", "macos", "nvidia-sm89", "nvidia-sm90"])
         self.assertNotIn("publish-core-linux", order)
 
     def test_a_failed_amd_publish_holds_the_core(self):
         r, order = self.staged(fail={"publish-amd"})
         self.assertEqual(r.go(), 1)
-        self.assertEqual(self.published(r), ["macos", "nvidia"])
+        self.assertEqual(self.published(r), ["amd-gfx942", "macos", "nvidia", "nvidia-sm89", "nvidia-sm90"])
         self.assertNotIn("publish-core-linux", order)
 
     def test_a_failed_core_publish_leaves_both_plugins_published(self):
         r, order = self.staged(fail={"publish-core-linux"})
         self.assertEqual(r.go(), 1)
-        self.assertEqual(self.published(r), ["amd", "macos", "nvidia"])
+        self.assertEqual(self.published(r), ["amd", "amd-gfx942", "macos", "nvidia", "nvidia-sm89", "nvidia-sm90"])
 
     def test_the_joint_diff_waits_for_both_columns_to_settle(self):
         r, order = self.staged(fail={"gpu-column-nvidia"})
