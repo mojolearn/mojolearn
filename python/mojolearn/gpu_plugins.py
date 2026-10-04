@@ -4,7 +4,8 @@
 
 The core pins mojolearn-nvidia and mojolearn-amd automatically. Each vendor
 wheel contains its registered native architecture sets; architecture selection
-still happens in the loader. Experimental PTX remains a separate opt-in artifact.
+still happens in the loader. Qualified PTX may be bundled in the NVIDIA wheel;
+experimental PTX also remains a separate opt-in artifact.
 Native directory depth stays unchanged to preserve binding RUNPATHs.
 """
 
@@ -154,11 +155,17 @@ def core_marker(version):
             "plugins": {v: {"distribution": r["distribution"]} for v, r in PLUGINS.items()}}  # glue: one row per GPU vendor
 
 
-def plugin_marker(vendor, version, arches):
+def plugin_marker(vendor, version, arches, bundled_ptx=None):
     row = PLUGINS[vendor]
-    return {"schema": PLUGIN_SCHEMA, "role": "vendor", "vendor": vendor, "version": version,
+    marker = {"schema": PLUGIN_SCHEMA, "role": "vendor", "vendor": vendor, "version": version,
             "distribution": row["distribution"], "requires": f"{CORE_DISTRIBUTION}=={version}",
             "arches": sorted(arches), "directory": row["directory"], "code_format": "native"}  # glue: canonicalize architecture identifiers in metadata
+    if bundled_ptx is not None:
+        if vendor != "cuda":
+            raise ValueError("only the NVIDIA vendor package can bundle PTX")
+        validate_bundle_descriptor(bundled_ptx)
+        marker["bundled_ptx"] = dict(bundled_ptx)
+    return marker
 
 
 def payload_marker(profile, version, arches):
@@ -176,11 +183,13 @@ def package_requirements(profile, version):
     return [f"{CORE_DISTRIBUTION}=={version}"]
 
 
-def package_marker(profile, version, arches=()):
+def package_marker(profile, version, arches=(), bundled_ptx=None):
+    if bundled_ptx is not None and profile != "nvidia":
+        raise ValueError("only the NVIDIA vendor package can bundle PTX")
     if profile == CORE_PROFILE:
         return core_marker(version)
     if package(profile)["role"] == "vendor":
-        return plugin_marker(by_profile(profile), version, arches)
+        return plugin_marker(by_profile(profile), version, arches, bundled_ptx=bundled_ptx)
     return payload_marker(profile, version, arches)
 
 
@@ -233,3 +242,53 @@ def validate_baseline_manifest(doc, files):
     if not declared or declared != files:
         raise ValueError("PTX manifest does not match the complete GPU binding bytes")
     return doc
+
+
+BUNDLED_PTX_ROOT = "mojolearn/cuda_ptx/sm_80"
+BASELINE_ADMISSION = "PTX_IDENTITY_ADMISSION.json"
+
+
+def validate_bundle_descriptor(descriptor):
+    """The vendor marker binds both payload and separate identity admission."""
+    import re
+    if (not isinstance(descriptor, dict) or set(descriptor) != {"manifest_sha256", "admission_sha256"}
+            or not all(isinstance(value, str) and re.fullmatch("[0-9a-f]{64}", value)
+                       for value in descriptor.values())):  # glue: check two SHA256 metadata fields
+        raise ValueError("invalid bundled PTX digest descriptor")
+
+
+def owns_member(profile, member, bundled_ptx=None):
+    """Ownership needs package context: experimental and bundled PTX collide."""
+    owner = member_payload(member)
+    if owner == "nvidia-ptx80" and profile == "nvidia" and bundled_ptx is not None:
+        validate_bundle_descriptor(bundled_ptx)
+        return member.startswith(BUNDLED_PTX_ROOT + "/")
+    return owner == profile
+
+
+def validate_bundled_ptx(descriptor, manifest_bytes, admission_bytes, files):
+    """Validate transported bundle bytes; return the separate admission record.
+
+    files is the complete relative GPU .so SHA256 map under cuda_ptx/sm_80.
+    No record is generated and no measured configuration is broadened here.
+    """
+    import hashlib
+    import importlib.util
+    import json
+    from pathlib import Path
+    validate_bundle_descriptor(descriptor)
+    if (hashlib.sha256(manifest_bytes).hexdigest() != descriptor["manifest_sha256"]
+            or hashlib.sha256(admission_bytes).hexdigest() != descriptor["admission_sha256"]):
+        raise ValueError("bundled PTX metadata bytes differ from vendor marker")
+    manifest = json.loads(manifest_bytes)
+    validate_baseline_manifest(manifest, files)
+    if manifest.get("source_dirty") is not False:
+        raise ValueError("bundled PTX needs a clean source manifest")
+    admission = json.loads(admission_bytes)
+    # This module is also loaded without package initialization by build tools.
+    spec = importlib.util.spec_from_file_location("_mojolearn_ptx_admission", Path(__file__).with_name("ptx_admission.py"))
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    helper.validate_admission(admission, source_commit=manifest["source_commit"],
+                              manifest_sha256=descriptor["manifest_sha256"])
+    return admission
