@@ -6,7 +6,10 @@ pattern).
 
 quality SOURCE QUALITY_TAG
 No builds, SSH, queue edits, or opponent runs. SOURCE is the exact full SHA.
-Quality only: separate strict no-regression and absolute results; no timing receipt.
+Quality only, no timing receipt. Status follows the FAST rule
+(tools/fast_quality_rule.py): `eigh_w4_quality.py compare` (within noise of
+FAST main plus the absolute bounds) decides PASS; the strict zero-tolerance
+no-regression result is saved as info only.
 """
 import argparse
 import hashlib
@@ -48,7 +51,8 @@ def main():
     os.chdir(root)
     assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip() == args.source
     subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--', '*.mojo', 'bindings/', 'python/', 'pixi.toml', 'pixi.lock',
-                    'tools/eigh_w4_quality.py', 'tools/eigh_panel_df_pair.py'], check=True)
+                    'tools/eigh_w4_quality.py', 'tools/eigh_panel_df_pair.py',
+                    'tools/fast_quality_rule.py'], check=True)
     home = Path.home()
     arms = home / 'mq/verified-arms' / args.source / BIND
     manifest = json.loads((arms / 'manifest.json').read_text())
@@ -85,23 +89,23 @@ def main():
         prefix = 'EIGH-MAIN-NO-REGRESSION '
         assert line.startswith(prefix)
         no_reg = json.loads(line[len(prefix):])
-        # Preserve the original absolute comparator and all eight cases.
-        # A failure is evidence to save, never replaced by main-relative PASS.
+        # The FAST-rule comparator over all eight cases decides the status.
         with (out / 'compare.log').open('x') as stream:
             absolute = subprocess.run([sys.executable, 'tools/eigh_w4_quality.py', 'compare',
                                        str(out / 'A.json'), str(out / 'B.json')],
                                       stdout=stream, stderr=subprocess.STDOUT)
         report = dict(source_sha=args.source, hashes=hashes, define=DEFINE,
                       fixture='eigh-panel-df-v1', baseline='current panel default',
-                      no_regression=no_reg['status'],
-                      absolute_status='PASS' if absolute.returncode == 0 else 'FAIL',
+                      strict_no_regression_info=no_reg['status'],
+                      status='PASS' if absolute.returncode == 0 else 'HOLD',
+                      rule='fast-quality-v1 (tools/fast_quality_rule.py)',
                       opponent_status='HOLD: separate opponent admission required',
                       timing_authorized=False, promotion_authorized=False,
                       quality_script_sha256=digest(root / 'tools/eigh_w4_quality.py'))
         (out / 'REPORT.json').write_text(json.dumps(report, indent=2) + '\n')
         print('EIGH-PANEL-DF-QUALITY ' + json.dumps(report, sort_keys=True))
-        if no_reg['status'] != 'PASS':
-            raise RuntimeError('HOLD: strict no-regression failed; see saved report')
+        if absolute.returncode != 0:
+            raise RuntimeError('HOLD: quality outside FAST main noise or the absolute bounds; see saved report')
     finally:
         temporary = installed.with_suffix('.so.restore')
         shutil.copy2(out / 'original.so', temporary)

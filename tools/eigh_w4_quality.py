@@ -11,15 +11,20 @@ Metrics (float64 numpy oracle, outside the solve): relative residual
 numpy.linalg.eigvalsh(float64), orthogonality ||V^T V - I||_F / sqrt(n),
 and w ascending.
 
-Tolerances, fixed before any B result exists:
+FAST rule (fast_quality_rule.py, Andrew 2026-10-04): PASS = no material drop
+against FAST main (arm A) and the absolute bounds below; noise-level changes
+and new bits are fine. Every metric must sit inside A's noise band
+max(1.1 A, A + atol) (atol: residual and orthogonality 5e-8, eigenvalue error
+EIG_FLOOR = one fp32 ulp of max |lambda|), and:
   * routed cases (n >= 512: board:4096, indefinite:1024, board:1000):
     eigenvalue error <= 3.5e-7 (the brief's target: the repaired eigh level),
-    residual <= max(1.1 A, A + 5e-8) (no worse than main; main's Jacobi is
-    5.4e-5 on the board), orthogonality <= 2e-4 (the original absolute bound
-    of tools/apple_fast_eigh_quality.py), ascending.
+    orthogonality <= 2e-4 (the original absolute bound of
+    tools/apple_fast_eigh_quality.py), ascending; an absolute bound A itself
+    misses is not charged to B.
   * refusal cases (repeated:1024, gram:1024: repeated eigenvalues, the new
     route must hand them to main's Jacobi) and every case below n = 512: each
-    metric <= max(1.1 A, A + 5e-8) and <= 2e-4 (A's own bound).
+    metric <= 2e-4 (A's own bound).
+`no-regression` (strict B <= A, zero tolerance) is info only.
 """
 import argparse
 import hashlib
@@ -37,6 +42,8 @@ OTHER = ('repeated:1024', 'gram:1024', 'board:257', 'indefinite:128', 'repeated:
 METRICS = ('relative_residual', 'max_eigenvalue_error', 'orthogonality_error')
 EIG_MAX = 3.5e-7
 ORTH_MAX = 2e-4
+EIG_FLOOR = 1.1920928955078125e-07
+ATOL = {'relative_residual': 5e-8, 'max_eigenvalue_error': EIG_FLOOR, 'orthogonality_error': 5e-8}
 
 
 def matrix(kind, n):
@@ -104,15 +111,15 @@ def compare(pa, pb):
             if not (isinstance(x, float) and math.isfinite(x) and x >= 0):
                 fails.append(name + '=nonfinite')
                 continue
+            good = x <= max(1.1 * ref, ref + ATOL[name])  # within noise of FAST main
+            bound = None
             if key in ROUTED:
-                if name == 'max_eigenvalue_error':
-                    good = x <= EIG_MAX
-                elif name == 'relative_residual':
-                    good = x <= max(1.1 * ref, ref + 5e-8)
-                else:
-                    good = x <= ORTH_MAX
+                bound = EIG_MAX if name == 'max_eigenvalue_error' else (
+                    ORTH_MAX if name == 'orthogonality_error' else None)
             else:
-                good = x <= max(1.1 * ref, ref + 5e-8) and x <= ORTH_MAX
+                bound = ORTH_MAX
+            if bound is not None and ref <= bound:
+                good = good and x <= bound
             if not good:
                 fails.append(f'{name} {x:.3e} vs A {ref:.3e}')
         ok &= not fails
@@ -124,11 +131,8 @@ def compare(pa, pb):
 
 
 def no_regression(pa, pb):
-    """Separate original main-relative criterion; never relax the strict gate.
-
-    Exact metric comparison, no new tolerance. Report only; the strict compare
-    remains the sole source of the existing quality PASS receipt.
-    """
+    """Strict B <= A, zero tolerance: INFO ONLY under the FAST rule (a
+    noise-level change is not a regression); `compare` decides PASS."""
     A = json.loads(Path(pa).read_text())['cases']
     B = json.loads(Path(pb).read_text())['cases']
     assert set(A) == set(B) == set(ROUTED + OTHER), 'case set mismatch'
@@ -146,7 +150,7 @@ def no_regression(pa, pb):
                          A=a, B=b)
     passed = all(row['status'] == 'PASS' for row in rows.values())
     print('EIGH-MAIN-NO-REGRESSION ' + json.dumps(dict(
-        criterion='finite nonnegative B metric <= A metric, ascending',
+        criterion='info only (FAST rule): finite nonnegative B metric <= A metric, ascending',
         tolerance=0, status='PASS' if passed else 'FAIL', cases=rows), sort_keys=True))
 
 
