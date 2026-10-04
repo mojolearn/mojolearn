@@ -53,6 +53,7 @@ from std.sys.compile import is_defined
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from hostptr import list_f32, list_u32
+from core.pair_split_device import device_split_pairs
 
 from checks.vendor import COMPILED_VENDOR
 from gbdt.binary_prediction import binary_prediction_device, sigmoid_f64_device
@@ -472,10 +473,10 @@ def gbdt_fit_binding(
         if n_pairs > 0:
             var pp = _u32_ptr(Int(py=params[fixed_and_weights + 5]))
             var pw = _f32_ptr(Int(py=params[fixed_and_weights + 7]))
-            for q in range(n_pairs):
-                pair_winners.append(pp.unsafe_load(2 * q))
-                pair_losers.append(pp.unsafe_load(2 * q + 1))
-                pair_weights.append(pw.unsafe_load(q))
+            # cpu3-bindings: the interleaved pairs split on the device and
+            # the weights in one memcpy (no per-pair host loop)
+            device_split_pairs(process_ctx[_DEVCTX_SLOT](), pp, n_pairs, pair_winners, pair_losers)
+            pair_weights = list_f32(pw, n_pairs)
 
     var fp = GbdtFitParams(
         Int(py=params[4]),
