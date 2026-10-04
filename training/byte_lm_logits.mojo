@@ -45,6 +45,7 @@ from training.byte_lm import (
 )
 from training.checks.train_loop import _copy_into, _upload, _zeros, _zeros_i32, download_f32, download_f32_into, download_f32_into_scanned
 from core.device_arena import arena_begin, arena_end, arena_release
+from core.device_scan import device_first_nonfinite
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.contract import OP_NT
 from embedding.checks.embedding_identical import identical_embedding_forward_into
@@ -308,9 +309,9 @@ def _logits_forward_into(
     config: ByteConfig,
     destination: MutPointer[Float32, MutUntrackedOrigin],
 ) raises:
-    """`_logits_enqueue`, then ONE device-to-host copy straight into `destination`
-    (`batch * length * vocab` floats the caller owns and keeps alive for
-    the whole call), then the non-finite refusal over that memory.
+    """`_logits_enqueue`, then the device non-finite refusal, then ONE
+    device-to-host copy straight into `destination` (`batch * length * vocab`
+    floats the caller owns and keeps alive for the whole call).
 
     lane/neural-net-experiment (2026-09-30): the bindings used
     `_logits_forward` and then copied its List into the caller's array. At
@@ -324,19 +325,24 @@ def _logits_forward_into(
     same bytes land in the same places, one transfer, no List.
 
     The sabotage define moves the same bit it moved before (flat index 0,
-    after the copy, before the scan)."""
+    after the copy; since cpu2-l11-neural the scan runs before the copy)."""
     var m = batch * length
     var vocab = config.vocab_size
     _logits_enqueue(ctx, weights, emb_w, lm_w, rope, sc, inputs, batch, length, config)
     var ton = timing_on()
     var tk = Int(perf_counter_ns())
-    var bad = download_f32_into_scanned(ctx, sc.logits, m * vocab, destination, True)
+    # cpu2-l11-neural (2026-10-04): the non-finite refusal is a DEVICE scan
+    # (`device_first_nonfinite`: one launch, one partials copy, the same
+    # first flat index the host walk returned), run before the download, so
+    # no host loop reads the m * vocab logits. The download is unscanned.
+    var bad = device_first_nonfinite(ctx, sc.logits, m * vocab)
+    timing_tick(ctx, ton, tk, "logits.scan")
+    if bad >= 0:
+        _raise_nonfinite_logit(bad)
+    _ = download_f32_into_scanned(ctx, sc.logits, m * vocab, destination, False)
     timing_tick(ctx, ton, tk, "logits.download")
     comptime if is_defined["MOJOLEARN_BYTE_LM_LOGITS_SABOTAGE"]():
         destination.unsafe_store(0, bitcast[DType.float32](bitcast[DType.uint32](destination.unsafe_load(0)) ^ UInt32(1)))
-    if bad >= 0:
-        _raise_nonfinite_logit(bad)
-    timing_tick(ctx, ton, tk, "logits.scan")
 
 
 def byte_logits_from_params(ctx: DeviceContext, params: List[Float32], inputs: List[Int32],
