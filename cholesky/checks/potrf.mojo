@@ -1952,7 +1952,7 @@ def potrf_lower(
     var inv_shape = ctx.enqueue_create_buffer[DType.float32](
         nb * nb if CHOL_RECURSIVE_PANEL else 1
     )
-    # CHOL_FAST_TALL (opt-in): the inner step's L11^{-1}
+    # CHOL_FAST_TALL (FAST+Apple default): the inner step's L11^{-1}
     var tall_linv = ctx.enqueue_create_buffer[DType.float32](
         CTL_NB * CTL_NB if CHOL_FAST_TALL else 1
     )
@@ -2024,8 +2024,8 @@ def potrf_lower(
                 tk = Int(perf_counter_ns())
 
         # ---- the panel ------------------------------------------------
-        # CHOL_FAST_TALL (opt-in, cholesky/checks/chol_fast_tall.mojo;
-        # -D MOJOLEARN_CHOL_FAST_TALL): only on the fast_defer sweep (the
+        # CHOL_FAST_TALL (FAST+Apple default, cholesky/checks/chol_fast_tall.mojo;
+        # rollback -D MOJOLEARN_CHOL_FAST_TALL_OFF): only on the fast_defer sweep (the
         # public Cholesky.fit, which redoes a failed factor on this loop's
         # main route). The column panel is factored whole -- L11 and L21 --
         # so the panel solve below is skipped; the trailing update is main's.

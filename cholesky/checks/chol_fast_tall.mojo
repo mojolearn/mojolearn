@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""lane/apple-fast-w3-linalg (2026-10-04): CHOL_FAST_TALL (opt-in,
-`-D MOJOLEARN_CHOL_FAST_TALL`), the Apple FAST Cholesky column panel as one
+"""lane/apple-fast-w3-linalg (2026-10-04): CHOL_FAST_TALL (FAST+Apple
+DEFAULT, rollback `-D MOJOLEARN_CHOL_FAST_TALL_OFF`), the Apple FAST Cholesky column panel as one
 tall blocked factor with matrix-unit solves (FAST on Apple only; only the
 public `Cholesky.fit` route reaches it, `cholesky_factor_devio`'s
 `defer_ok` sweep, which redoes a failed factor on main's route).
@@ -51,8 +51,10 @@ from max.gpu.sync import barrier
 from checks.kernel_matrix import COLUMN_APPLE, lib_smem_page_fits_for
 from gemm.afn_apple_fast import AFN_GEMM_APPLE, AFN_GEMM_KB, _afn_gload, _afn_load_t, _afn_mma, _afn_stage
 
-#: Opt-in candidate (M3 A/B owed: tags w2-cholt-*). `-D MOJOLEARN_CHOL_FAST_TALL`.
-comptime CHOL_FAST_TALL = AFN_GEMM_APPLE and is_defined["MOJOLEARN_CHOL_FAST_TALL"]()
+#: FAST+Apple DEFAULT (rollback `-D MOJOLEARN_CHOL_FAST_TALL_OFF`; gated on
+#: AFN_GEMM_APPLE). M3, source 3e5b8fc59, one run per arm: cholesky synthetic
+#: 275.9 -> 260.8 ms; w2-cholt-quality PASS (tools/chol_fast_tall_pair.py).
+comptime CHOL_FAST_TALL = AFN_GEMM_APPLE and not is_defined["MOJOLEARN_CHOL_FAST_TALL_OFF"]()
 #: The inner step (columns per diagonal block). At most the tile width, so
 #: the in-place solve has one output tile per row band.
 comptime CTL_NB = 64

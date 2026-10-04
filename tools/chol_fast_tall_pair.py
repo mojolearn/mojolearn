@@ -24,6 +24,9 @@ import subprocess
 import sys
 
 DEFINE = "MOJOLEARN_CHOL_FAST_TALL"
+# Promoted: CHOL_FAST_TALL is the FAST+Apple default; the old route is
+# -D MOJOLEARN_CHOL_FAST_TALL_OFF. A=""/B=-D DEFINE describes the pre-promotion
+# record; on a post-promotion source A = "-D " + DEFINE + "_OFF", B = "".
 FIXTURE = "chol-fast-tall-v1"
 BINDING = "gp"
 
