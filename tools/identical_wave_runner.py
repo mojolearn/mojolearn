@@ -15,7 +15,7 @@ import signal
 import subprocess
 import sys
 
-from identical_wave_compare import validate_proof
+from identical_wave_compare import validate_arch, validate_proof
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -70,6 +70,7 @@ def main():
     p.add_argument('--plan',required=True,type=Path)
     p.add_argument('--sha',required=True)
     p.add_argument('--vendor',required=True,choices=('nvidia','amd'))
+    p.add_argument('--gpu-arch',required=True,help='Actual build target, e.g. sm_120, sm_89 or gfx942; bound into every phase receipt')
     p.add_argument('--repo',type=Path,default=ROOT)
     p.add_argument('--out',required=True,type=Path)
     p.add_argument('--python',required=True,type=Path,help='Existing Python with NumPy/SciPy; no mojolearn install used')
@@ -77,6 +78,8 @@ def main():
     p.add_argument('--cross-vendor-proof',type=Path,help='PASS proof from identical_wave_compare.py; required for timing')
     p.add_argument('--semaphore',type=Path,default=Path('/root/mojolearn-evidence/compile_slot.sh'))
     a=p.parse_args()
+    try: arch=validate_arch(a.vendor,a.gpu_arch)
+    except ValueError as exc: p.error(str(exc))
     if sys.platform!='linux': p.error('remote Linux NVIDIA/AMD only')
     if not re.fullmatch('[0-9a-f]{40}',a.sha): p.error('full immutable 40-character SHA required')
     a.repo=a.repo.resolve(); a.out=a.out.resolve(); a.python=a.python.resolve(); a.data=a.data.resolve()
@@ -90,7 +93,7 @@ def main():
         wanted,name=line.split(None,1); path=a.data.parent/name.strip()
         if not path.resolve().is_relative_to(a.data): p.error('data manifest path outside canonical rows-small')
         if hashlib.sha256(path.read_bytes()).hexdigest()!=wanted: p.error('canonical data hash mismatch: '+name)
-    identity={'sha':a.sha,'vendor':a.vendor,'plan_sha256':plan_hash,'data_manifest_sha256':hashlib.sha256(manifest.read_bytes()).hexdigest()}
+    identity={'sha':a.sha,'vendor':a.vendor,'gpu_arch':arch,'plan_sha256':plan_hash,'data_manifest_sha256':hashlib.sha256(manifest.read_bytes()).hexdigest()}
     neural_hashes={}
     for case in plan['cases']:
         if case.get('driver')=='neural':
@@ -101,7 +104,6 @@ def main():
     marker=a.out/'wave.json'
     if marker.exists() and json.loads(marker.read_text())!=identity: p.error('output belongs to different SHA/plan/vendor/data')
     write(marker,identity)
-    arch={'nvidia':'sm_89','amd':'gfx942'}[a.vendor]
     backend={'nvidia':'cuda','amd':'hip'}[a.vendor]
     report={'identity':identity,'phase':a.phase,'status':'INCOMPLETE','arms':{},'opponents':'store only; never executed'}
     clean_env={k:v for k,v in os.environ.items() if not k.startswith(('MOJOLEARN_', 'MODULAR_MOJO_', 'MOJO_COMPILE_'))}

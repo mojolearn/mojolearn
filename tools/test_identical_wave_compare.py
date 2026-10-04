@@ -16,7 +16,8 @@ class IdentityProofTests(unittest.TestCase):
         self.receipts = {}
         for vendor, backend in [('nvidia', 'cuda'), ('amd', 'hip')]:
             receipt = {'phase': 'identity', 'status': 'PASS', 'identity': {
-                'vendor': vendor, 'sha': 'a'*40, 'plan_sha256': sha256(self.plan),
+                'vendor': vendor, 'gpu_arch': {'nvidia': 'sm_120', 'amd': 'gfx942'}[vendor],
+                'sha': 'a'*40, 'plan_sha256': sha256(self.plan),
                 'data_manifest_sha256': 'b'*64, 'neural_fixture_sha256': {'fixed.npz': 'c'*64}}, 'arms': {}}
             for arm, digest in [('on', 'd'*64), ('off', 'e'*64)]:
                 steps = []
@@ -68,6 +69,16 @@ class IdentityProofTests(unittest.TestCase):
         proof = self.compare(); self.receipts['nvidia']['note'] = 'changed receipt'
         with self.assertRaisesRegex(ValueError, 'receipt hash'):
             validate_proof(proof, self.raw('nvidia'), 'nvidia', self.plan)
+
+    def test_arch_is_vendor_specific_and_bound_to_receipt(self):
+        proof = self.compare()
+        self.receipts['nvidia']['identity']['gpu_arch'] = 'sm_89'
+        with self.assertRaisesRegex(ValueError, 'receipt hash'):
+            validate_proof(proof, self.raw('nvidia'), 'nvidia', self.plan)
+        self.receipts['nvidia']['identity']['gpu_arch'] = 'gfx942'
+        with self.assertRaisesRegex(ValueError, 'architecture'): self.compare()
+        self.receipts['nvidia']['identity'].pop('gpu_arch')
+        with self.assertRaisesRegex(ValueError, 'fields'): self.compare()
 
     def test_reject_stale_or_incomplete_proof(self):
         for mutation in [lambda p: p['identity_core'].update(sha='f'*40),

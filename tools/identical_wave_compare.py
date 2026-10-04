@@ -11,6 +11,13 @@ ARMS = ('on', 'off')
 CORE_FIELDS = {'sha', 'plan_sha256', 'data_manifest_sha256', 'neural_fixture_sha256'}
 
 
+def validate_arch(vendor, arch):
+    pattern = {'nvidia': r'sm_[0-9]{2,3}[a-z]?', 'amd': r'gfx[0-9a-f]+'}.get(vendor)
+    if pattern is None or not isinstance(arch, str) or not re.fullmatch(pattern, arch):
+        raise ValueError('invalid GPU architecture for vendor')
+    return arch
+
+
 def sha256(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -23,8 +30,9 @@ def require_hash(value, length=64):
 
 def identity_core(receipt):
     identity = receipt.get('identity', {})
-    if set(identity) != CORE_FIELDS | {'vendor'}:
+    if set(identity) != CORE_FIELDS | {'vendor', 'gpu_arch'}:
         raise ValueError('identity fields missing or unexpected')
+    validate_arch(identity['vendor'], identity['gpu_arch'])
     require_hash(identity['sha'], 40)
     require_hash(identity['plan_sha256'])
     require_hash(identity['data_manifest_sha256'])
