@@ -1192,8 +1192,9 @@ def _mojo_host_loops(lines, path, impl=frozenset(), skip=frozenset()):
             continue
         # the owner's rule counts rows, features, classes and members alike:
         # any runtime bound is data-sized; a walk over a List is too
-        rm = re.match(r"\s*for\s+(\w+)\s+in\s+range\(\s*(.*)\)\s*:", t) or \
-            re.match(r"\s*for\s+(\w+)\s+in\s+()([\w.\[\]]+)\s*:", t)
+        code = t.split("#", 1)[0]
+        rm = re.match(r"\s*for\s+(\w+)\s+in\s+range\(\s*(.*)\)\s*:", code) or \
+            re.match(r"\s*for\s+(\w+)\s+in\s+()([\w.\[\]]+)\s*:", code)
         if not rm or (rm.group(2) and not _runtime_bound(rm.group(2))):
             continue
         if not rm.group(2) and not re.search(r"\[\]|\w$", rm.group(3)):
@@ -1440,10 +1441,11 @@ def owed_allowance(ref):
     return allowed
 
 
-def owed_summary(owed, out=sys.stderr):
+def owed_summary(owed, out=None):
     """The owed findings, by rule and by file: CPU work that a fix lane owes
     (~/mojolearn-evidence/cpu-reaudit-2026-10-04/checker-new-findings.tsv),
     never accepted as debt."""
+    out = out or sys.stderr
     if not owed:
         return
     by_rule = collections.Counter(k[0] for k, _ in owed)
