@@ -137,8 +137,8 @@ from std.sys.compile import is_defined
 #: statement (the same ascending fold of pinned products, `identical_sqrt`,
 #: `identical_div`, every intermediate flushed), one thread per row, so the
 #: unit rows carry the bits the host column's call of that function gives.
-#: A row it must refuse is reported through one Int32 cell, and the refusal
-#: itself is then raised by the host function, by name, as before.
+#: A row it must refuse is reported through one Int32 cell and refused by
+#: name with the host function's sentence (without the squared norm value).
 #: `-D MOJOLEARN_IDN_DBSCAN_COSINE_DEVICE_OFF=1` restores the host scaling.
 comptime IDN_DBSCAN_COSINE_DEVICE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -328,20 +328,15 @@ def dbscan_fit(
         _ = d_bad^
         _ = h_bad^
         if bad_row != COSINE_NO_BAD_ROW:
-            # The refusal path only: the host function raises, naming the
-            # row and its squared norm exactly as it always has.
-            var raw_bad = List[Float32](
-                length=n_samples * n_features, fill=Float32(0)
-            )
-            for ib in range(n_samples * n_features):
-                raw_bad[ib] = x_ptr.unsafe_load(ib)
-            unit = cosine_unit_rows(
-                raw_bad, n_samples, n_features, "dbscan_fit"
-            )
+            # `cosine_unit_rows`' refusal, by name. The squared norm it
+            # also prints stays on the device; the row is the lowest
+            # refused row, the one the host function names.
             raise Error(
-                "dbscan_fit: the device refused cosine row "
-                + String(Int(bad_row))
-                + " and the host scaling accepted every row"
+                "dbscan_fit: metric='cosine' needs every row to have a"
+                " positive, finite norm; row " + String(Int(bad_row))
+                + " does not. The cosine distance of a zero row is"
+                " undefined (cuML divides by zero and carries NaN), so it is"
+                " refused by name"
             )
     elif metric == DBSCAN_METRIC_COSINE:
         var raw = List[Float32](length=n_samples * n_features, fill=Float32(0))
