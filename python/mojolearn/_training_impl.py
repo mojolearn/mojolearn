@@ -430,6 +430,8 @@ def _unpack_into(flat, arrays, probes):
 #: every optimizer's moments on the host and the per-call `optimizer_step`
 #: (the before arm of the A/B, `tools/optimizer_resident_check.py`).
 _RESIDENT_ENV = "MOJOLEARN_OPTIMIZER_RESIDENT"
+#: lane fam2-neural: the device-resident parameter/gradient entries
+_IO_ENTRIES = ("optimizer_resident_put", "optimizer_resident_get", "optimizer_resident_step_io")
 _RESIDENT_ENTRIES = ("optimizer_resident_open", "optimizer_resident_close",
                      "optimizer_resident_download", "optimizer_resident_upload",
                      "optimizer_resident_step")
@@ -628,6 +630,145 @@ class _Optimizer(NumericModeMixin):
         """True once the moments live on the device."""
         return self._res is not None
 
+    # -- lane fam2-neural (2026-10-04): parameters and gradients resident ----
+    # `step` moves three registry-sized buffers a step (parameters up,
+    # gradient up, parameters down). After `params_to_device()` the
+    # parameters live in the optimizer's device handle: `step(grads)` then
+    # uploads the gradient only, and `step_device()` with the gradient
+    # already on the device (`grads_to_device`) moves nothing. The caller's
+    # host arrays are STALE until `params_to_host()` writes them back. The
+    # step is the same device call on the same buffers: the same bits.
+    def _io_binding(self):
+        binding = _load(getattr(self, "numeric_mode", None))
+        self._open_resident(binding)
+        if self._res is None or not all(callable(getattr(binding, n, None)) for n in _IO_ENTRIES):  # glue: checks binding entry names
+            raise RuntimeError(
+                "mojolearn.%s: this build has no device-resident parameter "
+                "entries (IDENTICAL GPU builds only; "
+                "MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF or a resident-less "
+                "optimizer turns them off)" % self._where)
+        return binding
+
+    def params_resident_available(self):
+        """Whether `params_to_device` works on this build."""
+        try:
+            self._io_binding()
+        except RuntimeError:
+            return False
+        return True
+
+    def _flat(self, arrays, name):
+        seq = _as_seq(arrays, name, self._where)
+        probes = _check_dtype(seq, name, self._where, inplace=True)
+        if len(seq) != len(self.params) or sum(nelems(pb.shape) for pb in probes) != self.n_total:  # glue: element count over tensor shapes
+            raise ValueError(
+                "mojolearn.%s: %s does not match the optimizer's registry "
+                "(%d tensors, %d floats)" % (self._where, name, len(self.params), self.n_total))
+        flat, packed = _pack(seq, probes)
+        return seq, probes, flat, packed
+
+    def params_to_device(self):
+        """Upload the parameters into the optimizer's device handle and keep
+        them there: later steps neither upload nor download them. Call it
+        again after editing the host arrays. Returns self."""
+        binding = self._io_binding()
+        _, _, flat, _ = self._flat(self.params, "params")
+        binding.optimizer_resident_put(self._res, 0, addr(flat, name="params"), int(self.n_total))
+        self._p_dev = True
+        return self
+
+    def params_to_host(self):
+        """Download the device parameters into the caller's arrays (in
+        place); they stay resident. Returns the parameter list."""
+        if not getattr(self, "_p_dev", False):
+            return self.params
+        binding = self._io_binding()
+        seq, probes, flat, packed = self._flat(self.params, "params")
+        binding.optimizer_resident_get(self._res, 0, addr(flat, name="params"), int(self.n_total))
+        if packed:
+            _unpack_into(flat, seq, probes)
+        return self.params
+
+    def grads_to_device(self, grads):
+        """Upload a gradient into the handle's device gradient buffer, for
+        `step_device()`. Returns self."""
+        binding = self._io_binding()
+        _, _, flat, _ = self._flat(grads, "grads")
+        binding.optimizer_resident_put(self._res, 1, addr(flat, name="grads"), int(self.n_total))
+        self._g_dev = True
+        return self
+
+    def grads_to_host(self, grads):
+        """Download the device gradient (clipped, if the last step clipped)
+        into `grads`, in place. Returns `grads`."""
+        binding = self._io_binding()
+        seq, probes, flat, packed = self._flat(grads, "grads")
+        binding.optimizer_resident_get(self._res, 1, addr(flat, name="grads"), int(self.n_total))
+        if packed:
+            _unpack_into(flat, seq, probes)
+        return grads
+
+    def step_device(self, grads=None, max_norm=None):
+        """`step` on device-resident parameters (`params_to_device()` first).
+        `grads` given: uploaded (one transfer), and scaled in place on the
+        host when `max_norm` clips, as `step` does. `grads` None: the
+        gradient already in the handle (`grads_to_device`) is used and, with
+        `max_norm`, clipped there; nothing crosses the bus but the three
+        info words. Returns what `step` returns."""
+        if not getattr(self, "_p_dev", False):
+            raise RuntimeError("mojolearn.%s.step_device: call params_to_device() first" % self._where)
+        binding = self._io_binding()
+        io = 0
+        flat_g, packed_g, gs, gprobes = None, False, None, None
+        if grads is not None:
+            gs, gprobes, flat_g, packed_g = self._flat(grads, "grads")
+            io = 2 if max_norm is None else 10
+        else:
+            if not getattr(self, "_g_dev", False):
+                raise RuntimeError("mojolearn.%s.step_device: no gradient on the device "
+                                   "(pass grads or call grads_to_device)" % self._where)
+            if getattr(self, "maximize", False):
+                raise RuntimeError("mojolearn.%s.step_device: maximize needs the gradient "
+                                   "passed to the step" % self._where)
+        if self.lr_schedule is not None:
+            self.lr = float(self.lr_schedule.lr_at(self.t + 1))
+        cfg = self._config()
+        max_norm_f = 0.0 if max_norm is None else float(max_norm)
+        if max_norm is not None and not (max_norm_f > 0.0):
+            raise ValueError("mojolearn.%s.step_device: max_norm must be > 0 or None, got %r"
+                             % (self._where, max_norm))
+        info = zeros((3,), "<f4")
+        self.t += 1
+        # `optimizer_step`'s params list, word for word (see `step`)
+        plist = [
+            int(len(self.params)), int(self._KIND), int(self.t), int(cfg["nesterov"]),
+            float(cfg["lr"]), float(cfg["beta1"]), float(cfg["beta2"]), float(cfg["eps"]),
+            float(cfg["weight_decay"]), float(cfg["momentum"]), float(cfg["dampening"]),
+            max_norm_f, 1 if getattr(self, "maximize", False) else 0,
+        ]
+        info_addr = addr(info, name="info")
+        binding.optimizer_resident_step_io(
+            info_addr,
+            addr(flat_g, name="grads") if flat_g is not None else info_addr,
+            addr_ro(self.offsets, name="offsets"),
+            addr(self.buf_initialized, name="buf_initialized"),
+            info_addr,
+            plist,
+            [int(self._res), int(io)],
+        )
+        self._host_fresh = False
+        self._g_dev = True
+        if max_norm is not None and packed_g:
+            _unpack_into(flat_g, gs, gprobes)
+        if info[0] != 0.0:
+            self.total_norm_ = float(info[1])
+            self.clip_coef_ = float(info[2])
+        else:
+            self.total_norm_ = None
+            self.clip_coef_ = None
+        self.lr_ = float(_round_f32(cfg["lr"]))
+        return self.total_norm_
+
     def __del__(self):
         res, binding = getattr(self, "_res", None), getattr(self, "_res_binding", None)
         if res is not None and binding is not None:
@@ -712,6 +853,9 @@ class _Optimizer(NumericModeMixin):
         not running, and `optimizer_step_oracle` draws the same line by
         leaving its `clip.*` stages empty rather than filling them.
         """
+        if getattr(self, "_p_dev", False):
+            # lane fam2-neural: the parameters live on the device
+            return self.step_device(grads, max_norm)
         gs = _as_seq(grads, "grads", self._where)
         gprobes = _check_dtype(gs, "grads", self._where, inplace=True)
         # Re-read every parameter buffer's shape and layout on EVERY step

@@ -84,6 +84,11 @@ from training.estimator import (
     identical_optimizer_step_host,
     identical_optimizer_step_resident_host, opt_download_staged, opt_pool_buffers,
 )
+# lane fam2-neural (2026-10-04): parameters and gradients resident across steps
+from training.estimator import (
+    identical_optimizer_step_resident_io, IDN_OPT_PARAMS_RESIDENT, OPT_IO_UP_P, OPT_IO_UP_G, OPT_IO_DOWN_G,
+    OPT_IO_ALL,
+)
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer
 from training.mlp_ops import (
@@ -552,6 +557,152 @@ def optimizer_resident_step_binding(
                     kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
                     momentum, dampening, max_norm,
                 )
+    return PythonObject(n_total)
+
+
+# ---------------------------------------------------------------------------
+# lane fam2-neural (2026-10-04): THE HANDLE'S PARAMETERS AND GRADIENT, RESIDENT.
+# `optimizer_resident_step` still moved three registry-sized buffers a step
+# (parameters up, gradient up, parameters down). These entries let the
+# caller keep the parameters (and, when its gradient is already there, the
+# gradient) in the handle's device buffers between steps:
+#   optimizer_resident_put(handle, which, addr, n)   host -> device (0 = parameters, 1 = gradient)
+#   optimizer_resident_get(handle, which, addr, n)   device -> host
+#   optimizer_resident_step_io(..., [handle, io])    the step, moving only the transfers `io` names
+# The step is `identical_optimizer_step` on the same buffers: no bit moves.
+# Registered only under IDN_OPT_PARAMS_RESIDENT.
+
+
+def _opt_dev_pair(ctx: DeviceContext, h: Int) raises:
+    """The handle's parameter and gradient device buffers at full size
+    (off Apple they are one float until first needed here)."""
+    var pool = _OPT_POOL.get_or_create_ptr()
+    var n = pool[].n[h]
+    if len(pool[].p[h]) < n:
+        pool[].p[h] = ctx.enqueue_create_buffer[DType.float32](n)
+    if len(pool[].g[h]) < n:
+        pool[].g[h] = ctx.enqueue_create_buffer[DType.float32](n)
+
+
+def optimizer_resident_put_binding(
+    handle: PythonObject, which: PythonObject, addr: PythonObject, n_total: PythonObject,
+) raises -> PythonObject:
+    """Host `n_total` floats into the handle's parameter (which = 0) or
+    gradient (which = 1) device buffer. Returns `n_total`."""
+    var n = Int(py=n_total)
+    var h = _opt_pool_handle(handle, n)
+    var w = Int(py=which)
+    if w != 0 and w != 1:
+        raise Error("optimizer_resident_put: which is 0 (parameters) or 1 (gradient)")
+    var src = _f32_ptr(Int(py=addr))
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        _opt_dev_pair(ctx, h)
+        var pool = _OPT_POOL.get_or_create_ptr()
+        if w == 0:
+            ctx.enqueue_copy(dst_buf=pool[].p[h], src_ptr=src)
+        else:
+            ctx.enqueue_copy(dst_buf=pool[].g[h], src_ptr=src)
+        ctx.synchronize()
+    return PythonObject(n)
+
+
+def optimizer_resident_get_binding(
+    handle: PythonObject, which: PythonObject, addr: PythonObject, n_total: PythonObject,
+) raises -> PythonObject:
+    """The handle's parameter (which = 0) or gradient (which = 1) device
+    buffer into host memory (`n_total` floats). Returns `n_total`."""
+    var n = Int(py=n_total)
+    var h = _opt_pool_handle(handle, n)
+    var w = Int(py=which)
+    if w != 0 and w != 1:
+        raise Error("optimizer_resident_get: which is 0 (parameters) or 1 (gradient)")
+    var dst = _f32_ptr(Int(py=addr))
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        _opt_dev_pair(ctx, h)
+        var pool = _OPT_POOL.get_or_create_ptr()
+        if w == 0:
+            ctx.enqueue_copy(dst_ptr=dst, src_buf=pool[].p[h])
+        else:
+            ctx.enqueue_copy(dst_ptr=dst, src_buf=pool[].g[h])
+        ctx.synchronize()
+    return PythonObject(n)
+
+
+def optimizer_resident_step_io_binding(
+    param_addr: PythonObject,
+    grad_addr: PythonObject,
+    offsets_addr: PythonObject,
+    init_addr: PythonObject,
+    info_addr: PythonObject,
+    params: PythonObject,
+    handle_io: PythonObject,
+) raises -> PythonObject:
+    """`optimizer_resident_step` moving only the transfers `io` names
+    (handle_io = [handle, io]; io bits: 1 parameters up, 2 gradient up, 4
+    parameters down, 8 clipped gradient down). A transfer left out means
+    that buffer is already in the handle's device buffer
+    (`optimizer_resident_put`, or the previous step's result) and its
+    address here is not read (pass any valid float address, e.g. `info`).
+    `params` is `optimizer_step`'s list, word for word. Maximize needs the
+    gradient to come from the host (bit 2). Returns `N`."""
+    if len(params) != 12 and len(params) != 13:
+        raise Error(
+            "optimizer_resident_step_io: params must contain 12 or 13 values, got "
+            + String(len(params))
+        )
+    if len(handle_io) != 2:
+        raise Error("optimizer_resident_step_io: the last argument is [handle, io]")
+    var h = _opt_pool_handle(handle_io[0], 0)
+    var io = Int(py=handle_io[1])
+    if io < 0 or io > OPT_IO_ALL:
+        raise Error("optimizer_resident_step_io: io is a mask of 1, 2, 4 and 8")
+    var pp = _f32_ptr(Int(py=param_addr))
+    var gp = _f32_ptr(Int(py=grad_addr))
+    var maximize = len(params) == 13 and Int(py=params[12]) != 0
+    if maximize and (io & OPT_IO_UP_G) == 0:
+        raise Error("optimizer_resident_step_io: maximize needs the gradient uploaded by this call (io bit 2)")
+    var op = _i32_ptr(Int(py=offsets_addr))
+    var ip = _i32_ptr(Int(py=init_addr))
+    var fp = _f32_ptr(Int(py=info_addr))
+    var n_tensors = Int(py=params[0])
+    var kind = Int(py=params[1])
+    var t = Int(py=params[2])
+    var nesterov = Int(py=params[3])
+    var lr = Float32(Float64(py=params[4]))
+    var beta1 = Float32(Float64(py=params[5]))
+    var beta2 = Float32(Float64(py=params[6]))
+    var eps = Float32(Float64(py=params[7]))
+    var weight_decay = Float32(Float64(py=params[8]))
+    var momentum = Float32(Float64(py=params[9]))
+    var dampening = Float32(Float64(py=params[10]))
+    var max_norm = Float32(Float64(py=params[11]))
+    var n_total = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        _opt_dev_pair(ctx, h)
+        var pool = _OPT_POOL.get_or_create_ptr()
+        if maximize:
+            if n_tensors < 1 or op[n_tensors] < Int32(0):
+                raise Error("optimizer_resident_step_io: maximize needs a registry with offsets[J] >= 0")
+            var n_flat = Int(op[n_tensors])
+            var neg = maximize_negated_copy(gp, n_flat)
+            var np_ = neg.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+            n_total = identical_optimizer_step_resident_io(
+                ctx, pp, np_, pool[].m[h], pool[].v[h], pool[].p[h], pool[].g[h], pool[].sp[h], pool[].sg[h], op, ip,
+                fp, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps, weight_decay, momentum, dampening,
+                max_norm, io,
+            )
+            if max_norm > Float32(0.0) and (io & OPT_IO_DOWN_G) != 0:
+                for i in range(n_flat):
+                    gp[i] = maximize_negate(neg[i])
+        else:
+            n_total = identical_optimizer_step_resident_io(
+                ctx, pp, gp, pool[].m[h], pool[].v[h], pool[].p[h], pool[].g[h], pool[].sp[h], pool[].sg[h], op, ip,
+                fp, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps, weight_decay, momentum, dampening,
+                max_norm, io,
+            )
     return PythonObject(n_total)
 
 
@@ -1288,6 +1439,10 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
         m.def_function[optimizer_resident_download_binding]("optimizer_resident_download")
         m.def_function[optimizer_resident_upload_binding]("optimizer_resident_upload")
         m.def_function[optimizer_resident_step_binding]("optimizer_resident_step")
+        comptime if IDN_OPT_PARAMS_RESIDENT:
+            m.def_function[optimizer_resident_put_binding]("optimizer_resident_put")
+            m.def_function[optimizer_resident_get_binding]("optimizer_resident_get")
+            m.def_function[optimizer_resident_step_io_binding]("optimizer_resident_step_io")
         m.def_function[clip_grad_norm_binding]("clip_grad_norm")
         m.def_function[clip_grad_norm_multi_binding]("clip_grad_norm_multi")
         m.def_function[ce_loss_binding]("ce_loss")
