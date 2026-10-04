@@ -1010,7 +1010,10 @@ def _estimate_and_apply(
             and leaf_estimation_method == LEAF_ESTIMATION_NEWTON
             and estimate_can_batch(objective, leaf_estimation_method, iters)
             and approx_dim == 1
-            and not has_weights
+            # a weighted fit needs the constructor's per-leaf weight sums
+            # already on the host (not the deferred-weights oracle)
+            and not oracle.h_weight_stats.__bool__()
+            and len(oracle.weights_cpu) == n_leaves
             and oracle.single_bin_dim == 1
             and oracle.hessian_block_size() == 1
         )
@@ -1022,6 +1025,24 @@ def _estimate_and_apply(
         oracle.move_to(start_point)
         oracle.enqueue_single_dim_evaluation()
         stage_times.begin(ctx)
+        # weighted fit: `Regularize`'s per-leaf decision (1.0 keep, 0.0
+        # zero) from the weight sums the constructor read, in its own host
+        # buffer, alive until the drain below
+        # sized as `d_est` (the copy below moves the whole device buffer's
+        # length); one element when there is nothing to upload
+        var mask_len = 1
+        if has_weights:
+            mask_len = est_ws[0].n_leaves_cap * approx_dim
+        var h_mask = ctx.enqueue_create_host_buffer[DType.float32](mask_len)
+        if has_weights:
+            for i in range(mask_len):
+                h_mask.unsafe_ptr().unsafe_store(i, Float32(0.0))
+            for i in range(n_leaves):
+                var keep = Float32(1.0)
+                if oracle.weights_cpu[i] < oracle.min_leaf_weight:
+                    keep = Float32(0.0)
+                h_mask.unsafe_ptr().unsafe_store(i, keep)
+            ctx.enqueue_copy(dst_buf=d_est, src_ptr=h_mask.unsafe_ptr())
         ctx.enqueue_function[newton_one_step_kernel](
             oracle.d_part_stats.unsafe_ptr(),
             oracle.d_p_sz.unsafe_ptr(),
@@ -1029,6 +1050,7 @@ def _estimate_and_apply(
             bitcast[DType.uint64](oracle.min_leaf_weight),
             Int32(n_leaves),
             d_est.unsafe_ptr(),
+            Int32(1) if has_weights else Int32(0),
             grid_dim=((n_leaves + 255) // 256, 1, 1),
             block_dim=(256, 1, 1),
         )
@@ -1056,6 +1078,7 @@ def _estimate_and_apply(
         merge_stage_times(stage_times, oracle.times)
         trace.record_list_f32(leaf_tag, leaf_values)
         stage_times.end(ctx, "est.tail_apply")
+        _ = h_mask^  # past the drain (step-33 race class)
         _ = oracle^  # past the drain (step-33 race class, device side)
         return
     var estimated: List[Float32]

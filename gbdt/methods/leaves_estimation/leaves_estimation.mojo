@@ -91,8 +91,10 @@ from checks.soft_f64 import (
 #: the same on every vendor), the cursor add reads its output, and the task
 #: drains ONCE. The values are the host walker's bit for bit (correctly
 #: rounded double add, divide and narrowing), so the host column is
-#: untouched. Unweighted fits only: the regularizer's per-leaf weight is
-#: then the leaf's row count, which is already on the device.
+#: untouched. The regularizer's per-leaf weight is the leaf's row count on
+#: an unweighted fit (already on the device); on a weighted fit the host
+#: uploads its keep/zero decision per leaf (one float per leaf, from the
+#: weight sums the oracle's constructor already read).
 #: `-D MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF` (or the master
 #: `-D MOJOLEARN_IDN_ALL_OFF`) restores the host walker.
 comptime IDN_EST_ONE_STEP_DEVICE = (
@@ -229,6 +231,7 @@ def newton_one_step_kernel(
     min_leaf_weight_bits: UInt64,
     n_leaves_in: Int32,
     out_values: MutPointer[Float32, MutAnyOrigin],
+    has_mask: Int32,
 ):
     """`IDN_EST_ONE_STEP_DEVICE`: `TNewtonLikeWalker::Estimate` at
     `Iterations == 1` on the diagonal arm, one thread per leaf, from the
@@ -239,6 +242,11 @@ def newton_one_step_kernel(
         direction = hessian > 0 ? float(gradient / (hessian + 1e-20f)) : 0
         point = float(1.0 * direction + 0.0)       (the walker's fused move)
         point = 0 when double(leaf row count) < MinLeafWeight  (Regularize)
+
+    With `has_mask` (a weighted fit) `out_values[leaf]` arrives holding the
+    host's Regularize decision for the leaf, 0.0 = zero it, and is
+    overwritten with the value (one buffer in and out, so no two launch
+    arguments alias).
 
     The doubles are their bit patterns in `UInt64`; `lambda_bits` and
     `min_leaf_weight_bits` are the host doubles' bits."""
@@ -257,7 +265,11 @@ def newton_one_step_kernel(
     # `fma(1.0, direction, +0.0)`: a zero of either sign lands on +0.0
     if v == Float32(0.0):
         v = Float32(0.0)
-    var weight = sf64_from_int(Int(leaf_sizes.unsafe_load(leaf)))
-    if sf64_lt(weight, min_leaf_weight_bits):
-        v = Float32(0.0)
+    if has_mask != Int32(0):
+        if out_values.unsafe_load(leaf) == Float32(0.0):
+            v = Float32(0.0)
+    else:
+        var weight = sf64_from_int(Int(leaf_sizes.unsafe_load(leaf)))
+        if sf64_lt(weight, min_leaf_weight_bits):
+            v = Float32(0.0)
     out_values.unsafe_store(leaf, v)
