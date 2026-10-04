@@ -137,3 +137,23 @@ manager needs mechanism attribution. For speed work, first a narrow actual
 MinMax transform allocation candidate; for slow VAR, quantify the existing
 onecopy span and consider eliminating its fresh tmp/scatter stage only if
 that can matter at board dimensions. No blind generic framework migration.
+
+Board dimension follow-up from the same source snapshot
+------------------------------------------------------
+bench_board_algos.py uses K=16, maxlags=2, trend='c'. Uncapped synthetic
+series length is1440, with TS_H=48 held out: fit n1392, R1390, m33.
+The ONECOPY span is23025 floats (92100 bytes, about90KiB); input is89088
+bytes and pooled fit workspace is369028 bytes. This is far below the default
+pipeline threshold of4194304 floats. Eliminating tmp would save modest host
+traffic, not a large tensor readback; do not prioritize a new generic slab
+API on the assumption that VAR is bandwidth-bound. Taxi length depends on
+its source block/cap and must be read from its saved manifest, not guessed.
+
+The board's VAR fit and inference closures are separate: inference invokes
+forecast on the fitted result and uploads last p rows plus params through a
+new DeviceExec, then returns forecast. Any attempt to remove executor waits
+or retain forecast state must account for both contracts and mutation of
+public params. Existing board source lists fit5.0ms synthetic /5.1ms taxi
+versus statsmodels2.6/2.8ms; these bytes alone cannot attribute that gap.
+Given the small spans, source evidence favors investigating fixed launch /
+completion costs within actual VAR rather than recreating C1-C3 storage.
