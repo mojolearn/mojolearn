@@ -70,3 +70,16 @@ fragment arithmetic/order is unchanged. This is the only copied-kernel source
 change; the original pinned catalog/source4d5 remains preserved. No scored
 output existed, and no threshold, fixture or runtime dispatch changed.
 Recompile on M2; private intrinsic ABI and actual arithmetic remain unverified.
+
+## Compile-only repair r2
+
+M2 r1 source50e4be9f1 failed parsing the copied kernel parameter `out`, which
+is a Mojo parameter convention keyword. Rename both the raw kernel output
+parameter and the public explicit entry's mutable output buffer to `dst`,
+including all uses. Audit local/generic/function parameter declarations in
+both new Mojo sources; no other reserved identifiers found. `out self` in
+Counters.__init__ is the valid constructor convention, not a variable named
+out. PyInit export is @export, abi("C"), PythonObject return, and module name
+matches _mojolearn_gemm_probe, consistent with existing bindings. No fixture,
+gate or numerical change. New r2 branch preserves both failed compile SHAs;
+no scored or GPU output exists for either failed attempt.

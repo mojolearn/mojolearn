@@ -19,7 +19,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 def apple_mma_kernel[
     BM: Int, BN: Int, BK: Int, STAGED: Bool, PAD: Int, TRANSPOSE_B: Bool,
 ](
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
     a: MutPointer[Float32, MutAnyOrigin],
     b: MutPointer[Float32, MutAnyOrigin],
     m_in: Int32, n_in: Int32, k_in: Int32,
@@ -119,7 +119,7 @@ def apple_mma_kernel[
                 var row = bm + sr + mi * 8 + fr
                 var col = bn + sc + ni * 8 + fc + s
                 if row < m and col < n:
-                    out.unsafe_store(row * n + col, fragment[s])
+                    dst.unsafe_store(row * n + col, fragment[s])
 
 
 def apple_gemm_experiment[
@@ -127,7 +127,7 @@ def apple_gemm_experiment[
     STAGED: Bool = True, PAD: Int = 0, TRANSPOSE_B: Bool = True,
 ](
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32],
+    mut dst: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],
     mut b: DeviceBuffer[DType.float32],
     m: Int, n: Int, k: Int,
@@ -148,12 +148,12 @@ def apple_gemm_experiment[
                 raise Error("Apple MMA experiments require nonnegative extents")
             if m > 2147483647 or n > 2147483647 or k > 2147483647:
                 raise Error("Apple MMA experiment extent exceeds Int32")
-            if len(out) < m * n or len(a) < m * k or len(b) < n * k:
+            if len(dst) < m * n or len(a) < m * k or len(b) < n * k:
                 raise Error("Apple MMA experiment buffer is smaller than its shape")
             if m == 0 or n == 0:
                 return
             ctx.enqueue_function[apple_mma_kernel[BM, BN, BK, STAGED, PAD, TRANSPOSE_B]](
-                out.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
+                dst.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
                 Int32(m), Int32(n), Int32(k),
                 grid_dim=((n + BN - 1) // BN, (m + BM - 1) // BM, 1),
                 block_dim=(128, 1, 1),
