@@ -2639,6 +2639,15 @@ struct DeviceOps(ClusterOps):
             )
         self._ph1("mb_update")
 
+    def dist_sel(mut self, a: Int, n: Int, c: Int, d: Int, lab: Int, j: Int, dst: Int) raises:
+        self._ph0()
+        if n > 0:
+            self.ctx.enqueue_function[_dist_sel_kernel](
+                self._fp(a), Int32(n), self._fp(c), Int32(d), self._ip(lab), Int32(j), self._fp(dst),
+                grid_dim=_grid(n), block_dim=TPB,
+            )
+        self._ph1("dist_sel")
+
     def mb_draw(mut self, idx: Int, m: Int, n: Int, state: UInt64) raises:
         self._ph0()
         self.ctx.enqueue_function[_mb_draw_kernel](
@@ -3259,6 +3268,19 @@ struct DeviceOps(ClusterOps):
 
 
 
+
+
+def _dist_sel_kernel(a: FPtr, n: Int32, c: FPtr, d: Int32, lab: IPtr, j: Int32, dst: FPtr):
+    """Row t's squared distance to its own center (row lab[t] of `c`), 0
+    where j >= 0 and lab[t] != j (fam2-cluster: BisectingKMeans' scores and
+    inertia without the n x k matrix)."""
+    var t = _tid()
+    if t < Int(n):
+        var l = Int(lab[t])
+        if Int(j) < 0 or l == Int(j):
+            dst[t] = sq_dist_rows(a, t, c, l, Int(d))
+        else:
+            dst[t] = Float32(0)
 
 
 def _mb_draw_kernel(idx: IPtr, m: Int32, n: Int32, state: UInt64):

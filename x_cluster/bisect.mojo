@@ -16,11 +16,36 @@ next draw of the lane's splitmix64 stream. The scores are the per-child
 inertia ('biggest_inertia') or size ('largest_cluster'). Leaves in
 depth-first order are the labels; `predict` descends the tree on the device
 (`bodies.tree_descend`)."""
-from checks.numerics import ftz
+from std.sys.compile import is_defined
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS, INIT_RANDOM
 from x_cluster.bodies import SplitMix64
 from x_cluster.common import gather_rows
 from x_cluster.ops import ClusterOps
+from x_cluster.post_bodies import FM_PROD, FM_VAL
+
+# fam2-cluster (2026-10-04), IDENTICAL, default ON, BOTH COLUMNS (this is the
+# one driver): BisectingKMeans' child scores and final inertia folded where
+# the rows are. Each split computed the m x 2 distances, read them back and
+# summed its children's on the host (Float64 chains); the fit ended with the
+# n x k distance matrix read back whole to pick one value a row. Now a row's
+# distance to its OWN center only (`ops.dist_sel`) and `post_bodies`'
+# float-float fold on the device: two 2-float reads a split, one for the
+# inertia, no n-sized readback and k times less distance work at the end.
+# BITS: the scores and `inertia_` are the float-float fold's value where
+# they were Float64 chains (the same on the device and the host column; a
+# split pick moves only where two leaf scores agreed to a double's last
+# bits). Labels and centers are untouched unless a pick moves.
+# `-D MOJOLEARN_IDN_BISECT_DEVICE_SCORES_OFF=1` (or the master) restores the
+# readbacks; the define must reach the host-column build too.
+comptime IDN_BISECT_DEVICE_SCORES = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_BISECT_DEVICE_SCORES_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
 
 
 struct BisectTree(Movable):
@@ -156,23 +181,50 @@ def bisect_fit[O: ClusterOps](
                     best_c = c^
                     best_l = l^
         # per-child scores and rows
-        var cs = ops.put(best_c)
-        var ds = ops.zeros(m * 2)
-        ops.sqdist(sub_s, m, cs, 2, d, ds)
-        var dd = ops.get(ds, m * 2)
         var sc = List[Float64](length=2, fill=Float64(0))
         var child_rows = List[List[Int]]()
         child_rows.append(List[Int]())
         child_rows.append(List[Int]())
-        for t in range(m):
-            var j = Int(best_l[t])
-            child_rows[j].append(rows[t])
-            if largest_cluster:
-                sc[j] = sc[j] + 1
-            elif weighted:
-                sc[j] = sc[j] + identical_mul64(Float64(sub_w[t]), Float64(dd[t * 2 + j]))
-            else:
-                sc[j] = sc[j] + Float64(dd[t * 2 + j])
+        comptime if IDN_BISECT_DEVICE_SCORES:
+            for t in range(m):
+                var j = Int(best_l[t])
+                child_rows[j].append(rows[t])
+                if largest_cluster:
+                    sc[j] = sc[j] + 1
+            if not largest_cluster:
+                # each child's inertia folded where the rows are: the row's
+                # distance to its own center (0 for the other child's rows),
+                # the float-float fold, two 2-float reads in one wait
+                var cs = ops.put(best_c)
+                var lab_s = ops.put_i(best_l)
+                var dsel = ops.alloc(m)
+                var ws_s = -1
+                if weighted:
+                    ws_s = ops.put(sub_w)
+                var e0 = ops.zeros(2)
+                var e1 = ops.zeros(2)
+                ops.dist_sel(sub_s, m, cs, d, lab_s, 0, dsel)
+                ops.fold_into(dsel, ws_s, -1, m, FM_PROD if weighted else FM_VAL, e0)
+                ops.dist_sel(sub_s, m, cs, d, lab_s, 1, dsel)
+                ops.fold_into(dsel, ws_s, -1, m, FM_PROD if weighted else FM_VAL, e1)
+                var ee = ops.gets([e0, e1], [2, 2])
+                sc[0] = Float64(ee[0][0]) + Float64(ee[0][1])
+                sc[1] = Float64(ee[1][0]) + Float64(ee[1][1])
+                ops.shrink(dsel)
+        else:
+            var cs = ops.put(best_c)
+            var ds = ops.zeros(m * 2)
+            ops.sqdist(sub_s, m, cs, 2, d, ds)
+            var dd = ops.get(ds, m * 2)
+            for t in range(m):
+                var j = Int(best_l[t])
+                child_rows[j].append(rows[t])
+                if largest_cluster:
+                    sc[j] = sc[j] + 1
+                elif weighted:
+                    sc[j] = sc[j] + identical_mul64(Float64(sub_w[t]), Float64(dd[t * 2 + j]))
+                else:
+                    sc[j] = sc[j] + Float64(dd[t * 2 + j])
         var ids = List[Int]()
         for j in range(2):
             var cen = List[Float32](capacity=d)
@@ -196,15 +248,27 @@ def bisect_fit[O: ClusterOps](
     # inertia against the (uncentered) leaf centers, one Float64 chain
     var xs = ops.put(x)
     var cs = ops.put(centers)
-    var ds = ops.zeros(n * k)
-    ops.sqdist(xs, n, cs, k, d, ds)
-    var dd = ops.get(ds, n * k)
     var inertia = Float64(0)
-    for r in range(n):
+    comptime if IDN_BISECT_DEVICE_SCORES:
+        # each row against its own leaf center only (n distances, not
+        # n x k), folded on the device: one 2-float read
+        var lab_all = ops.put_i(labels)
+        var dn = ops.alloc(n)
+        ops.dist_sel(xs, n, cs, d, lab_all, -1, dn)
         if weighted:
-            inertia = inertia + identical_mul64(Float64(weights[r]), Float64(dd[r * k + Int(labels[r])]))
+            var w_all = ops.put(weights)
+            inertia = ops.sum_ff(dn, w_all, -1, n, FM_PROD)
         else:
-            inertia = inertia + Float64(dd[r * k + Int(labels[r])])
+            inertia = ops.sum_ff(dn, -1, -1, n, FM_VAL)
+    else:
+        var ds = ops.zeros(n * k)
+        ops.sqdist(xs, n, cs, k, d, ds)
+        var dd = ops.get(ds, n * k)
+        for r in range(n):
+            if weighted:
+                inertia = inertia + identical_mul64(Float64(weights[r]), Float64(dd[r * k + Int(labels[r])]))
+            else:
+                inertia = inertia + Float64(dd[r * k + Int(labels[r])])
     return inertia
 
 

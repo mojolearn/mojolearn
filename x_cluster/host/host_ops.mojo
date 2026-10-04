@@ -29,6 +29,7 @@ from x_cluster.host.moments_gemm import gemm_fold_cov, gemm_fold_means
 from x_cluster.bodies import (
     FPtr,
     splitmix_at,
+    sq_dist_rows,
     IPtr,
     cov_cell,
     argmax_row,
@@ -765,6 +766,18 @@ struct HostOps(ClusterOps):
     def mb_assign(mut self, src: Int, d: Int, idx: Int, m: Int, c: Int, k: Int, labels: Int, dist: Int, dst: Int) raises:
         self.gather_rows(src, d, idx, m, dst)
         self.nearest(dst, m, c, k, d, labels, dist)
+
+    def dist_sel(mut self, a: Int, n: Int, c: Int, d: Int, lab: Int, j: Int, dst: Int) raises:
+        var pa = self._fp(a)
+        var pc = self._fp(c)
+        var pl = self._ip(lab)
+        var pd = self._fp(dst)
+        for t in range(n):
+            var l = Int(pl[t])
+            if j < 0 or l == j:
+                pd[t] = sq_dist_rows[X_CLUSTER_HOST_SABOTAGE](pa, t, pc, l, d)
+            else:
+                pd[t] = Float32(0)
 
     def mb_draw(mut self, idx: Int, m: Int, n: Int, state: UInt64) raises:
         var pi = self._ip(idx)

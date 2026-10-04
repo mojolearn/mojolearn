@@ -258,6 +258,12 @@ trait ClusterOps(Movable):
         """dst[off + t] = src[t], t < n (float slots)."""
         ...
 
+    def dist_sel(mut self, a: Int, n: Int, c: Int, d: Int, lab: Int, j: Int, dst: Int) raises:
+        """dst[t] = `bodies.sq_dist_rows` of row t of `a` to row lab[t] of
+        `c` where j < 0 or lab[t] == j, else 0 (t < n; `lab` an int slot):
+        each row's distance to its OWN center (fam2-cluster)."""
+        ...
+
     def agglo_on_device(self) -> Bool:
         """True on the GPU column: `agglo_merge` runs the unconstrained
         agglomerative merge loop on the device (lane hr2-mds-agglo). The
