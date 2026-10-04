@@ -126,7 +126,7 @@ def mc_pinvh_kernel[MMA: Bool = False, DM: Int = 64](
     var hh = m // 2
     var so = stack_allocation[MC_TPB, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var sd = stack_allocation[MC_TPB, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
-    # DM: the largest d served (64 = MF_DMAX; MOJOLEARN_MCD_WIDE launches DM =
+    # DM: the largest d served (64 = MF_DMAX; MCD_WIDE launches DM =
     # 256 for 64 < d <= 256: one thread per row, so DM <= MC_TPB).
     comptime assert DM <= MC_TPB, "mc_pinvh_kernel: one thread per row"
     var order = stack_allocation[DM, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
