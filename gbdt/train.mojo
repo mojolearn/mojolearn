@@ -75,6 +75,7 @@ from checks.numerics import (
 )
 from checks.numerics import ftz as _hr2_ftz
 from gbdt.grid_creator.gls_borders_device import device_float_borders
+from core.device_scan import device_first_nonfinite
 from checks.soft_f64 import (
     SF64_ZERO,
     sf64_add,
@@ -2643,6 +2644,147 @@ def train_ordered_rmse(
         List[TCtrValueTable](), TTensorCtrRegistry(n_features),
     )
 
+
+
+def _build_cindex_from_device_floats(
+    ctx: DeviceContext,
+    mut d_x: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    borders: List[List[Float32]],
+    fold_counts: List[Int],
+) raises -> DeviceBuffer[DType.uint32]:
+    """cpu2-l6-bindings: `_build_cindex_from_floats` for a column-major X
+    already RESIDENT on the device and already refused for NaN / infinity
+    there (every column `AsIs`). The same kernel quantizes the same words
+    against the same borders, so the compressed index is the same bits; the
+    per-column host staging (a host NaN walk and a memcpy of every column)
+    is gone. The borders (k-sized) go up once, one 256-float slab a
+    feature, in `_build_cindex_from_floats`' slab layout."""
+    var n_features = len(borders)
+    if len(fold_counts) != n_features:
+        raise Error(
+            "fold_counts has " + String(len(fold_counts)) + " entries for "
+            + String(n_features) + " feature border lists"
+        )
+    var lay = build_layout(fold_counts)
+    var cindex = ctx.enqueue_create_buffer[DType.uint32](n_rows * lay.columns)
+    enqueue_fill(ctx, cindex, UInt32(0))
+    comptime SLAB = 256
+    var hb = ctx.enqueue_create_host_buffer[DType.float32](max(1, n_features) * SLAB)
+    var db = ctx.enqueue_create_buffer[DType.float32](max(1, n_features) * SLAB)
+    ctx.synchronize()
+    for f in range(n_features):
+        if len(borders[f]) + 1 > SLAB:
+            raise Error("_build_cindex_from_device_floats: more than 255 borders")
+        hb.unsafe_ptr().unsafe_store(f * SLAB, Float32(len(borders[f])))
+        for b in range(len(borders[f])):
+            hb.unsafe_ptr().unsafe_store(f * SLAB + 1 + b, borders[f][b])
+    ctx.enqueue_copy(dst_buf=db, src_ptr=hb.unsafe_ptr())
+    comptime BIN_GRID = BINARIZE_BLOCK_SIZE * BINARIZE_DOCS_PER_THREAD
+    for f in range(n_features):
+        if len(borders[f]) == 0:
+            continue
+        ref cf = lay.features[f]
+        ctx.enqueue_function[binarize_float_feature_kernel](
+            Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
+            d_x.unsafe_ptr() + f * n_rows, Int32(n_rows),
+            db.unsafe_ptr() + f * SLAB, cindex.unsafe_ptr(),
+            grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
+            block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
+        )
+    ctx.synchronize()
+    _ = hb^
+    _ = db^
+    return cindex^
+
+
+def train_ordered_rmse_ptr(
+    ctx: DeviceContext,
+    x_addr: Int, y: List[Float32],
+    n_rows: Int, n_features: Int, permutation: List[UInt32],
+    n_estimators: Int = 100, max_depth: Int = 6,
+    border_count: Int = 128,
+    learning_rate: Float32 = Float32(0.03),
+    l2_leaf_reg: Float32 = Float32(3.0),
+    sample_weight: List[Float32] = List[Float32](),
+) raises -> TrainedModel:
+    """cpu2-l6-bindings: `train_ordered_rmse` with the column-major X read
+    from the caller's address. X goes to the device ONCE, is refused for
+    NaN / infinity there (`device_first_nonfinite`, one Int32 per block read
+    back) and is quantized from the resident buffer; no host List copy of
+    X, no host finiteness walk, no per-column host staging. The grid comes
+    from the same device border build over the caller's columns, so the
+    model is the list route's bits. Without `IDN_ORDERED_RMSE_DEVICE_GRID`
+    (its `_OFF` arm builds the grid on the host) this takes the list
+    route."""
+    from gbdt.methods.dynamic_boosting import fit_ordered_rmse
+
+    if x_addr == 0:
+        raise Error("train_ordered_rmse: null X address")
+    var xp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x_addr)
+    comptime if not IDN_ORDERED_RMSE_DEVICE_GRID:
+        var xs = List[Float32](capacity=n_rows * n_features)
+        for i in range(n_rows * n_features):
+            xs.append(xp.unsafe_load(i))
+        return train_ordered_rmse(
+            ctx, xs, y, n_rows, n_features, permutation, n_estimators,
+            max_depth, border_count, learning_rate, l2_leaf_reg, sample_weight,
+        )
+    else:
+        if n_rows != len(y) or n_features < 1 or n_rows < 1:
+            raise Error("train_ordered_rmse input shape mismatch")
+        if border_count < 1 or border_count > 255:
+            raise Error("train_ordered_rmse supports 1..255 borders")
+        var n_cells = n_rows * n_features
+        var d_x = ctx.enqueue_create_buffer[DType.float32](n_cells)
+        ctx.enqueue_copy(
+            dst_buf=d_x,
+            src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=x_addr),
+        )
+        if device_first_nonfinite(ctx, d_x, n_cells) >= 0:
+            raise Error("train_ordered_rmse requires finite numeric features")
+        var grid_cols = List[MutPointer[Float32, MutUntrackedOrigin]](
+            capacity=n_features
+        )
+        for f in range(n_features):
+            grid_cols.append(xp + f * n_rows)
+        var got = device_float_borders(
+            ctx, grid_cols, n_rows, n_rows, border_count, NAN_MODE_FORBIDDEN,
+            generate_seed_for_borders(UInt64(0)),
+        )
+        var dev_grids = got[0].copy()
+        if len(dev_grids) != n_features:
+            raise Error(
+                "train_ordered_rmse: the device border build returned "
+                + String(len(dev_grids)) + " grids for "
+                + String(n_features) + " features"
+            )
+        var borders = List[List[Float32]]()
+        var fold_counts = List[Int]()
+        var one_hot = List[Bool]()
+        var nan_treatment = List[Int]()
+        for f in range(n_features):
+            fold_counts.append(len(dev_grids[f]))
+            borders.append(dev_grids[f].copy())
+            one_hot.append(False)
+            nan_treatment.append(NAN_TREATMENT_AS_IS)
+        var layout = build_layout(fold_counts)
+        var cindex = _build_cindex_from_device_floats(
+            ctx, d_x, n_rows, borders, fold_counts
+        )
+        _ = d_x^
+        var result = fit_ordered_rmse(
+            ctx, layout, cindex, y, sample_weight, permutation,
+            n_estimators, max_depth,
+            ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT),
+            learning_rate, l2_leaf_reg,
+        )
+        var exported_model = result.model.copy()
+        return TrainedModel(
+            exported_model^, fold_counts^, one_hot^, borders^, nan_treatment^,
+            List[Float64](), List[Float64](), -1, False, 0,
+            List[TCtrValueTable](), TTensorCtrRegistry(n_features),
+        )
 
 def model_input_features(tm: TrainedModel) raises -> Int:
     """How many RAW input columns `predict_floats` expects for this model.

@@ -70,6 +70,10 @@ from ensemble.decisiontree.batched_levelalgo.bins import (
     RegressionBin,
 )
 from checks.fixed_point import choose_scale
+from core.abs_sum_blocked import (
+    device_abs_sum_blocked,
+    device_any_index_out_of_range,
+)
 from ensemble.decisiontree.batched_levelalgo.objectives import (
     ClassificationObjectiveFunction,
     RegressionObjectiveFunction,
@@ -771,10 +775,9 @@ def rf_regressor_fit_session_binding(
         var dsw = ctx.enqueue_create_buffer[DT](1)
         ctx.synchronize()
         # the label scale, as `_rf_regressor_fit` chooses it
-        var mag = Float64(0.0)
-        for i in range(n_rows):
-            var v = Float64(yp[i])
-            mag += v if v >= 0.0 else -v
+        # cpu2-l6-bindings: the label magnitude on the device, in the fixed
+        # blocked order the host column restates (`core/abs_sum_blocked`)
+        var mag = device_abs_sum_blocked(ctx, dy, n_rows)
         var scales = BinScales(
             Float32(choose_scale(mag, n_rows)), Float32(1.0)
         )
@@ -832,10 +835,6 @@ def rf_regressor_fit_session_rows_binding(
     var src_rows = reg[].sessions[si].n_rows
     if reg[].sessions[si].n_cols != n_cols:
         raise Error("rf_regressor_fit_session_rows: the session holds another column count")
-    for i in range(n_rows):
-        var r = Int(rp[i])
-        if r < 0 or r >= src_rows:
-            raise Error("rf_regressor_fit_session_rows: a row id is outside the session's X")
 
     var forest: RandomForestMetaData[DT, RLT]
     with GILReleased(Python()):
@@ -847,6 +846,10 @@ def rf_regressor_fit_session_rows_binding(
         copy_f32(yp, hy.unsafe_ptr(), n_rows)
         var drows = ctx.enqueue_create_buffer[CLT](n_rows)
         ctx.enqueue_copy(dst_buf=drows, src_ptr=hrows.unsafe_ptr())
+        # cpu2-l6-bindings: the row-id range refusal on the device, before
+        # the gather reads through the ids (one Int32 read back)
+        if device_any_index_out_of_range(ctx, drows, n_rows, src_rows):
+            raise Error("rf_regressor_fit_session_rows: a row id is outside the session's X")
         var dy = ctx.enqueue_create_buffer[RLT](n_rows)
         ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
         var dsw = ctx.enqueue_create_buffer[DT](1)
@@ -860,10 +863,9 @@ def rf_regressor_fit_session_rows_binding(
             n_rows,
             n_cols,
         )
-        var mag = Float64(0.0)
-        for i in range(n_rows):
-            var v = Float64(yp[i])
-            mag += v if v >= 0.0 else -v
+        # cpu2-l6-bindings: the label magnitude on the device, in the fixed
+        # blocked order the host column restates (`core/abs_sum_blocked`)
+        var mag = device_abs_sum_blocked(ctx, dy, n_rows)
         var scales = BinScales(
             Float32(choose_scale(mag, n_rows)), Float32(1.0)
         )
@@ -1071,10 +1073,9 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         # forest of zero-leaved stumps -- the build gate caught exactly
         # that. The weight plane stays 1.0: unweighted `Weight()` is a
         # count, which is exact.
-        var mag = Float64(0.0)
-        for i in range(n_rows):
-            var v = Float64(yp[i])
-            mag += v if v >= 0.0 else -v
+        # cpu2-l6-bindings: the label magnitude on the device, in the fixed
+        # blocked order the host column restates (`core/abs_sum_blocked`)
+        var mag = device_abs_sum_blocked(ctx, dy, n_rows)
         var scales = BinScales(
             Float32(choose_scale(mag, n_rows)), Float32(1.0)
         )

@@ -51,6 +51,7 @@ from core.column_stats import (
     transpose_kernel,
 )
 from core.identity_trace import IdentityTrace
+from core.device_scan import device_first_negative, device_first_nonfinite
 from core.xtdz_coalesced import column_mean_launch
 from core.gemm import gemm_nt
 from decomposition.impl.linalg.detail.pca import (
@@ -493,6 +494,35 @@ def inverse_transform_host(
 # --------------------------------------------------------------------------
 
 
+def _pca_whiten_refuse_nonfinite(
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
+) raises:
+    """cpu2-l6-bindings: the whitening surfaces' finiteness refusal as a
+    device scan of the resident buffer (`core/device_scan`), one Int32
+    per block read back and never the data. Same sentence as the host
+    walk it replaces in `bindings/_mojolearn_estimators.mojo`."""
+    if device_first_nonfinite(ctx, buf, n) >= 0:
+        raise Error("PCA whitening requires finite inputs and outputs")
+
+
+def _pca_whiten_refuse_inputs(
+    ctx: DeviceContext,
+    mut first: DeviceBuffer[DType.float32], first_n: Int,
+    mut mean: DeviceBuffer[DType.float32], n_features: Int,
+    mut components: DeviceBuffer[DType.float32], n_components: Int,
+    mut singular: DeviceBuffer[DType.float32],
+) raises:
+    """The binding's input refusals in its order: every input finite, then
+    the singular values nonnegative (`device_first_negative` by bits:
+    `-0.0` passes, as `x < 0` says)."""
+    _pca_whiten_refuse_nonfinite(ctx, first, first_n)
+    _pca_whiten_refuse_nonfinite(ctx, mean, n_features)
+    _pca_whiten_refuse_nonfinite(ctx, components, n_components * n_features)
+    _pca_whiten_refuse_nonfinite(ctx, singular, n_components)
+    if device_first_negative(ctx, singular, n_components) >= 0:
+        raise Error("PCA whitening singular values must be nonnegative")
+
+
 def pca_whiten_transform_host(
     ctx: DeviceContext,
     x_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -504,8 +534,13 @@ def pca_whiten_transform_host(
     n_features: Int,
     n_components: Int,
     n_fit_rows: Int,
+    device_checks: Bool = False,
 ) raises:
     """`pcaTransform` with `prms.whiten = true`.
+
+    `device_checks` (cpu2-l6-bindings): refuse non-finite inputs, negative
+    singular values and a non-finite output by device scans of the
+    resident buffers, before anything is downloaded.
 
     `n_fit_rows` is the row count of the matrix the model was FITTED on, not
     of `x`. That is DEVIATION 580 and it is the one place this surface
@@ -526,6 +561,11 @@ def pca_whiten_transform_host(
     ctx.enqueue_copy(dst_buf=mu, src_ptr=mean_ptr)
     ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
     ctx.enqueue_copy(dst_buf=singular, src_ptr=singular_ptr)
+    if device_checks:
+        _pca_whiten_refuse_inputs(
+            ctx, x, n_rows * n_features, mu, n_features,
+            components, n_components, singular,
+        )
     ctx.synchronize()
     var trace = IdentityTrace()
     whiten_components(
@@ -549,6 +589,8 @@ def pca_whiten_transform_host(
         trace.record_device(
             ctx, "pca.whiten.scores", out, n_rows * n_components
         )
+    if device_checks:
+        _pca_whiten_refuse_nonfinite(ctx, out, n_rows * n_components)
     ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
     ctx.synchronize()
 
@@ -564,8 +606,11 @@ def pca_whiten_inverse_transform_host(
     n_features: Int,
     n_components: Int,
     n_fit_rows: Int,
+    device_checks: Bool = False,
 ) raises:
     """`pcaInverseTransform` with `prms.whiten = true`.
+
+    `device_checks`: as `pca_whiten_transform_host`'s.
 
     The mean is ALWAYS added back here, because there is no whitened
     truncated SVD: `TruncatedSVD` does not center and does not take a
@@ -591,6 +636,11 @@ def pca_whiten_inverse_transform_host(
     ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
     ctx.enqueue_copy(dst_buf=singular, src_ptr=singular_ptr)
     ctx.enqueue_copy(dst_buf=mean, src_ptr=mean_ptr)
+    if device_checks:
+        _pca_whiten_refuse_inputs(
+            ctx, scores, n_rows * n_components, mean, n_features,
+            components, n_components, singular,
+        )
     ctx.synchronize()
     whiten_components(
         ctx, components, components_w, singular,
@@ -610,5 +660,7 @@ def pca_whiten_inverse_transform_host(
         Float32(1.0), grid_dim=((n_rows * n_features + 255) // 256, 1, 1),
         block_dim=(256, 1, 1),
     )
+    if device_checks:
+        _pca_whiten_refuse_nonfinite(ctx, out, n_rows * n_features)
     ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
     ctx.synchronize()

@@ -128,6 +128,7 @@ from kernel_methods.impl.kernel_ridge.kernel_ridge import (
     kernel_ridge_workspace_floats,
 )
 from checks.numerics import ftz, identical_div, identical_sqrt
+from checks.soft_f64 import sf64_sqrt, sf64_to_f32
 from checks.numerics import NUMERIC_FAST as _NUMERIC_FAST
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
 from std.sys.info import has_apple_gpu_accelerator
@@ -428,8 +429,12 @@ def krr_scale_rows(v: List[Float32], sw: List[Float32], n: Int, t: Int) -> List[
 #: per cell, `krr_scale_rows`'s line) instead of two host loops over n x t
 #: cells around the device solve. One multiplication per cell rounded once
 #: either way: no bit moves, and `kmh_scale_rows` stays the host column.
-comptime KRR_IDN_DEV_SCALE = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KRR_DEV_SCALE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+#: cpu2-l6-bindings: ON on EVERY tier (FAST included); the host loops were
+#: CPU work on a GPU route. `MOJOLEARN_IDN_ALL_OFF` still turns it off on
+#: IDENTICAL builds only.
+comptime KRR_IDN_DEV_SCALE = not (
+    is_defined["MOJOLEARN_IDN_KRR_DEV_SCALE_OFF"]()
+    or (_CTX_MODE == _CTX_IDENTICAL and is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
 #: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
@@ -442,8 +447,14 @@ comptime KRR_IDN_DEV_SCALE = _CTX_MODE == _CTX_IDENTICAL and not (
 #: host finiteness walk, a staged second copy (`_upload`), a host list of
 #: the result and a model copy of X. The same words reach the same
 #: kernels: no bit moves; the same refusal texts.
-comptime KRR_IDN_PTR_IN = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KRR_PTR_IN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+#:
+#: cpu2-l6-bindings (2026-10-04): the pointer route is the default on EVERY
+#: tier and vendor (FAST included), so no fast build stages X, y or the
+#: sample-weight factors through host lists. Same kernels at the same
+#: default scheduling as the list route: FAST bits do not move either.
+comptime KRR_IDN_PTR_IN = not (
+    is_defined["MOJOLEARN_IDN_KRR_PTR_IN_OFF"]()
+    or (_CTX_MODE == _CTX_IDENTICAL and is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
 #: SCHEDULING: one thread per target cell.
@@ -464,6 +475,56 @@ def krr_scale_rows_kernel(
         return
     var i = idx // t
     v_io.unsafe_store(idx, ftz(ftz(v_io.unsafe_load(idx)) * ftz(s.unsafe_load(i))))
+
+
+#: SCHEDULING: one thread per row.
+comptime KRR_SQRT_W_TPB = 256
+
+
+def krr_sqrt_weights_kernel(
+    w: MutPointer[UInt64, MutAnyOrigin],
+    out: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """cpu2-l6-bindings: the per-row factor `sqrt(sample_weight)`, the
+    binary64 square root of each weight rounded once to float32, on the
+    device (`checks/soft_f64.mojo`: `sf64_sqrt` is correctly rounded and
+    `sf64_to_f32` is round-to-nearest-even, the host loop's
+    `Float32(sqrt(w))` word for word; the Apple GPU has no float64). A
+    negative weight gives NaN and the caller's device scan refuses it."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    out.unsafe_store(i, sf64_to_f32(sf64_sqrt(w.unsafe_load(i))))
+
+
+def _krr_sqrt_weights_dev(
+    ctx: DeviceContext, waddr: Int, n: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """The factors from the caller's float64 weights at `waddr`: one
+    upload, one launch, and `krr_validate_weights`' refusal (finite and
+    >= 0) as a device scan; one Int32 per block is read back, never the
+    data."""
+    if n <= 0 or n > 2147483647:
+        raise Error("kernel_ridge_fit_host: sample weight count out of range")
+    var dw = ctx.enqueue_create_buffer[DType.uint64](n)
+    ctx.enqueue_copy(
+        dst_buf=dw, src_ptr=MutPointer[UInt64, MutAnyOrigin](unsafe_from_address=waddr)
+    )
+    var dsw = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_function[krr_sqrt_weights_kernel](
+        dw.unsafe_ptr(), dsw.unsafe_ptr(), Int32(n),
+        grid_dim=((n + KRR_SQRT_W_TPB - 1) // KRR_SQRT_W_TPB, 1, 1),
+        block_dim=(KRR_SQRT_W_TPB, 1, 1),
+    )
+    var bad = device_first_nonfinite(ctx, dsw, n)
+    _ = dw^
+    if bad >= 0:
+        raise Error(
+            "kernel_ridge_fit_host: sample weight factor " + String(bad)
+            + " is negative or not finite; refused by name"
+        )
+    return dsw^
 
 
 def _krr_scale_rows_dev(
@@ -801,6 +862,7 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
     sw: List[Float32],
     dual_out: MutPointer[Float32, out_origin],
     mut trace: IdentityTrace,
+    waddr: Int = 0,
 ) raises -> Int:
     """KRR_IDN_PTR_IN: `kernel_ridge_fit_host` with X and y read from the
     caller's addresses on the device (`_upload_checked`: shape refused on
@@ -809,7 +871,11 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
     n_targets). The same launches in the same order as the list route at
     its default scheduling and no sabotage; the weighted arm scales on the
     device (`krr_scale_rows_kernel`, the host loop's line). Returns `info`
-    (0; a failed factorization raises DEVIATION 1662's refusal)."""
+    (0; a failed factorization raises DEVIATION 1662's refusal).
+
+    `waddr` (cpu2-l6-bindings): nonzero is the caller's n float64 sample
+    weights; the sqrt factors are formed and refused on the device
+    (`_krr_sqrt_weights_dev`) and `sw` must then be empty."""
     if xaddr == 0 or yaddr == 0:
         raise Error("kernel_ridge_fit: null X or y address")
     var ctx = _family_ctx()
@@ -825,20 +891,36 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
             )
     else:
         km_validate_kernel_params(kp, "kernel_ridge")
-    var weighted = len(sw) > 0
-    if weighted:
+    if waddr != 0 and len(sw) > 0:
+        raise Error("kernel_ridge_fit: weights given twice")
+    var weighted = len(sw) > 0 or waddr != 0
+    if len(sw) > 0:
         krr_validate_weights(sw, n_samples)
+    var dsw: DeviceBuffer[DType.float32]
+    if waddr != 0:
+        dsw = _krr_sqrt_weights_dev(ctx, waddr, n_samples)
+    elif weighted:
+        dsw = _upload(ctx, sw)
+    else:
+        dsw = ctx.enqueue_create_buffer[DType.float32](1)
     _krr_validate_alpha(alpha)
 
-    var dsw = _upload(ctx, sw) if weighted else ctx.enqueue_create_buffer[DType.float32](1)
     # lane/review-fixes: the pointer route honors KRR_IDN_DEV_SCALE's _OFF
     # arm too (the host loop on the downloaded y, the list route's old form).
+    # cpu2-l6-bindings: that arm needs the factors on the host; with
+    # `waddr` they were formed on the device, so it downloads them.
+    var sw_h = List[Float32]()
+    comptime if not KRR_IDN_DEV_SCALE:
+        if waddr != 0:
+            sw_h = _download(ctx, dsw, n_samples)
+        else:
+            sw_h = sw.copy()
     comptime if KRR_IDN_DEV_SCALE:
         if weighted:
             _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
     else:
         if weighted:
-            dy = _upload(ctx, krr_scale_rows(_download(ctx, dy, n_samples * n_targets), sw, n_samples, n_targets))
+            dy = _upload(ctx, krr_scale_rows(_download(ctx, dy, n_samples * n_targets), sw_h, n_samples, n_targets))
     trace.record_device(ctx, "krr.input", xa, n_samples * n_features)
 
     var dk = ctx.enqueue_create_buffer[DType.float32](n_samples * n_samples)
@@ -882,7 +964,7 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
         _download_into(ctx, dy, dual_out, n_samples * n_targets)
     else:
         if weighted:
-            var dual = krr_scale_rows(_download(ctx, dy, n_samples * n_targets), sw, n_samples, n_targets)
+            var dual = krr_scale_rows(_download(ctx, dy, n_samples * n_targets), sw_h, n_samples, n_targets)
             for i in range(n_samples * n_targets):
                 dual_out.unsafe_store(i, dual[i])
         else:

@@ -98,7 +98,7 @@ from glm.estimator import (
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from checks.soft_f64 import (
     SF64_ONE, SF64_ZERO, sf64_add, sf64_div, sf64_exp, sf64_from_f32, sf64_gt, sf64_neg,
-    sf64_sub,
+    sf64_sub, sf64_mul, sf64_to_f32,
 )
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
 from glm.impl.center_device import col_sums_device, center_device, scale_rows_device
@@ -352,14 +352,6 @@ def _pca_whiten_pointer(
     return _f32_ptr(address)
 
 
-def _pca_whiten_finite(
-    pointer: MutPointer[Float32, MutUntrackedOrigin], count: Int,
-) raises:
-    for i in range(count):
-        if not isfinite(pointer.unsafe_load(i)):
-            raise Error("PCA whitening requires finite inputs and outputs")
-
-
 def _pca_whiten_apply(
     input_addr: PythonObject,
     mean_addr: PythonObject,
@@ -408,21 +400,20 @@ def _pca_whiten_apply(
     for i in range(4):
         if oa < starts[i] + counts[i] * 4 and starts[i] < oa + output_count * 4:
             raise Error("PCA whitening output must not overlap any input")
-    _pca_whiten_finite(xp, input_count)
-    _pca_whiten_finite(mp, nf)
-    _pca_whiten_finite(cp, nc * nf)
-    _pca_whiten_finite(sp, nc)
-    for i in range(nc):
-        if sp.unsafe_load(i) < Float32(0):
-            raise Error("PCA whitening singular values must be nonnegative")
+    # cpu2-l6-bindings: the finiteness and sign refusals of every input
+    # and of the output run as device scans of the resident buffers
+    # (`device_checks=True`), never as host walks of the caller's arrays.
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         if inverse:
-            pca_whiten_inverse_transform_host(ctx, xp, cp, sp, mp, op, nr, nf, nc, nfit)
+            pca_whiten_inverse_transform_host(
+                ctx, xp, cp, sp, mp, op, nr, nf, nc, nfit, device_checks=True
+            )
         else:
-            pca_whiten_transform_host(ctx, xp, mp, cp, sp, op, nr, nf, nc, nfit)
+            pca_whiten_transform_host(
+                ctx, xp, mp, cp, sp, op, nr, nf, nc, nfit, device_checks=True
+            )
         ctx.synchronize()
-    _pca_whiten_finite(op, output_count)
     return PythonObject(0)
 
 
@@ -765,12 +756,63 @@ def ridge_fit_multi_binding(
     if len(params) == 7:
         var xm = _f32_ptr(Int(py=params[5]))
         var ic = _f32_ptr(Int(py=params[6]))
-        for j in range(nt):
-            var dot = Float64(0)
-            for c in range(nf):
-                dot += Float64(xm[c]) * Float64(wp[j * nf + c])
-            ic[j] = Float32(Float64(mp[j]) - dot)
+        if nt > 0 and nf > 0:
+            with GILReleased(Python()):
+                # cpu2-l6-bindings: the intercepts on the device
+                # (`ridge_multi_icpt_kernel`), one thread per target
+                var ctx = process_ctx[_DEVCTX_SLOT]()
+                var d_xm = ctx.enqueue_create_buffer[DType.float32](nf)
+                var d_w = ctx.enqueue_create_buffer[DType.float32](nt * nf)
+                var d_m = ctx.enqueue_create_buffer[DType.float32](nt)
+                var d_ic = ctx.enqueue_create_buffer[DType.float32](nt)
+                ctx.enqueue_copy(dst_buf=d_xm, src_ptr=xm)
+                ctx.enqueue_copy(dst_buf=d_w, src_ptr=wp)
+                ctx.enqueue_copy(dst_buf=d_m, src_ptr=mp)
+                ctx.enqueue_function[ridge_multi_icpt_kernel](
+                    d_xm.unsafe_ptr(), d_w.unsafe_ptr(), d_m.unsafe_ptr(),
+                    d_ic.unsafe_ptr(), Int64(nf), Int64(nt),
+                    grid_dim=(nt + 255) // 256, block_dim=256,
+                )
+                ctx.enqueue_copy(dst_ptr=ic, src_buf=d_ic)
+                ctx.synchronize()
+                _ = d_xm^
+                _ = d_w^
+                _ = d_m^
+                _ = d_ic^
+                _ = ctx^
     return PythonObject(0)
+
+
+def ridge_multi_icpt_kernel(
+    xmean: MutPointer[Float32, MutAnyOrigin],
+    coef: MutPointer[Float32, MutAnyOrigin],
+    ymean: MutPointer[Float32, MutAnyOrigin],
+    icpt: MutPointer[Float32, MutAnyOrigin],
+    n_features_in: Int64,
+    n_targets_in: Int64,
+):
+    """cpu2-l6-bindings: `icpt[j] = ymean[j] - xmean . coef[j, :]`, one
+    thread per target, the host loop's statements over
+    `checks/soft_f64.mojo`'s binary64 (the Apple GPU has no float64): each
+    product of two widened floats is exact, the sum is serial ascending in
+    features, the difference and the narrowing are round-to-nearest-even,
+    which are the words the host loop wrote."""
+    var nf = Int(n_features_in)
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j >= Int(n_targets_in):
+        return
+    var dot = SF64_ZERO
+    for c in range(nf):
+        dot = sf64_add(
+            dot,
+            sf64_mul(
+                sf64_from_f32(xmean.unsafe_load(c)),
+                sf64_from_f32(coef.unsafe_load(j * nf + c)),
+            ),
+        )
+    icpt.unsafe_store(
+        j, sf64_to_f32(sf64_sub(sf64_from_f32(ymean.unsafe_load(j)), dot))
+    )
 
 
 def ridge_predict_multi_binding(
