@@ -22,7 +22,9 @@ detects after native success. `byte_lm_session_run` (mirror in, mirror
 out) is kept for the transition and is unchanged.
 """
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.hostptr import f32_ptr, read_f32, copy_f32
+from bindings.hostptr import f32_ptr, read_f32, copy_f32, list_i32
+from std.gpu import block_dim, block_idx, thread_idx
+from core.device_zero import enqueue_fill
 from std.ffi import _Global
 from std.memory import bitcast
 from std.os import abort, getenv
@@ -301,7 +303,7 @@ def _validate_addresses(addresses: List[Int], action: Int, shape: ByteConfig) ra
     for i in range(5, 11):
         if i == 8 and action == 0:
             continue
-        for j in range(i):
+        for j in range(i):  # small-loop(i: earlier address slots, at most 10): overlap checks between pointer spans, not data
             if j == 8 and action == 0:
                 continue
             if (addresses[i] < addresses[j] + _span_cells(j, shape) * 4
@@ -338,12 +340,51 @@ def _bbytes(on: Bool, name: String, n_bytes: Int):
     print("timing " + name + " " + String(n_bytes) + " bytes")
 
 
-def _require_same_bits(before: List[Float32], after: List[Float32]) raises:
-    if len(before) != len(after):
+def _bits_differ_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    n: Int32,
+    flag: MutPointer[Int32, MutAnyOrigin],
+):
+    """flag[0] = 1 when any a[i], b[i] differ in bits. Every writer stores
+    the same value, so the result does not depend on thread order."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        if bitcast[DType.uint32](a.unsafe_load(i)) != bitcast[DType.uint32](b.unsafe_load(i)):
+            flag.unsafe_store(0, Int32(1))
+
+
+comptime _BITS_TPB = 256
+
+
+def _require_same_bits(
+    ctx: DeviceContext, before: List[Float32], mut after: DeviceBuffer[DType.float32], n: Int,
+) raises:
+    """The caller's host state against the device state it must equal, bit
+    for bit, compared ON THE DEVICE: one bulk upload of `before`, one
+    compare launch, one int read back (cpu3-bindings; the host walk it
+    replaces downloaded `after` and compared n floats on the CPU)."""
+    if len(before) != n:
         raise Error("byte LM: authoritative state length mismatch")
-    for i in range(len(before)):
-        if bitcast[DType.uint32](before[i]) != bitcast[DType.uint32](after[i]):
-            raise Error("byte LM: authoritative state bits mismatch")
+    if n <= 0:
+        return
+    var d_before = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_copy(dst_buf=d_before, src_ptr=before.unsafe_ptr())
+    var flag = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_fill(ctx, flag, Int32(0))
+    ctx.enqueue_function[_bits_differ_kernel](
+        d_before.unsafe_ptr(), after.unsafe_ptr(), Int32(n), flag.unsafe_ptr(),
+        grid_dim=((n + _BITS_TPB - 1) // _BITS_TPB, 1, 1), block_dim=(_BITS_TPB, 1, 1),
+    )
+    var host = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_buf=host, src_buf=flag)
+    ctx.synchronize()
+    var bad = host.unsafe_ptr().unsafe_load(0)
+    _ = d_before^
+    _ = flag^
+    _ = host^
+    if bad != Int32(0):
+        raise Error("byte LM: authoritative state bits mismatch")
 
 
 def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfig,
@@ -412,13 +453,13 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
     var ids_ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr[4])
     var flags = List[Bool]()
     var ids = List[Int32]()
-    for i in range(shape.n_tensors()):
+    for i in range(shape.n_tensors()):  # small-loop(n_tensors: momentum flags, one per parameter tensor): validates per tensor flags, not data
         var flag = flags_ptr.unsafe_load(i)
         if flag != 0 and flag != 1:
             raise Error("byte LM: momentum flags must be exactly 0 or 1")
         flags.append(flag == 1)
-    for i in range(shape.batch * (shape.length + 1)):
-        ids.append(ids_ptr.unsafe_load(i))
+    # one memcpy of the borrowed token ids (no per-element host loop)
+    ids = list_i32(ids_ptr, shape.batch * (shape.length + 1))
     # Host-to-host: three n-float Lists plus flags and ids from Python memory.
     _btick(ton, tk, "step.bind_read_inputs")
     _bbytes(ton, "step.bind_read_inputs_bytes", 3 * n * 4 + shape.n_tensors() * 4 + shape.batch * (shape.length + 1) * 4)
@@ -466,14 +507,14 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
                     or bitcast[DType.uint32](prior_cfg.momentum) != bitcast[DType.uint32](cfg.momentum) or bitcast[DType.uint32](prior_cfg.dampening) != bitcast[DType.uint32](cfg.dampening)
                     or bitcast[DType.uint32](prior_cfg.max_norm) != bitcast[DType.uint32](cfg.max_norm)):
                     raise Error("byte LM: resident optimizer mismatch")
-                _require_same_bits(initial_p, download_f32(ctx, session.trainer.value().buffers.param, n))
-                _require_same_bits(initial_m, download_f32(ctx, session.trainer.value().buffers.m_state, n))
-                _require_same_bits(initial_v, download_f32(ctx, session.trainer.value().buffers.v_state, n))
-                for i in range(shape.n_tensors()):
+                _require_same_bits(ctx, initial_p, session.trainer.value().buffers.param, n)
+                _require_same_bits(ctx, initial_m, session.trainer.value().buffers.m_state, n)
+                _require_same_bits(ctx, initial_v, session.trainer.value().buffers.v_state, n)
+                for i in range(shape.n_tensors()):  # small-loop(n_tensors: momentum flags, one per parameter tensor): compares per tensor flags, not data
                     if flags[i] != session.trainer.value().buffers.buf_initialized[i]:
                         raise Error("byte LM: resident flags mismatch")
-                # Three download_f32 (each waits inside) plus three host
-                # bit compares; the device queue is empty at this tick.
+                # Three device bit compares (each waits inside on one int
+                # read back); the device queue is empty at this tick.
                 _btick(ton, tk, "step.bind_resident_admission")
                 _bbytes(ton, "step.bind_resident_admission_bytes", 3 * n * 4)
             if action == 1:
@@ -506,10 +547,10 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
                 out_v = download_f32(ctx, session.trainer.value().buffers.v_state, n)
                 out_flags = session.trainer.value().buffers.buf_initialized.copy()
                 result_step = session.trainer.value().completed_steps
-                _require_same_bits(initial_p, out_p)
-                _require_same_bits(initial_m, out_m)
-                _require_same_bits(initial_v, out_v)
-                for i in range(shape.n_tensors()):
+                _require_same_bits(ctx, initial_p, session.trainer.value().buffers.param, n)
+                _require_same_bits(ctx, initial_m, session.trainer.value().buffers.m_state, n)
+                _require_same_bits(ctx, initial_v, session.trainer.value().buffers.v_state, n)
+                for i in range(shape.n_tensors()):  # small-loop(n_tensors: momentum flags, one per parameter tensor): compares per tensor flags, not data
                     if flags[i] != out_flags[i]:
                         raise Error("byte LM eval changed momentum flags")
                 _btick(ton, tk, "step.bind_eval_readback")
@@ -740,7 +781,7 @@ def _admit_session_scalars(session: ByteLMSession, completed: Int, cfg: Optimize
         raise Error("byte LM: resident optimizer mismatch")
     if len(flags) != len(session.trainer.value().buffers.buf_initialized):
         raise Error("byte LM: resident flags mismatch")
-    for i in range(len(flags)):
+    for i in range(len(flags)):  # small-loop(flags: one momentum flag per parameter tensor): compares per tensor flags, not data
         if flags[i] != session.trainer.value().buffers.buf_initialized[i]:
             raise Error("byte LM: resident flags mismatch")
 
@@ -973,7 +1014,7 @@ def byte_lm_session_eval_binding(session: PythonObject, addresses: PythonObject,
                 raise Error("byte LM: successful result has wrong completed step")
             if _nonfinite(loss):
                 raise Error("byte LM: nonfinite returned loss")
-            for i in range(n_tensors):
+            for i in range(n_tensors):  # small-loop(n_tensors: momentum flags, one per parameter tensor): compares per tensor flags, not data
                 if flags[i] != owner[].trainer.value().buffers.buf_initialized[i]:
                     raise Error("byte LM eval changed momentum flags")
             ctx.synchronize()
@@ -1347,7 +1388,7 @@ def byte_lm_parallel_open_binding[pooled: Bool = False](session: PythonObject, a
     var flags = _read_flags(addr[3], cells[3])
     byte_validate_state(p, m, v, flags, completed, cfg_shape)
     var device_ids = List[Int]()
-    for i in range(Int(py=devices.__len__())):
+    for i in range(Int(py=devices.__len__())):  # small-loop(devices: GPU device ids of the replicas): one id per device, not data
         device_ids.append(Int(py=devices[i]))
     var owner = session.downcast_value_ptr[ByteParallelTrainer]()
     # Retain the GIL: it is also the native object's exclusion lock.
@@ -1435,7 +1476,7 @@ def byte_lm_parallel_export_binding(session: PythonObject, addresses: PythonObje
     var count = 1 if gradients else 4
     var addr = _read_addresses(addresses, count)
     var cells = List[Int]()
-    for i in range(count):
+    for i in range(count):  # small-loop(count: one or four exported arrays): per array cell counts, not data
         cells.append(tr.config.n_tensors() if i == 3 else n)
     _validate_slot_table(addr, cells, 0)
     tr.validate_device_state(ctx, tr.completed_steps)
@@ -1456,7 +1497,7 @@ def byte_lm_parallel_export_binding(session: PythonObject, addresses: PythonObje
     else:
         if owner[].pool_optimizer:
             var at = 0
-            for i in range(len(owner[].trainers)):
+            for i in range(len(owner[].trainers)):  # small-loop(trainers: one trainer per replica device): checks range offsets per replica, not data
                 if owner[].trainers[i].buffers.optimizer_first != at:
                     raise Error("byte LM parallel: pooled optimizer ranges are not contiguous")
                 at += owner[].trainers[i].buffers.optimizer_count
@@ -1856,7 +1897,7 @@ def byte_lm_session_launch_probe_binding(session: PythonObject, count: PythonObj
     out.append(PythonObject(res[0]))
     out.append(PythonObject(res[1]))
     out.append(PythonObject(1 if device_arena_on() else 0))
-    for i in range(len(st)):
+    for i in range(len(st)):  # small-loop(st: a few arena stat counters): copies counters to Python, not data
         out.append(PythonObject(st[i]))
     return out
 
