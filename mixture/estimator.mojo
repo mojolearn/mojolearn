@@ -119,6 +119,7 @@ from mixture.checks.mstep import (
     gmm_mstep_gemm_workspace_floats,
     gmm_mstep_scratch_floats,
     gmm_precision_cholesky,
+    resp_exp_kernel,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, numeric_mode_name
 from checks.numerics import identical_div, identical_log
@@ -685,6 +686,30 @@ comptime IDN_GMM_INIT_DEVICE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
         is_defined["MOJOLEARN_IDN_GMM_INIT_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+#: IDENTICAL, every column: `predict_proba` takes its exponential on the
+#: device (`resp_exp_kernel`) instead of a host loop over the `n x K`
+#: downloaded logs. Same `ftz(identical_exp(ftz(v)))` per cell: same words.
+#: `-D MOJOLEARN_IDN_GMM_PROBA_DEVICE_OFF=1` restores the host loop.
+comptime IDN_GMM_PROBA_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_GMM_PROBA_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+#: IDENTICAL, every column: `score` (and so `bic` / `aic`) reads the scoring
+#: E-step's device mean (`_gmm_score_device`) instead of downloading n rows
+#: and folding them on the host. The device fold and `gmm_meanll_host` are
+#: one order (`mixture/meanll_order.mojo`), so the same word.
+#: `-D MOJOLEARN_IDN_GMM_SCORE_DEVICE_OFF=1` restores the host fold.
+comptime IDN_GMM_SCORE_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_GMM_SCORE_DEVICE_OFF"]()
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
 )
@@ -1466,10 +1491,25 @@ def gaussian_mixture_predict_proba(
         mahal, wlp, rowmax, lse, logresp, meanll, n_samples, d, ncomp,
         trace, card_prefix, elem_tpb, row_tpb, GMM_SAB_NONE,
     )
-    var out_log = _download(ctx, logresp, n_samples * ncomp)
     var out = List[Float32]()
-    for i in range(n_samples * ncomp):
-        out.append(_exp_resp(out_log[i]))
+    comptime if IDN_GMM_PROBA_DEVICE:
+        # fam2-cluster: the exponential on the device (`resp_exp_kernel`,
+        # the M-step's own kernel: `ftz(identical_exp(ftz(v)))` per cell,
+        # the words `_exp_resp` wrote on the host), then one download.
+        var cells = n_samples * ncomp
+        ctx.enqueue_function[resp_exp_kernel](
+            logresp.unsafe_ptr(),
+            resp.unsafe_ptr(),
+            Int32(n_samples),
+            Int32(ncomp),
+            grid_dim=((cells + elem_tpb - 1) // elem_tpb, 1, 1),
+            block_dim=(elem_tpb, 1, 1),
+        )
+        out = _download(ctx, resp, cells)
+    else:
+        var out_log = _download(ctx, logresp, n_samples * ncomp)
+        for i in range(n_samples * ncomp):
+            out.append(_exp_resp(out_log[i]))
     _ = dx^
     _ = dmeans^
     _ = dprec^
@@ -1609,8 +1649,79 @@ def gaussian_mixture_score(
 
     from mixture.meanll_order import gmm_meanll_host
 
+    comptime if IDN_GMM_SCORE_DEVICE:
+        return _gmm_score_device(model, x, n_samples)
     var s = gaussian_mixture_score_samples(model, x, n_samples)
     return gmm_meanll_host(s, n_samples)
+
+
+def _gmm_score_device(
+    model: GaussianMixtureModel, x: List[Float32], n_samples: Int
+) raises -> Float32:
+    """`score(X)` read from the device (fam2-cluster,
+    `IDN_GMM_SCORE_DEVICE`): the scoring E-step already folds `mean(lse)`
+    into its `meanll` scalar in the chunked levels of
+    `mixture/meanll_order.mojo`, which are the words `gmm_meanll_host`
+    writes from the downloaded rows. So ONE float comes back instead of n,
+    and no host fold runs. `gaussian_mixture_score_samples`' setup, kept
+    in step with it."""
+    var d = model.n_features
+    var ncomp = model.n_components
+    gmm_validate_data(x, n_samples, d)
+
+    var ctx = _binding_ctx()
+    var trace = IdentityTrace.disabled()
+    var dx = _upload(ctx, x)
+    var dmeans = _upload(ctx, model.means)
+    var dprec = _upload(ctx, model.precisions_cholesky)
+    var dlogdet = _upload(ctx, model.log_det_chol)
+    var lw = List[Float32]()
+    for k in range(ncomp):
+        lw.append(_safe_log(model.weights[k]))
+    var dlw = _upload(ctx, lw)
+
+    var mahal = ctx.enqueue_create_buffer[DType.float32](n_samples * ncomp)
+    var wlp = ctx.enqueue_create_buffer[DType.float32](n_samples * ncomp)
+    var rowmax = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    var lse = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    var logresp = ctx.enqueue_create_buffer[DType.float32](
+        n_samples * ncomp
+    )
+    var meanll = ctx.enqueue_create_buffer[DType.float32](1)
+    var escratch = ctx.enqueue_create_buffer[DType.float32](
+        gmm_estep_scratch_floats(n_samples, d)
+    )
+    var gws = ctx.enqueue_create_buffer[DType.float32](
+        gmm_estep_gemm_workspace_floats(n_samples, d)
+    )
+    ctx.synchronize()
+
+    gmm_e_step_dispatch(
+        ctx, dx, dmeans, dprec, dprec, dlogdet, dlw, escratch, gws,
+        mahal, wlp, rowmax, lse, logresp, meanll, n_samples, d, ncomp,
+        trace, "gmm.score", GMM_ELEM_TPB, GMM_ROW_TPB, GMM_SAB_NONE,
+    )
+    var h = ctx.enqueue_create_host_buffer[DType.float32](1)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=meanll)
+    ctx.synchronize()
+    var out = h.unsafe_ptr().unsafe_load(0)
+    _ = h^
+    _ = dx^
+    _ = dmeans^
+    _ = dprec^
+    _ = dlogdet^
+    _ = dlw^
+    _ = mahal^
+    _ = wlp^
+    _ = rowmax^
+    _ = lse^
+    _ = logresp^
+    _ = meanll^
+    _ = escratch^
+    _ = gws^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return out
 
 
 def gaussian_mixture_bic(
