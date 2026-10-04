@@ -733,6 +733,43 @@ def gp_kernel_diag(spec: GPKernelSpec) raises -> Float32:
 # ===========================================================================
 
 
+#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_GP_PRESCALE_OFF` restores the divide inside the cell):
+#: each RBF / Matern leaf first writes `X / length_scale` and
+#: `Y / length_scale` once ((m + n) d portable divisions, one thread a
+#: coordinate), and the cell kernels fold the stored quotients
+#: (`gp_scaled_sqdist` at `ls_len == 0`). Before, every cell divided both
+#: coordinates of every feature itself: 2 m n d portable divisions a leaf.
+#: Each quotient is rounded to float32 before the subtraction either way
+#: (DEVIATION 1753 says so and `check_kernels_vs_oracle`'s oracle
+#: materializes the scaled copy), so no bit moves on any column.
+comptime GP_IDN_PRESCALE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_GP_PRESCALE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def gp_prescale_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    ls: MutPointer[Float32, MutAnyOrigin],
+    rows_in: Int32,
+    d_in: Int32,
+    ls_len_in: Int32,
+):
+    """`dst[r, f] = ftz(identical_div(ftz(src[r, f]), ftz(l_f)))`, one thread
+    a coordinate: `gp_scaled_sqdist`'s two quotient lines, once per
+    coordinate instead of once per cell. `ls_len` is 1 (isotropic) or `d`."""
+    var d = Int(d_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(rows_in) * d:
+        return
+    var li = t % d
+    if Int(ls_len_in) == 1:
+        li = 0
+    var lv = ftz(ls.unsafe_load(li))
+    dst.unsafe_store(t, ftz(identical_div(ftz(src.unsafe_load(t)), lv)))
+
+
 def gp_scaled_sqdist(
     x: MutPointer[Float32, MutAnyOrigin],
     y: MutPointer[Float32, MutAnyOrigin],
@@ -773,6 +810,12 @@ def gp_scaled_sqdist(
     named in `gaussian_process/README.md` rather than done here.
     """
     var acc = Float32(0.0)
+    if ls_len == 0:
+        # GP_IDN_PRESCALE: `x` and `y` already hold the rounded quotients
+        # (`gp_prescale_kernel`), so the fold reads them as they are.
+        for f in range(d):
+            acc = l2_unexp_core(acc, ftz(x.unsafe_load(i * d + f)), ftz(y.unsafe_load(j * d + f)))
+        return ftz(acc)
     for f in range(d):
         var li = f
         if ls_len == 1:
@@ -1166,6 +1209,15 @@ def gp_kernel_matrix(
     var sqrt5 = gp_sqrt5()
     var self_flag = Int32(1) if is_self else Int32(0)
 
+    # GP_IDN_PRESCALE: one scaled copy of each operand, rewritten per leaf
+    # (the launches of one leaf are queued before the next leaf's rewrite,
+    # on one stream). Sabotage arms keep the divide inside the cell.
+    var pre = False
+    comptime if GP_IDN_PRESCALE:
+        pre = not sab_kernels
+    var xs = ctx.enqueue_create_buffer[DType.float32](m * d if pre else 1)
+    var ys = ctx.enqueue_create_buffer[DType.float32](n * d if pre else 1)
+
     var sp = 0
     for t in range(len(spec.kinds)):
         var kind = Int(spec.kinds[t])
@@ -1225,7 +1277,35 @@ def gp_kernel_matrix(
             var lsview = dls.create_sub_buffer[DType.float32](
                 Int(spec.ls_off[t]), Int(spec.ls_len[t])
             )
-            if kind == GP_K_RBF:
+            if pre:
+                ctx.enqueue_function[gp_prescale_kernel](
+                    xs.unsafe_ptr(), x.unsafe_ptr(), lsview.unsafe_ptr(),
+                    Int32(m), Int32(d), spec.ls_len[t],
+                    grid_dim=((m * d + elem_tpb - 1) // elem_tpb, 1, 1),
+                    block_dim=(elem_tpb, 1, 1),
+                )
+                ctx.enqueue_function[gp_prescale_kernel](
+                    ys.unsafe_ptr(), y.unsafe_ptr(), lsview.unsafe_ptr(),
+                    Int32(n), Int32(d), spec.ls_len[t],
+                    grid_dim=((n * d + elem_tpb - 1) // elem_tpb, 1, 1),
+                    block_dim=(elem_tpb, 1, 1),
+                )
+                if kind == GP_K_RBF:
+                    ctx.enqueue_function[gp_rbf_kernel](
+                        slot.unsafe_ptr(), xs.unsafe_ptr(), ys.unsafe_ptr(), lsview.unsafe_ptr(),
+                        Int32(m), Int32(n), Int32(d), Int32(0),
+                        grid_dim=(grid, 1, 1),
+                        block_dim=(elem_tpb, 1, 1),
+                    )
+                else:
+                    var nu_pre = gp_matern_nu_selector(spec.params[t])
+                    ctx.enqueue_function[gp_matern_kernel](
+                        slot.unsafe_ptr(), xs.unsafe_ptr(), ys.unsafe_ptr(), lsview.unsafe_ptr(),
+                        Int32(m), Int32(n), Int32(d), Int32(0), Int32(nu_pre), sqrt3, sqrt5,
+                        grid_dim=(grid, 1, 1),
+                        block_dim=(elem_tpb, 1, 1),
+                    )
+            elif kind == GP_K_RBF:
                 if sab_kernels:
                     ctx.enqueue_function[sabotage_rbf_kernel](
                         slot.unsafe_ptr(),
@@ -1301,6 +1381,11 @@ def gp_kernel_matrix(
         block_dim=(elem_tpb, 1, 1),
     )
     _ = root^
+    if pre:
+        # the scaled copies are this call's own: drain before they go
+        ctx.synchronize()
+    _ = xs^
+    _ = ys^
     trace.record_device(ctx, tag, out, cells)
 
 

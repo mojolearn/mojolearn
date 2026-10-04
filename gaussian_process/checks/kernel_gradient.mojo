@@ -138,6 +138,44 @@ def gp_ls_grad_kernel(
         g.unsafe_store(f * cells + t, gp_ls_gradient_value(form, dd, d2, k, sqrt3, sqrt5))
 
 
+def gp_ls_grad_pre_kernel(
+    g: MutPointer[Float32, MutAnyOrigin],
+    kval: MutPointer[Float32, MutAnyOrigin],
+    xs: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    ls_len_in: Int32,
+    form_in: Int32,
+    sqrt3: Float32,
+    sqrt5: Float32,
+):
+    """`gp_ls_grad_kernel` over the scaled copy `xs = X / length_scale`
+    (`kernels.mojo::gp_prescale_kernel`, GP_IDN_PRESCALE): the same cells
+    from the stored quotients, no division in the cell. `ls_len` is the
+    leaf's own (1 or d) and only selects the output layout."""
+    var n = Int(n_in)
+    var d = Int(d_in)
+    var ls_len = Int(ls_len_in)
+    var form = Int(form_in)
+    var cells = n * n
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= cells:
+        return
+    var i = t // n
+    var j = t - i * n
+    var k = ftz(kval.unsafe_load(t))
+    var d2 = gp_scaled_sqdist(xs, xs, xs, i, j, d, 0)
+    if ls_len == 1:
+        g.unsafe_store(t, gp_ls_gradient_value(form, d2, d2, k, sqrt3, sqrt5))
+        return
+    for f in range(d):
+        var xv = ftz(xs.unsafe_load(i * d + f))
+        var yv = ftz(xs.unsafe_load(j * d + f))
+        var diff = ftz(xv - yv)
+        var dd = ftz(identical_mul(diff, diff))
+        g.unsafe_store(f * cells + t, gp_ls_gradient_value(form, dd, d2, k, sqrt3, sqrt5))
+
+
 def gp_kernel_matrix_grad(
     ctx: DeviceContext,
     mut out: DeviceBuffer[DType.float32],

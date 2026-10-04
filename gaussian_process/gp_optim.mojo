@@ -46,17 +46,24 @@ from gaussian_process.checks.kernels import (
     GP_K_SUM,
     GP_K_WHITE,
     GPKernelSpec,
+    GP_IDN_PRESCALE,
     gp_combine_kernel,
     gp_copy_kernel,
     gp_kernel_stack_floats,
     gp_matern_kernel,
     gp_matern_nu_selector,
+    gp_prescale_kernel,
     gp_rbf_kernel,
     gp_sqrt3,
     gp_sqrt5,
     gp_validate_kernel,
 )
-from gaussian_process.checks.kernel_gradient import GP_GRAD_MATERN05, GP_GRAD_RBF, gp_ls_grad_kernel
+from gaussian_process.checks.kernel_gradient import (
+    GP_GRAD_MATERN05,
+    GP_GRAD_RBF,
+    gp_ls_grad_kernel,
+    gp_ls_grad_pre_kernel,
+)
 from gaussian_process.estimator import (
     GP_GRAD_TPB,
     GP_YDOT_TPB,
@@ -174,13 +181,18 @@ def gp_kernel_matrix_grad_dev(
     d: Int,
     spec: GPKernelSpec,
     free: List[Int32],
+    xs_input: DeviceBuffer[DType.float32],
     elem_tpb: Int = GP_ELEM_TPB,
 ) raises:
     """`gp_kernel_matrix_grad`'s walk and launches, CONST and WHITE values
     from the device parameter table `dpar` (one float per postfix node).
-    ASYNCHRONOUS."""
+    ASYNCHRONOUS. `xs_input` is the caller's n x d scratch for the scaled
+    copy of X (GP_IDN_PRESCALE; rewritten per RBF / Matern leaf, unread
+    when the define is off)."""
     var x = x_input.create_sub_buffer[DType.float32](0, len(x_input))
     var x2 = x_input.create_sub_buffer[DType.float32](0, len(x_input))
+    var xs = xs_input.create_sub_buffer[DType.float32](0, len(xs_input))
+    var xs2 = xs_input.create_sub_buffer[DType.float32](0, len(xs_input))
     var cells = n * n
     var grid = (cells + elem_tpb - 1) // elem_tpb
     var sqrt3 = gp_sqrt3()
@@ -265,27 +277,48 @@ def gp_kernel_matrix_grad_dev(
             var ln = Int(spec.ls_len[t])
             var lsview = dls.create_sub_buffer[DType.float32](Int(spec.ls_off[t]), ln)
             var form = GP_GRAD_RBF
+            # GP_IDN_PRESCALE: X / length_scale once per leaf (the table the
+            # optimizer's step wrote), then the cells fold the quotients
+            var ls_arg = spec.ls_len[t]
+            var xa = x.unsafe_ptr()
+            var xb = x2.unsafe_ptr()
+            comptime if GP_IDN_PRESCALE:
+                ctx.enqueue_function[gp_prescale_kernel](
+                    xs.unsafe_ptr(), x.unsafe_ptr(), lsview.unsafe_ptr(),
+                    Int32(n), Int32(d), spec.ls_len[t],
+                    grid_dim=((n * d + elem_tpb - 1) // elem_tpb, 1, 1), block_dim=(elem_tpb, 1, 1),
+                )
+                ls_arg = Int32(0)
+                xa = xs.unsafe_ptr()
+                xb = xs2.unsafe_ptr()
             if kind == GP_K_RBF:
                 ctx.enqueue_function[gp_rbf_kernel](
-                    slot.unsafe_ptr(), x.unsafe_ptr(), x2.unsafe_ptr(), lsview.unsafe_ptr(),
-                    Int32(n), Int32(n), Int32(d), spec.ls_len[t],
+                    slot.unsafe_ptr(), xa, xb, lsview.unsafe_ptr(),
+                    Int32(n), Int32(n), Int32(d), ls_arg,
                     grid_dim=(grid, 1, 1), block_dim=(elem_tpb, 1, 1),
                 )
             else:
                 var nu_sel = gp_matern_nu_selector(spec.params[t])
                 form = GP_GRAD_MATERN05 + nu_sel
                 ctx.enqueue_function[gp_matern_kernel](
-                    slot.unsafe_ptr(), x.unsafe_ptr(), x2.unsafe_ptr(), lsview.unsafe_ptr(),
-                    Int32(n), Int32(n), Int32(d), spec.ls_len[t], Int32(nu_sel), sqrt3, sqrt5,
+                    slot.unsafe_ptr(), xa, xb, lsview.unsafe_ptr(),
+                    Int32(n), Int32(n), Int32(d), ls_arg, Int32(nu_sel), sqrt3, sqrt5,
                     grid_dim=(grid, 1, 1), block_dim=(elem_tpb, 1, 1),
                 )
             if is_free:
                 var gsub = dgrad.create_sub_buffer[DType.float32](gi * cells, ln * cells)
-                ctx.enqueue_function[gp_ls_grad_kernel](
-                    gsub.unsafe_ptr(), slot.unsafe_ptr(), x.unsafe_ptr(), lsview.unsafe_ptr(),
-                    Int32(n), Int32(d), Int32(ln), Int32(form), sqrt3, sqrt5,
-                    grid_dim=(grid, 1, 1), block_dim=(elem_tpb, 1, 1),
-                )
+                comptime if GP_IDN_PRESCALE:
+                    ctx.enqueue_function[gp_ls_grad_pre_kernel](
+                        gsub.unsafe_ptr(), slot.unsafe_ptr(), xs.unsafe_ptr(),
+                        Int32(n), Int32(d), Int32(ln), Int32(form), sqrt3, sqrt5,
+                        grid_dim=(grid, 1, 1), block_dim=(elem_tpb, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[gp_ls_grad_kernel](
+                        gsub.unsafe_ptr(), slot.unsafe_ptr(), x.unsafe_ptr(), lsview.unsafe_ptr(),
+                        Int32(n), Int32(d), Int32(ln), Int32(form), sqrt3, sqrt5,
+                        grid_dim=(grid, 1, 1), block_dim=(elem_tpb, 1, 1),
+                    )
                 _ = gsub^
                 gi += ln
                 count.append(ln)
@@ -303,6 +336,8 @@ def gp_kernel_matrix_grad_dev(
     _ = root^
     _ = x^
     _ = x2^
+    _ = xs^
+    _ = xs2^
 
 
 def gpr_optimize_device(
@@ -355,6 +390,8 @@ def gpr_optimize_device(
     var dk = ctx.enqueue_create_buffer[DType.float32](cells)
     var dstack = ctx.enqueue_create_buffer[DType.float32](gp_kernel_stack_floats(n, n))
     var dgrad = ctx.enqueue_create_buffer[DType.float32](max(nt * cells, 1))
+    # GP_IDN_PRESCALE's scaled copy of X, one for the whole run
+    var dxs = ctx.enqueue_create_buffer[DType.float32](max(n * n_features, 1))
     var nb_pin = chol_nb_for(n, CHOL_NB_PINNED)
     var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
     var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
@@ -394,7 +431,7 @@ def gpr_optimize_device(
             if evals > eval_cap:
                 raise Error("gpr_optimize: the optimizer passed its evaluation cap without a stop word")
             # the likelihood and its gradient at the parameter table, in place
-            gp_kernel_matrix_grad_dev(ctx, dk, dx, dpar, dls, dstack, dgrad, n, n_features, kernel, free)
+            gp_kernel_matrix_grad_dev(ctx, dk, dx, dpar, dls, dstack, dgrad, n, n_features, kernel, free, dxs)
             add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
             var chol = potrf_lower(ctx, dk, ws, n, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
             var info = chol.info
@@ -475,6 +512,7 @@ def gpr_optimize_device(
     _ = dk^
     _ = dstack^
     _ = dgrad^
+    _ = dxs^
     _ = ws^
     _ = dwork^
     _ = dlparts^
