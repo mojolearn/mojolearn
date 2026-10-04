@@ -95,6 +95,26 @@ comptime MBF_RG_W = 32
 comptime MBF_RG_ROWS = MBF_TPB // MBF_RG_W
 comptime MBF_RG_MAXK = 16
 
+# MBK_W2_SUMCMP, DEFAULT in FAST + Apple (lane/apple-fast-w2-clres):
+# `_mbf_sum_kernel` first compacts its center's rows of the 256-row chunk (a
+# 256-wide prefix scan of the flags, row offsets in threadgroup memory) and
+# each feature thread sums only those rows, in the SAME ascending row order,
+# instead of walking all 256 rows per feature: same float sums, same bits.
+# M3, one run per arm: istella 147.2 -> 144.7 ms, taxi 43.9 -> 39.9 ms;
+# w2-mbk-sumcmp-q exact (centers, counts, labels, inertia identical).
+# MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF restores the full-chunk walk.
+comptime MBK_W2_SUMCMP = MINIBATCH_FAST_DEV and not is_defined["MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF"]()
+# lane/apple-fast-w2-clres (2026-10-04), OPEN, opt-in, FAST + Apple only.
+# -D MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG: the fit's last pass (labels and
+# distances of all n rows, x_cluster/minibatch_ptr.mojo) is
+# `DeviceOps.nearest`, a thread per row that walks its 880-byte Istella row k
+# times (uncoalesced, 1M rows). With the switch it is `_mbf_label_rg_kernel`,
+# the CLS3_ROWGRP batch assignment over every row: a 32-thread group per row,
+# coalesced reads, one pass over X. k <= MBF_RG_MAXK, else the old pass.
+# FAST: the distance's summation order changes (labels may flip only at
+# near-ties; quality checked against main).
+comptime MBK_W2_LABRG = MINIBATCH_FAST_DEV and is_defined["MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG"]()
+
 
 @always_inline
 def _sm_next(st: UPtr) -> UInt64:
@@ -238,6 +258,110 @@ def _mbf_sum_kernel(
         for u in range(MBF_TPB):
             within += Int(cnts[u])
         cpart[j * NC + c] = Int32(within)
+
+
+def _mbf_sum_cmp_kernel(
+    x: FPtr, idx: IPtr, batch: Int32, lab: IPtr, k: Int32, d: Int32, nchunk: Int32, part: FPtr, cpart: IPtr,
+):
+    """MBK_W2_SUMCMP: `_mbf_sum_kernel` over the compacted rows of center
+    `j` in chunk `c` (ascending row order, so the same sums). MBF_CH ==
+    MBF_TPB: thread `tid` owns chunk row `tid`."""
+    comptime assert MBF_CH == MBF_TPB, "the compacted sum gives each thread one chunk row"
+    var b = Int(block_idx.x)
+    var NC = Int(nchunk)
+    var j = b // NC
+    var c = b - j * NC
+    var tid = Int(thread_idx.x)
+    var D = Int(d)
+    var scan = stack_allocation[MBF_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var rows = stack_allocation[MBF_CH, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var t0 = c * MBF_CH
+    var cnt = Int(batch) - t0
+    if cnt > MBF_CH:
+        cnt = MBF_CH
+    var mine = Int32(0)
+    if tid < cnt and Int(lab[t0 + tid]) == j:
+        mine = Int32(1)
+    scan[tid] = mine
+    barrier()
+    # inclusive Hillis-Steele scan of the 256 flags
+    var off = 1
+    while off < MBF_TPB:
+        var v = scan[tid]
+        if tid >= off:
+            v = v + scan[tid - off]
+        barrier()
+        scan[tid] = v
+        barrier()
+        off *= 2
+    var m = Int(scan[MBF_TPB - 1])
+    if mine != Int32(0):
+        rows[Int(scan[tid]) - 1] = idx[t0 + tid]
+    barrier()
+    var o = (j * NC + c) * D
+    for f in range(tid, D, MBF_TPB):
+        var a = Float32(0)
+        for q in range(m):
+            a = ftz(a + ftz(x[Int(rows[q]) * D + f]))
+        part[o + f] = a
+    if tid == 0:
+        cpart[j * NC + c] = Int32(m)
+
+
+def _mbf_label_rg_kernel(x: FPtr, n: Int32, c: FPtr, k: Int32, d: Int32, lab: IPtr, dist: FPtr):
+    """MBK_W2_LABRG: `_mbf_assign_rg_kernel` over rows 0..n-1 (no index
+    list, no inertia partials): a 32-thread group per row, lane l takes
+    features l, l + 32, ...; ties to the lower center."""
+    var tid = Int(thread_idx.x)
+    var g = tid // MBF_RG_W
+    var l = tid - g * MBF_RG_W
+    var t = Int(block_idx.x) * MBF_RG_ROWS + g
+    var K = Int(k)
+    var D = Int(d)
+    var red = stack_allocation[MBF_TPB * MBF_RG_MAXK, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var acc = SIMD[DType.float32, MBF_RG_MAXK](0)
+    var live = t < Int(n)
+    if live:
+        for f in range(l, D, MBF_RG_W):
+            var xv = ftz(x[t * D + f])
+            comptime for j in range(MBF_RG_MAXK):
+                if j < K:
+                    var tt = ftz(ftz(c[j * D + f]) - xv)
+                    acc[j] = ftz(acc[j] + ftz(identical_mul(tt, tt)))
+    comptime for j in range(MBF_RG_MAXK):
+        red[tid * MBF_RG_MAXK + j] = acc[j]
+    barrier()
+    if l < K:
+        var s = Float32(0)
+        for q in range(MBF_RG_W):
+            s = ftz(s + red[(g * MBF_RG_W + q) * MBF_RG_MAXK + l])
+        red[(g * MBF_RG_W) * MBF_RG_MAXK + MBF_RG_MAXK * MBF_RG_W // 2 + l] = s
+    barrier()
+    if l == 0 and live:
+        var base = (g * MBF_RG_W) * MBF_RG_MAXK + MBF_RG_MAXK * MBF_RG_W // 2
+        var best = red[base]
+        var bi = 0
+        for j in range(1, K):
+            var a = red[base + j]
+            if a < best:
+                best = a
+                bi = j
+        lab[t] = Int32(bi)
+        dist[t] = best
+
+
+def mbk_labels_rg(ctx: DeviceContext, x: FPtr, n: Int, c: FPtr, k: Int, d: Int, lab: IPtr, dist: FPtr) raises -> Bool:
+    """MBK_W2_LABRG: enqueue the all-rows labelling (`lab`, `dist`, n each).
+    False (nothing enqueued) outside the switch or for k > MBF_RG_MAXK."""
+    comptime if MBK_W2_LABRG:
+        if k < 1 or k > MBF_RG_MAXK or n < 1 or d < 1:
+            return False
+        ctx.enqueue_function[_mbf_label_rg_kernel](
+            x, Int32(n), c, Int32(k), Int32(d), lab, dist,
+            grid_dim=(n + MBF_RG_ROWS - 1) // MBF_RG_ROWS, block_dim=MBF_TPB,
+        )
+        return True
+    return False
 
 
 def _mbf_finish_kernel(
@@ -456,10 +580,16 @@ def minibatch_fast_steps(
                         x, pi, Int32(batch), ci, Int32(k), Int32(d), p_lab, p_dist, p_ipart,
                         grid_dim=nblk, block_dim=MBF_TPB,
                     )
-                ctx.enqueue_function[_mbf_sum_kernel](
-                    x, pi, Int32(batch), p_lab, Int32(k), Int32(d), Int32(nchunk), p_part, p_cpart,
-                    grid_dim=k * nchunk, block_dim=MBF_TPB,
-                )
+                comptime if MBK_W2_SUMCMP:
+                    ctx.enqueue_function[_mbf_sum_cmp_kernel](
+                        x, pi, Int32(batch), p_lab, Int32(k), Int32(d), Int32(nchunk), p_part, p_cpart,
+                        grid_dim=k * nchunk, block_dim=MBF_TPB,
+                    )
+                else:
+                    ctx.enqueue_function[_mbf_sum_kernel](
+                        x, pi, Int32(batch), p_lab, Int32(k), Int32(d), Int32(nchunk), p_part, p_cpart,
+                        grid_dim=k * nchunk, block_dim=MBF_TPB,
+                    )
                 ctx.enqueue_function[_mbf_finish_kernel](
                     ci, wi, p_part, p_cpart, Int32(nchunk), Int32(k), Int32(d), co, wo, p_ipart, Int32(nblk),
                     p_in + g, grid_dim=ncell_blk, block_dim=MBF_TPB,

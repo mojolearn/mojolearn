@@ -647,6 +647,27 @@ exercised. These remain on existing guarded fallback routes; no claim is made
 that those cases were tested. Encoder/multilabel correctness was checked but
 speed was measured only for LabelBinarizer; do not update their timing rows.
 
+## MCD compatibility repair review (2026-10-04)
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_MCD_BATCH_COMPAT` | MinCovDet / taxi cap3000 | lane/apple-fast-mcd-exact @ ab4265c9a | gap26-mcdrepair-small-ready | quality-only fit5595.80 ->828.96; full-board timing gated | HOLD-quality | location_rel.032817, covariance_rel.085678, precision_rel.999817, distances_rel.997423; support Jaccard.941431, raw_support.798209, both raw ranks10. Collective-entry repair removed launch/convergence failure but fitted values remain different. Same flags(all true) do not establish quality. |
+
+Audit/proposal in `ab/mcd-compat-review.md`: main uses native Apple MMA for
+covariance, weighted eigenvector Gram and Mahalanobis products; COMPAT uses
+scalar FMA chains. Main covariance also splits K for support>=1024, unlike
+COMPAT's4096-term folds. This concrete arithmetic mismatch can amplify through
+singular determinants and candidate selection, but saved final fits alone do
+not identify the first divergent stage. No thresholds changed. No new numeric
+candidate is approved or claimed fixed; full timing remains gated.
+
+## MCD MMA repair candidate (2026-10-04)
+
+| define | algorithm / dataset | branch / base | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_MCD_BATCH_MMA` | MinCovDet / taxi, narrow d<=64 | lane/apple-fast-mcd-mma (base d4bb2b795) | gap26-mcd-mma-{small,ee-small,full,ee-full} | MCD taxi 70877.7 -> 3587.2 ms; EE taxi 70092.1 -> 3627.9 ms; all MCDQ-PAIR-PASS | DEFAULT (FAST+Apple), rollback `MOJOLEARN_MCD_BATCH_MMA_OFF` | Actual repair after scalar COMPAT quality failure: use main's existing MMA/split-K launcher per candidate for covariance, weighted Gram and Mahalanobis. Batched control/eigen/support work retained. No host model computation, no threshold changes. See ab/mcd-mma.md; compile, capped quality and conditional full timing owed. |
+| `MOJOLEARN_MCD_BMMA` | MinCovDet, EllipticEnvelope / taxi | lane/apple-fast-w2-mcd2 (base b2b1c22bc) | w2-mcdb-t-mcd-taxi, w2-mcdb-t-ee-taxi; quality w2-mcdb-q-mcd-taxi, w2-mcdb-q-ee-taxi | M3 one run per arm: MCD taxi 3002.9 -> 294.3 ms; EE taxi 3010.3 -> 299.3 ms; both MCDQ-PAIR-PASS (1% fitted state, .99 support) | DEFAULT (FAST+Apple), rollback `MOJOLEARN_MCD_BMMA_OFF` | One batched matrix-unit GEMM launch per product per step instead of 3 x nc launches; inactive candidates skipped. Same tile/K split per candidate as main. Hypothesis: ~310k phase-B launches dominate 3.6 s. See ab/mcd-next.md. |
+| `MOJOLEARN_MCD_WIDE` | MinCovDet, EllipticEnvelope / istella (d220) | lane/apple-fast-w2-mcd2 (base b2b1c22bc) | w2-mcdw-* (proposed) | A does not finish (> 20 min) | OPEN, opt-in | Batched search for 64 < d <= 256: block-per-candidate LU, 256-entry pinvh tables. B-only timing gated on istella cap3000 quality PASS. ~20 GB peak at board size. |
 ## AutoARIMA order batching current-main integration (2026-10-04)
 
 | Experiment | Branch / baseline | Evidence | Verdict / next step |
@@ -696,3 +717,29 @@ Quality: `tools/kfeat_pair.py quality` (`tools/kfeat_quality.py`); tolerances in
 | `XN_FAST_ACHI2_DEVSCAN` | additive-chi2 / istella, taxi | 12.3, 0.7 (sklearn 3.8, 0.4) | OPEN | fit's negative check as a pooled upload + `negative_partial_kernel` + pinned partials, one wait (main: sequential host `X.min()`). Retry of the dropped `ACHI2_FAST_DEVCHECK`: that one allocated X's device buffer and the flag fresh per call; this allocates nothing after the first round. Refuses a negative behind a NaN (main's min can miss it) |
 | `XN_FAST_SCHI2_MOJO_MT` | skewed-chi2 / istella, taxi | 7.3, 1.6 (sklearn 3.7, 0.6) | OPEN | fit's legacy MT19937 draws (sklearn's numbers) in Mojo instead of a Python loop + nested list comprehensions, weights kernel and offsets in the same call, one wait; bit-identical (unlike the held `SCHI2_FAST_DEVRNG`, which changes the numbers) |
 | `XD_FAST_SRP_STRAT` | sparse-rp / istella (quality HOLD), taxi | 15.2, 3.4 | OPEN | quality fix, not speed: 1.883 vs sklearn 0.474 is the nonzero count of a dominant raw column (count 2 -> |2*1.483-1| = 1.97, count 1 -> 0.48; main's seed-7 matrix has 27 of 220 columns at count >= 2). Column-stratified systematic sampling: same per-entry rate, signs and scale, count = floor/ceil(k * density). Gate: 40-seed paired mean on the board blocks |
+
+## SVGP wave 2 candidates (lane apple-fast-w2-svgp, 2026-10-04, OPEN)
+
+Base b2b1c22bc. Rows: svgp istella 661 vs gpytorch-cpu 307 ms, taxi 437 vs 248 ms. Binding x_neighbors (`x_neighbors/iter_device.mojo`). FAST + Apple only; RBFTILE is default (rollback `MOJOLEARN_SVGP_FAST_RBFTILE_OFF`), the others are off unless defined. Quality gate `tools/svgp_fast_quality.py` (r2, rmse, elbo one-sided 1e-4, fixed before results); quality-gated pair `tools/svgp_fast_pair.py`.
+
+| define | hypothesis | bits | verdict |
+|---|---|---|---|
+| `SVGP_FAST_BLKCHOL` | 3 float-float Cholesky factors (m = 512) took 1,024 dependent column launches; one launch per 16-column panel (64 launches), diag block factored in threadgroup memory, each entry the same chain as `_chol_col` | same chains (FAST contraction only) | OPEN, A/B owed |
+| `SVGP_FAST_RBFTILE` | scaled rbf (Kuu, Kfu, Ksu) was one thread per cell reading 2 d floats from global (istella d ~220: 51M cells); 64 x 64 block tiles, 16 features staged in threadgroup memory, 4 x 4 cells per thread, variance scale fused (no kbuf pass) | same per-cell fold (FAST contraction only) | DEFAULT (FAST+Apple), rollback `MOJOLEARN_SVGP_FAST_RBFTILE_OFF`: M3 one run per arm istella 336.3 -> 299.1 ms, taxi 285.9 -> 283.9 ms; w2-svgp-rbftile-q SVGP-FAST-PAIR PASS (r2/rmse/elbo; A r2 taxi -0.19498, istella -0.10602) |
+| `SVGP_FAST_BSPLIT` | SYMTILE's B launch keeps only 8,256 threads busy (32,768 rows deep each) and b = Kuf y only m threads; 4 (B) / 32 (b) row-slice float-float partials, summed slice-ascending | changes (float-float re-association, ~1e-14 rel) | OPEN, A/B owed |
+## MiniBatchKMeans W2 residuals (lane/apple-fast-w2-clres, 2026-10-04)
+
+Binding x_cluster (`x_cluster/minibatch_fast.mojo`), FAST + Apple only. Quality pair `tools/w2_clres_quality.py`.
+
+| define | algorithm / dataset | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|
+| `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP` | MiniBatchKMeans / istella, taxi | w2-mbk-sumcmp-q | M3 one run per arm: istella 147.2 -> 144.7 ms; taxi 43.9 -> 39.9 ms; exact (centers, counts, labels, inertia identical) | DEFAULT (FAST+Apple), rollback `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF` | Sum kernel compacts its center's rows per 256-row chunk (prefix scan) and sums only those, same ascending order; same bits as main. |
+| `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG` | MiniBatchKMeans / istella, taxi | (not promoted) | n/a here | OPEN, opt-in | Last labelling pass as the CLS3_ROWGRP 32-thread-per-row assignment; reorders distance sums (labrg tolerance mode). |
+
+## Manager verdicts, 2026-10-04 session 2 (rejected or held; candidates stay on their branches)
+
+| define | rows | branch / source | evidence | result | status |
+|---|---|---|---|---|---|
+| `MOJOLEARN_EIGH_TANGENT_CACHE` | eigh synthetic | lane/apple-fast-eigh-cache 14764dbb8 | gap26-eigh-cache-synthetic-ready | A 43721.3 -> B 44070.7 ms; quality pair PASS (B eigenvalue error 3.5e-7) | DROP-speed, opt-in only |
+| `MOJOLEARN_CAGRA_FAST_IVFG_LOWD` | cagra taxi | lane/apple-fast-w2-cagra 5d7d79cb5 | w2-cagra-lowd-q | taxi recall@10 A 0.997925 -> B 0.997125 (gate: B >= A); istella identical | DROP-quality; LOWD_SEEDS4 queued |
+| py2mojo decomp default | elliptic-envelope istella | lane/apple-fast-py2mojo-decomp 9a550d46c | py2mojo-decomp-elliptic-envelope-istella | A 1253937 -> B 1273419 ms (first valid timings for this row) | no gain |
