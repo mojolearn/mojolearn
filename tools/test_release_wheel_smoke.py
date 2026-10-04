@@ -9,6 +9,7 @@ import http.server
 import json
 import os
 import pathlib
+import re
 import signal
 import subprocess
 import tempfile
@@ -159,8 +160,21 @@ class SmokeTests(unittest.TestCase):
                  MOJOLEARN_HOTAISLE_CREATE_LOCK=str(self.dir / 'ha-create.lock'))
         e.pop('RUNPOD_API_KEY', None)
         e.update(env or {})
-        return subprocess.run(['bash', str(SMOKE), *args], capture_output=True, text=True,
-                              timeout=timeout, env=e)
+        result = subprocess.run(['bash', str(SMOKE), *args], capture_output=True, text=True,
+                                timeout=timeout, env=e)
+        # Ambiguous-create tests deliberately retain the guard. These guards
+        # target this fixture's localhost API; stop only its reported process.
+        if self.cloud:
+            for pid in re.findall(r'dead-man ARMED before the create: pid (\d+)', result.stdout):
+                command = subprocess.run(['ps', '-p', pid, '-o', 'command='], capture_output=True, text=True).stdout
+                if 'mojolearn-smoke-deadman-' not in command:
+                    continue
+                subprocess.run(['pkill', '-P', pid], capture_output=True)
+                try:
+                    os.kill(int(pid), signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+        return result
 
     def selection(self, backend='hip'):
         path = self.dir / f'selection-{backend}.json'

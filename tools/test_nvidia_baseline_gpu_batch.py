@@ -102,6 +102,39 @@ class Artifacts(unittest.TestCase):
         self.assertNotIn('collect full', batch.box_body(SHA, False))
         subprocess.run(['bash', '-n'], input=body, text=True, check=True)
 
+    def test_extra_capture_keeps_strict_collector_and_total_bounds(self):
+        body = batch.box_body(SHA, extra_capture=True)
+        self.assertIn('--seconds 120 --rss-gib 12 --cores 2', body)
+        self.assertIn('source/tools/nvidia_baseline_qualification.py collect', body)
+        self.assertIn('MOJOLEARN_CUDA_PATH=ptx-baseline MOJOLEARN_EXPERIMENTAL_PTX=1', body)
+        self.assertLess(body.index('extra-wrapper.py'), body.index('collect prototype'))
+        self.assertGreater(body.index('test "$EXTRA_FAILED" = 0'), body.index('full-local-comparison.json'))
+        subprocess.run(['bash', '-n'], input=body, text=True, check=True)
+
+    def test_tooling_split_is_explicit_and_advertised(self):
+        from unittest.mock import patch
+        import contextlib, io, sys
+        tooling = 'b' * 40
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td); self.make(root)
+            argv = ['batch', SHA, '--wheels', str(root), '--out', str(root/'out'), '--gpu', 'ada']
+            with patch.object(sys, 'argv', argv), patch.object(batch.subprocess, 'check_output', return_value=tooling):
+                with self.assertRaisesRegex(ValueError, 'frozen candidate'):
+                    batch.main()
+            argv += ['--tooling-commit', tooling]
+            for advertised, passes in [(SHA+'\trefs/heads/source', False),
+                                      (SHA+'\trefs/heads/source\n'+tooling+'\trefs/heads/tools', True)]:
+                with self.subTest(advertised=passes), patch.object(sys, 'argv', argv), patch.object(batch.subprocess, 'check_output', side_effect=[tooling,advertised]), patch.object(batch.subprocess, 'run', return_value=subprocess.CompletedProcess([],0)), contextlib.redirect_stdout(io.StringIO()) as output:
+                    if passes:
+                        self.assertEqual(batch.main(),0)
+                        plan=json.loads(output.getvalue())
+                        self.assertEqual(plan['source_commit'],SHA)
+                        self.assertEqual(plan['tooling_commit'],tooling)
+                        self.assertEqual(plan['work_seconds'],6300)
+                    else:
+                        with self.assertRaisesRegex(ValueError,'Push frozen tooling'):
+                            batch.main()
+
 
 MOCK = r'''
 RP=https://invalid.test/v1

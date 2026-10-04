@@ -25,9 +25,11 @@ import hashlib
 import importlib.util
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 from pathlib import Path
 
@@ -113,6 +115,27 @@ class SplitWheels(unittest.TestCase):
         return sorted(out.glob("*.whl"))
 
     # ---- the partition ------------------------------------------------------
+
+    def test_payload_only_keeps_binary_gate_without_a_core_api_audit(self):
+        out = Path(tempfile.mkdtemp(dir=self.root))
+        args = [a for s in self.set_dirs for a in ("--set", s)]
+        real_run = subprocess.run
+        binary_gate = mock.Mock()
+
+        def run(command, **kwargs):
+            if len(command) > 1 and command[1].endswith("packaging/portable_math/wheel.py"):
+                return binary_gate(command, **kwargs)
+            return real_run(command, **kwargs)
+
+        with mock.patch("subprocess.run", side_effect=run), mock.patch.object(
+                wheel_api_audit, "audit", side_effect=AssertionError("no core was requested")):
+            self.assertEqual(pw.main(args + ["--wheels", "nvidia-sm89", "--out", str(out)]), 0)
+        binary_gate.assert_called_once()
+        self.assertIn("--audit-only", binary_gate.call_args.args[0])
+        self.assertTrue(binary_gate.call_args.kwargs["check"])
+        self.assertEqual(len(list(out.glob("*.whl"))), 1)
+        self.assertEqual(json.loads(next(out.glob("SPLIT-*.json")).read_text())["problems"], [])
+        self.assertFalse(list(out.glob("API-*.json")))
     def test_the_six_wheels_are_the_combined_wheel(self):
         """Identity: same members, same paths, same bytes; only .dist-info differs."""
         single = {pw.gpu_plugins.installed_member(n): b for n, b in members(self.single).items() if ".dist-info/" not in n}

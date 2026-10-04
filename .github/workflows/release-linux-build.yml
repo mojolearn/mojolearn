@@ -337,6 +337,7 @@ jobs:
       - name: Pull pinned image
         run: timeout -k 20 600 docker pull "$IMAGE"
       - name: Build experimental baseline on CPU
+        id: baseline_build
         env:
           SOURCE_COMMIT: ${{ inputs.commit }}
           TOOLING_COMMIT: ${{ github.sha }}
@@ -352,15 +353,23 @@ jobs:
             "$IMAGE" bash /tooling/tools/gha_nvidia_baseline_box.sh
       - name: Retain logs and build artifacts
         if: always()
+        env:
+          SOURCE_COMMIT: ${{ inputs.commit }}
+          BUILD_OUTCOME: ${{ steps.baseline_build.outcome }}
         run: |
+          set -euo pipefail
           mkdir -p "$RUNNER_TEMP/ptx-out/bootstrap"
-          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/ptx-out"
+          args=()
+          if [ "$BUILD_OUTCOME" = success ]; then args+=(--require-complete); fi
+          sudo python3 tooling/tools/stage_ptx_artifact.py "$RUNNER_TEMP/ptx-out" "$RUNNER_TEMP/ptx-artifact" \
+            --source-commit "$SOURCE_COMMIT" "${args[@]}"
+          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/ptx-artifact"
           echo 'Experimental PTX only: not IDENTICAL-qualified or release-qualified.' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: experimental-nvidia-ptx80-${{ inputs.commit }}
-          path: ${{ runner.temp }}/ptx-out
+          path: ${{ runner.temp }}/ptx-artifact
           include-hidden-files: true
           retention-days: 14
           if-no-files-found: error
