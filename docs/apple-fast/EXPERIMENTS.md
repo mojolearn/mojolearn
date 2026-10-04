@@ -805,3 +805,5 @@ See [PT_SCORE_STABLE.md](PT_SCORE_STABLE.md) for code scope and exact owed check
 Callpath compile-only repair: source `28a2b0c9d` failed M2 arm A before execution because Mojo rejects `main()` in an imported package (`bench/apple_callpath_quality.mojo:181`). `lane/apple-fast-callpath-probe-r1` renames the imported entry to `run_quality` and retains native `main` in a separate wrapper. No runtime or timing evidence; failed artifact is not a scored run.
 
 Callpath second compile-only repair: `dd26a2019` M2 arm A rejects three variadic List constructors in the fixture. `lane/apple-fast-callpath-probe-r2` uses capacity plus append with identical values/order. No gate, arithmetic, runtime result or timing change; compilation remains owed.
+
+Callpath load repair: r2 compiled on M2 but M3 arm A could not load because the CPython initializer lacked `@export`. `lane/apple-fast-callpath-probe-r3` exports the existing correctly named initializer and checks the exact defined global Mach-O symbol with `nm -gU` at build time. No import or runtime test is performed on M2. This is an infrastructure failure, not a numerical quality failure; M3 load and quality remain owed.

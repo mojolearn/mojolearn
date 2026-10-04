@@ -34,6 +34,7 @@ def quality_binding() raises -> PythonObject:
     return PythonObject(0)
 
 
+@export
 def PyInit__mojolearn_callpath_probe() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_callpath_probe")
