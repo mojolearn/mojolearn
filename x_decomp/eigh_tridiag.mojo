@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """lane/apple-fast-w4-eigh (2026-10-04): FAST + Apple eigh by Householder
 tridiagonalization, double-float bisection and twisted-factorization vectors,
-behind -D MOJOLEARN_EIGH_FAST_TRIDIAG (OFF by default, candidate).
+behind -D MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS (OFF by default, candidate).
 
 Why: main's eigh on the board (n = 4096) is the round-robin Jacobi. Every
 round of every sweep reads and writes the whole matrix (4095 rounds a sweep,
@@ -53,11 +53,14 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.device_zero import enqueue_fill
 from x_decomp.cells import F32Ptr
 
-#: The switch. Candidate, default OFF (-D MOJOLEARN_EIGH_FAST_TRIDIAG turns it
+#: HOLD: predecessor board eigerr 4.26951e-7 missed fixed 3.5e-7 target;
+#: gram1024 fallback orthogonality also fails unchanged from main. This panel
+#: parallelism repair is unmeasured and does not claim to fix either gate.
+#: The switch. Candidate, default OFF (-D MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS turns it
 #: on). FAST + Apple only; IDENTICAL and other vendors never reach it.
 comptime EIGH_FAST_TRIDIAG = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_EIGH_FAST_TRIDIAG"]()
+    and is_defined["MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS"]()
 )
 #: Smallest n routed here; below it main's Jacobi is cheap.
 comptime TD_MIN_N = 512
@@ -666,12 +669,13 @@ def _td_y(a: F32Ptr, n: Int, k: Int, cnt: Int, i: Int, q: Int) -> Float32:
     return Float32(0.0)
 
 
-def td_gram_kernel(a: F32Ptr, gm: F32Ptr, n_in: Int32, k_in: Int32, cnt_in: Int32):
+def td_gram_kernel(a: F32Ptr, gm: F32Ptr, n_in: Int32):
     """gm[qa TD_NB + qb] = Y[:, qa] . Y[:, qb]; one block of TD_TPB per pair,
-    TD_NB x TD_NB blocks."""
+    TD_NB x TD_NB blocks per panel; every panel runs in grid y."""
     var n = Int(n_in)
-    var k = Int(k_in)
-    var cnt = Int(cnt_in)
+    var panel = Int(block_idx.y)
+    var k = panel * TD_NB
+    var cnt = min(TD_NB, n - 1 - k)
     var b = Int(block_idx.x)
     var qa = b // TD_NB
     var qb = b - qa * TD_NB
@@ -692,15 +696,17 @@ def td_gram_kernel(a: F32Ptr, gm: F32Ptr, n_in: Int32, k_in: Int32, cnt_in: Int3
         barrier()
         w = w // 2
     if tid == 0:
-        gm.unsafe_store(b, red[0])
+        gm.unsafe_store(panel * TD_NB * TD_NB + b, red[0])
 
 
-def td_tfac_kernel(gm: F32Ptr, tau: F32Ptr, tf: F32Ptr, k_in: Int32, cnt_in: Int32):
+def td_tfac_kernel(gm: F32Ptr, tau: F32Ptr, tf: F32Ptr, n_in: Int32):
     """LAPACK larft (forward, columnwise): T upper triangular, T[i, i] =
     tau_i, T[r, i] = -tau_i sum_{s=r}^{i-1} T[r, s] G[s, i]. Thread r owns
-    row r (no exchange). ONE block of TD_NB threads."""
-    var k = Int(k_in)
-    var cnt = Int(cnt_in)
+    row r (no exchange). One block per panel, all panels in parallel."""
+    var panel = Int(block_idx.x)
+    var k = panel * TD_NB
+    var cnt = min(TD_NB, Int(n_in) - 1 - k)
+    var offset = panel * TD_NB * TD_NB
     var r = Int(thread_idx.x)
     var row = InlineArray[Float32, TD_NB](fill=Float32(0.0))
     for i in range(TD_NB):
@@ -711,10 +717,10 @@ def td_tfac_kernel(gm: F32Ptr, tau: F32Ptr, tf: F32Ptr, k_in: Int32, cnt_in: Int
             elif r < i:
                 var s = Float32(0.0)
                 for q in range(r, i):
-                    s += row[q] * gm.unsafe_load(q * TD_NB + i)
+                    s += row[q] * gm.unsafe_load(offset + q * TD_NB + i)
                 row[i] = -ti * s
     for i in range(TD_NB):
-        tf.unsafe_store(r * TD_NB + i, row[i])
+        tf.unsafe_store(offset + r * TD_NB + i, row[i])
 
 
 def td_bt_s_kernel(
@@ -938,9 +944,19 @@ def eigh_td_on(
     # 4. V = Q Z
     var dS = ctx.enqueue_create_buffer[DType.float32](TD_KSPLIT * TD_NB * n)
     var dS2 = ctx.enqueue_create_buffer[DType.float32](TD_NB * n)
-    var dG = ctx.enqueue_create_buffer[DType.float32](TD_NB * TD_NB)
-    var dT = ctx.enqueue_create_buffer[DType.float32](TD_NB * TD_NB)
     var npan = (nref + TD_NB - 1) // TD_NB
+    var dG = ctx.enqueue_create_buffer[DType.float32](npan * TD_NB * TD_NB)
+    var dT = ctx.enqueue_create_buffer[DType.float32](npan * TD_NB * TD_NB)
+    # Reflectors and tau are immutable after tridiagonalization. Prepare all
+    # panel factors together, preserving every row's arithmetic order.
+    ctx.enqueue_function[td_gram_kernel](
+        da.unsafe_ptr(), dG.unsafe_ptr(), Int32(n),
+        grid_dim=(TD_NB * TD_NB, npan, 1), block_dim=TD_TPB,
+    )
+    ctx.enqueue_function[td_tfac_kernel](
+        dG.unsafe_ptr(), dtau.unsafe_ptr(), dT.unsafe_ptr(), Int32(n),
+        grid_dim=npan, block_dim=TD_NB,
+    )
     var gx = _td_grid(n, TD_TPB)
     var p = npan - 1
     var done = 0
@@ -948,21 +964,13 @@ def eigh_td_on(
         var kp = p * TD_NB
         var cnt = min(TD_NB, nref - kp)
         var mrows = n - kp - 1
-        ctx.enqueue_function[td_gram_kernel](
-            da.unsafe_ptr(), dG.unsafe_ptr(), Int32(n), Int32(kp), Int32(cnt),
-            grid_dim=TD_NB * TD_NB, block_dim=TD_TPB,
-        )
-        ctx.enqueue_function[td_tfac_kernel](
-            dG.unsafe_ptr(), dtau.unsafe_ptr(), dT.unsafe_ptr(), Int32(kp), Int32(cnt),
-            grid_dim=1, block_dim=TD_NB,
-        )
         var chunk = (mrows + TD_KSPLIT - 1) // TD_KSPLIT
         ctx.enqueue_function[td_bt_s_kernel](
             da.unsafe_ptr(), dz.unsafe_ptr(), dS.unsafe_ptr(), Int32(n), Int32(kp), Int32(cnt), Int32(chunk),
             grid_dim=(gx, TD_KSPLIT, 1), block_dim=(TD_TPB, 1, 1),
         )
         ctx.enqueue_function[td_bt_t_kernel](
-            dS.unsafe_ptr(), dT.unsafe_ptr(), dS2.unsafe_ptr(), Int32(n), grid_dim=gx, block_dim=TD_TPB
+            dS.unsafe_ptr(), dT.unsafe_ptr() + p * TD_NB * TD_NB, dS2.unsafe_ptr(), Int32(n), grid_dim=gx, block_dim=TD_TPB
         )
         ctx.enqueue_function[td_bt_z_kernel](
             da.unsafe_ptr(), dz.unsafe_ptr(), dS2.unsafe_ptr(), Int32(n), Int32(kp), Int32(cnt),

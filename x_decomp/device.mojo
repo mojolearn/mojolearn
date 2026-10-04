@@ -2300,7 +2300,7 @@ struct DevExec(Exec):
             ctx.enqueue_function[sym_from_triangle_kernel](
                 da.unsafe_ptr(), Int32(n), Int32(uplo), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
             )
-        # lane/apple-fast-w4-eigh: -D MOJOLEARN_EIGH_FAST_TRIDIAG (candidate,
+        # lane/apple-fast-w4-eigh: -D MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS (candidate,
         # off): Householder tridiagonalization + df64 bisection + twisted
         # vectors (x_decomp/eigh_tridiag.mojo) from n = TD_MIN_N; a refusal
         # (clustered spectrum, nonfinite T) falls through to the Jacobi on

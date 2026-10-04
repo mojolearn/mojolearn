@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Manager-only quality pair / quality-gated timing for MOJOLEARN_EIGH_FAST_TRIDIAG
+"""Manager-only quality pair / quality-gated timing for MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS
 (lane w4-eigh), on verified prebuilt x_decomp arms (tools/target_scratch_pair.py
 pattern).
 
@@ -20,7 +20,7 @@ import subprocess
 import sys
 
 BIND = 'x_decomp'
-DEFINE = 'MOJOLEARN_EIGH_FAST_TRIDIAG'
+DEFINE = 'MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS'
 
 
 def digest(path):
