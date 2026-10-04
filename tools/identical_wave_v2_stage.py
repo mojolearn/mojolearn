@@ -31,6 +31,7 @@ def main():
     p.add_argument('--data', default='/root/board-0833/cache/algos-data/rows-small')
     p.add_argument('--cell', action='append', default=[])
     p.add_argument('--skip-identity', action='store_true')
+    p.add_argument('--attempt', type=int, default=1, help='Fresh claim/log names for a new attempt; earlier attempts stay untouched')
     a = p.parse_args()
     wave, harness = a.wave.resolve(), a.harness.resolve()
     plan = harness / 'identical_wave_plan.json'
@@ -38,11 +39,13 @@ def main():
              'status': 'STARTING', 'stages': []}
 
     def save():
-        tmp = wave / 'stage-status.json.new'
+        status = 'stage-status.json' if a.attempt == 1 else 'stage-status-attempt%d.json' % a.attempt
+        tmp = wave / (status + '.new')
         tmp.write_text(json.dumps(state, indent=2) + '\n')
-        tmp.replace(wave / 'stage-status.json')
+        tmp.replace(wave / status)
 
     def stage(name, argv):
+        name = name if a.attempt == 1 else name + '-attempt' + str(a.attempt)
         (wave / (name + '.claim')).mkdir()  # refuses a repeated stage
         state['status'] = 'RUNNING_' + name.upper(); save()
         with (wave / (name + '-controller.log')).open('xb') as log:
@@ -71,7 +74,8 @@ def main():
             stage('identity', [a.python, str(harness / 'tools/identical_wave_runner.py'), 'identity', '--plan', str(plan), '--sha',
                                json.loads((wave / 'wave.json').read_text())['sha'], '--repo', a.repo, '--out', str(wave),
                                '--python', a.python, '--data', a.data] + common)
-        state['status'] = 'COMPLETE_NO_TIMING'; save()
+        failed = [s['stage'] for s in state['stages'] if s['rc']]
+        state['status'] = 'COMPLETE_WITH_FAILURES' if failed else 'COMPLETE_NO_TIMING'; state['failed_stages'] = failed; save()
     except Exception as exc:
         state['status'] = 'STOPPED'; state['error'] = str(exc); save(); traceback.print_exc(); return 1
     return 0
