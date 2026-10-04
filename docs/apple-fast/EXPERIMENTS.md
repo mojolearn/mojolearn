@@ -995,3 +995,9 @@ catalog per-shape leads. No compilation/runtime or quality/speed claim yet.
 Separate operation flags, split and PCA permissions; original split/zero/center/
 scale/restore policies retained. Baseline is current AFN, not SDK screen G0.
 See [scoped adapter contract](ab/scoped-gemm.md). M2/M3 manager gates required.
+
+## Recovered branch candidate, 2026-10-04
+
+| Define | Source | Prior evidence | State / next gate |
+|---|---|---|---|
+| `MOJOLEARN_RESAMPLE_FAST_GATHER` | `lane/apple-fast-resample-gpu-recovery`, base `34795a43c23f64790859977f5520048c51378771`; recovery checkpoint `9e68ac913`; original `origin/lane/apple-fast-resample@50b96e795` | Historical `resample-rs-gather-taxi` parse failure, no measured result; no istella result found by manager | OPEN, opt-in only. Minimal GPU draw/gather recovery; distinct from held host `RESAMPLE_FAST_ROW_GATHER`. M2 compile, pinned exact quality/reach/lifetime and M3 one-run caller-read timings owed. See `ab/resample-gpu-recovery.md`. |
