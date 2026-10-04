@@ -1,17 +1,16 @@
 diff --git a/sequence/recurrent.mojo b/sequence/recurrent.mojo
-index d9fac42dc..594aec7ac 100644
 --- a/sequence/recurrent.mojo
 +++ b/sequence/recurrent.mojo
-@@ -302,7 +302,11 @@ def backward[E: Exec](mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int,
-             dhn = t
-             s -= 1
-         var inp = x if l == 0 else w.hall[l - 1] + B * H
--        gemm(ex, w.dgx, inp, Gr + net.w_ih(l), GH, din, T * B, 1, GH, din, 1, False, din)
-+        fill(ex, Gr + net.w_ih(l), GH * din, Float32(0.0))
-+        var s2 = T - 1
-+        while s2 >= 0:
-+            gemm(ex, w.dgx + s2 * B * GH, inp + s2 * B * din, Gr + net.w_ih(l), GH, din, B, 1, GH, din, 1, True, din)
-+            s2 -= 1
-         gemm(ex, w.dgh, w.hall[l], Gr + net.w_hh(l), GH, H, T * B, 1, GH, H, 1, False, H)
-         colsum(ex, w.dgx, Gr + net.b_ih(l), T * B, GH)
-         colsum(ex, w.dgh, Gr + net.b_hh(l), T * B, GH)
+@@ -522,7 +522,11 @@ def backward[E: Exec](mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int,
+             wgrad_gemm(ex, w.one, w.dgx, Gr + net.b_ih(l), 1, GH, T * B, 0, 0, GH, 1, GH, w.wsplit)
+             wgrad_gemm(ex, w.one, w.dgh, Gr + net.b_hh(l), 1, GH, T * B, 0, 0, GH, 1, GH, w.wsplit)
+         elif SEQ_WGRAD_BLOCKED:
+-            wgrad_blocked(ex, w.dgx, inp, Gr + net.w_ih(l), GH, din, T * B, 1, GH, din, 1, din, w.wsplit)
++            fill(ex, Gr + net.w_ih(l), GH * din, Float32(0.0))
++            var s2 = T - 1
++            while s2 >= 0:
++                gemm(ex, w.dgx + s2 * B * GH, inp + s2 * B * din, Gr + net.w_ih(l), GH, din, B, 1, GH, din, 1, True, din)
++                s2 -= 1
+             wgrad_blocked(ex, w.dgh, w.hall[l], Gr + net.w_hh(l), GH, H, T * B, 1, GH, H, 1, H, w.wsplit)
+             if wgrad_block(T * B) < T * B:
+                 wgrad_blocked(ex, w.one, w.dgx, Gr + net.b_ih(l), 1, GH, T * B, 0, 0, GH, 1, GH, w.wsplit)

@@ -1,15 +1,15 @@
 diff --git a/sequence/exec_device.mojo b/sequence/exec_device.mojo
 --- a/sequence/exec_device.mojo
 +++ b/sequence/exec_device.mojo
-@@ -62,7 +62,7 @@ comptime SEQ_COOP_NVAMD = (
+@@ -63,7 +63,7 @@ comptime SEQ_COOP_NVAMD = (
      GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
      and not (is_defined["MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
  )
 -comptime SEQ_COOP = has_apple_gpu_accelerator() or SEQ_COOP_NVAMD
 +comptime SEQ_COOP = False
- 
- comptime TPB = 128
- 
+ #: nr-small D10: LayerNorm forward / backward-x rows on a simdgroup (the
+ #: same chains over broadcast words, coalesced loads; sequence/coop.mojo),
+ #: IDENTICAL on every GPU. -D MOJOLEARN_IDN_SEQ_LN_COOP_OFF (or
 diff --git a/sequence/gemm_tiled.mojo b/sequence/gemm_tiled.mojo
 --- a/sequence/gemm_tiled.mojo
 +++ b/sequence/gemm_tiled.mojo

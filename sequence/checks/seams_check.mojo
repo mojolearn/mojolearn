@@ -322,6 +322,15 @@ def main() raises:
     _check("5504_bptt_fold", o_bptt_dw(bh[1], x5, T, B5, GH, 3, False), o_bptt_dw(bh[1], x5, T, B5, GH, 3, True),
            bd[0], bh[0], tr)
     _same("5504_bptt_fold dgx", "device vs host", _diff(bd[1], bh[1]))
+    # nr-small D3: K = T B = 600 > 512 rows, two blocks of the IDENTICAL
+    # blocked weight-gradient order (one fold when it is off)
+    var Tb = 200
+    var xb5 = _mixed(Tb * B5 * 3, 54)
+    var bdb = _bptt(dx, net, P, xb5, dy, Tb, B5)
+    var bhb = _bptt(hx, net, P, xb5, dy, Tb, B5)
+    _check("5504_bptt_fold_blocked", o_bptt_dw(bhb[1], xb5, Tb, B5, GH, 3, False),
+           o_bptt_dw(bhb[1], xb5, Tb, B5, GH, 3, True), bdb[0], bhb[0], tr)
+    _same("5504_bptt_fold_blocked dgx", "device vs host", _diff(bdb[1], bhb[1]))
 
     # ---- 5505 softmax cross entropy, B 3, C 40.
     var B6 = 3; var C6 = 40

@@ -428,7 +428,9 @@ def op_gemm(t: Int, a: Args):
 
 
 def op_gemm_splitk(t: Int, a: Args):
-    """FAST only (apple2): op_gemm with K split into S = i9 blocks of i10.
+    """FAST (apple2) and, since nr-small D3, IDENTICAL's blocked recurrent
+    weight gradients (sequence/recurrent.mojo `wgrad_blocked`, the block
+    size a function of K alone): op_gemm with K split into S = i9 blocks of i10.
     i11 == 0: thread t = s MN + mn folds block s of cell mn from zero into
     p3[t]; i11 == 1: thread mn adds the S partials in order (onto C when
     i7) into C. A different order from op_gemm's one chain: FAST only, for
