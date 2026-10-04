@@ -145,6 +145,7 @@ from std.gpu import thread_idx, block_idx
 from std.memory import stack_allocation
 
 from checks.numerics import ftz, identical_mul_add, identical_sqrt, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.xtdz_coalesced import column_mean_launch
 from core.column_stats import (
     STATS_TPB,
     column_mean_kernel,

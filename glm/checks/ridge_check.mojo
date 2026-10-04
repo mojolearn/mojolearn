@@ -64,6 +64,7 @@ from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.column_stats import STATS_TPB
+from core.host_tile_fold import IDN_XTY_TILED, host_xty_tiled
 from core.identity_trace import IdentityTrace, first_divergence
 from glm.impl.ridge import (
     RIDGE_ALGO_EIG,
@@ -343,7 +344,12 @@ def _host_halving_xty(
     x: List[Float32], y: List[Float32], n: Int, d: Int, col: Int
 ) -> Float32:
     """`xty_kernel`'s shape: STATS_TPB strided partials through
-    `identical_mul_add`, then a halving tree, then `ftz`."""
+    `identical_mul_add`, then a halving tree, then `ftz`. Under
+    IDN_XTY_TILED (lane fam2-shared) `xty_launch` runs the tile order of
+    `core/host_tile_fold.mojo`, and so does this replay."""
+    comptime if IDN_XTY_TILED:
+        if n >= 1 and d >= 1:
+            return host_xty_tiled(x, y, n, d)[col]
     var red = List[Float32]()
     for t in range(STATS_TPB):
         var acc = Float32(0.0)

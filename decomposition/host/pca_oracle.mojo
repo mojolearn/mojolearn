@@ -156,6 +156,7 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import ftz, identical_mul, identical_mul_add, identical_sqrt
 from core.classical_host_predict import host_gemm_nt_into
+from core.host_tile_fold import IDN_XTY_TILED, host_column_mean_tiled
 from core.host_predict_threads import (
     HostF32Ptr,
     host_list_ptr,
@@ -229,6 +230,15 @@ def host_column_mean(x: List[Float32], n_rows: Int, n_cols: Int) -> List[Float32
         var s0 = ftz(host_halving_sum(partials))
         mu[col] = ftz(s0 / Float32(n_rows))
     return mu^
+
+
+def host_column_mean_launch(x: List[Float32], n_rows: Int, n_cols: Int) -> List[Float32]:
+    """`core/xtdz_coalesced.mojo::column_mean_launch`'s value: the tile
+    order under IDN_XTY_TILED (lane fam2-shared), else `host_column_mean`."""
+    comptime if IDN_XTY_TILED:
+        if n_rows >= 1 and n_cols >= 1:
+            return host_column_mean_tiled(x, n_rows, n_cols)
+    return host_column_mean(x, n_rows, n_cols)
 
 
 def host_gram_applies(m: Int) -> Bool:
@@ -706,7 +716,7 @@ def host_pca_fit(
 ) raises -> PCAHostFit:
     """`pca_fit_host` without the DeviceContext."""
     host_pca_validate(n_rows, n_cols, n_components)
-    var mu = host_column_mean(x, n_rows, n_cols)
+    var mu = host_column_mean_launch(x, n_rows, n_cols)
     var cov: List[Float32]
     if host_gram_applies(n_cols):
         cov = host_gram_splitk(x, mu, True, n_cols, n_rows)

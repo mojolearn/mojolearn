@@ -93,25 +93,10 @@ from bindings.array_helpers import (
 )
 from bindings.hotpath_helpers import (
     cast_elements_binding,
-    check_indices_i64_binding,
-    equal_elements_binding,
-    fold_ids_binding,
-    gather_i32_binding,
-    indices_overlap_i64_binding,
-    reduce_stat_binding,
-    select_fold_i64_binding,
-    arange_i64_binding,
-    leave_range_i64_binding,
-    mask_from_indices_u8_binding,
-    select_mask_u8_i64_binding,
-    count_mask_u8_binding,
     next_combination_i64_binding,
     ic_running_min_f64_binding,
     ic_running_min_f32_binding,
-    fold_pair_f32_binding,
-    threshold_labels_i64_binding,
     scale_shift_ftz_f32_binding,
-    bincount_i64_binding,
     compact_notnan_f32_binding,
     gather_keep_neg_i32_binding,
     dot_rows_f32_binding,
@@ -119,13 +104,10 @@ from bindings.hotpath_helpers import (
     count_fold_hits_i64_binding,
     split_table_i32_binding,
     scatter_rows_bytes_binding,
-    uniform_init_f32_binding,
     normal_init_f32_binding,
     epoch_order_i32_binding,
     adam_hyper_f64_binding,
     mean_std_f32_binding,
-    first_seen_i32_binding,
-    strat_fold_assign_i32_binding,
     strat_alloc_i64_binding,
     ocsvm_alpha_init_f32_binding,
     weighted_pick_i32_binding,
@@ -133,6 +115,33 @@ from bindings.hotpath_helpers import (
     weighted_draw_rows_i32_binding,
     group_fold_assign_i32_binding,
     strat_group_assign_i32_binding,
+)
+# lane fam2-shared (2026-10-04): these eighteen helpers run on the device in
+# this binding (bindings/hotpath_device.mojo, same names and signatures; each
+# falls back to its host helper of bindings/hotpath_helpers.mojo when its
+# -D MOJOLEARN_IDN_HPDEV_*_OFF switch or -D MOJOLEARN_IDN_ALL_OFF is given).
+from bindings.hotpath_device import (
+    check_indices_i64_binding,
+    equal_elements_binding,
+    fold_ids_binding,
+    gather_i32_binding,
+    indices_overlap_i64_binding,
+    select_fold_i64_binding,
+    arange_i64_binding,
+    leave_range_i64_binding,
+    mask_from_indices_u8_binding,
+    select_mask_u8_i64_binding,
+    count_mask_u8_binding,
+    fold_pair_f32_binding,
+    threshold_labels_i64_binding,
+    bincount_i64_binding,
+    first_seen_i32_binding,
+    strat_fold_assign_i32_binding,
+    hpdev_try_cast_f64_to_f32,
+    hpdev_try_encode_labels,
+    hpdev_try_gather_u64,
+    reduce_stat_binding,
+    uniform_init_f32_binding,
 )
 from std.os import abort
 from std.math import isfinite
@@ -979,6 +988,10 @@ def cast_f64_to_f32_binding(
         )
     if count == 0:
         return PythonObject(0)
+    # lane fam2-shared: candidate arm -D MOJOLEARN_IDN_HPDEV_CAST_F64 (default
+    # OFF) narrows on the device; False means the host loop below runs.
+    if hpdev_try_cast_f64_to_f32(Int(py=src_addr), Int(py=dst_addr), count):
+        return PythonObject(0)
     var sp = _f64_ptr(Int(py=src_addr))
     var dp = _f32_ptr(Int(py=dst_addr))
     with GILReleased(Python()):
@@ -1437,6 +1450,15 @@ def _encode_labels_binding[dt: DType](
         raise Error("encode_labels: max_classes must be positive")
     if Int(py=src_addr) == 0 or Int(py=classes_addr) == 0 or Int(py=codes_addr) == 0:
         raise Error("encode_labels: null buffer address")
+    # lane fam2-shared: the device encoder first (the sort, flag/scan and
+    # gather of core/label_encode_device.mojo); -1 means it did not encode
+    # (switch off, over the cap, a NaN label) and the host encoder below
+    # gives the answer or the refusal.
+    var dev_k = hpdev_try_encode_labels[dt](
+        Int(py=src_addr), count, Int(py=classes_addr), cap, Int(py=codes_addr)
+    )
+    if dev_k >= 0:
+        return PythonObject(dev_k)
     var sp = MutPointer[Scalar[dt], MutUntrackedOrigin](unsafe_from_address=Int(py=src_addr))
     var cp = MutPointer[Scalar[dt], MutUntrackedOrigin](unsafe_from_address=Int(py=classes_addr))
     var dp = _i32_ptr(Int(py=codes_addr))
@@ -1505,6 +1527,12 @@ def gather_i64_binding(
         return PythonObject(0)
     if Int(py=table_addr) == 0 or Int(py=codes_addr) == 0 or Int(py=dst_addr) == 0:
         raise Error("gather_i64: null buffer address")
+    # lane fam2-shared: the device gather first; False means it did not
+    # write (switch off, or a code out of range: the loop below raises).
+    if hpdev_try_gather_u64(
+        Int(py=table_addr), nt, Int(py=codes_addr), count, Int(py=dst_addr)
+    ):
+        return PythonObject(0)
     var tp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=table_addr))
     var cp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=codes_addr))
     var dp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=dst_addr))
@@ -1536,6 +1564,12 @@ def gather_f64_binding(
         return PythonObject(0)
     if Int(py=table_addr) == 0 or Int(py=codes_addr) == 0 or Int(py=dst_addr) == 0:
         raise Error("gather_f64: null buffer address")
+    # lane fam2-shared: the device gather first; False means it did not
+    # write (switch off, or a code out of range: the loop below raises).
+    if hpdev_try_gather_u64(
+        Int(py=table_addr), nt, Int(py=codes_addr), count, Int(py=dst_addr)
+    ):
+        return PythonObject(0)
     var tp = _f64_ptr(Int(py=table_addr))
     var cp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=codes_addr))
     var dp = _f64_ptr(Int(py=dst_addr))

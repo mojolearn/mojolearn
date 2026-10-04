@@ -96,6 +96,7 @@ from decomposition.host.pca_oracle import (
     _rot_add,
     _rot_sub,
     host_column_mean,
+    host_column_mean_launch,
     host_halving_sum,
     host_jacobi_rotation_cs,
     host_order_truncate_spectrum,
@@ -363,7 +364,7 @@ def host_pca_fit_full(
 ) raises -> PCAHostFit:
     """`pca_fit_full` without the DeviceContext, tall matrices only."""
     host_pca_full_validate(n_rows, n_cols, n_components)
-    var mu = host_column_mean(x, n_rows, n_cols)
+    var mu = host_column_mean_launch(x, n_rows, n_cols)
     var centered = host_shift_columns(x, mu, n_rows, n_cols, Float32(-1.0))
     var r = host_qr_factor(centered, n_rows, n_cols)
     var svd = host_one_sided_jacobi_svd(r, n_cols, JACOBI_SWEEPS, Float32(JACOBI_TOL))

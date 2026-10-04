@@ -16,8 +16,6 @@ block-per-n	serial-gpu	UNOWNED	owed2	decomposition/estimator.mojo	0	ctx.enqueue_
 # why: OWED (block-per-n, rule added by lane cgr5-owed2): one block per output column / class / feature walking all n rows; needs a row-tile then fold order (glm qn_tile_sum_classes' shape) with the host column in the same order
 block-per-n	serial-gpu	UNOWNED	owed2	decomposition/estimator.mojo	1	ctx.enqueue_function[column_mean_kernel](
 # why: OWED (block-per-n, rule added by lane cgr5-owed2): one block per output column / class / feature walking all n rows; needs a row-tile then fold order (glm qn_tile_sum_classes' shape) with the host column in the same order
-block-per-n	serial-gpu	UNOWNED	owed2	decomposition/impl/linalg/detail/svd_full.mojo	0	ctx.enqueue_function[column_mean_kernel](
-# why: OWED (block-per-n, rule added by lane cgr5-owed2): one block per output column / class / feature walking all n rows; needs a row-tile then fold order (glm qn_tile_sum_classes' shape) with the host column in the same order
 block-per-n	serial-gpu	UNOWNED	owed2	ensemble/decisiontree/batched_levelalgo/quantiles.mojo	0	ctx.enqueue_function[sample_owned_columns_kernel](
 # why: OWED (block-per-n, rule added by lane cgr5-owed2): one block per output column / class / feature walking all n rows; needs a row-tile then fold order (glm qn_tile_sum_classes' shape) with the host column in the same order
 block-per-n	serial-gpu	UNOWNED	owed2	glm/impl/qn/glm_base.mojo	0	ctx.enqueue_function[xtdz_multi_kernel](
