@@ -76,7 +76,7 @@ from x_decomp.mcd_mma import mc_center_kernel, mc_publish_matrix_kernel, mc_maha
 from x_decomp.kit import Mat
 from x_decomp.cells import FOLD_BLOCK
 from x_decomp.mcd_compat import mc_compact_kernel, mc_moment_kernel, mc_pinvh_kernel
-from x_decomp.mcd_bmma import launch_gemm_mma_batched, MCD_ORDERED_COV, ordered_cov_scratch, launch_mcd_cov_ordered
+from x_decomp.mcd_bmma import launch_gemm_mma_batched, MCD_ORDERED_COV, ordered_cov_scratch, launch_mcd_cov_ordered, note_cov_route
 from x_decomp.jacobi2 import dev_barrier
 
 # FAILED gap26-mcdcompat-taxi at 948c4e7b1: B rejected by the batched
@@ -944,6 +944,7 @@ def _mma_covariance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.floa
     )
     comptime if MCD_BMMA:
         comptime if MCD_ORDERED_COV:
+            note_cov_route(True, ph.h, d)
             launch_mcd_cov_ordered(ctx, _f(ph.mm_x), _f(ph.mm_out), _f(ph.part),
                 ph.h, d, ph.nc, ph.r*d, d*d, _i(ph.active), False)
         else:

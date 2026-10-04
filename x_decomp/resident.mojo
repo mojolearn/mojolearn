@@ -26,7 +26,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
 
-from x_decomp.mcd_bmma import MCD_ORDERED_COV, ordered_cov_scratch, launch_mcd_cov_ordered
+from x_decomp.mcd_bmma import MCD_ORDERED_COV, ordered_cov_scratch, launch_mcd_cov_ordered, launch_gemm_mma_batched, note_cov_route
 from x_decomp.cells import I32Ptr, F32Ptr, OP_SCALE, OP_SELECT, ew_cell, rand_cell
 from core.philox import philox4x32_10
 from std.gpu import block_dim, block_idx, thread_idx
@@ -247,6 +247,7 @@ def dev_mcd_cov_py(a: PythonObject, c: PythonObject, p: PythonObject) raises -> 
     var d = _n(p, 1)
     if rows <= 0 or d <= 0 or rows*d > 2147483647 or d*d > 2147483647:
         raise Error("ordered covariance invalid shape or Int32 bound exceeded")
+    note_cov_route(False, rows, d)
     var words = ordered_cov_scratch(1, rows, d)
     var sid = pool_alloc(words)
     launch_mcd_cov_ordered(xd_ctx(), _ptr(_id(a), rows*d), _ptr(_id(c), d*d),
@@ -777,3 +778,39 @@ def _pool_buf_view(id: Int, count: Int) raises -> DeviceBuffer[DType.float32]:
     """The first `count` floats of pooled matrix id as a sub-buffer."""
     var p = X_DECOMP_POOL.get_or_create_ptr()
     return p[].bufs[id].create_sub_buffer[DType.float32](0, count)
+
+
+# Test-only direct batched covariance seam, identical API on both arms.
+# Inactive outputs retain sentinel, partial storage is poisoned before B.
+def mcd_cov_probe_py(xaddr: PythonObject, gaddr: PythonObject, outaddr: PythonObject,
+                     p: PythonObject) raises -> PythonObject:
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_FAST or not has_apple_gpu_accelerator():
+        raise Error("covariance probe requires FAST Apple")
+    var nc = _n(p, 0)
+    var rows = _n(p, 1)
+    var d = _n(p, 2)
+    if nc <= 0 or rows <= 0 or d <= 0 or nc*rows*d > 2147483647 or nc*d*d > 2147483647:
+        raise Error("invalid ordered covariance probe shape")
+    var ctx = xd_ctx()
+    var dx = ctx.enqueue_create_buffer[DType.float32](nc*rows*d)
+    var dg = ctx.enqueue_create_buffer[DType.int32](nc)
+    var dc = ctx.enqueue_create_buffer[DType.float32](nc*d*d)
+    var scratch = ctx.enqueue_create_buffer[DType.float32](ordered_cov_scratch(nc, rows, d))
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=F32Ptr(unsafe_from_address=Int(py=xaddr)))
+    ctx.enqueue_copy(dst_buf=dg, src_ptr=I32Ptr(unsafe_from_address=Int(py=gaddr)))
+    ctx.enqueue_memset(dc, Float32(-123.5))
+    ctx.enqueue_memset(scratch, Float32(7654321))
+    comptime if MCD_ORDERED_COV:
+        note_cov_route(True, rows, d)
+        launch_mcd_cov_ordered(ctx, dx.unsafe_ptr(), dc.unsafe_ptr(), scratch.unsafe_ptr(),
+            rows, d, nc, rows*d, d*d, dg.unsafe_ptr(), False)
+    else:
+        launch_gemm_mma_batched(ctx, dx.unsafe_ptr(), dx.unsafe_ptr(), dc.unsafe_ptr(),
+            d, rows, d, True, False, nc, rows*d, rows*d, d*d, dg.unsafe_ptr(), False)
+    ctx.enqueue_copy(dst_ptr=F32Ptr(unsafe_from_address=Int(py=outaddr)), src_buf=dc)
+    ctx.synchronize()
+    _ = dx^
+    _ = dg^
+    _ = dc^
+    _ = scratch^
+    return PythonObject(1 if MCD_ORDERED_COV else 0)

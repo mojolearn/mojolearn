@@ -90,6 +90,41 @@ is authorized by this source branch. Manager owns all machine work.
    must later be tested separately against an accepted stable baseline; never
    attribute combined speed gains to ordered reduction alone.
 
-The strict ordered-cov oracle/reproducibility harness is still RUN OWED /
-IMPLEMENTATION OWED. This document is the fixed validation contract, not a
-claim that the current generic quality script enforces it.
+The specialized harness is implemented in the quality follow-up branch, but
+M2 compilation and M3 execution remain owed. Generic permissive MCD PASS
+receipts do not satisfy this contract.
+
+
+## Specialized quality harness (source only)
+
+`tools/mcd_ordered_pair.py SOURCE TAG CASE [DIRECT_PASS_TAG]` verifies exact
+source, binary hashes, defines and FAST mode, then executes isolated workers.
+The worker verifies the binding's Metal vendor, opt-in flag and runtime raw/
+final route counters (including split invocations). No clocks are read and no
+fit times are recorded. A is captured once; B twice strictly as an unscored
+reproducibility check, with intervening different-sized resident allocations.
+
+Run `direct` first. It covers n/d pairs (1023,11), (1024,65), (1025,11),
+(3000,220), (5001,65), (100000,11), each with three candidates and changing
+active masks. The raw probe poisons partials and inactive outputs, and calls
+the actual batched baseline or ordered helper. The final probe calls the real
+resident entry with pool reuse. B reverses fixture order for its second pass.
+Every direct output must be reproducible and no worse by both float64 error
+metrics; inactive outputs must preserve their sentinel exactly.
+
+Subsequent cases require that hash-bound direct PASS receipt:
+`mcd-istella`, `ee-istella` (3000 rows), `mcd-taxi`, `ee-taxi` (100000 rows),
+`mcd-synthetic` (1100x17 rank deficient). Each tests the actual estimator fit,
+state, query predictions and repeated B determinism. Runtime counters require
+both raw and final routes; non-synthetic cases also require raw split work.
+`tools/mcd_ordered_oracle.py` enforces the predeclared exact masks and strict
+numeric no-worse criteria, including raw mean/covariance. Capture metadata
+includes actual loaded binary hash, source, fixture input hashes, arm, reach
+and unscored execution policy. Reports are never overwritten.
+
+No timing action exists in this helper. A passing individual receipt is not
+permission to time while other required quality cases remain unresolved.
+The algorithm could later serve other long-K Gram/covariance consumers, but
+this branch changes only MCD's two covariance seams. Generalizing it would
+need caller-specific quality, memory and timing evidence; no other algorithm
+is silently opted in.

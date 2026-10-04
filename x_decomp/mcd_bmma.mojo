@@ -24,6 +24,8 @@ through f32 atomics (order free, as on main). A candidate whose gate word
 is 0 (inactive; for the weighted Gram, pinvh did not run) launches no work:
 main zeroed its operands and discarded its output (guarded publication).
 """
+from std.ffi import _Global
+from std.python import PythonObject
 from std.atomic import Atomic
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
@@ -333,3 +335,57 @@ def launch_mcd_cov_ordered(ctx: DeviceContext, x: F32Ptr, out: F32Ptr, part: F32
     ctx.enqueue_function[mcd_cov_fold_kernel](
         part, out, gate, ga, Int32(nc), Int32(d), Int32(splits), Int32(out_stride),
         grid_dim=(nc*d*d + MB_ZERO_TPB - 1) // MB_ZERO_TPB, block_dim=MB_ZERO_TPB)
+
+
+struct _CovReach(Defaultable, Movable):
+    var raw: Int
+    var final_count: Int
+    var raw_split: Int
+    var final_split: Int
+
+    def __init__(out self):
+        self.raw = 0
+        self.final_count = 0
+        self.raw_split = 0
+        self.final_split = 0
+
+
+comptime COV_REACH = _Global[StorageType=_CovReach, name="MojoMcdOrderedCovReach", init_fn=_CovReach.__init__]
+
+
+def note_cov_route(raw: Bool, rows: Int, d: Int) raises:
+    # Host metadata only; never consumes matrix values. Counts make no-op
+    # quality passes observable. No production dispatch outside the opt-in.
+    comptime if MCD_ORDERED_COV:
+        var r = COV_REACH.get_or_create_ptr()
+        var split = ordered_cov_shape(rows, d)[0] > 1
+        if raw:
+            r[].raw += 1
+            if split:
+                r[].raw_split += 1
+        else:
+            r[].final_count += 1
+            if split:
+                r[].final_split += 1
+
+
+def mcd_cov_reach_py(which: PythonObject) raises -> PythonObject:
+    var i = Int(py=which)
+    var r = COV_REACH.get_or_create_ptr()
+    if i == -1:
+        r[].raw = 0
+        r[].final_count = 0
+        r[].raw_split = 0
+        r[].final_split = 0
+        return PythonObject(0)
+    if i == 0:
+        return PythonObject(1 if MCD_ORDERED_COV else 0)
+    if i == 1:
+        return PythonObject(r[].raw)
+    if i == 2:
+        return PythonObject(r[].final_count)
+    if i == 3:
+        return PythonObject(r[].raw_split)
+    if i == 4:
+        return PythonObject(r[].final_split)
+    raise Error("unknown ordered covariance reach counter")
