@@ -17,6 +17,9 @@ from std.sys.compile import is_defined
 
 from x_cluster.ops import ClusterOps
 
+#: M3 A/B (lane/apple-fast-py2mojo-cluster 2b6f3bfd4, 2026-10-04, 1 run per
+#: arm): ivf-refine taxi 1196.0 -> 1198.9 ms with -D MOJOLEARN_PY2MOJO_cluster_OFF,
+#: NEUTRAL; default unchanged (on).
 comptime PY2MOJO_CLUSTER = not is_defined["MOJOLEARN_PY2MOJO_cluster_OFF"]()
 
 

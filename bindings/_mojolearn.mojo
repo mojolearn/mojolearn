@@ -153,6 +153,7 @@ comptime _DEVCTX_SLOT = "MojoCoreContextIdentical" if _DEVCTX_MODE == _DEVCTX_ID
 
 
 from cluster.estimator import kmeans_fit, kmeans_predict, kmeans_transform
+from cluster.impl.detail.kmeans import KMEANS_FAST_LAZY_SHIFT
 from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
 from neighbors.resident_index import (
     knn_index_classify,
@@ -660,6 +661,9 @@ def kmeans_fit_binding(
         var r = kmeans_fit(
             ctx, xp, ns, nf, nc, cp, lp, wp, nw, mi, tl, sd, ninit, ii, mm,
             0.0, ovs,
+            # OPT-IN, unmeasured (2026-10-04): the lazy convergence read for the
+            # KMeans estimator under -D MOJOLEARN_KMEANS_FAST_LAZY_SHIFT
+            lazy_shift=KMEANS_FAST_LAZY_SHIFT,
         )
         inertia = r.inertia
         n_iter = r.n_iter
