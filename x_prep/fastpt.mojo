@@ -47,6 +47,7 @@ from x_prep.common import FP, IP, STAGE_INTS, p, is_nan, sti
 from x_prep.prims import logf, sub, mul
 from x_prep.transform import PT_STATE, pt_finish, power_log, power_from_log
 from x_prep.pt_score import SCORE_WORDS, score_tile, score_finish
+from x_prep.pt_center import PT_SCORE_STABLE
 
 comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 # HOLD-quality, 2026-10-04, gap26-pt-score-quality, source bc112b172:
@@ -58,7 +59,7 @@ comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_acc
 # itself has std0/NaN normality. Cols0-5 improve; no isolated fix accepted.
 # See docs/apple-fast/PT_SCORE.md; diagnostics preserve all thresholds.
 # Explicitly disables speculation, whose objective tree is incompatible.
-comptime PT_SCORE = _FAST_APPLE and is_defined["MOJOLEARN_PT_SCORE"]()
+comptime PT_SCORE = _FAST_APPLE and (is_defined["MOJOLEARN_PT_SCORE"]() or PT_SCORE_STABLE)
 # DROP-quality (2026-10-03), M3 batchv-pt-all-istella: 2258 -> 512 ms.
 # M2 quality (100k x 220 / x 11): lambda max relative shift 9.5e-3;
 # sklearn-f64 lambda error 5.7e-3 -> 6.3e-3 fails the 1e-4 gate.
@@ -78,7 +79,7 @@ comptime PT_COLBATCH = _FAST_APPLE and (is_defined["MOJOLEARN_PT_COLBATCH"]() or
 # HOLD: failed quality only in the COLBATCH bundle (batchv-pt-nospec-*);
 # no isolated A/B vs main establishes a failure of this transform itself.
 # Keep opt-in; see docs/apple-fast/EXPERIMENTS.md (PT_FUSED_TRANSFORM).
-comptime PT_FUSED_TRANSFORM = _FAST_APPLE and (is_defined["MOJOLEARN_PT_FUSED_TRANSFORM"]() or PTIMPUTE_ALL)
+comptime PT_FUSED_TRANSFORM = _FAST_APPLE and not PT_SCORE_STABLE and (is_defined["MOJOLEARN_PT_FUSED_TRANSFORM"]() or PTIMPUTE_ALL)
 #: SI_ONEPASS: FAST + Apple DEFAULT since lane/apple-fast-batchv (2026-10-03), M3 A/B vs main:
 #: simple-imputer istella 303.7 -> 273.7 ms, taxi 26.4 -> 21.0 ms; quality (tools/batchv_quality.sh,
 #: M2): median statistics exact, mean statistics within 1.2e-7 absolute (one float32 ulp).
@@ -88,7 +89,7 @@ comptime SI_ONEPASS = _FAST_APPLE and (is_defined["MOJOLEARN_SI_ONEPASS"]() or P
 #: the bits `x_prep_ptimpute_flags` exports (registered only when nonzero):
 #: the Python layer shrinks the buffers the device no longer touches by them
 comptime PTIMPUTE_FLAGS = ((1 if PT_COLBATCH else 0) + (2 if PT_SPEC else 0) + (4 if PT_FUSED_TRANSFORM else 0)
-                           + (8 if SI_ONEPASS else 0) + (16 if PT_FOLD_NOX else 0))
+                           + (8 if SI_ONEPASS else 0) + (16 if PT_FOLD_NOX else 0) + (32 if PT_SCORE_STABLE else 0))
 
 #: threads per block of the finish kernels (a block a column, a tree)
 comptime TGR = 256

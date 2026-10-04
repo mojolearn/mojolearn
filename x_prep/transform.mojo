@@ -17,6 +17,7 @@ from std.memory import bitcast
 from checks.numerics import ftz, identical_log1p, identical_erf, _cephes_erfcf_ge1
 from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, is_nan, canonical_nan, RUN, run_block
 from x_prep.prims import add, acc_add, sub, mul, div, logf, expf, sqrtf, zero_to_one
+from x_prep.pt_center import PT_SCORE_STABLE, center_log, center_apply, center_inverse
 
 #: norm.ppf(1e-7 - eps) and its mirror: QuantileTransformer's normal clip.
 comptime QT_CLIP = Float32(5.1993375)
@@ -334,7 +335,8 @@ comptime PT_STATE = 10
 
 
 def pt_init_unit(t: Int, f: FP, q: IP):
-    """q = [METHOD, ST, d, LAMBDA, STATE, LEVAL]; t = column. A constant
+    """q = [METHOD, ST, d, LAMBDA, STATE, LEVAL, ANCHOR, KIND, STANDARDIZE]; t = column.
+    Last three params used only by PT_SCORE_STABLE. A constant
     column (yeo-johnson) is lambda 1 and skipped, as `pt_fit_unit`; otherwise
     the bracket [PT_LO, PT_HI], its two golden points, and x1 to evaluate."""
     var d = p(q, 2)
@@ -345,6 +347,31 @@ def pt_init_unit(t: Int, f: FP, q: IP):
     var x1 = add(a, mul(GOLDEN, sub(b, a)))
     var x2 = sub(b, mul(GOLDEN, sub(b, a)))
     var skip = p(q, 0) == 0 and ld(f, p(q, 1) + 2 * d + c) == Float32(0)
+    comptime if PT_SCORE_STABLE:
+        var anchor = ld(f, p(q, 1) + d + c)
+        var low = ld(f, p(q, 1) + 3 * d + c)
+        var high = ld(f, p(q, 1) + 4 * d + c)
+        var kind = Float32(0)
+        if not skip:
+            if p(q, 0) == 1 or low >= Float32(0):
+                kind = Float32(1)
+            elif high <= Float32(0):
+                kind = Float32(-1)
+        if kind != Float32(0):
+            var span = max(abs(center_log(low, anchor, kind, p(q, 0))),
+                           abs(center_log(high, anchor, kind, p(q, 0))))
+            # Extended bracket stays finite in centered coordinates. Wide
+            # columns retain at least the original radius8; narrow columns
+            # can find roots outside[-8,8] without exponent overflow.
+            var radius = max(Float32(8), min(Float32(1000000), Float32(8) / max(span, Float32(1e-12))))
+            if p(q, 8) == 0:
+                radius = Float32(8)
+            var midpoint = Float32(0) if kind > Float32(0) else Float32(2)
+            a = midpoint - radius if p(q, 8) != 0 else PT_LO
+            b = midpoint + radius if p(q, 8) != 0 else PT_HI
+            x1 = midpoint
+        f[p(q, 6) + c] = anchor
+        f[p(q, 7) + c] = kind
     f.unsafe_store(S + 0, a)
     f.unsafe_store(S + 1, b)
     f.unsafe_store(S + 2, x1)
@@ -355,6 +382,9 @@ def pt_init_unit(t: Int, f: FP, q: IP):
     f.unsafe_store(S + 7, Float32(1) if skip else Float32(0))
     f.unsafe_store(S + 8, Float32(0))
     f.unsafe_store(S + 9, Float32(0))
+    comptime if PT_SCORE_STABLE:
+        f[S + 8] = f[p(q, 6) + c]
+        f[S + 9] = f[p(q, 7) + c]
     f.unsafe_store(p(q, 5) + c, x1)
     if skip:
         st(f, p(q, 3) + c, Float32(1))
@@ -800,7 +830,7 @@ def pt_sres_unit(t: Int, f: FP, q: IP):
 
 
 def pt_apply_unit(t: Int, f: FP, q: IP):
-    """q = [X, n, d, LAMBDA, METHOD, MEAN, SCALE, OUT]; t = element. The power
+    """q = [X, n, d, LAMBDA, METHOD, MEAN, SCALE, OUT, ANCHOR, KIND]; t = element. The power
     transform, then (MEAN >= 0) standardisation; NaN is copied."""
     var d = p(q, 2)
     var c = t % d
@@ -808,7 +838,14 @@ def pt_apply_unit(t: Int, f: FP, q: IP):
     if is_nan(x):
         f.unsafe_store(p(q, 7) + t, x)
         return
-    var v = power(ftz(x), ld(f, p(q, 3) + c), p(q, 4))
+    var v: Float32
+    comptime if PT_SCORE_STABLE:
+        if p(q, 8) >= 0 and f[p(q, 9) + c] != Float32(0):
+            v = center_apply(ftz(x), f[p(q, 8) + c], f[p(q, 9) + c], ld(f, p(q, 3) + c), p(q, 4))
+        else:
+            v = power(ftz(x), ld(f, p(q, 3) + c), p(q, 4))
+    else:
+        v = power(ftz(x), ld(f, p(q, 3) + c), p(q, 4))
     if p(q, 5) >= 0:
         v = div(sub(v, ld(f, p(q, 5) + c)), ld(f, p(q, 6) + c))
     st(f, p(q, 7) + t, v)
@@ -824,7 +861,7 @@ def _inv_pow_m1(v: Float32, lam: Float32) -> Float32:
 
 
 def pt_inverse_unit(t: Int, f: FP, q: IP):
-    """q = [X, n, d, LAMBDA, METHOD, MEAN, SCALE, OUT]; t = element: the
+    """q = [X, n, d, LAMBDA, METHOD, MEAN, SCALE, OUT, ANCHOR, KIND]; t = element: the
     reference's inverse_transform. With MEAN >= 0 first x * SCALE + MEAN
     (StandardScaler.inverse_transform), then scipy's inv_boxcox (METHOD 1:
     exp(x) at lambda 0, else exp(log1p(lambda x) / lambda)) or sklearn's
@@ -840,6 +877,10 @@ def pt_inverse_unit(t: Int, f: FP, q: IP):
     if p(q, 5) >= 0:
         v = add(mul(v, ld(f, p(q, 6) + c)), ld(f, p(q, 5) + c))
     var lam = ld(f, p(q, 3) + c)
+    comptime if PT_SCORE_STABLE:
+        if p(q, 8) >= 0 and f[p(q, 9) + c] != Float32(0):
+            st(f, p(q, 7) + t, center_inverse(v, f[p(q, 8) + c], f[p(q, 9) + c], lam, p(q, 4)))
+            return
     var y: Float32
     if p(q, 4) == 1:
         if lam == Float32(0):

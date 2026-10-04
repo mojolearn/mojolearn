@@ -692,3 +692,12 @@ Detailed isolation audit and six identified scan-window tags: [MEASUREMENT_AUDIT
 | Experiment | Measured source / tags | A → B ms | Quality | Verdict / remaining gate |
 |---|---|---|---|---|
 | `ARIMA_ORDER_BATCH` → default + `ARIMA_ORDER_BATCH_OFF` | 7ba385b30; gap26-orders-current-synthetic / taxi-hourly | synthetic13780.316917 →9287.286750 (-32.6%); taxi-hourly22706.248042 →13747.215083 (-39.5%) | Fitted/order/likelihood/forecast full-quality PASS before timing; both board digests and RMSE identical (2.624119555 /74.659122441). Existing fused tail enabled in BOTH arms | KEEP, default merged on main dc2285bc0; manager default/OFF builds both rc0. Source review against main d1871643b preserved accepted fused tail. Taxi opponent-quality HOLD remains (74.6591 vs68.21). [Raw evidence and review](ab/arima-orders-default.md) |
+
+## PT centered-score WIP checkpoint (2026-10-04)
+
+`MOJOLEARN_PT_SCORE_STABLE`, lane/apple-fast-pt-precision, merged baseline12fdd6697:
+uncompiled/unvalidated repair of heldbc112b172. Centered affine-equivalent
+score/standardized output/inverse, span-derived bracket, stable same-lambda
+float64 oracle with independent Decimal check; existing thresholds unchanged.
+No builds/quality/timings yet; checkpointed for manager handoff, **not accepted**.
+See [PT_SCORE_STABLE.md](PT_SCORE_STABLE.md) for code scope and exact owed checks.

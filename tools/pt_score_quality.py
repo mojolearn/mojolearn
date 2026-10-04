@@ -10,6 +10,8 @@ independent validation, never part of the GPU implementation.
 """
 import argparse
 import json
+import hashlib
+from pathlib import Path
 import numpy as np
 from scipy import stats
 from batchv_quality import _data, _np
@@ -36,19 +38,118 @@ def measure(x, method, lam, transformed):
     return objective, normality
 
 
+ORACLE_VERSION = "centered-standardization-v1"
+
+
+def stable_reference_transform(x, method, lam):
+    """Same fitted lambda and mathematical standardized transform, stable coords.
+
+    Multiplying by positive t(anchor)**a and adding g(anchor) cannot change
+    standardized outputs. Avoid materializing those ill-conditioned terms.
+    """
+    x = np.asarray(x, dtype=np.float64)
+    out = np.empty_like(x)
+    for j in range(x.shape[1]):
+        col = x[:, j]
+        positive = method == "box-cox" or np.min(col) >= 0
+        negative = method != "box-cox" and np.max(col) <= 0
+        if positive or negative:
+            anchor = float(np.mean(col))
+            sign = 1.0 if positive else -1.0
+            norm = anchor if method == "box-cox" else 1 + abs(anchor)
+            lg = np.log1p(sign * (col - anchor) / norm)
+            a = float(lam[j]) if positive else 2 - float(lam[j])
+            value = sign * (lg if a == 0 else np.expm1(a * lg) / a)
+        else:
+            value = stats.yeojohnson(col, float(lam[j]))
+        deviation = value - value.mean()
+        scale = np.sqrt(np.mean(deviation ** 2))
+        assert np.isfinite(scale) and (scale > 0 or np.ptp(col) == 0)
+        out[:, j] = deviation / (scale if scale else 1)
+    return out
+
+
+def check_decimal_oracle(x, method, lam):
+    """Independent 160-digit evaluation on 17 actual rows; no optimizer/refit.
+
+    Specifically catches the old reference's nearconstant std=0 collapse.
+    Float64 stable reference must agree with high-precision original power
+    formula after standardization, including negative-lambda saturation.
+    """
+    from decimal import Decimal, localcontext
+    subset = x[np.linspace(0, len(x)-1, 17, dtype=int)].astype(np.float64)
+    stable = stable_reference_transform(subset, method, lam)
+    with localcontext() as ctx:
+        ctx.prec = 160
+        one, two = Decimal(1), Decimal(2)
+        for j in range(subset.shape[1]):
+            values = []
+            l = Decimal.from_float(float(lam[j]))
+            for raw in subset[:, j]:
+                v = Decimal.from_float(float(raw))
+                positive = method == "box-cox" or v >= 0
+                t = v if method == "box-cox" else one + abs(v)
+                a = l if positive else two-l
+                z = t.ln()
+                transformed = z if a == 0 else ((a*z).exp()-one)/a
+                values.append(transformed if positive else -transformed)
+            mean = sum(values) / len(values)
+            dev = [v-mean for v in values]
+            std = (sum(v*v for v in dev) / len(dev)).sqrt()
+            expected = np.array([float(v/std) for v in dev])
+            np.testing.assert_allclose(stable[:, j], expected, atol=1e-9, rtol=1e-9)
+    print("PT-ORACLE-DECIMAL status=PASS rows=17 columns=" + str(subset.shape[1]))
+
+
+def repair_reference(args):
+    """Artifact-only oracle correction; GPU outputs/lambdas/objectives unchanged."""
+    saved = np.load(args.main)
+    result = {key: saved[key] for key in saved.files}
+    n = result["stress_output"].shape[0]
+    for name, method, x in fixtures(n):
+        lam = result[name + "_reference_lambda"]
+        repaired = stable_reference_transform(x, method, lam)
+        result[name + "_legacy_reference_normality"] = result[name + "_reference_normality"]
+        result[name + "_legacy_reference_output_std"] = np.std(result[name + "_reference_output"], axis=0)
+        result[name + "_reference_output"] = repaired
+        result[name + "_reference_normality"] = stats.skew(repaired, axis=0)**2 + stats.kurtosis(repaired, axis=0)**2
+        if name == "stress":
+            check_decimal_oracle(x, method, lam)
+    result["reference_version"] = np.array(ORACLE_VERSION)
+    np.savez(args.out, **result)
+
+
 def dump(args):
-    from mojolearn._expansion_prep import PowerTransformer
+    from mojolearn._expansion_prep import PowerTransformer, _prep_binding, _ptimpute_flags
+    binding = _prep_binding("fast")
+    assert str(binding.x_prep_vendor()) == "metal" and int(binding.x_prep_numeric_mode()) == 0
+    stable_enabled = bool(_ptimpute_flags("fast") & 32)
+    if args.expect_stable is not None:
+        assert stable_enabled == bool(args.expect_stable)
+    print("PT-SCORE-BINDING " + json.dumps(dict(stable=stable_enabled,
+        sha256=hashlib.sha256(Path(binding.__file__).read_bytes()).hexdigest())))
     res = {}
     for name, method, x in fixtures(args.rows):
         pt = PowerTransformer(method=method, standardize=True).fit(x)
         lam, y = _np(pt.lambdas_), _np(pt.transform(x))
         obj, norm = measure(x, method, lam, y)
+        restored = _np(pt.inverse_transform(y))
+        roundtrip = np.sqrt(np.mean((restored-x.astype(np.float64))**2, axis=0)) / np.maximum(1, np.sqrt(np.mean(x.astype(np.float64)**2, axis=0)))
+        if not np.isfinite(roundtrip).all():
+            raise AssertionError("Nonfinite inverse transform: " + name)
+        res[name + "_roundtrip"] = roundtrip
         for key, val in (("lambda", lam), ("output", y), ("objective", obj), ("normality", norm)):
             res[name + "_" + key] = val
         if args.reference:
             from sklearn.preprocessing import PowerTransformer as Reference
             ref = Reference(method=method).fit(x.astype(np.float64))
-            ry = ref.transform(x.astype(np.float64))
+            legacy = ref.transform(x.astype(np.float64))
+            res[name + "_legacy_reference_output_std"] = np.std(legacy, axis=0)
+            res[name + "_legacy_reference_normality"] = stats.skew(legacy, axis=0)**2 + stats.kurtosis(legacy, axis=0)**2
+            ry = stable_reference_transform(x, method, ref.lambdas_)
+            if name == "stress":
+                check_decimal_oracle(x, method, ref.lambdas_)
+            res["reference_version"] = np.array(ORACLE_VERSION)
             ro, rn = measure(x, method, ref.lambdas_, ry)
             for key, val in (("lambda", ref.lambdas_), ("output", ry), ("objective", ro), ("normality", rn)):
                 res[name + "_reference_" + key] = val
@@ -57,6 +158,7 @@ def dump(args):
 
 def compare(args):
     base, candidate = np.load(args.main), np.load(args.candidate)
+    assert str(base["reference_version"]) == ORACLE_VERSION, "correct stable oracle required"
     passed = True
     for name in ("yj11", "yj220", "bc", "stress"):
         report = {"fixture": name}
@@ -90,6 +192,12 @@ def compare(args):
             report[key] = {"main_error_max": float(be.max()), "candidate_error_max": float(ce.max()),
                            "worst_regression": float((ce-be).max()), "noise": noise, "pass": metric_ok,
                            "failed_columns": np.flatnonzero(ce > be + noise).tolist()}
+        if name + "_roundtrip" in candidate.files:
+            cr = candidate[name + "_roundtrip"]
+            br = base[name + "_roundtrip"] if name + "_roundtrip" in base.files else np.zeros_like(cr)
+            rt_ok = bool(np.isfinite(cr).all() and np.all(cr <= br + 1e-5))
+            report["roundtrip"] = {"candidate_max": float(cr.max()), "noise": 1e-5, "pass": rt_ok}
+            ok &= rt_ok
         report["pass"] = ok
         passed &= ok
         print("PT-SCORE-Q " + json.dumps(report, sort_keys=True))
@@ -127,12 +235,16 @@ if __name__ == "__main__":
     p.add_argument("out")
     p.add_argument("--reference", action="store_true")
     p.add_argument("--rows", type=int, default=100000)
+    p.add_argument("--expect-stable", type=int, choices=(0,1))
     p = sub.add_parser("compare")
     p.add_argument("main")
     p.add_argument("candidate")
+    p = sub.add_parser("repair-reference")
+    p.add_argument("main")
+    p.add_argument("out")
     p = sub.add_parser("diagnose")
     p.add_argument("main")
     p.add_argument("candidate")
     p.add_argument("--fixture", default="stress")
     args = parser.parse_args()
-    {"dump": dump, "compare": compare, "diagnose": diagnose}[args.command](args)
+    {"dump": dump, "compare": compare, "diagnose": diagnose, "repair-reference": repair_reference}[args.command](args)

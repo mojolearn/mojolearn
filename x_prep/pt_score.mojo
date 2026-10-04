@@ -14,6 +14,7 @@ from x_linear.ff import FF, ff_of, ff_add, ff_add_f, ff_sub, ff_mul, ff_mul_f, f
 from x_prep.common import FP, IP, p, is_nan
 from x_prep.prims import expf
 from x_prep.transform import power_log, PT_STATE
+from x_prep.pt_center import PT_SCORE_STABLE, center_log
 
 comptime SCORE_WORDS = 12
 comptime SCORE_TGR = 256
@@ -82,8 +83,17 @@ def score_tile(f: FP, pp: FP, q: IP, rows: Int32, tpb: Int32):
         var x = f[p(q, 0) + i * d + c]
         if is_nan(x):
             continue
-        var lg = power_log(x, p(q, 3))
-        var yd = score_power(lg, x >= Float32(0), lam, p(q, 3))
+        var lg: Float32
+        var nonneg = x >= Float32(0)
+        comptime if PT_SCORE_STABLE:
+            if f[S + 9] != Float32(0):
+                lg = center_log(x, f[S + 8], f[S + 9], p(q, 3))
+                nonneg = f[S + 9] > Float32(0)
+            else:
+                lg = power_log(x, p(q, 3))
+        else:
+            lg = power_log(x, p(q, 3))
+        var yd = score_power(lg, nonneg, lam, p(q, 3))
         var y = ff_of(yd[0])
         var dy = ff_of(yd[1])
         a[0] = ff_add_f(a[0], Float32(1))
@@ -93,7 +103,7 @@ def score_tile(f: FP, pp: FP, q: IP, rows: Int32, tpb: Int32):
         a[3] = ff_add(a[3], ff_div(dd, a[0]))
         a[4] = ff_add(a[4], ff_mul(delta, ff_sub(y, a[2])))
         a[5] = ff_add(a[5], ff_mul(delta, ff_sub(dy, a[3])))
-        a[1] = ff_add_f(a[1], lg if p(q, 3) == 1 or x >= Float32(0) else -lg)
+        a[1] = ff_add_f(a[1], lg if p(q, 3) == 1 or nonneg else -lg)
     var o = (chunk * d + c) * SCORE_WORDS
     for k in range(6):
         pp[o + 2 * k] = a[k].hi
