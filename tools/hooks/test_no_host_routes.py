@@ -201,6 +201,31 @@ BLOCKED = [
     ("re-adding an in-flight PR's line on another branch",
      {"x_linear/ops.mojo": "def _p18(groups: Int):\n    host_parallelize(group, groups)"},
      "host_parallelize(group, groups)"),
+    ("download, then a host element copy loop (mojo-host-loop, not d2h-host-work)",
+     {DEV: "def _p25(ctx: DeviceContext, d: DeviceBuffer[DType.float32], out: UnsafePointer[Float32], n: Int) raises:\n"
+           "    var h = download_f32(ctx, d, n)\n    for i in range(n):\n        out[i] = h[i]"}, "[mojo-host-loop]"),
+    ("a host finiteness scan of a binding argument (mojo-host-loop)",
+     {DEV: "def _p26(p: UnsafePointer[Float32], count: Int) raises:\n"
+           "    for i in range(count):\n        if not isfinite(p.unsafe_load(i)):\n"
+           "            raise Error(\"non-finite\")"}, "for i in range(count):"),
+    ("a host loop over a List of data (mojo-host-loop)",
+     {DEV: "def _p27(values: List[Float32]) raises:\n"
+           "    for value in values:\n        if value != value:\n            raise Error(\"nan\")"},
+     "for value in values:"),
+    ("a host copy into a List before a run (mojo-host-loop)",
+     {DEV: "def _p28(x: UnsafePointer[Float32], n_query: Int, n_features: Int) raises -> List[Float32]:\n"
+           "    var q = List[Float32]()\n    for i in range(n_query * n_features):\n        q.append(x[i])\n"
+           "    return q^"}, "for i in range(n_query * n_features):"),
+    ("small-loop note naming a bound the loop does not use",
+     {DEV: "def _p29(p: UnsafePointer[Float32], n: Int) raises:\n"
+           "    for i in range(n):  # small-loop(d: feature count): the vector is d long\n"
+           "        p[i] = p[i] * 2"}, "for i in range(n):"),
+    ("GPU-path Python calls a native host helper by name (py-native-host)",
+     {PY: "def _pz6(arr):\n    return _native(\"all_finite_f32\")(arr._addr, arr.size)"}, "[py-native-host]"),
+    ("GPU-path Python calls a native host helper as a binding attribute (py-native-host)",
+     {PY: "def _pz7(b, w, n):\n    b.x_trees_samme_step(w, n)"}, "b.x_trees_samme_step(w, n)"),
+    ("cpu-route note whose reason is under three words",
+     {PY: "def _pz8(arr):\n    return _native(\"all_finite_f32\")(arr)  # cpu-route: fine"}, "[py-native-host]"),
     ("duplicating an existing debt line",
      {"cluster/estimator.mojo": "def _p19(groups: Int):\n    host_parallelize(_abs_sum_task, groups)"},
      "host_parallelize(_abs_sum_task, groups)"),
@@ -217,9 +242,6 @@ PASSES = [
                                         "        var ctx = DeviceContext(device_id=rank)\n"
                                         "        ctx.synchronize()\n    host_parallelize(_task, n)\n"),
       DEV: "from x_decomp.multi_gpu_drive import drive"}),
-    ("download, then a plain element copy",
-     {DEV: "def _q1(ctx: DeviceContext, d: DeviceBuffer[DType.float32], out: UnsafePointer[Float32], n: Int) raises:\n"
-           "    var h = download_f32(ctx, d, n)\n    for i in range(n):\n        out[i] = h[i]"}),
     ("download, then a trace-only fold",
      {DEV: "def _q2(ctx: DeviceContext, mut trace: IdentityTrace, d: DeviceBuffer[DType.float32], n: Int) raises:\n"
            "    var h = download_f32(ctx, d, n)\n    if trace.enabled:\n        var t = Float32(0.0)\n"
@@ -227,7 +249,8 @@ PASSES = [
     ("download, then a loop over a small k",
      {DEV: "def _q3(ctx: DeviceContext, d: DeviceBuffer[DType.float32], n_features: Int) raises -> Float32:\n"
            "    var h = download_f32(ctx, d, n_features)\n    var t = Float32(0.0)\n"
-           "    for j in range(n_features):\n        t = t + h[j]\n    return t"}),
+           "    for j in range(n_features):  # small-loop(n_features: feature count): one sum per feature, read once\n"
+           "        t = t + h[j]\n    return t"}),
     ("a reviewed small-launch note on a one-block launch over d-sized data",
      {DEV: "def _q4(ctx: DeviceContext, x: UnsafePointer[Float32], n: Int) raises:\n"
            "    ctx.enqueue_function[_fold_kernel](  # small-launch(n: parameter count): an L-BFGS vector phase, never rows\n"
@@ -239,6 +262,31 @@ PASSES = [
     ("a module-level table and a loop word in a string",
      {PY: "_QZ3 = {k: i for i, k in enumerate(('a', 'b'))}\n"
           "def _qz4():\n    raise ValueError('one value for each in X')"}),
+    ("a host loop inside a kernel (thread work, not host work)",
+     {DEV: "def _q5_kernel(x: UnsafePointer[Float32], n: Int):\n    var tid = Int(thread_idx.x)\n"
+           "    for i in range(tid, n, 256):\n        x[i] = x[i] * 2"}),
+    ("a loop in a kernel that reads its thread index through a helper",
+     {DEV: "def _q10_rows_kernel(cum: UnsafePointer[Int32], splits_: Int32):\n    var j = _tid()\n"
+           "    var splits = Int(splits_)\n    for fold in range(splits):\n        cum[j * splits + fold] = 1"}),
+    ("a host loop that drives the device per step (orchestration)",
+     {DEV: "def _q6(ctx: DeviceContext, x: UnsafePointer[Float32], n_steps: Int) raises:\n"
+           "    for s in range(n_steps):\n        x[s] = 0\n"
+           "        ctx.enqueue_function[_fold_kernel](x, Int32(s), grid_dim=64, block_dim=256)"}),
+    ("a host loop over a constant bound",
+     {DEV: "def _q7(p: UnsafePointer[Float32]) raises:\n    for i in range(16):\n        p[i] = p[i] * 2"}),
+    ("a host-column function in a GPU module",
+     {DEV: "def _q8_host_oracle(p: UnsafePointer[Float32], n: Int) raises:\n"
+           "    for i in range(n):\n        p[i] = p[i] * 2"}),
+    ("a reviewed small-loop note on a host loop over a small bound",
+     {DEV: "def _q9(p: UnsafePointer[Float32], n_classes: Int) raises:\n"
+           "    for c in range(n_classes):  # small-loop(n_classes: class count): one prior per class, set once\n"
+           "        p[c] = p[c] * 2"}),
+    ("a reviewed cpu-route note on a native host helper call",
+     {PY: "def _qz5(arr):\n    return _native(\"all_finite_f32\")(arr)  # cpu-route: CPU-only install verification digest"}),
+    ("a native helper that walks arguments, not data (_NATIVE_GLUE)",
+     {PY: "def _qz6(b, params):\n    return b.x_cnn_conv_shape(params)"}),
+    ("a device-backed export of the base binding",
+     {PY: "def _qz7(addr, n, bound):\n    return _native(\"check_indices_i64\")(addr, n, bound)"}),
     ("a module no GPU binding imports",
      {"x_decomp/unused_scratch.mojo": ("=", "def f(n: Int):\n    host_parallelize(_rows, n)\n")}),
 ]
@@ -312,6 +360,51 @@ def test_inflight_rows_serve_only_their_pr_head():
     assert not nhr._inflight_ok("inflight", pr), "unbound allowances must fail closed"
     rows = nhr.load_baseline(_git("show", f"HEAD:{nhr.BASELINE}"))
     assert not any(r["state"] == "inflight" for r in rows), "baseline contains an unbound allowance"
+
+
+def test_native_host_exports_are_classified_by_code():
+    tree = nhr.Tree("HEAD")
+    ex = tree.host_exports()
+    for name in ("all_finite_f32", "argmax_rows_f32", "gather_rows_bytes", "x_trees_samme_step"):
+        assert name in ex, f"{name} loops on the host and must be a native host helper"
+    for name in ("check_indices_i64", "unique_inverse", "cast_f64_to_f32"):
+        assert name not in ex, f"{name} runs on the device and is not a native host helper"
+
+
+def test_owed_rules_never_enter_the_baseline():
+    row = "py-native-host\tnative-host\tL12\tdebt\tpython/mojolearn/_buffer.py\t0\tx"
+    try:
+        nhr.load_baseline(nhr._HDR + "\n" + row + "\n")
+    except SystemExit as e:
+        assert "owed" in str(e), e
+    else:
+        raise AssertionError("a baseline row of an owed rule must be refused")
+
+
+def test_owed_findings_are_reported_not_refused():
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        rc = nhr.check_tree("HEAD")
+    out = err.getvalue()
+    assert rc == 0, out[-2000:]
+    assert "OWED (not baseline debt)" in out and "mojo-host-loop" in out and "py-native-host" in out, out[-2000:]
+    rows = nhr.owed_rows("HEAD").splitlines()
+    assert rows[0] == "rule\tclass\tpath\tline\ttext" and len(rows) > 1
+
+
+def test_fixing_an_owed_finding_leaves_no_stale_row():
+    rows = [r.split("\t") for r in nhr.owed_rows("HEAD").splitlines()[1:]]
+    py = [r for r in rows if r[0] == "py-native-host"]
+    assert py, "HEAD carries no owed py-native-host finding to remove"
+    path, no = py[0][2], int(py[0][3])
+    text = _git("show", f"HEAD:{path}").splitlines()[no - 1]
+    # replace the call line by a pass at the same indent: the owed row goes away
+    lines = _git("show", f"HEAD:{path}").splitlines()
+    ind = text[:len(text) - len(text.lstrip())]
+    lines[no - 1] = ind + "pass"
+    tip = scratch({path: ("=", "\n".join(lines) + "\n")})
+    rc, err = run_tree(tip)
+    assert "[py-native-host]" not in err, err[-1500:]
 
 
 def test_cli_tree_and_diff_modes():

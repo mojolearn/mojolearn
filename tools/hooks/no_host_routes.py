@@ -15,6 +15,10 @@ Modes:
         Rewrite REF's baseline (default HEAD, the worktree file) without its
         stale rows, and flip in-flight rows whose code is now in the tree to
         debt. It never adds a row.
+    no_host_routes.py --owed [REF]
+        Print every finding of the owed rules (py-native-host, mojo-host-loop)
+        in REF as TSV. These never enter the baseline: --tree reports them as
+        owed and refuses only the ones a tree adds over the owed anchor and main.
     no_host_routes.py <base> <tip> [--main REF]
         Diff mode: only the lines <tip> adds over merge-base(main, tip).
     no_host_routes.py --diff FILE
@@ -152,7 +156,8 @@ _RULE_CLASS.update({"host-call": "host-import", "serial-launch": "serial-gpu", "
                     "d2h-host-work": "d2h-roundtrip", "one-block-n": "serial-gpu",
                     "block-per-n": "serial-gpu",
                     "py-data-loop": "py-compute", "py-np-compute": "py-compute",
-                    "py-reduce": "py-compute", "py-array-method": "py-compute"})
+                    "py-reduce": "py-compute", "py-array-method": "py-compute",
+                    "py-native-host": "native-host", "mojo-host-loop": "host-loop"})
 _RULE_WHY = {r[0]: r[4] for r in _LINE_RULES}
 _RULE_WHY.update({
     "host-call": "calls a host-only module from GPU code",
@@ -167,7 +172,39 @@ _RULE_WHY.update({
     "py-np-compute": "numpy compute at runtime in GPU-path Python (move it into Mojo)",
     "py-reduce": "sorted()/sum()/min()/max() over a sequence at runtime in GPU-path Python",
     "py-array-method": "an array reduction or sort method at runtime in GPU-path Python",
+    "py-native-host": "GPU-path Python calls a native host helper (a binding export that loops on the CPU)",
+    "mojo-host-loop": "a host loop over a data size in GPU Mojo code (move it into a kernel)",
 })
+
+# ------------------------------------------------- owed (never baseline) ----
+# The re-audit of 2026-10-04 (~/mojolearn-evidence/cpu-reaudit-2026-10-04.md)
+# found CPU work the rules above never saw: native host helpers that GPU-path
+# Python calls (binding exports whose body loops on the CPU), and host loops
+# over data inside GPU Mojo code. These rules are OWED, not accepted debt:
+# their findings never enter the baseline (load_baseline refuses such a row).
+# A tree is charged only for what it adds over the owed anchor (the audited
+# integration head) and over main; what both already carry is printed as owed
+# on every run, so it stays visible until a fix lane removes it.
+_OWED_RULES = ("py-native-host", "mojo-host-loop")
+_OWED_ANCHOR = "1a252d6d48a3ec624e31943d1e6c34f4846ba17b"
+# Host exports whose loops walk arguments, handles, shapes or a saved model,
+# never rows, features, classes or tokens (reviewed, like _PY_CPU_SIDE): a
+# call to one is glue. Adding a name is a reviewed change.
+_NATIVE_GLUE = frozenset("""
+accumulation_is_aligned byte_lm_attention_estash_gate byte_lm_attention_memory_profile
+byte_lm_config_profile byte_lm_model_pool_open byte_lm_model_pool_ownership byte_lm_offload_open
+byte_lm_parallel_ownership byte_lm_session_info byte_lm_step_glue_arm gbdt_model_dim
+gbdt_resident_info gp_log64 gp_theta_params iforest_resident_release x_cnn_conv_shape
+x_cnn_pool_shape forest_export forest_export_legacy
+""".split())
+# A GPU-path Python line that runs on an explicit CPU-only route (a
+# CPU-only install, file I/O, a user callable) says so:
+#     # cpu-route: <reason of 3+ words>
+_CPU_ROUTE = re.compile(r"#\s*cpu-route:\s*(\S+\s+){2,}\S+")
+# A host Mojo loop over a size that is d- or k-sized, never rows, says so on
+# the `for` line, naming the bound (as small-launch does for launches):
+#     # small-loop(<bound>: <what it counts>): <why it is bounded>
+_SMALL_LOOP = re.compile(r"#\s*small-loop\(\s*([^:()]+?)\s*:\s*([^()]+?)\s*\)\s*:\s*(\S+\s+){2,}\S+")
 
 # --------------------------------------------------------------- git io ----
 
@@ -467,6 +504,101 @@ class Tree:
     def scoped(self):
         return sorted((self.gpu_mojo | self.gpu_py) - _INFRA)
 
+    # ------------------------------------------- native host helpers ----
+    _REGISTER = re.compile(r"def_function\[\s*([\w.]+)[^\]]*\]\s*\(\s*\"(\w+)\"")
+    # device work in a function body: a context, a buffer, a launch, a
+    # device-side helper call (`device_x(`, `x_device(`) or a kernel index
+    _ON_DEVICE = re.compile(r"process_ctx|DeviceContext|DeviceBuffer|enqueue_\w+|\bctx\b"
+                            r"|\bdevice_\w+\s*\(|\w+_device\w*\s*\(|thread_idx|block_idx")
+    _LOOP = re.compile(r"^\s*for\s+\w+\s+in\s+range\(([^)]*)\)|^\s*while\b")
+    _CALLEE = re.compile(r"\b([A-Za-z_]\w*)\s*[\[(]")
+
+    def _top_bodies(self, p):
+        k = ("tb", p)
+        if k not in self.__dict__.setdefault("_tb", {}):
+            ls = self.lines.get(p, [])
+            out = {}
+            for a, b in _functions(ls, top_only=True):
+                m = re.match(r"\s*(?:def|fn)\s+(\w+)", ls[a][1])
+                if m:
+                    out[m.group(1)] = ls[a:b]
+            self._tb[k] = out
+        return self._tb[k]
+
+    def _resolve_fn(self, p, f, depth=0):
+        """(module, name) where function f, as named in module p, is defined."""
+        if f in self._top_bodies(p):
+            return p, f
+        s = self.sym_src.get((p, f))
+        if s and s[1] and s[0] != p and depth < 6:
+            return self._resolve_fn(s[0], s[1], depth + 1)
+        return None, None
+
+    def _closure(self, p, f, limit=5):
+        """(module, name) of f and every function it calls, transitively."""
+        seen, stack = set(), [(p, f, 0)]
+        while stack:
+            q, g, d = stack.pop()
+            if (q, g) in seen or d > limit:
+                continue
+            seen.add((q, g))
+            for _, t in self._top_bodies(q).get(g, [])[1:]:
+                for m in self._CALLEE.finditer(t):
+                    r = self._resolve_fn(q, m.group(1))
+                    if r[0] is not None and r not in seen:
+                        stack.append((r[0], r[1], d + 1))
+        return seen
+
+    def host_exports(self):
+        """{export name: (module, function)} of the GPU bindings' Python
+        exports that run CPU work: no function they reach does device work,
+        and one of them loops over a runtime bound. Each is a native host
+        helper; a call from GPU-path Python is CPU work on the GPU route."""
+        if hasattr(self, "_host_exports"):
+            return self._host_exports
+        out = {}
+        impl = set()
+        for p in sorted(self.gpu_mojo):
+            if "def_function" not in "".join(t for _, t in self.lines.get(p, [])):
+                continue
+            txt = " ".join(t for _, t in self.lines.get(p, []))
+            for m in self._REGISTER.finditer(txt):
+                q, g = self._resolve_fn(p, m.group(1))
+                if q is None:
+                    continue
+                fns = self._closure(q, g)
+                bodies = [self._top_bodies(a).get(b, [])[1:] for a, b in fns]
+                if any(self._ON_DEVICE.search(t) for body in bodies for _, t in body):
+                    continue
+                loops = False
+                for body in bodies:
+                    for _, t in body:
+                        lm = self._LOOP.match(t)
+                        if lm and (lm.group(1) is None or _runtime_bound(lm.group(1))):
+                            loops = True
+                            break
+                    if loops:
+                        break
+                if loops:
+                    out[m.group(2)] = (q, g)
+                    impl |= fns
+        self._host_exports = out
+        # a function imported under a host-column alias (`f as host_f`: the
+        # host fallback of a device export, its _OFF arm) is the host column,
+        # with everything it calls
+        for (p, alias), (src, name) in sorted(self.sym_src.items()):
+            if name and src in self.gpu_mojo and _HOST_COLUMN_FN.search(alias) \
+                    and name in self._top_bodies(src):
+                impl |= self._closure(src, name)
+        # functions that only serve a host export: their loops are charged
+        # at the Python call site, once
+        self._export_impl = impl
+        return out
+
+    def export_impl(self):
+        self.host_exports()
+        return self._export_impl
+
 # -------------------------------------------------------------- scanning ----
 
 
@@ -720,18 +852,28 @@ def scan_file(tree, path):
                     host_syms.add(alias)
                     import_of.setdefault(no, []).append(f"{src[0]}:{name}")
     local_host = tree.host_funcs.get(path, set()) if lang == "mojo" else set()
+    native = frozenset()
+    impl = frozenset()
+    if hasattr(tree, "host_exports"):
+        if lang == "py":
+            native = frozenset(n for n in tree.host_exports() if n not in _NATIVE_GLUE)
+        else:
+            impl = frozenset(f for q, f in tree.export_impl() if q == path)
     sha = getattr(tree, "_sha", {}).get(path)
     ck = (path, sha, frozenset(host_thread_names), frozenset(host_syms),
-          tuple(sorted((k, tuple(v)) for k, v in import_of.items())), frozenset(local_host))
+          tuple(sorted((k, tuple(v)) for k, v in import_of.items())), frozenset(local_host),
+          native, impl)
     if sha is not None and ck in _SCAN_CACHE:
         return _SCAN_CACHE[ck]
-    res = _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host)
+    res = _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host,
+                      native=native, impl=impl, path=path)
     if sha is not None:
         _SCAN_CACHE[ck] = res
     return res
 
 
-def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host):
+def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host,
+                native=frozenset(), impl=frozenset(), path=""):
     out = []
     alias_re = (re.compile(r"\b(" + "|".join(map(re.escape, sorted(host_thread_names))) + r")\b")
                 if host_thread_names else None)
@@ -784,6 +926,8 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
     if lang != "mojo":
         for rule, no, t in _py_compute(lines):
             add(rule, no, t)
+        for no, t in _py_native_host(lines, native):
+            add("py-native-host", no, t)
         return out
     hostish = {"host-call", "host-import", "host-exec", "host-threads", "std-parallelize"}
     # host-switch: in a function that runs device code, an env/define read or
@@ -841,8 +985,12 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
     # download -> host loop over a data size that computes on the copy (the
     # result never needs to go back to the device: OPTICS, agglomerative and
     # HDBSCAN hid their host passes that way)
+    d2h_lines = set()
     for no, t in _d2h_host_work(lines):
         add("d2h-host-work", no, t)
+        d2h_lines.add(no)
+    for no, t in _mojo_host_loops(lines, path, impl, d2h_lines):
+        add("mojo-host-loop", no, t)
     # one-block / one-thread launches over a runtime size
     for i, txt in _launch_statements(lines):
         g1, b1 = _GRID1.search(txt), _BLOCK1.search(txt)
@@ -946,6 +1094,141 @@ def _py_compute(lines):
     return out
 
 
+_NATIVE_RE = {}
+
+
+def _py_native_host(lines, names):
+    """[(line_no, text)] of lines inside a def that name a native host helper:
+    `.name` (a binding attribute) or the exact string "name" (`_native("name")`,
+    `getattr(b, "name")`)."""
+    if not names:
+        return []
+    if names not in _NATIVE_RE:
+        alt = "|".join(sorted(map(re.escape, names), key=len, reverse=True))
+        _NATIVE_RE[names] = (re.compile(r"\.(" + alt + r")\b"),
+                             re.compile(r"(?<![\w\"'])[\"'](" + alt + r")[\"']"))
+    attr, lit = _NATIVE_RE[names]
+    out = []
+    def_ind = []
+    for no, t in lines:
+        ind = len(t) - len(t.lstrip())
+        st = t.lstrip()
+        while def_ind and ind <= def_ind[-1] and not st.startswith((")", "]", "}")):
+            def_ind.pop()
+        if re.match(r"(async\s+)?def\s", st):
+            def_ind.append(ind)
+            continue
+        if not def_ind or _GLUE.search(t) or _CPU_ROUTE.search(t):
+            continue
+        code = t.split("  #", 1)[0] if "  #" in t else t
+        if attr.search(_PY_STR.sub('""', code)) or lit.search(code):
+            out.append((no, t))
+    return out
+
+
+_DEVICE_MODULE = re.compile(r"\bDeviceContext\b|\bDeviceBuffer\b|\benqueue_\w+|\bprocess_ctx\b")
+# host-column functions inside a GPU module (oracles, replays, references)
+_HOST_COLUMN_FN = re.compile(r"(^|_)(host|oracle|reference|replay|cpu)(_|$)", re.I)
+
+
+_DRIVES_DEVICE = re.compile(r"\benqueue_\w+|\bctx\b|\.synchronize\(|\blaunch\w*\s*[\[(]|\w+_launch\w*\s*[\[(]"
+                            r"|\bdevice_\w+\s*[\[(]|\w+_(device|gpu|dev)\w*\s*[\[(]|\bDeviceBuffer\b")
+
+
+# a kernel by name, or by a thread-index helper (`_tid()`, `tid()`) in its body
+_KERNEL_NAME = re.compile(r"(^|_)kernel(_\w*)?$|_kern$")
+_KERNEL_IDX = re.compile(r"\b_?(tid|gtid|thread_id|global_id)\s*\(\s*\)")
+
+
+def _mojo_host_loops(lines, path, impl=frozenset(), skip=frozenset()):
+    """[(line_no, text)] of host `for` loops over a runtime data size whose body
+    touches data (indexes it with the loop variable, appends, or computes), in
+    a non-kernel function of a GPU binding (bindings/) or a module that drives
+    the device. Skipped: kernels, the functions behind a native host helper
+    (charged at the Python call site), host-column functions, check replays
+    (checks/), trace-only and debug blocks, comptime loops, loops already
+    charged as d2h-host-work, and loops marked `# small-loop(...)`."""
+    if "/checks/" in "/" + path:
+        return []
+    if not (path.startswith("bindings/") or any(_DEVICE_MODULE.search(t) for _, t in lines)):
+        return []
+    # each line's innermost def; a def is skipped when it is a kernel, a
+    # trace recorder, a host-column function, or (by itself or its top-level
+    # function) the body of a native host helper
+    stack, owner, top, skipdef = [], [], {}, {}
+    for i, (_, t) in enumerate(lines):
+        ind = len(t) - len(t.lstrip())
+        while stack and ind <= stack[-1][0] and not t.strip().startswith((")", "]", "@")):
+            stack.pop()
+        dm = re.match(r"\s*(?:def|fn)\s+(\w+)", t)
+        if dm:
+            name = dm.group(1)
+            outer = top[stack[0][1]] if stack else name
+            top[i] = outer
+            skipdef[i] = bool(name in impl or outer in impl or _HOST_COLUMN_FN.search(name)
+                              or _HOST_COLUMN_FN.search(outer) or _KERNEL_NAME.search(name))
+            stack.append((ind, i))
+            owner.append(None)
+            continue
+        o = stack[-1][1] if stack else None
+        owner.append(o)
+        if o is not None and (_KERNEL_TOK.search(t) or _KERNEL_IDX.search(t) or _TRACE_ONLY.match(t)):
+            skipdef[o] = True
+    out = []
+    ifs = []  # (indent, is_debug)
+    until = None  # indent of a flagged loop whose body is skipped
+    for k, (no, t) in enumerate(lines):
+        ind = len(t) - len(t.lstrip())
+        if until is not None:
+            if ind > until:
+                continue
+            until = None
+        while ifs and ind <= ifs[-1][0] and not re.match(r"\s*(else|elif)\b", t):
+            ifs.pop()
+        if re.match(r"\s*(comptime\s+)?(el)?if\b|\s*else\b", t):
+            if re.match(r"\s*(else|elif)\b", t) and ifs and ifs[-1][0] == ind:
+                ifs.pop()
+            ifs.append((ind, bool(_DEBUG_IF.match(t))))
+            continue
+        o = owner[k]
+        if o is None or skipdef.get(o) or not t.lstrip().startswith("for "):
+            continue
+        if no in skip or any(d for _, d in ifs) or lines[k - 1][1].strip().startswith("@parameter"):
+            continue
+        # the owner's rule counts rows, features, classes and members alike:
+        # any runtime bound is data-sized; a walk over a List is too
+        code = t.split("#", 1)[0]
+        rm = re.match(r"\s*for\s+(\w+)\s+in\s+range\(\s*(.*)\)\s*:", code) or \
+            re.match(r"\s*for\s+(\w+)\s+in\s+()([\w.\[\]]+)\s*:", code)
+        if not rm or (rm.group(2) and not _runtime_bound(rm.group(2))):
+            continue
+        if not rm.group(2) and not re.search(r"\[\]|\w$", rm.group(3)):
+            continue
+        sm = _SMALL_LOOP.search(t)
+        if sm and re.search(r"\b" + re.escape(sm.group(1)) + r"\b", rm.group(2)):
+            continue
+        var = rm.group(1)
+        # the body touches data with the loop variable (an index, a load or a
+        # store at it, an append), and drives no device work (a loop that
+        # launches per level, step or tree is orchestration, not CPU work)
+        use = re.compile(r"\[[^\]]*\b" + re.escape(var) + r"\b[^\]]*\]|\.append\(|"
+                         r"(load|store|bitcast)\w*\s*[\[(].*\b" + re.escape(var) + r"\b")
+        if not rm.group(2):
+            use = re.compile(r"\b" + re.escape(var) + r"\b")
+        inner = []
+        for _, t2 in lines[k + 1:]:
+            if len(t2) - len(t2.lstrip()) <= ind:
+                break
+            inner.append(t2)
+        if any(_DRIVES_DEVICE.search(x) for x in inner):
+            continue
+        if any(use.search(x) for x in inner) and any(
+                _HOST_WORK.search(x) or re.search(r"\]\s*=[^=]|\.append\(", x) for x in inner):
+            out.append((no, t))
+            until = ind
+    return out
+
+
 def _norm(t):
     return re.sub(r"\s+", " ", t.strip())
 
@@ -995,6 +1278,9 @@ def load_baseline(text):
         if len(c) != 7:
             raise SystemExit(f"no_host_routes: bad baseline row: {ln[:120]}")
         rule, cls, owner, state, path, occ, text = c
+        if rule in _OWED_RULES:
+            raise SystemExit(f"no_host_routes: a {rule} row is owed work, never baseline debt "
+                             f"(the checker reports it as owed; fix it instead): {ln[:120]}")
         if rule in _LATE_RULES and not why:
             raise SystemExit(f"no_host_routes: a {rule} row needs a `# why:` line above it: {ln[:120]}")
         rows.append(dict(rule=rule, cls=cls, owner=owner, state=state, path=path,
@@ -1069,6 +1355,8 @@ def check_tree(ref, baseline_path=None, overlay=None, quiet=False):
     rows = load_baseline(btext)
     tree = Tree(ref, overlay)
     found = tree_findings(tree)
+    owed_found = [(k, no) for k, no in found if k[0] in _OWED_RULES]
+    found = [(k, no) for k, no in found if k[0] not in _OWED_RULES]
     debt_keys = collections.Counter(_key(r) for r in rows if r["state"] in _DEBT_STATES)
     infl_keys = collections.Counter(_key(r) for r in rows if _inflight_ok(r["state"], ref))
     allowed_extra = collections.Counter()
@@ -1098,9 +1386,19 @@ def check_tree(ref, baseline_path=None, overlay=None, quiet=False):
         else:
             new.append((k, no))
     stale = [k for k, c in debt_keys.items() for _ in range(c)] if own else []
+    allowed_owed = owed_allowance(ref)
+    owed, new_owed = [], []
+    for k, no in owed_found:
+        if allowed_owed[k] > 0:
+            allowed_owed[k] -= 1
+            owed.append((k, no))
+        else:
+            new_owed.append((k, no))
+    new += new_owed
     bad = bool(new or stale or (own and matched_infl))
     if not quiet:
         summary(rows)
+        owed_summary(owed)
     if new:
         print(f"no-host-routes: REFUSED. {len(new)} finding(s) of CPU work in GPU code "
               "are not in the baseline:", file=sys.stderr)
@@ -1121,6 +1419,56 @@ def check_tree(ref, baseline_path=None, overlay=None, quiet=False):
         for (rule, p, n, _), no in matched_infl[:20]:
             print(f"  {p}:{no}: [{rule}] {n[:110]}", file=sys.stderr)
     return 1 if bad else 0
+
+
+_OWED_CACHE = {}
+
+
+def _owed_findings(sha):
+    if sha not in _OWED_CACHE:
+        _OWED_CACHE[sha] = collections.Counter(
+            k for k, _ in tree_findings(Tree(sha)) if k[0] in _OWED_RULES)
+    return _OWED_CACHE[sha]
+
+
+def owed_allowance(ref):
+    """Owed findings a tree may carry: those already in its merge-base with the
+    owed anchor and in its merge-base with main (the larger count of each).
+    Everything else of an owed rule is new CPU work and is refused."""
+    allowed = collections.Counter()
+    bases = set()
+    for other in (_OWED_ANCHOR, "refs/remotes/origin/main", "origin/main"):
+        mb = _git("merge-base", other, ref)
+        if mb.returncode == 0 and mb.stdout.strip():
+            bases.add(mb.stdout.strip())
+    for b in sorted(bases):
+        allowed |= _owed_findings(b)
+    return allowed
+
+
+def owed_summary(owed, out=None):
+    """The owed findings, by rule and by file: CPU work that a fix lane owes
+    (~/mojolearn-evidence/cpu-reaudit-2026-10-04/checker-new-findings.tsv),
+    never accepted as debt."""
+    out = out or sys.stderr
+    if not owed:
+        return
+    by_rule = collections.Counter(k[0] for k, _ in owed)
+    by_path = collections.Counter(k[1] for k, _ in owed)
+    print(f"no-host-routes OWED (not baseline debt): {len(owed)} findings of CPU work on the GPU route "
+          "(`--owed` lists them)", file=out)
+    print("  by rule: " + ", ".join(f"{k} {v}" for k, v in by_rule.most_common()), file=out)
+    print("  top files: " + ", ".join(f"{k} {v}" for k, v in by_path.most_common(8)), file=out)
+
+
+def owed_rows(ref="HEAD"):
+    """TSV of every owed finding in ref: rule, class, path, line, text."""
+    tree = Tree(ref) if ref != "HEAD" else Tree("HEAD", _worktree_overlay())
+    lines = ["rule\tclass\tpath\tline\ttext"]
+    for (rule, p, n, _), no in tree_findings(tree):
+        if rule in _OWED_RULES:
+            lines.append("\t".join([rule, _RULE_CLASS[rule], p, str(no), n]))
+    return "\n".join(lines) + "\n"
 
 
 def prune_baseline(ref="HEAD", path=BASELINE):
@@ -1258,6 +1606,9 @@ def main(argv):
         return check_tree(ref, bl)
     if args[:1] == ["--prune-baseline"]:
         return prune_baseline(args[1] if len(args) > 1 else "HEAD")
+    if args[:1] == ["--owed"]:
+        sys.stdout.write(owed_rows(args[1] if len(args) > 1 else "HEAD"))
+        return 0
     if args[:1] == ["--summary"]:
         btext, _ = _baseline_text(args[1] if len(args) > 1 else "HEAD", None)
         summary(load_baseline(btext), out=sys.stdout)
