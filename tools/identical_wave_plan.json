@@ -78,7 +78,8 @@
     "cnn_seams",
     "cnn_epoch_adam_controls",
     "eigh_block_expected_refusal",
-    "lu_result_word"
+    "lu_result_word",
+    "rf_phase_upload_lifetime"
   ],
   "quality_gates": [
     {
@@ -292,6 +293,12 @@
       "kind": "mojo",
       "path": "tools/identical_wave_lu_result_check.mojo",
       "coverage": "LU production result word encoder preserves every tested non-NaN word and maps NaN signs/payloads to0x7fc00000. Full lu_nan gate still compares unmodified factor/pivot/solve bytes."
+    },
+    {
+      "id": "rf_phase_upload_lifetime",
+      "kind": "mojo",
+      "path": "tools/identical_wave_rf_phase_lifetime_check.mojo",
+      "coverage": "Delayed H2D must expose overwritten single-source sabotage and preserve both double-buffered phase payloads. Full forest/DART raw-bit identity remains independently required."
     }
   ],
   "cases": [
