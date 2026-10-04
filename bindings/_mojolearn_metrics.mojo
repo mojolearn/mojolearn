@@ -89,9 +89,11 @@ from metrics.estimator import (
 )
 from spectral.estimator import (
     spectral_embedding_dataset_host,
+    spectral_embedding_dense_host,
     spectral_embedding_graph_host,
     spectral_fit_predict_dataset_host,
     spectral_fit_predict_dataset_host_keep,
+    spectral_fit_predict_dense_host_keep,
     spectral_fit_predict_graph_host,
     spectral_fit_predict_graph_host_keep,
     spectral_predict_host,
@@ -1047,6 +1049,98 @@ def spectral_fit_predict_graph_state_binding(
     return PythonObject(n_out)
 
 
+def spectral_fit_predict_dense_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`spectral_fit_predict_graph(_state)` on a DENSE n x n float32
+    affinity (lane cpu2-l9-neighbors, 2026-10-04): the matrix is uploaded
+    once and the COO the Python host scan used to build (`_DenseCOO`,
+    `_coo_triples`) is compacted on the device, with the value refusals
+    taken from the same scan. Same COO, same bits as the graph entry.
+
+    `addrs`: dense, labels, embedding, then (prediction data only) the four
+    state arrays of `spectral_fit_predict_graph_state`. `params`, in this
+    order (matched in `_spectral_impl.py`): n_samples, n_clusters,
+    n_components, n_init, n_neighbors, eigen_tol (float), seed.
+    Returns `n_out`, or a negative refusal code with nothing written:
+    -1 no nonzero entry, -2 a non-finite entry, -3 a negative entry."""
+    var na = len(addrs)
+    if na != 3 and na != 7:
+        raise Error("spectral_fit_predict_dense: addrs must contain 3 or 7 addresses, got " + String(na))
+    _want(String("spectral_fit_predict_dense"), params, 7)
+    var n_samples = Int(py=params[0])
+    var n_clusters = Int(py=params[1])
+    var n_components = Int(py=params[2])
+    var n_init = Int(py=params[3])
+    var n_neighbors = Int(py=params[4])
+    var eigen_tol = Float32(Float64(py=params[5]))
+    var seed = UInt64(Int(py=params[6]))
+    var dense_addr = Int(_f32_ptr(Int(py=addrs[0])))
+    var lp = _i32_ptr(Int(py=addrs[1]))
+    var ep = _f32_ptr(Int(py=addrs[2]))
+    var keep = na == 7
+    var labels = List[Int32]()
+    var embedding = List[Float32]()
+    var state = SpectralPredictionState()
+    var n_out = 0
+    with GILReleased(Python()):
+        n_out = spectral_fit_predict_dense_host_keep(
+            dense_addr, n_samples, n_clusters, n_components, n_init,
+            n_neighbors, eigen_tol, seed, labels, embedding, state, keep,
+        )
+    if n_out < 0:
+        return PythonObject(n_out)
+    _guard_spectral_outputs(labels, embedding, n_samples, n_components)
+    if keep:
+        _write_spectral_state(state, addrs, 3, n_samples, n_components, n_clusters)
+    for i in range(n_samples):
+        lp.unsafe_store(i, labels[i])
+    for i in range(len(embedding)):
+        ep.unsafe_store(i, embedding[i])
+    return PythonObject(n_out)
+
+
+def spectral_embedding_dense_binding(
+    dense_addr: PythonObject,
+    embedding_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`spectral_embedding_graph` on a DENSE n x n float32 affinity (lane
+    cpu2-l9-neighbors): uploaded once, compacted on the device, the
+    diagonal dropped as the graph entry drops it.
+
+    `params`, in this order (matched in `_spectral_impl.py`): n_samples,
+    n_lanczos, n_cols, norm_laplacian, drop_first, seed, then the optional
+    eigen_tol float. Returns `n_out`, or the refusal codes of
+    `spectral_fit_predict_dense`."""
+    if len(params) != 7:
+        _want(String("spectral_embedding_dense"), params, 6)
+    var tolerance = Float32(1e-5)
+    if len(params) == 7:
+        tolerance = Float32(Float64(py=params[6]))
+    var n_samples = Int(py=params[0])
+    var n_lanczos = Int(py=params[1])
+    var n_cols = Int(py=params[2])
+    var norm_laplacian = Int(py=params[3]) != 0
+    var drop_first = Int(py=params[4]) != 0
+    var seed = UInt64(Int(py=params[5]))
+    var daddr = Int(_f32_ptr(Int(py=dense_addr)))
+    var ep = _f32_ptr(Int(py=embedding_addr))
+    var embedding = List[Float32]()
+    var n_out = 0
+    with GILReleased(Python()):
+        n_out = spectral_embedding_dense_host(
+            daddr, n_samples, n_lanczos, norm_laplacian, drop_first, seed,
+            embedding, tolerance,
+        )
+    if n_out < 0:
+        return PythonObject(n_out)
+    _guard_embedding_output(embedding, n_samples, n_out, n_cols)
+    for i in range(len(embedding)):
+        ep.unsafe_store(i, embedding[i])
+    return PythonObject(n_out)
+
+
 def spectral_predict_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -1338,6 +1432,8 @@ def PyInit__mojolearn_metrics() abi("C") -> PythonObject:
         m.def_function[spectral_predict_binding]("spectral_predict")
         m.def_function[spectral_embedding_dataset_binding]("spectral_embedding_dataset")
         m.def_function[spectral_embedding_graph_binding]("spectral_embedding_graph")
+        m.def_function[spectral_fit_predict_dense_binding]("spectral_fit_predict_dense")
+        m.def_function[spectral_embedding_dense_binding]("spectral_embedding_dense")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_metrics: ", e))

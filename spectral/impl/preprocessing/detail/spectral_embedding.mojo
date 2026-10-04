@@ -65,6 +65,7 @@ from spectral.impl.sparse.linalg.detail.laplacian import (
     laplacian_normalize_device,
     laplacian_normalized,
 )
+from spectral.impl.sparse.linalg.detail.dense_graph import dense_graph_laplacian
 from spectral.impl.preprocessing.detail.fast_graph import (
     fast_graph_eligible,
     fast_knn_graph,
@@ -474,6 +475,53 @@ def transform_graph_keep(
     var n_out = compute_eigenpairs_keep(
         ctx, params, n, lap, diagonal, embedding, state, keep, trace, lanczos_tpb,
         scratch_pad, scratch_poison,
+    )
+    _ = diagonal^
+    _ = lap^
+    return n_out
+
+
+def transform_dense_keep(
+    ctx: DeviceContext,
+    params: SpectralEmbeddingParams,
+    dense: DeviceBuffer[DType.float32],
+    n: Int,
+    m: Int,
+    drop_diag: Bool,
+    var indptr: DeviceBuffer[DType.int32],
+    mut embedding: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+    mut trace: IdentityTrace,
+    laplacian_tpb: Int = LAPLACIAN_TPB,
+    lanczos_tpb: Int = LANCZOS_TPB,
+) raises -> Int:
+    """`transform_graph_keep` on a DENSE device affinity (lane
+    cpu2-l9-neighbors): the row-sorted COO with its diagonal is compacted on
+    the device (`dense_graph.mojo`) from the row offsets `dense_graph_scan`
+    left in `indptr`, then the same Laplacian, negation, records and
+    eigenpairs. The caller has already refused a non-finite or negative
+    value from the scan's flags. Returns `n_out`."""
+    if n <= 0:
+        raise Error("spectral: connectivity_graph must have n > 0")
+    var diagonal = ctx.enqueue_create_buffer[DType.float32](n)
+    var lap = dense_graph_laplacian(ctx, dense, n, m, drop_diag, indptr^, laplacian_tpb)
+    if params.norm_laplacian:
+        lap = laplacian_normalize_device(ctx, lap^, diagonal, laplacian_tpb)
+    ctx.enqueue_function[negate_kernel](
+        lap.vals.unsafe_ptr(),
+        Int32(lap.nnz),
+        grid_dim=((lap.nnz + laplacian_tpb - 1) // laplacian_tpb, 1, 1),
+        block_dim=(laplacian_tpb, 1, 1),
+    )
+    ctx.synchronize()
+    trace.record_device[DType.int32](ctx, "spectral.L.indptr", lap.indptr, n + 1)
+    trace.record_device[DType.int32](ctx, "spectral.L.cols", lap.cols, lap.nnz)
+    trace.record_device[DType.float32](ctx, "spectral.L.vals", lap.vals, lap.nnz)
+    if params.norm_laplacian:
+        trace.record_device[DType.float32](ctx, "spectral.diag", diagonal, n)
+    var n_out = compute_eigenpairs_keep(
+        ctx, params, n, lap, diagonal, embedding, state, keep, trace, lanczos_tpb,
     )
     _ = diagonal^
     _ = lap^
