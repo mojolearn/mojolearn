@@ -166,3 +166,36 @@ SVGP_BSPLIT already exists opt-in on main; readiness reviewb1487e2e is retained,
 not admitted. Most other unmatched request tags are neural work outside this
 classical/tree effort. Remaining classical/tree dispositions are in
 `notes/remaining-branch-audit-20261004.md`; GPU resample is the concrete recovery.
+
+
+## Main integration checkpoint, remote manager 2026-10-04
+
+User-authorized source consolidation preserves all candidate flags default OFF;
+this does not promote unmeasured/held code or claim a new opponent win.
+Integration descends GitHub main cb88add1c. M2 bare main may advance separately
+from GitHub: GitHub write authentication is unavailable in the remote session.
+Existing accepted defaults and rollback flags are preserved.
+
+| Current source | Evidence and exact state | Inline outcome location |
+|---|---|---|
+| GPU resample compiled7eacaa2b2, harness0c7066aae | q-r2 PASS exact outputs/refusals/lifetime/native reach. Initial taxi/istella timing attempts failed NumPy header parsing before scoring; repaired public metadata API, no numerical loss and no speed claim. New timing jobs use matched board warmup+one scored round. | resample/estimator.mojo RESAMPLE_GPU_GATHER |
+| Scoped decomp/PCA201fe736 and harness4c69e4387 | scoped mechanism PASS, actual PCA.fit HOLD on no-regression singular/noise gates; report recovery remains separate. No PCA default/board promotion. | scoped_dispatch.mojo and PCA/decomp caller gates |
+| Private compensated K3 GPU fe5df7ab0 | arima-k3-df-gpu-q-v1 PASS13groups/4controls; kernel-only. No production AutoARIMA integration or estimator timing. Original scalarK3 HOLD49 worse gradient components remains. | arima/impl/fast_scalar_df.mojo and gated binding export |
+| MCD G1 candidate35c712d9 with comments5d5a06c6 | SOURCE-READY/UNBUILT. Actual batched covariance/fitted-state/support/rank quality and timing owed; no import of held ordered covariance/PCA atomic route. | x_decomp/mcd_bmma.mojo |
+| Softmax G2 candidate4bfc1424 with comments574b63b8 | SOURCE-READY/UNBUILT. Matrix G2 lead does not establish optimizer quality/speed. Actual-caller quality and timing owed. | experiments/apple_fast/gemm/softmax_narrow.mojo |
+| Existing MBK_LABRG, CholeskyNB512 | MBK qualityPASS but negligible/mixed speed; NB512260.4->265.7ms. Stay opt-in. | x_cluster/minibatch_fast.mojo; cholesky/checks/potrf.mojo |
+| Existing SVGP_BSPLIT / PREP2_EIGH_BLOCK | OPEN with no judged timing admission; historical queued/readiness status is not a result. | x_neighbors/iter_device.mojo; x_prep/fastprep2.mojo |
+
+No deleted rejected implementations were recreated just to add comments:
+SHAP_PIPE, PINNED_OUT, host ROW_GATHER, VAR_FUSED, LU_TSLU/LU_DBUF, older K1,
+ordered MCD and abandoned sparse/RBF variants remain in their recorded branch
+history. Existing accepted SHAP/LU/PCA/label/target/RBF defaults retain their
+prior measured evidence and rollback switches. Source comments distinguish
+shared G1/G5 transform wins from inverse losses and scoped PCA-fit HOLD.
+
+Source-only validation: merge conflicts reconciled additively; unchanged board
+and quality thresholds; Python AST, conflict-marker/whitespace checks and
+no-host-routes hook. No native build or GPU job was launched by integration.
+New softmax/MCD compilation and combined-source native builds remain owed to
+the manager; source integration is not binary qualification. No board cells or
+351/377 headline are changed by this integration.
