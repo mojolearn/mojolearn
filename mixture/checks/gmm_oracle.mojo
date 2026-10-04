@@ -101,6 +101,7 @@ from mixture.checks.estep import (
     gmm_ten_eps,
 )
 from mixture.checks.mstep import GMM_CHOL_JITTER
+from mixture.nk_order import IDN_GMM_NK_LEVELS, gmm_nk_fold_levels
 from checks.numerics import (
     ftz,
     identical_div,
@@ -404,8 +405,15 @@ def oracle_m_step(
     var nk = List[Float32]()
     for k in range(ncomp):
         var acc = Float32(0.0)
-        for i in range(n):
-            acc = ftz(acc + ftz(resp[i * ncomp + k]))
+        comptime if IDN_GMM_NK_LEVELS:
+            # the device's chunked levels (`mixture/nk_order.mojo`)
+            var col = List[Float32](capacity=n)
+            for i in range(n):
+                col.append(resp[i * ncomp + k])
+            acc = gmm_nk_fold_levels(col)
+        else:
+            for i in range(n):
+                acc = ftz(acc + ftz(resp[i * ncomp + k]))
         nk.append(ftz(acc + gmm_ten_eps()))
     _record(trace, tag + ".nk", nk, ncomp)
 

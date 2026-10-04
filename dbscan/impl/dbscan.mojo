@@ -45,10 +45,36 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from checks.kernel_matrix import COLUMN_AMD, COLUMN_NVIDIA, TARGET_COLUMN
 
 from dbscan.impl.adjgraph.algo import scan_blocks_needed
 from dbscan.impl.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC, dbscan_fit
 from dbscan.impl.neighbors.epsilon_neighborhood import DBSCAN_METRIC_L2
+
+
+#: fam-cluster (2026-10-04), IDENTICAL on the NVIDIA and AMD columns: the
+#: ball-cover arm plans ONE batch of all rows and lets the runner's exact
+#: edge count split it, instead of sizing the batch for a dense `batch x
+#: n_rows` adjacency plus a worst-case `n_rows`-wide CSR row that the
+#: ball-cover arm never materializes (`compute_batch_size` charges `5 *
+#: n_rows` bytes per row: 1M rows on a 48 GB device is ~7,600 rows a batch,
+#: ~130 batches, each with its own count, fill, whole-dataset label init,
+#: propagation, merge and border rework). The edge cap handed to the runner
+#: is what the memory budget holds in CSR columns, at most the int32 bound.
+#: Labels cannot move: batch boundaries are not data (`runner.mojo`, the
+#: block above loop 1; `dbscan_edge_split_check` holds a split fit bitwise
+#: equal to the one-batch fit). `n_iter_` and the trace header's batch count
+#: follow the plan, as they already follow the device's memory size. An
+#: explicit `max_mbytes_per_batch` keeps the reference sizing.
+#: `-D MOJOLEARN_IDN_DBSCAN_RBC_ONE_BATCH_OFF=1` restores it everywhere.
+comptime IDN_DBSCAN_RBC_ONE_BATCH = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+    and not (
+        is_defined["MOJOLEARN_IDN_DBSCAN_RBC_ONE_BATCH_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
 
 
 def compute_batch_size(
@@ -266,7 +292,43 @@ def dbscan_fit_impl_weighted(
     # 50,000 rows and 10 GB at 100,000; it gets one byte. No kernel reads
     # it, so no bit moves. `-D MOJOLEARN_DBSCAN_FAST_DENSE_ADJ` keeps the
     # full allocation.
+    # IDN_DBSCAN_RBC_ONE_BATCH (see the define): one planned batch and a
+    # memory-derived edge cap on the sparse ball-cover arm. The sparse test
+    # is the runner's own (`sparse_rbc_mode`), so the dense adjacency this
+    # plan does not allocate is never read.
+    var edge_cap = 2147483647
+    var one_batch_plan = False
+    comptime if IDN_DBSCAN_RBC_ONE_BATCH:
+        if (
+            max_mbytes_per_batch == 0
+            and eps_nn_method == EPS_NN_RBC
+            and metric == DBSCAN_METRIC_L2
+            and n_features <= 2147483647 // n_rows
+        ):
+            # Resident besides the columns: the ball cover's reordered copy
+            # of X and its per-row tables, the degree and offset arrays,
+            # the label and work buffers (64 bytes a row covers them).
+            var fixed_bytes = n_rows * n_features * 4 + n_rows * 64
+            var spare = budget_mb * 1000000 - fixed_bytes
+            # Bytes per edge: the int32 column, the canonical-order scratch
+            # of the same length, and with weights loop 1's own columns.
+            var per_edge = 12 if has_weights else 8
+            var cap = spare // per_edge
+            if cap > 2147483647:
+                cap = 2147483647
+            # One row alone can hold `n_rows` neighbours; a cap below that
+            # could refuse a fit the reference sizing accepts.
+            if cap >= n_rows:
+                edge_cap = cap
+                batch = n_rows
+                one_batch_plan = True
+                if phase_timing:
+                    print(
+                        "PHASE plan.one_batch edge_cap " + String(edge_cap)
+                    )
     var adj_len = batch * n_rows
+    if one_batch_plan:
+        adj_len = 1
     comptime if (
         (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
         and has_apple_gpu_accelerator()
@@ -315,6 +377,7 @@ def dbscan_fit_impl_weighted(
         phase_timing,
         metric,
         has_weights,
+        edge_cap,
     )
     if out_core_addr != 0:
         var hc = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)

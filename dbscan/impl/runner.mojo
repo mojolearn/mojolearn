@@ -202,10 +202,42 @@ from neighbors.impl.ball_cover.scan import (
 #: from loop 1 and loop 2 scans them instead of re-running the count pass,
 #: so a fit walks the dataset twice instead of three times. The counts are
 #: the same kernel's output on the same rows, so the CSR is the same.
+#: fam-cluster (2026-10-04): IDENTICAL on the NVIDIA and AMD columns keeps
+#: the counts too (it was Apple only), so a fit the edge cap splits into
+#: several batches does not re-run the count pass in loop 2. Same counts, so
+#: the same CSR. `-D MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF=1` re-counts there.
+comptime IDN_DBSCAN_KEEP_COUNTS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not has_apple_gpu_accelerator()
+    and not (
+        is_defined["MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
 comptime DBSCAN_RBC_KEEP_COUNTS = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-    and has_apple_gpu_accelerator()
+    (
+        (
+            (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
+            and has_apple_gpu_accelerator()
+        )
+        or IDN_DBSCAN_KEEP_COUNTS
+    )
     and not is_defined["MOJOLEARN_DBSCAN_RBC_KEEP_COUNTS_OFF"]()
+)
+
+#: fam-cluster (2026-10-04), IDENTICAL: on the ball-cover arm loop 1 no
+#: longer reads back two scalars nothing uses. `vd[n_points]` is overwritten
+#: by the exact 64-bit count (`adjlen_here = nnz1`), and the per-batch
+#: maximum degree feeds only `rbc_dbscan_take_one_pass`, which returns False
+#: unconditionally. Three drains and one launch per batch; no value any
+#: kernel reads changes. `-D MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF=1`
+#: restores them.
+comptime IDN_DBSCAN_RBC_DEAD_READS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
 )
 
 comptime EPS_NN_BRUTE_FORCE = 0
@@ -710,15 +742,20 @@ their code branches on is this Bool.
                 ),
                 src_buf=vd.create_sub_buffer[DType.int32](0, n_points),
             )
-        var vd_last = vd.create_sub_buffer[DType.int32](n_points, 1)
-        ctx.enqueue_copy(dst_ptr=h_adjlen.unsafe_ptr(), src_buf=vd_last)
-        ctx.synchronize()
-        # The ball-cover arm keeps the EXACT count: `vd[n_points]` is the
-        # int32 scan's tail, equal to it only because the split above has
-        # already brought it under `edge_cap`.
-        var adjlen_here = Int(h_adjlen.unsafe_ptr().unsafe_load(0))
-        if sparse_rbc_mode:
-            adjlen_here = nnz1
+        var skip_dead_reads = False
+        comptime if IDN_DBSCAN_RBC_DEAD_READS:
+            skip_dead_reads = sparse_rbc_mode
+        var adjlen_here = nnz1
+        if not skip_dead_reads:
+            var vd_last = vd.create_sub_buffer[DType.int32](n_points, 1)
+            ctx.enqueue_copy(dst_ptr=h_adjlen.unsafe_ptr(), src_buf=vd_last)
+            ctx.synchronize()
+            # The ball-cover arm keeps the EXACT count: `vd[n_points]` is the
+            # int32 scan's tail, equal to it only because the split above has
+            # already brought it under `edge_cap`.
+            adjlen_here = Int(h_adjlen.unsafe_ptr().unsafe_load(0))
+            if sparse_rbc_mode:
+                adjlen_here = nnz1
 
         # `runner.cuh:287-293`: `maxklen.at(i) = thrust::reduce(vd, vd +
         # n_points, 0, maximum{})` -- the longest row in this batch, measured
@@ -726,7 +763,7 @@ their code branches on is this Bool.
         # form. The reduce runs on the DEVICE as thrust's does; only the
         # scalar comes back. It sits inside the mask.vertexdeg window below
         # exactly as it sits inside their nvtx VertexDeg range (:255-296).
-        if sparse_rbc_mode:
+        if sparse_rbc_mode and not skip_dead_reads:
             rbc_max_reduce_launch(
                 ctx, rbc_mk_scratch, vd, n_points
             )
