@@ -60,3 +60,4 @@ no benchmark-shape tuning; wait for Mojo/Modular rather than workarounds; Opus f
 - cpu3-python left 34 py-native-host findings with reasons (~/mojolearn-evidence/cpu3-python/); cpu3-seq left AutoARIMA resident series.
 - Orchestrator decision: keep cpu3-python removing the Apple FAST kfeat LAZYW host draw (device draw instead) under the no-CPU-in-GPU-path rule.
 - Still running at 22:40Z: cpu3-gbdt-a, cpu3-gbdt-b, cpu3-trees, cpu3-neighbors, cpu3-core, compile-fix (smoke), wave-ops (identity r1).
+- lane/cpu3-gbdt-b 19d215832 done (17 left: combination-CTR pipeline is host lists end to end; REAL CPU route remains: gbdt/train.mojo calls host compute_simple_ctrs in the fit for counter_calc_method=Full or IDENTICAL >=2^24 rows -> needs resident device CTR columns redesign).
