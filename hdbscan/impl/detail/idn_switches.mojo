@@ -66,6 +66,16 @@ comptime IDN_HDB_PREDICT_DEVICE_CAST = (
 """approximate_predict: the k-NN's UInt32 indices are narrowed to Int32 by
 the fit's device kernel instead of a host loop over nq * k cells."""
 
+comptime IDN_HDB_PREDICT_LEAN = (
+    _IDN_HDB_ON and not is_defined["MOJOLEARN_IDN_HDB_PREDICT_LEAN_OFF"]()
+)
+"""approximate_predict (lane fix-c1-cluster): every host staging buffer is
+allocated under one wait, the training matrix, the queries and the model
+arrays are staged with bulk copies instead of per-element loops (and without
+`_upload_*`'s three waits each), the kernels run with no wait between them,
+and the four outputs come back under one wait. The same kernels on the same
+values: no bit moves. Implies `IDN_HDB_PREDICT_DEVICE_CAST`'s device cast."""
+
 comptime IDN_HDB_SPARSE_MIN_ROWS = (
     get_defined_int["MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS", 46340]()
     if _IDN_HDB_ON

@@ -67,7 +67,7 @@ from spectral.host.spectral_predict_host import (
     spectral_keep_embedding_order,
 )
 from spectral.impl.sparse.coo import CooGraph
-from spectral.spmv_order import IDN_SPMV_LANES, SPMV_LANES
+from spectral.spmv_order import IDN_LAP_DEGREE_LANES, IDN_SPMV_LANES, SPMV_LANES
 from spectral.impl.sparse.op.coo_ops import (
     coo_remove_diagonal,
     coo_remove_scalar,
@@ -220,13 +220,34 @@ def host_laplacian[dt: DType](g: CooGraph, norm_laplacian: Bool) raises -> HostL
     var nnz = sorted_g.nnz()
     for i in range(nnz):
         out.vals.append(Scalar[dt](sorted_g.vals[i]))
-    # degrees: per row, ascending, flushed, seeded +0.0
+    # degrees: per row, flushed, seeded +0.0; under IDN_LAP_DEGREE_LANES the
+    # lane order of `spectral/spmv_order.mojo` (`degree_lanes_kernel`),
+    # otherwise the ascending chain (`degree_kernel`)
     var degrees = List[Scalar[dt]]()
-    for r in range(n):
-        var acc = Scalar[dt](0)
-        for j in range(Int(out.indptr[r]), Int(out.indptr[r + 1])):
-            acc = hflush[dt](acc + out.vals[j])
-        degrees.append(acc)
+    comptime if IDN_LAP_DEGREE_LANES:
+        for r in range(n):
+            var lo = Int(out.indptr[r])
+            var hi = Int(out.indptr[r + 1])
+            var part = List[Scalar[dt]](length=SPMV_LANES, fill=Scalar[dt](0))
+            for l in range(SPMV_LANES):
+                var acc = Scalar[dt](0)
+                var j = lo + l
+                while j < hi:
+                    acc = hflush[dt](acc + out.vals[j])
+                    j += SPMV_LANES
+                part[l] = acc
+            var w = SPMV_LANES // 2
+            while w >= 1:
+                for l in range(w):
+                    part[l] = hflush[dt](part[l] + part[l + w])
+                w = w // 2
+            degrees.append(part[0])
+    else:
+        for r in range(n):
+            var acc = Scalar[dt](0)
+            for j in range(Int(out.indptr[r]), Int(out.indptr[r + 1])):
+                acc = hflush[dt](acc + out.vals[j])
+            degrees.append(acc)
     # D - A
     for i in range(nnz):
         var r = out.rows[i]

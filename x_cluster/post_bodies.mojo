@@ -118,6 +118,97 @@ def ff_fold_host(mode: Int, a: FPtr, b: FPtr, c: FPtr, n: Int) -> FF:
 
 
 @always_inline
+def ff_strided_lane(
+    ff_in: Bool, a: FPtr, b: FPtr, off: Int, step: Int, base: Int, end: Int, lane: Int
+) -> FF:
+    """`ff_lane` over the strided sequence s[t] = a[off + t * step]: FM_VAL
+    elements (`ff_in` False) or FM_FF elements (a, b) (`ff_in` True), lane
+    `lane` of the chunk [base, end), ascending (lane fix-c1-cluster: a
+    column of a row-major matrix, or one column's chunk totals)."""
+    var acc = FF(Float32(0), Float32(0))
+    var t = base + lane
+    while t < end:
+        var i = off + t * step
+        if ff_in:
+            acc = ff_add(acc, FF(a[i], b[i]))
+        else:
+            acc = ff_add(acc, FF(ftz(a[i]), Float32(0)))
+        t += FOLD_LANES
+    return acc
+
+
+def ff_strided_chunk_host(
+    ff_in: Bool, a: FPtr, b: FPtr, off: Int, step: Int, base: Int, end: Int
+) -> FF:
+    """`ff_chunk_host` over `ff_strided_lane`: the device block's chunk
+    total (`device_post.ff_cols_chunk_kernel`), walked on the host."""
+    var hi = List[Float32](length=FOLD_LANES, fill=Float32(0))
+    var lo = List[Float32](length=FOLD_LANES, fill=Float32(0))
+    for q in range(FOLD_LANES):
+        var v = ff_strided_lane(ff_in, a, b, off, step, base, end, q)
+        hi[q] = v.hi
+        lo[q] = v.lo
+    var o = FOLD_LANES // 2
+    while o > 0:
+        for q in range(o):
+            var v = ff_add(FF(hi[q], lo[q]), FF(hi[q + o], lo[q + o]))
+            hi[q] = v.hi
+            lo[q] = v.lo
+        o //= 2
+    return FF(hi[0], lo[0])
+
+
+def ff_col_fold_host(a: FPtr, n: Int, d: Int, f: Int) -> FF:
+    """The float-float fold of column f of the row-major n x d matrix a,
+    the levels `DeviceOps.center_cols` launches: chunks of FOLD_CHUNK rows,
+    then the chunk totals of the column the same way until one is left
+    (`ff_fold_host`'s levels on the column)."""
+    if n <= 0:
+        return FF(Float32(0), Float32(0))
+    var nch = (n + FOLD_CHUNK - 1) // FOLD_CHUNK
+    var th = List[Float32](length=nch, fill=Float32(0))
+    var tl = List[Float32](length=nch, fill=Float32(0))
+    for q in range(nch):
+        var v = ff_strided_chunk_host(
+            False, a, a, f, d, q * FOLD_CHUNK, min(n, (q + 1) * FOLD_CHUNK)
+        )
+        th[q] = v.hi
+        tl[q] = v.lo
+    while nch > 1:
+        var m = (nch + FOLD_CHUNK - 1) // FOLD_CHUNK
+        var nh = List[Float32](length=m, fill=Float32(0))
+        var nl = List[Float32](length=m, fill=Float32(0))
+        var ph = th.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var pl = tl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        for q in range(m):
+            var v = ff_strided_chunk_host(
+                True, ph, pl, 0, 1, q * FOLD_CHUNK, min(nch, (q + 1) * FOLD_CHUNK)
+            )
+            nh[q] = v.hi
+            nl[q] = v.lo
+        th = nh^
+        tl = nl^
+        nch = m
+    return FF(th[0], tl[0])
+
+
+@always_inline
+def ff_mean_cell(hi: Float32, lo: Float32, n: Int) -> Float32:
+    """The float32 mean of a float-float sum (hi, lo) over n values: the
+    float-float quotient by n (n as float-float, exact below 2^48), rounded
+    once to float32. One body for the device kernel and the host column."""
+    var nh = Float32(n)
+    var nl = Float32(n - Int(nh))
+    return ff_f32(ff_div(FF(hi, lo), FF(nh, nl)))
+
+
+@always_inline
+def center_cell(x: Float32, mean: Float32) -> Float32:
+    """`bisect_fit`'s centered word: ftz(ftz(x) - ftz(mean))."""
+    return ftz(ftz(x) - ftz(mean))
+
+
+@always_inline
 def ff_ge(x: FF, y: FF) -> Bool:
     """x >= y, (hi, lo) lexicographic: the one comparison both columns use."""
     if x.hi != y.hi:

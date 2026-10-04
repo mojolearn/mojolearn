@@ -21,12 +21,16 @@ from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_sqrt
 from x_cluster.bodies import FPtr, IPtr
 from x_cluster.post_bodies import (
+    FOLD_CHUNK,
     FOLD_LANES,
     KEY_NONE,
     bin_key,
     bin_value,
+    center_cell,
     center_greater,
     ff_lane,
+    ff_mean_cell,
+    ff_strided_lane,
     first_equal_cell,
     kpp_search_cell,
     optics_relax_cell,
@@ -151,6 +155,56 @@ def ff_chunk_kernel(mode: Int32, a: FPtr, b: FPtr, c: FPtr, n: Int32, oh: FPtr, 
     if tid == 0:
         oh[Int(off) + Int(block_idx.x)] = sh[0]
         ol[Int(off) + Int(block_idx.x)] = sl[0]
+
+
+def ff_cols_chunk_kernel(
+    ff_in: Int32, a: FPtr, b: FPtr, n: Int32, col_stride: Int32, row_stride: Int32,
+    oh: FPtr, ol: FPtr, nch_out: Int32, ncols: Int32,
+):
+    """Block f + q * ncols (a 1-D grid of ncols * nch_out blocks, adjacent
+    blocks on adjacent columns): the fold of chunk q of column f, whose element t is
+    a[f * col_stride + t * row_stride] (`post_bodies.ff_strided_lane`, then
+    `ff_chunk_kernel`'s tree), into oh/ol[f * nch_out + q] (lane
+    fix-c1-cluster, `DeviceOps.center_cols`; the host twin is
+    `post_bodies.ff_col_fold_host`)."""
+    var sh = stack_allocation[RTPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var sl = stack_allocation[RTPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var f = Int(block_idx.x) % Int(ncols)
+    var q = Int(block_idx.x) // Int(ncols)
+    var base = q * FOLD_CHUNK
+    var end = min(Int(n), base + FOLD_CHUNK)
+    var v = ff_strided_lane(
+        ff_in != Int32(0), a, b, f * Int(col_stride), Int(row_stride), base, end, tid
+    )
+    sh[tid] = v.hi
+    sl[tid] = v.lo
+    barrier()
+    var o = FOLD_LANES // 2
+    while o > 0:
+        if tid < o:
+            var r = ff_add(FF(sh[tid], sl[tid]), FF(sh[tid + o], sl[tid + o]))
+            sh[tid] = r.hi
+            sl[tid] = r.lo
+        barrier()
+        o //= 2
+    if tid == 0:
+        oh[f * Int(nch_out) + q] = sh[0]
+        ol[f * Int(nch_out) + q] = sl[0]
+
+
+def ff_col_mean_kernel(th: FPtr, tl: FPtr, d: Int32, n: Int32, mean: FPtr):
+    """mean[f] = `post_bodies.ff_mean_cell` of column f's folded sum."""
+    var f = _tid()
+    if f < Int(d):
+        mean[f] = ff_mean_cell(th[f], tl[f], Int(n))
+
+
+def center_cols_kernel(x: FPtr, total: Int, d: Int32, mean: FPtr, dst: FPtr):
+    """dst[i] = `post_bodies.center_cell`(x[i], mean[i % d]), i < total."""
+    var i = _tid()
+    if i < total:
+        dst[i] = center_cell(x[i], mean[i % Int(d)])
 
 
 def kpp_search_kernel(mode: Int32, a: FPtr, b: FPtr, th: FPtr, tl: FPtr, n: Int32, v: FPtr, nt: Int32, ids: IPtr):

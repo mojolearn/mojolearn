@@ -42,7 +42,10 @@ the hashed-weight fixture is what separates this fold from a split one.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 
 from std.math import isfinite
 from std.memory import bitcast
@@ -53,6 +56,7 @@ from core.device_fold import device_exclusive_scan_total
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from spectral.checks.device_io import download_i32, upload_f32, upload_i32
 from spectral.impl.sparse.coo import CooGraph
+from spectral.spmv_order import IDN_LAP_DEGREE_LANES, SPMV_LANES
 from spectral.impl.sparse.matrix.detail.diagonal import (
     coo_diagonal_kernel,
     coo_scale_by_diagonal_symmetric_kernel,
@@ -136,6 +140,49 @@ def degree_kernel(
     for j in range(lo, hi):
         acc = ftz(acc + vals.unsafe_load(j))
     degrees.unsafe_store(r, acc)
+
+
+#: `degree_lanes_kernel`: rows a block, and threads a block (one per lane).
+comptime LAP_DEG_ROWS = 8
+comptime LAP_DEG_TPB = SPMV_LANES * LAP_DEG_ROWS
+
+
+def degree_lanes_kernel(
+    indptr: MutPointer[Int32, MutAnyOrigin],
+    vals: MutPointer[Float32, MutAnyOrigin],
+    degrees: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """`IDN_LAP_DEGREE_LANES` (`spectral/spmv_order.mojo`): one thread per
+    lane of a row (SPMV_LANES lanes, LAP_DEG_ROWS rows a block), each a
+    strided flushed sum over the row's ascending entries from `+0.0`, then
+    the row's lane 0 folds the lane sums in the fixed pairwise tree. A pure
+    function of the row's bits: the block shape only schedules."""
+    var part = stack_allocation[
+        LAP_DEG_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var t = Int(thread_idx.x)
+    var slot = t // SPMV_LANES
+    var lane = t % SPMV_LANES
+    var r = Int(block_idx.x) * LAP_DEG_ROWS + slot
+    var live = r < Int(n_in)
+    var acc = Float32(0.0)
+    if live:
+        var hi = Int(indptr.unsafe_load(r + 1))
+        var j = Int(indptr.unsafe_load(r)) + lane
+        while j < hi:
+            acc = ftz(acc + vals.unsafe_load(j))
+            j += SPMV_LANES
+    part[t] = acc
+    barrier()
+    if live and lane == 0:
+        var base = slot * SPMV_LANES
+        var w = SPMV_LANES // 2
+        while w >= 1:
+            for l in range(w):
+                part[base + l] = ftz(part[base + l] + part[base + l + w])
+            w = w // 2
+        degrees.unsafe_store(r, part[base])
 
 
 def d_minus_a_kernel(
@@ -549,14 +596,24 @@ def laplacian_from_sorted_device(
     var g_n = n
     var degrees = ctx.enqueue_create_buffer[DType.float32](g_n)
     ctx.enqueue_memset(degrees, Float32(0.0))
-    ctx.enqueue_function[degree_kernel](
-        indptr.unsafe_ptr(),
-        vals.unsafe_ptr(),
-        degrees.unsafe_ptr(),
-        Int32(g_n),
-        grid_dim=((g_n + tpb - 1) // tpb, 1, 1),
-        block_dim=(tpb, 1, 1),
-    )
+    comptime if IDN_LAP_DEGREE_LANES:
+        ctx.enqueue_function[degree_lanes_kernel](
+            indptr.unsafe_ptr(),
+            vals.unsafe_ptr(),
+            degrees.unsafe_ptr(),
+            Int32(g_n),
+            grid_dim=((g_n + LAP_DEG_ROWS - 1) // LAP_DEG_ROWS, 1, 1),
+            block_dim=(LAP_DEG_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[degree_kernel](
+            indptr.unsafe_ptr(),
+            vals.unsafe_ptr(),
+            degrees.unsafe_ptr(),
+            Int32(g_n),
+            grid_dim=((g_n + tpb - 1) // tpb, 1, 1),
+            block_dim=(tpb, 1, 1),
+        )
     ctx.enqueue_function[d_minus_a_kernel](
         rows.unsafe_ptr(),
         cols.unsafe_ptr(),

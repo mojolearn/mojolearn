@@ -47,6 +47,28 @@ comptime IDN_BISECT_DEVICE_SCORES = (
     )
 )
 
+# lane fix-c1-cluster (2026-10-04), IDENTICAL, default ON, BOTH COLUMNS (this
+# is the one driver): the column means and the centered matrix on the device.
+# X goes up once (`ops.put`), `ops.center_cols` folds each column with the
+# float-float blocked-then-tree fold (`post_bodies.ff_col_fold_host` is the
+# host column's walk of the same lanes) and writes ftz(ftz(x) - ftz(mean))
+# into a resident slot the splits gather from; the final inertia reuses the
+# uploaded X. Only the d means come back (the child centers add them). The
+# weighted path gathers its rows on the device too and reads the m x d rows
+# once for `ops.kmeans`. BITS: each mean is the float-float fold's quotient
+# where it was a Float64 ascending chain, so a centered word, and anything
+# downstream, can move in the last place; the device and the host column
+# move together. `-D MOJOLEARN_IDN_BISECT_DEVICE_CENTER_OFF=1` (or the
+# master) restores the host centering; the define must reach the host-column
+# build too.
+comptime IDN_BISECT_DEVICE_CENTER = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_BISECT_DEVICE_CENTER_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
 
 struct BisectTree(Movable):
     """Nodes in creation order; node 0 is the root. `centers` are UNCENTERED
@@ -107,22 +129,37 @@ def bisect_fit[O: ClusterOps](
     var weighted = len(weights) > 0
     if k < 1 or k > n:
         raise Error("BisectingKMeans: n_samples=" + String(n) + " should be >= n_clusters=" + String(k))
-    # the column means: one ascending Float64 chain per column, the chains
-    # advanced row by row (lane/neural-pass108: one pass over the rows in
-    # memory order, not d strided passes; each chain's adds are unchanged)
-    var acc = List[Float64](length=d, fill=Float64(0))
-    for r in range(n):
-        var row = r * d
+    var mean: List[Float32]
+    var xc: List[Float32]
+    var xs_all = -1
+    var xc_s = -1
+    comptime if IDN_BISECT_DEVICE_CENTER:
+        # IDN_BISECT_DEVICE_CENTER: X up once, the means and the centered
+        # matrix on the device; `xc` is a one-word placeholder (kmeans_rows
+        # fits the gathered slot and only keeps its `x` alive)
+        xs_all = ops.put(x)
+        var mean_s = ops.zeros(d)
+        xc_s = ops.alloc(n * d)
+        ops.center_cols(xs_all, n, d, mean_s, xc_s)
+        mean = ops.get(mean_s, d)
+        xc = List[Float32](length=1, fill=Float32(0))
+    else:
+        # the column means: one ascending Float64 chain per column, the chains
+        # advanced row by row (lane/neural-pass108: one pass over the rows in
+        # memory order, not d strided passes; each chain's adds are unchanged)
+        var acc = List[Float64](length=d, fill=Float64(0))
+        for r in range(n):
+            var row = r * d
+            for f in range(d):
+                acc[f] = acc[f] + Float64(x[row + f])
+        mean = List[Float32](capacity=d)
         for f in range(d):
-            acc[f] = acc[f] + Float64(x[row + f])
-    var mean = List[Float32](capacity=d)
-    for f in range(d):
-        mean.append(Float32(acc[f] / Float64(n)))
-    var xc = List[Float32](length=n * d, fill=Float32(0))
-    for r in range(n):
-        var row = r * d
-        for f in range(d):
-            xc[row + f] = ftz(ftz(x[row + f]) - ftz(mean[f]))
+            mean.append(Float32(acc[f] / Float64(n)))
+        xc = List[Float32](length=n * d, fill=Float32(0))
+        for r in range(n):
+            var row = r * d
+            for f in range(d):
+                xc[row + f] = ftz(ftz(x[row + f]) - ftz(mean[f]))
     var rng = SplitMix64(seed)
     var all_rows = List[Int](capacity=n)
     for r in range(n):
@@ -130,7 +167,6 @@ def bisect_fit[O: ClusterOps](
     var root_center = List[Float32](length=d, fill=Float32(0))
     _ = tree.add(root_center, Float64(0), all_rows^)
     var kinit = INIT_RANDOM if init == INIT_RANDOM else INIT_KMEANS_PLUS_PLUS
-    var xc_s = -1
     for _split in range(k - 1):
         var leaves = tree.leaves()
         var pick = leaves[0]
@@ -150,7 +186,19 @@ def bisect_fit[O: ClusterOps](
         var best_inertia = Float64(0)
         var sub_s: Int
         if weighted:
-            var sub = gather_rows(xc, d, rows)
+            var sub: List[Float32]
+            comptime if IDN_BISECT_DEVICE_CENTER:
+                # the rows gathered from the resident centered slot, read once
+                var widx = List[Int32](capacity=m)
+                for r in rows:
+                    widx.append(Int32(r))
+                var widx_s = ops.put_i(widx)
+                var wsub_s = ops.empty(m * d)
+                ops.gather_rows(xc_s, d, widx_s, m, wsub_s)
+                sub = ops.get(wsub_s, m * d)
+                ops.shrink(wsub_s)
+            else:
+                sub = gather_rows(xc, d, rows)
             for it in range(n_init):
                 var c = List[Float32]()
                 var l = List[Int32]()
@@ -246,7 +294,11 @@ def bisect_fit[O: ClusterOps](
         for f in range(d):
             centers.append(tree.centers[t * d + f])
     # inertia against the (uncentered) leaf centers, one Float64 chain
-    var xs = ops.put(x)
+    var xs: Int
+    if xs_all >= 0:
+        xs = xs_all
+    else:
+        xs = ops.put(x)
     var cs = ops.put(centers)
     var inertia = Float64(0)
     comptime if IDN_BISECT_DEVICE_SCORES:
