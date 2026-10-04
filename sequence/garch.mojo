@@ -17,6 +17,7 @@ The maximum is the same point when it is interior; the path is not."""
 from sequence.nm import Objective, nelder_mead
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_log, identical_pow, identical_sqrt
+from sequence.fold32 import FOLD_L, tree32
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
@@ -60,6 +61,39 @@ comptime GARCH_GRID = (
     and not is_defined["MOJOLEARN_SEQ_GARCH_GRID_OFF"]()
 )
 comptime GARCH_GRID_N = 64
+
+#: lane fix-t1-seq (audit T1, F10; from lane/hr2-kpca-seq e99030f6f
+#: SEQ_WARP_FIT). IDENTICAL on every vendor. The device fit is the team
+#: kernel (sequence/fit_team.mojo); there every thread folded all n
+#: log-likelihood terms in one ascending chain. GARCH_FOLD32 sums them in
+#: sequence/fold32.mojo's order (32 strided slots, then the pairwise tree):
+#: the slots on up to 32 threads, the tree on every thread; `garch_nll`
+#: below (the host column) replays the same slots and tree. CHANGES THE BITS
+#: of every GARCH log-likelihood, on NVIDIA, AMD, Apple and the host column
+#: together. -D MOJOLEARN_IDN_GARCH_FOLD32_OFF (or MOJOLEARN_IDN_ALL_OFF)
+#: restores the ascending chain everywhere.
+comptime GARCH_FOLD32 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_GARCH_FOLD32_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: lane fix-t1-seq (audit T1, F10). The chunked GARCH(1, 1) likelihood of
+#: Apple FAST (`GARCH_COOP`, sequence/fit_team.mojo `garch_nll_coop`: one
+#: chunk of the series per thread, the chunk's affine variance map composed
+#: from an unknown start, the exclusive prefix of the maps, the chunk walked
+#: with its bounds; a bound or a NaN anywhere sends the point to the stored
+#: recursion) under IDENTICAL on every vendor, and replayed in the host
+#: column by `garch_nll_chunks` below with the same GARCH_CHUNKS chunks, the
+#: same operations and the same fold of the per-chunk sums. p, o, q <= 1
+#: only (the board's GARCH(1, 1)); other orders keep the stored recursion.
+#: CHANGES THE BITS (the composed maps round differently from the step by
+#: step recursion), on NVIDIA, AMD, Apple and the host column together.
+#: -D MOJOLEARN_IDN_GARCH_COOP_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the
+#: lead thread's recursion everywhere.
+comptime GARCH_COOP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_GARCH_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: the chunks of garch_nll_coop: the team's threads (fit_team.mojo
+#: SEQ_TEAM_TPB, asserted equal in fit_team_py.mojo garch_team_py)
+comptime GARCH_CHUNKS = 64
 
 comptime LOG_2PI: Float32 = 1.8378770664093453
 #: floats at the end of each scratch row for Nelder-Mead's cycle snapshot:
@@ -170,10 +204,21 @@ def garch_sigma2(par: FP, r: FP, n: Int, p: Int, o: Int, q: Int, backcast: Float
 def garch_nll(par: FP, r: FP, n: Int, p: Int, o: Int, q: Int, backcast: Float32, vb: FP, s2: FP) -> Float32:
     garch_sigma2(par, r, n, p, o, q, backcast, vb, s2)
     var ll = Float32(0.0)
-    for t in range(n):
-        var v = ld(s2, t)
-        var x = ld(r, t)
-        ll = add(ll, add(add(LOG_2PI, ftz(identical_log(v))), div(mul(x, x), v)))
+    comptime if GARCH_FOLD32:
+        # the team's order (fit_team.mojo garch_nll_team): slot t mod 32
+        # ascending, then the pairwise tree
+        var sl = InlineArray[Float32, FOLD_L](fill=Float32(0.0))
+        for t in range(n):
+            var v = ld(s2, t)
+            var x = ld(r, t)
+            var j = t % FOLD_L
+            sl[j] = add(sl[j], add(add(LOG_2PI, ftz(identical_log(v))), div(mul(x, x), v)))
+        ll = tree32(sl)
+    else:
+        for t in range(n):
+            var v = ld(s2, t)
+            var x = ld(r, t)
+            ll = add(ll, add(add(LOG_2PI, ftz(identical_log(v))), div(mul(x, x), v)))
     ll = mul(Float32(0.5), ll)
     if not (ll <= Float32(3.0e38)):
         # an overflowed likelihood (inf, or inf - inf) scores as the worst

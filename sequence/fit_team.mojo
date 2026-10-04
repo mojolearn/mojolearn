@@ -27,7 +27,8 @@ x_linear/team.mojo:
 GARCH: the variance recursion is the lead thread's (it is sequential in
 time); the residuals and the n log-likelihood terms are dealt out; the sum of
 the terms is every thread's own ascending fold (the same words in the same
-order as op_garch's fused loop). Prophet: the points' residuals and weights
+order as op_garch's fused loop; IDENTICAL: sequence/fold32.mojo's slots and
+tree, GARCH_FOLD32 in sequence/garch.mojo). Prophet: the points' residuals and weights
 are dealt out; each of the P + 1 gradient and sse accumulators is ONE
 thread's ascending chain over the points, exactly op_prophet_fit's chain for
 that accumulator.
@@ -41,7 +42,8 @@ from std.sys.info import has_apple_gpu_accelerator, is_amd_gpu, is_apple_gpu, is
 from x_linear.team import team_barrier
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_exp, identical_log, identical_sqrt
-from sequence.garch import GARCH_SNAP, LOG_2PI, _backcast, _garch_step_reg, _grid, _pers, _var_bounds, garch_sigma2
+from sequence.fold32 import FOLD_L, tree32
+from sequence.garch import GARCH_COOP_IDN, GARCH_FOLD32, GARCH_SNAP, LOG_2PI, _backcast, _garch_step_reg, _grid, _pers, _var_bounds, garch_sigma2
 from sequence.nm import NMState, Objective, nm_finish, nm_start, nm_steps
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from sequence.prophet import MEM, LBState, ProphetFG, _fg_prior_v, lbfgs_start, lbfgs_steps
@@ -144,9 +146,23 @@ def garch_team_shared(n: Int) -> Int:
     """Words of a series' shared row: r, s2, the variance bounds (2n), the
     log-likelihood terms; GARCH_COOP: then the chunk maps (2 words per
     thread), the per-chunk sums and the bound flags."""
+    var w = 5 * n
     comptime if GARCH_COOP:
-        return 5 * n + 4 * SEQ_TEAM_TPB
-    return 5 * n
+        w += 4 * SEQ_TEAM_TPB
+    comptime if GARCH_FOLD32:
+        # sequence/fold32.mojo's slots (garch_nll_team), after the maps:
+        # never the maps' words, which the next chunked pass writes unsynced
+        w += FOLD_L
+    return w
+
+
+@always_inline
+def garch_slots_off(n: Int) -> Int:
+    """GARCH_FOLD32's slots, in words past the terms row: after the n terms
+    and, under GARCH_COOP, the chunk maps, sums and flags."""
+    comptime if GARCH_COOP:
+        return n + 4 * SEQ_TEAM_TPB
+    return n
 
 
 @always_inline
@@ -157,14 +173,34 @@ def garch_nll_team(team: SeqTeam, par: FP, r: FP, n: Int, p: Int, o: Int, q: Int
     if team.lead():
         garch_sigma2(par, r, n, p, o, q, backcast, vb, s2)
     team.sync()
-    for t in range(team.tid, n, team.nt):
-        var v = ld(s2, t)
-        var x = ld(r, t)
-        st(terms, t, add(add(LOG_2PI, ftz(identical_log(v))), ftz(identical_div(mul(x, x), v))))
-    team.sync()
     var ll = Float32(0.0)
-    for t in range(n):
-        ll = add(ll, ld(terms, t))
+    comptime if GARCH_FOLD32:
+        # sequence/fold32.mojo: slot s (on thread s mod nt) folds the terms
+        # s, s + 32, ... ascending from 0; every thread runs the tree on the
+        # stored slots (garch_nll's host order). The slots sit past the
+        # chunk maps (garch_team_shared); a slot is rewritten only after the
+        # next call's sync above, which every reader reaches first.
+        var slots = terms + garch_slots_off(n)
+        for s in range(team.tid, FOLD_L, team.nt):
+            var acc = Float32(0.0)
+            for t in range(s, n, FOLD_L):
+                var v = ld(s2, t)
+                var x = ld(r, t)
+                acc = add(acc, add(add(LOG_2PI, ftz(identical_log(v))), ftz(identical_div(mul(x, x), v))))
+            st(slots, s, acc)
+        team.sync()
+        var sl = InlineArray[Float32, FOLD_L](fill=Float32(0.0))
+        comptime for j in range(FOLD_L):
+            sl[j] = ld(slots, j)
+        ll = tree32(sl)
+    else:
+        for t in range(team.tid, n, team.nt):
+            var v = ld(s2, t)
+            var x = ld(r, t)
+            st(terms, t, add(add(LOG_2PI, ftz(identical_log(v))), ftz(identical_div(mul(x, x), v))))
+        team.sync()
+        for t in range(n):
+            ll = add(ll, ld(terms, t))
     ll = mul(Float32(0.5), ll)
     if not (ll <= Float32(3.0e38)):
         return Float32(3.0e38)
