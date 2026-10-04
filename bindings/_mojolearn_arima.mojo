@@ -81,6 +81,9 @@ from bindings.hostptr import f32_ptr, i32_ptr
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
+from arima.impl.fast_scalar_df import ARIMA_K3_DF_ON
+from bindings.arima_k3_df_probe import arima_k3_df_probe_binding
+
 from std.python.bindings import PythonModuleBuilder
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -433,6 +436,8 @@ def arima_forecast_binding(
 def PyInit__mojolearn_arima() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_arima")
+        comptime if ARIMA_K3_DF_ON:
+            m.def_function[arima_k3_df_probe_binding]("_arima_k3_df_probe")
         m.def_function[arima_vendor_binding]("arima_vendor")
         m.def_function[arima_numeric_mode_binding]("arima_numeric_mode")
         m.def_function[arima_fit_binding]("arima_fit")
