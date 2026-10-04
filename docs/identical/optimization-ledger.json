@@ -64,7 +64,20 @@
       ],
       "release_policy": "Final full receipts/admission bind the final frozen combined source; incomplete preliminary probes cannot create release qualification. No CPU fallback.",
       "main_promoted": false,
-      "publishing": "Out of scope."
+      "publishing": "Out of scope.",
+      "preliminary_evidence": "bench/results/identical-integration-20261004/current-ptx-probe.json",
+      "preliminary_result": "Pinned e82c12650:211tests+24subtests pass;sm89 native and forced-JITsm80 primitive digest match. Final architecture/admission matrix remains pending."
+    },
+    {
+      "candidate": "CNN/SGD correctness and launch bounds",
+      "status": "TARGETED_BITS_PASS_SPEED_PENDING",
+      "evidence": "bench/results/identical-integration-20261004/cnn-sgd-bits.json",
+      "validation": "Small/medium25cases perarm/column match NVIDIA/AMD/Linuxhost; no Apple claim.",
+      "fixes": [
+        "be3348860 linear module initialization export",
+        "a4d01a130 SGD launch-bound metadata"
+      ],
+      "main_promoted": false
     }
   ],
   "correctness_repairs": [

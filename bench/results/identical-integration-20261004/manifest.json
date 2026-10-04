@@ -41,6 +41,16 @@
       "original_evidence": "callpath-20261004/metal-58761102d/m4-host-results.json",
       "sha256": "cbfd271029f7a5ddb908d47cc6d82589149a6894ef96e2c2daa6401a3867d34d",
       "bytes": 598
+    },
+    "cnn-sgd-bits.json": {
+      "sha256": "d566561ab4ff99ddf3abbf59b97bf163469558479e4c55191ef34296bba174a3",
+      "bytes": 16287,
+      "source_and_scope": "See exact source snapshots and explicit qualification limits in this receipt."
+    },
+    "current-ptx-probe.json": {
+      "sha256": "86007827ae8f4f971ac0a189ae99618101c83455e0f67d973032c4d421c923e6",
+      "bytes": 2673,
+      "source_and_scope": "See exact source snapshots and explicit qualification limits in this receipt."
     }
   }
 }
