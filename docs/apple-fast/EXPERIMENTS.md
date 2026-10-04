@@ -963,3 +963,10 @@ catalog per-shape leads. No compilation/runtime or quality/speed claim yet.
 Separate operation flags, split and PCA permissions; original split/zero/center/
 scale/restore policies retained. Baseline is current AFN, not SDK screen G0.
 See [scoped adapter contract](ab/scoped-gemm.md). M2/M3 manager gates required.
+
+
+## MCD non-split batched G1 covariance (remote source-only, 2026-10-04)
+
+| Define | Algorithm / scope | Source | Evidence | Verdict |
+|---|---|---|---|---|
+| `MOJOLEARN_MCD_FAST_G1_GRAM` | MinCovDet / EllipticEnvelope, TN self-Gram d129..256 K128..1023, non-split phase A/B | lane/apple-fast-mcd-g1-gram-remote, base201fe736 | unbuilt; binding x_decomp; ab/mcd-g1-gram.md | OPEN default-off; matrix + actual fitted quality and speed owed; not held atomic PCA/ordered-covariance retry |

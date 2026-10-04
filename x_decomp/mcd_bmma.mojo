@@ -25,6 +25,35 @@ is 0 (inactive; for the weighted Gram, pinvh did not run) launches no work:
 main zeroed its operands and discarded its output (guarded publication).
 """
 from std.atomic import Atomic
+from std.ffi import _Global
+from std.sys.compile import is_defined
+from gemm.afn_apple_fast import AFN_GEMM_APPLE
+from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel
+
+# OPEN, no measured caller acceptance: independently scope non-split MCD
+# covariance to avoid replaying held PCA full-row atomic Gram. No default.
+comptime MCD_G1_GRAM = AFN_GEMM_APPLE and is_defined["MOJOLEARN_MCD_FAST_G1_GRAM"]()
+comptime MCD_G1_AUDIT = AFN_GEMM_APPLE and is_defined["MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT"]()
+
+struct MCDG1Audit(Defaultable, Movable):
+    var counts: InlineArray[Int, 4]
+    var last: InlineArray[Int, 7]
+    def __init__(out self):
+        self.counts = InlineArray[Int, 4](fill=0)
+        self.last = InlineArray[Int, 7](fill=0)
+
+comptime MCD_G1_STATE = _Global[StorageType=MCDG1Audit, name="MCDG1GramAuditV1", init_fn=MCDG1Audit.__init__]
+
+def mcd_g1_count(index: Int) raises -> Int:
+    if index < 0 or index >= 4:
+        raise Error("MCD G1 count index out of range")
+    return MCD_G1_STATE.get_or_create_ptr()[].counts[index]
+
+def mcd_g1_last(index: Int) raises -> Int:
+    if index < 0 or index >= 7:
+        raise Error("MCD G1 metadata index out of range")
+    return MCD_G1_STATE.get_or_create_ptr()[].last[index]
+
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceContext
@@ -179,6 +208,24 @@ def mcd_bmma_kernel[SPLIT: Bool](
                         c.unsafe_store(gi * n + gj, v)
 
 
+def mcd_g1_gram_batched_kernel(
+    c: F32Ptr, a: F32Ptr, gate: I32Ptr, gate_all: Int32,
+    m: Int32, k: Int32, a_bs: Int32, c_bs: Int32,
+):
+    """Non-split TN self-Gram, with the incumbent candidate gate and strides.
+    The common G1 implementation reads block_idx.x; z selects only the batch.
+    Every block of an inactive candidate returns before touching any operand.
+    """
+    var z = Int(block_idx.z)
+    if gate_all == 0 and gate.unsafe_load(z) == 0:
+        return
+    var x = a + z * Int(a_bs)
+    scoped_kernel[64, 64, False](
+        c + z * Int(c_bs), x, x, m, m, k,
+        Int32(1), m, m, Int32(1), k,
+    )
+
+
 def mcd_bmma_zero_kernel(c: F32Ptr, gate: I32Ptr, gate_all: Int32, nc: Int32, cells: Int32, c_bs: Int32):
     """C_z[0, cells) = +0.0 for every gated candidate z (the split sum's
     seed, `afn_zero_kernel` per candidate)."""
@@ -209,6 +256,37 @@ def launch_gemm_mma_batched(
     if tiles < DFG_BLOCK_TARGET and k >= 2 * DFG_MIN_SPLIT_STEPS:
         splits = min(DFG_BLOCK_TARGET // tiles, k // DFG_MIN_SPLIT_STEPS)
     var ga = Int32(1) if gate_all else Int32(0)
+    # MCD phase A/B covariance only: same centered input pointer/stride,
+    # 129..256 features and 128..1023 selected rows, no atomics/split change.
+    # Weighted precision (different pointers), Mahalanobis NN, taxi and
+    # phase-C huge-K covariance retain the incumbent kernel.
+    var eligible = (
+        m == n and m >= 129 and m <= 256 and k >= 128 and k <= 1023
+        and ta and not tb and a == b and a_bs == b_bs and splits == 1
+        and a_bs >= m * k and c_bs >= m * n and c != a and c != b
+    )
+    comptime if MCD_G1_AUDIT:
+        var state = MCD_G1_STATE.get_or_create_ptr()
+        state[].counts[0] += 1
+        if eligible:
+            state[].counts[1] += 1
+            state[].counts[3] += nc  # potential slots, NOT active device candidates
+            state[].last[0] = m
+            state[].last[1] = k
+            state[].last[2] = n
+            state[].last[3] = nc
+            state[].last[4] = a_bs
+            state[].last[5] = c_bs
+            state[].last[6] = splits
+    comptime if MCD_G1_GRAM:
+        if eligible:
+            comptime if MCD_G1_AUDIT:
+                MCD_G1_STATE.get_or_create_ptr()[].counts[2] += 1
+            ctx.enqueue_function[mcd_g1_gram_batched_kernel](
+                c, a, gate, ga, Int32(m), Int32(k), Int32(a_bs), Int32(c_bs),
+                grid_dim=(tiles, 1, nc), block_dim=(MB_NT, 1, 1),
+            )
+            return
     if splits > 1:
         var per = (k + splits - 1) // splits
         per = ((per + AFN_GEMM_KB - 1) // AFN_GEMM_KB) * AFN_GEMM_KB
