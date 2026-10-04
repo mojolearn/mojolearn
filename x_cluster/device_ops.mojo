@@ -569,7 +569,21 @@ def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
 # are distinct integers (the column is their low word), so the two largest
 # of a row are the same two whatever the fold's shape: the same picks, the
 # same R, one read of A + S less per iteration.
-comptime AP_R_TOP2 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_AP_EXACT"]()
+# fam-cluster (2026-10-04): IDENTICAL takes it by default. Integer keys, the
+# same two largest, so `first`, `second` and `arg` are `_ap_r_kernel`'s and
+# R is the same words. `-D MOJOLEARN_IDN_AP_R_TOP2_OFF=1` restores the two
+# walks.
+comptime IDN_AP_R_TOP2 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_AP_R_TOP2_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+comptime AP_R_TOP2 = (
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_AP_EXACT"]())
+    or IDN_AP_R_TOP2
+)
 
 
 def _ap_r_top2_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
