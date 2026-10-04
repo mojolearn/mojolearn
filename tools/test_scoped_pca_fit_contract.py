@@ -62,6 +62,25 @@ class ContractTests(unittest.TestCase):
             record(Path('/unused'),dict(unsupported=object()))
         opened.assert_not_called()
 
+    def test_recovery_metadata_pins_all_six_inputs(self):
+        from scoped_pca_recover import FILES, spec
+        self.assertEqual(len(FILES),6)
+        self.assertTrue(all(len(v)==64 and all(c in '0123456789abcdef' for c in v) for v in FILES.values()))
+        s=spec(H,'recovery-test')
+        self.assertEqual(s['artifacts'],[])
+        self.assertEqual(len(s['prerequisites']),6)
+        self.assertEqual(policy_for(H,s['script'],s['args']),'reference')
+
+    def test_recovery_retains_capture_identity_not_recovery_identity(self):
+        from scoped_pca_recover import partial_identity, COMPILED, CAPTURE, CAPTURE_HELPER, CONTRACT, DATA, BINARIES, A_FLAGS, B_FLAGS
+        identity=dict(source_sha=COMPILED,harness_source=CAPTURE,helper_sha=CAPTURE_HELPER,
+                      contract=CONTRACT,bound=5e-6,error_regression_allowance=0,data_sha=DATA,status='HOLD',
+                      manifest=dict(source_sha=COMPILED,binding='estimators',numeric_mode='fast',
+                                    defines_A=A_FLAGS,defines_B=B_FLAGS,hashes=BINARIES))
+        prefix=json.dumps(identity,indent=2)[:-2]+',\n  "metrics": {\n'
+        self.assertEqual(partial_identity(prefix),identity)
+        with self.assertRaises(AssertionError):partial_identity(prefix.replace('"HOLD"','"PASS"'))
+
     def receipt(self):
         return dict(status='PASS',scored=False,source_sha=C,
                     metrics={k:dict(A=0.0,B=0.0,pass_no_worse=True) for k in METRIC_NAMES},

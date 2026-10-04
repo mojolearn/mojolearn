@@ -127,3 +127,26 @@ harness separately recorded, and hashes of all saved packets and original
 partial report; never overwrite the failed report or substitute recovery
 source for capture provenance. Such recovery remains manager-owned serialized
 host analysis; it was not executed by this repair lane.
+
+
+### Frozen-output recovery command
+
+`tools/scoped_pca_recover.py H UNIQUE_TAG --spec` generates the metadata
+preflight spec declaring all six original files and exact SHA256s. After
+manager staging/preflight, the serial command is:
+
+```
+python tools/apple_fast_pinned_job.py H tools/scoped_pca_recover.py H scoped-pca-fit-istella-recover-v1
+```
+
+H is the final recovery commit, not the old capture or compiled commit.
+It checks exact capture identity, repaired comparator hash, all packet hashes,
+loaded-binary provenance from metadata, route/split records and input-preserved
+flags. It performs only CPU comparison of saved fitted outputs against saved
+220x220 oracle data. No native modules, fits, full dataset read, full covariance
+rebuild or timing. The partial report is never opened for writing. The NEW
+`TAG-recovery/report.json` keeps original C/capture-H/helper identity and adds
+separate recovery source/helper/input hashes. A known-HOLD guard rejects an
+unexpected PASS. Exit0 means reconstruction succeeded, never quality passed.
+The spec's reference policy requires no native artifacts. This recovery was
+prepared but not executed by the lane; the manager owns its serial execution.

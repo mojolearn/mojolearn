@@ -4,6 +4,7 @@ Importing this module performs no builds, imports of native modules, or jobs.
 import re
 
 POLICIES = {
+    "tools/scoped_pca_recover.py": "reference",
     "tools/scoped_pca_fit.py": "verified-scoped-pca-fit",
     "tools/scoped_gemm_quality.py": "verified-scoped-adapter-quality",
     "tools/arima_assoc_scan_oracle.py": "reference",
