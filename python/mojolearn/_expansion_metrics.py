@@ -1173,7 +1173,7 @@ class _Reg:
         prog.stage("reg_epi", D, _RE_MEAN, D, sums, self.SW, self.n, dst, d32, mode)
         return (dst, d32) if f32 else dst
 
-    def mean(self, kind, mode=_RE_DIV, **kw):
+    def stage_mean(self, kind, mode=_RE_DIV, **kw):
         """The per-column (weighted) mean of the term, binary64 (DEVIATION 6106)."""
         return self.fin(self.sums(self.term(kind, **kw)), mode)
 
@@ -1261,7 +1261,7 @@ def _mean_error(kind, y_true, y_pred, sample_weight, multioutput, numeric_mode, 
     r = _Reg(y_true, y_pred, sample_weight, multioutput, caller)
     r.program(scalar)
     flag = r.scan_log_domain() if log_domain else None
-    out = r.average(r.mean(kind, _RE_DIV | (_RE_ROOT if root else 0)))
+    out = r.average(r.stage_mean(kind, _RE_DIV | (_RE_ROOT if root else 0)))
     return r.result(out, numeric_mode, None if flag is None else lambda prog: _refuse_log_domain(prog, flag, log_domain))
 
 
@@ -1452,7 +1452,7 @@ def mean_tweedie_deviance(y_true, y_pred, *, sample_weight=None, power=0, numeri
         raise ValueError("Multioutput not supported in mean_tweedie_deviance")
     r.program(float(power))
     check = _tweedie_domain(r, power, "mean_tweedie_deviance")
-    return r.scalar(r.mean("tweedie"), numeric_mode, check)
+    return r.scalar(r.stage_mean("tweedie"), numeric_mode, check)
 
 
 def mean_poisson_deviance(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
@@ -1479,9 +1479,9 @@ def d2_tweedie_score(y_true, y_pred, *, sample_weight=None, power=0, numeric_mod
         return float("nan")
     r.program(float(power))
     check = _tweedie_domain(r, power, "d2_tweedie_score")
-    num = r.mean("tweedie")
+    num = r.stage_mean("tweedie")
     y_avg = r.fin(r.sums(r.Y), f32=True)[1]
-    den = r.mean("tweedie", P=y_avg, broadcast=True)
+    den = r.stage_mean("tweedie", P=y_avg, broadcast=True)
     return r.scalar(_assemble(r, num, den, False, average=False), numeric_mode, check)
 
 
@@ -1495,9 +1495,9 @@ def d2_pinball_score(y_true, y_pred, *, sample_weight=None, alpha=0.5, multioutp
         _undefined_warning("D^2 score is not well-defined with less than two samples.")
         return float("nan")
     r.program(alpha)
-    num = r.mean("pinball")
+    num = r.stage_mean("pinball")
     quant = r.percentile(r.Y, alpha * 100, f32=True)[1]
-    den = r.mean("pinball", P=quant, broadcast=True)
+    den = r.stage_mean("pinball", P=quant, broadcast=True)
     return r.result(_assemble(r, num, den, True), numeric_mode)
 
 
