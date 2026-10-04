@@ -163,8 +163,8 @@ from core.host_predict_threads import (
     host_predict_task_count,
 )
 from gemm.host.identical_gemm import OP_TN, gemm_oracle
-from decomposition.pca_rr_switch import PCA_RR_EIGH
-from x_decomp.rr import RR_EIGH_SWEEPS, host_eigh_rr
+from decomposition.pca_rr_switch import PCA_RR_EIGH, PCA_RR_SWEEPS
+from x_decomp.rr import host_eigh_rr
 
 
 #: The gate's negative control (the CPU training lane, brief section 3.4):
@@ -640,11 +640,11 @@ def host_eig_and_truncate(
     order and tests) in place of the cyclic replay."""
     comptime if PCA_RR_EIGH:
         var rv = List[Float32](length=n_cols * n_cols, fill=Float32(0.0))
-        var got = host_eigh_rr(cov, rv, n_cols, RR_EIGH_SWEEPS, Float32(JACOBI_TOL))
+        var got = host_eigh_rr(cov, rv, n_cols, PCA_RR_SWEEPS, Float32(JACOBI_TOL))
         if not got[0]:
             raise Error(
                 "the round-robin Jacobi did not converge in "
-                + String(RR_EIGH_SWEEPS)
+                + String(PCA_RR_SWEEPS)
                 + " sweeps at n_cols = "
                 + String(n_cols)
                 + ". An unconverged decomposition is not returned as if it were"

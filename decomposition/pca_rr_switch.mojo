@@ -19,3 +19,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 comptime PCA_RR_EIGH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_PCA_RR_EIGH_OFF"]()
 )
+
+#: The round-robin solve's sweep budget in PCA / TruncatedSVD, the device and
+#: the host column alike (the cyclic solver it replaces has JACOBI_SWEEPS =
+#: 15). The device enqueues every sweep's launches up front and decides
+#: convergence on the device (no readback between sweeps: launches after the
+#: converged test are no-ops), so the budget is also the launch count; a
+#: solve that needs more raises, as the cyclic one does.
+comptime PCA_RR_SWEEPS = 24
