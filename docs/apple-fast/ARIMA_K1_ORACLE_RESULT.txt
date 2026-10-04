@@ -109,3 +109,22 @@ optimizer and forecast no-regression plus a parallel GPU likelihood reduce.
 
 This review only reads saved metrics and source. No oracle reruns, local
 numerical experiments, builds, GPU calls or scored timings were performed.
+
+Prepared diagnostic harness
+---------------------------
+tools/arima_k1_diagnostics.py is a separate, reference-only experiment.
+Fixed 22 evaluations across the six failed groups and four representative
+math-passing groups (with listed perturbations); existing gate unchanged.
+Each evaluates three explicitly different model controls: rounded Q/shared
+rounded prior; symmetric Q/shared rounded prior; intended exact rank-one
+Q/recomputed double prior. Each records scan versus repaired and unrepaired
+serial64, serial repair sizes/counts, Q/P0/leaf C symmetry and symmetric-part
+eigenvalues, per-level I+CJ / I+JC condition numbers and solve backward
+residuals, composed C/J symmetry/spectra and first output index exceeding
+the ORIGINAL math bound. No new threshold or aggregate PASS is computed.
+Nonfinite condition numbers remain explicit strings in diagnostic JSON.
+These are numerical reference controls, not covariance changes proposed
+for production. No local execution was performed.
+
+After manager review, M3 serial queue:
+CMD lane/apple-fast-arima-k1-diagnostics arima-k1-diagnostics-v1 ~/board-0834/cache/venv/bin/python tools/arima_k1_diagnostics.py --output ~/mq/out/arima-k1-diagnostics-v1.json
