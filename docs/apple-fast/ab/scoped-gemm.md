@@ -70,3 +70,7 @@ and shell syntax checks only. M2 compile A/B; M3 unscored quality; review failur
 per operation, then add actual PCA/RSVD/NMF caller checks and one predeclared
 call+first-read measurement per eligible arm/scenario. Do not retime the previous
 SDK cold or resident contracts. A new AFN comparison must be named explicitly.
+
+Probe r1 lifecycle repair: GEMM and covariance fixtures share one process-lifetime
+DeviceContext via process_ctx; buffers remain alive through download/synchronize.
+The original04d source pin is preserved; no measurements or gates are changed.

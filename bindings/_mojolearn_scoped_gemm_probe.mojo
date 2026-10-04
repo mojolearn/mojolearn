@@ -3,7 +3,7 @@
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from experiments.apple_fast.gemm.scoped_dispatch import (
     AUDIT, ENABLED, TALL, DENSE, GRAM, NARROW, SPLITS, PCA,
@@ -51,7 +51,7 @@ def gemm_py(aa: PythonObject, bb: PythonObject, cc: PythonObject, dims: PythonOb
         var ap = FPtr(unsafe_from_address=Int(py=aa))
         var bp = FPtr(unsafe_from_address=Int(py=bb))
         var cp = FPtr(unsafe_from_address=Int(py=cc))
-        var ctx = DeviceContext()
+        var ctx = process_ctx["MojoScopedGemmProbeFast"]()
         var da = ctx.enqueue_create_buffer[DType.float32](m * k)
         ctx.enqueue_copy(dst_buf=da, src_ptr=ap)
         var db = da if aliased_inputs else ctx.enqueue_create_buffer[DType.float32](n * k)
@@ -81,7 +81,7 @@ def covariance_py(xx: PythonObject, cc: PythonObject, mm: PythonObject, after: P
         var restore = Int(py=dims[2]) != 0
         if nr < 2 or nc < 1 or max(nr * nc, nc * nc) > 2147483647:
             raise Error("invalid covariance shape")
-        var ctx = DeviceContext()
+        var ctx = process_ctx["MojoScopedGemmProbeFast"]()
         var dx = ctx.enqueue_create_buffer[DType.float32](nr * nc)
         ctx.enqueue_copy(dst_buf=dx, src_ptr=FPtr(unsafe_from_address=Int(py=xx)))
         # These are independent transpose/partial-sum scratch buffers.
