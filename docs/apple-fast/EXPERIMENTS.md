@@ -704,3 +704,9 @@ Detailed isolation audit and six identified scan-window tags: [MEASUREMENT_AUDIT
 | Experiment | Measured source / tags | A → B ms | Quality | Verdict / remaining gate |
 |---|---|---|---|---|
 | `ARIMA_ORDER_BATCH` → default + `ARIMA_ORDER_BATCH_OFF` | 7ba385b30; gap26-orders-current-synthetic / taxi-hourly | synthetic13780.316917 →9287.286750 (-32.6%); taxi-hourly22706.248042 →13747.215083 (-39.5%) | Fitted/order/likelihood/forecast full-quality PASS before timing; both board digests and RMSE identical (2.624119555 /74.659122441). Existing fused tail enabled in BOTH arms | KEEP, default merged on main dc2285bc0; manager default/OFF builds both rc0. Source review against main d1871643b preserved accepted fused tail. Taxi opponent-quality HOLD remains (74.6591 vs68.21). [Raw evidence and review](ab/arima-orders-default.md) |
+
+## AutoARIMA grouped refit candidate (2026-10-04, lane w2-ts)
+
+| Experiment | Source / tags | A → B ms | Quality | Verdict / remaining gate |
+|---|---|---|---|---|
+| `ARIMA_FIT_GROUPS` (opt-in `-D MOJOLEARN_ARIMA_FIT_GROUPS`) | lane/apple-fast-w2-ts; w2-ts-fitgroups-* | NOT RUN | Expected byte-identical: each chosen order keeps its own `OrderOptimizer`, only the Kalman launch is shared by (d, r, k), and an order leaves the loop at the poll where `order_min_lbfgs` breaks. Gate `tools/arima_fitgroups_quality.sh` (existing 512/2048 fixtures plus a 48-series 1392-obs board-shaped one; orders, IC, params, x, x0, fx, llf, n_iter, retcode, predictions, forecasts all byte-equal) | OPEN. Hypothesis: `AutoARIMA.fit` refits each chosen order serially at maxiter 1000, so its time is the sum of the orders' rounds; one call with grouped filter launches makes it about the slowest order's rounds. Not a retry of `ARIMA_ORDER_BATCH` (search only) or `ARIMA_P_FIX`/`EXACT_STEADY` (filter arithmetic). Phase split owed: `tools/arima_phase_diag.sh` |
