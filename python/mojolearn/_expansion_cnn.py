@@ -166,16 +166,15 @@ def _dev_of(layer, b):
 # words in a host array behind the same object, and a layer or option with
 # no resident form (groups, an explicit pad, any other layer through
 # `__array__`) takes the host entry on the downloaded words.
-# MOJOLEARN_XCNN_HOST_IO=1 is the before arm: `to_device` returns the host
-# array and the graph layers upload their ones vector per call again.
-_HOST_IO = __import__("os").environ.get("MOJOLEARN_XCNN_HOST_IO", "") == "1"
+# MOJOLEARN_XCNN_DEVICE_IO_OFF=1 is the A/B before arm (the same device
+# kernels either way): `to_device` returns the array it was given and the
+# graph layers upload their ones vector per call again.
+_DEVICE_IO_OFF = __import__("os").environ.get("MOJOLEARN_XCNN_DEVICE_IO_OFF", "") == "1"
 
 
 def _size(shape):
-    n = 1
-    for v in shape:
-        n *= int(v)
-    return n
+    """The element count of a shape tuple."""
+    return int(__import__("math").prod(shape))
 
 
 class DeviceTensor:
@@ -186,7 +185,7 @@ class DeviceTensor:
     _device_tensor = True
 
     def __init__(self, binding, shape, h=None, host=None, base=None):
-        self.b, self.shape = binding, tuple(int(v) for v in shape)
+        self.b, self.shape = binding, tuple(int(v) for v in shape)  # glue: a shape tuple's few ints
         self.h, self._host, self._base = h, host, base
 
     @classmethod
@@ -234,9 +233,9 @@ class DeviceTensor:
         keeps this tensor alive)."""
         if len(shape) == 1 and not isinstance(shape[0], int):
             shape = tuple(shape[0])
-        shape = [int(v) for v in shape]
+        shape = [int(v) for v in shape]  # glue: a shape tuple's few ints
         if shape.count(-1) == 1:
-            known = _size(v for v in shape if v != -1)
+            known = _size(v for v in shape if v != -1)  # glue: a shape tuple's few ints
             shape[shape.index(-1)] = self.size // known if known else 0
         if _size(shape) != self.size:
             raise ValueError(f"mojolearn: cannot reshape {self.shape} to {tuple(shape)}")
@@ -256,7 +255,7 @@ def to_device(x, numeric_mode=None):
     if isinstance(x, DeviceTensor):
         return x
     a = _f32(x, "x")
-    if _HOST_IO:
+    if _DEVICE_IO_OFF:
         return a
     return DeviceTensor._wrap(_backend.binding(_BINDING, numeric_mode or _backend.default_mode()), a)
 
@@ -267,7 +266,7 @@ def _is_t(x):
 
 def _on_dev(b, *ts):
     """Whether every one of `ts` is a tensor resident on mixed binding `b`."""
-    return _mixed(b) and all(_is_t(t) and t.h is not None and t.b is b for t in ts)
+    return _mixed(b) and all(_is_t(t) and t.h is not None and t.b is b for t in ts)  # glue: the call's arguments
 
 
 def _host(x):
@@ -2106,7 +2105,7 @@ class GCNConv(_Layer):
         Gh = G.h if gt else dev.upload("G", G)
         if self.bias:
             gb = np.empty((F, 1), np.float32)
-            if _HOST_IO:
+            if _DEVICE_IO_OFF:
                 ones = np.ones(n, np.float32)
                 b.x_cnn_gemm_m([Gh, ones.ctypes.data, gb.ctypes.data], 0b001, [F, 1, n, 2])
             else:

@@ -3487,7 +3487,7 @@ def _build_layer(lane, arm, D):
         # torch arm does (x_cpu.to(dev), dy.to(dev) on the first fit, y and the gradients left on
         # the device, a synchronize before the clock stops: ours' entries wait before they return).
         # y is read back in outputs(), outside the clock, as torch's .cpu() is.
-        # MOJOLEARN_XCNN_HOST_IO=1 keeps host arrays (the before arm).
+        # MOJOLEARN_XCNN_DEVICE_IO_OFF=1 keeps host arrays (the before arm).
         to_dev = None
         if getattr(layer, "_device_io", False):
             from mojolearn._expansion_cnn import to_device as to_dev
