@@ -18,6 +18,8 @@ from x_neighbors.graph_dev import op_louvain
 from x_neighbors.kapprox_dev import kpca_resident_binding
 from x_neighbors.iter_device import lp_fast_resident_binding
 from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES, ocsvm_resident_binding
+from x_neighbors.ocsvm_dev import OCSVM_IDN_RES, ocsvm_alpha_init_binding
+from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT
 from x_neighbors.sort_items import purity_flags_binding
 
 
@@ -1253,6 +1255,12 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
         # (x_neighbors/ocsvm_dev.mojo OCSVM_CLS2_RES; FAST + Apple default)
         comptime if OCSVM_CLS2_RES:
             m.def_function[ocsvm_resident_binding]("x_neighbors_ocsvm_resident")
+        # lane/fam2-neighbors: the same resident solve in IDENTICAL on every
+        # vendor, and libsvm's alpha start on the device
+        comptime if OCSVM_IDN_RES:
+            m.def_function[ocsvm_resident_binding]("x_neighbors_ocsvm_resident_idn")
+        comptime if XN_OCSVM_DEV_INIT:
+            m.def_function[ocsvm_alpha_init_binding]("x_neighbors_ocsvm_alpha_init")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors: ", e))

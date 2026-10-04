@@ -44,7 +44,10 @@ from x_neighbors.device_ops import xn_ctx, _grid, _tid, _buf, _buf_i, _down, BLO
 from std.python import PythonObject
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from x_neighbors.ocsvm_init import (
+    XN_OCSVM_DEV_INIT, oci_chunks, oci_part_item, oci_scan_item, oci_alpha_item, oci_nu_hi, oci_nu_lo,
+)
 
 comptime OCSVM_TPB = 256
 #: SMO iterations enqueued between two reads of the stop flag
@@ -74,8 +77,27 @@ comptime _OC_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelera
 # -D MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF / _2L_OFF / _CHUNK256_OFF turn them
 # off; the old -D names stay harmless.
 comptime OCSVM_CLS2_RES = _OC_FA and not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF"]()
-comptime OCSVM_CLS2_2L = _OC_FA and not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_2L_OFF"]()
-comptime OCSVM_CLS2_CHUNK256 = _OC_FA and not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF"]()
+# lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor. The three
+# switches above change no bit (same Q words, same maxima under the same
+# total order), so IDENTICAL takes them too:
+#   MOJOLEARN_IDN_OCSVM_RES (default ON; -D MOJOLEARN_IDN_OCSVM_RES_OFF): the
+#     Gram stays on the device (no n x n download and upload around the
+#     solve); the binding registers `x_neighbors_ocsvm_resident_idn`.
+#   MOJOLEARN_IDN_OCSVM_2L (default ON; -D MOJOLEARN_IDN_OCSVM_2L_OFF): two
+#     launches per SMO iteration, not three.
+#   MOJOLEARN_IDN_OCSVM_CHUNK256 (CANDIDATE, default OFF; -D
+#     MOJOLEARN_IDN_OCSVM_CHUNK256 turns it on): 256 iterations between two
+#     reads of the stop flag, not 64.
+# All off under MOJOLEARN_IDN_ALL_OFF.
+comptime _OC_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime OCSVM_IDN_RES = _OC_IDN and not is_defined["MOJOLEARN_IDN_OCSVM_RES_OFF"]()
+comptime OCSVM_X_ON = OCSVM_CLS2_RES or OCSVM_IDN_RES
+comptime OCSVM_CLS2_2L = (_OC_FA and not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_2L_OFF"]()) or (
+    _OC_IDN and not is_defined["MOJOLEARN_IDN_OCSVM_2L_OFF"]()
+)
+comptime OCSVM_CLS2_CHUNK256 = (_OC_FA and not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF"]()) or (
+    _OC_IDN and is_defined["MOJOLEARN_IDN_OCSVM_CHUNK256"]()
+)
 comptime OCSVM_CHUNK_RUN = 256 if OCSVM_CLS2_CHUNK256 else OCSVM_CHUNK
 
 comptime S_IT = 0
@@ -607,8 +629,8 @@ def op_ocsvm_x(
     """OCSVM_CLS2_RES: `op_ocsvm` over the Gram of the n x d rows at `x`
     formed on the device by the kernel the Python side would have run
     (`kernel_kernel`): the same words, never downloaded."""
-    comptime if not OCSVM_CLS2_RES:
-        raise Error("x_neighbors: op_ocsvm_x is a FAST Apple switch (off under -D MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF)")
+    comptime if not OCSVM_X_ON:
+        raise Error("x_neighbors: op_ocsvm_x is off in this build (MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF / MOJOLEARN_IDN_OCSVM_RES_OFF)")
     else:
         var ctx = xn_ctx()
         var d_x = _buf(ctx, x, n * d, True)
@@ -646,6 +668,79 @@ def ocsvm_resident_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject)
     var coef0 = Float32(Float64(py=f_[1]))
     var eps = Float32(Float64(py=f_[2]))
     op_ocsvm_x(a[0], a[1], a[2], a[3], a[4], iv[0], iv[1], iv[2], gamma, coef0, iv[3], eps, iv[4])
+    return PythonObject(None)
+
+
+def oci_part_kernel(cv: FP, ph: FP, pl: FP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < oci_chunks(n):
+        oci_part_item(t, cv, ph, pl, n)
+
+
+def oci_scan_kernel(ph: FP, pl: FP, oh: FP, ol: FP, n_: Int64, nu_hi: Float32, nu_lo: Float32):
+    var n = Int(n_)
+    var t = _tid()
+    if t < oci_chunks(n) + 1:
+        oci_scan_item(t, ph, pl, oh, ol, n, nu_hi, nu_lo)
+
+
+def oci_alpha_kernel(cv: FP, oh: FP, ol: FP, alpha: FP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < n:
+        oci_alpha_item(t, cv, oh, ol, alpha, n)
+
+
+def op_ocsvm_alpha_init(cv: Int, alpha: Int, n: Int, nu_hi: Float32, nu_lo: Float32) raises:
+    """libsvm's solve_one_class start on the device (x_neighbors/ocsvm_init.mojo):
+    three launches, alpha (n float32) downloaded."""
+    if n <= 0:
+        return
+    var ctx = xn_ctx()
+    var nc = oci_chunks(n)
+    var d_cv = _buf(ctx, cv, n, True)
+    var d_alpha = _buf(ctx, 0, n, False)
+    var d_ph = _buf(ctx, 0, nc, False)
+    var d_pl = _buf(ctx, 0, nc, False)
+    var d_oh = _buf(ctx, 0, nc + 1, False)
+    var d_ol = _buf(ctx, 0, nc + 1, False)
+    ctx.enqueue_function[oci_part_kernel](
+        d_cv.unsafe_ptr(), d_ph.unsafe_ptr(), d_pl.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+    )
+    ctx.enqueue_function[oci_scan_kernel](
+        d_ph.unsafe_ptr(), d_pl.unsafe_ptr(), d_oh.unsafe_ptr(), d_ol.unsafe_ptr(), Int64(n), nu_hi, nu_lo,
+        grid_dim=_grid(nc + 1), block_dim=BLOCK,
+    )
+    ctx.enqueue_function[oci_alpha_kernel](
+        d_cv.unsafe_ptr(), d_oh.unsafe_ptr(), d_ol.unsafe_ptr(), d_alpha.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    _down(ctx, d_alpha, alpha, n)
+    ctx.synchronize()
+    _ = d_cv^
+    _ = d_alpha^
+    _ = d_ph^
+    _ = d_pl^
+    _ = d_oh^
+    _ = d_ol^
+    _ = ctx^
+
+
+def ocsvm_alpha_init_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    """x_neighbors_ocsvm_alpha_init: addresses (cv, alpha), ints (n,),
+    floats (nu,). nu is read as binary64 and split into a float-float pair
+    (a scalar of the call)."""
+    var cv = Int(py=a_[0])
+    var alpha = Int(py=a_[1])
+    var n = Int(py=i_[0])
+    if n < 0:
+        raise Error("x_neighbors: a negative size was passed")
+    if n > 0 and (cv == 0 or alpha == 0):
+        raise Error("x_neighbors: null buffer address")
+    var nu = Float64(py=f_[0])
+    op_ocsvm_alpha_init(cv, alpha, n, oci_nu_hi(nu), oci_nu_lo(nu))
     return PythonObject(None)
 
 

@@ -702,14 +702,26 @@ class OneClassSVM(_XNeighbors):
             # lane/apple-fast-gap-cls2 (FAST + Apple default; -D MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF off):
             # the binding forms the same Gram on the device and solves over it
             # there (no 400 MB download into a fresh host array and upload back)
-            res_fn = getattr(self._bind(), "x_neighbors_ocsvm_resident", None) if self._fast_tier() else None
+            # lane/fam2-neighbors: IDENTICAL takes the same resident solve on
+            # every vendor (`x_neighbors_ocsvm_resident_idn`, registered unless
+            # -D MOJOLEARN_IDN_OCSVM_RES_OFF; the host binding has none)
+            res_fn = getattr(self._bind(), "x_neighbors_ocsvm_resident" if self._fast_tier()
+                             else "x_neighbors_ocsvm_resident_idn", None)
             Q = None if res_fn is not None else self._kernel(Xw, Xw, self.kernel, self._gamma, self.coef0, self.degree)
         # libsvm's start (solve_one_class) by the base binding's
         # `ocsvm_alpha_init_f32` (lane pyglue-numeric: a Python loop)
         from ._buffer import _native
         alpha = empty((m,), "<f4")
-        _native("ocsvm_alpha_init_f32")(addr_ro(cv, name="C"), m, float(self.nu),
-                                        0 if sample_weight is None else 1, addr(alpha, name="alpha"))
+        # lane/fam2-neighbors (cpu-gpu audit case 2): the start as three device
+        # launches (x_neighbors/ocsvm_init.mojo; the host binding runs the same
+        # items), registered in IDENTICAL unless -D MOJOLEARN_IDN_OCSVM_DEV_INIT_OFF
+        init_fn = getattr(self._bind(), "x_neighbors_ocsvm_alpha_init", None)
+        if init_fn is not None:
+            init_fn([addr_ro(cv, name="xn_ocsvm_init C"), addr(alpha, name="xn_ocsvm_init alpha")],
+                    [m], [float(self.nu)])
+        else:
+            _native("ocsvm_alpha_init_f32")(addr_ro(cv, name="C"), m, float(self.nu),
+                                            0 if sample_weight is None else 1, addr(alpha, name="alpha"))
         info = _empty_out((1,), "<f4")
         iters = empty((1,), "<i4")
         cap = 10_000_000 if int(self.max_iter) < 0 else int(self.max_iter)
