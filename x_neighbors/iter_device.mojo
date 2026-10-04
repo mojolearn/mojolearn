@@ -39,7 +39,10 @@ from std.sys.info import has_apple_gpu_accelerator
 
 from std.sys.compile import is_defined
 from std.python import PythonObject
-from x_neighbors.nan_cells_device import nan_cells_device
+from x_neighbors.nan_cells_device import (
+    nan_cells_device, nan_group_sum_kernel, nan_top_scan_kernel, nan_down_scan_kernel,
+    NC_TPB, NC_PER, NC_CHUNK, NC_SMEM_FITS,
+)
 from x_neighbors.graph_dev import pr_iterate_gpu
 from x_neighbors.items import FP, IP, absdiff_sum_item, xn_fold_blocks, _sub, _add, knn_sq_item, knn_impute_finish
 from x_neighbors.items import XN_TREE, XN_TREE_ON, xn_tree_slot
@@ -312,8 +315,12 @@ def op_nan_cells(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int, co
 def op_cc_iterate_csr(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
     """lane/neural-pass69: `op_cc_iterate` from a CSR adjacency (indptr n + 1,
     indices nnz), no dense matrix: hooking and pointer jumping on the device
-    (`_cc_csr_device`)."""
-    _cc_csr_device(indptr, indices, lab, info, n, nnz)
+    (`_cc_csr_device`). FAST on Apple under `-D MOJOLEARN_CC_FAST`:
+    `_cc_csr_fast` (batched rounds, the relabel on the device)."""
+    comptime if CC_FAST:
+        _cc_csr_fast(indptr, indices, lab, info, n, nnz)
+    else:
+        _cc_csr_device(indptr, indices, lab, info, n, nnz)
 
 
 # lane/neural-pass95 (2026-10-01): weak connected components of a CSR graph
@@ -404,6 +411,203 @@ def _cc_csr_device(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: 
     _ = d_ix^
     _ = d_l^
     _ = d_c^
+
+
+# lane/apple-fast-graph (2026-10-02), FAST on Apple only, opt-in
+# `-D MOJOLEARN_CC_FAST`: the same hooking and pointer jumping as
+# `_cc_csr_device`, with the host waits taken out of the loop. The board's
+# race (20,000 nodes, 54,528 edges) spends its ~90 ms on overhead, not on
+# the kernels: one host wait and one memset per round, a pinned staging
+# buffer with its own wait, three uploads, and Python's relabel over the
+# labels. Here the CSR and the start labels go straight to the device (no
+# staging), CC_FAST_BATCH rounds run between two reads of the change word,
+# the change word is never cleared (every writer of a round stores the ROUND
+# NUMBER, so after a batch the word equals the batch's last round iff that
+# round still lowered a label; a round that changes nothing is the fixed
+# point, so the spare rounds of a batch change nothing), and the relabel is a
+# device flag-and-scan: a root (lab[v] == v) is numbered by the count of
+# roots below it, which is the order of first appearance of the min-labels
+# over the nodes (the component's minimum node is the first node that
+# carries its label), the integers `_cc_relabel` builds; every node takes
+# its root's number. One download of the labels and the count. Same labels
+# as the host rounds + Python relabel; the round count in info[0] includes
+# the batch's spare rounds (Python reads only the labels and the count).
+#: FAST Apple candidate, default OFF: `-D MOJOLEARN_CC_FAST`. Source
+#: lane/apple-fast-graph@1fa36a7ec (ported 2026-10-04, lane
+#: apple-fast-rec-misc). connected_components on a CSR graph: batched
+#: hook + jump rounds (one change-word read per CC_FAST_BATCH rounds), the
+#: first-appearance relabel and the component count on the device.
+#: Known: never ran. M3 graph-cc-fast-taxi failed to parse at
+#: `cc_relabel_kernel(..., out: IP, ...)` ("expected argument name": `out`
+#: is an argument convention); renamed `dst`. Python half rebased onto
+#: main's `_p2m_iota` / `_p2m_relabel` (both already device ops). Board:
+#: connected-components taxi 0.68 (already a win); prior gap 88 ms vs
+#: networkx 7.3 ms was launch + wait overhead, not kernel time.
+comptime CC_FAST = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_CC_FAST"]()
+)
+#: hook + jump rounds between two reads of the change word
+comptime CC_FAST_BATCH = 4
+
+
+def cc_hook_round_kernel(indptr: IP, indices: IP, lab: IP, n: Int32, changed: IP, rid: Int32):
+    """`cc_hook_kernel` whose change word is the round number instead of 1
+    (never cleared; see the lane note above)."""
+    var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if u < Int(n):
+        for e in range(Int(indptr.unsafe_load(u)), Int(indptr.unsafe_load(u + 1))):
+            var v = Int(indices.unsafe_load(e))
+            var a = lab.unsafe_load(u)
+            var b = lab.unsafe_load(v)
+            if a != b:
+                var lo = a if a < b else b
+                var hi = b if a < b else a
+                if lab.unsafe_load(Int(hi)) > lo:
+                    _ = Atomic[DType.int32].min(lab + Int(hi), lo)
+                    changed.unsafe_store(0, rid)
+
+
+def cc_root_count_kernel(lab: IP, bcount: IP, n_: Int64):
+    """Per block of NC_CHUNK nodes, the number of roots (lab[v] == v): the
+    first stage of the compaction scan, the shape of `nan_count_kernel`."""
+    var n = Int(n_)
+    var t = Int(thread_idx.x)
+    var base = Int(block_idx.x) * NC_CHUNK
+    var sh = stack_allocation[NC_TPB, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var c = Int32(0)
+    for k in range(NC_PER):
+        var j = base + k * NC_TPB + t
+        if j < n and Int(lab.unsafe_load(j)) == j:
+            c += 1
+    sh[t] = c
+    barrier()
+    var s = NC_TPB // 2
+    while s > 0:
+        if t < s:
+            sh[t] = sh[t] + sh[t + s]
+        barrier()
+        s //= 2
+    if t == 0:
+        bcount.unsafe_store(Int(block_idx.x), sh[0])
+
+
+def cc_root_rank_kernel(lab: IP, boff: IP, newid: IP, n_: Int64):
+    """Root r gets newid[r] = the number of roots below r (the block's
+    offset plus the block's exclusive scan): the shape of
+    `nan_scatter_kernel`, writing the rank at the root instead of the root
+    at the rank."""
+    var n = Int(n_)
+    var t = Int(thread_idx.x)
+    var base = Int(block_idx.x) * NC_CHUNK
+    var sh = stack_allocation[NC_TPB, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var running = boff.unsafe_load(Int(block_idx.x))
+    for k in range(NC_PER):
+        var j = base + k * NC_TPB + t
+        var v = Int32(0)
+        if j < n and Int(lab.unsafe_load(j)) == j:
+            v = 1
+        sh[t] = v
+        barrier()
+        var off = 1
+        while off < NC_TPB:
+            var add = Int32(0)
+            if t >= off:
+                add = sh[t - off]
+            barrier()
+            sh[t] = sh[t] + add
+            barrier()
+            off *= 2
+        var incl = sh[t]
+        var tot = sh[NC_TPB - 1]
+        barrier()
+        if v != 0:
+            newid.unsafe_store(j, running + incl - v)
+        running += tot
+
+
+def cc_relabel_kernel(lab: IP, newid: IP, dst: IP, n: Int32):
+    """dst[v] = newid[lab[v]]: every node takes its root's rank. (`dst`, not
+    `out`: `out` is an argument convention and fails to parse as a name.)"""
+    var v = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if v < Int(n):
+        dst.unsafe_store(v, newid.unsafe_load(Int(lab.unsafe_load(v))))
+
+
+def _cc_csr_fast(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
+    """`_cc_csr_device`'s contract plus the relabel: out, `lab` holds the
+    compacted labels (component k = the k-th component in order of first
+    appearance over the nodes, scipy's numbering) and info[1] the number of
+    components + 1 (0 would mean "not relabelled here"). Start labels are
+    the identity (what `connected_components` passes)."""
+    comptime assert NC_SMEM_FITS, "cc_csr_fast: a 1 KB threadgroup page must fit"
+    var ctx = xn_ctx()
+    # the CSR and the start labels straight to the device (the copy engine)
+    var d_ip = _buf_i(ctx, indptr, n + 1, True)
+    var d_ix = _buf_i(ctx, indices, nnz, True)
+    var d_l = _buf_i(ctx, lab, n, True)
+    var d_out = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    var d_new = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    var nb = max((n + NC_CHUNK - 1) // NC_CHUNK, 1)
+    var ng = (nb + NC_CHUNK - 1) // NC_CHUNK
+    var d_bc = ctx.enqueue_create_buffer[DType.int32](nb)
+    var d_bo = ctx.enqueue_create_buffer[DType.int32](nb)
+    var d_gs = ctx.enqueue_create_buffer[DType.int32](ng)
+    var d_go = ctx.enqueue_create_buffer[DType.int32](ng)
+    var d_c = ctx.enqueue_create_buffer[DType.int32](1)
+    var d_cnt = ctx.enqueue_create_buffer[DType.int32](1)
+    # the change word starts below every round number (a kernel, not a memset)
+    enqueue_fill(ctx, d_c, Int32(0))
+    var blocks = (n + 255) // 256
+    var hflag = List[Int32](length=1, fill=Int32(0))
+    var rounds = 0
+    while n > 0:
+        for _ in range(CC_FAST_BATCH):
+            rounds += 1
+            ctx.enqueue_function[cc_hook_round_kernel](
+                d_ip.unsafe_ptr(), d_ix.unsafe_ptr(), d_l.unsafe_ptr(), Int32(n), d_c.unsafe_ptr(), Int32(rounds),
+                grid_dim=blocks, block_dim=256,
+            )
+            ctx.enqueue_function[cc_jump_kernel](d_l.unsafe_ptr(), Int32(n), grid_dim=blocks, block_dim=256)
+        # one read per batch: did the batch's last round still lower a label?
+        ctx.enqueue_copy(dst_ptr=hflag.unsafe_ptr(), src_buf=d_c)
+        ctx.synchronize()
+        if Int(hflag[0]) != rounds:
+            break
+    # the relabel: root flags per block -> group sums -> top scan (the count
+    # into d_cnt) -> block offsets -> root ranks -> every node its root's rank
+    var lp = d_l.unsafe_ptr()
+    ctx.enqueue_function[cc_root_count_kernel](lp, d_bc.unsafe_ptr(), Int64(n), grid_dim=nb, block_dim=NC_TPB)
+    ctx.enqueue_function[nan_group_sum_kernel](d_bc.unsafe_ptr(), d_gs.unsafe_ptr(), Int64(nb), grid_dim=ng, block_dim=NC_TPB)
+    ctx.enqueue_function[nan_top_scan_kernel](d_gs.unsafe_ptr(), d_go.unsafe_ptr(), d_cnt.unsafe_ptr(), Int64(ng),
+                                              grid_dim=1, block_dim=NC_TPB)
+    ctx.enqueue_function[nan_down_scan_kernel](d_bc.unsafe_ptr(), d_go.unsafe_ptr(), d_bo.unsafe_ptr(), Int64(nb),
+                                               grid_dim=ng, block_dim=NC_TPB)
+    ctx.enqueue_function[cc_root_rank_kernel](lp, d_bo.unsafe_ptr(), d_new.unsafe_ptr(), Int64(n), grid_dim=nb, block_dim=NC_TPB)
+    if n > 0:
+        ctx.enqueue_function[cc_relabel_kernel](lp, d_new.unsafe_ptr(), d_out.unsafe_ptr(), Int32(n),
+                                                grid_dim=blocks, block_dim=256)
+    var hcnt = List[Int32](length=1, fill=Int32(0))
+    ctx.enqueue_copy(dst_ptr=hcnt.unsafe_ptr(), src_buf=d_cnt)
+    _down_i(ctx, d_out, lab, n)
+    ctx.synchronize()
+    var ip = IP(unsafe_from_address=info)
+    ip.unsafe_store(0, Int32(rounds))
+    ip.unsafe_store(1, hcnt[0] + Int32(1))
+    _ = hflag^
+    _ = hcnt^
+    _ = d_ip^
+    _ = d_ix^
+    _ = d_l^
+    _ = d_out^
+    _ = d_new^
+    _ = d_bc^
+    _ = d_bo^
+    _ = d_gs^
+    _ = d_go^
+    _ = d_c^
+    _ = d_cnt^
 
 
 def cc_hook_dense_kernel(a: FP, lab: IP, n: Int32, changed: IP):
