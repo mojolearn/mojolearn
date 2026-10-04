@@ -21,6 +21,7 @@ are integer adds of per-(row block, column) counts: exact in any order.
 A cell is missing when its exponent is all ones and its mantissa is not
 zero (a NaN), tested on the bits so no fast-math can fold `v != v`."""
 from std.atomic import Atomic, Ordering
+from std.python import PythonObject
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
@@ -28,6 +29,7 @@ from max.gpu.sync import barrier
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 from x_neighbors.items import FP, IP
 from x_neighbors.device_ops import xn_ctx, _down_i
+from core.device_pool import pool_give, pool_take
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
@@ -215,12 +217,56 @@ comptime NC_COLMISS_ONLY = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gp
                             and not is_defined["MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF"]())
 
 
+# lane/apple-fast-w4-small, opt-in (-D MOJOLEARN_XN_FAST_NAN_FIT_LEAN), on
+# NC_COLMISS_ONLY (FAST + Apple): KNNImputer.fit's column counts without
+# fresh allocations. Main's fit path creates x's device buffer (n d floats)
+# and the count buffer on every call and the Python layer zero-fills an
+# n d int32 cell list the op never writes; here x and the counts live in
+# pooled buffers (core/device_pool, exact size: the board's rounds reuse
+# them), the counts come down straight into the caller's array, and the
+# Python layer passes a one-slot cell list (`x_neighbors_nc_fit_lean`).
+# The same kernel and integer adds: the same counts.
+comptime NC_FIT_LEAN = NC_COLMISS_ONLY and is_defined["MOJOLEARN_XN_FAST_NAN_FIT_LEAN"]()
+
+
+def nc_fit_lean_binding() raises -> PythonObject:
+    """1 when this binary's fit-time count op ignores the cell list (the
+    Python layer then passes a one-slot one)."""
+    comptime if NC_FIT_LEAN:
+        return PythonObject(1)
+    return PythonObject(0)
+
+
 def nan_cells_device(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int, colmiss_only: Int = 0) raises:
     """The device op: x (n x d) uploaded once, the three outputs downloaded
     (cells: the first `count` slots)."""
     comptime assert NC_SMEM_FITS, "nan_cells_device: a 1 KB threadgroup page must fit"
     var ctx = xn_ctx()
     var total = n * d
+    comptime if NC_FIT_LEAN:
+        if colmiss_only == 1:
+            var bx = pool_take["MojoXNeighborsNanFitX"](ctx, total)
+            var bc = pool_take["MojoXNeighborsNanFitCm"](ctx, d)
+            if total > 0:
+                ctx.enqueue_copy(dst_buf=bx, src_ptr=FP(unsafe_from_address=x))
+            ctx.enqueue_memset(bc, Float32(0.0))   # the int32 zero's bits
+            if total > 0:
+                var nrb2 = (n + NC_RB - 1) // NC_RB
+                var threads2 = nrb2 * d
+                ctx.enqueue_function[nan_colmiss_kernel](
+                    FP(unsafe_from_address=Int(bx.unsafe_ptr())), IP(unsafe_from_address=Int(bc.unsafe_ptr())),
+                    Int64(n), Int64(d), grid_dim=(threads2 + NC_TPB - 1) // NC_TPB, block_dim=NC_TPB)
+            if d > 0:
+                ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=colmiss), src_buf=bc)
+            ctx.synchronize()
+            var cnt2 = 0
+            var cmp2 = IP(unsafe_from_address=colmiss)
+            for f in range(d):
+                cnt2 += Int(cmp2.unsafe_load(f))
+            IP(unsafe_from_address=info).unsafe_store(0, Int32(cnt2))
+            pool_give["MojoXNeighborsNanFitX"](bx^)
+            pool_give["MojoXNeighborsNanFitCm"](bc^)
+            return
     comptime if NC_COLMISS_ONLY:
         if colmiss_only == 1:
             var d_x1 = ctx.enqueue_create_buffer[DType.float32](max(total, 1))
