@@ -25,10 +25,22 @@ from x_decomp.rr import pj_first, pj_second
 # Residual and orthogonality improved, but transformed-diagonal eigenvalues
 # drifted. Current candidate extracts normalized Rayleigh quotients from the
 # original GPU matrix, with compensated sums; no quality gate is relaxed.
+# Repaired source 131a0d78a, current M3 manager result (2026-10-04):
+# quality PASS, but synthetic 43796.817 -> 51254.836 ms (+17.03%): HOLD.
+# Eigenvalue error 6.08669e-5 -> 3.52564e-7; residual 5.37499e-5 ->
+# 4.82917e-6. Retain Rayleigh repair; do not default the slower experiment.
+# New opt-in caches each rotation once instead of repeating its sqrt/divide
+# for every matrix block and V row. Pending quality and speed, not a KEEP.
+comptime EIGH_TANGENT_CACHE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_EIGH_TANGENT_CACHE"]()
+)
+
 comptime EIGH_FAST_TANGENT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_EIGH_FAST_TANGENT"]()
+    and (is_defined["MOJOLEARN_EIGH_FAST_TANGENT"]() or EIGH_TANGENT_CACHE)
 )
 
 @always_inline
@@ -53,6 +65,14 @@ def stable_cs(a: F32Ptr, n: Int, m: Int, r: Int, b: Int) -> SIMD[DType.float32, 
     return SIMD[DType.float32, 4](s, s/(Float32(1)+c), t, c)
 
 @always_inline
+def round_cs[cached: Bool](a: F32Ptr, coeff: F32Ptr, n: Int, m: Int, r: Int, b: Int) -> SIMD[DType.float32, 4]:
+    comptime if cached:
+        return coeff.unsafe_load[width=4](4 * b)
+    else:
+        return stable_cs(a, n, m, r, b)
+
+
+@always_inline
 def stable_sub(tau: Float32, x: Float32, s: Float32, y: Float32) -> Float32:
     return fma(-s, fma(tau, x, y), x)
 
@@ -61,14 +81,14 @@ def stable_add(s: Float32, x: Float32, tau: Float32, y: Float32) -> Float32:
     return fma(s, fma(-tau, y, x), y)
 
 @always_inline
-def stable_block(src: F32Ptr, a: F32Ptr, n: Int, m: Int, r: Int, i: Int, j: Int):
+def stable_block[cached: Bool = False](src: F32Ptr, a: F32Ptr, n: Int, m: Int, r: Int, i: Int, j: Int, coeff: F32Ptr):
     """Block (i, j), i <= j, of round r: J_i^T B J_j (and its mirror); the
     pair's own block in closed form."""
     var i0 = pj_first(r, i, m)
     var i1 = pj_second(r, i, m)
     var pi = min(i0, i1)
     var qi = max(i0, i1)
-    var ri = stable_cs(src, n, m, r, i)
+    var ri = round_cs[cached](src, coeff, n, m, r, i)
     var ci = ri[1]
     var si = ri[0]
     if i == j:
@@ -89,7 +109,7 @@ def stable_block(src: F32Ptr, a: F32Ptr, n: Int, m: Int, r: Int, i: Int, j: Int)
     var j1 = pj_second(r, j, m)
     var pj = min(j0, j1)
     var qj = max(j0, j1)
-    var rj = stable_cs(src, n, m, r, j)
+    var rj = round_cs[cached](src, coeff, n, m, r, j)
     var cj = rj[1]
     var sj = rj[0]
     var vi = qi < n
@@ -126,14 +146,14 @@ def stable_block(src: F32Ptr, a: F32Ptr, n: Int, m: Int, r: Int, i: Int, j: Int)
 
 
 @always_inline
-def stable_vrow(src: F32Ptr, v: F32Ptr, n: Int, m: Int, r: Int, k: Int, j: Int):
+def stable_vrow[cached: Bool = False](src: F32Ptr, v: F32Ptr, n: Int, m: Int, r: Int, k: Int, j: Int, coeff: F32Ptr):
     """V = V J for row k, pair j of round r."""
     var j0 = pj_first(r, j, m)
     var j1 = pj_second(r, j, m)
     var pj = min(j0, j1)
     var qj = max(j0, j1)
     if qj < n:
-        var rj = stable_cs(src, n, m, r, j)
+        var rj = round_cs[cached](src, coeff, n, m, r, j)
         var cj = rj[1]
         var sj = rj[0]
         var vkp = v.unsafe_load(k * n + pj)
@@ -153,10 +173,42 @@ def eigh_tangent_round_kernel(src: F32Ptr, dst: F32Ptr, v: F32Ptr, n_in: Int32, 
         var i = t // h
         var j = t % h
         if i <= j:
-            stable_block(src, dst, n, m, r, i, j)
+            stable_block(src, dst, n, m, r, i, j, src)
     elif t < h*h+n*h:
         var u = t-h*h
-        stable_vrow(src, v, n, m, r, u//h, u%h)
+        stable_vrow(src, v, n, m, r, u//h, u%h, src)
+
+
+def eigh_tangent_cs_kernel(a: F32Ptr, coeff: F32Ptr, n_in: Int32, m_in: Int32, round_in: Int32):
+    """One parallel coefficient calculation per pair, before any A write."""
+    var b = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if b < Int(m_in) // 2:
+        coeff.unsafe_store[width=4](
+            4 * b, stable_cs(a, Int(n_in), Int(m_in), Int(round_in), b)
+        )
+
+
+def eigh_tangent_cached_round_kernel(a: F32Ptr, v: F32Ptr, coeff: F32Ptr, n_in: Int32, m_in: Int32, round_in: Int32):
+    """Same stable arithmetic as the repaired tangent round, cached c/s/tau.
+
+    Every triangular pair-of-pairs owns its disjoint 2x2 block and mirror;
+    every V row/pair owns two entries. The only cross-block inputs were the
+    diagonals/off-diagonal pivot entries used by stable_cs, now read from the
+    immutable coefficient cache. Consequently A may be updated in place.
+    """
+    var n = Int(n_in)
+    var m = Int(m_in)
+    var h = m // 2
+    var r = Int(round_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < h * h:
+        var i = t // h
+        var j = t % h
+        if i <= j:
+            stable_block[True](a, a, n, m, r, i, j, coeff)
+    elif t < h * h + n * h:
+        var u = t - h * h
+        stable_vrow[True](a, v, n, m, r, u // h, u % h, coeff)
 
 
 def eigh_tangent_copy_kernel(src: F32Ptr, dst: F32Ptr, n_in: Int32):

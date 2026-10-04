@@ -26,7 +26,7 @@ from gemm.afn_apple_fast import (
 )
 from decomposition.linalg_public_device import device_qr_r
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
-from x_decomp.eigh_tangent import EIGH_FAST_TANGENT, eigh_tangent_round_kernel, eigh_tangent_copy_kernel, eigh_rayleigh_kernel
+from x_decomp.eigh_tangent import EIGH_FAST_TANGENT, EIGH_TANGENT_CACHE, eigh_tangent_round_kernel, eigh_tangent_copy_kernel, eigh_rayleigh_kernel, eigh_tangent_cs_kernel, eigh_tangent_cached_round_kernel
 from x_decomp.lu_fast import LU_FAST_STEP1, lfs_blocks, lu_fast_panel
 from x_decomp.lasso_grp import DECOMP_FAST_LASSO_GRP, LG_MAXK, LG_TPB, lasso_grp_kernel
 from x_decomp.cells import (
@@ -2311,7 +2311,7 @@ struct DevExec(Exec):
         var doriginal = ctx.enqueue_create_buffer[DType.float32](n * n if EIGH_FAST_TANGENT else 1)
         comptime if EIGH_FAST_TANGENT:
             ctx.enqueue_copy(dst_buf=doriginal, src_buf=da)
-        var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
+        var dcs = ctx.enqueue_create_buffer[DType.float32]((4 if EIGH_TANGENT_CACHE else 2) * h)
         var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
         var dpart = ctx.enqueue_create_buffer[DType.float32](3 * _pj_off_blocks(n))
         var dfold = ctx.enqueue_create_buffer[DType.float32](3)
@@ -2340,7 +2340,20 @@ struct DevExec(Exec):
             if sweep == RR_EIGH_SWEEPS:
                 break
             executed += 1
-            comptime if EIGH_FAST_TANGENT:
+            comptime if EIGH_TANGENT_CACHE:
+                for rd in range(m - 1):
+                    ctx.enqueue_function[eigh_tangent_cs_kernel](
+                        da.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
+                        grid_dim=_pj_blocks(h), block_dim=PJ_TPB,
+                    )
+                    ctx.enqueue_function[eigh_tangent_cached_round_kernel](
+                        da.unsafe_ptr(), dv.unsafe_ptr(), dcs.unsafe_ptr(),
+                        Int32(n), Int32(m), Int32(rd),
+                        grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
+                    )
+                    if rd % PJ_SYNC_ROUNDS == PJ_SYNC_ROUNDS - 1:
+                        ctx.synchronize()
+            elif EIGH_FAST_TANGENT:
                 for rd in range(m - 1):
                     # Separate calls keep the two buffer origins disjoint to
                     # Mojo's borrow checker; conditional pointers union them.
