@@ -367,7 +367,9 @@ def _sgd_fit(est, X, y, n_classes, loss_code, penalty, lr, alpha, l1_ratio, eta0
     # loss scale); MOJOLEARN_SGD_BATCH_SUM=0/1 overrides for an A/B
     if os.environ.get("MOJOLEARN_SGD_BATCH_SUM", "") in ("0", "1"):
         batch_sum = os.environ["MOJOLEARN_SGD_BATCH_SUM"] == "1"
-    ip += [has_sw, has_cw, int(batch_size), int(bool(batch_sum))]
+    # None (SGDOneClassSVM's default, fix-l1-linear): -1, "auto"; the fit
+    # resolves it (x_linear/sgd.mojo `sgd_batch`, SGD_OC_IDN_MB_DEFAULT)
+    ip += [has_sw, has_cw, -1 if batch_size is None else int(batch_size), int(bool(batch_sum))]
     vals = _run(est, ALGO_SGD, a, n, d, y, ip, fp, problems * d + problems + 2, problems * (n + d + 1), problems * n)
     if vals[-1] != 0:
         raise ValueError("Floating-point under-/overflow occurred. Scaling input data with "
@@ -922,12 +924,16 @@ class SGDOneClassSVM(NumericModeMixin):
 
     def __init__(self, nu=0.5, fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True, verbose=0,
                  random_state=None, learning_rate="optimal", eta0=0.0, power_t=0.5, warm_start=False,
-                 average=False, batch_size=0):
-        # batch_size=0 (lane/neural-pass132): the per-sample fit, main's form.
-        # The minibatch form oscillates the offset (with w near 0 every row
-        # shares one score, so a batch moves all of them across the margin
-        # together): board istella nu 0.1 flags 0.374 of the training rows at
-        # batch 256, 0.024 at 64, sklearn 0.055. A positive batch_size opts in.
+                 average=False, batch_size=None):
+        # batch_size=None (fix-l1-linear, from lane/neural-pass139): "auto".
+        # IDENTICAL builds fit the fixed-order minibatch at 4096 (the mean
+        # step, a float-float intercept and an IMPLICIT intercept step,
+        # x_linear/sgd.mojo `oc_solve`: the explicit step oscillated the
+        # offset, board istella nu 0.1 flagged 0.374 of the training rows at
+        # batch 256, sklearn 0.055); FAST builds, or
+        # MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF, the per-sample fit
+        # (lane/neural-pass132's default). 0 asks for the per-sample fit, a
+        # positive batch_size for that minibatch.
         self.batch_size = batch_size
         self.nu, self.fit_intercept, self.max_iter, self.tol = nu, fit_intercept, max_iter, tol
         self.shuffle, self.verbose, self.random_state = shuffle, verbose, random_state
