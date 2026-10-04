@@ -52,13 +52,23 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
-from isolation_forest.impl.isolation_forest import IF_DEVICE_TRANSPOSE, IDN_IF_QUERY_DEVICE
+from isolation_forest.impl.isolation_forest import (
+    IF_DEVICE_TRANSPOSE,
+    IDN_IF_QUERY_DEVICE,
+    IDN_IF_RESIDENT,
+)
 
 from isolation_forest.impl.isolation_tree_builder import IF_FAST_ROWMAJOR
 from isolation_forest.estimator import (
     IF_WANT_PREDICT,
+    IFResidentKey,
     IFRunOutputs,
+    if_resident_new_token,
+    if_resident_put,
+    if_resident_release,
+    if_resident_take,
     iforest_run_host,
+    iforest_run_resident,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 # cgfin-c-svm: the epilogues, Platt, the shuffle and the row glue run on
@@ -525,8 +535,24 @@ def iforest_run_binding(
         0  offset_          (the contamination quantile, or -0.5)
         1  max_samples_     (the resolved subsample size)
         2  n_features_in_
+
+    Lane fam2-forests (`IDN_IF_RESIDENT`, isolation_forest/estimator.mojo
+    "THE RESIDENT ENTRY"): a binary whose `iforest_resident()` is 1 also
+    takes SEVENTEEN params and FOUR info slots:
+
+        params 16  token    (0 = fit a fresh forest and keep it; else the
+                             token an earlier call returned: that resident
+                             forest scores the query with NO fit; a token
+                             that is gone or whose key differs refits as
+                             DEVIATION 874 does and keeps the new forest)
+        info    3  token    (the resident forest's token after this call)
+
+    Sixteen params is the DEVIATION 874 form, unchanged.
     """
-    if len(params) != 16:
+    var resident = False
+    comptime if IDN_IF_RESIDENT:
+        resident = len(params) == 17
+    if len(params) != 16 and not resident:
         raise Error(
             "iforest_run: params must contain 16 values, got " + String(len(params))
         )
@@ -567,6 +593,39 @@ def iforest_run_binding(
         for i in range(n_query * n_features):
             query.append(qp.unsafe_load(i))
     var res = IFRunOutputs()
+    comptime if IDN_IF_RESIDENT:
+        if resident:
+            # The take and the put run under the GIL; the fit (on a miss) and
+            # the scoring run with it released, on an entry no other thread
+            # can reach while it is out of the store.
+            var token = Int(py=params[16])
+            var out_f32 = Int(py=out_f32_addr)
+            var out_i32 = Int(py=out_i32_addr)
+            var key = IFResidentKey(
+                Int(tp), n_train, n_features, n_estimators, max_samples_mode,
+                max_samples_int, max_samples_frac, max_depth, max_features_mode,
+                max_features_int, max_features_frac, bootstrap, random_state,
+                contamination_auto, contamination,
+            )
+            var held = if_resident_take(token, key)
+            var new_token = 0
+            if len(held) == 0:
+                new_token = if_resident_new_token()
+            try:
+                with GILReleased(Python()):
+                    res = iforest_run_resident(
+                        held, key, new_token, query, q_addr, n_query, want, out_f32, out_i32,
+                    )
+            except e:
+                # A refused query must not cost the resident forest.
+                if_resident_put(held)
+                raise e
+            if_resident_put(held)
+            ip.unsafe_store(0, res.offset_)
+            ip.unsafe_store(1, Float64(res.max_samples_))
+            ip.unsafe_store(2, Float64(res.n_features_in_))
+            ip.unsafe_store(3, Float64(res.token))
+            return PythonObject(n_query)
     with GILReleased(Python()):
         res = iforest_run_host(
             train, n_train, n_features, query, n_query, n_estimators,
@@ -613,6 +672,24 @@ def iforest_device_finite_scan_binding() raises -> PythonObject:
 
 def iforest_parallel_available() raises -> PythonObject:
     return PythonObject(1)
+
+
+def iforest_resident_binding() raises -> PythonObject:
+    """1 when this binary keeps the fitted forest resident between calls
+    (`IDN_IF_RESIDENT`, lane fam2-forests) and `iforest_run` takes the
+    17-value params with a token; 0 otherwise (DEVIATION 874's refit per
+    call)."""
+    comptime if IDN_IF_RESIDENT:
+        return PythonObject(1)
+    return PythonObject(0)
+
+
+def iforest_resident_release_binding(token: PythonObject) raises -> PythonObject:
+    """Drop the resident forest `token` names (the Python estimator was
+    refitted or collected). A token nobody holds is a no-op. Returns 0."""
+    comptime if IDN_IF_RESIDENT:
+        if_resident_release(Int(py=token))
+    return PythonObject(0)
 
 
 def iforest_device_scan_binding() raises -> PythonObject:
@@ -666,6 +743,8 @@ def PyInit__mojolearn_svm() abi("C") -> PythonObject:
         m.def_function[svr_fit_binding]("svr_fit")
         m.def_function[svr_predict_binding]("svr_predict")
         m.def_function[iforest_run_binding]("iforest_run")
+        m.def_function[iforest_resident_binding]("iforest_resident")
+        m.def_function[iforest_resident_release_binding]("iforest_resident_release")
         m.def_function[iforest_device_scan_binding]("iforest_device_scan")
         m.def_function[iforest_device_finite_scan_binding]("iforest_device_finite_scan")
         m.def_function[svm_scale_gamma_limbs_binding]("scale_gamma_limbs")

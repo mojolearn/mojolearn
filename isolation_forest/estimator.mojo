@@ -33,7 +33,9 @@ between calls; the binding may not, and DEVIATION 874 at that entry says
 what that costs.
 """
 
+from std.ffi import _Global
 from std.math import fma
+from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
@@ -45,13 +47,17 @@ comptime _DEVCTX_SLOT = "MojoSvmContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDE
 
 from core.identity_trace import IdentityTrace
 from isolation_forest.impl.isolation_forest import (
+    IDN_IF_EPILOGUE_DEVICE,
     IDN_IF_QUERY_DEVICE,
+    IDN_IF_RESIDENT,
     IF_params,
     IFLaunchKnobs,
     IsolationForestModel,
     fit as if_fit,
     predict as if_predict,
+    predict_into as if_predict_into,
     score_samples as if_score_samples,
+    score_samples_into as if_score_samples_into,
 )
 
 
@@ -349,6 +355,9 @@ struct IFRunOutputs(Copyable, Movable):
     var offset_: Float64
     var max_samples_: Int
     var n_features_in_: Int
+    var token: Int
+    """`IDN_IF_RESIDENT`: the resident forest's token (0 on the one-shot
+    entry, which keeps nothing)."""
 
     def __init__(out self):
         self.values = List[Float32]()
@@ -356,6 +365,7 @@ struct IFRunOutputs(Copyable, Movable):
         self.offset_ = -0.5
         self.max_samples_ = 0
         self.n_features_in_ = 0
+        self.token = 0
 
 
 def iforest_run_host(
@@ -460,5 +470,301 @@ def iforest_run_host(
     # that left the process wedged: the FIRST binding call returned, and the
     # NEXT GPU call in the process never did, GPU idle, every host thread in
     # futex wait. H100, M4 and MI325X never minded either shape.
+    _ = ctx^
+    return out^
+
+
+# ===========================================================================
+# THE RESIDENT ENTRY (lane fam2-forests, `IDN_IF_RESIDENT`).
+#
+# DEVIATION 874 above refits the forest inside every scoring call because
+# the one-shot entry keeps nothing. This entry keeps the fitted
+# `IsolationForestEstimator` (its model's device buffers, `offset_`, the
+# knobs) in a process-lifetime store on the binding's ONE process context
+# (`process_ctx`, which outlives every call, so DEVIATION 1944/1946's
+# "context dies first" cannot happen to a resident buffer: each entry also
+# holds its own copy of the context and destroys the model before it).
+#
+# Nothing is reconstructed: the resident model IS the struct `fit` filled,
+# the same one the gates score through, so the route DEVIATION 874 declined
+# (node arrays out to Python and back) is not taken either.
+#
+# Protocol. The Python layer holds a TOKEN per fitted estimator:
+#   * token 0 (`fit`): build a fresh forest, keep it, hand back a new token;
+#   * token t (scoring): the entry with token t AND an equal key (training
+#     address, shape and every parameter the fit depends on) scores without
+#     fitting. Anything else (evicted, another process, a parameter changed
+#     after fit) refits from the training matrix exactly as DEVIATION 874
+#     did, keeps that forest and hands back its new token.
+# The entry is TAKEN OUT of the store while a call uses it (the binding
+# does the take and the put under the GIL and scores with the GIL
+# released), so two threads never share one entry and an eviction never
+# frees buffers under a running launch; the second thread misses and refits,
+# which is the old behavior.
+#
+# What differs from the refit form, stated: the training matrix is read at
+# `fit` and not again. A caller who mutates the fitted array in place and
+# then scores WITHOUT calling `fit` got a forest of the mutated data before
+# and gets the fitted forest now (scikit-learn's behavior).
+# ===========================================================================
+
+
+#: Resident forests kept at once; the oldest is dropped past it (its owner
+#: refits on its next scoring call).
+comptime IF_RESIDENT_CAP = 8
+
+comptime _IF_RESIDENT_SLOT = "MojoIForestResidentIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoIForestResidentOther"
+
+
+@fieldwise_init
+struct IFResidentKey(Copyable, Movable):
+    """Everything the fit depends on that the caller can change between
+    calls. `train_addr` is the borrowed ROW-major training block."""
+
+    var train_addr: Int
+    var n_train: Int
+    var n_features: Int
+    var n_estimators: Int
+    var max_samples_mode: Int
+    var max_samples_int: Int
+    var max_samples_frac: Float64
+    var max_depth: Int
+    var max_features_mode: Int
+    var max_features_int: Int
+    var max_features_frac: Float64
+    var bootstrap: Bool
+    var random_state: Int
+    var contamination_auto: Bool
+    var contamination: Float64
+
+    def same(self, other: Self) -> Bool:
+        return (
+            self.train_addr == other.train_addr
+            and self.n_train == other.n_train
+            and self.n_features == other.n_features
+            and self.n_estimators == other.n_estimators
+            and self.max_samples_mode == other.max_samples_mode
+            and self.max_samples_int == other.max_samples_int
+            and self.max_samples_frac == other.max_samples_frac
+            and self.max_depth == other.max_depth
+            and self.max_features_mode == other.max_features_mode
+            and self.max_features_int == other.max_features_int
+            and self.max_features_frac == other.max_features_frac
+            and self.bootstrap == other.bootstrap
+            and self.random_state == other.random_state
+            and self.contamination_auto == other.contamination_auto
+            and self.contamination == other.contamination
+        )
+
+
+struct IFResidentEntry(Movable):
+    """One resident fitted forest. The estimator (and its model's device
+    buffers) is destroyed BEFORE this entry's copy of the context
+    (`IFModelShard`'s rule)."""
+
+    var token: Int
+    var key: IFResidentKey
+    var ctx: DeviceContext
+    var est: IsolationForestEstimator
+
+    def __init__(
+        out self, token: Int, key: IFResidentKey, ctx: DeviceContext,
+        var est: IsolationForestEstimator,
+    ):
+        self.token = token
+        self.key = key.copy()
+        self.ctx = ctx.copy()
+        self.est = est^
+
+    def __deinit__(deinit self):
+        _ = self.est^
+        try:
+            self.ctx.synchronize()
+        except:
+            pass
+        _ = self.ctx^
+
+
+struct _IFResidentStore(Defaultable, Movable):
+    var entries: List[IFResidentEntry]
+    var next: Int
+    var nonce: Int
+
+    def __init__(out self):
+        self.entries = List[IFResidentEntry]()
+        self.next = 0
+        self.nonce = 0
+
+
+comptime IF_RESIDENT_STORE = _Global[
+    StorageType=_IFResidentStore, name=_IF_RESIDENT_SLOT, init_fn=_IFResidentStore.__init__
+]
+
+
+def if_resident_new_token() raises -> Int:
+    """A token no other entry of this process carries and (through the
+    per-process nonce) one a token pickled in another process will not
+    equal. Never 0; below 2^51, so it is exact in the float64 `info` slot.
+    Call under the GIL."""
+    var p = IF_RESIDENT_STORE.get_or_create_ptr()
+    if p[].nonce == 0:
+        p[].nonce = ((Int(perf_counter_ns()) & 0x3FFFFFF) + 1) << 24
+    p[].next = (p[].next % 0xFFFFFF) + 1
+    return p[].nonce + p[].next
+
+
+def if_resident_take(token: Int, key: IFResidentKey) raises -> List[IFResidentEntry]:
+    """The resident entry `token` names, REMOVED from the store, as a list
+    of one; an empty list when there is none or its key differs (a stale
+    entry under that token is dropped). Call under the GIL."""
+    var held = List[IFResidentEntry]()
+    if token == 0:
+        return held^
+    var p = IF_RESIDENT_STORE.get_or_create_ptr()
+    var found = -1
+    for i in range(len(p[].entries)):
+        if p[].entries[i].token == token:
+            found = i
+            break
+    if found >= 0:
+        var entry = p[].entries.pop(found)
+        if entry.key.same(key):
+            held.append(entry^)
+        else:
+            _ = entry^
+    return held^
+
+
+def if_resident_put(mut held: List[IFResidentEntry]) raises:
+    """Return a taken (or freshly fitted) entry to the store. Call under the
+    GIL."""
+    if len(held) == 0:
+        return
+    var p = IF_RESIDENT_STORE.get_or_create_ptr()
+    while len(p[].entries) >= IF_RESIDENT_CAP:
+        var oldest = p[].entries.pop(0)
+        _ = oldest^
+    p[].entries.append(held.pop())
+
+
+def if_resident_release(token: Int) raises:
+    """Drop the resident forest `token` names, if any (the Python estimator
+    was refitted or collected). Call under the GIL."""
+    if token == 0:
+        return
+    var p = IF_RESIDENT_STORE.get_or_create_ptr()
+    var found = -1
+    for i in range(len(p[].entries)):
+        if p[].entries[i].token == token:
+            found = i
+            break
+    if found >= 0:
+        var entry = p[].entries.pop(found)
+        _ = entry^
+
+
+def iforest_run_resident(
+    mut held: List[IFResidentEntry],
+    key: IFResidentKey,
+    new_token: Int,
+    query: List[Float32],
+    query_addr: Int,
+    n_query: Int,
+    want: Int,
+    out_f32_addr: Int,
+    out_i32_addr: Int,
+) raises -> IFRunOutputs:
+    """`iforest_run_host` with the forest resident. `held` is what
+    `if_resident_take` returned: one entry scores without fitting; empty
+    fits from `key.train_addr` (the refusals and the contamination quantile
+    are `IsolationForestEstimator.fit`'s, unchanged) and leaves the new
+    entry, under `new_token`, in `held` for `if_resident_put`.
+
+    The result is written at `out_f32_addr` (`want` 0 and 1, `n_query`
+    float32) or `out_i32_addr` (`want` 2, `n_query` int32); the returned
+    lists are empty. `query_addr` nonzero lends the ROW-major query block
+    (`IDN_IF_QUERY_DEVICE`), else `query` holds it."""
+    if key.n_train <= 0:
+        raise Error("iforest_run_host: n_rows must be at least one")
+    if key.n_features <= 0:
+        raise Error("iforest_run_host: n_features must be at least one")
+    if key.train_addr == 0:
+        raise Error("iforest_run_resident: the training matrix address is null")
+    if n_query <= 0:
+        raise Error("iforest_run_host: the query matrix must have at least one row")
+    if query_addr == 0 and len(query) != n_query * key.n_features:
+        raise Error(
+            "iforest_run_host: the query X has " + String(len(query))
+            + " values, n_rows x n_features is " + String(n_query * key.n_features)
+        )
+    if want < IF_WANT_SCORE_SAMPLES or want > IF_WANT_PREDICT:
+        raise Error(
+            "iforest_run_host: want=" + String(want) + " is not one of 0"
+            " (score_samples), 1 (decision_function), 2 (predict)"
+        )
+    if want == IF_WANT_PREDICT:
+        if out_i32_addr == 0:
+            raise Error("iforest_run_resident: the label output address is null")
+    elif out_f32_addr == 0:
+        raise Error("iforest_run_resident: the score output address is null")
+
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    if len(held) == 0:
+        var est = IsolationForestEstimator(ctx)
+        est.n_estimators = key.n_estimators
+        est.max_samples_mode = key.max_samples_mode
+        est.max_samples_int = key.max_samples_int
+        est.max_samples_frac = key.max_samples_frac
+        est.max_depth = key.max_depth
+        est.max_features_mode = key.max_features_mode
+        est.max_features_int = key.max_features_int
+        est.max_features_frac = key.max_features_frac
+        est.bootstrap = key.bootstrap
+        est.random_state = key.random_state
+        est.contamination_auto = key.contamination_auto
+        est.contamination = key.contamination
+        est.warm_start = False
+        est.fit(ctx, List[Float32](), key.n_train, key.n_features, src_addr=key.train_addr)
+        held.append(IFResidentEntry(new_token, key, ctx, est^))
+
+    var out = IFRunOutputs()
+    out.offset_ = held[0].est.offset_
+    out.max_samples_ = held[0].est.max_samples_
+    out.n_features_in_ = held[0].est.n_features_in_
+    out.token = held[0].token
+    var n_features = key.n_features
+    comptime if IDN_IF_EPILOGUE_DEVICE:
+        if not held[0].est.fitted:
+            raise Error("Model has not been fitted. Call fit() first.")
+        if want == IF_WANT_PREDICT:
+            if_predict_into(
+                ctx, held[0].est.model, query, n_query, n_features,
+                Float32(-held[0].est.offset_), held[0].est.knobs, query_addr, out_i32_addr,
+            )
+        else:
+            if_score_samples_into(
+                ctx, held[0].est.model, query, n_query, n_features, held[0].est.knobs,
+                query_addr, out_f32_addr, want == IF_WANT_DECISION_FUNCTION,
+                Float32(held[0].est.offset_),
+            )
+    else:
+        if want == IF_WANT_PREDICT:
+            var labels = held[0].est.predict(ctx, query, n_query, n_features, query_addr)
+            var oi = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=out_i32_addr)
+            for i in range(n_query):
+                oi.unsafe_store(i, labels[i])
+        else:
+            var values: List[Float32]
+            if want == IF_WANT_DECISION_FUNCTION:
+                values = held[0].est.decision_function(
+                    ctx, query, n_query, n_features, query_addr
+                )
+            else:
+                values = held[0].est.score_samples(ctx, query, n_query, n_features, query_addr)
+            var of = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_f32_addr)
+            for i in range(n_query):
+                of.unsafe_store(i, values[i])
+    # The context dies after everything this call launched (DEVIATION 1946);
+    # the resident buffers hold their own copy of it.
     _ = ctx^
     return out^

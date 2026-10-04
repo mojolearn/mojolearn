@@ -514,6 +514,35 @@ comptime IDN_IF_QUERY_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not 
     or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
+#: Lane fam2-forests (IDENTICAL speed wave 3): the fitted forest stays
+#: RESIDENT between binding calls (`isolation_forest/estimator.mojo`,
+#: "THE RESIDENT ENTRY"). Before it DEVIATION 874 refitted the whole forest
+#: inside every `score_samples` / `decision_function` / `predict` call (and
+#: re-ran the contamination quantile over the training rows). The resident
+#: forest is the one `fit` built, so the scores are the refit's bit for bit
+#: (the forest is a pure function of the seed and the X bits) and the host
+#: column is untouched. `-D MOJOLEARN_IDN_IF_RESIDENT_OFF` restores the
+#: refit-per-call form.
+comptime IDN_IF_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_IF_RESIDENT_OFF"]()
+    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+#: Lane fam2-forests: the scoring epilogue of the resident entry runs on the
+#: device and the result is downloaded straight into the caller's buffer.
+#: Before it the scores came back into a List (one cell at a time), the
+#: Python layer's sign flip / `- offset_` / label flip ran over that List on
+#: the host into a second List, and the binding stored that List cell by
+#: cell under the GIL: three serial host passes over n values per scoring
+#: call. The kernels do one exact float32 negation (and one float32
+#: subtraction, the operation the host loop did), so no bit moves.
+#: Applies inside the resident entry only. `-D
+#: MOJOLEARN_IDN_IF_EPILOGUE_DEVICE_OFF` restores the host epilogue.
+comptime IDN_IF_EPILOGUE_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_IF_EPILOGUE_DEVICE_OFF"]()
+    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
 
 def _raise_first_nonfinite_rowmajor_view(
     name: String,
@@ -728,6 +757,42 @@ def predict_labels_kernel(
         return
     var s = scores.unsafe_load(i)
     predictions.unsafe_store(i, Int32(1) if s > threshold else Int32(-1))
+
+
+def if_score_epilogue_kernel(
+    scores: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    subtract: Int32,
+    offset: Float32,
+):
+    """`IDN_IF_EPILOGUE_DEVICE`: the Python layer's `score_samples = -paper`
+    (`isolation_forest.pyx:959`) and, when `subtract` is nonzero,
+    `decision_function = score_samples - offset_` (`:978`), in place. The
+    same two float32 operations `IsolationForestEstimator.score_samples` /
+    `decision_function` do on the host."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    var v = -scores.unsafe_load(i)
+    if subtract != 0:
+        v = v - offset
+    scores.unsafe_store(i, v)
+
+
+def if_predict_epilogue_kernel(
+    scores: MutPointer[Float32, MutAnyOrigin],
+    predictions: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+    threshold: Float32,
+):
+    """`IDN_IF_EPILOGUE_DEVICE`: `predict_labels_kernel` and the Python
+    layer's label flip in one launch: -1 = anomaly (`score > threshold`),
+    1 = inlier."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    var s = scores.unsafe_load(i)
+    predictions.unsafe_store(i, Int32(-1) if s > threshold else Int32(1))
 
 
 # ---------------------------------------------------------------------------
@@ -1249,6 +1314,81 @@ def predict(
     _ = scores^
     _ = preds^
     return out^
+
+
+def score_samples_into(
+    ctx: DeviceContext,
+    forest: IsolationForestModel,
+    input_rowmajor: List[Float32],
+    n_rows: Int,
+    n_cols: Int,
+    knobs: IFLaunchKnobs,
+    src_addr: Int,
+    out_addr: Int,
+    subtract_offset: Bool,
+    offset: Float32,
+) raises:
+    """`IDN_IF_EPILOGUE_DEVICE`: the sklearn-convention `score_samples`
+    (`-paper`) or `decision_function` (`-paper - offset`) of `n_rows` query
+    rows, written as `n_rows` float32 at the host address `out_addr`. The
+    epilogue is `if_score_epilogue_kernel`; the download lands in the
+    caller's buffer with no List in between."""
+    if out_addr == 0:
+        raise Error("score_samples_into: the output address is null")
+    var trace = IdentityTrace.disabled()
+    var scores = _score_samples_device(
+        ctx, forest, input_rowmajor, n_rows, n_cols, trace, knobs, src_addr
+    )
+    var blocks = (n_rows + knobs.path_tpb - 1) // knobs.path_tpb
+    ctx.enqueue_function[if_score_epilogue_kernel](
+        scores.unsafe_ptr(),
+        Int32(n_rows),
+        Int32(1) if subtract_offset else Int32(0),
+        offset,
+        grid_dim=(blocks, 1, 1),
+        block_dim=(knobs.path_tpb, 1, 1),
+    )
+    var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_addr)
+    ctx.enqueue_copy(dst_ptr=dst, src_buf=scores.create_sub_buffer[DType.float32](0, n_rows))
+    ctx.synchronize()
+    _ = scores^
+
+
+def predict_into(
+    ctx: DeviceContext,
+    forest: IsolationForestModel,
+    input_rowmajor: List[Float32],
+    n_rows: Int,
+    n_cols: Int,
+    threshold: Float32,
+    knobs: IFLaunchKnobs,
+    src_addr: Int,
+    out_addr: Int,
+) raises:
+    """`IDN_IF_EPILOGUE_DEVICE`: the sklearn-convention labels (-1 =
+    anomaly, 1 = inlier) of `n_rows` query rows, written as `n_rows` int32
+    at the host address `out_addr`."""
+    if out_addr == 0:
+        raise Error("predict_into: the output address is null")
+    var trace = IdentityTrace.disabled()
+    var scores = _score_samples_device(
+        ctx, forest, input_rowmajor, n_rows, n_cols, trace, knobs, src_addr
+    )
+    var preds = _poisoned_i32(ctx, n_rows, knobs.pad, knobs.poison)
+    var blocks = (n_rows + knobs.path_tpb - 1) // knobs.path_tpb
+    ctx.enqueue_function[if_predict_epilogue_kernel](
+        _mp_f32(scores),
+        preds.unsafe_ptr(),
+        Int32(n_rows),
+        threshold,
+        grid_dim=(blocks, 1, 1),
+        block_dim=(knobs.path_tpb, 1, 1),
+    )
+    var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=out_addr)
+    ctx.enqueue_copy(dst_ptr=dst, src_buf=preds.create_sub_buffer[DType.int32](0, n_rows))
+    ctx.synchronize()
+    _ = scores^
+    _ = preds^
 
 
 def _fit_tree_shards(ctx: DeviceContext, input_colmajor: List[Float32],
