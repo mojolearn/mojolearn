@@ -323,3 +323,131 @@ def spread_leaves_device(vals: MutPointer[Float32, MutUntrackedOrigin], offs: Mu
     _ = d_v^
     _ = d_o^
     _ = d_d^
+
+
+# ---------------------------------------------------------------------------
+# cpu2-l5-trees (2026-10-04): the forests' class_weight row expansion
+# (python/mojolearn/randomforest.py `_class_weight_rows`) left the host
+# helpers `bincount_i64` and `gather_rows_bytes`: the per-class counts are
+# integer atomics over int32 codes, the per-row weight is the class's
+# float32 word copied (as a 32-bit word, so no device flushes a subnormal).
+# The host column runs `code_counts_host` / `class_rows_host`, the same
+# integers and the same words.
+# ---------------------------------------------------------------------------
+def code_counts_kernel(codes: MutPointer[Int32, MutAnyOrigin], n: Int64, k: Int64,
+                       counts: MutPointer[Int32, MutAnyOrigin], bad: MutPointer[Int32, MutAnyOrigin]):
+    """counts[codes[r]] += 1 (integer atomics: order-free); a code outside
+    [0, k) sets bad[0]."""
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while r < Int(n):
+        var c = Int(codes.unsafe_load(r))
+        if c < 0 or c >= Int(k):
+            bad.unsafe_store(0, Int32(1))
+        else:
+            _ = Atomic.fetch_add(counts.unsafe_offset(c), Int32(1))
+        r += stride
+
+
+def class_rows_kernel(codes: MutPointer[Int32, MutAnyOrigin], n: Int64, k: Int64,
+                      values: MutPointer[UInt32, MutAnyOrigin], dst: MutPointer[UInt32, MutAnyOrigin],
+                      bad: MutPointer[Int32, MutAnyOrigin]):
+    """dst[r] = values[codes[r]] (a word copy); a code outside [0, k) sets
+    bad[0] and writes nothing for that row."""
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while r < Int(n):
+        var c = Int(codes.unsafe_load(r))
+        if c < 0 or c >= Int(k):
+            bad.unsafe_store(0, Int32(1))
+        else:
+            dst.unsafe_store(r, values.unsafe_load(c))
+        r += stride
+
+
+def code_counts_device(codes: MutPointer[Int32, MutUntrackedOrigin], n: Int, k: Int,
+                       counts: MutPointer[Int32, MutUntrackedOrigin]) raises:
+    """counts (int32, k) = the rows of each int32 class code, on the device."""
+    var ctx = _ctx()
+    var d_y = ctx.enqueue_create_buffer[DType.int32](max(1, n))
+    if n > 0:
+        ctx.enqueue_copy(dst_buf=d_y, src_ptr=codes)
+    var d_c = ctx.enqueue_create_buffer[DType.int32](k)
+    d_c.enqueue_fill(Int32(0))
+    var d_bad = ctx.enqueue_create_buffer[DType.int32](1)
+    d_bad.enqueue_fill(Int32(0))
+    ctx.enqueue_function[code_counts_kernel](
+        d_y.unsafe_ptr(), Int64(n), Int64(k), d_c.unsafe_ptr(), d_bad.unsafe_ptr(),
+        grid_dim=_blocks(n), block_dim=OPS_TPB,
+    )
+    var h_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_buf=h_bad, src_buf=d_bad)
+    ctx.enqueue_copy(dst_ptr=counts, src_buf=d_c)
+    ctx.synchronize()
+    var is_bad = h_bad.unsafe_ptr().unsafe_load(0) != Int32(0)
+    _ = d_y^
+    _ = d_c^
+    _ = d_bad^
+    _ = h_bad^
+    if is_bad:
+        raise Error("x_trees code_counts: a class code outside [0, n_classes)")
+
+
+def class_rows_device(codes: MutPointer[Int32, MutUntrackedOrigin], n: Int, k: Int,
+                      values: MutPointer[Float32, MutUntrackedOrigin], dst: MutPointer[Float32, MutUntrackedOrigin]) raises:
+    """dst (float32, n) = values (float32, k) at each row's int32 code, on
+    the device; nothing written to `dst` on a refusal."""
+    if n <= 0:
+        return
+    var ctx = _ctx()
+    var d_y = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_copy(dst_buf=d_y, src_ptr=codes)
+    var d_v = ctx.enqueue_create_buffer[DType.uint32](k)
+    ctx.enqueue_copy(dst_buf=d_v, src_ptr=values.bitcast[UInt32]())
+    var d_d = ctx.enqueue_create_buffer[DType.uint32](n)
+    var d_bad = ctx.enqueue_create_buffer[DType.int32](1)
+    d_bad.enqueue_fill(Int32(0))
+    ctx.enqueue_function[class_rows_kernel](
+        d_y.unsafe_ptr(), Int64(n), Int64(k), d_v.unsafe_ptr(), d_d.unsafe_ptr(), d_bad.unsafe_ptr(),
+        grid_dim=_blocks(n), block_dim=OPS_TPB,
+    )
+    var h_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_buf=h_bad, src_buf=d_bad)
+    ctx.synchronize()
+    var is_bad = h_bad.unsafe_ptr().unsafe_load(0) != Int32(0)
+    if not is_bad:
+        ctx.enqueue_copy(dst_ptr=dst.bitcast[UInt32](), src_buf=d_d)
+        ctx.synchronize()
+    _ = d_y^
+    _ = d_v^
+    _ = d_d^
+    _ = d_bad^
+    _ = h_bad^
+    if is_bad:
+        raise Error("x_trees class_rows: a class code outside [0, n_classes)")
+
+
+def code_counts_host(codes: MutPointer[Int32, MutUntrackedOrigin], n: Int, k: Int,
+                     counts: MutPointer[Int32, MutUntrackedOrigin]) raises:
+    """The host column's `code_counts_device`: the same integers."""
+    for c in range(k):
+        counts[unsafe_offset=c] = Int32(0)
+    for r in range(n):
+        var c = Int(codes[unsafe_offset=r])
+        if c < 0 or c >= k:
+            raise Error("x_trees code_counts: a class code outside [0, n_classes)")
+        counts[unsafe_offset=c] = counts[unsafe_offset=c] + Int32(1)
+
+
+def class_rows_host(codes: MutPointer[Int32, MutUntrackedOrigin], n: Int, k: Int,
+                    values: MutPointer[Float32, MutUntrackedOrigin], dst: MutPointer[Float32, MutUntrackedOrigin]) raises:
+    """The host column's `class_rows_device`: the same words, the same
+    refusal (checked before any row is written)."""
+    for r in range(n):
+        var c = Int(codes[unsafe_offset=r])
+        if c < 0 or c >= k:
+            raise Error("x_trees class_rows: a class code outside [0, n_classes)")
+    var vw = values.bitcast[UInt32]()
+    var dw = dst.bitcast[UInt32]()
+    for r in range(n):
+        dw[unsafe_offset=r] = vw[unsafe_offset=Int(codes[unsafe_offset=r])]

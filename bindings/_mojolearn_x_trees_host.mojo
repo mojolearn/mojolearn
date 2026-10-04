@@ -16,7 +16,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from xtrees.api import register
 from xtrees.shap_host import shap_prepare, tree_shap_values
 from xtrees.ops import XTREES_HOST_SABOTAGE
-from xtrees.dart_host import DART_HOST, dart_open, dart_step, dart_add, dart_close
+from xtrees.dart_host import DART_HOST, dart_open, dart_step, dart_add, dart_close, dart_predict
 
 
 def x_trees_host_numeric_mode_binding() raises -> PythonObject:
@@ -128,15 +128,17 @@ def dart_step_binding(handle: PythonObject, coef: PythonObject, thr: PythonObjec
 
 
 def dart_add_binding(handle: PythonObject, colid: PythonObject, quesval: PythonObject, left: PythonObject,
-                     values: PythonObject, params: PythonObject) raises -> PythonObject:
-    """The new tree's forest arrays (int32 / float32 / int32), values float32
-    n_nodes (out); params = [tree, class, lo, n_nodes, shrink, factor,
-    reg_lambda, reg_alpha, max_delta_step]."""
-    if len(params) != 9:
-        raise Error("x_trees_dart_add: params must hold 9 values")
+                     values: PythonObject, rows: PythonObject, params: PythonObject) raises -> PythonObject:
+    """The new tree's forest arrays (int32 / float32 / int32, colid in X's
+    columns), values float32 n_nodes (out), rows int32 m (the round's bag
+    rows, ascending; any address when m is 0); params = [tree, class, lo,
+    n_nodes, shrink, factor, reg_lambda, reg_alpha, max_delta_step, m]
+    (m = 0: the leaf sums over every row)."""
+    if len(params) != 10:
+        raise Error("x_trees_dart_add: params must hold 10 values")
     dart_add(Int(py=handle), Int(py=colid), Int(py=quesval), Int(py=left), Int(py=values), Int(py=params[0]),
              Int(py=params[1]), Int(py=params[2]), Int(py=params[3]), Float64(py=params[4]), Float64(py=params[5]),
-             Float64(py=params[6]), Float64(py=params[7]), Float64(py=params[8]))
+             Float64(py=params[6]), Float64(py=params[7]), Float64(py=params[8]), Int(py=rows), Int(py=params[9]))
     return PythonObject(Int(py=params[3]))
 
 
@@ -150,6 +152,45 @@ def dart_idn_binding() raises -> PythonObject:
     """Present only under `IDN_DART_DEVICE`: the IDENTICAL DART round (the
     Python layer then takes it with or without a forest data session)."""
     return PythonObject(1)
+
+
+def _dart_addr_list(v: PythonObject, nt: Int, who: String) raises -> List[Int]:
+    if len(v) != nt:
+        raise Error(who + ": one address per tree")
+    var out = List[Int]()
+    for j in range(nt):  # glue: T tree addresses
+        out.append(Int(py=v[j]))
+    return out^
+
+
+def dart_predict_binding(x: PythonObject, forest: PythonObject, sizes: PythonObject, coefs: PythonObject,
+                         inits: PythonObject, out: PythonObject, params: PythonObject) raises -> PythonObject:
+    """DART's raw score (lane cpu2-l5-trees, xtrees/dart_*.mojo
+    `dart_predict`): x float32 n x d row-major; forest = [colid addresses,
+    quesval addresses, left addresses, leaf value addresses], one per tree
+    (int32 / float32 / int32 / float32, each at the tree's first node);
+    sizes = the T node counts; coefs = the T float64 coefficients (tree j is
+    class j % k); inits = the k float64 class starts; out float64 k * n
+    class-major (out); params = [n, d, k]."""
+    var p = _dart_ints(params, 3, "x_trees_dart_predict")
+    if len(forest) != 4:
+        raise Error("x_trees_dart_predict: forest must hold 4 address lists")
+    var nt = len(sizes)
+    if len(coefs) != nt:
+        raise Error("x_trees_dart_predict: one coefficient per tree")
+    var sz = List[Int]()
+    var cf = List[Float64]()
+    for j in range(nt):  # glue: T tree sizes and coefficients
+        sz.append(Int(py=sizes[j]))
+        cf.append(Float64(py=coefs[j]))
+    var iv = List[Float64]()
+    for c in range(len(inits)):  # glue: k class starts
+        iv.append(Float64(py=inits[c]))
+    dart_predict(Int(py=x), _dart_addr_list(forest[0], nt, "x_trees_dart_predict"),
+                 _dart_addr_list(forest[1], nt, "x_trees_dart_predict"),
+                 _dart_addr_list(forest[2], nt, "x_trees_dart_predict"),
+                 _dart_addr_list(forest[3], nt, "x_trees_dart_predict"), sz, cf, iv, Int(py=out), p[0], p[1], p[2])
+    return PythonObject(p[0])
 
 
 @export
@@ -166,6 +207,8 @@ def PyInit__mojolearn_x_trees_host() abi("C") -> PythonObject:
         register(m)
         m.def_function[tree_shap_prepare_binding]("x_trees_tree_shap_prepare")
         m.def_function[tree_shap_binding]("x_trees_tree_shap")
+        # lane cpu2-l5-trees: DART predict, the device entry's host twin (every host build)
+        m.def_function[dart_predict_binding]("x_trees_dart_predict")
         comptime if DART_HOST:
             m.def_function[dart_open_binding]("x_trees_dart_open")
             m.def_function[dart_step_binding]("x_trees_dart_step")

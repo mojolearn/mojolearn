@@ -17,7 +17,8 @@ from std.memory import bitcast
 from xtrees.folds_device import device_folds, leaf_numbering
 from xtrees.glue_device import (
     binary_proba_device, indicator_codes_device, stack_w64_device, class_counts_device, remap_cols_device,
-    positive_codes_device, spread_leaves_device,
+    positive_codes_device, spread_leaves_device, code_counts_device, class_rows_device, code_counts_host,
+    class_rows_host,
 )
 from xtrees.exact_sum import ES_FLAGS, ES_MAX_ROWS, exact_sum_device, exact_sum_host
 from xtrees.oob import (
@@ -29,6 +30,8 @@ from xtrees.ops_device import (
     apply_trees_device, bag_rows_device, gather_f32_device, transpose_f32_device, transpose_f64_device,
     unseen_rows_device, weighted_sample_device,
 )
+from xtrees import ops_device_elem as elem_dev
+from xtrees import ops_device_boost as boost_dev
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
 
 #: cpu-gpu-cleanup t-gbdt / w2-trees: a GPU build gathers, applies, transposes
@@ -45,7 +48,7 @@ from xtrees.ops import (
     onehot_leaves, transpose_f32, normalize_rows, exact_sum_f32, EXACT_SUM_LIMBS, logit, scatter, platt_fit, platt_apply, isotonic_fit,
     isotonic_predict, platt_apply_strided, isotonic_predict_strided, complement_pairs, indicator_codes, column_f64,
     bag_rows, unseen_rows, transpose_f64, stack_w64, binary_proba, class_counts, remap_cols, positive_codes,
-    spread_leaves, tree_shape,
+    spread_leaves, tree_shape, margin2, normalized_weights, iota_i32, fill_class_major_f64,
 )
 
 
@@ -73,8 +76,12 @@ def sample_indices_binding(out_addr: PythonObject, params: PythonObject) raises 
     _need(params, 5, "x_trees_sample_indices")
     var n_draw = _count(_i(params, 1), "x_trees_sample_indices")
     if n_draw > 0:
-        sample_indices(i32_ptr(Int(py=out_addr)), _i(params, 0), n_draw, _i(params, 2) != 0,
-                       _i(params, 3), _i(params, 4))
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.sample_indices_device(i32_ptr(Int(py=out_addr)), _i(params, 0), n_draw, _i(params, 2) != 0,
+                                           _i(params, 3), _i(params, 4))
+        else:
+            sample_indices(i32_ptr(Int(py=out_addr)), _i(params, 0), n_draw, _i(params, 2) != 0,
+                           _i(params, 3), _i(params, 4))
     return PythonObject(n_draw)
 
 
@@ -114,7 +121,10 @@ def gather_i32_binding(src: PythonObject, rows: PythonObject, dst: PythonObject,
     _need(params, 2, "x_trees_gather_i32")
     var n_rows = _count(_i(params, 1), "x_trees_gather_i32")
     if n_rows > 0:
-        gather_i32(i32_ptr(Int(py=src)), _i(params, 0), i32_ptr(Int(py=rows)), n_rows, i32_ptr(Int(py=dst)))
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.gather_i32_device(i32_ptr(Int(py=src)), _i(params, 0), i32_ptr(Int(py=rows)), n_rows, i32_ptr(Int(py=dst)))
+        else:
+            gather_i32(i32_ptr(Int(py=src)), _i(params, 0), i32_ptr(Int(py=rows)), n_rows, i32_ptr(Int(py=dst)))
     return PythonObject(n_rows)
 
 
@@ -123,7 +133,10 @@ def accumulate_binding(acc: PythonObject, x: PythonObject, params: PythonObject)
     _need(params, 2, "x_trees_accumulate")
     var n = _count(_i(params, 0), "x_trees_accumulate")
     if n > 0:
-        accumulate(f64_ptr(Int(py=acc)), f32_ptr(Int(py=x)), n, _f(params, 1))
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.accumulate_device(f64_ptr(Int(py=acc)), f32_ptr(Int(py=x)), n, _f(params, 1))
+        else:
+            accumulate(f64_ptr(Int(py=acc)), f32_ptr(Int(py=x)), n, _f(params, 1))
     return PythonObject(n)
 
 
@@ -132,8 +145,12 @@ def accumulate_cols_binding(acc: PythonObject, x: PythonObject, cols: PythonObje
     _need(params, 4, "x_trees_accumulate_cols")
     var n = _count(_i(params, 0), "x_trees_accumulate_cols")
     if n > 0:
-        accumulate_cols(f64_ptr(Int(py=acc)), f32_ptr(Int(py=x)), i32_ptr(Int(py=cols)), n, _i(params, 1),
-                        _i(params, 2), _f(params, 3))
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.accumulate_cols_device(f64_ptr(Int(py=acc)), f32_ptr(Int(py=x)), i32_ptr(Int(py=cols)), n,
+                                            _i(params, 1), _i(params, 2), _f(params, 3))
+        else:
+            accumulate_cols(f64_ptr(Int(py=acc)), f32_ptr(Int(py=x)), i32_ptr(Int(py=cols)), n, _i(params, 1),
+                            _i(params, 2), _f(params, 3))
     return PythonObject(n)
 
 
@@ -144,7 +161,10 @@ def accumulate_rows_binding(acc: PythonObject, x: PythonObject, rows: PythonObje
     var k = _count(_i(params, 1), "x_trees_accumulate_rows")
     var m = _count(_i(params, 2), "x_trees_accumulate_rows")
     if m * k > 0:
-        accumulate_rows(f64_ptr(Int(py=acc)), n, k, f64_ptr(Int(py=x)), i32_ptr(Int(py=rows)), m)
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.accumulate_rows_device(f64_ptr(Int(py=acc)), n, k, f64_ptr(Int(py=x)), i32_ptr(Int(py=rows)), m)
+        else:
+            accumulate_rows(f64_ptr(Int(py=acc)), n, k, f64_ptr(Int(py=x)), i32_ptr(Int(py=rows)), m)
     return PythonObject(m)
 
 
@@ -153,7 +173,11 @@ def accumulate_onehot_binding(acc: PythonObject, codes: PythonObject, params: Py
     _need(params, 4, "x_trees_accumulate_onehot")
     var n = _count(_i(params, 0), "x_trees_accumulate_onehot")
     if n > 0:
-        accumulate_onehot(f64_ptr(Int(py=acc)), i32_ptr(Int(py=codes)), n, _i(params, 1), _f(params, 2), _f(params, 3))
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.accumulate_onehot_device(f64_ptr(Int(py=acc)), i32_ptr(Int(py=codes)), n, _i(params, 1),
+                                              _f(params, 2), _f(params, 3))
+        else:
+            accumulate_onehot(f64_ptr(Int(py=acc)), i32_ptr(Int(py=codes)), n, _i(params, 1), _f(params, 2), _f(params, 3))
     return PythonObject(n)
 
 
@@ -162,7 +186,10 @@ def argmax_rows_binding(x: PythonObject, res: PythonObject, params: PythonObject
     _need(params, 2, "x_trees_argmax_rows")
     var n = _count(_i(params, 0), "x_trees_argmax_rows")
     if n > 0:
-        argmax_rows(f64_ptr(Int(py=x)), n, _i(params, 1), i32_ptr(Int(py=res)))
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.argmax_rows_device(f64_ptr(Int(py=x)), n, _i(params, 1), i32_ptr(Int(py=res)))
+        else:
+            argmax_rows(f64_ptr(Int(py=x)), n, _i(params, 1), i32_ptr(Int(py=res)))
     return PythonObject(n)
 
 
@@ -170,7 +197,10 @@ def argmax_rows_f32_binding(x: PythonObject, res: PythonObject, params: PythonOb
     _need(params, 2, "x_trees_argmax_rows_f32")
     var n = _count(_i(params, 0), "x_trees_argmax_rows_f32")
     if n > 0:
-        argmax_rows_f32(f32_ptr(Int(py=x)), n, _i(params, 1), i32_ptr(Int(py=res)))
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.argmax_rows_f32_device(f32_ptr(Int(py=x)), n, _i(params, 1), i32_ptr(Int(py=res)))
+        else:
+            argmax_rows_f32(f32_ptr(Int(py=x)), n, _i(params, 1), i32_ptr(Int(py=res)))
     return PythonObject(n)
 
 
@@ -179,7 +209,10 @@ def scale_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
     _need(params, 2, "x_trees_scale")
     var n = _count(_i(params, 0), "x_trees_scale")
     if n > 0:
-        scale_f64(f64_ptr(Int(py=x)), n, _f(params, 1))
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.scale_f64_device(f64_ptr(Int(py=x)), n, _f(params, 1))
+        else:
+            scale_f64(f64_ptr(Int(py=x)), n, _f(params, 1))
     return PythonObject(n)
 
 
@@ -188,7 +221,10 @@ def scale_to_f32_binding(x: PythonObject, res: PythonObject, params: PythonObjec
     _need(params, 2, "x_trees_scale_to_f32")
     var n = _count(_i(params, 0), "x_trees_scale_to_f32")
     if n > 0:
-        scale_to_f32(f64_ptr(Int(py=x)), n, _f(params, 1), f32_ptr(Int(py=res)))
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.scale_to_f32_device(f64_ptr(Int(py=x)), n, _f(params, 1), f32_ptr(Int(py=res)))
+        else:
+            scale_to_f32(f64_ptr(Int(py=x)), n, _f(params, 1), f32_ptr(Int(py=res)))
     return PythonObject(n)
 
 
@@ -199,7 +235,12 @@ def exact_sum_f32_binding(x: PythonObject, params: PythonObject) raises -> Pytho
     _need(params, 1, "x_trees_exact_sum_f32")
     var n = _count(_i(params, 0), "x_trees_exact_sum_f32")
     var limbs = List[Int64](length=EXACT_SUM_LIMBS, fill=0)
-    if not exact_sum_f32(f32_ptr(Int(py=x)), n, limbs):
+    var ok: Bool
+    comptime if XTREES_DEVICE_OPS:
+        ok = elem_dev.exact_sum_f32_device(f32_ptr(Int(py=x)), n, limbs)
+    else:
+        ok = exact_sum_f32(f32_ptr(Int(py=x)), n, limbs)
+    if not ok:
         return PythonObject(None)
     var out = Python.list()
     for i in range(EXACT_SUM_LIMBS):
@@ -217,24 +258,10 @@ def margin2_binding(acc: PythonObject, dst: PythonObject, params: PythonObject) 
     _need(params, 2, "x_trees_margin2")
     var n = _count(_i(params, 0), "x_trees_margin2")
     var mode = _i(params, 1)
-    var a = f64_ptr(Int(py=acc))
-    if mode == 0:
-        var o = f64_ptr(Int(py=dst))
-        for i in range(n):
-            o[unsafe_offset=i] = a[unsafe_offset=2 * i + 1] - a[unsafe_offset=2 * i]
-    elif mode == 1:
-        var o = i32_ptr(Int(py=dst))
-        for i in range(n):
-            var d = a[unsafe_offset=2 * i + 1] - a[unsafe_offset=2 * i]
-            o[unsafe_offset=i] = Int32(1) if d > 0 else Int32(0)
-    elif mode == 2:
-        var o = f64_ptr(Int(py=dst))
-        for i in range(n):
-            var h = (a[unsafe_offset=2 * i + 1] - a[unsafe_offset=2 * i]) / 2
-            o[unsafe_offset=2 * i] = -h
-            o[unsafe_offset=2 * i + 1] = h
+    comptime if XTREES_DEVICE_OPS:
+        elem_dev.margin2_device(f64_ptr(Int(py=acc)), n, mode, f64_ptr(Int(py=dst)), i32_ptr(Int(py=dst)))
     else:
-        raise Error("x_trees_margin2: mode must be 0, 1 or 2")
+        margin2(f64_ptr(Int(py=acc)), n, mode, f64_ptr(Int(py=dst)), i32_ptr(Int(py=dst)))
     return PythonObject(n)
 
 
@@ -243,7 +270,10 @@ def put_f32_binding(dst: PythonObject, src: PythonObject, params: PythonObject) 
     _need(params, 2, "x_trees_put_f32")
     var n = _count(_i(params, 1), "x_trees_put_f32")
     if n > 0:
-        put_f32(f32_ptr(Int(py=dst)), _count(_i(params, 0), "x_trees_put_f32"), f32_ptr(Int(py=src)), n)
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.put_f32_device(f32_ptr(Int(py=dst)), _count(_i(params, 0), "x_trees_put_f32"), f32_ptr(Int(py=src)), n)
+        else:
+            put_f32(f32_ptr(Int(py=dst)), _count(_i(params, 0), "x_trees_put_f32"), f32_ptr(Int(py=src)), n)
     return PythonObject(n)
 
 
@@ -251,7 +281,10 @@ def softmax_rows_binding(x: PythonObject, params: PythonObject) raises -> Python
     _need(params, 2, "x_trees_softmax_rows")
     var n = _count(_i(params, 0), "x_trees_softmax_rows")
     if n > 0:
-        softmax_rows(f64_ptr(Int(py=x)), n, _i(params, 1))
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.softmax_rows_device(f64_ptr(Int(py=x)), n, _i(params, 1))
+        else:
+            softmax_rows(f64_ptr(Int(py=x)), n, _i(params, 1))
     return PythonObject(n)
 
 
@@ -263,8 +296,12 @@ def samme_step_binding(
     var n = _i(params, 0)
     if n <= 0:
         raise Error("x_trees_samme_step: n must be positive")
-    samme_step(f64_ptr(Int(py=w)), i32_ptr(Int(py=pred)), i32_ptr(Int(py=y)), n, _i(params, 1),
-               _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
+    comptime if XTREES_DEVICE_OPS:
+        boost_dev.samme_step_device(f64_ptr(Int(py=w)), i32_ptr(Int(py=pred)), i32_ptr(Int(py=y)), n, _i(params, 1),
+                                    _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
+    else:
+        samme_step(f64_ptr(Int(py=w)), i32_ptr(Int(py=pred)), i32_ptr(Int(py=y)), n, _i(params, 1),
+                   _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
     return PythonObject(n)
 
 
@@ -276,8 +313,12 @@ def r2_step_binding(
     var n = _i(params, 0)
     if n <= 0:
         raise Error("x_trees_r2_step: n must be positive")
-    r2_step(f64_ptr(Int(py=w)), f32_ptr(Int(py=pred)), f32_ptr(Int(py=y)), n, _i(params, 1),
-            _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
+    comptime if XTREES_DEVICE_OPS:
+        boost_dev.r2_step_device(f64_ptr(Int(py=w)), f32_ptr(Int(py=pred)), f32_ptr(Int(py=y)), n, _i(params, 1),
+                                 _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
+    else:
+        r2_step(f64_ptr(Int(py=w)), f32_ptr(Int(py=pred)), f32_ptr(Int(py=y)), n, _i(params, 1),
+                _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
     return PythonObject(n)
 
 
@@ -291,7 +332,10 @@ def weighted_median_binding(
     if m <= 0:
         raise Error("x_trees_weighted_median: need at least one estimator")
     if n > 0:
-        weighted_median(f32_ptr(Int(py=preds)), f64_ptr(Int(py=weights)), n, m, f32_ptr(Int(py=res)))
+        comptime if XTREES_DEVICE_OPS:
+            boost_dev.weighted_median_device(f32_ptr(Int(py=preds)), f64_ptr(Int(py=weights)), n, m, f32_ptr(Int(py=res)))
+        else:
+            weighted_median(f32_ptr(Int(py=preds)), f64_ptr(Int(py=weights)), n, m, f32_ptr(Int(py=res)))
     return PythonObject(n)
 
 
@@ -337,8 +381,12 @@ def gradients_binding(
         if k < 2:
             raise Error("x_trees_gradients: multiclass needs k >= 2")
     if n > 0:
-        gradients(f64_ptr(Int(py=score)), f32_ptr(Int(py=y)), n, kind, f64_ptr(Int(py=g)), f64_ptr(Int(py=h)),
-                  f32_ptr(Int(py=target)), k)
+        comptime if XTREES_DEVICE_OPS:
+            boost_dev.gradients_device(f64_ptr(Int(py=score)), f32_ptr(Int(py=y)), n, kind, f64_ptr(Int(py=g)),
+                                       f64_ptr(Int(py=h)), f32_ptr(Int(py=target)), k)
+        else:
+            gradients(f64_ptr(Int(py=score)), f32_ptr(Int(py=y)), n, kind, f64_ptr(Int(py=g)), f64_ptr(Int(py=h)),
+                      f32_ptr(Int(py=target)), k)
     return PythonObject(n)
 
 
@@ -357,8 +405,13 @@ def leaf_newton_binding(
     if len(params) == 5:
         l1 = _f(params, 3)
         mds = _f(params, 4)
-    leaf_newton(i32_ptr(Int(py=nodes)), f64_ptr(Int(py=g)), f64_ptr(Int(py=h)), n, n_nodes, _f(params, 2),
-                f32_ptr(Int(py=values)), l1, mds)
+    comptime if XTREES_DEVICE_OPS:
+        var np = i32_ptr(Int(py=nodes))
+        boost_dev.leaf_newton_device(np, np, False, n, f64_ptr(Int(py=g)), f64_ptr(Int(py=h)), n, n_nodes,
+                                     _f(params, 2), l1, mds, f32_ptr(Int(py=values)))
+    else:
+        leaf_newton(i32_ptr(Int(py=nodes)), f64_ptr(Int(py=g)), f64_ptr(Int(py=h)), n, n_nodes, _f(params, 2),
+                    f32_ptr(Int(py=values)), l1, mds)
     return PythonObject(n_nodes)
 
 
@@ -374,6 +427,11 @@ def leaf_newton_rows_binding(
     var n_nodes = _i(params, 2)
     if n_nodes < 1:
         raise Error("x_trees_leaf_newton_rows: need n_nodes >= 1")
+    comptime if XTREES_DEVICE_OPS:
+        boost_dev.leaf_newton_device(i32_ptr(Int(py=nodes)), i32_ptr(Int(py=rows)), True, m, f64_ptr(Int(py=g)),
+                                     f64_ptr(Int(py=h)), n, n_nodes, _f(params, 3), _f(params, 4), _f(params, 5),
+                                     f32_ptr(Int(py=values)))
+        return PythonObject(n_nodes)
     leaf_newton_rows(i32_ptr(Int(py=nodes)), i32_ptr(Int(py=rows)), m, f64_ptr(Int(py=g)), f64_ptr(Int(py=h)), n,
                      n_nodes, _f(params, 3), _f(params, 4), _f(params, 5), f32_ptr(Int(py=values)))
     return PythonObject(n_nodes)
@@ -384,7 +442,11 @@ def tree_score_add_binding(nodes: PythonObject, values: PythonObject, acc: Pytho
     _need(params, 2, "x_trees_tree_score_add")
     var n = _count(_i(params, 0), "x_trees_tree_score_add")
     if n > 0:
-        tree_score_add(i32_ptr(Int(py=nodes)), f32_ptr(Int(py=values)), n, _f(params, 1), f64_ptr(Int(py=acc)))
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.tree_score_add_device(i32_ptr(Int(py=nodes)), f32_ptr(Int(py=values)), n, _f(params, 1),
+                                           f64_ptr(Int(py=acc)))
+        else:
+            tree_score_add(i32_ptr(Int(py=nodes)), f32_ptr(Int(py=values)), n, _f(params, 1), f64_ptr(Int(py=acc)))
     return PythonObject(n)
 
 
@@ -393,7 +455,10 @@ def uniform_binding(res: PythonObject, params: PythonObject) raises -> PythonObj
     _need(params, 3, "x_trees_uniform")
     var n = _count(_i(params, 0), "x_trees_uniform")
     if n > 0:
-        uniform(f64_ptr(Int(py=res)), n, _i(params, 1), _i(params, 2))
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.uniform_device(f64_ptr(Int(py=res)), n, _i(params, 1), _i(params, 2))
+        else:
+            uniform(f64_ptr(Int(py=res)), n, _i(params, 1), _i(params, 2))
     return PythonObject(n)
 
 
@@ -404,8 +469,12 @@ def onehot_leaves_binding(
     _need(params, 3, "x_trees_onehot_leaves")
     var n = _count(_i(params, 0), "x_trees_onehot_leaves")
     if n > 0:
-        onehot_leaves(i32_ptr(Int(py=nodes)), i32_ptr(Int(py=tree_base)), i32_ptr(Int(py=node_col)), n,
-                      _i(params, 1), _i(params, 2), f64_ptr(Int(py=res)))
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.onehot_leaves_device(i32_ptr(Int(py=nodes)), i32_ptr(Int(py=tree_base)), i32_ptr(Int(py=node_col)),
+                                          n, _i(params, 1), _i(params, 2), f64_ptr(Int(py=res)))
+        else:
+            onehot_leaves(i32_ptr(Int(py=nodes)), i32_ptr(Int(py=tree_base)), i32_ptr(Int(py=node_col)), n,
+                          _i(params, 1), _i(params, 2), f64_ptr(Int(py=res)))
     return PythonObject(n)
 
 
@@ -470,7 +539,10 @@ def check_weights_f32_binding(w: PythonObject, params: PythonObject) raises -> P
     var n = _count(_i(params, 0), "x_trees_check_weights_f32")
     if n == 0:
         return PythonObject(2)
-    return PythonObject(check_weights_f32(f32_ptr(Int(py=w)), n))
+    comptime if XTREES_DEVICE_OPS:
+        return PythonObject(elem_dev.check_weights_f32_device(f32_ptr(Int(py=w)), n))
+    else:
+        return PythonObject(check_weights_f32(f32_ptr(Int(py=w)), n))
 
 
 def mul_f32_binding(a: PythonObject, b: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -478,7 +550,10 @@ def mul_f32_binding(a: PythonObject, b: PythonObject, dst: PythonObject, params:
     _need(params, 1, "x_trees_mul_f32")
     var n = _count(_i(params, 0), "x_trees_mul_f32")
     if n > 0:
-        mul_f32(f32_ptr(Int(py=a)), f32_ptr(Int(py=b)), n, f32_ptr(Int(py=dst)))
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.mul_f32_device(f32_ptr(Int(py=a)), f32_ptr(Int(py=b)), n, f32_ptr(Int(py=dst)))
+        else:
+            mul_f32(f32_ptr(Int(py=a)), f32_ptr(Int(py=b)), n, f32_ptr(Int(py=dst)))
     return PythonObject(n)
 
 
@@ -492,7 +567,10 @@ def logit_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
     _need(params, 1, "x_trees_logit")
     var n = _count(_i(params, 0), "x_trees_logit")
     if n > 0:
-        logit(f64_ptr(Int(py=x)), n)
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.logit_device(f64_ptr(Int(py=x)), n)
+        else:
+            logit(f64_ptr(Int(py=x)), n)
     return PythonObject(n)
 
 
@@ -501,7 +579,10 @@ def normalize_rows_binding(x: PythonObject, params: PythonObject) raises -> Pyth
     _need(params, 2, "x_trees_normalize_rows")
     var n = _count(_i(params, 0), "x_trees_normalize_rows")
     if n > 0:
-        normalize_rows(f64_ptr(Int(py=x)), n, _i(params, 1))
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.normalize_rows_device(f64_ptr(Int(py=x)), n, _i(params, 1))
+        else:
+            normalize_rows(f64_ptr(Int(py=x)), n, _i(params, 1))
     return PythonObject(n)
 
 
@@ -517,12 +598,16 @@ def scatter_binding(dst: PythonObject, src: PythonObject, rows: PythonObject, pa
     if col0 + c > n_cols:
         raise Error("x_trees_scatter: columns out of range")
     var rp = i32_ptr(Int(py=rows)) if m > 0 else i32_ptr(1)
-    for r in range(m):
-        var i = Int(rp[unsafe_offset=r])
-        if i < 0 or i >= n_dst:
-            raise Error("x_trees_scatter: row out of range")
-    if m * c > 0:
-        scatter(f64_ptr(Int(py=dst)), n_cols, f32_ptr(Int(py=src)), m, c, rp, col0)
+    comptime if XTREES_DEVICE_OPS:
+        # the row refusal is the device's check kernel (lane cpu2-l5-trees)
+        elem_dev.scatter_device(f64_ptr(Int(py=dst)), n_dst, n_cols, f32_ptr(Int(py=src)), m, c, rp, col0)
+    else:
+        for r in range(m):
+            var i = Int(rp[unsafe_offset=r])
+            if i < 0 or i >= n_dst:
+                raise Error("x_trees_scatter: row out of range")
+        if m * c > 0:
+            scatter(f64_ptr(Int(py=dst)), n_cols, f32_ptr(Int(py=src)), m, c, rp, col0)
     return PythonObject(m * c)
 
 
@@ -532,7 +617,10 @@ def platt_fit_binding(f: PythonObject, y: PythonObject, ab: PythonObject, params
     var n = _i(params, 0)
     if n < 1:
         raise Error("x_trees_platt_fit: no rows")
-    platt_fit(f64_ptr(Int(py=f)), i32_ptr(Int(py=y)), n, f64_ptr(Int(py=ab)))
+    comptime if XTREES_DEVICE_OPS:
+        boost_dev.platt_fit_device(f64_ptr(Int(py=f)), i32_ptr(Int(py=y)), n, f64_ptr(Int(py=ab)))
+    else:
+        platt_fit(f64_ptr(Int(py=f)), i32_ptr(Int(py=y)), n, f64_ptr(Int(py=ab)))
     return PythonObject(n)
 
 
@@ -541,7 +629,11 @@ def platt_apply_binding(f: PythonObject, res: PythonObject, params: PythonObject
     _need(params, 3, "x_trees_platt_apply")
     var n = _count(_i(params, 0), "x_trees_platt_apply")
     if n > 0:
-        platt_apply(f64_ptr(Int(py=f)), n, _f(params, 1), _f(params, 2), f64_ptr(Int(py=res)))
+        comptime if XTREES_DEVICE_OPS:
+            boost_dev.platt_apply_strided_device(f64_ptr(Int(py=f)), 1, n, _f(params, 1), _f(params, 2),
+                                                 f64_ptr(Int(py=res)), 1)
+        else:
+            platt_apply(f64_ptr(Int(py=f)), n, _f(params, 1), _f(params, 2), f64_ptr(Int(py=res)))
     return PythonObject(n)
 
 
@@ -551,7 +643,12 @@ def isotonic_fit_binding(
     """params = [n]; kx, ky float64[n] receive the knots; returns their count."""
     _need(params, 1, "x_trees_isotonic_fit")
     var n = _i(params, 0)
-    var m = isotonic_fit(f64_ptr(Int(py=x)), f64_ptr(Int(py=y)), n, f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)))
+    var m: Int
+    comptime if XTREES_DEVICE_OPS:
+        m = boost_dev.isotonic_fit_device(f64_ptr(Int(py=x)), f64_ptr(Int(py=y)), n, f64_ptr(Int(py=kx)),
+                                          f64_ptr(Int(py=ky)))
+    else:
+        m = isotonic_fit(f64_ptr(Int(py=x)), f64_ptr(Int(py=y)), n, f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)))
     return PythonObject(m)
 
 
@@ -565,7 +662,11 @@ def isotonic_predict_binding(
         raise Error("x_trees_isotonic_predict: no knots")
     var n = _count(_i(params, 1), "x_trees_isotonic_predict")
     if n > 0:
-        isotonic_predict(f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)), m, f64_ptr(Int(py=t)), n, f64_ptr(Int(py=res)))
+        comptime if XTREES_DEVICE_OPS:
+            boost_dev.isotonic_predict_strided_device(f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)), m, f64_ptr(Int(py=t)), 1,
+                                                      n, f64_ptr(Int(py=res)), 1)
+        else:
+            isotonic_predict(f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)), m, f64_ptr(Int(py=t)), n, f64_ptr(Int(py=res)))
     return PythonObject(n)
 
 
@@ -592,7 +693,11 @@ def platt_apply_strided_binding(f: PythonObject, res: PythonObject, params: Pyth
     _strided(_i(params, 3), fs, fo, n, "x_trees_platt_apply_strided")
     _strided(_i(params, 6), rs, ro, n, "x_trees_platt_apply_strided")
     if n > 0:
-        platt_apply_strided(f64_ptr(Int(py=f)) + fo, fs, n, _f(params, 1), _f(params, 2), f64_ptr(Int(py=res)) + ro, rs)
+        comptime if XTREES_DEVICE_OPS:
+            boost_dev.platt_apply_strided_device(f64_ptr(Int(py=f)) + fo, fs, n, _f(params, 1), _f(params, 2),
+                                                 f64_ptr(Int(py=res)) + ro, rs)
+        else:
+            platt_apply_strided(f64_ptr(Int(py=f)) + fo, fs, n, _f(params, 1), _f(params, 2), f64_ptr(Int(py=res)) + ro, rs)
     return PythonObject(n)
 
 
@@ -612,8 +717,12 @@ def isotonic_predict_strided_binding(
     _strided(_i(params, 2), ts, to, n, "x_trees_isotonic_predict_strided")
     _strided(_i(params, 5), rs, ro, n, "x_trees_isotonic_predict_strided")
     if n > 0:
-        isotonic_predict_strided(f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)), m, f64_ptr(Int(py=t)) + to, ts, n,
-                                 f64_ptr(Int(py=res)) + ro, rs)
+        comptime if XTREES_DEVICE_OPS:
+            boost_dev.isotonic_predict_strided_device(f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)), m,
+                                                      f64_ptr(Int(py=t)) + to, ts, n, f64_ptr(Int(py=res)) + ro, rs)
+        else:
+            isotonic_predict_strided(f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)), m, f64_ptr(Int(py=t)) + to, ts, n,
+                                     f64_ptr(Int(py=res)) + ro, rs)
     return PythonObject(n)
 
 
@@ -622,7 +731,10 @@ def complement_pairs_binding(x: PythonObject, params: PythonObject) raises -> Py
     _need(params, 1, "x_trees_complement_pairs")
     var n = _count(_i(params, 0), "x_trees_complement_pairs")
     if n > 0:
-        complement_pairs(f64_ptr(Int(py=x)), n)
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.complement_pairs_device(f64_ptr(Int(py=x)), n)
+        else:
+            complement_pairs(f64_ptr(Int(py=x)), n)
     return PythonObject(n)
 
 
@@ -757,6 +869,40 @@ def class_counts_binding(y: PythonObject, counts: PythonObject, params: PythonOb
     else:
         class_counts(yp, n, k, i32_ptr(Int(py=counts)))
     return PythonObject(k)
+
+
+def code_counts_binding(codes: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, k]: counts (int32, k) = the rows of each int32 class code
+    (the forests' class_weight='balanced' counts; cpu2-l5-trees: on the
+    device in a GPU build, `glue_device.code_counts_host` on the host column)."""
+    _need(params, 2, "x_trees_code_counts")
+    var n = _count(_i(params, 0), "x_trees_code_counts")
+    var k = _i(params, 1)
+    if k < 1:
+        raise Error("x_trees_code_counts: needs k >= 1")
+    var ca = Int(py=codes)
+    var cp = i32_ptr(ca) if ca != 0 else i32_ptr(Int(py=counts))
+    comptime if XTREES_DEVICE_OPS:
+        code_counts_device(cp, n, k, i32_ptr(Int(py=counts)))
+    else:
+        code_counts_host(cp, n, k, i32_ptr(Int(py=counts)))
+    return PythonObject(k)
+
+
+def class_rows_binding(codes: PythonObject, values: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, k]: dst (float32, n) = values (float32, k) at each row's
+    int32 class code (the forests' per-row class weights; cpu2-l5-trees)."""
+    _need(params, 2, "x_trees_class_rows")
+    var n = _count(_i(params, 0), "x_trees_class_rows")
+    var k = _i(params, 1)
+    if k < 1:
+        raise Error("x_trees_class_rows: needs k >= 1")
+    if n > 0:
+        comptime if XTREES_DEVICE_OPS:
+            class_rows_device(i32_ptr(Int(py=codes)), n, k, f32_ptr(Int(py=values)), f32_ptr(Int(py=dst)))
+        else:
+            class_rows_host(i32_ptr(Int(py=codes)), n, k, f32_ptr(Int(py=values)), f32_ptr(Int(py=dst)))
+    return PythonObject(n)
 
 
 def remap_cols_binding(colid: PythonObject, cols: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1053,26 +1199,45 @@ def _kshap_check(p: List[Int], who: String) raises:
 
 def normalized_weights_binding(w: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
     """AdaBoost's initial weights (lane cgr4-py-compute, out of Python):
-    out[i] = w[i] / sum(w) in float64 from float32 w, the sum in row order.
+    out[i] = w[i] / sum(w) in float64 from float32 w, the sum in
+    xtrees/fold_order.mojo's chunk + pairwise-tree order on every column
+    (`ops.normalized_weights` / `ops_device_elem.normalized_weights_device`).
     Returns 0, 1 when an entry is not finite or is negative, 2 when the
     total is not positive (out then unspecified). params = [n]."""
     _need(params, 1, "x_trees_normalized_weights")
     var n = _count(_i(params, 0), "x_trees_normalized_weights")
     if n == 0:
         return PythonObject(2)
-    var wp = f32_ptr(Int(py=w))
-    var op = f64_ptr(Int(py=dst))
-    var total = Float64(0)
-    for i in range(n):
-        var v = Float64(wp[i])
-        if not (v >= 0 and v <= 1.7976931348623157e308):
-            return PythonObject(1)
-        total += v
-    if not (total > 0):
-        return PythonObject(2)
-    for i in range(n):
-        op[i] = Float64(wp[i]) / total
-    return PythonObject(0)
+    comptime if XTREES_DEVICE_OPS:
+        return PythonObject(elem_dev.normalized_weights_device(f32_ptr(Int(py=w)), n, f64_ptr(Int(py=dst))))
+    else:
+        return PythonObject(normalized_weights(f32_ptr(Int(py=w)), n, f64_ptr(Int(py=dst))))
+
+
+def iota_i32_binding(out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """out (int32, n)[i] = i; params = [n]; returns n (lane cpu2-l5-trees)."""
+    _need(params, 1, "x_trees_iota_i32")
+    var n = _count(_i(params, 0), "x_trees_iota_i32")
+    if n > 0:
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.iota_i32_device(i32_ptr(Int(py=out_addr)), n)
+        else:
+            iota_i32(i32_ptr(Int(py=out_addr)), n)
+    return PythonObject(n)
+
+
+def fill_class_major_f64_binding(inits_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """out (float64, K x n)[c * n + i] = inits (float64, K)[c], a word copy;
+    params = [n, K]; returns K * n (lane cpu2-l5-trees)."""
+    _need(params, 2, "x_trees_fill_class_major_f64")
+    var n = _count(_i(params, 0), "x_trees_fill_class_major_f64")
+    var k = _count(_i(params, 1), "x_trees_fill_class_major_f64")
+    if n * k > 0:
+        comptime if XTREES_DEVICE_OPS:
+            elem_dev.fill_class_major_f64_device(f64_ptr(Int(py=inits_addr)), n, k, f64_ptr(Int(py=out_addr)))
+        else:
+            fill_class_major_f64(f64_ptr(Int(py=inits_addr)), n, k, f64_ptr(Int(py=out_addr)))
+    return PythonObject(n * k)
 
 
 def _kshap_binom(M: Int, r: Int) -> Float64:
@@ -1394,6 +1559,8 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[count_equal_binding]("x_trees_count_equal")
     m.def_function[oob_r2_binding]("x_trees_oob_r2")
     m.def_function[class_counts_binding]("x_trees_class_counts")
+    m.def_function[code_counts_binding]("x_trees_code_counts")
+    m.def_function[class_rows_binding]("x_trees_class_rows")
     m.def_function[remap_cols_binding]("x_trees_remap_cols")
     m.def_function[positive_codes_binding]("x_trees_positive_codes")
     m.def_function[spread_leaves_binding]("x_trees_spread_leaves")
@@ -1403,6 +1570,8 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[block_mean_binding]("x_trees_block_mean")
     m.def_function[kshap_schedule_binding]("x_trees_kshap_schedule")
     m.def_function[normalized_weights_binding]("x_trees_normalized_weights")
+    m.def_function[iota_i32_binding]("x_trees_iota_i32")
+    m.def_function[fill_class_major_f64_binding]("x_trees_fill_class_major_f64")
     m.def_function[kshap_synth_binding]("x_trees_kshap_synth")
     m.def_function[agn_pool_release_binding]("x_trees_agn_pool_release")
     m.def_function[kshap_solve_binding]("x_trees_kshap_solve")

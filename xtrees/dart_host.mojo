@@ -16,8 +16,10 @@ from std.ffi import _Global
 from xtrees.ops import stream_base, draw
 from xtrees.dart_units import (
     IDN_DART_DEVICE, DART_CHUNK, F32P, I32P, I64P, U16P, dart_init_unit, dart_drop_unit, dart_row_unit,
-    dart_apply_unit, dart_leaf_sum_unit, dart_newton_unit, dart_add_unit,
+    dart_apply_unit, dart_leaf_sum_unit, dart_leaf_sum_rows_unit, dart_newton_unit, dart_add_unit, U64P,
+    dart_predict_unit,
 )
+from std.memory import bitcast
 
 #: The host twin exists exactly where the IDENTICAL device round does.
 comptime DART_HOST = IDN_DART_DEVICE
@@ -184,11 +186,13 @@ def dart_step(
 
 def dart_add(
     id: Int, colid_addr: Int, quesval_addr: Int, left_addr: Int, values_out: Int, j: Int, c: Int, lo: Int,
-    n_nodes: Int, shrink: Float64, factor: Float64, lam: Float64, l1: Float64, mds: Float64,
+    n_nodes: Int, shrink: Float64, factor: Float64, lam: Float64, l1: Float64, mds: Float64, rows_addr: Int, m: Int,
 ) raises:
     """The device `dart_add` for class c's new tree j: the leaf index row,
     the chunked leaf sums, the Newton leaf values (to values_out) and the
-    score update."""
+    score update. m > 0: the leaf sums over the bag rows rows_addr[0 .. m)
+    only, chunked over the list positions in list order (the device's
+    `dart_leaf_sum_rows_unit`, the same units in the same order)."""
     comptime if DART_HOST:
         var reg = DART_HOST_SESSIONS.get_or_create_ptr()
         var idx = reg[].find(id)
@@ -201,6 +205,8 @@ def dart_add(
             raise Error("x_trees dart_add: tree or class index out of range")
         if n_nodes < 1 or n_nodes > node_cap or lo < 0:
             raise Error("x_trees dart_add: a tree with more nodes than 2 * num_leaves - 1")
+        if m < 0 or m > n:
+            raise Error("x_trees dart_add: bag row count out of range")
         var colid = I32P(unsafe_from_address=colid_addr + 4 * lo)
         var quesval = F32P(unsafe_from_address=quesval_addr + 4 * lo)
         var left = I32P(unsafe_from_address=left_addr + 4 * lo)
@@ -218,8 +224,14 @@ def dart_add(
         var voff = j * node_cap
         for i in range(n):
             dart_apply_unit(i, d, n_nodes, colid, quesval, left, x, row_off, nodes, bad)
-        for e in range(n_nodes * n_chunks):
-            dart_leaf_sum_unit(e, n, n_nodes, row_off, class_off, nodes, target, h, part)
+        if m > 0:
+            n_chunks = (m + DART_CHUNK - 1) // DART_CHUNK
+            var rows = I32P(unsafe_from_address=rows_addr)
+            for e in range(n_nodes * n_chunks):
+                dart_leaf_sum_rows_unit(e, n, m, n_nodes, row_off, class_off, rows, nodes, target, h, part, bad)
+        else:
+            for e in range(n_nodes * n_chunks):
+                dart_leaf_sum_unit(e, n, n_nodes, row_off, class_off, nodes, target, h, part)
         for e in range(n_nodes):
             dart_newton_unit(e, n_nodes, n_chunks, part, Float32(lam), Float32(l1), Float32(mds), voff, values)
         for e in range(n):
@@ -243,3 +255,75 @@ def dart_close(id: Int, bad_out: Int) raises:
         _ = gone^
     else:
         raise Error("x_trees dart_close: built without the host DART round (MOJOLEARN_IDN_DART_DEVICE_OFF)")
+
+
+def dart_predict(
+    x_addr: Int, colids: List[Int], quesvals: List[Int], lefts: List[Int], leaf_values: List[Int], sizes: List[Int],
+    coefs: List[Float64], inits: List[Float64], out_addr: Int, n: Int, d: Int, k: Int,
+) raises:
+    """The device `dart_predict` on the host column (lane cpu2-l5-trees,
+    registered on every host build): the forest concatenated in tree order,
+    then `dart_predict_unit` over e = 0 .. k * n - 1 in ascending order, so
+    the float64 raw score is the device's word for word (soft binary64, the
+    words of main's per-tree host adds under IDENTICAL)."""
+    var nt = len(sizes)
+    if n <= 0:
+        return
+    if (
+        d <= 0 or k <= 0 or nt < 1 or len(colids) != nt or len(quesvals) != nt or len(lefts) != nt
+        or len(leaf_values) != nt or len(coefs) != nt or len(inits) != k
+    ):
+        raise Error("x_trees dart_predict: needs features, classes, trees and one address per tree and class")
+    var toff = List[Int32](length=nt + 1, fill=0)
+    var total = 0
+    for j in range(nt):
+        if sizes[j] < 1:
+            raise Error("x_trees dart_predict: empty tree")
+        total += sizes[j]
+        if total >= (1 << 31):
+            raise Error("x_trees dart_predict: more than 2^31 forest nodes")
+        toff[j + 1] = Int32(total)
+    var colid = List[Int32](length=total, fill=0)
+    var quesval = List[Float32](length=total, fill=0.0)
+    var left = List[Int32](length=total, fill=0)
+    var values = List[Float32](length=total, fill=0.0)
+    for j in range(nt):
+        var lo = Int(toff[j])
+        var cs = I32P(unsafe_from_address=colids[j])
+        var qs = F32P(unsafe_from_address=quesvals[j])
+        var ls = I32P(unsafe_from_address=lefts[j])
+        var vs = F32P(unsafe_from_address=leaf_values[j])
+        for q in range(sizes[j]):
+            colid[lo + q] = cs[q]
+            quesval[lo + q] = qs[q]
+            left[lo + q] = ls[q]
+            values[lo + q] = vs[q]
+    var cw = List[UInt64](length=nt, fill=0)
+    for j in range(nt):
+        cw[j] = bitcast[DType.uint64](coefs[j])
+    var iw = List[UInt64](length=k, fill=0)
+    for c in range(k):
+        iw[c] = bitcast[DType.uint64](inits[c])
+    var bad = List[Int32](length=1, fill=0)
+    var x = F32P(unsafe_from_address=x_addr)
+    var out = U64P(unsafe_from_address=out_addr)
+    var tp = _hi(toff)
+    var cp = _hi(colid)
+    var qp = _hf(quesval)
+    var lp = _hi(left)
+    var vp = _hf(values)
+    var cwp = cw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var iwp = iw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var bp = _hi(bad)
+    for e in range(k * n):
+        dart_predict_unit(e, n, d, k, nt, tp, cp, qp, lp, vp, cwp, iwp, x, out, bp)
+    # the lists live past the loop (their pointers were taken above)
+    _ = toff^
+    _ = colid^
+    _ = quesval^
+    _ = left^
+    _ = values^
+    _ = cw^
+    _ = iw^
+    if bad[0] != Int32(0):
+        raise Error("x_trees dart_predict: a tree walk left its tree (child or column out of range)")
