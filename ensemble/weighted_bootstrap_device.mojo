@@ -32,26 +32,25 @@ Now, IDENTICAL on every vendor and on the host column
 
 No per-tree upload and no per-tree synchronize. THE DRAWN ROWS CHANGE
 (a new stream replaces Philox `uniform<double>`), on all four columns
-together. `-D MOJOLEARN_IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE_OFF` (or
-`MOJOLEARN_IDN_ALL_OFF`) restores the host Float64 arm everywhere.
+together.
+
+cpu3-trees (2026-10-04): this is the ONLY weighted route, in IDENTICAL and
+FAST alike (the host Float64 CDF arm and its `_OFF` define are gone, so FAST
+draws change too, quality unchanged: each row's chance is still its weight
+to within 2^-30 of the largest). The weights never visit the host:
+`scan_weights_device` reads the caller's device weights and does
+`prepare_weights`' two refusals and the `copy_if` of the nonzero rows
+(`randomforest.cuh:144-154`) as one packed integer scan (`refused` count in
+the high word, `kept` count in the low word) and one scatter; four words
+come back (first refused row and its bits, kept count, refused count).
 """
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.launch_clock import log_launch_ctx
 from ensemble.decisiontree.batched_levelalgo.quantiles import (
     PCGenerator,
     custom_next_uniform_int_u64,
-)
-
-comptime IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
 )
 
 #: elements per scan / max tile, and threads per block
@@ -222,14 +221,138 @@ def weighted_bootstrap_rows_kernel(
     rows.unsafe_store(i, Int32(lo))
 
 
+@always_inline
+def wb_weight_flags(bits: UInt32) -> UInt64:
+    """`prepare_weights`' value tests on one Float32 weight's bit pattern,
+    packed for the integer scan: bit 32 when the weight is REFUSED (NaN, or
+    negative: `w < 0`, so -0.0 is not), bit 0 when it is KEPT (`w != 0` and
+    not refused). The host column makes the same tests by value
+    (`host_weight_cdf` and the copy_if in `ensemble/host/rf_oracle.mojo`)."""
+    var mag = bits & UInt32(0x7FFFFFFF)
+    if mag > UInt32(0x7F800000):
+        return UInt64(1) << UInt64(32)
+    if (bits >> UInt32(31)) != UInt32(0) and mag != UInt32(0):
+        return UInt64(1) << UInt64(32)
+    if mag != UInt32(0):
+        return UInt64(1)
+    return UInt64(0)
+
+
+def wb_flag_tile_scan_kernel(
+    wbits: MutPointer[UInt32, MutAnyOrigin],
+    n: Int32,
+    incl: MutPointer[UInt64, MutAnyOrigin],
+    tot: MutPointer[UInt64, MutAnyOrigin],
+):
+    """Level 0 of the refusal/kept scan: `incl[i]` = the packed flags of
+    row `i`'s tile summed up to and including `i` (refused count in the
+    high word, kept count in the low word; both below 2^31, so the words
+    never carry into each other). Same shape as the quantum scan."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n):
+        return
+    var t = i // WB_TILE
+    var j = t * WB_TILE
+    var s = UInt64(0)
+    while j <= i:
+        s += wb_weight_flags(wbits.unsafe_load(j))
+        j += 1
+    incl.unsafe_store(i, s)
+    if i == Int(n) - 1 or (i + 1) % WB_TILE == 0:
+        tot.unsafe_store(t, s)
+
+
+def wb_kept_rows_kernel(
+    wbits: MutPointer[UInt32, MutAnyOrigin],
+    incl: MutPointer[UInt64, MutAnyOrigin],
+    n: Int32,
+    cap: Int32,
+    rows: MutPointer[Int32, MutAnyOrigin],
+    stats: MutPointer[UInt32, MutAnyOrigin],
+):
+    """The `copy_if` (`randomforest.cuh:144-154`): a kept row goes to slot
+    (kept rows before it), ascending, the first `cap` only. The FIRST
+    refused row (the one whose inclusive refused count is 1) writes its
+    index and bits to `stats[0]`, `stats[1]`; the last row writes the kept
+    and refused totals to `stats[2]`, `stats[3]`. Exactly one writer per
+    word; `stats[0]` is pre-filled with 0xFFFFFFFF (none refused)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n):
+        return
+    var b = wbits.unsafe_load(i)
+    var f = wb_weight_flags(b)
+    var v = incl.unsafe_load(i)
+    if (f >> UInt64(32)) != UInt64(0):
+        if (v >> UInt64(32)) == UInt64(1):
+            stats.unsafe_store(0, UInt32(i))
+            stats.unsafe_store(1, b)
+    elif f != UInt64(0):
+        var pos = Int((v & UInt64(0xFFFFFFFF)).cast[DType.int64]()) - 1
+        if pos < Int(cap):
+            rows.unsafe_store(pos, Int32(i))
+    if i == Int(n) - 1:
+        stats.unsafe_store(2, (v & UInt64(0xFFFFFFFF)).cast[DType.uint32]())
+        stats.unsafe_store(3, (v >> UInt64(32)).cast[DType.uint32]())
+
+
+def _enqueue_u64_scan_upper(
+    ctx: DeviceContext,
+    cdf: MutPointer[UInt64, MutAnyOrigin],
+    tot0: MutPointer[UInt64, MutAnyOrigin],
+    n_rows: Int,
+) raises:
+    """Levels 1-3 and the finish pass over a level-0 tile scan (`cdf`, its
+    tile totals `tot0`): `cdf` becomes the full inclusive scan. Drains
+    before it returns, so its scratch buffers outlive their launches."""
+    var n1 = ceildiv(n_rows, WB_TILE)
+    var n2 = ceildiv(n1, WB_TILE)
+    var n3 = ceildiv(n2, WB_TILE)
+    var n4 = ceildiv(n3, WB_TILE)
+    var incl1 = ctx.enqueue_create_buffer[DType.uint64](n1)
+    var tot1 = ctx.enqueue_create_buffer[DType.uint64](n2)
+    var incl2 = ctx.enqueue_create_buffer[DType.uint64](n2)
+    var tot2 = ctx.enqueue_create_buffer[DType.uint64](n3)
+    var incl3 = ctx.enqueue_create_buffer[DType.uint64](n3)
+    var tot3 = ctx.enqueue_create_buffer[DType.uint64](n4)
+    log_launch_ctx(ctx, "wboot_scan_l1")
+    ctx.enqueue_function[wb_u64_tile_scan_kernel](
+        tot0, Int32(n1), incl1.unsafe_ptr(), tot1.unsafe_ptr(),
+        grid_dim=ceildiv(n1, WB_TILE), block_dim=WB_TILE,
+    )
+    log_launch_ctx(ctx, "wboot_scan_l2")
+    ctx.enqueue_function[wb_u64_tile_scan_kernel](
+        tot1.unsafe_ptr(), Int32(n2), incl2.unsafe_ptr(), tot2.unsafe_ptr(),
+        grid_dim=ceildiv(n2, WB_TILE), block_dim=WB_TILE,
+    )
+    log_launch_ctx(ctx, "wboot_scan_l3")
+    ctx.enqueue_function[wb_u64_tile_scan_kernel](
+        tot2.unsafe_ptr(), Int32(n3), incl3.unsafe_ptr(), tot3.unsafe_ptr(),
+        grid_dim=ceildiv(n3, WB_TILE), block_dim=WB_TILE,
+    )
+    log_launch_ctx(ctx, "wboot_scan_finish")
+    ctx.enqueue_function[wb_finish_kernel](
+        cdf, incl1.unsafe_ptr(), incl2.unsafe_ptr(),
+        incl3.unsafe_ptr(), Int32(n_rows),
+        grid_dim=ceildiv(n_rows, WB_TILE), block_dim=WB_TILE,
+    )
+    ctx.synchronize()
+    _ = incl1^
+    _ = tot1^
+    _ = incl2^
+    _ = tot2^
+    _ = incl3^
+    _ = tot3^
+
+
 def build_weight_cdf_device(
     ctx: DeviceContext,
-    mut wbits: DeviceBuffer[DType.uint32],
+    wbits: MutPointer[UInt32, MutAnyOrigin],
     n_rows: Int,
 ) raises -> DeviceBuffer[DType.uint64]:
     """The UInt64 inclusive CDF of the quanta of `wbits` (the weights'
-    Float32 bit patterns, already on the device). Enqueues everything and
-    drains once, so every scratch buffer below outlives its launches."""
+    Float32 bit patterns, already on the device: the fit's own weight
+    buffer). Enqueues everything and drains once, so every scratch buffer
+    below outlives its launches."""
     var n1 = ceildiv(n_rows, WB_TILE)
     var n2 = ceildiv(n1, WB_TILE)
     var n3 = ceildiv(n2, WB_TILE)
@@ -242,7 +365,7 @@ def build_weight_cdf_device(
     var m4 = ctx.enqueue_create_buffer[DType.uint32](n4)
     log_launch_ctx(ctx, "wboot_max_l0")
     ctx.enqueue_function[wb_max_tile_kernel](
-        wbits.unsafe_ptr(), Int32(n_rows), m1.unsafe_ptr(),
+        wbits, Int32(n_rows), m1.unsafe_ptr(),
         grid_dim=ceildiv(n1, WB_TILE), block_dim=WB_TILE,
     )
     log_launch_ctx(ctx, "wboot_max_l1")
@@ -264,55 +387,75 @@ def build_weight_cdf_device(
 
     var cdf = ctx.enqueue_create_buffer[DType.uint64](n_rows)
     var tot0 = ctx.enqueue_create_buffer[DType.uint64](n1)
-    var incl1 = ctx.enqueue_create_buffer[DType.uint64](n1)
-    var tot1 = ctx.enqueue_create_buffer[DType.uint64](n2)
-    var incl2 = ctx.enqueue_create_buffer[DType.uint64](n2)
-    var tot2 = ctx.enqueue_create_buffer[DType.uint64](n3)
-    var incl3 = ctx.enqueue_create_buffer[DType.uint64](n3)
-    var tot3 = ctx.enqueue_create_buffer[DType.uint64](n4)
     log_launch_ctx(ctx, "wboot_scan_l0")
     ctx.enqueue_function[wb_quantum_tile_scan_kernel](
-        wbits.unsafe_ptr(), m4.unsafe_ptr(), Int32(n_rows),
+        wbits, m4.unsafe_ptr(), Int32(n_rows),
         cdf.unsafe_ptr(), tot0.unsafe_ptr(),
         grid_dim=ceildiv(n_rows, WB_TILE), block_dim=WB_TILE,
     )
-    log_launch_ctx(ctx, "wboot_scan_l1")
-    ctx.enqueue_function[wb_u64_tile_scan_kernel](
-        tot0.unsafe_ptr(), Int32(n1), incl1.unsafe_ptr(), tot1.unsafe_ptr(),
-        grid_dim=ceildiv(n1, WB_TILE), block_dim=WB_TILE,
+    # drains: the scratch below is named after it
+    _enqueue_u64_scan_upper(
+        ctx,
+        cdf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        tot0.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        n_rows,
     )
-    log_launch_ctx(ctx, "wboot_scan_l2")
-    ctx.enqueue_function[wb_u64_tile_scan_kernel](
-        tot1.unsafe_ptr(), Int32(n2), incl2.unsafe_ptr(), tot2.unsafe_ptr(),
-        grid_dim=ceildiv(n2, WB_TILE), block_dim=WB_TILE,
-    )
-    log_launch_ctx(ctx, "wboot_scan_l3")
-    ctx.enqueue_function[wb_u64_tile_scan_kernel](
-        tot2.unsafe_ptr(), Int32(n3), incl3.unsafe_ptr(), tot3.unsafe_ptr(),
-        grid_dim=ceildiv(n3, WB_TILE), block_dim=WB_TILE,
-    )
-    log_launch_ctx(ctx, "wboot_scan_finish")
-    ctx.enqueue_function[wb_finish_kernel](
-        cdf.unsafe_ptr(), incl1.unsafe_ptr(), incl2.unsafe_ptr(),
-        incl3.unsafe_ptr(), Int32(n_rows),
-        grid_dim=ceildiv(n_rows, WB_TILE), block_dim=WB_TILE,
-    )
-    # Once per forest. The scratch buffers were handed to kernels as raw
-    # pointers, so they must be named AFTER the drain (a Mojo local dies at
-    # its last named use).
-    ctx.synchronize()
     _ = m1^
     _ = m2^
     _ = m3^
     _ = m4^
     _ = tot0^
-    _ = incl1^
-    _ = tot1^
-    _ = incl2^
-    _ = tot2^
-    _ = incl3^
-    _ = tot3^
     return cdf^
+
+
+def scan_weights_device(
+    ctx: DeviceContext,
+    wbits: MutPointer[UInt32, MutAnyOrigin],
+    n_rows: Int,
+    mut kept_rows: DeviceBuffer[DType.int32],
+    cap: Int,
+) raises -> List[UInt32]:
+    """`prepare_weights` on the device: the refusal tests and the ordered
+    nonzero-row set (`kept_rows`, at most `cap` entries) from one packed
+    scan and one scatter. Returns the four stats words (first refused row or
+    0xFFFFFFFF, its bits, kept count, refused count): the only readback,
+    a scalar decision. Drains before it returns."""
+    var n1 = ceildiv(n_rows, WB_TILE)
+    var incl = ctx.enqueue_create_buffer[DType.uint64](n_rows)
+    var tot0 = ctx.enqueue_create_buffer[DType.uint64](n1)
+    var d_stats = ctx.enqueue_create_buffer[DType.uint32](4)
+    d_stats.enqueue_fill(UInt32(0xFFFFFFFF))
+    log_launch_ctx(ctx, "wboot_flags_l0")
+    ctx.enqueue_function[wb_flag_tile_scan_kernel](
+        wbits, Int32(n_rows), incl.unsafe_ptr(), tot0.unsafe_ptr(),
+        grid_dim=ceildiv(n_rows, WB_TILE), block_dim=WB_TILE,
+    )
+    _enqueue_u64_scan_upper(
+        ctx,
+        incl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        tot0.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        n_rows,
+    )
+    log_launch_ctx(ctx, "wboot_kept_rows")
+    ctx.enqueue_function[wb_kept_rows_kernel](
+        wbits, incl.unsafe_ptr(), Int32(n_rows), Int32(cap),
+        kept_rows.unsafe_ptr(), d_stats.unsafe_ptr(),
+        grid_dim=ceildiv(n_rows, WB_TILE), block_dim=WB_TILE,
+    )
+    var h_stats = ctx.enqueue_create_host_buffer[DType.uint32](4)
+    log_launch_ctx(ctx, "xfer_wboot_stats")
+    ctx.enqueue_copy(dst_buf=h_stats, src_buf=d_stats)
+    ctx.synchronize()
+    var out = List[UInt32]()
+    out.append(h_stats.unsafe_ptr().unsafe_load(0))
+    out.append(h_stats.unsafe_ptr().unsafe_load(1))
+    out.append(h_stats.unsafe_ptr().unsafe_load(2))
+    out.append(h_stats.unsafe_ptr().unsafe_load(3))
+    _ = incl^
+    _ = tot0^
+    _ = d_stats^
+    _ = h_stats^
+    return out^
 
 
 def launch_weighted_bootstrap_rows(

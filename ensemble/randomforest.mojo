@@ -69,9 +69,9 @@ from xtrees.oob import (
     round_kernel,
 )
 from ensemble.weighted_bootstrap_device import (
-    IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE,
     build_weight_cdf_device,
     launch_weighted_bootstrap_rows,
+    scan_weights_device,
 )
 from core.launch_log import log_launch
 from core.launch_clock import log_launch_ctx
@@ -82,7 +82,6 @@ from core.philox import (
     PhiloxState,
     custom_next_uniform_int_u32,
     launch_uniform_int,
-    uniform_double_host,
 )
 
 # DEVIATION 2010 -- the LSD one-bit radix passes are `core/`'s, already on
@@ -151,21 +150,14 @@ comptime IDN_RF_ROWS_SORTED = (
     and is_defined["MOJOLEARN_IDN_RF_ROWS_SORTED"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
-# fam2-forests (2026-10-04), IDENTICAL, every vendor: the weighted
+# cpu3-trees (2026-10-04), every mode and vendor: the weighted
 # non-bootstrap row set (AdaBoost members, any `sample_weight` fit with
-# `bootstrap=False`) no longer drains the queue per tree
-# (`IDN_RF_WEIGHT_ROWS_DEVICE`). With no zero weight the set is 0..n-1 and
-# the device sequence kernel writes it (no upload); with zero weights the
-# host-compacted set still uploads but without the per-tree synchronize.
-# Same Int32 row ids either way: no bit moves.
-# `-D MOJOLEARN_IDN_RF_WEIGHT_ROWS_DEVICE_OFF` restores upload + drain.
-comptime IDN_RF_WEIGHT_ROWS_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_RF_WEIGHT_ROWS_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# `bootstrap=False`) is compacted ON THE DEVICE once per forest
+# (`RowSampler.prepare_weights` -> `scan_weights_device`) and each tree takes
+# a device-to-device copy of it: no host pass over the weights, no upload, no
+# per-tree drain. Same Int32 row ids as the host copy_if: no bit moves. (This
+# replaces fam2-forests' `IDN_RF_WEIGHT_ROWS_DEVICE`, whose `_OFF` define and
+# host-compacted upload are gone.)
 comptime ROWS_SORTED_SAMPLE = (
     is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
     or IDN_RF_ROWS_SORTED
@@ -2324,23 +2316,21 @@ struct RowSampler(Movable):
     # arm produces FEWER rows than `n_sampled_rows`, and the builder must
     # be told how many, or it reads past the live entries.
     var n_selected: Int
-    # `:223` -- `rmm::device_uvector<double> sample_weight_cdf_`, and `:222`
-    # `double sample_weight_sum_`. Float64 on the HOST; see DEVIATION 306.
-    var weight_cdf: List[Float64]
-    var weight_sum: Float64
-    # `IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE`: the UInt64 CDF of the weights'
+    # `:223` -- `sample_weight_cdf_`, here the UInt64 CDF of the weights'
     # integer quanta, on the device (`ensemble/weighted_bootstrap_device
-    # .mojo`). None until `prepare_weights` builds it, and always None on
-    # the `_OFF` build, where the Float64 host CDF above is used.
+    # .mojo`), the only weighted-bootstrap route in every mode. None until
+    # `prepare_weights` builds it (bootstrap arms only).
     var weight_qcdf: Optional[DeviceBuffer[DType.uint64]]
+    # `:144-154` -- the `copy_if` of the nonzero-weight rows, ascending, at
+    # most `n_sampled_rows` of them, compacted on the device once per
+    # forest by `prepare_weights`; each tree of the weighted
+    # non-bootstrap arm copies it device to device. None until then.
+    var kept_rows: Optional[DeviceBuffer[DType.int32]]
     # `:224` -- `std::vector<rmm::device_uvector<int>> selected_rows_`,
     # ONE PER STREAM. The pipelined forest loop (DEVIATION 117) is their
     # stream pool expressed on one queue, so the slot dimension is implemented
-    # with it: each in-flight tree reads its own row buffer. `h_rows` is
-    # DEVIATION 305's host staging and stays single -- the arms that use
-    # it synchronize, so it is never live for two slots at once.
+    # with it: each in-flight tree reads its own row buffer.
     var selected_rows_: List[DeviceBuffer[DType.int32]]
-    var h_rows: HostBuffer[DType.int32]
     # `:70`, `:81` -- `bool* bootstrap_masks_`, an `n_trees x n_rows`
     # DEVICE buffer the CALLER owns; theirs asserts it is a device
     # pointer (`:82-83`) and treats null as "OOB not requested".
@@ -2385,16 +2375,14 @@ struct RowSampler(Movable):
         self.n_sampled_rows = n_sampled_rows
         self.has_sample_weight = has_sample_weight
         self.n_selected = n_sampled_rows
-        self.weight_cdf = List[Float64]()
-        self.weight_sum = Float64(0.0)
         self.weight_qcdf = Optional[DeviceBuffer[DType.uint64]]()
+        self.kept_rows = Optional[DeviceBuffer[DType.int32]]()
         var n = n_sampled_rows if n_sampled_rows > 0 else 1
         self.selected_rows_ = List[DeviceBuffer[DType.int32]]()
         for _ in range(n_slots if n_slots > 0 else 1):
             self.selected_rows_.append(
                 ctx.enqueue_create_buffer[DType.int32](n)
             )
-        self.h_rows = ctx.enqueue_create_host_buffer[DType.int32](n)
         self.has_masks = n_trees_for_masks > 0
         var m = n_trees_for_masks * n_rows if self.has_masks else 1
         self.bootstrap_masks = ctx.enqueue_create_buffer[DType.uint8](m)
@@ -2424,10 +2412,11 @@ struct RowSampler(Movable):
         ctx.synchronize()
 
     def prepare_weights(
-        mut self, ctx: DeviceContext, weights: List[Float32]
+        mut self, ctx: DeviceContext, mut weights: DeviceBuffer[DType.float32]
     ) raises:
         """`validate_sample_weight` (`:198-211`) + the `copy_if` of
-        `:144-154`, both done once.
+        `:144-154`, both done once, ON THE DEVICE, from the fit's own
+        device weights (`n_rows` Float32s).
 
         THEIR TWO REFUSALS ARE KEPT AND ARE NOT ADVISORY.
         `InvalidSampleWeight` rejects anything non-finite or negative
@@ -2436,15 +2425,64 @@ struct RowSampler(Movable):
         train a forest on a row set nobody asked for, which is the same
         failure class as a wrong bootstrap.
 
-        DEVIATION 305: theirs runs the `copy_if` on the DEVICE, inside
-        `sample()`, once per tree. Ours runs it on the HOST, once per
-        forest. The set is a function of `sample_weight` alone -- no tree
-        id, no RNG -- so every tree gets the identical set either way; the
-        difference is `n_trees - 1` redundant device passes, which is work
-        rather than meaning. PRICE: one host pass over `n_rows` weights
-        per forest, and the weights must be available on the host, which
-        they are because the caller supplies them.
+        cpu3-trees (2026-10-04): `scan_weights_device`
+        (`ensemble/weighted_bootstrap_device.mojo`) tests every weight's
+        bits, compacts the nonzero rows in order into `kept_rows` and hands
+        back four words (first refused row and its bits, kept count,
+        refused count): the refusals are decided from those, by the same
+        value tests and in the same row order as before (the FIRST refused
+        row names the error). The total is positive exactly when some
+        weight is nonzero, every weight being non-negative by then. The set
+        is a function of `sample_weight` alone, so every tree gets the same
+        one (DEVIATION 305: once per forest, not once per tree). The
+        bootstrap arms also build the integer CDF here, on the device.
         """
+        var wbits = (
+            weights.unsafe_ptr()
+            .unsafe_origin_cast[MutAnyOrigin]()
+            .unsafe_bitcast[UInt32]()
+        )
+        var cap = self.n_sampled_rows if self.n_sampled_rows > 0 else 1
+        var kept = ctx.enqueue_create_buffer[DType.int32](cap)
+        # drains before it returns: `st` is read on the host below
+        var st = scan_weights_device(ctx, wbits, self.n_rows, kept, cap)
+        if st[0] != UInt32(0xFFFFFFFF):
+            # `:202-208` -- non-finite or negative is refused BY VALUE.
+            var w = bitcast[DType.float32](st[1])
+            if not (w == w):
+                raise Error(
+                    "sample_weight values must be finite and non-negative;"
+                    " index " + String(Int(st[0])) + " is NaN"
+                )
+            raise Error(
+                "sample_weight values must be finite and non-negative;"
+                " index " + String(Int(st[0])) + " is " + String(w)
+            )
+        if Int(st[2]) == 0:
+            raise Error(
+                "sample_weight values must contain at least one positive"
+                " value (randomforest.cuh:93-95)"
+            )
+        self.n_selected = min(Int(st[2]), self.n_sampled_rows)
+        self.kept_rows = Optional(kept^)
+
+        # `:84-89` -- the weighted-bootstrap CDF: the UInt64 inclusive scan
+        # of the weights' integer quanta, whose LAST element is the draw
+        # span (`ensemble/weighted_bootstrap_device.mojo`). The weights'
+        # bits never cross the bus; every tree's draws are device work.
+        if self.bootstrap:
+            self.weight_qcdf = Optional(
+                build_weight_cdf_device(ctx, wbits, self.n_rows)
+            )
+        _ = st^
+
+    def prepare_weights(
+        mut self, ctx: DeviceContext, weights: List[Float32]
+    ) raises:
+        """The checks' door (`ensemble/checks/`): the caller's host List
+        crosses the bus once, as one bulk copy, and the device form above
+        does the work. `fit_forest` calls the device form on its own
+        weight buffer."""
         if len(weights) < self.n_rows:
             raise Error(
                 "sample_weight holds "
@@ -2452,69 +2490,12 @@ struct RowSampler(Movable):
                 + " values but n_rows is "
                 + String(self.n_rows)
             )
-        var total = Float64(0.0)
-        var kept = 0
-        var p = self.h_rows.unsafe_ptr()
-        for i in range(self.n_rows):
-            var w = weights[i]
-            # `:202-208` -- non-finite or negative is refused BY VALUE.
-            if not (w == w):
-                raise Error(
-                    "sample_weight values must be finite and non-negative;"
-                    " index " + String(i) + " is NaN"
-                )
-            if w < Float32(0.0):
-                raise Error(
-                    "sample_weight values must be finite and non-negative;"
-                    " index " + String(i) + " is " + String(w)
-                )
-            total += Float64(w)
-            if w != Float32(0.0):
-                if kept < self.n_sampled_rows:
-                    p.unsafe_store(kept, Int32(i))
-                kept += 1
-        if total <= 0.0:
-            raise Error(
-                "sample_weight values must contain at least one positive"
-                " value (randomforest.cuh:93-95)"
-            )
-        self.n_selected = min(kept, self.n_sampled_rows)
-
-        # `:84-89` -- the weighted-bootstrap CDF, an inclusive scan over the
-        # weights, and `:91` takes the total from its LAST ELEMENT rather
-        # than from a separate reduction. Kept: a separate sum could differ
-        # in the last bits from the scan's running total, and their
-        # `upper_bound` searches the SCAN.
-        if self.bootstrap:
-            comptime if IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE:
-                # The weights' bit patterns cross the bus once per forest;
-                # the quanta, their UInt64 CDF and every tree's draws are
-                # device work (`ensemble/weighted_bootstrap_device.mojo`).
-                # The loop below only moves the caller's List into a host
-                # buffer the copy can read; it computes nothing.
-                var hw = ctx.enqueue_create_host_buffer[DType.uint32](
-                    self.n_rows
-                )
-                for i in range(self.n_rows):
-                    hw.unsafe_ptr().unsafe_store(
-                        i, bitcast[DType.uint32](weights[i])
-                    )
-                var dw = ctx.enqueue_create_buffer[DType.uint32](self.n_rows)
-                log_launch_ctx(ctx, "xfer_wboot_weights")
-                ctx.enqueue_copy(dst_buf=dw, src_ptr=hw.unsafe_ptr())
-                # drains before it returns, so `hw` and `dw` may die below
-                self.weight_qcdf = Optional(
-                    build_weight_cdf_device(ctx, dw, self.n_rows)
-                )
-                _ = hw^
-                _ = dw^
-            else:
-                self.weight_cdf = List[Float64]()
-                var run = Float64(0.0)
-                for i in range(self.n_rows):
-                    run += Float64(weights[i])
-                    self.weight_cdf.append(run)
-                self.weight_sum = self.weight_cdf[self.n_rows - 1]
+        var dw = ctx.enqueue_create_buffer[DType.float32](self.n_rows)
+        log_launch_ctx(ctx, "xfer_wboot_weights")
+        ctx.enqueue_copy(dst_buf=dw, src_ptr=weights.unsafe_ptr())
+        # the device form drains before it returns, so `dw` may die after
+        self.prepare_weights(ctx, dw)
+        _ = dw^
 
     def rng_seed_for(self, tree_id: Int32) -> UInt32:
         """`:120-123`, the per-tree seed, exposed so a check can hold it to
@@ -2612,73 +2593,29 @@ struct RowSampler(Movable):
         mut self, ctx: DeviceContext, tree_id: Int32, slot: Int = 0
     ) raises:
         """`:112-161`, the four-way dispatch in their order. All four arms
-        run; see the struct docstring."""
+        run; see the struct docstring. Every arm is device work on the
+        queue: no upload, no host staging, no per-tree drain."""
         if self.bootstrap and self.has_sample_weight:
-            comptime if IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE:
-                # fam2-forests: integer CDF + PCG bounded draw + upper_bound,
-                # all on the device; no upload, no drain. The host column
-                # (`rf_oracle.host_sampled_rows`) draws the same rows.
-                if not self.weight_qcdf:
-                    raise Error(
-                        "weighted bootstrap needs prepare_weights first"
-                    )
-                self.n_selected = self.n_sampled_rows
-                launch_weighted_bootstrap_rows(
-                    ctx,
-                    self.selected_rows_[slot],
-                    self.weight_qcdf.value(),
-                    self.n_sampled_rows,
-                    self.n_rows,
-                    self.rng_seed_for(tree_id),
+            # `:125-138` -- "Draw bootstrap rows according to sample
+            # weights." fam2-forests: integer CDF + PCG bounded draw +
+            # `upper_bound` (the FIRST cdf entry STRICTLY GREATER than the
+            # draw, so a zero-weight row is never drawn), all on the
+            # device, in every mode. The host column
+            # (`rf_oracle.host_sampled_rows`) draws the same rows.
+            if not self.weight_qcdf:
+                raise Error(
+                    "weighted bootstrap needs prepare_weights first"
                 )
-                return
-            else:
-                # `:125-138` -- "Draw bootstrap rows according to sample
-                # weights."
-                #
-                #   raft::random::uniform<double>(res, rng, scratch.data(),
-                #       scratch.size(), 0.0, sample_weight_sum_);
-                #   thrust::upper_bound(policy, cdf.data(), cdf.data() + n_rows,
-                #       scratch.begin(), scratch.end(), selected_rows.begin());
-                #
-                # `upper_bound` returns the index of the FIRST cdf entry
-                # STRICTLY GREATER than the draw, which is what makes a row's
-                # probability its own weight over the total. A `lower_bound`
-                # here would hand every zero-weight row the mass of its
-                # predecessor.
-                if len(self.weight_cdf) < self.n_rows:
-                    raise Error(
-                        "weighted bootstrap needs prepare_weights first"
-                    )
-                var draws = uniform_double_host(
-                    UInt64(Int(self.rng_seed_for(tree_id))),
-                    UInt64(0),
-                    RNG_STRIDE,
-                    self.n_sampled_rows,
-                    Float64(0.0),
-                    self.weight_sum,
-                )
-                var p = self.h_rows.unsafe_ptr()
-                for i in range(self.n_sampled_rows):
-                    # std::upper_bound over the cdf
-                    var lo = 0
-                    var hi = self.n_rows
-                    var d = draws[i]
-                    while lo < hi:
-                        var mid = (lo + hi) // 2
-                        if self.weight_cdf[mid] <= d:
-                            lo = mid + 1
-                        else:
-                            hi = mid
-                    p.unsafe_store(i, Int32(lo))
-                self.n_selected = self.n_sampled_rows
-                log_launch_ctx(ctx, "xfer_sampled_rows")
-                ctx.enqueue_copy(
-                    dst_buf=self.selected_rows_[slot],
-                    src_ptr=self.h_rows.unsafe_ptr(),
-                )
-                ctx.synchronize()
-                return
+            self.n_selected = self.n_sampled_rows
+            launch_weighted_bootstrap_rows(
+                ctx,
+                self.selected_rows_[slot],
+                self.weight_qcdf.value(),
+                self.n_sampled_rows,
+                self.n_rows,
+                self.rng_seed_for(tree_id),
+            )
+            return
         if self.bootstrap:
             # `:140-142` -- THE DEFAULT ARM.
             #
@@ -2704,11 +2641,7 @@ struct RowSampler(Movable):
             # NO synchronize -- theirs is `uniformInt` on the stream and
             # `sample()` returns with no sync; the builder's kernels are
             # enqueued after this on the same queue and read
-            # `selected_rows` in order. The host never reads it. The
-            # host-staging arms below DO keep their sync, because each
-            # re-writes `h_rows` on the host next tree and the write must
-            # not race the in-flight copy -- that wait is the price of
-            # DEVIATION 305's host staging, not of the reference.
+            # `selected_rows` in order. The host never reads it.
             return
         if self.has_sample_weight:
             # `:144-154` -- `thrust::copy_if` over `NonzeroSampleWeight`,
@@ -2722,47 +2655,19 @@ struct RowSampler(Movable):
                     "sample_weight values must contain at least one"
                     " positive value (randomforest.cuh:94)"
                 )
-            comptime if IDN_RF_WEIGHT_ROWS_DEVICE:
-                # The kept set is strictly increasing, so its last entry
-                # equals `n_selected - 1` exactly when it is the identity
-                # prefix (no zero weight among the first rows): then the
-                # device sequence kernel writes the same Int32s and
-                # nothing crosses the bus.
-                if Int(
-                    self.h_rows.unsafe_ptr().unsafe_load(self.n_selected - 1)
-                ) == self.n_selected - 1:
-                    log_launch_ctx(ctx, "sampled_rows_sequence")
-                    ctx.enqueue_function[row_ids_tiled_sequence_kernel](
-                        self.selected_rows_[slot].unsafe_ptr(),
-                        Int32(self.n_selected),
-                        Int32(self.n_rows),
-                        grid_dim=_ceildiv(self.n_selected, 256),
-                        block_dim=256,
-                    )
-                    return
-                # Zero weights present: the host-compacted set uploads as
-                # before, WITHOUT the drain. On this arm (`bootstrap`
-                # False) `h_rows` is written once, by `prepare_weights`,
-                # and never again, so no later host write can race the
-                # in-flight copy; the sampler outlives `fit_forest`'s
-                # final synchronize (`_ = sampler^` after it).
-                log_launch_ctx(ctx, "xfer_sampled_rows")
-                ctx.enqueue_copy(
-                    dst_buf=self.selected_rows_[slot],
-                    src_ptr=self.h_rows.unsafe_ptr(),
-                )
-                return
-            else:
-                log_launch_ctx(ctx, "xfer_sampled_rows")
-                ctx.enqueue_copy(
-                    dst_buf=self.selected_rows_[slot],
-                    src_ptr=self.h_rows.unsafe_ptr(),
-                )
-                ctx.synchronize()
-                return
+            if not self.kept_rows:
+                raise Error("weighted rows need prepare_weights first")
+            # The device-compacted set, device to device on the queue: the
+            # sampler outlives `fit_forest`'s final synchronize
+            # (`_ = sampler^` after it), so no drain is needed here.
+            log_launch_ctx(ctx, "copy_sampled_rows")
+            ctx.enqueue_copy(
+                dst_buf=self.selected_rows_[slot],
+                src_buf=self.kept_rows.value(),
+            )
+            return
         # DEVIATION 2484: `:155-157` thrust::sequence, reusing ET's device
         # fill. Consumers use this queue, so no host staging or wait is needed.
-        # Weighted arms above retain their original sampling and synchronization.
         self.n_selected = self.n_sampled_rows
         log_launch_ctx(ctx, "sampled_rows_sequence")
         ctx.enqueue_function[row_ids_tiled_sequence_kernel](
@@ -3249,7 +3154,17 @@ def fit_forest_prepared[
         or n_cols >= ROWS_SORTED_MIN_COLS,
     )
     if has_sw:
-        sampler.prepare_weights(ctx, sample_weight_host)
+        if len(sample_weight_host) < n_rows:
+            raise Error(
+                "sample_weight holds "
+                + String(len(sample_weight_host))
+                + " values but n_rows is "
+                + String(n_rows)
+            )
+        # the weights are the device buffer the objective reads too
+        # (`sample_weight`, `n_rows` Float32s); the host List only says
+        # that weights were given
+        sampler.prepare_weights(ctx, sample_weight)
     # The fused bootstrap rows + labels launch serves the plain bootstrap
     # arm only, and only when the rows stay in drawn order.
     var fused_gather_ok = rf_params.bootstrap and not has_sw
