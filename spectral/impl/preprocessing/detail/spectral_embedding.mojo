@@ -72,10 +72,12 @@ from spectral.impl.preprocessing.detail.fast_graph import (
 from spectral.impl.sparse.linalg.detail.symmetrize import coo_symmetrize
 from spectral.impl.sparse.op.coo_ops import coo_remove_scalar, coo_sort
 from spectral.impl.sparse.solver.detail.lanczos import (
+    IDN_SPECTRAL_VECS_DEVICE,
     LANCZOS_TPB,
     SAB_MAXITER,
     SAB_NCV,
     lanczos_compute_eigenpairs,
+    lanczos_compute_eigenpairs_dev,
 )
 from spectral.impl.sparse.solver.lanczos_types import (
     LANCZOS_LA,
@@ -354,13 +356,25 @@ def compute_eigenpairs_keep(
     var eigenvalues = List[Float32]()
     var eigenvectors = List[Float32]()
     var no_v0 = List[Float32]()
-    _ = lanczos_compute_eigenpairs(
-        ctx, config, laplacian, no_v0, False, eigenvalues, eigenvectors, trace,
-        lanczos_tpb, scratch_pad, scratch_poison,
-    )
-    trace.record_list_f32("spectral.ritz", eigenvalues)
-    trace.record_list_f32("spectral.ritz.vectors", eigenvectors)
-    var d_vecs = upload_f32(ctx, eigenvectors)
+    # IDN_SPECTRAL_VECS_DEVICE: an untraced run draws the start vector on
+    # the device and leaves the Ritz vectors there for the gather below.
+    var vecs_on_device = False
+    comptime if IDN_SPECTRAL_VECS_DEVICE:
+        vecs_on_device = not trace.enabled
+    var d_vecs = ctx.enqueue_create_buffer[DType.float32](k * n_samples if vecs_on_device else 1)
+    if vecs_on_device:
+        _ = lanczos_compute_eigenpairs_dev(
+            ctx, config, laplacian, eigenvalues, d_vecs, trace, lanczos_tpb,
+            scratch_pad, scratch_poison,
+        )
+    else:
+        _ = lanczos_compute_eigenpairs(
+            ctx, config, laplacian, no_v0, False, eigenvalues, eigenvectors, trace,
+            lanczos_tpb, scratch_pad, scratch_poison,
+        )
+        trace.record_list_f32("spectral.ritz", eigenvalues)
+        trace.record_list_f32("spectral.ritz.vectors", eigenvectors)
+        d_vecs = upload_f32(ctx, eigenvectors)
     if keep:
         # The prediction state in embedding column order (the reversed
         # gather of the undivided Ritz vectors), formed on the device.

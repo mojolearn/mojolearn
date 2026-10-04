@@ -2174,6 +2174,60 @@ def lanczos_restart_pooled(
 # ---------------------------------------------------------------------------
 
 
+#: IDENTICAL, every GPU (fam2-cluster, 2026-10-04): the Lanczos start
+#: vector is drawn on the device (`lanczos_v0_kernel`, the same counter
+#: hash, integer work plus one exact scale) and the Ritz vectors stay on
+#: the device for the embedding gather. They were a host loop over n and an
+#: upload, then a k x n download into a `List` and an upload of the same
+#: floats. Copies and the same hash: no bit moves, the host column is
+#: unchanged. A traced run keeps the host lists (the card records them).
+#: `-D MOJOLEARN_IDN_SPECTRAL_VECS_DEVICE_OFF=1` restores the round trips.
+comptime IDN_SPECTRAL_VECS_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and has_accelerator()
+    and not (
+        is_defined["MOJOLEARN_IDN_SPECTRAL_VECS_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+
+def lanczos_v0_kernel(
+    out: MutPointer[Float32, MutAnyOrigin], seed: UInt64, n_in: Int32
+):
+    """`lanczos_v0` one thread per element: the same hash of `(seed, i)`,
+    the top 24 bits scaled by `2^-24` (exact)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    var z = seed * UInt64(0x9E3779B97F4A7C15) + UInt64(i) + UInt64(1)
+    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
+    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
+    z = z ^ (z >> 31)
+    var top = UInt32((z >> 40) & UInt64(0xFFFFFF))
+    out.unsafe_store(i, Float32(top) * Float32(5.9604644775390625e-08))
+
+
+def _lanczos_start_vector(
+    ctx: DeviceContext,
+    v0: List[Float32],
+    v0_seed: UInt64,
+    v0_on_device: Bool,
+    n: Int,
+    tpb: Int,
+) raises -> DeviceBuffer[DType.float32]:
+    """`u = v0` on the device: uploaded, or drawn there from the seed."""
+    if not v0_on_device:
+        return upload_f32(ctx, v0)
+    var u = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_function[lanczos_v0_kernel](
+        u.unsafe_ptr(), v0_seed, Int32(n),
+        grid_dim=(_grid(n, tpb), 1, 1), block_dim=(tpb, 1, 1),
+    )
+    ctx.synchronize()
+    return u^
+
+
 def lanczos_smallest(
     ctx: DeviceContext,
     mut A: DeviceCoo,
@@ -2190,7 +2244,42 @@ def lanczos_smallest(
     scratch_pad: Int = 0,
     scratch_poison: Float32 = 0.0,
 ) raises -> Int:
-    """`lanczos_smallest`, the restart loop. `scratch_pad` extra floats
+    """`lanczos_smallest_dev` with the start vector uploaded and the Ritz
+    vectors downloaded into `eigVecs_out`."""
+    var no_dev = ctx.enqueue_create_buffer[DType.float32](1)
+    var restarts = lanczos_smallest_dev(
+        ctx, A, nEigVecs, maxIter, restartIter, tol, which, eigVals_out,
+        eigVecs_out, v0, UInt64(0), False, no_dev, False, trace, tpb,
+        scratch_pad, scratch_poison,
+    )
+    _ = no_dev^
+    return restarts
+
+
+def lanczos_smallest_dev(
+    ctx: DeviceContext,
+    mut A: DeviceCoo,
+    nEigVecs: Int,
+    maxIter: Int,
+    restartIter: Int,
+    tol: Float32,
+    which: Int,
+    mut eigVals_out: List[Float32],
+    mut eigVecs_out: List[Float32],
+    v0: List[Float32],
+    v0_seed: UInt64,
+    v0_on_device: Bool,
+    mut vecs_dev: DeviceBuffer[DType.float32],
+    keep_dev: Bool,
+    mut trace: IdentityTrace,
+    tpb: Int = LANCZOS_TPB,
+    scratch_pad: Int = 0,
+    scratch_poison: Float32 = 0.0,
+) raises -> Int:
+    """`lanczos_smallest`, the restart loop. With `v0_on_device` the start
+    vector is `lanczos_v0_kernel(v0_seed)` and `v0` is not read; with
+    `keep_dev` the Ritz vectors are copied into `vecs_dev` (`nEigVecs x n`
+    floats) and `eigVecs_out` comes back empty. `scratch_pad` extra floats
     filled with `scratch_poison` are allocated behind every scratch vector
     (the launch-invariance gate's padding/poison arm; nothing reads them). `eigVecs_out` is `nEigVecs x n`
     row-major (their `n x nEigVecs` column-major, the same bytes). Returns
@@ -2207,7 +2296,7 @@ def lanczos_smallest(
             "lanczos: need n_components + 1 < ncv <= n, got ncv=" + String(ncv)
             + " n_components=" + String(k) + " n=" + String(n)
         )
-    if len(v0) != n:
+    if not v0_on_device and len(v0) != n:
         raise Error("lanczos: v0 must have n entries")
 
     # A DECISION, RECORDED. The solver's shape is chosen before any float
@@ -2228,7 +2317,7 @@ def lanczos_smallest(
     var V = ctx.enqueue_create_buffer[DType.float32](ncv * n)
     ctx.enqueue_memset(V, Float32(0.0))
     # u = v0  (:434-436)
-    var u = upload_f32(ctx, v0)
+    var u = _lanczos_start_vector(ctx, v0, v0_seed, v0_on_device, n, tpb)
     # v0nrm = ||v0||; V[0] = v0 / v0nrm  (:439-448)
     var v0nrm = _norm2(ctx, u, n)
     ctx.enqueue_function[scale_vector_kernel](
@@ -2445,7 +2534,15 @@ def lanczos_smallest(
     eigVals_out.clear()
     for c in range(k):
         eigVals_out.append(eigenvalues_k[c])
-    eigVecs_out = download_f32(ctx, ritz, k * n)
+    if keep_dev:
+        ctx.enqueue_function[copy_kernel](
+            vecs_dev.unsafe_ptr(), ritz.unsafe_ptr(), Int32(k * n),
+            grid_dim=(_grid(k * n, tpb), 1, 1), block_dim=(tpb, 1, 1),
+        )
+        ctx.synchronize()
+        eigVecs_out.clear()
+    else:
+        eigVecs_out = download_f32(ctx, ritz, k * n)
     var conv = List[Int32]()
     conv.append(Int32(1) if res <= tol else Int32(0))
     conv.append(Int32(restarts))
@@ -2562,6 +2659,50 @@ def lanczos_compute_eigenpairs(
         eigenvalues,
         eigenvectors,
         start,
+        trace,
+        tpb,
+        scratch_pad,
+        scratch_poison,
+    )
+
+
+def lanczos_compute_eigenpairs_dev(
+    ctx: DeviceContext,
+    config: LanczosSolverConfig,
+    mut A: DeviceCoo,
+    mut eigenvalues: List[Float32],
+    mut vecs_dev: DeviceBuffer[DType.float32],
+    mut trace: IdentityTrace,
+    tpb: Int = LANCZOS_TPB,
+    scratch_pad: Int = 0,
+    scratch_poison: Float32 = 0.0,
+) raises -> Int:
+    """`lanczos_compute_eigenpairs` with the seeded start vector drawn on
+    the device and the Ritz vectors left there (`IDN_SPECTRAL_VECS_DEVICE`):
+    `vecs_dev` receives `n_components x n` floats, row-major. For untraced
+    runs (the card records the host lists)."""
+    if not config.has_seed:
+        raise Error(
+            "lanczos: seed=None selects std::random_device, which is not"
+            " reproducible; pass a seed (DEVIATION 772)"
+        )
+    var no_v0 = List[Float32]()
+    var no_vecs = List[Float32]()
+    return lanczos_smallest_dev(
+        ctx,
+        A,
+        config.n_components,
+        config.max_iterations,
+        config.ncv,
+        config.tolerance,
+        config.which,
+        eigenvalues,
+        no_vecs,
+        no_v0,
+        config.seed,
+        True,
+        vecs_dev,
+        True,
         trace,
         tpb,
         scratch_pad,
