@@ -98,10 +98,12 @@ def main():
     p.add_argument('--worker',type=Path,help='Pinned repaired identity/timing worker (recorded by hash); default is the frozen source tools/identical_wave_worker.py')
     p.add_argument('--tag',default='',help='identity/timing only: write <phase>-<tag>.json and <arm>/<phase>-<tag>/ so a rerun never overwrites earlier evidence')
     p.add_argument('--cases',default='',help='identity/timing only: comma-separated lane--dataset subset (reruns of failed cases, or timing only proven cases)')
+    p.add_argument('--case-timeout',type=int,help='identity reruns only: override the plan per-case timeout (e.g. single-thread host eigh n=4096 exceeded 1800 s); recorded in the receipt')
     p.add_argument('--identity-receipt',type=Path,help='timing only: complete identity receipt (e.g. merged after reruns); default <out>/identity.json')
     p.add_argument('--prepare-jobs',type=int,choices=range(1,5),default=1,help='Concurrent independent builders; shared compile semaphore remains authoritative')
     a=p.parse_args()
     if (a.tag or a.cases) and a.phase not in ('identity','timing'): p.error('--tag/--cases apply to identity and timing only')
+    if a.case_timeout and a.phase!='identity': p.error('--case-timeout applies to identity reruns only')
     if a.tag and not re.fullmatch('[a-z0-9-]+',a.tag): p.error('invalid tag')
     stem=a.phase+('-'+a.tag if a.tag else '')
     try: arch=validate_arch(a.vendor,a.gpu_arch)
@@ -202,6 +204,7 @@ def main():
         selected=[c for c in plan['cases'] if c['lane']+'--'+c['dataset'] in wanted]
         if len(selected)!=len(set(wanted)): p.error('unknown case in --cases')
         report['cases']=sorted(wanted)
+    if a.case_timeout: report['case_timeout_override']=a.case_timeout
     if a.phase=='identity' and (a.out/(stem+'.json')).exists(): p.error('identity receipt exists; use a fresh --tag')
     write(a.out/(stem+'.json'),report)
     for arm in ('on','off'):
@@ -280,7 +283,7 @@ def main():
                     for vendor in vendors:
                         out=folder/(tag+'--'+vendor)
                         cmd=[str(a.python),str(a.worker.resolve() if a.worker else source/'tools/identical_wave_worker.py'),'--source',str(source),'--lane',case['lane'],'--dataset',case['dataset'],'--data',str(a.data),'--operation',a.phase,'--vendor',vendor,'--out',str(out),'--case-json',json.dumps(case),'--timing-contract',plan.get('timing_contract','board-warm-single-call')]
-                        rc=run(cmd,source,dict(env,MOJOLEARN_VENDOR=vendor),folder/(tag+'--'+vendor+'.log'),case.get('timeout',1800))
+                        rc=run(cmd,source,dict(env,MOJOLEARN_VENDOR=vendor),folder/(tag+'--'+vendor+'.log'),a.case_timeout or case.get('timeout',1800))
                         steps.append({'id':tag+'--'+vendor,'rc':rc,'status':'PASS' if rc==0 else 'FAIL'})
                         if rc==0: digests[vendor]=json.loads((out/'result.json').read_text())['digest']
                     if a.phase=='identity': steps.append({'id':tag+'--bits','status':'PASS' if len(digests)==2 and len(set(digests.values()))==1 else 'FAIL','digests':digests})
