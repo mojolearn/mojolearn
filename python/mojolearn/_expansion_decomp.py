@@ -278,7 +278,8 @@ class _M:
     def rows(self, a, b):
         if self._d is not None and 0 <= a < b <= self.r and _res_moves(self, (b - a) * self.c):
             # lane fam2-decomp: rows a .. b - 1 gathered on the device
-            # (TAKE_ROWS, the row numbers as exact floats)
+            # (TAKE_ROWS, the row numbers as exact floats); lane
+            # cpu2-l8-decomp: at every size and in every mode
             return _dev_gather(self, _MV_TAKE_ROWS, range(a, b))
         return _M(self.s[a * self.c:b * self.c], b - a, self.c)
 
@@ -305,8 +306,9 @@ class _M:
         idx = list(idx)
         w = len(idx)
         in_range = all(0 <= j < self.c for j in idx)  # glue: range check of the caller's column-index argument
-        if self._d is not None and in_range and _res_moves(self, self.r * w):
-            # lane fam2-decomp: the columns gathered on the device (TAKE_COLS)
+        if self._d is not None and in_range and w and _res_moves(self, self.r * w):
+            # lane fam2-decomp: the columns gathered on the device (TAKE_COLS);
+            # lane cpu2-l8-decomp: at every size and in every mode
             return _dev_gather(self, _MV_TAKE_COLS, idx)
         out = array.array("f", [0.0]) * (self.r * w)
         for t, j in enumerate(idx):
@@ -317,6 +319,10 @@ class _M:
     def T(self):
         d = self._d
         n = self.r * self.c
+        if d is not None and (self.r == 1 or self.c == 1):
+            # lane cpu2-l8-decomp: a vector's transpose is the same words, a
+            # view of the same device buffer (as the host form shares its store)
+            return _M._on_device(d, self.c, self.r)
         if d is not None and _res_moves(self, n):
             # lane fam2-decomp: transposed on the device (the TRANSPOSE move's
             # index functions; the index operand is unused, so the source's
@@ -333,6 +339,8 @@ class _M:
         return out
 
     def reshape(self, r, c):
+        if self._d is not None and r * c == self.r * self.c:
+            return _M._on_device(self._d, r, c)     # lane cpu2-l8-decomp: a view, no download
         return _M(self.s, r, c)
 
     def neg_rows(self, flags):
@@ -386,32 +394,14 @@ _MV_TAKE_ROWS, _MV_TRANSPOSE, _MV_PLACE_COLS, _MV_FILL0 = 0, 1, 2, 3
 _MV_TAKE_COLS = 4
 _F32_INDEX_MAX = 1 << 24
 
-#: lane fam2-decomp (2026-10-04): a resident matrix's moves stay on the
-#: device when the binding says so (bit 4 of `x_decomp_idn_flags`, an
-#: IDENTICAL GPU build without -D MOJOLEARN_IDN_RES_MOVES_OFF) and the result
-#: has at least this many values (a small result is usually read by Python
-#: at once, where one download of the operand is the cheaper route).
-_RES_MOVE_MIN = 1 << 14
-_RES_MOVE_BITS = {}
-
-
-def _binding_idn_bits(raw):
-    """`x_decomp_idn_flags` of a raw binding (0 when it has none), asked once."""
-    f = _RES_MOVE_BITS.get(id(raw))
-    if f is None:
-        try:
-            f = int(getattr(raw, "x_decomp_idn_flags")())
-        except Exception:
-            f = 0
-        _RES_MOVE_BITS[id(raw)] = f
-    return f
-
 
 def _res_moves(M, count):
     """Whether a move of the device matrix M with `count` result values runs
-    on the device (shape and binding facts only)."""
-    return (count >= _RES_MOVE_MIN and M.r < _F32_INDEX_MAX and M.c < _F32_INDEX_MAX
-            and bool(_binding_idn_bits(M._d.b) & 16))
+    on the device (shape facts only). Lane cpu2-l8-decomp (re-audit L8, the
+    `_M.take_cols` row): every size and every mode; the IDENTICAL-only
+    binding bit and the small-result floor are gone, so a resident matrix
+    is never downloaded whole to slice a part of it."""
+    return count > 0 and M.r < _F32_INDEX_MAX and M.c < _F32_INDEX_MAX
 
 
 def _dev_gather(M, op, idx):
@@ -712,10 +702,10 @@ class _Kit:
         return f
 
     def rand(self, r, c, seed, stream, kind):
-        if r * c >= 1024 and self._res() and self._idn_flags() & 8:   # a small draw is read at once: one call
-            # lane fam-decomp: drawn into a device matrix by the same kernel
-            # (IDENTICAL GPU build; -D MOJOLEARN_IDN_RAND_RESIDENT_OFF clears
-            # the bit); downloaded only if Python reads it
+        if r * c >= 1024 and self._res():   # a small draw is read at once: one call
+            # lane fam-decomp: drawn into a device matrix by the same kernel,
+            # downloaded only if Python reads it (lane cpu2-l8-decomp: in
+            # every mode, no longer behind the IDENTICAL-only binding bit)
             out = self._dout(r, c)
             self.b.x_decomp_dev_rand(out._d.id, [r * c, int(seed) & 0xFFFFFFFF, int(stream) & 0xFFFFFFFF, kind])
             return out
@@ -838,6 +828,151 @@ class _Kit:
             return A
         self.b.x_decomp_move(A.addr, _M._one.addr, A.addr, p)
         return A
+
+    # ---- lane cpu2-l8-decomp (2026-10-04, re-audit L8): scalar decisions
+    # and small moves without a download of the operand. Each has one host
+    # form (host-address entries of both bindings) and one device form (the
+    # resident entries) with the same words: select reductions and moves
+    # are exact, and the elementwise steps are the kit's own cells.
+    _SEL_MAXABS, _SEL_MAX, _SEL_MIN = 0, 1, 2
+
+    def reduce(self, A, op):
+        """max |A| (op 0), max A (1) or min A (2) as a 1 x 1 matrix
+        (x_decomp/select_ops.mojo; a NaN anywhere gives NaN)."""
+        n = A.r * A.c
+        if not n:
+            raise ValueError("x_decomp: reduce of an empty matrix")
+        if self._use(A):
+            out = self._dout(1, 1)
+            self.b.x_decomp_dev_reduce(self._did(A), out._d.id, [n, int(op)])
+            return out
+        out = _M.zeros(1, 1)
+        self.b.x_decomp_reduce(A.addr, out.addr, [n, int(op)])
+        return out
+
+    def word(self, A, i=0):
+        """A's value at flat position i as a float: one word down (the
+        element gathered first when A is on the device)."""
+        if A._d is not None and A.r * A.c > 1:
+            return float(self.strided(A, 1, 1, i).s[0])
+        return float(A.s[i])
+
+    def strided(self, A, count, stride, off=0):
+        """A's values at off + t * stride (t < count) as a 1 x count matrix:
+        the TAKE_COLS move with one column index, off (off < stride, or
+        count 1). Exact copies."""
+        if count == 1:
+            stride = off + 1
+        idx = _M.of([float(off)], 1, 1)
+        n = A.r * A.c
+        p = [_MV_TAKE_COLS, count, 1, stride, 0, 0, 0, n, count, 1]
+        if count and self._use(A):
+            out = self._dout(1, count)
+            self.b.x_decomp_dev_move(self._did(A), self._did(idx), out._d.id, p)
+            return out
+        out = _M.zeros(1, count)
+        if count:
+            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)
+        return out
+
+    def place_strided(self, D, V, stride, off=0):
+        """D[off + t * stride] = V[t] for every t of V, in place (the
+        PLACE_COLS move with width 1). Returns D."""
+        cnt = V.r * V.c
+        if not cnt:
+            return D
+        p = [_MV_PLACE_COLS, cnt, 1, stride, off, 0, 0, cnt, D.r * D.c, 1]
+        if self._use(D, V):
+            self.b.x_decomp_dev_move(self._did(V), _M._dev_one(self), self._did(D), p)
+            return D
+        self.b.x_decomp_move(V.addr, _M._one.addr, D.addr, p)
+        return D
+
+    def place_rows(self, D, V, row):
+        """V (r x D.c) into rows row .. row + r - 1 of D, in place."""
+        return self.place_strided(D, V.reshape(1, V.r * V.c), 1, row * D.c) if V.r * V.c else D
+
+    def diag(self, A):
+        """The diagonal of square A as 1 x n."""
+        return self.strided(A, A.r, A.r + 1, 0)
+
+    def diag_add(self, A, v):
+        """A copy of square A with v (1 x 1, or 1 x n) added to its
+        diagonal: one add per diagonal value, the rest copied."""
+        return self.place_strided(self.copy(A), self.ew("add", self.diag(A), v), A.r + 1, 0)
+
+    def order_small(self, A):
+        """The stable ascending order of A's values (ties to the lower
+        index, NaN last) as an n x 1 matrix of exact floats, on the device
+        for a resident kit (x_decomp/select_*.mojo; n <= 65536)."""
+        n = A.r * A.c
+        if n and self._use(A):
+            out = self._dout(n, 1)
+            self.b.x_decomp_dev_order_small(self._did(A), out._d.id, [n])
+            return out
+        out = _M.zeros(n, 1)
+        if n:
+            self.b.x_decomp_order_small(A.addr, out.addr, [n])
+        return out
+
+    def take_cols_m(self, A, idx, w):
+        """Columns idx[0 .. w) of A (idx an _M of exact floats, which may
+        live on the device)."""
+        p = [_MV_TAKE_COLS, A.r * w, w, A.c, 0, 0, 0, A.r * A.c, A.r * w, w]
+        if A.r * w and self._use(A, idx):
+            out = self._dout(A.r, w)
+            self.b.x_decomp_dev_move(self._did(A), self._did(idx), out._d.id, p)
+            return out
+        out = _M.zeros(A.r, w)
+        if A.r * w:
+            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)
+        return out
+
+    def count_gt(self, A, s):
+        """How many values of A are > s (an exact count; one word down)."""
+        if not A.r * A.c:
+            return 0
+        return int(self.total(self.ew("gts", A, s=float(s))).s[0])
+
+    def vstack(self, ms):
+        """`_vstack` on the device for a resident kit (copies only)."""
+        if self._res() and sum(m.r * m.c for m in ms):  # glue: value count of argument matrices
+            return self.vstack_dev(ms)
+        return _vstack(*ms)
+
+    def hstack(self, ms):
+        """`_hstack` with the device PLACE_COLS moves for a resident kit."""
+        r = ms[0].r
+        w = sum(m.c for m in ms)  # glue: column count of argument matrices
+        if not (self._res() and r * w):
+            return _hstack(*ms)
+        out = self._dout(r, w)
+        one = _M._dev_one(self)
+        off = 0
+        for m in ms:  # glue: one Mojo move per argument matrix
+            if m.r * m.c:
+                self.b.x_decomp_dev_move(self._did(m), one, out._d.id,
+                                         [_MV_PLACE_COLS, m.r * m.c, m.c, w, off, 0, 0, m.r * m.c, r * w, 1])
+            off += m.c
+        return out
+
+    def absmax_signs(self, A, by_col):
+        """Per column (by_col, 1 x c) or row (r x 1) of A: -1 where its
+        largest-|.| entry (ties to the lower index) is negative, else +1
+        (`absmax_sign_cell`, DEVIATION 5317, then one select cell)."""
+        cnt = A.c if by_col else A.r
+        if cnt and A.r * A.c and self._use(A):
+            out = self._dout(1, cnt)
+            self.b.x_decomp_dev_absmax(self._did(A), out._d.id, [A.r, A.c, 1 if by_col else 0])
+        else:
+            out = _M.zeros(1, cnt)
+            if cnt and A.r * A.c:
+                self.b.x_decomp_absmax_sign(A.addr, out.addr, [A.r, A.c, 1 if by_col else 0])
+        return self.neg_signs(out if by_col else out.reshape(cnt, 1))
+
+    def neg_signs(self, V):
+        """-1 where V < 0, else +1 (NaN: +1), elementwise: select(-V > 0)."""
+        return self.ew("select", self.ew("scale", V, s=-1.0), _M.of([-1.0], 1, 1), _M.of([1.0], 1, 1), s=0.0)
 
     def order(self, A):
         """The stable ascending order of A's values (ties to the lower index)
@@ -1293,7 +1428,8 @@ def _mode(numeric_mode):
 def _svd_flip_v(Vt):
     """sklearn `svd_flip(u_based_decision=False)`: each row of Vt signed so its
     largest-|.| entry (first on a tie) is positive. Exact sign flips."""
-    return Vt.neg_rows(_Kit(_backend.default_mode()).absmax_flags(Vt, False))
+    k = _Kit(_backend.default_mode())
+    return k.ew("mul", Vt, k.absmax_signs(Vt, False))
 
 
 def _gram_svd(k, Z):
@@ -1812,8 +1948,14 @@ def _thin_svd(k, X, nc, u_based=True):
         S, Ut = S.cols(0, nc), Ut.rows(0, nc)
         U = Ut.T
         Vt = k.ew("div", k.mm(U, X, ta=True), S.T)
-    fl = k.absmax_flags(U, True) if u_based else k.absmax_flags(Vt, False)
-    U, Vt = U.neg_cols(fl), Vt.neg_rows(fl)
+    # the signs as a +-1 vector on the device (lane cpu2-l8-decomp): exact
+    # multiplies, no flag list on the host
+    if u_based:
+        sg = k.absmax_signs(U, True)
+        U, Vt = k.ew("mul", U, sg), k.ew("mul", Vt, sg.T)
+    else:
+        sg = k.absmax_signs(Vt, False)
+        U, Vt = k.ew("mul", U, sg.T), k.ew("mul", Vt, sg)
     return U, S, Vt
 
 
@@ -2267,7 +2409,7 @@ class FastICA(_Base):
             ev = k.ew("maxs", ev.take_cols(order), s=_F32_EPS * 10)
             sv = k.ew("sqrt", ev)
             u = u.take_cols(order)
-            u = u.neg_cols([v < 0 for v in u.row(0)])
+            u = k.ew("mul", u, k.neg_signs(u.rows(0, 1)))   # row 0's signs, on the device
             K = k.ew("div", u, sv).T.rows(0, nc)
             X1 = k.ew("scale", k.mm(K, Xc, tb=True), s=math.sqrt(n))
         else:
@@ -2741,8 +2883,9 @@ def _orthonormal_cols(k, A):
 def _flip_u(U, Vt):
     """sklearn svd_flip(u_based_decision=True): each column of U signed so its
     largest-|.| entry (first on a tie) is positive; Vt's rows follow."""
-    fl = _Kit(_backend.default_mode()).absmax_flags(U, True)
-    return U.neg_cols(fl), Vt.neg_rows(fl)
+    k = _Kit(_backend.default_mode())
+    sg = k.absmax_signs(U, True)
+    return k.ew("mul", U, sg), k.ew("mul", Vt, sg.T)
 
 
 def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_iteration_normalizer="auto",
@@ -3074,13 +3217,11 @@ class _PLS(_Base):
                 break
             if getattr(self, "algorithm", "nipals") != "svd":
                 self.n_iter_.append(it)
-            # _svd_flip_1d: the largest-|.| entry of x_weights positive
-            best, arg = -1.0, 0
-            for j, v in enumerate(xw.s):
-                if abs(v) > best:
-                    best, arg = abs(v), j
-            if xw.s[arg] < 0:
-                xw, yw = xw.neg_cols([True]), yw.neg_cols([True])
+            # _svd_flip_1d: the largest-|.| entry of x_weights (the first on
+            # a tie) positive; its sign as a 1 x 1 device value (lane
+            # cpu2-l8-decomp: absmax_sign_cell over xw's one column)
+            sg = k.absmax_signs(xw, True)
+            xw, yw = k.ew("mul", xw, sg), k.ew("mul", yw, sg)
             x_scores = k.mm(Xk, xw)
             y_ss = k.const(1.0) if norm_y else _dot(k, yw, yw)
             y_scores = k.ew("div", k.mm(Yk, yw), y_ss)
@@ -4062,7 +4203,7 @@ def _top_eig(k, A, nc, topk=False):
         w, V = k.eigh(A)
         order = list(range(n - 1, n - 1 - nc, -1))
         w, V = w.take_cols(order), V.take_cols(order)
-    return w, V.neg_cols(k.absmax_flags(V, True))
+    return w, k.ew("mul", V, k.absmax_signs(V, True))
 
 
 class Isomap(_Base):
@@ -4602,12 +4743,15 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     V = k.ew("sub", full, k.ew("scale", k.mm(h, t), s=coef))
     # the columns are unit vectors or the solve is not an answer (an
     # overflow, a dropped launch): refuse rather than return them
-    sq = k.colsum(k.ew("sq", V)).s
-    if not all(0.9 <= float(v) <= 1.1 for v in sq) or not all(math.isfinite(float(v)) for v in sv.s):
+    # the unit-norm and finiteness guard as three words (lane cpu2-l8-decomp:
+    # min and max of the squared norms, max |sv|, reduced where they live)
+    sq = k.colsum(k.ew("sq", V))
+    lo, hi = k.word(k.reduce(sq, k._SEL_MIN)), k.word(k.reduce(sq, k._SEL_MAX))
+    if not (0.9 <= lo and hi <= 1.1) or not math.isfinite(k.word(k.reduce(sv, k._SEL_MAXABS))):
         raise RuntimeError(
             "LocallyLinearEmbedding: the shift-invert subspace iteration returned columns of squared norm "
-            f"{[float(v) for v in sq]} (not unit); pass eigen_solver='dense' for the full SVD.")
-    return V.neg_cols(k.absmax_flags(V, True)), sv
+            f"{[float(v) for v in sq.s]} (not unit); pass eigen_solver='dense' for the full SVD.")
+    return k.ew("mul", V, k.absmax_signs(V, True)), sv
 
 
 class LocallyLinearEmbedding(_Base):
@@ -5192,8 +5336,8 @@ def _randomized_decompose(X, nc, *, center, n_oversamples, n_iter, power_iterati
     Um, Sm, Vm = _rsvd_core(k, A, nc, n_oversamples, n_iter, power_iteration_normalizer, "auto", False,
                             random_state)
     # svd_flip(u_based_decision=False): each row of Vt, U's columns follow
-    fl = k.absmax_flags(Vm, False)
-    Vm, Um = Vm.neg_rows(fl), Um.neg_cols(fl)
+    sg = k.absmax_signs(Vm, False)
+    Vm, Um = k.ew("mul", Vm, sg), k.ew("mul", Um, sg.T)
     out = dict(components=Vm.out(), singular_values=Sm.out((nc,)), mean=mean.out((d,)))
     if center:
         ev = k.ew("scale", k.ew("sq", Sm), s=1.0 / (n - 1))
