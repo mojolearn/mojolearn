@@ -119,6 +119,7 @@ step, which is 135's ruling and not a defect.
 """
 
 from extratrees.checks.fixed_point import ceil_log2, choose_scale, quantize
+from core.abs_sum_blocked_host import host_abs_sum_blocked
 from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_ENTROPY,
     CRITERION_GINI,
@@ -134,6 +135,7 @@ from extratrees.impl.randomforest.randomforest import (
     class_ids_for,
     fit_classification_device,
     fit_regression_device,
+    fit_regression_device_f32,
 )
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
@@ -584,7 +586,7 @@ def depth_cap_bound(forest: Forest, plan: FitPlan) -> Bool:
     would report a different model without fitting a different one.
     """
     var bound = False
-    for t in range(len(forest.trees)):
+    for t in range(len(forest.trees)):  # small-loop(forest.trees: per-tree depth words): reads one depth per fitted tree, no rows
         if forest.trees[t].depth_counter >= plan.params.max_depth:
             bound = True
     return bound
@@ -668,7 +670,7 @@ def _is_regression_criterion(c: Int32) -> Bool:
     return c == CRITERION_MSE or c == CRITERION_POISSON or c == CRITERION_GAMMA or c == CRITERION_INVERSE_GAUSSIAN
 
 
-def quantize_labels(
+def quantize_labels_host(
     y: List[Float32], n_rows: Int32
 ) raises -> Tuple[List[Int32], Float64]:
     """The label vector in deviation 135's fixed point, and its scale.
@@ -676,13 +678,15 @@ def quantize_labels(
     `choose_scale` takes the sum of magnitudes over the WHOLE label vector,
     because any node's rows are a subset of it -- 135's bound, which makes
     accumulator overflow impossible rather than unlikely. The same derivation
-    `device_regression_check` uses, kept here so a caller of the device arm
-    does not have to know deviation 135 exists.
+    `device_regression_check` uses. cpu3-trees: this is the HOST COLUMN
+    (CPU fits, checks, benches); the GPU fit quantizes on the device
+    (`upload_dataset_labels_quantized`) to the same Int32s and scale.
     """
-    var mag = Float64(0.0)
-    for r in range(Int(n_rows)):
-        var v = Float64(y[r])
-        mag += v if v >= 0.0 else -v
+    # cpu3-trees: the blocked fixed-order sum (`core/abs_sum_blocked`), the
+    # same word the device fit (`upload_dataset_labels_quantized`) reads back
+    if len(y) < Int(n_rows):
+        raise Error("quantize_labels_host: y is shorter than n_rows")
+    var mag = host_abs_sum_blocked(Int(y.unsafe_ptr()), Int(n_rows))
     var scale = choose_scale(mag, Int(n_rows))
     var q = List[Int32]()
     for r in range(Int(n_rows)):
@@ -719,7 +723,7 @@ def fit_extra_trees_regressor_device(
 
     **What is NOT identical to the host arm, and it is deviation 135's ruling
     rather than a defect:** the device trainer consumes labels QUANTIZED to
-    fixed point, so `quantize_labels` derives the scale here, the tree
+    fixed point, so `quantize_labels_host` derives the scale here, the tree
     STRUCTURE is bit-identical to the host arm's ON THE CHECK'S FIXTURES
     (the device orders candidates by cuML's exact `Int64` MSE key over the
     quantized labels, deviation 189; the host arm `node_split_random_mse`

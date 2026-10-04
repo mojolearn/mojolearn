@@ -16,7 +16,7 @@ from extratrees.estimator import (
     FitResult,
     classifier_plan,
     depth_cap_bound,
-    quantize_labels,
+    quantize_labels_host,
     regressor_plan,
 )
 from extratrees.impl.randomforest.randomforest import class_ids_for
@@ -128,7 +128,7 @@ def fit_extra_trees_regressor_host_exact(
 ) raises -> FitResult:
     """THE CPU COLUMN'S REGRESSOR FIT (et-reg, 2026-09-14):
     `fit_extra_trees_regressor_device` restated on the host. The labels
-    are QUANTIZED by `quantize_labels` exactly as the device arm quantizes
+    are QUANTIZED by `quantize_labels_host` exactly as the device arm quantizes
     them (DEVIATION 135), the search is the device's exact `Int64` MSE key
     over those integers (DEVIATION 189) and the leaves are means of the
     quantized labels rescaled by `Float32(1 / scale)` as `leaf_kernel`
@@ -137,7 +137,7 @@ def fit_extra_trees_regressor_host_exact(
     differ from the device by up to one quantization step and cannot be
     the CPU column. Takes no DeviceContext."""
     var plan = regressor_plan(config, n_rows, n_features)
-    var ql = quantize_labels(y, n_rows)
+    var ql = quantize_labels_host(y, n_rows)
     var forest = fit_forest_exact(
         x_col_major,
         y,

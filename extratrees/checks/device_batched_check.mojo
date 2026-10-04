@@ -39,7 +39,7 @@ NO DURATION IS TAKEN ANYWHERE IN THIS FILE.
 from std.testing import assert_equal, assert_true
 from max.gpu.host import DeviceContext
 
-from extratrees.estimator import quantize_labels
+from extratrees.estimator import quantize_labels_host
 from extratrees.checks.fixtures import (
     Dataset as FixtureDataset,
     hashed_classification,
@@ -195,7 +195,7 @@ def serial_regression(
     seed: UInt64,
 ) raises -> List[TreeMetaDataNode[DType.float32]]:
     var x = column_major(fixture)
-    var ql = quantize_labels(fixture.y, Int32(fixture.n_rows))
+    var ql = quantize_labels_host(fixture.y, Int32(fixture.n_rows))
     var dev = upload_dataset(
         ctx, x, ql[0], Int32(fixture.n_rows), Int32(fixture.n_cols), 1
     )
@@ -220,7 +220,7 @@ def merged_regression(
     row_slot_cap: Int,
 ) raises -> List[TreeMetaDataNode[DType.float32]]:
     var x = column_major(fixture)
-    var ql = quantize_labels(fixture.y, Int32(fixture.n_rows))
+    var ql = quantize_labels_host(fixture.y, Int32(fixture.n_rows))
     var dev = upload_dataset(
         ctx, x, ql[0], Int32(fixture.n_rows), Int32(fixture.n_cols), 1
     )
@@ -339,7 +339,7 @@ def main() raises:
         strengthr >= 2,
         "fixture too weak: the 10 serial regression trees are near-copies",
     )
-    var ql = quantize_labels(reg.y, Int32(reg.n_rows))
+    var ql = quantize_labels_host(reg.y, Int32(reg.n_rows))
     var gotr_forest = fit_regression_device(
         ctx,
         column_major(reg),

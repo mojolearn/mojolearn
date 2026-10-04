@@ -1350,7 +1350,7 @@ def train_tree_exact(
 ) raises -> TreeMetaDataNode[DType.float32]:
     """One tree grown as the device grows it, on the host: the block comment
     above. `labels_q` is the device's label plane (class ids for a
-    classifier, `quantize_labels`'s fixed point for a regressor; `n_acc`
+    classifier, `quantize_labels_host`'s fixed point for a regressor; `n_acc`
     is the class count or 1; `inv_scale` is `Float32(1 / scale)` or 1)."""
     validity_check(params)
     if params.max_leaf_nodes != -1:
@@ -2609,7 +2609,7 @@ def upload_dataset_labels_quantized(
     x_row_major: Bool = False,
 ) raises -> DeviceDataset:
     """`upload_dataset` for a regressor with the labels QUANTIZED ON THE
-    DEVICE (cpu3-trees: the host `quantize_labels` row loops left the GPU
+    DEVICE (cpu3-trees: the host `quantize_labels_host` row loops left the GPU
     fit). y crosses the bus once as the caller's float32 words; the scale's
     `sum |y|` is `core/abs_sum_blocked`'s fixed-order device sum (one word
     back; `quantize_labels_host` restates it with `host_abs_sum_blocked`),

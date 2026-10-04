@@ -16,7 +16,7 @@ name the per-cell status. Diagnostic only; not part of any suite.
 from max.gpu.host import DeviceContext
 
 from extratrees.bench.bench_data import read_column_prefix, read_f32
-from extratrees.estimator import quantize_labels
+from extratrees.estimator import quantize_labels_host
 from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_MSE,
     DecisionTreeParams,
@@ -74,7 +74,7 @@ def main() raises:
     print("root split col", root_col, "q", q, ": left", len(left),
           "right", len(right))
 
-    var ql = quantize_labels(target, Int32(n_rows))
+    var ql = quantize_labels_host(target, Int32(n_rows))
     print("scale", ql[1])
     var ctx = DeviceContext()
     var dev = upload_dataset(
