@@ -18,11 +18,18 @@ target, embedded code format, and payload hashes before packaging. Approximate
 instructions are inventoried; passing this static audit alone does not establish
 cross-vendor identity.
 
-The loader currently requires both `MOJOLEARN_CUDA_PATH=ptx-baseline` and
-`MOJOLEARN_EXPERIMENTAL_PTX=1`. This is an investigation route, not an admitted
-IDENTICAL fallback. Its manifest and selection receipt explicitly retain
-`identical_qualified=false`. A successful build or a local repeatability check
-must not change that status.
+The forced investigation route requires both
+`MOJOLEARN_CUDA_PATH=ptx-baseline` and `MOJOLEARN_EXPERIMENTAL_PTX=1`. Its build
+manifest and experimental selection receipt retain `identical_qualified=false`.
+A successful build or a local repeatability check must not change that status.
+
+The production loader supports a separate native-first route. Only a detected
+NVIDIA device without compatible native code may reach it. A missing or invalid
+payload, a native load failure, or a provenance failure is not that condition.
+This route requires `PTX_IDENTITY_ADMISSION.json`, bound by hashes in the NVIDIA
+vendor marker to the exact PTX manifest, installed source, numeric tier, and
+measured device/driver configuration. Unknown configurations refuse instead of
+substituting CPU execution. No production admission record is provided here.
 
 ## Evidence required before admission
 
@@ -41,6 +48,21 @@ must not change that status.
   supported. PTX target compatibility alone does not qualify all NVIDIA GPUs
   or future driver versions.
 
-Until runtime admission and its evidence are implemented, IDENTICAL mode must
-not automatically select this experimental payload. An unsupported configuration
-must report the limitation while preserving the requested numeric mode.
+`tools/admit_nvidia_ptx.py` generates the separate admission record only after
+rechecking the actual payload and full NVIDIA nine-fixture comparisons, direct
+canonical three-fixture Apple/AMD comparisons over every applicable lane, and
+supplementary measured CUDA configuration witnesses. These two coverage scopes
+remain distinct in the record. The tool retains comparison reports and their
+hashes and writes the admission decision last. It does not rewrite input
+artifacts, their source commits, or experimental manifests.
+
+The packer's `--bundle-ptx-admission` option places the separately admitted PTX
+inside `mojolearn-nvidia`; it requires matching source and manifest bytes and
+cannot also emit a separate experimental owner for those paths. The requested
+250 MiB project allowance must still be confirmed before publication.
+
+Until the required evidence passes and a matching record is included, IDENTICAL
+mode must not automatically select PTX. An unsupported configuration reports the
+limitation while preserving the requested numeric mode. Forced-path numerical
+comparisons do not replace an end-to-end test of automatic fallback on a device
+without compatible native code.
