@@ -132,3 +132,7 @@ is silently opted in.
 ### Compile repair r1
 
 The first M2 arm A build of a47cdb339 failed before execution: `out` was used as a parameter name, and inferred immutable `DeviceBuffer.unsafe_ptr()` results did not match the existing mutable-pointer launcher API. The r1 source renames the parameter to `dst` and explicitly borrows each locally owned mutable buffer through `unsafe_ptr[True]()`, retaining a single input pointer for both X operands. No const cast or address reconstruction is introduced. Buffer ownership stays local through synchronization. This matches the [DeviceBuffer pointer API](https://max.modular.com/api/mojo/max/gpu/host/device_context/DeviceBuffer/). Arithmetic, fixtures, strict gates and scoring policy are unchanged. New M2 compilation and M3 quality remain required; the compile failure is not numerical evidence.
+
+### Installed-SDK compile repair r2
+
+M2 rejected r1's `unsafe_ptr[True]`: its installed `max/mojo/max/gpu/host/device_context.mojo:1858` declares the explicit parameter as `origin: MutOrigin`, not `mut: Bool`. The r1 linked web API belongs to a different SDK revision and does not establish compatibility here. r2 requests `unsafe_ptr[MutAnyOrigin]()` directly from each locally owned mutable buffer, matching the installed compiler diagnostic and the existing `F32Ptr` / `I32Ptr` aliases. This selects the mutable-origin overload; it is not a const cast. Owners remain alive through synchronization. No fixture or threshold changes. Compilation remains owed.

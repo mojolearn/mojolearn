@@ -803,10 +803,10 @@ def mcd_cov_probe_py(xaddr: PythonObject, gaddr: PythonObject, outaddr: PythonOb
     # Explicit mutable borrows of owned buffers for the legacy launcher API.
     # No integer-address reconstruction or const-removing pointer cast. Keep
     # one x borrow and copy its pointer for X^T X, rather than borrow dx twice.
-    var xp = dx.unsafe_ptr[True]()
-    var cp = dc.unsafe_ptr[True]()
-    var sp = scratch.unsafe_ptr[True]()
-    var gp = dg.unsafe_ptr[True]()
+    var xp = dx.unsafe_ptr[MutAnyOrigin]()
+    var cp = dc.unsafe_ptr[MutAnyOrigin]()
+    var sp = scratch.unsafe_ptr[MutAnyOrigin]()
+    var gp = dg.unsafe_ptr[MutAnyOrigin]()
     comptime if MCD_ORDERED_COV:
         note_cov_route(True, rows, d)
         launch_mcd_cov_ordered(ctx, xp, cp, sp,
