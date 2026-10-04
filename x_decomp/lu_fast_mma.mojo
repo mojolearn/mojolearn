@@ -49,13 +49,17 @@ Bits: the trailing sums run in the matrix unit's order over k = 32 or 256
 instead of main's ascending scalar chain per cell, so FAST words change (a
 different f32 rounding of the same sums); pivots can differ only on a
 near-tie. IDENTICAL and every other vendor compile main's route unchanged.
+
+LU_FAST_TSLU (candidate, `-D MOJOLEARN_LU_FAST_TSLU`, x_decomp/lu_fast_tslu.mojo)
+replaces each inner panel's `lu_fast_panel` + `_lfm_cols` with tournament
+pivoting (~6 launches a panel instead of ~37); the GEMMs are unchanged.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.kernel_matrix import COLUMN_APPLE, lib_smem_page_fits_for
@@ -63,6 +67,9 @@ from checks.numerics import ftz, identical_mul_add
 from gemm.afn_apple_fast import AFN_GEMM_APPLE, AFN_GEMM_KB, _afn_gload, _afn_load_t, _afn_mma, _afn_stage
 from x_decomp.cells import F32Ptr, I32Ptr, lu_swap_elem
 from x_decomp.lu_fast import LFS_TPB, LU_FAST_STEP1, lfs_blocks, lu_fast_panel
+from x_decomp.lu_fast_tslu import (
+    LTS_MAP_FLOATS, LTS_ORIG_FLOATS, LTS_U11_FLOATS, LU_FAST_TSLU, lts_cand_floats, lu_tslu_panel,
+)
 
 #: DEFAULT in FAST + Apple (lane/apple-fast-w2-linalg). M3, one run per arm:
 #: lu-factor synthetic 971.7 -> 849.3 ms, lu-solve synthetic 971.9 -> 852.1 ms;
@@ -217,6 +224,41 @@ def lu_fast_mma_factor(
     """The whole factorization (see the module docstring), enqueued, no sync.
     `info` must be initialized; p0/p1 hold n * LFM_PANEL floats each, pa/pb
     2 * maxb (`launch_lu`'s LU_FAST_STEP1 scratch)."""
+    comptime if LU_FAST_TSLU:
+        # LU_FAST_TSLU (candidate, -D MOJOLEARN_LU_FAST_TSLU, x_decomp/lu_fast_tslu.mojo):
+        # tournament-pivoting panels; their scratch lives here, so this arm
+        # drains before returning (launch_lu drains right after anyway).
+        var tca = ctx.enqueue_create_buffer[DType.float32](lts_cand_floats(n))
+        var tcb = ctx.enqueue_create_buffer[DType.float32](lts_cand_floats(n))
+        var tu = ctx.enqueue_create_buffer[DType.float32](LTS_U11_FLOATS)
+        var tor = ctx.enqueue_create_buffer[DType.float32](LTS_ORIG_FLOATS)
+        var tm = ctx.enqueue_create_buffer[DType.float32](LTS_MAP_FLOATS)
+        _lfm_run[True](
+            ctx, a, piv, info, act, p0, p1, pa, pb, n, maxb,
+            _lfm_p(tca), _lfm_p(tcb), _lfm_p(tu), _lfm_p(tor), _lfm_p(tm),
+        )
+        ctx.synchronize()
+        _ = tca^
+        _ = tcb^
+        _ = tu^
+        _ = tor^
+        _ = tm^
+    else:
+        _lfm_run[False](ctx, a, piv, info, act, p0, p1, pa, pb, n, maxb, p0, p0, p0, p0, p0)
+
+
+def _lfm_p(buf: DeviceBuffer[DType.float32]) -> F32Ptr:
+    """A device buffer's address as the cells' pointer type (device.mojo's `_p`)."""
+    return F32Ptr(unsafe_from_address=Int(buf.unsafe_ptr()))
+
+
+def _lfm_run[TSLU: Bool](
+    ctx: DeviceContext, a: F32Ptr, piv: I32Ptr, info: F32Ptr, act: F32Ptr,
+    p0: F32Ptr, p1: F32Ptr, pa: F32Ptr, pb: F32Ptr, n: Int, maxb: Int,
+    tca: F32Ptr, tcb: F32Ptr, tu11: F32Ptr, torig: F32Ptr, tmap: F32Ptr,
+) raises:
+    """`lu_fast_mma_factor`'s launches; with TSLU the inner panels by
+    `lu_tslu_panel` (tca .. tmap its scratch), else main's two calls."""
     comptime assert LFM_NB % LFM_PANEL == 0 and LFM_NB > 0, "LU_FAST_MMA: the outer block is whole 32-column panels"
     var K0 = 0
     while K0 < n:
@@ -224,9 +266,14 @@ def lu_fast_mma_factor(
         var k0 = K0
         while k0 < K1:
             var k1 = min(k0 + LFM_PANEL, K1)
-            lu_fast_panel(ctx, a, piv, info, act, p0, p1, pa, pb, k0, k1, n, maxb)
-            # every trailing column's swaps; the U rows inside the block
-            _lfm_cols(ctx, a, piv, act, k0, k1, k1, K1, n, n, True)
+            comptime if TSLU:
+                # the panel, its swaps on every column and the U rows inside
+                # the block: ~levels + 1 launches (tournament pivots)
+                lu_tslu_panel(ctx, a, piv, info, act, tca, tcb, tu11, torig, tmap, k0, k1, K1, n)
+            else:
+                lu_fast_panel(ctx, a, piv, info, act, p0, p1, pa, pb, k0, k1, n, maxb)
+                # every trailing column's swaps; the U rows inside the block
+                _lfm_cols(ctx, a, piv, act, k0, k1, k1, K1, n, n, True)
             # rows k1.. x the block's columns right of the panel
             _lfm_gemm_sub(ctx, a, n, k1, k1, k0, n - k1, K1 - k1, k1 - k0)
             k0 = k1
