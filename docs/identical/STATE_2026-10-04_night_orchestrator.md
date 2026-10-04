@@ -54,3 +54,9 @@
 
 ## Rules (memory has them): no Apple machines; grep logs; same bits across vendors within a version; no CPU in GPU paths;
 no benchmark-shape tuning; wait for Mojo/Modular rather than workarounds; Opus for subagents; max 20 concurrent subagents.
+
+## Update 22:40Z
+- Done and pushed (not yet merged into integration): lane/cpu3-bindings a15cf85eb, lane/cpu3-seq 2dcea21c6, lane/cpu3-python 6871dbf16, lane/compile-fix 45617e193+.
+- cpu3-python left 34 py-native-host findings with reasons (~/mojolearn-evidence/cpu3-python/); cpu3-seq left AutoARIMA resident series.
+- Orchestrator decision: keep cpu3-python removing the Apple FAST kfeat LAZYW host draw (device draw instead) under the no-CPU-in-GPU-path rule.
+- Still running at 22:40Z: cpu3-gbdt-a, cpu3-gbdt-b, cpu3-trees, cpu3-neighbors, cpu3-core, compile-fix (smoke), wave-ops (identity r1).
