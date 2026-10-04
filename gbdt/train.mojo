@@ -31,6 +31,11 @@ from gbdt.gpu_data.kernel.binarize import (
     binarize_float_feature_kernel,
 )
 from gbdt.ctrs.ctr import TCtrConfig, is_permutation_dependent_ctr_type
+from gbdt.data.target_prep import (
+    device_all_equal_first,
+    fold_class_weights,
+    upload_and_scan_targets,
+)
 from gbdt.ctrs.ctr_binarization import (
     TBinarizationOptions,
     build_binarized_target,
@@ -1053,6 +1058,27 @@ def train(
     # rather than carried and ignored. Everything here is decided before a
     # border is computed.
     var objective_code = objective_from_name(loss)
+    # ---- the targets and weights, uploaded ONCE and checked on the device
+    # (lane/cpu3-gbdt-b, `gbdt/data/target_prep.mojo`): every host walk of
+    # `y` and `sample_weight` below reads this scan's five words instead.
+    var use_sample_weight = len(sample_weight) > 0
+    if use_sample_weight and len(sample_weight) != n_rows:
+        raise Error(
+            "sample_weight has " + String(len(sample_weight))
+            + " entries for " + String(n_rows) + " rows"
+        )
+    var labels_multiclass = (
+        loss == "MultiClass" or loss == "MultiClassOneVsAll"
+        or objective_code == OBJECTIVE_MULTICLASS
+        or objective_code == OBJECTIVE_MULTICLASS_OVA
+    )
+    # `target_dim` planes for MultiRMSE, dim-major; one for every other loss
+    var targets = ctx.enqueue_create_buffer[DType.float32](n_rows * target_dim)
+    var weights = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var tscan = upload_and_scan_targets(
+        ctx, y, sample_weight, n_rows, target_dim, labels_multiclass,
+        targets, weights,
+    )
     var is_pair_logit = objective_code == OBJECTIVE_PAIR_LOGIT
     var is_yeti_rank = objective_code == OBJECTIVE_YETI_RANK
     var is_querywise = (
@@ -1073,9 +1099,8 @@ def train(
                 " multiclass_targets.h:167); got target_dim="
                 + String(target_dim)
             )
-        for i in range(n_rows * target_dim):
-            if not isfinite(y[i]):
-                raise Error("MultiRMSE targets must be finite")
+        if tscan.first_nonfinite >= 0:
+            raise Error("MultiRMSE targets must be finite")
         if boosting_type == "Ordered":
             raise Error(
                 "boosting_type='Ordered' with loss='MultiRMSE' is not carried"
@@ -1256,12 +1281,10 @@ def train(
     # prediction planes. The later objective check was too late to protect
     # MakeClassificationWeights (reference data_providers.cpp:162-168).
     if loss == "MultiClass" or loss == "MultiClassOneVsAll":
-        for r in range(n_rows):
-            var label = y[r]
-            if not isfinite(label) or label < 0 or label >= Float32(n_rows):
+        if tscan.first_bad_label() >= 0:
+            if tscan.first_bad_label_is_range():
                 raise Error("multiclass labels must be finite dense class codes 0..k-1")
-            if Float32(Int(label)) != label:
-                raise Error("multiclass labels must be integer class codes")
+            raise Error("multiclass labels must be integer class codes")
     if len(cat_features) != 0 and len(cat_features) != n_features:
         raise Error(
             "cat_features has "
@@ -1603,8 +1626,9 @@ def train(
                     List[UInt8](),
                     cat_params.counter_calc_method == COUNTER_CALC_FULL,
                 )
-            for c in range(len(independent_slots)):
-                ctr_columns[independent_slots[c]] = indep[c].copy()
+            # moved, not copied (lane/cpu3-gbdt-b): no element is touched
+            for c in range(len(independent_slots)):  # small-loop(independent_slots: CTR config slots): moves one column object per config, no element copy
+                swap(ctr_columns[independent_slots[c]], indep[c])
 
         if len(dependent_configs) > 0:
             # their `writeCtrs(..., permutationDependent)` (`:257`), ONCE
@@ -1622,9 +1646,12 @@ def train(
                     ctr_orders[p],
                 )
                 for c in range(len(dependent_slots)):
-                    dep_by_perm[p].append(dep[c].copy())
                     if p == est_perm:
                         ctr_columns[dependent_slots[c]] = dep[c].copy()
+                    # moved, not copied (lane/cpu3-gbdt-b)
+                    var moved = List[Float32]()
+                    swap(moved, dep[c])
+                    dep_by_perm[p].append(moved^)
         # the APPLY-TIME half of the same statistic: their
         # `CalcFinalCtrs` writes a `TCtrValueTable` beside every CTR the
         # model uses, because the learn column cannot score a new row.
@@ -1643,13 +1670,14 @@ def train(
             f,
             len(columns),
         )
-        for c in range(len(tables)):
-            ctr_tables.append(tables[c].copy())
+        ctr_tables.extend(tables^)
         var base_col = len(columns)
-        for c in range(len(dependent_slots)):
+        for c in range(len(dependent_slots)):  # small-loop(dependent_slots: CTR config slots): one column index per config
             dep_col_index.append(base_col + dependent_slots[c])
-        for c in range(len(ctr_columns)):
-            columns.append(ctr_columns[c].copy())
+        for c in range(len(ctr_columns)):  # small-loop(ctr_columns: CTR config slots): moves one column object and appends plan entries per config, no element copy
+            var moved_col = List[Float32]()
+            swap(moved_col, ctr_columns[c])
+            columns.append(moved_col^)
             column_src_feature.append(-1)
             column_one_hot.append(False)
             ctr_grids.append(cat_params.ctr_binarization_for(configs[c]))
@@ -1725,7 +1753,7 @@ def train(
     # than the dependent slice of one. DEVIATION 89.
     var cindexes = List[DeviceBuffer[DType.uint32]]()
     var any_dep = False
-    for c in range(n_columns):
+    for c in range(n_columns):  # small-loop(n_columns: column plan entries): one flag per column, no data
         if dep_ordinal_of_column[c] >= 0:
             any_dep = True
     for p in range(perm_count):
@@ -1741,21 +1769,32 @@ def train(
                 )
             )
             continue
-        var flat = List[Float32]()
-        for c in range(n_columns):
+        # lane/cpu3-gbdt-b: the dependent columns are read IN PLACE from this
+        # permutation's CTR lists, every other column from `column_ptrs`,
+        # through the same in-place builder as above (its docstring: same
+        # kernels, same borders, same writes, so the same bits as the flat
+        # pack this replaces, without the host copy of every column)
+        var perm_ptrs = List[MutPointer[Float32, MutUntrackedOrigin]](
+            capacity=n_columns
+        )
+        for c in range(n_columns):  # small-loop(n_columns: column pointers): one pointer per column, no data read
             var ord = dep_ordinal_of_column[c]
             if ord >= 0:
-                for r in range(n_rows):
-                    flat.append(dep_by_perm[p][ord][r])
+                perm_ptrs.append(
+                    rebind[MutPointer[Float32, MutUntrackedOrigin]](
+                        dep_by_perm[p][ord].unsafe_ptr()
+                    )
+                )
             else:
-                for r in range(n_rows):
-                    flat.append(column_ptrs[c].unsafe_load(r))
+                perm_ptrs.append(column_ptrs[c])
         cindexes.append(
-            _build_cindex_from_floats(
-                ctx, flat, n_rows, borders, fold_counts,
+            _build_cindex_from_columns(
+                ctx, columns, n_rows, borders, fold_counts,
                 column_nan_treatment,
+                column_ptrs=perm_ptrs,
             )
         )
+        _ = len(dep_by_perm)
     var cindex = cindexes[est_perm].copy()
     # DEVIATION 2550: `column_ptrs` points into `columns`; hold both to here
     _ = len(columns)
@@ -1773,11 +1812,7 @@ def train(
             "class weights take effect only with a classification loss,"
             " their option check's words (catboost_options.cpp:617)"
         )
-    # `target_dim` planes for MultiRMSE, dim-major; one for every other loss
-    var targets = ctx.enqueue_create_buffer[DType.float32](n_rows * target_dim)
-    var weights = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var ht = ctx.enqueue_create_host_buffer[DType.float32](n_rows * target_dim)
-    var hw = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    # `targets` and `weights` were uploaded and scanned at entry (`tscan`).
 
     # THEIR COMBINATION IS A PRODUCT (`private/libs/target/
     # data_providers.cpp:168`):
@@ -1787,24 +1822,13 @@ def train(
     # `rawGroupWeights` is the querywise family's and is 1 here -- this
     # implementation carries no `group_id`, so there is nothing to weight by. The
     # other two multiply, and a caller may pass either, both, or neither.
-    var use_sample_weight = len(sample_weight) > 0
-    if use_sample_weight and len(sample_weight) != n_rows:
-        raise Error(
-            "sample_weight has " + String(len(sample_weight))
-            + " entries for " + String(n_rows) + " rows"
-        )
 
     # `classWeights[(size_t)targetClassesArray[i]]` indexes by the TARGET
     # CLASS, so how many entries it needs depends on the loss: two for the
     # binarized classification targets, `numClasses` for MultiClass.
     var n_class_slots = 2
     if loss == "MultiClass" or loss == "MultiClassOneVsAll":
-        var mxc = -1
-        for r in range(n_rows):
-            var iv = Int(y[r])
-            if iv > mxc:
-                mxc = iv
-        n_class_slots = mxc + 1
+        n_class_slots = tscan.max_label + 1
     var use_class_weights = len(class_weights) > 0
     if use_class_weights and len(class_weights) != n_class_slots:
         raise Error(
@@ -1813,29 +1837,18 @@ def train(
             + String(len(class_weights))
         )
 
-    for r in range(n_rows):
-        ht.unsafe_ptr().unsafe_store(r, y[r])
-        var w = Float32(1.0)
-        if use_sample_weight:
-            if sample_weight[r] < Float32(0.0):
-                raise Error(
-                    "sample_weight at row " + String(r)
-                    + " is negative"
-                )
-            w = sample_weight[r]
-        if use_class_weights:
-            # their `targetClassesArray`: the dense class code for
-            # MultiClass, the binarized target otherwise
-            var cls: Int
-            if loss == "MultiClass" or loss == "MultiClassOneVsAll":
-                cls = Int(y[r])
-            else:
-                cls = 1 if y[r] > Float32(0.5) else 0
-            w = w * class_weights[cls]
-        hw.unsafe_ptr().unsafe_store(r, w)
-    # MultiRMSE's planes past the first, in the caller's dim-major order
-    for i in range(n_rows, n_rows * target_dim):
-        ht.unsafe_ptr().unsafe_store(i, y[i])
+    if tscan.first_negative_weight >= 0:
+        raise Error(
+            "sample_weight at row " + String(tscan.first_negative_weight)
+            + " is negative"
+        )
+    if use_class_weights:
+        # their `targetClassesArray`: the dense class code for MultiClass,
+        # the binarized target otherwise; the one product on the device
+        fold_class_weights(
+            ctx, targets, weights, class_weights, n_rows,
+            loss == "MultiClass" or loss == "MultiClassOneVsAll",
+        )
     if is_pair_logit:
         comptime if PAIRLOGIT_GROUP_FUSED:
             # generated pairs (empty list): the device setup rewrites the
@@ -1845,8 +1858,11 @@ def train(
                 var pair_prep = prepare_pairs(
                     pair_list.winners, pair_list.losers, pair_list.weights, n_rows
                 )
-                for r in range(n_rows):
-                    hw.unsafe_ptr().unsafe_store(r, pair_prep.row_weights[r])
+                ctx.enqueue_copy(
+                    dst_buf=weights, src_ptr=pair_prep.row_weights.unsafe_ptr()
+                )
+                ctx.synchronize()
+                _ = len(pair_prep.row_weights)
         else:
             # `InitPairLogit` (`targets/querywise_targets_impl.h:326-346`): the
             # target weights become the per-row sums of the pair weights, folded
@@ -1854,14 +1870,11 @@ def train(
             var pair_prep = prepare_pairs(
                 pair_list.winners, pair_list.losers, pair_list.weights, n_rows
             )
-            for r in range(n_rows):
-                hw.unsafe_ptr().unsafe_store(r, pair_prep.row_weights[r])
-    ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
-    ctx.synchronize()
-    # past the drain (step-33 race class)
-    _ = ht^
-    _ = hw^
+            ctx.enqueue_copy(
+                dst_buf=weights, src_ptr=pair_prep.row_weights.unsafe_ptr()
+            )
+            ctx.synchronize()
+            _ = len(pair_prep.row_weights)
     host_times.stop_host("train_targets_upload", t_phase)
     t_phase = host_times.start()
 
@@ -1950,23 +1963,16 @@ def train(
         objective == OBJECTIVE_MULTICLASS
         or objective == OBJECTIVE_MULTICLASS_OVA
     ):
-        var mx = -1
-        for r in range(n_rows):
-            var v = y[r]
-            if v < Float32(0.0):
-                raise Error(
-                    "MultiClass label at row " + String(r)
-                    + " is negative; labels are dense class codes 0..k-1"
-                )
-            var iv = Int(v)
-            if Float32(iv) != v:
-                raise Error(
-                    "MultiClass label at row " + String(r)
-                    + " is not an integer; labels are dense class codes"
-                    " 0..k-1"
-                )
-            if iv > mx:
-                mx = iv
+        # the entry scan's words (`tscan`): the lowest row that is not a
+        # dense class code is refused, the largest code sets the count
+        var bad_label = tscan.first_bad_label()
+        if bad_label >= 0:
+            raise Error(
+                "MultiClass label at row " + String(bad_label)
+                + " is not a dense class code 0..k-1 (negative, non-integer"
+                " or non-finite)"
+            )
+        var mx = tscan.max_label
         num_classes = mx + 1
         if num_classes < 2:
             raise Error(
@@ -2072,11 +2078,21 @@ def train(
     # whose target never varies cannot rank iterations, so they leave the
     # default off rather than shrink on a flat curve. `hasTestPairs` is
     # theirs and not ours -- this implementation carries no pairwise loss.
+    var t_rows = eval_rows if eval_rows > 0 else 1
+    var test_targets = ctx.enqueue_create_buffer[DType.float32](t_rows)
+    # the caller's eval targets straight into the device buffer (one H2D),
+    # or the one-row zero placeholder
+    if eval_rows > 0:
+        ctx.enqueue_copy(dst_buf=test_targets, src_ptr=eval_y.unsafe_ptr())
+    else:
+        enqueue_fill(ctx, test_targets, Float32(0.0))
+    ctx.synchronize()
+    _ = len(eval_y)  # past the drain (step-33 race class)
+    # `eval_y[r] != eval_y[0]` for some row, decided on the device (one
+    # word back); NaN compares unequal as on the host
     var eval_const_target = True
-    for r in range(1, eval_rows):
-        if eval_y[r] != eval_y[0]:
-            eval_const_target = False
-            break
+    if eval_rows > 1:
+        eval_const_target = device_all_equal_first(ctx, test_targets, eval_rows)
     var want_best_model = use_best_model
     if want_best_model == -1:
         want_best_model = (
@@ -2104,7 +2120,6 @@ def train(
             + String(best_model_min_trees)
         )
 
-    var t_rows = eval_rows if eval_rows > 0 else 1
     var eval_expanded: List[Float32]
     if eval_rows > 0 and ctr_column_count != 0:
         eval_expanded = expand_raw_columns(
@@ -2121,15 +2136,6 @@ def train(
         ctx, eval_expanded, t_rows, borders, fold_counts,
         column_nan_treatment,
     )
-    var test_targets = ctx.enqueue_create_buffer[DType.float32](t_rows)
-    var h_ty = ctx.enqueue_create_host_buffer[DType.float32](t_rows)
-    for r in range(t_rows):
-        h_ty.unsafe_ptr().unsafe_store(
-            r, eval_y[r] if eval_rows > 0 else Float32(0.0)
-        )
-    ctx.enqueue_copy(dst_buf=test_targets, src_ptr=h_ty.unsafe_ptr())
-    ctx.synchronize()
-    _ = h_ty^  # past the drain (step-33 race class)
 
     var approx_dim = 1
     if objective == OBJECTIVE_MULTICLASS:
