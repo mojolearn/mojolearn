@@ -45,6 +45,7 @@ from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 from sequence.schedule import fill_epoch_order, splitmix64
 from checks.numerics import portable_cosf, portable_log64
+from metrics.checks.pinned_sum import canonicalize_nan
 
 
 
@@ -1086,7 +1087,8 @@ def fold_pair_f32_binding(dst_addr: PythonObject, src_addr: PythonObject, n: Pyt
     var sp = _ptr[DType.float32](Int(py=src_addr))
     with GILReleased(Python()):
         for i in range(count):
-            var s = _ftz_bits(_ftz_bits(dp.unsafe_load(i)) + _ftz_bits(sp.unsafe_load(i)))
+            # NaN -> the canonical word, as the device kernel (lane/review-fixes)
+            var s = canonicalize_nan(_ftz_bits(_ftz_bits(dp.unsafe_load(i)) + _ftz_bits(sp.unsafe_load(i))))
             comptime if HOTPATH_SABOTAGE:
                 s = -s
             dp.unsafe_store(i, s)
