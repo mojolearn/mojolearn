@@ -552,9 +552,10 @@ def _umap_epochs_download(
 #: optimizer reads the same words: no bit moves, the host column is
 #: untouched. -D MOJOLEARN_IDN_UMAP_DEVICE_CSR_OFF (or MOJOLEARN_IDN_ALL_OFF)
 #: restores the host walk.
-comptime UMAP_IDN_DEVICE_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_UMAP_DEVICE_CSR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: lane cpu3-neighbors (2026-10-04): every mode and no _OFF arm (owner
+#: rule: the host compaction is not a GPU route), so
+#: `MOJOLEARN_IDN_UMAP_DEVICE_CSR_OFF` is retired.
+comptime UMAP_IDN_DEVICE_CSR = True
 
 comptime _UC_I32P = MutPointer[Int32, MutAnyOrigin]
 comptime _UC_U32P = MutPointer[UInt32, MutAnyOrigin]
@@ -736,23 +737,6 @@ def _scaled_weight(weight: Float32, max_weight: Float32) -> Float32:
     return ftz(Float32(Float64(weight) / Float64(max_weight)))
 
 
-def _csr_weight_at(
-    offsets: List[Int], indices: List[UInt32], values: List[Float32],
-    row: Int, col: Int,
-) -> Float32:
-    var lo = offsets[row]
-    var hi = offsets[row + 1]
-    while lo < hi:
-        var mid = lo + (hi - lo) // 2
-        if Int(indices[mid]) < col:
-            lo = mid + 1
-        else:
-            hi = mid
-    if lo < offsets[row + 1] and Int(indices[lo]) == col:
-        return values[lo]
-    return Float32(0.0)
-
-
 def optimize_sparse_layout_identical_device(
     ctx: DeviceContext,
     initial_embedding: List[Float32],
@@ -771,29 +755,8 @@ def optimize_sparse_layout_identical_device(
     seed: UInt64,
 ) raises -> List[Float32]:
     """CSR adapter: the caller has validated the graph (`validate_sparse_weights`) and its scalars; this compacts the positive non-self edges in row-major order (the serial loops' edge ordinals), checks symmetry, and runs the device epochs."""
-    comptime if UMAP_IDN_DEVICE_CSR:
-        return _optimize_sparse_layout_device_csr(
-            ctx, initial_embedding, offsets, indices, values, max_weight, n_samples,
-            n_components, n_epochs, initial_learning_rate, negative_sample_rate,
-            repulsion_strength, a, b, seed,
-        )
-    var row_offsets = List[UInt32]()
-    var tails = List[UInt32]()
-    var scaled = List[Float32]()
-    row_offsets.append(UInt32(0))
-    for head in range(n_samples):
-        for edge in range(offsets[head], offsets[head + 1]):
-            var tail = Int(indices[edge])
-            var weight = values[edge]
-            if head == tail or not (weight > Float32(0.0)):
-                continue
-            if weight != _csr_weight_at(offsets, indices, values, tail, head):
-                raise Error("UMAP device optimizer requires symmetric weights")
-            tails.append(UInt32(tail))
-            scaled.append(_scaled_weight(weight, max_weight))
-        row_offsets.append(UInt32(len(tails)))
-    return optimize_csr_layout_identical_device(
-        ctx, initial_embedding, row_offsets^, tails^, scaled^, n_samples,
+    return _optimize_sparse_layout_device_csr(
+        ctx, initial_embedding, offsets, indices, values, max_weight, n_samples,
         n_components, n_epochs, initial_learning_rate, negative_sample_rate,
         repulsion_strength, a, b, seed,
     )
