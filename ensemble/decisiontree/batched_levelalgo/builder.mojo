@@ -1245,6 +1245,11 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     # live workload now stages here, at `cur_wl_rel` -- the next 512-byte
     # boundary past the phase's live work items.
     var h_phase: HostBuffer[DType.uint8]
+    # Fused partition can queue a second phase before histogram DMA has
+    # consumed h_phase. Keep both pinned upload sources alive until the
+    # existing batch completion; device queue ordering does not protect
+    # a host source from being overwritten before its queued copy.
+    var h_phase_spare: HostBuffer[DType.uint8]
     var phase_view: _DevPrefixView
     var cur_wl_rel: Int
 
@@ -1499,6 +1504,12 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         self.h_phase = ctx.enqueue_create_host_buffer[DType.uint8](
             wi_span + size_of[WorkloadInfo]() * max_blocks
         )
+        comptime if IDN_RF_FUSED_PARTITION and HIST_ITEMS_PER_THREAD != 1:
+            self.h_phase_spare = ctx.enqueue_create_host_buffer[DType.uint8](
+                wi_span + size_of[WorkloadInfo]() * max_blocks
+            )
+        else:
+            self.h_phase_spare = ctx.enqueue_create_host_buffer[DType.uint8](1)
         self.phase_view = _DevPrefixView(
             self.d_buff,
             wi_span + size_of[WorkloadInfo]() * max_blocks,
@@ -2886,6 +2897,10 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         comptime if HIST_ITEMS_PER_THREAD == 1:
             n_partition_blocks = workload_blocks_for(work_items)
         else:
+            # Histogram and partition use different workload granularities.
+            # The earlier histogram upload may still be reading its pinned
+            # source; stage this upload into the other persistent span.
+            swap(self.h_phase, self.h_phase_spare)
             self._stage_work_items(work_items)
             n_partition_blocks = update_workload_info(
                 work_items, self._h_workload_ptr()
