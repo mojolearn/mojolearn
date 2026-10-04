@@ -10,13 +10,16 @@ from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_log1p, ftz
 from x_prep.prims import expf, logf
 
-# OPEN repair of bc112b172/gap26-pt-score-quality: nearconstant score
-# inputs rounded before compensation, fixed bracket missed lambda52/-63,
-# and standardization materialized a saturated original transform. Use
-# affine-equivalent centered log/power coordinates throughout; full quality
-# and timing still owed. See docs/apple-fast/PT_SCORE_STABLE.md.
+# PT_SCORE_STABLE: FAST+Apple DEFAULT (rollback -D MOJOLEARN_PT_SCORE_STABLE_OFF).
+# Repair of bc112b172/gap26-pt-score-quality (nearconstant score inputs
+# rounded before compensation, fixed bracket missed lambda 52/-63, saturated
+# standardization): affine-equivalent centered log/power coordinates
+# throughout. M3, source 9c458698d, one run per arm: power-transformer taxi
+# 293.4 -> 190.8 ms, istella 2206.6 -> 1530.5 ms; w2-pt-centered2-quality
+# PASS vs the f64 centered-MLE reference, tolerances unchanged.
+# See docs/apple-fast/PT_SCORE_STABLE.md.
 comptime PT_SCORE_STABLE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_PT_SCORE_STABLE"]())
+    and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_PT_SCORE_STABLE_OFF"]())
 
 
 @always_inline

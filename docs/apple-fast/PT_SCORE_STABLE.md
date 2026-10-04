@@ -1,5 +1,7 @@
 # WIP: centered PowerTransformer numerical repair
 
+**PROMOTED: FAST+Apple DEFAULT, rollback `MOJOLEARN_PT_SCORE_STABLE_OFF`** (w2-pt-centered2-quality PASS; taxi 293.4 -> 190.8 ms, istella 2206.6 -> 1530.5 ms). Original checkpoint note follows.
+
 Checkpoint requested by manager/user handoff. **Uncompiled, unvalidated,
 opt-in only; do not merge or time yet.** Branch `lane/apple-fast-pt-precision`,
 worktree `~/mojolearn-wt/pt-precision`. Baseline merged main `12fdd6697`.

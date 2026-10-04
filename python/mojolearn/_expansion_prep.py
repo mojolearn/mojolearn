@@ -3236,7 +3236,7 @@ class PowerTransformer(_PrepBase):
         xo = pr.put(arr)
         st, lam = pr.alloc(6 * d), pr.alloc(d)
         host = _optional_prep_entry(_prep_binding(mode), "x_prep_host_column") is not None
-        # PT_SCORE_STABLE (bit 32): the device's centered coordinates; never on the host binding
+        # PT_SCORE_STABLE (bit 32, FAST+Apple default, rollback MOJOLEARN_PT_SCORE_STABLE_OFF): the device's centered coordinates; never on the host binding
         centered = bool(_ptimpute_flags(mode) & 32) and not host
         anchor, anchor_kind = (pr.alloc(d), pr.alloc(d)) if centered else (_NONE, _NONE)
         pr.stage("col_stats", d, xo, n, d, st)

@@ -759,7 +759,8 @@ Binding x_cluster (`x_cluster/minibatch_fast.mojo`), FAST + Apple only. Quality 
 | `MOJOLEARN_SHAP_FAST_PIPE` | permutation-shap / kernel-shap istella | lane/apple-fast-w2-shap abd933572 | w2-shap-pipe-*-r1 | quality PASS (phi byte-identical); pshap 28217.4 -> 28271.8 ms, kshap 15418.1 -> 15446.0 ms | DROP-speed (no overlap gained), opt-in only |
 | `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG` | minibatch-kmeans | lane/apple-fast-w2-clres 4d80737b1 | w2-mbk-labrg-* | quality PASS; istella 146.6 -> 144.0, taxi 45.3 -> 46.3 ms | DROP-speed (noise), opt-in only |
 | `MOJOLEARN_ARIMA_FIT_GROUPS` | autoarima | lane/apple-fast-w2-ts 596d0abbb | w2-ts-fitgroups-*-r2 | quality PASS bit-exact; synthetic 9225.3 -> 9268.2, taxi-hourly 13749.1 -> 13072.9 ms; diag: search 8.2 s of 13.7 s; 200-iter search RMSE 75.71 (worse than 74.66) | HOLD (no gain on eligible synthetic row) |
-| PT_SCORE_STABLE centered | power-transformer | lane/apple-fast-pt-precision f88ed2cf6 | w2-pt-centered-quality | arm A dump failed: sklearn reference lambda col 7 not a local f64 NLL minimum (new oracle) | OPEN, reference rework |
+| PT_SCORE_STABLE centered | power-transformer | lane/apple-fast-pt-precision f88ed2cf6 | w2-pt-centered-quality | arm A dump failed: sklearn reference lambda col 7 not a local f64 NLL minimum (new oracle) | superseded: oracle v2 row below (DEFAULT) |
+| PT_SCORE_STABLE centered (oracle v2) | power-transformer | lane/apple-fast-pt-precision 9c458698d | w2-pt-centered2-quality | quality PASS vs f64 centered-MLE reference (tolerances unchanged); taxi 293.4 -> 190.8 ms, istella 2206.6 -> 1530.5 ms | DEFAULT (FAST+Apple), rollback MOJOLEARN_PT_SCORE_STABLE_OFF |
 
 ## PT centered-score WIP checkpoint (2026-10-04)
 
@@ -768,4 +769,6 @@ uncompiled/unvalidated repair of heldbc112b172. Centered affine-equivalent
 score/standardized output/inverse, span-derived bracket, stable same-lambda
 float64 oracle with independent Decimal check; existing thresholds unchanged.
 No builds/quality/timings yet; checkpointed for manager handoff, **not accepted**.
+Update: oracle v2 (9c458698d) w2-pt-centered2-quality PASS; promoted to
+FAST+Apple DEFAULT, rollback `MOJOLEARN_PT_SCORE_STABLE_OFF`.
 See [PT_SCORE_STABLE.md](PT_SCORE_STABLE.md) for code scope and exact owed checks.

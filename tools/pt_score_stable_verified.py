@@ -13,6 +13,9 @@ import sys
 
 BINDING = "x_prep"
 DEFINE = "MOJOLEARN_PT_SCORE_STABLE"
+# Promoted: PT_SCORE_STABLE is the FAST+Apple default; the old path is
+# -D MOJOLEARN_PT_SCORE_STABLE_OFF. Arms below are the pre-promotion A=""/B=-D DEFINE
+# record; a re-run on a post-promotion source needs A = "-D " + DEFINE + "_OFF", B = "".
 
 
 def sha(path):
