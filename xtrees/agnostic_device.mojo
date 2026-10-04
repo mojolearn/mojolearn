@@ -46,7 +46,7 @@ comptime KSHAP_FAST_BATCH = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_KSHAP_
 #:   Bit-inert: the same units write the same words to the same offsets; the
 #:   host column builds the matrix in the caller's buffer either way.
 comptime AGN_IDN_SYN_POOL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_AGN_IDN_SYN_POOL_OFF"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_AGN_IDN_SYN_POOL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 comptime _AGN_SYN_POOL = KSHAP_FAST_BATCH or AGN_IDN_SYN_POOL
 comptime AGN_MAX_BLOCKS = 65535 * 16
@@ -219,8 +219,9 @@ struct _Masks(Movable):
 struct _AgnPool(Defaultable, Movable):
     """The process's pooled synthetic-matrix device buffer
     (MOJOLEARN_KSHAP_FAST_BATCH, MOJOLEARN_AGN_IDN_SYN_POOL): grown on
-    demand, never shrunk. One pool per tier (its buffer belongs to that
-    tier's device context)."""
+    demand, never shrunk while an explanation runs. One pool per tier (its
+    buffer belongs to that tier's device context). IDENTICAL frees it when
+    the explanation ends (`pool_release`)."""
     var syn: Optional[DeviceBuffer[DType.float32]]
     var cap: Int
 
@@ -246,6 +247,19 @@ def _pool_syn(ctx: DeviceContext, total: Int) raises -> F32P:
         slot[].syn = ctx.enqueue_create_buffer[DType.float32](total)
         slot[].cap = total
     return F32P(unsafe_from_address=Int(slot[].syn.value().unsafe_ptr()))
+
+
+def pool_release() raises:
+    """Lane idn-all (the review of idn-shap-pca): frees the pooled synthetic
+    buffer. The IDENTICAL explainers call it when a `shap_values` call ends
+    (python/mojolearn/_expansion_trees.py), so the pool lives for one
+    explanation, reused by its chunks, and never holds the largest chunk for
+    the life of the process. Every pool user synchronizes before returning,
+    so nothing in flight reads the buffer. The FAST pool is left as it is."""
+    comptime if AGN_IDN_SYN_POOL:
+        var slot = AGN_POOL.get_or_create_ptr()
+        slot[].syn = Optional[DeviceBuffer[DType.float32]]()
+        slot[].cap = 0
 
 
 def _pool_down(ctx: DeviceContext, dst: Int, total: Int) raises:

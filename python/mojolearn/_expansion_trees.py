@@ -496,6 +496,19 @@ def _trees_switch(est, bit):
     return callable(query) and (int(query()) & bit) != 0
 
 
+def _agn_pool_release(b):
+    """Lane idn-all: frees the IDENTICAL explainers' pooled synthetic device
+    buffer when an explanation ends (xtrees/agnostic_device.mojo
+    `pool_release`), so the pool never outlives the `shap_values` call that
+    grew it."""
+    try:
+        release = getattr(b, "x_trees_agn_pool_release", None)
+    except ImportError:    # a host facade refuses an absent export with ImportError
+        release = None
+    if callable(release):
+        release()
+
+
 def _trees_build_switch(est, bit):
     """True when `est`'s x_trees binding was built with the define `bit`
     stands for, on whichever tier that define belongs to
@@ -3193,22 +3206,26 @@ class KernelExplainer(_AgnosticExplainer):
             return self._shape(phi, n, d)
         reuse = _trees_build_switch(self, _AGN_IDN_SYN_POOL)   # one synthetic buffer for every chunk
         syn = None
-        for r0 in range(0, n, R):
-            rows = min(R, n - r0)
-            params = [rows, nb, d, nfixed, m, nfull, L, npaired, r0, seed, wbits]
-            out = None
-            if m > 0:
-                if not reuse or syn is None or syn.size != rows * m * nb * d:
-                    syn = None
-                    syn = empty((rows * m * nb * d,), "<f4")
-                b.x_trees_kshap_synth(x0 + 4 * r0 * d, addr_ro(self._bg, name="data"), taddr,
-                                      addr(syn, name="synthetic"), params)
-                out = self._model_rows(syn, rows * m * nb, d)
-                if not reuse:
-                    syn = None
-            b.x_trees_kshap_solve(addr_ro(out, name="y") if out is not None else 0, f0 + 4 * r0 * k,
-                                  addr_ro(fnull, name="fnull"), taddr, p0 + 8 * r0 * d * k,
-                                  params + [k, 1 if self.link == "logit" else 0])
+        try:
+            for r0 in range(0, n, R):
+                rows = min(R, n - r0)
+                params = [rows, nb, d, nfixed, m, nfull, L, npaired, r0, seed, wbits]
+                out = None
+                if m > 0:
+                    if not reuse or syn is None or syn.size != rows * m * nb * d:
+                        syn = None
+                        syn = empty((rows * m * nb * d,), "<f4")
+                    b.x_trees_kshap_synth(x0 + 4 * r0 * d, addr_ro(self._bg, name="data"), taddr,
+                                          addr(syn, name="synthetic"), params)
+                    out = self._model_rows(syn, rows * m * nb, d)
+                    if not reuse:
+                        syn = None
+                b.x_trees_kshap_solve(addr_ro(out, name="y") if out is not None else 0, f0 + 4 * r0 * k,
+                                      addr_ro(fnull, name="fnull"), taddr, p0 + 8 * r0 * d * k,
+                                      params + [k, 1 if self.link == "logit" else 0])
+        finally:
+            if reuse:
+                _agn_pool_release(b)   # the pooled device buffer does not outlive the explanation
         return self._shape(phi, n, d)
 
 
@@ -3267,18 +3284,23 @@ class PermutationExplainer(_AgnosticExplainer):
         x0, p0 = addr_ro(Xa, name="X"), addr(phi, name="phi")
         R = self._chunk(mm * nb * d, n)
         # one synthetic buffer for every chunk
-        reuse = _trees_switch(self, _KSHAP_FAST_BATCH) or _trees_build_switch(self, _AGN_IDN_SYN_POOL)
+        idn_pool = _trees_build_switch(self, _AGN_IDN_SYN_POOL)
+        reuse = _trees_switch(self, _KSHAP_FAST_BATCH) or idn_pool
         syn = None
-        for r0 in range(0, n, R):  # glue: chunk loop (one model call per chunk)
-            rows = min(R, n - r0)
-            params = [rows, nb, d, npm, r0, seed]
-            if not reuse or syn is None or syn.size != rows * mm * nb * d:
-                syn = None
-                syn = empty((rows * mm * nb * d,), "<f4")
-            b.x_trees_pshap_synth(x0 + 4 * r0 * d, addr_ro(self._bg, name="data"), addr(syn, name="synthetic"),
-                                  params)
-            out = self._model_rows(syn, rows * mm * nb, d)
-            if not reuse:
-                syn = None
-            b.x_trees_pshap_values(addr_ro(out, name="y"), p0 + 8 * r0 * d * k, params + [k])
+        try:
+            for r0 in range(0, n, R):  # glue: chunk loop (one model call per chunk)
+                rows = min(R, n - r0)
+                params = [rows, nb, d, npm, r0, seed]
+                if not reuse or syn is None or syn.size != rows * mm * nb * d:
+                    syn = None
+                    syn = empty((rows * mm * nb * d,), "<f4")
+                b.x_trees_pshap_synth(x0 + 4 * r0 * d, addr_ro(self._bg, name="data"), addr(syn, name="synthetic"),
+                                      params)
+                out = self._model_rows(syn, rows * mm * nb, d)
+                if not reuse:
+                    syn = None
+                b.x_trees_pshap_values(addr_ro(out, name="y"), p0 + 8 * r0 * d * k, params + [k])
+        finally:
+            if idn_pool:
+                _agn_pool_release(b)   # the pooled device buffer does not outlive the explanation
         return self._shape(phi, n, d)

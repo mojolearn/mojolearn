@@ -1137,6 +1137,16 @@ def kshap_synth_binding(x: PythonObject, bg: PythonObject, tables: PythonObject,
     return PythonObject(p[0])
 
 
+def agn_pool_release_binding() raises -> PythonObject:
+    """Lane idn-all: frees the IDENTICAL explainers' pooled synthetic device
+    buffer (xtrees/agnostic_device.mojo `pool_release`); the Python
+    explainers call it when `shap_values` ends. Nothing to free on the host
+    column or a build without MOJOLEARN_AGN_IDN_SYN_POOL."""
+    comptime if XTREES_DEVICE_OPS:
+        agn_dev.pool_release()
+    return PythonObject(0)
+
+
 def kshap_solve_binding(yout: PythonObject, fx: PythonObject, fnull: PythonObject, tables: PythonObject,
                         phi: PythonObject, params: PythonObject) raises -> PythonObject:
     """KernelExplainer's values of a chunk: out Float32 (R m nb) x k (the
@@ -1281,6 +1291,7 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[kshap_schedule_binding]("x_trees_kshap_schedule")
     m.def_function[normalized_weights_binding]("x_trees_normalized_weights")
     m.def_function[kshap_synth_binding]("x_trees_kshap_synth")
+    m.def_function[agn_pool_release_binding]("x_trees_agn_pool_release")
     m.def_function[kshap_solve_binding]("x_trees_kshap_solve")
     m.def_function[kshap_means_binding]("x_trees_kshap_means")
     m.def_function[kshap_solve_ey_binding]("x_trees_kshap_solve_ey")
