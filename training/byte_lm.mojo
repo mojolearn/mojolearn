@@ -146,7 +146,7 @@ def byte_offsets(config: ByteConfig = ByteConfig()) raises -> List[Int]:
 
 def byte_names(config: ByteConfig = ByteConfig()) raises -> List[String]:
     var result = List[String]()
-    for j in range(config.n_tensors()):
+    for j in range(config.n_tensors()):  # small-loop(n_tensors: parameter tensors, 9 per layer plus 2): name strings only, no data
         result.append(byte_param_name(j, config))
     return result^
 
@@ -516,13 +516,18 @@ struct ByteBuffers(Movable):
         self.param = _upload(ctx, initial_params)
         self.grad = _zeros(ctx, n)
         if self.optimizer_pooled:
-            var local_m = List[Float32]()
-            var local_v = List[Float32]()
-            for i in range(optimizer_first, optimizer_first + owned):
-                local_m.append(initial_m[i])
-                local_v.append(initial_v[i])
-            self.m_state = _upload(ctx, local_m)
-            self.v_state = _upload(ctx, local_v)
+            # cpu3-seq: the owned moment range goes up straight from the
+            # caller's Lists (one DMA each), no host slice copy.
+            if len(initial_m) < optimizer_first + owned or len(initial_v) < optimizer_first + owned:
+                raise Error("byte LM: optimizer moments shorter than the owned range")
+            self.m_state = ctx.enqueue_create_buffer[DType.float32](owned)
+            self.v_state = ctx.enqueue_create_buffer[DType.float32](owned)
+            step_count_h2d()
+            ctx.enqueue_copy(dst_buf=self.m_state, src_ptr=initial_m.unsafe_ptr() + optimizer_first)
+            step_count_h2d()
+            ctx.enqueue_copy(dst_buf=self.v_state, src_ptr=initial_v.unsafe_ptr() + optimizer_first)
+            step_count_sync()
+            ctx.synchronize()
         else:
             self.m_state = _upload(ctx, initial_m)
             self.v_state = _upload(ctx, initial_v)
@@ -650,22 +655,34 @@ struct ByteBuffers(Movable):
 
 
 
-def _param_slice(values: List[Float32], j: Int, config: ByteConfig) raises -> List[Float32]:
-    var offsets = byte_offsets(config)
-    var result = List[Float32]()
-    for i in range(offsets[j], offsets[j + 1]):
-        result.append(values[i])
-    return result^
+def _param_upload(ctx: DeviceContext, values: List[Float32], offsets: List[Int], j: Int) raises -> DeviceBuffer[DType.float32]:
+    """cpu3-seq: parameter tensor `j` uploaded straight from its offset in
+    the flat parameter List (one DMA), no host slice copy. The caller waits
+    before `values` may be released."""
+    var lo = offsets[j]
+    var n = offsets[j + 1] - lo
+    if lo < 0 or n < 0 or lo + n > len(values):
+        raise Error("byte LM: parameter tensor outside the flat parameter list")
+    if n < 1:
+        return _zeros(ctx, 1)
+    var buf = ctx.enqueue_create_buffer[DType.float32](n)
+    step_count_h2d()
+    ctx.enqueue_copy(dst_buf=buf, src_ptr=values.unsafe_ptr() + lo)
+    return buf^
 
 
 def _block_weights(ctx: DeviceContext, params: List[Float32], block: Int, config: ByteConfig) raises -> LlamaDeviceWeights:
     var base = 1 + 9 * block
-    return LlamaDeviceWeights(ctx, byte_dims(config), Float32(1e-6),
-        _param_slice(params, base, config), _param_slice(params, base + 5, config),
-        _param_slice(params, base + 1, config), _param_slice(params, base + 2, config),
-        _param_slice(params, base + 3, config), _param_slice(params, base + 4, config),
-        _param_slice(params, base + 6, config), _param_slice(params, base + 7, config),
-        _param_slice(params, base + 8, config))
+    var o = byte_offsets(config)
+    var w = LlamaDeviceWeights(ctx, byte_dims(config), Float32(1e-6),
+        _param_upload(ctx, params, o, base), _param_upload(ctx, params, o, base + 5),
+        _param_upload(ctx, params, o, base + 1), _param_upload(ctx, params, o, base + 2),
+        _param_upload(ctx, params, o, base + 3), _param_upload(ctx, params, o, base + 4),
+        _param_upload(ctx, params, o, base + 6), _param_upload(ctx, params, o, base + 7),
+        _param_upload(ctx, params, o, base + 8))
+    step_count_sync()
+    ctx.synchronize()
+    return w^
 
 
 def _block_offsets(o: List[Int], base: Int) raises -> List[Int]:
@@ -1201,30 +1218,13 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
     comptime if AFN_LM_NOSYNC and deferred:
         afn_upload_ids(ctx, tr.buffers.ids, tr.buffers.targets, ids, config.batch, config.length)
     else:
-        var inputs = List[Int32]()
-        var targets = List[Int32]()
-        for b in range(config.batch):
-            for l in range(config.length):
-                inputs.append(ids[b * (config.length + 1) + l])
-                targets.append(ids[b * (config.length + 1) + l + 1])
-        step_count_host_alloc()
-        var hi = ctx.enqueue_create_host_buffer[DType.int32](M)
-        step_count_host_alloc()
-        var ht = ctx.enqueue_create_host_buffer[DType.int32](M)
+        # cpu3-seq: no host split or staging loop. The rows of `ids` go
+        # straight into the device input/target buffers (two DMA copies per
+        # row, the same bytes the old host split produced), then one wait so
+        # `ids` may be released by the caller as before.
+        afn_upload_ids(ctx, tr.buffers.ids, tr.buffers.targets, ids, config.batch, config.length)
         step_count_sync()
         ctx.synchronize()
-        for i in range(M):
-            hi.unsafe_ptr().unsafe_store(i, inputs[i])
-            ht.unsafe_ptr().unsafe_store(i, targets[i])
-        step_count_h2d()
-        ctx.enqueue_copy(dst_buf=tr.buffers.ids, src_ptr=hi.unsafe_ptr())
-        step_count_h2d()
-        ctx.enqueue_copy(dst_buf=tr.buffers.targets, src_ptr=ht.unsafe_ptr())
-        step_count_sync()
-        ctx.synchronize()
-        _ = hi
-        _ = ht
-        # The wait above completes both uploads: host split, staging, H2D.
     timing_tick(ctx, ton, tk, "step.upload_inputs")
     timing_bytes(ton, "step.upload_inputs_bytes", 2 * M * 4)
     for layer in range(config.n_layers):
