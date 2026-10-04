@@ -21,6 +21,10 @@ from arima.impl.lbfgs_device import LBFGS_TPB, lbfgs_init_kernel
 from arima.impl.tsa.arima_common import ARIMAOrder
 from glm.impl.qn.qn_util import LBFGSParam
 
+# OPEN, 2026-10-04: old-base small quality passed 18 arrays; full-quality
+# and current-main M3 speed remain unmeasured. Current integration retains
+# fused eval tail in BOTH arms; rebuild required, old binaries are stale.
+# See docs/apple-fast/ab/arima-orders-current.md and EXPERIMENTS.md.
 comptime ARIMA_ORDER_BATCH = (
     KALMAN_FAST_EVAL_WS and KALMAN_LL_ONLY and is_defined["MOJOLEARN_ARIMA_ORDER_BATCH"]()
 )

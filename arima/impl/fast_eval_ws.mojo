@@ -35,6 +35,8 @@ build (`eval`'s body exists only under KALMAN_FAST_EVAL_WS)."""
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
+from std.math import inf, isinf
+from std.sys.compile import is_defined
 
 from arima.impl.batched_kalman import (
     KALMAN_FAST_EVAL_WS,
@@ -48,9 +50,61 @@ from arima.impl.lbfgs_device import (
 )
 from arima.impl.timeSeries.arima_helpers import batched_jones_transform
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, unpack, validate_order
-from checks.numerics import ftz
+from checks.numerics import ftz, identical_div
 
 comptime EW_TPB = 128
+# FAST + Apple default after M3 gap26-arima-tail-{synthetic,taxi-hourly}:
+# 14498.225 -> 13569.230 ms and 24231.028 -> 22705.348 ms (one run/arm).
+# Forecast RMSE/digests unchanged; gap26-arima-quality-fixed checks 44
+# selected-order, parameter, likelihood and forecast arrays unchanged.
+# MOJOLEARN_ARIMA_FUSED_EVAL_TAIL_OFF restores the separate launches.
+# See docs/apple-fast/EXPERIMENTS.md; IDENTICAL/other vendors unchanged.
+comptime ARIMA_FUSED_EVAL_TAIL = (
+    KALMAN_FAST_EVAL_WS and not is_defined["MOJOLEARN_ARIMA_FUSED_EVAL_TAIL_OFF"]()
+)
+
+
+def ew_finish_kernel(
+    f_out: MutPointer[Float32, MutAnyOrigin],
+    g_out: MutPointer[Float32, MutAnyOrigin],
+    g_raw: MutPointer[Float32, MutAnyOrigin],
+    x_pert: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    ll: MutPointer[Float32, MutAnyOrigin],
+    info0: MutPointer[Int32, MutAnyOrigin],
+    info1: MutPointer[Int32, MutAnyOrigin],
+    bad: MutPointer[Int32, MutAnyOrigin],
+    batch_in: Int32, n_in: Int32, h: Float32, scale: Float32,
+):
+    """One thread per independent series, same finite differences and FTZ
+    sites as mark_infeasible + ew_grad + eval_finish. Also preserves both
+    scratch outputs (including raw gradients on infeasible series)."""
+    var b = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var bs = Int(batch_in)
+    if b >= bs:
+        return
+    var n = Int(n_in)
+    var invalid = False
+    for member in range(n + 1):
+        var j = member * bs + b
+        var v = ll[j]
+        if info0[j] != 0 or info1[j] != 0 or (isinf(v) and v < Float32(0.0)):
+            invalid = True
+    bad[b] = Int32(1) if invalid else Int32(0)
+    if invalid:
+        f_out[b] = inf[DType.float32]()
+    else:
+        f_out[b] = ftz(identical_div(ftz(-ll[b]), scale))
+    for i in range(n):
+        var diff = ftz(ftz(ll[(i + 1) * bs + b]) - ftz(ll[b]))
+        var raw = ftz(diff / h)
+        g_raw[b * n + i] = raw
+        x_pert[b * n + i] = x[b * n + i]
+        if invalid:
+            g_out[b * n + i] = Float32(0.0)
+        else:
+            g_out[b * n + i] = ftz(identical_div(ftz(-raw), scale))
+
 
 
 def ew_stack_kernel(
@@ -222,7 +276,8 @@ struct FastEvalWS(Movable):
         var eb = self.eb
         var nb_x = nb * N
         var grid = (nb + LBFGS_TPB - 1) // LBFGS_TPB
-        ctx.enqueue_memset(d_bad, Int32(0))
+        comptime if not ARIMA_FUSED_EVAL_TAIL:
+            ctx.enqueue_memset(d_bad, Int32(0))
         var g1 = (eb + EW_TPB - 1) // EW_TPB
         ctx.enqueue_function[ew_stack_kernel](
             self.x_ext.unsafe_ptr(), d_x.unsafe_ptr(), Int32(nb), Int32(N), h,
@@ -243,6 +298,17 @@ struct FastEvalWS(Movable):
         var N = self.N
         var nb_x = nb * N
         var grid = (nb + LBFGS_TPB - 1) // LBFGS_TPB
+        # Shared by single-order and grouped-order fits: both arms retain
+        # current main's accepted fused tail, independently of ORDER_BATCH.
+        comptime if ARIMA_FUSED_EVAL_TAIL:
+            ctx.enqueue_function[ew_finish_kernel](
+                d_f.unsafe_ptr(), d_g.unsafe_ptr(), d_grad.unsafe_ptr(),
+                d_x_pert.unsafe_ptr(), d_x.unsafe_ptr(), self.ws.loglike.unsafe_ptr(),
+                self.ws.info_init.unsafe_ptr(), self.ws.info_loop.unsafe_ptr(),
+                d_bad.unsafe_ptr(), Int32(nb), Int32(N), h, scale,
+                grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
+            )
+            return
         ctx.enqueue_function[arima_mark_infeasible_kernel](
             d_bad.unsafe_ptr(), self.ws.loglike.unsafe_ptr(), self.ws.info_init.unsafe_ptr(),
             self.ws.info_loop.unsafe_ptr(), Int32(nb), Int32(N + 1),

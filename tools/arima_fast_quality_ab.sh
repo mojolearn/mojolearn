@@ -9,8 +9,8 @@ cd "$arima_root"
 arima_python=$HOME/board-0834/cache/venv/bin/python
 arima_arms=$HOME/afc-def/$arima_tag
 arima_out=$HOME/mq/out/arima-quality-$arima_tag
-arima_capture_args=()
-[[ "${ARIMA_QUALITY_SMALL:-0}" != 1 ]] || arima_capture_args+=(--small)
+set --
+[[ "${ARIMA_QUALITY_SMALL:-0}" != 1 ]] || set -- --small
 arima_so=$arima_root/python/mojolearn/_mojolearn_arima.so
 [[ -x "$arima_python" && -f "$arima_arms/A.so" && -f "$arima_arms/B.so" && -f "$arima_so" ]]
 mkdir -p "$arima_out"
@@ -26,8 +26,8 @@ trap restore_arima EXIT
 for arima_arm in A B; do
   cp "$arima_arms/$arima_arm.so" "$arima_so.next"
   mv -f "$arima_so.next" "$arima_so"
-  PYTHONPATH="$arima_root/python" MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_BENCH_INSTALLED=0 \
-    "$arima_python" tools/arima_fast_fit_quality.py capture "$arima_out/$arima_arm.npz" "${arima_capture_args[@]}" \
+  PYTHONPATH="$arima_root/python" MOJOLEARN_VENDOR=apple MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_BENCH_INSTALLED=0 \
+    "$arima_python" tools/arima_fast_fit_quality.py capture "$arima_out/$arima_arm.npz" "$@" \
     > "$arima_out/$arima_arm.log" 2>&1 || { tail -n 12 "$arima_out/$arima_arm.log"; exit 1; }
   grep '^ARIMA_FAST_CAPTURE ' "$arima_out/$arima_arm.log"
 done

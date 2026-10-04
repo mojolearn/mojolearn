@@ -1,0 +1,1 @@
+AFB tag=gap26-arima-tail-taxi-hourly family=algos lane=autoarima ds=taxi-hourly mode=fast head=1a627f709 status=ok median_ms=22705.348082992714 runs=[22705.348082992714] digest=345eb06e29edb8f1 q=forecast_rmse=74.65912244133813
