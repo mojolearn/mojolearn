@@ -852,6 +852,12 @@ class _Kit:
     def lasso_rows(self, G, Q, W, alpha, max_iter, tol, positive):
         """Row-parallel Lasso CD on the Gram (x_decomp/cells.mojo `lasso_row`),
         W (n x k) the warm start, updated in place."""
+        if Q.r * Q.c and self._opt_dev("x_decomp_dev_code_rows") and self._use(G, Q, W):
+            # lane fam-decomp: the Gram, Q and the codes stay on the device
+            # (an IDENTICAL GPU build without -D MOJOLEARN_IDN_CODE_RESIDENT_OFF)
+            self.b.x_decomp_dev_code_rows(self._did(G), self._did(Q), self._did(W),
+                                          [0, Q.r, Q.c, int(max_iter), int(positive)], [float(alpha), float(tol)])
+            return W
         its = _M.zeros(Q.r, 1)
         self.b.x_decomp_lasso_rows(G.addr, Q.addr, W.addr, its.addr, [Q.r, Q.c, int(max_iter), int(positive)],
                                    [float(alpha), float(tol)])
@@ -896,6 +902,11 @@ class _Kit:
     def lars_rows(self, G, Q, m, nnz):
         """Row-parallel Lars on the Gram (x_decomp/cells.mojo `lars_row`): the
         n x k coefficients, m the samples of each row's problem."""
+        if Q.r * Q.c and self._opt_dev("x_decomp_dev_code_rows") and self._use(G, Q):
+            W = self._dout(Q.r, Q.c)       # lane fam-decomp: see lasso_rows
+            self.b.x_decomp_dev_code_rows(self._did(G), self._did(Q), W._d.id,
+                                          [1, Q.r, Q.c, int(m), int(nnz)], [0.0, 0.0])
+            return W
         W = _M.zeros(Q.r, Q.c)
         na = _M.zeros(Q.r, 1)
         if Q.r * Q.c:
@@ -903,6 +914,11 @@ class _Kit:
         return W
 
     def omp_rows(self, G, Q, nnz):
+        if Q.r * Q.c and self._opt_dev("x_decomp_dev_code_rows") and self._use(G, Q):
+            W = self._dout(Q.r, Q.c)       # lane fam-decomp: see lasso_rows
+            self.b.x_decomp_dev_code_rows(self._did(G), self._did(Q), W._d.id,
+                                          [2, Q.r, Q.c, int(nnz), 0], [0.0, 0.0])
+            return W
         W = _M.zeros(Q.r, Q.c)
         na = _M.zeros(Q.r, 1)
         self.b.x_decomp_omp_rows(G.addr, Q.addr, W.addr, na.addr, [Q.r, Q.c, int(nnz)])

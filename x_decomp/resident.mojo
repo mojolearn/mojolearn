@@ -26,7 +26,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
 
-from x_decomp.cells import F32Ptr, I32Ptr, OP_SCALE, OP_SELECT, ew_cell, rand_cell
+from x_decomp.cells import F32Ptr, I32Ptr, LARS_ROW_EXTRA, OP_SCALE, OP_SELECT, ew_cell, rand_cell
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import HostBuffer
 from core.device_scan import NONFINITE_NONE, SCAN_TPB, _scan_blocks, nonfinite_partial_kernel
@@ -63,6 +63,9 @@ from x_decomp.device import (
     cd_rows_kernel,
     DevExec,
     IDN_QR_R_DIRECT,
+    lasso_rows_kernel,
+    lars_rows_kernel,
+    omp_rows_kernel,
     LU_SCAL_LEN,
     launch_lu,
     _down_i,
@@ -702,6 +705,82 @@ def dev_qr_r_py(a: PythonObject, r: PythonObject, p: PythonObject) raises -> Pyt
         DevExec._qr_r_on(ctx, da, m, n, pr)
     _ = da^
     ctx.synchronize()
+    return PythonObject(n)
+
+
+# ---- lane fam-decomp (2026-10-04): IDN_CODE_RESIDENT (IDENTICAL default) ----
+#: sparse_encode's row solvers (Lasso CD, Lars, OMP on the Gram) on device
+#: matrices: the Gram D D^T and Q = X D^T are device products already, and
+#: the host-address entries downloaded both, uploaded both again, and
+#: brought the n x k codes down only for the next product to upload them
+#: (DictionaryLearning, SparsePCA and their mini-batch forms call it every
+#: iteration). Here the same kernel (`lasso_rows_kernel`, `lars_rows_kernel`,
+#: `omp_rows_kernel`: DevExec's launches) reads them where they are and
+#: writes the codes into a device matrix. The same words.
+#: -D MOJOLEARN_IDN_CODE_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves
+#: the entry out and Python keeps the host-address calls.
+comptime IDN_CODE_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_CODE_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def dev_code_rows_py(g: PythonObject, q: PythonObject, w: PythonObject, p: PythonObject, f: PythonObject) raises -> PythonObject:
+    """g (k x k), q (n x k) and w (n x k) are device matrices.
+    p = [kind, n, k, a, b]: kind 0 Lasso CD (w the warm start, updated in
+    place; a = max_iter, b = positive; f = [alpha, tol]), kind 1 Lars (w
+    written; a = m, b = nnz), kind 2 OMP (w written; a = nnz). Waits."""
+    var kind = Int(py=p[0])
+    var n = _n(p, 1)
+    var k = _n(p, 2)
+    var a = _n(p, 3)
+    var b = _n(p, 4)
+    if n == 0 or k == 0:
+        return PythonObject(0)
+    if kind < 0 or kind > 2:
+        raise Error("x_decomp: dev_code_rows kind must be 0 (lasso), 1 (lars) or 2 (omp)")
+    if n * (k * k + LARS_ROW_EXTRA * k) > 2147483647:
+        raise Error("x_decomp: code rows exceed the Int32 index bound")
+    var cells = n * k
+    var pg = _ptr(_id(g), k * k)
+    var pq = _ptr(_id(q), cells)
+    var iw = _id(w)
+    var pw = _ptr(iw, cells)
+    var alpha = Float32(Float64(py=f[0]))
+    var tol = Float32(Float64(py=f[1]))
+    var per = cells
+    if kind == 1:
+        per = n * (k * k + LARS_ROW_EXTRA * k)
+    elif kind == 2:
+        per = n * (k * k + 3 * k)
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var ctx = xd_ctx()
+    # the scratch at its exact size (DevExec's; a pooled buffer rounds n (k^2 +
+    # 7 k) floats up to a power of two)
+    var dn = ctx.enqueue_create_buffer[DType.float32](n)
+    var ds = ctx.enqueue_create_buffer[DType.float32](per)
+    with GILReleased(Python()):
+        if kind == 0:
+            ctx.enqueue_function[lasso_rows_kernel](
+                pg, pq, pw, _p(ds), _p(dn), Int32(n), Int32(k), alpha, Int32(a), tol,
+                Int32(1 if b != 0 else 0), grid_dim=_blocks(n), block_dim=TPB,
+            )
+        else:
+            # the host-address entries start from a zeroed w
+            var wsub = pool[].bufs[iw].create_sub_buffer[DType.float32](0, cells)
+            enqueue_fill(ctx, wsub, Float32(0.0))
+            if kind == 1:
+                ctx.enqueue_function[lars_rows_kernel](
+                    pg, pq, pw, _p(ds), _p(dn), Int32(n), Int32(k), Int32(a), Int32(b),
+                    grid_dim=_blocks(n), block_dim=TPB,
+                )
+            else:
+                ctx.enqueue_function[omp_rows_kernel](
+                    pg, pq, pw, _p(ds), _p(dn), Int32(n), Int32(k), Int32(a), grid_dim=_blocks(n), block_dim=TPB
+                )
+        # the scratch dies here: wait for the launch that uses it
+        ctx.synchronize()
+    _ = dn^
+    _ = ds^
     return PythonObject(n)
 
 
