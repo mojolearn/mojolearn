@@ -135,7 +135,13 @@ comptime EIGH_CYCLIC_Q = 5
 #: the other vendors compile main's code unchanged.
 comptime _MI_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime MI_ALL = is_defined["MOJOLEARN_MI_ALL"]()
-comptime MI_REG_TIES = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_REG_TIES"]())
+#: MI_REG_TIES: FAST + Apple DEFAULT since lane/apple-fast-miv (2026-10-03). M3 A/B vs main:
+#: select-mutual-info-reg istella 46,465 -> 1,340 ms, taxi 2,339 -> 160 ms (n_selected 110 / 5
+#: both arms; main's istella arm swings 46-70 s run to run, far inside the gap). Quality
+#: (tools/miv_quality.sh, M2): scores bit-identical to main's FAST route on a tie-heavy fixture.
+#: -D MOJOLEARN_MI_REG_TIES_OFF: main's search.
+comptime MI_REG_TIES = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_REG_TIES"]()
+                                   or not is_defined["MOJOLEARN_MI_REG_TIES_OFF"]())
 comptime MI_REG_RANKMAJOR = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_REG_RANKMAJOR"]())
 comptime MI_REG_SORTED = _MI_FA and (MI_REG_TIES or MI_REG_RANKMAJOR or is_defined["MOJOLEARN_MI_REG_SORTCOUNT"]())
 comptime MI_FAST_FOLDS = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_FAST_FOLDS"]())
