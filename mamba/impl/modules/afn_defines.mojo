@@ -43,6 +43,7 @@ docs/apple-fast/ab-neural/mamba.md the one-paragraph mechanisms):
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 
 #: The FAST tier on an Apple GPU: the only place any afn-mamba switch can be on.
 comptime AFN_APPLE_FAST = (
@@ -111,6 +112,32 @@ comptime IDN_MAMBA_ARENA = _IDN_MAMBA_DEVICE and not is_defined["MOJOLEARN_IDN_M
 comptime IDN_MAMBA_DEVICE_REFUSAL = _IDN_MAMBA_DEVICE and not is_defined[
     "MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF"
 ]()
+#: lane nr-mamba (2026-10-04, roadmap B2) IDN_MAMBA_CONV_CELL (default ON;
+#: `-D MOJOLEARN_IDN_MAMBA_CONV_CELL_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
+#: restores main): the Mamba-1 and Mamba-2 causal depthwise conv + SiLU
+#: launch one thread per (batch, position, channel) instead of one thread per
+#: (batch, channel) walking the sequence. Every output cell is the same
+#: bias-seeded four-tap fma chain over the same inputs (no recurrence), so no
+#: bit moves; the host column keeps the walking kernel (same cells, same bits).
+comptime IDN_MAMBA_CONV_CELL = _IDN_MAMBA_DEVICE and not is_defined[
+    "MOJOLEARN_IDN_MAMBA_CONV_CELL_OFF"
+]()
+#: lane nr-mamba (2026-10-04, roadmap B1) IDN_M2_SSD_TILES (default ON where
+#: the 20,480-byte shared page fits the column; `-D
+#: MOJOLEARN_IDN_M2_SSD_TILES_OFF` or `-D MOJOLEARN_IDN_ALL_OFF` restores
+#: main): the Mamba-2 SSD Y_diag (S13/S14) and C_state (S16) cells and the
+#: backward's ydiag/xd reverse as threadgroup tiles. M = G o L is formed once
+#: per (row, column) and B * decay once per (row, n) in shared memory instead
+#: of once per output column p; X_d / d_y rows are staged once per tile. Every
+#: output keeps its chain: the same leaves (two of 128 at Q = 256), the same
+#: ascending order, the structural j > i fma(+0) steps kept (dropping them
+#: could turn a -0 leaf into +0), so no bit moves. The host column keeps the
+#: cell kernels (it has no shared memory).
+comptime IDN_M2_SSD_TILES = (
+    _IDN_MAMBA_DEVICE
+    and not is_defined["MOJOLEARN_IDN_M2_SSD_TILES_OFF"]()
+    and lib_smem_page_fits_for[TARGET_COLUMN, 20480]()
+)
 
 comptime AFN_MAMBA1_CHUNKSCAN = AFN_MAMBA_ALL or (
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"]()

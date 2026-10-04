@@ -130,6 +130,7 @@ from std.time import perf_counter_ns
 from std.os import getenv
 from core.host_predict_threads import host_predict_task_count
 from core.host_lanes import HostF32Ptr, host_block_timing_on, host_f32_uninit, host_row_tasks, host_tick
+from mamba.checks.mamba_rms_fold import mamba_rms_row_sumsq_host
 from core.host_parallel import host_parallelize
 from gemm.host.gemm_host_rows import gemm_host_rows_into, GhrPtr, GHR_SERIAL_FMAS, gemm_host_rows, gemm_host_rows_right_zero_padded
 from mamba.checks.mamba_oracle import refuse_nonfinite
@@ -554,10 +555,8 @@ def mamba3_block_oracle(
     var tchunk = (m + ttasks - 1) // ttasks
     def _norm_rows(task: Int) {imm xp, imm normw_p, imm nsq_p, imm nout_p, imm m, imm dm, imm tchunk}:
         for t in range(task * tchunk, min((task + 1) * tchunk, m)):
-            var acc = Float32(0.0)
-            for j in range(dm):
-                var xj = ftz(xp.unsafe_load(t * dm + j))
-                acc = ftz(identical_mul_add(xj, xj, acc))
+            # lane nr-mamba (B11): the shared lanes + tree fold.
+            var acc = mamba_rms_row_sumsq_host(xp, t * dm, dm)
             nsq_p.unsafe_store(t, acc)
             var mean = ftz(identical_div(acc, Float32(dm)))
             var rstd = ftz(identical_rsqrt(ftz(mean + M3_RMS_EPS)))

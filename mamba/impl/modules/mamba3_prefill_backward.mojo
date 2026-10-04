@@ -51,6 +51,7 @@ from mamba.impl.modules.mamba3_backward import (
     mamba3_backward_join_rotary_into,
     mamba3_backward_join_current_into,
     mamba3_backward_angle_into,
+    mamba3_angle_suffix_sums_cells,
     mamba3_backward_dt_partial_into,
     mamba3_backward_seg_adt_into,
     mamba3_backward_adt_product_into,
@@ -92,6 +93,17 @@ from mamba.impl.modules.mamba3_backward import (
     mamba3_afn_backward_angle_into,
 )
 
+#: lane nr-mamba (2026-10-04) IDN_M3_BWD_SKIP_DEAD (IDENTICAL, default ON;
+#: `-D MOJOLEARN_IDN_M3_BWD_SKIP_DEAD_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
+#: restores main): the Mamba-3 prefill backward ran its angle stage twice,
+#: once on the pre-join d_theta whose results (and those of the join
+#: current, dt partial, dt_bias reduce and adt product around it) no
+#: returned gradient reads. Every column skips them; no bit moves.
+comptime IDN_M3_BWD_SKIP_DEAD = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_IDN_M3_BWD_SKIP_DEAD_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 comptime AFN_M3_BWD_ARENA = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 ) and (
@@ -419,30 +431,41 @@ def mamba3_prefill_backward_on(
     _mtick(ctx, ton, tk, "join_rotary")
     var d_b_total=_m3_scratch(afn_own, ctx,state_cells);var d_c_total=_m3_scratch(afn_own, ctx,state_cells)
     var d_gamma_total=_m3_scratch(afn_own, ctx,head_cells);var d_dt_total=_m3_scratch(afn_own, ctx,head_cells);var d_trap_total=_m3_scratch(afn_own, ctx,head_cells)
-    mamba3_backward_join_current_into(ctx,d_b_total,d_c_total,d_gamma_total,d_dt_total,d_trap_total,d_b_qk,d_c_qk,d_kraw_rot,d_qraw_rot,d_gamma_qk,d_gamma_scale,d_dt_qk,d_trap_qk,d_beta_scale,stages.dt_work,stages.sig_work,b,l,dims)
-    _mtick(ctx, ton, tk, "join_current")
+    # lane nr-mamba IDN_M3_BWD_SKIP_DEAD: the pre-join pass below (join
+    # current, angle, dt partial, dt_bias reduce, and the adt product after
+    # seg_adt) feeds no returned gradient: the join pass recomputes each from
+    # the joined d_theta / d_q / d_k, and only d_adt_seg (seg_adt) and
+    # d_value_total (join_rotary) cross over. Skipping it moves no bit.
+    comptime if not IDN_M3_BWD_SKIP_DEAD:
+        mamba3_backward_join_current_into(ctx,d_b_total,d_c_total,d_gamma_total,d_dt_total,d_trap_total,d_b_qk,d_c_qk,d_kraw_rot,d_qraw_rot,d_gamma_qk,d_gamma_scale,d_dt_qk,d_trap_qk,d_beta_scale,stages.dt_work,stages.sig_work,b,l,dims)
+        _mtick(ctx, ton, tk, "join_current")
     var d_angle_rate=_m3_scratch(afn_own, ctx,m*dims.nheads*M3_NUM_ROPE_ANGLES)
     var d_angle_raw=_m3_scratch(afn_own, ctx,m*M3_NUM_ROPE_ANGLES)
     var d_dt_angle=_m3_scratch(afn_own, ctx,head_cells)
-    comptime if AFN_M3_BWD_CHUNK:
-        var afn_sums = _m3_scratch(afn_own, ctx, b * dims.nheads * M3_NUM_ROPE_ANGLES * afn_m3_theta_chunks(l))
-        mamba3_afn_backward_angle_into(ctx,d_angle_rate,d_angle_raw,d_dt_angle,d_theta_rot,stages.dt_work,stages.in_proj,afn_sums,b,l,dims)
-        afn_arena.keep.append(afn_sums^)
-    else:
-        mamba3_backward_angle_into(ctx,d_angle_rate,d_angle_raw,d_dt_angle,d_theta_rot,stages.dt_work,stages.in_proj,b,l,dims)
-    _mtick(ctx, ton, tk, "angle")
+    comptime if not IDN_M3_BWD_SKIP_DEAD:
+        comptime if AFN_M3_BWD_CHUNK:
+            var afn_sums = _m3_scratch(afn_own, ctx, b * dims.nheads * M3_NUM_ROPE_ANGLES * afn_m3_theta_chunks(l))
+            mamba3_afn_backward_angle_into(ctx,d_angle_rate,d_angle_raw,d_dt_angle,d_theta_rot,stages.dt_work,stages.in_proj,afn_sums,b,l,dims)
+            afn_arena.keep.append(afn_sums^)
+        else:
+            var sums_rot=_m3_scratch(afn_own, ctx,mamba3_angle_suffix_sums_cells(b,l,dims.nheads))
+            mamba3_backward_angle_into(ctx,d_angle_rate,d_angle_raw,d_dt_angle,d_theta_rot,stages.dt_work,stages.in_proj,b,l,dims,sums_rot)
+            afn_arena.keep.append(sums_rot^)
+        _mtick(ctx, ton, tk, "angle")
     var d_dt_available=_m3_scratch(afn_own, ctx,head_cells);var d_dt_raw=_m3_scratch(afn_own, ctx,head_cells);var d_dt_bias_rows=_m3_scratch(afn_own, ctx,head_cells);var d_dt_bias=_m3_scratch(afn_own, ctx,dims.nheads)
-    mamba3_backward_dt_partial_into(ctx,d_dt_available,d_dt_raw,d_dt_bias_rows,d_dt_total,d_dt_angle,stages.in_proj,device_weights.dt_bias,m,dims)
-    _mtick(ctx, ton, tk, "dt_partial")
-    mamba3_backward_reduce_into(ctx,d_dt_bias,d_dt_bias_rows,ones,workspace,RED3_DT_BIAS,dims,m)
-    _mtick(ctx, ton, tk, "reduce")
+    comptime if not IDN_M3_BWD_SKIP_DEAD:
+        mamba3_backward_dt_partial_into(ctx,d_dt_available,d_dt_raw,d_dt_bias_rows,d_dt_total,d_dt_angle,stages.in_proj,device_weights.dt_bias,m,dims)
+        _mtick(ctx, ton, tk, "dt_partial")
+        mamba3_backward_reduce_into(ctx,d_dt_bias,d_dt_bias_rows,ones,workspace,RED3_DT_BIAS,dims,m)
+        _mtick(ctx, ton, tk, "reduce")
     var seg_cells=b*stages.nc*dims.nheads*M3_CHUNK_SIZE*M3_CHUNK_SIZE
     var d_seg=_m3_scratch(afn_own, ctx,seg_cells);var d_adt_seg=_m3_scratch(afn_own, ctx,head_cells)
     mamba3_backward_seg_adt_into(ctx,d_seg,d_adt_seg,d_skip,stages.rotq_work,stages.kscale_work,stages.v_work,stages.seg_l,b,l,dims,M3_CHUNK_SIZE)
     _mtick(ctx, ton, tk, "seg_adt")
     var d_a_seg=_m3_scratch(afn_own, ctx,head_cells);var d_dt_seg=_m3_scratch(afn_own, ctx,head_cells);var d_dt_with_seg=_m3_scratch(afn_own, ctx,head_cells)
-    mamba3_backward_adt_product_into(ctx,d_a_seg,d_dt_seg,d_dt_with_seg,d_adt_seg,stages.a_out,stages.dt_out,d_dt_available,head_cells)
-    _mtick(ctx, ton, tk, "adt_product")
+    comptime if not IDN_M3_BWD_SKIP_DEAD:
+        mamba3_backward_adt_product_into(ctx,d_a_seg,d_dt_seg,d_dt_with_seg,d_adt_seg,stages.a_out,stages.dt_out,d_dt_available,head_cells)
+        _mtick(ctx, ton, tk, "adt_product")
     var chunk_state_cells=b*stages.nc*dims.nheads*M3_HEADDIM*M3_D_STATE
     var initial_state_cells=b*dims.nheads*M3_HEADDIM*M3_D_STATE
     var d_state_direct=_m3_scratch(afn_own, ctx,chunk_state_cells);var d_state_total=_m3_scratch(afn_own, ctx,chunk_state_cells);var d_initial_state=_m3_scratch(afn_own, ctx,initial_state_cells)
@@ -481,7 +504,9 @@ def mamba3_prefill_backward_on(
         mamba3_afn_backward_angle_into(ctx,d_angle_rate_join,d_angle_raw_join,d_dt_angle_join,d_theta_join,stages.dt_work,stages.in_proj,afn_sums,b,l,dims)
         afn_arena.keep.append(afn_sums^)
     else:
-        mamba3_backward_angle_into(ctx,d_angle_rate_join,d_angle_raw_join,d_dt_angle_join,d_theta_join,stages.dt_work,stages.in_proj,b,l,dims)
+        var sums_join=_m3_scratch(afn_own, ctx,mamba3_angle_suffix_sums_cells(b,l,dims.nheads))
+        mamba3_backward_angle_into(ctx,d_angle_rate_join,d_angle_raw_join,d_dt_angle_join,d_theta_join,stages.dt_work,stages.in_proj,b,l,dims,sums_join)
+        afn_arena.keep.append(sums_join^)
     _mtick(ctx, ton, tk, "angle")
     var d_dt_join_base=_m3_scratch(afn_own, ctx,head_cells);mamba3_backward_join_two_into(ctx,d_dt_join_base,d_dt_join_current,d_dt_join_adt,head_cells)
     _mtick(ctx, ton, tk, "join_two")
