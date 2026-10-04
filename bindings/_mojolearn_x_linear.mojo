@@ -20,8 +20,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
 from x_linear.ops import FP, IP
-from x_linear.device import fit_device, decision_device, decision_codes_device
-from x_linear.dispatch import isotonic_abi_check
+from x_linear.device import fit_device, decision_device, decision_codes_device, SGD_IDN_DEV_FINITE
+from x_linear.dispatch import isotonic_abi_check, ALGO_SGD
 from x_linear.cls1_fast import cls1_flags
 
 
@@ -84,8 +84,11 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     var x = _fp(Int(py=x_addr))
     var y = _fp(Int(py=y_addr))
     var out = _fp(Int(py=out_addr))
-    _finite(x, Int(py=dims[2]), "X")
-    _finite(y, Int(py=dims[3]), "y")
+    # lane/idn-sgd-multiblock: the SGD grids test the uploaded words on the
+    # device (x_linear/device.mojo SGD_IDN_DEV_FINITE; the same error)
+    if not (SGD_IDN_DEV_FINITE and a == ALGO_SGD):
+        _finite(x, Int(py=dims[2]), "X")
+        _finite(y, Int(py=dims[3]), "y")
     with GILReleased(Python()):
         fit_device(a, x, n_x, y, n_y, n, d, ipl, fpl, n_out, n_fw, n_iw, out)
     return PythonObject(n_out)
