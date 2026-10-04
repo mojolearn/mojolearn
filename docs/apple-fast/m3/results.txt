@@ -1,4 +1,4 @@
-pos=1037 lines=    1598
+pos=1038 lines=    1598
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -1221,3 +1221,5 @@ pos=1037 lines=    1598
 1329:CMD apple-fast-batch@3150d75c1 vsearch-filter-all-istella-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=5032.3 all=[5032] quality=['{"recall_at_10":'] defines='-D MOJOLEARN_VSEARCH_ALL'
 1330:CMD apple-fast-batch@3150d75c1 vsearch-rabitq-all-istella-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1069.5 all=[1069] quality=['{"recall_at_10":'] defines='-D MOJOLEARN_VSEARCH_ALL'
 1331:CMD apple-fast-batch@3150d75c1 vsearch-pq-lut-taxi-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1187.8 all=[1188] quality=['{"recall_at_10":'] defines='-D MOJOLEARN_PQ_LUT_TILED'
+1332:FBUILD lane/apple-fast-vsv@ad265a028 core=0 ibase=0 estimators=0 x_ann=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+1333:CMD apple-fast-vsv@ad265a028 vsv-refine-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1649.2 all=[1649] quality=['{"recall_at_10":'] defines='-D MOJOLEARN_VSEARCH_ALL'
