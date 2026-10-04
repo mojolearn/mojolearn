@@ -633,7 +633,26 @@ class _Kit:
         self.b.x_decomp_sqdist(A.addr, B.addr, out.addr, [A.r, B.r, A.c, int(kind), float(pw)])
         return out
 
+    def _idn_flags(self):
+        """The binding's `x_decomp_idn_flags` (0 when it has none); asked once
+        per kit."""
+        f = self.__dict__.get("_idn_bits")
+        if f is None:
+            try:
+                f = int(getattr(self._raw(), "x_decomp_idn_flags")())
+            except Exception:
+                f = 0
+            self._idn_bits = f
+        return f
+
     def rand(self, r, c, seed, stream, kind):
+        if r * c >= 1024 and self._res() and self._idn_flags() & 8:   # a small draw is read at once: one call
+            # lane fam-decomp: drawn into a device matrix by the same kernel
+            # (IDENTICAL GPU build; -D MOJOLEARN_IDN_RAND_RESIDENT_OFF clears
+            # the bit); downloaded only if Python reads it
+            out = self._dout(r, c)
+            self.b.x_decomp_dev_rand(out._d.id, [r * c, int(seed) & 0xFFFFFFFF, int(stream) & 0xFFFFFFFF, kind])
+            return out
         out = _M.zeros(r, c)
         if r * c:
             self.b.x_decomp_rand(out.addr, [r * c, int(seed) & 0xFFFFFFFF, int(stream) & 0xFFFFFFFF, kind])
