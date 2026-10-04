@@ -318,9 +318,8 @@ def _encode_labels_native(y):
         # Same classes and codes: one ORDER RULE, the first spelling kept.
         wide_classes, codes = unique_inverse(arr)
         del arr
-        values = wide_classes.tolist()  # glue: the k class values
         conv = bool if bool_source else py
-        return [conv(v) for v in values], codes
+        return [conv(v) for v in wide_classes.tolist()], codes  # glue: the k class values
     del arr
     if bool_source:
         classes = [bool(classes_store[i]) for i in range(k)]
