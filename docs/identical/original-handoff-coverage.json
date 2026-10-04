@@ -8,10 +8,10 @@
   },
   "policy_overrides": [
     "User retains ON/OFF controls after promotion; old handoff instruction to delete OFF arms superseded.",
-    "Root owns authorized Apple checks one at a time; no Apple jobs were run by this audit.",
     "Root owns final IDENTICAL/PTX decisions. No other-session peer contact.",
     "Old-version bits may change; exact same-version all-column bits and defensible quality/speed evidence required.",
-    "Lost prior results are UNKNOWN, never PASS; historical PTX rehearsal is not final admission."
+    "Lost prior results are UNKNOWN, never PASS; historical PTX rehearsal is not final admission.",
+    "Latest user policy: no Apple checks now; M2 canceled. Focused NVIDIA/AMD targeted identity, quality and speed first. Exhaustive all-column verification deferred until final main before any future publication; publishing remains out of scope."
   ],
   "summary": {
     "lane_heads": 32,
@@ -2774,8 +2774,8 @@
     },
     {
       "id": "all_columns_and_arms",
-      "severity": "blocks_promotion",
-      "detail": "Current passing identities apply to selected fixtures and snapshots; require final sameSHA per-arm acrossNVIDIA/AMD/Apple/host and distinguish numeric fold changes between arms."
+      "severity": "blocks_final_release_qualification",
+      "detail": "Current identities apply to selected fixtures/snapshots. Targeted sameSHA NVIDIA/AMD/host checks precede winner decisions; exhaustive all-column matrix is deferred to finalmain, with no Apple checks now."
     },
     {
       "id": "callpath_public_wiring",
