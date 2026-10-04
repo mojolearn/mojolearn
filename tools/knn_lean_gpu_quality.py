@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """KNN lean GPU quality: dump knn-imputer OUT.npz; compare knn-imputer A.npz B.npz.
-30 arrays must be byte-identical: predictions, fitted flags, native column
+31 arrays must be byte-identical: predictions, fitted flags, native column
 counts and total. NumPy independently checks counts including zero rows,
 wide all-missing/all-present inputs and pool reuse. Run on M3 only."""
 import argparse
@@ -13,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 
-FIXTURE = "knn-lean-gpu-v1"
+FIXTURE = "knn-lean-gpu-v2"
 
 
 def _sha(mod):
@@ -46,13 +46,35 @@ def _knn(out):
         assert got_total == int(cm.sum()) and np.array_equal(got_cm, cm)
         assert list(m._valid) == [bool(c < n) for c in cm]
         assert list(m._miss_cols) == [f for f in range(d) if cm[f] > 0]
+    # Empty fit is a public refusal, not a valid route through _masked/_f32.
+    # Preserve and compare the exception rather than weakening validation.
+    empty_X = np.zeros((0, 7), np.float32)
+    try:
+        ml.KNNImputer().fit(empty_X)
+    except ValueError as exc:
+        out["public_empty_refusal"] = np.array([json.dumps(
+            {"type": type(exc).__name__, "message": str(exc)}, sort_keys=True).encode()])
+    else:
+        raise AssertionError("KNNImputer.fit must refuse a zero-row input")
     # Wide and empty count inputs exercise grid tails, zero initialization,
     # and shape changes in the pool without invoking unrelated transform work.
     for i, X in enumerate((np.zeros((0, 7), np.float32),
                            np.full((513, 257), np.nan, np.float32),
                            np.zeros((513, 257), np.float32))):
         m = ml.KNNImputer()
-        _, cols, total = m._nan_cells(m._masked(X), 1)
+        if X.shape[0] == 0:
+            # Native nan_cells explicitly supports n=0 and zeros its outputs.
+            # Use live one-slot buffers rather than passing a null empty-array
+            # address or routing through public nonempty-input validation.
+            dummy = np.zeros(1, np.float32)
+            cells = np.full(1, -17, np.int32)
+            cm = np.full(X.shape[1], -17, np.int32)
+            info = np.full(1, -17, np.int32)
+            b.xn_nan_cells([int(a.ctypes.data) for a in (dummy, cells, cm, info)],
+                           [0, X.shape[1], 1], [])
+            cols, total = cm, int(info[0])
+        else:
+            _, cols, total = m._nan_cells(m._masked(X), 1)
         ref = np.isnan(X).sum(axis=0)
         assert np.array_equal(cols, ref) and total == int(ref.sum())
         out[f"edge{i}_columns"] = np.array(cols, dtype=np.int32)
@@ -61,7 +83,7 @@ def _knn(out):
 
 
 CASES = {"knn-imputer": _knn}
-COUNTS = {"knn-imputer": 30}
+COUNTS = {"knn-imputer": 31}
 
 
 def main():

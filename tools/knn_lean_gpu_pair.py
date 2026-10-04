@@ -5,7 +5,7 @@
 MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU. Commands:
  quality SOURCE QUALITY_TAG knn-imputer
  timing SOURCE QUALITY_TAG TIMING_TAG knn-imputer knn-imputer taxi
-Fresh fixture knn-lean-gpu-v1 required; old w4 receipts are incompatible.
+Fresh fixture knn-lean-gpu-v2 required; old w4 receipts are incompatible.
 No SSH, queue edits, builds, or opponent reruns."""
 import argparse
 import hashlib
@@ -17,7 +17,7 @@ import shutil
 import subprocess
 import sys
 
-FIXTURE = "knn-lean-gpu-v1"
+FIXTURE = "knn-lean-gpu-v2"
 CASES = {"knn-imputer": ("x_neighbors", "MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU", ("knn-imputer",), ("taxi",))}
 
 
@@ -55,7 +55,10 @@ def main():
         assert tag is None or re.fullmatch("[A-Za-z0-9_.-]+", tag)
     root = Path(__file__).resolve().parents[1]
     os.chdir(root)
-    assert subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() == args.source
+    # Tool-only infrastructure repairs retain the original compiled source.
+    subprocess.run(["git", "merge-base", "--is-ancestor", args.source, "HEAD"], check=True)
+    subprocess.run(["git", "diff", "--quiet", args.source, "HEAD", "--",
+                    "*.mojo", "bindings/", "python/", "pixi.lock", "pixi.toml"], check=True)
     subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "sequence/", "x_neighbors/", "x_prep/", "resample/",
                     "core/", "bindings/", "python/", "tools/knn_lean_gpu_quality.py", "tools/knn_lean_gpu_pair.py"], check=True)
     home = Path.home()
@@ -70,7 +73,8 @@ def main():
     out = home / "mq/out" / (args.quality_tag + "-quality")
     receipt_path = out / "PASS.json"
     receipt_want = dict(source_sha=args.source, hashes=hashes, status="PASS", fixture=FIXTURE,
-                        case=case, binding=binding, define=define)
+                        case=case, binding=binding, define=define,
+                        quality_script_sha256=digest(root / "tools/knn_lean_gpu_quality.py"))
     if args.action == "timing":
         assert json.loads(receipt_path.read_text()) == receipt_want
         os.environ["AFC_FAMILY"] = "algos"
@@ -95,6 +99,7 @@ def main():
             assert len(records) == 1
             rec = records[0]
             assert rec["case"] == case and rec["binding_sha256"] == hashes[arm], rec
+            assert rec["fixture"] == FIXTURE and rec["arrays"] == 31, rec
             assert rec["reach"] == (1 if arm == "B" else 0), (arm, rec)
             print("W4SMALL-PAIR arm=%s capture=PASS reach=%s" % (arm, rec["reach"]), flush=True)
         cmp_log = out / "compare.log"
