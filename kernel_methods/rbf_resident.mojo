@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """lane apple-fast-w2-kfeat (2026-10-04): RBFSampler.fit_transform in ONE
-binding call, FAST + Apple, OPT-IN until its quality pair and M3 A/B
-(`-D MOJOLEARN_KM_FAST_RBF_RESIDENT`).
+binding call, DEFAULT in FAST + Apple (rollback
+`-D MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF`).
 
 Main's fit_transform is two binding calls. `fit` makes two fresh device
 buffers, waits, draws W and b, waits, and downloads each through a fresh
@@ -60,10 +60,14 @@ from kernel_methods.checks.random_features import (
 from kernel_methods.estimator import _family_ctx
 
 
+# KM_FAST_RBF_RESIDENT, DEFAULT in FAST + Apple (lane/apple-fast-w2-kfeat):
+# M3, one run per arm: rbf-sampler istella 93.4 -> 76.3 ms; w2-kfeat-rbf-q-r1
+# PASS (byte-identical outputs). MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF restores
+# main's two-call fit + transform.
 comptime KM_FAST_RBF_RESIDENT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_KM_FAST_RBF_RESIDENT"]()
+    and not is_defined["MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF"]()
     and not is_defined["MOJOLEARN_FAMILY_CTX_PER_CALL"]()  # the pools belong to the one context
 )
 

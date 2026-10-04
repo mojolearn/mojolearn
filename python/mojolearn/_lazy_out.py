@@ -25,8 +25,8 @@ _LAZY_OUT_MIN_BYTES = 1 << 26
 def _mapped_out(shape):
     """A float32 output backed by an anonymous map when it is 64 MB or more
     (else `empty`), whatever MOJOLEARN_XN_LAZY_OUT says: the route a binding
-    compiled with an opt-in define chooses (lane apple-fast-w2-kfeat,
-    RBFSampler.fit_transform under MOJOLEARN_KM_FAST_RBF_RESIDENT), so no
+    compiled in chooses (lane apple-fast-w2-kfeat, RBFSampler.fit_transform
+    under KM_FAST_RBF_RESIDENT, FAST + Apple default), so no
     core writes zeros the device copy then overwrites."""
     dims = tuple(int(v) for v in (shape if isinstance(shape, (tuple, list)) else (shape,)))  # glue: validates the shape argument
     count = 1

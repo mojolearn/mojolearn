@@ -29,15 +29,17 @@ import sys
 
 FIXTURE = "kfeat-v1"
 REACH = {  # binding -> (reach key in KFEAT-CAPTURE, B's expected value from the defines)
-    "kernel_methods": ("rbf_resident", lambda ds: "MOJOLEARN_KM_FAST_RBF_RESIDENT" in ds),
+    # RBF_RESIDENT and SRP_STRAT are default since their promotion; their
+    # _OFF forms build the old arm.
+    "kernel_methods": ("rbf_resident", lambda ds: "MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF" not in ds),
     "x_neighbors": ("kfeat_flags", lambda ds: (1 if "MOJOLEARN_XN_FAST_ACHI2_DEVSCAN" in ds else 0)
                     | (2 if "MOJOLEARN_XN_FAST_SCHI2_MOJO_MT" in ds else 0)),
     "x_decomp": ("grp_cls2", None),
 }
 ALLOWED = {
-    "kernel_methods": {"MOJOLEARN_KM_FAST_RBF_RESIDENT"},
+    "kernel_methods": {"MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF"},
     "x_neighbors": {"MOJOLEARN_XN_FAST_ACHI2_DEVSCAN", "MOJOLEARN_XN_FAST_SCHI2_MOJO_MT"},
-    "x_decomp": {"MOJOLEARN_XD_FAST_SRP_STRAT"},
+    "x_decomp": {"MOJOLEARN_XD_FAST_SRP_STRAT_OFF"},
 }
 
 
@@ -57,7 +59,7 @@ def reach_ok(binding, arm, value, defines):
     key, want = REACH[binding]
     if binding == "x_decomp":
         on = bool(int(value) & 16)
-        return on == (arm == "B")
+        return on == (arm == "A")  # SRP_STRAT default; B = _OFF
     expected = want(defines) if arm == "B" else want([])
     return value == expected
 

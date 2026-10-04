@@ -538,9 +538,12 @@ comptime GRP_CLS2_LAZY = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2
 #: launches rand and scale separately. Refusal stays in fit; bit 8 of
 #: `x_decomp_grp_cls2`. Needs DEVSCAN (not NOSCAN).
 comptime GRP_FAST_FUSED = GRP_CLS2_DEVSCAN and not is_defined["MOJOLEARN_XD_FAST_GRP_FUSED_OFF"]()
-#: lane apple-fast-w2-kfeat (2026-10-04), FAST + Apple, OPT-IN until its
-#: quality pair and M3 A/B (`-D MOJOLEARN_XD_FAST_SRP_STRAT`; needs
-#: GRP_FAST_FUSED): SparseRandomProjection's nonzero PATTERN is drawn column
+#: lane apple-fast-w2-kfeat (2026-10-04), DEFAULT in FAST + Apple (needs
+#: GRP_FAST_FUSED; rollback `-D MOJOLEARN_XD_FAST_SRP_STRAT_OFF`, main's
+#: Bernoulli pattern). Quality fix: w2-kfeat-srp-q PASS, istella 40-seed mean
+#: distortion 0.946 -> 0.571, board seed 7 1.883 -> 0.475 (sklearn 0.474);
+#: taxi mean 0.346 -> 0.233, seed 7 0.147 -> 0.264 (sklearn 0.381); M3
+#: speed istella 15.7 -> 15.9 ms (neutral). SparseRandomProjection's nonzero PATTERN is drawn column
 #: by column by systematic sampling (`srp_strat_kernel`): column j takes a
 #: uniform 24-bit offset o_j (Philox stream 4 at counter j) and component c
 #: is nonzero iff floor(((c+1) D + o_j) / 2^24) > floor((c D + o_j) / 2^24),
@@ -558,7 +561,7 @@ comptime GRP_FAST_FUSED = GRP_CLS2_DEVSCAN and not is_defined["MOJOLEARN_XD_FAST
 #: variance term for every input and leaves the off-diagonal terms' law
 #: alone. The 'auto' n_components and compute_inverse_components routes
 #: (not fused) keep main's draw.
-comptime GRP_FAST_SRP_STRAT = GRP_FAST_FUSED and is_defined["MOJOLEARN_XD_FAST_SRP_STRAT"]()
+comptime GRP_FAST_SRP_STRAT = GRP_FAST_FUSED and not is_defined["MOJOLEARN_XD_FAST_SRP_STRAT_OFF"]()
 comptime GRP_CLS2_ANY = GRP_CLS2_NOSCAN or GRP_CLS2_DEVSCAN or GRP_CLS2_LAZY
 
 
