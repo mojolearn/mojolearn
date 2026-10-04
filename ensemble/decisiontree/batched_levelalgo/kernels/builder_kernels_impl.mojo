@@ -2532,10 +2532,26 @@ def build_histograms_kernel[
 
 
 
+comptime IDN_RF_HIST_SIMD_AGG = (
+    BUILD_MODE == NUMERIC_IDENTICAL
+    and not has_apple_gpu_accelerator()
+    and not (
+        is_defined["MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+"""fam-forests (2026-10-04), IDENTICAL on NVIDIA and AMD: the warp
+aggregation below (`HIST_SIMD_AGG_DEFAULT`) in the column-tile histogram.
+A skewed column (Istella: the median column holds 74% of its rows in one
+value) otherwise sends most of a warp to one shared-memory address, where
+the atomics retry against each other. Unweighted bins only, whose fields
+are integers: the same per-bin totals in another order, so no bit moves.
+`-D MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF` restores one atomic per lane."""
+
 comptime HIST_SIMD_AGG_DEFAULT = (
     has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_RF_HIST_SIMD_AGG_OFF"]()
-)
+) or IDN_RF_HIST_SIMD_AGG
 """Apple, FAST since 2026-09-25 and IDENTICAL since 2026-09-28: in the column-tile histogram, the lanes of a SIMD group
 whose bin equals lane 0's bin add their contributions with one SIMD sum and
 lane 0 issues ONE threadgroup atomic for them; the other lanes add as
