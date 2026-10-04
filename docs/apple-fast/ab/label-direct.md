@@ -1,4 +1,20 @@
-# Label preprocessing experiments
+# Label preprocessing: measured bundle prepared as default
+
+Promotion branch: lane/apple-fast-label-default, based on main61ea51757.
+Measured source: dbe2ab85a, original base35a72c5ac. Current-main source drift
+in the affected routes is comments only. Only the presence/scatter bundle
+was measured; it is prepared as the Apple FAST default with
+`MOJOLEARN_LABEL_DIRECT_OFF` restoring both original paths. The original
+opt-in define names below describe the measured experiment, not the new
+rollback interface. IDENTICAL and other vendors remain on their old paths.
+
+M3 taxi348.254458 ->327.625833ms, istella33.176500 ->27.578792ms;
+one run per arm, board digests unchanged. Quality tag gap26-label-quality
+passed both independent public-path oracles(41,697,776 indicator cells each).
+See EXPERIMENTS.md for full evidence and coverage limitations. Default/OFF
+compile and manager merge remain outstanding; no new timing is required.
+
+## Original experiment
 
 Base: origin/main 35a72c5ac. Branch: lane/apple-fast-label-direct.
 No local builds or tests; manager owns remote compilation and M3 timing.
