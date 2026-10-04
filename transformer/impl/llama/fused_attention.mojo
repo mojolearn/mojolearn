@@ -153,6 +153,8 @@ from gemm.checks.gemm_identical import (
     _amma_mma,
 )
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
     identical_mul,
     ftz,
     identical_div,
@@ -8719,8 +8721,21 @@ def fused_bwd_zdot_stash_amma_kernel[HD: Int](
         zdot.unsafe_store(row, zf)
 
 
+comptime IDN_ATTN_SCRATCH_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""lane/fam-lm (2026-10-04), default ON under IDENTICAL: the Apple scratch
+cache below on NVIDIA and AMD too. The forward's `[B, n_heads, L, S]`
+score/exp stash and the backward's y and dy stashes were a fresh device
+allocation per layer per call there; they now come from the process cache
+(grown to the largest call, reused). The launchers that take a cached
+scratch wait before they return and their kernels write every cell they
+later read, so no bit moves. The cache is one per process, as the other
+process workspaces are: a process driving two device contexts must build
+with `-D MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF` (per-call allocation)."""
 comptime ATTN_SCRATCH_CACHE = (
-    TARGET_COLUMN == COLUMN_APPLE and not is_defined["MOJOLEARN_ATTN_NO_SCRATCH_CACHE"]()
+    (TARGET_COLUMN == COLUMN_APPLE or IDN_ATTN_SCRATCH_CACHE)
+    and not is_defined["MOJOLEARN_ATTN_NO_SCRATCH_CACHE"]()
 )
 """lane/neural-apple2 (2026-09-28): on Apple the attention launchers' big
 `[B, n_heads, L, S]` scratches (the round 3 forward's score/exp stash, the
