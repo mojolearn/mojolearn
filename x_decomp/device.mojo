@@ -27,6 +27,7 @@ from gemm.afn_apple_fast import (
 from decomposition.linalg_public_device import device_qr_r
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
 from x_decomp.lu_fast import LU_FAST_STEP1, lfs_blocks, lu_fast_panel
+from x_decomp.lu_fast_mma import LU_FAST_MMA, lu_fast_mma_factor
 from x_decomp.lasso_grp import DECOMP_FAST_LASSO_GRP, LG_MAXK, LG_TPB, lasso_grp_kernel
 from x_decomp.cells import (
     lu_perm_src,
@@ -1981,6 +1982,16 @@ def launch_lu(
         var lfs_p1 = ctx.enqueue_create_buffer[DType.float32](n * nb if step1 else 1)
         var lfs_pa = ctx.enqueue_create_buffer[DType.float32](2 * lfs_mb if step1 else 1)
         var lfs_pb = ctx.enqueue_create_buffer[DType.float32](2 * lfs_mb if step1 else 1)
+        # LU_FAST_MMA (opt-in, x_decomp/lu_fast_mma.mojo; -D MOJOLEARN_LU_FAST_MMA):
+        # 256-column outer blocks, the trailing updates delayed and run on
+        # the Apple matrix unit (one pass over the trailing square per 256
+        # columns instead of per 32). Off: main's loop below.
+        comptime if LU_FAST_MMA:
+            if nb == LU_PANEL_NB:
+                lu_fast_mma_factor(
+                    ctx, a, piv, info, act, _p(lfs_p0), _p(lfs_p1), _p(lfs_pa), _p(lfs_pb), n, lfs_mb
+                )
+                k0 = n
         while k0 < n:
             var k1 = min(k0 + nb, n)
             if step1:
