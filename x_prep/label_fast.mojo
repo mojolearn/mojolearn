@@ -5,7 +5,8 @@
 LABEL_PRESENT exposes existing parallel GPU presence stages to label fitting.
 LABEL_SCATTER clears the dense indicator with a device memset and scatters
 one positive word per row, avoiding one lookup/division per dense output cell.
-The measured presence/scatter bundle leaves IDENTICAL and other vendors unchanged.
+Lane idn-int-prep (2026-10-04): IDENTICAL takes the same bundle on every vendor
+and in the host column (IDN_LABEL below); FAST off Apple is unchanged.
 """
 from std.gpu import block_idx, block_dim, thread_idx
 from std.sys.compile import is_defined

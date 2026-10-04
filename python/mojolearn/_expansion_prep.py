@@ -2489,7 +2489,9 @@ class _DiscreteNB(_Classifier):
         densifying it: FAST mode and the x_prep binding built on Apple with
         NB_TEXT_CSR (lane apple-fast-nb, default since the M3 A/B; it exports
         `x_prep_nb_csr_fit`). The bench hands such a build the text block as
-        CSR. False everywhere else: IDENTICAL, other vendors,
+        CSR. Also IDENTICAL on every vendor's device binding (lane
+        idn-int-prep, IDN_NB_CSR, -D MOJOLEARN_IDN_NB_CSR_OFF). False
+        everywhere else: FAST off Apple, the host column,
         -D MOJOLEARN_NB_TEXT_CSR_OFF."""
         if not cls._csr_ok:
             return False
