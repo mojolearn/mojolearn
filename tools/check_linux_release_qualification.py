@@ -155,7 +155,7 @@ def inventory_digest(inventory):
     return hashlib.sha256(json.dumps(inventory, separators=(',', ':')).encode()).hexdigest()
 
 
-def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None, vendors=BOTH_VENDORS):
+def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None, vendors=BOTH_VENDORS, baseline_out=None):
     """Verify RECORD and every advertised architecture/mode on final bytes.
 
     `host_out`, when given, is filled with the vendor-neutral CPU TRAINING
@@ -200,6 +200,8 @@ def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None, 
                 vendor, arch, mode, name = match.groups()
                 extensions[path.removeprefix('mojolearn/')] = digest
                 sets.setdefault((vendor, arch, mode or 'fast'), set()).add(name)
+            elif baseline_out is not None and path.startswith('mojolearn/cuda_ptx/sm_80/') and path.endswith('.so'):
+                baseline_out[path] = digest
             elif path in HOST_MEMBERS:
                 # DEVIATION 2680: vendor-neutral, one copy for the whole wheel,
                 # so it belongs to no architecture and is recorded on its own.
@@ -304,6 +306,31 @@ def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets, arch
     return qualification
 
 
+def inspect_bundled_ptx(archive, payload, extensions):
+    """Check admitted PTX independently; native build proofs never cover it."""
+    plugins = surface.load_gpu_plugins()
+    prefix = plugins.BUNDLED_PTX_ROOT + '/'
+    members = {n for n in archive.namelist() if n.startswith(prefix) and not n.endswith('/')}
+    record = payload.get('bundled_ptx')
+    if not record:
+        require(not members and not extensions, 'Unrecorded bundled PTX payload')
+        return None
+    require(isinstance(record, dict) and set(record) == {'manifest_sha256', 'admission_sha256', 'root', 'source_commit'}
+            and record['root'] == plugins.BUNDLED_PTX_ROOT and record['source_commit'] == payload.get('source_commit'),
+            'Bundled PTX source/ownership inventory differs')
+    descriptor = {key: record[key] for key in ('manifest_sha256', 'admission_sha256')}
+    manifest_member = prefix + plugins.BASELINE_MANIFEST
+    admission_member = prefix + plugins.BASELINE_ADMISSION
+    require(members == set(extensions) | {manifest_member, admission_member}, 'Bundled PTX inventory has extra/missing files')
+    admission = plugins.validate_bundled_ptx(descriptor, archive.read(manifest_member), archive.read(admission_member),
+                                            {name[len(prefix):]: value for name, value in extensions.items()})
+    require(admission['source_commit'] == payload.get('source_commit'), 'Bundled PTX admission source differs')
+    for name in extensions:
+        require(payload.get('binding_origin', {}).get(name) == dict(origin='qualified-ptx-bundle', **descriptor),
+                'Bundled PTX binding provenance differs: ' + name)
+    return dict(record, extension_hashes=extensions)
+
+
 def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, vendors=BOTH_VENDORS):
     """File-only three-architecture preflight, also recomputed at final admission.
 
@@ -312,9 +339,9 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
     split core was packed with."""
     wheel, source_root, proof_root = map(Path, (wheel, source_root, proof_root))
     require(runtime_key in RELEASE_ARCHES_ACCEPTED, 'Unknown runtime architecture')
-    host_extensions = {}
+    host_extensions, baseline_extensions = {}, {}
     extensions, sets = inspect_wheel(wheel, source_root, flat_python=True, byte_lm=True,
-                                     host_out=host_extensions, vendors=vendors)
+                                     host_out=host_extensions, vendors=vendors, baseline_out=baseline_extensions)
     version = surface.release_version(source_root)  # DEVIATION 2290: the source root's, never a literal
     carried = {'/'.join(k.split('/')[:2]) for k in sets}
     require(carried_ok(carried, vendors),
@@ -331,7 +358,8 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
                 and (surface.is_release_profile(payload)
                      or (wheel_sha is not None and payload.get('assembly_profile') == SPLIT_PROFILE)),
                 'Wrong payload profile')
-        require(payload.get('extensions') == {'mojolearn/' + n: h for n, h in extensions.items()}
+        bundle = inspect_bundled_ptx(archive, payload, baseline_extensions)
+        require(payload.get('extensions') == {**{'mojolearn/' + n: h for n, h in extensions.items()}, **baseline_extensions}
                 and payload.get('source_inventory') == inventory,
                 'Final payload or source differs from assembly inventory')
         require(set(payload.get('sets', {})) == carried, 'Missing assembly set proofs')
@@ -387,7 +415,8 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
                 assembly_profile=surface.RELEASE_PROFILE, qualification_vendor=vendor, runtime_architecture=arch,
                 source_sha256=source_sha, build_provenance_sha256=proof_hashes[runtime_key],
                 architecture_build_proofs=proof_hashes, extension_hashes=extensions,
-                host_extension_hashes=host_extensions, sets=sets)
+                host_extension_hashes=host_extensions, sets=sets,
+                **({'bundled_ptx': bundle} if bundle else {}))
 
 
 def check_release061(wheel, qualification_root, source_root, wheel_sha=None, vendors=BOTH_VENDORS):

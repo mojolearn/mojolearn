@@ -971,6 +971,8 @@ def main(argv=None, _gates=True):
     ap.add_argument('--wheels', default='',
                     help='split profiles: comma list of ' + ','.join(WHEEL_KINDS)
                          + '; default the core plus the plugin of every vendor given')
+    ap.add_argument('--bundle-ptx-admission', type=pathlib.Path,
+                    help='bundle sm_80 PTX inside nvidia using this separately qualified identity admission')
     ap.add_argument('--build-proof', action='append', default=[],
                     help='complete per-architecture build-provenance.json; one per built set for '
                          + RELEASE_PROFILE + ' and ' + RELEASE_SPLIT_PROFILE)
@@ -1008,7 +1010,23 @@ def main(argv=None, _gates=True):
     if not strict and any(s.reuse for s in sets):
         raise SystemExit('pack_wheel: reuse.json (bindings taken from a published wheel) needs the release profile')
     kinds = split_kinds(a.wheels, {v for v, _ in keys}, keys) if split else ()
-    if ("cuda", "sm_80") in keys and (not split or "nvidia-ptx80" not in kinds):
+    bundle = None
+    if a.bundle_ptx_admission:
+        if not split or "nvidia" not in kinds or "nvidia-ptx80" in kinds or ("cuda", "sm_80") not in keys:
+            raise SystemExit("pack_wheel: bundling PTX needs nvidia plus sm_80 and excludes the separate experimental wheel")
+        baseline_set = next(s for s in sets if (s.vendor, s.arch) == ("cuda", "sm_80"))
+        manifest_path = baseline_set.files["cuda/sm_80/" + gpu_plugins.BASELINE_MANIFEST]
+        manifest_bytes = manifest_path.read_bytes()
+        admission_bytes = a.bundle_ptx_admission.read_bytes()
+        bundle = dict(manifest_sha256=hashlib.sha256(manifest_bytes).hexdigest(),
+                      admission_sha256=hashlib.sha256(admission_bytes).hexdigest())
+        try:
+            gpu_plugins.validate_bundled_ptx(bundle, manifest_bytes, admission_bytes,
+                {rel.split("/", 2)[2]: sha(path).hex() for rel, path in baseline_set.files.items() if rel.endswith(".so")})
+        except ValueError as exc:
+            raise SystemExit(f"pack_wheel: unqualified bundled PTX: {exc}") from exc
+        baseline_set.files["cuda/sm_80/" + gpu_plugins.BASELINE_ADMISSION] = a.bundle_ptx_admission
+    if ("cuda", "sm_80") in keys and not bundle and (not split or "nvidia-ptx80" not in kinds):
         raise SystemExit("pack_wheel: PTX baseline must be requested explicitly with --wheels nvidia-ptx80")
     if a.profile == RELEASE_PROFILE:
         inventory = release_inventory(sets, a.build_proof, version)
@@ -1022,11 +1040,25 @@ def main(argv=None, _gates=True):
         # were given. Either way every set given is proven like release-linux3's.
         required = (split_release_slots(plugin_vendors) if plugin_vendors
                     else {("cuda", "sm_90") if k in RELEASE_HOPPER_ALTS else k for k in keys} & RELEASE_061_SETS)
-        inventory = release_inventory(sets, a.build_proof, version, required=required,
+        inventory = release_inventory([s for s in sets if not (bundle and (s.vendor, s.arch) == ("cuda", "sm_80"))],
+                                      a.build_proof, version, required=required,
                                       profile=RELEASE_SPLIT_PROFILE)
     else:
         inventory = None
     if inventory is not None:
+        if bundle:
+            # Native legs retain their original build proofs. PTX's separate
+            # source/identity admission is recorded without relabeling a leg.
+            baseline_doc = json.loads(manifest_bytes)
+            if baseline_doc["source_commit"] != inventory["source_commit"]:
+                raise SystemExit("pack_wheel: bundled PTX and native source commits differ")
+            inventory["bundled_ptx"] = dict(bundle, root=gpu_plugins.BUNDLED_PTX_ROOT,
+                                           source_commit=baseline_doc["source_commit"])
+            for rel, path in baseline_set.files.items():
+                if rel.endswith(".so"):
+                    arc = "mojolearn/" + rel
+                    inventory["extensions"][arc] = sha(path).hex()
+                    inventory["binding_origin"][arc] = dict(origin="qualified-ptx-bundle", **bundle)
         if split:
             for mapping in ("extensions", "binding_origin"):
                 inventory[mapping] = {gpu_plugins.installed_member(k): v
@@ -1229,7 +1261,7 @@ def main(argv=None, _gates=True):
         built = [(write_wheel(whl, entries, generated, dist), None)]
     else:
         built = write_split(out, kinds, entries, generated, dist, proj, version, tag, inventory, sets,
-                            readme)
+                            readme, bundled_ptx=bundle)
 
     try:
         if _gates:
@@ -1356,11 +1388,20 @@ def split_payload(entries, generated, dist):
     return parts
 
 
-def write_split(out, kinds, entries, generated, dist, proj, version, tag, inventory, sets, readme):
+def write_split(out, kinds, entries, generated, dist, proj, version, tag, inventory, sets, readme, bundled_ptx=None):
     """Write the split wheels `kinds` asks for from the combined payload.
     Returns [(wheel path, profile or None for the core), ...]. Native bytes
     are preserved while GPU roots move to disjoint equal-depth directories."""
     parts = split_payload(entries, generated, dist)
+    if bundled_ptx is not None:
+        if "nvidia" not in kinds or "nvidia-ptx80" in kinds:
+            raise SystemExit("pack_wheel: bundled PTX has exactly one NVIDIA vendor owner")
+        extra_entries, extra_generated = parts.pop("nvidia-ptx80", ({}, {}))
+        if not extra_entries:
+            raise SystemExit("pack_wheel: bundled PTX payload is empty")
+        nentries, ngenerated = parts.setdefault("nvidia", ({}, {}))
+        nentries.update(extra_entries)
+        ngenerated.update(extra_generated)
     core_entries, core_payload = parts.get(None, ({}, {}))
     licenses = {k: v for k, v in generated.items() if k.startswith(f"{dist}/licenses/")}
     built = []
@@ -1409,7 +1450,7 @@ def write_split(out, kinds, entries, generated, dist, proj, version, tag, invent
                 pgen[pdist + arc[len(dist):]] = data
             marker_name = gpu_plugins.PLUGIN_MARKER if row["role"] == "vendor" else gpu_plugins.PAYLOAD_MARKER
             pgen[f"{pdist}/{marker_name}"] = (json.dumps(
-                gpu_plugins.package_marker(kind, version, arches), sort_keys=True, indent=2) + "\n").encode()
+                gpu_plugins.package_marker(kind, version, arches, bundled_ptx=bundled_ptx if kind == "nvidia" else None), sort_keys=True, indent=2) + "\n").encode()
             pgen.update(vpayload)
             whl = out / f"{row['wheel_name']}-{version}-{tag}.whl"
             built.append((write_wheel(whl, ventries, pgen, pdist), kind))
