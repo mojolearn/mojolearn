@@ -739,15 +739,16 @@ def cdf_split_flag_kernel(
 
 
 def cdf_status1_kernel(
-    check: I32P, bad: I32P, off: I32P, status: I32P, n: Int32
+    check: I32P, bad: I32P, off_last: I32P, status: I32P
 ):
-    """Four scalars into one status buffer (a copy, one thread)."""
+    """Four scalars into one status buffer (a copy, one thread; `off_last`
+    points at the scan's last word, so no size reaches the launch)."""
     if _gid() != 0:
         return
     status[0] = check[0]
     status[1] = check[1]
     status[2] = bad[0]
-    status[3] = off[Int(n) - 1]
+    status[3] = off_last[0]
 
 
 def cdf_status2_kernel(mx: I32P, bad: I32P, status: I32P):
@@ -840,8 +841,8 @@ def _condensed_two_reads(
 
     # READ 1: the MST check, the delta refusal and n_split, one wait.
     ctx.enqueue_function[cdf_status1_kernel](
-        check.unsafe_ptr(), bad.unsafe_ptr(), off.unsafe_ptr(),
-        status.unsafe_ptr(), Int32(n),
+        check.unsafe_ptr(), bad.unsafe_ptr(), off.unsafe_ptr() + (n - 1),
+        status.unsafe_ptr(),
         grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
     )
     var h1 = ctx.enqueue_create_host_buffer[DType.int32](4)
