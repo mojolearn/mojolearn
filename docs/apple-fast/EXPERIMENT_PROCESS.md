@@ -107,6 +107,25 @@ A passing miniature fixture does not certify all board shapes. Preserve broad
 coverage where needed; efficiency comes from removing redundant setup and
 uninformative experiments, not from shrinking quality requirements.
 
+## GEMM specialization and scoped winners
+
+A candidate does not need to win universally. Promote useful wins for validated
+operations and shape regimes, retaining fallbacks elsewhere. Different kernels
+may serve different operations within one estimator. Shared implementation
+machinery and specialized selection policies are compatible.
+
+Production selection uses already-known operation metadata: M/N/K, transpose,
+layout/strides, dtype/precision, batching, epilogue, alias constraints and hardware.
+Do not branch on dataset names, benchmark tags, targets or content fingerprints.
+No dataset scan or runtime race among variants is introduced by this workflow.
+Development benchmarks establish the policy; runtime metadata selects a kernel.
+
+A lead at one measured shape is not proof of an entire 'tall', 'narrow' or 'Gram'
+regime. Validate neighboring/boundary shapes and real callers before choosing
+production eligibility. Preserve numerical and storage contracts, with a scoped
+_OFF rollback. Algorithm flags isolate experiments; they do not justify copying
+whole GEMM implementations or claiming reach in fused/bypassing callers.
+
 ## Decide and maintain the toggle
 
 | State | Runtime default | Required action |

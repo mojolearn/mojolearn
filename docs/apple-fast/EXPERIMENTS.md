@@ -955,3 +955,18 @@ For batch_4_1, maximum error0.0398175029 ->0.0710675029 and relativeL2
 1.2517670343e-7 ->1.6478564181e-7; resident_3 relativeL2 also regresses.
 Several other cases improve. Preserve strict all-field no-regression failure;
 no fitted-model tests, speed measurements or default promotion admitted.
+
+Future-job preflight integrated at a78f0ab5e: seven metadata-only fixture tests
+PASS. Deployed during serial transfer window scoped-gemm-v1, which is now
+released. Resident timing resident-catalog-t-v1 and four G5 caller quality
+jobs passed metadata preflight before queue insertion. This readiness does
+not replace numerical quality, import/capability checks or counter validation.
+G5 core/estimators and same-source IDENTICAL ibase M2 PASS/staged; caller
+harnessf40649e0 checks both arms' prerequisites before fitting. No old job changed.
+
+User clarification: pursue individual scoped GEMM winners, not a universal one.
+Cold screen leads G1 low-widthNT0.934, G5 tallprojection0.932 and G9Gram0.885
+are per-tested-shape leads, not broad regime guarantees. Resident screen will
+compare the same kernels under a distinct resident-input contract. Scoped
+stride/split-aware decomposition/PCA adapters are in source preparation; no
+production GEMM default promoted and no dataset-specific dispatch introduced.
