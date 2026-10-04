@@ -16,6 +16,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from xtrees.api import register
 from xtrees.shap_host import shap_prepare, tree_shap_values
 from xtrees.ops import XTREES_HOST_SABOTAGE
+from xtrees.dart_host import DART_HOST, dart_open, dart_step, dart_add, dart_close
 
 
 def x_trees_host_numeric_mode_binding() raises -> PythonObject:
@@ -93,6 +94,64 @@ def tree_shap_binding(forest: PythonObject, tscale: PythonObject, cover: PythonO
     return PythonObject(p[0])
 
 
+# ---- DART's boosting round, host twin (lane fam2-forests, `IDN_DART_DEVICE`;
+# xtrees/dart_host.mojo). The GPU binding's four entries, same names, same
+# arguments, registered only under the same gate so the Python layer takes
+# the same loop on the host column as on an IDENTICAL GPU build.
+def _dart_ints(params: PythonObject, n: Int, who: String) raises -> List[Int]:
+    if len(params) != n:
+        raise Error(who + ": params must hold " + String(n) + " values")
+    var out = List[Int]()
+    for i in range(n):
+        out.append(Int(py=params[i]))
+    return out^
+
+
+def dart_open_binding(x: PythonObject, y: PythonObject, inits: PythonObject, params: PythonObject) raises -> PythonObject:
+    """x float32 n x d row-major, y float32 n, inits float32 k; params =
+    [n, d, k, kind, n_iterations, node_cap]. Returns the session handle."""
+    var p = _dart_ints(params, 6, "x_trees_dart_open")
+    return PythonObject(dart_open(Int(py=x), Int(py=y), Int(py=inits), p[0], p[1], p[2], p[3], p[4], p[5]))
+
+
+def dart_step_binding(handle: PythonObject, coef: PythonObject, thr: PythonObject, flags: PythonObject,
+                      bad: PythonObject, targets: PythonObject, params: PythonObject) raises -> PythonObject:
+    """coef float32 t * k, thr int64 t (in), flags int32 t and bad int32 1
+    (out), targets = [k float32 n addresses] (out); params = [t, drop_seed,
+    iteration, skip_thr]."""
+    var p = _dart_ints(params, 4, "x_trees_dart_step")
+    var outs = List[Int]()
+    for i in range(len(targets)):
+        outs.append(Int(py=targets[i]))
+    dart_step(Int(py=handle), Int(py=coef), Int(py=thr), Int(py=flags), Int(py=bad), outs, p[0], p[1], p[2], p[3])
+    return PythonObject(p[0])
+
+
+def dart_add_binding(handle: PythonObject, colid: PythonObject, quesval: PythonObject, left: PythonObject,
+                     values: PythonObject, params: PythonObject) raises -> PythonObject:
+    """The new tree's forest arrays (int32 / float32 / int32), values float32
+    n_nodes (out); params = [tree, class, lo, n_nodes, shrink, factor,
+    reg_lambda, reg_alpha, max_delta_step]."""
+    if len(params) != 9:
+        raise Error("x_trees_dart_add: params must hold 9 values")
+    dart_add(Int(py=handle), Int(py=colid), Int(py=quesval), Int(py=left), Int(py=values), Int(py=params[0]),
+             Int(py=params[1]), Int(py=params[2]), Int(py=params[3]), Float64(py=params[4]), Float64(py=params[5]),
+             Float64(py=params[6]), Float64(py=params[7]), Float64(py=params[8]))
+    return PythonObject(Int(py=params[3]))
+
+
+def dart_close_binding(handle: PythonObject, bad: PythonObject) raises -> PythonObject:
+    """Writes the bad word (int32 1) and frees the session."""
+    dart_close(Int(py=handle), Int(py=bad))
+    return PythonObject(0)
+
+
+def dart_idn_binding() raises -> PythonObject:
+    """Present only under `IDN_DART_DEVICE`: the IDENTICAL DART round (the
+    Python layer then takes it with or without a forest data session)."""
+    return PythonObject(1)
+
+
 @export
 def PyInit__mojolearn_x_trees_host() abi("C") -> PythonObject:
     try:
@@ -107,6 +166,12 @@ def PyInit__mojolearn_x_trees_host() abi("C") -> PythonObject:
         register(m)
         m.def_function[tree_shap_prepare_binding]("x_trees_tree_shap_prepare")
         m.def_function[tree_shap_binding]("x_trees_tree_shap")
+        comptime if DART_HOST:
+            m.def_function[dart_open_binding]("x_trees_dart_open")
+            m.def_function[dart_step_binding]("x_trees_dart_step")
+            m.def_function[dart_add_binding]("x_trees_dart_add")
+            m.def_function[dart_close_binding]("x_trees_dart_close")
+            m.def_function[dart_idn_binding]("x_trees_dart_idn")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_trees_host: ", e))

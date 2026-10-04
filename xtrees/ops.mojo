@@ -580,6 +580,32 @@ def apply_trees(
             res[unsafe_offset=i * nt + (t - t0)] = Int32(node)
 
 
+def tree_shape(left: MutPointer[Int32, MutUntrackedOrigin], cnt: Int, res: MutPointer[Int32, MutUntrackedOrigin]) raises:
+    """res[0] = the depth and res[1] = the leaf count of one fitted tree's
+    flat nodes (lane fam2-forests, `x_trees_tree_shape`): children of a node
+    sit at left and left + 1 and come after it, a leaf has left == -1. Model
+    metadata for `get_depth` / `get_n_leaves`, the walk
+    python/mojolearn/_expansion_trees.py used to run over `tolist()` rows;
+    integers, the same on every column."""
+    var depth = List[Int32](length=max(cnt, 1), fill=0)
+    var best = 0
+    var leaves = 0
+    for i in range(cnt):
+        var c = Int(left[unsafe_offset=i])
+        if c == -1:
+            leaves += 1
+        else:
+            if c <= i or c + 1 >= cnt:
+                raise Error("x_trees tree_shape: child out of range")
+            var dch = depth[i] + Int32(1)
+            depth[c] = dch
+            depth[c + 1] = dch
+            if Int(dch) > best:
+                best = Int(dch)
+    res[unsafe_offset=0] = Int32(best)
+    res[unsafe_offset=1] = Int32(leaves)
+
+
 def gradients(
     score: MutPointer[Float64, MutUntrackedOrigin], y: MutPointer[Float32, MutUntrackedOrigin], n: Int,
     kind: Int, g: MutPointer[Float64, MutUntrackedOrigin], h: MutPointer[Float64, MutUntrackedOrigin],

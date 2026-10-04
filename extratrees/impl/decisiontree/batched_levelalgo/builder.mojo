@@ -63,6 +63,8 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
     build_workload_info,
     float_gain_key,
     node_feature_score_host,
+    node_feature_score_host_binned,
+    ScoredCandidate,
     leaf_kernel,
     node_split_kernel,
     node_feature_range_kernel,
@@ -99,6 +101,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.split import (
     split_tie_salt_for,
 )
 from extratrees.checks.pcg_rng import key_for
+from extratrees.checks.pcg_rng import PCGenerator, uniform_int_u32
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv, fma
@@ -1124,6 +1127,7 @@ def _exact_candidate(
     min_samples_leaf: Int32,
     seed: UInt64,
     tree_id: Int32,
+    bins: HostBins,
 ) -> SplitExact:
     """One (node, feature) cell as the device's reduction receives it:
     `node_feature_score_host` then `score_to_candidate_kernel`'s policy (a
@@ -1131,25 +1135,42 @@ def _exact_candidate(
     key; a scored cell carries cuML's float gain as the metric and the
     exact rational as the key, entropy's key being the sign-magnitude map
     of its float gain over `den = 1`, DEVIATION 459)."""
-    var extent = node_feature_min_max(dataset, item, col)
     var key = key_for(
         seed, UInt32(Int(tree_id)), UInt32(Int(item.idx)), UInt32(Int(col))
     )
-    var cell = node_feature_score_host(
-        dataset.data.unsafe_origin_cast[MutAnyOrigin](),
-        dataset.row_ids.unsafe_origin_cast[MutAnyOrigin](),
-        labels_q,
-        Int(dataset.m),
-        Int(item.instances.begin),
-        Int(item.instances.count),
-        Int(col),
-        extent,
-        key,
-        n_acc,
-        is_classification,
-        Int(min_samples_leaf),
-        True,
-    )
+    var cell: ScoredCandidate
+    if bins.on and not is_classification:
+        # `IDN_ET_BINNED`: the binned range and score passes.
+        cell = node_feature_score_host_binned(
+            bins.codes.unsafe_origin_cast[MutAnyOrigin](),
+            (bins.q + Int(col) * ET_BINS).unsafe_origin_cast[MutAnyOrigin](),
+            bins.nb[unsafe_offset = Int(col)],
+            dataset.row_ids.unsafe_origin_cast[MutAnyOrigin](),
+            labels_q,
+            Int(dataset.m),
+            Int(item.instances.begin),
+            Int(item.instances.count),
+            Int(col),
+            bins.extent(dataset, item, col),
+            key,
+            Int(min_samples_leaf),
+        )
+    else:
+        cell = node_feature_score_host(
+            dataset.data.unsafe_origin_cast[MutAnyOrigin](),
+            dataset.row_ids.unsafe_origin_cast[MutAnyOrigin](),
+            labels_q,
+            Int(dataset.m),
+            Int(item.instances.begin),
+            Int(item.instances.count),
+            Int(col),
+            node_feature_min_max(dataset, item, col),
+            key,
+            n_acc,
+            is_classification,
+            Int(min_samples_leaf),
+            True,
+        )
     if cell.status != SCORE_STATUS_SCORED:
         return SplitExact()
     var acc_left = cell.acc_left.copy()
@@ -1196,6 +1217,7 @@ def _exact_node_split(
     min_samples_leaf: Int32,
     seed: UInt64,
     tree_id: Int32,
+    bins: HostBins,
 ) -> Split:
     """The device's per-node winner: the candidates of `colids` reduced by
     `SplitExact.update` under `split_tie_salt_for(tree, node)`, then the
@@ -1206,22 +1228,51 @@ def _exact_node_split(
     for ci in range(len(colids)):
         var cand = _exact_candidate(
             dataset, labels_q, item, colids[ci], n_acc, is_classification,
-            criterion, min_samples_leaf, seed, tree_id,
+            criterion, min_samples_leaf, seed, tree_id, bins,
         )
         _ = acc.update(cand, SPLIT_SAB_NONE, tie_salt)
     var out = acc.split
+    if bins.on and not is_classification and out.colid >= 0:
+        # `et_code_threshold_kernel`: the stored threshold is the border.
+        out.quesval = bins.stored_threshold(out.colid, out.quesval)
     if acc.key.valid == 0 or out.colid < 0:
         out.best_metric_val = Float32.MIN_FINITE
     return out
 
 
+def _exact_extent(
+    dataset: Dataset, item: NodeWorkItem, col: Int32, bins: HostBins,
+    is_classification: Bool,
+) -> FeatureRange:
+    """The range pass's cell: borders of the node's codes under
+    `IDN_ET_BINNED` regression, the float min and max otherwise."""
+    if bins.on and not is_classification:
+        return bins.extent(dataset, item, col)
+    return node_feature_min_max(dataset, item, col)
+
+
+def _exact_rescue_columns(
+    dataset: Dataset, item: NodeWorkItem, bins: HostBins,
+    is_classification: Bool,
+) raises -> List[Int32]:
+    """`rescue_columns` over `_exact_extent` (the device survey runs the
+    same range pass the search runs)."""
+    var out = List[Int32]()
+    for col in range(Int(dataset.n)):
+        var extent = _exact_extent(dataset, item, Int32(col), bins, is_classification)
+        if not node_feature_is_constant(extent, item.instances.count):
+            out.append(Int32(col))
+    return out^
+
+
 def _exact_all_constant(
-    dataset: Dataset, item: NodeWorkItem, colids: List[Int32]
+    dataset: Dataset, item: NodeWorkItem, colids: List[Int32],
+    bins: HostBins, is_classification: Bool,
 ) -> Bool:
     """`node_nonconstant_flag_kernel`'s per-node answer: no sampled column
     varied on this node's rows."""
     for ci in range(len(colids)):
-        var extent = node_feature_min_max(dataset, item, colids[ci])
+        var extent = _exact_extent(dataset, item, colids[ci], bins, is_classification)
         if not node_feature_is_constant(extent, item.instances.count):
             return False
     return True
@@ -1292,6 +1343,7 @@ def train_tree_exact(
     is_classification: Bool,
     n_acc: Int,
     inv_scale: Float32,
+    bins: HostBins,
 ) raises -> TreeMetaDataNode[DType.float32]:
     """One tree grown as the device grows it, on the host: the block comment
     above. `labels_q` is the device's label plane (class ids for a
@@ -1303,7 +1355,7 @@ def train_tree_exact(
         # (et-clf-entropy-bestfirst, 2026-09-15): see the function below.
         return train_tree_exact_bestfirst(
             dataset, labels_q, params, tree_id, seed, is_classification,
-            n_acc, inv_scale,
+            n_acc, inv_scale, bins,
         )
     if Int(dataset.num_outputs) != n_acc:
         raise Error(
@@ -1333,6 +1385,7 @@ def train_tree_exact(
             var split = _exact_node_split(
                 dataset, labels_q, item, my_colids, n_acc, is_classification,
                 params.split_criterion, params.min_samples_leaf, seed, tree_id,
+                bins,
             )
             # DEVIATION 205 as the device loop keys it: every sampled column
             # constant on a non-empty node, then one non-constant column
@@ -1340,9 +1393,13 @@ def train_tree_exact(
             # alone.
             if (
                 item.instances.count > 0
-                and _exact_all_constant(dataset, item, my_colids)
+                and _exact_all_constant(
+                    dataset, item, my_colids, bins, is_classification
+                )
             ):
-                var nonconst = rescue_columns(dataset, item)
+                var nonconst = _exact_rescue_columns(
+                    dataset, item, bins, is_classification
+                )
                 if len(nonconst) > 0:
                     var u = rescue_pick(
                         rescue_key(seed, tree_id, UInt32(Int(item.idx))),
@@ -1353,7 +1410,7 @@ def train_tree_exact(
                     split = _exact_node_split(
                         dataset, labels_q, item, one, n_acc, is_classification,
                         params.split_criterion, params.min_samples_leaf, seed,
-                        tree_id,
+                        tree_id, bins,
                     )
             splits.append(split)
             if not split_not_valid(
@@ -1381,6 +1438,7 @@ def _exact_search_one(
     is_classification: Bool,
     n_acc: Int,
     k: Int32,
+    bins: HostBins,
 ) raises -> Split:
     """One node's search as `search_batch` answers it for member `i` of any
     batch, on the host: the column sample keyed by (seed, tree, node)
@@ -1394,10 +1452,14 @@ def _exact_search_one(
     _ = sample_features(colids, one_item, tree_id, seed, Int(dataset.n), Int(k))
     var split = _exact_node_split(
         dataset, labels_q, item, colids, n_acc, is_classification,
-        params.split_criterion, params.min_samples_leaf, seed, tree_id,
+        params.split_criterion, params.min_samples_leaf, seed, tree_id, bins,
     )
-    if item.instances.count > 0 and _exact_all_constant(dataset, item, colids):
-        var nonconst = rescue_columns(dataset, item)
+    if item.instances.count > 0 and _exact_all_constant(
+        dataset, item, colids, bins, is_classification
+    ):
+        var nonconst = _exact_rescue_columns(
+            dataset, item, bins, is_classification
+        )
         if len(nonconst) > 0:
             var u = rescue_pick(
                 rescue_key(seed, tree_id, UInt32(Int(item.idx))), len(nonconst)
@@ -1407,6 +1469,7 @@ def _exact_search_one(
             split = _exact_node_split(
                 dataset, labels_q, item, one, n_acc, is_classification,
                 params.split_criterion, params.min_samples_leaf, seed, tree_id,
+                bins,
             )
     return split
 
@@ -1420,6 +1483,7 @@ def train_tree_exact_bestfirst(
     is_classification: Bool,
     n_acc: Int,
     inv_scale: Float32,
+    bins: HostBins,
 ) raises -> TreeMetaDataNode[DType.float32]:
     """One tree grown BEST-FIRST as the device grows it (DEVIATION 466), on
     the host and on the exact key (the CPU training lane,
@@ -1465,7 +1529,7 @@ def train_tree_exact_bestfirst(
         for i in range(len(pending)):
             var split = _exact_search_one(
                 dataset, labels_q, pending[i], params, tree_id, seed,
-                is_classification, n_acc, k,
+                is_classification, n_acc, k, bins,
             )
             _ = queue.bestfirst_admit(pending[i], split, tree_id)
         if not queue.bestfirst_can_pop():
@@ -1917,11 +1981,30 @@ def transpose_to_row_major_kernel(
 #: the M4 at 1M rows: istellareg 86 -> 67 s, year 23.2 -> 18.0 s, RMSE equal
 #: to float X (8-bit codes from 1024 sampled rows, or thresholds drawn in
 #: code space, both moved RMSE). `-D MOJOLEARN_ET_BINNED_OFF` keeps float X.
+comptime IDN_ET_BINNED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_ET_BINNED_U16"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""fam2-forests (2026-10-04), CANDIDATE ARM, default OFF
+(`-D MOJOLEARN_IDN_ET_BINNED_U16=1`; dead under `MOJOLEARN_IDN_ALL_OFF`):
+the 16-bit binned regression search under IDENTICAL on every vendor. THE
+MODEL CHANGES (ranges are the borders of the node's lowest and highest
+codes, every threshold is snapped down to a border), so all four columns
+move together: the device arms are the FAST Apple ones (the range kernel's
+IDENTICAL arm already folds codes in key space and decodes the borders),
+and the host column (`train_tree_exact`, through `HostBins`) restates the
+same borders, codes, ranges, snap and stored threshold. Gate, per FIT and
+the same on the host: a regressor with `n_cols >= ET_BINNED_MIN_COLS` and
+`2k >= n_cols` (`et_identical_bins_wanted`). Needs the tiled search
+(`ET_RANGE_TILED and ET_SCORE_TILED`, the IDENTICAL default on every
+vendor); with those off the arm is off on device and host alike."""
+
 comptime ET_BINNED_REG = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_ET_BINNED_OFF"]()
-)
+) or IDN_ET_BINNED
 comptime ET_BINS = ET_QSTRIDE
 comptime ET_CODE = DType.uint16
 #: Binning pays in bytes per row, so it is taken only on wide data: at 16
@@ -1929,6 +2012,170 @@ comptime ET_CODE = DType.uint16
 comptime ET_BINNED_MIN_COLS = 64
 comptime ET_CODE_TILE = 8
 """Features per block for the code passes (M4 istellareg: 4 -> 53 s, 8 -> 49 s, 16 -> 67 s, 32 -> 79 s)."""
+
+
+def et_identical_bins_wanted(n_cols: Int, k: Int) -> Bool:
+    """`IDN_ET_BINNED`'s per-fit gate, ONE function for the device forest
+    loop and the host column (`host_forest.fit_forest_exact`): a regression
+    fit bins when the data is wide and the fit samples at least half of it
+    (the tiled search's own `2k >= n_cols` gate, `ensure_row_major`)."""
+    comptime if not IDN_ET_BINNED:
+        return False
+    comptime if not (ET_RANGE_TILED and ET_SCORE_TILED):
+        return False
+    return n_cols >= ET_BINNED_MIN_COLS and 2 * k >= n_cols
+
+
+@fieldwise_init
+struct HostBins(ImplicitlyCopyable, Movable):
+    """`IDN_ET_BINNED`, the host column's view of the device's binned X:
+    `codes` is COLUMN-major (`codes[col * m + row]`, the value
+    `et_bin_rows_kernel` stores at `[row * n_cols + col]`), `q` the borders
+    (`n_cols x ET_BINS`, `DeviceDataset.d_quant`), `nb` the per-column
+    border counts. `on` False means float X and the pointers are unread.
+    Built by `extratrees/impl/decisiontree/batched_levelalgo/host_binned.mojo`."""
+
+    var on: Bool
+    var codes: MutPointer[Scalar[ET_CODE], MutUntrackedOrigin]
+    var q: MutPointer[Float32, MutUntrackedOrigin]
+    var nb: MutPointer[Int32, MutUntrackedOrigin]
+
+    def extent(self, dataset: Dataset, item: NodeWorkItem, col: Int32) -> FeatureRange:
+        """`node_feature_range_tiled_kernel`'s code arm then the decode: the
+        borders of the node's lowest and highest codes, no missing count (a
+        code is never NaN). An empty node keeps `node_feature_min_max`'s
+        answer (the kernel maps nothing when no row was seen)."""
+        var begin = Int(item.instances.begin)
+        var end = begin + Int(item.instances.count)
+        if end <= begin:
+            return node_feature_min_max(dataset, item, col)
+        var base = Int(col) * Int(dataset.m)
+        var cmin = 65535
+        var cmax = 0
+        for p in range(begin, end):
+            var row = Int(dataset.row_ids[unsafe_offset=p])
+            var c = Int(self.codes[unsafe_offset = base + row])
+            if c < cmin:
+                cmin = c
+            if c > cmax:
+                cmax = c
+        var qb = Int(col) * ET_BINS
+        return FeatureRange(
+            self.q[unsafe_offset = qb + cmin],
+            self.q[unsafe_offset = qb + cmax],
+            Int32(0),
+        )
+
+    def stored_threshold(self, col: Int32, thr: Float32) -> Float32:
+        """`et_code_threshold_kernel` for one winner."""
+        var qp = (self.q + Int(col) * ET_BINS).unsafe_origin_cast[MutAnyOrigin]()
+        var n = self.nb[unsafe_offset = Int(col)]
+        var t = et_snap_code(qp, n, thr)
+        if t < 0:
+            t = 0
+        if t >= Int(n) - 1:
+            return Float32.MAX
+        return self.q[unsafe_offset = Int(col) * ET_BINS + t]
+
+
+comptime IDN_ET_RESCUE_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_ET_RESCUE_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+"""fam2-forests (2026-10-04), IDENTICAL on every vendor, default ON:
+DEVIATION 205's rescue column is picked ON THE DEVICE. Before, a cycle with
+an all-constant node drained the queue after the survey, downloaded the
+survey's `3 * n_sub * n_cols` range cells, walked them on the host (the
+constant test and `rescue_pick` per node) and uploaded the chosen columns,
+after building and uploading an `n_sub * n_cols` identity column table on
+the host. Now `ident_colids_kernel` writes the survey's columns,
+`rescue_pick_kernel` runs the same constant test over the same cells in the
+same ascending column order with the same keyed draw, and the rescued
+search reads its column from `d_colids`; the host reads back one Int32 per
+surveyed node (riding the rescued search's own drain) to know which nodes
+had a column to rescue. The rescued search covers every surveyed node (a
+node with no varying column searches column 0, constant on its rows by the
+survey, and its split is left as the first search found it), so the staged
+work items are the survey's own bytes and no drain separates the two. Same
+columns, same splits: no bit moves, the host column is untouched.
+`-D MOJOLEARN_IDN_ET_RESCUE_DEVICE_OFF` restores the host walk."""
+
+
+def ident_colids_kernel(
+    out_colids: MutPointer[Int32, MutAnyOrigin],
+    n_cells: Int32,
+    n_cols: Int32,
+):
+    """`out_colids[node * n_cols + c] = c`: the survey's column table."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_cells):
+        return
+    out_colids[unsafe_offset=i] = Int32(i % Int(n_cols))
+
+
+def rescue_pick_kernel(
+    out_pick: MutPointer[Int32, MutAnyOrigin],
+    out_colids: MutPointer[Int32, MutAnyOrigin],
+    in_min: MutPointer[Float32, MutAnyOrigin],
+    in_max: MutPointer[Float32, MutAnyOrigin],
+    in_n_missing: MutPointer[Int32, MutAnyOrigin],
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    tree_ids: MutPointer[Int32, MutAnyOrigin],
+    n_sub: Int32,
+    n_cols: Int32,
+    seed: UInt64,
+):
+    """`IDN_ET_RESCUE_DEVICE`: one thread per surveyed node. Counts the
+    node's non-constant columns over the survey's cells (`n_sub x n_cols`,
+    ascending column order, `node_feature_is_constant`), draws
+    `rescue_pick`'s index from `rescue_key(seed, tree, node)` and stores
+    that column in `out_pick[node]` and `out_colids[node]` (the rescued
+    search's `k = 1` column table). A node with no varying column stores
+    -1 in `out_pick` and column 0 in `out_colids`."""
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j >= Int(n_sub):
+        return
+    var nc = Int(n_cols)
+    var rows = work_items[unsafe_offset=j].instances.count
+    var count = 0
+    for c in range(nc):
+        var idx = j * nc + c
+        var extent = FeatureRange(
+            in_min[unsafe_offset=idx],
+            in_max[unsafe_offset=idx],
+            in_n_missing[unsafe_offset=idx],
+        )
+        if not node_feature_is_constant(extent, rows):
+            count += 1
+    if count == 0:
+        out_pick[unsafe_offset=j] = Int32(-1)
+        out_colids[unsafe_offset=j] = Int32(0)
+        return
+    var key = rescue_key(
+        seed,
+        tree_ids[unsafe_offset=j],
+        UInt32(Int(work_items[unsafe_offset=j].idx)),
+    )
+    var gen = PCGenerator(key.seed, key.subsequence, UInt64(0))
+    var u = Int(uniform_int_u32(gen, UInt32(0), UInt32(count)))
+    var seen = 0
+    var pick = Int32(0)
+    for c in range(nc):
+        var idx = j * nc + c
+        var extent = FeatureRange(
+            in_min[unsafe_offset=idx],
+            in_max[unsafe_offset=idx],
+            in_n_missing[unsafe_offset=idx],
+        )
+        if not node_feature_is_constant(extent, rows):
+            if seen == u:
+                pick = Int32(c)
+            seen += 1
+    out_pick[unsafe_offset=j] = pick
+    out_colids[unsafe_offset=j] = pick
 
 
 def et_code_threshold_kernel(
@@ -2035,6 +2282,18 @@ struct DeviceDataset(Movable):
     """ET_BINNED_REG: the per-feature borders, `n_cols x ET_BINS`."""
     var d_nbins: DeviceBuffer[DType.int32]
     var has_bins: Bool
+    var bins_fit: Bool
+    """`IDN_ET_BINNED`: whether THIS fit takes the codes (set by the
+    regression forest loop from `et_identical_bins_wanted`), so a dataset a
+    session reuses with another `max_features` answers as the host column
+    does. Unread under FAST (`bins_active` is `has_bins` there)."""
+
+    @always_inline
+    def bins_active(self) -> Bool:
+        comptime if IDN_ET_BINNED:
+            return self.has_bins and self.bins_fit
+        else:
+            return self.has_bins
 
     def ensure_binned(mut self, ctx: DeviceContext) raises:
         """Build the row-major codes and their borders (RandomForest's
@@ -2185,7 +2444,7 @@ def upload_dataset(
     ctx.synchronize()
     return DeviceDataset(
         d_data^, d_labels^, n_rows, n_cols, n_classes, d_data_rm^, False,
-        d_bins_rm^, d_quant^, d_nbins^, False,
+        d_bins_rm^, d_quant^, d_nbins^, False, False,
     )
 
 
@@ -3654,7 +3913,27 @@ def search_batch(
     # caller already chose the columns. DEVIATION 205's rescue does: its
     # column comes from the host, which is the only place the survey's cells
     # were read.
-    if not use_sampler:
+    var dev_colids = False
+    comptime if IDN_ET_RESCUE_DEVICE:
+        # No host column table: the survey's identity columns are written
+        # by `ident_colids_kernel`, the rescue's by `rescue_pick_kernel`
+        # (already queued by the caller).
+        dev_colids = (not use_sampler) and len(host_colids) == 0
+    if dev_colids:
+        if range_only:
+            if Int(k) != Int(n_cols):
+                raise Error(
+                    "the device survey searches every column; got k = "
+                    + String(Int(k))
+                )
+            ctx.enqueue_function[ident_colids_kernel](
+                d_colids.unsafe_ptr(),
+                Int32(n_cells),
+                n_cols,
+                grid_dim=ceildiv(n_cells, 256),
+                block_dim=256,
+            )
+    elif not use_sampler:
         if len(host_colids) != n_cells:
             raise Error(
                 "host_colids must be n_nodes * k long; got "
@@ -3766,13 +4045,20 @@ def search_batch(
     # this pass loses its per-cycle stall -- cuML's `doSplit` shape, which
     # drains ONCE per batch. `clock.tick` still syncs when the clock is
     # ENABLED: the timed program was always the serialized one.
-    if range_only:
+    if range_only and not dev_colids:
         ctx.enqueue_copy(dst_buf=ws.o_rmin, src_buf=d_min)
         ctx.enqueue_copy(dst_buf=ws.o_rmax, src_buf=d_max)
         ctx.enqueue_copy(dst_buf=ws.o_rmiss, src_buf=d_missing)
         ctx.synchronize()
     clock.tick(ctx, PHASE_RANGE)
 
+    if range_only and dev_colids:
+        # `IDN_ET_RESCUE_DEVICE`: the cells stay on the device for
+        # `rescue_pick_kernel`; nothing drains and nothing is read here.
+        return (
+            List[Split](), List[Int32](), List[Float32](), List[Float32](),
+            List[Int32](),
+        )
     if range_only:
         # THE SURVEY. The rescue needs the cells themselves so the host can
         # pick a column; nothing else does, so nothing else pays for them.
@@ -4402,60 +4688,102 @@ def train_forest_classification_device_timed(
                     sub.append(work_items[retry[j]])
                     sub_trees.append(item_trees[retry[j]])
 
-                var ident = List[Int32](
-                    length=len(sub) * Int(n_cols), fill=Int32(0)
-                )
-                for j in range(len(sub)):
-                    for c in range(Int(n_cols)):
-                        ident[j * Int(n_cols) + c] = Int32(c)
-                var survey = search_batch(
-                    ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
-                    n_classes, n_rows, n_cols, sub_trees, seed, False,
-                    ident, True, clock,
-                )
-
-                var s_min = survey[2].copy()
-                var s_max = survey[3].copy()
-                var s_miss = survey[4].copy()
-
-                var chosen_items = List[NodeWorkItem]()
-                var chosen_trees = List[Int32]()
-                var chosen_cols = List[Int32]()
-                var chosen_slot = List[Int]()
-                for j in range(len(sub)):
-                    var nonconst = List[Int32]()
-                    for c in range(Int(n_cols)):
-                        var idx = j * Int(n_cols) + c
-                        var extent = FeatureRange(
-                            s_min[idx], s_max[idx], s_miss[idx]
-                        )
-                        if not node_feature_is_constant(
-                            extent, sub[j].instances.count
-                        ):
-                            nonconst.append(Int32(c))
-                    if len(nonconst) == 0:
-                        continue
-                    var u = rescue_pick(
-                        rescue_key(
-                            seed, sub_trees[j], UInt32(Int(sub[j].idx))
-                        ),
-                        len(nonconst),
+                comptime if IDN_ET_RESCUE_DEVICE:
+                    # The survey, the pick and the rescued search, queued
+                    # back to back (see `IDN_ET_RESCUE_DEVICE`).
+                    var n_sub = len(sub)
+                    _ = search_batch(
+                        ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
+                        n_classes, n_rows, n_cols, sub_trees, seed, False,
+                        List[Int32](), True, clock,
                     )
-                    chosen_items.append(sub[j])
-                    chosen_trees.append(sub_trees[j])
-                    chosen_cols.append(nonconst[u])
-                    chosen_slot.append(retry[j])
-
-                if len(chosen_items) > 0:
-                    st_rescued += len(chosen_items)
+                    var d_pick = ctx.enqueue_create_buffer[DType.int32](n_sub)
+                    var h_pick = ctx.enqueue_create_host_buffer[DType.int32](
+                        n_sub
+                    )
+                    ctx.enqueue_function[rescue_pick_kernel](
+                        d_pick.unsafe_ptr(),
+                        ws.d_colids.unsafe_ptr(),
+                        ws.d_min.unsafe_ptr(),
+                        ws.d_max.unsafe_ptr(),
+                        ws.d_missing.unsafe_ptr(),
+                        ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+                        ws.d_tree.unsafe_ptr(),
+                        Int32(n_sub),
+                        n_cols,
+                        seed,
+                        grid_dim=ceildiv(n_sub, 64),
+                        block_dim=64,
+                    )
+                    ctx.enqueue_copy(dst_buf=h_pick, src_buf=d_pick)
+                    # Drains at its reduce readback, `h_pick` with it.
                     var res2 = search_batch(
-                        ctx, ws, dataset, d_row_ids, chosen_items, 1, params,
-                        n_classes, n_rows, n_cols, chosen_trees, seed, False,
-                        chosen_cols, False, clock,
+                        ctx, ws, dataset, d_row_ids, sub, 1, params,
+                        n_classes, n_rows, n_cols, sub_trees, seed, False,
+                        List[Int32](), False, clock,
                     )
                     var rescued = res2[0].copy()
-                    for t in range(len(chosen_slot)):
-                        splits[chosen_slot[t]] = rescued[t]
+                    for j in range(n_sub):
+                        if h_pick.unsafe_ptr()[unsafe_offset=j] >= 0:
+                            splits[retry[j]] = rescued[j]
+                            st_rescued += 1
+                    _ = d_pick^
+                    _ = h_pick^
+                else:
+                    var ident = List[Int32](
+                        length=len(sub) * Int(n_cols), fill=Int32(0)
+                    )
+                    for j in range(len(sub)):
+                        for c in range(Int(n_cols)):
+                            ident[j * Int(n_cols) + c] = Int32(c)
+                    var survey = search_batch(
+                        ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
+                        n_classes, n_rows, n_cols, sub_trees, seed, False,
+                        ident, True, clock,
+                    )
+
+                    var s_min = survey[2].copy()
+                    var s_max = survey[3].copy()
+                    var s_miss = survey[4].copy()
+
+                    var chosen_items = List[NodeWorkItem]()
+                    var chosen_trees = List[Int32]()
+                    var chosen_cols = List[Int32]()
+                    var chosen_slot = List[Int]()
+                    for j in range(len(sub)):
+                        var nonconst = List[Int32]()
+                        for c in range(Int(n_cols)):
+                            var idx = j * Int(n_cols) + c
+                            var extent = FeatureRange(
+                                s_min[idx], s_max[idx], s_miss[idx]
+                            )
+                            if not node_feature_is_constant(
+                                extent, sub[j].instances.count
+                            ):
+                                nonconst.append(Int32(c))
+                        if len(nonconst) == 0:
+                            continue
+                        var u = rescue_pick(
+                            rescue_key(
+                                seed, sub_trees[j], UInt32(Int(sub[j].idx))
+                            ),
+                            len(nonconst),
+                        )
+                        chosen_items.append(sub[j])
+                        chosen_trees.append(sub_trees[j])
+                        chosen_cols.append(nonconst[u])
+                        chosen_slot.append(retry[j])
+
+                    if len(chosen_items) > 0:
+                        st_rescued += len(chosen_items)
+                        var res2 = search_batch(
+                            ctx, ws, dataset, d_row_ids, chosen_items, 1, params,
+                            n_classes, n_rows, n_cols, chosen_trees, seed, False,
+                            chosen_cols, False, clock,
+                        )
+                        var rescued = res2[0].copy()
+                        for t in range(len(chosen_slot)):
+                            splits[chosen_slot[t]] = rescued[t]
 
             if trace.enabled and n_nodes > 0:
                 # The SELECTED splits -- post-rescue. Under depth-wise
@@ -4968,7 +5296,27 @@ def search_batch_regression(
             block_dim=PHASE_SETUP_TPB,
         )
 
-    if not use_sampler:
+    var dev_colids = False
+    comptime if IDN_ET_RESCUE_DEVICE:
+        # No host column table: the survey's identity columns are written
+        # by `ident_colids_kernel`, the rescue's by `rescue_pick_kernel`
+        # (already queued by the caller).
+        dev_colids = (not use_sampler) and len(host_colids) == 0
+    if dev_colids:
+        if range_only:
+            if Int(k) != Int(n_cols):
+                raise Error(
+                    "the device survey searches every column; got k = "
+                    + String(Int(k))
+                )
+            ctx.enqueue_function[ident_colids_kernel](
+                d_colids.unsafe_ptr(),
+                Int32(n_cells),
+                n_cols,
+                grid_dim=ceildiv(n_cells, 256),
+                block_dim=256,
+            )
+    elif not use_sampler:
         # DEVIATION 205's rescue chose these columns on the host, from the
         # survey's own cells. Nothing draws here.
         if len(host_colids) != n_cells:
@@ -5009,7 +5357,7 @@ def search_batch_regression(
     var tiled_range = False
     comptime if ET_RANGE_TILED:
         tiled_range = dataset.has_rm
-    if tiled_range and dataset.has_bins:
+    if tiled_range and dataset.bins_active():
         ctx.enqueue_function[
             node_feature_range_tiled_kernel[TPB, ET_CODE_TILE, ET_CODE]
         ](
@@ -5096,13 +5444,20 @@ def search_batch_regression(
     ctx.enqueue_copy(dst_buf=ws.h_nonconst, src_buf=ws.d_nonconst)
     # DEVIATION 450: drain only for the survey -- see the classification
     # twin's range pass.
-    if range_only:
+    if range_only and not dev_colids:
         ctx.enqueue_copy(dst_buf=ws.o_rmin, src_buf=d_min)
         ctx.enqueue_copy(dst_buf=ws.o_rmax, src_buf=d_max)
         ctx.enqueue_copy(dst_buf=ws.o_rmiss, src_buf=d_missing)
         ctx.synchronize()
     clock.tick(ctx, PHASE_RANGE)
 
+    if range_only and dev_colids:
+        # `IDN_ET_RESCUE_DEVICE`: the cells stay on the device for
+        # `rescue_pick_kernel`; nothing drains and nothing is read here.
+        return (
+            List[Split](), List[Int32](), List[Float32](), List[Float32](),
+            List[Int32](),
+        )
     if range_only:
         var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
         for i in range(n_nodes):
@@ -5121,7 +5476,7 @@ def search_batch_regression(
     var tiled_score = False
     comptime if ET_SCORE_TILED:
         tiled_score = dataset.has_rm
-    if tiled_score and dataset.has_bins:
+    if tiled_score and dataset.bins_active():
         ctx.enqueue_function[
             node_feature_score_reg_tiled_kernel[TPB, ET_CODE_TILE, ET_CODE]
         ](
@@ -5309,7 +5664,7 @@ def search_batch_regression(
         )
         ctx.enqueue_copy(dst_buf=ws.o_ties, src_buf=ws.d_ties)
 
-    if dataset.has_bins:
+    if dataset.bins_active():
         ctx.enqueue_function[et_code_threshold_kernel](
             r_q.unsafe_ptr(), r_c.unsafe_ptr(), dataset.d_quant.unsafe_ptr(),
             dataset.d_nbins.unsafe_ptr(),
@@ -5579,8 +5934,18 @@ def train_forest_regression_device_timed(
 
         dataset.ensure_row_major(ctx, Int(k))
         comptime if ET_RANGE_TILED and ET_SCORE_TILED:
-            if dataset.has_rm and Int(dataset.n_cols) >= ET_BINNED_MIN_COLS:
-                dataset.ensure_binned(ctx)
+            comptime if IDN_ET_BINNED:
+                # Per fit, and the host column's gate (`HostBins`).
+                dataset.bins_fit = et_identical_bins_wanted(
+                    Int(dataset.n_cols), Int(k)
+                )
+                if dataset.bins_fit and dataset.has_rm:
+                    dataset.ensure_binned(ctx)
+                else:
+                    dataset.bins_fit = False
+            else:
+                if dataset.has_rm and Int(dataset.n_cols) >= ET_BINNED_MIN_COLS:
+                    dataset.ensure_binned(ctx)
         var ws = make_level_workspace(
             ctx,
             Int(params.max_batch_size),
@@ -5741,57 +6106,98 @@ def train_forest_regression_device_timed(
                 for j in range(len(retry)):
                     sub.append(work_items[retry[j]])
                     sub_trees.append(item_trees[retry[j]])
-                var ident = List[Int32](
-                    length=len(sub) * Int(n_cols), fill=Int32(0)
-                )
-                for j in range(len(sub)):
-                    for c in range(Int(n_cols)):
-                        ident[j * Int(n_cols) + c] = Int32(c)
-                var survey = search_batch_regression(
-                    ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
-                    n_rows, n_cols, sub_trees, seed, False, ident, True, clock,
-                )
-                var s_min = survey[2].copy()
-                var s_max = survey[3].copy()
-                var s_miss = survey[4].copy()
-
-                var chosen_items = List[NodeWorkItem]()
-                var chosen_trees = List[Int32]()
-                var chosen_cols = List[Int32]()
-                var chosen_slot = List[Int]()
-                for j in range(len(sub)):
-                    var nonconst = List[Int32]()
-                    for c in range(Int(n_cols)):
-                        var idx = j * Int(n_cols) + c
-                        var extent = FeatureRange(
-                            s_min[idx], s_max[idx], s_miss[idx]
-                        )
-                        if not node_feature_is_constant(
-                            extent, sub[j].instances.count
-                        ):
-                            nonconst.append(Int32(c))
-                    if len(nonconst) == 0:
-                        continue
-                    var u = rescue_pick(
-                        rescue_key(
-                            seed, sub_trees[j], UInt32(Int(sub[j].idx))
-                        ),
-                        len(nonconst),
+                comptime if IDN_ET_RESCUE_DEVICE:
+                    # The survey, the pick and the rescued search, queued
+                    # back to back (see `IDN_ET_RESCUE_DEVICE`).
+                    var n_sub = len(sub)
+                    _ = search_batch_regression(
+                        ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
+                        n_rows, n_cols, sub_trees, seed, False,
+                        List[Int32](), True, clock,
                     )
-                    chosen_items.append(sub[j])
-                    chosen_trees.append(sub_trees[j])
-                    chosen_cols.append(nonconst[u])
-                    chosen_slot.append(retry[j])
-
-                if len(chosen_items) > 0:
+                    var d_pick = ctx.enqueue_create_buffer[DType.int32](n_sub)
+                    var h_pick = ctx.enqueue_create_host_buffer[DType.int32](
+                        n_sub
+                    )
+                    ctx.enqueue_function[rescue_pick_kernel](
+                        d_pick.unsafe_ptr(),
+                        ws.d_colids.unsafe_ptr(),
+                        ws.d_min.unsafe_ptr(),
+                        ws.d_max.unsafe_ptr(),
+                        ws.d_missing.unsafe_ptr(),
+                        ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+                        ws.d_tree.unsafe_ptr(),
+                        Int32(n_sub),
+                        n_cols,
+                        seed,
+                        grid_dim=ceildiv(n_sub, 64),
+                        block_dim=64,
+                    )
+                    ctx.enqueue_copy(dst_buf=h_pick, src_buf=d_pick)
+                    # Drains at its reduce readback, `h_pick` with it.
                     var res2 = search_batch_regression(
-                        ctx, ws, dataset, d_row_ids, chosen_items, 1, params,
-                        n_rows, n_cols, chosen_trees, seed, False,
-                        chosen_cols, False, clock,
+                        ctx, ws, dataset, d_row_ids, sub, 1, params,
+                        n_rows, n_cols, sub_trees, seed, False,
+                        List[Int32](), False, clock,
                     )
                     var rescued = res2[0].copy()
-                    for t in range(len(chosen_slot)):
-                        splits[chosen_slot[t]] = rescued[t]
+                    for j in range(n_sub):
+                        if h_pick.unsafe_ptr()[unsafe_offset=j] >= 0:
+                            splits[retry[j]] = rescued[j]
+                    _ = d_pick^
+                    _ = h_pick^
+                else:
+                    var ident = List[Int32](
+                        length=len(sub) * Int(n_cols), fill=Int32(0)
+                    )
+                    for j in range(len(sub)):
+                        for c in range(Int(n_cols)):
+                            ident[j * Int(n_cols) + c] = Int32(c)
+                    var survey = search_batch_regression(
+                        ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
+                        n_rows, n_cols, sub_trees, seed, False, ident, True, clock,
+                    )
+                    var s_min = survey[2].copy()
+                    var s_max = survey[3].copy()
+                    var s_miss = survey[4].copy()
+
+                    var chosen_items = List[NodeWorkItem]()
+                    var chosen_trees = List[Int32]()
+                    var chosen_cols = List[Int32]()
+                    var chosen_slot = List[Int]()
+                    for j in range(len(sub)):
+                        var nonconst = List[Int32]()
+                        for c in range(Int(n_cols)):
+                            var idx = j * Int(n_cols) + c
+                            var extent = FeatureRange(
+                                s_min[idx], s_max[idx], s_miss[idx]
+                            )
+                            if not node_feature_is_constant(
+                                extent, sub[j].instances.count
+                            ):
+                                nonconst.append(Int32(c))
+                        if len(nonconst) == 0:
+                            continue
+                        var u = rescue_pick(
+                            rescue_key(
+                                seed, sub_trees[j], UInt32(Int(sub[j].idx))
+                            ),
+                            len(nonconst),
+                        )
+                        chosen_items.append(sub[j])
+                        chosen_trees.append(sub_trees[j])
+                        chosen_cols.append(nonconst[u])
+                        chosen_slot.append(retry[j])
+
+                    if len(chosen_items) > 0:
+                        var res2 = search_batch_regression(
+                            ctx, ws, dataset, d_row_ids, chosen_items, 1, params,
+                            n_rows, n_cols, chosen_trees, seed, False,
+                            chosen_cols, False, clock,
+                        )
+                        var rescued = res2[0].copy()
+                        for t in range(len(chosen_slot)):
+                            splits[chosen_slot[t]] = rescued[t]
 
             if trace.enabled and n_nodes > 0:
                 # The SELECTED splits -- post-rescue; see the twin, and

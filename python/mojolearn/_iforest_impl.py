@@ -355,9 +355,11 @@ class IsolationForest(NumericModeMixin):
             want,
         ]
 
-    def _run(self, X, want):
+    def _run(self, X, want, fresh=False):
         """One fit-and-score. DEVIATION 874: the fit happens here, every
-        time, on the training matrix `fit` kept."""
+        time, on the training matrix `fit` kept, unless the binary keeps the
+        forest resident (IDN_IF_RESIDENT); `fresh` (what `fit` passes) asks
+        such a binary for a new forest."""
         if not hasattr(self, "_x"):
             raise ValueError("mojolearn IsolationForest: call fit() first")
         q, _ = as_f32_c(X, ndim=2, name="X")
@@ -374,18 +376,53 @@ class IsolationForest(NumericModeMixin):
         # to `want`; do not allocate the other million-row boundary buffer.
         values = None if want == _WANT_PREDICT else empty((n_query,), "<f4")
         labels = empty((n_query,), "<i4") if want == _WANT_PREDICT else None
-        info = empty((3,), "<f8")
-        self._bind("_mojolearn_svm").iforest_run(
+        b = self._bind("_mojolearn_svm")
+        # Lane fam2-forests (IDN_IF_RESIDENT): a binary that keeps the fitted
+        # forest resident takes a 17th param, the token of this estimator's
+        # forest (0 = fit a fresh one), and returns the token in info[3].
+        # A scoring call then runs no fit. Other binaries refit per call
+        # (DEVIATION 874), unchanged.
+        probe = getattr(b, "iforest_resident", None)
+        resident = probe is not None and int(probe()) == 1
+        info = empty((4 if resident else 3,), "<f8")
+        params = self._params(train.shape[0], train.shape[1], n_query, want)
+        if resident:
+            params.append(0 if fresh else int(self.__dict__.get("_if_token", 0)))
+        b.iforest_run(
             addr_ro(train, name="X (training)"),
             addr_ro(q, name="X"),
             0 if values is None else addr(values, name="scores"),
             0 if labels is None else addr(labels, name="labels"),
             addr(info, name="info"),
-            self._params(train.shape[0], train.shape[1], n_query, want),
+            params,
         )
         self.offset_ = float(info[0])
         self.max_samples_ = int(info[1])
+        if resident:
+            self._if_token = int(info[3])
         return labels if want == _WANT_PREDICT else values
+
+    def _release_resident(self):
+        """Drop this estimator's resident forest in the binding, if any."""
+        token = self.__dict__.pop("_if_token", 0)
+        if not token:
+            return
+        try:
+            release = getattr(self._bind("_mojolearn_svm"), "iforest_resident_release", None)
+            if release is not None:
+                release(int(token))
+        except Exception:  # noqa: BLE001 - a release that cannot run frees nothing
+            pass
+
+    def __del__(self):
+        self._release_resident()
+
+    def __getstate__(self):
+        # The token names a forest in THIS process's binding; a copy or an
+        # unpickled estimator fits its own on its first scoring call.
+        state = dict(self.__dict__)
+        state.pop("_if_token", None)
+        return state
 
     def fit(self, X, y=None, sample_weight=None):
         """Fits, and reads back `offset_`, `max_samples_` and
@@ -412,10 +449,11 @@ class IsolationForest(NumericModeMixin):
             # ValueError for the same input
             raise ValueError("mojolearn IsolationForest: X contains NaN or infinity")
         had = {k: self.__dict__[k] for k in ("_x", "n_features_in_") if k in self.__dict__}  # glue: saves two attribute names
+        self._release_resident()  # the previous fit's resident forest, if any
         self._x = x  # kept alive; every scoring call refits from it
         self.n_features_in_ = x.shape[1]
         try:
-            self._run(x[:1], _WANT_SCORE_SAMPLES)  # one row, an `Array` copy
+            self._run(x[:1], _WANT_SCORE_SAMPLES, fresh=True)  # one row, an `Array` copy
         except Exception as exc:  # noqa: BLE001
             msg = str(exc)
             if device_scan and ("Input X contains" in msg or "does not accept non-finite" in msg):

@@ -2,7 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """DART's boosting round on the device (lane/apple-fast-dart, 2026-10-02).
 
-FAST + Apple only, on by default (off: `-D MOJOLEARN_DART_DEVICE_OFF`); nothing here is
+FAST + Apple (off: `-D MOJOLEARN_DART_DEVICE_OFF`) and, since fam2-forests, IDENTICAL on every
+vendor (`IDN_DART_DEVICE`, off: `-D MOJOLEARN_IDN_DART_DEVICE_OFF`); nothing here is
 instantiated otherwise (`DART_DEVICE` guards every entry body and the
 binding's registration), so IDENTICAL compiles main's code unchanged.
 
@@ -38,7 +39,6 @@ gathered sum per row instead of one add per tree. The drop set, the shrink
 factors and the tree shapes are main's."""
 from std.ffi import _Global
 from std.gpu import block_idx, block_dim, grid_dim, thread_idx
-from std.math import exp
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -46,6 +46,24 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.device_zero import enqueue_fill
 from core.neural_context import process_ctx
 from xtrees.ops import stream_base, draw
+from xtrees.dart_units import (
+    IDN_DART_DEVICE, DART_CHUNK, F32P, I32P, I64P, U16P, dart_init_unit, dart_drop_unit, dart_row_unit, dart_apply_unit,
+    dart_leaf_sum_unit, dart_newton_unit, dart_add_unit,
+)
+
+# fam2-forests (2026-10-04), IDENTICAL, every vendor, default ON: the round
+# below is DART's IDENTICAL route too (`IDN_DART_DEVICE`). Before, an
+# IDENTICAL GPU fit ran main's `_boost_loop`: the score, every tree walk,
+# the gradients, the leaf Newton sums and one score pass per dropped tree on
+# the HOST each round. The kernel bodies now live in xtrees/dart_units.mojo
+# with every float operation pinned under IDENTICAL (see that file), and the
+# host column runs the same units (xtrees/dart_host.mojo), so NVIDIA, AMD,
+# Apple and the host produce the same words. BITS CHANGE against the old
+# IDENTICAL DART (float32 state and chunked leaf sums instead of float64
+# row-order chains), on all four columns together.
+# `-D MOJOLEARN_IDN_DART_DEVICE_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) restores
+# main's loop on every column.
+# The gate itself is `xtrees/dart_units.mojo: IDN_DART_DEVICE` (shared with the host twin).
 
 # FAST + Apple default since the M3 A/B (lane/apple-fast-dart 443f4b3cc,
 # istella, n=1): dart 45,837 -> 24,730 ms (-46%), acc .9487 -> .9486;
@@ -53,19 +71,11 @@ from xtrees.ops import stream_base, draw
 # -D MOJOLEARN_DART_DEVICE_OFF. The old -D MOJOLEARN_DART_DEVICE is harmless.
 comptime DART_DEVICE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_DART_DEVICE_OFF"]()
-)
+) or IDN_DART_DEVICE
 
 comptime TPB = 256
 comptime GRID_MAX = 65535 * 16
-#: rows per leaf-sum chunk: one thread per (node, chunk) scans the chunk's
-#: leaf indices (a broadcast read across the block's consecutive nodes).
-comptime DART_CHUNK = 8192
 comptime _DART_CTX = "MojoXTreesDartContext"
-
-comptime F32P = MutPointer[Float32, MutAnyOrigin]
-comptime I32P = MutPointer[Int32, MutAnyOrigin]
-comptime I64P = MutPointer[Int64, MutAnyOrigin]
-comptime U16P = MutPointer[UInt16, MutAnyOrigin]
 
 
 @always_inline
@@ -83,12 +93,14 @@ def _blocks(units: Int) -> Int:
 
 
 # ------------------------------------------------------------------ kernels
+# Each kernel is a grid-stride loop over its units; the unit bodies are
+# xtrees/dart_units.mojo's (shared with the host column).
 def dart_init_kernel(units: Int64, n: Int64, inits: F32P, score: F32P):
     """score[c * n + i] = inits[c]."""
     var e = _tid()
     var stride = _tstride()
     while e < Int(units):
-        score[e] = inits[e // Int(n)]
+        dart_init_unit(e, Int(n), inits, score)
         e += stride
 
 
@@ -103,10 +115,7 @@ def dart_drop_kernel(units: Int64, seed: Int64, stream: Int64, skip_thr: Int64, 
     var e = _tid()
     var stride = _tstride()
     while e < Int(units):
-        if skip:
-            flags[e] = Int32(0)
-        else:
-            flags[e] = Int32(1) if (draw(base, e + 1) >> 11) < UInt64(thr[e]) else Int32(0)
+        dart_drop_unit(e, base, skip, thr, flags)
         e += stride
 
 
@@ -117,49 +126,12 @@ def dart_row_kernel(
     """Per row: dsum[c, i] = the dropped trees' coef x leaf value, taken off
     the score; then main's `gradients` (kind 0 L2, 1 logloss, 2 softmax,
     class-major) into target = -g and h."""
-    var nn = Int(n)
-    var kk = Int(k)
     var e = _tid()
     var stride = _tstride()
     while e < Int(units):
-        var i = e
-        for c in range(kk):
-            var s: Float32 = 0.0
-            for it in range(Int(t)):
-                if flags[it] != Int32(0):
-                    var j = it * kk + c
-                    s = s + coef[j] * values[j * Int(node_cap) + Int(nodes[j * nn + i])]
-            dsum[c * nn + i] = s
-            score[c * nn + i] = score[c * nn + i] - s
-        if kind == Int32(2):
-            var m = score[i]
-            for c in range(1, kk):
-                if score[c * nn + i] > m:
-                    m = score[c * nn + i]
-            var tot: Float32 = 0.0
-            for c in range(kk):
-                tot = tot + exp(score[c * nn + i] - m)
-            var yi = Int(y[i])
-            var factor = Float32(kk) / (Float32(kk) - 1.0)
-            for c in range(kk):
-                var p = exp(score[c * nn + i] - m) / tot
-                var g = p - 1.0 if yi == c else p
-                target[c * nn + i] = -g
-                h[c * nn + i] = factor * p * (1.0 - p)
-        else:
-            var s = score[i]
-            var yv = y[i]
-            var g: Float32
-            var hv: Float32
-            if kind == Int32(0):
-                g = s - yv
-                hv = 1.0
-            else:
-                var p = 1.0 / (1.0 + exp(-s))
-                g = p - yv
-                hv = p * (1.0 - p)
-            target[i] = -g
-            h[i] = hv
+        dart_row_unit(
+            e, Int(n), Int(k), Int(t), kind, Int(node_cap), flags, coef, nodes, values, y, score, dsum, target, h,
+        )
         e += stride
 
 
@@ -170,32 +142,10 @@ def dart_apply_kernel(
     """nodes[row_off + i] = the leaf node row i reaches (main's `apply_trees`
     walk: left child l, right l + 1, leaf where left is -1). A walk that
     leaves the tree sets bad[0] and lands on node 0; the host raises."""
-    var dd = Int(d)
-    var cnt = Int(count)
     var e = _tid()
     var stride = _tstride()
     while e < Int(units):
-        var i = e
-        var node = 0
-        var steps = 0
-        var ok = True
-        while True:
-            var l = Int(left[node])
-            if l == -1:
-                break
-            var c = Int(colid[node])
-            if c < 0 or c >= dd or l < 1 or l + 1 >= cnt or steps > cnt:
-                ok = False
-                break
-            if x[i * dd + c] <= quesval[node]:
-                node = l
-            else:
-                node = l + 1
-            steps += 1
-        if not ok:
-            bad[0] = Int32(1)
-            node = 0
-        nodes[Int(row_off) + i] = UInt16(node)
+        dart_apply_unit(e, Int(d), Int(count), colid, quesval, left, x, Int(row_off), nodes, bad)
         e += stride
 
 
@@ -205,23 +155,10 @@ def dart_leaf_sum_kernel(
 ):
     """part[(q * n_nodes + k) * 2 + {0, 1}] = sum of g (= -target) and h over
     the rows of chunk q that reached node k, in row order."""
-    var nn = Int(n)
-    var nk = Int(n_nodes)
     var e = _tid()
     var stride = _tstride()
     while e < Int(units):
-        var q = e // nk
-        var kk = e - q * nk
-        var r0 = q * DART_CHUNK
-        var r1 = min(r0 + DART_CHUNK, nn)
-        var sg: Float32 = 0.0
-        var sh: Float32 = 0.0
-        for i in range(r0, r1):
-            if Int(nodes[Int(row_off) + i]) == kk:
-                sg = sg - target[Int(class_off) + i]
-                sh = sh + h[Int(class_off) + i]
-        part[e * 2] = sg
-        part[e * 2 + 1] = sh
+        dart_leaf_sum_unit(e, Int(n), Int(n_nodes), Int(row_off), Int(class_off), nodes, target, h, part)
         e += stride
 
 
@@ -233,27 +170,10 @@ def dart_newton_kernel(
     in chunk order: -ThresholdL1(sum g, l1) / (sum h + lambda), clipped to
     +-max_delta_step when that is > 0, 0 where the denominator is not
     positive."""
-    var nk = Int(n_nodes)
     var e = _tid()
     var stride = _tstride()
     while e < Int(units):
-        var sg: Float32 = 0.0
-        var sh: Float32 = 0.0
-        for q in range(Int(n_chunks)):
-            sg = sg + part[(q * nk + e) * 2]
-            sh = sh + part[(q * nk + e) * 2 + 1]
-        var den = sh + lam
-        var ret: Float32 = 0.0
-        if den > 0.0:
-            var s = sg
-            if l1 > 0.0:
-                var a = (s if s >= 0.0 else -s) - l1
-                var reg = a if a > 0.0 else 0.0
-                s = reg if s > 0.0 else (-reg if s < 0.0 else 0.0)
-            ret = -s / den
-            if mds > 0.0 and (ret if ret >= 0.0 else -ret) > mds:
-                ret = mds if ret > 0.0 else -mds
-        values[Int(voff) + e] = ret
+        dart_newton_unit(e, Int(n_nodes), Int(n_chunks), part, lam, l1, mds, Int(voff), values)
         e += stride
 
 
@@ -267,8 +187,7 @@ def dart_add_kernel(
     var e = _tid()
     var stride = _tstride()
     while e < Int(units):
-        var ci = Int(class_off) + e
-        score[ci] = score[ci] + factor * dsum[ci] + shrink * values[Int(voff) + Int(nodes[Int(row_off) + e])]
+        dart_add_unit(e, Int(class_off), Int(row_off), Int(voff), factor, shrink, nodes, values, dsum, score)
         e += stride
 
 
@@ -423,7 +342,7 @@ def dart_open(
         ))
         return id
     else:
-        raise Error("x_trees dart_open: built without DART_DEVICE (not FAST + Apple, or MOJOLEARN_DART_DEVICE_OFF)")
+        raise Error("x_trees dart_open: built without DART_DEVICE (MOJOLEARN_DART_DEVICE_OFF / MOJOLEARN_IDN_DART_DEVICE_OFF)")
 
 
 def dart_step(
@@ -470,7 +389,7 @@ def dart_step(
         ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=bad_out), src_buf=reg[].sessions[idx].bad)
         ctx.synchronize()
     else:
-        raise Error("x_trees dart_step: built without DART_DEVICE (not FAST + Apple, or MOJOLEARN_DART_DEVICE_OFF)")
+        raise Error("x_trees dart_step: built without DART_DEVICE (MOJOLEARN_DART_DEVICE_OFF / MOJOLEARN_IDN_DART_DEVICE_OFF)")
 
 
 def dart_add(
@@ -527,7 +446,7 @@ def dart_add(
         var vsub = reg[].sessions[idx].values.create_sub_buffer[DType.float32](j * node_cap, n_nodes)
         ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=values_out), src_buf=vsub)
     else:
-        raise Error("x_trees dart_add: built without DART_DEVICE (not FAST + Apple, or MOJOLEARN_DART_DEVICE_OFF)")
+        raise Error("x_trees dart_add: built without DART_DEVICE (MOJOLEARN_DART_DEVICE_OFF / MOJOLEARN_IDN_DART_DEVICE_OFF)")
 
 
 def dart_close(id: Int, bad_out: Int) raises:
@@ -542,4 +461,4 @@ def dart_close(id: Int, bad_out: Int) raises:
         var gone = reg[].sessions.pop(idx)
         _ = gone^
     else:
-        raise Error("x_trees dart_close: built without DART_DEVICE (not FAST + Apple, or MOJOLEARN_DART_DEVICE_OFF)")
+        raise Error("x_trees dart_close: built without DART_DEVICE (MOJOLEARN_DART_DEVICE_OFF / MOJOLEARN_IDN_DART_DEVICE_OFF)")

@@ -45,7 +45,7 @@ from xtrees.ops import (
     onehot_leaves, transpose_f32, normalize_rows, exact_sum_f32, EXACT_SUM_LIMBS, logit, scatter, platt_fit, platt_apply, isotonic_fit,
     isotonic_predict, platt_apply_strided, isotonic_predict_strided, complement_pairs, indicator_codes, column_f64,
     bag_rows, unseen_rows, transpose_f64, stack_w64, binary_proba, class_counts, remap_cols, positive_codes,
-    spread_leaves,
+    spread_leaves, tree_shape,
 )
 
 
@@ -815,6 +815,27 @@ def leaf_numbering_binding(left: PythonObject, node_col: PythonObject, params: P
     return PythonObject(leaf_numbering(i32_ptr(Int(py=left)), nn, i32_ptr(Int(py=node_col))))
 
 
+#: lane fam2-forests (2026-10-04): `get_depth` / `get_n_leaves` walk the tree's
+#: nodes in this binding (xtrees/ops.mojo `tree_shape`) instead of a Python
+#: loop over `tolist()` rows. Integers; every build and both tiers.
+#: `-D MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF` (or `MOJOLEARN_IDN_ALL_OFF`)
+#: leaves the entry unregistered and the Python walk runs.
+comptime XTREES_TREE_SHAPE_NATIVE = not (
+    is_defined["MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def tree_shape_binding(left: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n_nodes]: res (int32 2) = [depth, leaf count] of the tree
+    whose `left` (int32 n_nodes, tree-relative) starts at the address."""
+    _need(params, 1, "x_trees_tree_shape")
+    var nn = _count(_i(params, 0), "x_trees_tree_shape")
+    if nn == 0:
+        raise Error("x_trees_tree_shape: empty tree")
+    tree_shape(i32_ptr(Int(py=left)), nn, i32_ptr(Int(py=res)))
+    return PythonObject(nn)
+
+
 #: lane apple-fast-py2mojo-trees (2026-10-03, Andrew: "everything is supposed
 #: to be in mojo"): 1 in every build, so python/mojolearn/_expansion_trees.py
 #: runs the wrappers' cv folds, OneVsRest targets, MultiOutputClassifier label
@@ -868,6 +889,12 @@ comptime _XT_ADA_SESSION_SHARE = _XT_ADA_SESSION and not is_defined["MOJOLEARN_T
 comptime _XT_IDN_ADA_SESSION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_ADA_SESSION_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
+#: fam2-forests (2026-10-04), an IDENTICAL GPU build's switch (bit 64, every
+#: vendor; never the host column): Kernel and Permutation SHAP over one of
+#: this library's flat forests evaluate the model on the device
+#: (xtrees/agnostic_device.mojo MOJOLEARN_IDN_SHAP_DEVICE_MODEL). Moves no
+#: bit. `-D MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF` clears it.
+comptime _XT_AGN_DEVICE_MODEL = XTREES_DEVICE_OPS and agn_dev.AGN_IDN_DEVICE_MODEL
 comptime XTREES_FAST_SWITCHES = (
     (1 if _XT_NATIVE_SPLITS else 0)
     + (2 if _XT_ADA_SESSION else 0)
@@ -875,6 +902,7 @@ comptime XTREES_FAST_SWITCHES = (
     + (8 if agn_dev.KSHAP_FAST_BATCH else 0)
     + (16 if agn_dev.AGN_IDN_SYN_POOL else 0)
     + (32 if _XT_IDN_ADA_SESSION else 0)
+    + (64 if _XT_AGN_DEVICE_MODEL else 0)
 )
 
 
@@ -883,7 +911,8 @@ def fast_switches_binding() raises -> PythonObject:
     MOJOLEARN_TE_ADA_SESSION, bit 4 MOJOLEARN_TE_ADA_SESSION_SHARE, bit 8
     MOJOLEARN_KSHAP_FAST_BATCH, bit 16 MOJOLEARN_AGN_IDN_SYN_POOL (an
     IDENTICAL build's switch; both in xtrees/agnostic_device.mojo), bit 32
-    `_XT_IDN_ADA_SESSION` (an IDENTICAL build's switch)."""
+    `_XT_IDN_ADA_SESSION` (an IDENTICAL build's switch), bit 64
+    MOJOLEARN_IDN_SHAP_DEVICE_MODEL (an IDENTICAL GPU build's switch)."""
     return PythonObject(XTREES_FAST_SWITCHES)
 
 
@@ -1240,6 +1269,72 @@ def pshap_values_binding(yout: PythonObject, phi: PythonObject, params: PythonOb
     return PythonObject(p[0])
 
 
+def agn_model_load_binding(forest: PythonObject, bg: PythonObject, params: PythonObject) raises -> PythonObject:
+    """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: uploads the explained flat forest and
+    the background for one `shap_values` call. forest = (offsets Int32
+    trees + 1, feature ids Int32 nodes, thresholds Float32 nodes, left
+    children Int32 nodes, leaves Float32 nodes x k), the snapshot the
+    forest's own predict validated; bg Float32 nb x d; params = [trees,
+    nodes, k, d, nb, rf_input]. Refused in a build without the define
+    (x_trees_fast_switches bit 64 is 0 there)."""
+    var p = _agn_ints(params, 6, "x_trees_agn_model_load")
+    if len(forest) != 5:
+        raise Error("x_trees_agn_model_load: forest must hold 5 arrays")
+    comptime if _XT_AGN_DEVICE_MODEL:
+        agn_dev.model_load(Int(py=forest[0]), Int(py=forest[1]), Int(py=forest[2]), Int(py=forest[3]),
+                           Int(py=forest[4]), Int(py=bg), p[0], p[1], p[2], p[3], p[4], p[5] != 0)
+    else:
+        raise Error("x_trees_agn_model_load: built without MOJOLEARN_IDN_SHAP_DEVICE_MODEL")
+    return PythonObject(p[0])
+
+
+def agn_model_release_binding() raises -> PythonObject:
+    """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: frees the device forest and
+    background (`x_trees_agn_model_load`); the Python explainers call it
+    when `shap_values` ends. Nothing to free in a build without the define."""
+    comptime if _XT_AGN_DEVICE_MODEL:
+        agn_dev.model_release()
+    return PythonObject(0)
+
+
+def kshap_solve_model_binding(x: PythonObject, fx: PythonObject, fnull: PythonObject, tables: PythonObject,
+                              phi: PythonObject, params: PythonObject) raises -> PythonObject:
+    """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: KernelExplainer's values of a chunk
+    over the loaded forest, `x_trees_kshap_synth` + the model +
+    `x_trees_kshap_solve` without leaving the device: x Float32 R x d (the
+    chunk's rows), fx Float32 R x k, fnull float64 k (linked), phi float64
+    R x d x k; params as x_trees_kshap_solve's = [R, nb, d, nfixed, m,
+    nfull, L, npaired, row0, seed, wrand_bits, k, link] (nb must be the
+    loaded background's)."""
+    var p = _agn_ints(params, 13, "x_trees_kshap_solve_model")
+    _kshap_check(p, "x_trees_kshap_solve_model")
+    if p[11] < 1:
+        raise Error("x_trees_kshap_solve_model: needs outputs")
+    comptime if _XT_AGN_DEVICE_MODEL:
+        agn_dev.kshap_solve_model(Int(py=x), Int(py=fx), Int(py=fnull), Int(py=tables[0]), Int(py=tables[1]),
+                                  Int(py=tables[2]), Int(py=phi), p[0], p[1], p[2], p[11], p[4], p[3], p[5], p[7],
+                                  p[6], p[9], p[8], UInt64(p[10]), p[12] != 0)
+    else:
+        raise Error("x_trees_kshap_solve_model: built without MOJOLEARN_IDN_SHAP_DEVICE_MODEL")
+    return PythonObject(p[0])
+
+
+def pshap_values_model_binding(x: PythonObject, phi: PythonObject, params: PythonObject) raises -> PythonObject:
+    """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: PermutationExplainer's values of a
+    chunk over the loaded forest, `x_trees_pshap_synth` + the model +
+    `x_trees_pshap_values` without leaving the device: x Float32 R x d,
+    phi float64 R x d x k; params as x_trees_pshap_values' = [R, nb, d, np,
+    row0, seed, k] (nb must be the loaded background's)."""
+    var p = _agn_ints(params, 7, "x_trees_pshap_values_model")
+    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 1 or p[4] < 0 or p[6] < 1:
+        raise Error("x_trees_pshap_values_model: bad counts")
+    comptime if _XT_AGN_DEVICE_MODEL:
+        agn_dev.pshap_values_model(Int(py=x), Int(py=phi), p[0], p[1], p[2], p[6], p[3], p[5], p[4])
+    else:
+        raise Error("x_trees_pshap_values_model: built without MOJOLEARN_IDN_SHAP_DEVICE_MODEL")
+    return PythonObject(p[0])
+
+
 def register(mut m: PythonModuleBuilder) raises:
     """The shared export list; both bindings call this."""
     m.def_function[sample_indices_binding]("x_trees_sample_indices")
@@ -1301,6 +1396,8 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[positive_codes_binding]("x_trees_positive_codes")
     m.def_function[spread_leaves_binding]("x_trees_spread_leaves")
     m.def_function[leaf_numbering_binding]("x_trees_leaf_numbering")
+    comptime if XTREES_TREE_SHAPE_NATIVE:
+        m.def_function[tree_shape_binding]("x_trees_tree_shape")
     m.def_function[block_mean_binding]("x_trees_block_mean")
     m.def_function[kshap_schedule_binding]("x_trees_kshap_schedule")
     m.def_function[normalized_weights_binding]("x_trees_normalized_weights")
@@ -1311,3 +1408,7 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[kshap_solve_ey_binding]("x_trees_kshap_solve_ey")
     m.def_function[pshap_synth_binding]("x_trees_pshap_synth")
     m.def_function[pshap_values_binding]("x_trees_pshap_values")
+    m.def_function[agn_model_load_binding]("x_trees_agn_model_load")
+    m.def_function[agn_model_release_binding]("x_trees_agn_model_release")
+    m.def_function[kshap_solve_model_binding]("x_trees_kshap_solve_model")
+    m.def_function[pshap_values_model_binding]("x_trees_pshap_values_model")
