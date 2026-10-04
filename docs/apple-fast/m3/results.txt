@@ -1,4 +1,4 @@
-pos=894 lines=    1530
+pos=914 lines=    1542
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -1060,3 +1060,27 @@ pos=894 lines=    1530
 1168:CMD apple-fast-gap-linalg2-kpcadef@75bc9a4f9 gl2-kpcadef-smoke rc=0 SMOKE-OK 23.6884765625 (3000, 8)
 1169:CMD apple-fast-opp@8157809e8 opp8-als-text rc=0 OPP-DONE tag=opp8-als-text out=~/mq/out/opp-opp8-als-text
 1170:FBUILD lane/apple-fast@443384b59 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+1171:CMD apple-fast@443384b59 nofast-eigh-synthetic-c rc=0 AFC-AB-SUMMARY nofast-eigh-synthetic-c arm=A lane=eigh ds=synthetic median_of_medians_ms=43721.64550004527 runs=[43721.64550004527 ] digest=ccc81597dc49c3f8 
+1172:CMD apple-fast@443384b59 nofast-sgd-synthetic-c rc=0 AFC-AB-SUMMARY nofast-sgd-synthetic-c arm=A lane=sgd ds=synthetic median_of_medians_ms=334.87049996620044 runs=[ 334.87049996620044 ] digest= digest=0743826898a3d479 
+1173:CMD apple-fast@443384b59 nofast-sgd-clf-istella-c rc=0 AFC-AB-SUMMARY nofast-sgd-clf-istella-c arm=A lane=sgd-clf ds=istella median_of_medians_ms=2959.421708015725 runs=[2959.421708015725 ] digest=1cc0a66e51d6a918 
+1174:CMD apple-fast@443384b59 nofast-sgd-clf-taxi-c rc=0 AFC-AB-SUMMARY nofast-sgd-clf-taxi-c arm=A lane=sgd-clf ds=taxi median_of_medians_ms=2451.556415995583 runs=[2451.556415995583 ] digest=c199c03da7d4c699 
+1175:CMD apple-fast@443384b59 nofast-sgd-reg-istella-c rc=0 AFC-AB-SUMMARY nofast-sgd-reg-istella-c arm=A lane=sgd-reg ds=istella median_of_medians_ms=2934.5070410054177 runs=[2934.5070410054177 ] digest=948d33192ea42288 
+1176:CMD apple-fast@443384b59 nofast-sgd-reg-taxi-c rc=0 AFC-AB-SUMMARY nofast-sgd-reg-taxi-c arm=A lane=sgd-reg ds=taxi median_of_medians_ms=2434.386875014752 runs=[2434.386875014752 ] digest=cf105a4c09851e0a 
+1177:CMD apple-fast@443384b59 nofast-gmm-taxi-c rc=0 AFC-AB-SUMMARY nofast-gmm-taxi-c arm=A lane=gmm ds=taxi median_of_medians_ms=none runs=[  ] digest= 
+1178:FBUILD lane/apple-fast-fix-treeshap@c777fdd93 prebuilt=m2 core=0 ibase=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 files=7
+1179:CMD apple-fast-fix-treeshap@c777fdd93 fixtshap-taxi rc=0 AFC-AB-SUMMARY fixtshap-taxi arm=A lane=tree-shap ds=taxi median_of_medians_ms=22.4250839673914 runs=[  22.4250839673914 ] digest= digest=84bd3ecd19bfdad7 
+1180:FBUILD lane/apple-fast-mcd-revert@83072911d prebuilt=m2 core=0 ibase=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 files=7
+1181:CMD apple-fast-mcd-revert@83072911d mcdrev-smoke2 rc=1     MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_x_decomp.sh
+1182:FBUILD lane/apple-fast@04225d48f core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+1183:CMD apple-fast@04225d48f nofast-gmm-taxi-d rc=0 AFC-AB-SUMMARY nofast-gmm-taxi-d arm=A lane=gmm ds=taxi median_of_medians_ms=none runs=[  ] digest= 
+1184:CMD apple-fast-mcd-revert@83072911d mcdrev-smoke3 rc=1 AttributeError: 'Array' object has no attribute 'mean'
+1185:CMD apple-fast-fix-treeshap@c777fdd93 ab-tshap-table-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=11.8 all=[12] quality=['{"max_additivity_error":'] defines='-D MOJOLEARN_TREESHAP_FAST_TABLE'
+1186:CMD apple-fast-mcd-revert@83072911d mcdrev-smoke4 rc=0 MCDREV-SMOKE OK (5, 5) 0.1
+1187:CMD apple-fast-fix-treeshap@c777fdd93 fixtshap-istella rc=0 AFC-AB-SUMMARY fixtshap-istella arm=A lane=tree-shap ds=istella median_of_medians_ms=24.252249975688756 runs=[24.252249975688756 ] digest=596b6cfa545888d1 
+1188:CMD apple-fast-fix-treeshap@c777fdd93 ab-tshap-table-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=25.1 all=[25] quality=['{"max_additivity_error":'] defines='-D MOJOLEARN_TREESHAP_FAST_TABLE'
+1189:CMD apple-fast-mcd-revert@83072911d mcdrev-smoke rc=1     MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_x_decomp.sh
+1190:CMD apple-fast@04225d48f nofast-min-cov-det-istella-b rc=0 AFC-AB-SUMMARY nofast-min-cov-det-istella-b arm=A lane=min-cov-det ds=istella median_of_medians_ms=none runs=[ ] digest= 
+1191:CMD apple-fast-fastonly2@eca3e33b6 fastonly2-3-ivf-pq-istella-m3 rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=5243.1 all=[5243] quality=['{"recall_at_10":'] defines='-D MOJOLEARN_ANN3_COARSE_SEED -D MOJOLEARN_IVF_FAST_SEED_DEVICE'
+1192:FBUILD lane/apple-fast-fix-treeshap-merge@baa34698e prebuilt=m2 core=0 ibase=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 files=7
+1193:CMD apple-fast-fix-treeshap-merge@baa34698e smoke-fixtshap-merge rc=2 bash: -c: line 1: syntax error: unexpected end of file
+1194:CMD apple-fast-fastonly2@eca3e33b6 fastonly2-4-ivf-istella-m3 rc=0 AFC-DEF-SUMMARY arm=B n=0 median_ms=None all=[] quality=[] defines='-D MOJOLEARN_ANN3_COARSE_SEED -D MOJOLEARN_IVF_FAST_SEED_DEVICE'
