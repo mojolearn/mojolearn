@@ -874,7 +874,99 @@ Catalog G1/G5 standalone6abb76673, w2-catalog-g1g5-q-20261004-r2: HOLD for unres
 SHAP delta promotion preparation `e3264731af227951cb2ecfb80f81d359592486b5`
 passed M2 default and `MOJOLEARN_PSHAP_DELTA_OFF` builds plus Python import
 smoke. Measured20bbdc372 gives28222.8 ->14788.6ms and exact output words in
-all3quality cases. Final default/rollback M3 quality is queued next; not
-merged yet. Fresh source pin fixes only promotion arm ordering; no scored replay.
+all3quality cases. Final default/rollback M3 quality pshap-delta-default-r1-quality-20261004 PASS: 13 arrays, A=default and B=OFF; exact source/binary hashes pinned. Approved for merge. Fresh source pin fixes only promotion arm ordering; no scored replay.
 
 | `MOJOLEARN_LU_FAST_PIVOT_SHUFFLE` / rollback `MOJOLEARN_LU_FAST_PIVOT_SHUFFLE_OFF` | lu-factor / lu-solve n8192 | measured6d82b61270dc5d7c65f1d3b847a91630c4e2bfcd; isolated default from0cbe0036a | w2-lu-pivot-shuffle-q-20261004; w2-lu-pivot-shuffle-t-20261004 | quality PASS10fixtures exact factors/pivots/solutions/info, no-worse residuals; call+read factor715.628750 ->653.702416ms, solve792.222333 ->733.531042ms | DEFAULT merged; promotion0769e1d92 M2default/OFF rc0. Existing parallel LUstep grid unchanged, exact directed reduction topology, same tie/NaN comparator; skips neutral initial-fold levels and uses warp shuffle for final5stages. Same synchronized output. No scored replay. |
+| `MOJOLEARN_PSHAP_DELTA` / `_OFF` | permutation-shap / istella | measured lane/apple-fast-w4-shap@20bbdc37256bd00ef09fc97970f79f6967fa4f2a; default lane/apple-fast-pshap-delta-default | w2-pdelta-quality; w2-pdelta-pshap-istella | 28,222.8 -> 14,788.6 ms (-47.6%); linear/tanh/two-output attribution arrays byte-identical, model rows 2713500 ->2215900 | DEFAULT: M2 default/rollback PASS; M3 pshap-delta-default-r1-quality-20261004 PASS, all13arrays exact. No arithmetic change, no host SHAP math, current-main source compatibility verified; callback remains existing boundary. See ab/pshap-delta-default.md. |
+
+## Catalog shared GEMM screen and actual caller expansion (2026-10-04)
+
+Catalog9ab2d3d3f intake is retained; all10 variants compiled at9f1a1657c.
+M3 catalog-matrix-t-v1, tools7dfae82b6: 66 one-call records, six predeclared
+n>=2 shapes, all output hashes exactly match incumbent. Unrestricted quality
+remains HOLD for the n1 GEMV regression; this scope excludes n1 explicitly.
+Cold context + upload + kernel + download + completion + first read total
+is about23–30ms; this is not a pure kernel throughput measurement.
+There is no universal winner. G1 denseNN ratio0.969, squareNN0.999 and
+low-widthNT0.934; G5 tall projection0.932 and Gram0.913; G9 Gram0.885.
+No default or caller speed claim follows from this screen. No scored replay.
+Report: ~/mojolearn-evidence/apple-fast/sync/catalog-matrix-t-v1-report.json.
+
+The shared G1/G5 dispatcher a9e64922f passed43 route/quality fixtures.
+Actual estimator counter/quality harness0505c9427 is source-only: core and
+estimators first; zero route reach cannot pass admission. A distinct resident
+input contract is being prepared to exclude setup/uploads while retaining
+completion and first read; new lifecycle quality must pass before timing.
+Decomp/PCA adapters must preserve caller-specific split plans, strides and
+atomic behavior. PCA still uses atomic split mode even with one split.
+
+SHAP default merged cf46d6f37 after M2 default/OFF and final M3 quality PASS.
+KNN GPU-only lean counts default76567110e M2 default/OFF PASS; final M3
+quality remains pending. Callpath r3 failed a context identity guard before
+numerical evaluation; r4 14761655f retains stable context ownership and
+foreign-context refusal, now compiling on M2. No callpath timing admitted.
+
+Eigh panel DF21eeacf90: M3 eigh-panel-df-q-v1 strict no-regression FAIL against current panel default, absolute gate FAIL; no timings or promotion admitted. K1 diagnostic1a58b974e is reference-only with22fixed evaluations across3explicit model controls; original K1 HOLD remains.
+
+Shared downstream G1 source30e4562c2129569ed03d93d878ec6a903ea51691
+starts M2 core A=COUNTERS, B=COUNTERS+G1; G5 source495c30c33a8805a1944b45f9bc911446f7e89ed8
+is separate to prevent manifest collisions. Core artifact is _mojolearn.so.
+No runtime admission yet. Resident catalog probe fa39073607e3b19c4fbfe063a5545a63318f13c2
+starts M2 A/B compilation; strict new lifecycle/matrix quality must pass before
+its distinct resident-input call/completion/first-read timing contract.
+Callpathr5 3491a4d4cab94ad76a04e779952daa8ba64ef1c8 M2bothPASS; M3qualityowed.
+EighDF failure details: board4096 eigenerror +34.3%, board1000 residual+0.65%,
+indefinite1024 orthogonality+0.85%; five fallback cases unchanged. HOLD retained.
+
+| `MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU` / `_OFF` | knn-imputer / taxi | measured f9c5887a8ff3b5fe8878e0bfe3d5f553a7f741f7; default lane/apple-fast-knn-lean-gpu-default, base1f33e9764 | w2-knn-lean-gpu-taxi-r1; repaired fixtureknn-lean-gpu-v2 | 2.2 ->0.8 ms; quality31 arrays byte-exact | DEFAULT: M2 default/rollback PASS, final M3 knn-lean-gpu-default-quality-20261004 PASS31exact arrays, Python import PASS. GPU count/total reduction and pool reuse, no imported host-lean or unrelated old candidates. See ab/knn-lean-gpu-default.md. |
+
+G1core+estimators30e4562c M2botharmsPASS, staged. Tools-only helperef2ce40dd
+fixes KMeans squared-distance oracle and validates compiledancestor/runtime
+identity; first unscored cases OLS/PCA/wide-kKNN/KMeans atwidth65 targetcoreNT
+route0. Small-kKNNwidth11 is a NO_REACH control. Other shared routes require
+separate eligible callers; no claim that all four routes are covered here.
+Residentcatalogfa390736 M2botharmsPASS/staged, fresh lifecycle quality queued.
+
+## Shared caller quality and process checkpoint
+
+G1 compiled30e4562c/harnessef2ce40dd: g1-downstream-ols-d65-q-v1,
+g1-downstream-pca-d65-q-v1 andg1-downstream-knn-wide-k-d65-q-v1 PASS.
+A/B capture hashes identical, independent float64 L2/max no-worse gatesPASS.
+Counters locate coreNT route0 in OLSfit (1call), PCAtransform/inverse (1each),
+andwide-kKNN kneighbors(1). PCAfit/OLSpredict/KNNfit do not reach this hook.
+g1-downstream-knn-d11-q-v1 is expectedNO_REACH with exact outputs, nottiming
+admission. KMeans A failed existing all_finite prerequisite before numerical
+comparison: same-source IDENTICAL base binding is missing from isolatedsource;
+this is infrastructure failure, notcandidatequality. Preserve original log.
+
+Residentcatalogfa390736 resident-catalog-q-v1 PASS: eleven matrix fixtures
+for eachofelevenarms, exact prior words, zero degradation, n1refused. Report
+SHA25645118d4df721f5ae5664f36232e7226cef67b397ed3f97849345d518b27da3e1.
+Distinct resident-input timing remains pending, no scored replay.
+Callpath3491a4d4 callpath-probe-quality-r5 PASS bits/lifecycle; notproduction
+or timing admission by itself. Next timing contract under source review.
+G5compiledsource495c30c3 core/estimators A/B builds started onM2 after removing
+only finished G1/resident build trees; manifests/artifacts/source refs retained.
+Future submissions follow the new efficient execution section inEXPERIMENT_PROCESS.
+
+MCD ordered covariance f35a57bd4: mcd-ordered-direct-q-r3 HOLD. B repeats
+bitwise, but deterministic reduction does not guarantee no-worse accuracy.
+For batch_4_1, maximum error0.0398175029 ->0.0710675029 and relativeL2
+1.2517670343e-7 ->1.6478564181e-7; resident_3 relativeL2 also regresses.
+Several other cases improve. Preserve strict all-field no-regression failure;
+no fitted-model tests, speed measurements or default promotion admitted.
+
+Future-job preflight integrated at a78f0ab5e: seven metadata-only fixture tests
+PASS. Deployed during serial transfer window scoped-gemm-v1, which is now
+released. Resident timing resident-catalog-t-v1 and four G5 caller quality
+jobs passed metadata preflight before queue insertion. This readiness does
+not replace numerical quality, import/capability checks or counter validation.
+G5 core/estimators and same-source IDENTICAL ibase M2 PASS/staged; caller
+harnessf40649e0 checks both arms' prerequisites before fitting. No old job changed.
+
+User clarification: pursue individual scoped GEMM winners, not a universal one.
+Cold screen leads G1 low-widthNT0.934, G5 tallprojection0.932 and G9Gram0.885
+are per-tested-shape leads, not broad regime guarantees. Resident screen will
+compare the same kernels under a distinct resident-input contract. Scoped
+stride/split-aware decomposition/PCA adapters are in source preparation; no
+production GEMM default promoted and no dataset-specific dispatch introduced.
