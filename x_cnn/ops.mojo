@@ -1488,7 +1488,12 @@ def l2norm_bwd_at(r: Int, y: FP, g: FP, aux: FP, dst: FP, q: IP, p: IP):
 comptime _FAM2_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime IDN_XENT_DEV_FOLD = _FAM2_IDN and not is_defined["MOJOLEARN_IDN_XENT_DEV_FOLD_OFF"]()
 comptime IDN_CNN_EPOCH_DEV = IDN_XENT_DEV_FOLD and not is_defined["MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF"]()
-comptime LOSS_FOLD_BLOCK = 32
+#: CANDIDATE ARM (default OFF): `-D MOJOLEARN_IDN_XENT_FOLD_BLOCK_256` folds
+#: blocks of 256 (one level up to 256 rows, two up to 65,536) instead of 32
+#: (one level up to 32 rows, two up to 1,024): fewer launches per loss, a
+#: longer one-thread chain per block. A different fold order, so different
+#: bits, on every column together (the host column reads the same constant).
+comptime LOSS_FOLD_BLOCK = 256 if is_defined["MOJOLEARN_IDN_XENT_FOLD_BLOCK_256"]() else 32
 
 
 @always_inline
