@@ -16,6 +16,8 @@ There is no host gradient/leaf reduction or alternate CPU training path.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 from std.gpu import block_idx, block_dim, thread_idx
+from std.atomic import Atomic
+from core.pinned_reduce import pinned_block_max
 from std.math import isfinite
 from checks.numerics import ftz, identical_mul, identical_mul_add
 from checks.fixed_point import choose_scale
@@ -40,6 +42,103 @@ struct OrderedFitResult(Movable):
     # Cursors use permutation POSITION, not original document id.
     var fold_cursors: List[DeviceBuffer[DType.float32]]
     var estimation_cursor: DeviceBuffer[DType.float32]
+
+
+comptime _ORD_RMSE_BLOCK = 256
+comptime _ORD_RMSE_GRID = 256
+comptime _ORD_RMSE_LANES = 5
+"""lane cpu3-gbdt-a: the input checks' lanes, all max folds (exact in any
+order): 0 max weight, 1 max |target|, 2 a bad permutation entry, 3 a
+non-finite or negative value, 4 a positive weight."""
+
+
+def _ord_rmse_scatter_kernel(
+    perm: MutPointer[UInt32, MutAnyOrigin],
+    n_in: Int32,
+    seen: MutPointer[UInt32, MutAnyOrigin],
+):
+    """lane cpu3-gbdt-a: count every permutation entry's row (`seen[row]`),
+    and an out-of-range entry at `seen[n]`. Row-parallel."""
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < n:
+        var row = Int(perm.unsafe_load(i))
+        if row >= n:
+            _ = Atomic.fetch_add(seen + n, UInt32(1))
+        else:
+            _ = Atomic.fetch_add(seen + row, UInt32(1))
+
+
+def _ord_rmse_check_kernel(
+    y: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    has_w: Int32,
+    seen: MutPointer[UInt32, MutAnyOrigin],
+    n_in: Int32,
+    partials: MutPointer[Float32, MutAnyOrigin],
+):
+    """lane cpu3-gbdt-a: the host walk's checks and its two maxima, per
+    block (grid `_ORD_RMSE_GRID`, block `_ORD_RMSE_BLOCK`, rows strided by
+    the whole grid). Every lane is a max over non-negative values, so the
+    result is exact and order-free (no bit moves)."""
+    var n = Int(n_in)
+    var t = Int(thread_idx.x)
+    var b = Int(block_idx.x)
+    var max_w = Float32(0.0)
+    var max_y = Float32(0.0)
+    var bad_p = Float32(0.0)
+    var bad_v = Float32(0.0)
+    var pos_w = Float32(0.0)
+    if b == 0 and t == 0 and seen.unsafe_load(n) != UInt32(0):
+        bad_p = Float32(1.0)
+    var i = b * _ORD_RMSE_BLOCK + t
+    while i < n:
+        if seen.unsafe_load(i) != UInt32(1):
+            bad_p = Float32(1.0)
+        var yi = y.unsafe_load(i)
+        var wi = Float32(1.0)
+        if has_w != Int32(0):
+            wi = w.unsafe_load(i)
+        if (
+            not isfinite(yi) or not isfinite(wi) or wi < Float32(0.0)
+            or not isfinite(identical_mul(wi, yi))
+        ):
+            bad_v = Float32(1.0)
+        else:
+            if wi > max_w:
+                max_w = wi
+            var ay = -yi if yi < Float32(0.0) else yi
+            if ay > max_y:
+                max_y = ay
+            if wi > Float32(0.0):
+                pos_w = Float32(1.0)
+        i += _ORD_RMSE_BLOCK * _ORD_RMSE_GRID
+    var r0 = pinned_block_max[_ORD_RMSE_BLOCK](max_w)
+    var r1 = pinned_block_max[_ORD_RMSE_BLOCK](max_y)
+    var r2 = pinned_block_max[_ORD_RMSE_BLOCK](bad_p)
+    var r3 = pinned_block_max[_ORD_RMSE_BLOCK](bad_v)
+    var r4 = pinned_block_max[_ORD_RMSE_BLOCK](pos_w)
+    if t == 0:
+        partials.unsafe_store(b * _ORD_RMSE_LANES + 0, r0)
+        partials.unsafe_store(b * _ORD_RMSE_LANES + 1, r1)
+        partials.unsafe_store(b * _ORD_RMSE_LANES + 2, r2)
+        partials.unsafe_store(b * _ORD_RMSE_LANES + 3, r3)
+        partials.unsafe_store(b * _ORD_RMSE_LANES + 4, r4)
+
+
+def _ord_rmse_check_combine_kernel(
+    partials: MutPointer[Float32, MutAnyOrigin],
+    out: MutPointer[Float32, MutAnyOrigin],
+):
+    """lane cpu3-gbdt-a: the `_ORD_RMSE_GRID` block partials, one per
+    thread, max-folded per lane into `out[0:_ORD_RMSE_LANES]`."""
+    var t = Int(thread_idx.x)
+    comptime for lane in range(_ORD_RMSE_LANES):
+        var r = pinned_block_max[_ORD_RMSE_GRID](
+            partials.unsafe_load(t * _ORD_RMSE_LANES + lane)
+        )
+        if t == 0:
+            out.unsafe_store(lane, r)
 
 
 def _ordered_target_kernel(
@@ -194,38 +293,56 @@ def fit_ordered_rmse(
         raise Error("ordered RMSE supports SolarL2, Cosine and NewtonCosine")
     if len(layout.features) == 0 or (len(one_hot) != 0 and len(one_hot) != len(layout.features)):
         raise Error("ordered RMSE feature shape mismatch")
-    var seen = List[Bool]()
-    for _ in range(n):
-        seen.append(False)
-    var hy = ctx.enqueue_create_host_buffer[DType.float32](n)
-    var hw = ctx.enqueue_create_host_buffer[DType.float32](n)
-    var hp = ctx.enqueue_create_host_buffer[DType.uint32](n)
-    var weight_sum = Float64(0)
-    var max_weight = Float64(0)
-    var residual_bound = Float64(0)
-    for i in range(n):
-        var row = Int(permutation[i])
-        if row >= n or seen[row]:
-            raise Error("ordered RMSE permutation must be a bijection")
-        seen[row] = True
-        var w = Float32(1) if len(sample_weight) == 0 else sample_weight[i]
-        if not isfinite(y[i]) or not isfinite(w) or w < Float32(0) or not isfinite(identical_mul(w, y[i])):
-            raise Error("ordered RMSE targets/weights must be finite; weights nonnegative")
-        weight_sum += Float64(w)
-        max_weight = max(max_weight, Float64(w))
-        residual_bound = max(residual_bound, abs(Float64(y[i])))
-        hy.unsafe_ptr().unsafe_store(i, y[i])
-        hw.unsafe_ptr().unsafe_store(i, w)
-        hp.unsafe_ptr().unsafe_store(i, permutation[i])
-    if weight_sum <= Float64(0):
-        raise Error("ordered RMSE weights sum to zero")
-    var folds = create_folds(n, growth_rate, IQueriesGrouping.without_queries(n), EBoostingType.Ordered, min_fold_size, 1)
+    # lane cpu3-gbdt-a: the inputs go up once and the device checks them
+    # (bijection, finiteness, the two maxima) in parallel; the host reads
+    # back five scalars. Max folds are exact, so no bit moves.
     var dy = ctx.enqueue_create_buffer[DType.float32](n)
     var dw = ctx.enqueue_create_buffer[DType.float32](n)
     var dp = ctx.enqueue_create_buffer[DType.uint32](n)
-    ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dw, src_ptr=hw.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=dp, src_ptr=hp.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dy, src_ptr=y.unsafe_ptr())
+    var has_w = len(sample_weight) != 0
+    if has_w:
+        ctx.enqueue_copy(dst_buf=dw, src_ptr=sample_weight.unsafe_ptr())
+    else:
+        enqueue_fill(ctx, dw, Float32(1))
+    ctx.enqueue_copy(dst_buf=dp, src_ptr=permutation.unsafe_ptr())
+    var seen = ctx.enqueue_create_buffer[DType.uint32](n + 1)
+    enqueue_fill(ctx, seen, UInt32(0))
+    ctx.enqueue_function[_ord_rmse_scatter_kernel](
+        dp.unsafe_ptr(), Int32(n), seen.unsafe_ptr(),
+        grid_dim=((n + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    )
+    var chk_part = ctx.enqueue_create_buffer[DType.float32](
+        _ORD_RMSE_GRID * _ORD_RMSE_LANES
+    )
+    ctx.enqueue_function[_ord_rmse_check_kernel](
+        dy.unsafe_ptr(), dw.unsafe_ptr(), Int32(1) if has_w else Int32(0),
+        seen.unsafe_ptr(), Int32(n), chk_part.unsafe_ptr(),
+        grid_dim=(_ORD_RMSE_GRID, 1, 1), block_dim=(_ORD_RMSE_BLOCK, 1, 1),
+    )
+    var chk = ctx.enqueue_create_buffer[DType.float32](_ORD_RMSE_LANES)
+    ctx.enqueue_function[_ord_rmse_check_combine_kernel](
+        chk_part.unsafe_ptr(), chk.unsafe_ptr(),
+        grid_dim=(1, 1, 1), block_dim=(_ORD_RMSE_GRID, 1, 1),
+    )
+    var h_chk = ctx.enqueue_create_host_buffer[DType.float32](_ORD_RMSE_LANES)
+    ctx.enqueue_copy(dst_buf=h_chk, src_buf=chk)
+    ctx.synchronize()
+    _ = seen^
+    _ = chk_part^
+    _ = chk^
+    if h_chk[2] != Float32(0.0):
+        raise Error("ordered RMSE permutation must be a bijection")
+    if h_chk[3] != Float32(0.0):
+        raise Error("ordered RMSE targets/weights must be finite; weights nonnegative")
+    # `weight_sum <= 0` over non-negative finite weights is "no weight is
+    # positive", which the device answers exactly
+    if h_chk[4] == Float32(0.0):
+        raise Error("ordered RMSE weights sum to zero")
+    var max_weight = Float64(h_chk[0])
+    var residual_bound = Float64(h_chk[1])
+    _ = h_chk^
+    var folds = create_folds(n, growth_rate, IQueriesGrouping.without_queries(n), EBoostingType.Ordered, min_fold_size, 1)
     var cursors = List[DeviceBuffer[DType.float32]]()
     var total = 0
     for f in range(len(folds)):
@@ -298,7 +415,4 @@ def fit_ordered_rmse(
         model.add_weak_model(weak^)
         residual_bound *= Float64(1) + Float64(learning_rate)
     ctx.synchronize()
-    _ = hy^
-    _ = hw^
-    _ = hp^
     return OrderedFitResult(model^, folds^, cursors^, estimation^)
