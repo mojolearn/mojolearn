@@ -527,6 +527,62 @@ def emb_backward_kernel(
 
 
 
+# lane nr-small D5 (2026-10-04): the fold launched over the TOUCHED rows
+# only. `emb_backward_kernel` launches V * d threads and every thread of an
+# untouched row returns at once; when the positions are fewer than the
+# vocabulary rows (T < V) the launch is T * d threads instead: thread (r, j)
+# acts only when sorted slot r opens its row's run (`run_begin[ids[perm[r]]]
+# == r`) and then folds that run for column j exactly as the clean path of
+# `emb_backward_kernel` does (the seeded cell, ascending t, ftz per add), so
+# every touched cell gets the same bits and every untouched cell keeps its
+# seed. Both plans fill `perm[0 : run_begin[V]]` with non-padding positions,
+# so the row is `ids[perm[r]]`. Off under every embedding sabotage arm (they
+# patch `emb_backward_kernel`). -D MOJOLEARN_IDN_EMB_TOUCHED_ROWS_OFF (or
+# MOJOLEARN_IDN_ALL_OFF) restores the V * d launch.
+comptime EMB_TOUCHED_ROWS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_IDN_EMB_TOUCHED_ROWS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    and not ANY_EMB_SABOTAGE
+)
+
+
+def emb_backward_touched_kernel(
+    dw: MutPointer[Float32, MutAnyOrigin],
+    dy: MutPointer[Float32, MutAnyOrigin],
+    perm: MutPointer[Int32, MutAnyOrigin],
+    run_begin: MutPointer[Int32, MutAnyOrigin],
+    ids: MutPointer[Int32, MutAnyOrigin],
+    n_positions_in: Int32,
+    vocab_in: Int32,
+    width_in: Int32,
+):
+    """`emb_backward_kernel`'s clean fold, one thread per (sorted slot r,
+    column j); only the slot that opens a run folds it."""
+    var width = Int(width_in)
+    if width < 1:
+        return
+    var n_positions = Int(n_positions_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= n_positions * width:
+        return
+    var r = cell // width
+    var j = cell - r * width
+    var vocab = Int(vocab_in)
+    if r >= Int(run_begin.unsafe_load(vocab)):
+        return
+    var v = Int(ids.unsafe_load(Int(perm.unsafe_load(r))))
+    var lo = Int(run_begin.unsafe_load(v))
+    if r != lo:
+        return
+    var hi = Int(run_begin.unsafe_load(v + 1))
+    var out = v * width + j
+    var acc = dw.unsafe_load(out)
+    for q in range(lo, hi):
+        var t = Int(perm.unsafe_load(q))
+        acc = ftz(ftz(acc) + ftz(dy.unsafe_load(t * width + j)))
+    dw.unsafe_store(out, ftz(acc))
+
+
 def emb_onehot_kernel(
     onehot: MutPointer[Float32, MutAnyOrigin],
     ids: MutPointer[Int32, MutAnyOrigin],
@@ -967,20 +1023,38 @@ def _emb_backward_launch(
             block_dim=(block_threads, 1, 1),
         )
 
+    var touched = False
+    comptime if EMB_TOUCHED_ROWS:
+        touched = n_positions < cfg.vocab
     comptime if SAB_FOLD_VIA_GEMM_ONEHOT:
         _emb_fold_via_gemm_onehot(ctx, dw, dy, ids, n_positions, cfg, block_threads)
     else:
-        step_count_launch()
-        ctx.enqueue_function[emb_backward_kernel](
-            dw.unsafe_ptr(),
-            dy.unsafe_ptr(),
-            perm.unsafe_ptr(),
-            run_begin.unsafe_ptr(),
-            Int32(cfg.vocab),
-            Int32(cfg.width),
-            grid_dim=(_grid_for(cells, block_threads), 1, 1),
-            block_dim=(block_threads, 1, 1),
-        )
+        if touched:
+            step_count_launch()
+            ctx.enqueue_function[emb_backward_touched_kernel](
+                dw.unsafe_ptr(),
+                dy.unsafe_ptr(),
+                perm.unsafe_ptr(),
+                run_begin.unsafe_ptr(),
+                ids.unsafe_ptr(),
+                Int32(n_positions),
+                Int32(cfg.vocab),
+                Int32(cfg.width),
+                grid_dim=(_grid_for(n_positions * cfg.width, block_threads), 1, 1),
+                block_dim=(block_threads, 1, 1),
+            )
+        else:
+            step_count_launch()
+            ctx.enqueue_function[emb_backward_kernel](
+                dw.unsafe_ptr(),
+                dy.unsafe_ptr(),
+                perm.unsafe_ptr(),
+                run_begin.unsafe_ptr(),
+                Int32(cfg.vocab),
+                Int32(cfg.width),
+                grid_dim=(_grid_for(cells, block_threads), 1, 1),
+                block_dim=(block_threads, 1, 1),
+            )
 
     if cfg.has_padding():
         step_count_launch()
