@@ -95,6 +95,7 @@ from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.memory import memcpy
 from std.os import getenv
+from std.sys.compile import is_defined
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from std.time import perf_counter_ns
 
@@ -104,6 +105,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 # lane afn-optim (2026-10-03): the Apple FAST candidates (False aliases on
 # every other build, so IDENTICAL compiles this file's code unchanged).
 from training.afn_optim import (
+    AFN_APPLE_FAST,
     AFN_LOSS_FUSED,
     AFN_OPT_RESIDENT_STATE,
     AFN_SF_DENOM,
@@ -630,6 +632,26 @@ def opt_pipe_download(
         _parallel_copy_out(_FP(unsafe_from_address=prev_dst), _stage_half(ctx, ch, prev_half), prev_cnt)
 
 
+#: MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN (lane apple-fast-rec-optim, 2026-10-04),
+#: default OFF, FAST + Apple only (AFN_APPLE_FAST): the training optimizers'
+#: resident step (mojolearn.SGD / Adam / AdamW; board lanes sgd, adam, adamw)
+#: reads the parameter (and a clipped gradient) back through `opt_pipe_download`
+#: (OPT_PIPE_FLOATS chunks, the DMA of chunk i overlapping the host read of chunk
+#: i - 1 out of the other pinned half) instead of one whole-registry DMA followed
+#: by one whole single-thread read of write-combined memory, and drops the two
+#: mid-step waits (after the raw uploads, after the scratch buffers; the queue is
+#: in order and the step waits inside `identical_optimizer_step`). Uploads stay
+#: raw host-pointer copies (the fast Apple upload, memory
+#: metal-transfer-costs-on-apple). Why: on the M3 board sgd/adam/adamw run
+#: 33.5-34.3 ms a step while the sequence optimizers, which already pipeline the
+#: download (OPT_PIPE_DOWN, default since lane/apple-fast-optspeed: adagrad 318
+#: -> 191 ms), run ~20 ms a step on the same three 64 MB transfers. Copies only:
+#: the same bytes, no bit moves. Prior: none on this path (MOJOLEARN_OPT_PIPE=1
+#: pipelines both directions with STAGED uploads, never measured on Apple).
+#: Source: this branch. Not compiled or measured yet.
+comptime TRAIN_OPT_PIPE_DOWN = AFN_APPLE_FAST and is_defined["MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN"]()
+
+
 def identical_optimizer_step_resident_host(
     ctx: DeviceContext,
     param_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -725,7 +747,8 @@ def identical_optimizer_step_resident_host(
     else:
         ctx.enqueue_copy(dst_buf=p_buf, src_ptr=param_ptr)
         ctx.enqueue_copy(dst_buf=g_buf, src_ptr=grad_ptr)
-        ctx.synchronize()
+        comptime if not TRAIN_OPT_PIPE_DOWN:
+            ctx.synchronize()
     _step_timing_tick(ctx, rton, rtk, "resident.upload")
 
     # `denom_out` and `q_out` are written only under `MOJOLEARN_OPT_RECORD`.
@@ -765,8 +788,9 @@ def identical_optimizer_step_resident_host(
         out2 = ctx.enqueue_create_buffer[DType.float32](2)
         ws = ctx.enqueue_create_buffer[DType.float32](ws_floats)
         sab_partials = ctx.enqueue_create_buffer[DType.float32](SAB_CHUNKS)
-    if not piped:
-        ctx.synchronize()
+    comptime if not TRAIN_OPT_PIPE_DOWN:
+        if not piped:
+            ctx.synchronize()
 
     _step_timing_tick(ctx, rton, rtk, "resident.small_buffers")
     var buf_initialized = List[Bool]()
@@ -800,7 +824,7 @@ def identical_optimizer_step_resident_host(
     # copy ran at about 3 GB/s here; the DMA into pinned memory and the
     # memcpy out together take a fifth of that)
     _step_timing_tick(ctx, rton, rtk, "resident.device_step")
-    if piped:
+    if piped or TRAIN_OPT_PIPE_DOWN:
         var down = PipeSegs()
         down.add(0, 0, Int(param_ptr), n_total)
         if max_norm > Float32(0.0):
