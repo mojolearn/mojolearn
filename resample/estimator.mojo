@@ -2066,13 +2066,14 @@ def resample_indices_host(
     return out^
 
 
-# OPEN-quality-PASS, 2026-10-04, compiled 7eacaa2b2; default OFF.
+# MIXED timing, 2026-10-04, compiled 7eacaa2b2; default OFF.
 # resample-gpu-recovered-q-r2-20261004: exact output/draw/refusal/lifetime
-# gates PASS with actual native reach; quality harness 7d66c0a05.
-# Historical parse failures and first timing NumPy-header failures produced
-# NO scores; 0c7066aae fixes that metadata API only. Board timing remains owed.
-# Keep opt-in pending matched board warmup + one scored call/arm; no speed
-# claim. See docs/apple-fast/ab/resample-gpu-recovery.md and EXPERIMENTS.md.
+# gates PASS with actual native reach. Timing harness 0c7066aae, r2 tags:
+# taxi A68.488292 -> B58.820584 ms; istella A390.820083 -> B805.391583 ms.
+# Both output checks PASS; matched board warmup + one scored call/arm.
+# Wide-row regression blocks broad activation; no dataset-specific switch.
+# Initial metadata failures produced NO scores. Full receipt hashes are in
+# docs/apple-fast/ab/resample-gpu-recovery.md; no new board promotion.
 comptime RESAMPLE_GPU_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_RESAMPLE_FAST_GATHER"]())

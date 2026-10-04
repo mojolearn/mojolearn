@@ -141,3 +141,17 @@ Taxi and istella must have distinct fresh timing tags/specs and run serially.
 The shared policy is `verified-scoped-caller`. The timing helper permits the
 reviewed timing/spec/policy/docs-only drift since the quality harness and
 checks the unchanged quality-script hash. No new native build is owed.
+
+
+## Completed matched timing, 2026-10-04
+
+Source7eacaa2b2, harness0c7066aae; r2-20261004 tags. One unscored warmup
+and one scored call per arm, existing board worker including full output reads.
+Both receipts PASS exact output summaries/digests. Taxi A68.48829198861495ms
+B58.8205840322189ms; istella A390.82008303375915ms B805.391583009623ms.
+Mixed result: wide-row regression blocks broad default. Toggle remains OFF;
+no board promotion or dataset-specific dispatch added.
+
+Receipt SHA256 taxi a8077db5a76c48ed431a7736597fe241d301aa1f01aa20f255d10c67431aeaea
+Receipt SHA256 istella 28e20bec22f34b67c1b8123f1d71ead38a4e402946777554f09fa412eadfd7c7
+Paths: ~/mq/out/resample-gpu-recovered-t-{taxi,istella}-r2-20261004-timing/PASS.json
