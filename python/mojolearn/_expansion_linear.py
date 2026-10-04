@@ -1363,7 +1363,10 @@ class IsotonicRegression(NumericModeMixin):
         n = xa.shape[0]
         yv = _vector(y, n)
         if self.increasing == "auto":
-            self.increasing_ = _spearman_sign(xa.tolist(), yv.tolist()) >= 0
+            # the sign of Spearman's rho, exact, in the binding (on the device
+            # on a GPU install; lane cpu2-l10-linear: was a Python ranking)
+            self.increasing_ = int(_fit_module(self, ALGO_ISOTONIC).x_linear_spearman_sign(
+                addr_ro(xa, name="X"), addr_ro(yv, name="y"), n)) >= 0
         else:
             self.increasing_ = bool(self.increasing)
         yy, has_w = _with_weights(yv, sample_weight, n)
@@ -1424,23 +1427,3 @@ class IsotonicRegression(NumericModeMixin):
 
     def fit_transform(self, X, y, sample_weight=None):
         return self.fit(X, y, sample_weight).transform(X)
-
-
-def _spearman_sign(x, y):
-    """The sign of Spearman's rho (scikit-learn's check_increasing), with
-    average ranks for ties, in float64 Python."""
-    def ranks(v):
-        order = sorted(range(len(v)), key=lambda i: v[i])
-        r = [0.0] * len(v)
-        i = 0
-        while i < len(order):
-            j = i
-            while j + 1 < len(order) and v[order[j + 1]] == v[order[i]]:
-                j += 1
-            for t in range(i, j + 1):
-                r[order[t]] = (i + j) / 2.0
-            i = j + 1
-        return r
-    rx, ry = ranks(x), ranks(y)
-    mx, my = sum(rx) / len(rx), sum(ry) / len(ry)
-    return sum((a - mx) * (b - my) for a, b in zip(rx, ry))

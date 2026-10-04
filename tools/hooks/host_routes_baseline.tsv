@@ -524,8 +524,6 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linea
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	for row, b in zip(coef_rows, intercepts):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	for t in range(i, j + 1):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	fp = [est.eps, est.tol] + [float(r) for r in l1_ratios] + (values if explicit else [])
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	fp = [float(v) for v in fp]
@@ -540,8 +538,6 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linea
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	return [values[c * d:(c + 1) * d] for c in range(k)]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	return sum((a - mx) * (b - my) for a, b in zip(rx, ry))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	self.l1_ratio_ = _enetcv_fit(self, X, y, [float(r) for r in ratios])
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	self.scores_ = {lab: Array.from_list(grid, "<f4") for lab in (labels[1:] if kp == 1 else labels)}
@@ -550,13 +546,7 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linea
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	best_c = Cs[min(range(nc), key=lambda i: abs(Cs[i] - vals[kp * d + kp]))]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	mx, my = sum(rx) / len(rx), sum(ry) / len(ry)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	order = sorted(range(len(v)), key=lambda i: v[i])
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	return min(l1_ratios, key=lambda r: abs(r - l1_best))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	return sum((a - mx) * (b - my) for a, b in zip(rx, ry))
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	values = sorted((float(v) for v in alphas), reverse=True)
 # why: O(classes)/O(outputs) epilogue after the device folds (per-class P/R/F, zero_division, averaging, confusion normalize, per-output regression finish, d2/brier class terms, ovo pair orchestration, StratifiedKFold class x fold offsets) plus the rare _FoldCurve edge cases (partial AUC past the last point, AP zero denominator); owed to x_metrics finish stages per family (pyglue-sweep A)
