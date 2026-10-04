@@ -159,6 +159,8 @@ from decomposition.checks.jacobi_eigh_device import (
     _rot_sub,
     jacobi_rotation_cs,
 )
+from core.xtdz_coalesced import column_mean_launch
+from std.sys.compile import is_defined
 from decomposition.impl.linalg.detail.pca import (
     PCAResult,
     SIGNFLIP_TPB,
@@ -174,6 +176,12 @@ from decomposition.impl.linalg.detail.pca import (
 #: eigensolver solves. Written as an assignment rather than restated so it
 #: cannot be moved on one side only.
 comptime SVD_TPB = JACOBI_TPB
+
+#: lane fam2-decomp (2026-10-04): see decomposition/estimator.mojo
+#: IDN_DECOMP_MEAN_LAUNCH (the same define; restated here because the
+#: estimator imports this module). -D MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF
+#: (or -D MOJOLEARN_IDN_ALL_OFF) restores the direct launch.
+comptime SVD_FULL_MEAN_LAUNCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 
 
 def one_sided_jacobi_svd_kernel[wide_rotation: Bool = False](
@@ -449,14 +457,20 @@ def pca_fit_full(
     # its fused split-K arm does not center in place at all (DEVIATION 42):
     # it folds `x - mu` into the Gram's tile read, and there is no Gram here
     # to fold anything into.
-    ctx.enqueue_function[column_mean_kernel](
-        mu.unsafe_ptr(),
-        x.unsafe_ptr(),
-        Int32(n_rows),
-        Int32(n_cols),
-        grid_dim=(n_cols, 1, 1),
-        block_dim=(STATS_TPB, 1, 1),
-    )
+    # lane fam2-decomp: through `column_mean_launch` in IDENTICAL builds, the
+    # covariance arm's own launch (pca.mojo `compute_covariance`): the same
+    # words, read row-coalesced where that form applies
+    comptime if SVD_FULL_MEAN_LAUNCH:
+        column_mean_launch(ctx, mu, x, n_rows, n_cols)
+    else:
+        ctx.enqueue_function[column_mean_kernel](
+            mu.unsafe_ptr(),
+            x.unsafe_ptr(),
+            Int32(n_rows),
+            Int32(n_cols),
+            grid_dim=(n_cols, 1, 1),
+            block_dim=(STATS_TPB, 1, 1),
+        )
     var cells = n_rows * n_cols
     ctx.enqueue_function[shift_columns_kernel](
         x.unsafe_ptr(),

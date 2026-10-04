@@ -30,7 +30,7 @@ from x_decomp.cells import F32Ptr, I32Ptr, LARS_ROW_EXTRA, OP_SCALE, OP_SELECT, 
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import HostBuffer
 from core.device_scan import NONFINITE_NONE, SCAN_TPB, _scan_blocks, nonfinite_partial_kernel
-from x_decomp.moves import MOVE_FILL0, MOVE_TAKE_ROWS
+from x_decomp.moves import MOVE_FILL0, MOVE_LAST, MOVE_TAKE_ROWS
 from x_decomp.moves_device import launch_move
 from x_decomp.device import (
     _down,
@@ -924,7 +924,7 @@ def dev_move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: Pyth
     var a3 = _n(p, 4)
     var ist = _n(p, 5)
     var ioff = _n(p, 6)
-    if op < MOVE_TAKE_ROWS or op > MOVE_FILL0:
+    if op < MOVE_TAKE_ROWS or op > MOVE_LAST:
         raise Error("x_decomp: unknown move op")
     if op != MOVE_FILL0 and a1 <= 0 and count > 0:
         raise Error("x_decomp: move needs a positive width")

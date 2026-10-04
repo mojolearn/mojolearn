@@ -276,6 +276,10 @@ class _M:
         return self.s[i * self.c:(i + 1) * self.c]
 
     def rows(self, a, b):
+        if self._d is not None and 0 <= a < b <= self.r and _res_moves(self, (b - a) * self.c):
+            # lane fam2-decomp: rows a .. b - 1 gathered on the device
+            # (TAKE_ROWS, the row numbers as exact floats)
+            return _dev_gather(self, _MV_TAKE_ROWS, range(a, b))
         return _M(self.s[a * self.c:b * self.c], b - a, self.c)
 
     def take_rows(self, idx):
@@ -300,6 +304,10 @@ class _M:
         """Data movement by strided slices: one C-level copy per column."""
         idx = list(idx)
         w = len(idx)
+        in_range = all(0 <= j < self.c for j in idx)  # glue: range check of the caller's column-index argument
+        if self._d is not None and in_range and _res_moves(self, self.r * w):
+            # lane fam2-decomp: the columns gathered on the device (TAKE_COLS)
+            return _dev_gather(self, _MV_TAKE_COLS, idx)
         out = array.array("f", [0.0]) * (self.r * w)
         for t, j in enumerate(idx):
             out[t::w] = self.s[j::self.c]
@@ -307,6 +315,15 @@ class _M:
 
     @property
     def T(self):
+        d = self._d
+        n = self.r * self.c
+        if d is not None and _res_moves(self, n):
+            # lane fam2-decomp: transposed on the device (the TRANSPOSE move's
+            # index functions; the index operand is unused, so the source's
+            # own id stands in for it)
+            out = _M._on_device(_DevBuf(d.b, n), self.c, self.r)
+            d.b.x_decomp_dev_move(d.id, d.id, out._d.id, [_MV_TRANSPOSE, n, self.r, self.c, 0, 0, 0, n, n, 1])
+            return out
         if self.r == 1 or self.c == 1:
             return _M(self.s, self.c, self.r)
         k = _host_kit()
@@ -366,7 +383,56 @@ _M._dev_one = staticmethod(_dev_one)
 #: lane apple-fast-py2mojo-decomp (2026-10-03): x_decomp/moves.mojo `move`
 #: ops and the float32 row-index bound (indices travel as exact floats).
 _MV_TAKE_ROWS, _MV_TRANSPOSE, _MV_PLACE_COLS, _MV_FILL0 = 0, 1, 2, 3
+_MV_TAKE_COLS = 4
 _F32_INDEX_MAX = 1 << 24
+
+#: lane fam2-decomp (2026-10-04): a resident matrix's moves stay on the
+#: device when the binding says so (bit 4 of `x_decomp_idn_flags`, an
+#: IDENTICAL GPU build without -D MOJOLEARN_IDN_RES_MOVES_OFF) and the result
+#: has at least this many values (a small result is usually read by Python
+#: at once, where one download of the operand is the cheaper route).
+_RES_MOVE_MIN = 1 << 14
+_RES_MOVE_BITS = {}
+
+
+def _binding_idn_bits(raw):
+    """`x_decomp_idn_flags` of a raw binding (0 when it has none), asked once."""
+    f = _RES_MOVE_BITS.get(id(raw))
+    if f is None:
+        try:
+            f = int(getattr(raw, "x_decomp_idn_flags")())
+        except Exception:
+            f = 0
+        _RES_MOVE_BITS[id(raw)] = f
+    return f
+
+
+def _res_moves(M, count):
+    """Whether a move of the device matrix M with `count` result values runs
+    on the device (shape and binding facts only)."""
+    return (count >= _RES_MOVE_MIN and M.r < _F32_INDEX_MAX and M.c < _F32_INDEX_MAX
+            and bool(_binding_idn_bits(M._d.b) & 16))
+
+
+def _dev_gather(M, op, idx):
+    """Rows (TAKE_ROWS) or columns (TAKE_COLS) `idx` of the device matrix M
+    as a device matrix: the indices go up once as exact floats (range
+    checked by the caller), one thread a moved value."""
+    raw = M._d.b
+    ia = array.array("f", idx)
+    w = len(ia)
+    di = _DevBuf(raw, w)
+    raw.x_decomp_dev_upload(di.id, ia.buffer_info()[0], w)
+    n = M.r * M.c
+    if op == _MV_TAKE_ROWS:
+        count = w * M.c
+        out = _M._on_device(_DevBuf(raw, count), w, M.c)
+        raw.x_decomp_dev_move(M._d.id, di.id, out._d.id, [op, count, M.c, 0, 0, 1, 0, n, count, w])
+    else:
+        count = M.r * w
+        out = _M._on_device(_DevBuf(raw, count), M.r, w)
+        raw.x_decomp_dev_move(M._d.id, di.id, out._d.id, [op, count, w, M.c, 0, 0, 0, n, count, w])
+    return out
 
 
 def _host_kit():
