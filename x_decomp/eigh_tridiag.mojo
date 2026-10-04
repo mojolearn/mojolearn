@@ -592,17 +592,18 @@ def td_vec_kernel(
     var g0 = df_sub(df_add(dp, dm), dl0)
     var best = abs(g0[0])
     var r = n - 1
-    for i in range(n - 2, -1, -1):
-        var e = ee.unsafe_load(i) * sc
-        var dl = df_sub(DF(dd.unsafe_load(i) * sc, Float32(0.0)), lam)
+    for tb in range(n - 1):
+        var ib = n - 2 - tb
+        var e = ee.unsafe_load(ib) * sc
+        var dl = df_sub(DF(dd.unsafe_load(ib) * sc, Float32(0.0)), lam)
         dm = df_guard(df_sub(dl, df_div(df_sq(e), dm)))
-        dmh.unsafe_store(i * n + k, dm[0])
-        dml.unsafe_store(i * n + k, dm[1])
-        var dpi = DF(dph.unsafe_load(i * n + k), dpl.unsafe_load(i * n + k))
+        dmh.unsafe_store(ib * n + k, dm[0])
+        dml.unsafe_store(ib * n + k, dm[1])
+        var dpi = DF(dph.unsafe_load(ib * n + k), dpl.unsafe_load(ib * n + k))
         var g = df_sub(df_add(dpi, dm), dl)
         if abs(g[0]) < best:
             best = abs(g[0])
-            r = i
+            r = ib
     # z_r = 1, then out from r in both directions (df64 running values)
     z.unsafe_store(r * n + k, Float32(1.0))
     var nrm = Float32(1.0)
