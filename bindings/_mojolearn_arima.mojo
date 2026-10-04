@@ -97,6 +97,13 @@ from arima.impl.fast_order_search import order_search_loglike
 from arima.impl.fast_order_state import ARIMA_ORDER_BATCH
 from arima.impl.tsa.arima_common import ARIMAOrder
 from core.identity_trace import IdentityTrace
+from arima.impl.fast_scalar_ll import ARIMA_FAST_SCALAR_LL
+from bindings.arima_scalar_probe import arima_scalar_probe_binding
+
+
+def arima_scalar_ll_enabled_binding() raises -> PythonObject:
+    """Compiled candidate reach; actual eligibility is checked per call."""
+    return PythonObject(ARIMA_FAST_SCALAR_LL)
 
 
 def arima_order_batch_enabled_binding() raises -> PythonObject:
@@ -435,6 +442,9 @@ def PyInit__mojolearn_arima() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_arima")
         m.def_function[arima_vendor_binding]("arima_vendor")
         m.def_function[arima_numeric_mode_binding]("arima_numeric_mode")
+        m.def_function[arima_scalar_ll_enabled_binding]("arima_scalar_ll_enabled")
+        comptime if ARIMA_FAST_SCALAR_LL:
+            m.def_function[arima_scalar_probe_binding]("_arima_scalar_ll_probe")
         m.def_function[arima_fit_binding]("arima_fit")
         m.def_function[arima_order_batch_enabled_binding]("arima_order_batch_enabled")
         m.def_function[arima_order_search_binding]("arima_order_search")

@@ -1,0 +1,69 @@
+K3 scalar exact-observation likelihood -- source-only candidate
+2026-10-04; no compile, GPU execution, numerical PASS or timing claim.
+
+Define: MOJOLEARN_ARIMA_FAST_SCALAR_LL (default OFF).
+Rollback: MOJOLEARN_ARIMA_FAST_SCALAR_LL_OFF wins if both are supplied.
+Binding: arima. Base: fc36f878c8c80381e38d3c2ea05c6739b93c74c1.
+
+Scope: Apple FAST, existing LL_ONLY dispatcher, rd=1, n_diff=0, no exog
+or forecast, 1<=nobs<=65536. Other calls retain the original kernel.
+The generic and held-workspace fitting paths both reach this dispatcher.
+No changes to order search, parameter initialization, optimizer iterations,
+predifferencing, prediction, forecast, or unsupported-shape handling.
+
+For noiseless scalar observations y_t=x_t, conditioning fixes the posterior
+state exactly to y_t. Therefore the next predictive mean is T*y_t+mu and
+variance is Q. The first observation retains supplied alpha/P. Main's
+scalar filter reaches the same result in real arithmetic through gain and
+covariance operations; finite-precision cancellation changes bits. This is
+not the rejected constant-gain convergence approximation.
+
+Implementation: one observation per lane; 256 lanes per time tile, across
+all series; tree reductions produce log(F), v*v/F and first-error partials.
+A second cooperative 256-lane group per series folds up to 256 partials.
+Only final scalar stores use lane zero; there is no single-thread time sum.
+Existing pred/vs/Fs storage is scratch because LL_ONLY does not promise
+their contents. The workspace schema and allocations are unchanged.
+The old likelihood normalization is preserved. Main writes final P but
+leaves alpha as its initialized buffer; the candidate preserves that
+workspace contract. First-error codes use the existing positive convention
+because eligibility excludes diffuse observations.
+
+Candidate-only private binding _arima_scalar_ll_probe launches the actual
+existing RD1 storing kernel (same arithmetic as LL_ONLY) and K3 on exactly
+the same supplied T/Q/P0/alpha0/mu and series. CAPTURE=True only adds stores
+to the same K3 kernel, not a second copy of its numerical implementation.
+The host probe performs transfers only. No probe exists in a default build.
+arima_scalar_ll_enabled reports the compile-time flag on all GPU builds;
+it does not claim every model is eligible or report an invocation count.
+
+tools/arima_scalar_quality.py is M3-only, no timers/opponents. It compares
+per-step prediction, innovation and variance, final covariance, likelihood,
+and h=2^-10 raw-parameter finite-difference gradients to a float64 scalar
+reference. For each model, candidate worst error in each field must not
+exceed main's; each gradient component must independently be no worse.
+There is zero new degradation allowance. Includes scalar near +/-unit AR,
+three scales, nonzero drift, constant/impulse/alternating signals, lengths
+1/2/255/256/257/1391/1392/1393/4095/4096/4097/65535/65536 and nonpositive
+first/later variance refusals. The supplied initializer is shared between
+arms and is NOT certification of production initializer bits.
+
+Required sequence:
+1. M2 compile arima default and candidate, inspect the first compile error.
+2. M3 serial-queue quality with the candidate arima binding installed:
+   MOJOLEARN_NUMERIC_MODE=fast PYTHONPATH=python <venv>/python
+     tools/arima_scalar_quality.py --output <fresh K3 quality JSON>
+   Preserve source and binary hashes. No scored timings are emitted.
+3. If kernel/gradient checks pass, actual full AutoARIMA A/B quality on
+   seeded fixtures and the same synthetic/taxi train/holdout sets, unchanged
+   budgets. Compare per-series forecast RMSE, predictions, selected order,
+   fitted parameters and likelihood. Taxi retains its opponent-quality HOLD.
+4. Only successful actual-model quality unlocks one M3 scored run per arm.
+   No promotion from compilation or the kernel probe alone. No rerun of
+   opponents, tolerance relaxation, covariance jitter, or iteration cuts.
+
+Consolidated source relation: K3 from experiments/apple_fast_path/kalman at
+9ab2d3d3fb770498ef025db08f595a0149792bb7 provides the same real-arithmetic
+scalar specialization. This implementation independently replaces that
+source's serial likelihood reduction with two parallel reductions; it needs
+its own quality evidence. K1/K2 and the general rank-one scan are separate.

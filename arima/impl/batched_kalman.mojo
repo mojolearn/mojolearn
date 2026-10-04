@@ -133,6 +133,7 @@ one (CONTRIBUTING.md (Non-default paths)).
 """
 
 from arima.impl.fast_kalman_scan import fast_kalman_scan
+from arima.impl.fast_scalar_ll import ARIMA_FAST_SCALAR_LL, SCALAR_LL_MAX_OBS, launch_scalar_ll
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
@@ -1126,6 +1127,18 @@ def _launch_loop_ll_only(
     Empty in every other build (no LL_ONLY instantiation exists there)."""
     comptime if not KALMAN_LL_ONLY:
         return
+    # K3, source-only opt-in: rd1 exact observations permit independent
+    # innovations; both likelihood folds are cooperative GPU reductions.
+    # No measured quality/speed claim. Existing caller guarantees no exog
+    # or forecast. OFF/default and every ineligible shape keep the old loop.
+    comptime if ARIMA_FAST_SCALAR_LL:
+        if rd == 1 and n_diff == 0 and nobs > 0 and nobs <= SCALAR_LL_MAX_OBS and batch_size > 0:
+            launch_scalar_ll(
+                ctx, d_ys, ws.T, ws.RQR, ws.P, ws.alpha, params.mu,
+                ws.pred, ws.vs, ws.Fs, ws.loglike, ws.info_loop, ws.fc,
+                nobs, batch_size, k,
+            )
+            return
     var grid = _grid(batch_size, kalman_tpb)
     if rd == 1:
         ctx.enqueue_function[batched_kalman_loop_kernel[1, True]](
