@@ -35,6 +35,8 @@ from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, add, mul, sub
 from sequence.layernorm import div as ln_div
 from checks.numerics import ftz, identical_rsqrt
 from sequence.theta_spec import THETA_SPEC, op_theta_spec
+from sequence.ops import OP_AF_RMEAN, OP_AF_ROW
+from sequence.adafactor import af_rmean_tail, af_row_tail
 from sequence.adafactor import af_alpha_tail, af_denom_tail, lamb_ratio_tail, op_af_alpha, op_af_denom, op_lamb_ratio, op_seg_sumsq
 
 #: the Apple simdgroup
@@ -79,6 +81,21 @@ def coop_sumsq(p: FP, start: Int, n: Int, lane: Int) -> Float32:
         for j in range(m):
             var x = coop_bcast(x0, j)
             acc = fma3(x, x, acc)
+        k += COOP_W
+    return acc
+
+
+@always_inline
+def coop_sum(p: FP, start: Int, n: Int, lane: Int) -> Float32:
+    """sum_{k < n} p[start + k], k ascending from +0.0, one add per term
+    (`add`), on every lane (nr-small D11: op_af_rmean's chain)."""
+    var acc = Float32(0.0)
+    var k = 0
+    while k < n:
+        var m = min(COOP_W, n - k)
+        var x0 = ld(p, start + k + lane) if lane < m else Float32(0.0)
+        for j in range(m):
+            acc = add(acc, coop_bcast(x0, j))
         k += COOP_W
     return acc
 
@@ -245,6 +262,15 @@ def apply_coop[OP: Int](cell: Int, lane: Int, a: Args):
         # lane/apple-fast-gap-tsa: theta with the Nelder-Mead candidates on
         # the simdgroup's lanes (sequence/theta_spec.mojo)
         op_theta_spec(cell, lane, a)
+    elif OP == OP_AF_ROW:
+        # nr-small D11: op_af_row's row chain on the simdgroup
+        var ss = coop_sumsq(a.p0, cell * a.i0, a.i0, lane)
+        if lane == 0:
+            af_row_tail(a, cell, ss)
+    elif OP == OP_AF_RMEAN:
+        var s = coop_sum(a.p0, 0, a.i0, lane)
+        if lane == 0:
+            af_rmean_tail(a, s)
     elif OP == OP_LN_FWD:
         coop_ln_fwd(cell, lane, a)
     elif OP == OP_LN_BWD_X:
