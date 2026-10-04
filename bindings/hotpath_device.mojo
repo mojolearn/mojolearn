@@ -37,8 +37,21 @@ five off):
   IDN_HPDEV_CAST    -D MOJOLEARN_IDN_HPDEV_CAST_OFF    cast_elements between
                     two different dtypes (lane fix-s1-shared; a same-dtype
                     call is a byte copy and stays the host helper's)
-  IDN_HPDEV_CAST_F64  CANDIDATE, default OFF, -D MOJOLEARN_IDN_HPDEV_CAST_F64
-                    turns it on: cast_f64_to_f32 (`hpdev_try_cast_f64_to_f32`)
+
+Input fixes (lane cpu2-l1-input, 2026-10-04; cpu re-audit lane L1). Not
+optimizations but the owner's rule (no CPU data work in a GPU fit, transform
+or predict, any mode), so there is NO `_OFF` arm and `MOJOLEARN_IDN_ALL_OFF`
+does not turn them off; only the sabotage builds keep the host loops. The
+host loops remain the host column (core host binding, CPU inference
+bindings) and the refusal path. Device code: `core/input_device.mojo`.
+  cast_f64_to_f32           `hpdev_try_cast_f64_to_f32` (was the candidate
+                            arm IDN_HPDEV_CAST_F64, now the default)
+  all_finite_f32/_f64       `hpdev_try_all_finite`
+  transpose_f32,
+  cast_colmajor_f64_to_f32  `hpdev_try_transpose_to_f32`
+  strided_copy_bytes, check_lengths_i64, ragged_rows_bytes
+                            the `*_binding`s below (host fallback:
+                            `bindings/array_helpers.mojo`)
 The sabotage builds (`HOTPATH_SABOTAGE`) keep every host helper, so the
 negative control still answers wrong on purpose.
 """
@@ -49,6 +62,11 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 
+from bindings.array_helpers import (
+    check_lengths_i64_binding as host_check_lengths_i64_binding,
+    ragged_rows_bytes_binding as host_ragged_rows_bytes_binding,
+    strided_copy_bytes_binding as host_strided_copy_bytes_binding,
+)
 from bindings.hotpath_helpers import (
     HOTPATH_SABOTAGE,
     arange_i64_binding as host_arange_i64_binding,
@@ -107,6 +125,14 @@ from core.hotpath_device import (
     device_threshold_labels_i64,
     device_uniform_init_f32,
 )
+from core.input_device import (
+    IND_MAX_N,
+    device_all_finite,
+    device_check_lengths,
+    device_ragged_rows,
+    device_strided_copy,
+    device_transpose_to_f32,
+)
 from core.neural_context import process_ctx
 
 
@@ -126,11 +152,9 @@ comptime IDN_HPDEV_ISUM = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_IS
 comptime IDN_HPDEV_CAST = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_CAST_OFF"]()
 #: lane fix-s1-shared: normal_init_f32 drawn on the device.
 comptime IDN_HPDEV_NORMAL = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_NORMAL_OFF"]()
-#: CANDIDATE ARM, default OFF: `-D MOJOLEARN_IDN_HPDEV_CAST_F64` narrows a
-#: float64 input on the device (`cast_f64_to_f32`). The words cross the bus
-#: twice more than the host cast's, so it is on only when measured to win, or
-#: as the first half of a resident handoff.
-comptime IDN_HPDEV_CAST_F64 = _HPDEV_BASE and is_defined["MOJOLEARN_IDN_HPDEV_CAST_F64"]()
+#: lane cpu2-l1-input: the input fixes (see the module docstring). On in
+#: every numeric mode; only the sabotage builds keep the host loops.
+comptime _HPDEV_INPUT = not HOTPATH_SABOTAGE
 
 #: The base binding's process-lifetime context slot
 #: (`bindings/_mojolearn.mojo::_DEVCTX_SLOT`): the same name, so the same
@@ -756,14 +780,16 @@ def cast_elements_binding(
 
 
 # ---------------------------------------------------------------------------
-# IDN_HPDEV_CAST_F64 (candidate arm, default OFF)
+# Input fixes (lane cpu2-l1-input): cast, finiteness, transpose, strided
+# and ragged layout
 # ---------------------------------------------------------------------------
 
 
 def hpdev_try_cast_f64_to_f32(src_addr: Int, dst_addr: Int, n: Int) raises -> Bool:
     """The device `cast_f64_to_f32` for the base binding: True when the
-    device wrote `dst`, False when the caller must run its host loop."""
-    comptime if IDN_HPDEV_CAST_F64:
+    device wrote `dst`, False when the caller must run its host loop (a
+    sabotage build, or a size the twin does not cover)."""
+    comptime if _HPDEV_INPUT:
         if n < 1 or n > HPD_MAX_N or src_addr == 0 or dst_addr == 0:
             return False
         var ctx = process_ctx[_HPDEV_SLOT]()
@@ -771,3 +797,114 @@ def hpdev_try_cast_f64_to_f32(src_addr: Int, dst_addr: Int, n: Int) raises -> Bo
             device_cast_f64_to_f32(ctx, src_addr, dst_addr, n)
         return True
     return False
+
+
+def hpdev_try_all_finite(addr: Int, n: Int, is_f64: Bool) raises -> Int:
+    """The device `all_finite_f32` / `all_finite_f64` for the base binding:
+    1 (all finite) or 0, or -1 when the caller must run its host loop. One
+    status word comes back; NaN, +inf and -inf fail and subnormals pass, by
+    bits, as `isfinite` decides on the host."""
+    comptime if _HPDEV_INPUT:
+        if n < 1 or n > IND_MAX_N or addr == 0:
+            return -1
+        var ctx = process_ctx[_HPDEV_SLOT]()
+        var ok = False
+        with GILReleased(Python()):
+            ok = device_all_finite(ctx, addr, n, is_f64)
+        return 1 if ok else 0
+    return -1
+
+
+def hpdev_try_transpose_to_f32(
+    src_addr: Int, dst_addr: Int, nr: Int, nc: Int, is_f64: Bool,
+) raises -> Bool:
+    """The device `transpose_f32` (float32 in) / `cast_colmajor_f64_to_f32`
+    (float64 in, the `cast_f64_to_f32` narrowing per element): True when the
+    device wrote `dst`, False when the caller must run its host loop."""
+    comptime if _HPDEV_INPUT:
+        if nr < 1 or nc < 1 or nr > IND_MAX_N // nc or src_addr == 0 or dst_addr == 0:
+            return False
+        var ctx = process_ctx[_HPDEV_SLOT]()
+        with GILReleased(Python()):
+            device_transpose_to_f32(ctx, src_addr, dst_addr, nr, nc, is_f64)
+        return True
+    return False
+
+
+def strided_copy_bytes_binding(
+    src_addr: PythonObject, dst_addr: PythonObject, dims_addr: PythonObject,
+    ndim: PythonObject, itemsize: PythonObject,
+) raises -> PythonObject:
+    """`strided_copy_bytes` (`bindings/array_helpers.mojo`), on the device:
+    the source and destination spans go up, one thread per element moves
+    its bits, the destination span comes down. Every refusal, an empty
+    copy, and overlapping or oversized spans run the host helper."""
+    comptime if _HPDEV_INPUT:
+        var nd = Int(py=ndim)
+        var isz = Int(py=itemsize)
+        var dims = Int(py=dims_addr)
+        var src = Int(py=src_addr)
+        var dst = Int(py=dst_addr)
+        if nd >= 1 and nd <= 64 and dims != 0 and src != 0 and dst != 0 and (
+            isz == 1 or isz == 2 or isz == 4 or isz == 8
+        ):
+            var dp = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=dims)
+            var total = 1
+            var valid = True
+            for k in range(nd):
+                var e = Int(dp[k])
+                if e < 1 or total > IND_MAX_N // e:
+                    valid = False
+                    break
+                total *= e
+            if valid:
+                var ctx = process_ctx[_HPDEV_SLOT]()
+                var done = False
+                with GILReleased(Python()):
+                    done = device_strided_copy(ctx, src, dst, dims, nd, isz, total)
+                if done:
+                    return PythonObject(total)
+    return host_strided_copy_bytes_binding(src_addr, dst_addr, dims_addr, ndim, itemsize)
+
+
+def check_lengths_i64_binding(
+    lengths_addr: PythonObject, b: PythonObject, length: PythonObject
+) raises -> PythonObject:
+    """`check_lengths_i64`, on the device: the first i whose length is
+    outside [1, length], or -1 (an integer minimum over the rows)."""
+    comptime if _HPDEV_INPUT:
+        var n = Int(py=b)
+        var la = Int(py=lengths_addr)
+        if n >= 1 and n <= IND_MAX_N and la != 0:
+            var hi = Int(py=length)
+            var ctx = process_ctx[_HPDEV_SLOT]()
+            var first = -1
+            with GILReleased(Python()):
+                first = device_check_lengths(ctx, la, n, hi)
+            return PythonObject(first)
+    return host_check_lengths_i64_binding(lengths_addr, b, length)
+
+
+def ragged_rows_bytes_binding(
+    src_addr: PythonObject, dst_addr: PythonObject, lengths_addr: PythonObject,
+    b: PythonObject, row_bytes: PythonObject, pos_bytes: PythonObject, mode: PythonObject,
+) raises -> PythonObject:
+    """`ragged_rows_bytes` (pad, zero-tail and last-real-row passes), on the
+    device; a length that would take the host loop outside its row, or a
+    size the twin does not cover, runs the host helper."""
+    comptime if _HPDEV_INPUT:
+        var n = Int(py=b)
+        var row = Int(py=row_bytes)
+        var pos = Int(py=pos_bytes)
+        var m = Int(py=mode)
+        var s = Int(py=src_addr)
+        var d = Int(py=dst_addr)
+        var la = Int(py=lengths_addr)
+        if n >= 1 and row >= 1 and pos >= 1 and d != 0 and la != 0 and (m == 1 or s != 0):
+            var ctx = process_ctx[_HPDEV_SLOT]()
+            var done = False
+            with GILReleased(Python()):
+                done = device_ragged_rows(ctx, s, d, la, n, row, pos, m)
+            if done:
+                return PythonObject(0)
+    return host_ragged_rows_bytes_binding(src_addr, dst_addr, lengths_addr, b, row_bytes, pos_bytes, mode)

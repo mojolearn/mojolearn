@@ -69,9 +69,11 @@ by the wrapper on the Python side. The pattern matches mojotrees'
 
 TWO HOST HELPERS WITH NO DEVICE CONTEXT (DEVIATION 2303, 2026-09-07)
 ---------------------------------------------------------------------
-`all_finite_f32` and `all_finite_f64` at the bottom of this file run on
-the CPU over the caller's buffer and never construct a `DeviceContext`
-(input validation, not learning). The centering helpers `column_mean_f64`,
+`all_finite_f32` and `all_finite_f64` at the bottom of this file keep
+their CPU loop as the host column and fallback only: since lane
+cpu2-l1-input (2026-10-04) this GPU binding scans on the device first
+(`hpdev_try_all_finite`, `core/input_device.mojo`), as it does the float64
+cast, both transposes and the strided and ragged layout copies. The centering helpers `column_mean_f64`,
 `center_columns_f32` and `scale_rows_f32` were deleted by lane
 hr-small-passes (2026-10-02): LinearRegression and Ridge center on the
 device through the estimators binding (glm/impl/center_device.mojo).
@@ -85,9 +87,6 @@ from core.dense_coo import (
 from core.dense_coo_device import knn_affinity_f32_device
 from core.label_encode_device import device_unique_inverse
 from bindings.array_helpers import (
-    strided_copy_bytes_binding,
-    check_lengths_i64_binding,
-    ragged_rows_bytes_binding,
     nsum_f64_binding,
     shard_topk_merge_f32_binding,
 )
@@ -137,6 +136,14 @@ from bindings.hotpath_device import (
     strat_fold_assign_i32_binding,
     hpdev_try_cast_f64_to_f32,
     hpdev_try_encode_labels,
+    # lane cpu2-l1-input: the input helpers on the device (no _OFF arm; the
+    # host loops below and in bindings/array_helpers.mojo are the host column
+    # and the fallback for what a twin does not cover)
+    hpdev_try_all_finite,
+    hpdev_try_transpose_to_f32,
+    strided_copy_bytes_binding,
+    check_lengths_i64_binding,
+    ragged_rows_bytes_binding,
     hpdev_try_gather_u64,
     reduce_stat_binding,
     uniform_init_f32_binding,
@@ -988,8 +995,8 @@ def cast_f64_to_f32_binding(
         )
     if count == 0:
         return PythonObject(0)
-    # lane fam2-shared: candidate arm -D MOJOLEARN_IDN_HPDEV_CAST_F64 (default
-    # OFF) narrows on the device; False means the host loop below runs.
+    # lane cpu2-l1-input: the device narrowing is the default (it was the
+    # fam2-shared candidate arm); False means the host loop below runs.
     if hpdev_try_cast_f64_to_f32(Int(py=src_addr), Int(py=dst_addr), count):
         return PythonObject(0)
     var sp = _f64_ptr(Int(py=src_addr))
@@ -1035,6 +1042,9 @@ def cast_colmajor_f64_to_f32_binding(
             + String(nc)
         )
     if nr == 0 or nc == 0:
+        return PythonObject(0)
+    # lane cpu2-l1-input: the fused cast-and-transpose on the device.
+    if hpdev_try_transpose_to_f32(Int(py=src_addr), Int(py=dst_addr), nr, nc, True):
         return PythonObject(0)
     var sp = _f64_ptr(Int(py=src_addr))
     var dp = _f32_ptr(Int(py=dst_addr))
@@ -1103,6 +1113,9 @@ def transpose_f32_binding(
             "transpose_f32: cols must be non-negative, got " + String(nc)
         )
     if nr == 0 or nc == 0:
+        return PythonObject(0)
+    # lane cpu2-l1-input: the transpose on the device.
+    if hpdev_try_transpose_to_f32(Int(py=src_addr), Int(py=dst_addr), nr, nc, False):
         return PythonObject(0)
     var sp = _f32_ptr(Int(py=src_addr))
     var dp = _f32_ptr(Int(py=dst_addr))
@@ -1214,8 +1227,9 @@ def nonzero_f64_fill_binding(
 # shape `bindings/_mojolearn_gbdt.mojo::gbdt_sigmoid_binding` already uses
 # for exactly this kind of host loop.
 #
-# None of them constructs a `DeviceContext`: the work is a single pass over
-# a host buffer. The GIL is still released around the pass (the
+# Their host loops construct no `DeviceContext`: each is a single pass over
+# a host buffer, reached only when the device scan (lane cpu2-l1-input,
+# `hpdev_try_all_finite`) declines or in a sabotage build. The GIL is still released around the pass (the
 # `var result: Int` / `with GILReleased(Python())` shape of
 # `knn_search_binding`) because nothing inside touches a Python object and
 # a caller scanning a million rows should not stall its other threads.
@@ -1242,6 +1256,10 @@ def all_finite_f32_binding(
         raise Error(
             "all_finite_f32: n must be non-negative, got " + String(count)
         )
+    # lane cpu2-l1-input: the scan on the device (one status word back).
+    var dev = hpdev_try_all_finite(Int(py=addr), count, False)
+    if dev >= 0:
+        return PythonObject(dev)
     var ok: Int = 1
     with GILReleased(Python()):
         for i in range(count):
@@ -1262,6 +1280,9 @@ def all_finite_f64_binding(
         raise Error(
             "all_finite_f64: n must be non-negative, got " + String(count)
         )
+    var dev = hpdev_try_all_finite(Int(py=addr), count, True)
+    if dev >= 0:
+        return PythonObject(dev)
     var ok: Int = 1
     with GILReleased(Python()):
         for i in range(count):
