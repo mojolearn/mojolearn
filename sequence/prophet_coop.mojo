@@ -36,7 +36,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_exp, identical_sqrt
 from sequence.fit_team import PT_DONE, TEAM_REC, SeqTeam, _ldi, _spend, _sti
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
-from sequence.prophet import MEM, PROPHET_COOP_IDN
+from sequence.prophet import COOP_NT, COOP_PW, MEM, PROPHET_COOP_IDN
 
 #: the switch: FAST on Apple by default since the M3 A/B (lane
 #: apple-fast-prophetspeed 805207038, n=1: prophet synthetic 431 -> 45 ms,
@@ -59,10 +59,12 @@ comptime PROPHET_COOP = (
     )
     or PROPHET_COOP_IDN
 )
-#: threads of a series' block on the cooperative path (prophet.mojo COOP_NT)
-comptime PROPHET_COOP_TPB = 256
-#: simdgroup width (prophet.mojo COOP_PW)
-comptime PW = 32
+#: threads of a series' block on the cooperative path: prophet.mojo's
+#: COOP_NT, the host replay's constant, imported so the two never drift
+#: (lane/review-fixes)
+comptime PROPHET_COOP_TPB = COOP_NT
+#: simdgroup width: prophet.mojo's COOP_PW, imported likewise
+comptime PW = COOP_PW
 
 
 def prophet_coop_vrow(P: Int) -> Int:

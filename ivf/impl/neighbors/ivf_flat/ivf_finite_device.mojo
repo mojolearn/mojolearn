@@ -93,7 +93,7 @@ def ivf_bound_partial_kernel(
 
 
 def ivf_bound_fold_kernel(
-    out: MutPointer[Int32, MutAnyOrigin],
+    dst: MutPointer[Int32, MutAnyOrigin],
     part: MutPointer[Int32, MutAnyOrigin],
     blocks_in: Int32,
 ):
@@ -123,7 +123,7 @@ def ivf_bound_fold_kernel(
         barrier()
         active = active // 2
     if tid == 0:
-        out.unsafe_store(0, red.unsafe_load(0))
+        dst.unsafe_store(0, red.unsafe_load(0))
 
 
 def ivf_device_first_over_bound(
