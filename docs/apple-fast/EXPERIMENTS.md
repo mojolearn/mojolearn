@@ -783,3 +783,5 @@ No builds/quality/timings yet; checkpointed for manager handoff, **not accepted*
 Update: oracle v2 (9c458698d) w2-pt-centered2-quality PASS; promoted to
 FAST+Apple DEFAULT, rollback `MOJOLEARN_PT_SCORE_STABLE_OFF`.
 See [PT_SCORE_STABLE.md](PT_SCORE_STABLE.md) for code scope and exact owed checks.
+| `MOJOLEARN_GBDT_DW_FLAT_GRID` | gbdt-depthwise taxi | lane/apple-fast-w3-dw 1fb97706a | w2-w3dw-* | quality PASS (AUC +0.000107); 11054.9 -> 11822.4 ms | DROP-speed, opt-in only |
+| `MOJOLEARN_ARIMA_SLAB` | autoarima | lane/apple-fast-w3-arima 40fedfcea | w2-w3arima-slab-* | quality PASS bit-exact; synthetic 9219.3 -> 9096.6, taxi-hourly 13763.6 -> 13519.0 ms | HOLD (gain within noise) |
