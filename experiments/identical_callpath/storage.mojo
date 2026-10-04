@@ -5,7 +5,6 @@ Internal to synchronous adapters. No public asynchronous result handles and
 no caller-supplied contexts: queued work cannot accidentally switch queues.
 """
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
@@ -26,8 +25,6 @@ struct IdenticalCallStorage(Movable):
             raise Error("experimental callpath requires explicit opt-in")
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
             raise Error("experimental callpath requires IDENTICAL numerical mode")
-        comptime if not has_apple_gpu_accelerator():
-            raise Error("experimental callpath is restricted to Apple GPU targets")
         if count <= 0 or count > 2147483647 or slots <= 0:
             raise Error("positive fixed shape and slot capacity required")
         self.ctx = DeviceContext()
