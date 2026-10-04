@@ -15,6 +15,7 @@ from x_decomp.api import (
     rowsum_py, sqdist_py, vendor_py,
 )
 from x_decomp.device import DevExec
+from x_decomp.lu_fast import LU_FAST_PIVOT_SHUFFLE
 from x_decomp.kit_device import lda_online_dev_py, mcd_dev_py
 from x_decomp.lda_fast import LDA_FUSED_SS, dev_lda_estep_ss_py
 from x_decomp.dict_fast import DECOMP_FAST_DICT_DEV, dev_dict_update_py
@@ -31,11 +32,16 @@ from x_decomp.resident import GRP_CLS2_ANY, GRP_CLS2_DEVSCAN, GRP_FAST_FUSED, gr
 from x_decomp.lanczos_dev import dev_lanczos_py, ipca_dev_on_py, kpca_lanczos_dev_on_py
 
 
+def lu_pivot_shuffle_on_py() raises -> PythonObject:
+    return PythonObject(Int(LU_FAST_PIVOT_SHUFFLE))
+
+
 @export
 def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_decomp")
         m.def_function[gemm_py[DevExec]]("x_decomp_gemm")
+        m.def_function[lu_pivot_shuffle_on_py]("x_decomp_lu_pivot_shuffle")
         m.def_function[ew_py[DevExec]]("x_decomp_ew")
         m.def_function[colsum_py[DevExec]]("x_decomp_colsum")
         m.def_function[rowsum_py[DevExec]]("x_decomp_rowsum")
