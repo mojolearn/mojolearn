@@ -31,6 +31,13 @@ from gbdt.gpu_data.kernel.binarize import (
     binarize_float_feature_kernel,
 )
 from gbdt.ctrs.ctr import TCtrConfig, is_permutation_dependent_ctr_type
+from gbdt.models.kernel.resident_link import (
+    LINK_BLOCK,
+    LINK_RAW,
+    LINK_SIGMOID,
+    LINK_SOFTMAX,
+    resident_link_kernel,
+)
 from gbdt.data.cat_code_scan import (
     cat_column_codes,
     cat_column_max_code,
@@ -2808,13 +2815,13 @@ def predict_floats(
         tm.model, ctx, n_rows, tm.fold_counts, cindex, cursor,
         one_hot=tm.one_hot,
     )
-    var hc = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=cursor)
+    # the cursor straight into the returned list (lane/cpu3-gbdt-b): no
+    # host staging buffer, no per-row host copy
+    var out = List[Float32](length=n_rows, fill=Float32(0.0))
+    if n_rows > 0:
+        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=cursor)
     ctx.synchronize()
     _ = cursor^  # past the drain (step-33 race class, device side)
-    var out = List[Float32]()
-    for r in range(n_rows):
-        out.append(hc.unsafe_ptr().unsafe_load(r))
     return out^
 
 
@@ -2841,6 +2848,38 @@ def predict_multi_floats(
     without a `prediction_type`.
     """
     var approx_dim = model_approx_dim(tm.model)
+    var out = List[Float32](length=n_rows * approx_dim, fill=Float32(0.0))
+    _ = predict_multi_linked_into(
+        ctx, tm, x_colmajor, n_rows, LINK_RAW,
+        rebind[MutPointer[Float32, MutUntrackedOrigin]](out.unsafe_ptr()),
+    )
+    return out^
+
+
+def predict_multi_linked_into(
+    ctx: DeviceContext,
+    tm: TrainedModel,
+    x_colmajor: List[Float32],
+    n_rows: Int,
+    link_mode: Int,
+    out: MutPointer[Float32, MutUntrackedOrigin],
+) raises -> Int:
+    """lane/cpu3-gbdt-b: `predict_multi_floats` with the row-major reshape
+    and the probability link ON THE DEVICE, written straight into `out`.
+    `link_mode` is `LINK_RAW` (`approx_dim` wide, the reshape the host loop
+    did), `LINK_SOFTMAX` (`approx_dim + 1` wide, `multiclass_probabilities`'
+    words) or `LINK_SIGMOID` (`approx_dim` wide, `one_vs_all_probabilities`'
+    words); `resident_link_kernel` computes them in soft binary64 exactly as
+    the host functions do, so the bits are theirs. Returns the width."""
+    var approx_dim = model_approx_dim(tm.model)
+    var width = approx_dim
+    if link_mode == LINK_SOFTMAX:
+        width = approx_dim + 1
+    elif link_mode != LINK_RAW and link_mode != LINK_SIGMOID:
+        raise Error(
+            "predict_multi_linked_into: link mode " + String(link_mode)
+            + " is not RAW, SOFTMAX or SIGMOID"
+        )
     var expanded_x: List[Float32]
     if len(tm.tensor_ctr_registry.features) != 0 and len(tm.ctr_tables) != 0:
         raise Error(
@@ -2862,26 +2901,40 @@ def predict_multi_floats(
         tm.nan_treatment,
     )
     var cursor = ctx.enqueue_create_buffer[DType.float32](
-        approx_dim * n_rows
+        max(1, approx_dim * n_rows)
     )
     predict(
         tm.model, ctx, n_rows, tm.fold_counts, cindex, cursor,
         one_hot=tm.one_hot,
     )
-    var hc = ctx.enqueue_create_host_buffer[DType.float32](
-        approx_dim * n_rows
+    if n_rows <= 0:
+        ctx.synchronize()
+        return width
+    var d_out = ctx.enqueue_create_buffer[DType.float32](n_rows * width)
+    var d_u64 = ctx.enqueue_create_buffer[DType.uint64](1)
+    var d_i64 = ctx.enqueue_create_buffer[DType.int64](1)
+    var link_blocks = min((n_rows + LINK_BLOCK - 1) // LINK_BLOCK, 65535)
+    ctx.enqueue_function[resident_link_kernel](
+        cursor.unsafe_ptr(),
+        d_out.unsafe_ptr(),
+        d_u64.unsafe_ptr(),
+        d_i64.unsafe_ptr(),
+        Int32(n_rows), Int32(approx_dim), Int32(link_mode),
+        Int32(0), Int32(0),
+        grid_dim=link_blocks, block_dim=LINK_BLOCK,
     )
-    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=cursor)
+    ctx.enqueue_copy(dst_ptr=out, src_buf=d_out)
     ctx.synchronize()
-    _ = cursor^  # past the drain (step-33 race class, device side)
-    var out = List[Float32]()
-    for r in range(n_rows):
-        for d in range(approx_dim):
-            out.append(hc.unsafe_ptr().unsafe_load(d * n_rows + r))
-    return out^
+    # past the drain (step-33 race class)
+    _ = cursor^
+    _ = d_out^
+    _ = d_u64^
+    _ = d_i64^
+    _ = len(expanded_x)
+    return width
 
 
-def one_vs_all_probabilities(
+def one_vs_all_probabilities_reference(
     approxes: List[Float32], n_rows: Int, num_classes: Int
 ) raises -> List[Float32]:
     """Their `MultiProbability` transform (`eval_processing.h:222-226`):
@@ -2917,7 +2970,7 @@ def one_vs_all_probabilities(
     return out^
 
 
-def multiclass_probabilities(
+def multiclass_probabilities_reference(
     approxes: List[Float32], n_rows: Int, num_classes: Int
 ) raises -> List[Float32]:
     """The softmax their `prediction_type='Probability'` applies.

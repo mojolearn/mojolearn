@@ -102,12 +102,11 @@ from gbdt.train import (
     BORROW_X_COLUMNS,
     TrainedModel,
     model_input_features,
-    multiclass_probabilities,
-    one_vs_all_probabilities,
     predict_floats,
-    predict_multi_floats,
+    predict_multi_linked_into,
     train,
 )
+from gbdt.models.kernel.resident_link import LINK_RAW, LINK_SIGMOID, LINK_SOFTMAX
 
 
 def gbdt_fit_two_level_feature_freq(
@@ -725,12 +724,11 @@ def gbdt_predict_multi(
     xs.resize(n_x, Float32(0.0))
     memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
 
-    var ap = predict_multi_floats(ctx, tm, xs, n_rows)
+    # lane/cpu3-gbdt-b: the reshape and the link on the device, written
+    # straight into the caller's buffer (`predict_multi_linked_into`); the
+    # host copy loops and the host softmax / sigmoid are gone
     if mode == PREDICT_RAW:
-        for i in range(n_rows * dim):
-            out_preds.unsafe_store(i, ap[i])
-        return dim
-
+        return predict_multi_linked_into(ctx, tm, xs, n_rows, LINK_RAW, out_preds)
     if dim < 2:
         raise Error(
             "gbdt_predict_multi: a probability mode needs a"
@@ -739,15 +737,13 @@ def gbdt_predict_multi(
             " Logloss's own predict_proba applies."
         )
     if mode == PREDICT_SOFTMAX:
-        var pr = multiclass_probabilities(ap, n_rows, dim + 1)
-        for i in range(n_rows * (dim + 1)):
-            out_preds.unsafe_store(i, pr[i])
-        return dim + 1
+        return predict_multi_linked_into(
+            ctx, tm, xs, n_rows, LINK_SOFTMAX, out_preds
+        )
     if mode == PREDICT_SIGMOID:
-        var ps = one_vs_all_probabilities(ap, n_rows, dim)
-        for i in range(n_rows * dim):
-            out_preds.unsafe_store(i, ps[i])
-        return dim
+        return predict_multi_linked_into(
+            ctx, tm, xs, n_rows, LINK_SIGMOID, out_preds
+        )
     raise Error(
         "gbdt_predict_multi: unknown mode " + String(mode)
     )
