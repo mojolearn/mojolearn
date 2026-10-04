@@ -18,7 +18,8 @@ from core.neural_context import process_ctx
 from xtrees.agnostic import (
     F32P, I32P, U64P, I64P, kshap_mask_unit, kshap_synth_unit, bg_mean_unit, logit_unit, kshap_gram_unit,
     kshap_rhs_unit, kshap_pivot_unit, kshap_elim_unit, kshap_back_unit, fx_unit, pshap_perm_unit,
-    pshap_synth_unit, pshap_marginal_unit,
+    pshap_synth_unit, pshap_marginal_unit, pshap_dcount_unit, scan_step_unit, pshap_dindex_unit,
+    pshap_dsynth_unit, pshap_dmap_unit, bg_mean_mapped_unit,
 )
 
 comptime AGN_TPB = 128
@@ -36,6 +37,14 @@ comptime AGN_TPB = 128
 #:   (-43.3%), rel_error_vs_exact 4.378e-09 both arms.
 comptime _AGN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime KSHAP_FAST_BATCH = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_KSHAP_FAST_BATCH_OFF"]()
+#: MOJOLEARN_PSHAP_DELTA (lane apple-fast-w4-shap, 2026-10-04): OPEN,
+#:   opt-in FAST + Apple only, no M3 A/B yet. PermutationExplainer runs the
+#:   model only on the (coalition, background row) pairs whose synthetic row
+#:   differs from the previous coalition's (the toggled feature's bits differ;
+#:   shap's own delta masking), instead of every (2d + 1) nb rows per
+#:   permutation; `pshap_dsynth` + `pshap_dvalues`, xtrees/agnostic.mojo.
+#:   See docs/apple-fast/EXPERIMENTS.md (PSHAP_DELTA).
+comptime PSHAP_DELTA = _AGN_FAST_APPLE and is_defined["MOJOLEARN_PSHAP_DELTA"]()
 comptime AGN_MAX_BLOCKS = 65535 * 16
 comptime _CTX = "MojoXTreesAgnosticIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXTreesAgnosticFast"
 
@@ -152,6 +161,50 @@ def marginal_kernel(total: Int64, d: Int32, k: Int32, np: Int32, inv: I32P, ey: 
     var t = _t0()
     while t < Int(total):
         pshap_marginal_unit(t, Int(d), Int(k), Int(np), inv, ey, phi)
+        t += _stride()
+
+
+def dcount_kernel(total: Int64, nb: Int32, d: Int32, np: Int32, x: F32P, bg: F32P, perm: I32P, cnt: I64P):
+    var t = _t0()
+    while t < Int(total):
+        pshap_dcount_unit(t, Int(nb), Int(d), Int(np), x, bg, perm, cnt)
+        t += _stride()
+
+
+def scan_kernel(total: Int64, off: Int64, src: I64P, dst: I64P):
+    var t = _t0()
+    while t < Int(total):
+        scan_step_unit(t, Int(off), src, dst)
+        t += _stride()
+
+
+def dindex_kernel(total: Int64, nb: Int32, d: Int32, np: Int32, x: F32P, bg: F32P, perm: I32P, incl: I64P,
+                  cnt: I64P, idx: I64P, src: I64P):
+    var t = _t0()
+    while t < Int(total):
+        pshap_dindex_unit(t, Int(nb), Int(d), Int(np), x, bg, perm, incl, cnt, idx, src)
+        t += _stride()
+
+
+def dsynth_kernel(total: Int64, nb: Int32, d: Int32, np: Int32, x: F32P, bg: F32P, inv: I32P, src: I64P,
+                  syn: F32P):
+    var t = _t0()
+    while t < Int(total):
+        pshap_dsynth_unit(t, Int(nb), Int(d), Int(np), x, bg, inv, src, syn)
+        t += _stride()
+
+
+def dmap_kernel(total: Int64, nb: Int32, idx: I64P, mp: I64P):
+    var t = _t0()
+    while t < Int(total):
+        pshap_dmap_unit(t, Int(nb), idx, mp)
+        t += _stride()
+
+
+def mmean_kernel(total: Int64, nb: Int32, k: Int32, y: F32P, mp: I64P, res: U64P):
+    var t = _t0()
+    while t < Int(total):
+        bg_mean_mapped_unit(t, Int(nb), Int(k), y, mp, res)
         t += _stride()
 
 
@@ -499,3 +552,131 @@ def bg_mean(y: Int, res: Int, m: Int, nb: Int, k: Int) raises:
     ctx.synchronize()
     _ = dy^
     _ = dr^
+
+
+struct _Delta(Movable):
+    """MOJOLEARN_PSHAP_DELTA: a chunk's permutations and its varying-row
+    index on the device. idx[(group, r)] = the compact row, or -1 when the
+    row repeats its predecessor's; src[compact row] = (group, r); `total`
+    = the compact rows (one small download, the only sync before the
+    synthetic rows are sized)."""
+    var perm: DeviceBuffer[DType.int32]
+    var inv: DeviceBuffer[DType.int32]
+    var dx: DeviceBuffer[DType.float32]
+    var dbg: DeviceBuffer[DType.float32]
+    var cnt: DeviceBuffer[DType.int64]
+    var sa: DeviceBuffer[DType.int64]
+    var sb: DeviceBuffer[DType.int64]
+    var idx: DeviceBuffer[DType.int64]
+    var src: DeviceBuffer[DType.int64]
+    var total: Int
+
+    def __init__(out self, ctx: DeviceContext, x: Int, bg: Int, tot: Int, R: Int, nb: Int, d: Int, np: Int,
+                 seed: Int, row0: Int) raises:
+        var G = R * np * (2 * d + 1)
+        var perm = ctx.enqueue_create_buffer[DType.int32](R * np * d)
+        var inv = ctx.enqueue_create_buffer[DType.int32](R * np * d)
+        _perms(ctx, R, d, np, seed, row0, perm, inv)
+        var dx = _up_f32(ctx, x, R * d)
+        var dbg = _up_f32(ctx, bg, nb * d)
+        var cnt = ctx.enqueue_create_buffer[DType.int64](G)
+        var sa = ctx.enqueue_create_buffer[DType.int64](G)
+        var sb = ctx.enqueue_create_buffer[DType.int64](G)
+        var idx = ctx.enqueue_create_buffer[DType.int64](G * nb)
+        var src = ctx.enqueue_create_buffer[DType.int64](G * nb)
+        ctx.enqueue_function[dcount_kernel](
+            Int64(G), Int32(nb), Int32(d), Int32(np), dx.unsafe_ptr(), dbg.unsafe_ptr(), perm.unsafe_ptr(),
+            cnt.unsafe_ptr(), grid_dim=_blocks(G), block_dim=AGN_TPB,
+        )
+        # inclusive prefix sum of the group counts: ceil(log2 G) parallel
+        # steps between two buffers (the first launch copies the counts)
+        var pa = sa.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var pb = sb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        ctx.enqueue_function[scan_kernel](Int64(G), Int64(G), cnt.unsafe_ptr(), pa, grid_dim=_blocks(G),
+                                          block_dim=AGN_TPB)
+        var in_a = True
+        var off = 1
+        while off < G:
+            var pin = pa if in_a else pb
+            var pout = pb if in_a else pa
+            ctx.enqueue_function[scan_kernel](Int64(G), Int64(off), pin, pout, grid_dim=_blocks(G),
+                                              block_dim=AGN_TPB)
+            in_a = not in_a
+            off *= 2
+        var incl = pa if in_a else pb
+        ctx.enqueue_function[dindex_kernel](
+            Int64(G * nb), Int32(nb), Int32(d), Int32(np), dx.unsafe_ptr(), dbg.unsafe_ptr(), perm.unsafe_ptr(),
+            incl, cnt.unsafe_ptr(), idx.unsafe_ptr(), src.unsafe_ptr(), grid_dim=_blocks(G * nb), block_dim=AGN_TPB,
+        )
+        if in_a:
+            ctx.enqueue_copy(dst_ptr=I64P(unsafe_from_address=tot), src_buf=sa.create_sub_buffer[DType.int64](G - 1, 1))
+        else:
+            ctx.enqueue_copy(dst_ptr=I64P(unsafe_from_address=tot), src_buf=sb.create_sub_buffer[DType.int64](G - 1, 1))
+        ctx.synchronize()
+        self.total = Int(I64P(unsafe_from_address=tot)[0])
+        self.perm = perm^
+        self.inv = inv^
+        self.dx = dx^
+        self.dbg = dbg^
+        self.cnt = cnt^
+        self.sa = sa^
+        self.sb = sb^
+        self.idx = idx^
+        self.src = src^
+
+
+def pshap_dsynth(x: Int, bg: Int, syn: Int, tot: Int, R: Int, nb: Int, d: Int, np: Int, seed: Int,
+                 row0: Int) raises:
+    """MOJOLEARN_PSHAP_DELTA: the chunk's VARYING synthetic rows, in full
+    (row, permutation, coalition, background row) order, to the host
+    address syn (room for every row); their count to the host Int64 at
+    tot."""
+    if R * np * (2 * d + 1) * nb * d <= 0:
+        return
+    var ctx = _ctx()
+    var dl = _Delta(ctx, x, bg, tot, R, nb, d, np, seed, row0)
+    var total = dl.total * d
+    if total > 0:
+        var ps = _pool_syn(ctx, total)
+        ctx.enqueue_function[dsynth_kernel](
+            Int64(total), Int32(nb), Int32(d), Int32(np), dl.dx.unsafe_ptr(), dl.dbg.unsafe_ptr(),
+            dl.inv.unsafe_ptr(), dl.src.unsafe_ptr(), ps, grid_dim=_blocks(total), block_dim=AGN_TPB,
+        )
+        _pool_down(ctx, syn, total)
+        ctx.synchronize()
+    _ = dl^
+
+
+def pshap_dvalues(x: Int, bg: Int, yout: Int, phi: Int, tot: Int, R: Int, nb: Int, d: Int, k: Int, np: Int,
+                  seed: Int, row0: Int) raises:
+    """MOJOLEARN_PSHAP_DELTA: phi (R x d x k binary64) from the model
+    outputs of the chunk's varying rows (`pshap_dsynth`'s order): every
+    (coalition, background row) reads its latest varying predecessor's
+    output, then `pshap_values`' means and marginals."""
+    var mm = np * (2 * d + 1)
+    if R * d * k <= 0 or mm <= 0:
+        return
+    var ctx = _ctx()
+    var dl = _Delta(ctx, x, bg, tot, R, nb, d, np, seed, row0)
+    var G = R * mm
+    var mp = ctx.enqueue_create_buffer[DType.int64](G * nb)
+    ctx.enqueue_function[dmap_kernel](Int64(G * nb), Int32(nb), dl.idx.unsafe_ptr(), mp.unsafe_ptr(),
+                                      grid_dim=_blocks(G * nb), block_dim=AGN_TPB)
+    var dout = _up_f32(ctx, yout, dl.total * k)
+    var ey = ctx.enqueue_create_buffer[DType.uint64](G * k)
+    ctx.enqueue_function[mmean_kernel](
+        Int64(G * k), Int32(nb), Int32(k), dout.unsafe_ptr(), mp.unsafe_ptr(), ey.unsafe_ptr(),
+        grid_dim=_blocks(G * k), block_dim=AGN_TPB,
+    )
+    var dphi = ctx.enqueue_create_buffer[DType.uint64](R * d * k)
+    ctx.enqueue_function[marginal_kernel](
+        Int64(R * d * k), Int32(d), Int32(k), Int32(np), dl.inv.unsafe_ptr(), ey.unsafe_ptr(), dphi.unsafe_ptr(),
+        grid_dim=_blocks(R * d * k), block_dim=AGN_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=phi), src_buf=dphi)
+    ctx.synchronize()
+    _ = dl^
+    _ = mp^
+    _ = dout^
+    _ = ey^
+    _ = dphi^

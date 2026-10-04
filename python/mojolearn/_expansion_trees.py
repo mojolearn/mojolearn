@@ -471,6 +471,11 @@ _TE_ADA_SESSION_SHARE = 4
 #     the synthetic rows across chunks and KernelExplainer solves many rows
 #     per launch sweep (`x_trees_kshap_means` + `x_trees_kshap_solve_ey`).
 _KSHAP_FAST_BATCH = 8
+#   MOJOLEARN_PSHAP_DELTA (lane apple-fast-w4-shap, OPEN opt-in): the
+#     PermutationExplainer model runs only on the synthetic rows that differ
+#     from the previous coalition's (`x_trees_pshap_dsynth` +
+#     `x_trees_pshap_dvalues`); see xtrees/agnostic_device.mojo.
+_PSHAP_DELTA = 32
 
 
 def _trees_fast_tier(est):
@@ -3249,6 +3254,9 @@ class PermutationExplainer(_AgnosticExplainer):
         x0, p0 = addr_ro(Xa, name="X"), addr(phi, name="phi")
         R = self._chunk(mm * nb * d, n)
         reuse = _trees_switch(self, _KSHAP_FAST_BATCH)   # one synthetic buffer for every chunk
+        if _trees_switch(self, _PSHAP_DELTA):
+            self._delta(b, Xa, phi, n, d, k, nb, npm, seed, R, mm)
+            return self._shape(phi, n, d)
         syn = None
         for r0 in range(0, n, R):  # glue: chunk loop (one model call per chunk)
             rows = min(R, n - r0)
@@ -3263,3 +3271,26 @@ class PermutationExplainer(_AgnosticExplainer):
                 syn = None
             b.x_trees_pshap_values(addr_ro(out, name="y"), p0 + 8 * r0 * d * k, params + [k])
         return self._shape(phi, n, d)
+
+    def _delta(self, b, Xa, phi, n, d, k, nb, npm, seed, R, mm):
+        """MOJOLEARN_PSHAP_DELTA: per chunk, the device builds only the
+        synthetic rows that differ from their previous coalition's into the
+        front of one reused host buffer (their count into `tot`), the model
+        runs on that prefix, and the device expands the outputs back to
+        every (coalition, background row)."""
+        x0, bg0, p0 = addr_ro(Xa, name="X"), addr_ro(self._bg, name="data"), addr(phi, name="phi")
+        tot = zeros((1,), "<i8")
+        t0 = addr(tot, name="count")
+        syn = empty((R * mm * nb * d,), "<f4")
+        for r0 in range(0, n, R):  # glue: chunk loop (one model call per chunk)
+            rows = min(R, n - r0)
+            params = [rows, nb, d, npm, r0, seed]
+            b.x_trees_pshap_dsynth(x0 + 4 * r0 * d, bg0, addr(syn, name="synthetic"), t0, params)
+            nv = int(tot.tolist()[0])
+            # the first nv rows of syn, zero-copy (syn stays alive in this frame)
+            front = memory_at(addr(syn, name="synthetic"), 4 * nv * d, writable=True).cast("f")
+            out = self._eval(Array.from_buffer(front).reshape((nv, d)))
+            del front
+            b.x_trees_pshap_dvalues(x0 + 4 * r0 * d, bg0, addr_ro(out, name="y"), p0 + 8 * r0 * d * k, t0,
+                                    params + [k])
+            del out
