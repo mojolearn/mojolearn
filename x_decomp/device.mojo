@@ -1530,11 +1530,17 @@ def _launch_gemm_mma(
             grid_dim=((m * n + 4 * AFN_ZERO_TPB - 1) // (4 * AFN_ZERO_TPB), 1, 1),
             block_dim=(AFN_ZERO_TPB, 1, 1),
         )
+        # OPEN: scoped source28f06e19 passed28 mechanism fixtures on M3
+        # (scoped-r2-all-q-v1, bound5e-6, zero error-regression allowance).
+        # Split-boundary PASS is not downstream fitted quality or a speed
+        # claim; broad default stays OFF. See GEMM_INLINE_OUTCOMES.md.
         if not try_scoped_gemm[True, 1](ctx, c, a, b, m, n, k, a_si, a_sp, b_sp, b_sj, splits, per):
             afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
                 ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, splits, per
             )
     else:
+        # OPEN: non-split G1/G2 mechanism PASS has no actual AFN timing
+        # admission. SDK catalog wins cannot promote this caller by analogy.
         if not try_scoped_gemm[False, 0](ctx, c, a, b, m, n, k, a_si, a_sp, b_sp, b_sj, 1, k):
             afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_NONE](
                 ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, 1, k

@@ -113,6 +113,12 @@ def compute_covariance(
             var per = (n_rows + splits - 1) // splits
             per = ((per + AFN_GEMM_KB - 1) // AFN_GEMM_KB) * AFN_GEMM_KB
             splits = (n_rows + per - 1) // per
+            # Opt-in scoped G1 fit remains HOLD (2026-10-04), source201fe736,
+            # scoped-pca-fit-istella-q-v1: singular/noise oracle errors worsen
+            # under zero allowance. Report serialization incomplete; no PASS
+            # or timing admission. Existing accepted AFN default is fallback.
+            # PCA transform/inverse evidence uses another route/contract;
+            # see docs/apple-fast/GEMM_INLINE_OUTCOMES.md before any retry.
             if not try_scoped_gemm[True, 2](
                 ctx, cp, xp, xp, n_cols, n_cols, n_rows, 1, n_cols, n_cols, 1, splits, per,
             ):

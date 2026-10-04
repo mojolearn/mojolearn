@@ -11,6 +11,12 @@ from gemm.afn_apple_fast import AFN_GEMM_APPLE
 from core.gemm import gemm_nt
 from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel
 
+# SOURCE-READY / UNBUILT, 2026-10-04, source4bfc1424a: default OFF.
+# No actual softmax quality or timing result exists for this algorithm flag.
+# Resident G2 32768x8x220 1.203750->0.865625ms is a matrix probe only;
+# scoped-r2-all-q-v1 PASS covers the shared kernel, not this optimizer caller.
+# Require M2 A/B compile, actual fit/predict reach and all zero-regression
+# gates in docs/apple-fast/ab/softmax-g2-narrow.md before timing/promotion.
 comptime SOFTMAX_G2 = AFN_GEMM_APPLE and is_defined["MOJOLEARN_SOFTMAX_FAST_G2_NARROW"]()
 comptime SOFTMAX_AUDIT = AFN_GEMM_APPLE and is_defined["MOJOLEARN_SOFTMAX_G2_AUDIT"]()
 
