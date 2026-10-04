@@ -15,6 +15,7 @@ from x_decomp.api import (
     rowsum_py, sqdist_py, vendor_py,
 )
 from x_decomp.device import DevExec
+from x_decomp.fa_fast import FA_FAST_APPLE, fa_defines_py, fa_em_py, fa_gram_py, fa_transform_py
 from x_decomp.mcd_bmma import MCD_G1_GRAM, MCD_G1_AUDIT, mcd_g1_count, mcd_g1_last
 
 def mcd_g1_gram_on_py() raises -> PythonObject:
@@ -158,6 +159,15 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
             m.def_function[dev_first_nonfinite_py]("x_decomp_dev_first_nonfinite")
         comptime if GRP_FAST_FUSED:
             m.def_function[grp_fit_fused_py]("x_decomp_grp_fit_fused")
+        # FactorAnalysis on the Apple GPU, FAST only (x_decomp/fa_fast.mojo,
+        # lane/apple-fast-fa recovered by lane/apple-fast-rec-fa-robust):
+        # registered only in a FAST build for Apple; each route also needs its
+        # -D MOJOLEARN_FA_<NAME> (reported by x_decomp_fa_defines, empty when none)
+        comptime if FA_FAST_APPLE:
+            m.def_function[fa_defines_py]("x_decomp_fa_defines")
+            m.def_function[fa_gram_py]("x_decomp_fa_gram")
+            m.def_function[fa_em_py]("x_decomp_fa_em")
+            m.def_function[fa_transform_py]("x_decomp_fa_transform")
         m.def_function[numeric_mode_py]("x_decomp_numeric_mode")
         m.def_function[vendor_py[DevExec]]("x_decomp_vendor")
         return m.finalize()
