@@ -34,7 +34,7 @@ Summary: 287 rows, 280 with a ratio, 222 faster than the best opponent after (FA
 | pca | istella | algos | 988 | 490 | sklearn-cpu | 205 | 4.82 | 2.39 |  | explained_variance_ratio_sum=1 | explained_variance_ratio_sum=1 | explained_variance_ratio_sum=1 | ok |
 | permutation-shap | istella | algos | 17214 | 28236 | shap-cpu | 12335 | 1.40 | 2.29 |  | rel_error_vs_exact=5.33875e-09 | rel_error_vs_exact=5.339e-09 | rel_error_vs_exact=3.692e-10 | ok |
 | lu-factor | synthetic | algos | 2323 | 977 | scipy-cpu | 428 | 5.43 | 2.28 |  | relative_residual=3.2563e-06 | relative_residual=3.248e-06 | relative_residual=3.246e-06 | ok |
-| svgp | istella | algos | 1495 | 266 | gpytorch-cpu | 307 | 4.86 | 0.87 | FLIP faster | r2=-0.106016, rmse=0.878373 | r2=-0.106, rmse=0.8784 | r2=-0.106, rmse=0.8784 | ok |
+| svgp | istella | algos | 1495 | 228 | gpytorch-cpu | 307 | 4.86 | 0.74 | FLIP faster | r2=-0.106016, rmse=0.878373 | r2=-0.106, rmse=0.8784 | r2=-0.106, rmse=0.8784 | ok |
 | lle | taxi | algos | 17885 | 2570 | sklearn-cpu | 1247 | 14.35 | 2.06 |  | trustworthiness_k15=0.826083 | trustworthiness_k15=0.8398 | trustworthiness_k15=0.7708 | ok |
 | kernel-pca | taxi | algos | 847 | 921 | sklearn-cpu | 460 | 1.84 | 2.00 |  | - | - | subspace_cos_vs_sklearn=1 | ok |
 | kernel-shap | istella | algos | 14386 | 15325 | shap-cpu | 7696 | 1.87 | 1.99 |  | rel_error_vs_exact=4.37806e-09 | rel_error_vs_exact=4.179e-09 | rel_error_vs_exact=1.405e-14 | ok |
@@ -45,7 +45,7 @@ Summary: 287 rows, 280 with a ratio, 222 faster than the best opponent after (FA
 | lu-solve | synthetic | algos | 2320 | 971 | torch-gpu | 506 | 4.59 | 1.92 |  | relative_residual=3.2563e-06 | relative_residual=3.248e-06 | relative_residual=8.234e-07 | ok |
 | sparse-rp | taxi | algos | 8.0 | 3.4 | sklearn-cpu | 1.8 | 4.44 | 1.90 |  | mean_abs_distortion=0.264 (seed 7; 40-seed mean 0.233) | mean_abs_distortion=0.1472 | mean_abs_distortion=0.381 | ok |
 | var | taxi-hourly | algos | 14.5 | 5.1 | statsmodels-cpu | 2.8 | 5.18 | 1.82 |  | forecast_rmse=33.168 | forecast_rmse=33.17 | forecast_rmse=33.17 | ok |
-| svgp | taxi | algos | - | 213 | gpytorch-cpu | 248 | - | 0.86 | FLIP faster | r2=-0.194982, rmse=17.7235 | - | r2=-0.2093, rmse=17.83 | ok |
+| svgp | taxi | algos | - | 207 | gpytorch-cpu | 248 | - | 0.83 | FLIP faster | r2=-0.194982, rmse=17.7235 | - | r2=-0.2093, rmse=17.83 | ok |
 | kernel-pca | istella | algos | 1049 | 979 | sklearn-cpu | 560 | 1.87 | 1.75 |  | - | - | subspace_cos_vs_sklearn=1 | ok |
 | additive-chi2 | taxi | algos | 0.6 | 0.7 | sklearn-cpu | 0.4 | 1.50 | 1.69 |  | kernel_rel_error=0.0938923 | kernel_rel_error=0.09389 | kernel_rel_error=0.09389 | ok |
 | knn-imputer | taxi | algos | 73.6 | 2.7 | sklearn-cpu | 1.7 | 43.29 | 1.61 |  | masked_rmse=5.1086 | masked_rmse=6.152 | masked_rmse=5.257 | ok |
@@ -424,3 +424,4 @@ Sources: before = M3 0.8.34 board (classical), M3 2026-09-29 board FAST cells (t
 - CAGRA LOWD+SEEDS4 default (main c8f1cbcd7, rollback MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF): cagra taxi build 2879.2 -> 714.9 ms; w2-cagra-lowds4-q recall@10 B >= A on taxi and istella. Istella build path unchanged (d > 64).
 - SVGP_FAST_BLKCHOL default (main 5cb11dcf8, rollback MOJOLEARN_SVGP_FAST_BLKCHOL_OFF): taxi 287.0 -> 212.5 ms (flips vs gpytorch-cpu 248), istella 336.6 -> 265.7 ms; w2-svgp-blkchol-q PASS. Board cells use the BLKCHOL-alone B times; the combined RBFTILE+BLKCHOL main retime is owed.
 - KM_FAST_RBF_RESIDENT default (main eb6e86223, rollback MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF): rbf-sampler istella 93.4 -> 76.3 ms, outputs byte-identical (w2-kfeat-rbf-q-r1). XD_FAST_SRP_STRAT default (rollback MOJOLEARN_XD_FAST_SRP_STRAT_OFF): stratified per-column sparse-RP draw; w2-kfeat-srp-q PASS (istella 40-seed mean distortion 0.946 -> 0.571, taxi 0.346 -> 0.233); istella time 15.7 -> 15.9 ms (neutral).
+- SVGP combined main retime (w2-svgp-combined-*, lane/apple-fast-svgp-blkchol-default fb79e1449, arm A = main with RBFTILE+BLKCHOL defaults, B = BLKCHOL_OFF): taxi A 207.1 ms (B 282.1), istella A 227.6 ms (B 297.1). Board cells now use arm A.
