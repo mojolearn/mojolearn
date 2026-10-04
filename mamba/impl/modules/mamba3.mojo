@@ -80,7 +80,7 @@ from mamba.impl.modules.mamba3_refusal import m3_refuse_nonfinite_named
 from core.identity_trace import IdentityTrace
 # Public Mamba forward keeps full-FP32 projection operands in every mode.
 # False bypasses NVIDIA TF32 vendor dispatch; IDENTICAL arithmetic is unchanged.
-from gemm.checks.gemm_identical import identical_gemm
+from mamba.impl.modules.idn_gemm_ws import mamba_proj_gemm
 
 # ORIENTATION NUMBERING: gemm_oracle's OP_NT = 1 -- the numbering
 # identical_gemm reads. The Mamba-1 header's trap note applies verbatim.
@@ -1379,11 +1379,11 @@ def mamba3_block_forward(
         if not afn_proj_gemm_into(
             ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
         ):
-            identical_gemm[False](
+            mamba_proj_gemm(
                 ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
             )
     else:
-        identical_gemm[False](
+        mamba_proj_gemm(
             ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
         )
 
@@ -1661,7 +1661,7 @@ def mamba3_block_forward(
         if trace.enabled or not afn_proj_gemm_resid_into(
             ctx, stages.residual_out, x, stages.gate_out, w.w_out, m, dm, di, OP_NT
         ):
-            identical_gemm[False](
+            mamba_proj_gemm(
                 ctx, stages.out_proj, stages.gate_out, w.w_out, m, dm, di, OP_NT
             )
             m3_phase_tick(ctx, phase_tick, String("block.out_proj"))
@@ -1676,7 +1676,7 @@ def mamba3_block_forward(
         else:
             m3_phase_tick(ctx, phase_tick, String("block.out_proj"))
     else:
-        identical_gemm[False](
+        mamba_proj_gemm(
             ctx, stages.out_proj, stages.gate_out, w.w_out, m, dm, di, OP_NT
         )
 
