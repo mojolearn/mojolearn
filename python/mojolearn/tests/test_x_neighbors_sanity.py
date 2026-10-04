@@ -307,15 +307,25 @@ def test_samplers_options():
     np.testing.assert_allclose(S.toarray(), R.toarray(), rtol=1e-4, atol=1e-5)
     assert np.array_equal(S.toarray(), np.asarray(a.transform(X)))
     assert list(a.get_feature_names_out()) == list(b.get_feature_names_out())
+    # A numpy RandomState (or None) gives one seed word, then the int-seed
+    # route (lane cpu2-l9-neighbors): the tables are ours, reproducible from
+    # an equal RandomState state, with scikit-learn's shapes and ranges.
     rs1, rs2 = np.random.RandomState(4), np.random.RandomState(4)
     p = ml.PolynomialCountSketch(n_components=16, random_state=rs1).fit(X)
-    q = PolynomialCountSketch(n_components=16, random_state=rs2).fit(X)
-    assert np.array_equal(np.asarray(p.indexHash_), q.indexHash_)
-    assert np.array_equal(np.asarray(p.bitHash_), q.bitHash_)
+    p2 = ml.PolynomialCountSketch(n_components=16, random_state=rs2).fit(X)
+    q = PolynomialCountSketch(n_components=16, random_state=np.random.RandomState(4)).fit(X)
+    assert np.array_equal(np.asarray(p.indexHash_), np.asarray(p2.indexHash_))
+    assert np.array_equal(np.asarray(p.bitHash_), np.asarray(p2.bitHash_))
+    ih, bh = np.asarray(p.indexHash_), np.asarray(p.bitHash_)
+    assert ih.shape == q.indexHash_.shape and bh.shape == q.bitHash_.shape
+    assert ih.min() >= 0 and ih.max() < 16 and set(np.unique(bh)) <= {-1, 1}
     assert list(p.get_feature_names_out()) == list(q.get_feature_names_out())
     s1 = ml.SkewedChi2Sampler(n_components=12, random_state=np.random.RandomState(9)).fit(X)
+    s1b = ml.SkewedChi2Sampler(n_components=12, random_state=np.random.RandomState(9)).fit(X)
     s2 = SkewedChi2Sampler(n_components=12, random_state=np.random.RandomState(9)).fit(X)
-    np.testing.assert_allclose(np.asarray(s1.random_weights_), s2.random_weights_, rtol=1e-5, atol=1e-6)
+    w1 = np.asarray(s1.random_weights_)
+    np.testing.assert_array_equal(w1, np.asarray(s1b.random_weights_))
+    assert w1.shape == s2.random_weights_.shape and np.isfinite(w1).all()
     assert list(s1.get_feature_names_out()) == list(s2.get_feature_names_out())
     assert ml.SkewedChi2Sampler(random_state=None).fit(X).random_weights_.shape == (6, 100)
 

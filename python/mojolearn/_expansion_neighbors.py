@@ -1085,6 +1085,21 @@ def _random_state(seed):
     raise ValueError(f"{seed!r} cannot be used to seed a numpy.random.RandomState instance")
 
 
+def _seed_word(seed):
+    """The sketch samplers' seed (lane cpu2-l9-neighbors): an int as given;
+    None (numpy's global RandomState) or a caller's numpy RandomState gives
+    ONE draw, a word in [0, 2^31), and that word seeds the device
+    counter-based generator exactly as an int random_state would. The
+    O(d * n_components) table is then drawn on the device, never in a Python
+    loop over the caller's generator. Not scikit-learn's numbers for those
+    two inputs (theirs are not reproducible for None either); the
+    distribution is the same. Anything else is refused as `_random_state`
+    refuses it."""
+    if isinstance(seed, int) and not isinstance(seed, bool):
+        return seed
+    return int(_random_state(seed).randint(1 << 31, 1)[0])
+
+
 class _NumpyRandomState:
     """The `_LegacyRandomState` draws, from a numpy RandomState."""
 
@@ -1129,7 +1144,7 @@ class PolynomialCountSketch(_XNeighbors):
         deg, nc = int(self.degree), int(self.n_components)
         if deg < 1 or nc < 1:
             raise ValueError("degree and n_components must be >= 1")
-        seed = self.random_state
+        seed = _seed_word(self.random_state)
         draw_idn = (getattr(self._bind(), "x_neighbors_kfeat_pcs_draw_idn", None)
                     if isinstance(seed, int) and not isinstance(seed, bool) and nf > 0 else None)
         if draw_idn is not None:
@@ -1143,7 +1158,7 @@ class PolynomialCountSketch(_XNeighbors):
             self.bitHash_ = bh
             self.n_features_in_ = d
             return self
-        rs = _random_state(self.random_state)
+        rs = _random_state(seed)
         idx = rs.randint(nc, deg * nf)
         bits = [(-1, 1)[v] for v in rs.randint(2, deg * nf)]
         self.indexHash_ = Array.from_list([idx[p * nf:(p + 1) * nf] for p in range(deg)], "<i4")
@@ -1265,7 +1280,7 @@ class SkewedChi2Sampler(_XNeighbors):
         X = _f32(X)
         d = X.shape[1]
         nc = int(self.n_components)
-        seed = self.random_state
+        seed = _seed_word(self.random_state)
         flags = (_kfeat_flags(self) if isinstance(seed, int) and not isinstance(seed, bool)
                  and d > 0 and nc > 0 else 0)
         self.__dict__.pop("_schi2_z", None)
@@ -1309,7 +1324,7 @@ class SkewedChi2Sampler(_XNeighbors):
             self.random_offset_ = off
             self.n_features_in_ = d
             return self
-        rs = _random_state(self.random_state)
+        rs = _random_state(seed)
         u = rs.random_sample(d * nc)
         z = Array.from_list([[math.pi / 2.0 * u[f * nc + c] for c in range(nc)] for f in range(d)], "<f4")
         w = _empty_out((d, nc), "<f4")
