@@ -73,7 +73,35 @@ grid is built from ALL rows with no subsampling. That matters for us in
 one direction only: it is the same all-rows rule `train.mojo` already uses.
 """
 
-from gbdt.grid_creator.binarization import best_split_min_entropy, binarize
+from gbdt.grid_creator.binarization import (
+    BORDER_TYPE_MIN_ENTROPY,
+    BORDER_TYPE_UNIFORM,
+    best_split_min_entropy,
+    binarize,
+)
+from std.sys.compile import is_defined
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+#: lane/fam2-gbdt F6 (IDENTICAL; CANDIDATE ARM, default OFF, enable with
+#: `-D MOJOLEARN_IDN_GBDT_CTR_BORDERS_DEVICE` on the device AND the host
+#: bindings): a simple-CTR column's grid is built on the device by
+#: `device_float_borders` (the float columns' border pipeline: device sort,
+#: device MinEntropy dynamic program or Uniform search, every row, NaN mode
+#: Forbidden) instead of `compute_ctr_borders`' host scan / host sort of
+#: every row per CTR column. The host column
+#: (`gbdt/host/gbdt_oracle_ctr.mojo`) takes `gbdt_host_grid`, that build's
+#: host restatement, under this same constant, so all four columns move
+#: together. BITS MAY MOVE against `compute_ctr_borders` (the device build
+#: flushes subnormals by bits and its Uniform is the float-feature Uniform),
+#: which is why it is an arm to time and to compare on a categorical fixture
+#: before it becomes a default. The two-level FeatureFreq tensor path
+#: (`estimator.mojo`, `tensor_ctr_value_table.mojo`) is not touched.
+comptime IDN_CTR_BORDERS_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_GBDT_CTR_BORDERS_DEVICE"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 
 
 # --- EBorderSelectionType (`grid_creator/binarization.h:13-21`) ----------
@@ -164,6 +192,24 @@ def uniform_borders(
         if len(out) == 0 or out[len(out) - 1] != b:
             out.append(b)
     return out^
+
+
+def ctr_border_type_code(description: TBinarizationOptions) raises -> Int:
+    """`IDN_CTR_BORDERS_DEVICE`: the `BORDER_TYPE_*` code
+    (`gbdt/grid_creator/binarization.mojo`) of a CTR grid's selection type,
+    with `compute_ctr_borders`' refusal for the types the simple-ctr
+    defaults never reach."""
+    if description.border_selection_type == BORDER_SELECTION_MIN_ENTROPY:
+        return BORDER_TYPE_MIN_ENTROPY
+    if description.border_selection_type == BORDER_SELECTION_UNIFORM:
+        return BORDER_TYPE_UNIFORM
+    raise Error(
+        "ctr_binarization border_type="
+        + border_selection_name(description.border_selection_type)
+        + " is not implemented; the GPU simple-ctr defaults are Uniform for"
+        " Borders and MinEntropy for FeatureFreq"
+        " (catboost_options.cpp:392-415, cat_feature_options.cpp:167-170)"
+    )
 
 
 def compute_ctr_borders(

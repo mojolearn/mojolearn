@@ -36,6 +36,8 @@ from gbdt.ctrs.ctr_binarization import (
     build_binarized_target,
     build_target_borders,
     compute_ctr_borders,
+    IDN_CTR_BORDERS_DEVICE,
+    ctr_border_type_code,
 )
 from gbdt.ctrs.ctr_calcers import (
     compute_simple_ctrs,
@@ -2321,6 +2323,37 @@ def train(
     )
 
 
+def _ctr_borders_device(
+    ctx: DeviceContext,
+    col: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    description: TBinarizationOptions,
+) raises -> List[Float32]:
+    """`IDN_CTR_BORDERS_DEVICE` (`gbdt/ctrs/ctr_binarization.mojo`): one
+    CTR column's grid from `device_float_borders` over every row at NaN mode
+    Forbidden, with `compute_ctr_borders`' constant-feature 0.5. The host
+    column's twin is `gbdt/host/gbdt_oracle_ctr.mojo::_ctr_borders_host_grid`."""
+    var one = List[MutPointer[Float32, MutUntrackedOrigin]](capacity=1)
+    one.append(col)
+    var got = device_float_borders(
+        ctx, one, n_rows, n_rows, description.border_count,
+        NAN_MODE_FORBIDDEN, generate_seed_for_borders(UInt64(0)),
+        ctr_border_type_code(description),
+    )
+    var grids = got[0].copy()
+    if len(grids) != 1:
+        raise Error(
+            "ctr borders: the device border build returned "
+            + String(len(grids)) + " grids for one column"
+        )
+    var bs = grids[0].copy()
+    if len(bs) == 0:
+        # `//hack to work with constant features`
+        # (`gpu_binarization_helpers.cpp:22-27`)
+        bs.append(Float32(0.5))
+    return bs^
+
+
 def _quantize_training_columns(
     ctx: DeviceContext,
     columns: List[List[Float32]],
@@ -2461,10 +2494,20 @@ def _quantize_training_columns(
             # written first -- and their loop starts at 0
             # (`doc_parallel_dataset_builder.cpp:250`). The grid is a
             # property of the feature, not of the permutation.
-            var bs = compute_ctr_borders(
-                dep_by_perm[0][dep_ordinal_of_column[f]],
-                ctr_grids[column_ctr_grid[f]],
-            )
+            var bs: List[Float32]
+            comptime if IDN_CTR_BORDERS_DEVICE:
+                bs = _ctr_borders_device(
+                    ctx,
+                    rebind[MutPointer[Float32, MutUntrackedOrigin]](
+                        dep_by_perm[0][dep_ordinal_of_column[f]].unsafe_ptr()
+                    ),
+                    n_rows, ctr_grids[column_ctr_grid[f]],
+                )
+            else:
+                bs = compute_ctr_borders(
+                    dep_by_perm[0][dep_ordinal_of_column[f]],
+                    ctr_grids[column_ctr_grid[f]],
+                )
             fold_counts.append(len(bs))
             borders.append(bs^)
         elif column_ctr_grid[f] >= 0:
@@ -2477,9 +2520,15 @@ def _quantize_training_columns(
             # for Borders). Reading `border_count` here instead would be
             # the numeric GreedyLogSum grid on a CTR column, which is what
             # `tools/ctr_prep.py` used to do.
-            var bs = compute_ctr_borders(columns[f], ctr_grids[
-                column_ctr_grid[f]
-            ])
+            var bs: List[Float32]
+            comptime if IDN_CTR_BORDERS_DEVICE:
+                bs = _ctr_borders_device(
+                    ctx, cps[f], n_rows, ctr_grids[column_ctr_grid[f]],
+                )
+            else:
+                bs = compute_ctr_borders(columns[f], ctr_grids[
+                    column_ctr_grid[f]
+                ])
             fold_counts.append(len(bs))
             borders.append(bs^)
         else:

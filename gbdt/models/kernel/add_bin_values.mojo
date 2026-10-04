@@ -31,6 +31,43 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from max.gpu.host import DeviceBuffer, DeviceContext
+from std.sys.compile import is_defined
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+#: lane/fam2-gbdt F3 (IDENTICAL, every vendor; default ON): the non-resident
+#: `predict` (`gbdt/methods/doc_parallel_boosting.mojo`) launches the
+#: oblivious ensemble four trees per launch (`compute_bins_and_add_four_kernel`,
+#: the resident path's grouping) instead of one launch per tree. Same ordered
+#: float32 adds per row, so no bit moves and the host column is untouched.
+#: `-D MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF` (or `-D MOJOLEARN_IDN_ALL_OFF`)
+#: restores one launch per tree.
+comptime IDN_PREDICT_FOUR = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+#: lane/fam2-gbdt F4 (IDENTICAL; CANDIDATE ARM, default OFF, enable with
+#: `-D MOJOLEARN_IDN_GBDT_APPLY_WIDE`): an ensemble whose trees all share one
+#: positive depth is applied `APPLY_WIDE_TREES` trees per launch
+#: (`compute_bins_and_add_uniform_kernel`), each row carrying its sum in a
+#: register through the trees in tree order: the same ordered float32 adds,
+#: one cursor store per launch instead of one per tree. No bit moves. Time it
+#: against the four-tree grouping (resident predict and `predict`). An
+#: ensemble with mixed depths keeps the four-tree grouping.
+comptime IDN_APPLY_WIDE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_GBDT_APPLY_WIDE"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+#: trees per launch of the wide arm: bounded so one launch stays short (macOS
+#: cuts a Metal launch that runs for seconds)
+comptime APPLY_WIDE_TREES = 64
 
 
 def compute_bins_and_add_kernel(
@@ -419,3 +456,185 @@ def compute_non_symmetric_decision_tree_bins_kernel(
 
         out_bins.unsafe_store(i, UInt32(bin))
         i += stride
+
+
+def compute_bins_and_add_uniform_kernel(
+    compressed_index: MutPointer[UInt32, MutAnyOrigin],
+    feature_offset: MutPointer[UInt32, MutAnyOrigin],
+    feature_shift: MutPointer[UInt32, MutAnyOrigin],
+    feature_mask: MutPointer[UInt32, MutAnyOrigin],
+    split_bin: MutPointer[UInt32, MutAnyOrigin],
+    take_equal: MutPointer[UInt8, MutAnyOrigin],
+    depth_in: Int32,
+    tree_count_in: Int32,
+    leaf_values: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    cursor: MutPointer[Float32, MutAnyOrigin],
+    dim_count_in: Int32,
+    cursor_stride_in: Int32,
+):
+    """`IDN_APPLY_WIDE`: `tree_count` consecutive oblivious trees of ONE
+    depth, applied in their original order. Tree `t`'s level records sit at
+    `t * depth` in the five descriptor planes and its leaf values at
+    `t * (1 << depth) * dim_count`; the planes are read from global memory
+    (they are a few kilobytes and shared by every row). Each row performs
+    `compute_bins_and_add_kernel`'s adds in tree order through `acc`."""
+    var depth = Int(depth_in)
+    var tree_count = Int(tree_count_in)
+    var n_rows = Int(n_rows_in)
+    var dim = Int(block_idx.y)
+    var dim_count = Int(dim_count_in)
+    var plane = dim * Int(cursor_stride_in)
+    var leaves_per_tree = (1 << depth) * dim_count
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while i < n_rows:
+        var acc = cursor.unsafe_load(plane + i)
+        for t in range(tree_count):
+            var level_base = t * depth
+            var leaf = 0
+            for level in range(depth):
+                var j = level_base + level
+                var off = Int(feature_offset.unsafe_load(j))
+                var shift = feature_shift.unsafe_load(j)
+                var mask = feature_mask.unsafe_load(j) << shift
+                var value = split_bin.unsafe_load(j) << shift
+                var feature_val = compressed_index.unsafe_load(off + i) & mask
+                var split: Bool
+                if take_equal.unsafe_load(j) != UInt8(0):
+                    split = feature_val == value
+                else:
+                    split = feature_val > value
+                if split:
+                    leaf += 1 << level
+            acc = acc + leaf_values.unsafe_load(
+                t * leaves_per_tree + leaf * dim_count + dim
+            )
+        cursor.unsafe_store(plane + i, acc)
+        i += stride
+
+
+def uniform_positive_depth(depths: List[Int]) -> Int:
+    """The one depth every tree shares when it is positive, else 0."""
+    if len(depths) == 0:
+        return 0
+    var d = depths[0]
+    if d < 1:
+        return 0
+    for t in range(1, len(depths)):
+        if depths[t] != d:
+            return 0
+    return d
+
+
+def launch_oblivious_apply_wide(
+    ctx: DeviceContext,
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut d_off: DeviceBuffer[DType.uint32],
+    mut d_shift: DeviceBuffer[DType.uint32],
+    mut d_mask: DeviceBuffer[DType.uint32],
+    mut d_bin: DeviceBuffer[DType.uint32],
+    mut d_eq: DeviceBuffer[DType.uint8],
+    mut d_vals: DeviceBuffer[DType.float32],
+    depth: Int,
+    n_trees: Int,
+    n_rows: Int,
+    mut cursor: DeviceBuffer[DType.float32],
+    approx_dim: Int,
+) raises:
+    """`IDN_APPLY_WIDE`'s launches: `n_trees` trees of one positive `depth`,
+    `APPLY_WIDE_TREES` per launch, back to back, no drain."""
+    var wide = (n_rows + 255) // 256
+    if wide > 1024:
+        wide = 1024
+    var t = 0
+    while t < n_trees:
+        var count = n_trees - t
+        if count > APPLY_WIDE_TREES:
+            count = APPLY_WIDE_TREES
+        var lvl = t * depth
+        var leaf = t * (1 << depth) * approx_dim
+        ctx.enqueue_function[compute_bins_and_add_uniform_kernel](
+            cindex.unsafe_ptr(),
+            d_off.unsafe_ptr() + lvl,
+            d_shift.unsafe_ptr() + lvl,
+            d_mask.unsafe_ptr() + lvl,
+            d_bin.unsafe_ptr() + lvl,
+            d_eq.unsafe_ptr() + lvl,
+            Int32(depth), Int32(count),
+            d_vals.unsafe_ptr() + leaf,
+            Int32(n_rows),
+            cursor.unsafe_ptr(),
+            Int32(approx_dim),
+            Int32(n_rows),
+            grid_dim=(wide, approx_dim, 1),
+            block_dim=(256, 1, 1),
+        )
+        t += count
+
+
+def launch_oblivious_apply_four(
+    ctx: DeviceContext,
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut d_off: DeviceBuffer[DType.uint32],
+    mut d_shift: DeviceBuffer[DType.uint32],
+    mut d_mask: DeviceBuffer[DType.uint32],
+    mut d_bin: DeviceBuffer[DType.uint32],
+    mut d_eq: DeviceBuffer[DType.uint8],
+    mut d_vals: DeviceBuffer[DType.float32],
+    depths: List[Int],
+    n_rows: Int,
+    mut cursor: DeviceBuffer[DType.float32],
+    approx_dim: Int,
+) raises:
+    """`IDN_PREDICT_FOUR`: the packed ensemble four trees per launch
+    (`compute_bins_and_add_four_kernel`), in tree order, back to back, no
+    drain: the launch loop of `gbdt/resident_model.mojo::_apply`."""
+    var wide = (n_rows + 255) // 256
+    if wide > 1024:
+        wide = 1024
+    var n_trees = len(depths)
+    var lvl = 0
+    var leaf = 0
+    var t = 0
+    while t < n_trees:
+        var count = n_trees - t
+        if count > 4:
+            count = 4
+        var d0 = depths[t]
+        var d1 = 0
+        var d2 = 0
+        var d3 = 0
+        var leaves = 1 << d0
+        if count > 1:
+            d1 = depths[t + 1]
+            leaves += 1 << d1
+        if count > 2:
+            d2 = depths[t + 2]
+            leaves += 1 << d2
+        if count > 3:
+            d3 = depths[t + 3]
+            leaves += 1 << d3
+        # a group with no level at all keeps offset zero (no one-past-end
+        # split pointer); a leading depth-0 tree needs no shift, because the
+        # group's records start at `lvl` either way
+        var split_offset = lvl if d0 + d1 + d2 + d3 > 0 else 0
+        ctx.enqueue_function[compute_bins_and_add_four_kernel](
+            cindex.unsafe_ptr(),
+            d_off.unsafe_ptr() + split_offset,
+            d_shift.unsafe_ptr() + split_offset,
+            d_mask.unsafe_ptr() + split_offset,
+            d_bin.unsafe_ptr() + split_offset,
+            d_eq.unsafe_ptr() + split_offset,
+            Int32(d0), Int32(d1), Int32(d2), Int32(d3), Int32(count),
+            d_vals.unsafe_ptr() + leaf,
+            Int32(n_rows),
+            cursor.unsafe_ptr(),
+            Int32(approx_dim),
+            Int32(n_rows),
+            grid_dim=(wide, approx_dim, 1),
+            block_dim=(256, 1, 1),
+        )
+        lvl += d0 + d1 + d2 + d3
+        leaf += leaves * approx_dim
+        t += count

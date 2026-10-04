@@ -101,7 +101,10 @@ from gbdt.ctrs.ctr_binarization import (
     build_binarized_target,
     build_target_borders,
     compute_ctr_borders,
+    IDN_CTR_BORDERS_DEVICE,
+    ctr_border_type_code,
 )
+from gbdt.options.data_processing_options import NAN_MODE_FORBIDDEN
 from gbdt.data.permutation import (
     DEFAULT_PERMUTATION_COUNT,
     ctrs_estimation_permutation,
@@ -512,13 +515,22 @@ def gbdt_ctr_host_fit(
         elif column_kind[c] == GBDT_COL_CTR:
             var grid_desc = _ctr_grid_for(configs[column_ctr_grid[c]])
             var bs: List[Float32]
-            if dep_ordinal_of_column[c] >= 0:
-                # PERMUTATION 0'S VALUES decide a dependent column's grid
-                bs = compute_ctr_borders(
-                    dep_by_perm[0][dep_ordinal_of_column[c]], grid_desc
-                )
+            comptime if IDN_CTR_BORDERS_DEVICE:
+                # lane/fam2-gbdt F6: the device build's host restatement
+                if dep_ordinal_of_column[c] >= 0:
+                    bs = _ctr_borders_host_grid(
+                        dep_by_perm[0][dep_ordinal_of_column[c]], grid_desc
+                    )
+                else:
+                    bs = _ctr_borders_host_grid(columns[c], grid_desc)
             else:
-                bs = compute_ctr_borders(columns[c], grid_desc)
+                if dep_ordinal_of_column[c] >= 0:
+                    # PERMUTATION 0'S VALUES decide a dependent column's grid
+                    bs = compute_ctr_borders(
+                        dep_by_perm[0][dep_ordinal_of_column[c]], grid_desc
+                    )
+                else:
+                    bs = compute_ctr_borders(columns[c], grid_desc)
             fold_counts[c] = len(bs)
             borders[c] = bs^
     var grid = GbdtHostGrid(borders^, fold_counts^, nan_treatment^)
@@ -651,3 +663,20 @@ def gbdt_ctr_host_model_text(r: GbdtCtrHostFit) raises -> String:
     for i in range(len(m.losses)):
         out += String("loss ") + String(i) + " " + gbdt_f64_token(m.losses[i]) + "\n"
     return out^
+
+
+def _ctr_borders_host_grid(
+    values: List[Float32], description: TBinarizationOptions
+) raises -> List[Float32]:
+    """`IDN_CTR_BORDERS_DEVICE`: `gbdt/train.mojo::_ctr_borders_device` on
+    host memory: `gbdt_host_grid` (the device border build's restatement)
+    over every row of the one column at NaN mode Forbidden, then the
+    constant-feature 0.5."""
+    var grid = gbdt_host_grid(
+        values, len(values), 1, description.border_count, 0, UInt64(0),
+        NAN_MODE_FORBIDDEN, ctr_border_type_code(description),
+    )
+    var bs = grid.borders[0].copy()
+    if len(bs) == 0:
+        bs.append(Float32(0.5))
+    return bs^

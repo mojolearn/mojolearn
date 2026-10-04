@@ -91,9 +91,15 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
 )
 from gbdt.gpu_util.kernel.random_gen import next_poisson_f, next_uniform_f
-from gbdt.data.pairs import PairList, generate_pairs, order_pairs_by_winner
+from gbdt.data.pairs import (
+    IDN_PAIRLOGIT_GROUP,
+    PairList,
+    generate_pairs,
+    order_pairs_by_winner,
+)
 from gbdt.host.gbdt_oracle_pair import (
     HostPairs,
+    host_pair_groups,
     host_pairs,
     pair_logit_eval,
     pair_logit_search_pass,
@@ -820,19 +826,26 @@ def gbdt_losses_host_fit(
         var sizes_u32 = List[UInt32](capacity=len(group_sizes))
         for g in range(len(group_sizes)):
             sizes_u32.append(UInt32(group_sizes[g]))
-        var ordered: PairList
-        if len(pair_winners) > 0:
-            ordered = order_pairs_by_winner(
-                PairList(pair_winners.copy(), pair_losers.copy(), pair_weights.copy()),
-                sizes_u32, n_rows,
-            )
+        if IDN_PAIRLOGIT_GROUP and len(pair_winners) == 0:
+            # lane/fam2-gbdt F2: generated pairs take the device's group
+            # layout (`pair_logit_group.mojo`), no pair list
+            var hg = host_pair_groups(sizes_u32, y, List[Float32](), n_rows)
+            loss_norm = hg.total_weight()
+            pairs = Optional(hg^)
         else:
-            ordered = order_pairs_by_winner(
-                generate_pairs(sizes_u32, y, List[Float32]()), sizes_u32, n_rows
-            )
-        var hp = host_pairs(ordered.winners, ordered.losers, ordered.weights, n_rows)
-        loss_norm = hp.prep.total
-        pairs = Optional(hp^)
+            var ordered: PairList
+            if len(pair_winners) > 0:
+                ordered = order_pairs_by_winner(
+                    PairList(pair_winners.copy(), pair_losers.copy(), pair_weights.copy()),
+                    sizes_u32, n_rows,
+                )
+            else:
+                ordered = order_pairs_by_winner(
+                    generate_pairs(sizes_u32, y, List[Float32]()), sizes_u32, n_rows
+                )
+            var hp = host_pairs(ordered.winners, ordered.losers, ordered.weights, n_rows)
+            loss_norm = hp.total_weight()
+            pairs = Optional(hp^)
     if n_rows < 1 or n_features < 1:
         raise Error("train requires at least one row and one feature")
     if len(x_colmajor) != n_rows * n_features:
@@ -872,10 +885,15 @@ def gbdt_losses_host_fit(
     var stats = List[Float32](length=2 * n_rows, fill=Float32(0.0))
     var mse_blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var fv_blocks = mse_blocks
+    # the magnitudes are two per 256-row block, except on PairLogit's group
+    # layout (`IDN_PAIRLOGIT_GROUP`): two per GROUP, as the value partials
+    var mag_blocks = mse_blocks
     if pairs.__bool__():
         fv_blocks = pairs.value().blocks()
+        if pairs.value().group_layout:
+            mag_blocks = fv_blocks
     var fv_part = List[Float32](length=fv_blocks, fill=Float32(0.0))
-    var mag_part = List[Float32](length=2 * mse_blocks, fill=Float32(0.0))
+    var mag_part = List[Float32](length=2 * mag_blocks, fill=Float32(0.0))
     var bootstrap_on = loss.bootstrap_kind >= 0
     var seeds = List[UInt64]()
     if bootstrap_on:
@@ -929,7 +947,7 @@ def gbdt_losses_host_fit(
             )
             fixed_scale = _choose_scale_from_magnitudes(bm[0], bm[1], n_rows)
         else:
-            var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
+            var mags = _deterministic_sum_lanes(mag_part, 2, mag_blocks)
             fixed_scale = _choose_scale_from_magnitudes(mags[0], mags[1], n_rows)
         _snap_gradients(stats, n_rows, 2, fixed_scale)  # lane/sym-quality
         var score_std_dev = Float32(0.0)

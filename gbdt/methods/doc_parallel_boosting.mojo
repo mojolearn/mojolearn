@@ -106,7 +106,19 @@ from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
     build_layout,
 )
-from gbdt.models.kernel.add_bin_values import compute_bins_and_add_kernel
+from gbdt.methods.leaves_estimation.leaves_estimation import (
+    IDN_EST_ONE_STEP_DEVICE,
+    newton_one_step_kernel,
+)
+from std.memory import bitcast
+from gbdt.models.kernel.add_bin_values import (
+    IDN_APPLY_WIDE,
+    IDN_PREDICT_FOUR,
+    compute_bins_and_add_kernel,
+    launch_oblivious_apply_four,
+    launch_oblivious_apply_wide,
+    uniform_positive_depth,
+)
 from checks.kernel_matrix import (
     TARGET_COLUMN,
     deterministic_flush_for,
@@ -988,6 +1000,87 @@ def _estimate_and_apply(
     # positive definite. Accumulated across the whole fit and
     # reported once, because the number that matters is whether
     # it is ever nonzero.
+    # lane/fam2-gbdt F5 (`IDN_EST_ONE_STEP_DEVICE`): the one-step Newton
+    # estimation of an unweighted single-dimensional pointwise loss finishes
+    # on the device and the task drains once.
+    var one_step_device = False
+    comptime if IDN_EST_ONE_STEP_DEVICE:
+        one_step_device = (
+            iters == 1
+            and leaf_estimation_method == LEAF_ESTIMATION_NEWTON
+            and estimate_can_batch(objective, leaf_estimation_method, iters)
+            and approx_dim == 1
+            # a weighted fit needs the constructor's per-leaf weight sums
+            # already on the host (not the deferred-weights oracle)
+            and not oracle.h_weight_stats.__bool__()
+            and len(oracle.weights_cpu) == n_leaves
+            and oracle.single_bin_dim == 1
+            and oracle.hessian_block_size() == 1
+        )
+    if one_step_device:
+        # the walker's own first calls, in its order: `MoveTo(start)` and the
+        # evaluation at it, both enqueued, not drained
+        oracle.times.enabled = stage_times.enabled
+        var start_point = List[Float32](length=n_leaves, fill=Float32(0.0))
+        oracle.move_to(start_point)
+        oracle.enqueue_single_dim_evaluation()
+        stage_times.begin(ctx)
+        # weighted fit: `Regularize`'s per-leaf decision (1.0 keep, 0.0
+        # zero) from the weight sums the constructor read, in its own host
+        # buffer, alive until the drain below
+        # sized as `d_est` (the copy below moves the whole device buffer's
+        # length); one element when there is nothing to upload
+        var mask_len = 1
+        if has_weights:
+            mask_len = est_ws[0].n_leaves_cap * approx_dim
+        var h_mask = ctx.enqueue_create_host_buffer[DType.float32](mask_len)
+        if has_weights:
+            for i in range(mask_len):
+                h_mask.unsafe_ptr().unsafe_store(i, Float32(0.0))
+            for i in range(n_leaves):
+                var keep = Float32(1.0)
+                if oracle.weights_cpu[i] < oracle.min_leaf_weight:
+                    keep = Float32(0.0)
+                h_mask.unsafe_ptr().unsafe_store(i, keep)
+            ctx.enqueue_copy(dst_buf=d_est, src_ptr=h_mask.unsafe_ptr())
+        ctx.enqueue_function[newton_one_step_kernel](
+            oracle.d_part_stats.unsafe_ptr(),
+            oracle.d_p_sz.unsafe_ptr(),
+            bitcast[DType.uint64](oracle.lambda_reg),
+            bitcast[DType.uint64](oracle.min_leaf_weight),
+            Int32(n_leaves),
+            d_est.unsafe_ptr(),
+            Int32(1) if has_weights else Int32(0),
+            grid_dim=((n_leaves + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        var os_gx = 2 * oracle.sm_count
+        if os_gx < 1:
+            os_gx = 1
+        ctx.enqueue_function[add_model_value_kernel](
+            oracle.d_p_off.unsafe_ptr(),
+            oracle.d_p_sz.unsafe_ptr(),
+            row_index.unsafe_ptr(),
+            d_est.unsafe_ptr(),
+            learning_rate,
+            cursor.unsafe_ptr(),
+            Int32(approx_dim), Int32(n_rows),
+            grid_dim=(os_gx, n_leaves, approx_dim),
+            block_dim=(256, 1, 1),
+        )
+        ctx.enqueue_copy(dst_ptr=h_est.unsafe_ptr(), src_buf=d_est)
+        # the task's one settle point (DEVIATION 1891's holds, as the
+        # ordinary tail below)
+        ctx.synchronize()
+        leaf_values.clear()
+        for i in range(n_leaves):
+            leaf_values.append(h_est.unsafe_ptr().unsafe_load(i))
+        merge_stage_times(stage_times, oracle.times)
+        trace.record_list_f32(leaf_tag, leaf_values)
+        stage_times.end(ctx, "est.tail_apply")
+        _ = h_mask^  # past the drain (step-33 race class)
+        _ = oracle^  # past the drain (step-33 race class, device side)
+        return
     var estimated: List[Float32]
     if leaf_estimation_method == LEAF_ESTIMATION_EXACT:
         estimated = oracle.estimate_exact()
@@ -3539,34 +3632,57 @@ def predict(
     var wide = (n_rows + 255) // 256
     if wide > 1024:
         wide = 1024
-    lvl = 0
-    leaf = 0
-    for t in range(model.size()):
-        ref weak = model.weak_models[t]
-        var depth = weak.structure.get_depth()
-        # With depth zero the existing kernel's level loop is empty and
-        # leaf remains zero: apply the constant, including inside a mixed
-        # ensemble. Use offset zero for unused pointers to avoid a trailing
-        # constant forming a one-past-end split pointer.
-        var split_offset = lvl if depth > 0 else 0
-        ctx.enqueue_function[compute_bins_and_add_kernel](
-            cindex.unsafe_ptr(),
-            d_off.unsafe_ptr() + split_offset,
-            d_shift.unsafe_ptr() + split_offset,
-            d_mask.unsafe_ptr() + split_offset,
-            d_bin.unsafe_ptr() + split_offset,
-            d_eq.unsafe_ptr() + split_offset,
-            Int32(depth),
-            d_vals.unsafe_ptr() + leaf,
-            Int32(n_rows),
-            cursor.unsafe_ptr(),
-            Int32(approx_dim),
-            Int32(n_rows),
-            grid_dim=(wide, approx_dim, 1),
-            block_dim=(256, 1, 1),
-        )
-        lvl += depth
-        leaf += (1 << depth) * approx_dim
+    # lane/fam2-gbdt F3 / F4: the same per-row ordered adds in fewer
+    # launches (`gbdt/models/kernel/add_bin_values.mojo`)
+    var grouped = False
+    comptime if IDN_PREDICT_FOUR or IDN_APPLY_WIDE:
+        var tree_depths = List[Int](capacity=model.size())
+        for t in range(model.size()):
+            tree_depths.append(model.weak_models[t].structure.get_depth())
+        comptime if IDN_APPLY_WIDE:
+            var uniform = uniform_positive_depth(tree_depths)
+            if uniform > 0:
+                launch_oblivious_apply_wide(
+                    ctx, cindex, d_off, d_shift, d_mask, d_bin, d_eq, d_vals,
+                    uniform, model.size(), n_rows, cursor, approx_dim,
+                )
+                grouped = True
+        comptime if IDN_PREDICT_FOUR:
+            if not grouped:
+                launch_oblivious_apply_four(
+                    ctx, cindex, d_off, d_shift, d_mask, d_bin, d_eq, d_vals,
+                    tree_depths, n_rows, cursor, approx_dim,
+                )
+                grouped = True
+    if not grouped:
+        lvl = 0
+        leaf = 0
+        for t in range(model.size()):
+            ref weak = model.weak_models[t]
+            var depth = weak.structure.get_depth()
+            # With depth zero the existing kernel's level loop is empty and
+            # leaf remains zero: apply the constant, including inside a mixed
+            # ensemble. Use offset zero for unused pointers to avoid a trailing
+            # constant forming a one-past-end split pointer.
+            var split_offset = lvl if depth > 0 else 0
+            ctx.enqueue_function[compute_bins_and_add_kernel](
+                cindex.unsafe_ptr(),
+                d_off.unsafe_ptr() + split_offset,
+                d_shift.unsafe_ptr() + split_offset,
+                d_mask.unsafe_ptr() + split_offset,
+                d_bin.unsafe_ptr() + split_offset,
+                d_eq.unsafe_ptr() + split_offset,
+                Int32(depth),
+                d_vals.unsafe_ptr() + leaf,
+                Int32(n_rows),
+                cursor.unsafe_ptr(),
+                Int32(approx_dim),
+                Int32(n_rows),
+                grid_dim=(wide, approx_dim, 1),
+                block_dim=(256, 1, 1),
+            )
+            lvl += depth
+            leaf += (1 << depth) * approx_dim
     ctx.synchronize()
     _ = d_vals^  # past the drain (step-33 race class, device side)
     _ = d_eq^  # past the drain (step-33 race class, device side)
