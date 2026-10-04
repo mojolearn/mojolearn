@@ -130,9 +130,40 @@ from cluster.impl.kmeans_params import (
 #: of 90 fitting cells); `-D MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1` forces
 #: it on any column for an A/B, `-D MOJOLEARN_KMEANS_BLOCK_ACC_OFF=1` forces
 #: it off. Apple and AMD are untimed and keep the atomic reductions.
+#: fam-cluster (2026-10-04), IDENTICAL: the row-block accumulator on the AMD
+#: column too. The kernels are vendor neutral (plain Int32 loads and stores,
+#: no shared memory, no atomics) and the Int32 totals are the atomic arms'
+#: totals by the associativity argument in `reduce_by_key.mojo`, so no bit
+#: moves. `-D MOJOLEARN_IDN_KMEANS_BLOCK_ACC_AMD_OFF=1` restores the atomic
+#: reductions on AMD.
+comptime IDN_KMEANS_BLOCK_ACC_AMD = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and TARGET_COLUMN == COLUMN_AMD
+    and not (
+        is_defined["MOJOLEARN_IDN_KMEANS_BLOCK_ACC_AMD_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
 comptime KMEANS_BLOCK_ACC = (
     not is_defined["MOJOLEARN_KMEANS_BLOCK_ACC_OFF"]()
-    and (is_defined["MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC"]() or TARGET_COLUMN == COLUMN_NVIDIA)
+    and (
+        is_defined["MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC"]()
+        or TARGET_COLUMN == COLUMN_NVIDIA
+        or IDN_KMEANS_BLOCK_ACC_AMD
+    )
+)
+#: fam-cluster (2026-10-04), IDENTICAL, with the row-block accumulator: the
+#: fold of the block tables STORES each output cell instead of adding into a
+#: buffer zeroed by two extra launches per Lloyd iteration. `0 + total` is
+#: `total` in Int32, so no bit moves. `-D MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF=1`
+#: restores the two zero launches and the adding fold.
+comptime IDN_KMEANS_FOLD_STORE = (
+    KMEANS_BLOCK_ACC
+    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
 )
 #: The reach control for 3080: the row-block arm with the first row of every
 #: block dropped. NEVER a shipping define.
@@ -1452,18 +1483,19 @@ def kmeans_fit_main_traced(
         var n_current_iter = params.max_iter + 1
         var it = 1
         while it <= params.max_iter:
-            ctx.enqueue_function[zero_i32_kernel](
-                sums_i32.unsafe_ptr(),
-                Int32(cd),
-                grid_dim=((cd + 255) // 256, 1, 1),
-                block_dim=(256, 1, 1),
-            )
-            ctx.enqueue_function[zero_i32_kernel](
-                weight_i32.unsafe_ptr(),
-                Int32(n_clusters),
-                grid_dim=((n_clusters + 255) // 256, 1, 1),
-                block_dim=(256, 1, 1),
-            )
+            comptime if not IDN_KMEANS_FOLD_STORE:
+                ctx.enqueue_function[zero_i32_kernel](
+                    sums_i32.unsafe_ptr(),
+                    Int32(cd),
+                    grid_dim=((cd + 255) // 256, 1, 1),
+                    block_dim=(256, 1, 1),
+                )
+                ctx.enqueue_function[zero_i32_kernel](
+                    weight_i32.unsafe_ptr(),
+                    Int32(n_clusters),
+                    grid_dim=((n_clusters + 255) // 256, 1, 1),
+                    block_dim=(256, 1, 1),
+                )
 
             compute_centroid_norms(
                 ctx,
@@ -1511,12 +1543,14 @@ def kmeans_fit_main_traced(
                 # totals are the atomic arms' totals (associative adds of
                 # the same addends, bounded inside Int32 by `choose_scale`).
                 launch_accumulate_centroid_sums_blocked[
-                    KMEANS_BLOCK_ACC_SABOTAGE
+                    KMEANS_BLOCK_ACC_SABOTAGE, IDN_KMEANS_FOLD_STORE
                 ](
                     ctx, sums_i32, acc_table, x, labels, weights,
                     n_samples, n_features, n_clusters, sum_scale,
                 )
-                launch_accumulate_weight_per_cluster_blocked(
+                launch_accumulate_weight_per_cluster_blocked[
+                    IDN_KMEANS_FOLD_STORE
+                ](
                     ctx, weight_i32, acc_table_w, labels, weights,
                     n_samples, n_clusters, weight_scale,
                 )

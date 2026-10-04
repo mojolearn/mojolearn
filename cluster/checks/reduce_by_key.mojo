@@ -835,7 +835,9 @@ def accumulate_weight_blocked_kernel(
         table.unsafe_store(base + label, table.unsafe_load(base + label) + q)
 
 
-def fold_block_table_kernel(
+def fold_block_table_kernel[
+    store: Bool = False
+](
     out_i32: MutPointer[Int32, MutAnyOrigin],
     table: MutPointer[Int32, MutAnyOrigin],
     n_blocks_in: Int32,
@@ -844,7 +846,10 @@ def fold_block_table_kernel(
     """Thread `cell`: `out[cell] += sum over blocks of table[b][cell]`. One
     thread per output cell, so the add into `out` needs no atomic, and it is
     an ADD because the two launchers accumulate into a buffer the caller
-    zeroed, as the atomic arms do."""
+    zeroed, as the atomic arms do.
+
+    `store = True` (fam-cluster, `IDN_KMEANS_FOLD_STORE`): the total is
+    STORED, so the caller need not zero `out` first. Same Int32 value."""
     var n_blocks = Int(n_blocks_in)
     var cells = Int(cells_in)
     var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -853,11 +858,14 @@ def fold_block_table_kernel(
     var acc = Int32(0)
     for b in range(n_blocks):
         acc += table.unsafe_load(b * cells + cell)
-    out_i32.unsafe_store(cell, out_i32.unsafe_load(cell) + acc)
+    comptime if store:
+        out_i32.unsafe_store(cell, acc)
+    else:
+        out_i32.unsafe_store(cell, out_i32.unsafe_load(cell) + acc)
 
 
 def launch_accumulate_centroid_sums_blocked[
-    sabotage: Bool = False
+    sabotage: Bool = False, store: Bool = False
 ](
     ctx: DeviceContext,
     mut sums_i32: DeviceBuffer[DType.int32],
@@ -889,7 +897,8 @@ def launch_accumulate_centroid_sums_blocked[
         block_dim=(BLOCK_ACC_TPB, 1, 1),
     )
     var cells = n_clusters * n_features
-    ctx.enqueue_function[fold_block_table_kernel](
+    comptime fold_kern = fold_block_table_kernel[store]
+    ctx.enqueue_function[fold_kern](
         sums_i32.unsafe_ptr(),
         table.unsafe_ptr(),
         Int32(n_blocks),
@@ -899,7 +908,9 @@ def launch_accumulate_centroid_sums_blocked[
     )
 
 
-def launch_accumulate_weight_per_cluster_blocked(
+def launch_accumulate_weight_per_cluster_blocked[
+    store: Bool = False
+](
     ctx: DeviceContext,
     mut weight_i32: DeviceBuffer[DType.int32],
     mut table: DeviceBuffer[DType.int32],
@@ -922,7 +933,8 @@ def launch_accumulate_weight_per_cluster_blocked(
         grid_dim=((n_blocks + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
         block_dim=(BLOCK_ACC_TPB, 1, 1),
     )
-    ctx.enqueue_function[fold_block_table_kernel](
+    comptime fold_kern_w = fold_block_table_kernel[store]
+    ctx.enqueue_function[fold_kern_w](
         weight_i32.unsafe_ptr(),
         table.unsafe_ptr(),
         Int32(n_blocks),
