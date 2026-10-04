@@ -642,14 +642,18 @@ def host_eig_and_truncate(
         var rv = List[Float32](length=n_cols * n_cols, fill=Float32(0.0))
         var got = host_eigh_rr(cov, rv, n_cols, PCA_RR_SWEEPS, Float32(JACOBI_TOL))
         if not got[0]:
+            # the cyclic solver's refusal, in its words (the device column
+            # raises the same: decomposition/impl/linalg/detail/pca.mojo)
             raise Error(
-                "the round-robin Jacobi did not converge in "
+                "the device Jacobi did not converge in "
                 + String(PCA_RR_SWEEPS)
                 + " sweeps at n_cols = "
                 + String(n_cols)
-                + ". An unconverged decomposition is not returned as if it were"
-                " one. A non-symmetric covariance produces this too; see"
-                " check_covariance_is_symmetric."
+                + " (round-robin order) against a tolerance of "
+                + String(JACOBI_TOL)
+                + ". cuSOLVER's syevj has the same failure mode and the same"
+                " remedy, which is more sweeps. A non-symmetric covariance"
+                " produces this too; see check_covariance_is_symmetric."
             )
         host_sign_flip(rv, n_cols)
         var rdiag = List[Float64]()

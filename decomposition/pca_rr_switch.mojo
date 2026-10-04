@@ -5,6 +5,7 @@ and its host column `host_eig_and_truncate` (decomposition/host/pca_oracle.mojo)
 both read, so the device and the host change eigensolver together."""
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from x_decomp.rr import RR_EIGH_SWEEPS
 
 #: lane idn-shap-pca (2026-10-04), the IDENTICAL default on every column
 #: (NVIDIA, AMD, Apple, host): PCA's and TruncatedSVD's covariance / Gram
@@ -17,13 +18,29 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 #: restores the cyclic solver on both (the A/B arm; pass it to the device
 #: AND the host binding builds). FAST builds are unchanged.
 comptime PCA_RR_EIGH = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_PCA_RR_EIGH_OFF"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_PCA_RR_EIGH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
 #: The round-robin solve's sweep budget in PCA / TruncatedSVD, the device and
-#: the host column alike (the cyclic solver it replaces has JACOBI_SWEEPS =
-#: 15). The device enqueues every sweep's launches up front and decides
-#: convergence on the device (no readback between sweeps: launches after the
-#: converged test are no-ops), so the budget is also the launch count; a
-#: solve that needs more raises, as the cyclic one does.
-comptime PCA_RR_SWEEPS = 24
+#: the host column alike. RECORDED REASON (lane idn-all, 2026-10-04): it is
+#: RR_EIGH_SWEEPS (60), the budget the SAME solver (same rounds, same test,
+#: same tolerance) runs under in x_decomp on every column since cgr-decomp
+#: (2026-10-03, verified nv = amd = M2 = host), so PCA cannot refuse a matrix
+#: `x_decomp` eigh accepts. The cyclic solver's 15 was measured for a
+#: different rotation order and does not transfer; no round-robin sweep count
+#: at PCA's shapes (220 columns) is recorded, so a tighter number would be a
+#: guess. The budget moves no bit of a converged solve (the sweeps run are
+#: the solve's own) and, with PCA_RR_FLAG_TEST, costs nothing: the device
+#: stops at the converged test. A solve that needs more raises, as the cyclic
+#: one did.
+comptime PCA_RR_SWEEPS = RR_EIGH_SWEEPS
+
+#: lane idn-all: the device's convergence flag is read between sweeps (six
+#: flag words, one wait per sweep; no matrix data crosses) and the enqueuing
+#: stops at the converged test, instead of enqueuing every budgeted sweep
+#: (about 2 (n - 1) launches each: 438 at 220 columns) as no-ops. Device
+#: only (the host column's loop already stops there); moves no bit.
+#: -D MOJOLEARN_PCA_RR_FLAG_TEST_OFF restores the enqueue-everything form.
+comptime PCA_RR_FLAG_TEST = PCA_RR_EIGH and not (
+    is_defined["MOJOLEARN_PCA_RR_FLAG_TEST_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)

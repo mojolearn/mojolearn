@@ -46,7 +46,7 @@ comptime PCA_FAST_GRAM_MMA = AFN_GEMM_APPLE and not is_defined["MOJOLEARN_PCA_FA
 comptime PCA_GRAM_BLOCK_TARGET = 640
 from checks.numerics import ftz, identical_div, identical_mul
 from core.device_zero import enqueue_fill
-from decomposition.pca_rr_switch import PCA_RR_EIGH, PCA_RR_SWEEPS
+from decomposition.pca_rr_switch import PCA_RR_EIGH, PCA_RR_FLAG_TEST, PCA_RR_SWEEPS
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_off_fold_kernel,
@@ -429,10 +429,12 @@ def _eig_rr_device(
     outcome in `info_buf` (`pca_rr_finish_kernel`). The rounds are
     x_decomp/rr.mojo's (`rr_cs`, `rr_block`, `rr_vrow`), every rotation of a
     round in parallel; the convergence test before each sweep is folded AND
-    decided on the device (`pca_rr_gate_kernel`), so the whole solve is
-    enqueued up front and nothing is read back until the caller's one
-    download: PCA_RR_SWEEPS sweeps of launches, no-ops once converged. The
-    host column `host_eigh_rr` runs the same rounds and the same test."""
+    decided on the device (`pca_rr_gate_kernel`). PCA_RR_FLAG_TEST (lane
+    idn-all): the host reads the device's PCA_RR_STATE flag words after each
+    test (no matrix data crosses) and stops enqueuing at the converged test,
+    so a solve costs its own sweeps, not the budget's; without it every
+    budgeted sweep is enqueued up front (no-ops once converged). The host
+    column `host_eigh_rr` runs the same rounds and the same test."""
     var m = n + (n % 2)
     var h = m // 2
     var nb = max((n + RR_OFF_TPB - 1) // RR_OFF_TPB, 1)
@@ -449,6 +451,7 @@ def _eig_rr_device(
     ctx.enqueue_function[pj_identity_kernel](
         vec_buf.unsafe_ptr(), Int32(n), grid_dim=(n * n + PJ_TPB - 1) // PJ_TPB, block_dim=PJ_TPB
     )
+    var hstate = ctx.enqueue_create_host_buffer[DType.float32](PCA_RR_STATE)
     var launched = 0
     for sweep in range(PCA_RR_SWEEPS + 1):
         ctx.enqueue_function[eigh_par_off_part_kernel](
@@ -461,6 +464,13 @@ def _eig_rr_device(
         ctx.enqueue_function[pca_rr_gate_kernel](
             dfold.unsafe_ptr(), dstate.unsafe_ptr(), Float32(JACOBI_TOL), grid_dim=1, block_dim=1
         )
+        comptime if PCA_RR_FLAG_TEST:
+            # the device's verdict (six flag words): converged, or a test
+            # block that did not run, ends the enqueuing here
+            ctx.enqueue_copy(dst_ptr=hstate.unsafe_ptr(), src_buf=dstate)
+            ctx.synchronize()
+            if hstate.unsafe_ptr().unsafe_load(0) == Float32(1.0) or hstate.unsafe_ptr().unsafe_load(4) < Float32(0.0):
+                break
         if sweep < PCA_RR_SWEEPS:
             for rd in range(m - 1):
                 ctx.enqueue_function[pca_rr_cs_kernel](
@@ -479,6 +489,7 @@ def _eig_rr_device(
         dstate.unsafe_ptr(), info_buf.unsafe_ptr(), grid_dim=1, block_dim=1
     )
     ctx.synchronize()
+    _ = hstate^
     _ = dcs^
     _ = doff^
     _ = dpart^
@@ -536,20 +547,28 @@ def eig_and_truncate(
     ctx.synchronize()
 
     comptime if PCA_RR_EIGH:
+        if h_info.unsafe_ptr().unsafe_load(0) < Float32(0.0):
+            raise Error(
+                "the device Jacobi's convergence test did not run at n_cols = "
+                + String(n_cols)
+                + " (a block's mark is still -1): a launch failure, not a"
+                " convergence failure. Check that the binding is built for this device."
+            )
+        # non-convergence is the refusal of the cyclic solver this replaced:
+        # the same error, in its words, on the device and the host column
         if h_info.unsafe_ptr().unsafe_load(0) != Float32(1.0):
             raise Error(
-                "the round-robin Jacobi did not converge in "
+                "the device Jacobi did not converge in "
                 + String(PCA_RR_SWEEPS)
                 + " sweeps at n_cols = "
                 + String(n_cols)
-                + " (info "
-                + String(h_info.unsafe_ptr().unsafe_load(0))
-                + ": 0 not converged or ||A||_F moved, -1 a launch did not run;"
-                " off-diagonal mass "
+                + " (round-robin order; off-diagonal mass "
                 + String(h_info.unsafe_ptr().unsafe_load(1))
-                + "). An unconverged decomposition is not returned as if it were"
-                " one. A non-symmetric covariance produces this too; see"
-                " check_covariance_is_symmetric."
+                + ", or ||A||_F moved) against a tolerance of "
+                + String(JACOBI_TOL)
+                + ". cuSOLVER's syevj has the same failure mode and the same"
+                " remedy, which is more sweeps. A non-symmetric covariance"
+                " produces this too; see check_covariance_is_symmetric."
             )
     if h_info.unsafe_ptr().unsafe_load(0) == Float32(0.0):
         raise Error(
