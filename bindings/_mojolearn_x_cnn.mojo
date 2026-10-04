@@ -29,6 +29,7 @@ from x_cnn.device import graph_op_device as graph_op_impl
 from x_cnn.device import adaptive_pool_device as adaptive_pool_impl
 from x_cnn.device import gcn_norm_device as gcn_norm_impl
 from x_cnn.device import csr_build_device as csr_build_impl
+from x_cnn.device import gcn_loops_device
 # lane fam-neural (2026-10-04): the `_m` forms of the entries that had none
 from x_cnn.device import idn_flags, adaptive_pool_m, graph_op_m, gcn_norm_m, pad2d_m, chan_copy_m
 # lane fam2-neural (2026-10-04): the device epoch (order, Adam scalars and losses on the device)
@@ -971,6 +972,29 @@ def csr_build_binding(rows_addr: PythonObject, cols_addr: PythonObject, csr_addr
     return PythonObject(n + 1 + 2 * nnz)
 
 
+def gcn_loops_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """GCN's remaining self loops on the device (lane fix-n1-lm-neural,
+    x_cnn/device.mojo gcn_loops_device): addrs = [src, dst (int32 [nnz]),
+    w (float32 [nnz]), src_out, dst_out (int32 [nnz + n]), w_out (float32
+    [nnz + n])]; params = [n, nnz, improved]. Returns K: the outputs' first
+    K + n slots are the edge list."""
+    var n = Int(py=params[0])
+    var nnz = Int(py=params[1])
+    var fill = Float32(2.0) if Int(py=params[2]) != 0 else Float32(1.0)
+    if n <= 0 or nnz < 0 or Int(py=len(addrs)) != 6:
+        raise Error("x_cnn gcn_loops: addrs [src, dst, w, src_out, dst_out, w_out], positive n and nnz >= 0 required")
+    var so = _ip(addrs[3])
+    var dso = _ip(addrs[4])
+    var wo = _fp(addrs[5])
+    var src = _ip(addrs[0]) if nnz > 0 else so
+    var dst = _ip(addrs[1]) if nnz > 0 else so
+    var w = _fp(addrs[2]) if nnz > 0 else wo
+    var k = 0
+    with GILReleased(Python()):
+        k = gcn_loops_device(src, dst, w, nnz, n, fill, so, dso, wo)
+    return PythonObject(k)
+
+
 def spmm_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs = [vals, h, csr, out]; params = [n, F, nnz, mode]. A resident
     csr (bit 2) is a `x_cnn_csr_upload` handle, checked when it was made; a
@@ -1477,6 +1501,7 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[dropout2d_m_binding]("x_cnn_dropout2d_m")
         m.def_function[csr_upload_binding]("x_cnn_csr_upload")
         m.def_function[csr_build_binding]("x_cnn_csr_build")
+        m.def_function[gcn_loops_binding]("x_cnn_gcn_loops")
         m.def_function[idn_flags_binding]("x_cnn_idn_flags")
         m.def_function[idn2_flags_binding]("x_cnn_idn2_flags")
         m.def_function[epoch_rows_binding]("x_cnn_epoch_rows")

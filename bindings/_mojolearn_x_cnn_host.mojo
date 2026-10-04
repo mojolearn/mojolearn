@@ -31,6 +31,7 @@ from x_cnn.host.ops_host import pad2d_backward_host as pad2d_backward_impl
 from x_cnn.host.ops_host import spmm_host as spmm_impl
 from x_cnn.host.ops_host import gcn_norm_host as gcn_norm_impl
 from x_cnn.host.ops_host import csr_build_host_binding
+from x_cnn.host.ops_host import gcn_loops_host_binding
 # lane fam2-neural (2026-10-04): the device epoch's element functions, looped
 from x_cnn.ops import idn2_flags, epoch_key, epoch_rows_prm, epoch_rows_at, adam_hyper_base, adam_hyper_at, AH_ROW
 
@@ -1110,6 +1111,7 @@ def PyInit__mojolearn_x_cnn_host() abi("C") -> PythonObject:
         m.def_function[x_cnn_host_vendor_binding]("x_cnn_host_vendor")
         m.def_function[x_cnn_host_column_binding]("x_cnn_host_column")
         m.def_function[csr_build_host_binding]("x_cnn_csr_build")
+        m.def_function[gcn_loops_host_binding]("x_cnn_gcn_loops")
         m.def_function[x_cnn_host_sabotage_binding]("x_cnn_host_sabotage")
         m.def_function[gemm_binding]("x_cnn_gemm")
         m.def_function[conv2d_forward_binding]("x_cnn_conv2d_forward")

@@ -1488,6 +1488,16 @@ def l2norm_bwd_at(r: Int, y: FP, g: FP, aux: FP, dst: FP, q: IP, p: IP):
 comptime _FAM2_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime IDN_XENT_DEV_FOLD = _FAM2_IDN and not is_defined["MOJOLEARN_IDN_XENT_DEV_FOLD_OFF"]()
 comptime IDN_CNN_EPOCH_DEV = IDN_XENT_DEV_FOLD and not is_defined["MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF"]()
+# IDN_GCN_LOOPS_DEV (lane fix-n1-lm-neural, audit F7 `gcn_self_loops`):
+#   GCNConv's add_remaining_self_loops (drop every existing loop, append one
+#   loop per node carrying the LAST existing loop's weight, else the fill)
+#   was host NumPy over the edges (`_expansion_cnn.py` GCNConv._graph). It is
+#   now `x_cnn_gcn_loops`: a stable radix sort of the edges by key
+#   (0 for a non-loop, 1 + node for a loop) and two gather kernels on the
+#   device (`gcn_loops_device`), the host twin `gcn_loops_host` on a CPU-only
+#   install. Selection and copies only: no arithmetic, so no bit moves on any
+#   column. `-D MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF` restores the NumPy form.
+comptime IDN_GCN_LOOPS_DEV = _FAM2_IDN and not is_defined["MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF"]()
 #: CANDIDATE ARM (default OFF): `-D MOJOLEARN_IDN_XENT_FOLD_BLOCK_256` folds
 #: blocks of 256 (one level up to 256 rows, two up to 65,536) instead of 32
 #: (one level up to 32 rows, two up to 1,024): fewer launches per loss, a
@@ -1752,10 +1762,13 @@ def adam_hyper_base(lr: Float64, b1: Float64, b2: Float64, eps: Float64, wd: Flo
 
 def idn2_flags() -> Int:
     """The lane fam2-neural switches this build has on (both bindings export
-    it as `x_cnn_idn2_flags`): bit 0 IDN_XENT_DEV_FOLD, bit 1 IDN_CNN_EPOCH_DEV."""
+    it as `x_cnn_idn2_flags`): bit 0 IDN_XENT_DEV_FOLD, bit 1 IDN_CNN_EPOCH_DEV,
+    bit 2 IDN_GCN_LOOPS_DEV (lane fix-n1-lm-neural)."""
     var f = 0
     comptime if IDN_XENT_DEV_FOLD:
         f |= 1
     comptime if IDN_CNN_EPOCH_DEV:
         f |= 2
+    comptime if IDN_GCN_LOOPS_DEV:
+        f |= 4
     return f

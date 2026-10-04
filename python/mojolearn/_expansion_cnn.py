@@ -117,7 +117,10 @@ def _idn(b, bit):
 # and Adam step scalars come from device kernels (`x_cnn_epoch_rows`,
 # `x_cnn_adam_hyper_d`, `x_cnn_fit_epoch_d`), not the CPU helpers
 # `epoch_order_i32` and `adam_hyper_f64`.
-_F2_XENT_FOLD, _F2_EPOCH_DEV = 1, 2
+# Bit 2 (lane fix-n1-lm-neural): GCNConv's remaining self loops come from
+# `x_cnn_gcn_loops` (a stable device sort and two gathers; the host twin on a
+# CPU-only install), not host NumPy. Copies only: no bit moves.
+_F2_XENT_FOLD, _F2_EPOCH_DEV, _F2_GCN_LOOPS = 1, 2, 4
 _IDN2_FLAGS = {}
 
 
@@ -2373,7 +2376,18 @@ class GCNConv(_Layer):
              else _f32(edge_weight, "edge_weight").reshape(-1).copy())
         if len(w) != len(src):
             raise ValueError("mojolearn: edge_weight must have one entry per edge")
-        if self.normalize and self.add_self_loops:
+        bl = self._binding()
+        if self.normalize and self.add_self_loops and _idn2(bl, _F2_GCN_LOOPS) and hasattr(bl, "x_cnn_gcn_loops"):
+            # lane fix-n1-lm-neural (IDN_GCN_LOOPS_DEV): the same edge list,
+            # built by the binding (glue: buffers and one call)
+            s32, d32 = np.ascontiguousarray(src, np.int32), np.ascontiguousarray(dst, np.int32)
+            w32 = np.ascontiguousarray(w, np.float32)
+            t = len(s32) + n
+            so, dso, wo = np.empty(t, np.int32), np.empty(t, np.int32), np.empty(t, np.float32)
+            k = int(bl.x_cnn_gcn_loops([s32.ctypes.data, d32.ctypes.data, w32.ctypes.data, so.ctypes.data,
+                                        dso.ctypes.data, wo.ctypes.data], [n, len(s32), int(self.improved)]))
+            src, dst, w = so[:k + n], dso[:k + n], wo[:k + n]
+        elif self.normalize and self.add_self_loops:
             fill = np.float32(2.0 if self.improved else 1.0)
             loop = src == dst
             loop_w = np.full(n, fill, np.float32)

@@ -20,7 +20,7 @@ from core.host_parallel import host_parallelize
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from x_cnn.host.gemm_host import gemm_host_into, parallel_tasks
 from checks.numerics import ftz
-from bindings.hostptr import i32_ptr
+from bindings.hostptr import i32_ptr, f32_ptr
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from x_cnn.ops import (
@@ -1087,3 +1087,46 @@ def csr_build_host_binding(rows_addr: PythonObject, cols_addr: PythonObject, csr
     with GILReleased(Python()):
         csr_build_host(rows, cols, nnz, n, pc, order)
     return PythonObject(n + 1 + 2 * nnz)
+
+
+def gcn_loops_host(src: IP, dst: IP, w: FP, nnz: Int, n: Int, fill: Float32, src_out: IP, dst_out: IP, w_out: FP) -> Int:
+    """`x_cnn/device.mojo::gcn_loops_device` on the host (lane
+    fix-n1-lm-neural, IDN_GCN_LOOPS_DEV): the kept (non-loop) edges in edge
+    order, then one loop per node i with the weight of node i's last loop in
+    edge order, else `fill`. Returns the kept count K. Copies only: the
+    device's words exactly."""
+    var k = 0
+    for e in range(nnz):
+        if src[e] != dst[e]:
+            src_out[k] = src[e]
+            dst_out[k] = dst[e]
+            w_out[k] = w[e]
+            k += 1
+    for i in range(n):
+        src_out[k + i] = Int32(i)
+        dst_out[k + i] = Int32(i)
+        w_out[k + i] = fill
+    for e in range(nnz):
+        if src[e] == dst[e]:
+            w_out[k + Int(src[e])] = w[e]
+    return k
+
+
+def gcn_loops_host_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`x_cnn_gcn_loops` for the host binding (`bindings/_mojolearn_x_cnn.mojo`'s
+    `gcn_loops_binding`, same arguments, same words)."""
+    var n = Int(py=params[0])
+    var nnz = Int(py=params[1])
+    var fill = Float32(2.0) if Int(py=params[2]) != 0 else Float32(1.0)
+    if n <= 0 or nnz < 0 or Int(py=len(addrs)) != 6:
+        raise Error("x_cnn gcn_loops: addrs [src, dst, w, src_out, dst_out, w_out], positive n and nnz >= 0 required")
+    var so = i32_ptr(Int(py=addrs[3])).unsafe_origin_cast[MutAnyOrigin]()
+    var dso = i32_ptr(Int(py=addrs[4])).unsafe_origin_cast[MutAnyOrigin]()
+    var wo = f32_ptr(Int(py=addrs[5])).unsafe_origin_cast[MutAnyOrigin]()
+    var src = i32_ptr(Int(py=addrs[0])).unsafe_origin_cast[MutAnyOrigin]() if nnz > 0 else so
+    var dst = i32_ptr(Int(py=addrs[1])).unsafe_origin_cast[MutAnyOrigin]() if nnz > 0 else so
+    var w = f32_ptr(Int(py=addrs[2])).unsafe_origin_cast[MutAnyOrigin]() if nnz > 0 else wo
+    var k = 0
+    with GILReleased(Python()):
+        k = gcn_loops_host(src, dst, w, nnz, n, fill, so, dso, wo)
+    return PythonObject(k)
