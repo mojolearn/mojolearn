@@ -471,6 +471,13 @@ _TE_ADA_SESSION_SHARE = 4
 #     the synthetic rows across chunks and KernelExplainer solves many rows
 #     per launch sweep (`x_trees_kshap_means` + `x_trees_kshap_solve_ey`).
 _KSHAP_FAST_BATCH = 8
+#   MOJOLEARN_SHAP_FAST_PIPE (lane apple-fast-w2-shap, OPT-IN candidate,
+#     not measured): Kernel/Permutation SHAP double-buffer the synthetic
+#     matrix; chunk i+1's synthesis + download is started
+#     (`x_trees_*shap_synth_start`) before the model runs on chunk i, and the
+#     next synchronizing call (`x_trees_pshap_values` / `x_trees_kshap_means`)
+#     completes it. Same words (the same units per row).
+_SHAP_FAST_PIPE = 16
 
 
 def _trees_fast_tier(est):
@@ -3072,6 +3079,41 @@ def _trees_model_fn(model):
     return model.predict
 
 
+def _agn_pipe(ex, b, n, R, per_row, d, evals_per_row, synth, consume):
+    """MOJOLEARN_SHAP_FAST_PIPE glue: the chunks of R rows through two
+    reused host buffers. `synth(r0, rows, buf, slot)` starts a chunk's
+    synthetic rows into `buf` without waiting; `consume(r0, rows, out)`
+    takes the model outputs and synchronizes the stream, which completes
+    the chunk started before the model ran. Chunk i+1 is started before
+    the model runs on chunk i, so its synthesis and download overlap the
+    model. Each chunk's words are those of the unpipelined path."""
+    bufs = [None, None]
+
+    def start(r0, slot):
+        rows = min(R, n - r0)
+        if bufs[slot] is None or bufs[slot].size != rows * per_row:
+            bufs[slot] = None
+            bufs[slot] = empty((rows * per_row,), "<f4")
+        synth(r0, rows, bufs[slot], slot)
+        return rows
+
+    try:
+        rows = start(0, 0)
+        b.x_trees_agn_sync()
+        slot = 0
+        for r0 in range(0, n, R):  # glue: chunk loop (one model call per chunk)
+            nxt = 0
+            if r0 + R < n:
+                nxt = start(r0 + R, 1 - slot)
+            out = ex._model_rows(bufs[slot], rows * evals_per_row, d)
+            consume(r0, rows, out)
+            del out
+            rows, slot = nxt, 1 - slot
+    finally:
+        b.x_trees_agn_sync()   # no copy may still target a buffer freed below
+    bufs[0] = bufs[1] = None
+
+
 class _AgnosticExplainer(_TreesEnsembleBase):
     def __init__(self, model, data, random_state):
         self.model = model
@@ -3203,6 +3245,26 @@ class KernelExplainer(_AgnosticExplainer):
         ey = zeros((n * m * k,), "<f8")
         e0 = addr(ey, name="ey")
         x0, bg0 = addr_ro(Xa, name="X"), addr_ro(self._bg, name="data")
+        if _trees_switch(self, _SHAP_FAST_PIPE):
+            def synth(r0, rows, buf, slot):
+                b.x_trees_kshap_synth_start(x0 + 4 * r0 * d, bg0, taddr, addr(buf, name="synthetic"),
+                                            [rows, nb, d, nfixed, m, nfull, L, npaired, r0, seed, wbits, slot])
+
+            def means(r0, rows, out):
+                b.x_trees_kshap_means(addr_ro(out, name="y"), e0 + 8 * r0 * m * k, [rows, nb, m, k, link])
+            _agn_pipe(self, b, n, R, m * nb * d, d, m * nb, synth, means)
+        else:
+            self._batched_means(b, x0, bg0, taddr, e0, n, d, k, nb, m, nfixed, nfull, npaired, L, seed, wbits, R,
+                                link)
+        f0, p0 = addr_ro(fx, name="fx"), addr(phi, name="phi")
+        nl = addr_ro(self._fnull, name="fnull")
+        S = self._chunk(m * d, n)
+        for s0 in range(0, n, S):  # glue: solve-batch loop (one binding call per batch)
+            rows = min(S, n - s0)
+            b.x_trees_kshap_solve_ey(e0 + 8 * s0 * m * k, f0 + 4 * s0 * k, nl, taddr, p0 + 8 * s0 * d * k,
+                                     [rows, nb, d, nfixed, m, nfull, L, npaired, s0, seed, wbits, k, link])
+
+    def _batched_means(self, b, x0, bg0, taddr, e0, n, d, k, nb, m, nfixed, nfull, npaired, L, seed, wbits, R, link):
         syn = empty((R * m * nb * d,), "<f4")
         for r0 in range(0, n, R):
             rows = min(R, n - r0)
@@ -3214,13 +3276,6 @@ class KernelExplainer(_AgnosticExplainer):
             b.x_trees_kshap_means(addr_ro(out, name="y"), e0 + 8 * r0 * m * k, [rows, nb, m, k, link])
             del out
         del syn
-        f0, p0 = addr_ro(fx, name="fx"), addr(phi, name="phi")
-        nl = addr_ro(self._fnull, name="fnull")
-        S = self._chunk(m * d, n)
-        for s0 in range(0, n, S):  # glue: solve-batch loop (one binding call per batch)
-            rows = min(S, n - s0)
-            b.x_trees_kshap_solve_ey(e0 + 8 * s0 * m * k, f0 + 4 * s0 * k, nl, taddr, p0 + 8 * s0 * d * k,
-                                     [rows, nb, d, nfixed, m, nfull, L, npaired, s0, seed, wbits, k, link])
 
 
 class PermutationExplainer(_AgnosticExplainer):
@@ -3248,6 +3303,17 @@ class PermutationExplainer(_AgnosticExplainer):
         mm = npm * (2 * d + 1)
         x0, p0 = addr_ro(Xa, name="X"), addr(phi, name="phi")
         R = self._chunk(mm * nb * d, n)
+        if _trees_switch(self, _SHAP_FAST_PIPE):
+            bg0 = addr_ro(self._bg, name="data")
+
+            def synth(r0, rows, buf, slot):
+                b.x_trees_pshap_synth_start(x0 + 4 * r0 * d, bg0, addr(buf, name="synthetic"),
+                                            [rows, nb, d, npm, r0, seed, slot])
+
+            def values(r0, rows, out):
+                b.x_trees_pshap_values(addr_ro(out, name="y"), p0 + 8 * r0 * d * k, [rows, nb, d, npm, r0, seed, k])
+            _agn_pipe(self, b, n, R, mm * nb * d, d, mm * nb, synth, values)
+            return self._shape(phi, n, d)
         reuse = _trees_switch(self, _KSHAP_FAST_BATCH)   # one synthetic buffer for every chunk
         syn = None
         for r0 in range(0, n, R):  # glue: chunk loop (one model call per chunk)
