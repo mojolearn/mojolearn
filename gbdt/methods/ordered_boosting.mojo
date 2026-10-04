@@ -1081,14 +1081,14 @@ struct _PermPartition(Movable):
         leaf_capacity: Int,
     ) raises:
         var need = 0
-        for i in range(len(bounds)):
+        for i in range(len(bounds)):  # small-loop(bounds: fold prefixes, a handful): the largest prefix
             if bounds[i] > need:
                 need = bounds[i]
         # ascending, unique (a handful of fold prefixes)
         var uniq = List[Int]()
-        for i in range(len(bounds)):
+        for i in range(len(bounds)):  # small-loop(bounds: fold prefixes, a handful): the unique sorted prefix list
             var seen = False
-            for j in range(len(uniq)):
+            for j in range(len(uniq)):  # small-loop(uniq: unique fold prefixes, a handful): duplicate test
                 if uniq[j] == bounds[i]:
                     seen = True
             if not seen:
@@ -1250,7 +1250,7 @@ struct _PermPartition(Movable):
         `[0, estimate_size)`: the same sizes and offsets on the host, the
         same `row_index` on the device (`_ord_segment_rows_kernel`)."""
         var k = -1
-        for i in range(len(self.bounds)):
+        for i in range(len(self.bounds)):  # small-loop(bounds: fold prefixes, a handful): snapshot lookup by prefix
             if self.bounds[i] == estimate_size:
                 k = i
         if k < 0:
@@ -1895,7 +1895,7 @@ def _ord_fast_init_cursors(
         var cat = ctx.enqueue_create_buffer[DType.float32](total)
         enqueue_fill(ctx, cat, start_value)
         var per = List[DeviceBuffer[DType.float32]]()
-        for f in range(len(folds)):
+        for f in range(len(folds)):  # small-loop(folds: the fold plan, a handful): sub-buffer views per fold
             per.append(
                 cat.create_sub_buffer[DType.float32](
                     offsets[f], folds[f].quality_evaluate_samples.right
@@ -1941,12 +1941,12 @@ def _ord_fast_init_tasks(
     var n_folds = len(folds)
     var n_tasks = learn_count * n_folds + 1
     var hk = ctx.enqueue_create_host_buffer[DType.uint32](n_folds)
-    for f in range(n_folds):
+    for f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): snapshot index per fold for the launch table
         var est = folds[f].estimate_samples.right
         comptime if ORDERED_SABOTAGE:
             est = folds[f].quality_evaluate_samples.right
         var k = -1
-        for i in range(len(parts[0].bounds)):
+        for i in range(len(parts[0].bounds)):  # small-loop(bounds: fold prefixes, a handful): snapshot lookup by prefix
             if parts[0].bounds[i] == est:
                 k = i
         if k < 0:
@@ -1955,7 +1955,7 @@ def _ord_fast_init_tasks(
     var dk = ctx.enqueue_create_buffer[DType.uint32](n_folds)
     ctx.enqueue_copy(dst_buf=dk, src_ptr=hk.unsafe_ptr())
     var ke = -1
-    for i in range(len(parts[est_p].bounds)):
+    for i in range(len(parts[est_p].bounds)):  # small-loop(bounds: fold prefixes, a handful): snapshot lookup by prefix
         if parts[est_p].bounds[i] == n_rows:
             ke = i
     if ke < 0:
@@ -2163,7 +2163,7 @@ def fit_ordered(
     # slice first; `quality` marks the quality slices
     var offsets = List[Int]()
     var total = 0
-    for f in range(n_folds):
+    for f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): fold offsets in the concatenated layout
         offsets.append(total)
         total += folds[f].quality_evaluate_samples.right
     # lane cpu3-gbdt-a: the mask on the device, two fills per fold (the
@@ -2357,7 +2357,7 @@ def fit_ordered(
     comptime if ORDERED_BATCH_EST:
         fast_on = batch and not trace.enabled
     var n_slots = learn_count * n_folds + 1 if batch else n_folds + 1
-    for _ in range(n_slots):
+    for _ in range(n_slots):  # small-loop(n_slots: estimation tasks, permutations times folds): empty workspace lists per task
         est_pools.append(List[TEstimationWorkspace]())
     var slots = List[_OrderedSlot]()
     if batch and not fast_on:
@@ -2377,7 +2377,7 @@ def fit_ordered(
         for p in range(perm_count):
             var bounds = List[Int]()
             if p < learn_count:
-                for f in range(n_folds):
+                for f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): fold prefixes per permutation
                     var est = folds[f].estimate_samples.right
                     comptime if ORDERED_SABOTAGE:
                         est = folds[f].quality_evaluate_samples.right
@@ -2491,7 +2491,7 @@ def fit_ordered(
         # fold plan and the fit's parameters, not of the data)
         var dev_scale = Float32(1.0)
         var ord_count = 0
-        for f in range(n_folds):
+        for f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): noise count from fold sizes
             ord_count += (
                 folds[f].quality_evaluate_samples.right
                 - folds[f].estimate_samples.right
@@ -2573,7 +2573,7 @@ def fit_ordered(
                 m0 = Float64(h_sums[1])
                 m1 = Float64(h_sums[2])
                 var count = 0
-                for f in range(n_folds):
+                for f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): noise count from fold sizes
                     count += (
                         folds[f].quality_evaluate_samples.right
                         - folds[f].estimate_samples.right
@@ -2617,7 +2617,7 @@ def fit_ordered(
                 else:
                     ctx.synchronize()
                     var count = 0
-                    for f in range(n_folds):
+                    for f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): noise count from fold sizes
                         count += (
                             folds[f].quality_evaluate_samples.right
                             - folds[f].estimate_samples.right
@@ -2700,7 +2700,7 @@ def fit_ordered(
                     # the deferred noise readback (DEVIATION 3111), the
                     # statements of the branch above
                     var count = 0
-                    for f in range(n_folds):
+                    for f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): noise count from fold sizes
                         count += (
                             folds[f].quality_evaluate_samples.right
                             - folds[f].estimate_samples.right
@@ -2852,13 +2852,13 @@ def fit_ordered(
             # still walking (a one-iteration walk is one round); none when
             # every task finished on the device (IDN_ORD_ONE_STEP_DEVICE)
             var walking = False
-            for t in range(len(pend)):
+            for t in range(len(pend)):  # small-loop(pend: pending estimation tasks, a handful): walker phase orchestration only
                 if pend[t].est.phase != 2:
                     walking = True
             while walking:
                 ctx.synchronize()
                 walking = False
-                for t in range(len(pend)):
+                for t in range(len(pend)):  # small-loop(pend: pending estimation tasks, a handful): walker phase orchestration only
                     if pend[t].est.phase != 2:
                         if estimate_advance(pend[t].est):
                             walking = True
@@ -3019,7 +3019,7 @@ def fit_ordered(
     if has_test:
         best = detector.best_iteration
     else:
-        for i in range(1, len(losses)):
+        for i in range(1, len(losses)):  # small-loop(losses: one value per tree, already read): the best-iteration argmin
             if losses[i] < losses[best]:
                 best = i
     return OrderedFitOutput(losses^, test_losses^, best, stopped_early)
