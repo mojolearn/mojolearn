@@ -284,7 +284,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `RESAMPLE_FAST_ONE_FOLD` | bootstrap / taxi | lane/apple-fast-resample @ 50b96e795 | resample-boot-onefold-taxi | - | OPEN | A/B queued, no judged result yet |
 | `RESAMPLE_FAST_PERM_SELECT` | permutation-test / taxi | lane/apple-fast-resample @ 50b96e795 | resample-perm-select-taxi | - | OPEN | A/B queued, no judged result yet |
 | `RESAMPLE_FAST_RANK_SORT` | bootstrap / taxi | lane/apple-fast-resample @ 50b96e795 | resample-boot-rank-taxi | - | OPEN | A/B queued, no judged result yet |
-| `SI_ONEPASS` | power-transformer / istella; simple-imputer / istella; simple-imputer / taxi | lane/apple-fast-ptimpute @ 9623cd7dc | ptimpute-pt-onepass-istella, ptimpute-si-onepass-istella, ptimpute-si-onepass-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `SI_ONEPASS` | simple-imputer / istella; simple-imputer / taxi | lane/apple-fast-batchv @ 77f1f5afb | batchv-si-onepass-istella, batchv-si-onepass-taxi | istella 303.7 -> 273.7 (-9.9%); taxi 26.4 -> 21.0 (-20%) | KEEP (FAST + Apple default, _OFF) | vs main; quality tools/batchv_quality.sh (M2): median stats exact, mean stats <= 1.2e-7 abs (1 ulp), PT lambdas exact |
 | `X_PREP_FAST_CLS2_PACK / _PRESENT` | onehot, ordinal | lane/apple-fast-gap-cls2 @ 72602a339 | gapcls2-* | - | OPEN |  |
 | `X_PREP_FAST_II_CONV` | - | lane/apple-fast-prep2 @ 8762eb33f | prep2-ii-conv-taxi | both arms status=error | OPEN | env-form line; define-form -b relaunch pending |
 | `X_PREP_FAST_II_GRAM_TILE` | - | lane/apple-fast-prep2 @ 8762eb33f | prep2-ii-gram-taxi | both arms status=error | OPEN | env-form line; -b relaunch pending |
@@ -371,12 +371,12 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `DBSCAN_FAST_DENSEBALL` | dbscan / taxi, istella | lane/apple-fast-dbscantaxi @ 1febff7df | dbscantaxi-ab, dbscantaxi-ab-ist | - | OPEN | queued; arm A times out on taxi; same-bits ID owed |
 | `DBSCAN_FAST_SCAN` | dbscan / taxi | lane/apple-fast-core @ 9a31ebb4c | core-dbscan-scan-taxi | dbscan taxi: both arms time out | OPEN | incomplete; replaced by DBSCAN_FAST_DENSEBALL lane |
 | `HDBSCAN2_ALL` | hdbscan / istella; hdbscan / taxi | lane/apple-fast-hdbscan2 @ 2fdb9114f | hdbscan2-all-taxi, hdbscan2-all6-taxi, hdbscan2-all-istella, hdbscan2-all6-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `HDB_CORE_TILE` | hdbscan / taxi | lane/apple-fast-hdbscan2 @ 2fdb9114f | hdbscan2-core-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `HDB_CORE_TILE` | hdbscan / taxi | lane/apple-fast-batchv @ c7ede6e47 | batchv-hdb-core-taxi | taxi vs main +0.8% | DROP | old-base -11% did not carry to main; stays opt-in define, not default |
 | `HDB_DEV_BORUVKA` | hdbscan / taxi | lane/apple-fast-hdbscan2 @ 2fdb9114f | hdbscan2-boruvka-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `HDB_LINKAGE_DEVICE` | hdbscan / istella; hdbscan / taxi | lane/apple-fast-hdbscan2 @ 2fdb9114f | hdbscan2-linkage-taxi, hdbscan2-linkage-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `HDB_ONE_SYNC` | hdbscan / istella; hdbscan / taxi | lane/apple-fast-hdbscan2 @ 2fdb9114f | hdbscan2-onesync-taxi, hdbscan2-onesync-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `HDB_SELECT_DEVICE` | hdbscan / istella; hdbscan / taxi | lane/apple-fast-hdbscan2 @ 2fdb9114f | hdbscan2-select-taxi, hdbscan2-select-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `HDB_SMR_TILED` | hdbscan / istella | lane/apple-fast-hdbscan2 @ 2fdb9114f | hdbscan2-smr-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `HDB_SMR_TILED` | hdbscan / istella; hdbscan / taxi | lane/apple-fast-batchv @ c7ede6e47 | batchv-hdb-smr-istella, batchv-hdb-smr-taxi | istella 44,879 -> 3,800 (-91.5%); taxi 426 -> 434 (+2%, noise: taxi takes the d <= 64 arm) | KEEP (FAST + Apple default, _OFF) | vs main, one run per arm; n_clusters 47 / noise 0.25381 (istella), 160 / 0.14222 (taxi) identical both arms |
 | `OPTICS2_ALL` | optics / istella; optics / taxi | lane/apple-fast-optics2 @ 3e192fdb7 | optics2-all-istella, optics2-all-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `OPTICS_CORE_SQ` | optics / istella; optics / taxi | lane/apple-fast-optics2 @ 3e192fdb7 | optics2-sq-istella, optics2-sq-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `OPTICS_FAST_DEVICE_ORDER` | optics / istella | lane/apple-fast-cluster2 @ ded4ea07b | cluster2-optics-devorder-istella | - | OPEN | A/B queued, no judged result yet |
