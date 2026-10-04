@@ -357,11 +357,31 @@ class DecisionTreeRegressor(RandomForestRegressor):
         return super().save(path)
 
 
+def _trees_shape_native(est):
+    """[depth, leaf count] of the (first) fitted tree from the x_trees binding
+    (lane fam2-forests, `x_trees_tree_shape`), or None when the binary does
+    not register it (-D MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF)."""
+    try:
+        entry = getattr(_trees_x_bind(est), "x_trees_tree_shape", None)
+    except ImportError:    # a host facade refuses an absent export with ImportError
+        entry = None
+    if not callable(entry):
+        return None
+    lo, hi = int(est._offsets[0]), int(est._offsets[1])
+    left = as_i32_c(est._left_child, ndim=1, name="left")[0]
+    res = empty((2,), "<i4")
+    entry(addr_ro(left, name="left") + 4 * lo, addr(res, name="shape"), [hi - lo])
+    return res.tolist()
+
+
 def _trees_depth(est):
     """Depth of the (first) fitted tree, from its flat nodes: children of a
     node sit at left and left + 1, a leaf has left == -1."""
     if not hasattr(est, "_offsets"):
         raise RuntimeError("this estimator is not fitted yet")
+    shape = _trees_shape_native(est)
+    if shape is not None:
+        return int(shape[0])
     offsets = est._offsets.tolist()
     left = est._left_child.tolist()
     lo, hi = offsets[0], offsets[1]
@@ -378,6 +398,9 @@ def _trees_depth(est):
 def _trees_n_leaves(est):
     if not hasattr(est, "_offsets"):
         raise RuntimeError("this estimator is not fitted yet")
+    shape = _trees_shape_native(est)
+    if shape is not None:
+        return int(shape[1])
     offsets = est._offsets.tolist()
     left = est._left_child.tolist()
     return sum(1 for i in range(offsets[0], offsets[1]) if left[i] == -1)

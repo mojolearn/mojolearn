@@ -45,7 +45,7 @@ from xtrees.ops import (
     onehot_leaves, transpose_f32, normalize_rows, exact_sum_f32, EXACT_SUM_LIMBS, logit, scatter, platt_fit, platt_apply, isotonic_fit,
     isotonic_predict, platt_apply_strided, isotonic_predict_strided, complement_pairs, indicator_codes, column_f64,
     bag_rows, unseen_rows, transpose_f64, stack_w64, binary_proba, class_counts, remap_cols, positive_codes,
-    spread_leaves,
+    spread_leaves, tree_shape,
 )
 
 
@@ -815,6 +815,27 @@ def leaf_numbering_binding(left: PythonObject, node_col: PythonObject, params: P
     return PythonObject(leaf_numbering(i32_ptr(Int(py=left)), nn, i32_ptr(Int(py=node_col))))
 
 
+#: lane fam2-forests (2026-10-04): `get_depth` / `get_n_leaves` walk the tree's
+#: nodes in this binding (xtrees/ops.mojo `tree_shape`) instead of a Python
+#: loop over `tolist()` rows. Integers; every build and both tiers.
+#: `-D MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF` (or `MOJOLEARN_IDN_ALL_OFF`)
+#: leaves the entry unregistered and the Python walk runs.
+comptime XTREES_TREE_SHAPE_NATIVE = not (
+    is_defined["MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def tree_shape_binding(left: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n_nodes]: res (int32 2) = [depth, leaf count] of the tree
+    whose `left` (int32 n_nodes, tree-relative) starts at the address."""
+    _need(params, 1, "x_trees_tree_shape")
+    var nn = _count(_i(params, 0), "x_trees_tree_shape")
+    if nn == 0:
+        raise Error("x_trees_tree_shape: empty tree")
+    tree_shape(i32_ptr(Int(py=left)), nn, i32_ptr(Int(py=res)))
+    return PythonObject(nn)
+
+
 #: lane apple-fast-py2mojo-trees (2026-10-03, Andrew: "everything is supposed
 #: to be in mojo"): 1 in every build, so python/mojolearn/_expansion_trees.py
 #: runs the wrappers' cv folds, OneVsRest targets, MultiOutputClassifier label
@@ -1375,6 +1396,8 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[positive_codes_binding]("x_trees_positive_codes")
     m.def_function[spread_leaves_binding]("x_trees_spread_leaves")
     m.def_function[leaf_numbering_binding]("x_trees_leaf_numbering")
+    comptime if XTREES_TREE_SHAPE_NATIVE:
+        m.def_function[tree_shape_binding]("x_trees_tree_shape")
     m.def_function[block_mean_binding]("x_trees_block_mean")
     m.def_function[kshap_schedule_binding]("x_trees_kshap_schedule")
     m.def_function[normalized_weights_binding]("x_trees_normalized_weights")
