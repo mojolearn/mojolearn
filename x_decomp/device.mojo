@@ -22,6 +22,7 @@ from gemm.afn_apple_fast import (
     AFN_TILE_SQUARE,
     AFN_ZERO_TPB,
     afn_launch_tile,
+    afn_gemm_mma_kernel,
     afn_zero_kernel,
 )
 from decomposition.linalg_public_device import device_qr_r
@@ -1502,6 +1503,9 @@ def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
 #: summed with f32 atomics into a zeroed C. FAST + Apple only; the sum order
 #: is the matrix unit's (FAST's fold order is free).
 comptime DECOMP_FAST_GEMM_MMA = AFN_GEMM_APPLE and not is_defined["MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF"]()
+# Candidate, default off: KB16 enables two shared pages in the existing
+# AFN kernel; only this launcher's non-split products change. No timing yet.
+comptime DECOMP_FAST_MMA_K16 = AFN_GEMM_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_MMA_K16"]()
 comptime DFG_BLOCK_TARGET = 640
 comptime DFG_MIN_SPLIT_STEPS = 512
 
@@ -1532,9 +1536,18 @@ def _launch_gemm_mma(
             ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, splits, per
         )
     else:
-        afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_NONE](
-            ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, 1, k
-        )
+        comptime if DECOMP_FAST_MMA_K16:
+            # Same 64x64 tile and ascending 8-step MMA fragments. No atomic
+            # split-order change; KB only changes the staging boundaries.
+            ctx.enqueue_function[afn_gemm_mma_kernel[2, 2, 4, 4, 16, DType.float32, DType.float32, False, AFN_EPI_NONE]](
+                c, a, b, c, c, c, Int32(m), Int32(n), Int32(k),
+                Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(k),
+                grid_dim=(tiles, 1, 1), block_dim=(128, 1, 1),
+            )
+        else:
+            afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_NONE](
+                ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, 1, k
+            )
 
 
 def launch_gemm(
