@@ -1454,6 +1454,38 @@ def _chol_left_launch[GUARD: Bool](
             )
 
 
+# lane fam2-decomp (2026-10-04), IDENTICAL: the strip route
+# (`_potrf_lower_strips`, NVIDIA and AMD) waits ONCE per factorization. The
+# upper triangle's zeros are enqueued before the one read of `info`, by a
+# kernel that returns at once when `info` is set (`zero_upper_guarded_kernel`),
+# so the read's wait is the last one of a successful factor; the wait after
+# the read to launch `zero_upper_kernel`, and the closing wait, are gone
+# (a GaussianMixture M-step factors every component: two waits a component
+# saved). A failed factor takes the old tail. Same kernels on the same
+# cells: the same words. -D MOJOLEARN_IDN_CHOL_ONE_WAIT_OFF (or
+# -D MOJOLEARN_IDN_ALL_OFF) restores the three waits.
+comptime IDN_CHOL_ONE_WAIT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_CHOL_ONE_WAIT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+
+
+def zero_upper_guarded_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    info: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """`zero_upper_kernel` when the factorization succeeded (`info[0] == 0`);
+    nothing when it failed (IDN_CHOL_ONE_WAIT)."""
+    if info[0] != Int32(0):
+        return
+    var n = Int(n_in)
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if idx >= n * n:
+        return
+    var i = idx // n
+    var j = idx % n
+    if j > i:
+        a.unsafe_store(idx, Float32(0.0))
+
+
 def zero_upper_kernel(
     a: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
@@ -1796,30 +1828,44 @@ def _potrf_lower_strips(
                 _strip_update(ctx, a, dinfo, n, q0 + w, s_end, p, p + 1, True)
             q0 += CS_NB
         j_strip = s_end
+    comptime if IDN_CHOL_ONE_WAIT:
+        ctx.enqueue_function[zero_upper_guarded_kernel](
+            a.unsafe_ptr(),
+            dinfo.unsafe_ptr(),
+            Int32(n),
+            grid_dim=((n * n + elem_tpb - 1) // elem_tpb, 1, 1),
+            block_dim=(elem_tpb, 1, 1),
+        )
     ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
     ctx.synchronize()
     var info = Int(hinfo.unsafe_ptr().unsafe_load(0))
     var n_panels = (n + CS_NB - 1) // CS_NB
+    # everything enqueued has been waited for unless a launch follows the read
+    var drained = False
     if info != 0:
         var pf = (info - 1) // CS_NB
         var f_end = min((pf * CS_NB // CHOL_STRIP_W + 1) * CHOL_STRIP_W, n)
         _strip_update(ctx, a, dinfo, n, f_end, n, 0, pf, False)
         n_panels = pf + 1
     else:
-        var cells = n * n
-        ctx.enqueue_function[zero_upper_kernel](
-            a.unsafe_ptr(),
-            Int32(n),
-            grid_dim=((cells + elem_tpb - 1) // elem_tpb, 1, 1),
-            block_dim=(elem_tpb, 1, 1),
-        )
+        comptime if IDN_CHOL_ONE_WAIT:
+            drained = not trace.enabled
+        else:
+            var cells = n * n
+            ctx.enqueue_function[zero_upper_kernel](
+                a.unsafe_ptr(),
+                Int32(n),
+                grid_dim=((cells + elem_tpb - 1) // elem_tpb, 1, 1),
+                block_dim=(elem_tpb, 1, 1),
+            )
     trace.record_device(ctx, "chol.factor", a, n * n)
     var nb_record = List[Int32]()
     nb_record.append(Int32(CS_NB))
     nb_record.append(Int32(n_panels))
     nb_record.append(Int32(info))
     trace.record_list_i32("chol.nb", nb_record)
-    ctx.synchronize()
+    if not drained:
+        ctx.synchronize()
     _ = dinfo^
     _ = hinfo^
     return CholRun(info, CS_NB, n_panels)
