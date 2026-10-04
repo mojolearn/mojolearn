@@ -1053,3 +1053,34 @@ no board promotion or dataset-specific dispatch added.
 Receipt SHA256 taxi a8077db5a76c48ed431a7736597fe241d301aa1f01aa20f255d10c67431aeaea
 Receipt SHA256 istella 28e20bec22f34b67c1b8123f1d71ead38a4e402946777554f09fa412eadfd7c7
 Paths: ~/mq/out/resample-gpu-recovered-t-{taxi,istella}-r2-20261004-timing/PASS.json
+
+## Optimizer / layernorm / schedule recovery (lane apple-fast-rec-optim, 2026-10-04)
+
+Reach check (source read, no runs): the training optimizers (board sgd, adam, adamw; binding training)
+go `optimizer_resident_step` -> `identical_optimizer_step_resident_host` -> `identical_optimizer_step`,
+which dispatches to `afn_optimizer_step` under any `AFN_OPT_*` define, so `AFN_OPT_VEC4`,
+`AFN_OPT_MULTITENSOR`, `AFN_OPT_RESIDENT_STATE`, `AFN_OPT_FUSE_SCAN` and `AFN_OPT_CLIP_FUSE` DO reach
+those lanes (their earlier A/B lines named only mlp/samba/lm train steps). They do NOT reach rmsprop,
+adagrad, adamax, nadam: those run `sequence/opt_resident.mojo` (one `op_opt` launch, no refusal scans,
+nothing for the AFN candidates to fuse). The board lanes do not clip and have one tensor, so CLIP_FUSE
+and MULTITENSOR measure dispatch only there. `AF_FAST_*` reach adafactor only. Every one of these rows
+is transport-bound (three 64 MB host transfers a step against torch's zero; the single-thread read of
+write-combined pinned memory is the floor).
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `TRAIN_OPT_FAST_PIPE_DOWN` | sgd, adam, adamw / synthetic | lane/apple-fast-rec-optim @ 81833c811 | - | - | READY-AB | new: the training resident step's read-back pipelined (8 MB chunks, DMA overlaps the read) and two mid-step waits dropped; board 335/343/338 ms vs the sequence optimizers' ~195 on the same transfers. Copies only |
+| `OPT_FAST_STREAM` | rmsprop, adagrad, adamax, nadam / synthetic | lane/apple-fast-rec-optim @ 384832d73 | - | - | READY-AB | new: the element-wise resident step streamed per 8 MB chunk (up, one `op_opt` launch on the chunk, DMA down; host reads chunk c-1 meanwhile); per-element kernel, same bits |
+| `AFN_OPT_FUSE_SCAN` | sgd, adam, adamw / synthetic | lane/apple-fast-neural @ 600237d7c (on main) | - | - | READY-AB | reaches the board optimizer lanes (above); four refusal scans + readback -> one scan + device gate |
+| `AFN_OPT_VEC4` | adam, adamw / synthetic | lane/apple-fast-neural @ 600237d7c (on main) | - | - | READY-AB | 4-wide Adam update; reaches adam/adamw |
+| `AFN_OPT_RESIDENT_STATE` | sgd, adam, adamw / synthetic | lane/apple-fast-neural @ 600237d7c (on main) | - | - | READY-AB | the resident step's eight scratch buffers pooled |
+| `AFN_OPTIM_ALL` | sgd, adam, adamw / synthetic | lane/apple-fast-neural @ 600237d7c (on main) | - | - | READY-AB | every AFN candidate together |
+| `TRAIN_OPT_FAST_PIPE_DOWN + AFN_OPTIM_ALL` | sgd, adam, adamw / synthetic | lane/apple-fast-rec-optim @ 81833c811 | - | - | READY-AB | the composition |
+| `OPT_FAST_MAP_DOWN` / `OPT_FAST_RAW_DOWN` / `OPT_FAST_PIPE_CH=524288` | rmsprop, adagrad, adamax, nadam / synthetic | lane/apple-fast-gap-optim @ cf4513f8a (on main) | - | - | READY-AB | unmeasured since merge (rows above) |
+| `LN_FAST_NOFILL`, `SEQ_FAST_MAP_DOWN`, `SEQ_FAST_RAW_DOWN` | layernorm / synthetic | lane/apple-fast-gap-optim @ cf4513f8a (on main) | - | - | READY-AB | same transport cause as the optimizers (two fresh 64 MB outputs, x up twice); no new code |
+| `MOJOLEARN_SCHED_FAST_INLINE=1` (env) | lr-exponential / synthetic | lane/apple-fast-gap-optim @ cf4513f8a (on main) | - | - | READY-AB | Python env switch, host-only schedule by contract |
+| `SEQ_FAST_LSTM_SCAN (+ _SMEM, + WGRAD)` | lstm-reg, lstm-clf / synthetic, taxi-hourly | lane/apple-fast-gap-lstm @ 0d6cbc821 (on main) | - | - | READY-AB | unmeasured since merge |
+
+Not ported: label-binarizer taxi (2.29) has a different cause (a 100000 x 259 output's allocation and
+first touch); `X_PREP_PINNED_OUT` is DROPPED (cost moves to the caller's read) and `PREP3_LABELS`
+DROPPED-noise.
