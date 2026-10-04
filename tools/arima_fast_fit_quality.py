@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 
 
-def capture(path):
+def capture(path, small=False):
     import numpy as np
     import mojolearn as ml
 
@@ -23,7 +23,7 @@ def capture(path):
         raise RuntimeError("This check requires the FAST Metal binding")
     arrays = {}
     metrics = {}
-    for seed, nobs in ((23, 512), (87, 2048)):
+    for seed, nobs in (((23, 128),) if small else ((23, 512), (87, 2048))):
         rng = np.random.default_rng(seed)
         horizon = 24
         innovations = rng.normal(size=(4, nobs + horizon)).astype(np.float32)
@@ -80,9 +80,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("capture", "compare"))
     parser.add_argument("paths", nargs="+")
+    parser.add_argument("--small", action="store_true", help="One 128-observation smoke fixture")
     args = parser.parse_args()
     if args.action == "capture" and len(args.paths) == 1:
-        capture(args.paths[0])
+        capture(args.paths[0], args.small)
     elif args.action == "compare" and len(args.paths) == 2:
         compare(*args.paths)
     else:

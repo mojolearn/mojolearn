@@ -646,6 +646,13 @@ exercised. These remain on existing guarded fallback routes; no claim is made
 that those cases were tested. Encoder/multilabel correctness was checked but
 speed was measured only for LabelBinarizer; do not update their timing rows.
 
+## AutoARIMA order batching current-main integration (2026-10-04)
+
+| Experiment | Branch / baseline | Evidence | Verdict / next step |
+|---|---|---|---|
+| `ARIMA_ORDER_BATCH`, original small quality | lane/apple-fast-arima-orders @ eae73e1f0; kernel457160e23 | Manager reports gap26-orders-quality PASS18 arrays on the 128-observation fixture; no new timing | Historical small-only evidence; not a full-quality or current-main acceptance |
+| `ARIMA_ORDER_BATCH`, fused-tail integration | lane/apple-fast-arima-orders-current; merged main d4bb2b795 (includes accepted fused-tail311d5233e) | Both arms now use current-main fused tail in shared prepare/finish; source changed, stale arms invalid | OPEN, opt-in only. Rebuild arima A/B, full512/2048 quality before one M3 timing/arm on synthetic and taxi-hourly; no opponent reruns. [Plan and exact commands](ab/arima-orders-current.md) |
+
 ## M3 repaired checks — 2026-10-04 09:00 UTC
 
 - `MOJOLEARN_CHOL_FAST_TRI_SYRK`, lane/apple-fast-chol-20261004 measured `ca5ea4b6e` (kernel `e724b7777`), `gap26-chol-fixed-synthetic`: A268.772791 -> B288.278250 ms (+7.3%), one run/arm. Digest `8818853dfae997da` and relative residual1.659095968e-7 identical. SPD/solve and failure-info quality checks pass. **DROPPED-slower**, no default or board change; comment retained beside candidate gate on its lane.
@@ -663,3 +670,25 @@ Raw M3 receipt: `~/mojolearn-evidence/apple-fast/sync/quality-repairs-results-09
 | `PT_SCORE` | lane/apple-fast-pt-precision @ bc112b172; gap26-pt-score-quality | Stress per-column worst regression: lambda .01330737 vs1e-5 tolerance; NLL/sample4.083e-7 vs1e-7; transform RMS9.606e-5 vs1e-5; normality nonfinite/shape failure. Box-Cox improves and passes | HOLD-quality; timing skipped, no speed claim/default. Diagnose saved stress columns and distinguish nonfinite reference from candidate before repair. Tolerances unchanged; source context [PT_SCORE.md](PT_SCORE.md) |
 
 Saved-array diagnosis: PT stress columns0–5 improve to ~1.5–1.8e-7 transform RMS. Regressions are near-constant columns6/7: reference lambdas52.6079/-63.3852 exceed main and candidate[-8,8] interval; f32 per-row log/transform/derivative precision remains before compensated reduction. The normality NaN belongs to reference column7 (constant sklearn transform, std0), not GPU outputs. No threshold relaxation or speculative kernel repair; a stable shared score/output transform and corrected stable oracle are needed before retry. See [PT_SCORE.md](PT_SCORE.md) for exact per-column evidence.
+
+### Measurement isolation audit — 2026-10-04 09:13 UTC
+
+The M3 runner serializes jobs and A/B arms, but the manager ran filesystem scans
+and cleanup outside the queue during this session. This violates full machine
+isolation even though no simultaneous scored benchmarks were found. Recent
+single-pair speed verdicts whose maintenance overlap cannot be excluded must be
+treated as **HOLD-measurement**, superseding firm speed-only rejection claims
+above (in particular the current depthwise tree comparison). Preserve raw times
+and independent quality evidence; do not merge a candidate on an uncertain speed
+result. No affected candidate was promoted from those recent rejected pairs.
+Future heavy maintenance must share the serial queue or an explicit idle boundary.
+The earlier ARIMA/label measurements predate this session's maintenance; this
+audit alone does not establish interference with those measured promotions.
+
+Detailed isolation audit and six identified scan-window tags: [MEASUREMENT_AUDIT_2026-10-04.md](MEASUREMENT_AUDIT_2026-10-04.md). Their speed verdict is HOLD-measurement, superseding historical speed-only verdicts. No overlap claim is made solely from a cleanup start timestamp.
+
+## AutoARIMA order-batching default promotion prepared (2026-10-04)
+
+| Experiment | Measured source / tags | A → B ms | Quality | Verdict / remaining gate |
+|---|---|---|---|---|
+| `ARIMA_ORDER_BATCH` → default + `ARIMA_ORDER_BATCH_OFF` | 7ba385b30; gap26-orders-current-synthetic / taxi-hourly | synthetic13780.316917 →9287.286750 (-32.6%); taxi-hourly22706.248042 →13747.215083 (-39.5%) | Fitted/order/likelihood/forecast full-quality PASS before timing; both board digests and RMSE identical (2.624119555 /74.659122441). Existing fused tail enabled in BOTH arms | KEEP, default merged on main dc2285bc0; manager default/OFF builds both rc0. Source review against main d1871643b preserved accepted fused tail. Taxi opponent-quality HOLD remains (74.6591 vs68.21). [Raw evidence and review](ab/arima-orders-default.md) |

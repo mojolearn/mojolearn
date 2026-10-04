@@ -841,6 +841,39 @@ struct KalmanWorkspace(Movable):
         )
 
 
+    def __init__(out self, parent: KalmanWorkspace, order: ARIMAOrder,
+                 offset: Int, batch_size: Int, n_obs: Int) raises:
+        """Disjoint views for one order's gradient members in a same-rd
+        group. Restricted by the caller to no differencing/exog/forecast."""
+        var rd = order.rd()
+        var r = order.r()
+        self.Z = parent.Z.create_sub_buffer[DType.float32](offset * (rd), batch_size * (rd))
+        self.R = parent.R.create_sub_buffer[DType.float32](offset * (rd), batch_size * (rd))
+        self.T = parent.T.create_sub_buffer[DType.float32](offset * (rd * rd), batch_size * (rd * rd))
+        self.RQ = parent.RQ.create_sub_buffer[DType.float32](offset * (rd), batch_size * (rd))
+        self.RQR = parent.RQR.create_sub_buffer[DType.float32](offset * (rd * rd), batch_size * (rd * rd))
+        self.P = parent.P.create_sub_buffer[DType.float32](offset * (rd * rd), batch_size * (rd * rd))
+        self.alpha = parent.alpha.create_sub_buffer[DType.float32](offset * (rd), batch_size * (rd))
+        self.ImAA = parent.ImAA.create_sub_buffer[DType.float32](offset * (r * r * r * r), batch_size * (r * r * r * r))
+        self.ImAA_inv = parent.ImAA_inv.create_sub_buffer[DType.float32](offset * (r * r * r * r), batch_size * (r * r * r * r))
+        self.piv = parent.piv.create_sub_buffer[DType.int32](offset * (LYAP_R2_MAX), batch_size * (LYAP_R2_MAX))
+        self.vecq = parent.vecq.create_sub_buffer[DType.float32](offset * (r * r), batch_size * (r * r))
+        self.ImT = parent.ImT.create_sub_buffer[DType.float32](offset * (r * r), batch_size * (r * r))
+        self.ImT_inv = parent.ImT_inv.create_sub_buffer[DType.float32](offset * (r * r), batch_size * (r * r))
+        self.guards = parent.guards.create_sub_buffer[DType.uint8](offset * (1), batch_size * (1))
+        self.info_init = parent.info_init.create_sub_buffer[DType.int32](offset * (1), batch_size * (1))
+        self.info_loop = parent.info_loop.create_sub_buffer[DType.int32](offset * (1), batch_size * (1))
+        self.pred = parent.pred.create_sub_buffer[DType.float32](offset * (n_obs), batch_size * (n_obs))
+        self.vs = parent.vs.create_sub_buffer[DType.float32](offset * (n_obs), batch_size * (n_obs))
+        self.Fs = parent.Fs.create_sub_buffer[DType.float32](offset * (n_obs), batch_size * (n_obs))
+        self.loglike = parent.loglike.create_sub_buffer[DType.float32](offset * (1), batch_size * (1))
+        self.P0 = parent.P0.create_sub_buffer[DType.float32](offset * (rd * rd), batch_size * (rd * rd))
+        self.alpha0 = parent.alpha0.create_sub_buffer[DType.float32](offset * (rd), batch_size * (rd))
+        self.fc = parent.fc.create_sub_buffer[DType.float32](0, 1)
+        self.obs = parent.obs.create_sub_buffer[DType.float32](0, 1)
+        self.obs_fut = parent.obs_fut.create_sub_buffer[DType.float32](0, 1)
+
+
 def init_batched_kalman_matrices(
     ctx: DeviceContext,
     mut params: ARIMAParams,
@@ -1151,6 +1184,25 @@ def _launch_loop_ll_only(
         )
 
 
+
+def fast_kalman_init_into(ctx: DeviceContext, mut params: ARIMAParams,
+                          order: ARIMAOrder, batch_size: Int,
+                          mut ws: KalmanWorkspace) raises:
+    """Initialize one order's covariance and state without filtering."""
+    var rd = order.rd()
+    var r = order.r()
+    var n_diff = order.n_diff()
+    init_batched_kalman_matrices(ctx, params, batch_size, order, ws)
+    ctx.enqueue_function[kalman_init_state_kernel](
+        ws.R.unsafe_ptr(), ws.T.unsafe_ptr(), params.sigma2.unsafe_ptr(), params.mu.unsafe_ptr(),
+        ws.RQ.unsafe_ptr(), ws.RQR.unsafe_ptr(), ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(),
+        ws.ImAA.unsafe_ptr(), ws.ImAA_inv.unsafe_ptr(), ws.piv.unsafe_ptr(), ws.vecq.unsafe_ptr(),
+        ws.ImT.unsafe_ptr(), ws.ImT_inv.unsafe_ptr(), ws.info_init.unsafe_ptr(),
+        ws.guards.unsafe_ptr(),
+        Int32(batch_size), Int32(rd), Int32(r), Int32(n_diff), Int32(order.k),
+        grid_dim=(_grid(batch_size, INIT_TPB), 1, 1), block_dim=(INIT_TPB, 1, 1),
+    )
+
 def fast_kalman_into(
     ctx: DeviceContext,
     mut d_ys: DeviceBuffer[DType.float32],
@@ -1174,16 +1226,7 @@ def fast_kalman_into(
     var rd = order.rd()
     var r = order.r()
     var n_diff = order.n_diff()
-    init_batched_kalman_matrices(ctx, params, batch_size, order, ws)
-    ctx.enqueue_function[kalman_init_state_kernel](
-        ws.R.unsafe_ptr(), ws.T.unsafe_ptr(), params.sigma2.unsafe_ptr(), params.mu.unsafe_ptr(),
-        ws.RQ.unsafe_ptr(), ws.RQR.unsafe_ptr(), ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(),
-        ws.ImAA.unsafe_ptr(), ws.ImAA_inv.unsafe_ptr(), ws.piv.unsafe_ptr(), ws.vecq.unsafe_ptr(),
-        ws.ImT.unsafe_ptr(), ws.ImT_inv.unsafe_ptr(), ws.info_init.unsafe_ptr(),
-        ws.guards.unsafe_ptr(),
-        Int32(batch_size), Int32(rd), Int32(r), Int32(n_diff), Int32(order.k),
-        grid_dim=(_grid(batch_size, INIT_TPB), 1, 1), block_dim=(INIT_TPB, 1, 1),
-    )
+    fast_kalman_init_into(ctx, params, order, batch_size, ws)
     var kl_done = False
     comptime if KALMAN_LL_ONLY:
         _launch_loop_ll_only(

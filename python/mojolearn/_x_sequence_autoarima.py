@@ -175,13 +175,31 @@ class AutoARIMA:
             best_ic = np.empty(nb, dtype=np.float64)
             best = np.empty(nb, dtype=np.int64)
             ic_k = np.empty(nb, dtype=np.float64)
-            for p_, q_, P_, Q_, k_ in itertools.product(p_opts, q_opts, P_opts, Q_opts, k_opts):  # glue: the user order grid, bounded options
-                if p_ + q_ + P_ + Q_ + k_ == 0:
-                    continue
+            # Metadata only: retain the exact itertools.product order. The
+            # native experiment groups GPU work by state dimension but writes
+            # likelihood rows back in this order, preserving first-min ties.
+            grid = [o for o in itertools.product(p_opts, q_opts, P_opts, Q_opts, k_opts)  # glue: user order metadata
+                    if o[0] + o[1] + o[2] + o[3] + o[4]]  # glue: user order options, no series data
+            grouped_ll = None
+            if grid and not s and D_ == 0 and 4 not in p_opts and 4 not in q_opts and self.n_obs > 2:
+                binding = ARIMA()._extension()
+                enabled = getattr(binding, "arima_order_batch_enabled", None)
+                if enabled is not None and enabled():
+                    grouped_ll = np.empty((len(grid), nb), dtype=np.float32)
+                    packed_grid = [v for p_, q_, _, _, k_ in grid for v in (p_, q_, k_)]  # glue: native order metadata arguments
+                    written = binding.arima_order_search(sub.ctypes.data, grouped_ll.ctypes.data,
+                                                         packed_grid, [nb, self.n_obs, d_, int(maxiter)])
+                    if int(written) != grouped_ll.size:
+                        raise RuntimeError("AutoARIMA: incomplete grouped likelihood output")
+            for trial, (p_, q_, P_, Q_, k_) in enumerate(grid):  # glue: user order grid, not series or observations
                 s_ = s if (P_ + D_ + Q_) else 0
                 m = ARIMA(order=(p_, d_, q_), seasonal_order=(P_, D_, Q_, s_),
-                          trend="c" if k_ else "n", maxiter=maxiter).fit(sub)
-                llf = np.ascontiguousarray(m.llf_, dtype=np.float32).reshape(-1)
+                          trend="c" if k_ else "n", maxiter=maxiter)
+                if grouped_ll is None:
+                    m.fit(sub)
+                    llf = np.ascontiguousarray(m.llf_, dtype=np.float32).reshape(-1)
+                else:
+                    llf = grouped_ll[trial]
                 # every series' criterion and the running first-minimum
                 # choice, in Mojo (lane cgr4-py-compute)
                 _native("ic_running_min_f64")(llf.ctypes.data, nb, self._penalty(m, ic, d_, D_, s_),

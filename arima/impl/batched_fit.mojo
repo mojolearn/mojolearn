@@ -119,8 +119,10 @@ from arima.impl.batched_arima import (
 from arima.impl.batched_kalman import KALMAN_FAST_EVAL_WS
 from arima.impl.estimate_x0 import StartParamsResult, estimate_x0_x
 from arima.impl.fast_eval_ws import FastEvalWS
+from arima.impl.fast_order_state import ARIMA_ORDER_BATCH, order_min_lbfgs
 from arima.impl.fast_lbfgs_async import (
     ARIMA_FAST_ASYNC,
+    AsyncLBFGSOut,
     async_min_lbfgs,
 )
 from arima.impl.lbfgs_device import (
@@ -500,7 +502,11 @@ def batched_min_lbfgs(
         # every series on its own schedule (fast_lbfgs_async.mojo); the
         # per-iteration card needs the lock-step shape, so a trace keeps it
         if ews and not trace.enabled:
-            var ar = async_min_lbfgs(ctx, ews.value(), bs, scale, order_kf, x0, param, h)
+            var ar: AsyncLBFGSOut
+            comptime if ARIMA_ORDER_BATCH:
+                ar = order_min_lbfgs(ctx, ews.value(), bs, scale, order_kf, x0, param, h)
+            else:
+                ar = async_min_lbfgs(ctx, ews.value(), bs, scale, order_kf, x0, param, h)
             trace.record_list_f32("fit.x", ar.x)
             trace.record_list_f32("fit.loss", ar.fx)
             trace.record_list_i32("fit.n_iter", ar.n_iter)

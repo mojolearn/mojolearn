@@ -204,6 +204,46 @@ struct FastEvalWS(Movable):
         self.t_params = t_params^
         self.ws = ws^
 
+    def __init__(
+        out self,
+        ctx: DeviceContext,
+        mut d_y: DeviceBuffer[DType.float32],
+        nb: Int,
+        n_obs: Int,
+        order: ARIMAOrder,
+        parent_ws: KalmanWorkspace,
+        parent_y: DeviceBuffer[DType.float32],
+        parent_mu: DeviceBuffer[DType.float32],
+        offset: Int,
+    ) raises:
+        """`d_y` holds the `nb` series (contiguous, `nb * n_obs`); it is
+        replicated N + 1 times here, once per solve."""
+        var N = order.complexity()
+        var M1 = N + 1
+        var eb = M1 * nb
+        var nb_y = nb * n_obs
+        var y_ext = parent_y.create_sub_buffer[DType.float32](offset * n_obs, eb * n_obs)
+        for m in range(M1):
+            ctx.enqueue_copy(
+                dst_buf=y_ext.create_sub_buffer[DType.float32](m * nb_y, nb_y),
+                src_buf=d_y.create_sub_buffer[DType.float32](0, nb_y),
+            )
+        var x_ext = ctx.enqueue_create_buffer[DType.float32](max(1, eb * N))
+        var p_ext = ARIMAParams(ctx, order, eb)
+        var t_params = ARIMAParams(ctx, order, eb)
+        var ws = KalmanWorkspace(parent_ws, order, offset, eb, n_obs)
+        t_params.mu = parent_mu.create_sub_buffer[DType.float32](offset, eb)
+        ctx.synchronize()
+        self.nb = nb
+        self.n_obs = n_obs
+        self.N = N
+        self.eb = eb
+        self.y_ext = y_ext^
+        self.x_ext = x_ext^
+        self.p_ext = p_ext^
+        self.t_params = t_params^
+        self.ws = ws^
+
     def eval(
         mut self,
         ctx: DeviceContext,
@@ -224,48 +264,68 @@ struct FastEvalWS(Movable):
         comptime if not KALMAN_FAST_EVAL_WS:
             raise Error("FastEvalWS.eval: not compiled in this build (MOJOLEARN_ARIMA_FAST_EVAL_WS)")
         else:
-            var nb = self.nb
-            var N = self.N
-            var eb = self.eb
-            var nb_x = nb * N
-            var grid = (nb + LBFGS_TPB - 1) // LBFGS_TPB
-            comptime if not ARIMA_FUSED_EVAL_TAIL:
-                ctx.enqueue_memset(d_bad, Int32(0))
-            var g1 = (eb + EW_TPB - 1) // EW_TPB
-            ctx.enqueue_function[ew_stack_kernel](
-                self.x_ext.unsafe_ptr(), d_x.unsafe_ptr(), Int32(nb), Int32(N), h,
-                grid_dim=(g1, 1, 1), block_dim=(EW_TPB, 1, 1),
-            )
-            unpack(ctx, self.p_ext, order, eb, self.x_ext)
-            validate_order(order)
-            batched_jones_transform(ctx, order, eb, False, self.p_ext, self.t_params)
-            fast_kalman_into(ctx, self.y_ext, self.t_params, order, eb, self.n_obs, self.ws, 32)
-            comptime if ARIMA_FUSED_EVAL_TAIL:
-                ctx.enqueue_function[ew_finish_kernel](
-                    d_f.unsafe_ptr(), d_g.unsafe_ptr(), d_grad.unsafe_ptr(),
-                    d_x_pert.unsafe_ptr(), d_x.unsafe_ptr(), self.ws.loglike.unsafe_ptr(),
-                    self.ws.info_init.unsafe_ptr(), self.ws.info_loop.unsafe_ptr(),
-                    d_bad.unsafe_ptr(), Int32(nb), Int32(N), h, scale,
-                    grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
-                )
-                return
-            ctx.enqueue_function[arima_mark_infeasible_kernel](
-                d_bad.unsafe_ptr(), self.ws.loglike.unsafe_ptr(), self.ws.info_init.unsafe_ptr(),
-                self.ws.info_loop.unsafe_ptr(), Int32(nb), Int32(N + 1),
+            self.prepare(ctx, order, h, d_x, d_bad)
+            fast_kalman_into(ctx, self.y_ext, self.t_params, order, self.eb, self.n_obs, self.ws, 32)
+            self.finish(ctx, h, scale, d_x, d_grad, d_x_pert, d_f, d_g, d_bad)
+
+    def prepare(mut self, ctx: DeviceContext, order: ARIMAOrder, h: Float32,
+                mut d_x: DeviceBuffer[DType.float32],
+                mut d_bad: DeviceBuffer[DType.int32]) raises:
+        var nb = self.nb
+        var N = self.N
+        var eb = self.eb
+        var nb_x = nb * N
+        var grid = (nb + LBFGS_TPB - 1) // LBFGS_TPB
+        comptime if not ARIMA_FUSED_EVAL_TAIL:
+            ctx.enqueue_memset(d_bad, Int32(0))
+        var g1 = (eb + EW_TPB - 1) // EW_TPB
+        ctx.enqueue_function[ew_stack_kernel](
+            self.x_ext.unsafe_ptr(), d_x.unsafe_ptr(), Int32(nb), Int32(N), h,
+            grid_dim=(g1, 1, 1), block_dim=(EW_TPB, 1, 1),
+        )
+        unpack(ctx, self.p_ext, order, eb, self.x_ext)
+        validate_order(order)
+        batched_jones_transform(ctx, order, eb, False, self.p_ext, self.t_params)
+
+    def finish(mut self, ctx: DeviceContext, h: Float32, scale: Float32,
+               mut d_x: DeviceBuffer[DType.float32],
+               mut d_grad: DeviceBuffer[DType.float32],
+               mut d_x_pert: DeviceBuffer[DType.float32],
+               mut d_f: DeviceBuffer[DType.float32],
+               mut d_g: DeviceBuffer[DType.float32],
+               mut d_bad: DeviceBuffer[DType.int32]) raises:
+        var nb = self.nb
+        var N = self.N
+        var nb_x = nb * N
+        var grid = (nb + LBFGS_TPB - 1) // LBFGS_TPB
+        # Shared by single-order and grouped-order fits: both arms retain
+        # current main's accepted fused tail, independently of ORDER_BATCH.
+        comptime if ARIMA_FUSED_EVAL_TAIL:
+            ctx.enqueue_function[ew_finish_kernel](
+                d_f.unsafe_ptr(), d_g.unsafe_ptr(), d_grad.unsafe_ptr(),
+                d_x_pert.unsafe_ptr(), d_x.unsafe_ptr(), self.ws.loglike.unsafe_ptr(),
+                self.ws.info_init.unsafe_ptr(), self.ws.info_loop.unsafe_ptr(),
+                d_bad.unsafe_ptr(), Int32(nb), Int32(N), h, scale,
                 grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
             )
-            var g2 = (nb_x + EW_TPB - 1) // EW_TPB
-            ctx.enqueue_function[ew_grad_kernel](
-                d_grad.unsafe_ptr(), self.ws.loglike.unsafe_ptr(), Int32(nb), Int32(N), h,
-                grid_dim=(g2, 1, 1), block_dim=(EW_TPB, 1, 1),
-            )
-            # the caller's scratch ends equal to d_x, as the sequential form leaves it
-            ctx.enqueue_copy(
-                dst_buf=d_x_pert.create_sub_buffer[DType.float32](0, nb_x),
-                src_buf=d_x.create_sub_buffer[DType.float32](0, nb_x),
-            )
-            ctx.enqueue_function[arima_eval_finish_kernel](
-                d_f.unsafe_ptr(), d_g.unsafe_ptr(), self.ws.loglike.unsafe_ptr(),
-                d_grad.unsafe_ptr(), d_bad.unsafe_ptr(), Int32(nb), Int32(N), scale,
-                grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
-            )
+            return
+        ctx.enqueue_function[arima_mark_infeasible_kernel](
+            d_bad.unsafe_ptr(), self.ws.loglike.unsafe_ptr(), self.ws.info_init.unsafe_ptr(),
+            self.ws.info_loop.unsafe_ptr(), Int32(nb), Int32(N + 1),
+            grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
+        )
+        var g2 = (nb_x + EW_TPB - 1) // EW_TPB
+        ctx.enqueue_function[ew_grad_kernel](
+            d_grad.unsafe_ptr(), self.ws.loglike.unsafe_ptr(), Int32(nb), Int32(N), h,
+            grid_dim=(g2, 1, 1), block_dim=(EW_TPB, 1, 1),
+        )
+        # the caller's scratch ends equal to d_x, as the sequential form leaves it
+        ctx.enqueue_copy(
+            dst_buf=d_x_pert.create_sub_buffer[DType.float32](0, nb_x),
+            src_buf=d_x.create_sub_buffer[DType.float32](0, nb_x),
+        )
+        ctx.enqueue_function[arima_eval_finish_kernel](
+            d_f.unsafe_ptr(), d_g.unsafe_ptr(), self.ws.loglike.unsafe_ptr(),
+            d_grad.unsafe_ptr(), d_bad.unsafe_ptr(), Int32(nb), Int32(N), scale,
+            grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
+        )
