@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """K3 compensated arithmetic experiment; private probe only, never dispatched
-by product fit/predict. Default OFF, Apple FAST only. GPU quality is owed.
+by product fit/predict. Default OFF, Apple FAST only. Private-kernel quality
+PASS; production integration, actual fit/forecast and timing remain owed.
 
 The held scalar candidate remains separate. This implements the fixed-step
 reference9723 proposal: preserve low words through residuals, log, two-level
@@ -16,8 +17,13 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, pinned_mul_f32
 
-# OPEN / default OFF, 2026-10-04, source fe5df7ab0: private GPU probe only;
-# build/source readiness is not a GPU quality, optimizer or timing acceptance.
+# PRIVATE-KERNEL-QUALITY PASS / default OFF, 2026-10-04, source fe5df7ab0:
+# arima-k3-df-gpu-q-v1.json:13/13groups PASS,4 refusal controls PASS,
+# degradation_allowance=0; fixed step0.0009765625, supplied-state hashes checked.
+# Actual compensated GPU stages/retained-low-word gradients pass versus saved
+# actual-main GPU errors; zero scored timings, promotion_authorized=false.
+# product_dispatch=false: device Jones/initializer, optimizer, public fit and
+# forecast quality, production integration and board timing are still owed.
 # Earlier scalar K3 actual-tail source102e0d70a remains HOLD-quality:
 # corrected product reduction still leaves12/13groups HOLD,49 worse gradient
 # components of648 (345 changed components improve). No timing admission.
