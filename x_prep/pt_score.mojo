@@ -51,7 +51,8 @@ def score_merge(mut a: InlineArray[FF, 6], b: InlineArray[FF, 6]):
     if b[0].hi == Float32(0):
         return
     if a[0].hi == Float32(0):
-        a = b
+        for k in range(6):
+            a[k] = b[k]
         return
     var n = ff_add(a[0], b[0])
     var delta = ff_sub(b[2], a[2])
