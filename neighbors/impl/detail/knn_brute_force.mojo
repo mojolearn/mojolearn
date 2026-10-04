@@ -175,6 +175,32 @@ comptime KNN_REGISTER_TILE_IDENTICAL = knn_distance_register_tile_for[
 ]()
 comptime KNN_PREFLIGHT_METADATA = knn_distance_metadata_for[TARGET_COLUMN, IDENTICAL_BUILD]()
 comptime KNN_PREFLIGHT_METADATA_DEFAULT = knn_distance_metadata_default_for[TARGET_COLUMN, IDENTICAL_BUILD]()
+
+# Large-request gate for the vector index transport and the preflight
+# metadata default. Both add a fixed cost (alignment branches; two
+# O((n_queries + n_index) x n_features) minimum passes) that only pays back
+# over the n_queries x n_index distance cells, so they admit any request
+# with at least KNN_LARGE_MIN_QUERIES query rows (eight 128-row query tiles,
+# enough to fill the SMs/CUs several times over) and KNN_LARGE_MIN_INDEX
+# index rows (the index no longer fits one small column tile), at small k.
+# Replacement rule is UNMEASURED.
+comptime KNN_LARGE_MIN_QUERIES = 1024
+comptime KNN_LARGE_MIN_INDEX = 65536
+
+
+@always_inline
+def knn_large_request(n_index: Int, n_queries: Int, n_features: Int, k: Int) -> Bool:
+    comptime if is_defined["MOJOLEARN_LEGACY_SHAPE_KNN_BOARD"]():
+        # LEGACY (default OFF): the exact knn board shape (400k index,
+        # 4k queries, 32 features, k in {10, 15}). Removed Oct 4 as
+        # benchmark-shape tuning; the size rule below is unmeasured.
+        return n_index == 400000 and n_queries == 4000 and n_features == 32 and (k == 10 or k == 15)
+    return (
+        n_queries >= KNN_LARGE_MIN_QUERIES
+        and n_index >= KNN_LARGE_MIN_INDEX
+        and n_features > 0
+        and k >= 1 and k <= SMALLK_MAX_K
+    )
 comptime KNN_INDEX_TILE_IDENTICAL = knn_index_tile_columns_for[
     TARGET_COLUMN, IDENTICAL_BUILD
 ]()
@@ -896,19 +922,20 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     # RAFT linalg/detail/contractions.cuh:193-219 loads vectors. Our pinned
     # arithmetic keeps its ascending chain; only the index transport changes.
     # Large same-process public requests save 3.1-3.6%, all output bits equal:
-    # bench/results/knn_vector_request_2026-09-10. Other shapes need their own
-    # request evidence before promotion. Per-partition alignment is checked below.
-    var use_vector = TARGET_COLUMN == COLUMN_NVIDIA and n_index == 400000 and n_queries == 4000 and n_features == 32 and (k == 10 or k == 15) and mtr == DIST_L2_SQRT_EXPANDED
+    # bench/results/knn_vector_request_2026-09-10 (measured at the board shape
+    # only; the size gate `knn_large_request` replaced that exact shape Oct 4
+    # and is unmeasured). Per-partition alignment is checked below.
+    var use_vector = TARGET_COLUMN == COLUMN_NVIDIA and knn_large_request(n_index, n_queries, n_features, k) and mtr == DIST_L2_SQRT_EXPANDED
     comptime if is_defined["MOJOLEARN_KNN_VECTOR_REQUEST_CHECK"]():
         # Named same-process check exercises scalar, vector and actual default.
         var vector_override = String(getenv("MOJOLEARN_KNN_VECTOR_TRIAL"))
         if vector_override == "0" or vector_override == "1":
             use_vector = vector_override == "1"
-    # Promotion uses the two actual large Apple targets, not the small controls.
-    # Broader shapes retain current preflight pending their own request evidence.
+    # Large requests only (`knn_large_request`); the exact board-shape gate
+    # was removed Oct 4 and the size gate is unmeasured.
     var use_metadata = KNN_PREFLIGHT_METADATA
     comptime if KNN_PREFLIGHT_METADATA_DEFAULT:
-        use_metadata = use_metadata or (use_transposed_index and KNN_REGISTER_TILE_IDENTICAL and not use_vendor_topk and mtr == DIST_L2_SQRT_EXPANDED and n_index == 400000 and n_queries == 4000 and n_features == 32 and (k == 10 or k == 15))
+        use_metadata = use_metadata or (use_transposed_index and KNN_REGISTER_TILE_IDENTICAL and not use_vendor_topk and mtr == DIST_L2_SQRT_EXPANDED and knn_large_request(n_index, n_queries, n_features, k))
     # DEVIATION 2629 (kernel-matrix row `knn_distance_exact_chain_for`): the
     # admission metadata rides in the same request-local scratch slot the
     # Apple minima use; the two never run in one request.
