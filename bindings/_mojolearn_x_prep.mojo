@@ -21,6 +21,7 @@ from x_prep.prep3 import PREP3_MAXABS
 from x_prep.fastmaxabs import maxabs_fit_direct
 
 from x_prep.fastpt import PTIMPUTE_FLAGS
+from x_prep.label_fast import LABEL_PRESENT
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -227,6 +228,10 @@ def target_scratch_binding() raises -> PythonObject:
     return PythonObject(1)
 
 
+def label_present_binding() raises -> PythonObject:
+    return PythonObject(1)
+
+
 def ptimpute_flags_binding() raises -> PythonObject:
     """Lane af-ptimpute (FAST + Apple, each switch its own define, default off):
     the bits of x_prep/fastpt.mojo PTIMPUTE_FLAGS (1 PT_COLBATCH, 2 PT_SPEC,
@@ -276,8 +281,13 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
             m.def_function[fast_unique_binding]("x_prep_fast_unique")
         comptime if SPLINE_FAST_FUSED:
             m.def_function[spline_fused_binding]("x_prep_spline_fused")
+        # OPEN: unused counts/downloads only; full A/B output-quality and M3
+        # speed remain unmeasured. Current-main rebuild required after label
+        # default merge. See docs/apple-fast/ab/target-scratch.md.
         comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_TARGET_SCRATCH"]():
             m.def_function[target_scratch_binding]("x_prep_target_scratch")
+        comptime if LABEL_PRESENT:
+            m.def_function[label_present_binding]("x_prep_label_present")
         comptime if CAT_CLS2_PACK:
             m.def_function[cls2_cat_binding]("x_prep_cls2_cat")
         comptime if CALIB_FOLDS:

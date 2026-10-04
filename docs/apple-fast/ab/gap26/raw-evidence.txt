@@ -1,0 +1,14 @@
+/Users/ec2-user/mq/out/gap26-arima-tail-synthetic.log:AFC-AB def=A rep=1 gap26-arima-tail-synthetic arm=A rep=1 lane=autoarima ds=synthetic status=error median_ms=none digest=none env='AFC_DEF_ARM=A' quality={}
+/Users/ec2-user/mq/out/gap26-arima-tail-synthetic.log:AFC-AB def=B rep=1 gap26-arima-tail-synthetic arm=A rep=1 lane=autoarima ds=synthetic status=error median_ms=none digest=none env='AFC_DEF_ARM=B' quality={}
+/Users/ec2-user/mq/out/gap26-arima-tail-synthetic.log:AFC-AB def=A rep=1 gap26-arima-tail-synthetic arm=A rep=1 lane=autoarima ds=synthetic status=ok median_ms=14498.225291958079 digest=9bdde6d5440d1cb6 env='AFC_DEF_ARM=A' quality={"forecast_rmse": 2.624119555180116}
+/Users/ec2-user/mq/out/gap26-arima-tail-synthetic.log:AFC-AB def=B rep=1 gap26-arima-tail-synthetic arm=A rep=1 lane=autoarima ds=synthetic status=ok median_ms=13569.230083026923 digest=9bdde6d5440d1cb6 env='AFC_DEF_ARM=B' quality={"forecast_rmse": 2.624119555180116}
+/Users/ec2-user/mq/out/gap26-arima-tail-taxi-hourly.log:AFC-AB def=A rep=1 gap26-arima-tail-taxi-hourly arm=A rep=1 lane=autoarima ds=taxi-hourly status=ok median_ms=24231.027625035495 digest=345eb06e29edb8f1 env='AFC_DEF_ARM=A' quality={"forecast_rmse": 74.65912244133813}
+/Users/ec2-user/mq/out/gap26-arima-tail-taxi-hourly.log:AFC-AB def=B rep=1 gap26-arima-tail-taxi-hourly arm=A rep=1 lane=autoarima ds=taxi-hourly status=ok median_ms=22705.348082992714 digest=345eb06e29edb8f1 env='AFC_DEF_ARM=B' quality={"forecast_rmse": 74.65912244133813}
+/Users/ec2-user/mq/out/gap26-label-taxi.log:AFC-AB def=A rep=1 gap26-label-taxi arm=A rep=1 lane=label-binarizer ds=taxi status=ok median_ms=348.2544580474496 digest=0703e6f6396640c4 env='AFC_DEF_ARM=A' quality={"output_shape": "100000x259"}
+/Users/ec2-user/mq/out/gap26-label-taxi.log:AFC-AB def=B rep=1 gap26-label-taxi arm=A rep=1 lane=label-binarizer ds=taxi status=ok median_ms=327.6258329860866 digest=0703e6f6396640c4 env='AFC_DEF_ARM=B' quality={"output_shape": "100000x259"}
+/Users/ec2-user/mq/out/gap26-label-istella.log:AFC-AB def=A rep=1 gap26-label-istella arm=A rep=1 lane=label-binarizer ds=istella status=ok median_ms=33.17650000099093 digest=de224838a841fa8c env='AFC_DEF_ARM=A' quality={"output_shape": "100000x16"}
+/Users/ec2-user/mq/out/gap26-label-istella.log:AFC-AB def=B rep=1 gap26-label-istella arm=A rep=1 lane=label-binarizer ds=istella status=ok median_ms=27.578792010899633 digest=de224838a841fa8c env='AFC_DEF_ARM=B' quality={"output_shape": "100000x16"}
+/Users/ec2-user/mq/out/gap26-label-quality.log:LABEL-FAST-QUALITY status=PASS checked_cells=41697776 captures=84
+/Users/ec2-user/mq/out/gap26-label-quality.log:LABEL-FAST-QUALITY status=PASS checked_cells=41697776 captures=84
+/Users/ec2-user/mq/out/gap26-label-quality.log:QUALITY-PAIR-PASS gap26-label
+/Users/ec2-user/mq/out/gap26-arima-quality-fixed.log:ARIMA_FAST_QUALITY status=PASS arrays=44 forecast=identical loglike=identical

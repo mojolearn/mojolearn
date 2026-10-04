@@ -4,12 +4,21 @@
 """Public TargetEncoder quality-only dump and exact main/candidate comparison."""
 import argparse
 import os
+import hashlib
+import json
+from pathlib import Path
 import numpy as np
 import mojolearn as ml
 
 
 def dump(path):
     assert os.environ.get('MOJOLEARN_NUMERIC_MODE') == 'fast'
+    from mojolearn._expansion_prep import _prep_binding, _target_scratch
+    binding = _prep_binding("fast")
+    assert str(binding.x_prep_vendor()) == "metal"
+    assert int(binding.x_prep_numeric_mode()) == 0
+    metadata = dict(binding_sha256=hashlib.sha256(Path(binding.__file__).read_bytes()).hexdigest(),
+                    scratch_enabled=_target_scratch("fast"), fixture="target-scratch-v1-seed553")
     rng = np.random.default_rng(553)
     X = rng.integers(0, 23, (5003, 5)).astype(np.float32)
     Xq = X[:137].copy()
@@ -49,6 +58,8 @@ def dump(path):
                     output[tag + f'enc{j}'] = np.asarray(a)
                 output[tag + 'mean'] = np.asarray(model.target_mean_)
     np.savez(path, **output)
+    metadata['arrays'] = len(output)
+    print('TARGET-SCRATCH-CAPTURE ' + json.dumps(metadata, sort_keys=True))
     print(f'TARGET-SCRATCH-QUALITY status=PASS arrays={len(output)} path={path}')
 
 
@@ -62,9 +73,10 @@ def main():
         dump(args.first)
     else:
         a, b = np.load(args.first), np.load(args.second)
-        assert sorted(a.files) == sorted(b.files)
+        assert len(a.files) == 108 and sorted(a.files) == sorted(b.files)
         for key in a.files:
-            np.testing.assert_array_equal(a[key], b[key], err_msg=key)
+            assert a[key].dtype == b[key].dtype and a[key].shape == b[key].shape, key
+            assert a[key].tobytes() == b[key].tobytes(), key
         print(f'TARGET-SCRATCH-AB status=PASS exact_arrays={len(a.files)}')
 
 
