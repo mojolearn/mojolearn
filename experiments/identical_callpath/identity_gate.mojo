@@ -14,10 +14,9 @@ from experiments.identical_callpath.minmax import ResidentIdenticalMinMax
 from experiments.identical_callpath.standard import ResidentIdenticalStandard
 
 
-def baseline(values: List[Float32], scales: List[Float32], offsets: List[Float32],
+def baseline(ctx: DeviceContext, values: List[Float32], scales: List[Float32], offsets: List[Float32],
              rows: Int, cols: Int, inverse: Int, flag_a: Int, flag_b: Int,
              standard: Bool) raises -> List[Float32]:
-    var ctx = DeviceContext()
     var x = ctx.enqueue_create_buffer[DType.float32](rows * cols)
     var scale = ctx.enqueue_create_buffer[DType.float32](cols)
     var offset = ctx.enqueue_create_buffer[DType.float32](cols)
@@ -36,7 +35,6 @@ def baseline(values: List[Float32], scales: List[Float32], offsets: List[Float32
     _ = scale^
     _ = offset^
     ctx.synchronize()
-    _ = ctx^
     return result^
 
 
@@ -53,6 +51,7 @@ def compare(actual: List[Float32], expected: List[Float32], mut digest: UInt64) 
 
 
 def main() raises:
+    var baseline_ctx = DeviceContext()
     var rows = 257
     var cols = 3
     var scales: List[Float32] = [1.0, 0.5, 2.0]
@@ -79,7 +78,7 @@ def main() raises:
                 minmax.transform_batch_into(inputs, results, inverse, first,
                                             -1.0, 1.0, Bool(grouped))
                 for slot in range(2):
-                    var expected = baseline(inputs[slot], scales, offsets,
+                    var expected = baseline(baseline_ctx, inputs[slot], scales, offsets,
                                             rows, cols, inverse, first, 0, False)
                     compare(results[slot], expected, digest)
                     comparisons += 1
@@ -87,7 +86,7 @@ def main() raises:
                     standard.transform_batch_into(inputs, results, inverse,
                                                   first, second, Bool(grouped))
                     for slot in range(2):
-                        var expected = baseline(inputs[slot], scales, offsets,
+                        var expected = baseline(baseline_ctx, inputs[slot], scales, offsets,
                                                 rows, cols, inverse, first, second, True)
                         compare(results[slot], expected, digest)
                         comparisons += 1
