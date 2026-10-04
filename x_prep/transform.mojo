@@ -348,30 +348,31 @@ def pt_init_unit(t: Int, f: FP, q: IP):
     var x2 = sub(b, mul(GOLDEN, sub(b, a)))
     var skip = p(q, 0) == 0 and ld(f, p(q, 1) + 2 * d + c) == Float32(0)
     comptime if PT_SCORE_STABLE:
-        var anchor = ld(f, p(q, 1) + d + c)
-        var low = ld(f, p(q, 1) + 3 * d + c)
-        var high = ld(f, p(q, 1) + 4 * d + c)
-        var kind = Float32(0)
-        if not skip:
-            if p(q, 0) == 1 or low >= Float32(0):
-                kind = Float32(1)
-            elif high <= Float32(0):
-                kind = Float32(-1)
-        if kind != Float32(0):
-            var span = max(abs(center_log(low, anchor, kind, p(q, 0))),
-                           abs(center_log(high, anchor, kind, p(q, 0))))
-            # Extended bracket stays finite in centered coordinates. Wide
-            # columns retain at least the original radius8; narrow columns
-            # can find roots outside[-8,8] without exponent overflow.
-            var radius = max(Float32(8), min(Float32(1000000), Float32(8) / max(span, Float32(1e-12))))
-            if p(q, 8) == 0:
-                radius = Float32(8)
-            var midpoint = Float32(0) if kind > Float32(0) else Float32(2)
-            a = midpoint - radius if p(q, 8) != 0 else PT_LO
-            b = midpoint + radius if p(q, 8) != 0 else PT_HI
-            x1 = midpoint
-        f[p(q, 6) + c] = anchor
-        f[p(q, 7) + c] = kind
+        if p(q, 6) >= 0:
+            var anchor = ld(f, p(q, 1) + d + c)
+            var low = ld(f, p(q, 1) + 3 * d + c)
+            var high = ld(f, p(q, 1) + 4 * d + c)
+            var kind = Float32(0)
+            if not skip:
+                if p(q, 0) == 1 or low >= Float32(0):
+                    kind = Float32(1)
+                elif high <= Float32(0):
+                    kind = Float32(-1)
+            if kind != Float32(0):
+                var span = max(abs(center_log(low, anchor, kind, p(q, 0))),
+                               abs(center_log(high, anchor, kind, p(q, 0))))
+                # Extended bracket stays finite in centered coordinates. Wide
+                # columns retain at least the original radius8; narrow columns
+                # can find roots outside[-8,8] without exponent overflow.
+                var radius = max(Float32(8), min(Float32(1000000), Float32(8) / max(span, Float32(1e-12))))
+                if p(q, 8) == 0:
+                    radius = Float32(8)
+                var midpoint = Float32(0) if kind > Float32(0) else Float32(2)
+                a = midpoint - radius if p(q, 8) != 0 else PT_LO
+                b = midpoint + radius if p(q, 8) != 0 else PT_HI
+                x1 = midpoint
+            f[p(q, 6) + c] = anchor
+            f[p(q, 7) + c] = kind
     f.unsafe_store(S + 0, a)
     f.unsafe_store(S + 1, b)
     f.unsafe_store(S + 2, x1)
@@ -383,8 +384,9 @@ def pt_init_unit(t: Int, f: FP, q: IP):
     f.unsafe_store(S + 8, Float32(0))
     f.unsafe_store(S + 9, Float32(0))
     comptime if PT_SCORE_STABLE:
-        f[S + 8] = f[p(q, 6) + c]
-        f[S + 9] = f[p(q, 7) + c]
+        if p(q, 6) >= 0:
+            f[S + 8] = f[p(q, 6) + c]
+            f[S + 9] = f[p(q, 7) + c]
     f.unsafe_store(p(q, 5) + c, x1)
     if skip:
         st(f, p(q, 3) + c, Float32(1))

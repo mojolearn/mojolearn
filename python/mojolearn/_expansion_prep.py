@@ -3235,10 +3235,12 @@ class PowerTransformer(_PrepBase):
         pr = _Prog()
         xo = pr.put(arr)
         st, lam = pr.alloc(6 * d), pr.alloc(d)
-        centered = bool(_ptimpute_flags(mode) & 32)
+        host = _optional_prep_entry(_prep_binding(mode), "x_prep_host_column") is not None
+        # PT_SCORE_STABLE (bit 32): the device's centered coordinates; never on the host binding
+        centered = bool(_ptimpute_flags(mode) & 32) and not host
         anchor, anchor_kind = (pr.alloc(d), pr.alloc(d)) if centered else (_NONE, _NONE)
         pr.stage("col_stats", d, xo, n, d, st)
-        if _optional_prep_entry(_prep_binding(mode), "x_prep_host_column") is not None:
+        if host:
             # the host binding: its own pt_fit (x_prep/host/power.mojo), the same words
             pr.stage("pt_fit", d, xo, n, d, method, st, lam)
         else:

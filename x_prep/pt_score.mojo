@@ -145,6 +145,23 @@ def score_finish(f: FP, pp: FP, q: IP, chunks: Int32):
         var lam = f[p(q, 7) + c]
         # No division by variance: sign of n*cov - J*M2 is the score sign.
         var score = ff_sub(ff_mul(a[0], a[5]), ff_mul(a[1], a[4]))
+        comptime if PT_SCORE_STABLE:
+            var sv = ff_f32(score)
+            if not (sv - sv == Float32(0)):
+                # Overflowed moments (|a * lg| past exp's range at a far
+                # bracket edge): the optimum lies toward the overflow-free
+                # pivot (0 centered positive, 2 centered negative, 1 mixed
+                # sign), so cut the far side instead of stalling the search.
+                var kind = f[S + 9]
+                var pivot = Float32(0) if kind > Float32(0) else (Float32(2) if kind < Float32(0) else Float32(1))
+                if lam > pivot:
+                    f[S + 1] = lam
+                elif lam < pivot:
+                    f[S] = lam
+                var nl = (f[S] + f[S + 1]) * Float32(0.5)
+                f[p(q, 7) + c] = nl
+                f[p(q, 8) + c] = nl
+                return
         if ff_f32(score) > Float32(0):
             f[S + 1] = lam
         elif ff_f32(score) < Float32(0):

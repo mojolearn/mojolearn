@@ -46,21 +46,44 @@ def center_from_log(lg: Float32, kind: Float32, lam: Float32) -> Float32:
 
 
 @always_inline
-def center_original(x: Float32, lam: Float32, method: Int) -> Float32:
-    var positive = method == 1 or x >= Float32(0)
-    var lg = logf(x) if method == 1 else ftz(identical_log1p(abs(x)))
-    return center_from_log(lg, Float32(1) if positive else Float32(-1), lam)
+def same_side(x: Float32, kind: Float32, method: Int) -> Bool:
+    """x lies on the training column's YJ branch. Zero belongs to both:
+    psi(0) = 0 on either branch, so a nonpositive column keeps it centered."""
+    return method == 1 or (x >= Float32(0) if kind > Float32(0) else x <= Float32(0))
+
+
+@always_inline
+def cross_scaled(x: Float32, anchor: Float32, kind: Float32, lam: Float32) -> Float32:
+    """(psi(x) - psi(anchor)) / t(anchor)**a for a YJ query on the other
+    branch (x and anchor of opposite signs; never Box-Cox). With
+    L0 = log t(anchor) and s = exp(-a L0):
+      psi(anchor) * s = kind * (1 - s) / a = -kind * expm1(-a L0) / a (kind * L0 at a = 0),
+      psi(x) * s      = sx * (exp(b L - a L0) - s) / b,  b the query branch,
+    each exponent formed before exp so inf * 0 never occurs."""
+    var a = lam if kind > Float32(0) else Float32(2) - lam
+    var l0 = ftz(identical_log1p(abs(anchor)))
+    var positive = x >= Float32(0)
+    var b = lam if positive else Float32(2) - lam
+    var lx = ftz(identical_log1p(abs(x)))
+    var s = expf(-a * l0)
+    var px: Float32
+    if b == Float32(0):
+        px = lx * s
+    else:
+        px = (expf(b * lx - a * l0) - s) / b
+    if not positive:
+        px = -px
+    var pa = kind * l0 if a == Float32(0) else -kind * center_expm1(-a * l0) / a
+    return px - pa
 
 
 @always_inline
 def center_apply(x: Float32, anchor: Float32, kind: Float32, lam: Float32, method: Int) -> Float32:
-    if method == 1 or (x >= Float32(0)) == (kind > Float32(0)):
+    if same_side(x, kind, method):
         return center_from_log(center_log(x, anchor, kind, method), kind, lam)
     # An inference query may cross the training column's sign. Keep the
     # same affine map, using the other YJ branch for this query only.
-    var a = lam if kind > Float32(0) else Float32(2) - lam
-    var lg0 = ftz(identical_log1p(abs(anchor)))
-    return (center_original(x, lam, method) - center_original(anchor, lam, method)) / expf(a * lg0)
+    return cross_scaled(x, anchor, kind, lam)
 
 
 @always_inline
@@ -73,12 +96,15 @@ def center_inverse(v: Float32, anchor: Float32, kind: Float32, lam: Float32, met
     var norm = anchor if method == 1 else Float32(1) + abs(anchor)
     var delta = norm * center_expm1(lg)
     var x = anchor + delta if kind > Float32(0) else anchor - delta
-    if method == 1 or (x == x and (x >= Float32(0)) == (kind > Float32(0))):
+    if x == x and same_side(x, kind, method):
         return x
-    # Crossing-sign inverse uses the original YJ branch after undoing the
-    # affine coordinate map. Same-sign training roundtrips stay centered.
-    var lg0 = ftz(identical_log1p(abs(anchor)))
-    var original = v * expf(a * lg0) + center_original(anchor, lam, method)
+    if method == 1:
+        return x  # Box-Cox: outside the domain stays NaN, as scipy inv_boxcox
+    # Crossing-sign inverse: undo the affine map to psi, then the original YJ
+    # branch of psi's sign (sklearn's _yeo_johnson_inverse_transform).
+    var l0 = ftz(identical_log1p(abs(anchor)))
+    var pa = kind * l0 if a == Float32(0) else -kind * center_expm1(-a * l0) / a
+    var original = (v + pa) * expf(a * l0)
     var positive = original >= Float32(0)
     var b = lam if positive else Float32(2) - lam
     var sv = original if positive else -original

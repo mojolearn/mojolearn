@@ -69,6 +69,60 @@ def stable_reference_transform(x, method, lam):
     return out
 
 
+def stable_objective(x, method, lam):
+    """Float64 NLL per observation, scipy's llf definition, centered coords.
+
+    log Var(g) = log Var(v) + 2 a log t(anchor) for homogeneous-sign columns,
+    so no saturated g(x) (11**-63, 11**52) is materialized. Mixed-sign
+    columns have no such map here and return NaN (not checked).
+    """
+    x = np.asarray(x, dtype=np.float64)
+    out = np.full(x.shape[1], np.nan)
+    for j in range(x.shape[1]):
+        col = x[:, j]
+        positive = method == "box-cox" or np.min(col) >= 0
+        negative = method != "box-cox" and np.max(col) <= 0
+        if not (positive or negative) or np.ptp(col) == 0:
+            continue
+        anchor = float(np.mean(col))
+        sign = 1.0 if positive else -1.0
+        norm = anchor if method == "box-cox" else 1 + abs(anchor)
+        lg = np.log1p(sign * (col - anchor) / norm)
+        a = float(lam[j]) if positive else 2 - float(lam[j])
+        v = sign * (lg if a == 0 else np.expm1(a * lg) / a)
+        jac = np.log(col) if method == "box-cox" else np.sign(col) * np.log1p(np.abs(col))
+        dev = v - v.mean()
+        log_var = np.log(np.mean(dev ** 2)) + 2 * a * np.log(norm)
+        out[j] = -(float(lam[j]) - 1) * jac.mean() + 0.5 * log_var
+    return out
+
+
+def check_objective_oracle(x, method, lam, label, optimum=False):
+    """The objective gate's scipy llf must equal the centered f64 NLL at the
+    lambdas it scores (1e-9 per observation, 1/100 of the 1e-7 gate noise).
+    With optimum, the reference lambda must also be a local minimum of the
+    centered NLL (steps 1e-2 * max(1, |lambda|)), so the near-constant
+    references (52.6, -63.4) are the MLE, not sklearn optimizer noise."""
+    llf = stats.yeojohnson_llf if method == "yeo-johnson" else stats.boxcox_llf
+    x64 = x.astype(np.float64)
+    stable = stable_objective(x64, method, lam)
+    checked = []
+    for j in np.flatnonzero(np.isfinite(stable)):
+        scipy_nll = -llf(float(lam[j]), x64[:, j]) / len(x64)
+        if not abs(scipy_nll - stable[j]) <= 1e-9 * max(1.0, abs(stable[j])):
+            raise AssertionError(f"objective oracle {label} column {j}: scipy {scipy_nll!r} "
+                                 f"centered {stable[j]!r} lambda {float(lam[j])!r}")
+        if optimum:
+            h = 1e-2 * max(1.0, abs(float(lam[j])))
+            for step in (-h, h):
+                moved = np.array(lam, dtype=np.float64)
+                moved[j] += step
+                if stable_objective(x64[:, j:j+1], method, moved[j:j+1])[0] < stable[j] - 1e-12:
+                    raise AssertionError(f"reference lambda column {j} is not a local NLL minimum")
+        checked.append(int(j))
+    print("PT-ORACLE-OBJECTIVE status=PASS " + label + " columns=" + json.dumps(checked))
+
+
 def check_decimal_oracle(x, method, lam):
     """Independent 160-digit evaluation on 17 actual rows; no optimizer/refit.
 
@@ -115,6 +169,7 @@ def repair_reference(args):
         result[name + "_reference_normality"] = stats.skew(repaired, axis=0)**2 + stats.kurtosis(repaired, axis=0)**2
         if name == "stress":
             check_decimal_oracle(x, method, lam)
+            check_objective_oracle(x, method, lam, "reference", optimum=True)
     result["reference_version"] = np.array(ORACLE_VERSION)
     np.savez(args.out, **result)
 
@@ -133,6 +188,8 @@ def dump(args):
         pt = PowerTransformer(method=method, standardize=True).fit(x)
         lam, y = _np(pt.lambdas_), _np(pt.transform(x))
         obj, norm = measure(x, method, lam, y)
+        if name == "stress":
+            check_objective_oracle(x, method, lam, "arm")
         restored = _np(pt.inverse_transform(y))
         roundtrip = np.sqrt(np.mean((restored-x.astype(np.float64))**2, axis=0)) / np.maximum(1, np.sqrt(np.mean(x.astype(np.float64)**2, axis=0)))
         if not np.isfinite(roundtrip).all():
@@ -149,6 +206,7 @@ def dump(args):
             ry = stable_reference_transform(x, method, ref.lambdas_)
             if name == "stress":
                 check_decimal_oracle(x, method, ref.lambdas_)
+                check_objective_oracle(x, method, ref.lambdas_, "reference", optimum=True)
             res["reference_version"] = np.array(ORACLE_VERSION)
             ro, rn = measure(x, method, ref.lambdas_, ry)
             for key, val in (("lambda", ref.lambdas_), ("output", ry), ("objective", ro), ("normality", rn)):
