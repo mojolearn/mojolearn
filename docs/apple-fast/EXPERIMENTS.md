@@ -597,3 +597,15 @@ Fixes of UNOWNED rows of `tools/hooks/host_routes_baseline.tsv`. Arm A of each A
 |---|---|---|---|---|---|---|
 | `KPCA_FAST_LANCZOS_DEV` | kernel-pca / taxi; kernel-pca / istella | lane/apple-fast-gap-linalg2-kpca @ 134dca742 | gl2k-kpca-lzdev-taxi, gl2k-kpca-lzdev-istella | kernel-pca taxi -9%; istella -12.5% | KEPT | M2 quality-only gl2k-kpca-quality-r3: eig rel diff 1.795e-07, transform angle 1.879e-06 rad; FAST+Apple default, -D MOJOLEARN_KPCA_FAST_LANCZOS_DEV_OFF reverts |
 | `IPCA_FAST_DEV` | incremental-pca / taxi | lane/apple-fast-gap-linalg2-kpca @ 134dca742 | gl2k-ipca-dev-taxi | incremental-pca taxi 159 -> 136 | KEPT | -14.5%; output digest bit-identical; each batch stacked on the device, public arrays read once; FAST+Apple default, -D MOJOLEARN_IPCA_FAST_DEV_OFF reverts |
+
+## Oct 4 manager takeover
+
+FAST bit changes are allowed. Acceptance requires faster M3 timing and no quality decline beyond noise; bitwise identity is sufficient evidence in some cases, not a universal requirement. Near-noise single-run results remain inconclusive.
+
+| Experiment | Branch / measured head | M3 tag | A → B (ms) | Quality | Verdict |
+|---|---|---|---|---|---|
+| SGDOC_FAST_PAR, Istella | lane/apple-fast-sgdoc-parallel @ 61710a5c8 | sgdocp-istella | 75537.985 → 181.313 | J .10000456 → .1; flagged .04042 → 0 | HOLD: anomaly behavior unresolved; old-base comparator |
+| SGDOC_FAST_PAR, taxi | lane/apple-fast-sgdoc-parallel @ 61710a5c8 | sgdocp-taxi | 58334.248 → 16.521 | candidate J .1, flagged 0 | HOLD: anomaly behavior unresolved; current-main comparison owed |
+| ARIMA_FUSED_EVAL_TAIL | lane/apple-fast-arima-batched @ 217e821e5 | gap26-arima-tail-synthetic / taxi-hourly | Pending | forecast/likelihood/selected-order checks queued | OPEN; M2 both arms compiled, M3 timing queued |
+| EIGH_FAST_TANGENT | lane/apple-fast-linalg-20261004 | gap26-eigh-tangent (proposed) | Pending | residual/eigenvalue error/orthogonality required | OPEN; first compile alias error fixed, rebuild pending |
+| MCD_BATCH_COMPAT | lane/apple-fast-mcd-exact | gap26-mcdcompat-taxi (proposed) | Pending | fitted covariance, precision, support, Mahalanobis distances, predictions | OPEN; compilation pending |
