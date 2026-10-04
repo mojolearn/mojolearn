@@ -815,3 +815,5 @@ metric. Taxi final oracle errors improve/equal, but raw covariance is not
 byte-identical and lacks an extra baseline. Reports preserve legacy capture
 provenance limitations. Stabilizing split-K accumulation is a new candidate,
 not retroactive validation of SKIP. DEFLATE remains HOLD for changed flags.
+
+| `MOJOLEARN_DECOMP_FAST_MMA_K16` | standalone decomposition GEMM, non-split only | lane/apple-fast-decomp-mma-k16@d487c814fe59d35de111d392751af9e6ce06eb66 | w2-mma-k16-q-20261004; w2-mma-k16-t-20261004 | 12 oracle fixtures PASS; dense4096 call+read 85.504250 -> 91.724583 ms (resident 43.152292 -> 47.424042); update4096x256x4096 36.670541 -> 36.401583 (resident 30.276000 -> 30.508875) | HOLD-speed: dense slower, update essentially unchanged. No caller timings/default/board changes. Harness calls transpose1024 a changed shape, but dispatcher yields256 tiles and2 splits, so it is an UNCHANGED control, alongside Gram/thin controls. Its apparent host gain6.389875 ->3.939625 cannot be attributed to K16. One scored call per route/arm retained; no replay. Resident completion timing is a fence-inclusive observation, not pure GPU throughput. |

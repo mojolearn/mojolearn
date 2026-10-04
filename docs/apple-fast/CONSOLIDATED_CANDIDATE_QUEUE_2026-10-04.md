@@ -103,3 +103,19 @@ are NumPy emulations, not actual-main kernel comparisons. Exact-rank
 elimination changes the rounded-Q model; do not use this formulation as
 validation for catalog K1/K2. Retaining full conditional covariance is the
 next mathematical comparison. Scalar K3 remains independently gated.
+
+## Shared reach priority
+
+User steering: test improvements across every eligible caller and reduce
+avoidable duplication. See [GEMM reach audit](GEMM_REACH_AUDIT_2026-10-04.md).
+Next integration targets both unfused SDK entrances with one opt-in candidate
+dispatcher and per-route reach counters. Matrix quality is followed by actual
+estimator quality before scored caller A/B runs. Specialized LU/Cholesky/MCD
+adapters must retain fused epilogues, batching, strides and reduction policy.
+No claim of broad runtime reach follows from source imports alone.
+
+Queued G1/G5 and C1–C4 quality jobs now use `tools/apple_fast_pinned_job.py`
+from an already prepared queue branch. Their own exact source is checked out
+privately and their M2 binary manifests/hashes are verified by the original
+probe helper; no redundant native build or scored replay is involved.
+K3 `6f09497ab` passed M2 A/B and is staged/queued for kernel quality only.
