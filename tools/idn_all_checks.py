@@ -8,9 +8,13 @@ that a board race cannot express. Run in a built branch tree, IDENTICAL mode
     python tools/idn_all_checks.py lu-nan        # LU on an input that overflows to NaN: device vs host column
     python tools/idn_all_checks.py sgd-nan       # an SGD fit with NaN / infinity in X or in y must raise
     python tools/idn_all_checks.py import-smoke  # import the package and every module the lanes changed
+    python tools/idn_all_checks.py pca-id        # PCA / TruncatedSVD fit (round-robin eigh): device vs host column
+    python tools/idn_all_checks.py all           # the four above, one verdict line each, then IDN_ALL_CHECKS
 
-Each prints one verdict line last (`LU_NAN ...`, `SGD_NAN ...`, `IMPORT_OK`)
-and exits non-zero on a failure. No timing, no opponent."""
+Each prints one verdict line last (`LU_NAN ...`, `SGD_NAN ...`, `IMPORT_OK`,
+`PCA_ID ...`) and exits non-zero on a failure. The digests in the LU_NAN and
+PCA_ID lines are comparable across boxes (same fixture, same bytes hashed).
+No timing, no opponent."""
 import hashlib
 import os
 import subprocess
@@ -61,9 +65,31 @@ def _lu_child():
     print("DIGEST %s nan_words=%d" % (h.hexdigest(), nan_words))
 
 
-def _run_child(extra_env):
+def _pca_child():
+    import numpy as np
+    from mojolearn.decomposition import PCA, TruncatedSVD
+    h = hashlib.sha256()
+    parts = 0
+    for n, d, k in ((4096, 220, 16), (1500, 33, 33), (900, 7, 3)):
+        i = np.arange(n * d, dtype=np.int64).reshape(n, d)
+        X = ((((i * 2654435761) % 1000003) - 500001).astype(np.float32) / np.float32(977.0)
+             * (1.0 + (np.arange(d) % 11)).astype(np.float32))
+        X = np.ascontiguousarray(X, dtype=np.float32)
+        for est in (PCA(n_components=k), TruncatedSVD(n_components=min(k, d - 1))):
+            est.fit(X)
+            for name in ("components_", "explained_variance_", "explained_variance_ratio_", "singular_values_",
+                         "mean_"):
+                v = getattr(est, name, None)
+                if v is not None:
+                    h.update(_bytes(v))
+                    parts += 1
+            h.update(_bytes(est.transform(X[:64])))
+    print("DIGEST %s parts=%d" % (h.hexdigest(), parts))
+
+
+def _run_child(extra_env, what="lu-nan"):
     env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical", **extra_env)
-    p = subprocess.run([sys.executable, os.path.abspath(__file__), "lu-nan", "--child"], env=env,
+    p = subprocess.run([sys.executable, os.path.abspath(__file__), what, "--child"], env=env,
                        capture_output=True, text=True)
     line = [ln for ln in p.stdout.splitlines() if ln.startswith("DIGEST ")]
     if p.returncode != 0 or not line:
@@ -81,6 +107,17 @@ def lu_nan():
     ok = dev[0] == host[0] and not vacuous
     print("LU_NAN device=%s host=%s %s %s" % (dev[0][:16], host[0][:16], dev[1],
                                               "MATCH" if ok else ("VACUOUS" if vacuous else "DIFFER")))
+    return 0 if ok else 1
+
+
+def pca_id():
+    dev, e1 = _run_child({}, "pca-id")
+    host, e2 = _run_child({"MOJOLEARN_VENDOR": "cpu"}, "pca-id")
+    if dev is None or host is None:
+        print("PCA_ID ERROR device=%s host=%s" % (e1, e2))
+        return 1
+    ok = dev[0] == host[0]
+    print("PCA_ID device=%s host=%s %s %s" % (dev[0][:16], host[0][:16], dev[1], "MATCH" if ok else "DIFFER"))
     return 0 if ok else 1
 
 
@@ -131,10 +168,20 @@ def import_smoke():
 
 
 def main(argv):
-    if len(argv) >= 2 and argv[0] == "lu-nan" and argv[1] == "--child":
-        _lu_child()
+    if len(argv) >= 2 and argv[1] == "--child" and argv[0] in ("lu-nan", "pca-id"):
+        (_lu_child if argv[0] == "lu-nan" else _pca_child)()
         return 0
-    table = {"lu-nan": lu_nan, "sgd-nan": sgd_nan, "import-smoke": import_smoke}
+    table = {"import-smoke": import_smoke, "lu-nan": lu_nan, "sgd-nan": sgd_nan, "pca-id": pca_id}
+    if len(argv) == 1 and argv[0] == "all":
+        got = {}
+        for name, fn in table.items():   # glue: the four checks, each its own verdict line
+            try:
+                got[name] = fn()
+            except Exception as e:
+                print("%s raised: %s" % (name, str(e)[:300]))
+                got[name] = 1
+        print("IDN_ALL_CHECKS " + " ".join("%s=%s" % (k, "ok" if v == 0 else "FAIL") for k, v in got.items()))
+        return 0 if not any(got.values()) else 1
     if len(argv) != 1 or argv[0] not in table:
         print(__doc__)
         return 2
