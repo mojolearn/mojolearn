@@ -132,10 +132,14 @@ core. FAST bits may move (Float32 blocked sums); recall check paired."""
 comptime IVF_FAST_RANDOM_INIT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and (is_defined["MOJOLEARN_IVF_COARSE_RANDOM_INIT"]() or is_defined["MOJOLEARN_VSEARCH_ALL"]())
+    and not is_defined["MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF"]()
 )
-"""FAST on Apple, OPT-IN (lane af-vsearch, 2026-10-03, `-D
-MOJOLEARN_IVF_COARSE_RANDOM_INIT`): the coarse quantizer starts from n_lists
+#: DEFAULT (FAST + Apple) since 2026-10-04: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,
+#: 2026-10-04, source ad265a028; x_ann/vsearch_fast.mojo has every row): 9/9
+#: IVF-family rows faster, recall_at_10 identical. ACCEPT;
+#: rollback `-D MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF` (k-means|| seeding).
+"""FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, 2026-10-03;
+rollback `-D MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF`): the coarse quantizer starts from n_lists
 DISTINCT training rows drawn with the fit's seed (FAISS's `Clustering`
 rule) and handed to cluster/'s k-means as INIT_ARRAY, so its scalable
 k-means|| seeding (8 rounds of every-row-to-candidate distances, each with
@@ -146,9 +150,14 @@ bits (another start): paired recall check."""
 comptime IVF_FAST_DEVICE_VALIDATE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and (is_defined["MOJOLEARN_IVF_DEVICE_VALIDATE"]() or is_defined["MOJOLEARN_VSEARCH_ALL"]())
+    and not is_defined["MOJOLEARN_IVF_DEVICE_VALIDATE_OFF"]()
 )
-"""FAST on Apple, OPT-IN (lane af-vsearch, `-D MOJOLEARN_IVF_DEVICE_VALIDATE`):
+#: DEFAULT (FAST + Apple) since 2026-10-04: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,
+#: 2026-10-04, source ad265a028; x_ann/vsearch_fast.mojo has every row): 9/9
+#: IVF-family rows faster, recall_at_10 identical. ACCEPT;
+#: rollback `-D MOJOLEARN_IVF_DEVICE_VALIDATE_OFF` (host word scan).
+"""FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch; rollback
+`-D MOJOLEARN_IVF_DEVICE_VALIDATE_OFF`):
 `ivf_validate_data`'s word scan of the n x dim dataset (one host pass over
 352 MB on Istella) runs on the device after the upload (`ivf_refused_words_kernel`,
 one flag word read back); a refused dataset then runs the host scan, which

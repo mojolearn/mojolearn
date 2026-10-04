@@ -668,7 +668,7 @@ def pq_score_tiled_kernel(
     codes: I32P, cb: F32P, pq_dim: Int32, pq_len: Int32, n_codes: Int32, probes: I32P,
     pstart: I32P, stride: Int32, mask: I32P, cand: F32P,
 ):
-    """FAST on Apple, OPT-IN (lane af-vsearch, `PQ_LUT_TILED`): `pq_score_kernel`
+    """FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, `PQ_LUT_TILED`; `_OFF` rolls back): `pq_score_kernel`
     with the lookup table staged in TILES of at most LUT_MAX entries (whole
     subspaces per tile), so Istella's 55 x 256 table (14,080 entries, which
     main evaluates per candidate from device memory because it does not fit)
@@ -771,7 +771,7 @@ def pq_scan_fused_kernel(
     codes: I32P, cb: F32P, pq_dim: Int32, pq_len: Int32, n_codes: Int32, probes: I32P, mask: I32P,
     k: Int32, out_d: F32P, out_i: I32P, out_n: I32P,
 ):
-    """FAST on Apple, OPT-IN (lane af-vsearch, `PQ_SCAN_FUSED`): the IVF-PQ
+    """FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, `PQ_SCAN_FUSED`; `_OFF` rolls back): the IVF-PQ
     score and top-k in ONE launch, one threadgroup of SEL_T per query, for
     k <= SEL_KM. For each probed list, in windows of SEL_T x PQ_FUSED_R
     slots: the lookup table is staged in tiles (`pq_score_tiled_kernel`'s
@@ -993,7 +993,7 @@ def ivf_scan_search[KIND: Int](
     var dcd = ctx.enqueue_create_buffer[DType.float32](mc * n_lists)
     var dprobes = ctx.enqueue_create_buffer[DType.int32](mc * np)
     var dpstart = ctx.enqueue_create_buffer[DType.int32](mc * np)
-    # lane af-vsearch, FAST on Apple, OPT-IN (`PQ_SCAN_FUSED`): the score and
+    # lane af-vsearch, FAST on Apple, DEFAULT since 2026-10-04 (`PQ_SCAN_FUSED`): the score and
     # the top-k in one launch per chunk; no candidate buffer, no select
     # launches (k <= SEL_KM; the table tile and the residual fit)
     var fused = False
@@ -1068,7 +1068,7 @@ def ivf_scan_search[KIND: Int](
             )
         st.mark(ctx, "probe")
         comptime if KIND == 0:
-            # lane af-vsearch, FAST on Apple, OPT-IN: the fused scan
+            # lane af-vsearch, FAST on Apple, DEFAULT since 2026-10-04: the fused scan
             # (`PQ_SCAN_FUSED`) or the tiled-table score (`PQ_LUT_TILED`)
             var tiled = False
             comptime if PQ_LUT_TILED:

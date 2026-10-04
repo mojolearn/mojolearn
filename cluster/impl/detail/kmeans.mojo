@@ -1279,10 +1279,14 @@ def kmeans_fit_main(
 comptime KMEANS_LAZY_SHIFT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and (is_defined["MOJOLEARN_IVF_KMEANS_LAZY_SHIFT"]() or is_defined["MOJOLEARN_VSEARCH_ALL"]())
+    and not is_defined["MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF"]()
 )
-"""FAST on Apple, OPT-IN (lane af-vsearch, 2026-10-03, `-D
-MOJOLEARN_IVF_KMEANS_LAZY_SHIFT`): the Lloyd loop reads the centroid shift
+#: DEFAULT (FAST + Apple) since 2026-10-04: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,
+#: 2026-10-04, source ad265a028; x_ann/vsearch_fast.mojo has every row): 9/9
+#: IVF-family rows faster, recall_at_10 identical. ACCEPT;
+#: rollback `-D MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF` (shift read every iteration).
+"""FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, 2026-10-03;
+rollback `-D MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF`): the Lloyd loop reads the centroid shift
 back and tests convergence every KMEANS_LAZY_SHIFT_EVERY iterations and at
 max_iter, instead of every iteration (one synchronize and one host round
 trip per iteration: 20 waits per IVF coarse fit, per k-means|| recluster and

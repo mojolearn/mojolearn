@@ -634,8 +634,11 @@ def refine_kernel(m: Int32, x: F32P, n: Int32, d: Int32, queries: F32P, cand: I3
         refine_cell(q, x, Int(n), Int(d), queries, cand, Int(k0), Int(k), out_d, out_i, root != 0)
 
 
-#: the refine team (lane af-vsearch): threads per query (candidates at most),
-#: the widest query row staged in threadgroup memory
+#: the refine team (lane af-vsearch, OPT-IN, NEUTRAL on the M3 2026-10-04 at
+#: lane/apple-fast-batch 3150d75c1: ivf-refine taxi 1208.3->1201.8 ms): threads
+#: per query (the kernel's candidate cap, one thread per candidate) and the
+#: widest query row staged in threadgroup memory (2 KB of float32, a memory
+#: budget, not a board shape; wider rows take `refine_kernel`)
 comptime REFINE_T = 128
 comptime REFINE_DIM_MAX = 512
 
