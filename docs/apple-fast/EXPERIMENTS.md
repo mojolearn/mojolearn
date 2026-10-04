@@ -926,3 +926,25 @@ identity; first unscored cases OLS/PCA/wide-kKNN/KMeans atwidth65 targetcoreNT
 route0. Small-kKNNwidth11 is a NO_REACH control. Other shared routes require
 separate eligible callers; no claim that all four routes are covered here.
 Residentcatalogfa390736 M2botharmsPASS/staged, fresh lifecycle quality queued.
+
+## Shared caller quality and process checkpoint
+
+G1 compiled30e4562c/harnessef2ce40dd: g1-downstream-ols-d65-q-v1,
+g1-downstream-pca-d65-q-v1 andg1-downstream-knn-wide-k-d65-q-v1 PASS.
+A/B capture hashes identical, independent float64 L2/max no-worse gatesPASS.
+Counters locate coreNT route0 in OLSfit (1call), PCAtransform/inverse (1each),
+andwide-kKNN kneighbors(1). PCAfit/OLSpredict/KNNfit do not reach this hook.
+g1-downstream-knn-d11-q-v1 is expectedNO_REACH with exact outputs, nottiming
+admission. KMeans A failed existing all_finite prerequisite before numerical
+comparison: same-source IDENTICAL base binding is missing from isolatedsource;
+this is infrastructure failure, notcandidatequality. Preserve original log.
+
+Residentcatalogfa390736 resident-catalog-q-v1 PASS: eleven matrix fixtures
+for eachofelevenarms, exact prior words, zero degradation, n1refused. Report
+SHA25645118d4df721f5ae5664f36232e7226cef67b397ed3f97849345d518b27da3e1.
+Distinct resident-input timing remains pending, no scored replay.
+Callpath3491a4d4 callpath-probe-quality-r5 PASS bits/lifecycle; notproduction
+or timing admission by itself. Next timing contract under source review.
+G5compiledsource495c30c3 core/estimators A/B builds started onM2 after removing
+only finished G1/resident build trees; manifests/artifacts/source refs retained.
+Future submissions follow the new efficient execution section inEXPERIMENT_PROCESS.
