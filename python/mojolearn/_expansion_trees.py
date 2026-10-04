@@ -3279,6 +3279,10 @@ class PermutationExplainer(_AgnosticExplainer):
         runs on that prefix, and the device expands the outputs back to
         every (coalition, background row)."""
         x0, bg0, p0 = addr_ro(Xa, name="X"), addr_ro(self._bg, name="data"), addr(phi, name="phi")
+        # the device keeps three Int64 words per (coalition, background row):
+        # bound them as if d were at least 16 (a narrow X would else index
+        # up to the whole synthetic budget in Int64 triples)
+        R = min(R, self._chunk(mm * nb * max(d, 16), n))
         tot = zeros((1,), "<i8")
         t0 = addr(tot, name="count")
         syn = empty((R * mm * nb * d,), "<f4")
