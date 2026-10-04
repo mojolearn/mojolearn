@@ -1229,14 +1229,31 @@ comptime LG_EXACT_BATCH_WIDTH = (
 #: sort of 0..n-1 by leaf keeps rows ascending inside each leaf, as the
 #: searcher's stable partitions of 0..n-1 do), at the same offsets, so the
 #: estimator reduces the same values in the same order.
+#:
+#: THE IDENTICAL DEFAULT since lane ml-gbdt (2026-10-04, roadmap T2), every
+#: vendor and the host column together. GUARD (review of T1+T2): a leaf
+#: LG_EXACT_ID split ahead of time and folded back holds its descendants'
+#: slots concatenated, so its rows are NOT ascending and the estimator's
+#: fold order would differ from the rebuild's. Under IDENTICAL a tree with
+#: any folded-back result leaf leaves the record unset and the caller
+#: rebuilds the partition from the model (`NS_INHERIT_ID_GUARD` below), so
+#: bits move nowhere: T1+T2 together inherit only trees where every result
+#: leaf is one searcher slot, whose rows ascend. `-D
+#: MOJOLEARN_GBDT_NS_INHERIT_ID_OFF` (or the master `-D
+#: MOJOLEARN_IDN_ALL_OFF`) is the A/B arm; the old opt-in `-D
+#: MOJOLEARN_GBDT_NS_INHERIT_ID` stays harmless.
+comptime NS_INHERIT_ID = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_GBDT_NS_INHERIT_ID_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 comptime NS_INHERIT_PARTITION = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_GBDT_NS_INHERIT_PARTITION_OFF"]()
-) or (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_GBDT_NS_INHERIT_ID"]()
-)
+) or NS_INHERIT_ID
+#: the T1+T2 guard: IDENTICAL never inherits a tree with a folded-back leaf
+comptime NS_INHERIT_ID_GUARD = NS_INHERIT_ID and LG_EXACT_ID
 
 
 def _path_before(a: TLeafPath, b: TLeafPath) -> Bool:
@@ -3839,6 +3856,9 @@ def fit_non_symmetric_tree[
             var lg_sums = List[Float64]()
             # the rows of each result leaf (NS_INHERIT_PARTITION)
             var final_rows = List[Int]()
+            # NS_INHERIT_ID_GUARD: a result leaf was split ahead of time and
+            # folded back (its rows are its descendants' slots, not ascending)
+            var lg_any_folded = False
             comptime if LG_EXACT_BATCH:
                 if lg_exact:
                     num_leaves = len(lg_final)
@@ -3853,6 +3873,7 @@ def fit_non_symmetric_tree[
                         comptime if LG_EXACT_ID:
                             # folded back: the stats it was scored with
                             if lg_node_left[lg_final[fi]] >= 0:
+                                lg_any_folded = True
                                 for st in range(stat_count):
                                     lg_sums[base + st] = Float64(
                                         lg_node_stats[
@@ -3965,6 +3986,9 @@ def fit_non_symmetric_tree[
                         inherit_sizes.append(final_rows[order[k]])
                         running += final_rows[order[k]]
                     inherit_ready = running == n_rows
+                comptime if NS_INHERIT_ID_GUARD:
+                    if lg_any_folded:
+                        inherit_ready = False
             break
 
     # THE MODEL ITSELF, last rung of the ladder. If every stage above
