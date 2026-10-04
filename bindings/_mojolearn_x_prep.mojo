@@ -148,7 +148,7 @@ def kfold_folds_binding(out_addr: PythonObject, ints: PythonObject, seed: Python
 # Python's `_optional_prep_entry` probe finds it in no other build and takes
 # main's route there).
 def maxabs_fit_direct_binding(x_addr: PythonObject, out_addr: PythonObject, ints: PythonObject) raises -> PythonObject:
-    """PREP3_MAXABS (FAST + Apple default): MaxAbsScaler's max_abs_ then
+    """PREP3_MAXABS (FAST + Apple, opt-in here, -D MOJOLEARN_PREP3_MAXABS): MaxAbsScaler's max_abs_ then
     scale_ (2 d words at out_addr) from the n x d float32 X at x_addr
     (x_prep/fastmaxabs.mojo). ints = (n, d). Returns 2 d."""
     var xa = Int(py=x_addr)
@@ -222,7 +222,7 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_prep")
         m.def_function[run_binding]("x_prep_run")
         comptime if NB_TEXT_CSR:
-            # lane apple-fast-nb: FAST + Apple default, -D MOJOLEARN_NB_TEXT_CSR_OFF reverts (x_prep/fastnb_csr.mojo)
+            # lane apple-fast-nb: FAST + Apple + -D MOJOLEARN_NB_TEXT_CSR only on this branch (x_prep/fastnb_csr.mojo)
             m.def_function[nb_csr_fit_py]("x_prep_nb_csr_fit")
             m.def_function[nb_csr_jll_py]("x_prep_nb_csr_jll")
         m.def_function[run_scratch_binding]("x_prep_run_scratch")

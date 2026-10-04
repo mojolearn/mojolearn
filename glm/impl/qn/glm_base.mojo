@@ -472,7 +472,7 @@ comptime QNT_TPB = 256
 
 # ---------------------------------------------------------------------------
 # lane/apple-fast-linsvr (2026-10-03): FAST on Apple, the C == 1 objective.
-# FAST + Apple, two parts DEFAULT (IDENTICAL compiles main's code unchanged;
+# FAST + Apple, QN_FAST_SLIM DEFAULT, QN_FAST_LS_BATCH OPT-IN here (IDENTICAL compiles main's code unchanged;
 # docs/apple-fast/notes/linsvr.md). Quality identical in every arm.
 #
 #   QN_FAST_SLIM     memset g + Tikhonov + the gradient norm (+ the OWL-QN l1
@@ -486,7 +486,8 @@ comptime QNT_TPB = 256
 #                    of the next QNF_LS_K - 1 backtracking candidates
 #                    (`qn_linesearch.mojo ls_backtrack_batched`). A/B: M2
 #                    linsvr-lsbatch-taxi-x -38.8%.
-#                    `-D MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF` reverts.
+#                    `-D MOJOLEARN_LSVR_LINESEARCH_BATCH` turns it on here
+#                    (default on main since lane/apple-fast-m2b1-m3).
 #
 # Dropped (code on lane/apple-fast-linsvr @ c649076a4; docs/apple-fast/
 # EXPERIMENTS.md): FASTPATH_FIX (M3 istella +1.5%), FUSED_GRAD alone (M3 taxi

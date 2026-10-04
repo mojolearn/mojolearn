@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MultinomialNB / ComplementNB on a CSR count matrix (lane apple-fast-nb,
-pass 2, 2026-10-02). FAST + Apple ONLY, ON by default (-D
-MOJOLEARN_NB_TEXT_CSR_OFF reverts; M2 A/B nb-mnb-csr-text-x: multinomial-nb
+pass 2, 2026-10-02). FAST + Apple ONLY, OPT-IN on this branch (-D
+MOJOLEARN_NB_TEXT_CSR; default on main since lane/apple-fast-m2b1-m3; M2 A/B nb-mnb-csr-text-x: multinomial-nb
 text 221.7 -> 47.7 ms, accuracy .9831 logloss .5595 identical): the
-IDENTICAL binding, the other vendors and a FAST build with the _OFF define do
+IDENTICAL binding, the other vendors and a FAST build without the define do
 not export `x_prep_nb_csr_fit` / `x_prep_nb_csr_jll`, and the Python layer
 (`_expansion_prep._DiscreteNB`) keeps main's dense program.
 
@@ -45,8 +45,8 @@ from x_prep.common import FP, IP
 from x_prep.prims import add, mul
 from x_prep.device import x_prep_ctx
 
-#: The switch: FAST and Apple, unless -D MOJOLEARN_NB_TEXT_CSR_OFF (default ON
-#: since M2 A/B nb-mnb-csr-text-x, 221.7 -> 47.7 ms, same accuracy / logloss).
+#: The switch: FAST, Apple and -D MOJOLEARN_NB_TEXT_CSR (opt-in on this branch;
+#: M2 A/B nb-mnb-csr-text-x, 221.7 -> 47.7 ms, same accuracy / logloss).
 comptime NB_TEXT_CSR = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_NB_TEXT_CSR"]()
 )

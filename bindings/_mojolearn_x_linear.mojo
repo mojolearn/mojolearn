@@ -89,12 +89,12 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     _finite(x, Int(py=dims[2]), "X")
     _finite(y, Int(py=dims[3]), "y")
     with GILReleased(Python()):
-        # FAST on Apple DEFAULT (lane/apple-fast-isotonic-knn): the isotonic
+        # FAST on Apple, OPT-IN (lane/apple-fast-isotonic-knn): the isotonic
         # fit on the grid (x_linear/isotonic_fast.mojo) instead of the lead
         # thread of one block (x_linear/isotonic.mojo:129); the team fit when
         # it declines. M2 A/B ik-iso-pair-istella-b: PAR alone timed out,
-        # PAR + PAIRMERGE 165.5 ms, r2 .188. -D MOJOLEARN_ISOTONIC_FAST_PAR_OFF
-        # reverts.
+        # PAR + PAIRMERGE 165.5 ms, r2 .188. Only with -D
+        # MOJOLEARN_ISOTONIC_FAST_PAR (held: no main-relative M3 A/B yet).
         comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_ISOTONIC_FAST_PAR"]():
             if a == ALGO_ISOTONIC:
                 var ctx = _p2m_ctx()

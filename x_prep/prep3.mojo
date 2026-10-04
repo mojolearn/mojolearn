@@ -7,10 +7,10 @@ host binding and the other vendors compile main's code unchanged.
 
   PREP3_MAXABS  MaxAbsScaler.fit from the caller's own buffer in one upload
                 (x_prep/fastmaxabs.mojo; the entry `x_prep_maxabs_fit_direct`
-                exists in no other build). FAST + Apple DEFAULT since M2 A/B
+                exists in no other build). FAST + Apple, OPT-IN here (-D MOJOLEARN_PREP3_MAXABS); M2 A/B
                 prep3-maxabs-istella-x: maxabs-scaler istella 133.0 -> 99.1 ms,
                 the same max_abs_ / scale_ words.
-                `-D MOJOLEARN_PREP3_MAXABS_OFF` reverts to the program route.
+                Default on main since lane/apple-fast-m2b1-m3 (M3 A/B).
 """
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

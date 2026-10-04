@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IsotonicRegression, FAST on Apple: the whole fit on the grid
-(lane/apple-fast-isotonic-knn, 2026-10-02). FAST + Apple DEFAULT in the
+(lane/apple-fast-isotonic-knn, 2026-10-02). FAST + Apple, OPT-IN in the
 x_linear binding (bindings/_mojolearn_x_linear.mojo; `-D
-MOJOLEARN_ISOTONIC_FAST_PAR_OFF` reverts to the team fit); IDENTICAL never
-compiles this module. The parallel pairwise pool merges (PAIRMERGE, below)
-replace step 6's boundary rounds by default (`-D
-MOJOLEARN_ISOTONIC_FAST_PAIRMERGE_OFF` reverts to the boundary rounds). M2 A/B
+MOJOLEARN_ISOTONIC_FAST_PAR` turns it on, the team fit otherwise); IDENTICAL
+never compiles this module. The parallel pairwise pool merges (PAIRMERGE,
+below) replace step 6's boundary rounds only with `-D
+MOJOLEARN_ISOTONIC_FAST_PAIRMERGE` (the boundary rounds otherwise). M2 A/B
 ik-iso-pair-istella-b: PAR alone timed out, PAR + PAIRMERGE 165.5 ms, r2 .188.
+Held opt-in: no main-relative M3 A/B yet.
 
 Cause: x_linear/isotonic.mojo `isotonic_fit` runs on the lead thread of ONE
 block (isotonic.mojo:129 `if not t.lead(): return`): the merge sort of a

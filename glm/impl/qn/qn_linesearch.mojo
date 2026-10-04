@@ -150,7 +150,7 @@ def ls_backtrack(
     many candidates were evaluated (for the card)."""
     if step <= Float32(0.0):
         return LS_INVALID_STEP
-    # lane/apple-fast-linsvr: FAST on Apple under QN_FAST_LS_BATCH (default; -D MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF reverts),
+    # lane/apple-fast-linsvr: FAST on Apple under QN_FAST_LS_BATCH (opt-in here, -D MOJOLEARN_LSVR_LINESEARCH_BATCH),
     # Armijo only (the Wolfe arms need a gradient dot per candidate)
     comptime if QN_FAST_LS_BATCH:
         if param.linesearch == LBFGS_LS_BT_ARMIJO and f.ls_batch_applies():
