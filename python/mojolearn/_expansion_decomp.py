@@ -1221,6 +1221,10 @@ class _Kit:
         self.b.x_decomp_qr_r(A.addr, R.addr, [A.r, A.c])
         return R
 
+    def maxabs_on(self, bit):
+        """Whether `maxabs_dev` can run with flag `bit` on this binding."""
+        return bool(self._res() and self._idn_flags() & bit and self._opt_dev("x_decomp_dev_maxabs"))
+
     def maxabs_dev(self, A, bit):
         """max |A| as a float, reduced on the device (`x_decomp_dev_maxabs`,
         one word down) when A is a device matrix and the binding's
@@ -1229,8 +1233,7 @@ class _Kit:
         host read). A max is exact: the value the host max gives (a NaN
         anywhere gives NaN)."""
         n = A.r * A.c
-        if (n and A._d is not None and self._use(A) and self._idn_flags() & bit
-                and self._opt_dev("x_decomp_dev_maxabs")):
+        if n and A._d is not None and self._use(A) and self.maxabs_on(bit):
             out = self._dout(1, 1)
             self.b.x_decomp_dev_maxabs(self._did(A), out._d.id, [n])
             return float(out.s[0])
@@ -2194,10 +2197,11 @@ class FastICA(_Base):
             W1 = _sym_decorrelation(k, k.ew("sub", k.ew("scale", k.mm(gx, X1, tb=True), s=1.0 / p),
                                             k.ew("mul", W, gp)))
             dots = k.rowsum(k.ew("mul", W1, W))
-            dev = k.ew("abs", k.ew("adds", k.ew("abs", dots), s=-1.0))
-            lim = k.maxabs_dev(dev, 64)     # lane fix-d1-decomp: one word down (IDN_ICA_LIM_DEV)
+            lim = None
+            if k.maxabs_on(64):     # lane fix-d1-decomp: one word down (IDN_ICA_LIM_DEV)
+                lim = k.maxabs_dev(k.ew("abs", k.ew("adds", k.ew("abs", dots), s=-1.0)), 64)
             if lim is None:
-                lim = max(dev.s)
+                lim = max(k.ew("abs", k.ew("adds", k.ew("abs", dots), s=-1.0)).s)
             W = W1
             if lim < self.tol:
                 break
