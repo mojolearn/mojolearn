@@ -310,36 +310,61 @@ def minmax_transform_direct(
     offset: MutPointer[Float32, MutUntrackedOrigin], output: MutPointer[Float32, MutUntrackedOrigin],
     n: Int, d: Int, inverse: Int, clip: Int, lower: Float32, upper: Float32,
 ) raises -> Int:
-    """lane/apple-fast-prep (2026-10-02), `PREP_FAST_MINMAX` only (the binding
-    registers it only then): `minmax_transform_host_into` from the caller's
-    own buffers. The List route copies the n*d words into a List
-    (bindings `load`, hostptr read_f32), walks them on one thread
-    (`finite_values`) and copies them again in `upload_f32` before the
-    device copy, and the Python side walked them once more (`all_finite`):
-    four host passes over Istella's 880 MB around one kernel (board
-    minmax-scaler Istella 5.7x behind scikit-learn). Here X, scale and
-    offset go up from their addresses and the only scan is the device's,
-    of the output: 1 when the n*d words were written, 0 (nothing written)
-    when the output holds a nonfinite word, which the caller tells apart
-    (a finite input overflowed, else its NaN route). The caller holds scale
-    and offset finite and scale positive. Same kernel, same words."""
+    """`minmax_transform_host_into` from the caller's own buffers (lane
+    apple-fast-prep; lane cpu2-l3-prep: every tier and vendor, no longer FAST
+    Apple only). The List route copies the n*d words into a List, walks them
+    on one thread (`finite_values`) and copies them again before the device
+    copy, and the Python side walked X and the output (`all_finite`). Here X,
+    scale and offset go up from their addresses and the only scans are the
+    device's: 1 when the n*d words were written; when the output holds a
+    nonfinite word nothing is written and the device scans X too: 0 (X
+    finite: a Float32 overflow) or -1 (X holds a NaN or an infinity: the
+    caller's NaN route). The caller holds scale and offset finite and scale
+    positive. Same kernel, same words."""
     validate_dimensions(n,d,lower,upper)
     if inverse < 0 or inverse > 1 or clip < 0 or clip > 1:
         raise Error("MinMaxScaler: invalid transform parameters")
-    comptime if not PREP_FAST_MINMAX:
-        raise Error("MinMaxScaler: minmax_transform_direct is a FAST Apple entry")
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var dx = _upload_direct(ctx,x,n*d)
+    var ds = _upload_direct(ctx,scale,d)
+    var dm = _upload_direct(ctx,offset,d)
+    var dout = ctx.enqueue_create_buffer[DType.float32](n*d)
+    minmax_transform_into(ctx,dx,ds,dm,dout,n,d,inverse,clip,lower,upper)
+    var ok = 1
+    if device_first_nonfinite(ctx,dout,n*d) >= 0:
+        ok = -1 if device_first_nonfinite(ctx,dx,n*d) >= 0 else 0
     else:
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var dx = _upload_direct(ctx,x,n*d)
-        var ds = _upload_direct(ctx,scale,d)
-        var dm = _upload_direct(ctx,offset,d)
-        var dout = ctx.enqueue_create_buffer[DType.float32](n*d)
-        minmax_transform_into(ctx,dx,ds,dm,dout,n,d,inverse,clip,lower,upper)
-        var ok = 1
-        if device_first_nonfinite(ctx,dout,n*d) >= 0:
-            ok = 0
-        else:
-            ctx.enqueue_copy(dst_ptr=output,src_buf=dout)
-            ctx.synchronize()
-        _ = dout^; _ = dm^; _ = ds^; _ = dx^; _ = ctx^
-        return ok
+        ctx.enqueue_copy(dst_ptr=output,src_buf=dout)
+        ctx.synchronize()
+    _ = dout^; _ = dm^; _ = ds^; _ = dx^; _ = ctx^
+    return ok
+
+
+def standard_transform_direct(
+    x: MutPointer[Float32, MutUntrackedOrigin], mean: MutPointer[Float32, MutUntrackedOrigin],
+    scale: MutPointer[Float32, MutUntrackedOrigin], output: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int, d: Int, inverse: Int, with_mean: Int, with_std: Int,
+) raises -> Int:
+    """Lane cpu2-l3-prep: `standard_transform_host_into` from the caller's
+    own buffers, every tier and vendor (`minmax_transform_direct`'s form: no
+    host List copies, no host finiteness walks). 1 when the n*d words were
+    written; else nothing is written and 0 (X finite: a Float32 overflow) or
+    -1 (X holds a NaN or an infinity). The caller holds mean and scale
+    finite and scale positive. Same kernel, same words."""
+    validate_standard(n,d,with_mean,with_std)
+    if inverse < 0 or inverse > 1:
+        raise Error("StandardScaler: invalid transform parameters")
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var dx = _upload_direct(ctx,x,n*d)
+    var dm = _upload_direct(ctx,mean,d)
+    var ds = _upload_direct(ctx,scale,d)
+    var dout = ctx.enqueue_create_buffer[DType.float32](n*d)
+    standard_transform_into(ctx,dx,dm,ds,dout,n,d,inverse,with_mean,with_std)
+    var ok = 1
+    if device_first_nonfinite(ctx,dout,n*d) >= 0:
+        ok = -1 if device_first_nonfinite(ctx,dx,n*d) >= 0 else 0
+    else:
+        ctx.enqueue_copy(dst_ptr=output,src_buf=dout)
+        ctx.synchronize()
+    _ = dout^; _ = ds^; _ = dm^; _ = dx^; _ = ctx^
+    return ok
