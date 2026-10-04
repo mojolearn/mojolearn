@@ -90,6 +90,26 @@ def _mixed(b):
     return hasattr(b, "x_cnn_map2_m")
 
 
+# lane fam-neural (2026-10-04): the binding's `x_cnn_idn_flags` names the
+# lane's IDENTICAL switches this build has on (x_cnn/device.mojo "lane
+# fam-neural: `_m` forms"; each has a `-D ..._OFF` before arm and all are off
+# under MOJOLEARN_IDN_ALL_OFF, in FAST, and on the CPU twin, which has no
+# such entry). The glue takes a new path only when its bit is set; otherwise
+# every layer runs exactly the calls it ran before.
+_F_ADAPT, _F_GRAPH, _F_PAD, _F_GROUP, _F_LAYER_IO = 1, 2, 4, 8, 16
+_IDN_FLAGS = {}
+
+
+def _idn(b, bit):
+    """Whether mixed binding `b` has lane fam-neural switch `bit` on."""
+    hit = _IDN_FLAGS.get(id(b))
+    if hit is None or hit[0] is not b:
+        f = getattr(b, "x_cnn_idn_flags", None)
+        hit = (b, int(f()) if f is not None and _mixed(b) else 0)
+        _IDN_FLAGS[id(b)] = hit
+    return (hit[1] & bit) != 0
+
+
 class _Dev:
     """A layer's resident device arrays (`x_cnn_res_alloc` handles) kept
     between calls: one named array per intermediate, reallocated only when
@@ -380,8 +400,31 @@ class Conv2d(_Layer):
     _device_io = True
 
     def _res_ok(self, b, *ts):
-        """Whether the resident entries serve this layer on tensors `ts`."""
-        return self.groups == 1 and not self._explicit and _on_dev(b, *ts)
+        """Whether the resident entries serve this layer on tensors `ts`.
+        lane fam-neural: an explicit pad (IDN_PAD_M) and groups (IDN_GROUP_M)
+        have resident forms too when the binding has them on."""
+        if not _on_dev(b, *ts):
+            return False
+        if self.groups != 1 and not _idn(b, _F_GROUP):
+            return False
+        if self._explicit and not _idn(b, _F_PAD):
+            return False
+        return True
+
+    def _pad_t(self, b, x):
+        """The explicitly padded resident copy of resident `x` (lane
+        fam-neural: `x_cnn_pad2d_m`, the host entry's launch on the words
+        where they live), or `x` itself when the conv carries the pad."""
+        if not self._explicit:
+            return x
+        xp = DeviceTensor._new(b, self._padded_shape(x.shape))
+        b.x_cnn_pad2d_m([x.h, xp.h], 0b11, self._pad_params(x.shape) + [0])
+        return xp
+
+    def _group_prm(self, shape, channels, g):
+        """`x_cnn_chan_copy_m`'s block for group `g` of an (N, channels, H, W) tensor."""
+        per = channels // self.groups
+        return [shape[0], channels, shape[2] * shape[3], per, g * per]
 
     def _check_x(self, x):
         if x.ndim != 4:
@@ -397,10 +440,28 @@ class Conv2d(_Layer):
         if not self._res_ok(b, x):
             return DeviceTensor._wrap(b, Conv2d.forward(self, x.numpy()))
         out = DeviceTensor._new(b, self._out_shape(x.shape))
-        w = np.ascontiguousarray(self.weight_, np.float32)
-        bias = np.ascontiguousarray(self.bias_, np.float32)
-        b.x_cnn_conv2d_forward_m([x.h, w.ctypes.data, bias.ctypes.data, out.h], 0b1001, self._params(x.shape))
-        self._x = self._xp = x
+        xp = self._pad_t(b, x)
+        prm = self._params(xp.shape)
+        if self.groups == 1:
+            w = np.ascontiguousarray(self.weight_, np.float32)
+            bias = np.ascontiguousarray(self.bias_, np.float32)
+            b.x_cnn_conv2d_forward_m([xp.h, w.ctypes.data, bias.ctypes.data, out.h], 0b1001, prm)
+        else:
+            # lane fam-neural (IDN_GROUP_M): each group's channels sliced,
+            # convolved and placed on the device (the host path slices with
+            # NumPy and crosses the bus twice per group); the same conv
+            # entry on the same words per group
+            dev = _dev_of(self, b)
+            og = self.out_channels // self.groups
+            xg = dev.get("xg", xp.size // self.groups)
+            yg = dev.get("yg", out.size // self.groups)
+            for g in range(self.groups):  # glue: one entry per group
+                wg = np.ascontiguousarray(self.weight_[g * og:(g + 1) * og], np.float32)
+                bg = np.ascontiguousarray(self.bias_[g * og:(g + 1) * og], np.float32)
+                b.x_cnn_chan_copy_m([xp.h, xg], 0b11, self._group_prm(xp.shape, self.in_channels, g) + [0])
+                b.x_cnn_conv2d_forward_m([xg, wg.ctypes.data, bg.ctypes.data, yg], 0b1001, prm)
+                b.x_cnn_chan_copy_m([yg, out.h], 0b11, self._group_prm(out.shape, self.out_channels, g) + [1])
+        self._x, self._xp = x, xp
         return out
 
     def _backward_t(self, grad_out, x):
@@ -415,13 +476,43 @@ class Conv2d(_Layer):
         shape = self._out_shape(xs.shape)
         if grad_out.shape != shape:
             raise ValueError(f"mojolearn: grad_out shape {grad_out.shape}, expected {shape}")
-        dx = DeviceTensor._new(b, xs.shape)
-        w = np.ascontiguousarray(self.weight_, np.float32)
+        # lane fam-neural: the forward's padded tensor when this is its
+        # backward (x not passed), else the pad of the x given
+        held = self.__dict__.get("_xp")
+        if self._explicit and x is None and _is_t(held) and held is not xs and _on_dev(b, held):
+            xp = held
+        else:
+            xp = self._pad_t(b, xs)
+        prm = self._params(xp.shape)
+        dxp = DeviceTensor._new(b, xp.shape)
         dw = np.empty(self.weight_.shape, np.float32)
         db = np.empty(self.out_channels, np.float32)
-        b.x_cnn_conv2d_backward_m([xs.h, w.ctypes.data, grad_out.h, dx.h, dw.ctypes.data, db.ctypes.data],
-                                  0b001101, self._params(xs.shape))
-        self._x = self._xp = xs
+        if self.groups == 1:
+            w = np.ascontiguousarray(self.weight_, np.float32)
+            b.x_cnn_conv2d_backward_m([xp.h, w.ctypes.data, grad_out.h, dxp.h, dw.ctypes.data, db.ctypes.data],
+                                      0b001101, prm)
+        else:
+            dev = _dev_of(self, b)
+            og = self.out_channels // self.groups
+            xg = dev.get("xg", xp.size // self.groups)
+            gg = dev.get("gg", grad_out.size // self.groups)
+            dxg = dev.get("dxg", xp.size // self.groups)
+            for g in range(self.groups):  # glue: one entry per group
+                wg = np.ascontiguousarray(self.weight_[g * og:(g + 1) * og], np.float32)
+                dwg = np.empty(wg.shape, np.float32)
+                dbg = np.empty(og, np.float32)
+                b.x_cnn_chan_copy_m([xp.h, xg], 0b11, self._group_prm(xp.shape, self.in_channels, g) + [0])
+                b.x_cnn_chan_copy_m([grad_out.h, gg], 0b11, self._group_prm(shape, self.out_channels, g) + [0])
+                b.x_cnn_conv2d_backward_m([xg, wg.ctypes.data, gg, dxg, dwg.ctypes.data, dbg.ctypes.data],
+                                          0b001101, prm)
+                b.x_cnn_chan_copy_m([dxg, dxp.h], 0b11, self._group_prm(xp.shape, self.in_channels, g) + [1])
+                dw[g * og:(g + 1) * og] = dwg
+                db[g * og:(g + 1) * og] = dbg
+        dx = dxp
+        if self._explicit:
+            dx = DeviceTensor._new(b, xs.shape)
+            b.x_cnn_pad2d_m([dxp.h, dx.h], 0b11, self._pad_params(xs.shape) + [1])
+        self._x, self._xp = xs, xp
         self.grad_weight_ = dw
         self.grad_bias_ = db if self.bias else np.zeros_like(db)
         return dx
@@ -806,6 +897,15 @@ class _ReLU(_Layer):
 
     def forward(self, x):
         np = _np()
+        if _is_t(x):
+            # lane fam-neural (IDN_LAYER_DEV_IO): x and the output resident
+            # (`x_cnn_map2_m` kind 0, the host entry's element function)
+            b = self._binding()
+            if _on_dev(b, x) and _idn(b, _F_LAYER_IO) and x.size > 0:
+                out = DeviceTensor._new(b, x.shape)
+                b.x_cnn_map2_m([x.h, x.h, out.h], 0b111, [0, x.size])
+                self._x = x
+                return out
         x = _f32(x, "x")
         out = np.empty_like(x)
         self._binding().x_cnn_relu_forward(x.ctypes.data, out.ctypes.data, [x.size])
@@ -814,6 +914,13 @@ class _ReLU(_Layer):
 
     def backward(self, grad_out):
         np = _np()
+        if _is_t(self._x):
+            b = self._binding()
+            if _on_dev(b, grad_out, self._x) and grad_out.size == self._x.size:
+                dx = DeviceTensor._new(b, self._x.shape)
+                b.x_cnn_map2_m([self._x.h, grad_out.h, dx.h], 0b111, [1, dx.size])
+                return dx
+            self._x = self._x.numpy()
         g = _f32(grad_out, "grad_out")
         dx = np.empty_like(self._x)
         self._binding().x_cnn_relu_backward(self._x.ctypes.data, g.ctypes.data, dx.ctypes.data, [g.size])
@@ -1401,6 +1508,23 @@ class BatchNorm2d(_Layer):
 
     def forward(self, x):
         np = _np()
+        if _is_t(x):
+            # lane fam-neural (IDN_LAYER_DEV_IO): a resident x is read where
+            # it lives and y is a resident tensor (the entry BasicBlock
+            # already runs this way); the backward reads x in place
+            b = self._binding()
+            if _on_dev(b, x) and _idn(b, _F_LAYER_IO) and x.ndim >= 2 and x.size > 0:
+                shape = x.shape
+                n, c = shape[:2]
+                if c != self.num_features:
+                    raise ValueError(f"mojolearn: input has {c} channels, the layer {self.num_features}")
+                hw = x.size // (n * c)
+                y = DeviceTensor._new(b, shape)
+                self._forward_dev(b, x.h, y.h, n, c, hw, dev_y=True)
+                self._xdev, self._x, self._shape, self._xdev_dev = x.h, None, shape, _dev_of(self, b)
+                self._xt = x  # keeps the resident words alive for the backward
+                return y
+        self._xt = None
         x3, shape = self._nchw(x)
         n, c, hw = x3.shape
         b = self._binding()
@@ -1425,6 +1549,15 @@ class BatchNorm2d(_Layer):
 
     def backward(self, grad_out):
         np = _np()
+        if _is_t(grad_out):
+            b = self._binding()
+            xh0 = self.__dict__.get("_xdev")
+            own0 = self.__dict__.get("_xdev_dev")
+            if (_on_dev(b, grad_out) and _idn(b, _F_LAYER_IO) and xh0 is not None and own0 is not None
+                    and own0.b is b and grad_out.size == _size(self._x3shape)):
+                dx = DeviceTensor._new(b, self._shape)
+                self._backward_dev(b, xh0, grad_out.h, dx.h, dev_dx=True)
+                return dx
         g = _f32(grad_out, "grad_out")
         g3 = np_reshape(g if g.ndim != 2 else g[:, :, None], self._x3shape)
         n, c, hw = self._x3shape
@@ -1515,8 +1648,35 @@ class Dropout2d(_Layer):
         self.__dict__["_mask_host"] = v
         self.__dict__["_mask_dev"] = None
 
+    def _forward_t(self, b, x):
+        """lane fam-neural (IDN_LAYER_DEV_IO): x, y and the mask resident
+        (`x_cnn_dropout2d_m`, the host entry's launches); eval mode is the
+        same resident words."""
+        if not self.training:
+            self.mask_ = None
+            return x.reshape(x.shape)
+        if x.ndim not in (3, 4):
+            raise ValueError("mojolearn: Dropout2d.forward takes (N, C, H, W) or (C, H, W)")
+        s4 = ((1,) + x.shape) if x.ndim == 3 else x.shape
+        n, c = s4[:2]
+        hw = s4[2] * s4[3]
+        thresh = min(int(round(self.p * 2 ** 32)), 2 ** 32)
+        seed_lo = self.random_state & 0x7FFFFFFF
+        seed_hi = ((self.random_state >> 31) * 1000003 + self.calls_) & 0x7FFFFFFF
+        self.calls_ += 1
+        prm = [n, c, hw, seed_lo, seed_hi, thresh >> 16, thresh & 0xFFFF]
+        y = DeviceTensor._new(b, x.shape)
+        h = _dev_of(self, b).get("mask", x.size)
+        b.x_cnn_dropout2d_m([x.h, y.h, h], 0b111, prm, self.p)
+        self.__dict__.update(_mask_host=None, _mask_dev=h, _mask_shape=x.shape)
+        return y
+
     def forward(self, x):
         np = _np()
+        if _is_t(x):
+            bt = self._binding()
+            if _on_dev(bt, x) and _idn(bt, _F_LAYER_IO) and x.size > 0:
+                return self._forward_t(bt, x)
         x = _f32(x, "x")
         if not self.training:
             self.mask_ = None
@@ -1547,8 +1707,20 @@ class Dropout2d(_Layer):
 
     def backward(self, grad_out):
         np = _np()
-        g = _f32(grad_out, "grad_out")
         d = self.__dict__
+        if _is_t(grad_out):
+            bt = self._binding()
+            if _on_dev(bt, grad_out) and _idn(bt, _F_LAYER_IO):
+                ht = d.get("_mask_dev")
+                if d.get("_mask_host") is None and ht is None:
+                    return grad_out.reshape(grad_out.shape)
+                if ht is not None and d.get("_dev") is not None and self._dev.b is bt:
+                    if grad_out.size != _size(d["_mask_shape"]):
+                        raise ValueError("mojolearn: grad_out does not match the forward's input")
+                    dxt = DeviceTensor._new(bt, grad_out.shape)
+                    bt.x_cnn_map2_m([grad_out.h, ht, dxt.h], 0b111, [3, grad_out.size])
+                    return dxt
+        g = _f32(grad_out, "grad_out")
         if d.get("_mask_host") is None and d.get("_mask_dev") is None:
             return g.copy()
         dx = np.empty_like(g)
@@ -1587,37 +1759,104 @@ class _AdaptivePool(_Layer):
     def _divides(self, shape):
         return shape[2] % self.output_size[0] == 0 and shape[3] % self.output_size[1] == 0
 
+    # lane fam-neural (2026-10-04, IDN_ADAPT_M): on a binding with the switch
+    # on, the adaptive kernel runs through `x_cnn_adaptive_pool_m`: host
+    # arrays are copied once each way (the host entry staged every array
+    # through a List), a `DeviceTensor` in gives a resident tensor out, the
+    # max winners stay on the device for the backward, and `indices_`
+    # downloads them only when read (a dividing size delegates to
+    # MaxPool2d/AvgPool2d, whose winners were downloaded on every forward
+    # here). The same element functions on the same words: no bit moves.
+
+    @property
+    def indices_(self):
+        d = self.__dict__
+        if d.get("_idx_host") is not None:
+            return d["_idx_host"]
+        lay = d.get("_layer")
+        if lay is not None:
+            return lay.indices_ if self._max else None
+        if d.get("_idx_dev") is not None:
+            idx = _np().empty(d["_idx_shape"], _np().int32)
+            self._dev.download(d["_idx_dev"], idx)
+            d["_idx_host"] = idx
+        return d.get("_idx_host")
+
+    @indices_.setter
+    def indices_(self, v):
+        self.__dict__["_idx_host"] = v
+        self.__dict__["_idx_dev"] = None
+
     def forward(self, x):
         np = _np()
-        x = _f32(x, "x")
+        b = self._binding()
+        m = _idn(b, _F_ADAPT)
+        xt = _is_t(x)
+        if xt and not m:
+            x, xt = _f32(x, "x"), False
+        elif xt and not _on_dev(b, x):
+            return DeviceTensor._wrap(b, self.forward(x.numpy()))
+        elif not xt:
+            x = _f32(x, "x")
         if x.ndim != 4:
             raise ValueError(f"mojolearn: {type(self).__name__}.forward takes (N, C, H, W)")
-        self._xshape = x.shape
+        self._xshape = tuple(x.shape)
+        d = self.__dict__
+        d["_idx_host"] = d["_idx_dev"] = None
         if self._divides(x.shape):
             k = (x.shape[2] // self.output_size[0], x.shape[3] // self.output_size[1])
             self._layer = (MaxPool2d if self._max else AvgPool2d)(k, stride=k, numeric_mode=self.numeric_mode)
             out = self._layer.forward(x)
-            if self._max:
-                self.indices_ = self._layer.indices_
+            if self._max and not m:
+                d["_idx_host"] = self._layer.indices_
             return out
         self._layer = None
         n, c = x.shape[:2]
-        out = np.empty((n, c) + self.output_size, np.float32)
-        idx = np.zeros((n, c) + self.output_size, np.int32)
-        self._binding().x_cnn_adaptive_pool(x.ctypes.data, out.ctypes.data, idx.ctypes.data,
-                                            [*x.shape, *self.output_size, 2 if self._max else 0])
-        self.indices_ = idx if self._max else None
+        oshape = (n, c) + self.output_size
+        prm = [*x.shape, *self.output_size, 2 if self._max else 0]
+        if m:
+            out = DeviceTensor._new(b, oshape) if xt else np.empty(oshape, np.float32)
+            h = _dev_of(self, b).get("idx", _size(oshape)) if self._max else 0
+            b.x_cnn_adaptive_pool_m([x.h if xt else x.ctypes.data, out.h if xt else out.ctypes.data, h],
+                                    (0b011 if xt else 0) | (0b100 if self._max else 0), prm)
+            if self._max:
+                d.update(_idx_dev=h, _idx_shape=oshape)
+            return out
+        out = np.empty(oshape, np.float32)
+        idx = np.zeros(oshape, np.int32)
+        b.x_cnn_adaptive_pool(x.ctypes.data, out.ctypes.data, idx.ctypes.data, prm)
+        d["_idx_host"] = idx if self._max else None
         return out
 
     def backward(self, grad_out):
         np = _np()
         if self._layer is not None:
             return self._layer.backward(grad_out)
-        g = _f32(grad_out, "grad_out")
+        b = self._binding()
+        m = _idn(b, _F_ADAPT)
+        gt = _is_t(grad_out)
+        if gt and m and not _on_dev(b, grad_out):
+            return DeviceTensor._wrap(b, self.backward(grad_out.numpy()))
+        gt = gt and m
+        g = grad_out if gt else _f32(grad_out, "grad_out")
+        prm = [*self._xshape, *self.output_size, 3 if self._max else 1]
+        if m:
+            if g.size != self._xshape[0] * self._xshape[1] * self.output_size[0] * self.output_size[1]:
+                raise ValueError("mojolearn: grad_out does not match the forward's output")
+            d = self.__dict__
+            h, hbit = 0, 0
+            if self._max:
+                h, hbit = d.get("_idx_dev"), 0b100
+                if h is None or d.get("_dev") is None or self._dev.b is not b:
+                    idx = np.ascontiguousarray(self.indices_, np.int32)
+                    h, hbit = idx.ctypes.data, 0
+            dx = DeviceTensor._new(b, self._xshape) if gt else np.empty(self._xshape, np.float32)
+            b.x_cnn_adaptive_pool_m([g.h if gt else g.ctypes.data, dx.h if gt else dx.ctypes.data, h],
+                                    (0b011 if gt else 0) | hbit, prm)
+            return dx
         dx = np.empty(self._xshape, np.float32)
         idx = self.indices_ if self._max else np.zeros(g.shape, np.int32)
-        self._binding().x_cnn_adaptive_pool(g.ctypes.data, dx.ctypes.data, idx.ctypes.data,
-                                            [*self._xshape, *self.output_size, 3 if self._max else 1])
+        b.x_cnn_adaptive_pool(g.ctypes.data, dx.ctypes.data, idx.ctypes.data, prm)
         return dx
 
     def transform(self, X):
@@ -2020,8 +2259,13 @@ class GCNConv(_Layer):
         wf = np.ascontiguousarray(w[g.order_f])
         if self.normalize:
             vals = np.empty(g.nnz, np.float32)
-            self._binding().x_cnn_gcn_norm(wf.ctypes.data, vals.ctypes.data, g.csr_f.ctypes.data,
-                                           [n, 1, g.nnz, 0])
+            bn = self._binding()
+            if _idn(bn, _F_GRAPH):
+                # lane fam-neural (IDN_GRAPH_M): the same two launches with
+                # one copy each way (no List staging of w, csr and vals)
+                bn.x_cnn_gcn_norm_m([wf.ctypes.data, vals.ctypes.data, g.csr_f.ctypes.data], 0, [n, 1, g.nnz, 0])
+            else:
+                bn.x_cnn_gcn_norm(wf.ctypes.data, vals.ctypes.data, g.csr_f.ctypes.data, [n, 1, g.nnz, 0])
         else:
             vals = wf
         return g, vals
@@ -2188,8 +2432,14 @@ class SAGEConv(_Layer):
     _device_io = True
 
     def _res_form(self, b):
-        return (_mixed(b) and not _LEGACY_STEP and not self.project and not self.normalize
-                and self.aggr in ("mean", "sum", "add"))
+        if not _mixed(b) or _LEGACY_STEP or self.project:
+            return False
+        # lane fam-neural (IDN_GRAPH_M): the max aggregation and the L2
+        # normalization have resident forms too (`x_cnn_graph_op_m`, the
+        # host entry's element functions on the words where they live)
+        if _idn(b, _F_GRAPH):
+            return True
+        return not self.normalize and self.aggr in ("mean", "sum", "add")
 
     def forward(self, x, edge_index):
         np = _np()
@@ -2261,21 +2511,45 @@ class SAGEConv(_Layer):
         xt = _is_t(x)
         xh = x.h if xt else dev.upload("x", x)
         aggh = dev.get("agg", n * D)
-        b.x_cnn_spmm_m([dev.h["vals_f"][0], xh, dev.h["csr_f"][0], aggh], 0b1111, [n, D, g.nnz, 1 if mean else 0])
+        if self.aggr == "max":
+            # lane fam-neural: the max and its tie counts stay resident for the backward
+            auxh = dev.get("maxaux", 2 * n * D)
+            b.x_cnn_graph_op_m([xh, xh, auxh, aggh, dev.h["csr_f"][0]], 0b11111, [n, D, g.nnz, 0])
+        else:
+            b.x_cnn_spmm_m([dev.h["vals_f"][0], xh, dev.h["csr_f"][0], aggh], 0b1111,
+                           [n, D, g.nnz, 1 if mean else 0])
         lin = self.lin_l
+        norm = self.normalize
         out = DeviceTensor._new(b, (n, F)) if xt else np.empty((n, F), np.float32)
-        olh = out.h if xt and not self.root_weight else dev.get("ol", n * F)
+        # with the normalization the sum lands in a resident `pre` first
+        preh = dev.get("pre", n * F) if norm else None
+        if norm and not self.root_weight:
+            olh = preh
+        else:
+            olh = out.h if xt and not self.root_weight else dev.get("ol", n * F)
         b.x_cnn_linear_forward_m([aggh, lin.weight_.ctypes.data, lin.bias_.ctypes.data, olh], 0b1001, [n, D, F])
         if self.root_weight:
             Wr = _f32(self.weight_r_, "b")
             rh = dev.get("r", n * F)
             b.x_cnn_gemm_m([xh, Wr.ctypes.data, rh], 0b101, [n, F, D, 1])
-            if xt:
+            if norm:
+                b.x_cnn_map2_m([olh, rh, preh], 0b111, [2, n * F])
+            elif xt:
                 b.x_cnn_map2_m([olh, rh, out.h], 0b111, [2, n * F])
             else:
                 b.x_cnn_map2_m([olh, rh, out.ctypes.data], 0b011, [2, n * F])
-        elif not xt:
+        elif not xt and not norm:
             dev.download(olh, out)
+        self._ydev = None
+        if norm:
+            # torch.nn.functional.normalize(out, p=2, dim=-1): y and the
+            # denominators stay resident for the backward
+            denh = dev.get("den", n)
+            yh = out.h if xt else dev.get("y", n * F)
+            b.x_cnn_graph_op_m([preh, preh, denh, yh, 0], 0b01111, [n, F, 0, 2])
+            if not xt:
+                dev.download(yh, out)
+            self._ydev = (yh, denh, out if xt else None)
         self._x, self._g, self._xs, self._xdev = x, g, x, (dev, xh, aggh)
         return out
 
@@ -2288,6 +2562,12 @@ class SAGEConv(_Layer):
             raise ValueError(f"mojolearn: grad_out shape {G.shape}, expected {(n, F)}")
         gt = _is_t(G)
         Gh = G.h if gt else dev.upload("G", G)
+        if self.normalize:
+            # lane fam-neural: the normalization's backward on the resident y, G and denominators
+            yh, denh, _ = self._ydev
+            g2h = dev.get("G2", n * F)
+            b.x_cnn_graph_op_m([yh, Gh, denh, g2h, 0], 0b01111, [n, F, 0, 3])
+            Gh = g2h
         lin = self.lin_l
         dagg = dev.get("dagg", n * D)
         dw = np.empty_like(lin.weight_)
@@ -2306,7 +2586,11 @@ class SAGEConv(_Layer):
             dsc = dev.get("dsc", n * D)
             b.x_cnn_spmm_m([dev.h["vals_f"][0], dagg, dev.h["csr_f"][0], dsc], 0b1111, [n, D, g.nnz, 3])
             dagg = dsc
-        b.x_cnn_spmm_m([dev.h["vals_t"][0], dagg, dev.h["csr_t"][0], dxs], 0b1111, [n, D, g.nnz, 0])
+        if self.aggr == "max":
+            # lane fam-neural: the max backward over the transposed view (resident x, dagg, aux)
+            b.x_cnn_graph_op_m([xh, dagg, dev.h["maxaux"][0], dxs, dev.h["csr_t"][0]], 0b11111, [n, D, g.nnz, 1])
+        else:
+            b.x_cnn_spmm_m([dev.h["vals_t"][0], dagg, dev.h["csr_t"][0], dxs], 0b1111, [n, D, g.nnz, 0])
         dx = dxt if gt else np.empty((n, D), np.float32)
         if self.root_weight:
             gwr = np.empty((F, D), np.float32)

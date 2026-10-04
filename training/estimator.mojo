@@ -1156,6 +1156,22 @@ comptime _CE_STAGE_POOL = "MojoDownloadStagesTrainingIdentical" if GLOBAL_NUMERI
 comptime _CE_DEV_POOL = "MojoDevPoolCeIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDevPoolCeFast"
 
 
+#: lane fam-neural (2026-10-04): THE LOGITS GO UP THROUGH THE PIPELINED
+#: PINNED STAGE. The host entry copied N * V logits (256 MB at the board's
+#: 8,192 x 8,192 cell) from the caller's pageable memory in one raw copy;
+#: the gradient already comes down through pooled pinned stages. IDENTICAL
+#: now sends the logits through the optimizer's two-half pinned stage
+#: (`opt_pipe_upload`: the copy into one half overlaps the DMA out of the
+#: other) wherever that pipeline is on (`opt_pipe_on`: NVIDIA and AMD by
+#: default, MOJOLEARN_OPT_PIPE forces either) and the tensor is at least one
+#: chunk. The same bytes into the same device buffer: no bit moves.
+#: `-D MOJOLEARN_IDN_CE_PIPE_UP_OFF` is the before arm (the raw copy).
+comptime IDN_CE_PIPE_UP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_IDN_CE_PIPE_UP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+
+
 def identical_ce_loss_host(
     ctx: DeviceContext,
     loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -1253,7 +1269,17 @@ def identical_ce_loss_host(
     # ---- Transport in.
     var logits = pool_take[_CE_DEV_POOL](ctx, cells)
     var targets = ctx.enqueue_create_buffer[DType.int32](n_rows)
-    ctx.enqueue_copy(dst_buf=logits, src_ptr=logits_ptr)
+    var ce_piped = False
+    comptime if IDN_CE_PIPE_UP:
+        ce_piped = opt_pipe_on() and cells >= opt_pipe_floats()
+    if ce_piped:
+        var ce_segs = PipeSegs()
+        var ce_spare = ctx.enqueue_create_buffer[DType.float32](1)
+        ce_segs.add(0, 0, Int(logits_ptr), cells)
+        opt_pipe_upload(ctx, logits, ce_spare, ce_segs)
+        _ = ce_spare^
+    else:
+        ctx.enqueue_copy(dst_buf=logits, src_ptr=logits_ptr)
     ctx.enqueue_copy(dst_buf=targets, src_ptr=targets_ptr)
     ctx.synchronize()
 

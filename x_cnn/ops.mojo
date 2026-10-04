@@ -32,6 +32,24 @@ comptime IP = MutPointer[Int32, MutAnyOrigin]
 comptime ElemFn = def(Int, FP, FP, FP, FP, IP, IP) thin -> None
 
 
+# lane fam-neural (2026-10-04): three backward gathers visited every window
+# (or every padded position) of the plane per pixel and kept the few that
+# read it. Each now visits only the candidates, in the same ascending order,
+# with the same membership test inside: the same terms folded in the same
+# order from +0.0, so no bit moves on any column (this file is every
+# column's element functions). IDENTICAL only; each has its own before arm.
+#: AvgPool2d backward, windows that tile the input (kernel == stride, no
+#: padding; global average pooling is this): the pixel's ONE window instead
+#: of a KH x KW scan. `-D MOJOLEARN_IDN_AVGPOOL_BWD_TILE_OFF` is the before arm.
+comptime IDN_AVGPOOL_BWD_TILE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_AVGPOOL_BWD_TILE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+#: pad backward: the pad margins and the pixel's own interior position
+#: instead of the whole Hp x Wp plane. `-D MOJOLEARN_IDN_PAD_BWD_BOUNDED_OFF`.
+comptime IDN_PAD_BWD_BOUNDED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_PAD_BWD_BOUNDED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+#: adaptive pool backward (avg and max): the output cells whose window can
+#: hold the pixel instead of all OH x OW. `-D MOJOLEARN_IDN_ADAPT_BWD_BOUNDED_OFF`.
+comptime IDN_ADAPT_BWD_BOUNDED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_ADAPT_BWD_BOUNDED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+
+
 # ---------------------------------------------------------------- conv params
 # The Int32 block of a convolution (conv_params fills 13 and 14):
 comptime CP_N = 0
@@ -501,6 +519,19 @@ def avgpool_bwd_at(i: Int, dout: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
     var h = t % H
     var nc = t // H
     var acc = Float32(0)
+    comptime if IDN_AVGPOOL_BWD_TILE:
+        # lane fam-neural: tiling windows hold each pixel exactly once, in
+        # window (h // KH, w // KW) (the loop below reaches it at kh = h % KH,
+        # kw = w % KW and no other), so this is its one step on the same words.
+        if KH == SH and KW == SW and PH == 0 and PW == 0:
+            var oh1 = _ud(h, KH)
+            var ow1 = _ud(w, KW)
+            if oh1 < OH and ow1 < OW:
+                var o1 = (nc * OH + oh1) * OW + ow1
+                var g1 = ftz(identical_div(ftz(dout.unsafe_load(o1)), Float32(_avg_divisor(oh1, ow1, p))))
+                acc = ftz(acc + g1)
+            dx.unsafe_store(i, acc)
+            return
     for a in range(KH):
         var kh = KH - 1 - a if _g(p, PP_REV) != 0 else a
         var th = h + PH - kh
@@ -1174,6 +1205,27 @@ def pad_bwd_at(i: Int, g: FP, f1: FP, dx: FP, f3: FP, q: IP, p: IP):
     var h = t % H
     var nc = t // H
     var acc = Float32(0)
+    comptime if IDN_PAD_BWD_BOUNDED:
+        # lane fam-neural: an interior padded position hp in [top, top + H)
+        # reads source hp - top, so only hp = h + top can read row h; every
+        # other reader is in a margin. Three ascending, disjoint ranges per
+        # axis (top margin, that one position, bottom margin) with the same
+        # test inside: the terms of the full scan in its order.
+        for sh in range(3):
+            var h0 = 0 if sh == 0 else (h + top if sh == 1 else top + H)
+            var h1 = top if sh == 0 else (h + top + 1 if sh == 1 else Hp)
+            for hp in range(h0, h1):
+                if _pad_src(hp, top, H, mode) != h:
+                    continue
+                for sw in range(3):
+                    var w0 = 0 if sw == 0 else (w + left if sw == 1 else left + W)
+                    var w1 = left if sw == 0 else (w + left + 1 if sw == 1 else Wp)
+                    for wp in range(w0, w1):
+                        if _pad_src(wp, left, W, mode) != w:
+                            continue
+                        acc = ftz(acc + ftz(g.unsafe_load((nc * Hp + hp) * Wp + wp)))
+        dx.unsafe_store(i, acc)
+        return
     for hp in range(Hp):
         if _pad_src(hp, top, H, mode) != h:
             continue
@@ -1182,6 +1234,36 @@ def pad_bwd_at(i: Int, g: FP, f1: FP, dx: FP, f3: FP, q: IP, p: IP):
                 continue
             acc = ftz(acc + ftz(g.unsafe_load((nc * Hp + hp) * Wp + wp)))
     dx.unsafe_store(i, acc)
+
+
+
+# ---------------------------------------------------------------- channel groups
+# lane fam-neural (2026-10-04): a grouped convolution's channel slice and its
+# inverse as device word copies (the host path slices with NumPy and uploads
+# each group). p = [N, C, HW, cg, c0]: the group is channels [c0, c0 + cg) of
+# an (N, C, HW) tensor; the part is (N, cg, HW). Words are copied, never
+# converted, so no float value changes.
+
+
+@always_inline
+def chan_slice_at(i: Int, src: FP, f1: FP, dst: FP, f3: FP, q: IP, p: IP):
+    """part[i] = full[n, c0 + c, s] for i = (n * cg + c) * HW + s."""
+    var C = _g(p, 1); var HW = _g(p, 2); var cg = _g(p, 3); var c0 = _g(p, 4)
+    var per = cg * HW
+    var n = _ud(i, per)
+    var rem = i - n * per
+    dst.unsafe_store(i, src.unsafe_load((n * C + c0) * HW + rem))
+
+
+@always_inline
+def chan_place_at(i: Int, src: FP, f1: FP, dst: FP, f3: FP, q: IP, p: IP):
+    """full[n, c0 + c, s] = part[i]: each part word has its own full word,
+    so the launch's writes never collide."""
+    var C = _g(p, 1); var HW = _g(p, 2); var cg = _g(p, 3); var c0 = _g(p, 4)
+    var per = cg * HW
+    var n = _ud(i, per)
+    var rem = i - n * per
+    dst.unsafe_store((n * C + c0) * HW + rem, src.unsafe_load(i))
 
 
 
@@ -1199,6 +1281,24 @@ def _astart(a: Int, osize: Int, isize: Int) -> Int:
 @always_inline
 def _aend(a: Int, osize: Int, isize: Int) -> Int:
     return ((a + 1) * isize + osize - 1) // osize
+
+
+@always_inline
+def _acell_lo(a: Int, osize: Int, isize: Int) -> Int:
+    """The first output cell whose window can hold input index `a`:
+    _aend(o) > a  <=>  (o + 1) * isize > a * osize  <=>  o >= floor(a * osize / isize)."""
+    comptime if IDN_ADAPT_BWD_BOUNDED:
+        return (a * osize) // isize
+    return 0
+
+
+@always_inline
+def _acell_hi(a: Int, osize: Int, isize: Int) -> Int:
+    """One past the last such cell: _astart(o) <= a  <=>  o * isize <
+    (a + 1) * osize  <=>  o < ceil((a + 1) * osize / isize) (at most osize)."""
+    comptime if IDN_ADAPT_BWD_BOUNDED:
+        return ((a + 1) * osize + isize - 1) // isize
+    return osize
 
 
 @always_inline
@@ -1228,11 +1328,13 @@ def adapt_avg_bwd_at(i: Int, g: FP, f1: FP, dx: FP, f3: FP, q: IP, p: IP):
     var h = t % H
     var nc = t // H
     var acc = Float32(0)
-    for oh in range(OH):
+    # lane fam-neural (IDN_ADAPT_BWD_BOUNDED): only the cells that can hold
+    # the pixel, ascending, the membership test kept
+    for oh in range(_acell_lo(h, OH, H), _acell_hi(h, OH, H)):
         var hs = _astart(oh, OH, H); var he = _aend(oh, OH, H)
         if h < hs or h >= he:
             continue
-        for ow in range(OW):
+        for ow in range(_acell_lo(w, OW, W), _acell_hi(w, OW, W)):
             var ws = _astart(ow, OW, W); var we = _aend(ow, OW, W)
             if w < ws or w >= we:
                 continue
@@ -1270,10 +1372,10 @@ def adapt_max_bwd_at(i: Int, g: FP, f1: FP, dx: FP, f3: FP, idx: IP, p: IP):
     var nc = t // H
     var me = Int32(h * W + w)
     var acc = Float32(0)
-    for oh in range(OH):
+    for oh in range(_acell_lo(h, OH, H), _acell_hi(h, OH, H)):
         if h < _astart(oh, OH, H) or h >= _aend(oh, OH, H):
             continue
-        for ow in range(OW):
+        for ow in range(_acell_lo(w, OW, W), _acell_hi(w, OW, W)):
             if w < _astart(ow, OW, W) or w >= _aend(ow, OW, W):
                 continue
             var o = (nc * OH + oh) * OW + ow
