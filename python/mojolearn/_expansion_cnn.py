@@ -221,6 +221,49 @@ def _size(shape):
     return n
 
 
+# lane fam2-neural (2026-10-04): PINNED LAYER WEIGHTS. A layer given a
+# `DeviceTensor` still uploaded its `weight_` (and `bias_`) on every forward
+# and every backward. `layer.pin_weights()` uploads them once into the
+# layer's resident arrays; the `_m` entries then read them there (their
+# residency bit set) until `unpin_weights()`. The host arrays stay the
+# layer's weights: after changing them (in place, or `set_weights`) call
+# `pin_weights()` again. The same entry on the same words: no bit moves.
+# `x_cnn_idn_flags` bit 5 (`-D MOJOLEARN_IDN_PIN_WEIGHTS_OFF`); with it off,
+# on FAST or on the CPU twin `pin_weights()` does nothing.
+_F_PIN = 32
+
+
+def _pin_weights(layer, names):
+    """Upload `layer`'s float32 arrays `names` once; returns the layer."""
+    np = _np()
+    b = layer._binding()
+    layer._pins = None
+    if not _idn(b, _F_PIN):
+        return layer
+    dev = _dev_of(layer, b)
+    handles = {}
+    for name in names:  # glue: one upload per named weight array
+        arr = getattr(layer, name, None)
+        if arr is None:
+            continue
+        a = np.ascontiguousarray(arr, np.float32)
+        handles[name] = (dev.upload("pin_" + name, a), int(a.size))
+    layer._pins = (b, handles)
+    return layer
+
+
+def _pinned(layer, b, name, size):
+    """The resident handle of `layer`'s pinned array `name` (holding `size`
+    words) on binding `b`, or None when it is not pinned there."""
+    p = layer.__dict__.get("_pins")
+    if not p or p[0] is not b:
+        return None
+    hit = p[1].get(name)
+    if hit is None or hit[1] != int(size):
+        return None
+    return hit[0]
+
+
 class DeviceTensor:
     """A float32 tensor resident on the device (an `x_cnn_res_alloc` array
     and its shape). Make one with `to_device(array)`; read it back with
@@ -392,6 +435,18 @@ class Conv2d(_Layer):
             self.bias_ = _f32(bias, "bias").reshape(self.out_channels).copy()
         elif not self.bias:
             self.bias_ = np.zeros(self.out_channels, np.float32)
+        if self.__dict__.get("_pins"):
+            self.pin_weights()  # the pinned copy follows the new weights
+        return self
+
+    def pin_weights(self):
+        """Keep `weight_` and `bias_` on the device for `DeviceTensor`
+        forwards and backwards (lane fam2-neural); call again after changing
+        them. Returns self."""
+        return _pin_weights(self, ("weight_", "bias_"))
+
+    def unpin_weights(self):
+        self._pins = None
         return self
 
     def _params(self, shape):
@@ -464,9 +519,15 @@ class Conv2d(_Layer):
         xp = self._pad_t(b, x)
         prm = self._params(xp.shape)
         if self.groups == 1:
-            w = np.ascontiguousarray(self.weight_, np.float32)
-            bias = np.ascontiguousarray(self.bias_, np.float32)
-            b.x_cnn_conv2d_forward_m([xp.h, w.ctypes.data, bias.ctypes.data, out.h], 0b1001, prm)
+            pw = _pinned(self, b, "weight_", self.weight_.size)
+            pb = _pinned(self, b, "bias_", self.bias_.size)
+            if pw is not None and pb is not None:
+                # lane fam2-neural: the pinned weights are read where they live
+                b.x_cnn_conv2d_forward_m([xp.h, pw, pb, out.h], 0b1111, prm)
+            else:
+                w = np.ascontiguousarray(self.weight_, np.float32)
+                bias = np.ascontiguousarray(self.bias_, np.float32)
+                b.x_cnn_conv2d_forward_m([xp.h, w.ctypes.data, bias.ctypes.data, out.h], 0b1001, prm)
         else:
             # lane fam-neural (IDN_GROUP_M): each group's channels sliced,
             # convolved and placed on the device (the host path slices with
@@ -509,9 +570,14 @@ class Conv2d(_Layer):
         dw = np.empty(self.weight_.shape, np.float32)
         db = np.empty(self.out_channels, np.float32)
         if self.groups == 1:
-            w = np.ascontiguousarray(self.weight_, np.float32)
-            b.x_cnn_conv2d_backward_m([xp.h, w.ctypes.data, grad_out.h, dxp.h, dw.ctypes.data, db.ctypes.data],
-                                      0b001101, prm)
+            pw = _pinned(self, b, "weight_", self.weight_.size)
+            if pw is not None:
+                b.x_cnn_conv2d_backward_m([xp.h, pw, grad_out.h, dxp.h, dw.ctypes.data, db.ctypes.data],
+                                          0b001111, prm)
+            else:
+                w = np.ascontiguousarray(self.weight_, np.float32)
+                b.x_cnn_conv2d_backward_m([xp.h, w.ctypes.data, grad_out.h, dxp.h, dw.ctypes.data, db.ctypes.data],
+                                          0b001101, prm)
         else:
             dev = _dev_of(self, b)
             og = self.out_channels // self.groups

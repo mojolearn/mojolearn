@@ -1870,6 +1870,10 @@ comptime IDN_GROUP_M = _FAM_IDN and not is_defined["MOJOLEARN_IDN_GROUP_M_OFF"](
 #: bit 4: BatchNorm, Dropout2d and ReLU take and return resident tensors
 #: (glue only; the entries are the existing `_m` ones). `-D MOJOLEARN_IDN_LAYER_DEV_IO_OFF`.
 comptime IDN_LAYER_DEV_IO = _FAM_IDN and not is_defined["MOJOLEARN_IDN_LAYER_DEV_IO_OFF"]()
+#: bit 5 (lane fam2-neural): `layer.pin_weights()` keeps a layer's weights
+#: resident and the `_m` entries read them there (glue only; the entries are
+#: the existing ones). `-D MOJOLEARN_IDN_PIN_WEIGHTS_OFF`.
+comptime IDN_PIN_WEIGHTS = _FAM_IDN and not is_defined["MOJOLEARN_IDN_PIN_WEIGHTS_OFF"]()
 
 
 def idn_flags() -> Int:
@@ -1885,6 +1889,8 @@ def idn_flags() -> Int:
         f |= 8
     comptime if IDN_LAYER_DEV_IO:
         f |= 16
+    comptime if IDN_PIN_WEIGHTS:
+        f |= 32
     return f
 
 
