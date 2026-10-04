@@ -562,10 +562,10 @@ def fast_mcd_dev(
 ) raises:
     """`fast_mcd` (x_decomp/mcd.mojo) with X resident: the same plan, the
     same C-steps, the same draws and orders."""
-    # FAST on Apple by default (-D MOJOLEARN_MCD_DEVICE_CSTEPS_OFF reverts):
-    # every candidate's C-steps together on the device (x_decomp/mcd_fast.mojo,
-    # lane/apple-fast-robust; M3 A/B min-cov-det taxi 79,925 -> 215 ms,
-    # M2 robust-ee-taxi-x 64,578 -> 267.5 ms)
+    # FAST on Apple, OPT-IN (-D MOJOLEARN_MCD_DEVICE_CSTEPS; DROPPED-quality
+    # 2026-10-03, see x_decomp/mcd_fast.mojo's docstring): every candidate's
+    # C-steps together on the device (lane/apple-fast-robust; M3 A/B min-cov-det
+    # taxi 79,925 -> 215 ms, M2 robust-ee-taxi-x 64,578 -> 267.5 ms)
     comptime if MCD_DEVICE_CSTEPS:
         if fast_mcd_fast(X, p, loc_out, cov_out, sup_out, dist_out):
             return
