@@ -865,10 +865,12 @@ def _ptx_identical_admission(pkg, admission_raw, source, manifest_hash):
             ptx_admission.local_admission_dir(),
             ptx_admission.local_admission_key(source, manifest_hash, configuration, reference))
         local_raw = open(path, "rb").read()
-        ptx_admission.validate_local_admission(json.loads(local_raw), source_commit=source,
+        local = ptx_admission.validate_local_admission(json.loads(local_raw), source_commit=source,
             manifest_sha256=manifest_hash, configuration=configuration, reference=reference)
+        coverage = local["coverage"]
         return "local", configuration, dict(admission_sha256=hashlib.sha256(local_raw).hexdigest(),
-                                            admission_path=path)
+            admission_path=path, coverage=dict(lanes_compared=coverage["lanes_compared"],
+                parts_compared=coverage["parts_compared"], exclusions=len(coverage["exclusions"])))
     except FileNotFoundError:
         detail["local"] = "no local qualification exists for this exact wheel, device and driver"
     except failures as exc:

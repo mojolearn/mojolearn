@@ -204,6 +204,8 @@ class Install(unittest.TestCase):
         return [dict(profile=profile, verdict="VERIFIED",
                      counts=dict(IDENTICAL=12, DIVERGENT=0, REFUSED=0, OWED=0, **{"N/A": 3}),
                      lanes_in_scope=3, lanes_verified=2, lanes_not_applicable=["par-synthetic"],
+                     lanes_with_exclusions=[], lanes_excluded=[], lanes_compared=["ols", "pca"],
+                     parts_compared=12, exclusions=[],
                      fixtures=list(FIXTURES), parts_identical=["infer", "train"], cells=15,
                      cross_check=dict(ran=True, passed=True, compared=4, agree=4), report_sha256="9" * 64)
                 for profile in self.A.QUALIFY_PROFILES]
@@ -391,8 +393,8 @@ class IdenticalAdmission(Install):
                 ("another driver inside", lambda d: d["configuration"].update(driver_version="1.2"), "another device or driver"),
                 ("unqualified", lambda d: d.update(qualified=False), "not a qualified local admission"),
                 ("release schema", lambda d: d.update(schema=self.A.SCHEMA), "not a qualified local admission"),
-                ("divergent summary", lambda d: d["comparison"]["profiles"][0]["counts"].update(DIVERGENT=1), "not complete and identical"),
-                ("owed summary", lambda d: d["comparison"]["profiles"][1]["counts"].update(OWED=2), "not complete and identical"),
+                ("divergent summary", lambda d: d["comparison"]["profiles"][0]["counts"].update(DIVERGENT=1), "not identical outside its pinned exclusions"),
+                ("owed summary", lambda d: d["comparison"]["profiles"][1]["counts"].update(OWED=2), "not identical outside its pinned exclusions"),
                 ("one profile", lambda d: d["comparison"]["profiles"].pop(), "every verification profile"),
                 ("lanes unaccounted", lambda d: d["comparison"]["profiles"][0].update(lanes_in_scope=9), "every lane in scope"),
                 ("another source", lambda d: d.update(source_commit="c" * 40), "another source commit"),
@@ -811,6 +813,246 @@ class QualifyCommand(Install):
             with patch.object(main._verify_all, "cmd_verify_all", return_value=0):
                 plain.func(plain)
             command.assert_not_called()
+
+
+def pinned_report(case, profile):
+    """A finished report on which every pinned exclusion reads exactly as pinned,
+    over the nine release fixtures, beside two fully identical lanes."""
+    A = case.A
+    fixtures = list(A.NVIDIA_FIXTURES)
+    report = clean_report(case, profile, fixtures=fixtures)
+    cells, lanes = report["cells"], report["lane_accounting"]["lanes"]
+    owed = 0
+    for lane, fixture, part, kind in A.LOCAL_EXCLUSIONS:
+        if kind == A.EXCLUDED_LANE:
+            lanes[lane] = dict(state="OWED", reason=A.LANE_OWED_REASON + ", so every part of it would read OWED")
+            continue
+        if lane not in lanes:
+            cells.append(dict(lane=lane, fixture="base", part="infer", state="IDENTICAL", detail="", value="c" * 16))
+        if kind == A.EXCLUDED_UNDECLARED:
+            lanes.setdefault(lane, dict(state="VERIFIED", reason=None))
+            cells.append(dict(lane=lane, fixture=fixture, part=part, state="N/A", detail=A.UNDECLARED_VALUE,
+                              value=A.UNDECLARED_VALUE, columns={}))
+        else:
+            lanes.setdefault(lane, dict(state="OWED", reason="no committed record carries a reference for a part of it"))
+            cells.append(dict(lane=lane, fixture=fixture, part=part, state="OWED", detail=A.CONFLICT_DETAIL,
+                              value="a" * 16, reference=None,
+                              columns=dict(amd=dict(agrees=True), apple=dict(agrees=False, value="b" * 16),
+                                           nvidia=dict(agrees=False, value="a" * 16))))
+            owed += 1
+    report["counts"] = {"IDENTICAL": sum(1 for c in cells if c["state"] == "IDENTICAL"), "DIVERGENT": 0,
+                        "OWED": owed, "REFUSED": 0, "N/A": sum(1 for c in cells if c["state"] == "N/A")}
+    report["lane_accounting"].update(total=len(lanes), verdict_scope=sorted(lanes))
+    return report
+
+
+class PinnedExclusions(Install):
+    """Step 5: the reference gaps the shipped table has on every device."""
+
+    def judge(self, report, profile="routine"):
+        return self.A.judge_report(report, profile=profile, reference=self.reference,
+                                   table_fixtures=list(self.A.NVIDIA_FIXTURES),
+                                   ptx_identical_sha256={self.identical_sha}, report_sha256="9" * 64)
+
+    def cell(self, report, lane, fixture, part):
+        return next(c for c in report["cells"] if (c["lane"], c["fixture"], c["part"]) == (lane, fixture, part))
+
+    def test_every_pinned_exclusion_reading_as_pinned_qualifies_and_is_never_a_match(self):
+        A = self.A
+        results = [self.judge(pinned_report(self, profile), profile) for profile in A.QUALIFY_PROFILES]
+        for result in results:
+            self.assertEqual((result["differing"], result["missing"], result["incomplete"]), ([], [], []))
+            summary = result["summary"]
+            self.assertEqual(len(summary["exclusions"]), len(A.LOCAL_EXCLUSIONS))
+            self.assertEqual(summary["lanes_excluded"], ["gemm-int15"])
+            self.assertEqual(summary["lanes_with_exclusions"],
+                             sorted({k[0] for k in A.LOCAL_EXCLUSIONS if k[3] == A.EXCLUDED_CONFLICT}))
+            # compared = the IDENTICAL cells only: no excluded part is in the count
+            self.assertEqual(summary["parts_compared"], summary["counts"]["IDENTICAL"])
+            self.assertNotIn("gemm-int15", summary["lanes_compared"])
+            self.assertEqual(summary["lanes_verified"] + len(summary["lanes_with_exclusions"])
+                             + len(summary["lanes_excluded"]) + len(summary["lanes_not_applicable"]),
+                             summary["lanes_in_scope"])
+            for row in summary["exclusions"]:
+                self.assertEqual(row.get("agrees"), ["nvidia"] if row["kind"] == A.EXCLUDED_CONFLICT else None)
+        doc = A.build_local_admission(source_commit=SOURCE, manifest_sha256=self.manifest_hash, configuration=CONFIG,
+            reference=self.reference, summaries=[r["summary"] for r in results], core_version=self.version,
+            created_utc="2026-10-04T00:00:00Z")
+        coverage = doc["coverage"]
+        self.assertEqual(len(coverage["exclusions"]), len(A.LOCAL_EXCLUSIONS))
+        self.assertEqual((coverage["exclusions_counted_as_matched"], coverage["pinned_exclusions_not_reached"]), (0, []))
+        self.assertEqual(coverage["parts_compared"], sum(r["summary"]["counts"]["IDENTICAL"] for r in results))
+        self.assertEqual(coverage["lanes_compared"], len(set(results[0]["summary"]["lanes_compared"])))
+        self.assertEqual(coverage["pinned_exclusions_sha256"], A.pinned_exclusions_sha256())
+        # the loader takes it and reports the same coverage
+        path = Path(A.local_admission_path(str(self.admissions), doc["key"]))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(doc))
+        self.layout("identical")
+        receipt = self.B.baseline_selection_receipt()
+        self.assertEqual(receipt["admission"], "local")
+        self.assertEqual(receipt["admission_detail"]["coverage"],
+                         dict(lanes_compared=coverage["lanes_compared"], parts_compared=coverage["parts_compared"],
+                              exclusions=len(A.LOCAL_EXCLUSIONS)))
+
+    def test_a_pinned_exclusion_that_reads_any_other_way_denies(self):
+        A = self.A
+        def conflict(report):
+            return self.cell(report, "x-prep-score-edges", "base", "train")
+        def undeclared(report):
+            return self.cell(report, "gbdt-class-weights", "odd", "batch")
+        cases = [
+            ("differing", "reproduces none of the committed columns", lambda r: conflict(r).update(value="d" * 16)),
+            ("incomplete", "did not read as pinned", lambda r: conflict(r).update(state="IDENTICAL", detail="")),
+            ("incomplete", "did not read as pinned",
+             lambda r: conflict(r).update(detail="no committed record carries this cell part yet")),
+            ("incomplete", "did not read as pinned", lambda r: conflict(r).update(state="N/A", value="n/a:skipped")),
+            ("differing", "MOVED", lambda r: conflict(r).update(state="DIVERGENT", detail="two hashes (MOVED)")),
+            ("incomplete", "raised", lambda r: conflict(r).update(state="REFUSED", detail="raised")),
+            ("incomplete", "did not read as pinned",
+             lambda r: undeclared(r).update(state="OWED", value="e" * 16, detail="no committed record carries this cell part yet")),
+            ("incomplete", "did not read as pinned", lambda r: undeclared(r).update(value="n/a:no-batch")),
+            ("incomplete", "pinned as having no record",
+             lambda r: r["lane_accounting"]["lanes"]["gemm-int15"].update(state="VERIFIED", reason=None)),
+            ("incomplete", "pinned as having no record",
+             lambda r: r["lane_accounting"]["lanes"]["gemm-int15"].update(reason="its fixture moved")),
+            ("incomplete", "yet this run compared it",
+             lambda r: r["cells"].append(dict(lane="gemm-int15", fixture="base", part="train", state="IDENTICAL",
+                                              detail="", value="f" * 16))),
+        ]
+        for bucket, expect, mutate in cases:
+            report = pinned_report(self, "routine")
+            mutate(report)
+            result = self.judge(report)
+            with self.subTest(expect=expect, bucket=bucket):
+                self.assertTrue(any(expect in row for row in result[bucket]), result[bucket][:3])
+        # a conflict value is matched against real column values only: a device n/a or a column with none is no match
+        report = pinned_report(self, "routine")
+        conflict(report).update(columns=dict(amd=dict(agrees=True), cpu=dict(agrees=True)))
+        self.assertTrue(any("reproduces none" in row for row in self.judge(report)["differing"]))
+
+    def test_anything_else_the_table_cannot_judge_still_denies(self):
+        cases = [
+            # an unpinned part of a lane that also has pinned conflicts: the lane is not excused
+            ("x-prep-score-edges/base/infer", lambda r: self.cell(r, "x-prep-score-edges", "base", "infer").update(
+                state="OWED", detail="no committed record carries this cell part yet")),
+            ("x-prep-score-edges: lane OWED", lambda r: self.cell(r, "x-prep-score-edges", "base", "infer").update(
+                state="OWED", detail="no committed record carries this cell part yet")),
+            # the same conflict sentence on a part that is not pinned
+            ("ols/base/train", lambda r: self.cell(r, "ols", "base", "train").update(
+                state="OWED", detail=self.A.CONFLICT_DETAIL, value="a" * 16)),
+            # an undeclared part outside the list
+            ("ols/base/stepfull: an undeclared part outside the pinned exclusions",
+             lambda r: self.cell(r, "ols", "base", "stepfull").update(value=self.A.UNDECLARED_VALUE)),
+            # lanes that are owed, held, not run or undeclared and not pinned
+            ("pca: lane OWED", lambda r: r["lane_accounting"]["lanes"]["pca"].update(
+                state="OWED", reason=self.A.LANE_OWED_REASON)),
+            ("pca: lane HELD", lambda r: r["lane_accounting"]["lanes"]["pca"].update(state="HELD", reason="held")),
+            ("pca: lane NOT RUN", lambda r: r["lane_accounting"]["lanes"]["pca"].update(state="NOT RUN", reason="x")),
+            ("pca: lane UNDECLARED", lambda r: r["lane_accounting"]["lanes"]["pca"].update(state="UNDECLARED", reason="x")),
+        ]
+        for expect, mutate in cases:
+            report = pinned_report(self, "routine")
+            mutate(report)
+            result = self.judge(report)
+            with self.subTest(expect=expect):
+                self.assertTrue(any(expect in row for row in result["missing"]), result["missing"][:3])
+        # a conflict lane with no part that matched is not excused either
+        report = pinned_report(self, "routine")
+        report["cells"] = [c for c in report["cells"]
+                           if not (c["lane"] == "x-prep-select-kbest" and c["state"] == "IDENTICAL")]
+        self.assertTrue(any("x-prep-select-kbest: lane OWED" in row for row in self.judge(report)["missing"]))
+
+    def test_an_admission_cannot_misstate_its_coverage(self):
+        A = self.A
+        summaries = [self.judge(pinned_report(self, profile), profile)["summary"] for profile in A.QUALIFY_PROFILES]
+        def build(mutate=None):
+            doc = A.build_local_admission(source_commit=SOURCE, manifest_sha256=self.manifest_hash,
+                configuration=CONFIG, reference=self.reference, summaries=copy.deepcopy(summaries),
+                core_version=self.version, created_utc="2026-10-04T00:00:00Z")
+            if mutate:
+                mutate(doc)
+            return A.validate_local_admission(doc, source_commit=SOURCE, manifest_sha256=self.manifest_hash,
+                                              configuration=CONFIG, reference=self.reference)
+        build()
+        first = lambda d: d["comparison"]["profiles"][0]
+        mutations = [
+            lambda d: d["coverage"]["exclusions"].pop(),
+            lambda d: d["coverage"].update(exclusions_counted_as_matched=1),
+            lambda d: d["coverage"].update(parts_compared=d["coverage"]["parts_compared"] + 27),
+            lambda d: d["coverage"].update(lanes_compared=d["coverage"]["lanes_compared"] + 1),
+            lambda d: d["coverage"].update(pinned_exclusions_sha256="0" * 64),
+            lambda d: d.pop("coverage"),
+            lambda d: first(d)["exclusions"].append(dict(lane="ols", fixture="base", part="train",
+                                                        kind=A.EXCLUDED_CONFLICT, agrees=["nvidia"])),
+            lambda d: first(d)["exclusions"].append(dict(first(d)["exclusions"][0])),
+            lambda d: first(d)["exclusions"].pop(),
+            lambda d: first(d)["counts"].update(OWED=0),
+            lambda d: first(d).update(parts_compared=first(d)["parts_compared"] + 1),
+            lambda d: first(d)["lanes_with_exclusions"].append("ols"),
+            lambda d: first(d).update(lanes_excluded=[]),
+            lambda d: first(d)["lanes_compared"].append("gemm-int15"),
+            lambda d: next(e for e in first(d)["exclusions"] if e["kind"] == A.EXCLUDED_CONFLICT).update(agrees=[]),
+            lambda d: next(e for e in first(d)["exclusions"] if e["kind"] == A.EXCLUDED_UNDECLARED).update(agrees=["nvidia"]),
+            lambda d: d.update(schema="mojolearn.ptx-local-identity-admission.v1"),
+        ]
+        for index, mutate in enumerate(mutations):
+            with self.subTest(mutation=index), self.assertRaises(ValueError):
+                build(mutate)
+
+    def test_a_run_that_reaches_no_pinned_part_says_so(self):
+        doc = self.A.build_local_admission(source_commit=SOURCE, manifest_sha256=self.manifest_hash,
+            configuration=CONFIG, reference=self.reference, summaries=self.summaries(), core_version=self.version,
+            created_utc="2026-10-04T00:00:00Z")
+        self.assertEqual(doc["coverage"]["exclusions"], [])
+        self.assertEqual(len(doc["coverage"]["pinned_exclusions_not_reached"]), len(self.A.LOCAL_EXCLUSIONS))
+        self.assertEqual((doc["coverage"]["lanes_compared"], doc["coverage"]["parts_compared"]), (2, 24))
+
+    def test_the_pinned_list_is_exactly_what_the_shipped_table_cannot_judge(self):
+        """Static, no device: the list against python/mojolearn/verify_reference/table.json and host_surface."""
+        A = self.A
+        repo = PKG_SRC.parents[1]
+        table = json.loads((PKG_SRC / "verify_reference" / "table.json").read_text())
+        def load(name, path):
+            spec = importlib.util.spec_from_file_location(name, path)
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[name] = module
+            self.addCleanup(sys.modules.pop, name, None)
+            spec.loader.exec_module(module)
+            return module
+        surface = load("ptx_pin_host_surface", PKG_SRC / "host_surface.py")
+        harness = load("ptx_pin_harness", repo / "tools" / "identity_break.py")
+        self.assertEqual(tuple(harness.FIXTURES), tuple(A.NVIDIA_FIXTURES))
+        exposure = surface.lane_exposure(list(harness.LANES), "nvidia")
+        exposed = [lane for lane in harness.LANES if exposure[lane]["status"] == "EXPOSED"]
+        found = [(lane, "*", "*", A.EXCLUDED_LANE) for lane in harness.LANES if exposure[lane]["status"] == "OWED"]
+        for lane in harness.LANES:
+            if exposure[lane]["status"] == "OWED":
+                self.assertTrue(exposure[lane]["reason"].startswith(A.LANE_OWED_REASON))
+        self.assertFalse([lane for lane in harness.LANES
+                          if exposure[lane]["status"] not in ("EXPOSED", "NOT APPLICABLE", "OWED")])
+        for lane in exposed:
+            for fixture in harness.FIXTURES:
+                cell = table["cells"].get(f"{lane}/{fixture}") or {}
+                self.assertTrue(cell, f"{lane}/{fixture} has no table cell")
+                for part in A.NVIDIA_PARTS:
+                    entry = cell.get(part)
+                    if entry is None:
+                        if part == "batch":
+                            found.append((lane, fixture, part, A.EXCLUDED_UNDECLARED))
+                        else:
+                            self.assertEqual(part, "rlpair", f"{lane}/{fixture}/{part} has no table entry")
+                    elif entry.get("conflict"):
+                        found.append((lane, fixture, part, A.EXCLUDED_CONFLICT))
+                        values = [v[1] for v in entry["cols"].values() if not isinstance(v, int)]
+                        self.assertTrue(values and all(isinstance(v, str) and len(v) == 16 for v in values))
+                    else:
+                        self.assertIsInstance(entry.get("ref"), str)
+        self.assertEqual(tuple(sorted(found)), A.LOCAL_EXCLUSIONS)
+        # the sentences the judge matches are the verifier's own
+        reference = load("ptx_pin_verify_reference", PKG_SRC / "_verify_reference.py")
+        self.assertEqual(reference.judge("a" * 16, dict(conflict=True, ref=None)), ("OWED", A.CONFLICT_DETAIL))
+        self.assertEqual(reference.judge(A.UNDECLARED_VALUE, None), ("N/A", A.UNDECLARED_VALUE))
 
 
 if __name__ == "__main__":

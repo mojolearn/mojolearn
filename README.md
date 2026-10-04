@@ -146,7 +146,9 @@ machine:
   The command runs every identity check through the PTX build on your GPU and
   compares each result with the reference results in the wheel. It records the
   qualification only if all of them match, and only for that exact wheel,
-  device and driver. See [NVIDIA PTX fallback](docs/NVIDIA_PTX_IDENTITY.md).
+  device and driver. A short pinned list of results the reference cannot
+  judge is left out of the comparison and named in the record. See
+  [NVIDIA PTX fallback](docs/NVIDIA_PTX_IDENTITY.md).
 
 mojolearn never substitutes the CPU for a GPU it cannot serve.
 

@@ -131,7 +131,7 @@ def validate_admission(doc, *, source_commit, manifest_sha256, configuration=Non
 # configuration. This module only validates records and judges finished
 # verifier reports. It runs nothing and computes no numeric result.
 
-LOCAL_SCHEMA = 'mojolearn.ptx-local-identity-admission.v1'
+LOCAL_SCHEMA = 'mojolearn.ptx-local-identity-admission.v2'
 LOCAL_SCOPE = 'this-wheel-device-driver-only'
 LOCAL_DIR_ENV = 'MOJOLEARN_PTX_ADMISSION_DIR'
 REPORT_FORMAT = 'mojolearn.verify-all-report.v1'
@@ -139,9 +139,98 @@ REPORT_FORMAT = 'mojolearn.verify-all-report.v1'
 QUALIFY_PROFILES = ('routine', 'neural-training')
 #: The only lane states a qualification accepts. NOT APPLICABLE is the par-*
 #: two-device drivers, a structural exclusion that stays named in the record.
-#: OWED, HELD, NOT RUN and UNDECLARED do not gate `verify`; they gate this.
+#: OWED, HELD, NOT RUN and UNDECLARED do not gate `verify`; they gate this,
+#: except for the pinned exclusions below, which are recorded and never matched.
 LANE_VERIFIED = 'VERIFIED'
 LANE_NOT_APPLICABLE = 'NOT APPLICABLE'
+LANE_OWED = 'OWED'
+
+# THE PINNED EXCLUSIONS. The reference table this source ships cannot judge
+# these (lane, fixture, part) triples on any device, so a rule of "everything
+# must match" would refuse every machine. The release admission solved the
+# same problem with a pinned list (tools/nvidia_baseline_qualification.py,
+# UNDECLARED_EXCLUSIONS, validated above as `undeclared_exclusions`); this is
+# the local counterpart. Each entry must be absent in exactly the way its kind
+# says, on the device being qualified. It is then recorded in the admission
+# as excluded and is never counted as a matching part. Anything else the
+# table cannot judge still denies, and so does a pinned entry that reads any
+# other way (the list is then stale against the table, and must be corrected,
+# not worked around).
+#
+#   undeclared-part     the harness declares no batch probe for the lane, so
+#                       the part reads `n/a:UNDECLARED` on every device and the
+#                       table carries no entry for it.
+#   reference-conflict  the committed columns disagree with each other at one
+#                       commit, so the table carries no reference. The device
+#                       must still reproduce one of the committed column
+#                       values; which classes it agrees with is recorded.
+#   lane-without-record host_surface declares the whole lane OWED (no release
+#                       record), so the verifier does not compare it.
+EXCLUDED_UNDECLARED = 'undeclared-part'
+EXCLUDED_CONFLICT = 'reference-conflict'
+EXCLUDED_LANE = 'lane-without-record'
+EXCLUSION_KINDS = (EXCLUDED_UNDECLARED, EXCLUDED_CONFLICT, EXCLUDED_LANE)
+UNDECLARED_VALUE = 'n/a:UNDECLARED'
+CONFLICT_DETAIL = 'the committed columns disagree with each other at one commit; no reference'
+LANE_OWED_REASON = 'no committed record carries a hash for this lane'
+COLUMN_CLASSES = ('amd', 'apple', 'cpu', 'nvidia')
+_C, _U = EXCLUDED_CONFLICT, EXCLUDED_UNDECLARED
+LOCAL_EXCLUSIONS = tuple(sorted(
+    [(lane, fixture, 'batch', _U) for lane in ('gbdt-class-weights', 'gbdt-multiclass-offgrid')  # glue: spell the pinned list
+     for fixture in NVIDIA_FIXTURES]
+    + [(lane, 'ties', part, _C) for lane in ('umap', 'x-decomp-umap-options')  # glue: spell the pinned list
+       for part in ('train', 'infer', 'model', 'batch')]
+    + [('x-cluster-optics-metrics', 'denormal', 'train', _C),
+       ('x-neighbors-nearest-centroid', 'denormal', 'train', _C),
+       ('x-prep-select-kbest', 'dupes', 'train', _C)]
+    + [('x-prep-inverse-transforms', fixture, 'train', _C)  # glue: spell the pinned list
+       for fixture in ('ties', 'hashed', 'wide', 'denormal', 'denormal_ftz', 'dupes', 'negative')]
+    + [('x-prep-score-edges', fixture, 'train', _C) for fixture in NVIDIA_FIXTURES]  # glue: spell the pinned list
+    + [('gemm-int15', '*', '*', EXCLUDED_LANE)]))
+
+
+def pinned_exclusions_sha256():
+    """One digest over the pinned list, recorded in every local admission."""
+    import hashlib
+    import json
+    return hashlib.sha256(json.dumps([list(row) for row in LOCAL_EXCLUSIONS],  # glue: serialize the pinned list
+                                     separators=(',', ':')).encode()).hexdigest()
+
+
+def _exclusion_key(row):
+    """(lane, fixture, part, kind) of one recorded exclusion, validated against the pinned list."""
+    _require(isinstance(row, dict) and {'lane', 'fixture', 'part', 'kind'} <= set(row)
+             and set(row) <= {'lane', 'fixture', 'part', 'kind', 'agrees'}, 'recorded exclusion malformed')
+    key = (row['lane'], row['fixture'], row['part'], row['kind'])
+    _require(all(isinstance(v, str) for v in key) and key in LOCAL_EXCLUSIONS,  # glue: check four identifier strings
+             'recorded exclusion is not a pinned exclusion')
+    agrees = row.get('agrees')
+    if row['kind'] == EXCLUDED_CONFLICT:
+        _require(_names(agrees) and set(agrees) <= set(COLUMN_CLASSES),
+                 'conflict exclusion does not name the committed columns it reproduced')
+    else:
+        _require(agrees is None, 'only a conflict exclusion names committed columns')
+    return key
+
+
+def local_coverage(profiles):
+    """What the comparison covered, derived from the profile summaries alone:
+    lanes and parts actually compared equal, and every exclusion, by name."""
+    lanes, parts, seen, rows = set(), 0, set(), []
+    for profile in profiles:  # glue: sum two recorded summaries
+        lanes |= set(profile['lanes_compared'])
+        parts += profile['parts_compared']
+        for row in profile['exclusions']:  # glue: collect recorded exclusion rows
+            key = _exclusion_key(row)
+            if key not in seen:
+                seen.add(key)
+                rows.append(dict(row))
+    rows.sort(key=lambda row: (row['lane'], row['fixture'], row['part']))
+    return dict(lanes_compared=len(lanes), parts_compared=parts, exclusions=rows,
+                exclusions_counted_as_matched=0,
+                pinned_exclusions_sha256=pinned_exclusions_sha256(),
+                pinned_exclusions_not_reached=[dict(lane=k[0], fixture=k[1], part=k[2], kind=k[3])
+                                               for k in LOCAL_EXCLUSIONS if k not in seen])  # glue: list pinned rows a run did not reach
 
 
 def local_admission_dir():
@@ -309,18 +398,37 @@ def validate_qualification_token(path, key):
 
 
 def _clean_profile(row, profile):
-    """One profile's recorded comparison summary must itself read complete and clean."""
+    """One profile's recorded comparison summary must itself read complete and
+    clean: every lane in scope accounted for, and nothing unmatched except the
+    pinned exclusions it lists."""
     _require(isinstance(row, dict) and row.get('profile') == profile, 'comparison profile missing')
     counts = row.get('counts')
+    exclusions = row.get('exclusions')
+    _require(isinstance(exclusions, list), profile + ' comparison does not list its exclusions')
+    keys = [_exclusion_key(item) for item in exclusions]  # glue: validate recorded exclusion rows
+    _require(len(keys) == len(set(keys)), profile + ' comparison lists an exclusion twice')
+    conflicts = [key for key in keys if key[3] == EXCLUDED_CONFLICT]  # glue: select conflict exclusion rows
     _require(row.get('verdict') == 'VERIFIED' and isinstance(counts, dict)
              and all(type(counts.get(k)) is int for k in ('IDENTICAL', 'DIVERGENT', 'REFUSED', 'OWED'))  # glue: validate recorded state counts
              and counts['IDENTICAL'] > 0 and counts['DIVERGENT'] == 0 and counts['REFUSED'] == 0
-             and counts['OWED'] == 0, profile + ' comparison is not complete and identical')
+             and counts['OWED'] == len(conflicts),
+             profile + ' comparison is not identical outside its pinned exclusions')
+    with_exclusions, excluded = row.get('lanes_with_exclusions'), row.get('lanes_excluded')
+    _require(isinstance(with_exclusions, list) and isinstance(excluded, list)
+             and set(with_exclusions) <= {key[0] for key in conflicts}  # glue: collect lane names of conflict exclusions
+             and set(excluded) == {key[0] for key in keys if key[3] == EXCLUDED_LANE}  # glue: collect lane-level exclusion names
+             and len(set(with_exclusions)) == len(with_exclusions) and len(set(excluded)) == len(excluded),
+             profile + ' comparison excuses a lane no pinned exclusion covers')
     _require(type(row.get('lanes_verified')) is int and row['lanes_verified'] > 0
              and type(row.get('lanes_in_scope')) is int
              and isinstance(row.get('lanes_not_applicable'), list)
-             and row['lanes_verified'] + len(row['lanes_not_applicable']) == row['lanes_in_scope'],
+             and (row['lanes_verified'] + len(with_exclusions) + len(excluded)
+                  + len(row['lanes_not_applicable'])) == row['lanes_in_scope'],
              profile + ' comparison does not account for every lane in scope')
+    _require(_names(row.get('lanes_compared')) and type(row.get('parts_compared')) is int
+             and row['parts_compared'] == counts['IDENTICAL']
+             and not set(excluded) & set(row['lanes_compared']),
+             profile + ' comparison does not state what it compared')
     _require(_names(row.get('fixtures')) and _digest(row.get('report_sha256')),
              profile + ' comparison evidence missing')
 
@@ -346,6 +454,10 @@ def validate_local_admission(doc, *, source_commit, manifest_sha256, configurati
              'local admission does not cover every verification profile')
     for row, profile in zip(comparison['profiles'], QUALIFY_PROFILES):  # glue: validate two recorded summaries
         _clean_profile(row, profile)
+    # The coverage statement is derived, never asserted: it must be exactly
+    # what the profile summaries add up to, exclusions included.
+    _require(doc.get('coverage') == local_coverage(comparison['profiles']),
+             'local admission misstates its coverage or exclusions')
     return doc
 
 
@@ -356,7 +468,13 @@ def judge_report(report, *, profile, reference, table_fixtures, ptx_identical_sh
     answers, `missing` is reference data the wheel does not ship for something
     this device ran or should have run, `incomplete` is anything that did not
     run or cannot be attributed to the PTX payload. Qualification needs all
-    three empty; nothing here weakens a state `verify` itself reported."""
+    three empty; nothing here weakens a state `verify` itself reported.
+
+    The one thing set aside is the pinned list (`LOCAL_EXCLUSIONS`): a part on
+    it that reads absent in exactly its pinned way is recorded in
+    `summary['exclusions']`, is never counted as compared, and denies if it
+    reads any other way. Every other part the table cannot judge still lands
+    in `missing`."""
     differing, missing, incomplete = [], [], []
     if not isinstance(report, dict) or report.get('format') != REPORT_FORMAT or 'cells' not in report:
         detail = report.get('detail') if isinstance(report, dict) else None
@@ -387,30 +505,77 @@ def judge_report(report, *, profile, reference, table_fixtures, ptx_identical_sh
     if (report.get('self_test') or {}).get('passed') is not True:
         incomplete.append(f'{profile}: the comparator self-test did not pass')
     parts = set()
+    pinned = {key[:3]: key[3] for key in LOCAL_EXCLUSIONS if key[3] != EXCLUDED_LANE}  # glue: index the pinned list by cell part
+    pinned_lanes = {key[0] for key in LOCAL_EXCLUSIONS if key[3] == EXCLUDED_LANE}  # glue: collect pinned lane names
+    exclusions, compared, parts_compared = [], set(), 0
+    conflict_lanes, unpinned_owed = set(), set()
     for row in report['cells']:  # glue: sort judged verifier rows by their recorded state
-        where = f'{row.get("lane")}/{row.get("fixture")}/{row.get("part")}'
-        state = row.get('state')
+        lane, fixture, part = row.get('lane'), row.get('fixture'), row.get('part')
+        where = f'{lane}/{fixture}/{part}'
+        state, value = row.get('state'), row.get('value')
+        kind = pinned.get((lane, fixture, part))
+        if kind is not None and state not in ('DIVERGENT', 'REFUSED'):
+            # A pinned exclusion must be absent in exactly the pinned way.
+            if kind == EXCLUDED_UNDECLARED and state == 'N/A' and value == UNDECLARED_VALUE:
+                exclusions.append(dict(lane=lane, fixture=fixture, part=part, kind=kind))
+            elif kind == EXCLUDED_CONFLICT and state == 'OWED' and row.get('detail') == CONFLICT_DETAIL:
+                columns = row.get('columns') if isinstance(row.get('columns'), dict) else {}
+                agrees = sorted(cls for cls, column in columns.items()  # glue: match one digest against recorded columns
+                                if cls in COLUMN_CLASSES and isinstance(column, dict) and column.get('value') == value
+                                and isinstance(value, str) and re.fullmatch('[0-9a-f]{16}', value))
+                if agrees:
+                    exclusions.append(dict(lane=lane, fixture=fixture, part=part, kind=kind, agrees=agrees))
+                    conflict_lanes.add(lane)
+                else:
+                    differing.append(f'{where}: this box {value} reproduces none of the committed columns '
+                                     'of a part whose columns disagree')
+                    unpinned_owed.add(lane)
+            else:
+                incomplete.append(f'{where}: a pinned exclusion ({kind}) did not read as pinned '
+                                  f'(state {state!r}, value {value!r}); the pinned list does not fit this reference table')
+                unpinned_owed.add(lane)
+            continue
+        if lane in pinned_lanes and state in ('IDENTICAL', 'OWED'):
+            incomplete.append(f'{where}: lane {lane} is pinned as having no record, yet this run compared it '
+                              f'(state {state!r}); the pinned list does not fit this reference table')
+            continue
         if state == 'IDENTICAL':
-            parts.add(row.get('part'))
+            parts.add(part)
+            compared.add(lane)
+            parts_compared += 1
         elif state == 'DIVERGENT':
             differing.append(f'{where}: {row.get("detail")}')
         elif state == 'OWED':
             missing.append(f'{where}: {row.get("detail")}')
+            unpinned_owed.add(lane)
         elif state == 'REFUSED':
             incomplete.append(f'{where}: {str(row.get("detail"))[:300]}')
         elif state != 'N/A':
             incomplete.append(f'{where}: unknown state {state!r}')
+        elif value == UNDECLARED_VALUE:
+            missing.append(f'{where}: an undeclared part outside the pinned exclusions')
     accounting = report.get('lane_accounting') or {}
     scope = list(accounting.get('verdict_scope') or [])
     lanes = accounting.get('lanes') or {}
-    verified, not_applicable = [], []
+    verified, not_applicable, with_exclusions, excluded = [], [], [], []
     for lane in scope:  # glue: sort lane accounting rows by their recorded state
         entry = lanes.get(lane) or {}
         state = entry.get('state')
-        if state == LANE_VERIFIED:
+        if lane in pinned_lanes:
+            # A lane pinned as having no record must read exactly that.
+            if state == LANE_OWED and str(entry.get('reason') or '').startswith(LANE_OWED_REASON):
+                excluded.append(lane)
+                exclusions.append(dict(lane=lane, fixture='*', part='*', kind=EXCLUDED_LANE))
+            else:
+                incomplete.append(f'{lane}: lane pinned as having no record reads {state!r}: {entry.get("reason")}; '
+                                  'the pinned list does not fit this install')
+        elif state == LANE_VERIFIED:
             verified.append(lane)
         elif state == LANE_NOT_APPLICABLE:
             not_applicable.append(lane)
+        elif (state == LANE_OWED and lane in conflict_lanes and lane not in unpinned_owed and lane in compared):
+            # Its only unreferenced parts are pinned conflicts, and its other parts matched.
+            with_exclusions.append(lane)
         elif state == 'DIVERGENT':
             differing.append(f'{lane}: lane DIVERGENT: {entry.get("reason")}')
         elif state == 'REFUSED':
@@ -436,9 +601,14 @@ def judge_report(report, *, profile, reference, table_fixtures, ptx_identical_sh
     if report.get('exit') != 0 or report.get('verdict') != 'VERIFIED':
         if not (differing or missing or incomplete):
             incomplete.append(f'{profile}: verifier verdict {report.get("verdict")!r}, exit {report.get("exit")}')
+    exclusions.sort(key=lambda item: (item['lane'], item['fixture'], item['part']))
     summary = dict(profile=profile, verdict=report.get('verdict'), counts=counts,
                    lanes_in_scope=len(scope), lanes_verified=len(verified),
+                   lanes_with_exclusions=sorted(with_exclusions),  # glue: canonicalize lane names
+                   lanes_excluded=sorted(excluded),  # glue: canonicalize lane names
                    lanes_not_applicable=sorted(not_applicable),  # glue: canonicalize lane names
+                   lanes_compared=sorted(l for l in compared if isinstance(l, str)),  # glue: canonicalize lane names
+                   parts_compared=parts_compared, exclusions=exclusions,
                    fixtures=fixtures,
                    parts_identical=sorted(p for p in parts if isinstance(p, str)),  # glue: canonicalize part names
                    cells=len(report['cells']),
@@ -456,6 +626,7 @@ def build_local_admission(*, source_commit, manifest_sha256, configuration, refe
                source_commit=source_commit, manifest_sha256=manifest_sha256, core_version=core_version,
                configuration=dict(configuration), reference=dict(reference),
                comparison=dict(reference='mojolearn/verify_reference/table.json', profiles=list(summaries)),
+               coverage=local_coverage(summaries),
                created_utc=created_utc)
     return validate_local_admission(doc, source_commit=source_commit, manifest_sha256=manifest_sha256,
                                     configuration=configuration, reference=reference)

@@ -13,7 +13,10 @@ in fresh verifier processes, and compares every part with the shipped
 reference table (`mojolearn/verify_reference/table.json`, the cross-vendor
 record). Only a run in which every applicable lane, fixture and part reads
 IDENTICAL writes a local admission (`ptx_admission.LOCAL_SCHEMA`) bound to this
-exact wheel, PTX payload, device, driver and reference. Anything else writes
+exact wheel, PTX payload, device, driver and reference. The pinned exclusions
+(`ptx_admission.LOCAL_EXCLUSIONS`), which the shipped table cannot judge on
+any device, must each read absent in exactly their pinned way; the admission
+lists them and counts none as a match. Anything else writes
 no admission and reports what differed, what the wheel ships no reference for,
 and what did not run.
 
@@ -106,7 +109,8 @@ def _judge_scope(profile, evidence, run, args, token, log, reference, table_fixt
         result["incomplete"].append(f"{profile}: the verifier exited {code}")
     summary = result["summary"] or {}
     log(f"#   {profile}: verifier exit {code}, {summary.get('lanes_verified', 0)} of "
-        f"{summary.get('lanes_in_scope', 0)} lanes verified, {len(result['differing'])} differing, "
+        f"{summary.get('lanes_in_scope', 0)} lanes verified, {len(summary.get('exclusions', []))} pinned "
+        f"exclusions not compared, {len(result['differing'])} differing, "
         f"{len(result['missing'])} without a reference, {len(result['incomplete'])} incomplete")
     return result
 
@@ -196,7 +200,14 @@ def cmd_qualify_gpu(args, backend=None, run=None):
         summaries=[judged[0]["summary"], judged[1]["summary"]], core_version=__version__,
         created_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     _atomic_json(admission_path, doc)
+    coverage = doc["coverage"]
+    log(f"# compared equal: {coverage['parts_compared']} parts over {coverage['lanes_compared']} lanes. "
+        f"Not compared: {len(coverage['exclusions'])} pinned exclusions the shipped reference cannot judge "
+        "(listed in the admission; none is counted as a match)")
     return _finish(args, EXIT_QUALIFIED, "QUALIFIED",
-                   f"every applicable lane, fixture and part matched the shipped reference; local admission "
-                   f"written to {admission_path} for this wheel, device and driver only",
-                   admission_path=admission_path, evidence=evidence)
+                   f"{coverage['parts_compared']} parts over {coverage['lanes_compared']} lanes matched the "
+                   f"shipped reference, and {len(coverage['exclusions'])} pinned exclusions it cannot judge were "
+                   f"not compared; local admission written to {admission_path} for this wheel, device and "
+                   "driver only", admission_path=admission_path, evidence=evidence,
+                   coverage=dict(lanes_compared=coverage["lanes_compared"], parts_compared=coverage["parts_compared"],
+                                 exclusions=len(coverage["exclusions"])))

@@ -88,7 +88,8 @@ is compared with the reference table in the wheel
 (`mojolearn/verify_reference/table.json`), which holds the results recorded on
 NVIDIA, AMD and Apple hardware and the host column.
 
-It writes a local admission only when all of the following hold in both runs:
+It writes a local admission only when all of the following hold in both runs
+(the pinned exclusions below are the only parts set aside):
 
 - every lane in scope reads VERIFIED or NOT APPLICABLE (the two-device `par-*`
   drivers, which a one-device run cannot state; they stay named in the record);
@@ -102,18 +103,47 @@ This is stricter than `verify` itself. A lane that is OWED, HELD, NOT RUN or
 UNDECLARED does not cost `verify` its pass, but it does deny qualification,
 because it is a lane the wheel ships no usable reference for. The command
 lists such lanes and parts as missing reference data. It does not admit on
-partial coverage.
+partial coverage, with one named exception.
 
-Current reference coverage, from a static read of the table in this source
-tree (no device run): lane `gemm-int15` has no committed record, and nine
-other lanes lack a usable reference for some fixture parts
-(`gbdt-class-weights` and `gbdt-multiclass-offgrid` batch; `umap` and
-`x-decomp-umap-options` on `ties`; single train parts of
-`x-cluster-optics-metrics`, `x-neighbors-nearest-centroid`,
-`x-prep-inverse-transforms`, `x-prep-score-edges` and `x-prep-select-kbest`).
-A qualification run reports whichever of these the device produces a value
-for as missing reference data and does not admit until a release record
-carries them.
+### Pinned exclusions
+
+The reference table in this source tree cannot judge 46 entries on any
+device, so without them the command would refuse every machine. They are
+pinned by name in `ptx_admission.LOCAL_EXCLUSIONS`, the local counterpart of
+the release checker's pinned list. Each must read absent in exactly its pinned
+way on the device being qualified:
+
+| Kind | Entries | Must read |
+| --- | --- | --- |
+| `undeclared-part` | `batch` of `gbdt-class-weights` and `gbdt-multiclass-offgrid`, nine fixtures each (18) | `n/a:UNDECLARED`: the harness declares no batch probe |
+| `reference-conflict` | all four parts of `umap` and `x-decomp-umap-options` on `ties` (8); `train` of `x-prep-score-edges` on nine fixtures, of `x-prep-inverse-transforms` on seven, and of `x-cluster-optics-metrics` and `x-neighbors-nearest-centroid` on `denormal` and `x-prep-select-kbest` on `dupes` (19) | OWED because the committed columns disagree, and the device's value must equal one of those committed column values |
+| `lane-without-record` | `gemm-int15` (1) | lane OWED: `host_surface` declares no release record for it |
+
+A pinned entry that reads as pinned is recorded in the admission as excluded
+and is never counted as a match. A pinned entry that reads any other way
+denies, and so does anything else the table cannot judge: an unpinned OWED
+part, an unpinned undeclared part, or a lane that is OWED, HELD, NOT RUN or
+UNDECLARED. A lane whose only unjudged parts are pinned conflicts, and whose
+other parts matched, is listed as verified with exclusions and not as verified.
+
+The `reference-conflict` entries are not missing data. In the shipped table
+the NVIDIA column differs from the AMD, Apple and host columns on the three
+`x-prep-*` lanes, and the NVIDIA and Apple columns differ on the others. Those
+are open cross-vendor differences in the native kernels, and a local admission
+makes no IDENTICAL claim for those parts. It records which committed columns
+the device reproduced.
+
+The local admission states its coverage in a `coverage` block that the loader
+recomputes from the profile summaries and refuses if it differs: the number
+of lanes and parts that compared equal, every exclusion by lane, fixture, part
+and kind, `exclusions_counted_as_matched` (always 0), the digest of the pinned
+list, and any pinned entry the run did not reach. The selection receipt
+repeats the three counts under `admission_detail.coverage`.
+
+A static test (`test_the_pinned_list_is_exactly_what_the_shipped_table_cannot_judge`)
+holds the list equal to what the committed table and `host_surface` cannot
+judge, so a release record that closes a gap fails the test until the entry
+is removed.
 
 A failed qualification writes no admission. It reports the differing lanes,
 the parts with no shipped reference and anything that did not run, and it
