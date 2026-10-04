@@ -91,6 +91,7 @@ from std.memory import memcpy
 from x_ann.stage_timer import AnnStages
 from x_ann.switches import ANN3_COARSE_SEED, ANN3_HOST_PASSES, ANN3_TRAINSET_COPY
 from x_ann.kpp_seed import kpp_seed
+from x_ann.kpp_seed_device import kpp_seed_device
 
 comptime IVF_FAST_TRAINSET = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -108,10 +109,21 @@ comptime IVF_FAST_SEED = (
     and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
 )
-"""FAST on Apple, OPT-IN (lane ann-apple3, `-D MOJOLEARN_ANN3_COARSE_SEED`):
+"""FAST on Apple, DEFAULT (lane ann-apple3; `-D MOJOLEARN_ANN3_COARSE_SEED_OFF` reverts):
 the coarse quantizer is seeded by `x_ann/kpp_seed.mojo` (host k-means++ over
 a stride sample of its training rows) and cluster/'s k-means starts from
 those seeds (`INIT_ARRAY`). An untraced build only."""
+
+comptime IVF_FAST_SEED_DEVICE = IVF_FAST_SEED and not is_defined["MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF"]()
+"""Lane apple-fast-fastonly2, FAST + Apple DEFAULT (`-D
+MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF` reverts to the host k-means++). M3 A/Bs:
+fastonly2-5-ivf-pq-istella-m3 (no seed -> seed+device) 5976 -> 5253 ms
+(-12.1%), recall_at_10 .5995 -> .6071; fastonly2-3-ivf-pq-istella-m3 (host
+seed -> device seed) 5516 -> 5243 ms (-4.9%), recall .6017 -> .6071. The
+IVF_FAST_SEED k-means++ runs on the device (`x_ann/kpp_seed_device.mojo`: a
+distance-update grid plus a fold/selection launch per seed, same HostRng
+stream) over the training rows already on the device, instead of on one host
+core. FAST bits may move (Float32 blocked sums); recall check paired."""
 
 
 def ivf_trainset_rows(n_rows: Int, n_train: Int, seed: UInt64) -> List[Int]:
@@ -439,14 +451,20 @@ def ivf_flat_build(
 
     comptime if IVF_FAST_SEED:
         if not trace.enabled and n_train >= n_lists:
-            var seeds = List[Float32](length=n_lists * dim, fill=Float32(0.0))
-            if n_train < n_rows:
-                kpp_seed(xt, n_train, dim, n_lists, params.seed, 8, seeds)
+            comptime if IVF_FAST_SEED_DEVICE:
+                if n_train < n_rows:
+                    kpp_seed_device(ctx, dxt, n_train, dim, n_lists, params.seed, 8, centroids)
+                else:
+                    kpp_seed_device(ctx, dx, n_rows, dim, n_lists, params.seed, 8, centroids)
             else:
-                kpp_seed(x, n_rows, dim, n_lists, params.seed, 8, seeds)
-            ctx.enqueue_copy(dst_buf=centroids, src_ptr=seeds.unsafe_ptr())
-            ctx.synchronize()
-            _ = seeds^
+                var seeds = List[Float32](length=n_lists * dim, fill=Float32(0.0))
+                if n_train < n_rows:
+                    kpp_seed(xt, n_train, dim, n_lists, params.seed, 8, seeds)
+                else:
+                    kpp_seed(x, n_rows, dim, n_lists, params.seed, 8, seeds)
+                ctx.enqueue_copy(dst_buf=centroids, src_ptr=seeds.unsafe_ptr())
+                ctx.synchronize()
+                _ = seeds^
             kp.init = INIT_ARRAY
             st.host("seed")
 
