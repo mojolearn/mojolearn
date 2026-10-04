@@ -18,6 +18,7 @@ the one thing the choice depends on (the selector-test rule: a check must be
 seen to move).
 """
 import importlib
+import json
 import os
 import sys
 import tempfile
@@ -57,6 +58,7 @@ class PluginLoader(unittest.TestCase):
         self.pkg = self.site / "mojolearn"
         self.pkg.mkdir(parents=True)
         self.B = fresh_backend()
+        self.B._pkg_dir = lambda: str(self.pkg)
         self.version = self.B._CORE_VERSION
         self.env = {k: os.environ.pop(k) for k in ("MOJOLEARN_VENDOR", "MOJOLEARN_GPU_ARCH",
                                                     "MOJOLEARN_VENDOR_FORCE") if k in os.environ}
@@ -74,6 +76,7 @@ class PluginLoader(unittest.TestCase):
         return d
 
     def split_core(self):
+        self.B._SPLIT = None
         import json
         gp = self.B.gpu_plugins
         self.dist_info("mojolearn", self.version,
@@ -85,14 +88,24 @@ class PluginLoader(unittest.TestCase):
     def sets(self, vendor, arches):
         for arch in arches:
             for tier in ("", "identical"):
-                d = self.pkg / vendor / arch / tier
+                directory = self.B.gpu_plugins.native_directory(vendor) if self.B._split_core() else vendor
+                d = self.pkg / directory / arch / tier
                 d.mkdir(parents=True, exist_ok=True)
                 (d / "_mojolearn_gbdt.so").write_bytes(b"inert")
 
     def plugin(self, vendor, arches, version=None):
-        row = self.B.gpu_plugins.plugin(vendor)
-        self.dist_info(row["distribution"], version or self.version)
+        gp = self.B.gpu_plugins
+        version = version or self.version
+        if vendor == "cuda" and "sm_89" not in arches:
+            arches = ["sm_89"] + list(arches)
+        self.dist_info(gp.plugin(vendor)["distribution"], version,
+                       (gp.PLUGIN_MARKER, json.dumps(gp.plugin_marker(vendor, version, arches))))
         self.sets(vendor, arches)
+        for row in gp.PAYLOADS.values():
+            found = [a for a in arches if a in row["arches"]]
+            if row["vendor"] == vendor and found:
+                self.dist_info(row["distribution"], version,
+                    (gp.PAYLOAD_MARKER, json.dumps(gp.payload_marker(row["profile"], version, found))))
 
     def host_binding(self):
         (self.pkg / "host").mkdir(exist_ok=True)
@@ -133,7 +146,7 @@ class PluginLoader(unittest.TestCase):
         # twin: the same box with the plugin installed loads it
         self.plugin("cuda", ["sm_90a"])
         kind, base = self.layout(cuda=True)
-        self.assertEqual((kind, base), ("vendor", str(self.pkg / "cuda" / "sm_90a")))
+        self.assertEqual((kind, base), ("vendor", str(self.pkg / "cuda_native" / "sm_90a")))
         self.assertEqual(self.B._PLUGINS_FOUND["cuda"]["distribution"], "mojolearn-nvidia")
         self.assertEqual(self.B._PLUGINS_FOUND["cuda"]["version"], self.version)
 
@@ -145,7 +158,7 @@ class PluginLoader(unittest.TestCase):
         self.assertIn(f'pip install --force-reinstall "mojolearn=={self.version}"', str(exc))
         self.assertNotIn("mojolearn-nvidia", str(exc))
         self.plugin("hip", ["gfx942"])
-        self.assertEqual(self.layout(hip=True), ("vendor", str(self.pkg / "hip" / "gfx942")))
+        self.assertEqual(self.layout(hip=True), ("vendor", str(self.pkg / "hip_native" / "gfx942")))
 
     def test_no_gpu_no_plugin_is_the_cpu_only_install(self):
         self.split_core()
@@ -168,10 +181,10 @@ class PluginLoader(unittest.TestCase):
         self.split_core()
         self.plugin("cuda", ["sm_89", "sm_90a"])
         self.plugin("hip", ["gfx942"])
-        self.assertEqual(self.layout(cuda=True), ("vendor", str(self.pkg / "cuda" / "sm_90a")))
+        self.assertEqual(self.layout(cuda=True), ("vendor", str(self.pkg / "cuda_native" / "sm_90a")))
         self.assertEqual(self.layout(cuda=True, device=("sm_89", "fixture")),
-                         ("vendor", str(self.pkg / "cuda" / "sm_89")))
-        self.assertEqual(self.layout(hip=True), ("vendor", str(self.pkg / "hip" / "gfx942")))
+                         ("vendor", str(self.pkg / "cuda_native" / "sm_89")))
+        self.assertEqual(self.layout(hip=True), ("vendor", str(self.pkg / "hip_native" / "gfx942")))
         exc = self.refusal(cuda=True, hip=True)   # today's refusal, unchanged
         self.assertNotIsInstance(exc, self.B.GpuPluginError)
         self.assertIn("MORE THAN ONE", str(exc))
@@ -284,6 +297,112 @@ class PluginLoader(unittest.TestCase):
     def test_a_malformed_marker_refuses(self):
         self.dist_info("mojolearn", self.version, (self.B.gpu_plugins.CORE_MARKER, "{}"))
         self.assertIsInstance(self.refusal(), self.B.GpuPluginError)
+
+
+class ArchitecturePayloadLoader(PluginLoader):
+    """Inheritance re-runs the existing native compatibility cases alongside new refusals."""
+
+    def test_missing_architecture_payload_cannot_hide_behind_aggregate(self):
+        self.split_core()
+        self.plugin("cuda", ["sm_89", "sm_90a"])
+        import shutil
+        shutil.rmtree(self.site / f"mojolearn_nvidia_sm89-{self.version}.dist-info")
+        self.assertIn("mojolearn-nvidia-sm89", str(self.refusal(cuda=True)))
+
+    def test_payload_marker_cannot_claim_another_architecture(self):
+        self.split_core()
+        self.plugin("cuda", ["sm_89", "sm_90a"])
+        path = self.site / f"mojolearn_nvidia_sm89-{self.version}.dist-info" / self.B.gpu_plugins.PAYLOAD_MARKER
+        doc = json.loads(path.read_text())
+        doc["arches"] = ["sm_90a"]
+        path.write_text(json.dumps(doc))
+        self.assertIn("invalid gpu_payload.json", str(self.refusal(cuda=True)))
+
+    def test_legacy_roots_cannot_override_new_payloads(self):
+        self.split_core()
+        self.plugin("cuda", ["sm_89", "sm_90a"])
+        legacy = self.pkg / "cuda" / "sm_90a"
+        legacy.mkdir(parents=True)
+        (legacy / "_mojolearn_gbdt.so").write_bytes(b"old wheel")
+        self.assertIn("legacy cuda", str(self.refusal(cuda=True)))
+
+    def baseline(self):
+        import hashlib
+        self.split_core()
+        gp = self.B.gpu_plugins
+        row = gp.PAYLOADS["nvidia-ptx80"]
+        self.dist_info(row["distribution"], self.version,
+                      (gp.PAYLOAD_MARKER, json.dumps(gp.payload_marker(row["profile"], self.version, ["sm_80"]))))
+        root = self.pkg / "cuda_ptx" / "sm_80"
+        (root / "identical").mkdir(parents=True)
+        binary = root / "identical" / "_mojolearn_gbdt.so"
+        binary.write_bytes(b"fake embedded PTX, not executable")
+        doc = dict(schema="mojolearn.ptx-baseline.v1", code_format="ptx-baseline", vendor="cuda",
+                   target="sm_80", min_compute_capability=[8, 0], source_commit="a" * 40,
+                   source_dirty=False, experimental=True, identical_qualified=False,
+                   qualification_required=True, errors=[], files=[dict(
+                       file="identical/_mojolearn_gbdt.so", numeric_mode="identical",
+                       sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
+                       ptx_modules=[dict(target="sm_80", sha256="b" * 64)])])
+        (root / gp.BASELINE_MANIFEST).write_text(json.dumps(doc))
+        (self.pkg / "identity_columns").mkdir()
+        (self.pkg / "identity_columns" / "COMMIT").write_text("a" * 40)
+        for key, value in (("MOJOLEARN_CUDA_PATH", "ptx-baseline"), ("MOJOLEARN_EXPERIMENTAL_PTX", "1")):
+            old = os.environ.get(key)
+            os.environ[key] = value
+            self.addCleanup(lambda k=key, v=old: os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v))
+        return root, binary
+
+    def test_baseline_requires_both_explicit_switches(self):
+        self.baseline()
+        os.environ.pop("MOJOLEARN_EXPERIMENTAL_PTX")
+        self.assertIsInstance(self.refusal(cuda=True), self.B.GpuPluginError)
+
+    def test_baseline_selection_and_actual_load_receipt(self):
+        root, binary = self.baseline()
+        self.plugin("cuda", ["sm_89", "sm_90a"])
+        self.assertEqual(self.layout(cuda=True, device=("sm_100", "fixture")), ("vendor", str(root)))
+        self.assertEqual(self.B.gpu_plugin()["code_format"], "ptx-baseline")
+        receipt = self.B.baseline_selection_receipt()
+        self.assertEqual(receipt["loaded_files"], [])
+        self.assertFalse(receipt["identical_qualified"])
+        self.assertFalse(receipt["native_fallback"])
+        class Loader:
+            path = str(binary)
+            def exec_module(self, module):
+                pass
+        self.B._exec_binding(Loader(), object())
+        self.assertEqual(self.B.baseline_selection_receipt()["loaded_files"][0]["file"],
+                         "identical/_mojolearn_gbdt.so")
+
+    def test_baseline_failed_load_does_not_claim_loaded_file(self):
+        root, binary = self.baseline()
+        self.layout(cuda=True)
+        class Loader:
+            path = str(binary)
+            def exec_module(self, module):
+                raise RuntimeError("failed load")
+        with self.assertRaises(RuntimeError):
+            self.B._exec_binding(Loader(), object())
+        self.assertEqual(self.B.baseline_selection_receipt()["loaded_files"], [])
+
+    def test_baseline_tamper_source_and_capability_refuse(self):
+        root, binary = self.baseline()
+        original = binary.read_bytes()
+        binary.write_bytes(b"tampered")
+        self.assertIn("complete GPU binding bytes", str(self.refusal(cuda=True)))
+        binary.write_bytes(original)
+        (self.pkg / "identity_columns" / "COMMIT").write_text("c" * 40)
+        self.assertIn("source commits differ", str(self.refusal(cuda=True)))
+        (self.pkg / "identity_columns" / "COMMIT").write_text("a" * 40)
+        self.assertIn("Ampere-or-newer", str(self.refusal(cuda=True, device=("sm_75", "fixture"))))
+
+    def test_baseline_never_selected_automatically(self):
+        self.baseline()
+        os.environ.pop("MOJOLEARN_CUDA_PATH")
+        os.environ.pop("MOJOLEARN_EXPERIMENTAL_PTX")
+        self.assertIsInstance(self.refusal(cuda=True, device=("sm_100", "fixture")), self.B.GpuPluginError)
+        self.assertIsNone(self.B.baseline_selection_receipt())
 
 
 if __name__ == "__main__":
