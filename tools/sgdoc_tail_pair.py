@@ -23,7 +23,7 @@ import shutil
 import subprocess
 import sys
 
-DEFINES = ('-D MOJOLEARN_SGDOC_FAST_TAIL', '-D MOJOLEARN_SGDOC_FAST_TAIL_LONG')
+DEFINES = ('-D MOJOLEARN_SGDOC_FAST_TAIL_OFF', '-D MOJOLEARN_SGDOC_FAST_TAIL_LONG')  # after promotion B=_OFF is the old path
 FIXTURE = 'sgdoc-tail-v1-rows-small'
 
 

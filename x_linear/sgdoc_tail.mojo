@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """SGDOneClassSVM's tail replay (lane/apple-fast-w2-sgdoc, 2026-10-04):
-MOJOLEARN_SGDOC_FAST_TAIL, FAST + Apple, opt-in (CANDIDATE, off on main).
+MOJOLEARN_SGDOC_FAST_TAIL: FAST + Apple DEFAULT (rollback MOJOLEARN_SGDOC_FAST_TAIL_OFF).
 
 Why the tail is the whole answer for learning_rate='optimal'. sgd_one with
 eta_t = 1 / (alpha (t0 + t)) decays w by (1 - eta_t alpha) =

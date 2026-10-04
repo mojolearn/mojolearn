@@ -1333,16 +1333,20 @@ def _sgd_ps_kernel_body(
 # scalars in every lane, no barrier: a lane only touches its own columns),
 # and the weights go back to device memory once a launch. d <= SPS_W *
 # SPS_MAXC, else the block form. FAST: the predictor's fold order changes.
-# lane/apple-fast-w2-sgdoc (2026-10-04): SGDOC_FAST_TAIL, CANDIDATE, opt-in
-# (-D MOJOLEARN_SGDOC_FAST_TAIL; _LONG for the 4x tail). SGDOneClassSVM at
+# SGDOC_FAST_TAIL: FAST+Apple DEFAULT (rollback -D MOJOLEARN_SGDOC_FAST_TAIL_OFF;
+# -D MOJOLEARN_SGDOC_FAST_TAIL_LONG for the 4x tail). SGDOneClassSVM at
 # learning_rate='optimal', tol=None on centered data: main's per-sample
 # kernels over the LAST SGDOC_TAIL_K steps of the real schedule from w = 0,
 # intercept = 1 (the 1/t schedule makes the final state a stationary chain's
-# draw; derivation and gate in x_linear/sgdoc_tail.mojo). Owed: M3 quality
-# (tools/sgdoc_tail_pair.py) and timing; see docs/apple-fast/EXPERIMENTS.md.
+# draw; derivation and gate in x_linear/sgdoc_tail.mojo). Non-centered data
+# keeps the full run bit for bit. M3, source 97ea50da3, one run per arm:
+# taxi 42142.4 -> 153.7 ms, istella 75533.9 -> 407.0 ms (w2-sgdoc-tail-*);
+# w2-sgdoc-q PASS (flag fraction, objective, |w|, score spread, Jaccard vs
+# main's own seed spread). Still main's serial per-sample chain, 300x
+# shorter: a parallel SGD one-class algorithm remains owed.
 comptime SGDOC_FAST_TAIL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and (is_defined["MOJOLEARN_SGDOC_FAST_TAIL"]() or is_defined["MOJOLEARN_SGDOC_FAST_TAIL_LONG"]())
+    and not is_defined["MOJOLEARN_SGDOC_FAST_TAIL_OFF"]()
 )
 comptime SGDOC_TAIL_K = 262144 if is_defined["MOJOLEARN_SGDOC_FAST_TAIL_LONG"]() else 65536
 
