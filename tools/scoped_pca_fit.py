@@ -1,0 +1,260 @@
+#!/usr/bin/env python3
+"""Pinned public PCA.fit: SOURCE TAG quality|timing DATA_NPZ DATA_SHA256.
+Timing requires --quality-report PATH --quality-sha SHA256. No builds/repeats.
+"""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+if not __debug__:
+    raise RuntimeError('assertions must be enabled')
+ROOT = Path(__file__).resolve().parents[1]
+CONTRACT = 'scoped-pca-public-fit-istella-v1'
+MODULE = '_mojolearn_estimators'
+A_FLAGS = '-D MOJOLEARN_SCOPED_GEMM_AUDIT'
+B_FLAGS = A_FLAGS + ' -D MOJOLEARN_SCOPED_GEMM_G1_GRAM -D MOJOLEARN_SCOPED_GEMM_SPLIT -D MOJOLEARN_SCOPED_GEMM_PCA'
+BOUND = 5e-6
+HARNESS_ONLY = {'tools/scoped_pca_fit.py', 'tools/scoped_pca_fit_spec.py',
+                'tools/test_scoped_pca_fit_contract.py', 'tools/apple_fast_job_policy.py',
+                'docs/apple-fast/ab/scoped-pca-fit.md'}
+
+
+def sha(path):
+    h = hashlib.sha256()
+    with Path(path).open('rb') as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b''):
+            h.update(block)
+    return h.hexdigest()
+
+
+def record(path, obj):
+    with Path(path).open('x') as stream:
+        json.dump(obj, stream, indent=2, allow_nan=False)
+        stream.write('\n')
+
+
+def source_contract(compiled):
+    assert re.fullmatch('[0-9a-f]{40}', compiled)
+    harness = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+    subprocess.run(['git', 'merge-base', '--is-ancestor', compiled, harness], check=True)
+    changed = set(subprocess.check_output(['git', 'diff', '--name-only', compiled, harness], text=True).splitlines())
+    assert changed <= HARNESS_ONLY, ('production/config drift', sorted(changed - HARNESS_ONLY))
+    subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--'], check=True)
+    return harness
+
+
+def install(src, dst):
+    fd, temp = tempfile.mkstemp(prefix='.scoped-pca-', suffix='.so', dir=dst.parent)
+    os.close(fd)
+    try:
+        shutil.copy2(src, temp)
+        os.replace(temp, dst)
+    finally:
+        Path(temp).unlink(missing_ok=True)
+
+
+def load_x(path, digest):
+    import numpy as np
+    assert sha(path) == digest, 'data pin mismatch'
+    with np.load(path, allow_pickle=False) as z:
+        x = np.array(z['X'], copy=True, order='C')
+    assert x.dtype == np.dtype('float32') and x.ndim == 2
+    assert x.shape[1] == 220 and x.shape[0] >= 128
+    assert x.size <= 2147483647 and np.isfinite(x).all()
+    return x
+
+
+def worker(binary_sha, mask, data, digest, output, scored, preflight):
+    import numpy as np
+    import time
+    sys.path.insert(0, str(ROOT / 'python'))
+    from mojolearn import PCA, _backend
+    module = _backend.binding(MODULE, 'fast')
+    path = Path(module.__file__).resolve()
+    assert path == (ROOT / 'python/mojolearn' / (MODULE + '.so')).resolve()
+    assert sha(path) == binary_sha and module.estimators_numeric_mode() == 0
+    assert module.estimators_vendor() == 'metal' and module.scoped_gemm_flags() == mask
+    for name in ('pca_fit', 'scoped_gemm_count', 'scoped_gemm_metadata'):
+        assert callable(getattr(module, name, None))
+    if preflight:
+        return
+    x = load_x(data, digest)
+    before = [module.scoped_gemm_count(r, a) for r in range(3) for a in range(3)]
+    start = time.perf_counter_ns() if scored else None
+    model = PCA(n_components=10, svd_solver='covariance_eigh', whiten=False, random_state=7)
+    model.fit(x)
+    arrays = {name: np.array(getattr(model, name), copy=True, order='C') for name in
+              ('components_', 'mean_', 'explained_variance_', 'explained_variance_ratio_', 'singular_values_')}
+    arrays['noise_variance_'] = np.asarray(model.noise_variance_, dtype='float64')
+    elapsed = (time.perf_counter_ns() - start) / 1e6 if scored else None
+    counts = [module.scoped_gemm_count(r, a) - before[3*r+a] for r in range(3) for a in range(3)]
+    expected = [0]*9
+    expected[6 + int(mask == 52)] = 1
+    assert counts == expected, ('NO_REACH/unexpected routes', counts)
+    meta = [module.scoped_gemm_metadata(i) for i in range(15)]
+    nr, nf = x.shape
+    initial = max(1, 640 // (((nf+63)//64)**2))
+    per = ((nr + initial - 1)//initial + 31)//32*32
+    splits = (nr+per-1)//per
+    assert meta[:13] == [2, int(mask == 52), nf, nf, nr, splits, per, 1, 1, nf, nf, 1, 1]
+    assert not model.input_copied_
+    assert all(np.isfinite(a).all() for a in arrays.values())
+    with np.load(data, allow_pickle=False) as original:
+        assert np.array_equal(x.view('uint32'), original['X'].view('uint32'))
+    np.savez(output, **arrays)
+    record(str(output)+'.json', dict(binary_sha=binary_sha, mask=mask, shape=list(x.shape),
+           counts=counts, metadata=meta, scored=scored, elapsed_ms=elapsed, input_preserved=True,
+           span='public PCA constructor + fit + first full fitted-output copies'))
+
+
+def oracle(data, digest, output):
+    import numpy as np
+    x = load_x(data, digest)
+    nr, nf = x.shape
+    mean = np.zeros(nf, dtype='float64')
+    for i in range(0, nr, 8192):
+        mean += x[i:i+8192].astype('float64').sum(axis=0)
+    mean /= nr
+    cov = np.zeros((nf,nf), dtype='float64')
+    for i in range(0, nr, 8192):
+        z = x[i:i+8192].astype('float64') - mean
+        cov += z.T @ z
+    cov /= nr-1
+    np.savez(output, mean=mean, cov=cov, eigenvalues=np.linalg.eigvalsh(cov)[::-1], rows=np.asarray(nr))
+
+
+def metrics(packet, reference):
+    import numpy as np
+    with np.load(packet, allow_pickle=False) as p, np.load(reference, allow_pickle=False) as ref:
+        c, mu, ev, ratio, singular = [p[k].astype('float64') for k in
+            ('components_', 'mean_', 'explained_variance_', 'explained_variance_ratio_', 'singular_values_')]
+        assert c.shape == (10,220) and mu.shape == (220,)
+        assert ev.shape == ratio.shape == singular.shape == (10,)
+        assert all(np.isfinite(p[k]).all() for k in p.files)
+        cov, mean, eig, nr = ref['cov'], ref['mean'], ref['eigenvalues'], int(ref['rows'])
+        trace = float(np.trace(cov))
+        assert trace > 0
+        top = eig[:10]
+        errors = {}
+        for name, a, b in [('mean',mu,mean), ('variance',ev,top), ('ratio',ratio,top/trace),
+                           ('singular',singular,np.sqrt(np.maximum(top,0)*(nr-1))),
+                           ('noise',p['noise_variance_'],np.asarray(np.maximum(eig[10:],0).mean()))]:
+            errors[name+'_relative'] = float(np.linalg.norm(a-b))/max(1.0,float(np.linalg.norm(b)))
+            errors[name+'_maxabs'] = float(np.max(np.abs(a-b)))
+        residual = cov @ c.T - c.T*ev
+        errors['eigen_residual_relative'] = float(np.linalg.norm(residual))/max(1.0,float(np.linalg.norm(cov)))
+        errors['eigen_residual_maxabs'] = float(np.max(np.abs(residual)))
+        ortho = c @ c.T - np.eye(10)
+        errors['orthogonality_relative'] = float(np.linalg.norm(ortho))/np.sqrt(10)
+        errors['orthogonality_maxabs'] = float(np.max(np.abs(ortho)))
+        projector = c.T @ c
+        errors['reconstruction_relative'] = float(np.trace(cov - 2*cov@projector + projector@cov@projector))/trace
+        return errors
+
+
+def compare(directory):
+    import math
+    a,b = [metrics(directory/(arm+'.npz'),directory/'oracle.npz') for arm in 'AB']
+    rows = {k:dict(A=a[k],B=b[k],pass_no_worse=math.isfinite(a[k]) and math.isfinite(b[k]) and b[k]<=a[k]) for k in a}
+    bounded = [k for k in a if k.endswith('_relative') and k!='reconstruction_relative']
+    ok = all(v['pass_no_worse'] for v in rows.values()) and all(a[k]<=BOUND and b[k]<=BOUND for k in bounded)
+    return ok,rows
+
+
+def admit_quality(path, identity):
+    import math
+    prior = json.loads(Path(path).read_text())
+    assert prior['status']=='PASS' and prior['scored'] is False
+    assert all(prior[k]==v for k,v in identity.items())
+    assert prior['metrics'] and all(r['pass_no_worse'] and math.isfinite(r['A']) and math.isfinite(r['B']) and r['B']<=r['A'] for r in prior['metrics'].values())
+    assert set(prior['packets'])=={'A.npz','B.npz','A.npz.json','B.npz.json','oracle.npz'}
+    for name,digest in prior['packets'].items():
+        assert sha(Path(path).parent/name)==digest
+    assert prior['A']['counts']==[0,0,0,0,0,0,1,0,0]
+    assert prior['B']['counts']==[0,0,0,0,0,0,0,1,0]
+    return prior
+
+
+def main():
+    if len(sys.argv)>1 and sys.argv[1]=='_capture':
+        _,_,binary_sha,mask,data,digest,out,scored,preflight = sys.argv
+        worker(binary_sha,int(mask),data,digest,Path(out),scored=='1',preflight=='1')
+        return
+    p=argparse.ArgumentParser(description=__doc__)
+    p.add_argument('source');p.add_argument('tag');p.add_argument('action',choices=('quality','timing'))
+    p.add_argument('data');p.add_argument('data_sha');p.add_argument('--quality-report');p.add_argument('--quality-sha')
+    a=p.parse_args()
+    assert re.fullmatch('[A-Za-z0-9_.-]+',a.tag) and re.fullmatch('[0-9a-f]{64}',a.data_sha)
+    assert subprocess.check_output(['sysctl','-n','machdep.cpu.brand_string'],text=True).strip()=='Apple M3 Ultra'
+    os.chdir(ROOT)
+    harness=source_contract(a.source)
+    data=Path(a.data).expanduser().resolve()
+    assert sha(data)==a.data_sha
+    arms=Path.home()/'mq/verified-arms'/a.source/'estimators'
+    manifest=json.loads((arms/'manifest.json').read_text())
+    expected=dict(source_sha=a.source,binding='estimators',numeric_mode='fast',defines_A=A_FLAGS,defines_B=B_FLAGS)
+    assert all(manifest[k]==v for k,v in expected.items())
+    hashes={arm:sha(arms/(arm+'.so')) for arm in 'AB'}
+    assert manifest['hashes']==hashes
+    identity=dict(source_sha=a.source,harness_source=harness,contract=CONTRACT,helper_sha=sha(__file__),
+                  data_sha=a.data_sha,data_path=str(data),manifest=manifest,bound=BOUND,error_regression_allowance=0)
+    if a.action=='timing':
+        assert a.quality_report and a.quality_sha
+        prior_path=Path(a.quality_report).expanduser().resolve()
+        assert sha(prior_path)==a.quality_sha
+        admit_quality(prior_path,identity)
+    else:
+        assert not a.quality_report and not a.quality_sha
+    out=Path.home()/'mq/out'/(a.tag+'-'+a.action)
+    out.mkdir(parents=True,exist_ok=False)
+    target=ROOT/'python/mojolearn'/(MODULE+'.so')
+    assert not target.is_symlink()
+    old=target.exists()
+    if old:
+        shutil.copy2(target,out/'original.so')
+    env=dict(os.environ,MOJOLEARN_NUMERIC_MODE='fast',MOJOLEARN_VENDOR='apple',MOJOLEARN_BENCH_INSTALLED='0',
+             PYTHONPATH=str(ROOT/'python'),OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1')
+    env.pop('PYTHONOPTIMIZE',None)
+    def run(arm,preflight):
+        install(arms/(arm+'.so'),target)
+        assert sha(target)==hashes[arm]
+        command=[sys.executable,str(Path(__file__).resolve()),'_capture',hashes[arm],'0' if arm=='A' else '52',
+                 str(data),a.data_sha,str(out/(arm+'.npz')),'1' if a.action=='timing' else '0','1' if preflight else '0']
+        log=out/(arm+('.preflight.log' if preflight else '.log'))
+        with log.open('x') as stream:
+            result=subprocess.run(command,env=env,stdout=stream,stderr=subprocess.STDOUT)
+        if result.returncode:
+            print('\n'.join(log.read_text(errors='replace').splitlines()[-12:]))
+            raise RuntimeError('capture infrastructure/reach failure: '+str(log))
+        assert sha(target)==hashes[arm] and sha(arms/(arm+'.so'))==hashes[arm]
+    try:
+        for arm in 'AB':run(arm,True)
+        if a.action=='timing':
+            key=hashlib.sha256(json.dumps([CONTRACT,a.source,a.data_sha,hashes],sort_keys=True).encode()).hexdigest()
+            record(Path.home()/'mq/out'/('scoped-pca-fit-scored-'+key+'.json'),dict(tag=a.tag,quality_sha=a.quality_sha,**identity))
+            shutil.copy2(prior_path.parent/'oracle.npz',out/'oracle.npz')
+        else:
+            oracle(data,a.data_sha,out/'oracle.npz')
+        for arm in 'AB':run(arm,False)
+        assert sha(data)==a.data_sha
+        ok,rows=compare(out)
+        packets={name:sha(out/name) for name in ('A.npz','B.npz','A.npz.json','B.npz.json','oracle.npz')}
+        report=dict(identity,status='PASS' if ok else 'HOLD',metrics=rows,packets=packets,
+                    A=json.loads((out/'A.npz.json').read_text()),B=json.loads((out/'B.npz.json').read_text()),
+                    scored=a.action=='timing',quality_report_sha=a.quality_sha,board_admitted=False)
+        record(out/'report.json',report)
+        print(json.dumps(dict(status=report['status'],report=str(out/'report.json'),scored=report['scored'])))
+        if not ok:raise SystemExit(1)
+    finally:
+        if old:install(out/'original.so',target)
+        else:target.unlink(missing_ok=True)
+
+
+if __name__=='__main__':main()
