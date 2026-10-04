@@ -144,7 +144,7 @@ r2 compiled arm A, but arm B instantiated `dev_mcd_cov_py` and rejected its fabr
 ### Split-chain repair r4 (lane apple-fast-rec-misc, 2026-10-04)
 
 r3 compiled and ran: `mcd-ordered-direct-q-r3` returned HOLD with `repeat_identical` true. B kept main's split
-count (`DFG_BLOCK_TARGET` / `DFG_MIN_SPLIT_STEPS`: 1, 2, 1, 5, 9 and 184 splits at the six direct shapes). With 2
+count (`DFG_BLOCK_TARGET` / `DFG_MIN_SPLIT_STEPS`: 1, 2, 2, 5, 9 and 184 splits at the six direct shapes). With 2
 partials the Neumaier fold equals the plain sum; with 5..9 the fp32 accumulation inside each split's MMA chain
 (about 550..600 rows) is larger than the fold's rounding, so B's error differed from A's by noise and the per-key
 max-abs comparison, with no tolerance, could go either way. r4 cuts every split to `MCD_ORD_CHAIN` = 4 K windows
