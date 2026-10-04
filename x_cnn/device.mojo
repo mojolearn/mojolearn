@@ -44,6 +44,8 @@ from x_cnn.ops import (
     relu_fwd_at, relu_bwd_at, add_at, bias_rows_at, softmax_xent_row_at, seq_mean, sgd_at,
     bn_stats_at, bn_eval_stats_at, bn_apply_at, bn_running_at, bn_bwd_red_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
     dropout2d_at, mul_at, spmm_at, gcn_deg_at, gcn_norm_at,
+    BN_FOLD_BLOCK, bn_fold_blocks, bn_blk_sum_at, bn_blk_mean_at, bn_blk_sq_at, bn_blk_var_at,
+    bn_blk_red_at, bn_blk_red_fin_at, DROPOUT2D_CH_MASK, dropout2d_chan_at, dropout2d_apply_at,
     pad_fwd_at, pad_bwd_at, adapt_avg_fwd_at, adapt_avg_bwd_at, adapt_max_fwd_at, adapt_max_bwd_at,
     sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at, gather_rows_at, argmax_row_at,
 )
@@ -88,6 +90,9 @@ struct _CnnContext(Defaultable, Movable):
     #: lane/cnn-apple2: freed resident arrays kept for reuse by `res_alloc`
     #: (at most `RES_POOL_MAX_FLOATS` in all).
     var pool: List[DeviceBuffer[DType.float32]]
+    #: lane idn-cnn-resident: the leading words of workspace slot
+    #: `ONES_WS_SLOT` that already hold 1.0f (`ones_buf`).
+    var ones_n: Int
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
@@ -95,6 +100,7 @@ struct _CnnContext(Defaultable, Movable):
         self.res = List[DeviceBuffer[DType.float32]]()
         self.tuned = List[Int]()
         self.pool = List[DeviceBuffer[DType.float32]]()
+        self.ones_n = 0
 
 
 #: The pinned stages of this binding's downloads (core/staged_download.mojo),
@@ -561,6 +567,34 @@ def ws_i(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType.int
     return view_i(ctx, b.unsafe_ptr().bitcast[Int32]().unsafe_origin_cast[MutAnyOrigin](), n)
 
 
+#: lane idn-cnn-resident (2026-10-04): THE DEVICE ONES VECTOR. The bias
+#: gradient is the pinned GEMM's fold of G against a vector of ones; every
+#: backward filled that vector again (a launch over the rows, or a fill).
+#: IDENTICAL now keeps one resident vector of 1.0f words in its own
+#: workspace slot, filled when it first grows to a size and read by every
+#: later backward. The same operand words into the same GEMM: no bit moves.
+#: `-D MOJOLEARN_XCNN_ONES_CACHE_OFF` is the before arm (a fill per call).
+comptime ONES_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_XCNN_ONES_CACHE_OFF"]()
+comptime ONES_WS_SLOT = 30
+
+
+def ones_buf(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """`n` floats for a backward's ones operand. With `ONES_CACHE` they are
+    the resident ones (already 1.0f; filled here, in order, when the vector
+    grows); without it they are workspace slot `slot`, which the caller
+    fills as it always did."""
+    comptime if ONES_CACHE:
+        var need = n if n > 0 else 1
+        var b = ws(ctx, ONES_WS_SLOT, need)
+        var s = _slots()
+        if s[].ones_n < need:
+            # a grown slot is a new buffer (`ws`), so every word is filled
+            b.enqueue_fill(Float32(1))
+            s[].ones_n = need
+        return b^
+    return ws(ctx, slot, n)
+
+
 def put[resident: Bool](ctx: DeviceContext, slot: Int, src: FP, n: Int) raises -> DeviceBuffer[DType.float32]:
     """An entry's input: the resident array itself, or host `src` copied into slot `slot`."""
     comptime if resident:
@@ -898,7 +932,7 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var dp = put_prm(ctx, 3, prm)
     var cols = ws(ctx, 4, rows * ckk)
     var g = ws(ctx, 5, rows * OC)
-    var ones = ws(ctx, 6, rows)
+    var ones = ones_buf(ctx, 6, rows)
     var gw = m_out(ctx, 7, a[4], OC * ckk, isdev(dev, 4))
     var gb = m_out(ctx, 8, a[5], OC, isdev(dev, 5))
     var dcols = ws(ctx, 9, rows * ckk)
@@ -912,7 +946,8 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
         )
     else:
         launch[dout_rows_at](ctx, fp(ddout), fp(g), fp(g), fp(g), ip(dp), ip(dp), rows * OC)
-    launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
+    comptime if not ONES_CACHE:
+        launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the weight gradient's reduction over the N*OH*OW rows is
     # the pinned GEMM's (leaves + balanced fold), never an atomic accumulation.
     device_gemm(ctx, gw, g, cols, OC, ckk, rows, OP_TN)
@@ -1154,8 +1189,9 @@ def linear_backward_m(a: List[Int], dev: Int, n: Int, d_in: Int, d_out: Int) rai
     var dx = m_in(ctx, 0, a[0], n * d_in, isdev(dev, 0))
     var dw = m_in(ctx, 1, a[1], d_out * d_in, isdev(dev, 1))
     var dg = m_in(ctx, 2, a[2], n * d_out, isdev(dev, 2))
-    var dones = ws(ctx, 3, n)
-    dones.enqueue_fill(Float32(1))
+    var dones = ones_buf(ctx, 3, n)
+    comptime if not ONES_CACHE:
+        dones.enqueue_fill(Float32(1))
     var gx = m_out(ctx, 4, a[3], n * d_in, isdev(dev, 3))
     var gw = m_out(ctx, 5, a[4], d_out * d_in, isdev(dev, 4))
     var gb = m_out(ctx, 6, a[5], d_out, isdev(dev, 5))
@@ -1451,14 +1487,24 @@ def batchnorm_forward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool
     var da = m_in(ctx, 2, a[2], na, isdev(dev, 2))
     var dp = put_prm(ctx, 3, prm)
     var dout = m_out(ctx, 4, a[3], total, isdev(dev, 3))
+    # lane idn-loss-norm-folds: the blocked folds' partials (x_cnn/ops.mojo
+    # BN_FOLD_BLOCK), C * NB words; one word when the single chain runs
+    var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
+    var dpart = ws(ctx, 5, nblk)
     if training:
-        var blk = False
-        comptime if BN_BLOCK:
-            blk = _bn_use_block[True](ctx, dx, dr, da, dp, Int(prm[0]), C, Int(prm[2]))
-        if blk:
-            ctx.enqueue_function[bn_stats_block_kernel](fp(dx), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
+        comptime if BN_FOLD_BLOCK:
+            launch[bn_blk_sum_at](ctx, fp(dx), fp(dpart), fp(dpart), fp(dpart), ip(dp), ip(dp), nblk)
+            launch[bn_blk_mean_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+            launch[bn_blk_sq_at](ctx, fp(dx), fp(dpart), fp(da), fp(da), ip(dp), ip(dp), nblk)
+            launch[bn_blk_var_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
         else:
-            launch[bn_stats_at](ctx, fp(dx), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+            var blk = False
+            comptime if BN_BLOCK:
+                blk = _bn_use_block[True](ctx, dx, dr, da, dp, Int(prm[0]), C, Int(prm[2]))
+            if blk:
+                ctx.enqueue_function[bn_stats_block_kernel](fp(dx), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
+            else:
+                launch[bn_stats_at](ctx, fp(dx), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
     else:
         launch[bn_eval_stats_at](ctx, fp(dr), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
     launch[bn_apply_at](ctx, fp(dx), fp(da), fp(dout), fp(dout), ip(dp), ip(dp), total)
@@ -1470,6 +1516,7 @@ def batchnorm_forward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool
     ctx.synchronize()
     _ = dx^
     _ = dr^
+    _ = dpart^
     _ = da^
     _ = dp^
     _ = dout^
@@ -1507,13 +1554,21 @@ def batchnorm_backward_m(a: List[Int], dev: Int, prm: List[Int32], training: Boo
     var da = m_in(ctx, 2, a[2], na, isdev(dev, 2))
     var dp = put_prm(ctx, 3, prm)
     var dout = m_out(ctx, 4, a[3], total, isdev(dev, 3))
-    var blk = False
-    comptime if BN_BLOCK:
-        blk = _bn_use_block[False](ctx, dx, dg, da, dp, Int(prm[0]), C, Int(prm[2]))
-    if blk:
-        ctx.enqueue_function[bn_bwd_red_block_kernel](fp(dx), fp(dg), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
+    # lane idn-loss-norm-folds: blocked folds (x_cnn/ops.mojo BN_FOLD_BLOCK),
+    # partials [sum_g C * NB | sum_gx C * NB]
+    var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
+    var dpart = ws(ctx, 5, 2 * nblk)
+    comptime if BN_FOLD_BLOCK:
+        launch[bn_blk_red_at](ctx, fp(dx), fp(dg), fp(da), fp(dpart), ip(dp), ip(dp), nblk)
+        launch[bn_blk_red_fin_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
     else:
-        launch[bn_bwd_red_at](ctx, fp(dx), fp(dg), fp(da), fp(da), ip(dp), ip(dp), C)
+        var blk = False
+        comptime if BN_BLOCK:
+            blk = _bn_use_block[False](ctx, dx, dg, da, dp, Int(prm[0]), C, Int(prm[2]))
+        if blk:
+            ctx.enqueue_function[bn_bwd_red_block_kernel](fp(dx), fp(dg), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
+        else:
+            launch[bn_bwd_red_at](ctx, fp(dx), fp(dg), fp(da), fp(da), ip(dp), ip(dp), C)
     if training:
         launch[bn_bwd_dx_at](ctx, fp(dx), fp(dg), fp(da), fp(dout), ip(dp), ip(dp), total)
     else:
@@ -1523,6 +1578,7 @@ def batchnorm_backward_m(a: List[Int], dev: Int, prm: List[Int32], training: Boo
     ctx.synchronize()
     _ = dx^
     _ = dg^
+    _ = dpart^
     _ = da^
     _ = dp^
     _ = dout^
@@ -1543,10 +1599,19 @@ def dropout2d_m(a: List[Int], dev: Int, n: Int, prm: List[Int32], hyper: List[Fl
     var dh = put_hyper(ctx, 2, hyper)
     var mask = m_out(ctx, 3, a[2], n, isdev(dev, 2))
     var dout = m_out(ctx, 4, a[1], n, isdev(dev, 1))
-    launch[dropout2d_at](ctx, fp(dx), fp(mask), fp(dout), fp(dh), ip(dp), ip(dp), n)
+    # lane idn-loss-norm-folds: one draw per (n, c) channel into a table,
+    # then the element pass (x_cnn/ops.mojo DROPOUT2D_CH_MASK); same words
+    var nch = Int(prm[0]) * Int(prm[1]) if DROPOUT2D_CH_MASK else 1
+    var dtab = ws(ctx, 5, nch)
+    comptime if DROPOUT2D_CH_MASK:
+        launch[dropout2d_chan_at](ctx, fp(dtab), fp(dh), fp(dh), fp(dh), ip(dp), ip(dp), nch)
+        launch[dropout2d_apply_at](ctx, fp(dx), fp(mask), fp(dout), fp(dtab), ip(dp), ip(dp), n)
+    else:
+        launch[dropout2d_at](ctx, fp(dx), fp(mask), fp(dout), fp(dh), ip(dp), ip(dp), n)
     m_fetch(ctx, dout, a[1], n, isdev(dev, 1))
     m_fetch(ctx, mask, a[2], n, isdev(dev, 2))
     ctx.synchronize()
+    _ = dtab^
     _ = dx^
     _ = dp^
     _ = dh^
@@ -1999,10 +2064,11 @@ def conv_block_backward_into[resident: Bool = False](
     else:
         launch[relu_bwd_at](ctx, fp(yconv), fp(dgo), fp(gy), fp(gy), ip(dp), ip(dp), ny)
         launch[dout_rows_at](ctx, fp(gy), fp(grow), fp(grow), fp(grow), ip(dp), ip(dp), ny)
-    var ones = ws(ctx, 13, rows)
+    var ones = ones_buf(ctx, 13, rows)
     var gw = outb[resident](ctx, 14, gw_out, OC * ckk)
     var gb = outb[resident](ctx, 15, gb_out, OC)
-    launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
+    comptime if not ONES_CACHE:
+        launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the pinned GEMM's fold over the rows, never an atomic.
     device_gemm(ctx, gw, grow, cols, OC, ckk, rows, OP_TN)
     device_gemm(ctx, gb, grow, ones, OC, 1, rows, OP_TN)

@@ -14,7 +14,7 @@ otherwise), then device == oracle and host == oracle bit for bit.
 Seams (DEVIATION numbers, lane cnn 5700-5799):
   5700 col2im: per input pixel, a gather over (kh, kw) ascending    alt: descending
   5701 conv weight gradient: GEMM TN, the pinned leaves + fold      alt: one serial fold
-  5702 BatchNorm statistics: one fold per channel over (n, hw)      alt: n descending
+  5702 BatchNorm statistics: blocked fold per channel over (n, hw)  alt: n descending
   5703 Dropout2d: Philox counter = n*C + c, integer threshold       alt: counter c*N + n
   5704 SpMM (GCN/SAGE): row entries folded in column order          alt: reversed
   5705 NaN canon + softmax +inf limit                               alt: raw arithmetic
@@ -31,7 +31,8 @@ Seams (DEVIATION numbers, lane cnn 5700-5799):
 """
 from std.math import fma
 from std.memory import bitcast
-from checks.numerics import ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt, identical_sqrt
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt, identical_sqrt
 from core.philox import philox4x32_10
 from gemm.contract import OP_TN
 from gemm.host.identical_gemm import gemm_oracle, gemm_oracle_serial
@@ -105,6 +106,37 @@ def o_conv_dw(
 
 
 # ---------------------------------------------------------------- 5702
+#: The oracle's own reading of the blocked-fold switch (x_cnn/ops.mojo
+#: BN_FOLD_BLOCK; lane idn-loss-norm-folds).
+comptime O_BN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_BN_FOLD_BLOCK_OFF"]()
+
+
+def _o_blocked_sum(v: List[Float32]) -> Float32:
+    """The channel fold's order (x_cnn/ops.mojo BN_FOLD_BLOCK): consecutive
+    blocks of B values (the smallest power of two >= 64 with B * B >= the
+    count), each an ascending chain from +0.0, the block sums then added
+    ascending from +0.0. One chain when the blocked fold is compiled out."""
+    var count = len(v)
+    var B = count if count > 0 else 1
+    comptime if O_BN_FOLD_BLOCK:
+        B = 64
+        while B * B < count:
+            B *= 2
+    var total = Float32(0)
+    var parts = List[Float32]()
+    var lo = 0
+    while lo < count:
+        var hi = min(lo + B, count)
+        var acc = Float32(0)
+        for j in range(lo, hi):
+            acc = ftz(acc + v[j])
+        parts.append(acc)
+        lo = hi
+    for b in range(len(parts)):
+        total = ftz(total + parts[b])
+    return total
+
+
 def o_bn_stats(x: List[Float32], N: Int, C: Int, HW: Int, eps: Float32, alt: Bool) -> List[Float32]:
     """[mean C | biased var C | invstd C]."""
     var mean = List[Float32]()
@@ -112,19 +144,19 @@ def o_bn_stats(x: List[Float32], N: Int, C: Int, HW: Int, eps: Float32, alt: Boo
     var inv = List[Float32]()
     var count = Float32(N * HW)
     for c in range(C):
-        var acc = Float32(0)
+        var xs = List[Float32]()
         for a in range(N):
             var n = N - 1 - a if alt else a
             for k in range(HW):
-                acc = ftz(acc + ftz(x[(n * C + c) * HW + k]))
-        var m = ftz(identical_div(acc, count))
-        var sq = Float32(0)
+                xs.append(ftz(x[(n * C + c) * HW + k]))
+        var m = ftz(identical_div(_o_blocked_sum(xs), count))
+        var ds = List[Float32]()
         for a in range(N):
             var n = N - 1 - a if alt else a
             for k in range(HW):
                 var d = ftz(ftz(x[(n * C + c) * HW + k]) - m)
-                sq = ftz(sq + ftz(identical_mul(d, d)))
-        var v = ftz(identical_div(sq, count))
+                ds.append(ftz(identical_mul(d, d)))
+        var v = ftz(identical_div(_o_blocked_sum(ds), count))
         mean.append(m)
         var_b.append(v)
         inv.append(ftz(identical_rsqrt(ftz(v + eps))))

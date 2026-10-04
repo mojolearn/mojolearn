@@ -14,6 +14,7 @@ from sequence.exec_trait import Exec
 from sequence.ops import SEQ_FAST_VAR_ONECOPY, TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
 from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LAMB_BLK, OP_LAMB_SEGFOLD, OP_LAMB_CLIP, OP_LAMB_TRUST, OP_LAMB_APPLY_ALL, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_PROPHET_FG_PART, OP_PROPHET_FG_SUM, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
+from sequence.layernorm import LN_FOLD_BLOCK, ln_fold_rows
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
 from sequence.ets import ets_scratch
@@ -1164,9 +1165,13 @@ def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp:
         # FAST: the column folds split over row blocks (about 8192 threads,
         # at least 1024 rows each), then one ordered sum of the S partials
         var S = min(max(8192 // D, 1), M // 1024) if _fast_norms() else 0
+        var RS = (M + S - 1) // S if S > 1 else M
+        # IDENTICAL (lane idn-loss-norm-folds, sequence/layernorm.mojo
+        # LN_FOLD_BLOCK): fixed blocks of ln_fold_rows(M) rows
+        comptime if LN_FOLD_BLOCK:
+            RS = ln_fold_rows(M)
+        S = (M + RS - 1) // RS
         if S > 1:
-            var RS = (M + S - 1) // S
-            S = (M + RS - 1) // RS
             var PW = ex.alloc(S * D)
             var PB = ex.alloc(S * D)
             c.p6 = PW

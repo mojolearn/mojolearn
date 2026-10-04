@@ -33,6 +33,8 @@ from x_cnn.ops import (
     relu_fwd_at, relu_bwd_at, add_at, bias_rows_at, softmax_xent_row_at, seq_mean, sgd_at,
     bn_stats_at, bn_eval_stats_at, bn_apply_at, bn_running_at, bn_bwd_red_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
     dropout2d_at, mul_at, spmm_at, gcn_deg_at, gcn_norm_at,
+    BN_FOLD_BLOCK, bn_fold_blocks, bn_blk_sum_at, bn_blk_mean_at, bn_blk_sq_at, bn_blk_var_at,
+    bn_blk_red_at, bn_blk_red_fin_at,
     pad_fwd_at, pad_bwd_at, adapt_avg_fwd_at, adapt_avg_bwd_at, adapt_max_fwd_at, adapt_max_bwd_at,
     sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at,
 )
@@ -785,14 +787,25 @@ def batchnorm_forward_into(x: FP, running: FP, aux: FP, dst: FP, prm: List[Int32
     var C = Int(prm[1])
     var total = Int(prm[0]) * C * Int(prm[2])
     var ps = prm.copy()
+    # lane idn-loss-norm-folds: the device's blocked folds (x_cnn/ops.mojo
+    # BN_FOLD_BLOCK), the same element functions
+    var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
+    var part = zeros(nblk)
     if training:
-        run[bn_stats_at](x, aux, aux, aux, hi(ps), hi(ps), C)
+        comptime if BN_FOLD_BLOCK:
+            run[bn_blk_sum_at](x, hp(part), hp(part), hp(part), hi(ps), hi(ps), nblk)
+            run[bn_blk_mean_at](hp(part), aux, aux, aux, hi(ps), hi(ps), C)
+            run[bn_blk_sq_at](x, hp(part), aux, aux, hi(ps), hi(ps), nblk)
+            run[bn_blk_var_at](hp(part), aux, aux, aux, hi(ps), hi(ps), C)
+        else:
+            run[bn_stats_at](x, aux, aux, aux, hi(ps), hi(ps), C)
     else:
         run[bn_eval_stats_at](running, aux, aux, aux, hi(ps), hi(ps), C)
     run[bn_apply_at](x, aux, dst, dst, hi(ps), hi(ps), total)
     if training:
         run[bn_running_at](running, aux, aux, aux, hi(ps), hi(ps), C)
     _ = ps^
+    _ = part^
 
 
 def batchnorm_backward_into(x: FP, g: FP, aux: FP, dst: FP, prm: List[Int32], training: Bool):
@@ -800,12 +813,19 @@ def batchnorm_backward_into(x: FP, g: FP, aux: FP, dst: FP, prm: List[Int32], tr
     var C = Int(prm[1])
     var total = Int(prm[0]) * C * Int(prm[2])
     var ps = prm.copy()
-    run[bn_bwd_red_at](x, g, aux, aux, hi(ps), hi(ps), C)
+    var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
+    var part = zeros(2 * nblk)
+    comptime if BN_FOLD_BLOCK:
+        run[bn_blk_red_at](x, g, aux, hp(part), hi(ps), hi(ps), nblk)
+        run[bn_blk_red_fin_at](hp(part), aux, aux, aux, hi(ps), hi(ps), C)
+    else:
+        run[bn_bwd_red_at](x, g, aux, aux, hi(ps), hi(ps), C)
     if training:
         run[bn_bwd_dx_at](x, g, aux, dst, hi(ps), hi(ps), total)
     else:
         run[bn_bwd_eval_dx_at](x, g, aux, dst, hi(ps), hi(ps), total)
     _ = ps^
+    _ = part^
 
 
 def batchnorm_forward_host(
