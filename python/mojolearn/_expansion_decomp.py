@@ -1326,6 +1326,16 @@ def _rp_rand(k, r, c, seed, stream, kind, dev):
     return out
 
 
+def _srp_grid_count(thr):
+    """The number of uniforms k * 2^-24 (k in [0, 2^24)) at or below
+    float32(thr): main's sparse keep rate on the draw grid, as an integer
+    (MOJOLEARN_XD_FAST_SRP_STRAT). Glue: one float32 rounding and a floor."""
+    t32 = array.array("f", [thr])[0]
+    if t32 < 0:
+        return 0
+    return min(int(t32 * 16777216.0) + 1, 16777216)  # exact: t32 * 2^24 is a scaled float32
+
+
 def _grp_cls2(k):
     """lane/apple-fast-gap-cls2: the random projections' FAST Apple fit
     switches compiled into the kit's binding (x_decomp/resident.mojo
@@ -1448,17 +1458,25 @@ class _RandomProjection(_Base):
         kc = int(self.n_components)
         if kc <= 0:
             raise ValueError(f"n_components must be greater than 0, got {kc}")
+        extra = []
         if isinstance(self, SparseRandomProjection):
             dens = 1.0 / math.sqrt(d) if self.density == "auto" else float(self.density)
             if not 0 < dens <= 1:
                 raise ValueError(f"Expected density in range ]0, 1], got: {dens}")
             mode, sc, thr = (2 if dens == 1 else 1), math.sqrt(1.0 / dens) / math.sqrt(kc), dens - 2.0 ** -25
+            if mode == 1 and _grp_cls2(k) & 16:
+                # lane apple-fast-w2-kfeat MOJOLEARN_XD_FAST_SRP_STRAT
+                # (x_decomp/resident.mojo `srp_strat_kernel`): the
+                # column-stratified pattern; D = the count of 2^-24 grid
+                # points main's `u <= float32(thr)` keeps, so every entry is
+                # nonzero with main's probability
+                mode, extra = 3, [d, _srp_grid_count(thr)]
         else:
             dens, mode, sc, thr = None, 0, 1.0 / math.sqrt(kc), 0.0
         C = k._dout(kc, d)
         res = array.array("f", [0.0]) * (kc * d)
         bad = int(k.b.x_decomp_grp_fit_fused(addr_ro(a, name="X"), a.size, C._d.id, res.buffer_info()[0],
-                                             [kc * d, int(_seed_of(self.random_state)) & 0xFFFFFFFF, mode],
+                                             [kc * d, int(_seed_of(self.random_state)) & 0xFFFFFFFF, mode] + extra,
                                              [sc, thr]))
         if bad >= 0:
             raise ValueError("X: input must be finite; NaN/inf are unsupported")

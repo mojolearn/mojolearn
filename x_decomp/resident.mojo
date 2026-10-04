@@ -27,6 +27,7 @@ from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
 
 from x_decomp.cells import F32Ptr, OP_SCALE, OP_SELECT, ew_cell, rand_cell
+from core.philox import philox4x32_10
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import HostBuffer
 from core.device_scan import NONFINITE_NONE, SCAN_TPB, _scan_blocks, nonfinite_partial_kernel
@@ -537,12 +538,37 @@ comptime GRP_CLS2_LAZY = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2
 #: launches rand and scale separately. Refusal stays in fit; bit 8 of
 #: `x_decomp_grp_cls2`. Needs DEVSCAN (not NOSCAN).
 comptime GRP_FAST_FUSED = GRP_CLS2_DEVSCAN and not is_defined["MOJOLEARN_XD_FAST_GRP_FUSED_OFF"]()
+#: lane apple-fast-w2-kfeat (2026-10-04), DEFAULT in FAST + Apple (needs
+#: GRP_FAST_FUSED; rollback `-D MOJOLEARN_XD_FAST_SRP_STRAT_OFF`, main's
+#: Bernoulli pattern). Quality fix: w2-kfeat-srp-q PASS, istella 40-seed mean
+#: distortion 0.946 -> 0.571, board seed 7 1.883 -> 0.475 (sklearn 0.474);
+#: taxi mean 0.346 -> 0.233, seed 7 0.147 -> 0.264 (sklearn 0.381); M3
+#: speed istella 15.7 -> 15.9 ms (neutral). SparseRandomProjection's nonzero PATTERN is drawn column
+#: by column by systematic sampling (`srp_strat_kernel`): column j takes a
+#: uniform 24-bit offset o_j (Philox stream 4 at counter j) and component c
+#: is nonzero iff floor(((c+1) D + o_j) / 2^24) > floor((c D + o_j) / 2^24),
+#: D = the 2^-24 grid count main's `u <= density - 2^-25` keeps. Every entry
+#: is still nonzero with probability D / 2^24 (main's), entries of different
+#: columns stay independent, and the signs and the scale are main's words
+#: (stream 3); only the within-column count changes, from Binomial(k, density)
+#: to floor or ceil of k * density. WHY: sparse-rp istella's distortion
+#: 1.883 vs sklearn's 0.474 is that count on one dominant raw column: with
+#: k = 10 and density 1/sqrt(220), a column picked twice gives
+#: |2 * 1.483 - 1| = 1.97 and once |1.483 - 1| = 0.48 (the projected squared
+#: distance of a pair separated along that column is count * s^2 * dx^2,
+#: s^2 = 1/(k density) = 1.483); main's seed-7 draw has 27 of 220 columns at
+#: count >= 2 (sklearn's draw has its own luck). Stratifying removes that
+#: variance term for every input and leaves the off-diagonal terms' law
+#: alone. The 'auto' n_components and compute_inverse_components routes
+#: (not fused) keep main's draw.
+comptime GRP_FAST_SRP_STRAT = GRP_FAST_FUSED and not is_defined["MOJOLEARN_XD_FAST_SRP_STRAT_OFF"]()
 comptime GRP_CLS2_ANY = GRP_CLS2_NOSCAN or GRP_CLS2_DEVSCAN or GRP_CLS2_LAZY
 
 
 def grp_cls2_py() raises -> PythonObject:
     """The random projections' FAST Apple fit switches compiled in: bit 1
-    NOSCAN, bit 2 DEVSCAN, bit 4 LAZY (0 on every other build)."""
+    NOSCAN, bit 2 DEVSCAN, bit 4 LAZY, bit 8 FUSED, bit 16 SRP_STRAT (0 on
+    every other build)."""
     var f = 0
     comptime if GRP_CLS2_NOSCAN:
         f |= 1
@@ -552,6 +578,8 @@ def grp_cls2_py() raises -> PythonObject:
         f |= 4
     comptime if GRP_FAST_FUSED:
         f |= 8
+    comptime if GRP_FAST_SRP_STRAT:
+        f |= 16
     return PythonObject(f)
 
 
@@ -617,6 +645,33 @@ def grp_rand_scale_kernel(dst: F32Ptr, count: Int32, seed: UInt32, mode: Int32, 
         dst.unsafe_store(i, v)
 
 
+def srp_strat_kernel(dst: F32Ptr, count: Int32, d: Int32, seed: UInt32, dgrid: UInt32, s: Float32):
+    """GRP_FAST_SRP_STRAT: the sparse matrix (row-major, k x d, entry i =
+    c d + j) with the column-stratified pattern (module comment above):
+    nonzero iff the systematic-sampling boundary falls in [c D, (c+1) D)
+    after column j's offset; the value is main's scaled sign
+    (`ew_cell(OP_SCALE, rand_cell(i, seed, 3, 2))`), else 0. Integer
+    arithmetic only (Metal has no float64); one Philox call per entry for
+    the offset (recomputed per row: no scratch, no second launch)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(count):
+        var dd = Int(d)
+        var c = i // dd
+        var j = i - c * dd
+        var r = philox4x32_10(
+            SIMD[DType.uint32, 4](UInt32(j & 0xFFFFFFFF), UInt32(4), UInt32(j >> 32), 0),
+            SIMD[DType.uint32, 2](seed, UInt32(0x5EED)),
+        )
+        var off = UInt64(r[0] >> 8)
+        var g = UInt64(dgrid)
+        var lo = (UInt64(c) * g + off) >> 24
+        var hi = (UInt64(c + 1) * g + off) >> 24
+        var v = Float32(0)
+        if hi != lo:
+            v = ew_cell(OP_SCALE, rand_cell(i, seed, UInt32(3), 2), Float32(1), Float32(1), s)
+        dst.unsafe_store(i, v)
+
+
 struct _GrpStage(Defaultable, Movable):
     """The fused fit's pooled scan partials (device) and their pinned copy."""
     var part: Optional[DeviceBuffer[DType.int32]]
@@ -643,6 +698,14 @@ def grp_fit_fused_py(
     var count = _n(p, 0)
     var seed = UInt32(Int(py=p[1]) & 0xFFFFFFFF)
     var mode = Int(py=p[2])
+    var sd = 1
+    var sgrid = 0
+    comptime if GRP_FAST_SRP_STRAT:
+        if mode == 3:
+            sd = _n(p, 3)
+            sgrid = _n(p, 4)
+            if sd <= 0 or count % sd != 0 or sgrid <= 0 or sgrid > 16777216:
+                raise Error("x_decomp_grp_fit_fused: stratified sparse mode needs n_features > 0 dividing count and 0 < D <= 2^24")
     var sc = Float32(Float64(py=s[0]))
     var thr = Float32(Float64(py=s[1]))
     var src = F32Ptr(unsafe_from_address=Int(py=xaddr))
@@ -666,9 +729,20 @@ def grp_fit_fused_py(
             ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(),
                              src_buf=st[].part.value().create_sub_buffer[DType.int32](0, blocks))
         if count > 0:
-            ctx.enqueue_function[grp_rand_scale_kernel](
-                pd, Int32(count), seed, Int32(mode), sc, thr, grid_dim=_blocks(count), block_dim=TPB
-            )
+            var strat = False
+            comptime if GRP_FAST_SRP_STRAT:
+                # p = [count, seed, 3, n_features, D]: the stratified sparse
+                # pattern (srp_strat_kernel); modes 0-2 are main's kernel
+                strat = mode == 3
+                if strat:
+                    ctx.enqueue_function[srp_strat_kernel](
+                        pd, Int32(count), Int32(sd), seed, UInt32(sgrid), sc,
+                        grid_dim=_blocks(count), block_dim=TPB,
+                    )
+            if not strat:
+                ctx.enqueue_function[grp_rand_scale_kernel](
+                    pd, Int32(count), seed, Int32(mode), sc, thr, grid_dim=_blocks(count), block_dim=TPB
+                )
             ctx.enqueue_copy(dst_ptr=host_out, src_buf=_pool_buf_view(_id(dst), count))
         ctx.synchronize()
         var hp = st[].host.value().unsafe_ptr()
