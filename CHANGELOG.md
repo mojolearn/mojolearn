@@ -4,6 +4,12 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+### 0.8.37 candidate
+
+- Split Linux native GPU binaries into Ada, Hopper, and gfx942 payload packages, retaining `mojolearn-nvidia` and `mojolearn-amd` as vendor aggregates. Ordinary `pip install mojolearn` still installs all native payloads. New ownership paths protect upgrades from the old vendor wheels.
+- Publish payloads before vendor aggregates and core; require architecture-specific smoke receipts and one frozen source commit throughout the release. Oversized and mixed-architecture payloads are rejected.
+- Add an explicitly selected experimental sm80 PTX build/loader and witnessed baseline/native comparison tool. It is excluded from default dependencies and publication and makes no IDENTICAL qualification claim.
+
 ## 0.8.36 (published 2026-10-03)
 
 `python -m mojolearn verify` works again: the bundled reference table and the 58 portable models are regenerated from columns recorded on NVIDIA (L40S, sm_89), AMD (MI325X, gfx942), Apple (M4, Metal) and the host column at this release's code (0.8.35 shipped a stale table, so `verify --quick` stopped at its self-test). `verify --quick` reads VERIFIED on 32 of 32 lanes. Releases now refuse to publish when `verify --self-test` fails on the built wheel.
