@@ -682,13 +682,28 @@ def dev_lu_aux_py(
 #: -D MOJOLEARN_IDN_QR_R_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves the
 #: entry out and Python keeps the host-address call.
 comptime IDN_QR_R_RESIDENT = IDN_QR_R_DIRECT and not is_defined["MOJOLEARN_IDN_QR_R_RESIDENT_OFF"]()
+# lane fix-d1-decomp (2026-10-04, audit F8): the resident QR held X twice
+# (the operand and the device copy the factorization destroys). When the
+# caller gives the operand up (p[2] != 0: FactorAnalysis's centered X, never
+# read after its R), the QR runs in place on the operand's own pooled buffer
+# and no second m x n buffer is made. The same launch on the same values:
+# the same words. -D MOJOLEARN_IDN_QR_R_INPLACE_OFF (or -D
+# MOJOLEARN_IDN_ALL_OFF) keeps the copy whatever the caller says.
+comptime IDN_QR_R_INPLACE = IDN_QR_R_RESIDENT and not (
+    is_defined["MOJOLEARN_IDN_QR_R_INPLACE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 
 
 def dev_qr_r_py(a: PythonObject, r: PythonObject, p: PythonObject) raises -> PythonObject:
-    """`x_decomp_qr_r` of the device matrix a (m x n, left as it is: the QR
-    destroys a device copy); r (n x n) is a host address. p = [m, n]. Waits."""
+    """`x_decomp_qr_r` of the device matrix a (m x n); r (n x n) is a host
+    address. p = [m, n] or [m, n, consume]. Without consume (or under
+    IDN_QR_R_INPLACE_OFF) a is left as it is: the QR destroys a device copy.
+    With consume != 0 and IDN_QR_R_INPLACE the QR destroys a itself (the
+    caller must not read a again). Returns 1 when a was consumed, else 0.
+    Waits."""
     var m = _n(p, 0)
     var n = _n(p, 1)
+    var consume = len(p) > 2 and Int(py=p[2]) != 0
     if n <= 0 or m < n:
         raise Error("x_decomp: qr_r needs m >= n >= 1")
     _validate_shape(m, n, "qr")
@@ -700,13 +715,21 @@ def dev_qr_r_py(a: PythonObject, r: PythonObject, p: PythonObject) raises -> Pyt
     var pr = F32Ptr(unsafe_from_address=Int(py=r))
     var pool = X_DECOMP_POOL.get_or_create_ptr()
     var ctx = xd_ctx()
+    comptime if IDN_QR_R_INPLACE:
+        if consume:
+            var dv = pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells)
+            with GILReleased(Python()):
+                DevExec._qr_r_on(ctx, dv, m, n, pr)
+            _ = dv^
+            ctx.synchronize()
+            return PythonObject(1)
     var da = ctx.enqueue_create_buffer[DType.float32](cells)
     ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
     with GILReleased(Python()):
         DevExec._qr_r_on(ctx, da, m, n, pr)
     _ = da^
     ctx.synchronize()
-    return PythonObject(n)
+    return PythonObject(0)
 
 
 # ---- lane fam-decomp (2026-10-04): IDN_CODE_RESIDENT (IDENTICAL default) ----

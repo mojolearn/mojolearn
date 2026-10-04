@@ -1200,14 +1200,23 @@ class _Kit:
                                     float(reg))
         return X
 
-    def qr_r(self, A):
-        """R (n x n) of the Householder QR of a tall A (decomposition/'s TSQR)."""
+    def qr_r(self, A, consume=False):
+        """R (n x n) of the Householder QR of a tall A (decomposition/'s TSQR).
+
+        consume=True: the caller gives A up (it is not read again). A device
+        A may then be factored in place (lane fix-d1-decomp,
+        IDN_QR_R_INPLACE: no second m x n device buffer); A is left empty
+        (0 x 0) when the binding consumed it."""
         R = _M.zeros(A.c, A.c)
         if A.r >= A.c >= 1 and self._opt_dev("x_decomp_dev_qr_r") and self._use(A):
             # lane fam-decomp: the QR of a device copy of the resident
             # operand (an IDENTICAL GPU build without
             # -D MOJOLEARN_IDN_QR_R_RESIDENT_OFF); only R comes down
-            self.b.x_decomp_dev_qr_r(self._did(A), R.addr, [A.r, A.c])
+            used = self.b.x_decomp_dev_qr_r(self._did(A), R.addr, [A.r, A.c, 1 if consume else 0])
+            if consume and int(used) == 1:
+                # its buffer holds the destroyed factorization: drop it
+                # (back to the pool) and leave A an empty matrix
+                A._s, A._d, A.r, A.c = array.array("f"), None, 0, 0
             return R
         self.b.x_decomp_qr_r(A.addr, R.addr, [A.r, A.c])
         return R
@@ -2404,6 +2413,7 @@ class FactorAnalysis(_Base):
         mean = k.colmean(M)
         mean = k.ew("add", mean, k.colmean(k.ew("sub", M, mean)))
         Xc = k.ew("sub", M, mean)
+        M = None     # not read again: the input's device copy goes back to the pool before the QR
         nsqrt = math.sqrt(n)
         llconst = d * _LOG_2PI + nc
         if self.noise_variance_init is None:
@@ -2415,7 +2425,8 @@ class FactorAnalysis(_Base):
         SMALL = 1e-12
         # Xc = Q R once; the scaled data Xc D / sqrt(n) then has the singular
         # values and right vectors of the d x d R D / sqrt(n) (Q orthogonal)
-        Rx = k.qr_r(Xc) if n >= d else None
+        # (n >= d never reads Xc again, so the QR may consume it: one copy of X on the device)
+        Rx = k.qr_r(Xc, consume=True) if n >= d else None
         old_ll = -math.inf
         loglike = []
         it = 0
