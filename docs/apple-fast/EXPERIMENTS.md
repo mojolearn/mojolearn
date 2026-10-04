@@ -876,3 +876,5 @@ passed M2 default and `MOJOLEARN_PSHAP_DELTA_OFF` builds plus Python import
 smoke. Measured20bbdc372 gives28222.8 ->14788.6ms and exact output words in
 all3quality cases. Final default/rollback M3 quality is queued next; not
 merged yet. Fresh source pin fixes only promotion arm ordering; no scored replay.
+
+| `MOJOLEARN_LU_FAST_PIVOT_SHUFFLE` / rollback `MOJOLEARN_LU_FAST_PIVOT_SHUFFLE_OFF` | lu-factor / lu-solve n8192 | measured6d82b61270dc5d7c65f1d3b847a91630c4e2bfcd; isolated default from0cbe0036a | w2-lu-pivot-shuffle-q-20261004; w2-lu-pivot-shuffle-t-20261004 | quality PASS10fixtures exact factors/pivots/solutions/info, no-worse residuals; call+read factor715.628750 ->653.702416ms, solve792.222333 ->733.531042ms | PROMOTION PREPARED pendingM2default/OFF. Existing parallel LUstep grid unchanged, exact directed reduction topology, same tie/NaN comparator; skips neutral initial-fold levels and uses warp shuffle for final5stages. Same synchronized output. No scored replay. |
