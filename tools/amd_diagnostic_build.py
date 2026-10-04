@@ -62,7 +62,8 @@ def inventory(wheels, commit):
     return rows
 
 
-def prepare(wheels, script, commit, directory, *, patch_manifest=None, patch_binding=None, patch_proof=None):
+def prepare(wheels, script, commit, directory, *, patch_manifest=None, patch_binding=None, patch_proof=None,
+            extra_capture=None):
     rows = inventory(wheels, commit)
     patch = None
     if any(p is not None for p in (patch_manifest, patch_binding, patch_proof)):
@@ -85,11 +86,15 @@ def prepare(wheels, script, commit, directory, *, patch_manifest=None, patch_bin
     if patch:
         files.update({'patch-manifest.json': Path(patch_manifest), 'patch-proof.json': Path(patch_proof),
                       'patched-binding.so': Path(patch_binding)})
+    if extra_capture:
+        files['extra-capture.py'] = Path(extra_capture)
     for name, path in files.items():
         (stage / name).write_bytes(path.read_bytes())
     plan = dict(schema='mojolearn.amd-diagnostic-plan.v1', source_commit=commit,
                 wheels=rows, script_sha256=digest(script), lease_minutes=30, cap_cents=300,
                 diagnostic_seconds=1200, amd_runtime_pool=AMD_POOL, diagnostic_patch=patch,
+                extra_capture_sha256=digest(extra_capture) if extra_capture else None,
+                extra_capture_seconds=120 if extra_capture else 0,
                 release_qualified=False)
     (directory / 'plan.json').write_text(json.dumps(plan, indent=2) + '\n')
     (stage / 'plan.json').write_text(json.dumps(plan, indent=2) + '\n')
@@ -158,6 +163,10 @@ assert all(row['verdict']=='STABLE' for row in column['cells'].values())
 pathlib.Path('results/fixed-lane-witness.json').write_text(json.dumps(dict(loaded_binding=loaded[0],patch=patch,qualification=False),indent=2)+'\\n')
 WITNESS
 fi
+if [[ -f extra-capture.py ]]; then
+    # Optional independent capture uses the untouched original installation.
+    venv/bin/python amd_serial_guard.py --seconds 120 --rss-gib 12 --cores 2 -- venv/bin/python extra-capture.py "$PWD/results/extra-capture.json" > results/extra-capture.log 2>&1
+fi
 ''')
     (stage / 'SHA256SUMS').write_text(''.join(f'{digest(p)}  {p.name}\n' for p in sorted(stage.iterdir())))
     bundle = directory / 'bundle.tgz'
@@ -177,9 +186,11 @@ def main():
     p.add_argument('--patch-manifest', type=Path)
     p.add_argument('--patch-binding', type=Path)
     p.add_argument('--patch-proof', type=Path)
+    p.add_argument('--extra-capture', type=Path, help='Optional independent installed-original-wheel diagnostic (120 seconds)')
     a = p.parse_args()
     bundle = prepare(a.wheel, a.script, a.source_commit, a.out,
-                     patch_manifest=a.patch_manifest, patch_binding=a.patch_binding, patch_proof=a.patch_proof)
+                     patch_manifest=a.patch_manifest, patch_binding=a.patch_binding, patch_proof=a.patch_proof,
+                     extra_capture=a.extra_capture)
     return subprocess.run(['bash', str(ROOT / 'tools/amd_diagnostic_lease.sh'), str(bundle),
                            str(a.out / 'lease'), 'rent' if a.rent else 'dry-run']).returncode
 
