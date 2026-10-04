@@ -218,14 +218,14 @@ def launch_gemm_mma_batched(
             grid_dim=max((nc * m * n + MB_ZERO_TPB - 1) // MB_ZERO_TPB, 1), block_dim=MB_ZERO_TPB,
         )
         ctx.enqueue_function[mcd_bmma_kernel[True]](
-            c, a, b, gate, all, Int32(m), Int32(n), Int32(k),
+            c, a, b, gate, ga, Int32(m), Int32(n), Int32(k),
             Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per),
             Int32(a_bs), Int32(b_bs), Int32(c_bs),
             grid_dim=(tiles, splits, nc), block_dim=(MB_NT, 1, 1),
         )
     else:
         ctx.enqueue_function[mcd_bmma_kernel[False]](
-            c, a, b, gate, all, Int32(m), Int32(n), Int32(k),
+            c, a, b, gate, ga, Int32(m), Int32(n), Int32(k),
             Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(k),
             Int32(a_bs), Int32(b_bs), Int32(c_bs),
             grid_dim=(tiles, 1, nc), block_dim=(MB_NT, 1, 1),

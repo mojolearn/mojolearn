@@ -10,7 +10,7 @@ from std.gpu import block_idx, block_dim, thread_idx
 from x_decomp.cells import F32Ptr, I32Ptr, sub, mul, add
 
 
-def mc_center_kernel(
+def mc_center_kernel[SKIP: Bool = False](
     x: F32Ptr, rows: I32Ptr, selected: I32Ptr, loc0: F32Ptr, loc1: F32Ptr,
     dst: F32Ptr, active: I32Ptr, fin: I32Ptr, nc: Int32, r: Int32, d: Int32,
     per: Int32, ident: Int32, count: Int32, compact: Int32, par: Int32, use_fin: Int32,
@@ -28,8 +28,11 @@ def mc_center_kernel(
     var target = c*rr*dd+i*dd+j
     # MMA calls for inactive candidates may still run; zero their source
     # and guard destination publication, retaining frozen fit state.
+    # SKIP (MOJOLEARN_MCD_BMMA): the batched GEMM launches no block for an
+    # inactive candidate, so its source is never read; skip the zero store.
     if use_fin == 0 and active.unsafe_load(c) == 0:
-        dst.unsafe_store(target, Float32(0))
+        comptime if not SKIP:
+            dst.unsafe_store(target, Float32(0))
         return
     var source_i = Int(selected.unsafe_load(c*rr+i)) if compact != 0 else i
     var source = source_i if ident != 0 else Int(rows.unsafe_load((c//Int(per))*rr+source_i))
