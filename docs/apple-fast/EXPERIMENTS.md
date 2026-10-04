@@ -919,3 +919,10 @@ EighDF failure details: board4096 eigenerror +34.3%, board1000 residual+0.65%,
 indefinite1024 orthogonality+0.85%; five fallback cases unchanged. HOLD retained.
 
 | `MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU` / `_OFF` | knn-imputer / taxi | measured f9c5887a8ff3b5fe8878e0bfe3d5f553a7f741f7; default lane/apple-fast-knn-lean-gpu-default, base1f33e9764 | w2-knn-lean-gpu-taxi-r1; repaired fixtureknn-lean-gpu-v2 | 2.2 ->0.8 ms; quality31 arrays byte-exact | DEFAULT: M2 default/rollback PASS, final M3 knn-lean-gpu-default-quality-20261004 PASS31exact arrays, Python import PASS. GPU count/total reduction and pool reuse, no imported host-lean or unrelated old candidates. See ab/knn-lean-gpu-default.md. |
+
+G1core+estimators30e4562c M2botharmsPASS, staged. Tools-only helperef2ce40dd
+fixes KMeans squared-distance oracle and validates compiledancestor/runtime
+identity; first unscored cases OLS/PCA/wide-kKNN/KMeans atwidth65 targetcoreNT
+route0. Small-kKNNwidth11 is a NO_REACH control. Other shared routes require
+separate eligible callers; no claim that all four routes are covered here.
+Residentcatalogfa390736 M2botharmsPASS/staged, fresh lifecycle quality queued.
