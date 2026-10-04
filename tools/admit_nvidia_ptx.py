@@ -79,6 +79,11 @@ def build(manifest_path, receipts, references, reference_hashes, witness_paths, 
             and nvidia.get('full_applicable_single_gpu_coverage') is True,
             'Full NVIDIA comparison did not pass')
     require(set(nvidia['lanes']) == set(inventory['lanes']), 'NVIDIA lane inventory differs')
+    # Pinned undeclared parts are absent evidence. The record names them so the
+    # nine-fixture scope never reads as covering them.
+    require(nvidia['undeclared_exclusions'] == baseline.undeclared_scope(nvidia['lanes'], nvidia['fixtures']),
+            'Undeclared exclusions differ from the pinned list')
+    undeclared = [dict(lane=row['lane'], part=row['part']) for row in nvidia['undeclared_exclusions']]
     script_sha = baseline.sha(witness_script)
     witnesses = {}
     witness_inputs = []
@@ -123,7 +128,8 @@ def build(manifest_path, receipts, references, reference_hashes, witness_paths, 
                                   parts=list(api.SHARED_PARTS), vendors=['cuda', 'hip', 'metal'],
                                   comparison_sha256=encoded_sha(shared)),
                       nvidia=dict(lanes=lanes, fixtures=list(api.NVIDIA_FIXTURES),
-                                  parts=list(api.NVIDIA_PARTS), comparison_sha256=encoded_sha(nvidia))),
+                                  parts=list(api.NVIDIA_PARTS), comparison_sha256=encoded_sha(nvidia),
+                                  undeclared_exclusions=undeclared)),
                   configurations=[configs[key] for key in sorted(configs)])
     api.validate_admission(record, source_commit=source, manifest_sha256=baseline.sha(manifest_path))
     return record, {'inventory.json': inventory, 'nvidia-comparison.json': nvidia,

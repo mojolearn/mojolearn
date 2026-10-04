@@ -161,6 +161,43 @@ def test_bad_columns_remain_bad_even_with_rehashed_receipt(campaign, mutation):
         q.check(campaign.manifest, campaign.receipts)
 
 
+def undeclare_batch(campaign, receipts):
+    for receipt in receipts:
+        column = receipt.parent / q.read(receipt)['column_file']
+        alter(column, lambda c: c['cells']['ridge/base'].update(batch=['n/a:UNDECLARED'] * 2, batch_verdict='N/A'))
+        alter(receipt, lambda r: r.update(column_sha256=q.sha(column)))
+
+
+def test_pinned_undeclared_part_is_reported_excluded_never_compared(campaign, monkeypatch):
+    monkeypatch.setattr(q, 'UNDECLARED_EXCLUSIONS', (('ridge', 'batch'), ('absent-lane', 'batch')))
+    undeclare_batch(campaign, campaign.receipts)
+    result = q.check(campaign.manifest, campaign.receipts)
+    assert result['compared_parts'] == 9 and result['excluded_parts'] == 1
+    assert result['undeclared_exclusions'] == [dict(lane='ridge', part='batch', fixtures=['base'],
+                                                    value='n/a:UNDECLARED')]
+
+
+def test_pinned_undeclared_part_must_be_undeclared_in_every_column(campaign, monkeypatch):
+    monkeypatch.setattr(q, 'UNDECLARED_EXCLUSIONS', (('ridge', 'batch'),))
+    # Every column still carries a batch hash: the pin is stale and refuses.
+    with pytest.raises(ValueError, match='Pinned undeclared exclusion carries another value: ridge/base/batch'):
+        q.check(campaign.manifest, campaign.receipts)
+    undeclare_batch(campaign, campaign.receipts[:2])
+    with pytest.raises(ValueError, match='Pinned undeclared exclusion carries another value'):
+        q.check(campaign.manifest, campaign.receipts)
+
+
+def test_unpinned_undeclared_part_still_fails_in_every_column(campaign):
+    undeclare_batch(campaign, campaign.receipts)
+    with pytest.raises(ValueError, match='Unverified part: ridge/base/batch'):
+        q.check(campaign.manifest, campaign.receipts)
+
+
+def test_default_pin_names_only_the_two_measured_lanes():
+    assert q.UNDECLARED_EXCLUSIONS == (('gbdt-class-weights', 'batch'), ('gbdt-multiclass-offgrid', 'batch'))
+    assert q.undeclared_scope(['ridge'], ['base']) == []
+
+
 def test_actual_payload_bytes_are_checked(campaign):
     campaign.payload.write_bytes(b'tampered')
     with pytest.raises(ValueError, match='Payload bytes changed'):

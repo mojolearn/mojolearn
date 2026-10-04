@@ -84,6 +84,38 @@ def test_complete_evidence_keeps_shared_and_nvidia_scopes_distinct(evidence):
     assert not q.read(evidence.campaign.manifest)['identical_qualified']
 
 
+def test_undeclared_exclusions_are_recorded_in_nvidia_coverage_only(evidence, monkeypatch):
+    record, _ = build(evidence)
+    assert record['coverage']['nvidia']['undeclared_exclusions'] == []
+    monkeypatch.setattr(q, 'UNDECLARED_EXCLUSIONS', (('ridge', 'batch'),))
+    for path in evidence.campaign.receipts:
+        receipt = q.read(path)
+        column_path = path.parent / receipt['column_file']
+        column = q.read(column_path)
+        for cell in column['cells'].values():
+            cell.update(batch=['n/a:UNDECLARED'] * 2, batch_verdict='N/A')
+        save(column_path, column)
+        receipt['column_sha256'] = q.sha(column_path)
+        save(path, receipt)
+    record, reports = build(evidence)
+    assert record['coverage']['nvidia']['undeclared_exclusions'] == [dict(lane='ridge', part='batch')]
+    assert 'undeclared_exclusions' not in record['coverage']['shared']
+    assert reports['nvidia-comparison.json']['excluded_parts'] == 9
+    api = a.admission_api()
+    for bad in ([dict(lane='other', part='batch')], [dict(lane='ridge', part='nope')],
+                [dict(lane='ridge', part='batch')] * 2, 'ridge/batch'):
+        broken = copy.deepcopy(record)
+        broken['coverage']['nvidia']['undeclared_exclusions'] = bad
+        with pytest.raises(ValueError, match='undeclared exclusion'):
+            api.validate_admission(broken, source_commit=record['source_commit'],
+                                   manifest_sha256=record['manifest_sha256'])
+    broken = copy.deepcopy(record)
+    broken['coverage']['shared']['undeclared_exclusions'] = []
+    with pytest.raises(ValueError, match='shared scope'):
+        api.validate_admission(broken, source_commit=record['source_commit'],
+                               manifest_sha256=record['manifest_sha256'])
+
+
 @pytest.mark.parametrize('change', [
     lambda d: d.update(cuDriverGetVersion_return=1),
     lambda d: d.update(cuDriverGetVersion=0),

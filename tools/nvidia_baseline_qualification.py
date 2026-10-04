@@ -38,6 +38,16 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = 'mojolearn.nvidia-baseline-run.v1'
+UNDECLARED = 'n/a:UNDECLARED'
+# The harness declares no batch probe for these lanes (no `_batch_decl` entry
+# in tools/identity_break.py's BATCH), so `_probe_batch` records UNDECLARED on
+# every fixture and device. The canonical verifier (`_part_value`, with
+# `_SKIPPED_NA`) reads that as no usable value, the same as a skipped part. Declaring the probes would
+# change the harness digest bound by retained receipts and reference columns,
+# so the checker pins the exclusion instead: each (lane, part) here MUST read
+# exactly UNDECLARED in every compared column, is reported as excluded, and
+# never enters the compared values. Any other undeclared part still fails.
+UNDECLARED_EXCLUSIONS = (('gbdt-class-weights', 'batch'), ('gbdt-multiclass-offgrid', 'batch'))
 
 
 def require(ok, message):
@@ -185,7 +195,14 @@ def fixture_witnesses(h, fixtures):
     return train, heldout
 
 
-def column_values(column, h, v, lanes, fixtures, witnesses, source):
+def undeclared_scope(lanes, fixtures):
+    """Pinned exclusions inside this scope, in report form."""
+    return [dict(lane=lane, part=part, fixtures=list(fixtures), value=UNDECLARED)
+            for lane, part in UNDECLARED_EXCLUSIONS if lane in lanes]
+
+
+def column_values(column, h, v, lanes, fixtures, witnesses, source, excluded=None):
+    """Compared values of one column. Pinned undeclared parts go to `excluded`."""
     reason = v.admit(column, 'retained-column.json', known_lanes=h.LANES)
     require(reason is None, 'Inadmissible column: ' + str(reason))
     require(v.record_device_class(column, 'retained-column.json')[0] == 'nvidia',
@@ -218,7 +235,17 @@ def column_values(column, h, v, lanes, fixtures, witnesses, source):
                     'Cell reports an error: ' + key)
             for part in parts:
                 value = v._part_value(cell, part, min_repeats=2)
-                require(value is not None and not value.startswith('n/a:UNDECLARED'),
+                if (lane, part) in UNDECLARED_EXCLUSIONS:
+                    # An excluded part is absent evidence, never an equal hash.
+                    # A value here means the harness changed: review the pin.
+                    # The canonical verifier yields no usable value for an
+                    # undeclared part, so read the retained repeats directly.
+                    require(value is None and cell.get(part) == [UNDECLARED] * column['repeats']
+                            and cell.get(part + '_verdict') == 'N/A' and excluded is not None,
+                            'Pinned undeclared exclusion carries another value: ' + key + '/' + part)
+                    excluded.add(key + '/' + part)
+                    continue
+                require(value is not None and not value.startswith(UNDECLARED),
                         'Unverified part: ' + key + '/' + part)
                 if part == 'batch':
                     protocol = dict(alone=h.BATCH_ALONE, split=list(h.BATCH_SPLIT) + ['n'],
@@ -328,6 +355,9 @@ def check(manifest_path, receipt_paths, *, prototype=False):
     require(prototype or (set(lanes) == set(scope['lanes']) and set(fixtures) == set(scope['fixtures'])),
             'Missing full applicable coverage; use --prototype for explicitly limited evidence')
     witnesses = fixture_witnesses(h, fixtures)
+    undeclared = undeclared_scope(lanes, fixtures)
+    expected_excluded = {row['lane'] + '/' + fixture + '/' + row['part']
+                         for row in undeclared for fixture in fixtures}
     compared, baseline_configs, native_configs = None, set(), set()
     inputs = []
     for path, receipt in receipts:
@@ -337,7 +367,10 @@ def check(manifest_path, receipt_paths, *, prototype=False):
         column = read(column_path)
         config = validate_receipt(receipt, column, manifest, sha(manifest_path), files,
                                   harness_digest())
-        values = column_values(column, h, v, lanes, fixtures, witnesses, manifest['source_commit'])
+        excluded = set()
+        values = column_values(column, h, v, lanes, fixtures, witnesses, manifest['source_commit'], excluded)
+        require(excluded == expected_excluded and not excluded & set(values),
+                'Undeclared exclusions differ from the pinned list')
         if compared is not None and values != compared:
             differing = sorted(key for key in compared.keys() | values.keys()
                                if compared.get(key) != values.get(key))
@@ -359,6 +392,7 @@ def check(manifest_path, receipt_paths, *, prototype=False):
                 status='PROTOTYPE_AGREEMENT' if prototype else 'OBSERVED_CONFIGURATION_AGREEMENT',
                 source_commit=manifest['source_commit'], manifest_sha256=sha(manifest_path),
                 lanes=lanes, fixtures=fixtures, compared_parts=len(compared),
+                undeclared_exclusions=undeclared, excluded_parts=len(expected_excluded),
                 baseline_configurations=sorted(baseline_configs), native_configurations=sorted(native_configs),
                 full_applicable_single_gpu_coverage=not prototype, excluded=scope['excluded'],
                 universal_gpu_support=False, future_drivers_qualified=False,

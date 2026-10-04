@@ -73,6 +73,17 @@ def validate_admission(doc, *, source_commit, manifest_sha256, configuration=Non
         _require(_names(row.get('parts')) and set(row['parts']) == set(parts), name + ' parts incomplete')
         _require(_digest(row.get('comparison_sha256')), name + ' comparison missing')
     _require(set(shared['lanes']) == set(native['lanes']), 'shared and NVIDIA lane scopes differ')
+    # Undeclared parts are named exclusions of the NVIDIA scope, never coverage.
+    # The shared scope admits none.
+    _require('undeclared_exclusions' not in shared, 'shared scope cannot exclude undeclared parts')
+    excluded = native.get('undeclared_exclusions', [])
+    _require(isinstance(excluded, list), 'undeclared exclusions malformed')
+    seen = set()
+    for row in excluded:  # glue: validate excluded lane/part metadata records
+        _require(isinstance(row, dict) and set(row) == {'lane', 'part'}
+                 and row['lane'] in native['lanes'] and row['part'] in native['parts']
+                 and (row['lane'], row['part']) not in seen, 'undeclared exclusion unknown or duplicated')
+        seen.add((row['lane'], row['part']))
     _require(_names(shared.get('vendors')) and set(shared['vendors']) == {'cuda', 'hip', 'metal'},
              'cross-vendor references incomplete')
     configs = doc.get('configurations')
