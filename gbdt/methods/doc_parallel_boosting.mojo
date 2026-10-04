@@ -113,6 +113,7 @@ from gbdt.methods.leaves_estimation.leaves_estimation import (
     MC_ONE_STEP_MAX_CLASSES,
     multiclass_one_step_kernel,
     newton_one_step_kernel,
+    weight_keep_mask_kernel,
 )
 from std.memory import bitcast
 from gbdt.models.kernel.add_bin_values import (
@@ -1539,6 +1540,11 @@ struct PendingEstimation(Movable):
     var not_pd: Int
     #: the walk's return, `MakeEstimationResult(point)`, once `phase == 2`
     var final_point: List[Float32]
+    #: lane ml-gbdt T4 (`_estimate_prepare(one_step_device=True)`): the
+    #: one-step Newton leaves were ENQUEUED on the device into the task
+    #: workspace's `d_est` (`newton_one_step_kernel`); `phase` is 2 at once,
+    #: `final_point` stays empty and `_estimate_complete` must not run
+    var device_done: Bool
 
     def __init__(
         out self,
@@ -1565,6 +1571,7 @@ struct PendingEstimation(Movable):
         self.estimator = StepEstimator(BACKTRACKING_ANY_IMPROVEMENT, 0.0, 0.0)
         self.not_pd = 0
         self.final_point = List[Float32]()
+        self.device_done = False
 
 
 def _walk_line_search_or_finish(mut p: PendingEstimation) raises -> Bool:
@@ -1725,6 +1732,7 @@ def _estimate_prepare(
     mut stage_times: StageTimes,
     staged: Bool = False,
     iterations: Int = 1,
+    one_step_device: Bool = False,
 ) raises -> PendingEstimation:
     """`_estimate_and_apply` for an `estimate_can_batch` task (approx_dim 1,
     no grouping), up to its walker's evaluation readback, WITHOUT the drain
@@ -1854,11 +1862,56 @@ def _estimate_prepare(
     # (`descent_helpers.newton_like_walker_estimate`), its first half:
     # `MoveTo(startPoint)`, then the evaluation up to its readback
     oracle.times.enabled = stage_times.enabled
+    # lane ml-gbdt T4 (`one_step_device`, the Ordered fit's
+    # `IDN_ORD_ONE_STEP_DEVICE`): a one-step diagonal Newton task finishes on
+    # the device as `_estimate_and_apply`'s `IDN_EST_ONE_STEP_DEVICE` arm
+    # does (same kernel, same statements, so the host walker's bits), with
+    # `Regularize`'s weighted keep/zero decision formed on the device from
+    # the deferred weight fold (`weight_keep_mask_kernel`), so the task needs
+    # no readback, no walk drain and no leaf upload
+    var one_step = False
+    if one_step_device:
+        one_step = (
+            iterations == 1
+            and leaf_estimation_method == LEAF_ESTIMATION_NEWTON
+            and oracle.single_bin_dim == 1
+            and oracle.hessian_block_size() == 1
+            and n_leaves <= est_ws[0].n_leaves_cap
+        )
+    if one_step and has_weights:
+        # the deferred weight fold sits in `d_part_stats[0, n_leaves)` until
+        # the evaluation below overwrites it (stream order)
+        ctx.enqueue_function[weight_keep_mask_kernel](
+            oracle.d_part_stats.unsafe_ptr(),
+            bitcast[DType.uint64](oracle.min_leaf_weight),
+            Int32(n_leaves),
+            est_ws[0].d_est.unsafe_ptr(),
+            grid_dim=((n_leaves + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
     var start = List[Float32]()
     for _ in range(oracle.point_dim()):
         start.append(Float32(0.0))
     oracle.move_to(start)
     oracle.enqueue_single_dim_evaluation()
+    if one_step:
+        ctx.enqueue_function[newton_one_step_kernel](
+            oracle.d_part_stats.unsafe_ptr(),
+            oracle.d_p_sz.unsafe_ptr(),
+            bitcast[DType.uint64](oracle.lambda_reg),
+            bitcast[DType.uint64](oracle.min_leaf_weight),
+            Int32(n_leaves),
+            est_ws[0].d_est.unsafe_ptr(),
+            Int32(1) if has_weights else Int32(0),
+            grid_dim=((n_leaves + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        var done = PendingEstimation(
+            oracle^, n_rows, n_leaves, iterations, start^
+        )
+        done.phase = 2
+        done.device_done = True
+        return done^
     return PendingEstimation(oracle^, n_rows, n_leaves, iterations, start^)
 
 
@@ -1885,6 +1938,8 @@ def _estimate_complete(
     ref oracle = pending.oracle
     if pending.phase != 2:
         raise Error("_estimate_complete before the walk finished")
+    if pending.device_done:
+        raise Error("_estimate_complete on a device one-step task")
     var estimated = pending.final_point.copy()
     merge_stage_times(stage_times, oracle.times)
     trace.record_list_f32(leaf_tag, estimated)

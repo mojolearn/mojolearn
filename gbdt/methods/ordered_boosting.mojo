@@ -131,6 +131,7 @@ from checks.fixed_point import choose_scale
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_mul,
     identical_mul64,
@@ -238,6 +239,27 @@ comptime ORDERED_BLOCK = 256
 #: of gbdt-ordered: 20 trees chose the same splits.) The host oracle carries
 #: the same arm (`GBDT_ORDERED_SABOTAGE`).
 comptime ORDERED_SABOTAGE = is_defined["MOJOLEARN_ORDERED_SABOTAGE"]()
+
+#: Lane ml-gbdt T4 (roadmap T4; IDENTICAL, every vendor; default ON): the
+#: batched Ordered estimation tasks (`_ordered_estimate_prepare`) take
+#: `_estimate_prepare(one_step_device=True)`: a one-step diagonal Newton
+#: task (`leaf_iterations == 1`, Newton, a single-dimensional pointwise
+#: loss) solves its leaves on the device with `IDN_EST_ONE_STEP_DEVICE`'s
+#: `newton_one_step_kernel` (the host walker's statements in soft-float64,
+#: so the host walker's bits; the host column is untouched), the weighted
+#: `Regularize` decision formed on the device from the deferred weight fold.
+#: The tree then skips the lock-step walk drain (no task walks), every
+#: task's leaf upload (the apply reads the device leaves), and the fold
+#: tasks' leaf readbacks; the estimation task's leaves come home on the
+#: learn-loss drain. Bits: none move. The partition settle drain stays (the
+#: oracle factory reads the host leaf sizes). `-D
+#: MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF` (or the master `-D
+#: MOJOLEARN_IDN_ALL_OFF`) restores the host walker.
+comptime IDN_ORD_ONE_STEP_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 
 
 @fieldwise_init
@@ -1376,6 +1398,7 @@ def _ordered_estimate_prepare(
         opts.kernel_alpha, opts.estimator_alpha, opts.logloss_border,
         opts.l2_leaf_reg, sm_count, opts.leaf_method, est_ws, arena,
         walker_times, staged=True, iterations=opts.leaf_iterations,
+        one_step_device=IDN_ORD_ONE_STEP_DEVICE,
     )
     est_times.end(ctx, "est.estimate_and_apply")
     return _OrderedPending(est^, apply_size)
@@ -1395,6 +1418,7 @@ def _ordered_estimate_complete(
     tag: String,
     mut est_times: StageTimes,
     mut walker_times: StageTimes,
+    want_leaves: Bool = True,
 ) raises -> List[Float32]:
     """The rest of `_ordered_estimate_task` after the batch's drain: the
     estimator's host half and its `AppendModels` (`_estimate_complete`),
@@ -1402,6 +1426,27 @@ def _ordered_estimate_complete(
     `pending` for the batch's closing drain."""
     var leaves = List[Float32]()
     var not_pd = 0
+    if pending.est.device_done:
+        # IDN_ORD_ONE_STEP_DEVICE: the leaves are in `d_est`; the apply
+        # reads them there, nothing is drained, read back or uploaded. The
+        # caller reads the estimation task's leaves after its next drain
+        # (`_ordered_device_leaves`); the list returned here is empty.
+        ref d_est = est_ws[0].d_est
+        trace.record_device(ctx, tag, d_est, n_leaves)
+        est_times.begin(ctx)
+        ctx.enqueue_function[_ordered_apply_kernel](
+            permutation.unsafe_ptr(), bins.unsafe_ptr(), d_est.unsafe_ptr(),
+            cursor.unsafe_ptr(), Int32(pending.apply_size),
+            opts.learning_rate,
+            grid_dim=(_grid(pending.apply_size), 1, 1),
+            block_dim=(ORDERED_BLOCK, 1, 1),
+        )
+        if want_leaves:
+            ctx.enqueue_copy(
+                dst_ptr=est_ws[0].h_est.unsafe_ptr(), src_buf=d_est
+            )
+        est_times.end(ctx, "est.apply")
+        return leaves^
     est_times.begin(ctx)
     _estimate_complete(
         ctx, pending.est, slot.row_index, cursor, opts.learning_rate,
@@ -1422,6 +1467,18 @@ def _ordered_estimate_complete(
         block_dim=(ORDERED_BLOCK, 1, 1),
     )
     est_times.end(ctx, "est.apply")
+    return leaves^
+
+
+def _ordered_device_leaves(
+    mut est_ws: List[TEstimationWorkspace], n_leaves: Int
+) -> List[Float32]:
+    """IDN_ORD_ONE_STEP_DEVICE: a device-estimated task's leaves, from the
+    `h_est` copy `_ordered_estimate_complete` enqueued. The caller has
+    drained since."""
+    var leaves = List[Float32]()
+    for leaf in range(n_leaves):
+        leaves.append(est_ws[0].h_est.unsafe_ptr().unsafe_load(leaf))
     return leaves^
 
 
@@ -2551,6 +2608,10 @@ def fit_ordered(
         # they are held here instead and released after the learn-loss
         # drain below, which then covers both (one drain, not two).
         var pend_held = List[_OrderedPending]()
+        # IDN_ORD_ONE_STEP_DEVICE: the estimation task's leaves are on the
+        # device; they come home on the learn-loss drain below
+        var ord_dev_leaves = False
+        var ord_dev_slot = 0
         if fast_on:
             comptime if ORDERED_BATCH_EST:
                 _ord_fast_estimate_tree(
@@ -2587,8 +2648,12 @@ def fit_ordered(
                 )
             )
             # the walks in lock step: one drain per round for every task
-            # still walking (a one-iteration walk is one round)
-            var walking = True
+            # still walking (a one-iteration walk is one round); none when
+            # every task finished on the device (IDN_ORD_ONE_STEP_DEVICE)
+            var walking = False
+            for t in range(len(pend)):
+                if pend[t].est.phase != 2:
+                    walking = True
             while walking:
                 ctx.synchronize()
                 walking = False
@@ -2604,8 +2669,10 @@ def fit_ordered(
                         bins,
                         cursors[lp][f], opts, est_pools[slot], trace,
                         tag + ".perm." + String(lp) + ".fold." + String(f),
-                        est_times, walker_times,
+                        est_times, walker_times, want_leaves=False,
                     )
+            ord_dev_leaves = pend[est_slot].est.device_done
+            ord_dev_slot = est_slot
             leaves = _ordered_estimate_complete(
                 ctx, pend[est_slot], slots[est_slot], n_leaves,
                 dperms[est_p], bins,
@@ -2643,7 +2710,7 @@ def fit_ordered(
         structure.splits = splits^
         var weak = TObliviousTreeModel(structure^)
         var weak_later = List[TObliviousTreeModel]()
-        if fast_on:
+        if fast_on or ord_dev_leaves:
             # its leaves come home on the learn-loss drain below
             weak_later.append(weak^)
         else:
@@ -2668,6 +2735,15 @@ def fit_ordered(
         ctx.synchronize()
         _ = pend_held^
         losses.append(-Float64(h_fv[0]) / Float64(n_rows))
+        if ord_dev_leaves:
+            leaves = _ordered_device_leaves(est_pools[ord_dev_slot], n_leaves)
+            var weak_dev = weak_later.pop()
+            for leaf in range(n_leaves):
+                weak_dev.leaf_values.append(
+                    identical_mul(leaves[leaf], opts.learning_rate)
+                )
+            model.add_weak_model(weak_dev^)
+            trace.record_device(ctx, tag + ".estimation_cursor", est_cursor)
         if fast_on:
             comptime if ORDERED_BATCH_EST:
                 leaves = _ord_fast_take_leaves(fast_h_leaves, n_leaves)
