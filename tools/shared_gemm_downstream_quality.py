@@ -15,11 +15,11 @@ import sys
 if not __debug__:
     raise RuntimeError("quality gates require Python assertions enabled")
 
-FAMILIES = {"kmeans": "_mojolearn", "knn": "_mojolearn",
+FAMILIES = {"kmeans": "_mojolearn", "knn": "_mojolearn", "knn-wide-k": "_mojolearn",
             "ols": "_mojolearn_estimators", "ridge": "_mojolearn_estimators",
             "pca": "_mojolearn_estimators", "kde": "_mojolearn_estimators",
             "svc": "_mojolearn_svm", "rbf": "_mojolearn_kernel_methods"}
-POLICY = "shared-downstream-f64-independent-errors-v1"
+POLICY = "shared-downstream-f64-independent-errors-v2"
 
 
 def sha(path):
@@ -43,9 +43,9 @@ def fixture(d):
 def dump(args):
     import numpy as np
     assert os.environ.get("MOJOLEARN_NUMERIC_MODE") == "fast"
-    source = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-    assert source == args.source, "source HEAD mismatch"
-    assert not subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=no"], text=True).strip(), "dirty tracked source"
+    from shared_gemm_source_contract import validate_source
+    provenance = validate_source(Path(__file__).resolve().parents[1], args.source)
+    source = args.source
     from mojolearn import _backend
     b = _backend.binding(FAMILIES[args.case], "fast")
     binary = str(Path(b.__file__).resolve())
@@ -73,9 +73,9 @@ def dump(args):
             save(key, getattr(model, key))
         save("prediction", phase("predict", lambda: model.predict(q)))
         save("transform", phase("transform", lambda: model.transform(q)))
-    elif args.case == "knn":
+    elif args.case in ("knn", "knn-wide-k"):
         from mojolearn.neighbors import NearestNeighbors
-        model = NearestNeighbors(n_neighbors=7, algorithm="brute")
+        model = NearestNeighbors(n_neighbors=65 if args.case == "knn-wide-k" else 7, algorithm="brute")
         phase("fit", lambda: model.fit(x))
         distances, indices = phase("kneighbors", lambda: model.kneighbors(q))
         save("distances", distances)
@@ -124,7 +124,7 @@ def dump(args):
     output.parent.mkdir(parents=True, exist_ok=True)
     np.savez(output, **arrays)
     write_json(output.with_suffix(".json"), dict(policy=POLICY, source=source,
-        case=args.case, features=args.features, variant=args.variant,
+        case=args.case, features=args.features, variant=args.variant, provenance=provenance,
         binding=FAMILIES[args.case], binary=binary, binary_sha=sha(binary),
         capture_sha=sha(output), fixture_sha=hashlib.sha256(x.tobytes()+q.tobytes()+y.tobytes()).hexdigest(),
         phases=phases, mode="fast", vendor="metal", scored=False))
@@ -137,6 +137,7 @@ def compare(args):
     ma, mb = [json.loads(Path(p).with_suffix(".json").read_text()) for p in (args.a, args.b)]
     for field in ("policy", "source", "case", "features", "fixture_sha", "binding", "mode", "vendor"):
         assert ma[field] == mb[field], field
+    assert ma["provenance"] == mb["provenance"], "harness provenance mismatch"
     assert ma["policy"] == POLICY and ma["variant"] == 0 and mb["variant"] in (1, 5)
     assert ma["capture_sha"] == sha(args.a) and mb["capture_sha"] == sha(args.b)
     assert set(a.files) == set(b.files)
@@ -163,10 +164,10 @@ def compare(args):
         intercept = y.mean()-x.mean(0)@coef
         for key, ref in (("coef_", coef), ("intercept_", intercept), ("prediction", q@coef+intercept)):
             metric(key, a[key], b[key], ref)
-    elif case == "knn":
+    elif case in ("knn", "knn-wide-k"):
         same("indices")
         dd = np.sum((q[:, None, :]-x[None, :, :])**2, axis=2)
-        indices = np.argsort(dd, axis=1, kind="stable")[:, :7]
+        indices = np.argsort(dd, axis=1, kind="stable")[:, :65 if case == "knn-wide-k" else 7]
         exact["oracle_indices_A"] = bool(np.array_equal(a["indices"], indices))
         exact["oracle_indices_B"] = bool(np.array_equal(b["indices"], indices))
         metric("distances", a["distances"], b["distances"], np.sqrt(np.take_along_axis(dd, indices, axis=1)))
@@ -177,7 +178,7 @@ def compare(args):
         centers = np.stack([x[labels == k].mean(0) for k in range(7)])
         metric("centers", a["cluster_centers_"], b["cluster_centers_"], centers)
         metric("inertia", a["inertia_"], b["inertia_"], np.sum((x-centers[labels])**2))
-        dist = np.sqrt(np.sum((q[:, None, :]-centers[None, :, :])**2, axis=2))
+        dist = np.sum((q[:, None, :]-centers[None, :, :])**2, axis=2)  # default euclidean means squared L2 here
         metric("transform", a["transform"], b["transform"], dist)
         exact["oracle_prediction_B"] = bool(np.array_equal(b["prediction"], dist.argmin(1)))
     elif case == "pca":
@@ -215,7 +216,7 @@ def compare(args):
     reached = totals(mb, 3) > 0
     passed = reached and all(exact.values()) and bool(metrics) and all(v["pass_no_worse"] for v in metrics.values())
     status = "PASS" if passed else ("NO_REACH" if not reached else "HOLD")
-    result = dict(policy=POLICY, source=ma["source"], case=case, status=status,
+    result = dict(policy=POLICY, source=ma["source"], provenance=ma["provenance"], case=case, status=status,
                   capture_sha=[sha(args.a), sha(args.b)], binary_sha=[ma["binary_sha"], mb["binary_sha"]],
                   phases_A=ma["phases"], phases_B=mb["phases"], exact=exact, metrics=metrics, scored=False)
     assert not Path(args.report).exists()
