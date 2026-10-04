@@ -1721,7 +1721,7 @@ FAMILIES = (
         host_modules=(
             "core/knn_host_predict.mojo", "bindings/host_helpers.mojo",
             "cluster/host/kmeans_oracle.mojo", "bindings/hotpath_helpers.mojo",
-            "core/dense_coo.mojo",
+            "core/dense_coo.mojo", "core/msel_host.mojo",
         ),
         exports=(
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
@@ -1744,6 +1744,12 @@ FAMILIES = (
             # lane/py-dn-kern (2026-09-28): the spectral routes' float32
             # dense-to-COO scan and precomputed kNN affinity (core/dense_coo.mojo)
             "nonzero_f32_count", "nonzero_f32_fill", "knn_affinity_f32",
+            # lane cpu2-l4-modelsel (2026-10-04): model selection's fold store,
+            # fold-row gather, prediction scatter, proba column and forest
+            # offset merge (bindings/msel_host.mojo, the host column)
+            "msel_put", "msel_alloc", "msel_read", "msel_free", "msel_live",
+            "msel_take_rows", "msel_scatter_rows", "msel_proba_column",
+            "msel_rebase_offsets_i32",
         ),
         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",
         wheel_note=(

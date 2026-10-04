@@ -143,6 +143,20 @@ from bindings.hotpath_device import (
     normal_init_f32_binding,
     cast_elements_binding,
 )
+# lane cpu2-l4-modelsel (2026-10-04): model selection's resident fold store,
+# fold-row gather, cross_val_predict scatter, binary proba column and the
+# parallel forest's offset merge (bindings/msel_device.mojo).
+from bindings.msel_device import (
+    msel_put_binding,
+    msel_alloc_binding,
+    msel_read_binding,
+    msel_free_binding,
+    msel_live_binding,
+    msel_take_rows_binding,
+    msel_scatter_rows_binding,
+    msel_proba_column_binding,
+    msel_rebase_offsets_i32_binding,
+)
 from std.os import abort
 from std.math import isfinite
 from std.memory import memcpy
@@ -1805,6 +1819,16 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[all_finite_f64_binding]("all_finite_f64")
         m.def_function[probability_rows_f32_binding]("probability_rows_f32")
         m.def_function[gather_rows_bytes_binding]("gather_rows_bytes")
+        # lane cpu2-l4-modelsel: model selection on the device (host column on the core host binding)
+        m.def_function[msel_put_binding]("msel_put")
+        m.def_function[msel_alloc_binding]("msel_alloc")
+        m.def_function[msel_read_binding]("msel_read")
+        m.def_function[msel_free_binding]("msel_free")
+        m.def_function[msel_live_binding]("msel_live")
+        m.def_function[msel_take_rows_binding]("msel_take_rows")
+        m.def_function[msel_scatter_rows_binding]("msel_scatter_rows")
+        m.def_function[msel_proba_column_binding]("msel_proba_column")
+        m.def_function[msel_rebase_offsets_i32_binding]("msel_rebase_offsets_i32")
         # DEVIATION 2500: label encode/decode and the class argmax, host side.
         m.def_function[encode_labels_f32_binding]("encode_labels_f32")
         m.def_function[encode_labels_f64_binding]("encode_labels_f64")
