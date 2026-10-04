@@ -23,6 +23,7 @@ Every Claude session and subagent in this repo reads this file. Lane briefs add 
   Boxes: nv is the RunPod L40S, amd the DO MI325X, and apple is the M2 Pro (the M3 Ultra is the Apple FAST peer's). Each runs one job at a time. The orchestrator watches the queues and sends results back. After queuing, the lane ends with a reply listing what it queued (box, id), so the orchestrator can match the results.
 - **Compile through the slot semaphore:** `bash ~/mojolearn-evidence/compile_slot.sh <command>`. It allows 4 compiles machine-wide at `nice -n 19`. Use `-j 1` and `MOJOLEARN_COMPILE_JOBS=1`.
 - **One worktree per lane:** `~/mojolearn-wt/<lane>` on branch `lane/<lane>`. Commit after every edit and push often, because a crash or reboot loses anything uncommitted. Never `git stash`, rebase, `reset --hard` or `checkout --` someone else's edits.
+  - A lane that doesn't read old evidence can use `tools/lean_worktree.sh ~/mojolearn-wt/<lane> lane/<lane>`: a sparse worktree without `bench/results/` except the canonical board dir.
 - **Nothing in `/private/tmp`.** It's wiped on reboot. Keep briefs, notes and scripts in the worktree or `~/mojolearn-evidence/`.
 - **Use bash, not zsh, for loops and variable expansion.** zsh doesn't word-split `$FLAGS`, so defines get dropped silently.
 - **Final reply format, short:**
