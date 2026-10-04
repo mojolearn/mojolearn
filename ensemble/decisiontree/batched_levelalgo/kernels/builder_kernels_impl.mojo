@@ -387,6 +387,7 @@ from std.gpu import (
     thread_idx,
 )
 from std.sys.info import (
+    has_amd_gpu_accelerator,
     has_apple_gpu_accelerator,
     has_nvidia_gpu_accelerator,
 )
@@ -2779,6 +2780,22 @@ def launch_build_histograms_kernel[
                 and (
                     has_nvidia_gpu_accelerator()
                     or has_apple_gpu_accelerator()
+                    # fam-forests (2026-10-04), IDENTICAL on AMD: the
+                    # four-column tile there too (integer / fixed-point
+                    # bins added by atomics, so the same histogram cells
+                    # as the one-column route: no bit moves). `-D
+                    # MOJOLEARN_IDN_RF_HIST_COLUMNS4_AMD_OFF` restores the
+                    # one-column route on AMD.
+                    or (
+                        has_amd_gpu_accelerator()
+                        and BUILD_MODE == NUMERIC_IDENTICAL
+                        and not (
+                            is_defined[
+                                "MOJOLEARN_IDN_RF_HIST_COLUMNS4_AMD_OFF"
+                            ]()
+                            or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+                        )
+                    )
                 )
             )
             comptime USE4 = (
