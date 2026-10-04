@@ -45,3 +45,7 @@ Promotion remains conditional on exact source review, acceptable quality,
 GPU-only parallel computation, call plus first read where applicable, and
 successful M2 default and rollback builds. Main merges, board updates,
 mirror synchronization and page rebuilding belong to the manager.
+
+## Panel eigh follow-up
+
+`e79a96e03` replaces single-block preparation with a panel-parallel grid. M3 `w2-eigh-panels-q-20261004` has identical metrics to the earlier solver and passes exact no-worse-than-main on all eight cases; absolute gates remain failed. New scored pair `w2-eigh-panels-t-20261004`: 43765.6 -> 700.3 ms. Isolated promotion `10cedc640` compiled default and `_OFF` on M2 (both rc0), merged `eb97b0948`. The handoff explicitly authorizes this original main-relative decision. Opponent-quality hold remains; no qualified-headline increment.
