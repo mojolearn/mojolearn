@@ -2,7 +2,7 @@
 """Opt-in synchronous MinMax adapter; uses the existing kernel unchanged."""
 from max.gpu.host import DeviceBuffer
 from preprocessing.minmax import minmax_transform_into
-from experiments.apple_identical_callpath.storage import IdenticalCallStorage
+from experiments.identical_callpath.storage import IdenticalCallStorage
 
 
 struct ResidentIdenticalMinMax(Movable):
