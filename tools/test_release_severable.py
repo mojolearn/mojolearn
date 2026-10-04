@@ -527,7 +527,13 @@ class SourceAndTooling(Base):
         r.state["commit"] = HEAD
         r.say = lambda m: None
         self.assertIn(f"says {version}", r.step_freeze_version())
-        self.assertIn("frozen source", r.step_freeze_changelog())
+        # A development HEAD may correctly be marked unreleased. Supply a
+        # published frozen-source document without editing the working tree.
+        with mock.patch.object(release, "file_at", return_value=f"## {version} (published 2026-10-04)\n"):
+            self.assertIn("frozen source", r.step_freeze_changelog())
+        with mock.patch.object(release, "file_at", return_value=f"## {version} (unreleased 2026-10-04)\n"):
+            with self.assertRaises(release.StepFailed):
+                r.step_freeze_changelog()
         self.assertIn("part of the frozen source", r.step_freeze_docs_facts())
         r.args.version = r.version = "9.9.9"
         with self.assertRaises(release.StepFailed):
