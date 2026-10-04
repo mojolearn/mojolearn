@@ -669,3 +669,5 @@ result. No affected candidate was promoted from those recent rejected pairs.
 Future heavy maintenance must share the serial queue or an explicit idle boundary.
 The earlier ARIMA/label measurements predate this session's maintenance; this
 audit alone does not establish interference with those measured promotions.
+
+Detailed isolation audit and six identified scan-window tags: [MEASUREMENT_AUDIT_2026-10-04.md](MEASUREMENT_AUDIT_2026-10-04.md). Their speed verdict is HOLD-measurement, superseding historical speed-only verdicts. No overlap claim is made solely from a cleanup start timestamp.
