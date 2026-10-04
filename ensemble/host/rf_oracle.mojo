@@ -1307,6 +1307,60 @@ def host_weight_cdf(weights: List[Float32], n_rows: Int) raises -> List[Float64]
     return cdf^
 
 
+comptime RF_ORACLE_WBOOT_INT = not (
+    is_defined["MOJOLEARN_IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE_OFF"]()
+    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""fam2-forests `IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE`: the weighted bootstrap
+in exact integers, the host column of
+`ensemble/weighted_bootstrap_device.mojo` (quantum, UInt64 CDF, PCG bounded
+draw, upper_bound). The `_OFF` define restores the Float64 CDF and the
+Philox `uniform<double>` draws here and on the device together."""
+
+
+def host_weight_quantum(bits: UInt32, max_bits: UInt32) -> UInt64:
+    """`weight_quantum`, `ensemble/weighted_bootstrap_device.mojo`,
+    statement for statement."""
+    if (bits & UInt32(0x7FFFFFFF)) == UInt32(0):
+        return UInt64(0)
+    var e = Int((bits >> 23) & UInt32(0xFF))
+    var sig = UInt64(Int(bits & UInt32(0x7FFFFF)))
+    if e == 0:
+        e = 1
+    else:
+        sig = sig | UInt64(0x800000)
+    var em = Int((max_bits >> 23) & UInt32(0xFF))
+    if em == 0:
+        em = 1
+    var d = e - em + 7
+    var q = UInt64(0)
+    if d >= 0:
+        q = sig << UInt64(d)
+    elif d > -24:
+        q = sig >> UInt64(-d)
+    if q == UInt64(0):
+        q = UInt64(1)
+    return q
+
+
+def host_weight_qcdf(weights: List[Float32], n_rows: Int) -> List[UInt64]:
+    """`build_weight_cdf_device`: the largest weight's bit pattern (sign
+    cleared), then the inclusive UInt64 sum of the quanta. Integer adds,
+    so the device's tiled scan and this row-order chain are the same
+    numbers."""
+    var max_bits = UInt32(0)
+    for i in range(n_rows):
+        var b = bitcast[DType.uint32](weights[i]) & UInt32(0x7FFFFFFF)
+        if b > max_bits:
+            max_bits = b
+    var cdf = List[UInt64](capacity=n_rows)
+    var run = UInt64(0)
+    for i in range(n_rows):
+        run += host_weight_quantum(bitcast[DType.uint32](weights[i]), max_bits)
+        cdf.append(run)
+    return cdf^
+
+
 def host_sampled_rows(
     seed: UInt64,
     tree_id: Int,
@@ -1314,10 +1368,37 @@ def host_sampled_rows(
     n_rows: Int,
     n_sampled: Int,
     weight_cdf: List[Float64] = List[Float64](),
+    weight_qcdf: List[UInt64] = List[UInt64](),
 ) raises -> List[Int32]:
     """`RowSampler._sample_rows`, `randomforest.mojo:2093-2206`: the two
-    unweighted arms and the weighted bootstrap (`weight_cdf` non-empty)."""
+    unweighted arms and the weighted bootstrap (`weight_cdf` non-empty;
+    under `RF_ORACLE_WBOOT_INT` the integer `weight_qcdf` decides)."""
     var rows = List[Int32](capacity=n_sampled)
+    comptime if RF_ORACLE_WBOOT_INT:
+        if bootstrap and len(weight_qcdf) > 0:
+            # `weighted_bootstrap_rows_kernel`: seed = the tree's hashed
+            # 32-bit seed, subsequence = the sample index, Lemire's bounded
+            # draw over [0, total), then upper_bound.
+            var total = weight_qcdf[n_rows - 1]
+            var qseed = UInt64(Int(host_seed_tree(seed, tree_id)) & 0xFFFFFFFF)
+            for i in range(n_sampled):
+                var qsub = UInt64(i)
+                comptime if RF_ORACLE_HOST_SABOTAGE:
+                    qsub = qsub + UInt64(1)
+                var qgen = host_pcg_init(qseed, qsub, UInt64(0))
+                var u = host_pcg_uniform_u64(qgen, UInt64(0), total)
+                var qlo = 0
+                var qhi = n_rows
+                while qlo < qhi:
+                    var qmid = (qlo + qhi) // 2
+                    if weight_qcdf[qmid] <= u:
+                        qlo = qmid + 1
+                    else:
+                        qhi = qmid
+                if qlo > n_rows - 1:
+                    qlo = n_rows - 1
+                rows.append(Int32(qlo))
+            return rows^
     if bootstrap and len(weight_cdf) > 0:
         # `:2098-2135`: `uniform_double_host` over `[0, weight_sum)` at stride
         # 110592 (`core/philox.mojo:357-379`, one generator per subsequence),
@@ -1612,11 +1693,15 @@ def rf_host_fit(
     # `fit_forest` calls `prepare_weights` before the first tree
     # (`randomforest.mojo:2567-2568`).
     var weight_cdf = List[Float64]()
+    var weight_qcdf = List[UInt64]()
     var wscale = Float32(0)
     var weighted_rows = List[Int32]()
     if len(weights) > 0:
         # Their two refusals by value (`prepare_weights`), both arms.
         weight_cdf = host_weight_cdf(weights, n_rows)
+        comptime if RF_ORACLE_WBOOT_INT:
+            if p.bootstrap:
+                weight_qcdf = host_weight_qcdf(weights, n_rows)
     if weighted_obj:
         # `bindings/_mojolearn_rf.mojo:375-389, 439-443`: the Float64 total in
         # row order, `choose_scale(total, n_rows)`, its Float32 range check.
@@ -1667,13 +1752,14 @@ def rf_host_fit(
                 weighted_rows, weighted_obj, wscale, n_rows, n_cols,
                 n_unique_labels, n_classes, classification, p, criterion,
                 label_scale, tree_start, n_sampled, original_cols, max_rounds,
+                weight_qcdf=weight_qcdf,
             )
     else:
         var tree_chunk = host_predict_chunk(p.n_trees, tree_tasks)
         var failed = List[Bool](length=tree_tasks, fill=False)
         var messages = List[String](length=tree_tasks, fill=String(""))
         var n_trees = p.n_trees
-        def _tree_task(task: Int) {mut trees, mut failed, mut messages, imm x, imm q, imm labels_i, imm labels_f, imm weights, imm weight_cdf, imm weighted_rows, imm weighted_obj, imm wscale, imm n_rows, imm n_cols, imm n_unique_labels, imm n_classes, imm classification, imm p, imm criterion, imm label_scale, imm tree_start, imm n_sampled, imm original_cols, imm max_rounds, imm tree_chunk, imm n_trees}:
+        def _tree_task(task: Int) {mut trees, mut failed, mut messages, imm x, imm q, imm labels_i, imm labels_f, imm weights, imm weight_cdf, imm weight_qcdf, imm weighted_rows, imm weighted_obj, imm wscale, imm n_rows, imm n_cols, imm n_unique_labels, imm n_classes, imm classification, imm p, imm criterion, imm label_scale, imm tree_start, imm n_sampled, imm original_cols, imm max_rounds, imm tree_chunk, imm n_trees}:
             var lo = task * tree_chunk
             var hi = min(lo + tree_chunk, n_trees)
             try:
@@ -1684,6 +1770,7 @@ def rf_host_fit(
                         n_unique_labels, n_classes, classification, p,
                         criterion, label_scale, tree_start, n_sampled,
                         original_cols, max_rounds,
+                        weight_qcdf=weight_qcdf,
                     )
             except e:
                 failed[task] = True
@@ -1739,6 +1826,7 @@ def _rf_host_tree(
     n_sampled: Int,
     original_cols: Int,
     max_rounds: Int,
+    weight_qcdf: List[UInt64] = List[UInt64](),
 ) raises -> _RfHostTree:
     """Tree `t` of `rf_host_fit`: its row sample, `NodeQueue` walk, splits,
     partitions and leaves (`fit_forest`'s per-tree body,
@@ -1753,7 +1841,10 @@ def _rf_host_tree(
         row_ids = weighted_rows.copy()
         n_root = len(weighted_rows)
     else:
-        row_ids = host_sampled_rows(p.seed, tree_id, p.bootstrap, n_rows, n_sampled, weight_cdf)
+        row_ids = host_sampled_rows(
+            p.seed, tree_id, p.bootstrap, n_rows, n_sampled, weight_cdf,
+            weight_qcdf,
+        )
 
     # `NodeQueue.__init__` (`builder.mojo:197-232`).
     var t_colid = List[Int32]()
