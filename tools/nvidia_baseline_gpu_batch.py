@@ -4,6 +4,9 @@
 Run twice with the same wheel directory and source: --gpu ada, then --gpu hopper.
 Then --gpu ampere (A100, capability 8.0, no native payload): forced-PTX
 collection, extra capture and witness only; its column is compared locally.
+With --fallback-stage the same rental then tests the automatic fallback end
+to end (tools/nvidia_ptx_fallback_stage.py); that needs wheels whose core has
+the admitted-fallback loader and the retained ada and hopper evidence.
 All seven exact wheels are staged; no index copy of mojolearn is installed.
 Use --native-release-checks --native-reference-column APPLE.json to collect
 the separate canonical six-wheel smoke, self-test and three-fixture column
@@ -30,6 +33,9 @@ GPUS = {'ada': 'NVIDIA GeForce RTX 4090', 'hopper': 'NVIDIA H100 80GB HBM3',
 NATIVE_ABSENT = {'ampere'}
 DISTS = {'mojolearn', 'mojolearn_nvidia', 'mojolearn_amd', 'mojolearn_nvidia_sm89',
          'mojolearn_nvidia_sm90', 'mojolearn_amd_gfx942', 'mojolearn_nvidia_ptx80'}
+# Since the native architectures moved into the vendor wheels there are three
+# release wheels plus the experimental PTX wheel. Both layouts are exact sets.
+CURRENT_DISTS = {'mojolearn', 'mojolearn_nvidia', 'mojolearn_amd', 'mojolearn_nvidia_ptx80'}
 LANES = 'kmeans,gemm-pinned,ridge,gbdt-symmetric,mamba2,transformer,svc'
 # Staged from the runner's tooling commit, not the payload checkout: the
 # measured-configuration witness and the checker that pins undeclared parts.
@@ -51,8 +57,10 @@ def sha(path):
 def artifacts(directory, commit):
     require(re.fullmatch('[0-9a-f]{40}', commit), 'Full source SHA required')
     wheels = sorted(Path(directory).resolve().glob('*.whl'))
-    require(len(wheels) == 7 and {p.name.split('-')[0] for p in wheels} == DISTS,
-            'Exactly six native release wheels plus experimental PTX wheel required')
+    names = {p.name.split('-')[0] for p in wheels}
+    require(len(wheels) == len(names) and names in (DISTS, CURRENT_DISTS),
+            'Exactly the native release wheels (six, or three with bundled architectures) '
+            'plus the experimental PTX wheel required')
     require(len({p.name.split('-')[1] for p in wheels}) == 1, 'Wheel versions differ')
     manifest = None
     for wheel in wheels:
@@ -82,7 +90,7 @@ def artifacts(directory, commit):
     return wheels, manifest
 
 
-def native_release_body(commit):
+def native_release_body(commit, native_count=6):
     # Keep the canonical qualifier's receipt unchanged. Its fresh install and
     # the column install contain exactly the six released distributions.
     return r'''NATIVE_FAILED=0
@@ -106,7 +114,7 @@ for wheel in "$ROOT"/wheels/*.whl; do
     esac
     NATIVE+=("$wheel")
 done
-test "${#NATIVE[@]}" = 6
+test "${#NATIVE[@]}" = @NATIVE_COUNT@
 test "${#CORE[@]}" = 1
 # Genuine expanded receipt, exact installed GPU architecture and all five
 # plugin wheel hashes are emitted by the existing frozen-source qualifier.
@@ -134,7 +142,7 @@ echo 0 > column.exit
 NATIVE_SCRIPT
 mkdir -p results/native-release
 timeout -k 20 1650 bash native-release.sh || NATIVE_FAILED=1
-'''.replace('@SHA@', commit)
+'''.replace('@SHA@', commit).replace('@NATIVE_COUNT@', str(int(native_count)))
 
 
 def reference_column(path, commit):
@@ -147,7 +155,8 @@ def reference_column(path, commit):
     return sha(path)
 
 
-def box_body(commit, full=True, extra_capture=False, native_release_checks=False, native_absent=False):
+def box_body(commit, full=True, extra_capture=False, native_release_checks=False, native_absent=False,
+             native_count=6):
     # All interpolated values are validated SHA or constants. No remote credentials.
     require(not (native_absent and native_release_checks), 'A native-absent device has no native stage')
     roles = 'baseline' if native_absent else 'native-reference baseline'
@@ -214,7 +223,7 @@ done
 test "$NATIVE_FAILED" = 0
 test "$EXTRA_FAILED" = 0
 test "$WITNESS_FAILED" = 0
-''' .replace('@SHA@', commit).replace('@LANES@', LANES).replace('@NATIVE@', native_release_body(commit) if native_release_checks else 'NATIVE_FAILED=0').replace('@EXTRA@', '''EXTRA_FAILED=0
+''' .replace('@SHA@', commit).replace('@LANES@', LANES).replace('@NATIVE@', native_release_body(commit, native_count) if native_release_checks else 'NATIVE_FAILED=0').replace('@EXTRA@', '''EXTRA_FAILED=0
 for role in @ROLES@; do
     cmd=(venv/bin/python source/tools/nvidia_serial_guard.py --seconds 120 --rss-gib 12 --cores 2 -- venv/bin/python extra-wrapper.py --script extra-capture.py --source-tools source/tools --manifest "$MANIFEST" --role "$role" --out "results/extra-$role.json")
     if [ "$role" = baseline ]; then
@@ -243,6 +252,19 @@ def main():
                    help='Also collect canonical native-six expanded receipt, self-test and three-fixture column')
     p.add_argument('--native-reference-column', type=Path, help='Same-source Apple three-fixture column for canonical native diff')
     p.add_argument('--extra-capture', type=Path, help='Supplemental script, native and PTX, 120 seconds each')
+    p.add_argument('--fallback-stage', action='store_true',
+                   help='ampere only: after collection, admit, pack the vendor wheel with the bundled PTX '
+                        'admission on this machine and test the automatic fallback on the same pod')
+    p.add_argument('--fallback-receipt', type=Path, action='append', default=[],
+                   help='retained full native-reference and baseline receipts from ada and hopper, same source')
+    p.add_argument('--fallback-witness', type=Path, action='append', default=[],
+                   help='retained PTX configuration witness for each of those baseline receipts')
+    for vendor in ('apple', 'amd'):
+        p.add_argument('--fallback-' + vendor, type=Path, help='pinned same-source three-fixture ' + vendor + ' column')
+        p.add_argument('--fallback-' + vendor + '-sha256')
+    p.add_argument('--fallback-pack-argv', type=Path,
+                   help='JSON list of packaging/linux/pack_wheel.py arguments naming the retained sets '
+                        '(--set, --profile, --build-proof, --portable-math-helper); the stage adds the rest')
     p.add_argument('--tooling-commit', help='Explicit full clean runner SHA when supplementary tooling differs from payload source')
     args = p.parse_args()
     wheels, manifest = artifacts(args.wheels, args.commit)
@@ -251,6 +273,17 @@ def main():
             'A native-absent device has no native stage; omit --native-release-checks')
     require(args.native_release_checks or args.native_reference_column is None, 'Reference column needs --native-release-checks')
     reference_sha = reference_column(args.native_reference_column, args.commit) if args.native_release_checks else None
+    require(not args.fallback_stage or (native_absent and not args.prototype_only),
+            'The fallback stage needs a full collection on a native-absent device (--gpu ampere)')
+    fallback = None
+    if args.fallback_stage:
+        import nvidia_ptx_fallback_stage as fallback_stage
+        require(args.fallback_pack_argv is not None and args.fallback_pack_argv.is_file(),
+                'The fallback stage needs --fallback-pack-argv')
+        fallback = fallback_stage.plan(args.commit, wheels, GPUS[args.gpu], args.fallback_receipt,
+                                       args.fallback_witness, args.fallback_apple, args.fallback_amd,
+                                       args.fallback_apple_sha256, args.fallback_amd_sha256,
+                                       json.loads(args.fallback_pack_argv.read_text()))
     require(not args.out.exists(), 'Output already exists')
     actual = subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip()
     tooling = args.tooling_commit or args.commit
@@ -275,6 +308,7 @@ def main():
                 extra_wrapper_sha256=sha(ROOT / 'tools/nvidia_extra_capture.py') if args.extra_capture else None,
                 extra_capture_seconds_per_role=120 if args.extra_capture else 0,
                 configuration_witness_sha256=sha(WITNESS), checker_sha256=sha(CHECKER),
+                fallback_stage=fallback,
                 wheels={w.name: sha(w) for w in wheels}, identical_qualified=False)
     print(json.dumps(plan, indent=2), flush=True)
     if not args.rent:
@@ -291,7 +325,7 @@ def main():
                     'Wheel bytes changed while staging; refuse before rental')
         artifacts(stage / 'wheels', args.commit)  # revalidate the exact staged bytes before creating a pod
         (stage / 'body.sh').write_text(box_body(args.commit, not args.prototype_only, bool(args.extra_capture),
-                                                  args.native_release_checks, native_absent))
+                                                  args.native_release_checks, native_absent, len(wheels) - 1))
         files = sorted((stage / 'wheels').glob('*.whl')) + [stage / 'body.sh']
         for source, name, key in [(WITNESS, 'cuda-config-witness.py', 'configuration_witness_sha256'),
                                   (CHECKER, 'tooling-check.py', 'checker_sha256')]:
@@ -311,8 +345,14 @@ def main():
                 require(sha(stage / name) == digest, 'Supplemental capture changed while staging')
                 files.append(stage / name)
         (stage / 'SHA256SUMS').write_text(''.join(f'{sha(f)}  {f.relative_to(stage)}\n' for f in files))
-        return subprocess.run(['bash', str(ROOT / 'tools/nvidia_baseline_gpu_lease.sh'),
-                               str(stage), str(args.out.resolve()), GPUS[args.gpu]], check=False).returncode
+        command = ['bash', str(ROOT / 'tools/nvidia_baseline_gpu_lease.sh'),
+                   str(stage), str(args.out.resolve()), GPUS[args.gpu]]
+        if fallback is not None:
+            # The lease runs the second body only after this machine has
+            # generated the admission from the collection it just fetched.
+            (args.out / 'fallback-plan.json').write_text(json.dumps(fallback, indent=2) + '\n')
+            command.append(str((args.out / 'fallback-plan.json').resolve()))
+        return subprocess.run(command, check=False).returncode
 
 
 if __name__ == '__main__':

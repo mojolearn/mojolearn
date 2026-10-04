@@ -4,6 +4,10 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 STAGE=${1:?}; OUT=${2:?}; GPU=${3:?}
+# Optional fallback plan (tools/nvidia_ptx_fallback_stage.py): a second body on
+# the same pod, inside the same lease and the same 6300-second work cap.
+FALLBACK=${4:-}; WORK_SECONDS=6300; FALLBACK_SECONDS=2200
+[ -z "$FALLBACK" ] || [ -f "$FALLBACK" ] || exit 2
 case "$GPU" in 'NVIDIA GeForce RTX 4090'|'NVIDIA H100 80GB HBM3'|'NVIDIA A100 80GB PCIe') ;; *) exit 2 ;; esac
 [ -f "$STAGE/SHA256SUMS" ] && [ -d "$OUT" ] || exit 2
 TMPD=$(mktemp -d); CURLRC="$TMPD/curlrc"
@@ -12,14 +16,17 @@ die() { echo "REFUSED: $*" >&2; exit 1; }
 source "$ROOT/tools/runpod_pod_lib.sh"
 POD_ID=''; DEADMAN_PID=''; DEADMAN_DIR=''; CREATE_ATTEMPTED=0; SSH_TARGET=''; FETCH_READY=0
 SSH_OPTS='-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3'
+fetch_results() {
+    mkdir -p "$OUT/remote"
+    with_timeout 180 ssh $SSH_OPTS $SSH_TARGET 'cd /root/ptx-batch && tar czf - results SHA256SUMS' > "$OUT/results.tgz" || return 1
+    tar xzf "$OUT/results.tgz" -C "$OUT/remote"
+}
 cleanup() {
     rc=$?
     trap - EXIT INT TERM
     set +e
     if [ "$FETCH_READY" = 1 ]; then
-        mkdir -p "$OUT/remote"
-        with_timeout 180 ssh $SSH_OPTS $SSH_TARGET 'cd /root/ptx-batch && tar czf - results SHA256SUMS' > "$OUT/results.tgz"
-        if [ "$?" = 0 ]; then tar xzf "$OUT/results.tgz" -C "$OUT/remote"; else rc=1; fi
+        fetch_results || rc=1
     fi
     safe=0
     if [ "$CREATE_ATTEMPTED" = 1 ] && [ -z "$POD_ID" ]; then
@@ -99,4 +106,18 @@ with_timeout 300 ssh $SSH_OPTS $SSH_TARGET 'mkdir -p /root/ptx-batch && tar xzf 
 FETCH_READY=1
 with_timeout 60 ssh $SSH_OPTS $SSH_TARGET 'cd /root/ptx-batch && sha256sum -c SHA256SUMS' > "$OUT/upload-check.txt" || die 'Staged bytes differ'
 # Remote timeout survives a disconnected SSH client; both delete watchdogs remain.
+WORK_START=$(date +%s)
 with_timeout 6420 ssh $SSH_OPTS $SSH_TARGET 'cd /root/ptx-batch && timeout -k 30 6300 bash body.sh' > "$OUT/ssh.log" 2>&1
+[ -n "$FALLBACK" ] || exit 0
+# Fallback stage. This machine generates the admission from the receipt and
+# witness just collected and packs the vendor wheel; the pod then installs it
+# unforced. Any refusal here still tears the pod down through cleanup.
+fetch_results || die 'Cannot fetch collection results for the fallback stage'
+with_timeout 1500 python3 "$ROOT/tools/nvidia_ptx_fallback_stage.py" prepare --plan "$FALLBACK" \
+    --results "$OUT/remote/results" --stage "$OUT/fallback-stage" > "$OUT/fallback-prepare.log" 2>&1 || die 'Fallback admission or packing refused'
+tar czf "$TMPD/fallback.tgz" -C "$OUT/fallback-stage" .
+with_timeout 300 ssh $SSH_OPTS $SSH_TARGET 'mkdir -p /root/ptx-batch/fallback && tar xzf - -C /root/ptx-batch/fallback' < "$TMPD/fallback.tgz" || die 'Fallback upload failed'
+with_timeout 60 ssh $SSH_OPTS $SSH_TARGET 'cd /root/ptx-batch/fallback && sha256sum -c SHA256SUMS' > "$OUT/fallback-upload-check.txt" || die 'Fallback staged bytes differ'
+LEFT=$(( WORK_SECONDS - ($(date +%s) - WORK_START) ))
+[ "$LEFT" -ge "$FALLBACK_SECONDS" ] || die "Work cap leaves $LEFT seconds; the fallback stage needs $FALLBACK_SECONDS"
+with_timeout $(( LEFT + 120 )) ssh $SSH_OPTS $SSH_TARGET "cd /root/ptx-batch && timeout -k 30 $LEFT bash fallback/body.sh" > "$OUT/ssh-fallback.log" 2>&1

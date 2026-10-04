@@ -304,6 +304,68 @@ elif args[:2]==['-m','mojolearn._identity_break']:
         self.assertIn("'NVIDIA A100 80GB PCIe') ;;", text)
         self.assertIn("1.99 if 'A100' in sys.argv[2] else 3.49", text)
 
+    def make_current(self, root, loader=True):
+        self.make(root)
+        for name in ('mojolearn_nvidia_sm89', 'mojolearn_nvidia_sm90', 'mojolearn_amd_gfx942'):
+            next(root.glob(name + '-*')).unlink()
+        for name, members in (('mojolearn', {'mojolearn/ptx_admission.py': ''} if loader else {}),
+                              ('mojolearn_nvidia', {'mojolearn/cuda_native/sm_89/identical/x.so': 'native'})):
+            with zipfile.ZipFile(next(root.glob(name + '-0*')), 'a') as z:
+                for member, data in members.items():
+                    z.writestr(member, data)
+
+    def test_bundled_architecture_layout_is_an_exact_four_wheel_set(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td); self.make_current(root)
+            self.assertEqual(len(batch.artifacts(root, SHA)[0]), 4)
+            self.assertIn('test "${#NATIVE[@]}" = 3', batch.box_body(SHA, native_release_checks=True, native_count=3))
+            self.assertIn('test "${#NATIVE[@]}" = 6', batch.box_body(SHA, native_release_checks=True))
+            next(root.glob('mojolearn_amd-*')).unlink()
+            with self.assertRaisesRegex(ValueError, 'Exactly'):
+                batch.artifacts(root, SHA)
+
+    def fallback_argv(self, root, gpu='ampere'):
+        (root/'pack.json').write_text(json.dumps(['--set', 'sets/cuda']))
+        return ['batch', SHA, '--wheels', str(root/'w'), '--out', str(root/'out'), '--gpu', gpu,
+                '--fallback-stage', '--fallback-pack-argv', str(root/'pack.json')]
+
+    def test_fallback_stage_refuses_before_any_git_or_rental_call(self):
+        from unittest.mock import patch
+        import sys
+        for gpu, loader, extra, message in (('ada', True, [], 'native-absent device'),
+                                            ('ampere', True, ['--prototype-only'], 'full collection'),
+                                            ('ampere', False, [], 'no admitted-fallback loader'),
+                                            ('ampere', True, [], 'receipts are required')):
+            with self.subTest(message=message), tempfile.TemporaryDirectory() as td:
+                root = Path(td); (root/'w').mkdir(); self.make_current(root/'w', loader)
+                with patch.object(sys, 'argv', self.fallback_argv(root, gpu) + extra), patch.object(batch.subprocess, 'check_output') as calls, patch.object(batch.subprocess, 'run') as run:
+                    with self.assertRaisesRegex(ValueError, message):
+                        batch.main()
+                    calls.assert_not_called(); run.assert_not_called()
+
+    def test_fallback_plan_is_printed_on_dry_run_and_handed_to_the_lease(self):
+        from unittest.mock import patch
+        import contextlib, io, sys
+        import nvidia_ptx_fallback_stage as fallback_stage
+        fake = dict(source_commit=SHA, body_seconds=2200)
+        for rent in (False, True):
+            with self.subTest(rent=rent), tempfile.TemporaryDirectory() as td:
+                root = Path(td); (root/'w').mkdir(); self.make_current(root/'w')
+                argv = self.fallback_argv(root) + (['--rent'] if rent else [])
+                stdout = io.StringIO()
+                with patch.object(sys, 'argv', argv), patch.object(fallback_stage, 'plan', return_value=fake) as planned, patch.object(batch.subprocess, 'check_output', side_effect=[SHA, SHA + '\trefs/heads/candidate']), patch.object(batch.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)) as run, contextlib.redirect_stdout(stdout):
+                    self.assertEqual(batch.main(), 0)
+                self.assertEqual(planned.call_args.args[2], 'NVIDIA A100 80GB PCIe')
+                self.assertEqual(planned.call_args.args[-1], ['--set', 'sets/cuda'])
+                self.assertEqual(json.loads(stdout.getvalue())['fallback_stage'], fake)
+                if rent:
+                    lease = run.call_args.args[0]
+                    self.assertEqual(lease[-1], str((root/'out'/'fallback-plan.json').resolve()))
+                    self.assertEqual(json.loads((root/'out'/'fallback-plan.json').read_text()), fake)
+                else:
+                    self.assertEqual(run.call_count, 1)
+                    self.assertFalse((root/'out').exists())
+
     def test_tooling_split_is_explicit_and_advertised(self):
         from unittest.mock import patch
         import contextlib, io, sys
@@ -352,7 +414,9 @@ with_timeout() {
  *runpod_guard*) [ "$CASE" != arm ] ;;
  *TOKEN_GET*) echo WATCHDOG_ALIVE; echo TOKEN_GET_200 ;;
  *'tar czf - results'*) tar czf - -C "$STAGE" SHA256SUMS ;;
+ *'bash fallback/body.sh'*) [ "$CASE" != fallback_body ] ;;
  *'timeout -k 30 6300'*) [ "$CASE" != body ] ;;
+ *nvidia_ptx_fallback_stage.py*) mkdir -p "$OUT/fallback-stage"; : > "$OUT/fallback-stage/SHA256SUMS"; [ "$CASE" != prepare ] ;;
  *) return 0 ;;
  esac
 }
@@ -360,15 +424,18 @@ with_timeout() {
 
 
 class Lease(unittest.TestCase):
-    def run_case(self, case):
+    def run_case(self, case, fallback=False):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td); (root / 'tools').mkdir(); out = root / 'out'; out.mkdir()
             stage = root / 'stage'; stage.mkdir(); (stage / 'SHA256SUMS').write_text('')
             (root / 'tools/runpod_pod_lib.sh').write_text(MOCK)
             script = root / 'tools/nvidia_baseline_gpu_lease.sh'
             script.write_text((ROOT / 'tools/nvidia_baseline_gpu_lease.sh').read_text())
-            result = subprocess.run(['bash', str(script), str(stage), str(out), batch.GPUS['ada']],
-                                    env={**os.environ, 'CASE': case}, capture_output=True, text=True, timeout=15)
+            argv = ['bash', str(script), str(stage), str(out), batch.GPUS['ampere' if fallback else 'ada']]
+            if fallback:
+                (root / 'plan.json').write_text('{}')
+                argv.append(str(root / 'plan.json'))
+            result = subprocess.run(argv, env={**os.environ, 'CASE': case}, capture_output=True, text=True, timeout=15)
             calls = (out / 'calls').read_text()
             teardown = (out / 'teardown.txt').read_text()
             # A deliberately unconfirmed delete leaves its real mock sleeper
@@ -399,6 +466,35 @@ class Lease(unittest.TestCase):
         self.assertIn('terminated_verified=0', teardown)
         self.assertNotIn('delete:', calls)
         self.assertIn('deadman remains armed', result.stderr)
+
+    def test_fallback_stage_runs_second_body_inside_the_same_work_cap(self):
+        result, calls, teardown = self.run_case('success', fallback=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = calls.splitlines()
+        first = next(i for i, l in enumerate(lines) if 'timeout -k 30 6300 bash body.sh' in l)
+        prepare = next(i for i, l in enumerate(lines) if 'nvidia_ptx_fallback_stage.py prepare --plan' in l)
+        second = next(i for i, l in enumerate(lines) if 'bash fallback/body.sh' in l)
+        self.assertLess(first, prepare); self.assertLess(prepare, second)
+        self.assertIn('tar czf - results', lines[prepare - 1])     # this rental's collection is fetched first
+        self.assertIn('fallback && sha256sum -c SHA256SUMS', calls)
+        left = int(lines[second].split('timeout -k 30 ')[1].split()[0])
+        self.assertTrue(2200 <= left <= 6300)
+        self.assertIn('delete:pod123', calls); self.assertIn('terminated_verified=1', teardown)
+        self.assertGreater(lines.index('delete:pod123'), second)
+
+    def test_fallback_failures_still_tear_down_and_never_run_the_second_body_early(self):
+        for case, ran in (('body', False), ('prepare', False), ('fallback_body', True)):
+            with self.subTest(case=case):
+                result, calls, teardown = self.run_case(case, fallback=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual('bash fallback/body.sh' in calls, ran)
+                self.assertIn('delete:pod123', calls)
+                self.assertIn('terminated_verified=1', teardown)
+
+    def test_lease_without_fallback_plan_never_touches_the_fallback_stage(self):
+        result, calls, teardown = self.run_case('success')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('fallback', calls)
 
     def test_failure_paths_teardown(self):
         for case in ['price', 'ambiguous', 'arm', 'body']:

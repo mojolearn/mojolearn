@@ -56,6 +56,32 @@ remain distinct in the record. The tool retains comparison reports and their
 hashes and writes the admission decision last. It does not rewrite input
 artifacts, their source commits, or experimental manifests.
 
+Two lanes (`gbdt-class-weights`, `gbdt-multiclass-offgrid`) have no batch
+declaration in the harness, so their batch part reads `n/a:UNDECLARED` in every
+column. The checker pins that (lane, part) list: each must read exactly that
+value in every compared column, is reported as excluded in the comparison and
+in the admission's NVIDIA coverage, and is never counted as an equal hash. Any
+other undeclared part fails.
+
+The fallback only triggers on a device with no native payload (an A100,
+capability 8.0), where no native column can exist. `--gpu ampere` in
+`tools/nvidia_baseline_gpu_batch.py` collects the forced-PTX nine-fixture
+column, the extra capture and the configuration witness there. Such a receipt
+is admitted only when its column equals the native reference columns of the
+natively supported devices from the same source, cell for cell, and its three
+shared fixtures equal the pinned Apple and AMD columns. It never counts toward
+the two natively supported capabilities. The record keeps these as a separate
+`native_absent` scope with its own comparison hashes.
+
+`--fallback-stage` then tests the automatic route in the same rental
+(`tools/nvidia_ptx_fallback_stage.py`): this machine generates the admission
+and packs the vendor wheel, and the pod installs the core plus that wheel with
+no forcing variable. The selection receipt must name the admitted fallback, the
+canonical three-fixture column must equal the Apple reference, and an admission
+without this device configuration and a vendor wheel without bundled PTX must
+both refuse with `GpuPluginError`. It needs wheels whose core has the
+admitted-fallback loader.
+
 The packer's `--bundle-ptx-admission` option places the separately admitted PTX
 inside `mojolearn-nvidia`; it requires matching source and manifest bytes and
 cannot also emit a separate experimental owner for those paths. The requested
