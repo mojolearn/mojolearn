@@ -26,7 +26,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
 
-from x_decomp.cells import F32Ptr, OP_SCALE, OP_SELECT, ew_cell, rand_cell
+from x_decomp.cells import F32Ptr, I32Ptr, OP_SCALE, OP_SELECT, ew_cell, rand_cell
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import HostBuffer
 from core.device_scan import NONFINITE_NONE, SCAN_TPB, _scan_blocks, nonfinite_partial_kernel
@@ -59,6 +59,8 @@ from x_decomp.device import (
     TPB,
     _blocks,
     xd_ctx,
+    _up_i,
+    cd_rows_kernel,
 )
 
 comptime POOL_KEEP_BYTES = 1 << 30
@@ -488,6 +490,50 @@ def dev_als_rows_py(
         _ptr(sid, ns if ns > 0 else 1), _ptr(_id(flags), n), n, m, f, su, si, Float32(Float64(py=reg)),
     )
     pool_free(sid)
+    return PythonObject(n)
+
+
+# ---- lane fam-decomp (2026-10-04): IDN_CD_RESIDENT (IDENTICAL default) ----
+#: NMF's coordinate-descent sweep (`cd_rows_kernel`, the launch
+#: `DevExec.cd_rows` makes) on device matrices: W is swept in place where it
+#: lives and the per-row violations land in a device matrix, so W, H^T H and
+#: X H^T no longer come down and go up again around every half sweep (W
+#: crossed four times and X H^T twice per half sweep through the host-address
+#: entry); only the permutation (k ints) goes up and the folded violation
+#: (one float, the kit's `total`) comes down. The same kernel on the same
+#: values: the same words. -D MOJOLEARN_IDN_CD_RESIDENT_OFF (or
+#: -D MOJOLEARN_IDN_ALL_OFF) leaves the entry out and Python keeps the
+#: host-address call.
+comptime IDN_CD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_CD_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def dev_cd_rows_py(
+    w: PythonObject, hht: PythonObject, xht: PythonObject, perm: PythonObject, viol: PythonObject, p: PythonObject
+) raises -> PythonObject:
+    """`x_decomp_cd_rows` on device matrices: w (n x k, swept in place), hht
+    (k x k), xht (n x k), viol (n, written); perm the host address of k
+    int32. p = [n, k]. Waits (the host permutation may die after it returns)."""
+    var n = _n(p, 0)
+    var k = _n(p, 1)
+    if n == 0 or k == 0:
+        return PythonObject(0)
+    if n * k > 2147483647:
+        raise Error("x_decomp: cd_rows exceeds the Int32 index bound")
+    var pw = _ptr(_id(w), n * k)
+    var ph = _ptr(_id(hht), k * k)
+    var px = _ptr(_id(xht), n * k)
+    var pv = _ptr(_id(viol), n)
+    var pp = I32Ptr(unsafe_from_address=Int(py=perm))
+    var ctx = xd_ctx()
+    var dp = _up_i(ctx, pp, k)
+    ctx.enqueue_function[cd_rows_kernel](
+        pw, ph, px, dp.unsafe_ptr(), pv, Int32(n), Int32(k), grid_dim=_blocks(n), block_dim=TPB
+    )
+    # the permutation buffer dies here: wait for the launch that reads it
+    ctx.synchronize()
+    _ = dp^
     return PythonObject(n)
 
 

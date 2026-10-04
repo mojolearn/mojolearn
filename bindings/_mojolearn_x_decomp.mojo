@@ -30,6 +30,7 @@ from x_decomp.resident import (
 )
 from x_decomp.resident import GRP_CLS2_ANY, GRP_CLS2_DEVSCAN, GRP_FAST_FUSED, grp_cls2_py, dev_first_nonfinite_py, grp_fit_fused_py
 from x_decomp.lanczos_dev import dev_lanczos_py, ipca_dev_on_py, kpca_lanczos_dev_on_py
+from x_decomp.resident import IDN_CD_RESIDENT, dev_cd_rows_py
 
 
 @export
@@ -122,6 +123,9 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
             # lane apple-fast-nb: FAST + Apple default (off: -D MOJOLEARN_LDA_FUSED_SS_OFF) (x_decomp/lda_fast.mojo)
             m.def_function[dev_lda_estep_ss_py]("x_decomp_dev_lda_estep_ss")
         m.def_function[dev_als_rows_py]("x_decomp_dev_als_rows")
+        comptime if IDN_CD_RESIDENT:
+            # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_CD_RESIDENT_OFF) (x_decomp/resident.mojo)
+            m.def_function[dev_cd_rows_py]("x_decomp_dev_cd_rows")
         comptime if DECOMP_FAST_DICT_DEV:
             # lane/apple-fast-gap-clus3: FAST + Apple default (off: -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF) (x_decomp/dict_fast.mojo)
             m.def_function[dev_dict_update_py]("x_decomp_dev_dict_update")

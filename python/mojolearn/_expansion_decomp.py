@@ -760,8 +760,26 @@ class _Kit:
         """One sklearn `_update_cdnmf_fast` sweep over every row of W, in
         place; returns the total violation (rows ascending)."""
         n, kc = W.r, W.c
-        viol = _M.zeros(n, 1)
         p = array.array("i", perm)
+        if "_cd_fn" not in self.__dict__:
+            # lane fam-decomp: `x_decomp_dev_cd_rows` when this binding
+            # exports it (an IDENTICAL GPU build without
+            # -D MOJOLEARN_IDN_CD_RESIDENT_OFF), else None
+            fn = None
+            if self._res():
+                try:
+                    fn = getattr(self._raw(), "x_decomp_dev_cd_rows")
+                except Exception:
+                    fn = None
+            self._cd_fn = fn
+        if self._cd_fn is not None and n * kc and self._use(W, HHt, XHt):
+            # W swept where it lives (it has moved to the device: no host
+            # store to go stale), the violations folded there, one float read
+            viol = self._dout(n, 1)
+            self.b.x_decomp_dev_cd_rows(self._did(W), self._did(HHt), self._did(XHt), p.buffer_info()[0],
+                                        viol._d.id, [n, kc])
+            return self.total(viol).s[0]
+        viol = _M.zeros(n, 1)
         self.b.x_decomp_cd_rows(W.addr, HHt.addr, XHt.addr, p.buffer_info()[0], viol.addr, [n, kc])
         return self.total(viol).s[0]
 
