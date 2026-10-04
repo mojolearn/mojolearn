@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MOJOLEARN_MCD_BATCH_COMPAT (2026-10-04) is a separate opt-in repair:
-compact support before 4096-term folds, FMA covariance/distance/LU cells,
+compact support before legacy scalar 4096-term folds, FMA covariance/distance/LU cells,
 and a parallel round-robin eigensolve using main's rotation and convergence
 rules. It does NOT inherit the failed route's quality approval. Validate
 with tools/mcd_compat_quality.py against current main before any default.
@@ -79,7 +79,17 @@ from x_decomp.mcd_compat import mc_compact_kernel, mc_moment_kernel, mc_pinvh_ke
 # FAILED gap26-mcdcompat-taxi at 948c4e7b1: B rejected by the batched
 # eigensolve gate (A=70877.713 ms). Repair: make collective entry uniform
 # before clearing needp for inactive singular candidates. Validation of
-# this race repair is still pending; keep opt-in and retain both gates.
+# this race repair is recorded below; keep opt-in and retain both gates.
+# FAIL-quality gap26-mcdrepair-small-ready, ab4265c9a, M3 taxi cap3000:
+# quality-fit A5595.80ms / B828.96ms (not full-board timing); location_rel
+# .032817, covariance_rel .085678, precision_rel .999817, distances_rel
+# .997423; support Jaccard .941431, raw support .798209; both raw ranks10.
+# Both flag fractions1 are uninformative. This is a changed fitted model.
+# Source audit: main DMcd.emp_cov/pinvh/mahal use DKit.mm -> Apple MMA,
+# including split-K covariance at support sizes>=1024. COMPAT's scalar
+# 4096-term folds do not replay that arithmetic. A causal first-divergence
+# trace is still owed; do NOT interpret the race repair as quality approval.
+# See docs/apple-fast/ab/mcd-compat-review.md for the semantics-preserving plan.
 comptime MCD_BATCH_COMPAT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_MCD_BATCH_COMPAT"]()

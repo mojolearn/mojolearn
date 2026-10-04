@@ -2,8 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 """Opt-in batched MCD arithmetic compatibility experiment.
 
-Keep support in ascending row order, main's 4096-term fold boundaries,
-FMA Gram products, and main's round-robin Jacobi rotations. Each candidate
+Keep support in ascending row order, the legacy scalar 4096-term fold boundaries,
+FMA Gram products, and main's round-robin Jacobi rotations. Main's Apple FAST
+DKit.mm now uses MMA (and split-K for long support); these scalar moments
+are NOT arithmetic-compatible with that default. See failed cap3000 tag
+gap26-mcdrepair-small-ready and ab/mcd-compat-review.md. Each candidate
 owns a block for the eigensolve, with concurrent rotations/cells; candidates
 also run in parallel. No host eigensolve or support selection.
 """

@@ -597,3 +597,18 @@ Fixes of UNOWNED rows of `tools/hooks/host_routes_baseline.tsv`. Arm A of each A
 |---|---|---|---|---|---|---|
 | `KPCA_FAST_LANCZOS_DEV` | kernel-pca / taxi; kernel-pca / istella | lane/apple-fast-gap-linalg2-kpca @ 134dca742 | gl2k-kpca-lzdev-taxi, gl2k-kpca-lzdev-istella | kernel-pca taxi -9%; istella -12.5% | KEPT | M2 quality-only gl2k-kpca-quality-r3: eig rel diff 1.795e-07, transform angle 1.879e-06 rad; FAST+Apple default, -D MOJOLEARN_KPCA_FAST_LANCZOS_DEV_OFF reverts |
 | `IPCA_FAST_DEV` | incremental-pca / taxi | lane/apple-fast-gap-linalg2-kpca @ 134dca742 | gl2k-ipca-dev-taxi | incremental-pca taxi 159 -> 136 | KEPT | -14.5%; output digest bit-identical; each batch stacked on the device, public arrays read once; FAST+Apple default, -D MOJOLEARN_IPCA_FAST_DEV_OFF reverts |
+
+
+## MCD compatibility repair review (2026-10-04)
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_MCD_BATCH_COMPAT` | MinCovDet / taxi cap3000 | lane/apple-fast-mcd-exact @ ab4265c9a | gap26-mcdrepair-small-ready | quality-only fit5595.80 ->828.96; full-board timing gated | HOLD-quality | location_rel.032817, covariance_rel.085678, precision_rel.999817, distances_rel.997423; support Jaccard.941431, raw_support.798209, both raw ranks10. Collective-entry repair removed launch/convergence failure but fitted values remain different. Same flags(all true) do not establish quality. |
+
+Audit/proposal in `ab/mcd-compat-review.md`: main uses native Apple MMA for
+covariance, weighted eigenvector Gram and Mahalanobis products; COMPAT uses
+scalar FMA chains. Main covariance also splits K for support>=1024, unlike
+COMPAT's4096-term folds. This concrete arithmetic mismatch can amplify through
+singular determinants and candidate selection, but saved final fits alone do
+not identify the first divergent stage. No thresholds changed. No new numeric
+candidate is approved or claimed fixed; full timing remains gated.
