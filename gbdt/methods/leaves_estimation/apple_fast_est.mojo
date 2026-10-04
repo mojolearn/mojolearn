@@ -108,16 +108,33 @@ from gbdt.targets.kernel.pointwise_targets import (
 comptime _APPLE_FAST = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 )
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed
+#: unstarted), never timed. `-D MOJOLEARN_SYM_EST_ALL` umbrella: all four.
 comptime EST_ALL = _APPLE_FAST and is_defined["MOJOLEARN_SYM_EST_ALL"]()
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed
+#: unstarted), never timed.
 comptime EST_STATS_FUSED = _APPLE_FAST and (
     is_defined["MOJOLEARN_EST_STATS_FUSED"]() or EST_ALL
 )
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed
+#: unstarted), never timed. (no EXPERIMENTS row at the source; added here)
 comptime EST_ITERS_DEVICE = _APPLE_FAST and (
     is_defined["MOJOLEARN_EST_ITERS_DEVICE"]() or EST_ALL
 )
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed
+#: unstarted), never timed.
 comptime EST_REUSE_PART = _APPLE_FAST and (
     is_defined["MOJOLEARN_EST_REUSE_PART"]() or EST_ALL
 )
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed
+#: unstarted), never timed. Port: stands down on a tree where
+#: SYM_DERIV_FUSED already enqueues the next gradient pass
+#: (doc_parallel_boosting `not sym_fuse`).
 comptime EST_SHRINK_FUSED = _APPLE_FAST and (
     is_defined["MOJOLEARN_EST_SHRINK_FUSED"]() or EST_ALL
 )

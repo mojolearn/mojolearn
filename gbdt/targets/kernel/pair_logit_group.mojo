@@ -149,7 +149,14 @@ def pl_group_narrow_for[column: Int]() -> Bool:
     return False
 
 
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-multi@d2c832da0; the laptop built the .so (Metal side
+#: unchecked), never timed. `-D MOJOLEARN_PL_PAIRS_ONCE` (or SYM_MULTI_ALL).
 comptime PL_PAIRS_ONCE = pl_pairs_once_for[TARGET_COLUMN]()
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-multi@d2c832da0; the laptop built the .so (Metal side
+#: unchecked), never timed. `-D MOJOLEARN_PL_GROUP_NARROW` (or
+#: SYM_MULTI_ALL).
 comptime PL_GROUP_NARROW = pl_group_narrow_for[TARGET_COLUMN]()
 #: the group kernel's block: 128 under `PL_GROUP_NARROW`, else `PLG_THREADS`
 #: (`MSE_BLOCK_SIZE`, 256)

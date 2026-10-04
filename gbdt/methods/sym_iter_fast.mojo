@@ -105,18 +105,37 @@ from gbdt.options.catboost_options import LEAF_ESTIMATION_NEWTON
 comptime SYM_ITER_FAST_APPLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 )
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-iter@4956a2234; SYM_ITER_ALL compiled rc=0 on the
+#: laptop 2026-10-03, singles never built, never timed. Umbrella: all four.
 comptime SYM_ITER_ALL = (
     SYM_ITER_FAST_APPLE and is_defined["MOJOLEARN_SYM_ITER_ALL"]()
 )
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-iter@4956a2234; SYM_ITER_ALL compiled rc=0 on the
+#: laptop 2026-10-03, singles never built, never timed. Port: the searcher's
+#: pooled fold dummies now sit in front of main's ORD_ALL observation
+#: scratch.
 comptime SYM_BUF_ARENA = SYM_ITER_FAST_APPLE and (
     is_defined["MOJOLEARN_SYM_BUF_ARENA"]() or SYM_ITER_ALL
 )
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-iter@4956a2234; SYM_ITER_ALL compiled rc=0 on the
+#: laptop 2026-10-03, singles never built, never timed.
 comptime SYM_LEAF_FROM_STATS = SYM_ITER_FAST_APPLE and (
     is_defined["MOJOLEARN_SYM_LEAF_FROM_STATS"]() or SYM_ITER_ALL
 )
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-iter@4956a2234; SYM_ITER_ALL compiled rc=0 on the
+#: laptop 2026-10-03, singles never built, never timed.
 comptime SYM_REUSE_PARTITION = SYM_ITER_FAST_APPLE and (
     is_defined["MOJOLEARN_SYM_REUSE_PARTITION"]() or SYM_LEAF_FROM_STATS
 )
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-iter@4956a2234; SYM_ITER_ALL compiled rc=0 on the
+#: laptop 2026-10-03, singles never built, never timed. Port: compiled with
+#: EST_SHRINK_FUSED, this prefetch wins on its trees (the estimation hook
+#: stands down).
 comptime SYM_DERIV_FUSED = SYM_ITER_FAST_APPLE and (
     is_defined["MOJOLEARN_SYM_DERIV_FUSED"]() or SYM_ITER_ALL
 )

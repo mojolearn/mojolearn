@@ -14,6 +14,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 comptime SYM_FEAT_FAST_APPLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 )
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
+#: source), never timed. Umbrella: all six.
 comptime SYM_FEAT_ALL = (
     SYM_FEAT_FAST_APPLE and is_defined["MOJOLEARN_SYM_FEAT_ALL"]()
 )
@@ -24,6 +27,10 @@ comptime SYM_FEAT_ALL = (
 #: the word assembled in a register and stored once) instead of one
 #: `binarize_float_feature_kernel` launch per feature. Needs the float
 #: columns resident on the device, so it implies `GBDT_QUANT_DEVICE`.
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
+#: source), never timed. Fixed: the pack kernel compares by `exact_f32_gt`,
+#: as main's binarize kernel (subnormal borders on Metal).
 comptime GBDT_INDEX_PACK_DEVICE = SYM_FEAT_FAST_APPLE and (
     is_defined["MOJOLEARN_GBDT_INDEX_PACK_DEVICE"]() or SYM_FEAT_ALL
 )
@@ -37,6 +44,10 @@ comptime GBDT_INDEX_PACK_DEVICE = SYM_FEAT_FAST_APPLE and (
 #: host) uploads its rows as handed over and the matrix is transposed on the
 #: device (`transpose_rows_to_columns_kernel`). Same border kernels, same
 #: binarize arithmetic, same words.
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
+#: source), never timed. Fixed: the pack kernel compares by `exact_f32_gt`
+#: (as INDEX_PACK_DEVICE).
 comptime GBDT_QUANT_DEVICE = SYM_FEAT_FAST_APPLE and (
     is_defined["MOJOLEARN_GBDT_QUANT_DEVICE"]() or GBDT_INDEX_PACK_DEVICE
 )
@@ -44,6 +55,9 @@ comptime GBDT_QUANT_DEVICE = SYM_FEAT_FAST_APPLE and (
 #: `_build_cindex_from_floats` over a one-row dummy (two uploads and a
 #: launch per bordered feature, a drain per eight) for a test arm nothing
 #: reads; the switch allocates the one-word index and skips the launches.
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
+#: source), never timed.
 comptime GBDT_EVAL_SKIP_EMPTY = SYM_FEAT_FAST_APPLE and (
     is_defined["MOJOLEARN_GBDT_EVAL_SKIP_EMPTY"]() or SYM_FEAT_ALL
 )
@@ -52,6 +66,9 @@ comptime GBDT_EVAL_SKIP_EMPTY = SYM_FEAT_FAST_APPLE and (
 #: instead of six, and when no overfitting detector can stop the fit the
 #: per-tree loss is left on the device (`fv_all[iteration]`) and read back
 #: once after the last tree instead of a readback and a drain per tree.
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
+#: source), never timed.
 comptime GBDT_EVAL_FUSED = SYM_FEAT_FAST_APPLE and (
     is_defined["MOJOLEARN_GBDT_EVAL_FUSED"]() or SYM_FEAT_ALL
 )
@@ -59,6 +76,9 @@ comptime GBDT_EVAL_FUSED = SYM_FEAT_FAST_APPLE and (
 #: ONE `pack_cindex_words_kernel` launch (not one per feature) and applies
 #: the whole ensemble with ONE `compute_bins_and_add_all_kernel` launch (not
 #: one per tree), the trees in order, the same float32 adds.
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
+#: source), never timed.
 comptime GBDT_PREDICT_PACKED = SYM_FEAT_FAST_APPLE and (
     is_defined["MOJOLEARN_GBDT_PREDICT_PACKED"]() or SYM_FEAT_ALL
 )
@@ -66,6 +86,9 @@ comptime GBDT_PREDICT_PACKED = SYM_FEAT_FAST_APPLE and (
 #: by one launch (`bootstrap_seed_fill_kernel`, splitmix64 of
 #: `base + (i + 1) * golden`, the host loop's exact values) instead of a
 #: host loop, a pinned upload and a drain.
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-feat@bca0e3a48; never built (compile owed at the
+#: source), never timed.
 comptime GBDT_BOOT_DEVICE = SYM_FEAT_FAST_APPLE and (
     is_defined["MOJOLEARN_GBDT_BOOT_DEVICE"]() or SYM_FEAT_ALL
 )

@@ -782,7 +782,15 @@ def mc_class_batch_est_for[column: Int]() -> Bool:
     return False
 
 
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-multi@d2c832da0; the laptop built the .so (Metal side
+#: unchecked), never timed. `-D MOJOLEARN_MC_CLASS_BATCH_DERIV` (or
+#: SYM_MULTI_ALL).
 comptime MC_CLASS_BATCH_DERIV = mc_class_batch_deriv_for[TARGET_COLUMN]()
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-multi@d2c832da0; the laptop built the .so (Metal side
+#: unchecked), never timed. `-D MOJOLEARN_MC_CLASS_BATCH_EST` (or
+#: SYM_MULTI_ALL).
 comptime MC_CLASS_BATCH_EST = mc_class_batch_est_for[TARGET_COLUMN]()
 #: the widest class count the register kernels hold (K-1 approxes and exps
 #: per thread, the Hessian triangle unrolled: 36 stores at 8); wider fits

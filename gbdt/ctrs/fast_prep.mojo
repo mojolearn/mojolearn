@@ -97,17 +97,39 @@ from gbdt.gpu_util.kernel.transform import (
 comptime _SYM_CTR_FAST_APPLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 )
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
+#: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,
+#: never timed. Umbrella: all five (with SYM_CTR_PERM_BATCH in
+#: doc_parallel_boosting).
 comptime SYM_CTR_ALL = is_defined["MOJOLEARN_SYM_CTR_ALL"]()
 
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
+#: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,
+#: never timed.
 comptime CTR_PREP_SHARED = _SYM_CTR_FAST_APPLE and (
     is_defined["MOJOLEARN_CTR_PREP_SHARED"]() or SYM_CTR_ALL
 )
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
+#: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,
+#: never timed.
 comptime CTR_SORT_ONCE = _SYM_CTR_FAST_APPLE and (
     is_defined["MOJOLEARN_CTR_SORT_ONCE"]() or SYM_CTR_ALL
 )
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
+#: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,
+#: never timed. Port: main removed CTR_PERM_PTRS, the sibling arm the source
+#: sat next to in train(); dropped.
 comptime CTR_INDEX_FUSED = _SYM_CTR_FAST_APPLE and (
     is_defined["MOJOLEARN_CTR_INDEX_FUSED"]() or SYM_CTR_ALL
 )
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
+#: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,
+#: never timed.
 comptime CTR_ONEHOT_DEVICE = _SYM_CTR_FAST_APPLE and (
     is_defined["MOJOLEARN_CTR_ONEHOT_DEVICE"]() or SYM_CTR_ALL
 )

@@ -21,12 +21,18 @@ comptime SYM_FAST_APPLE = (
 )
 
 #: all six switches at once
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
+#: arms never reached the queue). Umbrella: all six.
 comptime SYM_HIST_ALL = SYM_FAST_APPLE and is_defined["MOJOLEARN_SYM_HIST_ALL"]()
 
 #: the one-bit radix pass of the level split writes into `tmp_bins` /
 #: `tmp_indices` and the handles are SWAPPED instead of copied back: the
 #: two `copy_u32_kernel` launches per level go away
 #: (`pointwise_optimization_subsets.mojo::split_subsets_from_desc`).
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
+#: arms never reached the queue).
 comptime SYM_SORT_SWAP = SYM_FAST_APPLE and (
     SYM_HIST_ALL or is_defined["MOJOLEARN_SYM_SORT_SWAP"]()
 )
@@ -35,6 +41,9 @@ comptime SYM_SORT_SWAP = SYM_FAST_APPLE and (
 #: per threadgroup (threads stride the records, then a shared-memory tree
 #: reduce under the same three-key order) instead of once per thread
 #: (`pointwise_split_resolve.mojo`).
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
+#: arms never reached the queue).
 comptime SYM_RESOLVE_BLOCK = SYM_FAST_APPLE and (
     SYM_HIST_ALL or is_defined["MOJOLEARN_SYM_RESOLVE_BLOCK"]()
 )
@@ -42,6 +51,9 @@ comptime SYM_RESOLVE_BLOCK = SYM_FAST_APPLE and (
 #: after the sort, ONE launch gathers weights and targets by the new
 #: `indices` and writes the partition sizes, replacing the sizes kernel and
 #: the two gathers (`pointwise_optimization_subsets.mojo::update_subsets_stats`).
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
+#: arms never reached the queue).
 comptime SYM_GATHER_FUSED = SYM_FAST_APPLE and (
     SYM_HIST_ALL or is_defined["MOJOLEARN_SYM_GATHER_FUSED"]()
 )
@@ -50,6 +62,11 @@ comptime SYM_GATHER_FUSED = SYM_FAST_APPLE and (
 #: grid with a shared-memory reduce per block and a global float atomic
 #: add per block, after a fill, instead of one 1024-thread block per
 #: partition (`pointwise_scores.mojo::partition_update_chunked_kernel`).
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
+#: arms never reached the queue). KNOWN: the per-block float atomic add
+#: makes the partition sums' fold order run-dependent (FAST only; check auc
+#: and run-to-run on the A/B).
 comptime SYM_PART_STATS_PAR = SYM_FAST_APPLE and (
     SYM_HIST_ALL or is_defined["MOJOLEARN_SYM_PART_STATS_PAR"]()
 )
@@ -58,6 +75,9 @@ comptime SYM_PART_STATS_PAR = SYM_FAST_APPLE and (
 #: launch: the thread that scans a feature's folds for the computed child
 #: also writes parent - child for the sibling
 #: (`split_properties_helpers.mojo::scan_sub_pointwise_histograms_kernel`).
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
+#: arms never reached the queue).
 comptime SYM_SCAN_SUB_FUSED = SYM_FAST_APPLE and (
     SYM_HIST_ALL or is_defined["MOJOLEARN_SYM_SCAN_SUB_FUSED"]()
 )
@@ -66,6 +86,9 @@ comptime SYM_SCAN_SUB_FUSED = SYM_FAST_APPLE and (
 #: `SYM_HIST_MULT_FACTOR` times as many blocks as the SM heuristic would
 #: (`pointwise_kernels.mojo::pw_block_multiplier`), still capped at 64 and
 #: at >= 10k rows per block.
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
+#: arms never reached the queue).
 comptime SYM_HIST_MULT = SYM_FAST_APPLE and (
     SYM_HIST_ALL or is_defined["MOJOLEARN_SYM_HIST_MULT"]()
 )

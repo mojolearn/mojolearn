@@ -219,6 +219,11 @@ def yeti_task_fused_for[column: Int]() -> Bool:
     return False
 
 
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-multi@d2c832da0; the laptop built the .so (Metal side
+#: unchecked), never timed. `-D MOJOLEARN_YR_TASK_FUSED` (or SYM_MULTI_ALL).
+#: Port: the fused kernel now sorts with main's YETI_FAST_SORT arm (the
+#: block kernel's sort, both arms).
 comptime YETI_TASK_FUSED = yeti_task_fused_for[TARGET_COLUMN]()
 
 

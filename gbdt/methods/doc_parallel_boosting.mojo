@@ -199,6 +199,10 @@ comptime CTR_PERM_BATCH = (
 #: only the host interleaving changes. Taken when `estimate_can_batch` holds
 #: (pointwise loss, Newton or Gradient), `approx_dim == 1` and no ranking
 #: target; else the serial loop. IDENTICAL compiles the serial loop unchanged.
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
+#: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,
+#: never timed.
 comptime SYM_CTR_PERM_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
