@@ -793,7 +793,7 @@ def gbdt_fit_ordered_rmse_binding(
     conversions finish before releasing the GIL; buffers remain borrowed
     from live arrays held by the wrapper for the duration of this call.
     """
-    from gbdt.train import train_ordered_rmse
+    from gbdt.train import train_ordered_rmse_ptr
     from gbdt.models.model_text import model_text
 
     if len(params) != 9:
@@ -811,26 +811,29 @@ def gbdt_fit_ordered_rmse_binding(
         raise Error("ordered RMSE requires >=4 rows, features and a full permutation")
     if n_weights != 0 and n_weights != n_rows:
         raise Error("ordered RMSE sample weight shape mismatch")
-    var xp = _f32_ptr(Int(py=x_addr))
+    _ = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
     var wp = _f32_ptr(Int(py=weights_addr))
     var pp = _u32_ptr(Int(py=permutation_addr))
     var text: String
+    var x_address = Int(py=x_addr)
     with GILReleased(Python()):
-        var xs = List[Float32]()
+        # cpu2-l6-bindings: X (n_rows x n_features) is NOT copied into a host
+        # List: `train_ordered_rmse_ptr` uploads it from the caller's
+        # address once and refuses non-finite cells on the device. y, the
+        # permutation and the weights (O(n)) still feed
+        # `fit_ordered_rmse`'s host validation and fold plan as lists.
         var ys = List[Float32]()
         var ws = List[Float32]()
         var permutation = List[UInt32]()
-        for i in range(n_rows * n_features):
-            xs.append(xp.unsafe_load(i))
         for i in range(n_rows):
             ys.append(yp.unsafe_load(i))
             permutation.append(pp.unsafe_load(i))
         for i in range(n_weights):
             ws.append(wp.unsafe_load(i))
         with process_ctx[_DEVCTX_SLOT]() as ctx:
-            var trained = train_ordered_rmse(
-                ctx, xs, ys, n_rows, n_features, permutation,
+            var trained = train_ordered_rmse_ptr(
+                ctx, x_address, ys, n_rows, n_features, permutation,
                 n_estimators, max_depth, border_count, learning_rate,
                 l2_leaf_reg, ws,
             )
