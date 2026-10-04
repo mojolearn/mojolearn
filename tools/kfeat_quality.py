@@ -15,6 +15,15 @@ Tolerances, fixed before any result:
   random_weights_, random_offset_, sigma_/scale_, transforms) must be
   BYTE-IDENTICAL and every refusal must raise the same type with the same
   text. Tolerance zero.
+- lane apple-fast-w3-kfeat (fixture kfeat-v2), same zero tolerance, fixed
+  before any result: MOJOLEARN_XN_FAST_ACHI2_DEVSCAN with its size gate
+  (2^22 entries; the gate's both sides and its boundary are dumped),
+  MOJOLEARN_XN_FAST_SCHI2_LAZYW (transform BEFORE any random_weights_ read,
+  so the pending-weights call is what is compared; then the read, a second
+  transform, a read-before-transform estimator, refit, refusals) and
+  MOJOLEARN_KM_FAST_RBF_STAGED (the staged download: outputs above and
+  below DOWNLOAD_STAGE_MIN, the board shape repeated) are copies or the
+  same kernels on the same words.
 - x_decomp (MOJOLEARN_XD_FAST_SRP_STRAT; default now, old arm =
   MOJOLEARN_XD_FAST_SRP_STRAT_OFF) changes SparseRandomProjection's
   draw by design, so its bits differ. Gate: the board's own metric
@@ -70,6 +79,7 @@ def dump_kernel_methods():
     import mojolearn as ml
     sha, mod = _binding_sha("_mojolearn_kernel_methods")
     reach = hasattr(mod, "rbf_sampler_fit_transform_resident")
+    staged = int(mod.km_rbf_staged()) if hasattr(mod, "km_rbf_staged") else 0
     rng = np.random.default_rng(20261004)
     out, errs = {}, {}
     X1 = (rng.standard_normal((20011, 37)) * np.exp(rng.uniform(-2, 2, 37))).astype(np.float32)
@@ -100,7 +110,13 @@ def dump_kernel_methods():
     errs["inf"] = _err(lambda: ml.RBFSampler(gamma=0.1, n_components=8, random_state=1).fit_transform(bad2))
     errs["gamma0"] = _err(lambda: ml.RBFSampler(gamma=0.0, n_components=8).fit_transform(X1))
     errs["q0"] = _err(lambda: ml.RBFSampler(gamma=0.1, n_components=0).fit_transform(X1))
-    return sha, {"rbf_resident": reach}, out, errs
+    # kfeat-v2 (KM_FAST_RBF_STAGED): outputs just below / at / above the
+    # staged download's 1M-float minimum and a ragged last chunk, full arrays
+    for rows, q in ((4095, 256), (4096, 256), (4097, 256), (8193, 300)):
+        Xr = X2[:rows, :37] / np.float32(1e3)
+        out["staged_%d_%d" % (rows, q)] = np.asarray(
+            ml.RBFSampler(gamma=0.02, n_components=q, random_state=5).fit_transform(Xr))
+    return sha, {"rbf_resident": reach, "rbf_staged": staged}, out, errs
 
 
 # ------------------------------------------------------------------ x_neighbors
@@ -136,6 +152,44 @@ def dump_x_neighbors():
             out[k + "_b"] = np.asarray(e.random_offset_)
             if d == 31 and seed == 7:
                 out[k + "_T"] = np.asarray(e.transform(X))
+    # kfeat-v2: ACHI2_DEVSCAN's size gate (2^22 entries): the board's taxi
+    # shape (host side), one entry below the gate, at the gate (device side),
+    # each clean and with one negative at the end
+    for tag, shape in (("taxi", (100000, 11)), ("below", (4194303, 1)), ("at", (4194304, 1)),
+                       ("at2", (65536, 64))):
+        Xg = np.abs(rng.standard_normal(shape)).astype(np.float32)
+        errs["achi2_gate_ok_" + tag] = _err(lambda Xg=Xg: ml.AdditiveChi2Sampler().fit(Xg))
+        Xg[-1, -1] = -1e-30
+        errs["achi2_gate_neg_" + tag] = _err(lambda Xg=Xg: ml.AdditiveChi2Sampler().fit(Xg))
+    # kfeat-v2: SCHI2_LAZYW. Transform FIRST (the pending weights are made in
+    # the transform's call), then the weights, a second transform; the
+    # board's shapes (fit 100k rows, transform 1,000)
+    for tag, (n, d, nc, seed) in (("taxi", (100000, 11, 256, 7)), ("istella", (100000, 220, 256, 7)),
+                                  ("small", (5, 3, 4, 0)), ("one", (1, 1, 1, 12345))):
+        X = np.abs(rng.standard_normal((n, d))).astype(np.float32)
+        Xq = np.abs(rng.standard_normal((min(n, 1000), d))).astype(np.float32)
+        e = ml.SkewedChi2Sampler(skewedness=1.0, n_components=nc, random_state=seed).fit(X)
+        k = "lazy_" + tag
+        out[k + "_T1"] = np.asarray(e.transform(Xq))
+        out[k + "_W"] = np.asarray(e.random_weights_)
+        out[k + "_b"] = np.asarray(e.random_offset_)
+        out[k + "_T2"] = np.asarray(e.transform(Xq[: max(1, len(Xq) // 2)]))
+        e2 = ml.SkewedChi2Sampler(skewedness=0.5, n_components=nc, random_state=seed + 1).fit(X)
+        out[k + "_W_first"] = np.asarray(e2.random_weights_)  # read before any transform
+        out[k + "_T_after_read"] = np.asarray(e2.transform(Xq))
+        e2.fit(X[: max(1, n // 3)])  # refit replaces the weights
+        out[k + "_T_refit"] = np.asarray(e2.transform(Xq))
+        out[k + "_W_refit"] = np.asarray(e2.random_weights_)
+    Xr = np.abs(rng.standard_normal((300, 7))).astype(np.float32)
+    e3 = ml.SkewedChi2Sampler(skewedness=1.0, n_components=16, random_state=3).fit(Xr)
+    Xbad = Xr.copy()
+    Xbad[4, 2] = -1.0  # == -skewedness: refused by the transform, weights still pending
+    errs["lazy_refuse"] = _err(lambda: e3.transform(Xbad))
+    out["lazy_after_refuse_T"] = np.asarray(e3.transform(Xr))
+    errs["lazy_unfitted"] = _err(lambda: ml.SkewedChi2Sampler(n_components=4).transform(Xr))
+    e4 = ml.SkewedChi2Sampler(n_components=8, random_state=None).fit(Xr)  # main's Python draw
+    out["lazy_noseed_shape"] = np.array(np.asarray(e4.random_weights_).shape, np.int64)
+    out["lazy_noseed_T_shape"] = np.array(np.asarray(e4.transform(Xr)).shape, np.int64)
     return sha, {"kfeat_flags": flags}, out, errs
 
 

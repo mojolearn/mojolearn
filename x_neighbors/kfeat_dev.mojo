@@ -16,8 +16,10 @@ ACHI2_FAST_DEVCHECK (lane/apple-fast-gap-kapprox2, +1% istella, 0.9 -> 2.8
 ms taxi) made a fresh device buffer for X and a fresh flag per call and
 ran one thread per element against one flag word; this keeps nothing fresh.
 HOLD (opt-in): M3, one run per arm, istella 11.6 -> 2.9 ms but taxi 0.9 ->
-1.9 ms (w2-kfeat-achi2-*): the device round trip loses on small X, so it
-needs a size gate before it can be a default.
+1.9 ms (w2-kfeat-achi2-*): the device round trip loses on small X.
+lane apple-fast-w3-kfeat adds that size gate (`XN_ACHI2_DEVSCAN_MIN` =
+2^22 entries, derived from those two points below): smaller X keeps main's
+host minimum, so taxi keeps main's route; A/B owed before any default.
 Semantics: refuses iff some entry is negative by bits (`x < 0`, and a NaN
 with its sign bit set), wherever it sits; main's sequential minimum can
 hide a negative behind an earlier NaN (min(list) keeps the NaN). Every
@@ -38,6 +40,10 @@ the offsets (0 + 2 pi * u, main's double expression, rounded once) written
 directly, ONE synchronize. Bit-identical to main by construction. The
 stream itself is sequential by its definition (sklearn's numbers); it is
 the parameter draw, not a pass over X, and main draws it on the host too.
+
+SCHI2_LAZYW, opt-in (bit 4, `-D MOJOLEARN_XN_FAST_SCHI2_LAZYW`, lane
+apple-fast-w3-kfeat): fit without device work, the weights made inside
+the first transform's single call (section at the end of this file).
 """
 from std.ffi import _Global
 from std.memory import bitcast

@@ -27,18 +27,26 @@ import shutil
 import subprocess
 import sys
 
-FIXTURE = "kfeat-v1"
+FIXTURE = "kfeat-v2"  # lane apple-fast-w3-kfeat: gate, lazy-weights and staged cases added
 REACH = {  # binding -> (reach key in KFEAT-CAPTURE, B's expected value from the defines)
     # RBF_RESIDENT, SRP_STRAT and SCHI2_MOJO_MT are default since their promotion; their
     # _OFF forms build the old arm.
     "kernel_methods": ("rbf_resident", lambda ds: "MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF" not in ds),
     "x_neighbors": ("kfeat_flags", lambda ds: (1 if "MOJOLEARN_XN_FAST_ACHI2_DEVSCAN" in ds else 0)
-                    | (2 if "MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF" not in ds else 0)),
+                    | (2 if "MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF" not in ds else 0)
+                    | (4 if "MOJOLEARN_XN_FAST_SCHI2_LAZYW" in ds
+                       and "MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF" not in ds else 0)),
     "x_decomp": ("grp_cls2", None),
 }
+# extra reach keys checked as well (lane apple-fast-w3-kfeat)
+REACH_EXTRA = {
+    "kernel_methods": ("rbf_staged", lambda ds: 1 if ("MOJOLEARN_KM_FAST_RBF_STAGED" in ds
+                                                      and "MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF" not in ds) else 0),
+}
 ALLOWED = {
-    "kernel_methods": {"MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF"},
-    "x_neighbors": {"MOJOLEARN_XN_FAST_ACHI2_DEVSCAN", "MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF"},
+    "kernel_methods": {"MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF", "MOJOLEARN_KM_FAST_RBF_STAGED"},
+    "x_neighbors": {"MOJOLEARN_XN_FAST_ACHI2_DEVSCAN", "MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF",
+                    "MOJOLEARN_XN_FAST_SCHI2_LAZYW"},
     "x_decomp": {"MOJOLEARN_XD_FAST_SRP_STRAT_OFF"},
 }
 
@@ -62,6 +70,13 @@ def reach_ok(binding, arm, value, defines):
         return on == (arm == "A")  # SRP_STRAT default; B = _OFF
     expected = want(defines) if arm == "B" else want([])
     return value == expected
+
+
+def reach_extra_ok(binding, arm, reach, defines):
+    if binding not in REACH_EXTRA:
+        return True
+    key, want = REACH_EXTRA[binding]
+    return reach.get(key, 0) == (want(defines) if arm == "B" else want([]))
 
 
 def main():
@@ -131,6 +146,7 @@ def main():
             assert rec["binding"] == binding and rec["binding_sha256"] == hashes[arm], rec
             key = REACH[binding][0]
             assert reach_ok(binding, arm, rec["reach"][key], defines), (arm, rec["reach"])
+            assert reach_extra_ok(binding, arm, rec["reach"], defines), (arm, rec["reach"])
             print("KFEAT-PAIR arm=%s capture=PASS reach=%s" % (arm, rec["reach"]), flush=True)
         cmp_log = out / "compare.log"
         with cmp_log.open("x") as stream:
