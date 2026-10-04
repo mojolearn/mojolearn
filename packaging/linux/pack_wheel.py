@@ -671,18 +671,25 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
     out = []
     for adir in arch_dirs:
         arch = adir.name
+        # Experimental baselines use the generic profile, but a full baseline
+        # build can include byte LM. Preserve that declared file and enforce
+        # complete readbacks when present. Native generic semantics are unchanged.
+        carry_byte_lm = include_byte_lm or (
+            vendor == "cuda" and arch == "sm_80"
+            and (adir / gpu_plugins.BASELINE_MANIFEST).is_file()
+            and (adir / "identical/_mojolearn_byte_lm.so").is_file())
         manifest = json.loads((adir / "manifest.json").read_text())
         reuse = load_reuse(adir, vendor, arch)
         reused = reuse["files"] if reuse else {}
         expected_rels = {("" if tier == "fast" else tier + "/") + name + ".so"
-                         for tier in TIERS for name in tier_names(tier, include_byte_lm)}
+                         for tier in TIERS for name in tier_names(tier, carry_byte_lm)}
         all_reused = bool(reuse) and expected_rels <= set(reused) and (
-            not include_byte_lm or all(f"host/{n}.so" in reused for n in HOST_NAMES))
+            not carry_byte_lm or all(f"host/{n}.so" in reused for n in HOST_NAMES))
         has_witnesses = (adir / "readback.txt").is_file() and (adir / "arch_readback.txt").is_file()
         witnessed_built = []
         if not has_witnesses and not all_reused:
             missing = expected_rels - set(reused)
-            if include_byte_lm:
+            if carry_byte_lm:
                 missing |= {f"host/{n}.so" for n in HOST_NAMES if f"host/{n}.so" not in reused}
             built_host = {rel for rel in missing if rel.startswith("host/")}
             if not reuse or built_host != missing or not host_witnesses_by_name:
@@ -729,7 +736,7 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
                 raise SystemExit(
                     f"pack_wheel: {adir}/readback.txt names host bindings the manifest does not ship, "
                     f"or one twice: {host_named}; the manifest ships {list(HOST_NAMES)}")
-            if include_byte_lm and set(host_named) != set(HOST_NAMES):
+            if carry_byte_lm and set(host_named) != set(HOST_NAMES):
                 raise SystemExit(
                     f"pack_wheel: {adir}/readback.txt names {sorted(host_named)}; the release profile "
                     f"requires every host binding the manifest ships: {list(HOST_NAMES)}")
@@ -756,7 +763,7 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
             if sorted(r[1] for r in host_arch_rows) != sorted(host_named):
                 raise SystemExit(
                     f"pack_wheel: {adir}/arch_readback.txt and readback.txt name different host bindings")
-            if include_byte_lm:
+            if carry_byte_lm:
                 expected_rows = {(tier, name) for tier in TIERS
                                  for name in tier_names(tier, True)}
                 for witness, expected_value in (('readback.txt', vendor), ('arch_readback.txt', arch)):
@@ -790,7 +797,7 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
         files = {}
         for tier in TIERS:
             d = adir if tier == "fast" else adir / tier
-            names = tier_names(tier, include_byte_lm)
+            names = tier_names(tier, carry_byte_lm)
             actual = {p.name for p in d.glob('_mojolearn*.so')}
             if actual != {n + '.so' for n in names}:
                 raise SystemExit(f'pack_wheel: undeclared or missing native payload in {d}: {sorted(actual)}')

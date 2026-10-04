@@ -43,7 +43,7 @@ SETS = (("cuda", "sm_89"), ("cuda", "sm_90a"), ("hip", "gfx942"))
 TAG = "py3-none-manylinux_2_35_x86_64"
 
 
-def make_sets(root, sets=SETS, libs_differ=False):
+def make_sets(root, sets=SETS, libs_differ=False, include_byte_lm=False):
     """sets/<vendor>/<arch>/ trees in build_sets.sh's shape, inert bytes."""
     for vendor, arch in sets:
         adir = root / "sets" / vendor / arch
@@ -51,7 +51,7 @@ def make_sets(root, sets=SETS, libs_differ=False):
         for tier in pw.TIERS:
             d = adir if tier == "fast" else adir / tier
             d.mkdir(parents=True, exist_ok=True)
-            for name in pw.tier_names(tier):
+            for name in pw.tier_names(tier, include_byte_lm):
                 (d / f"{name}.so").write_bytes(f"{vendor}/{arch}/{tier}/{name}".encode())
                 rb.append(f"{tier} {name} {vendor}")
                 ab.append(f"{tier} {name} {arch}")
@@ -342,9 +342,21 @@ class SplitWheels(unittest.TestCase):
             self.pack("--wheels", "nvidia", sets=dirs)
 
     def test_experimental_ptx_payload_is_explicit_and_cannot_enter_release(self):
+        self._check_experimental_baseline(include_byte_lm=False)
+
+    def test_experimental_ptx_preserves_full_byte_lm_payload_and_readbacks(self):
+        self._check_experimental_baseline(include_byte_lm=True)
+
+    def test_native_generic_does_not_start_accepting_optional_byte_lm(self):
+        root = Path(tempfile.mkdtemp(dir=self.root))
+        dirs = make_sets(root, sets=(("cuda", "sm_89"),), include_byte_lm=True)
+        with self.assertRaisesRegex(SystemExit, "undeclared or missing native payload"):
+            self.pack("--wheels", "nvidia-sm89", sets=dirs)
+
+    def _check_experimental_baseline(self, include_byte_lm):
         import subprocess
         root = Path(tempfile.mkdtemp(dir=self.root))
-        dirs = make_sets(root, sets=(("cuda", "sm_80"),))
+        dirs = make_sets(root, sets=(("cuda", "sm_80"),), include_byte_lm=include_byte_lm)
         adir = root / "sets" / "cuda" / "sm_80"
         source = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
         files = []
@@ -365,6 +377,19 @@ class SplitWheels(unittest.TestCase):
         payload = members(wheels[0])
         self.assertIn("mojolearn/cuda_ptx/sm_80/PTX_BASELINE.json", payload)
         self.assertTrue(all(n.startswith("mojolearn/cuda_ptx/sm_80/") for n in payload if ".dist-info/" not in n))
+        byte_member = "mojolearn/cuda_ptx/sm_80/identical/_mojolearn_byte_lm.so"
+        self.assertEqual(byte_member in payload, include_byte_lm)
+        if include_byte_lm:
+            self.assertEqual(payload[byte_member], (adir / "identical/_mojolearn_byte_lm.so").read_bytes())
+            packed_doc = json.loads(payload["mojolearn/cuda_ptx/sm_80/PTX_BASELINE.json"])
+            self.assertTrue(any(row["file"] == "identical/_mojolearn_byte_lm.so" for row in packed_doc["files"]))
+            witness = adir / "readback.txt"
+            original = witness.read_text()
+            witness.write_text("\n".join(line for line in original.splitlines()
+                                         if not line.startswith("identical _mojolearn_byte_lm ")) + "\n")
+            with self.assertRaisesRegex(SystemExit, "incomplete release native readback"):
+                self.pack("--wheels", "nvidia-ptx80", sets=dirs)
+            witness.write_text(original)
         with self.assertRaisesRegex(SystemExit, "experimental payloads cannot"):
             self.pack("--profile", "release-split", "--wheels", "nvidia-ptx80", sets=dirs)
         for req in pw.gpu_plugins.core_requirements(self.version) + pw.gpu_plugins.payload_requirements("cuda", self.version):
