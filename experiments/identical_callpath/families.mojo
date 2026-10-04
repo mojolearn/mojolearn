@@ -5,6 +5,7 @@ These are device-stage building blocks, not replacements for estimator host
 validation, tracing, initialization, convergence checks or model ownership.
 Use only when the baseline already calls the same primitive/profile.
 """
+from max.gpu.host import DeviceBuffer, DeviceContext
 from core.row_norms import NORM_TPB, row_norm_kernel
 from core.column_stats import STATS_TPB, column_mean_kernel, shift_columns_kernel
 from core.gemm import gemm_nt
@@ -13,6 +14,34 @@ from gemm.checks.gemm_identical import (
 )
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
 from experiments.identical_callpath.session import IdenticalCallSession
+
+
+
+def _row_norms_into(ctx: DeviceContext, mut output: DeviceBuffer[DType.float32],
+                    mut source: DeviceBuffer[DType.float32], rows: Int,
+                    cols: Int, take_sqrt: Bool) raises:
+    ctx.enqueue_function[row_norm_kernel](
+        output.unsafe_ptr(), source.unsafe_ptr(), Int32(cols), Int32(take_sqrt),
+        grid_dim=(rows, 1, 1), block_dim=(NORM_TPB, 1, 1),
+    )
+
+
+def _column_means_into(ctx: DeviceContext, mut output: DeviceBuffer[DType.float32],
+                       mut source: DeviceBuffer[DType.float32], rows: Int,
+                       cols: Int) raises:
+    ctx.enqueue_function[column_mean_kernel](
+        output.unsafe_ptr(), source.unsafe_ptr(), Int32(rows), Int32(cols),
+        grid_dim=(cols, 1, 1), block_dim=(STATS_TPB, 1, 1),
+    )
+
+
+def _shift_columns_into(ctx: DeviceContext, mut source: DeviceBuffer[DType.float32],
+                        mut means: DeviceBuffer[DType.float32], rows: Int,
+                        cols: Int, sign: Float32) raises:
+    ctx.enqueue_function[shift_columns_kernel](
+        source.unsafe_ptr(), means.unsafe_ptr(), Int32(rows), Int32(cols), sign,
+        grid_dim=((rows * cols + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    )
 
 
 def _require_f32(session: IdenticalCallSession, slot: Int, count: Int) raises:
@@ -42,11 +71,8 @@ def enqueue_row_norms(mut session: IdenticalCallSession, output: Int,
         _require_f32(session, output, rows)
         if source == output:
             raise Error("row norm source/output must not alias")
-        session.ctx.enqueue_function[row_norm_kernel](
-            session.f32.device[output].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), session.f32.device[source].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            Int32(cols), Int32(take_sqrt), grid_dim=(rows, 1, 1),
-            block_dim=(NORM_TPB, 1, 1),
-        )
+        var buffers = session.f32.device.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+        _row_norms_into(session.ctx, buffers[output], buffers[source], rows, cols, take_sqrt)
     except e:
         session.abort()
         raise e
@@ -62,11 +88,8 @@ def enqueue_column_means(mut session: IdenticalCallSession, output: Int,
         _require_f32(session, output, cols)
         if source == output:
             raise Error("column mean source/output must not alias")
-        session.ctx.enqueue_function[column_mean_kernel](
-            session.f32.device[output].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), session.f32.device[source].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            Int32(rows), Int32(cols), grid_dim=(cols, 1, 1),
-            block_dim=(STATS_TPB, 1, 1),
-        )
+        var buffers = session.f32.device.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+        _column_means_into(session.ctx, buffers[output], buffers[source], rows, cols)
     except e:
         session.abort()
         raise e
@@ -84,11 +107,8 @@ def enqueue_shift_columns(mut session: IdenticalCallSession, source: Int,
         if source == means:
             raise Error("column means must not alias the shifted matrix")
         var sign = Float32(1.0) if restore else Float32(-1.0)
-        session.ctx.enqueue_function[shift_columns_kernel](
-            session.f32.device[source].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), session.f32.device[means].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            Int32(rows), Int32(cols), sign,
-            grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
-        )
+        var buffers = session.f32.device.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+        _shift_columns_into(session.ctx, buffers[source], buffers[means], rows, cols, sign)
     except e:
         session.abort()
         raise e

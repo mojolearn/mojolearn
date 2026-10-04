@@ -217,6 +217,8 @@ The GEMM adapters require distinct left, right, output and workspace slots.
 Bounds and distinctness checks precede untracked mutable handle borrows;
 no slot allocation or list mutation occurs during those calls. A caller
 needing the same matrix as both operands must reserve separate operand slots.
-Kernel pointers use explicit `MutAnyOrigin` casts while storage remains owned
-by the active session. These changes accommodate the current Mojo ownership
+Small typed DeviceBuffer helpers launch the unchanged kernels with native
+`unsafe_ptr()` arguments; this avoids the compiler's argument inference
+failure on direct session/list-element launches. Storage remains owned by
+the active session. These changes accommodate the current Mojo ownership
 rules without changing kernels or dispatch.
