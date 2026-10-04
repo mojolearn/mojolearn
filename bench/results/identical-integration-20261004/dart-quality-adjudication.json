@@ -1,0 +1,118 @@
+{
+  "schema": 1,
+  "status": "PASS",
+  "box": "amd 162.243.193.137 (Linux CPU, nice 19)",
+  "wave": "/root/lq/medium-wave-a4d-fb2",
+  "source_sha": "a4d01a130c8d05ff0208a39989d36b86b69aa0ed",
+  "tools_commit": "59143dbfb461e73f19e5b9e99d2092f4f08f497c",
+  "frozen_record_commit": "f57406e6b",
+  "receipts": {
+    "off": "/root/lq/dart-adjudication/off-receipt/receipt.json",
+    "on": "/root/lq/dart-adjudication/on-receipt/receipt.json"
+  },
+  "scope": "Holdout sampling uncertainty of retained AMD gfx942 ON vs OFF DART predictions conditional on the fitted models; no training-seed or drift claim; does not waive identity, residual or speed gates; root decides. Blackwell predictions not adjudicated here.",
+  "decisions": {
+    "4096": {
+      "path": "/root/lq/dart-adjudication/decisions/decision-block4096.json",
+      "sha256": "24b6286c396252408df3a9dad1fb493e20fa1d82e68a3e2fb03d78960820dab8",
+      "status": "PASS",
+      "frozen_sha256": "672bce1f084a114bc23ac7a98702d876d839d87e28a154d41f6021e9735c1ee2",
+      "metrics": {
+        "classification": {
+          "status": "PASS",
+          "baseline_score": 0.76834,
+          "candidate_score": 0.76824,
+          "delta_on_minus_off": -9.999999999998899e-05,
+          "lower_bound": -0.00026999999999999247,
+          "upper_bound": 6.0250000000054726e-05,
+          "frozen_margin": 0.006480750000000035,
+          "logloss": {
+            "baseline": 0.5290595561630321,
+            "candidate": 0.5290970868182553
+          }
+        },
+        "regression": {
+          "status": "PASS",
+          "baseline_score": 0.9254970149266408,
+          "candidate_score": 0.9254969787725075,
+          "delta_on_minus_off": -3.6154133353782925e-08,
+          "lower_bound": -0.00023566592660307915,
+          "upper_bound": 0.0002499587867332396,
+          "frozen_margin": 0.017560423189040275,
+          "logloss": {
+            "baseline": null,
+            "candidate": null
+          }
+        }
+      }
+    },
+    "1024": {
+      "path": "/root/lq/dart-adjudication/decisions/decision-block1024.json",
+      "sha256": "4da366996920b9918b3703a641804f79690e953a13332442f2c3881e5b79e8c5",
+      "status": "PASS",
+      "frozen_sha256": "70f4bc62d9ab083df3827b6421cdde58633ae782a7289ce3a962a7128e82a6fb",
+      "metrics": {
+        "classification": {
+          "status": "PASS",
+          "baseline_score": 0.76834,
+          "candidate_score": 0.76824,
+          "delta_on_minus_off": -9.999999999998899e-05,
+          "lower_bound": -0.00026999999999999247,
+          "upper_bound": 4.999999999999449e-05,
+          "frozen_margin": 0.0048200000000000465,
+          "logloss": {
+            "baseline": 0.5290595561630321,
+            "candidate": 0.5290970868182553
+          }
+        },
+        "regression": {
+          "status": "PASS",
+          "baseline_score": 0.9254970149266408,
+          "candidate_score": 0.9254969787725075,
+          "delta_on_minus_off": -3.6154133353782925e-08,
+          "lower_bound": -0.00025151903302007004,
+          "upper_bound": 0.0002943908096546931,
+          "frozen_margin": 0.012269029174806767,
+          "logloss": {
+            "baseline": null,
+            "candidate": null
+          }
+        }
+      }
+    },
+    "2048": {
+      "path": "/root/lq/dart-adjudication/decisions/decision-block2048.json",
+      "sha256": "eb765aa6b0b8deda4e5d10d7a7b9b8a1d5e553e943792d92086ed9c389e05860",
+      "status": "PASS",
+      "frozen_sha256": "080a9b41f90a767408270fdcc65f77e5982f948a5ea303023d4a8992d88366d9",
+      "metrics": {
+        "classification": {
+          "status": "PASS",
+          "baseline_score": 0.76834,
+          "candidate_score": 0.76824,
+          "delta_on_minus_off": -9.999999999998899e-05,
+          "lower_bound": -0.00026999999999999247,
+          "upper_bound": 4.999999999999449e-05,
+          "frozen_margin": 0.005850750000000016,
+          "logloss": {
+            "baseline": 0.5290595561630321,
+            "candidate": 0.5290970868182553
+          }
+        },
+        "regression": {
+          "status": "PASS",
+          "baseline_score": 0.9254970149266408,
+          "candidate_score": 0.9254969787725075,
+          "delta_on_minus_off": -3.6154133353782925e-08,
+          "lower_bound": -0.000268708661517314,
+          "upper_bound": 0.0002684828482346882,
+          "frozen_margin": 0.014166989528036078,
+          "logloss": {
+            "baseline": null,
+            "candidate": null
+          }
+        }
+      }
+    }
+  }
+}
