@@ -15,29 +15,13 @@ import subprocess
 import sys
 import tempfile
 
+from apple_fast_job_policy import policy_for
+
 
 def main():
     source, script, *args = sys.argv[1:]
     assert re.fullmatch(r"[0-9a-f]{40}", source)
-    policies = {
-        "tools/arima_assoc_scan_oracle.py": "reference",
-        "tools/arima_gaussian_scan_oracle.py": "reference",
-        "tools/arima_k1_diagnostics.py": "reference",
-        "tools/mcd_saved_oracle.py": "reference",
-        "tools/catalog_gemm_quality.py": "verified-standalone-quality",
-        "tools/callpath_probe_pair.py": "verified-standalone-quality",
-        "tools/shared_gemm_quality.py": "verified-standalone-quality",
-        "tools/catalog_resident_quality.py": "verified-standalone-quality",
-        "tools/shared_gemm_downstream_pair.py": "verified-downstream-quality",
-        "tools/catalog_gemm_matrix_timing.py": "verified-matrix-timing",
-    }
-    assert script in policies
-    policy = policies[script]
-    if policy == "verified-standalone-quality":
-        assert args and args[0] == source, "Probe must verify the same exact source"
-    if policy == "verified-downstream-quality":
-        assert args and re.fullmatch(r"[0-9a-f]{40}", args[0])
-        # Helper validates ancestor, exact tools-only changes, config and binaries.
+    policy = policy_for(source, script, args)
     brand = subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True)
     assert "Apple M3 Ultra" in brand
     home = Path.home()

@@ -161,3 +161,12 @@ alone. Distinguish quality regression, slower, noise, stale base and harness err
 This process is the target standard, not a claim that every historical toggle
 already has complete comments or evidence. Fill gaps during review; do not label
 untested legacy code as validated.
+
+## Future submission preflight
+
+Before submitting a new pinned job, use the read-only metadata gate described
+in [JOB_PREFLIGHT.md](JOB_PREFLIGHT.md). Declare exact source, script/arguments,
+all pair/single artifacts and each case's prerequisites. READY is a snapshot,
+not a queue reservation or native-symbol/quality/reach certification. The
+case helper retains the final runtime and numerical gates. Apply this process
+to future submissions; do not rewrite or replay in-flight jobs.
