@@ -3342,8 +3342,8 @@ class KernelExplainer(_AgnosticExplainer):
         tables = (zeros((h + 1,), "<i8"), zeros((h,), "<f8"), zeros((h,), "<f8"))
         out = zeros((6,), "<i8")
         if M > 1:
-            self._bind().x_trees_kshap_schedule(tuple(addr(t, name="schedule") for t in tables),  # cpu-route: coalition-size weight schedule over M/2 sizes, launch parameters only
-                                                addr(out, name="schedule"), [M, nsamples])
+            taddrs = tuple(addr(t, name="schedule") for t in tables)  # glue: the three schedule table addresses
+            self._bind().x_trees_kshap_schedule(taddrs, addr(out, name="schedule"), [M, nsamples])  # cpu-route: coalition-size weight schedule over M/2 sizes, launch parameters only
         m, nfixed, nfull, npaired, L, wbits = out.tolist()
         return m, nfixed, nfull, npaired, tables, L, wbits
 
