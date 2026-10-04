@@ -2697,6 +2697,19 @@ struct DevExec(Exec):
         MOJOLEARN_XD_JACOBI switch are replaced by the round-robin rounds."""
         var ctx = xd_ctx()
         var da = _up(ctx, a, m * n)
+        DevExec._svd_on(ctx, da, m, n, s, v, qr_cells)
+        _ = da^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def _svd_on(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, s: F32Ptr, v: F32Ptr, qr_cells: Int
+    ) raises:
+        """`svd_cells` on the device matrix in `da` (m x n, overwritten by the
+        QR): s (n) and v (n x n) out to host memory, every launch waited for.
+        `svd_cells` and the resident entry (x_decomp/resident.mojo
+        `dev_svd_py`, lane fam-decomp) both call it: one launch sequence."""
         var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, n) * n * n)
         var r_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
         var rt = ctx.enqueue_create_buffer[DType.float32](n * n)
@@ -2759,7 +2772,6 @@ struct DevExec(Exec):
             if s.unsafe_load(t) != s.unsafe_load(t):
                 raise Error("x_decomp svd: singular value " + String(t) + " of " + String(n)
                             + " is NaN after the solve (a device launch cut short, or a NaN input): refused")
-        _ = da^
         _ = scratch^
         _ = r_buf^
         _ = rt^
@@ -2770,8 +2782,6 @@ struct DevExec(Exec):
         _ = hflags^
         _ = dfirst^
         _ = hfirst^
-        ctx.synchronize()
-        _ = ctx^
 
     @staticmethod
     def lasso_rows(

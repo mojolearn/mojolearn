@@ -61,7 +61,9 @@ from x_decomp.device import (
     xd_ctx,
     _up_i,
     cd_rows_kernel,
+    DevExec,
 )
+from x_decomp.qr_bounded import QRB_CELLS
 
 comptime POOL_KEEP_BYTES = 1 << 30
 comptime POOL_CLASSES = 40
@@ -534,6 +536,47 @@ def dev_cd_rows_py(
     # the permutation buffer dies here: wait for the launch that reads it
     ctx.synchronize()
     _ = dp^
+    return PythonObject(n)
+
+
+# ---- lane fam-decomp (2026-10-04): IDN_SVD_RESIDENT (IDENTICAL default) ----
+#: The kit's tall SVD on a device matrix: `DevExec._svd_on` (the launches
+#: `DevExec.svd` makes) on a device copy of the operand, so a product or an
+#: elementwise result that is already resident (FactorAnalysis scales X
+#: every EM step and takes its SVD; LLE's null-space iteration takes the SVD
+#: of F^ X every step; randomized_svd and linalg.svd likewise) is not
+#: downloaded and uploaded again around the solve; only s (n) and V (n x n)
+#: come down. The same launches on the same values: the same words.
+#: -D MOJOLEARN_IDN_SVD_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves
+#: the entry out and Python keeps the host-address call.
+comptime IDN_SVD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_SVD_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def dev_svd_py(a: PythonObject, s: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`x_decomp_svd` of the device matrix a (m x n, left as it is: the QR
+    overwrites a device copy); s (n) and v (n x n) are host addresses.
+    p = [m, n]. Waits."""
+    var m = _n(p, 0)
+    var n = _n(p, 1)
+    if n <= 0 or m < n:
+        raise Error("x_decomp: svd needs m >= n >= 1 (a tall matrix)")
+    var cells = m * n
+    if cells > 2147483647:
+        raise Error("x_decomp: svd exceeds the Int32 index bound")
+    var ia = _id(a)
+    _ = _ptr(ia, cells)
+    var ps = F32Ptr(unsafe_from_address=Int(py=s))
+    var pv = F32Ptr(unsafe_from_address=Int(py=v))
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var ctx = xd_ctx()
+    var da = ctx.enqueue_create_buffer[DType.float32](cells)
+    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+    with GILReleased(Python()):
+        DevExec._svd_on(ctx, da, m, n, ps, pv, QRB_CELLS)
+    _ = da^
+    ctx.synchronize()
     return PythonObject(n)
 
 

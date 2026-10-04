@@ -463,6 +463,23 @@ class _Kit:
                 big = True
         return big
 
+    def _opt_dev(self, name):
+        """Whether this binding exports the optional resident entry `name`
+        (lane fam-decomp: entries compiled only into an IDENTICAL GPU build
+        whose _OFF define is not set); asked once per kit and name."""
+        got = self.__dict__.setdefault("_opt_fns", {})
+        r = got.get(name)
+        if r is None:
+            r = False
+            if self._res():
+                try:
+                    getattr(self._raw(), name)
+                    r = True
+                except Exception:
+                    r = False
+            got[name] = r
+        return r
+
     def _dict_dev(self):
         """`x_decomp_dev_dict_update` when this binding exports it (a FAST
         Apple build without -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF), else None."""
@@ -789,7 +806,13 @@ class _Kit:
         values sorted descending with ties to the lower index."""
         m, n = A.r, A.c
         s, v = _M.zeros(1, n), _M.zeros(n, n)
-        self.b.x_decomp_svd(A.addr, s.addr, v.addr, [m, n])
+        if m >= n >= 1 and self._opt_dev("x_decomp_dev_svd") and self._use(A):
+            # lane fam-decomp: the solve on a device copy of the resident
+            # operand (an IDENTICAL GPU build without
+            # -D MOJOLEARN_IDN_SVD_RESIDENT_OFF); A stays on the device
+            self.b.x_decomp_dev_svd(self._did(A), s.addr, v.addr, [m, n])
+        else:
+            self.b.x_decomp_svd(A.addr, s.addr, v.addr, [m, n])
         # descending by value, ties to the lower index: the stable ascending
         # order of -s (an exact negation), and the gathers, in Mojo
         o = self.order(self.ew("scale", s, s=-1.0))
