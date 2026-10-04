@@ -632,6 +632,28 @@ instantiates them at 16 rows, which halves a block's threadgroup page
 the Apple column where a 256-thread block with a 27.6 KB page sits alone on
 a core. The chains per row are the same; only which block owns a row moves."""
 
+comptime ATTN_FWD_TQ_RULE = (
+    is_defined["MOJOLEARN_ATTN_FWD_TQ_RULE"]()
+    and not is_defined["MOJOLEARN_ATTN_FWD_TQ16"]()
+    and not is_defined["MOJOLEARN_ATTN_TILE_RULE_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and lib_smem_page_fits_for[TARGET_COLUMN, _fwd_r2_page_bytes(16, True)]()
+)
+"""lane/nr-attn (2026-10-04), CANDIDATE (opt-in `-D
+MOJOLEARN_ATTN_FWD_TQ_RULE=1`): the lane/neural-pass46/pass59 forward TQ16
+arm ported onto the per-launch tile rule. The shipped estash forward
+(`_launch_fwd_r2_keep`, NVIDIA's and AMD's default word) takes its query
+rows per block (16 or 32) from `attn_fwd_rows_for`, i.e.
+`attn_rows_tile_rule` over `b * n_heads` groups of `l` rows at two waves
+(the dk/dv rule's: an output and a score accumulator per thread), instead of
+the comptime `ATTN_FWD_TQ`. Compiled only when the 16-row Q-resident page
+fits the column (`lib_smem_page_fits_for`; NVIDIA's 48 KB static page; the
+r2 page at 16 rows is about 11.5 KB, the MFMA copy's 10.4 KB). The page fix
+of lane/neural-pass59 ba90adec2 / pass67 dec693302 (the page never smaller
+than the V tile) is already in both kernels. Which block owns a row touches
+no chain: same bits at either tile, on every vendor. The forward's `ran`
+word keeps reporting 32 rows, as the comptime TQ16 arm did."""
+
 
 def _attn_arm_base_from_name(base: String, full: String) raises -> Int:
     """The first-round base of an arm name (section 12.1)."""
@@ -2497,6 +2519,159 @@ def regime_finite(x_max: Float64) -> Bool:
     return x_max < inf
 
 
+comptime IDN_ATTN_BWD_SCAN_REUSE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""lane/nr-attn (2026-10-04), default ON under IDENTICAL (the review's
+"backward regime scan re-reads q_rope/k_cache/v_cache", fused_attention
+:10770). The fused backward's regime scan read q_rope, k_cache, v_cache and
+dctx; the fused forward of the same call had already scanned the first three
+with the same `absmax_partial_kernel` at the same grid, and nothing writes
+them between that forward and its backward. The forward now records its
+three maxima (`AttnFwdScan`, keyed by the three buffer addresses and their
+lengths), the caller keeps the record in its stages (cleared at the start of
+every attention forward, the only place those buffers are rewritten), and
+the backward, handed a record that matches its own buffers, scans dctx only
+and takes the other three maxima from the record. `max` over the same
+partials of the same bytes is the same value, so the regime decision is the
+same decision: no bit moves on any column. A NaN or absent maximum (-1) falls
+back to the full scan. `-D MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF` restores
+the four-buffer scan."""
+
+
+struct AttnFwdScan(Copyable, Movable):
+    """The fused forward's regime-scan maxima for one call: q_rope, k_cache
+    and v_cache, keyed by each buffer's address and the lengths scanned.
+    `ok` is False when no scan is recorded."""
+
+    var ok: Bool
+    var q: Int
+    var k: Int
+    var v: Int
+    var nq: Int
+    var nkv: Int
+    var qmax: Float64
+    var kmax: Float64
+    var vmax: Float64
+
+    def __init__(out self):
+        self.ok = False
+        self.q = 0
+        self.k = 0
+        self.v = 0
+        self.nq = 0
+        self.nkv = 0
+        self.qmax = -1.0
+        self.kmax = -1.0
+        self.vmax = -1.0
+
+    def clear(mut self):
+        self.ok = False
+        self.qmax = -1.0
+        self.kmax = -1.0
+        self.vmax = -1.0
+
+    def valid_for(self, q: Int, nq: Int, k: Int, v: Int, nkv: Int) -> Bool:
+        return (
+            self.ok and self.q == q and self.nq == nq and self.k == k
+            and self.v == v and self.nkv == nkv
+        )
+
+
+struct _AttnFwdScanLast(Defaultable, Movable):
+    # The last fused forward scan of this process: the caller takes it right
+    # after the forward returns (`attention_fwd_scan_take`).
+    var ctx_id: Int
+    var rec: AttnFwdScan
+
+    def __init__(out self):
+        self.ctx_id = 0
+        self.rec = AttnFwdScan()
+
+
+comptime _ATTN_FWD_SCAN_LAST = _Global[StorageType=_AttnFwdScanLast,
+    name="MojolearnAttnFwdScanLastV1", init_fn=_AttnFwdScanLast.__init__]
+
+
+def attention_fwd_scan_clear() raises:
+    """Forget the last fused forward scan (called before a fused forward)."""
+    comptime if IDN_ATTN_BWD_SCAN_REUSE:
+        var g = _ATTN_FWD_SCAN_LAST.get_or_create_ptr()
+        g[].rec.clear()
+
+
+def _attn_fwd_scan_note(
+    ctx: DeviceContext, q: Int, nq: Int, k: Int, v: Int, nkv: Int,
+    qmax: Float64, kmax: Float64, vmax: Float64,
+) raises:
+    """Record a fused forward's regime-scan maxima (the values the host
+    already holds; no device work)."""
+    comptime if IDN_ATTN_BWD_SCAN_REUSE:
+        var g = _ATTN_FWD_SCAN_LAST.get_or_create_ptr()
+        g[].ctx_id = ctx_cache_key(ctx)
+        g[].rec.ok = True
+        g[].rec.q = q
+        g[].rec.k = k
+        g[].rec.v = v
+        g[].rec.nq = nq
+        g[].rec.nkv = nkv
+        g[].rec.qmax = qmax
+        g[].rec.kmax = kmax
+        g[].rec.vmax = vmax
+
+
+def attention_fwd_scan_take(
+    ctx: DeviceContext, q: Int, nq: Int, k: Int, v: Int, nkv: Int
+) raises -> AttnFwdScan:
+    """The last fused forward scan when it was taken on `ctx` over exactly
+    these buffers and lengths, else an empty record. Clears the record."""
+    var out = AttnFwdScan()
+    comptime if IDN_ATTN_BWD_SCAN_REUSE:
+        var g = _ATTN_FWD_SCAN_LAST.get_or_create_ptr()
+        if g[].ctx_id == ctx_cache_key(ctx) and g[].rec.valid_for(q, nq, k, v, nkv):
+            out = g[].rec.copy()
+        g[].rec.clear()
+    return out^
+
+
+def _attn_bwd_regime_scan(
+    ctx: DeviceContext,
+    mut q_rope: DeviceBuffer[DType.float32],
+    mut dctx: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+    nq: Int,
+    nkv: Int,
+    fwd_qmax: Float64,
+    fwd_kmax: Float64,
+    fwd_vmax: Float64,
+) raises -> StaticTuple[Float64, 4]:
+    """The fused backward's regime scan: (qmax, kmax, vmax, dmax). Under
+    IDN_ATTN_BWD_SCAN_REUSE with all three forward maxima present (>= 0) it
+    scans dctx alone, in slot 3 at the grid `device_absmax4` gives it there,
+    and returns the forward's three; otherwise the four-buffer scan."""
+    var reuse = False
+    comptime if IDN_ATTN_BWD_SCAN_REUSE:
+        reuse = fwd_qmax >= 0.0 and fwd_kmax >= 0.0 and fwd_vmax >= 0.0
+    if reuse:
+        var amx = device_absmax4(
+            ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
+            k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
+            v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
+            dctx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), nq,
+        )
+        amx[0] = fwd_qmax
+        amx[1] = fwd_kmax
+        amx[2] = fwd_vmax
+        return amx
+    return device_absmax4(
+        ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), nq,
+        k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), nkv,
+        v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), nkv,
+        dctx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), nq,
+    )
+
+
 # ===========================================================================
 # THE FUSED FORWARD
 # ===========================================================================
@@ -4313,6 +4488,12 @@ def attn_dq_rows_for(ctx: DeviceContext, b: Int, nh: Int, l: Int, hd: Int) -> In
     comptime if ATTN_DQ_TQ_PINNED:
         return ATTN_DQ_TQ
     return attn_rows_tile_rule(b * nh, l, hd, attn_device_units(ctx), 4, 16, 64)
+
+
+def attn_fwd_rows_for(ctx: DeviceContext, b: Int, nh: Int, l: Int) -> Int:
+    """Query rows per block (16 or 32) of the shipped estash forward under
+    `ATTN_FWD_TQ_RULE`: the tile rule at two waves, head_dim 64."""
+    return attn_rows_tile_rule(b * nh, l, ATTN_STASH_HD, attn_device_units(ctx), 2, 16, 32)
 
 
 def attn_dkdv_keys_r32_for(ctx: DeviceContext, b: Int, nkv: Int, s: Int, hd: Int) -> Int:
@@ -7937,6 +8118,10 @@ def fused_forward_launch_ran(
         var qmax = amx[0]
         var kmax = amx[1]
         var vmax = amx[2]
+        _attn_fwd_scan_note(
+            ctx, Int(q_rope.unsafe_ptr()), b * l * nh * hd, Int(k_cache.unsafe_ptr()),
+            Int(v_cache.unsafe_ptr()), b * nkv * s * hd, qmax, kmax, vmax,
+        )
         if not regime_product_ok(hd, qmax, kmax) or not regime_finite(vmax):
             return FUSED_REFUSED_REGIME
         _attn_tick(ctx, ton, tk, "fwd_regime_scan")
@@ -8153,13 +8338,20 @@ def fused_forward_launch_ran(
         var hit2 = _read_flag(ctx, corner)
         _ = corner^
         _attn_tick(ctx, ton, tk, "fwd_regime_scan_behind_and_corner_flag")
+        _attn_fwd_scan_note(
+            ctx, Int(q_rope.unsafe_ptr()), b * l * nh * hd, Int(k_cache.unsafe_ptr()),
+            Int(v_cache.unsafe_ptr()), b * nkv * s * hd, amx2[0], amx2[1], amx2[2],
+        )
         if not regime_product_ok(hd, amx2[0], amx2[1]) or not regime_finite(amx2[2]):
             return FUSED_REFUSED_REGIME
         if hit2:
             return FUSED_CORNER
         return FUSED_RAN
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_ONE_FLAG_WAIT: the flag read below waits once behind
+    # the kernels; the wait that sat here was a second round trip.
+    comptime if not IDN_ATTN_ONE_FLAG_WAIT:
+        step_count_sync()
+        ctx.synchronize()
     var hit = _read_flag(ctx, corner)
     _ = corner^
     _attn_tick(ctx, ton, tk, "fwd_corner_flag")
@@ -8190,6 +8382,9 @@ def fused_backward_launch(
     key_lo: Int,
     window: Int,
     scale: Float32,
+    fwd_qmax: Float64 = -1.0,
+    fwd_kmax: Float64 = -1.0,
+    fwd_vmax: Float64 = -1.0,
 ) raises -> Int:
     """The fused backward: `zdot` (stage 18), `dq` (22, `[M, nh*hd]`),
     `dk` and `dv` (23-24, `[B, n_kv, S, hd]`) on `FUSED_RAN`. `amax` and
@@ -8199,6 +8394,7 @@ def fused_backward_launch(
         ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
         b, l, nh, nkv, hd, s, pos0, key_lo, window, scale,
         fused_attention_arm_from_env(),
+        fwd_qmax=fwd_qmax, fwd_kmax=fwd_kmax, fwd_vmax=fwd_vmax,
     )
 
 
@@ -9046,6 +9242,33 @@ by two calls. Every kernel writes each cell it later reads within the call
 (the fresh buffers were never guaranteed zero on Metal, DEVIATION 2712), so
 no bit moves. `-D MOJOLEARN_ATTN_NO_SCRATCH_CACHE` allocates per call."""
 
+comptime IDN_ATTN_ONE_FLAG_WAIT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and TARGET_COLUMN != COLUMN_APPLE
+    and not (
+        is_defined["MOJOLEARN_IDN_ATTN_ONE_FLAG_WAIT_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+"""lane/nr-attn (2026-10-04), default ON under IDENTICAL on NVIDIA and AMD
+(the review's "double waits", fused_attention :8161 / :10870). The corner
+flag read `_read_flags` enqueues its copy behind the kernels on the same
+in-order context and waits once; the explicit `ctx.synchronize()` the
+launchers ran before it was a second full round trip that ordered nothing.
+The same holds inside the shipped launchers whose buffers outlive the call:
+`_launch_fwd_r2_keep` (the kept stash is the caller's) and, under
+`ATTN_SCRATCH_CACHE`, `_launch_bwd_estash` (its y/dy stashes are the
+process cache's, so no buffer is freed under a running kernel; the wait
+after the scratch request and the one between the zdot and dq launches
+ordered nothing either: same context, in order). Each of those launchers is
+followed, in every caller, by the flag read's wait before the caller
+returns, so the next call never grows a cached scratch under a running
+kernel. Per layer on the shipped estash words (NVIDIA and AMD): four fewer
+waits in the backward, two in the forward.
+No arithmetic moves: same bits on every column. The Apple column keeps
+every wait (a Metal command buffer that grows past a few seconds is cut
+silently). `-D MOJOLEARN_IDN_ATTN_ONE_FLAG_WAIT_OFF` restores them."""
+
 
 comptime _ATTN_SCRATCH_SLOTS = 3
 
@@ -9204,8 +9427,11 @@ def _launch_fwd_r2_keep[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ:
             grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
             block_dim=(FUSED_THREADS, 1, 1),
         )
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_ONE_FLAG_WAIT: `sstash` is the caller's kept buffer; the
+    # caller's flag read waits behind this kernel.
+    comptime if not IDN_ATTN_ONE_FLAG_WAIT:
+        step_count_sync()
+        ctx.synchronize()
     _attn_tick(ctx, on, tk, "fwd_r2_keep_kernel")
 
 
@@ -9814,8 +10040,11 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
         y_cells = 1
     var y_st = _attn_scratch(ctx, 1, y_cells)
     var dy_st = _attn_scratch(ctx, 2, cells)
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_ONE_FLAG_WAIT: a stream-ordered allocation; the kernels below
+    # run behind it on the same context.
+    comptime if not (IDN_ATTN_ONE_FLAG_WAIT and ATTN_SCRATCH_CACHE):
+        step_count_sync()
+        ctx.synchronize()
     _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
     var zdot_tq = attention_estash_zdot_tq(l, window)
     step_count_launch()
@@ -9861,8 +10090,11 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
                     Int32(window), grid_dim=(b * nh * ((l + 7) // 8), 1, 1),
                     block_dim=(FUSED_THREADS, 1, 1),
                 )
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_ONE_FLAG_WAIT: dq reads zdot and the stashes behind the zdot
+    # kernel on the same in-order context; the host reads nothing here.
+    comptime if not IDN_ATTN_ONE_FLAG_WAIT:
+        step_count_sync()
+        ctx.synchronize()
     comptime if DRES:
         _attn_tick(ctx, on, tk, "bwd_zdot_estash_dres_pf")
     else:
@@ -9901,8 +10133,12 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
     _attn_tick(ctx, on, tk, "bwd_kvgrid_dkdv_pf")
     # The stashes must outlive the enqueued kernels: synchronize, then the
     # explicit last use (a buffer is freed at its last use).
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_ONE_FLAG_WAIT under ATTN_SCRATCH_CACHE: `y_st`/`dy_st` are
+    # views of the process cache's buffers, which outlive these kernels; the
+    # caller's flag read waits behind them before the caller returns.
+    comptime if not (IDN_ATTN_ONE_FLAG_WAIT and ATTN_SCRATCH_CACHE):
+        step_count_sync()
+        ctx.synchronize()
     _ = y_st^
     _ = dy_st^
 
@@ -10063,6 +10299,9 @@ def fused_backward_launch_arm(
     window: Int,
     scale: Float32,
     arm: Int,
+    fwd_qmax: Float64 = -1.0,
+    fwd_kmax: Float64 = -1.0,
+    fwd_vmax: Float64 = -1.0,
 ) raises -> Int:
     """`fused_backward_launch` with the arm given; see
     `fused_forward_launch_arm` for what an arm value means on a build
@@ -10071,6 +10310,7 @@ def fused_backward_launch_arm(
     return fused_backward_launch_ran(
         ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
         b, l, nh, nkv, hd, s, pos0, key_lo, window, scale, arm, ran,
+        fwd_qmax=fwd_qmax, fwd_kmax=fwd_kmax, fwd_vmax=fwd_vmax,
     )
 
 
@@ -10098,12 +10338,16 @@ def fused_backward_launch_ran(
     scale: Float32,
     arm: Int,
     mut ran: Int,
+    fwd_qmax: Float64 = -1.0,
+    fwd_kmax: Float64 = -1.0,
+    fwd_vmax: Float64 = -1.0,
 ) raises -> Int:
     """`fused_backward_launch_ran_report` without the replay-site report."""
     var repaired = 0
     return fused_backward_launch_ran_report(
         ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
         b, l, nh, nkv, hd, s, pos0, key_lo, window, scale, arm, ran, repaired,
+        fwd_qmax=fwd_qmax, fwd_kmax=fwd_kmax, fwd_vmax=fwd_vmax,
     )
 
 
@@ -10132,6 +10376,9 @@ def fused_backward_launch_ran_report(
     arm: Int,
     mut ran: Int,
     mut repaired: Int,
+    fwd_qmax: Float64 = -1.0,
+    fwd_kmax: Float64 = -1.0,
+    fwd_vmax: Float64 = -1.0,
 ) raises -> Int:
     """`fused_backward_launch_arm`, also reporting in `ran` the arm word of
     the kernels that launched (DEVIATION 2534): 0 for the shipped kernels
@@ -10156,10 +10403,10 @@ def fused_backward_launch_ran_report(
         )
     var ton = _attn_timer_on()
     var tk = Int(perf_counter_ns())
-    var amx = device_absmax4(
-        ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-        b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
-        dctx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd,
+    # IDN_ATTN_BWD_SCAN_REUSE: dctx alone when the forward's maxima came in.
+    var amx = _attn_bwd_regime_scan(
+        ctx, q_rope, dctx, k_cache, v_cache, b * l * nh * hd, b * nkv * s * hd,
+        fwd_qmax, fwd_kmax, fwd_vmax,
     )
     var qmax = amx[0]
     var kmax = amx[1]
@@ -10507,8 +10754,11 @@ def fused_backward_launch_ran_report(
                 v_cache, amax, denom, b, l, nh, nkv, s, pos0, key_lo, window,
                 scale, row_blocks, key_blocks, nt,
             )
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_ONE_FLAG_WAIT: the flag read below waits once behind
+    # the kernels; the wait that sat here was a second round trip.
+    comptime if not IDN_ATTN_ONE_FLAG_WAIT:
+        step_count_sync()
+        ctx.synchronize()
     var flags = _read_flags(ctx, corner)
     var hit = flags[0]
     repaired = flags[1]
@@ -10587,6 +10837,10 @@ def fused_forward_launch_estash_ran(
                 var qmax = amx[0]
                 var kmax = amx[1]
                 var vmax = amx[2]
+                _attn_fwd_scan_note(
+                    ctx, Int(q_rope.unsafe_ptr()), b * l * nh * hd, Int(k_cache.unsafe_ptr()),
+                    Int(v_cache.unsafe_ptr()), b * nkv * s * hd, qmax, kmax, vmax,
+                )
                 if not regime_product_ok(hd, qmax, kmax) or not regime_finite(vmax):
                     return FUSED_REFUSED_REGIME
                 _attn_tick(ctx, ton, tk, "fwd_regime_scan")
@@ -10638,11 +10892,22 @@ def fused_forward_launch_estash_ran(
                             scale,
                         )
                 else:
-                    _launch_fwd_r2_keep[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, False, ATTN_DEFAULT_BSWZ](
-                        ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
-                        k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
-                        scale,
-                    )
+                    var fwd_tq = ATTN_FWD_TQ
+                    comptime if ATTN_FWD_TQ_RULE:
+                        fwd_tq = attn_fwd_rows_for(ctx, b, nh, l)
+                    if fwd_tq == 16 and ATTN_FWD_TQ != 16:
+                        comptime if ATTN_FWD_TQ_RULE:
+                            _launch_fwd_r2_keep[ATTN_STASH_HD, 16, True, True, False, ATTN_DEFAULT_BSWZ](
+                                ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
+                                k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
+                                scale,
+                            )
+                    else:
+                        _launch_fwd_r2_keep[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, False, ATTN_DEFAULT_BSWZ](
+                            ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
+                            k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
+                            scale,
+                        )
             # DEVIATION 2900 leaves the FORWARD's `ran` word alone: the
             # word `fused_attention_arm_forward_resolved` predicts has no
             # estash slot either, and the backward's word carries the bit
@@ -10657,14 +10922,21 @@ def fused_forward_launch_estash_ran(
                 var hit2 = _read_flag(ctx, corner)
                 _ = corner^
                 _attn_tick(ctx, ton, tk, "fwd_regime_scan_behind_and_corner_flag")
+                _attn_fwd_scan_note(
+                    ctx, Int(q_rope.unsafe_ptr()), b * l * nh * hd, Int(k_cache.unsafe_ptr()),
+                    Int(v_cache.unsafe_ptr()), b * nkv * s * hd, amx2[0], amx2[1], amx2[2],
+                )
                 if not regime_product_ok(hd, amx2[0], amx2[1]) or not regime_finite(amx2[2]):
                     return FUSED_REFUSED_REGIME
                 kept_cells = cells
                 if hit2:
                     return FUSED_CORNER
                 return FUSED_RAN
-            step_count_sync()
-            ctx.synchronize()
+            # IDN_ATTN_ONE_FLAG_WAIT: the flag read below waits once behind
+            # the kernels; the wait that sat here was a second round trip.
+            comptime if not IDN_ATTN_ONE_FLAG_WAIT:
+                step_count_sync()
+                ctx.synchronize()
             var hit = _read_flag(ctx, corner)
             _ = corner^
             _attn_tick(ctx, ton, tk, "fwd_corner_flag")
@@ -10740,6 +11012,9 @@ def fused_backward_launch_estash_report(
     arm: Int,
     mut ran: Int,
     mut repaired: Int,
+    fwd_qmax: Float64 = -1.0,
+    fwd_kmax: Float64 = -1.0,
+    fwd_vmax: Float64 = -1.0,
 ) raises -> Int:
     """`fused_backward_launch_ran`, and under an `_estash` arm this build
     runs (`fused_attention_arm_estash_runs`, head_dim 64) with a VALID kept
@@ -10768,10 +11043,10 @@ def fused_backward_launch_estash_report(
                 )
             var ton = _attn_timer_on()
             var tk = Int(perf_counter_ns())
-            var amx = device_absmax4(
-                ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
-                dctx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd,
+            # IDN_ATTN_BWD_SCAN_REUSE: dctx alone when the forward's maxima came in.
+            var amx = _attn_bwd_regime_scan(
+                ctx, q_rope, dctx, k_cache, v_cache, b * l * nh * hd, b * nkv * s * hd,
+                fwd_qmax, fwd_kmax, fwd_vmax,
             )
             var qmax = amx[0]
             var kmax = amx[1]
@@ -10867,8 +11142,11 @@ def fused_backward_launch_estash_report(
             )
             if swz:
                 ran = ran | ATTN_ARM_BSWZ
-            step_count_sync()
-            ctx.synchronize()
+            # IDN_ATTN_ONE_FLAG_WAIT: the flag read below waits once behind
+            # the kernels; the wait that sat here was a second round trip.
+            comptime if not IDN_ATTN_ONE_FLAG_WAIT:
+                step_count_sync()
+                ctx.synchronize()
             var flags = _read_flags(ctx, corner)
             var hit = flags[0]
             repaired = flags[1]
@@ -10884,6 +11162,7 @@ def fused_backward_launch_estash_report(
     return fused_backward_launch_ran_report(
         ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
         b, l, nh, nkv, hd, s, pos0, key_lo, window, scale, arm, ran, repaired,
+        fwd_qmax=fwd_qmax, fwd_kmax=fwd_kmax, fwd_vmax=fwd_vmax,
     )
 
 
