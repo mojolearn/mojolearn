@@ -141,6 +141,17 @@ def _msi_finish_kernel(
                 iters[s] = iters[s] + Int32(1)
 
 
+def _msi_pending_kernel(done: IPtr, ns: Int32, pending: IPtr):
+    """pending[0] = 1 when any seed's done flag is still 0 (one block; every
+    writer stores the same word, so the result is order free). The host reads
+    this one word instead of the ns flags."""
+    var tid = Int(thread_idx.x)
+    for s in range(tid, Int(ns), MSI_TPB):
+        if done[s] == Int32(0):
+            pending[0] = Int32(1)
+            break
+
+
 def meanshift_idn_grid(
     ctx: DeviceContext, x: FPtr, n: Int, d: Int, bw: Float32, stop: Float32, max_iter: Int,
     centers: FPtr, ns: Int, intensity: IPtr, iters: IPtr,
@@ -162,7 +173,9 @@ def meanshift_idn_grid(
         var pp = part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var cp = cntb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var dp = done.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var hd = List[Int32](length=ns, fill=Int32(0))
+        var pend = ctx.enqueue_create_buffer[DType.int32](1)
+        var pdp = pend.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var hd = List[Int32](length=1, fill=Int32(0))
         var it = 0
         # at most max_iter + 1 shifts: the stop test runs after the shift
         while it <= max_iter:
@@ -178,19 +191,18 @@ def meanshift_idn_grid(
                     grid_dim=ns, block_dim=MSI_TPB,
                 )
                 it += 1
-            ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=done)
+            # the done test runs on the device; the host reads one word
+            ctx.enqueue_memset(pend, Int32(0))
+            ctx.enqueue_function[_msi_pending_kernel](dp, Int32(ns), pdp, grid_dim=1, block_dim=MSI_TPB)
+            ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=pend)
             ctx.synchronize()
-            var all_done = True
-            for s in range(ns):
-                if hd[s] == Int32(0):
-                    all_done = False
-                    break
-            if all_done:
+            if hd[0] == Int32(0):
                 break
         # the buffers outlive every launch that holds their pointers
         _ = part^
         _ = cntb^
         _ = done^
+        _ = pend^
         _ = hd^
         return True
     return False
