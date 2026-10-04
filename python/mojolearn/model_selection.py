@@ -2250,12 +2250,12 @@ class ParameterSampler:
 def _rank(values):
     """scikit-learn's rank_test_score: 'min' ranking of the scores,
     descending (1 is best)."""
-    order = sorted(set(values), reverse=True)
+    order = sorted(set(values), reverse=True)  # glue: explicit scalar tail, one score per candidate
     pos, start = {}, 1
-    for v in order:
+    for v in order:  # glue: explicit scalar tail, one score per candidate
         pos[v] = start
         start += values.count(v)
-    return [pos[v] for v in values]
+    return [pos[v] for v in values]  # glue: explicit scalar tail, one rank per candidate
 
 
 class _BaseSearch:
@@ -2332,8 +2332,10 @@ class _BaseSearch:
             suffix = '' if multi is None else f'_{nm}'
             for i in range(n_splits):
                 results[f'split{i}_test_score{suffix}'] = Array.from_list([s[i] for s in per[nm]], '<f8')
-            means = [math.fsum(s) / len(s) for s in per[nm]]
-            stds = [math.sqrt(math.fsum((v - m) * (v - m) for v in s) / len(s)) for s, m in zip(per[nm], means)]
+            # glue: explicit scalar tail over the candidates x folds scores (Python floats, not data)
+            means = [math.fsum(s) / len(s) for s in per[nm]]  # glue: one mean per candidate
+            stds = [math.sqrt(math.fsum((v - m) * (v - m) for v in s) / len(s))  # glue: one std per candidate
+                    for s, m in zip(per[nm], means)]
             results[f'mean_test_score{suffix}'] = Array.from_list(means, '<f8')
             results[f'std_test_score{suffix}'] = Array.from_list(stds, '<f8')
             results[f'rank_test_score{suffix}'] = Array.from_list(_rank(means), '<i4')
@@ -2683,7 +2685,7 @@ class _NativePermutation:
             yp = rows0._res.take(base, idx)
             rows0._res.release(idx)
             perm_scores.append(mean_score(yp))
-        pvalue = (sum(1 for s in perm_scores if s >= score) + 1.0) / (n_permutations + 1)
+        pvalue = (sum(1 for s in perm_scores if s >= score) + 1.0) / (n_permutations + 1)  # glue: explicit scalar tail, one score per permutation
         return score, Array.from_list(perm_scores, '<f8'), pvalue
 
     def _group_order(self, groups):

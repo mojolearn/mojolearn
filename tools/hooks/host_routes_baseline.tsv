@@ -2316,8 +2316,6 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	1	for v in labels))
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	for v in order:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	for v in param_range:
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	for value in sorted(set(rem), reverse=True):
@@ -2340,8 +2338,6 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	integral = not width and all(p.dtype[1] in 'iu' for p, _ in preds)
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	means = [math.fsum(s) / len(s) for s in per[nm]]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	n_max = min(len(tr) for tr, _ in folds)
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	names = [p for p in inspect.signature(type(self).__init__).parameters if p != 'self']
@@ -2358,8 +2354,6 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	pvalue = (sum(1 for s in perm_scores if s >= score) + 1.0) / (n_permutations + 1)
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	1	pvalue = (sum(1 for s in perm_scores if s >= score) + 1.0) / (n_permutations + 1)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	rem = [c * n_draws % total for c in class_counts]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	res = {k: Array.from_list(v, '<f8') for k, v in out.items()}
@@ -2373,8 +2367,6 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	return Array._owned(words, (n,), '<i4', 'C'), gc.m, [gc.counts[c] for c in order]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	return Array.from_list([float(v) for row in rows for v in row], '<f8').reshape((n,) + tuple(width))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	return [pos[v] for v in values]
 # why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	return [self.rows(words, f, int(sizes[f])) for f in range(k)]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -2415,8 +2407,6 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	sizes = [offs[g + 1] - offs[g] for g in range(m)]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	std_per_class.append(math.sqrt(math.nsum((v - mu) * (v - mu) for v in col) / self.n_splits))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	stds = [math.sqrt(math.fsum((v - m) * (v - m) for v in s) / len(s)) for s, m in zip(per[nm], means)]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	stratify = (all(isinstance(v, str) for v in labels) or
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -2492,13 +2482,9 @@ py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	order = sorted(range(m), key=lambda i: (sizes[i], i))[::-1]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	order = sorted(set(values), reverse=True)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	params = ', '.join(f'{k}={v!r}' for k, v in sorted(self.get_params().items()))
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	pvalue = (sum(1 for s in perm_scores if s >= score) + 1.0) / (n_permutations + 1)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	1	pvalue = (sum(1 for s in perm_scores if s >= score) + 1.0) / (n_permutations + 1)
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	return sorted(_scorer_table())
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
