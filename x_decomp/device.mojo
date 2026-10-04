@@ -924,6 +924,19 @@ comptime XD_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_a
 #: (`cholqr_guard_kernel`) and the host reads one flag a pass instead of
 #: downloading the l x l factor and scanning its diagonal on the host.
 comptime SVD_FAST_CHOLQR = XD_FAST_APPLE and is_defined["MOJOLEARN_SVD_FAST_CHOLQR"]()
+#: Recovered candidate (lane/apple-fast-rec-decomp, 2026-10-04), default OFF,
+#: FAST + Apple only. Source lane/apple-fast-decomp-linalg@74d52352b
+#: (50d12a950). What it does: `DevExec.qr_r` uploads the caller's floats
+#: straight to the device and runs `qr_factor` there, R downloaded once,
+#: instead of copying all m x n values into a host List one `append` at a
+#: time (FactorAnalysis's `k.qr_r(Xc)` at 1,000,000 x 220: 220 million host
+#: appends) for `device_qr_r` to upload. Same kernels and slice count, so the
+#: same R bits; only the host copy goes. Known: queued once as
+#: dlin-fa-qrr-istella (lane/apple-fast-batch prebuilt arms); no recorded
+#: result or failure. The factor-analysis lane's bigger levers are the
+#: lane/apple-fast-fa candidates (lane apple-fast-rec-fa-robust), which may
+#: drop the qr_r call; this keeps only the decomp-linalg part.
+comptime FA_FAST_QRR = XD_FAST_APPLE and is_defined["MOJOLEARN_FA_FAST_QRR"]()
 comptime CQ_TPB = 256
 #: 2^8: the largest diagonal span CholeskyQR2 takes (cond(A) about its square)
 comptime CQ_SPAN = Float32(256.0)
@@ -3363,6 +3376,24 @@ struct DevExec(Exec):
 
     @staticmethod
     def qr_r(a: F32Ptr, m: Int, n: Int, r: F32Ptr) raises:
+        comptime if FA_FAST_QRR:
+            # -D MOJOLEARN_FA_FAST_QRR (default off, FAST + Apple; see the
+            # define): the upload straight from the caller's floats
+            if m >= n and n > 0:
+                var ctx = xd_ctx()
+                var da = _up(ctx, a, m * n)
+                var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, n) * n * n)
+                var r_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
+                ctx.synchronize()
+                _ = qr_factor(ctx, da, scratch, r_buf, m, n)
+                _down(ctx, r_buf, r, n * n)
+                ctx.synchronize()
+                _ = da^
+                _ = scratch^
+                _ = r_buf^
+                ctx.synchronize()
+                _ = ctx^
+                return
         var w = List[Float32](capacity=m * n)
         for t in range(m * n):
             w.append(a.unsafe_load(t))
