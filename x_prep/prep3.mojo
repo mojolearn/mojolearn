@@ -12,6 +12,13 @@ host binding and the other vendors compile main's code unchanged.
                 104.2 ms (-14.4%), output digest bit-identical (M2 A/B
                 prep3-maxabs-istella-x 133.0 -> 99.1 ms).
                 `-D MOJOLEARN_PREP3_MAXABS_OFF` reverts to the program route.
+  PREP3_MAXABS_POOL  (lane/apple-fast-w4-small, opt-in
+                -D MOJOLEARN_PREP3_MAXABS_POOL, on PREP3_MAXABS): the direct
+                fit's three device buffers (X's n d floats, 880 MB at
+                istella, the partials and the 2 d outputs) come from
+                core/device_pool (exact size, kept between calls) instead of
+                three fresh allocations and frees per fit. Storage only: the
+                same kernels, the same words.
 """
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -19,3 +26,4 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 comptime PREP3_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime PREP3_MAXABS = PREP3_FAST_APPLE and not is_defined["MOJOLEARN_PREP3_MAXABS_OFF"]()
+comptime PREP3_MAXABS_POOL = PREP3_MAXABS and is_defined["MOJOLEARN_PREP3_MAXABS_POOL"]()
