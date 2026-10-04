@@ -578,6 +578,42 @@ def nonfinite_kernel(total: Int64, v: F32P, flag: I32P):
         t += _stride()
 
 
+def model_check_kernel(trees: Int32, nodes: Int32, d: Int32, off: I32P, col: I32P, left: I32P, flag: I32P):
+    """`model_load`'s bounds walk (lane/review-fixes). Index t < trees: tree
+    t's offsets (flag[0] = 1 unless 0 <= off[t] < off[t + 1] <= nodes).
+    Index trees + i: node i, its tree found by a binary search over the
+    offsets (in bounds whatever they hold; its answer counts only when
+    flag[0] stays 0); flag[1] = 1 when a split node's local child or feature
+    is out of range. Every writer stores the same 1, so no order."""
+    var nt = Int(trees)
+    var nn = Int(nodes)
+    var t = _t0()
+    while t < nt + nn:
+        if t < nt:
+            var base = Int(off[t])
+            var end = Int(off[t + 1])
+            if base < 0 or end <= base or end > nn:
+                flag[0] = Int32(1)
+        else:
+            var i = t - nt
+            var lo = 0
+            var hi = nt - 1
+            while lo < hi:
+                var mid = (lo + hi + 1) // 2
+                if Int(off[mid]) <= i:
+                    lo = mid
+                else:
+                    hi = mid - 1
+            var base = Int(off[lo])
+            var end = Int(off[lo + 1])
+            var child = Int(left[i])
+            if child != -1:
+                var f = Int(col[i])
+                if child < 0 or child + 1 >= end - base or f < 0 or f >= Int(d):
+                    flag[1] = Int32(1)
+        t += _stride()
+
+
 def _up_i32(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.int32]:
     var b = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
     if n > 0:
@@ -644,28 +680,16 @@ def model_load(off: Int, col: Int, thr: Int, left: Int, leaf: Int, bg: Int, tree
     nodes, thresholds Float32 nodes, local left children Int32 nodes, leaf
     values Float32 nodes x k) and the background (Float32 nb x d). The
     caller hands the snapshot the forest's own predict validated (acyclic,
-    finite); the walk below re-checks only what keeps a kernel in bounds
-    (shape metadata, no data work). Synchronizes, so the host arrays need
+    finite); `model_check_kernel` re-checks on the device only what keeps
+    a kernel in bounds. Synchronizes, so the host arrays need
     not outlive the call."""
     if trees < 1 or nodes < 1 or k < 1 or d < 1 or nb < 1:
         raise Error("x_trees_agn_model_load: needs trees, nodes, outputs, features and background rows")
     if nodes > 2147483647 // k or nb > 2147483647 // d:
         raise Error("x_trees_agn_model_load: element counts exceed Int32 range")
     var po = I32P(unsafe_from_address=off)
-    var pc = I32P(unsafe_from_address=col)
-    var pl = I32P(unsafe_from_address=left)
     if Int(po[0]) != 0 or Int(po[trees]) != nodes:
         raise Error("x_trees_agn_model_load: offsets must cover all nodes")
-    for t in range(trees):
-        var base = Int(po[t])
-        var end = Int(po[t + 1])
-        if base < 0 or end <= base or end > nodes:
-            raise Error("x_trees_agn_model_load: offsets must be strictly increasing")
-        for node in range(base, end):
-            var child = Int(pl[node])
-            if child != -1:
-                if child < 0 or child + 1 >= end - base or Int(pc[node]) < 0 or Int(pc[node]) >= d:
-                    raise Error("x_trees_agn_model_load: feature/child index out of bounds")
     model_release()
     var ctx = _ctx()
     var slot = AGN_MODEL.get_or_create_ptr()
@@ -675,7 +699,32 @@ def model_load(off: Int, col: Int, thr: Int, left: Int, leaf: Int, bg: Int, tree
     slot[].left = _up_i32(ctx, left, nodes)
     slot[].leaf = _up_f32(ctx, leaf, nodes * k)
     slot[].bg = _up_f32(ctx, bg, nb * d)
+    # lane/review-fixes: the bounds walk over every tree and node runs on
+    # the device on the uploaded forest (was a serial host loop per call):
+    # one thread per tree and per node, two flags read back.
+    var dflag = ctx.enqueue_create_buffer[DType.int32](2)
+    var hflag = ctx.enqueue_create_host_buffer[DType.int32](2)
+    ctx.enqueue_memset(dflag, Int32(0))
+    ctx.enqueue_function[model_check_kernel](
+        Int32(trees), Int32(nodes), Int32(d),
+        I32P(unsafe_from_address=Int(slot[].off.value().unsafe_ptr())),
+        I32P(unsafe_from_address=Int(slot[].col.value().unsafe_ptr())),
+        I32P(unsafe_from_address=Int(slot[].left.value().unsafe_ptr())),
+        dflag.unsafe_ptr(),
+        grid_dim=_blocks(trees + nodes), block_dim=AGN_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=hflag.unsafe_ptr(), src_buf=dflag)
     ctx.synchronize()
+    var bad_off = hflag.unsafe_ptr().unsafe_load(0) != Int32(0)
+    var bad_idx = hflag.unsafe_ptr().unsafe_load(1) != Int32(0)
+    _ = dflag^
+    _ = hflag^
+    if bad_off:
+        model_release()
+        raise Error("x_trees_agn_model_load: offsets must be strictly increasing")
+    if bad_idx:
+        model_release()
+        raise Error("x_trees_agn_model_load: feature/child index out of bounds")
     slot[].trees = trees
     slot[].k = k
     slot[].d = d

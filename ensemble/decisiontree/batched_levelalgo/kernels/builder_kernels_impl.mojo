@@ -2598,6 +2598,8 @@ are integers: the same per-bin totals in another order, so no bit moves.
 comptime HIST_SIMD_AGG_DEFAULT = (
     has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_RF_HIST_SIMD_AGG_OFF"]()
+    # lane/review-fixes: the Apple IDENTICAL arm is off under ALL_OFF
+    and not (BUILD_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 ) or IDN_RF_HIST_SIMD_AGG
 """Apple, FAST since 2026-09-25 and IDENTICAL since 2026-09-28: in the column-tile histogram, the lanes of a SIMD group
 whose bin equals lane 0's bin add their contributions with one SIMD sum and
