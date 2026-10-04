@@ -127,3 +127,19 @@ def test_wheel_audit_refuses_unpinned_identical_ptx(tmp_path):
     assert report["identical_ptx_rounding_pinned"] and report["identical_cuda_machine_code"]
     assert report["identical_ptx"][0]["plain_float_ops"] == 0
     assert report["identical_cuda_fatbins"][0]["arches"] == ["sm_90a"]
+
+
+def test_relocated_native_cuda_keeps_rounding_and_machine_code_gates(tmp_path):
+    import cubin_contract as cc
+    native = "mojolearn/cuda_native/sm_89/identical/_mojolearn.so"
+    portable = "mojolearn/cuda_ptx/sm_80/identical/_mojolearn.so"
+    for rel in (native, portable):
+        p = tmp_path / rel
+        p.parent.mkdir(parents=True)
+        p.write_bytes(blob(PTX))
+    assert pc.is_identical_cuda(native)
+    assert not pc.is_identical_cuda(portable)
+    errors, rows = pc.audit_tree(tmp_path)
+    assert errors and [r["file"] for r in rows] == [native]
+    errors, rows = cc.audit_tree(tmp_path)
+    assert errors and [r["file"] for r in rows] == [native]
