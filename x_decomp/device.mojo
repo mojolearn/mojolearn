@@ -184,7 +184,14 @@ comptime XD_NO_FLAG = Int32(2147483647)
 # work a step, so the block is not short of threads at these sizes.
 # -D MOJOLEARN_IDN_EIGH_SMALL_OFF restores the per-round launches.
 comptime IDN_EIGH_SMALL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_EIGH_SMALL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-comptime IDN_EIGH_SMALL_N = 32
+# lane fam2-decomp (2026-10-04), CANDIDATE ARMS (default off; the same words
+# by the batched kernel's contract, so no column moves): the one-launch
+# route up to n = 64 (-D MOJOLEARN_IDN_EIGH_SMALL_N64) or n = 128
+# (-D MOJOLEARN_IDN_EIGH_SMALL_N128) instead of 32. One block of RR_OFF_TPB
+# threads then carries h h + n h cells a round (3,072 at n = 64, 12,288 at
+# n = 128) against 2 (m - 1) launches a sweep; which wins is a measurement.
+comptime _IDN_EIGH_SMALL_N_WIDE = 128 if is_defined["MOJOLEARN_IDN_EIGH_SMALL_N128"]() else 32
+comptime IDN_EIGH_SMALL_N = 64 if is_defined["MOJOLEARN_IDN_EIGH_SMALL_N64"]() else _IDN_EIGH_SMALL_N_WIDE
 
 # lane fam-decomp (2026-10-04), IDENTICAL: `DevExec.qr_r` uploads the caller's
 # matrix straight from its address and takes R straight into the caller's
