@@ -13,6 +13,10 @@ No intra-chunk, B/C, A/dt, or projection gradient is claimed here.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from mamba.impl.modules.afn_defines import IDN_M2_SSD_TILES
 
 from checks.numerics import (
     identical_mul,
@@ -952,6 +956,86 @@ def mamba2_ydiag_xd_backward_kernel(
     )
 
 
+def mamba2_ydiag_xd_backward_tile_kernel(
+    d_xd: MutPointer[Float32, MutAnyOrigin],
+    d_x: MutPointer[Float32, MutAnyOrigin],
+    d_dt_xd: MutPointer[Float32, MutAnyOrigin],
+    d_dt_merged: MutPointer[Float32, MutAnyOrigin],
+    d_y: MutPointer[Float32, MutAnyOrigin],
+    cb_g: MutPointer[Float32, MutAnyOrigin],
+    seg_l: MutPointer[Float32, MutAnyOrigin],
+    xbc: MutPointer[Float32, MutAnyOrigin],
+    dt: MutPointer[Float32, MutAnyOrigin],
+    d_dt_da: MutPointer[Float32, MutAnyOrigin],
+    d_xd_cstate: MutPointer[Float32, MutAnyOrigin],
+    d_xd_total: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, t_in: Int32, nh_in: Int32, di_in: Int32,
+    cd_in: Int32, nc_in: Int32, q_in: Int32,
+):
+    """IDN_M2_SSD_TILES (roadmap B1, backward twin): one block per (b, t, h)
+    of `mamba2_ydiag_xd_backward_kernel`, one thread per p. The column of
+    M = G o L below the row (ii = jj .. real) is formed once in shared memory
+    instead of once per p; each p's chain is the cell kernel's (ii ascending
+    from +0.0), and thread 0 folds d_dt over p ascending as the cell kernel
+    did. Same bits."""
+    var t_work = Int(t_in)
+    var nh = Int(nh_in)
+    var cd = Int(cd_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    var cell = Int(block_idx.x)
+    var pp = Int(thread_idx.x)
+    var bb = cell // (t_work * nh)
+    var rem = cell - bb * t_work * nh
+    var tt = rem // nh
+    var hh = rem - tt * nh
+    var cc = tt // qv
+    var jj = tt - cc * qv
+    var real = t_work - cc * qv
+    if real > qv:
+        real = qv
+    var m_s = stack_allocation[
+        256, Scalar[DType.float32], address_space=AddressSpace.SHARED
+    ]()
+    var dxd_s = stack_allocation[
+        M2_HEADDIM, Scalar[DType.float32], address_space=AddressSpace.SHARED
+    ]()
+    var ii = jj + pp
+    while ii < real:
+        m_s[ii] = ftz(identical_mul(
+            ftz(cb_g.unsafe_load(((bb * nc + cc) * qv + ii) * qv + jj)),
+            ftz(seg_l.unsafe_load(
+                (((bb * nc + cc) * nh + hh) * qv + ii) * qv + jj
+            )),
+        ))
+        ii += M2_HEADDIM
+    barrier()
+    var dxd = Float32(0.0)
+    for i2 in range(jj, real):
+        var dy = ftz(d_y.unsafe_load(
+            ((bb * t_work + cc * qv + i2) * nh + hh) * M2_HEADDIM + pp
+        ))
+        dxd = ftz(identical_mul_add(m_s[i2], dy, dxd))
+    d_xd.unsafe_store(cell * M2_HEADDIM + pp, dxd)
+    dxd = ftz(dxd + ftz(d_xd_cstate.unsafe_load(cell * M2_HEADDIM + pp)))
+    d_xd_total.unsafe_store(cell * M2_HEADDIM + pp, dxd)
+    var dtv = ftz(dt.unsafe_load(cell))
+    d_x.unsafe_store(cell * M2_HEADDIM + pp, ftz(identical_mul(dxd, dtv)))
+    dxd_s[pp] = dxd
+    barrier()
+    if pp == 0:
+        var ddt = Float32(0.0)
+        for p2 in range(M2_HEADDIM):
+            var xp = ftz(xbc.unsafe_load(
+                (bb * t_work + tt) * cd + hh * M2_HEADDIM + p2
+            ))
+            ddt = ftz(identical_mul_add(xp, dxd_s[p2], ddt))
+        d_dt_xd.unsafe_store(cell, ddt)
+        d_dt_merged.unsafe_store(
+            cell, ftz(ftz(d_dt_da.unsafe_load(cell)) + ddt)
+        )
+
+
 # ---------------------------------------------------------------------------
 # IDN_M2_BWD_CELL kernels (roadmap B6; see the define's note at the top).
 # ---------------------------------------------------------------------------
@@ -1256,17 +1340,30 @@ def mamba2_ydiag_xd_and_partial_dt_into(
     _m2_da_product_into(
         ctx, out, True, dt, a, b * t_work, nh
     )
-    ctx.enqueue_function[mamba2_ydiag_xd_backward_kernel](
-        out.d_xd_ydiag.unsafe_ptr(), out.d_x_from_xd.unsafe_ptr(),
-        out.d_dt_from_xd.unsafe_ptr(), out.d_dt_merged.unsafe_ptr(),
-        d_y.unsafe_ptr(), cb_g.unsafe_ptr(), seg_l.unsafe_ptr(),
-        xbc.unsafe_ptr(), dt.unsafe_ptr(), out.d_dt.unsafe_ptr(),
-        out.d_xd_cstate.unsafe_ptr(),
-        out.d_xd_total.unsafe_ptr(),
-        Int32(b), Int32(t_work), Int32(nh), Int32(di), Int32(cd),
-        Int32(nc), Int32(qv), grid_dim=(_grid(b * t_work * nh), 1, 1),
-        block_dim=(M2_SSD_BWD_TPB, 1, 1),
-    )
+    comptime if IDN_M2_SSD_TILES:
+        ctx.enqueue_function[mamba2_ydiag_xd_backward_tile_kernel](
+            out.d_xd_ydiag.unsafe_ptr(), out.d_x_from_xd.unsafe_ptr(),
+            out.d_dt_from_xd.unsafe_ptr(), out.d_dt_merged.unsafe_ptr(),
+            d_y.unsafe_ptr(), cb_g.unsafe_ptr(), seg_l.unsafe_ptr(),
+            xbc.unsafe_ptr(), dt.unsafe_ptr(), out.d_dt.unsafe_ptr(),
+            out.d_xd_cstate.unsafe_ptr(),
+            out.d_xd_total.unsafe_ptr(),
+            Int32(b), Int32(t_work), Int32(nh), Int32(di), Int32(cd),
+            Int32(nc), Int32(qv), grid_dim=(b * t_work * nh, 1, 1),
+            block_dim=(M2_HEADDIM, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[mamba2_ydiag_xd_backward_kernel](
+            out.d_xd_ydiag.unsafe_ptr(), out.d_x_from_xd.unsafe_ptr(),
+            out.d_dt_from_xd.unsafe_ptr(), out.d_dt_merged.unsafe_ptr(),
+            d_y.unsafe_ptr(), cb_g.unsafe_ptr(), seg_l.unsafe_ptr(),
+            xbc.unsafe_ptr(), dt.unsafe_ptr(), out.d_dt.unsafe_ptr(),
+            out.d_xd_cstate.unsafe_ptr(),
+            out.d_xd_total.unsafe_ptr(),
+            Int32(b), Int32(t_work), Int32(nh), Int32(di), Int32(cd),
+            Int32(nc), Int32(qv), grid_dim=(_grid(b * t_work * nh), 1, 1),
+            block_dim=(M2_SSD_BWD_TPB, 1, 1),
+        )
     comptime if IDN_M2_BWD_CELL:
         var bt = b * t_work
         ctx.enqueue_function[mamba2_dt_cell_kernel](
