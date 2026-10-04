@@ -5060,13 +5060,20 @@ def _scores_classif(X, y, kind):
     xo, yo = pr.put(arr), pr.put_codes(codes)
     cnt, mean, sums = pr.alloc(K), pr.alloc(K * d), pr.alloc(K * d)
     sc, pv, st = pr.alloc(d), pr.alloc(d), pr.alloc(6 * d)
-    pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, _NONE, sums)
+    mode = _mode()
+    _cls(pr, mode, xo, n, d, yo, K, cnt, mean, _NONE, sums)
     if kind == "chi2":
-        pr.stage("col_stats", d, xo, n, d, st)
+        _cs(pr, mode, xo, n, d, st, var=False)
         pr.stage("chi2", d, sums, K, d, cnt, n, sc, pv)
+    elif _blocked() and _idn_fam(mode) & _IDN_SELECT_BLOCKED:
+        # x_prep/select_blocked.mojo: the within-class squares by row blocks, then the score
+        nb = (n + _XB - 1) // _XB
+        ps = pr.work(nb * d)
+        pr.stage("fcb_part", nb * d, xo, n, d, yo, mean, ps, nb)
+        pr.stage("fcb_fin", d, ps, n, d, nb, K, cnt, mean, sc, pv)
     else:
         pr.stage("f_classif", d, xo, n, d, yo, K, cnt, mean, sc, pv)
-    pr.run(_mode())
+    pr.run(mode)
     if kind == "chi2" and any(v < 0 for v in pr.values(st + 3 * d, d)):
         raise ValueError("mojolearn: Input X must be non-negative.")
     return pr.get(sc, d), pr.get(pv, d)
@@ -5097,8 +5104,21 @@ def _pearson(X, y, center, force_finite):
     pr = _Prog()
     xo, yo = pr.put(arr), pr.put(yv)
     sc, pv, co = pr.alloc(d), pr.alloc(d), pr.alloc(d)
-    pr.stage("f_regression", d, xo, n, d, yo, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
-    pr.run(_mode())
+    mode = _mode()
+    if _blocked() and _idn_fam(mode) & _IDN_SELECT_BLOCKED:
+        # x_prep/select_blocked.mojo: the sums and the centred products by row blocks
+        nb = (n + _XB - 1) // _XB
+        mx = my = _NONE
+        if center:
+            psx, psy, mx, my = pr.work(nb * d), pr.work(nb), pr.work(d), pr.work(1)
+            pr.stage("frb_part1", nb * d, xo, n, d, yo, psx, psy, nb)
+            pr.stage("frb_mean", d, psx, psy, nb, d, n, mx, my)
+        pxy, pxx, pyy = pr.work(nb * d), pr.work(nb * d), pr.work(nb)
+        pr.stage("frb_part2", nb * d, xo, n, d, yo, mx, my, pxy, pxx, pyy, nb)
+        pr.stage("frb_fin", d, pxy, pxx, pyy, nb, d, n, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
+    else:
+        pr.stage("f_regression", d, xo, n, d, yo, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
+    pr.run(mode)
     return pr.get(sc, d), pr.get(pv, d), pr.get(co, d)
 
 
