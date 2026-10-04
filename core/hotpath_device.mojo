@@ -1591,3 +1591,134 @@ def device_cast_f64_to_f32(ctx: DeviceContext, src_addr: Int, dst_addr: Int, n: 
     ctx.synchronize()
     _ = d_s^
     _ = d_d^
+
+
+# ===========================================================================
+# reduce_stat's exact integer sum (lane fix-s1-shared, IDN_HPDEV_ISUM)
+# ===========================================================================
+#
+# Python's `sum` of integers is exact, so any order gives the same total: a
+# 128-bit two's complement accumulator (hi, lo) per tile of HPD_TILE
+# elements, then tiles of tile sums, as `device_reduce_arg` folds. Integer
+# adds with carry only: the host helper's (hi, lo) on every vendor.
+
+
+@always_inline
+def _isum_add(mut acc_hi: UInt64, mut acc_lo: UInt64, add_hi: UInt64, add_lo: UInt64):
+    var nlo = acc_lo + add_lo
+    var carry = UInt64(1) if nlo < acc_lo else UInt64(0)
+    acc_hi = acc_hi + add_hi + carry
+    acc_lo = nlo
+
+
+def _isum_first_kernel(
+    s8: _U8, s32: _U32, s64: _U64, code: Int32, n_: Int32, hi_out: _U64, lo_out: _U64,
+):
+    """Thread j sums elements [j * HPD_TILE, (j + 1) * HPD_TILE), each
+    sign-extended to 128 bits."""
+    var j = _tid()
+    var n = Int(n_)
+    var lo = j * HPD_TILE
+    if lo >= n:
+        return
+    var hi = min(n, lo + HPD_TILE)
+    var acc_hi = UInt64(0)
+    var acc_lo = UInt64(0)
+    var i = lo
+    while i < hi:
+        var v: Int64
+        if code == HPD_U8:
+            v = s8.unsafe_load(i).cast[DType.int64]()
+        elif code == HPD_I64:
+            v = bitcast[DType.int64](s64.unsafe_load(i))
+        elif code == HPD_I32:
+            v = bitcast[DType.int32](s32.unsafe_load(i)).cast[DType.int64]()
+        else:
+            v = s32.unsafe_load(i).cast[DType.int64]()
+        var ext = UInt64(0xFFFFFFFFFFFFFFFF) if v < 0 else UInt64(0)
+        _isum_add(acc_hi, acc_lo, ext, bitcast[DType.uint64](v))
+        i += 1
+    hi_out.unsafe_store(j, acc_hi)
+    lo_out.unsafe_store(j, acc_lo)
+
+
+def _isum_pass_kernel(hi_in: _U64, lo_in: _U64, m_: Int32, hi_out: _U64, lo_out: _U64):
+    """Thread j sums the 128-bit tile sums [j * HPD_TILE, (j + 1) * HPD_TILE)."""
+    var j = _tid()
+    var m = Int(m_)
+    var lo = j * HPD_TILE
+    if lo >= m:
+        return
+    var hi = min(m, lo + HPD_TILE)
+    var acc_hi = UInt64(0)
+    var acc_lo = UInt64(0)
+    var i = lo
+    while i < hi:
+        _isum_add(acc_hi, acc_lo, hi_in.unsafe_load(i), lo_in.unsafe_load(i))
+        i += 1
+    hi_out.unsafe_store(j, acc_hi)
+    lo_out.unsafe_store(j, acc_lo)
+
+
+def device_isum(ctx: DeviceContext, addr: Int, code: Int, n: Int) raises -> Tuple[UInt64, UInt64]:
+    """The exact sum of the n integers (`HPD_I32`, `HPD_I64`, `HPD_U32` or
+    `HPD_U8`) at `addr` as the 128-bit two's complement (hi, lo)
+    (`1 <= n <= HPD_MAX_N`)."""
+    var wide = code == HPD_I64
+    var narrow8 = code == HPD_U8
+    var d_s8 = ctx.enqueue_create_buffer[DType.uint8](n if narrow8 else 1)
+    var d_s32 = ctx.enqueue_create_buffer[DType.uint32](n if (not wide and not narrow8) else 1)
+    var d_s64 = ctx.enqueue_create_buffer[DType.uint64](n if wide else 1)
+    if narrow8:
+        ctx.enqueue_copy(dst_buf=d_s8, src_ptr=_U8(unsafe_from_address=addr))
+    elif wide:
+        ctx.enqueue_copy(dst_buf=d_s64, src_ptr=_U64(unsafe_from_address=addr))
+    else:
+        ctx.enqueue_copy(dst_buf=d_s32, src_ptr=_U32(unsafe_from_address=addr))
+    var m1 = _tiles(n)
+    var m2 = _tiles(m1)
+    var m3 = _tiles(m2)
+    var d_h1 = ctx.enqueue_create_buffer[DType.uint64](m1)
+    var d_l1 = ctx.enqueue_create_buffer[DType.uint64](m1)
+    var d_h2 = ctx.enqueue_create_buffer[DType.uint64](m2)
+    var d_l2 = ctx.enqueue_create_buffer[DType.uint64](m2)
+    var d_h3 = ctx.enqueue_create_buffer[DType.uint64](m3)
+    var d_l3 = ctx.enqueue_create_buffer[DType.uint64](m3)
+    var d_h4 = ctx.enqueue_create_buffer[DType.uint64](1)
+    var d_l4 = ctx.enqueue_create_buffer[DType.uint64](1)
+    ctx.enqueue_function[_isum_first_kernel](
+        d_s8.unsafe_ptr(), d_s32.unsafe_ptr(), d_s64.unsafe_ptr(), Int32(code), Int32(n),
+        d_h1.unsafe_ptr(), d_l1.unsafe_ptr(), grid_dim=_blocks(m1), block_dim=HPD_TPB,
+    )
+    ctx.enqueue_function[_isum_pass_kernel](
+        d_h1.unsafe_ptr(), d_l1.unsafe_ptr(), Int32(m1), d_h2.unsafe_ptr(), d_l2.unsafe_ptr(),
+        grid_dim=_blocks(m2), block_dim=HPD_TPB,
+    )
+    ctx.enqueue_function[_isum_pass_kernel](
+        d_h2.unsafe_ptr(), d_l2.unsafe_ptr(), Int32(m2), d_h3.unsafe_ptr(), d_l3.unsafe_ptr(),
+        grid_dim=_blocks(m3), block_dim=HPD_TPB,
+    )
+    # m3 <= HPD_TILE for every n <= HPD_MAX_N: one thread
+    ctx.enqueue_function[_isum_pass_kernel](
+        d_h3.unsafe_ptr(), d_l3.unsafe_ptr(), Int32(m3), d_h4.unsafe_ptr(), d_l4.unsafe_ptr(),
+        grid_dim=_blocks(1), block_dim=HPD_TPB,
+    )
+    var h = ctx.enqueue_create_host_buffer[DType.uint64](2)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d_h4)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr() + 1, src_buf=d_l4)
+    ctx.synchronize()
+    var hi_w = h.unsafe_ptr()[0]
+    var lo_w = h.unsafe_ptr()[1]
+    _ = h^
+    _ = d_s8^
+    _ = d_s32^
+    _ = d_s64^
+    _ = d_h1^
+    _ = d_l1^
+    _ = d_h2^
+    _ = d_l2^
+    _ = d_h3^
+    _ = d_l3^
+    _ = d_h4^
+    _ = d_l4^
+    return (hi_w, lo_w)

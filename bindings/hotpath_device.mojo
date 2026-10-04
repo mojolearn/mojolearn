@@ -27,9 +27,11 @@ five off):
                     check_indices_i64, indices_overlap_i64, first_seen_i32,
                     strat_fold_assign_i32
   IDN_HPDEV_REDUCE  -D MOJOLEARN_IDN_HPDEV_REDUCE_OFF  reduce_stat's min,
-                    max, argmax and integral test (the float sum and the
-                    exact integer sum stay the host helper's)
+                    max, argmax and integral test (the sequential float
+                    sum stays the host helper's)
   IDN_HPDEV_INIT    -D MOJOLEARN_IDN_HPDEV_INIT_OFF    uniform_init_f32
+  IDN_HPDEV_ISUM    -D MOJOLEARN_IDN_HPDEV_ISUM_OFF    reduce_stat's exact
+                    integer sum (lane fix-s1-shared)
   IDN_HPDEV_CAST_F64  CANDIDATE, default OFF, -D MOJOLEARN_IDN_HPDEV_CAST_F64
                     turns it on: cast_f64_to_f32 (`hpdev_try_cast_f64_to_f32`)
 The sabotage builds (`HOTPATH_SABOTAGE`) keep every host helper, so the
@@ -37,6 +39,7 @@ negative control still answers wrong on purpose.
 """
 
 from std.math import isfinite
+from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
@@ -84,6 +87,7 @@ from core.hotpath_device import (
     device_gather_i32,
     device_gather_u64,
     device_indices_overlap_i64,
+    device_isum,
     device_kfold_ids,
     device_mask_from_indices_u8,
     device_reduce_arg,
@@ -107,6 +111,8 @@ comptime IDN_HPDEV_LABELS = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_
 comptime IDN_HPDEV_FOLDS = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_FOLDS_OFF"]()
 comptime IDN_HPDEV_REDUCE = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_REDUCE_OFF"]()
 comptime IDN_HPDEV_INIT = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_INIT_OFF"]()
+#: lane fix-s1-shared: reduce_stat's exact integer sum as a device tile fold.
+comptime IDN_HPDEV_ISUM = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_ISUM_OFF"]()
 #: CANDIDATE ARM, default OFF: `-D MOJOLEARN_IDN_HPDEV_CAST_F64` narrows a
 #: float64 input on the device (`cast_f64_to_f32`). The words cross the bus
 #: twice more than the host cast's, so it is on only when measured to win, or
@@ -567,6 +573,7 @@ comptime _RS_MIN = 0
 comptime _RS_MAX = 1
 comptime _RS_ARGMAX = 3
 comptime _RS_INTEGRAL = 4
+comptime _RS_ISUM = 5
 
 
 def _peek[dt: DType](addr: Int, i: Int) -> PythonObject:
@@ -595,8 +602,29 @@ def reduce_stat_binding(
 ) raises -> PythonObject:
     """`reduce_stat`: min, max and argmax as a device tile reduction over
     (ordered key, index) pairs, and the integral test as a device predicate.
-    A NaN first element (Python's answer is then that NaN, or index 0), the
-    float sum and the integer sum take the host helper."""
+    A NaN first element (Python's answer is then that NaN, or index 0) and
+    the float sum take the host helper. The exact integer sum (what = 5) is a
+    device tile fold under IDN_HPDEV_ISUM (any order is exact)."""
+    comptime if IDN_HPDEV_ISUM:
+        var count = Int(py=n)
+        var c = Int(py=code)
+        var a = Int(py=addr)
+        if (
+            Int(py=what) == _RS_ISUM and count >= 1 and count <= HPD_MAX_N and a != 0
+            and (c == HPD_I32 or c == HPD_I64 or c == HPD_U32 or c == HPD_U8)
+        ):
+            var ctx = process_ctx[_HPDEV_SLOT]()
+            var hi_w = UInt64(0)
+            var lo_w = UInt64(0)
+            with GILReleased(Python()):
+                var t = device_isum(ctx, a, c, count)
+                hi_w = t[0]
+                lo_w = t[1]
+            return Python.tuple(
+                PythonObject(Int(bitcast[DType.int64](hi_w))),
+                PythonObject(Int(lo_w >> 32)),
+                PythonObject(Int(lo_w & UInt64(0xFFFFFFFF))),
+            )
     comptime if IDN_HPDEV_REDUCE:
         var count = Int(py=n)
         var w = Int(py=what)
