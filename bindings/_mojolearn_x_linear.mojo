@@ -160,13 +160,13 @@ def py2mojo_linear_flags_binding() raises -> PythonObject:
     return PythonObject(py2mojo_linear_flags())
 
 
-@export
 def glm_ydom_binding() raises -> PythonObject:
     """1: a GLM fit checks its targets' range itself and returns -1 in the
     converged word when it fails (x_linear/glm_ydom.mojo, lane fam2-linear)."""
     return PythonObject(1)
 
 
+@export
 def PyInit__mojolearn_x_linear() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_linear")
