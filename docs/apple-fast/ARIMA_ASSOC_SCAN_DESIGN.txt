@@ -1,0 +1,170 @@
+Apple FAST AutoARIMA: full-covariance temporal scan proposal
+2026-10-04; source-only design, no implementation or measurement claim
+Base: 6d8463b26ea3b3e9d931ed014853cb0bb922b259
+Proposed define: MOJOLEARN_ARIMA_FAST_ASSOC_SCAN; default OFF.
+Future accepted rollback: MOJOLEARN_ARIMA_FAST_ASSOC_SCAN_OFF.
+
+Problem and source findings
+---------------------------
+The board runs 64 series, 1,392 training observations, exhaustive p/q=0..3,
+d=0..1, then final fitting. Search is about 8.2 of 13.7 seconds on taxi.
+Do not reduce iterations, candidate orders, or forecast work.
+
+ARIMA_FIT_GROUPS passed byte quality but synthetic did not improve
+(9225.3 -> 9268.2 ms); taxi 13749.1 -> 13072.9 ms did not establish a
+win for the eligible synthetic row. ARIMA_SLAB was held for inconclusive
+small gains (9219.3 -> 9096.6; 13763.6 -> 13519.0 ms).
+
+An older MOJOLEARN_KALMAN_TIME_SCAN already exists! Its gain/covariance
+freezing approximation reduced fitted likelihood in every tested group
+(worst -0.371) and was disabled. It also starts only at 4096 observations,
+so misses this board, and current fast_kalman_into LL_ONLY evaluations
+bypass it. Do not reactivate it or relax its convergence cutoff.
+
+Pointers:
+* arima/impl/batched_kalman.mojo:176-192 old scan and quality rejection.
+* arima/impl/batched_kalman.mojo:520 batched_kalman_loop_kernel recurrence.
+* arima/impl/batched_kalman.mojo:995 LL_ONLY dispatch for generic filtering.
+* arima/impl/batched_kalman.mojo:1206 fast_kalman_into, held-workspace hot path.
+* arima/impl/fast_eval_ws.mojo:268 stacked gradient/evaluation dispatch.
+* arima/impl/batched_fit.mojo:49-102 finite-difference h=2^-10 and noise floor.
+* tools/bench_board_algos.py:774 board arguments; :2845 actual search + fit.
+* tools/arima_fast_fit_quality.py: existing exact-byte gate and fixtures.
+
+Scope and mathematical reduction
+--------------------------------
+Initial candidate: FAST + Apple, pre-differenced n_diff=0, no exogenous
+inputs, rd=2..4, likelihood-only evaluations. Other cases stay on the
+existing path. rd=1 offers a simpler direct innovation calculation and
+should be a separate independently measured candidate. Existing forecast
+and prediction implementations remain untouched; optimizer limits and
+search candidate sets remain identical. Verify pre-differenced dispatch
+actually reaches every intended board fit group before scoring.
+
+Write the state model x_t = T x_(t-1) + c + R epsilon_t,
+y_t = H x_t, H=e0^T, c=mu e0, Var(epsilon)=sigma2. The existing matrix
+initializer sets R0=1. Thus Q=sigma2 R R^T has rank one and H Q H^T=sigma2.
+Conditioning a transition on y_t gives zero conditional process covariance:
+K=R, C=Q-K sigma2 K^T=0. This is an algebraic identity, not a convergence
+approximation. Use C=0 exactly rather than subtracting nearly equal values.
+
+For each t>=1, represent p(x_t | x_(t-1), y_t) and the unnormalized
+likelihood p(y_t | x_(t-1)) by four objects (A,b,J,eta):
+  u = H T                              (row vector)
+  z = y_t - H c
+  A = T - R u
+  b = c - R (H c) + R y_t
+  J = u^T u / sigma2
+  eta = u^T z / sigma2
+The conditional state map is x_t=A x_(t-1)+b. Its likelihood quadratic is
+-0.5 x_(t-1)^T J x_(t-1) + eta^T x_(t-1), up to a constant.
+Normalization constants need not be scanned: compute innovations from
+recovered prefix states and sum the original likelihood formula afterward.
+
+Compose chronological segments i then j with this associative operator:
+  A_ij   = A_j A_i
+  b_ij   = A_j b_i + b_j
+  J_ij   = J_i + A_i^T J_j A_i
+  eta_ij = eta_i + A_i^T (eta_j - J_j b_i)
+Identity = (I,0,0,0). No inversions occur in this scan. This special-case
+operator follows by substitution of deterministic affine maps into a
+Gaussian log likelihood; do not use it if process covariance is not rank
+one, H R is not one, or observation noise is later added.
+
+Initial observation and posterior recovery
+------------------------------------------
+Use the existing stationary initializer's alpha0 and P0, including its
+unit-root/intercept guards; no separate initialization model:
+  F0=H P0 H^T; v0=y0-H alpha0; k0=P0 H^T/F0
+  m0=alpha0+k0 v0; C0=P0-k0 F0 k0^T
+Preserve rejection when F0 is nonpositive/nonfinite. C0 is singular because
+observation noise is zero; NEVER invert C0 or add jitter to make it invertible.
+
+For each inclusive prefix (A,b,J,eta) of leaves 1..t:
+  W = solve(I+C0 J, C0)
+  m_initial = m0 + W (eta-J m0)
+  m_t = A m_initial + b
+  C_t = A W A^T
+Symmetrize covariance for roundoff; do not hide materially negative
+variances using abs, diagonal floors, changed sigma2, or dropped terms.
+For t>=1, recover the PRIOR from prefix t-1:
+  a_t=T m_(t-1)+c; P_t=T C_(t-1) T^T+Q
+  v_t=y_t-H a_t; F_t=H P_t H^T
+The likelihood is the original sum of log(F_t)+v_t^2/F_t+n*log(2*pi).
+Reduce those terms with a parallel tree. The prefix needed for observation
+1 is the initial posterior (m0,C0). Handle observation zero separately.
+This avoids the serial time recurrence without freezing covariance.
+
+GPU layout and ownership
+------------------------
+New module arima/impl/fast_assoc_scan.mojo, imported only under FAST Apple
+opt-in dispatch; no Python numeric path. One worker per (stacked-series,
+time) factor; small rd=2/3/4 local matrix algebra. Grid spans many blocks,
+including for batch=1. Host only enqueues logarithmic scan levels.
+
+Start with double-buffered Hillis-Steele inclusive scan for clear boundary
+semantics; each level reads only the old buffer. Prefix workers recover
+states/innovations independently. A multiblock reduction handles likelihood
+sums and the earliest invalid innovation index; return the existing
+info_loop convention. No one-thread per-series time loop or serial chunk
+chaining. Padded identities must not introduce log-likelihood observations.
+
+Tuple size 2*rd^2+2*rd floats; rd4 double-buffered storage is 320 bytes per
+(series,time), about 228 MB for 512 stacked members x 1392 observations.
+Keep scratch in FastEvalWS so every optimizer evaluation reuses it. The
+scan moves this storage over ~11 levels; memory traffic and launch overhead
+may defeat the theoretical benefit. Measure before accepting. A later
+work-efficient tree or tiled scan is a separate optimization, with the
+same quality gate; do not bundle new pooling changes into this candidate.
+
+Dispatch in BOTH fast_kalman_into and generic LL_ONLY evaluation before
+existing _launch_loop_ll_only. Expose a binding capability/reach counter
+for the quality capture so a PASS cannot silently measure only fallback.
+Record count of scanned series, state sizes, observations, and refusals.
+Unsupported scope uses the existing route; numerical trouble inside a
+supported scan is a failed candidate/gate, not an unrecorded quality pass.
+
+Quality gates fixed before any candidate timing
+-----------------------------------------------
+No quality threshold may be relaxed after results. Existing byte-equality
+gate cannot validate changed summation order; keep it unchanged for the
+old experiments and add a separate scan-specific capture/comparator.
+
+1. Kernel fixtures: compare main and candidate to the same float64 model
+recurrence (quality oracle only, never a product host route). Cover p/q
+0..3, near-unit AR and MA roots of both signs, nonzero means, sigma2 at
+1e-6/1/1e6, constant/impulse/alternating data, 1391/1392/1393 and powers of
+two plus/minus one, multiple series and all supported rd values. Compare
+innovations, F, final alpha/P, and LL; candidate error against reference
+must not exceed main's corresponding error (except machine-precision
+oracle comparison bounds fixed before run). Nonfinite/refusal behavior
+must agree. Do not turn relative equality into a quality-improvement claim.
+2. Evaluate both f(x) and every actual finite-difference perturbation
+x+h e_j with h=2^-10. Compare resulting gradient errors against the same
+float64 finite-difference oracle; candidate must not worsen them. A tiny
+LL difference divided by h can change optimizer decisions materially.
+3. Full fits: preserve iteration budgets/search grid. Capture orders,
+criteria, fitted parameters, convergence codes, prediction, LL and future
+forecast for the existing seeded fixtures plus the two exact board inputs.
+Compare per-series holdout forecast RMSE and fitted prediction RMSE:
+candidate <= main, with no new statistical-noise allowance. For equal
+orders, evaluate main/candidate parameters under the same float64 LL
+oracle and require candidate LL >= main; report changed orders explicitly
+and compare selected criteria/forecast quality without comparing LL from
+different model families as though interchangeable. Report failures as
+HOLD-quality. Retain taxi's existing opponent-quality HOLD even if main
+quality is preserved. Never rerun opponents.
+4. Only after these pass, one M3 timing arm per build, synthetic and taxi.
+Capture total search+fit, search and fit separately, plus forecast call and
+first read. M2 compiles only. Record exact source/compiler/defines/binary
+hashes and promotion OFF build. No timings requested by this design file.
+
+Why no kernel is committed with this design
+------------------------------------------
+The method is mathematically different from the rejected steady-state
+shortcut, but float32 information accumulation (eta-J*m0), semidefinite
+posterior solves, and near-unit MA roots can be numerically delicate.
+The bounded source-only task cannot establish those properties or a Mojo
+build. A large uncompiled kernel would not be a reviewable, validated
+promotion. Implement the factor/oracle gate first, then device kernels,
+then run the quality-first M2/M3 pipeline with independent measured tags.
