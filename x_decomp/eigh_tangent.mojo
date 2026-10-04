@@ -12,10 +12,19 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt, fma
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul
 from x_decomp.cells import F32Ptr
 from x_decomp.rr import pj_first, pj_second
 
+# Failed M3 tag gap26-eigh-tangent-quality-fix, head 7e0422e95:
+# max eigenvalue error board128 1.27636e-6 -> 1.57335e-6,
+# gram128 8.81720e-7 -> 1.19155e-6; board257 1.49875e-6 -> 2.03518e-6.
+# Residual and orthogonality improved, but transformed-diagonal eigenvalues
+# drifted. Current candidate extracts normalized Rayleigh quotients from the
+# original GPU matrix, with compensated sums; no quality gate is relaxed.
 comptime EIGH_FAST_TANGENT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
@@ -154,3 +163,64 @@ def eigh_tangent_copy_kernel(src: F32Ptr, dst: F32Ptr, n_in: Int32):
     var t = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
     if t < Int(n_in)*Int(n_in):
         dst.unsafe_store(t, src.unsafe_load(t))
+
+
+@always_inline
+def rayleigh_add(a: SIMD[DType.float32, 2], b: SIMD[DType.float32, 2]) -> SIMD[DType.float32, 2]:
+    # Error-free two-sum of the high words, then renormalize the low words.
+    var s = a[0] + b[0]
+    var z = s - a[0]
+    var e = ((a[0] - (s - z)) + (b[0] - z)) + (a[1] + b[1])
+    var h = s + e
+    return SIMD[DType.float32, 2](h, e - (h - s))
+
+
+@always_inline
+def rayleigh_product(a: Float32, b: Float32) -> SIMD[DType.float32, 2]:
+    var h = a * b
+    return SIMD[DType.float32, 2](h, fma(a, b, -h))
+
+
+def eigh_rayleigh_kernel(v: F32Ptr, av: F32Ptr, diag: F32Ptr, n_in: Int32):
+    """One block per vector: normalized v^T (A_original v), compensated
+    dot products and pairwise reduction; A_original v is GPU matrix GEMM.
+    Quotient normalization removes vector-norm drift from eigenvalues.
+    """
+    comptime NT = 256
+    var n = Int(n_in)
+    var j = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var nh = stack_allocation[NT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var nl = stack_allocation[NT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var dh = stack_allocation[NT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var dl = stack_allocation[NT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var num = SIMD[DType.float32, 2](0.0, 0.0)
+    var den = SIMD[DType.float32, 2](0.0, 0.0)
+    var i = tid
+    while i < n:
+        var x = v.unsafe_load(i*n+j)
+        num = rayleigh_add(num, rayleigh_product(x, av.unsafe_load(i*n+j)))
+        den = rayleigh_add(den, rayleigh_product(x, x))
+        i += NT
+    nh[tid] = num[0]
+    nl[tid] = num[1]
+    dh[tid] = den[0]
+    dl[tid] = den[1]
+    barrier()
+    var step = NT // 2
+    while step > 0:
+        if tid < step:
+            num = rayleigh_add(SIMD[DType.float32, 2](nh[tid], nl[tid]),
+                               SIMD[DType.float32, 2](nh[tid+step], nl[tid+step]))
+            den = rayleigh_add(SIMD[DType.float32, 2](dh[tid], dl[tid]),
+                               SIMD[DType.float32, 2](dh[tid+step], dl[tid+step]))
+            nh[tid] = num[0]
+            nl[tid] = num[1]
+            dh[tid] = den[0]
+            dl[tid] = den[1]
+        barrier()
+        step //= 2
+    if tid == 0:
+        var q = nh[0] / dh[0]
+        var r = fma(-q, dh[0], nh[0]) + nl[0] - q*dl[0]
+        diag.unsafe_store(j, q + r/dh[0])
