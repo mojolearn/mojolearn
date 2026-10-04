@@ -19,6 +19,7 @@ from x_prep.common import FP, IP, p, is_nan
 from x_prep.prims import add, sub, mul, div
 from x_prep.transform import PT_STATE, pt_finish, log1pf
 from x_prep.prims import logf
+from x_prep.fastpt import PT_FOLD_NOX
 
 comptime TGR = 256
 
@@ -125,6 +126,18 @@ def pt_fold_fast_kernel(f: FP, q: IP):
     var sm = Float32(0)
     var sj = Float32(0)
     for i in range(tid, nn, TGR):
+        comptime if PT_FOLD_NOX:
+            # lane af-ptimpute, -D MOJOLEARN_PT_FOLD_NOX: after K = 0 fold T alone, as
+            # `pt_fold_unit` does (a row is NaN exactly where its T word is, pt_map_unit). The
+            # X read below is d words apart per thread, a cache line a word at Istella's d = 220,
+            # 220M lines per evaluation for a NaN test (docs/apple-fast/notes/ptimpute.md).
+            if not first:
+                var tvx = f[T + c * nn + i]
+                if is_nan(tvx):
+                    continue
+                cnt += 1
+                sm = add(sm, tvx)
+                continue
         var x = f[X + i * dd + c]
         if is_nan(x):
             continue
