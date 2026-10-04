@@ -1769,8 +1769,9 @@ class _DARTBase(_TreesEnsembleBase):
             vals.append(addr_ro(values, name="values"))
             sizes.append(int(offs[1]) - lo)
             coefs.append(float(coef))
+        starts = [float(v) for v in inits]  # glue: the K class starts
         self._bind().x_trees_dart_predict(addr_ro(Xa, name="X"), [cols, ques, lefts, vals], sizes, coefs,
-                                          [float(v) for v in inits], addr(score, name="score"), [n, d, K])
+                                          starts, addr(score, name="score"), [n, d, K])
         return score
 
     def _raw_rows(self, X):
