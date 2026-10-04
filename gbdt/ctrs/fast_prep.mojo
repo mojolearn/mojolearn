@@ -100,8 +100,9 @@ comptime _SYM_CTR_FAST_APPLE = (
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
 #: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,
-#: never timed. Umbrella: all five (with SYM_CTR_PERM_BATCH in
-#: doc_parallel_boosting).
+#: never timed. Umbrella: the four CTR prep switches
+#: (SYM_CTR_PERM_BATCH is not ported: recorded DROP-speed, EXPERIMENTS.md
+#: sym-ctr-perm-batch-taxicat-x 27,161 -> 27,196 ms).
 comptime SYM_CTR_ALL = is_defined["MOJOLEARN_SYM_CTR_ALL"]()
 
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
