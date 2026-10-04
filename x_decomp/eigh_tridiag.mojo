@@ -67,6 +67,15 @@ comptime EIGH_FAST_TRIDIAG = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF"]()
 )
+#: Accuracy experiment: compensate each panel trailing rank-2 update in
+#: double-float, rounding only its final matrix cell back to float32.
+#: Default OFF; the existing panel default is the A arm. Neither this nor
+#: its OFF changes bisection, vector recovery, eligibility or refusal gates.
+comptime EIGH_FAST_PANEL_DF = (
+    EIGH_FAST_TRIDIAG
+    and is_defined["MOJOLEARN_EIGH_FAST_PANEL_DF"]()
+    and not is_defined["MOJOLEARN_EIGH_FAST_PANEL_DF_OFF"]()
+)
 #: Smallest n routed here; below it main's Jacobi is cheap.
 comptime TD_MIN_N = 512
 #: Panel width (reflectors per WY block). TD_TPB == 8 TD_NB is assumed by
@@ -455,19 +464,43 @@ def td_syr2k_kernel(a: F32Ptr, vp: F32Ptr, wp: F32Ptr, n_in: Int32, kend_in: Int
         svc[rr * TD_NBP + q] = a3
         swc[rr * TD_NBP + q] = a4
     barrier()
-    var acc = InlineArray[Float32, 4](fill=Float32(0.0))
-    comptime for q in range(TD_NB):
+    comptime if EIGH_FAST_PANEL_DF:
+        # Keep the two products' rounding residuals and all 32 rank-2
+        # contributions. Include A in the same compensated subtraction:
+        # rounding the accumulated update before A - update loses low
+        # bits when cancellation leaves a small trailing cell.
+        var acc_df = InlineArray[DF, 4](fill=DF(Float32(0.0), Float32(0.0)))
+        comptime for q in range(TD_NB):
+            comptime for ra in range(2):
+                var vr = DF(svr[(ty + 16 * ra) * TD_NBP + q], Float32(0.0))
+                var wr = DF(swr[(ty + 16 * ra) * TD_NBP + q], Float32(0.0))
+                comptime for cb in range(2):
+                    var wc = DF(swc[(tx + 16 * cb) * TD_NBP + q], Float32(0.0))
+                    var vc = DF(svc[(tx + 16 * cb) * TD_NBP + q], Float32(0.0))
+                    var pair = df_add(df_mul(vr, wc), df_mul(wr, vc))
+                    acc_df[ra * 2 + cb] = df_add(acc_df[ra * 2 + cb], pair)
         comptime for ra in range(2):
-            var vr = svr[(ty + 16 * ra) * TD_NBP + q]
-            var wr = swr[(ty + 16 * ra) * TD_NBP + q]
             comptime for cb in range(2):
-                acc[ra * 2 + cb] += vr * swc[(tx + 16 * cb) * TD_NBP + q] + wr * svc[(tx + 16 * cb) * TD_NBP + q]
-    comptime for ra in range(2):
-        comptime for cb in range(2):
-            var ri = r0 + ty + 16 * ra
-            var ci = c0 + tx + 16 * cb
-            if ri < n and ci < n:
-                a.unsafe_store(ri * n + ci, a.unsafe_load(ri * n + ci) - acc[ra * 2 + cb])
+                var ri = r0 + ty + 16 * ra
+                var ci = c0 + tx + 16 * cb
+                if ri < n and ci < n:
+                    var prior = DF(a.unsafe_load(ri * n + ci), Float32(0.0))
+                    var updated = df_sub(prior, acc_df[ra * 2 + cb])
+                    a.unsafe_store(ri * n + ci, updated[0] + updated[1])
+    else:
+        var acc = InlineArray[Float32, 4](fill=Float32(0.0))
+        comptime for q in range(TD_NB):
+            comptime for ra in range(2):
+                var vr = svr[(ty + 16 * ra) * TD_NBP + q]
+                var wr = swr[(ty + 16 * ra) * TD_NBP + q]
+                comptime for cb in range(2):
+                    acc[ra * 2 + cb] += vr * swc[(tx + 16 * cb) * TD_NBP + q] + wr * svc[(tx + 16 * cb) * TD_NBP + q]
+        comptime for ra in range(2):
+            comptime for cb in range(2):
+                var ri = r0 + ty + 16 * ra
+                var ci = c0 + tx + 16 * cb
+                if ri < n and ci < n:
+                    a.unsafe_store(ri * n + ci, a.unsafe_load(ri * n + ci) - acc[ra * 2 + cb])
 
 
 # ===========================================================================

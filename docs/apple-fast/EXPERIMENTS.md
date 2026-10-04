@@ -868,3 +868,17 @@ an absolute-difference PASS alone cannot establish no regression and no
 same-arm noise evidence is yet recorded. No LLE default proposal prepared.
 
 Catalog G1/G5 standalone6abb76673, w2-catalog-g1g5-q-20261004-r2: HOLD for unrestricted use. Eleven cases byte-identical to incumbent; only NT vector79x1,K65 regresses scaled error7.05755e-9 ->1.78820e-8. Preserve existing GEMV fallback; shared adapter predeclares this exclusion and needs its own quality evidence. Callpath r2 failed import (missing PyInit export), not numerical quality; repair required.
+
+## EIGH panel compensated update candidate (2026-10-04)
+
+`MOJOLEARN_EIGH_FAST_PANEL_DF` on `lane/apple-fast-eigh-panel-df`, based on
+main a100d3b6f: OPEN, opt-in only, rollback `_OFF`. Compensates 32-term
+trailing rank-2 tile sums and final subtraction using existing double-float
+helpers; no new launch, allocation, CPU route or changed refusal. Targets
+float32 tridiagonalization error before already-df64 bisection. Current
+panel A is 700.3 ms, board eigenvalue error 4.26951e-7 versus opponent
+about 3.49e-8: opponent-quality HOLD stays. No candidate results yet.
+Required: M2 A/B compile, current-panel A versus candidate B all eight
+fixtures with finite B<=A and zero allowance, retaining Gram1024's known
+orthogonality failure, then timing only if quality justifies it. Details
+and limitations: EIGH_PANEL_DF_REVIEW.txt. Source-only work; no local run.
