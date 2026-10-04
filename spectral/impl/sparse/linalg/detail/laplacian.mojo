@@ -44,8 +44,14 @@ the hashed-weight fixture is what separates this fold from a split one.
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from checks.numerics import ftz, identical_sqrt
-from spectral.checks.device_io import upload_f32, upload_i32
+from std.math import isfinite
+from std.memory import bitcast
+from std.sys.compile import is_defined
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_sqrt
+from core.device_fold import device_exclusive_scan_total
+from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
+from spectral.checks.device_io import download_i32, upload_f32, upload_i32
 from spectral.impl.sparse.coo import CooGraph
 from spectral.impl.sparse.matrix.detail.diagonal import (
     coo_diagonal_kernel,
@@ -62,6 +68,26 @@ from spectral.impl.sparse.op.coo_ops import (
 #: this lane defaults to. Scheduling, not numeric: nothing below folds
 #: across threads. The gates vary it.
 comptime LAPLACIAN_TPB = 256
+
+#: IDENTICAL, every vendor (fam2-cluster, 2026-10-04): the Laplacian's input
+#: is prepared on the device. The bounds walk, the diagonal marking, the
+#: `(idx, idx, 0)` insertion, the total-order sort `(row, col, original
+#: index)`, the repeated-key test and the row offsets were host loops over
+#: `List`s (`_mark_and_insert_diagonal`, `coo_sort`, `sorted_coo_to_csr`);
+#: here they are one mark launch, one scan, two stable radix sorts
+#: (`core/fast_radix_sort`), a gather and a binary-search offsets launch.
+#: Integer keys and a stable sort give the host's permutation, so no bit
+#: moves and the host column is unchanged. The host walks remain only as
+#: the error path (they raise the same messages when a device flag is set).
+#: `-D MOJOLEARN_IDN_SPECTRAL_LAP_DEVICE_OFF=1` restores the host
+#: preparation.
+comptime IDN_SPECTRAL_LAP_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_SPECTRAL_LAP_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
 
 
 struct DeviceCoo(Movable):
@@ -174,13 +200,8 @@ def _mark_and_insert_diagonal(g: CooGraph) raises -> CooGraph:
     return sorted_g^
 
 
-def compute_graph_laplacian(
-    ctx: DeviceContext, g: CooGraph, tpb: Int = LAPLACIAN_TPB
-) raises -> DeviceCoo:
-    """`compute_graph_laplacian` (COO, `:119-234`): returns `D - A` on the
-    device, row-sorted, one diagonal entry per row."""
-    if g.n <= 0:
-        raise Error("compute_graph_laplacian: n must be positive")
+def refuse_out_of_range(g: CooGraph) raises:
+    """`compute_graph_laplacian`'s index refusal, by name."""
     for i in range(g.nnz()):
         var r = Int(g.rows[i])
         var c = Int(g.cols[i])
@@ -189,16 +210,327 @@ def compute_graph_laplacian(
                 "connectivity_graph: entry " + String(i) + " has (row, col) = ("
                 + String(r) + ", " + String(c) + ") outside [0, " + String(g.n) + ")"
             )
-    var sorted_g = _mark_and_insert_diagonal(g)
-    var nnz = sorted_g.nnz()
-    var indptr_h = sorted_coo_to_csr(sorted_g)
-    var rows = upload_i32(ctx, sorted_g.rows)
-    var cols = upload_i32(ctx, sorted_g.cols)
-    var vals = upload_f32(ctx, sorted_g.vals)
-    var indptr = upload_i32(ctx, indptr_h)
-    return laplacian_from_sorted_device(
-        ctx, g.n, nnz, rows^, cols^, vals^, indptr^, tpb
+
+
+def refuse_bad_values(g: CooGraph) raises:
+    """The precomputed graph's value refusal (finite, non-negative), by
+    name: `transform_graph_keep`'s walk."""
+    for i in range(g.nnz()):
+        var v = g.vals[i]
+        if not isfinite(v):
+            raise Error(
+                "spectral: connectivity_graph has a non-finite value at entry "
+                + String(i) + " -- refused by name"
+            )
+        if v < Float32(0.0):
+            raise Error(
+                "spectral: connectivity_graph has a negative value at entry "
+                + String(i) + " -- refused by name (sqrt of a negative degree is NaN in theirs)"
+            )
+
+
+def lapdev_mark_kernel(
+    rows: MutPointer[Int32, MutAnyOrigin],
+    cols: MutPointer[Int32, MutAnyOrigin],
+    vals: MutPointer[Float32, MutAnyOrigin],
+    has_diag: MutPointer[Int32, MutAnyOrigin],
+    flags: MutPointer[Int32, MutAnyOrigin],
+    nnz_in: Int32,
+    n_in: Int32,
+):
+    """One thread per entry. `flags[0] = 1` on an out-of-range index,
+    `flags[1] = 1` on a non-finite or negative value, `has_diag[r] = 1` on
+    a diagonal entry. Every racing store writes the same word."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(nnz_in):
+        return
+    var n = Int(n_in)
+    var v = vals.unsafe_load(i)
+    if (bitcast[DType.uint32](v) & UInt32(0x7F800000)) == UInt32(0x7F800000) or v < Float32(0.0):
+        flags.unsafe_store(1, Int32(1))
+    var r = Int(rows.unsafe_load(i))
+    var c = Int(cols.unsafe_load(i))
+    if r < 0 or r >= n or c < 0 or c >= n:
+        flags.unsafe_store(0, Int32(1))
+        return
+    if r == c:
+        has_diag.unsafe_store(r, Int32(1))
+
+
+def lapdev_missing_kernel(
+    has_diag: MutPointer[Int32, MutAnyOrigin],
+    scan: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """`scan[r] = 1` for a row with no diagonal entry (the scan's input)."""
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if r >= Int(n_in):
+        return
+    scan.unsafe_store(r, Int32(1) - has_diag.unsafe_load(r))
+
+
+def lapdev_total_kernel(
+    scan: MutPointer[Int32, MutAnyOrigin],
+    flags: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """`flags[2]` = the scan's total (rows lacking a diagonal entry)."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        flags.unsafe_store(2, scan.unsafe_load(Int(n_in)))
+
+
+def lapdev_diag_rows_kernel(
+    has_diag: MutPointer[Int32, MutAnyOrigin],
+    scan: MutPointer[Int32, MutAnyOrigin],
+    diag_rows: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """The appended entries' row list, ascending: `diag_rows[scan[r]] = r`
+    for each row with no diagonal entry."""
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if r >= Int(n_in):
+        return
+    if has_diag.unsafe_load(r) == Int32(0):
+        diag_rows.unsafe_store(Int(scan.unsafe_load(r)), Int32(r))
+
+
+def lapdev_key_kernel(
+    src: MutPointer[Int32, MutAnyOrigin],
+    diag_rows: MutPointer[Int32, MutAnyOrigin],
+    perm: MutPointer[UInt32, MutAnyOrigin],
+    keys: MutPointer[UInt32, MutAnyOrigin],
+    m_in: Int32,
+    nnz_in: Int32,
+    init_in: Int32,
+):
+    """The sort key of slot `i` over the input followed by the appended
+    diagonal entries: `src[s]` for an input entry `s < nnz`, the row itself
+    for an appended one. `init_in != 0` also seeds `perm[i] = i`; otherwise
+    `s = perm[i]` (the second pass, over the first pass's order)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(m_in):
+        return
+    var s = i
+    if init_in != Int32(0):
+        perm.unsafe_store(i, UInt32(i))
+    else:
+        s = Int(perm.unsafe_load(i))
+    var nnz = Int(nnz_in)
+    var k = Int32(0)
+    if s < nnz:
+        k = src.unsafe_load(s)
+    else:
+        k = diag_rows.unsafe_load(s - nnz)
+    keys.unsafe_store(i, UInt32(Int(k)))
+
+
+def lapdev_gather_kernel(
+    rows: MutPointer[Int32, MutAnyOrigin],
+    cols: MutPointer[Int32, MutAnyOrigin],
+    vals: MutPointer[Float32, MutAnyOrigin],
+    diag_rows: MutPointer[Int32, MutAnyOrigin],
+    perm: MutPointer[UInt32, MutAnyOrigin],
+    o_rows: MutPointer[Int32, MutAnyOrigin],
+    o_cols: MutPointer[Int32, MutAnyOrigin],
+    o_vals: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    nnz_in: Int32,
+):
+    """Slot `i` of the sorted COO: entry `perm[i]` of the input followed by
+    the appended `(r, r, 0)` entries."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(m_in):
+        return
+    var s = Int(perm.unsafe_load(i))
+    var nnz = Int(nnz_in)
+    if s < nnz:
+        o_rows.unsafe_store(i, rows.unsafe_load(s))
+        o_cols.unsafe_store(i, cols.unsafe_load(s))
+        o_vals.unsafe_store(i, vals.unsafe_load(s))
+    else:
+        var r = diag_rows.unsafe_load(s - nnz)
+        o_rows.unsafe_store(i, r)
+        o_cols.unsafe_store(i, r)
+        o_vals.unsafe_store(i, Float32(0.0))
+
+
+def lapdev_repeat_kernel(
+    o_rows: MutPointer[Int32, MutAnyOrigin],
+    o_cols: MutPointer[Int32, MutAnyOrigin],
+    flags: MutPointer[Int32, MutAnyOrigin],
+    m_in: Int32,
+):
+    """`flags[3] = 1` when two adjacent sorted entries share `(row, col)`
+    (DEVIATION 777's refusal, decided on the device)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < 1 or i >= Int(m_in):
+        return
+    if (
+        o_rows.unsafe_load(i) == o_rows.unsafe_load(i - 1)
+        and o_cols.unsafe_load(i) == o_cols.unsafe_load(i - 1)
+    ):
+        flags.unsafe_store(3, Int32(1))
+
+
+def lapdev_indptr_kernel(
+    o_rows: MutPointer[Int32, MutAnyOrigin],
+    indptr: MutPointer[Int32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+):
+    """`indptr[r]` = the first sorted slot whose row is `>= r`, for `r` in
+    `[0, n]` (so `indptr[n] = m`): `sorted_coo_to_csr`'s counts-then-scan
+    as one binary search per row."""
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if r > Int(n_in):
+        return
+    var lo = 0
+    var hi = Int(m_in)
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        if Int(o_rows.unsafe_load(mid)) < r:
+            lo = mid + 1
+        else:
+            hi = mid
+    indptr.unsafe_store(r, Int32(lo))
+
+
+def compute_graph_laplacian_prepared_device(
+    ctx: DeviceContext, g: CooGraph, check_values: Bool, tpb: Int
+) raises -> DeviceCoo:
+    """`compute_graph_laplacian` with the preparation on the device
+    (`IDN_SPECTRAL_LAP_DEVICE`). Two scalar readbacks, both for sizing and
+    refusal: the number of appended diagonal entries with the input flags,
+    then the repeated-key flag."""
+    var n = g.n
+    var nnz = g.nnz()
+    var rows0 = upload_i32(ctx, g.rows)
+    var cols0 = upload_i32(ctx, g.cols)
+    var vals0 = upload_f32(ctx, g.vals)
+    var has_diag = ctx.enqueue_create_buffer[DType.int32](n)
+    var scan = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var flags = ctx.enqueue_create_buffer[DType.int32](4)
+    ctx.enqueue_memset(has_diag, Int32(0))
+    ctx.enqueue_memset(flags, Int32(0))
+    var gn = (n + tpb - 1) // tpb
+    if nnz > 0:
+        ctx.enqueue_function[lapdev_mark_kernel](
+            rows0.unsafe_ptr(), cols0.unsafe_ptr(), vals0.unsafe_ptr(),
+            has_diag.unsafe_ptr(), flags.unsafe_ptr(), Int32(nnz), Int32(n),
+            grid_dim=((nnz + tpb - 1) // tpb, 1, 1), block_dim=(tpb, 1, 1),
+        )
+    ctx.enqueue_function[lapdev_missing_kernel](
+        has_diag.unsafe_ptr(), scan.unsafe_ptr(), Int32(n),
+        grid_dim=(gn, 1, 1), block_dim=(tpb, 1, 1),
     )
+    device_exclusive_scan_total(ctx, scan, n)
+    ctx.enqueue_function[lapdev_total_kernel](
+        scan.unsafe_ptr(), flags.unsafe_ptr(), Int32(n),
+        grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+    )
+    var f0 = download_i32(ctx, flags, 4)
+    if check_values and f0[1] != Int32(0):
+        refuse_bad_values(g)
+    if f0[0] != Int32(0):
+        refuse_out_of_range(g)
+        raise Error("connectivity_graph: an entry is outside the matrix")
+    var n_missing = Int(f0[2])
+    var m = nnz + n_missing
+    var diag_rows = ctx.enqueue_create_buffer[DType.int32](n_missing if n_missing > 0 else 1)
+    if n_missing > 0:
+        ctx.enqueue_function[lapdev_diag_rows_kernel](
+            has_diag.unsafe_ptr(), scan.unsafe_ptr(), diag_rows.unsafe_ptr(), Int32(n),
+            grid_dim=(gn, 1, 1), block_dim=(tpb, 1, 1),
+        )
+    # m >= n >= 1: every row holds a diagonal entry after the insertion.
+    var gm = (m + tpb - 1) // tpb
+    var keys = ctx.enqueue_create_buffer[DType.uint32](m)
+    var perm = ctx.enqueue_create_buffer[DType.uint32](m)
+    var tk = ctx.enqueue_create_buffer[DType.uint32](m)
+    var tv = ctx.enqueue_create_buffer[DType.uint32](m)
+    var counts = ctx.enqueue_create_buffer[DType.int32](frs_counts_len(m))
+    # LSD over the pair: columns first, then rows, each pass stable, so the
+    # order is (row, col, original index) -- `coo_sort`'s total order.
+    ctx.enqueue_function[lapdev_key_kernel](
+        cols0.unsafe_ptr(), diag_rows.unsafe_ptr(), perm.unsafe_ptr(), keys.unsafe_ptr(),
+        Int32(m), Int32(nnz), Int32(1),
+        grid_dim=(gm, 1, 1), block_dim=(tpb, 1, 1),
+    )
+    fast_radix_sort_pairs_u32(ctx, m, keys, perm, tk, tv, counts)
+    ctx.enqueue_function[lapdev_key_kernel](
+        rows0.unsafe_ptr(), diag_rows.unsafe_ptr(), perm.unsafe_ptr(), keys.unsafe_ptr(),
+        Int32(m), Int32(nnz), Int32(0),
+        grid_dim=(gm, 1, 1), block_dim=(tpb, 1, 1),
+    )
+    fast_radix_sort_pairs_u32(ctx, m, keys, perm, tk, tv, counts)
+    var rows = ctx.enqueue_create_buffer[DType.int32](m)
+    var cols = ctx.enqueue_create_buffer[DType.int32](m)
+    var vals = ctx.enqueue_create_buffer[DType.float32](m)
+    var indptr = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    ctx.enqueue_function[lapdev_gather_kernel](
+        rows0.unsafe_ptr(), cols0.unsafe_ptr(), vals0.unsafe_ptr(), diag_rows.unsafe_ptr(),
+        perm.unsafe_ptr(), rows.unsafe_ptr(), cols.unsafe_ptr(), vals.unsafe_ptr(),
+        Int32(m), Int32(nnz),
+        grid_dim=(gm, 1, 1), block_dim=(tpb, 1, 1),
+    )
+    ctx.enqueue_function[lapdev_repeat_kernel](
+        rows.unsafe_ptr(), cols.unsafe_ptr(), flags.unsafe_ptr(), Int32(m),
+        grid_dim=(gm, 1, 1), block_dim=(tpb, 1, 1),
+    )
+    ctx.enqueue_function[lapdev_indptr_kernel](
+        rows.unsafe_ptr(), indptr.unsafe_ptr(), Int32(m), Int32(n),
+        grid_dim=((n + tpb) // tpb, 1, 1), block_dim=(tpb, 1, 1),
+    )
+    var f1 = download_i32(ctx, flags, 4)
+    # the launches above held raw pointers into these
+    _ = rows0^
+    _ = cols0^
+    _ = vals0^
+    _ = has_diag^
+    _ = scan^
+    _ = flags^
+    _ = diag_rows^
+    _ = keys^
+    _ = perm^
+    _ = tk^
+    _ = tv^
+    _ = counts^
+    if f1[3] != Int32(0):
+        # the host walk names the pair
+        var sorted_g = _mark_and_insert_diagonal(g)
+        _ = sorted_g^
+        raise Error("connectivity_graph: repeated (row, col) pair -- refused by name (DEVIATION 775)")
+    return laplacian_from_sorted_device(ctx, n, m, rows^, cols^, vals^, indptr^, tpb)
+
+
+def compute_graph_laplacian(
+    ctx: DeviceContext,
+    g: CooGraph,
+    tpb: Int = LAPLACIAN_TPB,
+    check_values: Bool = False,
+) raises -> DeviceCoo:
+    """`compute_graph_laplacian` (COO, `:119-234`): returns `D - A` on the
+    device, row-sorted, one diagonal entry per row. `check_values` adds the
+    precomputed graph's value refusal (finite, non-negative), raised before
+    the index refusal."""
+    if g.n <= 0:
+        raise Error("compute_graph_laplacian: n must be positive")
+    comptime if IDN_SPECTRAL_LAP_DEVICE:
+        return compute_graph_laplacian_prepared_device(ctx, g, check_values, tpb)
+    else:
+        if check_values:
+            refuse_bad_values(g)
+        refuse_out_of_range(g)
+        var sorted_g = _mark_and_insert_diagonal(g)
+        var nnz = sorted_g.nnz()
+        var indptr_h = sorted_coo_to_csr(sorted_g)
+        var rows = upload_i32(ctx, sorted_g.rows)
+        var cols = upload_i32(ctx, sorted_g.cols)
+        var vals = upload_f32(ctx, sorted_g.vals)
+        var indptr = upload_i32(ctx, indptr_h)
+        return laplacian_from_sorted_device(
+            ctx, g.n, nnz, rows^, cols^, vals^, indptr^, tpb
+        )
 
 
 def laplacian_from_sorted_device(
@@ -244,12 +576,13 @@ def laplacian_normalized(
     g: CooGraph,
     mut diagonal_out: DeviceBuffer[DType.float32],
     tpb: Int = LAPLACIAN_TPB,
+    check_values: Bool = False,
 ) raises -> DeviceCoo:
     """`laplacian_normalized` (`:257-282`): `D^(-1/2) L D^(-1/2)` with the
     diagonal set to `1`, and `diagonal_out = sqrt(degree)` with zeros
     replaced by ones (the vector `compute_eigenpairs` divides the
     eigenvectors by). `diagonal_out` must hold `n` floats."""
-    var lap = compute_graph_laplacian(ctx, g, tpb)
+    var lap = compute_graph_laplacian(ctx, g, tpb, check_values)
     return laplacian_normalize_device(ctx, lap^, diagonal_out, tpb)
 
 
