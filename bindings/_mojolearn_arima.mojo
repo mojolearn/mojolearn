@@ -93,7 +93,9 @@ from arima.estimator import (
 )
 
 
-from arima.impl.fast_order_search import order_search_loglike
+from arima.impl.fast_order_search import (
+    order_search_caps, order_search_device, order_search_loglike,
+)
 from arima.impl.fast_order_state import ARIMA_ORDER_BATCH
 from arima.impl.tsa.arima_common import ARIMAOrder
 from core.identity_trace import IdentityTrace
@@ -121,6 +123,58 @@ def arima_order_search_binding(y_addr: PythonObject, out_addr: PythonObject,
     var written = 0
     with GILReleased(Python()):
         written = order_search_loglike(yp, op, orders, bs, nobs, maxiter)
+    return PythonObject(written)
+
+
+def arima_order_caps_binding() raises -> PythonObject:
+    """lane/fam2-timeseries: `order_search_caps` (bit 0 the device search
+    entry `arima_order_search_device`, bit 1 seasonal grids, bit 2 the
+    float32 criterion and order choice on the device); with a trace on only
+    bit 2 (the search runs as per-order fits, same criterion)."""
+    var trace = IdentityTrace()
+    if trace.enabled:
+        # per-order fits, but the criterion stays the build's (bit 2)
+        return PythonObject(order_search_caps() & 4)
+    return PythonObject(order_search_caps())
+
+
+def arima_order_search_device_binding(
+    y_addr: PythonObject, out_addr: PythonObject, best_addr: PythonObject,
+    grid: PythonObject, pens: PythonObject, config: PythonObject,
+) raises -> PythonObject:
+    """`order_search_device`: `grid` is (p, q, P, Q, k) per order, `pens`
+    one criterion penalty per order (read only with want_ic), `config`
+    [batch, nobs, d, D, s, maxiter, want_ic]. Each order's period is `s`
+    when P + D + Q > 0, else 0 (the Python search's rule). Returns the count
+    written to `out_addr`, 0 when the caller must take the per-order fits."""
+    if len(config) != 7 or len(grid) % 5 != 0:
+        raise Error("arima_order_search_device: expected [batch,nobs,d,D,s,maxiter,want_ic] and (p,q,P,Q,k) rows")
+    var bs = Int(py=config[0])
+    var nobs = Int(py=config[1])
+    var d = Int(py=config[2])
+    var D = Int(py=config[3])
+    var s = Int(py=config[4])
+    var maxiter = Int(py=config[5])
+    var want_ic = Int(py=config[6]) != 0
+    var orders = List[ARIMAOrder]()
+    var pen = List[Float32]()
+    for i in range(len(grid) // 5):
+        var sp = Int(py=grid[5 * i + 2])
+        var sq = Int(py=grid[5 * i + 3])
+        var period = s if (sp + D + sq) > 0 else 0
+        orders.append(ARIMAOrder(Int(py=grid[5 * i]), d, Int(py=grid[5 * i + 1]),
+                                 sp, D, sq, period, Int(py=grid[5 * i + 4]), 0))
+    if want_ic:
+        if len(pens) != len(orders):
+            raise Error("arima_order_search_device: one penalty per order")
+        for i in range(len(orders)):
+            pen.append(Float32(Float64(py=pens[i])))
+    var yp = f32_ptr(Int(py=y_addr))
+    var op = f32_ptr(Int(py=out_addr))
+    var bp = i32_ptr(Int(py=best_addr))
+    var written = 0
+    with GILReleased(Python()):
+        written = order_search_device(yp, op, bp, orders, pen, bs, nobs, maxiter, want_ic)
     return PythonObject(written)
 
 
@@ -438,6 +492,8 @@ def PyInit__mojolearn_arima() abi("C") -> PythonObject:
         m.def_function[arima_fit_binding]("arima_fit")
         m.def_function[arima_order_batch_enabled_binding]("arima_order_batch_enabled")
         m.def_function[arima_order_search_binding]("arima_order_search")
+        m.def_function[arima_order_caps_binding]("arima_order_caps")
+        m.def_function[arima_order_search_device_binding]("arima_order_search_device")
         m.def_function[arima_predict_binding]("arima_predict")
         m.def_function[arima_forecast_binding]("arima_forecast")
         return m.finalize()
