@@ -32,6 +32,7 @@ from x_decomp.lu_fast import LU_FAST_STEP1, lfs_blocks, lu_fast_panel
 from x_decomp.lu_fast_mma import LU_FAST_MMA, lu_fast_mma_factor
 from x_decomp.lasso_grp import DECOMP_FAST_LASSO_GRP, LG_MAXK, LG_TPB, lasso_grp_kernel
 from x_decomp.fast_chol import CHOL_FAST_BLOCKED, CH_NB, launch_chol_blocked
+from x_decomp.fast_gemm import DECOMP_FAST_GEMM_TILED, FG_TPB, fg_gemm_tiled_kernel, fg_tiles
 from x_decomp.fast_qr import (
     FQ_TPB,
     QR_FAST_DEV,
@@ -1639,6 +1640,20 @@ def launch_gemm(
 ) raises:
     """C = op(A) op(B) on device pointers, enqueued (no sync): FOLD_BLOCK
     partial sums then the fold past one block (DEVIATIONS 5300/5301)."""
+    comptime if DECOMP_FAST_GEMM_TILED:
+        # -D MOJOLEARN_DECOMP_FAST_GEMM_TILED (x_decomp/fast_gemm.mojo, default
+        # off, FAST + Apple): the threadgroup-tiled kernel with the same
+        # FOLD_BLOCK partials (grid z) and fold, ahead of the MMA route below.
+        if m > 0 and n > 0 and k > 0:
+            var tnb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
+            ctx.enqueue_function[fg_gemm_tiled_kernel](
+                a, b, p if tnb > 1 else c, Int32(m), Int32(k), Int32(n),
+                Int32(1 if ta else 0), Int32(1 if tb else 0), Int32(tnb),
+                grid_dim=(fg_tiles(n), fg_tiles(m), tnb), block_dim=(FG_TPB, 1, 1),
+            )
+            if tnb > 1:
+                ctx.enqueue_function[fold_kernel](p, c, Int32(m * n), Int32(tnb), grid_dim=_blocks(m * n), block_dim=TPB)
+            return
     comptime if DECOMP_FAST_GEMM_MMA:
         if m > 0 and n > 0 and k > 0:
             _launch_gemm_mma(ctx, a, b, c, m, k, n, ta, tb)
