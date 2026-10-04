@@ -405,6 +405,18 @@ trait ClusterOps(Movable):
         all ones or all zeros, and some e is 1."""
         ...
 
+    def ap_loop(
+        mut self, s: Int, a: Int, r: Int, e: Int, ring: Int, n: Int, damping: Float32, max_iter: Int,
+        conv_iter: Int,
+    ) raises -> Int:
+        """The whole message loop (`ap_r`, `ap_a`, `ap_e`, `ap_conv` per
+        iteration) with the convergence window decided where the data is
+        (fam2-cluster): returns the iteration it converged at (the `it` of
+        `affinity_fit`'s break), `max_iter` when it never did, or -1 when the
+        column does not take it (the host, FAST, the `_OFF` define): the
+        caller runs the loop."""
+        ...
+
     def ap_exemplars(mut self, s: Int, e: Int, n: Int, centers: Int, labels: Int) raises -> Int:
         """AffinityPropagation's exemplar refinement and labels from the
         flags `e`; returns the number of centers (0: every label -1)."""

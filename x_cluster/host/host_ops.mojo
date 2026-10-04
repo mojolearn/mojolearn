@@ -971,6 +971,12 @@ struct HostOps(ClusterOps):
         for i in range(n):
             ps[i * n + i] = pv[i]
 
+    def ap_loop(
+        mut self, s: Int, a: Int, r: Int, e: Int, ring: Int, n: Int, damping: Float32, max_iter: Int,
+        conv_iter: Int,
+    ) raises -> Int:
+        return -1
+
     def ap_conv(mut self, e: Int, ring: Int, n: Int, conv_iter: Int, it: Int) raises -> Bool:
         var pe = self._ip(e)
         var pr = self._ip(ring)

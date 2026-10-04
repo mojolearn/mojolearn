@@ -517,7 +517,8 @@ def _ap_key_index(key: UInt64) -> Int:
     return Int(UInt32(0xFFFFFFFF) - UInt32(key & UInt64(0xFFFFFFFF)))
 
 
-def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
+@always_inline
+def _ap_r_body(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
     """`ap_responsibility_row` for row `block_idx.x` on one block: the max
     of `ftz(A + S)` with its lowest index, then the second max over the
     other columns with ITS lowest index (each an integer max of `_ap_key`,
@@ -564,6 +565,10 @@ def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
         ap_r_update(s, r, N, damping, one_minus, i, k, first, second, arg)
 
 
+def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
+    _ap_r_body(s, a, r, n, damping)
+
+
 # Lane cluster-apple3, FAST, OPT-IN `-D MOJOLEARN_AP_EXACT=1`: `_ap_r_kernel`
 # with the row's max and second max taken in ONE walk of the row. The keys
 # are distinct integers (the column is their low word), so the two largest
@@ -586,7 +591,8 @@ comptime AP_R_TOP2 = (
 )
 
 
-def _ap_r_top2_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
+@always_inline
+def _ap_r_top2_body(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
     var i = Int(block_idx.x)
     var tid = Int(thread_idx.x)
     var N = Int(n)
@@ -625,6 +631,92 @@ def _ap_r_top2_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
     var one_minus = ftz(Float32(1) - damping)
     for k in range(tid, N, AP_TPB):
         ap_r_update(s, r, N, damping, one_minus, i, k, first, second, arg)
+
+
+def _ap_r_top2_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
+    _ap_r_top2_body(s, a, r, n, damping)
+
+
+# fam2-cluster (2026-10-04), IDENTICAL, default ON: THE CONVERGENCE WINDOW
+# DECIDED ON THE DEVICE. `affinity_fit` read one flag per iteration
+# (`ap_conv`: a fresh 2-int slot, a launch, a copy and a drain each time).
+# `DeviceOps.ap_loop` enqueues AP_CONV_CHUNK iterations at a time and reads
+# the state once per chunk; every kernel of an iteration starts by reading
+# st[0] (done) and returns when it is set, so the iterations enqueued past
+# convergence write nothing: A, R and e are the words the per-iteration loop
+# left at its break and st[1] is the iteration it broke at (`n_iter_` the
+# same). The exemplar flags and the window share one launch (three launches
+# and one 1-thread decision per iteration for four launches, a memset and a
+# drain). `-D MOJOLEARN_IDN_AP_DEVICE_CONV_OFF=1` restores the per-iteration
+# read. CANDIDATE ARMS for the chunk (default 8):
+# `-D MOJOLEARN_IDN_AP_CONV_CHUNK4=1`, `..._CHUNK16=1`, `..._CHUNK32=1`.
+comptime IDN_AP_DEVICE_CONV = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_AP_DEVICE_CONV_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+comptime AP_CONV_CHUNK = (
+    4 if is_defined["MOJOLEARN_IDN_AP_CONV_CHUNK4"]()
+    else (
+        16 if is_defined["MOJOLEARN_IDN_AP_CONV_CHUNK16"]()
+        else (32 if is_defined["MOJOLEARN_IDN_AP_CONV_CHUNK32"]() else 8)
+    )
+)
+
+
+def _ap_r_gated_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32, st: IPtr):
+    """`ap_r`'s kernel behind the done flag st[0] (uniform over the grid:
+    only `_ap_decide_kernel`, a launch of its own, writes it)."""
+    if st[0] != 0:
+        return
+    comptime if AP_R_TOP2:
+        _ap_r_top2_body(s, a, r, n, damping)
+    else:
+        _ap_r_body(s, a, r, n, damping)
+
+
+def _ap_a_gated_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32, st: IPtr):
+    if st[0] != 0:
+        return
+    var t = _tid()
+    if t < Int(n):
+        ap_availability_col(r, a, Int(n), damping, t)
+
+
+def _ap_e_conv_gated_kernel(a: FPtr, r: FPtr, n: Int32, e: IPtr, ring: IPtr, ci: Int32, it: Int32, st: IPtr):
+    """`_ap_e_kernel` then `ap_conv_kernel` for row t (the row's own flag
+    and window only). st[2] = 1 when some e is set, st[3] = 1 when a window
+    is mixed (every writer stores the same 1)."""
+    if st[0] != 0:
+        return
+    var t = _tid()
+    if t < Int(n):
+        ap_exemplar_cell(a, r, Int(n), e, t)
+        var C = Int(ci)
+        var ev = e[t]
+        ring[t * C + Int(it) % C] = ev
+        if ev != 0:
+            st[2] = 1
+        if Int(it) >= C:
+            var se = 0
+            for q in range(C):
+                se += Int(ring[t * C + q])
+            if se != C and se != 0:
+                st[3] = 1
+
+
+def _ap_decide_kernel(ci: Int32, it: Int32, st: IPtr):
+    """`ap_conv`'s host test on one thread: done (st[0] = 1, st[1] = it)
+    when it >= conv_iter, no window is mixed and some e is set; the two
+    marks cleared for the next iteration."""
+    if _tid() == 0 and st[0] == 0:
+        if it >= ci and st[3] == 0 and st[2] != 0:
+            st[1] = it
+            st[0] = 1
+        st[2] = 0
+        st[3] = 0
 
 
 def _ap_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32):
@@ -2864,6 +2956,44 @@ struct DeviceOps(ClusterOps):
         var h = self.get_i(st, 2)
         self._ph1("ap_conv")
         return it >= conv_iter and h[1] == 0 and h[0] > 0
+
+    def ap_loop(
+        mut self, s: Int, a: Int, r: Int, e: Int, ring: Int, n: Int, damping: Float32, max_iter: Int,
+        conv_iter: Int,
+    ) raises -> Int:
+        var res = -1
+        comptime if IDN_AP_DEVICE_CONV:
+            if n > 0 and conv_iter > 0:
+                self._ph0()
+                var st = self.zeros_i(4)
+                res = max_iter
+                var it = 0
+                while it < max_iter:
+                    var stop = it + AP_CONV_CHUNK
+                    if stop > max_iter:
+                        stop = max_iter
+                    while it < stop:
+                        self.ctx.enqueue_function[_ap_r_gated_kernel](
+                            self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, self._ip(st),
+                            grid_dim=n, block_dim=AP_TPB,
+                        )
+                        self.ctx.enqueue_function[_ap_a_gated_kernel](
+                            self._fp(r), self._fp(a), Int32(n), damping, self._ip(st), grid_dim=_grid(n), block_dim=TPB,
+                        )
+                        self.ctx.enqueue_function[_ap_e_conv_gated_kernel](
+                            self._fp(a), self._fp(r), Int32(n), self._ip(e), self._ip(ring), Int32(conv_iter), Int32(it),
+                            self._ip(st), grid_dim=_grid(n), block_dim=TPB,
+                        )
+                        self.ctx.enqueue_function[_ap_decide_kernel](
+                            Int32(conv_iter), Int32(it), self._ip(st), grid_dim=1, block_dim=TPB,
+                        )
+                        it += 1
+                    var h = self.get_i(st, 2)
+                    if h[0] != 0:
+                        res = Int(h[1])
+                        break
+                self._ph1("ap_loop")
+        return res
 
     def ap_exemplars(mut self, s: Int, e: Int, n: Int, centers: Int, labels: Int) raises -> Int:
         self._ph0()
