@@ -88,6 +88,8 @@ from arima.impl.linalg.batched.least_squares import (
 from arima.impl.timeSeries.jones_transform import JONES_MAX_PARAMS
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, validate_order
 from arima.impl.fast_arma_ls import FLS_MAX_COLS, FLS_TPB, fast_arma_ls_kernel
+from arima.impl.idn_arma_ls import idn_arma_ls_kernel
+from arima.impl.idn_ls_math import ILS_MAX_COLS, ILS_TPB, X0_IDN_PAR_LS, X0_IDN_PAR_LS_MIN_OBS
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -565,6 +567,34 @@ def arma_least_squares(
             + " columns, above LS_MAX_COLS = " + String(LS_MAX_COLS)
             + "; refused by name (arima/NOT_IMPLEMENTED.tsv)"
         )
+
+    comptime if X0_IDN_PAR_LS:
+        # lane/fam2-timeseries, candidate arm: one block of ILS_TPB threads
+        # per series, pinned Givens folds in a fixed order
+        # (`idn_arma_ls.mojo`); the host column takes the same condition.
+        if (
+            n_obs_d >= X0_IDN_PAR_LS_MIN_OBS
+            and p + q + k <= ILS_MAX_COLS
+            and (q == 0 or p_ar <= ILS_MAX_COLS)
+        ):
+            ctx.enqueue_function[idn_arma_ls_kernel](
+                d_y.unsafe_ptr(), d_ar.unsafe_ptr(), d_ma.unsafe_ptr(),
+                d_sigma2.unsafe_ptr(), d_mu.unsafe_ptr(), info.unsafe_ptr(),
+                Int32(n_obs_d), Int32(p), Int32(q), Int32(s), Int32(k),
+                Int32(p_ar), Int32(r_ls), Int32(1 if estimate_sigma2 else 0),
+                grid_dim=(batch_size, 1, 1), block_dim=(ILS_TPB, 1, 1),
+            )
+            ctx.enqueue_function[fast_ls_finish_kernel](
+                d_ar.unsafe_ptr(), d_ma.unsafe_ptr(), d_sigma2.unsafe_ptr(),
+                d_mu.unsafe_ptr(), info.unsafe_ptr(), verdict.unsafe_ptr(),
+                Int32(batch_size), Int32(p), Int32(q), Int32(k),
+                Int32(1 if estimate_sigma2 else 0),
+                grid_dim=(grid, 1, 1), block_dim=(X0_TPB, 1, 1),
+            )
+            ctx.synchronize()
+            return LeastSquaresResult(
+                info=info^, verdict=verdict^, degenerate=False
+            )
 
     comptime if X0_FAST_LS:
         if (
