@@ -139,6 +139,7 @@ from checks.numerics import (
     identical_mul,
     identical_mul_add,
     identical_sqrt,
+    identical_tanh,
 )
 from core.gemm import gemm_nt
 from svm.impl.distance.kernel_matrices import (
@@ -510,6 +511,76 @@ def km_rbf_cell_kernel(
         output.unsafe_store(j * n + i, v)
 
 
+#: fix-kg1-kernel (2026-10-04, audit B11), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_KM_DOT_CELL_OFF` or `MOJOLEARN_IDN_ALL_OFF` restores the
+#: GEMM + epilogue route; `km_host_oracle.mojo::KMH_DOT_CELL` and
+#: `km_oracle.mojo` read the same defines): the POLYNOMIAL and SIGMOID kernel
+#: matrices at k <= KM_DOT_CELL_MAX_D features are ONE launch, one thread per
+#: cell, the dot as one chain over the features ascending
+#: (`identical_mul_add(a, b, acc)`) and the epilogue line of
+#: `polynomial_epilogue_kernel` / `tanh_epilogue_kernel` in the same thread,
+#: in place of two row-norm launches, the GEMM over k and the epilogue launch.
+#: BITS CHANGE (the chain, not the GEMM profile's fold): NVIDIA, AMD and Apple
+#: run this kernel and the host column runs the same line. The chain reads
+#: a_ic * b_jc, the same word as b_jc * a_ic, so a self-kernel computes the
+#: upper triangle and mirrors it. `-D MOJOLEARN_IDN_KM_DOT_CELL_D16` lowers
+#: the bound to 16 on every column, for timing the crossover.
+comptime KM_IDN_DOT_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_KM_DOT_CELL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime KM_DOT_CELL_MAX_D = 16 if is_defined["MOJOLEARN_IDN_KM_DOT_CELL_D16"]() else 64
+
+
+def km_dot_cell_kernel(
+    output: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    gain: Float32,
+    offset: Float32,
+    degree_in: Int32,
+    poly_in: Int32,
+    sym_in: Int32,
+):
+    """KM_IDN_DOT_CELL: cell (i, j) = epilogue(sum_c a_ic b_jc), the sum one
+    chain over c ascending; `poly_in` != 0 is `(gain dot + offset)^degree` by
+    repeated multiplication, else `tanh(gain dot + offset)`, each the line of
+    `impl/distance/kernel_matrices.mojo`'s epilogue. `sym_in` != 0 (a IS b,
+    m == n): threads below the diagonal return and each thread at or above
+    it writes its cell and the mirrored one."""
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var k = Int(k_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= m * n:
+        return
+    var i = t // n
+    var j = t - i * n
+    if sym_in != Int32(0) and j < i:
+        return
+    var dot = Float32(0.0)
+    for c in range(k):
+        dot = ftz(
+            identical_mul_add(
+                ftz(a.unsafe_load(i * k + c)), ftz(b.unsafe_load(j * k + c)), dot
+            )
+        )
+    var base = ftz(identical_mul_add(gain, dot, offset))
+    var v: Float32
+    if poly_in != Int32(0):
+        var acc = Float32(1.0)
+        for _ in range(Int(degree_in)):
+            acc = ftz(identical_mul(acc, base))
+        v = acc
+    else:
+        v = ftz(identical_tanh(base))
+    output.unsafe_store(t, v)
+    if sym_in != Int32(0) and j != i:
+        output.unsafe_store(j * n + i, v)
+
+
 def chi2_cell_kernel(
     out_k: MutPointer[Float32, MutAnyOrigin],
     a: MutPointer[Float32, MutAnyOrigin],
@@ -687,8 +758,9 @@ def km_kernel_matrix(
     """`out[m x n] = K(a_i, b_j)`, row-major, for the five implemented kernels.
 
     `self_kernel` (fam2-kernel-gp): the caller states `a_input` IS `b_input`
-    and m == n. Read only by the KM_IDN_RBF_CELL arm, which then computes one
-    triangle and mirrors it; every other route ignores it.
+    and m == n. Read only by the KM_IDN_RBF_CELL and KM_IDN_DOT_CELL arms,
+    which then compute one triangle and mirror it; every other route ignores
+    it.
 
     ASYNCHRONOUS. `ws` must hold at least `km_kernel_workspace_floats(m, n,
     k)` floats and every buffer must outlive the caller's own
@@ -796,6 +868,25 @@ def km_kernel_matrix(
             ctx.enqueue_function[km_rbf_cell_kernel](
                 out.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
                 Int32(m), Int32(n), Int32(k), -Float32(kp.gamma),
+                Int32(1) if (self_kernel and m == n) else Int32(0),
+                grid_dim=(grid_all, 1, 1),
+                block_dim=(elem_tpb, 1, 1),
+            )
+            return
+
+    comptime if KM_IDN_DOT_CELL:
+        if (
+            (kp.kernel == KM_KERNEL_POLYNOMIAL or kp.kernel == KM_KERNEL_SIGMOID)
+            and not via_copy
+            and k <= KM_DOT_CELL_MAX_D
+        ):
+            ctx.enqueue_memset(norm_a, Float32(0.0))
+            ctx.enqueue_memset(norm_b, Float32(0.0))
+            ctx.enqueue_function[km_dot_cell_kernel](
+                out.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
+                Int32(m), Int32(n), Int32(k),
+                Float32(kp.gamma), Float32(kp.coef0), Int32(kp.degree),
+                Int32(1) if kp.kernel == KM_KERNEL_POLYNOMIAL else Int32(0),
                 Int32(1) if (self_kernel and m == n) else Int32(0),
                 grid_dim=(grid_all, 1, 1),
                 block_dim=(elem_tpb, 1, 1),

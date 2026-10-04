@@ -218,6 +218,14 @@ comptime KMH_RBF_CELL = (
 )
 comptime KMH_RBF_CELL_MAX_D = 16 if is_defined["MOJOLEARN_IDN_KM_RBF_CELL_D16"]() else 64
 
+#: fix-kg1-kernel (audit B11): the host column of
+#: `kernel_methods/checks/kernel_matrix.mojo::KM_IDN_DOT_CELL` (ON by
+#: default), the same defines and the same feature bound.
+comptime KMH_DOT_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_KM_DOT_CELL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime KMH_DOT_CELL_MAX_D = 16 if is_defined["MOJOLEARN_IDN_KM_DOT_CELL_D16"]() else 64
+
 
 def kmh_row_norms(x: List[Float32], n_rows: Int, k: Int) -> List[Float32]:
     """`svm row_norm_l2sq_kernel`: one ascending chain per row."""
@@ -345,6 +353,45 @@ def kmh_kernel_matrix(
             else:
                 host_parallelize(_cell_rows, tasks_c)
             return outc^
+    comptime if KMH_DOT_CELL:
+        if (
+            kernel == KMH_KERNEL_POLYNOMIAL or kernel == KMH_KERNEL_SIGMOID
+        ) and k <= KMH_DOT_CELL_MAX_D:
+            # `km_dot_cell_kernel`, cell by cell, the same lines
+            var outd = List[Float32](length=m * n, fill=Float32(0.0))
+            var opd = host_list_ptr(outd)
+            var gain_d = Float32(gamma)
+            var offset_d = Float32(coef0)
+            var poly_d = kernel == KMH_KERNEL_POLYNOMIAL
+            var tasks_d = host_predict_task_count(m)
+            if m * n * k < 32768:
+                tasks_d = 1
+            var chunk_d = host_predict_chunk(m, tasks_d)
+
+            def _dot_rows(task: Int) {imm a, imm b, imm m, imm n, imm k, imm gain_d, imm offset_d, imm degree, imm poly_d, imm chunk_d, imm opd}:
+                var lo = task * chunk_d
+                var hi = min(lo + chunk_d, m)
+                for i in range(lo, hi):
+                    for j in range(n):
+                        var dd = Float32(0.0)
+                        for c in range(k):
+                            dd = ftz(identical_mul_add(ftz(a[i * k + c]), ftz(b[j * k + c]), dd))
+                        var base_d = ftz(identical_mul_add(gain_d, dd, offset_d))
+                        var v: Float32
+                        if poly_d:
+                            var acc_d = Float32(1.0)
+                            for _ in range(degree):
+                                acc_d = ftz(identical_mul(acc_d, base_d))
+                            v = acc_d
+                        else:
+                            v = ftz(identical_tanh(base_d))
+                        opd.unsafe_store(i * n + j, v)
+
+            if tasks_d == 1:
+                _dot_rows(0)
+            else:
+                host_parallelize(_dot_rows, tasks_d)
+            return outd^
     var dot = host_gemm_identical(a, b, OP_NT, m, n, k)
     if kernel == KMH_KERNEL_LINEAR:
         return dot^
