@@ -20,10 +20,10 @@ Sources: `~/mojolearn-evidence/apple-fast/LEDGER.md` (every KEEP / DROP / MERGED
 
 | verdict | meaning | rows |
 |---|---|---|
-| KEPT `<main sha>` | FAST + Apple default since that main commit | 85 |
+| KEPT `<main sha>` | FAST + Apple default since that main commit | 84 |
 | DROPPED-slower | B slower than A | 19 |
 | DROPPED-noise | the difference is inside run-to-run spread (arms overlap, or under 5% at n=1), or the signs are mixed across datasets | 48 |
-| DROPPED-quality | faster, but the quality metric got worse | 2 |
+| DROPPED-quality | faster, but the quality metric got worse | 3 |
 | DROPPED-semantics | no longer matches main's code path: stale base, duplicate of a main change, a no-op, or a host step in the GPU path | 4 |
 | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | merged to main default OFF without an A/B (Andrew Oct 3: "just merge in the neurals provided they compile; not publicly exposed; don't lose the work") | 84 |
 | OPEN | not measured yet, measured but not judged, or the run did not finish | 189 |
@@ -333,7 +333,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `FA_ITER_DEVICE + FA_LIVEBUF` | factor-analysis / istella; factor-analysis / taxi | lane/apple-fast-fa @ 3efbce2af | fa-livebuf-taxi, fa-livebuf-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `FA_TRANSFORM_FUSED` | factor-analysis / istella; factor-analysis / taxi | lane/apple-fast-fa @ 3efbce2af | fa-tr-taxi, fa-tr-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `LU_FAST_PIVOT_GRID` | lu-factor / synthetic; lu-solve / synthetic | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-lu-pivot-synthetic, dlin-lusolve-pivot-synthetic | lu-factor synthetic 1,377 -> 1,233; lu-solve 1,367 -> 1,234 | OPEN | candidate (-10%); merge waits on the other decomp-linalg lines |
-| `MCD_DEVICE_CSTEPS` | min-cov-det / taxi; elliptic-envelope / taxi | lane/apple-fast-robust @ cfdb95e48 | M3 min-cov-det taxi; robust-ee-taxi-x (M2) | M3 mcd 79,925 -> 215; M2 ee 64,578 -> 267.5 | KEPT lane/apple-fast-m2b1-main | ee fraction_flagged .1024 -> .1027 (target .1); default, `-D MOJOLEARN_MCD_DEVICE_CSTEPS_OFF` reverts |
+| `MCD_DEVICE_CSTEPS` | min-cov-det / taxi; elliptic-envelope / taxi | lane/apple-fast-robust @ cfdb95e48 | M3 min-cov-det taxi; robust-ee-taxi-x (M2) | M3 mcd 79,925 -> 215; M2 ee 64,578 -> 267.5 | DROPPED-quality (Oct 3; code kept opt-in `-D MOJOLEARN_MCD_DEVICE_CSTEPS` for a future correct parallel C-step) | tools/mcd_quality_ab.sh (M2, taxi 100k, mcdq4): Jaccard flagged Xq vs OFF .8805 mcd / .9645 ee (bar .99); OFF vs IDENTICAL .994 / .999; location_ 14%, covariance_ 18% rel Frobenius shift; mcd flag rate .231 -> .203; raw covariance rank 8 vs OFF/IDENTICAL 10 (all exact-fit singular) |
 | `ANN3_COARSE_SEED + IVF_FAST_SEED_DEVICE` | ivf-pq / istella | lane/apple-fast-fastonly2 @ eca3e33b6 | fastonly2-5-ivf-pq-istella, fastonly2-3-ivf-pq-istella (M2) | 18,555 -> 12,036; device vs host seed -1.3% | HELD (M2 only) | recall .5995 -> .6071; owes an M3 A/B; fastonly2-4-ivf-istella failed (`--lane ivf` invalid) |
 | `QR_FAST_DEV` | qr / istella | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-qr-dev-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `SVD_FAST_CHOLQR` | svd / istella | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-svd-cholqr-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
