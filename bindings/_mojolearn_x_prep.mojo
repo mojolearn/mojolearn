@@ -22,6 +22,7 @@ from x_prep.fastmaxabs import maxabs_fit_direct
 
 from x_prep.fastpt import PTIMPUTE_FLAGS
 from x_prep.label_fast import LABEL_PRESENT
+from x_prep.host_out import X_PREP_HOST_OUT, host_out_free, host_out_live
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -93,6 +94,43 @@ def run_ranges_binding(arena_addr: PythonObject, prog_addr: PythonObject, out_ad
     with GILReleased(Python()):
         run_program_device_ranges(fa, n, qa, s, sc, oa, on, ia, ni, ra, no)
     return PythonObject(s)
+
+
+def run_ranges_host_binding(arena_addr: PythonObject, prog_addr: PythonObject, receipt_addr: PythonObject,
+                            sizes: PythonObject, ranges: PythonObject) raises -> PythonObject:
+    """x_prep_run_ranges whose output region lands in a pinned HostBuffer
+    the caller keeps (MOJOLEARN_X_PREP_HOST_OUT, x_prep/host_out.mojo):
+    Int64 [id, address] at receipt_addr; `x_prep_host_out_free(id)` when the
+    last view of it dies. Exported only by a FAST Apple build with the define."""
+    var fa = Int(py=arena_addr)
+    var qa = Int(py=prog_addr)
+    var ra0 = Int(py=receipt_addr)
+    var n = Int(py=sizes[0])
+    var sc = Int(py=sizes[1])
+    var on = Int(py=sizes[2])
+    var s = Int(py=sizes[3])
+    var ia = Int(py=ranges[0])
+    var ni = Int(py=ranges[1])
+    var ra = Int(py=ranges[2])
+    var no = Int(py=ranges[3])
+    if fa == 0 or qa == 0 or ra0 == 0 or n < 0 or sc < 0 or on <= 0 or s < 0 or ni < 0 or no < 0:
+        raise Error("x_prep: invalid program buffers")
+    with GILReleased(Python()):
+        run_program_device_ranges(fa, n, qa, s, sc, 0, on, ia, ni, ra, no, ra0)
+    return PythonObject(s)
+
+
+def host_out_free_binding(id: PythonObject) raises -> PythonObject:
+    """Release a host output (x_prep_run_ranges_host); False when not live."""
+    var i = Int(py=id)
+    var ok: Bool
+    with GILReleased(Python()):
+        ok = host_out_free(i)
+    return PythonObject(ok)
+
+
+def host_out_live_binding() raises -> PythonObject:
+    return PythonObject(host_out_live())
 
 
 def dev_put_binding(addr: PythonObject, n_words: PythonObject) raises -> PythonObject:
@@ -299,6 +337,11 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
             m.def_function[label_present_binding]("x_prep_label_present")
         comptime if X_PREP_POOL_ARENA:
             m.def_function[pool_arena_binding]("x_prep_pool_arena")
+        comptime if X_PREP_HOST_OUT:
+            # lane/apple-fast-w3-prep candidate, opt-in (-D MOJOLEARN_X_PREP_HOST_OUT)
+            m.def_function[run_ranges_host_binding]("x_prep_run_ranges_host")
+            m.def_function[host_out_free_binding]("x_prep_host_out_free")
+            m.def_function[host_out_live_binding]("x_prep_host_out_live")
         comptime if CAT_CLS2_PACK:
             m.def_function[cls2_cat_binding]("x_prep_cls2_cat")
         comptime if CALIB_FOLDS:
