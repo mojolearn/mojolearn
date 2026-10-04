@@ -617,8 +617,11 @@ def iforest_run_binding(
                         held, key, new_token, query, q_addr, n_query, want, out_f32, out_i32,
                     )
             except e:
-                # A refused query must not cost the resident forest.
-                if_resident_put(held)
+                # Preserve an existing caller-owned forest after a refused
+                # query. A new token has not reached Python yet: caching it
+                # here would orphan its buffers until native-global teardown.
+                if new_token == 0:
+                    if_resident_put(held)
                 raise e
             if_resident_put(held)
             ip.unsafe_store(0, res.offset_)
