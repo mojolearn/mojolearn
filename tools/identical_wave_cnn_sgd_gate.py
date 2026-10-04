@@ -31,6 +31,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', required=True, type=Path)
     parser.add_argument('--sha', required=True)
+    parser.add_argument('--harness-sha', help='Optional exact commit supplying this harness, separately from numerical source')
     parser.add_argument('--vendor', required=True, choices=('cuda', 'hip', 'metal', 'cpu'))
     parser.add_argument('--arm', required=True, choices=('on', 'off'))
     parser.add_argument('--suite', required=True, choices=('cnn-primitives', 'cnn-training', 'sgd'))
@@ -41,8 +42,11 @@ def main():
     if os.environ.get('MOJOLEARN_VENDOR') != args.vendor: parser.error('explicit vendor environment mismatch')
     root = args.source.resolve(); source_check(root, args.sha)
     harness = Path(__file__).read_bytes()
-    if harness != (root/'tools'/Path(__file__).name).read_bytes():
-        raise RuntimeError('gate harness differs from frozen source')
+    harness_sha = args.harness_sha or args.sha
+    if not re.fullmatch('[0-9a-f]{40}', harness_sha): parser.error('exact harness commit required')
+    committed_harness = subprocess.check_output(['git', '-C', str(root), 'show', harness_sha+':tools/identical_wave_cnn_sgd_gate.py'])
+    if harness != committed_harness:
+        raise RuntimeError('gate harness differs from recorded harness commit')
     args.out.mkdir(parents=True, exist_ok=False)
     sys.path.insert(0, str(root/'python'))
     import numpy as np
@@ -52,7 +56,7 @@ def main():
     if ml.vendor() != args.vendor: raise RuntimeError('selected vendor differs from requested vendor')
     report = {'schema': 1, 'status': 'INCOMPLETE', 'sha': args.sha, 'vendor': args.vendor,
               'arm': args.arm, 'suite': args.suite, 'timing_samples': 0, 'opponents_executed': 0,
-              'harness_sha256': hashlib.sha256(harness).hexdigest(),
+              'harness_sha256': hashlib.sha256(harness).hexdigest(), 'harness_source_sha': harness_sha,
               'cases': {}, 'bindings': {}, 'package': str(Path(ml.__file__).resolve())}
     receipt = args.out/'gate.json'; dump(receipt, report)
 
@@ -61,7 +65,12 @@ def main():
             raise RuntimeError('binding is not IDENTICAL: '+prefix)
         if str(getattr(module, prefix+'_vendor')()) != args.vendor:
             raise RuntimeError('binding vendor mismatch: '+prefix)
-        path = Path(module.__file__).resolve()
+        if args.vendor == 'cpu':
+            from mojolearn import _backend
+            native = _backend.load_host_module('_mojolearn_'+prefix+'_host')
+        else:
+            native = module
+        path = Path(vars(native).get('__file__') or native.__spec__.origin).resolve()
         if not path.is_relative_to(root/'python/mojolearn') or path.suffix != '.so':
             raise RuntimeError('source-built binding provenance absent: '+str(path))
         report['bindings'][prefix] = {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
