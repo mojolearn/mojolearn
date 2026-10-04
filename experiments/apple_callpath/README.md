@@ -95,7 +95,7 @@ clipped and inverse transforms. No speed or runtime pass is yet claimed.
 M2 compile only:
 
 ```
-mojo build -I . -D MOJOLEARN_APPLE_FAST_CALLPATH_CANDIDATES bench/apple_callpath_quality.mojo -o apple-callpath-quality
+mojo build -j 1 --target-cpu apple-m1 --target-accelerator metal:1 -I . -D MOJOLEARN_APPLE_FAST_CALLPATH_CANDIDATES bench/apple_callpath_quality.mojo -o apple-callpath-quality
 ```
 
 The manager stages this native executable with its source SHA and SHA256 to
@@ -108,3 +108,31 @@ with separate cold/warm one-call scenarios (one scored run each). C2 requires
 an equivalent two-call A/B contract. C3 submits one copy per result. Pinned
 reads occur inside collection and must never be omitted from timed work.
 C4 remains a wiring fixture: it makes no claim about still-slow algorithms.
+
+### Preferred cross-machine validation: standard probe binding
+
+Native dylib portability cannot be certified from uncompiled source. The
+follow-up `callpath_probe` binding uses the existing M2 `compile_arms` protocol:
+`bindings/build_callpath_probe.sh` writes
+`python/mojolearn/_mojolearn_callpath_probe.so`, FAST only, explicit
+`--target-cpu apple-m1 --target-accelerator metal:1`, `-j 1`, and deployment
+floor 11.0 via linker flags after unsetting `MACOSX_DEPLOYMENT_TARGET`.
+It never imports or runs the result. It saves `otool -L` and `otool -l` reports
+beside the output for dependency/rpath inspection. Runtime dependency
+resolution uses the same M3 Python/MAX environment as existing staged
+bindings; no standalone executable portability claim is made.
+
+Arm A has no define, reports reach=0 and performs no fixture work. B uses
+`-D MOJOLEARN_APPLE_FAST_CALLPATH_CANDIDATES`, reports reach=1 and runs all
+fixtures. Their mathematical/transfer comparison occurs inside B against
+its unchanged ordinary copy/kernel route, eliminating unrelated compiler
+arithmetic drift. This is quality validation, not a scored A/B timing pair.
+
+`tools/callpath_probe_pair.py SOURCE TAG` reads manager-verified arms and
+manifest under `~/mq/verified-arms/SOURCE/callpath_probe`. It verifies mode,
+defines and hashes, then directly imports each staged binary in a fresh
+Python process. No installed custom `.so` is required and none is modified.
+It verifies actual mode/vendor/reach and records a hash-bound PASS receipt.
+The native driver remains available for local-on-M3 diagnostic execution;
+use the probe binding for cross-machine validation until native dependencies
+have separately been audited. Every compile and run remains manager-owned.
