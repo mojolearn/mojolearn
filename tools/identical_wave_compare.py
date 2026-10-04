@@ -110,6 +110,83 @@ def compare_receipts(nvidia_bytes, amd_bytes, plan_bytes):
             'expected_cases': sorted(expected_cases(plan_bytes)), 'arms': combined}
 
 
+def classify_receipts(nvidia_bytes, amd_bytes, plan_bytes):
+    """Per-case classification for a wave whose identity is not uniformly PASS.
+
+    PROVEN: both vendors' GPU and host digests present and all four equal.
+    GPU_ONLY_MATCH: both GPU digests equal, a host column missing (e.g. no host
+    implementation); not PROVEN. DIFFER: any present digests disagree.
+    MISSING: a GPU digest absent. Only PROVEN cases may be timed."""
+    raw = {'nvidia': nvidia_bytes, 'amd': amd_bytes}
+    receipts = {vendor: json.loads(data) for vendor, data in raw.items()}
+    cores = {vendor: identity_core(receipt) for vendor, receipt in receipts.items()}
+    if cores['nvidia'] != cores['amd']:
+        raise ValueError('cross-vendor source/plan/data/neural identity mismatch')
+    for vendor, receipt in receipts.items():
+        if receipt.get('phase') != 'identity' or receipt['identity']['vendor'] != vendor:
+            raise ValueError('identity receipt phase/vendor mismatch')
+        if cores[vendor]['plan_sha256'] != sha256(plan_bytes):
+            raise ValueError('identity plan hash mismatch')
+    tags = sorted(expected_cases(plan_bytes))
+    result = {'schema': 1, 'kind': 'partial', 'identity_core': cores['nvidia'],
+              'receipt_sha256': {v: sha256(b) for v, b in raw.items()}, 'expected_cases': tags,
+              'classes': {}, 'cells': {}}
+    for arm in ARMS:
+        cells, classes = {}, {}
+        steps = {v: {s['id']: s for s in receipts[v].get('arms', {}).get(arm, [])} for v in BACKENDS}
+        for tag in tags:
+            digests = {}
+            for vendor, backend in BACKENDS.items():
+                bits = steps[vendor].get(tag + '--bits', {})
+                d = {k: v for k, v in bits.get('digests', {}).items() if k in (backend, 'cpu')}
+                for column in (backend, 'cpu'):
+                    step = steps[vendor].get(tag + '--' + column)
+                    if column in d and (not step or step.get('status') != 'PASS' or step.get('rc', 0) != 0):
+                        d.pop(column)
+                for value in d.values():
+                    require_hash(value)
+                digests[vendor] = d
+            gpu = [digests[v].get(b) for v, b in BACKENDS.items()]
+            values = {x for ds in digests.values() for x in ds.values()}
+            if None in gpu:
+                cls = 'MISSING'
+            elif len(values) != 1:
+                cls = 'DIFFER'
+            elif all(set(digests[v]) == {b, 'cpu'} for v, b in BACKENDS.items()):
+                cls = 'PROVEN'
+            else:
+                cls = 'GPU_ONLY_MATCH'
+            cells[tag] = digests
+            classes.setdefault(cls, []).append(tag)
+        result['cells'][arm] = cells
+        result['classes'][arm] = classes
+    proven_everywhere = all(set(result['classes'][arm].get('PROVEN', [])) == set(tags) for arm in ARMS)
+    result['status'] = 'PASS' if proven_everywhere else 'PARTIAL'
+    return result
+
+
+def validate_partial_cases(proof, local_bytes, vendor, plan_bytes, cases):
+    """Timing gate for a case subset: every selected case PROVEN in both arms and
+    this box's receipt digests equal to the proof's."""
+    if proof.get('schema') != 1 or proof.get('kind') != 'partial' or proof.get('status') not in ('PASS', 'PARTIAL'):
+        raise ValueError('partial cross-vendor proof missing')
+    local = json.loads(local_bytes)
+    if proof.get('identity_core') != identity_core(local) or proof['identity_core']['plan_sha256'] != sha256(plan_bytes):
+        raise ValueError('partial proof identity mismatch')
+    if proof.get('receipt_sha256', {}).get(vendor) != sha256(local_bytes):
+        raise ValueError('partial proof local receipt hash mismatch')
+    backend = BACKENDS[vendor]
+    for arm in ARMS:
+        proven = set(proof['classes'][arm].get('PROVEN', []))
+        steps = {s['id']: s for s in local['arms'][arm]}
+        for tag in cases:
+            if tag not in proven:
+                raise ValueError('case not PROVEN in ' + arm + ': ' + tag)
+            bits = steps.get(tag + '--bits', {})
+            if bits.get('status') != 'PASS' or bits.get('digests') != proof['cells'][arm][tag][vendor] or set(bits['digests']) != {backend, 'cpu'}:
+                raise ValueError('local digest differs from partial proof: ' + arm + '/' + tag)
+
+
 def validate_proof(proof, local_bytes, vendor, plan_bytes):
     if proof.get('schema') != 1 or proof.get('status') != 'PASS':
         raise ValueError('cross-vendor proof incomplete or failed')
@@ -151,7 +228,15 @@ def main():
     parser.add_argument('--amd', required=True, type=Path)
     parser.add_argument('--plan', required=True, type=Path)
     parser.add_argument('--out', required=True, type=Path)
+    parser.add_argument('--partial', action='store_true', help='Per-case classes (PROVEN/GPU_ONLY_MATCH/DIFFER/MISSING) for incomplete waves; only PROVEN cases may be timed')
     args = parser.parse_args()
+    if args.partial:
+        with args.out.open('x') as stream:  # never overwrite an earlier proof
+            proof = classify_receipts(args.nvidia.read_bytes(), args.amd.read_bytes(), args.plan.read_bytes())
+            stream.write(json.dumps(proof, indent=2) + '\n')
+        print('CROSS_VENDOR_PARTIAL', proof['status'], json.dumps({arm: {k: len(v) for k, v in c.items()} for arm, c in proof['classes'].items()}, sort_keys=True),
+              'DIFFER', {arm: c.get('DIFFER', []) for arm, c in proof['classes'].items()})
+        return
     try:
         proof = compare_receipts(args.nvidia.read_bytes(), args.amd.read_bytes(), args.plan.read_bytes())
     except (ValueError, KeyError, TypeError, OSError) as exc:

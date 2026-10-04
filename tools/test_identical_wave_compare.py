@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from identical_wave_compare import compare_receipts, sha256, validate_proof
+from identical_wave_compare import classify_receipts, compare_receipts, sha256, validate_partial_cases, validate_proof
 from identical_wave_runner import ProgressSteps, binary_inventory, verify_products, write
 
 
@@ -109,5 +109,30 @@ class BinaryInventoryTests(unittest.TestCase):
             saved = json.loads(receipt.read_text())
             self.assertEqual(saved['arms']['on'][0]['id'], 'finished-step')
             self.assertEqual(saved['status'], 'INCOMPLETE')
+
+
+class PartialProofTests(IdentityProofTests):
+    def test_partial_classes_and_subset_gate(self):
+        amd_on = self.receipts['amd']['arms']['on']
+        for step in amd_on:  # host column missing for one case on AMD ON
+            if step['id'] == 'neural--small--cpu':
+                step.update(rc=1, status='FAIL')
+            if step['id'] == 'neural--small--bits':
+                step.update(status='FAIL', digests={'hip': 'd'*64})
+        proof = classify_receipts(self.raw('nvidia'), self.raw('amd'), self.plan)
+        self.assertEqual(proof['status'], 'PARTIAL')
+        self.assertEqual(proof['classes']['on'], {'PROVEN': ['linear--medium'], 'GPU_ONLY_MATCH': ['neural--small']})
+        validate_partial_cases(proof, self.raw('amd'), 'amd', self.plan, ['linear--medium'])
+        with self.assertRaises(ValueError):
+            validate_partial_cases(proof, self.raw('amd'), 'amd', self.plan, ['neural--small'])
+
+    def test_partial_differ(self):
+        for step in self.receipts['amd']['arms']['off']:
+            if step['id'] == 'linear--medium--bits':
+                step['digests'] = {'hip': 'f'*64, 'cpu': 'f'*64}
+        proof = classify_receipts(self.raw('nvidia'), self.raw('amd'), self.plan)
+        self.assertEqual(proof['classes']['off'].get('DIFFER'), ['linear--medium'])
+        with self.assertRaises(ValueError):
+            validate_partial_cases(proof, self.raw('nvidia'), 'nvidia', self.plan, ['linear--medium'])
 
 if __name__ == '__main__': unittest.main()

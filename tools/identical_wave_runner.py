@@ -16,7 +16,7 @@ import signal
 import subprocess
 import sys
 
-from identical_wave_compare import validate_arch, validate_proof
+from identical_wave_compare import validate_arch, validate_proof, validate_partial_cases
 from identical_wave_reuse import validate_receipt, import_artifacts
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -176,14 +176,22 @@ def main():
                 p.error(str(exc))
     if a.phase=='timing':
         identity_receipt=a.identity_receipt or a.out/'identity.json'
+        if a.cross_vendor_proof is None: p.error('timing blocked: --cross-vendor-proof required')
+        try: proof_doc=json.loads(a.cross_vendor_proof.read_bytes())
+        except (ValueError,OSError) as exc: p.error('timing blocked: '+str(exc))
+        # A partial proof (some cases harness-blocked) admits ONLY its PROVEN cases,
+        # named explicitly with --cases; the identity receipt may then be incomplete.
+        partial=proof_doc.get('kind')=='partial'
+        if partial and not a.cases: p.error('timing blocked: a partial proof requires --cases naming PROVEN cases')
         for phase,receipt in (('quality',a.out/'quality.json'),('identity',identity_receipt)):
             if not receipt.exists(): p.error('timing blocked: '+phase+' receipt missing')
             doc=json.loads(receipt.read_text())
-            if doc.get('identity')!=identity or doc.get('status')!='PASS': p.error('timing blocked: '+phase+' incomplete or failed')
-        if a.cross_vendor_proof is None: p.error('timing blocked: --cross-vendor-proof required')
+            if doc.get('identity')!=identity: p.error('timing blocked: '+phase+' identity mismatch')
+            if doc.get('status')!='PASS' and not (partial and phase=='identity'): p.error('timing blocked: '+phase+' incomplete or failed')
         try:
             proof_bytes=a.cross_vendor_proof.read_bytes()
-            validate_proof(json.loads(proof_bytes),identity_receipt.read_bytes(),a.vendor,a.plan.read_bytes())
+            if partial: validate_partial_cases(proof_doc,identity_receipt.read_bytes(),a.vendor,a.plan.read_bytes(),a.cases.split(','))
+            else: validate_proof(json.loads(proof_bytes),identity_receipt.read_bytes(),a.vendor,a.plan.read_bytes())
         except (ValueError,KeyError,TypeError,OSError) as exc:
             p.error('timing blocked: '+str(exc))
         report['cross_vendor_proof_sha256']=hashlib.sha256(proof_bytes).hexdigest()
