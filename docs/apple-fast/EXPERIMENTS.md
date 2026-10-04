@@ -724,3 +724,11 @@ Binding x_cluster (`x_cluster/minibatch_fast.mojo`), FAST + Apple only. Quality 
 |---|---|---|---|---|---|
 | `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP` | MiniBatchKMeans / istella, taxi | w2-mbk-sumcmp-q | M3 one run per arm: istella 147.2 -> 144.7 ms; taxi 43.9 -> 39.9 ms; exact (centers, counts, labels, inertia identical) | DEFAULT (FAST+Apple), rollback `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF` | Sum kernel compacts its center's rows per 256-row chunk (prefix scan) and sums only those, same ascending order; same bits as main. |
 | `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG` | MiniBatchKMeans / istella, taxi | (not promoted) | n/a here | OPEN, opt-in | Last labelling pass as the CLS3_ROWGRP 32-thread-per-row assignment; reorders distance sums (labrg tolerance mode). |
+
+## Manager verdicts, 2026-10-04 session 2 (rejected or held; candidates stay on their branches)
+
+| define | rows | branch / source | evidence | result | status |
+|---|---|---|---|---|---|
+| `MOJOLEARN_EIGH_TANGENT_CACHE` | eigh synthetic | lane/apple-fast-eigh-cache 14764dbb8 | gap26-eigh-cache-synthetic-ready | A 43721.3 -> B 44070.7 ms; quality pair PASS (B eigenvalue error 3.5e-7) | DROP-speed, opt-in only |
+| `MOJOLEARN_CAGRA_FAST_IVFG_LOWD` | cagra taxi | lane/apple-fast-w2-cagra 5d7d79cb5 | w2-cagra-lowd-q | taxi recall@10 A 0.997925 -> B 0.997125 (gate: B >= A); istella identical | DROP-quality; LOWD_SEEDS4 queued |
+| py2mojo decomp default | elliptic-envelope istella | lane/apple-fast-py2mojo-decomp 9a550d46c | py2mojo-decomp-elliptic-envelope-istella | A 1253937 -> B 1273419 ms (first valid timings for this row) | no gain |
