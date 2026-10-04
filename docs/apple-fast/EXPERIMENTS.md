@@ -607,21 +607,22 @@ FAST bit changes are allowed. Acceptance requires faster M3 timing and no qualit
 |---|---|---|---|---|---|
 | SGDOC_FAST_PAR, Istella | lane/apple-fast-sgdoc-parallel @ 61710a5c8 | sgdocp-istella | 75537.985 → 181.313 | J .10000456 → .1; flagged .04042 → 0 | HOLD: anomaly behavior unresolved; old-base comparator |
 | SGDOC_FAST_PAR, taxi | lane/apple-fast-sgdoc-parallel @ 61710a5c8 | sgdocp-taxi | 58334.248 → 16.521 | candidate J .1, flagged 0 | HOLD: anomaly behavior unresolved; current-main comparison owed |
-| ARIMA_FUSED_EVAL_TAIL | lane/apple-fast-arima-batched @ 217e821e5 | gap26-arima-tail-synthetic / taxi-hourly | Pending | forecast/likelihood/selected-order checks queued | OPEN; M2 both arms compiled, M3 timing queued |
+| ARIMA_FUSED_EVAL_TAIL | lane/apple-fast-arima-batched @ 1a627f709; kernel 217e821e5 | gap26-arima-tail-synthetic / taxi-hourly | synthetic 14498.225 → 13569.230 (-6.4%); taxi-hourly 24231.028 → 22705.348 (-6.3%) | Both digests and RMSE unchanged; gap26-arima-quality-fixed PASS, 44 byte-identical selected-order/parameter/likelihood/forecast arrays | KEEP: default/OFF promotion 311d5233e; taxi RMSE 74.6591 remains worse than opponent 68.21, quality gap under review |
 | EIGH_FAST_TANGENT | lane/apple-fast-linalg-20261004 | gap26-eigh-tangent (proposed) | Pending | residual/eigenvalue error/orthogonality required | OPEN; first compile alias error fixed, rebuild pending |
 | MCD_BATCH_COMPAT | lane/apple-fast-mcd-exact | gap26-mcdcompat-taxi (proposed) | Pending | fitted covariance, precision, support, Mahalanobis distances, predictions | OPEN; compilation pending |
 | ARIMA_EXACT_STEADY | lane/apple-fast-arima-batched @ a670ce8c2 (removed in 217e821e5) | NOT RUN | No new timing | Equivalent to earlier failed P_FIX covariance fixed-point experiment | ABANDONED before M3; prior P_FIX +165%, combined ASYNC +22–64%; avoids duplicate experiment |
 | SYM_CTR_PERM_BATCH | lane/apple-fast-batch @ 3150d75c1 | sym-ctr-perm-batch-taxicat-x | 27161 → 27196 (+0.1%) | AUC .630994 → .631048, logloss .528561 → .528534 | DROP-speed: no gain on old base |
 | CTR_PREP_SHARED | lane/apple-fast-batch @ 3150d75c1 | sym-ctr-prep-shared-taxicat-x | 27548 → 26357 (-4.3%) | AUC .631249 → .630964; noise not established | HOLD: old base; quality decline requires assessment before any current-main verification |
 | CTR_INDEX_FUSED | lane/apple-fast-batch @ 3150d75c1 | sym-ctr-index-fused-taxicat-x | 27240 → 25566 (-6.1%) | AUC .630808 → .630766; logloss .528548 → .528535 | HOLD: old base; candidate only, no merge without current-main A/B and quality |
-| ARIMA_FUSED_EVAL_TAIL synthetic first result | lane/apple-fast-arima-batched @ 1a627f709; compiled source 217e821e5 | gap26-arima-tail-synthetic | 14498.225 → 13569.230 (-6.4%) | forecast RMSE 2.624119555 both, digest identical | CANDIDATE: additional quality + taxi pending; not yet a default or board refresh |
+
+Gap26 accounting evidence and converted arm-B records: [ab/gap26/README.md](ab/gap26/README.md). Label-direct experiment verdict is owned by its promotion branch; its two measured board cells and independent quality receipt are preserved in this accounting bundle.
 
 
-## Label-direct promotion prepared (2026-10-04)
+## Label-direct promotion (2026-10-04)
 
 | define | algorithm / dataset | measured branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
 |---|---|---|---|---|---|---|
-| `MOJOLEARN_LABEL_DIRECT` -> `MOJOLEARN_LABEL_DIRECT_OFF` | label-binarizer / taxi, istella | lane/apple-fast-label-direct @ dbe2ab85a (base35a72c5ac) | gap26-label-taxi, gap26-label-istella; quality gap26-label-quality | taxi348.254458 -> 327.625833; istella33.176500 -> 27.578792 | KEEP, default promotion prepared; not yet merged | One M3 run/arm, -5.9%/-16.9%, respective digests0703e6f6396640c4/de224838a841fa8c identical. Independent public-output oracle PASS both arms, 41,697,776 cells each, fitted classes/codes/inverse checked. Source review against main61ea51757: relevant drift comments only. Manager still owes default/OFF compile before merge. |
+| `MOJOLEARN_LABEL_DIRECT` -> `MOJOLEARN_LABEL_DIRECT_OFF` | label-binarizer / taxi, istella | lane/apple-fast-label-direct @ dbe2ab85a (base35a72c5ac) | gap26-label-taxi, gap26-label-istella; quality gap26-label-quality | taxi348.254458 -> 327.625833; istella33.176500 -> 27.578792 | KEEP, default merged on main1975c2dc5 | One M3 run/arm, -5.9%/-16.9%, respective digests0703e6f6396640c4/de224838a841fa8c identical. Independent public-output oracle PASS both arms, 41,697,776 cells each, fitted classes/codes/inverse checked. Source review against main61ea51757: relevant drift comments only. Manager verified default/OFF builds rc0 before merge. |
 
 Quality review: `tools/label_fast_quality.py` checks every LabelBinarizer
 training/query indicator against an independent definition, actual fitted
