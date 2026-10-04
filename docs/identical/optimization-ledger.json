@@ -10,7 +10,9 @@
     "identity": "Compare raw outputs across vendors within each arm; bits may change between ON/OFF or previous versions.",
     "promotion": "Require cross-vendor identity, predictive quality within a frozen defensible noise margin, and a speed improvement before main promotion.",
     "evidence": "Retain exact source, compiler, flags, architecture, artifact/input hashes, complete logs, return codes, quality/identity/timing receipts, and keep/drop verdict.",
-    "publishing": "Out of scope."
+    "publishing": "Out of scope.",
+    "apple_checks": "Deferred by latest user instruction: no Apple GPU/CPU verification or compile checks; M2 move cancelled. Retain prior evidence without claiming current Apple qualification.",
+    "verification_schedule": "Focused NVIDIA/AMD checks during iteration and winner selection; exhaustive combined-source verification on main before any future PyPI release. Publishing remains out of scope."
   },
   "records": [
     {
