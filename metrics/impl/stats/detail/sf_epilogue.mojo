@@ -72,43 +72,106 @@ def mi_part_kernel(part: U64P, cm: I32P, a: I64P, b: I64P, k: Int32, size: Int32
         part.unsafe_store(c, acc)
 
 
-def epi_final_kernel(out: U64P, part: U64P, nch: Int32, size: Int32, divide: Int32):
-    """One thread: OUT[0] = the chunk sums added ascending from zero,
-    divided by size when `divide` (MI)."""
-    var t = Int(thread_idx.x) + Int(block_dim.x) * Int(block_idx.x)
-    if t == 0:
+def sf_level_kernel(
+    buf: U64P, src_off: Int32, n_src: Int32, dst_off: Int32, n_dst: Int32, size: Int32, divide: Int32
+):
+    """One level of the fold: one thread per chunk of EPI_CH source sums,
+    BUF[dst_off + c] = BUF[src_off + c*EPI_CH ..] added ascending from zero.
+    The last level (n_dst == 1) divides by size when `divide` (MI)."""
+    var c = Int(thread_idx.x) + Int(block_dim.x) * Int(block_idx.x)
+    if c < Int(n_dst):
+        var lo = c * EPI_CH
+        var hi = min(lo + EPI_CH, Int(n_src))
         var acc = SF64_ZERO
-        for c in range(Int(nch)):
-            acc = sf64_add(acc, part.unsafe_load(c))
-        if divide != Int32(0):
+        for i in range(lo, hi):
+            acc = sf64_add(acc, buf.unsafe_load(Int(src_off) + i))
+        if divide != Int32(0) and Int(n_dst) == 1:
             acc = sf64_div(acc, sf64_from_i64(Int(size)))
-        out.unsafe_store(0, acc)
+        buf.unsafe_store(Int(dst_off) + c, acc)
 
 
-def ari_final_kernel(out: U64P, a: I64P, b: I64P, rs: I64P, k: Int32, size: Int32):
-    """One thread: the three pair-count sums over the k rows / columns
-    (exact Int64, any order), then `ari_value`."""
-    var t = Int(thread_idx.x) + Int(block_dim.x) * Int(block_idx.x)
-    if t == 0:
+def ari_part_kernel(tri: I64P, a: I64P, b: I64P, rs: I64P, k: Int32, nch: Int32):
+    """One thread per chunk of EPI_CH rows / columns: TRI[3c ..] = the
+    chunk's sums of RS, nCTwo(A) and nCTwo(B) (exact Int64, any order)."""
+    var c = Int(thread_idx.x) + Int(block_dim.x) * Int(block_idx.x)
+    if c < Int(nch):
+        var lo = c * EPI_CH
+        var hi = min(lo + EPI_CH, Int(k))
         var n2 = 0
         var a2 = 0
         var b2 = 0
-        for i in range(Int(k)):
+        for i in range(lo, hi):
             n2 += Int(rs.unsafe_load(i))
             a2 += n_c_two_i(Int(a.unsafe_load(i)))
             b2 += n_c_two_i(Int(b.unsafe_load(i)))
-        out.unsafe_store(0, ari_value(n2, a2, b2, Int(size)))
+        tri.unsafe_store(3 * c, Int64(n2))
+        tri.unsafe_store(3 * c + 1, Int64(a2))
+        tri.unsafe_store(3 * c + 2, Int64(b2))
+
+
+def ari_level_kernel(
+    out: U64P, tri: I64P, src_off: Int32, n_src: Int32, dst_off: Int32, n_dst: Int32, size: Int32
+):
+    """One level of the integer fold over triples (offsets count triples);
+    the last level (n_dst == 1) also writes OUT[0] = `ari_value`."""
+    var c = Int(thread_idx.x) + Int(block_dim.x) * Int(block_idx.x)
+    if c < Int(n_dst):
+        var lo = c * EPI_CH
+        var hi = min(lo + EPI_CH, Int(n_src))
+        var n2 = 0
+        var a2 = 0
+        var b2 = 0
+        for i in range(lo, hi):
+            var at = 3 * (Int(src_off) + i)
+            n2 += Int(tri.unsafe_load(at))
+            a2 += Int(tri.unsafe_load(at + 1))
+            b2 += Int(tri.unsafe_load(at + 2))
+        var to = 3 * (Int(dst_off) + c)
+        tri.unsafe_store(to, Int64(n2))
+        tri.unsafe_store(to + 1, Int64(a2))
+        tri.unsafe_store(to + 2, Int64(b2))
+        if Int(n_dst) == 1:
+            out.unsafe_store(0, ari_value(n2, a2, b2, Int(size)))
 
 
 # ---------------------------------------------------------------- device entries
-def _read_word(ctx: DeviceContext, mut out: DeviceBuffer[DType.uint64]) raises -> UInt64:
+def fold_words(nch: Int) -> Int:
+    """Words a fold buffer needs: the nch chunk sums and every level above."""
+    return nch + nch // 32 + 8
+
+
+def _read_word(ctx: DeviceContext, mut buf: DeviceBuffer[DType.uint64], at: Int) raises -> UInt64:
     """The one binary64 word a label metric brings back."""
     var h = ctx.enqueue_create_host_buffer[DType.uint64](1)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=out)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf.create_sub_buffer[DType.uint64](at, 1))
     ctx.synchronize()
     var bits = h.unsafe_ptr().unsafe_load(0)
     _ = h^
     return bits
+
+
+def _fold_levels(
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.uint64], nch: Int, size: Int, divide: Bool
+) raises -> UInt64:
+    """The levels of the fold over BUF[0:nch] (sf_epilogue_core.mojo
+    `sf_fold_list`'s order: at least one level, then until one sum is
+    left), and the final word read back."""
+    var src_off = 0
+    var n = nch
+    var dst_off = nch
+    while True:
+        var nd = ceildiv(n, EPI_CH)
+        ctx.enqueue_function[sf_level_kernel](
+            buf.unsafe_ptr(), Int32(src_off), Int32(n), Int32(dst_off), Int32(nd), Int32(size),
+            Int32(1) if divide else Int32(0),
+            grid_dim=(ceildiv(nd, EPI_TPB), 1, 1), block_dim=(EPI_TPB, 1, 1),
+        )
+        src_off = dst_off
+        dst_off += nd
+        n = nd
+        if n == 1:
+            break
+    return _read_word(ctx, buf, src_off)
 
 
 def entropy_epilogue_device(
@@ -116,19 +179,13 @@ def entropy_epilogue_device(
 ) raises -> Float64:
     """The entropy of the device histogram `bins[0:k]` of `size` labels."""
     var nch = ceildiv(k, EPI_CH)
-    var part = ctx.enqueue_create_buffer[DType.uint64](nch)
-    var out = ctx.enqueue_create_buffer[DType.uint64](1)
+    var buf = ctx.enqueue_create_buffer[DType.uint64](fold_words(nch))
     ctx.enqueue_function[entropy_part_kernel](
-        part.unsafe_ptr(), bins.unsafe_ptr(), Int32(k), Int32(size), Int32(nch),
+        buf.unsafe_ptr(), bins.unsafe_ptr(), Int32(k), Int32(size), Int32(nch),
         grid_dim=(ceildiv(nch, EPI_TPB), 1, 1), block_dim=(EPI_TPB, 1, 1),
     )
-    ctx.enqueue_function[epi_final_kernel](
-        out.unsafe_ptr(), part.unsafe_ptr(), Int32(nch), Int32(size), Int32(0),
-        grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
-    )
-    var bits = _read_word(ctx, out)
-    _ = part^
-    _ = out^
+    var bits = _fold_levels(ctx, buf, nch, size, False)
+    _ = buf^
     return sf_to_f64(bits)
 
 
@@ -141,26 +198,20 @@ def mi_epilogue_device(
     var b = ctx.enqueue_create_buffer[DType.int64](k)
     var rs = ctx.enqueue_create_buffer[DType.int64](k)
     var nch = ceildiv(k * k, EPI_CH)
-    var part = ctx.enqueue_create_buffer[DType.uint64](nch)
-    var out = ctx.enqueue_create_buffer[DType.uint64](1)
+    var buf = ctx.enqueue_create_buffer[DType.uint64](fold_words(nch))
     ctx.enqueue_function[cm_sums_kernel](
         a.unsafe_ptr(), b.unsafe_ptr(), rs.unsafe_ptr(), cm.unsafe_ptr(), Int32(k),
         grid_dim=(ceildiv(2 * k, EPI_TPB), 1, 1), block_dim=(EPI_TPB, 1, 1),
     )
     ctx.enqueue_function[mi_part_kernel](
-        part.unsafe_ptr(), cm.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(), Int32(k), Int32(size), Int32(nch),
+        buf.unsafe_ptr(), cm.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(), Int32(k), Int32(size), Int32(nch),
         grid_dim=(ceildiv(nch, EPI_TPB), 1, 1), block_dim=(EPI_TPB, 1, 1),
     )
-    ctx.enqueue_function[epi_final_kernel](
-        out.unsafe_ptr(), part.unsafe_ptr(), Int32(nch), Int32(size), Int32(1),
-        grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
-    )
-    var bits = _read_word(ctx, out)
+    var bits = _fold_levels(ctx, buf, nch, size, True)
     _ = a^
     _ = b^
     _ = rs^
-    _ = part^
-    _ = out^
+    _ = buf^
     return sf_to_f64(bits)
 
 
@@ -171,18 +222,35 @@ def ari_epilogue_device(
     var a = ctx.enqueue_create_buffer[DType.int64](k)
     var b = ctx.enqueue_create_buffer[DType.int64](k)
     var rs = ctx.enqueue_create_buffer[DType.int64](k)
+    var nch = ceildiv(k, EPI_CH)
+    var tri = ctx.enqueue_create_buffer[DType.int64](3 * fold_words(nch))
     var out = ctx.enqueue_create_buffer[DType.uint64](1)
     ctx.enqueue_function[cm_sums_kernel](
         a.unsafe_ptr(), b.unsafe_ptr(), rs.unsafe_ptr(), cm.unsafe_ptr(), Int32(k),
         grid_dim=(ceildiv(2 * k, EPI_TPB), 1, 1), block_dim=(EPI_TPB, 1, 1),
     )
-    ctx.enqueue_function[ari_final_kernel](
-        out.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(), rs.unsafe_ptr(), Int32(k), Int32(size),
-        grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+    ctx.enqueue_function[ari_part_kernel](
+        tri.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(), rs.unsafe_ptr(), Int32(k), Int32(nch),
+        grid_dim=(ceildiv(nch, EPI_TPB), 1, 1), block_dim=(EPI_TPB, 1, 1),
     )
-    var bits = _read_word(ctx, out)
+    var src_off = 0
+    var n = nch
+    var dst_off = nch
+    while True:
+        var nd = ceildiv(n, EPI_CH)
+        ctx.enqueue_function[ari_level_kernel](
+            out.unsafe_ptr(), tri.unsafe_ptr(), Int32(src_off), Int32(n), Int32(dst_off), Int32(nd), Int32(size),
+            grid_dim=(ceildiv(nd, EPI_TPB), 1, 1), block_dim=(EPI_TPB, 1, 1),
+        )
+        src_off = dst_off
+        dst_off += nd
+        n = nd
+        if n == 1:
+            break
+    var bits = _read_word(ctx, out, 0)
     _ = a^
     _ = b^
     _ = rs^
+    _ = tri^
     _ = out^
     return sf_to_f64(bits)

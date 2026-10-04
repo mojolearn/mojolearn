@@ -24,10 +24,11 @@ binary64 word comes back instead of k or k^2 ints:
             IEEE results the host computed, so ARI's value does not move.
 
 THE FOLD ORDER (entropy, MI), one order everywhere: terms are added
-ascending from zero inside chunks of EPI_CH, and the chunk sums are added
-ascending from zero. On the device one thread owns a chunk (it computes the
-chunk's terms too), then one thread folds the chunk sums and applies the
-final division: no serial chain over all k^2 cells. The host column
+ascending from zero inside chunks of EPI_CH, and the chunk sums are folded
+by levels the same way (EPI_CH sums into one, at least one level, until one
+sum is left). On the device one thread owns a chunk (it computes the chunk's
+terms too) and one thread owns each sum of a level; the last level applies
+the final division: no serial chain over all k^2 cells. The host column
 (`*_sf_list`, called by metrics/host/metrics_oracle.mojo and by the traced
 entries) runs the same term functions in the same order.
 
@@ -154,10 +155,27 @@ def mi_sf_parts(c: List[Int32], a: List[Int64], b: List[Int64], k: Int, size: In
 
 
 def sf_fold_list(parts: List[UInt64]) -> UInt64:
-    var acc = SF64_ZERO
-    for i in range(len(parts)):
-        acc = sf64_add(acc, parts[i])
-    return acc
+    """The fold of the chunk sums, by levels: EPI_CH sums are added
+    ascending from zero into one sum of the next level; at least one level,
+    then until one sum is left (sf_epilogue.mojo `sf_level_kernel` runs one
+    thread per sum of a level)."""
+    var cur = parts.copy()
+    while True:
+        var nxt = List[UInt64]()
+        var c0 = 0
+        while c0 < len(cur):
+            var hi = min(c0 + EPI_CH, len(cur))
+            var acc = SF64_ZERO
+            for i in range(c0, hi):
+                acc = sf64_add(acc, cur[i])
+            nxt.append(acc)
+            c0 += EPI_CH
+        cur = nxt^
+        if len(cur) <= 1:
+            break
+    if len(cur) == 0:
+        return SF64_ZERO
+    return cur[0]
 
 
 def sf_to_f64(bits: UInt64) -> Float64:
