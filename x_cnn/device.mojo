@@ -50,6 +50,8 @@ from x_cnn.ops import (
     sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at, gather_rows_at, argmax_row_at,
     chan_slice_at, chan_place_at,
 )
+# lane fix-n1-lm-neural (2026-10-04): the blocked adaptive average fold (audit B9)
+from x_cnn.ops import IDN_GAP_BLOCK_FOLD, gap_fold_blocks, adapt_avg_blk_at, adapt_avg_fin_at
 # lane fam2-neural (2026-10-04): the device loss fold, epoch order and Adam step scalars
 from x_cnn.ops import (
     IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan, EP_LEN, epoch_rows_at, epoch_rows_prm,
@@ -1798,6 +1800,27 @@ def adaptive_pool_device(x: List[Float32], idx: List[Int32], prm: List[Int32], k
     var nin = nc * Int(prm[2]) * Int(prm[3])
     var nout = nc * Int(prm[4]) * Int(prm[5])
     if kind == 0:
+        comptime if IDN_GAP_BLOCK_FOLD:
+            var nb = gap_fold_blocks(Int(prm[2]), Int(prm[3]), Int(prm[4]), Int(prm[5]))
+            if nb > 1:
+                # lane fix-n1-lm-neural: one thread per (output, block), then one per output
+                var ctx = cnn_ctx()
+                var da = upload_f32(ctx, x)
+                var di = upload_i32(ctx, idx)
+                var dp = upload_i32(ctx, prm)
+                var part = ctx.enqueue_create_buffer[DType.float32](nout * nb)
+                var out = ctx.enqueue_create_buffer[DType.float32](nout)
+                launch[adapt_avg_blk_at](ctx, fp(da), fp(da), fp(part), fp(part), ip(di), ip(dp), nout * nb)
+                launch[adapt_avg_fin_at](ctx, fp(part), fp(part), fp(out), fp(out), ip(di), ip(dp), nout)
+                var result = download_f32(ctx, out, nout)
+                idx_out = download_i32(ctx, di, len(idx))
+                _ = da^
+                _ = di^
+                _ = dp^
+                _ = part^
+                _ = out^
+                _ = ctx^
+                return result^
         return adaptive_device[adapt_avg_fwd_at](x, idx, nout, prm, idx_out)
     if kind == 1:
         return adaptive_device[adapt_avg_bwd_at](x, idx, nin, prm, idx_out)
@@ -1920,7 +1943,17 @@ def adaptive_pool_m(a: List[Int], dev: Int, prm: List[Int32], kind: Int) raises:
     var dp = put_prm(ctx, 1, prm)
     var dout = m_out(ctx, 2, a[1], n_write, isdev(dev, 1))
     var di = _adapt_idx(ctx, a[2], nout, isdev(dev, 2), kind)
-    if kind == 0:
+    var gap_nb = 1
+    comptime if IDN_GAP_BLOCK_FOLD:
+        if kind == 0:
+            gap_nb = gap_fold_blocks(Int(prm[2]), Int(prm[3]), Int(prm[4]), Int(prm[5]))
+    if kind == 0 and gap_nb > 1:
+        # lane fix-n1-lm-neural (IDN_GAP_BLOCK_FOLD): the blocked window fold
+        var part = ws(ctx, 4, n_write * gap_nb)
+        launch[adapt_avg_blk_at](ctx, fp(da), fp(da), fp(part), fp(part), ip(di), ip(dp), n_write * gap_nb)
+        launch[adapt_avg_fin_at](ctx, fp(part), fp(part), fp(dout), fp(dout), ip(di), ip(dp), n_write)
+        _ = part^
+    elif kind == 0:
         launch[adapt_avg_fwd_at](ctx, fp(da), fp(da), fp(dout), fp(dout), ip(di), ip(dp), n_write)
     elif kind == 1:
         launch[adapt_avg_bwd_at](ctx, fp(da), fp(da), fp(dout), fp(dout), ip(di), ip(dp), n_write)
@@ -2665,3 +2698,137 @@ def csr_build_device(rows_h: IP, cols_h: IP, nnz: Int, n: Int, csr_out: IP, orde
     _ = csr_d^
     _ = order_d^
     _ = ctx^
+
+
+# ---------------------------------------------------------------------------
+# lane fix-n1-lm-neural (2026-10-04), IDN_GCN_LOOPS_DEV (x_cnn/ops.mojo):
+# GCNConv's add_remaining_self_loops on the device. Every edge gets the key
+# 0 (not a loop) or 1 + node (a loop); one stable radix sort puts the kept
+# edges first in edge order and each node's loops together in edge order.
+# The output is the kept edges, then one loop per node i carrying the
+# weight of node i's LAST loop in edge order (NumPy's `loop_w[src[loop]] =
+# w[loop]`), else `fill`. Copies only: the same words on every column.
+# ---------------------------------------------------------------------------
+
+
+def _gcn_loop_key_kernel(keys: UP, ids: UP, src: IP, dst: IP, nnz: Int32):
+    var e = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if e >= Int(nnz):
+        return
+    var s = src[e]
+    if s == dst[e]:
+        keys[e] = s.cast[DType.uint32]() + UInt32(1)
+    else:
+        keys[e] = UInt32(0)
+    ids[e] = UInt32(e)
+
+
+@always_inline
+def _gcn_lower_bound(keys: UP, nnz: Int, v: UInt32) -> Int:
+    """The first sorted position whose key is >= v."""
+    var lo = 0
+    var hi = nnz
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        if keys[mid] < v:
+            lo = mid + 1
+        else:
+            hi = mid
+    return lo
+
+
+def _gcn_loop_kept_kernel(keys: UP, ids: UP, src: IP, dst: IP, w: FP, so: IP, dso: IP, wo: FP, nnz: Int32):
+    """Sorted position p < K (key 0) copies kept edge ids[p] to slot p."""
+    var p = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if p >= Int(nnz):
+        return
+    if keys[p] != UInt32(0):
+        return
+    var e = Int(ids[p])
+    so[p] = src[e]
+    dso[p] = dst[e]
+    wo[p] = w[e]
+
+
+def _gcn_loop_nodes_kernel(
+    keys: UP, ids: UP, w: FP, so: IP, dso: IP, wo: FP, kout: IP, n: Int32, nnz: Int32, fill: Float32
+):
+    """Node i writes its loop at slot K + i (K = the kept count, found by a
+    binary search of the sorted keys); node 0 also writes K."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n):
+        return
+    var m = Int(nnz)
+    var k = _gcn_lower_bound(keys, m, UInt32(1))
+    var lo = _gcn_lower_bound(keys, m, UInt32(i) + UInt32(1))
+    var hi = _gcn_lower_bound(keys, m, UInt32(i) + UInt32(2))
+    var wi = fill
+    if hi > lo:
+        wi = w[Int(ids[hi - 1])]
+    so[k + i] = Int32(i)
+    dso[k + i] = Int32(i)
+    wo[k + i] = wi
+    if i == 0:
+        kout[0] = Int32(k)
+
+
+def gcn_loops_device(
+    src_h: IP, dst_h: IP, w_h: FP, nnz: Int, n: Int, fill: Float32, src_out: IP, dst_out: IP, w_out: FP
+) raises -> Int:
+    """The edge list with GCN's remaining self loops (host arrays in; the
+    outputs hold nnz + n slots, the first K + n written). Returns K, the
+    number of kept (non-loop) edges."""
+    var ctx = cnn_ctx()
+    var m = max(1, nnz)
+    var t = nnz + n
+    var src_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var dst_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var w_d = ctx.enqueue_create_buffer[DType.float32](m)
+    var keys = ctx.enqueue_create_buffer[DType.uint32](m)
+    var ids = ctx.enqueue_create_buffer[DType.uint32](m)
+    var tkeys = ctx.enqueue_create_buffer[DType.uint32](m)
+    var tids = ctx.enqueue_create_buffer[DType.uint32](m)
+    var counts = ctx.enqueue_create_buffer[DType.int32](max(1, frs_counts_len(m)))
+    var so_d = ctx.enqueue_create_buffer[DType.int32](t)
+    var do_d = ctx.enqueue_create_buffer[DType.int32](t)
+    var wo_d = ctx.enqueue_create_buffer[DType.float32](t)
+    var k_d = ctx.enqueue_create_buffer[DType.int32](1)
+    var grid = (m + TPB - 1) // TPB
+    if nnz > 0:
+        ctx.enqueue_copy(dst_buf=src_d, src_ptr=src_h)
+        ctx.enqueue_copy(dst_buf=dst_d, src_ptr=dst_h)
+        ctx.enqueue_copy(dst_buf=w_d, src_ptr=w_h)
+        ctx.enqueue_function[_gcn_loop_key_kernel](
+            keys.unsafe_ptr(), ids.unsafe_ptr(), src_d.unsafe_ptr(), dst_d.unsafe_ptr(), Int32(nnz),
+            grid_dim=grid, block_dim=TPB,
+        )
+        fast_radix_sort_pairs_u32(ctx, nnz, keys, ids, tkeys, tids, counts)
+        ctx.enqueue_function[_gcn_loop_kept_kernel](
+            keys.unsafe_ptr(), ids.unsafe_ptr(), src_d.unsafe_ptr(), dst_d.unsafe_ptr(), w_d.unsafe_ptr(),
+            so_d.unsafe_ptr(), do_d.unsafe_ptr(), wo_d.unsafe_ptr(), Int32(nnz),
+            grid_dim=grid, block_dim=TPB,
+        )
+    ctx.enqueue_function[_gcn_loop_nodes_kernel](
+        keys.unsafe_ptr(), ids.unsafe_ptr(), w_d.unsafe_ptr(), so_d.unsafe_ptr(), do_d.unsafe_ptr(),
+        wo_d.unsafe_ptr(), k_d.unsafe_ptr(), Int32(n), Int32(nnz), fill,
+        grid_dim=(n + TPB - 1) // TPB, block_dim=TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=src_out, src_buf=so_d)
+    ctx.enqueue_copy(dst_ptr=dst_out, src_buf=do_d)
+    ctx.enqueue_copy(dst_ptr=w_out, src_buf=wo_d)
+    var kh = download_i32(ctx, k_d, 1)
+    ctx.synchronize()
+    _ = src_d^
+    _ = dst_d^
+    _ = w_d^
+    _ = keys^
+    _ = ids^
+    _ = tkeys^
+    _ = tids^
+    _ = counts^
+    _ = so_d^
+    _ = do_d^
+    _ = wo_d^
+    _ = k_d^
+    _ = ctx^
+    return Int(kh[0])
