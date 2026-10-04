@@ -14,6 +14,7 @@ def main():
     p.add_argument('--source', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--vendor', choices=('cuda', 'hip'), required=True)
+    p.add_argument('--gates', nargs='+', choices=('lu-nan', 'pca-id'), default=('lu-nan', 'pca-id'))
     a = p.parse_args()
     if sys.platform != 'linux':
         p.error('run only on the authorized Linux boxes')
@@ -49,7 +50,7 @@ except SystemExit as exc:
 print('SOURCE_PROVENANCE ' + json.dumps(source_provenance(Path(root), vendor)))
 '''
     save()
-    for gate in ('lu-nan', 'pca-id'):
+    for gate in a.gates:
         row = {'status': 'RUNNING', 'columns': {}}
         report['checks'][gate] = row
         save()
