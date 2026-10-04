@@ -16,7 +16,7 @@ name the per-cell status. Diagnostic only; not part of any suite.
 from max.gpu.host import DeviceContext
 
 from extratrees.bench.bench_data import read_column_prefix, read_f32
-from extratrees.estimator import quantize_labels_host
+from extratrees.host_estimator import quantize_labels_host
 from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_MSE,
     DecisionTreeParams,

@@ -119,7 +119,6 @@ step, which is 135's ruling and not a defect.
 """
 
 from extratrees.checks.fixed_point import ceil_log2, choose_scale, quantize
-from core.abs_sum_blocked_host import host_abs_sum_blocked
 from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_ENTROPY,
     CRITERION_GINI,
@@ -668,30 +667,6 @@ def regressor_plan(
 def _is_regression_criterion(c: Int32) -> Bool:
     """MSE and DEVIATION 5610's three deviances."""
     return c == CRITERION_MSE or c == CRITERION_POISSON or c == CRITERION_GAMMA or c == CRITERION_INVERSE_GAUSSIAN
-
-
-def quantize_labels_host(
-    y: List[Float32], n_rows: Int32
-) raises -> Tuple[List[Int32], Float64]:
-    """The label vector in deviation 135's fixed point, and its scale.
-
-    `choose_scale` takes the sum of magnitudes over the WHOLE label vector,
-    because any node's rows are a subset of it -- 135's bound, which makes
-    accumulator overflow impossible rather than unlikely. The same derivation
-    `device_regression_check` uses. cpu3-trees: this is the HOST COLUMN
-    (CPU fits, checks, benches); the GPU fit quantizes on the device
-    (`upload_dataset_labels_quantized`) to the same Int32s and scale.
-    """
-    # cpu3-trees: the blocked fixed-order sum (`core/abs_sum_blocked`), the
-    # same word the device fit (`upload_dataset_labels_quantized`) reads back
-    if len(y) < Int(n_rows):
-        raise Error("quantize_labels_host: y is shorter than n_rows")
-    var mag = host_abs_sum_blocked(Int(y.unsafe_ptr()), Int(n_rows))
-    var scale = choose_scale(mag, Int(n_rows))
-    var q = List[Int32]()
-    for r in range(Int(n_rows)):
-        q.append(Int32(quantize(Float64(y[r]), scale)))
-    return (q^, scale)
 
 
 def fit_extra_trees_regressor_device(

@@ -39,7 +39,7 @@ NO DURATION IS TAKEN ANYWHERE IN THIS FILE.
 from std.testing import assert_equal, assert_true
 from max.gpu.host import DeviceContext
 
-from extratrees.estimator import quantize_labels_host
+from extratrees.host_estimator import quantize_labels_host
 from extratrees.checks.fixtures import (
     Dataset as FixtureDataset,
     hashed_classification,
