@@ -2,6 +2,7 @@
 """Focused mode/shape gate for the Apple production-batch GEMM dispatch."""
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
 from std.testing import assert_true
 from gemm.checks.gemm_identical import (
     PLAN_TUNED_64_4X4,
@@ -23,10 +24,19 @@ def main() raises:
         assert_true(choose_gemm_plan(768, 2048, 2048) == PLAN_TUNED_64_4X4)
         assert_true(choose_gemm_plan(768, 3072, 2048) == PLAN_TUNED_64_4X4)
         assert_true(choose_gemm_plan(767, 3072, 2048) == PLAN_TUNED_128_8X8)
-        assert_true(choose_gemm_plan(768, 3072, 1023) == PLAN_TUNED_128_8X8)
-        assert_true(choose_gemm_plan(1023, 768, 768) == PLAN_TUNED_128_8X8)
         assert_true(choose_gemm_plan(2048, 767, 768) == PLAN_TUNED_128_8X8)
-        assert_true(choose_gemm_plan(32768, 1024, 769) == PLAN_TUNED_128_8X8)
+        comptime if is_defined["MOJOLEARN_LEGACY_SHAPE_APPLE_PLAN64"]():
+            # The removed d_model == 768 rule's boundaries.
+            assert_true(choose_gemm_plan(768, 3072, 1023) == PLAN_TUNED_128_8X8)
+            assert_true(choose_gemm_plan(1023, 768, 768) == PLAN_TUNED_128_8X8)
+            assert_true(choose_gemm_plan(32768, 1024, 769) == PLAN_TUNED_128_8X8)
+        else:
+            # Oct 4 range rule: narrow side or k at most APPLE_PLAN64_NARROW.
+            assert_true(choose_gemm_plan(768, 3072, 1023) == PLAN_TUNED_64_4X4)
+            assert_true(choose_gemm_plan(1023, 768, 768) == PLAN_TUNED_64_4X4)
+            assert_true(choose_gemm_plan(32768, 1024, 769) == PLAN_TUNED_64_4X4)
+            assert_true(choose_gemm_plan(4096, 1536, 1536) == PLAN_TUNED_128_8X8)
+            assert_true(choose_gemm_plan(4096, 1025, 1025) == PLAN_TUNED_128_8X8)
     else:
         assert_true(choose_gemm_plan(32768, 1024, 768) == PLAN_TUNED_128_8X8)
         assert_true(choose_gemm_plan(32768, 2304, 768) == PLAN_TUNED_128_8X8)
