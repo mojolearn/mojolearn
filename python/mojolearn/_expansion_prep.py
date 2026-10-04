@@ -175,6 +175,64 @@ def _p2m_positive_rows(pr, xo, wo, n, d, m):
 #: the smallest output (words) that `_Prog.output` keeps out of the arena
 _OUT_MIN_WORDS = 2 ** 27
 
+#: lane/apple-fast-w3-prep (MOJOLEARN_X_PREP_PINNED_OUT, x_prep/pinned_out.mojo):
+#: a binding built with the define exports `x_prep_run_ranges_pinned`, and an
+#: output region of at least _PINNED_OUT_MIN_WORDS words (16 MB) is then the
+#: caller's array itself: one DMA into a pinned host buffer that the result
+#: views (no stage memcpy, no fresh mapping), freed by id when the last view
+#: dies. Copies only, the same words. MOJOLEARN_XPREP_PINNED_OUT=0 keeps the
+#: old download with such a binding (glue: lifetime plumbing only).
+_PINNED_OUT_MIN_WORDS = 2 ** 22
+
+
+def _pinned_entry(binding):
+    """`x_prep_run_ranges_pinned` of this binding, or None (absent, or the
+    MOJOLEARN_XPREP_PINNED_OUT=0 switch)."""
+    if os.environ.get("MOJOLEARN_XPREP_PINNED_OUT", "1") == "0":
+        return None
+    return _optional_prep_entry(binding, "x_prep_run_ranges_pinned")
+
+
+def _pinned_on_for_mode():
+    """Whether `_Prog.output` may keep a 2^22 .. 2^27 word output out of the
+    arena: only when the FAST binding exports the pinned runner."""
+    try:
+        mode = _mode()
+        return mode == "fast" and _pinned_entry(_prep_binding(mode)) is not None
+    except Exception:  # noqa: BLE001 - a missing/host binding keeps the old layout
+        return False
+
+
+class _PinnedOut:
+    """Owner of one pinned output (`x_prep_run_ranges_pinned`): every Array
+    viewing it holds this object; the buffer goes back to the binding's pool
+    when the last one dies."""
+    __slots__ = ("_free", "id", "addr", "nbytes")
+
+    def __init__(self, free, hid, addr, nbytes):
+        self._free, self.id, self.addr, self.nbytes = free, int(hid), int(addr), int(nbytes)
+
+    def __del__(self):
+        try:
+            self._free(self.id)
+        except Exception:  # noqa: BLE001 - interpreter shutdown: the process frees it
+            pass
+
+    def array(self, off, n, shape, code):
+        """A zero-copy Array over words [off, off + n) that keeps this owner alive."""
+        from . import _buffer
+        dtype = "<f4" if code == "f" else "<i4"
+        a = Array.__new__(Array)
+        a._store = self
+        a._base = None
+        mv = _buffer.memory_at(self.addr + 4 * off, 4 * n, writable=True).cast(code)
+        a._pin = mv
+        a._mv = mv
+        a._addr = self.addr + 4 * off
+        a._readonly = False
+        a._set_meta(shape, dtype, "C")
+        return a
+
 #: IterativeImputer(estimator=...): the most chunks of its row selection
 #: (`ii_rcount` / `ii_rwrite`), so `uniq_scan` folds at most this many counts
 _II_CH = 1024
@@ -408,9 +466,14 @@ class _Prog:
         on the M4 Pro, the region only pays for itself on very large outputs
         (taxi OneHotEncoder, 566M words: 1.68 -> 1.50 s; HIGGS, 88M words:
         0.52 -> 0.58 s)."""
-        if int(n) < _OUT_MIN_WORDS:
+        if int(n) < _OUT_MIN_WORDS and not (int(n) >= _PINNED_OUT_MIN_WORDS and self.out_size is None
+                                             and _pinned_on_for_mode()):
             return self.alloc(n)
         if self.out_size is not None:
+            if int(n) < _OUT_MIN_WORDS or self.out_size < _OUT_MIN_WORDS:
+                # MOJOLEARN_X_PREP_PINNED_OUT: a region taken below the old
+                # threshold never turns a second output into an error
+                return self.alloc(n)
             raise ValueError("x_prep: one output region per program")
         self.out_size = max(int(n), 0)
         self._out_code = code
@@ -525,15 +588,31 @@ class _Prog:
             ins = _arena_io.input_ranges(spans)
             outs = _arena_io.output_ranges(_arena_io.complement(ins, ha) + [list(s) for s in self._inout])
             ia, oa = _arena_io.pack_ins(ins), _arena_io.pack_outs(outs)
-            out, out_addr = _zero_words(on, self._out_code) if dev_out else (None, 0)
-            try:
-                run_ranges(base, prog.buffer_info()[0], out_addr,
-                           (ha, sc if dev_scratch else 0, on if dev_out else 0, nst),
+            pinned = _pinned_entry(binding) if dev_out and on >= _PINNED_OUT_MIN_WORDS else None
+            if pinned is not None:
+                # MOJOLEARN_X_PREP_PINNED_OUT: the output region is a pinned
+                # host buffer the result views (receipt = [id, address])
+                receipt = array.array("q", [0, 0])
+                try:
+                    pinned(base, prog.buffer_info()[0], receipt.buffer_info()[0],
+                           (ha, sc if dev_scratch else 0, on, nst),
                            (ia.buffer_info()[0], len(ins), oa.buffer_info()[0], len(outs)))
-            finally:
-                if direct is not None:
-                    direct.close()
-            self._out = out
+                finally:
+                    if direct is not None:
+                        direct.close()
+                if receipt[0] <= 0 or receipt[1] == 0:
+                    raise RuntimeError("x_prep: the pinned output runner returned no buffer")
+                self._out = _PinnedOut(binding.x_prep_pinned_out_free, receipt[0], receipt[1], 4 * on)
+            else:
+                out, out_addr = _zero_words(on, self._out_code) if dev_out else (None, 0)
+                try:
+                    run_ranges(base, prog.buffer_info()[0], out_addr,
+                               (ha, sc if dev_scratch else 0, on if dev_out else 0, nst),
+                               (ia.buffer_info()[0], len(ins), oa.buffer_info()[0], len(outs)))
+                finally:
+                    if direct is not None:
+                        direct.close()
+                self._out = out
         elif dev_out:
             out, out_addr = _zero_words(on, self._out_code)
             run_out(base, prog.buffer_info()[0], out_addr, (ha, sc if dev_scratch else 0, on, nst))
@@ -573,6 +652,8 @@ class _Prog:
         if isinstance(off, _Scratch):
             if off.kind != "o":
                 raise ValueError("x_prep: scratch words never reach the host")
+            if isinstance(self._out, _PinnedOut):
+                return self._out.array(off.off, n, shape, code)
             if self._out is not None:
                 return _take(self._out, off.off, n, shape, code)
             off = self._out_at + off.off
