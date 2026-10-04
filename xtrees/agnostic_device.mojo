@@ -45,6 +45,25 @@ comptime KSHAP_FAST_BATCH = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_KSHAP_
 #: Device counts/compaction/mapping, same background mean/marginal order;
 #: callback retains the existing chunked, row-independent model contract.
 comptime PSHAP_DELTA = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_PSHAP_DELTA_OFF"]()
+#: SHAP_PERM_CACHE (FAST + Apple, on top of PSHAP_DELTA; OPT-IN until its
+#: A/B passes: `-D MOJOLEARN_SHAP_PERM_CACHE`): `pshap_dsynth` keeps its
+#: chunk's `_Delta` (permutations, uploaded x and background, counts, the
+#: prefix sum, the varying-row index and its total) for the process, and the
+#: matching `pshap_dvalues` (same addresses, counts, seed and row0: the next
+#: call of the same chunk, after the caller's model) takes it instead of
+#: rebuilding it: per chunk one permutation draw, two uploads, the count
+#: launch, ceil(log2 G) scan launches, the index launch and one host wait
+#: fewer. Same buffers, same kernels after: no bit moves. Source
+#: lane/apple-fast-shap@13343dd51 (commit 2f0029ac5), recovered 2026-10-04.
+#: Prior: never compiled on M3 (the branch failed to parse at
+#: xtrees/api.mojo:715, a parameter named `out`, and :811); never timed;
+#: board context permutation-shap istella ratio 1.20. Fixed: the old
+#: candidate cached the four buffers of `perm_device.perm_synthetic`, a
+#: per-row host-permutation path main has since replaced with PSHAP_DELTA
+#: (and pooled the synthetic buffer under KSHAP_FAST_BATCH), so the same
+#: idea, caching the per-chunk device state, is re-aimed at the work
+#: PSHAP_DELTA still does twice per chunk.
+comptime SHAP_PERM_CACHE = PSHAP_DELTA and is_defined["MOJOLEARN_SHAP_PERM_CACHE"]()
 comptime AGN_MAX_BLOCKS = 65535 * 16
 comptime _CTX = "MojoXTreesAgnosticIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXTreesAgnosticFast"
 
@@ -625,6 +644,40 @@ struct _Delta(Movable):
         self.src = src^
 
 
+struct _DeltaSlot(Defaultable, Movable):
+    """SHAP_PERM_CACHE: the last `pshap_dsynth` chunk's `_Delta` and its key
+    (x, bg, tot, R, nb, d, np, seed, row0)."""
+    var dl: Optional[_Delta]
+    var key: List[Int]
+
+    def __init__(out self):
+        self.dl = Optional[_Delta]()
+        self.key = List[Int]()
+
+
+comptime AGN_DELTA_SLOT = _Global[StorageType=_DeltaSlot, name="MojoXTreesAgnosticDeltaFast", init_fn=_DeltaSlot.__init__]
+
+
+def _delta_key(x: Int, bg: Int, tot: Int, R: Int, nb: Int, d: Int, np: Int, seed: Int, row0: Int) -> List[Int]:
+    return [x, bg, tot, R, nb, d, np, seed, row0]
+
+
+def _delta_take(ctx: DeviceContext, x: Int, bg: Int, tot: Int, R: Int, nb: Int, d: Int, np: Int, seed: Int,
+                row0: Int) raises -> _Delta:
+    """SHAP_PERM_CACHE: the kept `_Delta` when its key matches (the slot is
+    emptied either way), else a fresh one."""
+    var slot = AGN_DELTA_SLOT.get_or_create_ptr()
+    var hit = False
+    if slot[].dl:
+        hit = slot[].key == _delta_key(x, bg, tot, R, nb, d, np, seed, row0)
+    if hit:
+        slot[].key = List[Int]()
+        return slot[].dl.take()
+    slot[].dl = Optional[_Delta]()
+    slot[].key = List[Int]()
+    return _Delta(ctx, x, bg, tot, R, nb, d, np, seed, row0)
+
+
 def pshap_dsynth(x: Int, bg: Int, syn: Int, tot: Int, R: Int, nb: Int, d: Int, np: Int, seed: Int,
                  row0: Int) raises:
     """MOJOLEARN_PSHAP_DELTA: the chunk's VARYING synthetic rows, in full
@@ -644,7 +697,12 @@ def pshap_dsynth(x: Int, bg: Int, syn: Int, tot: Int, R: Int, nb: Int, d: Int, n
         )
         _pool_down(ctx, syn, total)
         ctx.synchronize()
-    _ = dl^
+    comptime if SHAP_PERM_CACHE:
+        var slot = AGN_DELTA_SLOT.get_or_create_ptr()
+        slot[].dl = Optional[_Delta](dl^)
+        slot[].key = _delta_key(x, bg, tot, R, nb, d, np, seed, row0)
+    else:
+        _ = dl^
 
 
 def pshap_dvalues(x: Int, bg: Int, yout: Int, phi: Int, tot: Int, R: Int, nb: Int, d: Int, k: Int, np: Int,
@@ -657,7 +715,11 @@ def pshap_dvalues(x: Int, bg: Int, yout: Int, phi: Int, tot: Int, R: Int, nb: In
     if R * d * k <= 0 or mm <= 0:
         return
     var ctx = _ctx()
-    var dl = _Delta(ctx, x, bg, tot, R, nb, d, np, seed, row0)
+    var dl: _Delta
+    comptime if SHAP_PERM_CACHE:
+        dl = _delta_take(ctx, x, bg, tot, R, nb, d, np, seed, row0)
+    else:
+        dl = _Delta(ctx, x, bg, tot, R, nb, d, np, seed, row0)
     var G = R * mm
     var mp = ctx.enqueue_create_buffer[DType.int64](G * nb)
     ctx.enqueue_function[dmap_kernel](Int64(G * nb), Int32(nb), dl.idx.unsafe_ptr(), mp.unsafe_ptr(),
