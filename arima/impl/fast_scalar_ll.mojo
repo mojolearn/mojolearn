@@ -31,12 +31,12 @@ comptime SCALAR_LL_LOG_2PI = Float32(1.8378770664093453)
 
 
 def scalar_ll_parts_kernel[CAPTURE: Bool = False](
-    y: Pointer[Float32, _],
-    T: Pointer[Float32, _],
-    Q: Pointer[Float32, _],
-    P0: Pointer[Float32, _],
-    alpha0: Pointer[Float32, _],
-    mu: Pointer[Float32, _],
+    y: Pointer[Float32, ImmutAnyOrigin],
+    T: Pointer[Float32, ImmutAnyOrigin],
+    Q: Pointer[Float32, ImmutAnyOrigin],
+    P0: Pointer[Float32, ImmutAnyOrigin],
+    alpha0: Pointer[Float32, ImmutAnyOrigin],
+    mu: Pointer[Float32, ImmutAnyOrigin],
     log_parts: MutPointer[Float32, MutAnyOrigin],
     quad_parts: MutPointer[Float32, MutAnyOrigin],
     error_parts: MutPointer[Float32, MutAnyOrigin],
@@ -103,10 +103,10 @@ def scalar_ll_parts_kernel[CAPTURE: Bool = False](
 
 
 def scalar_ll_finish_kernel(
-    log_parts: Pointer[Float32, _],
-    quad_parts: Pointer[Float32, _],
-    error_parts: Pointer[Float32, _],
-    Q: Pointer[Float32, _],
+    log_parts: Pointer[Float32, ImmutAnyOrigin],
+    quad_parts: Pointer[Float32, ImmutAnyOrigin],
+    error_parts: Pointer[Float32, ImmutAnyOrigin],
+    Q: Pointer[Float32, ImmutAnyOrigin],
     P: MutPointer[Float32, MutAnyOrigin],
     loglike: MutPointer[Float32, MutAnyOrigin],
     info: MutPointer[Int32, MutAnyOrigin],
