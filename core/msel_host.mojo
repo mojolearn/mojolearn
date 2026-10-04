@@ -167,3 +167,56 @@ def host_rebase_offsets_i32(
         base += Int64(raw.unsafe_load(start + len_s - 1))
         start += len_s
     return o == n_out
+
+
+def host_split_table_i32(
+    perm_addr: Int, m: Int, n_test: Int, n_train: Int, counts_addr: Int, table_addr: Int, sums_addr: Int,
+) raises -> Bool:
+    var pp = _I64(unsafe_from_address=perm_addr)
+    var cp = _I64(unsafe_from_address=counts_addr)
+    var tp = _I32(unsafe_from_address=table_addr)
+    var sp = _I64(unsafe_from_address=sums_addr)
+    for i in range(n_test + n_train):
+        var g = Int(pp.unsafe_load(i))
+        if g < 0 or g >= m:
+            return False
+    var c_tr = Int32(0)
+    var c_te = Int32(0)
+    for g in range(m):
+        tp.unsafe_store(g, Int32(2))
+    for i in range(n_test + n_train):
+        var g = Int(pp.unsafe_load(i))
+        if i < n_test:
+            tp.unsafe_store(g, Int32(1))
+            c_te += Int32(cp.unsafe_load(g))
+        else:
+            tp.unsafe_store(g, Int32(0))
+            c_tr += Int32(cp.unsafe_load(g))
+    sp.unsafe_store(0, Int64(c_tr))
+    sp.unsafe_store(1, Int64(c_te))
+    return True
+
+
+def host_group_fold_perm_i32(
+    counts_addr: Int, m: Int, n_folds: Int, perm_addr: Int, dst_addr: Int, sizes_addr: Int,
+) raises -> Bool:
+    var pp = _I64(unsafe_from_address=perm_addr)
+    var cp = _I64(unsafe_from_address=counts_addr)
+    var dp = _I32(unsafe_from_address=dst_addr)
+    var sp = _I64(unsafe_from_address=sizes_addr)
+    for j in range(m):
+        var g = Int(pp.unsafe_load(j))
+        if g < 0 or g >= m:
+            return False
+    var sizes = List[Int32](length=n_folds, fill=0)
+    var start = 0
+    for f in range(n_folds):
+        var size = m // n_folds + (1 if f < m % n_folds else 0)
+        for j in range(start, start + size):
+            var g = Int(pp.unsafe_load(j))
+            dp.unsafe_store(g, Int32(f))
+            sizes[f] += Int32(cp.unsafe_load(g))
+        start += size
+    for f in range(n_folds):
+        sp.unsafe_store(f, Int64(sizes[f]))
+    return True

@@ -88,6 +88,8 @@ from bindings.msel_host import (
     msel_scatter_rows_binding,
     msel_proba_column_binding,
     msel_rebase_offsets_i32_binding,
+    msel_split_table_i32_binding,
+    msel_group_fold_perm_i32_binding,
 )
 from std.os import abort
 from std.python import Python, PythonObject
@@ -1473,6 +1475,8 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[msel_scatter_rows_binding]("msel_scatter_rows")
         module.def_function[msel_proba_column_binding]("msel_proba_column")
         module.def_function[msel_rebase_offsets_i32_binding]("msel_rebase_offsets_i32")
+        module.def_function[msel_split_table_i32_binding]("msel_split_table_i32")
+        module.def_function[msel_group_fold_perm_i32_binding]("msel_group_fold_perm_i32")
         module.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
         module.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
         module.def_function[probability_rows_f32_binding]("probability_rows_f32")

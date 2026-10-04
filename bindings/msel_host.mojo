@@ -12,7 +12,9 @@ from std.python._cpython import GILReleased
 from core.msel_convert import MSEL_F32, MSEL_F64, MSEL_I64, msel_is_int, msel_valid_code
 from core.msel_host import (
     MselHostStore,
+    host_group_fold_perm_i32,
     host_proba_column,
+    host_split_table_i32,
     host_rebase_offsets_i32,
     host_scatter_rows,
     host_take_rows,
@@ -143,4 +145,54 @@ def msel_rebase_offsets_i32_binding(
         ok = host_rebase_offsets_i32(ra, nr, la, p, no, d)
     if not ok:
         raise Error("msel_rebase_offsets_i32: a merged offset leaves int32")
+    return PythonObject(0)
+
+
+def msel_split_table_i32_binding(
+    perm_addr: PythonObject, m: PythonObject, n_test: PythonObject, n_train: PythonObject,
+    counts_addr: PythonObject, table_addr: PythonObject, sums_addr: PythonObject,
+) raises -> PythonObject:
+    """GroupShuffleSplit's per-group side table (the signature of
+    `split_table_i32`): table[g] 1 test, 0 train, 2 neither; sums [train
+    rows, test rows]."""
+    var mm = Int(py=m)
+    var te = Int(py=n_test)
+    var tr = Int(py=n_train)
+    if mm < 1 or te < 0 or tr < 0 or te + tr > mm or mm > 2147483000:
+        raise Error("split_table_i32: bad sizes")
+    var pa = Int(py=perm_addr)
+    var ca = Int(py=counts_addr)
+    var ta = Int(py=table_addr)
+    var sa = Int(py=sums_addr)
+    if (te + tr > 0 and pa == 0) or ca == 0 or ta == 0 or sa == 0:
+        raise Error("split_table_i32: null buffer address")
+    var ok = True
+    with GILReleased(Python()):
+        ok = host_split_table_i32(pa, mm, te, tr, ca, ta, sa)
+    if not ok:
+        raise Error("split_table_i32: group index out of range")
+    return PythonObject(0)
+
+
+def msel_group_fold_perm_i32_binding(
+    counts_addr: PythonObject, m: PythonObject, n_folds: PythonObject, perm_addr: PythonObject,
+    dst_addr: PythonObject, sizes_addr: PythonObject,
+) raises -> PythonObject:
+    """Shuffled GroupKFold (the perm branch of `group_fold_assign_i32`):
+    the permuted groups in n_folds nearly equal runs."""
+    var mm = Int(py=m)
+    var K = Int(py=n_folds)
+    if K < 1 or mm < K or mm > 2147483000:
+        raise Error("group_fold_assign_i32: m >= n_folds >= 1")
+    var ca = Int(py=counts_addr)
+    var pa = Int(py=perm_addr)
+    var da = Int(py=dst_addr)
+    var sa = Int(py=sizes_addr)
+    if ca == 0 or pa == 0 or da == 0 or sa == 0:
+        raise Error("group_fold_assign_i32: null buffer address")
+    var ok = True
+    with GILReleased(Python()):
+        ok = host_group_fold_perm_i32(ca, mm, K, pa, da, sa)
+    if not ok:
+        raise Error("group_fold_assign_i32: a permuted group is out of range")
     return PythonObject(0)

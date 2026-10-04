@@ -24,6 +24,7 @@ no element count is bounded by Int32; the one atomic-free status word is
 set by any thread that sees an out-of-range index.
 """
 
+from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -399,5 +400,151 @@ def device_rebase_offsets_i32(
     _ = d_raw^
     _ = d_lens^
     _ = d_dst^
+    _ = d_status^
+    return ok
+
+
+# ===========================================================================
+# Group splitters: GroupShuffleSplit's side table, shuffled GroupKFold's runs
+# ===========================================================================
+#
+# Per-group row counts add with Int32 atomics (exact in any order: every sum
+# is at most the row count, below 2^31 as in core/hotpath_device.mojo), and
+# each group's entry is written by the one thread holding its position in
+# the permutation, so the bytes do not depend on the schedule.
+
+
+def _fill_i32_kernel(dst: _I32, n: Int64, v: Int32):
+    var step = _stride()
+    var t = _tid()
+    while t < Int(n):
+        dst.unsafe_store(t, v)
+        t += step
+
+
+def _split_side_kernel(
+    perm: _I64, m: Int64, n_test: Int64, n_side: Int64, counts: _I64, table: _I32, sums: _I32, status: _I32,
+):
+    var step = _stride()
+    var i = _tid()
+    while i < Int(n_side):
+        var g = Int(perm.unsafe_load(i))
+        if g < 0 or g >= Int(m):
+            status.unsafe_store(0, Int32(1))
+        else:
+            var side = 1 if i < Int(n_test) else 0
+            table.unsafe_store(g, Int32(side))
+            _ = Atomic[DType.int32].fetch_add(sums + side, Int32(counts.unsafe_load(g)))
+        i += step
+
+
+def device_split_table_i32(
+    ctx: DeviceContext, perm_addr: Int, m: Int, n_test: Int, n_train: Int,
+    counts_addr: Int, table_addr: Int, sums_addr: Int,
+) raises -> Bool:
+    """`split_table_i32` on the device: table[g] = 1 for the first n_test
+    groups of the int64 permutation, 0 for the next n_train, 2 for the
+    rest; sums (int64, 2) = [train rows, test rows]. False when a permuted
+    group is out of range."""
+    var n_side = n_test + n_train
+    var d_perm = ctx.enqueue_create_buffer[DType.int64](max(n_side, 1))
+    var d_counts = ctx.enqueue_create_buffer[DType.int64](m)
+    var d_table = ctx.enqueue_create_buffer[DType.int32](m)
+    var d_sums = ctx.enqueue_create_buffer[DType.int32](2)
+    var d_status = ctx.enqueue_create_buffer[DType.int32](2)
+    enqueue_fill(ctx, d_status, Int32(0))
+    enqueue_fill(ctx, d_sums, Int32(0))
+    if n_side > 0:
+        ctx.enqueue_copy(
+            dst_buf=d_perm.create_sub_buffer[DType.int64](0, n_side), src_ptr=_I64(unsafe_from_address=perm_addr)
+        )
+    ctx.enqueue_copy(dst_buf=d_counts, src_ptr=_I64(unsafe_from_address=counts_addr))
+    ctx.enqueue_function[_fill_i32_kernel](
+        d_table.unsafe_ptr(), Int64(m), Int32(2), grid_dim=_grid(m), block_dim=MSEL_TPB,
+    )
+    if n_side > 0:
+        ctx.enqueue_function[_split_side_kernel](
+            d_perm.unsafe_ptr(), Int64(m), Int64(n_test), Int64(n_side), d_counts.unsafe_ptr(),
+            d_table.unsafe_ptr(), d_sums.unsafe_ptr(), d_status.unsafe_ptr(),
+            grid_dim=_grid(n_side), block_dim=MSEL_TPB,
+        )
+    var ok = _status(ctx, d_status) == 0
+    if ok:
+        var h = ctx.enqueue_create_host_buffer[DType.int32](2)
+        ctx.enqueue_copy(dst_ptr=_I32(unsafe_from_address=table_addr), src_buf=d_table)
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d_sums)
+        ctx.synchronize()
+        var sp = _I64(unsafe_from_address=sums_addr)
+        sp.unsafe_store(0, Int64(h.unsafe_ptr()[0]))
+        sp.unsafe_store(1, Int64(h.unsafe_ptr()[1]))
+        _ = h^
+    _ = d_perm^
+    _ = d_counts^
+    _ = d_table^
+    _ = d_sums^
+    _ = d_status^
+    return ok
+
+
+def _group_perm_fold_kernel(
+    perm: _I64, m: Int64, folds: Int64, counts: _I64, dst: _I32, sizes: _I32, status: _I32,
+):
+    var mm = Int(m)
+    var K = Int(folds)
+    var q = mm // K
+    var r = mm - q * K
+    var long_end = r * (q + 1)
+    var step = _stride()
+    var j = _tid()
+    while j < mm:
+        var f: Int
+        if j < long_end:
+            f = j // (q + 1)
+        else:
+            f = r + (j - long_end) // q
+        var g = Int(perm.unsafe_load(j))
+        if g < 0 or g >= mm:
+            status.unsafe_store(0, Int32(1))
+        else:
+            dst.unsafe_store(g, Int32(f))
+            _ = Atomic[DType.int32].fetch_add(sizes + f, Int32(counts.unsafe_load(g)))
+        j += step
+
+
+def device_group_fold_perm_i32(
+    ctx: DeviceContext, counts_addr: Int, m: Int, n_folds: Int, perm_addr: Int, dst_addr: Int, sizes_addr: Int,
+) raises -> Bool:
+    """Shuffled GroupKFold: the permuted groups split into n_folds nearly
+    equal runs (the first m % n_folds one longer); int32 dst[g] the fold of
+    group g, int64 sizes[f] each fold's rows. Needs m >= n_folds >= 1.
+    False when a permuted group is out of range."""
+    var d_perm = ctx.enqueue_create_buffer[DType.int64](m)
+    var d_counts = ctx.enqueue_create_buffer[DType.int64](m)
+    var d_dst = ctx.enqueue_create_buffer[DType.int32](m)
+    var d_sizes = ctx.enqueue_create_buffer[DType.int32](n_folds)
+    var d_status = ctx.enqueue_create_buffer[DType.int32](2)
+    enqueue_fill(ctx, d_status, Int32(0))
+    enqueue_fill(ctx, d_sizes, Int32(0))
+    ctx.enqueue_copy(dst_buf=d_perm, src_ptr=_I64(unsafe_from_address=perm_addr))
+    ctx.enqueue_copy(dst_buf=d_counts, src_ptr=_I64(unsafe_from_address=counts_addr))
+    ctx.enqueue_function[_group_perm_fold_kernel](
+        d_perm.unsafe_ptr(), Int64(m), Int64(n_folds), d_counts.unsafe_ptr(), d_dst.unsafe_ptr(),
+        d_sizes.unsafe_ptr(), d_status.unsafe_ptr(), grid_dim=_grid(m), block_dim=MSEL_TPB,
+    )
+    var ok = _status(ctx, d_status) == 0
+    if ok:
+        var h = ctx.enqueue_create_host_buffer[DType.int32](n_folds)
+        ctx.enqueue_copy(dst_ptr=_I32(unsafe_from_address=dst_addr), src_buf=d_dst)
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d_sizes)
+        ctx.synchronize()
+        # the n_folds fold sizes widened to the caller's int64 (k scalars)
+        var sp = _I64(unsafe_from_address=sizes_addr)
+        for f in range(n_folds):
+            sp.unsafe_store(f, Int64(h.unsafe_ptr()[f]))
+        _ = h^
+    _ = d_perm^
+    _ = d_counts^
+    _ = d_dst^
+    _ = d_sizes^
     _ = d_status^
     return ok

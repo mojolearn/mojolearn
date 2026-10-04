@@ -1075,9 +1075,17 @@ class GroupKFold(_KFoldBase):
         to_fold = array.array('i', bytes(4 * m))
         sizes = array.array('q', bytes(8 * self.n_splits))
         counts = array.array('q', gc.counts)
-        _native('group_fold_assign_i32')(counts.buffer_info()[0], m, self.n_splits,
-                                         perm.buffer_info()[0] if perm is not None and m else 0,
-                                         to_fold.buffer_info()[0], sizes.buffer_info()[0])
+        if perm is not None:
+            # shuffled: the permuted groups' runs on the device (lane
+            # cpu2-l4-modelsel); the unshuffled greedy below is sequential
+            # by definition (each group goes to the fold lightest after
+            # every larger group) and stays the binding's group-level loop
+            _native('msel_group_fold_perm_i32')(counts.buffer_info()[0], m, self.n_splits,
+                                                perm.buffer_info()[0], to_fold.buffer_info()[0],
+                                                sizes.buffer_info()[0])
+        else:
+            _native('group_fold_assign_i32')(counts.buffer_info()[0], m, self.n_splits, 0,
+                                             to_fold.buffer_info()[0], sizes.buffer_info()[0])
         yield from gc.split_by_fold(to_fold, self.n_splits, sizes)
 
     def _test_folds(self, X, y, groups):
@@ -1460,7 +1468,8 @@ class GroupShuffleSplit(ShuffleSplit):
             # each group's side (0 train, 1 test, 2 neither) as a table
             # gathered per row, the same draws (lane/py-misc-msel)
             # each draw's per-group side table and side sizes in Mojo
-            # (`split_table_i32`; lane cgr4-py-compute), gathered per row
+            # (`split_table_i32`; lane cgr4-py-compute; on the device since
+            # lane cpu2-l4-modelsel, `msel_split_table_i32`), gathered per row
             m = gc.m
             n_train, n_test = self._sizes(m)
             rng = _rng(self.random_state)
@@ -1468,8 +1477,9 @@ class GroupShuffleSplit(ShuffleSplit):
             table = array.array('i', bytes(4 * m))
             sums = array.array('q', [0, 0])
             for perm in rng.permutation_rows([m] * self.n_splits):
-                _native('split_table_i32')(perm.buffer_info()[0], m, n_test, n_train, counts.buffer_info()[0],
-                                           table.buffer_info()[0], sums.buffer_info()[0])
+                _native('msel_split_table_i32')(perm.buffer_info()[0], m, n_test, n_train,
+                                                counts.buffer_info()[0], table.buffer_info()[0],
+                                                sums.buffer_info()[0])
                 words = gc.mapped(table)
                 yield gc.only(words, 0, sums[0]), gc.only(words, 1, sums[1])
             return

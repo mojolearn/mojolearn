@@ -156,6 +156,8 @@ from bindings.msel_device import (
     msel_scatter_rows_binding,
     msel_proba_column_binding,
     msel_rebase_offsets_i32_binding,
+    msel_split_table_i32_binding,
+    msel_group_fold_perm_i32_binding,
 )
 from std.os import abort
 from std.math import isfinite
@@ -1829,6 +1831,8 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[msel_scatter_rows_binding]("msel_scatter_rows")
         m.def_function[msel_proba_column_binding]("msel_proba_column")
         m.def_function[msel_rebase_offsets_i32_binding]("msel_rebase_offsets_i32")
+        m.def_function[msel_split_table_i32_binding]("msel_split_table_i32")
+        m.def_function[msel_group_fold_perm_i32_binding]("msel_group_fold_perm_i32")
         # DEVIATION 2500: label encode/decode and the class argmax, host side.
         m.def_function[encode_labels_f32_binding]("encode_labels_f32")
         m.def_function[encode_labels_f64_binding]("encode_labels_f64")
