@@ -8,6 +8,7 @@ of main); lines will drift as that branch moves.
 Scope: the IDENTICAL tier on NVIDIA and AMD, neural families first (GEMM under the LM and
 transformer rows, Mamba-1/2/3, Samba, x_cnn, sequence, optimizers, embedding, cross-entropy).
 Apple is out of scope here except where a bits change must move every column together.
+Trees and classical ML are in the companion `IDENTICAL_ML_TREES_ROADMAP.md`.
 
 Rules that bind every item (see `CLAUDE.md`, `docs/plans/HOST_ROUTE_REMOVAL.md`):
 
