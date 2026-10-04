@@ -1168,6 +1168,11 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                     var bs_prev = 0
                     var et_prev = eta0
                     var etp = FP(unsafe_from_address=Int(dstt.unsafe_ptr())) + 4 * par + 2
+                    # host-side addresses (the two pairs swap roles a batch)
+                    var wpa = FP(unsafe_from_address=Int(dw.unsafe_ptr()))
+                    var wpb = FP(unsafe_from_address=Int(dw2.unsafe_ptr()))
+                    var bpa = FP(unsafe_from_address=Int(dbias.unsafe_ptr()))
+                    var bpb = FP(unsafe_from_address=Int(dbias2.unsafe_ptr()))
                     while start < n:
                         var bs = min(batch, n - start)
                         var et = mb_eta(lr, eta0, eta0, alpha, power_t, opt_init, t)
@@ -1181,10 +1186,8 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                         else:
                             ctx.enqueue_function[sgd_mb_steprows_kernel](
                                 dparts.unsafe_ptr(),
-                                dw.unsafe_ptr() if cur == 0 else dw2.unsafe_ptr(),
-                                dbias.unsafe_ptr() if cur == 0 else dbias2.unsafe_ptr(),
-                                dw2.unsafe_ptr() if cur == 0 else dw.unsafe_ptr(),
-                                dbias2.unsafe_ptr() if cur == 0 else dbias.unsafe_ptr(),
+                                wpa if cur == 0 else wpb, bpa if cur == 0 else bpb,
+                                wpb if cur == 0 else wpa, bpb if cur == 0 else bpa,
                                 dobj.unsafe_ptr(), dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), dsw.unsafe_ptr(),
                                 ddl.unsafe_ptr(), dlv.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), etp,
                                 Int32(start), Int32(bs_prev), Int32(bs), et_prev, Int32(dev_eta),
