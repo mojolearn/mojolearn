@@ -982,7 +982,7 @@ class SmallByteLanguageModelTrainer:
         stateless path otherwise. An explicit bool is returned as given."""
         if self._resident is None:
             binding = self._binding()
-            self._resident = all(callable(getattr(binding, name, None)) for name in _SESSION_ENTRIES)
+            self._resident = all(callable(getattr(binding, name, None)) for name in _SESSION_ENTRIES)  # glue: binding entry names
         return self._resident
 
     def run_metadata(self):
