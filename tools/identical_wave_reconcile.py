@@ -5,7 +5,8 @@ Inputs: the composed revision (identical_wave_revision.py), its original
 quality.json (hash bound in revision-provenance.json) and append-only
 supplements (identical_wave_supplement.py). Per required gate and arm:
   original PASS / NOT_APPLICABLE  -> carried, linked to the original receipt;
-  original FAIL + supplement PASS -> PASS, linked to the supplement receipt;
+  original FAIL + supplement PASS -> PASS, linked to the supplement receipt
+                                     (latest attempt decides; all attempts listed);
   dart_reference failure          -> PASS only with an adjudication receipt
                                      whose status is PASS for that arm, else PENDING;
   anything else                   -> FAIL.
@@ -81,7 +82,18 @@ def main():
                 row.update(status='PASS', rc=0, source='original',
                            log=str(old_root / arm / 'quality' / (gate_id + '.log')))
             else:
-                folder = wave / 'supplements' / (gate_id + '--' + arm)
+                # Every attempt is listed; the LATEST attempt decides. Earlier
+                # failed attempts (e.g. harness packaging defects) stay visible.
+                base = wave / 'supplements' / (gate_id + '--' + arm)
+                attempts, n = [], 1
+                folder = base
+                while folder.is_dir():
+                    attempts.append(folder)
+                    n += 1
+                    folder = base.with_name(base.name + '--attempt' + str(n))
+                if attempts:
+                    row['attempts'] = [{'folder': str(f), 'status': (load(f / 'receipt.json').get('status') if (f / 'receipt.json').is_file() else 'NO_RECEIPT')} for f in attempts]
+                folder = attempts[-1] if attempts else base
                 receipt_path = folder / 'receipt.json'
                 if gate_id == 'dart_reference':
                     verdict = (adjudication or {}).get('arms', {}).get(arm, {}).get('status') if adjudication else None

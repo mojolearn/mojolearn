@@ -84,16 +84,25 @@ def main():
     failed = 0
     for gate, arm in cells:
         source = wave / arm / 'source'
-        folder = wave / 'supplements' / (gate['id'] + '--' + arm)
-        folder.parent.mkdir(exist_ok=True)
+        # Earlier attempts stay untouched; the reconciler reports every attempt.
+        base = wave / 'supplements' / (gate['id'] + '--' + arm)
+        base.parent.mkdir(exist_ok=True)
+        folder, n = base, 1
+        while folder.exists():
+            n += 1
+            folder = base.with_name(base.name + '--attempt' + str(n))
         folder.mkdir()  # exist_ok=False: one attempt per folder, never overwritten
+        # Use the harness copy only when it IS a reviewed repair (bytes differ from
+        # the frozen source); unchanged gates run from the frozen tree beside
+        # their own helper modules (e.g. bench_board_probe).
         pinned = a.harness / gate['path']
-        script = pinned if pinned.is_file() else source / gate['path']
+        frozen = source / gate['path']
+        script = pinned if pinned.is_file() and digest(pinned) != digest(frozen) else frozen
         report = folder / (gate['id'] + '.json')
         argv = [str(a.python), str(script)] + [v.replace('{report}', str(report)).replace('{full_data}', str(a.data.parent / 'rows-full')) for v in gate.get('args', [])]
         env = environment(a.vendor, a.gpu_arch, source, arm)
         env['MOJOLEARN_IDN_GATE_ARTIFACTS'] = str(folder / 'artifacts')
-        receipt = {'schema': 1, 'kind': 'quality-supplement', 'gate': gate['id'], 'arm': arm, 'identity': identity,
+        receipt = {'schema': 1, 'kind': 'quality-supplement', 'gate': gate['id'], 'arm': arm, 'attempt': n, 'identity': identity,
                    'wave': str(wave), 'prepare_sha256': digest(wave / 'prepare.json'),
                    'build_products_sha256': digest(wave / arm / 'build-products.json'),
                    'plan_gate': gate, 'harness_commit': a.harness_commit,
