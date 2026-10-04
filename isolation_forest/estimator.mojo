@@ -45,6 +45,7 @@ comptime _DEVCTX_SLOT = "MojoSvmContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDE
 
 from core.identity_trace import IdentityTrace
 from isolation_forest.impl.isolation_forest import (
+    IDN_IF_QUERY_DEVICE,
     IF_params,
     IFLaunchKnobs,
     IsolationForestModel,
@@ -229,11 +230,18 @@ struct IsolationForestEstimator(Movable):
         if use_quantile:
             var training_scores: List[Float32]
             if src_addr != 0:
-                var sp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=src_addr)
-                var x_rows = List[Float32](capacity=n_rows * n_cols)
-                for i in range(n_rows * n_cols):
-                    x_rows.append(sp.unsafe_load(i))
-                training_scores = self.score_samples(ctx, x_rows, n_rows, n_cols)
+                comptime if IDN_IF_QUERY_DEVICE:
+                    # lane fam-forests: the borrowed block is scored from its
+                    # address (no List copy of n x d cells).
+                    training_scores = self.score_samples(
+                        ctx, List[Float32](), n_rows, n_cols, src_addr
+                    )
+                else:
+                    var sp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=src_addr)
+                    var x_rows = List[Float32](capacity=n_rows * n_cols)
+                    for i in range(n_rows * n_cols):
+                        x_rows.append(sp.unsafe_load(i))
+                    training_scores = self.score_samples(ctx, x_rows, n_rows, n_cols)
             else:
                 training_scores = self.score_samples(ctx, x_rowmajor, n_rows, n_cols)
             self.offset_ = percentile_linear(training_scores, 100.0 * self.contamination)
@@ -241,25 +249,31 @@ struct IsolationForestEstimator(Movable):
             self.offset_ = -0.5
 
     def score_samples(
-        self, ctx: DeviceContext, x_rowmajor: List[Float32], n_rows: Int, n_cols: Int
+        self, ctx: DeviceContext, x_rowmajor: List[Float32], n_rows: Int, n_cols: Int,
+        src_addr: Int = 0,
     ) raises -> List[Float32]:
-        """`score_samples(X)` (`:894-959`): `-paper_score`."""
+        """`score_samples(X)` (`:894-959`): `-paper_score`. A nonzero
+        `src_addr` lends the ROW-major X instead of `x_rowmajor`
+        (`IDN_IF_QUERY_DEVICE`)."""
         if not self.fitted:
             raise Error("Model has not been fitted. Call fit() first.")
         var trace = IdentityTrace.disabled()
-        var paper = if_score_samples(ctx, self.model, x_rowmajor, n_rows, n_cols, trace, self.knobs)
+        var paper = if_score_samples(
+            ctx, self.model, x_rowmajor, n_rows, n_cols, trace, self.knobs, src_addr
+        )
         var out = List[Float32]()
         for i in range(n_rows):
             out.append(-paper[i])
         return out^
 
     def decision_function(
-        self, ctx: DeviceContext, x_rowmajor: List[Float32], n_rows: Int, n_cols: Int
+        self, ctx: DeviceContext, x_rowmajor: List[Float32], n_rows: Int, n_cols: Int,
+        src_addr: Int = 0,
     ) raises -> List[Float32]:
         """`decision_function(X) = score_samples(X) - offset_` (`:978`).
         The subtraction is the Python layer's (float32 array minus a
         Python float: numpy/cupy compute it in float32)."""
-        var s = self.score_samples(ctx, x_rowmajor, n_rows, n_cols)
+        var s = self.score_samples(ctx, x_rowmajor, n_rows, n_cols, src_addr)
         var off = Float32(self.offset_)
         var out = List[Float32]()
         for i in range(n_rows):
@@ -267,14 +281,17 @@ struct IsolationForestEstimator(Movable):
         return out^
 
     def predict(
-        self, ctx: DeviceContext, x_rowmajor: List[Float32], n_rows: Int, n_cols: Int
+        self, ctx: DeviceContext, x_rowmajor: List[Float32], n_rows: Int, n_cols: Int,
+        src_addr: Int = 0,
     ) raises -> List[Int32]:
         """`predict(X)` (`:981-1042`): `-C++predict(X, threshold =
         -offset_)`; sklearn convention, -1 = anomaly, 1 = inlier."""
         if not self.fitted:
             raise Error("Model has not been fitted. Call fit() first.")
         var threshold = Float32(-self.offset_)
-        var raw = if_predict(ctx, self.model, x_rowmajor, n_rows, n_cols, threshold, self.knobs)
+        var raw = if_predict(
+            ctx, self.model, x_rowmajor, n_rows, n_cols, threshold, self.knobs, src_addr
+        )
         var out = List[Int32]()
         for i in range(n_rows):
             out.append(-raw[i])
@@ -361,6 +378,7 @@ def iforest_run_host(
     contamination: Float64,
     want: Int,
     train_addr: Int = 0,
+    query_addr: Int = 0,
 ) raises -> IFRunOutputs:
     """`IsolationForest(...).fit(train)` then one of `score_samples`,
     `decision_function` or `predict` on `query`, in one call.
@@ -391,7 +409,7 @@ def iforest_run_host(
         )
     if n_query <= 0:
         raise Error("iforest_run_host: the query matrix must have at least one row")
-    if len(query) != n_query * n_features:
+    if query_addr == 0 and len(query) != n_query * n_features:
         raise Error(
             "iforest_run_host: the query X has " + String(len(query))
             + " values, n_rows x n_features is " + String(n_query * n_features)
@@ -418,6 +436,8 @@ def iforest_run_host(
     est.contamination = contamination
     est.warm_start = False
     # DEVIATION 2638: `train_addr` lends the ROW-major training block.
+    # Lane fam-forests: `query_addr` (nonzero only under
+    # `IDN_IF_QUERY_DEVICE`) lends the ROW-major query block the same way.
     est.fit(ctx, train, n_train, n_features, src_addr=train_addr)
 
     var out = IFRunOutputs()
@@ -425,11 +445,11 @@ def iforest_run_host(
     out.max_samples_ = est.max_samples_
     out.n_features_in_ = est.n_features_in_
     if want == IF_WANT_PREDICT:
-        out.labels = est.predict(ctx, query, n_query, n_features)
+        out.labels = est.predict(ctx, query, n_query, n_features, query_addr)
     elif want == IF_WANT_DECISION_FUNCTION:
-        out.values = est.decision_function(ctx, query, n_query, n_features)
+        out.values = est.decision_function(ctx, query, n_query, n_features, query_addr)
     else:
-        out.values = est.score_samples(ctx, query, n_query, n_features)
+        out.values = est.score_samples(ctx, query, n_query, n_features, query_addr)
     _ = est^
     # DEVIATION 1946: THE CONTEXT DIES LAST. `est.model` holds EIGHT
     # `DeviceBuffer`s (`isolation_forest.mojo:155-162`). Mojo destroys a value
