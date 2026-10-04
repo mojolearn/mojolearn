@@ -26,7 +26,8 @@ from gemm.afn_apple_fast import (
 )
 from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
 from decomposition.linalg_public_device import device_qr_r
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
+from std.sys.info import has_apple_gpu_accelerator
 from x_decomp.lu_fast import LU_FAST_STEP1, lfs_blocks, lu_fast_panel
 from x_decomp.lu_fast_mma import LU_FAST_MMA, lu_fast_mma_factor
 from x_decomp.lasso_grp import DECOMP_FAST_LASSO_GRP, LG_MAXK, LG_TPB, lasso_grp_kernel
@@ -884,6 +885,77 @@ def cd_rows_kernel(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32P
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):
         viol.unsafe_store(i, cd_row(w, hht, xht, perm, i, Int(k)))
+
+
+# lane/apple-fast-rec-decomp (2026-10-04): the FAST + Apple guard of the
+# recovered `-D MOJOLEARN_...` candidates in this file (SVD_FAST_CHOLQR,
+# FA_FAST_QRR). IDENTICAL and every other vendor compile main's code.
+comptime XD_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+
+#: Recovered candidate (lane/apple-fast-rec-decomp, 2026-10-04), default OFF,
+#: FAST + Apple only. Source lane/apple-fast-decomp-linalg@74d52352b
+#: (50d12a950). What it does: `orth_on_device_diag`'s `with_diag` caller
+#: (linalg.svd's U on the whole-matrix route) runs each pass as CholeskyQR:
+#: G = A^T A on `launch_gemm`, L = chol(G) (the blocked kernel when
+#: CHOL_FAST_BLOCKED is on and l > CH_NB, else the column driver), R = L^T,
+#: then main's row-parallel A R^-1; two passes = CholeskyQR2. linalg.svd
+#: takes that route instead of the blocked TSQR only when the FAST Metal
+#: binding reports the define (`x_decomp_fast_defines`). A pass falls back
+#: to main's sliced Householder pass when the factor fails or its diagonal
+#: spans more than 2^8 (cond past CholeskyQR2's float32 bound), so quality is
+#: never lowered. Known: prior M3 B arm (dlin-svd-cholqr-istella, old head)
+#: svd istella 15,620 ms against the board's FAST 1,781 ms (main's TSQR):
+#: a large negative lead. Fixed in the port: the guard is a device kernel
+#: (`cholqr_guard_kernel`) and the host reads one flag a pass instead of
+#: downloading the l x l factor and scanning its diagonal on the host.
+comptime SVD_FAST_CHOLQR = XD_FAST_APPLE and is_defined["MOJOLEARN_SVD_FAST_CHOLQR"]()
+comptime CQ_TPB = 256
+#: 2^8: the largest diagonal span CholeskyQR2 takes (cond(A) about its square)
+comptime CQ_SPAN = Float32(256.0)
+
+
+def cholqr_guard_kernel(g: F32Ptr, info: F32Ptr, flag: F32Ptr, l: Int32):
+    """SVD_FAST_CHOLQR's guard on the device: flag[0] = 1 when the l x l
+    Cholesky factor in `g` succeeded (info 0), every diagonal is positive and
+    max / min of the diagonal is at most CQ_SPAN; else 0. One block: thread
+    t folds diagonals t, t + CQ_TPB, ..., then a tree."""
+    var tid = Int(thread_idx.x)
+    var ll = Int(l)
+    var smax = stack_allocation[CQ_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var smin = stack_allocation[CQ_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var sbad = stack_allocation[CQ_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var mx = Float32(0)
+    var mn = Float32(3.4028234663852886e38)
+    var bad = Float32(0)
+    var j = tid
+    while j < ll:
+        var d = g.unsafe_load(j * ll + j)
+        if not (d > Float32(0)):
+            bad = Float32(1)
+        if d > mx:
+            mx = d
+        if d < mn:
+            mn = d
+        j += CQ_TPB
+    smax[tid] = mx
+    smin[tid] = mn
+    sbad[tid] = bad
+    barrier()
+    var half = CQ_TPB // 2
+    while half > 0:
+        if tid < half:
+            if smax[tid + half] > smax[tid]:
+                smax[tid] = smax[tid + half]
+            if smin[tid + half] < smin[tid]:
+                smin[tid] = smin[tid + half]
+            if sbad[tid + half] > sbad[tid]:
+                sbad[tid] = sbad[tid + half]
+        barrier()
+        half //= 2
+    if tid == 0:
+        var ok = ll > 0 and info.unsafe_load(0) == Float32(0) and sbad[0] == Float32(0)
+        ok = ok and smin[0] * CQ_SPAN >= smax[0]
+        flag.unsafe_store(0, Float32(1) if ok else Float32(0))
 
 
 def orth_guard_kernel(r: F32Ptr, l: Int32):
@@ -1922,16 +1994,59 @@ def orth_on_device_diag(
     var dw = ctx.enqueue_create_buffer[DType.float32](cells)
     var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, l) * l * l if l > 0 else 1)
     var r_buf = ctx.enqueue_create_buffer[DType.float32](l * l if l > 0 else 1)
+    # SVD_FAST_CHOLQR (default off, FAST + Apple; see the define): each pass
+    # as CholeskyQR, falling back to the Householder pass below on the guard.
+    var cholqr = False
+    comptime if SVD_FAST_CHOLQR:
+        cholqr = with_diag and l > 0 and m >= l
     for p in range(2):
         var src = da if p == 0 else dq
         var dst = dq if p == 0 else da
-        ctx.enqueue_copy(dst_buf=dw, src_buf=src)
-        # lane/decomp-apple2: the guard cell (k-sized: the l x l R) on one
-        # device thread, in stream order after the R it reads, so R never
-        # leaves the device (cgr-decomp: the MOJOLEARN_XD_ORTH_DEV=0 host
-        # round trip is deleted)
-        _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
-        ctx.enqueue_function[orth_guard_kernel](r_buf.unsafe_ptr(), Int32(l), grid_dim=1, block_dim=1)
+        var done = False
+        comptime if SVD_FAST_CHOLQR:
+            if cholqr:
+                var gscr_n = gemm_scratch(l, m, l)
+                var dg = ctx.enqueue_create_buffer[DType.float32](l * l)
+                var dinfo = ctx.enqueue_create_buffer[DType.float32](1)
+                var dflag = ctx.enqueue_create_buffer[DType.float32](1)
+                var gscr = ctx.enqueue_create_buffer[DType.float32](gscr_n if gscr_n > 0 else 1)
+                var hflag = ctx.enqueue_create_host_buffer[DType.float32](1)
+                launch_gemm(ctx, _p(src), _p(src), _p(dg), _p(gscr), l, m, l, True, False)
+                var gblocked = False
+                comptime if CHOL_FAST_BLOCKED:
+                    if l > CH_NB:
+                        launch_chol_blocked(ctx, _p(dg), _p(dinfo), l)
+                        gblocked = True
+                if not gblocked:
+                    ctx.enqueue_function[lu_info_init_kernel](dinfo.unsafe_ptr(), grid_dim=1, block_dim=1)
+                    for j in range(l):
+                        ctx.enqueue_function[chol_step_kernel](
+                            dg.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(j), Int32(l), grid_dim=_blocks(l - j), block_dim=TPB
+                        )
+                ctx.enqueue_function[cholqr_guard_kernel](  # small-launch(l: Gram columns): the l x l diagonal, l = the matrix's column count
+                    dg.unsafe_ptr(), dinfo.unsafe_ptr(), dflag.unsafe_ptr(), Int32(l), grid_dim=1, block_dim=CQ_TPB
+                )
+                ctx.enqueue_copy(dst_ptr=hflag.unsafe_ptr(), src_buf=dflag)
+                ctx.synchronize()
+                if hflag.unsafe_ptr().unsafe_load(0) != Float32(0):
+                    ctx.enqueue_function[pj_transpose_kernel](
+                        dg.unsafe_ptr(), r_buf.unsafe_ptr(), Int32(l), grid_dim=_pj_blocks(l * l), block_dim=PJ_TPB
+                    )
+                    done = True
+                ctx.synchronize()
+                _ = dg^
+                _ = dinfo^
+                _ = dflag^
+                _ = gscr^
+                _ = hflag^
+        if not done:
+            ctx.enqueue_copy(dst_buf=dw, src_buf=src)
+            # lane/decomp-apple2: the guard cell (k-sized: the l x l R) on one
+            # device thread, in stream order after the R it reads, so R never
+            # leaves the device (cgr-decomp: the MOJOLEARN_XD_ORTH_DEV=0 host
+            # round trip is deleted)
+            _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
+            ctx.enqueue_function[orth_guard_kernel](r_buf.unsafe_ptr(), Int32(l), grid_dim=1, block_dim=1)
         if with_diag and l > 0:
             ctx.enqueue_function[orth_diag_kernel](
                 r_buf.unsafe_ptr(), ddiag.unsafe_ptr(), Int32(l), grid_dim=_blocks(l), block_dim=TPB

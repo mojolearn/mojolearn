@@ -418,6 +418,25 @@ def _kit_vendor(kit):
     return v
 
 
+def _kit_fast_define(kit, name):
+    """lane/apple-fast-rec-decomp (2026-10-04; from
+    lane/apple-fast-decomp-linalg@74d52352b): whether the kit's binding is a
+    FAST Metal build compiled with `-D <name>` (asked of the binding's
+    `x_decomp_fast_defines` once per kit; no env read). False for every
+    IDENTICAL kit, another vendor and a binding without the entry, so the
+    default never takes one of these routes."""
+    if kit.mode != "fast" or _kit_vendor(kit) != "metal":
+        return False
+    d = kit.__dict__.get("_fast_defines")
+    if d is None:
+        try:
+            d = str(kit._raw().x_decomp_fast_defines()).split(",")
+        except Exception:
+            d = []
+        kit._fast_defines = d
+    return name in d
+
+
 class _Kit:
     """The binding's cells, called on `_M` matrices."""
 

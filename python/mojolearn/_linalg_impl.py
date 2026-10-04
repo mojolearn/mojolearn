@@ -990,6 +990,19 @@ def _xd_kit():
     return _Kit(_backend.default_mode())
 
 
+def _fast_apple_kit(switch):
+    """lane/apple-fast-rec-decomp (2026-10-04; from
+    lane/apple-fast-decomp-linalg@74d52352b): the FAST x_decomp kit when the
+    process tier is FAST and its binding is a Metal build compiled with
+    `-D <switch>` (`_kit_fast_define`; no env read), else None (the default
+    route stands)."""
+    if _backend.default_mode() != "fast":
+        return None
+    from ._expansion_decomp import _kit_fast_define
+    k = _xd_kit()
+    return k if _kit_fast_define(k, switch) else None
+
+
 def _xd_matrix(a_arr, rows, cols):
     import array as _array
     from ._expansion_decomp import _M
@@ -1153,10 +1166,14 @@ def _qr_q(a, mode):
     lane's sliced order (x_decomp/qr_sliced.mojo, DEVIATION 5320;
     lane/algos-decomp, 2026-09-27; sliced by lane hr-qr, 2026-10-02). Any shape, wide included."""
     a_arr, rows, cols = _two_d(a, "a")
-    if mode == "reduced" and _tsqr_on(rows, cols):
+    # -D MOJOLEARN_QR_FAST_DEV (default off, FAST on Apple; x_decomp/fast_qr.mojo):
+    # the FAST kit's geqrf / orgqr take the grid-fold route there, ahead of
+    # the blocked TSQR (the A/B's A arm)
+    kf = _fast_apple_kit("MOJOLEARN_QR_FAST_DEV")
+    if kf is None and mode == "reduced" and _tsqr_on(rows, cols):
         return _qr_tsqr(a_arr, rows, cols)
-    k = _xd_kit()
-    h, tau = _qr_q_factor(a_arr, rows, cols)
+    k = kf or _xd_kit()
+    h, tau = k.geqrf(_xd_matrix(a_arr, rows, cols))
     kk = min(rows, cols)
     if mode == "raw":
         # numpy returns geqrf's Fortran-ordered array seen in C order: the
@@ -1440,9 +1457,14 @@ def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
     a_arr, rows, cols = _two_d(a, "a")
     if not compute_uv:
         return svdvals(a_arr)
-    if not hermitian and not full_matrices and _tsqr_on(rows, cols):
+    # -D MOJOLEARN_SVD_FAST_CHOLQR (default off, FAST on Apple; x_decomp/
+    # device.mojo SVD_FAST_CHOLQR): the whole-matrix route below, whose
+    # orth_diag then runs CholeskyQR2 passes, instead of the blocked TSQR
+    # (the A/B's A arm)
+    kf = _fast_apple_kit("MOJOLEARN_SVD_FAST_CHOLQR")
+    if kf is None and not hermitian and not full_matrices and _tsqr_on(rows, cols):
         return _svd_tsqr(a_arr, rows, cols)
-    k = _xd_kit()
+    k = kf or _xd_kit()
     A = _xd_matrix(a_arr, rows, cols)
     if hermitian:
         if rows != cols:
