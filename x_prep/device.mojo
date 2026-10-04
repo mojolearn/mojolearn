@@ -35,6 +35,7 @@ from x_prep.fastpt import (
     PT_COLBATCH, PT_SPEC, PT_FUSED_TRANSFORM, SI_ONEPASS, OP_PT_MAP, OP_PT_SMAP, OP_PT_SFOLD, OP_PT_APPLY,
     pt_colbatch_fold, pt_spec_fold, cs_tile_stats, ptimpute_part_words, fused_tail_pair,
 )
+from x_prep.dmi_fast import mi_cc_device, mi_cd_device_rank, mi_colscale_fast_kernel, mi_reduce_fast_kernel, TGF
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
 from core.staged_download import download_f32_into
 
@@ -122,6 +123,38 @@ comptime RR_EIGH = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accele
 #: RR_EIGH off 4,593 ms vs on 8,821 ms, masked_rmse unchanged. LDA / QDA leave
 #: it 0 and keep the round-robin path.
 comptime EIGH_CYCLIC_Q = 5
+
+#: lane/apple-fast-mi (2026-10-03): FAST + Apple only, default OFF, one `-D MOJOLEARN_MI_<NAME>`
+#: each (docs/apple-fast/ab/mi.md; MOJOLEARN_MI_ALL turns every one on). x_prep/dmi_fast.mojo:
+#: REG_SORTCOUNT: op 68 (`mi_cc`, mutual_info_regression) as the sorted Kraskov search (the
+#: host's argument, x_prep/host/mutual_info.mojo `_cc_column`) instead of the brute-force
+#: unit; REG_TIES: its tie-aware form (implies SORTCOUNT); REG_RANKMAJOR: its point kernel
+#: one thread per (column, sorted rank) (implies SORTCOUNT); FAST_FOLDS: ops 66 / 70
+#: (`mi_colscale`, `mi_reduce`) as threadgroup folds; CLF_RANKMAJOR: op 69's point kernel
+#: one thread per (column, sorted rank). Every launch is inside these guards; IDENTICAL and
+#: the other vendors compile main's code unchanged.
+comptime _MI_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime MI_ALL = is_defined["MOJOLEARN_MI_ALL"]()
+#: MI_REG_TIES: FAST + Apple DEFAULT since lane/apple-fast-miv (2026-10-03). M3 A/B vs main:
+#: select-mutual-info-reg istella 46,465 -> 1,340 ms, taxi 2,339 -> 160 ms (n_selected 110 / 5
+#: both arms; main's istella arm swings 46-70 s run to run, far inside the gap). Quality
+#: (tools/miv_quality.sh, M2): scores bit-identical to main's FAST route on a tie-heavy fixture.
+#: -D MOJOLEARN_MI_REG_TIES_OFF: main's search.
+comptime MI_REG_TIES = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_REG_TIES"]()
+                                   or not is_defined["MOJOLEARN_MI_REG_TIES_OFF"]())
+comptime MI_REG_RANKMAJOR = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_REG_RANKMAJOR"]())
+comptime MI_REG_SORTED = _MI_FA and (MI_REG_TIES or MI_REG_RANKMAJOR or is_defined["MOJOLEARN_MI_REG_SORTCOUNT"]())
+#: MI_FAST_FOLDS stays opt-in (lane/apple-fast-miv): its scores move up to 3% of the largest
+#: score and the selected set changes on the tools/miv_quality.py fixture.
+comptime MI_FAST_FOLDS = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_FAST_FOLDS"]())
+#: MI_CLF_RANKMAJOR: FAST + Apple DEFAULT since lane/apple-fast-miv (2026-10-03). M3 A/B vs main:
+#: select-mutual-info istella 715.2 -> 645.2 ms, taxi 202.2 -> 196.4 ms (n_selected identical);
+#: scores bit-identical (tools/miv_quality.sh, M2). -D MOJOLEARN_MI_CLF_RANKMAJOR_OFF: main's layout.
+comptime MI_CLF_RANKMAJOR = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_CLF_RANKMAJOR"]()
+                                        or not is_defined["MOJOLEARN_MI_CLF_RANKMAJOR_OFF"]())
+comptime OP_MI_CC = 68
+comptime OP_MI_COLSCALE = 66
+comptime OP_MI_REDUCE = 70
 
 #: op 69 (`mi_cd`) runs as the sorted neighbour search of x_prep/dmi.mojo
 #: (the host's argument, x_prep/host/mutual_info.mojo: the same words)
@@ -386,6 +419,27 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         if total <= 0:
             continue
         var qp = dq.unsafe_ptr() + (s * STAGE_INTS + 2)
+        comptime if MI_CLF_RANKMAJOR:
+            if mi_sorted and mi_ties and op == OP_MI_CD:
+                var hq = host_q + (s * STAGE_INTS + 2)
+                mi_cd_device_rank(ctx, df, dmw, dmu, dq, s * STAGE_INTS + 2, total, Int(hq[1]), Int(hq[2]),
+                                  Int(hq[0]), Int(hq[7]))
+                continue
+        comptime if MI_REG_SORTED:
+            if op == OP_MI_CC:
+                # q = [Z, n, d, Y, k, TERM, ZS, YS]
+                var hq = host_q + (s * STAGE_INTS + 2)
+                mi_cc_device[MI_REG_TIES, MI_REG_RANKMAJOR](ctx, df, dq, s * STAGE_INTS + 2, total, Int(hq[1]),
+                                                            Int(hq[2]), Int(hq[0]), Int(hq[6]), Int(hq[3]),
+                                                            Int(hq[7]))
+                continue
+        comptime if MI_FAST_FOLDS:
+            if op == OP_MI_COLSCALE:
+                ctx.enqueue_function[mi_colscale_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGF)
+                continue
+            if op == OP_MI_REDUCE:
+                ctx.enqueue_function[mi_reduce_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGF)
+                continue
         if mi_sorted and op == OP_MI_CD:
             var hq = host_q + (s * STAGE_INTS + 2)
             mi_cd_device(ctx, df, dmw, dmu, dq, s * STAGE_INTS + 2, total, Int(hq[1]), Int(hq[2]), Int(hq[0]),
