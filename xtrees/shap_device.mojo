@@ -33,9 +33,12 @@ comptime UNITS_MAX = 1 << 20
 comptime SHAP_TABLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_TREESHAP_FAST_TABLE"]()
+    and not is_defined["MOJOLEARN_TREESHAP_FAST_TABLE_OFF"]()
 )
-"""FAST + Apple experiment (lane fix-treeshap, OPT-IN): the leaf table of
+"""FAST + Apple DEFAULT (lane fix-treeshap; M3 A/B ab-tshap-table-taxi
+21.4 -> 11.8 ms, ab-tshap-table-istella 71.6 -> 25.1 ms, additivity error
+identical; `-D MOJOLEARN_TREESHAP_FAST_TABLE_OFF` restores the per-row
+units): the leaf table of
 xtrees/shap.mojo (`shap_table_unit`, `shap_table_row_unit`). The per-row
 work drops from a path rebuild plus `extend_path` and every unwound sum per
 leaf (cubic in the path length) to one path walk and n table reads per
