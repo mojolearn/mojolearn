@@ -1383,6 +1383,15 @@ comptime SVGP_FAST_RBFTILE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_SVGP_FAST_RBFTILE_OFF"]()
 )
+#: X6 (IDENTICAL, every vendor; lane ml-cluster-nbrs 2026-10-04): the same
+#: tiled launch. Each cell is `kernel_item`'s K_RBF chain (`_sub`, the pinned
+#: `identical_mul_add`, features ascending from +0 over exactly d) and
+#: `unary_item`'s identity step, so the words are the per-cell kernel's.
+#: `-D MOJOLEARN_IDN_SVGP_RBFTILE_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores it.
+comptime IDN_SVGP_RBFTILE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_SVGP_RBFTILE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime SVGP_RBFTILE = SVGP_FAST_RBFTILE or IDN_SVGP_RBFTILE
 comptime SVGP_RBF_T = 64
 comptime SVGP_RBF_TP = SVGP_RBF_T + 1
 comptime SVGP_RBF_FK = 16
@@ -1452,7 +1461,7 @@ def _launch_scaled_rbf(
 ) raises:
     """SVGP's `_k`: the rbf kernel (coef0 0, degree 0), then
     `unary(K, identity, variance, 0)`."""
-    comptime if SVGP_FAST_RBFTILE:
+    comptime if SVGP_RBFTILE:
         if rows * m > 0:
             var nblk = ((rows + SVGP_RBF_T - 1) // SVGP_RBF_T) * ((m + SVGP_RBF_T - 1) // SVGP_RBF_T)
             ctx.enqueue_function[svgp_rbf_tile_kernel](
@@ -1628,6 +1637,16 @@ comptime SVGP_FAST_BLKCHOL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_SVGP_FAST_BLKCHOL_OFF"]()
 )
+#: X5 (IDENTICAL, every vendor; lane ml-cluster-nbrs 2026-10-04): the same
+#: panel factor. Its chains are `_chol_col`'s through the shared ff helpers
+#: (x_linear/ff.mojo: two_prod and ff_mul on the pinned `fmad`), k ascending,
+#: so no contraction choice can move a word: the factor of the one-column
+#: launches bit for bit. `-D MOJOLEARN_IDN_SVGP_BLKCHOL_OFF` (or
+#: MOJOLEARN_IDN_ALL_OFF) restores one column per launch.
+comptime IDN_SVGP_BLKCHOL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_SVGP_BLKCHOL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime SVGP_BLKCHOL = SVGP_FAST_BLKCHOL or IDN_SVGP_BLKCHOL
 #: panel width (columns per launch)
 comptime SVGP_CHOL_PB = 16
 comptime _SVGP_CHOL_SMEM_FITS = lib_smem_page_fits_for[TARGET_COLUMN, 4 * SVGP_CHOL_PB * SVGP_CHOL_PB * 4]()
@@ -1908,7 +1927,7 @@ def op_svgp_fit_ff(
             _p(d_kuu), _p(d_bh), _p(d_bl), wp, Int64(m), Int64(n), noise, jitter,
             grid_dim=_grid(mm), block_dim=BLOCK,
         )
-    comptime if SVGP_FAST_BLKCHOL:
+    comptime if SVGP_BLKCHOL:
         _svgp_chol_panels(ctx, wp, m, n, 2)
     else:
         for j in range(m):
@@ -1934,7 +1953,7 @@ def op_svgp_fit_ff(
         ctx.enqueue_function[svgp_ff_qmu_kernel](
             _p(d_kuu), _p(d_qmu), wp, Int64(m), Int64(n), jitter, grid_dim=_grid(m), block_dim=BLOCK,
         )
-    comptime if SVGP_FAST_BLKCHOL:
+    comptime if SVGP_BLKCHOL:
         _svgp_chol_panels(ctx, wp, m, n, 1)
     else:
         for j in range(m):
