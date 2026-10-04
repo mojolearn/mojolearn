@@ -2,6 +2,7 @@
 """Actual qn_fit multiclass quality gate. M3 only; no timing/build fallback."""
 import argparse, hashlib, importlib.util, json, os, subprocess
 from pathlib import Path
+from fast_quality_rule import RULE, judge
 for key in ('OPENBLAS_NUM_THREADS','OMP_NUM_THREADS','VECLIB_MAXIMUM_THREADS'):
     os.environ[key]='1'
 if not __debug__: raise RuntimeError('Assertions required')
@@ -13,7 +14,15 @@ CASES = {
  'r8000-d1500-c3':(8000,1500,3), 'r3001-d700-c40':(3001,700,40),
  'r60000-d150-c64':(60000,150,64), 'r200000-d64-c9':(200000,64,9),
 }
-POLICY='softmax-g2-real-fit-zero-regression-v2-no-window'
+POLICY='softmax-g2-real-fit-zero-regression-v2-no-window'  # capture format; judging is fast_quality_rule
+# FAST rule (fast_quality_rule.py): per metric (rtol, atol), lower is better.
+# Losses: 0.1% relative. Stationarity (gradient norm): 2x or 1e-5 (the fit's
+# tolerance scale). Holdout misclassification: 0.2 percentage points (8 of
+# 4,097 query rows). Score / objective agreement with the FP64 recompute:
+# 1.5x or 1e-5 (fp32 fold order).
+TOL={'train':(1e-3,1e-6),'holdout':(1e-3,1e-6),'gradient':(1.0,1e-5),
+     'classification':(0.0,2e-3),'scores':(0.5,1e-5),'train_scores':(0.5,1e-5),
+     'objective_error':(0.5,1e-5)}
 
 def sha(p): return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def write(p,data):
@@ -83,7 +92,7 @@ def compare(a):
     assert all(np.isfinite(v).all() for arm in (A,B) for v in arm.values())
     metrics={}
     def le(name,av,bv):
-        metrics[name]=dict(A=float(av),B=float(bv),ok=bool(bv<=av))
+        metrics[name]=judge(av,bv,*TOL[name])
     def softmax(z):
         zz=z-z.max(axis=1,keepdims=True);e=np.exp(zz)
         return e/e.sum(axis=1,keepdims=True),zz
@@ -106,7 +115,9 @@ def compare(a):
     good=all(m['ok'] for m in metrics.values()) and status_equal
     write(a.output,dict(policy=POLICY,source=ma['source'],case=ma['case'],
         status='PASS' if good else 'HOLD',metrics=metrics,retcode_equal=status_equal,
-        phases_A=ma['phases'],phases_B=mb['phases'],degradation_allowance=0,
+        phases_A=ma['phases'],phases_B=mb['phases'],rule=RULE,
+        opponent_status='not in this fixture: the board metric vs the best opponent is judged on the board',
+        strict_le_all_info=all(m['strict_le_info'] for m in metrics.values()),
         scored_timings=0,promotion_authorized=False))
     return 0 if good else 1
 
