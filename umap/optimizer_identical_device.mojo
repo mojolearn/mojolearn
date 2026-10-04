@@ -1199,6 +1199,87 @@ def umap_positive_coo_device(
     return UmapDeviceCoo(m, rows^, cols^, vals^)
 
 
+def umap_dense_coo_fill_kernel(
+    w: _UC_F32P, out_off: _UC_I32P, rows: _UC_I32P, cols: _UC_I32P, ovals: _UC_F32P, n_: Int32,
+):
+    """Row `head`'s kept dense entries (off the diagonal, positive) as COO
+    `(head, tail, value)` at its scanned offset, in tail order."""
+    var head = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var n = Int(n_)
+    if head >= n:
+        return
+    var at = Int(out_off.unsafe_load(head))
+    var base = head * n
+    for tail in range(n):
+        var x = w.unsafe_load(base + tail)
+        if head == tail or not (x > Float32(0.0)):
+            continue
+        rows.unsafe_store(at, Int32(head))
+        cols.unsafe_store(at, Int32(tail))
+        ovals.unsafe_store(at, x)
+        at += 1
+
+
+def umap_dense_positive_coo_device(
+    ctx: DeviceContext, weights: List[Float32], n_samples: Int
+) raises -> UmapDeviceCoo:
+    """`_weights_to_coo` on the device (lane cpu3-neighbors, 2026-10-04):
+    any invalid weight refuses, the kept entries in row-major order become
+    the COO (`umap_dense_scan_kernel`'s counts, a scan, a fill), "no edges"
+    when there are none. The matrix goes up once; the COO stays there."""
+    var n = n_samples
+    if len(weights) != n * n:
+        raise Error("UMAP spectral graph has the wrong dense shape")
+    if n < 1 or n > 46340:
+        raise Error("UMAP dense graph exceeds the kernel Int32 range")
+    var nn = n * n
+    var h_w = ctx.enqueue_create_host_buffer[DType.float32](nn)
+    ctx.synchronize()
+    memcpy(dest=h_w.unsafe_ptr(), src=weights.unsafe_ptr(), count=nn)
+    var g_w = ctx.enqueue_create_buffer[DType.float32](nn)
+    var counts = ctx.enqueue_create_buffer[DType.int32](n)
+    var codes = ctx.enqueue_create_buffer[DType.int32](n)
+    var err = ctx.enqueue_create_buffer[DType.int32](1)
+    var flags = ctx.enqueue_create_buffer[DType.int32](3)
+    var maxbits = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_buf=g_w, src_ptr=h_w.unsafe_ptr())
+    ctx.enqueue_memset(err, UMAP_NO_ROW)
+    ctx.enqueue_memset(flags, Int32(0))
+    ctx.enqueue_memset(maxbits, Int32(0))
+    ctx.enqueue_function[umap_dense_scan_kernel](
+        g_w.unsafe_ptr(), counts.unsafe_ptr(), codes.unsafe_ptr(), err.unsafe_ptr(),
+        flags.unsafe_ptr(), maxbits.unsafe_ptr(), Int32(n),
+        grid_dim=((n + _UC_TPB - 1) // _UC_TPB, 1, 1), block_dim=(_UC_TPB, 1, 1),
+    )
+    var out_off = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var bs = ctx.enqueue_create_buffer[DType.int32](scan_blocks_needed(n) + 1)
+    exclusive_scan(ctx, out_off, counts, bs, n)
+    if _uc_read_i32(ctx, flags, 0, 1)[0] != Int32(0):
+        raise Error("UMAP spectral graph contains an invalid weight")
+    var m = Int(_uc_read_i32(ctx, out_off, n, 1)[0])
+    if m == 0:
+        raise Error("UMAP spectral graph has no edges")
+    var rows = ctx.enqueue_create_buffer[DType.int32](m)
+    var cols = ctx.enqueue_create_buffer[DType.int32](m)
+    var vals = ctx.enqueue_create_buffer[DType.float32](m)
+    ctx.enqueue_function[umap_dense_coo_fill_kernel](
+        g_w.unsafe_ptr(), out_off.unsafe_ptr(), rows.unsafe_ptr(), cols.unsafe_ptr(),
+        vals.unsafe_ptr(), Int32(n),
+        grid_dim=((n + _UC_TPB - 1) // _UC_TPB, 1, 1), block_dim=(_UC_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    _ = h_w^
+    _ = g_w^
+    _ = counts^
+    _ = codes^
+    _ = err^
+    _ = flags^
+    _ = maxbits^
+    _ = out_off^
+    _ = bs^
+    return UmapDeviceCoo(m, rows^, cols^, vals^)
+
+
 def _optimize_sparse_layout_device_csr(
     ctx: DeviceContext,
     initial_embedding: List[Float32],
