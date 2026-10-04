@@ -108,6 +108,10 @@ from gbdt.gpu_data.compressed_index_builder import (
 )
 from gbdt.methods.leaves_estimation.leaves_estimation import (
     IDN_EST_ONE_STEP_DEVICE,
+    IDN_GBDT_MC_ONE_STEP_DEVICE,
+    IDN_GBDT_SYM_EST_DEFER_DRAIN,
+    MC_ONE_STEP_MAX_CLASSES,
+    multiclass_one_step_kernel,
     newton_one_step_kernel,
 )
 from std.memory import bitcast
@@ -716,6 +720,24 @@ struct TEstimationWorkspace(Movable):
     #: one-call path builds
     var arena_scratch: List[OracleDeviceScratch]
     var arena_host: List[OracleHostScratch]
+    #: lane fix-g1-gbdt (`IDN_GBDT_MC_ONE_STEP_DEVICE`): the MultiClass
+    #: one-step's device stashes, kept for the fit like the buffers above.
+    #: `mc_grad` holds `n_leaves * approx_dim` reduced der floats, `mc_hess`
+    #: the `k (k + 1) / 2` reduced Hessian columns per leaf
+    #: (`k = approx_dim + 1`), `mc_not_pd` one fallback flag per leaf and
+    #: `h_mc_not_pd` its host copy. One element each on the arena workspace,
+    #: which never takes this path (`mc_hess_len` / `mc_grad_len` gate it).
+    var mc_grad: DeviceBuffer[DType.float32]
+    var mc_hess: DeviceBuffer[DType.float32]
+    var mc_not_pd: DeviceBuffer[DType.uint32]
+    var h_mc_not_pd: HostBuffer[DType.uint32]
+    var mc_grad_len: Int
+    var mc_hess_len: Int
+    #: lane fix-g1-gbdt (`IDN_GBDT_SYM_EST_DEFER_DRAIN`): at most one
+    #: estimation task whose tail drain was deferred to the next tree's
+    #: search drain (`finish_deferred_estimation` settles it). Empty
+    #: otherwise.
+    var pending: List[PendingEstimationTail]
 
     def __init__(
         out self,
@@ -742,6 +764,13 @@ struct TEstimationWorkspace(Movable):
         self.oracle_scratch = OracleScratchPool()
         self.arena_scratch = List[OracleDeviceScratch]()
         self.arena_host = List[OracleHostScratch]()
+        self.mc_grad = arena.device[DType.float32](ctx, 1)
+        self.mc_hess = arena.device[DType.float32](ctx, 1)
+        self.mc_not_pd = arena.device[DType.uint32](ctx, 1)
+        self.h_mc_not_pd = arena.host_buffer[DType.uint32](ctx, 1)
+        self.mc_grad_len = 0
+        self.mc_hess_len = 0
+        self.pending = List[PendingEstimationTail]()
 
     def __init__(
         out self,
@@ -775,6 +804,160 @@ struct TEstimationWorkspace(Movable):
         self.oracle_scratch = OracleScratchPool()
         self.arena_scratch = List[OracleDeviceScratch]()
         self.arena_host = List[OracleHostScratch]()
+        # lane fix-g1-gbdt: sized only where the MultiClass one-step can run
+        # (approx_dim > 1); one element otherwise
+        var mc_grad_len = 0
+        var mc_hess_len = 0
+        comptime if IDN_GBDT_MC_ONE_STEP_DEVICE:
+            if approx_dim > 1:
+                var mc_k = approx_dim + 1
+                mc_grad_len = n_leaves * approx_dim
+                mc_hess_len = n_leaves * ((mc_k * (mc_k + 1)) // 2)
+        var mc_flag_len = 1
+        if mc_hess_len > 0 and n_leaves > 1:
+            mc_flag_len = n_leaves
+        self.mc_grad = ctx.enqueue_create_buffer[DType.float32](
+            mc_grad_len if mc_grad_len > 0 else 1
+        )
+        self.mc_hess = ctx.enqueue_create_buffer[DType.float32](
+            mc_hess_len if mc_hess_len > 0 else 1
+        )
+        self.mc_not_pd = ctx.enqueue_create_buffer[DType.uint32](mc_flag_len)
+        self.h_mc_not_pd = ctx.enqueue_create_host_buffer[DType.uint32](
+            mc_flag_len
+        )
+        self.mc_grad_len = mc_grad_len
+        self.mc_hess_len = mc_hess_len
+        self.pending = List[PendingEstimationTail]()
+
+
+struct PendingEstimationTail(Movable):
+    """lane fix-g1-gbdt (`IDN_GBDT_SYM_EST_DEFER_DRAIN`): what a one-step
+    device estimation task (F5's `newton_one_step_kernel` or the MultiClass
+    `multiclass_one_step_kernel`) must keep alive past the drain it no longer
+    takes itself: the oracle (its buffers are operands of queued launches and
+    copies, the step-33 race class) and the weighted fit's host mask (the
+    source of a queued copy). The leaf values sit in the workspace's `h_est`
+    (and the MultiClass fallback flags in `h_mc_not_pd`) once the queue
+    drains."""
+
+    var oracle: BinOptimizedOracle
+    var h_mask: HostBuffer[DType.float32]
+    #: how many floats of `h_est` are the task's leaf values
+    var n_values: Int
+    var n_leaves: Int
+    #: True on the MultiClass path: DEVIATION 74's counter reads the flags
+    var count_not_pd: Bool
+    var leaf_tag: String
+
+    def __init__(
+        out self,
+        var oracle: BinOptimizedOracle,
+        var h_mask: HostBuffer[DType.float32],
+        n_values: Int,
+        n_leaves: Int,
+        count_not_pd: Bool,
+        leaf_tag: String,
+    ):
+        self.oracle = oracle^
+        self.h_mask = h_mask^
+        self.n_values = n_values
+        self.n_leaves = n_leaves
+        self.count_not_pd = count_not_pd
+        self.leaf_tag = leaf_tag.copy()
+
+
+def _append_deferred_oblivious_tree(
+    mut model: TAdditiveModel,
+    splits: List[TBinarySplit],
+    leaf_values: List[Float32],
+    approx_dim: Int,
+    learning_rate: Float32,
+) raises:
+    """lane fix-g1-gbdt (`IDN_GBDT_SYM_EST_DEFER_DRAIN`): the boosting
+    loop's oblivious `AddWeakModel` for a tree whose leaf values arrived
+    through `finish_deferred_estimation`; the same statements as the loop's
+    own append (DEVIATION 256's host rescale included)."""
+    var structure = TObliviousTreeStructure()
+    for i in range(len(splits)):
+        structure.splits.append(splits[i])
+    var weak = TObliviousTreeModel(structure^)
+    weak.dim = approx_dim
+    for i in range(len(leaf_values)):
+        weak.leaf_values.append(leaf_values[i] * learning_rate)
+    model.add_weak_model(weak^)
+
+
+def _settle_deferred_tree(
+    ctx: DeviceContext,
+    mut est_ws: List[TEstimationWorkspace],
+    mut model: TAdditiveModel,
+    mut deferred_splits: List[TBinarySplit],
+    mut has_deferred_tree: Bool,
+    approx_dim: Int,
+    learning_rate: Float32,
+    mut not_pd_total: Int,
+    mut trace: IdentityTrace,
+    mut stage_times: StageTimes,
+) raises:
+    """lane fix-g1-gbdt: settle the pending tree (if any) and append it."""
+    if not has_deferred_tree:
+        return
+    var prev_values = List[Float32]()
+    if not finish_deferred_estimation(
+        ctx, est_ws, prev_values, not_pd_total, trace, stage_times
+    ):
+        raise Error(
+            "IDN_GBDT_SYM_EST_DEFER_DRAIN: a tree was deferred but its"
+            " estimation task is not pending"
+        )
+    if len(prev_values) != (1 << len(deferred_splits)) * approx_dim:
+        raise Error(
+            "the deferred estimator returned " + String(len(prev_values))
+            + " leaf values for a depth-" + String(len(deferred_splits))
+            + " tree x " + String(approx_dim) + " dims"
+        )
+    _append_deferred_oblivious_tree(
+        model, deferred_splits, prev_values, approx_dim, learning_rate
+    )
+    deferred_splits.clear()
+    has_deferred_tree = False
+
+
+def finish_deferred_estimation(
+    ctx: DeviceContext,
+    mut est_ws: List[TEstimationWorkspace],
+    mut leaf_values: List[Float32],
+    mut not_pd_total: Int,
+    mut trace: IdentityTrace,
+    mut stage_times: StageTimes,
+) raises -> Bool:
+    """lane fix-g1-gbdt (`IDN_GBDT_SYM_EST_DEFER_DRAIN`): settle the
+    estimation task whose tail drain was deferred, and hand back its leaf
+    values. Returns False (and touches nothing) when none is pending.
+
+    The caller calls this right after the NEXT tree's search returned, so
+    that search's drain already ran every queued op of the task (one
+    in-order queue); the `synchronize` here finds the queue idle and only
+    makes the host reads below independent of which drain kind the search
+    took. Then the values, DEVIATION 74's counter and the trace record the
+    task's own tail would have produced, and the oracle and mask die past
+    the drain."""
+    if len(est_ws) == 0 or len(est_ws[0].pending) == 0:
+        return False
+    ctx.synchronize()
+    var tail = est_ws[0].pending.pop()
+    if tail.count_not_pd:
+        for i in range(tail.n_leaves):
+            if est_ws[0].h_mc_not_pd.unsafe_ptr().unsafe_load(i) != UInt32(0):
+                not_pd_total += 1
+    leaf_values.clear()
+    for i in range(tail.n_values):
+        leaf_values.append(est_ws[0].h_est.unsafe_ptr().unsafe_load(i))
+    merge_stage_times(stage_times, tail.oracle.times)
+    trace.record_list_f32(tail.leaf_tag, leaf_values)
+    _ = tail^  # past the drain (step-33 race class, device side)
+    return True
 
 
 def _estimate_and_apply(
@@ -816,6 +999,12 @@ def _estimate_and_apply(
     # the seed of this task's YetiRank evaluation stream (one draw of the
     # fit's YetiRank stream per tree); read only with `yeti`
     yeti_seed: UInt64 = UInt64(0),
+    # lane fix-g1-gbdt (`IDN_GBDT_SYM_EST_DEFER_DRAIN`): when a one-step
+    # device path runs, skip its tail drain and leave the task pending in
+    # `est_ws[0].pending` (`leaf_values` comes back EMPTY; the caller gets
+    # them from `finish_deferred_estimation` after its next drain). Every
+    # other path ignores it and drains as before.
+    defer_tail: Bool = False,
 ) raises:
     """One estimation task: their `TDocParallelLeavesEstimator::Estimate`
     plus the `AppendModels` that follows it, for ONE (dataset, cursor).
@@ -832,6 +1021,13 @@ def _estimate_and_apply(
     exports (`doc_parallel_boosting.h:526-528`).
     """
     var not_pd_blocks = 0
+    # lane fix-g1-gbdt: a deferred task must be settled first (its staging
+    # and oracle scratch are what this task is about to reuse)
+    if len(est_ws) > 0 and len(est_ws[0].pending) > 0:
+        raise Error(
+            "_estimate_and_apply: the previous task's deferred tail was never"
+            " settled (finish_deferred_estimation); the call order broke"
+        )
     # their `weak->NeedEstimation()` arm (`doc_parallel_boosting.h:
     # 371-385`): the searcher's leaf values are DISCARDED, the
     # estimator recomputes them at the cursor, and only then does
@@ -1069,6 +1265,18 @@ def _estimate_and_apply(
             block_dim=(256, 1, 1),
         )
         ctx.enqueue_copy(dst_ptr=h_est.unsafe_ptr(), src_buf=d_est)
+        comptime if IDN_GBDT_SYM_EST_DEFER_DRAIN:
+            if defer_tail:
+                # lane fix-g1-gbdt: no drain here; the next tree's search
+                # drain settles this task (`finish_deferred_estimation`)
+                stage_times.end(ctx, "est.tail_apply")
+                leaf_values.clear()
+                est_ws[0].pending.append(
+                    PendingEstimationTail(
+                        oracle^, h_mask^, n_leaves, n_leaves, False, leaf_tag
+                    )
+                )
+                return
         # the task's one settle point (DEVIATION 1891's holds, as the
         # ordinary tail below)
         ctx.synchronize()
@@ -1079,6 +1287,136 @@ def _estimate_and_apply(
         trace.record_list_f32(leaf_tag, leaf_values)
         stage_times.end(ctx, "est.tail_apply")
         _ = h_mask^  # past the drain (step-33 race class)
+        _ = oracle^  # past the drain (step-33 race class, device side)
+        return
+    # lane fix-g1-gbdt (`IDN_GBDT_MC_ONE_STEP_DEVICE`): the one-step
+    # MultiClass Newton estimation (blocked Hessian) finishes on the device:
+    # the evaluation and every Hessian row are enqueued and stashed, one
+    # kernel solves each leaf's system in soft-float64, the cursor add reads
+    # its output and the task drains ONCE (the host walker drained after the
+    # gradient, after the Hessian rows and at the tail). Same bits as the
+    # host walker; the host column is untouched.
+    var mc_one_step_device = False
+    comptime if IDN_GBDT_MC_ONE_STEP_DEVICE:
+        var mc_k = oracle.single_bin_dim
+        mc_one_step_device = (
+            iters == 1
+            and leaf_estimation_method == LEAF_ESTIMATION_NEWTON
+            and objective == OBJECTIVE_MULTICLASS
+            and oracle.objective == OBJECTIVE_MULTICLASS
+            and mc_k >= 2
+            and mc_k <= MC_ONE_STEP_MAX_CLASSES
+            and oracle.cursor_dim == approx_dim
+            and mc_k == approx_dim + 1
+            and oracle.hessian_block_size() == mc_k
+            and oracle.bin_count == n_leaves
+            # a weighted fit needs the constructor's per-leaf weight sums
+            # already on the host (not the deferred-weights oracle)
+            and not oracle.h_weight_stats.__bool__()
+            and len(oracle.weights_cpu) == n_leaves
+            and est_ws[0].mc_grad_len >= n_leaves * approx_dim
+            and est_ws[0].mc_hess_len >= n_leaves * ((mc_k * (mc_k + 1)) // 2)
+        )
+    if mc_one_step_device:
+        oracle.times.enabled = stage_times.enabled
+        # the walker's own first call, `MoveTo(start)` at the zero point in
+        # the walker's gauge (`SingleBinDim()` components per leaf)
+        var mc_start = List[Float32](
+            length=n_leaves * oracle.single_bin_dim, fill=Float32(0.0)
+        )
+        oracle.move_to(mc_start)
+        # handle copies (the workspace keeps the memory for the fit)
+        var mc_grad = est_ws[0].mc_grad.copy()
+        var mc_hess = est_ws[0].mc_hess.copy()
+        var mc_not_pd = est_ws[0].mc_not_pd.copy()
+        oracle.enqueue_multiclass_one_step_inputs(mc_grad, mc_hess)
+        stage_times.begin(ctx)
+        # weighted fit: `Regularize`'s per-leaf decision (1.0 keep, 0.0
+        # zero) at each leaf's first slot of `d_est`, from the weight sums
+        # the constructor read; sized as `d_est` (the copy moves the whole
+        # device buffer's length)
+        var mc_mask_len = 1
+        if has_weights:
+            mc_mask_len = est_ws[0].n_leaves_cap * approx_dim
+        var h_mc_mask = ctx.enqueue_create_host_buffer[DType.float32](
+            mc_mask_len
+        )
+        if has_weights:
+            for i in range(mc_mask_len):
+                h_mc_mask.unsafe_ptr().unsafe_store(i, Float32(0.0))
+            for i in range(n_leaves):
+                var keep = Float32(1.0)
+                if oracle.weights_cpu[i] < oracle.min_leaf_weight:
+                    keep = Float32(0.0)
+                h_mc_mask.unsafe_ptr().unsafe_store(i * approx_dim, keep)
+            ctx.enqueue_copy(dst_buf=d_est, src_ptr=h_mc_mask.unsafe_ptr())
+        ctx.enqueue_function[multiclass_one_step_kernel](
+            mc_grad.unsafe_ptr(),
+            mc_hess.unsafe_ptr(),
+            oracle.d_p_sz.unsafe_ptr(),
+            bitcast[DType.uint64](oracle.lambda_reg),
+            bitcast[DType.uint64](oracle.min_leaf_weight),
+            Int32(n_leaves),
+            Int32(approx_dim),
+            d_est.unsafe_ptr(),
+            mc_not_pd.unsafe_ptr(),
+            Int32(1) if has_weights else Int32(0),
+            grid_dim=((n_leaves + 63) // 64, 1, 1),
+            block_dim=(64, 1, 1),
+        )
+        var mc_gx = 2 * oracle.sm_count
+        if mc_gx < 1:
+            mc_gx = 1
+        ctx.enqueue_function[add_model_value_kernel](
+            oracle.d_p_off.unsafe_ptr(),
+            oracle.d_p_sz.unsafe_ptr(),
+            row_index.unsafe_ptr(),
+            d_est.unsafe_ptr(),
+            learning_rate,
+            cursor.unsafe_ptr(),
+            Int32(approx_dim), Int32(n_rows),
+            grid_dim=(mc_gx, n_leaves, approx_dim),
+            block_dim=(256, 1, 1),
+        )
+        ctx.enqueue_copy(dst_ptr=h_est.unsafe_ptr(), src_buf=d_est)
+        ctx.enqueue_copy(
+            dst_ptr=est_ws[0].h_mc_not_pd.unsafe_ptr(), src_buf=mc_not_pd
+        )
+        comptime if IDN_GBDT_SYM_EST_DEFER_DRAIN:
+            if defer_tail:
+                # lane fix-g1-gbdt: no drain here; the next tree's search
+                # drain settles this task (`finish_deferred_estimation`).
+                # The stash handles are views of workspace memory.
+                stage_times.end(ctx, "est.tail_apply")
+                leaf_values.clear()
+                _ = mc_grad^
+                _ = mc_hess^
+                _ = mc_not_pd^
+                est_ws[0].pending.append(
+                    PendingEstimationTail(
+                        oracle^, h_mc_mask^, n_leaves * approx_dim, n_leaves,
+                        True, leaf_tag,
+                    )
+                )
+                return
+        # the task's one settle point (DEVIATION 1891's holds, as the
+        # ordinary tail below)
+        ctx.synchronize()
+        # DEVIATION 74's counter, from the per-leaf fallback flags
+        for i in range(n_leaves):
+            if est_ws[0].h_mc_not_pd.unsafe_ptr().unsafe_load(i) != UInt32(0):
+                not_pd_blocks += 1
+        not_pd_total += not_pd_blocks
+        leaf_values.clear()
+        for i in range(n_leaves * approx_dim):
+            leaf_values.append(h_est.unsafe_ptr().unsafe_load(i))
+        merge_stage_times(stage_times, oracle.times)
+        trace.record_list_f32(leaf_tag, leaf_values)
+        stage_times.end(ctx, "est.tail_apply")
+        _ = h_mc_mask^  # past the drain (step-33 race class)
+        _ = mc_grad^
+        _ = mc_hess^
+        _ = mc_not_pd^
         _ = oracle^  # past the drain (step-33 race class, device side)
         return
     var estimated: List[Float32]
@@ -2351,6 +2689,11 @@ def fit_with_test(
     # stage's own drain returned". Disjoint stages; `other` is the rest.
     var loop_times = HostStageTimes()
     var t_loop = loop_times.start()
+    # lane fix-g1-gbdt (`IDN_GBDT_SYM_EST_DEFER_DRAIN`): the structure of the
+    # tree whose estimation tail is still queued (settled after the next
+    # tree's search, or after the loop)
+    var deferred_splits = List[TBinarySplit]()
+    var has_deferred_tree = False
     for iteration in range(n_estimators):
         var t_grad = loop_times.start()
         # ---- which permutation the STRUCTURE is searched on ----------
@@ -3138,6 +3481,15 @@ def fit_with_test(
             )
             loop_times.stop_host("iter_tree_search", t_sym)
 
+        # lane fix-g1-gbdt (`IDN_GBDT_SYM_EST_DEFER_DRAIN`): the search
+        # above drained the queue, so the previous tree's deferred
+        # estimation is complete; take its values and append its model
+        # before this tree's estimation reuses the staging.
+        comptime if IDN_GBDT_SYM_EST_DEFER_DRAIN:
+            _settle_deferred_tree(
+                ctx, est_ws, model, deferred_splits, has_deferred_tree,
+                approx_dim, learning_rate, not_pd_total, trace, stage_times,
+            )
         var t_sym_est = loop_times.start()
         if need_estimation and not non_symmetric:
             # ---- their estimation loop (`doc_parallel_boosting.h:
@@ -3155,6 +3507,9 @@ def fit_with_test(
             # partition; the others compute their own, because a row's leaf
             # depends on that permutation's CTR columns and the searcher
             # never looked at them.
+            var sym_defer_est = False
+            comptime if IDN_GBDT_SYM_EST_DEFER_DRAIN:
+                sym_defer_est = perm_count == 1 and not has_test
             for p in range(perm_count):
                 var pv = List[Float32]()
                 if p == learn_p:
@@ -3188,6 +3543,9 @@ def fit_with_test(
                         p_est^,
                         y_est^,
                         y_seed,
+                        # lane fix-g1-gbdt: one task per tree and no eval
+                        # set, so nothing below needs the values this tree
+                        defer_tail=sym_defer_est,
                     )
                 else:
                     var d_bins = ctx.enqueue_create_buffer[DType.uint32](
@@ -3238,26 +3596,36 @@ def fit_with_test(
             # rate was folded into the tree's values above
             model.add_non_symmetric_model(ns_trees.pop())
         else:
-            var structure = TObliviousTreeStructure()
-            for i in range(len(splits)):
-                structure.splits.append(splits[i])
-            var weak = TObliviousTreeModel(structure^)
-            # their `Dim` / `OutputDim()` (`oblivious_model.h:130-133`): the
-            # number of approxes a leaf carries. `MakeEstimationResult` already
-            # projected the walker's `numClasses`-wide point down to this, so
-            # a MultiClass leaf holds `numClasses - 1` values and the model's
-            # dimension matches the CURSOR's, not the walker's.
-            weak.dim = approx_dim
-            # DEVIATION 256, justified UNPINNED: IDENTITY_PATHS row 9 names
-            # the LEAF RESCALE, and this multiply is it -- the device half
-            # was already closed as the cursor-update fma
-            # (`add_model_value_kernel`, `39a0d88`), and what remains is one
-            # correctly-rounded HOST Float32 multiply with no chain to
-            # contract and no device flush policy in play, so its bits are
-            # the same on every host.
-            for i in range(len(leaf_values)):
-                weak.leaf_values.append(leaf_values[i] * learning_rate)
-            model.add_weak_model(weak^)
+            # lane fix-g1-gbdt (`IDN_GBDT_SYM_EST_DEFER_DRAIN`): a tree whose
+            # estimation tail is still queued is appended by
+            # `_settle_deferred_tree` once its values are home
+            var deferred_now = False
+            comptime if IDN_GBDT_SYM_EST_DEFER_DRAIN:
+                if len(est_ws) > 0 and len(est_ws[0].pending) > 0:
+                    deferred_now = True
+                    deferred_splits = splits.copy()
+                    has_deferred_tree = True
+            if not deferred_now:
+                var structure = TObliviousTreeStructure()
+                for i in range(len(splits)):
+                    structure.splits.append(splits[i])
+                var weak = TObliviousTreeModel(structure^)
+                # their `Dim` / `OutputDim()` (`oblivious_model.h:130-133`): the
+                # number of approxes a leaf carries. `MakeEstimationResult` already
+                # projected the walker's `numClasses`-wide point down to this, so
+                # a MultiClass leaf holds `numClasses - 1` values and the model's
+                # dimension matches the CURSOR's, not the walker's.
+                weak.dim = approx_dim
+                # DEVIATION 256, justified UNPINNED: IDENTITY_PATHS row 9 names
+                # the LEAF RESCALE, and this multiply is it -- the device half
+                # was already closed as the cursor-update fma
+                # (`add_model_value_kernel`, `39a0d88`), and what remains is one
+                # correctly-rounded HOST Float32 multiply with no chain to
+                # contract and no device flush policy in play, so its bits are
+                # the same on every host.
+                for i in range(len(leaf_values)):
+                    weak.leaf_values.append(leaf_values[i] * learning_rate)
+                model.add_weak_model(weak^)
         loop_times.stop_host("iter_model_append", t_append)
 
         # ---- their `AppendModels(..., learnCursors, testCursor)` -----
@@ -3292,9 +3660,20 @@ def fit_with_test(
             var v = Float64(h_fv.unsafe_ptr().unsafe_load(0))
             # `size()` counts either shape (the non-symmetric ensemble's
             # trees are in `non_symmetric_models`)
-            if model.size() > 1:
+            var trees_so_far = model.size()
+            if has_deferred_tree:
+                # lane fix-g1-gbdt: this tree's model is appended later
+                trees_so_far += 1
+            if trees_so_far > 1:
                 losses.append(-v / loss_norm)
 
+    # lane fix-g1-gbdt (`IDN_GBDT_SYM_EST_DEFER_DRAIN`): the last tree's
+    # deferred estimation
+    comptime if IDN_GBDT_SYM_EST_DEFER_DRAIN:
+        _settle_deferred_tree(
+            ctx, est_ws, model, deferred_splits, has_deferred_tree,
+            approx_dim, learning_rate, not_pd_total, trace, stage_times,
+        )
     loop_times.stop_host("fit_total", t_loop)
     loop_times.report()
 
