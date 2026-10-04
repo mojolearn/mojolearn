@@ -4,7 +4,9 @@
 Usage: SOURCE tools/ALLOWLISTED.py [args...]. Invoke only through the existing
 serial queue from an already prepared branch. Reference scripts run CPU oracle
 analysis; standalone probes load and verify their exact M2-built binaries.
-Neither route builds, times an opponent, or authorizes a promotion.
+The matrix timing helper additionally verifies its pinned matrix-only quality
+report and original compiled source. No route builds, times an opponent, or
+authorizes a promotion.
 """
 import os
 from pathlib import Path
@@ -24,6 +26,7 @@ def main():
         "tools/catalog_gemm_quality.py": "verified-standalone-quality",
         "tools/callpath_probe_pair.py": "verified-standalone-quality",
         "tools/shared_gemm_quality.py": "verified-standalone-quality",
+        "tools/catalog_gemm_matrix_timing.py": "verified-matrix-timing",
     }
     assert script in policies
     policy = policies[script]

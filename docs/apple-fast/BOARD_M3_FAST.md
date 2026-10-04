@@ -35,7 +35,7 @@ Canonical full-board summary (2026-10-04): 387 FAST rows, 377 eligible opponent 
 | cholesky | synthetic | algos | 960 | 261 | torch-gpu | 110 | 8.70 | 2.37 |  | relative_residual=1.6591e-07 | relative_residual=1.659e-07 | relative_residual=5.449e-07 | ok |
 | pca | istella | algos | 988 | 217.8 | sklearn-cpu | 205 | 4.82 | 1.06 |  | explained_variance_ratio_sum=1 | explained_variance_ratio_sum=1 | explained_variance_ratio_sum=1 | ok |
 | permutation-shap | istella | algos | 17214 | 28236 | shap-cpu | 12335 | 1.40 | 2.29 |  | rel_error_vs_exact=5.33875e-09 | rel_error_vs_exact=5.339e-09 | rel_error_vs_exact=3.692e-10 | ok |
-| lu-factor | synthetic | algos | 2323 | 849 | scipy-cpu | 428 | 5.43 | 1.98 |  | relative_residual=3.2563e-06 | relative_residual=3.248e-06 | relative_residual=3.246e-06 | ok |
+| lu-factor | synthetic | algos | 2323 | 653.702416 | scipy-cpu | 428 | 5.43 | 1.53 |  | relative_residual=3.2563e-06 | relative_residual=3.248e-06 | relative_residual=3.246e-06 | ok |
 | svgp | istella | algos | 1495 | 228 | gpytorch-cpu | 307 | 4.86 | 0.74 | FLIP faster | r2=-0.106016, rmse=0.878373 | r2=-0.106, rmse=0.8784 | r2=-0.106, rmse=0.8784 | ok |
 | lle | taxi | algos | 17885 | 2570 | sklearn-cpu | 1247 | 14.35 | 2.06 |  | trustworthiness_k15=0.826083 | trustworthiness_k15=0.8398 | trustworthiness_k15=0.7708 | ok |
 | kernel-pca | taxi | algos | 847 | 127.5 | sklearn-cpu | 460 | 1.84 | 0.28 | FLIP faster | - | - | subspace_cos_vs_sklearn=1 | ok |
@@ -44,7 +44,7 @@ Canonical full-board summary (2026-10-04): 387 FAST rows, 377 eligible opponent 
 | skewed-chi2 | istella | algos | 6.8 | 0.9 | sklearn-cpu | 3.7 | 1.84 | 0.24 | FLIP faster | kernel_rel_error=0.671898 | kernel_rel_error=0.6719 | kernel_rel_error=0.6719 | ok |
 | var | synthetic | algos | 15.9 | 5.0 | statsmodels-cpu | 2.6 | 6.12 | 1.93 |  | forecast_rmse=1.14079 | forecast_rmse=1.141 | forecast_rmse=1.145 | ok |
 | moe | synthetic | algos | 789 | 72.7 | torch-eager-bf16 | 37.7 | 20.92 | 1.93 |  | - | - | max_rel_diff_vs_torch_eager_fp32=2.234e+04, rel_fro_vs_torch_eager_fp32=0.05522 | ok |
-| lu-solve | synthetic | algos | 2320 | 852 | torch-gpu | 506 | 4.59 | 1.68 |  | relative_residual=3.2563e-06 | relative_residual=3.248e-06 | relative_residual=8.234e-07 | ok |
+| lu-solve | synthetic | algos | 2320 | 733.531042 | torch-gpu | 506 | 4.59 | 1.45 |  | relative_residual=3.2563e-06 | relative_residual=3.248e-06 | relative_residual=8.234e-07 | ok |
 | sparse-rp | taxi | algos | 8.0 | 3.4 | sklearn-cpu | 1.8 | 4.44 | 1.90 |  | mean_abs_distortion=0.264 (seed 7; 40-seed mean 0.233) | mean_abs_distortion=0.1472 | mean_abs_distortion=0.381 | ok |
 | var | taxi-hourly | algos | 14.5 | 5.1 | statsmodels-cpu | 2.8 | 5.18 | 1.82 |  | forecast_rmse=33.168 | forecast_rmse=33.17 | forecast_rmse=33.17 | ok |
 | svgp | taxi | algos | - | 207 | gpytorch-cpu | 248 | - | 0.83 | FLIP faster | r2=-0.194982, rmse=17.7235 | - | r2=-0.2093, rmse=17.83 | ok |
@@ -442,3 +442,5 @@ Sources: before = M3 0.8.34 board (classical), M3 2026-09-29 board FAST cells (t
 - Eigh panel-parallel default, 2026-10-04: measured `e79a96e03`, `w2-eigh-panels-t-20261004` A 43765.6 -> B 700.3 ms; quality captures `w2-eigh-panels-q-20261004` pass the handoff-authorized no-worse-than-main criterion for all eight fixtures, exact B<=A with no allowance. Fixed absolute eigenvalue target 3.5e-7 and Gram orthogonality target still fail; the opponent-quality hold remains and this row adds no qualified winner. Source `10cedc640`, M2 default and `MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF` both rc=0, merge `eb97b0948`. Original single-block factor launch replaced by all-panel parallel preparation; ordinary synchronized outputs retained.
 
 - PCA pooling accepted 2026-10-04: measured34b4f6c72, w2-w4d-pca-istella-r1 471.2 ->217.8ms; promotion906fe59c9 M2 default/OFF rc0, merged d8e7825cf. Same-input repeated-fit reconstruction differences lie within observed A range; arithmetic unchanged, eager synchronized outputs. Still slower than existing205ms opponent; no new winner.
+
+- LU pivot shuffle accepted2026-10-04: source6d82b6127; w2-lu-pivot-shuffle-q-20261004 exact10fixturePASS, w2-lu-pivot-shuffle-t-20261004 factorcall+read715.628750->653.702416ms, solve792.222333->733.531042ms. Default0769e1d92 M2default/OFF rc0. Board uses conservative call+first-read totals; no new winner or opponent run.
