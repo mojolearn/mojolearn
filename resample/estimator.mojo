@@ -1105,19 +1105,30 @@ def _bootstrap_theta(
         _ = vals^
         _ = svals^
     else:
-        _launch_bootstrap_stat(
-            ctx,
-            theta,
-            dx,
-            key,
-            r_first,
-            n_resamples,
-            n,
-            n,
-            n_features,
-            statistic,
-            tpb,
-        )
+        # -D MOJOLEARN_RESAMPLE_FAST_ONE_FOLD (FAST + Apple, default OFF):
+        # mean / diff_means folded once per replicate block instead of a
+        # virtual_block_sum per 256-draw chunk; same draws, FAST's fold.
+        # Any other statistic: main's launch.
+        var folded = False
+        comptime if RESAMPLE_FAST_ONE_FOLD:
+            folded = bootstrap_mean_fast(
+                ctx, theta, dx, key, r_first, n_resamples, n, n_features,
+                statistic,
+            )
+        if not folded:
+            _launch_bootstrap_stat(
+                ctx,
+                theta,
+                dx,
+                key,
+                r_first,
+                n_resamples,
+                n,
+                n,
+                n_features,
+                statistic,
+                tpb,
+            )
         ctx.synchronize()
 
 
