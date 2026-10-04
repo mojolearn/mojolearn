@@ -91,6 +91,8 @@ from svm.checks.device_select import (
 )
 from svm.impl.kernelcache import BatchDescriptor, CACHE_READY, KernelCache
 from svm.impl.fast_update_f import fast_update_f
+from svm.impl.idn_update_f import idn_update_f
+from std.os import getenv
 from svm.impl.results import Results
 from svm.impl.smoblocksolve import (
     SMO_GRID_MAX_BLOCKS,
@@ -145,6 +147,24 @@ comptime SVM_FUSED_UPDATE_F = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_
 """FAST on Apple: the gradient update computes each kernel value where it
 is used (`fast_update_f.mojo`) instead of writing the `nnz x batch` kernel
 tile and reading it back; RBF and linear kernels, n_cols <= 64."""
+
+
+#: lane/fam-linear (2026-10-04): IDENTICAL, every vendor. The gradient update
+#: computes each kernel value where it is used (`idn_update_f.mojo`) instead
+#: of writing the `nnz x batch` kernel tile (identical GEMM + RBF epilogue
+#: launch) and reading it back: RBF and linear kernels, n_cols <= 64, one
+#: device. Same expressions in the same order per cell, so no bit moves and
+#: the host column is untouched. `-D MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF`
+#: (or the master `MOJOLEARN_IDN_ALL_OFF`) keeps the tile path; the sabotage
+#: builds keep it too, so each still fails its gate through the kernels it
+#: names.
+comptime SVM_IDN_FUSED_UPDATE_F = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    and not SAB_FOLD_ROTATE
+    and not SAB_NO_FTZ
+    and not is_defined["MOJOLEARN_SVM_SABOTAGE_STD_EXP"]()
+)
 
 
 def fold_order_rank_kernel(
@@ -749,6 +769,10 @@ struct SmoSolver(Movable):
         var st = StageTimes()
         var t_fit = st.start()
         self.host_nan_flag.unsafe_ptr().unsafe_store(0, Int32(0))
+        # SVM_IDN_FUSED_UPDATE_F serves one device; the multi-device kernel
+        # rows (`kernel_op`, MOJOLEARN_SVM_DEVICE_COUNT) keep the tile path.
+        var device_setting = String(getenv("MOJOLEARN_SVM_DEVICE_COUNT"))
+        var one_device = device_setting == "" or device_setting == "1"
         while keep_going:
             var t0 = st.start()
             ctx.enqueue_function[fill_f32_kernel](
@@ -822,6 +846,19 @@ struct SmoSolver(Movable):
                             ctx, self.f, x, cache.matrix_l2, cache.x_ws_dense,
                             cache.matrix_l2_ws, self.nz_da, nnz_da, n_rows,
                             n_cols, Float32(cache.kp.gamma),
+                            cache.kp.kernel == KERNEL_RBF,
+                            self.svmType == EPSILON_SVR,
+                        )
+                        if fused_f:
+                            cache.cache_state = CACHE_READY
+                comptime if SVM_IDN_FUSED_UPDATE_F:
+                    if one_device and (
+                        cache.kp.kernel == KERNEL_RBF or cache.kp.kernel == KERNEL_LINEAR
+                    ):
+                        fused_f = idn_update_f(
+                            ctx, self.f, x, cache.matrix_l2, cache.x_ws_dense,
+                            cache.matrix_l2_ws, self.nz_da, self.fold_order,
+                            nnz_da, n_rows, n_cols, Float32(cache.kp.gamma),
                             cache.kp.kernel == KERNEL_RBF,
                             self.svmType == EPSILON_SVR,
                         )
