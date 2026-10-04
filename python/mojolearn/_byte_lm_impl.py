@@ -1248,7 +1248,7 @@ class SmallByteLanguageModelTrainer:
     def _next_bytes_resident(self, tokens, batch, length, shape):
         self._require_not_lost()
         binding = self._binding()
-        missing = [name for name in _SESSION_ENTRIES + (_SESSION_NEXT_ENTRY,)
+        missing = [name for name in _SESSION_ENTRIES + (_SESSION_NEXT_ENTRY,)  # glue: ten binding entry names
                    if not callable(getattr(binding, name, None))]
         if missing:
             raise ImportError('Byte-LM binding lacks resident GPU next bytes (%s); rebuild bindings/build_byte_lm.sh'
