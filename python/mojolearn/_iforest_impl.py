@@ -37,6 +37,7 @@ NumPy. Nothing in this module imports NumPy.
 """
 
 import numbers
+import weakref
 
 from . import _serialize
 from ._array import Array
@@ -399,12 +400,28 @@ class IsolationForest(NumericModeMixin):
         self.offset_ = float(info[0])
         self.max_samples_ = int(info[1])
         if resident:
-            self._if_token = int(info[3])
+            token = int(info[3])
+            if token != self.__dict__.get("_if_token", 0):
+                self._release_resident()
+                # Run while Python and the GPU binding are still alive, even
+                # for estimators retained until interpreter shutdown. Keep the
+                # native entry itself, not a late module lookup in __del__.
+                self._if_finalizer = weakref.finalize(
+                    self, b.iforest_resident_release, token
+                )
+            self._if_token = token
         return labels if want == _WANT_PREDICT else values
 
     def _release_resident(self):
         """Drop this estimator's resident forest in the binding, if any."""
         token = self.__dict__.pop("_if_token", 0)
+        finalizer = self.__dict__.pop("_if_finalizer", None)
+        if finalizer is not None:
+            try:
+                finalizer()
+            except Exception:  # noqa: BLE001 - match explicit release semantics
+                pass
+            return
         if not token:
             return
         try:
@@ -422,14 +439,15 @@ class IsolationForest(NumericModeMixin):
         # unpickled estimator fits its own on its first scoring call.
         state = dict(self.__dict__)
         state.pop("_if_token", None)
+        state.pop("_if_finalizer", None)
         return state
 
     def fit(self, X, y=None, sample_weight=None):
-        """Fits, and reads back `offset_`, `max_samples_` and
-        `n_features_in_`. The forest itself is NOT kept: it is rebuilt on
-        every scoring call (DEVIATION 874), so this runs the fit plus a
-        one-row scoring pass, which is the cheapest call the entry point
-        accepts."""
+        """Fit and read back `offset_`, `max_samples_` and `n_features_in_`.
+
+        Resident-capable bindings keep the forest; other bindings reconstruct
+        it on each scoring call. The one-row score initializes either path.
+        """
         if sample_weight is not None:
             raise NotImplementedError(
                 "mojolearn IsolationForest: sample_weight is not supported "
@@ -450,7 +468,7 @@ class IsolationForest(NumericModeMixin):
             raise ValueError("mojolearn IsolationForest: X contains NaN or infinity")
         had = {k: self.__dict__[k] for k in ("_x", "n_features_in_") if k in self.__dict__}  # glue: saves two attribute names
         self._release_resident()  # the previous fit's resident forest, if any
-        self._x = x  # kept alive; every scoring call refits from it
+        self._x = x  # retained for bindings that reconstruct a missing forest
         self.n_features_in_ = x.shape[1]
         try:
             self._run(x[:1], _WANT_SCORE_SAMPLES, fresh=True)  # one row, an `Array` copy
