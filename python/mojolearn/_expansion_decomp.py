@@ -4260,6 +4260,16 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     Fh = k.mm(F, h)
     dev_f0 = (_LLE_FAST_DEV_F0 and str(k.mode).strip().lower() == "fast" and k._use(F)
               and _kit_vendor(k) == "metal")
+    if not dev_f0 and str(k.mode).strip().lower() != "fast":
+        # lane fam-decomp: IDENTICAL takes the cell form on every column
+        # (device and host binding alike, whatever F's size: one arithmetic,
+        # so the four columns agree) when the binding says so
+        # (`x_decomp_idn_flags` bit 2; -D MOJOLEARN_IDN_LLE_DEV_F0_OFF or
+        # -D MOJOLEARN_IDN_ALL_OFF clears it).
+        try:
+            dev_f0 = bool(int(getattr(k._raw(), "x_decomp_idn_flags")()) & 4)
+        except (ImportError, AttributeError):
+            dev_f0 = False
     if dev_f0:
         # lane/apple-fast-gap-manprep (2026-10-03), FAST + Apple default: F0 = [F^ | u] built on the device in three cells
         # instead of F.cols (F downloaded, then one strided Python slice per
