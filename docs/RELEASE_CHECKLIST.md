@@ -646,6 +646,13 @@ its own project's files.
 dependencies and publication. Build it explicitly with
 `MOJOLEARN_CUDA_CODE_FORMAT=ptx-baseline MOJOLEARN_GPU_ARCHS=sm_80` through
 `packaging/linux/build_sets.sh`; pack with `--profile split --wheels nvidia-ptx80`.
+For a leased CPU build, use
+`python tools/nvidia_baseline_build.py <full-sha> --out <new-directory>` to
+validate the plan; add `--rent` to run it. The commit must already be the tip
+of an advertised origin ref. The runner fetches a real checkout, applies CPU,
+memory and time limits, and relies on the leased runner's watchdog and teardown.
+It leaves native release admission unchanged.
+
 Its `cuda_ptx/sm_80/PTX_BASELINE.json` records final hashes, source, compiler,
 PTX target/ISA, rounding checks, and approximate instructions. It does not
 certify bitwise identity.
