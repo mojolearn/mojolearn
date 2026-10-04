@@ -15,6 +15,11 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 PROJECTS = {'mojolearn', 'mojolearn-amd', 'mojolearn-nvidia',
             'mojolearn-amd-gfx942', 'mojolearn-nvidia-sm89', 'mojolearn-nvidia-sm90'}
+AMD_POOL = {
+    'MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_SIZE': '1073741824',
+    'MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_ONLY': 'true',
+    'MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_CHUNK_PERCENT': '100',
+}
 
 
 def digest(path):
@@ -74,7 +79,7 @@ def prepare(wheels, script, commit, directory):
         (stage / name).write_bytes(path.read_bytes())
     plan = dict(schema='mojolearn.amd-diagnostic-plan.v1', source_commit=commit,
                 wheels=rows, script_sha256=digest(script), lease_minutes=30, cap_cents=300,
-                diagnostic_seconds=1200, release_qualified=False)
+                diagnostic_seconds=1200, amd_runtime_pool=AMD_POOL, release_qualified=False)
     (directory / 'plan.json').write_text(json.dumps(plan, indent=2) + '\n')
     (stage / 'plan.json').write_text(json.dumps(plan, indent=2) + '\n')
     (stage / 'run.sh').write_text('''#!/bin/bash
@@ -85,6 +90,16 @@ python3 -m venv venv > results/setup.log 2>&1 || { apt-get -o DPkg::Lock::Timeou
 timeout -k 10 180 venv/bin/pip install --disable-pip-version-check --retries 1 --timeout 30 ./*.whl numpy >> results/setup.log 2>&1
 export MOJOLEARN_NUMERIC_MODE=identical PYTHONNOUSERSITE=1
 unset PYTHONPATH PYTHONHOME
+# The existing AMD campaign pool (gemm_remote_leg.sh) avoids the runtime's
+# near-device-sized reservation. This does not change the external 85% guard.
+eval "$(venv/bin/python - <<'POOL'
+import json, pathlib, shlex
+pool=json.loads(pathlib.Path('plan.json').read_text())['amd_runtime_pool']
+for name, value in pool.items():
+    print('export '+name+'='+shlex.quote(value))
+pathlib.Path('results/runtime-pool.json').write_text(json.dumps(pool,indent=2)+'\\n')
+POOL
+)"
 venv/bin/python - <<'PY'
 import json, pathlib, importlib.metadata as md, mojolearn as m
 from mojolearn import _backend
