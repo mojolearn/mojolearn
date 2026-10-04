@@ -13,11 +13,25 @@ from std.ffi import _Global
 from std.sys.compile import is_defined
 from gemm.afn_apple_fast import AFN_GEMM_APPLE
 
+# OPEN / default OFF, evidence checked on M3 2026-10-04 (not runner rc).
+# scoped-r2-all-q-v1, source28f06e19/harness5776a5d1: all28 mechanism
+# fixtures PASS, relative-Frobenius bound5e-6, zero maxabs/relative error
+# regression allowance against actual AFN. This is NOT fitted-caller timing.
+# Resident SDK catalog sourcefa390736: G1 tall6.826875->3.524209ms,
+# G2 narrow1.203750->0.865625ms; different baseline from this AFN adapter.
+# Separate shared G1/G5 PCA transforms were faster, inverses slower; none
+# supplies PCA-fit or broad-regime admission. See GEMM_INLINE_OUTCOMES.md.
 comptime TALL = is_defined["MOJOLEARN_SCOPED_GEMM_G1_TALL"]()
 comptime DENSE = is_defined["MOJOLEARN_SCOPED_GEMM_G1_DENSE"]()
 comptime GRAM = is_defined["MOJOLEARN_SCOPED_GEMM_G1_GRAM"]()
 comptime NARROW = is_defined["MOJOLEARN_SCOPED_GEMM_G2_NARROW"]()
 comptime SPLITS = is_defined["MOJOLEARN_SCOPED_GEMM_SPLIT"]()
+# HOLD-quality, scoped-pca-fit-istella-q-v1, compiled201fe736, zero allowance:
+# singular_relative1.964589033e-5->1.964642456e-5 and noise_relative
+# .2086188062->.2086434597 worsen; noise_maxabs438.731387->438.783234.
+# Saved report serialization is INCOMPLETE; preserved fields show HOLD,
+# never PASS inferred from process rc. Rejudge saved captures (no GPU replay)
+# is owed; no fit timing/default admission. Mechanism PASS above is separate.
 comptime PCA = is_defined["MOJOLEARN_SCOPED_GEMM_PCA"]()
 comptime AUDIT = is_defined["MOJOLEARN_SCOPED_GEMM_AUDIT"]()
 comptime ENABLED = AFN_GEMM_APPLE and (TALL or DENSE or GRAM or NARROW or AUDIT)

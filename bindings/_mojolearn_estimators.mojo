@@ -24,6 +24,8 @@ from core.py2mojo_rows import py2mojo_rows_device_binding
 from core.py2mojo_linear import py2mojo_linear_flags
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from experiments.apple_fast.gemm.softmax_narrow import SOFTMAX_AUDIT
+from bindings.softmax_g2_observe import softmax_g2_state_binding, softmax_g2_count_binding, softmax_g2_last_binding, softmax_g2_reset_binding
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import NUMERIC_FAST as _OLS_FAST
 from std.sys.compile import is_defined
@@ -1290,6 +1292,11 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         comptime if MULTIOUT_RIDGE:
             m.def_function[ridge_fit_multi_binding]("ridge_fit_multi")
             m.def_function[ridge_predict_multi_binding]("ridge_predict_multi")
+        comptime if SOFTMAX_AUDIT:
+            m.def_function[softmax_g2_state_binding]("softmax_g2_state")
+            m.def_function[softmax_g2_count_binding]("softmax_g2_count")
+            m.def_function[softmax_g2_last_binding]("softmax_g2_last")
+            m.def_function[softmax_g2_reset_binding]("softmax_g2_reset")
         m.def_function[qn_fit_binding]("qn_fit")
         m.def_function[qn_decision_function_binding]("qn_decision_function")
         m.def_function[qn_predict_binary_binding]("qn_predict_binary")

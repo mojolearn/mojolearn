@@ -1,0 +1,35 @@
+Apple FAST remote manager checkpoint, 2026-10-04
+
+User-directed allocation: M2 source/builds; M3 serialized quality/timing.
+Laptop used only for SSH remote control. Preserve existing shared queue jobs;
+no communication with the other session. No duplicate scored arms.
+
+Compiled and staged on M3:
+- Resample GPU gather source 7eacaa2b2c1a6fa84fa3aa6e4b7d6c14b2d0d817:
+  FAST A/B resample plus same-source IDENTICAL ibase.
+- Scoped public PCA.fit source 201fe7367461af236f4adf0331f367d8a02cd29d:
+  estimators A/B with audit and opt-in scoped Gram/PCA flags.
+
+M3 quality submissions completed but neither admitted to timing:
+- resample-gpu-recovered-q-r1-20261004: rc1 quality failed A;
+  investigation assigned; preserve report and unchanged gates.
+- scoped-pca-fit-istella-q-v1: rc1 bool JSON serialization error;
+  investigation assigned; no claim of numerical PASS.
+
+M2 K3 private compensated GPU probe source
+03e31b4dc01f57f6fda07c6b33a1d48ba28e1854 failed initial compile:
+DF implicit copy at fast_scalar_df.mojo:122 and :123.
+Repair assigned. Original production K3 quality HOLD remains in force.
+No new timings, board promotions, or default activation from these jobs.
+
+Source recovery and harness work committed to remote M2 bare repository.
+GitHub publication of new remote commits is blocked by missing write
+credentials on M2; M2 bare pushes do not imply GitHub publication.
+
+Follow-up checkpoint:
+Resample fresh quality resample-gpu-recovered-q-r2-20261004 PASS on M3
+with repaired harness 7d66c0a052cd55d97b984caf521af32f5d12e229.
+PCA saved outputs indicate HOLD; no fit rerun or timing admitted.
+K3 source fe5df7ab075883123c57f561fb35e9cc6838a71a compiled both
+probe-enabled B and default-off A on M2. Hash manifest saved with artifacts;
+GPU quality is still owed. No board promotion.

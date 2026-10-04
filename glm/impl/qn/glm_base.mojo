@@ -61,6 +61,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.column_stats import STATS_TPB, xty_kernel
 from core.gemm import gemm_nt, gemv_n
+from experiments.apple_fast.gemm.softmax_narrow import softmax_gemm_nt
 from core.pinned_reduce import pinned_block_max, pinned_block_sum
 from core.strided_walk import (
     APPLE_IDENTICAL_STEP_UNROLL,
@@ -1244,7 +1245,7 @@ def linear_fwd(
             grid_dim=((cd + VEC_ELEM_TPB - 1) // VEC_ELEM_TPB, 1, 1),
             block_dim=(VEC_ELEM_TPB, 1, 1),
         )
-        gemm_nt(ctx, z, x, w_weights, n_rows, dims.C, d)
+        softmax_gemm_nt(ctx, z, x, w_weights, n_rows, dims.C, d)
         if dims.fit_intercept:
             var cn = dims.C * n_rows
             ctx.enqueue_function[add_bias_multi_kernel](
