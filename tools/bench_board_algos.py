@@ -4344,6 +4344,30 @@ def _kernel_exact(kind, Xc, D):
     return np.prod(2 * a[:, None, :] * a[None, :, :] / (X[:, None, :] + X[None, :, :] + 2 * c), axis=-1)
 
 
+def _stable_topk_indices(d, k):
+    """Exact stable argsort prefix without sorting every reference point.
+
+    The cutoff's ties must be filled in original index order: an arbitrary
+    argpartition prefix would change recall for duplicate points and masks.
+    This is benchmark quality work, outside the measured GPU operation.
+    """
+    np = _np()
+    k = min(max(k, 0), d.shape[1])
+    truth = np.empty((d.shape[0], k), dtype=np.intp)
+    if not k:
+        return truth
+    for i, row in enumerate(d):
+        cutoff = np.partition(row, k - 1)[k - 1]
+        if np.isnan(cutoff):
+            truth[i] = np.argsort(row, kind="stable")[:k]
+            continue
+        below = np.flatnonzero(row < cutoff)
+        tied = np.flatnonzero(row == cutoff)[:k - below.size]
+        chosen = np.concatenate((below, tied))
+        truth[i] = chosen[np.lexsort((chosen, row[chosen]))]
+    return truth
+
+
 def _recall(D, ind, k=KNN_K, allowed=None):
     np = _np()
     X = D["index"].astype(np.float64)
@@ -4355,7 +4379,7 @@ def _recall(D, ind, k=KNN_K, allowed=None):
         d = sq[None, :] - 2 * q @ X.T
         if allowed is not None:
             d[:, ~allowed] = np.inf
-        truth = np.argsort(d, axis=1, kind="stable")[:, :k]
+        truth = _stable_topk_indices(d, k)
         for i in range(q.shape[0]):
             hits += len(set(truth[i].tolist()) & set(ind[s + i][:k].tolist()))
     return hits / float(Q.shape[0] * k)
