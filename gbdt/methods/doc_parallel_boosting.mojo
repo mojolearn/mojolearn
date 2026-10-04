@@ -74,6 +74,7 @@ from gbdt.ctrs.ctr_binarization import TBinarizationOptions
 # `pointwise_non_symmetric.cpp:7-29` registers for every single-target
 # pointwise loss under `EGrowPolicy::Depthwise` and `Lossguide`
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper_depthwise import (
+    IDN_NS_SCALE_DEVICE,
     NS_INHERIT_PARTITION,
     TDepthwiseWorkspace,
     fit_non_symmetric_tree,
@@ -2628,9 +2629,17 @@ def fit_with_test(
             var wmag = Float32(0.0)
             var gmag = Float32(0.0)
             var t_mags = loop_times.start()
+            # lane/fam-gbdt (IDN_NS_SCALE_DEVICE): the driver derives the
+            # scale on the device from `mags` (as `run_tree_layout` does,
+            # DEVIATION 95), so this per-tree drain is not taken.
+            var ns_mags_opt = Optional[DeviceBuffer[DType.float32]]()
 
             @parameter
-            if _needs_magnitudes:
+            if _needs_magnitudes and IDN_NS_SCALE_DEVICE:
+                ns_mags_opt = Optional(mags.copy())
+
+            @parameter
+            if _needs_magnitudes and not IDN_NS_SCALE_DEVICE:
                 var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
                 ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
                 ctx.synchronize()
@@ -2678,6 +2687,7 @@ def fit_with_test(
                 multiclass_optimization=objective == OBJECTIVE_MULTICLASS,
                 random_seed=tree_seed,
                 tag_prefix=_tree_tag(iteration) + ".",
+                mags_dev=ns_mags_opt^,
             )
             loop_times.stop_host("iter_tree_search", t_search)
             var n_bins = tree.bin_count()

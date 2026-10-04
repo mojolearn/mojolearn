@@ -54,6 +54,7 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.builtin.sort import sort
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+    choose_scale_kernel,
     copy_histograms_kernel,
     copy_histograms_vec4_kernel,
     scan_histograms_kernel,
@@ -287,6 +288,23 @@ comptime DW2_PART_VEC4 = DW_FUSED_CHAIN and not is_defined[
 #: 17,014 ms (-1.3%), auc within spread. Off:
 #: `-D MOJOLEARN_GBDT_DW2_SCAN_SMEM_OFF`. The old opt-in define
 #: `-D MOJOLEARN_GBDT_DW2_SCAN_SMEM` is harmless.
+#: lane/fam-gbdt (2026-10-04), IDN_NS_SCALE_DEVICE: IDENTICAL, every vendor,
+#: default on. The Depthwise / Lossguide driver derives its fixed-point
+#: scale on the device (`choose_scale_kernel`, DEVIATION 95, the kernel the
+#: symmetric driver already launches) when the caller hands the magnitudes
+#: buffer, so the boosting loop no longer drains once per tree to read two
+#: floats back. Same bits: the kernel is the host `choose_scale` as an exact
+#: integer search (its docstring), reading the same two magnitudes.
+#: `-D MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF` (or the master
+#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the per-tree drain and host scale.
+comptime IDN_NS_SCALE_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
 comptime DW2_SCAN_SMEM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
@@ -1569,6 +1587,10 @@ def fit_non_symmetric_tree[
     # so twenty non-symmetric trees in one card stay distinguishable.
     # DEVIATION 259.
     tag_prefix: String = String(""),
+    # IDN_NS_SCALE_DEVICE: the two magnitudes on the device (weight, then
+    # gradient, sums of absolute values); when present the scale is derived
+    # there and `weight_magnitude` / `gradient_magnitude` are not read.
+    mags_dev: Optional[DeviceBuffer[DType.float32]] = None,
 ) raises -> TNonSymmetricTree:
     """`TGreedyTreeLikeStructureSearcher<TNonSymmetricTree>::FitImpl`.
 
@@ -1973,23 +1995,35 @@ def fit_non_symmetric_tree[
     # is not wired here: it exists to remove the boosting loop's per-tree
     # magnitudes drain, and this lane has no boosting loop yet. Same
     # function, same bits (`choose_scale` is an exact integer search).
-    var mag = Float64(weight_magnitude)
-    if mag < 0.0:
-        mag = -mag
-    var gmag = Float64(gradient_magnitude)
-    if gmag < 0.0:
-        gmag = -gmag
-    if gmag > mag:
-        mag = gmag
-    ws[0].h_scale.unsafe_ptr().unsafe_store(
-        0, Float32(choose_scale(mag, n_rows))
-    )
-    ctx.enqueue_copy(
-        dst_buf=ws[0].scale_dev, src_ptr=ws[0].h_scale.unsafe_ptr()
-    )
+    # lane/fam-gbdt (IDN_NS_SCALE_DEVICE): with the magnitudes buffer the
+    # same derivation runs on the device, as in `run_tree_layout`.
     var fixed_scale = rebind[MutPointer[Float32, MutAnyOrigin]](
         ws[0].scale_dev.unsafe_ptr()
     )
+    if mags_dev:
+        ctx.enqueue_function[choose_scale_kernel](  # small-launch(n_rows: a scalar operand of the scale snap): one thread of control plane reading two magnitudes
+            rebind[MutPointer[Float32, MutAnyOrigin]](
+                mags_dev.value().unsafe_ptr()
+            ),
+            Int32(n_rows), fixed_scale,
+            grid_dim=(1, 1, 1),
+            block_dim=(1, 1, 1),
+        )
+    else:
+        var mag = Float64(weight_magnitude)
+        if mag < 0.0:
+            mag = -mag
+        var gmag = Float64(gradient_magnitude)
+        if gmag < 0.0:
+            gmag = -gmag
+        if gmag > mag:
+            mag = gmag
+        ws[0].h_scale.unsafe_ptr().unsafe_store(
+            0, Float32(choose_scale(mag, n_rows))
+        )
+        ctx.enqueue_copy(
+            dst_buf=ws[0].scale_dev, src_ptr=ws[0].h_scale.unsafe_ptr()
+        )
     # lane/sym-quality: the gradient planes onto this tree's fixed-point
     # grid before the root histogram (`snap_gradients_to_scale_kernel`), as
     # the symmetric driver does; only where a histogram quantizes at all.
