@@ -97,13 +97,33 @@ comptime TPB_DEFAULT = 128
 # the M4 Pro measures RandomForestRegressor Istella-S 49.53 s at 10, 47.84
 # s at 20, 47.14 s at 40, the same hash 3a5e8c09dd0d5fc7 (steward
 # 1790612032193); the 91 s above was an older tree.
+#
+# fam-forests (2026-10-04), IDENTICAL on NVIDIA and AMD: 40 columns per pass
+# there too (`IDN_RF_COLS40`). A wide forest (Istella regression samples 220
+# of 220) otherwise runs 22 histogram + split passes per sampling round and
+# now runs 6; the pass width only regroups (node, column) blocks into
+# launches, every histogram cell and candidate is the same integer, and Apple
+# IDENTICAL already runs 40 against the others 10 with equal forests, so no
+# bit moves. `-D MOJOLEARN_IDN_RF_COLS40_OFF` restores 10.
+comptime IDN_RF_COLS40 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not has_apple_gpu_accelerator()
+    and not (
+        is_defined["MOJOLEARN_IDN_RF_COLS40_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
 comptime N_BLKS_FOR_COLS = 40 if (
     (
-        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        (
+            GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+            or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        )
+        and has_apple_gpu_accelerator()
+        and not is_defined["MOJOLEARN_RF_COLS10"]()
     )
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_RF_COLS10"]()
+    or IDN_RF_COLS40
 ) else (
     # trial arms (trees-apple2): the columns per pass under IDENTICAL
     20 if is_defined["MOJOLEARN_RF_TRIAL_COLS20"]() else (
