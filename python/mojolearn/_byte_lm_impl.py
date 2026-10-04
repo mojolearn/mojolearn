@@ -27,7 +27,10 @@ boundary at admission (`_open_session`: `_validate_state` once, one
 upload), at export (`export_state`, `export_gradients`, `export_checkpoint`,
 `close`) and never per step; a step moves the ids in and the loss and the
 flags out. The stateless path (`resident=False`) is unchanged: mirror in,
-mirror out, validated candidate committed or nothing.
+mirror out, validated candidate committed or nothing. Since cpu2-l11-neural
+(2026-10-04) `resident` defaults to True on a GPU install (the stateless
+path is an explicit opt-out and the route of a binding without session
+entries); a defaulted session keeps `step_result='full'`.
 
 GPU LOGITS (DEVIATION 2658). `logits(ids)` and `next_bytes(ids)` run the
 forward alone, through the native `byte_lm_logits` (stateless) and
@@ -115,6 +118,10 @@ _F32_MAX = 3.4028234663852886e+38
 #: DEVIATION 2514: the native entries a resident session needs. A binding
 #: missing any of them refuses with ImportError; there is no fallback to
 #: the mirror-in/mirror-out `byte_lm_session_run`.
+#: The native refusal of an id outside [0, vocab) (training/byte_lm.mojo
+#: `byte_validate_tokens`), mapped back to the public ValueError.
+_TOKEN_REFUSAL = 'token ID outside configured vocabulary'
+
 _SESSION_ENTRIES = ('byte_lm_session_create', 'byte_lm_session_close',
                     'byte_lm_session_open', 'byte_lm_session_step',
                     'byte_lm_session_eval', 'byte_lm_session_export_state',
@@ -611,16 +618,23 @@ class SmallByteLanguageModelTrainer:
     """
 
     def __init__(self, parameters, *, data_schedule, lr=1e-3, betas=(.9, .999),
-                 eps=1e-8, weight_decay=.01, shape=None, resident=False, step_result=None):
+                 eps=1e-8, weight_decay=.01, shape=None, resident=None, step_result=None):
         # A trainer runs only under a numeric profile whose TRAINING gates have passed.
         _numeric_profile.require_training("mojolearn.SmallByteLanguageModelTrainer")
-        if type(resident) is not bool:
+        # cpu2-l11-neural (2026-10-04): `resident=None` (the default) is
+        # AUTO: the device-owned session whenever the loaded binding carries
+        # the session entries (every current GPU build), so no step mirrors,
+        # copies or re-scans the parameters and moments on the host. It is
+        # resolved at the first call that needs the binding (`_is_resident`).
+        # `resident=False` keeps the stateless path as an explicit opt-out.
+        if resident is not None and type(resident) is not bool:
             raise TypeError("resident must be a bool")
         if step_result is None:
-            step_result = 'lean' if resident else 'full'
+            # AUTO keeps the stateless return shape ('full').
+            step_result = 'lean' if resident is True else 'full'
         if type(step_result) is not str or step_result not in ('full', 'lean'):
             raise ValueError("step_result must be 'full' or 'lean'")
-        if step_result == 'lean' and not resident:
+        if step_result == 'lean' and resident is not True:
             raise ValueError("step_result='lean' requires resident=True: the stateless path "
                              "destroys its context before returning, so there is nothing to export from")
         self._resident = resident
@@ -849,7 +863,10 @@ class SmallByteLanguageModelTrainer:
                                                             list(shape.native_shape))
         if _is_bool(returned) or not isinstance(returned, int) or returned != step:
             raise RuntimeError('Byte-LM gradient export returned a different step')
-        gradients = _array(out_grad, (shape.n_total,), 'pre-update gradients')
+        # cpu2-l11-neural: the native export already ran the finite scan on
+        # the device (`first_nonfinite`) and wrote a fresh owned buffer, so
+        # no host re-scan or second copy.
+        gradients = out_grad
         result = dict(flat_gradients=gradients)
         if named:
             result['gradients'] = {
@@ -959,6 +976,15 @@ class SmallByteLanguageModelTrainer:
             self._runtime_binding = binding
         return binding
 
+    def _is_resident(self):
+        """Lock held. Resolve AUTO (`resident=None`, cpu2-l11-neural): the
+        resident session when the binding carries every session entry, the
+        stateless path otherwise. An explicit bool is returned as given."""
+        if self._resident is None:
+            binding = self._binding()
+            self._resident = all(callable(getattr(binding, name, None)) for name in _SESSION_ENTRIES)
+        return self._resident
+
     def run_metadata(self):
         """Exact current profile/config/schedule/source/binary runtime witness.
 
@@ -969,7 +995,7 @@ class SmallByteLanguageModelTrainer:
             self._binding()
             return dict(json.loads(_canonical(self._runtime)), schema='small-byte-lm.run-metadata.v1',
                         qualification='authored/unqualified', profile=self._state['profile'],
-                        device_state_lifetime='resident' if self._resident else 'call',
+                        device_state_lifetime='resident' if self._is_resident() else 'call',
                         step_result=self._step_result, last_export_step=self._last_export_step,
                         config=dict(self._state['config']), data_schedule=_schedule(self._state['data_schedule']),
                         completed_steps=self.step_, next_batch_index=self.step_)
@@ -977,7 +1003,7 @@ class SmallByteLanguageModelTrainer:
     def _run(self, ids, train):
         try:
             return self._run_impl(ids, train)
-        except BaseException:
+        except BaseException as exc:
             # Native success followed by Python validation failure, or a
             # native failure after the update: roll the device back to the
             # last committed step and keep the session. Host state has not
@@ -986,6 +1012,9 @@ class SmallByteLanguageModelTrainer:
                 self._recover_session()
             except Exception:
                 pass  # Preserve the original failure; the session is marked lost.
+            if not isinstance(exc, ValueError) and _TOKEN_REFUSAL in str(exc):
+                shape = state_shape(self._state)
+                raise ValueError(f'Byte-LM IDs must be in [0, {shape.vocab_size})') from exc
             raise
 
     def _run_impl(self, ids, train):
@@ -994,10 +1023,11 @@ class SmallByteLanguageModelTrainer:
         clock = [time.perf_counter()]
         n4 = shape.n_total * 4
         tokens = _array(ids, (shape.batch, shape.length + 1), 'ids', '<i4')
-        if tokens.min() < 0 or tokens.max() >= shape.vocab_size:
-            raise ValueError(f'Byte-LM IDs must be in [0, {shape.vocab_size})')
+        # cpu2-l11-neural: no Python min/max over the ids. The native entry
+        # admits them (`byte_validate_tokens`, the same [0, vocab) rule)
+        # before any upload; `_run` maps its refusal to this ValueError.
         _tick(ton, clock, 'step.py_tokens', tokens.nbytes)
-        if self._resident:
+        if self._is_resident():
             return self._run_resident(tokens, train, shape, ton, clock)
         working = _validate_state(self._state)
         if train and working['completed_steps'] >= 999999:
@@ -1187,7 +1217,7 @@ class SmallByteLanguageModelTrainer:
         with self._lock:
             shape = state_shape(self._state)
             tokens, batch, length = _gpu_logits_ids(ids, shape)
-            if self._resident:
+            if self._is_resident():
                 return self._logits_resident(tokens, batch, length, shape)
             return self._logits_stateless(tokens, batch, length, shape)
 
@@ -1352,7 +1382,7 @@ class SmallByteLanguageModelTrainer:
         return _byte_lm_checkpoint.save(path, payload)
 
     @classmethod
-    def from_checkpoint_binary(cls, path, *, resident=False):
+    def from_checkpoint_binary(cls, path, *, resident=None):
         """Restore a `mojolearn.byte-lm-stream.v1` archive written by
         `export_checkpoint_binary`, never the JSON/hex envelope and never
         `training/checkpoint.mojo`'s unreachable native binary v1.
@@ -1375,14 +1405,14 @@ class SmallByteLanguageModelTrainer:
         return result.load_state_dict(state)
 
     @classmethod
-    def from_checkpoint(cls, path, *, resident=False):
+    def from_checkpoint(cls, path, *, resident=None):
         """Restore this explicit JSON checkpoint schema, never native binary v1."""
         with Path(path).open('rb') as stream:
             encoded = stream.read(_CHECKPOINT_LIMIT + 1)
         return cls.from_checkpoint_bytes(encoded, resident=resident)
 
     @classmethod
-    def from_checkpoint_bytes(cls, encoded, *, resident=False):
+    def from_checkpoint_bytes(cls, encoded, *, resident=None):
         """Restore one bounded immutable capture without opening any path.
 
         Only exact ``bytes`` is accepted: callers must first capture mutable
