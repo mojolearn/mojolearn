@@ -200,6 +200,23 @@ def compare(directory):
     return ok, rows
 
 
+def admit_quality(path, identity):
+    """Read-only strict admission; packet and exact caller reach are mandatory."""
+    import math
+    prior = json.loads(Path(path).read_text())
+    assert prior['status'] == 'PASS' and prior['scored'] is False
+    assert all(prior[k] == v for k, v in identity.items())
+    assert prior['metrics']
+    assert all(row['pass_no_worse'] and math.isfinite(row['A']) and math.isfinite(row['B'])
+               and row['B'] <= row['A'] for row in prior['metrics'].values())
+    assert set(prior['packets']) == {'A.npz', 'B.npz', 'A.npz.json', 'B.npz.json', 'oracle.npz'}
+    for name, digest in prior['packets'].items():
+        assert sha(Path(path).parent / name) == digest
+    assert prior['A']['counts'] == [0,0,0,0,0,0,1,0,0]
+    assert prior['B']['counts'] == [0,0,0,0,0,0,0,1,0]
+    return prior
+
+
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == '_capture':
         _, _, binary_sha, mask, data, data_sha, out, scored, preflight = sys.argv
@@ -231,13 +248,7 @@ def main():
         assert args.quality_report and args.quality_sha
         prior_path = Path(args.quality_report).expanduser().resolve()
         assert sha(prior_path) == args.quality_sha
-        prior = json.loads(prior_path.read_text())
-        assert prior['status'] == 'PASS' and all(prior[k] == v for k, v in identity.items())
-        assert all(row['pass_no_worse'] and row['B'] <= row['A'] for row in prior['metrics'].values())
-        for name, digest in prior['packets'].items():
-            assert sha(prior_path.parent / name) == digest
-        assert prior['A']['counts'] == [0,0,0,0,0,0,1,0,0]
-        assert prior['B']['counts'] == [0,0,0,0,0,0,0,1,0]
+        prior = admit_quality(prior_path, identity)
     else:
         assert not args.quality_report and not args.quality_sha
     directory = Path.home() / 'mq/out' / (args.tag + '-' + args.action)
