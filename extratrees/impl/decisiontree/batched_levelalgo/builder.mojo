@@ -1996,9 +1996,10 @@ IDENTICAL arm already folds codes in key space and decodes the borders),
 and the host column (`train_tree_exact`, through `HostBins`) restates the
 same borders, codes, ranges, snap and stored threshold. Gate, per FIT and
 the same on the host: a regressor with `n_cols >= ET_BINNED_MIN_COLS` and
-`2k >= n_cols` (`et_identical_bins_wanted`). Needs the tiled search
-(`ET_RANGE_TILED and ET_SCORE_TILED`, the IDENTICAL default on every
-vendor); with those off the arm is off on device and host alike."""
+`2k >= n_cols` (`et_identical_bins_wanted`). It turns the tiled search on
+(`ET_RANGE_TILED and ET_SCORE_TILED` include `IDN_ET_BINNED`, bit-inert)
+whatever the vendor tiled-search switches say, so the binning decision is
+the same on every column under every switch combination."""
 
 comptime ET_BINNED_REG = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -2027,8 +2028,12 @@ def et_identical_bins_wanted(n_cols: Int, k: Int) -> Bool:
     (the tiled search's own `2k >= n_cols` gate, `ensure_row_major`)."""
     comptime if not IDN_ET_BINNED:
         return False
-    comptime if not (ET_RANGE_TILED and ET_SCORE_TILED):
-        return False
+    # lane/review-fixes: no test of ET_RANGE_TILED / ET_SCORE_TILED here.
+    # Those come from vendor switches (Apple's ET_TILED_SEARCH_*_OFF,
+    # NVIDIA/AMD's IDN_ET_TILED_SEARCH_OFF), so the binning decision would
+    # differ by vendor under some switch mix. IDN_ET_BINNED forces both
+    # tiled passes on (bit-inert) on every device instead, so this gate is
+    # one rule on NVIDIA, AMD, Apple and the host column.
     return n_cols >= ET_BINNED_MIN_COLS and 2 * k >= n_cols
 
 
@@ -3055,7 +3060,7 @@ comptime ET_RANGE_TILED = (
         is_defined["MOJOLEARN_ET_RANGE_TILED"]()
         or ET_TILED_SEARCH_APPLE_DEFAULT
     )
-) or ET_TILED_SEARCH_APPLE_IDENTICAL or IDN_ET_TILED_SEARCH
+) or ET_TILED_SEARCH_APPLE_IDENTICAL or IDN_ET_TILED_SEARCH or IDN_ET_BINNED
 """FAST experiment: the range pass reads a row-major X with up to
 `ET_FEATURE_TILE` sampled features per block
 (`node_feature_range_tiled_kernel`)."""
@@ -3080,7 +3085,7 @@ comptime ET_SCORE_TILED = (
         is_defined["MOJOLEARN_ET_SCORE_TILED"]()
         or ET_TILED_SEARCH_APPLE_DEFAULT
     )
-) or ET_TILED_SEARCH_APPLE_IDENTICAL or IDN_ET_TILED_SEARCH
+) or ET_TILED_SEARCH_APPLE_IDENTICAL or IDN_ET_TILED_SEARCH or IDN_ET_BINNED
 """FAST experiment: the REGRESSION score pass reads a row-major X with up to
 `ET_FEATURE_TILE` sampled features per block
 (`node_feature_score_reg_tiled_kernel`)."""
