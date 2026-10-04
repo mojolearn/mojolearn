@@ -64,6 +64,44 @@ shift on the host after the walker; the host oracle
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.sys.compile import is_defined
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.soft_f64 import (
+    SF64_ZERO,
+    sf64_add,
+    sf64_div,
+    sf64_from_f32,
+    sf64_from_int,
+    sf64_gt,
+    sf64_is_nan,
+    sf64_lt,
+    sf64_to_f32,
+)
+
+#: lane/fam2-gbdt F5 (IDENTICAL, every vendor; default ON): the ONE-STEP
+#: Newton estimation (`leaf_estimation_iterations == 1`, the default of
+#: Logloss and the other single-dimensional pointwise losses) is finished ON
+#: THE DEVICE. `_estimate_and_apply` (`gbdt/methods/doc_parallel_boosting.mojo`)
+#: used to drain after the evaluation, read the per-leaf sums back, take the
+#: walker's one step on the host (`descent_helpers.mojo`: Float64 divide,
+#: regularize), upload the leaf values and drain again. Now
+#: `newton_one_step_kernel` takes that step from the device sums in
+#: soft-float64 (`checks/soft_f64.mojo`, IEEE double in integer arithmetic,
+#: the same on every vendor), the cursor add reads its output, and the task
+#: drains ONCE. The values are the host walker's bit for bit (correctly
+#: rounded double add, divide and narrowing), so the host column is
+#: untouched. Unweighted fits only: the regularizer's per-leaf weight is
+#: then the leaf's row count, which is already on the device.
+#: `-D MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF` (or the master
+#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the host walker.
+comptime IDN_EST_ONE_STEP_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
 
 
 comptime LEAF_BLOCK = 256
@@ -181,4 +219,45 @@ def compute_leaf_values_kernel(
     if w < MIN_LEAF_WEIGHT:
         v = Float32(0.0)
 
+    out_values.unsafe_store(leaf, v)
+
+
+def newton_one_step_kernel(
+    part_stats: MutPointer[Float32, MutAnyOrigin],
+    leaf_sizes: MutPointer[UInt32, MutAnyOrigin],
+    lambda_bits: UInt64,
+    min_leaf_weight_bits: UInt64,
+    n_leaves_in: Int32,
+    out_values: MutPointer[Float32, MutAnyOrigin],
+):
+    """`IDN_EST_ONE_STEP_DEVICE`: `TNewtonLikeWalker::Estimate` at
+    `Iterations == 1` on the diagonal arm, one thread per leaf, from the
+    evaluation's per-leaf sums `part_stats[2 * leaf] = sum(der)`,
+    `part_stats[2 * leaf + 1] = sum(der2)`:
+
+        gradient = double(der);  hessian = double(der2) + lambda
+        direction = hessian > 0 ? float(gradient / (hessian + 1e-20f)) : 0
+        point = float(1.0 * direction + 0.0)       (the walker's fused move)
+        point = 0 when double(leaf row count) < MinLeafWeight  (Regularize)
+
+    The doubles are their bit patterns in `UInt64`; `lambda_bits` and
+    `min_leaf_weight_bits` are the host doubles' bits."""
+    var n_leaves = Int(n_leaves_in)
+    var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if leaf >= n_leaves:
+        return
+    var g = sf64_from_f32(part_stats.unsafe_load(2 * leaf))
+    var h = sf64_add(
+        sf64_from_f32(part_stats.unsafe_load(2 * leaf + 1)), lambda_bits
+    )
+    var v = Float32(0.0)
+    if (not sf64_is_nan(h)) and sf64_gt(h, SF64_ZERO):
+        var eps = sf64_from_f32(Float32(1e-20))
+        v = sf64_to_f32(sf64_div(g, sf64_add(h, eps)))
+    # `fma(1.0, direction, +0.0)`: a zero of either sign lands on +0.0
+    if v == Float32(0.0):
+        v = Float32(0.0)
+    var weight = sf64_from_int(Int(leaf_sizes.unsafe_load(leaf)))
+    if sf64_lt(weight, min_leaf_weight_bits):
+        v = Float32(0.0)
     out_values.unsafe_store(leaf, v)

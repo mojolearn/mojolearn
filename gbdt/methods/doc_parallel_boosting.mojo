@@ -106,6 +106,11 @@ from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
     build_layout,
 )
+from gbdt.methods.leaves_estimation.leaves_estimation import (
+    IDN_EST_ONE_STEP_DEVICE,
+    newton_one_step_kernel,
+)
+from std.memory import bitcast
 from gbdt.models.kernel.add_bin_values import (
     IDN_APPLY_WIDE,
     IDN_PREDICT_FOUR,
@@ -995,6 +1000,64 @@ def _estimate_and_apply(
     # positive definite. Accumulated across the whole fit and
     # reported once, because the number that matters is whether
     # it is ever nonzero.
+    # lane/fam2-gbdt F5 (`IDN_EST_ONE_STEP_DEVICE`): the one-step Newton
+    # estimation of an unweighted single-dimensional pointwise loss finishes
+    # on the device and the task drains once.
+    var one_step_device = False
+    comptime if IDN_EST_ONE_STEP_DEVICE:
+        one_step_device = (
+            iters == 1
+            and leaf_estimation_method == LEAF_ESTIMATION_NEWTON
+            and estimate_can_batch(objective, leaf_estimation_method, iters)
+            and approx_dim == 1
+            and not has_weights
+            and oracle.single_bin_dim == 1
+            and oracle.hessian_block_size() == 1
+        )
+    if one_step_device:
+        # the walker's own first calls, in its order: `MoveTo(start)` and the
+        # evaluation at it, both enqueued, not drained
+        oracle.times.enabled = stage_times.enabled
+        var start_point = List[Float32](length=n_leaves, fill=Float32(0.0))
+        oracle.move_to(start_point)
+        oracle.enqueue_single_dim_evaluation()
+        stage_times.begin(ctx)
+        ctx.enqueue_function[newton_one_step_kernel](
+            oracle.d_part_stats.unsafe_ptr(),
+            oracle.d_p_sz.unsafe_ptr(),
+            bitcast[DType.uint64](oracle.lambda_reg),
+            bitcast[DType.uint64](oracle.min_leaf_weight),
+            Int32(n_leaves),
+            d_est.unsafe_ptr(),
+            grid_dim=((n_leaves + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        var os_gx = 2 * oracle.sm_count
+        if os_gx < 1:
+            os_gx = 1
+        ctx.enqueue_function[add_model_value_kernel](
+            oracle.d_p_off.unsafe_ptr(),
+            oracle.d_p_sz.unsafe_ptr(),
+            row_index.unsafe_ptr(),
+            d_est.unsafe_ptr(),
+            learning_rate,
+            cursor.unsafe_ptr(),
+            Int32(approx_dim), Int32(n_rows),
+            grid_dim=(os_gx, n_leaves, approx_dim),
+            block_dim=(256, 1, 1),
+        )
+        ctx.enqueue_copy(dst_ptr=h_est.unsafe_ptr(), src_buf=d_est)
+        # the task's one settle point (DEVIATION 1891's holds, as the
+        # ordinary tail below)
+        ctx.synchronize()
+        leaf_values.clear()
+        for i in range(n_leaves):
+            leaf_values.append(h_est.unsafe_ptr().unsafe_load(i))
+        merge_stage_times(stage_times, oracle.times)
+        trace.record_list_f32(leaf_tag, leaf_values)
+        stage_times.end(ctx, "est.tail_apply")
+        _ = oracle^  # past the drain (step-33 race class, device side)
+        return
     var estimated: List[Float32]
     if leaf_estimation_method == LEAF_ESTIMATION_EXACT:
         estimated = oracle.estimate_exact()
