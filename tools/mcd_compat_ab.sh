@@ -4,12 +4,19 @@
 # Manager must first confirm branch base == current main (or merge main).
 # Usage: bash tools/mcd_compat_ab.sh TAG DATASET [LANE] [ROWS]
 # Prebuilt overrides: MCD_A_SO, MCD_B_SO. They must be default/current-main
-# and this commit with MOJOLEARN_MCD_BATCH_COMPAT, respectively.
+# and this commit with MCD_DEFINE (default MOJOLEARN_MCD_BATCH_COMPAT).
+# MCD_BASELINE_NPZ may reuse a saved A only after manager source review.
+# Comparison still enforces exact dataset/lane/shape/input hash agreement.
 set -euo pipefail
 TAG=$1
 DATASET=$2
 LANE=${3:-min-cov-det}
 ROWS=${4:-}
+MCD_DEFINE=${MCD_DEFINE:-MOJOLEARN_MCD_BATCH_COMPAT}
+case "$MCD_DEFINE" in
+  MOJOLEARN_MCD_BATCH_COMPAT|MOJOLEARN_MCD_BATCH_MMA) ;;
+  *) echo "MCDQ unsupported define: $MCD_DEFINE"; exit 2 ;;
+esac
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 OUT="$HOME/afc-def/$TAG"
@@ -18,11 +25,16 @@ PY="$HOME/board-0834/cache/venv/bin/python"
 DATA="$HOME/board-0834/cache/algos-data/rows-full"
 SO="$ROOT/python/mojolearn/_mojolearn_x_decomp.so"
 for ARM in A B; do
+  if [ "$ARM" = A ] && [ -n "${MCD_BASELINE_NPZ:-}" ]; then
+    cp "$MCD_BASELINE_NPZ" "$OUT/A.npz"
+    echo "MCDQ-REUSE arm=A source=$MCD_BASELINE_NPZ (manager source review required)"
+    continue
+  fi
   PREBUILT=${MCD_A_SO:-}
   DEFINES=
   if [ "$ARM" = B ]; then
     PREBUILT=${MCD_B_SO:-}
-    DEFINES='-D MOJOLEARN_MCD_BATCH_COMPAT'
+    DEFINES="-D $MCD_DEFINE"
   fi
   if [ -n "$PREBUILT" ]; then
     cp "$PREBUILT" "$OUT/$ARM.so"
@@ -42,7 +54,7 @@ for ARM in A B; do
   mv "$SO.tmp" "$SO"
   set --
   [ -z "$ROWS" ] || set -- --rows "$ROWS"
-  MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_VENDOR=metal PYTHONPATH="$ROOT/python" \
+  MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_VENDOR=apple PYTHONPATH="$ROOT/python" \
     "$PY" tools/mcd_compat_quality.py fit "$DATA" "$DATASET" "$OUT/$ARM.npz" \
     --lane "$LANE" "$@"
 done

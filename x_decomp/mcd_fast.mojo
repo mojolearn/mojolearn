@@ -71,7 +71,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
 from x_decomp.cells import F32Ptr, I32Ptr, add, sub, mul, div0, sqrt0, log_floor, rand_cell
-from x_decomp.device import xd_ctx, _down, _down_i, _launch_gemm_mma
+from x_decomp.device import xd_ctx, _down, _down_i, _launch_gemm_mma, DECOMP_FAST_GEMM_MMA
 from x_decomp.mcd_mma import mc_center_kernel, mc_publish_matrix_kernel, mc_mahal_reduce_kernel
 from x_decomp.kit import Mat
 from x_decomp.cells import FOLD_BLOCK
@@ -97,7 +97,7 @@ from x_decomp.mcd_compat import mc_compact_kernel, mc_moment_kernel, mc_pinvh_ke
 # Unvalidated: original 1% fitted-state / .99 support gates remain mandatory.
 comptime MCD_BATCH_MMA = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_MCD_BATCH_MMA"]()
+    and DECOMP_FAST_GEMM_MMA and is_defined["MOJOLEARN_MCD_BATCH_MMA"]()
 )
 
 comptime MCD_BATCH_COMPAT = (

@@ -659,3 +659,5 @@ COMPAT's4096-term folds. This concrete arithmetic mismatch can amplify through
 singular determinants and candidate selection, but saved final fits alone do
 not identify the first divergent stage. No thresholds changed. No new numeric
 candidate is approved or claimed fixed; full timing remains gated.
+
+| `MOJOLEARN_MCD_BATCH_MMA` | MinCovDet / taxi, narrow d<=64 | lane/apple-fast-mcd-mma (base d4bb2b795) | new capped-quality tag owed | unknown | OPEN, off | Actual repair after scalar COMPAT quality failure: use main's existing MMA/split-K launcher per candidate for covariance, weighted Gram and Mahalanobis. Batched control/eigen/support work retained. No host model computation, no threshold changes. See ab/mcd-mma.md; compile, capped quality and conditional full timing owed. |
