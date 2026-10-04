@@ -16,6 +16,18 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, pinned_mul_f32
 
+# OPEN / default OFF, 2026-10-04, source fe5df7ab0: private GPU probe only;
+# build/source readiness is not a GPU quality, optimizer or timing acceptance.
+# Earlier scalar K3 actual-tail source102e0d70a remains HOLD-quality:
+# corrected product reduction still leaves12/13groups HOLD,49 worse gradient
+# components of648 (345 changed components improve). No timing admission.
+# The former r2 harness gradient mismatch was repaired; do not cite that
+# harness defect to dismiss the corrected actual-gradient failures.
+# This compensated DF proposal requires every stage and gradient component
+# to pass unchanged zero-degradation gates, then actual fit/forecast checks.
+# Reference-only K1/K3 studies do not authorize product defaults.
+# See docs/apple-fast/ARIMA_K3_DF_REFERENCE_PLAN.txt and
+# docs/apple-fast/ARIMA_K3_DF_GPU_PLAN.txt; original scalar hold stays separate.
 comptime ARIMA_K3_DF_ON = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_ARIMA_FAST_K3_DF_PROBE"]()
