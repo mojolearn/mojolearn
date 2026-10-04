@@ -892,7 +892,8 @@ def _native(key):
         return fn
     from . import _backend
     try:
-        fn = getattr(_backend.binding("_mojolearn", mode="identical"), key)
+        with _backend.host_helper_scope():
+            fn = getattr(_backend.binding("_mojolearn", mode="identical"), key)
     except Exception as exc:
         fn = _host_native(key)
         if fn is None:
