@@ -46,12 +46,18 @@ def dump(args):
     from shared_gemm_source_contract import validate_source
     provenance = validate_source(Path(__file__).resolve().parents[1], args.source)
     source = args.source
+    from shared_gemm_preflight import check_loaded
+    plan = json.loads(Path(args.prerequisites_json).read_text()) if args.prerequisites_json else {}
+    preflight = check_loaded(Path(__file__).resolve().parents[1], args.case, source,
+                             args.binary_sha, args.variant, plan)
+    if args.preflight_only:
+        assert not Path(args.output).exists()
+        write_json(args.output, dict(status="PREFLIGHT_PASS",preflight=preflight,
+            provenance=provenance,case=args.case,variant=args.variant,scored=False))
+        return
     from mojolearn import _backend
     b = _backend.binding(FAMILIES[args.case], "fast")
     binary = str(Path(b.__file__).resolve())
-    assert sha(binary) == args.binary_sha, "actual loaded estimator binding hash mismatch"
-    assert b.shared_gemm_mode() == 0 and b.shared_gemm_vendor() == "metal"
-    assert b.shared_gemm_variant() == args.variant
     x, q, y = fixture(args.features)
     arrays = {"x": x, "q": q, "y": y}
     phases = {}
@@ -124,7 +130,7 @@ def dump(args):
     output.parent.mkdir(parents=True, exist_ok=True)
     np.savez(output, **arrays)
     write_json(output.with_suffix(".json"), dict(policy=POLICY, source=source,
-        case=args.case, features=args.features, variant=args.variant, provenance=provenance,
+        case=args.case, features=args.features, variant=args.variant, provenance=provenance, preflight=preflight,
         binding=FAMILIES[args.case], binary=binary, binary_sha=sha(binary),
         capture_sha=sha(output), fixture_sha=hashlib.sha256(x.tobytes()+q.tobytes()+y.tobytes()).hexdigest(),
         phases=phases, mode="fast", vendor="metal", scored=False))
@@ -138,6 +144,7 @@ def compare(args):
     for field in ("policy", "source", "case", "features", "fixture_sha", "binding", "mode", "vendor"):
         assert ma[field] == mb[field], field
     assert ma["provenance"] == mb["provenance"], "harness provenance mismatch"
+    assert ma["preflight"]["dependencies"] == mb["preflight"]["dependencies"], "auxiliary binding changed across arms"
     assert ma["policy"] == POLICY and ma["variant"] == 0 and mb["variant"] in (1, 5)
     assert ma["capture_sha"] == sha(args.a) and mb["capture_sha"] == sha(args.b)
     assert set(a.files) == set(b.files)
@@ -232,15 +239,22 @@ def main():
     d.add_argument("source"); d.add_argument("binary_sha")
     d.add_argument("variant", type=int, choices=(0, 1, 5)); d.add_argument("case", choices=tuple(FAMILIES))
     d.add_argument("output", help="new .npz path")
+    d.add_argument("--preflight-only", action="store_true", help="load/capability checks only; no numerical fixture")
+    d.add_argument("--prerequisites-json", help="manager-verified auxiliary manifest plan")
     d.add_argument("--features", type=int, choices=(11, 65, 220), default=65)
     c = sub.add_parser("compare")
     c.add_argument("a"); c.add_argument("b"); c.add_argument("report")
     args = p.parse_args()
     if args.action == "dump":
-        assert args.output.endswith(".npz")
+        assert args.preflight_only or args.output.endswith(".npz")
         dump(args)
         return 0
     return compare(args)
 
 if __name__ == "__main__":
-    sys.exit(main())
+    from shared_gemm_preflight import InfrastructureError
+    try:
+        sys.exit(main())
+    except InfrastructureError as exc:
+        print(json.dumps(dict(status="INFRASTRUCTURE_ERROR",phase="preflight",error=str(exc))), flush=True)
+        sys.exit(2)

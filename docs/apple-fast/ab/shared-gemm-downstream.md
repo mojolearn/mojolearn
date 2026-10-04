@@ -245,3 +245,93 @@ harness file. A/B must use identical harness provenance. Old v1 captures
 cannot be compared under v2. Do not rebuild native code for this tools-only
 repair; compile sources remain G1 `30e4562c2129569ed03d93d878ec6a903ea51691`
 and G5 `495c30c33a8805a1944b45f9bc911446f7e89ed8`.
+
+## Future-job prerequisite preflight (r2 tooling only)
+
+The first G1 KMeans A capture stopped before fitting: `_buffer.all_finite`
+resolves `_buffer._native('all_finite_f32')`, which explicitly requests
+`_backend.binding('_mojolearn', mode='identical')`, regardless of the FAST
+estimator mode. A fresh worktree containing only FAST `_mojolearn.so` is
+therefore incomplete. `ibase` is the manager's name for the IDENTICAL
+**same core module**, not a separate `_mojolearn_ibase.so` binding.
+The required installed artifact is `python/mojolearn/identical/_mojolearn.so`.
+The existing helper itself is a native host finiteness scan; this repair
+preserves it and does not add Python/host fallback checks, alter estimator
+refusals or claim that this preexisting helper is GPU arithmetic.
+
+New `tools/shared_gemm_preflight.py` declares exact native capabilities and
+auxiliary dependencies per supported future pair case:
+
+| Case | FAST primary family | Required primary entry capabilities | Auxiliary |
+|---|---|---|---|
+| kmeans | core | kmeans_fit, kmeans_predict, kmeans_transform | ibase IDENTICAL, all_finite_f32 |
+| knn / knn-wide-k | core | knn_search, knn_search_resident, knn_index_prepare, knn_index_release | none for this f32 fixture |
+| ols | estimators | ols_fit_resident, ols_normal_eq_default, ols_predict | none for this f32 fixture |
+| ridge | estimators | ridge_fit_resident, ridge_resident_default, ols_predict | none for this f32 fixture |
+| pca | estimators | pca_fit_full, pca_transform, inverse_transform | none for this full/nonwhitened fixture |
+| kde | estimators | kde_fit_prepare, kde_fit_release, kde_score_samples_resident | none for this f32 fixture |
+
+All require the five shared diagnostic exports as well. Undeclared cases
+are refused as infrastructure rather than guessed. In particular standalone
+SVC/RBF capture cases need their own reviewed prerequisite declarations
+before using this new preflight. Requirements are fixture-specific, not a
+claim that arbitrary inputs or solver settings have no other dependencies.
+
+### Exact M2 auxiliary build
+
+Use the reviewed **new harness** script, but point it at the existing M2
+checkout whose HEAD is exactly the **compiled source**, not the new tools
+source. The script refuses any differing or dirty target source. For G1:
+
+```
+bash /PATH/TO/G1_R2_HARNESS/tools/shared_gemm_build_ibase.sh /PATH/TO/M2_G1_COMPILED_CHECKOUT 30e4562c2129569ed03d93d878ec6a903ea51691
+```
+
+For G5 the compiled source remains
+`495c30c33a8805a1944b45f9bc911446f7e89ed8`. The command builds the existing
+`bindings/build.sh` with IDENTICAL, empty experiment defines, Apple/metal:1,
+-j1 and `MOJOLEARN_SKIP_BUILD_GATE=1`. It uses the M2 hardware/disk/build-lock
+checks, never imports or launches the module, verifies its PyInit symbol,
+and refuses an existing output directory. FAST arms are untouched.
+
+Output is `~/m2-arms/COMPILED_SOURCE/ibase/`, containing `_mojolearn.so`,
+`manifest.json`, build log and exported-symbol listing. During a manager-owned
+transfer window, stage it intact at
+`~/mq/verified-arms/COMPILED_SOURCE/ibase/`. No M3 compile fallback exists.
+The single-artifact manifest has contract `shared-gemm-prerequisite-v1`,
+source_sha, binding `ibase`, module `_mojolearn`, artifact `_mojolearn.so`,
+install_path `identical/_mojolearn.so`, numeric_mode `identical`, defines
+empty, builder `m2`, compile_only true, Apple target metadata, artifact
+`sha256`, required_exports `[all_finite_f32]`, and builder script tooling_sha.
+It cannot substitute an artifact from another source, mode, path or hash.
+
+### Future pair behavior and failure classification
+
+Only the **new harness branches and new tags** use this process. No active
+or queued job, prior source pin, fixture thresholds, scheduler or evidence
+file is modified. The pair CLI still takes the unchanged compiled source;
+the source-contract allowlist additionally permits only the new preflight
+module and compile-only prerequisite script. Native/runtime inputs remain
+zero-diff. Existing compiled G1/G5 arms are reused.
+
+Before installing anything, the pair verifies required single-artifact
+manifests and hashes. It backs up the primary and every prerequisite,
+installs auxiliaries at their exact tier paths, then checks **both A and B**
+in fresh preflight-only processes before either numerical fixture/fit.
+Preflight checks actual loaded path/SHA, mode/vendor/variant and callable
+capabilities; for ibase it also verifies `_buffer._native` resolves the
+function from that exact module without executing the scan. This is metadata
+validation, not a numerical case or quality PASS. Each numerical capture
+repeats these checks in its own fresh process before generating the fixture.
+A/B captures bind to the same prerequisite hashes and manifests.
+
+All targets restore in `finally`, attempting every restoration even if one
+fails; restoration hashes and errors are recorded. Missing manifests,
+missing exports, wrong tiers, wrong loaded paths/hashes and preflight load
+failures return **rc2 / INFRASTRUCTURE_ERROR**, never numerical FAIL or PASS.
+If evidence setup has begun, `INFRASTRUCTURE.json` records the failure;
+otherwise the serial job log carries the explicit infrastructure status.
+No fit begins unless both preflights pass. A crash or hard kill still needs
+manager recovery from retained backups/intake; this helper never silently
+continues after an incomplete restoration. Numerical no-regression and
+NO_REACH rules are unchanged.
