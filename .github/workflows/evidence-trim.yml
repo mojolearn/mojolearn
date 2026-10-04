@@ -1,0 +1,59 @@
+name: Evidence trim
+
+# Daily: keep the newest 3 runs per evidence group under bench/results and
+# bench/evidence, plus anything committed in the last 24 hours, canonical
+# boards, and anything a tracked doc or tool references. Removed paths are
+# listed in bench/results/ARCHIVE_INDEX.md with the sha that restores them.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  # Only used when branch protection refuses the direct push and the job
+  # opens a pull request instead.
+  pull-requests: write
+
+concurrency:
+  group: evidence-trim
+  cancel-in-progress: false
+
+jobs:
+  trim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: main
+          # Full history: last-commit dates and restore shas come from git log.
+          fetch-depth: 0
+
+      - name: Trim
+        run: python3 tools/evidence_trim.py
+
+      - name: Commit and push
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if git diff --cached --quiet; then
+            echo "evidence-trim: nothing removed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q -m "evidence-trim: keep last 3 per group + 24h"
+          if git push origin HEAD:main; then
+            exit 0
+          fi
+          echo "Direct push to main refused; opening a pull request."
+          branch="evidence-trim/$(date -u +%Y%m%d-%H%M%S)"
+          git push origin "HEAD:refs/heads/${branch}"
+          gh pr create \
+            --base main \
+            --head "${branch}" \
+            --title "evidence-trim: keep last 3 per group + 24h" \
+            --body "Automated by .github/workflows/evidence-trim.yml. Removed paths, with the sha that restores each, are listed in bench/results/ARCHIVE_INDEX.md."

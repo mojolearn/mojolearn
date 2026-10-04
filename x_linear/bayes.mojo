@@ -19,7 +19,7 @@ target mean, rows ascending. float32 throughout.
 """
 from std.sys.compile import is_defined
 from x_linear.ops import (
-    FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, ld, st, ldi, sti, i2f, fill, copy,
+    FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fsqrt, ld, st, ldi, sti, i2f, fill, copy,
     cholesky, chol_solve, jacobi_eig, centered_gram, centered_xty, mean_of,
     add_acc, axpy_acc, axpy_centered, par_rows,
 )
@@ -688,8 +688,115 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
     if t.lead():
         bayes_finish(fw, res, d, fi, ym, alpha, lam, iters)
 
+#: QUALITY FIX (lane apple-fast-q-reg, 2026-10-04), the FAST default on every
+#: vendor; `-D MOJOLEARN_ARD_SIGMA_QOLD` restores the old sigma. Audit
+#: (board-quality-audit-2026-10-04, M3 0.8.34): ard istella r2 -0.1387
+#: (FAST) / -0.1249 (IDENTICAL) vs scikit-learn 0.3274; taxi (11 features)
+#: equal. Cause: `_ard_sigma` factors diag(lambda) + alpha G in float32 as
+#: it stands and ignores `cholesky`'s False (`_ = cholesky(...)` below):
+#: Istella's 220 columns span many orders of magnitude, so a pivot goes
+#: non-positive, the factor is left half-written and sigma and the
+#: coefficients are garbage (worse than the mean). scikit-learn takes pinvh
+#: of the same matrix. Here, FAST: the matrix is equilibrated to unit
+#: diagonal (A~ = S A S, S = diag(1 / sqrt(A_jj)), recomputed from G and
+#: lambda), factored, and on a non-positive pivot refactored with a ridge
+#: of dk * eps32 on A~'s diagonal (x10 a retry, ARD_EQ_TRIES); sigma =
+#: S inv(A~) S. Same team split as before; no host step.
+comptime ARD_FAST_EQ = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_ARD_SIGMA_QOLD"]()
+comptime ARD_EQ_TRIES = 8
+
+
+@always_inline
+def _ard_eq_scale(fw: FP, gg: Int, lamo: Int, alpha: Float32, d: Int, j: Int) -> Float32:
+    """1 / sqrt(alpha G_jj + lambda_j): feature j's equilibration factor."""
+    return fd(Float32(1), fsqrt(fa(fm(alpha, ld(fw, gg + j * d + j)), ld(fw, lamo + j))))
+
+
+@always_inline
+def _ard_eq_row(fw: FP, gg: Int, aa: Int, lamo: Int, alpha: Float32, iw: IP, keep: Int, d: Int, dk: Int,
+                a: Int, ridge: Float32):
+    """Row a of the equilibrated A~ (+ ridge on its diagonal)."""
+    var ja = ldi(iw, keep + d + a)
+    var sa = _ard_eq_scale(fw, gg, lamo, alpha, d, ja)
+    for b in range(dk):
+        var jb = ldi(iw, keep + d + b)
+        var v = fm(alpha, ld(fw, gg + ja * d + jb))
+        if a == b:
+            v = fa(v, ld(fw, lamo + ja))
+        v = fm(fm(v, sa), _ard_eq_scale(fw, gg, lamo, alpha, d, jb))
+        if a == b:
+            v = fa(v, ridge)
+        st(fw, aa + a * dk + b, v)
+
+
+@always_inline
+def _ard_eq_col(fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: Float32, iw: IP, keep: Int, d: Int,
+                dk: Int, c: Int):
+    """Column c of sigma = S inv(A~) S from the factor of A~."""
+    for r in range(dk):
+        st(fw, sg + c * dk + r, Float32(1) if r == c else Float32(0))
+    chol_solve(fw, aa, dk, fw, sg + c * dk)
+    var sc = _ard_eq_scale(fw, gg, lamo, alpha, d, ldi(iw, keep + d + c))
+    for r in range(dk):
+        var sr = _ard_eq_scale(fw, gg, lamo, alpha, d, ldi(iw, keep + d + r))
+        st(fw, sg + c * dk + r, fm(fm(ld(fw, sg + c * dk + r), sr), sc))
+
+
+@always_inline
+def _ard_eq_next_ridge(ridge: Float32, dk: Int) -> Float32:
+    if ridge == Float32(0):
+        return fm(Float32(1.1920929e-07), i2f(max(dk, 1)))
+    return fm(ridge, Float32(10))
+
+
+def _ard_sigma_eq(d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: Float32, iw: IP, keep: Int) -> Int:
+    """ARD_FAST_EQ's sigma on one thread. Returns dk."""
+    var dk = 0
+    for j in range(d):
+        if ldi(iw, keep + j) != 0:
+            sti(iw, keep + d + dk, j)
+            dk += 1
+    var ridge = Float32(0)
+    for _ in range(ARD_EQ_TRIES):
+        for a in range(dk):
+            _ard_eq_row(fw, gg, aa, lamo, alpha, iw, keep, d, dk, a, ridge)
+        if cholesky(fw, aa, dk):
+            break
+        ridge = _ard_eq_next_ridge(ridge, dk)
+    for c in range(dk):
+        _ard_eq_col(fw, gg, aa, sg, lamo, alpha, iw, keep, d, dk, c)
+    return dk
+
+
+def _t_ard_sigma_eq(t: Team, d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: Float32, iw: IP,
+                    keep: Int) -> Int:
+    """ARD_FAST_EQ's sigma on the team: rows and columns split as in
+    `_t_ard_sigma`; `t_cholesky`'s result is uniform, so is the retry."""
+    var dk = 0
+    if t.lead():
+        for j in range(d):
+            if ldi(iw, keep + j) != 0:
+                sti(iw, keep + d + dk, j)
+                dk += 1
+    dk = t.bcast_int(dk, 0)
+    var ridge = Float32(0)
+    for _ in range(ARD_EQ_TRIES):
+        for a in range(t.tid, dk, t.nt):
+            _ard_eq_row(fw, gg, aa, lamo, alpha, iw, keep, d, dk, a, ridge)
+        t.sync()
+        if t_cholesky(t, fw, aa, dk):
+            break
+        ridge = _ard_eq_next_ridge(ridge, dk)
+    for c in range(t.tid, dk, t.nt):
+        _ard_eq_col(fw, gg, aa, sg, lamo, alpha, iw, keep, d, dk, c)
+    t.sync()
+    return dk
+
+
 def _ard_sigma(d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: Float32, iw: IP, keep: Int) -> Int:
     """sigma (dk x dk, over the kept features in ascending order) = inv(diag(lambda) + alpha G). Returns dk."""
+    comptime if ARD_FAST_EQ:
+        return _ard_sigma_eq(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
     var dk = 0
     for j in range(d):
         if ldi(iw, keep + j) != 0:
@@ -731,6 +838,9 @@ def _t_ard_sigma(t: Team, d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, 
         return dk0
     if t.nt <= 1:
         return _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
+    comptime if ARD_FAST_EQ:
+        if d >= ARD_TEAM_MIN:
+            return _t_ard_sigma_eq(t, d, fw, gg, aa, sg, lamo, alpha, iw, keep)
     # below ARD_TEAM_MIN features the column barriers of `t_cholesky` cost
     # more than the lead's serial factor (ARD taxi, 11 features: 32.6 to
     # 36.7 ms on the L40S); the lead runs `_ard_sigma`, the same words

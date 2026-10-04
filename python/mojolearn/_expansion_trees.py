@@ -295,6 +295,21 @@ class DecisionTreeClassifier(RandomForestClassifier):
         return super().save(path)
 
 
+def _dt_tier_bins(est):
+    """The quantile bin count a DecisionTreeRegressor fits with: its own
+    n_bins, or for n_bins=None its binding's `rf_dt_default_bins` (QUALITY
+    FIX, lane apple-fast-q-reg: 256 in a FAST build, 128 in IDENTICAL and
+    under `-D MOJOLEARN_DT_BINS_QOLD`; 128 for a binding without the export).
+    The audit numbers are at bindings/_mojolearn_rf.mojo RF_DT_DEFAULT_BINS."""
+    if getattr(est, "n_bins", None) is not None:
+        return int(est.n_bins)
+    try:
+        query = getattr(est._bind("_mojolearn_rf"), "rf_dt_default_bins", None)
+    except (AttributeError, ImportError):
+        return 128
+    return int(query()) if callable(query) else 128
+
+
 @forest_estimator("regressor")
 class DecisionTreeRegressor(RandomForestRegressor):
     """sklearn's `DecisionTreeRegressor` on the forest builder: one tree, no
@@ -316,21 +331,27 @@ class DecisionTreeRegressor(RandomForestRegressor):
         min_impurity_decrease=0.0,
         ccp_alpha=0.0,
         monotonic_cst=None,
-        n_bins=128,
+        n_bins=None,
         device="gpu",
         inference_engine="auto",
     ):
         rf_leaves = _dt_common(splitter, max_features, max_leaf_nodes)
+        # n_bins=None: the tier's default, resolved at fit (`_dt_tier_bins`)
         super().__init__(
             n_estimators=1, criterion=criterion, max_depth=max_depth,
             min_samples_split=min_samples_split, min_samples_leaf=min_samples_leaf,
             min_weight_fraction_leaf=min_weight_fraction_leaf, max_features=max_features,
             max_leaf_nodes=rf_leaves, min_impurity_decrease=min_impurity_decrease,
             bootstrap=False, random_state=random_state, ccp_alpha=ccp_alpha,
-            monotonic_cst=monotonic_cst, n_bins=n_bins, n_streams=1, device=device,
-            inference_engine=inference_engine,
+            monotonic_cst=monotonic_cst, n_bins=128 if n_bins is None else n_bins, n_streams=1,
+            device=device, inference_engine=inference_engine,
         )
         self.splitter = splitter
+
+    def _fit_params(self, n_rows, n_features, n_classes):
+        params = super()._fit_params(n_rows, n_features, n_classes)
+        params[7] = _dt_tier_bins(self)   # slot 7: max_n_bins
+        return params
 
     def fit(self, X, y, sample_weight=None):
         if sample_weight is not None:
@@ -715,7 +736,8 @@ class _BaggingBase(_TreesEnsembleBase):
                       min_impurity_decrease=base.min_impurity_decrease,
                       bootstrap=bool(self.bootstrap),
                       max_samples=(n_rows / n) if self.bootstrap else None,
-                      random_state=seed, n_bins=base.n_bins,
+                      random_state=seed,
+                      n_bins=_dt_tier_bins(base) if isinstance(base, DecisionTreeRegressor) else base.n_bins,
                       numeric_mode=getattr(base, "numeric_mode", None))
         if isinstance(base, DecisionTreeClassifier):
             forest = RandomForestClassifier(class_weight=base.class_weight, **common)
