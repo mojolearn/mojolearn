@@ -53,8 +53,14 @@ from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, unpack, validat
 from checks.numerics import ftz, identical_div
 
 comptime EW_TPB = 128
+# FAST + Apple default after M3 gap26-arima-tail-{synthetic,taxi-hourly}:
+# 14498.225 -> 13569.230 ms and 24231.028 -> 22705.348 ms (one run/arm).
+# Forecast RMSE/digests unchanged; gap26-arima-quality-fixed checks 44
+# selected-order, parameter, likelihood and forecast arrays unchanged.
+# MOJOLEARN_ARIMA_FUSED_EVAL_TAIL_OFF restores the separate launches.
+# See docs/apple-fast/EXPERIMENTS.md; IDENTICAL/other vendors unchanged.
 comptime ARIMA_FUSED_EVAL_TAIL = (
-    KALMAN_FAST_EVAL_WS and is_defined["MOJOLEARN_ARIMA_FUSED_EVAL_TAIL"]()
+    KALMAN_FAST_EVAL_WS and not is_defined["MOJOLEARN_ARIMA_FUSED_EVAL_TAIL_OFF"]()
 )
 
 
