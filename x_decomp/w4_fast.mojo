@@ -2,8 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """lane/apple-fast-w4-decomp (2026-10-04): FAST + Apple candidates.
 
-LLE_FAST_DEV_LU (FAST + Apple default; `-D MOJOLEARN_LLE_FAST_DEV_LU_OFF`
-rolls back): LocallyLinearEmbedding's
+LLE_FAST_DEV_LU (`-D MOJOLEARN_LLE_FAST_DEV_LU`): LocallyLinearEmbedding's
 shift-invert factor F0 (n x n, 10,000 x 10,000 = 400 MB at the board's n)
 is factored where it already lives. Main (`_lle_smallest` ->
 `_Kit.lu` + `_Kit.lu_aux`) moved it through the host five times: F0.copy()
@@ -54,15 +53,13 @@ from x_decomp.device import (
 )
 from x_decomp.resident import _id, _n, _ptr
 
-#: FAST + Apple DEFAULT (rollback `-D MOJOLEARN_LLE_FAST_DEV_LU_OFF`), measured
-#: source e9d72edb5 (2026-10-04). M3 afc_ab_def, full board size, 1 run per arm:
-#: lle taxi 1783.8 -> 1039.0 ms; trustworthiness_k15 0.8662 -> 0.8410, above
-#: the opponent and above the old FAST board 0.826: good quality under the FAST
-#: rule (HOLD under the retired strict B >= A rule).
+#: HOLD, opt-in only (`-D MOJOLEARN_LLE_FAST_DEV_LU`), measured source e9d72edb5 (2026-10-04).
+#: M3 afc_ab_def, full board size, 1 run per arm: lle taxi 1783.8 -> 1039.0 ms,
+#: but trustworthiness_k15 0.86623 -> 0.84096 (worse), so default OFF.
 comptime LLE_FAST_DEV_LU = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_LLE_FAST_DEV_LU_OFF"]()
+    and is_defined["MOJOLEARN_LLE_FAST_DEV_LU"]()
 )
 #: FAST Apple default, measured source e9d72edb5 (2026-10-04).
 #: M3 afc_ab_def, full board size, 1 run per arm: randomized-svd istella
