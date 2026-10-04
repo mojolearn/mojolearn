@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """lane apple-fast-w2-kfeat (2026-10-04): the chi2 samplers' fit entries on
-the GPU binding, FAST + Apple, OPT-IN until their quality pair and M3 A/Bs.
+the GPU binding, FAST + Apple. SCHI2_MOJO_MT is DEFAULT; ACHI2_DEVSCAN stays
+opt-in (HOLD, see below).
 
 `-D MOJOLEARN_XN_FAST_ACHI2_DEVSCAN` (bit 1 of `x_neighbors_kfeat_flags`):
 AdditiveChi2Sampler.fit's negative check (main: `X.min() < 0`, one
@@ -14,12 +15,18 @@ ONE synchronize, the integer minimum over the partials. The dropped
 ACHI2_FAST_DEVCHECK (lane/apple-fast-gap-kapprox2, +1% istella, 0.9 -> 2.8
 ms taxi) made a fresh device buffer for X and a fresh flag per call and
 ran one thread per element against one flag word; this keeps nothing fresh.
+HOLD (opt-in): M3, one run per arm, istella 11.6 -> 2.9 ms but taxi 0.9 ->
+1.9 ms (w2-kfeat-achi2-*): the device round trip loses on small X, so it
+needs a size gate before it can be a default.
 Semantics: refuses iff some entry is negative by bits (`x < 0`, and a NaN
 with its sign bit set), wherever it sits; main's sequential minimum can
 hide a negative behind an earlier NaN (min(list) keeps the NaN). Every
 NaN-free input answers as main.
 
-`-D MOJOLEARN_XN_FAST_SCHI2_MOJO_MT` (bit 2): SkewedChi2Sampler.fit's draws
+SCHI2_MOJO_MT, DEFAULT in FAST + Apple (bit 2; rollback
+`-D MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF`). M3, one run per arm: skewed-chi2
+istella 9.0 -> 2.2 ms, taxi 2.5 -> 1.5 ms; w2-kfeat-xn-q-r1 PASS
+(byte-identical outputs and refusals). SkewedChi2Sampler.fit's draws
 (main: `_LegacyRandomState`, numpy's legacy MT19937 stream, drawn by a
 Python loop of d * n_components `random()` calls, then a nested list
 comprehension for pi/2 * u and `Array.from_list`, about 6 of istella's
@@ -48,7 +55,7 @@ from x_neighbors.items import FP
 
 comptime _KFEAT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime XN_FAST_ACHI2_DEVSCAN = _KFEAT_FAST_APPLE and is_defined["MOJOLEARN_XN_FAST_ACHI2_DEVSCAN"]()
-comptime XN_FAST_SCHI2_MOJO_MT = _KFEAT_FAST_APPLE and is_defined["MOJOLEARN_XN_FAST_SCHI2_MOJO_MT"]()
+comptime XN_FAST_SCHI2_MOJO_MT = _KFEAT_FAST_APPLE and not is_defined["MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF"]()
 comptime XN_KFEAT_ANY = XN_FAST_ACHI2_DEVSCAN or XN_FAST_SCHI2_MOJO_MT
 
 

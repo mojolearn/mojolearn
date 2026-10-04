@@ -6,6 +6,8 @@ Summary: 287 rows, 280 with a ratio, 222 faster than the best opponent after (FA
 
 | lane | dataset | family | FAST before ms | FAST after ms | best opponent | opp ms | ratio before | ratio after | flip | quality after (FAST) | quality before (FAST) | opponent quality | status |
 |---|---|---|---:|---:|---|---:|---:|---:|---|---|---|---|---|
+| min-cov-det | istella | algos | - | 86334 | sklearn-cpu | 43632 | - | 1.98 |  | MCDQ pair PASS vs main (cap 3000) | - | - | ok |
+| elliptic-envelope | istella | algos | - | 86641 | sklearn-cpu | 43759 | - | 1.98 |  | MCDQ pair PASS vs main (cap 3000) | - | - | ok |
 | min-cov-det | taxi | algos | 1739 | 294 | sklearn-cpu | 1413 | 1.23 | 0.21 | FLIP faster | n_features=11 | n_features=11 | n_features=11 | ok |
 | elliptic-envelope | taxi | algos | 1741 | 299 | sklearn-cpu | 1423 | 1.22 | 0.21 | FLIP faster | fraction_flagged=0.10237 | fraction_flagged=0.1024 | fraction_flagged=0.1025, jaccard_vs_sklearn=1 | ok |
 | sgd-ocsvm | taxi | algos | 945 | 154 | sklearn-cpu | 898 | 1.05 | 0.17 | FLIP faster | fraction_flagged=0.05557 | fraction_flagged=0, jaccard_vs_sklearn=0 | fraction_flagged=0.00702, jaccard_vs_sklearn=1 | ok |
@@ -24,32 +26,32 @@ Summary: 287 rows, 280 with a ratio, 222 faster than the best opponent after (FA
 | autoarima | synthetic | algos | - | 9287 | statsforecast-cpu | 2880 | - | 3.22 |  | forecast_rmse=2.624119555180116 | - | forecast_rmse=17.55 | ok |
 | lr-exponential | synthetic | algos | 224 | 225 | torch-cpu | 76.7 | 2.92 | 2.93 |  | - | max_rel_diff_vs_ours=0 | max_rel_diff_vs_ours=5.933e-08 | ok |
 | cagra | taxi | algos | - | 715 | faiss-cpu | 1016 | - | 0.70 | FLIP faster | recall_at_10=0.997925 | - | recall_at_10=0.9277 | ok |
-| label-binarizer | taxi | algos | 1362 | 328 | sklearn-cpu | 118 | 11.59 | 2.79 |  | output_shape=100000x259 | - | - | ok |
+| label-binarizer | taxi | algos | 1362 | 270 | sklearn-cpu | 118 | 11.59 | 2.29 |  | output_shape=100000x259 | - | - | ok |
 | lstm-reg | synthetic | algos | 1880 | 1878 | torch-compile-fp32 (fill) | 695 | 2.70 | 2.70 |  | r2=0.981013, rmse=0.159641 | r2=0.981, rmse=0.1596 | - | ok |
-| skewed-chi2 | taxi | algos | 2.7 | 1.6 | sklearn-cpu | 0.6 | 4.50 | 2.69 |  | kernel_rel_error=0.0377486 | kernel_rel_error=0.03775 | kernel_rel_error=0.03775 | ok |
+| skewed-chi2 | taxi | algos | 2.7 | 1.5 | sklearn-cpu | 0.6 | 4.50 | 2.50 |  | kernel_rel_error=0.0377486 | kernel_rel_error=0.03775 | kernel_rel_error=0.03775 | ok |
 | lstm-reg | taxi-hourly | algos | 1878 | 1879 | torch-compile-fp32 (fill) | 700 | 2.68 | 2.68 |  | r2=0.751679, rmse=0.540429 | r2=0.7517, rmse=0.5404 | - | ok |
 | lstm-clf | taxi-hourly | algos | 1879 | 1890 | torch-eager-fp32 (fill) | 729 | 2.58 | 2.59 |  | accuracy=0.868218, logloss=0.299901 | accuracy=0.8682, logloss=0.2999 | - | ok |
 | lstm-clf | synthetic | algos | 1878 | 1882 | torch-eager-fp32 (fill) | 729 | 2.58 | 2.58 |  | accuracy=0.968696, logloss=0.0724409 | accuracy=0.9687, logloss=0.07244 | - | ok |
 | cholesky | synthetic | algos | 960 | 271 | torch-gpu | 110 | 8.70 | 2.46 |  | relative_residual=1.6591e-07 | relative_residual=1.659e-07 | relative_residual=5.449e-07 | ok |
 | pca | istella | algos | 988 | 490 | sklearn-cpu | 205 | 4.82 | 2.39 |  | explained_variance_ratio_sum=1 | explained_variance_ratio_sum=1 | explained_variance_ratio_sum=1 | ok |
 | permutation-shap | istella | algos | 17214 | 28236 | shap-cpu | 12335 | 1.40 | 2.29 |  | rel_error_vs_exact=5.33875e-09 | rel_error_vs_exact=5.339e-09 | rel_error_vs_exact=3.692e-10 | ok |
-| lu-factor | synthetic | algos | 2323 | 977 | scipy-cpu | 428 | 5.43 | 2.28 |  | relative_residual=3.2563e-06 | relative_residual=3.248e-06 | relative_residual=3.246e-06 | ok |
-| svgp | istella | algos | 1495 | 266 | gpytorch-cpu | 307 | 4.86 | 0.87 | FLIP faster | r2=-0.106016, rmse=0.878373 | r2=-0.106, rmse=0.8784 | r2=-0.106, rmse=0.8784 | ok |
+| lu-factor | synthetic | algos | 2323 | 849 | scipy-cpu | 428 | 5.43 | 1.98 |  | relative_residual=3.2563e-06 | relative_residual=3.248e-06 | relative_residual=3.246e-06 | ok |
+| svgp | istella | algos | 1495 | 228 | gpytorch-cpu | 307 | 4.86 | 0.74 | FLIP faster | r2=-0.106016, rmse=0.878373 | r2=-0.106, rmse=0.8784 | r2=-0.106, rmse=0.8784 | ok |
 | lle | taxi | algos | 17885 | 2570 | sklearn-cpu | 1247 | 14.35 | 2.06 |  | trustworthiness_k15=0.826083 | trustworthiness_k15=0.8398 | trustworthiness_k15=0.7708 | ok |
 | kernel-pca | taxi | algos | 847 | 921 | sklearn-cpu | 460 | 1.84 | 2.00 |  | - | - | subspace_cos_vs_sklearn=1 | ok |
 | kernel-shap | istella | algos | 14386 | 15325 | shap-cpu | 7696 | 1.87 | 1.99 |  | rel_error_vs_exact=4.37806e-09 | rel_error_vs_exact=4.179e-09 | rel_error_vs_exact=1.405e-14 | ok |
 | rbf-sampler | istella | algos | 85.7 | 76.3 | sklearn-cpu | 47.6 | 1.80 | 1.60 |  | kernel_rel_error=0.14198 | kernel_rel_error=0.142 | kernel_rel_error=0.1374 | ok |
-| skewed-chi2 | istella | algos | 6.8 | 7.3 | sklearn-cpu | 3.7 | 1.84 | 1.96 |  | kernel_rel_error=0.671898 | kernel_rel_error=0.6719 | kernel_rel_error=0.6719 | ok |
+| skewed-chi2 | istella | algos | 6.8 | 2.2 | sklearn-cpu | 3.7 | 1.84 | 0.59 | FLIP faster | kernel_rel_error=0.671898 | kernel_rel_error=0.6719 | kernel_rel_error=0.6719 | ok |
 | var | synthetic | algos | 15.9 | 5.0 | statsmodels-cpu | 2.6 | 6.12 | 1.93 |  | forecast_rmse=1.14079 | forecast_rmse=1.141 | forecast_rmse=1.145 | ok |
 | moe | synthetic | algos | 789 | 72.7 | torch-eager-bf16 | 37.7 | 20.92 | 1.93 |  | - | - | max_rel_diff_vs_torch_eager_fp32=2.234e+04, rel_fro_vs_torch_eager_fp32=0.05522 | ok |
-| lu-solve | synthetic | algos | 2320 | 971 | torch-gpu | 506 | 4.59 | 1.92 |  | relative_residual=3.2563e-06 | relative_residual=3.248e-06 | relative_residual=8.234e-07 | ok |
+| lu-solve | synthetic | algos | 2320 | 852 | torch-gpu | 506 | 4.59 | 1.68 |  | relative_residual=3.2563e-06 | relative_residual=3.248e-06 | relative_residual=8.234e-07 | ok |
 | sparse-rp | taxi | algos | 8.0 | 3.4 | sklearn-cpu | 1.8 | 4.44 | 1.90 |  | mean_abs_distortion=0.264 (seed 7; 40-seed mean 0.233) | mean_abs_distortion=0.1472 | mean_abs_distortion=0.381 | ok |
 | var | taxi-hourly | algos | 14.5 | 5.1 | statsmodels-cpu | 2.8 | 5.18 | 1.82 |  | forecast_rmse=33.168 | forecast_rmse=33.17 | forecast_rmse=33.17 | ok |
-| svgp | taxi | algos | - | 213 | gpytorch-cpu | 248 | - | 0.86 | FLIP faster | r2=-0.194982, rmse=17.7235 | - | r2=-0.2093, rmse=17.83 | ok |
+| svgp | taxi | algos | - | 207 | gpytorch-cpu | 248 | - | 0.83 | FLIP faster | r2=-0.194982, rmse=17.7235 | - | r2=-0.2093, rmse=17.83 | ok |
 | kernel-pca | istella | algos | 1049 | 979 | sklearn-cpu | 560 | 1.87 | 1.75 |  | - | - | subspace_cos_vs_sklearn=1 | ok |
 | additive-chi2 | taxi | algos | 0.6 | 0.7 | sklearn-cpu | 0.4 | 1.50 | 1.69 |  | kernel_rel_error=0.0938923 | kernel_rel_error=0.09389 | kernel_rel_error=0.09389 | ok |
 | knn-imputer | taxi | algos | 73.6 | 2.7 | sklearn-cpu | 1.7 | 43.29 | 1.61 |  | masked_rmse=5.1086 | masked_rmse=6.152 | masked_rmse=5.257 | ok |
-| multilabel-binarizer | taxi | algos | 727 | 192 | sklearn-cpu | 129 | 5.62 | 1.49 |  | output_shape=20000x489 | - | - | ok |
+| multilabel-binarizer | taxi | algos | 727 | 168 | sklearn-cpu | 129 | 5.62 | 1.30 |  | output_shape=20000x489 | - | - | ok |
 | randomized-svd | istella | algos | 691 | 533 | sklearn-cpu | 369 | 1.87 | 1.45 |  | relative_reconstruction_error=0.000235946 | relative_reconstruction_error=0.0002359 | relative_reconstruction_error=0.0002359 | ok |
 | target-encoder | taxi | algos | 462 | 204 | sklearn-cpu | 147 | 3.14 | 1.38 |  | exact_arrays=108, smoothing_oracle=PASS | - | - | ok |
 | gaussian-rp | taxi | algos | 5.9 | 2.1 | sklearn-cpu | 1.6 | 3.69 | 1.31 |  | mean_abs_distortion=0.345752 | mean_abs_distortion=0.3458 | mean_abs_distortion=0.3398 | ok |
@@ -58,7 +60,7 @@ Summary: 287 rows, 280 with a ratio, 222 faster than the best opponent after (FA
 | minibatch-kmeans | istella | algos | 673 | 145 | sklearn-cpu | 124 | 5.45 | 1.17 |  | n_clusters=8, silhouette=0.118168 | ari_vs_ours=1, n_clusters=8, silhouette=0.1167 | ari_vs_ours=0.6224, n_clusters=8, silhouette=0.1119 | ok |
 | resample | istella | algos | 388 | 389 | sklearn-cpu | 336 | 1.16 | 1.16 |  | max_mean_shift_over_std=0.00320274 | max_mean_shift_over_std=0.003203 | max_mean_shift_over_std=0.002552 | ok |
 | adafactor | synthetic | algos | 184 | 393 | torch-eager-fp32 | 344 | 0.54 | 1.15 | FLIP slower | - | - | - | ok |
-| multilabel-binarizer | istella | algos | 770 | 163 | sklearn-cpu | 144 | 5.36 | 1.14 |  | output_shape=20000x119 | - | - | ok |
+| multilabel-binarizer | istella | algos | 770 | 126 | sklearn-cpu | 144 | 5.36 | 0.88 | FLIP faster | output_shape=20000x119 | - | - | ok |
 | maxabs-scaler | istella | algos | 134 | 104 | sklearn-cpu | 99.7 | 1.34 | 1.04 |  | output_shape=100000x220 | - | - | ok |
 | gbdt-depthwise | taxi | trees | 13994 | 10812 | xgboost-cpu (fill) | 10435 | 1.34 | 1.04 |  | logloss=0.527929, auc=0.632351 | auc=0.6258, logloss=0.53 | auc=0.631 | ok |
 | lasso-lars | istella | algos | 1016 | 227 | sklearn-cpu | 228 | 4.45 | 1.00 | FLIP faster | r2=0.310837, rmse=0.69346 | r2=0.3103, rmse=0.6937 | r2=0.3111, rmse=0.6933 | ok |
@@ -424,3 +426,5 @@ Sources: before = M3 0.8.34 board (classical), M3 2026-09-29 board FAST cells (t
 - CAGRA LOWD+SEEDS4 default (main c8f1cbcd7, rollback MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF): cagra taxi build 2879.2 -> 714.9 ms; w2-cagra-lowds4-q recall@10 B >= A on taxi and istella. Istella build path unchanged (d > 64).
 - SVGP_FAST_BLKCHOL default (main 5cb11dcf8, rollback MOJOLEARN_SVGP_FAST_BLKCHOL_OFF): taxi 287.0 -> 212.5 ms (flips vs gpytorch-cpu 248), istella 336.6 -> 265.7 ms; w2-svgp-blkchol-q PASS. Board cells use the BLKCHOL-alone B times; the combined RBFTILE+BLKCHOL main retime is owed.
 - KM_FAST_RBF_RESIDENT default (main eb6e86223, rollback MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF): rbf-sampler istella 93.4 -> 76.3 ms, outputs byte-identical (w2-kfeat-rbf-q-r1). XD_FAST_SRP_STRAT default (rollback MOJOLEARN_XD_FAST_SRP_STRAT_OFF): stratified per-column sparse-RP draw; w2-kfeat-srp-q PASS (istella 40-seed mean distortion 0.946 -> 0.571, taxi 0.346 -> 0.233); istella time 15.7 -> 15.9 ms (neutral).
+- SVGP combined main retime (w2-svgp-combined-*, lane/apple-fast-svgp-blkchol-default fb79e1449, arm A = main with RBFTILE+BLKCHOL defaults, B = BLKCHOL_OFF): taxi A 207.1 ms (B 282.1), istella A 227.6 ms (B 297.1). Board cells now use arm A.
+- Wave 2 batch 3 (main c25116004; each default and _OFF compiled rc0, merged x_decomp compiled rc0): LU_FAST_MMA (rollback MOJOLEARN_LU_FAST_MMA_OFF): lu-factor 971.7 -> 849.3 ms, lu-solve 971.9 -> 852.1 ms, w2-lumma-quality PASS. X_PREP_POOL_ARENA (MOJOLEARN_X_PREP_POOL_ARENA_OFF): label-binarizer taxi 319.9 -> 270.4, multilabel-binarizer taxi 175.6 -> 167.5, istella 129.3 -> 125.7 ms (flips vs 143.5); outputs sha256-identical. XN_FAST_SCHI2_MOJO_MT (MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF): skewed-chi2 istella 9.0 -> 2.2 (flips vs 3.7), taxi 2.5 -> 1.5 ms; byte-identical. MCD_WIDE (MOJOLEARN_MCD_WIDE_OFF): MinCovDet/EllipticEnvelope istella now finish: 86333.5 / 86640.8 ms (B-only; previous main path 1253937 ms for EE istella), w2-mcdw-q-*-r1 MCDQ-PAIR-PASS; still 1.98x sklearn-cpu.
