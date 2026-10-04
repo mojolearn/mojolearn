@@ -815,3 +815,5 @@ metric. Taxi final oracle errors improve/equal, but raw covariance is not
 byte-identical and lacks an extra baseline. Reports preserve legacy capture
 provenance limitations. Stabilizing split-K accumulation is a new candidate,
 not retroactive validation of SKIP. DEFLATE remains HOLD for changed flags.
+
+| `MOJOLEARN_APPLE_FAST_SHARED_GEMM_G1 / _G5` | core NT/Gram + vendor NN/NT; 43 route-quality fixtures, estimator gates still required | lane/apple-fast-shared-gemm-g1g5; base d32fdfc743 | shared-gemm-routes-q-20261004 (planned) | unmeasured | OPEN, default OFF. Repaired catalog MMA6abb source; one adapter, per-route reach counters, strict no-worse FP64 errors before timing. Does not alter fused/split/batched bypasses. See ab/shared-gemm-g1g5.md. |

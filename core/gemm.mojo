@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The matrix product."""
 
+from experiments.apple_fast.gemm.shared_dispatch import try_shared_gemm
 from layout import TileTensor
 from layout.tile_layout import row_major
 from linalg.matmul import matmul
@@ -419,6 +420,8 @@ def gemm_nt(
     k: Int,
 ) raises:
     """`z[m x n] = x[m x k] ."""
+    if try_shared_gemm[True, 0](ctx, z, x, y, m, n, k):
+        return
     if n == 1:
         gemv_n(ctx, z, x, y, m, k)
         return
@@ -504,6 +507,10 @@ def gemm_nt_gram(
             grid_dim=((m * n + PINNED_GEMM_TPB - 1) // PINNED_GEMM_TPB, 1, 1),
             block_dim=(PINNED_GEMM_TPB, 1, 1),
         )
+        return
+    var xa = xt
+    var xb = xt
+    if try_shared_gemm[True, 1](ctx, z, xa, xb, m, n, k):
         return
     var tz = TileTensor(z, row_major(m, n))
     var tx = TileTensor(xt, row_major(m, k))

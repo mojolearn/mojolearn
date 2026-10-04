@@ -115,6 +115,7 @@ the normative `(d, q)` addressing).
 CALLER owns and the caller keeps alive past `ctx.synchronize()`.
 """
 
+from experiments.apple_fast.gemm.shared_dispatch import try_shared_gemm
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA, WARP_SIZE
 from std.gpu.primitives.warp import shuffle_xor
 from std.utils import StaticTuple
@@ -8809,6 +8810,12 @@ def _fast_vendor_gemm(
     that failure is this precision cut arriving at a bit-exactness
     assertion, not a regression in the block.
     """
+    if op == OP_NT:
+        if try_shared_gemm[True, 3](ctx, c, a, b, m, n, k):
+            return True
+    elif op == OP_NN:
+        if try_shared_gemm[False, 2](ctx, c, a, b, m, n, k):
+            return True
     if op == OP_NT:
         if n == 1:
             # `z[m] = a[m x k] . b[k]`: b is a contiguous k-vector whether
