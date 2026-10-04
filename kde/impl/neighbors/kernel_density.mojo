@@ -3430,9 +3430,10 @@ def kde2_score_samples_fast_apple_to_host(
 # in the same order with the same seam calls. Accuracy: a float32 sum of at
 # most 256 terms per chunk and n_train / 256 chunk terms, against one chain
 # of n_train terms before. Bits change for euclidean, l1 and chebyshev KDE
-# scores on NVIDIA, AMD, Apple and the host column together; the staged
-# path (other metrics, trace recording) keeps its serial fold on both
-# sides. `-D MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF` (or MOJOLEARN_IDN_ALL_OFF)
+# scores on NVIDIA, AMD, Apple and the host column together. The staged
+# path keeps its serial fold for the other metrics; for these three it
+# folds the stored matrix in the same chunks (`kde_chunk_lse_matrix_kernel`,
+# lane/review-fixes), so a trace recording never changes the bits. `-D MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF` (or MOJOLEARN_IDN_ALL_OFF)
 # restores the tiled matrix pass and the host's serial row fold.
 # ===========================================================================
 comptime KDE_IDN_CHUNK_LSE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
@@ -3603,6 +3604,91 @@ def kde_chunk_lse_reduce_kernel(
         var v = part_max.unsafe_load(base + b)
         if v > mx:
             mx = v
+    if mx == neg_inf:
+        lse.unsafe_store(i, mx)
+        return
+    var s = Float32(0.0)
+    for b in range(n_chunks):
+        var mc = part_max.unsafe_load(base + b)
+        if mc != neg_inf:
+            s = ftz(identical_mul_add(part_sum.unsafe_load(base + b), ftz(identical_exp(ftz(mc - mx))), s))
+    lse.unsafe_store(i, ftz(identical_log(s) + mx))
+
+
+# lane/review-fixes (2026-10-04): THE STAGED PASS FOLDS THE SAME CHUNKS.
+# With a trace recording (or `staged_only`) the device takes the staged
+# pass, which builds the n_query x n_train log-kernel matrix; for the three
+# chunked metrics its log-sum-exp must be the chunked fold above, because
+# the host oracle and host column (`_kde_lse_row_chunked`) fold those
+# metrics in chunks whether or not a trace is on. These two kernels run
+# steps 1 and 2 over the stored matrix: the same chunks
+# (`kde_chunk_rows_for(n_train)`), the same (m, s) update in ascending j,
+# the same chunk-ascending reduce, so recording a trace never changes the
+# arithmetic. The cell values are the tiled pass's bit for bit (the gate
+# `check_kde_tiled_equals_staged`), so traced and untraced scores agree.
+def kde_chunk_lse_matrix_kernel(
+    part_max: MutPointer[Float32, MutAnyOrigin],
+    part_sum: MutPointer[Float32, MutAnyOrigin],
+    logk: MutPointer[Float32, MutAnyOrigin],
+    n_query_in: Int32,
+    n_train_in: Int32,
+    n_chunks_in: Int32,
+    chunk_rows_in: Int32,
+):
+    """Step 1 over a stored row-major log-kernel matrix: grid (query
+    blocks, chunks), one thread per (query, chunk)."""
+    var n_query = Int(n_query_in)
+    var n_train = Int(n_train_in)
+    var n_chunks = Int(n_chunks_in)
+    var chunk_rows = Int(chunk_rows_in)
+    var q = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var chunk = Int(block_idx.y)
+    if q >= n_query or chunk >= n_chunks:
+        return
+    var j_begin = chunk * chunk_rows
+    var j_end = j_begin + chunk_rows
+    if j_end > n_train:
+        j_end = n_train
+    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
+    var m = neg_inf
+    var s = Float32(0.0)
+    var row = q * n_train
+    for j in range(j_begin, j_end):
+        var v = logk.unsafe_load(row + j)
+        if v > m:
+            if m == neg_inf:
+                s = Float32(1.0)
+            else:
+                s = ftz(identical_mul_add(s, ftz(identical_exp(ftz(m - v))), Float32(1.0)))
+            m = v
+        elif v != neg_inf:
+            s = ftz(s + ftz(identical_exp(ftz(v - m))))
+    part_max.unsafe_store(q * n_chunks + chunk, m)
+    part_sum.unsafe_store(q * n_chunks + chunk, s)
+
+
+def kde_chunk_lse_reduce_rowmax_kernel(
+    lse: MutPointer[Float32, MutAnyOrigin],
+    rowmax: MutPointer[Float32, MutAnyOrigin],
+    part_max: MutPointer[Float32, MutAnyOrigin],
+    part_sum: MutPointer[Float32, MutAnyOrigin],
+    n_query_in: Int32,
+    n_chunks_in: Int32,
+):
+    """Step 2 with the row max stored for the card (`kde.rowmax`): the
+    chunk maxima's strict-`>` max, as `_kde_lse_row_chunked` returns it."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_query_in):
+        return
+    var n_chunks = Int(n_chunks_in)
+    var base = i * n_chunks
+    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
+    var mx = part_max.unsafe_load(base)
+    for b in range(1, n_chunks):
+        var v = part_max.unsafe_load(base + b)
+        if v > mx:
+            mx = v
+    rowmax.unsafe_store(i, mx)
     if mx == neg_inf:
         lse.unsafe_store(i, mx)
         return
@@ -3851,15 +3937,47 @@ def kde_score_samples_device(
     trace.record_device[DType.float32](ctx, "kde.logk", logk, cells)
 
     # logsumexp_kernel.forall(log_probabilities.size)(distances, log_probabilities)  (:340-342)
-    ctx.enqueue_function[logsumexp_kernel](
-        logk.unsafe_ptr(),
-        lse.unsafe_ptr(),
-        rowmax.unsafe_ptr(),
-        Int32(n_query),
-        Int32(n_train),
-        grid_dim=((n_query + lse_tpb - 1) // lse_tpb, 1, 1),
-        block_dim=(lse_tpb, 1, 1),
-    )
+    # lane/review-fixes: the chunked metrics fold in chunks here too, the
+    # host oracle's route (`kde_chunk_lse_metric_applies`), trace or not.
+    if kde_chunk_lse_metric_applies(metric) and n_train > 0:
+        var chunk_rows = kde_chunk_rows_for(n_train)
+        var n_chunks = (n_train + chunk_rows - 1) // chunk_rows
+        var part = ctx.enqueue_create_buffer[DType.float32](n_query * n_chunks)
+        var psum = ctx.enqueue_create_buffer[DType.float32](n_query * n_chunks)
+        ctx.enqueue_function[kde_chunk_lse_matrix_kernel](
+            part.unsafe_ptr(),
+            psum.unsafe_ptr(),
+            logk.unsafe_ptr(),
+            Int32(n_query),
+            Int32(n_train),
+            Int32(n_chunks),
+            Int32(chunk_rows),
+            grid_dim=((n_query + lse_tpb - 1) // lse_tpb, n_chunks, 1),
+            block_dim=(lse_tpb, 1, 1),
+        )
+        ctx.enqueue_function[kde_chunk_lse_reduce_rowmax_kernel](
+            lse.unsafe_ptr(),
+            rowmax.unsafe_ptr(),
+            part.unsafe_ptr(),
+            psum.unsafe_ptr(),
+            Int32(n_query),
+            Int32(n_chunks),
+            grid_dim=((n_query + lse_tpb - 1) // lse_tpb, 1, 1),
+            block_dim=(lse_tpb, 1, 1),
+        )
+        ctx.synchronize()
+        _ = part^
+        _ = psum^
+    else:
+        ctx.enqueue_function[logsumexp_kernel](
+            logk.unsafe_ptr(),
+            lse.unsafe_ptr(),
+            rowmax.unsafe_ptr(),
+            Int32(n_query),
+            Int32(n_train),
+            grid_dim=((n_query + lse_tpb - 1) // lse_tpb, 1, 1),
+            block_dim=(lse_tpb, 1, 1),
+        )
     ctx.synchronize()
     trace.record_device[DType.float32](ctx, "kde.rowmax", rowmax, n_query)
     trace.record_device[DType.float32](ctx, "kde.logsumexp", lse, n_query)

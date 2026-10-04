@@ -54,6 +54,8 @@ from gemm.checks.gemm_oracle import OP_NN, OP_NT, gemm_oracle
 from kernel_methods.checks.kernel_matrix import (
     KM_DOT_CELL_MAX_D,
     KM_IDN_DOT_CELL,
+    KM_IDN_RBF_CELL,
+    KM_RBF_CELL_MAX_D,
     KM_KERNEL_LAPLACIAN,
     KM_KERNEL_LINEAR,
     KM_KERNEL_POLYNOMIAL,
@@ -203,6 +205,22 @@ def km_kernel_matrix_f32(
                     )
                 out.append(ftz(identical_exp(ftz(identical_mul(gain, acc)))))
         return out^
+
+    comptime if KM_IDN_RBF_CELL:
+        if kp.kernel == KM_KERNEL_RBF and k <= KM_RBF_CELL_MAX_D:
+            # `km_rbf_cell_kernel`, seam for seam (lane/review-fixes): the
+            # candidate arm's device route, the same gate as the device
+            # (sabotage `via_copy` aside) and `KMH_RBF_CELL`.
+            var neg_gamma = -Float32(kp.gamma)
+            var outr = List[Float32]()
+            for i in range(m):
+                for j in range(n):
+                    var acc = Float32(0.0)
+                    for c in range(k):
+                        var d = ftz(ftz(xa[i * k + c]) - ftz(xb[j * k + c]))
+                        acc = ftz(identical_mul_add(d, d, acc))
+                    outr.append(ftz(identical_exp(ftz(identical_mul(neg_gamma, acc)))))
+            return outr^
 
     comptime if KM_IDN_DOT_CELL:
         if (

@@ -429,8 +429,12 @@ def krr_scale_rows(v: List[Float32], sw: List[Float32], n: Int, t: Int) -> List[
 #: per cell, `krr_scale_rows`'s line) instead of two host loops over n x t
 #: cells around the device solve. One multiplication per cell rounded once
 #: either way: no bit moves, and `kmh_scale_rows` stays the host column.
-comptime KRR_IDN_DEV_SCALE = _CTX_MODE == _CTX_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_KRR_DEV_SCALE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+#: cpu2-l6-bindings: ON on EVERY tier (FAST included); the host loops were
+#: CPU work on a GPU route. `MOJOLEARN_IDN_ALL_OFF` still turns it off on
+#: IDENTICAL builds only.
+comptime KRR_IDN_DEV_SCALE = not (
+    is_defined["MOJOLEARN_IDN_KRR_DEV_SCALE_OFF"]()
+    or (_CTX_MODE == _CTX_IDENTICAL and is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
 #: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
@@ -901,8 +905,22 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
         dsw = ctx.enqueue_create_buffer[DType.float32](1)
     _krr_validate_alpha(alpha)
 
-    if weighted:
-        _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
+    # lane/review-fixes: the pointer route honors KRR_IDN_DEV_SCALE's _OFF
+    # arm too (the host loop on the downloaded y, the list route's old form).
+    # cpu2-l6-bindings: that arm needs the factors on the host; with
+    # `waddr` they were formed on the device, so it downloads them.
+    var sw_h = List[Float32]()
+    comptime if not KRR_IDN_DEV_SCALE:
+        if waddr != 0:
+            sw_h = _download(ctx, dsw, n_samples)
+        else:
+            sw_h = sw.copy()
+    comptime if KRR_IDN_DEV_SCALE:
+        if weighted:
+            _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
+    else:
+        if weighted:
+            dy = _upload(ctx, krr_scale_rows(_download(ctx, dy, n_samples * n_targets), sw_h, n_samples, n_targets))
     trace.record_device(ctx, "krr.input", xa, n_samples * n_features)
 
     var dk = ctx.enqueue_create_buffer[DType.float32](n_samples * n_samples)
@@ -940,9 +958,17 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
     if info != 0:
         ctx.synchronize()
         raise Error(_krr_not_pd_message(info, kp.kernel, n_samples))
-    if weighted:
-        _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
-    _download_into(ctx, dy, dual_out, n_samples * n_targets)
+    comptime if KRR_IDN_DEV_SCALE:
+        if weighted:
+            _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
+        _download_into(ctx, dy, dual_out, n_samples * n_targets)
+    else:
+        if weighted:
+            var dual = krr_scale_rows(_download(ctx, dy, n_samples * n_targets), sw_h, n_samples, n_targets)
+            for i in range(n_samples * n_targets):
+                dual_out.unsafe_store(i, dual[i])
+        else:
+            _download_into(ctx, dy, dual_out, n_samples * n_targets)
     _ = dsw^
     _ = xa^
     _ = dy^
