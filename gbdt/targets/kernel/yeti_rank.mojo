@@ -1544,11 +1544,30 @@ def yeti_rank_task_fused_kernel[estimation: Bool](
             function_value.unsafe_store(b, Float32(0.0))
             b += Int(n_tasks_in)
     if compute_magnitudes != Int32(0):
-        var w_total = pinned_block_sum[block_size=YETI_THREADS](w_abs)
-        var g_total = pinned_block_sum[block_size=YETI_THREADS](g_abs)
+        # lane/apple-fast-rec-sym: the two block sums fold in `sh_relev` /
+        # `sh_exp` (free once the pairs are done) by a halving tree, NOT
+        # `pinned_block_sum`: its FAST arm (`block.sum`) takes its own
+        # shared slab, 64 B for the two calls, on top of this kernel's
+        # 32 KiB, and Metal refused the launch at 32,832 B
+        # (LEDGER 2026-10-03, SYM_MULTI_ALL yetirank at warm-up).
+        barrier()
+        sh_relev.unsafe_store(tid, w_abs)
+        sh_exp.unsafe_store(tid, g_abs)
+        barrier()
+        var half = YETI_THREADS // 2
+        while half > 0:
+            if tid < half:
+                sh_relev.unsafe_store(
+                    tid, sh_relev.unsafe_load(tid) + sh_relev.unsafe_load(tid + half)
+                )
+                sh_exp.unsafe_store(
+                    tid, sh_exp.unsafe_load(tid) + sh_exp.unsafe_load(tid + half)
+                )
+            barrier()
+            half = half // 2
         if tid == 0:
-            plane_magnitudes.unsafe_store(2 * task, w_total)
-            plane_magnitudes.unsafe_store(2 * task + 1, g_total)
+            plane_magnitudes.unsafe_store(2 * task, sh_relev.unsafe_load(0))
+            plane_magnitudes.unsafe_store(2 * task + 1, sh_exp.unsafe_load(0))
 
 
 def launch_yeti_rank_fused[estimation: Bool](
