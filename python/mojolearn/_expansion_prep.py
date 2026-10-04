@@ -96,6 +96,9 @@ _OPS = dict(
     # -D MOJOLEARN_IDN_NB_ONEPASS_OFF has none) run them (`_idn_int` bit 2); IDENTICAL also
     # compiles 157-160 (x_prep/label_fast.mojo IDN_LABEL)
     csb1_part=162, csb1_neg=163,
+    # lane idn-all (x_prep/blocked.mojo `csr_dense_unit`): the IDENTICAL device binding
+    # (`_idn_int` bit 8; -D MOJOLEARN_IDN_NB_CSR_DENSE_OFF has none) densifies a CSR input
+    csr_dense=164,
     # lane apple-fast-py2mojo-prep (x_prep/py2mojo.mojo, a range of its own): every binding
     # runs them (lane pyglue-numeric deleted the OFF arm and its Python loops)
     p2m_ccount=200, p2m_cscan=201, p2m_cstart=202, p2m_cwrite=203, p2m_rgather=204, p2m_smrows=205,
@@ -2170,14 +2173,20 @@ class _Classifier(_PrepBase):
         self.classes_ = classes
         return codes
 
-    def _scores(self, X, want):
+    def _scores(self, X, want, csr=None):
         self._check_fitted()
-        arr = _x2d(X)
-        self._check_width(arr)
-        n, d = arr.shape
-        K = len(self.classes_)
         pr = _Prog()
-        xo = pr.put(arr)
+        # lane idn-all: `csr` (the IDENTICAL CSR scoring's fallback, its
+        # width already checked) is densified by the program on the device
+        xo = _csr_dense_x(pr, csr, self.numeric_mode_) if csr is not None else None
+        if xo is None:
+            arr = _x2d(X.toarray() if csr is not None else X)
+            self._check_width(arr)
+            n, d = arr.shape
+            xo = pr.put(arr)
+        else:
+            n, d = csr[3], csr[4]
+        K = len(self.classes_)
         chk = self._score_checks(pr, xo, n, d)
         # the joint log likelihood stays on the device unless it is the answer
         jll = pr.work(n * K) if want else pr.alloc(n * K)
@@ -2242,13 +2251,14 @@ def _nb_weights(pr, sample_weight, n):
 
 #: binding -> its `x_prep_idn_int` bits (0 when it has none), probed once
 _IDN_INT = {}
-_IDN_NB_ONEPASS, _IDN_NB_CSR = 2, 4
+_IDN_NB_ONEPASS, _IDN_NB_CSR, _IDN_NB_CSR_DENSE = 2, 4, 8
 
 
 def _idn_int(mode):
     """Lane idn-int-prep: the IDENTICAL binding's integer prep switches
     (bindings/_mojolearn_x_prep.mojo `idn_int_binding`: 1 IDN_LABEL, 2
-    IDN_NB_ONEPASS, 4 IDN_NB_CSR), 0 on another tier or a build with none."""
+    IDN_NB_ONEPASS, 4 IDN_NB_CSR, 8 IDN_NB_CSR_DENSE), 0 on another tier or a
+    build with none."""
     if mode != "identical":
         return 0
     binding = _prep_binding(mode)
@@ -2471,6 +2481,22 @@ def _csr_input(X):
     return ip, ix, dv, n, d
 
 
+def _csr_dense_x(pr, csr, mode):
+    """Lane idn-all: the dense n x d block of a CSR input, built ON THE
+    DEVICE by the program itself (op csr_dense, x_prep/blocked.mojo): the
+    CSR arrays go up, the block is device work words. Returns its offset, or
+    None when the binding has no such stage (`_idn_int` bit 8 clear: the
+    caller densifies on the host, the old form)."""
+    if not _idn_int(mode) & _IDN_NB_CSR_DENSE:
+        return None
+    ip, ix, dv, n, d = csr
+    if n * d > 2 ** 31 - 1:
+        raise ValueError("mojolearn: X exceeds the native Int32 indexing bound")
+    xo = pr.work(n * d)
+    pr.stage("csr_dense", n, pr.put_words(ip), pr.put_words(ix), pr.put(dv), d, xo)
+    return xo
+
+
 def _check_nonnegative(pr_values, who):
     if any(v < 0 for v in pr_values):
         raise ValueError(f"mojolearn: Negative values in data passed to {who}")
@@ -2578,7 +2604,9 @@ class _DiscreteNB(_Classifier):
             flag = Array.from_list([0], "<i4")
             jll_csr(*args, _addr_rw(flag, name="flag"))
             if int(flag.tolist()[0]) != 0:
-                return super()._scores(X.toarray(), want)
+                # lane idn-all: the dense program on a block the device
+                # builds from the CSR arrays (no host densify mid-predict)
+                return super()._scores(X, want, csr=csr)
         else:
             jll_csr(*args)
         pr = _Prog()
@@ -2587,14 +2615,20 @@ class _DiscreteNB(_Classifier):
         pr.stage("add_arrays", n * K, pr.put(jll_h), z, jll)
         return self._score_tail(pr, n, d, K, jll, want, None)
 
-    def _fit_counts(self, X, y, binarize=None, sample_weight=None):
-        arr = _x2d(X)
-        n, d = arr.shape
-        codes = self._encode_y(y, n)
-        K = len(self.classes_)
+    def _fit_counts(self, X, y, binarize=None, sample_weight=None, csr=None):
         mode = _mode()
         pr = _Prog()
-        xo = pr.put(arr)
+        # lane idn-all: `csr` (the IDENTICAL CSR route's fallback) is
+        # densified by the program on the device, not by the host
+        xo = _csr_dense_x(pr, csr, mode) if csr is not None else None
+        if xo is None:
+            arr = _x2d(X.toarray() if csr is not None else X)
+            n, d = arr.shape
+            xo = pr.put(arr)
+        else:
+            n, d = csr[3], csr[4]
+        codes = self._encode_y(y, n)
+        K = len(self.classes_)
         wo = _nb_weights(pr, sample_weight, n)
         if _nb_onepass(mode):
             # lane idn-int-prep: one unit per (block, column) counts every
@@ -2635,7 +2669,9 @@ class _DiscreteNB(_Classifier):
             got = self._fit_counts_csr(csr, y)
             if got is not None:
                 return self._params(*got)
-            X = X.toarray()     # IDENTICAL only: the dense program (`_fit_counts_csr`)
+            # IDENTICAL only (`_fit_counts_csr`'s flag): the dense program,
+            # its block built on the device from the CSR arrays (lane idn-all)
+            return self._params(*self._fit_counts(X, y, getattr(self, "binarize", None), None, csr=csr))
         return self._params(*self._fit_counts(X, y, getattr(self, "binarize", None), sample_weight))
 
     def partial_fit(self, X, y, classes=None, sample_weight=None):

@@ -42,6 +42,7 @@ from x_prep.blocked import (
     colb_part_unit, colb_fold_unit, colb_ss_unit, colb_var_unit, maxabs_fold_unit,
     csb_part_unit, csb_fold_unit, csb_ss_unit, csb_var_unit, cat_hpart_unit, cat_hfold_unit,
     IDN_NB_ONEPASS, csb1_part_unit, csb1_neg_unit,
+    IDN_NB_CSR_DENSE, csr_dense_unit,
 )
 from x_prep.label_fast import IDN_LABEL
 from naive_bayes.da import (
@@ -61,8 +62,9 @@ from x_prep.calib import (
 #: lane idn-int-prep: IDENTICAL compiles the presence ops 157-160 (IDN_LABEL,
 #: x_prep/label_fast.mojo) and ops 162-163 (IDN_NB_ONEPASS, x_prep/blocked.mojo)
 #: on every vendor and in the host column; the op numbers between are empty there.
-comptime IDN_INT_OPS = IDN_LABEL or IDN_NB_ONEPASS
-comptime N_OPS = 164 if IDN_INT_OPS else (162 if CAT_CLS2_PACK else (157 if CALIB_FOLDS else 142))
+#: lane idn-all: op 164 (IDN_NB_CSR_DENSE, x_prep/blocked.mojo `csr_dense_unit`), IDENTICAL only.
+comptime IDN_INT_OPS = IDN_LABEL or IDN_NB_ONEPASS or IDN_NB_CSR_DENSE
+comptime N_OPS = 165 if IDN_INT_OPS else (162 if CAT_CLS2_PACK else (157 if CALIB_FOLDS else 142))
 #: ops 157-161 (x_prep/cat_cls2.mojo, lane/apple-fast-gap-cls2) exist only under
 #: CAT_CLS2_PACK (FAST + Apple default, -D MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF off)
 
@@ -401,3 +403,6 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
             csb1_part_unit(t, f, q)
         comptime if OP == 163:
             csb1_neg_unit(t, f, q)
+    comptime if IDN_NB_CSR_DENSE:
+        comptime if OP == 164:
+            csr_dense_unit(t, f, q)

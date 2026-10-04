@@ -23,7 +23,7 @@ whole before the next stage reads it.
 """
 from std.sys.compile import is_defined
 from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_prep.common import FP, IP, p, ld, st, raw, RUN, run_block, is_nan
+from x_prep.common import FP, IP, p, ld, st, raw, RUN, run_block, is_nan, ldi
 from x_prep.prims import add, sub, mul, div, zero_to_one, acc_add, _cs_take, _ss_take
 
 #: rows a block unit folds (python/mojolearn/_expansion_prep.py `_XB`)
@@ -40,7 +40,7 @@ comptime XB = 2048
 #: ascending from zero), so the words are csb_part's.
 #: -D MOJOLEARN_IDN_NB_ONEPASS_OFF restores csb_part + colb_part + binarize.
 comptime IDN_NB_ONEPASS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_NB_ONEPASS_OFF"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_NB_ONEPASS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 #: classes csb1_part keeps in registers (more: the partial table itself)
 comptime CSB1_REG = 8
@@ -489,3 +489,36 @@ def cat_hfold_unit(t: Int, f: FP, q: IP):
         for b in range(nb):
             m += Int(ld(f, at + b * stride))
         st(f, p(q, 7) + t, Float32(m))
+
+
+#: lane idn-all (2026-10-04, the review of idn-int-prep): the IDENTICAL CSR
+#: naive Bayes route's fallback (non-integer values, counts >= 2^24, rows not
+#: canonical) densified its input on the host (`X.toarray()`) in the middle
+#: of a fit. Here the dense block is built ON THE DEVICE from the CSR arrays
+#: (op 164, one thread per row) and the dense program runs on it: nothing
+#: comes back to the host between the flag and the dense stages. The words
+#: are `toarray`'s for float32 data: zeros, each entry added in its row's
+#: stored order (a duplicate column sums, -0.0 becomes +0.0, NaN stays).
+#: -D MOJOLEARN_IDN_NB_CSR_DENSE_OFF restores the host densify.
+comptime IDN_NB_CSR_DENSE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_IDN_NB_CSR_DENSE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+
+
+def csr_dense_unit(t: Int, f: FP, q: IP):
+    """q = [INDPTR, INDICES, DATA, d, OUT]; t = row. INDPTR (n + 1) and
+    INDICES (nnz) are int32 words, DATA (nnz) float32. OUT's row t (d words,
+    written whole by this thread alone): zeros, then OUT[t, INDICES[e]] +=
+    DATA[e] for the row's entries e ascending. An index outside [0, d) is
+    skipped (the CSR entry checks the indices before this stage runs)."""
+    var d = p(q, 3)
+    var o = p(q, 4) + t * d
+    for j in range(d):
+        st(f, o + j, Float32(0))
+    var lo = ldi(f, p(q, 0) + t)
+    var hi = ldi(f, p(q, 0) + t + 1)
+    for e in range(lo, hi):
+        var c = ldi(f, p(q, 1) + e)
+        if c >= 0 and c < d:
+            st(f, o + c, ftz(ld(f, o + c) + ld(f, p(q, 2) + e)))
