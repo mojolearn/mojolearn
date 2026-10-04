@@ -2447,8 +2447,34 @@ def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
 
 
 def solve(a, b, *, numeric_mode=None):
-    """numpy.linalg.solve through lu_factor + lu_solve (gesv)."""
-    return lu_solve(lu_factor(a, numeric_mode=numeric_mode), b, numeric_mode=numeric_mode)
+    """numpy.linalg.solve through lu_factor + lu_solve (gesv). Lane
+    idn-dense-linalg: one binding entry (`x_decomp_lu_gesv`) when the
+    binding routes there (`x_decomp_idn_flags` bit 1): the same launches
+    with the factor and the pivots resident, so only A and B go up and X
+    comes down; the same words, warning and refusals."""
+    k = _Kit(_mode(numeric_mode))
+    try:
+        flags = int(getattr(k._raw(), "x_decomp_idn_flags")())
+    except (ImportError, AttributeError):
+        flags = 0
+    if not flags & 2:
+        return lu_solve(lu_factor(a, numeric_mode=numeric_mode), b, numeric_mode=numeric_mode)
+    A = _M.from_input(a, "a")
+    if A.r != A.c:
+        raise ValueError(f"expected a square matrix, got {A.r} x {A.c}")
+    n = A.r
+    vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
+    B = _M.from_input(_row_of(b), "b").T if vec else _M.from_input(b, "b")
+    if B.r != n:
+        raise ValueError(f"b has {B.r} rows, the factorization has {n}")
+    X = B          # from_input's own store: solved in place
+    info = _M.zeros(1, 1)
+    # ORDER MATCHES x_decomp/api.mojo lu_gesv_py: (a, b in/out, info), (n, nrhs)
+    k.b.x_decomp_lu_gesv(A.addr, X.addr, info.addr, [n, B.c])
+    if int(info.s[0]):
+        import warnings
+        warnings.warn(f"Diagonal number {int(info.s[0])} is exactly zero. Singular matrix.", RuntimeWarning, stacklevel=2)
+    return X.out((n,)) if vec else X.out()
 
 
 def _row_of(b):
@@ -2568,7 +2594,7 @@ def _tsqr_lstsq_on(m, nn, nrhs):
     return nn >= 1 and nrhs >= 1 and nn + nrhs <= _TS_MAX_N and m >= nn + nrhs
 
 
-def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond, equilibrate=False):
+def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond, equilibrate=False, Ra=None):
     """(X nn x nrhs, residuals _M 1 x nrhs or None, rank, S 1 x nn) of
     min ||A X - B|| through the blocked TSQR of [A | B] (lane
     neural-pass140; x_decomp/tsqr_core.mojo): R_aug = [[R, C], [0, R22]]
@@ -2586,14 +2612,19 @@ def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond, equilibrate=False):
     in balanced units as the normal equations route did, and X is
     multiplied by s after. A power of two scales without rounding, so
     R S is what the TSQR of A S gives; every step stays on the binding's
-    cells (the same words on every column)."""
+    cells (the same words on every column).
+
+    `Ra` (lane idn-dense-linalg): R_aug already factored by the caller
+    (`linear_model._ols_tsqr_centered`'s one entry); a_arr and b_arr are
+    then not read."""
     from ._linalg_impl import _svd_tall
     from ._buffer import addr_ro
     n = nn + nrhs
-    Ra = _M.zeros(n, n)
-    # ORDER MATCHES x_decomp/api.mojo tsqr_r_py: (a, b, r_out), (m, d, nrhs, keep)
-    k.b.x_decomp_tsqr_r(addr_ro(a_arr, name="a"), addr_ro(b_arr, name="b"), Ra.addr,
-                        [int(m), int(nn), int(nrhs), 0])
+    if Ra is None:
+        Ra = _M.zeros(n, n)
+        # ORDER MATCHES x_decomp/api.mojo tsqr_r_py: (a, b, r_out), (m, d, nrhs, keep)
+        k.b.x_decomp_tsqr_r(addr_ro(a_arr, name="a"), addr_ro(b_arr, name="b"), Ra.addr,
+                            [int(m), int(nn), int(nrhs), 0])
     top = Ra.rows(0, nn)
     R, C = top.cols(0, nn), top.cols(nn, n)
     sc = None

@@ -39,13 +39,15 @@ from std.atomic import Atomic
 from std.ffi import _Global
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
-from checks.numerics import ftz, identical_div, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
 from core.device_zero import enqueue_fill
+from glm.impl.center_items import center_cell
 from x_decomp.cells import F32Ptr
 from x_decomp.jacobi2 import dev_barrier
 from x_decomp.tsqr_core import (
@@ -69,7 +71,29 @@ from x_decomp.tsqr_core import (
 comptime _SH = UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED]
 comptime _TT = TS_NB * TS_NB
 comptime TS_PART = TS_NB * TS_P * TS_NB
-comptime TS_SMEM_BYTES = 4 * (TS_PART + 3 * _TT + TS_TPB)
+comptime TS_SMEM_BYTES = 4 * (TS_PART + 3 * _TT + TS_TPB + TS_P)
+
+# lane idn-dense-linalg (2026-10-04), IDENTICAL speed on NVIDIA and AMD; the
+# same words on every column (the host replay x_decomp/tsqr_host.mojo is
+# unchanged):
+#
+# TS_GRID_UPDATE (-D MOJOLEARN_IDN_TSQR_GRID_OFF restores the old form): a
+# panel's trailing update (and Q C's panel apply) is its own launch of one
+# threadgroup per (block, chunk of TS_NB columns), not a serial walk over the
+# chunks inside the block's one threadgroup. The chunks of one panel are
+# independent (each reads the panel's reflectors and T, and reads and writes
+# only its own columns), so no bit moves.
+#
+# TS_NORM_FUSED (-D MOJOLEARN_IDN_TSQR_NORM_OFF restores the old form): the
+# norm chain of panel column j + 1 is accumulated by the threads that update
+# that column in step j (chain g walks the same rows in the same order and
+# squares the very words it stores), so the separate norm pass (TS_P live
+# threads of TS_TPB) runs only for a panel's first column and after a zero
+# reflector. The same fmas in the same order: no bit moves.
+# IDENTICAL builds only: a FAST build keeps its launches as they were.
+comptime _TS_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+comptime TS_GRID_UPDATE = _TS_IDN and not is_defined["MOJOLEARN_IDN_TSQR_GRID_OFF"]()
+comptime TS_NORM_FUSED = _TS_IDN and not is_defined["MOJOLEARN_IDN_TSQR_NORM_OFF"]()
 comptime TS_SMEM_OK = lib_smem_page_fits_for[TARGET_COLUMN, TS_SMEM_BYTES]()
 
 
@@ -144,6 +168,23 @@ def ts_pack_kernel(a: F32Ptr, b: F32Ptr, dst: F32Ptr, m_in: Int32, d_in: Int32, 
     dst.unsafe_store(t, a.unsafe_load(i * d + c) if c < d else b.unsafe_load(i * r + c - d))
 
 
+def ts_pack_center_kernel(a: F32Ptr, b: F32Ptr, mx: F32Ptr, my: F32Ptr, dst: F32Ptr, m_in: Int32, d_in: Int32):
+    """dst (m x (d + 1)) = [a - mx | b - my], one thread per word: `ts_pack_kernel`
+    of `center_cell`'s words (glm/impl/center_items.mojo), which is what the
+    two lm_center calls and the pack wrote."""
+    var d = Int(d_in)
+    var n = d + 1
+    var t = Int(block_idx.x) * TS_TPB + Int(thread_idx.x)
+    if t >= Int(m_in) * n:
+        return
+    var i = t // n
+    var c = t - i * n
+    if c < d:
+        dst.unsafe_store(t, center_cell(a.unsafe_load(i * d + c), mx.unsafe_load(c)))
+    else:
+        dst.unsafe_store(t, center_cell(b.unsafe_load(i), my.unsafe_load(0)))
+
+
 def ts_leaf_panel_kernel(a: F32Ptr, tst: F32Ptr, m_in: Int32, n_in: Int32, nb_in: Int32, b0_in: Int32, pan_in: Int32):
     """`ts_factor_block_host`'s panel `pan` for block b0 + block_idx.x."""
     var part = stack_allocation[TS_PART, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
@@ -151,6 +192,7 @@ def ts_leaf_panel_kernel(a: F32Ptr, tst: F32Ptr, m_in: Int32, n_in: Int32, nb_in
     var zsh = stack_allocation[_TT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var wsh = stack_allocation[_TT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var red = stack_allocation[TS_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var nrm = stack_allocation[TS_P, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var m = Int(m_in)
     var n = Int(n_in)
     var nb = Int(nb_in)
@@ -170,18 +212,23 @@ def ts_leaf_panel_kernel(a: F32Ptr, tst: F32Ptr, m_in: Int32, n_in: Int32, nb_in
     tsh[tid] = Float32(0.0)
     barrier()
     # (F)
+    # have_norm: nrm[] already holds column j's TS_P norm chains (TS_NORM_FUSED:
+    # step j - 1's update of column j accumulated them); the same on every thread
+    var have_norm = False
     for p in range(pw):
         var j = j0 + p
-        var acc = Float32(0.0)
-        if l == 0:
-            var i = ts_first_row(j, g)
-            while i < mb:
-                var v = ftz(blk.unsafe_load(i * n + j))
-                acc = ts_fma(v, v, acc)
-                i += TS_P
-            red[g] = acc
+        if not have_norm:
+            var acc = Float32(0.0)
+            if l == 0:
+                var i = ts_first_row(j, g)
+                while i < mb:
+                    var v = ftz(blk.unsafe_load(i * n + j))
+                    acc = ts_fma(v, v, acc)
+                    i += TS_P
+                nrm[g] = acc
         barrier()
-        var sigma = _fold_sh(red, 0, 1)
+        have_norm = False
+        var sigma = _fold_sh(nrm, 0, 1)
         var normx = ftz(identical_sqrt(sigma))
         var ajj = ftz(blk.unsafe_load(j * n + j))
         barrier()
@@ -224,10 +271,26 @@ def ts_leaf_panel_kernel(a: F32Ptr, tst: F32Ptr, m_in: Int32, n_in: Int32, nb_in
                 if g == 0:
                     blk.unsafe_store(j * n + c, ftz(ajc - td))
                 var i = ts_first_row(j + 1, g)
-                while i < mb:
-                    blk.unsafe_store(i * n + c, ts_fma(-td, ftz(blk.unsafe_load(i * n + j)), ftz(blk.unsafe_load(i * n + c))))
-                    i += TS_P
+                comptime if TS_NORM_FUSED:
+                    # column j + 1's thread also runs that column's norm chain g
+                    # over the words it stores (rows ts_first_row(j + 1, g), +TS_P, ...)
+                    var nacc = Float32(0.0)
+                    while i < mb:
+                        var nv = ts_fma(-td, ftz(blk.unsafe_load(i * n + j)), ftz(blk.unsafe_load(i * n + c)))
+                        blk.unsafe_store(i * n + c, nv)
+                        if c == j + 1:
+                            var fv = ftz(nv)
+                            nacc = ts_fma(fv, fv, nacc)
+                        i += TS_P
+                    if c == j + 1:
+                        nrm[g] = nacc
+                else:
+                    while i < mb:
+                        blk.unsafe_store(i * n + c, ts_fma(-td, ftz(blk.unsafe_load(i * n + j)), ftz(blk.unsafe_load(i * n + c))))
+                        i += TS_P
             dev_barrier()
+            comptime if TS_NORM_FUSED:
+                have_norm = p + 1 < pw
     # (T)
     for p in range(1, pw):
         var acc = Float32(0.0)
@@ -248,11 +311,50 @@ def ts_leaf_panel_kernel(a: F32Ptr, tst: F32Ptr, m_in: Int32, n_in: Int32, nb_in
             tsh[l * TS_NB + p] = ts_scale(-tsh[p * TS_NB + p], s)
         barrier()
     tst.unsafe_store((b * npan + pan) * _TT + tid, tsh[tid])
-    # (U)
-    var c0 = j0 + pw
-    while c0 < n:
-        _wy_chunk[True](blk, n, blk, n, c0, n, mb, j0, pw, tsh, part, zsh, wsh, g, l)
-        c0 += TS_NB
+    # (U): TS_GRID_UPDATE runs it as `ts_leaf_update_kernel`'s launch
+    comptime if not TS_GRID_UPDATE:
+        var c0 = j0 + pw
+        while c0 < n:
+            _wy_chunk[True](blk, n, blk, n, c0, n, mb, j0, pw, tsh, part, zsh, wsh, g, l)
+            c0 += TS_NB
+
+
+def ts_leaf_update_kernel(
+    a: F32Ptr, tst: F32Ptr, m_in: Int32, n_in: Int32, nb_in: Int32, b0_in: Int32, pan_in: Int32, nch_in: Int32
+):
+    """`ts_leaf_panel_kernel`'s (U) for panel `pan`, one threadgroup per
+    (block, chunk): threadgroup t is block b0 + t // nch and the chunk of
+    TS_NB trailing columns t % nch. T comes from `tst` (the words the panel
+    launch held in threadgroup memory)."""
+    var part = stack_allocation[TS_PART, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tsh = stack_allocation[_TT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var zsh = stack_allocation[_TT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var wsh = stack_allocation[_TT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var nb = Int(nb_in)
+    var pan = Int(pan_in)
+    var nch = Int(nch_in)
+    var bq = Int(block_idx.x) // nch
+    var ch = Int(block_idx.x) - bq * nch
+    var b = Int(b0_in) + bq
+    if b >= nb:
+        return
+    var lo = ts_block_lo(b)
+    var mb = ts_block_hi(b, nb, m) - lo
+    var blk = a + lo * n
+    var tid = Int(thread_idx.x)
+    var g = tid // TS_NB
+    var l = tid - g * TS_NB
+    var j0 = pan * TS_NB
+    var pw = min(TS_NB, n - j0)
+    var npan = ts_panels(n)
+    var c0 = j0 + pw + ch * TS_NB
+    if c0 >= n:
+        return
+    tsh[tid] = tst.unsafe_load((b * npan + pan) * _TT + tid)
+    barrier()
+    _wy_chunk[True](blk, n, blk, n, c0, n, mb, j0, pw, tsh, part, zsh, wsh, g, l)
 
 
 def ts_rtile_kernel(a: F32Ptr, tiles: F32Ptr, m_in: Int32, n_in: Int32, nb_in: Int32):
@@ -381,9 +483,13 @@ def ts_qinit_kernel(cbuf: F32Ptr, q: F32Ptr, m_in: Int32, n_in: Int32, k_in: Int
 
 
 def ts_leaf_apply_kernel(
-    a: F32Ptr, tst: F32Ptr, q: F32Ptr, m_in: Int32, n_in: Int32, k_in: Int32, nb_in: Int32, b0_in: Int32, pan_in: Int32
+    a: F32Ptr, tst: F32Ptr, q: F32Ptr, m_in: Int32, n_in: Int32, k_in: Int32, nb_in: Int32, b0_in: Int32, pan_in: Int32,
+    nch_in: Int32,
 ):
-    """`ts_apply_block_host`'s panel `pan` for block b0 + block_idx.x."""
+    """`ts_apply_block_host`'s panel `pan`: with nch == 0 for block b0 +
+    block_idx.x, every chunk of TS_NB columns of C in turn; with nch > 0
+    (TS_GRID_UPDATE) threadgroup t is block b0 + t // nch and chunk t % nch
+    (the chunks are independent: the same words)."""
     var part = stack_allocation[TS_PART, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var tsh = stack_allocation[_TT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var zsh = stack_allocation[_TT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
@@ -393,7 +499,13 @@ def ts_leaf_apply_kernel(
     var k = Int(k_in)
     var nb = Int(nb_in)
     var pan = Int(pan_in)
-    var b = Int(b0_in) + Int(block_idx.x)
+    var nch = Int(nch_in)
+    var bq = Int(block_idx.x)
+    var ch = 0
+    if nch > 0:
+        bq = Int(block_idx.x) // nch
+        ch = Int(block_idx.x) - bq * nch
+    var b = Int(b0_in) + bq
     if b >= nb:
         return
     var lo = ts_block_lo(b)
@@ -404,12 +516,17 @@ def ts_leaf_apply_kernel(
     var j0 = pan * TS_NB
     var pw = min(TS_NB, n - j0)
     var npan = ts_panels(n)
+    if ch * TS_NB >= k:
+        return
     tsh[tid] = tst.unsafe_load((b * npan + pan) * _TT + tid)
     barrier()
-    var c0 = 0
-    while c0 < k:
-        _wy_chunk[False](a + lo * n, n, q + lo * k, k, c0, k, mb, j0, pw, tsh, part, zsh, wsh, g, l)
-        c0 += TS_NB
+    if nch > 0:
+        _wy_chunk[False](a + lo * n, n, q + lo * k, k, ch * TS_NB, k, mb, j0, pw, tsh, part, zsh, wsh, g, l)
+    else:
+        var c0 = 0
+        while c0 < k:
+            _wy_chunk[False](a + lo * n, n, q + lo * k, k, c0, k, mb, j0, pw, tsh, part, zsh, wsh, g, l)
+            c0 += TS_NB
 
 
 # ---- the factored state between `ts_factor_device` and `ts_apply_device`
@@ -478,6 +595,25 @@ def ts_pack_device(
     return out^
 
 
+def ts_pack_center_device(
+    ctx: DeviceContext,
+    mut ta: DeviceBuffer[DType.float32],
+    mut tb: DeviceBuffer[DType.float32],
+    mut mx: DeviceBuffer[DType.float32],
+    mut my: DeviceBuffer[DType.float32],
+    m: Int,
+    d: Int,
+) raises -> DeviceBuffer[DType.float32]:
+    """[ta - mx | tb - my] (m x (d + 1)) on the device, enqueued."""
+    var n = d + 1
+    var out = ctx.enqueue_create_buffer[DType.float32](m * n)
+    ctx.enqueue_function[ts_pack_center_kernel](
+        ta.unsafe_ptr(), tb.unsafe_ptr(), mx.unsafe_ptr(), my.unsafe_ptr(), out.unsafe_ptr(), Int32(m), Int32(d),
+        grid_dim=_grid(m * n), block_dim=TS_TPB,
+    )
+    return out^
+
+
 def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, r: F32Ptr, keep: Bool) raises:
     """R (n x n) of the m x n row-major `da` (factored in place) into the host
     r; with `keep` the factored state stays for `ts_apply_device`."""
@@ -501,6 +637,16 @@ def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m:
                 grid_dim=cnt, block_dim=TS_TPB,
             )
             _wait_apple(ctx)
+            comptime if TS_GRID_UPDATE:
+                # the trailing chunks of this slice of blocks, one threadgroup each
+                var j1 = pan * TS_NB + min(TS_NB, n - pan * TS_NB)
+                var nch = (n - j1 + TS_NB - 1) // TS_NB
+                if nch > 0:
+                    ctx.enqueue_function[ts_leaf_update_kernel](
+                        da.unsafe_ptr(), dt.unsafe_ptr(), Int32(m), Int32(n), Int32(nb), Int32(b0), Int32(pan),
+                        Int32(nch), grid_dim=cnt * nch, block_dim=TS_TPB,
+                    )
+                    _wait_apple(ctx)
             b0 += cnt
     ctx.enqueue_function[ts_rtile_kernel](
         da.unsafe_ptr(), dtl.unsafe_ptr(), Int32(m), Int32(n), Int32(nb), grid_dim=_grid(nb * n * n), block_dim=TS_TPB
@@ -587,6 +733,9 @@ def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int) raise
     )
     var mbmax = m - ts_block_lo(nb - 1)
     var bpl = _per_launch(3 * mbmax * k * TS_NB)
+    var ach = 0
+    comptime if TS_GRID_UPDATE:
+        ach = (k + TS_NB - 1) // TS_NB
     for pp in range(npan):
         var pan = npan - 1 - pp
         var b0 = 0
@@ -594,7 +743,7 @@ def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int) raise
             var cnt = min(bpl, nb - b0)
             ctx.enqueue_function[ts_leaf_apply_kernel](
                 da.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), Int32(m), Int32(n), Int32(k), Int32(nb), Int32(b0), Int32(pan),
-                grid_dim=cnt, block_dim=TS_TPB,
+                Int32(ach), grid_dim=cnt * (ach if ach > 0 else 1), block_dim=TS_TPB,
             )
             _wait_apple(ctx)
             b0 += cnt

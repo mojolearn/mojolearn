@@ -7,8 +7,9 @@ same names, so the GPU binding and the CPU host binding share the address
 contract by construction. Every address is a host buffer the caller owns."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
+from std.sys.compile import is_defined
 
-from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import mat_from
@@ -532,6 +533,68 @@ def tsqr_r_py[E: Exec](a: PythonObject, b: PythonObject, r: PythonObject, p: Pyt
     var pr = _f(r)
     with GILReleased(Python()):
         E.tsqr_factor(pa, pb, pr, m, d, nrhs, keep)
+    return PythonObject(n)
+
+
+# lane idn-dense-linalg (2026-10-04): the one-entry routes Python takes when
+# `idn_flags_py` says so (both bindings; the same words as the calls they
+# replace). -D MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF / -D MOJOLEARN_IDN_LU_GESV_OFF
+# clear the bit, and Python keeps the old call sequence. IDENTICAL builds
+# only: a FAST build's bits are 0 and its routes are as they were.
+comptime _API_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+comptime IDN_OLS_ONE_ENTRY = _API_IDN and not is_defined["MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF"]()
+comptime IDN_LU_GESV = _API_IDN and not is_defined["MOJOLEARN_IDN_LU_GESV_OFF"]()
+
+
+def idn_flags_py() raises -> PythonObject:
+    """Bit 0: LinearRegression takes `ols_tsqr_r_py`; bit 1: solve takes
+    `lu_gesv_py`."""
+    var bits = 0
+    comptime if IDN_OLS_ONE_ENTRY:
+        bits |= 1
+    comptime if IDN_LU_GESV:
+        bits |= 2
+    return PythonObject(bits)
+
+
+def ols_tsqr_r_py[E: Exec](
+    a: PythonObject, b: PythonObject, r: PythonObject, mu: PythonObject, ymean: PythonObject, p: PythonObject
+) raises -> PythonObject:
+    """r ((d + 1) x (d + 1)) = R of the blocked TSQR of [a - mu | b - ymean]
+    (a m x d, b m), mu (float32 [d]) and ymean (float64 [1]) written: X and
+    y cross to the device once (Exec.ols_tsqr_factor). p = [m, d]."""
+    var m = _n(p, 0)
+    var d = _n(p, 1)
+    var n = d + 1
+    if d < 1 or n > TS_MAX_N or m < n:
+        raise Error("x_decomp: ols_tsqr_r needs 1 <= d, d + 1 <= " + String(TS_MAX_N) + " and m >= d + 1")
+    if m * n > 2147483647:
+        raise Error("x_decomp: ols_tsqr_r exceeds the Int32 index bound")
+    var pa = _f(a)
+    var pb = _f(b)
+    var pr = _f(r)
+    var pm = _f(mu)
+    var ya = Int(py=ymean)
+    if ya == 0:
+        raise Error("x_decomp: null float64 buffer address")
+    var py = MutPointer[UInt64, MutAnyOrigin](unsafe_from_address=ya)
+    with GILReleased(Python()):
+        E.ols_tsqr_factor(pa, pb, pr, pm, py, m, d)
+    return PythonObject(n)
+
+
+def lu_gesv_py[E: Exec](a: PythonObject, b: PythonObject, info: PythonObject, p: PythonObject) raises -> PythonObject:
+    """b (n x nrhs) = the solution of a x = b through `lu` then `lu_solve`
+    with the factor resident (Exec.lu_gesv); info (1) is `lu`'s. p = [n, nrhs]."""
+    var n = _n(p, 0)
+    var nrhs = _n(p, 1)
+    if n >= 1 << 24:
+        raise Error("x_decomp: lu_gesv row numbers exceed float32's exact integers")
+    var pa = _f(a)
+    var pb = _f(b)
+    var pi = _f(info)
+    with GILReleased(Python()):
+        E.lu_gesv(pa, pb, pi, n, nrhs)
     return PythonObject(n)
 
 
