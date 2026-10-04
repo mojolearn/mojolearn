@@ -220,9 +220,14 @@ struct _AfnScratch(Defaultable, Movable):
         self.hi_n = List[Int]()
 
 
+#: one pool per tier's binding (lane idn-opt-resident: IDENTICAL's resident
+#: step and clip take their small scratch from it too, training/estimator.mojo)
+comptime _AFN_SCRATCH_NAME = (
+    "MojoAfnOptimScratchFast" if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else "MojoAfnOptimScratchIdentical"
+)
 comptime AFN_SCRATCH = _Global[
     StorageType=_AfnScratch,
-    name="MojoAfnOptimScratchFast",
+    name=_AFN_SCRATCH_NAME,
     init_fn=_AfnScratch.__init__,
 ]
 

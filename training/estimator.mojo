@@ -95,6 +95,7 @@ from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.memory import memcpy
 from std.os import getenv
+from std.sys.compile import is_defined
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from std.time import perf_counter_ns
 
@@ -399,6 +400,31 @@ def identical_optimizer_step_host(
     return n_done
 
 
+
+
+#: lane idn-opt-resident (2026-10-04): IDENTICAL's resident step and the two
+#: clip entries take their small per-call scratch (sumsq, norms, the cells,
+#: the workspace, the partials) as views of the process-wide pool
+#: (`training/afn_optim.mojo`, created once per shape) on every vendor,
+#: instead of six to eight device allocations a call. Every launch writes a
+#: scratch cell before it reads it, as with a fresh (uninitialized) buffer:
+#: no bit moves. -D MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF restores the fresh
+#: buffers. FAST keeps its own switch (AFN_OPT_RESIDENT_STATE).
+comptime IDN_OPT_SCRATCH_POOL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    and not is_defined["MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF"]()
+)
+comptime OPT_SCRATCH_POOL = AFN_OPT_RESIDENT_STATE or IDN_OPT_SCRATCH_POOL
+
+
+def _scratch(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """A scratch buffer of n floats: a view of pool slot `slot` under
+    IDN_OPT_SCRATCH_POOL, a fresh buffer otherwise."""
+    comptime if IDN_OPT_SCRATCH_POOL:
+        return afn_scratch_view(ctx, slot, n)
+    else:
+        return ctx.enqueue_create_buffer[DType.float32](n)
 
 
 def opt_pool_buffers() -> Bool:
@@ -745,7 +771,7 @@ def identical_optimizer_step_resident_host(
     var out2: DeviceBuffer[DType.float32]
     var ws: DeviceBuffer[DType.float32]
     var sab_partials: DeviceBuffer[DType.float32]
-    comptime if AFN_OPT_RESIDENT_STATE:
+    comptime if OPT_SCRATCH_POOL:
         # lane afn-optim: views of pooled buffers, created once per shape;
         # the step allocates nothing here.
         denom_out = afn_scratch_view(ctx, AFN_SF_DENOM, record_n)
@@ -924,14 +950,12 @@ def identical_clip_grad_norm_host(
     ctx.enqueue_copy(dst_buf=grad, src_ptr=grad_ptr)
     ctx.synchronize()
 
-    var sumsq = ctx.enqueue_create_buffer[DType.float32](n_tensors)
-    var norms = ctx.enqueue_create_buffer[DType.float32](n_tensors)
-    var total_cell = ctx.enqueue_create_buffer[DType.float32](1)
-    var out2 = ctx.enqueue_create_buffer[DType.float32](2)
-    var ws = ctx.enqueue_create_buffer[DType.float32](
-        identical_optimizer_workspace_floats(offsets)
-    )
-    var sab_partials = ctx.enqueue_create_buffer[DType.float32](SAB_CHUNKS)
+    var sumsq = _scratch(ctx, AFN_SF_SUMSQ, n_tensors)
+    var norms = _scratch(ctx, AFN_SF_NORMS, n_tensors)
+    var total_cell = _scratch(ctx, AFN_SF_TOTAL, 1)
+    var out2 = _scratch(ctx, AFN_SF_OUT2, 2)
+    var ws = _scratch(ctx, AFN_SF_WS, identical_optimizer_workspace_floats(offsets))
+    var sab_partials = _scratch(ctx, AFN_SF_SAB, SAB_CHUNKS)
     ctx.synchronize()
 
     # THE ONE CALL THAT COMPUTES ANYTHING.
@@ -1022,14 +1046,12 @@ def identical_clip_grad_norm_addrs_host(
             _ = view^
         ctx.synchronize()
 
-    var sumsq = ctx.enqueue_create_buffer[DType.float32](n_tensors)
-    var norms = ctx.enqueue_create_buffer[DType.float32](n_tensors)
-    var total_cell = ctx.enqueue_create_buffer[DType.float32](1)
-    var out2 = ctx.enqueue_create_buffer[DType.float32](2)
-    var ws = ctx.enqueue_create_buffer[DType.float32](
-        identical_optimizer_workspace_floats(offsets)
-    )
-    var sab_partials = ctx.enqueue_create_buffer[DType.float32](SAB_CHUNKS)
+    var sumsq = _scratch(ctx, AFN_SF_SUMSQ, n_tensors)
+    var norms = _scratch(ctx, AFN_SF_NORMS, n_tensors)
+    var total_cell = _scratch(ctx, AFN_SF_TOTAL, 1)
+    var out2 = _scratch(ctx, AFN_SF_OUT2, 2)
+    var ws = _scratch(ctx, AFN_SF_WS, identical_optimizer_workspace_floats(offsets))
+    var sab_partials = _scratch(ctx, AFN_SF_SAB, SAB_CHUNKS)
 
     # THE ONE CALL THAT COMPUTES ANYTHING.
     if piped:

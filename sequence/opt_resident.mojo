@@ -60,8 +60,17 @@ comptime OPT_RAW_UP = _OPT_APPLE_FAST and is_defined["MOJOLEARN_OPT_RAW_UP"]()
 #: adamax 326 -> 195; PIPE_DOWN alone 318 -> 191. Off with
 #: MOJOLEARN_OPT_PIPE_DOWN_OFF / MOJOLEARN_OPT_ZERO_OPEN_OFF; the old
 #: -D names are harmless. RAW_UP measured noise (310 -> 307): opt-in.
-comptime OPT_PIPE_DOWN = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_PIPE_DOWN_OFF"]()
-comptime OPT_ZERO_OPEN = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_ZERO_OPEN_OFF"]()
+#: lane idn-opt-resident (2026-10-04): IDENTICAL takes PIPE_DOWN and
+#: ZERO_OPEN on every vendor (copies only, and zeros not uploaded over
+#: zeros: no bit moves). -D MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF /
+#: -D MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF restore IDENTICAL's old transport.
+comptime _OPT_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+comptime OPT_PIPE_DOWN = (_OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_PIPE_DOWN_OFF"]()) or (
+    _OPT_IDN and not is_defined["MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF"]()
+)
+comptime OPT_ZERO_OPEN = (_OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_ZERO_OPEN_OFF"]()) or (
+    _OPT_IDN and not is_defined["MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF"]()
+)
 #: the pipelined download's chunk, floats (8 MB; lane apple-fast-gap-optim:
 #: -D MOJOLEARN_OPT_FAST_PIPE_CH=<floats> for the A/B)
 comptime OPT_PIPE_CH = get_defined_int["MOJOLEARN_OPT_FAST_PIPE_CH", 1 << 21]()
@@ -82,7 +91,14 @@ comptime OPT_RAW_DOWN = _OPT_APPLE_FAST and is_defined["MOJOLEARN_OPT_FAST_RAW_D
 #:    parameter and gradient up and the parameter down only (the board's
 #:    1-D tensor: three 64 MB transfers instead of five). The same launches
 #:    (`sequence/pyapi.mojo::adafactor_core`) on the same values.
-comptime AF_RESIDENT = _OPT_APPLE_FAST and is_defined["MOJOLEARN_AF_FAST_RESIDENT"]()
+#: lane idn-opt-resident (2026-10-04): the IDENTICAL default on every
+#: vendor (the per-call entry moved P, G and the moment up and two of them
+#: down each step); -D MOJOLEARN_IDN_AF_RESIDENT_OFF restores the per-call
+#: entry (the Python side falls back when the entry points are absent).
+#: The same `adafactor_core` launches on the same values: no bit moves.
+comptime AF_RESIDENT = (_OPT_APPLE_FAST and is_defined["MOJOLEARN_AF_FAST_RESIDENT"]()) or (
+    _OPT_IDN and not is_defined["MOJOLEARN_IDN_AF_RESIDENT_OFF"]()
+)
 
 #: the handle kinds
 comptime RES_ELEMENTWISE = 1
@@ -543,7 +559,7 @@ def adafactor_resident_open_py(ip: PythonObject) raises -> PythonObject:
     col_var (C, matrices only), zero filled. Returns [handle, used mask]
     (and 1 under OPT_ZERO_OPEN)."""
     comptime if not AF_RESIDENT:
-        raise Error("adafactor_resident_open: not built (-D MOJOLEARN_AF_FAST_RESIDENT, FAST + Apple)")
+        raise Error("adafactor_resident_open: not built (IDENTICAL, or FAST + Apple with -D MOJOLEARN_AF_FAST_RESIDENT)")
     if len(ip) != 2:
         raise Error("adafactor_resident_open: requires [R, C]")
     var R = ival(ip, 0)
@@ -565,7 +581,7 @@ def adafactor_resident_step_py(handle: PythonObject, addrs: PythonObject, ip: Py
     fp = `adafactor_step`'s six. The parameter is updated in place.
     Returns n."""
     comptime if not AF_RESIDENT:
-        raise Error("adafactor_resident_step: not built (-D MOJOLEARN_AF_FAST_RESIDENT, FAST + Apple)")
+        raise Error("adafactor_resident_step: not built (IDENTICAL, or FAST + Apple with -D MOJOLEARN_AF_FAST_RESIDENT)")
     var h = _handle(handle, RES_ADAFACTOR)
     if len(addrs) != 2 or len(ip) != 3 or len(fp) != 6:
         raise Error("adafactor_resident_step: requires 2 addresses, 3 integer and 6 float parameters")
