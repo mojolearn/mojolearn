@@ -891,7 +891,9 @@ def smr_rank_key_kernel(
         idx[p] = UInt32(p)
     else:
         s = Int(idx[p])
-    keys[p] = bitcast[DType.uint32](src[s]) ^ UInt32(0x80000000)
+    # a same-width integer cast keeps the bits (fam2-cluster: was a
+    # `bitcast` of the loaded scalar)
+    keys[p] = src[s].cast[DType.uint32]() ^ UInt32(0x80000000)
 
 
 def smr_rank_from_perm_kernel(idx: _U32P, rank: _I32P, m_in: Int32):

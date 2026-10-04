@@ -12,6 +12,7 @@ switch below ORs into the same `comptime if`.
 """
 
 from std.sys.compile import is_defined
+from std.sys.defines import get_defined_int
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
@@ -64,3 +65,17 @@ comptime IDN_HDB_PREDICT_DEVICE_CAST = (
 )
 """approximate_predict: the k-NN's UInt32 indices are narrowed to Int32 by
 the fit's device kernel instead of a host loop over nq * k cells."""
+
+comptime IDN_HDB_SPARSE_MIN_ROWS = (
+    get_defined_int["MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS", 46340]()
+    if _IDN_HDB_ON
+    else 46340
+)
+"""CANDIDATE ARM (default 46340 = `PAIRWISE_MAX_ROWS`, no change). Under
+`graph = auto` the matrix-free sparse arm (DEVIATION 1620: the same tree,
+bit for bit) is taken ABOVE this many rows instead of only past the dense
+bound. The dense arm allocates and scans m * m cells every Boruvka round;
+the sparse arm prunes. Time `-D MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS=4096`,
+`=16384` against the default. A value above 46340 is refused at compile
+time. With a trace on, the dense arm's `hdbscan.mr.dists` stage is not
+recorded by the sparse arm, so keep the default for card runs."""

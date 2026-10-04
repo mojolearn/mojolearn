@@ -68,7 +68,10 @@ from hierarchy.impl.cluster.detail.dendrogram_device import (
     IDN_DENDRO_UNION,
     build_dendrogram_device,
 )
-from hdbscan.impl.detail.idn_switches import IDN_HDB_MR_FUSED_GUARD
+from hdbscan.impl.detail.idn_switches import (
+    IDN_HDB_MR_FUSED_GUARD,
+    IDN_HDB_SPARSE_MIN_ROWS,
+)
 from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
     PAIRWISE_MAX_ROWS,
@@ -189,8 +192,17 @@ def build_mr_linkage(
         )
     # DEVIATION 1620: past the dense bound (or when asked) the mutual
     # reachability MST is built without the m * m graph.
+    # fam2-cluster: the auto switch point is IDN_HDB_SPARSE_MIN_ROWS (a
+    # candidate arm; its default is PAIRWISE_MAX_ROWS, the old test).
+    comptime assert (
+        IDN_HDB_SPARSE_MIN_ROWS <= PAIRWISE_MAX_ROWS
+        and IDN_HDB_SPARSE_MIN_ROWS >= 2
+    ), "MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS must be in 2..46340"
     var use_sparse = graph == MR_GRAPH_SPARSE or (
-        graph == MR_GRAPH_AUTO and m > PAIRWISE_MAX_ROWS and not use_fast
+        graph == MR_GRAPH_AUTO
+        and m > IDN_HDB_SPARSE_MIN_ROWS
+        and not use_fast
+        and (m > PAIRWISE_MAX_ROWS or not trace.enabled)
     )
     if graph != MR_GRAPH_AUTO and graph != MR_GRAPH_DENSE and graph != MR_GRAPH_SPARSE:
         raise Error(
