@@ -176,7 +176,7 @@ from mamba.impl.modules.mamba_simple import mamba_step
 #: lane afn-mamba (2026-10-03): under FAST + Apple + `-D MOJOLEARN_AFN_MAMBA_ARENA`
 #: every block call's device buffers are views of ONE arena and the caller's
 #: arrays are copied in with no per-buffer wait (`_mamba{1,2,3}_run_arena`).
-from mamba.impl.modules.afn_defines import AFN_MAMBA_ARENA
+from mamba.impl.modules.afn_defines import AFN_MAMBA_ARENA, IDN_MAMBA_ALLOC_NOWAIT
 from mamba.impl.modules.afn_arena import MambaArena
 from mamba.impl.modeling.modeling_mamba import mamba1_arena_floats
 from mamba.impl.modules.mamba2 import mamba2_arena_floats
@@ -2233,7 +2233,11 @@ def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, d
         s.dx = mamba_device_alloc(ctx, max(n_x, 1))
     ref dx = s.dx.value()
     ctx.enqueue_copy(dst_buf=dx, src_ptr=_f32_ptr(a[0]))
-    ctx.synchronize()
+    # lane fam-lm (IDN_MAMBA_ALLOC_NOWAIT, IDENTICAL): the caller's x array
+    # outlives this call and the copy is ahead of every reader on the
+    # in-order context, so the upload's own wait ordered nothing.
+    comptime if not IDN_MAMBA_ALLOC_NOWAIT:
+        ctx.synchronize()
     m3_phase_tick(ctx, phase_tick, String("surface.x_upload"))
     var trace = IdentityTrace.disabled()
     mamba3_block_forward(
