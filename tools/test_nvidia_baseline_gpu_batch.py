@@ -39,6 +39,98 @@ class Artifacts(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Exactly'):
                 batch.artifacts(root, SHA)
 
+    def test_native_reference_source_and_fixture_scope(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / 'ref.json'
+            doc = dict(commit=SHA, fixtures={k: {} for k in ('base', 'denormal', 'odd')}, cells={'a/base': {}})
+            p.write_text(json.dumps(doc))
+            self.assertEqual(batch.reference_column(p, SHA), batch.sha(p))
+            with self.assertRaisesRegex(ValueError, 'source differs'):
+                batch.reference_column(p, 'b' * 40)
+            doc['fixtures']['extra'] = {}; p.write_text(json.dumps(doc))
+            with self.assertRaisesRegex(ValueError, 'three fixtures'):
+                batch.reference_column(p, SHA)
+
+    def test_native_plan_retains_exact_six_hashes_and_reference(self):
+        from unittest.mock import patch
+        import contextlib, io, sys
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td); self.make(root)
+            reference=root/'apple.json'
+            reference.write_text(json.dumps(dict(commit=SHA,fixtures={k:{} for k in ('base','denormal','odd')},cells={'umap/base':{}})))
+            argv=['batch',SHA,'--wheels',str(root),'--out',str(root/'out'),'--gpu','ada',
+                  '--native-release-checks','--native-reference-column',str(reference)]
+            stdout=io.StringIO()
+            with patch.object(sys,'argv',argv), patch.object(batch.subprocess,'check_output',side_effect=[SHA,SHA+'\trefs/heads/candidate']), patch.object(batch.subprocess,'run',return_value=subprocess.CompletedProcess([],0)), contextlib.redirect_stdout(stdout):
+                self.assertEqual(batch.main(),0)
+            plan=json.loads(stdout.getvalue())
+            self.assertEqual(len(plan['native_release_wheels']),6)
+            self.assertFalse(any('ptx80' in n for n in plan['native_release_wheels']))
+            self.assertEqual(plan['native_reference_sha256'],batch.sha(reference))
+            self.assertEqual((plan['work_seconds'],plan['lease_minutes']),(6300,120))
+            with patch.object(sys,'argv',argv[:-2]), patch.object(batch.subprocess,'check_output') as calls:
+                with self.assertRaisesRegex(ValueError,'reference column'):batch.main()
+                calls.assert_not_called()
+
+    def test_canonical_native_stage_is_separate_and_bounded(self):
+        body = batch.box_body(SHA, native_release_checks=True)
+        self.assertLess(body.index('bash native-release.sh'), body.index('collect prototype'))
+        self.assertIn('timeout -k 20 1650 bash native-release.sh || NATIVE_FAILED=1', body)
+        self.assertIn('mojolearn_nvidia_ptx80-*) continue', body)
+        self.assertIn('--scope expanded --python', body)
+        self.assertIn('--fixtures base,denormal,odd', body)
+        self.assertIn('--require-columns 2 --lanes "$LANES"', body)
+        self.assertIn('--seconds 900 --rss-gib 12 --cores 2', body)
+        self.assertIn('collect full "$role" 2400', body)
+        self.assertGreater(body.index('test "$NATIVE_FAILED" = 0'), body.index('full-local-comparison'))
+        result = subprocess.run(['bash', '-n'], input=body, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_native_shell_installs_exact_six_and_keeps_receipt_on_later_failure(self):
+        import sys
+        for fail in ('', 'selftest'):
+            with self.subTest(fail=fail), tempfile.TemporaryDirectory() as td:
+                root = Path(td); (root/'wheels').mkdir(); self.make(root/'wheels')
+                (root/'venv/bin').mkdir(parents=True); (root/'bin').mkdir()
+                (root/'native-reference.json').write_text('{}')
+                interpreter = root/'venv/bin/python'
+                interpreter.write_text('#!' + sys.executable + '\n' + r'''import json,os,pathlib,subprocess,sys
+args=sys.argv[1:]
+with open(os.environ['CALLS'],'a') as f:f.write(json.dumps(args)+'\n')
+if args[:2]==['-m','venv']:
+ p=pathlib.Path(args[2])/'bin';p.mkdir(parents=True);(p/'python').symlink_to(pathlib.Path(sys.argv[0]).resolve())
+elif args and args[0].endswith('nvidia_serial_guard.py'):
+ sys.exit(subprocess.run(args[args.index('--')+1:]).returncode)
+elif args and args[0].endswith('qualify_verifier_wheel.py'):
+ out=pathlib.Path(args[args.index('--output')+1]);out.mkdir(parents=True)
+ (out/'results.json').write_text(json.dumps({'real_qualifier_arguments':args}))
+elif args and args[0].endswith('verify_lanes.py'):
+ pathlib.Path(args[args.index('--write-selection')+1]).write_text(json.dumps({'lanes':['umap','ridge']}))
+elif args and args[0]=='-c':
+ sys.argv=args[1:];exec(args[1])
+elif args[:3]==['-m','mojolearn','verify'] and os.environ['FAIL']=='selftest':sys.exit(7)
+elif args[:2]==['-m','mojolearn._identity_break']:
+ pathlib.Path(args[args.index('--json')+1]).write_text('{}')
+''')
+                interpreter.chmod(0o755)
+                (root/'bin/python3').symlink_to(interpreter)
+                timeout = root/'bin/timeout'; timeout.write_text('#!/bin/bash\nshift 3\nexec "$@"\n'); timeout.chmod(0o755)
+                result = subprocess.run(['bash', '-c', batch.native_release_body(SHA) + '\nexit "$NATIVE_FAILED"'],
+                    cwd=root, env={**os.environ, 'PATH':str(root/'bin')+os.pathsep+os.environ['PATH'],
+                                   'CALLS':str(root/'calls.jsonl'), 'FAIL':fail}, capture_output=True, text=True, timeout=20)
+                out=root/'results/native-release'
+                self.assertEqual(result.returncode, 1 if fail else 0, (out/'body.log').read_text())
+                receipt=json.loads((out/'out/results.json').read_text())
+                args=receipt['real_qualifier_arguments']
+                wheels=[a for a in args if a.endswith('.whl')]
+                self.assertEqual(len(wheels),6)
+                self.assertFalse(any('ptx80' in a for a in wheels))
+                calls=[json.loads(line) for line in (root/'calls.jsonl').read_text().splitlines()]
+                installed=[a for a in calls if a[:3]==['-m','pip','install']][0]
+                self.assertEqual(set(a for a in installed if a.endswith('.whl')),set(wheels))
+                self.assertEqual((out/'body.exit').read_text().strip(),'7' if fail else '0')
+                self.assertEqual((out/'column-cuda.json').exists(),not bool(fail))
+
     def test_manifest_tamper(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td); self.make(root)
