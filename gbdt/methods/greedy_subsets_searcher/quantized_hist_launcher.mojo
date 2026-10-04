@@ -176,6 +176,7 @@ def launch_quantized_histograms[ridx_stats: Bool = False](
     hist_cells_per_leaf: Int,
     q_skip: MutPointer[UInt32, MutAnyOrigin],
     q_skip_cap: Int,
+    max_live_rows: Int = -1,
 ) raises:
     """The quantized family's whole level: quantize the pairs for the
     partitions being built (DEV 1911), one shared-histogram launch per
@@ -208,6 +209,15 @@ def launch_quantized_histograms[ridx_stats: Bool = False](
     var qx = (n_rows + QH_BLOCK - 1) // QH_BLOCK
     if qx > 4 * sm_count:
         qx = 4 * sm_count
+    # lane apple-fast-w3-dw (MOJOLEARN_GBDT_DW_FLAT_GRID, the caller passes
+    # `max_live_rows` only under it): the quantize pass strides each leaf's
+    # rows, so blocks past `ceil(largest built leaf / QH_BLOCK)` would only
+    # read their leaf header and return. Each position is still written once
+    # by the same expression: the same q_stats.
+    if max_live_rows >= 0:
+        var qx_rows = (max_live_rows + QH_BLOCK - 1) // QH_BLOCK
+        if qx_rows < qx:
+            qx = qx_rows
     if qx < 1:
         qx = 1
     ctx.enqueue_function[quantize_pair_kernel[ridx_stats]](

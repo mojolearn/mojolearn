@@ -100,6 +100,13 @@ from gbdt.methods.greedy_subsets_searcher.kernel.dw2_level import (
     dw2_scan_histograms_smem_kernel,
     dw2_scan_update_kernel,
 )
+from gbdt.methods.greedy_subsets_searcher.kernel.dw3_flat import (
+    DW3_MAX_SLOTS,
+    dw3_flat_copy_back_kernel,
+    dw3_flat_flags_count_kernel,
+    dw3_flat_grid,
+    dw3_flat_place_scatter_kernel,
+)
 from checks.kernel_matrix import TARGET_COLUMN, ridx_only_splits_for
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
     StageTimes,
@@ -293,6 +300,28 @@ comptime DW2_SCAN_SMEM = (
     and not is_defined["MOJOLEARN_GBDT_DW2_SCAN_SMEM_OFF"]()
 )
 
+# ---- lane apple-fast-w3-dw: FAST Apple, OPT-IN ------------------------------
+#: CANDIDATE, opt-in, 2026-10-04 (lane/apple-fast-w3-dw). Grids sized by the
+#: work, not by the device and the leaf count:
+#:   * the DW2 split chain's K1 / K3 / K4 run on a 1D grid over the level's
+#:     (slot, chunk) work list (`kernel/dw3_flat.mojo`), instead of
+#:     `(min(max_chunks(n_rows), 2 * sm_count), n_split)` where about 88% of
+#:     the threadgroups return at once on a depth-8 level;
+#:   * the quantize pass of the quantized histogram build is sized by the
+#:     largest built leaf (`launch_quantized_histograms`' `max_live_rows`)
+#:     instead of `min(n_rows / 512, 4 * sm_count)` per leaf.
+#: Same work items, same bodies: bit-identical by construction (integer
+#: moves; the quantize pass writes each position once whatever the grid).
+#: Needs DW2_PART_VEC4 (the FAST Apple default). Depthwise only; Lossguide
+#: never takes the fused chain and keeps the full quantize grid.
+#: `-D MOJOLEARN_GBDT_DW_FLAT_GRID`; no default until the M3 A/B.
+comptime DW_FLAT_GRID = (
+    DW2_PART_VEC4
+    and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GBDT_DW_FLAT_GRID"]()
+)
+
 
 def _dw_dev_u32(
     buf: DeviceBuffer[DType.uint32], offset: Int
@@ -348,6 +377,73 @@ def _launch_fused_split_chain[
         # lane apple-fast-dwgap2: the same four launches at four rows per
         # thread (`kernel/dw2_level.mojo`)
         var max_chunks4 = dw2_part_max_chunks(n_rows)
+        comptime if DW_FLAT_GRID:
+            if n_split <= DW3_MAX_SLOTS:
+                # lane apple-fast-w3-dw: K1 / K3 / K4 on the flat
+                # (slot, chunk) list; K2 unchanged (one block per slot)
+                var flat_grid = dw3_flat_grid(n_split, n_rows, sm_count)
+                ctx.enqueue_function[dw3_flat_flags_count_kernel[GUARD]](
+                    cindex.unsafe_ptr(),
+                    row_index.unsafe_ptr(),
+                    p_off.unsafe_ptr(),
+                    p_sz.unsafe_ptr(),
+                    d_left.unsafe_ptr(),
+                    sp_feats.unsafe_ptr().bitcast[CFeature](),
+                    sp_bins.unsafe_ptr(),
+                    flags.unsafe_ptr(),
+                    chunk_zeros.unsafe_ptr(),
+                    Int32(max_chunks4),
+                    Int32(n_split),
+                    n_split_dev,
+                    grid_dim=(flat_grid, 1, 1),
+                    block_dim=(DW2_PART_BLOCK, 1, 1),
+                )
+                ctx.enqueue_function[dw2_scan_update_kernel[GUARD]](
+                    d_left.unsafe_ptr(),
+                    d_right.unsafe_ptr(),
+                    p_off.unsafe_ptr(),
+                    p_sz.unsafe_ptr(),
+                    chunk_zeros.unsafe_ptr(),
+                    chunk_offsets.unsafe_ptr(),
+                    leaf_zeros.unsafe_ptr(),
+                    slot_off.unsafe_ptr(),
+                    slot_sz.unsafe_ptr(),
+                    d_win_cells.unsafe_ptr(),
+                    sp_feats.unsafe_ptr().bitcast[CFeature](),
+                    Int32(hist_cells_per_leaf),
+                    Int32(stat_count),
+                    hist.unsafe_ptr(),
+                    part_stats.unsafe_ptr(),
+                    Int32(max_chunks4),
+                    n_split_dev,
+                    grid_dim=(1, n_split, 1),
+                    block_dim=(DW2_PART_BLOCK, 1, 1),
+                )
+                ctx.enqueue_function[dw3_flat_place_scatter_kernel[GUARD]](
+                    slot_off.unsafe_ptr(),
+                    slot_sz.unsafe_ptr(),
+                    flags.unsafe_ptr(),
+                    chunk_offsets.unsafe_ptr(),
+                    leaf_zeros.unsafe_ptr(),
+                    row_index.unsafe_ptr(),
+                    temp_index.unsafe_ptr(),
+                    Int32(max_chunks4),
+                    Int32(n_split),
+                    n_split_dev,
+                    grid_dim=(flat_grid, 1, 1),
+                    block_dim=(DW2_PART_BLOCK, 1, 1),
+                )
+                ctx.enqueue_function[dw3_flat_copy_back_kernel[GUARD]](
+                    slot_off.unsafe_ptr(),
+                    slot_sz.unsafe_ptr(),
+                    temp_index.unsafe_ptr(),
+                    row_index.unsafe_ptr(),
+                    Int32(n_split),
+                    n_split_dev,
+                    grid_dim=(flat_grid, 1, 1),
+                    block_dim=(DW2_PART_BLOCK, 1, 1),
+                )
+                return
         var grid_x4 = split_points_grid_x(n_split, sm_count)
         var chunk_grid4 = max_chunks4
         if grid_x4 < chunk_grid4:
@@ -2451,6 +2547,17 @@ def fit_non_symmetric_tree[
             var quantized_built = False
             comptime if QUANTIZED_HIST_LIVE:
                 if qh_ok:
+                    # DW_FLAT_GRID: the largest built leaf bounds the
+                    # quantize grid (host sizes from the last level's
+                    # readback, the same sizes `non_zero` was chosen by)
+                    var qh_max_rows = -1
+                    comptime if DW_FLAT_GRID:
+                        if not lossguide:
+                            qh_max_rows = 0
+                            for i in range(len(non_zero)):
+                                var nz_size = leaves[Int(non_zero[i])].size
+                                if nz_size > qh_max_rows:
+                                    qh_max_rows = nz_size
                     if use_ridx:
                         launch_quantized_histograms[True](
                             ctx, dblocks, iteration - 1, len(non_zero), n_rows,
@@ -2458,6 +2565,7 @@ def fit_non_symmetric_tree[
                             cindex, row_index, stats, p_off, p_sz, d_ids,
                             d_qstats, d_qacc, hist, hist_cells_per_leaf,
                             _dw_dev_u32(dws[0].d_qskip, 0), dws[0].n_features_key,
+                            qh_max_rows,
                         )
                     else:
                         launch_quantized_histograms[False](
@@ -2466,6 +2574,7 @@ def fit_non_symmetric_tree[
                             cindex, row_index, stats, p_off, p_sz, d_ids,
                             d_qstats, d_qacc, hist, hist_cells_per_leaf,
                             _dw_dev_u32(dws[0].d_qskip, 0), dws[0].n_features_key,
+                            qh_max_rows,
                         )
                     quantized_built = True
             if not quantized_built:
