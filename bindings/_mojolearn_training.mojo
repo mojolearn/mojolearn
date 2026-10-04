@@ -84,6 +84,11 @@ from training.estimator import (
     identical_optimizer_step_host,
     identical_optimizer_step_resident_host, opt_download_staged, opt_pool_buffers,
 )
+# lane fam2-neural (2026-10-04): device tensors for the training ops
+from training.dev_tensors import (
+    IDN_TRAIN_DEV_TENSORS, train_dev_alloc, train_dev_free, train_dev_put, train_dev_get, train_dev_view,
+    train_dev_copy, train_linear_forward_dev, train_linear_backward_dev, train_ce_loss_dev,
+)
 # lane fam2-neural (2026-10-04): parameters and gradients resident across steps
 from training.estimator import (
     identical_optimizer_step_resident_io, IDN_OPT_PARAMS_RESIDENT, OPT_IO_UP_P, OPT_IO_UP_G, OPT_IO_DOWN_G,
@@ -704,6 +709,162 @@ def optimizer_resident_step_io_binding(
                 max_norm, io,
             )
     return PythonObject(n_total)
+
+
+# ---------------------------------------------------------------------------
+# lane fam2-neural (2026-10-04): DEVICE TENSORS (training/dev_tensors.mojo).
+# Float32 device arrays by handle, and the linear / cross-entropy ops and
+# the resident optimizer reading and writing them, so a training loop's
+# N * V and parameter-sized arrays never cross the bus. Registered only
+# under IDN_TRAIN_DEV_TENSORS.
+
+
+def _handles(handles: PythonObject, want: Int, name: String) raises -> List[Int]:
+    if len(handles) != want:
+        raise Error(name + ": handles must contain " + String(want) + " entries, got " + String(len(handles)))
+    var out = List[Int]()
+    for i in range(want):
+        out.append(Int(py=handles[i]))
+    return out^
+
+
+def train_dev_alloc_binding(n: PythonObject) raises -> PythonObject:
+    """A device array of `n` floats; returns its handle."""
+    var count = Int(py=n)
+    var h = -1
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        h = train_dev_alloc(ctx, count)
+    return PythonObject(h)
+
+
+def train_dev_free_binding(handle: PythonObject) raises -> PythonObject:
+    var h = Int(py=handle)
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        train_dev_free(ctx, h)
+    return PythonObject(h)
+
+
+def train_dev_put_binding(handle: PythonObject, addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    """Host `n` floats at `addr` into the handle."""
+    var h = Int(py=handle)
+    var count = Int(py=n)
+    var src = _f32_ptr(Int(py=addr))
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        train_dev_put(ctx, h, src, count)
+    return PythonObject(count)
+
+
+def train_dev_get_binding(handle: PythonObject, addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    """The handle's first `n` floats into host memory at `addr`."""
+    var h = Int(py=handle)
+    var count = Int(py=n)
+    var dst = _f32_ptr(Int(py=addr))
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        train_dev_get(ctx, h, dst, count)
+    return PythonObject(count)
+
+
+def linear_forward_dev_binding(handles: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`linear_forward` on device arrays. handles = [c (written), a, w];
+    params = [m, n, k]."""
+    var hs = _handles(handles, 3, "linear_forward_dev")
+    _params(params, 3, "linear_forward_dev")
+    var m = Int(py=params[0])
+    var n = Int(py=params[1])
+    var k = Int(py=params[2])
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        count = train_linear_forward_dev(ctx, hs[0], hs[1], hs[2], m, n, k)
+    return PythonObject(count)
+
+
+def linear_backward_dev_binding(handles: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`linear_backward` on device arrays. handles = [da (written), dw
+    (written), dc, a, w]; params = [m, n, k]."""
+    var hs = _handles(handles, 5, "linear_backward_dev")
+    _params(params, 3, "linear_backward_dev")
+    var m = Int(py=params[0])
+    var n = Int(py=params[1])
+    var k = Int(py=params[2])
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        count = train_linear_backward_dev(ctx, hs[0], hs[1], hs[2], hs[3], hs[4], m, n, k)
+    return PythonObject(count)
+
+
+def ce_loss_dev_binding(
+    loss_addr: PythonObject,
+    row_addr: PythonObject,
+    targets_addr: PythonObject,
+    handles: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ce_loss` with the logits and their gradient as device arrays.
+    handles = [dlogits (written when want_grad != 0; any open handle
+    otherwise), logits]; `params` is `ce_loss`'s list, word for word (7
+    values); loss, row and targets are host addresses as there. Returns
+    `count`."""
+    if len(params) != 7:
+        raise Error("ce_loss_dev: params must contain 7 values, got " + String(len(params)))
+    var hs = _handles(handles, 2, "ce_loss_dev")
+    var lp = _f32_ptr(Int(py=loss_addr))
+    var rp = _f32_ptr(Int(py=row_addr))
+    var tp = _i32_ptr(Int(py=targets_addr))
+    var n_rows = Int(py=params[0])
+    var vocab = Int(py=params[1])
+    var ignore_index = Int(py=params[2])
+    var reduction = Int(py=params[3])
+    var num_items = Int(py=params[4])
+    var want_grad = Int(py=params[5])
+    var label_smoothing = Float32(Float64(py=params[6]))
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        count = train_ce_loss_dev(
+            ctx, lp, rp, hs[0], hs[1], tp, n_rows, vocab, ignore_index, reduction, num_items, want_grad,
+            label_smoothing,
+        )
+    return PythonObject(count)
+
+
+def optimizer_resident_copy_dev_binding(handle: PythonObject, params: PythonObject) raises -> PythonObject:
+    """A device-to-device copy between an optimizer handle's parameter or
+    gradient buffer and a device array. params = [which (0 parameters, 1
+    gradient), tensor handle, offset (floats, into the optimizer's flat
+    registry), n, direction (0: tensor -> optimizer, 1: optimizer ->
+    tensor)]. Returns `n`."""
+    _params(params, 5, "optimizer_resident_copy_dev")
+    var h = _opt_pool_handle(handle, 0)
+    var which = Int(py=params[0])
+    var th = Int(py=params[1])
+    var off = Int(py=params[2])
+    var n = Int(py=params[3])
+    var direction = Int(py=params[4])
+    if (which != 0 and which != 1) or (direction != 0 and direction != 1):
+        raise Error("optimizer_resident_copy_dev: which and direction are 0 or 1")
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        _opt_dev_pair(ctx, h)
+        var pool = _OPT_POOL.get_or_create_ptr()
+        var tv = train_dev_view(ctx, th, n, "the optimizer copy")
+        if which == 0:
+            if direction == 0:
+                train_dev_copy(ctx, pool[].p[h], off, tv, 0, n)
+            else:
+                train_dev_copy(ctx, tv, 0, pool[].p[h], off, n)
+        else:
+            if direction == 0:
+                train_dev_copy(ctx, pool[].g[h], off, tv, 0, n)
+            else:
+                train_dev_copy(ctx, tv, 0, pool[].g[h], off, n)
+        _ = tv^
+    return PythonObject(n)
 
 
 def clip_grad_norm_binding(
@@ -1443,6 +1604,16 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
             m.def_function[optimizer_resident_put_binding]("optimizer_resident_put")
             m.def_function[optimizer_resident_get_binding]("optimizer_resident_get")
             m.def_function[optimizer_resident_step_io_binding]("optimizer_resident_step_io")
+        comptime if IDN_TRAIN_DEV_TENSORS:
+            m.def_function[train_dev_alloc_binding]("train_dev_alloc")
+            m.def_function[train_dev_free_binding]("train_dev_free")
+            m.def_function[train_dev_put_binding]("train_dev_put")
+            m.def_function[train_dev_get_binding]("train_dev_get")
+            m.def_function[linear_forward_dev_binding]("linear_forward_dev")
+            m.def_function[linear_backward_dev_binding]("linear_backward_dev")
+            m.def_function[ce_loss_dev_binding]("ce_loss_dev")
+            comptime if IDN_OPT_PARAMS_RESIDENT:
+                m.def_function[optimizer_resident_copy_dev_binding]("optimizer_resident_copy_dev")
         m.def_function[clip_grad_norm_binding]("clip_grad_norm")
         m.def_function[clip_grad_norm_multi_binding]("clip_grad_norm_multi")
         m.def_function[ce_loss_binding]("ce_loss")

@@ -1390,6 +1390,50 @@ def identical_ce_loss_host(
     return count
 
 
+def identical_ce_loss_dev(
+    ctx: DeviceContext,
+    loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    row_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mut dlogits: DeviceBuffer[DType.float32],
+    mut logits: DeviceBuffer[DType.float32],
+    targets_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    n_rows: Int,
+    vocab: Int,
+    ignore_index: Int,
+    reduction: Int,
+    num_items: Int,
+    want_grad: Int,
+    label_smoothing: Float32,
+) raises -> Int:
+    """lane fam2-neural: `identical_ce_loss_host` with the logits ALREADY ON
+    THE DEVICE and the gradient LEFT THERE (`logits` N * V floats; `dlogits`
+    N * V floats when `want_grad != 0`, else any buffer of at least one):
+    that entry's refusals, `ce_count` and resident call, in its order, minus
+    the N * V upload and the N * V download (256 MB each way at the board's
+    8,192 x 8,192). The targets (N int32), the row losses and the loss
+    scalar cross as before. The same device calls on the same values: no
+    bit moves. Returns `count`."""
+    identical_ce_admit_call(reduction, want_grad, n_rows)
+    var cfg = CeConfig(vocab, ignore_index, reduction, label_smoothing, num_items)
+    var h_targets = List[Int32](length=n_rows, fill=Int32(0))
+    memcpy(dest=h_targets.unsafe_ptr(), src=targets_ptr, count=n_rows)
+    ce_refuse_shape(n_rows, n_rows * vocab, cfg)
+    var count = ce_count(h_targets, ignore_index)
+    _ = h_targets^
+    var cells = n_rows * vocab
+    if len(logits) < cells or (want_grad != 0 and len(dlogits) < cells):
+        raise Error("mojolearn training: the device logits or gradient buffer is smaller than N * V")
+    var targets = ctx.enqueue_create_buffer[DType.int32](n_rows)
+    ctx.enqueue_copy(dst_buf=targets, src_ptr=targets_ptr)
+    ctx.synchronize()
+    identical_ce_loss_resident[_CE_DEV_POOL](
+        ctx, loss_ptr, row_ptr, dlogits, logits, targets, n_rows, count,
+        reduction, want_grad, cfg,
+    )
+    _ = targets^
+    return count
+
+
 def _ce_buf[pool: StaticString](ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
     """A pooled buffer when `pool` names one, else a fresh allocation (the
     resident callers `samba_head_loss_host` and the MLP head keep theirs)."""
