@@ -1488,12 +1488,11 @@ def host_kmeans_fit(
         _ = wc^
         if cap < sum_scale:
             sum_scale = cap
-    var weight_bound = Float64(n)
+    # `kmeans_fit`: supplied weights take the device fold of `plan_sum_scale`
+    # as one column (lane cpu3-core), unit weights the exact n
+    var weight_scale = choose_scale(Float64(n), n)
     if n_weights != 0:
-        weight_bound = Float64(0.0)
-        for r in range(n):
-            weight_bound += Float64(abs(weights_in[r]))
-    var weight_scale = choose_scale(weight_bound, n)
+        weight_scale = host_plan_sum_scale(weights_in, n, 1)
 
     var weights = List[Float32](length=n, fill=Float32(1.0))
     if n_weights != 0:

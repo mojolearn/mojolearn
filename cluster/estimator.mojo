@@ -341,12 +341,14 @@ def kmeans_fit(
     # accumulator. So the supplied case is summed, at the cost of one more
     # host pass over n_samples values -- cheap beside the n_samples *
     # n_features pass `plan_sum_scale` already pays.
-    var weight_bound = Float64(n_samples)
-    if n_weights != 0:
-        weight_bound = Float64(0.0)
-        for r in range(n_samples):
-            weight_bound += Float64(abs(weights_ptr.unsafe_load(r)))
-    var weight_scale = choose_scale(weight_bound, n_samples)
+    #
+    # Lane cpu3-core (2026-10-04): supplied weights take their bound on the
+    # device, after the upload below: `plan_sum_scale` over the weights as one
+    # column (the same fixed-order fold, widened by its error bound, then
+    # `choose_scale(bound, n_samples)`), no host pass. Unit weights keep the
+    # exact `n_samples`. The host column (`host_kmeans_fit`) takes the same
+    # fold (`host_plan_sum_scale(weights, n, 1)`).
+    var weight_scale = choose_scale(Float64(n_samples), n_samples)
 
     var cd = n_clusters * n_features
     var x = ctx.enqueue_create_buffer[DType.float32](n_samples * n_features)
@@ -393,6 +395,7 @@ def kmeans_fit(
     # nothing downstream can move.
     if n_weights != 0:
         ctx.enqueue_copy(dst_buf=weights, src_ptr=weights_ptr)
+        weight_scale = plan_sum_scale(ctx, weights, n_samples, 1)
     else:
         enqueue_fill[DType.float32](ctx, weights, Float32(1.0))
 
