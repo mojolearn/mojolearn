@@ -2767,13 +2767,30 @@ half the features (the regressors at max_features 1.0) take them. Never
 binned codes: `ET_BINNED_REG` stays FAST. `-D
 MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF` keeps the one-feature kernels."""
 
+comptime IDN_ET_TILED_SEARCH = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not has_apple_gpu_accelerator()
+    and not (
+        is_defined["MOJOLEARN_IDN_ET_TILED_SEARCH_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+"""fam-forests (2026-10-04), IDENTICAL on NVIDIA and AMD: the two tiled
+search kernels Apple IDENTICAL already takes (`ET_TILED_SEARCH_APPLE_IDENTICAL`
+above, the same bit-inert argument: a key-space range fold, integer counts
+and label sums). A fit that samples at least half its features (the
+regressors at max_features 1.0) reads each row id and quantized label once
+per `ET_FEATURE_TILE` features from a row-major X instead of once per
+feature from a column gather. The host column is untouched (same cells).
+`-D MOJOLEARN_IDN_ET_TILED_SEARCH_OFF` keeps the one-feature kernels."""
+
 comptime ET_RANGE_TILED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and (
         is_defined["MOJOLEARN_ET_RANGE_TILED"]()
         or ET_TILED_SEARCH_APPLE_DEFAULT
     )
-) or ET_TILED_SEARCH_APPLE_IDENTICAL
+) or ET_TILED_SEARCH_APPLE_IDENTICAL or IDN_ET_TILED_SEARCH
 """FAST experiment: the range pass reads a row-major X with up to
 `ET_FEATURE_TILE` sampled features per block
 (`node_feature_range_tiled_kernel`)."""
@@ -2798,7 +2815,7 @@ comptime ET_SCORE_TILED = (
         is_defined["MOJOLEARN_ET_SCORE_TILED"]()
         or ET_TILED_SEARCH_APPLE_DEFAULT
     )
-) or ET_TILED_SEARCH_APPLE_IDENTICAL
+) or ET_TILED_SEARCH_APPLE_IDENTICAL or IDN_ET_TILED_SEARCH
 """FAST experiment: the REGRESSION score pass reads a row-major X with up to
 `ET_FEATURE_TILE` sampled features per block
 (`node_feature_score_reg_tiled_kernel`)."""
