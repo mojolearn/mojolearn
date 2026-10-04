@@ -51,6 +51,7 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
     launch_gather_sampled_order_kernel,
     launch_leaf_kernel,
     launch_node_split_kernel,
+    launch_finalize_pure_splits_kernel,
     launch_phase_setup_kernel,
 )
 from ensemble.decisiontree.decisiontree import (
@@ -874,12 +875,40 @@ def compute_shared_memory_config(
 # ===========================================================================
 
 
+# fam2-forests (2026-10-04), IDENTICAL, every vendor: the partition rides the
+# SAME drain as round zero's split search (`IDN_RF_FUSED_PARTITION`). Before,
+# every batch paid two host round trips: download the candidate splits, read
+# them, re-upload them, partition, download again. Now `begin_batch` enqueues
+# search -> `finalize_pure_splits_kernel` -> partition and one download brings
+# back splits that already carry `local_nLeft`. A node that found no split is
+# skipped by the partition's own `IsValid()` guards exactly as before; such
+# nodes (when more sampling rounds remain) are retried on the old path and
+# then partitioned as a subset, which is the same stable partition of the same
+# disjoint row ranges, only later. No arithmetic or order inside any node
+# changes, so no bit moves and the host column is untouched.
+# `-D MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF` restores the two-drain batch.
+# Off under an identity trace (the trace records the candidate round) and
+# under any check sabotage hook.
+comptime IDN_RF_FUSED_PARTITION = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+
 @fieldwise_init
 struct BatchState[O: ObjectiveLike](Movable):
     """One batch of `doSplit` (`builder.cuh:410-482`), suspended at a sync
     point. `phase` 0 means a best-splits download is pending; 1 means the
     node-split download is. `do_split` drives this serially and is
-    bit-identical to the pre-pipeline transcription."""
+    bit-identical to the pre-pipeline transcription.
+
+    `IDN_RF_FUSED_PARTITION` adds two phases: 2 means round zero's search
+    AND its partition share the pending download; 3 means the partition
+    of the retried subset (`fused_retry`, original batch indices) is
+    pending. `fused_retry` is empty on every other path."""
 
     var work_items: List[NodeWorkItem]
     var active_items: List[NodeWorkItem]
@@ -889,6 +918,7 @@ struct BatchState[O: ObjectiveLike](Movable):
     var max_rounds: Int
     var phase: Int
     var result: List[SplitSummary[Self.O.DataT]]
+    var fused_retry: List[Int]
 
 
 @fieldwise_init
@@ -2383,10 +2413,17 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             max_rounds,
             0,
             List[SplitSummary[Self.O.DataT]](),
+            List[Int](),
         )
         self._enqueue_round[sabotage](
             ctx, dataset, quantiles, smem_config, st, instr
         )
+        comptime if IDN_RF_FUSED_PARTITION and sabotage == 0:
+            if not instr.trace.enabled:
+                var t_fp = instr.times.start()
+                self._enqueue_fused_node_split(ctx, dataset, st.work_items)
+                instr.times.stop_host("host_enq_partition", t_fp)
+                st.phase = 2
         return st^
 
     def advance_batch[
@@ -2422,6 +2459,47 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                     + ".splits",
                     st.result,
                 )
+            return True
+        if st.phase == 2:
+            # `IDN_RF_FUSED_PARTITION`: one read serves the candidate
+            # round AND the partition. A valid slot already carries the
+            # `local_nLeft` the partition published; an invalid one was
+            # skipped by the partition's `IsValid()` guards.
+            var t_rf = instr.times.start()
+            var hf = self._read_splits(len(st.work_items))
+            instr.times.stop_host("host_read_splits", t_rf)
+            var retry_f = List[NodeWorkItem]()
+            var retry_f_orig = List[Int]()
+            for i in range(len(st.work_items)):
+                st.final_splits[i] = hf[i]
+                if not hf[i].is_valid and not hf[i].terminal:
+                    retry_f.append(st.work_items[i])
+                    retry_f_orig.append(i)
+            if len(retry_f) == 0 or st.round + 1 >= st.max_rounds:
+                st.result = hf^
+                return True
+            # Retry the nodes that found no split on the two-drain path
+            # (rounds 1..), then partition that subset alone (phase 3).
+            st.fused_retry = retry_f_orig.copy()
+            st.active_items = retry_f^
+            st.active_to_original = retry_f_orig^
+            st.round += 1
+            st.phase = 0
+            var t_rt2 = instr.times.start()
+            self._enqueue_round[sabotage](
+                ctx, dataset, quantiles, smem_config, st, instr
+            )
+            instr.times.stop_host("host_enq_hist_retry", t_rt2)
+            return False
+        if st.phase == 3:
+            # The retried subset's partition has drained: merge its
+            # `local_nLeft`-carrying splits into the batch's answer.
+            var t_r3 = instr.times.start()
+            var h3 = self._read_splits(len(st.fused_retry))
+            instr.times.stop_host("host_read_splits", t_r3)
+            for j in range(len(st.fused_retry)):
+                st.final_splits[st.fused_retry[j]] = h3[j]
+            st.result = st.final_splits.copy()
             return True
         var t_rd = instr.times.start()
         var h = self._read_splits(len(st.active_items))
@@ -2473,6 +2551,21 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # (priced in the 2011 block). Comptime-folds to `st.round == 0`
         # under the default flag.
         var t_ns = instr.times.start()
+        if len(st.fused_retry) > 0:
+            # `IDN_RF_FUSED_PARTITION`: every node outside `fused_retry`
+            # was partitioned with round zero; only the retried subset is
+            # left, and its row ranges are disjoint from the others.
+            var sub_items = List[NodeWorkItem]()
+            var sub_splits = List[SplitSummary[Self.O.DataT]]()
+            for j in range(len(st.fused_retry)):
+                sub_items.append(st.work_items[st.fused_retry[j]])
+                sub_splits.append(st.final_splits[st.fused_retry[j]])
+            self.enqueue_node_split(
+                ctx, dataset, sub_items, sub_splits, reuse_phase_span=False
+            )
+            instr.times.stop_host("host_enq_partition", t_ns)
+            st.phase = 3
+            return False
         self.enqueue_node_split(
             ctx,
             dataset,
@@ -2597,6 +2690,60 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # is the same bytes for every batch of a tree -- staged on the
         # tree's first partition, re-handed until the args cache is
         # invalidated (`reset_for_tree` / the drive entries).
+        if not self.node_split_args_ready:
+            _ = self.node_split_args.upload(ctx, NodeSplitArgs(ds.copy()))
+            self.node_split_args_ready = True
+        var argsp = self.node_split_args.device_ptr()
+        launch_node_split_kernel(
+            ctx,
+            ds,
+            self._work_items_ptr(),
+            self._splits_ptr(),
+            self._workload_ptr(),
+            n_partition_blocks,
+            n,
+            self.partition_row_ids.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            self.node_split_scratch,
+            argsp,
+        )
+        self._enqueue_splits_download(ctx, n)
+
+    def _enqueue_fused_node_split(
+        mut self,
+        ctx: DeviceContext,
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+        work_items: List[NodeWorkItem],
+    ) raises:
+        """`IDN_RF_FUSED_PARTITION`: `enqueue_node_split` WITHOUT the host
+        splits upload. Call directly after round zero's
+        `enqueue_best_splits` over the same `work_items`: the device
+        `splits` region then holds this batch's candidates in batch
+        order, `finalize_pure_splits_kernel` turns each pure slot into a
+        leaf (DEVIATION 2502, what `_read_splits` did on the host), and
+        the partition reads the slots where they are. The staged
+        [items | workload] span is reused under the same condition
+        DEVIATION 1919 states (round zero staged this very list at TPB
+        granularity); otherwise it is restaged from the host list, which
+        is control data the host already owns."""
+        var n = len(work_items)
+        if n == 0:
+            return
+        var ds = dataset.copy()
+        ds.n_sampled_cols = Int32(self.original_n_sampled_cols)
+        comptime if not RETRY_PURE_NODES:
+            launch_finalize_pure_splits_kernel[Self.O.DataT](
+                ctx, self._splits_ptr(), n
+            )
+        var n_partition_blocks: Int
+        comptime if HIST_ITEMS_PER_THREAD == 1:
+            n_partition_blocks = workload_blocks_for(work_items)
+        else:
+            self._stage_work_items(work_items)
+            n_partition_blocks = update_workload_info(
+                work_items, self._h_workload_ptr()
+            )
+            self._enqueue_phase_upload(ctx, n_partition_blocks)
         if not self.node_split_args_ready:
             _ = self.node_split_args.upload(ctx, NodeSplitArgs(ds.copy()))
             self.node_split_args_ready = True
@@ -2921,6 +3068,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                 0,
                 0,
                 List[SplitSummary[Self.O.DataT]](),
+                List[Int](),
             ),
             TreeMetaDataNode[Self.O.DataT](
                 Int32(-1),

@@ -1040,6 +1040,53 @@ def publish_local_left_counts_kernel[
         splits[unsafe_offset=idx] = s
 
 
+def finalize_pure_splits_kernel[
+    dtype: DType
+](
+    splits: MutPointer[Split[dtype], MutAnyOrigin],
+    n_splits: Int32,
+):
+    """NOT IN THEIR SOURCE. fam2-forests `IDN_RF_FUSED_PARTITION`.
+
+    The device form of what `_read_splits` + `enqueue_node_split` did on
+    the host between the split search and the partition: a PURE node
+    (DEVIATION 2502) is a leaf whatever candidate its slot holds, so its
+    `colid` becomes -1 and every `split.IsValid()` guard of the partition
+    kernels skips it. A slot that is not pure is left byte for byte as
+    the split search published it, which is what the host re-upload
+    carried for the fields the partition reads (`colid`, `quesval`).
+    One thread per slot; no float work.
+    """
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if idx < Int(n_splits):
+        var s = splits[unsafe_offset=idx]
+        if s.pure != Int32(0):
+            s.colid = Int32(-1)
+            splits[unsafe_offset=idx] = s
+
+
+def launch_finalize_pure_splits_kernel[
+    dtype: DType
+](
+    ctx: DeviceContext,
+    splits: MutPointer[Split[dtype], MutUntrackedOrigin],
+    n_work_items: Int,
+) raises:
+    """Launcher for `finalize_pure_splits_kernel`, the reset kernel's
+    shape (`launch_node_split_kernel`'s first launch)."""
+    if n_work_items == 0:
+        return
+    comptime FINALIZE_TPB = 128
+    comptime k_fin = finalize_pure_splits_kernel[dtype]
+    log_launch_ctx(ctx, "nodesplit_finalize_pure")
+    ctx.enqueue_function[k_fin](
+        splits.unsafe_origin_cast[MutAnyOrigin](),
+        Int32(n_work_items),
+        grid_dim=ceildiv(n_work_items, FINALIZE_TPB),
+        block_dim=FINALIZE_TPB,
+    )
+
+
 @fieldwise_init
 struct NodeSplitArgs[dtype: DType, label_dtype: DType](Copyable, Movable):
     """DEVIATION 128a's blob for `countLocalLeftKernel` (`:56`) and
