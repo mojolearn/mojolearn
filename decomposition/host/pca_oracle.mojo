@@ -165,6 +165,7 @@ from core.host_predict_threads import (
 )
 from gemm.host.identical_gemm import OP_TN, gemm_oracle
 from decomposition.pca_rr_switch import PCA_RR_EIGH, PCA_RR_SWEEPS
+from decomposition.mean_switch import IDN_DECOMP_MEAN_LAUNCH
 from x_decomp.rr import host_eigh_rr
 
 
@@ -754,12 +755,21 @@ def tsvd_explained_finish(
 
 
 def host_column_variance(m: List[Float32], n_rows: Int, n_cols: Int) -> List[Float32]:
-    """`estimator.mojo::_column_variance` on the host: the column mean, the
-    centering, the pinned square, the column mean of the squares."""
-    var mu = host_column_mean(m, n_rows, n_cols)
+    """The device variance's selected mean fold, centering and pinned square.
+
+    The launch helper's tiled fold is a different association from the direct
+    one-block mean. Match the device switch for BOTH variance reductions.
+    """
+    var mu: List[Float32]
+    comptime if IDN_DECOMP_MEAN_LAUNCH:
+        mu = host_column_mean_launch(m, n_rows, n_cols)
+    else:
+        mu = host_column_mean(m, n_rows, n_cols)
     var c = host_shift_columns(m, mu, n_rows, n_cols, Float32(-1.0))
-    for i in range(len(c)):
+    for i in range(n_rows * n_cols):
         c[i] = ftz(identical_mul(c[i], c[i]))
+    comptime if IDN_DECOMP_MEAN_LAUNCH:
+        return host_column_mean_launch(c, n_rows, n_cols)
     return host_column_mean(c, n_rows, n_cols)
 
 

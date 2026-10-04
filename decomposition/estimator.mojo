@@ -297,10 +297,10 @@ def square_in_place_kernel(
 # lane fam2-decomp (2026-10-04), IDENTICAL: the column mean is launched
 # through core/xtdz_coalesced.mojo `column_mean_launch` (the launch
 # decomposition/impl/linalg/detail/pca.mojo already uses): the same chains,
-# fold and quotient as `column_mean_kernel`, read row-coalesced where that
-# form applies. Same words. -D MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF (or
+# fold and quotient as `column_mean_kernel` in the coalesced fallback; the
+# tiled arm changes the fold and must also be selected by the host column. -D MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF (or
 # -D MOJOLEARN_IDN_ALL_OFF) restores the direct one-block-per-column launch.
-comptime IDN_DECOMP_MEAN_LAUNCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+from decomposition.mean_switch import IDN_DECOMP_MEAN_LAUNCH
 
 
 def _column_variance(
