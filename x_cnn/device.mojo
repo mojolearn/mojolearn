@@ -25,7 +25,7 @@ from gemm.checks.gemm_identical import (
     PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, PLAN_TUNED_32_2X2, PLAN_SPLITK, apple_mma_applies, apple_mma_applies_one_leaf, PLAN_APPLE_MMA_SPLIT, PLAN_APPLE_MMA_SPLIT_BIG,
     identical_gemm_splitk_fits, choose_gemm_plan,
 )
-from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_AMD, COLUMN_NVIDIA
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from core.staged_download import download_f32_into
@@ -264,9 +264,22 @@ def _im2col(
 # weights sit flushed in threadgroup memory; the NCHW store is
 # `conv_out_val` of that cell. No GEMM launch, no y2 round trip, no
 # conv_out launch. `-D MOJOLEARN_XCNN_NO_DIRECT_CONV` is the before arm.
-#: Apple only: measured there (the other columns keep their GEMM path until
-#: their own runs time it).
-comptime DIRECT_CONV = TARGET_COLUMN == COLUMN_APPLE and not is_defined["MOJOLEARN_XCNN_NO_DIRECT_CONV"]()
+#: Apple since lane/cnn-apple2; NVIDIA and AMD since nr-small D6
+#: (2026-10-04, roadmap D6 / review "ALREADY WRITTEN, gated"): the cell is
+#: the pinned contract's one-leaf chain on every column (k <= DC_MAXK is one
+#: leaf; the leaf bound is 128, DC_MAXK = 32 is the register staging of the
+#: taps), and the kernel uses only `barrier()` over threadgroup memory, so
+#: the words are the GEMM path's. Needs the NV/AMD ID check.
+#: IDENTICAL only on NV/AMD (FAST keeps its AFN direct path there).
+#: -D MOJOLEARN_IDN_DIRECT_CONV_NVAMD_OFF (or MOJOLEARN_IDN_ALL_OFF)
+#: restores Apple only.
+comptime DIRECT_CONV_NVAMD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_DIRECT_CONV_NVAMD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime DIRECT_CONV = (
+    TARGET_COLUMN == COLUMN_APPLE
+    or (DIRECT_CONV_NVAMD and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD))
+) and not is_defined["MOJOLEARN_XCNN_NO_DIRECT_CONV"]()
 comptime DC_MAXK = 32
 comptime DC_MAXW = 2048  # 8 KB of threadgroup memory: four blocks fit a core
 comptime DC_TPB = 256
