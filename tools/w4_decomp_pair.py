@@ -8,7 +8,10 @@ on verified A/B arms (tools/kfeat_pair.py's pattern).
  timing  SOURCE QUALITY_TAG TIMING_TAG ALGO DATASET
 
 ALGO: pca | kernel-pca | randomized-svd | lle (binding and define from
-tools/w4_decomp_quality.py ALGOS; A = main = no define, B = -D <define>).
+tools/w4_decomp_quality.py ALGOS; A = main = no define, B = every w4 define
+of that binding: estimators -D MOJOLEARN_PCA_FAST_POOL; x_neighbors
+-D MOJOLEARN_KPCA_RESIDENT; x_decomp -D MOJOLEARN_LLE_FAST_DEV_LU
+-D MOJOLEARN_RSVD_FAST_DIRECT_IN, one B build for both).
 SOURCE is the exact full SHA. Arms: ~/mq/verified-arms/SOURCE/BINDING/
 {A.so,B.so,manifest.json}. The quality action installs each arm, runs
 `tools/w4_decomp_quality.py dump`, checks the arm's reach (B compiled the
@@ -34,6 +37,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from w4_decomp_quality import ALGOS, FIXTURE  # noqa: E402
 
 FAMILY = {"pca": "classical", "kernel-pca": "algos", "randomized-svd": "algos", "lle": "algos"}
+#: the B arm of each binding: x_decomp's two candidates share ONE B build
+#: (disjoint paths: randomized_svd's input vs LLE's factor), so each
+#: algorithm's timing measures only its own candidate
+DEFINES_B = {}
+for _algo, (_mod, _def) in ALGOS.items():
+    DEFINES_B.setdefault(_mod.removeprefix("_mojolearn_"), []).append(_def)
+DEFINES_B = {b: sorted(d) for b, d in DEFINES_B.items()}
 
 
 def digest(path):
@@ -79,13 +89,14 @@ def main():
     assert manifest["source_sha"] == args.source and manifest["binding"] == binding
     assert manifest["numeric_mode"] == "fast"
     assert manifest["defines_A"] == ""
-    assert manifest["defines_B"].split() == ["-D", define], manifest["defines_B"]
+    defines = DEFINES_B[binding]
+    assert sorted(manifest["defines_B"].replace("-D ", "").split()) == defines, manifest["defines_B"]
     hashes = {arm: digest(arms / (arm + ".so")) for arm in ("A", "B")}
     assert hashes == manifest["hashes"]
     out = home / "mq/out" / (args.quality_tag + "-quality")
     receipt_path = out / "PASS.json"
     receipt_want = dict(source_sha=args.source, hashes=hashes, status="PASS", fixture=FIXTURE,
-                        binding=binding, define=define, algo=algo)
+                        binding=binding, defines=defines, algo=algo)
     if args.action == "timing":
         assert json.loads(receipt_path.read_text()) == receipt_want
         os.environ["AFC_FAMILY"] = FAMILY[algo]
@@ -93,7 +104,8 @@ def main():
             os.environ["MOJOLEARN_PCA_STAGE_LOG"] = str(home / "mq/out" / (timing_tag + "-stages.log"))
         os.execv(sys.executable, [sys.executable, str(home / "mq/verified_arms.py"),
                  args.source, binding, define, timing_tag,
-                 "bash", "tools/afc_ab_def.sh", timing_tag, binding, algo, dataset, "1", "1", "", "-D " + define])
+                 "bash", "tools/afc_ab_def.sh", timing_tag, binding, algo, dataset, "1", "1", "",
+                 " ".join("-D " + d for d in defines)])
     out.mkdir(parents=True, exist_ok=False)  # never silently reuse partial captures
     os.environ.update(MOJOLEARN_NUMERIC_MODE="fast", MOJOLEARN_VENDOR="apple",
                       MOJOLEARN_BENCH_INSTALLED="0", PYTHONPATH=str(root / "python"),
