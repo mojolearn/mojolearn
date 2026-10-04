@@ -42,7 +42,7 @@ for ARM in A B; do
   mv "$SO.tmp" "$SO"
   ARGS=()
   [ -z "$ROWS" ] || ARGS=(--rows "$ROWS")
-  MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_VENDOR=apple PYTHONPATH="$ROOT/python" \
+  MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_VENDOR=metal PYTHONPATH="$ROOT/python" \
     "$PY" tools/mcd_compat_quality.py fit "$DATA" "$DATASET" "$OUT/$ARM.npz" \
     --lane "$LANE" "${ARGS[@]}"
 done
