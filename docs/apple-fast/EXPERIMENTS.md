@@ -3,6 +3,8 @@
 The record of every Apple FAST (M3 Ultra) experiment from Oct 2 to Oct 3, 2026: the winners that became defaults, the losers, and the A/Bs still owed.
 Sources: `~/mojolearn-evidence/apple-fast/LEDGER.md` (every KEEP / DROP / MERGED / CANDIDATE line) and the queue lines (`docs/apple-fast/ab/*.txt`) and notes (`docs/apple-fast/notes/*.md`) on each lane branch.
 
+Process: [experiment validation, toggle lifecycle and promotion](EXPERIMENT_PROCESS.md).
+
 ## How to use it
 
 - **Before you write a new experiment, search this file for the define** (and for the algorithm). If it was dropped, read the reason first. Do not re-run a dropped idea unless the code it touched has changed since.
