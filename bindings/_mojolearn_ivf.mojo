@@ -24,6 +24,7 @@ and mirrored in `_ivf_impl.py`.
 
 from std.os import abort
 from std.sys.compile import is_defined
+from std.memory import memcpy
 from bindings.hostptr import f32_ptr, i32_ptr, copy_f32, read_f32
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -123,8 +124,10 @@ def _ivf_run(
     # ORIGINAL row ids, UInt32 on the Mojo side and below 2**31 by
     # construction (n <= 46340 on every lane in this tree), so the int32
     # bytes are the same bytes.
-    for i in range(m * k):
-        ip.unsafe_store(i, Int32(Int(r.indices[i])))
+    # cpu2-l6-bindings: one byte copy instead of a per-element conversion
+    memcpy(
+        dest=ip.bitcast[UInt32](), src=r.indices.unsafe_ptr(), count=m * k
+    )
     comptime if is_defined["MOJOLEARN_IVF_BINDING_SABOTAGE"]():
         # NEVER SHIPPED. Swaps the first two neighbor ids of query 0, the
         # tie-class corruption a wrong (distance, id) order would produce, so
@@ -272,12 +275,9 @@ def _ivf_search_arrays(
     var k = ext[1]
     var n_probes = ext[2]
     var queries = read_f32(Int(py=addrs[5]), m * arrays.dim)
-    # `labels` is build workspace the search never reads; it is restored
-    # from the carried ids so the struct holds the assignment it describes.
-    var labels = List[UInt32](length=arrays.n_rows, fill=UInt32(0))
-    for l in range(arrays.n_lists):
-        for s in range(Int(arrays.offsets[l]), Int(arrays.offsets[l + 1])):
-            labels[Int(arrays.list_indices[s])] = UInt32(l)
+    # `labels` is build workspace the search never reads (cpu2-l6-bindings:
+    # no longer restored by a host scatter over every row; left empty).
+    var labels = List[UInt32]()
     var index = IvfFlatIndex(
         arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
         arrays.centers.copy(), arrays.center_norms.copy(), arrays.offsets.copy(),
@@ -330,7 +330,9 @@ def ivf_flat_index_prepare_binding(addrs: PythonObject, params: PythonObject) ra
         addrs, params, String("ivf_flat_search"), 5, 5, partial_storage=partial
     )
     bst.host("read_admit")
-    var labels = _labels_from_arrays(arrays.offsets, arrays.list_indices, arrays.n_lists, arrays.n_rows)
+    # cpu2-l6-bindings: the resident index never reads `labels` (build
+    # workspace), so no host scatter over every row restores it
+    var labels = List[UInt32]()
     # lane ann-apple3, behind `ANN3_PREPARE`: the admitted arrays move into
     # the index (copied otherwise, the n_rows x dim list data among them)
     var centers = List[Float32]()
@@ -390,15 +392,6 @@ def ivf_flat_index_release_binding(handle: PythonObject) raises -> PythonObject:
     return PythonObject(0)
 
 
-def _labels_from_arrays(offsets: List[Int32], list_indices: List[UInt32], n_lists: Int, n_rows: Int) -> List[UInt32]:
-    """The assignment an admitted index describes, from its carried ids."""
-    var labels = List[UInt32](length=n_rows, fill=UInt32(0))
-    for l in range(n_lists):
-        for s in range(Int(offsets[l]), Int(offsets[l + 1])):
-            labels[Int(list_indices[s])] = UInt32(l)
-    return labels^
-
-
 def ivf_flat_extend_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -408,7 +401,10 @@ def ivf_flat_extend_binding(
     var arrays = ivf_read_index_arrays(addrs, params, String("ivf_flat_extend"), 10, 5)
     var n_new = ivf_extend_count(params, arrays.n_rows, arrays.dim)
     var new_x = read_f32(Int(py=addrs[5]), n_new * arrays.dim)
-    var labels = _labels_from_arrays(arrays.offsets, arrays.list_indices, arrays.n_lists, arrays.n_rows)
+    # cpu2-l6-bindings: the extension reads only the NEW rows' labels, so
+    # the old assignment is not restored by a host scatter (left empty);
+    # `ivf_flat_extend_host` appends the new labels after it.
+    var labels = List[UInt32]()
     var index = IvfFlatIndex(
         arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
         arrays.centers.copy(), arrays.center_norms.copy(), arrays.offsets.copy(),
@@ -418,8 +414,9 @@ def ivf_flat_extend_binding(
     var out = ivf_flat_extend_host(ctx, index, new_x, n_new)
     ctx.synchronize()
     var new_labels = List[UInt32](capacity=n_new)
+    var first_new = len(out.labels) - n_new
     for j in range(n_new):
-        new_labels.append(out.labels[arrays.n_rows + j])
+        new_labels.append(out.labels[first_new + j])
     ivf_write_extended_arrays(
         addrs, out.n_rows, out.dim, out.n_lists, out.list_offsets,
         out.list_indices, out.list_data, new_labels, n_new,
