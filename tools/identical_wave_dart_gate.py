@@ -12,8 +12,9 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--data',required=True,type=Path)
     p.add_argument('--report',required=True,type=Path)
+    p.add_argument('--source',type=Path,default=Path(__file__).resolve().parents[1])
     p.add_argument('--reference',type=Path,default=Path(__file__).with_name('identical_wave_dart_reference.json'))
-    a=p.parse_args();root=Path(__file__).resolve().parents[1]
+    a=p.parse_args();root=a.source.resolve()
     sys.path.insert(0,str(root/'tools'));sys.path.insert(0,str(root/'python'))
     import numpy as np
     import bench_board_algos as board

@@ -95,10 +95,11 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('gate',choices=('eigh','pca','gram_cd','small_eigh'))
     p.add_argument('--report',type=Path,required=True)
+    p.add_argument('--source',type=Path,default=Path(__file__).resolve().parents[1])
     a=p.parse_args()
     rows=globals()[a.gate]()
     from identical_wave_worker import source_provenance
-    provenance=source_provenance(Path(__file__).resolve().parents[1],os.environ['MOJOLEARN_VENDOR'])
+    provenance=source_provenance(a.source.resolve(),os.environ['MOJOLEARN_VENDOR'])
     a.report.parent.mkdir(parents=True,exist_ok=True)
     a.report.write_text(json.dumps({'status':'PASS','gate':a.gate,'checks':rows,'provenance':provenance,
         'scope':'quality only; does not establish cross-vendor identity or branch reachability'},indent=2)+'\n')
