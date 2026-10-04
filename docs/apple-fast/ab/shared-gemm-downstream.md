@@ -335,3 +335,52 @@ No fit begins unless both preflights pass. A crash or hard kill still needs
 manager recovery from retained backups/intake; this helper never silently
 continues after an incomplete restoration. Numerical no-regression and
 NO_REACH rules are unchanged.
+
+### Future scoped caller gates and timing
+
+`tools/shared_gemm_scoped.py COMPILED_SHA UNIQUE_TAG SCOPE GATE_TAG --action quality|timing`
+uses the previously verified core/estimators arms without a rebuild. Source ancestry,
+zero runtime/config drift, exact manifest hashes, M3 machine identity, and both-arm
+capability preflight remain mandatory. This helper does not enqueue jobs. Scopes are
+`ols-fit-small`, `knn-wide-k-small`, `pca-transform-small`, `pca-inverse-small`,
+`pca-transform-tall`, and `pca-inverse-tall`.
+
+Quality admission requires the corresponding original actual-algorithm d65 PASS
+receipt, report hash, exact binary hashes, independent float64 error gates, and
+candidate reach in the particular phase being isolated. Tall PCA preparation is a
+separate unscored actual baseline A fit (513x220, full SVD, 64 components). Both
+arms receive the same frozen fitted state and deterministic 32769-row input.
+Transform exercises logical 32769x64x220; inverse exercises 32769x220x64. Both
+actually enter core NT route 0; the earlier resident NN screen is not their reach
+evidence. The float64 oracle tests projection/reconstruction conditional on the
+common fitted state. This does not establish PCA-fit, whitened-PCA, or board-row
+quality. Small scopes retain inputs/state from the admitted original A capture.
+
+Every scoped output must independently be no worse than A in float64 maximum
+absolute and scaled L2 error, without a tolerance. KNN additionally requires both
+sets of indices exactly equal the stable float64 oracle. Each arm must enter the
+shared route, and B must report positive selected-candidate reach; NO_REACH cannot
+PASS. Quality and timing use the identical frozen helper pin and packet identity.
+
+Only after reviewing the scoped `PASS.json` and `report.json` may the manager admit
+`--action timing` with that scoped quality tag. Timing copies the exact packet and
+checks its hash and receipt/report chain. It reserves an exclusive global ledger
+key per compiled source, scope, binary pair, and cold scenario; each arm atomically
+records its call before execution. There is no automatic replay after failure.
+One cold target call per arm includes the public API call plus a full copy of every
+returned output into ordinary caller-owned arrays. Imports, input generation,
+model restoration and the KNN fit setup are excluded; KNN lazy native preparation
+inside kneighbors is included. Both arms retain diagnostic counter overhead.
+This is a cold-call experiment, not a steady-state kernel claim. The timed outputs
+are also assessed by the same oracle after timing. Every report marks
+`board_evidence=false`; defaults and the board remain unchanged.
+
+Example future G1 tall transform quality (manager runs only in its serial M3 job):
+
+```sh
+python tools/shared_gemm_scoped.py 30e4562c2129569ed03d93d878ec6a903ea51691 g1-pca-tall-transform-q-v1 pca-transform-tall g1-downstream-pca-d65-q-v1 --action quality
+```
+
+After that exact scoped quality report passes and is reviewed, a separate uniquely
+tagged invocation may reference `g1-pca-tall-transform-q-v1` with `--action timing`.
+No timing is preauthorized by merely creating the quality job.
