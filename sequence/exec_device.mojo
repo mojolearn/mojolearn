@@ -39,6 +39,7 @@ from sequence.ops import OP_MOE_ROUTE, OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_A
 from sequence.coop import COOP_W, apply_coop
 from sequence.gemm_tiled import GT_TPB, SEQ_GEMM_TILED, seq_gemm_tiled_blocks, seq_gemm_tiled_kernel, seq_gemm_tiled_on
 from sequence.ops import OP_THETA
+from sequence.ops import OP_LN_BWD_X, OP_LN_FWD
 from sequence.theta_spec import THETA_SPEC
 from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST, TSA2_VAR
 from sequence.vecar_block import VAR_SMEM, VAR_TPB, var_chol_block_kernel, var_forecast_block_kernel
@@ -63,6 +64,14 @@ comptime SEQ_COOP_NVAMD = (
     and not (is_defined["MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 comptime SEQ_COOP = has_apple_gpu_accelerator() or SEQ_COOP_NVAMD
+#: nr-small D10: LayerNorm forward / backward-x rows on a simdgroup (the
+#: same chains over broadcast words, coalesced loads; sequence/coop.mojo),
+#: IDENTICAL on every GPU. -D MOJOLEARN_IDN_SEQ_LN_COOP_OFF (or
+#: MOJOLEARN_IDN_ALL_OFF) restores one thread per row.
+comptime SEQ_LN_COOP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_IDN_SEQ_LN_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
 
 comptime TPB = 128
 
@@ -764,11 +773,14 @@ struct DeviceExec(Exec):
                     grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
                 )
                 return
-        comptime if SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ
-                                  or OP == OP_LAMB_RATIO or OP == OP_GEMM or OP == OP_AF_BLK_SUMSQ
-                                  or (THETA_SPEC and OP == OP_THETA)):
+        comptime if (SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ
+                                   or OP == OP_LAMB_RATIO or OP == OP_GEMM or OP == OP_AF_BLK_SUMSQ
+                                   or (THETA_SPEC and OP == OP_THETA))) or (
+                SEQ_LN_COOP and (OP == OP_LN_FWD or OP == OP_LN_BWD_X)):
             var coop = True
-            comptime if OP == OP_GEMM:
+            comptime if OP == OP_LN_FWD or OP == OP_LN_BWD_X:
+                coop = a.i0 >= COOP_W
+            elif OP == OP_GEMM:
                 coop = a.i0 * a.i1 <= 1024 and a.i2 >= 32768
             elif OP == OP_AF_ALPHA or OP == OP_AF_DENOM:
                 coop = a.i0 >= 4096

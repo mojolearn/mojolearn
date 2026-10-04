@@ -31,6 +31,9 @@ from sequence.ops import (
     st,
 )
 from sequence.ops import OP_THETA
+from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, add, mul, sub
+from sequence.layernorm import div as ln_div
+from checks.numerics import ftz, identical_rsqrt
 from sequence.theta_spec import THETA_SPEC, op_theta_spec
 from sequence.adafactor import af_alpha_tail, af_denom_tail, lamb_ratio_tail, op_af_alpha, op_af_denom, op_lamb_ratio, op_seg_sumsq
 
@@ -110,6 +113,88 @@ def coop_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
 
 
 @always_inline
+def coop_ln_fwd(row: Int, lane: Int, a: Args):
+    """nr-small D10: `op_ln_fwd`'s row on a simdgroup. The mean and variance
+    chains are `_stats`'s (adds, then fmas of (x - mean)^2, c ascending, on
+    every lane over broadcast words); the outputs are elementwise, lane c
+    writes columns c, c + COOP_W, ... Same words as the one-thread row."""
+    var D = a.i0
+    var base = row * D
+    var s = Float32(0.0)
+    var k = 0
+    while k < D:
+        var m = min(COOP_W, D - k)
+        var x0 = ld(a.p0, base + k + lane) if lane < m else Float32(0.0)
+        for j in range(m):
+            s = add(s, coop_bcast(x0, j))
+        k += COOP_W
+    var mean = ln_div(s, Float32(D))
+    var q = Float32(0.0)
+    k = 0
+    while k < D:
+        var m = min(COOP_W, D - k)
+        var d0 = sub(ld(a.p0, base + k + lane), mean) if lane < m else Float32(0.0)
+        for j in range(m):
+            var d = coop_bcast(d0, j)
+            q = fma3(d, d, q)
+        k += COOP_W
+    var rstd = ftz(identical_rsqrt(add(ln_div(q, Float32(D)), a.f0)))
+    if lane == 0:
+        st(a.p4, row, mean)
+        st(a.p5, row, rstd)
+    var c = lane
+    while c < D:
+        var y = mul(sub(ld(a.p0, base + c), mean), rstd)
+        if a.i1 != 0:
+            y = mul(y, ld(a.p1, c))
+        if a.i2 != 0:
+            y = add(y, ld(a.p2, c))
+        st(a.p3, base + c, y)
+        c += COOP_W
+
+
+@always_inline
+def coop_ln_bwd_x(row: Int, lane: Int, a: Args):
+    """nr-small D10: `op_ln_bwd_x`'s row on a simdgroup: g and xhat of column
+    c are computed by its lane (the one-thread row's expressions), broadcast,
+    and the sum(g) / sum(g xhat) chains run c ascending on every lane; the
+    outputs are elementwise. Same words as the one-thread row."""
+    var D = a.i0
+    var base = row * D
+    var mean = ld(a.p4, row)
+    var rstd = ld(a.p5, row)
+    var sg = Float32(0.0)
+    var sgx = Float32(0.0)
+    var k = 0
+    while k < D:
+        var m = min(COOP_W, D - k)
+        var g0 = Float32(0.0)
+        var xh0 = Float32(0.0)
+        if lane < m:
+            var c = k + lane
+            g0 = ld(a.p0, base + c)
+            if a.i1 != 0:
+                g0 = mul(g0, ld(a.p2, c))
+            xh0 = mul(sub(ld(a.p1, base + c), mean), rstd)
+        for j in range(m):
+            var g = coop_bcast(g0, j)
+            var xh = coop_bcast(xh0, j)
+            sg = add(sg, g)
+            sgx = fma3(g, xh, sgx)
+        k += COOP_W
+    var mg = ln_div(sg, Float32(D))
+    var mgx = ln_div(sgx, Float32(D))
+    var c = lane
+    while c < D:
+        var g = ld(a.p0, base + c)
+        if a.i1 != 0:
+            g = mul(g, ld(a.p2, c))
+        var xh = mul(sub(ld(a.p1, base + c), mean), rstd)
+        st(a.p3, base + c, mul(rstd, sub(sub(g, mg), mul(xh, mgx))))
+        c += COOP_W
+
+
+@always_inline
 def apply_coop[OP: Int](cell: Int, lane: Int, a: Args):
     """Cell `cell` of OP on one simdgroup. A FAST launch that carries
     partials (i2 / i0 / i1 set) runs the one-thread op on lane 0."""
@@ -160,6 +245,10 @@ def apply_coop[OP: Int](cell: Int, lane: Int, a: Args):
         # lane/apple-fast-gap-tsa: theta with the Nelder-Mead candidates on
         # the simdgroup's lanes (sequence/theta_spec.mojo)
         op_theta_spec(cell, lane, a)
+    elif OP == OP_LN_FWD:
+        coop_ln_fwd(cell, lane, a)
+    elif OP == OP_LN_BWD_X:
+        coop_ln_bwd_x(cell, lane, a)
     elif OP == OP_GEMM:
         # op_gemm's cell, the fold on the simdgroup
         var n_cols = a.i1
