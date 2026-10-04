@@ -136,9 +136,8 @@ def _differ(a: List[Int32], b: List[Int32]) -> Int:
     return d
 
 
-def check_exact_total_past_the_wrap() raises:
+def check_exact_total_past_the_wrap(ctx: DeviceContext) raises:
     """Part 1: a wrapped int32 scan still yields the exact count."""
-    var ctx = DeviceContext()
     comptime ROWS = 4
     var h = ctx.enqueue_create_host_buffer[DType.int32](ROWS + 1)
     ctx.synchronize()
@@ -180,9 +179,8 @@ def check_exact_total_past_the_wrap() raises:
     )
 
 
-def check_split_moves_no_label() raises:
+def check_split_moves_no_label(ctx: DeviceContext) raises:
     """Part 2: forced splits and forced small batches, bit for bit."""
-    var ctx = DeviceContext()
     var n = ES_N
     var x = ctx.enqueue_create_buffer[DType.float32](n * ES_D)
     var hx = ctx.enqueue_create_host_buffer[DType.float32](n * ES_D)
@@ -269,6 +267,12 @@ def check_split_moves_no_label() raises:
 
 
 def main() raises:
-    check_exact_total_past_the_wrap()
-    check_split_moves_no_label()
+    # One context for both checks, matching the production estimator binding's
+    # process_ctx lifetime. On RTX 4090, destroying the count-only context and
+    # then allocating in a new context can deadlock before the first DBSCAN
+    # kernel (the existing runtime hazard documented in core/neural_context,
+    # DEVIATION 2513). This does not fix arbitrary context teardown/recreation.
+    var ctx = DeviceContext()
+    check_exact_total_past_the_wrap(ctx)
+    check_split_moves_no_label(ctx)
     print("dbscan_edge_split_check: PASS")
