@@ -1062,3 +1062,13 @@ Paths: ~/mq/out/resample-gpu-recovered-t-{taxi,istella}-r2-20261004-timing/PASS.
 
 | `MOJOLEARN_RSVD_FAST_DIRECT_IN` (rollback `MOJOLEARN_RSVD_FAST_DIRECT_IN_OFF`) | randomized-svd istella, taxi (x_decomp/w4_fast.mojo) | measured lane/apple-fast-w4-decomp-harness-r1 e9d72edb5; ported by hand to lane/apple-fast-w4-port | M3 afc_ab_def, full board size, 1 run per arm (2026-10-04) | istella 517.3 -> 501.3 ms, taxi 200.8 -> 198.5 ms; relative_reconstruction_error equal (istella 2.3594584442703e-4 -> 2.3594584442301e-4, taxi 0.0271967625509 -> 0.0271967625509) | ACCEPT: DEFAULT for FAST + Apple |
 | `MOJOLEARN_LLE_FAST_DEV_LU` | lle taxi (x_decomp/w4_fast.mojo) | measured lane/apple-fast-w4-decomp-harness-r1 e9d72edb5; ported by hand to lane/apple-fast-w4-port | M3 afc_ab_def, full board size, 1 run per arm (2026-10-04) | 1783.8 -> 1039.0 ms, but trustworthiness_k15 0.86623 -> 0.84096 (worse) | HOLD-quality: opt-in only, default OFF |
+
+## Quality fixes, classifiers (lane/apple-fast-q-clf, 2026-10-04, READY-AB)
+
+Rows from board-quality-audit-2026-10-04 where FAST quality trailed the best opponent. Arm A: the build with the QOLD define (old behavior). Arm B: no define (the new FAST default). Artifacts: docs/apple-fast/QUALITY_AUDIT_NOTES.md.
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_SGD_PERC_QOLD` (A) / none (B) | perceptron / taxi, istella (x_linear/sgd.mojo `SGD_PERC_AVG`, x_linear/sgd_avg.mojo) | lane/apple-fast-q-clf @ a3bd71a65 | (owed) | (owed) | QUALITY-FIX, READY-AB | minibatch Perceptron returns the mean of its epoch-end iterates from epoch max_iter//2 on; audit accuracy 0.465 vs sklearn 0.751; float32 numpy model of the step (taxi 1M rows): last iterate 0.543/0.774/0.668/0.757 over seeds, mean 0.771/0.769/0.774; device grid + FAST host column |
+| `MOJOLEARN_PROBA64_QOLD` (A) / none (B) | gaussian-nb, bernoulli-nb, multinomial-nb, complement-nb, qda (also lda-clf, categorical-nb) / istella, taxi, text (x_prep/proba64.mojo) | lane/apple-fast-q-clf @ a3bd71a65 | (owed) | (owed) | QUALITY-FIX, READY-AB | predict_proba as float64 words; float32 saturates at exactly 1.0 past a ~16.6-nat gap; istella log loss FAST vs sklearn gnb 3.574/3.417, bnb 5.351/4.279, mnb 3.629/3.087, cnb 3.763/3.175, qda 3.609/3.477; numpy model: f64 probabilities 3.542 (gnb) / 4.231 (bnb) vs the same rounded to f32 3.679 / 4.896 |
+| `MOJOLEARN_PROBA64_QOLD` (A) / none (B) | nearest-centroid / istella, taxi (x_neighbors/proba64_nc.mojo) | lane/apple-fast-q-clf @ a3bd71a65 | (owed) | (owed) | QUALITY-FIX, READY-AB | the same fix in the neighbors binding; istella log loss 4.299 vs sklearn 4.118 |
