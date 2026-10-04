@@ -106,7 +106,14 @@ from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
     build_layout,
 )
-from gbdt.models.kernel.add_bin_values import compute_bins_and_add_kernel
+from gbdt.models.kernel.add_bin_values import (
+    IDN_APPLY_WIDE,
+    IDN_PREDICT_FOUR,
+    compute_bins_and_add_kernel,
+    launch_oblivious_apply_four,
+    launch_oblivious_apply_wide,
+    uniform_positive_depth,
+)
 from checks.kernel_matrix import (
     TARGET_COLUMN,
     deterministic_flush_for,
@@ -3539,34 +3546,57 @@ def predict(
     var wide = (n_rows + 255) // 256
     if wide > 1024:
         wide = 1024
-    lvl = 0
-    leaf = 0
-    for t in range(model.size()):
-        ref weak = model.weak_models[t]
-        var depth = weak.structure.get_depth()
-        # With depth zero the existing kernel's level loop is empty and
-        # leaf remains zero: apply the constant, including inside a mixed
-        # ensemble. Use offset zero for unused pointers to avoid a trailing
-        # constant forming a one-past-end split pointer.
-        var split_offset = lvl if depth > 0 else 0
-        ctx.enqueue_function[compute_bins_and_add_kernel](
-            cindex.unsafe_ptr(),
-            d_off.unsafe_ptr() + split_offset,
-            d_shift.unsafe_ptr() + split_offset,
-            d_mask.unsafe_ptr() + split_offset,
-            d_bin.unsafe_ptr() + split_offset,
-            d_eq.unsafe_ptr() + split_offset,
-            Int32(depth),
-            d_vals.unsafe_ptr() + leaf,
-            Int32(n_rows),
-            cursor.unsafe_ptr(),
-            Int32(approx_dim),
-            Int32(n_rows),
-            grid_dim=(wide, approx_dim, 1),
-            block_dim=(256, 1, 1),
-        )
-        lvl += depth
-        leaf += (1 << depth) * approx_dim
+    # lane/fam2-gbdt F3 / F4: the same per-row ordered adds in fewer
+    # launches (`gbdt/models/kernel/add_bin_values.mojo`)
+    var grouped = False
+    comptime if IDN_PREDICT_FOUR or IDN_APPLY_WIDE:
+        var tree_depths = List[Int](capacity=model.size())
+        for t in range(model.size()):
+            tree_depths.append(model.weak_models[t].structure.get_depth())
+        comptime if IDN_APPLY_WIDE:
+            var uniform = uniform_positive_depth(tree_depths)
+            if uniform > 0:
+                launch_oblivious_apply_wide(
+                    ctx, cindex, d_off, d_shift, d_mask, d_bin, d_eq, d_vals,
+                    uniform, model.size(), n_rows, cursor, approx_dim,
+                )
+                grouped = True
+        comptime if IDN_PREDICT_FOUR:
+            if not grouped:
+                launch_oblivious_apply_four(
+                    ctx, cindex, d_off, d_shift, d_mask, d_bin, d_eq, d_vals,
+                    tree_depths, n_rows, cursor, approx_dim,
+                )
+                grouped = True
+    if not grouped:
+        lvl = 0
+        leaf = 0
+        for t in range(model.size()):
+            ref weak = model.weak_models[t]
+            var depth = weak.structure.get_depth()
+            # With depth zero the existing kernel's level loop is empty and
+            # leaf remains zero: apply the constant, including inside a mixed
+            # ensemble. Use offset zero for unused pointers to avoid a trailing
+            # constant forming a one-past-end split pointer.
+            var split_offset = lvl if depth > 0 else 0
+            ctx.enqueue_function[compute_bins_and_add_kernel](
+                cindex.unsafe_ptr(),
+                d_off.unsafe_ptr() + split_offset,
+                d_shift.unsafe_ptr() + split_offset,
+                d_mask.unsafe_ptr() + split_offset,
+                d_bin.unsafe_ptr() + split_offset,
+                d_eq.unsafe_ptr() + split_offset,
+                Int32(depth),
+                d_vals.unsafe_ptr() + leaf,
+                Int32(n_rows),
+                cursor.unsafe_ptr(),
+                Int32(approx_dim),
+                Int32(n_rows),
+                grid_dim=(wide, approx_dim, 1),
+                block_dim=(256, 1, 1),
+            )
+            lvl += depth
+            leaf += (1 << depth) * approx_dim
     ctx.synchronize()
     _ = d_vals^  # past the drain (step-33 race class, device side)
     _ = d_eq^  # past the drain (step-33 race class, device side)
