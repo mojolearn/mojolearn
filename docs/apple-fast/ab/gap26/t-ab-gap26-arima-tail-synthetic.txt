@@ -1,0 +1,1 @@
+AFB tag=gap26-arima-tail-synthetic family=algos lane=autoarima ds=synthetic mode=fast head=1a627f709 status=ok median_ms=13569.230083026923 runs=[13569.230083026923] digest=9bdde6d5440d1cb6 q=forecast_rmse=2.624119555180116
