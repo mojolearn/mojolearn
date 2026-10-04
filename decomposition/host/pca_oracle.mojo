@@ -163,6 +163,8 @@ from core.host_predict_threads import (
     host_predict_task_count,
 )
 from gemm.host.identical_gemm import OP_TN, gemm_oracle
+from decomposition.pca_rr_switch import PCA_RR_EIGH
+from x_decomp.rr import RR_EIGH_SWEEPS, host_eigh_rr
 
 
 #: The gate's negative control (the CPU training lane, brief section 3.4):
@@ -632,7 +634,33 @@ def host_eig_and_truncate(
     mut cov: List[Float32], n_cols: Int, n_components: Int, singular_scale: Int,
 ) raises -> PCAHostResult:
     """`eig_and_truncate`: the Jacobi at the device's settings, the sign
-    flip, the convergence refusal in its words, the Float64 tail."""
+    flip, the convergence refusal in its words, the Float64 tail.
+    PCA_RR_EIGH (decomposition/pca_rr_switch.mojo, the IDENTICAL default):
+    the round-robin Jacobi's rounds (`host_eigh_rr`, the device driver's
+    order and tests) in place of the cyclic replay."""
+    comptime if PCA_RR_EIGH:
+        var rv = List[Float32](length=n_cols * n_cols, fill=Float32(0.0))
+        var got = host_eigh_rr(cov, rv, n_cols, RR_EIGH_SWEEPS, Float32(JACOBI_TOL))
+        if not got[0]:
+            raise Error(
+                "the round-robin Jacobi did not converge in "
+                + String(RR_EIGH_SWEEPS)
+                + " sweeps at n_cols = "
+                + String(n_cols)
+                + ". An unconverged decomposition is not returned as if it were"
+                " one. A non-symmetric covariance produces this too; see"
+                " check_covariance_is_symmetric."
+            )
+        host_sign_flip(rv, n_cols)
+        var rdiag = List[Float64]()
+        for i in range(n_cols):
+            rdiag.append(Float64(cov[i * n_cols + i]))
+        var rvecs = List[Float64]()
+        for i in range(n_cols * n_cols):
+            rvecs.append(Float64(rv[i]))
+        return host_order_truncate_spectrum(
+            rdiag, rvecs, n_cols, n_components, singular_scale
+        )
     var jac = host_jacobi_eigh(cov, n_cols, JACOBI_SWEEPS, Float32(JACOBI_TOL))
     var vecs32 = jac.vectors.copy()
     host_sign_flip(vecs32, n_cols)

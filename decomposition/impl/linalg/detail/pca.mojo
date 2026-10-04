@@ -45,6 +45,17 @@ comptime PCA_FAST_GRAM_MMA = AFN_GEMM_APPLE and not is_defined["MOJOLEARN_PCA_FA
 #: blocks the split Gram aims for (tiles x splits), about 8 per M3 Ultra core
 comptime PCA_GRAM_BLOCK_TARGET = 640
 from checks.numerics import ftz, identical_div, identical_mul
+from core.device_zero import enqueue_fill
+from decomposition.pca_rr_switch import PCA_RR_EIGH
+from x_decomp.jacobi_par import (
+    PJ_TPB,
+    eigh_par_cs_kernel,
+    eigh_par_off_fold_kernel,
+    eigh_par_off_part_kernel,
+    eigh_par_update_kernel,
+    pj_identity_kernel,
+)
+from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
 from core.gram_splitk import gram_centered_splitk_into, gram_splitk_applies
 from core.xtdz_coalesced import column_mean_launch
 from core.column_stats import (
@@ -323,6 +334,104 @@ def order_truncate_spectrum(
     )
 
 
+#: rounds between synchronizes of the round-robin solve (x_decomp/device.mojo
+#: PJ_SYNC_ROUNDS: a bound on the enqueued launches, no bit).
+comptime PCA_RR_SYNC_ROUNDS = 512
+
+
+def _eig_rr_device(
+    ctx: DeviceContext,
+    mut cov: DeviceBuffer[DType.float32],
+    mut vec_buf: DeviceBuffer[DType.float32],
+    n: Int,
+) raises:
+    """PCA_RR_EIGH: the round-robin two-sided Jacobi on `cov` in place (its
+    diagonal the eigenvalues), the vectors in the columns of `vec_buf`:
+    x_decomp/device.mojo `_eigh_par_on`'s rounds, convergence test (folded
+    on the device, three scalars read a sweep) and Frobenius check, with the
+    host column `host_eigh_rr` (x_decomp/rr.mojo) the same words. Raises on a
+    launch that did not run and on a solve that did not converge."""
+    var m = n + (n % 2)
+    var h = m // 2
+    var nb = max((n + RR_OFF_TPB - 1) // RR_OFF_TPB, 1)
+    var cells_blocks = (n * n + PJ_TPB - 1) // PJ_TPB
+    var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
+    var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
+    var dpart = ctx.enqueue_create_buffer[DType.float32](3 * nb)
+    var dfold = ctx.enqueue_create_buffer[DType.float32](3)
+    var hfold = ctx.enqueue_create_host_buffer[DType.float32](3)
+    ctx.enqueue_function[pj_identity_kernel](
+        vec_buf.unsafe_ptr(), Int32(n), grid_dim=cells_blocks, block_dim=PJ_TPB
+    )
+    var converged = False
+    var fro_in = Float32(-1.0)
+    var fro_now = Float32(0.0)
+    var off_last = Float32(0.0)
+    for sweep in range(RR_EIGH_SWEEPS + 1):
+        enqueue_fill(ctx, dpart, Float32(-1.0))
+        enqueue_fill(ctx, dfold, Float32(-1.0))
+        ctx.enqueue_function[eigh_par_off_part_kernel](
+            cov.unsafe_ptr(), doff.unsafe_ptr(), dpart.unsafe_ptr(), Int32(n),
+            grid_dim=nb, block_dim=RR_OFF_TPB,
+        )
+        ctx.enqueue_function[eigh_par_off_fold_kernel](
+            dpart.unsafe_ptr(), dfold.unsafe_ptr(), Int32(nb), grid_dim=1, block_dim=RR_OFF_TPB
+        )
+        ctx.enqueue_copy(dst_ptr=hfold.unsafe_ptr(), src_buf=dfold)
+        ctx.synchronize()
+        var off = hfold.unsafe_ptr().unsafe_load(0)
+        var dg = hfold.unsafe_ptr().unsafe_load(1)
+        if not (hfold.unsafe_ptr().unsafe_load(2) >= Float32(0.0)):
+            raise Error(
+                "pca: a block of the round-robin Jacobi's convergence test did not run (its mark is"
+                " still -1): a launch failure, not a convergence failure. Check that the binding is"
+                " built for this device."
+            )
+        off_last = off
+        fro_now = ftz(off + dg)
+        if fro_in < Float32(0.0):
+            fro_in = fro_now
+        if rr_converged(off, dg, Float32(JACOBI_TOL)):
+            converged = True
+            break
+        if sweep == RR_EIGH_SWEEPS:
+            break
+        for rd in range(m - 1):
+            ctx.enqueue_function[eigh_par_cs_kernel](
+                cov.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
+                grid_dim=(h + PJ_TPB - 1) // PJ_TPB, block_dim=PJ_TPB,
+            )
+            ctx.enqueue_function[eigh_par_update_kernel](
+                cov.unsafe_ptr(), vec_buf.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
+                grid_dim=(h * h + n * h + PJ_TPB - 1) // PJ_TPB, block_dim=PJ_TPB,
+            )
+            if rd % PCA_RR_SYNC_ROUNDS == PCA_RR_SYNC_ROUNDS - 1:
+                ctx.synchronize()
+    # J^T A J keeps ||A||_F: a solve that moved it is not an answer
+    if converged and not rr_fro_kept(fro_in, fro_now):
+        converged = False
+    ctx.synchronize()
+    _ = dcs^
+    _ = doff^
+    _ = dpart^
+    _ = dfold^
+    _ = hfold^
+    if not converged:
+        raise Error(
+            "the round-robin Jacobi did not converge in "
+            + String(RR_EIGH_SWEEPS)
+            + " sweeps at n_cols = "
+            + String(n)
+            + " (off-diagonal mass "
+            + String(off_last)
+            + " of "
+            + String(fro_now)
+            + "). An unconverged decomposition is not returned as if it were"
+            " one. A non-symmetric covariance produces this too; see"
+            " check_covariance_is_symmetric."
+        )
+
+
 def eig_and_truncate(
     ctx: DeviceContext,
     mut cov: DeviceBuffer[DType.float32],
@@ -334,16 +443,23 @@ def eig_and_truncate(
     var vec_buf = ctx.enqueue_create_buffer[DType.float32](n_cols * n_cols)
     var info_buf = ctx.enqueue_create_buffer[DType.float32](3)
     ctx.synchronize()
-    ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
-        cov.unsafe_ptr(),
-        vec_buf.unsafe_ptr(),
-        info_buf.unsafe_ptr(),
-        Int32(n_cols),
-        Int32(JACOBI_SWEEPS),
-        Float32(JACOBI_TOL),
-        grid_dim=(1, 1, 1),
-        block_dim=(JACOBI_ROT_TPB, 1, 1),
-    )
+    comptime if PCA_RR_EIGH:
+        # the round-robin rounds (every rotation of a round in parallel); a
+        # launch failure or an unconverged solve raises inside. info slot 0
+        # is set so the cyclic refusal below stays the cyclic arm's only.
+        _eig_rr_device(ctx, cov, vec_buf, n_cols)
+        enqueue_fill(ctx, info_buf, Float32(1.0))
+    else:
+        ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
+            cov.unsafe_ptr(),
+            vec_buf.unsafe_ptr(),
+            info_buf.unsafe_ptr(),
+            Int32(n_cols),
+            Int32(JACOBI_SWEEPS),
+            Float32(JACOBI_TOL),
+            grid_dim=(1, 1, 1),
+            block_dim=(JACOBI_ROT_TPB, 1, 1),
+        )
 
     ctx.enqueue_function[sign_flip_kernel](
         vec_buf.unsafe_ptr(),
