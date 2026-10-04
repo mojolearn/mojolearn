@@ -106,3 +106,39 @@ Quality logs and metrics live at
 `~/mq/out/gap26-eigh-cache-quality/{A-small,B-small,repaired-board,A-board,B-board}.{log,json}`;
 repaired-small.json is a preserved reference copy. Scored evidence lands in
 `~/mq/out/race-gap26-eigh-cache-synthetic/race.log`.
+
+## Resume after the captured main baseline failure
+
+Main A-board4096 produced residual 5.374987821e-5, eigenvalue error 6.08669e-5
+and orthogonality .00117131286. The last exceeds the original 2e-4 absolute
+quality threshold. The old helper stopped before B-board; this is baseline
+failure evidence, not a reason to skip candidate assessment.
+
+The updated helper preserves that failure and still requires candidate B
+to satisfy **all original absolute gates**, sorted eigenvalues and the
+unchanged per-metric comparison to BOTH main and repaired references.
+No tolerance was widened. Baseline failure is explicitly printed as
+`EIGH-BASELINE-FAILURE` and remains in the hashed evidence.
+
+Exact M3 serial-queue resume CMD:
+
+```sh
+MOJOLEARN_NUMERIC_MODE=fast "$HOME/board-0834/cache/venv/bin/python" tools/eigh_cache_verified.py resume gap26-eigh-cache
+```
+
+This specific resume requires existing A-small, B-small, repaired-board and
+A-board captures, with matching log/JSON cases and metrics; it refuses if
+B-board was already captured or attempted. It validates staged A/B binaries
+against source14764dbb's manifest, the repaired manifest/reference and the
+unchanged checker. It writes RESUME.json pinning inherited artifact hashes,
+then executes **only missing B-board4096**. No prior GPU capture or scored
+run is repeated. It issues PASS.json only after candidate absolute and both
+reference gates pass; the separate timing command still requires that receipt.
+
+The legacy failed run had no start receipt. Its provenance is explicitly
+manager-authorized evidence, corroborated by staged source/binary hashes
+and complete matching logs, rather than a claim that retrospective hashing
+proves historical execution. New resume receipts preserve that distinction.
+All GPU quality and scored work must run on the serial M3 queue; no heavy
+maintenance or backup may overlap the measured window. Historical one-pair
+speed verdicts with unaudited overlap remain HOLD-measurement.

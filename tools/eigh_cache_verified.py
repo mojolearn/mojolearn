@@ -33,13 +33,33 @@ def require(ok, message):
         raise SystemExit(message)
 
 
-def checked_metrics(path, expected):
+def checked_metrics(path, expected, strict=True):
     data = json.loads(path.read_text())
     require(set(data) == expected, "fixture mismatch: " + str(path))
     for case, metrics in data.items():
         require(set(metrics) == set(METRICS), "metric mismatch: " + case)
-        require(all(math.isfinite(x) and 0 <= x <= 2e-4 for x in metrics.values()),
+        require(all(math.isfinite(x) and 0 <= x and (not strict or x <= 2e-4) for x in metrics.values()),
                 "invalid residual/eigenvalue/orthogonality: " + case)
+    return data
+
+
+def captured_metrics(out, name, expected, strict=True):
+    """Validate saved metrics against the complete checker output, no GPU run."""
+    data = checked_metrics(out / (name + ".json"), expected, strict=strict)
+    text = (out / (name + ".log")).read_text()
+    require("Traceback (most recent call last)" not in text, "traceback in " + name)
+    rows = [json.loads(line[len("EIGH-QUALITY "):]) for line in text.splitlines()
+            if line.startswith("EIGH-QUALITY ")]
+    require(len(rows) == len(expected) and {r["case"] for r in rows} == expected,
+            "incomplete checker log: " + name)
+    for row in rows:
+        require({k: row[k] for k in METRICS} == data[row["case"]],
+                "JSON/log mismatch: " + name)
+        require(row["status"] in ("OK", "FAIL"), "unknown checker status")
+        if strict:
+            require(row["status"] == "OK", "candidate/reference checker failure: " + name)
+        elif row["status"] != "OK":
+            print("EIGH-BASELINE-FAILURE " + json.dumps(row, sort_keys=True), flush=True)
     return data
 
 
@@ -54,7 +74,7 @@ def compare(candidate, reference, label):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("mode", choices=("quality", "timing"))
+    ap.add_argument("mode", choices=("quality", "resume", "timing"))
     ap.add_argument("quality_tag")
     ap.add_argument("timing_tag", nargs="?")
     ap.add_argument("--repaired-small", type=Path,
@@ -114,8 +134,37 @@ def main():
         subprocess.run(["git", "diff", "--quiet", REPAIRED + "..HEAD", "--",
                         "tools/apple_fast_eigh_quality.py", "python/mojolearn/linalg.py",
                         "python/mojolearn/_backend.py"], check=True)
-    out.mkdir(parents=True, exist_ok=False)
-    shutil.copy2(args.repaired_small, out / "repaired-small.json")
+    if args.mode == "resume":
+        require(out.is_dir() and not marker.exists(), "resume needs existing incomplete quality directory")
+        # Legacy helper did not write a start receipt. Manager explicitly
+        # authorizes these captured artifacts; verify source-scoped staged
+        # binaries, both manifests, unchanged checker, matching log/JSON,
+        # then freeze all inherited bytes before any new GPU work.
+        current = json.loads((compiled / "manifest.json").read_text())
+        staged_existing = home / "afc-def" / args.quality_tag
+        for arm in ("A", "B"):
+            require(sha(staged_existing / (arm + ".so")) == current["hashes"][arm],
+                    "resume staged binary mismatch: " + arm)
+        require(sha(out / "repaired-small.json") == sha(args.repaired_small),
+                "resume repaired-small reference mismatch")
+        require(sha(out / "repaired-manifest.json") == sha(repaired_dir / "manifest.json"),
+                "resume repaired manifest mismatch")
+        subprocess.run(["git", "diff", "--quiet", SOURCE + "..HEAD", "--",
+                        "tools/apple_fast_eigh_quality.py"], check=True)
+        for name, expected, strict in (("A-small", SMALL, False), ("B-small", SMALL, True),
+                                       ("repaired-board", {"board:4096"}, True),
+                                       ("A-board", {"board:4096"}, False)):
+            captured_metrics(out, name, expected, strict=strict)
+        require(not (out / "B-board.json").exists() and not (out / "B-board.log").exists(),
+                "resume only supports missing B-board; never repeat a captured candidate")
+        resume_receipt = out / "RESUME.json"
+        inherited = {p.name: sha(p) for p in out.iterdir() if p.is_file()}
+        require(not resume_receipt.exists(), "resume already claimed; inspect previous attempt")
+        resume_receipt.write_text(json.dumps({"signature": signature, "inherited": inherited,
+            "provenance": "manager-authorized legacy capture; validated staged binary and artifact hashes"}, indent=2) + "\n")
+    else:
+        out.mkdir(parents=True, exist_ok=False)
+        shutil.copy2(args.repaired_small, out / "repaired-small.json")
     subprocess.run([str(py), str(validator), SOURCE, BIND, DEFINE,
                     args.quality_tag, "--stage-only"], check=True, env=env)
     staged = home / "afc-def" / args.quality_tag
@@ -125,22 +174,28 @@ def main():
         shutil.copy2(so, dest.with_suffix(".so.next"))
         os.replace(dest.with_suffix(".so.next"), dest)
 
-    def probe(name, board=False):
+    def probe(name, board=False, baseline=False):
         cmd = [str(py), str(checker), "--output", str(out / (name + ".json"))]
         if board:
             cmd += ["--sizes", "4096", "--kinds", "board"]
         with (out / (name + ".log")).open("w") as log:
             run = subprocess.run(cmd, env=env, stdout=log, stderr=subprocess.STDOUT)
-        require(run.returncode == 0, "quality checker failed; inspect " + str(out / (name + ".log")))
-        return checked_metrics(out / (name + ".json"), {"board:4096"} if board else SMALL)
+        require(run.returncode == 0 or (baseline and run.returncode == 1),
+                "quality checker failed; inspect " + str(out / (name + ".log")))
+        return captured_metrics(out, name, {"board:4096"} if board else SMALL, strict=not baseline)
 
     small = {}
     for arm in ("A", "B"):
-        install(staged / (arm + ".so"))
-        small[arm] = probe(arm + "-small")
+        if args.mode == "resume":
+            small[arm] = captured_metrics(out, arm + "-small", SMALL, strict=arm != "A")
+        else:
+            install(staged / (arm + ".so"))
+            small[arm] = probe(arm + "-small", baseline=arm == "A")
     compare(small["B"], small["A"], "small-vs-current-main")
     compare(small["B"], repaired_small, "small-vs-repaired")
-    if args.repaired_board:
+    if args.mode == "resume":
+        repaired_board = captured_metrics(out, "repaired-board", {"board:4096"})
+    elif args.repaired_board:
         shutil.copy2(args.repaired_board, out / "repaired-board.json")
         repaired_board = checked_metrics(out / "repaired-board.json", {"board:4096"})
     else:
@@ -149,13 +204,17 @@ def main():
         shutil.copy2(repaired_dir / "manifest.json", out / "repaired-manifest.json")
     board = {}
     for arm in ("A", "B"):
-        install(staged / (arm + ".so"))
-        board[arm] = probe(arm + "-board", board=True)
+        if args.mode == "resume" and arm == "A":
+            board[arm] = captured_metrics(out, "A-board", {"board:4096"}, strict=False)
+        else:
+            install(staged / (arm + ".so"))
+            board[arm] = probe(arm + "-board", board=True, baseline=arm == "A")
     compare(board["B"], board["A"], "4096-vs-current-main")
     compare(board["B"], repaired_board, "4096-vs-repaired")
-    artifacts = {p.name: sha(p) for p in out.glob("*.json")}
+    artifacts = {p.name: sha(p) for p in out.iterdir()
+                 if p.is_file() and p.suffix in (".json", ".log")}
     evidence = {"signature": signature, "artifacts": artifacts,
-                "gate": "all 3 metrics per fixture <= max(reference*1.1, reference+5e-8); finite <=2e-4; sorted eigenvalues via checker"}
+                "gate": "candidate all 3 metrics per fixture <= max(reference*1.1, reference+5e-8) against both references; candidate finite <=2e-4 and sorted; main failure retained as reference evidence"}
     tmp = marker.with_suffix(".json.next")
     tmp.write_text(json.dumps(evidence, indent=2) + "\n")
     os.replace(tmp, marker)
