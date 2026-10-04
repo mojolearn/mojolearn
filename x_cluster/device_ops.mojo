@@ -1282,9 +1282,10 @@ def _opt_key(v: Float32, j: Int) -> UInt64:
 
 
 @always_inline
-def _opt_pick(part: MutPointer[UInt64, MutAnyOrigin], nb: Int) -> UInt64:
+def _opt_pick_kern(part: MutPointer[UInt64, MutAnyOrigin], nb: Int) -> UInt64:
     """The min of the nb partial keys (every thread folds them itself: nb is
-    the block count, tens at the board's rows)."""
+    the block count, tens at the board's rows). Device code, called from the
+    kernels only (the `_kern` suffix names it so)."""
     var k = UInt64(0xFFFFFFFFFFFFFFFF)
     for b in range(nb):
         k = min(k, part[b])
@@ -1312,7 +1313,7 @@ def _optics_step_kernel(
             pred[o] = Int32(-1)
             proc[o] = Int32(0)
     else:
-        var key = _opt_pick(part + (s & 1) * NB, NB)
+        var key = _opt_pick_kern(part + (s & 1) * NB, NB)
         var point = Int(UInt32(key & UInt64(0xFFFFFFFF)))
         if b == 0 and tid == 0:
             ordering[s] = Int32(point)
@@ -1475,9 +1476,10 @@ def _agg_argmin_part_kernel(md: FPtr, nn: IPtr, live: IPtr, n: Int32, part: MutP
 
 
 @always_inline
-def _agg_pick(part: MutPointer[UInt64, MutAnyOrigin], nb: Int) -> UInt64:
+def _agg_pick_kern(part: MutPointer[UInt64, MutAnyOrigin], nb: Int) -> UInt64:
     """The step's pick from the argmin partials (a few per thousand rows),
-    read by every thread that needs it."""
+    read by every thread that needs it. Device code, called from the kernels
+    only (the `_kern` suffix names it so)."""
     var r = AGG_NONE
     for q in range(nb):
         r = min(r, part[q])
@@ -1496,7 +1498,7 @@ def _agg_lw_kernel(
     var N = Int(n)
     if st[3] != 0:
         return
-    var r = _agg_pick(part, Int(nb))
+    var r = _agg_pick_kern(part, Int(nb))
     if r == AGG_NONE:
         if k == 0:
             st[3] = 1
@@ -1722,7 +1724,7 @@ struct DeviceOps(ClusterOps):
                 )
 
     def _ph_add(mut self, name: String, ns: Int):
-        for q in range(len(self.ph_names)):
+        for q in range(len(self.ph_names)):  # small-loop(ph_names: phase timer names): a few dozen named phases, debug timing
             if self.ph_names[q] == name:
                 self.ph_ns[q] += ns
                 self.ph_calls[q] += 1
@@ -1844,7 +1846,7 @@ struct DeviceOps(ClusterOps):
     def gets(mut self, slots: List[Int], ns: List[Int]) raises -> List[List[Float32]]:
         self._ph0()
         var outs = List[List[Float32]](capacity=len(slots))
-        for q in range(len(slots)):
+        for q in range(len(slots)):  # small-loop(slots: requested slots): a handful of readback destinations per call
             outs.append(List[Float32](length=ns[q], fill=Float32(0)))
         for q in range(len(slots)):
             if ns[q] > 0:
@@ -2811,10 +2813,8 @@ struct DeviceOps(ClusterOps):
         if self._flag_true(bad):
             raise Error("AgglomerativeClustering: a connectivity edge is outside [0, n)")
         # the components: min-label propagation to the fixed point
-        var lab_h = List[Int32](capacity=n)
-        for v in range(n):
-            lab_h.append(Int32(v))
-        var lab = self.put_i(lab_h)
+        var lab = self.zeros_i(n)
+        self.ctx.enqueue_function[_iota_i_kernel](self._ip(lab), Int32(n), grid_dim=pgrid(n), block_dim=PTPB)
         var changed = self.zeros_i(1)
         while True:
             self.ctx.enqueue_function[agc_prop_kernel](
@@ -3096,11 +3096,12 @@ struct DeviceOps(ClusterOps):
             self._fp(centers), self._ip(rep), self._ip(rv), Int32(ns), Int32(d), self._fp(dst), self._ip(cnt),
             grid_dim=pgrid(ns), block_dim=PTPB,
         )
-        var parts = self.get_i(part, nb)
-        n_iter = 0
-        for q in range(nb):
-            if Int(parts[q]) > n_iter:
-                n_iter = Int(parts[q])
+        # the partials' max folded on the device; one word comes back
+        var mx = self.zeros_i(1)
+        self.ctx.enqueue_function[_words_reduce_kernel](
+            self._ip(part), Int32(nb), Int32(1), self._ip(mx), grid_dim=1, block_dim=RTPB,
+        )
+        n_iter = self._int1(mx)
         var m = self._int1(cnt)
         self._ph1("ms_unique")
         return m
@@ -3114,6 +3115,7 @@ struct DeviceOps(ClusterOps):
         if nb < 1:
             nb = 1
         var part = self.zeros_i(nb)
+        var lo = self.zeros_i(1)
         # rounds: the lowest undecided center is kept and drops every
         # undecided one within the bandwidth; the batch ends with a check
         while True:
@@ -3128,12 +3130,11 @@ struct DeviceOps(ClusterOps):
             self.ctx.enqueue_function[lowest_part_kernel](
                 self._ip(und), Int32(m), self._ip(part), grid_dim=nb, block_dim=RTPB,
             )
-            var parts = self.get_i(part, nb)
-            var left = False
-            for q in range(nb):
-                if Int(parts[q]) < m:
-                    left = True
-            if not left:
+            # the partials' min folded on the device; one word comes back
+            self.ctx.enqueue_function[_words_reduce_kernel](
+                self._ip(part), Int32(nb), Int32(0), self._ip(lo), grid_dim=1, block_dim=RTPB,
+            )
+            if self._int1(lo) >= m:
                 break
         var sc = self._scan(self._ip(uni), m)
         self.ctx.enqueue_function[compact_rows_kernel](
@@ -3299,7 +3300,7 @@ struct DeviceOps(ClusterOps):
             Int32(mode), pc, pw, pc, Int32(m), self._fp(th), self._fp(tl), Int32(0), grid_dim=nch, block_dim=RTPB,
         )
         var vh = List[Float32](capacity=2 * len(vs))
-        for t in range(len(vs)):
+        for t in range(len(vs)):  # small-loop(vs: candidate uniforms): 2 + log(k) values per kmeans++ pick
             var v = ff_of_f64(vs[t])
             vh.append(v.hi)
             vh.append(v.lo)
@@ -3320,7 +3321,7 @@ struct DeviceOps(ClusterOps):
             self._fold(FM_WMIN if w >= 0 else FM_MIN, self._fp(dc) + t * m, pc, pw, m, po, po + nt, t)
         var h = self.get(o, 2 * nt)
         var out = List[Float64](capacity=nt)
-        for t in range(nt):
+        for t in range(nt):  # small-loop(nt: candidate potentials): 2 + log(k) words per kmeans++ pick
             out.append(Float64(h[t]) + Float64(h[nt + t]))
         self._ph1("kpp_pots")
         return out^
@@ -3347,6 +3348,36 @@ def _dist_sel_kernel(a: FPtr, n: Int32, c: FPtr, d: Int32, lab: IPtr, j: Int32, 
             dst[t] = sq_dist_rows(a, t, c, l, Int(d))
         else:
             dst[t] = Float32(0)
+
+
+def _iota_i_kernel(dst: IPtr, n: Int32):
+    """dst[t] = t (each vertex its own component label to start)."""
+    var t = _tid()
+    if t < Int(n):
+        dst[t] = Int32(t)
+
+
+def _words_reduce_kernel(v: IPtr, n: Int32, take_max: Int32, dst: IPtr):
+    """dst[0] = the max (take_max != 0; 0 for none) or the min (Int32 max for
+    none) of v[0 .. n): one block of RTPB threads, a strided fold then the
+    halving tree. Integers, so the order cannot move the word. The shared
+    page is RTPB words, as `max_part_kernel`'s."""
+    var red = stack_allocation[RTPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var mx = take_max != Int32(0)
+    var a = Int32(0) if mx else Int32(2147483647)
+    for i in range(tid, Int(n), RTPB):
+        a = max(a, v[i]) if mx else min(a, v[i])
+    red[tid] = a
+    barrier()
+    var off = RTPB // 2
+    while off > 0:
+        if tid < off:
+            red[tid] = max(red[tid], red[tid + off]) if mx else min(red[tid], red[tid + off])
+        barrier()
+        off //= 2
+    if tid == 0:
+        dst[0] = red[0]
 
 
 def _mb_draw_kernel(idx: IPtr, m: Int32, n: Int32, state: UInt64):
