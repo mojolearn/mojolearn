@@ -213,8 +213,8 @@ def nb_csr_count_int_kernel(
         _ = Atomic.max(flag.unsafe_offset(0), bits)
 
 
-def nb_csr_int_out_kernel(tab: IP, out: FP, flag: IP, total: Int32, limit: Int32):
-    """out[t] = Float32(tab[t]) (one thread per word). limit > 0: a count of
+def nb_csr_int_out_kernel(tab: IP, dst: FP, flag: IP, total: Int32, limit: Int32):
+    """dst[t] = Float32(tab[t]) (one thread per word). limit > 0: a count of
     at least `limit` (2^24: past it the dense float fold is not exact) raises
     CSR_FLAG_FALLBACK."""
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -223,7 +223,7 @@ def nb_csr_int_out_kernel(tab: IP, out: FP, flag: IP, total: Int32, limit: Int32
     var v = tab.unsafe_load(t)
     if limit > 0 and (v < 0 or v >= limit):
         _ = Atomic.max(flag.unsafe_offset(0), Int32(CSR_FLAG_FALLBACK))
-    out.unsafe_store(t, Float32(Int(v)))
+    dst.unsafe_store(t, Float32(Int(v)))
 
 
 def nb_csr_jll_chk_kernel(
