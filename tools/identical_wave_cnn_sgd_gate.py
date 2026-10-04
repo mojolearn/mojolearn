@@ -40,6 +40,9 @@ def main():
     if os.environ.get('MOJOLEARN_NUMERIC_MODE') != 'identical': parser.error('IDENTICAL environment required')
     if os.environ.get('MOJOLEARN_VENDOR') != args.vendor: parser.error('explicit vendor environment mismatch')
     root = args.source.resolve(); source_check(root, args.sha)
+    harness = Path(__file__).read_bytes()
+    if harness != (root/'tools'/Path(__file__).name).read_bytes():
+        raise RuntimeError('gate harness differs from frozen source')
     args.out.mkdir(parents=True, exist_ok=False)
     sys.path.insert(0, str(root/'python'))
     import numpy as np
@@ -49,6 +52,7 @@ def main():
     if ml.vendor() != args.vendor: raise RuntimeError('selected vendor differs from requested vendor')
     report = {'schema': 1, 'status': 'INCOMPLETE', 'sha': args.sha, 'vendor': args.vendor,
               'arm': args.arm, 'suite': args.suite, 'timing_samples': 0, 'opponents_executed': 0,
+              'harness_sha256': hashlib.sha256(harness).hexdigest(),
               'cases': {}, 'bindings': {}, 'package': str(Path(ml.__file__).resolve())}
     receipt = args.out/'gate.json'; dump(receipt, report)
 
@@ -189,6 +193,9 @@ def main():
         case('sgd-overflow-refusal', refuse_overflow)
         expected_count = 5
     source_check(root, args.sha)
+    for binding in report['bindings'].values():
+        if hashlib.sha256(Path(binding['path']).read_bytes()).hexdigest() != binding['sha256']:
+            raise RuntimeError('binding changed during fixture execution')
     report['expected_cases'] = expected_count
     report['status'] = 'PASS' if len(report['cases']) == expected_count and all(c['status'] == 'PASS' for c in report['cases'].values()) else 'FAIL'
     dump(receipt, report)

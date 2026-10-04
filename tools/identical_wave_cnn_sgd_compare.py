@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 
 EXPECTED = {
@@ -19,12 +20,25 @@ def compare(paths, required):
     baseline = None; vendors = set(); evidence = []
     for path in paths:
         raw = path.read_bytes(); report = json.loads(raw)
-        core = {key: report[key] for key in ('sha', 'arm', 'suite')}
+        core = {key: report[key] for key in ('sha', 'arm', 'suite', 'harness_sha256')}
+        if not re.fullmatch('[0-9a-f]{40}', core['sha']) or core['arm'] not in ('on', 'off'):
+            raise ValueError('invalid source or arm identity')
+        if not re.fullmatch('[0-9a-f]{64}', core['harness_sha256']):
+            raise ValueError('invalid fixture harness identity')
+        if report['vendor'] not in {'cuda', 'hip', 'metal', 'cpu'} or report['vendor'] in vendors:
+            raise ValueError('unknown or duplicate vendor receipt')
+        binding_name = 'x_cnn' if core['suite'].startswith('cnn') else 'x_linear'
+        binding = report['bindings'][binding_name]
+        if (binding['numeric_mode'] != 1 or binding['vendor'] != report['vendor']
+                or not re.fullmatch('[0-9a-f]{64}', binding['sha256'])):
+            raise ValueError('invalid binding provenance')
         if report.get('status') != 'PASS' or set(report['cases']) != EXPECTED[core['suite']]:
             raise ValueError('failed or incomplete gate receipt: '+str(path))
         if report.get('timing_samples') != 0 or report.get('opponents_executed') != 0:
             raise ValueError('receipt is not an untimed own-build gate')
         digests = {key: row['digest'] for key, row in report['cases'].items() if row['status'] == 'PASS'}
+        if not all(isinstance(v, str) and re.fullmatch('[0-9a-f]{64}', v) for v in digests.values()):
+            raise ValueError('invalid output digest')
         if set(digests) != EXPECTED[core['suite']]: raise ValueError('case status failed')
         value = {'identity': core, 'digests': digests}
         if baseline is None: baseline = value
