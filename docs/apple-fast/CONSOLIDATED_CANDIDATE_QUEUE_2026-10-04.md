@@ -27,16 +27,16 @@ this core GEMM hook: decomposition MMA, LU and Cholesky have other launchers.
 
 | ID | Modifiers | Tile M x N x K | Intake state |
 | --- | --- | --- | --- |
-| G1 | DIRECT | 64 x 64 x 16 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
-| G2 | DIRECT, SMALL | 32 x 32 x 16 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
-| G3 | DIRECT, WIDE | 64 x 128 x 16 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
-| G4 | DIRECT, TALL | 128 x 64 x 16 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
-| G5 | none | 64 x 64 x 16 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
-| G6 | DEEP | 64 x 64 x 32 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
-| G7 | PADDED | 64 x 64 x 16 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
-| G8 | WIDE, DEEP | 64 x 128 x 32 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
-| G9 | TALL, DEEP | 128 x 64 x 32 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
-| G10 | DEEP, PADDED | 64 x 64 x 32 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
+| G1 | DIRECT | 64 x 64 x 16 | M2 A/B PASS9f1a1657c; resident screen fa390736 all66 records exact; standalone n1 HOLD retained; no broad default |
+| G2 | DIRECT, SMALL | 32 x 32 x 16 | M2 A/B PASS9f1a1657c; resident screen fa390736 all66 records exact; standalone n1 HOLD retained; no broad default |
+| G3 | DIRECT, WIDE | 64 x 128 x 16 | M2 A/B PASS9f1a1657c; resident screen fa390736 all66 records exact; standalone n1 HOLD retained; no broad default |
+| G4 | DIRECT, TALL | 128 x 64 x 16 | M2 A/B PASS9f1a1657c; resident screen fa390736 all66 records exact; standalone n1 HOLD retained; no broad default |
+| G5 | none | 64 x 64 x 16 | M2 A/B PASS9f1a1657c; resident screen fa390736 all66 records exact; standalone n1 HOLD retained; no broad default |
+| G6 | DEEP | 64 x 64 x 32 | M2 A/B PASS9f1a1657c; resident screen fa390736 all66 records exact; standalone n1 HOLD retained; no broad default |
+| G7 | PADDED | 64 x 64 x 16 | M2 A/B PASS9f1a1657c; resident screen fa390736 all66 records exact; standalone n1 HOLD retained; no broad default |
+| G8 | WIDE, DEEP | 64 x 128 x 32 | M2 A/B PASS9f1a1657c; resident screen fa390736 all66 records exact; standalone n1 HOLD retained; no broad default |
+| G9 | TALL, DEEP | 128 x 64 x 32 | M2 A/B PASS9f1a1657c; resident screen fa390736 all66 records exact; standalone n1 HOLD retained; no broad default |
+| G10 | DEEP, PADDED | 64 x 64 x 32 | M2 A/B PASS9f1a1657c; resident screen fa390736 all66 records exact; standalone n1 HOLD retained; no broad default |
 
 Overlap review: `DECOMP_FAST_MMA_K16@d487c814f` targets decomposition's
 non-split launcher; `LU_FAST_MMA_DBUF@5d4e5d5d5` targets LU's subtract-update
@@ -57,11 +57,11 @@ promotion. Forecast quality remains a separate acceptance gate.
 
 | ID | Candidate | Intake state |
 | --- | --- | --- |
-| K1 | Full Gaussian associative prefix scan | Full Gaussian oracle HOLD: 6 math / 48 float32 / 14 gradient failures; fixed diagnostic controls queued |
+| K1 | Full Gaussian associative prefix scan | Full Gaussian oracle HOLD: 6 math / 48 float32 / 14 gradient failures; fixed diagnostic controls completed; conditioning/model repair required before GPU admission |
 | K2-B8 | Blocked Gaussian scan, block size 8 | Equation/oracle and adapter backlog |
 | K2-B16 | Blocked Gaussian scan, block size 16 | Equation/oracle and adapter backlog |
 | K2-B32 | Blocked Gaussian scan, block size 32 | Equation/oracle and adapter backlog |
-| K3 | Scalar exact-observation specialization | Actual scalar kernel M2 PASS; original quality HOLD; product-gradient-tail correction102e0d70a queued, full fit/forecast owed |
+| K3 | Scalar exact-observation specialization | Actual GPU102e0d70a HOLD49 gradient components; compensated reference9723a738 PASS13 groups on M3; compensated GPU implementation and full fit/forecast owed |
 
 ## Shared-call variants
 
@@ -73,10 +73,10 @@ These APIs need explicit FAST/Apple guards at any production integration.
 
 | ID | Candidate | Intake state |
 | --- | --- | --- |
-| C1 | ResidentCallSlot: retained transfers and scratch | r3 import fixed, context identity guard failed; r5 stable retained identity3491a4d4c compiling M2, lifecycle quality owed |
-| C2 | wait_pair: one wait for two independent calls | r3 import fixed, context identity guard failed; r5 stable retained identity3491a4d4c compiling M2, lifecycle quality owed |
-| C3 | PackedReadback: retained grouped readback slab | r3 import fixed, context identity guard failed; r5 stable retained identity3491a4d4c compiling M2, lifecycle quality owed |
-| C4 | Resident MinMax transform adapter | r3 import fixed, context identity guard failed; r5 stable retained identity3491a4d4c compiling M2, lifecycle quality owed |
+| C1 | ResidentCallSlot: retained transfers and scratch | r5 lifecycle quality PASS3491a4d4c; A probe is no-op, not production timing baseline; caller integration/reach review required |
+| C2 | wait_pair: one wait for two independent calls | r5 lifecycle quality PASS3491a4d4c; A probe is no-op, not production timing baseline; caller integration/reach review required |
+| C3 | PackedReadback: retained grouped readback slab | r5 lifecycle quality PASS3491a4d4c; A probe is no-op, not production timing baseline; caller integration/reach review required |
+| C4 | Resident MinMax transform adapter | r5 lifecycle quality PASS3491a4d4c; A probe is no-op, not production timing baseline; caller integration/reach review required |
 
 The sibling IDENTICAL call-path worktree is not included in this FAST intake.
 Manager owns queue edits and merges; delegated reviewers own isolated source
@@ -131,3 +131,38 @@ Actual core/estimators counter-quality harness0505c9427 is source-only.
 Shared dispatcher a9e64922f passed43 route fixtures, including preserved
 GEMV/TN/K0 fallbacks. Decomposition and PCA bypass these SDK entrances;
 their next adapters must preserve strides, split policy and atomic behavior.
+
+## Manager execution checkpoint — 2026-10-04
+
+All19 original ideas remain individually listed above; no side branch is deleted.
+The 19-row catalog is an accounting of source ideas, not 19 runnable jobs.
+K2 block8/16/32 remain explicit oracle/adapter backlog. C1/C3 mostly duplicate
+already pooled VAR behavior; C4 must preserve mutable model attributes and finite
+checks and needs a current-MinMax baseline. Do not score the no-op C probe.
+
+Four actual PCA transform/inverse G1/G5 jobs completed on M3: transform G1
+32.633750->29.887000ms and G5 32.698166->30.608875ms; inverse G1
+34.177417->36.050709ms and G5 35.538000->36.727542ms. All output gates pass;
+diagnostic counters enabled, one cold call plus first full copy, no board admission.
+Tags are `g{1,5}-pca-tall-{transform,inverse}-t-v1`. Keep inverse incumbent.
+
+Scoped actual AFN decomp/PCA adapter compiled28f06e1923 on M2 A/B, pinned
+harness5776a5d1cb; M3 `scoped-r2-all-q-v1` PASS with no failures. Metadata
+preflight covered28 fixtures; report contains38 output checks. Actual PCA.fit
+quality/reach remains the next gate. Board RSVD rank18 intermediates fall outside
+the current tall/narrow selector; do not queue an expensive NO_REACH timing.
+
+`arima-k3-df-reference-v1` completed PASS13groups at9723a738, zero error allowance,
+reference emulation only. Original actual-GPU K3 HOLD remains in force.
+
+Recovered `MOJOLEARN_RESAMPLE_FAST_GATHER` source8605a3581 is now under M2
+A/B compilation; its old taxi request failed parsing, with no timing. Source and
+quality harness are consolidated opt-in into lane/apple-fast, not enabled or
+merged into production main. Scoped GEMM source/harness are also consolidated
+there. M3 legacy lane ref is deliberately not moved just for source consolidation;
+new jobs use exact pinned source and verified artifacts.
+
+SVGP_BSPLIT already exists opt-in on main; readiness reviewb1487e2e is retained,
+not admitted. Most other unmatched request tags are neural work outside this
+classical/tree effort. Remaining classical/tree dispositions are in
+`notes/remaining-branch-audit-20261004.md`; GPU resample is the concrete recovery.
