@@ -599,6 +599,41 @@ def _label_order(labels, present):
 # Classification
 # ---------------------------------------------------------------------------
 
+#: cm_epi kinds (x_metrics/cm_epi.mojo, op 59; lane cpu2-l7-metrics)
+_CM_MLCM, _CM_MCC, _CM_COUNT, _CM_NORM, _CM_KAPPA, _CM_CLR, _CM_TOTAL = range(7)
+#: the NORM modes: the 'all' total, then 'all', 'true', 'pred', none
+_NORM_MODES = {"all": 1, "true": 2, "pred": 3, None: 4}
+#: the kappa weight modes
+_KAPPA_W = {None: 0, "linear": 1, "quadratic": 2}
+
+
+def _cm_stage(prog, groups, w, n, k, kind, size):
+    """Stage a cm_epi tail over a `_Sums` program's groupings (`tail=`):
+    the match / true / pred sums' OFF tables (unweighted) or PairSums
+    (weighted), the first k labels; the total is the row count n or the
+    total grouping's PairSum. Returns the `size`-word output slot."""
+    col = 0 if w is None else 1
+    out = prog.alloc(max(size, 1))
+    tp, tr, pr = groups[0][col], groups[1][col], groups[2][col]
+    tot = n if w is None else groups[3][1]
+    if kind == _CM_MLCM:
+        if k:
+            prog.stage("cm_epi", k, kind, tp, tr, pr, k, col, tot, out)
+    elif kind == _CM_MCC:
+        prog.stage("cm_epi", 1, kind, tp, tr, pr, k, col, out)
+    else:
+        prog.stage("cm_epi", 1, kind, tp, k, col, tot, out)
+    return out
+
+
+def _cm_count(true, pred, w, present, numeric_mode):
+    """The COUNT tail (x_metrics/cm_epi.mojo) over the match sums: the
+    program and its 11-word output (see `_count` there)."""
+    s = _Sums(true, pred, w, present, numeric_mode,
+              tail=lambda prog, groups: _cm_stage(prog, groups, w, len(true), len(present), _CM_COUNT, 11))
+    return s.prog, s.tail, s.weighted
+
+
 def multilabel_confusion_matrix(y_true, y_pred, *, sample_weight=None, labels=None,
                                 samplewise=False, numeric_mode=None):
     """Per-label one-vs-rest 2x2 confusion matrices, `[[tn, fp], [fn, tp]]`.
@@ -614,17 +649,14 @@ def multilabel_confusion_matrix(y_true, y_pred, *, sample_weight=None, labels=No
     from ._metrics_impl import _selected_labels
     true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "multilabel_confusion_matrix")
     chosen = list(present) if labels is None else _selected_labels(labels, kind, present)
-    s = _Sums(true, pred, w, _label_order(chosen, present), numeric_mode)
-    rows = []
-    for i in range(len(chosen)):
-        tp = s.tp[i]
-        fp = s.pred[i] - tp
-        fn = s.true[i] - tp
-        tn = s.total - tp - fp - fn
-        rows.extend([tn, fp, fn, tp])
+    k = len(chosen)
+    # the device tail (x_metrics/cm_epi.mojo, MLCM): one unit per label writes
+    # tn, fp, fn, tp, exact Int64 counts or binary64 (weighted)
+    s = _Sums(true, pred, w, _label_order(chosen, present), numeric_mode,
+              tail=lambda prog, groups: _cm_stage(prog, groups, w, len(true), k, _CM_MLCM, 8 * k))
     if s.weighted:
-        return Array.from_list([float(v) for v in rows], "<f8").reshape((len(chosen), 2, 2))
-    return Array.from_list([int(v) for v in rows], "<i8").reshape((len(chosen), 2, 2))
+        return Array._owned(s.prog.words(s.tail, 8 * k, "d"), (k, 2, 2), "<f8")
+    return Array._owned(s.prog.words(s.tail, 8 * k, "q"), (k, 2, 2), "<i8")
 
 
 import threading as _threading
@@ -757,27 +789,13 @@ def matthews_corrcoef(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
     """scikit-learn 1.9 `matthews_corrcoef` (binary and multiclass): the
     covariance form over the per-class true / predicted sums and the trace."""
     true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "matthews_corrcoef")
-    s = _Sums(true, pred, w, present, numeric_mode)
-    t_sum = [float(v) for v in s.true]
-    p_sum = [float(v) for v in s.pred]
-    n_correct = 0.0
-    for v in s.tp:
-        n_correct += v
-    n = 0.0
-    for v in p_sum:
-        n += v
-    tp_dot = pp_dot = tt_dot = 0.0
-    for a, b in zip(t_sum, p_sum):
-        tp_dot += a * b
-        pp_dot += b * b
-        tt_dot += a * a
-    cov_ytyp = n_correct * n - tp_dot
-    cov_ypyp = n * n - pp_dot
-    cov_ytyt = n * n - tt_dot
-    prod = cov_ypyp * cov_ytyt
-    if prod == 0:
-        return 0.0
-    return float(cov_ytyp / pmath.sqrt(prod))
+    # the device tail (x_metrics/cm_epi.mojo, MCC): the sums, dots and
+    # covariances in binary64, one unit; flag 1 = a negative product
+    s = _Sums(true, pred, w, present, numeric_mode,
+              tail=lambda prog, groups: _cm_stage(prog, groups, w, len(true), len(present), _CM_MCC, 4))
+    if s.prog.ints(s.tail, 1)[0]:
+        raise ValueError("math domain error")
+    return float(s.prog.words(s.tail + 2, 2, "d")[0])
 
 
 def _confusion(true, pred, w, order, numeric_mode):
@@ -880,11 +898,11 @@ def hamming_loss(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
     """scikit-learn 1.9 `hamming_loss` for binary / multiclass 1-D targets:
     the (weighted) fraction of mismatched labels."""
     true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "hamming_loss")
-    s = _Sums(true, pred, w, present, numeric_mode)
-    hit = 0.0
-    for v in s.tp:
-        hit += v
-    return float((s.total - hit) / s.total)
+    # the device tail (x_metrics/cm_epi.mojo, COUNT): (total - hit) / total
+    prog, out, _ = _cm_count(true, pred, w, present, numeric_mode)
+    if prog.ints(out, 1)[0]:
+        raise ZeroDivisionError("float division by zero")
+    return float(prog.words(out + 6, 2, "d")[0])
 
 
 def zero_one_loss(y_true, y_pred, *, normalize=True, sample_weight=None, numeric_mode=None):
@@ -892,23 +910,28 @@ def zero_one_loss(y_true, y_pred, *, normalize=True, sample_weight=None, numeric
     if not is_bool(normalize):
         raise ValueError("normalize must be a bool")
     true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "zero_one_loss")
-    s = _Sums(true, pred, w, present, numeric_mode)
-    hit = 0
-    for v in s.tp:
-        hit += v
+    # the device tail (x_metrics/cm_epi.mojo, COUNT): total - hit and its ratio
+    prog, out, weighted = _cm_count(true, pred, w, present, numeric_mode)
     if normalize:
-        return float((s.total - hit) / s.total)
-    return (s.total - hit) if s.weighted else int(s.total - hit)
+        if prog.ints(out, 1)[0]:
+            raise ZeroDivisionError("float division by zero" if weighted else "division by zero")
+        return float(prog.words(out + 6, 2, "d")[0])
+    return float(prog.words(out + 4, 2, "d")[0]) if weighted else prog.ints(out + 10, 1)[0]
 
 
 def _accuracy_sums(y_true, y_pred, sample_weight, numeric_mode):
-    """(the (weighted) number of matches, the row count or weight total)."""
+    """(the (weighted) number of matches, their fraction of the row count
+    (at least 1) or the weight total), both from the device tail
+    (x_metrics/cm_epi.mojo, COUNT). A zero weight total raises as the
+    division did."""
     true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "accuracy_score")
-    s = _Sums(true, pred, w, present, numeric_mode)
-    hit = 0
-    for v in s.tp:
-        hit += v
-    return (float(hit) if s.weighted else int(hit)), s.total
+    prog, out, weighted = _cm_count(true, pred, w, present, numeric_mode)
+    if not weighted:
+        return prog.ints(out + 1, 1)[0], float(prog.words(out + 8, 2, "d")[0])
+    hit = float(prog.words(out + 2, 2, "d")[0])
+    if prog.ints(out, 1)[0]:
+        return hit, None
+    return hit, float(prog.words(out + 8, 2, "d")[0])
 
 
 def accuracy_count(y_true, y_pred, sample_weight, numeric_mode):
@@ -923,10 +946,10 @@ def accuracy_fraction(y_true, y_pred, sample_weight=None, numeric_mode=None):
     weight total is the program's PairSum, not a host sum). Lane
     cgr4-py-compute: the estimators' `score` methods called this instead of
     a per-row Python comparison."""
-    hit, total = _accuracy_sums(y_true, y_pred, sample_weight, numeric_mode)
-    if sample_weight is None:
-        return float(hit) / max(total, 1)
-    return float(hit) / total
+    frac = _accuracy_sums(y_true, y_pred, sample_weight, numeric_mode)[1]
+    if frac is None:
+        raise ZeroDivisionError("float division by zero")
+    return frac
 
 
 def class_likelihood_ratios(y_true, y_pred, *, labels=None, sample_weight=None,
