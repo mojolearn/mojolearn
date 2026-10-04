@@ -14,14 +14,15 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE
 from x_prep.folds import I32P, kfold_folds, strat_folds
-from x_prep.fastnb_csr import NB_TEXT_CSR, nb_csr_fit_py, nb_csr_jll_py
+from x_prep.fastnb_csr import NB_TEXT_CSR, nb_csr_fit_py, nb_csr_jll_py, IDN_NB_CSR, nb_csr_fit_int_py, nb_csr_jll_chk_py
+from x_prep.blocked import IDN_NB_ONEPASS
 from x_prep.calib import CALIB_FOLDS, CAL_ST, CAL_LS
 from x_prep.py2mojo import PY2MOJO_PREP
 from x_prep.prep3 import PREP3_MAXABS
 from x_prep.fastmaxabs import maxabs_fit_direct
 
 from x_prep.fastpt import PTIMPUTE_FLAGS
-from x_prep.label_fast import LABEL_PRESENT
+from x_prep.label_fast import LABEL_PRESENT, IDN_LABEL
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -232,6 +233,14 @@ def label_present_binding() raises -> PythonObject:
     return PythonObject(1)
 
 
+def idn_int_binding() raises -> PythonObject:
+    """Lane idn-int-prep (IDENTICAL): the bits of the integer prep switches
+    this binding was built with, read by python/mojolearn/_expansion_prep.py
+    `_idn_int` (1 IDN_LABEL, 2 IDN_NB_ONEPASS, 4 IDN_NB_CSR); registered only
+    when one is on."""
+    return PythonObject((1 if IDN_LABEL else 0) | (2 if IDN_NB_ONEPASS else 0) | (4 if IDN_NB_CSR else 0))
+
+
 def ptimpute_flags_binding() raises -> PythonObject:
     """Lane af-ptimpute (FAST + Apple, each switch its own define, default off):
     the bits of x_prep/fastpt.mojo PTIMPUTE_FLAGS (1 PT_COLBATCH, 2 PT_SPEC,
@@ -265,6 +274,12 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
             # lane apple-fast-nb: FAST + Apple default (M3 A/B 186.9 -> 35.4 ms), -D MOJOLEARN_NB_TEXT_CSR_OFF reverts (x_prep/fastnb_csr.mojo)
             m.def_function[nb_csr_fit_py]("x_prep_nb_csr_fit")
             m.def_function[nb_csr_jll_py]("x_prep_nb_csr_jll")
+        comptime if IDN_NB_CSR:
+            # lane idn-int-prep: IDENTICAL, every vendor, -D MOJOLEARN_IDN_NB_CSR_OFF reverts (x_prep/fastnb_csr.mojo)
+            m.def_function[nb_csr_fit_int_py]("x_prep_nb_csr_fit")
+            m.def_function[nb_csr_jll_chk_py]("x_prep_nb_csr_jll")
+        comptime if IDN_LABEL or IDN_NB_ONEPASS or IDN_NB_CSR:
+            m.def_function[idn_int_binding]("x_prep_idn_int")
         m.def_function[run_scratch_binding]("x_prep_run_scratch")
         m.def_function[run_out_binding]("x_prep_run_out")
         m.def_function[run_ranges_binding]("x_prep_run_ranges")

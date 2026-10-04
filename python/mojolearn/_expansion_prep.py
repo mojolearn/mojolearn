@@ -92,6 +92,10 @@ _OPS = dict(
     # lane apple-fast-gap-cls2 (x_prep/cat_cls2.mojo): only the FAST + Apple binding (default;
     # -D MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF has none) runs them (it exports x_prep_cls2_cat)
     cat_zero=157, cat_present=158, pres_count=159, pres_write=160, cat_pack=161,
+    # lane idn-int-prep (x_prep/blocked.mojo): the IDENTICAL bindings (device and host column;
+    # -D MOJOLEARN_IDN_NB_ONEPASS_OFF has none) run them (`_idn_int` bit 2); IDENTICAL also
+    # compiles 157-160 (x_prep/label_fast.mojo IDN_LABEL)
+    csb1_part=162, csb1_neg=163,
     # lane apple-fast-py2mojo-prep (x_prep/py2mojo.mojo, a range of its own): every binding
     # runs them (lane pyglue-numeric deleted the OFF arm and its Python loops)
     p2m_ccount=200, p2m_cscan=201, p2m_cstart=202, p2m_cwrite=203, p2m_rgather=204, p2m_smrows=205,
@@ -2236,6 +2240,48 @@ def _nb_weights(pr, sample_weight, n):
     return pr.put(w)
 
 
+#: binding -> its `x_prep_idn_int` bits (0 when it has none), probed once
+_IDN_INT = {}
+_IDN_NB_ONEPASS, _IDN_NB_CSR = 2, 4
+
+
+def _idn_int(mode):
+    """Lane idn-int-prep: the IDENTICAL binding's integer prep switches
+    (bindings/_mojolearn_x_prep.mojo `idn_int_binding`: 1 IDN_LABEL, 2
+    IDN_NB_ONEPASS, 4 IDN_NB_CSR), 0 on another tier or a build with none."""
+    if mode != "identical":
+        return 0
+    binding = _prep_binding(mode)
+    key = id(binding)
+    v = _IDN_INT.get(key)
+    if v is None:
+        fn = _optional_prep_entry(binding, "x_prep_idn_int")
+        v = int(fn()) if fn is not None else 0
+        _IDN_INT[key] = v
+    return v
+
+
+def _nb_onepass(mode):
+    return _blocked() and bool(_idn_int(mode) & _IDN_NB_ONEPASS)
+
+
+def _nb_counts(pr, wo, xo, n, d, yo, K, cnt, sums, thr=_NONE, neg=_NONE):
+    """The discrete naive Bayes count pass as one unit per (block, column)
+    (x_prep/blocked.mojo `csb1_part`, lane idn-int-prep): csb_part's
+    partials of every class from one walk of X, then csb_fold. thr: the
+    binarize threshold's offset (BernoulliNB; X is binarized in the unit).
+    neg: d words that are -1 for a column holding a negative word, else 0
+    (where the fit read the column minimum)."""
+    nb = (n + _XB - 1) // _XB
+    w = _NONE if wo is None else wo
+    ps, pc, cn = pr.work(nb * K * d), pr.work(nb * K * d), pr.work(K * d)
+    ng = pr.work(nb * d) if neg != _NONE else _NONE
+    pr.stage("csb1_part", nb * d, xo, n, d, yo, K, ps, pc, nb, w, thr, ng)
+    pr.stage("csb_fold", K * d, ps, pc, nb, K, d, cn, cnt, _NONE, sums, w)
+    if neg != _NONE:
+        pr.stage("csb1_neg", d, ng, nb, d, neg)
+
+
 def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums):
     """class_stats, or its weighted form when a sample_weight offset is given;
     in x_prep/blocked.mojo's blocked order when `_blocked()` (offsets
@@ -2433,6 +2479,9 @@ def _check_nonnegative(pr_values, who):
 class _DiscreteNB(_Classifier):
     #: MultinomialNB and ComplementNB take a CSR input on the FAST CSR path
     _csr_ok = False
+    #: whether `_params` reads the column minimum row (the negative-input
+    #: refusal of MultinomialNB / ComplementNB)
+    _needs_min = False
 
     @classmethod
     def _nb_csr_ready(cls):
@@ -2440,11 +2489,21 @@ class _DiscreteNB(_Classifier):
         densifying it: FAST mode and the x_prep binding built on Apple with
         NB_TEXT_CSR (lane apple-fast-nb, default since the M3 A/B; it exports
         `x_prep_nb_csr_fit`). The bench hands such a build the text block as
-        CSR. False everywhere else: IDENTICAL, other vendors,
+        CSR. Also IDENTICAL on every vendor's device binding (lane
+        idn-int-prep, IDN_NB_CSR, -D MOJOLEARN_IDN_NB_CSR_OFF). False
+        everywhere else: FAST off Apple, the host column,
         -D MOJOLEARN_NB_TEXT_CSR_OFF."""
-        if not cls._csr_ok or _mode() != "fast":
+        if not cls._csr_ok:
             return False
+        mode = _mode()
         try:
+            if mode == "identical":
+                # lane idn-int-prep: the IDENTICAL device binding on every
+                # vendor (IDN_NB_CSR; the host column has no CSR entry and
+                # takes the dense block: the same words)
+                return bool(_idn_int(mode) & _IDN_NB_CSR)
+            if mode != "fast":
+                return False
             return _optional_prep_entry(_prep_binding("fast"), "x_prep_nb_csr_fit") is not None
         except Exception:
             return False
@@ -2473,7 +2532,15 @@ class _DiscreteNB(_Classifier):
         fit_csr(addr_ro(ip, name="indptr"), addr_ro(ix, name="indices"), addr_ro(dv, name="data"),
                 addr_ro(codes, name="y"), [n, d, K, dv.size],
                 _addr_rw(fc, name="feature_count"), _addr_rw(cnt, name="class_count"), _addr_rw(flag, name="flag"))
-        if int(flag.tolist()[0]) != 0:
+        level = int(flag.tolist()[0])
+        if mode == "identical":
+            # x_prep/fastnb_csr.mojo: 2 a negative value; 1 the counts are not
+            # exact integers below 2^24 (or the rows are not canonical), so
+            # the caller runs the dense program
+            if level == 1:
+                return None
+            level = 1 if level == 2 else 0
+        if level != 0:
             raise ValueError(f"mojolearn: Negative values in data passed to {type(self).__name__} (input X)")
         pr = _Prog()
         st = pr.alloc(6 * d)
@@ -2501,10 +2568,19 @@ class _DiscreteNB(_Classifier):
         jll_csr = _optional_prep_entry(_prep_binding(self.numeric_mode_), "x_prep_nb_csr_jll")
         jll_h = Array._from_flat([0.0] * (n * K), (n, K), "<f4")
         bias = self._csr_bias()
-        jll_csr(addr_ro(ip, name="indptr"), addr_ro(ix, name="indices"), addr_ro(dv, name="data"),
+        args = (addr_ro(ip, name="indptr"), addr_ro(ix, name="indices"), addr_ro(dv, name="data"),
                 addr_ro(self.feature_log_prob_, name="feature_log_prob_"),
                 0 if bias is None else addr_ro(bias, name="class_log_prior_"),
                 [n, d, K, dv.size], _addr_rw(jll_h, name="jll"))
+        if self.numeric_mode_ == "identical":
+            # lane idn-int-prep: the dense chain without its zero terms; a row
+            # whose columns do not ascend strictly takes the dense program
+            flag = Array.from_list([0], "<i4")
+            jll_csr(*args, _addr_rw(flag, name="flag"))
+            if int(flag.tolist()[0]) != 0:
+                return super()._scores(X.toarray(), want)
+        else:
+            jll_csr(*args)
         pr = _Prog()
         z = pr.put_list([0.0] * (n * K))
         jll = pr.alloc(n * K)
@@ -2520,6 +2596,19 @@ class _DiscreteNB(_Classifier):
         pr = _Prog()
         xo = pr.put(arr)
         wo = _nb_weights(pr, sample_weight, n)
+        if _nb_onepass(mode):
+            # lane idn-int-prep: one unit per (block, column) counts every
+            # class, binarizes (BernoulliNB) and flags a negative word; no
+            # binarized copy and no column-stats pass. The same words.
+            yo = pr.put_codes(codes)
+            st = pr.alloc(6 * d)
+            cnt, fc = pr.alloc(K), pr.alloc(K * d)
+            clp = pr.alloc(K)
+            _nb_counts(pr, wo, xo, n, d, yo, K, cnt, fc,
+                       thr=_NONE if binarize is None else pr.put_scalar(binarize),
+                       neg=st + 3 * d if self._needs_min else _NONE)
+            self._prior_stages(pr, K, cnt, clp)
+            return pr, mode, n, d, K, st, cnt, fc, clp
         if binarize is not None:
             thr = pr.put_scalar(binarize)
             xb = pr.work(n * d)
@@ -2543,7 +2632,10 @@ class _DiscreteNB(_Classifier):
         _check_alpha(self)
         csr = self._csr_fast(X) if sample_weight is None else None
         if csr is not None:
-            return self._params(*self._fit_counts_csr(csr, y))
+            got = self._fit_counts_csr(csr, y)
+            if got is not None:
+                return self._params(*got)
+            X = X.toarray()     # IDENTICAL only: the dense program (`_fit_counts_csr`)
         return self._params(*self._fit_counts(X, y, getattr(self, "binarize", None), sample_weight))
 
     def partial_fit(self, X, y, classes=None, sample_weight=None):
@@ -2563,19 +2655,31 @@ class _DiscreteNB(_Classifier):
         pr = _Prog()
         xo = pr.put(arr)
         wo = _nb_weights(pr, sample_weight, n)
+        onepass = _nb_onepass(mode)
+        thr = _NONE
         if getattr(self, "binarize", None) is not None:
-            xb = pr.work(n * d)
-            pr.stage("binarize", n * d, xo, n * d, pr.put_scalar(self.binarize), xb)
-            xo = xb
+            if onepass:
+                thr = pr.put_scalar(self.binarize)
+            else:
+                xb = pr.work(n * d)
+                pr.stage("binarize", n * d, xo, n * d, pr.put_scalar(self.binarize), xb)
+                xo = xb
         yo = pr.put_codes(codes)
         st = pr.alloc(6 * d)
         cnt, fc, clp = pr.alloc(K), pr.alloc(K * d), pr.alloc(K)
-        _col_stats(pr, xo, n, d, st, var=False)
+        if not onepass:
+            _col_stats(pr, xo, n, d, st, var=False)
         if first:
-            _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, _NONE, _NONE, fc)
+            bc, bf = cnt, fc
         else:
             bc, bf = pr.alloc(K), pr.alloc(K * d)
+        if onepass:
+            # lane idn-int-prep (`_fit_counts`): the same words
+            _nb_counts(pr, wo, xo, n, d, yo, K, bc, bf, thr=thr,
+                       neg=st + 3 * d if self._needs_min else _NONE)
+        else:
             _class_stats(pr, wo, K * d, xo, n, d, yo, K, bc, _NONE, _NONE, bf)
+        if not first:
             pr.stage("add_arrays", K, pr.put(self.class_count_), bc, cnt)
             pr.stage("add_arrays", K * d, pr.put(self.feature_count_), bf, fc)
         self._prior_stages(pr, K, cnt, clp)
@@ -2598,6 +2702,7 @@ class MultinomialNB(_DiscreteNB):
     reference; partial_fit adds each batch's counts, as the reference."""
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior")
     _csr_ok = True
+    _needs_min = True
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None):
         self.alpha = alpha
@@ -3897,7 +4002,9 @@ _LABEL_PRESENT = {}
 
 
 def _label_present_enabled(mode):
-    if mode != "fast":
+    # FAST + Apple (LABEL_DIRECT) and, lane idn-int-prep, IDENTICAL on every
+    # vendor and the host column (IDN_LABEL): the binding's export is the switch
+    if mode not in ("fast", "identical"):
         return False
     binding = _prep_binding(mode)
     key = id(binding)
@@ -5212,6 +5319,7 @@ class ComplementNB(_DiscreteNB):
     reference; partial_fit adds each batch's counts, as the reference."""
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "norm")
     _csr_ok = True
+    _needs_min = True
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, norm=False):
         self.alpha = alpha

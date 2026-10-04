@@ -22,13 +22,21 @@ from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from x_prep.common import FP, IP, p, ld, st
 
-#: The switch: FAST, Apple, and the define (default OFF).
+#: lane idn-int-prep (2026-10-04): IDENTICAL on every vendor, ON by default.
+#: The table is an integer count: the atomic adds give the units' words at any
+#: row count (`cat_hfold_unit` also sums integers and converts once), and the
+#: host column keeps the units. -D MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF restores
+#: the unit path on the device.
+comptime IDN_NB_CAT_ATOMIC = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF"]()
+)
+#: The switch: FAST, Apple, and the define (default OFF); or IDENTICAL (above).
 comptime NB_CAT_ATOMIC = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_NB_CAT_ATOMIC"]()
-)
+) or IDN_NB_CAT_ATOMIC
 
 
 def cat_hist_atomic_kernel(f: FP, q: IP, total: Int32):

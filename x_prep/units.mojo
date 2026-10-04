@@ -41,7 +41,9 @@ from x_prep.mutual_info import mi_colscale_unit, mi_noise_unit, mi_cc_unit, mi_c
 from x_prep.blocked import (
     colb_part_unit, colb_fold_unit, colb_ss_unit, colb_var_unit, maxabs_fold_unit,
     csb_part_unit, csb_fold_unit, csb_ss_unit, csb_var_unit, cat_hpart_unit, cat_hfold_unit,
+    IDN_NB_ONEPASS, csb1_part_unit, csb1_neg_unit,
 )
+from x_prep.label_fast import IDN_LABEL
 from naive_bayes.da import (
     lda_prep_unit, lda_w_unit, lda_stage2_unit, lda_stage3_unit, qda_cov_unit, qda_prep_unit, qda_dec_unit,
     da_shrink_unit, da_pool_unit, sym_fn_unit, da_intercept_unit, evr_unit,
@@ -56,7 +58,11 @@ from x_prep.calib import (
 
 #: ops 142-156 (x_prep/calib.mojo) exist only under CALIB_FOLDS (FAST + Apple,
 #: default on, -D MOJOLEARN_CALIB_GNB_FOLDS_OFF off); every other binding keeps the 142-op table.
-comptime N_OPS = 162 if CAT_CLS2_PACK else (157 if CALIB_FOLDS else 142)
+#: lane idn-int-prep: IDENTICAL compiles the presence ops 157-160 (IDN_LABEL,
+#: x_prep/label_fast.mojo) and ops 162-163 (IDN_NB_ONEPASS, x_prep/blocked.mojo)
+#: on every vendor and in the host column; the op numbers between are empty there.
+comptime IDN_INT_OPS = IDN_LABEL or IDN_NB_ONEPASS
+comptime N_OPS = 164 if IDN_INT_OPS else (162 if CAT_CLS2_PACK else (157 if CALIB_FOLDS else 142))
 #: ops 157-161 (x_prep/cat_cls2.mojo, lane/apple-fast-gap-cls2) exist only under
 #: CAT_CLS2_PACK (FAST + Apple default, -D MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF off)
 
@@ -378,7 +384,7 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
             cal_platt_ls_pick_unit(t, f, q)
         comptime if OP == 156:
             cal_sigmoid_avg_unit(t, f, q)
-    comptime if CAT_CLS2_PACK:
+    comptime if CAT_CLS2_PACK or IDN_LABEL:
         comptime if OP == 157:
             cat_zero_unit(t, f, q)
         comptime if OP == 158:
@@ -387,5 +393,11 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
             pres_count_unit(t, f, q)
         comptime if OP == 160:
             pres_write_unit(t, f, q)
+    comptime if CAT_CLS2_PACK:
         comptime if OP == 161:
             cat_pack_unit(t, f, q)
+    comptime if IDN_NB_ONEPASS:
+        comptime if OP == 162:
+            csb1_part_unit(t, f, q)
+        comptime if OP == 163:
+            csb1_neg_unit(t, f, q)
