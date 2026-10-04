@@ -158,6 +158,21 @@ comptime IDN_XD_SWEEP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_def
 comptime IDN_XD_NO_WAIT = IDN_XD_SWEEP and TARGET_COLUMN != COLUMN_APPLE
 comptime XD_NO_FLAG = Int32(2147483647)
 
+# lane fam-decomp (2026-10-04), IDENTICAL: a small eigh (n <= IDN_EIGH_SMALL_N)
+# is ONE launch and one wait, the batched round-robin kernel
+# (x_decomp/rr_batch.mojo) with a batch of one, whose pairs, 2 x 2 blocks and
+# V rows spread over the block's RR_OFF_TPB threads, instead of two launches
+# a round, 2 (m - 1) a sweep, and a three-scalar readback before every sweep
+# (at n = 16 about 250 launches and 8 waits a solve; FastICA's symmetric
+# decorrelation, FactorAnalysis, PLS and MCD's pinvh call it every
+# iteration). The batched kernel runs the single solver's cells in its
+# order and decides by the same tests (its header): the same words, on the
+# device columns and against `host_eigh_rr`. At most RR_OFF_TPB cells of
+# work a step, so the block is not short of threads at these sizes.
+# -D MOJOLEARN_IDN_EIGH_SMALL_OFF restores the per-round launches.
+comptime IDN_EIGH_SMALL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_EIGH_SMALL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+comptime IDN_EIGH_SMALL_N = 32
+
 
 @always_inline
 def _round_sync(ctx: DeviceContext, rd: Int) raises:
@@ -2339,7 +2354,20 @@ struct DevExec(Exec):
         `sign_flip_kernel` and the ascending permutation; w (n) and v (n x n)
         out to host memory. The resident kit (x_decomp/kit_device.mojo)
         hands its own copy here, the Lanczos projected solve too. Returns the
-        sweeps run."""
+        sweeps run (0 from the small route, which does not report them)."""
+        comptime if IDN_EIGH_SMALL:
+            if n >= 1 and n <= IDN_EIGH_SMALL_N:
+                # one launch (see IDN_EIGH_SMALL); an unconverged solve or a
+                # block that did not run raises inside `_rr_batch_on`
+                var bw = ctx.enqueue_create_buffer[DType.float32](n)
+                var bv = ctx.enqueue_create_buffer[DType.float32](n * n)
+                DevExec._rr_batch_on(ctx, da, 1, n, bw, bv)
+                _down(ctx, bw, w, n)
+                _down(ctx, bv, v, n * n)
+                ctx.synchronize()
+                _ = bw^
+                _ = bv^
+                return 0
         var m = n + (n % 2)
         var h = m // 2
         var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
