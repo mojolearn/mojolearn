@@ -58,6 +58,7 @@ from x_linear.huber_grid import huber_fit_grid
 from x_linear.dispatch import ALGO_HUBER, ALGO_ENETCV
 from x_linear.enetcv_fast import enetcv_fast
 from x_linear.fast_gram import fast_gram_into, XL_RIDGE_FAST_GRAM
+from x_linear.sgdoc_tail import sgdoc_centered
 from x_linear.cls1_fast import (
     C1_TPB, C1_BATCH, C1_BAYES_STATE, BAYES_CLS1_STATS, BAYES_CLS1_PARTS, BAYES_CLS1_BATCH,
     RIDGE_CLS1_CODES, c1_sq_parts_kernel, c1_sum_parts_kernel, c1_dev_parts_kernel, c1_codes_targets_kernel,
@@ -1332,6 +1333,24 @@ def _sgd_ps_kernel_body(
 # scalars in every lane, no barrier: a lane only touches its own columns),
 # and the weights go back to device memory once a launch. d <= SPS_W *
 # SPS_MAXC, else the block form. FAST: the predictor's fold order changes.
+# SGDOC_FAST_TAIL: FAST+Apple DEFAULT (rollback -D MOJOLEARN_SGDOC_FAST_TAIL_OFF;
+# -D MOJOLEARN_SGDOC_FAST_TAIL_LONG for the 4x tail). SGDOneClassSVM at
+# learning_rate='optimal', tol=None on centered data: main's per-sample
+# kernels over the LAST SGDOC_TAIL_K steps of the real schedule from w = 0,
+# intercept = 1 (the 1/t schedule makes the final state a stationary chain's
+# draw; derivation and gate in x_linear/sgdoc_tail.mojo). Non-centered data
+# keeps the full run bit for bit. M3, source 97ea50da3, one run per arm:
+# taxi 42142.4 -> 153.7 ms, istella 75533.9 -> 407.0 ms (w2-sgdoc-tail-*);
+# w2-sgdoc-q PASS (flag fraction, objective, |w|, score spread, Jaccard vs
+# main's own seed spread). Still main's serial per-sample chain, 300x
+# shorter: a parallel SGD one-class algorithm remains owed.
+comptime SGDOC_FAST_TAIL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SGDOC_FAST_TAIL_OFF"]()
+)
+comptime SGDOC_TAIL_K = 262144 if is_defined["MOJOLEARN_SGDOC_FAST_TAIL_LONG"]() else 65536
+
+
 comptime SGD_FAST_PS_SIMD = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_SGD_FAST_PS_SIMD_OFF"]()
@@ -1658,6 +1677,18 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
         hst[c * SGD_END_ST + 3] = bitcast[DType.float32](Int32(1))
     if n_x > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    # SGDOC_FAST_TAIL: the first epoch e0 and its first position r0 of the
+    # last SGDOC_TAIL_K steps, t of that step (0, 0 and t = 1: the full run)
+    var e0 = 0
+    var r0 = 0
+    comptime if SGDOC_FAST_TAIL:
+        if (one_class and lr == LR_OPTIMAL and penalty == P_L2 and fi and do_shuffle and not need_obj
+                and not has_sw and max_iter * n > SGDOC_TAIL_K):
+            if sgdoc_centered(ctx, FP(unsafe_from_address=Int(dx.unsafe_ptr())), n, d):
+                var s0 = max_iter * n - SGDOC_TAIL_K
+                e0 = s0 // n
+                r0 = s0 - e0 * n
+                hpt[0] = Int32(s0 + 1)
     ctx.enqueue_copy(dst_buf=dlab, src_ptr=y)
     if has_sw:
         ctx.enqueue_copy(dst_buf=dsw, src_ptr=y + n)
@@ -1673,10 +1704,11 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     ctx.enqueue_function[sgd_iota_kernel](didx.unsafe_ptr(), Int32(n), Int32(problems),
                                           grid_dim=_xg_blocks(problems * n), block_dim=XG_TPB)
     var fin_par = 0
-    for epoch in range(max_iter):
+    for epoch in range(e0, max_iter):
         # which problems still run is the device's (dact); every problem's
-        # order is written (a stopped one's is never read)
-        var par = epoch % 2
+        # order is written (a stopped one's is never read). The stop state's
+        # parity counts from e0 (parity 0 holds the initial words).
+        var par = (epoch - e0) % 2
         # the epoch as ONE guarded unit: it updates w, q, the scalar state
         # and t in place, so a cut epoch restores them and replays
         ctx.enqueue_copy(dst_buf=dws, src_buf=dw)
@@ -1698,7 +1730,7 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                     grid_dim=_xg_blocks(n), block_dim=XG_TPB,
                 )
                 wo += _xg_blocks(n)
-            var start = 0
+            var start = r0 if epoch == e0 else 0
             while start < n:
                 var cnt = min(chunk, n - start)
                 if sps:
