@@ -963,15 +963,18 @@ def _category_block(pr, categories):
     return pr.put_list(block), kmax
 
 
-def _codes(pr, arr, categories):
+def _codes(pr, arr, categories, *, device_only=False):
     """Stages that write each element's category index (or -1) and each
     column's unknown count. Returns (codes offset, unknown-count offset)."""
     n, d = arr.shape
     xo = pr.put(arr)
     uo, kmax = _category_block(pr, categories)
     co = pr.put_list([c.size for c in categories])
-    codes = pr.alloc(n * d)
+    codes = pr.scratch(n * d) if device_only else pr.alloc(n * d)
     pr.stage("lookup", n * d, xo, n, d, uo, kmax, co, codes)
+    if device_only:
+        # TargetEncoder consumes the codes only; unknown counts are unused.
+        return codes, None
     neg = pr.alloc(d)
     pr.stage("count_neg", d, codes, n, d, neg)
     return codes, neg
@@ -1565,21 +1568,6 @@ def _target_scratch(mode):
     return _TARGET_SCRATCH[key]
 
 
-def _target_codes(pr, arr, cats, scratch):
-    if not scratch:
-        return _codes(pr, arr, cats)[0]
-    # TargetEncoder never reads the unknown counts or the codes on the host.
-    # Unknown codes remain -1 and te_apply returns the fitted global mean.
-    n, d = arr.shape
-    xo = pr.put(arr)
-    uo, kmax = _category_block(pr, cats)
-    # glue: per-column category-array lengths form the GPU lookup arguments.
-    co = pr.put_list([c.size for c in cats])
-    codes = pr.scratch(n * d)
-    pr.stage("lookup", n * d, xo, n, d, uo, kmax, co, codes)
-    return codes
-
-
 class TargetEncoder(_PrepBase):
     """sklearn.preprocessing.TargetEncoder over numeric category columns:
     binary, continuous and multiclass targets, smooth 'auto' (empirical
@@ -1641,7 +1629,7 @@ class TargetEncoder(_PrepBase):
         F = n_folds
         pr = _Prog()
         scratch = _target_scratch(mode)
-        codes = _target_codes(pr, arr, cats, scratch)
+        codes, _neg = _codes(pr, arr, cats, device_only=scratch)
         # the target's words as arrays (lane apple-fast-py2mojo-prep /
         # cgr4-py-compute): continuous float32, codes through i2f, the
         # one-hot rows built on the device
@@ -1792,7 +1780,7 @@ class TargetEncoder(_PrepBase):
         n, d = arr.shape
         T, cmax = self._T, self._cmax
         pr = _Prog()
-        codes = _target_codes(pr, arr, self.categories_, _target_scratch(self.numeric_mode_))
+        codes, _neg = _codes(pr, arr, self.categories_, device_only=_target_scratch(self.numeric_mode_))
         enc = pr.put(self._enc)
         meta = pr.put(self._meta)
         out = pr.output(n * d * T)
