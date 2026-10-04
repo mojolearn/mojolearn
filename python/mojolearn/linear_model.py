@@ -1265,6 +1265,27 @@ class LogisticRegression(NumericModeMixin):
                 [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0],
             )
             return decode_labels(self.classes_, codes)
+        # lane fam2-linear: the row argmax runs on the device beside the
+        # scores (`qn_predict_multiclass`); a binding without the entry (a
+        # CPU-only install, or a build with MOJOLEARN_QN_DEV_ARGMAX_OFF)
+        # keeps the host scan, the same first-maximum rule.
+        binding = self._bind("_mojolearn_estimators")
+        native = getattr(binding, "qn_predict_multiclass", None)
+        if native is not None:
+            if not hasattr(self, "_w"):
+                raise ValueError("mojolearn LogisticRegression: call fit first")
+            x, _ = as_f32_c(X, ndim=2, name="X")
+            if x.shape[1] != self.n_features_in_:
+                raise ValueError("mojolearn LogisticRegression feature count differs from fit")
+            codes = empty((x.shape[0],), "<i8")
+            if x.shape[0]:
+                native(
+                    addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
+                    addr(codes, name="codes"),
+                    [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0,
+                     self._n_targets()],
+                )
+            return decode_labels(self.classes_, codes)
         scores = self.decision_function(X)
         return decode_labels(self.classes_, argmax_rows(scores))
 

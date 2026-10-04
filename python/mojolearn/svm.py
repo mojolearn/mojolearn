@@ -146,6 +146,32 @@ class LinearSVC(_LinearSVMBase):
         # elsewhere; two classes select class 1 and fit once.
         selected = [1] if n_classes == 2 else list(range(n_classes))
         blocks, n_iter, objectives, retcodes = [], 0, [], []
+        ovr = getattr(self._bind("_mojolearn_estimators"), "qn_fit_ovr", None)
+        if ovr is not None and codes.dtype == "<i4":
+            # lane fam2-linear: X and the class codes cross the bus once;
+            # the binding builds each 0/1 target on the device and runs the
+            # same per-class fits (a binding without the entry keeps the
+            # per-class calls below)
+            n_fits = len(selected)
+            n_coefs = cols + (1 if self.fit_intercept else 0)
+            w_all = zeros((n_fits, n_coefs), "<f4")
+            info = zeros((n_fits, 3), "<f4")
+            codes_c = codes._as_c()
+            ovr(
+                addr_ro(x, name="X"), addr_ro(codes_c, name="codes"),
+                addr(w_all, name="coef_"), addr(info, name="info"),
+                [rows, cols, selected[0], n_fits, float(l1), float(l2),
+                 float(self.tol), float(0.1 * self.tol), int(self.max_iter),
+                 int(self.linesearch_max_iter), int(self.lbfgs_memory),
+                 1 if self.fit_intercept else 0,
+                 1 if self.penalty_normalized else 0,
+                 int(self._LOSSES[self.loss])])
+            for k, (fx, rc, it) in enumerate(info.tolist()):  # glue: unpacks one result row per fit
+                blocks.append(w_all[k])
+                n_iter = max(n_iter, int(it))
+                objectives.append(float(fx))
+                retcodes.append(int(rc))
+            selected = []
         for cls in selected:
             # the 0/1 target through the core helpers (equal_elements, cast_elements)
             y_enc = (codes == cls).astype("<f4")
@@ -193,6 +219,22 @@ class LinearSVC(_LinearSVMBase):
                     addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
                     addr(codes, name="codes"),
                     [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0])
+            return decode_labels(self.classes_, codes)
+        multi = getattr(b, "qn_predict_multiclass", None) if b is not None else None
+        if multi is not None and len(self.classes_) > 2:
+            # lane fam2-linear: the row argmax on the device beside the scores
+            if not hasattr(self, "_w"):
+                raise ValueError("mojolearn LinearSVC: call fit first")
+            x, _ = as_f32_c(X, ndim=2, name="X")
+            if x.shape[1] != self.n_features_in_:
+                raise ValueError(f"mojolearn {type(self).__name__} feature count differs from fit")
+            codes = empty((x.shape[0],), "<i8")
+            if x.shape[0]:
+                multi(
+                    addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
+                    addr(codes, name="codes"),
+                    [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0,
+                     len(self.classes_)])
             return decode_labels(self.classes_, codes)
         scores = self.decision_function(X)
         if len(self.classes_) == 2:

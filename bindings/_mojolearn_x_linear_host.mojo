@@ -13,6 +13,8 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_linear.ops import FP, IP, X_LINEAR_HOST_SABOTAGE
 from x_linear.dispatch import fit_dispatch, decision_one, decision_code_row, team_rows, team_own, ALGO_ISOTONIC, ALGO_LOGCV, ALGO_RIDGE, isotonic_abi_check
+from x_linear.dispatch import ALGO_GLM
+from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM, GLM_YDOM_REFUSED, glm_ydom_host
 from x_linear.logcv import logcv_fold_ids
 from x_linear.isotonic_host import isotonic_fit_host
 from x_linear.team import team_work, solo
@@ -30,6 +32,11 @@ def _finite(p: FP, count: Int, name: String) raises:
         var v = p.unsafe_load(i)
         if not (v == v) or v > Float32(3.4028234e38) or v < Float32(-3.4028234e38):
             raise Error(String("mojolearn: ", name, " contains NaN or infinity"))
+
+
+def glm_ydom_binding() raises -> PythonObject:
+    """1: a GLM fit checks its targets' range itself (x_linear/glm_ydom.mojo)."""
+    return PythonObject(1)
 
 
 def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, dims: PythonObject,
@@ -63,6 +70,12 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     _finite(y, Int(py=dims[3]), "y")
     for i in range(n_out):
         out.unsafe_store(i, Float32(0))
+    # lane fam2-linear: the GLM targets' range, the device grid's rule
+    # (x_linear/glm_ydom.mojo); a refused fit returns -1 in the converged word
+    comptime if XLIN_GLM_DEV_YDOM:
+        if a == ALGO_GLM and n_fp > 0 and n_out >= d + 3 and glm_ydom_host(y, n, fpl[0]):
+            out.unsafe_store(d + 2, GLM_YDOM_REFUSED)
+            return PythonObject(n_out)
     # LogisticRegressionCV: the caller's fold ids are zeros; its StratifiedKFold
     # ids are built here from the labels (cgr-linear), into a copy of y
     var ycopy = List[Float32]()
@@ -192,6 +205,8 @@ def PyInit__mojolearn_x_linear_host() abi("C") -> PythonObject:
         m.def_function[x_linear_host_column_binding]("x_linear_host_column")
         m.def_function[x_linear_host_sabotage_binding]("x_linear_host_sabotage")
         m.def_function[fit_binding]("x_linear_fit")
+        comptime if XLIN_GLM_DEV_YDOM:
+            m.def_function[glm_ydom_binding]("x_linear_glm_ydom")
         m.def_function[decision_binding]("x_linear_decision")
         m.def_function[decision_codes_binding]("x_linear_decision_codes")
         m.def_function[x_linear_numeric_mode_binding]("x_linear_numeric_mode")

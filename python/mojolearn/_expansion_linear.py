@@ -481,12 +481,21 @@ class _GLMBase(_LinearRegressorMixin, NumericModeMixin):
             raise ValueError(f"mojolearn {type(self).__name__}: alpha must be >= 0")
         a, n, d = _matrix(X)
         yv = _vector(y, n)
-        self._check_y(yv.tolist())
+        # lane fam2-linear: the targets' range is checked by the fit itself
+        # (x_linear/glm_ydom.mojo: on the device on a GPU route); a binding
+        # without `x_linear_glm_ydom` keeps the walk here
+        native_range = getattr(_fit_module(self, ALGO_GLM), "x_linear_glm_ydom", None)
+        if native_range is None:
+            self._check_y(yv.tolist())
         link = self._link_code()
         m = d + 1
         yv, has_sw = _with_weights(yv, sample_weight, n)
         vals = _run(self, ALGO_GLM, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept)), link, has_sw],
                     [self._power_value(), self.alpha, self.tol], d + 3, 3 * n + m * m + 3 * m, 1)
+        if native_range is not None and vals[d + 2] < 0:
+            # the class's own message: its rule fails on a negative target
+            self._check_y([-1.0])
+            raise ValueError("mojolearn: some value(s) of y are out of the valid range of the loss")
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
         self.n_iter_ = int(vals[d + 1])

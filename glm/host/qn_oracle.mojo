@@ -143,6 +143,7 @@ from core.classical_host_predict import (
 from decomposition.host.pca_oracle import STATS_TPB, host_halving_sum
 from glm.host.glm_oracle import host_xty, host_fma_row_into
 from core.host_predict_threads import host_list_ptr
+from glm.impl.qn.qn_tiled_rule import qn_tiled_multi_shape
 
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
@@ -535,6 +536,36 @@ struct HostGLM(Movable):
             var C = self.c
             var D = self.d
             var cd = C * D
+            # lane fam2-linear: QN_TILED_MULTI's order (`qntm_partial_kernel`
+            # / `qntm_fold_kernel`): per tile, every (class, feature) its own
+            # chain over the tile's rows ascending from 0.0, then the tile
+            # fold per cell; the same rule function as the device.
+            if qn_tiled_multi_shape(n, D, C):
+                var tiles = host_qnt_tiles(n)
+                var tpart = List[Float32](length=tiles * cd, fill=Float32(0.0))
+                var tacc = List[Float32](length=cd, fill=Float32(0.0))
+                var tap = host_list_ptr(tacc)
+                var txp = host_list_ptr(self.x)
+                for k in range(tiles):
+                    for i in range(cd):
+                        tacc[i] = Float32(0.0)
+                    for r in range(k * HOST_QNT_ROWS, min(n, (k + 1) * HOST_QNT_ROWS)):
+                        for cc in range(C):
+                            host_fma_row_into(tap + cc * D, txp + r * D, self.z[cc + C * r], D)
+                    for cc in range(C):
+                        for j in range(D):
+                            tpart[(cc + C * j) * tiles + k] = tacc[cc * D + j]
+                for b in range(cd):
+                    var tsc = ftz(alpha * host_qnt_fold(tpart, b * tiles, tiles))
+                    if set_zero:
+                        g[b] = tsc
+                    else:
+                        g[b] = ftz(tsc + g[b])
+                if self.fit_intercept:
+                    var tratio = Float32(1.0) / Float32(n)
+                    for cc in range(C):
+                        g[cd + cc] = ftz(host_qnt_sum_strided(self.z, n, C, cc) * tratio)
+                return
             # Output b = j*C + cc, lane t folds rows t, t + STATS_TPB, ...
             # ascending, then the halving tree. Walked row by row (lane
             # linear-cpu): row r feeds lane r mod STATS_TPB of every output,

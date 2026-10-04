@@ -174,7 +174,11 @@ from glm.impl.linear_model.qn import (
     QN_LOSS_SVR_L1,
     QN_LOSS_SVR_L2,
 )
-from checks.numerics import ftz
+from checks.numerics import ftz, identical_mul_add
+from checks.rtf_seam import rtf_mul_add
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from glm.impl.qn.qn_tiled_rule import qn_tiled_multi_shape
 
 
 @fieldwise_init
@@ -996,6 +1000,104 @@ def qn_slim_epilogue_gated_kernel(
     )
 
 
+# lane fam2-linear (2026-10-04): QN_IDN_SLIM, the IDENTICAL `C == 1`
+# evaluation's small launches as one. After the tile fold wrote the loss
+# gradient (set_zero), one block adds the Tikhonov gradient and folds its
+# value, then reduces the gradient norm (and OWL-QN's l1 term): it replaces
+# the memset, `tikhonov_reg_grad_kernel`, the norm kernel and `nrm1_kernel`.
+# NO BIT MOVES: `g[j] = ftz(sc + ftz(l2 * w_j))` is the sum the beta = 1
+# fold formed (an addition, commuted); the regularizer value, `dot_self` /
+# `nrm1` / `nrm_max` and the l1 term are those kernels' chains and folds.
+# `-D MOJOLEARN_QN_IDN_SLIM_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) restores the
+# separate launches.
+comptime QN_IDN_SLIM = QN_TILED and not (
+    is_defined["MOJOLEARN_QN_IDN_SLIM_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+@always_inline
+def _qn_idn_epilogue_body(
+    slots: MutPointer[Float32, MutAnyOrigin],
+    g: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    n_weights_in: Int32,
+    n_param_in: Int32,
+    l2: Float32,
+    gnorm_kind: Int32,
+    pen_len_in: Int32,
+):
+    """QN_IDN_SLIM, one block of STATS_TPB: `tikhonov_reg_grad_kernel`'s
+    gradient added to g and its value into slots[1] (l2 != 0), then the
+    norm of the updated g into slots[2] (kind 1 `dot_self_kernel`, 2
+    `nrm1_kernel`, 0 `nrm_max_kernel`, each character for character), then,
+    pen_len > 0, `nrm1_kernel(w[0:pen_len])` into slots[3]. Index j belongs
+    to thread j mod STATS_TPB in every walk, so each g word is read by the
+    thread that wrote it."""
+    var nw = Int(n_weights_in)
+    var np = Int(n_param_in)
+    var pl = Int(pen_len_in)
+    var tid = Int(thread_idx.x)
+    var reg = Float32(0.0)
+    if l2 != Float32(0.0):
+        var half_l2 = ftz(Float32(0.5) * l2)
+        var j = tid
+        while j < nw:
+            var wj = w.unsafe_load(j)
+            g.unsafe_store(j, ftz(g.unsafe_load(j) + ftz(l2 * wj)))
+            var t = ftz(half_l2 * wj)
+            reg = ftz(reg + ftz(t * wj))
+            j += STATS_TPB
+    var reg_s = ftz(pinned_block_sum[STATS_TPB](reg))
+    var acc = Float32(0.0)
+    var i = tid
+    while i < np:
+        var gi = g.unsafe_load(i)
+        if gnorm_kind == 1:
+            acc = identical_mul_add(gi, gi, acc)
+        elif gnorm_kind == 2:
+            acc = ftz(acc + abs(gi))
+        else:
+            var a = abs(gi)
+            if a > acc:
+                acc = a
+        i += STATS_TPB
+    var norm = Float32(0.0)
+    if gnorm_kind == 0:
+        norm = pinned_block_max[STATS_TPB](acc)
+    else:
+        norm = ftz(pinned_block_sum[STATS_TPB](acc))
+    var pen = Float32(0.0)
+    if pl > 0:
+        var p = Float32(0.0)
+        var k = tid
+        while k < pl:
+            p = ftz(p + abs(w.unsafe_load(k)))
+            k += STATS_TPB
+        pen = ftz(pinned_block_sum[STATS_TPB](p))
+    if tid == 0:
+        if l2 != Float32(0.0):
+            slots.unsafe_store(1, reg_s)
+        slots.unsafe_store(2, norm)
+        if pl > 0:
+            slots.unsafe_store(3, pen)
+
+
+def qn_idn_epilogue_kernel(
+    slots: MutPointer[Float32, MutAnyOrigin],
+    g: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    n_weights_in: Int32,
+    n_param_in: Int32,
+    l2: Float32,
+    gnorm_kind: Int32,
+    pen_len_in: Int32,
+):
+    """The kernel entry of `_qn_idn_epilogue_body`."""
+    _qn_idn_epilogue_body(
+        slots, g, w, n_weights_in, n_param_in, l2, gnorm_kind, pen_len_in,
+    )
+
+
 def qnt_tiles(n: Int) -> Int:
     return (n + QNT_ROWS - 1) // QNT_ROWS
 
@@ -1070,6 +1172,248 @@ def qnt_fold_kernel(
                 g.unsafe_store(D, ftz(s0 * ratio))
         else:
             slots.unsafe_store(0, s0)
+
+
+# ---------------------------------------------------------------------------
+# lane fam2-linear (2026-10-04): QN_IDN_FUSED, the IDENTICAL `C == 1`
+# evaluation's row work as ONE launch. QN_TILED ran four launches over the
+# rows: the gemv forward, the bias add, the loss map, then `qnt_partial_kernel`
+# (X read from memory twice, z and the loss terms written and re-read). Here
+# block k owns tile k's QNT_ROWS rows: phase 1, thread t runs row t's forward
+# chain (`pinned_gemv_n_kernel`'s spelling, its loads staged through shared
+# memory on NVIDIA / AMD exactly as `pinned_gemv_n_tiled_kernel` stages them),
+# the bias seam and the loss map, leaving dZ and the loss term in shared
+# memory (and in `z` / `loss_terms`, as before); phase 2, thread o runs
+# output o's chain over the tile's rows (`qnt_partial_kernel`'s chains,
+# outputs o, o + 256, ... when D + 2 > 256), X now cache-resident.
+# `qnt_fold_kernel` follows unchanged. NO BIT MOVES: every chain is the one
+# the four launches ran, so the host column is untouched.
+# `-D MOJOLEARN_QN_IDN_FUSED_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) restores the
+# four launches.
+# ---------------------------------------------------------------------------
+
+comptime QN_IDN_FUSED = QN_TILED and not (
+    is_defined["MOJOLEARN_QN_IDN_FUSED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: lane fam2-linear, CANDIDATE ARM (default OFF, `-D MOJOLEARN_QN_IDN_DCONV`):
+#: IDENTICAL L-BFGS iterations whose step-1 Armijo decision and convergence
+#: test run on the device (`qn_dconv.mojo::dconv_idn_run`), the host reading
+#: one state block per QN_IDN_DCONV_POLL iterations. Needs QN_IDN_FUSED and
+#: QN_IDN_SLIM (their gated forms are the device iteration's evaluation).
+comptime QN_IDN_DCONV = (
+    QN_IDN_FUSED and QN_IDN_SLIM and is_defined["MOJOLEARN_QN_IDN_DCONV"]()
+)
+#: the staged column window (`core/gemm.mojo` GEMV_TILE_K / GEMV_TILE_STRIDE)
+comptime QNIF_K = 32
+comptime QNIF_STRIDE = QNIF_K + 1
+
+
+@always_inline
+def _qn_idn_fused_body(
+    part: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    z: MutPointer[Float32, MutAnyOrigin],
+    loss_terms: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    tiles_in: Int32,
+    loss_in: Int32,
+    fit_intercept: Int32,
+    normalization: Float32,
+    svr_eps: Float32,
+):
+    """Block k, QNT_ROWS threads: tile k's forward, loss map and tile
+    partials (see QN_IDN_FUSED). Stores `z[r] = dZ`, `loss_terms[r]` and
+    `part[o * tiles + k]`, o < D the `X^T dZ` cell, D the dZ sum, D + 1 the
+    loss-term sum. Launch `grid = tiles, block = QNT_ROWS`."""
+    var n = Int(n_in)
+    var D = Int(d_in)
+    var tiles = Int(tiles_in)
+    var tid = Int(thread_idx.x)
+    var k = Int(block_idx.x)
+    var r0 = k * QNT_ROWS
+    var rows = min(QNT_ROWS, n - r0)
+    var dzs = stack_allocation[
+        QNT_ROWS, Scalar[DType.float32], address_space=AddressSpace.SHARED
+    ]()
+    var lts = stack_allocation[
+        QNT_ROWS, Scalar[DType.float32], address_space=AddressSpace.SHARED
+    ]()
+    # phase 1: the forward chain of row r0 + tid
+    var acc = Float32(0.0)
+    comptime if NV_AMD_IDENTICAL_STEPS:
+        var xs = stack_allocation[
+            QNT_ROWS * QNIF_STRIDE,
+            Scalar[DType.float32],
+            address_space=AddressSpace.SHARED,
+        ]()
+        var ws = stack_allocation[
+            QNIF_K, Scalar[DType.float32], address_space=AddressSpace.SHARED
+        ]()
+        var p0 = 0
+        while p0 < D:
+            var kt = min(QNIF_K, D - p0)
+            var t = tid
+            var total = rows * kt
+            while t < total:
+                var r = t // kt
+                var c = t - r * kt
+                xs[r * QNIF_STRIDE + c] = ftz(x.unsafe_load((r0 + r) * D + p0 + c))
+                t += QNT_ROWS
+            if tid < kt:
+                ws[tid] = ftz(w.unsafe_load(p0 + tid))
+            barrier()
+            if tid < rows:
+                for pp in range(kt):
+                    acc = rtf_mul_add(xs[tid * QNIF_STRIDE + pp], ws[pp], acc)
+            barrier()
+            p0 += QNIF_K
+    else:
+        if tid < rows:
+            for p in range(D):
+                acc = rtf_mul_add(
+                    ftz(x.unsafe_load((r0 + tid) * D + p)), ftz(w.unsafe_load(p)), acc
+                )
+    if tid < rows:
+        var zi = ftz(Float32(0.0) + ftz(acc))
+        if fit_intercept != 0:
+            zi = ftz(zi + w.unsafe_load(D))
+        var yi = y.unsafe_load(r0 + tid)
+        var lt = Float32(0.0)
+        var dzi = Float32(0.0)
+        _qn_row_loss(Int(loss_in), yi, zi, svr_eps, lt, dzi)
+        lt = ftz(lt * normalization)
+        dzs[tid] = dzi
+        lts[tid] = lt
+        z.unsafe_store(r0 + tid, dzi)
+        loss_terms.unsafe_store(r0 + tid, lt)
+    barrier()
+    # phase 2: output o's chain over the tile's rows, ascending from 0.0
+    var o = tid
+    while o < D + 2:
+        var a = Float32(0.0)
+        if o < D:
+            for rr in range(rows):
+                a = identical_mul_add(x.unsafe_load((r0 + rr) * D + o), dzs[rr], a)
+        elif o == D:
+            for rr in range(rows):
+                a = ftz(a + dzs[rr])
+        else:
+            for rr in range(rows):
+                a = ftz(a + lts[rr])
+        part.unsafe_store(o * tiles + k, a)
+        o += QNT_ROWS
+
+
+def qn_idn_fused_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    z: MutPointer[Float32, MutAnyOrigin],
+    loss_terms: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    tiles_in: Int32,
+    loss_in: Int32,
+    fit_intercept: Int32,
+    normalization: Float32,
+    svr_eps: Float32,
+):
+    """The kernel entry of `_qn_idn_fused_body` (QN_IDN_FUSED). Launch
+    `grid = tiles, block = QNT_ROWS`."""
+    _qn_idn_fused_body(
+        part, x, y, w, z, loss_terms, n_in, d_in, tiles_in, loss_in,
+        fit_intercept, normalization, svr_eps,
+    )
+
+
+def qn_idn_fused_gated_kernel(
+    gate: MutPointer[Float32, MutAnyOrigin],
+    need_word: Int32,
+    part: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    z: MutPointer[Float32, MutAnyOrigin],
+    loss_terms: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    tiles_in: Int32,
+    loss_in: Int32,
+    fit_intercept: Int32,
+    normalization: Float32,
+    svr_eps: Float32,
+):
+    """QN_IDN_DCONV: `qn_idn_fused_kernel`, a no-op once the device solver
+    state `gate` says stop (`_dc_skip`; the test is uniform across the
+    grid, so every barrier is reached by all or none)."""
+    if _dc_skip(gate, need_word):
+        return
+    _qn_idn_fused_body(
+        part, x, y, w, z, loss_terms, n_in, d_in, tiles_in, loss_in,
+        fit_intercept, normalization, svr_eps,
+    )
+
+
+def qnt_fold_gated_kernel(
+    gate: MutPointer[Float32, MutAnyOrigin],
+    need_word: Int32,
+    g: MutPointer[Float32, MutAnyOrigin],
+    slots: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    tiles_in: Int32,
+    alpha: Float32,
+    beta_is_one: Int32,
+    fit_intercept: Int32,
+):
+    """QN_IDN_DCONV: `qnt_fold_kernel` character for character behind the
+    gate (`_dc_skip`)."""
+    if _dc_skip(gate, need_word):
+        return
+    var D = Int(d_in)
+    var tiles = Int(tiles_in)
+    var o = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var acc = strided_ftz_sum[STATS_TPB](part, 1, o * tiles, tiles, tid, Float32(0.0))
+    var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
+    if tid == 0:
+        if o < D:
+            var sc = ftz(alpha * s0)
+            if beta_is_one != 0:
+                g.unsafe_store(o, ftz(sc + g.unsafe_load(o)))
+            else:
+                g.unsafe_store(o, sc)
+        elif o == D:
+            if fit_intercept != 0:
+                var ratio = Float32(1.0) / Float32(Int(n_in))
+                g.unsafe_store(D, ftz(s0 * ratio))
+        else:
+            slots.unsafe_store(0, s0)
+
+
+def qn_idn_epilogue_gated_kernel(
+    gate: MutPointer[Float32, MutAnyOrigin],
+    need_word: Int32,
+    slots: MutPointer[Float32, MutAnyOrigin],
+    g: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    n_weights_in: Int32,
+    n_param_in: Int32,
+    l2: Float32,
+    gnorm_kind: Int32,
+    pen_len_in: Int32,
+):
+    """QN_IDN_DCONV: `qn_idn_epilogue_kernel` behind the gate (`_dc_skip`)."""
+    if _dc_skip(gate, need_word):
+        return
+    _qn_idn_epilogue_body(
+        slots, g, w, n_weights_in, n_param_in, l2, gnorm_kind, pen_len_in,
+    )
 
 
 # lane/apple-fast-purity2 (2026-10-03): the loss sum and the bias mean that
@@ -1215,6 +1559,70 @@ def qn_tile_sum_classes(
     )
 
 
+# lane fam2-linear (2026-10-04): QN_TILED for `C > 1` (multinomial logistic).
+# `xtdz_multi_kernel` ran one block per output cell `(c, j)`, 256 lanes each
+# walking all N rows at a stride of D floats: X read C * D times. Here the
+# rows are cut into QNT_ROWS tiles as at `C == 1`: pass 1 one chain per
+# (tile, cell), rows ascending from 0.0 (`identical_mul_add(x[r, j],
+# dz[c + C r], acc)`), cells fastest so neighbouring threads read
+# neighbouring words; pass 2 folds each cell's tile partials as
+# `qnt_fold_kernel` does. The words differ from the 256-chain order and are
+# the same on NVIDIA, AMD, Apple and the host column
+# (`glm/host/qn_oracle.mojo`, `qn_tiled_multi_shape` in both).
+comptime QN_TILED_MULTI = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+
+
+def qn_tiled_multi_applies(n_rows: Int, d: Int, c: Int) -> Bool:
+    comptime if QN_TILED_MULTI:
+        return qn_tiled_multi_shape(n_rows, d, c)
+    return False
+
+
+def qntm_partial_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    dz: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    c_in: Int32,
+    tiles_in: Int32,
+):
+    """Pass 1: thread `(k, b)`, `b = c + C*j` fastest, the `X^T dZ` cell `b`
+    over tile `k`'s rows ascending. Stores `part[b * tiles + k]`."""
+    var n = Int(n_in)
+    var D = Int(d_in)
+    var C = Int(c_in)
+    var tiles = Int(tiles_in)
+    var cd = C * D
+    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var k = gid // cd
+    var b = gid - k * cd
+    if k >= tiles:
+        return
+    var c = b % C
+    var j = b // C
+    var r0 = k * QNT_ROWS
+    var r1 = min(n, r0 + QNT_ROWS)
+    var acc = strided_mul_add[1](x, D, j, dz, C, c, r1, r0)
+    part.unsafe_store(b * tiles + k, acc)
+
+
+def qntm_fold_kernel(
+    out_v: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    tiles_in: Int32,
+):
+    """Pass 2: block `b`, STATS_TPB lanes, the pinned fold of cell `b`'s
+    tile partials into `out_v[b]` (the cuBLAS epilogue follows as before)."""
+    var tiles = Int(tiles_in)
+    var b = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var acc = strided_ftz_sum[STATS_TPB](part, 1, b * tiles, tiles, tid, Float32(0.0))
+    var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
+    if tid == 0:
+        out_v.unsafe_store(b, s0)
+
+
 def linear_fwd(
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],
@@ -1286,18 +1694,37 @@ def linear_bwd(
     var d = dims.D
     # `alpha = 1.0 / X.m`: a double narrowed to T. `beta = setZero ? 0 : 1`.
     var alpha = Float32(1.0 / Float64(n_rows))
-    var distributed = gradient_columns(ctx, xtdz, x, dz, n_rows, d, dims.C)
+    # lane fam2-linear: the tiled `C > 1` gradient is decided first (one
+    # rule with the host column), so no other route computes these cells
+    var tiled_multi = qn_tiled_multi_applies(n_rows, d, dims.C)
+    var distributed = False
+    if not tiled_multi:
+        distributed = gradient_columns(ctx, xtdz, x, dz, n_rows, d, dims.C)
     # AUDIT (i): unreached at C == 1; the C == 1 body below is certified.
     if dims.C > 1:
         var cd = dims.C * d
         var fast_done = False
+        if tiled_multi:
+            var tiles_m = qnt_tiles(n_rows)
+            var threads_m = tiles_m * cd
+            ctx.enqueue_function[qntm_partial_kernel](
+                xtdz_ws.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),
+                Int32(n_rows), Int32(d), Int32(dims.C), Int32(tiles_m),
+                grid_dim=((threads_m + QNT_TPB - 1) // QNT_TPB, 1, 1),
+                block_dim=(QNT_TPB, 1, 1),
+            )
+            ctx.enqueue_function[qntm_fold_kernel](
+                xtdz.unsafe_ptr(), xtdz_ws.unsafe_ptr(), Int32(tiles_m),
+                grid_dim=(cd, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
+            fast_done = True
         comptime if QN_FAST_XTDZ:
-            if not distributed and fast_xtdz_applies(d, dims.C) and not qn_coalesced_applies(d, dims.C):
+            if not distributed and not fast_done and fast_xtdz_applies(d, dims.C) and not qn_coalesced_applies(d, dims.C):
                 fast_xtdz_into(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, dims.C)
                 fast_done = True
         # Apple IDENTICAL: the same chains and fold, row-coalesced
         # (`core/xtdz_coalesced.mojo`); a no-op test on every other column.
-        if not distributed and qn_coalesced_applies(d, dims.C):
+        if not distributed and not fast_done and qn_coalesced_applies(d, dims.C):
             xtdz_coalesced(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, dims.C)
             fast_done = True
         if not distributed and not fast_done:
@@ -1428,6 +1855,9 @@ struct GLMWithData(Movable):
         ws_floats = max(ws_floats, qnt_tiles(n_rows))
         # qn_tile_sum_classes' partials (the C > 1 bias mean)
         ws_floats = max(ws_floats, dims.C * qnt_tiles(n_rows))
+        # lane fam2-linear: the tiled C > 1 gradient's tile partials
+        if qn_tiled_multi_applies(n_rows, dims.D, dims.C):
+            ws_floats = max(ws_floats, qnt_tiles(n_rows) * dims.C * dims.D)
         comptime if QN_FAST_FUSED:
             # lane/apple-fast-linsvr: the fused pass's tile partials live here
             if qn_fused_applies(dims.D, dims.C):
@@ -1590,6 +2020,9 @@ struct GLMWithData(Movable):
         var slim = False
         comptime if QN_FAST_SLIM:
             slim = self.dims.C == 1 and self.dims.n_param <= STATS_TPB
+        # lane fam2-linear: IDENTICAL's own one-launch epilogue (same bits)
+        comptime if QN_IDN_SLIM:
+            slim = tiled
         if self.l2 == Float32(0.0) or slim:
             if blocks:
                 self.enqueue_blocks(ctx, w, g, True)
@@ -1629,6 +2062,14 @@ struct GLMWithData(Movable):
         comptime if QN_FAST_SLIM:
             if slim:
                 self.enqueue_slim_epilogue(ctx, w, g, pen_len)
+        comptime if QN_IDN_SLIM:
+            if slim:
+                ctx.enqueue_function[qn_idn_epilogue_kernel](  # small-launch(n: parameter count n_param): the coefficient vector, never rows
+                    self.slots.unsafe_ptr(), g.unsafe_ptr(), w.unsafe_ptr(),
+                    Int32(self.dims.C * self.dims.D), Int32(np),
+                    self.l2, Int32(self._gnorm_kind()), Int32(pen_len),
+                    grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+                )
         if not slim and self._gnorm_kind() == 1:
             ctx.enqueue_function[dot_self_kernel](
                 s2.unsafe_ptr(), g.unsafe_ptr(), Int32(np),
@@ -1951,6 +2392,54 @@ struct GLMWithData(Movable):
                 grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
             )
 
+    def idn_dconv_applies(self) -> Bool:
+        """QN_IDN_DCONV serves this objective: the tiled `C == 1` one."""
+        comptime if QN_IDN_DCONV:
+            return qn_tiled_applies(self.dims.D, self.dims.C)
+        return False
+
+    def enqueue_idn_dconv_eval(
+        mut self,
+        ctx: DeviceContext,
+        mut w: DeviceBuffer[DType.float32],
+        mut g: DeviceBuffer[DType.float32],
+        gate: MutPointer[Float32, MutAnyOrigin],
+    ) raises:
+        """QN_IDN_DCONV: `evaluate`'s three IDENTICAL launches (fused row
+        pass, tile fold with beta 0, the one-launch epilogue), each gated on
+        the device solver state, with NO synchronize: slots 0..2 stay on
+        the device for `qn_dconv.mojo`'s kernels. Not counted in `n_evals`
+        (nothing reads it)."""
+        comptime if not QN_IDN_DCONV:
+            raise Error("qn: enqueue_idn_dconv_eval is compiled under -D MOJOLEARN_QN_IDN_DCONV only")
+        else:
+            var n = self.n_rows
+            var d = self.dims.D
+            var tiles = qnt_tiles(n)
+            var fi = Int32(1) if self.dims.fit_intercept else Int32(0)
+            var nw = Int32(-1)
+            ctx.enqueue_function[qn_idn_fused_gated_kernel](
+                gate, nw, self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(),
+                self.y.unsafe_ptr(), w.unsafe_ptr(), self.z.unsafe_ptr(),
+                self.loss_terms.unsafe_ptr(),
+                Int32(n), Int32(d), Int32(tiles), Int32(self.loss), fi,
+                Float32(1.0 / Float64(n)), self.svr_eps,
+                grid_dim=(tiles, 1, 1), block_dim=(QNT_ROWS, 1, 1),
+            )
+            ctx.enqueue_function[qnt_fold_gated_kernel](
+                gate, nw, g.unsafe_ptr(), self.slots.unsafe_ptr(),
+                self.xtdz_ws.unsafe_ptr(),
+                Int32(n), Int32(d), Int32(tiles), Float32(1.0 / Float64(n)),
+                Int32(0), fi,
+                grid_dim=(d + 2, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
+            ctx.enqueue_function[qn_idn_epilogue_gated_kernel](  # small-launch(n: parameter count n_param): the coefficient vector, never rows
+                gate, nw, self.slots.unsafe_ptr(), g.unsafe_ptr(), w.unsafe_ptr(),
+                Int32(self.dims.C * self.dims.D), Int32(self.dims.n_param),
+                self.l2, Int32(self._gnorm_kind()), Int32(0),
+                grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
+
     def enqueue_tiled(
         mut self,
         ctx: DeviceContext,
@@ -1967,6 +2456,25 @@ struct GLMWithData(Movable):
         var d = self.dims.D
         var tiles = qnt_tiles(n)
         var cells = tiles * (d + 2)
+        comptime if QN_IDN_FUSED:
+            # lane fam2-linear: the forward, the loss map and the tile
+            # partials as one launch (same chains, same bits)
+            ctx.enqueue_function[qn_idn_fused_kernel](
+                self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(), self.y.unsafe_ptr(),
+                w.unsafe_ptr(), self.z.unsafe_ptr(), self.loss_terms.unsafe_ptr(),
+                Int32(n), Int32(d), Int32(tiles), Int32(self.loss),
+                Int32(1) if self.dims.fit_intercept else Int32(0),
+                Float32(1.0 / Float64(n)), self.svr_eps,
+                grid_dim=(tiles, 1, 1), block_dim=(QNT_ROWS, 1, 1),
+            )
+            ctx.enqueue_function[qnt_fold_kernel](
+                g.unsafe_ptr(), self.slots.unsafe_ptr(), self.xtdz_ws.unsafe_ptr(),
+                Int32(n), Int32(d), Int32(tiles), Float32(1.0 / Float64(n)),
+                Int32(0) if set_zero else Int32(1),
+                Int32(1) if self.dims.fit_intercept else Int32(0),
+                grid_dim=(d + 2, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
+            return
         linear_fwd(ctx, self.z, self.x, w, self.w_weights, n, self.dims)
         self.enqueue_loss_and_dz(
             ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), False

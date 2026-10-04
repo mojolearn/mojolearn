@@ -18,7 +18,16 @@ from std.sys.compile import is_defined
 comptime CD_IDN_GRAM_ON = not (
     is_defined["MOJOLEARN_CD_IDN_GRAM_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
-comptime CD_IDN_GRAM_MAX_COLS = 256 if is_defined["MOJOLEARN_CD_IDN_GRAM_WIDE"]() else 64
+# lane fam2-linear: the width bound as candidate arms for the orchestrator's
+# A/B (default 64; pass the same define to the device and the host build):
+#   -D MOJOLEARN_CD_IDN_GRAM_COLS_128   n_cols <= 128
+#   -D MOJOLEARN_CD_IDN_GRAM_COLS_256   n_cols <= 256 (= the older _WIDE)
+# 256 is the kernel's ceiling (one block of CD_IDN_GRAM_TPB = 256 threads).
+comptime CD_IDN_GRAM_MAX_COLS = (
+    256
+    if (is_defined["MOJOLEARN_CD_IDN_GRAM_WIDE"]() or is_defined["MOJOLEARN_CD_IDN_GRAM_COLS_256"]())
+    else (128 if is_defined["MOJOLEARN_CD_IDN_GRAM_COLS_128"]() else 64)
+)
 
 
 def cd_idn_gram_shape(n_rows: Int, n_cols: Int) -> Bool:
