@@ -905,3 +905,5 @@ KNN GPU-only lean counts default76567110e M2 default/OFF PASS; final M3
 quality remains pending. Callpath r3 failed a context identity guard before
 numerical evaluation; r4 14761655f retains stable context ownership and
 foreign-context refusal, now compiling on M2. No callpath timing admitted.
+
+Eigh panel DF21eeacf90: M3 eigh-panel-df-q-v1 strict no-regression FAIL against current panel default, absolute gate FAIL; no timings or promotion admitted. K1 diagnostic1a58b974e is reference-only with22fixed evaluations across3explicit model controls; original K1 HOLD remains.
