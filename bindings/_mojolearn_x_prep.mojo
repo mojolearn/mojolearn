@@ -223,6 +223,10 @@ def cls2_cat_binding() raises -> PythonObject:
     return PythonObject(f)
 
 
+def target_scratch_binding() raises -> PythonObject:
+    return PythonObject(1)
+
+
 def ptimpute_flags_binding() raises -> PythonObject:
     """Lane af-ptimpute (FAST + Apple, each switch its own define, default off):
     the bits of x_prep/fastpt.mojo PTIMPUTE_FLAGS (1 PT_COLBATCH, 2 PT_SPEC,
@@ -272,6 +276,8 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
             m.def_function[fast_unique_binding]("x_prep_fast_unique")
         comptime if SPLINE_FAST_FUSED:
             m.def_function[spline_fused_binding]("x_prep_spline_fused")
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_TARGET_SCRATCH"]():
+            m.def_function[target_scratch_binding]("x_prep_target_scratch")
         comptime if CAT_CLS2_PACK:
             m.def_function[cls2_cat_binding]("x_prep_cls2_cat")
         comptime if CALIB_FOLDS:
