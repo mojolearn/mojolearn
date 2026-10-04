@@ -514,6 +514,10 @@ def dev_als_rows_py(
 # -D MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF turns it off. NOSCAN and LAZY
 # stay opt-in (they move the NaN/inf refusal from fit to transform; pending
 # Andrew's decision); NOSCAN, when defined, replaces the device scan.
+#: M3 A/B 2026-10-04 (afc_ab_def, full board size, 1 run per arm, main a16fada80), gaussian-rp taxi,
+#: mean_abs_distortion identical (0.345752395): NOSCAN 2.135 -> 1.143 ms; LAZY 2.165 -> 2.057 ms.
+#: Still opt-in: both gains come from not doing in fit what sklearn does in fit (NOSCAN skips the
+#: NaN/inf refusal, LAZY defers components_ out of the timed fit). Default needs Andrew's API decision.
 
 comptime _CLS2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime GRP_CLS2_NOSCAN = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN"]()
