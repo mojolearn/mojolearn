@@ -134,6 +134,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from svm.impl.svm_parameter import KernelParams
 from x_decomp.cells import F32Ptr
 from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
+from x_decomp.rr import rr_block, rr_cs, rr_vrow
 from kernel_methods.rbf_fused import (
     RBF_FUSED_MAX_D,
     RBF_FUSED_TPB,
@@ -1360,6 +1361,221 @@ def _nystroem_rr_eigh_idn(
     return executed
 
 
+#: fam2-kernel-gp (2026-10-04), IDENTICAL, CANDIDATE ARM, OFF by default
+#: (`-D MOJOLEARN_IDN_NYS_RR_DEV_STOP` turns it on; `MOJOLEARN_IDN_ALL_OFF`
+#: turns it off): the round-robin eigh's convergence test is DECIDED on the
+#: device. A one-thread gate kernel reads the folded sums after every test
+#: and keeps the solve's state in five device words (done, the entry and
+#: current Frobenius sums, the last off-diagonal sum, the sweeps run); the
+#: rotation and update kernels of every later round return at once when the
+#: state says done. The host reads the state once every NYS_RR_STOP_BATCH
+#: sweeps instead of three words and a wait before every sweep. The
+#: rotations that run are the default arm's, in its order: no bit moves and
+#: the host column is unchanged. The cost is the empty launches of up to
+#: NYS_RR_STOP_BATCH - 1 sweeps after convergence, which is why this is an
+#: arm to time (`-D MOJOLEARN_IDN_NYS_RR_DEV_STOP_B4`: batches of 4, not 2).
+comptime NYS_IDN_RR_DEV_STOP = (
+    NYS_IDN_RR_EIGH
+    and is_defined["MOJOLEARN_IDN_NYS_RR_DEV_STOP"]()
+)
+comptime NYS_RR_STOP_BATCH = 4 if is_defined["MOJOLEARN_IDN_NYS_RR_DEV_STOP_B4"]() else 2
+#: `nys_rr_gate_kernel`'s state words.
+comptime NYS_RR_ST_DONE = 0
+comptime NYS_RR_ST_FRO_IN = 1
+comptime NYS_RR_ST_FRO_NOW = 2
+comptime NYS_RR_ST_OFF = 3
+comptime NYS_RR_ST_SWEEPS = 4
+comptime NYS_RR_ST_WORDS = 5
+
+
+def nys_rr_gate_kernel(res: F32Ptr, st: F32Ptr, tol: Float32, last_in: Int32):
+    """One thread: `_nystroem_rr_eigh_idn`'s host statements after a test.
+    st[DONE]: 0 running, 1 converged, 2 the budget ran out, 3 a block of the
+    test did not run. Does nothing once the solve is done."""
+    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+        return
+    if st.unsafe_load(NYS_RR_ST_DONE) != Float32(0.0):
+        return
+    var off = res.unsafe_load(0)
+    var dg = res.unsafe_load(1)
+    if not (res.unsafe_load(2) >= Float32(0.0)):
+        st.unsafe_store(NYS_RR_ST_DONE, Float32(3.0))
+        return
+    st.unsafe_store(NYS_RR_ST_OFF, off)
+    var fro = ftz(off + dg)
+    st.unsafe_store(NYS_RR_ST_FRO_NOW, fro)
+    if st.unsafe_load(NYS_RR_ST_FRO_IN) < Float32(0.0):
+        st.unsafe_store(NYS_RR_ST_FRO_IN, fro)
+    if rr_converged(off, dg, tol):
+        st.unsafe_store(NYS_RR_ST_DONE, Float32(1.0))
+        return
+    if last_in != Int32(0):
+        st.unsafe_store(NYS_RR_ST_DONE, Float32(2.0))
+        return
+    st.unsafe_store(NYS_RR_ST_SWEEPS, st.unsafe_load(NYS_RR_ST_SWEEPS) + Float32(1.0))
+
+
+def nys_rr_cs_gated_kernel(a: F32Ptr, cs: F32Ptr, st: F32Ptr, n_in: Int32, m_in: Int32, round_in: Int32):
+    """`eigh_par_cs_kernel` while the solve is running (st[DONE] == 0)."""
+    if st.unsafe_load(NYS_RR_ST_DONE) != Float32(0.0):
+        return
+    var m = Int(m_in)
+    var b = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if b < m // 2:
+        var got = rr_cs(a, Int(n_in), m, Int(round_in), b)
+        cs.unsafe_store(2 * b, got[0])
+        cs.unsafe_store(2 * b + 1, got[1])
+
+
+def nys_rr_update_gated_kernel(
+    a: F32Ptr, v: F32Ptr, cs: F32Ptr, st: F32Ptr, n_in: Int32, m_in: Int32, round_in: Int32
+):
+    """`eigh_par_update_kernel` while the solve is running (st[DONE] == 0)."""
+    if st.unsafe_load(NYS_RR_ST_DONE) != Float32(0.0):
+        return
+    var n = Int(n_in)
+    var m = Int(m_in)
+    var h = m // 2
+    var r = Int(round_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < h * h:
+        var i = t // h
+        var j = t - i * h
+        if i <= j:
+            rr_block(a, cs, n, m, r, i, j)
+    elif t < h * h + n * h:
+        var u = t - h * h
+        var k = u // h
+        rr_vrow(v, cs, n, m, r, k, u - k * h)
+
+
+def _nystroem_rr_eigh_idn_devstop(
+    ctx: DeviceContext,
+    mut dk: DeviceBuffer[DType.float32],
+    mut dvec: DeviceBuffer[DType.float32],
+    q: Int,
+    sabotage: Int,
+    mut eig_diag: List[Float32],
+    mut vecs: List[Float32],
+    want_host: Bool = True,
+) raises -> Int:
+    """NYS_IDN_RR_DEV_STOP: `_nystroem_rr_eigh_idn` with the stop decided on
+    the device (see the define's comment). The same outputs."""
+    var n = q
+    var even_q = n + (n % 2)
+    var h = even_q // 2
+    var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
+    var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
+    var hoff = ctx.enqueue_create_host_buffer[DType.float32](3 * n)
+    var nb_off = max((n + RR_OFF_TPB - 1) // RR_OFF_TPB, 1)
+    var dpart = ctx.enqueue_create_buffer[DType.float32](3 * nb_off)
+    var dres = ctx.enqueue_create_buffer[DType.float32](3)
+    var dst = ctx.enqueue_create_buffer[DType.float32](NYS_RR_ST_WORDS)
+    var hst = ctx.enqueue_create_host_buffer[DType.float32](NYS_RR_ST_WORDS)
+    # done = 0, fro_in = -1 (unset), fro_now, off, sweeps = 0
+    hst.unsafe_ptr().unsafe_store(NYS_RR_ST_DONE, Float32(0.0))
+    hst.unsafe_ptr().unsafe_store(NYS_RR_ST_FRO_IN, Float32(-1.0))
+    hst.unsafe_ptr().unsafe_store(NYS_RR_ST_FRO_NOW, Float32(0.0))
+    hst.unsafe_ptr().unsafe_store(NYS_RR_ST_OFF, Float32(0.0))
+    hst.unsafe_ptr().unsafe_store(NYS_RR_ST_SWEEPS, Float32(0.0))
+    ctx.enqueue_copy(dst_buf=dst, src_ptr=hst.unsafe_ptr())
+    ctx.enqueue_function[pj_identity_kernel](
+        dvec.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
+    )
+    ctx.synchronize()
+    var tol = Float32(JACOBI_TOL)
+    var done = Float32(0.0)
+    for sweep in range(RR_EIGH_SWEEPS + 1):
+        enqueue_fill(ctx, dpart, Float32(-1.0))
+        enqueue_fill(ctx, dres, Float32(-1.0))
+        ctx.enqueue_function[eigh_par_off_part_kernel](
+            dk.unsafe_ptr(), doff.unsafe_ptr(), dpart.unsafe_ptr(), Int32(n), grid_dim=nb_off, block_dim=RR_OFF_TPB
+        )
+        ctx.enqueue_function[eigh_par_off_fold_kernel](
+            dpart.unsafe_ptr(), dres.unsafe_ptr(), Int32(nb_off), grid_dim=1, block_dim=RR_OFF_TPB
+        )
+        ctx.enqueue_function[nys_rr_gate_kernel](
+            dres.unsafe_ptr(), dst.unsafe_ptr(), tol, Int32(1) if sweep == RR_EIGH_SWEEPS else Int32(0),
+            grid_dim=1, block_dim=1,
+        )
+        if sweep % NYS_RR_STOP_BATCH == NYS_RR_STOP_BATCH - 1 or sweep == RR_EIGH_SWEEPS:
+            ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dst)
+            ctx.synchronize()
+            done = hst.unsafe_ptr().unsafe_load(NYS_RR_ST_DONE)
+            if done != Float32(0.0):
+                break
+        if sweep == RR_EIGH_SWEEPS:
+            break
+        for rd in range(even_q - 1):
+            ctx.enqueue_function[nys_rr_cs_gated_kernel](
+                dk.unsafe_ptr(), dcs.unsafe_ptr(), dst.unsafe_ptr(), Int32(n), Int32(even_q), Int32(rd),
+                grid_dim=_pj_blocks(h), block_dim=PJ_TPB,
+            )
+            ctx.enqueue_function[nys_rr_update_gated_kernel](
+                dk.unsafe_ptr(), dvec.unsafe_ptr(), dcs.unsafe_ptr(), dst.unsafe_ptr(),
+                Int32(n), Int32(even_q), Int32(rd),
+                grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
+            )
+            comptime if has_apple_gpu_accelerator():
+                if rd % NYS_IDN_RR_SYNC_ROUNDS == NYS_IDN_RR_SYNC_ROUNDS - 1:
+                    ctx.synchronize()
+    var fro_in = hst.unsafe_ptr().unsafe_load(NYS_RR_ST_FRO_IN)
+    var fro_now = hst.unsafe_ptr().unsafe_load(NYS_RR_ST_FRO_NOW)
+    var off_last = hst.unsafe_ptr().unsafe_load(NYS_RR_ST_OFF)
+    var executed = Int(hst.unsafe_ptr().unsafe_load(NYS_RR_ST_SWEEPS))
+    if done == Float32(3.0):
+        raise Error(
+            "nystroem_fit_host: a block of the round-robin Jacobi's convergence test did not"
+            " run (its mark is still -1): a launch failure, not a convergence failure"
+        )
+    var converged = done == Float32(1.0)
+    # J^T A J keeps ||A||_F: a solve that moved it is not an answer
+    if converged and not rr_fro_kept(fro_in, fro_now):
+        converged = False
+    if not converged:
+        raise Error(
+            "nystroem_fit_host: the device Jacobi did not converge in "
+            + String(RR_EIGH_SWEEPS)
+            + " sweeps at n_components = "
+            + String(q)
+            + "; the off-diagonal mass is still "
+            + String(off_last)
+            + " of "
+            + String(fro_now)
+            + " against a tolerance of "
+            + String(JACOBI_TOL)
+            + ". An unconverged eigendecomposition returned as if it were"
+            " one is a wrong answer with no error"
+        )
+    if sabotage != KMSAB_NO_SIGN_FLIP:
+        ctx.enqueue_function[sign_flip_kernel](
+            dvec.unsafe_ptr(),
+            Int32(n),
+            grid_dim=(n, 1, 1),
+            block_dim=(SIGNFLIP_TPB, 1, 1),
+        )
+    if want_host:
+        # the last test's kernel left the diagonal of the converged A in
+        # doff[2 n, 3 n)
+        ctx.enqueue_copy(dst_ptr=hoff.unsafe_ptr(), src_buf=doff)
+        ctx.synchronize()
+        var got = _download(ctx, dvec, n * n)
+        for c in range(n):
+            eig_diag.append(hoff.unsafe_ptr().unsafe_load(2 * n + c))
+        for i in range(n * n):
+            vecs.append(got[i])
+    else:
+        ctx.synchronize()
+    _ = dcs^
+    _ = doff^
+    _ = hoff^
+    _ = dpart^
+    _ = dres^
+    _ = dst^
+    _ = hst^
+    return executed
+
+
 def _nystroem_device_eigh(
     ctx: DeviceContext,
     mut dk: DeviceBuffer[DType.float32],
@@ -1382,6 +1598,10 @@ def _nystroem_device_eigh(
             if got >= 0:
                 trace.record_device(ctx, "nys.eigenvectors_flipped", dvec, q * q)
                 return got
+    comptime if NYS_IDN_RR_DEV_STOP:
+        var ran_ds = _nystroem_rr_eigh_idn_devstop(ctx, dk, dvec, q, sabotage, eig_diag, vecs, want_host)
+        trace.record_device(ctx, "nys.eigenvectors_flipped", dvec, q * q)
+        return ran_ds
     comptime if NYS_IDN_RR_EIGH:
         var ran = _nystroem_rr_eigh_idn(ctx, dk, dvec, q, sabotage, eig_diag, vecs, want_host)
         trace.record_device(ctx, "nys.eigenvectors_flipped", dvec, q * q)
