@@ -216,5 +216,5 @@ def run_quality() raises:
     minmax_case(ctx, 0)
     minmax_case(ctx, 777)
     ctx.device.synchronize()
-    foreign.synchronize()
+    foreign.device.synchronize()
     print("CALLPATH-QUALITY status=PASS variants=C1,C2,C3,C4 first_read=all_words mode=FAST vendor=Apple reach=C1+C2+C3+C4 timing=NONE")
