@@ -52,6 +52,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
 from arima.host.arima_oracle import (
     ARIMA_ORACLE_HOST_SABOTAGE,
     arima_host_fit,
@@ -118,6 +119,31 @@ def arima_vendor_binding() raises -> PythonObject:
     """"cpu". On a CPU-only install `_backend.vendor()` is "cpu" and the
     read-back cross-check expects that string from every host binding."""
     return PythonObject(String("cpu"))
+
+
+#: lane/fam2-timeseries: the host column of ARIMA_ORDER_IC_DEVICE
+#: (`arima/impl/fast_order_search.mojo`), spelled from the same defines
+#: because this binding does not import the device modules: AutoARIMA's
+#: criterion is the float32 one (`ic_running_min_f32`) exactly when the
+#: device binding built from the same defines chooses orders on the device.
+comptime ARIMA_HOST_IC_F32 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    or is_defined["MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF"]()
+    or is_defined["MOJOLEARN_IDN_ARIMA_LLONLY_OFF"]()
+    or is_defined["MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF"]()
+    or is_defined["MOJOLEARN_ARIMA_ORDER_BATCH_OFF"]()
+    or is_defined["MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF"]()
+    or is_defined["MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF"]()
+)
+
+
+def arima_order_caps_binding() raises -> PythonObject:
+    """The device binding's `arima_order_caps` for the host column: bit 2
+    (the float32 criterion) only; no grouped search runs here."""
+    var caps = 0
+    comptime if ARIMA_HOST_IC_F32:
+        caps = 4
+    return PythonObject(caps)
 
 
 def arima_numeric_mode_binding() raises -> PythonObject:
@@ -246,6 +272,7 @@ def PyInit__mojolearn_arima_host() abi("C") -> PythonObject:
         module.def_function[arima_host_sabotage_binding]("arima_host_sabotage")
         module.def_function[arima_vendor_binding]("arima_vendor")
         module.def_function[arima_numeric_mode_binding]("arima_numeric_mode")
+        module.def_function[arima_order_caps_binding]("arima_order_caps")
         module.def_function[arima_fit_binding]("arima_fit")
         module.def_function[arima_predict_binding]("arima_predict")
         module.def_function[arima_forecast_binding]("arima_forecast")

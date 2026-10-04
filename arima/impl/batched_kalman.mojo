@@ -189,6 +189,17 @@ comptime IDN_ARIMA_LLONLY = _KALMAN_IDN and not (
 comptime IDN_ARIMA_EVAL_WS = _KALMAN_IDN and not (
     is_defined["MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
+#: lane/fam2-timeseries (2026-10-04), IDENTICAL on every vendor: a fit WITH
+#: exogenous regressors takes the held stacked evaluation too (it kept the
+#: sequential N + 1 filter passes, each allocating a workspace and waiting).
+#: The observation intercept of every (member, step) cell is
+#: `obs_intercept_kernel`'s ascending fma from 0 on that member's own beta
+#: (`fast_eval_ws.mojo::ew_obs_intercept_kernel`, one thread per cell), and
+#: the loop kernel reads it exactly as the sequential pass does, so the
+#: log-likelihood and gradient bits are unchanged.
+#: `-D MOJOLEARN_IDN_ARIMA_EVAL_WS_EXOG_OFF=1` restores the sequential form
+#: for exog fits; `MOJOLEARN_IDN_ALL_OFF` turns the workspace, and so this, off.
+comptime ARIMA_EVAL_WS_EXOG = IDN_ARIMA_EVAL_WS and not is_defined["MOJOLEARN_IDN_ARIMA_EVAL_WS_EXOG_OFF"]()
 #: IDENTICAL only: the held stacked workspace is taken when its (N + 1) x
 #: batch x n_obs cells stay under this bound (four such float32 arrays live
 #: at once); larger fits keep the sequential evaluation, same bits.
@@ -1172,10 +1183,13 @@ def _launch_loop_ll_only(
     k: Int,
     n_diff: Int,
     kalman_tpb: Int,
+    has_exog: Int = 0,
 ) raises:
     """lane/apple-fast-tsa: the loop kernel at `LL_ONLY = True` (no `pred` /
     `vs` / `Fs` stores), the same per-rd instantiation choice as
-    `batched_kalman_filter_x`'s serial arm, no exog, no forecast steps.
+    `batched_kalman_filter_x`'s serial arm, no forecast steps. `has_exog`
+    (0 or 1, lane/fam2-timeseries) is the kernel's `has_exog_in`: 1 reads the
+    caller-filled `ws.obs`.
     Empty in every other build (no LL_ONLY instantiation exists there)."""
     comptime if not KALMAN_LL_ONLY:
         return
@@ -1194,7 +1208,7 @@ def _launch_loop_ll_only(
             ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
             ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
             Int32(rd), Int32(nobs), Int32(batch_size), Int32(k), Int32(n_diff), Int32(0),
-            Int32(0),
+            Int32(has_exog),
             grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
         )
     elif spec and rd == 2:
@@ -1205,7 +1219,7 @@ def _launch_loop_ll_only(
             ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
             ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
             Int32(rd), Int32(nobs), Int32(batch_size), Int32(k), Int32(n_diff), Int32(0),
-            Int32(0),
+            Int32(has_exog),
             grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
         )
     elif spec and rd == 3:
@@ -1216,7 +1230,7 @@ def _launch_loop_ll_only(
             ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
             ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
             Int32(rd), Int32(nobs), Int32(batch_size), Int32(k), Int32(n_diff), Int32(0),
-            Int32(0),
+            Int32(has_exog),
             grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
         )
     elif spec and rd == 4:
@@ -1227,7 +1241,7 @@ def _launch_loop_ll_only(
             ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
             ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
             Int32(rd), Int32(nobs), Int32(batch_size), Int32(k), Int32(n_diff), Int32(0),
-            Int32(0),
+            Int32(has_exog),
             grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
         )
     else:
@@ -1238,7 +1252,7 @@ def _launch_loop_ll_only(
             ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
             ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
             Int32(rd), Int32(nobs), Int32(batch_size), Int32(k), Int32(n_diff), Int32(0),
-            Int32(0),
+            Int32(has_exog),
             grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
         )
 
@@ -1271,6 +1285,7 @@ def fast_kalman_into(
     nobs: Int,
     mut ws: KalmanWorkspace,
     kalman_tpb: Int = KALMAN_TPB,
+    has_exog: Int = 0,
 ) raises:
     """lane/apple-fast-tsa (`-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1`, FAST on
     Apple): `batched_kalman_filter_x`'s launch sequence into a CALLER-OWNED
@@ -1289,7 +1304,7 @@ def fast_kalman_into(
     var kl_done = False
     comptime if KALMAN_LL_ONLY:
         _launch_loop_ll_only(
-            ctx, d_ys, params, ws, rd, nobs, batch_size, order.k, n_diff, kalman_tpb
+            ctx, d_ys, params, ws, rd, nobs, batch_size, order.k, n_diff, kalman_tpb, has_exog
         )
         kl_done = True
     if not kl_done:
@@ -1305,7 +1320,7 @@ def fast_kalman_into(
                 ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
                 ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
                 Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(0),
-                Int32(0),
+                Int32(has_exog),
                 grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
             )
         elif fast_rd and rd == 2:
@@ -1316,7 +1331,7 @@ def fast_kalman_into(
                 ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
                 ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
                 Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(0),
-                Int32(0),
+                Int32(has_exog),
                 grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
             )
         elif fast_rd and rd == 3:
@@ -1327,7 +1342,7 @@ def fast_kalman_into(
                 ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
                 ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
                 Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(0),
-                Int32(0),
+                Int32(has_exog),
                 grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
             )
         elif fast_rd and rd == 4:
@@ -1338,7 +1353,7 @@ def fast_kalman_into(
                 ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
                 ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
                 Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(0),
-                Int32(0),
+                Int32(has_exog),
                 grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
             )
         else:
@@ -1349,7 +1364,7 @@ def fast_kalman_into(
                 ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
                 ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
                 Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(0),
-                Int32(0),
+                Int32(has_exog),
                 grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
             )
 

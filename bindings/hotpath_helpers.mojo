@@ -984,6 +984,48 @@ def next_combination_i64_binding(addr: PythonObject, p: PythonObject, n: PythonO
     return PythonObject(1)
 
 
+def ic_running_min_f32_binding(
+    llf_addr: PythonObject, n: PythonObject, penalty: PythonObject, order: PythonObject,
+    ic_addr: PythonObject, best_ic_addr: PythonObject, best_idx_addr: PythonObject,
+) raises -> PythonObject:
+    """lane/fam2-timeseries: `ic_running_min_f64` with the criterion in
+    float32, the host column of the device order choice
+    (`arima/impl/fast_order_search.mojo::order_ic_argmin_kernel`):
+    ic[b] = -2 llf[b] + Float32(penalty), ONE rounding (the product is exact,
+    so contraction cannot change it), then the same running first minimum.
+    `ic` and `best_ic` are float32, `best_idx` int64. A NaN best criterion is
+    the kernel's canonical NaN once chosen."""
+    var count = Int(py=n)
+    var k = Int(py=order)
+    if count < 1 or k < 0:
+        raise Error("ic_running_min_f32: n must be positive and order non-negative")
+    var pen = Float32(Float64(py=penalty))
+    var lp = _ptr[DType.float32](Int(py=llf_addr))
+    var ip = _ptr[DType.float32](Int(py=ic_addr))
+    var bp = _ptr[DType.float32](Int(py=best_ic_addr))
+    var xp = _ptr[DType.int64](Int(py=best_idx_addr))
+    with GILReleased(Python()):
+        for b in range(count):
+            var v = Float32(-2.0) * lp.unsafe_load(b) + pen
+            if v != v:
+                v = bitcast[DType.float32](UInt32(0x7FC00000))
+            ip.unsafe_store(b, v)
+            if k == 0:
+                bp.unsafe_store(b, v)
+                xp.unsafe_store(b, 0)
+            else:
+                var cur = bp.unsafe_load(b)
+                var take = False
+                if cur == cur:
+                    take = (v != v) or v < cur
+                comptime if HOTPATH_SABOTAGE:
+                    take = not take
+                if take:
+                    bp.unsafe_store(b, v)
+                    xp.unsafe_store(b, Int64(k))
+    return PythonObject(0)
+
+
 def ic_running_min_f64_binding(
     llf_addr: PythonObject, n: PythonObject, penalty: PythonObject, order: PythonObject,
     ic_addr: PythonObject, best_ic_addr: PythonObject, best_idx_addr: PythonObject,

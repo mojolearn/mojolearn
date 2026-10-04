@@ -88,7 +88,11 @@ struct OrderOptimizer(Movable):
 
     def __init__(out self, ctx: DeviceContext, mut ews: FastEvalWS,
                  batch_size: Int, scale: Float32, order_kf: ARIMAOrder,
-                 x0: List[Float32], param: LBFGSParam, h: Float32) raises:
+                 var x: DeviceBuffer[DType.float32], param: LBFGSParam, h: Float32) raises:
+        """`x` is the starting point ALREADY ON THE DEVICE (packed, at least
+        `max(1, batch_size * N)` floats), taken over as the optimizer's
+        iterate (lane/fam2-timeseries: the grouped search hands the device
+        buffer `pack` wrote; `order_x_from_list` uploads a host list)."""
         var n = order_kf.complexity()
         var bs = batch_size
         var b_n = bs * n
@@ -97,7 +101,6 @@ struct OrderOptimizer(Movable):
         var grid = (bs + LBFGS_TPB - 1) // LBFGS_TPB
         var ist = ctx.enqueue_create_buffer[DType.int32](max(1, I_N * bs))
         var fst = ctx.enqueue_create_buffer[DType.float32](max(1, F_N * bs))
-        var x = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
         var cand = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
         var xp = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
         var grad = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
@@ -128,11 +131,10 @@ struct OrderOptimizer(Movable):
         ctx.enqueue_memset(alpha, Float32(0.0))
         ctx.enqueue_memset(fx_hist, Float32(0.0))
         if b_n > 0:
-            var hx = x0.copy()
-            ctx.enqueue_copy(dst_buf=x.create_sub_buffer[DType.float32](0, b_n), src_ptr=hx.unsafe_ptr())
-            ctx.synchronize()
-            _ = hx^
-        ctx.enqueue_copy(dst_buf=cand, src_buf=x)
+            ctx.enqueue_copy(
+                dst_buf=cand.create_sub_buffer[DType.float32](0, b_n),
+                src_buf=x.create_sub_buffer[DType.float32](0, b_n),
+            )
         # the evaluation at x0, then `lbfgs_init_kernel` on the packed fields
         ews.eval(ctx, order_kf, h, scale, cand, d_grad, d_x_pert, f_fx, grad, bad)
         var ip = ist.unsafe_ptr()
@@ -246,10 +248,23 @@ struct OrderOptimizer(Movable):
                              retcode=retcode_out^, n_eval=self.rounds + 1)
 
 
+def order_x_from_list(ctx: DeviceContext, x0: List[Float32], b_n: Int) raises -> DeviceBuffer[DType.float32]:
+    """The packed starting point uploaded from a host list (the upload
+    `OrderOptimizer.__init__` made itself before lane/fam2-timeseries)."""
+    var x = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
+    if b_n > 0:
+        var hx = x0.copy()
+        ctx.enqueue_copy(dst_buf=x.create_sub_buffer[DType.float32](0, b_n), src_ptr=hx.unsafe_ptr())
+        ctx.synchronize()
+        _ = hx^
+    return x^
+
+
 def order_min_lbfgs(ctx: DeviceContext, mut ews: FastEvalWS, batch_size: Int,
                     scale: Float32, order: ARIMAOrder, x0: List[Float32],
                     param: LBFGSParam, h: Float32) raises -> AsyncLBFGSOut:
-    var state = OrderOptimizer(ctx, ews, batch_size, scale, order, x0, param, h)
+    var x_dev = order_x_from_list(ctx, x0, batch_size * order.complexity())
+    var state = OrderOptimizer(ctx, ews, batch_size, scale, order, x_dev^, param, h)
     while state.rounds < state.max_rounds:
         if state.rounds % ASYNC_READ_EVERY == 0:
             state.enqueue_poll(ctx)
