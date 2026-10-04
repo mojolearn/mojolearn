@@ -79,19 +79,20 @@ comptime PREP2_FAST_EIGH_BLOCK = PREP2_FAST and is_defined["MOJOLEARN_PREP2_FAST
 #: then a tree (`te_global_fast_kernel`), in place of ONE thread per (fold,
 #: target) walking every row twice ((F + 1) T = 5 threads on a 1M-row fit).
 #: Source lane/apple-fast-prep2@8762eb33f. Prior M3: both arms of the
-#: env-form A/B (prep2-te-global-taxi) ended status=error: an env switch
-#: leaves the .so unchanged, so the batch's ENSURE-SO step refused the B
-#: arm; never timed. Fixed 2026-10-04 (lane/apple-fast-rec-fa-robust): a
-#: build define instead of the env read, and the row counts as Int32 (a
-#: float32 count stops being exact past 2^24 rows).
+#: env-form line (tools/afc_ab.sh ... MOJOLEARN_X_PREP_FAST_TE_GLOBAL=1,
+#: prep2-te-global-taxi) ended status=error, the A arm too, so the line
+#: failed, not the kernel (later logged as ENSURE-SO); never timed. Fixed
+#: 2026-10-04 (lane/apple-fast-rec-fa-robust): a build define instead of the
+#: env read, so the A/B is the ordinary prebuilt -D pair, and the row counts
+#: as Int32 (a float32 count stops being exact past 2^24 rows).
 comptime X_PREP_FAST_TE_GLOBAL = PREP2_FAST and is_defined["MOJOLEARN_X_PREP_FAST_TE_GLOBAL"]()
 #: (FAST + Apple, default OFF) TargetEncoder's te_enc stage by one
 #: threadgroup per (fold, column, category, target) over the category's
 #: gathered bucket (`te_enc_fast_kernel`), in place of ONE thread walking
 #: the bucket (taxi's largest category is hundreds of thousands of rows on
 #: one thread). Source lane/apple-fast-prep2@8762eb33f. Prior M3: the
-#: env-form A/B (prep2-te-enc-taxi) failed both arms (ENSURE-SO, as
-#: TE_GLOBAL); a later B-only run timed target-encoder taxi at 359.6 ms
+#: env-form line (prep2-te-enc-taxi) failed both arms, as TE_GLOBAL's; a
+#: later prebuilt B-only run timed target-encoder taxi at 359.6 ms
 #: with no A arm (the lane's board ratio: 1.38). Fixed as
 #: TE_GLOBAL: a build define, Int32 counts.
 comptime X_PREP_FAST_TE_ENC = PREP2_FAST and is_defined["MOJOLEARN_X_PREP_FAST_TE_ENC"]()
