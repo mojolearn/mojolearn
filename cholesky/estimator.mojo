@@ -222,9 +222,16 @@ def cholesky_factor_host(
 #: cholesky synthetic 435 -> 290 ms, residual the same 1.659e-07; tag
 #: gl2-chol-devio-synthetic). -D MOJOLEARN_CHOL_FAST_DEVIO_OFF restores
 #: main's host-List route (the A/B arm).
+#: lane/idn-gates (2026-10-04): also the IDENTICAL default on every vendor
+#: (the same predicate on the device, `potrf_lower` unchanged, so the same
+#: words; `defer_ok` is honoured under CHOL_FAST_NOSYNC only, which stays
+#: FAST + Apple). -D MOJOLEARN_IDN_GATES_OFF (or the _OFF above) restores
+#: the host-List route in IDENTICAL.
 comptime CHOL_FAST_DEVIO = (
-    _CTX_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    (
+        (_CTX_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
+        or (_CTX_MODE == _CTX_IDENTICAL and not is_defined["MOJOLEARN_IDN_GATES_OFF"]())
+    )
     and not is_defined["MOJOLEARN_CHOL_FAST_DEVIO_OFF"]()
 )
 
@@ -287,7 +294,10 @@ def cholesky_factor_devio(
         copy_f32(ap, a.unsafe_ptr(), cells)
         chol_validate_matrix(a, n, "the matrix")
     var trace = IdentityTrace()
+    # the host route's trace records (no-ops unless the trace is enabled)
+    trace.header("cholesky: n=" + String(n) + " nb=" + String(nb) + " jitter_bits=see CHOL_JITTER_BITS")
     add_jitter(ctx, da, n, jitter, CHOL_ELEM_TPB)
+    trace.record_device(ctx, "chol.jittered", da, n * n)
     var run = potrf_lower(
         ctx, da, ws, n, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB, defer_ok=True
     )
