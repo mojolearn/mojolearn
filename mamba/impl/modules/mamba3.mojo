@@ -119,6 +119,11 @@ from mamba.impl.ops.mamba3_siso import (
     SISO3_ANY_SABOTAGE,
     m3_phase_tick,
     m3_mod_2pi,
+    M3_ANGLE_PARALLEL,
+    M3_ANGLE_Q_MASK,
+    m3_angle_q_from_inc,
+    m3_angle_q_from_state,
+    m3_angle_q_to_theta,
     m3_n_chunks,
     m3_q_eff,
     m3_siso_forward,
@@ -983,9 +988,23 @@ def m3_step_angle_kernel(
         )
     )
     var inc = ftz(identical_mul(a, ftz(dt_out.unsafe_load(bb * nh + hh))))
-    theta_state.unsafe_store(
-        cell, m3_mod_2pi(ftz(ftz(theta_state.unsafe_load(cell)) + inc))
-    )
+    comptime if M3_ANGLE_PARALLEL:
+        # lane/fam2-lm candidate arm: the one-token case of the integer
+        # chain (mamba3_siso.mojo `M3_ANGLE_PARALLEL`), so a decode step
+        # continues a prefill bit for bit.
+        theta_state.unsafe_store(
+            cell,
+            m3_angle_q_to_theta(
+                (
+                    m3_angle_q_from_state(theta_state.unsafe_load(cell))
+                    + m3_angle_q_from_inc(inc)
+                ) & M3_ANGLE_Q_MASK
+            ),
+        )
+    else:
+        theta_state.unsafe_store(
+            cell, m3_mod_2pi(ftz(ftz(theta_state.unsafe_load(cell)) + inc))
+        )
 
 
 def m3_step_core_kernel(

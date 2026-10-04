@@ -104,6 +104,8 @@ chunked schedule factorizes exactly) in double precision. It is a
 TOLERANCE instrument, never a bitwise one.
 """
 
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.numerics import (
     identical_mul,
     ftz,
@@ -167,6 +169,50 @@ def m3_mod_2pi(x: Float32) -> Float32:
     return ftz(
         identical_mul_add(-M3_TWO_PI, floor(identical_div(x, M3_TWO_PI)), x)
     )
+
+
+#: lane/fam2-lm (2026-10-04) candidate arm `-D MOJOLEARN_IDN_M3_ANGLE_PARALLEL`
+#: (see mamba/impl/ops/mamba3_siso.mojo `M3_ANGLE_PARALLEL`): S10 as an exact
+#: integer chain of 2pi / 2**23 counts. The oracle walks it serially; the
+#: device splits it into blocks, which integer addition mod 2**23 permits.
+#: This is the oracle's own spelling of the three count conversions.
+comptime M3O_ANGLE_COUNTS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_M3_ANGLE_PARALLEL"]()
+    and not is_defined["MOJOLEARN_MAMBA3_LEGACY_ANGLE_INCREMENT"]()
+    and not is_defined["MOJOLEARN_MAMBA3_SABOTAGE_ANGLE_MOD_PER_CHUNK"]()
+    and not is_defined["MOJOLEARN_MAMBA3_SABOTAGE_ANGLE_MOD_AT_END"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime M3O_COUNT_MASK = 8388607  # 2**23 - 1
+
+
+def m3o_count_angle(u: Int) -> Float32:
+    """Count -> angle: `u * 2**-23` (exact), one pinned product by 2pi."""
+    return ftz(identical_mul(Float32(u) * Float32(1.1920928955078125e-07), M3_TWO_PI))
+
+
+def m3o_turns_count(x: Float32) -> Int:
+    """Turns -> nearest count mod 2**23; a non-finite `x` is count 0."""
+    from std.math import floor
+
+    var f = x - floor(x)
+    if not (f >= Float32(0.0) and f <= Float32(1.0)):
+        return 0
+    return Int(floor(f * Float32(8388608.0) + Float32(0.5))) & M3O_COUNT_MASK
+
+
+def m3o_state_count(theta: Float32) -> Int:
+    """The count whose angle is `theta` (searched 0, +1, -1, +2, -2 around
+    the rounded estimate; the estimate itself when none matches)."""
+    var th = ftz(theta)
+    var u0 = m3o_turns_count(identical_mul(th, Float32(0.15915494309189535)))
+    var deltas = [0, 1, M3O_COUNT_MASK, 2, M3O_COUNT_MASK - 1]
+    for d in deltas:
+        var c = (u0 + d) & M3O_COUNT_MASK
+        if m3o_count_angle(c) == th:
+            return c
+    return u0
 
 
 def m3_heavy_tail_a(dd_a: Float32) -> Float32:
@@ -760,6 +806,42 @@ def mamba3_block_oracle(
             var bb = r0 // nh
             var hh = r0 % nh
             for r in range(r_ang_v):
+                comptime if M3O_ANGLE_COUNTS:
+                    if l > 0:
+                        var cnt = m3o_state_count(
+                            stheta_p.unsafe_load((bb * nh + hh) * r_ang_v + r)
+                        )
+                        for li in range(l):
+                            var mm = bb * l + li
+                            var a = ftz(
+                                identical_mul(
+                                    identical_tanh(
+                                        ftz(ip_p.unsafe_load(mm * dip + c_ang + r))
+                                    ),
+                                    M3_PI,
+                                )
+                            )
+                            var inc = ftz(
+                                identical_mul(
+                                    a,
+                                    ftz(
+                                        dtw_p.unsafe_load((bb * t_work + q0 + li) * nh + hh)
+                                    ),
+                                )
+                            )
+                            cnt = (
+                                cnt
+                                + m3o_turns_count(
+                                    identical_mul(inc, Float32(0.15915494309189535))
+                                )
+                            ) & M3O_COUNT_MASK
+                            ang_p.unsafe_store(
+                                (mm * nh + hh) * r_ang_v + r, m3o_count_angle(cnt)
+                            )
+                        var fin = m3o_count_angle(cnt)
+                        stheta_p.unsafe_store((bb * nh + hh) * r_ang_v + r, fin)
+                        thl_p.unsafe_store((bb * nh + hh) * r_ang_v + r, fin)
+                        continue
                 var run = ftz(stheta_p.unsafe_load((bb * nh + hh) * r_ang_v + r))
                 for li in range(l):
                     var mm = bb * l + li
