@@ -12,7 +12,7 @@ This worktree is `experiment/apple-kernel-lanes-20261004`, based on `c96137714`.
 | AutoARIMA | [Kalman scan](apple_fast_path/kalman/README.md) | Gaussian associative time scan, three blocked sizes, scalar specialization | Isolated Metal source and integration contract; production search is unchanged |
 | Shared call overhead | [Resident calls](apple_callpath/README.md) | Persistent transfer and scratch buffers, grouped readback, enqueue then collect | Explicit experimental APIs and an existing-kernel adapter |
 
-The dedicated bitwise-identity call-path experiment lives in a separate sibling worktree, `../mojolearn-apple-identical-callpath`, branch `experiment/apple-identical-callpath-20261004`. It is intentionally not merged into this one.
+The dedicated bitwise-identity call-path experiment lives in a separate sibling worktree, `../mojolearn-identical-callpath`, branch `experiment/identical-callpath-all-algorithms-20261004`. Its scope is all algorithm families and GPU vendors, with a shared typed session and explicit adapters. It is intentionally not merged into this one.
 
 ## Numerical boundaries
 
