@@ -136,3 +136,9 @@ It verifies actual mode/vendor/reach and records a hash-bound PASS receipt.
 The native driver remains available for local-on-M3 diagnostic execution;
 use the probe binding for cross-machine validation until native dependencies
 have separately been audited. Every compile and run remains manager-owned.
+
+## Context owner repair (r4)
+
+M3 r3 arm A loaded, but B rejected its own context before numerical validation. The old `Int(Pointer(to=ctx))` compared addresses of DeviceContext wrapper values rather than stable context identity. r4 accepts a `CallpathContext` owner in all candidate methods. It owns the DeviceContext and a one-word device identity allocation; slots and packed readback retain aliases to that allocation. Moving the owner preserves identity, and keeping the key alive prevents address reuse from impersonating an existing owner. Every enqueue uses the owner's device; callers must not replace its resource fields independently. The fixture explicitly checks slots/readback constructed before an owner move and rejection of a different owner. Existing occupied, visibility, reuse and bit-quality gates remain.
+
+The identity word is never numerically read or written. Its allocation and setup synchronization belong in future cold end-to-end timing; neither occurs on a warm call. This is a candidate API repair only: M2 compilation and M3 lifecycle/bit validation remain owed. Original catalog source is untouched.

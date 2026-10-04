@@ -5,7 +5,8 @@ No arithmetic lives here. The caller enqueues its EXISTING kernels against
 device_input/device_output/scratch on the same in-order context, between
 begin() and seal(). Keep this object and context alive through drain().
 """
-from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from max.gpu.host import DeviceBuffer, HostBuffer
+from experiments.apple_callpath.context_owner import CallpathContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
@@ -16,7 +17,7 @@ comptime CALLPATH_ENABLED = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 
 
 struct ResidentCallSlot(Movable):
-    var context_token: Int
+    var context_key: DeviceBuffer[DType.int32]
     var device_input: DeviceBuffer[DType.float32]
     var device_output: DeviceBuffer[DType.float32]
     var scratch: DeviceBuffer[DType.float32]
@@ -29,28 +30,28 @@ struct ResidentCallSlot(Movable):
     var phase: Int
     var staged: Bool
 
-    def __init__(out self, ctx: DeviceContext, inputs: Int, outputs: Int,
+    def __init__(out self, ctx: CallpathContext, inputs: Int, outputs: Int,
                  scratch_count: Int, index_count: Int) raises:
         comptime if not CALLPATH_ENABLED:
             raise Error("callpath candidates require opt-in FAST on Apple")
-        self.context_token = Int(Pointer(to=ctx))
+        self.context_key = ctx.identity
         if inputs < 0 or outputs < 0 or scratch_count < 0 or index_count < 0:
             raise Error("negative resident slot capacity")
-        self.device_input = ctx.enqueue_create_buffer[DType.float32](max(inputs, 1))
-        self.device_output = ctx.enqueue_create_buffer[DType.float32](max(outputs, 1))
-        self.scratch = ctx.enqueue_create_buffer[DType.float32](max(scratch_count, 1))
-        self.index_scratch = ctx.enqueue_create_buffer[DType.int32](max(index_count, 1))
-        self.host_input = ctx.enqueue_create_host_buffer[DType.float32](max(inputs, 1))
-        self.host_output = ctx.enqueue_create_host_buffer[DType.float32](max(outputs, 1))
+        self.device_input = ctx.device.enqueue_create_buffer[DType.float32](max(inputs, 1))
+        self.device_output = ctx.device.enqueue_create_buffer[DType.float32](max(outputs, 1))
+        self.scratch = ctx.device.enqueue_create_buffer[DType.float32](max(scratch_count, 1))
+        self.index_scratch = ctx.device.enqueue_create_buffer[DType.int32](max(index_count, 1))
+        self.host_input = ctx.device.enqueue_create_host_buffer[DType.float32](max(inputs, 1))
+        self.host_output = ctx.device.enqueue_create_host_buffer[DType.float32](max(outputs, 1))
         self.input_count = inputs
         self.output_count = outputs
         self.phase = 0
         self.staged = False
         # Setup boundary only; no constructor allocations on a warmed call.
-        ctx.synchronize()
+        ctx.device.synchronize()
 
-    def check_context(self, ctx: DeviceContext) raises:
-        if self.context_token != Int(Pointer(to=ctx)):
+    def check_context(self, ctx: CallpathContext) raises:
+        if Int(self.context_key.unsafe_ptr()) != Int(ctx.identity.unsafe_ptr()):
             raise Error("callpath context identity changed")
 
     def stage(mut self, values: List[Float32]) raises:
@@ -60,7 +61,7 @@ struct ResidentCallSlot(Movable):
             self.host_input.unsafe_ptr()[i] = values[i]
         self.staged = True
 
-    def begin(mut self, ctx: DeviceContext) raises:
+    def begin(mut self, ctx: CallpathContext) raises:
         self.check_context(ctx)
         if self.phase != 0 or not self.staged:
             raise Error("slot must be idle with staged input")
@@ -68,21 +69,21 @@ struct ResidentCallSlot(Movable):
         self.phase = 1
         self.staged = False
         if self.input_count > 0:
-            ctx.enqueue_copy(dst_buf=self.device_input, src_ptr=self.host_input.unsafe_ptr())
+            ctx.device.enqueue_copy(dst_buf=self.device_input, src_ptr=self.host_input.unsafe_ptr())
 
-    def seal(mut self, ctx: DeviceContext) raises:
+    def seal(mut self, ctx: CallpathContext) raises:
         self.check_context(ctx)
         if self.phase != 1:
             raise Error("seal requires an open slot")
         if self.output_count > 0:
-            ctx.enqueue_copy(dst_ptr=self.host_output.unsafe_ptr(), src_buf=self.device_output)
+            ctx.device.enqueue_copy(dst_ptr=self.host_output.unsafe_ptr(), src_buf=self.device_output)
         self.phase = 2
 
-    def wait(mut self, ctx: DeviceContext) raises:
+    def wait(mut self, ctx: CallpathContext) raises:
         self.check_context(ctx)
         if self.phase != 2:
             raise Error("wait requires a sealed slot")
-        ctx.synchronize()
+        ctx.device.synchronize()
         self.phase = 3
 
     def collect_into(mut self, mut result: List[Float32]) raises:
@@ -93,15 +94,15 @@ struct ResidentCallSlot(Movable):
             result[i] = self.host_output.unsafe_ptr()[i]
         self.phase = 0
 
-    def drain(mut self, ctx: DeviceContext) raises:
+    def drain(mut self, ctx: CallpathContext) raises:
         """Abort/release boundary; pending output is intentionally discarded."""
         self.check_context(ctx)
-        ctx.synchronize()
+        ctx.device.synchronize()
         self.phase = 0
         self.staged = False
 
 
-def wait_pair(ctx: DeviceContext, mut first: ResidentCallSlot,
+def wait_pair(ctx: CallpathContext, mut first: ResidentCallSlot,
               mut second: ResidentCallSlot) raises:
     """Two independent calls share one host wait on the SAME context.
 
@@ -114,6 +115,6 @@ def wait_pair(ctx: DeviceContext, mut first: ResidentCallSlot,
         raise Error("wait_pair requires distinct slots")
     if first.phase != 2 or second.phase != 2:
         raise Error("both slots must be sealed")
-    ctx.synchronize()
+    ctx.device.synchronize()
     first.phase = 3
     second.phase = 3

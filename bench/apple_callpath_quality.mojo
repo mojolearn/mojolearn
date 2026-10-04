@@ -5,7 +5,7 @@ Compile: mojo build -j 1 --target-cpu apple-m1 --target-accelerator metal:1 -I .
          bench/apple_callpath_quality_main.mojo -o apple-callpath-quality
 """
 from std.memory import bitcast
-from max.gpu.host import DeviceContext
+from experiments.apple_callpath.context_owner import CallpathContext
 from experiments.apple_callpath.resident_slot import ResidentCallSlot, wait_pair, CALLPATH_ENABLED
 from experiments.apple_callpath.packed_readback import PackedReadback
 from experiments.apple_callpath.minmax_adapter import enqueue_minmax_transform
@@ -47,7 +47,7 @@ def exact(a: List[Float32], b: List[Float32]) raises:
         require(bitcast[DType.uint32](a[i]) == bitcast[DType.uint32](b[i]), "output word differs")
 
 
-def transfer_case(ctx: DeviceContext, foreign: DeviceContext, n: Int) raises:
+def transfer_case(ctx: CallpathContext, foreign: CallpathContext, n: Int) raises:
     var first = ResidentCallSlot(ctx, n, n, 3, 3)
     var second = ResidentCallSlot(ctx, n, n, 3, 3)
     var packed = PackedReadback(ctx, 2 * n)
@@ -72,8 +72,8 @@ def transfer_case(ctx: DeviceContext, foreign: DeviceContext, n: Int) raises:
             occupied = True
         second.begin(ctx)
         if n > 0:
-            ctx.enqueue_copy(dst_buf=first.device_output, src_buf=first.device_input)
-            ctx.enqueue_copy(dst_buf=second.device_output, src_buf=second.device_input)
+            ctx.device.enqueue_copy(dst_buf=first.device_output, src_buf=first.device_input)
+            ctx.device.enqueue_copy(dst_buf=second.device_output, src_buf=second.device_input)
         var scratch = values(3, round)
         var scratch_out = List[Float32](length=3, fill=Float32(0))
         var indexes = List[Int32](capacity=3)
@@ -81,10 +81,10 @@ def transfer_case(ctx: DeviceContext, foreign: DeviceContext, n: Int) raises:
         indexes.append(Int32(-2147483647))
         indexes.append(Int32(round))
         var indexes_out = List[Int32](length=3, fill=Int32(0))
-        ctx.enqueue_copy(dst_buf=first.scratch, src_ptr=scratch.unsafe_ptr())
-        ctx.enqueue_copy(dst_ptr=scratch_out.unsafe_ptr(), src_buf=first.scratch)
-        ctx.enqueue_copy(dst_buf=first.index_scratch, src_ptr=indexes.unsafe_ptr())
-        ctx.enqueue_copy(dst_ptr=indexes_out.unsafe_ptr(), src_buf=first.index_scratch)
+        ctx.device.enqueue_copy(dst_buf=first.scratch, src_ptr=scratch.unsafe_ptr())
+        ctx.device.enqueue_copy(dst_ptr=scratch_out.unsafe_ptr(), src_buf=first.scratch)
+        ctx.device.enqueue_copy(dst_buf=first.index_scratch, src_ptr=indexes.unsafe_ptr())
+        ctx.device.enqueue_copy(dst_ptr=indexes_out.unsafe_ptr(), src_buf=first.index_scratch)
         first.seal(ctx)
         second.seal(ctx)
         var premature = False
@@ -135,7 +135,7 @@ def transfer_case(ctx: DeviceContext, foreign: DeviceContext, n: Int) raises:
     first.stage(again)
     first.begin(ctx)
     if n > 0:
-        ctx.enqueue_copy(dst_buf=first.device_output, src_buf=first.device_input)
+        ctx.device.enqueue_copy(dst_buf=first.device_output, src_buf=first.device_input)
     first.seal(ctx)
     first.wait(ctx)
     first.collect_into(out1)
@@ -143,11 +143,11 @@ def transfer_case(ctx: DeviceContext, foreign: DeviceContext, n: Int) raises:
     _ = packed^
     _ = first^
     _ = second^
-    ctx.synchronize()
+    ctx.device.synchronize()
     print("CALLPATH-QUALITY C1+C2+C3 n=", n, " status=PASS", sep="")
 
 
-def minmax_case(ctx: DeviceContext, n: Int) raises:
+def minmax_case(ctx: CallpathContext, n: Int) raises:
     var scale_values = List[Float32](capacity=3)
     scale_values.append(Float32(2))
     scale_values.append(Float32(-0.5))
@@ -156,22 +156,22 @@ def minmax_case(ctx: DeviceContext, n: Int) raises:
     offset_values.append(Float32(1))
     offset_values.append(Float32(-2))
     offset_values.append(Float32(0))
-    var scale = upload_f32(ctx, scale_values)
-    var offset = upload_f32(ctx, offset_values)
+    var scale = upload_f32(ctx.device, scale_values)
+    var offset = upload_f32(ctx.device, offset_values)
     var slot = ResidentCallSlot(ctx, n, n, 0, 0)
     var result = List[Float32](length=n, fill=Float32(0))
     for variant in range(3):
         var input = values(n, variant)
-        var baseline_in = upload_f32(ctx, input)
-        var baseline_out = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+        var baseline_in = upload_f32(ctx.device, input)
+        var baseline_out = ctx.device.enqueue_create_buffer[DType.float32](max(n, 1))
         var inverse = Int32(1 if variant == 2 else 0)
         var clip = Int32(1 if variant == 1 else 0)
         if n > 0:
-            ctx.enqueue_function[minmax_transform_kernel](
+            ctx.device.enqueue_function[minmax_transform_kernel](
                 baseline_in.unsafe_ptr(), scale.unsafe_ptr(), offset.unsafe_ptr(), baseline_out.unsafe_ptr(),
                 Int32(n), Int32(3), inverse, clip, Float32(-1), Float32(1),
                 grid_dim=(n + 255) // 256, block_dim=256)
-        var reference = download_f32(ctx, baseline_out, n)
+        var reference = download_f32(ctx.device, baseline_out, n)
         slot.stage(input)
         enqueue_minmax_transform(ctx, slot, scale, offset, 3, inverse, clip, Float32(-1), Float32(1))
         slot.wait(ctx)
@@ -179,25 +179,42 @@ def minmax_case(ctx: DeviceContext, n: Int) raises:
         exact(reference, result)
         _ = baseline_in^
         _ = baseline_out^
-        ctx.synchronize()
+        ctx.device.synchronize()
     _ = slot^
     _ = scale^
     _ = offset^
-    ctx.synchronize()
+    ctx.device.synchronize()
     print("CALLPATH-QUALITY C4 n=", n, " status=PASS", sep="")
 
 
 def run_quality() raises:
     comptime if not CALLPATH_ENABLED:
         raise Error("requires opt-in FAST Apple build")
-    var ctx = DeviceContext()
-    var foreign = DeviceContext()
+    var original = CallpathContext()
+    var slot_before_move = ResidentCallSlot(original, 0, 0, 0, 0)
+    var slab_before_move = PackedReadback(original, 0)
+    var ctx = original^
+    # Slots constructed before a move must still recognize the same context.
+    slot_before_move.check_context(ctx)
+    slab_before_move.check_context(ctx)
+    var foreign = CallpathContext()
+    var rejected_slot = False
+    var rejected_slab = False
+    try:
+        slot_before_move.check_context(foreign)
+    except:
+        rejected_slot = True
+    try:
+        slab_before_move.check_context(foreign)
+    except:
+        rejected_slab = True
+    require(rejected_slot and rejected_slab, "foreign context accepted after owner move")
     transfer_case(ctx, foreign, 0)
     transfer_case(ctx, foreign, 1)
     transfer_case(ctx, foreign, 257)
     transfer_case(ctx, foreign, 4099)
     minmax_case(ctx, 0)
     minmax_case(ctx, 777)
-    ctx.synchronize()
+    ctx.device.synchronize()
     foreign.synchronize()
     print("CALLPATH-QUALITY status=PASS variants=C1,C2,C3,C4 first_read=all_words mode=FAST vendor=Apple reach=C1+C2+C3+C4 timing=NONE")
