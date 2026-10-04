@@ -23,9 +23,9 @@ with exact source/binary hashes checked by `arima_orders_gated_timing.sh`.
 512/2048-observation fixtures cover stationary, near-unit-root, integrated
 and mixed ARMA series: selected orders, IC/differencing, fitted parameters,
 likelihood, iteration/return codes, fitted predictions and forecasts are
-byte-identical. No quality threshold was loosened. The manager reports the
-full receipt passed; the original 18-array small fixture alone was not
-used as the promotion gate.
+byte-identical. No quality threshold was loosened. The manager-fetched [receipt](arima-orders-evidence/FULL_PASS.json) and
+[summary](arima-orders-evidence/quality-summary.txt) confirm 44 arrays exact;
+the original 18-array small fixture alone was not used as the promotion gate.
 
 Taxi-hourly's preexisting opponent-quality HOLD is preserved:
 RMSE74.6591 versus stored statsforecast68.21. This optimization preserves
@@ -73,7 +73,7 @@ replaying the already-scored timing tags.
 
 Manager must confirm measurement isolation under
 [EXPERIMENT_PROCESS.md](../EXPERIMENT_PROCESS.md), both builds, source review,
-and merge approval. If a scan-window overlap is unresolved, keep speed
+then merge under the user's existing authorization (no further permission request). If a scan-window overlap is unresolved, keep speed
 verdict HOLD-measurement regardless of passing quality. No main merge,
 SSH, builds, queue actions or tests were performed by this agent. Preserve
 the raw measurements and taxi opponent hold in subsequent accounting.

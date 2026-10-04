@@ -24,7 +24,7 @@ from glm.impl.qn.qn_util import LBFGSParam
 # KEEP candidate for default promotion, M3 2026-10-04, source 7ba385b30:
 # gap26-orders-current-synthetic 13780.317 -> 9287.287 ms (-32.6%);
 # gap26-orders-current-taxi-hourly 22706.248 -> 13747.215 ms (-39.5%).
-# Digests/RMSE unchanged; FULL_PASS paired 512/2048-observation fitted,
+# Digests/RMSE unchanged; FULL_PASS 44 paired 512/2048-observation fitted,
 # order, likelihood and forecast arrays exact. Accepted fused tail in both.
 # Taxi's existing opponent-quality hold remains (RMSE74.659 vs68.21).
 # Default only within existing FAST+Apple guards; named OFF restores the
