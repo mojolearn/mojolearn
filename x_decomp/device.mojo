@@ -1556,6 +1556,32 @@ def _eigh_par_test(
     return SIMD[DType.float32, 4](p.unsafe_load(0), p.unsafe_load(1), p.unsafe_load(2), Float32(0.0))
 
 
+def _eigh_block_test(
+    ctx: DeviceContext,
+    mut da: DeviceBuffer[DType.float32],
+    mut doff: DeviceBuffer[DType.float32],
+    mut dpart: DeviceBuffer[DType.float32],
+    mut dfold: DeviceBuffer[DType.float32],
+    mut hfold: HostBuffer[DType.float32],
+    mut dbad: DeviceBuffer[DType.float32],
+    mut hbad: HostBuffer[DType.float32],
+    n: Int,
+) raises -> SIMD[DType.float32, 4]:
+    """`_eigh_par_test` for the block Jacobi (lane fam2-decomp): the pivot
+    solves' two sticky flags (`rb_bad_kernel`) ride the same wait. Returns
+    (off, diag, ran, bad): bad 0 = every pivot solve so far converged, 1 = one
+    did not, 2 or 3 = a pivot block did not run."""
+    ctx.enqueue_copy(dst_ptr=hbad.unsafe_ptr(), src_buf=dbad)
+    var tst = _eigh_par_test(ctx, da, doff, dpart, dfold, hfold, n)
+    var pb = hbad.unsafe_ptr()
+    var bad = Float32(0.0)
+    if pb.unsafe_load(0) != Float32(0.0):
+        bad = Float32(1.0)
+    if pb.unsafe_load(1) != Float32(0.0):
+        bad = bad + Float32(2.0)
+    return SIMD[DType.float32, 4](tst[0], tst[1], tst[2], bad)
+
+
 def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
     """Floats of partial-sum scratch `launch_gemm` needs (0: none)."""
     var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
@@ -2531,15 +2557,14 @@ struct DevExec(Exec):
         var fro_now = Float32(0.0)
         var off_last = Float32(0.0)
         for sweep in range(RR_EIGH_SWEEPS + 1):
-            ctx.enqueue_copy(dst_ptr=hbad.unsafe_ptr(), src_buf=dbad)
-            var tst = _eigh_par_test(ctx, dab, doff, dpart, dfold, hfold, nn)
-            if not (tst[2] >= Float32(0.0)) or hbad.unsafe_ptr().unsafe_load(1) != Float32(0.0):
+            var tst = _eigh_block_test(ctx, dab, doff, dpart, dfold, hfold, dbad, hbad, nn)
+            if not (tst[2] >= Float32(0.0)) or tst[3] >= Float32(2.0):
                 raise Error(
                     "eigh: a block of the block Jacobi's convergence test or of a pivot solve did not run:"
                     " a launch failure, not a convergence failure. Check that the binding is built for"
                     " this device."
                 )
-            if hbad.unsafe_ptr().unsafe_load(0) != Float32(0.0):
+            if tst[3] != Float32(0.0):
                 raise Error(
                     "eigh: a " + String(RB_W) + " x " + String(RB_W) + " pivot problem of the block Jacobi did"
                     " not converge in " + String(RR_EIGH_SWEEPS) + " sweeps at n = " + String(n)
