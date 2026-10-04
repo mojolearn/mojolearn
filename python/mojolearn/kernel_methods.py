@@ -30,7 +30,7 @@ from . import _backend, _serialize
 from ._scale_gamma import scale_gamma, scale_gamma_x
 from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, as_f64_c, empty, full
-from ._lazy_out import _empty_out
+from ._lazy_out import _empty_out, _mapped_out
 from ._mode import NumericModeMixin
 
 #: The saved-model formats (lane/inference-linear-svm, 2026-09-15):
@@ -567,6 +567,30 @@ class RBFSampler(_KernelMethodBase):
         scikit-learn's does."""
         x, _ = as_f32_dense_c(X, ndim=2, name="X")
         _, d = x.shape
+        gamma, q, seed = self._fit_params(x, d)
+        weights = empty((d * q,), "<f4")
+        offset = empty((q,), "<f4")
+        scalars = empty((2,), "<f8")
+        self._extension().rbf_sampler_fit(
+            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::rbf_sampler_fit_binding.
+            # weights_out, offset_out, scalars_out
+            [addr(weights, name="random_weights_"), addr(offset, name="random_offset_"), addr(scalars, name="scalars")],
+            # d, q, gamma, seed
+            [d, q, gamma, seed],
+        )
+        self._set_fitted(d, q, gamma, seed, weights, offset, scalars)
+        return self
+
+    def _set_fitted(self, d, q, gamma, seed, weights, offset, scalars):
+        self.n_features_in_ = d
+        self.random_weights_ = weights.reshape((d, q))
+        self.random_offset_ = offset
+        self.sigma_ = float(scalars[0])
+        self.scale_ = float(scalars[1])
+        self._params = (gamma, seed)
+
+    def _fit_params(self, x, d):
+        """(gamma, n_components, seed) as `fit` resolves and refuses them."""
         if isinstance(self.gamma, str) and self.gamma == "scale":
             # scikit-learn's 1 / (n_features * X.var()), 1.0 at zero
             # variance: the EXACT variance of the float32 cells, the
@@ -585,23 +609,7 @@ class RBFSampler(_KernelMethodBase):
             # address check before anything had said which argument was wrong.
             raise ValueError(f"mojolearn {self._WHERE}: n_components must be positive, got {q}")
         seed = int(self.random_state)
-        weights = empty((d * q,), "<f4")
-        offset = empty((q,), "<f4")
-        scalars = empty((2,), "<f8")
-        self._extension().rbf_sampler_fit(
-            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::rbf_sampler_fit_binding.
-            # weights_out, offset_out, scalars_out
-            [addr(weights, name="random_weights_"), addr(offset, name="random_offset_"), addr(scalars, name="scalars")],
-            # d, q, gamma, seed
-            [d, q, gamma, seed],
-        )
-        self.n_features_in_ = d
-        self.random_weights_ = weights.reshape((d, q))
-        self.random_offset_ = offset
-        self.sigma_ = float(scalars[0])
-        self.scale_ = float(scalars[1])
-        self._params = (gamma, seed)
-        return self
+        return gamma, q, seed
 
     def transform(self, X):
         """`scale_ * cos(X . random_weights_ + random_offset_)`, float32."""
@@ -628,7 +636,29 @@ class RBFSampler(_KernelMethodBase):
         return out.reshape((m, q))
 
     def fit_transform(self, X, y=None):
-        return self.fit(X).transform(X)
+        ext = self._extension()
+        resident = getattr(ext, "rbf_sampler_fit_transform_resident", None)
+        if resident is None:
+            return self.fit(X).transform(X)
+        # lane apple-fast-w2-kfeat MOJOLEARN_KM_FAST_RBF_RESIDENT
+        # (kernel_methods/rbf_resident.mojo): the draws, the upload, the
+        # projection and every download in one binding call and one wait;
+        # main's words. The output is mapped memory (no zero pass).
+        x, _ = as_f32_dense_c(X, ndim=2, name="X")
+        m, d = x.shape
+        gamma, q, seed = self._fit_params(x, d)
+        weights = empty((d * q,), "<f4")
+        offset = empty((q,), "<f4")
+        scalars = empty((2,), "<f8")
+        out = _mapped_out((m * q,))
+        resident(
+            # ORDER MATCHES kernel_methods/rbf_resident.mojo::rbf_sampler_fit_transform_binding.
+            [addr(weights, name="random_weights_"), addr(offset, name="random_offset_"), addr(scalars, name="scalars"),
+             addr_ro(x, name="X"), addr(out, name="transform")],
+            [d, q, gamma, seed, m],
+        )
+        self._set_fitted(d, q, gamma, seed, weights, offset, scalars)
+        return out.reshape((m, q))
 
     def save(self, path):
         """Write the fitted sampler to `path` as an npz: the weights and
