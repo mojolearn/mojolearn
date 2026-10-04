@@ -1,0 +1,232 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""MOJOLEARN_MCD_BMMA (lane/apple-fast-w2-mcd2, 2026-10-04, opt-in, FAST +
+Apple only): ONE launch of the matrix-unit GEMM over every candidate of an
+MCD phase instead of one `_launch_gemm_mma` per candidate.
+
+Why: x_decomp/mcd_fast.mojo's MCD_BATCH_MMA default enqueues three GEMMs per
+candidate per C-step (covariance, weighted Gram, Mahalanobis product), for
+every candidate of the phase, active or not. Taxi phase B is 3,330
+candidates x up to 31 steps x 3 = up to ~310,000 Metal launches (~10-20 us
+of enqueue each, memory metal-enqueue-costs), which is the bulk of the
+3.6 s fit; the matrices themselves are 11 x 11.
+
+What is kept: the tile kernel below is `gemm/afn_apple_fast.mojo`'s
+`afn_gemm_mma_kernel` at AFN_TILE_SQUARE (2 x 2 simdgroups, 4 x 4
+fragments, AFN_GEMM_KB window), statement for statement, with the
+candidate taken from `block_idx.z` and the three operand pointers moved by
+that candidate's batch stride. The host launcher computes `tiles`,
+`splits` and the K chunk exactly as `x_decomp/device.mojo::_launch_gemm_mma`
+does for ONE candidate (every candidate of a phase has the same m, k, n),
+so each candidate's output cell is the same matrix-unit sum over the same
+K windows and the same split-K ranges as main. Split-K partials still meet
+through f32 atomics (order free, as on main). A candidate whose gate word
+is 0 (inactive; for the weighted Gram, pinvh did not run) launches no work:
+main zeroed its operands and discarded its output (guarded publication).
+"""
+from std.atomic import Atomic
+from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import stack_allocation
+from max.gpu.host import DeviceContext
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from checks.kernel_matrix import COLUMN_APPLE, lib_smem_page_fits_for, lib_smem_pages_for
+from gemm.afn_apple_fast import AFN_GEMM_KB, _M64, _afn_gload, _afn_load_t, _afn_mma, _afn_stage
+from x_decomp.cells import F32Ptr, I32Ptr
+from x_decomp.device import DFG_BLOCK_TARGET, DFG_MIN_SPLIT_STEPS
+
+#: AFN_TILE_SQUARE's shape (`afn_launch_tile_aux`'s default branch).
+comptime MB_SGM = 2
+comptime MB_SGN = 2
+comptime MB_FM = 4
+comptime MB_FN = 4
+comptime MB_BM = 8 * MB_FM * MB_SGM
+comptime MB_BN = 8 * MB_FN * MB_SGN
+comptime MB_NT = MB_SGM * MB_SGN * 32
+comptime MB_ZERO_TPB = 256
+
+
+def mcd_bmma_kernel[SPLIT: Bool](
+    c_in: F32Ptr,
+    a_in: F32Ptr,
+    b_in: F32Ptr,
+    gate: I32Ptr,
+    gate_all: Int32,
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    a_si_in: Int32,
+    a_sp_in: Int32,
+    b_sp_in: Int32,
+    b_sj_in: Int32,
+    k_split_in: Int32,
+    a_bs_in: Int32,
+    b_bs_in: Int32,
+    c_bs_in: Int32,
+):
+    """`afn_gemm_mma_kernel[2, 2, 4, 4, AFN_GEMM_KB, f32, f32, SPLIT,
+    AFN_EPI_NONE]` for candidate `block_idx.z`: C_z (+)= A_z . B_z with
+    A_z = a + z * a_bs, B_z = b + z * b_bs, C_z = c + z * c_bs. Skipped
+    (whole block, before any barrier) when gate[z] == 0 and not gate_all."""
+    comptime SGM = MB_SGM
+    comptime SGN = MB_SGN
+    comptime FM = MB_FM
+    comptime FN = MB_FN
+    comptime KB = AFN_GEMM_KB
+    comptime NSG = SGM * SGN
+    comptime NT = NSG * 32
+    comptime BM = 8 * FM * SGM
+    comptime BN = 8 * FN * SGN
+    comptime AST = BM + 4
+    comptime BST = KB + 4
+    comptime NF = FM * FN
+    comptime ASZ = KB * AST
+    comptime BSZ = BN * BST
+    comptime PAGE_BYTES = (ASZ + BSZ) * 4
+    comptime NPG = lib_smem_pages_for[COLUMN_APPLE, PAGE_BYTES]()
+    comptime assert lib_smem_page_fits_for[COLUMN_APPLE, PAGE_BYTES](), (
+        "mcd_bmma_kernel: one staged page must fit Apple's threadgroup memory"
+    )
+    comptime assert KB % 8 == 0, "mcd_bmma_kernel: whole 8-step fragments"
+    var z = Int(block_idx.z)
+    if gate_all == 0 and gate.unsafe_load(z) == 0:
+        return
+    var a = a_in + z * Int(a_bs_in)
+    var b = b_in + z * Int(b_bs_in)
+    var c = c_in + z * Int(c_bs_in)
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var k = Int(k_in)
+    var a_si = Int(a_si_in)
+    var a_sp = Int(a_sp_in)
+    var b_sp = Int(b_sp_in)
+    var b_sj = Int(b_sj_in)
+    var tid = Int(thread_idx.x)
+    var sg = tid // 32
+    var lane = tid % 32
+    var sgm = sg // SGN
+    var sgn = sg % SGN
+    var nbn = (n + BN - 1) // BN
+    var bid = Int(block_idx.x)
+    var m0 = (bid // nbn) * BM
+    var n0 = (bid % nbn) * BN
+    var qd = lane // 4
+    var frow = (qd & 4) + ((lane // 2) % 4)
+    var fcol = (qd & 2) * 2 + (lane % 2) * 2
+    var at = stack_allocation[NPG * ASZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var bt = stack_allocation[NPG * BSZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var acc = InlineArray[_M64, NF](fill=_M64(0))
+    var a_ofast = a_si == 1 and a_sp != 1
+    var b_ofast = b_sj == 1 and b_sp != 1
+    var kb = 0
+    var ke = k
+    comptime if SPLIT:
+        kb = Int(block_idx.y) * Int(k_split_in)
+        ke = min(k, kb + Int(k_split_in))
+    var windows = (ke - kb + KB - 1) // KB
+    var ra = _afn_gload[BM, KB, NT, DType.float32](a, a_si, a_sp, m0, m, kb, min(KB, ke - kb), tid, a_ofast)
+    var rb = _afn_gload[BN, KB, NT, DType.float32](b, b_sj, b_sp, n0, n, kb, min(KB, ke - kb), tid, b_ofast)
+    comptime if NPG == 2:
+        _afn_stage[BM, KB, NT, True, AST](at, ra, tid, a_ofast)
+        _afn_stage[BN, KB, NT, False, BST](bt, rb, tid, b_ofast)
+        barrier()
+        if windows > 1:
+            ra = _afn_gload[BM, KB, NT, DType.float32](a, a_si, a_sp, m0, m, kb + KB, min(KB, ke - kb - KB), tid, a_ofast)
+            rb = _afn_gload[BN, KB, NT, DType.float32](b, b_sj, b_sp, n0, n, kb + KB, min(KB, ke - kb - KB), tid, b_ofast)
+    for w in range(windows):
+        var k0 = kb + w * KB
+        var cur = w % NPG
+        var atc = at + cur * ASZ
+        var btc = bt + cur * BSZ
+        comptime if NPG == 1:
+            _afn_stage[BM, KB, NT, True, AST](at, ra, tid, a_ofast)
+            _afn_stage[BN, KB, NT, False, BST](bt, rb, tid, b_ofast)
+            barrier()
+            if w + 1 < windows:
+                var k1 = k0 + KB
+                ra = _afn_gload[BM, KB, NT, DType.float32](a, a_si, a_sp, m0, m, k1, min(KB, ke - k1), tid, a_ofast)
+                rb = _afn_gload[BN, KB, NT, DType.float32](b, b_sj, b_sp, n0, n, k1, min(KB, ke - k1), tid, b_ofast)
+        comptime for p8 in range(KB // 8):
+            var af = InlineArray[_M64, FM](fill=_M64(0))
+            var bf = InlineArray[_M64, FN](fill=_M64(0))
+            comptime for fm in range(FM):
+                af[fm] = _afn_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+            comptime for fq in range(FN):
+                bf[fq] = _afn_load_t(btc + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+            comptime for fm in range(FM):
+                comptime for fq in range(FN):
+                    acc[fm * FN + fq] = _afn_mma(af[fm], bf[fq], acc[fm * FN + fq])
+        comptime if NPG == 2:
+            if w + 1 < windows:
+                var nxt = (w + 1) % NPG
+                _afn_stage[BM, KB, NT, True, AST](at + nxt * ASZ, ra, tid, a_ofast)
+                _afn_stage[BN, KB, NT, False, BST](bt + nxt * BSZ, rb, tid, b_ofast)
+                if w + 2 < windows:
+                    var k2 = k0 + 2 * KB
+                    ra = _afn_gload[BM, KB, NT, DType.float32](a, a_si, a_sp, m0, m, k2, min(KB, ke - k2), tid, a_ofast)
+                    rb = _afn_gload[BN, KB, NT, DType.float32](b, b_sj, b_sp, n0, n, k2, min(KB, ke - k2), tid, b_ofast)
+        barrier()
+    comptime for fm in range(FM):
+        comptime for fq in range(FN):
+            comptime for e in range(2):
+                var gi = m0 + (sgm * FM + fm) * 8 + frow
+                var gj = n0 + (sgn * FN + fq) * 8 + fcol + e
+                if gi < m and gj < n:
+                    var v = acc[fm * FN + fq][e]
+                    comptime if SPLIT:
+                        _ = Atomic.fetch_add(c.unsafe_offset(gi * n + gj), v)
+                    else:
+                        c.unsafe_store(gi * n + gj, v)
+
+
+def mcd_bmma_zero_kernel(c: F32Ptr, gate: I32Ptr, gate_all: Int32, nc: Int32, cells: Int32, c_bs: Int32):
+    """C_z[0, cells) = +0.0 for every gated candidate z (the split sum's
+    seed, `afn_zero_kernel` per candidate)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var mn = Int(cells)
+    if t < Int(nc) * mn:
+        var z = t // mn
+        if gate_all != 0 or gate.unsafe_load(z) != 0:
+            c.unsafe_store(z * Int(c_bs) + (t - z * mn), Float32(0.0))
+
+
+def launch_gemm_mma_batched(
+    ctx: DeviceContext, a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool,
+    nc: Int, a_bs: Int, b_bs: Int, c_bs: Int, gate: I32Ptr, gate_all: Bool,
+) raises:
+    """`_launch_gemm_mma(ctx, a + z a_bs, b + z b_bs, c + z c_bs, m, k, n,
+    ta, tb)` for every candidate z < nc whose gate word is set (all when
+    gate_all), as one launch (plus one zero launch when split)."""
+    if nc <= 0 or m <= 0 or n <= 0 or k <= 0:
+        return
+    # the strides, tiles and split of _launch_gemm_mma, unchanged
+    var a_si = 1 if ta else k
+    var a_sp = m if ta else 1
+    var b_sp = 1 if tb else n
+    var b_sj = k if tb else 1
+    var tiles = ((m + MB_BM - 1) // MB_BM) * ((n + MB_BN - 1) // MB_BN)
+    var splits = 1
+    if tiles < DFG_BLOCK_TARGET and k >= 2 * DFG_MIN_SPLIT_STEPS:
+        splits = min(DFG_BLOCK_TARGET // tiles, k // DFG_MIN_SPLIT_STEPS)
+    var ga = Int32(1) if gate_all else Int32(0)
+    if splits > 1:
+        var per = (k + splits - 1) // splits
+        per = ((per + AFN_GEMM_KB - 1) // AFN_GEMM_KB) * AFN_GEMM_KB
+        splits = (k + per - 1) // per
+        ctx.enqueue_function[mcd_bmma_zero_kernel](
+            c, gate, ga, Int32(nc), Int32(m * n), Int32(c_bs),
+            grid_dim=max((nc * m * n + MB_ZERO_TPB - 1) // MB_ZERO_TPB, 1), block_dim=MB_ZERO_TPB,
+        )
+        ctx.enqueue_function[mcd_bmma_kernel[True]](
+            c, a, b, gate, all, Int32(m), Int32(n), Int32(k),
+            Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per),
+            Int32(a_bs), Int32(b_bs), Int32(c_bs),
+            grid_dim=(tiles, splits, nc), block_dim=(MB_NT, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[mcd_bmma_kernel[False]](
+            c, a, b, gate, all, Int32(m), Int32(n), Int32(k),
+            Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(k),
+            Int32(a_bs), Int32(b_bs), Int32(c_bs),
+            grid_dim=(tiles, 1, nc), block_dim=(MB_NT, 1, 1),
+        )
