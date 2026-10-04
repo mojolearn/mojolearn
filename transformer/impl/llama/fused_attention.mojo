@@ -8157,8 +8157,11 @@ def fused_forward_launch_ran(
         if hit2:
             return FUSED_CORNER
         return FUSED_RAN
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_ONE_FLAG_WAIT: the flag read below waits once behind
+    # the kernels; the wait that sat here was a second round trip.
+    comptime if not IDN_ATTN_ONE_FLAG_WAIT:
+        step_count_sync()
+        ctx.synchronize()
     var hit = _read_flag(ctx, corner)
     _ = corner^
     _attn_tick(ctx, ton, tk, "fwd_corner_flag")
@@ -9045,6 +9048,33 @@ by two calls. Every kernel writes each cell it later reads within the call
 (the fresh buffers were never guaranteed zero on Metal, DEVIATION 2712), so
 no bit moves. `-D MOJOLEARN_ATTN_NO_SCRATCH_CACHE` allocates per call."""
 
+comptime IDN_ATTN_ONE_FLAG_WAIT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and TARGET_COLUMN != COLUMN_APPLE
+    and not (
+        is_defined["MOJOLEARN_IDN_ATTN_ONE_FLAG_WAIT_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+"""lane/nr-attn (2026-10-04), default ON under IDENTICAL on NVIDIA and AMD
+(the review's "double waits", fused_attention :8161 / :10870). The corner
+flag read `_read_flags` enqueues its copy behind the kernels on the same
+in-order context and waits once; the explicit `ctx.synchronize()` the
+launchers ran before it was a second full round trip that ordered nothing.
+The same holds inside the shipped launchers whose buffers outlive the call:
+`_launch_fwd_r2_keep` (the kept stash is the caller's) and, under
+`ATTN_SCRATCH_CACHE`, `_launch_bwd_estash` (its y/dy stashes are the
+process cache's, so no buffer is freed under a running kernel; the wait
+after the scratch request and the one between the zdot and dq launches
+ordered nothing either: same context, in order). Each of those launchers is
+followed, in every caller, by the flag read's wait before the caller
+returns, so the next call never grows a cached scratch under a running
+kernel. Per layer on the shipped estash words (NVIDIA and AMD): four fewer
+waits in the backward, two in the forward.
+No arithmetic moves: same bits on every column. The Apple column keeps
+every wait (a Metal command buffer that grows past a few seconds is cut
+silently). `-D MOJOLEARN_IDN_ATTN_ONE_FLAG_WAIT_OFF` restores them."""
+
 
 comptime _ATTN_SCRATCH_SLOTS = 3
 
@@ -9203,8 +9233,11 @@ def _launch_fwd_r2_keep[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ:
             grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
             block_dim=(FUSED_THREADS, 1, 1),
         )
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_ONE_FLAG_WAIT: `sstash` is the caller's kept buffer; the
+    # caller's flag read waits behind this kernel.
+    comptime if not IDN_ATTN_ONE_FLAG_WAIT:
+        step_count_sync()
+        ctx.synchronize()
     _attn_tick(ctx, on, tk, "fwd_r2_keep_kernel")
 
 
@@ -9813,8 +9846,11 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
         y_cells = 1
     var y_st = _attn_scratch(ctx, 1, y_cells)
     var dy_st = _attn_scratch(ctx, 2, cells)
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_ONE_FLAG_WAIT: a stream-ordered allocation; the kernels below
+    # run behind it on the same context.
+    comptime if not (IDN_ATTN_ONE_FLAG_WAIT and ATTN_SCRATCH_CACHE):
+        step_count_sync()
+        ctx.synchronize()
     _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
     var zdot_tq = attention_estash_zdot_tq(l, window)
     step_count_launch()
@@ -9860,8 +9896,11 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
                     Int32(window), grid_dim=(b * nh * ((l + 7) // 8), 1, 1),
                     block_dim=(FUSED_THREADS, 1, 1),
                 )
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_ONE_FLAG_WAIT: dq reads zdot and the stashes behind the zdot
+    # kernel on the same in-order context; the host reads nothing here.
+    comptime if not IDN_ATTN_ONE_FLAG_WAIT:
+        step_count_sync()
+        ctx.synchronize()
     comptime if DRES:
         _attn_tick(ctx, on, tk, "bwd_zdot_estash_dres_pf")
     else:
@@ -9900,8 +9939,12 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
     _attn_tick(ctx, on, tk, "bwd_kvgrid_dkdv_pf")
     # The stashes must outlive the enqueued kernels: synchronize, then the
     # explicit last use (a buffer is freed at its last use).
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_ONE_FLAG_WAIT under ATTN_SCRATCH_CACHE: `y_st`/`dy_st` are
+    # views of the process cache's buffers, which outlive these kernels; the
+    # caller's flag read waits behind them before the caller returns.
+    comptime if not (IDN_ATTN_ONE_FLAG_WAIT and ATTN_SCRATCH_CACHE):
+        step_count_sync()
+        ctx.synchronize()
     _ = y_st^
     _ = dy_st^
 
@@ -10506,8 +10549,11 @@ def fused_backward_launch_ran_report(
                 v_cache, amax, denom, b, l, nh, nkv, s, pos0, key_lo, window,
                 scale, row_blocks, key_blocks, nt,
             )
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_ONE_FLAG_WAIT: the flag read below waits once behind
+    # the kernels; the wait that sat here was a second round trip.
+    comptime if not IDN_ATTN_ONE_FLAG_WAIT:
+        step_count_sync()
+        ctx.synchronize()
     var flags = _read_flags(ctx, corner)
     var hit = flags[0]
     repaired = flags[1]
@@ -10662,8 +10708,11 @@ def fused_forward_launch_estash_ran(
                 if hit2:
                     return FUSED_CORNER
                 return FUSED_RAN
-            step_count_sync()
-            ctx.synchronize()
+            # IDN_ATTN_ONE_FLAG_WAIT: the flag read below waits once behind
+            # the kernels; the wait that sat here was a second round trip.
+            comptime if not IDN_ATTN_ONE_FLAG_WAIT:
+                step_count_sync()
+                ctx.synchronize()
             var hit = _read_flag(ctx, corner)
             _ = corner^
             _attn_tick(ctx, ton, tk, "fwd_corner_flag")
@@ -10866,8 +10915,11 @@ def fused_backward_launch_estash_report(
             )
             if swz:
                 ran = ran | ATTN_ARM_BSWZ
-            step_count_sync()
-            ctx.synchronize()
+            # IDN_ATTN_ONE_FLAG_WAIT: the flag read below waits once behind
+            # the kernels; the wait that sat here was a second round trip.
+            comptime if not IDN_ATTN_ONE_FLAG_WAIT:
+                step_count_sync()
+                ctx.synchronize()
             var flags = _read_flags(ctx, corner)
             var hit = flags[0]
             repaired = flags[1]
