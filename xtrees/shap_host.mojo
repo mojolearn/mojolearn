@@ -86,7 +86,7 @@ def shap_prepare(forest: List[Int], tscale: Int, bg: Int, cover_out: Int, ev: In
     for j in range(k):
         shap_ev_fold_unit(j, n_trees, k, pp, e)
     if fo.meta[SHAP_META_BAD] != 0:
-        raise Error("x_trees tree_shap: malformed tree")
+        raise Error("x_trees tree_shap: malformed tree (reason " + String(fo.meta[SHAP_META_BAD]) + ")")
     var mo = I32P(unsafe_from_address=meta_out)
     for i in range(SHAP_META_WORDS):
         mo[unsafe_offset=i] = fo.meta[i]
@@ -131,6 +131,6 @@ def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi:
         _tasks_over(_fold, d * k * rc, n_trees)
         r0 += rc
     if fo.meta[SHAP_META_BAD] != 0:
-        raise Error("x_trees tree_shap: malformed tree")
+        raise Error("x_trees tree_shap: malformed tree (reason " + String(fo.meta[SHAP_META_BAD]) + ")")
     _ = buf^
     _ = fo^
