@@ -544,12 +544,31 @@ def tsqr_r_py[E: Exec](a: PythonObject, b: PythonObject, r: PythonObject, p: Pyt
 comptime _API_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime IDN_OLS_ONE_ENTRY = _API_IDN and not (is_defined["MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 comptime IDN_LU_GESV = _API_IDN and not (is_defined["MOJOLEARN_IDN_LU_GESV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# lane fam-decomp (2026-10-04): LLE builds F0 = [F^ | u] in three cells and
+# takes F^ X as F0 [X; 0] on every column of an IDENTICAL build (device and
+# host binding alike, so the four agree), instead of downloading F, slicing
+# its columns in Python and uploading F^ again.
+# -D MOJOLEARN_IDN_LLE_DEV_F0_OFF clears the bit: Python keeps the host
+# F.cols + _hstack route.
+comptime IDN_LLE_DEV_F0 = _API_IDN and not (is_defined["MOJOLEARN_IDN_LLE_DEV_F0_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# lane fam-decomp (2026-10-04): the kit's `rand` draws into a device matrix
+# on the GPU binding (`dev_rand_py`, the kernel `DevExec.rand` launches: the
+# same Philox words) and downloads it only if Python reads it, instead of
+# downloading every draw and uploading it again for the first product (NMF's
+# n x k init, randomized_svd's d x l test matrix, ALS's factors, MDS's
+# starts). -D MOJOLEARN_IDN_RAND_RESIDENT_OFF clears the bit.
+comptime IDN_RAND_RESIDENT = _API_IDN and not (is_defined["MOJOLEARN_IDN_RAND_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 
 
 def idn_flags_py() raises -> PythonObject:
     """Bit 0: LinearRegression takes `ols_tsqr_r_py`; bit 1: solve takes
-    `lu_gesv_py`."""
+    `lu_gesv_py`; bit 2: LLE builds F0 in cells (IDN_LLE_DEV_F0); bit 3: the
+    kit's `rand` stays on the device (IDN_RAND_RESIDENT)."""
     var bits = 0
+    comptime if IDN_RAND_RESIDENT:
+        bits |= 8
+    comptime if IDN_LLE_DEV_F0:
+        bits |= 4
     comptime if IDN_OLS_ONE_ENTRY:
         bits |= 1
     comptime if IDN_LU_GESV:

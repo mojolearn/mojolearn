@@ -463,6 +463,23 @@ class _Kit:
                 big = True
         return big
 
+    def _opt_dev(self, name):
+        """Whether this binding exports the optional resident entry `name`
+        (lane fam-decomp: entries compiled only into an IDENTICAL GPU build
+        whose _OFF define is not set); asked once per kit and name."""
+        got = self.__dict__.setdefault("_opt_fns", {})
+        r = got.get(name)
+        if r is None:
+            r = False
+            if self._res():
+                try:
+                    getattr(self._raw(), name)
+                    r = True
+                except Exception:
+                    r = False
+            got[name] = r
+        return r
+
     def _dict_dev(self):
         """`x_decomp_dev_dict_update` when this binding exports it (a FAST
         Apple build without -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF), else None."""
@@ -616,7 +633,26 @@ class _Kit:
         self.b.x_decomp_sqdist(A.addr, B.addr, out.addr, [A.r, B.r, A.c, int(kind), float(pw)])
         return out
 
+    def _idn_flags(self):
+        """The binding's `x_decomp_idn_flags` (0 when it has none); asked once
+        per kit."""
+        f = self.__dict__.get("_idn_bits")
+        if f is None:
+            try:
+                f = int(getattr(self._raw(), "x_decomp_idn_flags")())
+            except Exception:
+                f = 0
+            self._idn_bits = f
+        return f
+
     def rand(self, r, c, seed, stream, kind):
+        if r * c >= 1024 and self._res() and self._idn_flags() & 8:   # a small draw is read at once: one call
+            # lane fam-decomp: drawn into a device matrix by the same kernel
+            # (IDENTICAL GPU build; -D MOJOLEARN_IDN_RAND_RESIDENT_OFF clears
+            # the bit); downloaded only if Python reads it
+            out = self._dout(r, c)
+            self.b.x_decomp_dev_rand(out._d.id, [r * c, int(seed) & 0xFFFFFFFF, int(stream) & 0xFFFFFFFF, kind])
+            return out
         out = _M.zeros(r, c)
         if r * c:
             self.b.x_decomp_rand(out.addr, [r * c, int(seed) & 0xFFFFFFFF, int(stream) & 0xFFFFFFFF, kind])
@@ -630,6 +666,13 @@ class _Kit:
         device), 0 the whole matrix."""
         n = A.r
         w, v = _M.zeros(1, n), _M.zeros(n, n)
+        if n >= 1 and A.c == n and A._d is not None and A._d.b is self._raw() and self._opt_dev("x_decomp_dev_eigh"):
+            # lane fam-decomp: an operand already on the device is solved on
+            # a device copy (an IDENTICAL GPU build without
+            # -D MOJOLEARN_IDN_EIGH_RESIDENT_OFF); a host operand keeps the
+            # host-address call (one upload either way)
+            self.b.x_decomp_dev_eigh(A._d.id, w.addr, v.addr, [n, int(uplo)])
+            return w, v
         self.b.x_decomp_eigh(A.addr, w.addr, v.addr, [n, int(uplo)])
         return w, v
 
@@ -645,9 +688,16 @@ class _Kit:
 
     def lu(self, A):
         n = A.r
-        lu = A.copy()
         piv = array.array("i", [0] * n)
         info = _M.zeros(1, 1)
+        if n >= 1 and A.c == n and self._opt_dev("x_decomp_dev_lu") and self._use(A):
+            # lane fam-decomp: the factor made in a device matrix from a
+            # device copy of A (an IDENTICAL GPU build without
+            # -D MOJOLEARN_IDN_LU_RESIDENT_OFF); pivots and info come down
+            lu = self._dout(n, n)
+            self.b.x_decomp_dev_lu(self._did(A), lu._d.id, piv.buffer_info()[0], info.addr, [n])
+            return lu, piv, int(info.s[0])
+        lu = A.copy()
         self.b.x_decomp_lu(lu.addr, piv.buffer_info()[0], info.addr, [n])
         return lu, piv, int(info.s[0])
 
@@ -760,8 +810,26 @@ class _Kit:
         """One sklearn `_update_cdnmf_fast` sweep over every row of W, in
         place; returns the total violation (rows ascending)."""
         n, kc = W.r, W.c
-        viol = _M.zeros(n, 1)
         p = array.array("i", perm)
+        if "_cd_fn" not in self.__dict__:
+            # lane fam-decomp: `x_decomp_dev_cd_rows` when this binding
+            # exports it (an IDENTICAL GPU build without
+            # -D MOJOLEARN_IDN_CD_RESIDENT_OFF), else None
+            fn = None
+            if self._res():
+                try:
+                    fn = getattr(self._raw(), "x_decomp_dev_cd_rows")
+                except Exception:
+                    fn = None
+            self._cd_fn = fn
+        if self._cd_fn is not None and n * kc and self._use(W, HHt, XHt):
+            # W swept where it lives (it has moved to the device: no host
+            # store to go stale), the violations folded there, one float read
+            viol = self._dout(n, 1)
+            self.b.x_decomp_dev_cd_rows(self._did(W), self._did(HHt), self._did(XHt), p.buffer_info()[0],
+                                        viol._d.id, [n, kc])
+            return self.total(viol).s[0]
+        viol = _M.zeros(n, 1)
         self.b.x_decomp_cd_rows(W.addr, HHt.addr, XHt.addr, p.buffer_info()[0], viol.addr, [n, kc])
         return self.total(viol).s[0]
 
@@ -771,7 +839,13 @@ class _Kit:
         values sorted descending with ties to the lower index."""
         m, n = A.r, A.c
         s, v = _M.zeros(1, n), _M.zeros(n, n)
-        self.b.x_decomp_svd(A.addr, s.addr, v.addr, [m, n])
+        if m >= n >= 1 and self._opt_dev("x_decomp_dev_svd") and self._use(A):
+            # lane fam-decomp: the solve on a device copy of the resident
+            # operand (an IDENTICAL GPU build without
+            # -D MOJOLEARN_IDN_SVD_RESIDENT_OFF); A stays on the device
+            self.b.x_decomp_dev_svd(self._did(A), s.addr, v.addr, [m, n])
+        else:
+            self.b.x_decomp_svd(A.addr, s.addr, v.addr, [m, n])
         # descending by value, ties to the lower index: the stable ascending
         # order of -s (an exact negation), and the gathers, in Mojo
         o = self.order(self.ew("scale", s, s=-1.0))
@@ -804,6 +878,12 @@ class _Kit:
     def lasso_rows(self, G, Q, W, alpha, max_iter, tol, positive):
         """Row-parallel Lasso CD on the Gram (x_decomp/cells.mojo `lasso_row`),
         W (n x k) the warm start, updated in place."""
+        if Q.r * Q.c and self._opt_dev("x_decomp_dev_code_rows") and self._use(G, Q, W):
+            # lane fam-decomp: the Gram, Q and the codes stay on the device
+            # (an IDENTICAL GPU build without -D MOJOLEARN_IDN_CODE_RESIDENT_OFF)
+            self.b.x_decomp_dev_code_rows(self._did(G), self._did(Q), self._did(W),
+                                          [0, Q.r, Q.c, int(max_iter), int(positive)], [float(alpha), float(tol)])
+            return W
         its = _M.zeros(Q.r, 1)
         self.b.x_decomp_lasso_rows(G.addr, Q.addr, W.addr, its.addr, [Q.r, Q.c, int(max_iter), int(positive)],
                                    [float(alpha), float(tol)])
@@ -836,6 +916,11 @@ class _Kit:
         under eps * max |u_ii| in `lu` itself."""
         n = lu.r
         pm, im, diag, st = _M.zeros(n, 1), _M.zeros(n, 1), _M.zeros(1, n), _M.zeros(1, 4)
+        if n >= 1 and lu._d is not None and lu._d.b is self._raw() and self._opt_dev("x_decomp_dev_lu"):
+            # lane fam-decomp: read (and clamped) where the factor lives
+            self.b.x_decomp_dev_lu_aux(lu._d.id, piv.buffer_info()[0], pm.addr, im.addr, diag.addr, st.addr,
+                                       [n, int(bool(clamp))])
+            return [float(v) for v in st.s], diag, pm, im  # glue: the four-field lu_aux status
         self.b.x_decomp_lu_aux(lu.addr, piv.buffer_info()[0], pm.addr, im.addr, diag.addr, st.addr,
                                [n, int(bool(clamp))])
         return [float(v) for v in st.s], diag, pm, im  # glue: the four-field lu_aux status
@@ -843,6 +928,11 @@ class _Kit:
     def lars_rows(self, G, Q, m, nnz):
         """Row-parallel Lars on the Gram (x_decomp/cells.mojo `lars_row`): the
         n x k coefficients, m the samples of each row's problem."""
+        if Q.r * Q.c and self._opt_dev("x_decomp_dev_code_rows") and self._use(G, Q):
+            W = self._dout(Q.r, Q.c)       # lane fam-decomp: see lasso_rows
+            self.b.x_decomp_dev_code_rows(self._did(G), self._did(Q), W._d.id,
+                                          [1, Q.r, Q.c, int(m), int(nnz)], [0.0, 0.0])
+            return W
         W = _M.zeros(Q.r, Q.c)
         na = _M.zeros(Q.r, 1)
         if Q.r * Q.c:
@@ -850,6 +940,11 @@ class _Kit:
         return W
 
     def omp_rows(self, G, Q, nnz):
+        if Q.r * Q.c and self._opt_dev("x_decomp_dev_code_rows") and self._use(G, Q):
+            W = self._dout(Q.r, Q.c)       # lane fam-decomp: see lasso_rows
+            self.b.x_decomp_dev_code_rows(self._did(G), self._did(Q), W._d.id,
+                                          [2, Q.r, Q.c, int(nnz), 0], [0.0, 0.0])
+            return W
         W = _M.zeros(Q.r, Q.c)
         na = _M.zeros(Q.r, 1)
         self.b.x_decomp_omp_rows(G.addr, Q.addr, W.addr, na.addr, [Q.r, Q.c, int(nnz)])
@@ -1042,6 +1137,12 @@ class _Kit:
     def qr_r(self, A):
         """R (n x n) of the Householder QR of a tall A (decomposition/'s TSQR)."""
         R = _M.zeros(A.c, A.c)
+        if A.r >= A.c >= 1 and self._opt_dev("x_decomp_dev_qr_r") and self._use(A):
+            # lane fam-decomp: the QR of a device copy of the resident
+            # operand (an IDENTICAL GPU build without
+            # -D MOJOLEARN_IDN_QR_R_RESIDENT_OFF); only R comes down
+            self.b.x_decomp_dev_qr_r(self._did(A), R.addr, [A.r, A.c])
+            return R
         self.b.x_decomp_qr_r(A.addr, R.addr, [A.r, A.c])
         return R
 
@@ -4260,6 +4361,16 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     Fh = k.mm(F, h)
     dev_f0 = (_LLE_FAST_DEV_F0 and str(k.mode).strip().lower() == "fast" and k._use(F)
               and _kit_vendor(k) == "metal")
+    if not dev_f0 and str(k.mode).strip().lower() != "fast":
+        # lane fam-decomp: IDENTICAL takes the cell form on every column
+        # (device and host binding alike, whatever F's size: one arithmetic,
+        # so the four columns agree) when the binding says so
+        # (`x_decomp_idn_flags` bit 2; -D MOJOLEARN_IDN_LLE_DEV_F0_OFF or
+        # -D MOJOLEARN_IDN_ALL_OFF clears it).
+        try:
+            dev_f0 = bool(int(getattr(k._raw(), "x_decomp_idn_flags")()) & 4)
+        except (ImportError, AttributeError):
+            dev_f0 = False
     if dev_f0:
         # lane/apple-fast-gap-manprep (2026-10-03), FAST + Apple default: F0 = [F^ | u] built on the device in three cells
         # instead of F.cols (F downloaded, then one strided Python slice per

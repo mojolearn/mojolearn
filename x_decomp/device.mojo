@@ -26,6 +26,7 @@ from gemm.afn_apple_fast import (
     afn_zero_kernel,
 )
 from decomposition.linalg_public_device import device_qr_r
+from decomposition.linalg_types import _validate_shape
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
 from x_decomp.lu_fast import LU_FAST_STEP1, lfs_blocks, lu_fast_panel
 from x_decomp.lasso_grp import DECOMP_FAST_LASSO_GRP, LG_MAXK, LG_TPB, lasso_grp_kernel
@@ -157,6 +158,31 @@ comptime PJ_SYNC_ROUNDS = 512
 comptime IDN_XD_SWEEP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_XD_SWEEP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 comptime IDN_XD_NO_WAIT = IDN_XD_SWEEP and TARGET_COLUMN != COLUMN_APPLE
 comptime XD_NO_FLAG = Int32(2147483647)
+
+# lane fam-decomp (2026-10-04), IDENTICAL: a small eigh (n <= IDN_EIGH_SMALL_N)
+# is ONE launch and one wait, the batched round-robin kernel
+# (x_decomp/rr_batch.mojo) with a batch of one, whose pairs, 2 x 2 blocks and
+# V rows spread over the block's RR_OFF_TPB threads, instead of two launches
+# a round, 2 (m - 1) a sweep, and a three-scalar readback before every sweep
+# (at n = 16 about 250 launches and 8 waits a solve; FastICA's symmetric
+# decorrelation, FactorAnalysis, PLS and MCD's pinvh call it every
+# iteration). The batched kernel runs the single solver's cells in its
+# order and decides by the same tests (its header): the same words, on the
+# device columns and against `host_eigh_rr`. At most RR_OFF_TPB cells of
+# work a step, so the block is not short of threads at these sizes.
+# -D MOJOLEARN_IDN_EIGH_SMALL_OFF restores the per-round launches.
+comptime IDN_EIGH_SMALL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_EIGH_SMALL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+comptime IDN_EIGH_SMALL_N = 32
+
+# lane fam-decomp (2026-10-04), IDENTICAL: `DevExec.qr_r` uploads the caller's
+# matrix straight from its address and takes R straight into the caller's
+# array (`_qr_r_on`: `device_qr_r`'s buffers and its one `qr_factor`), instead
+# of appending every one of its m n values to a List on ONE host thread
+# (220 M appends at the board's 1 M x 220 FactorAnalysis), copying that List
+# into a staging buffer, and copying R through a second List. Copies only:
+# the same launches on the same values, the same words.
+# -D MOJOLEARN_IDN_QR_R_DIRECT_OFF restores the List route.
+comptime IDN_QR_R_DIRECT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_QR_R_DIRECT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 
 
 @always_inline
@@ -2321,14 +2347,24 @@ struct DevExec(Exec):
         on the device; 0 the whole matrix."""
         var ctx = xd_ctx()
         var da = _up(ctx, a, n * n)
+        DevExec._eigh_on(ctx, da, w, v, n, uplo)
+        _ = da^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def _eigh_on(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int, uplo: Int
+    ) raises:
+        """`eigh` on the device matrix in `da` (n x n, overwritten): the
+        triangle mirrored when uplo != 0, then `_eigh_par_on`. `eigh` and the
+        resident entry (x_decomp/resident.mojo `dev_eigh_py`, lane
+        fam-decomp) both call it: one launch sequence."""
         if uplo != 0:
             ctx.enqueue_function[sym_from_triangle_kernel](
                 da.unsafe_ptr(), Int32(n), Int32(uplo), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
             )
         _ = DevExec._eigh_par_on(ctx, da, w, v, n)
-        _ = da^
-        ctx.synchronize()
-        _ = ctx^
 
     @staticmethod
     def _eigh_par_on(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int) raises -> Int:
@@ -2339,7 +2375,20 @@ struct DevExec(Exec):
         `sign_flip_kernel` and the ascending permutation; w (n) and v (n x n)
         out to host memory. The resident kit (x_decomp/kit_device.mojo)
         hands its own copy here, the Lanczos projected solve too. Returns the
-        sweeps run."""
+        sweeps run (0 from the small route, which does not report them)."""
+        comptime if IDN_EIGH_SMALL:
+            if n >= 1 and n <= IDN_EIGH_SMALL_N:
+                # one launch (see IDN_EIGH_SMALL); an unconverged solve or a
+                # block that did not run raises inside `_rr_batch_on`
+                var bw = ctx.enqueue_create_buffer[DType.float32](n)
+                var bv = ctx.enqueue_create_buffer[DType.float32](n * n)
+                DevExec._rr_batch_on(ctx, da, 1, n, bw, bv)
+                _down(ctx, bw, w, n)
+                _down(ctx, bv, v, n * n)
+                ctx.synchronize()
+                _ = bw^
+                _ = bv^
+                return 0
         var m = n + (n % 2)
         var h = m // 2
         var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
@@ -2669,6 +2718,19 @@ struct DevExec(Exec):
         MOJOLEARN_XD_JACOBI switch are replaced by the round-robin rounds."""
         var ctx = xd_ctx()
         var da = _up(ctx, a, m * n)
+        DevExec._svd_on(ctx, da, m, n, s, v, qr_cells)
+        _ = da^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def _svd_on(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, s: F32Ptr, v: F32Ptr, qr_cells: Int
+    ) raises:
+        """`svd_cells` on the device matrix in `da` (m x n, overwritten by the
+        QR): s (n) and v (n x n) out to host memory, every launch waited for.
+        `svd_cells` and the resident entry (x_decomp/resident.mojo
+        `dev_svd_py`, lane fam-decomp) both call it: one launch sequence."""
         var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, n) * n * n)
         var r_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
         var rt = ctx.enqueue_create_buffer[DType.float32](n * n)
@@ -2731,7 +2793,6 @@ struct DevExec(Exec):
             if s.unsafe_load(t) != s.unsafe_load(t):
                 raise Error("x_decomp svd: singular value " + String(t) + " of " + String(n)
                             + " is NaN after the solve (a device launch cut short, or a NaN input): refused")
-        _ = da^
         _ = scratch^
         _ = r_buf^
         _ = rt^
@@ -2742,8 +2803,6 @@ struct DevExec(Exec):
         _ = hflags^
         _ = dfirst^
         _ = hfirst^
-        ctx.synchronize()
-        _ = ctx^
 
     @staticmethod
     def lasso_rows(
@@ -2790,8 +2849,24 @@ struct DevExec(Exec):
         pivots, negative pivots, swaps), diag = u_ii, and with `clamp` the
         pivots under eps max |u_jj| floored (lu written back)."""
         var ctx = xd_ctx()
-        var nb = _pj_off_blocks(n)
         var dl = _up(ctx, lu, n * n)
+        DevExec._lu_aux_on(ctx, _p(dl), piv, pm, im, diag, stats, n, clamp)
+        if clamp != 0:
+            _down(ctx, dl, lu, n * n)
+        ctx.synchronize()
+        _ = dl^
+        _ = ctx^
+
+    @staticmethod
+    def _lu_aux_on(
+        ctx: DeviceContext, pl: F32Ptr, piv: I32Ptr, pm: F32Ptr, im: F32Ptr, diag: F32Ptr, stats: F32Ptr, n: Int,
+        clamp: Int,
+    ) raises:
+        """`lu_aux` on the device factor at `pl` (n x n, its tiny pivots
+        floored in place with `clamp`); piv, pm, im, diag and stats are host
+        memory. Waits. `lu_aux` and the resident entry (x_decomp/resident.mojo
+        `dev_lu_aux_py`, lane fam-decomp) both call it: one launch sequence."""
+        var nb = _pj_off_blocks(n)
         var dp = _up_i(ctx, piv, n)
         var dpm = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
         var dim = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
@@ -2801,26 +2876,22 @@ struct DevExec(Exec):
         var pp = I32Ptr(unsafe_from_address=Int(dp.unsafe_ptr()))
         ctx.enqueue_function[lu_perm_kernel](pp, _p(dpm), Int32(n), Int32(0), grid_dim=_blocks(n), block_dim=TPB)
         ctx.enqueue_function[lu_perm_kernel](pp, _p(dim), Int32(n), Int32(1), grid_dim=_blocks(n), block_dim=TPB)
-        ctx.enqueue_function[lu_aux_part_kernel](_p(dl), pp, _p(dpart), Int32(n), grid_dim=nb, block_dim=RR_OFF_TPB)
+        ctx.enqueue_function[lu_aux_part_kernel](pl, pp, _p(dpart), Int32(n), grid_dim=nb, block_dim=RR_OFF_TPB)
         ctx.enqueue_function[lu_aux_fold_kernel](_p(dpart), _p(dst), Int32(nb), grid_dim=1, block_dim=RR_OFF_TPB)
         ctx.enqueue_function[lu_aux_clamp_kernel](
-            _p(dl), _p(dd), _p(dst), Int32(n), Int32(clamp), grid_dim=_blocks(n), block_dim=TPB
+            pl, _p(dd), _p(dst), Int32(n), Int32(clamp), grid_dim=_blocks(n), block_dim=TPB
         )
         _down(ctx, dpm, pm, n)
         _down(ctx, dim, im, n)
         _down(ctx, dd, diag, n)
         _down(ctx, dst, stats, 4)
-        if clamp != 0:
-            _down(ctx, dl, lu, n * n)
         ctx.synchronize()
-        _ = dl^
         _ = dp^
         _ = dpm^
         _ = dim^
         _ = dd^
         _ = dpart^
         _ = dst^
-        _ = ctx^
 
     @staticmethod
     def lars_rows(g: F32Ptr, q: F32Ptr, w: F32Ptr, na: F32Ptr, n: Int, k: Int, m: Int, nnz: Int) raises:
@@ -3084,12 +3155,35 @@ struct DevExec(Exec):
 
     @staticmethod
     def qr_r(a: F32Ptr, m: Int, n: Int, r: F32Ptr) raises:
-        var w = List[Float32](capacity=m * n)
-        for t in range(m * n):
-            w.append(a.unsafe_load(t))
-        var got = device_qr_r(xd_ctx(), w, m, n)
-        for t in range(n * n):
-            r.unsafe_store(t, got[t])
+        comptime if IDN_QR_R_DIRECT:
+            _validate_shape(m, n, "qr")
+            var ctx = xd_ctx()
+            var da = _up(ctx, a, m * n)
+            DevExec._qr_r_on(ctx, da, m, n, r)
+            _ = da^
+            ctx.synchronize()
+            _ = ctx^
+        else:
+            var w = List[Float32](capacity=m * n)
+            for t in range(m * n):
+                w.append(a.unsafe_load(t))
+            var got = device_qr_r(xd_ctx(), w, m, n)
+            for t in range(n * n):
+                r.unsafe_store(t, got[t])
+
+    @staticmethod
+    def _qr_r_on(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, r: F32Ptr) raises:
+        """R (n x n, host memory at `r`) of the Householder QR of the device
+        matrix in `da` (m x n, destroyed by `qr_factor`): `device_qr_r`'s
+        buffers and launch. Waits. The caller has validated the shape."""
+        var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, n) * n * n)
+        var r_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
+        ctx.synchronize()
+        _ = qr_factor(ctx, da, scratch, r_buf, m, n)
+        _down(ctx, r_buf, r, n * n)
+        ctx.synchronize()
+        _ = scratch^
+        _ = r_buf^
 
     @staticmethod
     def tsqr_factor(a: F32Ptr, b: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:

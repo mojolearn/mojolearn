@@ -26,7 +26,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
 
-from x_decomp.cells import F32Ptr, OP_SCALE, OP_SELECT, ew_cell, rand_cell
+from x_decomp.cells import F32Ptr, I32Ptr, LARS_ROW_EXTRA, OP_SCALE, OP_SELECT, ew_cell, rand_cell
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import HostBuffer
 from core.device_scan import NONFINITE_NONE, SCAN_TPB, _scan_blocks, nonfinite_partial_kernel
@@ -59,7 +59,20 @@ from x_decomp.device import (
     TPB,
     _blocks,
     xd_ctx,
+    _up_i,
+    cd_rows_kernel,
+    DevExec,
+    IDN_QR_R_DIRECT,
+    lasso_rows_kernel,
+    lars_rows_kernel,
+    omp_rows_kernel,
+    LU_SCAL_LEN,
+    launch_lu,
+    _down_i,
+    _p,
 )
+from x_decomp.qr_bounded import QRB_CELLS
+from decomposition.linalg_types import _validate_shape
 
 comptime POOL_KEEP_BYTES = 1 << 30
 comptime POOL_CLASSES = 40
@@ -488,6 +501,328 @@ def dev_als_rows_py(
         _ptr(sid, ns if ns > 0 else 1), _ptr(_id(flags), n), n, m, f, su, si, Float32(Float64(py=reg)),
     )
     pool_free(sid)
+    return PythonObject(n)
+
+
+# ---- lane fam-decomp (2026-10-04): IDN_CD_RESIDENT (IDENTICAL default) ----
+#: NMF's coordinate-descent sweep (`cd_rows_kernel`, the launch
+#: `DevExec.cd_rows` makes) on device matrices: W is swept in place where it
+#: lives and the per-row violations land in a device matrix, so W, H^T H and
+#: X H^T no longer come down and go up again around every half sweep (W
+#: crossed four times and X H^T twice per half sweep through the host-address
+#: entry); only the permutation (k ints) goes up and the folded violation
+#: (one float, the kit's `total`) comes down. The same kernel on the same
+#: values: the same words. -D MOJOLEARN_IDN_CD_RESIDENT_OFF (or
+#: -D MOJOLEARN_IDN_ALL_OFF) leaves the entry out and Python keeps the
+#: host-address call.
+comptime IDN_CD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_CD_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def dev_cd_rows_py(
+    w: PythonObject, hht: PythonObject, xht: PythonObject, perm: PythonObject, viol: PythonObject, p: PythonObject
+) raises -> PythonObject:
+    """`x_decomp_cd_rows` on device matrices: w (n x k, swept in place), hht
+    (k x k), xht (n x k), viol (n, written); perm the host address of k
+    int32. p = [n, k]. Waits (the host permutation may die after it returns)."""
+    var n = _n(p, 0)
+    var k = _n(p, 1)
+    if n == 0 or k == 0:
+        return PythonObject(0)
+    if n * k > 2147483647:
+        raise Error("x_decomp: cd_rows exceeds the Int32 index bound")
+    var pw = _ptr(_id(w), n * k)
+    var ph = _ptr(_id(hht), k * k)
+    var px = _ptr(_id(xht), n * k)
+    var pv = _ptr(_id(viol), n)
+    var pp = I32Ptr(unsafe_from_address=Int(py=perm))
+    var ctx = xd_ctx()
+    var dp = _up_i(ctx, pp, k)
+    ctx.enqueue_function[cd_rows_kernel](
+        pw, ph, px, dp.unsafe_ptr(), pv, Int32(n), Int32(k), grid_dim=_blocks(n), block_dim=TPB
+    )
+    # the permutation buffer dies here: wait for the launch that reads it
+    ctx.synchronize()
+    _ = dp^
+    return PythonObject(n)
+
+
+# ---- lane fam-decomp (2026-10-04): IDN_SVD_RESIDENT (IDENTICAL default) ----
+#: The kit's tall SVD on a device matrix: `DevExec._svd_on` (the launches
+#: `DevExec.svd` makes) on a device copy of the operand, so a product or an
+#: elementwise result that is already resident (FactorAnalysis scales X
+#: every EM step and takes its SVD; LLE's null-space iteration takes the SVD
+#: of F^ X every step; randomized_svd and linalg.svd likewise) is not
+#: downloaded and uploaded again around the solve; only s (n) and V (n x n)
+#: come down. The same launches on the same values: the same words.
+#: -D MOJOLEARN_IDN_SVD_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves
+#: the entry out and Python keeps the host-address call.
+comptime IDN_SVD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_SVD_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def dev_svd_py(a: PythonObject, s: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`x_decomp_svd` of the device matrix a (m x n, left as it is: the QR
+    overwrites a device copy); s (n) and v (n x n) are host addresses.
+    p = [m, n]. Waits."""
+    var m = _n(p, 0)
+    var n = _n(p, 1)
+    if n <= 0 or m < n:
+        raise Error("x_decomp: svd needs m >= n >= 1 (a tall matrix)")
+    var cells = m * n
+    if cells > 2147483647:
+        raise Error("x_decomp: svd exceeds the Int32 index bound")
+    var ia = _id(a)
+    _ = _ptr(ia, cells)
+    var ps = F32Ptr(unsafe_from_address=Int(py=s))
+    var pv = F32Ptr(unsafe_from_address=Int(py=v))
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var ctx = xd_ctx()
+    var da = ctx.enqueue_create_buffer[DType.float32](cells)
+    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+    with GILReleased(Python()):
+        DevExec._svd_on(ctx, da, m, n, ps, pv, QRB_CELLS)
+    _ = da^
+    ctx.synchronize()
+    return PythonObject(n)
+
+
+# ---- lane fam-decomp (2026-10-04): IDN_LU_RESIDENT (IDENTICAL default) ----
+#: The kit's LU and its companions on device matrices. `Kit.lu` copied its
+#: operand on the host (downloading it when it was a device result),
+#: uploaded the copy, and downloaded the factor; `lu_aux` uploaded the
+#: factor again and (with clamp) downloaded it again; the resident
+#: `trisolve` then uploaded it a third time. At LLE's n = 10,000 that is a
+#: 400 MB matrix crossing five times around one factorization. Here the
+#: factor is made in a device matrix from a device copy of the operand
+#: (`launch_lu`, DevExec.lu's launches) and `DevExec._lu_aux_on` reads and
+#: clamps it where it lives; only the pivots (n ints), info, the row orders
+#: (2 n), the diagonal (n) and the four stats come down. The same launches
+#: on the same values: the same words.
+#: -D MOJOLEARN_IDN_LU_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves the
+#: entries out and Python keeps the host-address calls.
+comptime IDN_LU_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_LU_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def dev_lu_py(a: PythonObject, lu: PythonObject, piv: PythonObject, info: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`x_decomp_lu` on device matrices: lu (n x n) = the factor of a (n x n,
+    left as it is); piv (n int32) and info (1 float32) are host addresses.
+    p = [n]. Waits."""
+    var n = _n(p, 0)
+    if n < 1:
+        raise Error("x_decomp: the resident lu needs n >= 1")
+    var cells = n * n
+    if cells > 2147483647:
+        raise Error("x_decomp: lu exceeds the Int32 index bound")
+    var ia = _id(a)
+    var il = _id(lu)
+    _ = _ptr(ia, cells)
+    var pl = _ptr(il, cells)
+    var pp = I32Ptr(unsafe_from_address=Int(py=piv))
+    var pi = F32Ptr(unsafe_from_address=Int(py=info))
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var ctx = xd_ctx()
+    if ia != il:
+        ctx.enqueue_copy(
+            dst_buf=pool[].bufs[il].create_sub_buffer[DType.float32](0, cells),
+            src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells),
+        )
+    var dp = ctx.enqueue_create_buffer[DType.int32](n)
+    var di = ctx.enqueue_create_buffer[DType.float32](1)
+    var ds = ctx.enqueue_create_buffer[DType.float32](LU_SCAL_LEN)
+    var dact = ctx.enqueue_create_buffer[DType.float32](n)
+    with GILReleased(Python()):
+        launch_lu(ctx, pl, I32Ptr(unsafe_from_address=Int(dp.unsafe_ptr())), _p(di), _p(ds), _p(dact), n)
+        _down_i(ctx, dp, pp, n)
+        _down(ctx, di, pi, 1)
+        ctx.synchronize()
+    _ = dp^
+    _ = di^
+    _ = ds^
+    _ = dact^
+    return PythonObject(n)
+
+
+def dev_lu_aux_py(
+    lu: PythonObject, piv: PythonObject, pm: PythonObject, im: PythonObject, diag: PythonObject,
+    stats: PythonObject, p: PythonObject,
+) raises -> PythonObject:
+    """`x_decomp_lu_aux` on the device factor lu (n x n, clamped in place
+    with p[1]); piv (n int32), pm, im, diag (n each) and stats (4) are host
+    addresses. p = [n, clamp]. Waits."""
+    var n = _n(p, 0)
+    var clamp = _n(p, 1)
+    if n < 1 or n >= 16777216:
+        raise Error("x_decomp: lu_aux needs 1 <= n < 2^24")
+    if n * n > 2147483647:
+        raise Error("x_decomp: lu_aux exceeds the Int32 index bound")
+    var pl = _ptr(_id(lu), n * n)
+    var pv = I32Ptr(unsafe_from_address=Int(py=piv))
+    var p1 = F32Ptr(unsafe_from_address=Int(py=pm))
+    var p2 = F32Ptr(unsafe_from_address=Int(py=im))
+    var pd = F32Ptr(unsafe_from_address=Int(py=diag))
+    var ps = F32Ptr(unsafe_from_address=Int(py=stats))
+    var ctx = xd_ctx()
+    with GILReleased(Python()):
+        DevExec._lu_aux_on(ctx, pl, pv, p1, p2, pd, ps, n, clamp)
+    return PythonObject(n)
+
+
+# ---- lane fam-decomp (2026-10-04): IDN_QR_R_RESIDENT (IDENTICAL default) ----
+#: The kit's `qr_r` on a device matrix: `DevExec._qr_r_on` on a device copy
+#: of the operand, so a resident operand (FactorAnalysis's centered X, an
+#: elementwise result of the whole n x d input) is not downloaded and
+#: uploaded again for its QR; only R (d x d) comes down. The same launch on
+#: the same values: the same words. Needs IDN_QR_R_DIRECT (its helper).
+#: -D MOJOLEARN_IDN_QR_R_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves the
+#: entry out and Python keeps the host-address call.
+comptime IDN_QR_R_RESIDENT = IDN_QR_R_DIRECT and not is_defined["MOJOLEARN_IDN_QR_R_RESIDENT_OFF"]()
+
+
+def dev_qr_r_py(a: PythonObject, r: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`x_decomp_qr_r` of the device matrix a (m x n, left as it is: the QR
+    destroys a device copy); r (n x n) is a host address. p = [m, n]. Waits."""
+    var m = _n(p, 0)
+    var n = _n(p, 1)
+    if n <= 0 or m < n:
+        raise Error("x_decomp: qr_r needs m >= n >= 1")
+    _validate_shape(m, n, "qr")
+    var cells = m * n
+    if cells > 2147483647:
+        raise Error("x_decomp: qr_r exceeds the Int32 index bound")
+    var ia = _id(a)
+    _ = _ptr(ia, cells)
+    var pr = F32Ptr(unsafe_from_address=Int(py=r))
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var ctx = xd_ctx()
+    var da = ctx.enqueue_create_buffer[DType.float32](cells)
+    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+    with GILReleased(Python()):
+        DevExec._qr_r_on(ctx, da, m, n, pr)
+    _ = da^
+    ctx.synchronize()
+    return PythonObject(n)
+
+
+# ---- lane fam-decomp (2026-10-04): IDN_CODE_RESIDENT (IDENTICAL default) ----
+#: sparse_encode's row solvers (Lasso CD, Lars, OMP on the Gram) on device
+#: matrices: the Gram D D^T and Q = X D^T are device products already, and
+#: the host-address entries downloaded both, uploaded both again, and
+#: brought the n x k codes down only for the next product to upload them
+#: (DictionaryLearning, SparsePCA and their mini-batch forms call it every
+#: iteration). Here the same kernel (`lasso_rows_kernel`, `lars_rows_kernel`,
+#: `omp_rows_kernel`: DevExec's launches) reads them where they are and
+#: writes the codes into a device matrix. The same words.
+#: -D MOJOLEARN_IDN_CODE_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves
+#: the entry out and Python keeps the host-address calls.
+comptime IDN_CODE_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_CODE_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def dev_code_rows_py(g: PythonObject, q: PythonObject, w: PythonObject, p: PythonObject, f: PythonObject) raises -> PythonObject:
+    """g (k x k), q (n x k) and w (n x k) are device matrices.
+    p = [kind, n, k, a, b]: kind 0 Lasso CD (w the warm start, updated in
+    place; a = max_iter, b = positive; f = [alpha, tol]), kind 1 Lars (w
+    written; a = m, b = nnz), kind 2 OMP (w written; a = nnz). Waits."""
+    var kind = Int(py=p[0])
+    var n = _n(p, 1)
+    var k = _n(p, 2)
+    var a = _n(p, 3)
+    var b = _n(p, 4)
+    if n == 0 or k == 0:
+        return PythonObject(0)
+    if kind < 0 or kind > 2:
+        raise Error("x_decomp: dev_code_rows kind must be 0 (lasso), 1 (lars) or 2 (omp)")
+    if n * (k * k + LARS_ROW_EXTRA * k) > 2147483647:
+        raise Error("x_decomp: code rows exceed the Int32 index bound")
+    var cells = n * k
+    var pg = _ptr(_id(g), k * k)
+    var pq = _ptr(_id(q), cells)
+    var iw = _id(w)
+    var pw = _ptr(iw, cells)
+    var alpha = Float32(Float64(py=f[0]))
+    var tol = Float32(Float64(py=f[1]))
+    var per = cells
+    if kind == 1:
+        per = n * (k * k + LARS_ROW_EXTRA * k)
+    elif kind == 2:
+        per = n * (k * k + 3 * k)
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var ctx = xd_ctx()
+    # the scratch at its exact size (DevExec's; a pooled buffer rounds n (k^2 +
+    # 7 k) floats up to a power of two)
+    var dn = ctx.enqueue_create_buffer[DType.float32](n)
+    var ds = ctx.enqueue_create_buffer[DType.float32](per)
+    with GILReleased(Python()):
+        if kind == 0:
+            ctx.enqueue_function[lasso_rows_kernel](
+                pg, pq, pw, _p(ds), _p(dn), Int32(n), Int32(k), alpha, Int32(a), tol,
+                Int32(1 if b != 0 else 0), grid_dim=_blocks(n), block_dim=TPB,
+            )
+        else:
+            # the host-address entries start from a zeroed w
+            var wsub = pool[].bufs[iw].create_sub_buffer[DType.float32](0, cells)
+            enqueue_fill(ctx, wsub, Float32(0.0))
+            if kind == 1:
+                ctx.enqueue_function[lars_rows_kernel](
+                    pg, pq, pw, _p(ds), _p(dn), Int32(n), Int32(k), Int32(a), Int32(b),
+                    grid_dim=_blocks(n), block_dim=TPB,
+                )
+            else:
+                ctx.enqueue_function[omp_rows_kernel](
+                    pg, pq, pw, _p(ds), _p(dn), Int32(n), Int32(k), Int32(a), grid_dim=_blocks(n), block_dim=TPB
+                )
+        # the scratch dies here: wait for the launch that uses it
+        ctx.synchronize()
+    _ = dn^
+    _ = ds^
+    return PythonObject(n)
+
+
+# ---- lane fam-decomp (2026-10-04): IDN_EIGH_RESIDENT (IDENTICAL default) ----
+#: The kit's `eigh` on a device matrix: `DevExec._eigh_on` (DevExec.eigh's
+#: launches) on a device copy of the operand, so a resident n x n operand
+#: (KernelPCA's centered Gram, ClassicalMDS / Isomap's double-centered
+#: distances, a covariance product) is not downloaded and uploaded again
+#: for its solve; w (n) and V (n x n) come down as before. The same launches
+#: on the same values: the same words.
+#: -D MOJOLEARN_IDN_EIGH_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves
+#: the entry out and Python keeps the host-address call.
+comptime IDN_EIGH_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_EIGH_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def dev_eigh_py(a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`x_decomp_eigh` of the device matrix a (n x n, left as it is: the
+    solve overwrites a device copy); w (n) and v (n x n) are host addresses.
+    p = [n, uplo]. Waits."""
+    var n = _n(p, 0)
+    var uplo = _n(p, 1)
+    if n < 1:
+        raise Error("x_decomp: the resident eigh needs n >= 1")
+    if uplo > 2:
+        raise Error("x_decomp: eigh uplo is 0, 1 (L) or 2 (U)")
+    var cells = n * n
+    if cells > 2147483647:
+        raise Error("x_decomp: eigh exceeds the Int32 index bound")
+    var ia = _id(a)
+    _ = _ptr(ia, cells)
+    var pw = F32Ptr(unsafe_from_address=Int(py=w))
+    var pv = F32Ptr(unsafe_from_address=Int(py=v))
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var ctx = xd_ctx()
+    var da = ctx.enqueue_create_buffer[DType.float32](cells)
+    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+    with GILReleased(Python()):
+        DevExec._eigh_on(ctx, da, pw, pv, n, uplo)
+    _ = da^
+    ctx.synchronize()
     return PythonObject(n)
 
 
