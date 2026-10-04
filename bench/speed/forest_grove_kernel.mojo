@@ -20,7 +20,7 @@ from std.sys import argv
 from std.time import perf_counter_ns
 from std.testing import assert_equal
 from max.gpu.host import DeviceContext, DeviceBuffer
-from core.forest_inference import forest_grove32_kernel, forest_vector_grove32_kernel, validate_flat_forest
+from core.forest_inference import forest_grove32_kernel, forest_vector_grove32_kernel, validate_flat_forest_host
 from checks.numerics import numeric_mode_name
 from checks.vendor import COMPILED_VENDOR
 
@@ -90,7 +90,7 @@ def run[CAP: Int](rows: Int, trees: Int, depth: Int, outputs: Int, repetitions: 
     for i in range(rows*28):
         var h = mix32(UInt32(i)+UInt32(0x97531))
         x[i] = Float32(Int(h&65535)-32768)/Float32(32768)
-    validate_flat_forest(offsets,cols,thresholds,left,leaves,x,rows,28,outputs)
+    validate_flat_forest_host(offsets,cols,thresholds,left,leaves,x,rows,28,outputs)
     var ctx = DeviceContext()
     var doff = ctx.enqueue_create_buffer[DType.int32](trees+1)
     var dcol = ctx.enqueue_create_buffer[DType.int32](nodes)

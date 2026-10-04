@@ -15,7 +15,7 @@ from std.math import abs
 from std.testing import assert_equal, assert_true
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
-from core.forest_inference import forest_predict_gpu, validate_flat_forest, vector_groves_for
+from core.forest_inference import forest_predict_gpu, validate_flat_forest_host, vector_groves_for
 
 
 def reference_flush(x: Float32) -> Float32:
@@ -170,14 +170,14 @@ def invalid_graph(ctx: DeviceContext) raises:
     var x: List[Float32] = [0]
     var caught = False
     try:
-        validate_flat_forest(offsets,cols,thresholds,children,leaves,x,1,1,1)
+        validate_flat_forest_host(offsets,cols,thresholds,children,leaves,x,1,1,1)
     except:
         caught = True
     assert_true(caught)
     children[0] = 3
     caught = False
     try:
-        validate_flat_forest(offsets,cols,thresholds,children,leaves,x,1,1,1)
+        validate_flat_forest_host(offsets,cols,thresholds,children,leaves,x,1,1,1)
     except:
         caught = True
     assert_true(caught)
