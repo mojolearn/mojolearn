@@ -93,24 +93,10 @@ from bindings.array_helpers import (
 )
 from bindings.hotpath_helpers import (
     cast_elements_binding,
-    check_indices_i64_binding,
-    equal_elements_binding,
-    fold_ids_binding,
-    gather_i32_binding,
-    indices_overlap_i64_binding,
     reduce_stat_binding,
-    select_fold_i64_binding,
-    arange_i64_binding,
-    leave_range_i64_binding,
-    mask_from_indices_u8_binding,
-    select_mask_u8_i64_binding,
-    count_mask_u8_binding,
     next_combination_i64_binding,
     ic_running_min_f64_binding,
-    fold_pair_f32_binding,
-    threshold_labels_i64_binding,
     scale_shift_ftz_f32_binding,
-    bincount_i64_binding,
     compact_notnan_f32_binding,
     gather_keep_neg_i32_binding,
     dot_rows_f32_binding,
@@ -123,8 +109,6 @@ from bindings.hotpath_helpers import (
     epoch_order_i32_binding,
     adam_hyper_f64_binding,
     mean_std_f32_binding,
-    first_seen_i32_binding,
-    strat_fold_assign_i32_binding,
     strat_alloc_i64_binding,
     ocsvm_alpha_init_f32_binding,
     weighted_pick_i32_binding,
@@ -132,6 +116,29 @@ from bindings.hotpath_helpers import (
     weighted_draw_rows_i32_binding,
     group_fold_assign_i32_binding,
     strat_group_assign_i32_binding,
+)
+# lane fam2-shared (2026-10-04): these sixteen helpers run on the device in
+# this binding (bindings/hotpath_device.mojo, same names and signatures; each
+# falls back to its host helper of bindings/hotpath_helpers.mojo when its
+# -D MOJOLEARN_IDN_HPDEV_*_OFF switch or -D MOJOLEARN_IDN_ALL_OFF is given).
+from bindings.hotpath_device import (
+    check_indices_i64_binding,
+    equal_elements_binding,
+    fold_ids_binding,
+    gather_i32_binding,
+    indices_overlap_i64_binding,
+    select_fold_i64_binding,
+    arange_i64_binding,
+    leave_range_i64_binding,
+    mask_from_indices_u8_binding,
+    select_mask_u8_i64_binding,
+    count_mask_u8_binding,
+    fold_pair_f32_binding,
+    threshold_labels_i64_binding,
+    bincount_i64_binding,
+    first_seen_i32_binding,
+    strat_fold_assign_i32_binding,
+    hpdev_try_encode_labels,
 )
 from std.os import abort
 from std.math import isfinite
@@ -1436,6 +1443,15 @@ def _encode_labels_binding[dt: DType](
         raise Error("encode_labels: max_classes must be positive")
     if Int(py=src_addr) == 0 or Int(py=classes_addr) == 0 or Int(py=codes_addr) == 0:
         raise Error("encode_labels: null buffer address")
+    # lane fam2-shared: the device encoder first (the sort, flag/scan and
+    # gather of core/label_encode_device.mojo); -1 means it did not encode
+    # (switch off, over the cap, a NaN label) and the host encoder below
+    # gives the answer or the refusal.
+    var dev_k = hpdev_try_encode_labels[dt](
+        Int(py=src_addr), count, Int(py=classes_addr), cap, Int(py=codes_addr)
+    )
+    if dev_k >= 0:
+        return PythonObject(dev_k)
     var sp = MutPointer[Scalar[dt], MutUntrackedOrigin](unsafe_from_address=Int(py=src_addr))
     var cp = MutPointer[Scalar[dt], MutUntrackedOrigin](unsafe_from_address=Int(py=classes_addr))
     var dp = _i32_ptr(Int(py=codes_addr))
