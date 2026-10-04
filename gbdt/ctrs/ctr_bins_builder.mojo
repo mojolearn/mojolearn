@@ -60,6 +60,8 @@ ORDER rather than a row count, `order[i]` being the original row at
 position `i` -- see `gbdt/data/permutation.mojo`.
 """
 
+from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 
@@ -74,6 +76,7 @@ from gbdt.ctrs.kernel.ctr_calcers import (
     launch_extract_border_masks,
     launch_update_borders_mask,
 )
+from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins
 from gbdt.gpu_util.kernel.scan import SCAN_BLOCK, launch_scan_vector_u32
 from gbdt.gpu_util.kernel.transform import (
@@ -105,7 +108,7 @@ def int_log2(unique_values: Int) -> Int:
     return bits
 
 
-def _stable_sort_by_bin(
+def _stable_sort_by_bin_host(
     mut bins: List[UInt32], mut indices: List[UInt32]
 ) raises:
     """Their `ReorderBins(Bins, Indices, 0, IntLog2(uniqueValues), ...)`
@@ -152,6 +155,72 @@ def _stable_sort_by_bin(
     indices = out_indices^
 
 
+def _identity_order_host(n_rows: Int) -> List[UInt32]:
+    """The host column's `MakeSequence`: row `r` at position `r`."""
+    var order = List[UInt32]()
+    for r in range(n_rows):
+        order.append(UInt32(r))
+    return order^
+
+
+def _check_order_host(order: List[UInt32]) raises:
+    """The host column's order check: row ids only, no flag bits."""
+    for i in range(len(order)):
+        if (order[i] & ~CTR_INDEX_MASK) != UInt32(0):
+            raise Error(
+                "ctr estimation order entry "
+                + String(i)
+                + " has bits above the 0x3FFFFFFF index mask set; the"
+                " order carries row ids only, the flag bits are"
+                " UpdateBordersMask's to write"
+            )
+
+
+#: block of `ctr_bound_check_kernel`
+comptime CTR_CHECK_BLOCK = 256
+
+
+def ctr_bound_check_kernel(
+    values: MutPointer[UInt32, MutAnyOrigin],
+    limit: UInt32,
+    flag: MutPointer[UInt32, MutAnyOrigin],
+    size_in: Int32,
+):
+    """Sets `flag[0] = 1` when any `values[i] >= limit` (cpu3-gbdt-b).
+
+    The device form of the builder's input checks, so the GPU route reads
+    back one word instead of walking every row on the host. Every writer
+    stores the same value, so the unordered stores need no atomic.
+    """
+    var size = Int(size_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < size:
+        if values.unsafe_load(i) >= limit:
+            flag.unsafe_store(0, UInt32(1))
+
+
+def _launch_ctr_bound_check(
+    ctx: DeviceContext,
+    mut values: DeviceBuffer[DType.uint32],
+    limit: UInt32,
+    mut flag: DeviceBuffer[DType.uint32],
+    size: Int,
+) raises:
+    """Zeroes `flag` and enqueues `ctr_bound_check_kernel` over `size`."""
+    enqueue_fill(ctx, flag, UInt32(0))
+    var num_blocks = (size + CTR_CHECK_BLOCK - 1) // CTR_CHECK_BLOCK
+    if num_blocks == 0:
+        return
+    ctx.enqueue_function[ctr_bound_check_kernel](
+        values.unsafe_ptr(),
+        limit,
+        flag.unsafe_ptr(),
+        Int32(size),
+        grid_dim=(num_blocks, 1, 1),
+        block_dim=(CTR_CHECK_BLOCK, 1, 1),
+    )
+
+
 struct TCtrBinBuilder(Movable):
     """Their `TCtrBinBuilder<TMapping>`, the single-device, learn-only case.
 
@@ -185,14 +254,10 @@ struct TCtrBinBuilder(Movable):
         permutation-INDEPENDENT CTRs are written from (`:229`). No flags
         set, so the whole dataset is ONE segment until a feature is
         added."""
-        self.indices = List[UInt32]()
-        self.bins = List[UInt32]()
-        self.current_bins = List[UInt32]()
+        self.indices = _identity_order_host(n_rows)
+        self.bins = List[UInt32](length=n_rows, fill=UInt32(0))
+        self.current_bins = List[UInt32](length=n_rows, fill=UInt32(0))
         self.learn_size = n_rows
-        for r in range(n_rows):
-            self.indices.append(UInt32(r))
-            self.bins.append(UInt32(0))
-            self.current_bins.append(UInt32(0))
 
     def __init__(out self, var order: List[UInt32]) raises:
         """The same `SetIndices`, over an arbitrary CTR ESTIMATION ORDER --
@@ -204,20 +269,10 @@ struct TCtrBinBuilder(Movable):
         their `WriteOrder` writes raw row ids for the same reason.
         """
         var n = len(order)
+        _check_order_host(order)
         self.learn_size = n
-        self.bins = List[UInt32]()
-        self.current_bins = List[UInt32]()
-        for i in range(n):
-            if (order[i] & ~CTR_INDEX_MASK) != UInt32(0):
-                raise Error(
-                    "ctr estimation order entry "
-                    + String(i)
-                    + " has bits above the 0x3FFFFFFF index mask set; the"
-                    " order carries row ids only, the flag bits are"
-                    " UpdateBordersMask's to write"
-                )
-            self.bins.append(UInt32(0))
-            self.current_bins.append(UInt32(0))
+        self.bins = List[UInt32](length=n, fill=UInt32(0))
+        self.current_bins = List[UInt32](length=n, fill=UInt32(0))
         self.indices = order^
 
     @staticmethod
@@ -240,7 +295,7 @@ struct TCtrBinBuilder(Movable):
     def size(self) -> Int:
         return len(self.indices)
 
-    def compute_current_bins(mut self):
+    def compute_current_bins_host(mut self):
         """Their static `ComputeCurrentBins` (`:134-142`).
 
             ExtractMask(indices, dst, false)   // END flags
@@ -265,7 +320,7 @@ struct TCtrBinBuilder(Movable):
             if is_end:
                 running += UInt32(1)
 
-    def add_cat_feature_bins(
+    def add_cat_feature_bins_host(
         mut self, cat_bins: List[UInt32], unique_values: Int
     ) raises:
         """Their `AddCompressedBins` -> `ProceedNewBins` (`:104-110`,
@@ -289,13 +344,13 @@ struct TCtrBinBuilder(Movable):
             # found")` (`batch_binarized_ctr_calcer.cpp:150`)
             raise Error("Error: useless catFeature found")
 
-        self.compute_current_bins()
+        self.compute_current_bins_host()
 
         # `GatherWithMask(Bins, DecompressedTempBins, Indices, Mask)`
         for i in range(len(self.indices)):
             self.bins[i] = cat_bins[Int(index_of(self.indices[i]))]
 
-        _stable_sort_by_bin(self.bins, self.indices)
+        _stable_sort_by_bin_host(self.bins, self.indices)
 
         # `UpdateBordersMask(Bins, currentBins, Indices)`, the host twin of
         # `kernel/ctr_calcers.update_borders_mask_kernel`
@@ -314,7 +369,7 @@ struct TCtrBinBuilder(Movable):
             new_indices.append(with_mask(current_index, mask))
         self.indices = new_indices^
 
-    def segment_ids(self) -> List[UInt32]:
+    def segment_ids_host(self) -> List[UInt32]:
         """Their `ExtractMask(Indices, Tmp, false)` followed by
         `ScanVector(Tmp, Bins, false)`, the first two lines of BOTH freq
         calcers (`ctr_bins_builder.h:167-169`, `ctr_calcers.h:311-314`).
@@ -335,7 +390,7 @@ struct TCtrBinBuilder(Movable):
                 running += UInt32(1)
         return out^
 
-    def segment_offsets(self, segment_ids: List[UInt32]) -> List[UInt32]:
+    def segment_offsets_host(self, segment_ids: List[UInt32]) -> List[UInt32]:
         """Their `UpdatePartitionOffsets(Bins, Tmp)`
         (`ctr_bins_builder.h:170`, kernel at
         `cuda_util/kernel/partitions.cu:81-107`).
@@ -362,7 +417,7 @@ struct TCtrBinBuilder(Movable):
             b += 1
         return offsets^
 
-    def visit_equal_up_to_prior_freq_ctrs(
+    def visit_equal_up_to_prior_freq_ctrs_host(
         self, ctr_configs: List[TCtrConfig]
     ) raises -> List[List[Float32]]:
         """Their `VisitEqualUpToPriorFreqCtrs` (`ctr_bins_builder.h:163-186`),
@@ -381,8 +436,8 @@ struct TCtrBinBuilder(Movable):
         Returns one column per config, in config order, each indexed by
         ORIGINAL row.
         """
-        var segment_ids = self.segment_ids()
-        var offsets = self.segment_offsets(segment_ids)
+        var segment_ids = self.segment_ids_host()
+        var offsets = self.segment_offsets_host(segment_ids)
         var size = len(self.indices)
 
         var out = List[List[Float32]]()
@@ -472,17 +527,11 @@ struct TCtrBinBuilderGpu(Movable):
         self.size = n
         self.learn_size = n
 
+        # one bulk copy into the stage; the flag-bit check runs on the
+        # device below (cpu3-gbdt-b), not in a host loop over the rows
         var h = ctx.enqueue_create_host_buffer[DType.uint32](n)
-        for i in range(n):
-            if (order[i] & ~CTR_INDEX_MASK) != UInt32(0):
-                raise Error(
-                    "ctr estimation order entry "
-                    + String(i)
-                    + " has bits above the 0x3FFFFFFF index mask set; the"
-                    " order carries row ids only, the flag bits are"
-                    " UpdateBordersMask's to write"
-                )
-            h.unsafe_ptr().unsafe_store(i, order[i])
+        ctx.synchronize()
+        memcpy(dest=h.unsafe_ptr(), src=order.unsafe_ptr(), count=n)
 
         self.indices = ctx.enqueue_create_buffer[DType.uint32](n)
         self.bins = ctx.enqueue_create_buffer[DType.uint32](n)
@@ -502,10 +551,56 @@ struct TCtrBinBuilderGpu(Movable):
         )
 
         ctx.enqueue_copy(dst_buf=self.indices, src_ptr=h.unsafe_ptr())
+        var flag = ctx.enqueue_create_buffer[DType.uint32](1)
+        _launch_ctr_bound_check(
+            ctx, self.indices, CTR_INDEX_MASK + UInt32(1), flag, n
+        )
+        var h_flag = ctx.enqueue_create_host_buffer[DType.uint32](1)
+        ctx.enqueue_copy(dst_ptr=h_flag.unsafe_ptr(), src_buf=flag)
         enqueue_fill(ctx, self.bins, UInt32(0))
         enqueue_fill(ctx, self.current_bins, UInt32(0))
         ctx.synchronize()
         _ = h^  # past the drain (step-33 race class)
+        _ = flag^
+        if h_flag.unsafe_ptr().unsafe_load(0) != UInt32(0):
+            raise Error(
+                "ctr estimation order has an entry with bits above the"
+                " 0x3FFFFFFF index mask set; the order carries row ids"
+                " only, the flag bits are UpdateBordersMask's to write"
+            )
+
+    def __init__(
+        out self, ctx: DeviceContext, *, identity_rows: Int
+    ) raises:
+        """`SetIndices` over the IDENTITY order, written on the device by
+        their `MakeSequence(ctrEstimationOrder)`
+        (`doc_parallel_dataset_builder.cpp:206`) -- the order the
+        permutation-INDEPENDENT CTRs are written from. Same buffers as the
+        order constructor; nothing is built or uploaded from the host
+        (cpu3-gbdt-b)."""
+        var n = identity_rows
+        if n <= 0:
+            raise Error("TCtrBinBuilderGpu: empty order")
+        self.size = n
+        self.learn_size = n
+        self.indices = ctx.enqueue_create_buffer[DType.uint32](n)
+        self.bins = ctx.enqueue_create_buffer[DType.uint32](n)
+        self.current_bins = ctx.enqueue_create_buffer[DType.uint32](n)
+        self.decompressed_temp_bins = ctx.enqueue_create_buffer[
+            DType.uint32
+        ](n)
+        self.tmp = ctx.enqueue_create_buffer[DType.uint32](n)
+        self.scan_block_sums = ctx.enqueue_create_buffer[DType.uint32](
+            (n + SCAN_BLOCK - 1) // SCAN_BLOCK
+        )
+        # 512 is `REORDER_BLOCK`, as in the order constructor
+        self.sort_offsets = ctx.enqueue_create_buffer[DType.int32](n)
+        self.sort_block_sums = ctx.enqueue_create_buffer[DType.int32](
+            (n + 512 - 1) // 512
+        )
+        launch_make_sequence(ctx, UInt32(0), self.indices, n)
+        enqueue_fill(ctx, self.bins, UInt32(0))
+        enqueue_fill(ctx, self.current_bins, UInt32(0))
 
     def compute_current_bins(mut self, ctx: DeviceContext) raises:
         """Their static `ComputeCurrentBins` (`:134-146`), launch for launch.
@@ -575,23 +670,32 @@ struct TCtrBinBuilderGpu(Movable):
         # their `AddLearnBins` -> `Decompress(compressedLearn, ...)`
         # (`:196-202`); dense codes need no decompression, so this is the
         # upload that puts the same bytes in the same buffer.
+        # One bulk copy into the stage; the range check runs on the device
+        # and reads back one word (cpu3-gbdt-b), not a host loop over rows.
         var h = ctx.enqueue_create_host_buffer[DType.uint32](self.size)
-        for i in range(self.size):
-            if Int(cat_bins[i]) >= unique_values:
-                raise Error(
-                    "cat bin "
-                    + String(cat_bins[i])
-                    + " at row "
-                    + String(i)
-                    + " is outside 0.."
-                    + String(unique_values - 1)
-                )
-            h.unsafe_ptr().unsafe_store(i, cat_bins[i])
+        ctx.synchronize()
+        memcpy(dest=h.unsafe_ptr(), src=cat_bins.unsafe_ptr(), count=self.size)
         ctx.enqueue_copy(
             dst_buf=self.decompressed_temp_bins, src_ptr=h.unsafe_ptr()
         )
+        var flag = ctx.enqueue_create_buffer[DType.uint32](1)
+        _launch_ctr_bound_check(
+            ctx,
+            self.decompressed_temp_bins,
+            UInt32(unique_values),
+            flag,
+            self.size,
+        )
+        var h_flag = ctx.enqueue_create_host_buffer[DType.uint32](1)
+        ctx.enqueue_copy(dst_ptr=h_flag.unsafe_ptr(), src_buf=flag)
         ctx.synchronize()
         _ = h^  # past the drain (step-33 race class)
+        _ = flag^
+        if h_flag.unsafe_ptr().unsafe_load(0) != UInt32(0):
+            raise Error(
+                "a cat bin is outside 0.."
+                + String(unique_values - 1)
+            )
 
         launch_gather_with_mask_u32(
             ctx,
@@ -637,7 +741,6 @@ struct TCtrBinBuilderGpu(Movable):
         var h = ctx.enqueue_create_host_buffer[DType.uint32](self.size)
         ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=self.indices)
         ctx.synchronize()
-        var out = List[UInt32]()
-        for i in range(self.size):
-            out.append(h.unsafe_ptr().unsafe_load(i))
+        var out = List[UInt32](unsafe_uninit_length=self.size)
+        memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=self.size)
         return out^
