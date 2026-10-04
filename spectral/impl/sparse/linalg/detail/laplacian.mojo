@@ -424,7 +424,7 @@ def compute_graph_laplacian_prepared_device(
         grid_dim=(gn, 1, 1), block_dim=(tpb, 1, 1),
     )
     device_exclusive_scan_total(ctx, scan, n)
-    ctx.enqueue_function[lapdev_total_kernel](
+    ctx.enqueue_function[lapdev_total_kernel](  # small-launch(n: the index of the one slot read): one thread copies one word, no walk
         scan.unsafe_ptr(), flags.unsafe_ptr(), Int32(n),
         grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
     )
