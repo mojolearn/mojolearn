@@ -110,6 +110,27 @@ def _idn(b, bit):
     return (hit[1] & bit) != 0
 
 
+# lane fam2-neural (2026-10-04): `x_cnn_idn2_flags` (BOTH bindings export it:
+# these switches move bits, so the host column moves with the devices).
+# Bit 0: the softmax mean loss is the blocked device fold (inside the
+# binding; nothing for the glue to choose). Bit 1: the fit epoch's row order
+# and Adam step scalars come from device kernels (`x_cnn_epoch_rows`,
+# `x_cnn_adam_hyper_d`, `x_cnn_fit_epoch_d`), not the CPU helpers
+# `epoch_order_i32` and `adam_hyper_f64`.
+_F2_XENT_FOLD, _F2_EPOCH_DEV = 1, 2
+_IDN2_FLAGS = {}
+
+
+def _idn2(b, bit):
+    """Whether binding `b` (either column) has lane fam2-neural switch `bit` on."""
+    hit = _IDN2_FLAGS.get(id(b))
+    if hit is None or hit[0] is not b:
+        f = getattr(b, "x_cnn_idn2_flags", None)
+        hit = (b, int(f()) if f is not None else 0)
+        _IDN2_FLAGS[id(b)] = hit
+    return (hit[1] & bit) != 0
+
+
 class _Dev:
     """A layer's resident device arrays (`x_cnn_res_alloc` handles) kept
     between calls: one named array per intermediate, reallocated only when
@@ -198,6 +219,49 @@ def _size(shape):
     for v in shape:  # glue: a shape tuple's few ints
         n *= int(v)
     return n
+
+
+# lane fam2-neural (2026-10-04): PINNED LAYER WEIGHTS. A layer given a
+# `DeviceTensor` still uploaded its `weight_` (and `bias_`) on every forward
+# and every backward. `layer.pin_weights()` uploads them once into the
+# layer's resident arrays; the `_m` entries then read them there (their
+# residency bit set) until `unpin_weights()`. The host arrays stay the
+# layer's weights: after changing them (in place, or `set_weights`) call
+# `pin_weights()` again. The same entry on the same words: no bit moves.
+# `x_cnn_idn_flags` bit 5 (`-D MOJOLEARN_IDN_PIN_WEIGHTS_OFF`); with it off,
+# on FAST or on the CPU twin `pin_weights()` does nothing.
+_F_PIN = 32
+
+
+def _pin_weights(layer, names):
+    """Upload `layer`'s float32 arrays `names` once; returns the layer."""
+    np = _np()
+    b = layer._binding()
+    layer._pins = None
+    if not _idn(b, _F_PIN):
+        return layer
+    dev = _dev_of(layer, b)
+    handles = {}
+    for name in names:  # glue: one upload per named weight array
+        arr = getattr(layer, name, None)
+        if arr is None:
+            continue
+        a = np.ascontiguousarray(arr, np.float32)
+        handles[name] = (dev.upload("pin_" + name, a), int(a.size))
+    layer._pins = (b, handles)
+    return layer
+
+
+def _pinned(layer, b, name, size):
+    """The resident handle of `layer`'s pinned array `name` (holding `size`
+    words) on binding `b`, or None when it is not pinned there."""
+    p = layer.__dict__.get("_pins")
+    if not p or p[0] is not b:
+        return None
+    hit = p[1].get(name)
+    if hit is None or hit[1] != int(size):
+        return None
+    return hit[0]
 
 
 class DeviceTensor:
@@ -371,6 +435,18 @@ class Conv2d(_Layer):
             self.bias_ = _f32(bias, "bias").reshape(self.out_channels).copy()
         elif not self.bias:
             self.bias_ = np.zeros(self.out_channels, np.float32)
+        if self.__dict__.get("_pins"):
+            self.pin_weights()  # the pinned copy follows the new weights
+        return self
+
+    def pin_weights(self):
+        """Keep `weight_` and `bias_` on the device for `DeviceTensor`
+        forwards and backwards (lane fam2-neural); call again after changing
+        them. Returns self."""
+        return _pin_weights(self, ("weight_", "bias_"))
+
+    def unpin_weights(self):
+        self._pins = None
         return self
 
     def _params(self, shape):
@@ -443,9 +519,15 @@ class Conv2d(_Layer):
         xp = self._pad_t(b, x)
         prm = self._params(xp.shape)
         if self.groups == 1:
-            w = np.ascontiguousarray(self.weight_, np.float32)
-            bias = np.ascontiguousarray(self.bias_, np.float32)
-            b.x_cnn_conv2d_forward_m([xp.h, w.ctypes.data, bias.ctypes.data, out.h], 0b1001, prm)
+            pw = _pinned(self, b, "weight_", self.weight_.size)
+            pb = _pinned(self, b, "bias_", self.bias_.size)
+            if pw is not None and pb is not None:
+                # lane fam2-neural: the pinned weights are read where they live
+                b.x_cnn_conv2d_forward_m([xp.h, pw, pb, out.h], 0b1111, prm)
+            else:
+                w = np.ascontiguousarray(self.weight_, np.float32)
+                bias = np.ascontiguousarray(self.bias_, np.float32)
+                b.x_cnn_conv2d_forward_m([xp.h, w.ctypes.data, bias.ctypes.data, out.h], 0b1001, prm)
         else:
             # lane fam-neural (IDN_GROUP_M): each group's channels sliced,
             # convolved and placed on the device (the host path slices with
@@ -488,9 +570,14 @@ class Conv2d(_Layer):
         dw = np.empty(self.weight_.shape, np.float32)
         db = np.empty(self.out_channels, np.float32)
         if self.groups == 1:
-            w = np.ascontiguousarray(self.weight_, np.float32)
-            b.x_cnn_conv2d_backward_m([xp.h, w.ctypes.data, grad_out.h, dxp.h, dw.ctypes.data, db.ctypes.data],
-                                      0b001101, prm)
+            pw = _pinned(self, b, "weight_", self.weight_.size)
+            if pw is not None:
+                b.x_cnn_conv2d_backward_m([xp.h, pw, grad_out.h, dxp.h, dw.ctypes.data, db.ctypes.data],
+                                          0b001111, prm)
+            else:
+                w = np.ascontiguousarray(self.weight_, np.float32)
+                b.x_cnn_conv2d_backward_m([xp.h, w.ctypes.data, grad_out.h, dxp.h, dw.ctypes.data, db.ctypes.data],
+                                          0b001101, prm)
         else:
             dev = _dev_of(self, b)
             og = self.out_channels // self.groups
@@ -986,10 +1073,10 @@ def _adam(binding, param, grad, mv, step, lr, betas, eps, weight_decay, decouple
     computes them in Python."""
     grad = _f32(grad, "grad")
     binding.x_cnn_adam(param.ctypes.data, grad.ctypes.data, mv.ctypes.data, [param.size],
-                       _adam_hyper(step, lr, betas, eps, weight_decay, decoupled))
+                       _adam_hyper(step, lr, betas, eps, weight_decay, decoupled, binding))
 
 
-def _adam_hyper(step, lr, betas, eps, weight_decay, decoupled):
+def _adam_hyper(step, lr, betas, eps, weight_decay, decoupled, binding=None):
     """adam_at's hyper block for 1-based step `step` (the scalars in double,
     as torch computes them in Python); `_adam` and the resident fit share it.
     DEVIATION 6900: torch's `beta ** step` calls the platform pow; here it is
@@ -997,10 +1084,10 @@ def _adam_hyper(step, lr, betas, eps, weight_decay, decoupled):
     the same bits on every host. sqrt is correctly rounded everywhere."""
     if step != int(step):
         raise ValueError(f"Adam step must be a whole number, got {step!r}")
-    return _adam_hyper_block(int(step), 1, lr, betas, eps, weight_decay, decoupled).reshape(-1).tolist()
+    return _adam_hyper_block(int(step), 1, lr, betas, eps, weight_decay, decoupled, binding).reshape(-1).tolist()
 
 
-def _adam_hyper_block(step0, nsteps, lr, betas, eps, weight_decay, decoupled):
+def _adam_hyper_block(step0, nsteps, lr, betas, eps, weight_decay, decoupled, binding=None):
     """`_adam_hyper` of steps step0 .. step0 + nsteps - 1 as an (nsteps, 9)
     float64 array, made in Mojo (the base binding's `adam_hyper_f64`; lane
     cgr4-py-compute): beta ** step by squaring in one fixed order, the
@@ -1008,6 +1095,15 @@ def _adam_hyper_block(step0, nsteps, lr, betas, eps, weight_decay, decoupled):
     np = _np()
     from ._buffer import _native
     out = np.empty((max(int(nsteps), 1), 9), dtype=np.float64)
+    if binding is not None and _idn2(binding, _F2_EPOCH_DEV):
+        # lane fam2-neural: the step scalars from the binding's own kernel
+        # (`adam_hyper_at`, float32 pairs; the same words on every column)
+        if int(step0) < 1:
+            raise ValueError("Adam step must be at least 1")
+        binding.x_cnn_adam_hyper_d(out.ctypes.data, [int(step0), int(nsteps)],
+                                   [float(lr), float(betas[0]), float(betas[1]), float(eps), float(weight_decay),
+                                    1.0 if decoupled else 0.0])
+        return out[:int(nsteps)]
     _native("adam_hyper_f64")(out.ctypes.data, int(step0), int(nsteps),
                               [float(lr), float(betas[0]), float(betas[1]), float(eps), float(weight_decay),
                                1.0 if decoupled else 0.0])
@@ -1256,9 +1352,36 @@ class CNNClassifier(_Layer):
                             plan_last=[[list(p[0]), list(p[1])] for p in self._plan(m_last)[0]])
                 sgd_row = [self.learning_rate, self.momentum, self.weight_decay, self.dampening,
                            1.0 if self.nesterov else 0.0, 0.0]
+            # lane fam2-neural: the order, Adam's scalars and the losses on the device
+            dev_epoch = _idn2(b, _F2_EPOCH_DEV)
+            seed64 = int(order_state[0])
+            seed_lo, seed_hi = seed64 & 0xFFFFFFFF, seed64 >> 32
+            ep = -1
             for _ in range(self.max_iter):
+                ep += 1
+                if epoch_entry and dev_epoch:
+                    losses = np.empty(nsteps, dtype=np.float64)
+                    if self.optimizer == "sgd":
+                        fpar = [float(self.learning_rate), float(self.momentum), float(self.weight_decay),
+                                float(self.dampening), 1.0 if self.nesterov else 0.0, 0.0]
+                    else:
+                        fpar = [float(self.learning_rate), float(self.betas[0]), float(self.betas[1]),
+                                float(self.eps), float(self.weight_decay),
+                                1.0 if self.optimizer == "adamw" else 0.0]
+                    b.x_cnn_fit_epoch_d(spec, losses.ctypes.data,
+                                        [n, bs, 0 if self.optimizer == "sgd" else 1, step, ep,
+                                         1 if self.shuffle else 0, seed_lo, seed_hi], fpar)
+                    step += nsteps
+                    epoch = losses.tolist()
+                    self.losses_.extend(epoch)
+                    self.loss_curve_.append(_pm.nsum(epoch) / len(epoch))
+                    continue
                 order = np.empty(n, dtype=np.int32)
-                _native("epoch_order_i32")(order.ctypes.data, n, 1 if self.shuffle else 0, order_state.ctypes.data)
+                if dev_epoch:
+                    b.x_cnn_epoch_rows(order.ctypes.data, [n, ep, 1 if self.shuffle else 0, seed_lo, seed_hi])
+                else:
+                    _native("epoch_order_i32")(order.ctypes.data, n, 1 if self.shuffle else 0,
+                                               order_state.ctypes.data)
                 if epoch_entry:
                     rows = np.ascontiguousarray(order, dtype=np.int32)
                     if self.optimizer == "sgd":
@@ -1268,7 +1391,7 @@ class CNNClassifier(_Layer):
                     else:
                         hyper = np.ascontiguousarray(_adam_hyper_block(
                             step + 1, nsteps, self.learning_rate, self.betas, self.eps, self.weight_decay,
-                            self.optimizer == "adamw"))
+                            self.optimizer == "adamw", b))
                     losses = np.empty(nsteps, dtype=np.float64)
                     b.x_cnn_fit_epoch_r(spec, rows.ctypes.data, hyper.ctypes.data, losses.ctypes.data,
                                         [n, bs, 0 if self.optimizer == "sgd" else 1])
@@ -1326,7 +1449,7 @@ class CNNClassifier(_Layer):
                         else:
                             b.x_cnn_adam_r(hp, hg, hbuf, sizes, _adam_hyper(step, self.learning_rate, self.betas,
                                                                             self.eps, self.weight_decay,
-                                                                            self.optimizer == "adamw"))
+                                                                            self.optimizer == "adamw", b))
                     for (layer, attr, _), p_, g_, buf in zip(params, hp, hg, hbuf) if not lists else ():
                         size = getattr(layer, attr).size
                         if self.optimizer == "sgd":
@@ -1336,7 +1459,7 @@ class CNNClassifier(_Layer):
                         else:
                             b.x_cnn_adam_r(p_, g_, buf, [size], _adam_hyper(step, self.learning_rate, self.betas,
                                                                             self.eps, self.weight_decay,
-                                                                            self.optimizer == "adamw"))
+                                                                            self.optimizer == "adamw", b))
                     epoch.append(loss)
                 self.losses_.extend(epoch)
                 # CPython 3.12+'s sum spelled out: the same bits on every Python (DEVIATION 6901)

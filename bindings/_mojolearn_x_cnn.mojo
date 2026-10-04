@@ -31,6 +31,12 @@ from x_cnn.device import gcn_norm_device as gcn_norm_impl
 from x_cnn.device import csr_build_device as csr_build_impl
 # lane fam-neural (2026-10-04): the `_m` forms of the entries that had none
 from x_cnn.device import idn_flags, adaptive_pool_m, graph_op_m, gcn_norm_m, pad2d_m, chan_copy_m
+# lane fam2-neural (2026-10-04): the device epoch (order, Adam scalars and losses on the device)
+from x_cnn.ops import idn2_flags, epoch_key, adam_hyper_base, AH_ROW
+from x_cnn.device import (
+    epoch_rows_download, res_gather_pair_perm, adam_hyper_resident, adam_hyper_download, opt_many_resident_h,
+    softmax_xent_res_loss,
+)
 
 
 def _fp(addr: PythonObject) raises -> FP:
@@ -1233,6 +1239,172 @@ def fit_epoch_r_binding(
     return PythonObject(steps)
 
 
+# ------------------------------------------------ lane fam2-neural: the device epoch
+# `x_cnn_fit_epoch_d` is `x_cnn_fit_epoch_r` with nothing computed on the
+# host and nothing crossing the bus inside the epoch: each step's rows come
+# from `epoch_rows_at` on the device (was the CPU's Fisher-Yates order,
+# uploaded per step), Adam's step scalars from `adam_hyper_at` into a
+# resident block (was `adam_hyper_f64` on the CPU, uploaded per step), and
+# each step's mean loss stays in a resident block (`blk_fold_at`; was n row
+# losses down per step and a host fold) that comes down once at the end.
+# The forward, backward and optimizer launches are the `_r` entry's.
+
+
+def idn2_flags_binding() raises -> PythonObject:
+    return PythonObject(idn2_flags())
+
+
+def _seed64(lo: PythonObject, hi: PythonObject) raises -> UInt64:
+    return (UInt64(Int(py=hi)) << UInt64(32)) | UInt64(Int(py=lo))
+
+
+def epoch_rows_binding(dst_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Host int32 dst[0:n] = epoch `epoch`'s row order. params = [n, epoch,
+    shuffle (0/1), seed low 32 bits, seed high 32 bits]."""
+    var n = Int(py=params[0])
+    if n < 1 or n >= 2147483647:
+        raise Error("x_cnn epoch rows: 1 <= n < 2^31 - 1")
+    var key = epoch_key(_seed64(params[3], params[4]), Int(py=params[1]))
+    var shuffle = Int(py=params[2]) != 0
+    var dst = _ip(dst_addr)
+    with GILReleased(Python()):
+        epoch_rows_download(dst, n, 0, n, shuffle, key)
+    return PythonObject(n)
+
+
+def _adam_base(fparams: PythonObject) raises -> List[Float32]:
+    if Int(py=len(fparams)) != 6:
+        raise Error("x_cnn adam hyper: fparams is [lr, beta1, beta2, eps, weight_decay, decoupled]")
+    return adam_hyper_base(
+        Float64(py=fparams[0]), Float64(py=fparams[1]), Float64(py=fparams[2]), Float64(py=fparams[3]),
+        Float64(py=fparams[4]), Float64(py=fparams[5]),
+    )
+
+
+def adam_hyper_d_binding(dst_addr: PythonObject, params: PythonObject, fparams: PythonObject) raises -> PythonObject:
+    """Host float64 dst[0 : 9 nsteps] = `adam_at`'s hyper blocks of 1-based
+    steps step0 .. step0 + nsteps - 1, computed on the device in float32
+    pairs (`adam_hyper_at`) and widened. params = [step0, nsteps]; fparams
+    = [lr, beta1, beta2, eps, weight_decay, decoupled]."""
+    var step0 = Int(py=params[0])
+    var nsteps = Int(py=params[1])
+    if step0 < 1 or nsteps < 0:
+        raise Error("x_cnn adam hyper: step0 >= 1, nsteps >= 0")
+    var base = _adam_base(fparams)
+    var out = List[Float32](length=nsteps * AH_ROW + 1, fill=Float32(0))
+    var po = out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    with GILReleased(Python()):
+        adam_hyper_download(base, step0, nsteps, po)
+    var dst = f64_ptr(Int(py=dst_addr))
+    for e in range(nsteps * AH_ROW):
+        dst[e] = Float64(out[e])
+    _ = base^
+    _ = out^
+    return PythonObject(nsteps)
+
+
+def fit_epoch_d_binding(
+    spec: PythonObject, losses_addr: PythonObject, params: PythonObject, fparams: PythonObject,
+) raises -> PythonObject:
+    """params = [n, batch, adam (0/1), steps already taken, epoch, shuffle
+    (0/1), seed low 32 bits, seed high 32 bits]; fparams = Adam's [lr,
+    beta1, beta2, eps, weight_decay, decoupled] or SGD's [lr, momentum,
+    weight_decay, dampening, nesterov, 0]; losses = float64 per step; spec
+    as `x_cnn_fit_epoch_r`."""
+    var n = Int(py=params[0])
+    var batch = Int(py=params[1])
+    var adam = Int(py=params[2]) != 0
+    var done = Int(py=params[3])
+    var epoch = Int(py=params[4])
+    var shuffle = Int(py=params[5]) != 0
+    if n <= 0 or batch <= 0 or n >= 2147483647 or done < 0:
+        raise Error("x_cnn fit epoch: positive rows and batch required")
+    var key = epoch_key(_seed64(params[6], params[7]), epoch)
+    var blocks = spec["blocks"]
+    var nb = Int(py=len(blocks))
+    var bh = List[List[Int]]()
+    for j in range(nb):
+        var h = _ints(blocks[j])
+        if len(h) != 9:
+            raise Error("x_cnn fit epoch: a block is [w, b, gw, gb, out, idx, gout, cols, conv out]")
+        bh.append(h^)
+    var head = _ints(spec["head"])
+    var a = _ints(spec["a"])
+    var data = _ints(spec["data"])
+    var dims = _ints(spec["dims"])
+    var opt = spec["opt"]
+    var t = _many(opt[0], opt[1], opt[2], opt[3])
+    var cs = List[List[List[Int32]]]()
+    var ps = List[List[List[Int32]]]()
+    var pools = List[List[Bool]]()
+    _epoch_plan(spec["plan_full"], nb, cs, ps, pools)
+    _epoch_plan(spec["plan_last"], nb, cs, ps, pools)
+    var flat = dims[0]
+    var k = dims[1]
+    var steps = (n + batch - 1) // batch
+    var losses = f64_ptr(Int(py=losses_addr))
+    # the hyper rows: Adam's from the device kernel; SGD's two rows (the
+    # first step's, flag 1, then every later step's), words only
+    var base = List[Float32]()
+    if adam:
+        base = _adam_base(fparams)
+    else:
+        if Int(py=len(fparams)) != 6:
+            raise Error("x_cnn fit epoch: SGD's fparams is [lr, momentum, weight_decay, dampening, nesterov, 0]")
+        for r in range(2):
+            for e in range(5):
+                base.append(Float32(Float64(py=fparams[e])))
+            base.append(Float32(1) if r == 0 else Float32(0))
+    var l32 = List[Float32](length=steps, fill=Float32(0))
+    with GILReleased(Python()):
+        var hbuf = res_alloc(steps * AH_ROW if adam else 12)
+        var lbuf = res_alloc(steps)
+        if adam:
+            adam_hyper_resident(base, done + 1, steps, hbuf)
+        else:
+            res_upload(hbuf, base.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 12)
+        for st in range(steps):
+            var s0 = st * batch
+            var m = min(batch, n - s0)
+            var q = 0 if m == batch else 1
+            res_gather_pair_perm(a[0], data[0], data[2], a[1], data[1], 1, n, s0, m, shuffle, key)
+            var src = a[0]
+            for j in range(nb):
+                conv_block_forward_into[True](
+                    _at(src), _at(bh[j][0]), _at(bh[j][1]), cs[q][j], ps[q][j], pools[q][j], _at(bh[j][4]),
+                    _at_i(bh[j][5]), bh[j][7], bh[j][8],
+                )
+                src = bh[j][4]
+            linear_forward_into[True](_at(src), _at(head[0]), _at(head[1]), m, flat, k, _at(a[2]))
+            softmax_xent_res_loss(_at(a[2]), _at_i(a[1]), m, k, _at(a[3]), _at(a[4]), lbuf, st)
+            var glast = bh[nb - 1][6] if nb > 0 else a[5]
+            linear_backward_into[True](
+                _at(src), _at(head[0]), _at(a[3]), m, flat, k, _at(glast), _at(head[2]), _at(head[3])
+            )
+            for jj in range(nb):
+                var j = nb - 1 - jj
+                var bsrc = bh[j - 1][4] if j > 0 else a[0]
+                var dx = bh[j - 1][6] if j > 0 else 0
+                var want = dx != 0
+                conv_block_backward_into[True](
+                    _at(bsrc), _at(bh[j][0]), _at(bh[j][1]), _at(bh[j][6]), _at_i(bh[j][5]), cs[q][j], ps[q][j],
+                    pools[q][j], want, _at(dx) if want else _at(bh[j][3]), _at(bh[j][2]), _at(bh[j][3]), bh[j][7],
+                    bh[j][8],
+                )
+            if adam:
+                opt_many_resident_h[True](t[0], t[1], t[2], t[3], hbuf + 4 * AH_ROW * st)
+            else:
+                opt_many_resident_h[False](t[0], t[1], t[2], t[3], hbuf + (0 if done + st == 0 else 24))
+        res_download(lbuf, l32.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), steps)
+        res_free(hbuf)
+        res_free(lbuf)
+    for st in range(steps):
+        losses[st] = Float64(l32[st])
+    _ = base^
+    _ = l32^
+    return PythonObject(steps)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -1306,6 +1478,10 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[csr_upload_binding]("x_cnn_csr_upload")
         m.def_function[csr_build_binding]("x_cnn_csr_build")
         m.def_function[idn_flags_binding]("x_cnn_idn_flags")
+        m.def_function[idn2_flags_binding]("x_cnn_idn2_flags")
+        m.def_function[epoch_rows_binding]("x_cnn_epoch_rows")
+        m.def_function[adam_hyper_d_binding]("x_cnn_adam_hyper_d")
+        m.def_function[fit_epoch_d_binding]("x_cnn_fit_epoch_d")
         m.def_function[adaptive_pool_m_binding]("x_cnn_adaptive_pool_m")
         m.def_function[graph_op_m_binding]("x_cnn_graph_op_m")
         m.def_function[gcn_norm_m_binding]("x_cnn_gcn_norm_m")

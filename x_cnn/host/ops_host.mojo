@@ -38,6 +38,8 @@ from x_cnn.ops import (
     pad_fwd_at, pad_bwd_at, adapt_avg_fwd_at, adapt_avg_bwd_at, adapt_max_fwd_at, adapt_max_bwd_at,
     sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at,
 )
+# lane fam2-neural (2026-10-04): the blocked loss fold (the device's `blk_fold_at`)
+from x_cnn.ops import IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan
 
 #: The host family's negative control (host_surface sabotage_define): the
 #: host col2im gathers in reversed (kh) order.
@@ -739,12 +741,50 @@ def linear_backward_host(x: List[Float32], w: List[Float32], g: List[Float32], n
     return r^
 
 
+def blocked_mean(values: List[Float32], n: Int) -> Float32:
+    """lane fam2-neural: the mean of values[0:n] (n >= 1) by the device's
+    blocked fold: `blk_fold_at` over the levels of `fold_plan`, the level
+    sums ping-ponging between two buffers as on the device."""
+    var a = values.copy()
+    var b = zeros((n + LOSS_FOLD_BLOCK - 1) // LOSS_FOLD_BLOCK)
+    var red = zeros(1)
+    var prm = fold_plan(n, n, 0)
+    var pp = hi(prm)
+    var src = hp(a)
+    var dst = hp(b)
+    var fin = hp(red)
+    var c = n
+    var lvl = 0
+    while True:
+        var nb = (c + LOSS_FOLD_BLOCK - 1) // LOSS_FOLD_BLOCK
+        var lp_ = pp + 3 * lvl
+        if nb <= 1:
+            blk_fold_at(0, src, fin, fin, fin, lp_, lp_)
+            break
+        for t in range(nb):
+            blk_fold_at(t, src, dst, dst, dst, lp_, lp_)
+        var sw = src
+        src = dst
+        dst = sw
+        c = nb
+        lvl += 1
+    var out = red[0]
+    _ = a^
+    _ = b^
+    _ = red^
+    _ = prm^
+    return out
+
+
 def softmax_xent_into(logits: FP, labels: IP, grad: FP, proba: FP, n: Int, k: Int) -> Float32:
     """grad and proba [n x k] written in place; returns the mean loss."""
     var prm: List[Int32] = [Int32(n), Int32(k)]
     var rl = zeros(n)
     run[softmax_xent_row_at](logits, grad, proba, hp(rl), labels, hi(prm), n)
     _ = prm^
+    comptime if IDN_XENT_DEV_FOLD:
+        if n > 0:
+            return blocked_mean(rl, n)
     return seq_mean(rl, n)
 
 
