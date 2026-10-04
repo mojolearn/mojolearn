@@ -13,10 +13,20 @@ DATASET=$2
 LANE=${3:-min-cov-det}
 ROWS=${4:-}
 MCD_DEFINE=${MCD_DEFINE:-MOJOLEARN_MCD_BATCH_COMPAT}
-case "$MCD_DEFINE" in
-  MOJOLEARN_MCD_BATCH_COMPAT|MOJOLEARN_MCD_BATCH_MMA) ;;
-  *) echo "MCDQ unsupported define: $MCD_DEFINE"; exit 2 ;;
-esac
+# MCD_DEFINE may list several defines, space or comma separated (w2-mcd2: B =
+# "MOJOLEARN_MCD_WIDE_OFF"; BMMA and WIDE are default since their promotion,
+# so "MOJOLEARN_MCD_BMMA_OFF" / "MOJOLEARN_MCD_WIDE_OFF" build the
+# pre-promotion paths; BMMA_OFF also turns WIDE off).
+B_DEFINES=
+for D in ${MCD_DEFINE//,/ }; do
+  case "$D" in
+    MOJOLEARN_MCD_BATCH_COMPAT|MOJOLEARN_MCD_BATCH_MMA|MOJOLEARN_MCD_BMMA_OFF|MOJOLEARN_MCD_WIDE_OFF) ;;
+    MOJOLEARN_MCD_BMMA) echo "MCDQ MOJOLEARN_MCD_BMMA is default now; use MOJOLEARN_MCD_BMMA_OFF for the old arm"; exit 2 ;;
+    MOJOLEARN_MCD_WIDE) echo "MCDQ MOJOLEARN_MCD_WIDE is default now; use MOJOLEARN_MCD_WIDE_OFF for the old arm"; exit 2 ;;
+    *) echo "MCDQ unsupported define: $D"; exit 2 ;;
+  esac
+  B_DEFINES="$B_DEFINES -D $D"
+done
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 OUT="$HOME/afc-def/$TAG"
@@ -41,8 +51,10 @@ for ARM in A B; do
   DEFINES=
   if [ "$ARM" = B ]; then
     PREBUILT=${MCD_B_SO:-}
-    DEFINES="-D $MCD_DEFINE"
+    DEFINES="${B_DEFINES# }"
   fi
+  # A manager-staged arm at $OUT/<arm>.so (as afc_ab_def.sh's AFC_SKIP_BUILD) is used as is.
+  if [ -z "$PREBUILT" ] && [ -f "$OUT/$ARM.so" ]; then PREBUILT="$OUT/$ARM.so"; fi
   if [ -n "$PREBUILT" ]; then
     [ "$PREBUILT" = "$OUT/$ARM.so" ] || cp "$PREBUILT" "$OUT/$ARM.so"
   else

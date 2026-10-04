@@ -12,7 +12,7 @@ from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE
+from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE, X_PREP_POOL_ARENA
 from x_prep.folds import I32P, kfold_folds, strat_folds
 from x_prep.fastnb_csr import NB_TEXT_CSR, nb_csr_fit_py, nb_csr_jll_py, IDN_NB_CSR, nb_csr_fit_int_py, nb_csr_jll_chk_py
 from x_prep.blocked import IDN_NB_ONEPASS, IDN_NB_CSR_DENSE
@@ -24,7 +24,7 @@ from x_prep.fam2 import IDN_WDRAW, IDN_PERM_DRAW, IDN_WPICK, IDN_PARTIAL_CODES, 
 from x_prep.gram_blocked import IDN_GRAM_BLOCKED, IDN_GRAM_ROWTILE, IDN_GRAM_ROWS
 from x_prep.calib import CALIB_FOLDS, CAL_ST, CAL_LS
 from x_prep.py2mojo import PY2MOJO_PREP
-from x_prep.prep3 import PREP3_MAXABS
+from x_prep.prep3 import PREP3_MAXABS, PREP3_MAXABS_POOL
 from x_prep.fastmaxabs import maxabs_fit_direct
 
 from x_prep.fastpt import PTIMPUTE_FLAGS
@@ -154,6 +154,14 @@ def kfold_folds_binding(out_addr: PythonObject, ints: PythonObject, seed: Python
     return PythonObject(0)
 
 
+def maxabs_pool_binding() raises -> PythonObject:
+    """1 when this binary's direct MaxAbsScaler fit uses pooled buffers
+    (lane/apple-fast-w4-small PREP3_MAXABS_POOL): the quality pair's reach."""
+    comptime if PREP3_MAXABS_POOL:
+        return PythonObject(1)
+    return PythonObject(0)
+
+
 # lane/apple-fast-prep3 (FAST on Apple; registered under PREP3_MAXABS only, so
 # Python's `_optional_prep_entry` probe finds it in no other build and takes
 # main's route there).
@@ -251,6 +259,11 @@ def idn_int_binding() raises -> PythonObject:
     )
 
 
+def pool_arena_binding() raises -> PythonObject:
+    """Present only in a FAST Apple build with X_PREP_POOL_ARENA on (default; absent under -D MOJOLEARN_X_PREP_POOL_ARENA_OFF). A probe for checkers."""
+    return PythonObject(1)
+
+
 def ptimpute_flags_binding() raises -> PythonObject:
     """Lane af-ptimpute (FAST + Apple, each switch its own define, default off):
     the bits of x_prep/fastpt.mojo PTIMPUTE_FLAGS (1 PT_COLBATCH, 2 PT_SPEC,
@@ -334,6 +347,7 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         m.def_function[kfold_folds_binding]("x_prep_kfold_folds")
         comptime if PREP3_MAXABS:
             m.def_function[maxabs_fit_direct_binding]("x_prep_maxabs_fit_direct")
+        m.def_function[maxabs_pool_binding]("x_prep_maxabs_pool")
         m.def_function[numeric_mode_binding]("x_prep_numeric_mode")
         m.def_function[vendor_binding]("x_prep_vendor")
         comptime if X_PREP_FAST_UNIQUE:
@@ -351,6 +365,8 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
             m.def_function[target_scratch_binding]("x_prep_target_scratch")
         comptime if LABEL_PRESENT:
             m.def_function[label_present_binding]("x_prep_label_present")
+        comptime if X_PREP_POOL_ARENA:
+            m.def_function[pool_arena_binding]("x_prep_pool_arena")
         comptime if CAT_CLS2_PACK:
             m.def_function[cls2_cat_binding]("x_prep_cls2_cat")
         comptime if CALIB_FOLDS:

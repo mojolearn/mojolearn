@@ -22,6 +22,16 @@ from x_neighbors.ocsvm_dev import OCSVM_IDN_RES, ocsvm_alpha_init_binding
 from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV
 from x_neighbors.ocsvm_dev import unit_ff_binding
 from x_neighbors.sort_items import purity_flags_binding
+from x_neighbors.kfeat_dev import (
+    XN_FAST_SCHI2_LAZYW,
+    XN_KFEAT_ANY,
+    kfeat_first_negative_binding,
+    kfeat_flags_binding,
+    kfeat_schi2_draw_binding,
+    kfeat_schi2_fit_binding,
+    kfeat_schi2_transform_binding,
+    kfeat_schi2_weights_binding,
+)
 
 
 def _a(v: PythonObject, k: Int) raises -> Int:
@@ -1265,6 +1275,17 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
         # lane/fam2-neighbors: PageRank's caller vectors normalized by the op
         comptime if XN_UNIT_DEV:
             m.def_function[unit_ff_binding]("x_neighbors_unit_ff")
+        # lane apple-fast-w2-kfeat: the chi2 samplers' fit entries
+        # (x_neighbors/kfeat_dev.mojo; FAST + Apple, opt-in defines)
+        comptime if XN_KFEAT_ANY:
+            m.def_function[kfeat_flags_binding]("x_neighbors_kfeat_flags")
+            m.def_function[kfeat_first_negative_binding]("x_neighbors_kfeat_first_negative")
+            m.def_function[kfeat_schi2_fit_binding]("x_neighbors_kfeat_schi2_fit")
+        # lane apple-fast-w3-kfeat: SkewedChi2Sampler's lazy weights (opt-in)
+        comptime if XN_FAST_SCHI2_LAZYW:
+            m.def_function[kfeat_schi2_draw_binding]("x_neighbors_kfeat_schi2_draw")
+            m.def_function[kfeat_schi2_weights_binding]("x_neighbors_kfeat_schi2_weights")
+            m.def_function[kfeat_schi2_transform_binding]("x_neighbors_kfeat_schi2_transform")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors: ", e))

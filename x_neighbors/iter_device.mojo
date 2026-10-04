@@ -18,12 +18,13 @@ from x_neighbors.svgp_ff import (
     matmul_tn_acc_ff_item, svgp_ff_init_item, svgp_ff_chol_item, svgp_ff_chol_s_item, svgp_ff_column_item,
     svgp_ff_x_item, svgp_ff_qmu_item, svgp_ff_qsqrt_item, svgp_ff_part_item, svgp_ff_fin_item, svgp_ff_nbn,
     svgp_ff_nbm, svgp_ff_ws_size, matmul_tn_sym_ff_tile_item, svgp_sym_nb,
-    svgp_ff_col_solve_item, svgp_ff_col_fin_item,
+    svgp_ff_col_solve_item, svgp_ff_col_fin_item, svgp_ff_mat,
 )
 from x_neighbors.svgp_ff import (
     SVGP_TREE, SVGP_TREE_ON, SV8, svgp_ff_tree_comb, svgp_ff_tree_slot, svgp_ff_bound, svgp_ff_failed,
 )
 from x_linear.ff import FF
+from x_linear.ff import ff_of, ff_add, ff_sub, ff_mul, ff_div, ff_sqrt, ff_ld, ff_st
 from std.memory import bitcast, memcpy
 from std.atomic import Atomic
 from std.math import sqrt
@@ -1369,11 +1370,96 @@ def op_kernel_matmul(
     _ = ctx^
 
 
+#: SVGP_FAST_RBFTILE, DEFAULT in FAST + Apple (lane/apple-fast-w2-svgp):
+#: SVGP's scaled rbf (Kuu, the Kfu tiles, Ksu in predict) as one tiled
+#: launch, 64 rows x 64 inducing points per 256-thread block, 16 features
+#: staged in threadgroup memory per step, 4 x 4 cells per thread, variance
+#: scale fused. Each cell keeps `kernel_item`'s chain (_sub, mul_add,
+#: features ascending) and `unary_item`'s identity step. M3, one run per
+#: arm: istella 336.3 -> 299.1 ms, taxi 285.9 -> 283.9 ms; w2-svgp-rbftile-q
+#: SVGP-FAST-PAIR PASS (r2/rmse/elbo gates; A r2 taxi -0.19498, istella
+#: -0.10602). MOJOLEARN_SVGP_FAST_RBFTILE_OFF restores the per-cell kernel.
+comptime SVGP_FAST_RBFTILE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SVGP_FAST_RBFTILE_OFF"]()
+)
+comptime SVGP_RBF_T = 64
+comptime SVGP_RBF_TP = SVGP_RBF_T + 1
+comptime SVGP_RBF_FK = 16
+comptime SVGP_RBF_THREADS = 256
+comptime _SVGP_RBF_SMEM_FITS = lib_smem_page_fits_for[TARGET_COLUMN, 2 * SVGP_RBF_FK * SVGP_RBF_TP * 4]()
+
+
+def svgp_rbf_tile_kernel(q: FP, z: FP, dst: FP, rows_: Int64, m_: Int64, d_: Int64, gamma: Float32, variance: Float32):
+    comptime assert _SVGP_RBF_SMEM_FITS, "svgp_rbf_tile_kernel: an 8.3 KB threadgroup page must fit"
+    comptime T = SVGP_RBF_T
+    comptime TP = SVGP_RBF_TP
+    comptime FK = SVGP_RBF_FK
+    comptime NT = SVGP_RBF_THREADS
+    var rows = Int(rows_)
+    var m = Int(m_)
+    var d = Int(d_)
+    var ncb = (m + T - 1) // T
+    var b = Int(block_idx.x)
+    var rb = b // ncb
+    var cb = b - rb * ncb
+    var r0 = rb * T
+    var c0 = cb * T
+    var tid = Int(thread_idx.x)
+    var ty = tid // 16
+    var tx = tid - ty * 16
+    var xs = stack_allocation[FK * TP, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var zs = stack_allocation[FK * TP, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var acc = SIMD[DType.float32, 16](0)
+    var f0 = 0
+    while f0 < d:
+        var fk = min(FK, d - f0)
+        # stage: element e = row * FK + feature (a row's features are adjacent in memory)
+        var e = tid
+        while e < FK * T:
+            var rr = e // FK
+            var ff = e - rr * FK
+            var xv = Float32(0)
+            var zv = Float32(0)
+            if ff < fk:
+                if r0 + rr < rows:
+                    xv = q.unsafe_load((r0 + rr) * d + f0 + ff)
+                if c0 + rr < m:
+                    zv = z.unsafe_load((c0 + rr) * d + f0 + ff)
+            xs[ff * TP + rr] = xv
+            zs[ff * TP + rr] = zv
+            e += NT
+        barrier()
+        for ff in range(fk):
+            comptime for u in range(4):
+                var xv = xs[ff * TP + ty + 16 * u]
+                comptime for v in range(4):
+                    var df = _sub(xv, zs[ff * TP + tx + 16 * v])
+                    acc[u * 4 + v] = ftz(identical_mul_add(df, df, acc[u * 4 + v]))
+        barrier()
+        f0 += FK
+    comptime for u in range(4):
+        comptime for v in range(4):
+            var i = r0 + ty + 16 * u
+            var j = c0 + tx + 16 * v
+            if i < rows and j < m:
+                var k = ftz(identical_exp(ftz(identical_mul(-gamma, acc[u * 4 + v]))))
+                dst.unsafe_store(i * m + j, ftz(identical_mul_add(variance, ftz(k), Float32(0))))
+
+
 def _launch_scaled_rbf(
     ctx: DeviceContext, q: FP, z: FP, kbuf: FP, dst: FP, rows: Int, m: Int, d: Int, gamma: Float32, variance: Float32,
 ) raises:
     """SVGP's `_k`: the rbf kernel (coef0 0, degree 0), then
     `unary(K, identity, variance, 0)`."""
+    comptime if SVGP_FAST_RBFTILE:
+        if rows * m > 0:
+            var nblk = ((rows + SVGP_RBF_T - 1) // SVGP_RBF_T) * ((m + SVGP_RBF_T - 1) // SVGP_RBF_T)
+            ctx.enqueue_function[svgp_rbf_tile_kernel](
+                q, z, dst, Int64(rows), Int64(m), Int64(d), gamma, variance,
+                grid_dim=nblk, block_dim=SVGP_RBF_THREADS,
+            )
+        return
     _launch_kernel(ctx, q, z, kbuf, rows, m, d, K_RBF, 0, gamma, Float32(0))
     var cells = rows * m
     ctx.enqueue_function[unary_kernel](
@@ -1521,6 +1607,209 @@ def svgp_ff_fin_tree_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float
         svgp_ff_bound(w, info, FF(sh[0], sh[1]), FF(sh[2], sh[3]), FF(sh[4], sh[5]), sh[6], sh[7], nf, noise, kdiag)
 
 
+# ---- lane apple-fast-w2-svgp (2026-10-04): FAST + Apple candidates for
+# SVGP's fit (and predict). BLKCHOL is default; BSPLIT stays opt-in.
+
+#: SVGP_FAST_BLKCHOL, DEFAULT in FAST + Apple (lane/apple-fast-w2-svgp).
+#: M3, one run per arm (measured without RBFTILE; combined retime owed):
+#: taxi 287.0 -> 212.5 ms, istella 336.6 -> 265.7 ms; w2-svgp-blkchol-q
+#: SVGP-FAST-PAIR PASS. MOJOLEARN_SVGP_FAST_BLKCHOL_OFF restores the
+#: one-column-per-launch factor.
+#: The three m x m float-float Cholesky factors
+#: (L_u, L_s, then Q) one panel of SVGP_CHOL_PB columns per launch instead of
+#: one column per launch (m = 512: 1,024 dependent launches -> 64). Each block
+#: forms the panel's diagonal block G = A - L L^T over the columns before the
+#: panel (k ascending), factors it in threadgroup memory one column per
+#: barrier, then each thread finishes its own row's panel columns. Every
+#: entry is the same chain as `_chol_col`: the pivot A[c,c] - L[c,k]^2 and
+#: the row A[i,c] - L[i,k] L[c,k], k ascending from 0, then sqrt / divide.
+#: The words only move with FAST's free contraction.
+comptime SVGP_FAST_BLKCHOL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SVGP_FAST_BLKCHOL_OFF"]()
+)
+#: panel width (columns per launch)
+comptime SVGP_CHOL_PB = 16
+comptime _SVGP_CHOL_SMEM_FITS = lib_smem_page_fits_for[TARGET_COLUMN, 4 * SVGP_CHOL_PB * SVGP_CHOL_PB * 4]()
+
+
+def svgp_ff_chol_panel_kernel(w: FP, m_: Int64, n_: Int64, j0_: Int64, nfac_: Int64):
+    """Columns j0 .. j0 + tb - 1 of nfac factors (2: L_u then L_s, as
+    `svgp_ff_chol_item`; 1: Q, as `svgp_ff_chol_s_item`). Block b: factor
+    b // bpf, rows j0 + (b % bpf) * BLOCK + thread."""
+    comptime assert _SVGP_CHOL_SMEM_FITS, "svgp_ff_chol_panel_kernel: a 4 KB threadgroup page must fit"
+    comptime PB = SVGP_CHOL_PB
+    var m = Int(m_)
+    var n = Int(n_)
+    var j0 = Int(j0_)
+    var span = m - j0
+    var tb = min(PB, span)
+    var bpf = (span + BLOCK - 1) // BLOCK
+    var b = Int(block_idx.x)
+    var fac = b // bpf
+    var rb = b - fac * bpf
+    var tid = Int(thread_idx.x)
+    var ah: FP
+    var al: FP
+    var lh: FP
+    var ll: FP
+    var ok: FP
+    if Int(nfac_) == 1:
+        ah = svgp_ff_mat(w, m, n, 8)
+        al = svgp_ff_mat(w, m, n, 9)
+        lh = svgp_ff_mat(w, m, n, 10)
+        ll = svgp_ff_mat(w, m, n, 11)
+        ok = w + 2
+    elif fac == 0:
+        ah = svgp_ff_mat(w, m, n, 0)
+        al = svgp_ff_mat(w, m, n, 1)
+        lh = svgp_ff_mat(w, m, n, 4)
+        ll = svgp_ff_mat(w, m, n, 5)
+        ok = w
+    else:
+        ah = svgp_ff_mat(w, m, n, 2)
+        al = svgp_ff_mat(w, m, n, 3)
+        lh = svgp_ff_mat(w, m, n, 6)
+        ll = svgp_ff_mat(w, m, n, 7)
+        ok = w + 1
+    # G (the panel block continued over k < j0) and its factor D, PB x PB, row major
+    var gh = stack_allocation[PB * PB, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var gl = stack_allocation[PB * PB, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var dh = stack_allocation[PB * PB, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var dl = stack_allocation[PB * PB, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var tri = tb * (tb + 1) // 2
+    var e = tid
+    while e < tri:
+        var r = 0
+        var c = e
+        while c > r:
+            c -= r + 1
+            r += 1
+        var gi = j0 + r
+        var gj = j0 + c
+        var tv = ff_ld(ah, al, gi * m + gj)
+        for k in range(j0):
+            tv = ff_sub(tv, ff_mul(ff_ld(lh, ll, gi * m + k), ff_ld(lh, ll, gj * m + k)))
+        gh[r * PB + c] = tv.hi
+        gl[r * PB + c] = tv.lo
+        e += BLOCK
+    barrier()
+    for c in range(tb):
+        if tid >= c and tid < tb:
+            # the pivot, every thread in the same order as `_chol_col`
+            var s = FF(gh[c * PB + c], gl[c * PB + c])
+            for k in range(c):
+                var l = FF(dh[c * PB + k], dl[c * PB + k])
+                s = ff_sub(s, ff_mul(l, l))
+            var rt = ff_sqrt(s)
+            if tid == c:
+                if not (s.hi > 0) and rb == 0:
+                    ok.unsafe_store(0, Float32(0))
+                dh[c * PB + c] = rt.hi
+                dl[c * PB + c] = rt.lo
+            else:
+                var tv = FF(gh[tid * PB + c], gl[tid * PB + c])
+                for k in range(c):
+                    tv = ff_sub(tv, ff_mul(FF(dh[tid * PB + k], dl[tid * PB + k]), FF(dh[c * PB + k], dl[c * PB + k])))
+                var q = ff_div(tv, rt)
+                dh[tid * PB + c] = q.hi
+                dl[tid * PB + c] = q.lo
+        barrier()
+    var rr = rb * BLOCK + tid
+    if fac >= Int(nfac_) or rr >= span:
+        return
+    var i = j0 + rr
+    if rr < tb:
+        for c in range(rr + 1):
+            ff_st(lh, ll, i * m + j0 + c, FF(dh[rr * PB + c], dl[rr * PB + c]))
+        return
+    # row i below the panel: all panel columns' chains over k < j0 together
+    # (k outer, each column's own order unchanged), then the panel columns
+    var th = SIMD[DType.float32, PB](0)
+    var tl = SIMD[DType.float32, PB](0)
+    comptime for c in range(PB):
+        if c < tb:
+            var a = ff_ld(ah, al, i * m + j0 + c)
+            th[c] = a.hi
+            tl[c] = a.lo
+    for k in range(j0):
+        var lik = ff_ld(lh, ll, i * m + k)
+        comptime for c in range(PB):
+            if c < tb:
+                var tv = ff_sub(FF(th[c], tl[c]), ff_mul(lik, ff_ld(lh, ll, (j0 + c) * m + k)))
+                th[c] = tv.hi
+                tl[c] = tv.lo
+    comptime for c in range(PB):
+        if c < tb:
+            var tv = FF(th[c], tl[c])
+            comptime for k in range(c):
+                tv = ff_sub(tv, ff_mul(FF(th[k], tl[k]), FF(dh[c * PB + k], dl[c * PB + k])))
+            var q = ff_div(tv, FF(dh[c * PB + c], dl[c * PB + c]))
+            th[c] = q.hi
+            tl[c] = q.lo
+            ff_st(lh, ll, i * m + j0 + c, q)
+
+
+def _svgp_chol_panels(ctx: DeviceContext, wp: FP, m: Int, n: Int, nfac: Int) raises:
+    var j0 = 0
+    while j0 < m:
+        var bpf = (m - j0 + BLOCK - 1) // BLOCK
+        ctx.enqueue_function[svgp_ff_chol_panel_kernel](
+            wp, Int64(m), Int64(n), Int64(j0), Int64(nfac), grid_dim=nfac * bpf, block_dim=BLOCK,
+        )
+        j0 += SVGP_CHOL_PB
+
+
+#: MOJOLEARN_SVGP_FAST_BSPLIT (with SYMTILE on): B = Kuf Kfu and b = Kuf y
+#: over SVGP_BSPLIT_R (B) and SVGP_BSPLIT_RV (b) row slices of every Kfu
+#: tile, each slice its own float-float partial carried across the tiles,
+#: then the partials summed slice-ascending. SYMTILE's launch has 8,256
+#: busy threads (m = 512) each 32,768 rows deep, and b's has m threads with
+#: one dependent float-float chain each: too few to fill the M3 Ultra. Bits
+#: change (float-float re-association, ~1e-14 relative in B and b).
+comptime SVGP_FAST_BSPLIT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and SVGP_FAST_SYMTILE
+    and is_defined["MOJOLEARN_SVGP_FAST_BSPLIT"]()
+)
+comptime SVGP_BSPLIT_R = 4
+comptime SVGP_BSPLIT_RV = 32
+
+
+def matmul_tn_sym_ff_split_kernel(a: FP, ph: FP, pl: FP, rows_: Int64, m_: Int64):
+    var t = _tid()
+    var m = Int(m_)
+    var nb = svgp_sym_nb(m)
+    var nbb = nb * nb
+    if t < SVGP_BSPLIT_R * nbb:
+        var s = t // nbb
+        var rows = Int(rows_)
+        var lo = rows * s // SVGP_BSPLIT_R
+        var hi = rows * (s + 1) // SVGP_BSPLIT_R
+        matmul_tn_sym_ff_tile_item(t - s * nbb, a + lo * m, ph + s * m * m, pl + s * m * m, hi - lo, m)
+
+
+def matmul_tn_vec_ff_split_kernel(a: FP, y: FP, ph: FP, pl: FP, rows_: Int64, m_: Int64):
+    var t = _tid()
+    var m = Int(m_)
+    if t < SVGP_BSPLIT_RV * m:
+        var s = t // m
+        var rows = Int(rows_)
+        var lo = rows * s // SVGP_BSPLIT_RV
+        var hi = rows * (s + 1) // SVGP_BSPLIT_RV
+        matmul_tn_acc_ff_item(t - s * m, a + lo * m, y + lo, ph + s * m, pl + s * m, hi - lo, m, 1)
+
+
+def svgp_ff_split_sum_kernel(ph: FP, pl: FP, rh: FP, rl: FP, count_: Int64, parts_: Int64):
+    """(rh, rl)[t] = the parts' cell t summed part-ascending, float-float."""
+    var t = _tid()
+    var count = Int(count_)
+    if t < count:
+        var acc = ff_ld(ph, pl, t)
+        for s in range(1, Int(parts_)):
+            acc = ff_add(acc, ff_ld(ph, pl, s * count + t))
+        ff_st(rh, rl, t, acc)
+
+
 def op_svgp_fit_ff(
     x: Int, z: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int, n: Int, m: Int, d: Int,
     gamma: Float32, variance: Float32, noise: Float32, jitter: Float32, kdiag: Float32,
@@ -1554,26 +1843,57 @@ def op_svgp_fit_ff(
     if mm > 0:
         _launch_scaled_rbf(ctx, _p(d_z), _p(d_z), _p(d_k), _p(d_kuu), m, m, d, gamma, variance)
     var tile = _tile_rows(n, m)
+    # MOJOLEARN_SVGP_FAST_BSPLIT: the row-slice partials of B and b
+    var d_pbh = ctx.enqueue_create_buffer[DType.float32](max(SVGP_BSPLIT_R * mm, 1) if SVGP_FAST_BSPLIT else 1)
+    var d_pbl = ctx.enqueue_create_buffer[DType.float32](max(SVGP_BSPLIT_R * mm, 1) if SVGP_FAST_BSPLIT else 1)
+    var d_pvh = ctx.enqueue_create_buffer[DType.float32](max(SVGP_BSPLIT_RV * m, 1) if SVGP_FAST_BSPLIT else 1)
+    var d_pvl = ctx.enqueue_create_buffer[DType.float32](max(SVGP_BSPLIT_RV * m, 1) if SVGP_FAST_BSPLIT else 1)
+    comptime if SVGP_FAST_BSPLIT:
+        enqueue_fill(ctx, d_pbh, Float32(0))
+        enqueue_fill(ctx, d_pbl, Float32(0))
+        enqueue_fill(ctx, d_pvh, Float32(0))
+        enqueue_fill(ctx, d_pvl, Float32(0))
     var r0 = 0
     while r0 < n:
         var rows = min(tile, n - r0)
         _launch_scaled_rbf(ctx, xp + r0 * d, _p(d_z), _p(d_k), _p(d_ks), rows, m, d, gamma, variance)
-        comptime if SVGP_FAST_SYMTILE:
-            var nbs = svgp_sym_nb(m)
-            ctx.enqueue_function[matmul_tn_sym_ff_kernel](
-                _p(d_ks), _p(d_bh), _p(d_bl), Int64(rows), Int64(m),
-                grid_dim=_grid(nbs * nbs), block_dim=BLOCK,
+        comptime if SVGP_FAST_BSPLIT:
+            var nbs2 = svgp_sym_nb(m)
+            ctx.enqueue_function[matmul_tn_sym_ff_split_kernel](
+                _p(d_ks), _p(d_pbh), _p(d_pbl), Int64(rows), Int64(m),
+                grid_dim=_grid(SVGP_BSPLIT_R * nbs2 * nbs2), block_dim=BLOCK,
+            )
+            ctx.enqueue_function[matmul_tn_vec_ff_split_kernel](
+                _p(d_ks), yp + r0, _p(d_pvh), _p(d_pvl), Int64(rows), Int64(m),
+                grid_dim=_grid(SVGP_BSPLIT_RV * m), block_dim=BLOCK,
             )
         else:
+            comptime if SVGP_FAST_SYMTILE:
+                var nbs = svgp_sym_nb(m)
+                ctx.enqueue_function[matmul_tn_sym_ff_kernel](
+                    _p(d_ks), _p(d_bh), _p(d_bl), Int64(rows), Int64(m),
+                    grid_dim=_grid(nbs * nbs), block_dim=BLOCK,
+                )
+            else:
+                ctx.enqueue_function[matmul_tn_acc_ff_kernel](
+                    _p(d_ks), _p(d_ks), _p(d_bh), _p(d_bl), Int64(rows), Int64(m), Int64(m),
+                    grid_dim=_grid(mm), block_dim=(BLOCK if mm > 1 else 1),
+                )
             ctx.enqueue_function[matmul_tn_acc_ff_kernel](
-                _p(d_ks), _p(d_ks), _p(d_bh), _p(d_bl), Int64(rows), Int64(m), Int64(m),
-                grid_dim=_grid(mm), block_dim=(BLOCK if mm > 1 else 1),
+                _p(d_ks), yp + r0, _p(d_bvh), _p(d_bvl), Int64(rows), Int64(m), Int64(1),
+                grid_dim=_grid(m), block_dim=(BLOCK if m > 1 else 1),
             )
-        ctx.enqueue_function[matmul_tn_acc_ff_kernel](
-            _p(d_ks), yp + r0, _p(d_bvh), _p(d_bvl), Int64(rows), Int64(m), Int64(1),
-            grid_dim=_grid(m), block_dim=(BLOCK if m > 1 else 1),
-        )
         r0 += rows
+    comptime if SVGP_FAST_BSPLIT:
+        if mm > 0:
+            ctx.enqueue_function[svgp_ff_split_sum_kernel](
+                _p(d_pbh), _p(d_pbl), _p(d_bh), _p(d_bl), Int64(mm), Int64(SVGP_BSPLIT_R),
+                grid_dim=_grid(mm), block_dim=BLOCK,
+            )
+            ctx.enqueue_function[svgp_ff_split_sum_kernel](
+                _p(d_pvh), _p(d_pvl), _p(d_bvh), _p(d_bvl), Int64(m), Int64(SVGP_BSPLIT_RV),
+                grid_dim=_grid(m), block_dim=BLOCK,
+            )
     var d_alpha = _buf(ctx, 0, m, False)
     var d_c = _buf(ctx, 0, mm, False)
     var d_qmu = _buf(ctx, 0, m, False)
@@ -1588,9 +1908,12 @@ def op_svgp_fit_ff(
             _p(d_kuu), _p(d_bh), _p(d_bl), wp, Int64(m), Int64(n), noise, jitter,
             grid_dim=_grid(mm), block_dim=BLOCK,
         )
-    for j in range(m):
-        ctx.enqueue_function[svgp_ff_chol_kernel](wp, Int64(m), Int64(n), Int64(j),
-                                                  grid_dim=_grid(2 * (m - j)), block_dim=BLOCK)
+    comptime if SVGP_FAST_BLKCHOL:
+        _svgp_chol_panels(ctx, wp, m, n, 2)
+    else:
+        for j in range(m):
+            ctx.enqueue_function[svgp_ff_chol_kernel](wp, Int64(m), Int64(n), Int64(j),
+                                                      grid_dim=_grid(2 * (m - j)), block_dim=BLOCK)
     if m > 0:
         comptime if SVGP_FAST_COLSPLIT:
             ctx.enqueue_function[svgp_ff_col_solve_kernel](
@@ -1611,9 +1934,12 @@ def op_svgp_fit_ff(
         ctx.enqueue_function[svgp_ff_qmu_kernel](
             _p(d_kuu), _p(d_qmu), wp, Int64(m), Int64(n), jitter, grid_dim=_grid(m), block_dim=BLOCK,
         )
-    for j in range(m):
-        ctx.enqueue_function[svgp_ff_chol_s_kernel](wp, Int64(m), Int64(n), Int64(j),
-                                                    grid_dim=_grid(m - j), block_dim=BLOCK)
+    comptime if SVGP_FAST_BLKCHOL:
+        _svgp_chol_panels(ctx, wp, m, n, 1)
+    else:
+        for j in range(m):
+            ctx.enqueue_function[svgp_ff_chol_s_kernel](wp, Int64(m), Int64(n), Int64(j),
+                                                        grid_dim=_grid(m - j), block_dim=BLOCK)
     if mm > 0:
         ctx.enqueue_function[svgp_ff_qsqrt_kernel](_p(d_qs), wp, Int64(m), Int64(n), grid_dim=_grid(mm), block_dim=BLOCK)
     var nbn = svgp_ff_nbn(n)
@@ -1655,6 +1981,10 @@ def op_svgp_fit_ff(
     _ = d_info^
     _ = d_w^
     _ = d_xb^
+    _ = d_pbh^
+    _ = d_pbl^
+    _ = d_pvh^
+    _ = d_pvl^
     _ = ctx^
 
 

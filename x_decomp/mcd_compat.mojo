@@ -82,7 +82,7 @@ def mc_moment_kernel(
         part.unsafe_store(t, acc)
 
 
-def mc_pinvh_kernel[MMA: Bool = False](
+def mc_pinvh_kernel[MMA: Bool = False, DM: Int = 64](
     cov: F32Ptr, work: F32Ptr, vectors: F32Ptr, precision: F32Ptr,
     nc: Int32, d: Int32, active: I32Ptr, needp: I32Ptr, err: I32Ptr,
     sorted_v: F32Ptr, weighted_v: F32Ptr, ran: I32Ptr,
@@ -126,8 +126,11 @@ def mc_pinvh_kernel[MMA: Bool = False](
     var hh = m // 2
     var so = stack_allocation[MC_TPB, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var sd = stack_allocation[MC_TPB, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
-    var order = stack_allocation[64, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
-    var inv = stack_allocation[64, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    # DM: the largest d served (64 = MF_DMAX; MCD_WIDE launches DM =
+    # 256 for 64 < d <= 256: one thread per row, so DM <= MC_TPB).
+    comptime assert DM <= MC_TPB, "mc_pinvh_kernel: one thread per row"
+    var order = stack_allocation[DM, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var inv = stack_allocation[DM, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var z = tid
     while z < dd * dd:
         a.unsafe_store(z, cov.unsafe_load(o + z))

@@ -244,6 +244,12 @@ def _mat(w: FP, m: Int, n: Int, k: Int) -> FP:
 
 
 @always_inline
+def svgp_ff_mat(w: FP, m: Int, n: Int, k: Int) -> FP:
+    """`_mat` for the device drivers (SVGP_FAST_BLKCHOL, default; MOJOLEARN_SVGP_FAST_BLKCHOL_OFF rolls back)."""
+    return _mat(w, m, n, k)
+
+
+@always_inline
 def _vec(w: FP, m: Int, n: Int, k: Int) -> FP:
     return w + _o_mat(m, n) + 14 * m * m + k * m
 

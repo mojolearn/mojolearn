@@ -296,6 +296,7 @@ The one thing in the RAPIDS trees that IS portable source and IS implemented her
 """
 
 from cholesky.checks.fast_trsm import FTP_MAX_NB, FTS_BLOCK, fast_trsm_panel_kernel, fast_gemm_nt_sub_lower, fast_panel_solve_inv
+from cholesky.checks.chol_fast_tall import CHOL_FAST_TALL, CTL_NB, chol_fast_tall_panel
 from std.gpu import block_dim, block_idx, thread_idx
 from std.gpu.primitives.warp import shuffle_xor
 from max.gpu.primitives.block import prefix_sum
@@ -1997,6 +1998,10 @@ def potrf_lower(
     var inv_shape = ctx.enqueue_create_buffer[DType.float32](
         nb * nb if CHOL_RECURSIVE_PANEL else 1
     )
+    # CHOL_FAST_TALL (FAST+Apple default): the inner step's L11^{-1}
+    var tall_linv = ctx.enqueue_create_buffer[DType.float32](
+        CTL_NB * CTL_NB if CHOL_FAST_TALL else 1
+    )
     # MOJOLEARN_CHOL_TIMING=1: per-stage host times (synchronizing), printed
     # once at the end. Diagnostics only; off by default and bit-inert.
     var ctim = String(getenv("MOJOLEARN_CHOL_TIMING")) == "1"
@@ -2065,7 +2070,19 @@ def potrf_lower(
                 tk = Int(perf_counter_ns())
 
         # ---- the panel ------------------------------------------------
-        if chol_sabotage_is_kernel_arm(sabotage):
+        # CHOL_FAST_TALL (FAST+Apple default, cholesky/checks/chol_fast_tall.mojo;
+        # rollback -D MOJOLEARN_CHOL_FAST_TALL_OFF): only on the fast_defer sweep (the
+        # public Cholesky.fit, which redoes a failed factor on this loop's
+        # main route). The column panel is factored whole -- L11 and L21 --
+        # so the panel solve below is skipped; the trailing update is main's.
+        var tall_done = False
+        comptime if CHOL_FAST_TALL:
+            if fast_defer:
+                chol_fast_tall_panel(ctx, a, dinfo, tall_linv, n, j0, w)
+                tall_done = True
+        if tall_done:
+            pass
+        elif chol_sabotage_is_kernel_arm(sabotage):
             ctx.enqueue_function[sabotage_panel_factor_kernel](  # small-launch(n: leading dimension only): the negative-control copy of the w x w panel factor, reached only with a sabotage id
                 a.unsafe_ptr(),
                 dinfo.unsafe_ptr(),
@@ -2140,7 +2157,9 @@ def potrf_lower(
         if n_trail > 0:
             # ---- the panel solve, L21 = A21 . L11^{-T} -----------------
             var solve_grid = (n_trail + solve_tpb - 1) // solve_tpb
-            if chol_sabotage_is_kernel_arm(sabotage):
+            if tall_done:
+                pass  # CHOL_FAST_TALL: L21 is already in `a`
+            elif chol_sabotage_is_kernel_arm(sabotage):
                 ctx.enqueue_function[sabotage_trsm_panel_kernel](
                     a.unsafe_ptr(),
                     Int32(n),
@@ -2345,6 +2364,7 @@ def potrf_lower(
         ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
         ctx.synchronize()
         info = Int(hinfo.unsafe_ptr().unsafe_load(0))
+    _ = tall_linv^  # CHOL_FAST_TALL: alive past every enqueued use
     if defer:
         # CHOL_DEFER_INFO: the one read of `info`. After a failing panel pf
         # every later kernel returned at once, so the matrix is what the
