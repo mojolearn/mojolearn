@@ -1,4 +1,4 @@
-pos=956 lines=    1558
+pos=964 lines=    1561
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -1133,3 +1133,12 @@ pos=956 lines=    1558
 1241:CMD apple-fast-batchv@77f1f5afb batchv-pt-all-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=65.5 all=[66] quality=['{"output_shape":'] defines='-D MOJOLEARN_PTIMPUTE_ALL'
 1242:CMD apple-fast-batchv@77f1f5afb batchv-pt-nospec-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=425.4 all=[425] quality=['{"output_shape":'] defines='-D MOJOLEARN_PT_COLBATCH -D MOJOLEARN_PT_FUSED_TRANSFORM -D MOJOLEARN_SI_ONEPASS'
 1243:CMD apple-fast-batchv@77f1f5afb batchv-pt-nospec-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=54.1 all=[54] quality=['{"output_shape":'] defines='-D MOJOLEARN_PT_COLBATCH -D MOJOLEARN_PT_FUSED_TRANSFORM -D MOJOLEARN_SI_ONEPASS'
+1244:CMD apple-fast-batchv@77f1f5afb batchv-si-onepass-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=273.7 all=[274] quality=['{"masked_rmse":'] defines='-D MOJOLEARN_SI_ONEPASS'
+1245:CMD apple-fast-batchv@77f1f5afb batchv-si-onepass-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=21.0 all=[21] quality=['{"masked_rmse":'] defines='-D MOJOLEARN_SI_ONEPASS'
+1246:CMD apple-fast-batchv@77f1f5afb batchv-kde-dimtile-istella rc=1 ~/mq/wt/lane_apple-fast-batchv/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+1247:CMD apple-fast-batchv@77f1f5afb batchv-kde-dimtile-taxi rc=1 ~/mq/wt/lane_apple-fast-batchv/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+1248:CMD apple-fast-batch@3150d75c1 symhist-gather-fused-taxi-x rc=0 AFT-MEDIAN arm=B n=1 median_ms=9620.3 all=[9620] hashes=['ee77e5880b78b029'] acc={'logloss': [0.528595], 'auc': [0.630376]}
+1249:CMD apple-fast-batch@3150d75c1 symhist-part-stats-par-taxi-x rc=0 AFT-MEDIAN arm=B n=1 median_ms=9567.9 all=[9568] hashes=['ee77e5880b78b029'] acc={'logloss': [0.528595], 'auc': [0.630376]}
+1250:CMD apple-fast-batch@3150d75c1 symhist-scan-sub-fused-taxi-x rc=0 AFT-MEDIAN arm=B n=1 median_ms=9554.1 all=[9554] hashes=['ee77e5880b78b029'] acc={'logloss': [0.528595], 'auc': [0.630376]}
+1251:CMD apple-fast-batch@3150d75c1 symhist-hist-mult-taxi-x rc=0 AFT-MEDIAN arm=B n=1 median_ms=9585.3 all=[9585] hashes=['ee77e5880b78b029'] acc={'logloss': [0.528595], 'auc': [0.630376]}
+1252:FBUILD lane/apple-fast-batchv@30aa43339 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
