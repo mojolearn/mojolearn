@@ -471,3 +471,76 @@ def dw2_scan_histograms_smem_kernel(
                 for i in range(folds):
                     running = ftz(running + histogram.unsafe_load(b + i))
                     histogram.unsafe_store(b + i, running)
+
+
+# ---- MOJOLEARN_GBDT_DW_BRIDGE_SCAN (opt-in FAST + Apple) -------------------
+# Pending current-main M3 speed and fitted AUC/logloss gate. Each tile owns
+# disjoint feature cells in the dense integer accumulator and the sparse
+# leaf histogram. Keep the bridge's exact division and the scanner's serial
+# Float32 fold; only their global-memory intermediate and launch disappear.
+def dw_bridge_scan_kernel(
+    hist_ids: MutPointer[UInt32, MutAnyOrigin],
+    feature_first_bin: MutPointer[UInt32, MutAnyOrigin],
+    feature_folds: MutPointer[UInt32, MutAnyOrigin],
+    feature_one_hot: MutPointer[UInt8, MutAnyOrigin],
+    feature_count_in: Int32,
+    bin_feature_count_in: Int32,
+    q_acc: MutPointer[Int32, MutAnyOrigin],
+    fixed_scale_ptr: MutPointer[Float32, MutAnyOrigin],
+    histogram: MutPointer[Float32, MutAnyOrigin],
+):
+    """Fuse qh_write_hist_kernel with the existing shared serial scan.
+
+    One-byte quantized histograms only: at most 256 folds per feature.
+    Grid (ceil(features / 16), dense built leaf, stat), block 256.
+    The root keeps the separate bridge so mode selection sees raw bins.
+    """
+    var f0 = Int(block_idx.x) * DW2_SCAN_FT
+    var nf = min(DW2_SCAN_FT, Int(feature_count_in) - f0)
+    var tid = Int(thread_idx.x)
+    var dense = Int(block_idx.y)
+    var stat = Int(block_idx.z)
+    var stat_count = Int(grid_dim.z)
+    var cells = Int(bin_feature_count_in)
+    var src_base = (dense * stat_count + stat) * cells
+    var leaf = Int(hist_ids.unsafe_load(dense))
+    var dst_base = (leaf * stat_count + stat) * cells
+    var scale = fixed_scale_ptr.unsafe_load(0)
+    var s = stack_allocation[
+        DW2_SCAN_FT * 256, Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    # Adjacent lanes load adjacent bins; padded feature slots never touch
+    # global memory and are not consumed by the feature's prefix fold.
+    var i = tid
+    while i < nf * 256:
+        var f = f0 + (i >> 8)
+        var bin = i & 255
+        var folds = Int(feature_folds.unsafe_load(f))
+        if bin < folds:
+            var cell = Int(feature_first_bin.unsafe_load(f)) + bin
+            var q = q_acc.unsafe_load(src_base + cell)
+            var val = Float32(0.0)
+            if q != Int32(0):
+                val = ftz(Float32(Int(q)) / scale)
+                q_acc.unsafe_store(src_base + cell, Int32(0))
+            s[i] = val
+        i += Int(block_dim.x)
+    barrier()
+    if tid < nf:
+        var f = f0 + tid
+        var folds = Int(feature_folds.unsafe_load(f))
+        if feature_one_hot.unsafe_load(f) == UInt8(0) and folds > 1:
+            var running = Float32(0.0)
+            for bin in range(folds):
+                running = ftz(running + s[tid * 256 + bin])
+                s[tid * 256 + bin] = running
+    barrier()
+    i = tid
+    while i < nf * 256:
+        var f = f0 + (i >> 8)
+        var bin = i & 255
+        if bin < Int(feature_folds.unsafe_load(f)):
+            var cell = Int(feature_first_bin.unsafe_load(f)) + bin
+            histogram.unsafe_store(dst_base + cell, s[i])
+        i += Int(block_dim.x)

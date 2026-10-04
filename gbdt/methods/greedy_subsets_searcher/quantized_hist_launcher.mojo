@@ -176,6 +176,7 @@ def launch_quantized_histograms[ridx_stats: Bool = False](
     hist_cells_per_leaf: Int,
     q_skip: MutPointer[UInt32, MutAnyOrigin],
     q_skip_cap: Int,
+    defer_bridge: Bool = False,
 ) raises:
     """The quantized family's whole level: quantize the pairs for the
     partitions being built (DEV 1911), one shared-histogram launch per
@@ -334,6 +335,12 @@ def launch_quantized_histograms[ridx_stats: Bool = False](
                 block_dim=(QH_BLOCK, 1, 1),
             )
         block_first_bin += blk.total_folds
+
+    # The depthwise opt-in fused bridge/scan consumes and clears q_acc
+    # directly. The caller never defers the root (mode selection needs its
+    # raw histogram) or an unquantized build.
+    if defer_bridge:
+        return
 
     # ---- the dequantizing bridge: ONE launch for the whole level's
     # built leaves, every cell stored (the flat slot must equal the

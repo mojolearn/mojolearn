@@ -98,6 +98,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.dw2_level import (
     dw2_part_max_chunks,
     dw2_place_scatter_kernel,
     dw2_scan_histograms_smem_kernel,
+    dw_bridge_scan_kernel,
     dw2_scan_update_kernel,
 )
 from checks.kernel_matrix import TARGET_COLUMN, ridx_only_splits_for
@@ -292,6 +293,17 @@ comptime DW2_SCAN_SMEM = (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_GBDT_DW2_SCAN_SMEM_OFF"]()
 )
+
+#: Opt-in: fuse the quantized bridge with the shared histogram prefix scan
+#: after the root, in Depthwise only. Pending current-main M3 A/B; do not
+#: enable by default without speed plus fitted AUC/logloss approval.
+comptime DW_BRIDGE_SCAN = (
+    DW2_SCAN_SMEM
+    and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GBDT_DW_BRIDGE_SCAN"]()
+)
+
 
 
 def _dw_dev_u32(
@@ -2448,6 +2460,10 @@ def fit_non_symmetric_tree[
             # exactly the layout the scan below expects, so nothing after
             # this branch knows which arm built it.
             # =======================================================================
+            var fused_bridge_scan = (
+                DW_BRIDGE_SCAN and iteration > 1
+                and options.policy == GROW_DEPTHWISE and qh_ok
+            )
             var quantized_built = False
             comptime if QUANTIZED_HIST_LIVE:
                 if qh_ok:
@@ -2458,6 +2474,7 @@ def fit_non_symmetric_tree[
                             cindex, row_index, stats, p_off, p_sz, d_ids,
                             d_qstats, d_qacc, hist, hist_cells_per_leaf,
                             _dw_dev_u32(dws[0].d_qskip, 0), dws[0].n_features_key,
+                            defer_bridge=fused_bridge_scan,
                         )
                     else:
                         launch_quantized_histograms[False](
@@ -2466,6 +2483,7 @@ def fit_non_symmetric_tree[
                             cindex, row_index, stats, p_off, p_sz, d_ids,
                             d_qstats, d_qacc, hist, hist_cells_per_leaf,
                             _dw_dev_u32(dws[0].d_qskip, 0), dws[0].n_features_key,
+                            defer_bridge=fused_bridge_scan,
                         )
                     quantized_built = True
             if not quantized_built:
@@ -2524,40 +2542,58 @@ def fit_non_symmetric_tree[
             # sum is linear, so the derived sibling needs no scan and an
             # all-zero slot scans to itself.
             stage_times.begin(ctx)
-            comptime if DW2_SCAN_SMEM:
-                # lane apple-fast-dwgap2: the same serial fold over a
-                # shared-memory copy of 16 features per block
-                ctx.enqueue_function[dw2_scan_histograms_smem_kernel](
+            if fused_bridge_scan:
+                ctx.enqueue_function[dw_bridge_scan_kernel](
                     d_ids.unsafe_ptr(),
                     flat_first.unsafe_ptr(),
                     flat_folds.unsafe_ptr(),
                     flat_one_hot.unsafe_ptr(),
                     Int32(len(fold_counts)),
                     Int32(hist_cells_per_leaf),
+                    d_qacc.unsafe_ptr(),
+                    fixed_scale,
                     hist.unsafe_ptr(),
                     grid_dim=(
                         (len(fold_counts) + DW2_SCAN_FT - 1) // DW2_SCAN_FT,
-                        len(non_zero),
-                        stat_count,
+                        len(non_zero), stat_count,
                     ),
                     block_dim=(DW2_SCAN_BLOCK, 1, 1),
                 )
             else:
-                ctx.enqueue_function[scan_histograms_kernel](
-                    d_ids.unsafe_ptr(),
-                    flat_first.unsafe_ptr(),
-                    flat_folds.unsafe_ptr(),
-                    flat_one_hot.unsafe_ptr(),
-                    Int32(len(fold_counts)),
-                    Int32(hist_cells_per_leaf),
-                    hist.unsafe_ptr(),
-                    grid_dim=(
-                        (len(fold_counts) + 255) // 256,
-                        len(non_zero),
-                        stat_count,
-                    ),
-                    block_dim=(256, 1, 1),
-                )
+                comptime if DW2_SCAN_SMEM:
+                    # lane apple-fast-dwgap2: the same serial fold over a
+                    # shared-memory copy of 16 features per block
+                    ctx.enqueue_function[dw2_scan_histograms_smem_kernel](
+                        d_ids.unsafe_ptr(),
+                        flat_first.unsafe_ptr(),
+                        flat_folds.unsafe_ptr(),
+                        flat_one_hot.unsafe_ptr(),
+                        Int32(len(fold_counts)),
+                        Int32(hist_cells_per_leaf),
+                        hist.unsafe_ptr(),
+                        grid_dim=(
+                            (len(fold_counts) + DW2_SCAN_FT - 1) // DW2_SCAN_FT,
+                            len(non_zero),
+                            stat_count,
+                        ),
+                        block_dim=(DW2_SCAN_BLOCK, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[scan_histograms_kernel](
+                        d_ids.unsafe_ptr(),
+                        flat_first.unsafe_ptr(),
+                        flat_folds.unsafe_ptr(),
+                        flat_one_hot.unsafe_ptr(),
+                        Int32(len(fold_counts)),
+                        Int32(hist_cells_per_leaf),
+                        hist.unsafe_ptr(),
+                        grid_dim=(
+                            (len(fold_counts) + 255) // 256,
+                            len(non_zero),
+                            stat_count,
+                        ),
+                        block_dim=(256, 1, 1),
+                    )
             mgr.stream_kernel()
             stage_times.end(ctx, "hist.scan")
             trace.record_device(
