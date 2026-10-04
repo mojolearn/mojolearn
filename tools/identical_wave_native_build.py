@@ -15,7 +15,7 @@ import subprocess
 import sys
 import time
 
-DEFAULT='svm,svm_host,estimators,estimators_host,x_decomp,x_decomp_host,x_prep,x_prep_host,x_trees,x_trees_host,x_sequence,x_sequence_host,gp,gp_host'
+DEFAULT='base,base_host,svm,svm_host,estimators,estimators_host,x_decomp,x_decomp_host,x_prep,x_prep_host,x_trees,x_trees_host,x_sequence,x_sequence_host,gp,gp_host'
 
 
 def save(path,value):
@@ -86,11 +86,13 @@ def main():
             log=a.out/('build-'+binding+'.log'); build_env=dict(env)
             if binding.endswith('_host'):
                 build_env.pop('MOJOLEARN_GPU_ARCHS',None); build_env['MOJOLEARN_TARGET_COLUMN']='cpu'
-            row=command(['bash',str(a.semaphore),'bash','bindings/build_'+binding+'.sh'],source,build_env,log,a.timeout)
+            builder={'base':'build.sh','base_host':'build_core_host.sh'}.get(binding,'build_'+binding+'.sh')
+            row=command(['bash',str(a.semaphore),'bash','bindings/'+builder],source,build_env,log,a.timeout)
             row['status']='BUILD_FAILED' if row['rc'] else 'BUILT'
             report['modules'][binding]=row; save(receipt,report)
             if row['rc']: continue
-            filename='_mojolearn_'+binding+'.so'
+            module={'base':'_mojolearn','base_host':'_mojolearn_core_host'}.get(binding,'_mojolearn_'+binding)
+            filename=module+'.so'
             matches=list((source/'python/mojolearn').rglob(filename))
             matches=[m for m in matches if (m.parent.name=='host' if binding.endswith('_host') else (m.parent.name=='identical')==(a.mode=='identical'))]
             if len(matches)!=1:
@@ -110,7 +112,7 @@ expected_vendor=sys.argv[4]
 assert all(v==expected_vendor for v in vendors.values()),(vendors,expected_vendor)
 print(json.dumps({'artifact':path,'numeric_modes':modes,'vendors':vendors,'expected_vendor':expected_vendor}))
 """
-            smoke_result=command([str(a.python),'-c',smoke,str(artifact),'_mojolearn_'+binding,str(expected_mode),'cpu' if binding.endswith('_host') else {'nvidia':'cuda','amd':'hip'}[a.vendor]],source,build_env,a.out/('import-'+binding+'.log'),120)
+            smoke_result=command([str(a.python),'-c',smoke,str(artifact),module,str(expected_mode),'cpu' if binding.endswith('_host') else {'nvidia':'cuda','amd':'hip'}[a.vendor]],source,build_env,a.out/('import-'+binding+'.log'),120)
             row.update(status='PASS' if smoke_result['rc']==0 else 'IMPORT_FAILED',import_smoke=smoke_result,
                        artifact=str(artifact),sha256=hashlib.sha256(artifact.read_bytes()).hexdigest())
             save(receipt,report)
