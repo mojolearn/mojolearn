@@ -477,6 +477,27 @@ class _Kit:
             self._w4_flags = f
         return f
 
+    def qfix_flags(self):
+        """lane/apple-fast-q-linalg: the binding's FAST quality repairs
+        (`x_decomp_qfix_flags`, x_decomp/qfix.mojo: bit 1 SVD_QFIX, bit 2
+        TSVD_QFIX, bit 4 LU_QFIX; each off with its -D MOJOLEARN_*_QOLD; 0 on
+        an IDENTICAL or host binding, which keep the old routes)."""
+        f = self.__dict__.get("_qfix_flags")
+        if f is None:
+            try:
+                f = int(getattr(self._raw(), "x_decomp_qfix_flags")())
+            except Exception:
+                f = 0
+            self._qfix_flags = f
+        return f
+
+    def lu_resid(self, A, X, B):
+        """B - A X (n x nrhs), the sum folded in float-float on the device
+        (x_decomp/qfix.mojo `lu_resid_ff_kernel`) and rounded once."""
+        R = _M.zeros(B.r, B.c)
+        self.b.x_decomp_lu_resid(A.addr, X.addr, B.addr, R.addr, [A.r, B.c])
+        return R
+
     def lu_dev_aux(self, A, clamp=False):
         """lane/apple-fast-w4-decomp LLE_FAST_DEV_LU: `lu` then `lu_aux` on
         the device (x_decomp/w4_fast.mojo `dev_lu_aux_py`, the same launches
@@ -2581,7 +2602,27 @@ def lu_factor(a, *, numeric_mode=None):
     if info:
         import warnings
         warnings.warn(f"Diagonal number {info} is exactly zero. Singular matrix.", RuntimeWarning, stacklevel=2)
-    return lu.out(), frombytes(piv.tobytes(), "<i4", (A.r,))
+    pair = (lu.out(), frombytes(piv.tobytes(), "<i4", (A.r,)))
+    if not info and k.qfix_flags() & 4:
+        # LU_QFIX (FAST default; -D MOJOLEARN_LU_QOLD off): the pair carries
+        # this call's own copy of A so `lu_solve` can refine (see _LUPair)
+        return _LUPair(pair, A)
+    return pair
+
+
+class _LUPair(tuple):
+    """`lu_factor`'s (lu, piv), unpacked and indexed as the plain tuple
+    scipy returns, plus `_qfix_a`: the float32 copy of A the factor came
+    from (lane/apple-fast-q-linalg LU_QFIX). `lu_solve` uses it for one
+    step of iterative refinement, x += LU^-1 (B - A x), the residual in
+    float-float on the device. #: audit 2026-10-04: lu-solve / lu-factor
+    synthetic relative_residual 3.26e-06 vs numpy 3.26e-08, torch-gpu
+    8.23e-07; -D MOJOLEARN_LU_QOLD restores the unrefined solve."""
+
+    def __new__(cls, pair, a_m):
+        obj = super().__new__(cls, pair)
+        obj._qfix_a = a_m
+        return obj
 
 
 def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
@@ -2605,6 +2646,10 @@ def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
     if B.r != n:
         raise ValueError(f"b has {B.r} rows, the factorization has {n}")
     X = k.lu_solve(L, pv, B, trans=1 if trans else 0)
+    A0 = getattr(lu_and_piv, "_qfix_a", None)
+    if A0 is not None and not trans and A0.r == n and A0.c == n and k.qfix_flags() & 4:
+        # LU_QFIX: one refinement step (lane/apple-fast-q-linalg; see _LUPair)
+        X = k.ew("add", X, k.lu_solve(L, pv, k.lu_resid(A0, X, B)))
     return X.out((n,)) if vec else X.out()
 
 
