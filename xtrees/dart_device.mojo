@@ -53,8 +53,9 @@ from core.neural_context import process_ctx
 from xtrees.ops import stream_base, draw
 from xtrees.dart_units import (
     IDN_DART_DEVICE, DART_CHUNK, F32P, I32P, I64P, U16P, dart_init_unit, dart_drop_unit, dart_row_unit, dart_apply_unit,
-    dart_leaf_sum_unit, dart_leaf_sum_rows_unit, dart_newton_unit, dart_add_unit,
+    dart_leaf_sum_unit, dart_leaf_sum_rows_unit, dart_newton_unit, dart_add_unit, U64P, dart_predict_unit,
 )
+from std.memory import bitcast
 
 # fam2-forests (2026-10-04), IDENTICAL, every vendor, default ON: the round
 # below is DART's IDENTICAL route too (`IDN_DART_DEVICE`). Before, an
@@ -213,6 +214,21 @@ def dart_add_kernel(
     var stride = _tstride()
     while e < Int(units):
         dart_add_unit(e, Int(class_off), Int(row_off), Int(voff), factor, shrink, nodes, values, dsum, score)
+        e += stride
+
+
+def dart_predict_kernel(
+    units: Int64, n: Int64, d: Int32, k: Int32, nt: Int32, toff: I32P, colid: I32P, quesval: F32P, left: I32P,
+    values: F32P, coef: U64P, inits: U64P, x: F32P, out: U64P, bad: I32P,
+):
+    """out[c * n + i] = DART's float64 raw score of row i for class c
+    (`dart_predict_unit`): one unit per (class, row), its trees ascending."""
+    var e = _tid()
+    var stride = _tstride()
+    while e < Int(units):
+        dart_predict_unit(
+            e, Int(n), Int(d), Int(k), Int(nt), toff, colid, quesval, left, values, coef, inits, x, out, bad,
+        )
         e += stride
 
 
@@ -514,3 +530,95 @@ def dart_close(id: Int, bad_out: Int) raises:
         _ = gone^
     else:
         raise Error("x_trees dart_close: built without DART_DEVICE (MOJOLEARN_DART_DEVICE_OFF / MOJOLEARN_IDN_DART_DEVICE_OFF)")
+
+
+@always_inline
+def _u64(b: DeviceBuffer[DType.uint64]) -> U64P:
+    return b.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
+
+
+def dart_predict(
+    x_addr: Int, colids: List[Int], quesvals: List[Int], lefts: List[Int], leaf_values: List[Int], sizes: List[Int],
+    coefs: List[Float64], inits: List[Float64], out_addr: Int, n: Int, d: Int, k: Int,
+) raises:
+    """DART's predict on the device (lane cpu2-l5-trees, `x_trees_dart_predict`;
+    every GPU build, every mode). Replaces `_DARTBase._raw`'s per-tree
+    `x_trees_apply` + host `x_trees_tree_score_add` loop.
+
+    X is float32 n x d row-major; tree j (of T = len(sizes), class j % k)
+    is the sizes[j] nodes at colids[j] / quesvals[j] / lefts[j] (int32 /
+    float32 / int32, tree-relative children and X's columns) with float32
+    leaf values at leaf_values[j] and the float64 coefficient coefs[j];
+    inits holds the k float64 class starts. Writes the k x n class-major
+    float64 raw score to out_addr (`dart_predict_unit`: trees ascending per
+    row, soft binary64, the words of main's host adds under IDENTICAL).
+    The forest crosses once: the per-tree arrays are copied into one device
+    forest (T copies per array, no host pass over them), the T + 1 node
+    offsets and the coefficient words are model metadata. Raises when a
+    walk leaves its tree."""
+    var nt = len(sizes)
+    if n <= 0:
+        return
+    if (
+        d <= 0 or k <= 0 or nt < 1 or len(colids) != nt or len(quesvals) != nt or len(lefts) != nt
+        or len(leaf_values) != nt or len(coefs) != nt or len(inits) != k
+    ):
+        raise Error("x_trees dart_predict: needs features, classes, trees and one address per tree and class")
+    # glue: the T + 1 node offsets and the T + k float64 words (model metadata, T-sized)
+    var toff = List[Int32](length=nt + 1, fill=0)
+    var total = 0
+    for j in range(nt):
+        if sizes[j] < 1:
+            raise Error("x_trees dart_predict: empty tree")
+        total += sizes[j]
+        if total >= (1 << 31):
+            raise Error("x_trees dart_predict: more than 2^31 forest nodes")
+        toff[j + 1] = Int32(total)
+    var cw = List[UInt64](length=nt, fill=0)
+    for j in range(nt):  # glue: T coefficient words
+        cw[j] = bitcast[DType.uint64](coefs[j])
+    var iw = List[UInt64](length=k, fill=0)
+    for c in range(k):  # glue: k class-start words
+        iw[c] = bitcast[DType.uint64](inits[c])
+    var ctx = process_ctx[_DART_CTX]()
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=F32P(unsafe_from_address=x_addr))
+    var toff_d = ctx.enqueue_create_buffer[DType.int32](nt + 1)
+    ctx.enqueue_copy(dst_buf=toff_d, src_ptr=toff.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]())
+    var coef_d = ctx.enqueue_create_buffer[DType.uint64](nt)
+    ctx.enqueue_copy(dst_buf=coef_d, src_ptr=cw.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]())
+    var inits_d = ctx.enqueue_create_buffer[DType.uint64](k)
+    ctx.enqueue_copy(dst_buf=inits_d, src_ptr=iw.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]())
+    var colid = ctx.enqueue_create_buffer[DType.int32](total)
+    var quesval = ctx.enqueue_create_buffer[DType.float32](total)
+    var left = ctx.enqueue_create_buffer[DType.int32](total)
+    var values = ctx.enqueue_create_buffer[DType.float32](total)
+    for j in range(nt):  # glue: one copy per tree and array (the model upload)
+        var lo = Int(toff[j])
+        var cnt = sizes[j]
+        var csub = colid.create_sub_buffer[DType.int32](lo, cnt)
+        ctx.enqueue_copy(dst_buf=csub, src_ptr=I32P(unsafe_from_address=colids[j]))
+        var qsub = quesval.create_sub_buffer[DType.float32](lo, cnt)
+        ctx.enqueue_copy(dst_buf=qsub, src_ptr=F32P(unsafe_from_address=quesvals[j]))
+        var lsub = left.create_sub_buffer[DType.int32](lo, cnt)
+        ctx.enqueue_copy(dst_buf=lsub, src_ptr=I32P(unsafe_from_address=lefts[j]))
+        var vsub = values.create_sub_buffer[DType.float32](lo, cnt)
+        ctx.enqueue_copy(dst_buf=vsub, src_ptr=F32P(unsafe_from_address=leaf_values[j]))
+    var out = ctx.enqueue_create_buffer[DType.uint64](k * n)
+    var bad = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_fill[DType.int32](ctx, bad, Int32(0))
+    ctx.enqueue_function[dart_predict_kernel](
+        Int64(k * n), Int64(n), Int32(d), Int32(k), Int32(nt), _i(toff_d), _i(colid), _f(quesval), _i(left),
+        _f(values), _u64(coef_d), _u64(inits_d), _f(x), _u64(out), _i(bad),
+        grid_dim=(_blocks(k * n), 1, 1), block_dim=(TPB, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=out_addr), src_buf=out)
+    var bad_h = List[Int32](length=1, fill=0)
+    ctx.enqueue_copy(dst_ptr=bad_h.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), src_buf=bad)
+    ctx.synchronize()
+    # the staged host lists live until the copies above landed
+    _ = toff^
+    _ = cw^
+    _ = iw^
+    if bad_h[0] != Int32(0):
+        raise Error("x_trees dart_predict: a tree walk left its tree (child or column out of range)")

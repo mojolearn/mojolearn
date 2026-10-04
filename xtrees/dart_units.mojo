@@ -29,6 +29,7 @@ from std.sys.compile import is_defined
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul, identical_div, identical_exp, identical_sigmoid,
 )
+from checks.soft_f64 import sf64_add, sf64_mul, sf64_from_f32
 from xtrees.ops import draw
 
 comptime DART_PIN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -49,6 +50,7 @@ comptime F32P = MutPointer[Float32, MutAnyOrigin]
 comptime I32P = MutPointer[Int32, MutAnyOrigin]
 comptime I64P = MutPointer[Int64, MutAnyOrigin]
 comptime U16P = MutPointer[UInt16, MutAnyOrigin]
+comptime U64P = MutPointer[UInt64, MutAnyOrigin]
 
 
 # ------------------------------------------------------------ pinned helpers
@@ -301,3 +303,58 @@ def dart_add_unit(
     and the new tree at its shrinkage, in that order."""
     var ci = class_off + e
     score[ci] = _mul_add(shrink, values[voff + Int(nodes[row_off + e])], _mul_add(factor, dsum[ci], score[ci]))
+
+
+@always_inline
+def dart_predict_unit(
+    e: Int, nn: Int, dd: Int, kk: Int, nt: Int, toff: I32P, colid: I32P, quesval: F32P, left: I32P, values: F32P,
+    coef: U64P, inits: U64P, x: F32P, out: U64P, bad: I32P,
+):
+    """DART's raw score of row i for class c (lane cpu2-l5-trees,
+    `x_trees_dart_predict`; e = c * nn + i, the class-major layout of
+    `_DARTBase._raw`): out[e] = inits[c] + sum over the trees j = c, c + kk,
+    c + 2 kk, ... (ascending) of coef[j] x values[leaf of row i in tree j].
+
+    The forest is concatenated: tree j's nodes are toff[j] .. toff[j + 1] of
+    colid / quesval / left / values (left and colid tree-relative, the walk
+    of `apply_trees`: `x <= quesval` goes to the left child l, else l + 1,
+    a leaf where left is -1). A walk that leaves its tree sets bad[0] and
+    the tree adds nothing; the caller raises.
+
+    BITS. float64 words (UInt64), every operation `checks/soft_f64.mojo`'s
+    correctly rounded binary64: the product sf64_mul(coef, widen(value)),
+    then one sf64_add onto the running score, per tree in ascending order.
+    That is main's per-tree `tree_score_add` (`acc + identical_mul64(w,
+    Float64(v))`, an unfused product and an IEEE add) word for word under
+    IDENTICAL, on every vendor (Apple has no float64) and on the host twin.
+    FAST spells the same operations (main's FAST host add could fuse the
+    product into the add: at most the last bit of a raw score differs)."""
+    var c = e // nn
+    var i = e - c * nn
+    var acc = inits[c]
+    var j = c
+    while j < nt:
+        var lo = Int(toff[j])
+        var cnt = Int(toff[j + 1]) - lo
+        var node = 0
+        var steps = 0
+        var ok = cnt >= 1
+        while ok:
+            var l = Int(left[lo + node])
+            if l == -1:
+                break
+            var cc = Int(colid[lo + node])
+            if cc < 0 or cc >= dd or l < 1 or l + 1 >= cnt or steps > cnt:
+                ok = False
+                break
+            if x[i * dd + cc] <= quesval[lo + node]:
+                node = l
+            else:
+                node = l + 1
+            steps += 1
+        if ok:
+            acc = sf64_add(acc, sf64_mul(coef[j], sf64_from_f32(values[lo + node])))
+        else:
+            bad[0] = Int32(1)
+        j += kk
+    out[e] = acc

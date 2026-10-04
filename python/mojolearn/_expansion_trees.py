@@ -1747,11 +1747,30 @@ class _DARTBase(_TreesEnsembleBase):
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         if Xa.shape[1] != self.n_features_in_:
             raise ValueError(f"X has {Xa.shape[1]} features, fit saw {self.n_features_in_}")
-        n, K = Xa.shape[0], int(getattr(self, "n_classes_", 1))
+        n, d = Xa.shape
+        K = int(getattr(self, "n_classes_", 1))
         inits = [self.init_score_] if K == 1 else list(self.init_score_)
-        score = self._class_major(inits, n)
-        for j, (tree, values, coef) in enumerate(zip(self.trees_, self.tree_values_, self.tree_coefs_)):
-            self._add(score, self._tree_nodes(tree, Xa), values, coef, j % K)
+        score = empty((K * n,), "<f8")
+        if n == 0:
+            return score
+        # lane cpu2-l5-trees: ONE native entry (`x_trees_dart_predict`, a device
+        # kernel on a GPU build, its host twin on the host column) walks every
+        # row through every tree and folds coef x leaf value onto the class
+        # start, trees ascending per (class, row), in soft binary64: the words
+        # main's per-tree `x_trees_apply` + host `x_trees_tree_score_add` loop
+        # wrote under IDENTICAL. Below is glue: one address per tree and array.
+        cols, ques, lefts, vals, sizes, coefs = [], [], [], [], [], []
+        for tree, values, coef in zip(self.trees_, self.tree_values_, self.tree_coefs_):  # glue: T tree addresses
+            offs = tree._offsets.tolist()
+            lo = int(offs[0])
+            cols.append(addr_ro(tree._colid, name="colid") + 4 * lo)
+            ques.append(addr_ro(tree._quesval, name="quesval") + 4 * lo)
+            lefts.append(addr_ro(tree._left_child, name="left") + 4 * lo)
+            vals.append(addr_ro(values, name="values"))
+            sizes.append(int(offs[1]) - lo)
+            coefs.append(float(coef))
+        self._bind().x_trees_dart_predict(addr_ro(Xa, name="X"), [cols, ques, lefts, vals], sizes, coefs,
+                                          [float(v) for v in inits], addr(score, name="score"), [n, d, K])
         return score
 
     def _raw_rows(self, X):
