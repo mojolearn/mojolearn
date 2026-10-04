@@ -731,6 +731,7 @@ def gpu_binding():
             + "from x_neighbors.iter_device import lp_fast_resident_binding\n"
             + "from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES, ocsvm_resident_binding\n"
             + "from x_neighbors.sort_items import purity_flags_binding\n"
+            + "from x_neighbors.kfeat_dev import XN_KFEAT_ANY, kfeat_flags_binding, kfeat_first_negative_binding, kfeat_schi2_fit_binding\n"
             + wrappers() + """
 
 def x_neighbors_vendor_binding() raises -> PythonObject:
@@ -750,6 +751,12 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
         # (x_neighbors/ocsvm_dev.mojo OCSVM_CLS2_RES; FAST + Apple default)
         comptime if OCSVM_CLS2_RES:
             m.def_function[ocsvm_resident_binding]("x_neighbors_ocsvm_resident")
+        # lane apple-fast-w2-kfeat: the chi2 samplers' fit entries
+        # (x_neighbors/kfeat_dev.mojo; FAST + Apple, opt-in defines)
+        comptime if XN_KFEAT_ANY:
+            m.def_function[kfeat_flags_binding]("x_neighbors_kfeat_flags")
+            m.def_function[kfeat_first_negative_binding]("x_neighbors_kfeat_first_negative")
+            m.def_function[kfeat_schi2_fit_binding]("x_neighbors_kfeat_schi2_fit")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors: ", e))
