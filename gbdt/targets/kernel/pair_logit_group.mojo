@@ -106,8 +106,8 @@ comptime PAIRLOGIT_EST_REUSE = pairlogit_est_reuse_for[TARGET_COLUMN]()
 
 
 def pl_pairs_once_for[column: Int]() -> Bool:
-    """Lane af-sym-multi (2026-10-03), `-D MOJOLEARN_PL_PAIRS_ONCE` (or
-    `-D MOJOLEARN_SYM_MULTI_ALL`), FAST + Apple, on top of the group kernel:
+    """Lane af-sym-multi (2026-10-03), `-D MOJOLEARN_PL_PAIRS_ONCE` (not in
+    `SYM_MULTI_ALL`: a recorded DROP), FAST + Apple, on top of the group kernel:
     a group that fits one block evaluates every unordered pair ONCE. The
     group kernel's thread `i` loops over every `j` of the group, so each
     pair's exp, divide, clamp (and the winner's log) run twice, once from
@@ -124,7 +124,6 @@ def pl_pairs_once_for[column: Int]() -> Bool:
     the chunked loop."""
     comptime if (
         is_defined["MOJOLEARN_PL_PAIRS_ONCE"]()
-        or is_defined["MOJOLEARN_SYM_MULTI_ALL"]()
     ):
         return pairlogit_group_fused_for[column]()
     return False
@@ -150,8 +149,10 @@ def pl_group_narrow_for[column: Int]() -> Bool:
 
 
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-multi@d2c832da0; the laptop built the .so (Metal side
-#: unchecked), never timed. `-D MOJOLEARN_PL_PAIRS_ONCE` (or SYM_MULTI_ALL).
+#: lane/apple-fast-sym-multi@d2c832da0. `-D MOJOLEARN_PL_PAIRS_ONCE`.
+#: apple-fast LEDGER 2026-10-03: DROP symmulti pl-once and
+#: pl-both (within +-2.4%, identical quality), old base; recorded loser,
+#: OUT of SYM_MULTI_ALL, not in the A/B table.
 comptime PL_PAIRS_ONCE = pl_pairs_once_for[TARGET_COLUMN]()
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-multi@d2c832da0; the laptop built the .so (Metal side

@@ -754,16 +754,16 @@ def launch_multilogit_second_der_all_rows(
 # in one `compute_partition_stats`, copies once, waits once, and serves the
 # Hessian from that readback (`pointwise_oracle.mojo`).
 #
-# `-D MOJOLEARN_SYM_MULTI_ALL` turns on every sym-multi define at once.
+# `-D MOJOLEARN_SYM_MULTI_ALL` no longer reaches these two (recorded
+# DROPs, LEDGER 2026-10-03); it turns on PL_GROUP_NARROW + YR_TASK_FUSED.
 # =========================================================================
 
 
 def mc_class_batch_deriv_for[column: Int]() -> Bool:
-    """FAST + Apple + `MOJOLEARN_MC_CLASS_BATCH_DERIV` (or
-    `MOJOLEARN_SYM_MULTI_ALL`); False everywhere else."""
+    """FAST + Apple + `MOJOLEARN_MC_CLASS_BATCH_DERIV`; False everywhere
+    else (not in `SYM_MULTI_ALL`: a recorded DROP)."""
     comptime if (
         is_defined["MOJOLEARN_MC_CLASS_BATCH_DERIV"]()
-        or is_defined["MOJOLEARN_SYM_MULTI_ALL"]()
     ):
         comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
             return True
@@ -771,11 +771,10 @@ def mc_class_batch_deriv_for[column: Int]() -> Bool:
 
 
 def mc_class_batch_est_for[column: Int]() -> Bool:
-    """FAST + Apple + `MOJOLEARN_MC_CLASS_BATCH_EST` (or
-    `MOJOLEARN_SYM_MULTI_ALL`); False everywhere else."""
+    """FAST + Apple + `MOJOLEARN_MC_CLASS_BATCH_EST`; False everywhere
+    else (not in `SYM_MULTI_ALL`: a recorded DROP)."""
     comptime if (
         is_defined["MOJOLEARN_MC_CLASS_BATCH_EST"]()
-        or is_defined["MOJOLEARN_SYM_MULTI_ALL"]()
     ):
         comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
             return True
@@ -784,13 +783,16 @@ def mc_class_batch_est_for[column: Int]() -> Bool:
 
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-multi@d2c832da0; the laptop built the .so (Metal side
-#: unchecked), never timed. `-D MOJOLEARN_MC_CLASS_BATCH_DERIV` (or
-#: SYM_MULTI_ALL).
+#: unchecked). `-D MOJOLEARN_MC_CLASS_BATCH_DERIV`.
+#: apple-fast LEDGER 2026-10-03: DROP symmulti mc-deriv
+#: (within +-2.4%, identical quality), old base; recorded loser, OUT of
+#: SYM_MULTI_ALL, not in the A/B table.
 comptime MC_CLASS_BATCH_DERIV = mc_class_batch_deriv_for[TARGET_COLUMN]()
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
-#: lane/apple-fast-sym-multi@d2c832da0; the laptop built the .so (Metal side
-#: unchecked), never timed. `-D MOJOLEARN_MC_CLASS_BATCH_EST` (or
-#: SYM_MULTI_ALL).
+#: lane/apple-fast-sym-multi@d2c832da0. `-D MOJOLEARN_MC_CLASS_BATCH_EST`.
+#: apple-fast LEDGER 2026-10-03: DROP symmulti mc-est
+#: (within +-2.4%, identical quality) and symmulti-all-mc istella (-1.2%),
+#: old base; recorded loser, OUT of SYM_MULTI_ALL, not in the A/B table.
 comptime MC_CLASS_BATCH_EST = mc_class_batch_est_for[TARGET_COLUMN]()
 #: the widest class count the register kernels hold (K-1 approxes and exps
 #: per thread, the Hessian triangle unrolled: 36 stores at 8); wider fits

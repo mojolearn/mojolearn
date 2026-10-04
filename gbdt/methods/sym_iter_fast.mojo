@@ -8,7 +8,7 @@ main makes eight host waits and ~25 Metal allocations per tree before any
 histogram work.
 
 The defines (each default OFF, each its own A/B; `MOJOLEARN_SYM_ITER_ALL`
-turns every one on):
+turns on SYM_BUF_ARENA only; the other three are recorded DROPs):
 
 - `MOJOLEARN_SYM_BUF_ARENA` (`SYM_BUF_ARENA`): a per-fit pool of one
   (`SymIterPool`) for every buffer the loop made per tree -- the two split
@@ -107,7 +107,10 @@ comptime SYM_ITER_FAST_APPLE = (
 )
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-iter@4956a2234; SYM_ITER_ALL compiled rc=0 on the
-#: laptop 2026-10-03, singles never built, never timed. Umbrella: all four.
+#: laptop 2026-10-03, singles never built, never timed.
+#: apple-fast LEDGER 2026-10-03: DROP sym-iter-all istella (0.0%, auc
+#: .980163 -> .980122). The umbrella now holds only SYM_BUF_ARENA, the one
+#: switch with no verdict.
 comptime SYM_ITER_ALL = (
     SYM_ITER_FAST_APPLE and is_defined["MOJOLEARN_SYM_ITER_ALL"]()
 )
@@ -122,12 +125,16 @@ comptime SYM_BUF_ARENA = SYM_ITER_FAST_APPLE and (
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-iter@4956a2234; SYM_ITER_ALL compiled rc=0 on the
 #: laptop 2026-10-03, singles never built, never timed.
+#: apple-fast LEDGER 2026-10-03: DROP sym-iter leaf-1000 (-0.2%, noise), old base;
+#: recorded loser, OUT of SYM_ITER_ALL, not in the A/B table.
 comptime SYM_LEAF_FROM_STATS = SYM_ITER_FAST_APPLE and (
-    is_defined["MOJOLEARN_SYM_LEAF_FROM_STATS"]() or SYM_ITER_ALL
+    is_defined["MOJOLEARN_SYM_LEAF_FROM_STATS"]()
 )
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-iter@4956a2234; SYM_ITER_ALL compiled rc=0 on the
 #: laptop 2026-10-03, singles never built, never timed.
+#: apple-fast LEDGER 2026-10-03: DROP sym-iter reuse-1000 (+0.3%, noise), old base;
+#: recorded loser, OUT of SYM_ITER_ALL, not in the A/B table.
 comptime SYM_REUSE_PARTITION = SYM_ITER_FAST_APPLE and (
     is_defined["MOJOLEARN_SYM_REUSE_PARTITION"]() or SYM_LEAF_FROM_STATS
 )
@@ -136,8 +143,10 @@ comptime SYM_REUSE_PARTITION = SYM_ITER_FAST_APPLE and (
 #: laptop 2026-10-03, singles never built, never timed. Port: compiled with
 #: EST_SHRINK_FUSED, this prefetch wins on its trees (the estimation hook
 #: stands down).
+#: apple-fast LEDGER 2026-10-03: DROP sym-iter-fused (-0.1%), old base;
+#: recorded loser, OUT of SYM_ITER_ALL, not in the A/B table.
 comptime SYM_DERIV_FUSED = SYM_ITER_FAST_APPLE and (
-    is_defined["MOJOLEARN_SYM_DERIV_FUSED"]() or SYM_ITER_ALL
+    is_defined["MOJOLEARN_SYM_DERIV_FUSED"]()
 )
 comptime SYM_ITER_ANY = (
     SYM_BUF_ARENA or SYM_REUSE_PARTITION or SYM_DERIV_FUSED

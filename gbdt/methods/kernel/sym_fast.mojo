@@ -5,7 +5,8 @@ Every switch is `GLOBAL_NUMERIC_MODE == NUMERIC_FAST and
 has_apple_gpu_accelerator()` AND its own `-D MOJOLEARN_SYM_<NAME>` define,
 so IDENTICAL (and FAST on any other vendor, and FAST on Apple without the
 define) compiles main's code unchanged. `-D MOJOLEARN_SYM_HIST_ALL` turns
-every switch on at once. Profile and mechanisms:
+on SORT_SWAP + RESOLVE_BLOCK (the other four are recorded DROPs; see
+each switch). Profile and mechanisms:
 docs/apple-fast/notes/sym-hist.md, docs/apple-fast/ab/sym-hist.md.
 """
 
@@ -23,7 +24,11 @@ comptime SYM_FAST_APPLE = (
 #: all six switches at once
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
-#: arms never reached the queue). Umbrella: all six.
+#: arms never reached the queue).
+#: apple-fast LEDGER 2026-10-03: symhist-all noise DROP (all six, old
+#: base). The umbrella now holds only SORT_SWAP + RESOLVE_BLOCK, the two
+#: switches with no named verdict (the batch's 'DROPPED: symhist x2' names
+#: no tags).
 comptime SYM_HIST_ALL = SYM_FAST_APPLE and is_defined["MOJOLEARN_SYM_HIST_ALL"]()
 
 #: the one-bit radix pass of the level split writes into `tmp_bins` /
@@ -54,8 +59,10 @@ comptime SYM_RESOLVE_BLOCK = SYM_FAST_APPLE and (
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
 #: arms never reached the queue).
+#: apple-fast LEDGER 2026-10-03 batchv: DROP symhist gather (noise), old base;
+#: recorded loser, OUT of SYM_HIST_ALL, not in the A/B table.
 comptime SYM_GATHER_FUSED = SYM_FAST_APPLE and (
-    SYM_HIST_ALL or is_defined["MOJOLEARN_SYM_GATHER_FUSED"]()
+    is_defined["MOJOLEARN_SYM_GATHER_FUSED"]()
 )
 
 #: the per-partition weight / target sums run on a (partitions x chunks)
@@ -67,8 +74,10 @@ comptime SYM_GATHER_FUSED = SYM_FAST_APPLE and (
 #: arms never reached the queue). KNOWN: the per-block float atomic add
 #: makes the partition sums' fold order run-dependent (FAST only; check auc
 #: and run-to-run on the A/B).
+#: apple-fast LEDGER 2026-10-03 batchv: DROP symhist part-stats (noise), old base;
+#: recorded loser, OUT of SYM_HIST_ALL, not in the A/B table.
 comptime SYM_PART_STATS_PAR = SYM_FAST_APPLE and (
-    SYM_HIST_ALL or is_defined["MOJOLEARN_SYM_PART_STATS_PAR"]()
+    is_defined["MOJOLEARN_SYM_PART_STATS_PAR"]()
 )
 
 #: on a partial pass the fold scan and the sibling subtraction are one
@@ -78,8 +87,10 @@ comptime SYM_PART_STATS_PAR = SYM_FAST_APPLE and (
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
 #: arms never reached the queue).
+#: apple-fast LEDGER 2026-10-03 batchv: DROP symhist scan-sub (noise), old base;
+#: recorded loser, OUT of SYM_HIST_ALL, not in the A/B table.
 comptime SYM_SCAN_SUB_FUSED = SYM_FAST_APPLE and (
-    SYM_HIST_ALL or is_defined["MOJOLEARN_SYM_SCAN_SUB_FUSED"]()
+    is_defined["MOJOLEARN_SYM_SCAN_SUB_FUSED"]()
 )
 
 #: the pointwise histogram launchers ask CatBoost's document multiplier for
@@ -89,8 +100,10 @@ comptime SYM_SCAN_SUB_FUSED = SYM_FAST_APPLE and (
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-hist@3bb4db314; never built or timed (its prebuilt M3
 #: arms never reached the queue).
+#: apple-fast LEDGER 2026-10-03: symhist hist-mult noise DROP, old base;
+#: recorded loser, OUT of SYM_HIST_ALL, not in the A/B table.
 comptime SYM_HIST_MULT = SYM_FAST_APPLE and (
-    SYM_HIST_ALL or is_defined["MOJOLEARN_SYM_HIST_MULT"]()
+    is_defined["MOJOLEARN_SYM_HIST_MULT"]()
 )
 comptime SYM_HIST_MULT_FACTOR = 2
 

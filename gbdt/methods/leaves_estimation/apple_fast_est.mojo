@@ -34,7 +34,8 @@ family and the ranking targets keep main's path.
                               full-row kernel writes the new cursor, the two
                               search planes and the value partials the loop
                               head would otherwise recompute.
-  MOJOLEARN_SYM_EST_ALL       all four.
+  MOJOLEARN_SYM_EST_ALL       EST_STATS_FUSED + EST_ITERS_DEVICE (REUSE_PART
+                              and SHRINK_FUSED are recorded DROPs).
 
 Apple has no f64 on the device, so the device walker computes in f32 what
 the host walker computed in f64 (the Hessian plus lambda, the direction
@@ -110,7 +111,11 @@ comptime _APPLE_FAST = (
 )
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed
-#: unstarted), never timed. `-D MOJOLEARN_SYM_EST_ALL` umbrella: all four.
+#: unstarted), never timed.
+#: apple-fast LEDGER 2026-10-03: DROP sym-est-all (-3.5%, auc .980177 ->
+#: .980164; it carried EST_REUSE_PART's bug), 2026-10-04 DROP
+#: sym-est-all-ord taxi (+0.7%). The umbrella now holds EST_STATS_FUSED +
+#: EST_ITERS_DEVICE, the two switches with no verdict.
 comptime EST_ALL = _APPLE_FAST and is_defined["MOJOLEARN_SYM_EST_ALL"]()
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed
@@ -127,16 +132,22 @@ comptime EST_ITERS_DEVICE = _APPLE_FAST and (
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed
 #: unstarted), never timed.
+#: apple-fast LEDGER 2026-10-03: DROP sym-est-rp, BUG: auc .980 -> .930,
+#: logloss .186 -> 2.15 (wrong leaves; cause not found, not fixed here);
+#: recorded loser, OUT of SYM_EST_ALL, not in the A/B table.
 comptime EST_REUSE_PART = _APPLE_FAST and (
-    is_defined["MOJOLEARN_EST_REUSE_PART"]() or EST_ALL
+    is_defined["MOJOLEARN_EST_REUSE_PART"]()
 )
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed
 #: unstarted), never timed. Port: stands down on a tree where
 #: SYM_DERIV_FUSED already enqueues the next gradient pass
 #: (doc_parallel_boosting `not sym_fuse`).
+#: apple-fast LEDGER 2026-10-04: sym-est-sh-1k istella -2.8% (old base, auc
+#: up), judged inconclusive and not worth a main verify;
+#: recorded loser, OUT of SYM_EST_ALL, not in the A/B table.
 comptime EST_SHRINK_FUSED = _APPLE_FAST and (
-    is_defined["MOJOLEARN_EST_SHRINK_FUSED"]() or EST_ALL
+    is_defined["MOJOLEARN_EST_SHRINK_FUSED"]()
 )
 comptime EST_APPLE_ANY = (
     EST_STATS_FUSED or EST_ITERS_DEVICE or EST_REUSE_PART or EST_SHRINK_FUSED
