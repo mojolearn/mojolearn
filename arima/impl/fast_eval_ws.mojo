@@ -50,7 +50,7 @@ from arima.impl.lbfgs_device import (
 )
 from arima.impl.timeSeries.arima_helpers import batched_jones_transform
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, unpack, validate_order
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul_add
 
 comptime EW_TPB = 128
 # FAST + Apple default after M3 gap26-arima-tail-{synthetic,taxi-hourly}:
@@ -162,6 +162,42 @@ def ew_grad_kernel(
     d_grad.unsafe_store(N * b + i, ftz(diff / h))
 
 
+def ew_obs_intercept_kernel(
+    d_exog: MutPointer[Float32, MutAnyOrigin],
+    d_beta: MutPointer[Float32, MutAnyOrigin],
+    d_obs: MutPointer[Float32, MutAnyOrigin],
+    nb_in: Int32,
+    eb_in: Int32,
+    n_in: Int32,
+    n_exog_in: Int32,
+):
+    """lane/fam2-timeseries: the stacked evaluation's observation intercept,
+    one thread per (member, step) cell. Member `bid` of the `eb` stacked
+    members is series `bid % nb`, whose regressors it reads (the series'
+    exog is NOT replicated); its beta is its own (perturbed) one.
+    `obs_intercept_kernel`'s statement (`batched_kalman.mojo`): the ascending
+    fma from 0 over the regressors, so each cell's bits are the sequential
+    pass's."""
+    var t_all = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var n = Int(n_in)
+    var eb = Int(eb_in)
+    if t_all >= eb * n:
+        return
+    var nb = Int(nb_in)
+    var n_exog = Int(n_exog_in)
+    var bid = t_all // n
+    var t = t_all - bid * n
+    var b = bid % nb
+    var xb = b * n_exog * n
+    var bb = bid * n_exog
+    var acc = Float32(0.0)
+    for i in range(n_exog):
+        var xv = ftz(d_exog.unsafe_load(xb + i * n + t))
+        var bv = ftz(d_beta.unsafe_load(bb + i))
+        acc = ftz(identical_mul_add(xv, bv, acc))
+    d_obs.unsafe_store(bid * n + t, acc)
+
+
 struct FastEvalWS(Movable):
     """Every buffer of one stacked evaluation, sized for `nb` series. The
     optimizer holds one in an `Optional` that is `None` when the switch is
@@ -172,6 +208,13 @@ struct FastEvalWS(Movable):
     var n_obs: Int
     var N: Int
     var eb: Int
+    var n_exog: Int
+    """0, or the regressors per series once `attach_exog` ran
+    (lane/fam2-timeseries, ARIMA_EVAL_WS_EXOG)."""
+    var exog: DeviceBuffer[DType.float32]
+    """The `nb` series' differenced regressors (a view of the caller's
+    buffer, `[b * n_exog * n_obs + i * n_obs + t]`); one float when
+    `n_exog == 0`."""
     var y_ext: DeviceBuffer[DType.float32]
     var x_ext: DeviceBuffer[DType.float32]
     var p_ext: ARIMAParams
@@ -207,6 +250,8 @@ struct FastEvalWS(Movable):
         self.n_obs = n_obs
         self.N = N
         self.eb = eb
+        self.n_exog = 0
+        self.exog = ctx.enqueue_create_buffer[DType.float32](1)
         self.y_ext = y_ext^
         self.x_ext = x_ext^
         self.p_ext = p_ext^
@@ -247,11 +292,21 @@ struct FastEvalWS(Movable):
         self.n_obs = n_obs
         self.N = N
         self.eb = eb
+        self.n_exog = 0
+        self.exog = ctx.enqueue_create_buffer[DType.float32](1)
         self.y_ext = y_ext^
         self.x_ext = x_ext^
         self.p_ext = p_ext^
         self.t_params = t_params^
         self.ws = ws^
+
+    def attach_exog(mut self, d_exog: DeviceBuffer[DType.float32], n_exog: Int) raises:
+        """The fit's differenced regressors (`nb * n_exog * n_obs` floats),
+        for an order with `n_exog != 0`. The workspace was built from that
+        order, so `ws.obs` is `eb * n_obs` long."""
+        if n_exog > 0:
+            self.exog = d_exog.create_sub_buffer[DType.float32](0, self.nb * n_exog * self.n_obs)
+            self.n_exog = n_exog
 
     def eval(
         mut self,
@@ -274,7 +329,8 @@ struct FastEvalWS(Movable):
             raise Error("FastEvalWS.eval: not compiled in this build (MOJOLEARN_ARIMA_FAST_EVAL_WS)")
         else:
             self.prepare(ctx, order, h, d_x, d_bad)
-            fast_kalman_into(ctx, self.y_ext, self.t_params, order, self.eb, self.n_obs, self.ws, 32)
+            fast_kalman_into(ctx, self.y_ext, self.t_params, order, self.eb, self.n_obs, self.ws, 32,
+                             1 if self.n_exog > 0 else 0)
             self.finish(ctx, h, scale, d_x, d_grad, d_x_pert, d_f, d_g, d_bad)
 
     def prepare(mut self, ctx: DeviceContext, order: ARIMAOrder, h: Float32,
@@ -295,6 +351,14 @@ struct FastEvalWS(Movable):
         unpack(ctx, self.p_ext, order, eb, self.x_ext)
         validate_order(order)
         batched_jones_transform(ctx, order, eb, False, self.p_ext, self.t_params)
+        if self.n_exog > 0:
+            # every member's x_t beta, before the filter reads `ws.obs`
+            var cells = eb * self.n_obs
+            ctx.enqueue_function[ew_obs_intercept_kernel](
+                self.exog.unsafe_ptr(), self.t_params.beta.unsafe_ptr(), self.ws.obs.unsafe_ptr(),
+                Int32(nb), Int32(eb), Int32(self.n_obs), Int32(self.n_exog),
+                grid_dim=((cells + EW_TPB - 1) // EW_TPB, 1, 1), block_dim=(EW_TPB, 1, 1),
+            )
 
     def finish(mut self, ctx: DeviceContext, h: Float32, scale: Float32,
                mut d_x: DeviceBuffer[DType.float32],
