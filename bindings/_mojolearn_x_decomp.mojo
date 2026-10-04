@@ -19,6 +19,9 @@ from x_decomp.device import DevExec
 from x_decomp.kit_device import lda_online_dev_py, mcd_dev_py
 from x_decomp.lda_fast import LDA_FUSED_SS, dev_lda_estep_ss_py
 from x_decomp.dict_fast import DECOMP_FAST_DICT_DEV, dev_dict_update_py
+from x_decomp.select_ops import order_small_py, reduce_py
+from x_decomp.select_dev import dev_order_small_py, dev_reduce_py
+from x_decomp.mds_iso_dev import dev_mds_disp_py, dev_mds_setup_py
 from x_decomp.graph_device import (
     dev_graph_knn_py, dev_graph_knn_dense_py, dev_graph_radius_py, dev_graph_radius_geo_py, dev_graph_lle_iw_py, dev_graph_components_py,
     dev_graph_join_py, dev_graph_dijkstra_py,
@@ -104,6 +107,13 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[pca_mle_pa_py]("x_decomp_pca_mle_pa")
         m.def_function[topn_desc_py]("x_decomp_topn_desc")
         m.def_function[dev_move_py]("x_decomp_dev_move")
+        # lane cpu2-l8-decomp: exact select reductions and the small stable order (x_decomp/select_*.mojo)
+        m.def_function[reduce_py]("x_decomp_reduce")
+        m.def_function[order_small_py]("x_decomp_order_small")
+        m.def_function[dev_reduce_py]("x_decomp_dev_reduce")
+        m.def_function[dev_order_small_py]("x_decomp_dev_order_small")
+        m.def_function[dev_mds_setup_py]("x_decomp_dev_mds_setup")
+        m.def_function[dev_mds_disp_py]("x_decomp_dev_mds_disp")
         # device-resident matrices (x_decomp/resident.mojo; GPU binding only)
         m.def_function[dev_alloc_py]("x_decomp_dev_alloc")
         m.def_function[dev_free_py]("x_decomp_dev_free")

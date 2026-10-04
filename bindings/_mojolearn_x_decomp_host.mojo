@@ -18,6 +18,9 @@ from x_decomp.api import (
     idn_flags_py, lu_gesv_py, ols_tsqr_r_py,
 )
 from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
+from x_decomp.select_ops import order_small_py, reduce_py
+from x_decomp.lanczos_host import lanczos_py
+from x_decomp.mds_iso import mds_disp_host_py, mds_setup_host_py
 from x_decomp.graph_host import (
     graph_knn_py, graph_knn_dense_py, graph_radius_py, graph_radius_geo_py, graph_lle_iw_py, graph_components_py, graph_join_py,
     graph_dijkstra_py,
@@ -97,6 +100,11 @@ def PyInit__mojolearn_x_decomp_host() abi("C") -> PythonObject:
         m.def_function[iso_order_py]("x_decomp_iso_order")
         m.def_function[py2mojo_py]("x_decomp_py2mojo")
         m.def_function[move_py]("x_decomp_move")
+        m.def_function[reduce_py]("x_decomp_reduce")
+        m.def_function[order_small_py]("x_decomp_order_small")
+        m.def_function[lanczos_py]("x_decomp_lanczos")
+        m.def_function[mds_setup_host_py]("x_decomp_mds_setup")
+        m.def_function[mds_disp_host_py]("x_decomp_mds_disp")
         m.def_function[dsum_sq_py]("x_decomp_dsum_sq")
         m.def_function[order_f_py]("x_decomp_order_f")
         m.def_function[select_smallest_py]("x_decomp_select_smallest")

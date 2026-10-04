@@ -26,7 +26,7 @@ FAMILIES = (
         forest_kinds=(),
         classes=("IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "NMF", "FastICA", "FactorAnalysis", "SpectralEmbedding", "lu_factor", "lstsq", "PLSRegression", "PLSCanonical", "CCA", "DictionaryLearning", "MiniBatchDictionaryLearning", "SparsePCA", "MiniBatchSparsePCA", "LatentDirichletAllocation", "Isomap", "MDS", "ClassicalMDS", "LocallyLinearEmbedding", "MinCovDet", "EllipticEnvelope", "AlternatingLeastSquares", "SparseCoder"),
         display="the decomposition and linear algebra expansion",
-        host_modules=("x_decomp/host.mojo", "x_decomp/host_simd.mojo", "x_decomp/host_graph.mojo", "x_decomp/host_qr.mojo", "x_decomp/tsqr_host.mojo", "x_decomp/tsqr_core.mojo", "x_decomp/qr_sliced.mojo", "x_decomp/qr_sliced_host.mojo", "x_decomp/host_jacobi.mojo", "x_decomp/host_lda.mojo", "x_decomp/host_ew.mojo", "x_decomp/cells.mojo", "x_decomp/api.mojo", "x_decomp/exec_trait.mojo", "x_decomp/kit.mojo", "x_decomp/mcd.mojo", "x_decomp/lda_online.mojo", "x_decomp/moves.mojo", "x_decomp/graph_cells.mojo", "x_decomp/graph_host.mojo"),
+        host_modules=("x_decomp/host.mojo", "x_decomp/select_ops.mojo", "x_decomp/lanczos_host.mojo", "x_decomp/mds_iso.mojo", "x_decomp/host_simd.mojo", "x_decomp/host_graph.mojo", "x_decomp/host_qr.mojo", "x_decomp/tsqr_host.mojo", "x_decomp/tsqr_core.mojo", "x_decomp/qr_sliced.mojo", "x_decomp/qr_sliced_host.mojo", "x_decomp/host_jacobi.mojo", "x_decomp/host_lda.mojo", "x_decomp/host_ew.mojo", "x_decomp/cells.mojo", "x_decomp/api.mojo", "x_decomp/exec_trait.mojo", "x_decomp/kit.mojo", "x_decomp/mcd.mojo", "x_decomp/lda_online.mojo", "x_decomp/moves.mojo", "x_decomp/graph_cells.mojo", "x_decomp/graph_host.mojo"),
         exports=(
             "x_decomp_host_numeric_mode", "x_decomp_host_vendor", "x_decomp_host_column", "x_decomp_host_sabotage",
             "x_decomp_gemm", "x_decomp_ew", "x_decomp_colsum", "x_decomp_rowsum", "x_decomp_sqdist",
@@ -39,6 +39,8 @@ FAMILIES = (
             # lane hr2-graph-embed (2026-10-02): the Isomap / LLE graph builds as cells
             "x_decomp_graph_knn", "x_decomp_graph_knn_dense", "x_decomp_graph_radius", "x_decomp_graph_lle_iw",
             "x_decomp_graph_components", "x_decomp_graph_join", "x_decomp_graph_dijkstra",
+            # lane cpu2-l8-decomp (2026-10-04): exact select reductions, the small stable order, the Lanczos steps
+            "x_decomp_reduce", "x_decomp_order_small", "x_decomp_lanczos", "x_decomp_mds_setup", "x_decomp_mds_disp",
             "x_decomp_numeric_mode", "x_decomp_vendor",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
