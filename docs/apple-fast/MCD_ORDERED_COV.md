@@ -128,3 +128,7 @@ The algorithm could later serve other long-K Gram/covariance consumers, but
 this branch changes only MCD's two covariance seams. Generalizing it would
 need caller-specific quality, memory and timing evidence; no other algorithm
 is silently opted in.
+
+### Compile repair r1
+
+The first M2 arm A build of a47cdb339 failed before execution: `out` was used as a parameter name, and inferred immutable `DeviceBuffer.unsafe_ptr()` results did not match the existing mutable-pointer launcher API. The r1 source renames the parameter to `dst` and explicitly borrows each locally owned mutable buffer through `unsafe_ptr[True]()`, retaining a single input pointer for both X operands. No const cast or address reconstruction is introduced. Buffer ownership stays local through synchronization. This matches the [DeviceBuffer pointer API](https://max.modular.com/api/mojo/max/gpu/host/device_context/DeviceBuffer/). Arithmetic, fixtures, strict gates and scoring policy are unchanged. New M2 compilation and M3 quality remain required; the compile failure is not numerical evidence.

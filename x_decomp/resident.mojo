@@ -800,13 +800,20 @@ def mcd_cov_probe_py(xaddr: PythonObject, gaddr: PythonObject, outaddr: PythonOb
     ctx.enqueue_copy(dst_buf=dg, src_ptr=I32Ptr(unsafe_from_address=Int(py=gaddr)))
     ctx.enqueue_memset(dc, Float32(-123.5))
     ctx.enqueue_memset(scratch, Float32(7654321))
+    # Explicit mutable borrows of owned buffers for the legacy launcher API.
+    # No integer-address reconstruction or const-removing pointer cast. Keep
+    # one x borrow and copy its pointer for X^T X, rather than borrow dx twice.
+    var xp = dx.unsafe_ptr[True]()
+    var cp = dc.unsafe_ptr[True]()
+    var sp = scratch.unsafe_ptr[True]()
+    var gp = dg.unsafe_ptr[True]()
     comptime if MCD_ORDERED_COV:
         note_cov_route(True, rows, d)
-        launch_mcd_cov_ordered(ctx, dx.unsafe_ptr(), dc.unsafe_ptr(), scratch.unsafe_ptr(),
-            rows, d, nc, rows*d, d*d, dg.unsafe_ptr(), False)
+        launch_mcd_cov_ordered(ctx, xp, cp, sp,
+            rows, d, nc, rows*d, d*d, gp, False)
     else:
-        launch_gemm_mma_batched(ctx, dx.unsafe_ptr(), dx.unsafe_ptr(), dc.unsafe_ptr(),
-            d, rows, d, True, False, nc, rows*d, rows*d, d*d, dg.unsafe_ptr(), False)
+        launch_gemm_mma_batched(ctx, xp, xp, cp,
+            d, rows, d, True, False, nc, rows*d, rows*d, d*d, gp, False)
     ctx.enqueue_copy(dst_ptr=F32Ptr(unsafe_from_address=Int(py=outaddr)), src_buf=dc)
     ctx.synchronize()
     _ = dx^

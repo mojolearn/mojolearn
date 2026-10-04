@@ -310,7 +310,7 @@ def mcd_cov_fold_kernel(part: F32Ptr, dst: F32Ptr, gate: I32Ptr, gate_all: Int32
     dst.unsafe_store(candidate * Int(stride_) + cell, _cov_add(total, correction))
 
 
-def launch_mcd_cov_ordered(ctx: DeviceContext, x: F32Ptr, out: F32Ptr, part: F32Ptr,
+def launch_mcd_cov_ordered(ctx: DeviceContext, x: F32Ptr, dst: F32Ptr, part: F32Ptr,
                            rows: Int, d: Int, nc: Int, x_stride: Int, out_stride: Int,
                            gate: I32Ptr, gate_all: Bool) raises:
     """Only X^T X; caller owns sufficient partial storage through completion.
@@ -321,7 +321,7 @@ def launch_mcd_cov_ordered(ctx: DeviceContext, x: F32Ptr, out: F32Ptr, part: F32
     var shape = ordered_cov_shape(rows, d)
     var splits = shape[0]
     if splits == 1:
-        launch_gemm_mma_batched(ctx, x, x, out, d, rows, d, True, False,
+        launch_gemm_mma_batched(ctx, x, x, dst, d, rows, d, True, False,
                                 nc, x_stride, x_stride, out_stride, gate, gate_all)
         return
     _ = ordered_cov_scratch(nc, rows, d)  # validate before narrowing strides
@@ -333,7 +333,7 @@ def launch_mcd_cov_ordered(ctx: DeviceContext, x: F32Ptr, out: F32Ptr, part: F32
         Int32(x_stride), Int32(x_stride), Int32(splits*d*d),
         grid_dim=(tiles, splits, nc), block_dim=(MB_NT, 1, 1))
     ctx.enqueue_function[mcd_cov_fold_kernel](
-        part, out, gate, ga, Int32(nc), Int32(d), Int32(splits), Int32(out_stride),
+        part, dst, gate, ga, Int32(nc), Int32(d), Int32(splits), Int32(out_stride),
         grid_dim=(nc*d*d + MB_ZERO_TPB - 1) // MB_ZERO_TPB, block_dim=MB_ZERO_TPB)
 
 
