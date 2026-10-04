@@ -1080,18 +1080,35 @@ def _sortable_to_float(key: UInt32) -> UInt32:
 
 
 def host_quantile_bin_index(bin: Int, sample_count: Int, max_n_bins: Int) -> Int:
-    """`quantile_bin_index`, `quantiles.mojo:700-725`, Float64 round half away."""
-    var bin_width = Float64(sample_count) / Float64(max_n_bins)
-    var x = Float64(bin + 1) * bin_width
-    var r = floor(x)
-    if x - r >= Float64(0.5):
-        r = r + Float64(1.0)
-    var idx = Int(r) - 1
-    if idx < 0:
-        idx = 0
-    if idx > sample_count - 1:
-        idx = sample_count - 1
-    return idx
+    """`quantile_bin_index`, `quantiles.mojo:700-725`, Float64 round half away.
+
+    fam2-forests `IDN_RF_QBIN_DEVICE`: the device computes the index in
+    exact integers (`quantile_bin_index_exact`), and this host column
+    computes the same expression; `-D MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF`
+    (or `MOJOLEARN_IDN_ALL_OFF`) restores the Float64 form on both."""
+    comptime if not (
+        is_defined["MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    ):
+        var ri = (2 * (bin + 1) * sample_count + max_n_bins) // (2 * max_n_bins)
+        var idx_i = ri - 1
+        if idx_i < 0:
+            idx_i = 0
+        if idx_i > sample_count - 1:
+            idx_i = sample_count - 1
+        return idx_i
+    else:
+        var bin_width = Float64(sample_count) / Float64(max_n_bins)
+        var x = Float64(bin + 1) * bin_width
+        var r = floor(x)
+        if x - r >= Float64(0.5):
+            r = r + Float64(1.0)
+        var idx = Int(r) - 1
+        if idx < 0:
+            idx = 0
+        if idx > sample_count - 1:
+            idx = sample_count - 1
+        return idx
 
 
 def host_lower_bound(values: List[Float32], base: Int, n: Int, element: Float32) -> Int:
