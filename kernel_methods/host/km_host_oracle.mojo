@@ -208,6 +208,17 @@ def kmh_validate_kernel(
         )
 
 
+#: fam2-kernel-gp (2026-10-04): the host column of
+#: `kernel_methods/checks/kernel_matrix.mojo::KM_IDN_RBF_CELL` (a candidate
+#: arm, OFF by default), the same defines and the same feature bound.
+comptime KMH_RBF_CELL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_KM_RBF_CELL"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime KMH_RBF_CELL_MAX_D = 16 if is_defined["MOJOLEARN_IDN_KM_RBF_CELL_D16"]() else 64
+
+
 def kmh_row_norms(x: List[Float32], n_rows: Int, k: Int) -> List[Float32]:
     """`svm row_norm_l2sq_kernel`: one ascending chain per row."""
     var out = List[Float32]()
@@ -304,6 +315,36 @@ def kmh_kernel_matrix(
     if kernel == KMH_KERNEL_COSINE:
         # cosine_rows_kernel on both operands, then the pinned GEMM
         return gemm_oracle(_kmh_cosine_rows(a, m, k), _kmh_cosine_rows(b, n, k), OP_NT, m, n, k)
+    comptime if KMH_RBF_CELL:
+        if kernel == KMH_KERNEL_RBF and k <= KMH_RBF_CELL_MAX_D:
+            # `km_rbf_cell_kernel`, cell by cell, the same lines
+            var outc = List[Float32](length=m * n, fill=Float32(0.0))
+            var opc = host_list_ptr(outc)
+            var neg_gamma = -Float32(gamma)
+            var tasks_c = host_predict_task_count(m)
+            if m * n * k < 32768:
+                tasks_c = 1
+            var chunk_c = host_predict_chunk(m, tasks_c)
+
+            def _cell_rows(task: Int) {imm a, imm b, imm m, imm n, imm k, imm neg_gamma, imm chunk_c, imm opc}:
+                var lo = task * chunk_c
+                var hi = min(lo + chunk_c, m)
+                for i in range(lo, hi):
+                    for j in range(n):
+                        var acc = Float32(0.0)
+                        for c in range(k):
+                            var d = ftz(ftz(a[i * k + c]) - ftz(b[j * k + c]))
+                            acc = ftz(identical_mul_add(d, d, acc))
+                        opc.unsafe_store(
+                            i * n + j,
+                            ftz(identical_exp(ftz(identical_mul(neg_gamma, acc)))),
+                        )
+
+            if tasks_c == 1:
+                _cell_rows(0)
+            else:
+                host_parallelize(_cell_rows, tasks_c)
+            return outc^
     var dot = host_gemm_identical(a, b, OP_NT, m, n, k)
     if kernel == KMH_KERNEL_LINEAR:
         return dot^

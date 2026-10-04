@@ -646,7 +646,7 @@ def kernel_ridge_fit_host(
     else:
         km_kernel_matrix(
             ctx, kp, dk, xa, xa, n_samples, n_samples, n_features,
-            na, nb, kws, elem_tpb, sabotage,
+            na, nb, kws, elem_tpb, sabotage, True,
         )
     ctx.synchronize()
     trace.record_device(ctx, "krr.kernel", dk, n_samples * n_samples)
@@ -851,7 +851,7 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
     else:
         km_kernel_matrix(
             ctx, kp, dk, xa, xa, n_samples, n_samples, n_features,
-            na, nb, kws, KM_EPILOGUE_TPB, KMSAB_NONE,
+            na, nb, kws, KM_EPILOGUE_TPB, KMSAB_NONE, True,
         )
     trace.record_device(ctx, "krr.kernel", dk, n_samples * n_samples)
     if weighted:
@@ -1912,7 +1912,7 @@ def _nystroem_fit_core(
     )
     ctx.synchronize()
     km_kernel_matrix(
-        ctx, kp, dk, ca, ca, q, q, n_features, na, nb, kws, elem_tpb, sabotage
+        ctx, kp, dk, ca, ca, q, q, n_features, na, nb, kws, elem_tpb, sabotage, True
     )
     ctx.synchronize()
     trace.record_device(ctx, "nys.basis_kernel", dk, q * q)
