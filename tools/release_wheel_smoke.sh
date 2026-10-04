@@ -744,7 +744,7 @@ if [ "$RENT" = 0 ] && [ -z "$SSH_GIVEN" ]; then
 fi
 
 # ---------------------------------------------------------------- the run
-POD_ID=""; POD_TERMINATED=0; DEADMAN_PID=""; DEADMAN_DIR=""; SSH_TARGET="$SSH_GIVEN"; COST_HR=""; T_POST=""
+RP_CREATE_ATTEMPTED=0; POD_ID=""; POD_TERMINATED=0; DEADMAN_PID=""; DEADMAN_DIR=""; SSH_TARGET="$SSH_GIVEN"; COST_HR=""; T_POST=""
 DROPLET_ID=""; DO_CREATE_ATTEMPTED=0; DO_GONE=0; DO_DEADMAN_PID=""; DO_DEADMAN_DIR=""; DO_LOCK_HELD=0
 DO_LOCK_NONCE="$$-$STAMP"; DO_COST_HR=""; DO_T_POST=""; DO_REGION=""; PROVIDER_USED=""
 bssh() {  # shellcheck disable=SC2086
@@ -756,7 +756,7 @@ teardown() {
     if [ -n "$POD_ID" ]; then
         echo; echo "== teardown (exit $_rc) =="
         delete_pod "$POD_ID"
-        if verify_gone "$POD_ID"; then POD_TERMINATED=1; fi
+        if verify_gone "$POD_ID"; then POD_TERMINATED=1; else _rc=1; fi
         _t=$(now)
         { echo "pod=$POD_ID"; echo "name=$POD_NAME"; echo "terminated_verified=$POD_TERMINATED"; echo "exit=$_rc"
           echo "at=$(date -u +%FT%TZ)"
@@ -787,13 +787,15 @@ teardown() {
         sed 's/^/  /' "$OUT/teardown.txt"
     fi
     if [ -n "$DEADMAN_PID" ]; then
-        if [ -z "$POD_ID" ] || [ "$POD_TERMINATED" = 1 ]; then
+        if [ "$RP_CREATE_ATTEMPTED" = 0 ] || [ "$POD_TERMINATED" = 1 ]; then
             pkill -P "$DEADMAN_PID" 2>/dev/null || true
             kill "$DEADMAN_PID" 2>/dev/null && echo "  dead-man cancelled (pid $DEADMAN_PID)"
             rm -rf "$DEADMAN_DIR"
         else
             echo "  ##########################################################"
-            echo "  # $POD_ID WAS NOT CONFIRMED GONE. The dead-man stays armed"
+            echo "  # ${POD_ID:-unknown id named $POD_NAME} WAS NOT CONFIRMED GONE. The dead-man stays armed"
+            _rc=1
+            printf 'create_attempted=%s\npod=%s\nterminated_verified=0\n' "$RP_CREATE_ATTEMPTED" "${POD_ID:-unknown}" >> "$OUT/teardown.txt"
             echo "  # (pid $DEADMAN_PID) and the on-pod watchdog fires at the lease."
             echo "  # End it by hand:  sh tools/runpod_guard.sh reap --force $POD_ID"
             echo "  ##########################################################"
@@ -842,6 +844,7 @@ rent_runpod() {  # sets POD_ID and SSH_TARGET; 1 (nothing created) when RunPod h
     cp "$CREATE" "$OUT/create_request.json"
     rp_call GET "$RP/pods"
     case "$RP_CODE" in 2*) ;; *) die "pod listing HTTP $RP_CODE; a runner that cannot list cannot verify a delete" ;; esac
+    [ "$(rp_py listingvalid)" = yes ] || die "pod listing schema invalid; nothing created"
     DEADMAN_DIR="${TMPDIR:-/tmp}/mojolearn-smoke-deadman-$$"
     _dm_secs=$(( READY_TIMEOUT + LEASE * 60 + 600 ))
     write_deadman "$DEADMAN_DIR" "$_dm_secs" || die "the dead-man did not compose; nothing created"
@@ -853,6 +856,7 @@ rent_runpod() {  # sets POD_ID and SSH_TARGET; 1 (nothing created) when RunPod h
 
     say "creating $POD_NAME ($GPU) on RunPod. THE BILL STARTS HERE."
     T_POST=$(now)
+    RP_CREATE_ATTEMPTED=1
     rp_call POST "$RP/pods" "$CREATE"
     _ccode=$RP_CODE     # the listing below overwrites RP_CODE
     cp "$TMPD/rp.body" "$OUT/create_response.json"
@@ -862,7 +866,24 @@ rent_runpod() {  # sets POD_ID and SSH_TARGET; 1 (nothing created) when RunPod h
         rp_call GET "$RP/pods"
         POD_ID=$(rp_py byname "$POD_NAME" | awk '{print $1}')
         [ -n "$POD_ID" ] && { printf '%s\n' "$POD_ID" > "$DEADMAN_DIR/pod_id.txt"; die "create response unparsed but $POD_ID exists by name; tearing it down"; }
-        if [ "$PROVIDER" = auto ] && printf '%s' "$_body" | grep -qi 'no instances currently available'; then
+        # Only an explicit parsed refusal plus a successful, valid listing can
+        # establish that no pod was created; transport errors are ambiguous.
+        _refused=0
+        if [ "$_ccode" = 200 ] && [ "$RP_CODE" = 200 ] && [ "$(rp_py listingvalid)" = yes ] &&
+           python3 - "$OUT/create_response.json" <<'PYREFUSAL'
+import json, sys
+try:
+    response = json.load(open(sys.argv[1]))
+    error = response.get("error") if isinstance(response, dict) else None
+    sys.exit(0 if isinstance(error, str) and "no instances currently available" in error.lower() else 1)
+except (OSError, ValueError):
+    sys.exit(1)
+PYREFUSAL
+        then
+            _refused=1
+            RP_CREATE_ATTEMPTED=0
+        fi
+        if [ "$PROVIDER" = auto ] && [ "$_refused" = 1 ]; then
             # THE FALLBACK DECISION (0.8.16, 2026-09-23). RunPod answered HTTP 200 with
             # {"error":"create pod: There are no instances currently available"}: no
             # MI300X to give, nothing created (the listing has no pod by this name).
