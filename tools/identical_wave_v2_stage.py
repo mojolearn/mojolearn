@@ -55,6 +55,9 @@ def main():
                                 'utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}); save()
         return rc
 
+    # Claim the attempt before writing ANY status, so a duplicate launch cannot
+    # overwrite a running driver's stage-status file.
+    (wave / ('driver-attempt%d.claim' % a.attempt)).mkdir()
     try:
         expected = json.loads((harness / 'harness-sha256.json').read_text())
         for name, wanted in expected.items():
