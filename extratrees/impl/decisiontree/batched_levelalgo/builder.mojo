@@ -2850,12 +2850,33 @@ def search_grid(row_blocks: Int, k: Int) -> Tuple[Int, Int, Int]:
 
 comptime PART_ROWS_PER_THREAD = (
     SEARCH_ROWS_PER_THREAD
-    if GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and (
-        is_defined["MOJOLEARN_ET_PART_ROWS"]()
-        or (
-            has_apple_gpu_accelerator()
-            and not is_defined["MOJOLEARN_ET_PART_ROWS_OFF"]()
+    if (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+        and (
+            is_defined["MOJOLEARN_ET_PART_ROWS"]()
+            or (
+                has_apple_gpu_accelerator()
+                and not is_defined["MOJOLEARN_ET_PART_ROWS_OFF"]()
+            )
+        )
+    )
+    or (
+        # fam-forests (2026-10-04), `IDN_ET_PART_ROWS`: IDENTICAL on NVIDIA
+        # and AMD. Those vendors search at 64 rows per thread and partitioned
+        # at 1, so EVERY level cycle restaged `d_items` / `d_wl` and drained
+        # the queue before the partition (the
+        # `SEARCH_ROWS_PER_THREAD != PART_ROWS_PER_THREAD` arm of the level
+        # loops); with equal tiles a plain cycle does neither. The ROWS > 1
+        # arms of the four partition kernels are a stable partition (a
+        # thread keeps its rows in order after the previous thread, blocks
+        # in order), so `row_ids` is the same array as at ROWS == 1: no bit
+        # moves and the host column is untouched.
+        # `-D MOJOLEARN_IDN_ET_PART_ROWS_OFF` restores one row per thread.
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and not has_apple_gpu_accelerator()
+        and not (
+            is_defined["MOJOLEARN_IDN_ET_PART_ROWS_OFF"]()
+            or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
         )
     )
     else 1
@@ -2883,7 +2904,20 @@ gathering the split column again. Same directions, same partition.
 `-D MOJOLEARN_ET_PART_FLAGS_OFF` restores the second gather."""
 
 comptime ET_STAGE_LIVE_PREFIX = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or has_apple_gpu_accelerator())
+    (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+        or has_apple_gpu_accelerator()
+        # fam-forests (2026-10-04), `IDN_ET_STAGE_LIVE`: IDENTICAL on NVIDIA
+        # and AMD too. Only the live prefix is ever read, so no bit moves.
+        # `-D MOJOLEARN_IDN_ET_STAGE_LIVE_OFF` restores full-capacity staging.
+        or (
+            GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+            and not (
+                is_defined["MOJOLEARN_IDN_ET_STAGE_LIVE_OFF"]()
+                or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+            )
+        )
+    )
     and not is_defined["MOJOLEARN_ET_STAGE_FULL_CAPACITY"]()
 )
 """FAST, and IDENTICAL on Apple since 2026-09-28 (only the live prefix is
