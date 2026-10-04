@@ -14,7 +14,7 @@ priority through the existing insertion helper, without a second runner.
 
 | Candidate / measured source | M3 evidence | Current decision |
 | --- | --- | --- |
-| `PREP3_MAXABS_POOL`, `74d233862` | `w2-w4s-maxabs-istella`: 104.6 -> 17.0 ms; quality PASS, 12 output arrays byte-identical | Preparing isolated default + `_OFF` builds. Same parallel kernels and synchronized caller-owned output; no first-read deferral. |
+| `PREP3_MAXABS_POOL`, `74d233862` | `w2-w4s-maxabs-istella`: 104.6 -> 17.0 ms; quality PASS, 12 output arrays byte-identical | PROMOTED: `033fbbe10`; M2 default + `_OFF` both rc=0. Same parallel kernels and synchronized caller-owned output; no first-read deferral. |
 | `KPCA_RESIDENT`, `34b4f6c72` | `w2-w4d-kpca-taxi`: 850.7 -> 127.5 ms; istella 919.5 -> 201.0 ms; quality PASS | Preparing RBF-scoped promotion review. Quality fixture first reads are 0.1 ms for both arms; eigenvalues/subspaces meet unchanged tolerances. |
 | `XN_FAST_NAN_FIT_LEAN`, `74d233862` | `w2-w4s-knn-taxi`: 2.2 -> 1.3 ms; quality PASS | HOLD: newly copied host sum over downloaded counts in `nan_cells_device.mojo`; repair GPU computation before fresh candidate evidence. |
 | `EIGH_FAST_TRIDIAG`, `97304d34c` | `w2-w4eigh-t-synthetic`: 43729.2 -> 701.9 ms | HOLD: single-block `td_tfac_kernel` needs parallel panel launch. Preserve the failed absolute quality gate and opponent-quality hold. |
