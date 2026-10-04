@@ -131,6 +131,8 @@ _SESSION_ENTRIES = ('byte_lm_session_create', 'byte_lm_session_close',
 #: admit; `logits` refuses anything outside the limits here first.
 _LOGITS_ENTRY = 'byte_lm_logits'
 _SESSION_LOGITS_ENTRY = 'byte_lm_session_logits'
+#: cpu3-seq (2026-10-04): the resident greedy next byte, argmax on the device.
+_SESSION_NEXT_ENTRY = 'byte_lm_session_next_bytes'
 _LOGITS_MAX_BATCH = 1024
 _LOGITS_MAX_CELLS = 268435456
 
@@ -1233,7 +1235,40 @@ class SmallByteLanguageModelTrainer:
                                                   'SmallByteLanguageModelTrainer.next_bytes')
             return _greedy_next_bytes(_ragged.last_real_rows(logits, lens,
                                                              'SmallByteLanguageModelTrainer.next_bytes'))
+        with self._lock:
+            if self._is_resident():
+                # cpu3-seq: on a resident session the forward, the refusal
+                # and the per-row argmax run on the device and only `batch`
+                # int32 come back (the logits never cross the bus).
+                shape = state_shape(self._state)
+                tokens, batch, length = _gpu_logits_ids(ids, shape)
+                return self._next_bytes_resident(tokens, batch, length, shape)
         return _greedy_next_bytes(self.logits(ids))
+
+    def _next_bytes_resident(self, tokens, batch, length, shape):
+        self._require_not_lost()
+        binding = self._binding()
+        missing = [name for name in _SESSION_ENTRIES + (_SESSION_NEXT_ENTRY,)
+                   if not callable(getattr(binding, name, None))]
+        if missing:
+            raise ImportError('Byte-LM binding lacks resident GPU next bytes (%s); rebuild bindings/build_byte_lm.sh'
+                              % ', '.join(missing))
+        if not self._session_open:
+            self._open_session(binding, shape)
+        out = zeros((batch,), '<i4')
+        try:
+            written = getattr(binding, _SESSION_NEXT_ENTRY)(
+                self._native_session, [addr_ro(tokens, name='ids'), addr(out, name='next_bytes')],
+                [batch, length], list(shape.native_shape), self._state['completed_steps'])
+            _require_written(written, batch)
+        except BaseException:
+            try:
+                self._logits_failed()
+            except Exception:
+                pass  # Preserve the original failure.
+            raise
+        _mode()
+        return out.tolist()
 
     def _logits_stateless(self, tokens, batch, length, shape):
         working = _validate_state(self._state)

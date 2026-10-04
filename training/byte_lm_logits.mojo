@@ -28,7 +28,10 @@ not.
 A PREDICTION UNTIL GATED. `tools/byte_lm_gpu_logits_sweep.py` compares these
 logits byte for byte with the CPU reference path on each GPU.
 """
-from std.memory import bitcast
+from std.memory import bitcast, stack_allocation
+from std.gpu import block_idx, thread_idx
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace
@@ -493,6 +496,136 @@ def byte_logits_resident_into(ctx: DeviceContext, mut tr: ByteTrainer, inputs: L
         _logits_forward_into(ctx, tr.weights, tr.buffers.emb_w, tr.buffers.lm_w, tr.rope,
             scratch.value(), inputs, batch, length, config, destination)
         ctx.synchronize()
+    except error:
+        failed = True
+        message = String(error)
+    if failed:
+        _byte_recover(ctx, tr, message)
+    tr.healthy = True
+
+
+# ===========================================================================
+# cpu3-seq (2026-10-04): GREEDY NEXT BYTE ON THE DEVICE
+# ===========================================================================
+
+comptime BYTE_NEXT_TPB = 256
+"""Threads per row of the next-byte argmax (a halving tree over them)."""
+
+
+@always_inline
+def _next_key(v: Float32) -> UInt32:
+    """An order key whose unsigned order is the float order `>` for every
+    non-NaN value, by BITS (contract row 49: Metal flushes compare
+    operands, so a subnormal logit is never compared as a float here):
+    sign set -> all bits flipped, sign clear -> sign bit set, and -0.0
+    keyed as +0.0 (they compare equal). The logits reaching this kernel
+    passed the device non-finite refusal, so no NaN is keyed."""
+    var bits = bitcast[DType.uint32](v)
+    if bits == UInt32(0x80000000):
+        bits = UInt32(0)
+    if (bits & UInt32(0x80000000)) != UInt32(0):
+        return ~bits
+    return bits | UInt32(0x80000000)
+
+
+def byte_next_byte_kernel(
+    picked_out: MutPointer[Int32, MutAnyOrigin],
+    logits: MutPointer[Float32, MutAnyOrigin],
+    length_in: Int32,
+    vocab_in: Int32,
+):
+    """One block per row `b`: the greedy next byte, the argmax over `vocab`
+    of the row's LAST position `logits[(b * length + length - 1) * vocab:]`,
+    ties to the LOWEST byte value. That is the host `argmax_rows_f32` rule
+    (strict `>` scanning from index 0), as an order-free reduction: the
+    larger key wins, an equal key keeps the smaller index, so every vendor
+    and every block size gives the same byte. Integer keys, no float
+    arithmetic: no bit can differ."""
+    var keys = stack_allocation[
+        BYTE_NEXT_TPB, Scalar[DType.uint32], address_space = AddressSpace.SHARED
+    ]()
+    var idxs = stack_allocation[
+        BYTE_NEXT_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var tid = Int(thread_idx.x)
+    var b = Int(block_idx.x)
+    var length = Int(length_in)
+    var vocab = Int(vocab_in)
+    var base = (b * length + length - 1) * vocab
+    var best_k = UInt32(0)
+    var best_i = Int32(2147483647)
+    var j = tid
+    while j < vocab:
+        var k = _next_key(logits.unsafe_load(base + j))
+        if best_i == Int32(2147483647) or k > best_k:
+            best_k = k
+            best_i = Int32(j)
+        j += BYTE_NEXT_TPB
+    keys.unsafe_store(tid, best_k)
+    idxs.unsafe_store(tid, best_i)
+    barrier()
+    var active = BYTE_NEXT_TPB // 2
+    while active > 0:
+        if tid < active:
+            var ok = keys.unsafe_load(tid + active)
+            var oi = idxs.unsafe_load(tid + active)
+            var mk = keys.unsafe_load(tid)
+            var mi = idxs.unsafe_load(tid)
+            if oi != Int32(2147483647) and (
+                mi == Int32(2147483647) or ok > mk or (ok == mk and oi < mi)
+            ):
+                keys.unsafe_store(tid, ok)
+                idxs.unsafe_store(tid, oi)
+        barrier()
+        active = active // 2
+    if tid == 0:
+        var r = idxs.unsafe_load(0)
+        picked_out.unsafe_store(b, Int32(0) if r == Int32(2147483647) else r)
+
+
+def byte_next_bytes_resident_into(ctx: DeviceContext, mut tr: ByteTrainer, inputs: List[Int32],
+                                  batch: Int, length: Int,
+                                  mut scratch: Optional[ByteLogitsScratch],
+                                  destination: MutPointer[Int32, MutUntrackedOrigin]) raises:
+    """cpu3-seq: `byte_logits_resident_into`'s forward and refusals, then the
+    greedy next byte of every row on the device (`byte_next_byte_kernel`)
+    and ONE download of `batch` int32 into `destination`. The logits never
+    leave the device (the Python glue downloaded `batch * length * vocab`
+    floats and ran the argmax on the host). Same failure convention."""
+    var config = tr.config.copy()
+    byte_logits_validate(inputs, batch, length, config)
+    if not tr.healthy:
+        raise Error("byte LM: session lost; restore a retained export")
+    var rebuild = True
+    if scratch:
+        rebuild = not scratch.value().fits(batch, length)
+    if rebuild:
+        scratch = None
+        scratch = ByteLogitsScratch(ctx, batch, length, config)
+    tr.healthy = False
+    tr.shadow_valid = False
+    var failed = False
+    var message = String("")
+    try:
+        for layer in range(config.n_layers):
+            _unpack_block(ctx, tr.buffers, tr.weights[layer], layer)
+        _bind_emb_head(ctx, tr.buffers, config)
+        ref sc = scratch.value()
+        var m = batch * length
+        var vocab = config.vocab_size
+        _logits_enqueue(ctx, tr.weights, tr.buffers.emb_w, tr.buffers.lm_w, tr.rope,
+            sc, inputs, batch, length, config)
+        var bad = device_first_nonfinite(ctx, sc.logits, m * vocab)
+        if bad >= 0:
+            _raise_nonfinite_logit(bad)
+        var picked = ctx.enqueue_create_buffer[DType.int32](batch)
+        ctx.enqueue_function[byte_next_byte_kernel](
+            picked.unsafe_ptr(), sc.logits.unsafe_ptr(), Int32(length), Int32(vocab),
+            grid_dim=(batch, 1, 1), block_dim=(BYTE_NEXT_TPB, 1, 1),
+        )
+        ctx.enqueue_copy(dst_ptr=destination, src_buf=picked)
+        ctx.synchronize()
+        _ = picked^
     except error:
         failed = True
         message = String(error)

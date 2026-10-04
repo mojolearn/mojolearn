@@ -22,7 +22,7 @@ detects after native success. `byte_lm_session_run` (mirror in, mirror
 out) is kept for the transition and is unchanged.
 """
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.hostptr import f32_ptr, read_f32, copy_f32
+from bindings.hostptr import f32_ptr, i32_ptr, read_f32, copy_f32
 from std.ffi import _Global
 from std.memory import bitcast
 from std.os import abort, getenv
@@ -70,6 +70,7 @@ from training.byte_lm_logits import (
     byte_logits_from_params_into,
     byte_logits_resident,
     byte_logits_resident_into,
+    byte_next_bytes_resident_into,
     byte_logits_validate,
     byte_logits_validate_params,
 )
@@ -1322,6 +1323,53 @@ def byte_lm_session_logits_binding(session: PythonObject, addresses: PythonObjec
     return PythonObject(cells_out)
 
 
+def byte_lm_session_next_bytes_binding(session: PythonObject, addresses: PythonObject,
+                                       dims: PythonObject, shape: PythonObject,
+                                       completed: PythonObject) raises -> PythonObject:
+    """cpu3-seq (2026-10-04): the greedy next byte of every row on an open
+    resident session. addresses[2] = [in_ids_i32 (batch * length),
+    out_next_i32 (batch)]; dims = [batch, length]; `completed` as in
+    `byte_lm_session_logits`. The logits stay on the device: the forward,
+    the non-finite refusal and the per-row argmax (ties to the lowest byte)
+    run there and `batch` int32 come back. Writes no parameter, moment, flag
+    or step. Returns `batch`."""
+    _require_binding_profile()
+    var cfg_shape = _byte_config(shape)
+    var owner = session.downcast_value_ptr[ByteLMSession]()
+    var bl = _logits_dims(dims, cfg_shape)
+    var claimed = Int(py=Python.import_module("operator").index(completed))
+    if claimed < 0 or claimed >= 1000000:
+        raise Error("byte LM: completed step outside admitted bound")
+    var m = bl[0] * bl[1]
+    var addr = _read_addresses(addresses, 2)
+    var cells: List[Int] = [m, bl[0]]
+    _validate_slot_table(addr, cells, 1)
+    var ids = _read_ids(addr[0], m)
+    byte_logits_validate(ids, bl[0], bl[1], cfg_shape)
+    _require_open(owner[])
+    if owner[].trainer.value().config.profile() != cfg_shape.profile():
+        raise Error("byte LM: resident model shape mismatch")
+    if owner[].trainer.value().completed_steps != claimed:
+        raise Error("byte LM: resident completed-step mismatch")
+    var step_before = owner[].trainer.value().completed_steps
+    var out = i32_ptr(addr[1])
+    owner[].busy = True
+    try:
+        with GILReleased(Python()):
+            ref ctx = owner[].ctx.value()
+            byte_next_bytes_resident_into(ctx, owner[].trainer.value(), ids, bl[0], bl[1],
+                                          owner[].logits_scratch, out)
+            if owner[].trainer.value().completed_steps != step_before:
+                raise Error("byte LM next bytes changed the completed step")
+            ctx.synchronize()
+    except error:
+        owner[].busy = False
+        _mark_if_lost(owner[])
+        raise error
+    owner[].busy = False
+    return PythonObject(bl[0])
+
+
 def byte_lm_parallel_create_binding() raises -> PythonObject:
     return PythonObject(alloc=ByteParallelTrainer())
 
@@ -1901,6 +1949,7 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         # DEVIATION 2658: forward-only logits.
         module.def_function[byte_lm_logits_binding]("byte_lm_logits")
         module.def_function[byte_lm_session_logits_binding]("byte_lm_session_logits")
+        module.def_function[byte_lm_session_next_bytes_binding]("byte_lm_session_next_bytes")
         module.def_function[byte_lm_session_rollback_binding]("byte_lm_session_rollback")
         module.def_function[byte_lm_session_info_binding]("byte_lm_session_info")
         module.def_function[byte_lm_fault_inject_available_binding]("byte_lm_fault_inject_available")
