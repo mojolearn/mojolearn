@@ -154,14 +154,17 @@ comptime MCD_BMMA = MCD_BATCH_MMA and not is_defined["MOJOLEARN_MCD_BMMA_OFF"]()
 # Cost: ~20 GB peak memory at the istella board size. MOJOLEARN_MCD_WIDE_OFF (or
 # MOJOLEARN_MCD_BMMA_OFF) restores the fast_mcd_dev fallback for d > 64.
 comptime MCD_WIDE = MCD_BMMA and not is_defined["MOJOLEARN_MCD_WIDE_OFF"]()
+#: Kernel limit, not a board window: mc_pinvh_kernel (mcd_compat.mojo)
+#: gives one thread per row and asserts DM <= MC_TPB (256), with DM-entry
+#: shared tables. A larger d needs a looped pinvh (unwritten).
 comptime MF_WIDE_DMAX = 256
 
 comptime U64Ptr = MutPointer[UInt64, MutAnyOrigin]
 comptime MF_TPB = 256
 #: Rows per tile of the masked moments.
 comptime MF_TILE = 256
-#: Largest feature count served here (the per-row distance keeps the
-#: centered row in registers).
+#: Largest feature count served here. Kernel limit (register footprint):
+#: the per-row distance keeps the centered row in registers.
 comptime MF_DMAX = 64
 #: Jacobi sweeps of the per-candidate eigensolve.
 comptime MF_SWEEPS = 60
