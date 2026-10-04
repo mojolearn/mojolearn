@@ -144,6 +144,10 @@ from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     ivf_search_params_validate,
     ivf_validate_data,
 )
+from ivf.impl.neighbors.ivf_flat.ivf_finite_device import (
+    IVF_IDN_DEVICE_FINITE,
+    ivf_validate_device,
+)
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
@@ -640,7 +644,10 @@ def ivf_flat_search_traced(
     """`ivf_flat::search` over an index prepared for this call alone
     (`IvfFlatDevice`, then `ivf_flat_search_prepared`). See the latter."""
     ivf_search_params_validate(sp, index.n_lists, n_queries, k)
-    ivf_validate_data(queries, n_queries, index.dim, "queries")
+    # under IVF_IDN_DEVICE_FINITE `ivf_flat_search_prepared` scans the
+    # uploaded queries on the device; this walk was a second copy of its own
+    comptime if not IVF_IDN_DEVICE_FINITE:
+        ivf_validate_data(queries, n_queries, index.dim, "queries")
     var dev = IvfFlatDevice(ctx, index)
     var r = ivf_flat_search_prepared(
         ctx, trace, index, dev, sp, queries, n_queries, k, tile_tpb, expand_tpb, partial_storage, keep
@@ -702,7 +709,8 @@ def ivf_flat_search_prepared(
     flat arrays at all.
     """
     ivf_search_params_validate(sp, index.n_lists, n_queries, k)
-    ivf_validate_data(queries, n_queries, index.dim, "queries")
+    comptime if not IVF_IDN_DEVICE_FINITE:
+        ivf_validate_data(queries, n_queries, index.dim, "queries")
     var dist_is_identity = postprocess_distances_is_identity(index.metric)
     var filtered = len(keep) > 0
     if filtered and len(keep) != index.n_rows:
@@ -745,6 +753,9 @@ def ivf_flat_search_prepared(
 
     # ---- upload: the queries only (the index side is `dev`) -----------
     var dq = upload_f32(ctx, queries)
+    comptime if IVF_IDN_DEVICE_FINITE:
+        # lane fix-k1-neighbors: the queries' finiteness on the device
+        ivf_validate_device(ctx, dq, queries, n_queries, dim, "queries")
     var dq_norm = ctx.enqueue_create_buffer[DType.float32](n_queries)
     compute_row_norms(ctx, dq, dq_norm, n_queries, dim)
     if trace.enabled:

@@ -88,6 +88,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
 from checks.numerics import NUMERIC_IDENTICAL as _IVF_NUMERIC_IDENTICAL
 from cluster.estimator import plan_sum_scale
+from ivf.impl.neighbors.ivf_flat.ivf_finite_device import (
+    IVF_IDN_DEVICE_FINITE,
+    ivf_validate_device,
+)
 
 #: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor, default ON:
 #: the quantizer's fixed-point sum scale comes from the rows already on the
@@ -377,7 +381,12 @@ def ivf_flat_build(
     # (off: no sync, no print)
     var st = AnnStages("ivf_flat_build")
     ivf_index_params_validate(params, n_rows, dim)
-    ivf_validate_data(x, n_rows, dim, "dataset")
+    # lane fix-k1-neighbors: under IVF_IDN_DEVICE_FINITE the values are
+    # scanned on the device after the upload below (ivf_finite_device.mojo)
+    # (the host walk stays when the host scale walk runs: it reads the rows
+    # before the upload and must not meet a non-finite value first)
+    comptime if not (IVF_IDN_DEVICE_FINITE and IVF_IDN_DEVICE_SCALE):
+        ivf_validate_data(x, n_rows, dim, "dataset")
     st.host("validate")
 
     var n_lists = params.n_lists
@@ -433,6 +442,9 @@ def ivf_flat_build(
     st.host("trainset_scale")
 
     var dx = upload_f32(ctx, x)
+    comptime if IVF_IDN_DEVICE_FINITE and IVF_IDN_DEVICE_SCALE:
+        # every training row is one of these rows, so this covers `dxt`
+        ivf_validate_device(ctx, dx, x, n_rows, dim, "dataset")
     if n_train == n_rows:
         xt.append(Float32(0.0))
     var dxt = upload_f32(ctx, xt)
@@ -646,7 +658,8 @@ def ivf_flat_extend(
     sequential id keeps the index a function of the rows alone. The centres
     and their norms do not move.
     """
-    ivf_validate_data(new_x, n_new, index.dim, "extension rows")
+    comptime if not IVF_IDN_DEVICE_FINITE:
+        ivf_validate_data(new_x, n_new, index.dim, "extension rows")
     var dim = index.dim
     var n_lists = index.n_lists
     var kp = KMeansParams.default()
@@ -656,6 +669,8 @@ def ivf_flat_extend(
     kp.n_init = 1
 
     var dx = upload_f32(ctx, new_x)
+    comptime if IVF_IDN_DEVICE_FINITE:
+        ivf_validate_device(ctx, dx, new_x, n_new, dim, "extension rows")
     var x_norm = ctx.enqueue_create_buffer[DType.float32](n_new)
     var centroids = upload_f32(ctx, index.centers)
     var labels = ctx.enqueue_create_buffer[DType.uint32](n_new)

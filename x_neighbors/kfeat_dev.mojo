@@ -60,6 +60,9 @@ from core.device_pool import pool_give, pool_take
 from core.device_scan import NONFINITE_NONE, SCAN_BLOCKS, SCAN_TPB, _scan_blocks, negative_partial_kernel
 from x_neighbors.device_ops import BLOCK, _grid, skew_transform_kernel, skew_weights_kernel, unary_kernel, xn_ctx
 from x_neighbors.items import FP, U_LOG
+from x_neighbors.items import IP
+from x_neighbors.kfeat_rng import kfeat_pcs_draw_item, kfeat_schi2_draw_item
+from std.gpu import block_dim, block_idx, thread_idx
 
 
 comptime _KFEAT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
@@ -388,4 +391,95 @@ def kfeat_schi2_transform_binding(p: PythonObject, a: PythonObject, f: PythonObj
         pool_give["MojoXNeighborsKfeatSkewW"](dw^)
         pool_give["MojoXNeighborsKfeatSkewTO"](doff^)
         pool_give["MojoXNeighborsKfeatSkewTR"](dres^)
+    return PythonObject(0)
+
+
+# ------------------------------------------------------- IDENTICAL sketch draws
+# lane fix-k1-neighbors (2026-10-04), IDENTICAL, default ON, rollback
+# `-D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF` (or MOJOLEARN_IDN_ALL_OFF): the
+# samplers' random tables from the counter-based generator in
+# `x_neighbors/kfeat_rng.mojo`, one GPU thread per draw, instead of the
+# MT19937 Python loop. The host column runs the same items
+# (`kfeat_rng.op_kfeat_*_host`). Bits change for every integer seed (new
+# tables), on all four columns together.
+
+
+def kfeat_schi2_draw_idn_kernel(z: FP, off: FP, seed: UInt32, count_: Int64, nc_: Int64):
+    var count = Int(count_)
+    var total = count + Int(nc_)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < total:
+        kfeat_schi2_draw_item(t, seed, count, z, off)
+
+
+def kfeat_pcs_draw_idn_kernel(idx: IP, sgn: IP, seed: UInt32, nc_: Int64, total_: Int64):
+    var total = Int(total_)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < total:
+        kfeat_pcs_draw_item(t, seed, Int(nc_), idx, sgn)
+
+
+def kfeat_schi2_fit_idn_binding(p: PythonObject, w_out: PythonObject, off_out: PythonObject) raises -> PythonObject:
+    """p = [seed & 2^32-1, d, n_components]: `random_weights_` (d x nc
+    float32 at w_out) and `random_offset_` (nc at off_out). The draws, then
+    main's `skew_weights_kernel` on z, both on the device; one wait.
+    Returns 0."""
+    var seed = UInt32(Int(py=p[0]) & 0xFFFFFFFF)
+    var d = Int(py=p[1])
+    var nc = Int(py=p[2])
+    if d <= 0 or nc <= 0:
+        raise Error("x_neighbors_kfeat_schi2_fit_idn: n_features and n_components must be positive")
+    if d * nc > 2147483647:
+        raise Error("x_neighbors_kfeat_schi2_fit_idn: more than 2^31 - 1 draws")
+    var count = d * nc
+    var wp = FP(unsafe_from_address=Int(py=w_out))
+    var op = FP(unsafe_from_address=Int(py=off_out))
+    with GILReleased(Python()):
+        var ctx = xn_ctx()
+        var dz = ctx.enqueue_create_buffer[DType.float32](count)
+        var dw = ctx.enqueue_create_buffer[DType.float32](count)
+        var doff = ctx.enqueue_create_buffer[DType.float32](nc)
+        ctx.enqueue_function[kfeat_schi2_draw_idn_kernel](
+            dz.unsafe_ptr(), doff.unsafe_ptr(), seed, Int64(count), Int64(nc),
+            grid_dim=_grid(count + nc), block_dim=BLOCK,
+        )
+        ctx.enqueue_function[skew_weights_kernel](
+            dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(count),
+            grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
+        )
+        ctx.enqueue_copy(dst_ptr=wp, src_buf=dw)
+        ctx.enqueue_copy(dst_ptr=op, src_buf=doff)
+        ctx.synchronize()
+        _ = dz^
+        _ = dw^
+        _ = doff^
+    return PythonObject(0)
+
+
+def kfeat_pcs_draw_idn_binding(p: PythonObject, idx_out: PythonObject, sgn_out: PythonObject) raises -> PythonObject:
+    """p = [seed & 2^32-1, n_components, degree * n_features]: `indexHash_`
+    and `bitHash_` (int32, flat) at idx_out / sgn_out, drawn on the device;
+    one wait. Returns 0."""
+    var seed = UInt32(Int(py=p[0]) & 0xFFFFFFFF)
+    var nc = Int(py=p[1])
+    var total = Int(py=p[2])
+    if nc <= 0 or total <= 0:
+        raise Error("x_neighbors_kfeat_pcs_draw_idn: sizes must be positive")
+    if total > 2147483647:
+        raise Error("x_neighbors_kfeat_pcs_draw_idn: more than 2^31 - 1 draws")
+    var ip = IP(unsafe_from_address=Int(py=idx_out))
+    var sp = IP(unsafe_from_address=Int(py=sgn_out))
+    with GILReleased(Python()):
+        var ctx = xn_ctx()
+        var didx = ctx.enqueue_create_buffer[DType.int32](total)
+        var dsgn = ctx.enqueue_create_buffer[DType.int32](total)
+        ctx.enqueue_function[kfeat_pcs_draw_idn_kernel](
+            didx.unsafe_ptr(), dsgn.unsafe_ptr(), seed, Int64(nc), Int64(total),
+            grid_dim=_grid(total), block_dim=BLOCK,
+        )
+        ctx.enqueue_copy(dst_ptr=ip, src_buf=didx)
+        ctx.enqueue_copy(dst_ptr=sp, src_buf=dsgn)
+        ctx.synchronize()
+        _ = didx^
+        _ = dsgn^
     return PythonObject(0)

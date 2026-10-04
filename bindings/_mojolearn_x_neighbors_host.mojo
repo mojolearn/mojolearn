@@ -21,6 +21,7 @@ from x_neighbors.graph_host import op_louvain
 from x_neighbors.kapprox_host import kpca_resident_binding
 from x_neighbors.iter_host import lp_fast_resident_binding
 from x_neighbors.sort_items import purity_flags_binding
+from x_neighbors.kfeat_rng import XN_IDN_SKETCH_CTR, kfeat_pcs_draw_idn_host_binding, kfeat_schi2_fit_idn_host_binding
 
 
 def _a(v: PythonObject, k: Int) raises -> Int:
@@ -1277,6 +1278,10 @@ def PyInit__mojolearn_x_neighbors_host() abi("C") -> PythonObject:
         # lane/fam2-neighbors: PageRank's caller vectors normalized by the op
         comptime if XN_UNIT_DEV:
             m.def_function[unit_ff_binding]("x_neighbors_unit_ff")
+        # lane fix-k1-neighbors: the host column of the samplers' counter-based draws
+        comptime if XN_IDN_SKETCH_CTR:
+            m.def_function[kfeat_schi2_fit_idn_host_binding]("x_neighbors_kfeat_schi2_fit_idn")
+            m.def_function[kfeat_pcs_draw_idn_host_binding]("x_neighbors_kfeat_pcs_draw_idn")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors_host: ", e))

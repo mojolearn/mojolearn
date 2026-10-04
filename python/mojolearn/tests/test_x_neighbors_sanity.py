@@ -17,6 +17,12 @@ def _data(n=200, d=6, seed=0):
     return X
 
 
+def _sketch_ctr(est, name):
+    """Whether the bound binary draws the samplers' tables from the
+    counter-based generator (IDN_XN_SKETCH_CTR, x_neighbors/kfeat_rng.mojo)."""
+    return getattr(est._bind(), name, None) is not None
+
+
 def test_lof():
     from sklearn.neighbors import LocalOutlierFactor as R
     X = _data()
@@ -90,8 +96,19 @@ def test_polynomial_count_sketch():
     X = _data(60)
     a = ml.PolynomialCountSketch(degree=3, gamma=0.5, coef0=1.0, n_components=32, random_state=7).fit(X)
     b = R(degree=3, gamma=0.5, coef0=1.0, n_components=32, random_state=7).fit(X)
-    np.testing.assert_array_equal(np.asarray(a.indexHash_), b.indexHash_)
-    np.testing.assert_array_equal(np.asarray(a.bitHash_), b.bitHash_)
+    if _sketch_ctr(a, "x_neighbors_kfeat_pcs_draw_idn"):
+        # IDN_XN_SKETCH_CTR: our own counter-based tables for an int seed;
+        # theirs is given ours, so the map itself is still compared
+        ih, bh = np.asarray(a.indexHash_), np.asarray(a.bitHash_)
+        assert ih.shape == b.indexHash_.shape and bh.shape == b.bitHash_.shape
+        assert ih.min() >= 0 and ih.max() < 32 and set(np.unique(bh)) <= {-1, 1}
+        again = ml.PolynomialCountSketch(degree=3, gamma=0.5, coef0=1.0, n_components=32, random_state=7).fit(X)
+        np.testing.assert_array_equal(np.asarray(again.indexHash_), ih)
+        np.testing.assert_array_equal(np.asarray(again.bitHash_), bh)
+        b.indexHash_, b.bitHash_ = ih.astype(b.indexHash_.dtype), bh.astype(b.bitHash_.dtype)
+    else:
+        np.testing.assert_array_equal(np.asarray(a.indexHash_), b.indexHash_)
+        np.testing.assert_array_equal(np.asarray(a.bitHash_), b.bitHash_)
     np.testing.assert_allclose(np.asarray(a.transform(X)), b.transform(X), rtol=1e-3, atol=1e-3)
 
 
@@ -109,8 +126,19 @@ def test_skewed_chi2():
     X = np.abs(_data(40))
     a = ml.SkewedChi2Sampler(skewedness=0.5, n_components=50, random_state=4).fit(X)
     b = R(skewedness=0.5, n_components=50, random_state=4).fit(X)
-    np.testing.assert_allclose(np.asarray(a.random_weights_), b.random_weights_, rtol=1e-4, atol=1e-5)
-    np.testing.assert_allclose(np.asarray(a.random_offset_), b.random_offset_, rtol=1e-6)
+    if _sketch_ctr(a, "x_neighbors_kfeat_schi2_fit_idn"):
+        # IDN_XN_SKETCH_CTR: our own counter-based draws for an int seed;
+        # theirs is given ours, so the map itself is still compared
+        w, off = np.asarray(a.random_weights_), np.asarray(a.random_offset_)
+        assert w.shape == b.random_weights_.shape and off.shape == b.random_offset_.shape
+        assert np.isfinite(w).all() and (off > 0).all() and (off < 2 * np.pi).all()
+        again = ml.SkewedChi2Sampler(skewedness=0.5, n_components=50, random_state=4).fit(X)
+        np.testing.assert_array_equal(np.asarray(again.random_weights_), w)
+        np.testing.assert_array_equal(np.asarray(again.random_offset_), off)
+        b.random_weights_, b.random_offset_ = w.astype(np.float64), off.astype(np.float64)
+    else:
+        np.testing.assert_allclose(np.asarray(a.random_weights_), b.random_weights_, rtol=1e-4, atol=1e-5)
+        np.testing.assert_allclose(np.asarray(a.random_offset_), b.random_offset_, rtol=1e-6)
     np.testing.assert_allclose(np.asarray(a.transform(X)), b.transform(X), rtol=1e-3, atol=2e-4)
 
 
