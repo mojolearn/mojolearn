@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """M3-only unscored actual decomp/PCA quality. No timing or installs.
 
-SOURCE TAG PROFILE validates staged A/B manifests, captures each isolated arm,
+COMPILED_SOURCE TAG PROFILE validates staged A/B manifests, captures each isolated arm,
 then gates against FP64 and A with zero error-regression allowance.
 """
 import argparse
@@ -21,6 +21,24 @@ FLAGS = ['MOJOLEARN_SCOPED_GEMM_' + x for x in
          ['G1_TALL', 'G1_DENSE', 'G1_GRAM', 'G2_NARROW', 'SPLIT', 'PCA']]
 PROFILES = {'tall': 1, 'dense': 2, 'gram': 4, 'narrow': 8,
             'gram-split': 20, 'pca': 52, 'all': 63}
+# Only these reviewed harness files may differ from the compiled source.
+HARNESS_ONLY = {
+    'tools/scoped_gemm_quality.py', 'tools/scoped_gemm_preflight_spec.py',
+    'tools/apple_fast_job_policy.py', 'tools/test_scoped_gemm_readiness.py',
+    'docs/apple-fast/ab/scoped-gemm-readiness.md',
+}
+
+
+def verify_source(compiled):
+    harness = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+    subprocess.run(['git', 'merge-base', '--is-ancestor', compiled, harness], check=True)
+    changed = set(subprocess.check_output(
+        ['git', 'diff', '--name-only', compiled, harness], text=True).splitlines())
+    assert changed <= HARNESS_ONLY, ('compiled/harness production drift', sorted(changed - HARNESS_ONLY))
+    subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--'], check=True)
+    return harness
+
+
 BOUND = 5e-6
 # (name, m, n, k, transpose A/B, aliased inputs, data kind)
 CASES = [
@@ -95,8 +113,9 @@ def chosen(case, mask):
     return result
 
 
-def capture(so, destination, mask):
+def capture(so, destination, mask, expected_hash):
     import numpy as np
+    assert hashlib.sha256(so.read_bytes()).hexdigest() == expected_hash
     spec = importlib.util.spec_from_file_location('_mojolearn_scoped_gemm_probe', so)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -154,7 +173,7 @@ def capture(so, destination, mask):
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == '_capture':
-        capture(Path(sys.argv[2]), Path(sys.argv[3]), int(sys.argv[4]))
+        capture(Path(sys.argv[2]), Path(sys.argv[3]), int(sys.argv[4]), sys.argv[5])
         return
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('source')
@@ -165,8 +184,7 @@ def main():
     assert re.fullmatch('[A-Za-z0-9_.-]+', args.tag)
     assert subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True).strip() == 'Apple M3 Ultra'
     os.chdir(ROOT)
-    assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip() == args.source
-    subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--', 'bindings/', 'core/', 'gemm/', 'x_decomp/', 'decomposition/', 'experiments/', 'tools/scoped_gemm_quality.py'], check=True)
+    harness_source = verify_source(args.source)
     arms = Path.home() / 'mq/verified-arms' / args.source / BINDING
     manifest = json.loads((arms / 'manifest.json').read_text())
     mask = PROFILES[args.profile]
@@ -182,7 +200,8 @@ def main():
     os.environ.update(OPENBLAS_NUM_THREADS='1', OMP_NUM_THREADS='1')
     # Isolated Python processes load explicit verified paths; no installed .so assumptions.
     for arm, flagmask in [('A', 0), ('B', mask)]:
-        subprocess.run([sys.executable, str(Path(__file__).resolve()), '_capture', str(arms / (arm + '.so')), str(directory / (arm + '.npz')), str(flagmask)], check=True)
+        subprocess.run([sys.executable, str(Path(__file__).resolve()), '_capture', str(arms / (arm + '.so')), str(directory / (arm + '.npz')), str(flagmask), manifest['hashes'][arm]], check=True)
+        assert hashlib.sha256((arms / (arm + '.so')).read_bytes()).hexdigest() == manifest['hashes'][arm]
     import numpy as np
     a, b = np.load(directory / 'A.npz'), np.load(directory / 'B.npz')
     reached = json.loads((directory / 'B.npz.json').read_text())
@@ -210,7 +229,10 @@ def main():
             failures.append(key)
         rows.append({'case': key, 'A_relative_fro': ea, 'B_relative_fro': eb,
                      'A_maxabs': ma, 'B_maxabs': mb, 'same_words': bool(np.array_equal(a[key].view('uint32'), b[key].view('uint32'))), 'pass': ok})
-    report = {'source_sha': args.source, 'binding': BINDING, 'profile': args.profile,
+    report = {'source_sha': args.source, 'harness_source': harness_source,
+              'helper_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+              'packet_hashes': {name: hashlib.sha256((directory / name).read_bytes()).hexdigest()
+                                for name in ('A.npz', 'B.npz', 'A.npz.json', 'B.npz.json')}, 'binding': BINDING, 'profile': args.profile,
               'contract': 'scoped-actual-decomp-pca-quality-v1',
               'baseline': 'current-main AFN decomp/PCA; small PCA fused Gram unchanged, NOT SDK screen G0',
               'manifest': manifest, 'bound': BOUND, 'error_regression_allowance': 0,
