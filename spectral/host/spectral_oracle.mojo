@@ -10,8 +10,11 @@ is `spectral/impl/sparse/solver/detail/lanczos.mojo` re-spelled with
 every device launch replaced by a host loop that performs the SAME
 ARITHMETIC IN THE SAME ORDER:
 
-  device `spmv_kernel`          -> `host_spmv`: per row, ascending over the
-                                   sorted entries, `fma` from `+0.0`, flushed
+  device `spmv_enqueue`         -> `host_spmv`: per row, under
+                                   `IDN_SPMV_LANES` the lane order of
+                                   `spectral/spmv_order.mojo` (else ascending
+                                   over the sorted entries), `fma` from
+                                   `+0.0`, flushed
   `identical_gemm` (the dots,   -> `host_dot`: the contract's leaf partition
   the gemvs, the Ritz product)     (`contract_leaf_size(k)`) with the
                                    serial ascending leaf and the fixed
