@@ -52,9 +52,12 @@ _BINDING = "_mojolearn_x_metrics"
 #: op name -> id; x_metrics/units.mojo `run_unit` holds the same table.
 _OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wpercentile=5, col_max=6, bin_curve=7, row_metric=8, row_centroid_dist=9, permute=10,
             fold_rows=36, rows64=41, strat_codes=45, curve_fold=46, onehot=52, rep_rows=53, pair_cols=54,
-            # lane fam2-prep-metrics (x_metrics/cls_epi.mojo): only a binding whose
-            # `x_metrics_idn_fam2` has bit 1 runs it (IDENTICAL)
-            cls_epi=55)
+            # lane fam2-prep-metrics (x_metrics/cls_epi.mojo), both numeric modes
+            # since lane cpu2-l7-metrics
+            cls_epi=55,
+            # lane cpu2-l7-metrics: the metric tails and scans on the device
+            # (x_metrics/tail.mojo, cm_epi.mojo, reg_epi.mojo, rank_epi.mojo)
+            off_diff=56, flag_scan=57, proba_rows=58, cm_epi=59, reg_epi=60, rank_epi=61, cl_epi=62)
 _PARAMS = 14
 _NONE = -1
 
@@ -359,6 +362,64 @@ def _group(prog, key, n, m, *, values=_NONE, vstride=1, weights=_NONE, width=1):
     return off, out
 
 
+def _counts(prog, off, m):
+    """The m group sizes of a `group_sort` OFF table as an Int32 slot the
+    device fills (`off_diff`, x_metrics/tail.mojo); read with prog.ints."""
+    out = prog.alloc(m)
+    if m:
+        prog.stage("off_diff", m, off, m, out)
+    return out
+
+
+#: flag_scan tests (x_metrics/tail.mojo)
+_SCAN_LOG_DOMAIN, _SCAN_INDICATOR = 0, 1
+
+
+def _scan_flag(prog, src, n, mode):
+    """One Int32 flag word the device sets to 1 when any of the n Float32
+    values at `src` fails the test (`flag_scan`); 0 otherwise."""
+    flag = prog.alloc(1)
+    if n:
+        prog.stage("flag_scan", n, src, n, mode, flag)
+    return flag
+
+
+def _flag_set(prog, flag):
+    return prog.ints(flag, 1)[0] != 0
+
+
+def _put_proba(prog, a, n, k, binary):
+    """The probabilities' check and layout in the program (`proba_rows`,
+    x_metrics/tail.mojo): (S, FLAGS). S is the (n, k) Float32 matrix the
+    metric reads: `a` itself, or for a binary column the `[1 - p, p]` rows
+    the device packs. FLAGS: three Int32 words (non-finite, outside [0, 1],
+    a row sum off one), read by `_proba_check` after the run."""
+    A = prog.put(a)
+    flags = prog.alloc(3)
+    S = A
+    if binary:
+        S = prog.scratch(2 * n)
+    if n:
+        prog.stage("proba_rows", n, A, n, 1 if binary else k, 1 if binary else 0, S, flags)
+    return S, flags
+
+
+#: probability_rows codes 1..3, in the order the check reports them
+_PROBA_REASONS = ("must be finite", "must lie in [0, 1]", "rows must sum to one within sqrt(float32 eps)")
+
+
+def _proba_code(prog, flags):
+    """0, or the first failed check (1 non-finite, 2 outside [0, 1], 3 a row sum)."""
+    f = prog.ints(flags, 3)
+    return 1 if f[0] else (2 if f[1] else (3 if f[2] else 0))
+
+
+def _proba_check(prog, flags, caller):
+    code = _proba_code(prog, flags)
+    if code:
+        raise ValueError(f"mojolearn {caller}: y_proba " + _PROBA_REASONS[code - 1])
+
+
 # ---------------------------------------------------------------------------
 # Shared validation
 # ---------------------------------------------------------------------------
@@ -400,24 +461,6 @@ def _codes(labels_seq, order):
     return _label_map(labels_seq, lambda v: index.get(v, -1))
 
 
-#: binding -> its `x_metrics_idn_fam2` bits (0 when it has none), probed once
-_IDN_FAM2 = {}
-
-
-def _idn_fam2(numeric_mode):
-    """Lane fam2-prep-metrics: the binding's IDENTICAL metric switches
-    (bindings/_mojolearn_x_metrics*.mojo `idn_fam2_binding`: 1 IDN_CLS_EPI,
-    op 55 `cls_epi`), 0 on the FAST tier or a build without them."""
-    b = _binding(numeric_mode)
-    key = id(b)
-    v = _IDN_FAM2.get(key)
-    if v is None:
-        fn = _optional_metrics_entry(b, "x_metrics_idn_fam2")
-        v = int(fn()) if fn is not None else 0
-        _IDN_FAM2[key] = v
-    return v
-
-
 def _epi_codes(average, zero_division):
     """(AVG, ZD) of x_metrics/cls_epi.mojo: 0 per label, 1 micro, 3 weighted,
     2 the plain mean (macro, binary); 0 / 1 / 2 = zero_division 0.0, 1.0, NaN."""
@@ -428,15 +471,20 @@ def _epi_codes(average, zero_division):
 class _Sums:
     """Per-label tp / pred / true sums and the total, over `order` (every
     label that can occur; the caller selects a prefix). Unweighted sums are
-    exact integers (the group sizes); weighted ones are the Float32 PairSum
-    of each group's weights, read as Python floats. `epi` (lane
-    fam2-prep-metrics; kind, k, AVG, ZD, FMODE, beta^2) stages the set-wise
-    epilogue in the same program when the binding has it (`cls_epi`,
+    exact integers (the group sizes, differenced on the device: `off_diff`);
+    weighted ones are the Float32 PairSum of each group's weights, read as
+    Python floats. `epi` (lane fam2-prep-metrics; kind, k, AVG, ZD, FMODE,
+    beta^2) stages the set-wise epilogue in the same program (`cls_epi`,
     x_metrics/cls_epi.mojo: the ratios, micro sums and averages as binary64
-    on the device): `self.epi` = (flags, kept, scalars, per-label values),
-    else None and the caller runs its Python epilogue."""
+    on the device, both numeric modes since lane cpu2-l7-metrics): `self.epi`
+    = (flags, kept, scalars, per-label values), else None (a list of
+    `epi` tuples stages one epilogue each and `self.epi` is the list of
+    results). `self.prog` and
+    `self.groups` (the three (OFF, OUT) groupings, then the total's) let a
+    caller that staged its own tail (`tail`: a function of (prog, groups)
+    that stages it and returns what to keep) read it back as `self.tail`."""
 
-    def __init__(self, true, pred, w, order, numeric_mode, epi=None):
+    def __init__(self, true, pred, w, order, numeric_mode, epi=None, tail=None):
         n, L = len(true), len(order)
         yt, yp = _codes(true, order), _codes(pred, order)
         prog = _Prog()
@@ -446,14 +494,13 @@ class _Sums:
         prog.stage("pair_key", n, a, b, match, L, 1)
         W = _NONE if w is None else prog.put(w)
         groups = [_group(prog, k, n, L, weights=W) for k in (match, a, b)]  # glue: the three count groupings
-        total = None
         if w is not None:
             zero = prog.scratch(n)          # every row in group 0: the total weight
             prog.stage("pair_key", n, a, a, zero, 1, 2)
             groups.append(_group(prog, zero, n, 1, weights=W))
-        eo = None
-        if epi is not None and _idn_fam2(numeric_mode) & 1:
-            kind, k, avg, zd, fmode, b2 = epi
+        cnt = [_counts(prog, off, L) for off, _ in groups] if w is None else None  # glue: the three count slots
+        eos = []
+        for kind, k, avg, zd, fmode, b2 in ([epi] if isinstance(epi, tuple) else (epi or [])):  # glue: one cls_epi stage per requested average
             col = 0 if w is None else 1
             bo = 0
             if fmode == 2:
@@ -463,23 +510,25 @@ class _Sums:
             eo = prog.alloc(8 + 6 * max(L, 1))
             prog.stage("cls_epi", 1, groups[0][col], groups[1][col], groups[2][col], k, col, kind, avg, zd, eo,
                        fmode, bo)
+            eos.append(eo)
+        self.tail = None
+        keep = tail(prog, groups) if tail is not None else None
         _execute(prog, numeric_mode)
-        self.epi = None
-        if eo is not None:
+        self.prog, self.groups = prog, groups
+        res = []
+        for eo in eos:  # glue: reads each staged epilogue's flags, scalars and values
             head = prog.ints(eo, 2)
-            self.epi = (head[0], head[1], prog.words(eo + 2, 6, "d"), prog.words(eo + 8, 6 * max(L, 1), "d"))
+            res.append((head[0], head[1], prog.words(eo + 2, 6, "d"), prog.words(eo + 8, 6 * max(L, 1), "d")))
+        self.epi = (res[0] if res else None) if (epi is None or isinstance(epi, tuple)) else res
         if w is None:
-            sums = []
-            for off, _ in groups:  # glue: reads the three count groupings
-                o = prog.ints(off, L + 1)
-                sums.append([o[i + 1] - o[i] for i in range(L)])
-            total = n
+            self.tp, self.true, self.pred = (prog.ints(c, L) for c in cnt)  # glue: reads the three count slots
+            self.total = n
         else:
-            sums = [prog.floats(out, L) for _, out in groups[:3]]  # glue: reads the three weighted groupings
-            total = prog.floats(groups[3][1], 1)[0]
-        self.tp, self.true, self.pred = sums
-        self.total = total
+            self.tp, self.true, self.pred = (prog.floats(out, L) for _, out in groups[:3])  # glue: reads the weighted sums
+            self.total = prog.floats(groups[3][1], 1)[0]
         self.weighted = w is not None
+        if tail is not None:
+            self.tail = keep
 
 
 class UndefinedMetricWarning(UserWarning):
@@ -511,44 +560,6 @@ def _zero_division_value(zero_division):
         if pmath.isnan(float(zero_division)):
             return float("nan")
     raise ValueError("zero_division must be 'warn', 0.0, 1.0 or np.nan")
-
-
-def _divide(num, den, zero_division, what, warn_list):
-    out = []
-    bad = False
-    zv = _zero_division_value(zero_division)
-    for a, b in zip(num, den):
-        if b == 0:
-            out.append(zv)
-            bad = True
-        else:
-            out.append(a / b)
-    if bad and isinstance(zero_division, str) and warn_list is not None:
-        warn_list.append(what)
-    return out
-
-
-def _nanaverage(values, weights=None):
-    keep = [i for i, v in enumerate(values) if not pmath.isnan(v)]
-    if not values or not keep:
-        return float("nan")
-    if weights is None:
-        s = 0.0
-        for i in keep:
-            s += values[i]
-        return s / len(keep)
-    sw = 0.0
-    for i in keep:
-        sw += weights[i]
-    if sw == 0:
-        s = 0.0
-        for i in keep:
-            s += values[i]
-        return s / len(keep)
-    s = 0.0
-    for i in keep:
-        s += values[i] * weights[i]
-    return s / sw
 
 
 def _set_wise_labels(present, kind, average, labels, pos_label, caller):
@@ -646,69 +657,43 @@ def precision_recall_fscore_support(y_true, y_pred, *, beta=1.0, labels=None, po
     true, pred, kind, present, w = hit
     chosen = _set_wise_labels(present, kind, average, labels, pos_label, "precision_recall_fscore_support")
     order = _label_order(chosen, present)
-    key = ("sums", same, tuple(order), numeric_mode)
-    s = None if memo is None else memo.get(key)
     k = len(chosen)
-    if s is None:
-        epi = None
-        if memo is None:
-            # outside classification_report (whose memo shares one `_Sums` between
-            # averages): the epilogue runs in the sums' program (x_metrics/cls_epi.mojo)
-            fb = float(beta)
-            epi = (2, k) + _epi_codes(average, zero_division) + (0 if pmath.isinf(fb) else (1 if fb == 0 else 2),
-                                                                   fb * fb)
-        s = _Sums(true, pred, w, order, numeric_mode, epi=epi)
-        if memo is not None:
-            memo[key] = s
-    if memo is None and s.epi is not None:
-        bad, _, scal, vals = s.epi
-        if isinstance(zero_division, str):
-            for bit, what in ((1, "precision"), (2, "recall"), (4, "f-score")):  # glue: the three metric names
-                if bad & bit and what in warn_for:
-                    _undefined_warning(f"{what.capitalize()} is ill-defined and being set to 0.0 in labels "
-                                       "with no predicted/true samples. Use `zero_division` parameter to "
-                                       "control this behavior.")
-        if average is None:
-            ts = s.true[:k]
-            support = (Array.from_list([float(v) for v in ts], "<f8") if s.weighted  # glue: the k label supports
-                       else Array.from_list([int(v) for v in ts], "<i8"))  # glue: the k label supports
-            return (Array.from_list(list(vals[:k]), "<f8"), Array.from_list(list(vals[k:2 * k]), "<f8"),
-                    Array.from_list(list(vals[2 * k:3 * k]), "<f8"), support)
-        return (scal[0], scal[1], scal[2], None)
-    tp, ps, ts = s.tp[:k], s.pred[:k], s.true[:k]
-    if average == "micro":
-        a = b = c = 0
-        for i in range(k):
-            a += tp[i]
-            b += ps[i]
-            c += ts[i]
-        tp, ps, ts = [a], [b], [c]
-    warned = []
-    precision = _divide(tp, ps, zero_division, "precision", warned)
-    recall = _divide(tp, ts, zero_division, "recall", warned)
-    beta = float(beta)
-    if pmath.isinf(beta):
-        fscore = recall
-    elif beta == 0:
-        fscore = precision
+    fb = float(beta)
+    fmode = 0 if pmath.isinf(fb) else (1 if fb == 0 else 2)
+    if memo is None:
+        # the epilogue runs in the sums' program (x_metrics/cls_epi.mojo)
+        s = _Sums(true, pred, w, order, numeric_mode,
+                  epi=(2, k) + _epi_codes(average, zero_division) + (fmode, fb * fb))
+        res = s.epi
     else:
-        b2 = beta * beta
-        fscore = _divide([(1 + b2) * v for v in tp], [b2 * t + p for t, p in zip(ts, ps)],
-                         zero_division, "f-score", warned)
-    for what in warned:  # glue: the names of ill-defined metrics
-        if what in warn_for:
-            _undefined_warning(f"{what.capitalize()} is ill-defined and being set to 0.0 in labels "
-                               "with no predicted/true samples. Use `zero_division` parameter to "
-                               "control this behavior.")
+        # classification_report asks for the four averages of one input: one
+        # program makes the sums and stages all four epilogues
+        key = ("sums", same, tuple(order), numeric_mode, zero_division if isinstance(zero_division, str)
+               else float(zero_division), fb)
+        hit = memo.get(key)
+        if hit is None:
+            s = _Sums(true, pred, w, order, numeric_mode,
+                      epi=[(2, k) + _epi_codes(a, zero_division) + (fmode, fb * fb) for a in _REPORT_AVERAGES])  # glue: the report's four averages
+            hit = memo[key] = (s, dict(zip(_REPORT_AVERAGES, s.epi)))
+        s, res = hit[0], hit[1][average]
+    bad, _, scal, vals = res
+    if isinstance(zero_division, str):
+        for bit, what in ((1, "precision"), (2, "recall"), (4, "f-score")):  # glue: the three metric names
+            if bad & bit and what in warn_for:
+                _undefined_warning(f"{what.capitalize()} is ill-defined and being set to 0.0 in labels "
+                                   "with no predicted/true samples. Use `zero_division` parameter to "
+                                   "control this behavior.")
     if average is None:
-        dtype = "<f8"
-        support = (Array.from_list([float(v) for v in ts], "<f8") if s.weighted
-                   else Array.from_list([int(v) for v in ts], "<i8"))
-        return (Array.from_list(precision, dtype), Array.from_list(recall, dtype),
-                Array.from_list(fscore, dtype), support)
-    weights = ts if average == "weighted" else None
-    return (_nanaverage(precision, weights), _nanaverage(recall, weights),
-            _nanaverage(fscore, weights), None)
+        ts = s.true[:k]
+        support = (Array.from_list([float(v) for v in ts], "<f8") if s.weighted  # glue: the k label supports
+                   else Array.from_list([int(v) for v in ts], "<i8"))  # glue: the k label supports
+        return (Array.from_list(list(vals[:k]), "<f8"), Array.from_list(list(vals[k:2 * k]), "<f8"),
+                Array.from_list(list(vals[2 * k:3 * k]), "<f8"), support)
+    return (scal[0], scal[1], scal[2], None)
+
+
+#: the averages classification_report asks precision_recall_fscore_support for
+_REPORT_AVERAGES = (None, "micro", "macro", "weighted")
 
 
 def fbeta_score(y_true, y_pred, *, beta, labels=None, pos_label=1, average="binary",
@@ -745,44 +730,14 @@ def jaccard_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
     k = len(chosen)
     s = _Sums(true, pred, w, _label_order(chosen, present), numeric_mode,
               epi=(0, k) + _epi_codes(average, zero_division) + (0, 0.0))
-    if s.epi is not None:
-        # the device epilogue (x_metrics/cls_epi.mojo): the same binary64 operations
-        bad, _, scal, vals = s.epi
-        if bad and isinstance(zero_division, str):
-            _undefined_warning("Jaccard is ill-defined and being set to 0.0 in labels with no true or "
-                               "predicted samples. Use `zero_division` parameter to control this behavior.")
-        if average is None:
-            return Array.from_list(list(vals[:k]), "<f8")
-        return scal[0]
-    num = list(s.tp[:k])
-    den = [s.pred[i] + s.true[i] - s.tp[i] for i in range(k)]
-    if average == "micro":
-        a = b = 0
-        for i in range(k):
-            a += num[i]
-            b += den[i]
-        num, den = [a], [b]
-    warned = []
-    jac = _divide(num, den, zero_division, "jaccard", warned)
-    if warned:
+    # the device epilogue (x_metrics/cls_epi.mojo): the binary64 ratios and averages
+    bad, _, scal, vals = s.epi
+    if bad and isinstance(zero_division, str):
         _undefined_warning("Jaccard is ill-defined and being set to 0.0 in labels with no true or "
                            "predicted samples. Use `zero_division` parameter to control this behavior.")
     if average is None:
-        return Array.from_list(jac, "<f8")
-    weights = None
-    if average == "weighted":
-        weights = [s.true[i] for i in range(k)]
-        if not any(weights):
-            weights = None
-    return _nanaverage(jac, weights) if weights is None else _average_plain(jac, weights)
-
-
-def _average_plain(values, weights):
-    s = sw = 0.0
-    for v, w in zip(values, weights):
-        s += v * w
-        sw += w
-    return s / sw
+        return Array.from_list(list(vals[:k]), "<f8")
+    return scal[0]
 
 
 def balanced_accuracy_score(y_true, y_pred, *, sample_weight=None, adjusted=False, numeric_mode=None):
@@ -791,28 +746,11 @@ def balanced_accuracy_score(y_true, y_pred, *, sample_weight=None, adjusted=Fals
     dropped with sklearn's warning), chance-adjusted when `adjusted`."""
     true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "balanced_accuracy_score")
     s = _Sums(true, pred, w, present, numeric_mode, epi=(1, len(present), 0, 1 if adjusted else 0, 0, 0.0))
-    if s.epi is not None:
-        # the device epilogue (x_metrics/cls_epi.mojo): the mean recall over the kept
-        # classes and the chance adjustment, the same binary64 operations
-        if s.epi[1] != len(present):
-            warnings.warn("y_pred contains classes not in y_true", stacklevel=2)
-        return float(s.epi[2][0])
-    per_class = [s.tp[i] / s.true[i] for i in range(len(present)) if s.true[i] != 0]
-    if len(per_class) != len(present):
+    # the device epilogue (x_metrics/cls_epi.mojo): the mean recall over the kept
+    # classes and the chance adjustment, binary64
+    if s.epi[1] != len(present):
         warnings.warn("y_pred contains classes not in y_true", stacklevel=2)
-    if not per_class:
-        return float("nan")
-    score = 0.0
-    for v in per_class:
-        score += v
-    score /= len(per_class)
-    if adjusted:
-        chance = 1 / len(per_class)
-        score -= chance
-        if chance == 1:
-            return float("nan")     # numpy's 0 / 0 in scikit-learn, chosen by value here
-        score /= 1 - chance
-    return float(score)
+    return float(s.epi[2][0])
 
 
 def matthews_corrcoef(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
