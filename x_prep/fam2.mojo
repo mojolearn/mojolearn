@@ -36,6 +36,9 @@ define that restores the old route, and turns off under MOJOLEARN_IDN_ALL_OFF.
       f2_clamp0 (an unknown label's -1 becomes class 0 so no unit indexes
       out of its table; the count refuses the batch after the run).
 
+Ops 236-240 are the IDENTICAL tiled Gram of LDA / QDA (x_prep/gram_blocked.mojo,
+IDN_GRAM_BLOCKED and its candidate arms).
+
 Ops F2_BASE .. F2_BASE + F2_N - 1 are a range of their own (as P2M_BASE's).
 An op whose switch is off compiles to nothing; the Python layer never stages
 it then (`x_prep_idn_fam2`, bindings/_mojolearn_x_prep*.mojo).
@@ -46,6 +49,9 @@ from x_prep.common import FP, IP, p, raw, ldi, sti, ld, st
 from x_prep.prims import add, mul
 from x_prep.py2mojo import splitmix_at
 from x_prep.blocked import XB
+from x_prep.gram_blocked import (
+    IDN_GRAM_BLOCKED, IDN_GRAM_ROWTILE, gb_part_unit, gb_part_row_unit, gb_fold_unit, qcb_part_unit, qcb_fold_unit,
+)
 
 comptime _F2_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime IDN_WDRAW = _F2_IDN and not is_defined["MOJOLEARN_IDN_WDRAW_OFF"]()
@@ -54,7 +60,7 @@ comptime IDN_WPICK = _F2_IDN and not is_defined["MOJOLEARN_IDN_WPICK_OFF"]()
 comptime IDN_PARTIAL_CODES = _F2_IDN and not is_defined["MOJOLEARN_IDN_PARTIAL_CODES_OFF"]()
 
 comptime F2_BASE = 230
-comptime F2_N = 6
+comptime F2_N = 11
 
 
 @always_inline
@@ -266,3 +272,16 @@ def run_f2_unit[OP: Int](t: Int, f: FP, q: IP):
     comptime if IDN_PARTIAL_CODES:
         comptime if OP == F2_BASE + 5:
             f2_clamp0_unit(t, f, q)
+    comptime if IDN_GRAM_BLOCKED:
+        # the IDENTICAL tiled Gram (x_prep/gram_blocked.mojo)
+        comptime if OP == F2_BASE + 6:
+            gb_part_unit(t, f, q)
+        comptime if OP == F2_BASE + 8:
+            gb_fold_unit(t, f, q)
+        comptime if OP == F2_BASE + 9:
+            qcb_part_unit(t, f, q)
+        comptime if OP == F2_BASE + 10:
+            qcb_fold_unit(t, f, q)
+    comptime if IDN_GRAM_ROWTILE:
+        comptime if OP == F2_BASE + 7:
+            gb_part_row_unit(t, f, q)

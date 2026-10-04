@@ -115,6 +115,8 @@ _OPS = dict(
     # (device and host column) run them; `_idn_fam2` bits 1 (f2_wblk .. f2_wdraw), 2
     # (f2_perm_rows), 4 (f2_wpick), 8 (f2_clamp0)
     f2_wblk=230, f2_wscan=231, f2_wdraw=232, f2_perm_rows=233, f2_wpick=234, f2_clamp0=235,
+    # the IDENTICAL tiled Gram (x_prep/gram_blocked.mojo): bit 16; gb_part_row is the bit 32 candidate
+    gb_part=236, gb_part_row=237, gb_fold=238, qcb_part=239, qcb_fold=240,
 )
 _PARAMS = 14
 _NONE = -1
@@ -2328,6 +2330,59 @@ def _nb_counts(pr, wo, xo, n, d, yo, K, cnt, sums, thr=_NONE, neg=_NONE):
 #: binding -> its `x_prep_idn_fam2` bits (0 when it has none), probed once
 _IDN_FAM2 = {}
 _F2_WDRAW, _F2_PERM_DRAW, _F2_WPICK, _F2_PARTIAL_CODES = 1, 2, 4, 8
+_F2_GRAM, _F2_GRAM_ROWTILE = 16, 32
+#: the most partial words (blocks x cells) a blocked Gram keeps; past it the
+#: block grows, then the one-thread-per-cell stage (a function of the shape
+#: only, so the device and the host column agree)
+_GRAM_WORDS = 2 ** 26
+
+
+def _gram_rows(v, n, cells):
+    """Rows per block of a blocked Gram over n rows with `cells` partial
+    words a block (x_prep/gram_blocked.mojo): the binding's block length
+    (`x_prep_idn_fam2` >> 16; 2048 unless a candidate arm is built), doubled
+    until the partial table fits `_GRAM_WORDS`; 0 when it never does."""
+    rows = (v >> 16) or _XB
+    while ((n + rows - 1) // rows) * cells > _GRAM_WORDS and rows < 2 ** 22:  # glue: the block length doubles
+        rows *= 2
+    return rows if ((n + rows - 1) // rows) * cells <= _GRAM_WORDS else 0
+
+
+def _gram(pr, mode, z, n, d, g):
+    """Stages G = Z'Z of the (n, d) block at z into the (d, d) block g. Under
+    IDENTICAL (`_idn_fam2` bit 16): block partials of the upper triangle, one
+    thread per (block, a, b >= a) (bit 32, a candidate arm: one per
+    (block, a)), then each cell folded over the blocks. Else `matmul`: one
+    thread per cell over every row."""
+    v = _idn_fam2(mode)
+    rows = _gram_rows(v, n, d * d) if (_blocked() and v & _F2_GRAM) else 0
+    if not rows:
+        pr.stage("matmul", d * d, z, 1, d, z, d, 1, g, d, n, _NONE, _NONE)
+        return
+    nb = (n + rows - 1) // rows
+    part = pr.work(nb * d * d)
+    if v & _F2_GRAM_ROWTILE:
+        pr.stage("gb_part_row", nb * d, z, n, d, part, nb, rows)
+    else:
+        pr.stage("gb_part", nb * d * d, z, n, d, part, nb, rows)
+    pr.stage("gb_fold", d * d, part, nb, d, g)
+
+
+def _qda_cov(pr, mode, xo, n, d, yo, K, mean, cnt, cov):
+    """Stages the K class covariances (divisor the class count) into cov.
+    Under IDENTICAL (`_idn_fam2` bit 16): block partials of every class from
+    one walk per (block, a, b >= a), then each cell folded over the blocks
+    (x_prep/gram_blocked.mojo). Else `qda_cov`: one thread per (class, a, b)
+    over every row."""
+    v = _idn_fam2(mode)
+    rows = _gram_rows(v, n, K * d * d) if (_blocked() and v & _F2_GRAM) else 0
+    if not rows:
+        pr.stage("qda_cov", K * d * d, xo, n, d, yo, mean, cnt, cov)
+        return
+    nb = (n + rows - 1) // rows
+    part = pr.work(nb * K * d * d)
+    pr.stage("qcb_part", nb * d * d, xo, n, d, yo, K, mean, part, nb, rows)
+    pr.stage("qcb_fold", K * d * d, part, nb, K, d, cnt, cov)
 
 
 def _idn_fam2(mode):
@@ -3076,7 +3131,7 @@ def _lda_cov_blocks(pr, xo, n, d, yo, K, mean, var, cnt, shr, given=None):
     if given is not None:
         return pr.put_list(given)
     cov = pr.alloc(K * d * d)
-    pr.stage("qda_cov", K * d * d, xo, n, d, yo, mean, cnt, cov)
+    _qda_cov(pr, _mode(), xo, n, d, yo, K, mean, cnt, cov)
     if shr is not None:
         pr.stage("da_shrink", K, xo, n, d, yo, mean, var, cnt, cov, pr.put_scalar(shr), pr.alloc(K))
     return cov
@@ -3169,7 +3224,7 @@ class LinearDiscriminantAnalysis(_Classifier):
         _cs(pr, mode, z, n, d, stz)
         pr.stage("lda_w", d, stz + 2 * d, d, n, K, std, w)
         pr.stage("center_rows", n * d, xo, n, d, mean, yo, w, z2)
-        pr.stage("matmul", d * d, z2, 1, d, z2, d, 1, g, d, n, _NONE, _NONE)
+        _gram(pr, mode, z2, n, d, g)
         pr.stage("eigh", 1, g, d, 0, e1, v1)
         pr.stage("lda_stage2", 1, e1, v1, std, mean, xbar, priors, K, d, n, meta, scal1, g2, ms)
         pr.stage("eigh", 1, g2, d, 0, e2, v2)
@@ -3380,7 +3435,7 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         if est is not None:
             cov = pr.put_list(_estimator_covs(est, arr, codes, K, "QuadraticDiscriminantAnalysis"))
         else:
-            pr.stage("qda_cov", K * d * d, xo, n, d, yo, mean, cnt, cov)
+            _qda_cov(pr, mode, xo, n, d, yo, K, mean, cnt, cov)
         if shr is not None:
             pr.stage("da_shrink", K, xo, n, d, yo, mean, var, cnt, cov, pr.put_scalar(shr), pr.alloc(K))
         keep = pr.alloc(K * d * d) if (self.store_covariance and eigen) else None

@@ -48,8 +48,21 @@ comptime IDN_RR_EIGH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (is_defined["MOJOLEARN_IDN_RR_EIGH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
-#: the smallest matrix the round-robin takes under IDN_RR_EIGH (shape only)
-comptime IDN_RR_MIN_N = 24
+#: the smallest matrix the round-robin takes under IDN_RR_EIGH (shape only).
+#: Lane fam2-prep-metrics: CANDIDATE ARMS for the threshold, each default OFF
+#: (the default stays 24): -D MOJOLEARN_IDN_RR_MIN_8, _16, _48 or _96 builds
+#: the device and the host column with that threshold (the first defined of
+#: 8, 16, 48, 96 wins), so they can be timed against each other on LDA / QDA.
+#: Below the threshold the cyclic one-thread unit runs; both are Jacobi to the
+#: same tolerance, so an arm moves eigenvalues within float32 round-off only
+#: for the sizes whose route it changes, on all four columns together.
+comptime IDN_RR_MIN_N = (
+    8 if is_defined["MOJOLEARN_IDN_RR_MIN_8"]() else (
+        16 if is_defined["MOJOLEARN_IDN_RR_MIN_16"]() else (
+            48 if is_defined["MOJOLEARN_IDN_RR_MIN_48"]() else (96 if is_defined["MOJOLEARN_IDN_RR_MIN_96"]() else 24)
+        )
+    )
+)
 #: x_prep/rr_eigh.mojo RRE_SWEEPS: the sweep budget (the device enqueues it whole)
 comptime IDN_RR_SWEEPS = 32
 #: x_prep/device.mojo EIGH_CYCLIC_Q
