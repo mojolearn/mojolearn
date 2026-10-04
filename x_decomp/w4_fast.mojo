@@ -53,9 +53,11 @@ from x_decomp.device import (
 )
 from x_decomp.resident import _id, _n, _ptr
 
-#: HOLD, opt-in only (`-D MOJOLEARN_LLE_FAST_DEV_LU`), measured source e9d72edb5 (2026-10-04).
-#: M3 afc_ab_def, full board size, 1 run per arm: lle taxi 1783.8 -> 1039.0 ms,
-#: but trustworthiness_k15 0.86623 -> 0.84096 (worse), so default OFF.
+#: HOLD-quality, opt-in only (`-D MOJOLEARN_LLE_FAST_DEV_LU`), measured source
+#: e9d72edb5 (2026-10-04). M3 afc_ab_def, full board size, 1 run per arm: lle
+#: taxi 1783.8 -> 1039.0 ms, but trustworthiness_k15 0.8662 -> 0.8410 vs FAST
+#: main (arm A) is a real drop, not noise, so default OFF (FAST quality must
+#: not go down vs FAST main and must match the best opponent).
 comptime LLE_FAST_DEV_LU = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
