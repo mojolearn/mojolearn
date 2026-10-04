@@ -5,13 +5,15 @@ from pathlib import Path
 for key in ('OPENBLAS_NUM_THREADS','OMP_NUM_THREADS','VECLIB_MAXIMUM_THREADS'):
     os.environ[key]='1'
 if not __debug__: raise RuntimeError('Assertions required')
+# Generic spread (rows 2k..200k, features 8..1500, classes 2..64), no shape
+# window: the route has none since 2026-10-04 (old window cases removed).
 CASES = {
- 'anchor':(32768,220,8), 'odd':(4097,221,7), 'lower':(4096,128,3),
- 'upper':(4097,512,16), 'rows-out':(4095,220,8),
- 'features-low':(4097,127,8), 'features-high':(4097,513,8),
- 'classes-out':(4097,220,17),
+ 'r2000-d8-c2':(2000,8,2), 'r5003-d37-c5':(5003,37,5),
+ 'r12000-d97-c11':(12000,97,11), 'r20011-d300-c24':(20011,300,24),
+ 'r8000-d1500-c3':(8000,1500,3), 'r3001-d700-c40':(3001,700,40),
+ 'r60000-d150-c64':(60000,150,64), 'r200000-d64-c9':(200000,64,9),
 }
-POLICY='softmax-g2-real-fit-zero-regression-v1'
+POLICY='softmax-g2-real-fit-zero-regression-v2-no-window'
 
 def sha(p): return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def write(p,data):
@@ -58,7 +60,7 @@ def capture(a):
         counts(name);arrays[name+'_scores']=scores
     assert all(np.isfinite(value).all() for value in arrays.values())
     for phase,rows in [('fit',n),('train',n),('query',len(q))]:
-        expected=rows>=4096 and 2<=c<=16 and 128<=d<=512
+        expected=rows>=1 and c>=1 and d>=1  # kernel limits only (no window)
         reached=phases[phase]['counts']
         assert reached[1]+reached[2]>0, 'NO_REACH '+phase
         assert (reached[0]>0) if expected else (reached[0]==0)

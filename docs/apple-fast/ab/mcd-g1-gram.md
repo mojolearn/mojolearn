@@ -14,10 +14,14 @@ subset K≈151 and merged phase-B K≈752. Thousands of slots run phase A and up
 to30 phase-B steps. TN self-Gram M=N=220 is non-split. Other robust-fit work
 may dominate; this is a hypothesis, not a speed prediction.
 
-Eligibility:129<=M=N<=256,128<=K<=1023,ta=True/tb=False, identical input
-pointers and batch strides, sufficient batch strides, distinct output base,
-existing splits==1. Metadata only. Phase-C huge-K, taxi<=128, weighted precision
-(nonalias), Mahalanobis NN and all split/atomic products remain incumbent.
+Eligibility (2026-10-04, no shape window): any M=N, K>=1 with ta=True/tb=False,
+identical input pointers and batch strides, sufficient batch strides, distinct
+output base, existing splits==1, Int32-safe shapes and strides. These are the
+kernel's correctness limits only. The old window 129<=M<=256, 128<=K<=1023
+bracketed the board and was removed as benchmark-tuned; it survives only behind
+default-off MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM. The window-free route is
+UNMEASURED. Weighted precision (nonalias), Mahalanobis NN and all split/atomic
+products remain incumbent.
 Original active gate is checked before operand access. Candidate z selects
 original batch strides; output grid64x64 and128 threads are unchanged.
 Non-split output overwrites; inactive candidates retain no-write behavior.
@@ -50,12 +54,13 @@ selected==eligible>0. NO_REACH is a control, never timing admission.
 
 ## Quality-first plan (still owed)
 
-1. Small exact-source batched-entry matrix probe: d129/220/221/256;
-K128/151/752/1023; all-inactive/mixed gates; batch padding; sentinels. Controls:
-d128/257,K127/1024, weighted nonalias, NN, output alias. Independent FP64 vs A
+1. Small exact-source batched-entry matrix probe over a generic spread
+(d 8..1500, K 2..1500, odd and tile-multiple sizes); all-inactive/mixed gates;
+batch padding; sentinels. Controls: weighted nonalias, NN, output alias,
+split plans. Independent FP64 vs A
 with existing5e-6 error bound and zero relative/maxabs regression allowance.
 Unchanged inactive outputs and split plans mandatory. Probe/helper still owed.
-2. Actual MinCovDet then EE on exact board rows. Smaller cases may reject early
+2. Actual MinCovDet then EE over the generic spread in tools/mcd_g1_quality.py. Smaller cases may reject early
 but do not certify100k scope. Preserve mcd_compat_quality.py gates (1% fitted
 state,.99 support/flag Jaccard,equal raw rank) and independent oracle-error
 checks. Better objective never excuses changed anomaly decisions. No loosening.

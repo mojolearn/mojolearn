@@ -32,13 +32,19 @@ from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel
 
 # SOURCE-READY / UNBUILT, 2026-10-04, lane/apple-fast-mcd-g1-gram-remote
 # source35c712d9c: no matrix/fitted quality or timing evidence. Default OFF.
-# Non-split phase-A/B self-Gram only; held PCA full-row atomic Gram excluded.
+# Non-split self-Gram of any shape (no window since 2026-10-04); split plans
+# keep the incumbent atomic path.
 # Admission requires gated batched FP64/no-regression checks, actual MCD/EE
 # fitted-state/support/rank gates, positive caller reach, then M3 A/B timing.
 # Existing ordered-covariance HOLD is not waived by this separate candidate.
 # See docs/apple-fast/ab/mcd-g1-gram.md and EXPERIMENTS.md (MCD_FAST_G1_GRAM).
 comptime MCD_G1_GRAM = AFN_GEMM_APPLE and is_defined["MOJOLEARN_MCD_FAST_G1_GRAM"]()
 comptime MCD_G1_AUDIT = AFN_GEMM_APPLE and is_defined["MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT"]()
+# LEGACY, default OFF: the old window admitted only d 129..256 features and
+# K 128..1023 selected rows, which brackets the board (istella 220 features).
+# Removed as benchmark-tuned on 2026-10-04; the window-free replacement is
+# UNMEASURED.
+comptime MCD_G1_LEGACY_WINDOW = is_defined["MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM"]()
 
 struct MCDG1Audit(Defaultable, Movable):
     var counts: InlineArray[Int, 4]
@@ -261,15 +267,21 @@ def launch_gemm_mma_batched(
     if tiles < DFG_BLOCK_TARGET and k >= 2 * DFG_MIN_SPLIT_STEPS:
         splits = min(DFG_BLOCK_TARGET // tiles, k // DFG_MIN_SPLIT_STEPS)
     var ga = Int32(1) if gate_all else Int32(0)
-    # MCD phase A/B covariance only: same centered input pointer/stride,
-    # 129..256 features and 128..1023 selected rows, no atomics/split change.
-    # Weighted precision (different pointers), Mahalanobis NN, taxi and
-    # phase-C huge-K covariance retain the incumbent kernel.
+    # Correctness limits only, no shape window. The batched kernel is a TN
+    # self-Gram (C = A^T A, one operand pointer and stride), so it needs
+    # m == n, ta, not tb and a == b with equal batch strides. It is the
+    # non-split scoped_kernel[64, 64, False], whose tiles equal MB_BM x MB_BN,
+    # so it applies only where the incumbent plan picks splits == 1 (a split
+    # plan needs the zero seed and atomics below). Every index is
+    # bounds-checked, so any m, k >= 1 is correct. Shapes and batch strides
+    # travel as Int32, so they must fit in Int32. No overlap of C with A.
     var eligible = (
-        m == n and m >= 129 and m <= 256 and k >= 128 and k <= 1023
-        and ta and not tb and a == b and a_bs == b_bs and splits == 1
+        m == n and ta and not tb and a == b and a_bs == b_bs and splits == 1
         and a_bs >= m * k and c_bs >= m * n and c != a and c != b
+        and max(a_bs, max(c_bs, max(m * k, m * n))) <= 2147483647
     )
+    comptime if MCD_G1_LEGACY_WINDOW:
+        eligible = eligible and m >= 129 and m <= 256 and k >= 128 and k <= 1023
     comptime if MCD_G1_AUDIT:
         var state = MCD_G1_STATE.get_or_create_ptr()
         state[].counts[0] += 1
