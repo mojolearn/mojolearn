@@ -38,6 +38,8 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import (
     lu_perm_src,
+    lu_result_word,
+    lu_finish_host,
     lu_aux_clamp,
     lu_aux_join,
     lu_aux_val,
@@ -139,7 +141,7 @@ def lu_solve_rl(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: In
     for i in range(n):
         var r = i if trans == 0 else src[i]
         for c in range(nrhs):
-            b.unsafe_store(r * nrhs + c, tp.unsafe_load(i * nrhs + c))
+            b.unsafe_store(r * nrhs + c, lu_result_word(tp.unsafe_load(i * nrhs + c)))
     _ = tmp^
     _ = src^
 
@@ -364,6 +366,7 @@ struct HostExec(Exec):
                 lu_rows(a, n, k, d, k + 1 + t * LU_ROWS, k + 1 + min(rows, (t + 1) * LU_ROWS))
 
             xd_parallel(elim, (rows + LU_ROWS - 1) // LU_ROWS)
+        lu_finish_host(a, n * n)
 
     @staticmethod
     def trisolve(lu: F32Ptr, idx: F32Ptr, src: F32Ptr, dst: F32Ptr, n: Int, nrhs: Int, trans: Int) raises:

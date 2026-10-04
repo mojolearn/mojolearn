@@ -87,6 +87,7 @@ from x_decomp.cells import (
     lu_l_elem,
     lu_swap_elem,
     lu_update_elem,
+    lu_result_word,
     omp_row,
     lars_row,
     LARS_ROW_EXTRA,
@@ -1810,6 +1811,19 @@ def launch_trs_tri(ctx: DeviceContext, lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int,
             )
 
 
+def lu_finish_kernel(a: F32Ptr, count: Int32):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(count):
+        a.unsafe_store(i, lu_result_word(a.unsafe_load(i)))
+
+
+def launch_lu_finish(ctx: DeviceContext, a: F32Ptr, count: Int) raises:
+    """Canonical NaN result words stay on the GPU, with no added host wait."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        if count > 0:
+            ctx.enqueue_function[lu_finish_kernel](a, Int32(count), grid_dim=_blocks(count), block_dim=TPB)
+
+
 def launch_trisolve(
     ctx: DeviceContext, lu: F32Ptr, idx: F32Ptr, src: F32Ptr, dst: F32Ptr, tmp: F32Ptr, n: Int, nrhs: Int, trans: Int
 ) raises:
@@ -1821,11 +1835,13 @@ def launch_trisolve(
         ctx.enqueue_function[trs_gather_kernel](src, idx, dst, Int32(n), Int32(nrhs), grid_dim=_blocks(cells), block_dim=TPB)
         launch_trs_tri(ctx, lu, dst, n, nrhs, 0)
         launch_trs_tri(ctx, lu, dst, n, nrhs, 1)
+        launch_lu_finish(ctx, dst, cells)
         return
     ctx.enqueue_function[trs_copy_kernel](src, tmp, Int32(cells), grid_dim=_blocks(cells), block_dim=TPB)
     launch_trs_tri(ctx, lu, tmp, n, nrhs, 2)
     launch_trs_tri(ctx, lu, tmp, n, nrhs, 3)
     ctx.enqueue_function[trs_gather_kernel](tmp, idx, dst, Int32(n), Int32(nrhs), grid_dim=_blocks(cells), block_dim=TPB)
+    launch_lu_finish(ctx, dst, cells)
 
 
 def lu_perm_kernel(piv: I32Ptr, idx: F32Ptr, n: Int32, trans: Int32):
@@ -2182,6 +2198,8 @@ def launch_lu(
                 a, scal, Int32(k), Int32(n),
                 grid_dim=_blocks((n - k - 1) * (n - k - 1)), block_dim=TPB,
             )
+
+    launch_lu_finish(ctx, a, n * n)
 
 
 @fieldwise_init

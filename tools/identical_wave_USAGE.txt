@@ -29,7 +29,7 @@ Environment strips inherited MojoLearn/candidate compile settings. Mandatory
 compile semaphore covers native and Mojo quality compiles. Preserve AMD Mojo cache.
 
 The reviewed plan contains 47 representative cases across all 11 affected
-families, 23 concrete quality gates, and 50 GPU/host binding build scripts.
+families, 24 concrete quality gates, and 50 GPU/host binding build scripts.
 Coverage includes VAR, knn-imputer, Gaussian/sparse random projections,
 additive-chi2 and maxabs-scaler fixed-cost rows. This is bounded representative
 coverage, not every estimator or a full race. The classical PCA/OLS/KMeans

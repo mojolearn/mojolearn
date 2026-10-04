@@ -77,7 +77,8 @@
     "import_smoke",
     "cnn_seams",
     "cnn_epoch_adam_controls",
-    "eigh_block_expected_refusal"
+    "eigh_block_expected_refusal",
+    "lu_result_word"
   ],
   "quality_gates": [
     {
@@ -285,6 +286,12 @@
       "kind": "mojo",
       "path": "tools/identical_wave_eigh_block_refusal.mojo",
       "coverage": "Exact captured32x32 unsafe block pivot must refuse60sweeps, default all-column block route disabled. This is a refusal regression, not a passed decomposition."
+    },
+    {
+      "id": "lu_result_word",
+      "kind": "mojo",
+      "path": "tools/identical_wave_lu_result_check.mojo",
+      "coverage": "LU production result word encoder preserves every tested non-NaN word and maps NaN signs/payloads to0x7fc00000. Full lu_nan gate still compares unmodified factor/pivot/solve bytes."
     }
   ],
   "cases": [
