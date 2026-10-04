@@ -347,7 +347,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     host arena's words arrive zeroed), never uploaded, and copied back into
     the host buffer at out_addr, not into the arena. Where a word lives moves
     no bit."""
-    for s in range(stages):
+    for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
         if (op < 0 or op >= N_OPS) and not is_p2m_op(op) and not is_f2_op(op):
             raise Error(String("x_prep: unknown op ", op))
@@ -367,7 +367,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     var prof = getenv("MOJOLEARN_XPREP_PROFILE", "0") == "1"
     var t_last = perf_counter_ns()
     var scratch = 1
-    for s in range(stages):
+    for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
         if Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_SORT_COLS:
             var sq = host_q + (s * STAGE_INTS + 2)
             var units = Int(host_q.unsafe_load(s * STAGE_INTS + 1))
@@ -378,7 +378,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         # FAST on Apple (lane/apple-fast-select, -D MOJOLEARN_SELECT_FREG / _FCLS): the
         # f_regression / f_classif tiles' partials live in the sort scratch (x_prep/select_fast.mojo)
         var sel_fcls = program_has_op(host_q, stages, OP_F_CLASSIF)
-        for s in range(stages):
+        for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
             var sq = host_q + (s * STAGE_INTS + 2)
             scratch = max(scratch, select_scratch_words(Int(host_q.unsafe_load(s * STAGE_INTS)), Int(sq[1]),
                                                         Int(sq[2]), Int(sq[4]), sel_fcls))
@@ -397,7 +397,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     var mi_ties = getenv("MOJOLEARN_XPREP_MI_TIES", "1") != "0"
     var mi_w = 1
     var mi_u = 1
-    for s in range(stages):
+    for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
         if Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_MI_CD:
             var mq = host_q + (s * STAGE_INTS + 2)
             mi_w = max(mi_w, mi_w_words(Int(mq[1]), Int(mq[2])))
@@ -410,7 +410,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                  and not is_defined["MOJOLEARN_X_PREP_CLASS_COV_GRID_OFF"]()):
         cov_grid = True
         if cov_grid:
-            for s in range(stages):
+            for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
                 var op = Int(host_q.unsafe_load(s * STAGE_INTS))
                 var total = Int(host_q.unsafe_load(s * STAGE_INTS + 1))
                 var cq = host_q + (s * STAGE_INTS + 2)
@@ -421,7 +421,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     # the round-robin eigh's scratch and done marks, sized over the program
     var rre_scr = 1
     comptime if RR_EIGH or IDN_RR_EIGH:
-        for s in range(stages):
+        for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
             if (Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_EIGH
                     and Int(host_q.unsafe_load(s * STAGE_INTS + 2 + EIGH_CYCLIC_Q)) == 0):
                 var eb = Int(host_q.unsafe_load(s * STAGE_INTS + 1))

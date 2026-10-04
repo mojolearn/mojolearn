@@ -104,7 +104,7 @@ def arena_release(id: Int) raises:
     if id < 0:
         return
     var pool = DEVICE_ARENA.get_or_create_ptr()
-    for i in range(len(pool[].chunks)):
+    for i in range(len(pool[].chunks)):  # small-loop(chunks: arena chunks): a handful of grow-only device chunks, no data
         if pool[].owner[i] == id:
             pool[].owner[i] = -1
     if pool[].active == id:
@@ -161,7 +161,7 @@ def arena_stats() raises -> List[Int]:
     var pool = DEVICE_ARENA.get_or_create_ptr()
     var used = 0
     var floats = 0
-    for i in range(len(pool[].chunks)):
+    for i in range(len(pool[].chunks)):  # small-loop(chunks: arena chunks): a handful of grow-only device chunks, no data
         floats += pool[].chunk_n[i]
         if pool[].owner[i] >= 0:
             used += 1

@@ -281,7 +281,7 @@ def idn_tree_scratch_words(host_q: IP, stages: Int) -> Int:
     tiled ii_gram stages need (0: none)."""
     var need = 0
     comptime if IDN_II_GRAM_TILE:
-        for s in range(stages):
+        for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
             if Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_II_GRAM:
                 var hq = host_q + (s * STAGE_INTS + 2)
                 need = max(need, iig_chunks(Int(hq[1])) * Int(hq[2]) * Int(hq[2]))

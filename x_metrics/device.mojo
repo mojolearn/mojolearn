@@ -94,7 +94,7 @@ def run_program_device_out(arena_addr: Int, arena_len: Int, prog_addr: Int, stag
     reads need not come back. Every other arena word keeps what the caller
     put there."""
     var o = IP(unsafe_from_address=outs_addr)
-    for k in range(nouts):
+    for k in range(nouts):  # small-loop(nouts: arena output ranges): validates the per-launch range list, a handful of entries
         var lo = Int(o.unsafe_load(4 * k))
         var hi = Int(o.unsafe_load(4 * k + 1))
         var cn = Int(o.unsafe_load(4 * k + 2))
@@ -113,7 +113,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     planned stage is one launch on one stream, the caller's arena comes back
     once (only the `nouts` ranges at `outs_addr` when nouts >= 0). `legacy` runs
     the caller's stages unplanned (the seam gate)."""
-    for s in range(stages):
+    for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
         if not is_user_op(op):
             raise Error(String("x_metrics: unknown op ", op))
