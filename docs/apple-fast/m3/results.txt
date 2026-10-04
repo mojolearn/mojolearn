@@ -1,4 +1,4 @@
-pos=996 lines=    1579
+pos=1005 lines=    1582
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -1177,3 +1177,13 @@ pos=996 lines=    1579
 1285:CMD apple-fast-batch@3150d75c1 symmulti-all-yr-istella-x rc=0 AFT-MEDIAN arm=B n=0 median_ms=None all=[] hashes=[] acc={}
 1286:CMD apple-fast-batch@3150d75c1 mi-reg-ties-istella-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1414.2 all=[1414] quality=['{"n_selected":'] defines='-D MOJOLEARN_MI_REG_TIES'
 1287:CMD apple-fast-batch@3150d75c1 mi-reg-folds-istella-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=46528.2 all=[46528] quality=['{"n_selected":'] defines='-D MOJOLEARN_MI_FAST_FOLDS'
+1288:FBUILD lane/apple-fast-miv@514401169 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+1289:CMD apple-fast-miv@514401169 miv-reg-ties-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1340.0 all=[1340] quality=['{"n_selected":'] defines='-D MOJOLEARN_MI_REG_TIES'
+1290:CMD apple-fast-miv@514401169 miv-reg-ties-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=160.0 all=[160] quality=['{"n_selected":'] defines='-D MOJOLEARN_MI_REG_TIES'
+1291:CMD apple-fast-miv@514401169 miv-reg-all-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1150.7 all=[1151] quality=['{"n_selected":'] defines='-D MOJOLEARN_MI_ALL'
+1292:CMD apple-fast-miv@514401169 miv-reg-all-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=80.7 all=[81] quality=['{"n_selected":'] defines='-D MOJOLEARN_MI_ALL'
+1293:CMD apple-fast-miv@514401169 miv-clf-all-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=551.8 all=[552] quality=['{"n_selected":'] defines='-D MOJOLEARN_MI_ALL'
+1294:CMD apple-fast-miv@514401169 miv-clf-all-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=145.1 all=[145] quality=['{"n_selected":'] defines='-D MOJOLEARN_MI_ALL'
+1295:CMD apple-fast-miv@514401169 miv-clf-rank-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=645.2 all=[645] quality=['{"n_selected":'] defines='-D MOJOLEARN_MI_CLF_RANKMAJOR'
+1296:CMD apple-fast-miv@514401169 miv-clf-rank-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=196.4 all=[196] quality=['{"n_selected":'] defines='-D MOJOLEARN_MI_CLF_RANKMAJOR'
+1297:CMD apple-fast-batch@3150d75c1 mi-reg-work-istella-x rc=0 AFC-AB-SUMMARY mi-reg-work-istella-x arm=B lane=select-mutual-info-reg ds=istella median_of_medians_ms=46430.240000016056 runs=[46430.240000016056 ] digest=2f87721e6d5094e8 
