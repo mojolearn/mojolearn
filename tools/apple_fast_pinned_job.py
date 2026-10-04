@@ -27,6 +27,7 @@ def main():
         "tools/catalog_gemm_quality.py": "verified-standalone-quality",
         "tools/callpath_probe_pair.py": "verified-standalone-quality",
         "tools/shared_gemm_quality.py": "verified-standalone-quality",
+        "tools/catalog_resident_quality.py": "verified-standalone-quality",
         "tools/catalog_gemm_matrix_timing.py": "verified-matrix-timing",
     }
     assert script in policies

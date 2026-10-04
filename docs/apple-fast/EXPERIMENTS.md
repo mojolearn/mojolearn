@@ -907,3 +907,13 @@ numerical evaluation; r4 14761655f retains stable context ownership and
 foreign-context refusal, now compiling on M2. No callpath timing admitted.
 
 Eigh panel DF21eeacf90: M3 eigh-panel-df-q-v1 strict no-regression FAIL against current panel default, absolute gate FAIL; no timings or promotion admitted. K1 diagnostic1a58b974e is reference-only with22fixed evaluations across3explicit model controls; original K1 HOLD remains.
+
+Shared downstream G1 source30e4562c2129569ed03d93d878ec6a903ea51691
+starts M2 core A=COUNTERS, B=COUNTERS+G1; G5 source495c30c33a8805a1944b45f9bc911446f7e89ed8
+is separate to prevent manifest collisions. Core artifact is _mojolearn.so.
+No runtime admission yet. Resident catalog probe fa39073607e3b19c4fbfe063a5545a63318f13c2
+starts M2 A/B compilation; strict new lifecycle/matrix quality must pass before
+its distinct resident-input call/completion/first-read timing contract.
+Callpathr5 3491a4d4cab94ad76a04e779952daa8ba64ef1c8 M2bothPASS; M3qualityowed.
+EighDF failure details: board4096 eigenerror +34.3%, board1000 residual+0.65%,
+indefinite1024 orthogonality+0.85%; five fallback cases unchanged. HOLD retained.
