@@ -84,7 +84,9 @@ from gbdt.methods.greedy_subsets_searcher.structure_searcher_options import (
 )
 from gbdt.models.non_symmetric_tree import TNonSymmetricTree
 from gbdt.models.add_non_symmetric_tree_doc_parallel import (
+    IDN_NS_PREDICT_PACKED,
     add_non_symmetric_tree_to_cursor,
+    add_non_symmetric_trees_packed,
     compute_non_symmetric_bins_for_model,
 )
 from gbdt.options.catboost_options import (
@@ -3420,12 +3422,20 @@ def predict(
         # per-tree cost on a path that runs once per predict, stated
         # rather than hidden, and the packed-once form the oblivious arm
         # below takes is the fix if anyone measures a need.
-        for t in range(model.size()):
-            add_non_symmetric_tree_to_cursor(
-                ctx, layout, model.non_symmetric_models[t], cindex, n_rows,
+        # lane/fam-gbdt (IDN_NS_PREDICT_PACKED): the ensemble packed once,
+        # the same kernels back to back, one drain
+        comptime if IDN_NS_PREDICT_PACKED:
+            add_non_symmetric_trees_packed(
+                ctx, layout, model.non_symmetric_models, cindex, n_rows,
                 cursor,
             )
-        ctx.synchronize()
+        else:
+            for t in range(model.size()):
+                add_non_symmetric_tree_to_cursor(
+                    ctx, layout, model.non_symmetric_models[t], cindex,
+                    n_rows, cursor,
+                )
+            ctx.synchronize()
         return
 
     # pack every tree's per-level records and leaf values, flat.
