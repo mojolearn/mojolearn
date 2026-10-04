@@ -63,6 +63,14 @@ def main():
         base=a.data/(case.get('block','reg')+'-'+a.dataset)
         with np.load(str(base)+'.npz') as z: arrays={k:np.ascontiguousarray(z[k]) for k in z.files}
         block_info=json.loads(Path(str(base)+'.json').read_text())
+        if driver=='estimator' and case.get('class','').endswith('Classifier') and arrays['y'].dtype.kind=='f':
+            # cls-* blocks store integral class ids as float32; public classifiers
+            # refuse floating labels. Exact integral values only, else refuse.
+            labels=arrays['y']
+            if not np.all(np.isfinite(labels)) or not np.array_equal(labels,np.round(labels)):
+                raise RuntimeError('non-integral classification labels')
+            arrays['y']=labels.astype(np.int64)
+            block_info=dict(block_info,labels_cast='float32 integral -> int64')
         import classical_two_datasets as ctd
         if driver=='classical':
             cls={'pca':ctd.OursPCA,'ols':ctd.OursOLS,'kmeans':ctd.OursKMeans}[a.lane]
