@@ -1,5 +1,5 @@
 """Unit checks for the AMD portable payload prototype (pure Python; no GPU).
-Run: python3 -m unittest packaging/linux/test_amd_portable_payload.py"""
+Run: python3 packaging/linux/test_amd_portable_payload.py"""
 import importlib.util, struct, unittest
 from pathlib import Path
 

@@ -106,7 +106,7 @@ def embedded_objects(data):
                 size = shoff + shentsize * shnum
                 if 0 < size <= len(data) - i:
                     blob = data[i:i + size]
-                    names = sorted({m.decode() for m in  # glue: byte scan for embedded ELF headers
+                    names = sorted({m.decode() for m in  # glue: kernel names in one code object
                                     re.findall(rb"([A-Za-z0-9_$.]{6,})\.kd\x00", blob)})
                     out.append((i, size, names))
                     i += size
@@ -147,7 +147,7 @@ def trim_comment(elf):
         return elf
     c = com[0]
     later = [r for r in rows if r["off"] > c["off"] and r["type"] != 8]  # not NOBITS  # glue: ELF section table
-    if any(r["flags"] & 0x2 for r in later):  # glue: ELF program headers
+    if any(r["flags"] & 0x2 for r in later):  # glue: ELF section flags
         return elf  # a loaded section follows; leave the object alone
     phoff = struct.unpack_from("<Q", elf, 0x20)[0]
     phentsize, phnum = struct.unpack_from("<HH", elf, 0x36)
