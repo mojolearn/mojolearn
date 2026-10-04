@@ -651,11 +651,19 @@ def _check_plugins(pkg, present):
         if not gpu_plugins.valid_arches(row["profile"], arches):
             raise GpuPluginError(f"mojolearn: {row['distribution']} has missing or unexpected "
                                  f"architecture sets {arches}; {fix}")
-        _read_plugin_marker(dist, gpu_plugins.PLUGIN_MARKER,
-                            gpu_plugins.plugin_marker(vendor, _CORE_VERSION, arches))
+        try:
+            raw_marker = json.loads(dist.read_text(gpu_plugins.PLUGIN_MARKER) or "{}")
+            bundle = raw_marker.get("bundled_ptx") if isinstance(raw_marker, dict) else None
+            expected = (gpu_plugins.plugin_marker(vendor, _CORE_VERSION, arches, bundled_ptx=bundle)
+                        if bundle is not None else gpu_plugins.plugin_marker(vendor, _CORE_VERSION, arches))
+        except (ValueError, TypeError) as exc:
+            raise GpuPluginError(f"mojolearn: invalid vendor PTX ownership metadata: {exc}") from exc
+        _read_plugin_marker(dist, gpu_plugins.PLUGIN_MARKER, expected)
         _PLUGINS_FOUND[vendor] = {"distribution": row["distribution"], "version": dist.version,
                                   "location": _site_dir(), "code_format": "native",
                                   "payloads": [row["distribution"]]}
+        if bundle is not None:
+            _PLUGINS_FOUND[vendor]["bundled_ptx"] = bundle
 
 
 _BASELINE_SELECTION = None
@@ -719,6 +727,94 @@ def _baseline_layout(pkg):
                                   location=_site_dir(), code_format="ptx-baseline", identical_qualified=False)
     _LAYOUT = ("vendor", str(root))
     return _LAYOUT
+
+
+def _ptx_runtime_configuration():
+    """Correlate CUDA logical device zero with its exact NVIDIA driver record."""
+    import ctypes
+    import subprocess
+    lib = None
+    for name in _PROBE["cuda"]["libs"]:
+        try:
+            lib = ctypes.CDLL(name)
+            break
+        except OSError:
+            continue
+    if lib is None:
+        raise ValueError("CUDA driver unavailable")
+    def check(rc):
+        if rc != 0:
+            raise ValueError(f"CUDA admission query failed ({rc})")
+    check(lib.cuInit(0))
+    count, dev = ctypes.c_int(), ctypes.c_int()
+    check(lib.cuDeviceGetCount(ctypes.byref(count)))
+    # This admission contract qualifies single-GPU execution only. Do not
+    # infer selection on a multi-device process from nvidia-smi ordering.
+    if count.value != 1:
+        raise ValueError("PTX admission currently requires one visible CUDA device")
+    check(lib.cuDeviceGet(ctypes.byref(dev), 0))
+    uuid = ctypes.create_string_buffer(16)
+    uuid_fn = getattr(lib, "cuDeviceGetUuid_v2", None) or lib.cuDeviceGetUuid
+    check(uuid_fn(uuid, dev))
+    import uuid as uuid_module
+    device_uuid = "GPU-" + str(uuid_module.UUID(bytes=uuid.raw))
+    api = ctypes.c_int()
+    check(lib.cuDriverGetVersion(ctypes.byref(api)))
+    output = subprocess.check_output([
+        "nvidia-smi", "--id=" + device_uuid,
+        "--query-gpu=uuid,name,compute_cap,driver_version", "--format=csv,noheader,nounits"],
+        text=True, timeout=10).strip().splitlines()
+    if len(output) != 1:
+        raise ValueError("ambiguous NVIDIA device query")
+    fields = [v.strip() for v in output[0].split(",")]  # glue: parse driver metadata CSV fields
+    if len(fields) != 4 or fields[0].lower() != device_uuid.lower():
+        raise ValueError("CUDA device and NVIDIA driver witness differ")
+    return dict(device_name=fields[1], compute_capability=[int(v) for v in fields[2].split(".")],  # glue: parse architecture metadata integers
+                driver_version=fields[3], cuda_driver_version=api.value)
+
+
+def _admitted_baseline_base(pkg, native_refusal):
+    """Only called after a detected NVIDIA device lacks compatible native code."""
+    global _BASELINE_SELECTION, _BASELINE_FILES, _BASELINE_ROOT, _ARCH_SELECTED, _ARCH_HOW
+    from pathlib import Path
+    import hashlib
+    from . import ptx_admission
+    import subprocess
+    try:
+        if os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical").strip().lower() != "identical":
+            raise ValueError("no automatic PTX policy is admitted for this numeric mode")
+        info = _PLUGINS_FOUND.get("cuda", {})
+        bundle = info.get("bundled_ptx")
+        if (not isinstance(bundle, dict) or set(bundle) != {"manifest_sha256", "admission_sha256"}
+                or info.get("distribution") != "mojolearn-nvidia"):
+            raise ValueError("NVIDIA vendor wheel carries no admitted PTX fallback")
+        root = Path(pkg) / "cuda_ptx" / "sm_80"
+        raw = (root / gpu_plugins.BASELINE_MANIFEST).read_bytes()
+        admission_raw = (root / ptx_admission.ADMISSION_FILE).read_bytes()
+        manifest_hash = hashlib.sha256(raw).hexdigest()
+        admission_hash = hashlib.sha256(admission_raw).hexdigest()
+        if manifest_hash != bundle["manifest_sha256"] or admission_hash != bundle["admission_sha256"]:
+            raise ValueError("bundled PTX metadata differs from vendor ownership marker")
+        doc = json.loads(raw)
+        actual = {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                  for p in root.rglob("*.so")}  # glue: inventory installed binary paths and file digests
+        gpu_plugins.validate_baseline_manifest(doc, actual)
+        source = (Path(pkg) / "identity_columns" / "COMMIT").read_text().strip()
+        if source != doc["source_commit"] or doc.get("source_dirty") is not False:
+            raise ValueError("PTX build source differs from the clean installed core")
+        configuration = _ptx_runtime_configuration()
+        ptx_admission.validate_admission(json.loads(admission_raw), source_commit=source,
+                                        manifest_sha256=manifest_hash, configuration=configuration)
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, subprocess.SubprocessError) as exc:
+        raise GpuPluginError(f"{native_refusal}\nIDENTICAL PTX fallback refused: {exc}") from exc
+    _BASELINE_ROOT, _BASELINE_FILES = str(root), actual
+    _BASELINE_SELECTION = dict(schema="mojolearn.ptx-baseline-selection.v1", requested="native-first",
+        selected="ptx-baseline", native_fallback=False, code_format="ptx-baseline",
+        manifest_sha256=manifest_hash, admission_sha256=admission_hash, source_commit=source,
+        identical_qualified=True, configuration=configuration, loaded_files=[])
+    _ARCH_SELECTED, _ARCH_HOW = "sm_80", "native unavailable; admitted IDENTICAL PTX fallback"
+    info.update(code_format="ptx-baseline", identical_qualified=True)
+    return str(root)
 
 
 def _record_baseline_load(path):
@@ -887,6 +983,10 @@ def _sm_parts(arch):
     return int(body[:-1]), int(body[-1]), specific
 
 
+class _NoCompatibleNative(ImportError):
+    """A detected device has no compatible carried native architecture."""
+
+
 def _pick_arch(vendor, vdir, archs):
     """Which of `archs` (the carried architecture directories) this box
     should load, and how that was decided. Raises with the whole table when
@@ -942,7 +1042,7 @@ def _pick_arch(vendor, vdir, archs):
             "compatibility on hip" if vendor == "hip" else
             "cubins run forward only within one family, and `a`-suffixed "
             "builds only on their exact chip")
-    raise ImportError(
+    raise _NoCompatibleNative(
         f"mojolearn: this device is {dev} ({how}) and no {vendor} set this "
         f"install carries can run on it ({hint}). Carried:\n{lines}\n"
         "A release carrying this device's architecture is needed; "
@@ -962,7 +1062,12 @@ def _vendor_base(pkg, vendor):
         _ARCH_SELECTED = None
         _ARCH_HOW = "no architecture level (arch-less set)"
         return vdir
-    arch, how = _pick_arch(vendor, vdir, archs)
+    try:
+        arch, how = _pick_arch(vendor, vdir, archs)
+    except _NoCompatibleNative as exc:
+        if vendor != "cuda":
+            raise
+        return _admitted_baseline_base(pkg, exc)
     _ARCH_SELECTED = arch
     _ARCH_HOW = how
     return os.path.join(vdir, arch)
