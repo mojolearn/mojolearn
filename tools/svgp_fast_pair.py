@@ -25,7 +25,7 @@ import sys
 # RBFTILE and BLKCHOL are default since their promotion; their _OFF forms build the old arm.
 DEFINES = ("MOJOLEARN_SVGP_FAST_BLKCHOL_OFF", "MOJOLEARN_SVGP_FAST_RBFTILE_OFF", "MOJOLEARN_SVGP_FAST_BSPLIT")
 DATASETS = ("taxi", "istella")
-FIXTURE = "svgp-board-v1"
+FIXTURE = "svgp-board-v2-input-hashes"
 
 
 def digest(path):
@@ -85,7 +85,9 @@ def main():
                       MOJOLEARN_BENCH_INSTALLED='0', PYTHONPATH=str(root / 'python'),
                       OPENBLAS_NUM_THREADS='1', OMP_NUM_THREADS='1')
     installed = root / 'python/mojolearn/_mojolearn_x_neighbors.so'
-    shutil.copy2(installed, out / 'original.so')
+    had_original = installed.exists()
+    if had_original:
+        shutil.copy2(installed, out / 'original.so')
     passed = True
     try:
         for arm in ('A', 'B'):
@@ -112,9 +114,12 @@ def main():
                 json.dump(receipt_want, stream, sort_keys=True)
         print('SVGP-FAST-PAIR status=%s define=%s source=%s' % ('PASS' if passed else 'FAIL', define, args.source))
     finally:
-        temporary = installed.with_suffix('.so.restore')
-        shutil.copy2(out / 'original.so', temporary)
-        os.replace(temporary, installed)
+        if had_original:
+            temporary = installed.with_suffix('.so.restore')
+            shutil.copy2(out / 'original.so', temporary)
+            os.replace(temporary, installed)
+        else:
+            installed.unlink(missing_ok=True)
     sys.exit(0 if passed else 1)
 
 

@@ -35,7 +35,7 @@ import sys
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = "svgp-board-v1"
+FIXTURE = "svgp-board-v2-input-hashes"
 TOL = 1e-4
 
 
@@ -70,6 +70,12 @@ def dump(path, dataset, data):
     out = dict(pred=pred, yq=np.asarray(yq, dtype=np.float32), elbo=np.float64(model.elbo_),
                alpha=np.asarray(model._alpha), C=np.asarray(model._C), q_mu=np.asarray(model.q_mu_),
                q_sqrt=np.asarray(model.q_sqrt_))
+    # Bind quality to all effective inputs, not just matching query targets.
+    for name, value in dict(X=X, y=y, Xq=Xq, Z=Z0).items():
+        a = np.ascontiguousarray(value)
+        header = json.dumps(dict(shape=a.shape, dtype=a.dtype.str), sort_keys=True).encode()
+        out["input_" + name] = np.array(hashlib.sha256(header + a.tobytes()).hexdigest())
+    out["hyp"] = np.array(json.dumps(hyp, sort_keys=True))
     np.savez(path, **out)
     so = Path(xn.__file__).with_name("_mojolearn_x_neighbors.so")
     meta = dict(fixture=FIXTURE, dataset=dataset, n=int(X.shape[0]), m=int(Z0.shape[0]), d=int(X.shape[1]),
@@ -95,6 +101,11 @@ def _rel(a, b):
 def compare(fa, fb):
     a, b = np.load(fa), np.load(fb)
     assert a["yq"].tobytes() == b["yq"].tobytes(), "different query targets"
+    for key in ("input_X", "input_y", "input_Xq", "input_Z", "hyp"):
+        assert a[key].item() == b[key].item(), "different fixture: " + key
+    for key in ("pred", "yq", "alpha", "C", "q_mu", "q_sqrt", "elbo"):
+        assert a[key].shape == b[key].shape, "different output shape: " + key
+        assert np.isfinite(a[key]).all() and np.isfinite(b[key]).all(), "nonfinite: " + key
     r2a, rma, ea = _metrics(a)
     r2b, rmb, eb = _metrics(b)
     finite = all(np.isfinite(b[k]).all() for k in ("pred", "alpha", "C", "q_mu", "q_sqrt")) and np.isfinite(eb)
