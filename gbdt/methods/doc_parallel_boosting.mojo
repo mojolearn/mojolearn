@@ -108,6 +108,9 @@ from gbdt.gpu_data.compressed_index_builder import (
 )
 from gbdt.methods.leaves_estimation.leaves_estimation import (
     IDN_EST_ONE_STEP_DEVICE,
+    IDN_GBDT_MC_ONE_STEP_DEVICE,
+    MC_ONE_STEP_MAX_CLASSES,
+    multiclass_one_step_kernel,
     newton_one_step_kernel,
 )
 from std.memory import bitcast
@@ -716,6 +719,19 @@ struct TEstimationWorkspace(Movable):
     #: one-call path builds
     var arena_scratch: List[OracleDeviceScratch]
     var arena_host: List[OracleHostScratch]
+    #: lane fix-g1-gbdt (`IDN_GBDT_MC_ONE_STEP_DEVICE`): the MultiClass
+    #: one-step's device stashes, kept for the fit like the buffers above.
+    #: `mc_grad` holds `n_leaves * approx_dim` reduced der floats, `mc_hess`
+    #: the `k (k + 1) / 2` reduced Hessian columns per leaf
+    #: (`k = approx_dim + 1`), `mc_not_pd` one fallback flag per leaf and
+    #: `h_mc_not_pd` its host copy. One element each on the arena workspace,
+    #: which never takes this path (`mc_hess_len` / `mc_grad_len` gate it).
+    var mc_grad: DeviceBuffer[DType.float32]
+    var mc_hess: DeviceBuffer[DType.float32]
+    var mc_not_pd: DeviceBuffer[DType.uint32]
+    var h_mc_not_pd: HostBuffer[DType.uint32]
+    var mc_grad_len: Int
+    var mc_hess_len: Int
 
     def __init__(
         out self,
@@ -742,6 +758,12 @@ struct TEstimationWorkspace(Movable):
         self.oracle_scratch = OracleScratchPool()
         self.arena_scratch = List[OracleDeviceScratch]()
         self.arena_host = List[OracleHostScratch]()
+        self.mc_grad = arena.device[DType.float32](ctx, 1)
+        self.mc_hess = arena.device[DType.float32](ctx, 1)
+        self.mc_not_pd = arena.device[DType.uint32](ctx, 1)
+        self.h_mc_not_pd = arena.host_buffer[DType.uint32](ctx, 1)
+        self.mc_grad_len = 0
+        self.mc_hess_len = 0
 
     def __init__(
         out self,
@@ -775,6 +797,30 @@ struct TEstimationWorkspace(Movable):
         self.oracle_scratch = OracleScratchPool()
         self.arena_scratch = List[OracleDeviceScratch]()
         self.arena_host = List[OracleHostScratch]()
+        # lane fix-g1-gbdt: sized only where the MultiClass one-step can run
+        # (approx_dim > 1); one element otherwise
+        var mc_grad_len = 0
+        var mc_hess_len = 0
+        comptime if IDN_GBDT_MC_ONE_STEP_DEVICE:
+            if approx_dim > 1:
+                var mc_k = approx_dim + 1
+                mc_grad_len = n_leaves * approx_dim
+                mc_hess_len = n_leaves * ((mc_k * (mc_k + 1)) // 2)
+        var mc_flag_len = 1
+        if mc_hess_len > 0 and n_leaves > 1:
+            mc_flag_len = n_leaves
+        self.mc_grad = ctx.enqueue_create_buffer[DType.float32](
+            mc_grad_len if mc_grad_len > 0 else 1
+        )
+        self.mc_hess = ctx.enqueue_create_buffer[DType.float32](
+            mc_hess_len if mc_hess_len > 0 else 1
+        )
+        self.mc_not_pd = ctx.enqueue_create_buffer[DType.uint32](mc_flag_len)
+        self.h_mc_not_pd = ctx.enqueue_create_host_buffer[DType.uint32](
+            mc_flag_len
+        )
+        self.mc_grad_len = mc_grad_len
+        self.mc_hess_len = mc_hess_len
 
 
 def _estimate_and_apply(
@@ -1079,6 +1125,119 @@ def _estimate_and_apply(
         trace.record_list_f32(leaf_tag, leaf_values)
         stage_times.end(ctx, "est.tail_apply")
         _ = h_mask^  # past the drain (step-33 race class)
+        _ = oracle^  # past the drain (step-33 race class, device side)
+        return
+    # lane fix-g1-gbdt (`IDN_GBDT_MC_ONE_STEP_DEVICE`): the one-step
+    # MultiClass Newton estimation (blocked Hessian) finishes on the device:
+    # the evaluation and every Hessian row are enqueued and stashed, one
+    # kernel solves each leaf's system in soft-float64, the cursor add reads
+    # its output and the task drains ONCE (the host walker drained after the
+    # gradient, after the Hessian rows and at the tail). Same bits as the
+    # host walker; the host column is untouched.
+    var mc_one_step_device = False
+    comptime if IDN_GBDT_MC_ONE_STEP_DEVICE:
+        var mc_k = oracle.single_bin_dim
+        mc_one_step_device = (
+            iters == 1
+            and leaf_estimation_method == LEAF_ESTIMATION_NEWTON
+            and objective == OBJECTIVE_MULTICLASS
+            and oracle.objective == OBJECTIVE_MULTICLASS
+            and mc_k >= 2
+            and mc_k <= MC_ONE_STEP_MAX_CLASSES
+            and oracle.cursor_dim == approx_dim
+            and mc_k == approx_dim + 1
+            and oracle.hessian_block_size() == mc_k
+            and oracle.bin_count == n_leaves
+            # a weighted fit needs the constructor's per-leaf weight sums
+            # already on the host (not the deferred-weights oracle)
+            and not oracle.h_weight_stats.__bool__()
+            and len(oracle.weights_cpu) == n_leaves
+            and est_ws[0].mc_grad_len >= n_leaves * approx_dim
+            and est_ws[0].mc_hess_len >= n_leaves * ((mc_k * (mc_k + 1)) // 2)
+        )
+    if mc_one_step_device:
+        oracle.times.enabled = stage_times.enabled
+        # the walker's own first call, `MoveTo(start)` at the zero point in
+        # the walker's gauge (`SingleBinDim()` components per leaf)
+        var mc_start = List[Float32](
+            length=n_leaves * oracle.single_bin_dim, fill=Float32(0.0)
+        )
+        oracle.move_to(mc_start)
+        # handle copies (the workspace keeps the memory for the fit)
+        var mc_grad = est_ws[0].mc_grad.copy()
+        var mc_hess = est_ws[0].mc_hess.copy()
+        var mc_not_pd = est_ws[0].mc_not_pd.copy()
+        oracle.enqueue_multiclass_one_step_inputs(mc_grad, mc_hess)
+        stage_times.begin(ctx)
+        # weighted fit: `Regularize`'s per-leaf decision (1.0 keep, 0.0
+        # zero) at each leaf's first slot of `d_est`, from the weight sums
+        # the constructor read; sized as `d_est` (the copy moves the whole
+        # device buffer's length)
+        var mc_mask_len = 1
+        if has_weights:
+            mc_mask_len = est_ws[0].n_leaves_cap * approx_dim
+        var h_mc_mask = ctx.enqueue_create_host_buffer[DType.float32](
+            mc_mask_len
+        )
+        if has_weights:
+            for i in range(mc_mask_len):
+                h_mc_mask.unsafe_ptr().unsafe_store(i, Float32(0.0))
+            for i in range(n_leaves):
+                var keep = Float32(1.0)
+                if oracle.weights_cpu[i] < oracle.min_leaf_weight:
+                    keep = Float32(0.0)
+                h_mc_mask.unsafe_ptr().unsafe_store(i * approx_dim, keep)
+            ctx.enqueue_copy(dst_buf=d_est, src_ptr=h_mc_mask.unsafe_ptr())
+        ctx.enqueue_function[multiclass_one_step_kernel](
+            mc_grad.unsafe_ptr(),
+            mc_hess.unsafe_ptr(),
+            oracle.d_p_sz.unsafe_ptr(),
+            bitcast[DType.uint64](oracle.lambda_reg),
+            bitcast[DType.uint64](oracle.min_leaf_weight),
+            Int32(n_leaves),
+            Int32(approx_dim),
+            d_est.unsafe_ptr(),
+            mc_not_pd.unsafe_ptr(),
+            Int32(1) if has_weights else Int32(0),
+            grid_dim=((n_leaves + 63) // 64, 1, 1),
+            block_dim=(64, 1, 1),
+        )
+        var mc_gx = 2 * oracle.sm_count
+        if mc_gx < 1:
+            mc_gx = 1
+        ctx.enqueue_function[add_model_value_kernel](
+            oracle.d_p_off.unsafe_ptr(),
+            oracle.d_p_sz.unsafe_ptr(),
+            row_index.unsafe_ptr(),
+            d_est.unsafe_ptr(),
+            learning_rate,
+            cursor.unsafe_ptr(),
+            Int32(approx_dim), Int32(n_rows),
+            grid_dim=(mc_gx, n_leaves, approx_dim),
+            block_dim=(256, 1, 1),
+        )
+        ctx.enqueue_copy(dst_ptr=h_est.unsafe_ptr(), src_buf=d_est)
+        ctx.enqueue_copy(
+            dst_ptr=est_ws[0].h_mc_not_pd.unsafe_ptr(), src_buf=mc_not_pd
+        )
+        # the task's one settle point (DEVIATION 1891's holds, as the
+        # ordinary tail below)
+        ctx.synchronize()
+        # DEVIATION 74's counter, from the per-leaf fallback flags
+        for i in range(n_leaves):
+            if est_ws[0].h_mc_not_pd.unsafe_ptr().unsafe_load(i) != UInt32(0):
+                not_pd_blocks += 1
+        not_pd_total += not_pd_blocks
+        leaf_values.clear()
+        for i in range(n_leaves * approx_dim):
+            leaf_values.append(h_est.unsafe_ptr().unsafe_load(i))
+        merge_stage_times(stage_times, oracle.times)
+        trace.record_list_f32(leaf_tag, leaf_values)
+        stage_times.end(ctx, "est.tail_apply")
+        _ = h_mc_mask^  # past the drain (step-33 race class)
+        _ = mc_grad^
+        _ = mc_hess^
+        _ = mc_not_pd^
         _ = oracle^  # past the drain (step-33 race class, device side)
         return
     var estimated: List[Float32]

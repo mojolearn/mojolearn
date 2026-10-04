@@ -101,6 +101,9 @@ from gbdt.methods.leaves_estimation.leaves_estimation_helper import (
     compute_exact_approx,
     make_exact_quantile_scratch,
 )
+from gbdt.methods.leaves_estimation.leaves_estimation import (
+    f32_stash_kernel,
+)
 from gbdt.targets.kernel.multilogit import (
     launch_multilogit_second_der,
     launch_multilogit_second_der_all_rows,
@@ -875,6 +878,94 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         for b in range(ml_blocks):
             mfv32 += self.h_fv.unsafe_ptr().unsafe_load(b)
         value = Float64(mfv32)
+
+    def _stash_multi_stats(
+        mut self,
+        mut dst: DeviceBuffer[DType.float32],
+        dst_offset: Int,
+        n: Int,
+    ) raises:
+        """`IDN_GBDT_MC_ONE_STEP_DEVICE`: `d_multi_stats[0:n]` into
+        `dst[dst_offset:dst_offset + n]`, stream-ordered (no wait)."""
+        if n <= 0:
+            return
+        self.ctx.enqueue_function[f32_stash_kernel](
+            self.d_multi_stats.unsafe_ptr(),
+            dst.unsafe_ptr(),
+            Int32(dst_offset),
+            Int32(n),
+            grid_dim=((n + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+
+    def enqueue_multiclass_one_step_inputs(
+        mut self,
+        mut d_grad: DeviceBuffer[DType.float32],
+        mut d_hess: DeviceBuffer[DType.float32],
+    ) raises:
+        """lane fix-g1-gbdt, `IDN_GBDT_MC_ONE_STEP_DEVICE`: the walker's
+        first evaluation and blocked second derivatives for MultiClass at
+        the current point, ENQUEUED with no wait and no host read: the SAME
+        launches, grids and reductions as
+        `_write_multi_dim_value_and_first_derivatives` (MultiClass arm) and
+        `_write_blocked_second_derivatives` (the row loop), so every per-leaf
+        float is the host path's. Each reduction is stashed on the device
+        instead of copied to the host:
+
+          `d_grad[leaf * cursor_dim + d]`, the reduced der planes;
+          `d_hess`, row `r` (columns `0..r`) at `bin_count * r (r + 1) / 2`.
+
+        `multiclass_one_step_kernel` reads both. The der-at-point and der2
+        caches are cleared, as a `move_to` leaves them: nothing on this
+        path reads them."""
+        if self.objective != OBJECTIVE_MULTICLASS:
+            raise Error(
+                "enqueue_multiclass_one_step_inputs: MultiClass only, got"
+                " objective " + String(self.objective)
+            )
+        self.times.begin(self.ctx)
+        launch_multilogit_value_and_der(
+            self.ctx, self.num_classes, self.n_rows,
+            self.d_target, self.d_weights, self.has_weights,
+            self.d_cursor, self.n_rows,
+            self.d_identity, False,
+            self.d_fv, True,
+            self.d_multi_der, self.n_rows,
+            self.d_mag_dummy, False,
+        )
+        self.times.end(self.ctx, "est.approx")
+        self.times.begin(self.ctx)
+        compute_partition_stats(
+            self.ctx, self.bin_count, 0, self.cursor_dim, self.n_rows,
+            self.d_leaves, self.d_p_off, self.d_p_sz,
+            self.d_multi_der, self.d_multi_partials, self.d_multi_stats,
+            sm_count=self.sm_count,
+        )
+        self._stash_multi_stats(d_grad, 0, self.bin_count * self.cursor_dim)
+        var hbs = self.single_bin_dim
+        for row in range(hbs):
+            var column_count = row + 1
+            launch_multilogit_second_der(
+                self.ctx, self.num_classes, self.n_rows,
+                self.d_weights, self.has_weights,
+                self.d_cursor, self.n_rows,
+                self.d_multi_der, row, self.n_rows,
+            )
+            compute_partition_stats(
+                self.ctx, self.bin_count, 0, column_count, self.n_rows,
+                self.d_leaves, self.d_p_off, self.d_p_sz,
+                self.d_multi_der, self.d_multi_partials,
+                self.d_multi_stats,
+                sm_count=self.sm_count,
+            )
+            self._stash_multi_stats(
+                d_hess,
+                self.bin_count * ((row * (row + 1)) // 2),
+                self.bin_count * column_count,
+            )
+        self.times.end(self.ctx, "est.pstats")
+        self.der_at_point.clear()
+        self.cached_der2.clear()
 
     def write_second_derivatives(mut self, mut second_der: List[Float64]) raises:
         """`WriteSecondDerivatives` (`pointwise_oracle.cpp:114-195`).
