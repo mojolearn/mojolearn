@@ -39,6 +39,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
+from std.sys.defines import get_defined_int
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
@@ -68,6 +69,27 @@ comptime IDN_DENDRO_RADIX_SORT = (
         is_defined["MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF"]()
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
+)
+
+#: fam2-cluster (2026-10-04), IDENTICAL: the dendrogram's hook + jump loop
+#: reads its "something hooked" flag once per CHUNK of pairs instead of once
+#: per pair. A pair past the fixed point changes nothing (no lower-half edge
+#: joins two roots, so the hook writes nothing and the jump finds every root
+#: in place), and the flag is cleared before the chunk's LAST pair only, so
+#: it answers the same question the per-pair read did. Same parents, same
+#: dendrogram. The chunk is `-D MOJOLEARN_IDN_DENDRO_HOOK_CHUNK=<n>`
+#: (default 4; time 2 and 8 against it);
+#: `-D MOJOLEARN_IDN_DENDRO_HOOK_CHUNK_OFF=1` restores the per-pair read.
+comptime IDN_DENDRO_HOOK_CHUNK = (
+    get_defined_int["MOJOLEARN_IDN_DENDRO_HOOK_CHUNK", 4]()
+    if (
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and not (
+            is_defined["MOJOLEARN_IDN_DENDRO_HOOK_CHUNK_OFF"]()
+            or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+        )
+    )
+    else 1
 )
 
 
@@ -128,9 +150,9 @@ def _sort_half_kernel(keys: U64P, idx: U32P, half: U32P, cnt: Int32, high: Int32
         return
     if Int(high) == 0:
         idx[p] = UInt32(p)
-        half[p] = UInt32(Int(keys[p] & UInt64(0xFFFFFFFF)))
+        half[p] = (keys[p] & UInt64(0xFFFFFFFF)).cast[DType.uint32]()
     else:
-        half[p] = UInt32(Int((keys[Int(idx[p])] >> UInt64(32)) & UInt64(0xFFFFFFFF)))
+        half[p] = (keys[Int(idx[p])] >> UInt64(32)).cast[DType.uint32]()
 
 
 def _sort_rank_from_perm_kernel(idx: U32P, rank: I32P, cnt: Int32):
@@ -409,13 +431,18 @@ def build_dendrogram_device(
         # is the only value read back
         var more = True
         while more:
-            ctx.enqueue_memset(flag, Int32(0))
-            ctx.enqueue_function[_dd_hook_kernel](
-                p_la, p_lb, p_par, p_flag, Int32(cnt), S, grid_dim=(ge, 1, 1), block_dim=(DD_TPB, 1, 1),
-            )
-            ctx.enqueue_function[_dd_jump_kernel](
-                p_la, p_lb, p_par, Int32(cnt), S, grid_dim=(ge, 1, 1), block_dim=(DD_TPB, 1, 1),
-            )
+            # fam2-cluster, IDN_DENDRO_HOOK_CHUNK: the flag is cleared
+            # before the chunk's last pair, so it reports that pair alone.
+            comptime assert IDN_DENDRO_HOOK_CHUNK >= 1, "MOJOLEARN_IDN_DENDRO_HOOK_CHUNK must be >= 1"
+            for q in range(IDN_DENDRO_HOOK_CHUNK):
+                if q == IDN_DENDRO_HOOK_CHUNK - 1:
+                    ctx.enqueue_memset(flag, Int32(0))
+                ctx.enqueue_function[_dd_hook_kernel](
+                    p_la, p_lb, p_par, p_flag, Int32(cnt), S, grid_dim=(ge, 1, 1), block_dim=(DD_TPB, 1, 1),
+                )
+                ctx.enqueue_function[_dd_jump_kernel](
+                    p_la, p_lb, p_par, Int32(cnt), S, grid_dim=(ge, 1, 1), block_dim=(DD_TPB, 1, 1),
+                )
             ctx.enqueue_copy(dst_ptr=h_flag.unsafe_ptr(), src_buf=flag)
             ctx.synchronize()
             more = h_flag.unsafe_ptr()[0] != 0
