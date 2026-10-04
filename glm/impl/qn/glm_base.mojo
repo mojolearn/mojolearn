@@ -1000,6 +1000,104 @@ def qn_slim_epilogue_gated_kernel(
     )
 
 
+# lane fam2-linear (2026-10-04): QN_IDN_SLIM, the IDENTICAL `C == 1`
+# evaluation's small launches as one. After the tile fold wrote the loss
+# gradient (set_zero), one block adds the Tikhonov gradient and folds its
+# value, then reduces the gradient norm (and OWL-QN's l1 term): it replaces
+# the memset, `tikhonov_reg_grad_kernel`, the norm kernel and `nrm1_kernel`.
+# NO BIT MOVES: `g[j] = ftz(sc + ftz(l2 * w_j))` is the sum the beta = 1
+# fold formed (an addition, commuted); the regularizer value, `dot_self` /
+# `nrm1` / `nrm_max` and the l1 term are those kernels' chains and folds.
+# `-D MOJOLEARN_QN_IDN_SLIM_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) restores the
+# separate launches.
+comptime QN_IDN_SLIM = QN_TILED and not (
+    is_defined["MOJOLEARN_QN_IDN_SLIM_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+@always_inline
+def _qn_idn_epilogue_body(
+    slots: MutPointer[Float32, MutAnyOrigin],
+    g: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    n_weights_in: Int32,
+    n_param_in: Int32,
+    l2: Float32,
+    gnorm_kind: Int32,
+    pen_len_in: Int32,
+):
+    """QN_IDN_SLIM, one block of STATS_TPB: `tikhonov_reg_grad_kernel`'s
+    gradient added to g and its value into slots[1] (l2 != 0), then the
+    norm of the updated g into slots[2] (kind 1 `dot_self_kernel`, 2
+    `nrm1_kernel`, 0 `nrm_max_kernel`, each character for character), then,
+    pen_len > 0, `nrm1_kernel(w[0:pen_len])` into slots[3]. Index j belongs
+    to thread j mod STATS_TPB in every walk, so each g word is read by the
+    thread that wrote it."""
+    var nw = Int(n_weights_in)
+    var np = Int(n_param_in)
+    var pl = Int(pen_len_in)
+    var tid = Int(thread_idx.x)
+    var reg = Float32(0.0)
+    if l2 != Float32(0.0):
+        var half_l2 = ftz(Float32(0.5) * l2)
+        var j = tid
+        while j < nw:
+            var wj = w.unsafe_load(j)
+            g.unsafe_store(j, ftz(g.unsafe_load(j) + ftz(l2 * wj)))
+            var t = ftz(half_l2 * wj)
+            reg = ftz(reg + ftz(t * wj))
+            j += STATS_TPB
+    var reg_s = ftz(pinned_block_sum[STATS_TPB](reg))
+    var acc = Float32(0.0)
+    var i = tid
+    while i < np:
+        var gi = g.unsafe_load(i)
+        if gnorm_kind == 1:
+            acc = identical_mul_add(gi, gi, acc)
+        elif gnorm_kind == 2:
+            acc = ftz(acc + abs(gi))
+        else:
+            var a = abs(gi)
+            if a > acc:
+                acc = a
+        i += STATS_TPB
+    var norm = Float32(0.0)
+    if gnorm_kind == 0:
+        norm = pinned_block_max[STATS_TPB](acc)
+    else:
+        norm = ftz(pinned_block_sum[STATS_TPB](acc))
+    var pen = Float32(0.0)
+    if pl > 0:
+        var p = Float32(0.0)
+        var k = tid
+        while k < pl:
+            p = ftz(p + abs(w.unsafe_load(k)))
+            k += STATS_TPB
+        pen = ftz(pinned_block_sum[STATS_TPB](p))
+    if tid == 0:
+        if l2 != Float32(0.0):
+            slots.unsafe_store(1, reg_s)
+        slots.unsafe_store(2, norm)
+        if pl > 0:
+            slots.unsafe_store(3, pen)
+
+
+def qn_idn_epilogue_kernel(
+    slots: MutPointer[Float32, MutAnyOrigin],
+    g: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    n_weights_in: Int32,
+    n_param_in: Int32,
+    l2: Float32,
+    gnorm_kind: Int32,
+    pen_len_in: Int32,
+):
+    """The kernel entry of `_qn_idn_epilogue_body`."""
+    _qn_idn_epilogue_body(
+        slots, g, w, n_weights_in, n_param_in, l2, gnorm_kind, pen_len_in,
+    )
+
+
 def qnt_tiles(n: Int) -> Int:
     return (n + QNT_ROWS - 1) // QNT_ROWS
 
@@ -1804,6 +1902,9 @@ struct GLMWithData(Movable):
         var slim = False
         comptime if QN_FAST_SLIM:
             slim = self.dims.C == 1 and self.dims.n_param <= STATS_TPB
+        # lane fam2-linear: IDENTICAL's own one-launch epilogue (same bits)
+        comptime if QN_IDN_SLIM:
+            slim = tiled
         if self.l2 == Float32(0.0) or slim:
             if blocks:
                 self.enqueue_blocks(ctx, w, g, True)
@@ -1843,6 +1944,14 @@ struct GLMWithData(Movable):
         comptime if QN_FAST_SLIM:
             if slim:
                 self.enqueue_slim_epilogue(ctx, w, g, pen_len)
+        comptime if QN_IDN_SLIM:
+            if slim:
+                ctx.enqueue_function[qn_idn_epilogue_kernel](  # small-launch(n: parameter count n_param): the coefficient vector, never rows
+                    self.slots.unsafe_ptr(), g.unsafe_ptr(), w.unsafe_ptr(),
+                    Int32(self.dims.C * self.dims.D), Int32(np),
+                    self.l2, Int32(self._gnorm_kind()), Int32(pen_len),
+                    grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+                )
         if not slim and self._gnorm_kind() == 1:
             ctx.enqueue_function[dot_self_kernel](
                 s2.unsafe_ptr(), g.unsafe_ptr(), Int32(np),
