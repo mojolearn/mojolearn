@@ -1863,10 +1863,6 @@ py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.p
 py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	if max(self.devices) >= len(ids) or any(not ids[d] for d in self.devices):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	names = sorted({request[0] for request in requests})
-# why: OWED A/B control only: reached solely in a -D MOJOLEARN_PY2MOJO_cluster_OFF build (gp_py2mojo() == 0); every default build takes the binding's targets/out_kind (gaussian_process/unnorm.mojo); delete with that define
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_parallel_worker.py	0	return Array.from_list([1 if v > 0.0 else 0 for v in mean.tolist()], '<i8')
-# why: OWED A/B control only: reached solely in a -D MOJOLEARN_PY2MOJO_cluster_OFF build (gp_py2mojo() == 0); every default build takes the binding's targets/out_kind (gaussian_process/unnorm.mojo); delete with that define
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_parallel_worker.py	0	return Array.from_list([[1.0 - v, v] for v in probability.tolist()], '<f8')
 # why: _fsum_exact: the exact big-integer sum fsum falls back to only when math.fsum meets a NaN, an infinity or an intermediate overflow; Mojo has no arbitrary-precision integer, owed as a Mojo NaN/inf classifier plus an exact wide accumulator
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_portable_math.py	0	for value in values:
 # why: scale_gamma is the reference definition kept for tests only; no runtime path calls it since scale_gamma_x refuses instead of falling back
