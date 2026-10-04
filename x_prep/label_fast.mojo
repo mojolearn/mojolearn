@@ -14,8 +14,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_prep.common import FP, IP, p, ld, sti
 
 comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime LABEL_PRESENT = _FAST_APPLE and is_defined["MOJOLEARN_LABEL_PRESENT"]()
-comptime LABEL_SCATTER = _FAST_APPLE and is_defined["MOJOLEARN_LABEL_SCATTER"]()
+comptime LABEL_DIRECT = _FAST_APPLE and is_defined["MOJOLEARN_LABEL_DIRECT"]()
+comptime LABEL_PRESENT = _FAST_APPLE and (LABEL_DIRECT or is_defined["MOJOLEARN_LABEL_PRESENT"]())
+comptime LABEL_SCATTER = _FAST_APPLE and (LABEL_DIRECT or is_defined["MOJOLEARN_LABEL_SCATTER"]())
 
 
 def label_scatter_kernel(f: FP, q: IP, total: Int32):

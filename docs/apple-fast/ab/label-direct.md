@@ -3,7 +3,7 @@
 Base: origin/main 35a72c5ac. Branch: lane/apple-fast-label-direct.
 No local builds or tests; manager owns remote compilation and M3 timing.
 
-Two independent opt-in FAST + Apple build defines:
+Bundle define `MOJOLEARN_LABEL_DIRECT` enables both. Two independent opt-in FAST + Apple build defines:
 
 * `MOJOLEARN_LABEL_PRESENT`: reuse the existing exact GPU category presence
   stages for LabelEncoder, LabelBinarizer and MultiLabelBinarizer fitting.
