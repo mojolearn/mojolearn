@@ -1053,3 +1053,6 @@ no board promotion or dataset-specific dispatch added.
 Receipt SHA256 taxi a8077db5a76c48ed431a7736597fe241d301aa1f01aa20f255d10c67431aeaea
 Receipt SHA256 istella 28e20bec22f34b67c1b8123f1d71ead38a4e402946777554f09fa412eadfd7c7
 Paths: ~/mq/out/resample-gpu-recovered-t-{taxi,istella}-r2-20261004-timing/PASS.json
+
+| `MOJOLEARN_RSVD_FAST_DIRECT_IN` (rollback `MOJOLEARN_RSVD_FAST_DIRECT_IN_OFF`) | randomized-svd istella, taxi (x_decomp/w4_fast.mojo) | measured lane/apple-fast-w4-decomp-harness-r1 e9d72edb5; ported by hand to lane/apple-fast-w4-port | M3 afc_ab_def, full board size, 1 run per arm (2026-10-04) | istella 517.3 -> 501.3 ms, taxi 200.8 -> 198.5 ms; relative_reconstruction_error equal (istella 2.3594584442703e-4 -> 2.3594584442301e-4, taxi 0.0271967625509 -> 0.0271967625509) | ACCEPT: DEFAULT for FAST + Apple |
+| `MOJOLEARN_LLE_FAST_DEV_LU` | lle taxi (x_decomp/w4_fast.mojo) | measured lane/apple-fast-w4-decomp-harness-r1 e9d72edb5; ported by hand to lane/apple-fast-w4-port | M3 afc_ab_def, full board size, 1 run per arm (2026-10-04) | 1783.8 -> 1039.0 ms, but trustworthiness_k15 0.86623 -> 0.84096 (worse) | HOLD-quality: opt-in only, default OFF |
