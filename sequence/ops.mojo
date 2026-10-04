@@ -84,6 +84,12 @@ comptime TSA2_STL = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_STL_OFF"
 #: 5.9 -> 5.1 ms, synthetic 6.2 -> 5.0 ms); -D MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF
 #: restores the four copies; the old -D MOJOLEARN_SEQ_FAST_VAR_ONECOPY is harmless.
 comptime SEQ_FAST_VAR_ONECOPY = TSA2_VAR and not is_defined["MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF"]()
+#: lane/apple-fast-w4-small, opt-in (-D MOJOLEARN_SEQ_FAST_VAR_FUSED), FAST +
+#: Apple, device binding only: the TSA2_VAR fit as ONE threadgroup launch
+#: (no fill, one upload, one download, one wait) and the forecast's two
+#: uploads as one staged copy with no output fill (sequence/var_fused.mojo).
+#: Every output word's chain is the queued fit's: byte-identical outputs.
+comptime SEQ_FAST_VAR_FUSED = TSA2_VAR and is_defined["MOJOLEARN_SEQ_FAST_VAR_FUSED"]()
 
 # ------------------------------------------------------------------ op codes
 comptime OP_GEMM = 1

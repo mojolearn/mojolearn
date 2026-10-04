@@ -20,6 +20,8 @@ from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run
 from sequence.schedule import epoch_schedule_py
 from sequence.prophet_prep import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from sequence.moe_weights import moe_weights_put, moe_weights_ptrs, moe_weights_free
+from sequence.ops import SEQ_FAST_VAR_FUSED
+from sequence.var_fused import var_fit_fused_py, var_forecast_fused_py
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -92,11 +94,20 @@ def stl_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
 
 def var_fit_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
+    comptime if SEQ_FAST_VAR_FUSED:
+        # lane/apple-fast-w4-small: one launch; -1 = not served (main's path)
+        var code = var_fit_fused_py(ex, addrs, ip)
+        if code >= 0:
+            return PythonObject(code)
     return var_fit_py(ex, addrs, ip)
 
 
 def var_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
+    comptime if SEQ_FAST_VAR_FUSED:
+        var r = var_forecast_fused_py(ex, addrs, ip)
+        if r >= 0:
+            return PythonObject(r)
     return var_forecast_py(ex, addrs, ip)
 
 
