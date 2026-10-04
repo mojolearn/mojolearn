@@ -55,6 +55,29 @@ comptime CAGRA_FAST_IVFG = ANN_FAST_APPLE and not is_defined["MOJOLEARN_CAGRA_FA
 comptime CAGRA_FAST_IVFG_PROBES = 16
 comptime CAGRA_FAST_IVFG_EXACTD = CAGRA_FAST_IVFG and not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF"]()
 
+#: lane/apple-fast-w2-cagra (2026-10-04): IVFG (with EXACTD) for rows of 64
+#: features or fewer too. Cause: CAGRA taxi (400,000 x 11) still builds the
+#: exact graph (`knn_tiled_kernel[12]`, one thread per row against all
+#: 400,000 rows: 1.6e11 pairs, each 12 subtract + ftz + fma steps and a
+#: `ts_knn_beats` test), 2,900 ms vs faiss-cpu HNSW 1,016 ms. IVFG offers
+#: each row ~6,000 candidates (16 probe lists of ~384 rows), ~65x fewer
+#: pairs. Taxi's features are integer codes, so EXACTD's difference-form
+#: sums are exact integers: the graph is the exact graph restricted to the
+#: probe pool. Same refusals (n < 65,536 or a short probe pool -> exact
+#: graph). Rows wider than 64 features are unchanged (IVFG there already).
+#: LOWD_SEEDS4 = IVFG_LOWD + SEEDS4 (four times the search seeds; SEEDS4
+#: moves the search, infer_ms, not the build), DEFAULT in FAST + Apple:
+#: M3, one run per arm, taxi build 2,879.2 -> 714.9 ms (faiss-cpu 1,015.6);
+#: w2-cagra-lowds4-q PASS (recall@10 B >= A on taxi and istella).
+#: `-D MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF` restores the exact low-d
+#: graph and the 1x seeds. Plain LOWD without SEEDS4 failed recall (taxi
+#: .997925 -> .997125, w2-cagra-lowd-q) and stays opt-in:
+#: `-D MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF -D MOJOLEARN_CAGRA_FAST_IVFG_LOWD`.
+comptime _CAGRA_LOWD_SEEDS4 = CAGRA_FAST_IVFG and not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF"]()
+comptime CAGRA_FAST_IVFG_LOWD = CAGRA_FAST_IVFG and (
+    is_defined["MOJOLEARN_CAGRA_FAST_IVFG_LOWD"]() or _CAGRA_LOWD_SEEDS4
+)
+
 #: lane/apple-fast-gap-cagra (2026-10-03), the CAGRA SEARCH (taxi recall .48
 #: vs faiss .93): taxi's 11 features are integer codes (zone ids 1..265,
 #: hour, day), so each row's 64 nearest rows sit in its own (pickup,
@@ -66,10 +89,9 @@ comptime CAGRA_FAST_IVFG_EXACTD = CAGRA_FAST_IVFG and not is_defined["MOJOLEARN_
 #: the walk converge). FAST+Apple default since the M3 A/B (one run per
 #: arm): taxi recall .4838 -> .9979 (SEEDS+ITERS), build 2,859 -> 2,900 ms
 #: (noise). `-D MOJOLEARN_CAGRA_FAST_SEEDS_OFF` / `_ITERS_OFF` turn each off.
-#: SEEDS4 (OPT-IN, `-D MOJOLEARN_CAGRA_FAST_SEEDS4`): four times the seed
-#: work (taxi .9997, istella untested; follow-up A/B).
-comptime CAGRA_FAST_SEEDS = ANN_FAST_APPLE and (
-    not is_defined["MOJOLEARN_CAGRA_FAST_SEEDS_OFF"]() or is_defined["MOJOLEARN_CAGRA_FAST_SEEDS4"]()
-)
-comptime CAGRA_FAST_SEED_WORK = 4 * 262144 if is_defined["MOJOLEARN_CAGRA_FAST_SEEDS4"]() else 262144
+#: SEEDS4 (`-D MOJOLEARN_CAGRA_FAST_SEEDS4`): four times the seed work
+#: (taxi .9997); on by default with LOWD_SEEDS4 above.
+comptime _CAGRA_SEEDS4 = is_defined["MOJOLEARN_CAGRA_FAST_SEEDS4"]() or _CAGRA_LOWD_SEEDS4
+comptime CAGRA_FAST_SEEDS = ANN_FAST_APPLE and (not is_defined["MOJOLEARN_CAGRA_FAST_SEEDS_OFF"]() or _CAGRA_SEEDS4)
+comptime CAGRA_FAST_SEED_WORK = 4 * 262144 if _CAGRA_SEEDS4 else 262144
 comptime CAGRA_FAST_ITERS = ANN_FAST_APPLE and not is_defined["MOJOLEARN_CAGRA_FAST_ITERS_OFF"]()
