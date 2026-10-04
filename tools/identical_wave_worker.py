@@ -117,6 +117,10 @@ def main():
         import mojolearn as ml
         from mojolearn import _backend
         binding=_backend.binding('_mojolearn_metrics','identical')
+        if a.vendor=='cpu' and type(binding).__name__=='_HostBinding':
+            # Host column: the proxy exposes no dir(); read the getters of the
+            # host module it serves (metrics_host_numeric_mode etc.).
+            binding=_backend.load_host_module(getattr(binding,'_HostBinding__basename'))
         modes=[getattr(binding,n)() for n in dir(binding) if n.endswith('_numeric_mode')]
         if not modes or any(m!=1 for m in modes): raise RuntimeError('metric IDENTICAL mode readback missing')
         with np.load(a.data/('reg-'+a.dataset+'.npz')) as z: target=np.ascontiguousarray(z['yq'])
