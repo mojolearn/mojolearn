@@ -69,6 +69,13 @@ class Workflow(unittest.TestCase):
         upload = next(s for s in steps if s.get('uses', '').startswith('actions/upload-artifact@'))
         self.assertEqual(upload['if'], 'always()')
         self.assertEqual(upload['with']['include-hidden-files'], 'true')
+        self.assertEqual(upload['with']['path'], '${{ runner.temp }}/ptx-artifact')
+        retention = next(s for s in steps if s.get('name') == 'Retain logs and build artifacts')
+        self.assertEqual(retention['if'], 'always()')
+        self.assertEqual(build['id'], 'baseline_build')
+        self.assertEqual(retention['env']['BUILD_OUTCOME'], '${{ steps.baseline_build.outcome }}')
+        self.assertIn('stage_ptx_artifact.py', retention['run'])
+        self.assertIn('--require-complete', retention['run'])
         # Parse every newly introduced shell block before any remote dispatch.
         for step in steps:
             if 'run' in step:
