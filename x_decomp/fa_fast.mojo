@@ -553,13 +553,13 @@ def fa_chol_df_kernel(g: F32Ptr, rt: F32Ptr, d_in: Int32):
             g.unsafe_store(j * d + tid, o[0])
             g.unsafe_store(dd + j * d + tid, o[1])
         dev_barrier()
-    for t in range(tid, dd, FA_TPB):
-        var p = t // d
-        var i = t - p * d
+    for u in range(tid, dd, FA_TPB):
+        var p = u // d
+        var i = u - p * d
         var val = Float32(0.0)
         if i <= p:
             val = _rn(g.unsafe_load(i * d + p), g.unsafe_load(dd + i * d + p))
-        rt.unsafe_store(t, val)
+        rt.unsafe_store(u, val)
 
 
 def fa_gram_py(x: PythonObject, mean: PythonObject, g: PythonObject, var_: PythonObject, p: PythonObject) raises -> PythonObject:
