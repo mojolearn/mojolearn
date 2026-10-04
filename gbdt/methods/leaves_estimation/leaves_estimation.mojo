@@ -338,6 +338,31 @@ def newton_one_step_kernel(
     out_values.unsafe_store(leaf, v)
 
 
+def weight_keep_mask_kernel(
+    weight_stats: MutPointer[Float32, MutAnyOrigin],
+    min_leaf_weight_bits: UInt64,
+    n_leaves_in: Int32,
+    out_mask: MutPointer[Float32, MutAnyOrigin],
+):
+    """Lane ml-gbdt T4 (`IDN_ORD_ONE_STEP_DEVICE`): `Regularize`'s per-leaf
+    keep/zero decision for `newton_one_step_kernel`'s `has_mask` input, on
+    the device. `weight_stats[leaf]` is the deferred weight fold's per-leaf
+    float32 sum (`make_bin_optimized_oracle(defer_weights=True)`), the value
+    `settle_weights` widens on the host; the host test
+    `double(w) < MinLeafWeight` is restated in soft-float64, so the mask is
+    the host's bit for bit (a NaN sum compares false there: keep).
+    `out_mask[leaf]` = 0.0 (zero the leaf) or 1.0 (keep)."""
+    var n_leaves = Int(n_leaves_in)
+    var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if leaf >= n_leaves:
+        return
+    var w = sf64_from_f32(weight_stats.unsafe_load(leaf))
+    var keep = Float32(1.0)
+    if (not sf64_is_nan(w)) and sf64_lt(w, min_leaf_weight_bits):
+        keep = Float32(0.0)
+    out_mask.unsafe_store(leaf, keep)
+
+
 def f32_stash_kernel(
     src: MutPointer[Float32, MutAnyOrigin],
     dst: MutPointer[Float32, MutAnyOrigin],

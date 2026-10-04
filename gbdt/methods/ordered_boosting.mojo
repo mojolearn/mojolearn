@@ -119,7 +119,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.os import getenv
 from std.gpu import block_idx, block_dim, thread_idx
 from std.math import isfinite, sqrt
-from std.memory import stack_allocation
+from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
@@ -128,9 +128,19 @@ from std.sys.info import has_apple_gpu_accelerator
 from core.device_zero import enqueue_fill
 from core.identity_trace import IdentityTrace
 from checks.fixed_point import choose_scale
+from checks.soft_f64 import (
+    sf64_add,
+    sf64_div,
+    sf64_from_f32,
+    sf64_from_int,
+    sf64_mul,
+    sf64_sqrt,
+    sf64_to_f32,
+)
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_mul,
     identical_mul64,
@@ -238,6 +248,126 @@ comptime ORDERED_BLOCK = 256
 #: of gbdt-ordered: 20 trees chose the same splits.) The host oracle carries
 #: the same arm (`GBDT_ORDERED_SABOTAGE`).
 comptime ORDERED_SABOTAGE = is_defined["MOJOLEARN_ORDERED_SABOTAGE"]()
+
+#: Lane ml-gbdt T4 (roadmap T4; IDENTICAL, every vendor; default ON): the
+#: batched Ordered estimation tasks (`_ordered_estimate_prepare`) take
+#: `_estimate_prepare(one_step_device=True)`: a one-step diagonal Newton
+#: task (`leaf_iterations == 1`, Newton, a single-dimensional pointwise
+#: loss) solves its leaves on the device with `IDN_EST_ONE_STEP_DEVICE`'s
+#: `newton_one_step_kernel` (the host walker's statements in soft-float64,
+#: so the host walker's bits; the host column is untouched), the weighted
+#: `Regularize` decision formed on the device from the deferred weight fold.
+#: The tree then skips the lock-step walk drain (no task walks), every
+#: task's leaf upload (the apply reads the device leaves), and the fold
+#: tasks' leaf readbacks; the estimation task's leaves come home on the
+#: learn-loss drain. Bits: none move. The partition settle drain stays (the
+#: oracle factory reads the host leaf sizes). `-D
+#: MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF` (or the master `-D
+#: MOJOLEARN_IDN_ALL_OFF`) restores the host walker.
+comptime IDN_ORD_ONE_STEP_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+#: Lane ml-gbdt T5 (roadmap T5; IDENTICAL, every vendor; default ON): the
+#: tree's score-noise std dev and fixed-point scale are formed ON THE DEVICE
+#: (`_ord_std_scale_kernel`, one thread of control plane) from the noise sum
+#: and the two magnitudes, which never come to the host: the std through
+#: the correctly rounded `sf64_sqrt` (checks/soft_f64.mojo), the scale by
+#: `choose_scale_kernel`'s exact integer search; the host reads the two
+#: floats back on the drain it already took and does no arithmetic on the
+#: data. The statements are the host's, `Float32(mult * sqrt(s2 / (count +
+#: 1e-100)) * random_strength)` in binary64 with one rounding each (sqrt,
+#: like every IEEE sqrt, correctly rounded), and `choose_scale(max(m0, m1),
+#: total)`, so bits do not move and the host column (`gbdt_oracle_ordered`)
+#: is untouched. The drain itself stays: the histogram and score kernels
+#: still take the scale and the std as launch values (owed: a device-scalar
+#: form of `compute_hist2`, `find_optimal_split` and the snap).
+#: `-D MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF` (or the master `-D
+#: MOJOLEARN_IDN_ALL_OFF`) restores the host arithmetic.
+comptime IDN_ORD_STD_SCALE_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def _ord_std_scale_kernel(
+    s2: MutPointer[Float32, MutAnyOrigin],
+    s2_at: Int32,
+    has_std: Int32,
+    mags: MutPointer[Float32, MutAnyOrigin],
+    mag_at: Int32,
+    count: Int32,
+    tiny_bits: UInt64,
+    mult_bits: UInt64,
+    random_strength: Float32,
+    row_count: Int32,
+    out: MutPointer[Float32, MutAnyOrigin],
+):
+    """IDN_ORD_STD_SCALE_DEVICE: `out[0]` = the score std dev, `out[1]` =
+    the fixed-point scale. One thread; control plane, not compute.
+
+    std (`has_std`), the host's binary64 statements in soft-float64 (no
+    device double, so Metal compiles it):
+        Float32(mult * sqrt(double(s2[s2_at]) / (double(count) + 1e-100))
+                * double(random_strength))
+    `tiny_bits` and `mult_bits` are the host doubles' bits (`1e-100`, and
+    `ordered_model_length_mult`, a function of the fit's parameters only).
+
+    scale: `choose_scale_kernel` (`histogram_utils.mojo`), statement for
+    statement, over `mags[mag_at]`, `mags[mag_at + 1]` (the weight and the
+    gradient magnitudes); that kernel is the host `choose_scale` bit for bit
+    (DEVIATION 95)."""
+    if Int(thread_idx.x) != 0 or Int(block_idx.x) != 0:
+        return
+    var std = Float32(0.0)
+    if has_std != Int32(0):
+        var q = sf64_div(
+            sf64_from_f32(s2.unsafe_load(Int(s2_at))),
+            sf64_add(sf64_from_int(Int(count)), tiny_bits),
+        )
+        var v = sf64_mul(
+            sf64_mul(mult_bits, sf64_sqrt(q)), sf64_from_f32(random_strength)
+        )
+        std = sf64_to_f32(v)
+    out.unsafe_store(0, std)
+    var w = mags.unsafe_load(Int(mag_at))
+    var g = mags.unsafe_load(Int(mag_at) + 1)
+    var m = w
+    if g > m:
+        m = g
+    if m == Float32(0.0):
+        out.unsafe_store(1, Float32(1.0))
+        return
+    var limit = Int64((1 << 30) - 1) - Int64(Int(row_count))
+    var floor_limit = Int64((1 << 28) - 1)
+    if limit < floor_limit:
+        limit = floor_limit
+    var mbits = UInt32(m.to_bits())
+    var exp_field = Int((mbits >> 23) & UInt32(0xFF))
+    var mant = Int64(Int(mbits & UInt32(0x7FFFFF)))
+    var s_int: Int64
+    var e2: Int
+    if exp_field == 0:
+        s_int = mant
+        e2 = -149
+    else:
+        s_int = mant + Int64(1 << 23)
+        e2 = exp_field - 150
+    var t = 30
+    while (s_int << Int64(t)) > limit:
+        t -= 1
+    var k = t - e2
+    var scale = Float32(1.0)
+    if k >= 0:
+        for _ in range(k):
+            scale = scale * Float32(2.0)
+    else:
+        for _ in range(-k):
+            scale = scale * Float32(0.5)
+    out.unsafe_store(1, scale)
 
 
 @fieldwise_init
@@ -1376,6 +1506,7 @@ def _ordered_estimate_prepare(
         opts.kernel_alpha, opts.estimator_alpha, opts.logloss_border,
         opts.l2_leaf_reg, sm_count, opts.leaf_method, est_ws, arena,
         walker_times, staged=True, iterations=opts.leaf_iterations,
+        one_step_device=IDN_ORD_ONE_STEP_DEVICE,
     )
     est_times.end(ctx, "est.estimate_and_apply")
     return _OrderedPending(est^, apply_size)
@@ -1395,6 +1526,7 @@ def _ordered_estimate_complete(
     tag: String,
     mut est_times: StageTimes,
     mut walker_times: StageTimes,
+    want_leaves: Bool = True,
 ) raises -> List[Float32]:
     """The rest of `_ordered_estimate_task` after the batch's drain: the
     estimator's host half and its `AppendModels` (`_estimate_complete`),
@@ -1402,6 +1534,27 @@ def _ordered_estimate_complete(
     `pending` for the batch's closing drain."""
     var leaves = List[Float32]()
     var not_pd = 0
+    if pending.est.device_done:
+        # IDN_ORD_ONE_STEP_DEVICE: the leaves are in `d_est`; the apply
+        # reads them there, nothing is drained, read back or uploaded. The
+        # caller reads the estimation task's leaves after its next drain
+        # (`_ordered_device_leaves`); the list returned here is empty.
+        ref d_est = est_ws[0].d_est
+        trace.record_device(ctx, tag, d_est, n_leaves)
+        est_times.begin(ctx)
+        ctx.enqueue_function[_ordered_apply_kernel](
+            permutation.unsafe_ptr(), bins.unsafe_ptr(), d_est.unsafe_ptr(),
+            cursor.unsafe_ptr(), Int32(pending.apply_size),
+            opts.learning_rate,
+            grid_dim=(_grid(pending.apply_size), 1, 1),
+            block_dim=(ORDERED_BLOCK, 1, 1),
+        )
+        if want_leaves:
+            ctx.enqueue_copy(
+                dst_ptr=est_ws[0].h_est.unsafe_ptr(), src_buf=d_est
+            )
+        est_times.end(ctx, "est.apply")
+        return leaves^
     est_times.begin(ctx)
     _estimate_complete(
         ctx, pending.est, slot.row_index, cursor, opts.learning_rate,
@@ -1422,6 +1575,18 @@ def _ordered_estimate_complete(
         block_dim=(ORDERED_BLOCK, 1, 1),
     )
     est_times.end(ctx, "est.apply")
+    return leaves^
+
+
+def _ordered_device_leaves(
+    mut est_ws: List[TEstimationWorkspace], n_leaves: Int
+) -> List[Float32]:
+    """IDN_ORD_ONE_STEP_DEVICE: a device-estimated task's leaves, from the
+    `h_est` copy `_ordered_estimate_complete` enqueued. The caller has
+    drained since."""
+    var leaves = List[Float32]()
+    for leaf in range(n_leaves):
+        leaves.append(est_ws[0].h_est.unsafe_ptr().unsafe_load(leaf))
     return leaves^
 
 
@@ -2228,6 +2393,11 @@ def fit_ordered(
     var dummy_mag = ctx.enqueue_create_buffer[DType.float32](2)
     var d_sums = ctx.enqueue_create_buffer[DType.float32](3)
     var h_sums = ctx.enqueue_create_host_buffer[DType.float32](3)
+    # IDN_ORD_STD_SCALE_DEVICE: the unfused noise sum, and the device's
+    # (std dev, scale) pair with its readback
+    var d_s2 = ctx.enqueue_create_buffer[DType.float32](1)
+    var d_ss = ctx.enqueue_create_buffer[DType.float32](2)
+    var h_ss = ctx.enqueue_create_host_buffer[DType.float32](2)
     var loss_stats = ctx.enqueue_create_buffer[DType.float32](2 * n_rows)
     var has_test = test.n_rows > 0
     if has_test:
@@ -2306,6 +2476,19 @@ def fit_ordered(
         var fused_sums = opts.random_strength != Float32(0.0) and not bootstrap_on
         var m0 = Float64(0.0)
         var m1 = Float64(0.0)
+        # IDN_ORD_STD_SCALE_DEVICE: the scale the device formed, and the
+        # noise statement's two parameters (`count`, `mult`: functions of the
+        # fold plan and the fit's parameters, not of the data)
+        var dev_scale = Float32(1.0)
+        var ord_count = 0
+        for f in range(n_folds):
+            ord_count += (
+                folds[f].quality_evaluate_samples.right
+                - folds[f].estimate_samples.right
+            )
+        var ord_mult = ordered_model_length_mult(
+            n_rows, identical_mul64(Float64(iteration), Float64(opts.learning_rate))
+        )
         # DEVIATION 3111: ONE DRAIN FOR THE NOISE SUM, THE BOOTSTRAP AND THE
         # MAGNITUDES. Off the `fused_sums` arm the tree drained up to three
         # times here (the noise readback, a drain after the bootstrap that
@@ -2359,25 +2542,41 @@ def fit_ordered(
                         Int32(total), d_sums.unsafe_ptr(),
                         grid_dim=1, block_dim=REDUCE_LANES_BLOCK,
                     )
-            ctx.enqueue_copy(dst_buf=h_sums, src_buf=d_sums)
-            ctx.synchronize()
-            _ = part^
-            m0 = Float64(h_sums[1])
-            m1 = Float64(h_sums[2])
-            var count = 0
-            for f in range(n_folds):
-                count += (
-                    folds[f].quality_evaluate_samples.right
-                    - folds[f].estimate_samples.right
+            comptime if IDN_ORD_STD_SCALE_DEVICE:
+                # d_sums = (noise sum, weight magnitude, gradient magnitude)
+                var sums_p = d_sums.unsafe_ptr()
+                ctx.enqueue_function[_ord_std_scale_kernel](
+                    sums_p, Int32(0), Int32(1), sums_p, Int32(1),
+                    Int32(ord_count), bitcast[DType.uint64](Float64(1e-100)),
+                    bitcast[DType.uint64](ord_mult), opts.random_strength,
+                    Int32(total), d_ss.unsafe_ptr(),
+                    grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
                 )
-            var mult = ordered_model_length_mult(
-                n_rows, identical_mul64(Float64(iteration), Float64(opts.learning_rate))
-            )
-            score_std = Float32(
-                mult
-                * sqrt(Float64(h_sums[0]) / (Float64(count) + 1e-100))
-                * Float64(opts.random_strength)
-            )
+                ctx.enqueue_copy(dst_buf=h_ss, src_buf=d_ss)
+                ctx.synchronize()
+                _ = part^
+                score_std = h_ss[0]
+                dev_scale = h_ss[1]
+            else:
+                ctx.enqueue_copy(dst_buf=h_sums, src_buf=d_sums)
+                ctx.synchronize()
+                _ = part^
+                m0 = Float64(h_sums[1])
+                m1 = Float64(h_sums[2])
+                var count = 0
+                for f in range(n_folds):
+                    count += (
+                        folds[f].quality_evaluate_samples.right
+                        - folds[f].estimate_samples.right
+                    )
+                var mult = ordered_model_length_mult(
+                    n_rows, identical_mul64(Float64(iteration), Float64(opts.learning_rate))
+                )
+                score_std = Float32(
+                    mult
+                    * sqrt(Float64(h_sums[0]) / (Float64(count) + 1e-100))
+                    * Float64(opts.random_strength)
+                )
         elif opts.random_strength != Float32(0.0):
             var terms = ctx.enqueue_create_buffer[DType.float32](total)
             ctx.enqueue_function[_ord_std_terms_kernel](
@@ -2385,38 +2584,48 @@ def fit_ordered(
                 terms.unsafe_ptr(), Int32(total),
                 grid_dim=(_grid(total), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
             )
-            var s2 = ctx.enqueue_create_buffer[DType.float32](1)
-            ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
-                terms.unsafe_ptr(), Int32(total), s2.unsafe_ptr(),
-                grid_dim=1, block_dim=256,
-            )
-            var hs = ctx.enqueue_create_host_buffer[DType.float32](1)
-            ctx.enqueue_copy(dst_buf=hs, src_buf=s2)
-            if defer_drain:
+            comptime if IDN_ORD_STD_SCALE_DEVICE:
+                # the noise sum stays on the device for
+                # `_ord_std_scale_kernel` at the magnitudes below; `terms`
+                # is held past their drain
+                ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
+                    terms.unsafe_ptr(), Int32(total), d_s2.unsafe_ptr(),
+                    grid_dim=1, block_dim=256,
+                )
                 held.append(terms^)
-                held.append(s2^)
-                held_h.append(hs^)
             else:
-                ctx.synchronize()
-                var count = 0
-                for f in range(n_folds):
-                    count += (
-                        folds[f].quality_evaluate_samples.right
-                        - folds[f].estimate_samples.right
+                var s2 = ctx.enqueue_create_buffer[DType.float32](1)
+                ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
+                    terms.unsafe_ptr(), Int32(total), s2.unsafe_ptr(),
+                    grid_dim=1, block_dim=256,
+                )
+                var hs = ctx.enqueue_create_host_buffer[DType.float32](1)
+                ctx.enqueue_copy(dst_buf=hs, src_buf=s2)
+                if defer_drain:
+                    held.append(terms^)
+                    held.append(s2^)
+                    held_h.append(hs^)
+                else:
+                    ctx.synchronize()
+                    var count = 0
+                    for f in range(n_folds):
+                        count += (
+                            folds[f].quality_evaluate_samples.right
+                            - folds[f].estimate_samples.right
+                        )
+                    # the product pinned: inlined, the default build fused it into
+                    # `log(n) - model_size` (lane/pinned-mul-contract-free)
+                    var mult = ordered_model_length_mult(
+                        n_rows, identical_mul64(Float64(iteration), Float64(opts.learning_rate))
                     )
-                # the product pinned: inlined, the default build fused it into
-                # `log(n) - model_size` (lane/pinned-mul-contract-free)
-                var mult = ordered_model_length_mult(
-                    n_rows, identical_mul64(Float64(iteration), Float64(opts.learning_rate))
-                )
-                score_std = Float32(
-                    mult
-                    * sqrt(Float64(hs[0]) / (Float64(count) + 1e-100))
-                    * Float64(opts.random_strength)
-                )
-                _ = terms^
-                _ = s2^
-                _ = hs^
+                    score_std = Float32(
+                        mult
+                        * sqrt(Float64(hs[0]) / (Float64(count) + 1e-100))
+                        * Float64(opts.random_strength)
+                    )
+                    _ = terms^
+                    _ = s2^
+                    _ = hs^
 
         times.end(ctx, "ord.score_std")
         # 4. the bootstrap, quality slices only
@@ -2453,36 +2662,59 @@ def fit_ordered(
                 absv.unsafe_ptr(), Int32(total), mags.unsafe_ptr(),
                 grid_dim=1, block_dim=256,
             )
-            var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
-            ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
-            ctx.synchronize()
-            m0 = Float64(hm[0])
-            m1 = Float64(hm[1])
-            _ = absv^
-            _ = mags^
-            _ = hm^
-            if len(held_h) > 0:
-                # the deferred noise readback (DEVIATION 3111), the
-                # statements of the branch above
-                var count = 0
-                for f in range(n_folds):
-                    count += (
-                        folds[f].quality_evaluate_samples.right
-                        - folds[f].estimate_samples.right
+            comptime if IDN_ORD_STD_SCALE_DEVICE:
+                # the noise sum in `d_s2` (written above when the noise is
+                # on), the magnitudes in `mags`
+                ctx.enqueue_function[_ord_std_scale_kernel](
+                    d_s2.unsafe_ptr(), Int32(0),
+                    Int32(1) if opts.random_strength != Float32(0.0) else Int32(0),
+                    mags.unsafe_ptr(), Int32(0),
+                    Int32(ord_count), bitcast[DType.uint64](Float64(1e-100)),
+                    bitcast[DType.uint64](ord_mult), opts.random_strength,
+                    Int32(total), d_ss.unsafe_ptr(),
+                    grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+                )
+                ctx.enqueue_copy(dst_buf=h_ss, src_buf=d_ss)
+                ctx.synchronize()
+                _ = absv^
+                _ = mags^
+                score_std = h_ss[0]
+                dev_scale = h_ss[1]
+            else:
+                var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
+                ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
+                ctx.synchronize()
+                m0 = Float64(hm[0])
+                m1 = Float64(hm[1])
+                _ = absv^
+                _ = mags^
+                _ = hm^
+                if len(held_h) > 0:
+                    # the deferred noise readback (DEVIATION 3111), the
+                    # statements of the branch above
+                    var count = 0
+                    for f in range(n_folds):
+                        count += (
+                            folds[f].quality_evaluate_samples.right
+                            - folds[f].estimate_samples.right
+                        )
+                    # the product pinned: inlined, the default build fused it into
+                    # `log(n) - model_size` (lane/pinned-mul-contract-free)
+                    var mult = ordered_model_length_mult(
+                        n_rows, identical_mul64(Float64(iteration), Float64(opts.learning_rate))
                     )
-                # the product pinned: inlined, the default build fused it into
-                # `log(n) - model_size` (lane/pinned-mul-contract-free)
-                var mult = ordered_model_length_mult(
-                    n_rows, identical_mul64(Float64(iteration), Float64(opts.learning_rate))
-                )
-                score_std = Float32(
-                    mult
-                    * sqrt(Float64(held_h[0][0]) / (Float64(count) + 1e-100))
-                    * Float64(opts.random_strength)
-                )
+                    score_std = Float32(
+                        mult
+                        * sqrt(Float64(held_h[0][0]) / (Float64(count) + 1e-100))
+                        * Float64(opts.random_strength)
+                    )
         _ = held^
         _ = held_h^
-        var scale = Float32(choose_scale(m1 if m1 > m0 else m0, total))
+        var scale: Float32
+        comptime if IDN_ORD_STD_SCALE_DEVICE:
+            scale = dev_scale
+        else:
+            scale = Float32(choose_scale(m1 if m1 > m0 else m0, total))
         trace.record_scalar_f32(tag + ".scale", scale)
         trace.record_scalar_f32(tag + ".score_std", score_std)
 
@@ -2551,6 +2783,10 @@ def fit_ordered(
         # they are held here instead and released after the learn-loss
         # drain below, which then covers both (one drain, not two).
         var pend_held = List[_OrderedPending]()
+        # IDN_ORD_ONE_STEP_DEVICE: the estimation task's leaves are on the
+        # device; they come home on the learn-loss drain below
+        var ord_dev_leaves = False
+        var ord_dev_slot = 0
         if fast_on:
             comptime if ORDERED_BATCH_EST:
                 _ord_fast_estimate_tree(
@@ -2587,8 +2823,12 @@ def fit_ordered(
                 )
             )
             # the walks in lock step: one drain per round for every task
-            # still walking (a one-iteration walk is one round)
-            var walking = True
+            # still walking (a one-iteration walk is one round); none when
+            # every task finished on the device (IDN_ORD_ONE_STEP_DEVICE)
+            var walking = False
+            for t in range(len(pend)):
+                if pend[t].est.phase != 2:
+                    walking = True
             while walking:
                 ctx.synchronize()
                 walking = False
@@ -2604,8 +2844,10 @@ def fit_ordered(
                         bins,
                         cursors[lp][f], opts, est_pools[slot], trace,
                         tag + ".perm." + String(lp) + ".fold." + String(f),
-                        est_times, walker_times,
+                        est_times, walker_times, want_leaves=False,
                     )
+            ord_dev_leaves = pend[est_slot].est.device_done
+            ord_dev_slot = est_slot
             leaves = _ordered_estimate_complete(
                 ctx, pend[est_slot], slots[est_slot], n_leaves,
                 dperms[est_p], bins,
@@ -2643,7 +2885,7 @@ def fit_ordered(
         structure.splits = splits^
         var weak = TObliviousTreeModel(structure^)
         var weak_later = List[TObliviousTreeModel]()
-        if fast_on:
+        if fast_on or ord_dev_leaves:
             # its leaves come home on the learn-loss drain below
             weak_later.append(weak^)
         else:
@@ -2668,6 +2910,15 @@ def fit_ordered(
         ctx.synchronize()
         _ = pend_held^
         losses.append(-Float64(h_fv[0]) / Float64(n_rows))
+        if ord_dev_leaves:
+            leaves = _ordered_device_leaves(est_pools[ord_dev_slot], n_leaves)
+            var weak_dev = weak_later.pop()
+            for leaf in range(n_leaves):
+                weak_dev.leaf_values.append(
+                    identical_mul(leaves[leaf], opts.learning_rate)
+                )
+            model.add_weak_model(weak_dev^)
+            trace.record_device(ctx, tag + ".estimation_cursor", est_cursor)
         if fast_on:
             comptime if ORDERED_BATCH_EST:
                 leaves = _ord_fast_take_leaves(fast_h_leaves, n_leaves)

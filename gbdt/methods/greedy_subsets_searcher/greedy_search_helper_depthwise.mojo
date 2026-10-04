@@ -1159,10 +1159,26 @@ comptime GBDT_LG_BATCH = 1 if not _LG_FAST_APPLE else (
 #: rows in the same order, instead of the sum of its children's. Only the
 #: per-level score noise (`random_strength` with a Cosine score) draws per
 #: round, so a fit with noise grows one leaf per iteration.
+#:
+#: THE IDENTICAL DEFAULT since lane ml-gbdt (2026-10-04, roadmap T1): on for
+#: every vendor and the host column together, so the four columns still
+#: agree. Bits: none move against one leaf per iteration (the argument
+#: above). `-D MOJOLEARN_GBDT_LG_EXACT_ID_OFF` (or the master `-D
+#: MOJOLEARN_IDN_ALL_OFF`) is the A/B arm and restores one leaf per
+#: iteration; the old opt-in `-D MOJOLEARN_GBDT_LG_EXACT_ID` stays harmless.
+#: Memory gate (`LG_EXACT_ID_MAX_CELLS`, in the fit): the capacity doubles
+#: to min(2 * max_leaves, 1 << max_depth) leaf slots; a fit whose doubled
+#: slots would not fit the pool's leaf histograms, or whose histogram cells
+#: would pass the Int32 offset range, keeps one leaf per iteration.
 comptime LG_EXACT_ID = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_GBDT_LG_EXACT_ID"]()
+    and not is_defined["MOJOLEARN_GBDT_LG_EXACT_ID_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
+#: LG_EXACT_ID memory gate: the most histogram cells (leaf slots x stat
+#: planes x cells per leaf) a batched IDENTICAL Lossguide fit may address.
+#: Int32 offsets index the histogram and fixed-point accumulator planes.
+comptime LG_EXACT_ID_MAX_CELLS = 2147483647
 comptime LG_EXACT_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
@@ -1213,14 +1229,31 @@ comptime LG_EXACT_BATCH_WIDTH = (
 #: sort of 0..n-1 by leaf keeps rows ascending inside each leaf, as the
 #: searcher's stable partitions of 0..n-1 do), at the same offsets, so the
 #: estimator reduces the same values in the same order.
+#:
+#: THE IDENTICAL DEFAULT since lane ml-gbdt (2026-10-04, roadmap T2), every
+#: vendor and the host column together. GUARD (review of T1+T2): a leaf
+#: LG_EXACT_ID split ahead of time and folded back holds its descendants'
+#: slots concatenated, so its rows are NOT ascending and the estimator's
+#: fold order would differ from the rebuild's. Under IDENTICAL a tree with
+#: any folded-back result leaf leaves the record unset and the caller
+#: rebuilds the partition from the model (`NS_INHERIT_ID_GUARD` below), so
+#: bits move nowhere: T1+T2 together inherit only trees where every result
+#: leaf is one searcher slot, whose rows ascend. `-D
+#: MOJOLEARN_GBDT_NS_INHERIT_ID_OFF` (or the master `-D
+#: MOJOLEARN_IDN_ALL_OFF`) is the A/B arm; the old opt-in `-D
+#: MOJOLEARN_GBDT_NS_INHERIT_ID` stays harmless.
+comptime NS_INHERIT_ID = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_GBDT_NS_INHERIT_ID_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 comptime NS_INHERIT_PARTITION = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_GBDT_NS_INHERIT_PARTITION_OFF"]()
-) or (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_GBDT_NS_INHERIT_ID"]()
-)
+) or NS_INHERIT_ID
+#: the T1+T2 guard: IDENTICAL never inherits a tree with a folded-back leaf
+comptime NS_INHERIT_ID_GUARD = NS_INHERIT_ID and LG_EXACT_ID
 
 
 def _path_before(a: TLeafPath, b: TLeafPath) -> Bool:
@@ -1702,6 +1735,21 @@ def fit_non_symmetric_tree[
     var layout = build_layout(fold_counts, one_hot)
     var blocks = blocks_for(layout, n_rows)
     var hist_cells_per_leaf = layout.hist_cells
+    # LG_EXACT_ID memory gate (T1): the doubled leaf capacity must fit the
+    # leaf histograms the symmetric pool holds (`1 << max_depth` slots, see
+    # `TTreeWorkspace`) and stay inside Int32 cell offsets; otherwise this
+    # fit grows one leaf per iteration (same bits, the banner's argument).
+    comptime if LG_EXACT_ID:
+        if lg_exact and max_leaves > options.max_leaves:
+            var lg_gate_ok = max_depth < 30 and max_leaves <= (1 << max_depth)
+            if lg_gate_ok:
+                var lg_cells = max_leaves * stat_count * hist_cells_per_leaf
+                lg_gate_ok = lg_cells <= LG_EXACT_ID_MAX_CELLS
+            if not lg_gate_ok:
+                lg_exact = False
+                max_leaves = options.max_leaves
+                ws_leaves_key = options.max_leaves
+                lg_room_bound = False
     # DEVIATION 2007a: the SM count is read off the symmetric pool below
     # (one `ctx.get_attribute` per WORKSPACE build, not per tree -- the
     # query is 1.26 ms/call on Metal, the price note in
@@ -3808,6 +3856,9 @@ def fit_non_symmetric_tree[
             var lg_sums = List[Float64]()
             # the rows of each result leaf (NS_INHERIT_PARTITION)
             var final_rows = List[Int]()
+            # NS_INHERIT_ID_GUARD: a result leaf was split ahead of time and
+            # folded back (its rows are its descendants' slots, not ascending)
+            var lg_any_folded = False
             comptime if LG_EXACT_BATCH:
                 if lg_exact:
                     num_leaves = len(lg_final)
@@ -3822,6 +3873,7 @@ def fit_non_symmetric_tree[
                         comptime if LG_EXACT_ID:
                             # folded back: the stats it was scored with
                             if lg_node_left[lg_final[fi]] >= 0:
+                                lg_any_folded = True
                                 for st in range(stat_count):
                                     lg_sums[base + st] = Float64(
                                         lg_node_stats[
@@ -3934,6 +3986,9 @@ def fit_non_symmetric_tree[
                         inherit_sizes.append(final_rows[order[k]])
                         running += final_rows[order[k]]
                     inherit_ready = running == n_rows
+                comptime if NS_INHERIT_ID_GUARD:
+                    if lg_any_folded:
+                        inherit_ready = False
             break
 
     # THE MODEL ITSELF, last rung of the ladder. If every stage above
