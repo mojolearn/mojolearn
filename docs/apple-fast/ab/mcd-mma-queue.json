@@ -1,0 +1,5 @@
+[
+  "CMD lane/apple-fast-mcd-mma gap26-mcd-mma-ee-small bash tools/mcd_mma_serial.sh ee-small gap26-mcd-mma-ee-small \"$HOME/afc-def/gap26-mcd-mma-small/A.npz\" \"$HOME/afc-def/gap26-mcd-mma-small/B.npz\"",
+  "CMD lane/apple-fast-mcd-mma gap26-mcd-mma-full bash tools/mcd_mma_serial.sh mcd-full gap26-mcd-mma-full \"$HOME/afc-def/gap26-mcd-mma-ee-small/A.npz\" \"$HOME/afc-def/gap26-mcd-mma-ee-small/B.npz\" \"$HOME/afc-def/gap26-mcdcompat-taxi/A.npz\"",
+  "CMD lane/apple-fast-mcd-mma gap26-mcd-mma-ee-full bash tools/mcd_mma_serial.sh ee-full gap26-mcd-mma-ee-full \"$HOME/afc-def/gap26-mcd-mma-full/A.npz\" \"$HOME/afc-def/gap26-mcd-mma-full/B.npz\""
+]
