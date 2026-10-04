@@ -714,6 +714,21 @@ comptime IDN_GMM_SCORE_DEVICE = (
     )
 )
 
+#: IDENTICAL, every column: the mean log likelihood's copy to the host is
+#: enqueued right after the E-step instead of at the end of the iteration,
+#: so it rides the drain the precision Cholesky already pays to read its
+#: pivot flags and the iteration's last synchronize finds an empty queue.
+#: With `IDN_GMM_FUSED_CHOL` that is one working drain an EM iteration. The
+#: same value is read (nothing between the E-step and the read writes
+#: `meanll`). `-D MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF=1` restores the late copy.
+comptime IDN_GMM_ONE_DRAIN = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
 comptime GMM_INIT_TPB = 256
 comptime GMM_INIT_NO_BAD_ROW = Int32(-1)
 
@@ -1178,6 +1193,11 @@ def gaussian_mixture_fit(
             escratch, gws, mahal, wlp, rowmax, lse, logresp, meanll,
             n, d, ncomp, trace, tag, elem_tpb, row_tpb, sabotage,
         )
+        comptime if IDN_GMM_ONE_DRAIN:
+            # The E-step wrote `meanll` and nothing later in the iteration
+            # touches it: start its trip home now, so the precision
+            # Cholesky's one drain (the pivot flags) brings it too.
+            ctx.enqueue_copy(dst_ptr=hll.unsafe_ptr(), src_buf=meanll)
         if st_on:
             ctx.synchronize()
             var now = Int(perf_counter_ns())
@@ -1205,7 +1225,8 @@ def gaussian_mixture_fit(
             st_c += Int(perf_counter_ns()) - st_t
 
         # THE ONE DRAIN PER ITERATION. See this function's docstring.
-        ctx.enqueue_copy(dst_ptr=hll.unsafe_ptr(), src_buf=meanll)
+        comptime if not IDN_GMM_ONE_DRAIN:
+            ctx.enqueue_copy(dst_ptr=hll.unsafe_ptr(), src_buf=meanll)
         ctx.synchronize()
         lower_bound = hll.unsafe_ptr().unsafe_load(0)
 
