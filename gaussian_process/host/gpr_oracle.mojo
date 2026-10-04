@@ -66,6 +66,7 @@ trailing update and the posterior mean move as well through
 """
 
 from gaussian_process.gpc_items import gpr_ydot_host
+from gaussian_process.gp_var_seg import GP_IDN_VAR_SEG, gp_var_seg_sumsq_host
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
@@ -939,9 +940,12 @@ def gpr_host_predict(
         chol_host_trsm_lower(l, kcross, n_train, n_star)
         for t in range(n_star):
             var acc = Float32(0.0)
-            for i in range(n_train):
-                var vv = ftz(kcross[i * n_star + t])
-                acc = ftz(identical_mul_add(vv, vv, acc))
+            comptime if GP_IDN_VAR_SEG:
+                acc = gp_var_seg_sumsq_host(kcross, n_train, n_star, t)
+            else:
+                for i in range(n_train):
+                    var vv = ftz(kcross[i * n_star + t])
+                    acc = ftz(identical_mul_add(vv, vv, acc))
             var raw = ftz(ftz(kss) - acc)
             var outv = raw
             if not (raw > Float32(0.0)):

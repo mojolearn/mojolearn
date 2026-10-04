@@ -91,7 +91,7 @@ from gaussian_process.estimator import (
 from gaussian_process.gpc_resident_k import _gpc_kernel_self_dev
 from gaussian_process.gpc_device_var import (
     GPC_VAR_TPB,
-    gpc_latent_var_kernel,
+    gpc_latent_var_launch,
     gpc_scale_rows_kernel,
 )
 from gaussian_process.gpc_common import (
@@ -572,11 +572,7 @@ def gpc_predict_binary_host(
         )
         var dl2 = _upload(ctx, l)
         trsm_lower(ctx, dl2, dv2, n_train, n_star, trace, "gpc.v", CHOL_SOLVE_TPB)
-        ctx.enqueue_function[gpc_latent_var_kernel](
-            dvar.unsafe_ptr(), dv2.unsafe_ptr(), Int32(n_train), Int32(n_star), kss,
-            grid_dim=((n_star + GPC_VAR_TPB - 1) // GPC_VAR_TPB, 1, 1),
-            block_dim=(GPC_VAR_TPB, 1, 1),
-        )
+        gpc_latent_var_launch(ctx, dvar, dv2, n_train, n_star, kss)
         # DEVIATION 2832's probability from the resident mean and variance
         var dpr = ctx.enqueue_create_buffer[DType.uint64](n_star)
         ctx.enqueue_function[gpc_proba_kernel](
