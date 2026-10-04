@@ -77,6 +77,7 @@ from checks.numerics import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from gemm.contract import OP_NN, OP_NT, OP_TN
+from mamba.checks.mamba_rms_fold import mamba_rms_row_sumsq_list
 from gemm.checks.gemm_oracle import gemm_oracle, gemm_oracle_right_zero_padded
 from gemm.host.gemm_host_rows import gemm_host_rows, gemm_host_rows_right_zero_padded
 from mamba.checks.mamba_oracle import refuse_nonfinite
@@ -626,11 +627,10 @@ def mamba2_block_oracle(
 
     # ---- block RMSNorm (HF Mamba2RMSNorm :591-605), S1-S3: the Mamba-1
     #      S1-S4 machinery verbatim (inheritance column).
+    # lane nr-mamba (B11): S1 is the shared lanes + tree fold
+    # (mamba/checks/mamba_rms_fold.mojo, IDN_MAMBA_RMS_TREE).
     for t in range(m):
-        var acc = Float32(0.0)
-        for j in range(dm):
-            var xj = ftz(x[t * dm + j])
-            acc = ftz(identical_mul_add(xj, xj, acc))
+        var acc = mamba_rms_row_sumsq_list(x, t * dm, dm)
         st.norm_sumsq.append(acc)
         var mean = ftz(identical_div(acc, Float32(dm)))
         var rstd = ftz(identical_rsqrt(ftz(mean + M2_RMS_EPS)))
@@ -815,11 +815,10 @@ def mamba2_block_oracle(
                     )
                 )
             )
+    # lane nr-mamba (B11): the same shared fold (the device runs the same
+    # `mamba_rms_norm` for S21).
     for t in range(m):
-        var acc = Float32(0.0)
-        for j in range(di):
-            var g = ftz(st.gnorm_gate[t * di + j])
-            acc = ftz(identical_mul_add(g, g, acc))
+        var acc = mamba_rms_row_sumsq_list(st.gnorm_gate, t * di, di)
         st.gnorm_sumsq.append(acc)
         var mean = ftz(identical_div(acc, Float32(di)))
         var rstd = ftz(identical_rsqrt(ftz(mean + M2_RMS_EPS)))

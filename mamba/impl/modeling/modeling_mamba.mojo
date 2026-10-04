@@ -205,6 +205,11 @@ from mamba.impl.modules.afn_defines import (
     IDN_MAMBA_CONV_CELL,
 )
 from mamba.impl.modules.afn_arena import MambaArena
+from mamba.checks.mamba_rms_fold import (
+    IDN_MAMBA_RMS_TREE,
+    MAMBA_RMS_LANES,
+    mamba_rms_tree,
+)
 from mamba.impl.modules.afn_refusal import AfnRefusalBatch
 from mamba.impl.modeling.afn_mamba1_fused import afn_m1_conv_token, afn_m1_split_a
 #: lane w2-epi (2026-10-03): in_proj/out_proj on the FAST matrix-unit kernel,
@@ -951,6 +956,73 @@ def mamba_rms_norm_kernel(
         )
 
 
+def mamba_rms_lane_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],  # [M, MAMBA_RMS_LANES]
+    x: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    dm_in: Int32,
+):
+    """IDN_MAMBA_RMS_TREE (roadmap B11), S1 part 1: one thread per (row,
+    lane), lane k's chain over j = k, k + 32, ... ascending from +0.0
+    (mamba/checks/mamba_rms_fold.mojo states the fold)."""
+    var m = Int(m_in)
+    var dm = Int(dm_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= m * MAMBA_RMS_LANES:
+        return
+    var t = cell // MAMBA_RMS_LANES
+    var lane = cell - t * MAMBA_RMS_LANES
+    var acc = Float32(0.0)
+    var j = lane
+    while j < dm:
+        var xj = ftz(x.unsafe_load(t * dm + j))
+        acc = ftz(identical_mul_add(xj, xj, acc))
+        j += MAMBA_RMS_LANES
+    part.unsafe_store(cell, acc)
+
+
+def mamba_rms_tree_kernel(
+    sumsq: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],  # [M, MAMBA_RMS_LANES]
+    m_in: Int32,
+):
+    """S1 part 2: one thread per row, the fixed pairwise tree over its lane
+    partials in lane order."""
+    var m = Int(m_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= m:
+        return
+    var v = SIMD[DType.float32, MAMBA_RMS_LANES](0.0)
+    comptime for lane in range(MAMBA_RMS_LANES):
+        v[lane] = part.unsafe_load(t * MAMBA_RMS_LANES + lane)
+    sumsq.unsafe_store(t, mamba_rms_tree(v))
+
+
+def mamba_rms_out_kernel(
+    out_buf: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    weight: MutPointer[Float32, MutAnyOrigin],
+    sumsq: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    dm_in: Int32,
+):
+    """S2-S4 per element (`mamba_rms_norm_kernel`'s output loop, same
+    arithmetic per cell): rstd from the row's recorded sumsq."""
+    var m = Int(m_in)
+    var dm = Int(dm_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= m * dm:
+        return
+    var t = cell // dm
+    var j = cell - t * dm
+    var mean = ftz(identical_div(sumsq.unsafe_load(t), Float32(dm)))
+    var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
+    var inner = ftz(identical_mul(ftz(x.unsafe_load(cell)), rstd))
+    out_buf.unsafe_store(
+        cell, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
+    )
+
+
 def mamba_rms_norm(
     ctx: DeviceContext,
     mut sumsq: DeviceBuffer[DType.float32],
@@ -962,14 +1034,67 @@ def mamba_rms_norm(
 ) raises:
     """`MambaRMSNorm.forward(hidden_states)` (:495-499) over `M = B * L`
     token rows. ASYNCHRONOUS: the caller synchronizes."""
-    ctx.enqueue_function[mamba_rms_norm_kernel](
+    comptime if IDN_MAMBA_RMS_TREE:
+        # B11: lanes, tree, then the per-element output. The lane partials
+        # sit in `out_buf` (M * d_model >= M * 32 cells) until S2-S4
+        # overwrites it; a narrower row takes its own scratch.
+        if d_model >= MAMBA_RMS_LANES:
+            var pp = out_buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            _mamba_rms_tree_launches(ctx, sumsq, pp, out_buf, x, weight, m, d_model)
+        else:
+            var part = mamba_scratch(ctx, m * MAMBA_RMS_LANES)
+            var pp = part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            _mamba_rms_tree_launches(ctx, sumsq, pp, out_buf, x, weight, m, d_model)
+            # the scratch must outlive its two readers (a d_model below 32
+            # never occurs in a shipped config; the wait is this arm's only).
+            ctx.synchronize()
+            _ = part^
+    else:
+        ctx.enqueue_function[mamba_rms_norm_kernel](
+            sumsq.unsafe_ptr(),
+            out_buf.unsafe_ptr(),
+            x.unsafe_ptr(),
+            weight.unsafe_ptr(),
+            Int32(m),
+            Int32(d_model),
+            grid_dim=(_grid(m), 1, 1),
+            block_dim=(MAMBA_TPB, 1, 1),
+        )
+
+
+def _mamba_rms_tree_launches(
+    ctx: DeviceContext,
+    mut sumsq: DeviceBuffer[DType.float32],
+    part: MutPointer[Float32, MutAnyOrigin],
+    mut out_buf: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut weight: DeviceBuffer[DType.float32],
+    m: Int,
+    d_model: Int,
+) raises:
+    ctx.enqueue_function[mamba_rms_lane_kernel](
+        part,
+        x.unsafe_ptr(),
+        Int32(m),
+        Int32(d_model),
+        grid_dim=(_grid(m * MAMBA_RMS_LANES), 1, 1),
+        block_dim=(MAMBA_TPB, 1, 1),
+    )
+    ctx.enqueue_function[mamba_rms_tree_kernel](
         sumsq.unsafe_ptr(),
+        part,
+        Int32(m),
+        grid_dim=(_grid(m), 1, 1),
+        block_dim=(MAMBA_TPB, 1, 1),
+    )
+    ctx.enqueue_function[mamba_rms_out_kernel](
         out_buf.unsafe_ptr(),
         x.unsafe_ptr(),
         weight.unsafe_ptr(),
+        sumsq.unsafe_ptr(),
         Int32(m),
         Int32(d_model),
-        grid_dim=(_grid(m), 1, 1),
+        grid_dim=(_grid(m * d_model), 1, 1),
         block_dim=(MAMBA_TPB, 1, 1),
     )
 
