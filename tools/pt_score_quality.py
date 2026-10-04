@@ -66,7 +66,10 @@ def compare(args):
                        ((base, ""), (candidate, ""), (base, "reference_")))
             if b.shape != c.shape or b.shape != r.shape or not all(np.isfinite(v).all() for v in (b, c, r)):
                 ok = False
-                report[key] = "NONFINITE_OR_SHAPE_FAILURE"
+                report[key] = {"failure": "NONFINITE_OR_SHAPE_FAILURE",
+                               "shapes": [list(v.shape) for v in (b, c, r)],
+                               "nonfinite_indices": {arm: np.argwhere(~np.isfinite(v)).tolist()[:16]
+                                   for arm, v in zip(("main", "candidate", "reference"), (b, c, r))}}
                 continue
             if key == "output":
                 be, ce = np.sqrt(np.mean((b-r)**2, axis=0)), np.sqrt(np.mean((c-r)**2, axis=0))
@@ -85,12 +88,36 @@ def compare(args):
             metric_ok = bool(np.all(ce <= be + noise))
             ok &= metric_ok
             report[key] = {"main_error_max": float(be.max()), "candidate_error_max": float(ce.max()),
-                           "worst_regression": float((ce-be).max()), "noise": noise, "pass": metric_ok}
+                           "worst_regression": float((ce-be).max()), "noise": noise, "pass": metric_ok,
+                           "failed_columns": np.flatnonzero(ce > be + noise).tolist()}
         report["pass"] = ok
         passed &= ok
         print("PT-SCORE-Q " + json.dumps(report, sort_keys=True))
     print("PT-SCORE-Q-SUMMARY " + ("PASS" if passed else "FAIL"))
     raise SystemExit(0 if passed else 1)
+
+
+def diagnose(args):
+    """Read saved outputs only; no estimator fitting or new GPU runs."""
+    base, candidate = np.load(args.main), np.load(args.candidate)
+    name = args.fixture
+    bl, cl, rl = (a[name + "_" + prefix + "lambda"] for a, prefix in
+                  ((base, ""), (candidate, ""), (base, "reference_")))
+    for col in range(len(bl)):
+        report = {"fixture": name, "column": col, "lambda": {"main": float(bl[col]),
+                  "candidate": float(cl[col]), "reference": float(rl[col])}}
+        for arm, arrays, prefix in (("main", base, ""), ("candidate", candidate, ""),
+                                    ("reference", base, "reference_")):
+            y = arrays[name + "_" + prefix + "output"][:, col]
+            report[arm] = {"objective": float(arrays[name + "_" + prefix + "objective"][col]),
+                           "normality": float(arrays[name + "_" + prefix + "normality"][col]),
+                           "output_min": float(np.min(y)), "output_max": float(np.max(y)),
+                           "output_std": float(np.std(y)), "nonfinite": int((~np.isfinite(y)).sum())}
+        by, cy, ry = (a[name + "_" + prefix + "output"][:, col] for a, prefix in
+                      ((base, ""), (candidate, ""), (base, "reference_")))
+        report["output_reference_rms"] = {"main": float(np.sqrt(np.mean((by-ry)**2))),
+                                          "candidate": float(np.sqrt(np.mean((cy-ry)**2)))}
+        print("PT-SCORE-DIAG " + json.dumps(report, sort_keys=True))
 
 
 if __name__ == "__main__":
@@ -103,5 +130,9 @@ if __name__ == "__main__":
     p = sub.add_parser("compare")
     p.add_argument("main")
     p.add_argument("candidate")
+    p = sub.add_parser("diagnose")
+    p.add_argument("main")
+    p.add_argument("candidate")
+    p.add_argument("--fixture", default="stress")
     args = parser.parse_args()
-    {"dump": dump, "compare": compare}[args.command](args)
+    {"dump": dump, "compare": compare, "diagnose": diagnose}[args.command](args)

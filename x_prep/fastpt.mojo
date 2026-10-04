@@ -49,9 +49,14 @@ from x_prep.transform import PT_STATE, pt_finish, power_log, power_from_log
 from x_prep.pt_score import SCORE_WORDS, score_tile, score_finish
 
 comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-# EXPERIMENT (unmeasured): analytic NLL score + compensated centered moments
-# removes absolute-f32-objective comparisons near a flat minimum. Prior
-# COLBATCH drift 9.5e-3 failed quality; see docs/apple-fast/PT_SCORE.md.
+# HOLD-quality, 2026-10-04, gap26-pt-score-quality, source bc112b172:
+# stress worst per-column regressions: lambda .01330737 (gate 1e-5),
+# NLL/sample 4.083e-7 (1e-7), transform RMS 9.606e-5 (1e-5);
+# normality nonfinite/shape gate also failed. Timing correctly skipped.
+# Near-constant stress cols6/7 still round per-row log/y/dy in f32;
+# f64 optima52.61/-63.39 exceed fixed[-8,8]. Reference col7 transform
+# itself has std0/NaN normality. Cols0-5 improve; no isolated fix accepted.
+# See docs/apple-fast/PT_SCORE.md; diagnostics preserve all thresholds.
 # Explicitly disables speculation, whose objective tree is incompatible.
 comptime PT_SCORE = _FAST_APPLE and is_defined["MOJOLEARN_PT_SCORE"]()
 # DROP-quality (2026-10-03), M3 batchv-pt-all-istella: 2258 -> 512 ms.

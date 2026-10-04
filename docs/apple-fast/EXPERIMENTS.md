@@ -655,3 +655,11 @@ speed was measured only for LabelBinarizer; do not update their timing rows.
 Raw M3 receipt: `~/mojolearn-evidence/apple-fast/sync/quality-repairs-results-0900.txt`; individual tags under `~/mq/out/`. Source review for queued PT `bc112b172`: subsequent main x_prep changes only add label-specific binding/dispatch/Python paths; power-transformer implementation is unchanged.
 
 - `MOJOLEARN_GBDT_DW_BRIDGE_SCAN`, measured kernel `2519f4867`, helper `f193454e7`, `gap26-dwcurrent-taxi`: A10279.095 -> B10827.749 ms (+5.34%), one M3 run/arm. AUC .632554 -> .632211; logloss .527920 -> .528002. **DROPPED-slower**; changed quality has no established noise bound, so no quality-equivalence claim. No default or board change. Receipt `~/mojolearn-evidence/apple-fast/sync/dwcurrent-result-0905.txt`; full M3 `~/afc-def/gap26-dwcurrent-taxi/`.
+
+## PowerTransformer compensated score failure (2026-10-04)
+
+| Experiment | Source / tag | Quality | Verdict / next step |
+|---|---|---|---|
+| `PT_SCORE` | lane/apple-fast-pt-precision @ bc112b172; gap26-pt-score-quality | Stress per-column worst regression: lambda .01330737 vs1e-5 tolerance; NLL/sample4.083e-7 vs1e-7; transform RMS9.606e-5 vs1e-5; normality nonfinite/shape failure. Box-Cox improves and passes | HOLD-quality; timing skipped, no speed claim/default. Diagnose saved stress columns and distinguish nonfinite reference from candidate before repair. Tolerances unchanged; source context [PT_SCORE.md](PT_SCORE.md) |
+
+Saved-array diagnosis: PT stress columns0–5 improve to ~1.5–1.8e-7 transform RMS. Regressions are near-constant columns6/7: reference lambdas52.6079/-63.3852 exceed main and candidate[-8,8] interval; f32 per-row log/transform/derivative precision remains before compensated reduction. The normality NaN belongs to reference column7 (constant sklearn transform, std0), not GPU outputs. No threshold relaxation or speculative kernel repair; a stable shared score/output transform and corrected stable oracle are needed before retry. See [PT_SCORE.md](PT_SCORE.md) for exact per-column evidence.
