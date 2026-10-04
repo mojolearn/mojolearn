@@ -27,11 +27,11 @@ this core GEMM hook: decomposition MMA, LU and Cholesky have other launchers.
 
 | ID | Modifiers | Tile M x N x K | Intake state |
 | --- | --- | --- | --- |
-| G1 | DIRECT | 64 x 64 x 16 | Review/compile backlog; direct control |
+| G1 | DIRECT | 64 x 64 x 16 | M2 A/B PASS at 6abb76673; M3 quality next |
 | G2 | DIRECT, SMALL | 32 x 32 x 16 | Review/compile backlog |
 | G3 | DIRECT, WIDE | 64 x 128 x 16 | Review/compile backlog |
 | G4 | DIRECT, TALL | 128 x 64 x 16 | Review/compile backlog |
-| G5 | none | 64 x 64 x 16 | Review/compile backlog; staged control |
+| G5 | none | 64 x 64 x 16 | M2 A/B PASS at 6abb76673; M3 quality next |
 | G6 | DEEP | 64 x 64 x 32 | Review/compile backlog |
 | G7 | PADDED | 64 x 64 x 16 | Review/compile backlog |
 | G8 | WIDE, DEEP | 64 x 128 x 32 | Review/compile backlog |
@@ -61,7 +61,7 @@ promotion. Forecast quality remains a separate acceptance gate.
 | K2-B8 | Blocked Gaussian scan, block size 8 | Equation/oracle and adapter backlog |
 | K2-B16 | Blocked Gaussian scan, block size 16 | Equation/oracle and adapter backlog |
 | K2-B32 | Blocked Gaussian scan, block size 32 | Equation/oracle and adapter backlog |
-| K3 | Scalar exact-observation specialization | Eligibility/oracle and adapter backlog |
+| K3 | Scalar exact-observation specialization | Exact scalar Mojo adapter; M2 signature repair pending; quality/forecast gates owed |
 
 ## Shared-call variants
 
@@ -73,12 +73,33 @@ These APIs need explicit FAST/Apple guards at any production integration.
 
 | ID | Candidate | Intake state |
 | --- | --- | --- |
-| C1 | ResidentCallSlot: retained transfers and scratch | Ownership review and bit-quality harness backlog |
-| C2 | wait_pair: one wait for two independent calls | Dependency/ownership and bit-quality harness backlog |
-| C3 | PackedReadback: retained grouped readback slab | First-read/ownership and bit-quality harness backlog |
-| C4 | Resident MinMax transform adapter | Existing-kernel control; trace useful slow-row adapters separately |
+| C1 | ResidentCallSlot: retained transfers and scratch | M2 probe A/B PASS at 89e7d080b; M3 quality next |
+| C2 | wait_pair: one wait for two independent calls | M2 probe A/B PASS at 89e7d080b; M3 quality next |
+| C3 | PackedReadback: retained grouped readback slab | M2 probe A/B PASS at 89e7d080b; M3 quality next |
+| C4 | Resident MinMax transform adapter | M2 probe A/B PASS at 89e7d080b; M3 quality next |
 
 The sibling IDENTICAL call-path worktree is not included in this FAST intake.
 Manager owns queue edits and merges; delegated reviewers own isolated source
 and harness preparation. Record new jobs and verdicts in `EXPERIMENTS.md`
 when their exact compiled source and gates are ready.
+
+## First intake evidence
+
+G1/G5 probe source `6abb76673038a3f7a3eb6ebc5be331472e32747e`, binding
+`gemm_probe`, define `MOJOLEARN_APPLE_GEMM_PROBE`: M2 A/B rc0. This
+standalone probe compares explicit incumbent, direct and staged kernels;
+production dispatch is unchanged. Earlier reserved-identifier parse failures
+produced no measurements. Twelve M3 oracle fixtures must pass before timing.
+
+C1–C4 probe source `89e7d080b1bdb99fb84e956b5ba64371453857e2`, binding
+`callpath_probe`, define `MOJOLEARN_APPLE_FAST_CALLPATH_CANDIDATES`: M2
+A/B rc0. M3 bit/lifecycle checks are still owed. Compilation is not evidence
+of safe reuse, output identity, or end-to-end speed.
+
+The separate rank-one Kalman reference oracle `45b61672d`, tag
+`arima-assoc-oracle-v1`, is HOLD: float64 algebra passes all 68 fixtures,
+but 47 float32 checks and 9 finite-difference gradient checks fail. These
+are NumPy emulations, not actual-main kernel comparisons. Exact-rank
+elimination changes the rounded-Q model; do not use this formulation as
+validation for catalog K1/K2. Retaining full conditional covariance is the
+next mathematical comparison. Scalar K3 remains independently gated.

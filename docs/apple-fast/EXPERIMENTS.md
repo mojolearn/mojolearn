@@ -801,3 +801,17 @@ See [PT_SCORE_STABLE.md](PT_SCORE_STABLE.md) for code scope and exact owed check
 | `MOJOLEARN_MCD_SKIP_PINVH` + `MOJOLEARN_MCD_DEFLATE` | elliptic-envelope istella | lane/apple-fast-w4-mcd d0b30bfe9 | w2-w4mcd-q-ee-istella-defl | gate PASS but flags Jaccard 0.9988687783; fraction 0.2946667 -> 0.2943333; precision relative delta 0.001521 | HOLD-quality: changed anomaly behavior requires evidence, not merely a permissive passing gate |
 
 | `MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS` / rollback `MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF` | eigh synthetic, n>=512 with refusal fallback | measured e79a96e03d0331450a65544a7f55d06c7b140576; isolated promotion from main fc36f878c | w2-eigh-panels-q-20261004; w2-eigh-panels-t-20261004 | M3 43765.6 -> 700.3 ms; original no-regression criterion PASS all 8 fixtures, zero allowance; stricter absolute eig/Gram gates still FAIL and opponent-quality HOLD preserved | DEFAULT under original main-relative criterion; M2 default/OFF rc0 at 10cedc640, merged eb97b0948; absolute and opponent-quality holds retained. Panel factors now multi-block; previous single-block implementation excluded. Source review: two production files exactly measured except default switch/comment; intervening main changes do not affect x_decomp numerical path. |
+
+| `MOJOLEARN_LU_FAST_MMA_DBUF` | lu-factor / lu-solve n8192 | lane/apple-fast-lu-mma-dbuf@5d4e5d5d5f61c93d49c03e7eb826130ca088dd9d | w2-lu-dbuf-q-20261004; w2-lu-dbuf-t-20261004 | quality PASS: exact LU/pivots/solutions and no-worse residuals on 8 fixtures; factor call+read 712.147958 -> 690.727875 ms; solve 778.036750 -> 778.825792 ms | HOLD-speed: factor gain about 3%, no solve gain; no default or board change. One scored run per arm, no replay. Source review identifies pivot-reduction synchronization as next distinct lever. |
+| Rank-one Gaussian associative scan reference | AutoARIMA design only | lane/apple-fast-arima-scan-oracle@45b61672db3075e106c27917d971da0641ecbe2b | arima-assoc-oracle-v1 | 68 f64 algebra fixtures pass; 47 f32 checks and 9 finite-difference gradient checks fail | HOLD: rounded-Q model and derivative differences; not actual-main GPU evidence, no timings or promotion |
+
+Saved-output MCD follow-up (`w2-w4mcd-oracle-{mcd-istella,ee-istella,mcd-taxi}-r1`,
+analysis source `1388758c39afa56587b659d9ce2600d0fb0eb336`): HOLD remains.
+Istella MCD precision error B 0.01008622 exceeds A 0.009929996 and prior A
+0.009888035; train-distance error B 0.000575127 exceeds 0.000564590 and
+0.000535111. EE distance/decision/offset errors also exceed both saved A
+errors. Observed A–A variation does not establish an allowance for every
+metric. Taxi final oracle errors improve/equal, but raw covariance is not
+byte-identical and lacks an extra baseline. Reports preserve legacy capture
+provenance limitations. Stabilizing split-K accumulation is a new candidate,
+not retroactive validation of SKIP. DEFLATE remains HOLD for changed flags.
