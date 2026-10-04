@@ -23,6 +23,7 @@ from x_prep.fastred import (
 )
 from x_prep.dmi import mi_cd_device, mi_w_words, mi_scratch_words
 from x_prep.fastnb import NB_CAT_ATOMIC, cat_hist_atomic_kernel, cat_hist_convert_kernel
+from x_prep.label_fast import LABEL_SCATTER, label_scatter_kernel
 from x_prep.select_fast import (
     SELECT_FREG, SELECT_FCLS, OP_F_CLASSIF, OP_F_REGRESSION, program_has_op, select_scratch_words,
     select_freg_device, select_fcls_device, select_cstats_device,
@@ -457,6 +458,18 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 sort_cols_device(ctx, df, dw, total, Int(hq[0]), Int(hq[1]), Int(hq[2]),
                                  Int(hq[3]), Int(hq[4]))
             continue
+        comptime if LABEL_SCATTER:
+            if op == 51:
+                var hq = host_q + (s * STAGE_INTS + 2)
+                if Int(hq[4]) == 0:
+                    # Explicit clear also handles reused arena/output regions.
+                    ctx.enqueue_memset(df.create_sub_buffer[DType.float32](Int(hq[7]), total), Float32(0))
+                    var rows = Int(hq[1])
+                    ctx.enqueue_function[label_scatter_kernel](
+                        df.unsafe_ptr(), qp, Int32(rows),
+                        grid_dim=(rows + BLOCK - 1) // BLOCK, block_dim=BLOCK,
+                    )
+                    continue
         comptime if SELECT_FREG:
             # FAST on Apple (lane/apple-fast-select): f_regression as row x feature tiles
             if op == OP_F_REGRESSION:

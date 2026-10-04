@@ -21,6 +21,7 @@ from x_prep.prep3 import PREP3_MAXABS
 from x_prep.fastmaxabs import maxabs_fit_direct
 
 from x_prep.fastpt import PTIMPUTE_FLAGS
+from x_prep.label_fast import LABEL_PRESENT
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -223,6 +224,10 @@ def cls2_cat_binding() raises -> PythonObject:
     return PythonObject(f)
 
 
+def label_present_binding() raises -> PythonObject:
+    return PythonObject(1)
+
+
 def ptimpute_flags_binding() raises -> PythonObject:
     """Lane af-ptimpute (FAST + Apple, each switch its own define, default off):
     the bits of x_prep/fastpt.mojo PTIMPUTE_FLAGS (1 PT_COLBATCH, 2 PT_SPEC,
@@ -272,6 +277,8 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
             m.def_function[fast_unique_binding]("x_prep_fast_unique")
         comptime if SPLINE_FAST_FUSED:
             m.def_function[spline_fused_binding]("x_prep_spline_fused")
+        comptime if LABEL_PRESENT:
+            m.def_function[label_present_binding]("x_prep_label_present")
         comptime if CAT_CLS2_PACK:
             m.def_function[cls2_cat_binding]("x_prep_cls2_cat")
         comptime if CALIB_FOLDS:
