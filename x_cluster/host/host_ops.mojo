@@ -34,6 +34,8 @@ from x_cluster.bodies import (
     exp_cell,
     gauss_q_cell,
     nk_cell,
+    nk_levels_cell,
+    IDN_BGMM_NK_LEVELS,
     pdist_cell,
     resp_row,
     xk_cell,
@@ -542,7 +544,10 @@ struct HostOps(ClusterOps):
         var pc = self._fp(cov)
 
         def nk_body(t: Int) {imm pr, imm pn, imm n, imm kc}:
-            nk_cell(pr, n, kc, pn, t)
+            comptime if IDN_BGMM_NK_LEVELS:
+                nk_levels_cell(pr, n, kc, pn, t)
+            else:
+                nk_cell(pr, n, kc, pn, t)
 
         host_cells(nk_body, kc, 2 * n)
 

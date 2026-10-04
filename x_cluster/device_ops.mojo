@@ -32,6 +32,7 @@ from x_cluster.bodies import (
     xk_term,
     gauss_q_cell,
     nk_cell,
+    IDN_BGMM_NK_LEVELS,
     pdist_cell,
     resp_row,
     xk_cell,
@@ -54,7 +55,15 @@ from cluster.estimator import kmeans_fit, kmeans_fit_rows
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.contract import OP_TN
-from mixture.checks.mstep import center_scale_kernel, cov_finish_kernel, means_divide_kernel
+from mixture.checks.mstep import (
+    center_scale_kernel,
+    cov_finish_kernel,
+    means_divide_kernel,
+    nk_finish_kernel,
+    nk_level1_kernel,
+    nk_level_kernel,
+)
+from mixture.nk_order import GMM_NK_CHUNK, gmm_nk_levels_floats
 from x_cluster.ops import ClusterOps
 from x_cluster.optics_xi_device import optics_xi_device
 from x_cluster.meanshift_fast import MEANSHIFT_FAST_GRID, meanshift_fast_grid
@@ -1582,6 +1591,22 @@ def _agg_rescan_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: I
 
 
 
+# fam2-cluster (2026-10-04), IDENTICAL, default ON: `_moments_gemm` (every EM
+# iteration of the x_cluster mixtures) allocated four buffers (two of them
+# n x d) and DRAINED the stream before returning so they could die. The
+# buffers now live in the ops object and the call returns with its work
+# enqueued: one allocation per fit, one drain less per EM iteration.
+# Scheduling only, no bit moves. `-D MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF=1`
+# restores the per-call buffers and the drain.
+comptime IDN_BGMM_MOMENTS_POOL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+
 struct _ClusterContext(Defaultable, Movable):
     """ONE process-lifetime DeviceContext for every x_cluster entry (the
     x_cnn `_Global` pattern: one DeviceContext per process). A context per call hung the SECOND
@@ -1642,6 +1667,15 @@ struct DeviceOps(ClusterOps):
     var ph_calls: List[Int]
     var u: List[DeviceBuffer[DType.uint64]]
     """The post-processing primitives' 64-bit key buffers (lane cgr2-cluster)."""
+    var mom_raw: DeviceBuffer[DType.float32]
+    """`_moments_gemm`'s scratch (fam2-cluster, IDN_BGMM_MOMENTS_POOL): the
+    GEMM output, its workspace, the centered and the scaled rows and the nk
+    levels, kept for the fit; `mom_n` their sizes (raw, ws, diff/scaled, nk)."""
+    var mom_ws: DeviceBuffer[DType.float32]
+    var mom_diff: DeviceBuffer[DType.float32]
+    var mom_scaled: DeviceBuffer[DType.float32]
+    var mom_nk: DeviceBuffer[DType.float32]
+    var mom_n: List[Int]
 
     def __init__(out self) raises:
         self.ctx = x_cluster_ctx()
@@ -1657,6 +1691,12 @@ struct DeviceOps(ClusterOps):
         self.ph_ns = List[Int]()
         self.ph_calls = List[Int]()
         self.u = List[DeviceBuffer[DType.uint64]]()
+        self.mom_raw = self.ctx.enqueue_create_buffer[DType.float32](1)
+        self.mom_ws = self.ctx.enqueue_create_buffer[DType.float32](1)
+        self.mom_diff = self.ctx.enqueue_create_buffer[DType.float32](1)
+        self.mom_scaled = self.ctx.enqueue_create_buffer[DType.float32](1)
+        self.mom_nk = self.ctx.enqueue_create_buffer[DType.float32](1)
+        self.mom_n = [0, 0, 0, 0]
 
     def __del__(deinit self):
         # the buffers and the pending sources die with this value: drain first
@@ -2169,9 +2209,6 @@ struct DeviceOps(ClusterOps):
         component, cov = ((resp * diff)^T . diff) / nk + reg on the diagonal,
         both products through `identical_gemm_into` at OP_TN
         (`mixture/checks/mstep.mojo`'s kernels around them)."""
-        self.ctx.enqueue_function[_nk_kernel](
-            self._fp(resp), Int32(n), Int32(kc), self._fp(nk), grid_dim=_grid(kc), block_dim=TPB,
-        )
         var wsn = identical_gemm_workspace_max_floats(kc, d, n)
         var w2 = identical_gemm_workspace_max_floats(d, d, n)
         if w2 > wsn:
@@ -2180,10 +2217,86 @@ struct DeviceOps(ClusterOps):
             wsn = 1
         var rawn = kc * d if kc * d > d * d else d * d
         var nd = n * d if n * d > 0 else 1
-        var raw = self.ctx.enqueue_create_buffer[DType.float32](rawn)
-        var ws = self.ctx.enqueue_create_buffer[DType.float32](wsn)
-        var diff = self.ctx.enqueue_create_buffer[DType.float32](nd)
-        var scaled = self.ctx.enqueue_create_buffer[DType.float32](nd)
+        var pooled = False
+        comptime if IDN_BGMM_MOMENTS_POOL:
+            pooled = True
+        var nkn = 1
+        comptime if IDN_BGMM_NK_LEVELS:
+            nkn = gmm_nk_levels_floats(n, kc)
+            if nkn < 1:
+                nkn = 1
+        if pooled:
+            # the scratch lives in the ops object: grown (after a drain, the
+            # stream may still hold the old buffers' pointers) only when a
+            # call needs more, so an EM loop allocates once and never drains
+            if rawn > self.mom_n[0] or wsn > self.mom_n[1] or nd > self.mom_n[2] or nkn > self.mom_n[3]:
+                self.ctx.synchronize()
+                if rawn > self.mom_n[0]:
+                    self.mom_raw = self.ctx.enqueue_create_buffer[DType.float32](rawn)
+                    self.mom_n[0] = rawn
+                if wsn > self.mom_n[1]:
+                    self.mom_ws = self.ctx.enqueue_create_buffer[DType.float32](wsn)
+                    self.mom_n[1] = wsn
+                if nd > self.mom_n[2]:
+                    self.mom_diff = self.ctx.enqueue_create_buffer[DType.float32](nd)
+                    self.mom_scaled = self.ctx.enqueue_create_buffer[DType.float32](nd)
+                    self.mom_n[2] = nd
+                if nkn > self.mom_n[3]:
+                    self.mom_nk = self.ctx.enqueue_create_buffer[DType.float32](nkn)
+                    self.mom_n[3] = nkn
+        # handle copies when pooled (the same device memory as the fields)
+        var raw: DeviceBuffer[DType.float32]
+        var ws: DeviceBuffer[DType.float32]
+        var diff: DeviceBuffer[DType.float32]
+        var scaled: DeviceBuffer[DType.float32]
+        var nks: DeviceBuffer[DType.float32]
+        if pooled:
+            raw = self.mom_raw.copy()
+            ws = self.mom_ws.copy()
+            diff = self.mom_diff.copy()
+            scaled = self.mom_scaled.copy()
+            nks = self.mom_nk.copy()
+        else:
+            raw = self.ctx.enqueue_create_buffer[DType.float32](rawn)
+            ws = self.ctx.enqueue_create_buffer[DType.float32](wsn)
+            diff = self.ctx.enqueue_create_buffer[DType.float32](nd)
+            scaled = self.ctx.enqueue_create_buffer[DType.float32](nd)
+            nks = self.ctx.enqueue_create_buffer[DType.float32](nkn)
+        comptime if IDN_BGMM_NK_LEVELS:
+            # `mixture/checks/mstep.mojo::gmm_nk_levels_launch`'s launches
+            var pr = self._fp(resp)
+            var pk = self._fp(nk)
+            var psc = nks.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            var ten_eps = Float32(1.1920929e-06)
+            var grid_k = (kc + 255) // 256
+            if n <= GMM_NK_CHUNK:
+                self.ctx.enqueue_function[nk_finish_kernel](
+                    pr, Int32(0), Int32(n), Int32(1), pk, Int32(kc), ten_eps, grid_dim=grid_k, block_dim=256,
+                )
+            else:
+                var p1 = (n + GMM_NK_CHUNK - 1) // GMM_NK_CHUNK
+                self.ctx.enqueue_function[nk_level1_kernel](
+                    pr, psc, Int32(0), Int32(n), Int32(kc), grid_dim=(p1 * kc + 255) // 256, block_dim=256,
+                )
+                var src_off = 0
+                var off = p1 * kc
+                var cnt = p1
+                while cnt > GMM_NK_CHUNK:
+                    var pl = (cnt + GMM_NK_CHUNK - 1) // GMM_NK_CHUNK
+                    self.ctx.enqueue_function[nk_level_kernel](
+                        psc, Int32(src_off), Int32(off), Int32(cnt), Int32(kc),
+                        grid_dim=(pl * kc + 255) // 256, block_dim=256,
+                    )
+                    src_off = off
+                    off += pl * kc
+                    cnt = pl
+                self.ctx.enqueue_function[nk_finish_kernel](
+                    psc, Int32(src_off), Int32(cnt), Int32(0), pk, Int32(kc), ten_eps, grid_dim=grid_k, block_dim=256,
+                )
+        else:
+            self.ctx.enqueue_function[_nk_kernel](
+                self._fp(resp), Int32(n), Int32(kc), self._fp(nk), grid_dim=_grid(kc), block_dim=TPB,
+            )
         # handle copies: the same device memory as the slots
         var rb = self.f[resp].copy()
         var xb = self.f[x].copy()
@@ -2202,12 +2315,15 @@ struct DeviceOps(ClusterOps):
                 raw.unsafe_ptr(), self._fp(nk), self._fp(cov), Int32(d), Int32(k), reg, Int32(1),
                 grid_dim=_grid(d * d), block_dim=TPB,
             )
-        # the scratch buffers die with this call: drain first
-        self.ctx.synchronize()
+        # the scratch buffers die with this call: drain first (pooled: they
+        # are handles of the ops object's buffers, nothing dies)
+        if not pooled:
+            self.ctx.synchronize()
         _ = raw^
         _ = ws^
         _ = diff^
         _ = scaled^
+        _ = nks^
         _ = rb^
         _ = xb^
 
