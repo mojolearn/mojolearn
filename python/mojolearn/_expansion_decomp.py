@@ -662,9 +662,16 @@ class _Kit:
 
     def lu(self, A):
         n = A.r
-        lu = A.copy()
         piv = array.array("i", [0] * n)
         info = _M.zeros(1, 1)
+        if n >= 1 and A.c == n and self._opt_dev("x_decomp_dev_lu") and self._use(A):
+            # lane fam-decomp: the factor made in a device matrix from a
+            # device copy of A (an IDENTICAL GPU build without
+            # -D MOJOLEARN_IDN_LU_RESIDENT_OFF); pivots and info come down
+            lu = self._dout(n, n)
+            self.b.x_decomp_dev_lu(self._did(A), lu._d.id, piv.buffer_info()[0], info.addr, [n])
+            return lu, piv, int(info.s[0])
+        lu = A.copy()
         self.b.x_decomp_lu(lu.addr, piv.buffer_info()[0], info.addr, [n])
         return lu, piv, int(info.s[0])
 
@@ -877,6 +884,11 @@ class _Kit:
         under eps * max |u_ii| in `lu` itself."""
         n = lu.r
         pm, im, diag, st = _M.zeros(n, 1), _M.zeros(n, 1), _M.zeros(1, n), _M.zeros(1, 4)
+        if n >= 1 and lu._d is not None and lu._d.b is self._raw() and self._opt_dev("x_decomp_dev_lu"):
+            # lane fam-decomp: read (and clamped) where the factor lives
+            self.b.x_decomp_dev_lu_aux(lu._d.id, piv.buffer_info()[0], pm.addr, im.addr, diag.addr, st.addr,
+                                       [n, int(bool(clamp))])
+            return [float(v) for v in st.s], diag, pm, im  # glue: the four-field lu_aux status
         self.b.x_decomp_lu_aux(lu.addr, piv.buffer_info()[0], pm.addr, im.addr, diag.addr, st.addr,
                                [n, int(bool(clamp))])
         return [float(v) for v in st.s], diag, pm, im  # glue: the four-field lu_aux status

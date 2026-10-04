@@ -2828,8 +2828,24 @@ struct DevExec(Exec):
         pivots, negative pivots, swaps), diag = u_ii, and with `clamp` the
         pivots under eps max |u_jj| floored (lu written back)."""
         var ctx = xd_ctx()
-        var nb = _pj_off_blocks(n)
         var dl = _up(ctx, lu, n * n)
+        DevExec._lu_aux_on(ctx, _p(dl), piv, pm, im, diag, stats, n, clamp)
+        if clamp != 0:
+            _down(ctx, dl, lu, n * n)
+        ctx.synchronize()
+        _ = dl^
+        _ = ctx^
+
+    @staticmethod
+    def _lu_aux_on(
+        ctx: DeviceContext, pl: F32Ptr, piv: I32Ptr, pm: F32Ptr, im: F32Ptr, diag: F32Ptr, stats: F32Ptr, n: Int,
+        clamp: Int,
+    ) raises:
+        """`lu_aux` on the device factor at `pl` (n x n, its tiny pivots
+        floored in place with `clamp`); piv, pm, im, diag and stats are host
+        memory. Waits. `lu_aux` and the resident entry (x_decomp/resident.mojo
+        `dev_lu_aux_py`, lane fam-decomp) both call it: one launch sequence."""
+        var nb = _pj_off_blocks(n)
         var dp = _up_i(ctx, piv, n)
         var dpm = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
         var dim = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
@@ -2839,26 +2855,22 @@ struct DevExec(Exec):
         var pp = I32Ptr(unsafe_from_address=Int(dp.unsafe_ptr()))
         ctx.enqueue_function[lu_perm_kernel](pp, _p(dpm), Int32(n), Int32(0), grid_dim=_blocks(n), block_dim=TPB)
         ctx.enqueue_function[lu_perm_kernel](pp, _p(dim), Int32(n), Int32(1), grid_dim=_blocks(n), block_dim=TPB)
-        ctx.enqueue_function[lu_aux_part_kernel](_p(dl), pp, _p(dpart), Int32(n), grid_dim=nb, block_dim=RR_OFF_TPB)
+        ctx.enqueue_function[lu_aux_part_kernel](pl, pp, _p(dpart), Int32(n), grid_dim=nb, block_dim=RR_OFF_TPB)
         ctx.enqueue_function[lu_aux_fold_kernel](_p(dpart), _p(dst), Int32(nb), grid_dim=1, block_dim=RR_OFF_TPB)
         ctx.enqueue_function[lu_aux_clamp_kernel](
-            _p(dl), _p(dd), _p(dst), Int32(n), Int32(clamp), grid_dim=_blocks(n), block_dim=TPB
+            pl, _p(dd), _p(dst), Int32(n), Int32(clamp), grid_dim=_blocks(n), block_dim=TPB
         )
         _down(ctx, dpm, pm, n)
         _down(ctx, dim, im, n)
         _down(ctx, dd, diag, n)
         _down(ctx, dst, stats, 4)
-        if clamp != 0:
-            _down(ctx, dl, lu, n * n)
         ctx.synchronize()
-        _ = dl^
         _ = dp^
         _ = dpm^
         _ = dim^
         _ = dd^
         _ = dpart^
         _ = dst^
-        _ = ctx^
 
     @staticmethod
     def lars_rows(g: F32Ptr, q: F32Ptr, w: F32Ptr, na: F32Ptr, n: Int, k: Int, m: Int, nnz: Int) raises:

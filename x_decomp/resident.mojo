@@ -62,6 +62,10 @@ from x_decomp.device import (
     _up_i,
     cd_rows_kernel,
     DevExec,
+    LU_SCAL_LEN,
+    launch_lu,
+    _down_i,
+    _p,
 )
 from x_decomp.qr_bounded import QRB_CELLS
 
@@ -577,6 +581,89 @@ def dev_svd_py(a: PythonObject, s: PythonObject, v: PythonObject, p: PythonObjec
         DevExec._svd_on(ctx, da, m, n, ps, pv, QRB_CELLS)
     _ = da^
     ctx.synchronize()
+    return PythonObject(n)
+
+
+# ---- lane fam-decomp (2026-10-04): IDN_LU_RESIDENT (IDENTICAL default) ----
+#: The kit's LU and its companions on device matrices. `Kit.lu` copied its
+#: operand on the host (downloading it when it was a device result),
+#: uploaded the copy, and downloaded the factor; `lu_aux` uploaded the
+#: factor again and (with clamp) downloaded it again; the resident
+#: `trisolve` then uploaded it a third time. At LLE's n = 10,000 that is a
+#: 400 MB matrix crossing five times around one factorization. Here the
+#: factor is made in a device matrix from a device copy of the operand
+#: (`launch_lu`, DevExec.lu's launches) and `DevExec._lu_aux_on` reads and
+#: clamps it where it lives; only the pivots (n ints), info, the row orders
+#: (2 n), the diagonal (n) and the four stats come down. The same launches
+#: on the same values: the same words.
+#: -D MOJOLEARN_IDN_LU_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves the
+#: entries out and Python keeps the host-address calls.
+comptime IDN_LU_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_LU_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def dev_lu_py(a: PythonObject, lu: PythonObject, piv: PythonObject, info: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`x_decomp_lu` on device matrices: lu (n x n) = the factor of a (n x n,
+    left as it is); piv (n int32) and info (1 float32) are host addresses.
+    p = [n]. Waits."""
+    var n = _n(p, 0)
+    if n < 1:
+        raise Error("x_decomp: the resident lu needs n >= 1")
+    var cells = n * n
+    if cells > 2147483647:
+        raise Error("x_decomp: lu exceeds the Int32 index bound")
+    var ia = _id(a)
+    var il = _id(lu)
+    _ = _ptr(ia, cells)
+    var pl = _ptr(il, cells)
+    var pp = I32Ptr(unsafe_from_address=Int(py=piv))
+    var pi = F32Ptr(unsafe_from_address=Int(py=info))
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var ctx = xd_ctx()
+    if ia != il:
+        ctx.enqueue_copy(
+            dst_buf=pool[].bufs[il].create_sub_buffer[DType.float32](0, cells),
+            src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells),
+        )
+    var dp = ctx.enqueue_create_buffer[DType.int32](n)
+    var di = ctx.enqueue_create_buffer[DType.float32](1)
+    var ds = ctx.enqueue_create_buffer[DType.float32](LU_SCAL_LEN)
+    var dact = ctx.enqueue_create_buffer[DType.float32](n)
+    with GILReleased(Python()):
+        launch_lu(ctx, pl, I32Ptr(unsafe_from_address=Int(dp.unsafe_ptr())), _p(di), _p(ds), _p(dact), n)
+        _down_i(ctx, dp, pp, n)
+        _down(ctx, di, pi, 1)
+        ctx.synchronize()
+    _ = dp^
+    _ = di^
+    _ = ds^
+    _ = dact^
+    return PythonObject(n)
+
+
+def dev_lu_aux_py(
+    lu: PythonObject, piv: PythonObject, pm: PythonObject, im: PythonObject, diag: PythonObject,
+    stats: PythonObject, p: PythonObject,
+) raises -> PythonObject:
+    """`x_decomp_lu_aux` on the device factor lu (n x n, clamped in place
+    with p[1]); piv (n int32), pm, im, diag (n each) and stats (4) are host
+    addresses. p = [n, clamp]. Waits."""
+    var n = _n(p, 0)
+    var clamp = _n(p, 1)
+    if n < 1 or n >= 16777216:
+        raise Error("x_decomp: lu_aux needs 1 <= n < 2^24")
+    if n * n > 2147483647:
+        raise Error("x_decomp: lu_aux exceeds the Int32 index bound")
+    var pl = _ptr(_id(lu), n * n)
+    var pv = I32Ptr(unsafe_from_address=Int(py=piv))
+    var p1 = F32Ptr(unsafe_from_address=Int(py=pm))
+    var p2 = F32Ptr(unsafe_from_address=Int(py=im))
+    var pd = F32Ptr(unsafe_from_address=Int(py=diag))
+    var ps = F32Ptr(unsafe_from_address=Int(py=stats))
+    var ctx = xd_ctx()
+    with GILReleased(Python()):
+        DevExec._lu_aux_on(ctx, pl, pv, p1, p2, pd, ps, n, clamp)
     return PythonObject(n)
 
 
