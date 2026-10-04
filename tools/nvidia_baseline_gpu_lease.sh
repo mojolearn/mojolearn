@@ -24,7 +24,9 @@ cleanup() {
     safe=0
     if [ "$CREATE_ATTEMPTED" = 1 ] && [ -z "$POD_ID" ]; then
         rp_call GET "$RP/pods"
-        case "$RP_CODE" in 2*) POD_ID=$(rp_py byname "$POD_NAME"); [ -n "$POD_ID" ] || safe=1 ;; esac
+        # A missing name immediately after an ambiguous POST is not proof of
+        # failed creation. Leave the durable deadman armed if no ID resolves.
+        case "$RP_CODE" in 2*) POD_ID=$(rp_py byname "$POD_NAME") ;; esac
     fi
     if [ -n "$POD_ID" ]; then
         safe=1

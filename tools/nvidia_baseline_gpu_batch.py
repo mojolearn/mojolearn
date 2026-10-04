@@ -43,7 +43,8 @@ def artifacts(directory, commit):
             name = wheel.name.split('-')[0]
             if name == 'mojolearn_nvidia_ptx80':
                 matches = [p for p in z.namelist() if p.endswith('/PTX_BASELINE.json')]
-                require(len(matches) == 1, 'Baseline manifest missing or ambiguous')
+                require(matches == ['mojolearn/cuda_ptx/sm_80/PTX_BASELINE.json'],
+                        'Baseline manifest missing, ambiguous or outside its registered directory')
                 manifest = json.loads(z.read(matches[0]))
                 require(manifest.get('source_commit') == commit and manifest.get('source_dirty') is False
                         and manifest.get('code_format') == 'ptx-baseline', 'Baseline source/format differs')
@@ -86,11 +87,8 @@ test "$(git -C source rev-parse HEAD)" = @SHA@
 # Resolve installed payload without importing mojolearn or preselecting a backend.
 MANIFEST=$(venv/bin/python - <<'INNER'
 import pathlib,sysconfig
-p=pathlib.Path(sysconfig.get_paths()['purelib'])/'mojolearn_kernels/cuda_ptx/sm_80/PTX_BASELINE.json'
-if not p.is_file():
-    paths=list(pathlib.Path(sysconfig.get_paths()['purelib']).glob('**/cuda_ptx/sm_80/PTX_BASELINE.json'))
-    if len(paths)!=1: raise SystemExit('Installed baseline manifest ambiguous/missing')
-    p=paths[0]
+p=pathlib.Path(sysconfig.get_paths()['purelib'])/'mojolearn/cuda_ptx/sm_80/PTX_BASELINE.json'
+if not p.is_file(): raise SystemExit('Installed baseline manifest missing from its registered directory')
 print(p)
 INNER
 )
@@ -152,6 +150,9 @@ def main():
         import shutil
         for wheel in wheels:
             shutil.copyfile(wheel, stage / 'wheels' / wheel.name)
+            require(sha(stage / 'wheels' / wheel.name) == plan['wheels'][wheel.name],
+                    'Wheel bytes changed while staging; refuse before rental')
+        artifacts(stage / 'wheels', args.commit)  # revalidate the exact staged bytes before creating a pod
         (stage / 'body.sh').write_text(box_body(args.commit, not args.prototype_only))
         files = sorted((stage / 'wheels').glob('*.whl')) + [stage / 'body.sh']
         (stage / 'SHA256SUMS').write_text(''.join(f'{sha(f)}  {f.relative_to(stage)}\n' for f in files))

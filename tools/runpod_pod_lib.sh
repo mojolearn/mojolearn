@@ -42,6 +42,9 @@ try:
     d = json.load(open(sys.argv[1]))
 except Exception:
     sys.exit(0)
+raw_pods = d if isinstance(d, list) else (d.get("items", d.get("pods")) if isinstance(d, dict) else None)
+valid_pods = isinstance(raw_pods, list) and all(
+    isinstance(p, dict) and isinstance(p.get("id"), str) and p["id"] for p in raw_pods)
 if isinstance(d, list):
     d = {"items": d}
 what = sys.argv[2]
@@ -63,8 +66,11 @@ elif what == "names":
         print("%s\t%s\t%s\t%s" % (p.get("id"), p.get("name"), p.get("desiredStatus"), p.get("costPerHr")))
 elif what == "byname":
     print(" ".join(str(p.get("id")) for p in pods if p.get("name") == sys.argv[3]))
+elif what == "listingvalid":
+    print("yes" if valid_pods else "no")
 elif what == "hasid":
-    print("yes" if any(p.get("id") == sys.argv[3] for p in pods) else "no")
+    if valid_pods:
+        print("yes" if any(p.get("id") == sys.argv[3] for p in raw_pods) else "no")
 PYEOF
 }
 
@@ -75,8 +81,12 @@ verify_gone() {  # pod id; 0 when the API says it is gone
         _code=$RP_CODE
         _st=$(rp_py status)
         rp_call GET "$RP/pods"
+        _list_code=$RP_CODE
+        _valid=$(rp_py listingvalid)
         _listed=$(rp_py hasid "$1")
-        if { [ "$_code" = 404 ] || [ "$_st" = TERMINATED ]; } && [ "$_listed" = no ]; then
+        if { [ "$_code" = 404 ] || { [ "$_code" = 200 ] && [ "$_st" = TERMINATED ]; }; } &&
+           { case "$_list_code" in 2*) true ;; *) false ;; esac; } &&
+           [ "$_valid" = yes ] && [ "$_listed" = no ]; then
             echo "  VERIFIED: $1 is gone (GET pod HTTP $_code${_st:+ status $_st}; not in the pod listing)"
             return 0
         fi
@@ -104,20 +114,59 @@ set -u
 D="$(cd "$(dirname "$0")" && pwd)"
 sleep @SECS@
 echo "$(date -u +%FT%TZ) dead-man firing for @NAME@" >> "$D/deadman.log"
+# Bounded requests and retries. On uncertainty preserve the credential for
+# manual recovery and report failure; never call an unverified DELETE gone.
+read_pods() {
+    python3 - "$D/pods.json" "$1" "$2" <<'PODS'
+import json, sys
+value = json.load(open(sys.argv[1]))
+pods = value if isinstance(value, list) else value.get('items', value.get('pods')) if isinstance(value, dict) else None
+if not isinstance(pods, list) or not all(isinstance(p, dict) and isinstance(p.get('id'), str) and p['id'] for p in pods):
+    raise SystemExit('invalid pod listing schema')
+if sys.argv[2] == 'byname':
+    print(' '.join(p['id'] for p in pods if p.get('name') == sys.argv[3]))
+else:
+    print('yes' if any(p['id'] == sys.argv[3] for p in pods) else 'no')
+PODS
+}
 ids=""
 [ -s "$D/pod_id.txt" ] && ids="$(cat "$D/pod_id.txt")"
-if [ -z "$ids" ]; then
-    curl -K "$D/curlrc" -o "$D/pods.json" "@RP@/pods" >> "$D/deadman.log" 2>&1
-    ids="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(" ".join(p["id"] for p in d if p.get("name")==sys.argv[2]))' "$D/pods.json" "@NAME@" 2>/dev/null)"
-fi
-for id in $ids; do
-    for u in "@RP@/pods/$id" "@RPV2@/pods/$id"; do
-        c="$(curl -K "$D/curlrc" -o /dev/null -w '%{http_code}' -X DELETE "$u" 2>>"$D/deadman.log")"
-        echo "$(date -u +%FT%TZ) DELETE $u -> $c" >> "$D/deadman.log"
-        case "$c" in 2*|404) break ;; esac
+attempt=0
+while [ "$attempt" -lt 8 ]; do
+    attempt=$((attempt + 1))
+    code=$(curl -K "$D/curlrc" --connect-timeout 10 --max-time 30 -o "$D/pods.json" -w '%{http_code}' "@RP@/pods" 2>>"$D/deadman.log") || code=000
+    case "$code" in 2*) ;; *) sleep 15; continue ;; esac
+    matched=$(read_pods byname "@NAME@" 2>>"$D/deadman.log") || { sleep 15; continue; }
+    [ -n "$ids" ] || ids="$matched"
+    if [ -z "$ids" ]; then
+        echo "$(date -u +%FT%TZ) no matching pod in valid listing after deadman deadline" >> "$D/deadman.log"
+        rm -f "$D/curlrc"
+        exit 0
+    fi
+    gone=1
+    for id in $ids; do
+        listed=$(read_pods hasid "$id" 2>>"$D/deadman.log") || listed=unknown
+        state_code=$(curl -K "$D/curlrc" --connect-timeout 10 --max-time 30 -o "$D/pod.json" -w '%{http_code}' "@RP@/pods/$id" 2>>"$D/deadman.log") || state_code=000
+        state=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("desiredStatus", ""))' "$D/pod.json" 2>/dev/null) || state=unknown
+        if [ "$listed" = no ] && { [ "$state_code" = 404 ] || { [ "$state_code" = 200 ] && [ "$state" = TERMINATED ]; }; }; then
+            continue
+        fi
+        gone=0
+        for u in "@RP@/pods/$id" "@RPV2@/pods/$id"; do
+            c=$(curl -K "$D/curlrc" --connect-timeout 10 --max-time 30 -o /dev/null -w '%{http_code}' -X DELETE "$u" 2>>"$D/deadman.log") || c=000
+            echo "$(date -u +%FT%TZ) DELETE $u -> $c" >> "$D/deadman.log"
+            case "$c" in 2*|404) break ;; esac
+        done
     done
+    if [ "$gone" = 1 ]; then
+        echo "$(date -u +%FT%TZ) termination VERIFIED" >> "$D/deadman.log"
+        rm -f "$D/curlrc"
+        exit 0
+    fi
+    sleep 15
 done
-rm -f "$D/curlrc"
+echo "$(date -u +%FT%TZ) TEARDOWN UNCONFIRMED after bounded retries; credential retained for recovery" >> "$D/deadman.log"
+exit 1
 DM_EOF
     sed -i.bak -e "s|@SECS@|$2|g" -e "s|@NAME@|$POD_NAME|g" -e "s|@RP@|$RP|g" -e "s|@RPV2@|$RP_V2|g" "$1/deadman.sh"
     rm -f "$1/deadman.sh.bak"
