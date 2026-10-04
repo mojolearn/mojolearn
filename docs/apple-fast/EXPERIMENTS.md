@@ -645,3 +645,10 @@ input, string/bool fallbacks and MultiLabelBinarizer inverse are not explicitly
 exercised. These remain on existing guarded fallback routes; no claim is made
 that those cases were tested. Encoder/multilabel correctness was checked but
 speed was measured only for LabelBinarizer; do not update their timing rows.
+
+## AutoARIMA order batching current-main integration (2026-10-04)
+
+| Experiment | Branch / baseline | Evidence | Verdict / next step |
+|---|---|---|---|
+| `ARIMA_ORDER_BATCH`, original small quality | lane/apple-fast-arima-orders @ eae73e1f0; kernel457160e23 | Manager reports gap26-orders-quality PASS18 arrays on the 128-observation fixture; no new timing | Historical small-only evidence; not a full-quality or current-main acceptance |
+| `ARIMA_ORDER_BATCH`, fused-tail integration | lane/apple-fast-arima-orders-current; merged main d4bb2b795 (includes accepted fused-tail311d5233e) | Both arms now use current-main fused tail in shared prepare/finish; source changed, stale arms invalid | OPEN, opt-in only. Rebuild arima A/B, full512/2048 quality before one M3 timing/arm on synthetic and taxi-hourly; no opponent reruns. [Plan and exact commands](ab/arima-orders-current.md) |
