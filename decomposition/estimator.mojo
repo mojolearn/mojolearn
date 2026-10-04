@@ -64,6 +64,22 @@ from decomposition.impl.linalg.detail.svd_full import (
     pca_fit_full,
     pca_full_scratch_cells,
 )
+from core.device_pool import pool_give, pool_take
+from core.gram_splitk import gram_splitk_applies
+from std.sys.compile import is_defined
+
+#: FAST Apple default proposal, measured source 34b4f6c72 (2026-10-04).
+#: M3 w2-w4d-pca-istella-r1: 471.2 -> 217.8 ms; quality PASS (16 checks).
+#: `-D MOJOLEARN_PCA_FAST_POOL_OFF` restores fresh allocations.
+#: (FAST + Apple, on top of PCA_FAST_GRAM_MMA): when the fit takes the MMA
+#: Gram arm (d past the split-K Gram, Istella's 220), the fit's n x d device
+#: copy of X comes from core/device_pool (kept between calls, up to
+#: POOL_KEEP_BYTES: 1.8 GB idle at the board's 2,043,304 x 220) instead of a
+#: fresh allocation each call (fresh-page cost; x_prep's POOL_ARENA measured
+#: ~50 ms per GB), and the two n x d alias buffers that arm never reads are
+#: 1 float. Copies and allocations only: no bit moves.
+comptime PCA_FAST_POOL = PCA_FAST_GRAM_MMA and not is_defined["MOJOLEARN_PCA_FAST_POOL_OFF"]()
+comptime _PCA_POOL = "MojoEstimatorsPcaFastX"
 
 
 def pca_fit_host(
@@ -78,9 +94,15 @@ def pca_fit_host(
     n_features: Int,
     n_components: Int,
 ) raises -> Float64:
-    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    var big = n_rows * n_features
+    var pooled = False
+    comptime if PCA_FAST_POOL:
+        # the MMA arm of compute_covariance reads neither alias buffer
+        pooled = not gram_splitk_applies(n_features, n_features, n_rows)
+    var x = pool_take[_PCA_POOL](ctx, big) if pooled else ctx.enqueue_create_buffer[DType.float32](big)
+    var alias_n = 1 if pooled else big
+    var xa = ctx.enqueue_create_buffer[DType.float32](alias_n)
+    var xa2 = ctx.enqueue_create_buffer[DType.float32](alias_n)
     var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
     var cov = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
@@ -132,6 +154,10 @@ def pca_fit_host(
     ctx.synchronize()
     for i in range(n_features):
         mean_ptr.unsafe_store(i, hmu.unsafe_ptr().unsafe_load(i))
+    if pooled:
+        pool_give[_PCA_POOL](x^)
+    else:
+        _ = x^
     return result.noise_var
 
 

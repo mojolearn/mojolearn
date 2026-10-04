@@ -817,3 +817,33 @@ provenance limitations. Stabilizing split-K accumulation is a new candidate,
 not retroactive validation of SKIP. DEFLATE remains HOLD for changed flags.
 
 | `MOJOLEARN_DECOMP_FAST_MMA_K16` | standalone decomposition GEMM, non-split only | lane/apple-fast-decomp-mma-k16@d487c814fe59d35de111d392751af9e6ce06eb66 | w2-mma-k16-q-20261004; w2-mma-k16-t-20261004 | 12 oracle fixtures PASS; dense4096 call+read 85.504250 -> 91.724583 ms (resident 43.152292 -> 47.424042); update4096x256x4096 36.670541 -> 36.401583 (resident 30.276000 -> 30.508875) | HOLD-speed: dense slower, update essentially unchanged. No caller timings/default/board changes. Harness calls transpose1024 a changed shape, but dispatcher yields256 tiles and2 splits, so it is an UNCHANGED control, alongside Gram/thin controls. Its apparent host gain6.389875 ->3.939625 cannot be attributed to K16. One scored call per route/arm retained; no replay. Resident completion timing is a fence-inclusive observation, not pure GPU throughput. |
+
+## W4 PCA pool isolated promotion proposal (2026-10-04)
+
+`MOJOLEARN_PCA_FAST_POOL_OFF`: proposed FAST Apple default, not yet merged.
+Measured source `34b4f6c72b489c16f8333ef1416ac23fd143cd59`, timing
+`w2-w4d-pca-istella-r1`: M3 Istella 471.2 -> 217.8 ms. Quality
+`w2-w4d-pca-q`: PASS 16 checks, 200,000 x 220 seeded ill-scaled input,
+three consecutive fits to exercise dirty pool reuse, ten components;
+means identical, eigenvalue relative differences about 1e-6, component
+angles about 2e-6 to 3.5e-6 rad, reconstruction absolute differences
+1e-12 to 1.6e-11. NaN refusal checked. Values are A/B differences, not
+independent-reference accuracy claims. Final manager review remains required.
+
+This proposal is isolated on main `f690a6308`: estimators binding plus
+PCA input pool/unused aliases only. No RSVD, LLE, KPCA or eigensolver changes.
+The unchanged covariance MMA arm reads neither alias buffer; its input is
+fully overwritten from the caller before reuse. Pool return follows final
+synchronization and host output copies. Exceptions release owned buffers.
+Pool keeps at most 2 GiB idle; board input occupies about 1.8 GB.
+Outputs remain eager host arrays; no work is deferred to first read.
+Unconditional getenv/perf_counter_ns calls and optional stage file logging
+from the measurement source are removed entirely from the proposal.
+
+Source comparison found no intervening change in this PCA numerical path;
+main's newer x_decomp host eigh dispatch is a separate implementation.
+FAST Apple and existing PCA_FAST_GRAM_MMA eligibility are retained; split-K
+cases and IDENTICAL remain on fresh allocation. `_OFF` restores the original
+allocation policy. Pending M2 default/OFF compile and promotion validation;
+no local compilation or timing was run. Broader shapes and modes were not
+newly measured by this quality fixture.
