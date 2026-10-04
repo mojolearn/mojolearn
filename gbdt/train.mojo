@@ -64,7 +64,12 @@ from std.os import getenv
 
 # DEVIATION 258: the probability links (double, as CatBoost computes them)
 # go through the host-portable exp64 under IDENTICAL; FAST is the stdlib
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_exp64
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
+    identical_exp64,
+)
 from checks.numerics import ftz as _hr2_ftz
 from gbdt.grid_creator.gls_borders_device import device_float_borders
 from checks.soft_f64 import (
@@ -121,6 +126,27 @@ comptime CTR_FAST_FREQ = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_GBDT_CTR_FAST_FREQ_OFF"]()
+)
+
+#: lane/fam-gbdt (2026-10-04), IDN_CTR_FREQ_DEVICE: IDENTICAL, every vendor,
+#: default on. The same routing as CTR_FAST_FREQ above: the
+#: permutation-INDEPENDENT simple CTR (FeatureFreq) takes
+#: `compute_simple_ctrs_device` instead of the host stable sort and host
+#: frequency calcer, once per categorical feature. No bit moves: the device
+#: calcer's bin sums are integer-valued float counts, exact in any reduction
+#: order while they stay below 2^24, and the final `(sum + prior) / (total +
+#: prior_observations)` is one float32 divide per row on both sides. The
+#: call site keeps the host calcer for `n_rows >= 2^24` (where a count could
+#: leave the exact range) and for `counter_calc_method == Full` (no device
+#: arm). The host column (`gbdt/host/gbdt_oracle_ctr.mojo`) restates the
+#: host calcer and is unchanged. `-D MOJOLEARN_IDN_GBDT_CTR_FREQ_DEVICE_OFF`
+#: (or the master `-D MOJOLEARN_IDN_ALL_OFF`) restores the host calcer.
+comptime IDN_CTR_FREQ_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_GBDT_CTR_FREQ_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
 )
 
 from gbdt.gpu_util.kernel.bootstrap import (
@@ -1555,6 +1581,11 @@ def train(
             comptime if CTR_FAST_FREQ:
                 indep_on_device = (
                     cat_params.counter_calc_method != COUNTER_CALC_FULL
+                )
+            comptime if IDN_CTR_FREQ_DEVICE:
+                indep_on_device = (
+                    cat_params.counter_calc_method != COUNTER_CALC_FULL
+                    and n_rows < (1 << 24)
                 )
             if indep_on_device:
                 indep = compute_simple_ctrs_device(
