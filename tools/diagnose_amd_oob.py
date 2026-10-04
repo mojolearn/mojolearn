@@ -91,7 +91,7 @@ def direct(binding, acc, counts, y):
     return arrays, report
 
 
-def provenance(ml, loaded):
+def provenance(ml, loaded, patch=None):
     """Tie actual loaded extension bytes to installed native wheel inventories."""
     package = Path(ml.__file__).resolve().parent
     names = ['mojolearn', 'mojolearn-amd', 'mojolearn-amd-gfx942']
@@ -113,13 +113,22 @@ def provenance(ml, loaded):
                 require(member not in owned, 'Duplicate native ownership')
                 owned[member] = hashes[member]
         records.append(dict(distribution=name, text_sha256=digest(raw.encode()), document=doc))
+    patched = []
     for row in loaded:
         path = Path(row['file']).resolve()
         member = path.relative_to(package.parent).as_posix()
-        require(digest(path.read_bytes()) == row['sha256'] == owned.get(member),
+        expected = owned.get(member)
+        if patch and member == patch['archive_path']:
+            require(expected == patch['original_sha256'], 'Patch original inventory differs')
+            expected = patch['patched_sha256']
+            patched.append(member)
+        require(digest(path.read_bytes()) == row['sha256'] == expected,
                 'Loaded binding differs from installed native inventory: ' + member)
         row['installed_member'] = member
-    return dict(source_commit=source, inventories=records, loaded_bindings=loaded)
+    if patch:
+        require(patched == [patch['archive_path']], 'Exactly one patched binding must be loaded')
+    return dict(source_commit=source, inventories=records, loaded_bindings=loaded,
+                diagnostic_patch=patch, qualification=False)
 
 
 def hardware():
@@ -141,6 +150,10 @@ def run(args):
     require(re.fullmatch('[0-9a-f]{40}', args.source_commit), 'Full source SHA required')
     source = (Path(ml.__file__).parent / 'identity_columns/COMMIT').read_text().strip()
     require(source == args.source_commit, 'Installed core source differs')
+    patch = None
+    if getattr(args, 'patch_manifest', None):
+        from amd_diagnostic_patch import validate
+        patch = validate(args.patch_manifest, args.patch_proof, source)
     require(ml.vendor() == 'hip' and ml.numeric_mode() == 'identical', 'AMD HIP IDENTICAL required')
     require(not args.out.exists(), 'Refusing to overwrite diagnostic evidence')
     args.out.mkdir(parents=True)
@@ -148,7 +161,7 @@ def run(args):
                   diagnostic_script_sha256=digest(Path(__file__).read_bytes()),
                   package_version=ml.__version__, vendor=ml.vendor(), numeric_mode=ml.numeric_mode(),
                   plugin=_backend.gpu_plugin(), hardware=hardware(), cases={},
-                  qualification=False, complete=False)
+                  qualification=False, diagnostic_patch=patch, complete=False)
     (args.out / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
 
     def save(name, arrays, row):
@@ -212,7 +225,7 @@ def run(args):
         target = (np.arange(n) % 5 - 2).astype('<f4')
         arrays, row = direct(binding, counts * target.astype('<f8'), counts, target)
         save(f'mixed-counts-n{n}', arrays, row)
-    report['provenance'] = provenance(ml, binding_artifacts())
+    report['provenance'] = provenance(ml, binding_artifacts(), patch)
     report['complete'] = True
     (args.out / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(dict(output=str(args.out), cases=len(report['cases']), complete=True,
@@ -224,7 +237,12 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--source-commit', required=True)
     p.add_argument('--out', type=Path, required=True)
-    return run(p.parse_args())
+    p.add_argument('--patch-manifest', type=Path)
+    p.add_argument('--patch-proof', type=Path)
+    args = p.parse_args()
+    if bool(args.patch_manifest) != bool(args.patch_proof):
+        p.error('Patch manifest and proof must be supplied together')
+    return run(args)
 
 
 if __name__ == '__main__':
