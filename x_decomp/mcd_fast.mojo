@@ -76,6 +76,8 @@ from x_decomp.mcd_mma import mc_center_kernel, mc_publish_matrix_kernel, mc_maha
 from x_decomp.kit import Mat
 from x_decomp.cells import FOLD_BLOCK
 from x_decomp.mcd_compat import mc_compact_kernel, mc_moment_kernel, mc_pinvh_kernel
+from x_decomp.mcd_bmma import launch_gemm_mma_batched
+from x_decomp.jacobi2 import dev_barrier
 
 # FAILED gap26-mcdcompat-taxi at 948c4e7b1: B rejected by the batched
 # eigensolve gate (A=70877.713 ms). Repair: make collective entry uniform
@@ -118,6 +120,25 @@ comptime MCD_DEVICE_CSTEPS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
     and (is_defined["MOJOLEARN_MCD_DEVICE_CSTEPS"]() or MCD_BATCH_COMPAT)
 )
+
+# DEFAULT (FAST + Apple, on top of MCD_BATCH_MMA; lane/apple-fast-w2-mcd2):
+# each of the three per-candidate GEMM loops is ONE launch over the phase's
+# candidates (x_decomp/mcd_bmma.mojo: main's tile kernel, same tiles / K
+# windows / split-K per candidate); inactive candidates launch no GEMM work.
+# M3, one run per arm: MinCovDet taxi 3002.9 -> 294.3 ms (w2-mcdb-t-mcd-taxi),
+# EllipticEnvelope taxi 3010.3 -> 299.3 ms (w2-mcdb-t-ee-taxi); quality
+# w2-mcdb-q-mcd-taxi, w2-mcdb-q-ee-taxi MCDQ-PAIR-PASS (1% fitted state,
+# .99 support). MOJOLEARN_MCD_BMMA_OFF restores the per-candidate launches.
+comptime MCD_BMMA = MCD_BATCH_MMA and not is_defined["MOJOLEARN_MCD_BMMA_OFF"]()
+# MOJOLEARN_MCD_WIDE: this batched search for 64 < d <= MF_WIDE_DMAX too
+# (istella d = 220 fell back to fast_mcd_dev: per candidate, per C-step kit
+# launches + host syncs + a 220-wide round-robin eigh with a sync per sweep,
+# killed > 20 min on the board). Wide d adds a block-per-candidate LU
+# (mf_det_wide_kernel, the same pivots / cells / log sum as mf_det_kernel)
+# and mc_pinvh_kernel with 256-entry eigen tables; everything else is the
+# narrow MMA path (the distance never holds a row in registers there).
+comptime MCD_WIDE = MCD_BATCH_MMA and is_defined["MOJOLEARN_MCD_WIDE"]()
+comptime MF_WIDE_DMAX = 256
 
 comptime U64Ptr = MutPointer[UInt64, MutAnyOrigin]
 comptime MF_TPB = 256
@@ -404,6 +425,115 @@ def mf_det_kernel(
             if iters == 0:
                 use_prev = False
             fin.unsafe_store(c, Int32(((s + 1) % 2) if use_prev else (s % 2)))
+
+
+def mf_det_wide_kernel(
+    cov: F32Ptr, work: F32Ptr, det: F32Ptr, det_prev: F32Ptr, nc: Int32, d: Int32, step: Int32, n_iter: Int32,
+    active: I32Ptr, needp: I32Ptr, fin: I32Ptr, err: I32Ptr,
+):
+    """MOJOLEARN_MCD_WIDE: mf_det_kernel with one BLOCK per candidate. The
+    LU is _logdet's (MCD_BATCH_COMPAT cells): the pivot is the first largest
+    |a_ik| by `>` (a block reduction, ties to the lower row), the row swap,
+    the factors and the trailing update are parallel over rows / cells (row
+    k is not written during step k, so each cell sees _logdet's operands),
+    the log sum is one thread's ascending sum. Then the same C-step control."""
+    var c = Int(block_idx.x)
+    if active.unsafe_load(c) == 0:
+        return
+    var tid = Int(thread_idx.x)
+    var dd = Int(d)
+    var o = c * dd * dd
+    var a = work + o
+    var sv = stack_allocation[MF_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var si = stack_allocation[MF_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var z = tid
+    while z < dd * dd:
+        a.unsafe_store(z, cov.unsafe_load(o + z))
+        z += MF_TPB
+    dev_barrier()
+    var neg = 0  # thread 0's count
+    var zero = False
+    for k in range(dd):
+        var best = Float32(-1)
+        var bi = dd
+        var i = k + tid
+        while i < dd:
+            var v = abs(a.unsafe_load(i * dd + k))
+            if v > best:
+                best = v
+                bi = i
+            i += MF_TPB
+        sv[tid] = best
+        si[tid] = Int32(bi)
+        dev_barrier()
+        var w = MF_TPB // 2
+        while w > 0:
+            if tid < w:
+                var v2 = sv[tid + w]
+                var i2 = si[tid + w]
+                if v2 > sv[tid] or (v2 == sv[tid] and i2 < si[tid]):
+                    sv[tid] = v2
+                    si[tid] = i2
+            dev_barrier()
+            w //= 2
+        var p = Int(si[0])
+        if p >= dd:
+            p = k  # every |a_ik| unordered (NaN): _logdet keeps p = k
+        if p != k:
+            if tid == 0:
+                neg += 1
+            var j = tid
+            while j < dd:
+                var t = a.unsafe_load(k * dd + j)
+                a.unsafe_store(k * dd + j, a.unsafe_load(p * dd + j))
+                a.unsafe_store(p * dd + j, t)
+                j += MF_TPB
+        dev_barrier()
+        var piv = a.unsafe_load(k * dd + k)
+        if piv == Float32(0):
+            zero = True
+            break
+        if piv < Float32(0) and tid == 0:
+            neg += 1
+        var r = k + 1 + tid
+        while r < dd:
+            a.unsafe_store(r * dd + k, div0(a.unsafe_load(r * dd + k), ftz(piv)))
+            r += MF_TPB
+        dev_barrier()
+        var span = dd - k - 1
+        var q = tid
+        while q < span * span:
+            var ii = k + 1 + q // span
+            var jj = k + 1 + q % span
+            var f = a.unsafe_load(ii * dd + k)
+            a.unsafe_store(ii * dd + jj, ftz(identical_mul_add(-f, ftz(a.unsafe_load(k * dd + jj)), ftz(a.unsafe_load(ii * dd + jj)))))
+            q += MF_TPB
+        dev_barrier()
+    if tid != 0:
+        return
+    var cur = _neg_inf32()
+    if not zero and neg % 2 == 0:
+        var total = Float32(0)
+        for i in range(dd):
+            total = add(total, log_floor(abs(a.unsafe_load(i * dd + i)), MF_FLT_MIN))
+        cur = total
+    det.unsafe_store(c, cur)
+    var s = Int(step)
+    var iters = Int(n_iter) - s
+    var prev = _pos_inf32()
+    if s > 0:
+        prev = det_prev.unsafe_load(c)
+    if s == 0 and cur == _neg_inf32():
+        needp.unsafe_store(c, Int32(1))
+    var cont = cur < prev and iters > 0 and cur != _neg_inf32()
+    if not cont:
+        active.unsafe_store(c, Int32(0))
+        if s == 0 and cur != _neg_inf32():
+            err.unsafe_store(1, Int32(1))
+        var use_prev = s > 0 and cur > prev
+        if iters == 0:
+            use_prev = False
+        fin.unsafe_store(c, Int32(((s + 1) % 2) if use_prev else (s % 2)))
 
 
 def mf_pinvh_kernel(cov: F32Ptr, a: F32Ptr, v: F32Ptr, p: F32Ptr, nc: Int32, d: Int32, active: I32Ptr, needp: I32Ptr):
@@ -747,7 +877,11 @@ struct MfPhase(Movable):
         self.wv = ctx.enqueue_create_buffer[DType.float32](cdd)
         self.det0 = ctx.enqueue_create_buffer[DType.float32](max(nc, 1))
         self.det1 = ctx.enqueue_create_buffer[DType.float32](max(nc, 1))
-        self.part = ctx.enqueue_create_buffer[DType.float32](max(nc * self.tiles * max(d, npair), 1))
+        var pw = max(d, npair)
+        comptime if MCD_WIDE:
+            if d > MF_DMAX:
+                pw = d  # the MMA route folds column sums only (npair = 24,310 at d = 220)
+        self.part = ctx.enqueue_create_buffer[DType.float32](max(nc * self.tiles * pw, 1))
         self.active = ctx.enqueue_create_buffer[DType.int32](max(nc, 1))
         self.needp = ctx.enqueue_create_buffer[DType.int32](max(nc, 1))
         self.fin = ctx.enqueue_create_buffer[DType.int32](max(nc, 1))
@@ -773,10 +907,15 @@ def _perm(ctx: DeviceContext, keys: DeviceBuffer[DType.uint64], npad: Int, count
 
 
 def _mma_precision(ctx: DeviceContext, ph: MfPhase, d: Int) raises:
-    for c in range(ph.nc):
-        var off = c*d*d
-        _launch_gemm_mma(ctx, _f(ph.mm_vw)+off, _f(ph.mm_v)+off,
-                         _f(ph.mm_out)+off, d, d, d, False, True)
+    comptime if MCD_BMMA:
+        # gate = mm_ran (pinvh ran for the candidate), the publication's mask
+        launch_gemm_mma_batched(ctx, _f(ph.mm_vw), _f(ph.mm_v), _f(ph.mm_out), d, d, d, False, True,
+                                ph.nc, d*d, d*d, d*d, _i(ph.mm_ran), False)
+    else:
+        for c in range(ph.nc):
+            var off = c*d*d
+            _launch_gemm_mma(ctx, _f(ph.mm_vw)+off, _f(ph.mm_v)+off,
+                             _f(ph.mm_out)+off, d, d, d, False, True)
     ctx.enqueue_function[mc_publish_matrix_kernel](
         _f(ph.mm_out), _f(ph.pm), _i(ph.mm_ran), Int32(ph.nc), Int32(d), Float32(1),
         grid_dim=_blocks(ph.nc*d*d), block_dim=MF_TPB,
@@ -785,15 +924,19 @@ def _mma_precision(ctx: DeviceContext, ph: MfPhase, d: Int) raises:
 
 def _mma_covariance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.float32],
                     rows: DeviceBuffer[DType.int32], d: Int, par: Int, hinv: Float32) raises:
-    ctx.enqueue_function[mc_center_kernel](
+    ctx.enqueue_function[mc_center_kernel[MCD_BMMA]](
         _f(dx), _i(rows), _i(ph.selected), _f(ph.loc0), _f(ph.loc1),
         _f(ph.mm_x), _i(ph.active), _i(ph.fin), Int32(ph.nc), Int32(ph.r), Int32(d),
         Int32(ph.per), Int32(ph.ident), Int32(ph.h), Int32(1), Int32(par), Int32(0),
         grid_dim=_blocks(ph.nc*ph.h*d), block_dim=MF_TPB,
     )
-    for c in range(ph.nc):
-        var x = _f(ph.mm_x)+c*ph.r*d
-        _launch_gemm_mma(ctx, x, x, _f(ph.mm_out)+c*d*d, d, ph.h, d, True, False)
+    comptime if MCD_BMMA:
+        launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), _f(ph.mm_out), d, ph.h, d, True, False,
+                                ph.nc, ph.r*d, ph.r*d, d*d, _i(ph.active), False)
+    else:
+        for c in range(ph.nc):
+            var x = _f(ph.mm_x)+c*ph.r*d
+            _launch_gemm_mma(ctx, x, x, _f(ph.mm_out)+c*d*d, d, ph.h, d, True, False)
     ctx.enqueue_function[mc_publish_matrix_kernel](
         _f(ph.mm_out), _f(ph.cov1) if par == 1 else _f(ph.cov0), _i(ph.active),
         Int32(ph.nc), Int32(d), hinv, grid_dim=_blocks(ph.nc*d*d), block_dim=MF_TPB,
@@ -803,20 +946,63 @@ def _mma_covariance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.floa
 def _mma_distance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.float32],
                   rows: DeviceBuffer[DType.int32], d: Int, par: Int, use_fin: Bool,
                   err: DeviceBuffer[DType.int32]) raises:
-    ctx.enqueue_function[mc_center_kernel](
+    ctx.enqueue_function[mc_center_kernel[MCD_BMMA]](
         _f(dx), _i(rows), _i(ph.selected), _f(ph.loc0), _f(ph.loc1),
         _f(ph.mm_x), _i(ph.active), _i(ph.fin), Int32(ph.nc), Int32(ph.r), Int32(d),
         Int32(ph.per), Int32(ph.ident), Int32(ph.r), Int32(0), Int32(par), Int32(1 if use_fin else 0),
         grid_dim=_blocks(ph.nc*ph.r*d), block_dim=MF_TPB,
     )
-    for c in range(ph.nc):
-        var off = c*ph.r*d
-        _launch_gemm_mma(ctx, _f(ph.mm_x)+off, _f(ph.pm)+c*d*d,
-                         _f(ph.mm_y)+off, ph.r, d, d, False, False)
+    comptime if MCD_BMMA:
+        # gate = active, every candidate for the final distances (use_fin)
+        launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.pm), _f(ph.mm_y), ph.r, d, d, False, False,
+                                ph.nc, ph.r*d, d*d, ph.r*d, _i(ph.active), use_fin)
+    else:
+        for c in range(ph.nc):
+            var off = c*ph.r*d
+            _launch_gemm_mma(ctx, _f(ph.mm_x)+off, _f(ph.pm)+c*d*d,
+                             _f(ph.mm_y)+off, ph.r, d, d, False, False)
     ctx.enqueue_function[mc_mahal_reduce_kernel](
         _f(ph.mm_x), _f(ph.mm_y), _f(ph.dist), _i(ph.active), _i(err),
         Int32(ph.nc), Int32(ph.r), Int32(d), Int32(1 if use_fin else 0),
         grid_dim=_blocks(ph.nc*ph.r), block_dim=MF_TPB,
+    )
+
+
+def _compat_pinvh(ctx: DeviceContext, ph: MfPhase, cov: F32Ptr, d: Int,
+                  err: DeviceBuffer[DType.int32]) raises:
+    """mc_pinvh_kernel over the phase (64-entry tables; MOJOLEARN_MCD_WIDE
+    takes the 256-entry instance for d > MF_DMAX)."""
+    comptime if MCD_WIDE:
+        if d > MF_DMAX:
+            ctx.enqueue_function[mc_pinvh_kernel[MCD_BATCH_MMA, MF_WIDE_DMAX]](
+                cov, _f(ph.wa), _f(ph.wv), _f(ph.pm), Int32(ph.nc), Int32(d), _i(ph.active), _i(ph.needp),
+                _i(err), _f(ph.mm_v), _f(ph.mm_vw), _i(ph.mm_ran),
+                grid_dim=ph.nc, block_dim=MF_TPB,
+            )
+            return
+    ctx.enqueue_function[mc_pinvh_kernel[MCD_BATCH_MMA]](
+        cov, _f(ph.wa), _f(ph.wv), _f(ph.pm), Int32(ph.nc), Int32(d), _i(ph.active), _i(ph.needp), _i(err),
+        _f(ph.mm_v), _f(ph.mm_vw), _i(ph.mm_ran),
+        grid_dim=ph.nc, block_dim=MF_TPB,
+    )
+
+
+def _det(ctx: DeviceContext, ph: MfPhase, d: Int, s: Int, err: DeviceBuffer[DType.int32]) raises:
+    """Step s's log determinant + C-step control (MOJOLEARN_MCD_WIDE: one
+    block per candidate for d > MF_DMAX)."""
+    var par = s % 2
+    comptime if MCD_WIDE:
+        if d > MF_DMAX:
+            ctx.enqueue_function[mf_det_wide_kernel](
+                _f(ph.cov1) if par == 1 else _f(ph.cov0), _f(ph.wa), _f(ph.det1) if par == 1 else _f(ph.det0),
+                _f(ph.det0) if par == 1 else _f(ph.det1), Int32(ph.nc), Int32(d), Int32(s), Int32(ph.n_iter),
+                _i(ph.active), _i(ph.needp), _i(ph.fin), _i(err), grid_dim=ph.nc, block_dim=MF_TPB,
+            )
+            return
+    ctx.enqueue_function[mf_det_kernel](
+        _f(ph.cov1) if par == 1 else _f(ph.cov0), _f(ph.wa), _f(ph.det1) if par == 1 else _f(ph.det0),
+        _f(ph.det0) if par == 1 else _f(ph.det1), Int32(ph.nc), Int32(d), Int32(s), Int32(ph.n_iter), _i(ph.active),
+        _i(ph.needp), _i(ph.fin), _i(err), grid_dim=_blocks(ph.nc), block_dim=MF_TPB,
     )
 
 
@@ -839,11 +1025,7 @@ def _run_phase(
     if has_init:
         # P0 = pinvh(cov0), dist = mahal(X, loc0, P0), sel = the h smallest
         comptime if MCD_BATCH_COMPAT:
-            ctx.enqueue_function[mc_pinvh_kernel[MCD_BATCH_MMA]](
-                _f(ph.cov1), _f(ph.wa), _f(ph.wv), _f(ph.pm), Int32(nc), Int32(d), _i(ph.active), _i(ph.needp), _i(err),
-                _f(ph.mm_v), _f(ph.mm_vw), _i(ph.mm_ran),
-                grid_dim=nc, block_dim=MF_TPB,
-            )
+            _compat_pinvh(ctx, ph, _f(ph.cov1), d, err)
             comptime if MCD_BATCH_MMA:
                 _mma_precision(ctx, ph, d)
         else:
@@ -905,23 +1087,14 @@ def _run_phase(
                 _f(ph.part), _f(ph.cov1) if par == 1 else _f(ph.cov0), _i(pj), _i(pk), Int32(nc), Int32(ph.tiles), Int32(d),
                 Int32(npair), hinv, _i(ph.active), grid_dim=_blocks(nc * npair), block_dim=MF_TPB,
             )
-        ctx.enqueue_function[mf_det_kernel](
-            _f(ph.cov1) if par == 1 else _f(ph.cov0), _f(ph.wa), _f(ph.det1) if par == 1 else _f(ph.det0),
-            _f(ph.det0) if par == 1 else _f(ph.det1), Int32(nc), Int32(d), Int32(s), Int32(ph.n_iter), _i(ph.active),
-            _i(ph.needp), _i(ph.fin), _i(err), grid_dim=_blocks(nc), block_dim=MF_TPB,
-        )
+        _det(ctx, ph, d, s, err)
         ctx.enqueue_function[mf_fill_i_kernel](_i(anyb), Int32(1), Int32(0), grid_dim=1, block_dim=MF_TPB)
         ctx.enqueue_function[mf_any_kernel](_i(ph.active), Int32(nc), _i(anyb), grid_dim=_blocks(nc), block_dim=MF_TPB)
         ctx.enqueue_copy(dst_ptr=hany.unsafe_ptr(), src_buf=anyb)
         ctx.synchronize()
         # the -inf start's pinvh (needp) runs even when no candidate is active
         comptime if MCD_BATCH_COMPAT:
-            ctx.enqueue_function[mc_pinvh_kernel[MCD_BATCH_MMA]](
-                _f(ph.cov1) if par == 1 else _f(ph.cov0), _f(ph.wa), _f(ph.wv), _f(ph.pm), Int32(nc), Int32(d),
-                _i(ph.active), _i(ph.needp), _i(err),
-                _f(ph.mm_v), _f(ph.mm_vw), _i(ph.mm_ran),
-                grid_dim=nc, block_dim=MF_TPB,
-            )
+            _compat_pinvh(ctx, ph, _f(ph.cov1) if par == 1 else _f(ph.cov0), d, err)
             comptime if MCD_BATCH_MMA:
                 _mma_precision(ctx, ph, d)
         else:
@@ -1021,7 +1194,10 @@ def fast_mcd_fast(
     var d = p[1]
     var h = p[2]
     var seed = p[3]
-    if d > MF_DMAX or d < 2 or n < 1:
+    var dmax = MF_DMAX
+    comptime if MCD_WIDE:
+        dmax = MF_WIDE_DMAX
+    if d > dmax or d < 2 or n < 1:
         return False
     var ctx = xd_ctx()
     var npair = d * (d + 1) // 2
