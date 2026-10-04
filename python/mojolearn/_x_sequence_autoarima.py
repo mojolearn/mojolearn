@@ -204,9 +204,7 @@ class AutoARIMA:
                     # bound, or the period rule): the per-order fits below.
                     want_ic = 1 if caps & 4 else 0
                     packed_grid = [v for o in grid for v in o]  # glue: native order metadata arguments
-                    pens = [self._penalty_of(p_ + q_ + P_ + Q_ + k_ + 1, ic, d_, D_,  # glue: one scalar per order
-                                             s if (P_ + D_ + Q_) else 0)
-                            for p_, q_, P_, Q_, k_ in grid]
+                    pens = [self._penalty_of(sum(o) + 1, ic, d_, D_, s if (o[2] + D_ + o[3]) else 0) for o in grid]  # glue: one penalty scalar per order
                     best32 = np.empty(nb, dtype=np.int32)
                     out = np.empty(nb if want_ic else len(grid) * nb, dtype=np.float32)
                     written = int(binding.arima_order_search_device(
