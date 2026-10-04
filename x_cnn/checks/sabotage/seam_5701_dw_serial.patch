@@ -1,14 +1,16 @@
+diff --git a/x_cnn/host/ops_host.mojo b/x_cnn/host/ops_host.mojo
+index 32a9ac287..29231bd9e 100644
 --- a/x_cnn/host/ops_host.mojo
 +++ b/x_cnn/host/ops_host.mojo
-@@ -20,6 +20,7 @@
- from gemm.host.identical_gemm import OP_NN, OP_NT, OP_TN
+@@ -20,6 +20,7 @@ from core.host_parallel import host_parallelize
+ from gemm.contract import OP_NN, OP_NT, OP_TN
  from x_cnn.host.gemm_host import gemm_host_into, parallel_tasks
  from checks.numerics import ftz
 +from checks.numerics import identical_mul_add
- from x_cnn.ops import (
-     canon,
-     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, CP_REV,
-@@ -353,7 +354,13 @@
+ from bindings.hostptr import i32_ptr, f32_ptr
+ from std.python import Python, PythonObject
+ from std.python._cpython import GILReleased
+@@ -362,7 +363,13 @@ def conv2d_backward_cols(cols: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm:
      var g = scratch(rows * OC)
      dout_rows_host(dout, g, ps)
      var ones = List[Float32](length=rows, fill=Float32(1))
