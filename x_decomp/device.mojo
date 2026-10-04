@@ -26,6 +26,7 @@ from gemm.afn_apple_fast import (
 )
 from decomposition.linalg_public_device import device_qr_r
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
+from x_decomp.eigh_tangent import EIGH_FAST_TANGENT, eigh_tangent_round_kernel, eigh_tangent_copy_kernel
 from x_decomp.lu_fast import LU_FAST_STEP1, lfs_blocks, lu_fast_panel
 from x_decomp.lasso_grp import DECOMP_FAST_LASSO_GRP, LG_MAXK, LG_TPB, lasso_grp_kernel
 from x_decomp.cells import (
@@ -2306,6 +2307,7 @@ struct DevExec(Exec):
         var m = n + (n % 2)
         var h = m // 2
         var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var dtangent = ctx.enqueue_create_buffer[DType.float32](n * n if EIGH_FAST_TANGENT else 1)
         var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
         var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
         var dpart = ctx.enqueue_create_buffer[DType.float32](3 * _pj_off_blocks(n))
@@ -2335,17 +2337,33 @@ struct DevExec(Exec):
             if sweep == RR_EIGH_SWEEPS:
                 break
             executed += 1
-            for rd in range(m - 1):
-                ctx.enqueue_function[eigh_par_cs_kernel](
-                    da.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
-                    grid_dim=_pj_blocks(h), block_dim=PJ_TPB,
+            comptime if EIGH_FAST_TANGENT:
+                for rd in range(m - 1):
+                    var src = da.unsafe_ptr() if rd % 2 == 0 else dtangent.unsafe_ptr()
+                    var dst = dtangent.unsafe_ptr() if rd % 2 == 0 else da.unsafe_ptr()
+                    ctx.enqueue_function[eigh_tangent_round_kernel](
+                        src, dst, dv.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
+                        grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
+                    )
+                    if rd % PJ_SYNC_ROUNDS == PJ_SYNC_ROUNDS - 1:
+                        ctx.synchronize()
+                # m is even: m-1 rounds leave the latest matrix in scratch.
+                ctx.enqueue_function[eigh_tangent_copy_kernel](
+                    dtangent.unsafe_ptr(), da.unsafe_ptr(), Int32(n),
+                    grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB,
                 )
-                ctx.enqueue_function[eigh_par_update_kernel](
-                    da.unsafe_ptr(), dv.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
-                    grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
-                )
-                if rd % PJ_SYNC_ROUNDS == PJ_SYNC_ROUNDS - 1:
-                    ctx.synchronize()
+            else:
+                for rd in range(m - 1):
+                    ctx.enqueue_function[eigh_par_cs_kernel](
+                        da.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
+                        grid_dim=_pj_blocks(h), block_dim=PJ_TPB,
+                    )
+                    ctx.enqueue_function[eigh_par_update_kernel](
+                        da.unsafe_ptr(), dv.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
+                        grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
+                    )
+                    if rd % PJ_SYNC_ROUNDS == PJ_SYNC_ROUNDS - 1:
+                        ctx.synchronize()
         # J^T A J keeps ||A||_F: a solve that moved it is not an answer
         if converged and not rr_fro_kept(fro_in, fro_now):
             converged = False
@@ -2373,6 +2391,7 @@ struct DevExec(Exec):
         _ = dvo^
         _ = dpos^
         _ = dv^
+        _ = dtangent^
         _ = dcs^
         _ = doff^
         _ = dpart^
