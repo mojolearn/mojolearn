@@ -34,7 +34,8 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--wave', required=True, type=Path)
     p.add_argument('--plan', required=True, type=Path)
-    p.add_argument('--dart-adjudication', type=Path, help='PASS/FAIL adjudication receipt from the DART statistics lane')
+    p.add_argument('--dart-adjudication', type=Path, help='dart-quality-adjudication.json from the DART statistics lane (ON vs OFF retained predictions)')
+    p.add_argument('--dart-on-receipt', type=Path, help='The adjudicated ON prediction receipt (receipt.json) it names; its prediction hashes must equal this box\'s retained ON outputs')
     a = p.parse_args()
     wave = a.wave.resolve()
     identity = load(wave / 'wave.json')
@@ -96,14 +97,36 @@ def main():
                 folder = attempts[-1] if attempts else base
                 receipt_path = folder / 'receipt.json'
                 if gate_id == 'dart_reference':
-                    verdict = (adjudication or {}).get('arms', {}).get(arm, {}).get('status') if adjudication else None
+                    # The adjudication compares retained ON predictions with OFF on
+                    # frozen OFF-only margins. It transfers to this box only when this
+                    # box's retained ON prediction files are byte-identical to the
+                    # adjudicated ones (same-bits contract); otherwise it stays pending.
+                    verdict, evidence = None, {}
+                    if adjudication is not None and a.dart_on_receipt and arm == 'on':
+                        on_receipt = load(a.dart_on_receipt)
+                        local = {name: digest(old_root / 'on/quality/dart_reference-outputs' / (name + '.npz'))
+                                 for name in on_receipt.get('prediction_sources', {})}
+                        matched = (bool(local) and on_receipt.get('arm') == 'on' and on_receipt.get('source_sha') == identity['sha']
+                                   and all(local[n] == on_receipt['prediction_sources'][n]['sha256'] for n in local))
+                        decisions = adjudication.get('decisions', {})
+                        if adjudication.get('source_sha') != identity['sha'] or not decisions:
+                            verdict = None
+                        elif not matched:
+                            verdict = 'PREDICTIONS_DIFFER'
+                        elif adjudication.get('status') == 'PASS' and all(d.get('status') == 'PASS' for d in decisions.values()):
+                            verdict = 'PASS'
+                        else:
+                            verdict = adjudication.get('status')
+                        evidence = {'adjudication': str(a.dart_adjudication), 'adjudication_sha256': adjudication_sha,
+                                    'on_receipt': str(a.dart_on_receipt), 'on_receipt_sha256': digest(a.dart_on_receipt),
+                                    'local_prediction_sha256': local, 'predictions_match_adjudicated': matched,
+                                    'decisions': {k: d.get('status') for k, d in decisions.items()}}
                     if verdict == 'PASS':
-                        row.update(status='PASS', rc=0, source='adjudication', adjudication=str(a.dart_adjudication),
-                                   adjudication_sha256=adjudication_sha)
-                    elif verdict in ('FAIL', 'INCONCLUSIVE', 'INSUFFICIENT'):
-                        row.update(status='FAIL', source='adjudication', verdict=verdict, adjudication_sha256=adjudication_sha)
+                        row.update(status='PASS', rc=0, source='adjudication', **evidence)
+                    elif verdict in ('FAIL', 'INCONCLUSIVE', 'INSUFFICIENT', 'PREDICTIONS_DIFFER'):
+                        row.update(status='FAIL', source='adjudication', verdict=verdict, **evidence)
                     else:
-                        row.update(status='PENDING_ADJUDICATION', source='dart statistics lane')
+                        row.update(status='PENDING_ADJUDICATION', source='dart statistics lane', **evidence)
                 elif receipt_path.is_file():
                     sup = load(receipt_path)
                     log = folder / (gate_id + '.log')
