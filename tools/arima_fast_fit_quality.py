@@ -56,7 +56,7 @@ def capture(path, small=False):
                 arrays[f"{prefix}/group{group}/{name}"] = value
         metrics[prefix] = dict(forecast_rmse=float(np.sqrt(np.mean((forecast.astype(np.float64) - y[:, nobs:]) ** 2))),
                                fitted_rmse=float(np.sqrt(np.mean((pred.astype(np.float64) - y[:, 2:nobs]) ** 2))),
-                               loglike_sum=float(sum(np.sum(fit.llf_) for fit in model._fitted)))
+                               loglike_sum=float(sum(np.sum(np.asarray(fit.llf_, dtype=np.float64)) for fit in model._fitted)))
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez(path, **arrays)
