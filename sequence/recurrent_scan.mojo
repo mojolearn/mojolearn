@@ -32,12 +32,18 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.memory import AddressSpace
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
 from x_linear.team import team_barrier
 from sequence.ops import FP, Args, add, fma3, gates_of, ld, op_cell_bwd, op_cell_bwd_h, op_cell_fwd, op_cell_fwd_h, st
 
 comptime _APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime SEQ_LSTM_SCAN = _APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN"]()
+#: nr-small (review D2, 2026-10-04): CANDIDATE, default OFF. The one-launch
+#: scan under IDENTICAL on every GPU, for the owed NV/AMD/Apple ID check
+#: (the chain order is the T-launch path's; `team_barrier` orders device
+#: memory on CUDA/HIP/Metal by the repo's lowering notes, unproven by a
+#: run). -D MOJOLEARN_IDN_SEQ_LSTM_SCAN turns it on.
+comptime SEQ_LSTM_SCAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_SEQ_LSTM_SCAN"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime SEQ_LSTM_SCAN = (_APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN"]()) or SEQ_LSTM_SCAN_IDN
 comptime SEQ_LSTM_SCAN_SMEM = SEQ_LSTM_SCAN and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM"]()
 comptime SEQ_LSTM_WGRAD = _APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_WGRAD"]()
 
