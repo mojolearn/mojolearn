@@ -1007,7 +1007,10 @@ def ic_running_min_f32_binding(
     var xp = _ptr[DType.int64](Int(py=best_idx_addr))
     with GILReleased(Python()):
         for b in range(count):
-            var v = Float32(-2.0) * lp.unsafe_load(b) + pen
+            # lane/review-fixes: flushed as the device's
+            # `ftz(fma(-2, ftz(ll), pen))` (arima fast_order_search); -2 x is
+            # exact, so mul + add is the fma's word
+            var v = _ftz_bits(Float32(-2.0) * _ftz_bits(lp.unsafe_load(b)) + pen)
             if v != v:
                 v = bitcast[DType.float32](UInt32(0x7FC00000))
             ip.unsafe_store(b, v)
