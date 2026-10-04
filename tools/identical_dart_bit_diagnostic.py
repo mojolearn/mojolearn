@@ -52,7 +52,9 @@ def child(root, out, vendor, full=False, repeats=2):
             other=arrays[key.replace('-repeat0-','-repeat1-')]
             if value.shape!=other.shape or value.dtype!=other.dtype or value.tobytes()!=other.tobytes():
                 repeated.append(key)
-    (out / (vendor + '-repeat.json')).write_text(json.dumps({'status':'PASS' if not repeated else 'DIFFER','differing_outputs':repeated},indent=2))
+    (out / (vendor + '-repeat.json')).write_text(json.dumps({
+        'status': 'NOT_RUN' if repeats < 2 else ('PASS' if not repeated else 'DIFFER'),
+        'repeats': repeats, 'differing_outputs': repeated}, indent=2))
     print('DART_DIAGNOSTIC_CHILD', vendor, 'outputs=' + str(len(arrays)), 'repeat_differences='+str(len(repeated)),flush=True)
 
 
