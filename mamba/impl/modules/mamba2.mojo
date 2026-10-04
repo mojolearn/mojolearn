@@ -66,7 +66,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace
 # Public Mamba forward keeps full-FP32 projection operands in every mode.
 # False bypasses NVIDIA TF32 vendor dispatch; IDENTICAL arithmetic is unchanged.
-from gemm.checks.gemm_identical import identical_gemm
+from mamba.impl.modules.idn_gemm_ws import IDN_MAMBA_GEMM_WS, mamba_proj_gemm
 
 # ORIENTATION NUMBERING: gemm_oracle's OP_NT = 1 (OP_NN = 0, OP_TN = 2),
 # the numbering identical_gemm reads -- NOT bench/gemm_shapes.mojo's
@@ -1095,11 +1095,11 @@ def mamba2_block_forward(
         if not afn_proj_gemm_into(
             ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
         ):
-            identical_gemm[False](
+            mamba_proj_gemm(
                 ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
             )
     else:
-        identical_gemm[False](
+        mamba_proj_gemm(
             ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
         )
     trace.record_device[DType.float32](
@@ -1433,7 +1433,7 @@ def mamba2_block_forward(
         if trace.enabled or not afn_proj_gemm_resid_into(
             ctx, stages.residual_out, x, stages.gnorm_out, w.w_out, m, dm, di, OP_NT
         ):
-            identical_gemm[False](
+            mamba_proj_gemm(
                 ctx, stages.out_proj, stages.gnorm_out, w.w_out, m, dm, di, OP_NT
             )
             trace.record_device[DType.float32](
@@ -1448,7 +1448,7 @@ def mamba2_block_forward(
                 block_dim=(MAMBA2_TPB, 1, 1),
             )
     else:
-        identical_gemm[False](
+        mamba_proj_gemm(
             ctx, stages.out_proj, stages.gnorm_out, w.w_out, m, dm, di, OP_NT
         )
         trace.record_device[DType.float32](
@@ -1463,6 +1463,12 @@ def mamba2_block_forward(
             block_dim=(MAMBA2_TPB, 1, 1),
         )
     _m2_stage_sync(ctx, trace)
+    comptime if IDN_MAMBA_GEMM_WS:
+        # lane fam-lm: the projection GEMMs no longer wait (idn_gemm_ws.mojo),
+        # so the forward completes here, once, before any caller can release
+        # an operand; main's out_proj GEMM wait stood two launches earlier.
+        if not trace.enabled:
+            ctx.synchronize()
     trace.record_device[DType.float32](
         ctx, prefix + ".residual.out", stages.residual_out, m * dm
     )

@@ -102,7 +102,7 @@ from std.sys._assembly import inlined_assembly
 from std.sys.compile import is_defined
 from std.sys.info import is_amd_gpu
 from std.time import perf_counter_ns
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
 from core.step_phase import (
@@ -153,6 +153,8 @@ from gemm.checks.gemm_identical import (
     _amma_mma,
 )
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
     identical_mul,
     ftz,
     identical_div,
@@ -2246,6 +2248,128 @@ def _absmax_blocks(n: Int) -> Int:
     return blocks
 
 
+comptime IDN_ATTN_SCAN_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""lane/fam-lm (2026-10-04), default ON under IDENTICAL: the fused
+attention's regime scan (`device_absmax4`) and corner flag (`_zero_flag`,
+`_read_flags`) take their partials buffer, their flag buffer and their
+pinned host buffer from one process cache, created once, where every fused
+forward and backward (per layer, per call) made a device allocation and a
+pinned host allocation for the scan and another pair for the flag. Each
+call still writes every partial and zero-fills the flag before it reads
+them, and waits before the host reads, so the values read are the same: no
+bit moves (a regime BOUND and a flag; nothing reaches a card). One cache
+per process, as the other process workspaces are.
+`-D MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF` restores the per-call allocations."""
+
+comptime _SCAN_CACHE_PART = 4 * ABSMAX_BLOCKS
+comptime _SCAN_CACHE_FLAGS = 4
+
+
+struct _AttnScanCache(Defaultable, Movable):
+    var part: Optional[DeviceBuffer[DType.float32]]  # [_SCAN_CACHE_PART]
+    var flag: Optional[DeviceBuffer[DType.float32]]  # [_SCAN_CACHE_FLAGS]
+    var host: Optional[HostBuffer[DType.float32]]  # [_SCAN_CACHE_PART + _SCAN_CACHE_FLAGS]
+
+    def __init__(out self):
+        self.part = Optional[DeviceBuffer[DType.float32]]()
+        self.flag = Optional[DeviceBuffer[DType.float32]]()
+        self.host = Optional[HostBuffer[DType.float32]]()
+
+
+comptime _ATTN_SCAN_CACHE = _Global[StorageType=_AttnScanCache,
+    name="MojolearnAttnScanCacheV1", init_fn=_AttnScanCache.__init__]
+
+
+def _scan_cache_host(ctx: DeviceContext) raises -> MutPointer[Float32, MutAnyOrigin]:
+    """The cached pinned buffer: the scan's partials at `[0,
+    _SCAN_CACHE_PART)`, the flag words after them. Created on first use."""
+    var g = _ATTN_SCAN_CACHE.get_or_create_ptr()
+    if not g[].host:
+        step_count_host_alloc()
+        g[].host = ctx.enqueue_create_host_buffer[DType.float32](
+            _SCAN_CACHE_PART + _SCAN_CACHE_FLAGS
+        )
+    return g[].host.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+
+def _device_absmax4_cached(
+    ctx: DeviceContext,
+    b0_p: MutPointer[Float32, MutAnyOrigin], n0: Int,
+    b1_p: MutPointer[Float32, MutAnyOrigin], n1: Int,
+    b2_p: MutPointer[Float32, MutAnyOrigin], n2: Int,
+    b3_p: MutPointer[Float32, MutAnyOrigin], n3: Int,
+) raises -> StaticTuple[Float64, 4]:
+    """`device_absmax4` on the cached partials and host buffers: the same
+    launches at the same grids into the same slices, one copy of the slices
+    written, one wait, the same host fold."""
+    var k0 = _absmax_blocks(n0)
+    var k1 = _absmax_blocks(n1)
+    var k2 = _absmax_blocks(n2)
+    var k3 = _absmax_blocks(n3)
+    var total = k0 + k1 + k2 + k3
+    var out = StaticTuple[Float64, 4](0.0, 0.0, 0.0, 0.0)
+    if total == 0:
+        return out
+    var g = _ATTN_SCAN_CACHE.get_or_create_ptr()
+    if not g[].part:
+        step_count_device_alloc()
+        g[].part = ctx.enqueue_create_buffer[DType.float32](_SCAN_CACHE_PART)
+    var part = g[].part.value().create_sub_buffer[DType.float32](0, total)
+    var hp = _scan_cache_host(ctx)
+    var off = 0
+    if k0 > 0:
+        step_count_launch()
+        ctx.enqueue_function[absmax_partial_kernel](
+            part.unsafe_ptr() + off, b0_p, Int32(n0),
+            grid_dim=(k0, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+        )
+    off += k0
+    if k1 > 0:
+        step_count_launch()
+        ctx.enqueue_function[absmax_partial_kernel](
+            part.unsafe_ptr() + off, b1_p, Int32(n1),
+            grid_dim=(k1, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+        )
+    off += k1
+    if k2 > 0:
+        step_count_launch()
+        ctx.enqueue_function[absmax_partial_kernel](
+            part.unsafe_ptr() + off, b2_p, Int32(n2),
+            grid_dim=(k2, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+        )
+    off += k2
+    if k3 > 0:
+        step_count_launch()
+        ctx.enqueue_function[absmax_partial_kernel](
+            part.unsafe_ptr() + off, b3_p, Int32(n3),
+            grid_dim=(k3, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+        )
+    step_count_d2h()
+    ctx.enqueue_copy(dst_ptr=hp, src_buf=part)
+    step_count_sync()
+    ctx.synchronize()
+    var lo = 0
+    for which in range(4):
+        var kb = k0
+        if which == 1:
+            kb = k1
+        elif which == 2:
+            kb = k2
+        elif which == 3:
+            kb = k3
+        var m = Float32(0.0)
+        for i in range(lo, lo + kb):
+            var v = hp.unsafe_load(i)
+            if v > m:
+                m = v
+        out[which] = Float64(m)
+        lo += kb
+    _ = part^
+    return out
+
+
 def device_absmax4(
     ctx: DeviceContext,
     b0_p: MutPointer[Float32, MutAnyOrigin], n0: Int,
@@ -2264,6 +2388,8 @@ def device_absmax4(
     allocation, copy); on Apple a wait with pending work is the step's
     dominant cost (memory: metal-cost-is-syncs-not-launches). A buffer with
     `n <= 0` reads 0.0 and launches nothing, as `device_absmax` returns."""
+    comptime if IDN_ATTN_SCAN_CACHE:
+        return _device_absmax4_cached(ctx, b0_p, n0, b1_p, n1, b2_p, n2, b3_p, n3)
     var k0 = _absmax_blocks(n0)
     var k1 = _absmax_blocks(n1)
     var k2 = _absmax_blocks(n2)
@@ -7497,6 +7623,22 @@ def _read_flags(
     # the copy and the kernels that wrote `flag` are in stream order on
     # `ctx`, so the wait after the copy covers them all. The wait that sat
     # between the creation and the copy was a second full round trip.
+    comptime if IDN_ATTN_SCAN_CACHE:
+        # lane/fam-lm: the cached pinned buffer's flag words.
+        if len(flag) <= _SCAN_CACHE_FLAGS:
+            var fp = _scan_cache_host(ctx) + _SCAN_CACHE_PART
+            step_count_d2h()
+            ctx.enqueue_copy(dst_ptr=fp, src_buf=flag)
+            step_count_sync()
+            ctx.synchronize()
+            var cv = fp.unsafe_load(0)
+            var crep = 0
+            if len(flag) >= 3:
+                if fp.unsafe_load(1) != Float32(0.0):
+                    crep += 1
+                if fp.unsafe_load(2) != Float32(0.0):
+                    crep += 2
+            return (cv != Float32(0.0), crep)
     step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.float32](len(flag))
     step_count_d2h()
@@ -7518,6 +7660,19 @@ def _read_flag(ctx: DeviceContext, mut flag: DeviceBuffer[DType.float32]) raises
 
 
 def _zero_flag(ctx: DeviceContext) raises -> DeviceBuffer[DType.float32]:
+    comptime if IDN_ATTN_SCAN_CACHE:
+        # lane/fam-lm: a view of the cached flag buffer, zero-filled for
+        # this call exactly as the fresh one is.
+        var g = _ATTN_SCAN_CACHE.get_or_create_ptr()
+        if not g[].flag:
+            step_count_device_alloc()
+            g[].flag = ctx.enqueue_create_buffer[DType.float32](_SCAN_CACHE_FLAGS)
+        var cf = g[].flag.value().create_sub_buffer[DType.float32](
+            0, 3 if ATTN_REPAIR_MASKED_TAIL else 1
+        )
+        step_count_launch()
+        cf.enqueue_fill(Float32(0.0))
+        return cf^
     step_count_device_alloc()
     var f = ctx.enqueue_create_buffer[DType.float32](3 if ATTN_REPAIR_MASKED_TAIL else 1)
     step_count_launch()
@@ -8719,8 +8874,21 @@ def fused_bwd_zdot_stash_amma_kernel[HD: Int](
         zdot.unsafe_store(row, zf)
 
 
+comptime IDN_ATTN_SCRATCH_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""lane/fam-lm (2026-10-04), default ON under IDENTICAL: the Apple scratch
+cache below on NVIDIA and AMD too. The forward's `[B, n_heads, L, S]`
+score/exp stash and the backward's y and dy stashes were a fresh device
+allocation per layer per call there; they now come from the process cache
+(grown to the largest call, reused). The launchers that take a cached
+scratch wait before they return and their kernels write every cell they
+later read, so no bit moves. The cache is one per process, as the other
+process workspaces are: a process driving two device contexts must build
+with `-D MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF` (per-call allocation)."""
 comptime ATTN_SCRATCH_CACHE = (
-    TARGET_COLUMN == COLUMN_APPLE and not is_defined["MOJOLEARN_ATTN_NO_SCRATCH_CACHE"]()
+    (TARGET_COLUMN == COLUMN_APPLE or IDN_ATTN_SCRATCH_CACHE)
+    and not is_defined["MOJOLEARN_ATTN_NO_SCRATCH_CACHE"]()
 )
 """lane/neural-apple2 (2026-09-28): on Apple the attention launchers' big
 `[B, n_heads, L, S]` scratches (the round 3 forward's score/exp stash, the

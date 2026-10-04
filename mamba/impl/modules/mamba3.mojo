@@ -80,7 +80,7 @@ from mamba.impl.modules.mamba3_refusal import m3_refuse_nonfinite_named
 from core.identity_trace import IdentityTrace
 # Public Mamba forward keeps full-FP32 projection operands in every mode.
 # False bypasses NVIDIA TF32 vendor dispatch; IDENTICAL arithmetic is unchanged.
-from gemm.checks.gemm_identical import identical_gemm
+from mamba.impl.modules.idn_gemm_ws import mamba_proj_gemm
 
 # ORIENTATION NUMBERING: gemm_oracle's OP_NT = 1 -- the numbering
 # identical_gemm reads. The Mamba-1 header's trap note applies verbatim.
@@ -137,6 +137,7 @@ from mamba.impl.modules.afn_defines import (
     AFN_MAMBA3_SISO_FUSED,
     AFN_MAMBA_ARENA,
     AFN_MAMBA_DEVICE_REFUSAL,
+    IDN_MAMBA_ARENA,
 )
 from mamba.impl.modules.afn_arena import MambaArena
 from mamba.impl.modules.afn_refusal import AfnRefusalBatch
@@ -624,6 +625,18 @@ def _m3_stage_sync(ctx: DeviceContext, trace: IdentityTrace) raises:
             ctx.synchronize()
     else:
         ctx.synchronize()
+
+
+def _m3_final_sync(ctx: DeviceContext, trace: IdentityTrace) raises:
+    """The block forward's LAST stage wait. lane fam-lm: under
+    IDN_MAMBA_ARENA (IDENTICAL) the per-stage waits above are traced-only,
+    but this one stays unconditional, so every caller that is not the arena
+    binding (the prefill session, the backward's tail, gates) still gets a
+    forward that has completed when it returns, as main's did."""
+    comptime if IDN_MAMBA_ARENA:
+        ctx.synchronize()
+    else:
+        _m3_stage_sync(ctx, trace)
 
 
 # ===========================================================================
@@ -1366,11 +1379,11 @@ def mamba3_block_forward(
         if not afn_proj_gemm_into(
             ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
         ):
-            identical_gemm[False](
+            mamba_proj_gemm(
                 ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
             )
     else:
-        identical_gemm[False](
+        mamba_proj_gemm(
             ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
         )
 
@@ -1648,7 +1661,7 @@ def mamba3_block_forward(
         if trace.enabled or not afn_proj_gemm_resid_into(
             ctx, stages.residual_out, x, stages.gate_out, w.w_out, m, dm, di, OP_NT
         ):
-            identical_gemm[False](
+            mamba_proj_gemm(
                 ctx, stages.out_proj, stages.gate_out, w.w_out, m, dm, di, OP_NT
             )
             m3_phase_tick(ctx, phase_tick, String("block.out_proj"))
@@ -1663,7 +1676,7 @@ def mamba3_block_forward(
         else:
             m3_phase_tick(ctx, phase_tick, String("block.out_proj"))
     else:
-        identical_gemm[False](
+        mamba_proj_gemm(
             ctx, stages.out_proj, stages.gate_out, w.w_out, m, dm, di, OP_NT
         )
 
@@ -1676,7 +1689,7 @@ def mamba3_block_forward(
             grid_dim=(_grid(m * dm), 1, 1),
             block_dim=(MAMBA3_TPB, 1, 1),
         )
-    _m3_stage_sync(ctx, trace)
+    _m3_final_sync(ctx, trace)
 
     # ---- the card, contract section 7's order (input.x recorded above).
     trace.record_device[DType.float32](

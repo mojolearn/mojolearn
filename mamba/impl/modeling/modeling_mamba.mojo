@@ -173,7 +173,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace
 # Public Mamba forward keeps full-FP32 projection operands in every mode.
 # False bypasses NVIDIA TF32 vendor dispatch; IDENTICAL arithmetic is unchanged.
-from gemm.checks.gemm_identical import identical_gemm
+from mamba.impl.modules.idn_gemm_ws import mamba_proj_gemm
 
 # ORIENTATION NUMBERING: this `OP_NT` is `gemm_oracle`'s, where
 # `OP_NN = 0, OP_NT = 1, OP_TN = 2`. It is NOT `bench/gemm_shapes.mojo`'s
@@ -200,6 +200,8 @@ from mamba.impl.modules.afn_defines import (
     AFN_MAMBA1_FUSE_IN,
     AFN_MAMBA_ARENA,
     AFN_MAMBA_DEVICE_REFUSAL,
+    IDN_MAMBA_ALLOC_NOWAIT,
+    IDN_MAMBA_ARENA,
 )
 from mamba.impl.modules.afn_arena import MambaArena
 from mamba.impl.modules.afn_refusal import AfnRefusalBatch
@@ -489,7 +491,7 @@ def mamba_zeros[wait: Bool = True](
     else:
         dev.enqueue_fill(Float32(0.0))
     # The guarded sub-buffer is local; keep its existing completion fence.
-    comptime if wait or MAMBA_GUARD > 0:
+    comptime if (wait and not IDN_MAMBA_ALLOC_NOWAIT) or MAMBA_GUARD > 0:
         step_count_sync()
         ctx.synchronize()
     return dev^
@@ -582,7 +584,8 @@ def mamba_scratch(
     var dev = mamba_device_alloc(ctx, n_buf)
     comptime if not MAMBA_POISON:
         dev.enqueue_fill(Float32(0.0))
-    ctx.synchronize()
+    comptime if not IDN_MAMBA_ALLOC_NOWAIT:
+        ctx.synchronize()
     return dev^
 
 
@@ -701,6 +704,18 @@ def _m1_stage_sync(ctx: DeviceContext, trace: IdentityTrace) raises:
             ctx.synchronize()
     else:
         ctx.synchronize()
+
+
+def _m1_final_sync(ctx: DeviceContext, trace: IdentityTrace) raises:
+    """The block forward's LAST stage wait. lane fam-lm: under
+    IDN_MAMBA_ARENA (IDENTICAL) the per-stage waits above are traced-only,
+    but this one stays unconditional, so every caller that is not the arena
+    binding (sessions, gates) still gets a forward that has completed when
+    it returns, as main's did."""
+    comptime if IDN_MAMBA_ARENA:
+        ctx.synchronize()
+    else:
+        _m1_stage_sync(ctx, trace)
 
 
 struct MambaDeviceState(Movable):
@@ -1574,7 +1589,7 @@ def mamba_mixer_forward(
         if not afn_proj_gemm_into(
             ctx, stages.in_proj, stages.norm_out, w.w_in, m, 2 * di, dm, _gemm_op_nt()
         ):
-            identical_gemm[False](
+            mamba_proj_gemm(
                 ctx,
                 stages.in_proj,
                 stages.norm_out,
@@ -1585,7 +1600,7 @@ def mamba_mixer_forward(
                 _gemm_op_nt(),
             )
     else:
-        identical_gemm[False](
+        mamba_proj_gemm(
             ctx,
             stages.in_proj,
             stages.norm_out,
@@ -1665,7 +1680,7 @@ def mamba_mixer_forward(
 
     # ---- x_proj (:437). `nn.Linear(d_inner, dt_rank + 2*d_state,
     #      bias=False)`. C[M, xr] = silu_out[M, di] . w_x[xr, di]^T.
-    identical_gemm[False](
+    mamba_proj_gemm(
         ctx, stages.x_proj, stages.silu_out, w.w_x, m, xr, di, _gemm_op_nt()
     )
     trace.record_device[DType.float32](
@@ -1715,7 +1730,7 @@ def mamba_mixer_forward(
     #      `k = dt_rank = 1` the gemm leaf is `ftz(fma(a, b, +0.0))`, so a
     #      `-0.0`-valued product reaches this stage as `+0.0`. That is v1
     #      gemm behavior and this profile inherits it UNCHANGED.
-    identical_gemm[False](
+    mamba_proj_gemm(
         ctx, stages.dt_proj, stages.dt_low, w.w_dt, m, di, r, _gemm_op_nt()
     )
     trace.record_device[DType.float32](
@@ -1738,7 +1753,7 @@ def mamba_mixer_forward(
     #      traced call keeps main's GEMM here so `out_proj.out` is recorded.
     comptime if AFN_MAMBA_PROJ_ROUTE:
         if trace.enabled:
-            identical_gemm[False](
+            mamba_proj_gemm(
                 ctx,
                 stages.out_proj,
                 stages.gate_out,
@@ -1749,7 +1764,7 @@ def mamba_mixer_forward(
                 _gemm_op_nt(),
             )
     else:
-        identical_gemm[False](
+        mamba_proj_gemm(
             ctx,
             stages.out_proj,
             stages.gate_out,
@@ -1876,7 +1891,7 @@ def mamba_block_forward(
             dims.d_inner,
             _gemm_op_nt(),
         ):
-            identical_gemm[False](
+            mamba_proj_gemm(
                 ctx,
                 stages.out_proj,
                 stages.gate_out,
@@ -1903,7 +1918,7 @@ def mamba_block_forward(
             grid_dim=(_grid(m * dm), 1, 1),
             block_dim=(MAMBA_TPB, 1, 1),
         )
-    _m1_stage_sync(ctx, trace)
+    _m1_final_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".residual.out", stages.residual_out, m * dm
     )
