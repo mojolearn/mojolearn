@@ -322,6 +322,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `LU_FAST_STEP1` | lu-factor / synthetic; lu-solve / synthetic | lane/apple-fast-gap-linalg2 @ f3d66dd94 | gl2-lu-step1-synthetic, gl2-lusolve-step1-synthetic | lu-factor synthetic 1,369 -> 977; lu-solve 1,422 -> 971 | KEPT | -28.6% / -31.7%; residual the same 3.256e-06; FAST+Apple default, -D MOJOLEARN_LU_FAST_STEP1_OFF reverts |
 | `CHOL_FAST_DEVIO` | cholesky / synthetic | lane/apple-fast-gap-linalg2 @ 19fb05674 | gl2-chol-devio-synthetic | cholesky synthetic 435 -> 290 | KEPT | -33%; residual the same 1.659e-07; FAST+Apple default, -D MOJOLEARN_CHOL_FAST_DEVIO_OFF reverts |
 | `CHOL_FAST_NOSYNC` | cholesky / synthetic | lane/apple-fast-gap-linalg2 @ 19fb05674 | gl2-chol-nosync-synthetic | cholesky synthetic 285 -> 271 (on top of DEVIO) | KEPT | -4.7%; residual the same; FAST+Apple default, -D MOJOLEARN_CHOL_FAST_NOSYNC_OFF reverts |
+| `CHOL_FAST_TALL` | cholesky / synthetic | lane/apple-fast-w3-linalg @ 97b7bcb7e | w2-cholt-quality, w2-cholt-synthetic | cholesky synthetic 275.9 -> 260.8 ms; quality PASS | DEFAULT (FAST+Apple), rollback MOJOLEARN_CHOL_FAST_TALL_OFF | panel as one tall 64-step blocked factor (threadgroup-memory diag factor + inverse, matrix-unit in-place solve and panel update): drops the 256x256 inverse, its pack/unpack and ~19 of ~30 launches per panel; outer trailing update unchanged (differs from the DROPPED triangular-SYRK attempt, which changed only the trailing update). Quality: tools/chol_fast_tall_pair.py |
 | `DECOMP_FAST_GEMM_MMA` | randomized-svd / istella, taxi; nmf / istella | lane/apple-fast-gap-linalg2-pca @ 474241154 | gl2p-rsvd-gemmmma-istella, gl2p-rsvd-gemmmma-taxi, gl2p-nmf-gemmmma-istella | randomized-svd istella 711 -> 533; taxi -1.3%; nmf istella 8,155 -> 6,333 | KEPT | -25% / -22%; reconstruction error the same (rsvd .0002359 / .0272, nmf .3252); FAST+Apple default for every x_decomp kit GEMM, -D MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF reverts |
 | `PCA_FAST_GRAM_MMA` | pca / istella | lane/apple-fast-gap-linalg2-pca @ 474241154 | gl2p-pca-grammma-istella-r, gl2p-pca-quality (M2) | pca istella 606 -> 490 | KEPT | -19%; quality-only check: explained_variance_ rel diff 3.4e-06, subspace angle 1.8e-06 rad (nondeterministic MMA/atomic sum); FAST+Apple default, -D MOJOLEARN_PCA_FAST_GRAM_MMA_OFF reverts |
 | `CHOL_FAST_BLOCKED` | cholesky / synthetic | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-chol-blocked-synthetic | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
@@ -690,6 +691,14 @@ Raw M3 receipt: `~/mojolearn-evidence/apple-fast/sync/quality-repairs-results-09
 
 - `MOJOLEARN_GBDT_DW_BRIDGE_SCAN`, measured kernel `2519f4867`, helper `f193454e7`, `gap26-dwcurrent-taxi`: A10279.095 -> B10827.749 ms (+5.34%), one M3 run/arm. AUC .632554 -> .632211; logloss .527920 -> .528002. **DROPPED-slower**; changed quality has no established noise bound, so no quality-equivalence claim. No default or board change. Receipt `~/mojolearn-evidence/apple-fast/sync/dwcurrent-result-0905.txt`; full M3 `~/afc-def/gap26-dwcurrent-taxi/`.
 
+## PowerTransformer compensated score failure (2026-10-04)
+
+| Experiment | Source / tag | Quality | Verdict / next step |
+|---|---|---|---|
+| `PT_SCORE` | lane/apple-fast-pt-precision @ bc112b172; gap26-pt-score-quality | Stress per-column worst regression: lambda .01330737 vs1e-5 tolerance; NLL/sample4.083e-7 vs1e-7; transform RMS9.606e-5 vs1e-5; normality nonfinite/shape failure. Box-Cox improves and passes | HOLD-quality; timing skipped, no speed claim/default. Diagnose saved stress columns and distinguish nonfinite reference from candidate before repair. Tolerances unchanged; source context [PT_SCORE.md](PT_SCORE.md) |
+
+Saved-array diagnosis: PT stress columns0–5 improve to ~1.5–1.8e-7 transform RMS. Regressions are near-constant columns6/7: reference lambdas52.6079/-63.3852 exceed main and candidate[-8,8] interval; f32 per-row log/transform/derivative precision remains before compensated reduction. The normality NaN belongs to reference column7 (constant sklearn transform, std0), not GPU outputs. No threshold relaxation or speculative kernel repair; a stable shared score/output transform and corrected stable oracle are needed before retry. See [PT_SCORE.md](PT_SCORE.md) for exact per-column evidence.
+
 ### Measurement isolation audit — 2026-10-04 09:13 UTC
 
 The M3 runner serializes jobs and A/B arms, but the manager ran filesystem scans
@@ -723,6 +732,16 @@ Quality: `tools/kfeat_pair.py quality` (`tools/kfeat_quality.py`); tolerances in
 | `XN_FAST_SCHI2_MOJO_MT` | skewed-chi2 / istella, taxi | 7.3, 1.6 (sklearn 3.7, 0.6) | DEFAULT (FAST+Apple), rollback `MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF`: M3 one run per arm istella 9.0 -> 2.2 ms, taxi 2.5 -> 1.5 ms; w2-kfeat-xn-q-r1 PASS (byte-identical outputs and refusals) | fit's legacy MT19937 draws (sklearn's numbers) in Mojo instead of a Python loop + nested list comprehensions, weights kernel and offsets in the same call, one wait; bit-identical (unlike the held `SCHI2_FAST_DEVRNG`, which changes the numbers) |
 | `XD_FAST_SRP_STRAT` | sparse-rp / istella (quality HOLD), taxi | 15.2, 3.4 | DEFAULT (FAST+Apple), rollback `MOJOLEARN_XD_FAST_SRP_STRAT_OFF`: w2-kfeat-srp-q PASS, istella 40-seed mean distortion 0.946 -> 0.571, seed 7 1.883 -> 0.475 (sklearn 0.474); taxi mean 0.346 -> 0.233, seed 7 0.147 -> 0.264 (sklearn 0.381); speed istella 15.7 -> 15.9 ms (neutral) | quality fix, not speed: 1.883 vs sklearn 0.474 is the nonzero count of a dominant raw column (count 2 -> |2*1.483-1| = 1.97, count 1 -> 0.48; main's seed-7 matrix has 27 of 220 columns at count >= 2). Column-stratified systematic sampling: same per-entry rate, signs and scale, count = floor/ceil(k * density). Gate: 40-seed paired mean on the board blocks |
 
+## Wave 3 kernel features (lane/apple-fast-w3-kfeat, 2026-10-04, OPEN)
+
+Base 7cda81ab0 (lane/apple-fast-schi2-mt-default on main 5a5fc6395). Quality: `tools/kfeat_pair.py quality` (`tools/kfeat_quality.py`, fixture kfeat-v2: byte-identical arrays and refusals, tolerance zero, fixed before any run).
+
+| define | algorithm / dataset | before ms (board) | verdict | hypothesis / note |
+|---|---|---|---|---|
+| `XN_FAST_ACHI2_DEVSCAN` + size gate | additive-chi2 / istella, taxi | 12.3, 0.7 (sklearn 3.8, 0.4) | DEFAULT (FAST+Apple), rollback MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF: M3 one run per arm (ea6b2035e) istella 11.2 -> 4.4 ms, taxi 0.9 -> 1.1 ms (below gate, main's host path: noise); w2-w3kf-xn-q PASS | device scan only from 2^22 entries (`XN_ACHI2_DEVSCAN_MIN`, x_neighbors/kfeat_dev.mojo); below it main's host `X.min()`. From w2's M3 points (taxi 1.1M entries host 0.9 / device 1.9 ms, istella 22.0M host 11.6 / device 2.9): host ~0.34 + 0.51 ms/M, device ~1.85 + 0.048 ms/M, crossing ~3.3M; the gate sits above it. Expected: istella ~2.9, taxi = main |
+| `XN_FAST_SCHI2_LAZYW` | skewed-chi2 / taxi, istella | 1.6, 7.3 (sklearn 0.6, 3.7); M3 MOJO_MT taxi 1.5 | DEFAULT (FAST+Apple), rollback MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF (needs SCHI2_MOJO_MT): M3 one run per arm (ea6b2035e) taxi 1.8 -> 0.4 ms, istella 2.1 -> 0.9 ms; w2-w3kf-xn-q PASS | fit's remaining cost is one GPU round trip for 2,816 weights; fit now draws z and the offsets on the host (sklearn's sequential stream, as MOJO_MT) with no device work, and transform runs log, the pending weights kernel and the map in ONE call (main: 2 waits in transform + 1 in fit). Same kernels, same words |
+| `KM_FAST_RBF_STAGED` | rbf-sampler / istella | 76.3 (sklearn 47.6) | DEFAULT (FAST+Apple), rollback MOJOLEARN_KM_FAST_RBF_STAGED_OFF: M3 one run per arm (ea6b2035e) istella 77.6 -> 57.1 ms; w2-w3kf-rbf-q PASS byte-identical | the 102 MB projection comes down through core/staged_download (pinned 8 MiB chunks, copy-out overlapped) instead of one raw host-pointer copy (~3 GB/s); the same transport took x_prep's label-binarizer taxi 563 -> 345 ms. Handing out the pinned memory itself is not done: the caller would read write-combined memory |
+
 ## SVGP wave 2 candidates (lane apple-fast-w2-svgp, 2026-10-04, OPEN)
 
 Base b2b1c22bc. Rows: svgp istella 661 vs gpytorch-cpu 307 ms, taxi 437 vs 248 ms. Binding x_neighbors (`x_neighbors/iter_device.mojo`). FAST + Apple only; RBFTILE and BLKCHOL are default (rollbacks `MOJOLEARN_SVGP_FAST_RBFTILE_OFF`, `MOJOLEARN_SVGP_FAST_BLKCHOL_OFF`), BSPLIT is off unless defined. Quality gate `tools/svgp_fast_quality.py` (r2, rmse, elbo one-sided 1e-4, fixed before results); quality-gated pair `tools/svgp_fast_pair.py`.
@@ -748,3 +767,21 @@ Binding x_cluster (`x_cluster/minibatch_fast.mojo`), FAST + Apple only. Quality 
 | `MOJOLEARN_EIGH_TANGENT_CACHE` | eigh synthetic | lane/apple-fast-eigh-cache 14764dbb8 | gap26-eigh-cache-synthetic-ready | A 43721.3 -> B 44070.7 ms; quality pair PASS (B eigenvalue error 3.5e-7) | DROP-speed, opt-in only |
 | `MOJOLEARN_CAGRA_FAST_IVFG_LOWD` | cagra taxi | lane/apple-fast-w2-cagra 5d7d79cb5 | w2-cagra-lowd-q | taxi recall@10 A 0.997925 -> B 0.997125 (gate: B >= A); istella identical | DROP-quality; LOWD_SEEDS4 queued |
 | py2mojo decomp default | elliptic-envelope istella | lane/apple-fast-py2mojo-decomp 9a550d46c | py2mojo-decomp-elliptic-envelope-istella | A 1253937 -> B 1273419 ms (first valid timings for this row) | no gain |
+| `MOJOLEARN_SHAP_FAST_PIPE` | permutation-shap / kernel-shap istella | lane/apple-fast-w2-shap abd933572 | w2-shap-pipe-*-r1 | quality PASS (phi byte-identical); pshap 28217.4 -> 28271.8 ms, kshap 15418.1 -> 15446.0 ms | DROP-speed (no overlap gained), opt-in only |
+| `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG` | minibatch-kmeans | lane/apple-fast-w2-clres 4d80737b1 | w2-mbk-labrg-* | quality PASS; istella 146.6 -> 144.0, taxi 45.3 -> 46.3 ms | DROP-speed (noise), opt-in only |
+| `MOJOLEARN_ARIMA_FIT_GROUPS` | autoarima | lane/apple-fast-w2-ts 596d0abbb | w2-ts-fitgroups-*-r2 | quality PASS bit-exact; synthetic 9225.3 -> 9268.2, taxi-hourly 13749.1 -> 13072.9 ms; diag: search 8.2 s of 13.7 s; 200-iter search RMSE 75.71 (worse than 74.66) | HOLD (no gain on eligible synthetic row) |
+| PT_SCORE_STABLE centered | power-transformer | lane/apple-fast-pt-precision f88ed2cf6 | w2-pt-centered-quality | arm A dump failed: sklearn reference lambda col 7 not a local f64 NLL minimum (new oracle) | superseded: oracle v2 row below (DEFAULT) |
+| PT_SCORE_STABLE centered (oracle v2) | power-transformer | lane/apple-fast-pt-precision 9c458698d | w2-pt-centered2-quality | quality PASS vs f64 centered-MLE reference (tolerances unchanged); taxi 293.4 -> 190.8 ms, istella 2206.6 -> 1530.5 ms | DEFAULT (FAST+Apple), rollback MOJOLEARN_PT_SCORE_STABLE_OFF |
+
+## PT centered-score WIP checkpoint (2026-10-04)
+
+`MOJOLEARN_PT_SCORE_STABLE`, lane/apple-fast-pt-precision, merged baseline12fdd6697:
+uncompiled/unvalidated repair of heldbc112b172. Centered affine-equivalent
+score/standardized output/inverse, span-derived bracket, stable same-lambda
+float64 oracle with independent Decimal check; existing thresholds unchanged.
+No builds/quality/timings yet; checkpointed for manager handoff, **not accepted**.
+Update: oracle v2 (9c458698d) w2-pt-centered2-quality PASS; promoted to
+FAST+Apple DEFAULT, rollback `MOJOLEARN_PT_SCORE_STABLE_OFF`.
+See [PT_SCORE_STABLE.md](PT_SCORE_STABLE.md) for code scope and exact owed checks.
+| `MOJOLEARN_GBDT_DW_FLAT_GRID` | gbdt-depthwise taxi | lane/apple-fast-w3-dw 1fb97706a | w2-w3dw-* | quality PASS (AUC +0.000107); 11054.9 -> 11822.4 ms | DROP-speed, opt-in only |
+| `MOJOLEARN_ARIMA_SLAB` | autoarima | lane/apple-fast-w3-arima 40fedfcea | w2-w3arima-slab-* | quality PASS bit-exact; synthetic 9219.3 -> 9096.6, taxi-hourly 13763.6 -> 13519.0 ms | HOLD (gain within noise) |

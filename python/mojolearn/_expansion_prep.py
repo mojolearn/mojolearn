@@ -3235,8 +3235,12 @@ class PowerTransformer(_PrepBase):
         pr = _Prog()
         xo = pr.put(arr)
         st, lam = pr.alloc(6 * d), pr.alloc(d)
+        host = _optional_prep_entry(_prep_binding(mode), "x_prep_host_column") is not None
+        # PT_SCORE_STABLE (bit 32, FAST+Apple default, rollback MOJOLEARN_PT_SCORE_STABLE_OFF): the device's centered coordinates; never on the host binding
+        centered = bool(_ptimpute_flags(mode) & 32) and not host
+        anchor, anchor_kind = (pr.alloc(d), pr.alloc(d)) if centered else (_NONE, _NONE)
         pr.stage("col_stats", d, xo, n, d, st)
-        if _optional_prep_entry(_prep_binding(mode), "x_prep_host_column") is not None:
+        if host:
             # the host binding: its own pt_fit (x_prep/host/power.mojo), the same words
             pr.stage("pt_fit", d, xo, n, d, method, st, lam)
         else:
@@ -3266,7 +3270,7 @@ class PowerTransformer(_PrepBase):
                     lg, tv = pr.scratch(1), pr.scratch(1)
                 else:
                     lg, tv = pr.scratch(n * d), pr.scratch(n * d * mmax)
-                pr.stage("pt_init", d, method, st, d, lam, state, leval)
+                pr.stage("pt_init", d, method, st, d, lam, state, leval, anchor, anchor_kind, int(self.standardize))
                 if not tiled:
                     pr.stage("pt_log", n * d, xo, n, d, method, lg)
                 k0 = 0
@@ -3281,7 +3285,7 @@ class PowerTransformer(_PrepBase):
             else:
                 state, leval = pr.alloc(_PT_STATE * d), pr.alloc(d)
                 tv, lg = (pr.alloc(1), pr.alloc(1)) if tiled else (pr.alloc(n * d), pr.alloc(n * d))
-                pr.stage("pt_init", d, method, st, d, lam, state, leval)
+                pr.stage("pt_init", d, method, st, d, lam, state, leval, anchor, anchor_kind, int(self.standardize))
                 if not tiled:
                     pr.stage("pt_log", n * d, xo, n, d, method, lg)
                 for k in range(_PT_EVALS):
@@ -3295,13 +3299,15 @@ class PowerTransformer(_PrepBase):
             # the transformed block is never written: a word
             fused = bool(_ptimpute_flags(mode) & 4)
             tx, st2 = pr.alloc(1) if fused else pr.alloc(n * d), pr.alloc(6 * d)
-            pr.stage("pt_apply", n * d, xo, n, d, lam, method, _NONE, _NONE, tx)
+            pr.stage("pt_apply", n * d, xo, n, d, lam, method, _NONE, _NONE, tx, anchor, anchor_kind)
             pr.stage("col_stats", d, tx, n, d, st2)
             pr.stage("std_params", d, st2, d, mean, scale)
         pr.run(mode)
         if method == 1 and any(v <= 0 for v in pr.values(st + 3 * d, d)):
             raise ValueError("mojolearn: The Box-Cox transformation can only be applied to strictly positive data")
         self.lambdas_ = pr.get(lam, d)
+        self._pt_anchor = pr.get(anchor, d) if centered and self.standardize else None
+        self._pt_anchor_kind = pr.get(anchor_kind, d) if centered and self.standardize else None
         self._mean = pr.get(mean, d) if self.standardize else None
         self._scale = pr.get(scale, d) if self.standardize else None
         self._method = method
@@ -3318,7 +3324,10 @@ class PowerTransformer(_PrepBase):
         mo = pr.put(self._mean) if self.standardize else _NONE
         so = pr.put(self._scale) if self.standardize else _NONE
         out = pr.output(n * d)
-        pr.stage(op, n * d, xo, n, d, lo, self._method, mo, so, out)
+        anchor = getattr(self, "_pt_anchor", None)
+        ao = pr.put(anchor) if anchor is not None else _NONE
+        ko = pr.put(self._pt_anchor_kind) if anchor is not None else _NONE
+        pr.stage(op, n * d, xo, n, d, lo, self._method, mo, so, out, ao, ko)
         pr.run(self.numeric_mode_)
         return pr.get(out, (n, d))
 
