@@ -314,8 +314,8 @@ def gp_kernel_matrix_grad(
             var lsview = dls.create_sub_buffer[DType.float32](Int(spec.ls_off[t]), ln)
             var form = GP_GRAD_RBF
             var ls_arg = spec.ls_len[t]
-            var xa = x.unsafe_ptr()
-            var xb = x2.unsafe_ptr()
+            var xa = x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            var xb = x2.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
             comptime if GP_IDN_GRAD_PRESCALE:
                 # gp_optim.mojo's form: X / length_scale written once for
                 # this leaf, the cells fold the stored quotients
@@ -325,8 +325,8 @@ def gp_kernel_matrix_grad(
                     grid_dim=((n * d + elem_tpb - 1) // elem_tpb, 1, 1), block_dim=(elem_tpb, 1, 1),
                 )
                 ls_arg = Int32(0)
-                xa = xs.unsafe_ptr()
-                xb = xs2.unsafe_ptr()
+                xa = xs.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+                xb = xs2.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
             if kind == GP_K_RBF:
                 ctx.enqueue_function[gp_rbf_kernel](
                     slot.unsafe_ptr(), xa, xb, lsview.unsafe_ptr(),

@@ -280,8 +280,8 @@ def gp_kernel_matrix_grad_dev(
             # GP_IDN_PRESCALE: X / length_scale once per leaf (the table the
             # optimizer's step wrote), then the cells fold the quotients
             var ls_arg = spec.ls_len[t]
-            var xa = x.unsafe_ptr()
-            var xb = x2.unsafe_ptr()
+            var xa = x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            var xb = x2.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
             comptime if GP_IDN_PRESCALE:
                 ctx.enqueue_function[gp_prescale_kernel](
                     xs.unsafe_ptr(), x.unsafe_ptr(), lsview.unsafe_ptr(),
@@ -289,8 +289,8 @@ def gp_kernel_matrix_grad_dev(
                     grid_dim=((n * d + elem_tpb - 1) // elem_tpb, 1, 1), block_dim=(elem_tpb, 1, 1),
                 )
                 ls_arg = Int32(0)
-                xa = xs.unsafe_ptr()
-                xb = xs2.unsafe_ptr()
+                xa = xs.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+                xb = xs2.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
             if kind == GP_K_RBF:
                 ctx.enqueue_function[gp_rbf_kernel](
                     slot.unsafe_ptr(), xa, xb, lsview.unsafe_ptr(),
