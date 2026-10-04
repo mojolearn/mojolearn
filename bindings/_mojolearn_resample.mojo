@@ -42,6 +42,7 @@ from resample.estimator import (
     RESAMPLE_IDX_DIRECT,
     RESAMPLE_GPU_GATHER,
     resample_gather_gpu,
+    resample_fast_defines,
 )
 
 
@@ -57,6 +58,15 @@ def resample_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER as the `NUMERIC_*` code: 0 FAST, 1 IDENTICAL, 2
     DETERMINISTIC."""
     return PythonObject(GLOBAL_NUMERIC_MODE)
+
+
+def resample_fast_defines_binding() raises -> PythonObject:
+    """The FAST + Apple candidate defines this build was compiled with, as
+    resample/estimator.mojo `resample_fast_defines`' bit mask (0 unless the
+    build is FAST on Apple with a `-D MOJOLEARN_RESAMPLE_FAST_*` / `-D
+    MOJOLEARN_CV_FAST_*` define). Python switches on this, never on an
+    environment variable (lane apple-fast-rec-resample, 2026-10-04)."""
+    return PythonObject(resample_fast_defines())
 
 
 def resample_vendor_binding() raises -> PythonObject:
@@ -529,6 +539,7 @@ def PyInit__mojolearn_resample() abi("C") -> PythonObject:
         m.def_function[resample_ranges_parallel_available]("resample_ranges_parallel_available")
         m.def_function[resample_vendor_binding]("resample_vendor")
         m.def_function[resample_numeric_mode_binding]("resample_numeric_mode")
+        m.def_function[resample_fast_defines_binding]("resample_fast_defines")
         m.def_function[bootstrap_binding]("bootstrap")
         m.def_function[bootstrap_unpaired_binding]("bootstrap_unpaired")
         m.def_function[permutation_test_binding]("permutation_test")

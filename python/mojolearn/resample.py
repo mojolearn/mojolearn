@@ -364,6 +364,27 @@ def _gpu_gather(arrays, n, count, seed, numeric_mode):
     return None
 
 
+#: Bits of the resample binding's `resample_fast_defines()` mask
+#: (resample/estimator.mojo): FAST + Apple candidate defines, default OFF.
+FAST_DEFINE_CV_SLICE = 32
+FAST_DEFINE_CV_TRUST_FOLDS = 64
+
+
+def fast_defines(numeric_mode=None):
+    """The FAST + Apple candidate defines the resample binding was built
+    with (`-D MOJOLEARN_RESAMPLE_FAST_*`, `-D MOJOLEARN_CV_FAST_*`), as the
+    binding's bit mask; 0 off the FAST tier, on a build without the
+    function, or when the binding cannot be loaded. No environment read."""
+    if (numeric_mode or _backend.default_mode()) != "fast":
+        return 0
+    try:
+        mod = _extension(numeric_mode)
+    except Exception:
+        return 0
+    fn = getattr(mod, "resample_fast_defines", None)
+    return 0 if fn is None else int(fn())
+
+
 def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=None,
              sample_weight=None, numeric_mode=None):
     """`sklearn.utils.resample(*arrays, replace=..., n_samples=...,
