@@ -129,6 +129,9 @@ from core.host_parallel import host_parallelize
 
 from checks.numerics import ftz, identical_div, identical_log, identical_mul_add, identical_sqrt
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+#: lane fam2-prep-metrics: the IDENTICAL label epilogues are soft binary64 in a chunked
+#: order (metrics/impl/stats/detail/sf_epilogue_core.mojo), on the device and here alike
+from metrics.impl.stats.detail.sf_epilogue_core import IDN_METRIC_EPI, entropy_sf_list, mi_sf_list
 
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
@@ -727,14 +730,17 @@ def _host_entropy(
         return 1.0
     var n_unique = Int(upper - lower + 1)
     var counts = host_histogram(labels, size, lower, n_unique)
-    var acc = Float32(0.0)
-    var fsize = Float32(size)
-    for i in range(n_unique):
-        var p = ftz(Float32(counts[i]) / fsize)
-        if p != Float32(0.0):
-            var lp = ftz(identical_log(p))
-            acc = ftz(identical_mul_add(-p, lp, acc))
-    return Float64(acc)
+    comptime if IDN_METRIC_EPI:
+        return entropy_sf_list(counts, size)
+    else:
+        var acc = Float32(0.0)
+        var fsize = Float32(size)
+        for i in range(n_unique):
+            var p = ftz(Float32(counts[i]) / fsize)
+            if p != Float32(0.0):
+                var lp = ftz(identical_log(p))
+                acc = ftz(identical_mul_add(-p, lp, acc))
+        return Float64(acc)
 
 
 def host_entropy_ptr(
@@ -755,14 +761,17 @@ def host_entropy_ptr(
                 value = Int32(1)
         var bin = Int(value - lower)
         counts[bin] = counts[bin] + Int32(1)
-    var acc = Float32(0.0)
-    var fsize = Float32(size)
-    for i in range(n_unique):
-        var p = ftz(Float32(counts[i]) / fsize)
-        if p != Float32(0.0):
-            var lp = ftz(identical_log(p))
-            acc = ftz(identical_mul_add(-p, lp, acc))
-    return Float64(acc)
+    comptime if IDN_METRIC_EPI:
+        return entropy_sf_list(counts, size)
+    else:
+        var acc = Float32(0.0)
+        var fsize = Float32(size)
+        for i in range(n_unique):
+            var p = ftz(Float32(counts[i]) / fsize)
+            if p != Float32(0.0):
+                var lp = ftz(identical_log(p))
+                acc = ftz(identical_mul_add(-p, lp, acc))
+        return Float64(acc)
 
 
 def host_mutual_info(
@@ -790,19 +799,22 @@ def _host_mutual_info(
     var c = host_contingency(first, second, size, lower, upper)
     var a = host_row_sums(c, k)
     var b = host_col_sums(c, k)
-    var acc = Float32(0.0)
-    var fsize = Float32(size)
-    for i in range(k):
-        for j in range(k):
-            var cij = c[i * k + j]
-            var ab = a[i] * b[j]
-            if ab != Int64(0) and cij != Int32(0):
-                var fc = Float32(cij)
-                var l1 = ftz(identical_log(ftz(fsize * fc)))
-                var l2 = ftz(identical_log(ftz(Float32(ab))))
-                var diff = ftz(l1 - l2)
-                acc = ftz(identical_mul_add(fc, diff, acc))
-    return Float64(ftz(acc / fsize))
+    comptime if IDN_METRIC_EPI:
+        return mi_sf_list(c, a, b, k, size)
+    else:
+        var acc = Float32(0.0)
+        var fsize = Float32(size)
+        for i in range(k):
+            for j in range(k):
+                var cij = c[i * k + j]
+                var ab = a[i] * b[j]
+                if ab != Int64(0) and cij != Int32(0):
+                    var fc = Float32(cij)
+                    var l1 = ftz(identical_log(ftz(fsize * fc)))
+                    var l2 = ftz(identical_log(ftz(Float32(ab))))
+                    var diff = ftz(l1 - l2)
+                    acc = ftz(identical_mul_add(fc, diff, acc))
+        return Float64(ftz(acc / fsize))
 
 
 def host_mutual_info_ptr(
@@ -844,19 +856,22 @@ def host_mutual_info_ptr(
         c[idx] = c[idx] + Int32(1)
     var a = host_row_sums(c, k)
     var b = host_col_sums(c, k)
-    var acc = Float32(0.0)
-    var fsize = Float32(size)
-    for i in range(k):
-        for j in range(k):
-            var cij = c[i * k + j]
-            var ab = a[i] * b[j]
-            if ab != Int64(0) and cij != Int32(0):
-                var fc = Float32(cij)
-                var l1 = ftz(identical_log(ftz(fsize * fc)))
-                var l2 = ftz(identical_log(ftz(Float32(ab))))
-                var diff = ftz(l1 - l2)
-                acc = ftz(identical_mul_add(fc, diff, acc))
-    return Float64(ftz(acc / fsize))
+    comptime if IDN_METRIC_EPI:
+        return mi_sf_list(c, a, b, k, size)
+    else:
+        var acc = Float32(0.0)
+        var fsize = Float32(size)
+        for i in range(k):
+            for j in range(k):
+                var cij = c[i * k + j]
+                var ab = a[i] * b[j]
+                if ab != Int64(0) and cij != Int32(0):
+                    var fc = Float32(cij)
+                    var l1 = ftz(identical_log(ftz(fsize * fc)))
+                    var l2 = ftz(identical_log(ftz(Float32(ab))))
+                    var diff = ftz(l1 - l2)
+                    acc = ftz(identical_mul_add(fc, diff, acc))
+        return Float64(ftz(acc / fsize))
 
 
 def host_homogeneity_score(
