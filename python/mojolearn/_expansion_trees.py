@@ -3127,7 +3127,8 @@ def _agn_device_forest(explainer, model):
         m._prepare_resident_forest()
     except (AttributeError, ImportError, RuntimeError, ValueError):
         return None
-    arrays = tuple(getattr(m, name) for name in ("_offsets", "_colid", "_quesval", "_left_child", "_leaves"))
+    names = ("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
+    arrays = tuple(getattr(m, name) for name in names)  # glue: the five model arrays by name
     return arrays, int(m._num_outputs), int(m._n_trees), rf_input
 
 
@@ -3179,7 +3180,8 @@ class _AgnosticExplainer(_TreesEnsembleBase):
         if dev is None:
             return False
         arrays, k, n_trees, rf_input = dev
-        b.x_trees_agn_model_load([addr_ro(a, name="forest") for a in arrays], addr_ro(self._bg, name="data"),
+        faddr = [addr_ro(a, name="forest") for a in arrays]  # glue: one address per model array (five)
+        b.x_trees_agn_model_load(faddr, addr_ro(self._bg, name="data"),
                                  [n_trees, arrays[1].size, k, self._bg.shape[1], self._bg.shape[0], rf_input])
         return True
 
