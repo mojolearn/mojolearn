@@ -49,6 +49,7 @@ comptime _DEVCTX_SLOT = "MojoResampleContextIdentical" if _DEVCTX_MODE == _DEVCT
 
 from core.identity_trace import IdentityTrace
 from core.segmented_sort import SORT_BLOCK, segmented_sort_keys_f32
+from resample.order_select import IDN_BOOT_SELECT, boot_quantile_select_kernel
 from metrics.checks.pinned_sum import (
     PINNED_SUM_TPB,
     PINNED_SUM_W,
@@ -936,6 +937,40 @@ def _owner_offset(rank: Int) -> Int:
     return 0
 
 
+def _launch_boot_select_at[
+    tpb: Int
+](
+    ctx: DeviceContext,
+    mut theta: DeviceBuffer[DType.float32],
+    mut dx: DeviceBuffer[DType.float32],
+    key: UInt64,
+    r_first: Int,
+    n_resamples: Int,
+    n: Int,
+    n_features: Int,
+    q: Float32,
+) raises:
+    """K12: `boot_quantile_select_kernel`, one block per replicate."""
+    comptime kern = boot_quantile_select_kernel[tpb]
+    ctx.enqueue_function[kern](
+        theta.unsafe_ptr(),
+        dx.unsafe_ptr(),
+        key_lo(key),
+        key_hi(key),
+        Int32(r_first),
+        Int32(n_resamples),
+        Int32(n),
+        Int32(n),
+        Int32(n_features),
+        Int32(0),
+        q,
+        grid_dim=(n_resamples, 1, 1),
+        block_dim=(tpb, 1, 1),
+    )
+    _ = theta.unsafe_ptr()
+    _ = dx.unsafe_ptr()
+
+
 def _bootstrap_theta(
     ctx: DeviceContext,
     mut theta: DeviceBuffer[DType.float32],
@@ -953,6 +988,24 @@ def _bootstrap_theta(
     """Replicates `[r_first, r_first + n_resamples)` into `theta`. Every
     replicate is a pure function of its global index and the sample
     (DEVIATION 1690(b), the r_first batch-invariance handle)."""
+    # K12 (IDENTICAL): the quantile by bisection on the draws' sorting keys,
+    # one block per replicate, nothing materialized or sorted
+    # (resample/order_select.mojo; the same words as the sort path)
+    comptime if IDN_BOOT_SELECT:
+        if statistic == STAT_QUANTILE:
+            if tpb == 256:
+                _launch_boot_select_at[256](ctx, theta, dx, key, r_first, n_resamples, n, n_features, q_or_prop)
+            elif tpb == 128:
+                _launch_boot_select_at[128](ctx, theta, dx, key, r_first, n_resamples, n, n_features, q_or_prop)
+            elif tpb == 64:
+                _launch_boot_select_at[64](ctx, theta, dx, key, r_first, n_resamples, n, n_features, q_or_prop)
+            else:
+                raise Error(
+                    "bootstrap: threads-per-block must be 64, 128 or 256; got "
+                    + String(tpb)
+                )
+            ctx.synchronize()
+            return
     if stat_needs_sort(statistic):
         var cells = n_resamples * n
         var vals = ctx.enqueue_create_buffer[DType.float32](cells)
