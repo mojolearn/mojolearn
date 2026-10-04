@@ -47,6 +47,7 @@ from gbdt.data.permutation import (
     ctrs_estimation_permutation,
 )
 from gbdt.grid_creator.binarization import (
+    IDN_ORDERED_RMSE_DEVICE_GRID,
     BORDER_TYPE_GREEDY_LOG_SUM,
     best_split,
     border_type_from_name,
@@ -2529,18 +2530,52 @@ def train_ordered_rmse(
     var fold_counts = List[Int]()
     var one_hot = List[Bool]()
     var nan_treatment = List[Int]()
-    for f in range(n_features):
-        var column = List[Float32]()
-        for r in range(n_rows):
-            var value = x_colmajor[f * n_rows + r]
-            if not isfinite(value):
+    comptime if IDN_ORDERED_RMSE_DEVICE_GRID:
+        # lane/fam-gbdt: the grid on the device, over every row (see the
+        # constant in `gbdt/grid_creator/binarization.mojo`). The finite
+        # check keeps this entry's refusal and its sentence.
+        for i in range(n_rows * n_features):
+            if not isfinite(x_colmajor[i]):
                 raise Error("train_ordered_rmse requires finite numeric features")
-            column.append(value)
-        var grid = best_split(column^, border_count)
-        fold_counts.append(len(grid))
-        borders.append(grid^)
-        one_hot.append(False)
-        nan_treatment.append(NAN_TREATMENT_AS_IS)
+        var grid_cols = List[MutPointer[Float32, MutUntrackedOrigin]](
+            capacity=n_features
+        )
+        for f in range(n_features):
+            grid_cols.append(
+                rebind[MutPointer[Float32, MutUntrackedOrigin]](
+                    x_colmajor.unsafe_ptr()
+                )
+                + f * n_rows
+            )
+        var got = device_float_borders(
+            ctx, grid_cols, n_rows, n_rows, border_count, NAN_MODE_FORBIDDEN,
+            generate_seed_for_borders(UInt64(0)),
+        )
+        var dev_grids = got[0].copy()
+        if len(dev_grids) != n_features:
+            raise Error(
+                "train_ordered_rmse: the device border build returned "
+                + String(len(dev_grids)) + " grids for "
+                + String(n_features) + " features"
+            )
+        for f in range(n_features):
+            fold_counts.append(len(dev_grids[f]))
+            borders.append(dev_grids[f].copy())
+            one_hot.append(False)
+            nan_treatment.append(NAN_TREATMENT_AS_IS)
+    else:
+        for f in range(n_features):
+            var column = List[Float32]()
+            for r in range(n_rows):
+                var value = x_colmajor[f * n_rows + r]
+                if not isfinite(value):
+                    raise Error("train_ordered_rmse requires finite numeric features")
+                column.append(value)
+            var grid = best_split(column^, border_count)
+            fold_counts.append(len(grid))
+            borders.append(grid^)
+            one_hot.append(False)
+            nan_treatment.append(NAN_TREATMENT_AS_IS)
     var layout = build_layout(fold_counts)
     var cindex = _build_cindex_from_floats(ctx, x_colmajor, n_rows, borders, fold_counts)
     var result = fit_ordered_rmse(
