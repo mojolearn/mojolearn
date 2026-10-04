@@ -9,7 +9,7 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr
-from checks.numerics import identical_log64, GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import identical_log64, GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.python import Python
@@ -856,12 +856,25 @@ comptime _XT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_
 comptime _XT_NATIVE_SPLITS = _XT_FAST_APPLE and not is_defined["MOJOLEARN_TE_NATIVE_SPLITS_OFF"]()
 comptime _XT_ADA_SESSION = _XT_FAST_APPLE and not is_defined["MOJOLEARN_TE_ADA_SESSION_OFF"]()
 comptime _XT_ADA_SESSION_SHARE = _XT_ADA_SESSION and not is_defined["MOJOLEARN_TE_ADA_SESSION_SHARE_OFF"]()
+#: fam-forests (2026-10-04), an IDENTICAL build's switch (bit 32, every
+#: vendor): the AdaBoost members fit ONE staged device copy of X through the
+#: EXACT forest data session (the session DART opens by default; never
+#: "share"), instead of every member scanning, transposing and uploading X
+#: (the classifier) or gathering its rows on the host and uploading them
+#: (the regressor). Each member still draws its own quantile sample, so its
+#: forest is the one its own fit returns: no bit moves and the host column
+#: (which has no session) is untouched. `-D MOJOLEARN_IDN_ADA_SESSION_OFF`
+#: clears it.
+comptime _XT_IDN_ADA_SESSION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_ADA_SESSION_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 comptime XTREES_FAST_SWITCHES = (
     (1 if _XT_NATIVE_SPLITS else 0)
     + (2 if _XT_ADA_SESSION else 0)
     + (4 if _XT_ADA_SESSION_SHARE else 0)
     + (8 if agn_dev.KSHAP_FAST_BATCH else 0)
     + (16 if agn_dev.AGN_IDN_SYN_POOL else 0)
+    + (32 if _XT_IDN_ADA_SESSION else 0)
 )
 
 
@@ -869,7 +882,8 @@ def fast_switches_binding() raises -> PythonObject:
     """`XTREES_FAST_SWITCHES`: bit 1 MOJOLEARN_TE_NATIVE_SPLITS, bit 2
     MOJOLEARN_TE_ADA_SESSION, bit 4 MOJOLEARN_TE_ADA_SESSION_SHARE, bit 8
     MOJOLEARN_KSHAP_FAST_BATCH, bit 16 MOJOLEARN_AGN_IDN_SYN_POOL (an
-    IDENTICAL build's switch; both in xtrees/agnostic_device.mojo)."""
+    IDENTICAL build's switch; both in xtrees/agnostic_device.mojo), bit 32
+    `_XT_IDN_ADA_SESSION` (an IDENTICAL build's switch)."""
     return PythonObject(XTREES_FAST_SWITCHES)
 
 
