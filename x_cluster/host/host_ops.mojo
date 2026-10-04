@@ -28,6 +28,7 @@ from x_cluster.host.moments_gemm import gemm_fold_cov, gemm_fold_means
 
 from x_cluster.bodies import (
     FPtr,
+    splitmix_at,
     IPtr,
     cov_cell,
     argmax_row,
@@ -764,6 +765,24 @@ struct HostOps(ClusterOps):
     def mb_assign(mut self, src: Int, d: Int, idx: Int, m: Int, c: Int, k: Int, labels: Int, dist: Int, dst: Int) raises:
         self.gather_rows(src, d, idx, m, dst)
         self.nearest(dst, m, c, k, d, labels, dist)
+
+    def mb_draw(mut self, idx: Int, m: Int, n: Int, state: UInt64) raises:
+        var pi = self._ip(idx)
+        for t in range(m):
+            pi[t] = Int32(Int(splitmix_at(state, UInt64(t + 1)) % UInt64(n)))
+
+    def fold_at(mut self, a: Int, n: Int, mode: Int, dst: Int, off: Int, th: Int, tl: Int) raises:
+        var pa = self._fp(a)
+        var v = ff_fold_host(mode, pa, pa, pa, n)
+        var po = self._fp(dst)
+        po[off] = v.hi
+        po[off + 1] = v.lo
+
+    def copy_at(mut self, src: Int, n: Int, dst: Int, off: Int) raises:
+        var ps = self._fp(src)
+        var pd = self._fp(dst)
+        for t in range(n):
+            pd[off + t] = ps[t]
 
     # ------------------------------------------------------------------
     # lane cgr2-cluster: the post-processing primitives, host column

@@ -241,6 +241,23 @@ trait ClusterOps(Movable):
         lane/neural-pass133)."""
         ...
 
+    def mb_draw(mut self, idx: Int, m: Int, n: Int, state: UInt64) raises:
+        """idx[t] = draw t + 1 of the splitmix64 stream whose state is
+        `state`, `% n`, t < m: `SplitMix64.below(n)` m times, by counter
+        (fam2-cluster)."""
+        ...
+
+    def fold_at(mut self, a: Int, n: Int, mode: Int, dst: Int, off: Int, th: Int, tl: Int) raises:
+        """`fold_into` of the one slot `a` (FM_VAL, FM_SQRT: the modes that
+        read `a` alone) left in dst[off], dst[off + 1]; `th`, `tl` float
+        slots of `minibatch.mb_fold_scratch(n)` words the device's levels
+        use (the host ignores them)."""
+        ...
+
+    def copy_at(mut self, src: Int, n: Int, dst: Int, off: Int) raises:
+        """dst[off + t] = src[t], t < n (float slots)."""
+        ...
+
     def agglo_on_device(self) -> Bool:
         """True on the GPU column: `agglo_merge` runs the unconstrained
         agglomerative merge loop on the device (lane hr2-mds-agglo). The

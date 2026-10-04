@@ -33,6 +33,7 @@ from x_cluster.bodies import (
     gauss_q_cell,
     nk_cell,
     IDN_BGMM_NK_LEVELS,
+    splitmix_at,
     pdist_cell,
     resp_row,
     xk_cell,
@@ -2638,6 +2639,54 @@ struct DeviceOps(ClusterOps):
             )
         self._ph1("mb_update")
 
+    def mb_draw(mut self, idx: Int, m: Int, n: Int, state: UInt64) raises:
+        self._ph0()
+        self.ctx.enqueue_function[_mb_draw_kernel](
+            self._ip(idx), Int32(m), Int32(n), state, grid_dim=_grid(m), block_dim=TPB,
+        )
+        self._ph1("mb_draw")
+
+    def fold_at(mut self, a: Int, n: Int, mode: Int, dst: Int, off: Int, th: Int, tl: Int) raises:
+        self._ph0()
+        var po = self._fp(dst)
+        var pa = self._fp(a)
+        if n <= FOLD_CHUNK:
+            # one chunk (or none): `_fold` allocates nothing
+            self._fold(mode, pa, pa, pa, n, po, po + 1, off)
+        else:
+            # `_fold`'s levels with the partials in the caller's two scratch
+            # slots (level by level, each after the last) and no allocation
+            var ph = self._fp(th)
+            var pl = self._fp(tl)
+            var nch = (n + FOLD_CHUNK - 1) // FOLD_CHUNK
+            var md = mode
+            var xa = pa
+            var xb = pa
+            var cnt = n
+            var so = 0
+            while nch > 1:
+                self.ctx.enqueue_function[ff_chunk_kernel](
+                    Int32(md), xa, xb, xa, Int32(cnt), ph + so, pl + so, Int32(0), grid_dim=nch, block_dim=RTPB,
+                )
+                md = FM_FF
+                xa = ph + so
+                xb = pl + so
+                cnt = nch
+                so += nch
+                nch = (nch + FOLD_CHUNK - 1) // FOLD_CHUNK
+            self.ctx.enqueue_function[ff_chunk_kernel](
+                Int32(md), xa, xb, xa, Int32(cnt), po, po + 1, Int32(off), grid_dim=1, block_dim=RTPB,
+            )
+        self._ph1("fold_at")
+
+    def copy_at(mut self, src: Int, n: Int, dst: Int, off: Int) raises:
+        self._ph0()
+        if n > 0:
+            self.ctx.enqueue_function[_copy_at_kernel](
+                self._fp(src), Int32(n), self._fp(dst), Int32(off), grid_dim=_grid(n), block_dim=TPB,
+            )
+        self._ph1("copy_at")
+
     # ------------------------------------------------------------------
     # lane cgr2-cluster: the post-processing primitives on the device
     def _keys(mut self, n: Int) raises -> UPtr:
@@ -3210,6 +3259,20 @@ struct DeviceOps(ClusterOps):
 
 
 
+
+
+def _mb_draw_kernel(idx: IPtr, m: Int32, n: Int32, state: UInt64):
+    """idx[t] = `SplitMix64.below(n)`'s draw t + 1 of the stream at `state`
+    (fam2-cluster: the unit-weight batch rows, drawn where the data is)."""
+    var t = _tid()
+    if t < Int(m):
+        idx[t] = Int32(Int(splitmix_at(state, UInt64(t + 1)) % UInt64(Int(n))))
+
+
+def _copy_at_kernel(src: FPtr, n: Int32, dst: FPtr, off: Int32):
+    var t = _tid()
+    if t < Int(n):
+        dst[Int(off) + t] = src[t]
 
 
 def _mb_centers_kernel(b: FPtr, batch: Int32, labels: IPtr, c: FPtr, w: FPtr, k: Int32, d: Int32):
