@@ -23,6 +23,7 @@ from max.gpu.host import DeviceContext
 from x_linear.ops import FP, IP, fs, fd, fa, fmad, ld, st, ldi, sti, i2f, fill, copy
 from x_linear.tops import fold_parts, fold_blocks, fold_fa, FOLD_BLOCK
 from x_linear.team import device_team, team_work, LINEAR_TPB
+from x_linear.finite_device import XLIN_IDN_DEV_FINITE, xlin_finite_device
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.moments_grid import mg_means_kernel, mg_cross_kernel, mg_tiles, MG_NT
 from x_linear.fast_gram import fast_gram_into
@@ -229,6 +230,8 @@ def ard_fit_grid(
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    comptime if XLIN_IDN_DEV_FINITE:
+        xlin_finite_device(ctx, dx, n_x, y, n_y)
     ctx.enqueue_copy(dst_buf=dfp, src_ptr=hfp.unsafe_ptr())
     var xp = dx.unsafe_ptr()
     var yp = dy.unsafe_ptr()

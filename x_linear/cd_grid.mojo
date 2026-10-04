@@ -28,6 +28,7 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 from max.gpu.host import DeviceContext
+from x_linear.finite_device import XLIN_IDN_DEV_FINITE, xlin_finite_device
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.ops import FP, IP, fa, fm, fs, fd, fmad, ld, st, ldi, i2f, fill
 from x_linear.team import Team, TEAM_SLOTS, LINEAR_TPB, team_at
@@ -624,6 +625,8 @@ def enetcv_fit_grid(
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    comptime if XLIN_IDN_DEV_FINITE:
+        xlin_finite_device(ctx, dx, n_x, y, n_y)
     ctx.enqueue_copy(dst_buf=dip, src_ptr=hip.unsafe_ptr())
     if len(hfp) > 0:
         ctx.enqueue_copy(dst_buf=dfp, src_ptr=hfp.unsafe_ptr())

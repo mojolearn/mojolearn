@@ -19,6 +19,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from x_linear.ops import FP, IP, ld, st, fexp, fm, fd, i2f
 from x_linear.team import team_at
 from x_linear.tops import fold_blocks, fold_parts, FOLD_BLOCK
+from x_linear.finite_device import XLIN_IDN_DEV_FINITE, xlin_finite_device
 from x_linear.witness import Witness, witness_end
 from x_linear.huber import huber_map_row, huber_finish_t, _huber_part
 from x_linear.vfold import vscratch
@@ -204,6 +205,8 @@ def huber_fit_grid(
     var p = d + 2 if fi else d + 1
     var c = ctx.copy()
     var obj = HuberObjective(c, x, n_x, y, n_y, n, d, fi, sw, fp[0], fp[1])
+    comptime if XLIN_IDN_DEV_FINITE:
+        xlin_finite_device(c, obj.x, n_x, y, n_y)
     var wit = Witness(c, lbd_witness_words(obj.blocks(), p))
     var lw = c.enqueue_create_buffer[DType.float32](lbd_words(p))
     lw.enqueue_fill(Float32(0))
