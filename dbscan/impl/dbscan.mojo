@@ -67,6 +67,17 @@ from dbscan.impl.neighbors.epsilon_neighborhood import DBSCAN_METRIC_L2
 #: follow the plan, as they already follow the device's memory size. An
 #: explicit `max_mbytes_per_batch` keeps the reference sizing.
 #: `-D MOJOLEARN_IDN_DBSCAN_RBC_ONE_BATCH_OFF=1` restores it everywhere.
+#: fam2-cluster (2026-10-04): the core mask of `prediction_data=True` goes
+#: straight into the caller's array (see `IDN_DBSCAN_DIRECT_OUT` in
+#: `dbscan/estimator.mojo`; the same `_OFF` define restores the staged copy).
+comptime IDN_DBSCAN_DIRECT_CORE_OUT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
 comptime IDN_DBSCAN_RBC_ONE_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
@@ -379,7 +390,18 @@ def dbscan_fit_impl_weighted(
         has_weights,
         edge_cap,
     )
-    if out_core_addr != 0:
+    var direct_core_out = False
+    comptime if IDN_DBSCAN_DIRECT_CORE_OUT:
+        direct_core_out = True
+    if out_core_addr != 0 and direct_core_out:
+        ctx.enqueue_copy(
+            dst_ptr=MutPointer[UInt8, MutUntrackedOrigin](
+                unsafe_from_address=out_core_addr
+            ),
+            src_buf=core,
+        )
+        ctx.synchronize()
+    elif out_core_addr != 0:
         var hc = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
         ctx.synchronize()
         ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=core)
