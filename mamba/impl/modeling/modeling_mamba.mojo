@@ -200,6 +200,7 @@ from mamba.impl.modules.afn_defines import (
     AFN_MAMBA1_FUSE_IN,
     AFN_MAMBA_ARENA,
     AFN_MAMBA_DEVICE_REFUSAL,
+    IDN_MAMBA_ARENA,
 )
 from mamba.impl.modules.afn_arena import MambaArena
 from mamba.impl.modules.afn_refusal import AfnRefusalBatch
@@ -701,6 +702,18 @@ def _m1_stage_sync(ctx: DeviceContext, trace: IdentityTrace) raises:
             ctx.synchronize()
     else:
         ctx.synchronize()
+
+
+def _m1_final_sync(ctx: DeviceContext, trace: IdentityTrace) raises:
+    """The block forward's LAST stage wait. lane fam-lm: under
+    IDN_MAMBA_ARENA (IDENTICAL) the per-stage waits above are traced-only,
+    but this one stays unconditional, so every caller that is not the arena
+    binding (sessions, gates) still gets a forward that has completed when
+    it returns, as main's did."""
+    comptime if IDN_MAMBA_ARENA:
+        ctx.synchronize()
+    else:
+        _m1_stage_sync(ctx, trace)
 
 
 struct MambaDeviceState(Movable):
@@ -1903,7 +1916,7 @@ def mamba_block_forward(
             grid_dim=(_grid(m * dm), 1, 1),
             block_dim=(MAMBA_TPB, 1, 1),
         )
-    _m1_stage_sync(ctx, trace)
+    _m1_final_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".residual.out", stages.residual_out, m * dm
     )

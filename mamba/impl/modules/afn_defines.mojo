@@ -42,7 +42,7 @@ docs/apple-fast/ab-neural/mamba.md the one-paragraph mechanisms):
 """
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 #: The FAST tier on an Apple GPU: the only place any afn-mamba switch can be on.
 comptime AFN_APPLE_FAST = (
@@ -50,6 +50,36 @@ comptime AFN_APPLE_FAST = (
 )
 
 comptime AFN_MAMBA_ALL = AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA_ALL"]()
+
+#: lane fam-lm (2026-10-04), IDENTICAL on a device column (NVIDIA, AMD and
+#: Apple alike; never the host column). Both switches are plumbing: the
+#: kernels, their launch geometry and every fold are main's, so no bit moves.
+#:
+#: IDN_MAMBA_ARENA (default ON; `-D MOJOLEARN_IDN_MAMBA_ARENA_OFF` or
+#: `-D MOJOLEARN_IDN_ALL_OFF` restores main): the arena form below under
+#: IDENTICAL. A Mamba-1/2/3 block call's weights, state, stages and x are
+#: views of ONE allocation filled once, the caller's arrays are copied in
+#: with no per-buffer wait, the per-stage waits are kept only on a traced
+#: run, and the call waits once at its end. Main paid one allocation, one
+#: fill and one wait per buffer (about fifty per forward) plus a wait per
+#: stage.
+#:
+#: IDN_MAMBA_DEVICE_REFUSAL (default ON; `-D
+#: MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
+#: restores main): the non-finite refusal of every named input as device
+#: reductions with ONE readback per call (afn_refusal.mojo), in the same
+#: name order with the same message, where main downloaded each named buffer
+#: to the host and walked it there (Mamba-1, Mamba-2) or read back once per
+#: name (Mamba-3).
+comptime _IDN_MAMBA_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime IDN_MAMBA_ARENA = _IDN_MAMBA_DEVICE and not is_defined["MOJOLEARN_IDN_MAMBA_ARENA_OFF"]()
+comptime IDN_MAMBA_DEVICE_REFUSAL = _IDN_MAMBA_DEVICE and not is_defined[
+    "MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF"
+]()
 
 comptime AFN_MAMBA1_CHUNKSCAN = AFN_MAMBA_ALL or (
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"]()
@@ -65,10 +95,10 @@ comptime AFN_MAMBA3_SISO_FUSED = AFN_MAMBA_ALL or (
 )
 comptime AFN_MAMBA_ARENA = AFN_MAMBA_ALL or (
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA_ARENA"]()
-)
+) or IDN_MAMBA_ARENA
 comptime AFN_MAMBA_DEVICE_REFUSAL = AFN_MAMBA_ALL or (
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL"]()
-)
+) or IDN_MAMBA_DEVICE_REFUSAL
 
 
 def afn_mamba_switches() -> String:

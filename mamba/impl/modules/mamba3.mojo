@@ -137,6 +137,7 @@ from mamba.impl.modules.afn_defines import (
     AFN_MAMBA3_SISO_FUSED,
     AFN_MAMBA_ARENA,
     AFN_MAMBA_DEVICE_REFUSAL,
+    IDN_MAMBA_ARENA,
 )
 from mamba.impl.modules.afn_arena import MambaArena
 from mamba.impl.modules.afn_refusal import AfnRefusalBatch
@@ -624,6 +625,18 @@ def _m3_stage_sync(ctx: DeviceContext, trace: IdentityTrace) raises:
             ctx.synchronize()
     else:
         ctx.synchronize()
+
+
+def _m3_final_sync(ctx: DeviceContext, trace: IdentityTrace) raises:
+    """The block forward's LAST stage wait. lane fam-lm: under
+    IDN_MAMBA_ARENA (IDENTICAL) the per-stage waits above are traced-only,
+    but this one stays unconditional, so every caller that is not the arena
+    binding (the prefill session, the backward's tail, gates) still gets a
+    forward that has completed when it returns, as main's did."""
+    comptime if IDN_MAMBA_ARENA:
+        ctx.synchronize()
+    else:
+        _m3_stage_sync(ctx, trace)
 
 
 # ===========================================================================
@@ -1676,7 +1689,7 @@ def mamba3_block_forward(
             grid_dim=(_grid(m * dm), 1, 1),
             block_dim=(MAMBA3_TPB, 1, 1),
         )
-    _m3_stage_sync(ctx, trace)
+    _m3_final_sync(ctx, trace)
 
     # ---- the card, contract section 7's order (input.x recorded above).
     trace.record_device[DType.float32](
