@@ -1,0 +1,1 @@
+AFB tag=gap26-orders-current-synthetic family=algos lane=autoarima ds=synthetic mode=fast head=7ba385b30 status=ok median_ms=9287.286750040948 runs=[9287.286750040948] digest=9bdde6d5440d1cb6 q=forecast_rmse=2.624119555180116
