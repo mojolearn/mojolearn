@@ -525,7 +525,7 @@ def logcv_fit_grid(
     scores.enqueue_fill(Float32(0))
     var cvals = c.enqueue_create_buffer[DType.float32](max(nc, 1))
     var hc = List[Float32](length=max(nc, 1), fill=Float32(0))
-    for ci in range(nc):
+    for ci in range(nc):  # small-loop(nc: C grid values): the user's Cs list, one launch constant each
         hc[ci] = fp[1 + ci]
     c.enqueue_copy(dst_buf=cvals, src_ptr=hc.unsafe_ptr())
     # the StratifiedKFold ids from the device labels (the caller sent zeros)
