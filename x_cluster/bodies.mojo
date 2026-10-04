@@ -111,6 +111,74 @@ def kth_smallest_row(m: FPtr, n_cols: Int, k: Int, dst: FPtr, row: Int):
     dst[row] = bitcast[DType.float32](lo)
 
 
+# K6 (IDENTICAL, lane ml-cluster-nbrs 2026-10-04): MeanShift's per-shift sum
+# over the rows within the bandwidth is a BLOCKED fold: rows in chunks of
+# MSI_T, each chunk folded ascending from zero, the chunk partials folded
+# ascending from zero. That fixed shape lets the device run a (seed, row
+# chunk) grid (x_cluster/meanshift_idn.mojo) instead of one block per seed;
+# this body (the host column and the one-thread fallback) restates it add for
+# add. The count is an integer. Bits move from the one-chain fold on every
+# vendor and the host together (old bits do not matter); a blocked float sum
+# is at least as accurate as the n-long chain. Scratch is 2 * ns * d words
+# (meanshift_fit sizes it with MSI_SCRATCH_PER_SEED). `-D
+# MOJOLEARN_IDN_MEANSHIFT_GRID_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores the
+# one-chain fold and the one-block-per-seed team kernel.
+comptime IDN_MEANSHIFT_GRID = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_MEANSHIFT_GRID_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime MSI_T = 256
+"""Rows per chunk of the K6 blocked fold (fixed: the bits depend on it)."""
+comptime MSI_SCRATCH_PER_SEED = 2 if IDN_MEANSHIFT_GRID else 1
+"""Scratch words per seed and feature that `meanshift_seed` uses."""
+
+
+@always_inline
+def meanshift_seed_blocked[REV: Bool = False](
+    x: FPtr, n: Int, d: Int, bw: Float32, stop: Float32, max_iter: Int,
+    centers: FPtr, scratch: FPtr, intensity: IPtr, iters: IPtr, s: Int,
+):
+    """K6: `meanshift_seed` with the blocked fold (see IDN_MEANSHIFT_GRID).
+    scratch[2sd .. 2sd+d) holds the sums, scratch[2sd+d .. 2sd+2d) one chunk's
+    partials. REV (host sabotage) walks each chunk's rows descending."""
+    var completed = 0
+    var within = 0
+    var sb = s * 2 * d
+    var pb = sb + d
+    while True:
+        within = 0
+        for f in range(d):
+            scratch[sb + f] = Float32(0)
+        var c0 = 0
+        while c0 < n:
+            var cn = min(MSI_T, n - c0)
+            for f in range(d):
+                scratch[pb + f] = Float32(0)
+            for rr in range(cn):
+                var p = c0 + (cn - 1 - rr if REV else rr)
+                var dd = identical_sqrt(sq_dist_rows(centers, s, x, p, d))
+                if dd <= bw:
+                    within += 1
+                    for f in range(d):
+                        scratch[pb + f] = ftz(scratch[pb + f] + ftz(x[p * d + f]))
+            for f in range(d):
+                scratch[sb + f] = ftz(scratch[sb + f] + scratch[pb + f])
+            c0 += cn
+        if within == 0:
+            break
+        var shift2 = Float32(0)
+        var cnt = Float32(within)
+        for f in range(d):
+            var m = ftz(identical_div(scratch[sb + f], cnt))
+            var t = ftz(m - centers[s * d + f])
+            shift2 = ftz(shift2 + ftz(identical_mul(t, t)))
+            centers[s * d + f] = m
+        if identical_sqrt(shift2) <= stop or completed == max_iter:
+            break
+        completed += 1
+    intensity[s] = Int32(within)
+    iters[s] = Int32(completed)
+
+
 # DEVIATION 5104 (the flat-kernel fold over the rows ascending, one quotient
 # per feature, the rooted shift test). Row 113; meanshift_check.
 @always_inline
@@ -122,7 +190,11 @@ def meanshift_seed[REV: Bool = False](
     `s`, whose start is already in `centers[s]`: the flat kernel (every point
     with `sqrt(d2) <= bw`), the mean by one ascending fold over the points and
     ONE quotient per feature, the shift `sqrt(sum (new - old)^2)`, stop at
-    `shift <= stop` or `completed == max_iter`. `scratch[s]` holds the sums."""
+    `shift <= stop` or `completed == max_iter`. `scratch[s]` holds the sums.
+    Under IDN_MEANSHIFT_GRID (K6) the blocked fold runs instead."""
+    comptime if IDN_MEANSHIFT_GRID:
+        meanshift_seed_blocked[REV](x, n, d, bw, stop, max_iter, centers, scratch, intensity, iters, s)
+        return
     var completed = 0
     var within = 0
     while True:
