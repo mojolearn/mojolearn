@@ -6,8 +6,8 @@ Summary: 287 rows, 280 with a ratio, 222 faster than the best opponent after (FA
 
 | lane | dataset | family | FAST before ms | FAST after ms | best opponent | opp ms | ratio before | ratio after | flip | quality after (FAST) | quality before (FAST) | opponent quality | status |
 |---|---|---|---:|---:|---|---:|---:|---:|---|---|---|---|---|
-| min-cov-det | taxi | algos | 1739 | 79657 | sklearn-cpu | 1413 | 1.23 | 56.36 |  | n_features=11 | n_features=11 | n_features=11 | ok |
-| elliptic-envelope | taxi | algos | 1741 | 78766 | sklearn-cpu | 1423 | 1.22 | 55.34 |  | fraction_flagged=0.10237 | fraction_flagged=0.1024 | fraction_flagged=0.1025, jaccard_vs_sklearn=1 | ok |
+| min-cov-det | taxi | algos | 1739 | 294 | sklearn-cpu | 1413 | 1.23 | 0.21 | FLIP faster | n_features=11 | n_features=11 | n_features=11 | ok |
+| elliptic-envelope | taxi | algos | 1741 | 299 | sklearn-cpu | 1423 | 1.22 | 0.21 | FLIP faster | fraction_flagged=0.10237 | fraction_flagged=0.1024 | fraction_flagged=0.1025, jaccard_vs_sklearn=1 | ok |
 | sgd-ocsvm | taxi | algos | 945 | 42252 | sklearn-cpu | 898 | 1.05 | 47.05 |  | fraction_flagged=0.05557 | fraction_flagged=0, jaccard_vs_sklearn=0 | fraction_flagged=0.00702, jaccard_vs_sklearn=1 | ok |
 | sgd | synthetic | algos | 121 | 335 | torch-eager-fp32 | 17.9 | 6.75 | 18.71 |  | - | - | - | ok |
 | layernorm | synthetic | algos | 26.8 | 52.2 | torch-eager-bf16 | 2.8 | 9.57 | 18.64 |  | - | - | max_rel_diff_vs_torch_eager_fp32=0, rel_fro_vs_torch_eager_fp32=0 | ok |
@@ -34,7 +34,7 @@ Summary: 287 rows, 280 with a ratio, 222 faster than the best opponent after (FA
 | pca | istella | algos | 988 | 490 | sklearn-cpu | 205 | 4.82 | 2.39 |  | explained_variance_ratio_sum=1 | explained_variance_ratio_sum=1 | explained_variance_ratio_sum=1 | ok |
 | permutation-shap | istella | algos | 17214 | 28236 | shap-cpu | 12335 | 1.40 | 2.29 |  | rel_error_vs_exact=5.33875e-09 | rel_error_vs_exact=5.339e-09 | rel_error_vs_exact=3.692e-10 | ok |
 | lu-factor | synthetic | algos | 2323 | 977 | scipy-cpu | 428 | 5.43 | 2.28 |  | relative_residual=3.2563e-06 | relative_residual=3.248e-06 | relative_residual=3.246e-06 | ok |
-| svgp | istella | algos | 1495 | 661 | gpytorch-cpu | 307 | 4.86 | 2.15 |  | r2=-0.106016, rmse=0.878373 | r2=-0.106, rmse=0.8784 | r2=-0.106, rmse=0.8784 | ok |
+| svgp | istella | algos | 1495 | 299 | gpytorch-cpu | 307 | 4.86 | 0.97 | FLIP faster | r2=-0.106016, rmse=0.878373 | r2=-0.106, rmse=0.8784 | r2=-0.106, rmse=0.8784 | ok |
 | lle | taxi | algos | 17885 | 2570 | sklearn-cpu | 1247 | 14.35 | 2.06 |  | trustworthiness_k15=0.826083 | trustworthiness_k15=0.8398 | trustworthiness_k15=0.7708 | ok |
 | kernel-pca | taxi | algos | 847 | 921 | sklearn-cpu | 460 | 1.84 | 2.00 |  | - | - | subspace_cos_vs_sklearn=1 | ok |
 | kernel-shap | istella | algos | 14386 | 15325 | shap-cpu | 7696 | 1.87 | 1.99 |  | rel_error_vs_exact=4.37806e-09 | rel_error_vs_exact=4.179e-09 | rel_error_vs_exact=1.405e-14 | ok |
@@ -45,7 +45,7 @@ Summary: 287 rows, 280 with a ratio, 222 faster than the best opponent after (FA
 | lu-solve | synthetic | algos | 2320 | 971 | torch-gpu | 506 | 4.59 | 1.92 |  | relative_residual=3.2563e-06 | relative_residual=3.248e-06 | relative_residual=8.234e-07 | ok |
 | sparse-rp | taxi | algos | 8.0 | 3.4 | sklearn-cpu | 1.8 | 4.44 | 1.90 |  | mean_abs_distortion=0.147163 | mean_abs_distortion=0.1472 | mean_abs_distortion=0.381 | ok |
 | var | taxi-hourly | algos | 14.5 | 5.1 | statsmodels-cpu | 2.8 | 5.18 | 1.82 |  | forecast_rmse=33.168 | forecast_rmse=33.17 | forecast_rmse=33.17 | ok |
-| svgp | taxi | algos | - | 437 | gpytorch-cpu | 248 | - | 1.77 |  | r2=-0.194982, rmse=17.7235 | - | r2=-0.2093, rmse=17.83 | ok |
+| svgp | taxi | algos | - | 284 | gpytorch-cpu | 248 | - | 1.15 |  | r2=-0.194982, rmse=17.7235 | - | r2=-0.2093, rmse=17.83 | ok |
 | kernel-pca | istella | algos | 1049 | 979 | sklearn-cpu | 560 | 1.87 | 1.75 |  | - | - | subspace_cos_vs_sklearn=1 | ok |
 | additive-chi2 | taxi | algos | 0.6 | 0.7 | sklearn-cpu | 0.4 | 1.50 | 1.69 |  | kernel_rel_error=0.0938923 | kernel_rel_error=0.09389 | kernel_rel_error=0.09389 | ok |
 | knn-imputer | taxi | algos | 73.6 | 2.7 | sklearn-cpu | 1.7 | 43.29 | 1.61 |  | masked_rmse=5.1086 | masked_rmse=6.152 | masked_rmse=5.257 | ok |
@@ -55,7 +55,7 @@ Summary: 287 rows, 280 with a ratio, 222 faster than the best opponent after (FA
 | gaussian-rp | taxi | algos | 5.9 | 2.1 | sklearn-cpu | 1.6 | 3.69 | 1.31 |  | mean_abs_distortion=0.345752 | mean_abs_distortion=0.3458 | mean_abs_distortion=0.3398 | ok |
 | randomized-svd | taxi | algos | 193 | 199 | sklearn-cpu | 163 | 1.19 | 1.22 |  | relative_reconstruction_error=0.0271968 | relative_reconstruction_error=0.0272 | relative_reconstruction_error=0.0272 | ok |
 | resample | taxi | algos | 65.2 | 62.8 | sklearn-cpu | 51.9 | 1.26 | 1.21 |  | max_mean_shift_over_std=0.0029166 | max_mean_shift_over_std=0.002917 | max_mean_shift_over_std=0.002257 | ok |
-| minibatch-kmeans | istella | algos | 673 | 148 | sklearn-cpu | 124 | 5.45 | 1.20 |  | n_clusters=8, silhouette=0.118168 | ari_vs_ours=1, n_clusters=8, silhouette=0.1167 | ari_vs_ours=0.6224, n_clusters=8, silhouette=0.1119 | ok |
+| minibatch-kmeans | istella | algos | 673 | 145 | sklearn-cpu | 124 | 5.45 | 1.17 |  | n_clusters=8, silhouette=0.118168 | ari_vs_ours=1, n_clusters=8, silhouette=0.1167 | ari_vs_ours=0.6224, n_clusters=8, silhouette=0.1119 | ok |
 | resample | istella | algos | 388 | 389 | sklearn-cpu | 336 | 1.16 | 1.16 |  | max_mean_shift_over_std=0.00320274 | max_mean_shift_over_std=0.003203 | max_mean_shift_over_std=0.002552 | ok |
 | adafactor | synthetic | algos | 184 | 393 | torch-eager-fp32 | 344 | 0.54 | 1.15 | FLIP slower | - | - | - | ok |
 | multilabel-binarizer | istella | algos | 770 | 163 | sklearn-cpu | 144 | 5.36 | 1.14 |  | output_shape=20000x119 | - | - | ok |
@@ -418,3 +418,5 @@ Sources: before = M3 0.8.34 board (classical), M3 2026-09-29 board FAST cells (t
 - AutoARIMA order batching, measured source7ba385b30, default promotion dc2285bc0: gap26-orders-current-synthetic 13780.316917 -> 9287.286750 ms (-32.6%); gap26-orders-current-taxi-hourly 22706.248042 -> 13747.215083 ms (-39.5%). One M3 scored run/arm, fitted/forecast digests and RMSE unchanged; full-quality 44 arrays exact. Default/OFF compile both rc0. Taxi-hourly remains FAST quality under review against opponent (forecast RMSE74.6591 vs68.21); no new eligible winner.
 
 - TargetEncoder promotion, default merged 1d079a036 (default and _OFF compiled rc0, MOJOLEARN_TARGET_SCRATCH_OFF): measured source4d1ea20b2, gap26-target-current-taxi A270.947625 -> B203.743667ms and gap26-target-current-istella A250.423916 -> B179.818916ms, one scored run per arm. Digests unchanged; separate quality PASS108 exact fitted/output arrays and independent smoothing oracle. These two rows use B, not mixed-arm summary medians. Recorded heavy-maintenance windows do not overlap09:25:14–09:25:21 UTC; variance was not estimated. Istella newly beats recorded sklearn228.8ms; taxi remains behind147.3ms.
+- MCD batched MMA default, merged 5a68562e8 (default and MOJOLEARN_MCD_BATCH_MMA_OFF compiled rc0): gap26-mcd-mma-full MinCovDet taxi A70877.7 -> B3587.2 ms; gap26-mcd-mma-ee-full EllipticEnvelope taxi A70092.1 -> B3627.9 ms; one scored M3 run per arm. Quality: small, ee-small, full and ee-full all MCDQ-PAIR-PASS on the original 1% fitted-state / .99 support gates. The 0.8.34 'before' cells (1739/1741 ms) came from the reverted C-step that changed the fit. Both rows remain slower than sklearn-cpu.
+- Wave 2 merges (main 46649f47b; each default and _OFF compiled on M2 rc0; one scored M3 run per arm): MCD_BMMA default (rollback MOJOLEARN_MCD_BMMA_OFF): MinCovDet taxi 3002.9 -> 294.3 ms, EllipticEnvelope taxi 3010.3 -> 299.3 ms, w2-mcdb-q-* MCDQ-PAIR-PASS; both flip faster vs sklearn-cpu. SVGP_FAST_RBFTILE default (MOJOLEARN_SVGP_FAST_RBFTILE_OFF): istella 336.3 -> 299.1 ms (flips vs gpytorch-cpu 307), taxi 285.9 -> 283.9 ms; w2-svgp-rbftile-q PASS (r2/rmse/elbo). MBK SUMCMP default (MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF): istella 147.2 -> 144.7 ms, taxi 43.9 -> 39.9 ms, outputs bit-identical; taxi board cell keeps its earlier 38.1 ms.
