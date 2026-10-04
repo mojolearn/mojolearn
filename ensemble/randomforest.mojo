@@ -108,9 +108,29 @@ comptime LABELS_SAMPLED_ORDER = True
 # histograms, counts, leaves, and the resulting forest remain identical, but
 # `row_ids` order and its diagnostic trace intentionally differ from the reference.
 # `-D MOJOLEARN_2010_ROWS_SORTED=1` turns it on; off is the shipped default.
-comptime ROWS_SORTED_SAMPLE = is_defined["MOJOLEARN_2010_ROWS_SORTED"]() or (
-    has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_RF_ROWS_SORTED_OFF"]()
+#
+# fam2-forests (2026-10-04) CANDIDATE ARM, default OFF: sorted bootstrap rows
+# on NVIDIA and AMD under IDENTICAL, wide data only (the same
+# `ROWS_SORTED_MIN_COLS` gate Apple ships). `-D MOJOLEARN_IDN_RF_ROWS_SORTED`
+# turns it on. Where NVIDIA's fused bootstrap gather would have staged the
+# labels in drawn order, a tree whose rows are sorted takes the two-launch
+# route instead (sample, sort, then gather labels by the sorted `row_ids`):
+# see `fused_gather_ok` in `fit_forest`. Same drawn multiset, same integer /
+# fixed-point histograms, counts and leaves, so the forest is the one the
+# drawn order builds and the host column is untouched.
+comptime IDN_RF_ROWS_SORTED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_IDN_RF_ROWS_SORTED"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime ROWS_SORTED_SAMPLE = (
+    is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
+    or IDN_RF_ROWS_SORTED
+    or (
+        has_apple_gpu_accelerator()
+        and not is_defined["MOJOLEARN_RF_ROWS_SORTED_OFF"]()
+    )
 )
 """Apple, FAST since 2026-09-25 and IDENTICAL since 2026-09-28 (the drawn
 multiset and every integer / fixed-point histogram, count and leaf are
@@ -2582,9 +2602,10 @@ def fit_forest_prepared[
     already-hashed seed down would double-hash and produce a different
     forest.
     """
-    comptime assert not (FUSED_BOOTSTRAP_GATHER and ROWS_SORTED_SAMPLE), (
-        "fused bootstrap gather and sorted bootstrap rows are separate candidates"
-    )
+    # fam2-forests: the two candidates may now be compiled together. A
+    # tree whose bootstrap rows are sorted takes the two-launch route at
+    # run time (`fused_gather_ok` below), because the fused launch stages
+    # labels in DRAWN order and the sort would leave them misaligned.
     comptime assert (
         FUSED_BOOTSTRAP_GATHER or not FUSED_BOOTSTRAP_GATHER_SABOTAGE
     ), "fused bootstrap gather sabotage requires its candidate"
@@ -2836,6 +2857,12 @@ def fit_forest_prepared[
     )
     if has_sw:
         sampler.prepare_weights(ctx, sample_weight_host)
+    # The fused bootstrap rows + labels launch serves the plain bootstrap
+    # arm only, and only when the rows stay in drawn order.
+    var fused_gather_ok = rf_params.bootstrap and not has_sw
+    comptime if ROWS_SORTED_SAMPLE:
+        if sampler.sort_keys:
+            fused_gather_ok = False
 
     # `RowSampler::tree_sample_weight`, `randomforest.cuh:166-167`:
     #
@@ -2931,7 +2958,7 @@ def fit_forest_prepared[
         while next_tree < n_trees:
             t_stage = instr.times.start()
             comptime if FUSED_BOOTSTRAP_GATHER:
-                if rf_params.bootstrap and not has_sw:
+                if fused_gather_ok:
                     comptime if FUSED_BOOTSTRAP_GATHER_SABOTAGE:
                         launch_bootstrap_rows_labels[sabotage=1](
                             ctx,
@@ -3009,7 +3036,7 @@ def fit_forest_prepared[
             # out under the default.
             comptime if LABELS_SAMPLED_ORDER:
                 comptime if FUSED_BOOTSTRAP_GATHER:
-                    if not (rf_params.bootstrap and not has_sw):
+                    if not fused_gather_ok:
                         builders[k].stage_sampled_order(ctx, dataset)
                     else:
                         dataset.labels = (
@@ -3075,7 +3102,7 @@ def fit_forest_prepared[
                     break
                 t_stage = instr.times.start()
                 comptime if FUSED_BOOTSTRAP_GATHER:
-                    if rf_params.bootstrap and not has_sw:
+                    if fused_gather_ok:
                         comptime if FUSED_BOOTSTRAP_GATHER_SABOTAGE:
                             launch_bootstrap_rows_labels[sabotage=1](
                                 ctx,
@@ -3149,7 +3176,7 @@ def fit_forest_prepared[
                 # DEVIATION 2001 -- as in the prime loop above.
                 comptime if LABELS_SAMPLED_ORDER:
                     comptime if FUSED_BOOTSTRAP_GATHER:
-                        if not (rf_params.bootstrap and not has_sw):
+                        if not fused_gather_ok:
                             builders[k].stage_sampled_order(ctx, dataset)
                         else:
                             dataset.labels = (
