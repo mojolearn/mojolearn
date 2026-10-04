@@ -14,6 +14,7 @@ from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from bindings.shared_gemm_observe import COUNTERS, shared_gemm_count_binding, shared_gemm_reset_binding, shared_gemm_variant_binding, shared_gemm_mode_binding, shared_gemm_vendor_binding
 from bindings.py2mojo_cluster_est import dbscan_core_arrays_binding, estimators_py2mojo_cluster_binding
 from core.py2mojo_rows import py2mojo_rows_device_binding
 from core.py2mojo_linear import py2mojo_linear_flags
@@ -1218,6 +1219,12 @@ def py2mojo_linear_flags_binding() raises -> PythonObject:
 def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_estimators")
+        comptime if COUNTERS:
+            m.def_function[shared_gemm_count_binding]("shared_gemm_count")
+            m.def_function[shared_gemm_reset_binding]("shared_gemm_reset")
+            m.def_function[shared_gemm_variant_binding]("shared_gemm_variant")
+            m.def_function[shared_gemm_mode_binding]("shared_gemm_mode")
+            m.def_function[shared_gemm_vendor_binding]("shared_gemm_vendor")
         m.def_function[dbscan_parallel_available_binding]("dbscan_parallel_available")
         m.def_function[gram_parallel_available_binding]("gram_parallel_available")
         m.def_function[gram_parallel_available_binding]("gram_outputs_parallel_available")

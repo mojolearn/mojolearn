@@ -16,6 +16,7 @@ from experiments.apple_fast.gemm.mma import apple_gemm_experiment
 
 comptime G1 = is_defined["MOJOLEARN_APPLE_FAST_SHARED_GEMM_G1"]()
 comptime G5 = is_defined["MOJOLEARN_APPLE_FAST_SHARED_GEMM_G5"]()
+comptime COUNTERS = is_defined["MOJOLEARN_APPLE_FAST_SHARED_GEMM_COUNTERS"]()
 comptime AUDIT = is_defined["MOJOLEARN_APPLE_FAST_SHARED_GEMM_AUDIT"]()
 comptime ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]() and TARGET_COLUMN == COLUMN_APPLE and (G1 or G5 or AUDIT)
 
@@ -40,6 +41,12 @@ def audit_count(route: Int, column: Int) raises -> Int:
         raise Error("invalid shared GEMM counter")
     return STATE.get_or_create_ptr()[].counts[route * 4 + column]
 
+def reset_static_counts() raises:
+    comptime if not COUNTERS or AUDIT:
+        raise Error("requires static shared GEMM COUNTERS build without AUDIT")
+    STATE.get_or_create_ptr()[].counts = InlineArray[Int, 16](fill=0)
+
+
 def try_shared_gemm[TRANSPOSE_B: Bool, ROUTE: Int](
     ctx: DeviceContext,
     mut dst: DeviceBuffer[DType.float32],
@@ -51,6 +58,8 @@ def try_shared_gemm[TRANSPOSE_B: Bool, ROUTE: Int](
     comptime assert not (AUDIT and (G1 or G5)), "audit selector is isolated from production selection"
     comptime assert ROUTE >= 0 and ROUTE < 4
     comptime if not ENABLED:
+        comptime if COUNTERS:
+            STATE.get_or_create_ptr()[].counts[ROUTE * 4] += 1
         return False
     else:
         # n=1 retains existing GEMV; K=0 never enters a TileTensor here.
@@ -61,7 +70,7 @@ def try_shared_gemm[TRANSPOSE_B: Bool, ROUTE: Int](
         comptime if AUDIT:
             arm = STATE.get_or_create_ptr()[].arm
         if not eligible or arm == 0:
-            comptime if AUDIT:
+            comptime if AUDIT or COUNTERS:
                 STATE.get_or_create_ptr()[].counts[ROUTE * 4] += 1
             return False
         # Inputs may alias each other; no change to caller output ownership.
@@ -69,7 +78,7 @@ def try_shared_gemm[TRANSPOSE_B: Bool, ROUTE: Int](
             apple_gemm_experiment[64, 64, 16, False, 0, TRANSPOSE_B](ctx, dst, a, b, m, n, k)
         else:
             apple_gemm_experiment[64, 64, 16, True, 0, TRANSPOSE_B](ctx, dst, a, b, m, n, k)
-        comptime if AUDIT:
+        comptime if AUDIT or COUNTERS:
             STATE.get_or_create_ptr()[].counts[ROUTE * 4 + (1 if arm == 1 else 2)] += 1
             STATE.get_or_create_ptr()[].counts[ROUTE * 4 + 3] += 1
         return True

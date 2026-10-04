@@ -50,6 +50,7 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from bindings.shared_gemm_observe import COUNTERS, shared_gemm_count_binding, shared_gemm_reset_binding, shared_gemm_variant_binding, shared_gemm_mode_binding, shared_gemm_vendor_binding
 
 from checks.vendor import COMPILED_VENDOR
 from isolation_forest.impl.isolation_forest import IF_DEVICE_TRANSPOSE
@@ -646,6 +647,12 @@ def svc_dual_gemv_binding(
 def PyInit__mojolearn_svm() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_svm")
+        comptime if COUNTERS:
+            m.def_function[shared_gemm_count_binding]("shared_gemm_count")
+            m.def_function[shared_gemm_reset_binding]("shared_gemm_reset")
+            m.def_function[shared_gemm_variant_binding]("shared_gemm_variant")
+            m.def_function[shared_gemm_mode_binding]("shared_gemm_mode")
+            m.def_function[shared_gemm_vendor_binding]("shared_gemm_vendor")
         m.def_function[svm_parallel_available]("svm_parallel_available")
         m.def_function[iforest_parallel_available]("iforest_parallel_available")
         m.def_function[svm_vendor_binding]("svm_vendor")

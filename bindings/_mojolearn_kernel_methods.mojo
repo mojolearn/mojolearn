@@ -37,6 +37,7 @@ from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from bindings.shared_gemm_observe import COUNTERS, shared_gemm_count_binding, shared_gemm_reset_binding, shared_gemm_variant_binding, shared_gemm_mode_binding, shared_gemm_vendor_binding
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
@@ -614,6 +615,12 @@ def km_scale_gamma_limbs_binding(
 def PyInit__mojolearn_kernel_methods() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_kernel_methods")
+        comptime if COUNTERS:
+            m.def_function[shared_gemm_count_binding]("shared_gemm_count")
+            m.def_function[shared_gemm_reset_binding]("shared_gemm_reset")
+            m.def_function[shared_gemm_variant_binding]("shared_gemm_variant")
+            m.def_function[shared_gemm_mode_binding]("shared_gemm_mode")
+            m.def_function[shared_gemm_vendor_binding]("shared_gemm_vendor")
         m.def_function[kernel_methods_rows_parallel_available](
             "kernel_methods_rows_parallel_available"
         )
