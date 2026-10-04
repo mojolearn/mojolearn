@@ -70,11 +70,11 @@ from x_decomp.lu_fast import LFS_TPB, LU_FAST_STEP1, lfs_blocks, lu_fast_panel
 #: Still needs LU_FAST_STEP1 and AFN_GEMM_APPLE. `-D MOJOLEARN_LU_FAST_MMA_OFF`
 #: restores main's per-32-column scalar trailing updates.
 comptime LU_FAST_MMA = LU_FAST_STEP1 and AFN_GEMM_APPLE and not is_defined["MOJOLEARN_LU_FAST_MMA_OFF"]()
-#: The outer block (the big GEMM's k). A multiple of the 32-column panel.
 #: Candidate, default off: preserve pivots/MMA accumulation order and use
 #: KB16 ping-pong shared pages. No evidence yet; require exact output equality
 #: on the hard-pivot fixtures before considering timing/promotion.
 comptime LU_FAST_MMA_DBUF = LU_FAST_MMA and is_defined["MOJOLEARN_LU_FAST_MMA_DBUF"]()
+#: The outer block (the big GEMM's k). A multiple of the 32-column panel.
 comptime LFM_NB = get_defined_int["MOJOLEARN_LU_FAST_MMA_NB", 256]()
 comptime LFM_PANEL = 32
 
