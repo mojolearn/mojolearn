@@ -1617,19 +1617,15 @@ class _DARTBase(_TreesEnsembleBase):
     _DART_VALUES_CAP = 1 << 26
 
     def _dart_device(self, b, session, K):
+        # lane cpu2-l5-trees: every binary with the entries takes the round,
+        # with or without a forest data session, bagged and column-sampled
+        # fits included (a bagged member fits its gathered rows and the leaf
+        # sums take the bag only; a column-sampled member's colid is remapped
+        # to X's columns before `x_trees_dart_add`). `_boost_loop` is left to
+        # binaries without the entries (a FAST CPU-only install, the _OFF
+        # defines) and to trees past the node cap below.
         if not callable(getattr(b, "x_trees_dart_open", None)):
             return False
-        if session is None:
-            # lane fam2-forests (IDN_DART_DEVICE): an IDENTICAL binary (GPU
-            # or host, both expose x_trees_dart_idn) takes the round without
-            # a forest data session too, each member fitting X itself, so
-            # the host column and the devices run the same loop. A bagged or
-            # column-sampled fit keeps main's loop on every column.
-            if not callable(getattr(b, "x_trees_dart_idn", None)):
-                return False
-            if (float(self.subsample) < 1.0 and int(self.subsample_freq) > 0) \
-                    or float(self.colsample_bytree) < 1.0:
-                return False
         node_cap = 2 * int(self.num_leaves) - 1
         return 1 <= node_cap <= 65535 and int(self.n_estimators) * K * node_cap <= self._DART_VALUES_CAP
 
@@ -1647,6 +1643,7 @@ class _DARTBase(_TreesEnsembleBase):
         n, d = Xa.shape
         n_iters = int(self.n_estimators)
         node_cap = 2 * int(self.num_leaves) - 1
+        all_cols = self._arange(d)
         inits32 = Array.from_list([float(v) for v in inits], "<f4")
         skip_thr = self._dart_thr(float(self.skip_drop))
         bad = empty((1,), "<i4")
@@ -1688,24 +1685,45 @@ class _DARTBase(_TreesEnsembleBase):
                     shrink = lr if k == 0 else lr / (lr + k)
                     factor = k / (k + lr)
                     wdiv = 1.0 / (k + lr)
+                # the round's bag rows (device-drawn `x_trees_bag_rows`; None:
+                # every row), drawn after the step so the last round's list
+                # (its copies landed at the step's sync) may be replaced
+                rows = self._bag(n, it)
+                m = 0 if rows is None else len(rows)
                 for c in range(K):
                     j = it * K + c
+                    cols = self._cols(d, j)
                     tree = RandomForestRegressor(
                         n_estimators=1, bootstrap=False, max_features=1.0, max_depth=max_depth,
                         max_leaves=int(self.num_leaves), min_samples_leaf=int(self.min_child_samples),
                         n_bins=int(self.max_bin), random_state=_trees_sub_seed(seed, j), n_streams=1,
                         numeric_mode=self.numeric_mode)
-                    if session is not None:
-                        tree._fit_in_session(session, targets[c])
+                    if rows is None and cols is None:
+                        if session is not None:
+                            tree._fit_in_session(session, targets[c])
+                        else:
+                            tree.fit(Xa, targets[c])
                     else:
-                        tree.fit(Xa, targets[c])
+                        # main's member: X gathered at the bag rows and the
+                        # tree's columns, the target at the bag rows (device
+                        # gathers); the colid back in X's columns (device remap)
+                        Xf = self._gather(Xa, rows if rows is not None else self._arange(n),
+                                          cols if cols is not None else all_cols)
+                        yf = targets[c] if rows is None else self._gather_vec(targets[c], rows)
+                        tree.fit(Xf, yf)
+                        if cols is not None:
+                            cid = tree._colid.copy()
+                            b.x_trees_remap_cols(addr(cid, name="colid"), addr_ro(cols, name="cols"),
+                                                 [len(cid), len(cols)])
+                            tree._colid = cid
                     offs = tree._offsets.tolist()
                     lo, n_nodes = int(offs[0]), int(offs[1]) - int(offs[0])
                     values = empty((n_nodes,), "<f4")
                     b.x_trees_dart_add(handle, addr_ro(tree._colid, name="colid"),
                                        addr_ro(tree._quesval, name="quesval"), addr_ro(tree._left_child, name="left"),
                                        addr(values, name="values"),
-                                       [j, c, lo, n_nodes, float(shrink), float(factor), lam, l1, mds])
+                                       addr_ro(rows if rows is not None else all_cols, name="bag rows"),
+                                       [j, c, lo, n_nodes, float(shrink), float(factor), lam, l1, mds, m])
                     self.trees_.append(tree)
                     self.tree_values_.append(values)
                     self.tree_coefs_.append(shrink)

@@ -16,7 +16,7 @@ from std.ffi import _Global
 from xtrees.ops import stream_base, draw
 from xtrees.dart_units import (
     IDN_DART_DEVICE, DART_CHUNK, F32P, I32P, I64P, U16P, dart_init_unit, dart_drop_unit, dart_row_unit,
-    dart_apply_unit, dart_leaf_sum_unit, dart_newton_unit, dart_add_unit,
+    dart_apply_unit, dart_leaf_sum_unit, dart_leaf_sum_rows_unit, dart_newton_unit, dart_add_unit,
 )
 
 #: The host twin exists exactly where the IDENTICAL device round does.
@@ -184,11 +184,13 @@ def dart_step(
 
 def dart_add(
     id: Int, colid_addr: Int, quesval_addr: Int, left_addr: Int, values_out: Int, j: Int, c: Int, lo: Int,
-    n_nodes: Int, shrink: Float64, factor: Float64, lam: Float64, l1: Float64, mds: Float64,
+    n_nodes: Int, shrink: Float64, factor: Float64, lam: Float64, l1: Float64, mds: Float64, rows_addr: Int, m: Int,
 ) raises:
     """The device `dart_add` for class c's new tree j: the leaf index row,
     the chunked leaf sums, the Newton leaf values (to values_out) and the
-    score update."""
+    score update. m > 0: the leaf sums over the bag rows rows_addr[0 .. m)
+    only, chunked over the list positions in list order (the device's
+    `dart_leaf_sum_rows_unit`, the same units in the same order)."""
     comptime if DART_HOST:
         var reg = DART_HOST_SESSIONS.get_or_create_ptr()
         var idx = reg[].find(id)
@@ -201,6 +203,8 @@ def dart_add(
             raise Error("x_trees dart_add: tree or class index out of range")
         if n_nodes < 1 or n_nodes > node_cap or lo < 0:
             raise Error("x_trees dart_add: a tree with more nodes than 2 * num_leaves - 1")
+        if m < 0 or m > n:
+            raise Error("x_trees dart_add: bag row count out of range")
         var colid = I32P(unsafe_from_address=colid_addr + 4 * lo)
         var quesval = F32P(unsafe_from_address=quesval_addr + 4 * lo)
         var left = I32P(unsafe_from_address=left_addr + 4 * lo)
@@ -218,8 +222,14 @@ def dart_add(
         var voff = j * node_cap
         for i in range(n):
             dart_apply_unit(i, d, n_nodes, colid, quesval, left, x, row_off, nodes, bad)
-        for e in range(n_nodes * n_chunks):
-            dart_leaf_sum_unit(e, n, n_nodes, row_off, class_off, nodes, target, h, part)
+        if m > 0:
+            n_chunks = (m + DART_CHUNK - 1) // DART_CHUNK
+            var rows = I32P(unsafe_from_address=rows_addr)
+            for e in range(n_nodes * n_chunks):
+                dart_leaf_sum_rows_unit(e, n, m, n_nodes, row_off, class_off, rows, nodes, target, h, part, bad)
+        else:
+            for e in range(n_nodes * n_chunks):
+                dart_leaf_sum_unit(e, n, n_nodes, row_off, class_off, nodes, target, h, part)
         for e in range(n_nodes):
             dart_newton_unit(e, n_nodes, n_chunks, part, Float32(lam), Float32(l1), Float32(mds), voff, values)
         for e in range(n):

@@ -128,15 +128,17 @@ def dart_step_binding(handle: PythonObject, coef: PythonObject, thr: PythonObjec
 
 
 def dart_add_binding(handle: PythonObject, colid: PythonObject, quesval: PythonObject, left: PythonObject,
-                     values: PythonObject, params: PythonObject) raises -> PythonObject:
-    """The new tree's forest arrays (int32 / float32 / int32), values float32
-    n_nodes (out); params = [tree, class, lo, n_nodes, shrink, factor,
-    reg_lambda, reg_alpha, max_delta_step]."""
-    if len(params) != 9:
-        raise Error("x_trees_dart_add: params must hold 9 values")
+                     values: PythonObject, rows: PythonObject, params: PythonObject) raises -> PythonObject:
+    """The new tree's forest arrays (int32 / float32 / int32, colid in X's
+    columns), values float32 n_nodes (out), rows int32 m (the round's bag
+    rows, ascending; any address when m is 0); params = [tree, class, lo,
+    n_nodes, shrink, factor, reg_lambda, reg_alpha, max_delta_step, m]
+    (m = 0: the leaf sums over every row)."""
+    if len(params) != 10:
+        raise Error("x_trees_dart_add: params must hold 10 values")
     dart_add(Int(py=handle), Int(py=colid), Int(py=quesval), Int(py=left), Int(py=values), Int(py=params[0]),
              Int(py=params[1]), Int(py=params[2]), Int(py=params[3]), Float64(py=params[4]), Float64(py=params[5]),
-             Float64(py=params[6]), Float64(py=params[7]), Float64(py=params[8]))
+             Float64(py=params[6]), Float64(py=params[7]), Float64(py=params[8]), Int(py=rows), Int(py=params[9]))
     return PythonObject(Int(py=params[3]))
 
 

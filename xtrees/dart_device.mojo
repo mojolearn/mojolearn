@@ -30,7 +30,11 @@ the device for the whole fit, and each round is
          Newton leaf values, and one row launch that adds the scaled new tree
          and the dropped trees' rescale (factor x the gathered sum) back
          onto the score; the leaf values go back to the host asynchronously
-         for the model.
+         for the model. A bagged fit (lane cpu2-l5-trees) passes the
+         round's bag rows: the walk and the score update still cover every
+         row, the leaf sums only the bag (in bag-list order). A
+         column-sampled member arrives with its colid already remapped to
+         X's columns (`x_trees_remap_cols`), so nothing here changes for it.
 
 Deviations from main's spelling under this switch (FAST tier): the device
 holds the score, gradients and leaf values in float32 (Metal has no
@@ -49,7 +53,7 @@ from core.neural_context import process_ctx
 from xtrees.ops import stream_base, draw
 from xtrees.dart_units import (
     IDN_DART_DEVICE, DART_CHUNK, F32P, I32P, I64P, U16P, dart_init_unit, dart_drop_unit, dart_row_unit, dart_apply_unit,
-    dart_leaf_sum_unit, dart_newton_unit, dart_add_unit,
+    dart_leaf_sum_unit, dart_leaf_sum_rows_unit, dart_newton_unit, dart_add_unit,
 )
 
 # fam2-forests (2026-10-04), IDENTICAL, every vendor, default ON: the round
@@ -168,6 +172,21 @@ def dart_leaf_sum_kernel(
         e += stride
 
 
+def dart_leaf_sum_rows_kernel(
+    units: Int64, n: Int64, m: Int64, n_nodes: Int32, row_off: Int64, class_off: Int64, rows: I32P, nodes: U16P,
+    target: F32P, h: F32P, part: F32P, bad: I32P,
+):
+    """The bagged leaf sums: chunk q of the bag list rows[0 .. m), in list
+    order (`dart_leaf_sum_rows_unit`)."""
+    var e = _tid()
+    var stride = _tstride()
+    while e < Int(units):
+        dart_leaf_sum_rows_unit(
+            e, Int(n), Int(m), Int(n_nodes), Int(row_off), Int(class_off), rows, nodes, target, h, part, bad,
+        )
+        e += stride
+
+
 def dart_newton_kernel(
     units: Int64, n_nodes: Int32, n_chunks: Int32, part: F32P, lam: Float32, l1: Float32, mds: Float32,
     voff: Int64, values: F32P,
@@ -223,6 +242,7 @@ struct DartSession(Movable):
     var colid: DeviceBuffer[DType.int32]
     var quesval: DeviceBuffer[DType.float32]
     var left: DeviceBuffer[DType.int32]
+    var rows: DeviceBuffer[DType.int32]
 
     def __init__(
         out self, id: Int, n: Int, d: Int, k: Int, kind: Int, cap_iters: Int, node_cap: Int, n_chunks: Int,
@@ -234,6 +254,7 @@ struct DartSession(Movable):
         var flags: DeviceBuffer[DType.int32], var bad: DeviceBuffer[DType.int32],
         var part: DeviceBuffer[DType.float32], var colid: DeviceBuffer[DType.int32],
         var quesval: DeviceBuffer[DType.float32], var left: DeviceBuffer[DType.int32],
+        var rows: DeviceBuffer[DType.int32],
     ):
         self.id = id
         self.n = n
@@ -259,6 +280,7 @@ struct DartSession(Movable):
         self.colid = colid^
         self.quesval = quesval^
         self.left = left^
+        self.rows = rows^
 
 
 struct DartRegistry(Defaultable, Movable):
@@ -332,6 +354,8 @@ def dart_open(
         var colid = ctx.enqueue_create_buffer[DType.int32](node_cap)
         var quesval = ctx.enqueue_create_buffer[DType.float32](node_cap)
         var left = ctx.enqueue_create_buffer[DType.int32](node_cap)
+        # the bag rows of the round (dart_add with m > 0), at most n
+        var rows = ctx.enqueue_create_buffer[DType.int32](n)
         ctx.enqueue_function[dart_init_kernel](
             Int64(k * n), Int64(n), _f(inits), _f(score),
             grid_dim=(_blocks(k * n), 1, 1), block_dim=(TPB, 1, 1),
@@ -344,7 +368,7 @@ def dart_open(
         reg[].next_id += 1
         reg[].sessions.append(DartSession(
             id, n, d, k, kind, cap_iters, node_cap, n_chunks, x^, y^, score^, dsum^, target^, h^, nodes^, values^,
-            coef^, thr^, flags^, bad^, part^, colid^, quesval^, left^,
+            coef^, thr^, flags^, bad^, part^, colid^, quesval^, left^, rows^,
         ))
         return id
     else:
@@ -400,12 +424,20 @@ def dart_step(
 
 def dart_add(
     id: Int, colid_addr: Int, quesval_addr: Int, left_addr: Int, values_out: Int, j: Int, c: Int, lo: Int,
-    n_nodes: Int, shrink: Float64, factor: Float64, lam: Float64, l1: Float64, mds: Float64,
+    n_nodes: Int, shrink: Float64, factor: Float64, lam: Float64, l1: Float64, mds: Float64, rows_addr: Int, m: Int,
 ) raises:
     """One round's second half for class c's new tree j (its nodes lo ..
-    lo + n_nodes of the forest arrays): the leaf index row, the Newton leaf
-    values (to values_out, float32 n_nodes, landed by the next sync) and
-    the score update. No wait."""
+    lo + n_nodes of the forest arrays, colid already in X's columns): the
+    leaf index row of EVERY row, the Newton leaf values (to values_out,
+    float32 n_nodes, landed by the next sync) and the score update of every
+    row. No wait.
+
+    m > 0 (lane cpu2-l5-trees, a bagged fit): rows_addr holds the round's
+    bag rows (int32 m, ascending, the `x_trees_bag_rows` list) and the leaf
+    sums take those rows only, chunked over the list positions in list
+    order (`dart_leaf_sum_rows_unit`); m == 0: every row, as before. The
+    caller keeps the bag list alive until the next `dart_step` (the copy
+    lands by that sync)."""
     comptime if DART_DEVICE:
         var reg = DART_SESSIONS.get_or_create_ptr()
         var idx = reg[].find(id)
@@ -417,6 +449,8 @@ def dart_add(
             raise Error("x_trees dart_add: tree or class index out of range")
         if n_nodes < 1 or n_nodes > node_cap or lo < 0:
             raise Error("x_trees dart_add: a tree with more nodes than 2 * num_leaves - 1")
+        if m < 0 or m > n:
+            raise Error("x_trees dart_add: bag row count out of range")
         var ctx = process_ctx[_DART_CTX]()
         var csub = reg[].sessions[idx].colid.create_sub_buffer[DType.int32](0, n_nodes)
         ctx.enqueue_copy(dst_buf=csub, src_ptr=I32P(unsafe_from_address=colid_addr + 4 * lo))
@@ -433,12 +467,24 @@ def dart_add(
             _u16(reg[].sessions[idx].nodes), _i(reg[].sessions[idx].bad),
             grid_dim=(_blocks(n), 1, 1), block_dim=(TPB, 1, 1),
         )
-        var units = n_nodes * n_chunks
-        ctx.enqueue_function[dart_leaf_sum_kernel](
-            Int64(units), Int64(n), Int32(n_nodes), row_off, class_off, _u16(reg[].sessions[idx].nodes),
-            _f(reg[].sessions[idx].target), _f(reg[].sessions[idx].h), _f(reg[].sessions[idx].part),
-            grid_dim=(_blocks(units), 1, 1), block_dim=(TPB, 1, 1),
-        )
+        if m > 0:
+            n_chunks = (m + DART_CHUNK - 1) // DART_CHUNK
+            var rsub = reg[].sessions[idx].rows.create_sub_buffer[DType.int32](0, m)
+            ctx.enqueue_copy(dst_buf=rsub, src_ptr=I32P(unsafe_from_address=rows_addr))
+            var units = n_nodes * n_chunks
+            ctx.enqueue_function[dart_leaf_sum_rows_kernel](
+                Int64(units), Int64(n), Int64(m), Int32(n_nodes), row_off, class_off, _i(reg[].sessions[idx].rows),
+                _u16(reg[].sessions[idx].nodes), _f(reg[].sessions[idx].target), _f(reg[].sessions[idx].h),
+                _f(reg[].sessions[idx].part), _i(reg[].sessions[idx].bad),
+                grid_dim=(_blocks(units), 1, 1), block_dim=(TPB, 1, 1),
+            )
+        else:
+            var units = n_nodes * n_chunks
+            ctx.enqueue_function[dart_leaf_sum_kernel](
+                Int64(units), Int64(n), Int32(n_nodes), row_off, class_off, _u16(reg[].sessions[idx].nodes),
+                _f(reg[].sessions[idx].target), _f(reg[].sessions[idx].h), _f(reg[].sessions[idx].part),
+                grid_dim=(_blocks(units), 1, 1), block_dim=(TPB, 1, 1),
+            )
         ctx.enqueue_function[dart_newton_kernel](
             Int64(n_nodes), Int32(n_nodes), Int32(n_chunks), _f(reg[].sessions[idx].part), Float32(lam),
             Float32(l1), Float32(mds), voff, _f(reg[].sessions[idx].values),

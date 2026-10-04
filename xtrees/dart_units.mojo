@@ -236,6 +236,35 @@ def dart_leaf_sum_unit(
 
 
 @always_inline
+def dart_leaf_sum_rows_unit(
+    e: Int, nn: Int, m: Int, nk: Int, row_off: Int, class_off: Int, rows: I32P, nodes: U16P, target: F32P, h: F32P,
+    part: F32P, bad: I32P,
+):
+    """The bagged twin of `dart_leaf_sum_unit` (lane cpu2-l5-trees): chunk q
+    is the bag LIST positions q * DART_CHUNK .. (q + 1) * DART_CHUNK of
+    rows[0 .. m), scanned in list order, so only the bagged rows feed the
+    leaf values (LightGBM: the leaf output comes from the bagged rows; main's
+    `leaf_newton_rows`). The walk and the score update still cover every row.
+    A bag row outside [0, nn) sets bad[0] and is skipped; the caller raises."""
+    var q = e // nk
+    var kk = e - q * nk
+    var p0 = q * DART_CHUNK
+    var p1 = min(p0 + DART_CHUNK, m)
+    var sg: Float32 = 0.0
+    var sh: Float32 = 0.0
+    for p in range(p0, p1):
+        var i = Int(rows[p])
+        if i < 0 or i >= nn:
+            bad[0] = Int32(1)
+            continue
+        if Int(nodes[row_off + i]) == kk:
+            sg = _sub(sg, target[class_off + i])
+            sh = _add(sh, h[class_off + i])
+    part[e * 2] = sg
+    part[e * 2 + 1] = sh
+
+
+@always_inline
 def dart_newton_unit(
     e: Int, nk: Int, n_chunks: Int, part: F32P, lam: Float32, l1: Float32, mds: Float32, voff: Int, values: F32P,
 ):
