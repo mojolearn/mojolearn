@@ -47,6 +47,14 @@ defines (docs/apple-fast/ab/fa.md):
   launch over rows with P = (W / psi)^T cov_z (d x nc) and the mean in
   threadgroup memory, one row per thread, the n x nc result read back once.
 - MOJOLEARN_FA_ALL: every define above.
+- (QUALITY-FIX, lane/apple-fast-fa-quality 2026-10-04) every ITER_DEVICE
+  arm forms G in double-float (`fa_gram_tile_df_kernel`), factors it once
+  (`fa_chol_df_kernel`, R^T R = G) and takes main's one-sided SVD of
+  R D / sqrt(n) per iteration (`fa_rs_svd_block_kernel` / `rs_round_kernel`)
+  instead of the float32 eigh of D G D / n, which squared the condition
+  number (Istella held-out mean_log_likelihood 92.898 against main's
+  99.487). MOJOLEARN_FA_GRAM_QOLD keeps the float32 route; GRAM_ONCE alone
+  (the Python loop) keeps it too. See FA_GRAM_DF below.
 """
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt
