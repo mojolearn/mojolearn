@@ -136,11 +136,26 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 #: only when `estimate_can_batch` holds (single-dim pointwise loss, Newton
 #: or Gradient) and the device partitioner is on; IDENTICAL compiles the
 #: serial loop unchanged.
+#: lane/fam-gbdt (2026-10-04), IDN_CTR_PERM_BATCH: the same batched walk
+#: under IDENTICAL on every vendor, default on. No arithmetic moves: each
+#: permutation's task launches the kernels of its serial run on the same
+#: inputs in the same order (the paragraph above), and only the drains are
+#: shared, so the bits are the serial loop's on every column and the host
+#: column is untouched. `-D MOJOLEARN_IDN_GBDT_CTR_PERM_BATCH_OFF` (or the
+#: master `-D MOJOLEARN_IDN_ALL_OFF`) restores the serial loop under
+#: IDENTICAL.
+comptime IDN_CTR_PERM_BATCH = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_GBDT_CTR_PERM_BATCH_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
 comptime CTR_PERM_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF"]()
-)
+) or IDN_CTR_PERM_BATCH
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.bootstrap import (
     bootstrap_grid_blocks,
@@ -2181,7 +2196,7 @@ def fit_with_test(
     var leaf_parts = List[DeviceLeafPartitioner]()
     # CTR_PERM_BATCH: one partitioner and one estimation workspace per
     # permutation (every task's buffers live at once), and the arena the
-    # batched path carves them from. Empty under IDENTICAL.
+    # batched path carves them from. Empty when the arm is compiled out.
     var perm_leaf_parts = List[DeviceLeafPartitioner]()
     var perm_est_ws = List[List[TEstimationWorkspace]]()
     var perm_arena = BufferArena()
