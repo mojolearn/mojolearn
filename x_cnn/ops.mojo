@@ -25,7 +25,7 @@ from std.math import fma  # only a sabotage arm (seam 5709) spells the fused for
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from core.philox import philox4x32_10
-from checks.numerics import ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt, identical_sqrt
 
 comptime FP = MutPointer[Float32, MutAnyOrigin]
 comptime IP = MutPointer[Int32, MutAnyOrigin]
@@ -723,6 +723,8 @@ def adam_at(i: Int, w: FP, g: FP, mv: FP, hyper: FP, q: IP, p: IP):
 # every shape and every core count (IDENTITY_PATHS row 7's rule; DEVIATION
 # 5702). PyTorch's reference (aten/src/ATen/native/cuda/Normalization.cuh)
 # uses Welford partials across a block, a schedule of its own.
+# Under IDENTICAL the reductions are the BLOCKED folds below (BN_FOLD_BLOCK):
+# fixed blocks whose size depends on N * HW alone, on every column.
 comptime BN_MEAN = 0
 comptime BN_VAR = 1
 comptime BN_INVSTD = 2
@@ -827,6 +829,142 @@ def bn_bwd_red_at(c: Int, x: FP, g: FP, aux: FP, f3: FP, q: IP, p: IP):
     aux.unsafe_store(_bn(aux, BN_SUMGX, c, C), sgx)
 
 
+# lane idn-loss-norm-folds (2026-10-04): the BLOCKED per-channel folds,
+# IDENTICAL only, on every column (the device launches these one thread per
+# element, the host calls the same functions). A channel's count = N * HW
+# values, in the same (n, hw) order, are cut into consecutive blocks of
+# bn_fold_block(count) values; each block is one ascending chain from +0.0
+# (one thread per (channel, block)), and the channel's block partials are
+# then added ascending from +0.0 (one thread per channel). The block size is
+# a function of count alone, so the order is the same on every vendor, the
+# host and every core count. With one block the result is the single
+# chain's. It replaced one thread folding a whole channel.
+# `-D MOJOLEARN_BN_FOLD_BLOCK_OFF` restores the single chain.
+comptime BN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_BN_FOLD_BLOCK_OFF"]()
+
+
+@always_inline
+def bn_fold_block(count: Int) -> Int:
+    """Values per block: the smallest power of two B >= 64 with B * B >= count."""
+    var b = 64
+    while b * b < count:
+        b *= 2
+    return b
+
+
+@always_inline
+def bn_fold_blocks(count: Int) -> Int:
+    """Blocks per channel (at least 1)."""
+    var b = bn_fold_block(count)
+    var nb = (count + b - 1) // b
+    return nb if nb > 0 else 1
+
+
+@always_inline
+def _bn_blk_fold[MODE: Int](t: Int, x: FP, g: FP, aux: FP, p: IP) -> Tuple[Float32, Float32]:
+    """Block t = c * NB + b of channel c: the ascending chain over its
+    values. MODE 0: (sum x, 0), images through bn_mean_row. MODE 1:
+    (sum (x - mean)^2, 0). MODE 2: (sum g, sum g * xhat)."""
+    var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
+    var count = N * HW
+    var B = bn_fold_block(count)
+    var NB = bn_fold_blocks(count)
+    var c = t // NB
+    var j = (t - c * NB) * B
+    var j1 = min(j + B, count)
+    var a = j // HW
+    var k = j - a * HW
+    var mean = Float32(0)
+    var invstd = Float32(0)
+    comptime if MODE != 0:
+        mean = aux.unsafe_load(_bn(aux, BN_MEAN, c, C))
+    comptime if MODE == 2:
+        invstd = aux.unsafe_load(_bn(aux, BN_INVSTD, c, C))
+    var s0 = Float32(0)
+    var s1 = Float32(0)
+    while j < j1:
+        var n = a
+        comptime if MODE == 0:
+            n = bn_mean_row(a, N)
+        var base = (n * C + c) * HW
+        var kend = min(HW, k + (j1 - j))
+        var kk = k
+        while kk < kend:
+            comptime if MODE == 0:
+                s0 = ftz(s0 + ftz(x.unsafe_load(base + kk)))
+            elif MODE == 1:
+                var d = ftz(ftz(x.unsafe_load(base + kk)) - mean)
+                s0 = ftz(s0 + ftz(identical_mul(d, d)))
+            else:
+                var gv = ftz(g.unsafe_load(base + kk))
+                var xhat = ftz(identical_mul(ftz(ftz(x.unsafe_load(base + kk)) - mean), invstd))
+                s0 = ftz(s0 + gv)
+                s1 = ftz(s1 + ftz(identical_mul(gv, xhat)))
+            kk += 1
+        j += kend - k
+        k = 0
+        a += 1
+    return (s0, s1)
+
+
+@always_inline
+def _bn_blk_total(c: Int, part: FP, NB: Int) -> Float32:
+    """The NB block partials of channel c added ascending from +0.0."""
+    var acc = Float32(0)
+    for b in range(NB):
+        acc = ftz(acc + part.unsafe_load(c * NB + b))
+    return acc
+
+
+@always_inline
+def bn_blk_sum_at(t: Int, x: FP, part: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """part[t] = block t's sum of x (part holds C * NB words)."""
+    part.unsafe_store(t, _bn_blk_fold[0](t, x, x, x, p)[0])
+
+
+@always_inline
+def bn_blk_mean_at(c: Int, part: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """Channel c's mean from its block sums."""
+    var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
+    var acc = _bn_blk_total(c, part, bn_fold_blocks(N * HW))
+    aux.unsafe_store(_bn(aux, BN_MEAN, c, C), ftz(identical_div(acc, Float32(N * HW))))
+
+
+@always_inline
+def bn_blk_sq_at(t: Int, x: FP, part: FP, aux: FP, f3: FP, q: IP, p: IP):
+    """part[t] = block t's sum of (x - mean)^2."""
+    part.unsafe_store(t, _bn_blk_fold[1](t, x, x, aux, p)[0])
+
+
+@always_inline
+def bn_blk_var_at(c: Int, part: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """Channel c's biased variance and invstd from its block sums."""
+    var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
+    var sq = _bn_blk_total(c, part, bn_fold_blocks(N * HW))
+    var var_b = ftz(identical_div(sq, Float32(N * HW)))
+    aux.unsafe_store(_bn(aux, BN_VAR, c, C), var_b)
+    aux.unsafe_store(_bn(aux, BN_INVSTD, c, C), ftz(identical_rsqrt(ftz(var_b + aux.unsafe_load(0)))))
+
+
+@always_inline
+def bn_blk_red_at(t: Int, x: FP, g: FP, aux: FP, part: FP, q: IP, p: IP):
+    """part[t] = block t's sum of g, part[C * NB + t] = its sum of g * xhat
+    (part holds 2 * C * NB words)."""
+    var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
+    var r = _bn_blk_fold[2](t, x, g, aux, p)
+    part.unsafe_store(t, r[0])
+    part.unsafe_store(C * bn_fold_blocks(N * HW) + t, r[1])
+
+
+@always_inline
+def bn_blk_red_fin_at(c: Int, part: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """Channel c's sum_g and sum_gx from its block sums."""
+    var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
+    var NB = bn_fold_blocks(N * HW)
+    aux.unsafe_store(_bn(aux, BN_SUMG, c, C), _bn_blk_total(c, part, NB))
+    aux.unsafe_store(_bn(aux, BN_SUMGX, c, C), _bn_blk_total(C + c, part, NB))
+
+
 @always_inline
 def bn_bwd_dx_at(i: Int, x: FP, g: FP, aux: FP, dst: FP, q: IP, p: IP):
     """Training-mode dx = (g - mean(g) - xhat * mean(g xhat)) * invstd * gamma
@@ -856,15 +994,18 @@ def bn_bwd_eval_dx_at(i: Int, x: FP, g: FP, aux: FP, dst: FP, q: IP, p: IP):
 # p = [N, C, HW, seed_lo, seed_hi, thresh_hi, thresh_lo]; hyper f[0] = drop p.
 
 
+# lane idn-loss-norm-folds (2026-10-04): the device draws a channel's mask
+# value ONCE (dropout2d_chan_at, one thread per (n, c)) and the element pass
+# reads it (dropout2d_apply_at), instead of ten Philox rounds and a division
+# per element. Same draw, same threshold, same product: no bit moves.
+# IDENTICAL only. `-D MOJOLEARN_DROPOUT2D_CH_MASK_OFF` restores the
+# per-element draw. The host column keeps dropout2d_at (the same words).
+comptime DROPOUT2D_CH_MASK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_DROPOUT2D_CH_MASK_OFF"]()
+
+
 @always_inline
-def dropout2d_at(i: Int, x: FP, mask: FP, dst: FP, hyper: FP, q: IP, p: IP):
-    """PyTorch nn.Dropout2d (training): every (n, c) channel is zeroed with
-    probability p, the rest scaled by 1 / (1 - p). The draw is Philox4x32-10
-    at counter (n*C + c, 0, 0, 0) under the 64-bit seed, word 0 compared as
-    an INTEGER against thresh = round(p * 2^32): no float in the decision
-    (DEVIATION 5703; torch's own stream is its generator's, not ours)."""
-    var C = _g(p, 1); var HW = _g(p, 2)
-    var nc = i // HW
+def dropout2d_mask_val(nc: Int, hyper: FP, p: IP) -> Float32:
+    """Channel nc = n*C + c's mask value: 0 or 1 / (1 - p)."""
     var key = SIMD[DType.uint32, 2](UInt32(p.unsafe_load(3)), UInt32(p.unsafe_load(4)))
     var ctr = SIMD[DType.uint32, 4](UInt32(nc), 0, 0, 0)
     var u = philox4x32_10(ctr, key)[0]
@@ -872,6 +1013,32 @@ def dropout2d_at(i: Int, x: FP, mask: FP, dst: FP, hyper: FP, q: IP, p: IP):
     var m = Float32(0)
     if UInt64(u) >= thresh:
         m = ftz(identical_div(Float32(1), ftz(Float32(1) - hyper.unsafe_load(0))))
+    return m
+
+
+@always_inline
+def dropout2d_at(i: Int, x: FP, mask: FP, dst: FP, hyper: FP, q: IP, p: IP):
+    """PyTorch nn.Dropout2d (training): every (n, c) channel is zeroed with
+    probability p, the rest scaled by 1 / (1 - p). The draw is Philox4x32-10
+    at counter (n*C + c, 0, 0, 0) under the 64-bit seed, word 0 compared as
+    an INTEGER against thresh = round(p * 2^32): no float in the decision
+    (DEVIATION 5703; torch's own stream is its generator's, not ours)."""
+    var HW = _g(p, 2)
+    var m = dropout2d_mask_val(i // HW, hyper, p)
+    mask.unsafe_store(i, m)
+    dst.unsafe_store(i, ftz(identical_mul(ftz(x.unsafe_load(i)), m)))
+
+
+@always_inline
+def dropout2d_chan_at(nc: Int, tab: FP, hyper: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """tab[nc] = channel nc's mask value (tab holds N * C words)."""
+    tab.unsafe_store(nc, dropout2d_mask_val(nc, hyper, p))
+
+
+@always_inline
+def dropout2d_apply_at(i: Int, x: FP, mask: FP, dst: FP, tab: FP, q: IP, p: IP):
+    """dropout2d_at's two stores, the mask value read from tab."""
+    var m = tab.unsafe_load(_ud(i, _g(p, 2)))
     mask.unsafe_store(i, m)
     dst.unsafe_store(i, ftz(identical_mul(ftz(x.unsafe_load(i)), m)))
 
