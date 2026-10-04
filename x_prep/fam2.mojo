@@ -4,8 +4,8 @@
 inside the prep lane's GPU routes, as x_prep units (x_prep/common.mojo's
 program model: one GPU thread per unit, the host binding the same units in a
 loop, so NVIDIA, AMD, Apple and the host column share one arithmetic).
-IDENTICAL only; each group has its own switch, ON by default, an `_OFF`
-define that restores the old route, and turns off under MOJOLEARN_IDN_ALL_OFF.
+Lane cpu2-l3-prep: the five groups below run on every tier (FAST too) and
+have no `_OFF` arm left (the old host steps are deleted from the GPU routes).
 
   IDN_WDRAW (-D MOJOLEARN_IDN_WDRAW_OFF): KBinsDiscretizer's weighted
       with-replacement subsample. Was the base binding's host helper
@@ -49,26 +49,30 @@ Ops F2_BASE .. F2_BASE + F2_N - 1 are a range of their own (as P2M_BASE's).
 An op whose switch is off compiles to nothing; the Python layer never stages
 it then (`x_prep_idn_fam2`, bindings/_mojolearn_x_prep*.mojo).
 """
-from std.sys.compile import is_defined
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.common import FP, IP, p, raw, ldi, sti, ld, st
 from checks.soft_f64 import sf64_from_f32
 from x_prep.prims import add, mul
 from x_prep.py2mojo import splitmix_at
 from x_prep.blocked import XB
+from x_prep.cpu2_prep import C2_FIRST, C2_N, run_c2_unit
 from x_prep.gram_blocked import (
     IDN_GRAM_BLOCKED, IDN_GRAM_ROWTILE, gb_part_unit, gb_part_row_unit, gb_fold_unit, qcb_part_unit, qcb_fold_unit,
 )
 
-comptime _F2_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-comptime IDN_WDRAW = _F2_IDN and not is_defined["MOJOLEARN_IDN_WDRAW_OFF"]()
-comptime IDN_PERM_DRAW = _F2_IDN and not is_defined["MOJOLEARN_IDN_PERM_DRAW_OFF"]()
-comptime IDN_WPICK = _F2_IDN and not is_defined["MOJOLEARN_IDN_WPICK_OFF"]()
-comptime IDN_PARTIAL_CODES = _F2_IDN and not is_defined["MOJOLEARN_IDN_PARTIAL_CODES_OFF"]()
-comptime IDN_LABEL_INV = _F2_IDN and not is_defined["MOJOLEARN_IDN_LABEL_INV_OFF"]()
+# Lane cpu2-l3-prep (2026-10-04): these five were IDENTICAL-only with an `_OFF` arm
+# that, like the FAST tier, ran the old host step inside the GPU fit / transform.
+# They are fixes, not experiments (owner): every tier and vendor runs the device
+# units, the host column runs the same units in its loop, and the `_OFF` defines
+# (and MOJOLEARN_IDN_ALL_OFF) no longer restore a host step.
+comptime IDN_WDRAW = True
+comptime IDN_PERM_DRAW = True
+comptime IDN_WPICK = True
+comptime IDN_PARTIAL_CODES = True
+comptime IDN_LABEL_INV = True
 
 comptime F2_BASE = 230
-comptime F2_N = 12
+# lane cpu2-l3-prep: ops 242 .. are x_prep/cpu2_prep.mojo's (C2_N of them)
+comptime F2_N = C2_FIRST + C2_N
 
 
 @always_inline
@@ -328,3 +332,6 @@ def run_f2_unit[OP: Int](t: Int, f: FP, q: IP):
     comptime if IDN_LABEL_INV:
         comptime if OP == F2_BASE + 11:
             f2_code_gather_unit(t, f, q)
+    # lane cpu2-l3-prep (x_prep/cpu2_prep.mojo), every tier
+    comptime if OP >= F2_BASE + C2_FIRST and OP < F2_BASE + C2_FIRST + C2_N:
+        run_c2_unit[OP - F2_BASE - C2_FIRST](t, f, q)
