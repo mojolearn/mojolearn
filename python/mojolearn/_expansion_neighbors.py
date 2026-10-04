@@ -726,14 +726,11 @@ class OneClassSVM(_XNeighbors):
         alpha = empty((m,), "<f4")
         # lane/fam2-neighbors (cpu-gpu audit case 2): the start as three device
         # launches (x_neighbors/ocsvm_init.mojo; the host binding runs the same
-        # items), registered in IDENTICAL unless -D MOJOLEARN_IDN_OCSVM_DEV_INIT_OFF
-        init_fn = getattr(self._bind(), "x_neighbors_ocsvm_alpha_init", None)
-        if init_fn is not None:
-            init_fn([addr_ro(cv, name="xn_ocsvm_init C"), addr(alpha, name="xn_ocsvm_init alpha")],
-                    [m], [float(self.nu)])
-        else:
-            _native("ocsvm_alpha_init_f32")(addr_ro(cv, name="C"), m, float(self.nu),
-                                            0 if sample_weight is None else 1, addr(alpha, name="alpha"))
+        # items), registered in every mode since lane cpu2-l9-neighbors (no
+        # host fallback)
+        self._bind().x_neighbors_ocsvm_alpha_init(
+            [addr_ro(cv, name="xn_ocsvm_init C"), addr(alpha, name="xn_ocsvm_init alpha")],
+            [m], [float(self.nu)])
         info = _empty_out((1,), "<f4")
         iters = empty((1,), "<i4")
         cap = 10_000_000 if int(self.max_iter) < 0 else int(self.max_iter)
