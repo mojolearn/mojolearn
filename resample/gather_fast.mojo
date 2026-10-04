@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Opt-in Apple FAST row gather, recovered independently of old resample bundle."""
-from max.gpu import block_idx, block_dim, thread_idx
+from std.gpu import block_idx, block_dim, thread_idx
 
 
 def gather_rows_f32_kernel(
