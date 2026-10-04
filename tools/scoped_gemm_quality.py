@@ -41,36 +41,34 @@ def verify_source(compiled):
 
 BOUND = 5e-6
 # (name, m, n, k, transpose A/B, aliased inputs, data kind)
+# Generic spread, no shape window: the routes have none since 2026-10-04
+# (old window-edge cases removed). Includes split plans and vector shapes.
 CASES = [
-    ('tall-anchor', 32768, 64, 220, 0, 0, 0, 'random'),
-    ('tall-neighbor', 4097, 71, 221, 0, 0, 0, 'cancel'),
-    ('tall-low-bound', 4096, 32, 128, 0, 0, 0, 'dynamic'),
-    ('tall-outside', 4095, 32, 128, 0, 0, 0, 'random'),
-    ('dense-anchor', 2048, 512, 512, 0, 0, 0, 'random'),
-    ('dense-neighbor', 1025, 257, 257, 0, 0, 0, 'cancel'),
-    ('dense-outside', 1023, 256, 256, 0, 0, 0, 'random'),
-    ('narrow-anchor', 32768, 8, 220, 0, 1, 0, 'random'),
-    ('narrow-neighbor', 4097, 9, 221, 0, 1, 0, 'dynamic'),
-    ('narrow-low-bound', 4096, 2, 128, 0, 1, 0, 'cancel'),
-    ('narrow-outside', 4096, 17, 128, 0, 1, 0, 'random'),
-    ('vector-control', 4096, 1, 128, 0, 1, 0, 'random'),
-    ('square-control', 1024, 1024, 220, 0, 0, 0, 'random'),
-    ('gram-nt-anchor', 1024, 1024, 220, 0, 1, 1, 'random'),
-    ('gram-nt-neighbor', 221, 221, 257, 0, 1, 1, 'dynamic'),
-    ('gram-tn-new-orientation', 220, 220, 257, 1, 0, 1, 'random'),
-    ('gram-nonalias-control', 220, 220, 257, 1, 0, 0, 'random'),
-    ('gram-128-control', 128, 128, 220, 0, 1, 1, 'random'),
-    ('gram-before-split', 220, 220, 1023, 0, 1, 1, 'cancel'),
-    ('gram-at-split', 220, 220, 1024, 0, 1, 1, 'random'),
-    ('gram-after-split', 220, 220, 1025, 0, 1, 1, 'dynamic'),
-    ('gram-tn-split', 220, 220, 1025, 1, 0, 1, 'random'),
+    ('nn-tall', 50000, 48, 300, 0, 0, 0, 'random'),
+    ('nn-odd', 2003, 97, 37, 0, 0, 0, 'cancel'),
+    ('nn-wide', 3000, 1500, 64, 0, 0, 0, 'dynamic'),
+    ('nn-small', 9, 8, 13, 0, 0, 0, 'random'),
+    ('nn-vector', 20000, 1, 150, 0, 0, 0, 'random'),
+    ('nn-split', 100, 90, 4000, 0, 0, 0, 'cancel'),
+    ('nt-narrow', 200000, 3, 64, 0, 1, 0, 'random'),
+    ('nt-odd', 5003, 37, 700, 0, 1, 0, 'dynamic'),
+    ('nt-wide', 2000, 600, 1500, 0, 1, 0, 'random'),
+    ('nt-vector', 4000, 1, 77, 0, 1, 0, 'cancel'),
+    ('nt-split', 64, 40, 3000, 0, 1, 0, 'random'),
+    ('gram-nt', 1500, 1500, 300, 0, 1, 1, 'random'),
+    ('gram-nt-split', 8, 8, 2000, 0, 1, 1, 'dynamic'),
+    ('gram-nt-odd', 333, 333, 977, 0, 1, 1, 'cancel'),
+    ('gram-tn-split', 97, 97, 5000, 1, 0, 1, 'random'),
+    ('gram-tn', 600, 600, 800, 1, 0, 1, 'dynamic'),
+    ('tn-nonalias-control', 300, 300, 257, 1, 0, 0, 'random'),
     ('tt-control', 129, 131, 257, 1, 1, 0, 'random'),
 ]
 # Covariance actual entrance including its separate split policy and input lifecycle.
-PCA_CASES = [('pca-fused-control', 257, 128, 1), ('pca-boundary', 257, 129, 1),
-             ('pca-neighbor', 1025, 221, 1), ('pca-no-restore', 1025, 220, 0),
-             ('pca-one-split-atomic-control', 31, 129, 1)]
-
+# nc <= 128 takes the caller's fused arm (no scoped call); that is the
+# caller's existing structure, not a route window.
+PCA_CASES = [('pca-fused-control', 2000, 64, 1), ('pca-wide', 3001, 300, 1),
+             ('pca-no-restore', 5000, 700, 0), ('pca-few-rows', 31, 150, 1),
+             ('pca-many-features', 4000, 1500, 1)]
 
 def inputs(case):
     import numpy as np
@@ -99,14 +97,14 @@ def plan(case):
 
 def chosen(case, mask):
     _, m, n, k, ta, tb, alias, _ = case
+    nn, nt, tn = not ta and not tb, not ta and tb, ta and not tb
     result = 0
-    if mask & 1 and not ta and not tb and m >= 4096 and 32 <= n <= 128 and 128 <= k <= 512:
+    # Layout only (scoped_dispatch.try_scoped_gemm, no shape window).
+    if mask & 3 and nn:
         result = 1
-    if mask & 2 and not ta and not tb and 1024 <= m <= 8192 and 256 <= n <= 768 and 256 <= k <= 768 and m >= 2 * n:
+    if mask & 4 and alias and m == n and (nt or tn):
         result = 1
-    if mask & 4 and alias and m == n and 129 <= m <= 1024 and k >= 128 and ta != tb:
-        result = 1
-    if mask & 8 and not ta and tb and m >= 4096 and 2 <= n <= 16 and 128 <= k <= 512:
+    elif mask & 8 and nt:
         result = 2
     if plan(case)[0] and not mask & 16:
         result = 0
@@ -152,7 +150,7 @@ def capture(so, destination, mask, expected_hash):
         mod.covariance(x.ctypes.data, c.ctypes.data, mu.ctypes.data, after.ctypes.data, [nr, nc, restore])
         delta = [a-b for a, b in zip(counts(), before)]
         expected = [0] * 9
-        arm = int(mask & 52 == 52 and nc > 128 and nr >= 128)
+        arm = int(mask & 52 == 52 and nc > 128)
         meta = None
         if nc > 128:
             expected[6 + arm] = 1

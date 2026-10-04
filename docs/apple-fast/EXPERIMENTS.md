@@ -1007,7 +1007,7 @@ See [scoped adapter contract](ab/scoped-gemm.md). M2/M3 manager gates required.
 
 | Define | Algorithm / scope | Source | Evidence | Verdict |
 |---|---|---|---|---|
-| `MOJOLEARN_MCD_FAST_G1_GRAM` | MinCovDet / EllipticEnvelope, TN self-Gram d129..256 K128..1023, non-split phase A/B | lane/apple-fast-mcd-g1-gram-remote, base201fe736 | unbuilt; binding x_decomp; ab/mcd-g1-gram.md | OPEN default-off; matrix + actual fitted quality and speed owed; not held atomic PCA/ordered-covariance retry |
+| `MOJOLEARN_MCD_FAST_G1_GRAM` | MinCovDet / EllipticEnvelope, TN self-Gram any d, K (window removed 2026-10-04 as benchmark-tuned; old window behind MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM), non-split | lane/apple-fast-mcd-g1-gram-remote, base201fe736 | unbuilt; binding x_decomp; ab/mcd-g1-gram.md | OPEN default-off; matrix + actual fitted quality and speed owed; not held atomic PCA/ordered-covariance retry |
 
 
 ## Main integration checkpoint, remote manager 2026-10-04
@@ -1024,7 +1024,7 @@ Existing accepted defaults and rollback flags are preserved.
 | Scoped decomp/PCA201fe736 and harness4c69e4387 | scoped mechanism PASS, actual PCA.fit HOLD on no-regression singular/noise gates; report recovery remains separate. No PCA default/board promotion. | scoped_dispatch.mojo and PCA/decomp caller gates |
 | Private compensated K3 GPU fe5df7ab0 | arima-k3-df-gpu-q-v1 PASS13groups/4controls; kernel-only. No production AutoARIMA integration or estimator timing. Original scalarK3 HOLD49 worse gradient components remains. | arima/impl/fast_scalar_df.mojo and gated binding export |
 | MCD G1 candidate35c712d9 with comments5d5a06c6 | SOURCE-READY/UNBUILT. Actual batched covariance/fitted-state/support/rank quality and timing owed; no import of held ordered covariance/PCA atomic route. | x_decomp/mcd_bmma.mojo |
-| Softmax G2 candidate4bfc1424 with comments574b63b8 | SOURCE-READY/UNBUILT. Matrix G2 lead does not establish optimizer quality/speed. Actual-caller quality and timing owed. | experiments/apple_fast/gemm/softmax_narrow.mojo |
+| Softmax G2 candidate4bfc1424 with comments574b63b8 | SOURCE-READY/UNBUILT. Window removed 2026-10-04 (any M, C, D; old window behind MOJOLEARN_LEGACY_NARROW_SOFTMAX_G2). Matrix G2 lead does not establish optimizer quality/speed. Actual-caller quality and timing owed. | experiments/apple_fast/gemm/softmax_narrow.mojo |
 | Existing MBK_LABRG, CholeskyNB512 | MBK qualityPASS but negligible/mixed speed; NB512260.4->265.7ms. Stay opt-in. | x_cluster/minibatch_fast.mojo; cholesky/checks/potrf.mojo |
 | Existing SVGP_BSPLIT / PREP2_EIGH_BLOCK | OPEN with no judged timing admission; historical queued/readiness status is not a result. | x_neighbors/iter_device.mojo; x_prep/fastprep2.mojo |
 

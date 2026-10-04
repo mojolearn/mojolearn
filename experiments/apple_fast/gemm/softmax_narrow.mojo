@@ -2,7 +2,8 @@
 """Opt-in G2 for the actual multiclass linear_fwd only. UNVALIDATED.
 
 No change to GEMV, transpose, bias, optimizer, precision or buffer lifecycle.
-Shape window is a hypothesis around resident G2 32768x8x220, not a winner.
+No shape window (2026-10-04): every contiguous NT call the kernel can run
+correctly is eligible. Only kernel limits remain (see softmax_gemm_nt).
 """
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.ffi import _Global
@@ -19,6 +20,10 @@ from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel
 # gates in docs/apple-fast/ab/softmax-g2-narrow.md before timing/promotion.
 comptime SOFTMAX_G2 = AFN_GEMM_APPLE and is_defined["MOJOLEARN_SOFTMAX_FAST_G2_NARROW"]()
 comptime SOFTMAX_AUDIT = AFN_GEMM_APPLE and is_defined["MOJOLEARN_SOFTMAX_G2_AUDIT"]()
+# LEGACY, default OFF: the old window admitted only M>=4096, C 2..16, D 128..512,
+# which brackets the board (istella-like 220 features, 8 classes). Removed as
+# benchmark-tuned on 2026-10-04; the window-free replacement is UNMEASURED.
+comptime SOFTMAX_LEGACY_WINDOW = is_defined["MOJOLEARN_LEGACY_NARROW_SOFTMAX_G2"]()
 
 struct SoftmaxAudit(Defaultable, Movable):
     var counts: InlineArray[Int, 3]
@@ -49,7 +54,14 @@ def softmax_gemm_nt(ctx: DeviceContext, mut dst: DeviceBuffer[DType.float32],
                    mut x: DeviceBuffer[DType.float32], mut weights: DeviceBuffer[DType.float32],
                    m: Int, n: Int, k: Int) raises:
     comptime if SOFTMAX_G2 or SOFTMAX_AUDIT:
-        var eligible = m >= 4096 and n >= 2 and n <= 16 and k >= 128 and k <= 512
+        # Kernel limits only. scoped_kernel[32, 32, False] bounds-checks every
+        # row, column and K index, so any M, C, D >= 1 is correct (one launch
+        # replaces one launch, so no launch-amortization floor is needed).
+        # Its shape arguments and strides are Int32, so every operand extent
+        # must fit in Int32.
+        var eligible = m >= 1 and n >= 1 and k >= 1
+        comptime if SOFTMAX_LEGACY_WINDOW:
+            eligible = eligible and m >= 4096 and n >= 2 and n <= 16 and k >= 128 and k <= 512
         eligible = eligible and max(m * n, max(m * k, n * k)) <= 2147483647
         eligible = eligible and dst.unsafe_ptr() != x.unsafe_ptr() and dst.unsafe_ptr() != weights.unsafe_ptr()
         eligible = eligible and len(dst) >= m * n and len(x) >= m * k and len(weights) >= n * k

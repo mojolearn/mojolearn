@@ -10,23 +10,25 @@ outputs have no transferred quality or speed claim. No default changes.
 
 The reusable selector uses only M/N/K, physical strides and input pointer
 identity. It does not inspect dataset names, values, labels or run variants
-at fit time. Its windows are opt-in hypotheses requiring held-out shapes
-and actual caller evidence before any default:
+at fit time. Since 2026-10-04 the routes have no shape window: the old
+windows bracketed board shapes and were removed as benchmark-tuned (kept only
+behind default-off MOJOLEARN_LEGACY_NARROW_SCOPED_GEMM). The window-free
+routes are UNMEASURED. Selection is layout only:
 
-| Flag suffix | Candidate | Experimental operation window |
+| Flag suffix | Candidate | Operation (any M, N, K >= 1, Int32-safe) |
 |---|---|---|
-| G1_TALL | G1 | NN, M≥4096, N32..128, K128..512 |
-| G1_DENSE | G1 | NN, M1024..8192, N256..768, K256..768, M≥2N |
-| G1_GRAM | G1 | same input pointer, square129..1024, NT or TN, K≥128 |
-| G2_NARROW | G2 | NT, M≥4096, N2..16, K128..512 |
+| G1_TALL | G1 | NN |
+| G1_DENSE | G1 | NN (same 64x64 kernel as G1_TALL) |
+| G1_GRAM | G1 | same input pointer, square, NT or TN |
+| G2_NARROW | G2 | NT (not claimed by G1_GRAM) |
 
 All flags start `MOJOLEARN_SCOPED_GEMM_`; FAST Apple is mandatory. `_SPLIT`
 is an additional permission for the existing atomic operation; `_PCA`
 is an additional permission for the PCA route. No flag means incumbent.
 `_AUDIT` counts incumbent/G1/G2 separately for decomp non-split, decomp split,
 PCA atomic, and exposes the last exact strides/splits/per. It never selects
-an arm dynamically. Audit calls must be serial. N1, output-input alias,
-unsupported layouts and outside-window shapes retain incumbent behavior.
+an arm dynamically. Audit calls must be serial. Output-input alias, unsupported layouts and
+non-Int32-safe extents retain incumbent behavior.
 The quality probe deliberately requires positive extents and refuses K0;
 product zero/empty handling remains entirely upstream and unchanged.
 

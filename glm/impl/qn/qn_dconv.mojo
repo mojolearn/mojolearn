@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""lane/apple-fast-linsvr, QN_FAST_DCONV (FAST + Apple default, part of QN_LSVR_ALL, n_features <= QN_ALL_MAX_D only; -D MOJOLEARN_LSVR_ALL_OFF reverts):
+"""lane/apple-fast-linsvr, QN_FAST_DCONV (FAST + Apple default, part of QN_LSVR_ALL, n_features <= QNF_MAX_D (fused-pass register bound); -D MOJOLEARN_LSVR_ALL_OFF reverts):
 L-BFGS iterations whose line-search decision and convergence test run on
 the device, the host reading ONE state block every QN_DCONV_POLL iterations.
 

@@ -34,6 +34,12 @@ comptime SPLITS = is_defined["MOJOLEARN_SCOPED_GEMM_SPLIT"]()
 # is owed; no fit timing/default admission. Mechanism PASS above is separate.
 comptime PCA = is_defined["MOJOLEARN_SCOPED_GEMM_PCA"]()
 comptime AUDIT = is_defined["MOJOLEARN_SCOPED_GEMM_AUDIT"]()
+# LEGACY, default OFF: the old per-route windows (TALL M>=4096 N32..128
+# K128..512; DENSE M1024..8192 N256..768 K256..768 M>=2N; GRAM M129..1024
+# K>=128; NARROW M>=4096 N2..16 K128..512; N>=2) bracketed board shapes
+# (220 features, 8 classes). Removed as benchmark-tuned on 2026-10-04; the
+# window-free replacement is UNMEASURED.
+comptime LEGACY_WINDOWS = is_defined["MOJOLEARN_LEGACY_NARROW_SCOPED_GEMM"]()
 comptime ENABLED = AFN_GEMM_APPLE and (TALL or DENSE or GRAM or NARROW or AUDIT)
 comptime FPtr = MutPointer[Float32, MutAnyOrigin]
 
@@ -139,17 +145,33 @@ def try_scoped_gemm[SPLIT: Bool, ROUTE: Int](
         var tn = a_si == 1 and a_sp == m and b_sp == n and b_sj == 1
         var aliased_inputs = a == b
         var arm = 0
-        # Conservative experimental windows; no speed claim between measured points.
-        if TALL and nn and m >= 4096 and n >= 32 and n <= 128 and k >= 128 and k <= 512:
-            arm = 1
-        if DENSE and nn and m >= 1024 and m <= 8192 and n >= 256 and n <= 768 and k >= 256 and k <= 768 and m >= 2 * n:
-            arm = 1
-        if GRAM and aliased_inputs and m == n and m >= 129 and m <= 1024 and k >= 128 and (nt or tn):
-            arm = 1
-        if NARROW and nt and m >= 4096 and n >= 2 and n <= 16 and k >= 128 and k <= 512:
-            arm = 2
-        if m <= 0 or n <= 1 or k <= 0 or dst == a or dst == b:
+        comptime if LEGACY_WINDOWS:
+            if TALL and nn and m >= 4096 and n >= 32 and n <= 128 and k >= 128 and k <= 512:
+                arm = 1
+            if DENSE and nn and m >= 1024 and m <= 8192 and n >= 256 and n <= 768 and k >= 256 and k <= 768 and m >= 2 * n:
+                arm = 1
+            if GRAM and aliased_inputs and m == n and m >= 129 and m <= 1024 and k >= 128 and (nt or tn):
+                arm = 1
+            if NARROW and nt and m >= 4096 and n >= 2 and n <= 16 and k >= 128 and k <= 512:
+                arm = 2
+            if n <= 1:
+                arm = 0
+        else:
+            # Layout only, no shape window. scoped_kernel bounds-checks every
+            # row, column and K index, so any M, N, K >= 1 is correct; one
+            # launch replaces one launch, so no launch-amortization floor.
+            # TALL and DENSE share the 64x64 NN kernel. A self-Gram (aliased,
+            # square) keeps the 64x64 tile; any other NT call takes the 32x32
+            # tile under NARROW.
+            if (TALL or DENSE) and nn:
+                arm = 1
+            if GRAM and aliased_inputs and m == n and (nt or tn):
+                arm = 1
+            elif NARROW and nt:
+                arm = 2
+        if m <= 0 or n <= 0 or k <= 0 or dst == a or dst == b:
             arm = 0
+        # Shapes and strides travel as Int32 (kernel limit).
         if max(m * n, max(m * k, n * k)) > 2147483647:
             arm = 0
         if splits < 1 or per < 1 or (SPLIT and per % 16 != 0):

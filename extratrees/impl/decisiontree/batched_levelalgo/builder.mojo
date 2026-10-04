@@ -1924,9 +1924,12 @@ comptime ET_BINNED_REG = (
 )
 comptime ET_BINS = ET_QSTRIDE
 comptime ET_CODE = DType.uint16
-#: Binning pays in bytes per row, so it is taken only on wide data: at 16
-#: columns (taxi) the border pass costs more than the smaller reads save.
-comptime ET_BINNED_MIN_COLS = 64
+#: LEGACY, default OFF: binning was taken only at n_cols >= 64, chosen
+#: between taxi (16 columns, slower) and istella (220, faster). Removed as
+#: benchmark-tuned on 2026-10-04: binning now applies at every width;
+#: UNMEASURED.
+comptime ET_BINNED_LEGACY_NARROW = is_defined["MOJOLEARN_LEGACY_NARROW_ET_BINNED"]()
+comptime ET_BINNED_MIN_COLS = 64 if ET_BINNED_LEGACY_NARROW else 1
 comptime ET_CODE_TILE = 8
 """Features per block for the code passes (M4 istellareg: 4 -> 53 s, 8 -> 49 s, 16 -> 67 s, 32 -> 79 s)."""
 

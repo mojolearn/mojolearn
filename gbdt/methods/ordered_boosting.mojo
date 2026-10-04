@@ -2023,9 +2023,8 @@ def fit_ordered(
     var fast_est_view = List[DeviceBuffer[DType.float32]]()
     var fast_h_leaves = List[HostBuffer[DType.float32]]()
     # the Apple FAST Ordered bundle (`ORD_ALL`, ordered_fast_switches.mojo):
-    # on only when compiled in AND the index has more than
-    # ORD_ALL_MIN_FEATURES features (istella-wide gains with equal or
-    # better quality; taxi-narrow lost auc, so it keeps main's path). One
+    # on whenever compiled in (any width since 2026-10-04; the old width
+    # gate is MOJOLEARN_LEGACY_NARROW_ORD_ALL, default off). One
     # entry each when `ord_wide`, empty otherwise. `fast_part_off`: the
     # fold layout's partition starts plus `total` for the searcher's
     # one-launch fold bins. `fast_obs`: the searcher's per-level

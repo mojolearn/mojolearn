@@ -10,8 +10,11 @@ retaining weight transpose, bias addition, loss, backward pass, optimizer,
 stopping criteria, precision, buffers and refusals. Binary C=1 GEMV is intact.
 
 The shared direct `scoped_kernel[32,32,False]` is reused without cloning tile
-machinery. Candidate scope: FAST+Apple, M>=4096, C2..16, D128..512, contiguous
-NT buffers, valid capacities, no output/input alias and int32-safe products.
+machinery. Candidate scope (2026-10-04, no shape window): FAST+Apple, any M, C, D >= 1,
+contiguous NT buffers, valid capacities, no output/input alias and int32-safe
+products. The old window M>=4096, C2..16, D128..512 bracketed the board and was
+removed as benchmark-tuned; it survives only behind default-off
+MOJOLEARN_LEGACY_NARROW_SOFTMAX_G2. The window-free route is UNMEASURED.
 No split/atomic path, allocation, extra copy or synchronization is introduced.
 The selection depends only on known shape/layout metadata, not data or labels.
 
@@ -37,13 +40,14 @@ Audit exports: `softmax_g2_state`, `softmax_g2_reset`, `softmax_g2_count(0..2)`
 `tools/softmax_g2_quality.py` has capture/compare modes, only on M3 Ultra:
 
 ```
-MOJOLEARN_NUMERIC_MODE=fast python tools/softmax_g2_quality.py capture   --source FULL_SHA --binding VERIFIED_SO --binding-sha256 HASH   --arm 0 --case anchor --output FRESH_A_NPZ
+MOJOLEARN_NUMERIC_MODE=fast python tools/softmax_g2_quality.py capture   --source FULL_SHA --binding VERIFIED_SO --binding-sha256 HASH   --arm 0 --case r2000-d8-c2 --output FRESH_A_NPZ
 # Arm1, separate fresh process, B artifact, same case/source and fresh output.
 python tools/softmax_g2_quality.py compare --a A_NPZ --b B_NPZ --output FRESH_JSON
 ```
 
-All declared cases required before claiming the proposed window: anchor,
-odd,lower,upper,rows-out,features-low,features-high,classes-out. Actual fit and
+All declared cases required: a generic spread of rows 2k..200k, features
+8..1500, classes 2..64 (see CASES in the tool; no case sits on a window edge).
+Actual fit and
 train/query scoring are captured, with exact expected route counts/metadata.
 Fresh reservation prevents replay under the same capture tag. Fixture hashes,
 source and binary hashes are recorded. NO_REACH is a failure, not admission.
@@ -52,8 +56,7 @@ Independent FP64 evaluates each arm's fitted train/holdout cross-entropy,
 training gradient norm, holdout classification error, returned-score maximum
 error and objective error. Every metric requires B<=A with ZERO allowance;
 retcode must match. No coefficient bit-match requirement or relaxed numerical
-threshold is substituted. Cases outside eligibility remain control evidence;
-rows-out still exercises eligible query scoring. No timings or opponent jobs.
+threshold is substituted. Every case is eligible (no window). No timings or opponent jobs.
 Binary GEMV isolation also needs a predeclared binary caller control before
 promotion; it is not silently certified by these multiclass-only captures.
 

@@ -1318,10 +1318,12 @@ def _sgd_ps_kernel_body(
 
 
 # lane/apple-fast-gap-clus3 (2026-10-03): SGD_FAST_PS_SIMD, FAST + Apple default
-# for d <= SPS_MAX_D (off: -D MOJOLEARN_SGD_FAST_PS_SIMD_OFF). M3 A/Bs (n=1):
+# for d <= SPS_MAX_D = SPS_W * SPS_MAXC, the register bound (off:
+# -D MOJOLEARN_SGD_FAST_PS_SIMD_OFF; old d <= 32 gate behind
+# MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD). M3 A/Bs (n=1):
 # sgd-ocsvm taxi (d 11) 58,334 -> 42,252 ms (-27.6%), fraction_flagged .05557
 # identical (clus3-sgdoc-simd-taxi); sgd-ocsvm istella (d 220) 75,506 ->
-# 106,443 ms (+41%, clus3-sgdoc-simd-istella), hence the small-d gate. Cause: the per-sample fit above runs a
+# 106,443 ms (+41%, clus3-sgdoc-simd-istella), hence the old small-d gate. Cause: the per-sample fit above runs a
 # whole block per problem and, per SAMPLE, writes the MB_DBLK block partials
 # to device memory, crosses a device-memory `team_barrier`, re-reads them and
 # reloads/stores every weight from device memory: ~3.7 us a sample on the M3,
@@ -1357,8 +1359,14 @@ comptime SGD_FAST_PS_SIMD = (
 )
 comptime SPS_W = 32
 comptime SPS_MAXC = 8
-comptime SPS_MAX_D = 32
-"""The simdgroup form wins at taxi's d = 11 and loses at Istella's 220."""
+#: Kernel limit (register footprint): each of the SPS_W lanes holds SPS_MAXC
+#: weights and their q in registers, so d <= SPS_W * SPS_MAXC.
+comptime SPS_MAX_D = SPS_W * SPS_MAXC
+#: LEGACY, default OFF: the old gate admitted only d <= 32, chosen between
+#: taxi (d 11, -27.6%) and istella (d 220, +41%). Removed as benchmark-tuned
+#: on 2026-10-04; the register-bound replacement is UNMEASURED.
+comptime SPS_LEGACY_NARROW = is_defined["MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD"]()
+comptime SPS_LEGACY_MAX_D = 32
 
 
 @always_inline
@@ -1611,6 +1619,8 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var sps = False
     comptime if SGD_FAST_PS_SIMD:
         sps = d >= 1 and d <= SPS_MAX_D
+        comptime if SPS_LEGACY_NARROW:
+            sps = sps and d <= SPS_LEGACY_MAX_D
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
     var dlab = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     var dsw = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
