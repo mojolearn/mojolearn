@@ -1497,9 +1497,10 @@ class _DARTBase(_TreesEnsembleBase):
                 default="1")
         try:
             if self._dart_device(b, session, K):
-                # lane/apple-fast-dart: the round on the device (FAST + Apple
-                # binaries (default; not -D MOJOLEARN_DART_DEVICE_OFF) expose the
-                # x_trees_dart_* entries; every other binary takes main's loop)
+                # lane/apple-fast-dart: the round on the device (FAST binaries on
+                # every GPU vendor since lane cpu2-l5-trees, IDENTICAL GPU and host
+                # binaries since fam2-forests, expose the x_trees_dart_* entries;
+                # a binary without them takes main's loop)
                 self._boost_loop_device(Xa, y32, K, b, seed, drop_seed, inits, lr, l1, mds, lam, max_depth,
                                         session)
             else:
@@ -1604,8 +1605,9 @@ class _DARTBase(_TreesEnsembleBase):
             sum_w += shrink
 
     # -------------------------------------------- lane/apple-fast-dart
-    # The boosting round on the device (xtrees/dart_device.mojo): FAST +
-    # Apple (default unless -D MOJOLEARN_DART_DEVICE_OFF) and, since lane
+    # The boosting round on the device (xtrees/dart_device.mojo): FAST on
+    # every GPU vendor (Apple since lane/apple-fast-dart, NVIDIA and AMD since
+    # lane cpu2-l5-trees; default unless -D MOJOLEARN_DART_DEVICE_OFF) and, since lane
     # fam2-forests, every IDENTICAL build (GPU kernels and the host twin
     # xtrees/dart_host.mojo, default unless -D MOJOLEARN_IDN_DART_DEVICE_OFF);
     # the only builds that register x_trees_dart_open. Same drop set, shrink factors and

@@ -2,7 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """DART's boosting round on the device (lane/apple-fast-dart, 2026-10-02).
 
-FAST + Apple (off: `-D MOJOLEARN_DART_DEVICE_OFF`) and, since fam2-forests, IDENTICAL on every
+FAST on every GPU vendor (Apple first, NVIDIA and AMD since lane cpu2-l5-trees;
+off: `-D MOJOLEARN_DART_DEVICE_OFF`) and, since fam2-forests, IDENTICAL on every
 vendor (`IDN_DART_DEVICE`, off: `-D MOJOLEARN_IDN_DART_DEVICE_OFF`); nothing here is
 instantiated otherwise (`DART_DEVICE` guards every entry body and the
 binding's registration), so IDENTICAL compiles main's code unchanged.
@@ -40,7 +41,7 @@ factors and the tree shapes are main's."""
 from std.ffi import _Global
 from std.gpu import block_idx, block_dim, grid_dim, thread_idx
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from std.sys import has_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.device_zero import enqueue_fill
@@ -65,12 +66,17 @@ from xtrees.dart_units import (
 # main's loop on every column.
 # The gate itself is `xtrees/dart_units.mojo: IDN_DART_DEVICE` (shared with the host twin).
 
-# FAST + Apple default since the M3 A/B (lane/apple-fast-dart 443f4b3cc,
+# FAST default since the M3 A/B (lane/apple-fast-dart 443f4b3cc,
 # istella, n=1): dart 45,837 -> 24,730 ms (-46%), acc .9487 -> .9486;
 # dart-reg 45,445 -> 24,837 ms (-45%), r2 .5507 -> .5514. Off define:
 # -D MOJOLEARN_DART_DEVICE_OFF. The old -D MOJOLEARN_DART_DEVICE is harmless.
+# lane cpu2-l5-trees (2026-10-04): FAST on EVERY GPU vendor, not Apple only.
+# Before, a FAST NVIDIA or AMD fit ran main's `_boost_loop`, the score, the
+# tree walks, the gradients, the leaf sums and the per-dropped-tree passes
+# as host ops each round; the round here is the FAST + Apple round
+# unchanged (float32 score, chunked leaf sums), now on every vendor.
 comptime DART_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_DART_DEVICE_OFF"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_accelerator() and not is_defined["MOJOLEARN_DART_DEVICE_OFF"]()
 ) or IDN_DART_DEVICE
 
 comptime TPB = 256

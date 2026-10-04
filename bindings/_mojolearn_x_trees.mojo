@@ -75,8 +75,9 @@ def tree_shap_binding(forest: PythonObject, tscale: PythonObject, cover: PythonO
     return PythonObject(p[0])
 
 
-# ---- DART's boosting round on the device (lane/apple-fast-dart; FAST +
-# Apple by default, off with -D MOJOLEARN_DART_DEVICE_OFF; xtrees/dart_device.mojo). Registered
+# ---- DART's boosting round on the device (lane/apple-fast-dart; FAST on
+# every GPU vendor since lane cpu2-l5-trees, IDENTICAL since fam2-forests;
+# off with -D MOJOLEARN_DART_DEVICE_OFF; xtrees/dart_device.mojo). Registered
 # only under that guard: the Python layer takes the device loop when
 # `x_trees_dart_open` exists on the binding.
 def _dart_ints(params: PythonObject, n: Int, who: String) raises -> List[Int]:
