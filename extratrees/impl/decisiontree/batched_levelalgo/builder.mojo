@@ -105,6 +105,7 @@ from extratrees.checks.pcg_rng import PCGenerator, uniform_int_u32
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv, fma
+from std.atomic import Atomic
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator, size_of
 
@@ -2089,30 +2090,18 @@ struct HostBins(ImplicitlyCopyable, Movable):
         return self.q[unsafe_offset = Int(col) * ET_BINS + t]
 
 
-comptime IDN_ET_RESCUE_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_ET_RESCUE_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
-"""fam2-forests (2026-10-04), IDENTICAL on every vendor, default ON:
-DEVIATION 205's rescue column is picked ON THE DEVICE. Before, a cycle with
-an all-constant node drained the queue after the survey, downloaded the
-survey's `3 * n_sub * n_cols` range cells, walked them on the host (the
-constant test and `rescue_pick` per node) and uploaded the chosen columns,
-after building and uploading an `n_sub * n_cols` identity column table on
-the host. Now `ident_colids_kernel` writes the survey's columns,
-`rescue_pick_kernel` runs the same constant test over the same cells in the
-same ascending column order with the same keyed draw, and the rescued
-search reads its column from `d_colids`; the host reads back one Int32 per
-surveyed node (riding the rescued search's own drain) to know which nodes
-had a column to rescue. The rescued search covers every surveyed node (a
-node with no varying column searches column 0, constant on its rows by the
-survey, and its split is left as the first search found it), so the staged
-work items are the survey's own bytes and no drain separates the two. Same
-columns, same splits: no bit moves, the host column is untouched.
-`-D MOJOLEARN_IDN_ET_RESCUE_DEVICE_OFF` restores the host walk."""
+# THE DEVICE RESCUE (fam2-forests 2026-10-04; unconditional since cpu3-trees,
+# in IDENTICAL and FAST, every vendor): DEVIATION 205's rescue column is
+# picked ON THE DEVICE. `ident_colids_kernel` writes the survey's columns,
+# `rescue_pick_kernel` runs the constant test over the survey's cells in
+# ascending column order with `rescue_pick`'s keyed draw, and the rescued
+# search reads its column from `d_colids`; the host reads back one Int32 per
+# surveyed node (riding the rescued search's own drain). The rescued search
+# covers every surveyed node (a node with no varying column searches column
+# 0, constant on its rows by the survey, and its split is left as the first
+# search found it). Same columns, same splits as the host column. The old
+# host walk (download `3 * n_sub * n_cols` cells, pick on the host, upload
+# the columns) and its `MOJOLEARN_IDN_ET_RESCUE_DEVICE_OFF` arm are removed.
 
 
 def ident_colids_kernel(
@@ -2139,7 +2128,7 @@ def rescue_pick_kernel(
     n_cols: Int32,
     seed: UInt64,
 ):
-    """`IDN_ET_RESCUE_DEVICE`: one thread per surveyed node. Counts the
+    """THE DEVICE RESCUE: one thread per surveyed node. Counts the
     node's non-constant columns over the survey's cells (`n_sub x n_cols`,
     ascending column order, `node_feature_is_constant`), draws
     `rescue_pick`'s index from `rescue_key(seed, tree, node)` and stores
@@ -2395,8 +2384,13 @@ def upload_dataset(
     n_classes: Int32,
     x_addr: Int = 0,
     x_row_major: Bool = False,
+    labels_on_device: Bool = False,
 ) raises -> DeviceDataset:
     """Put the immutable half of the fit on the device, once. DEVIATION 184.
+
+    `labels_on_device` (cpu3-trees): `class_ids` is ignored and `d_labels`
+    is allocated but not written; `upload_dataset_labels_f32` fills it with
+    `class_ids_device_kernel`.
 
     A nonzero `x_addr` borrows the caller's float32 block through this
     synchronous upload (DEVIATION 2481); `x_row_major` says it is ROW-major
@@ -2408,7 +2402,7 @@ def upload_dataset(
         raise Error("upload_dataset: a row-major X must be a borrowed address")
     if x_addr == 0 and len(x_col_major) != Int(n_rows) * Int(n_cols):
         raise Error("x_col_major must be n_rows * n_cols long, column major")
-    if len(class_ids) != Int(n_rows):
+    if not labels_on_device and len(class_ids) != Int(n_rows):
         raise Error("class_ids must be n_rows long")
     var count = Int(n_rows) * Int(n_cols)
     var boundary_times = StageTimes()
@@ -2431,10 +2425,17 @@ def upload_dataset(
         ctx.synchronize()
         _ = h_data^
     var d_labels = ctx.enqueue_create_buffer[DType.int32](Int(n_rows))
-    var h_labels = ctx.enqueue_create_host_buffer[DType.int32](Int(n_rows))
+    var h_labels = ctx.enqueue_create_host_buffer[DType.int32](
+        1 if labels_on_device else Int(n_rows)
+    )
     ctx.synchronize()
-    memcpy(dest=h_labels.unsafe_ptr(), src=class_ids.unsafe_ptr(), count=Int(n_rows))
-    ctx.enqueue_copy(dst_buf=d_labels, src_ptr=h_labels.unsafe_ptr())
+    if not labels_on_device:
+        memcpy(
+            dest=h_labels.unsafe_ptr(),
+            src=class_ids.unsafe_ptr(),
+            count=Int(n_rows),
+        )
+        ctx.enqueue_copy(dst_buf=d_labels, src_ptr=h_labels.unsafe_ptr())
     var d_data_rm = ctx.enqueue_create_buffer[DType.float32](1)
     # FAST on Apple (lane apple-fast-rfet-scan): the non-finite refusal is
     # this device scan of the uploaded X; the Python fit skips its host scan
@@ -2457,6 +2458,96 @@ def upload_dataset(
         d_data^, d_labels^, n_rows, n_cols, n_classes, d_data_rm^, False,
         d_bins_rm^, d_quant^, d_nbins^, False, False,
     )
+
+
+def class_ids_device_kernel(
+    out_ids: MutPointer[Int32, MutAnyOrigin],
+    labels: MutPointer[Float32, MutAnyOrigin],
+    first_bad: MutPointer[Int32, MutAnyOrigin],
+    n_rows: Int32,
+    n_classes: Int32,
+):
+    """cpu3-trees: `class_ids_for` (`randomforest.mojo`) on the device, one
+    thread per row. The id is the SAME truncation (`Int(label)`); a label
+    whose truncation falls outside `[0, n_classes)` (or a NaN) stores 0 and
+    lowers `first_bad[0]` to its row (an integer minimum: order-free)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_rows):
+        return
+    var v = labels[unsafe_offset=i]
+    if v > Float32(-1.0) and v < Float32(Int(n_classes)):
+        out_ids[unsafe_offset=i] = Int32(Int(v))
+    else:
+        out_ids[unsafe_offset=i] = Int32(0)
+        _ = Atomic[DType.int32].min(first_bad, Int32(i))
+
+
+def upload_dataset_labels_f32(
+    ctx: DeviceContext,
+    x_col_major: List[Float32],
+    labels: List[Float32],
+    n_rows: Int32,
+    n_cols: Int32,
+    n_classes: Int32,
+    x_addr: Int = 0,
+    x_row_major: Bool = False,
+) raises -> DeviceDataset:
+    """`upload_dataset` with the float labels converted to class ids ON THE
+    DEVICE (cpu3-trees: the host `class_ids_for` row loop left the GPU fit).
+    The labels cross the bus once as the caller's float32 words; the ids are
+    `class_ids_device_kernel`'s, the same truncation as the host column's
+    `class_ids_for`, so no bit moves. One Int32 comes back: the first row
+    whose label is out of range, refused with `class_ids_for`'s message."""
+    if len(labels) != Int(n_rows):
+        raise Error(
+            "labels must be n_rows long; got "
+            + String(len(labels))
+            + " for n_rows="
+            + String(n_rows)
+        )
+    var dataset = upload_dataset(
+        ctx, x_col_major, List[Int32](), n_rows, n_cols, n_classes,
+        x_addr=x_addr, x_row_major=x_row_major, labels_on_device=True,
+    )
+    var n = Int(n_rows)
+    var d_lf = ctx.enqueue_create_buffer[DType.float32](n)
+    var h_lf = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var d_bad = ctx.enqueue_create_buffer[DType.int32](1)
+    var h_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.synchronize()
+    memcpy(dest=h_lf.unsafe_ptr(), src=labels.unsafe_ptr(), count=n)
+    ctx.enqueue_copy(dst_buf=d_lf, src_ptr=h_lf.unsafe_ptr())
+    ctx.enqueue_memset(d_bad, Int32(n))
+    ctx.enqueue_function[class_ids_device_kernel](
+        dataset.d_labels.unsafe_ptr(),
+        d_lf.unsafe_ptr(),
+        d_bad.unsafe_ptr(),
+        n_rows,
+        n_classes,
+        grid_dim=ceildiv(n, 256),
+        block_dim=256,
+    )
+    ctx.enqueue_copy(dst_buf=h_bad, src_buf=d_bad)
+    ctx.synchronize()
+    var bad = Int(h_bad.unsafe_ptr()[unsafe_offset=0])
+    _ = d_lf^
+    _ = h_lf^
+    _ = d_bad^
+    _ = h_bad^
+    if bad < n:
+        raise Error(
+            "label "
+            + String(labels[bad])
+            + " at row "
+            + String(bad)
+            + " truncates to class id "
+            + String(Int(labels[bad]))
+            + ", which is outside [0, "
+            + String(n_classes)
+            + "). The device score kernel would index its shared"
+            " accumulator out of bounds; refused by name."
+        )
+    return dataset^
 
 
 def train_classification_device(
@@ -3925,14 +4016,19 @@ def search_batch(
     # --- 3. the range pass -------------------------------------------
     # --- feature sampling, WHERE cuML DOES IT (deviation 201), unless the
     # caller already chose the columns. DEVIATION 205's rescue does: its
-    # column comes from the host, which is the only place the survey's cells
-    # were read.
-    var dev_colids = False
-    comptime if IDN_ET_RESCUE_DEVICE:
-        # No host column table: the survey's identity columns are written
-        # by `ident_colids_kernel`, the rescue's by `rescue_pick_kernel`
-        # (already queued by the caller).
-        dev_colids = (not use_sampler) and len(host_colids) == 0
+    # column comes from `rescue_pick_kernel` (THE DEVICE RESCUE).
+    # cpu3-trees: the rescue's columns are always the DEVICE's (the host
+    # survey walk and its host column table are gone): the survey's identity
+    # columns are written by `ident_colids_kernel`, the rescue's by
+    # `rescue_pick_kernel` (already queued by the caller).
+    if len(host_colids) != 0:
+        raise Error(
+            "host_colids: caller-chosen columns were the host rescue walk,"
+            " removed (cpu3-trees); pass an empty list"
+        )
+    var dev_colids = not use_sampler
+    if range_only and not dev_colids:
+        raise Error("the survey (range_only) runs on the device columns only")
     if dev_colids:
         if range_only:
             if Int(k) != Int(n_cols):
@@ -3947,20 +4043,6 @@ def search_batch(
                 grid_dim=ceildiv(n_cells, 256),
                 block_dim=256,
             )
-    elif not use_sampler:
-        if len(host_colids) != n_cells:
-            raise Error(
-                "host_colids must be n_nodes * k long; got "
-                + String(len(host_colids))
-                + " for "
-                + String(n_cells)
-            )
-        for i in range(n_cells):
-            h_colids.unsafe_ptr().unsafe_store(i, host_colids[i])
-        # DEVIATION 450: no synchronize after this copy -- queue-ordered
-        # ahead of the kernels reading `d_colids`, and `h_colids` is next
-        # rewritten only after a required drain.
-        ctx.enqueue_copy(dst_buf=d_colids, src_ptr=h_colids.unsafe_ptr())
     if use_sampler:
         # --- feature sampling, WHERE cuML DOES IT (deviation 201) --------
         # `d_report` is the DEVICE's own statement of which kernel ran;
@@ -4059,34 +4141,15 @@ def search_batch(
     # this pass loses its per-cycle stall -- cuML's `doSplit` shape, which
     # drains ONCE per batch. `clock.tick` still syncs when the clock is
     # ENABLED: the timed program was always the serialized one.
-    if range_only and not dev_colids:
-        ctx.enqueue_copy(dst_buf=ws.o_rmin, src_buf=d_min)
-        ctx.enqueue_copy(dst_buf=ws.o_rmax, src_buf=d_max)
-        ctx.enqueue_copy(dst_buf=ws.o_rmiss, src_buf=d_missing)
-        ctx.synchronize()
     clock.tick(ctx, PHASE_RANGE)
 
-    if range_only and dev_colids:
-        # `IDN_ET_RESCUE_DEVICE`: the cells stay on the device for
+    if range_only:
+        # The device rescue: the cells stay on the device for
         # `rescue_pick_kernel`; nothing drains and nothing is read here.
         return (
             List[Split](), List[Int32](), List[Float32](), List[Float32](),
             List[Int32](),
         )
-    if range_only:
-        # THE SURVEY. The rescue needs the cells themselves so the host can
-        # pick a column; nothing else does, so nothing else pays for them.
-        var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
-        for i in range(n_nodes):
-            any_nonconst[i] = ws.h_nonconst.unsafe_ptr()[unsafe_offset=i]
-        var rmin = List[Float32](length=n_cells, fill=Float32(0.0))
-        var rmax = List[Float32](length=n_cells, fill=Float32(0.0))
-        var rmiss = List[Int32](length=n_cells, fill=Int32(0))
-        for i in range(n_cells):
-            rmin[i] = ws.o_rmin.unsafe_ptr()[unsafe_offset=i]
-            rmax[i] = ws.o_rmax.unsafe_ptr()[unsafe_offset=i]
-            rmiss[i] = ws.o_rmiss.unsafe_ptr()[unsafe_offset=i]
-        return (List[Split](), any_nonconst^, rmin^, rmax^, rmiss^)
 
     # --- 4. the draw and score pass ----------------------------------
     # DEVIATION 470: the score cells and class accumulators were seeded
@@ -4702,102 +4765,46 @@ def train_forest_classification_device_timed(
                     sub.append(work_items[retry[j]])
                     sub_trees.append(item_trees[retry[j]])
 
-                comptime if IDN_ET_RESCUE_DEVICE:
-                    # The survey, the pick and the rescued search, queued
-                    # back to back (see `IDN_ET_RESCUE_DEVICE`).
-                    var n_sub = len(sub)
-                    _ = search_batch(
-                        ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
-                        n_classes, n_rows, n_cols, sub_trees, seed, False,
-                        List[Int32](), True, clock,
-                    )
-                    var d_pick = ctx.enqueue_create_buffer[DType.int32](n_sub)
-                    var h_pick = ctx.enqueue_create_host_buffer[DType.int32](
-                        n_sub
-                    )
-                    ctx.enqueue_function[rescue_pick_kernel](
-                        d_pick.unsafe_ptr(),
-                        ws.d_colids.unsafe_ptr(),
-                        ws.d_min.unsafe_ptr(),
-                        ws.d_max.unsafe_ptr(),
-                        ws.d_missing.unsafe_ptr(),
-                        ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-                        ws.d_tree.unsafe_ptr(),
-                        Int32(n_sub),
-                        n_cols,
-                        seed,
-                        grid_dim=ceildiv(n_sub, 64),
-                        block_dim=64,
-                    )
-                    ctx.enqueue_copy(dst_buf=h_pick, src_buf=d_pick)
-                    # Drains at its reduce readback, `h_pick` with it.
-                    var res2 = search_batch(
-                        ctx, ws, dataset, d_row_ids, sub, 1, params,
-                        n_classes, n_rows, n_cols, sub_trees, seed, False,
-                        List[Int32](), False, clock,
-                    )
-                    var rescued = res2[0].copy()
-                    for j in range(n_sub):
-                        if h_pick.unsafe_ptr()[unsafe_offset=j] >= 0:
-                            splits[retry[j]] = rescued[j]
-                            st_rescued += 1
-                    _ = d_pick^
-                    _ = h_pick^
-                else:
-                    var ident = List[Int32](
-                        length=len(sub) * Int(n_cols), fill=Int32(0)
-                    )
-                    for j in range(len(sub)):
-                        for c in range(Int(n_cols)):
-                            ident[j * Int(n_cols) + c] = Int32(c)
-                    var survey = search_batch(
-                        ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
-                        n_classes, n_rows, n_cols, sub_trees, seed, False,
-                        ident, True, clock,
-                    )
-
-                    var s_min = survey[2].copy()
-                    var s_max = survey[3].copy()
-                    var s_miss = survey[4].copy()
-
-                    var chosen_items = List[NodeWorkItem]()
-                    var chosen_trees = List[Int32]()
-                    var chosen_cols = List[Int32]()
-                    var chosen_slot = List[Int]()
-                    for j in range(len(sub)):
-                        var nonconst = List[Int32]()
-                        for c in range(Int(n_cols)):
-                            var idx = j * Int(n_cols) + c
-                            var extent = FeatureRange(
-                                s_min[idx], s_max[idx], s_miss[idx]
-                            )
-                            if not node_feature_is_constant(
-                                extent, sub[j].instances.count
-                            ):
-                                nonconst.append(Int32(c))
-                        if len(nonconst) == 0:
-                            continue
-                        var u = rescue_pick(
-                            rescue_key(
-                                seed, sub_trees[j], UInt32(Int(sub[j].idx))
-                            ),
-                            len(nonconst),
-                        )
-                        chosen_items.append(sub[j])
-                        chosen_trees.append(sub_trees[j])
-                        chosen_cols.append(nonconst[u])
-                        chosen_slot.append(retry[j])
-
-                    if len(chosen_items) > 0:
-                        st_rescued += len(chosen_items)
-                        var res2 = search_batch(
-                            ctx, ws, dataset, d_row_ids, chosen_items, 1, params,
-                            n_classes, n_rows, n_cols, chosen_trees, seed, False,
-                            chosen_cols, False, clock,
-                        )
-                        var rescued = res2[0].copy()
-                        for t in range(len(chosen_slot)):
-                            splits[chosen_slot[t]] = rescued[t]
+                # The survey, the pick and the rescued search, queued
+                # back to back (see THE DEVICE RESCUE).
+                var n_sub = len(sub)
+                _ = search_batch(
+                    ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
+                    n_classes, n_rows, n_cols, sub_trees, seed, False,
+                    List[Int32](), True, clock,
+                )
+                var d_pick = ctx.enqueue_create_buffer[DType.int32](n_sub)
+                var h_pick = ctx.enqueue_create_host_buffer[DType.int32](
+                    n_sub
+                )
+                ctx.enqueue_function[rescue_pick_kernel](
+                    d_pick.unsafe_ptr(),
+                    ws.d_colids.unsafe_ptr(),
+                    ws.d_min.unsafe_ptr(),
+                    ws.d_max.unsafe_ptr(),
+                    ws.d_missing.unsafe_ptr(),
+                    ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+                    ws.d_tree.unsafe_ptr(),
+                    Int32(n_sub),
+                    n_cols,
+                    seed,
+                    grid_dim=ceildiv(n_sub, 64),
+                    block_dim=64,
+                )
+                ctx.enqueue_copy(dst_buf=h_pick, src_buf=d_pick)
+                # Drains at its reduce readback, `h_pick` with it.
+                var res2 = search_batch(
+                    ctx, ws, dataset, d_row_ids, sub, 1, params,
+                    n_classes, n_rows, n_cols, sub_trees, seed, False,
+                    List[Int32](), False, clock,
+                )
+                var rescued = res2[0].copy()
+                for j in range(n_sub):
+                    if h_pick.unsafe_ptr()[unsafe_offset=j] >= 0:
+                        splits[retry[j]] = rescued[j]
+                        st_rescued += 1
+                _ = d_pick^
+                _ = h_pick^
 
             if trace.enabled and n_nodes > 0:
                 # The SELECTED splits -- post-rescue. Under depth-wise
@@ -5310,12 +5317,18 @@ def search_batch_regression(
             block_dim=PHASE_SETUP_TPB,
         )
 
-    var dev_colids = False
-    comptime if IDN_ET_RESCUE_DEVICE:
-        # No host column table: the survey's identity columns are written
-        # by `ident_colids_kernel`, the rescue's by `rescue_pick_kernel`
-        # (already queued by the caller).
-        dev_colids = (not use_sampler) and len(host_colids) == 0
+    # cpu3-trees: the rescue's columns are always the DEVICE's (the host
+    # survey walk and its host column table are gone): the survey's identity
+    # columns are written by `ident_colids_kernel`, the rescue's by
+    # `rescue_pick_kernel` (already queued by the caller).
+    if len(host_colids) != 0:
+        raise Error(
+            "host_colids: caller-chosen columns were the host rescue walk,"
+            " removed (cpu3-trees); pass an empty list"
+        )
+    var dev_colids = not use_sampler
+    if range_only and not dev_colids:
+        raise Error("the survey (range_only) runs on the device columns only")
     if dev_colids:
         if range_only:
             if Int(k) != Int(n_cols):
@@ -5330,22 +5343,6 @@ def search_batch_regression(
                 grid_dim=ceildiv(n_cells, 256),
                 block_dim=256,
             )
-    elif not use_sampler:
-        # DEVIATION 205's rescue chose these columns on the host, from the
-        # survey's own cells. Nothing draws here.
-        if len(host_colids) != n_cells:
-            raise Error(
-                "host_colids must be n_nodes * k long; got "
-                + String(len(host_colids))
-                + " for "
-                + String(n_cells)
-            )
-        for i in range(n_cells):
-            h_colids.unsafe_ptr().unsafe_store(i, host_colids[i])
-        # DEVIATION 450: no synchronize after this copy either -- it is
-        # queue-ordered ahead of the kernels that read `d_colids`, and
-        # `h_colids` is next rewritten only after a required drain.
-        ctx.enqueue_copy(dst_buf=d_colids, src_ptr=h_colids.unsafe_ptr())
     else:
         # --- feature sampling, WHERE cuML DOES IT (deviation 201) --------
         # `d_report` is the DEVICE's own statement of which kernel ran;
@@ -5458,32 +5455,15 @@ def search_batch_regression(
     ctx.enqueue_copy(dst_buf=ws.h_nonconst, src_buf=ws.d_nonconst)
     # DEVIATION 450: drain only for the survey -- see the classification
     # twin's range pass.
-    if range_only and not dev_colids:
-        ctx.enqueue_copy(dst_buf=ws.o_rmin, src_buf=d_min)
-        ctx.enqueue_copy(dst_buf=ws.o_rmax, src_buf=d_max)
-        ctx.enqueue_copy(dst_buf=ws.o_rmiss, src_buf=d_missing)
-        ctx.synchronize()
     clock.tick(ctx, PHASE_RANGE)
 
-    if range_only and dev_colids:
-        # `IDN_ET_RESCUE_DEVICE`: the cells stay on the device for
+    if range_only:
+        # The device rescue: the cells stay on the device for
         # `rescue_pick_kernel`; nothing drains and nothing is read here.
         return (
             List[Split](), List[Int32](), List[Float32](), List[Float32](),
             List[Int32](),
         )
-    if range_only:
-        var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
-        for i in range(n_nodes):
-            any_nonconst[i] = ws.h_nonconst.unsafe_ptr()[unsafe_offset=i]
-        var rmin = List[Float32](length=n_cells, fill=Float32(0.0))
-        var rmax = List[Float32](length=n_cells, fill=Float32(0.0))
-        var rmiss = List[Int32](length=n_cells, fill=Int32(0))
-        for i in range(n_cells):
-            rmin[i] = ws.o_rmin.unsafe_ptr()[unsafe_offset=i]
-            rmax[i] = ws.o_rmax.unsafe_ptr()[unsafe_offset=i]
-            rmiss[i] = ws.o_rmiss.unsafe_ptr()[unsafe_offset=i]
-        return (List[Split](), any_nonconst^, rmin^, rmax^, rmiss^)
     # DEVIATION 470: the score cells and the one-output accumulators were
     # seeded by fused half B above (the survey skips half B and returned
     # already).
@@ -6120,98 +6100,45 @@ def train_forest_regression_device_timed(
                 for j in range(len(retry)):
                     sub.append(work_items[retry[j]])
                     sub_trees.append(item_trees[retry[j]])
-                comptime if IDN_ET_RESCUE_DEVICE:
-                    # The survey, the pick and the rescued search, queued
-                    # back to back (see `IDN_ET_RESCUE_DEVICE`).
-                    var n_sub = len(sub)
-                    _ = search_batch_regression(
-                        ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
-                        n_rows, n_cols, sub_trees, seed, False,
-                        List[Int32](), True, clock,
-                    )
-                    var d_pick = ctx.enqueue_create_buffer[DType.int32](n_sub)
-                    var h_pick = ctx.enqueue_create_host_buffer[DType.int32](
-                        n_sub
-                    )
-                    ctx.enqueue_function[rescue_pick_kernel](
-                        d_pick.unsafe_ptr(),
-                        ws.d_colids.unsafe_ptr(),
-                        ws.d_min.unsafe_ptr(),
-                        ws.d_max.unsafe_ptr(),
-                        ws.d_missing.unsafe_ptr(),
-                        ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-                        ws.d_tree.unsafe_ptr(),
-                        Int32(n_sub),
-                        n_cols,
-                        seed,
-                        grid_dim=ceildiv(n_sub, 64),
-                        block_dim=64,
-                    )
-                    ctx.enqueue_copy(dst_buf=h_pick, src_buf=d_pick)
-                    # Drains at its reduce readback, `h_pick` with it.
-                    var res2 = search_batch_regression(
-                        ctx, ws, dataset, d_row_ids, sub, 1, params,
-                        n_rows, n_cols, sub_trees, seed, False,
-                        List[Int32](), False, clock,
-                    )
-                    var rescued = res2[0].copy()
-                    for j in range(n_sub):
-                        if h_pick.unsafe_ptr()[unsafe_offset=j] >= 0:
-                            splits[retry[j]] = rescued[j]
-                    _ = d_pick^
-                    _ = h_pick^
-                else:
-                    var ident = List[Int32](
-                        length=len(sub) * Int(n_cols), fill=Int32(0)
-                    )
-                    for j in range(len(sub)):
-                        for c in range(Int(n_cols)):
-                            ident[j * Int(n_cols) + c] = Int32(c)
-                    var survey = search_batch_regression(
-                        ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
-                        n_rows, n_cols, sub_trees, seed, False, ident, True, clock,
-                    )
-                    var s_min = survey[2].copy()
-                    var s_max = survey[3].copy()
-                    var s_miss = survey[4].copy()
-
-                    var chosen_items = List[NodeWorkItem]()
-                    var chosen_trees = List[Int32]()
-                    var chosen_cols = List[Int32]()
-                    var chosen_slot = List[Int]()
-                    for j in range(len(sub)):
-                        var nonconst = List[Int32]()
-                        for c in range(Int(n_cols)):
-                            var idx = j * Int(n_cols) + c
-                            var extent = FeatureRange(
-                                s_min[idx], s_max[idx], s_miss[idx]
-                            )
-                            if not node_feature_is_constant(
-                                extent, sub[j].instances.count
-                            ):
-                                nonconst.append(Int32(c))
-                        if len(nonconst) == 0:
-                            continue
-                        var u = rescue_pick(
-                            rescue_key(
-                                seed, sub_trees[j], UInt32(Int(sub[j].idx))
-                            ),
-                            len(nonconst),
-                        )
-                        chosen_items.append(sub[j])
-                        chosen_trees.append(sub_trees[j])
-                        chosen_cols.append(nonconst[u])
-                        chosen_slot.append(retry[j])
-
-                    if len(chosen_items) > 0:
-                        var res2 = search_batch_regression(
-                            ctx, ws, dataset, d_row_ids, chosen_items, 1, params,
-                            n_rows, n_cols, chosen_trees, seed, False,
-                            chosen_cols, False, clock,
-                        )
-                        var rescued = res2[0].copy()
-                        for t in range(len(chosen_slot)):
-                            splits[chosen_slot[t]] = rescued[t]
+                # The survey, the pick and the rescued search, queued
+                # back to back (see THE DEVICE RESCUE).
+                var n_sub = len(sub)
+                _ = search_batch_regression(
+                    ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
+                    n_rows, n_cols, sub_trees, seed, False,
+                    List[Int32](), True, clock,
+                )
+                var d_pick = ctx.enqueue_create_buffer[DType.int32](n_sub)
+                var h_pick = ctx.enqueue_create_host_buffer[DType.int32](
+                    n_sub
+                )
+                ctx.enqueue_function[rescue_pick_kernel](
+                    d_pick.unsafe_ptr(),
+                    ws.d_colids.unsafe_ptr(),
+                    ws.d_min.unsafe_ptr(),
+                    ws.d_max.unsafe_ptr(),
+                    ws.d_missing.unsafe_ptr(),
+                    ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+                    ws.d_tree.unsafe_ptr(),
+                    Int32(n_sub),
+                    n_cols,
+                    seed,
+                    grid_dim=ceildiv(n_sub, 64),
+                    block_dim=64,
+                )
+                ctx.enqueue_copy(dst_buf=h_pick, src_buf=d_pick)
+                # Drains at its reduce readback, `h_pick` with it.
+                var res2 = search_batch_regression(
+                    ctx, ws, dataset, d_row_ids, sub, 1, params,
+                    n_rows, n_cols, sub_trees, seed, False,
+                    List[Int32](), False, clock,
+                )
+                var rescued = res2[0].copy()
+                for j in range(n_sub):
+                    if h_pick.unsafe_ptr()[unsafe_offset=j] >= 0:
+                        splits[retry[j]] = rescued[j]
+                _ = d_pick^
+                _ = h_pick^
 
             if trace.enabled and n_nodes > 0:
                 # The SELECTED splits -- post-rescue; see the twin, and
