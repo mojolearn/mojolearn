@@ -41,7 +41,7 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator, is_amd_gpu, is_apple_gpu, is_nvidia_gpu
 from x_linear.team import team_barrier
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_exp, identical_log, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_exp, identical_log, identical_sqrt
 from sequence.fold32 import FOLD_L, tree32
 from sequence.garch import GARCH_CHUNKS, GARCH_COOP_IDN, GARCH_FOLD32, GARCH_SNAP, LOG_2PI, _backcast, _garch_step_reg, _grid, _pers, _var_bounds, garch_sigma2
 from sequence.nm import NMState, Objective, nm_finish, nm_start, nm_steps
@@ -165,6 +165,35 @@ def garch_team_shared(n: Int) -> Int:
     return w
 
 
+#: lane fix-t1-seq (audit T1). IDENTICAL: the lead's stored recursion for
+#: p, o, q <= 1 keeps r_{t-1} and sigma2_{t-1} in registers
+#: (`_garch_sigma2_reg`, sequence/garch.mojo `_garch_step_reg`'s statements,
+#: which are garch_sigma2's for these orders) instead of reading both back
+#: from device memory each step; sigma2 is still stored. Bits unchanged.
+#: -D MOJOLEARN_IDN_GARCH_LEAD_REG_OFF (or MOJOLEARN_IDN_ALL_OFF) restores
+#: garch_sigma2 on the lead.
+comptime GARCH_LEAD_REG = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_GARCH_LEAD_REG_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+@always_inline
+def _garch_sigma2_reg(par: FP, r: FP, n: Int, p: Int, o: Int, q: Int, backcast: Float32, vb: FP, s2: FP):
+    """garch_sigma2 for p, o, q <= 1 from registers: the same fma3 order
+    (omega, alpha, gamma, beta), backcast terms at t = 0 and bounds."""
+    var w = ld(par, 0)
+    var pa = ld(par, 1) if p > 0 else Float32(0.0)
+    var pg = ld(par, 1 + p) if o > 0 else Float32(0.0)
+    var pb = ld(par, 1 + p + o) if q > 0 else Float32(0.0)
+    var rp = Float32(0.0)
+    var sp = Float32(0.0)
+    for t in range(n):
+        var v = _garch_step_reg(w, pa, pg, pb, p, o, q, t, rp, sp, backcast, ld(vb, 2 * t), ld(vb, 2 * t + 1))
+        st(s2, t, v)
+        rp = ld(r, t)
+        sp = v
+
+
 @always_inline
 def garch_slots_off(n: Int) -> Int:
     """GARCH_FOLD32's slots, in words past the terms row: after the n terms
@@ -180,7 +209,13 @@ def garch_nll_team(team: SeqTeam, par: FP, r: FP, n: Int, p: Int, o: Int, q: Int
     """garch_nll over a block: the recursion on the lead, the n terms dealt
     out, their sum every thread's own ascending fold (garch_nll's words)."""
     if team.lead():
-        garch_sigma2(par, r, n, p, o, q, backcast, vb, s2)
+        comptime if GARCH_LEAD_REG:
+            if p <= 1 and o <= 1 and q <= 1:
+                _garch_sigma2_reg(par, r, n, p, o, q, backcast, vb, s2)
+            else:
+                garch_sigma2(par, r, n, p, o, q, backcast, vb, s2)
+        else:
+            garch_sigma2(par, r, n, p, o, q, backcast, vb, s2)
     team.sync()
     var ll = Float32(0.0)
     comptime if GARCH_FOLD32:
