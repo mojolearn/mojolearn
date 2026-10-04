@@ -363,11 +363,40 @@ RAISING_COMPARE = ("_same_bytes", "_same_state")
 #: calls it independent. They are read at the CALL SITE and never followed
 #: into. Every other harness helper is followed, because a comparison a lane
 #: reaches through a helper it calls is still a comparison inside its cell.
-COMPARE_PRIMITIVES = ("_same_bytes", "_same_state", "_mismatch_bytes")
+COMPARE_PRIMITIVES = ("_same_bytes", "_same_state", "_mismatch_bytes", "_oracle_mismatch")
+
+
+def _oracle_mismatch_pairs(call):
+    """Comparison operands visible at a batched mismatch callsite.
+
+    Expand explicit four-tuples and starred tuple comprehensions. Unknown
+    dynamic operands stay unclassified rather than inventing an oracle from
+    the comparison helper's formal parameters.
+    """
+    for arg in call.args:
+        bound = set()
+        if isinstance(arg, ast.Starred):
+            value = arg.value
+            if isinstance(value, (ast.ListComp, ast.GeneratorExp, ast.SetComp)):
+                candidates = [value.elt]
+                bound = {name.id for generator in value.generators
+                         for name in ast.walk(generator.target) if isinstance(name, ast.Name)}
+            elif isinstance(value, (ast.List, ast.Tuple)):
+                candidates = value.elts
+            else:
+                candidates = []
+        else:
+            candidates = [arg]
+        for pair in candidates:
+            if isinstance(pair, (ast.Tuple, ast.List)) and len(pair.elts) == 4:
+                if _root(pair.elts[1]) in bound or _root(pair.elts[3]) in bound:
+                    continue  # Loop variables do not establish distinct caller objects.
+                yield ast.Call(func=ast.Name(id="_mismatch_bytes", ctx=ast.Load()),
+                               args=list(pair.elts), keywords=[])
 
 
 def _raised_mismatches(node):
-    """The `_mismatch_bytes` calls in this body whose message is RAISED.
+    """The direct or batched mismatch calls whose message is RAISED.
 
     The idiom `_mismatch_bytes` was introduced for (lane/sabotage-sweep,
     2026-09-17) is
@@ -385,7 +414,7 @@ def _raised_mismatches(node):
         if (isinstance(sub, ast.Assign) and len(sub.targets) == 1
                 and isinstance(sub.targets[0], ast.Name)
                 and isinstance(sub.value, ast.Call)
-                and _root_name(sub.value.func) == "_mismatch_bytes"):
+                and _root_name(sub.value.func) in ("_mismatch_bytes", "_oracle_mismatch")):
             assigned.setdefault(sub.targets[0].id, []).append(sub.value)
     raised = set()
     for sub in ast.walk(node):
@@ -396,7 +425,14 @@ def _raised_mismatches(node):
         for t in ast.walk(sub.test):
             if isinstance(t, ast.Name) and t.id in assigned:
                 raised.add(t.id)
-    return [call for name in raised for call in assigned[name]]
+    calls = []
+    for name in raised:
+        for call in assigned[name]:
+            if _root_name(call.func) == "_oracle_mismatch":
+                calls.extend(_oracle_mismatch_pairs(call))
+            else:
+                calls.append(call)
+    return calls
 
 
 #: Names that are INPUTS to a body, never an object under test, so they never
