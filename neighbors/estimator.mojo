@@ -123,8 +123,27 @@ from core.identity_trace import IdentityTrace
 from core.device_fold import device_sum_i32
 from neighbors.impl.multi_gpu import knn_device_count, parallel_knn_rows
 from std.sys.compile import is_defined
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from max.gpu.host import DeviceBuffer, DeviceContext
+from std.math import fma, sqrt
+
+comptime KNN_FAST_REFINE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_KNN_REFINE_QOLD"]()
+)
+"""FAST QUALITY FIX (lane apple-fast-q-misc, 2026-10-04; old behavior
+`-D MOJOLEARN_KNN_REFINE_QOLD`). Euclidean / sqeuclidean
+`knn_search_resident` (what `NearestNeighbors.kneighbors` runs on a GPU)
+selects a pool of `min(n_index, 4 k, KNN_REFINE_POOL_MAX)` candidates by
+the expanded float32 distance |q|^2 + |x|^2 - 2 q.x, then re-ranks the pool
+on the device by the DIFFERENCE form sum (q - x)^2 (error-free product and
+two-sum compensation, about float32 relative accuracy whatever the norms)
+and keeps the k best by (distance, index). Not used under IDENTICAL."""
+#: Board quality audit 2026-10-04 (~/mojolearn-evidence/board-quality-audit-2026-10-04.md):
+#: knn istella recall_at_k FAST 0.982434 (IDENTICAL 0.97625, torch-gpu float32 0.97997)
+#: vs scikit-learn 1.0 (it upcasts float32 to float64). Cause: the expanded form
+#: cancels on Istella's large-norm rows (kmeans inertia 6e17), so float32 rounding
+#: of |q|^2 + |x|^2 swamps the gaps between the 64th and 65th neighbours.
+comptime KNN_REFINE_POOL_MAX: Int = 1024
 
 from neighbors.impl.knn.knn import (
     knn_class_proba,
@@ -592,6 +611,15 @@ def knn_search_resident(
         index_ptr, n_index, queries_ptr, n_queries, n_features, k, return_sqrt,
         requested_query_tile, knn_method, metric, metric_arg,
     )
+    comptime if KNN_FAST_REFINE:
+        # FAST quality fix (lane apple-fast-q-misc): pool then exact re-rank;
+        # `-D MOJOLEARN_KNN_REFINE_QOLD` keeps the expanded-form top-k below.
+        if _knn_refine_applies(plan[0], negate_products, k, n_index):
+            return _knn_search_resident_refined(
+                ctx, index, index_ptr, n_index, queries_ptr, n_queries, n_features, k,
+                out_dist_ptr, out_idx_ptr, return_sqrt, requested_query_tile, knn_method,
+                metric, metric_arg, cache,
+            )
     var retained = List[DeviceBuffer[DType.uint32]]()
     return _knn_search_on_device_index(
         ctx, trace, retained, False, index, n_index, queries_ptr, n_queries,
@@ -923,6 +951,182 @@ def _knn_negate_device(ctx: DeviceContext, mut out_dist: DeviceBuffer[DType.floa
     ctx.enqueue_function[knn_negate_kernel](
         pd, Int32(n), grid_dim=(n + _KO_TPB - 1) // _KO_TPB, block_dim=_KO_TPB,
     )
+
+
+
+# ---- KNN_FAST_REFINE (FAST quality fix, lane apple-fast-q-misc) -------------
+
+
+@always_inline
+def _knn_refine_sq(qp: _KFP, xp: _KFP, d: Int) -> Float32:
+    """sum_j (q_j - x_j)^2 in float32 with an error-free product
+    (`fma(df, df, -p)`) and Knuth's two-sum into a running compensation: the
+    difference form has no cancellation, so the result is accurate to about
+    one float32 rounding of each difference whatever |q| and |x| are."""
+    var s = Float32(0.0)
+    var c = Float32(0.0)
+    for j in range(d):
+        var df = qp.unsafe_load(j) - xp.unsafe_load(j)
+        var p = df * df
+        var pe = fma(df, df, -p)
+        var t = s + p
+        var bb = t - s
+        c += ((s - (t - bb)) + (p - bb)) + pe
+        s = t
+    var r = s + c
+    return r if r > Float32(0.0) else Float32(0.0)
+
+
+def knn_refine_score_kernel(
+    px: _KFP, pq: _KFP, pc: _KUP, keys: _KKP, state: _KIP,
+    n_q: Int32, d_: Int32, pool_: Int32, pad_: Int32,
+):
+    """One thread per (query, pool slot): the slot's candidate scored by
+    `_knn_refine_sq` into the row's (distance, index) key; slots past the
+    pool are padded with the largest key. Slot 0 marks the row for
+    `knn_order_sort_kernel` (state 1)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var pad = Int(pad_)
+    if t >= Int(n_q) * pad:
+        return
+    var i = t // pad
+    var slot = t - i * pad
+    if slot == 0:
+        state.unsafe_store(i, Int32(1))
+    var pool = Int(pool_)
+    if slot >= pool:
+        keys.unsafe_store(t, UInt64(0xFFFFFFFFFFFFFFFF))
+        return
+    var d = Int(d_)
+    var cid = pc.unsafe_load(i * pool + slot)
+    var dist = _knn_refine_sq(pq + i * d, px + Int(cid) * d, d)
+    keys.unsafe_store(t, _knn_order_key(dist, cid))
+
+
+def knn_refine_store_kernel(
+    keys: _KKP, pd: _KFP, pi: _KUP, n_q: Int32, k_: Int32, pad_: Int32, root: Int32,
+):
+    """One thread per (query, rank < k): the sorted key back to (distance,
+    index), the distance square-rooted when the caller asked for euclidean."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var k = Int(k_)
+    if t >= Int(n_q) * k:
+        return
+    var i = t // k
+    var kk = keys.unsafe_load(i * Int(pad_) + (t - i * k))
+    var tw = UInt32(kk >> 32)
+    var ub = tw ^ UInt32(0x80000000) if (tw >> 31) == 1 else tw ^ UInt32(0xFFFFFFFF)
+    var dv = bitcast[DType.float32](ub)
+    if root != Int32(0):
+        dv = sqrt(dv)
+    pd.unsafe_store(t, dv)
+    pi.unsafe_store(t, UInt32(kk & 0xFFFFFFFF))
+
+
+@always_inline
+def _knn_refine_pool(k: Int, n_index: Int) -> Int:
+    """The candidate pool the expanded search selects before the re-rank."""
+    return min(n_index, min(KNN_REFINE_POOL_MAX, 4 * k))
+
+
+@always_inline
+def _knn_refine_applies(mtr: Int, negate_products: Bool, k: Int, n_index: Int) -> Bool:
+    """L2 (expanded) metrics only, and only when the pool is wider than k."""
+    if mtr != DIST_L2_EXPANDED and mtr != DIST_L2_SQRT_EXPANDED:
+        return False
+    if negate_products:
+        return False
+    return _knn_refine_pool(k, n_index) > k
+
+
+def _knn_search_resident_refined(
+    ctx: DeviceContext,
+    mut index: DeviceBuffer[DType.float32],
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    out_dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+    return_sqrt: Bool,
+    requested_query_tile: Int,
+    knn_method: Int,
+    metric: Int,
+    metric_arg: Float32,
+    cache: KnnIndexCachePointer,
+) raises -> Int:
+    """`KNN_FAST_REFINE`: the resident search at the pool width (its refusals,
+    plan and selection; the pool's ids stay on the device), then the exact
+    re-rank on the device: score every pool slot, bitonic-sort each row's
+    (distance, index) keys (`knn_order_sort_kernel`), keep the first k.
+    Host work is the readback copy only."""
+    var pool = _knn_refine_pool(k, n_index)
+    var plan = _knn_search_plan(
+        index_ptr, n_index, queries_ptr, n_queries, n_features, pool, return_sqrt,
+        requested_query_tile, knn_method, metric, metric_arg,
+    )
+    var trace = IdentityTrace()
+    var retained = List[DeviceBuffer[DType.uint32]]()
+    var cand_d = List[Float32](length=n_queries * pool, fill=Float32(0.0))
+    var cand_i = List[UInt32](length=n_queries * pool, fill=UInt32(0))
+    var used = _knn_search_on_device_index(
+        ctx, trace, retained, True, index, n_index, queries_ptr, n_queries,
+        n_features, pool,
+        cand_d.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+        cand_i.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+        return_sqrt, plan[2], knn_method, plan[0], metric_arg, plan[1], plan[3],
+        cache, False,
+    )
+    _ = cand_d^
+    _ = cand_i^
+    if len(retained) != 1:
+        raise Error("knn refine: the pool search kept " + String(len(retained)) + " index buffers, expected 1")
+    var pad = 1
+    while pad < pool:
+        pad *= 2
+    var queries = ctx.enqueue_create_buffer[DType.float32](n_queries * n_features)
+    ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
+    var keys = ctx.enqueue_create_buffer[DType.uint64](n_queries * pad)
+    var state = ctx.enqueue_create_buffer[DType.int32](n_queries)
+    var od = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
+    var oi = ctx.enqueue_create_buffer[DType.uint32](n_queries * k)
+    var px = index.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pq = queries.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pc = retained[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pk = keys.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var ps = state.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pd = od.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pi = oi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    ctx.enqueue_function[knn_refine_score_kernel](
+        px, pq, pc, pk, ps, Int32(n_queries), Int32(n_features), Int32(pool), Int32(pad),
+        grid_dim=(n_queries * pad + _KO_TPB - 1) // _KO_TPB, block_dim=_KO_TPB,
+    )
+    ctx.enqueue_function[knn_order_sort_kernel](pk, ps, Int32(pad), grid_dim=n_queries, block_dim=_KO_TPB)
+    ctx.enqueue_function[knn_refine_store_kernel](
+        pk, pd, pi, Int32(n_queries), Int32(k), Int32(pad), Int32(1) if plan[0] == DIST_L2_SQRT_EXPANDED else Int32(0),
+        grid_dim=(n_queries * k + _KO_TPB - 1) // _KO_TPB, block_dim=_KO_TPB,
+    )
+    var hd = ctx.enqueue_create_host_buffer[DType.float32](n_queries * k)
+    var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_queries * k)
+    ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=od)
+    ctx.enqueue_copy(dst_ptr=hi.unsafe_ptr(), src_buf=oi)
+    ctx.synchronize()
+    var hdp = hd.unsafe_ptr()
+    var hip = hi.unsafe_ptr()
+    for e in range(n_queries * k):
+        out_dist_ptr.unsafe_store(e, hdp.unsafe_load(e))
+        out_idx_ptr.unsafe_store(e, hip.unsafe_load(e))
+    _ = hd^
+    _ = hi^
+    _ = od^
+    _ = oi^
+    _ = keys^
+    _ = state^
+    _ = queries^
+    _ = retained^
+    return used
 
 
 def _knn_search_on_device_index(
