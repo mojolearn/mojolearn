@@ -1680,7 +1680,7 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     comptime if SGDOC_FAST_TAIL:
         if (one_class and lr == LR_OPTIMAL and penalty == P_L2 and fi and do_shuffle and not need_obj
                 and not has_sw and max_iter * n > SGDOC_TAIL_K):
-            if sgdoc_centered(ctx, dx.unsafe_ptr(), n, d):
+            if sgdoc_centered(ctx, FP(unsafe_from_address=Int(dx.unsafe_ptr())), n, d):
                 var s0 = max_iter * n - SGDOC_TAIL_K
                 e0 = s0 // n
                 r0 = s0 - e0 * n
