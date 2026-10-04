@@ -878,3 +878,30 @@ all3quality cases. Final default/rollback M3 quality pshap-delta-default-r1-qual
 
 | `MOJOLEARN_LU_FAST_PIVOT_SHUFFLE` / rollback `MOJOLEARN_LU_FAST_PIVOT_SHUFFLE_OFF` | lu-factor / lu-solve n8192 | measured6d82b61270dc5d7c65f1d3b847a91630c4e2bfcd; isolated default from0cbe0036a | w2-lu-pivot-shuffle-q-20261004; w2-lu-pivot-shuffle-t-20261004 | quality PASS10fixtures exact factors/pivots/solutions/info, no-worse residuals; call+read factor715.628750 ->653.702416ms, solve792.222333 ->733.531042ms | DEFAULT merged; promotion0769e1d92 M2default/OFF rc0. Existing parallel LUstep grid unchanged, exact directed reduction topology, same tie/NaN comparator; skips neutral initial-fold levels and uses warp shuffle for final5stages. Same synchronized output. No scored replay. |
 | `MOJOLEARN_PSHAP_DELTA` / `_OFF` | permutation-shap / istella | measured lane/apple-fast-w4-shap@20bbdc37256bd00ef09fc97970f79f6967fa4f2a; default lane/apple-fast-pshap-delta-default | w2-pdelta-quality; w2-pdelta-pshap-istella | 28,222.8 -> 14,788.6 ms (-47.6%); linear/tanh/two-output attribution arrays byte-identical, model rows 2713500 ->2215900 | DEFAULT: M2 default/rollback PASS; M3 pshap-delta-default-r1-quality-20261004 PASS, all13arrays exact. No arithmetic change, no host SHAP math, current-main source compatibility verified; callback remains existing boundary. See ab/pshap-delta-default.md. |
+
+## Catalog shared GEMM screen and actual caller expansion (2026-10-04)
+
+Catalog9ab2d3d3f intake is retained; all10 variants compiled at9f1a1657c.
+M3 catalog-matrix-t-v1, tools7dfae82b6: 66 one-call records, six predeclared
+n>=2 shapes, all output hashes exactly match incumbent. Unrestricted quality
+remains HOLD for the n1 GEMV regression; this scope excludes n1 explicitly.
+Cold context + upload + kernel + download + completion + first read total
+is about23–30ms; this is not a pure kernel throughput measurement.
+There is no universal winner. G1 denseNN ratio0.969, squareNN0.999 and
+low-widthNT0.934; G5 tall projection0.932 and Gram0.913; G9 Gram0.885.
+No default or caller speed claim follows from this screen. No scored replay.
+Report: ~/mojolearn-evidence/apple-fast/sync/catalog-matrix-t-v1-report.json.
+
+The shared G1/G5 dispatcher a9e64922f passed43 route/quality fixtures.
+Actual estimator counter/quality harness0505c9427 is source-only: core and
+estimators first; zero route reach cannot pass admission. A distinct resident
+input contract is being prepared to exclude setup/uploads while retaining
+completion and first read; new lifecycle quality must pass before timing.
+Decomp/PCA adapters must preserve caller-specific split plans, strides and
+atomic behavior. PCA still uses atomic split mode even with one split.
+
+SHAP default merged cf46d6f37 after M2 default/OFF and final M3 quality PASS.
+KNN GPU-only lean counts default76567110e M2 default/OFF PASS; final M3
+quality remains pending. Callpath r3 failed a context identity guard before
+numerical evaluation; r4 14761655f retains stable context ownership and
+foreign-context refusal, now compiling on M2. No callpath timing admitted.

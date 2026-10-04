@@ -34,7 +34,7 @@ Canonical full-board summary (2026-10-04): 387 FAST rows, 377 eligible opponent 
 | lstm-clf | synthetic | algos | 1878 | 1882 | torch-eager-fp32 (fill) | 729 | 2.58 | 2.58 |  | accuracy=0.968696, logloss=0.0724409 | accuracy=0.9687, logloss=0.07244 | - | ok |
 | cholesky | synthetic | algos | 960 | 261 | torch-gpu | 110 | 8.70 | 2.37 |  | relative_residual=1.6591e-07 | relative_residual=1.659e-07 | relative_residual=5.449e-07 | ok |
 | pca | istella | algos | 988 | 217.8 | sklearn-cpu | 205 | 4.82 | 1.06 |  | explained_variance_ratio_sum=1 | explained_variance_ratio_sum=1 | explained_variance_ratio_sum=1 | ok |
-| permutation-shap | istella | algos | 17214 | 28236 | shap-cpu | 12335 | 1.40 | 2.29 |  | rel_error_vs_exact=5.33875e-09 | rel_error_vs_exact=5.339e-09 | rel_error_vs_exact=3.692e-10 | ok |
+| permutation-shap | istella | algos | 17214 | 14788.6 | shap-cpu | 12335 | 1.40 | 1.20 |  | rel_error_vs_exact=5.33875e-09 | rel_error_vs_exact=1.031583e-08; A/B output words exact | rel_error_vs_exact=3.692e-10 | delta rows default; _OFF rollback |
 | lu-factor | synthetic | algos | 2323 | 653.702416 | scipy-cpu | 428 | 5.43 | 1.53 |  | relative_residual=3.2563e-06 | relative_residual=3.248e-06 | relative_residual=3.246e-06 | ok |
 | svgp | istella | algos | 1495 | 228 | gpytorch-cpu | 307 | 4.86 | 0.74 | FLIP faster | r2=-0.106016, rmse=0.878373 | r2=-0.106, rmse=0.8784 | r2=-0.106, rmse=0.8784 | ok |
 | lle | taxi | algos | 17885 | 2570 | sklearn-cpu | 1247 | 14.35 | 2.06 |  | trustworthiness_k15=0.826083 | trustworthiness_k15=0.8398 | trustworthiness_k15=0.7708 | ok |
@@ -444,3 +444,5 @@ Sources: before = M3 0.8.34 board (classical), M3 2026-09-29 board FAST cells (t
 - PCA pooling accepted 2026-10-04: measured34b4f6c72, w2-w4d-pca-istella-r1 471.2 ->217.8ms; promotion906fe59c9 M2 default/OFF rc0, merged d8e7825cf. Same-input repeated-fit reconstruction differences lie within observed A range; arithmetic unchanged, eager synchronized outputs. Still slower than existing205ms opponent; no new winner.
 
 - LU pivot shuffle accepted2026-10-04: source6d82b6127; w2-lu-pivot-shuffle-q-20261004 exact10fixturePASS, w2-lu-pivot-shuffle-t-20261004 factorcall+read715.628750->653.702416ms, solve792.222333->733.531042ms. Default0769e1d92 M2default/OFF rc0. Board uses conservative call+first-read totals; no new winner or opponent run.
+
+- main cf46d6f37: permutation SHAP delta default, measured20bbdc372 / w2-pdelta-pshap-istella 28222.8 ->14788.6ms. Default/OFF M2 builds and M3 pshap-delta-default-r1-quality-20261004 PASS13exact arrays. Still slower than existing shap-cpu12335ms; no winner-count change.
