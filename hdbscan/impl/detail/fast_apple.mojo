@@ -25,8 +25,13 @@ comptime HDB_ALL = is_defined["MOJOLEARN_HDBSCAN2_ALL"]()
 
 comptime HDB_SMR_TILED = HDB_FAST_APPLE and (
     is_defined["MOJOLEARN_HDB_SMR_TILED"]() or HDB_ALL
+    or not is_defined["MOJOLEARN_HDB_SMR_TILED_OFF"]()
 )
-"""The sparse arm's tiled search kernel on Apple (sparse_mr_mst.mojo)."""
+"""The sparse arm's tiled search kernel on Apple (sparse_mr_mst.mojo).
+FAST + Apple DEFAULT since lane/apple-fast-batchv (2026-10-03), M3 A/B vs
+main batchv-hdb-smr-istella: hdbscan istella 44,879 -> 3,800 ms, n_clusters
+47 / noise 0.25381 both arms (taxi takes the d <= 64 arm: 426 / 434 ms,
+160 / 0.14222 both). -D MOJOLEARN_HDB_SMR_TILED_OFF: main's search."""
 
 comptime HDB_CORE_TILE = HDB_FAST_APPLE and (
     is_defined["MOJOLEARN_HDB_CORE_TILE"]() or HDB_ALL

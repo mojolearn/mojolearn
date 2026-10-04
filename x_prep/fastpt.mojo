@@ -2,7 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Lane af-ptimpute (2026-10-03): PowerTransformer's evaluation and the
 `col_stats` stage as ROW-TILED grids. FAST + Apple only, each switch behind its
-own define (default off; docs/apple-fast/ab/ptimpute.md):
+own define (default off except SI_ONEPASS, a FAST + Apple default with
+_OFF since lane/apple-fast-batchv; docs/apple-fast/ab/ptimpute.md):
 
   -D MOJOLEARN_PT_FOLD_NOX        x_prep/fastred.mojo pt_fold_fast_kernel reads X
                                   only at K = 0 (the unit's rule); later
@@ -53,7 +54,12 @@ comptime PT_SPEC = _FAST_APPLE and (is_defined["MOJOLEARN_PT_SPEC"]() or PTIMPUT
 #: PT_SPEC runs COLBATCH's kernels, so it turns COLBATCH on
 comptime PT_COLBATCH = _FAST_APPLE and (is_defined["MOJOLEARN_PT_COLBATCH"]() or PT_SPEC)
 comptime PT_FUSED_TRANSFORM = _FAST_APPLE and (is_defined["MOJOLEARN_PT_FUSED_TRANSFORM"]() or PTIMPUTE_ALL)
-comptime SI_ONEPASS = _FAST_APPLE and (is_defined["MOJOLEARN_SI_ONEPASS"]() or PTIMPUTE_ALL)
+#: SI_ONEPASS: FAST + Apple DEFAULT since lane/apple-fast-batchv (2026-10-03), M3 A/B vs main:
+#: simple-imputer istella 303.7 -> 273.7 ms, taxi 26.4 -> 21.0 ms; quality (tools/batchv_quality.sh,
+#: M2): median statistics exact, mean statistics within 1.2e-7 absolute (one float32 ulp).
+#: -D MOJOLEARN_SI_ONEPASS_OFF: main's two-pass col_stats.
+comptime SI_ONEPASS = _FAST_APPLE and (is_defined["MOJOLEARN_SI_ONEPASS"]() or PTIMPUTE_ALL
+                                       or not is_defined["MOJOLEARN_SI_ONEPASS_OFF"]())
 #: the bits `x_prep_ptimpute_flags` exports (registered only when nonzero):
 #: the Python layer shrinks the buffers the device no longer touches by them
 comptime PTIMPUTE_FLAGS = ((1 if PT_COLBATCH else 0) + (2 if PT_SPEC else 0) + (4 if PT_FUSED_TRANSFORM else 0)
