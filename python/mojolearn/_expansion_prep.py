@@ -1468,31 +1468,62 @@ def _splitmix64(state):
     return state, z ^ (z >> 31)
 
 
-def _native_folds(n, n_folds, seed, shuffle, codes=None, n_classes=0, as_array=False):
-    """The fold assignment through the binding's host entry (x_prep/folds.mojo,
-    the same integers; both the GPU and the CPU-only binding export it since
-    lane apple-fast-py2mojo-prep, which deleted the Python copies
-    `_kfold_assignment` / `_stratified_assignment`). `codes` is a list or an
-    int32 Array; as_array returns the folds as an int32 Array."""
-    b = _prep_binding(_mode())
+def _stage_folds(pr, n, n_folds, seed, shuffle, codes=_NONE, n_classes=0):
+    """Stages TargetEncoder's cross-fit fold of every row (lane cpu2-l3-prep:
+    on the device, every tier; the host entries x_prep_kfold_folds /
+    x_prep_strat_folds walked a serial Fisher-Yates). Without `codes` (the
+    float class codes' offset): KFold, c2_kfold. With them: StratifiedKFold,
+    the rows grouped by class (p2m_ccount .. p2m_cwrite), each class's start
+    in first-seen order (c2_strat_meta), its rows' folds (c2_strat_fold).
+    Unshuffled, the reference's folds; shuffled, a seed-keyed permutation of
+    the positions (of each class's fold block), integers only. Returns (the
+    folds' float codes offset, the refusal flag offset or None: 1.0 when
+    every class has fewer rows than n_folds)."""
     s = int(seed) & 0xFFFFFFFFFFFFFFFF
-    halves = (s & 0xFFFFFFFF, s >> 32)
-    out = array.array("i", bytes(4 * max(n, 1)))
-    if codes is None:
-        b.x_prep_kfold_folds(out.buffer_info()[0], (n, n_folds, 1 if shuffle else 0), halves)
-    else:
-        if isinstance(codes, Array) and codes.dtype == "<i4" and codes._has_order("C") and codes.size == n:
-            cod, cod_addr = codes, addr_ro(codes, name="codes")
-        else:
-            cod = array.array("i", codes)
-            cod_addr = cod.buffer_info()[0]
-        if b.x_prep_strat_folds(cod_addr, out.buffer_info()[0],
-                                (n, n_classes, n_folds, 1 if shuffle else 0), halves) != 0:
-            raise ValueError(f"mojolearn: n_splits={n_folds} cannot be greater than the number of members in each class")
-    if as_array:
-        return Array._owned(out, (len(out),), "<i4", "C") if len(out) == n else \
-            Array._owned(array.array("i", out[:n]), (n,), "<i4", "C")
-    return out[:n].tolist()
+    fo = pr.alloc(max(n, 1))
+    if codes == _NONE:
+        pr.stage("c2_kfold", n, _seed_words(pr, s), n, n_folds, 1 if shuffle else 0, fo)
+        return fo, None
+    K = n_classes
+    ch, nch = _p2m_chunks(n, K)
+    cnt, tot = pr.alloc(nch * K), pr.alloc(K)
+    pr.stage("p2m_ccount", nch, codes, n, K, ch, cnt)
+    pr.stage("p2m_cscan", K, cnt, nch, K, tot)
+    start, ro = pr.alloc(K), pr.alloc(n)
+    pr.stage("p2m_cstart", 1, tot, K, start, _NONE)
+    pr.stage("p2m_cwrite", nch, codes, n, K, ch, cnt, start, ro)
+    meta, flag = pr.alloc(2 * K), pr.alloc(1)
+    pr.stage("c2_strat_meta", K, start, tot, ro, K, meta)
+    pr.stage("c2_strat_flag", 1, tot, K, n_folds, flag)
+    pr.stage("c2_strat_fold", n, ro, start, tot, codes, meta, n_folds, _seed_words(pr, s), 1 if shuffle else 0, fo)
+    return fo, flag
+
+
+def _refuse_folds(pr, flag, n_folds):
+    """After the run: the reference's refusal when every class is smaller
+    than n_folds (one word read back)."""
+    if flag is None:
+        return
+
+    def refuse(prog, flag=flag):
+        if prog.values(flag, 1)[0] != 0:
+            raise ValueError(f"mojolearn: n_splits={n_folds} cannot be greater than the number of members in "
+                             "each class")
+    pr._after.append(refuse)
+
+
+def _native_folds(n, n_folds, seed, shuffle, codes=None, n_classes=0, as_array=False):
+    """The folds `_stage_folds` gives TargetEncoder's fit, as int32 words
+    (one program; `codes` a list or an int32 Array of class codes)."""
+    pr = _Prog()
+    co = pr.put_codes(codes) if codes is not None else _NONE
+    fo, flag = _stage_folds(pr, n, n_folds, seed, shuffle, co, n_classes)
+    _refuse_folds(pr, flag, n_folds)
+    out = pr.alloc(max(n, 1))
+    pr.stage("f2i", n, fo, out)
+    pr.run(_mode())
+    got = pr.get_i32(out, n)
+    return got if as_array else got.tolist()
 
 
 def _target_binary_codes(y, target_type):
@@ -1524,14 +1555,14 @@ def _target_kind(y, target_type):
     """(kind, classes, targets, T): targets are a float32 Array (continuous)
     or the int32 class codes (binary, multiclass; the device makes their
     float and one-hot words). Lane cgr4-py-compute: the kind test (any
-    non-integer value) is the base binding's `reduce_stat` integral check,
-    not a per-label Python test, and no per-row target list is built."""
+    non-integer value) is `_all_integral` (lane cpu2-l3-prep: on the
+    device), not a per-label Python test, and no per-row target list is
+    built."""
     num = _numeric_target(y)
     continuous = target_type == "continuous"
     if not continuous and target_type == "auto" and num is not None and num.size \
             and num.dtype in ("<f4", "<f8"):
-        continuous = not bool(_native_helper("reduce_stat")(num._addr, 0 if num.dtype == "<f4" else 1,
-                                                            num.size, 4))
+        continuous = not _all_integral(num)
     if continuous:
         if num is None:
             raise ValueError("mojolearn: a continuous TargetEncoder target must be numeric")
@@ -1545,9 +1576,21 @@ def _target_kind(y, target_type):
 
 
 def _all_integral(arr):
-    """Whether every value of a float Array is an integer (`reduce_stat`)."""
-    vec = arr if arr._has_order("C") else arr._as_c()
-    return bool(_native_helper("reduce_stat")(vec._addr, 0 if vec.dtype == "<f4" else 1, vec.size, 4))
+    """Whether every value of a float32 / float64 Array is finite and an
+    integer (`reduce_stat`'s integral test), on the device: c2_integral by
+    chunks, c2_isum, one word read back (lane cpu2-l3-prep)."""
+    lb = _label_buffer(arr)
+    if lb is None or lb.kind not in (0, 4):
+        raise TypeError("mojolearn: the integral test takes a float32 or float64 vector")
+    n = lb.n
+    ch = max(4096, -(-n // 4096))
+    nch = -(-n // ch)
+    pr = _Prog()
+    cnt, tot = pr.alloc(nch), pr.alloc(1)
+    pr.stage("c2_integral", nch, pr.put_words(lb.words), lb.kind, n, ch, cnt)
+    pr.stage("c2_isum", 1, cnt, nch, tot)
+    pr.run(_mode())
+    return int(pr.get_i32(tot, 1).tolist()[0]) == 0
 
 
 def _target_arrays(y, target_type):
@@ -1569,9 +1612,8 @@ def _target_arrays(y, target_type):
         return None
     if kind == "f" and (arr.dtype not in ("<f4", "<f8") or not all_finite(arr)):
         return None
-    # the reference's continuous test: some label is not an integer (a C-speed map
-    # over the storage; an integer dtype holds integers)
-    # (the base binding's `reduce_stat` integral test; an integer dtype holds integers)
+    # the reference's continuous test: some label is not an integer (`_all_integral`,
+    # on the device; an integer dtype holds integers)
     cont = target_type == "continuous" or (
         target_type == "auto" and kind == "f" and not _all_integral(arr))
     if cont:
@@ -1672,12 +1714,20 @@ class TargetEncoder(_PrepBase):
             # the one-hot rows: word 1.0f (bits 0x3F800000) where row i's code is c, else 0.0f
             co, yo = pr.put_codes(tgt), pr.alloc(n * T)
             pr.stage("label_binarize", n * T, co, n, T, 0, 0, 0x3F800000, T, yo)
-        if folds is None:
-            folds = full((max(n, 1),), -1, "<i4")
-        elif not isinstance(folds, Array):
-            store = array.array("i", folds)
-            folds = Array._owned(store, (len(store),), "<i4", "C")
-        fo = pr.put_codes(folds)
+        if isinstance(folds, tuple):
+            # cv an int: the folds on the device (`_stage_folds`): KFold for a continuous
+            # target, else StratifiedKFold over the class codes
+            _, seed, shuffle = folds
+            codes_off = _NONE if kind == "continuous" else (yo if T == 1 else co)
+            fo, flag = _stage_folds(pr, n, F, seed, shuffle, codes_off, len(classes) if classes is not None else 0)
+            _refuse_folds(pr, flag, F)
+        else:
+            if folds is None:
+                folds = full((max(n, 1),), -1, "<i4")
+            elif not isinstance(folds, Array):
+                store = array.array("i", folds)
+                folds = Array._owned(store, (len(store),), "<i4", "C")
+            fo = pr.put_codes(folds)
         nco = pr.put_list([c.size for c in cats])
         meta = pr.alloc(2 * (F + 1) * T)
         smo = pr.put_scalar(-1.0 if self.smooth == "auto" else float(self.smooth))
@@ -1784,24 +1834,20 @@ class TargetEncoder(_PrepBase):
         if n < cv:
             raise ValueError(f"mojolearn: cv={cv} folds need at least {cv} rows")
         seed = 0 if self.random_state is None else int(self.random_state)
+        # the folds are staged in the fit's own program (`_stage_folds`, lane cpu2-l3-prep)
+        folds = ("cv", seed, bool(self.shuffle))
         binary = _target_binary_codes(y, self.target_type)
         if binary is not None:
             if binary[1].size != n:
                 raise ValueError("mojolearn: X and y have different numbers of rows")
-            folds = _native_folds(n, cv, seed, bool(self.shuffle), binary[1], len(binary[0]), as_array=True)
-            if folds is not None:
-                return self._run(arr, y, folds, cv, True, binary=binary)
-        # the target and the folds as arrays (`_target_arrays`, lane
-        # apple-fast-py2mojo-prep; else `_target_kind`'s arrays, lane
-        # cgr4-py-compute): no per-row Python either way
+            return self._run(arr, y, folds, cv, True, binary=binary)
+        # the target as arrays (`_target_arrays`, lane apple-fast-py2mojo-prep;
+        # else `_target_kind`'s arrays, lane cgr4-py-compute): no per-row Python either way
         target = _target_arrays(y, self.target_type)
         if target is None:
             target = _target_kind(y, self.target_type)
-        kind, classes, tgt, _T = target
-        if tgt.size != n:
+        if target[2].size != n:
             raise ValueError("mojolearn: X and y have different numbers of rows")
-        folds = (_native_folds(n, cv, seed, bool(self.shuffle), as_array=True) if kind == "continuous" else
-                 _native_folds(n, cv, seed, bool(self.shuffle), tgt, len(classes), as_array=True))
         return self._run(arr, y, folds, cv, True, target=target)
 
     def transform(self, X):
