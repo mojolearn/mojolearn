@@ -443,6 +443,12 @@ def chol_default_nb_hint() -> Int:
     return CHOL_NB_PINNED
 
 
+# FAST experiment: one launch of 64x64 lower-triangle matrix-unit tiles,
+# avoiding the 2048-column slabs' unused upper work and tail scratch traffic.
+comptime CHOL_FAST_TRI_SYRK = (
+    CHOL_FAST_APPLE and is_defined["MOJOLEARN_CHOL_FAST_TRI_SYRK"]()
+)
+
 comptime CHOL_FAST_CB = 2048
 comptime CHOL_FAST_NB = 64 if is_defined["MOJOLEARN_CHOL_FAST_NB64"]() else (
     128 if is_defined["MOJOLEARN_CHOL_FAST_NB128"]() else (
@@ -990,7 +996,7 @@ median off against 9.38 s on. The trailing update is not this factor's
 bottleneck on the M4."""
 
 
-def chol_syrk_sub_lower_amma_kernel(
+def chol_syrk_sub_lower_amma_kernel[FAST: Bool = False](
     a: MutPointer[Float32, MutAnyOrigin],
     xa: MutPointer[Float32, MutAnyOrigin],
     yb: MutPointer[Float32, MutAnyOrigin],
@@ -1044,24 +1050,29 @@ def chol_syrk_sub_lower_amma_kernel(
         var chunk = min(KB, k - k0)
         var ea = _amma_stage[BM, KB, NT, True, AST](at, ra, tid, False)
         var eb = _amma_stage[BN, KB, NT, False, BST](bt, rb, tid, False)
-        ea = _admit_warp_min(ea)
-        eb = _admit_warp_min(eb)
-        if lane == 0:
-            wmin[sg] = ea
-            wmin[NSG + sg] = eb
+        comptime if not FAST:
+            ea = _admit_warp_min(ea)
+            eb = _admit_warp_min(eb)
+            if lane == 0:
+                wmin[sg] = ea
+                wmin[NSG + sg] = eb
         barrier()
         if w + 1 < windows:
             var k1 = k0 + KB
             ra = _amma_gload[BM, KB, NT](xa, k, 1, m0, m, k1, min(KB, k - k1), tid, False)
             rb = _amma_gload[BN, KB, NT](yb, k, 1, n0, m, k1, min(KB, k - k1), tid, False)
-        var bea = UInt32(0xFF)
-        var beb = UInt32(0xFF)
-        comptime for q in range(NSG):
-            bea = min(bea, wmin[q])
-            beb = min(beb, wmin[NSG + q])
-        var admitted = exact_ok and chunk == KB and (bea + beb) >= UInt32(APPLE_MMA_ADMIT_EXP_SUM)
-        if not admitted:
-            exact_ok = False
+        # FAST admits every finite FP32 tile; masked loads zero-pad the
+        # final k window. IDENTICAL retains its original exactness gate.
+        var admitted = True
+        comptime if not FAST:
+            var bea = UInt32(0xFF)
+            var beb = UInt32(0xFF)
+            comptime for q in range(NSG):
+                bea = min(bea, wmin[q])
+                beb = min(beb, wmin[NSG + q])
+            admitted = exact_ok and chunk == KB and (bea + beb) >= UInt32(APPLE_MMA_ADMIT_EXP_SUM)
+            if not admitted:
+                exact_ok = False
         if admitted:
             comptime for p8 in range(KB // 8):
                 var af = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
@@ -2202,7 +2213,18 @@ def potrf_lower(
                 var lower_blocked = False
                 comptime if CHOL_FAST_APPLE:
                     lower_blocked = sabotage == CHOL_SAB_NONE and n_trail > CHOL_FAST_CB
-                if lower_blocked:
+                var fast_triangle = False
+                comptime if CHOL_FAST_TRI_SYRK:
+                    fast_triangle = sabotage == CHOL_SAB_NONE and chol_device_count() == 1
+                if fast_triangle:
+                    var tb = (n_trail + 63) // 64
+                    ctx.enqueue_function[chol_syrk_sub_lower_amma_kernel[True]](
+                        a.unsafe_ptr(), packed.unsafe_ptr(), packed_b.unsafe_ptr(),
+                        Int32(n), Int32(j0 + w), Int32(n_trail), Int32(w),
+                        grid_dim=(tb * (tb + 1) // 2, 1, 1), block_dim=(128, 1, 1),
+                    )
+                    lower_blocked = True  # subtraction is fused, no G scratch
+                elif lower_blocked:
                     # rows >= cb of each CHOL_FAST_CB-wide column block only:
                     # about half the product of the full square
                     var cb = 0
@@ -2245,7 +2267,7 @@ def potrf_lower(
                             if sabotage == CHOL_SAB_NONE:
                                 fused = True
                                 var tb = (n_trail + 63) // 64
-                                ctx.enqueue_function[chol_syrk_sub_lower_amma_kernel](
+                                ctx.enqueue_function[chol_syrk_sub_lower_amma_kernel[False]](
                                     a.unsafe_ptr(), packed.unsafe_ptr(), packed_b.unsafe_ptr(),
                                     Int32(n), Int32(j0 + w), Int32(n_trail), Int32(w),
                                     grid_dim=(tb * (tb + 1) // 2, 1, 1), block_dim=(128, 1, 1),
