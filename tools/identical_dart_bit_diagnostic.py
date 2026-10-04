@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 
-def child(root, out, vendor):
+def child(root, out, vendor, full=False, repeats=2):
     sys.path.insert(0, str(root / 'python'))
     from identical_wave_worker import source_provenance
     import numpy as np
@@ -19,14 +19,20 @@ def child(root, out, vendor):
     params = dict(n_estimators=24, num_leaves=31, max_depth=5, min_child_samples=8,
                   max_bin=63, random_state=7, drop_seed=7, bagging_seed=7,
                   feature_fraction_seed=7, drop_rate=0.2, skip_drop=0.25)
-    data=Path('/root/board-0833/cache/algos-data/rows-small')
+    data=Path('/root/board-0833/cache/algos-data')/('rows-full' if full else 'rows-small')
+    reference=json.loads(Path(__file__).with_name('identical_wave_dart_reference.json').read_text())
     for kind, cls in (('clf', ml.DARTClassifier), ('reg', ml.DARTRegressor)):
         block='cls' if kind=='clf' else 'reg'
         with np.load(data / (block + '-taxi.npz')) as z:
-            x=np.ascontiguousarray(z['X'][:16384]); y=np.ascontiguousarray(z['y'][:16384])
-            xq=np.ascontiguousarray(z['Xq'][:257])
+            n=len(z['X']) if full else 16384
+            nq=len(z['Xq']) if full else 257
+            x=np.ascontiguousarray(z['X'][:n]); y=np.ascontiguousarray(z['y'][:n])
+            xq=np.ascontiguousarray(z['Xq'][:nq])
+        if full:
+            lane='dart' if kind=='clf' else 'dart-reg'
+            params=next(r['params'] for r in reference['rows'] if r['lane']==lane)
         inputs[kind]={n:hashlib.sha256(v.tobytes()).hexdigest() for n,v in [('X',x),('y',y),('Xq',xq)]}
-        for repeat in range(2):
+        for repeat in range(repeats):
             model=cls(**params).fit(x,y)
             prefix=f'{kind}-repeat{repeat}'
             arrays[prefix+'-prediction']=np.ascontiguousarray(model.predict(xq))
@@ -42,7 +48,7 @@ def child(root, out, vendor):
     (out / (vendor + '-inputs.json')).write_text(json.dumps(inputs,indent=2))
     repeated=[]
     for key,value in arrays.items():
-        if '-repeat0-' in key:
+        if repeats>1 and '-repeat0-' in key:
             other=arrays[key.replace('-repeat0-','-repeat1-')]
             if value.shape!=other.shape or value.dtype!=other.dtype or value.tobytes()!=other.tobytes():
                 repeated.append(key)
@@ -56,12 +62,14 @@ def main():
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--vendor', choices=('cuda', 'hip', 'cpu'), required=True)
     p.add_argument('--child', action='store_true')
+    p.add_argument('--full', action='store_true', help='Exact stored full-row DART parameters and data')
+    p.add_argument('--repeats', type=int, choices=(1,2), default=2)
     a = p.parse_args()
     if sys.platform != 'linux':
         p.error('execute only on the authorized Linux boxes')
     root = a.source.resolve()
     if a.child:
-        child(root, a.out, a.vendor)
+        child(root, a.out, a.vendor, a.full, a.repeats)
         return 0
     if a.vendor == 'cpu':
         p.error('parent requires cuda or hip')
@@ -78,7 +86,8 @@ def main():
                    LD_LIBRARY_PATH=str(root / 'python/mojolearn/.libs') + ':' + env.get('LD_LIBRARY_PATH', ''))
         with (a.out / (vendor + '.log')).open('w') as log:
             proc = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--child',
-                '--source', str(root), '--out', str(a.out), '--vendor', vendor],
+                '--source', str(root), '--out', str(a.out), '--vendor', vendor,
+                '--repeats',str(a.repeats), *(['--full'] if a.full else [])],
                 cwd=root, env=env, stdout=log, stderr=subprocess.STDOUT, timeout=1800)
         report['columns'][vendor] = {'rc': proc.returncode}
         if proc.returncode:
