@@ -590,13 +590,10 @@ class _Prog:
         return self._read(off, shape, "i")
 
     def get_f64(self, off, shape):
-        """float64 values written as word pairs (low, high) by `q64_softmax`:
+        """An (rows, cols) block of float64 values written as word pairs (low, high) by `q64_softmax`:
         the 2 * prod(shape) words reinterpreted as bytes (glue: no arithmetic)."""
-        shape = tuple(shape) if isinstance(shape, (tuple, list)) else (int(shape),)
-        n = 1
-        for s_ in shape:
-            n *= s_
-        words = self._read(off, (2 * n,), "i")
+        rows, cols = shape
+        words = self._read(off, (2 * rows * cols,), "i")
         out = array.array("d")
         out.frombytes(words.tobytes())
         return Array._owned(out, shape, "<f8", "C")
