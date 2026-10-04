@@ -40,6 +40,8 @@ from x_cnn.ops import (
 )
 # lane fam2-neural (2026-10-04): the blocked loss fold (the device's `blk_fold_at`)
 from x_cnn.ops import IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan
+# lane fix-n1-lm-neural (2026-10-04): the blocked adaptive average fold (audit B9)
+from x_cnn.ops import IDN_GAP_BLOCK_FOLD, gap_fold_blocks, adapt_avg_blk_at, adapt_avg_fin_at
 
 #: The host family's negative control (host_surface sabotage_define): the
 #: host col2im gathers in reversed (kh) order.
@@ -980,6 +982,21 @@ def adaptive_pool_host(x: List[Float32], idx: List[Int32], prm: List[Int32], kin
     var nin = nc * Int(prm[2]) * Int(prm[3])
     var nout = nc * Int(prm[4]) * Int(prm[5])
     if kind == 0:
+        comptime if IDN_GAP_BLOCK_FOLD:
+            var nb = gap_fold_blocks(Int(prm[2]), Int(prm[3]), Int(prm[4]), Int(prm[5]))
+            if nb > 1:
+                # lane fix-n1-lm-neural: the device's two launches, the same words
+                var sa = x.copy()
+                var ps = prm.copy()
+                idx_out = idx.copy()
+                var part = zeros(nout * nb)
+                var out = zeros(nout)
+                run[adapt_avg_blk_at](hp(sa), hp(sa), hp(part), hp(part), hi(idx_out), hi(ps), nout * nb)
+                run[adapt_avg_fin_at](hp(part), hp(part), hp(out), hp(out), hi(idx_out), hi(ps), nout)
+                _ = sa^
+                _ = ps^
+                _ = part^
+                return out^
         return adaptive_host[adapt_avg_fwd_at](x, idx, nout, prm, idx_out)
     if kind == 1:
         return adaptive_host[adapt_avg_bwd_at](x, idx, nin, prm, idx_out)

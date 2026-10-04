@@ -50,6 +50,8 @@ from x_cnn.ops import (
     sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at, gather_rows_at, argmax_row_at,
     chan_slice_at, chan_place_at,
 )
+# lane fix-n1-lm-neural (2026-10-04): the blocked adaptive average fold (audit B9)
+from x_cnn.ops import IDN_GAP_BLOCK_FOLD, gap_fold_blocks, adapt_avg_blk_at, adapt_avg_fin_at
 # lane fam2-neural (2026-10-04): the device loss fold, epoch order and Adam step scalars
 from x_cnn.ops import (
     IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan, EP_LEN, epoch_rows_at, epoch_rows_prm,
@@ -1798,6 +1800,27 @@ def adaptive_pool_device(x: List[Float32], idx: List[Int32], prm: List[Int32], k
     var nin = nc * Int(prm[2]) * Int(prm[3])
     var nout = nc * Int(prm[4]) * Int(prm[5])
     if kind == 0:
+        comptime if IDN_GAP_BLOCK_FOLD:
+            var nb = gap_fold_blocks(Int(prm[2]), Int(prm[3]), Int(prm[4]), Int(prm[5]))
+            if nb > 1:
+                # lane fix-n1-lm-neural: one thread per (output, block), then one per output
+                var ctx = cnn_ctx()
+                var da = upload_f32(ctx, x)
+                var di = upload_i32(ctx, idx)
+                var dp = upload_i32(ctx, prm)
+                var part = ctx.enqueue_create_buffer[DType.float32](nout * nb)
+                var out = ctx.enqueue_create_buffer[DType.float32](nout)
+                launch[adapt_avg_blk_at](ctx, fp(da), fp(da), fp(part), fp(part), ip(di), ip(dp), nout * nb)
+                launch[adapt_avg_fin_at](ctx, fp(part), fp(part), fp(out), fp(out), ip(di), ip(dp), nout)
+                var result = download_f32(ctx, out, nout)
+                idx_out = download_i32(ctx, di, len(idx))
+                _ = da^
+                _ = di^
+                _ = dp^
+                _ = part^
+                _ = out^
+                _ = ctx^
+                return result^
         return adaptive_device[adapt_avg_fwd_at](x, idx, nout, prm, idx_out)
     if kind == 1:
         return adaptive_device[adapt_avg_bwd_at](x, idx, nin, prm, idx_out)
@@ -1920,7 +1943,17 @@ def adaptive_pool_m(a: List[Int], dev: Int, prm: List[Int32], kind: Int) raises:
     var dp = put_prm(ctx, 1, prm)
     var dout = m_out(ctx, 2, a[1], n_write, isdev(dev, 1))
     var di = _adapt_idx(ctx, a[2], nout, isdev(dev, 2), kind)
-    if kind == 0:
+    var gap_nb = 1
+    comptime if IDN_GAP_BLOCK_FOLD:
+        if kind == 0:
+            gap_nb = gap_fold_blocks(Int(prm[2]), Int(prm[3]), Int(prm[4]), Int(prm[5]))
+    if kind == 0 and gap_nb > 1:
+        # lane fix-n1-lm-neural (IDN_GAP_BLOCK_FOLD): the blocked window fold
+        var part = ws(ctx, 4, n_write * gap_nb)
+        launch[adapt_avg_blk_at](ctx, fp(da), fp(da), fp(part), fp(part), ip(di), ip(dp), n_write * gap_nb)
+        launch[adapt_avg_fin_at](ctx, fp(part), fp(part), fp(dout), fp(dout), ip(di), ip(dp), n_write)
+        _ = part^
+    elif kind == 0:
         launch[adapt_avg_fwd_at](ctx, fp(da), fp(da), fp(dout), fp(dout), ip(di), ip(dp), n_write)
     elif kind == 1:
         launch[adapt_avg_bwd_at](ctx, fp(da), fp(da), fp(dout), fp(dout), ip(di), ip(dp), n_write)

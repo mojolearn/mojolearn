@@ -1318,6 +1318,88 @@ def adapt_avg_fwd_at(i: Int, x: FP, f1: FP, dst: FP, f3: FP, q: IP, p: IP):
     dst.unsafe_store(i, ftz(identical_div(acc, Float32((he - hs) * (we - ws)))))
 
 
+# lane fix-n1-lm-neural (2026-10-04, audit B9), IDENTICAL only, every column:
+# the adaptive average forward (global average pooling is its 1 x 1 case)
+# was one thread per output folding the whole window in (h, w) order. With
+# IDN_GAP_BLOCK_FOLD the window's values, in the same (h, w) order, are cut
+# into consecutive blocks of B = bn_fold_block(KH * KW) values (KH, KW the
+# largest window extents of the shape, so B depends on the shape alone):
+# one ascending chain from +0.0 per (output, block) (`adapt_avg_blk_at`),
+# then the output's block partials added ascending from +0.0 and one
+# division by the window size (`adapt_avg_fin_at`). A window of at most B
+# values (B >= 64, so every window up to 8 x 8) is one block: the old chain's
+# bits exactly; larger windows move bits on the devices and the host column
+# together. `-D MOJOLEARN_IDN_GAP_BLOCK_FOLD_OFF` restores the single chain.
+comptime IDN_GAP_BLOCK_FOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GAP_BLOCK_FOLD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+
+
+@always_inline
+def adapt_max_extent(isize: Int, osize: Int) -> Int:
+    """An upper bound of every adaptive window's extent along one axis."""
+    var k = (isize + osize - 1) // osize + 1
+    return k if k < isize else isize
+
+
+@always_inline
+def gap_fold_block(H: Int, W: Int, OH: Int, OW: Int) -> Int:
+    """Values per block of the blocked adaptive average fold."""
+    return bn_fold_block(adapt_max_extent(H, OH) * adapt_max_extent(W, OW))
+
+
+@always_inline
+def gap_fold_blocks(H: Int, W: Int, OH: Int, OW: Int) -> Int:
+    """Block slots per output (at least 1); 1 means the single chain runs."""
+    var c = adapt_max_extent(H, OH) * adapt_max_extent(W, OW)
+    var b = bn_fold_block(c)
+    var nb = (c + b - 1) // b
+    return nb if nb > 0 else 1
+
+
+@always_inline
+def adapt_avg_blk_at(t: Int, x: FP, f1: FP, part: FP, f3: FP, q: IP, p: IP):
+    """Slot t = i * NB + b: the ascending chain over block b of output i's
+    window values in (h, w) order (+0.0 for a block past the window)."""
+    var H = _g(p, 2); var W = _g(p, 3); var OH = _g(p, 4); var OW = _g(p, 5)
+    var B = gap_fold_block(H, W, OH, OW)
+    var NB = gap_fold_blocks(H, W, OH, OW)
+    var i = t // NB
+    var blk = t - i * NB
+    var ow = i % OW
+    var r = i // OW
+    var oh = r % OH
+    var nc = r // OH
+    var hs = _astart(oh, OH, H); var he = _aend(oh, OH, H)
+    var ws = _astart(ow, OW, W); var we = _aend(ow, OW, W)
+    var ww = we - ws
+    var cnt = (he - hs) * ww
+    var j1 = min((blk + 1) * B, cnt)
+    var acc = Float32(0)
+    for k in range(blk * B, j1):
+        var h = hs + k // ww
+        var w = ws + k % ww
+        acc = ftz(acc + ftz(x.unsafe_load((nc * H + h) * W + w)))
+    part.unsafe_store(t, acc)
+
+
+@always_inline
+def adapt_avg_fin_at(i: Int, part: FP, f1: FP, dst: FP, f3: FP, q: IP, p: IP):
+    """Output i: its block partials added ascending from +0.0, then one
+    division by the window size."""
+    var H = _g(p, 2); var W = _g(p, 3); var OH = _g(p, 4); var OW = _g(p, 5)
+    var B = gap_fold_block(H, W, OH, OW)
+    var NB = gap_fold_blocks(H, W, OH, OW)
+    var ow = i % OW
+    var oh = (i // OW) % OH
+    var hs = _astart(oh, OH, H); var he = _aend(oh, OH, H)
+    var ws = _astart(ow, OW, W); var we = _aend(ow, OW, W)
+    var cnt = (he - hs) * (we - ws)
+    var nb = (cnt + B - 1) // B
+    var acc = Float32(0)
+    for b in range(nb):
+        acc = ftz(acc + part.unsafe_load(i * NB + b))
+    dst.unsafe_store(i, ftz(identical_div(acc, Float32(cnt))))
+
+
 @always_inline
 def adapt_avg_bwd_at(i: Int, g: FP, f1: FP, dx: FP, f3: FP, q: IP, p: IP):
     """dx[n, c, h, w] = the sum over the windows holding the pixel of
