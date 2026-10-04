@@ -16,7 +16,8 @@ exhausts Metal's per-process command queues, and x_cluster/x_neighbors hung
 on the second GPU call of a process). Each entry's buffers are released
 before it returns; the context stays.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from std.gpu import block_idx, block_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA
+from std.utils import StaticTuple
 from std.gpu.primitives.warp import shuffle_idx, shuffle_xor
 from std.ffi import _Global
 from std.sys.compile import is_defined
@@ -993,6 +994,11 @@ def _sgd_mb_chunk_kernel_body(
         start += bs
 
 
+# The launch width also constrains register allocation: without this bound
+# the 1024-thread IDENTICAL launch can exceed NVIDIA registers per block
+# (Blackwell CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES). This declares the existing
+# launch, preserving the work order and the CHUNK_WIDE_OFF comparison arm.
+@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(SGD_CHUNK_TPB)))
 def sgd_mb_chunk_kernel(
     x: FP, ys: FP, idx: IP, w: FP, bias: FP, swp: FP, dlv: FP, lv: FP, parts: FP, obj: FP, ci: IP, cf: FP,
     dotp: FP, sqp: FP, start0: Int32, nbat: Int32, t0: Int32, wf: IP, woff: Int32, nonce: Int32,
@@ -1025,6 +1031,7 @@ comptime SGD_OVR_CF = 9
 comptime SGD_OVR_MAX_CELLS = 1 << 28
 
 
+@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(SGD_CHUNK_TPB)))
 def sgd_mb_chunk_ovr_kernel(
     x: FP, ys: FP, idx: IP, w: FP, bias: FP, swp: FP, dlv: FP, lv: FP, parts: FP, obj: FP, ci: IP, cf: FP,
     dotp: FP, sqp: FP, act: IP, start0: Int32, nbat: Int32, t0: Int32, wf: IP, woff: Int32, nonce: Int32,

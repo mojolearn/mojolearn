@@ -184,7 +184,11 @@ def main():
         def refuse_nan():
             bad = x.copy(); bad[-1, -1] = np.nan
             try: ml.SGDClassifier(max_iter=1, batch_size=128, random_state=7).fit(bad, y)
-            except ValueError: return {'refused': np.asarray(1, dtype=np.int32)}
+            except Exception as exc:
+                # Mojo's checked finite-input refusal crosses Python as a plain
+                # Exception on this ABI; validate the reason, not a guessed type.
+                if str(exc) != 'mojolearn: X contains NaN or infinity': raise
+                return {'refused': np.asarray(1, dtype=np.int32)}
             raise AssertionError('SGD accepted NaN input')
         case('sgd-nan-refusal', refuse_nan)
         def refuse_overflow():
