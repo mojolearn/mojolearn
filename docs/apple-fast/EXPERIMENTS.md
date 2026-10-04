@@ -647,6 +647,25 @@ exercised. These remain on existing guarded fallback routes; no claim is made
 that those cases were tested. Encoder/multilabel correctness was checked but
 speed was measured only for LabelBinarizer; do not update their timing rows.
 
+## MCD compatibility repair review (2026-10-04)
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_MCD_BATCH_COMPAT` | MinCovDet / taxi cap3000 | lane/apple-fast-mcd-exact @ ab4265c9a | gap26-mcdrepair-small-ready | quality-only fit5595.80 ->828.96; full-board timing gated | HOLD-quality | location_rel.032817, covariance_rel.085678, precision_rel.999817, distances_rel.997423; support Jaccard.941431, raw_support.798209, both raw ranks10. Collective-entry repair removed launch/convergence failure but fitted values remain different. Same flags(all true) do not establish quality. |
+
+Audit/proposal in `ab/mcd-compat-review.md`: main uses native Apple MMA for
+covariance, weighted eigenvector Gram and Mahalanobis products; COMPAT uses
+scalar FMA chains. Main covariance also splits K for support>=1024, unlike
+COMPAT's4096-term folds. This concrete arithmetic mismatch can amplify through
+singular determinants and candidate selection, but saved final fits alone do
+not identify the first divergent stage. No thresholds changed. No new numeric
+candidate is approved or claimed fixed; full timing remains gated.
+
+## MCD MMA repair candidate (2026-10-04)
+
+| define | algorithm / dataset | branch / base | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_MCD_BATCH_MMA` | MinCovDet / taxi, narrow d<=64 | lane/apple-fast-mcd-mma (base d4bb2b795) | gap26-mcd-mma-{small,ee-small,full,ee-full} | MCD taxi 70877.7 -> 3587.2 ms; EE taxi 70092.1 -> 3627.9 ms; all MCDQ-PAIR-PASS | DEFAULT (FAST+Apple), rollback `MOJOLEARN_MCD_BATCH_MMA_OFF` | Actual repair after scalar COMPAT quality failure: use main's existing MMA/split-K launcher per candidate for covariance, weighted Gram and Mahalanobis. Batched control/eigen/support work retained. No host model computation, no threshold changes. See ab/mcd-mma.md; compile, capped quality and conditional full timing owed. |
 ## AutoARIMA order batching current-main integration (2026-10-04)
 
 | Experiment | Branch / baseline | Evidence | Verdict / next step |
