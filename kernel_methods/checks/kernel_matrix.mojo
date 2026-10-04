@@ -476,7 +476,7 @@ comptime KM_RBF_CELL_MAX_D = 16 if is_defined["MOJOLEARN_IDN_KM_RBF_CELL_D16"]()
 
 
 def km_rbf_cell_kernel(
-    out: MutPointer[Float32, MutAnyOrigin],
+    output: MutPointer[Float32, MutAnyOrigin],
     a: MutPointer[Float32, MutAnyOrigin],
     b: MutPointer[Float32, MutAnyOrigin],
     m_in: Int32,
@@ -505,9 +505,9 @@ def km_rbf_cell_kernel(
         var d = ftz(ftz(a.unsafe_load(i * k + c)) - ftz(b.unsafe_load(j * k + c)))
         acc = ftz(identical_mul_add(d, d, acc))
     var v = ftz(identical_exp(ftz(identical_mul(neg_gamma, acc))))
-    out.unsafe_store(t, v)
+    output.unsafe_store(t, v)
     if sym_in != Int32(0) and j != i:
-        out.unsafe_store(j * n + i, v)
+        output.unsafe_store(j * n + i, v)
 
 
 def chi2_cell_kernel(

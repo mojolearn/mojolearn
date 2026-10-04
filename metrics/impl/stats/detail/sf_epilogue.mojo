@@ -110,7 +110,7 @@ def ari_part_kernel(tri: I64P, a: I64P, b: I64P, rs: I64P, k: Int32, nch: Int32)
 
 
 def ari_level_kernel(
-    out: U64P, tri: I64P, src_off: Int32, n_src: Int32, dst_off: Int32, n_dst: Int32, size: Int32
+    output: U64P, tri: I64P, src_off: Int32, n_src: Int32, dst_off: Int32, n_dst: Int32, size: Int32
 ):
     """One level of the integer fold over triples (offsets count triples);
     the last level (n_dst == 1) also writes OUT[0] = `ari_value`."""
@@ -131,7 +131,7 @@ def ari_level_kernel(
         tri.unsafe_store(to + 1, Int64(a2))
         tri.unsafe_store(to + 2, Int64(b2))
         if Int(n_dst) == 1:
-            out.unsafe_store(0, ari_value(n2, a2, b2, Int(size)))
+            output.unsafe_store(0, ari_value(n2, a2, b2, Int(size)))
 
 
 # ---------------------------------------------------------------- device entries

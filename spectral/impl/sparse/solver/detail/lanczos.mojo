@@ -2193,7 +2193,7 @@ comptime IDN_SPECTRAL_VECS_DEVICE = (
 
 
 def lanczos_v0_kernel(
-    out: MutPointer[Float32, MutAnyOrigin], seed: UInt64, n_in: Int32
+    output: MutPointer[Float32, MutAnyOrigin], seed: UInt64, n_in: Int32
 ):
     """`lanczos_v0` one thread per element: the same hash of `(seed, i)`,
     the top 24 bits scaled by `2^-24` (exact)."""
@@ -2205,7 +2205,7 @@ def lanczos_v0_kernel(
     z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
     z = z ^ (z >> 31)
     var top = UInt32((z >> 40) & UInt64(0xFFFFFF))
-    out.unsafe_store(i, Float32(top) * Float32(5.9604644775390625e-08))
+    output.unsafe_store(i, Float32(top) * Float32(5.9604644775390625e-08))
 
 
 def _lanczos_start_vector(
