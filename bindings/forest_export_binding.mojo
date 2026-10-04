@@ -45,8 +45,8 @@ struct ForestExportRegistry[Model: Movable & Deinitable](Defaultable, Movable):
         descriptor.append(PythonObject(nodes))
         descriptor.append(PythonObject(outputs))
         var metadata = Python.list()
-        for item in meta:
-            metadata.append(PythonObject(Int(item)))
+        for m in range(len(meta)):  # small-loop(meta: at most six export metadata words): descriptor glue, not data
+            metadata.append(PythonObject(Int(meta[m])))
         descriptor.append(metadata)
         self.entries[handle] = ForestExportEntry[Self.Model](model^, trees, nodes,
                                                        outputs, meta^)
