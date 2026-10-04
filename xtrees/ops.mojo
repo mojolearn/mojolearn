@@ -37,6 +37,7 @@ xtrees/checks/glue_check.mojo, one sabotage arm each):
 """
 from std.sys.compile import is_defined
 from checks.numerics import identical_mul64, identical_exp64, identical_log64, identical_pow64
+from xtrees.fold_order import FOLD_CHUNK, fold_chunks, fold_chunk_size, fold_tree_host
 
 #: The host gate's negative control (`-D MOJOLEARN_HOST_SABOTAGE=1`, host builds
 #: only): `scale_f64` divides by a perturbed divisor, so every vote average moves.
@@ -75,8 +76,14 @@ def sample_indices(
     seed: Int, stream: Int,
 ) raises:
     """`n_draw` row indices from [0, n_pool): with replacement, draw k is
-    `draw % n_pool`; without, a partial Fisher-Yates shuffle whose position k
-    swaps with k + draw % (n_pool - k)."""
+    `draw % n_pool`; without (lane cpu2-l5-trees, a parallel law replacing
+    the serial partial Fisher-Yates), key_i = draw(base, i) >> 11 for every
+    i in [0, n_pool), the selected rows are the n_draw smallest (key_i, i)
+    pairs, written in ASCENDING index order. Integer keys, so the selection
+    is order-free: `ops_device_elem.sample_indices_device` finds the same
+    set by a parallel radix select. Here: the same 8-bit digit passes
+    serially (the n_draw-th smallest key K* and how many of its ties to
+    take), then one walk in index order."""
     if n_pool <= 0 or n_draw < 0 or (not replace and n_draw > n_pool):
         raise Error("x_trees sample_indices: need n_pool > 0 and 0 <= n_draw (<= n_pool without replacement)")
     var base = stream_base(seed, stream)
@@ -85,15 +92,40 @@ def sample_indices(
             # DEVIATION 5600: the index is the counter draw mod n.
             res[unsafe_offset=k] = Int32(Int(draw(base, k) % UInt64(n_pool)))
         return
-    var perm = List[Int32](capacity=n_pool)
+    if n_draw == 0:
+        return
+    var keys = List[UInt64](capacity=n_pool)
     for i in range(n_pool):
-        perm.append(Int32(i))
-    for k in range(n_draw):
-        var j = k + Int(draw(base, k) % UInt64(n_pool - k))
-        var t = perm[k]
-        perm[k] = perm[j]
-        perm[j] = t
-        res[unsafe_offset=k] = perm[k]
+        keys.append(draw(base, i) >> 11)
+    var prefix = UInt64(0)
+    var want = n_draw
+    var shift = 48
+    while shift >= 0:
+        var hist = List[Int](length=256, fill=0)
+        var sh = UInt64(shift)
+        for i in range(n_pool):
+            var key = keys[i]
+            if (key >> (sh + 8)) == (prefix >> (sh + 8)):
+                hist[Int((key >> sh) & UInt64(0xFF))] += 1
+        var cum = 0
+        for b in range(256):
+            if cum < want and want <= cum + hist[b]:
+                prefix |= UInt64(b) << sh
+                want -= cum
+                break
+            cum += hist[b]
+        shift -= 8
+    var k = 0
+    var ties = 0
+    for i in range(n_pool):
+        var key = keys[i]
+        var take = key < prefix
+        if key == prefix:
+            take = ties < want
+            ties += 1
+        if take:
+            res[unsafe_offset=k] = Int32(i)
+            k += 1
 
 
 #: `weighted_sample`'s scan chunk: each chunk's cumulative sum is sequential
@@ -1262,3 +1294,74 @@ def spread_leaves(vals: MutPointer[Float32, MutUntrackedOrigin], offs: MutPointe
         for g in range(Int(offs[unsafe_offset=j]), Int(offs[unsafe_offset=j + 1])):
             for q in range(k):
                 dst[unsafe_offset=g * k + q] = vals[unsafe_offset=g] if q == c else Float32(0.0)
+
+
+# lane cpu2-l5-trees: host twins of `ops_device_elem.mojo`'s new device
+# entries (the CPU column; a GPU build runs the device spelling).
+
+
+def margin2(
+    acc: MutPointer[Float64, MutUntrackedOrigin], n: Int, mode: Int,
+    dst_f: MutPointer[Float64, MutUntrackedOrigin], dst_i: MutPointer[Int32, MutUntrackedOrigin],
+) raises:
+    """Two-class vote rows (n x 2) to the SAMME margin d = acc[2i+1] -
+    acc[2i], one IEEE binary64 subtraction per row. mode 0: dst_f[i] = d;
+    mode 1: dst_i[i] = 1 if d > 0 else 0 (a NaN gives 0); mode 2: dst_f
+    pairs (-(d/2), d/2). `dst_f` and `dst_i` may alias (the binding passes
+    one address); only the mode's one is written."""
+    if mode < 0 or mode > 2:
+        raise Error("x_trees_margin2: mode must be 0, 1 or 2")
+    for i in range(n):
+        var d = acc[unsafe_offset=2 * i + 1] - acc[unsafe_offset=2 * i]
+        if mode == 0:
+            dst_f[unsafe_offset=i] = d
+        elif mode == 1:
+            dst_i[unsafe_offset=i] = Int32(1) if d > 0 else Int32(0)
+        else:
+            var h = d / 2
+            dst_f[unsafe_offset=2 * i] = -h
+            dst_f[unsafe_offset=2 * i + 1] = h
+
+
+def normalized_weights(
+    w: MutPointer[Float32, MutUntrackedOrigin], n: Int, res: MutPointer[Float64, MutUntrackedOrigin],
+) -> Int:
+    """AdaBoost's initial weights: res[i] = float64(w[i]) / total, the total
+    in xtrees/fold_order.mojo's fixed order (CHUNK partials from +0.0 in row
+    order, then the pairwise TREE; it was one sequential chain). Returns 0;
+    1 when an entry is not finite or is negative; 2 when the total is not
+    positive (res untouched)."""
+    if n <= 0:
+        return 2
+    var m = fold_chunks(n)
+    var p = List[Float64](length=m, fill=0.0)
+    for c in range(m):
+        var run: Float64 = 0.0
+        for i in range(c * FOLD_CHUNK, min((c + 1) * FOLD_CHUNK, n)):
+            var v = Float64(w[unsafe_offset=i])
+            if not (v >= 0 and v <= 1.7976931348623157e308):
+                return 1
+            run = run + v
+        p[c] = run
+    fold_tree_host(p, m, 1)
+    var total = p[0]
+    if not (total > 0):
+        return 2
+    for i in range(n):
+        res[unsafe_offset=i] = Float64(w[unsafe_offset=i]) / total
+    return 0
+
+
+def iota_i32(res: MutPointer[Int32, MutUntrackedOrigin], n: Int):
+    """res[i] = i."""
+    for i in range(n):
+        res[unsafe_offset=i] = Int32(i)
+
+
+def fill_class_major_f64(
+    inits: MutPointer[Float64, MutUntrackedOrigin], n: Int, k: Int, res: MutPointer[Float64, MutUntrackedOrigin],
+):
+    """res[c * n + i] = inits[c] for c < k, i < n (a word copy)."""
+    for c in range(k):
+        for i in range(n):
+            res[unsafe_offset=c * n + i] = inits[unsafe_offset=c]
