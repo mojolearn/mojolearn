@@ -98,6 +98,7 @@ from cluster.checks.reduce_by_key import (
 )
 from cluster.checks.scalable_init import (
     count_labels_kernel,
+    sample_flags_dev_kernel,
     sample_flags_kernel,
     select_scatter_kernel,
     set_flag_kernel,
@@ -851,6 +852,21 @@ comptime KMEANS_FAST_INCR_INIT = IDN_KMEANS_INCR_INIT or (
 )
 
 
+#: fam2-cluster (2026-10-04), IDENTICAL: each k-means|| round's cost `psi`
+#: stays on the device. `sample_flags_dev_kernel` reads it from the device
+#: scalar the reduction wrote, so the round drops its drain-and-read of psi
+#: (one of the round's drains; the selected COUNT still comes back, because
+#: it sizes the next allocation). Same Float32 psi, so the same flags.
+#: `-D MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF=1` restores the readback.
+comptime IDN_KMEANS_INIT_PSI_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+
 def fold_new_candidates_kernel(
     min_dist: MutPointer[Float32, MutAnyOrigin],
     labels: MutPointer[UInt32, MutAnyOrigin],
@@ -1093,9 +1109,10 @@ def init_scalable_kmeans_plus_plus(
         _sum_device(
             ctx, min_dist, ones, partials, d_psi, n_samples, SUM_MODE_PLAIN
         )
-        ctx.enqueue_copy(dst_ptr=h_psi.unsafe_ptr(), src_buf=d_psi)
-        ctx.synchronize()
-        psi = Float64(h_psi.unsafe_ptr().unsafe_load(0))
+        comptime if not IDN_KMEANS_INIT_PSI_DEVICE:
+            ctx.enqueue_copy(dst_ptr=h_psi.unsafe_ptr(), src_buf=d_psi)
+            ctx.synchronize()
+            psi = Float64(h_psi.unsafe_ptr().unsafe_load(0))
 
         # <<< Step-4 >>> (`:689-707`): one 64-bit round seed from the host
         # (O(1), where theirs advances a device Philox state), hashed per
@@ -1108,18 +1125,32 @@ def init_scalable_kmeans_plus_plus(
         ]().cast[DType.int32]()
         var lk = Float32(params.oversampling_factor * Float64(k))
 
-        ctx.enqueue_function[sample_flags_kernel](
-            flags.unsafe_ptr(),
-            min_dist.unsafe_ptr(),
-            is_centroid.unsafe_ptr(),
-            Int32(n_samples),
-            Float32(psi),
-            lk,
-            seed_lo,
-            seed_hi,
-            grid_dim=((n_samples + 255) // 256, 1, 1),
-            block_dim=(256, 1, 1),
-        )
+        comptime if IDN_KMEANS_INIT_PSI_DEVICE:
+            ctx.enqueue_function[sample_flags_dev_kernel](
+                flags.unsafe_ptr(),
+                min_dist.unsafe_ptr(),
+                is_centroid.unsafe_ptr(),
+                d_psi.unsafe_ptr(),
+                Int32(n_samples),
+                lk,
+                seed_lo,
+                seed_hi,
+                grid_dim=((n_samples + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[sample_flags_kernel](
+                flags.unsafe_ptr(),
+                min_dist.unsafe_ptr(),
+                is_centroid.unsafe_ptr(),
+                Int32(n_samples),
+                Float32(psi),
+                lk,
+                seed_lo,
+                seed_hi,
+                grid_dim=((n_samples + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
         ctx.enqueue_function[chunk_sums_kernel](
             chunk_totals.unsafe_ptr(),
             flags.unsafe_ptr(),
