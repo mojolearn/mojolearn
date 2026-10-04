@@ -37,12 +37,33 @@ offsets depend only on the block counts), then the matrices."""
 from x_neighbors.items import FP, XN_FOLD_BLOCK
 from x_linear.ff import (
     FF, ff_of, two_prod, ff_add, ff_add_f, ff_sub, ff_mul, ff_div, ff_sqrt, ff_f32, ff_ld, ff_st, ff_chol_solve,
+    two_sum,
 )
-from checks.numerics import ftz, identical_log
+from x_linear.ops import fa
+from checks.numerics import ftz, identical_log, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 
 #: elements of one partial of the m-long folds
 comptime SVGP_FF_FOLD = 64
+
+#: lane/fam-neighbors (2026-10-04), IDENTICAL on every vendor and the host
+#: column: the float-float accumulation of B = Kuf Kfu and b = Kuf y folds
+#: each run of SVGP_DOT2_CHUNK rows (chunks start at multiples of the chunk
+#: inside a row tile) as a compensated dot product (Ogita, Rump and Oishi's
+#: Dot2: every product exact by two_prod, the running sum by two_sum, the
+#: error terms summed in float32), then adds the chunk (hi, lo) to the
+#: float-float accumulator with one ff_add. Before, every row paid a full
+#: ff_add (20 float operations; now 8 and one ff_add per chunk). A chunk's
+#: error is at most about chunk^2 eps^2 of its own sum, the same order as
+#: the old chain's per-row ff_add error, so B stays a Gram matrix to ~1e-14.
+#: Bits change (alpha, C, q_mu, q_sqrt, the bound) on all four columns
+#: together: the two items below are the only B/b accumulators and the host
+#: column loops the same item. -D MOJOLEARN_IDN_SVGP_DOT2_OFF (or
+#: MOJOLEARN_IDN_ALL_OFF) restores the per-row ff_add chain.
+comptime SVGP_IDN_DOT2 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_SVGP_DOT2_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime SVGP_DOT2_CHUNK = 16
 
 
 def matmul_tn_acc_ff_item(t: Int, a: FP, b: FP, rh: FP, rl: FP, rows: Int, n: Int, m: Int):
@@ -51,8 +72,24 @@ def matmul_tn_acc_ff_item(t: Int, a: FP, b: FP, rh: FP, rl: FP, rows: Int, n: In
     var i = t // m
     var j = t - i * m
     var acc = FF(rh.unsafe_load(t), rl.unsafe_load(t))
-    for p in range(rows):
-        acc = ff_add(acc, two_prod(ftz(a.unsafe_load(p * n + i)), ftz(b.unsafe_load(p * m + j))))
+    comptime if SVGP_IDN_DOT2:
+        var p0 = 0
+        while p0 < rows:
+            var p1 = p0 + SVGP_DOT2_CHUNK
+            if p1 > rows:
+                p1 = rows
+            var s = Float32(0)
+            var c = Float32(0)
+            for p in range(p0, p1):
+                var pr = two_prod(ftz(a.unsafe_load(p * n + i)), ftz(b.unsafe_load(p * m + j)))
+                var sm = two_sum(s, pr.hi)
+                s = sm.hi
+                c = fa(c, fa(sm.lo, pr.lo))
+            acc = ff_add(acc, two_sum(s, c))
+            p0 = p1
+    else:
+        for p in range(rows):
+            acc = ff_add(acc, two_prod(ftz(a.unsafe_load(p * n + i)), ftz(b.unsafe_load(p * m + j))))
     rh.unsafe_store(t, acc.hi)
     rl.unsafe_store(t, acc.lo)
 
@@ -92,19 +129,49 @@ def matmul_tn_sym_ff_tile_item(t: Int, a: FP, rh: FP, rl: FP, rows: Int, m: Int)
             if i < m and j < m:
                 hh[u * TB + v] = rh.unsafe_load(i * m + j)
                 ll[u * TB + v] = rl.unsafe_load(i * m + j)
-    for p in range(rows):
-        var ai = SIMD[DType.float32, TB](0)
-        var aj = SIMD[DType.float32, TB](0)
-        comptime for u in range(TB):
-            if i0 + u < m:
-                ai[u] = ftz(a.unsafe_load(p * m + i0 + u))
-            if j0 + u < m:
-                aj[u] = ftz(a.unsafe_load(p * m + j0 + u))
-        comptime for u in range(TB):
-            comptime for v in range(TB):
-                var c = ff_add(FF(hh[u * TB + v], ll[u * TB + v]), two_prod(ai[u], aj[v]))
-                hh[u * TB + v] = c.hi
-                ll[u * TB + v] = c.lo
+    comptime if SVGP_IDN_DOT2:
+        # the chunked Dot2 fold of `matmul_tn_acc_ff_item`, per entry
+        var p0 = 0
+        while p0 < rows:
+            var p1 = p0 + SVGP_DOT2_CHUNK
+            if p1 > rows:
+                p1 = rows
+            var ss = SIMD[DType.float32, TB * TB](0)
+            var cc = SIMD[DType.float32, TB * TB](0)
+            for p in range(p0, p1):
+                var ai = SIMD[DType.float32, TB](0)
+                var aj = SIMD[DType.float32, TB](0)
+                comptime for u in range(TB):
+                    if i0 + u < m:
+                        ai[u] = ftz(a.unsafe_load(p * m + i0 + u))
+                    if j0 + u < m:
+                        aj[u] = ftz(a.unsafe_load(p * m + j0 + u))
+                comptime for u in range(TB):
+                    comptime for v in range(TB):
+                        var pr = two_prod(ai[u], aj[v])
+                        var sm = two_sum(ss[u * TB + v], pr.hi)
+                        ss[u * TB + v] = sm.hi
+                        cc[u * TB + v] = fa(cc[u * TB + v], fa(sm.lo, pr.lo))
+            comptime for u in range(TB):
+                comptime for v in range(TB):
+                    var c = ff_add(FF(hh[u * TB + v], ll[u * TB + v]), two_sum(ss[u * TB + v], cc[u * TB + v]))
+                    hh[u * TB + v] = c.hi
+                    ll[u * TB + v] = c.lo
+            p0 = p1
+    else:
+        for p in range(rows):
+            var ai = SIMD[DType.float32, TB](0)
+            var aj = SIMD[DType.float32, TB](0)
+            comptime for u in range(TB):
+                if i0 + u < m:
+                    ai[u] = ftz(a.unsafe_load(p * m + i0 + u))
+                if j0 + u < m:
+                    aj[u] = ftz(a.unsafe_load(p * m + j0 + u))
+            comptime for u in range(TB):
+                comptime for v in range(TB):
+                    var c = ff_add(FF(hh[u * TB + v], ll[u * TB + v]), two_prod(ai[u], aj[v]))
+                    hh[u * TB + v] = c.hi
+                    ll[u * TB + v] = c.lo
     comptime for u in range(TB):
         comptime for v in range(TB):
             var i = i0 + u
