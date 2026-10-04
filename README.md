@@ -212,6 +212,15 @@ another framework reproduce under mojolearn's arithmetic, not that
 framework's. [SUPPORT_MATRIX.md](SUPPORT_MATRIX.md) lists the verified
 devices and configurations.
 
+## Benchmark boards
+
+These are the canonical pages. Update them in place; don't start new ones.
+
+- [Apple M3 Ultra board](bench/results/bench_board/m3ultra-0834/BOARD.md): every lane, with our FAST and IDENTICAL arms next to the opponents. The IDENTICAL cells come from the 2026-10-04 sweep (`tools/af_board_ident_update.py`); FAST and opponent cells come from the 0.8.34 board.
+- [Apple FAST refresh](docs/apple-fast/BOARD_M3_FAST.md): FAST before and after for each lane against the best opponent (`tools/af_board_merge.py`).
+- [Apple IDENTICAL refresh](docs/apple-fast/BOARD_M3_IDENTICAL.md): the same view for IDENTICAL (`tools/af_board_merge.py --mode identical`).
+- [Board protocol](docs/BENCH_BOARD.md) and [older boards](bench/results/board-archive/README.md).
+
 ## Documentation
 
 - [Support matrix](SUPPORT_MATRIX.md)
