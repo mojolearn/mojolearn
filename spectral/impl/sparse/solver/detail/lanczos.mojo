@@ -189,6 +189,7 @@ from spectral.checks.symmetric_eig_host import (
 from x_decomp.cells import F32Ptr
 from x_decomp.device import DevExec
 from spectral.impl.sparse.linalg.detail.laplacian import DeviceCoo
+from spectral.spmv_order import IDN_SPMV_LANES, SPMV_LANES
 from spectral.impl.sparse.matrix.detail.diagonal import SAB_LAPLACIAN_SEAM
 from spectral.impl.sparse.solver.lanczos_types import (
     LANCZOS_LA,
@@ -316,6 +317,86 @@ def spmv_kernel(
                 )
             )
     result.unsafe_store(r, acc)
+
+
+#: Rows a block of `id_spmv_lanes_kernel` serves (one lane group each).
+comptime ID_SPMV_ROWS = 8
+comptime ID_SPMV_TPB = SPMV_LANES * ID_SPMV_ROWS
+
+
+def id_spmv_lanes_kernel(
+    result: MutPointer[Float32, MutAnyOrigin],
+    indptr: MutPointer[Int32, MutAnyOrigin],
+    cols: MutPointer[Int32, MutAnyOrigin],
+    vals: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """`spmv_kernel` in the lane order of `spectral/spmv_order.mojo`: one
+    thread per lane of a row (SPMV_LANES lanes, ID_SPMV_ROWS rows a block),
+    each a strided `fma` chain over the row's ascending entries, then the
+    row's lane 0 folds the SPMV_LANES lane sums in the fixed pairwise tree.
+    A pure function of the row's bits: the block shape only schedules."""
+    var part = stack_allocation[
+        ID_SPMV_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var t = Int(thread_idx.x)
+    var slot = t // SPMV_LANES
+    var lane = t % SPMV_LANES
+    var r = Int(block_idx.x) * ID_SPMV_ROWS + slot
+    var live = r < Int(n_in)
+    var acc = Float32(0.0)
+    if live:
+        var hi = Int(indptr.unsafe_load(r + 1))
+        var j = Int(indptr.unsafe_load(r)) + lane
+        comptime if SAB_SPMV_ROTATE:
+            j = Int(indptr.unsafe_load(r)) + ((lane + Int(block_idx.x)) % SPMV_LANES)
+        while j < hi:
+            acc = ftz(
+                identical_mul_add(
+                    vals.unsafe_load(j), x.unsafe_load(Int(cols.unsafe_load(j))), acc
+                )
+            )
+            j += SPMV_LANES
+    part[t] = acc
+    barrier()
+    if live and lane == 0:
+        var base = slot * SPMV_LANES
+        var w = SPMV_LANES // 2
+        while w >= 1:
+            for l in range(w):
+                part[base + l] = ftz(part[base + l] + part[base + l + w])
+            w = w // 2
+        result.unsafe_store(r, part[base])
+
+
+def spmv_enqueue(
+    ctx: DeviceContext,
+    mut A: DeviceCoo,
+    mut ub: DeviceBuffer[DType.float32],
+    mut xb: DeviceBuffer[DType.float32],
+    x_off: Int,
+    n: Int,
+    tpb: Int,
+) raises:
+    """`u = A x` for the pinned step, enqueued: the lane kernel under
+    `IDN_SPMV_LANES`, the per-row chain otherwise. `x` is `xb` from float
+    `x_off`."""
+    var u = ub.unsafe_ptr()
+    var x = xb.unsafe_ptr().unsafe_offset(x_off)
+    comptime if IDN_SPMV_LANES:
+        ctx.enqueue_function[id_spmv_lanes_kernel](
+            u, A.indptr.unsafe_ptr(), A.cols.unsafe_ptr(),
+            A.vals.unsafe_ptr(), x, Int32(n),
+            grid_dim=((n + ID_SPMV_ROWS - 1) // ID_SPMV_ROWS, 1, 1),
+            block_dim=(ID_SPMV_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[spmv_kernel](
+            u, A.indptr.unsafe_ptr(), A.cols.unsafe_ptr(),
+            A.vals.unsafe_ptr(), x, Int32(n),
+            grid_dim=(_grid(n, tpb), 1, 1), block_dim=(tpb, 1, 1),
+        )
 
 
 def scale_vector_kernel(
@@ -1244,16 +1325,7 @@ def _id_dev_enqueue_steps(
         block_dim=(tpb, 1, 1),
     )
     for i in range(start_idx, end_idx):
-        ctx.enqueue_function[spmv_kernel](
-            u.unsafe_ptr(),
-            A.indptr.unsafe_ptr(),
-            A.cols.unsafe_ptr(),
-            A.vals.unsafe_ptr(),
-            v.unsafe_ptr(),
-            Int32(n),
-            grid_dim=(g, 1, 1),
-            block_dim=(tpb, 1, 1),
-        )
+        spmv_enqueue(ctx, A, u, v, 0, n, tpb)
         identical_gemm_into(ctx, dot_c, v, u, ws, 1, 1, n, OP_NT)
         var prev = (i - 1 + ncv) % ncv
         comptime if LANCZOS_ID_DEV_FUSE:
@@ -1525,16 +1597,7 @@ def lanczos_restart_identical_dev(
         grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
     )
     # u = A V[k]  (:594-624)
-    ctx.enqueue_function[spmv_kernel](
-        u.unsafe_ptr(),
-        A.indptr.unsafe_ptr(),
-        A.cols.unsafe_ptr(),
-        A.vals.unsafe_ptr(),
-        V.unsafe_ptr().unsafe_offset(k * n),
-        Int32(n),
-        grid_dim=(g, 1, 1),
-        block_dim=(tpb, 1, 1),
-    )
+    spmv_enqueue(ctx, A, u, V, k * n, n, tpb)
     # alpha[k] = dot(V[k], u) straight into d_alpha[k]; u -= alpha_k V[k]
     identical_gemm_into(ctx, dak, vk, u, ws, 1, 1, n, OP_NT)
     ctx.enqueue_function[id_axpy_neg_dev_kernel](
@@ -1643,16 +1706,7 @@ def lanczos_aux(
     ctx.synchronize()
     for i in range(start_idx, end_idx):
         # cusparsespmv: u = A v  (:304-313)
-        ctx.enqueue_function[spmv_kernel](
-            u.unsafe_ptr(),
-            A.indptr.unsafe_ptr(),
-            A.cols.unsafe_ptr(),
-            A.vals.unsafe_ptr(),
-            v.unsafe_ptr(),
-            Int32(n),
-            grid_dim=(_grid(n, tpb), 1, 1),
-            block_dim=(tpb, 1, 1),
-        )
+        spmv_enqueue(ctx, A, u, v, 0, n, tpb)
         ctx.synchronize()
         # alpha_i = dot(v, u)  (:315-317)
         var alpha_i = _dot(ctx, v, u, n)
@@ -2023,16 +2077,7 @@ def lanczos_restart_pooled(
         grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
     )
     # u = A V[k]  (:594-624)
-    ctx.enqueue_function[spmv_kernel](
-        u.unsafe_ptr(),
-        A.indptr.unsafe_ptr(),
-        A.cols.unsafe_ptr(),
-        A.vals.unsafe_ptr(),
-        V.unsafe_ptr().unsafe_offset(k * n),
-        Int32(n),
-        grid_dim=(g, 1, 1),
-        block_dim=(tpb, 1, 1),
-    )
+    spmv_enqueue(ctx, A, u, V, k * n, n, tpb)
     # alpha[k] = dot(V[k], u) straight into d_alpha[k]; u -= alpha_k V[k]
     identical_gemm_into(ctx, dak, vk, u, ws, 1, 1, n, OP_NT)
     ctx.enqueue_function[id_axpy_neg_dev_kernel](
@@ -2338,16 +2383,7 @@ def lanczos_smallest(
         comptime if SPMV_WARP:
             _spmv_fast(ctx, A, u, V, k * n, n, tpb)
         else:
-            ctx.enqueue_function[spmv_kernel](
-                u.unsafe_ptr(),
-                A.indptr.unsafe_ptr(),
-                A.cols.unsafe_ptr(),
-                A.vals.unsafe_ptr(),
-                V.unsafe_ptr().unsafe_offset(k * n),
-                Int32(n),
-                grid_dim=(_grid(n, tpb), 1, 1),
-                block_dim=(tpb, 1, 1),
-            )
+            spmv_enqueue(ctx, A, u, V, k * n, n, tpb)
         ctx.synchronize()
         # alpha[k] = dot(V[k], u)  (:626-629)
         var vk = V.create_sub_buffer[DType.float32](k * n, n)
