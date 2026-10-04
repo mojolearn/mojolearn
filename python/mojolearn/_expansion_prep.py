@@ -3869,9 +3869,59 @@ def _label_classes_of(pr, lb, u, k):
     return classes, cats
 
 
+_LABEL_PRESENT = {}
+
+
+def _label_present_enabled(mode):
+    if mode != "fast":
+        return False
+    binding = _prep_binding(mode)
+    key = id(binding)
+    if key not in _LABEL_PRESENT:
+        fn = _optional_prep_entry(binding, "x_prep_label_present")
+        _LABEL_PRESENT[key] = bool(fn()) if fn is not None else False
+    return _LABEL_PRESENT[key]
+
+
+def _label_fit_present(mode, lb, codes):
+    """Exact small-integer distinct labels on GPU, avoiding an n-row sort
+    and n-word download. A GPU BAD flag rejects values outside [0, 4096),
+    including fractional/inexact labels. The caller then uses its unchanged
+    general GPU sort. No host scan of the input or target values."""
+    n, R, ch = lb.n, _CAT_R, _CAT_CH
+    pr = _Prog()
+    x = _label_load(pr, lb)
+    fl, bad = pr.work(R), pr.alloc(1)
+    u, k = pr.alloc(R), pr.alloc(1)
+    nch = -(-R // ch)
+    cnt, off = pr.work(nch), pr.work(nch)
+    pr.stage("cat_zero", R, fl)
+    pr.stage("cat_present", n, x, n, 1, R, fl, bad)
+    pr.stage("pres_count", nch, fl, R, ch, cnt)
+    pr.stage("uniq_scan", 1, cnt, nch, off, k)
+    pr.stage("pres_write", nch, fl, R, ch, off, u)
+    out = None
+    if codes:
+        c = pr.work(n)
+        pr.stage("lookup", n, x, n, 1, u, R, k, c)
+        out = pr.output(n, "i")
+        pr.stage("f2i", n, c, out)
+    pr.run(mode)
+    if pr.get_i32(bad, 1).tolist()[0]:
+        return None
+    got = _label_classes_of(pr, lb, u, k)
+    if got is None:
+        return None
+    return got[0], got[1], (pr.get_i32(out, n) if codes else None)
+
+
 def _label_fit_device(mode, lb, codes=False):
     """One program: (classes, cats, int32 codes Array or None), or None for
     the old route."""
+    if _label_present_enabled(mode):
+        got = _label_fit_present(mode, lb, codes)
+        if got is not None:
+            return got
     n = lb.n
     pr = _Prog()
     x = _label_load(pr, lb)

@@ -14,7 +14,8 @@ Sources: `~/mojolearn-evidence/apple-fast/LEDGER.md` (every KEEP / DROP / MERGED
 
 - **Winners** become FAST + Apple defaults. Each one gets a `<NAME>_OFF` define that restores the old path, and a code comment citing its A/B (tag and numbers). IDENTICAL mode never changes.
 - **Losers are not kept in main's code.** They stay on their branch at the recorded sha. A dropped define that is still on main is a dead toggle; a cleanup lane removes those.
-- Quality comes before speed: a faster arm with worse quality is DROPPED-quality, and a slower arm with better quality can be KEPT (see `X_PREP_CLASS_COV_GRID`).
+- **User clarification (Oct 4):** "it is OK if bits change for fast work.. do you understand that? but quality cannot go down beyond noise". FAST does not require bit identity; judge quality using the relevant metric and measured noise. A quality change beyond noise is DROPPED-quality; a bit change alone is not a failure. A slower arm with better quality can be KEPT (see `X_PREP_CLASS_COV_GRID`).
+- Keep concise evidence comments next to surviving failed or held opt-in toggles: dataset, A/B tag, measured effect, status, and this record. Distinguish an inconclusive/noise result or an old-base hold from an established regression; a bundle failure does not prove each component failed alone. Do not restore deleted code to annotate it.
 
 ## Verdicts
 
@@ -609,3 +610,35 @@ FAST bit changes are allowed. Acceptance requires faster M3 timing and no qualit
 | ARIMA_FUSED_EVAL_TAIL | lane/apple-fast-arima-batched @ 217e821e5 | gap26-arima-tail-synthetic / taxi-hourly | Pending | forecast/likelihood/selected-order checks queued | OPEN; M2 both arms compiled, M3 timing queued |
 | EIGH_FAST_TANGENT | lane/apple-fast-linalg-20261004 | gap26-eigh-tangent (proposed) | Pending | residual/eigenvalue error/orthogonality required | OPEN; first compile alias error fixed, rebuild pending |
 | MCD_BATCH_COMPAT | lane/apple-fast-mcd-exact | gap26-mcdcompat-taxi (proposed) | Pending | fitted covariance, precision, support, Mahalanobis distances, predictions | OPEN; compilation pending |
+| ARIMA_EXACT_STEADY | lane/apple-fast-arima-batched @ a670ce8c2 (removed in 217e821e5) | NOT RUN | No new timing | Equivalent to earlier failed P_FIX covariance fixed-point experiment | ABANDONED before M3; prior P_FIX +165%, combined ASYNC +22–64%; avoids duplicate experiment |
+| SYM_CTR_PERM_BATCH | lane/apple-fast-batch @ 3150d75c1 | sym-ctr-perm-batch-taxicat-x | 27161 → 27196 (+0.1%) | AUC .630994 → .631048, logloss .528561 → .528534 | DROP-speed: no gain on old base |
+| CTR_PREP_SHARED | lane/apple-fast-batch @ 3150d75c1 | sym-ctr-prep-shared-taxicat-x | 27548 → 26357 (-4.3%) | AUC .631249 → .630964; noise not established | HOLD: old base; quality decline requires assessment before any current-main verification |
+| CTR_INDEX_FUSED | lane/apple-fast-batch @ 3150d75c1 | sym-ctr-index-fused-taxicat-x | 27240 → 25566 (-6.1%) | AUC .630808 → .630766; logloss .528548 → .528535 | HOLD: old base; candidate only, no merge without current-main A/B and quality |
+| ARIMA_FUSED_EVAL_TAIL synthetic first result | lane/apple-fast-arima-batched @ 1a627f709; compiled source 217e821e5 | gap26-arima-tail-synthetic | 14498.225 → 13569.230 (-6.4%) | forecast RMSE 2.624119555 both, digest identical | CANDIDATE: additional quality + taxi pending; not yet a default or board refresh |
+
+
+## Label-direct promotion prepared (2026-10-04)
+
+| define | algorithm / dataset | measured branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_LABEL_DIRECT` -> `MOJOLEARN_LABEL_DIRECT_OFF` | label-binarizer / taxi, istella | lane/apple-fast-label-direct @ dbe2ab85a (base35a72c5ac) | gap26-label-taxi, gap26-label-istella; quality gap26-label-quality | taxi348.254458 -> 327.625833; istella33.176500 -> 27.578792 | KEEP, default promotion prepared; not yet merged | One M3 run/arm, -5.9%/-16.9%, respective digests0703e6f6396640c4/de224838a841fa8c identical. Independent public-output oracle PASS both arms, 41,697,776 cells each, fitted classes/codes/inverse checked. Source review against main61ea51757: relevant drift comments only. Manager still owes default/OFF compile before merge. |
+
+Quality review: `tools/label_fast_quality.py` checks every LabelBinarizer
+training/query indicator against an independent definition, actual fitted
+classes, inverse-transform values and LabelEncoder codes. It also checks
+MultiLabelBinarizer classes and train/query indicators, including empty rows,
+unseen labels and duplicates. Covered numeric cases include257 classes,
+sparse integer ranges, binary/single class, negative/range/fractional fallbacks,
+signed zero, and non-default positive/negative output labels. Actual bounded
+M3 log reports `LABEL-FAST-QUALITY status=PASS checked_cells=41697776 captures=84`
+for both arms followed by `QUALITY-PAIR-PASS gap26-label`.
+
+The wrapper did not request `--dump`, so it did not compare84 saved arrays
+between arms; each arm independently passed the mathematical oracle. Board
+quality itself is only output_shape and is insufficient alone; the oracle and
+unchanged board digests provide the quality evidence. Coverage gaps: invalid
+NaN/Inf labels, integers not exactly representable as FP32, noncontiguous/empty
+input, string/bool fallbacks and MultiLabelBinarizer inverse are not explicitly
+exercised. These remain on existing guarded fallback routes; no claim is made
+that those cases were tested. Encoder/multilabel correctness was checked but
+speed was measured only for LabelBinarizer; do not update their timing rows.

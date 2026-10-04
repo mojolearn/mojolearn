@@ -23,6 +23,7 @@ from x_prep.fastred import (
 )
 from x_prep.dmi import mi_cd_device, mi_w_words, mi_scratch_words
 from x_prep.fastnb import NB_CAT_ATOMIC, cat_hist_atomic_kernel, cat_hist_convert_kernel
+from x_prep.label_fast import LABEL_SCATTER, label_scatter_kernel
 from x_prep.select_fast import (
     SELECT_FREG, SELECT_FCLS, OP_F_CLASSIF, OP_F_REGRESSION, program_has_op, select_scratch_words,
     select_freg_device, select_fcls_device, select_cstats_device,
@@ -134,6 +135,10 @@ comptime EIGH_CYCLIC_Q = 5
 #: one thread per (column, sorted rank). Every launch is inside these guards; IDENTICAL and
 #: the other vendors compile main's code unchanged.
 comptime _MI_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+# DROP-quality, M3 miv-reg-all-* / miv-clf-all-* (istella, taxi):
+# regression 46430 -> 1151 / 2316 -> 81 ms, but includes FAST_FOLDS.
+# M2 30k x 48 tie-heavy fixture: score shift up to 3.2% of scale and
+# selected-set symmetric difference 2. See docs/apple-fast/EXPERIMENTS.md.
 comptime MI_ALL = is_defined["MOJOLEARN_MI_ALL"]()
 #: MI_REG_TIES: FAST + Apple DEFAULT since lane/apple-fast-miv (2026-10-03). M3 A/B vs main:
 #: select-mutual-info-reg istella 46,465 -> 1,340 ms, taxi 2,339 -> 160 ms (n_selected 110 / 5
@@ -146,6 +151,9 @@ comptime MI_REG_RANKMAJOR = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_REG_R
 comptime MI_REG_SORTED = _MI_FA and (MI_REG_TIES or MI_REG_RANKMAJOR or is_defined["MOJOLEARN_MI_REG_SORTCOUNT"]())
 #: MI_FAST_FOLDS stays opt-in (lane/apple-fast-miv): its scores move up to 3% of the largest
 #: score and the selected set changes on the tools/miv_quality.py fixture.
+# DROP-quality / INCONCLUSIVE-speed: mi-reg-folds-istella-x was -0.2%
+# on the old base; M2 quality showed 3.2% score shift and selected-set
+# symmetric difference 2. See docs/apple-fast/EXPERIMENTS.md.
 comptime MI_FAST_FOLDS = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_FAST_FOLDS"]())
 #: MI_CLF_RANKMAJOR: FAST + Apple DEFAULT since lane/apple-fast-miv (2026-10-03). M3 A/B vs main:
 #: select-mutual-info istella 715.2 -> 645.2 ms, taxi 202.2 -> 196.4 ms (n_selected identical);
@@ -457,6 +465,18 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 sort_cols_device(ctx, df, dw, total, Int(hq[0]), Int(hq[1]), Int(hq[2]),
                                  Int(hq[3]), Int(hq[4]))
             continue
+        comptime if LABEL_SCATTER:
+            if op == 51:
+                var hq = host_q + (s * STAGE_INTS + 2)
+                if Int(hq[4]) == 0:
+                    # Explicit clear also handles reused arena/output regions.
+                    ctx.enqueue_memset(df.create_sub_buffer[DType.float32](Int(hq[7]), total), Float32(0))
+                    var rows = Int(hq[1])
+                    ctx.enqueue_function[label_scatter_kernel](
+                        df.unsafe_ptr(), qp, Int32(rows),
+                        grid_dim=(rows + BLOCK - 1) // BLOCK, block_dim=BLOCK,
+                    )
+                    continue
         comptime if SELECT_FREG:
             # FAST on Apple (lane/apple-fast-select): f_regression as row x feature tiles
             if op == OP_F_REGRESSION:

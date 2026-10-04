@@ -2652,16 +2652,31 @@ def kde_score_samples_fused_identical(
 comptime _KDE2_FAST_APPLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 )
+# INCONCLUSIVE, M3 kde2-all-vs-dimtile-istella: no gain over DIMTILE;
+# taxi variants near 10 ms were jitter-dominated (A ranged 8.1-18.6 ms).
+# Quality unchanged; opt-in only. See docs/apple-fast/EXPERIMENTS.md.
 comptime KDE2_ALL = _KDE2_FAST_APPLE and is_defined["MOJOLEARN_KDE2_ALL"]()
+# INCONCLUSIVE, M3 kde2-lse-istella / -taxi with DIMTILE: no istella
+# gain over DIMTILE; taxi jitter-dominated, quality unchanged.
+# See docs/apple-fast/EXPERIMENTS.md (KDE_DIMTILE + KDE_LSE_FUSED).
 comptime KDE2_LSE_FUSED = _KDE2_FAST_APPLE and (
     KDE2_ALL or is_defined["MOJOLEARN_KDE_LSE_FUSED"]()
 )
+# INCONCLUSIVE, M3 kde2-norm-istella / -taxi with DIMTILE: no istella
+# gain over DIMTILE; taxi jitter-dominated, quality unchanged.
+# See docs/apple-fast/EXPERIMENTS.md (KDE_DIMTILE + KDE_NORM_FUSED).
 comptime KDE2_NORM_FUSED = _KDE2_FAST_APPLE and (
     KDE2_ALL or is_defined["MOJOLEARN_KDE_NORM_FUSED"]()
 )
+# INCONCLUSIVE, M3 kde2-variants-istella / -taxi with DIMTILE: no
+# istella gain over DIMTILE; taxi jitter-dominated, quality unchanged.
+# See docs/apple-fast/EXPERIMENTS.md (KDE_KERNEL_VARIANTS).
 comptime KDE2_KERNEL_VARIANTS = _KDE2_FAST_APPLE and (
     KDE2_ALL or is_defined["MOJOLEARN_KDE_KERNEL_VARIANTS"]()
 )
+# DROP-speed, M3 old-base kde2-sample-taxi-x: taxi +354%; not a
+# current-main result. With DIMTILE (kde2-sample-ontile-istella), no
+# gain over DIMTILE. See docs/apple-fast/EXPERIMENTS.md (KDE_SAMPLE_FUSED).
 comptime KDE2_SAMPLE_FUSED = _KDE2_FAST_APPLE and (
     KDE2_ALL or is_defined["MOJOLEARN_KDE_SAMPLE_FUSED"]()
 )
