@@ -17,6 +17,7 @@ from x_neighbors.ocsvm_dev import op_ocsvm
 from x_neighbors.graph_dev import op_louvain
 from x_neighbors.kapprox_dev import kpca_resident_binding
 from x_neighbors.iter_device import lp_fast_resident_binding
+from x_neighbors.nan_cells_device import nc_fit_lean_binding
 from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES, ocsvm_resident_binding
 from x_neighbors.sort_items import purity_flags_binding
 from x_neighbors.kfeat_dev import (
@@ -1257,6 +1258,7 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+        m.def_function[nc_fit_lean_binding]("x_neighbors_nc_fit_lean")
         m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
         # lane/apple-fast-gap-cls2: OneClassSVM's Gram kept on the device
