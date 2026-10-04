@@ -66,6 +66,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
+from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -158,6 +159,37 @@ comptime MCD_WIDE = MCD_BMMA and not is_defined["MOJOLEARN_MCD_WIDE_OFF"]()
 #: gives one thread per row and asserts DM <= MC_TPB (256), with DM-entry
 #: shared tables. A larger d needs a looped pinvh (unwritten).
 comptime MF_WIDE_DMAX = 256
+#: MCD_SKIP_PINVH: FAST + Apple DEFAULT (rollback -D MOJOLEARN_MCD_SKIP_PINVH_OFF).
+#: Measured source lane/apple-fast-w4-mcd d0b30bfe9, M3 afc_ab_def, full board
+#: size, 1 run per arm, 2026-10-04: min-cov-det istella 86853.6 -> 31891.1 ms,
+#: elliptic-envelope istella 86637.0 -> 31780.9 ms; quality PASS, support masks
+#: unchanged, covariance/precision differ at noise level (good quality under
+#: the FAST rule).
+# Skips the pinvh (and its precision GEMM) that only feeds a
+# candidate's FINAL distances in a phase whose distances nobody reads
+# (`want_dist` False: phase A always, phase B when n >= 1500). sklearn's
+# select_candidates hands on (location, covariance, det) only; the final
+# `dist` of those _c_step calls is discarded. Concretely: the -inf start's
+# needp pinvh is cleared, and when no candidate is still stepping the loop
+# breaks before the pinvh launch. The skipped work had no reader; only a
+# convergence error of a skipped, unused eigensolve no longer raises.
+# istella (d220, 20 constant columns: every covariance singular, every
+# candidate stops at step 0) runs three phase-wide 3,330-candidate 220-wide
+# Jacobi rounds without it; two of them are skipped.
+comptime MCD_SKIP_PINVH = MCD_BATCH_MMA and not is_defined["MOJOLEARN_MCD_SKIP_PINVH_OFF"]()
+#: MCD_DEFLATE, OPT-IN (-D MOJOLEARN_MCD_DEFLATE, wide d only; lane/apple-fast-w4-mcd
+#: d0b30bfe9): stays opt-in, no opponent comparison yet: the wide pinvh (mc_pinvh_kernel DEFL) drops indices whose
+# covariance row and column are exactly zero (constant-zero columns of the
+# support: istella's sparse features on 151-row phase-A supports) and runs
+# main's round-robin Jacobi on the live submatrix; Jacobi cost ~ ns^3. With
+# no zero row the kernel is main's statement for statement. Changed bits only
+# through the different rotation schedule over the live indices.
+comptime MCD_DEFLATE = MCD_WIDE and is_defined["MOJOLEARN_MCD_DEFLATE"]()
+# MCD_PROFILE, diagnostic only (-D MOJOLEARN_MCD_PROFILE): synchronizes around
+# each phase, each pinvh, each log determinant and the distance/covariance
+# launches, and prints one `MCDPROF` line per phase and per stage. Never a
+# default; the syncs cost time themselves.
+comptime MCD_PROFILE = MCD_BATCH_MMA and is_defined["MOJOLEARN_MCD_PROFILE"]()
 
 comptime U64Ptr = MutPointer[UInt64, MutAnyOrigin]
 comptime MF_TPB = 256
@@ -1003,7 +1035,7 @@ def _compat_pinvh(ctx: DeviceContext, ph: MfPhase, cov: F32Ptr, d: Int,
     takes the 256-entry instance for d > MF_DMAX)."""
     comptime if MCD_WIDE:
         if d > MF_DMAX:
-            ctx.enqueue_function[mc_pinvh_kernel[MCD_BATCH_MMA, MF_WIDE_DMAX]](
+            ctx.enqueue_function[mc_pinvh_kernel[MCD_BATCH_MMA, MF_WIDE_DMAX, MCD_DEFLATE]](
                 cov, _f(ph.wa), _f(ph.wv), _f(ph.pm), Int32(ph.nc), Int32(d), _i(ph.active), _i(ph.needp),
                 _i(err), _f(ph.mm_v), _f(ph.mm_vw), _i(ph.mm_ran),
                 grid_dim=ph.nc, block_dim=MF_TPB,
@@ -1035,6 +1067,20 @@ def _det(ctx: DeviceContext, ph: MfPhase, d: Int, s: Int, err: DeviceBuffer[DTyp
     )
 
 
+def _pms(ctx: DeviceContext) raises -> Float64:
+    """MCD_PROFILE: wall milliseconds once the queue has drained."""
+    ctx.synchronize()
+    return Float64(perf_counter_ns()) / 1.0e6
+
+
+def _lap(ctx: DeviceContext, mut prof: List[Float64], k: Int, mut tp: Float64) raises:
+    """MCD_PROFILE: charge the time since tp to stage k (nothing otherwise)."""
+    comptime if MCD_PROFILE:
+        var t = _pms(ctx)
+        prof[k] += t - tp
+        tp = t
+
+
 def _run_phase(
     ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.float32], rows: DeviceBuffer[DType.int32],
     pj: DeviceBuffer[DType.int32], pk: DeviceBuffer[DType.int32], d: Int, npair: Int, has_init: Bool,
@@ -1048,6 +1094,15 @@ def _run_phase(
     var nc = ph.nc
     var r = ph.r
     var hinv = Float32(1.0 / Float64(ph.h))
+    # MCD_PROFILE stages: 0 init (pinvh + distance + select), 1 moments + covariance,
+    # 2 log determinant + stop word, 3 pinvh + precision, 4 distance + select, 5 final distance
+    var prof = List[Float64](length=6, fill=Float64(0))
+    var tp = Float64(0)
+    var t0 = Float64(0)
+    var steps = 0
+    comptime if MCD_PROFILE:
+        t0 = _pms(ctx)
+        tp = t0
     ctx.enqueue_function[mf_fill_i_kernel](_i(ph.active), Int32(nc), Int32(1), grid_dim=_blocks(nc), block_dim=MF_TPB)
     ctx.enqueue_function[mf_fill_i_kernel](_i(ph.needp), Int32(nc), Int32(0), grid_dim=_blocks(nc), block_dim=MF_TPB)
     ctx.enqueue_function[mf_fill_i_kernel](_i(ph.fin), Int32(nc), Int32(0), grid_dim=_blocks(nc), block_dim=MF_TPB)
@@ -1073,8 +1128,10 @@ def _run_phase(
     ctx.enqueue_function[mf_select_kernel](
         _f(ph.dist), _i(ph.mask0), Int32(r), Int32(ph.h), _i(ph.active), grid_dim=nc, block_dim=MF_TPB,
     )
+    _lap(ctx, prof, 0, tp)
     for s in range(ph.n_iter + 1):
         var par = s % 2
+        steps += 1
         comptime if MCD_BATCH_COMPAT:
             ctx.enqueue_function[mc_compact_kernel](
                 _i(ph.mask1) if par == 1 else _i(ph.mask0), _i(ph.selected), Int32(r), _i(ph.active),
@@ -1116,11 +1173,22 @@ def _run_phase(
                 _f(ph.part), _f(ph.cov1) if par == 1 else _f(ph.cov0), _i(pj), _i(pk), Int32(nc), Int32(ph.tiles), Int32(d),
                 Int32(npair), hinv, _i(ph.active), grid_dim=_blocks(nc * npair), block_dim=MF_TPB,
             )
+        _lap(ctx, prof, 1, tp)
         _det(ctx, ph, d, s, err)
         ctx.enqueue_function[mf_fill_i_kernel](_i(anyb), Int32(1), Int32(0), grid_dim=1, block_dim=MF_TPB)
         ctx.enqueue_function[mf_any_kernel](_i(ph.active), Int32(nc), _i(anyb), grid_dim=_blocks(nc), block_dim=MF_TPB)
         ctx.enqueue_copy(dst_ptr=hany.unsafe_ptr(), src_buf=anyb)
         ctx.synchronize()
+        _lap(ctx, prof, 2, tp)
+        comptime if MCD_SKIP_PINVH:
+            # nobody reads this phase's final distances: the pinvh that only
+            # feeds them (needp, and every pinvh once no candidate steps) is dead
+            if not want_dist:
+                if Int(hany[0]) == 0:
+                    break
+                ctx.enqueue_function[mf_fill_i_kernel](
+                    _i(ph.needp), Int32(nc), Int32(0), grid_dim=_blocks(nc), block_dim=MF_TPB,
+                )
         # the -inf start's pinvh (needp) runs even when no candidate is active
         comptime if MCD_BATCH_COMPAT:
             _compat_pinvh(ctx, ph, _f(ph.cov1) if par == 1 else _f(ph.cov0), d, err)
@@ -1131,6 +1199,7 @@ def _run_phase(
                 _f(ph.cov1) if par == 1 else _f(ph.cov0), _f(ph.wa), _f(ph.wv), _f(ph.pm), Int32(nc), Int32(d),
                 _i(ph.active), _i(ph.needp), grid_dim=_blocks(nc), block_dim=MF_TPB,
             )
+        _lap(ctx, prof, 3, tp)
         if Int(hany[0]) == 0:
             break
         comptime if MCD_BATCH_MMA:
@@ -1145,6 +1214,7 @@ def _run_phase(
             _f(ph.dist), _i(ph.mask0) if par == 1 else _i(ph.mask1), Int32(r), Int32(ph.h), _i(ph.active),
             grid_dim=nc, block_dim=MF_TPB,
         )
+        _lap(ctx, prof, 4, tp)
     if want_dist:
         comptime if MCD_BATCH_MMA:
             _mma_distance(ctx, ph, dx, rows, d, 0, True, err)
@@ -1154,6 +1224,11 @@ def _run_phase(
                 _f(ph.pm), _f(ph.dist), Int32(nc), Int32(r), Int32(d), _i(ph.active), _i(err),
                 grid_dim=_blocks(nc * r), block_dim=MF_TPB,
             )
+    _lap(ctx, prof, 5, tp)
+    comptime if MCD_PROFILE:
+        print("MCDPROF phase nc=", nc, " r=", r, " h=", ph.h, " d=", d, " init=", has_init, " want_dist=", want_dist,
+              " steps=", steps, " total_ms=", tp - t0, " init_ms=", prof[0], " cov_ms=", prof[1], " det_ms=", prof[2],
+              " pinvh_ms=", prof[3], " dist_ms=", prof[4], " final_ms=", prof[5], sep="")
 
 
 def _rank(ctx: DeviceContext, ph: MfPhase, keep: Int, order: DeviceBuffer[DType.int32]) raises:
@@ -1229,6 +1304,14 @@ def fast_mcd_fast(
     if d > dmax or d < 2 or n < 1:
         return False
     var ctx = xd_ctx()
+    # MCD_PROFILE top-level stages: 0 upload + phase A buffers, 1 phase B buffers + handoff,
+    # 2 phase C buffers + handoff, 3 finish
+    var fprof = List[Float64](length=4, fill=Float64(0))
+    var ftp = Float64(0)
+    var ft0 = Float64(0)
+    comptime if MCD_PROFILE:
+        ft0 = _pms(ctx)
+        ftp = ft0
     var npair = d * (d + 1) // 2
     var hpj = List[Int32](capacity=npair)
     var hpk = List[Int32](capacity=npair)
@@ -1266,11 +1349,14 @@ def fast_mcd_fast(
         var nc_a = n_sub * n_trials
         var keep_a = min(10, n_trials)
         var pa = MfPhase(ctx, nc_a, n_trials, n_ss, 0, h_sub, 2, d, npair)
+        _lap(ctx, fprof, 0, ftp)
         ctx.enqueue_function[mf_draw_kernel](
             _f(pa.dist), Int32(nc_a), Int32(n_ss), UInt32(seed & 0xFFFFFFFF), UInt32((1000 + 2) & 0xFFFFFFFF), _i(err),
             grid_dim=_blocks(nc_a * n_ss), block_dim=MF_TPB,
         )
         _run_phase(ctx, pa, dx, shuf, pj, pk, d, npair, False, False, err, anyb, hany)
+        comptime if MCD_PROFILE:
+            ftp = _pms(ctx)
         var order_a = ctx.enqueue_create_buffer[DType.int32](max(n_sub * keep_a, 1))
         _rank(ctx, pa, keep_a, order_a)
         # draw 2 + nc_a: the merged selection
@@ -1280,11 +1366,15 @@ def fast_mcd_fast(
         var nc_b = n_sub * keep_a
         var pb = MfPhase(ctx, nc_b, nc_b, n_m, 0, h_m, 30, d, npair)
         _handoff(ctx, pa, order_a, pb, d)
+        _lap(ctx, fprof, 1, ftp)
         _run_phase(ctx, pb, dx, sel, pj, pk, d, npair, True, n < 1500, err, anyb, hany)
         var order_b = ctx.enqueue_create_buffer[DType.int32](max(n_best_m, 1))
         _rank(ctx, pb, n_best_m, order_b)
+        comptime if MCD_PROFILE:
+            ftp = _pms(ctx)
         if n < 1500:
             _finish(ctx, pb, order_b, sel, n, d, loc_out, cov_out, sup_out, dist_out, err)
+            _lap(ctx, fprof, 3, ftp)
             _ = pa^
             _ = pb^
             _ = keys^
@@ -1296,10 +1386,14 @@ def fast_mcd_fast(
             # phase C: the n_best_m on every row, up to 30 steps, distances kept
             var pc = MfPhase(ctx, n_best_m, n_best_m, n, 1, h, 30, d, npair)
             _handoff(ctx, pb, order_b, pc, d)
+            _lap(ctx, fprof, 2, ftp)
             _run_phase(ctx, pc, dx, ident, pj, pk, d, npair, True, True, err, anyb, hany)
             var order_c = ctx.enqueue_create_buffer[DType.int32](1)
             _rank(ctx, pc, 1, order_c)
+            comptime if MCD_PROFILE:
+                ftp = _pms(ctx)
             _finish(ctx, pc, order_c, ident, n, d, loc_out, cov_out, sup_out, dist_out, err)
+            _lap(ctx, fprof, 3, ftp)
             _ = pa^
             _ = pb^
             _ = pc^
@@ -1330,6 +1424,9 @@ def fast_mcd_fast(
         _ = pc^
         _ = order_a^
         _ = order_c^
+    comptime if MCD_PROFILE:
+        print("MCDPROF fit n=", n, " d=", d, " h=", h, " total_ms=", _pms(ctx) - ft0, " alloc_a_ms=", fprof[0],
+              " alloc_b_ms=", fprof[1], " alloc_c_ms=", fprof[2], " finish_ms=", fprof[3], sep="")
     _ = hpj^
     _ = hpk^
     _ = hany^
