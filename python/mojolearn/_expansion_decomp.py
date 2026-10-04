@@ -2211,7 +2211,7 @@ def _fa_fast_defines(k):
         got = frozenset()
         if k._res():
             try:
-                got = frozenset(x for x in str(getattr(k._raw(), "x_decomp_fa_defines")()).split(",") if x)
+                got = frozenset(filter(None, str(getattr(k._raw(), "x_decomp_fa_defines")()).split(",")))
             except Exception:
                 got = frozenset()
         k._fa_defs = got
@@ -2357,7 +2357,7 @@ class FactorAnalysis(_Base):
         drop = _M.of([0.0] * nc + [1.0] * (d - nc), 1, d)
         it = 0
         W = None
-        for it in range(1, self.max_iter + 1):
+        for it in range(1, self.max_iter + 1):  # glue: EM iteration driver; every step is device launches (main's loop form)
             sqrt_psi = k.ew("adds", k.ew("sqrt", psi), s=SMALL)
             ev, V = k.eigh(k.ew("scale", k.ew("div", k.ew("div", G, sqrt_psi), sqrt_psi.T), s=1.0 / n))
             s2 = k.ew("maxs", ev.take_cols(order), s=0.0)
