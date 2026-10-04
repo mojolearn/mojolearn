@@ -67,6 +67,9 @@ def _rb_par[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
         for i in range(g * chunk, min(n, (g + 1) * chunk)):
             func(i)
 
+    if groups <= 1:
+        group(0)
+        return
     host_parallelize(group, groups)
 
 
@@ -217,11 +220,11 @@ def host_eigh_rb_sorted(mut a_in: List[Float32], n: Int, mut w: List[Float32], m
     var vo = List[Float32](length=n * n, fill=Float32(0.0))
     for i in range(nn):
         if pad[i] == Float32(0.0):
-            var c = n - 1 - rb_rank_real(pkey, ppad, nn, i)
-            if c >= 0 and c < n:
-                wo[c] = key[i]
+            var dcol = n - 1 - rb_rank_real(pkey, ppad, nn, i)
+            if dcol >= 0 and dcol < n:
+                wo[dcol] = key[i]
                 for r in range(n):
-                    vo[r * n + c] = vfin.unsafe_load(r * nn + i)
+                    vo[r * n + dcol] = vfin.unsafe_load(r * nn + i)
     w = wo^
     v = vo^
     # the pointers above read these lists to here
