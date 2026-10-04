@@ -46,6 +46,8 @@ from arima.impl.lbfgs_device import (
 )
 from arima.impl.tsa.arima_common import ARIMAOrder
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_mul,
     identical_mul_add,
@@ -68,9 +70,21 @@ from glm.impl.qn.qn_util import (
 #: 14,918 ms (-48%), forecast_rmse identical. The old
 #: `-D MOJOLEARN_ARIMA_FAST_ASYNC=1` stays harmless;
 #: `-D MOJOLEARN_ARIMA_FAST_ASYNC_OFF=1` turns it off.
+#: IDENTICAL ON EVERY VENDOR since lane/fam-timeseries (2026-10-04), with
+#: the held evaluation workspace (IDN_ARIMA_EVAL_WS, `batched_kalman.mojo`):
+#: each series' iterates, `n_iter` and `retcode` are the lock-step solver's
+#: bit for bit (module banner), and the host reads one word every
+#: ASYNC_READ_EVERY evaluations instead of one per line-search step and one
+#: per iteration. `-D MOJOLEARN_IDN_ARIMA_ASYNC_OFF=1` keeps the lock-step
+#: solver under IDENTICAL; `MOJOLEARN_IDN_ALL_OFF` turns the workspace, and
+#: so this, off.
 comptime ARIMA_FAST_ASYNC = (
     KALMAN_FAST_EVAL_WS
     and not is_defined["MOJOLEARN_ARIMA_FAST_ASYNC_OFF"]()
+    and not (
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and is_defined["MOJOLEARN_IDN_ARIMA_ASYNC_OFF"]()
+    )
 )
 
 #: evaluations between two reads of the "any series still running" word;

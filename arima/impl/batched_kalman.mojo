@@ -167,9 +167,41 @@ comptime INIT_TPB = 128
 #: in registers instead of runtime-indexed RD_MAX arrays -- the same
 #: operations in the same order. `-D MOJOLEARN_KALMAN_FAST_RD_OFF` keeps the
 #: runtime-rd kernel.
+#: lane/fam-timeseries (2026-10-04), IDENTICAL on EVERY vendor: the four
+#: ARIMA fit schedules below were FAST + Apple (or Apple) only. Each is a
+#: schedule over per-series threads whose arithmetic is the serial form's
+#: (their own banners say why), so the bits are the ones NVIDIA, AMD, Apple
+#: and the host column (`arima/host/arima_oracle.mojo`) already agree on.
+#: Each has its own `_OFF`; `MOJOLEARN_IDN_ALL_OFF` turns all of them off.
+#: None of them changes a FAST build.
+comptime _KALMAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+#: the loop kernel instantiated at the state dimension on NVIDIA and AMD too
+comptime IDN_KALMAN_RD = _KALMAN_IDN and not (
+    is_defined["MOJOLEARN_IDN_KALMAN_RD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: the fit's evaluations on the loop kernel without its three per-step stores
+comptime IDN_ARIMA_LLONLY = _KALMAN_IDN and not (
+    is_defined["MOJOLEARN_IDN_ARIMA_LLONLY_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: the fit's stacked evaluation on buffers held for the whole solve, with no
+#: wait per evaluation (the sequential form is N + 1 filter passes, each
+#: allocating a workspace and waiting)
+comptime IDN_ARIMA_EVAL_WS = _KALMAN_IDN and not (
+    is_defined["MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: IDENTICAL only: the held stacked workspace is taken when its (N + 1) x
+#: batch x n_obs cells stay under this bound (four such float32 arrays live
+#: at once); larger fits keep the sequential evaluation, same bits.
+comptime IDN_EVAL_WS_MAX_CELLS = 134217728
+
 comptime KALMAN_FAST_RD = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-    and has_apple_gpu_accelerator()
+    (
+        (
+            (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
+            and has_apple_gpu_accelerator()
+        )
+        or IDN_KALMAN_RD
+    )
     and not is_defined["MOJOLEARN_KALMAN_FAST_RD_OFF"]()
 )
 
@@ -208,10 +240,15 @@ comptime KALMAN_TIME_SCAN_MIN_OBS = 4096
 #: (-21.8%). The old `-D MOJOLEARN_ARIMA_FAST_LLONLY=1` /
 #: `-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1` stay harmless; `-D <NAME>_OFF=1` turns
 #: each off.
+#: IDENTICAL on every vendor since lane/fam-timeseries (IDN_ARIMA_LLONLY
+#: above; `-D MOJOLEARN_IDN_ARIMA_LLONLY_OFF=1`).
 comptime KALMAN_LL_ONLY = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_ARIMA_FAST_LLONLY_OFF"]()
+    (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+        and has_apple_gpu_accelerator()
+        and not is_defined["MOJOLEARN_ARIMA_FAST_LLONLY_OFF"]()
+    )
+    or IDN_ARIMA_LLONLY
 )
 
 #: lane/apple-fast-tsa (2026-10-02). `-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1`:
@@ -225,11 +262,27 @@ comptime KALMAN_LL_ONLY = (
 #: (-21.8%). The old `-D MOJOLEARN_ARIMA_FAST_LLONLY=1` /
 #: `-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1` stay harmless; `-D <NAME>_OFF=1` turns
 #: each off.
+#: IDENTICAL on every vendor since lane/fam-timeseries (IDN_ARIMA_EVAL_WS
+#: above; `-D MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF=1`).
 comptime KALMAN_FAST_EVAL_WS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF"]()
+    (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+        and has_apple_gpu_accelerator()
+        and not is_defined["MOJOLEARN_ARIMA_FAST_EVAL_WS_OFF"]()
+    )
+    or IDN_ARIMA_EVAL_WS
 )
+
+
+def eval_ws_fits(members: Int, n_obs: Int) -> Bool:
+    """Whether a held stacked workspace of `members` filter threads over
+    `n_obs` steps is taken. FAST: always (unchanged). IDENTICAL: under
+    IDN_EVAL_WS_MAX_CELLS; a larger fit keeps the sequential evaluation,
+    which computes the same bits."""
+    var ok = True
+    comptime if _KALMAN_IDN:
+        ok = members * n_obs <= IDN_EVAL_WS_MAX_CELLS
+    return ok
 
 
 def _grid(n: Int, tpb: Int) -> Int:
@@ -1127,7 +1180,13 @@ def _launch_loop_ll_only(
     comptime if not KALMAN_LL_ONLY:
         return
     var grid = _grid(batch_size, kalman_tpb)
-    if rd == 1:
+    # FAST: the per-rd instantiation always (unchanged). IDENTICAL: only
+    # with KALMAN_FAST_RD, so `-D MOJOLEARN_IDN_KALMAN_RD_OFF=1` is a clean
+    # A/B of the specialization (same operations in the same order).
+    var spec = True
+    comptime if _KALMAN_IDN and not KALMAN_FAST_RD:
+        spec = False
+    if spec and rd == 1:
         ctx.enqueue_function[batched_kalman_loop_kernel[1, True]](
             d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
             ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
@@ -1138,7 +1197,7 @@ def _launch_loop_ll_only(
             Int32(0),
             grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
         )
-    elif rd == 2:
+    elif spec and rd == 2:
         ctx.enqueue_function[batched_kalman_loop_kernel[2, True]](
             d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
             ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
@@ -1149,7 +1208,7 @@ def _launch_loop_ll_only(
             Int32(0),
             grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
         )
-    elif rd == 3:
+    elif spec and rd == 3:
         ctx.enqueue_function[batched_kalman_loop_kernel[3, True]](
             d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
             ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
@@ -1160,7 +1219,7 @@ def _launch_loop_ll_only(
             Int32(0),
             grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
         )
-    elif rd == 4:
+    elif spec and rd == 4:
         ctx.enqueue_function[batched_kalman_loop_kernel[4, True]](
             d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
             ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),

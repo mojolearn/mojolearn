@@ -116,7 +116,7 @@ from arima.impl.batched_arima import (
     perturb_kernel,
     reset_param_kernel,
 )
-from arima.impl.batched_kalman import KALMAN_FAST_EVAL_WS
+from arima.impl.batched_kalman import KALMAN_FAST_EVAL_WS, eval_ws_fits
 from arima.impl.estimate_x0 import StartParamsResult, estimate_x0_x
 from arima.impl.fast_eval_ws import FastEvalWS
 from arima.impl.fast_order_state import ARIMA_ORDER_BATCH, order_min_lbfgs
@@ -496,7 +496,10 @@ def batched_min_lbfgs(
     # exog; `arima/impl/fast_eval_ws.mojo`). `None` in every other build.
     var ews = Optional[FastEvalWS]()
     comptime if KALMAN_FAST_EVAL_WS:
-        if order_kf.n_exog == 0:
+        # IDENTICAL on every vendor since lane/fam-timeseries
+        # (IDN_ARIMA_EVAL_WS, `batched_kalman.mojo`); `eval_ws_fits` is
+        # always true under FAST and a size bound under IDENTICAL.
+        if order_kf.n_exog == 0 and eval_ws_fits((n + 1) * bs, n_obs_kf):
             ews = FastEvalWS(ctx, d_y_kf, bs, n_obs_kf, order_kf)
     comptime if ARIMA_FAST_ASYNC:
         # every series on its own schedule (fast_lbfgs_async.mojo); the
