@@ -31,6 +31,7 @@ from xtrees.ops_device import (
     unseen_rows_device, weighted_sample_device,
 )
 from xtrees import ops_device_elem as elem_dev
+from xtrees import ops_device_boost as boost_dev
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
 
 #: cpu-gpu-cleanup t-gbdt / w2-trees: a GPU build gathers, applies, transposes
@@ -295,8 +296,12 @@ def samme_step_binding(
     var n = _i(params, 0)
     if n <= 0:
         raise Error("x_trees_samme_step: n must be positive")
-    samme_step(f64_ptr(Int(py=w)), i32_ptr(Int(py=pred)), i32_ptr(Int(py=y)), n, _i(params, 1),
-               _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
+    comptime if XTREES_DEVICE_OPS:
+        boost_dev.samme_step_device(f64_ptr(Int(py=w)), i32_ptr(Int(py=pred)), i32_ptr(Int(py=y)), n, _i(params, 1),
+                                    _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
+    else:
+        samme_step(f64_ptr(Int(py=w)), i32_ptr(Int(py=pred)), i32_ptr(Int(py=y)), n, _i(params, 1),
+                   _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
     return PythonObject(n)
 
 
@@ -308,8 +313,12 @@ def r2_step_binding(
     var n = _i(params, 0)
     if n <= 0:
         raise Error("x_trees_r2_step: n must be positive")
-    r2_step(f64_ptr(Int(py=w)), f32_ptr(Int(py=pred)), f32_ptr(Int(py=y)), n, _i(params, 1),
-            _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
+    comptime if XTREES_DEVICE_OPS:
+        boost_dev.r2_step_device(f64_ptr(Int(py=w)), f32_ptr(Int(py=pred)), f32_ptr(Int(py=y)), n, _i(params, 1),
+                                 _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
+    else:
+        r2_step(f64_ptr(Int(py=w)), f32_ptr(Int(py=pred)), f32_ptr(Int(py=y)), n, _i(params, 1),
+                _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
     return PythonObject(n)
 
 
@@ -323,7 +332,10 @@ def weighted_median_binding(
     if m <= 0:
         raise Error("x_trees_weighted_median: need at least one estimator")
     if n > 0:
-        weighted_median(f32_ptr(Int(py=preds)), f64_ptr(Int(py=weights)), n, m, f32_ptr(Int(py=res)))
+        comptime if XTREES_DEVICE_OPS:
+            boost_dev.weighted_median_device(f32_ptr(Int(py=preds)), f64_ptr(Int(py=weights)), n, m, f32_ptr(Int(py=res)))
+        else:
+            weighted_median(f32_ptr(Int(py=preds)), f64_ptr(Int(py=weights)), n, m, f32_ptr(Int(py=res)))
     return PythonObject(n)
 
 
@@ -369,8 +381,12 @@ def gradients_binding(
         if k < 2:
             raise Error("x_trees_gradients: multiclass needs k >= 2")
     if n > 0:
-        gradients(f64_ptr(Int(py=score)), f32_ptr(Int(py=y)), n, kind, f64_ptr(Int(py=g)), f64_ptr(Int(py=h)),
-                  f32_ptr(Int(py=target)), k)
+        comptime if XTREES_DEVICE_OPS:
+            boost_dev.gradients_device(f64_ptr(Int(py=score)), f32_ptr(Int(py=y)), n, kind, f64_ptr(Int(py=g)),
+                                       f64_ptr(Int(py=h)), f32_ptr(Int(py=target)), k)
+        else:
+            gradients(f64_ptr(Int(py=score)), f32_ptr(Int(py=y)), n, kind, f64_ptr(Int(py=g)), f64_ptr(Int(py=h)),
+                      f32_ptr(Int(py=target)), k)
     return PythonObject(n)
 
 
@@ -389,8 +405,13 @@ def leaf_newton_binding(
     if len(params) == 5:
         l1 = _f(params, 3)
         mds = _f(params, 4)
-    leaf_newton(i32_ptr(Int(py=nodes)), f64_ptr(Int(py=g)), f64_ptr(Int(py=h)), n, n_nodes, _f(params, 2),
-                f32_ptr(Int(py=values)), l1, mds)
+    comptime if XTREES_DEVICE_OPS:
+        var np = i32_ptr(Int(py=nodes))
+        boost_dev.leaf_newton_device(np, np, False, n, f64_ptr(Int(py=g)), f64_ptr(Int(py=h)), n, n_nodes,
+                                     _f(params, 2), l1, mds, f32_ptr(Int(py=values)))
+    else:
+        leaf_newton(i32_ptr(Int(py=nodes)), f64_ptr(Int(py=g)), f64_ptr(Int(py=h)), n, n_nodes, _f(params, 2),
+                    f32_ptr(Int(py=values)), l1, mds)
     return PythonObject(n_nodes)
 
 
@@ -406,6 +427,11 @@ def leaf_newton_rows_binding(
     var n_nodes = _i(params, 2)
     if n_nodes < 1:
         raise Error("x_trees_leaf_newton_rows: need n_nodes >= 1")
+    comptime if XTREES_DEVICE_OPS:
+        boost_dev.leaf_newton_device(i32_ptr(Int(py=nodes)), i32_ptr(Int(py=rows)), True, m, f64_ptr(Int(py=g)),
+                                     f64_ptr(Int(py=h)), n, n_nodes, _f(params, 3), _f(params, 4), _f(params, 5),
+                                     f32_ptr(Int(py=values)))
+        return PythonObject(n_nodes)
     leaf_newton_rows(i32_ptr(Int(py=nodes)), i32_ptr(Int(py=rows)), m, f64_ptr(Int(py=g)), f64_ptr(Int(py=h)), n,
                      n_nodes, _f(params, 3), _f(params, 4), _f(params, 5), f32_ptr(Int(py=values)))
     return PythonObject(n_nodes)
@@ -591,7 +617,10 @@ def platt_fit_binding(f: PythonObject, y: PythonObject, ab: PythonObject, params
     var n = _i(params, 0)
     if n < 1:
         raise Error("x_trees_platt_fit: no rows")
-    platt_fit(f64_ptr(Int(py=f)), i32_ptr(Int(py=y)), n, f64_ptr(Int(py=ab)))
+    comptime if XTREES_DEVICE_OPS:
+        boost_dev.platt_fit_device(f64_ptr(Int(py=f)), i32_ptr(Int(py=y)), n, f64_ptr(Int(py=ab)))
+    else:
+        platt_fit(f64_ptr(Int(py=f)), i32_ptr(Int(py=y)), n, f64_ptr(Int(py=ab)))
     return PythonObject(n)
 
 
@@ -600,7 +629,11 @@ def platt_apply_binding(f: PythonObject, res: PythonObject, params: PythonObject
     _need(params, 3, "x_trees_platt_apply")
     var n = _count(_i(params, 0), "x_trees_platt_apply")
     if n > 0:
-        platt_apply(f64_ptr(Int(py=f)), n, _f(params, 1), _f(params, 2), f64_ptr(Int(py=res)))
+        comptime if XTREES_DEVICE_OPS:
+            boost_dev.platt_apply_strided_device(f64_ptr(Int(py=f)), 1, n, _f(params, 1), _f(params, 2),
+                                                 f64_ptr(Int(py=res)), 1)
+        else:
+            platt_apply(f64_ptr(Int(py=f)), n, _f(params, 1), _f(params, 2), f64_ptr(Int(py=res)))
     return PythonObject(n)
 
 
@@ -624,7 +657,11 @@ def isotonic_predict_binding(
         raise Error("x_trees_isotonic_predict: no knots")
     var n = _count(_i(params, 1), "x_trees_isotonic_predict")
     if n > 0:
-        isotonic_predict(f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)), m, f64_ptr(Int(py=t)), n, f64_ptr(Int(py=res)))
+        comptime if XTREES_DEVICE_OPS:
+            boost_dev.isotonic_predict_strided_device(f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)), m, f64_ptr(Int(py=t)), 1,
+                                                      n, f64_ptr(Int(py=res)), 1)
+        else:
+            isotonic_predict(f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)), m, f64_ptr(Int(py=t)), n, f64_ptr(Int(py=res)))
     return PythonObject(n)
 
 
@@ -651,7 +688,11 @@ def platt_apply_strided_binding(f: PythonObject, res: PythonObject, params: Pyth
     _strided(_i(params, 3), fs, fo, n, "x_trees_platt_apply_strided")
     _strided(_i(params, 6), rs, ro, n, "x_trees_platt_apply_strided")
     if n > 0:
-        platt_apply_strided(f64_ptr(Int(py=f)) + fo, fs, n, _f(params, 1), _f(params, 2), f64_ptr(Int(py=res)) + ro, rs)
+        comptime if XTREES_DEVICE_OPS:
+            boost_dev.platt_apply_strided_device(f64_ptr(Int(py=f)) + fo, fs, n, _f(params, 1), _f(params, 2),
+                                                 f64_ptr(Int(py=res)) + ro, rs)
+        else:
+            platt_apply_strided(f64_ptr(Int(py=f)) + fo, fs, n, _f(params, 1), _f(params, 2), f64_ptr(Int(py=res)) + ro, rs)
     return PythonObject(n)
 
 
@@ -671,8 +712,12 @@ def isotonic_predict_strided_binding(
     _strided(_i(params, 2), ts, to, n, "x_trees_isotonic_predict_strided")
     _strided(_i(params, 5), rs, ro, n, "x_trees_isotonic_predict_strided")
     if n > 0:
-        isotonic_predict_strided(f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)), m, f64_ptr(Int(py=t)) + to, ts, n,
-                                 f64_ptr(Int(py=res)) + ro, rs)
+        comptime if XTREES_DEVICE_OPS:
+            boost_dev.isotonic_predict_strided_device(f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)), m,
+                                                      f64_ptr(Int(py=t)) + to, ts, n, f64_ptr(Int(py=res)) + ro, rs)
+        else:
+            isotonic_predict_strided(f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)), m, f64_ptr(Int(py=t)) + to, ts, n,
+                                     f64_ptr(Int(py=res)) + ro, rs)
     return PythonObject(n)
 
 
