@@ -44,7 +44,7 @@ comptime CD_IDN_GRAM_MAX_COLS = (
 #: T = 64 sweeps (a fit that converges sooner pays a build it did not need;
 #: one that runs longer saves more). The bound approaches 4T = 256 for tall
 #: data and shrinks for short data (n_rows 1024: n_cols <= 227; n_rows 400:
-n_cols <= 100 by tallness, 193 by work). Bits move for
+#: n_cols <= 100 by tallness, 193 by work). Bits move for
 #: the fits whose route flips (n_cols 65..255 on tall data), on the device and
 #: the host column together: both read this function.
 #: `-D MOJOLEARN_CD_IDN_GRAM_COST_RULE_OFF=1` restores n_cols <= 64 (pass it

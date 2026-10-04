@@ -172,6 +172,11 @@ comptime ROWS_SORTED_SAMPLE = (
     or (
         has_apple_gpu_accelerator()
         and not is_defined["MOJOLEARN_RF_ROWS_SORTED_OFF"]()
+        # lane/review-fixes: the Apple IDENTICAL arm is off under ALL_OFF
+        and not (
+            GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+            and is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+        )
     )
 )
 """Apple, FAST since 2026-09-25 and IDENTICAL since 2026-09-28 (the drawn
