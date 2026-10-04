@@ -99,6 +99,11 @@ _OPS = dict(
     # lane idn-all (x_prep/blocked.mojo `csr_dense_unit`): the IDENTICAL device binding
     # (`_idn_int` bit 8; -D MOJOLEARN_IDN_NB_CSR_DENSE_OFF has none) densifies a CSR input
     csr_dense=164,
+    # lane fam-prep-metrics: the IDENTICAL bindings (device and host column) run them
+    # (`_idn_fam` bit 2: csb1_ss, x_prep/blocked.mojo, -D MOJOLEARN_IDN_CLASS_ONEPASS_OFF has
+    # none; bit 4: the blocked univariate scores, x_prep/select_blocked.mojo,
+    # -D MOJOLEARN_IDN_SELECT_BLOCKED_OFF has none)
+    csb1_ss=165, fcb_part=166, fcb_fin=167, frb_part1=168, frb_mean=169, frb_part2=170, frb_fin=171,
     # lane apple-fast-py2mojo-prep (x_prep/py2mojo.mojo, a range of its own): every binding
     # runs them (lane pyglue-numeric deleted the OFF arm and its Python loops)
     p2m_ccount=200, p2m_cscan=201, p2m_cstart=202, p2m_cwrite=203, p2m_rgather=204, p2m_smrows=205,
@@ -1863,7 +1868,7 @@ class SimpleImputer(_PrepBase):
         half = pr.put_list([0.5])
         if sorts:
             pr.stage("sort_cols", d, xo, n, d, so, 0)
-        pr.stage("col_stats", d, xo, n, d, st)
+        _cs(pr, mode, xo, n, d, st, var=False)
         if self.strategy == "median" and qsel:
             pr.stage("quantile", d, xo, n, d, half, 1, med, st, 1)
         elif self.strategy == "median":
@@ -2074,7 +2079,7 @@ class KBinsDiscretizer(_PrepBase):
         ne = pr.alloc(d)
         lab = pr.alloc(n * d) if strat == 3 else 0
         cen = pr.alloc(d * nbmax) if strat == 3 else 0
-        pr.stage("col_stats", d, xo, n, d, st)
+        _cs(pr, mode, xo, n, d, st)
         if w is None:
             pr.stage("sort_cols", d, xo, n, d, so, 0)
             pr.stage("kbins_edges", d, so, n, d, nbo, nbmax, strat, st, edges, ne, lab, cen)
@@ -2087,7 +2092,7 @@ class KBinsDiscretizer(_PrepBase):
                 # validated nonnegative: v > 0 is v != 0)
                 m = wl
                 if m < n:
-                    pr.stage("col_stats", d, _p2m_positive_rows(pr, xo, pr.put(w), n, d, m), m, d, stw)
+                    _cs(pr, mode, _p2m_positive_rows(pr, xo, pr.put(w), n, d, m), m, d, stw)
                 else:
                     stw = st
             if strat == 0:
@@ -2292,19 +2297,78 @@ def _nb_counts(pr, wo, xo, n, d, yo, K, cnt, sums, thr=_NONE, neg=_NONE):
         pr.stage("csb1_neg", d, ng, nb, d, neg)
 
 
-def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums):
+#: binding -> its `x_prep_idn_fam` bits (0 when it has none), probed once
+_IDN_FAM = {}
+_IDN_STATS_BLOCKED, _IDN_CLASS_ONEPASS, _IDN_SELECT_BLOCKED = 1, 2, 4
+#: `_cls`: the most partial words (blocks x classes x columns) a blocked
+#: class_stats stage keeps; past it the serial stage (a function of the shape
+#: only, so the device and the host column agree)
+_CLS_BLOCK_WORDS = 2 ** 26
+
+
+def _idn_fam(mode):
+    """Lane fam-prep-metrics: the IDENTICAL binding's family switches
+    (bindings/_mojolearn_x_prep*.mojo `idn_fam_binding`: 1 IDN_STATS_BLOCKED,
+    2 IDN_CLASS_ONEPASS, 4 IDN_SELECT_BLOCKED), 0 on another tier or a build
+    with none. The device and the host column export the same bits, so both
+    stage the same program."""
+    if mode != "identical":
+        return 0
+    binding = _prep_binding(mode)
+    key = id(binding)
+    v = _IDN_FAM.get(key)
+    if v is None:
+        fn = _optional_prep_entry(binding, "x_prep_idn_fam")
+        v = int(fn()) if fn is not None else 0
+        _IDN_FAM[key] = v
+    return v
+
+
+def _cs(pr, mode, xo, n, d, out, var=True):
+    """A col_stats stage: x_prep/blocked.mojo's blocked order under
+    IDN_STATS_BLOCKED (IDENTICAL; `_col_stats`), else one thread per column
+    over every row. var=False: the caller reads no variance (the blocked
+    order then skips that pass)."""
+    if _blocked() and _idn_fam(mode) & _IDN_STATS_BLOCKED:
+        _col_stats(pr, xo, n, d, out, var=var)
+    else:
+        pr.stage("col_stats", d, xo, n, d, out)
+
+
+def _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, sums, *tail):
+    """An unweighted class_stats stage: x_prep/blocked.mojo's blocked order
+    under IDN_STATS_BLOCKED (IDENTICAL; `_class_stats`) while its partial
+    tables stay within _CLS_BLOCK_WORDS, else one thread per (class, column)
+    over every row (`tail`: the serial stage's trailing parameters)."""
+    nb = (n + _XB - 1) // _XB
+    if _blocked() and _idn_fam(mode) & _IDN_STATS_BLOCKED and nb * K * d <= _CLS_BLOCK_WORDS:
+        _class_stats(pr, None, K * d, xo, n, d, yo, K, cnt, mean, var, sums, mode=mode)
+    else:
+        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, var, sums, *tail)
+
+
+def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums, mode=None):
     """class_stats, or its weighted form when a sample_weight offset is given;
     in x_prep/blocked.mojo's blocked order when `_blocked()` (offsets
-    _NONE are not written)."""
+    _NONE are not written). mode given and IDN_CLASS_ONEPASS (IDENTICAL):
+    one unit per (block, column) walks X once for every class (csb1_part /
+    csb1_ss; the same words as csb_part / csb_ss)."""
     if _blocked():
         nb = (n + _XB - 1) // _XB
         w = _NONE if wo is None else wo
         ps, pc, cn = pr.work(nb * K * d), pr.work(nb * K * d), pr.work(K * d)
         if var != _NONE and mean == _NONE:
             mean = pr.work(K * d)
-        pr.stage("csb_part", nb * K * d, xo, n, d, yo, K, ps, pc, nb, w)
+        onepass = mode is not None and bool(_idn_fam(mode) & _IDN_CLASS_ONEPASS)
+        if onepass:
+            pr.stage("csb1_part", nb * d, xo, n, d, yo, K, ps, pc, nb, w, _NONE, _NONE)
+        else:
+            pr.stage("csb_part", nb * K * d, xo, n, d, yo, K, ps, pc, nb, w)
         pr.stage("csb_fold", K * d, ps, pc, nb, K, d, cn, cnt, mean, sums, w)
-        if var != _NONE:
+        if var != _NONE and onepass:
+            pr.stage("csb1_ss", nb * d, xo, n, d, yo, K, mean, cn, ps, nb, w)
+            pr.stage("csb_var", K * d, ps, nb, K, d, cn, var)
+        elif var != _NONE:
             pr.stage("csb_ss", nb * K * d, xo, n, d, yo, K, mean, cn, ps, nb, w)
             pr.stage("csb_var", K * d, ps, nb, K, d, cn, var)
         return
@@ -2398,7 +2462,7 @@ class GaussianNB(_Classifier):
         wo = _nb_weights(pr, sample_weight, n)
         _col_stats(pr, xo, n, d, st)
         pr.stage("gnb_eps", 1, st + 2 * d, d, eps, vs)
-        _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, theta, var, _NONE)
+        _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, theta, var, _NONE, mode=mode)
         raw = _copy_block(pr, var, K, d)
         given = _NONE
         if self.priors is not None:
@@ -2440,7 +2504,7 @@ class GaussianNB(_Classifier):
         wo = _nb_weights(pr, sample_weight, n)
         _col_stats(pr, xo, n, d, st)
         pr.stage("gnb_eps", 1, st + 2 * d, d, eps, vs)
-        _class_stats(pr, wo, K * d, xo, n, d, yo, K, bc, bm, bv, _NONE)
+        _class_stats(pr, wo, K * d, xo, n, d, yo, K, bc, bm, bv, _NONE, mode=mode)
         oc = pr.put_list(zk) if first else pr.put(self.class_count_)
         om = pr.put_list(zkd) if first else pr.put(self.theta_)
         ov = pr.put_list(zkd) if first else pr.put(self._raw_var)
@@ -2966,14 +3030,14 @@ class LinearDiscriminantAnalysis(_Classifier):
         scal1, g2, ms = pr.alloc(d * d), pr.alloc(d * d), pr.alloc(K * d)
         e2, v2 = pr.alloc(d), pr.alloc(d * d)
         scal, coef, inter, evr, tmp = pr.alloc(d * d), pr.alloc(K * d), pr.alloc(K), pr.alloc(d), pr.alloc(K * d)
-        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, _NONE, _NONE)
+        _cls(pr, mode, xo, n, d, yo, K, cnt, mean, _NONE, _NONE)
         gflag, gofs = 0, 0
         if self.priors is not None:
             pv = _given_priors(self.priors, K, "LinearDiscriminantAnalysis")
             gflag, gofs = (2 if abs(sum(pv) - 1.0) > 1e-5 else 1), pr.put_list(pv)
         pr.stage("lda_prep", 1, cnt, mean, K, d, n, priors, xbar, gflag, gofs)
         pr.stage("center_rows", n * d, xo, n, d, mean, yo, _NONE, z)
-        pr.stage("col_stats", d, z, n, d, stz)
+        _cs(pr, mode, z, n, d, stz)
         pr.stage("lda_w", d, stz + 2 * d, d, n, K, std, w)
         pr.stage("center_rows", n * d, xo, n, d, mean, yo, w, z2)
         pr.stage("matmul", d * d, z2, 1, d, z2, d, 1, g, d, n, _NONE, _NONE)
@@ -3010,7 +3074,7 @@ class LinearDiscriminantAnalysis(_Classifier):
         yo = pr.put_codes(codes)
         cnt, mean, priors, xbar = pr.alloc(K), pr.alloc(K * d), pr.alloc(K), pr.alloc(d)
         var = pr.alloc(K * d) if shr is not None else _NONE
-        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, var, _NONE)
+        _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, _NONE)
         gflag, gofs = 0, 0
         if self.priors is not None:
             pv = _given_priors(self.priors, K, "LinearDiscriminantAnalysis")
@@ -3023,7 +3087,7 @@ class LinearDiscriminantAnalysis(_Classifier):
             y0 = pr.put_list([0.0] * n)
             c1, m1 = pr.alloc(1), pr.alloc(d)
             v1 = pr.alloc(d) if shr is not None else _NONE
-            pr.stage("class_stats", d, xo, n, d, y0, 1, c1, m1, v1, _NONE)
+            _cls(pr, mode, xo, n, d, y0, 1, c1, m1, v1, _NONE)
             gt = None if est is None else _estimator_covs(est, arr, None, 1, "LinearDiscriminantAnalysis")
             tot = _lda_cov_blocks(pr, xo, n, d, y0, 1, m1, v1, c1, shr, gt)
         gk = None if est is None else _estimator_covs(est, arr, codes, K, "LinearDiscriminantAnalysis")
@@ -3179,7 +3243,7 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         var = pr.alloc(K * d) if shr is not None else _NONE
         # the trailing 1: FAST keeps row-order class sums here (the tree sums did not pass
         # QuadraticDiscriminantAnalysis' paired quality check)
-        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, var, _NONE, 1)
+        _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, _NONE, 1)
         gflag, gofs = 0, 0
         if self.priors is not None:
             gflag, gofs = 1, pr.put_list(_given_priors(self.priors, K, "QuadraticDiscriminantAnalysis"))
@@ -3290,7 +3354,7 @@ class QuantileTransformer(_PrepBase):
         so, st, qf = pr.work(n * d), pr.alloc(6 * d), pr.put(refs_arr)
         qo = pr.alloc(nq * d)
         pr.stage("sort_cols", d, xo, n, d, so, 0)
-        pr.stage("col_stats", d, xo, n, d, st)
+        _cs(pr, mode, xo, n, d, st, var=False)
         pr.stage("quantile", nq * d, so, n, d, qf, nq, qo, st)
         # quantiles_ (nq, d): the (d, nq) block written column-major on the
         # device (p2m_transpose; lane pyglue-numeric: a Python transpose)
@@ -3376,7 +3440,7 @@ class PowerTransformer(_PrepBase):
         pr = _Prog()
         xo = pr.put(arr)
         st, lam = pr.alloc(6 * d), pr.alloc(d)
-        pr.stage("col_stats", d, xo, n, d, st)
+        _cs(pr, mode, xo, n, d, st)
         if _optional_prep_entry(_prep_binding(mode), "x_prep_host_column") is not None:
             # the host binding: its own pt_fit (x_prep/host/power.mojo), the same words
             pr.stage("pt_fit", d, xo, n, d, method, st, lam)
@@ -3437,7 +3501,7 @@ class PowerTransformer(_PrepBase):
             fused = bool(_ptimpute_flags(mode) & 4)
             tx, st2 = pr.alloc(1) if fused else pr.alloc(n * d), pr.alloc(6 * d)
             pr.stage("pt_apply", n * d, xo, n, d, lam, method, _NONE, _NONE, tx)
-            pr.stage("col_stats", d, tx, n, d, st2)
+            _cs(pr, mode, tx, n, d, st2)
             pr.stage("std_params", d, st2, d, mean, scale)
         pr.run(mode)
         if method == 1 and any(v <= 0 for v in pr.values(st + 3 * d, d)):
@@ -3589,7 +3653,7 @@ def _check_weights(sample_weight, n, who):
     pr = _Prog()
     wo = pr.put(w)
     st = pr.alloc(6)
-    pr.stage("col_stats", 1, wo, n, 1, st)
+    _cs(pr, _mode(), wo, n, 1, st, var=False)
     pos = _p2m_sel(pr, wo, n, 1, 1, pr.alloc(n))
     pr.run(_mode())
     cnt, lo = pr.values(st, 1)[0], pr.values(st + 3, 1)[0]
@@ -3741,7 +3805,7 @@ class SplineTransformer(_PrepBase):
         if fused:
             _col_stats(pr, xo, n, d, st, var=False)
         else:
-            pr.stage("col_stats", d, xo, n, d, st)
+            _cs(pr, mode, xo, n, d, st, var=False)
         uniform, kst = 0, st
         if given:
             base = pr.put_list([v for col in cols for v in col])
@@ -3761,7 +3825,7 @@ class SplineTransformer(_PrepBase):
             if w is not None and wl < n:
                 # the positive-weight rows on the device
                 kst = pr.alloc(6 * d)
-                pr.stage("col_stats", d, _p2m_positive_rows(pr, xo, pr.put(w), n, d, wl), wl, d, kst)
+                _cs(pr, mode, _p2m_positive_rows(pr, xo, pr.put(w), n, d, wl), wl, d, kst, var=False)
         pr.stage("spline_knots", d, base, nk, d, k, knots, uniform, kst, int(periodic))
         nspl = nk - 1 if periodic else nk + k - 1
         W = d * (nspl if self.include_bias else nspl - 1)
@@ -3798,7 +3862,7 @@ class SplineTransformer(_PrepBase):
             if _spline_fused(self.numeric_mode_):
                 _col_stats(pr, xo, n, d, st, var=False)
             else:
-                pr.stage("col_stats", d, xo, n, d, st)
+                _cs(pr, self.numeric_mode_, xo, n, d, st, var=False)
         pr.stage("spline_apply", n * d, xo, n, d, ko, self._nk, self._k, self._EXTRAP[self.extrapolation], W,
                  1 if self.include_bias else 0, out)
         fo = _p2m_f_stage(pr, out, n, W) if self.order == "F" else None
@@ -4627,8 +4691,8 @@ class IterativeImputer(_PrepBase):
         fo, mo, bo = self._prepare(pr, arr, Xf)
         xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
         st, stm = pr.alloc(6 * d), pr.alloc(6 * dk)
-        pr.stage("col_stats", d, xo, n, d, st)
-        pr.stage("col_stats", dk, mo, n, dk, stm)
+        _cs(pr, mode, xo, n, d, st)
+        _cs(pr, mode, mo, n, dk, stm)
         pr.run(mode)
         miss = [round(v * n) for v in pr.values(stm + dk, dk)]      # mean of the 0/1 mask
         scale = max([v for v in pr.values(st + 5 * d, d)] or [0.0])
@@ -4974,7 +5038,7 @@ class VarianceThreshold(_SelectorMixin):
         pr = _Prog()
         xo = pr.put(arr)
         st, var = pr.alloc(6 * d), pr.alloc(d)
-        pr.stage("col_stats", d, xo, n, d, st)
+        _cs(pr, mode, xo, n, d, st)
         pr.stage("var_ptp", d, st, d, var, 1 if self.threshold == 0 else 0)
         pr.run(mode)
         self.variances_ = pr.get(var, d)
@@ -5169,13 +5233,13 @@ def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_s
         dc = len(cont)
         xo = pr.put(arr if not disc else _gather(arr, cont, mode))
         st, sc, ma, z, zs = pr.alloc(6 * dc), pr.alloc(dc), pr.alloc(dc), work(n * dc), work(n * dc)
-        pr.stage("col_stats", dc, xo, n, dc, st)
+        _cs(pr, mode, xo, n, dc, st)
         pr.stage("mi_colscale", dc, xo, n, dc, st, sc, ma)
         pr.stage("mi_noise", n * dc, xo, n, dc, sc, ma, 2 * seed, z, _plus1(zs))
     if not discrete_target:
         yo = pr.put(yv)
         sty, scy, may, zy, zys = pr.alloc(6), pr.alloc(1), pr.alloc(1), work(n), work(n)
-        pr.stage("col_stats", 1, yo, n, 1, sty)
+        _cs(pr, mode, yo, n, 1, sty)
         pr.stage("mi_colscale", 1, yo, n, 1, sty, scy, may)
         pr.stage("mi_noise", n, yo, n, 1, scy, may, 2 * seed + 1, zy, _plus1(zys))
     if cont:

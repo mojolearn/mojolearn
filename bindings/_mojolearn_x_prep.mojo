@@ -16,6 +16,8 @@ from x_prep.device import run_program_device, run_program_device_ranges, x_prep_
 from x_prep.folds import I32P, kfold_folds, strat_folds
 from x_prep.fastnb_csr import NB_TEXT_CSR, nb_csr_fit_py, nb_csr_jll_py, IDN_NB_CSR, nb_csr_fit_int_py, nb_csr_jll_chk_py
 from x_prep.blocked import IDN_NB_ONEPASS, IDN_NB_CSR_DENSE
+from x_prep.blocked import IDN_STATS_BLOCKED, IDN_CLASS_ONEPASS
+from x_prep.select_blocked import IDN_SELECT_BLOCKED
 from x_prep.calib import CALIB_FOLDS, CAL_ST, CAL_LS
 from x_prep.py2mojo import PY2MOJO_PREP
 from x_prep.prep3 import PREP3_MAXABS
@@ -269,6 +271,17 @@ def py2mojo_binding() raises -> PythonObject:
     return PythonObject(1)
 
 
+def idn_fam_binding() raises -> PythonObject:
+    """Lane fam-prep-metrics (IDENTICAL, device and host column alike): the
+    bits of the family switches this binding was built with, read by
+    python/mojolearn/_expansion_prep.py `_idn_fam` (1 IDN_STATS_BLOCKED, 2
+    IDN_CLASS_ONEPASS: op 165, 4 IDN_SELECT_BLOCKED: ops 166-171);
+    registered only when one is on."""
+    return PythonObject(
+        (1 if IDN_STATS_BLOCKED else 0) | (2 if IDN_CLASS_ONEPASS else 0) | (4 if IDN_SELECT_BLOCKED else 0)
+    )
+
+
 @export
 def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
     try:
@@ -284,6 +297,9 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
             m.def_function[nb_csr_jll_chk_py]("x_prep_nb_csr_jll")
         comptime if IDN_LABEL or IDN_NB_ONEPASS or IDN_NB_CSR or IDN_NB_CSR_DENSE:
             m.def_function[idn_int_binding]("x_prep_idn_int")
+        comptime if IDN_STATS_BLOCKED or IDN_CLASS_ONEPASS or IDN_SELECT_BLOCKED:
+            # lane fam-prep-metrics
+            m.def_function[idn_fam_binding]("x_prep_idn_fam")
         m.def_function[run_scratch_binding]("x_prep_run_scratch")
         m.def_function[run_out_binding]("x_prep_run_out")
         m.def_function[run_ranges_binding]("x_prep_run_ranges")

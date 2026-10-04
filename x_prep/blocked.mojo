@@ -45,6 +45,36 @@ comptime IDN_NB_ONEPASS = (
 #: classes csb1_part keeps in registers (more: the partial table itself)
 comptime CSB1_REG = 8
 
+#: lane fam-prep-metrics (2026-10-04), IDENTICAL on every vendor and the host
+#: column, ON by default: every `col_stats` / `class_stats` stage the Python
+#: layer still staged as one thread per (class, column) over all n rows
+#: (SimpleImputer, KBinsDiscretizer, QuantileTransformer, PowerTransformer,
+#: SplineTransformer, IterativeImputer, VarianceThreshold, LDA, QDA, chi2,
+#: f_classif, mutual information, the weight check) is staged as this file's
+#: blocked folds (colb_* / csb_*). No kernel changes: the switch is a bit of
+#: `x_prep_idn_fam` (bindings/_mojolearn_x_prep*.mojo) that
+#: python/mojolearn/_expansion_prep.py `_idn_fam` reads, so the device and the
+#: host column stage the same program. BITS: sums, means and variances take
+#: the blocked order for n > XB (counts, minima, maxima unchanged).
+#: -D MOJOLEARN_IDN_STATS_BLOCKED_OFF restores the serial stages.
+comptime IDN_STATS_BLOCKED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_IDN_STATS_BLOCKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+
+#: lane fam-prep-metrics (2026-10-04), IDENTICAL on every vendor and the host
+#: column, ON by default: the blocked class statistics walk X ONCE per (block,
+#: column) instead of once per (block, class, column): the sums by
+#: `csb1_part` (op 162, so it needs IDN_NB_ONEPASS) and the squared deviations
+#: by `csb1_ss` (op 165). Each class chain is csb_part's / csb_ss's (the
+#: class's rows of the block, ascending from zero), so the words are theirs:
+#: no bit moves against the blocked order.
+#: -D MOJOLEARN_IDN_CLASS_ONEPASS_OFF restores csb_part / csb_ss.
+comptime IDN_CLASS_ONEPASS = (
+    IDN_NB_ONEPASS
+    and not (is_defined["MOJOLEARN_IDN_CLASS_ONEPASS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+
 
 @always_inline
 def _span(b: Int, n: Int) -> Tuple[Int, Int]:
@@ -409,6 +439,72 @@ def csb_ss_unit(t: Int, f: FP, q: IP):
                 var e = sub(ld(f, X + i * d + c), mean)
                 ss = add(ss, mul(ld(f, W + i), mul(e, e)))
     st(f, p(q, 7) + t, ss)
+
+
+def csb1_ss_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, Y, K, MEAN, CN, PS, nb, W]; t = b*d + c (lane
+    fam-prep-metrics, IDN_CLASS_ONEPASS). csb_ss's partials of EVERY class of
+    (block b, column c) from one walk of the block's rows, ascending:
+    PS[(b*K + k)*d + c] = the block's sum of squared deviations of class k's
+    rows from MEAN[k*d + c] (W >= 0: w (x - mean)^2) from zero; zero when
+    CN[k*d + c] is zero. Each class's chain is csb_ss's (same rows, same
+    order, same operations), so the words are its."""
+    var X = p(q, 0)
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var Y = p(q, 3)
+    var K = p(q, 4)
+    var MEAN = p(q, 5)
+    var CN = p(q, 6)
+    var PS = p(q, 7)
+    var W = p(q, 9)
+    var c = t % d
+    var b = t // d
+    var r = _span(b, n)
+    var base = b * K * d + c
+    if K <= CSB1_REG:
+        var mean = SIMD[DType.float32, CSB1_REG](0)
+        var live = SIMD[DType.float32, CSB1_REG](0)
+        var ss = SIMD[DType.float32, CSB1_REG](0)
+        comptime for u in range(CSB1_REG):
+            if u < K:
+                mean[u] = ld(f, MEAN + u * d + c)
+                live[u] = ld(f, CN + u * d + c)
+        for i in range(r[0], r[1]):
+            var x = ld(f, X + i * d + c)
+            var k = Int(ld(f, Y + i))
+            if W < 0:
+                comptime for u in range(CSB1_REG):
+                    if k == u:
+                        var e = sub(x, mean[u])
+                        ss[u] = add(ss[u], mul(e, e))
+            else:
+                var w = ld(f, W + i)
+                comptime for u in range(CSB1_REG):
+                    if k == u:
+                        var e = sub(x, mean[u])
+                        ss[u] = add(ss[u], mul(w, mul(e, e)))
+        comptime for u in range(CSB1_REG):
+            if u < K:
+                if live[u] != Float32(0):
+                    st(f, PS + base + u * d, ss[u])
+                else:
+                    st(f, PS + base + u * d, Float32(0))
+    else:
+        for k in range(K):
+            st(f, PS + base + k * d, Float32(0))
+        for i in range(r[0], r[1]):
+            var k = Int(ld(f, Y + i))
+            if k < 0 or k >= K:
+                continue
+            if ld(f, CN + k * d + c) == Float32(0):
+                continue
+            var e = sub(ld(f, X + i * d + c), ld(f, MEAN + k * d + c))
+            var at = base + k * d
+            if W < 0:
+                st(f, PS + at, add(ld(f, PS + at), mul(e, e)))
+            else:
+                st(f, PS + at, add(ld(f, PS + at), mul(ld(f, W + i), mul(e, e))))
 
 
 def csb_var_unit(t: Int, f: FP, q: IP):
