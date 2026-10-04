@@ -1254,10 +1254,10 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
         tr.prefill_cache.s = 0
         var prefix = String("byte.block") + String(layer) + ".forward"
         var norm1_ready = layer > 0 and residual_next_norm_fusion_enabled(
-            M, tr.weights[layer].opts.norm_kind, tr.weights[layer].opts.norm_bias
+            M, config.d_model, tr.weights[layer].opts.norm_kind, tr.weights[layer].opts.norm_bias
         )
         var fuse_next = layer + 1 < config.n_layers and residual_next_norm_fusion_enabled(
-            M, tr.weights[layer + 1].opts.norm_kind,
+            M, config.d_model, tr.weights[layer + 1].opts.norm_kind,
             tr.weights[layer + 1].opts.norm_bias,
         )
         if layer == 0:

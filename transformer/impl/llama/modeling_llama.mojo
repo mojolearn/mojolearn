@@ -2060,13 +2060,33 @@ def residual_rms_norm_kernel(
         )
 
 
+# The fused residual + RMSNorm kernel and the unfused pair compute the same
+# bits (one row owner, S1's serial ascending fold either way); this only picks
+# which launch plan runs. The fusion saves one launch and one reread of the
+# residual, which pays while the residual working set is small; as M * d_model
+# grows the extra serial pass per row thread costs more than the launch it
+# saves. Measured on Apple at d_model 768 (evidence
+# 2026-09-20_residual_rmsnorm_fusion.md): faster at 1.6 M f32 elements,
+# neutral at 3.1 M and 6.3 M, 10.7% slower at 25.2 M. The cut is a working-set
+# RANGE between the last neutral and the first slower point (2^23 elements,
+# 32 MiB f32), so it scales with d_model and is not tied to one row count.
+# Needs neighbor-shape validation (d_model 512 / 1024, M around the cut).
+comptime RESIDUAL_NORM_FUSE_MAX_ELEMS = 1 << 23
+
+
+def residual_norm_fusion_size_ok(m: Int, dm: Int) -> Bool:
+    """True while the [m, dm] residual is within the fusion's working set."""
+    return m * dm <= RESIDUAL_NORM_FUSE_MAX_ELEMS
+
+
 def residual_next_norm_fusion_enabled(
-    m: Int, norm_kind: Int, norm_bias: Bool
+    m: Int, dm: Int, norm_kind: Int, norm_bias: Bool
 ) -> Bool:
     """The measured cross-block residual2 -> norm1 route."""
     return (
         not is_defined["MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM"]()
-        and TARGET_COLUMN == COLUMN_APPLE and m <= 2048
+        and TARGET_COLUMN == COLUMN_APPLE
+        and residual_norm_fusion_size_ok(m, dm)
         and norm_kind == NORM_RMSNORM and not norm_bias
     )
 
@@ -5480,7 +5500,7 @@ def _afn_mlp_and_residual2(
         return True
     # main's residual2 launches.
     var fuse_next_norm = (
-        want_next and residual_next_norm_fusion_enabled(m, NORM_RMSNORM, False)
+        want_next and residual_next_norm_fusion_enabled(m, dm, NORM_RMSNORM, False)
     )
     step_count_launch()
     if fuse_next_norm:
@@ -5765,7 +5785,8 @@ def llama_decoder_layer_forward_planted(
     var fused_residual_norm = (
         fuse_residual_norm and w.opts.norm_kind == NORM_RMSNORM
         and not w.opts.norm_bias and (
-            is_defined["MOJOLEARN_FUSE_RESIDUAL1_NORM2"]() or m <= 2048
+            is_defined["MOJOLEARN_FUSE_RESIDUAL1_NORM2"]()
+            or residual_norm_fusion_size_ok(m, dm)
         )
     )
     comptime if AFN_ATTN_ANY:
@@ -5859,7 +5880,7 @@ def llama_decoder_layer_forward_planted(
             var fuse_next_norm = (
                 next_norm_sumsq and next_norm_out and next_norm_weight
                 and next_norm_eps
-                and residual_next_norm_fusion_enabled(m, NORM_RMSNORM, False)
+                and residual_next_norm_fusion_enabled(m, dm, NORM_RMSNORM, False)
             )
             step_count_launch()
             if fuse_next_norm:
@@ -5884,7 +5905,7 @@ def llama_decoder_layer_forward_planted(
         var fuse_next_norm = (
             next_norm_sumsq and next_norm_out and next_norm_weight
             and next_norm_eps
-            and residual_next_norm_fusion_enabled(m, NORM_RMSNORM, False)
+            and residual_next_norm_fusion_enabled(m, dm, NORM_RMSNORM, False)
         )
         step_count_launch()
         if fuse_next_norm:
