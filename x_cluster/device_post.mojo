@@ -159,9 +159,10 @@ def ff_chunk_kernel(mode: Int32, a: FPtr, b: FPtr, c: FPtr, n: Int32, oh: FPtr, 
 
 def ff_cols_chunk_kernel(
     ff_in: Int32, a: FPtr, b: FPtr, n: Int32, col_stride: Int32, row_stride: Int32,
-    oh: FPtr, ol: FPtr, nch_out: Int32,
+    oh: FPtr, ol: FPtr, nch_out: Int32, ncols: Int32,
 ):
-    """Block (f, q): the fold of chunk q of column f, whose element t is
+    """Block f + q * ncols (a 1-D grid of ncols * nch_out blocks, adjacent
+    blocks on adjacent columns): the fold of chunk q of column f, whose element t is
     a[f * col_stride + t * row_stride] (`post_bodies.ff_strided_lane`, then
     `ff_chunk_kernel`'s tree), into oh/ol[f * nch_out + q] (lane
     fix-c1-cluster, `DeviceOps.center_cols`; the host twin is
@@ -169,8 +170,8 @@ def ff_cols_chunk_kernel(
     var sh = stack_allocation[RTPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var sl = stack_allocation[RTPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var tid = Int(thread_idx.x)
-    var f = Int(block_idx.x)
-    var q = Int(block_idx.y)
+    var f = Int(block_idx.x) % Int(ncols)
+    var q = Int(block_idx.x) // Int(ncols)
     var base = q * FOLD_CHUNK
     var end = min(Int(n), base + FOLD_CHUNK)
     var v = ff_strided_lane(
