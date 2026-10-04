@@ -781,3 +781,95 @@ def qn_predict_binary_host(
     ctx.synchronize()
     _ = codes^
     _ = scores^
+
+
+#: lane fam2-linear (2026-10-04): multiclass `LogisticRegression.predict`
+#: took the row argmax on the host (`_labels.argmax_rows`) after the device
+#: scored. The argmax now runs on the device (one thread per row) and the
+#: int64 codes download straight into the caller's buffer.
+#: `-D MOJOLEARN_QN_DEV_ARGMAX_OFF` (or the master `MOJOLEARN_IDN_ALL_OFF`)
+#: leaves the entry unregistered, and the Python layer falls back to the host
+#: scan. No bit moves: the same strict `>` from column 0.
+comptime QN_DEV_ARGMAX = not (
+    is_defined["MOJOLEARN_QN_DEV_ARGMAX_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+@always_inline
+def _argmax_key(b: UInt32) -> UInt32:
+    """A float's bits as an unsigned key whose integer order is the float
+    order of the non-NaN values, `-0.0` and `+0.0` sharing one key (so
+    neither is greater than the other, as IEEE `>` says)."""
+    var mag = b & UInt32(0x7FFFFFFF)
+    if mag == UInt32(0):
+        return UInt32(0x80000000)
+    if (b >> 31) == UInt32(0):
+        return b | UInt32(0x80000000)
+    return ~b
+
+
+def _row_argmax_code_kernel(
+    scores: MutPointer[Float32, MutAnyOrigin],
+    codes: MutPointer[Int64, MutAnyOrigin],
+    n_in: Int32,
+    n_cls: Int32,
+):
+    """codes[i] = the first maximum of scores[i*C .. i*C + C), decided BY
+    BITS (Metal flushes compare operands): a later column replaces only
+    when strictly greater, and a NaN on either side never replaces. That is
+    `_labels.argmax_rows` (`argmax_rows_f32_binding`) for every float."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        var c_n = Int(n_cls)
+        var base = i * c_n
+        var best = 0
+        var bb = bitcast[DType.uint32](scores.unsafe_load(base))
+        var best_nan = (bb & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000)
+        var best_key = _argmax_key(bb)
+        for c in range(1, c_n):
+            var b = bitcast[DType.uint32](scores.unsafe_load(base + c))
+            var is_nan = (b & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000)
+            var key = _argmax_key(b)
+            if (not is_nan) and (not best_nan) and key > best_key:
+                best = c
+                best_key = key
+        codes.unsafe_store(i, Int64(best))
+
+
+def qn_predict_multiclass_host(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Int64, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    fit_intercept: Bool,
+    n_classes: Int,
+) raises:
+    """Multiclass `qn_predict` (`n_classes > 2`): the softmax decision
+    function and the row argmax both on the device; the int64 class codes
+    are the only download."""
+    if n_classes <= 2:
+        raise Error("qn_predict_multiclass: n_classes must exceed 2, got " + String(n_classes))
+    if n_rows <= 0:
+        return
+    var n_param = (n_features + (1 if fit_intercept else 0)) * n_classes
+    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    var w = ctx.enqueue_create_buffer[DType.float32](n_param)
+    var scores = ctx.enqueue_create_buffer[DType.float32](n_rows * n_classes)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    ctx.enqueue_copy(dst_buf=w, src_ptr=coef_ptr)
+    ctx.synchronize()
+    var pams = QNParams.default()
+    pams.loss = QN_LOSS_SOFTMAX
+    pams.fit_intercept = fit_intercept
+    qn_decision_function(ctx, pams, x, n_rows, n_features, w, scores, n_classes)
+    var codes = ctx.enqueue_create_buffer[DType.int64](n_rows)
+    ctx.enqueue_function[_row_argmax_code_kernel](
+        scores.unsafe_ptr(), codes.unsafe_ptr(), Int32(n_rows), Int32(n_classes),
+        grid_dim=((n_rows + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=codes)
+    ctx.synchronize()
+    _ = codes^
+    _ = scores^

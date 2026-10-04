@@ -88,6 +88,8 @@ from glm.estimator import (
     qn_decision_function_host,
     qn_fit_host,
     qn_predict_binary_host,
+    qn_predict_multiclass_host,
+    QN_DEV_ARGMAX,
     ridge_fit_host,
     ridge_fit_resident_host,
 )
@@ -900,6 +902,31 @@ def qn_predict_binary_binding(
     return PythonObject(0)
 
 
+def qn_predict_multiclass_binding(
+    x_addr: PythonObject,
+    coef_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Multiclass `qn_predict` (lane fam2-linear): int64 class codes, the
+    row argmax of the softmax decision function taken on the device (first
+    maximum wins). params: n_rows, n_features, fit_intercept, n_classes."""
+    if len(params) != 4:
+        raise Error("qn_predict_multiclass: params must contain n_rows, n_features, fit_intercept, n_classes")
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var fi = Int(py=params[2]) != 0
+    var nc = Int(py=params[3])
+    var op = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=out_addr))
+    var xp = _f32_ptr(Int(py=x_addr))
+    var cp = _f32_ptr(Int(py=coef_addr))
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        qn_predict_multiclass_host(ctx, xp, cp, op, nr, nf, fi, nc)
+        ctx.synchronize()
+    return PythonObject(0)
+
+
 def qn_sigmoid_kernel(
     scores: MutPointer[Float32, MutAnyOrigin],
     dst: MutPointer[UInt64, MutAnyOrigin],
@@ -1261,6 +1288,8 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[qn_fit_binding]("qn_fit")
         m.def_function[qn_decision_function_binding]("qn_decision_function")
         m.def_function[qn_predict_binary_binding]("qn_predict_binary")
+        comptime if QN_DEV_ARGMAX:
+            m.def_function[qn_predict_multiclass_binding]("qn_predict_multiclass")
         m.def_function[qn_sigmoid_binding]("qn_sigmoid")
         m.def_function[qn_softmax_binding]("qn_softmax")
         return m.finalize()
