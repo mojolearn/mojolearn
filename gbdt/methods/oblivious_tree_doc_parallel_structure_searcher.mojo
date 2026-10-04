@@ -133,7 +133,7 @@ from gbdt.methods.oblivious_tree_fold_tasks import (
     FoldLayout,
     create_fold_based_subsets,
     fold_tasks_from_folds,
-    make_fold_doc_indices,
+    make_fold_doc_indices_device,
     plan_fold_layout,
     plan_single_task_layout,
     write_fold_based_initial_bins,
@@ -616,28 +616,29 @@ def fit_oblivious_tree_structure_traced(
     if cached >= 0:
         d_doc_ids = pool[0].doc_ids[cached].copy()
     else:
-        var doc_ids_host = make_fold_doc_indices(folds, permutation) if (
-            fold_count > 1
-        ) else List[UInt32]()
+        # lane cpu3-gbdt-a: the doc ids built on the device
+        # (`make_fold_doc_indices_device`) from the permutation uploaded
+        # once, cached per permutation id as before
         d_doc_ids = ctx.enqueue_create_buffer[DType.uint32](
-            len(doc_ids_host) if fold_count > 1 else 1
+            doc_count if fold_count > 1 else 1
         )
         if fold_count > 1:
-            if len(doc_ids_host) != doc_count:
-                raise Error(
-                    "MakeDocIndices produced "
-                    + String(len(doc_ids_host))
-                    + " ids for "
-                    + String(doc_count)
-                    + " concatenated documents"
+            var has_perm = len(permutation) != 0
+            var d_perm = ctx.enqueue_create_buffer[DType.uint32](
+                len(permutation) if has_perm else 1
+            )
+            if has_perm:
+                ctx.enqueue_copy(
+                    dst_buf=d_perm, src_ptr=permutation.unsafe_ptr()
                 )
-            ctx.enqueue_copy(
-                dst_buf=d_doc_ids, src_ptr=doc_ids_host.unsafe_ptr()
+            _ = make_fold_doc_indices_device(
+                ctx, folds, d_perm, has_perm, d_doc_ids
             )
             ctx.synchronize()
-            # keep the host list alive across the queue: a raw pointer does
-            # not ([[mojo-buffer-freed-at-last-use]])
-            _ = doc_ids_host[0]
+            # held past the drain ([[mojo-buffer-freed-at-last-use]]): the
+            # upload read the list, the launches read `d_perm`
+            _ = d_perm^
+            _ = len(permutation)
             if permutation_id >= 0:
                 pool[0].doc_ids_keys.append(permutation_id)
                 pool[0].doc_ids.append(d_doc_ids.copy())
