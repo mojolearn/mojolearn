@@ -513,7 +513,8 @@ def cagra_knn_enqueue(
     (x_ann/fast_env.mojo, x_ann/cagra_fast_knn.mojo): IVFG, the
     approximate graph, which refuses (returns False) back to the exact
     graph when n is small or a probe pool is too small; otherwise
-    `knn_enqueue`. lane/apple-fast-w2-cagra (opt-in CAGRA_FAST_IVFG_LOWD):
+    `knn_enqueue`. lane/apple-fast-w2-cagra (CAGRA_FAST_IVFG_LOWD, default
+    with SEEDS4; rollback MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF):
     IVFG for rows of 64 features or fewer as well (CAGRA taxi, d = 11)."""
     comptime if CAGRA_FAST_IVFG:
         if d > 64 or CAGRA_FAST_IVFG_LOWD:

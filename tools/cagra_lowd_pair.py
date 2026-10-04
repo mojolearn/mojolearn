@@ -7,8 +7,9 @@ quality SOURCE QUALITY_TAG
  timing SOURCE QUALITY_TAG TIMING_TAG taxi|istella
 
 Arms: ~/mq/verified-arms/SOURCE/x_ann/{A,B}.so + manifest.json, A = main
-(defines ''), B = '-D MOJOLEARN_CAGRA_FAST_IVFG_LOWD' or
-'-D MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4'. The quality job dumps both arms
+(defines ''), B = '-D MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF' (LOWD +
+SEEDS4 is default since its promotion; before it B was '-D ..._IVFG_LOWD' or
+'-D ..._IVFG_LOWD_SEEDS4'). The quality job dumps both arms
 on taxi and istella (tools/cagra_lowd_quality.py) and writes PASS.json only
 when B's recall@10 >= A's on both (and, for IVFG_LOWD, istella's graph and ids
 are byte-identical). The timing job refuses without that receipt. No builds,
@@ -23,7 +24,10 @@ import shutil
 import subprocess
 import sys
 
-DEFINES = ('-D MOJOLEARN_CAGRA_FAST_IVFG_LOWD', '-D MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4')
+# LOWD_SEEDS4 is default since its promotion: A ('') is LOWD + SEEDS4, and
+# its _OFF form builds the old arm. The recall gate (B >= A) was written for
+# the pre-promotion direction.
+DEFINES = ('-D MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF',)
 DATASETS = ('taxi', 'istella')
 
 
@@ -64,7 +68,7 @@ def main():
     assert manifest['defines_A'] == ''
     assert manifest['defines_B'] in DEFINES
     define = manifest['defines_B'].removeprefix('-D ')
-    istella_identical = define == 'MOJOLEARN_CAGRA_FAST_IVFG_LOWD'
+    istella_identical = False  # every arm vs the LOWD_SEEDS4 default moves the search
     hashes = {arm: digest(arms / (arm + '.so')) for arm in ('A', 'B')}
     assert hashes == manifest['hashes']
     out = home / 'mq/out' / (args.quality_tag + '-quality')
