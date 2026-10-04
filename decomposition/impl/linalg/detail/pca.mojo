@@ -4,7 +4,7 @@
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.memory import AddressSpace
 from core.pinned_reduce import (
     pinned_block_max as block_max,
@@ -417,6 +417,20 @@ def pca_rr_finish_kernel(state: F32Ptr, info: F32Ptr):
         info.unsafe_store(2, state.unsafe_load(5))
 
 
+def _pca_rr_done(
+    ctx: DeviceContext, mut dstate: DeviceBuffer[DType.float32], mut hstate: HostBuffer[DType.float32]
+) raises -> Bool:
+    """PCA_RR_FLAG_TEST: reads the device's verdict of the test just enqueued
+    (`pca_rr_gate_kernel`'s PCA_RR_STATE flag words, the only words that
+    cross; x_decomp/device.mojo `_eigh_par_test` reads its three the same
+    way) and returns True when the solve is over: converged (state[0]), or a
+    test block did not run (state[4]). The decision itself was made on the
+    device; the host only stops enqueuing rounds that would be no-ops."""
+    ctx.enqueue_copy(dst_ptr=hstate.unsafe_ptr(), src_buf=dstate)
+    ctx.synchronize()
+    return hstate.unsafe_ptr().unsafe_load(0) == Float32(1.0) or hstate.unsafe_ptr().unsafe_load(4) < Float32(0.0)
+
+
 def _eig_rr_device(
     ctx: DeviceContext,
     mut cov: DeviceBuffer[DType.float32],
@@ -465,11 +479,9 @@ def _eig_rr_device(
             dfold.unsafe_ptr(), dstate.unsafe_ptr(), Float32(JACOBI_TOL), grid_dim=1, block_dim=1
         )
         comptime if PCA_RR_FLAG_TEST:
-            # the device's verdict (six flag words): converged, or a test
-            # block that did not run, ends the enqueuing here
-            ctx.enqueue_copy(dst_ptr=hstate.unsafe_ptr(), src_buf=dstate)
-            ctx.synchronize()
-            if hstate.unsafe_ptr().unsafe_load(0) == Float32(1.0) or hstate.unsafe_ptr().unsafe_load(4) < Float32(0.0):
+            # the device's verdict: converged, or a test block that did not
+            # run, ends the enqueuing here
+            if _pca_rr_done(ctx, dstate, hstate):
                 break
         if sweep < PCA_RR_SWEEPS:
             for rd in range(m - 1):
