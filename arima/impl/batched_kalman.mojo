@@ -148,6 +148,7 @@ from arima.impl.timeSeries.arima_helpers import (
     reduced_polynomial,
 )
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams
+from arima.impl.fast_slab import slab_f32, slab_i32
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_log, identical_mul_add
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -811,32 +812,32 @@ struct KalmanWorkspace(Movable):
         var r = order.r()
         var rd2 = rd * rd
         var r2 = r * r
-        self.Z = ctx.enqueue_create_buffer[DType.float32](rd * batch_size)
-        self.R = ctx.enqueue_create_buffer[DType.float32](rd * batch_size)
-        self.T = ctx.enqueue_create_buffer[DType.float32](rd2 * batch_size)
-        self.RQ = ctx.enqueue_create_buffer[DType.float32](rd * batch_size)
-        self.RQR = ctx.enqueue_create_buffer[DType.float32](rd2 * batch_size)
-        self.P = ctx.enqueue_create_buffer[DType.float32](rd2 * batch_size)
-        self.alpha = ctx.enqueue_create_buffer[DType.float32](rd * batch_size)
-        self.ImAA = ctx.enqueue_create_buffer[DType.float32](r2 * r2 * batch_size)
-        self.ImAA_inv = ctx.enqueue_create_buffer[DType.float32](r2 * r2 * batch_size)
-        self.piv = ctx.enqueue_create_buffer[DType.int32](LYAP_R2_MAX * batch_size)
-        self.vecq = ctx.enqueue_create_buffer[DType.float32](r2 * batch_size)
-        self.ImT = ctx.enqueue_create_buffer[DType.float32](r2 * batch_size)
-        self.ImT_inv = ctx.enqueue_create_buffer[DType.float32](r2 * batch_size)
+        self.Z = slab_f32(ctx, rd * batch_size)
+        self.R = slab_f32(ctx, rd * batch_size)
+        self.T = slab_f32(ctx, rd2 * batch_size)
+        self.RQ = slab_f32(ctx, rd * batch_size)
+        self.RQR = slab_f32(ctx, rd2 * batch_size)
+        self.P = slab_f32(ctx, rd2 * batch_size)
+        self.alpha = slab_f32(ctx, rd * batch_size)
+        self.ImAA = slab_f32(ctx, r2 * r2 * batch_size)
+        self.ImAA_inv = slab_f32(ctx, r2 * r2 * batch_size)
+        self.piv = slab_i32(ctx, LYAP_R2_MAX * batch_size)
+        self.vecq = slab_f32(ctx, r2 * batch_size)
+        self.ImT = slab_f32(ctx, r2 * batch_size)
+        self.ImT_inv = slab_f32(ctx, r2 * batch_size)
         self.guards = ctx.enqueue_create_buffer[DType.uint8](batch_size)
-        self.info_init = ctx.enqueue_create_buffer[DType.int32](batch_size)
-        self.info_loop = ctx.enqueue_create_buffer[DType.int32](batch_size)
-        self.pred = ctx.enqueue_create_buffer[DType.float32](n_obs * batch_size)
-        self.vs = ctx.enqueue_create_buffer[DType.float32](n_obs * batch_size)
-        self.Fs = ctx.enqueue_create_buffer[DType.float32](n_obs * batch_size)
-        self.loglike = ctx.enqueue_create_buffer[DType.float32](batch_size)
-        self.fc = ctx.enqueue_create_buffer[DType.float32](max(1, fc_steps * batch_size))
-        self.P0 = ctx.enqueue_create_buffer[DType.float32](rd2 * batch_size)
-        self.alpha0 = ctx.enqueue_create_buffer[DType.float32](rd * batch_size)
+        self.info_init = slab_i32(ctx, batch_size)
+        self.info_loop = slab_i32(ctx, batch_size)
+        self.pred = slab_f32(ctx, n_obs * batch_size)
+        self.vs = slab_f32(ctx, n_obs * batch_size)
+        self.Fs = slab_f32(ctx, n_obs * batch_size)
+        self.loglike = slab_f32(ctx, batch_size)
+        self.fc = slab_f32(ctx, max(1, fc_steps * batch_size))
+        self.P0 = slab_f32(ctx, rd2 * batch_size)
+        self.alpha0 = slab_f32(ctx, rd * batch_size)
         var with_exog = order.n_exog != 0
-        self.obs = ctx.enqueue_create_buffer[DType.float32](n_obs * batch_size if with_exog else 1)
-        self.obs_fut = ctx.enqueue_create_buffer[DType.float32](
+        self.obs = slab_f32(ctx, n_obs * batch_size if with_exog else 1)
+        self.obs_fut = slab_f32(ctx, 
             max(1, fc_steps * batch_size) if with_exog else 1
         )
 

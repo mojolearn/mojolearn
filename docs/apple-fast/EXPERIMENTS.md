@@ -746,3 +746,11 @@ Binding x_cluster (`x_cluster/minibatch_fast.mojo`), FAST + Apple only. Quality 
 | `MOJOLEARN_EIGH_TANGENT_CACHE` | eigh synthetic | lane/apple-fast-eigh-cache 14764dbb8 | gap26-eigh-cache-synthetic-ready | A 43721.3 -> B 44070.7 ms; quality pair PASS (B eigenvalue error 3.5e-7) | DROP-speed, opt-in only |
 | `MOJOLEARN_CAGRA_FAST_IVFG_LOWD` | cagra taxi | lane/apple-fast-w2-cagra 5d7d79cb5 | w2-cagra-lowd-q | taxi recall@10 A 0.997925 -> B 0.997125 (gate: B >= A); istella identical | DROP-quality; LOWD_SEEDS4 queued |
 | py2mojo decomp default | elliptic-envelope istella | lane/apple-fast-py2mojo-decomp 9a550d46c | py2mojo-decomp-elliptic-envelope-istella | A 1253937 -> B 1273419 ms (first valid timings for this row) | no gain |
+
+## Wave 3 AutoARIMA slab (lane/apple-fast-w3-arima, 2026-10-04)
+
+Binding arima (tsa rebuilt too: it imports the changed arima modules). FAST + Apple only, opt-in.
+
+| define | algorithm / dataset | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|
+| `MOJOLEARN_ARIMA_SLAB` | autoarima / synthetic, taxi-hourly | w2-w3arima-slab-* | NOT RUN | OPEN, opt-in | Hypothesis: per-launch Metal host cost grows ~0.25 us per live allocation (metal-launch-cost-scales-with-live-buffers); a search group holds ~165 separate buffers across ~45 launches per round, the maxiter-1000 refit ~70. `arima/impl/fast_slab.mojo` carves ARIMAParams / KalmanWorkspace / FastEvalWS / OrderOptimizer / grouped y from a few 64 MB chunks inside windows around each search group and each FAST async fit; zero-filled, storage only, so bytes must be identical. Not a retry of P_FIX / EXACT_STEADY / FIT_GROUPS (no arithmetic, no regrouping). Gate `tools/arima_slab_quality.sh` (512/2048 fixtures + 48-series 1392-obs board-shaped; orders, ic, d, params, llf, n_iter, retcode, predictions, forecasts byte-equal) before `tools/arima_slab_gated_timing.sh`. |

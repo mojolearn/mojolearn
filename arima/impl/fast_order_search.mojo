@@ -19,6 +19,7 @@ from arima.impl.estimate_x0 import estimate_x0_x
 from arima.impl.fast_eval_ws import FastEvalWS
 from arima.impl.fast_lbfgs_async import ASYNC_READ_EVERY
 from arima.impl.fast_order_state import ARIMA_ORDER_BATCH, OrderOptimizer
+from arima.impl.fast_slab import slab_begin, slab_end, slab_f32
 from arima.impl.timeSeries.arima_helpers import batched_jones_transform
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, pack, unpack, validate_order
 from tsa.impl.timeSeries.arima_helpers import prepare_data
@@ -88,9 +89,12 @@ def order_search_loglike(
                         members += bs * (orders[i].complexity() + 1)
                 if len(ids) == 0:
                     continue
+                # ARIMA_SLAB (opt-in): this group's buffers are views of
+                # the slab; an empty mark (no window) in other builds.
+                var slab_mark = slab_begin()
                 var group_order = ARIMAOrder(rd, 0, 0, 0, 0, 0, 0, 1, 0)
                 var group_ws = KalmanWorkspace(ctx, group_order, members, nkf, 0)
-                var group_y = ctx.enqueue_create_buffer[DType.float32](members * nkf)
+                var group_y = slab_f32(ctx, members * nkf)
                 var group_params = ARIMAParams(ctx, group_order, members)
                 var evals = List[FastEvalWS]()
                 var states = List[OrderOptimizer]()
@@ -157,6 +161,7 @@ def order_search_loglike(
                 _ = group_params^
                 _ = group_y^
                 _ = group_ws^
+                slab_end(ctx, slab_mark)
         _ = ykf^
         _ = exog^
         _ = y^

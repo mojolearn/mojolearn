@@ -60,6 +60,7 @@ A Float64 device arm is not offered; the refusal is by dtype.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
+from arima.impl.fast_slab import slab_f32
 
 
 #: DEVIATION 994: the widest exogenous design `estimate_x0` regresses. It is
@@ -168,13 +169,13 @@ struct ARIMAParams(Movable):
     var sigma2: DeviceBuffer[DType.float32]
 
     def __init__(out self, ctx: DeviceContext, order: ARIMAOrder, batch_size: Int) raises:
-        self.mu = ctx.enqueue_create_buffer[DType.float32](max(1, order.k * batch_size))
-        self.beta = ctx.enqueue_create_buffer[DType.float32](max(1, order.n_exog * batch_size))
-        self.ar = ctx.enqueue_create_buffer[DType.float32](max(1, order.p * batch_size))
-        self.ma = ctx.enqueue_create_buffer[DType.float32](max(1, order.q * batch_size))
-        self.sar = ctx.enqueue_create_buffer[DType.float32](max(1, order.P * batch_size))
-        self.sma = ctx.enqueue_create_buffer[DType.float32](max(1, order.Q * batch_size))
-        self.sigma2 = ctx.enqueue_create_buffer[DType.float32](max(1, batch_size))
+        self.mu = slab_f32(ctx, max(1, order.k * batch_size))
+        self.beta = slab_f32(ctx, max(1, order.n_exog * batch_size))
+        self.ar = slab_f32(ctx, max(1, order.p * batch_size))
+        self.ma = slab_f32(ctx, max(1, order.q * batch_size))
+        self.sar = slab_f32(ctx, max(1, order.P * batch_size))
+        self.sma = slab_f32(ctx, max(1, order.Q * batch_size))
+        self.sigma2 = slab_f32(ctx, max(1, batch_size))
 
 
 def pack_kernel(

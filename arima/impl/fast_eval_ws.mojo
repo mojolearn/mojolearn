@@ -51,6 +51,7 @@ from arima.impl.lbfgs_device import (
 from arima.impl.timeSeries.arima_helpers import batched_jones_transform
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, unpack, validate_order
 from checks.numerics import ftz, identical_div
+from arima.impl.fast_slab import slab_f32
 
 comptime EW_TPB = 128
 # FAST + Apple default after M3 gap26-arima-tail-{synthetic,taxi-hourly}:
@@ -183,13 +184,13 @@ struct FastEvalWS(Movable):
         var M1 = N + 1
         var eb = M1 * nb
         var nb_y = nb * n_obs
-        var y_ext = ctx.enqueue_create_buffer[DType.float32](max(1, eb * n_obs))
+        var y_ext = slab_f32(ctx, max(1, eb * n_obs))
         for m in range(M1):
             ctx.enqueue_copy(
                 dst_buf=y_ext.create_sub_buffer[DType.float32](m * nb_y, nb_y),
                 src_buf=d_y.create_sub_buffer[DType.float32](0, nb_y),
             )
-        var x_ext = ctx.enqueue_create_buffer[DType.float32](max(1, eb * N))
+        var x_ext = slab_f32(ctx, max(1, eb * N))
         var p_ext = ARIMAParams(ctx, order, eb)
         var t_params = ARIMAParams(ctx, order, eb)
         var ws = KalmanWorkspace(ctx, order, eb, n_obs, 0)
@@ -228,7 +229,7 @@ struct FastEvalWS(Movable):
                 dst_buf=y_ext.create_sub_buffer[DType.float32](m * nb_y, nb_y),
                 src_buf=d_y.create_sub_buffer[DType.float32](0, nb_y),
             )
-        var x_ext = ctx.enqueue_create_buffer[DType.float32](max(1, eb * N))
+        var x_ext = slab_f32(ctx, max(1, eb * N))
         var p_ext = ARIMAParams(ctx, order, eb)
         var t_params = ARIMAParams(ctx, order, eb)
         var ws = KalmanWorkspace(parent_ws, order, offset, eb, n_obs)

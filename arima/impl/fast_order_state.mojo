@@ -20,6 +20,7 @@ from arima.impl.fast_lbfgs_async import (
 from arima.impl.lbfgs_device import LBFGS_TPB, lbfgs_init_kernel
 from arima.impl.tsa.arima_common import ARIMAOrder
 from glm.impl.qn.qn_util import LBFGSParam
+from arima.impl.fast_slab import slab_f32, slab_i32
 
 # KEEP candidate for default promotion, M3 2026-10-04, source 7ba385b30:
 # gap26-orders-current-synthetic 13780.317 -> 9287.287 ms (-32.6%);
@@ -80,24 +81,24 @@ struct OrderOptimizer(Movable):
         var m = param.m
         var past = param.past if param.past > 0 else 0
         var grid = (bs + LBFGS_TPB - 1) // LBFGS_TPB
-        var ist = ctx.enqueue_create_buffer[DType.int32](max(1, I_N * bs))
-        var fst = ctx.enqueue_create_buffer[DType.float32](max(1, F_N * bs))
-        var x = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
-        var cand = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
-        var xp = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
-        var grad = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
-        var gradp = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
-        var gradc = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
-        var drt = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
-        var d_grad = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
-        var d_x_pert = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
-        var S = ctx.enqueue_create_buffer[DType.float32](max(1, b_n * m))
-        var Y = ctx.enqueue_create_buffer[DType.float32](max(1, b_n * m))
-        var yhist = ctx.enqueue_create_buffer[DType.float32](max(1, bs * m))
-        var alpha = ctx.enqueue_create_buffer[DType.float32](max(1, bs * m))
-        var fx_hist = ctx.enqueue_create_buffer[DType.float32](max(1, bs * (past if past > 0 else 1)))
-        var bad = ctx.enqueue_create_buffer[DType.int32](max(1, bs))
-        var any_active = ctx.enqueue_create_buffer[DType.int32](1)
+        var ist = slab_i32(ctx, max(1, I_N * bs))
+        var fst = slab_f32(ctx, max(1, F_N * bs))
+        var x = slab_f32(ctx, max(1, b_n))
+        var cand = slab_f32(ctx, max(1, b_n))
+        var xp = slab_f32(ctx, max(1, b_n))
+        var grad = slab_f32(ctx, max(1, b_n))
+        var gradp = slab_f32(ctx, max(1, b_n))
+        var gradc = slab_f32(ctx, max(1, b_n))
+        var drt = slab_f32(ctx, max(1, b_n))
+        var d_grad = slab_f32(ctx, max(1, b_n))
+        var d_x_pert = slab_f32(ctx, max(1, b_n))
+        var S = slab_f32(ctx, max(1, b_n * m))
+        var Y = slab_f32(ctx, max(1, b_n * m))
+        var yhist = slab_f32(ctx, max(1, bs * m))
+        var alpha = slab_f32(ctx, max(1, bs * m))
+        var fx_hist = slab_f32(ctx, max(1, bs * (past if past > 0 else 1)))
+        var bad = slab_i32(ctx, max(1, bs))
+        var any_active = slab_i32(ctx, 1)
         var flag_host = ctx.enqueue_create_host_buffer[DType.int32](1)
         var f_fx = fst.create_sub_buffer[DType.float32](F_FX * bs, max(1, bs))
         var f_fxc = fst.create_sub_buffer[DType.float32](F_FXC * bs, max(1, bs))

@@ -119,6 +119,7 @@ from arima.impl.batched_arima import (
 from arima.impl.batched_kalman import KALMAN_FAST_EVAL_WS
 from arima.impl.estimate_x0 import StartParamsResult, estimate_x0_x
 from arima.impl.fast_eval_ws import FastEvalWS
+from arima.impl.fast_slab import ARIMA_SLAB, slab_begin, slab_end
 from arima.impl.fast_order_state import ARIMA_ORDER_BATCH, order_min_lbfgs
 from arima.impl.fast_lbfgs_async import (
     ARIMA_FAST_ASYNC,
@@ -495,8 +496,15 @@ def batched_min_lbfgs(
     # whole solve (`-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1`, FAST on Apple, no
     # exog; `arima/impl/fast_eval_ws.mojo`). `None` in every other build.
     var ews = Optional[FastEvalWS]()
+    # ARIMA_SLAB (opt-in, fast_slab.mojo): the solve's FastEvalWS and
+    # OrderOptimizer buffers are slab views, opened only when the async
+    # branch below is certain to run (and close the window) for this call.
+    var slab_mark = List[Int]()
     comptime if KALMAN_FAST_EVAL_WS:
         if order_kf.n_exog == 0:
+            comptime if ARIMA_SLAB and ARIMA_FAST_ASYNC:
+                if not trace.enabled:
+                    slab_mark = slab_begin()
             ews = FastEvalWS(ctx, d_y_kf, bs, n_obs_kf, order_kf)
     comptime if ARIMA_FAST_ASYNC:
         # every series on its own schedule (fast_lbfgs_async.mojo); the
@@ -516,6 +524,7 @@ def batched_min_lbfgs(
             _ = d_x_pert^
             _ = scratch^
             _ = ews^
+            slab_end(ctx, slab_mark)
             return BatchedLBFGSResult(
                 x=ar.x.copy(), fx=ar.fx.copy(), n_iter=ar.n_iter.copy(),
                 retcode=ar.retcode.copy(), n_eval=ar.n_eval,
