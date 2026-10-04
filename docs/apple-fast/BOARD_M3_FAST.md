@@ -33,7 +33,7 @@ Canonical full-board summary (2026-10-04): 387 FAST rows, 377 eligible opponent 
 | lstm-clf | taxi-hourly | algos | 1879 | 1890 | torch-eager-fp32 (fill) | 729 | 2.58 | 2.59 |  | accuracy=0.868218, logloss=0.299901 | accuracy=0.8682, logloss=0.2999 | - | ok |
 | lstm-clf | synthetic | algos | 1878 | 1882 | torch-eager-fp32 (fill) | 729 | 2.58 | 2.58 |  | accuracy=0.968696, logloss=0.0724409 | accuracy=0.9687, logloss=0.07244 | - | ok |
 | cholesky | synthetic | algos | 960 | 261 | torch-gpu | 110 | 8.70 | 2.37 |  | relative_residual=1.6591e-07 | relative_residual=1.659e-07 | relative_residual=5.449e-07 | ok |
-| pca | istella | algos | 988 | 490 | sklearn-cpu | 205 | 4.82 | 2.39 |  | explained_variance_ratio_sum=1 | explained_variance_ratio_sum=1 | explained_variance_ratio_sum=1 | ok |
+| pca | istella | algos | 988 | 217.8 | sklearn-cpu | 205 | 4.82 | 1.06 |  | explained_variance_ratio_sum=1 | explained_variance_ratio_sum=1 | explained_variance_ratio_sum=1 | ok |
 | permutation-shap | istella | algos | 17214 | 28236 | shap-cpu | 12335 | 1.40 | 2.29 |  | rel_error_vs_exact=5.33875e-09 | rel_error_vs_exact=5.339e-09 | rel_error_vs_exact=3.692e-10 | ok |
 | lu-factor | synthetic | algos | 2323 | 849 | scipy-cpu | 428 | 5.43 | 1.98 |  | relative_residual=3.2563e-06 | relative_residual=3.248e-06 | relative_residual=3.246e-06 | ok |
 | svgp | istella | algos | 1495 | 228 | gpytorch-cpu | 307 | 4.86 | 0.74 | FLIP faster | r2=-0.106016, rmse=0.878373 | r2=-0.106, rmse=0.8784 | r2=-0.106, rmse=0.8784 | ok |
@@ -440,3 +440,5 @@ Sources: before = M3 0.8.34 board (classical), M3 2026-09-29 board FAST cells (t
 - Accounting correction, 2026-10-04: ARD istella was incorrectly included because its quality flag did not match the page exclusion prefixes. Corrected the flag and row status, preserving all timings. Headline 351/378 -> 350/377 is an exclusion, not a performance change; the three accepted wave-4 flips remain.
 
 - Eigh panel-parallel default, 2026-10-04: measured `e79a96e03`, `w2-eigh-panels-t-20261004` A 43765.6 -> B 700.3 ms; quality captures `w2-eigh-panels-q-20261004` pass the handoff-authorized no-worse-than-main criterion for all eight fixtures, exact B<=A with no allowance. Fixed absolute eigenvalue target 3.5e-7 and Gram orthogonality target still fail; the opponent-quality hold remains and this row adds no qualified winner. Source `10cedc640`, M2 default and `MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF` both rc=0, merge `eb97b0948`. Original single-block factor launch replaced by all-panel parallel preparation; ordinary synchronized outputs retained.
+
+- PCA pooling accepted 2026-10-04: measured34b4f6c72, w2-w4d-pca-istella-r1 471.2 ->217.8ms; promotion906fe59c9 M2 default/OFF rc0, merged d8e7825cf. Same-input repeated-fit reconstruction differences lie within observed A range; arithmetic unchanged, eager synchronized outputs. Still slower than existing205ms opponent; no new winner.

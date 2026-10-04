@@ -818,9 +818,9 @@ not retroactive validation of SKIP. DEFLATE remains HOLD for changed flags.
 
 | `MOJOLEARN_DECOMP_FAST_MMA_K16` | standalone decomposition GEMM, non-split only | lane/apple-fast-decomp-mma-k16@d487c814fe59d35de111d392751af9e6ce06eb66 | w2-mma-k16-q-20261004; w2-mma-k16-t-20261004 | 12 oracle fixtures PASS; dense4096 call+read 85.504250 -> 91.724583 ms (resident 43.152292 -> 47.424042); update4096x256x4096 36.670541 -> 36.401583 (resident 30.276000 -> 30.508875) | HOLD-speed: dense slower, update essentially unchanged. No caller timings/default/board changes. Harness calls transpose1024 a changed shape, but dispatcher yields256 tiles and2 splits, so it is an UNCHANGED control, alongside Gram/thin controls. Its apparent host gain6.389875 ->3.939625 cannot be attributed to K16. One scored call per route/arm retained; no replay. Resident completion timing is a fence-inclusive observation, not pure GPU throughput. |
 
-## W4 PCA pool isolated promotion proposal (2026-10-04)
+## W4 PCA pool isolated promotion (2026-10-04)
 
-`MOJOLEARN_PCA_FAST_POOL_OFF`: proposed FAST Apple default, not yet merged.
+`MOJOLEARN_PCA_FAST_POOL_OFF`: FAST Apple DEFAULT, merged d8e7825cf; M2 default/OFF rc0 at promotion906fe59c9.
 Measured source `34b4f6c72b489c16f8333ef1416ac23fd143cd59`, timing
 `w2-w4d-pca-istella-r1`: M3 Istella 471.2 -> 217.8 ms. Quality
 `w2-w4d-pca-q`: PASS 16 checks, 200,000 x 220 seeded ill-scaled input,
@@ -828,9 +828,9 @@ three consecutive fits to exercise dirty pool reuse, ten components;
 means identical, eigenvalue relative differences about 1e-6, component
 angles about 2e-6 to 3.5e-6 rad, reconstruction absolute differences
 1e-12 to 1.6e-11. NaN refusal checked. Values are A/B differences, not
-independent-reference accuracy claims. Final manager review remains required.
+independent-reference accuracy claims. Manager source and noise evidence review completed.
 
-This proposal is isolated on main `f690a6308`: estimators binding plus
+This promotion is isolated on main `f690a6308`: estimators binding plus
 PCA input pool/unused aliases only. No RSVD, LLE, KPCA or eigensolver changes.
 The unchanged covariance MMA arm reads neither alias buffer; its input is
 fully overwritten from the caller before reuse. Pool return follows final
@@ -844,7 +844,7 @@ Source comparison found no intervening change in this PCA numerical path;
 main's newer x_decomp host eigh dispatch is a separate implementation.
 FAST Apple and existing PCA_FAST_GRAM_MMA eligibility are retained; split-K
 cases and IDENTICAL remain on fresh allocation. `_OFF` restores the original
-allocation policy. Pending M2 default/OFF compile and promotion validation;
+allocation policy. M2 default/OFF builds passed;
 no local compilation or timing was run. Broader shapes and modes were not
 newly measured by this quality fixture.
 
@@ -866,3 +866,5 @@ taxi 200.8 -> 198.5 ms are under 5% at n=1, HOLD-speed/noise. LLE taxi
 from 0.5841975142761169 to 0.584208390251185. LLE remains HOLD-quality:
 an absolute-difference PASS alone cannot establish no regression and no
 same-arm noise evidence is yet recorded. No LLE default proposal prepared.
+
+Catalog G1/G5 standalone6abb76673, w2-catalog-g1g5-q-20261004-r2: HOLD for unrestricted use. Eleven cases byte-identical to incumbent; only NT vector79x1,K65 regresses scaled error7.05755e-9 ->1.78820e-8. Preserve existing GEMV fallback; shared adapter predeclares this exclusion and needs its own quality evidence. Callpath r2 failed import (missing PyInit export), not numerical quality; repair required.
