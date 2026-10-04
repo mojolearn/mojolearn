@@ -7,6 +7,9 @@ check compares retained columns, including exact hashes and structural N/A.
 Receipts are evidence from a trusted collector, not cryptographic attestation.
 Even full agreement is limited to the observed hardware/driver combinations;
 this tool never edits the runtime admission policy or qualifies a release.
+Both roles require the installed core COMMIT witness. Native references also
+require the installed release payload inventories and exact loaded-file hashes;
+a new harness checkout cannot confer its source SHA on an old native wheel.
 
 On an installed experimental wheel, with the frozen source checkout present:
   MOJOLEARN_CUDA_PATH=ptx-baseline MOJOLEARN_EXPERIMENTAL_PTX=1 \
@@ -22,6 +25,8 @@ Omit --lanes/--fixtures to collect the whole applicable registry. Cold-cache,
 warm-cache, fresh-process and additional driver runs should retain separate
 receipts. Comparisons use the existing harness's output fingerprints, not a
 proof covering untested inputs or every public algorithm.
+The --manifest path may point to an external retained build artifact; loaded
+files are resolved against the installed loader's validated baseline root.
 """
 import argparse
 import hashlib
@@ -57,6 +62,67 @@ def write(path, value):
     with Path(path).open('x') as stream:
         json.dump(value, stream, indent=2, sort_keys=True)
         stream.write('\n')
+
+
+def document_sha(document):
+    return hashlib.sha256(json.dumps(document, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+def installed_source_evidence(package_dir, backend, role, source, loaded):
+    """Read actual installed core/payload provenance, never infer it from Git."""
+    package_dir = Path(package_dir).resolve()
+    commit_text = (package_dir / 'identity_columns/COMMIT').read_text()
+    require(commit_text.strip() == source, 'Installed core source differs from frozen source')
+    evidence = dict(core_commit=commit_text,
+                    core_commit_sha256=hashlib.sha256(commit_text.encode()).hexdigest(), inventories=[])
+    if role == 'native-reference':
+        plugin = backend.gpu_plugin() or {}
+        for name in ['mojolearn', *plugin.get('payloads', [])]:
+            dist = backend._find_distribution(name, [str(package_dir.parent)])
+            require(dist is not None, 'Missing installed distribution: ' + name)
+            raw = dist.read_text('LINUX_PAYLOAD.json')
+            require(raw is not None, 'Native reference requires installed LINUX_PAYLOAD provenance: ' + name)
+            doc = json.loads(raw)
+            require(doc.get('schema') == 'mojolearn.linux-payload.v1' and doc.get('source_commit') == source,
+                    'Native payload inventory source differs: ' + name)
+            evidence['inventories'].append(dict(distribution=name, document=doc,
+                document_sha256=document_sha(doc), installed_text_sha256=hashlib.sha256(raw.encode()).hexdigest()))
+        for row in loaded:
+            row['installed_member'] = Path(row['file']).resolve().relative_to(package_dir.parent).as_posix()
+    validate_installed_evidence(evidence, role, source, loaded)
+    return evidence
+
+
+def validate_installed_evidence(evidence, role, source, loaded):
+    text = evidence.get('core_commit', '')
+    require(isinstance(text, str) and text.strip() == source
+            and evidence.get('core_commit_sha256') == hashlib.sha256(text.encode()).hexdigest(),
+            'Missing or stale installed core source witness')
+    if role != 'native-reference':
+        return
+    docs = evidence.get('inventories', [])
+    require(docs and len({r['distribution'] for r in docs}) == len(docs),
+            'Missing or duplicate installed native inventories')
+    owned = {}
+    for row in docs:
+        doc = row.get('document', {})
+        require(doc.get('schema') == 'mojolearn.linux-payload.v1' and doc.get('source_commit') == source
+                and row.get('document_sha256') == document_sha(doc)
+                and re.fullmatch('[0-9a-f]{64}', str(row.get('installed_text_sha256', ''))),
+                'Invalid installed native inventory source or document hash')
+        split = doc.get('split', {})
+        require(split.get('distribution') == row['distribution'], 'Native inventory ownership differs')
+        hashes = dict(doc.get('extensions', {}))
+        hashes.update({r['archive_path']: r['sha256'] for r in doc.get('host_native', {}).values()})
+        for member in split.get('native_members', []):
+            if member in hashes:
+                require(member not in owned, 'Two native inventories own the same loaded path')
+                owned[member] = hashes[member]
+    for row in loaded:
+        member = row.get('installed_member', '')
+        require(member.startswith(('mojolearn/cuda_native/', 'mojolearn/host/'))
+                and owned.get(member) == row['sha256'],
+                'Loaded native bytes differ from installed payload inventory')
 
 
 def modules():
@@ -199,6 +265,7 @@ def validate_receipt(receipt, column, manifest, manifest_hash, files, harness_ha
             entry = files.get(row.get('file'))
             require(entry is not None and entry['sha256'] == row['sha256']
                     and entry.get('numeric_mode') == 'identical', 'Loaded bytes are not IDENTICAL baseline payload')
+    validate_installed_evidence(receipt.get('installed_source', {}), role, manifest['source_commit'], loaded)
     if role == 'baseline':
         require(selection.get('manifest_sha256') == manifest_hash, 'Different baseline payload manifest')
         require(any(not row['module'].endswith('_host') for row in loaded), 'No GPU binding executed')
@@ -277,6 +344,8 @@ def collect(args):
     expected = 'ptx-baseline' if args.role == 'baseline' else 'native'
     plugin = _backend.gpu_plugin() or {}
     require(plugin.get('code_format') == expected, 'Loader did not select requested code format')
+    installed_source_evidence(Path(ml.__file__).resolve().parent, _backend,
+                              args.role, manifest['source_commit'], [])
     # An ambiguous physical-device mapping cannot become a qualification receipt.
     smi = subprocess.check_output(['nvidia-smi', '--query-gpu=uuid,name,compute_cap,driver_version',
                                   '--format=csv,noheader,nounits'], text=True).strip().splitlines()
@@ -306,11 +375,16 @@ def collect(args):
     for row in binding_artifacts():
         item = dict(module=row['module'], sha256=row['sha256'], file=row['file'])
         if args.role == 'baseline' and not row['module'].endswith('_host'):
-            relative = str(Path(row['file']).resolve().relative_to(manifest_path.parent))
+            # --manifest can be the external build artifact. Resolve actual
+            # imports against the root validated by the installed loader.
+            baseline_root = Path(_backend._BASELINE_ROOT).resolve()
+            relative = str(Path(row['file']).resolve().relative_to(baseline_root))
             require(relative in files and files[relative]['sha256'] == row['sha256'],
                     'A loaded GPU binding is outside the baseline payload')
             item['file'] = relative
         loaded.append(item)
+    installation = installed_source_evidence(Path(ml.__file__).resolve().parent, _backend,
+                                            args.role, manifest['source_commit'], loaded)
     if args.role == 'baseline':
         runtime = _backend.baseline_selection_receipt()
         require(runtime.get('schema') == 'mojolearn.ptx-baseline-selection.v1'
@@ -326,6 +400,7 @@ def collect(args):
                    source_commit=manifest['source_commit'], harness_sha256=harness_digest(),
                    hardware=dict(uuid=uuid, name=name, compute_capability=[int(x) for x in cap.split('.')]),
                    driver_version=driver, exit_code=0, lanes=lanes, fixtures=fixtures,
+                   installed_source=installation,
                    column_file=column.name, column_sha256=sha(column),
                    selection=dict(requested=expected, selected=expected, native_fallback=False,
                                   manifest_sha256=sha(manifest_path), loaded_files=loaded,

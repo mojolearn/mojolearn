@@ -57,6 +57,17 @@ def campaign(tmp_path, monkeypatch):
         receipt['selection']['runtime_receipt'] = dict(schema='mojolearn.ptx-baseline-selection.v1',
             source_commit='a' * 40, manifest_sha256=q.sha(manifest_path), requested=fmt, selected=fmt,
             native_fallback=False, loaded_files=[dict(file='identical/_mojolearn.so', sha256=q.sha(payload))])
+        commit_text = 'a' * 40 + '\n'
+        receipt['installed_source'] = dict(core_commit=commit_text,
+            core_commit_sha256=q.hashlib.sha256(commit_text.encode()).hexdigest(), inventories=[])
+        if role == 'native-reference':
+            member = 'mojolearn/cuda_native/sm_89/identical/_mojolearn.so'
+            receipt['selection']['loaded_files'][0]['installed_member'] = member
+            doc = dict(schema='mojolearn.linux-payload.v1', source_commit='a' * 40,
+                split=dict(distribution='mojolearn-nvidia-sm89', native_members=[member]),
+                extensions={member: q.sha(payload)})
+            receipt['installed_source']['inventories'] = [dict(distribution='mojolearn-nvidia-sm89',
+                document=doc, document_sha256=q.document_sha(doc), installed_text_sha256='e' * 64)]
         path = tmp_path / f'{i}.json'
         q.write(path, receipt)
         receipts.append(path)
@@ -92,6 +103,8 @@ def test_complete_observed_agreement_does_not_enable_identical(campaign):
     lambda r: r.update(exit_code=1),
     lambda r: r.update(column_sha256='b' * 64),
     lambda r: r.update(driver_version=''),
+    lambda r: r.pop('installed_source'),
+    lambda r: r['installed_source'].update(core_commit='b' * 40 + '\n'),
     lambda r: r['hardware'].update(uuid=''),
     lambda r: r['hardware'].update(compute_capability=[7, 5]),
     lambda r: r['selection'].update(selected='native'),
@@ -191,9 +204,18 @@ def test_collector_binds_actual_loaded_files_to_runtime_path(campaign, monkeypat
     backend = types.ModuleType('mojolearn._backend')
     backend.gpu_plugin = lambda: {'code_format': 'ptx-baseline'}
     backend.baseline_selection_receipt = lambda: runtime
+    installed = campaign.manifest.parent / 'site-packages' / 'mojolearn'
+    baseline_root = installed / 'cuda_ptx' / 'sm_80'
+    installed_payload = baseline_root / 'identical' / '_mojolearn.so'
+    installed_payload.parent.mkdir(parents=True)
+    installed_payload.write_bytes(campaign.payload.read_bytes())
+    (installed / 'identity_columns').mkdir()
+    (installed / 'identity_columns/COMMIT').write_text('a' * 40 + '\n')
+    backend._BASELINE_ROOT = str(baseline_root)
     verifier = types.ModuleType('mojolearn._verify')
-    verifier.binding_artifacts = lambda: [dict(module='_mojolearn', file=str(campaign.payload), sha256=q.sha(campaign.payload))]
+    verifier.binding_artifacts = lambda: [dict(module='_mojolearn', file=str(installed_payload), sha256=q.sha(installed_payload))]
     package = types.ModuleType('mojolearn')
+    package.__file__ = str(installed / '__init__.py')
     package.vendor = lambda: 'cuda'
     package.numeric_mode = lambda: 'identical'
     package._backend = backend
@@ -221,3 +243,52 @@ def test_collector_binds_actual_loaded_files_to_runtime_path(campaign, monkeypat
         assert receipt['selection']['runtime_receipt'] == runtime
         assert receipt['column_sha256'] == q.sha(out.with_suffix('.column.json'))
         assert receipt['selection']['loaded_files'][0]['file'] == 'identical/_mojolearn.so'
+
+
+@pytest.mark.parametrize('mutation', [
+    lambda r: r['installed_source'].update(inventories=[]),
+    lambda r: r['installed_source']['inventories'][0]['document'].update(source_commit='b' * 40),
+    lambda r: r['installed_source']['inventories'][0].update(document_sha256='b' * 64),
+    lambda r: r['selection']['loaded_files'][0].update(installed_member='mojolearn/cuda_ptx/sm_80/identical/_mojolearn.so'),
+    lambda r: r['installed_source']['inventories'][0]['document']['extensions'].update(
+        {'mojolearn/cuda_native/sm_89/identical/_mojolearn.so': 'b' * 64}),
+])
+def test_old_or_unwitnessed_native_wheels_cannot_borrow_harness_source(campaign, mutation):
+    alter(campaign.receipts[2], mutation)
+    with pytest.raises(ValueError):
+        q.check(campaign.manifest, campaign.receipts)
+
+
+def test_installed_core_source_is_checked_independently_of_checkout(tmp_path):
+    package = tmp_path / 'mojolearn'
+    (package / 'identity_columns').mkdir(parents=True)
+    (package / 'identity_columns/COMMIT').write_text('b' * 40 + '\n')
+    with pytest.raises(ValueError, match='Installed core source differs'):
+        q.installed_source_evidence(package, None, 'baseline', 'a' * 40, [])
+
+
+def test_native_collection_reads_installed_distribution_inventory(tmp_path):
+    package = tmp_path / 'mojolearn'
+    (package / 'identity_columns').mkdir(parents=True)
+    (package / 'identity_columns/COMMIT').write_text('a' * 40 + '\n')
+    member = 'mojolearn/cuda_native/sm_89/identical/_mojolearn.so'
+    binary = tmp_path / member
+    binary.parent.mkdir(parents=True)
+    binary.write_bytes(b'native test')
+    docs = {name: dict(schema='mojolearn.linux-payload.v1', source_commit='a' * 40,
+                      split=dict(distribution=name, native_members=[]), extensions={})
+            for name in ('mojolearn', 'mojolearn-nvidia-sm89')}
+    docs['mojolearn-nvidia-sm89']['split']['native_members'] = [member]
+    docs['mojolearn-nvidia-sm89']['extensions'][member] = q.sha(binary)
+    backend = SimpleNamespace(gpu_plugin=lambda: dict(payloads=['mojolearn-nvidia-sm89']),
+        _find_distribution=lambda name, paths: SimpleNamespace(read_text=lambda file: json.dumps(docs[name])))
+    loaded = [dict(module='_mojolearn', file=str(binary), sha256=q.sha(binary))]
+    evidence = q.installed_source_evidence(package, backend, 'native-reference', 'a' * 40, loaded)
+    assert loaded[0]['installed_member'] == member and len(evidence['inventories']) == 2
+    docs['mojolearn-nvidia-sm89']['source_commit'] = 'b' * 40
+    with pytest.raises(ValueError, match='inventory source differs'):
+        q.installed_source_evidence(package, backend, 'native-reference', 'a' * 40, loaded)
+    docs['mojolearn-nvidia-sm89']['source_commit'] = 'a' * 40
+    docs['mojolearn-nvidia-sm89']['extensions'][member] = 'b' * 64
+    with pytest.raises(ValueError, match='Loaded native bytes differ'):
+        q.installed_source_evidence(package, backend, 'native-reference', 'a' * 40, loaded)
