@@ -51,8 +51,13 @@ comptime X_PREP_STAGED_OUT = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_
                               and not is_defined["MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF"]())
 comptime _XP_STAGE_POOL = "MojoXPrepDownloadStagesFast"
 
-#: lane/apple-fast-w2-prep (2026-10-04), CANDIDATE, opt-in: -D MOJOLEARN_X_PREP_POOL_ARENA
-#: (FAST + Apple only; IDENTICAL and other vendors compile none of it). The
+#: lane/apple-fast-w2-prep (2026-10-04), DEFAULT in FAST + Apple; rollback
+#: -D MOJOLEARN_X_PREP_POOL_ARENA_OFF (IDENTICAL and other vendors compile
+#: none of it). M3, one run per arm: label-binarizer taxi 319.9 -> 270.4 ms,
+#: multilabel-binarizer taxi 175.6 -> 167.5 ms, istella 129.3 -> 125.7 ms;
+#: w2-pool-quality PASS (25 output arrays sha256-identical A vs B, dirty-buffer
+#: repeats). Cost: up to POOL_KEEP_BYTES (2 GB) of idle device memory stays
+#: held by the pool between programs. The
 #: program's device buffer `df` (arena + scratch + output region) comes from
 #: core/device_pool.mojo instead of a fresh allocation when it is at least
 #: _XP_POOL_MIN_WORDS long, and goes back to the pool after the final wait.
@@ -71,7 +76,7 @@ comptime _XP_STAGE_POOL = "MojoXPrepDownloadStagesFast"
 #: Copies and clears only: no bit moves. Idle pooled bytes are capped by
 #: core/device_pool.mojo POOL_KEEP_BYTES (2 GB).
 comptime X_PREP_POOL_ARENA = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                             and is_defined["MOJOLEARN_X_PREP_POOL_ARENA"]())
+                             and not is_defined["MOJOLEARN_X_PREP_POOL_ARENA_OFF"]())
 comptime _XP_DF_POOL = "MojoXPrepArenaPoolFast"
 #: 2^24 words = 64 MB: smaller programs keep the fresh allocation
 comptime _XP_POOL_MIN_WORDS = 1 << 24

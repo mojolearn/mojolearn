@@ -233,7 +233,7 @@ def label_present_binding() raises -> PythonObject:
 
 
 def pool_arena_binding() raises -> PythonObject:
-    """Present only in a -D MOJOLEARN_X_PREP_POOL_ARENA FAST Apple build (a probe for checkers)."""
+    """Present only in a FAST Apple build with X_PREP_POOL_ARENA on (default; absent under -D MOJOLEARN_X_PREP_POOL_ARENA_OFF). A probe for checkers."""
     return PythonObject(1)
 
 
