@@ -970,3 +970,21 @@ are per-tested-shape leads, not broad regime guarantees. Resident screen will
 compare the same kernels under a distinct resident-input contract. Scoped
 stride/split-aware decomposition/PCA adapters are in source preparation; no
 production GEMM default promoted and no dataset-specific dispatch introduced.
+
+Resident GEMM66recordscreen completed with alloutputsexact, no qualityreview
+flags. See RESIDENT_GEMM_RESULTS_2026-10-04.md: G1tall6.826875->3.524209ms,
+G1Gram3.563291->2.027875ms, G2narrow1.203750->0.865625ms. SquareNNincumbent
+remainsbest. These individualleads guide scopedcallerwork; no universalwinner
+required, no broadregime/defaultclaim. Allmeasuredrecordsretained, noreplay.
+
+G5same-source495c30c3+harnessf40649e0: OLS65/PCA65/wide-kKNN65/KMeans65 all M3qualityPASS under g5-downstream-*-d65-q-v1. The KMeans IDENTICAL base prerequisite was verified before fits, resolving the missingbinding infrastructureissue without changing math. No actualcaller speed claim yet.
+
+ARIMA K3 actual-tail102e0d70a: arima-k3-actual-tail-quality HOLD. Thirteen
+groups total: n1PASS, twelve longerHOLD; fourcontrolsPASS. All saved input,
+stage and likelihood hashes match earlier test, isolating actual-tail correction.
+Gradient regressions against independent reference decrease53->49 of648
+components (345 other changed components improve). Prediction/variance/finalP
+pass; seveninnovation andthirteenlikelihood checks fail. No timing or promotion.
+Compensated residual/likelihood lowword reference candidate planned; no change
+to fixed finite-difference step or thresholds. Fixture supplies common states;
+it does not certify production initializer/Jones transformation equivalence.
