@@ -70,6 +70,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     hist2_level_quantize_kernel,
     snap_gradients_to_scale_kernel,
     snap_plane_to_scale_kernel,
+    snap_plane_to_scale_dev_kernel,
 )
 from checks.numerics import numeric_mode_name
 from std.os import getenv
@@ -2150,6 +2151,25 @@ def enqueue_snap_plane(
             return
         ctx.enqueue_function[snap_plane_to_scale_kernel](
             plane.unsafe_ptr(), Int32(n), fixed_scale,
+            grid_dim=((n + LEVEL_QUANT_BLOCK - 1) // LEVEL_QUANT_BLOCK, 1, 1),
+            block_dim=(LEVEL_QUANT_BLOCK, 1, 1),
+        )
+
+
+def enqueue_snap_plane_dev(
+    ctx: DeviceContext,
+    mut plane: DeviceBuffer[DType.float32],
+    n: Int,
+    scale_word: MutPointer[Float32, MutAnyOrigin],
+) raises:
+    """T5 drain (lane cpu3-gbdt-a): `enqueue_snap_plane` with the scale a
+    device word (`snap_plane_to_scale_dev_kernel`); same gate, same
+    geometry, same arithmetic."""
+    comptime if acc_i32_is_live[HIST2_SMEM_MODE]():
+        if n < 1:
+            return
+        ctx.enqueue_function[snap_plane_to_scale_dev_kernel](
+            plane.unsafe_ptr(), Int32(n), scale_word,
             grid_dim=((n + LEVEL_QUANT_BLOCK - 1) // LEVEL_QUANT_BLOCK, 1, 1),
             block_dim=(LEVEL_QUANT_BLOCK, 1, 1),
         )
