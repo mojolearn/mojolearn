@@ -124,13 +124,15 @@ struct _MT19937(Movable):
     var idx: Int
 
     def __init__(out self, seed: UInt32):
-        self.mt = List[UInt32](capacity=624)
-        self.mt.append(seed)
-        for i in range(1, 624):
-            var prev = UInt64(self.mt[i - 1])
-            var v = (UInt64(1812433253) * (prev ^ (prev >> 30)) + UInt64(i)) & UInt64(0xFFFFFFFF)
-            self.mt.append(UInt32(v))
         self.idx = 624
+        var mt = List[UInt32](capacity=624)
+        mt.append(seed)
+        var prev = UInt64(seed)
+        for i in range(1, 624):
+            var v = (UInt64(1812433253) * (prev ^ (prev >> 30)) + UInt64(i)) & UInt64(0xFFFFFFFF)
+            mt.append(UInt32(v))
+            prev = v
+        self.mt = mt^
 
     def _twist(mut self):
         for k in range(624):
