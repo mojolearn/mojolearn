@@ -249,7 +249,8 @@ def kde_score_samples_resident(
     # it straight into `scores`, one synchronize for the call. Every other
     # build runs main's sequence below unchanged.
     comptime if KDE2_SAMPLE_FUSED:
-        if not trace.enabled and n_features <= KDE_FUSED_TILE_FLOATS:
+        # `want_total` (KernelDensity.score) takes main's sequence: its device sum needs `dout`
+        if not trace.enabled and not want_total and n_features <= KDE_FUSED_TILE_FLOATS:
             kde2_score_samples_fast_apple_to_host(
                 entry.ctx, entry.train, dquery, entry.weights, entry.has_weights,
                 entry.sum_w, entry.n_train, n_query, n_features, bandwidth, k, m,
@@ -258,7 +259,7 @@ def kde_score_samples_resident(
             _ = host^
             _ = dquery^
             _ = dout^
-            return
+            return Float32(0)
     score_samples(
         entry.ctx, dquery, entry.train, entry.weights, entry.has_weights, dout,
         n_query, entry.n_train, n_features, bandwidth, entry.sum_w, k, m,
