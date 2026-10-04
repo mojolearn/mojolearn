@@ -109,6 +109,9 @@ comptime SYM_CTR_ALL = is_defined["MOJOLEARN_SYM_CTR_ALL"]()
 #: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
 #: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,
 #: never timed.
+#: EXPERIMENTS.md (Oct 4): sym-ctr-prep-shared-taxicat-x on the old batch
+#: base 3150d75c1, 27,548 -> 26,357 ms (-4.3%), AUC .631249 -> .630964,
+#: HOLD (old base; quality noise not established). Owed: current-main A/B.
 comptime CTR_PREP_SHARED = _SYM_CTR_FAST_APPLE and (
     is_defined["MOJOLEARN_CTR_PREP_SHARED"]() or SYM_CTR_ALL
 )
@@ -124,6 +127,9 @@ comptime CTR_SORT_ONCE = _SYM_CTR_FAST_APPLE and (
 #: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,
 #: never timed. Port: main removed CTR_PERM_PTRS, the sibling arm the source
 #: sat next to in train(); dropped.
+#: EXPERIMENTS.md (Oct 4): sym-ctr-index-fused-taxicat-x on the old batch
+#: base 3150d75c1, 27,240 -> 25,566 ms (-6.1%), AUC .630808 -> .630766,
+#: HOLD (old base). Owed: current-main A/B.
 comptime CTR_INDEX_FUSED = _SYM_CTR_FAST_APPLE and (
     is_defined["MOJOLEARN_CTR_INDEX_FUSED"]() or SYM_CTR_ALL
 )
