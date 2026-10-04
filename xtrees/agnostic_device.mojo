@@ -36,6 +36,19 @@ comptime AGN_TPB = 128
 #:   (-43.3%), rel_error_vs_exact 4.378e-09 both arms.
 comptime _AGN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime KSHAP_FAST_BATCH = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_KSHAP_FAST_BATCH_OFF"]()
+#: lane idn-shap-pca (2026-10-04), the IDENTICAL default on NVIDIA, AMD and
+#: Apple (-D MOJOLEARN_AGN_IDN_SYN_POOL_OFF restores the per-chunk buffers):
+#: MOJOLEARN_AGN_IDN_SYN_POOL  the explainers' synthetic matrix is built in
+#:   the one pooled device buffer (no 100-400 MB device allocation per
+#:   chunk; Permutation SHAP on a 220-feature table is one chunk a row) and
+#:   the Python glue hands every chunk the same host buffer (no fresh pages
+#:   per chunk), the FAST + Apple MOJOLEARN_KSHAP_FAST_BATCH buffer handling.
+#:   Bit-inert: the same units write the same words to the same offsets; the
+#:   host column builds the matrix in the caller's buffer either way.
+comptime AGN_IDN_SYN_POOL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_AGN_IDN_SYN_POOL_OFF"]()
+)
+comptime _AGN_SYN_POOL = KSHAP_FAST_BATCH or AGN_IDN_SYN_POOL
 comptime AGN_MAX_BLOCKS = 65535 * 16
 comptime _CTX = "MojoXTreesAgnosticIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXTreesAgnosticFast"
 
@@ -205,7 +218,9 @@ struct _Masks(Movable):
 
 struct _AgnPool(Defaultable, Movable):
     """The process's pooled synthetic-matrix device buffer
-    (MOJOLEARN_KSHAP_FAST_BATCH): grown on demand, never shrunk."""
+    (MOJOLEARN_KSHAP_FAST_BATCH, MOJOLEARN_AGN_IDN_SYN_POOL): grown on
+    demand, never shrunk. One pool per tier (its buffer belongs to that
+    tier's device context)."""
     var syn: Optional[DeviceBuffer[DType.float32]]
     var cap: Int
 
@@ -214,7 +229,11 @@ struct _AgnPool(Defaultable, Movable):
         self.cap = 0
 
 
-comptime AGN_POOL = _Global[StorageType=_AgnPool, name="MojoXTreesAgnosticSynPoolFast", init_fn=_AgnPool.__init__]
+comptime _AGN_POOL_NAME = (
+    "MojoXTreesAgnosticSynPoolIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    else "MojoXTreesAgnosticSynPoolFast"
+)
+comptime AGN_POOL = _Global[StorageType=_AgnPool, name=_AGN_POOL_NAME, init_fn=_AgnPool.__init__]
 
 
 def _pool_syn(ctx: DeviceContext, total: Int) raises -> F32P:
@@ -246,7 +265,7 @@ def kshap_synth(x: Int, bg: Int, size_off: Int, size_w: Int, cdf: Int, syn: Int,
     var mk = _Masks(ctx, size_off, size_w, cdf, R, d, m, nfixed, nfull, npaired, L, seed, row0, wrand)
     var dx = _up_f32(ctx, x, R * d)
     var dbg = _up_f32(ctx, bg, nb * d)
-    comptime if KSHAP_FAST_BATCH:
+    comptime if _AGN_SYN_POOL:
         var ps = _pool_syn(ctx, total)
         ctx.enqueue_function[ksynth_kernel](
             Int64(total), Int32(nb), Int32(d), Int32(m), dx.unsafe_ptr(), dbg.unsafe_ptr(), mk.masks.unsafe_ptr(),
@@ -432,7 +451,7 @@ def pshap_synth(x: Int, bg: Int, syn: Int, R: Int, nb: Int, d: Int, np: Int, see
     _perms(ctx, R, d, np, seed, row0, perm, inv)
     var dx = _up_f32(ctx, x, R * d)
     var dbg = _up_f32(ctx, bg, nb * d)
-    comptime if KSHAP_FAST_BATCH:
+    comptime if _AGN_SYN_POOL:
         var ps = _pool_syn(ctx, total)
         ctx.enqueue_function[psynth_kernel](
             Int64(total), Int32(nb), Int32(d), Int32(np), dx.unsafe_ptr(), dbg.unsafe_ptr(), inv.unsafe_ptr(),

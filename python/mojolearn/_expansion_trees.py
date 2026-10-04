@@ -471,6 +471,11 @@ _TE_ADA_SESSION_SHARE = 4
 #     the synthetic rows across chunks and KernelExplainer solves many rows
 #     per launch sweep (`x_trees_kshap_means` + `x_trees_kshap_solve_ey`).
 _KSHAP_FAST_BATCH = 8
+#   MOJOLEARN_AGN_IDN_SYN_POOL (lane idn-shap-pca; an IDENTICAL build's
+#     switch, -D MOJOLEARN_AGN_IDN_SYN_POOL_OFF clears it): Kernel/Permutation
+#     SHAP hand every chunk the same host buffer for the synthetic rows (the
+#     device side builds them in one pooled buffer). Moves no bit.
+_AGN_IDN_SYN_POOL = 16
 
 
 def _trees_fast_tier(est):
@@ -487,6 +492,14 @@ def _trees_switch(est, bit):
     built with the define `bit` stands for (`x_trees_fast_switches`)."""
     if not _trees_fast_tier(est):
         return False
+    query = getattr(est._bind(), "x_trees_fast_switches", None)
+    return callable(query) and (int(query()) & bit) != 0
+
+
+def _trees_build_switch(est, bit):
+    """True when `est`'s x_trees binding was built with the define `bit`
+    stands for, on whichever tier that define belongs to
+    (`x_trees_fast_switches`)."""
     query = getattr(est._bind(), "x_trees_fast_switches", None)
     return callable(query) and (int(query()) & bit) != 0
 
@@ -3178,16 +3191,21 @@ class KernelExplainer(_AgnosticExplainer):
         if m > 0 and _trees_switch(self, _KSHAP_FAST_BATCH):
             self._batched(b, Xa, fx, taddr, phi, n, d, k, nb, m, nfixed, nfull, npaired, L, seed, wbits, R)
             return self._shape(phi, n, d)
+        reuse = _trees_build_switch(self, _AGN_IDN_SYN_POOL)   # one synthetic buffer for every chunk
+        syn = None
         for r0 in range(0, n, R):
             rows = min(R, n - r0)
             params = [rows, nb, d, nfixed, m, nfull, L, npaired, r0, seed, wbits]
             out = None
             if m > 0:
-                syn = empty((rows * m * nb * d,), "<f4")
+                if not reuse or syn is None or syn.size != rows * m * nb * d:
+                    syn = None
+                    syn = empty((rows * m * nb * d,), "<f4")
                 b.x_trees_kshap_synth(x0 + 4 * r0 * d, addr_ro(self._bg, name="data"), taddr,
                                       addr(syn, name="synthetic"), params)
                 out = self._model_rows(syn, rows * m * nb, d)
-                del syn
+                if not reuse:
+                    syn = None
             b.x_trees_kshap_solve(addr_ro(out, name="y") if out is not None else 0, f0 + 4 * r0 * k,
                                   addr_ro(fnull, name="fnull"), taddr, p0 + 8 * r0 * d * k,
                                   params + [k, 1 if self.link == "logit" else 0])
@@ -3248,7 +3266,8 @@ class PermutationExplainer(_AgnosticExplainer):
         mm = npm * (2 * d + 1)
         x0, p0 = addr_ro(Xa, name="X"), addr(phi, name="phi")
         R = self._chunk(mm * nb * d, n)
-        reuse = _trees_switch(self, _KSHAP_FAST_BATCH)   # one synthetic buffer for every chunk
+        # one synthetic buffer for every chunk
+        reuse = _trees_switch(self, _KSHAP_FAST_BATCH) or _trees_build_switch(self, _AGN_IDN_SYN_POOL)
         syn = None
         for r0 in range(0, n, R):  # glue: chunk loop (one model call per chunk)
             rows = min(R, n - r0)
