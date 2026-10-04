@@ -566,6 +566,12 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `XD_FAST_GRP_FUSED` (`_OFF`) | gaussian-rp, sparse-rp / taxi, istella | lane/apple-fast-gap-kapprox2-grp | kap2-grp-fused-{taxi,istella}, kap2-srp-fused-{taxi,istella} | grp taxi 3.4 -> 2.1, istella -4.6%; srp taxi -10.7%, istella -8.5% | KEPT | fit in one binding call and one synchronize (pooled scan partials, matrix drawn+scaled/selected by one kernel, both downloads in one queue); distortion identical. sparse-rp istella distortion gap vs sklearn: no bug (density, scaling, laws = sklearn's; one 10-component draw) |
 | `KSHAP_FAST_SIGNGRAM` | kernel-shap / istella | lane/apple-fast-gap-kapprox2 @ 4fd464a43 | kap2-kshap-sign-istella (A = BATCH) | -1.4% | DROPPED | noise; sign adds instead of soft-f64 products in the normal equations (same words); not merged |
 
+## W2 explainers (lane/apple-fast-w2-shap, Oct 4)
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `SHAP_FAST_PIPE` (opt-in) | permutation-shap, kernel-shap / istella | lane/apple-fast-w2-shap (base 254e50a01) | w2-shap-pipe-quality, w2-shap-pipe-pshap-istella, w2-shap-pipe-kshap-istella | - | OPEN | hypothesis: ~half of each row is the raw ~3 GB/s download of the 388 / 180 MB synthetic chunk (0.8.34's host synthesis ran pshap in 17.2 s vs 28.2 s now); chunk i+1's synthesis + download is enqueued without a sync before the model runs on chunk i (two pooled device slots, two reused host buffers), the next values/means call completes it. Bit-inert by construction; gate = tools/shap_pipe_quality.py byte-identical phi. Risk: if Metal performs the pageable download on the caller's thread inside synchronize(), there is no overlap (then no gain, no loss) |
+
 ## Fixes without a switch (merged; not experiments)
 
 | change | branch @ sha | main | note |
