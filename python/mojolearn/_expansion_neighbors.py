@@ -1214,8 +1214,24 @@ class SkewedChi2Sampler(_XNeighbors):
         d = X.shape[1]
         nc = int(self.n_components)
         seed = self.random_state
-        if (isinstance(seed, int) and not isinstance(seed, bool) and d > 0 and nc > 0
-                and _kfeat_flags(self) & 2):
+        flags = (_kfeat_flags(self) if isinstance(seed, int) and not isinstance(seed, bool)
+                 and d > 0 and nc > 0 else 0)
+        self.__dict__.pop("_schi2_z", None)
+        if flags & 4:
+            # MOJOLEARN_XN_FAST_SCHI2_LAZYW (x_neighbors/kfeat_dev.mojo):
+            # main's z = pi/2 * u and offsets drawn into our arrays, no device
+            # work; the weights come from z in the first transform's one call
+            # (or on the first read of random_weights_)
+            z = empty((d, nc), "<f4")
+            off = empty((nc,), "<f4")
+            self._bind().x_neighbors_kfeat_schi2_draw([seed & 0xFFFFFFFF, d, nc], addr(z, name="schi2 z"),
+                                                      addr(off, name="random_offset_"))
+            self.__dict__.pop("_random_weights", None)
+            self.__dict__["_schi2_z"] = z
+            self.random_offset_ = off
+            self.n_features_in_ = d
+            return self
+        if flags & 2:
             # SCHI2_MOJO_MT (default; _OFF rollback): _LegacyRandomState(seed)'s
             # stream, pi/2 * u, the weights kernel and the offsets in one
             # binding call (x_neighbors_kfeat_schi2_fit): main's words
@@ -1237,12 +1253,50 @@ class SkewedChi2Sampler(_XNeighbors):
         self.n_features_in_ = d
         return self
 
+    @property
+    def random_weights_(self):
+        # SCHI2_LAZYW: made from z on the first read (one binding call, main's
+        # kernel and words) when no transform has made it yet. Stored under
+        # `_random_weights` (an older pickle's plain attribute still reads).
+        st = self.__dict__
+        z = st.get("_schi2_z")
+        if z is not None:
+            w = _empty_out(z.shape, "<f4")
+            self._bind().x_neighbors_kfeat_schi2_weights(addr_ro(z, name="schi2 z"),
+                                                         addr(w, name="random_weights_"), z.size)
+            st["_random_weights"] = w
+            del st["_schi2_z"]
+        if "_random_weights" in st:
+            return st["_random_weights"]
+        if "random_weights_" in st:
+            return st["random_weights_"]
+        raise AttributeError("'SkewedChi2Sampler' object has no attribute 'random_weights_'")
+
+    @random_weights_.setter
+    def random_weights_(self, value):
+        self.__dict__.pop("_schi2_z", None)
+        self.__dict__["_random_weights"] = value
+
     def transform(self, X):
         X = _f32(X)
         n, d = X.shape
         if X.size and X.min() <= -float(self.skewedness):
             raise ValueError("X may not contain entries smaller than -skewedness.")
         nc = int(self.n_components)
+        z = self.__dict__.get("_schi2_z")
+        if (z is not None or _kfeat_flags(self) & 4) and d == self.__dict__.get("n_features_in_"):
+            # SCHI2_LAZYW: log, the pending weights, the map: one call, one wait
+            w = _empty_out((d, nc), "<f4") if z is not None else self.random_weights_
+            out = _empty_out((n, nc), "<f4")
+            self._bind().x_neighbors_kfeat_schi2_transform(
+                [n, d, nc, 0 if z is None else 1],
+                [addr_ro(X, name="X"), addr_ro(w if z is None else z, name="random_weights_"),
+                 0 if z is None else addr(w, name="random_weights_"),
+                 addr_ro(self.random_offset_, name="random_offset_"), addr(out, name="schi2 output")],
+                [_f32_scalar(self.skewedness)])
+            if z is not None:
+                self.random_weights_ = w
+            return out
         lx = self._unary(X, _U_LOG, 1.0, _f32_scalar(self.skewedness))
         out = _empty_out((n, nc), "<f4")
         self._op("skew_transform", [(lx, 0), (self.random_weights_, 0), (self.random_offset_, 0), (out, 1)], (n, d, nc))

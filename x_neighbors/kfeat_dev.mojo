@@ -49,13 +49,16 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.device_pool import pool_give, pool_take
 from core.device_scan import NONFINITE_NONE, SCAN_BLOCKS, SCAN_TPB, _scan_blocks, negative_partial_kernel
-from x_neighbors.device_ops import BLOCK, _grid, skew_weights_kernel, xn_ctx
-from x_neighbors.items import FP
+from x_neighbors.device_ops import BLOCK, _grid, skew_transform_kernel, skew_weights_kernel, unary_kernel, xn_ctx
+from x_neighbors.items import FP, U_LOG
 
 
 comptime _KFEAT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime XN_FAST_ACHI2_DEVSCAN = _KFEAT_FAST_APPLE and is_defined["MOJOLEARN_XN_FAST_ACHI2_DEVSCAN"]()
 comptime XN_FAST_SCHI2_MOJO_MT = _KFEAT_FAST_APPLE and not is_defined["MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF"]()
+# lane apple-fast-w3-kfeat, opt-in (needs SCHI2_MOJO_MT, i.e. not its _OFF):
+# see `kfeat_schi2_draw_binding`.
+comptime XN_FAST_SCHI2_LAZYW = XN_FAST_SCHI2_MOJO_MT and is_defined["MOJOLEARN_XN_FAST_SCHI2_LAZYW"]()
 comptime XN_KFEAT_ANY = XN_FAST_ACHI2_DEVSCAN or XN_FAST_SCHI2_MOJO_MT
 
 
@@ -78,12 +81,15 @@ comptime KFEAT_STAGE = _Global[StorageType=_KfeatStage, name="MojoXNeighborsKfea
 
 
 def kfeat_flags_binding() raises -> PythonObject:
-    """bit 1 ACHI2_DEVSCAN, bit 2 SCHI2_MOJO_MT (0 on every other build)."""
+    """bit 1 ACHI2_DEVSCAN, bit 2 SCHI2_MOJO_MT, bit 4 SCHI2_LAZYW (0 on
+    every other build)."""
     var f = 0
     comptime if XN_FAST_ACHI2_DEVSCAN:
         f |= 1
     comptime if XN_FAST_SCHI2_MOJO_MT:
         f |= 2
+    comptime if XN_FAST_SCHI2_LAZYW:
+        f |= 4
     return PythonObject(f)
 
 
@@ -191,6 +197,21 @@ struct _MT19937(Movable):
         return (Float64(a) * 67108864.0 + Float64(b)) * (1.0 / 9007199254740992.0)
 
 
+def _schi2_draw(seed: UInt32, count: Int, nc: Int, hz: FP, op: FP):
+    """`_LegacyRandomState(seed)`: z[t] = pi/2 * random() for t < count
+    (rs.random_sample(d * nc); flat order = draw order), rounded once to
+    float32 (Array.from_list "<f4"), then the offsets 0 + 2 pi * random()
+    (rs.uniform(0.0, 2 pi, nc)), rounded once. Main's words."""
+    # math.pi / 2.0 and 2.0 * math.pi, bit for bit (both exact scalings of pi)
+    var half_pi = bitcast[DType.float64](UInt64(0x3FF921FB54442D18))
+    var two_pi = bitcast[DType.float64](UInt64(0x401921FB54442D18))
+    var mt = _MT19937(seed)
+    for t in range(count):
+        hz[t] = Float32(half_pi * mt.random())
+    for c in range(nc):
+        op[c] = Float32(0.0 + two_pi * mt.random())
+
+
 def kfeat_schi2_fit_binding(p: PythonObject, w_out: PythonObject, off_out: PythonObject) raises -> PythonObject:
     """p = [seed & 2^32-1, d, n_components]: `random_weights_` (d x nc, into
     the float32 array at w_out) and `random_offset_` (nc, at off_out), the
@@ -204,9 +225,6 @@ def kfeat_schi2_fit_binding(p: PythonObject, w_out: PythonObject, off_out: Pytho
     var count = d * nc
     var wp = FP(unsafe_from_address=Int(py=w_out))
     var op = FP(unsafe_from_address=Int(py=off_out))
-    # math.pi / 2.0 and 2.0 * math.pi, bit for bit (both exact scalings of pi)
-    var half_pi = bitcast[DType.float64](UInt64(0x3FF921FB54442D18))
-    var two_pi = bitcast[DType.float64](UInt64(0x401921FB54442D18))
     with GILReleased(Python()):
         var ctx = xn_ctx()
         var st = KFEAT_STAGE.get_or_create_ptr()
@@ -214,14 +232,7 @@ def kfeat_schi2_fit_binding(p: PythonObject, w_out: PythonObject, off_out: Pytho
             st[].z = ctx.enqueue_create_host_buffer[DType.float32](count)
             st[].z_cap = count
         var hz = st[].z.value().unsafe_ptr()
-        var mt = _MT19937(seed)
-        # rs.random_sample(d * nc), then z[f][c] = pi/2 * u[f * nc + c]
-        # rounded once to float32 (Array.from_list "<f4"): flat order = draw order
-        for t in range(count):
-            hz[t] = Float32(half_pi * mt.random())
-        # rs.uniform(0.0, 2 pi, nc) = 0.0 + (2 pi - 0.0) * random(), rounded once
-        for c in range(nc):
-            op[c] = Float32(0.0 + two_pi * mt.random())
+        _schi2_draw(seed, count, nc, FP(unsafe_from_address=Int(hz)), op)
         var dz = pool_take["MojoXNeighborsKfeatSkewZ"](ctx, count)
         var dw = pool_take["MojoXNeighborsKfeatSkewW"](ctx, count)
         ctx.enqueue_copy(dst_buf=dz, src_ptr=hz)
@@ -233,4 +244,136 @@ def kfeat_schi2_fit_binding(p: PythonObject, w_out: PythonObject, off_out: Pytho
         ctx.synchronize()
         pool_give["MojoXNeighborsKfeatSkewZ"](dz^)
         pool_give["MojoXNeighborsKfeatSkewW"](dw^)
+    return PythonObject(0)
+
+
+# ---------------------------------------------------------------- SCHI2_LAZYW
+# lane apple-fast-w3-kfeat (2026-10-04), opt-in `-D MOJOLEARN_XN_FAST_SCHI2_LAZYW`
+# (bit 4; needs SCHI2_MOJO_MT). After SCHI2_MOJO_MT the board's skewed-chi2
+# taxi fit (d = 11, 256 components: 2,816 weights) is 1.5 ms against
+# sklearn's 0.6; what is left is not the draw (microseconds) but the one
+# GPU round trip that turns 11 KB of uniforms into the weights (upload,
+# skew_weights_kernel, download, wait), and `transform` then pays two more
+# (main's `_unary` log of X down to the host and back up, then
+# `skew_transform`). Here:
+#   fit       draws z = pi/2 * u (float32, main's words) and the offsets on
+#             the host into the estimator's own arrays: NO device work;
+#   transform ONE call, ONE wait: X up into a pooled buffer, main's
+#             `unary_kernel` (log(x + skewedness)) into a pooled buffer that
+#             stays on the device, the weights from z by main's
+#             `skew_weights_kernel` on the first transform (downloaded
+#             once into `random_weights_`; uploaded as words afterwards),
+#             main's `skew_transform_kernel`, the result down;
+#   random_weights_ read before any transform: one call (z up, kernel,
+#             down, wait), the same words.
+# Same kernels on the same words in the same order: every bit is main's.
+# Fit + transform go from three waits to one.
+
+
+def kfeat_schi2_draw_binding(p: PythonObject, z_out: PythonObject, off_out: PythonObject) raises -> PythonObject:
+    """p = [seed & 2^32-1, d, n_components]: z (d * nc float32 at z_out, the
+    words main hands `skew_weights_kernel`) and `random_offset_` (nc at
+    off_out). Host only: the draw is sklearn's sequential stream."""
+    var seed = UInt32(Int(py=p[0]) & 0xFFFFFFFF)
+    var d = Int(py=p[1])
+    var nc = Int(py=p[2])
+    if d <= 0 or nc <= 0:
+        raise Error("x_neighbors_kfeat_schi2_draw: n_features and n_components must be positive")
+    var zp = FP(unsafe_from_address=Int(py=z_out))
+    var op = FP(unsafe_from_address=Int(py=off_out))
+    with GILReleased(Python()):
+        _schi2_draw(seed, d * nc, nc, zp, op)
+    return PythonObject(0)
+
+
+def kfeat_schi2_weights_binding(z_addr: PythonObject, w_addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    """`random_weights_` (n floats at w_addr) from z (n floats at z_addr):
+    main's `skew_weights_kernel`, one wait. Returns 0."""
+    var count = Int(py=n)
+    if count <= 0:
+        raise Error("x_neighbors_kfeat_schi2_weights: empty weights")
+    var zp = FP(unsafe_from_address=Int(py=z_addr))
+    var wp = FP(unsafe_from_address=Int(py=w_addr))
+    with GILReleased(Python()):
+        var ctx = xn_ctx()
+        var dz = pool_take["MojoXNeighborsKfeatSkewZ"](ctx, count)
+        var dw = pool_take["MojoXNeighborsKfeatSkewW"](ctx, count)
+        ctx.enqueue_copy(dst_buf=dz, src_ptr=zp)
+        ctx.enqueue_function[skew_weights_kernel](
+            dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(count),
+            grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
+        )
+        ctx.enqueue_copy(dst_ptr=wp, src_buf=dw)
+        ctx.synchronize()
+        pool_give["MojoXNeighborsKfeatSkewZ"](dz^)
+        pool_give["MojoXNeighborsKfeatSkewW"](dw^)
+    return PythonObject(0)
+
+
+def kfeat_schi2_transform_binding(p: PythonObject, a: PythonObject, f: PythonObject) raises -> PythonObject:
+    """SkewedChi2Sampler.transform under SCHI2_LAZYW. p = [n, d, nc, pending];
+    a = [x (n*d), wz, w_out, off (nc), out (n*nc)]; f = [skewedness as
+    float32]. pending = 1: wz is z, the weights are made here and written
+    to w_out; 0: wz is `random_weights_` (w_out unused). The caller has
+    made main's `X.min() <= -skewedness` refusal. Returns 0."""
+    var n = Int(py=p[0])
+    var d = Int(py=p[1])
+    var nc = Int(py=p[2])
+    var pending = Int(py=p[3]) != 0
+    if n <= 0 or d <= 0 or nc <= 0:
+        raise Error("x_neighbors_kfeat_schi2_transform: need positive n, d, n_components")
+    var nx = n * d
+    var nw = d * nc
+    var nz = n * nc
+    if nx > 2147483647 or nz > 2147483647:
+        raise Error("x_neighbors_kfeat_schi2_transform: more than 2^31 - 1 cells")
+    var xp = FP(unsafe_from_address=Int(py=a[0]))
+    var wzp = FP(unsafe_from_address=Int(py=a[1]))
+    var wop = FP(unsafe_from_address=Int(py=a[2]))
+    var offp = FP(unsafe_from_address=Int(py=a[3]))
+    var outp = FP(unsafe_from_address=Int(py=a[4]))
+    var skew = Float32(Float64(py=f[0]))
+    with GILReleased(Python()):
+        var ctx = xn_ctx()
+        var dx = pool_take["MojoXNeighborsKfeatSkewTX"](ctx, nx)
+        var dl = pool_take["MojoXNeighborsKfeatSkewTL"](ctx, nx)
+        var dw = pool_take["MojoXNeighborsKfeatSkewW"](ctx, nw)
+        var doff = pool_take["MojoXNeighborsKfeatSkewTO"](ctx, nc)
+        var dres = pool_take["MojoXNeighborsKfeatSkewTR"](ctx, nz)
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=xp)
+        # main's `_unary(X, _U_LOG, 1.0, skewedness)`: log(1 * x + skewedness)
+        ctx.enqueue_function[unary_kernel](
+            dx.unsafe_ptr(), dl.unsafe_ptr(), Int64(nx), Int64(U_LOG), Float32(1.0), skew,
+            grid_dim=_grid(nx), block_dim=(BLOCK if nx > 1 else 1),
+        )
+        if pending:
+            var dz = pool_take["MojoXNeighborsKfeatSkewZ"](ctx, nw)
+            ctx.enqueue_copy(dst_buf=dz, src_ptr=wzp)
+            ctx.enqueue_function[skew_weights_kernel](
+                dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(nw),
+                grid_dim=_grid(nw), block_dim=(BLOCK if nw > 1 else 1),
+            )
+            ctx.enqueue_copy(dst_ptr=wop, src_buf=dw)
+            ctx.enqueue_copy(dst_buf=doff, src_ptr=offp)
+            ctx.enqueue_function[skew_transform_kernel](
+                dl.unsafe_ptr(), dw.unsafe_ptr(), doff.unsafe_ptr(), dres.unsafe_ptr(), Int64(n), Int64(d), Int64(nc),
+                grid_dim=_grid(nz), block_dim=(BLOCK if nz > 1 else 1),
+            )
+            ctx.enqueue_copy(dst_ptr=outp, src_buf=dres)
+            ctx.synchronize()
+            pool_give["MojoXNeighborsKfeatSkewZ"](dz^)
+        else:
+            ctx.enqueue_copy(dst_buf=dw, src_ptr=wzp)
+            ctx.enqueue_copy(dst_buf=doff, src_ptr=offp)
+            ctx.enqueue_function[skew_transform_kernel](
+                dl.unsafe_ptr(), dw.unsafe_ptr(), doff.unsafe_ptr(), dres.unsafe_ptr(), Int64(n), Int64(d), Int64(nc),
+                grid_dim=_grid(nz), block_dim=(BLOCK if nz > 1 else 1),
+            )
+            ctx.enqueue_copy(dst_ptr=outp, src_buf=dres)
+            ctx.synchronize()
+        pool_give["MojoXNeighborsKfeatSkewTX"](dx^)
+        pool_give["MojoXNeighborsKfeatSkewTL"](dl^)
+        pool_give["MojoXNeighborsKfeatSkewW"](dw^)
+        pool_give["MojoXNeighborsKfeatSkewTO"](doff^)
+        pool_give["MojoXNeighborsKfeatSkewTR"](dres^)
     return PythonObject(0)

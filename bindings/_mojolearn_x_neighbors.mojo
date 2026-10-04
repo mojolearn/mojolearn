@@ -19,7 +19,16 @@ from x_neighbors.kapprox_dev import kpca_resident_binding
 from x_neighbors.iter_device import lp_fast_resident_binding
 from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES, ocsvm_resident_binding
 from x_neighbors.sort_items import purity_flags_binding
-from x_neighbors.kfeat_dev import XN_KFEAT_ANY, kfeat_flags_binding, kfeat_first_negative_binding, kfeat_schi2_fit_binding
+from x_neighbors.kfeat_dev import (
+    XN_FAST_SCHI2_LAZYW,
+    XN_KFEAT_ANY,
+    kfeat_first_negative_binding,
+    kfeat_flags_binding,
+    kfeat_schi2_draw_binding,
+    kfeat_schi2_fit_binding,
+    kfeat_schi2_transform_binding,
+    kfeat_schi2_weights_binding,
+)
 
 
 def _a(v: PythonObject, k: Int) raises -> Int:
@@ -1260,6 +1269,11 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
             m.def_function[kfeat_flags_binding]("x_neighbors_kfeat_flags")
             m.def_function[kfeat_first_negative_binding]("x_neighbors_kfeat_first_negative")
             m.def_function[kfeat_schi2_fit_binding]("x_neighbors_kfeat_schi2_fit")
+        # lane apple-fast-w3-kfeat: SkewedChi2Sampler's lazy weights (opt-in)
+        comptime if XN_FAST_SCHI2_LAZYW:
+            m.def_function[kfeat_schi2_draw_binding]("x_neighbors_kfeat_schi2_draw")
+            m.def_function[kfeat_schi2_weights_binding]("x_neighbors_kfeat_schi2_weights")
+            m.def_function[kfeat_schi2_transform_binding]("x_neighbors_kfeat_schi2_transform")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors: ", e))
