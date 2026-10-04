@@ -4664,7 +4664,7 @@ def train_forest_classification_device_timed(
             # FIFO pop. `seg_*` stays empty; the best-first expansion is per
             # popped node and does not use it.
             if bestfirst:
-                for i in range(len(bf_pending)):
+                for i in range(len(bf_pending)):  # small-loop(bf_pending: children of the last pops): at most two per tree slot, g capped
                     work_items.append(bf_pending[i])
                     item_trees.append(tree_ids[first + bf_pending_q[i]])
             else:
@@ -4699,9 +4699,10 @@ def train_forest_classification_device_timed(
                 if not bf_more:
                     clock.tick(ctx, PHASE_HOST_QUEUE)
                     break
-            if sabotage == FOREST_SAB_SCALAR_TREE:
-                for i in range(len(item_trees)):
-                    item_trees[i] = item_trees[0]
+            if sabotage == FOREST_SAB_SCALAR_TREE and len(item_trees) > 0:
+                item_trees = List[Int32](
+                    length=len(item_trees), fill=item_trees[0]
+                )
             var n_nodes = len(work_items)
             st_nodes += n_nodes
 
@@ -4883,10 +4884,9 @@ def train_forest_classification_device_timed(
                     clock.tick(ctx, PHASE_HOST_QUEUE)
                     break
             else:
-                for i in range(n_nodes):
-                    part_items.append(work_items[i])
-                    part_trees.append(item_trees[i])
-                    part_splits.append(splits[i])
+                part_items = work_items.copy()
+                part_trees = item_trees.copy()
+                part_splits = splits.copy()
             var n_part = len(part_items)
 
             var plan = build_workload_info(
@@ -6019,7 +6019,7 @@ def train_forest_regression_device_timed(
             # FIFO pop. `seg_*` stays empty; the best-first expansion is per
             # popped node and does not use it.
             if bestfirst:
-                for i in range(len(bf_pending)):
+                for i in range(len(bf_pending)):  # small-loop(bf_pending: children of the last pops): at most two per tree slot, g capped
                     work_items.append(bf_pending[i])
                     item_trees.append(tree_ids[first + bf_pending_q[i]])
             else:
@@ -6054,9 +6054,10 @@ def train_forest_regression_device_timed(
                 if not bf_more:
                     clock.tick(ctx, PHASE_HOST_QUEUE)
                     break
-            if sabotage == FOREST_SAB_SCALAR_TREE:
-                for i in range(len(item_trees)):
-                    item_trees[i] = item_trees[0]
+            if sabotage == FOREST_SAB_SCALAR_TREE and len(item_trees) > 0:
+                item_trees = List[Int32](
+                    length=len(item_trees), fill=item_trees[0]
+                )
             var n_nodes = len(work_items)
 
             clock.tick(ctx, PHASE_HOST_QUEUE)
@@ -6218,10 +6219,9 @@ def train_forest_regression_device_timed(
                     clock.tick(ctx, PHASE_HOST_QUEUE)
                     break
             else:
-                for i in range(n_nodes):
-                    part_items.append(work_items[i])
-                    part_trees.append(item_trees[i])
-                    part_splits.append(splits[i])
+                part_items = work_items.copy()
+                part_trees = item_trees.copy()
+                part_splits = splits.copy()
             var n_part = len(part_items)
 
             var plan = build_workload_info(
