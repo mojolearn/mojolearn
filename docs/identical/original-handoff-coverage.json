@@ -1,0 +1,2800 @@
+{
+  "schema": 1,
+  "audit_head": "ccaaf03176d7dbbde3f87ab4cb47ab35fc8b0f52",
+  "scope": "Original2026-10-04 IDENTICAL speed/CPU/PTX handoff plus user e7979f65a vendor-neutral callpath revision. Static inclusion/coverage audit, not promotion or blanket validation.",
+  "handoff": {
+    "path": "~/mojolearn-evidence/HANDOFF_2026-10-04_identical-speed-and-ptx.md",
+    "sha256": "40ef24e5a65838bbf000dedd4a403160f9c1dabb7e0ce3bb6df76ebc6092844e"
+  },
+  "policy_overrides": [
+    "User retains ON/OFF controls after promotion; old handoff instruction to delete OFF arms superseded.",
+    "Root owns authorized Apple checks one at a time; no Apple jobs were run by this audit.",
+    "Root owns final IDENTICAL/PTX decisions. No other-session peer contact.",
+    "Old-version bits may change; exact same-version all-column bits and defensible quality/speed evidence required.",
+    "Lost prior results are UNKNOWN, never PASS; historical PTX rehearsal is not final admission."
+  ],
+  "summary": {
+    "lane_heads": 32,
+    "preserved_refs": 37,
+    "ancestor_refs": 36,
+    "callpath_implementation_cherry_equivalents": 2,
+    "unmerged_callpath_doc_only_commits": 2,
+    "missing_original_source_merges_identified": 0,
+    "candidate_groups": 38,
+    "unique_candidate_flags": 72,
+    "explicit_candidate_groups_in_current_plan": 1,
+    "plan_cases": 47,
+    "plan_quality_gates": 25,
+    "api_optin_contracts": 4,
+    "remaining_cpu_work_groups": 15,
+    "promotion_status": "NOT_READY"
+  },
+  "refs": [
+    {
+      "ref": "experiment/identical-callpath-all-algorithms-20261004",
+      "sha": "e7979f65a2686a5ddeacf46b834e0025edac4553",
+      "ancestor_of_audit_head": false,
+      "cherry_plus": [
+        "695170a8adc894ba62d69f97b7ba9e92af2744f0",
+        "c96137714d72141e5cf77e64a53660d0c60450e5"
+      ],
+      "cherry_minus": [
+        "291187d0a9ac280eb367b5fcf2999058d262e10d",
+        "e7979f65a2686a5ddeacf46b834e0025edac4553"
+      ]
+    },
+    {
+      "ref": "fix/wheel-size-main-20261004",
+      "sha": "cb704e3c7870284744181c1aa92e1ad2412bf880",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam-all",
+      "sha": "c05c390f0a901ffbe44cf2c2171b22f4e013a79d",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam-all2",
+      "sha": "57aad0e40efbe67e3fd7627c20f7fccca0454cf9",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam-cluster",
+      "sha": "70dcc64bbdf6f211c54ea37cf7e67eaa0252841c",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam-decomp",
+      "sha": "6803a85901b62999ffc5061c053e109c7d46310b",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam-forests",
+      "sha": "e4cf1e40b4bdb0d069ca9726701e5a535002e2b8",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam-gbdt",
+      "sha": "ebe881307ba6d163c988167e8f96f1a0bcf8d771",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam-kernel-gp",
+      "sha": "21cf058cc291c7b1f7e3d0e0b4566aaa77ace6bd",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam-linear",
+      "sha": "f1f45c3f98c9b059f574852bed27f19fcb187c5a",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam-lm",
+      "sha": "6db0a2a7a9000d19198f4445cb3ea6ac3002f534",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam-neighbors",
+      "sha": "ad12ea61adf5a5a027985a6197330223d7b1acbd",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam-neural",
+      "sha": "d77ac360d7e840a764f9f3c3c99b1625ef1e04db",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam-prep-metrics",
+      "sha": "a1acf58963ba9184e0155a74b4ffeb1a5d09e5b4",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam-timeseries",
+      "sha": "97f333dba7c1b88ffdadcbaa1066874c204ff893",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam2-cluster",
+      "sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam2-decomp",
+      "sha": "59d1615810907c73cf3cec4f53ab4b47790bef4d",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam2-forests",
+      "sha": "1ecd3dfdc8e0b68e909a0044b3abca626a69b61d",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam2-gbdt",
+      "sha": "54c99a3b7b4f1a90a19a4a486af5ecbdb2b81690",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam2-kernel-gp",
+      "sha": "a0329a4e9b496604fb4100e6fb82d5658a89fdda",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam2-linear",
+      "sha": "d2f2abb011cb6b4439f4621bf6377ecbae6e5001",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam2-lm",
+      "sha": "dd5cee5517a4337c43b98dbc1f1e164d8a963604",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam2-neighbors",
+      "sha": "c395f3631340e6d508aa3551e685a89295291791",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam2-neural",
+      "sha": "3f04284d843469017ee15d23910015c216578554",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam2-prep-metrics",
+      "sha": "ce576f3404c2e614c2446c634705f50d234e4758",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam2-shared",
+      "sha": "f394108a6b2da1c69fa84a26240bc70465bcdebd",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/fam2-timeseries",
+      "sha": "287909f7a960d440643fe0a3190a2ea6a9de48c1",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/idn-all",
+      "sha": "b8e1412501b664a5c6a9e84380a281a6735d7f2f",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/idn-cnn-resident",
+      "sha": "9a35d7fd945435968074f8c3233fcb2266147de0",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/idn-dense-linalg",
+      "sha": "c983f0b076623a45088ba72ba2aadc429a08c0a2",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/idn-embedding",
+      "sha": "601f50fc4b3ca8b8676b462e9467f166cdbd6282",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/idn-gates",
+      "sha": "de3d57391bb3ecba34fb7697365cfabf892c7b85",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/idn-int-prep",
+      "sha": "873d2090891e926ef351a2ddddc3567d5065e892",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/idn-loss-norm-folds",
+      "sha": "d729e3a82b31913e712aeb4aef6a6d0156a2b537",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/idn-opt-resident",
+      "sha": "75976151a8ca0dc93566943a729d0300ddb77ddb",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/idn-sgd-multiblock",
+      "sha": "2501bdd61d7a2ab3106d23e374d3416e170027b4",
+      "ancestor_of_audit_head": true
+    },
+    {
+      "ref": "lane/idn-shap-pca",
+      "sha": "a574dda39e4cd182d2e6cf238b8f9bebb2147a6c",
+      "ancestor_of_audit_head": true
+    }
+  ],
+  "callpath_cherry_audit": {
+    "included_implementation_commits": [
+      "291187d0a",
+      "e7979f65a"
+    ],
+    "unmerged_doc_only_commits": [
+      "695170a8a docs citation title",
+      "c96137714 stale handoff deletions"
+    ],
+    "source_deletions_since_original_handoff": [
+      "D\texperiments/apple_identical_callpath/README.md"
+    ],
+    "disposition": "No blind merge: both requested implementation patches already included; newer fixes are intentional descendants."
+  },
+  "lanes": [
+    {
+      "ref": "lane/fam-cluster",
+      "source_sha": "70dcc64bbdf6f211c54ea37cf7e67eaa0252841c",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam-cluster.md",
+      "planned_representative_cases": 5,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    },
+    {
+      "ref": "lane/fam-decomp",
+      "source_sha": "6803a85901b62999ffc5061c053e109c7d46310b",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam-decomp.md",
+      "planned_representative_cases": 6,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    },
+    {
+      "ref": "lane/fam-forests",
+      "source_sha": "e4cf1e40b4bdb0d069ca9726701e5a535002e2b8",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam-forests.md",
+      "planned_representative_cases": 4,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    },
+    {
+      "ref": "lane/fam-gbdt",
+      "source_sha": "ebe881307ba6d163c988167e8f96f1a0bcf8d771",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam-gbdt.md",
+      "planned_representative_cases": 2,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    },
+    {
+      "ref": "lane/fam-kernel-gp",
+      "source_sha": "21cf058cc291c7b1f7e3d0e0b4566aaa77ace6bd",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam-kernel-gp.md",
+      "planned_representative_cases": 5,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    },
+    {
+      "ref": "lane/fam-linear",
+      "source_sha": "f1f45c3f98c9b059f574852bed27f19fcb187c5a",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam-linear.md",
+      "planned_representative_cases": 5,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    },
+    {
+      "ref": "lane/fam-lm",
+      "source_sha": "6db0a2a7a9000d19198f4445cb3ea6ac3002f534",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam-lm.md",
+      "planned_representative_cases": 2,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    },
+    {
+      "ref": "lane/fam-neighbors",
+      "source_sha": "ad12ea61adf5a5a027985a6197330223d7b1acbd",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam-neighbors.md",
+      "planned_representative_cases": 3,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    },
+    {
+      "ref": "lane/fam-neural",
+      "source_sha": "d77ac360d7e840a764f9f3c3c99b1625ef1e04db",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam-neural.md",
+      "planned_representative_cases": 7,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    },
+    {
+      "ref": "lane/fam-prep-metrics",
+      "source_sha": "a1acf58963ba9184e0155a74b4ffeb1a5d09e5b4",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam-prep-metrics.md",
+      "planned_representative_cases": 4,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    },
+    {
+      "ref": "lane/fam-timeseries",
+      "source_sha": "97f333dba7c1b88ffdadcbaa1066874c204ff893",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam-timeseries.md",
+      "planned_representative_cases": 4,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    },
+    {
+      "ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam2-cluster.md",
+      "planned_representative_cases": 5,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": [
+        "kmeans_convergence_chunk",
+        "kmeans_accumulator_rows",
+        "gmm_estep_stack",
+        "dbscan_cc_chunk",
+        "dbscan_cc_split",
+        "mst_scan_lanes",
+        "dendrogram_hook_chunk",
+        "hdbscan_sparse_threshold",
+        "single_linkage_sparse_mst",
+        "affinity_convergence_chunk",
+        "minibatch_group_size"
+      ]
+    },
+    {
+      "ref": "lane/fam2-decomp",
+      "source_sha": "59d1615810907c73cf3cec4f53ab4b47790bef4d",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam2-decomp.md",
+      "planned_representative_cases": 6,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": [
+        "eigh_block_width",
+        "eigh_block_threshold",
+        "eigh_small_limit",
+        "eigh_block_reenable"
+      ]
+    },
+    {
+      "ref": "lane/fam2-forests",
+      "source_sha": "1ecd3dfdc8e0b68e909a0044b3abca626a69b61d",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam2-forests.md",
+      "planned_representative_cases": 4,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": [
+        "rf_sorted_bootstrap",
+        "rf_device_level_loop",
+        "extra_trees_u16_bins"
+      ]
+    },
+    {
+      "ref": "lane/fam2-gbdt",
+      "source_sha": "54c99a3b7b4f1a90a19a4a486af5ecbdb2b81690",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam2-gbdt.md",
+      "planned_representative_cases": 2,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": [
+        "gbdt_apply_wide",
+        "gbdt_ctr_borders_device"
+      ]
+    },
+    {
+      "ref": "lane/fam2-kernel-gp",
+      "source_sha": "a0329a4e9b496604fb4100e6fb82d5658a89fdda",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam2-kernel-gp.md",
+      "planned_representative_cases": 5,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": [
+        "gp_gradient_rows4",
+        "nystroem_device_rr_stop",
+        "rbf_direct_cell"
+      ]
+    },
+    {
+      "ref": "lane/fam2-linear",
+      "source_sha": "d2f2abb011cb6b4439f4621bf6377ecbae6e5001",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam2-linear.md",
+      "planned_representative_cases": 5,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": [
+        "gram_cd_column_limit",
+        "qn_tiled_multinomial_all",
+        "qn_device_convergence"
+      ]
+    },
+    {
+      "ref": "lane/fam2-lm",
+      "source_sha": "dd5cee5517a4337c43b98dbc1f1e164d8a963604",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam2-lm.md",
+      "planned_representative_cases": 2,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": [
+        "mamba3_parallel_angle",
+        "gemm_group_slack",
+        "gemm_group_s",
+        "gemm_group_tiles_body"
+      ]
+    },
+    {
+      "ref": "lane/fam2-neighbors",
+      "source_sha": "c395f3631340e6d508aa3551e685a89295291791",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam2-neighbors.md",
+      "planned_representative_cases": 3,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": [
+        "ocsvm_chunk256"
+      ]
+    },
+    {
+      "ref": "lane/fam2-neural",
+      "source_sha": "3f04284d843469017ee15d23910015c216578554",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam2-neural.md",
+      "planned_representative_cases": 7,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": [
+        "cross_entropy_fold256"
+      ]
+    },
+    {
+      "ref": "lane/fam2-prep-metrics",
+      "source_sha": "ce576f3404c2e614c2446c634705f50d234e4758",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam2-prep-metrics.md",
+      "planned_representative_cases": 4,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": [
+        "lda_gram_rowtile",
+        "lda_qda_gram_rows",
+        "lda_qda_rr_min"
+      ]
+    },
+    {
+      "ref": "lane/fam2-shared",
+      "source_sha": "f394108a6b2da1c69fa84a26240bc70465bcdebd",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam2-shared.md",
+      "planned_representative_cases": 0,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": [
+        "xty_tile_rows",
+        "device_f64_narrowing"
+      ]
+    },
+    {
+      "ref": "lane/fam2-timeseries",
+      "source_sha": "287909f7a960d440643fe0a3190a2ea6a9de48c1",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/fam/fam2-timeseries.md",
+      "planned_representative_cases": 4,
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": [
+        "arima_parallel_start_ls"
+      ]
+    },
+    {
+      "ref": "lane/idn-cnn-resident",
+      "source_sha": "9a35d7fd945435968074f8c3233fcb2266147de0",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/idn-all/",
+      "planned_representative_cases": "cross-family mapping in idn-all queue-plan.sh",
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    },
+    {
+      "ref": "lane/idn-dense-linalg",
+      "source_sha": "c983f0b076623a45088ba72ba2aadc429a08c0a2",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/idn-all/",
+      "planned_representative_cases": "cross-family mapping in idn-all queue-plan.sh",
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    },
+    {
+      "ref": "lane/idn-embedding",
+      "source_sha": "601f50fc4b3ca8b8676b462e9467f166cdbd6282",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/idn-all/",
+      "planned_representative_cases": "cross-family mapping in idn-all queue-plan.sh",
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    },
+    {
+      "ref": "lane/idn-gates",
+      "source_sha": "de3d57391bb3ecba34fb7697365cfabf892c7b85",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/idn-all/",
+      "planned_representative_cases": "cross-family mapping in idn-all queue-plan.sh",
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    },
+    {
+      "ref": "lane/idn-int-prep",
+      "source_sha": "873d2090891e926ef351a2ddddc3567d5065e892",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/idn-all/",
+      "planned_representative_cases": "cross-family mapping in idn-all queue-plan.sh",
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    },
+    {
+      "ref": "lane/idn-loss-norm-folds",
+      "source_sha": "d729e3a82b31913e712aeb4aef6a6d0156a2b537",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/idn-all/",
+      "planned_representative_cases": "cross-family mapping in idn-all queue-plan.sh",
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    },
+    {
+      "ref": "lane/idn-opt-resident",
+      "source_sha": "75976151a8ca0dc93566943a729d0300ddb77ddb",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/idn-all/",
+      "planned_representative_cases": "cross-family mapping in idn-all queue-plan.sh",
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    },
+    {
+      "ref": "lane/idn-sgd-multiblock",
+      "source_sha": "2501bdd61d7a2ab3106d23e374d3416e170027b4",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/idn-all/",
+      "planned_representative_cases": "cross-family mapping in idn-all queue-plan.sh",
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    },
+    {
+      "ref": "lane/idn-shap-pca",
+      "source_sha": "a574dda39e4cd182d2e6cf238b8f9bebb2147a6c",
+      "integration": "ANCESTOR",
+      "retained_report": "~/mojolearn-evidence/idn-all/",
+      "planned_representative_cases": "cross-family mapping in idn-all queue-plan.sh",
+      "compile_identity_quality_timing": "PARTIAL_RETAINED_BATCH_EVIDENCE; NO_BLANKET_LANE_PASS",
+      "candidate_groups": []
+    }
+  ],
+  "candidate_groups": [
+    {
+      "id": "kmeans_convergence_chunk",
+      "family": "cluster",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "flags": [
+        "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1",
+        "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_2",
+        "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_4",
+        "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_16",
+        "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_32"
+      ],
+      "variants": [
+        1,
+        2,
+        4,
+        16,
+        32
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1": [
+          {
+            "path": "cluster/impl/detail/kmeans.mojo",
+            "line": 200
+          },
+          {
+            "path": "cluster/impl/detail/kmeans.mojo",
+            "line": 203
+          }
+        ],
+        "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_2": [
+          {
+            "path": "cluster/impl/detail/kmeans.mojo",
+            "line": 205
+          }
+        ],
+        "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_4": [
+          {
+            "path": "cluster/impl/detail/kmeans.mojo",
+            "line": 207
+          }
+        ],
+        "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_16": [
+          {
+            "path": "cluster/impl/detail/kmeans.mojo",
+            "line": 209
+          }
+        ],
+        "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_32": [
+          {
+            "path": "cluster/impl/detail/kmeans.mojo",
+            "line": 211
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-cluster.md:14",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "KMeans labels/centers versus host; confirm grouped stopping does not change final iterate."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "kmeans_accumulator_rows",
+      "family": "cluster",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "flags": [
+        "MOJOLEARN_IDN_KMEANS_ACC_ROWS_256",
+        "MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096"
+      ],
+      "variants": [
+        256,
+        4096
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_KMEANS_ACC_ROWS_256": [
+          {
+            "path": "cluster/checks/reduce_by_key.mojo",
+            "line": 759
+          },
+          {
+            "path": "cluster/checks/reduce_by_key.mojo",
+            "line": 769
+          }
+        ],
+        "MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096": [
+          {
+            "path": "cluster/checks/reduce_by_key.mojo",
+            "line": 760
+          },
+          {
+            "path": "cluster/checks/reduce_by_key.mojo",
+            "line": 775
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-cluster.md:15",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "KMeans integer totals and final labels/centers; memory bound at skinny and wide shapes."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "gmm_estep_stack",
+      "family": "cluster",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "flags": [
+        "MOJOLEARN_IDN_GMM_ESTEP_STACK"
+      ],
+      "variants": [
+        1
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_GMM_ESTEP_STACK": [
+          {
+            "path": "mixture/checks/estep.mojo",
+            "line": 1007
+          },
+          {
+            "path": "mixture/checks/estep.mojo",
+            "line": 1013
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-cluster.md:22",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "GaussianMixture E-step raw likelihood/responsibility/model bytes plus predictive quality; exercise n*K*d below and above 1GiB cap."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "dbscan_cc_chunk",
+      "family": "cluster",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "flags": [
+        "MOJOLEARN_IDN_DBSCAN_CC_CHUNK4",
+        "MOJOLEARN_IDN_DBSCAN_CC_CHUNK16",
+        "MOJOLEARN_IDN_DBSCAN_CC_CHUNK32"
+      ],
+      "variants": [
+        4,
+        16,
+        32
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_DBSCAN_CC_CHUNK4": [
+          {
+            "path": "dbscan/impl/sparse/detail/csr.mojo",
+            "line": 111
+          },
+          {
+            "path": "dbscan/impl/sparse/detail/csr.mojo",
+            "line": 113
+          }
+        ],
+        "MOJOLEARN_IDN_DBSCAN_CC_CHUNK16": [
+          {
+            "path": "dbscan/impl/sparse/detail/csr.mojo",
+            "line": 115
+          }
+        ],
+        "MOJOLEARN_IDN_DBSCAN_CC_CHUNK32": [
+          {
+            "path": "dbscan/impl/sparse/detail/csr.mojo",
+            "line": 116
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-cluster.md:60",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "DBSCAN exact labels including long propagation chain and all-noise; convergence must reach same fixed point."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "dbscan_cc_split",
+      "family": "cluster",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "flags": [
+        "MOJOLEARN_IDN_DBSCAN_CC_SPLIT4",
+        "MOJOLEARN_IDN_DBSCAN_CC_SPLIT8",
+        "MOJOLEARN_IDN_DBSCAN_CC_SPLIT16"
+      ],
+      "variants": [
+        4,
+        8,
+        16
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_DBSCAN_CC_SPLIT4": [
+          {
+            "path": "dbscan/impl/sparse/detail/csr.mojo",
+            "line": 127
+          },
+          {
+            "path": "dbscan/impl/sparse/detail/csr.mojo",
+            "line": 130
+          }
+        ],
+        "MOJOLEARN_IDN_DBSCAN_CC_SPLIT8": [
+          {
+            "path": "dbscan/impl/sparse/detail/csr.mojo",
+            "line": 132
+          }
+        ],
+        "MOJOLEARN_IDN_DBSCAN_CC_SPLIT16": [
+          {
+            "path": "dbscan/impl/sparse/detail/csr.mojo",
+            "line": 133
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-cluster.md:62",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "Dense-neighborhood edge rows with splitting active; exact labels/host identity, not just unordered cluster equivalence."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "mst_scan_lanes",
+      "family": "cluster",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "flags": [
+        "MOJOLEARN_IDN_MST_SCAN_LANES"
+      ],
+      "variants": [
+        64,
+        128,
+        256
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_MST_SCAN_LANES": [
+          {
+            "path": "hierarchy/impl/sparse/solver/detail/mst_kernels.mojo",
+            "line": 108
+          },
+          {
+            "path": "hierarchy/impl/sparse/solver/detail/mst_kernels.mojo",
+            "line": 110
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-cluster.md:113",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "Dense MST deterministic total-order edges including equal weights; hierarchy and HDBSCAN raw tree/label identity."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "dendrogram_hook_chunk",
+      "family": "cluster",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "flags": [
+        "MOJOLEARN_IDN_DENDRO_HOOK_CHUNK"
+      ],
+      "variants": [
+        2,
+        8
+      ],
+      "requires": [
+        "DISABLE_DEVICE_CONVERGENCE_ROUTE: exact define spelling must be read from defining source before creating build recipe"
+      ],
+      "source_locations": {
+        "MOJOLEARN_IDN_DENDRO_HOOK_CHUNK": [
+          {
+            "path": "hierarchy/impl/cluster/detail/dendrogram_device.mojo",
+            "line": 98
+          },
+          {
+            "path": "hierarchy/impl/cluster/detail/dendrogram_device.mojo",
+            "line": 102
+          },
+          {
+            "path": "hierarchy/impl/cluster/detail/dendrogram_device.mojo",
+            "line": 454
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-cluster.md:115",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "Disable device-convergence route first; hook/jump rounds must preserve exact dendrogram and convergence."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "hdbscan_sparse_threshold",
+      "family": "cluster",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "flags": [
+        "MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS"
+      ],
+      "variants": [
+        4096,
+        16384
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS": [
+          {
+            "path": "hdbscan/impl/cluster/detail/single_linkage.mojo",
+            "line": 200
+          },
+          {
+            "path": "hdbscan/impl/detail/idn_switches.mojo",
+            "line": 70
+          },
+          {
+            "path": "hdbscan/impl/detail/idn_switches.mojo",
+            "line": 78
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-cluster.md:122",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "Fixtures straddling both thresholds below46340 so changed route is reached; exact hierarchy/labels, sparse MR checker."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "single_linkage_sparse_mst",
+      "family": "cluster",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "flags": [
+        "MOJOLEARN_IDN_SL_SPARSE_MST",
+        "MOJOLEARN_IDN_SL_SPARSE_MIN_ROWS"
+      ],
+      "variants": [
+        {
+          "MST": 1,
+          "MIN_ROWS": 4096
+        }
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_SL_SPARSE_MST": [
+          {
+            "path": "hierarchy/impl/cluster/detail/single_linkage.mojo",
+            "line": 63
+          },
+          {
+            "path": "hierarchy/impl/cluster/detail/single_linkage.mojo",
+            "line": 81
+          }
+        ],
+        "MOJOLEARN_IDN_SL_SPARSE_MIN_ROWS": [
+          {
+            "path": "hierarchy/impl/cluster/detail/single_linkage.mojo",
+            "line": 78
+          },
+          {
+            "path": "hierarchy/impl/cluster/detail/single_linkage.mojo",
+            "line": 85
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-cluster.md:123",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "Source report only compares unordered child pairs against dense route. Mandatory exact within-version raw child orientation across all columns plus infinity refusal behavior; sparse linkage checks."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "affinity_convergence_chunk",
+      "family": "cluster",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "flags": [
+        "MOJOLEARN_IDN_AP_CONV_CHUNK4",
+        "MOJOLEARN_IDN_AP_CONV_CHUNK16",
+        "MOJOLEARN_IDN_AP_CONV_CHUNK32"
+      ],
+      "variants": [
+        4,
+        16,
+        32
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_AP_CONV_CHUNK4": [
+          {
+            "path": "x_cluster/device_ops.mojo",
+            "line": 662
+          },
+          {
+            "path": "x_cluster/device_ops.mojo",
+            "line": 671
+          }
+        ],
+        "MOJOLEARN_IDN_AP_CONV_CHUNK16": [
+          {
+            "path": "x_cluster/device_ops.mojo",
+            "line": 673
+          }
+        ],
+        "MOJOLEARN_IDN_AP_CONV_CHUNK32": [
+          {
+            "path": "x_cluster/device_ops.mojo",
+            "line": 674
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-cluster.md:175",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "Affinity propagation labels/exemplars and convergence boundary fixtures; unchanged final iterate."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "minibatch_group_size",
+      "family": "cluster",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "flags": [
+        "MOJOLEARN_IDN_MINIBATCH_GROUP8",
+        "MOJOLEARN_IDN_MINIBATCH_GROUP32",
+        "MOJOLEARN_IDN_MINIBATCH_GROUP64"
+      ],
+      "variants": [
+        8,
+        32,
+        64
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_MINIBATCH_GROUP8": [
+          {
+            "path": "x_cluster/minibatch.mojo",
+            "line": 64
+          },
+          {
+            "path": "x_cluster/minibatch.mojo",
+            "line": 73
+          }
+        ],
+        "MOJOLEARN_IDN_MINIBATCH_GROUP32": [
+          {
+            "path": "x_cluster/minibatch.mojo",
+            "line": 75
+          }
+        ],
+        "MOJOLEARN_IDN_MINIBATCH_GROUP64": [
+          {
+            "path": "x_cluster/minibatch.mojo",
+            "line": 76
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-cluster.md:179",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "MiniBatchKMeans exact centers/labels across grouping boundaries and remainder steps."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "eigh_block_width",
+      "family": "decomp",
+      "source_ref": "lane/fam2-decomp",
+      "source_sha": "59d1615810907c73cf3cec4f53ab4b47790bef4d",
+      "flags": [
+        "MOJOLEARN_IDN_EIGH_BLOCK_B8",
+        "MOJOLEARN_IDN_EIGH_BLOCK_B32"
+      ],
+      "variants": [
+        8,
+        32
+      ],
+      "requires": [
+        "MOJOLEARN_IDN_EIGH_BLOCK_ON=1"
+      ],
+      "source_locations": {
+        "MOJOLEARN_IDN_EIGH_BLOCK_B8": [
+          {
+            "path": "x_decomp/rr_block.mojo",
+            "line": 58
+          },
+          {
+            "path": "x_decomp/rr_block.mojo",
+            "line": 72
+          }
+        ],
+        "MOJOLEARN_IDN_EIGH_BLOCK_B32": [
+          {
+            "path": "x_decomp/rr_block.mojo",
+            "line": 59
+          },
+          {
+            "path": "x_decomp/rr_block.mojo",
+            "line": 70
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-decomp.md:14",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "BLOCK_FAMILY_QUARANTINED_DEFAULT_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "DEFAULT_BLOCK16_FAILED_STRICT_CONVERGENCE; OTHER_VARIANTS_UNQUALIFIED",
+        "evidence": "~/mojolearn-evidence/identical-all/eigh-block-drop.json",
+        "required": "Default block candidate already failed strict intrinsic pivot convergence. Do not time or promote siblings without their own convergence/residual/orthogonality plus identity proof."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Leave all block-eigh variants opt-in and unpromoted; root may explicitly drop/quarantine family. Do not weaken tolerance."
+    },
+    {
+      "id": "eigh_block_threshold",
+      "family": "decomp",
+      "source_ref": "lane/fam2-decomp",
+      "source_sha": "59d1615810907c73cf3cec4f53ab4b47790bef4d",
+      "flags": [
+        "MOJOLEARN_IDN_EIGH_BLOCK_MIN128"
+      ],
+      "variants": [
+        128
+      ],
+      "requires": [
+        "MOJOLEARN_IDN_EIGH_BLOCK_ON=1"
+      ],
+      "source_locations": {
+        "MOJOLEARN_IDN_EIGH_BLOCK_MIN128": [
+          {
+            "path": "x_decomp/rr_block.mojo",
+            "line": 60
+          },
+          {
+            "path": "x_decomp/rr_block.mojo",
+            "line": 76
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-decomp.md:15",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "BLOCK_FAMILY_QUARANTINED_DEFAULT_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "DEFAULT_BLOCK16_FAILED_STRICT_CONVERGENCE; OTHER_VARIANTS_UNQUALIFIED",
+        "evidence": "~/mojolearn-evidence/identical-all/eigh-block-drop.json",
+        "required": "Same failed block family; n128..511 and nonmultiple dimensions need full strict quality before any measurement."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Leave all block-eigh variants opt-in and unpromoted; root may explicitly drop/quarantine family. Do not weaken tolerance."
+    },
+    {
+      "id": "eigh_small_limit",
+      "family": "decomp",
+      "source_ref": "lane/fam2-decomp",
+      "source_sha": "59d1615810907c73cf3cec4f53ab4b47790bef4d",
+      "flags": [
+        "MOJOLEARN_IDN_EIGH_SMALL_N64",
+        "MOJOLEARN_IDN_EIGH_SMALL_N128"
+      ],
+      "variants": [
+        64,
+        128
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_EIGH_SMALL_N64": [
+          {
+            "path": "x_decomp/device.mojo",
+            "line": 192
+          },
+          {
+            "path": "x_decomp/device.mojo",
+            "line": 197
+          }
+        ],
+        "MOJOLEARN_IDN_EIGH_SMALL_N128": [
+          {
+            "path": "x_decomp/device.mojo",
+            "line": 193
+          },
+          {
+            "path": "x_decomp/device.mojo",
+            "line": 196
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-decomp.md:19",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "n48,64,128 exact host/GPU eigensystem; one-block host-route guard and residual/orthogonality; keep default32 unless needed."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "rf_sorted_bootstrap",
+      "family": "forests",
+      "source_ref": "lane/fam2-forests",
+      "source_sha": "1ecd3dfdc8e0b68e909a0044b3abca626a69b61d",
+      "flags": [
+        "MOJOLEARN_IDN_RF_ROWS_SORTED"
+      ],
+      "variants": [
+        1
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_RF_ROWS_SORTED": [
+          {
+            "path": "ensemble/randomforest.mojo",
+            "line": 125
+          },
+          {
+            "path": "ensemble/randomforest.mojo",
+            "line": 135
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-forests.md:18",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "Wide RF bootstrap with >=64cols and narrow control; exact forest/predictions, trace row order intentionally different."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "rf_device_level_loop",
+      "family": "forests",
+      "source_ref": "lane/fam2-forests",
+      "source_sha": "1ecd3dfdc8e0b68e909a0044b3abca626a69b61d",
+      "flags": [
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP",
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP_K1",
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP_K2",
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP_K8"
+      ],
+      "variants": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP": [
+          {
+            "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+            "line": 917
+          },
+          {
+            "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+            "line": 932
+          },
+          {
+            "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+            "line": 3059
+          },
+          {
+            "path": "ensemble/decisiontree/batched_levelalgo/kernels/level_loop_kernels.mojo",
+            "line": 4
+          }
+        ],
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP_K1": [
+          {
+            "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+            "line": 928
+          },
+          {
+            "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+            "line": 936
+          }
+        ],
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP_K2": [
+          {
+            "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+            "line": 937
+          }
+        ],
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP_K8": [
+          {
+            "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+            "line": 938
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-forests.md:22",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "max_leaves=-1 and single sampling round required, unlike DART255-leaf fixture. Exact forest node queue/IDs and tail batches; bound unlimited-depth allocation."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "extra_trees_u16_bins",
+      "family": "forests",
+      "source_ref": "lane/fam2-forests",
+      "source_sha": "1ecd3dfdc8e0b68e909a0044b3abca626a69b61d",
+      "flags": [
+        "MOJOLEARN_IDN_ET_BINNED_U16"
+      ],
+      "variants": [
+        1
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_ET_BINNED_U16": [
+          {
+            "path": "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+            "line": 1986
+          },
+          {
+            "path": "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+            "line": 1990
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-forests.md:25",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": ">=64cols with2*k>=cols; Istella-reg/year quality within declared margin and raw all-column model/prediction identity. Taxi16cols cannot activate."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "gbdt_apply_wide",
+      "family": "gbdt",
+      "source_ref": "lane/fam2-gbdt",
+      "source_sha": "54c99a3b7b4f1a90a19a4a486af5ecbdb2b81690",
+      "flags": [
+        "MOJOLEARN_IDN_GBDT_APPLY_WIDE"
+      ],
+      "variants": [
+        1
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_GBDT_APPLY_WIDE": [
+          {
+            "path": "gbdt/models/kernel/add_bin_values.mojo",
+            "line": 55
+          },
+          {
+            "path": "gbdt/models/kernel/add_bin_values.mojo",
+            "line": 64
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-gbdt.md:14",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "Wide symmetric predict resident/nonresident fixtures, zero/mixed depth and exact labels/probabilities."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "gbdt_ctr_borders_device",
+      "family": "gbdt",
+      "source_ref": "lane/fam2-gbdt",
+      "source_sha": "54c99a3b7b4f1a90a19a4a486af5ecbdb2b81690",
+      "flags": [
+        "MOJOLEARN_IDN_GBDT_CTR_BORDERS_DEVICE"
+      ],
+      "variants": [
+        1
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_GBDT_CTR_BORDERS_DEVICE": [
+          {
+            "path": "gbdt/ctrs/ctr_binarization.mojo",
+            "line": 87
+          },
+          {
+            "path": "gbdt/ctrs/ctr_binarization.mojo",
+            "line": 102
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-gbdt.md:16",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "Categorical GBDT borders/model/prediction raw identity with flag applied device AND host builds."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "gp_gradient_rows4",
+      "family": "kernel-gp",
+      "source_ref": "lane/fam2-kernel-gp",
+      "source_sha": "a0329a4e9b496604fb4100e6fb82d5658a89fdda",
+      "flags": [
+        "MOJOLEARN_IDN_GP_GRAD_ROWS4"
+      ],
+      "variants": [
+        4
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_GP_GRAD_ROWS4": [
+          {
+            "path": "gaussian_process/gp_grad_items.mojo",
+            "line": 30
+          },
+          {
+            "path": "gaussian_process/gp_grad_items.mojo",
+            "line": 35
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-kernel-gp.md:16",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "Optimized GPR theta/lml gradient and prediction quality; same fold on host, default ROWFOLD is1."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "nystroem_device_rr_stop",
+      "family": "kernel-gp",
+      "source_ref": "lane/fam2-kernel-gp",
+      "source_sha": "a0329a4e9b496604fb4100e6fb82d5658a89fdda",
+      "flags": [
+        "MOJOLEARN_IDN_NYS_RR_DEV_STOP",
+        "MOJOLEARN_IDN_NYS_RR_DEV_STOP_B4"
+      ],
+      "variants": [
+        2,
+        4
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_NYS_RR_DEV_STOP": [
+          {
+            "path": "kernel_methods/estimator.mojo",
+            "line": 1365
+          },
+          {
+            "path": "kernel_methods/estimator.mojo",
+            "line": 1379
+          }
+        ],
+        "MOJOLEARN_IDN_NYS_RR_DEV_STOP_B4": [
+          {
+            "path": "kernel_methods/estimator.mojo",
+            "line": 1376
+          },
+          {
+            "path": "kernel_methods/estimator.mojo",
+            "line": 1381
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-kernel-gp.md:68",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "Nystroem eigen convergence and basis/transform bytes; stopped and extra-empty sweep fixtures."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "rbf_direct_cell",
+      "family": "kernel-gp",
+      "source_ref": "lane/fam2-kernel-gp",
+      "source_sha": "a0329a4e9b496604fb4100e6fb82d5658a89fdda",
+      "flags": [
+        "MOJOLEARN_IDN_KM_RBF_CELL",
+        "MOJOLEARN_IDN_KM_RBF_CELL_D16"
+      ],
+      "variants": [
+        16,
+        64
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_KM_RBF_CELL": [
+          {
+            "path": "kernel_methods/checks/kernel_matrix.mojo",
+            "line": 455
+          },
+          {
+            "path": "kernel_methods/checks/kernel_matrix.mojo",
+            "line": 472
+          },
+          {
+            "path": "kernel_methods/host/km_host_oracle.mojo",
+            "line": 216
+          }
+        ],
+        "MOJOLEARN_IDN_KM_RBF_CELL_D16": [
+          {
+            "path": "kernel_methods/checks/kernel_matrix.mojo",
+            "line": 468
+          },
+          {
+            "path": "kernel_methods/checks/kernel_matrix.mojo",
+            "line": 475
+          },
+          {
+            "path": "kernel_methods/host/km_host_oracle.mojo",
+            "line": 219
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-kernel-gp.md:69",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "KernelRidge/Nystroem direct squared differences changes arithmetic; exact all-column cells and kernel-relative-error/predictive quality on cancellation-sensitive data."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "gram_cd_column_limit",
+      "family": "linear",
+      "source_ref": "lane/fam2-linear",
+      "source_sha": "d2f2abb011cb6b4439f4621bf6377ecbae6e5001",
+      "flags": [
+        "MOJOLEARN_CD_IDN_GRAM_COLS_128",
+        "MOJOLEARN_CD_IDN_GRAM_COLS_256"
+      ],
+      "variants": [
+        128,
+        256
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_CD_IDN_GRAM_COLS_128": [
+          {
+            "path": "solver/impl/cd_gram_rule.mojo",
+            "line": 23
+          },
+          {
+            "path": "solver/impl/cd_gram_rule.mojo",
+            "line": 29
+          }
+        ],
+        "MOJOLEARN_CD_IDN_GRAM_COLS_256": [
+          {
+            "path": "solver/impl/cd_gram_rule.mojo",
+            "line": 24
+          },
+          {
+            "path": "solver/impl/cd_gram_rule.mojo",
+            "line": 28
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-linear.md:12",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "Lasso/ElasticNet width>64 and at both new thresholds; Gram route readback, coefficients/objective/KKT and raw identity."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "qn_tiled_multinomial_all",
+      "family": "linear",
+      "source_ref": "lane/fam2-linear",
+      "source_sha": "d2f2abb011cb6b4439f4621bf6377ecbae6e5001",
+      "flags": [
+        "MOJOLEARN_QN_TILED_MULTI_ALL"
+      ],
+      "variants": [
+        1
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_QN_TILED_MULTI_ALL": [
+          {
+            "path": "glm/impl/qn/qn_tiled_rule.mojo",
+            "line": 14
+          },
+          {
+            "path": "glm/impl/qn/qn_tiled_rule.mojo",
+            "line": 24
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-linear.md:13",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "C>1 and D*C<=256 specifically, otherwise default already tiled; fitted logistic model/raw prediction identity and quality."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "qn_device_convergence",
+      "family": "linear",
+      "source_ref": "lane/fam2-linear",
+      "source_sha": "d2f2abb011cb6b4439f4621bf6377ecbae6e5001",
+      "flags": [
+        "MOJOLEARN_QN_IDN_DCONV",
+        "MOJOLEARN_QN_IDN_DCONV_POLL_2",
+        "MOJOLEARN_QN_IDN_DCONV_POLL_8"
+      ],
+      "variants": [
+        2,
+        4,
+        8
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_QN_IDN_DCONV": [
+          {
+            "path": "glm/impl/qn/glm_base.mojo",
+            "line": 1198
+          },
+          {
+            "path": "glm/impl/qn/glm_base.mojo",
+            "line": 1204
+          },
+          {
+            "path": "glm/impl/qn/glm_base.mojo",
+            "line": 2414
+          },
+          {
+            "path": "glm/impl/qn/qn_dconv.mojo",
+            "line": 489
+          },
+          {
+            "path": "glm/impl/qn/qn_dconv.mojo",
+            "line": 617
+          },
+          {
+            "path": "glm/impl/qn/qn_solvers.mojo",
+            "line": 277
+          }
+        ],
+        "MOJOLEARN_QN_IDN_DCONV_POLL_2": [
+          {
+            "path": "glm/impl/qn/qn_dconv.mojo",
+            "line": 515
+          },
+          {
+            "path": "glm/impl/qn/qn_dconv.mojo",
+            "line": 520
+          }
+        ],
+        "MOJOLEARN_QN_IDN_DCONV_POLL_8": [
+          {
+            "path": "glm/impl/qn/qn_dconv.mojo",
+            "line": 516
+          },
+          {
+            "path": "glm/impl/qn/qn_dconv.mojo",
+            "line": 521
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-linear.md:16",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "Logistic/SVR Armijo/convergence/line-search fallback fixtures; exact model against all columns at poll boundaries."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "mamba3_parallel_angle",
+      "family": "lm",
+      "source_ref": "lane/fam2-lm",
+      "source_sha": "dd5cee5517a4337c43b98dbc1f1e164d8a963604",
+      "flags": [
+        "MOJOLEARN_IDN_M3_ANGLE_PARALLEL",
+        "MOJOLEARN_IDN_M3_ANGLE_BLOCK_32",
+        "MOJOLEARN_IDN_M3_ANGLE_BLOCK_128"
+      ],
+      "variants": [
+        32,
+        64,
+        128
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_M3_ANGLE_PARALLEL": [
+          {
+            "path": "mamba/checks/mamba3_oracle.mojo",
+            "line": 174
+          },
+          {
+            "path": "mamba/checks/mamba3_oracle.mojo",
+            "line": 181
+          },
+          {
+            "path": "mamba/host/gen/mamba3_siso.mojo",
+            "line": 490
+          },
+          {
+            "path": "mamba/host/gen/mamba3_siso.mojo",
+            "line": 526
+          },
+          {
+            "path": "mamba/impl/ops/mamba3_siso.mojo",
+            "line": 488
+          },
+          {
+            "path": "mamba/impl/ops/mamba3_siso.mojo",
+            "line": 524
+          }
+        ],
+        "MOJOLEARN_IDN_M3_ANGLE_BLOCK_32": [
+          {
+            "path": "mamba/host/gen/mamba3_siso.mojo",
+            "line": 537
+          },
+          {
+            "path": "mamba/impl/ops/mamba3_siso.mojo",
+            "line": 535
+          }
+        ],
+        "MOJOLEARN_IDN_M3_ANGLE_BLOCK_128": [
+          {
+            "path": "mamba/host/gen/mamba3_siso.mojo",
+            "line": 538
+          },
+          {
+            "path": "mamba/impl/ops/mamba3_siso.mojo",
+            "line": 536
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-lm.md:8",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "EXPLICIT_DEFAULT_BLOCK64_GATE_DECLARED; ACTUAL RECEIPT REQUIRED",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "Mamba3 seam-crossing angle, staged forward/backward/decode and source-generated host oracle; all explicit block sizes require identity and quality."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": [
+          "mamba3_angle"
+        ]
+      },
+      "next_action": "Run/review separately compiled candidate+default pair and host oracle, plus32/128 only when chosen; defaultON/OFF alone is insufficient."
+    },
+    {
+      "id": "gemm_group_slack",
+      "family": "lm",
+      "source_ref": "lane/fam2-lm",
+      "source_sha": "dd5cee5517a4337c43b98dbc1f1e164d8a963604",
+      "flags": [
+        "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2",
+        "MOJOLEARN_IDN_GEMM_GROUP_SLACK_8"
+      ],
+      "variants": [
+        2,
+        8
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2": [
+          {
+            "path": "gemm/checks/gemm_identical.mojo",
+            "line": 5765
+          },
+          {
+            "path": "gemm/checks/gemm_identical.mojo",
+            "line": 5776
+          }
+        ],
+        "MOJOLEARN_IDN_GEMM_GROUP_SLACK_8": [
+          {
+            "path": "gemm/checks/gemm_identical.mojo",
+            "line": 5777
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-lm.md:9",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "Grouped GEMM route-active NVIDIA shapes; exact GEMM/lm/transformer results and selected split plan readback."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "gemm_group_s",
+      "family": "lm",
+      "source_ref": "lane/fam2-lm",
+      "source_sha": "dd5cee5517a4337c43b98dbc1f1e164d8a963604",
+      "flags": [
+        "MOJOLEARN_IDN_GEMM_GROUP_S_HALF",
+        "MOJOLEARN_IDN_GEMM_GROUP_S_X2"
+      ],
+      "variants": [
+        "half",
+        "x2"
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_GEMM_GROUP_S_HALF": [
+          {
+            "path": "gemm/checks/gemm_identical.mojo",
+            "line": 5766
+          },
+          {
+            "path": "gemm/checks/gemm_identical.mojo",
+            "line": 5794
+          }
+        ],
+        "MOJOLEARN_IDN_GEMM_GROUP_S_X2": [
+          {
+            "path": "gemm/checks/gemm_identical.mojo",
+            "line": 5796
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-lm.md:10",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "NVIDIA and AMD shapes with positive grouped-split row; exact outputs and actual chosen launch plan."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "gemm_group_tiles_body",
+      "family": "lm",
+      "source_ref": "lane/fam2-lm",
+      "source_sha": "dd5cee5517a4337c43b98dbc1f1e164d8a963604",
+      "flags": [
+        "MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY"
+      ],
+      "variants": [
+        1
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY": [
+          {
+            "path": "gemm/checks/gemm_identical.mojo",
+            "line": 5768
+          },
+          {
+            "path": "gemm/checks/gemm_identical.mojo",
+            "line": 5780
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-lm.md:11",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "NVIDIA body row1 actual128x64 tiles versus128x128 count; record selected split route and exact outputs."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "ocsvm_chunk256",
+      "family": "neighbors",
+      "source_ref": "lane/fam2-neighbors",
+      "source_sha": "c395f3631340e6d508aa3551e685a89295291791",
+      "flags": [
+        "MOJOLEARN_IDN_OCSVM_CHUNK256"
+      ],
+      "variants": [
+        256
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_OCSVM_CHUNK256": [
+          {
+            "path": "x_neighbors/ocsvm_dev.mojo",
+            "line": 89
+          },
+          {
+            "path": "x_neighbors/ocsvm_dev.mojo",
+            "line": 90
+          },
+          {
+            "path": "x_neighbors/ocsvm_dev.mojo",
+            "line": 100
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-neighbors.md:13",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "OneClassSVM stop boundary/model identity; candidate enqueues256SMO iterations rather than64."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "cross_entropy_fold256",
+      "family": "neural",
+      "source_ref": "lane/fam2-neural",
+      "source_sha": "3f04284d843469017ee15d23910015c216578554",
+      "flags": [
+        "MOJOLEARN_IDN_XENT_FOLD_BLOCK_256"
+      ],
+      "variants": [
+        256
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_XENT_FOLD_BLOCK_256": [
+          {
+            "path": "x_cnn/ops.mojo",
+            "line": 1491
+          },
+          {
+            "path": "x_cnn/ops.mojo",
+            "line": 1496
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-neural.md:9",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "Loss fold arithmetic changes; n33,256,257,1024,1025 raw loss/gradient host+GPU and high-precision reference error."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "lda_gram_rowtile",
+      "family": "prep-metrics",
+      "source_ref": "lane/fam2-prep-metrics",
+      "source_sha": "ce576f3404c2e614c2446c634705f50d234e4758",
+      "flags": [
+        "MOJOLEARN_IDN_GRAM_ROWTILE"
+      ],
+      "variants": [
+        1
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_GRAM_ROWTILE": [
+          {
+            "path": "x_prep/gram_blocked.mojo",
+            "line": 36
+          },
+          {
+            "path": "x_prep/gram_blocked.mojo",
+            "line": 51
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-prep-metrics.md:28",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "LDA ZtZ exact cell fold and model/transform across all columns, tail blocks."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "lda_qda_gram_rows",
+      "family": "prep-metrics",
+      "source_ref": "lane/fam2-prep-metrics",
+      "source_sha": "ce576f3404c2e614c2446c634705f50d234e4758",
+      "flags": [
+        "MOJOLEARN_IDN_GRAM_ROWS_512",
+        "MOJOLEARN_IDN_GRAM_ROWS_8192"
+      ],
+      "variants": [
+        512,
+        8192
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_GRAM_ROWS_512": [
+          {
+            "path": "x_prep/gram_blocked.mojo",
+            "line": 37
+          },
+          {
+            "path": "x_prep/gram_blocked.mojo",
+            "line": 53
+          }
+        ],
+        "MOJOLEARN_IDN_GRAM_ROWS_8192": [
+          {
+            "path": "x_prep/gram_blocked.mojo",
+            "line": 53
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-prep-metrics.md:29",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "LDA/QDA changed Gram fold: full raw host/GPU plus covariance/eigen/accuracy checks, rows straddling block size."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "lda_qda_rr_min",
+      "family": "prep-metrics",
+      "source_ref": "lane/fam2-prep-metrics",
+      "source_sha": "ce576f3404c2e614c2446c634705f50d234e4758",
+      "flags": [
+        "MOJOLEARN_IDN_RR_MIN_8",
+        "MOJOLEARN_IDN_RR_MIN_16",
+        "MOJOLEARN_IDN_RR_MIN_48",
+        "MOJOLEARN_IDN_RR_MIN_96"
+      ],
+      "variants": [
+        8,
+        16,
+        48,
+        96
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_RR_MIN_8": [
+          {
+            "path": "x_prep/host/rr_eigh_host.mojo",
+            "line": 53
+          },
+          {
+            "path": "x_prep/host/rr_eigh_host.mojo",
+            "line": 60
+          }
+        ],
+        "MOJOLEARN_IDN_RR_MIN_16": [
+          {
+            "path": "x_prep/host/rr_eigh_host.mojo",
+            "line": 61
+          }
+        ],
+        "MOJOLEARN_IDN_RR_MIN_48": [
+          {
+            "path": "x_prep/host/rr_eigh_host.mojo",
+            "line": 62
+          }
+        ],
+        "MOJOLEARN_IDN_RR_MIN_96": [
+          {
+            "path": "x_prep/host/rr_eigh_host.mojo",
+            "line": 62
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-prep-metrics.md:30",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "Matrices whose route changes between cyclic and round-robin eigh; raw all-column and strict eigensystem error against high precision."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "xty_tile_rows",
+      "family": "shared",
+      "source_ref": "lane/fam2-shared",
+      "source_sha": "f394108a6b2da1c69fa84a26240bc70465bcdebd",
+      "flags": [
+        "MOJOLEARN_IDN_XTY_TILE_64",
+        "MOJOLEARN_IDN_XTY_TILE_1024"
+      ],
+      "variants": [
+        64,
+        1024
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_XTY_TILE_64": [
+          {
+            "path": "core/host_tile_fold.mojo",
+            "line": 21
+          },
+          {
+            "path": "core/host_tile_fold.mojo",
+            "line": 49
+          }
+        ],
+        "MOJOLEARN_IDN_XTY_TILE_1024": [
+          {
+            "path": "core/host_tile_fold.mojo",
+            "line": 21
+          },
+          {
+            "path": "core/host_tile_fold.mojo",
+            "line": 50
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-shared.md:11",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "OLS/Ridge/ARIMA/svd consumers; altered tile fold at boundary rows, raw host/GPU and fit quality."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "device_f64_narrowing",
+      "family": "shared",
+      "source_ref": "lane/fam2-shared",
+      "source_sha": "f394108a6b2da1c69fa84a26240bc70465bcdebd",
+      "flags": [
+        "MOJOLEARN_IDN_HPDEV_CAST_F64"
+      ],
+      "variants": [
+        1
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_HPDEV_CAST_F64": [
+          {
+            "path": "bindings/_mojolearn.mojo",
+            "line": 991
+          },
+          {
+            "path": "bindings/hotpath_device.mojo",
+            "line": 33
+          },
+          {
+            "path": "bindings/hotpath_device.mojo",
+            "line": 110
+          },
+          {
+            "path": "bindings/hotpath_device.mojo",
+            "line": 114
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-shared.md:17",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "Float64->Float32 rounding tie/subnormal/infinity/NaN payload cases across GPU+host; never accept host fallback. Cost includes extra bus transfers."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "arima_parallel_start_ls",
+      "family": "timeseries",
+      "source_ref": "lane/fam2-timeseries",
+      "source_sha": "287909f7a960d440643fe0a3190a2ea6a9de48c1",
+      "flags": [
+        "MOJOLEARN_IDN_X0_PAR_LS",
+        "MOJOLEARN_IDN_X0_PAR_LS_MIN256"
+      ],
+      "variants": [
+        256,
+        2048
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_X0_PAR_LS": [
+          {
+            "path": "arima/impl/idn_arma_ls.mojo",
+            "line": 5
+          },
+          {
+            "path": "arima/impl/idn_ls_math.mojo",
+            "line": 24
+          },
+          {
+            "path": "arima/impl/idn_ls_math.mojo",
+            "line": 38
+          }
+        ],
+        "MOJOLEARN_IDN_X0_PAR_LS_MIN256": [
+          {
+            "path": "arima/impl/idn_ls_math.mojo",
+            "line": 27
+          },
+          {
+            "path": "arima/impl/idn_ls_math.mojo",
+            "line": 41
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-timeseries.md:14",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
+        "required": "ARIMA/AutoARIMA long start-parameter least squares at threshold boundaries; raw fit/forecast and quality versus same data."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+    },
+    {
+      "id": "eigh_block_reenable",
+      "family": "decomp",
+      "source_ref": "lane/fam2-decomp",
+      "source_sha": "59d1615810907c73cf3cec4f53ab4b47790bef4d",
+      "flags": [
+        "MOJOLEARN_IDN_EIGH_BLOCK_ON"
+      ],
+      "variants": [
+        1
+      ],
+      "requires": [],
+      "source_locations": {
+        "MOJOLEARN_IDN_EIGH_BLOCK_ON": [
+          {
+            "path": "tools/identical_wave_eigh_block_refusal.mojo",
+            "line": 17
+          },
+          {
+            "path": "x_decomp/rr_block.mojo",
+            "line": 53
+          },
+          {
+            "path": "x_decomp/rr_block.mojo",
+            "line": 68
+          }
+        ]
+      },
+      "report": "~/mojolearn-evidence/fam/fam2-decomp.md:13",
+      "integration": "ANCESTOR_CODE_PRESENT",
+      "disposition": "DISABLED_AFTER_OBSERVED_CONVERGENCE_FAILURE",
+      "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
+      "identity_quality": {
+        "status": "DEFAULT_BLOCK16_FAILED_STRICT_CONVERGENCE; OTHER_VARIANTS_UNQUALIFIED",
+        "evidence": "~/mojolearn-evidence/identical-all/eigh-block-drop.json",
+        "required": "Captured rank-one pivot refused60sweeps; all4096/nonmultiple quality must pass before reconsidering default. Refusal regression is NOT decomposition success."
+      },
+      "timing": {
+        "status": "NOT_MEASURED",
+        "required": "One sample per explicitly recorded arm on NVIDIA and AMD only after its identity/quality gates; store-only opponents."
+      },
+      "matrix_coverage": {
+        "default_on_off_activates_candidate": false,
+        "explicit_plan_gate_ids": []
+      },
+      "next_action": "Leave all block-eigh variants opt-in and unpromoted; root may explicitly drop/quarantine family. Do not weaken tolerance."
+    }
+  ],
+  "api_optin_workloads": [
+    {
+      "id": "optimizer_resident_io",
+      "flag": "MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF",
+      "required_calls": [
+        "params_to_device",
+        "grads_to_device",
+        "step_device",
+        "params_to_host"
+      ],
+      "reason": "Flag defaults ON but board host-array steps do not activate persistent operands. Must retain a dedicated equal-contract transfer/setup and single-call comparison."
+    },
+    {
+      "id": "training_device_tensors",
+      "flag": "MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF",
+      "required_calls": [
+        "train_to_device",
+        "linear_forward",
+        "linear_backward",
+        "cross_entropy",
+        "to_host"
+      ],
+      "reason": "Generic host-array board calls cannot demonstrate removed transfers; compare identical device-handle workload and final raw outputs."
+    },
+    {
+      "id": "cnn_pinned_weights",
+      "flag": "MOJOLEARN_IDN_PIN_WEIGHTS_OFF",
+      "required_calls": [
+        "pin_weights",
+        "forward/backward on device tensors",
+        "unpin_weights"
+      ],
+      "reason": "Requires device tensors and eligiblegroups==1 plus stale-weight/repin behavior checks."
+    },
+    {
+      "id": "shared_callpath_grouping",
+      "flag": "MOJOLEARN_EXPERIMENT_IDENTICAL_CALLPATH",
+      "required_calls": [
+        "persistent session",
+        "independent queued calls",
+        "one completion",
+        "readback"
+      ],
+      "reason": "Single board call cannot prove grouped-call savings; fixed-cost rows need persistent-single-call versus explicitly grouped scenarios."
+    }
+  ],
+  "original_remaining_cpu_items": [
+    {
+      "id": "tokenizer_device_encode_gather",
+      "requirement": "Tokenizer encode and tokens_gather_rows; keep BPE text training explicitly CPU-only.",
+      "status": "NOT_CLOSED_BY_THIS_AUDIT",
+      "next_action": "Root-owned source audit and within-version tests; none of the32original lane merges itself establishes this owed item complete."
+    },
+    {
+      "id": "garch_identical_team",
+      "requirement": "Enable GARCH cooperative kernel with shared host replay, sequence/fit_team.mojo and garch.mojo.",
+      "status": "NOT_CLOSED_BY_THIS_AUDIT",
+      "next_action": "Root-owned source audit and within-version tests; none of the32original lane merges itself establishes this owed item complete."
+    },
+    {
+      "id": "arima_ic",
+      "requirement": "Remove ARIMA aic_/bic_ host Float64 compute via shared all-column arithmetic.",
+      "status": "NOT_CLOSED_BY_THIS_AUDIT",
+      "next_action": "Root-owned source audit and within-version tests; none of the32original lane merges itself establishes this owed item complete."
+    },
+    {
+      "id": "ocsvm_weighted_gather",
+      "requirement": "Weighted OneClassSVM gather_i32 device path.",
+      "status": "NOT_CLOSED_BY_THIS_AUDIT",
+      "next_action": "Root-owned source audit and within-version tests; none of the32original lane merges itself establishes this owed item complete."
+    },
+    {
+      "id": "ivf_finiteness",
+      "requirement": "Device IVF data/query finiteness checks.",
+      "status": "NOT_CLOSED_BY_THIS_AUDIT",
+      "next_action": "Root-owned source audit and within-version tests; none of the32original lane merges itself establishes this owed item complete."
+    },
+    {
+      "id": "gcn_self_loops",
+      "requirement": "GCNConv self-loop edge preparation remains host NumPy once per graph.",
+      "status": "NOT_CLOSED_BY_THIS_AUDIT",
+      "next_action": "Root-owned source audit and within-version tests; none of the32original lane merges itself establishes this owed item complete."
+    },
+    {
+      "id": "bisecting_centering",
+      "requirement": "BisectingKMeans host centering.",
+      "status": "NOT_CLOSED_BY_THIS_AUDIT",
+      "next_action": "Root-owned source audit and within-version tests; none of the32original lane merges itself establishes this owed item complete."
+    },
+    {
+      "id": "hdbscan_approx_predict",
+      "requirement": "HDBSCAN approximate_predict host compute.",
+      "status": "NOT_CLOSED_BY_THIS_AUDIT",
+      "next_action": "Root-owned source audit and within-version tests; none of the32original lane merges itself establishes this owed item complete."
+    },
+    {
+      "id": "silhouette_label_counts",
+      "requirement": "Silhouette countLabels readback.",
+      "status": "NOT_CLOSED_BY_THIS_AUDIT",
+      "next_action": "Root-owned source audit and within-version tests; none of the32original lane merges itself establishes this owed item complete."
+    },
+    {
+      "id": "trustworthiness_staging",
+      "requirement": "Trustworthiness X_embedded host staging copy.",
+      "status": "NOT_CLOSED_BY_THIS_AUDIT",
+      "next_action": "Root-owned source audit and within-version tests; none of the32original lane merges itself establishes this owed item complete."
+    },
+    {
+      "id": "shared_numeric_helpers",
+      "requirement": "cast_elements, reduce_stat float/integer sums, normal_init_f32, resident X gathers for CV; existing per-call upload/download helpers do not complete residency.",
+      "status": "NOT_CLOSED_BY_THIS_AUDIT",
+      "next_action": "Root-owned source audit and within-version tests; none of the32original lane merges itself establishes this owed item complete."
+    },
+    {
+      "id": "decomp_python_leftovers",
+      "requirement": "Four numeric Python leftovers in fam2-decomp report.",
+      "status": "NOT_CLOSED_BY_THIS_AUDIT",
+      "next_action": "Root-owned source audit and within-version tests; none of the32original lane merges itself establishes this owed item complete."
+    },
+    {
+      "id": "neighbor_sketch_rng",
+      "requirement": "Host MT19937 sketch tables in fam2-neighbors.",
+      "status": "NOT_CLOSED_BY_THIS_AUDIT",
+      "next_action": "Root-owned source audit and within-version tests; none of the32original lane merges itself establishes this owed item complete."
+    },
+    {
+      "id": "gbdt_multiclass_leaf_solve",
+      "requirement": "Multiclass one-step per-leaf solve on device and symmetric-fit drain merge.",
+      "status": "NOT_CLOSED_BY_THIS_AUDIT",
+      "next_action": "Root-owned source audit and within-version tests; none of the32original lane merges itself establishes this owed item complete."
+    },
+    {
+      "id": "host_route_baseline_false_positives",
+      "requirement": "Review each not-compute list with explicit reason; preserve latest user requirement to retain OFF arms rather than deleting them as old handoff suggested.",
+      "status": "NOT_CLOSED_BY_THIS_AUDIT",
+      "next_action": "Root-owned source audit and within-version tests; none of the32original lane merges itself establishes this owed item complete."
+    }
+  ],
+  "ptx": {
+    "source_ref": "fix/wheel-size-main-20261004",
+    "source_sha": "cb704e3c7870284744181c1aa92e1ad2412bf880",
+    "integration": "ANCESTOR",
+    "retained_historical_evidence": "~/mojolearn-evidence/wheel-split-20261004/5c156c5f225e/",
+    "historical_limits": "Rehearsal source5c156c5f, A100 capture2535cells truncated; no current-release admission.",
+    "remaining": [
+      "Freeze final integrated source only after correctness/quality/keep-drop and merge-to-main.",
+      "Build fresh wheels/PTX from frozen SHA; full nine-fixture native/PTX4090,H100,A100 validation.",
+      "A100 verify --qualify-gpu and --fallback-stage real-wheel end-to-end.",
+      "Record72-cell conflict set, settle21 stale rows, gemm-int15 cleanup and regenerated reference/admission records.",
+      "Verify mamba_host_gen --check on finalsource; source regeneration earlier is not final-tree proof.",
+      "Publishing excluded."
+    ],
+    "status": "FINAL_BATCH_NOT_DONE"
+  },
+  "retained_current_evidence": {
+    "compile_summary": "~/mojolearn-evidence/identical-all/codex-compile-live-summary.json",
+    "compile_limit": "Mixed snapshots andpartialOFF coverage; read receipts by SHA/flags.265/349completed at audited summary snapshot is not whole-tree completion.",
+    "dart_fixed_bits": "~/mojolearn-evidence/identical-all/dart-fixed-all-column-bits.json",
+    "block_eigh_refusal": "~/mojolearn-evidence/identical-all/eigh-block-drop.json",
+    "lu_canonical_nan": "~/mojolearn-evidence/identical-all/lu-nan-fix-report.json",
+    "callpath": "~/mojolearn-evidence/callpath-20261004/; primitive tests do not prove every estimator wired."
+  },
+  "actionable_gaps": [
+    {
+      "id": "candidate_build_surface",
+      "severity": "blocks_candidate_qualification",
+      "detail": "Native builder only supports masterON/OFF; explicit candidate defines/parameters are not exposed. Default compile does not instantiate disabled candidates.",
+      "owner_next": "remote_plan add reviewed explicit-defines recipes after coordinating native-builder owner."
+    },
+    {
+      "id": "candidate_route_eligibility",
+      "severity": "blocks_interpretable_measurement",
+      "detail": "47representative cases omit hierarchy/HDBSCAN and wide extra-trees shapes;50krows already above HDB default sparse threshold. Recipes require purposeful sizes, boundary values and route readbacks."
+    },
+    {
+      "id": "all_columns_and_arms",
+      "severity": "blocks_promotion",
+      "detail": "Current passing identities apply to selected fixtures and snapshots; require final sameSHA per-arm acrossNVIDIA/AMD/Apple/host and distinguish numeric fold changes between arms."
+    },
+    {
+      "id": "callpath_public_wiring",
+      "severity": "blocks_callpath_promotion",
+      "detail": "e797implementation included and primitives tested; all-estimator wiring and persistent/grouped caller timing contracts remain partial."
+    },
+    {
+      "id": "cpu_owed_items",
+      "severity": "blocks_original_task_completion",
+      "detail": "Original15group CPU-removal list remains explicitly tracked; no automatic completion from source ancestry or host-route row count."
+    },
+    {
+      "id": "old_lost_results",
+      "severity": "evidence_gap",
+      "detail": "First nine-lane GPU round lost outputs; original129/129compilation is not retained bit/timing proof."
+    }
+  ],
+  "audit_limits": [
+    "Ancestry proves preserved branch history integrated; it does not alone prove every merged hunk or candidate route survived unchanged.72explicit flags were resolved to retained source locations.",
+    "Six original merge-resolution sites and deeper lane-specific eligibility still require their compile/route receipts; no blanket semantic merge PASS.",
+    "Candidate inventory is report-derived and explicitly PENDING qualification; no runtime or measurement launched for this audit."
+  ]
+}
