@@ -52,7 +52,7 @@ from x_cluster.bodies import (
     lance_williams,
     LINK_WARD,
 )
-from cluster.estimator import kmeans_fit, kmeans_fit_rows
+from cluster.estimator import kmeans_fit, kmeans_fit_rows, kmeans_fit_rows_resident
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.contract import OP_TN
@@ -2034,12 +2034,14 @@ struct DeviceOps(ClusterOps):
         self._ph0()
         var xc = x.copy()
         centers = List[Float32](length=k * d, fill=Float32(0))
-        var lab = List[UInt32](length=n, fill=UInt32(0))
+        # the fit's UInt32 labels land in the Int32 list's own words (labels
+        # are < 2^31, so the bits are the Int32 values): no host conversion
+        labels = List[Int32](length=n, fill=Int32(0))
         var w = weights.copy() if len(weights) > 0 else List[Float32](length=1, fill=Float32(1))
         var r = kmeans_fit(
             self.ctx, xc.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), n, d, k,
             centers.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
-            lab.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            labels.unsafe_ptr().bitcast[UInt32]().unsafe_origin_cast[MutUntrackedOrigin](),
             w.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), len(weights),
             max_iter=max_iter, tol=tol, seed=seed, n_init=n_init, init=init, metric=METRIC_L2_EXPANDED,
         )
@@ -2049,9 +2051,6 @@ struct DeviceOps(ClusterOps):
         # run drift and CUDA_ERROR_ILLEGAL_ADDRESS on the bisecting lane).
         _ = xc^
         _ = w^
-        labels = List[Int32](capacity=n)
-        for t in range(n):
-            labels.append(Int32(lab[t]))
         self._ph1("kmeans")
         return r.inertia
 
@@ -2074,18 +2073,32 @@ struct DeviceOps(ClusterOps):
         self._ph0()
         var n = len(rows)
         centers = List[Float32](length=k * d, fill=Float32(0))
-        var lab = List[UInt32](length=n, fill=UInt32(0))
+        # UInt32 labels straight into the Int32 list's words (labels < 2^31)
+        labels = List[Int32](length=n, fill=Int32(0))
         var r = kmeans_fit_rows(
             self.ctx, self.f[sub], MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(x.unsafe_ptr())), rows, d, k,
             centers.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
-            lab.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            labels.unsafe_ptr().bitcast[UInt32]().unsafe_origin_cast[MutUntrackedOrigin](),
             max_iter=max_iter, tol=tol, seed=seed, n_init=n_init, init=init, metric=METRIC_L2_EXPANDED,
         )
         _ = x[0]
         _ = rows[0]
-        labels = List[Int32](capacity=n)
-        for t in range(n):
-            labels.append(Int32(lab[t]))
+        self._ph1("kmeans")
+        return r.inertia
+
+    def kmeans_sub(
+        mut self, sub: Int, m: Int, d: Int, k: Int, max_iter: Int, tol: Float64, seed: UInt64, n_init: Int,
+        init: Int, mut centers: List[Float32], mut labels: DeviceBuffer[DType.uint32],
+    ) raises -> Float64:
+        """`kmeans_rows` on the m gathered rows of slot `sub` with the labels
+        left on the device in `labels` (m words): the same fit, so the same
+        words (lane cpu3-core: the FAST bisecting split)."""
+        self._ph0()
+        centers = List[Float32](length=k * d, fill=Float32(0))
+        var r = kmeans_fit_rows_resident(
+            self.ctx, self.f[sub], m, d, k, centers.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), labels,
+            max_iter=max_iter, tol=tol, seed=seed, n_init=n_init, init=init, metric=METRIC_L2_EXPANDED,
+        )
         self._ph1("kmeans")
         return r.inertia
 

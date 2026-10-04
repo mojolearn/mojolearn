@@ -458,9 +458,11 @@ def _kmeans_fit_tail(
     oversampling_factor: Float64,
     sum_scale: Float64,
     weight_scale: Float64,
+    copy_labels: Bool = True,
 ) raises -> KMeansFitResult:
     """`kmeans_fit` from the uploaded design on: the row norms, the fit, the
-    read-back (shared with `kmeans_fit_rows`)."""
+    read-back (shared with `kmeans_fit_rows`). `copy_labels` False leaves
+    the labels in `labels` on the device (`out_labels_ptr` is not written)."""
     var take_sqrt = Int32(0)
     if centroid_norms_take_sqrt(metric):
         take_sqrt = Int32(1)
@@ -506,7 +508,8 @@ def _kmeans_fit_tail(
     # into the caller's arrays. The copy engine writes the caller's pages
     # instead, which is the same bytes and two host passes fewer.
     ctx.enqueue_copy(dst_ptr=out_centroids_ptr, src_buf=centroids)
-    ctx.enqueue_copy(dst_ptr=out_labels_ptr, src_buf=labels)
+    if copy_labels:
+        ctx.enqueue_copy(dst_ptr=out_labels_ptr, src_buf=labels)
     ctx.synchronize()
 
     return KMeansFitResult(
@@ -554,6 +557,48 @@ def kmeans_fit_rows(
         ctx, x, x_norm, weights, centroids, labels, min_dist, n_samples, n_features,
         n_clusters, out_centroids_ptr, out_labels_ptr, max_iter, tol, seed, n_init, init,
         metric, oversampling_factor, sum_scale, weight_scale,
+    )
+
+
+def kmeans_fit_rows_resident(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    out_centroids_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mut labels: DeviceBuffer[DType.uint32],
+    max_iter: Int = 300,
+    tol: Float64 = 1e-4,
+    seed: UInt64 = 0,
+    n_init: Int = 1,
+    init: Int = INIT_KMEANS_PLUS_PLUS,
+    metric: Int = METRIC_L2_EXPANDED,
+    oversampling_factor: Float64 = 2.0,
+) raises -> KMeansFitResult:
+    """`kmeans_fit_rows` (the same scale, the same tail, so the same words)
+    on the `n_samples` gathered rows in `x`, with the labels left on the
+    device in `labels` (n_samples words) for a caller that consumes them
+    there (lane cpu3-core: the FAST bisecting split keeps row membership on
+    the device). Only the centroids come back."""
+    if n_samples < 1 or n_features < 1 or n_clusters < 1 or n_clusters > n_samples:
+        raise Error("kmeans_fit_rows_resident: bad shape " + String(n_samples) + " x " + String(n_features)
+                    + " for " + String(n_clusters) + " clusters")
+    var sum_scale = plan_sum_scale(ctx, x, n_samples, n_features)
+    var weight_scale = choose_scale(Float64(n_samples), n_samples)
+    var cd = n_clusters * n_features
+    var weights = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    var centroids = ctx.enqueue_create_buffer[DType.float32](cd)
+    var x_norm = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    var min_dist = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    enqueue_fill[DType.float32](ctx, weights, Float32(1.0))
+    # the tail does not write `out_labels_ptr` with copy_labels False; any
+    # valid host pointer of the type stands in (never dereferenced)
+    var no_host_labels = out_centroids_ptr.bitcast[UInt32]()
+    return _kmeans_fit_tail(
+        ctx, x, x_norm, weights, centroids, labels, min_dist, n_samples, n_features,
+        n_clusters, out_centroids_ptr, no_host_labels, max_iter, tol, seed, n_init, init,
+        metric, oversampling_factor, sum_scale, weight_scale, copy_labels=False,
     )
 
 
