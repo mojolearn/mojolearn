@@ -42,6 +42,7 @@ from checks.soft_f64 import (
     sf64_sub,
     sf64_to_f32,
 )
+from core.device_fold import device_exclusive_scan_total_from
 from core.device_zero import enqueue_fill
 from core.fast_radix_sort import (
     fast_radix_sort_pairs_u32,
@@ -1086,10 +1087,10 @@ def device_stratified_fold_ids(
     counts_addr: Int, fold_addr: Int, fold_counts_addr: Int,
 ) raises -> Bool:
     """`fold_ids` with class codes (`1 <= n <= HPD_MAX_N`, `k >= 1`,
-    `splits >= 2`). The rows are counted, ranked and dealt on the device;
-    the host builds only the k x splits quota table from the k class counts
-    (control data, the helper's own integer formula). False when a code is
-    out of range (nothing written)."""
+    `splits >= 2`). The rows are counted, ranked and dealt on the device,
+    and the k x splits quota table is built there too (the helper's own
+    integer formula, `_fold_quota_rows_kernel`). False when a code is out of
+    range (nothing written)."""
     var d_codes = ctx.enqueue_create_buffer[DType.int32](n)
     var d_cnt = ctx.enqueue_create_buffer[DType.int32](k)
     var d_order = ctx.enqueue_create_buffer[DType.uint32](k)
@@ -1100,51 +1101,36 @@ def device_stratified_fold_ids(
         _ = d_cnt^
         _ = d_order^
         return False
-    var h_cnt = ctx.enqueue_create_host_buffer[DType.int32](k)
-    var h_order = ctx.enqueue_create_host_buffer[DType.uint32](k)
-    ctx.enqueue_copy(dst_ptr=h_cnt.unsafe_ptr(), src_buf=d_cnt)
-    ctx.enqueue_copy(dst_ptr=h_order.unsafe_ptr(), src_buf=d_order)
-    ctx.synchronize()
-    var h_start = ctx.enqueue_create_host_buffer[DType.int32](k)
-    var h_cum = ctx.enqueue_create_host_buffer[DType.int32](k * splits)
-    var cp = h_cnt.unsafe_ptr()
-    var op = h_order.unsafe_ptr()
-    var sp = h_start.unsafe_ptr()
-    var qp = h_cum.unsafe_ptr()
-    var at = 0
-    for c in range(k):
-        sp.unsafe_store(c, Int32(at))
-        at += Int(cp.unsafe_load(c))
-    var offset = 0
-    for j in range(k):
-        var c = Int(op.unsafe_load(j))
-        var count = Int(cp.unsafe_load(c))
-        var run = 0
-        for fold in range(splits):
-            var first = (fold - offset) % splits
-            if first < 0:
-                first += splits
-            var take = 0
-            if first < count:
-                take = 1 + (count - 1 - first) // splits
-            run += take
-            qp.unsafe_store(c * splits + fold, Int32(run))
-        offset += count
-    var d_start = ctx.enqueue_create_buffer[DType.int32](k)
+    # lane/review-fixes: the k x splits quota table is built on the device
+    # (was a host loop over k x splits entries between device phases): the
+    # class starts are the exclusive scan of the counts in class order, each
+    # class's offset the exclusive scan of the counts in `d_order`, and one
+    # thread per class runs the helper's own integer formula over the folds.
+    # Integers only: the same table, no bit moves.
+    var d_start = ctx.enqueue_create_buffer[DType.int32](k + 1)
     var d_cum = ctx.enqueue_create_buffer[DType.int32](k * splits)
     var d_cnt64 = ctx.enqueue_create_buffer[DType.int64](k)
-    ctx.enqueue_copy(dst_buf=d_start, src_buf=h_start)
-    ctx.enqueue_copy(dst_buf=d_cum, src_buf=h_cum)
+    var d_ocnt = ctx.enqueue_create_buffer[DType.int32](k)
+    var d_ooff = ctx.enqueue_create_buffer[DType.int32](k + 1)
+    device_exclusive_scan_total_from(ctx, d_cnt, d_start, k)
+    ctx.enqueue_function[_gather_by_order_kernel](
+        d_cnt.unsafe_ptr(), d_order.unsafe_ptr(), Int32(k), d_ocnt.unsafe_ptr(),
+        grid_dim=_blocks(k), block_dim=HPD_TPB,
+    )
+    device_exclusive_scan_total_from(ctx, d_ocnt, d_ooff, k)
+    ctx.enqueue_function[_fold_quota_rows_kernel](
+        d_cnt.unsafe_ptr(), d_order.unsafe_ptr(), d_ooff.unsafe_ptr(), Int32(k), Int32(splits),
+        d_cum.unsafe_ptr(),
+        grid_dim=_blocks(k), block_dim=HPD_TPB,
+    )
     ctx.enqueue_function[_widen_counts_kernel](
         d_cnt.unsafe_ptr(), Int32(k), d_cnt64.unsafe_ptr(), Int32(0),
         grid_dim=_blocks(k), block_dim=HPD_TPB,
     )
     ctx.enqueue_copy(dst_ptr=_I64(unsafe_from_address=counts_addr), src_buf=d_cnt64)
     device_rank_folds(ctx, d_codes, n, k, splits, d_start, d_cum, 0, fold_addr, fold_counts_addr)
-    _ = h_cnt^
-    _ = h_order^
-    _ = h_start^
-    _ = h_cum^
+    _ = d_ocnt^
+    _ = d_ooff^
     _ = d_codes^
     _ = d_cnt^
     _ = d_order^
@@ -1225,54 +1211,39 @@ def device_strat_fold_assign_i32(
     perms_addr: Int, counts_addr: Int, dst_addr: Int,
 ) raises -> Bool:
     """`strat_fold_assign_i32`. The k x n_folds tables (class offsets,
-    cumulative allocations) are built on the host from the caller's k-sized
-    `counts` and `alloc` (control data); every row is ranked and assigned on
-    the device. False (nothing written) when the tables are inconsistent or
+    cumulative allocations) are built on the device from the caller's
+    uploaded `counts` and `alloc` (`_strat_alloc_rows_kernel` and a scan);
+    every row is ranked and assigned on the device. False (nothing written) when the tables are inconsistent or
     a class code is out of range: the binding reruns the host helper."""
+    # lane/review-fixes: the k x n_folds tables are built on the device from
+    # the uploaded `counts` and `alloc` (was a host loop between device
+    # phases): one thread per class checks its allocations (non-negative,
+    # summing to its count) into status[0] and writes its cumulative row;
+    # the class starts are the exclusive scan of the counts. The caller's
+    # counts must equal the rows' own counts (checked below), so they sum to
+    # n. Integers only: the same tables, no bit moves.
     var cp = _I64(unsafe_from_address=counts_addr)
     var ap = _I64(unsafe_from_address=alloc_addr)
-    var h_start = ctx.enqueue_create_host_buffer[DType.int32](k)
-    var h_cum = ctx.enqueue_create_host_buffer[DType.int32](k * n_folds)
-    var sp = h_start.unsafe_ptr()
-    var qp = h_cum.unsafe_ptr()
-    var at = 0
-    var consistent = True
-    for c in range(k):
-        var count = Int(cp.unsafe_load(c))
-        if count < 0:
-            consistent = False
-            count = 0
-        sp.unsafe_store(c, Int32(at))
-        at += count
-        var run = 0
-        for f in range(n_folds):
-            var a = Int(ap.unsafe_load(f * k + c))
-            if a < 0:
-                consistent = False
-                a = 0
-            run += a
-            qp.unsafe_store(c * n_folds + f, Int32(run))
-        if run != count:
-            consistent = False
-    if at != n:
-        consistent = False
-    if not consistent:
-        _ = h_start^
-        _ = h_cum^
-        return False
     var d_codes = ctx.enqueue_create_buffer[DType.int32](n)
     var d_cnt = ctx.enqueue_create_buffer[DType.int32](k)
     var d_cnt64 = ctx.enqueue_create_buffer[DType.int64](k)
     var d_ref64 = ctx.enqueue_create_buffer[DType.int64](k)
+    var d_alloc = ctx.enqueue_create_buffer[DType.int64](k * n_folds)
+    var d_ref32 = ctx.enqueue_create_buffer[DType.int32](k)
     var d_status = ctx.enqueue_create_buffer[DType.int32](2)
-    var d_start = ctx.enqueue_create_buffer[DType.int32](k)
+    var d_start = ctx.enqueue_create_buffer[DType.int32](k + 1)
     var d_cum = ctx.enqueue_create_buffer[DType.int32](k * n_folds)
     enqueue_fill(ctx, d_cnt, Int32(0))
     enqueue_fill(ctx, d_status, Int32(0))
     ctx.enqueue_copy(dst_buf=d_codes, src_ptr=_I32(unsafe_from_address=enc_addr))
     ctx.enqueue_copy(dst_buf=d_ref64, src_ptr=cp)
-    ctx.enqueue_copy(dst_buf=d_start, src_buf=h_start)
-    ctx.enqueue_copy(dst_buf=d_cum, src_buf=h_cum)
+    ctx.enqueue_copy(dst_buf=d_alloc, src_ptr=ap)
+    ctx.enqueue_function[_strat_alloc_rows_kernel](
+        d_ref64.unsafe_ptr(), d_alloc.unsafe_ptr(), Int32(k), Int32(n_folds),
+        d_ref32.unsafe_ptr(), d_cum.unsafe_ptr(), d_status.unsafe_ptr(),
+        grid_dim=_blocks(k), block_dim=HPD_TPB,
+    )
+    device_exclusive_scan_total_from(ctx, d_ref32, d_start, k)
     # the rows' own class counts must be the caller's `counts`: a row whose
     # rank passes its class's count would read another class's permutation
     ctx.enqueue_function[_bincount_i32_kernel](
@@ -1290,8 +1261,8 @@ def device_strat_fold_assign_i32(
     var ok = _read_status(ctx, d_status, 0) == 0
     if ok:
         device_rank_folds(ctx, d_codes, n, k, n_folds, d_start, d_cum, perms_addr, dst_addr, 0)
-    _ = h_start^
-    _ = h_cum^
+    _ = d_alloc^
+    _ = d_ref32^
     _ = d_codes^
     _ = d_cnt^
     _ = d_cnt64^
@@ -1300,6 +1271,68 @@ def device_strat_fold_assign_i32(
     _ = d_start^
     _ = d_cum^
     return ok
+
+
+def _gather_by_order_kernel(cnt: _I32, order: _U32, k_: Int32, dst: _I32):
+    """dst[j] = cnt[order[j]] (lane/review-fixes)."""
+    var j = _tid()
+    if j < Int(k_):
+        dst.unsafe_store(j, cnt.unsafe_load(Int(order.unsafe_load(j))))
+
+
+def _fold_quota_rows_kernel(cnt: _I32, order: _U32, pos_off: _I32, k_: Int32, splits_: Int32, cum: _I32):
+    """One thread per position j of `order` (lane/review-fixes): class
+    c = order[j] dealt from offset pos_off[j] (the counts of the classes
+    before it in `order`); cum[c * splits + fold] is the running number of
+    its rows in folds 0 .. fold, the host helper's formula line for line."""
+    var j = _tid()
+    if j >= Int(k_):
+        return
+    var splits = Int(splits_)
+    var c = Int(order.unsafe_load(j))
+    var count = Int(cnt.unsafe_load(c))
+    var offset = Int(pos_off.unsafe_load(j))
+    var run = 0
+    for fold in range(splits):
+        var first = (fold - offset) % splits
+        if first < 0:
+            first += splits
+        var take = 0
+        if first < count:
+            take = 1 + (count - 1 - first) // splits
+        run += take
+        cum.unsafe_store(c * splits + fold, Int32(run))
+
+
+def _strat_alloc_rows_kernel(
+    cnt64: _I64, alloc: _I64, k_: Int32, n_folds_: Int32, cnt32: _I32, cum: _I32, status: _I32
+):
+    """One thread per class c (lane/review-fixes): cnt32[c] = counts[c],
+    cum[c * n_folds + f] = alloc[0 .. f][c] summed; status[0] = 1 when a
+    count or an allocation is negative or the allocations miss the count."""
+    var c = _tid()
+    var k = Int(k_)
+    if c >= k:
+        return
+    var n_folds = Int(n_folds_)
+    var count = Int(cnt64.unsafe_load(c))
+    var bad = False
+    if count < 0:
+        bad = True
+        count = 0
+    cnt32.unsafe_store(c, Int32(count))
+    var run = 0
+    for f in range(n_folds):
+        var a = Int(alloc.unsafe_load(f * k + c))
+        if a < 0:
+            bad = True
+            a = 0
+        run += a
+        cum.unsafe_store(c * n_folds + f, Int32(run))
+    if run != count:
+        bad = True
+    if bad:
+        status.unsafe_store(0, Int32(1))
 
 
 def _eq_u64_status_kernel(a: _I64, b: _I64, k: Int32, status: _I32):
