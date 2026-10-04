@@ -161,7 +161,7 @@ def split_audit(wheels):
                    tags=sorted(tags), members=len(payload),
                    binaries=sum(m.endswith('.so') for m in payload))
         if wheel.stat().st_size > plugins.wheel_size_limit(name):
-            problems.append(f'{wheel.name}: exceeds the PyPI per-file size limit')
+            problems.append(f'{wheel.name}: exceeds the configured project upload budget')
         if name == plugins.CORE_DISTRIBUTION:
             row['role'] = plugins.CORE_PROFILE
             stray = [m for m in payload if plugins.member_vendor(m)]

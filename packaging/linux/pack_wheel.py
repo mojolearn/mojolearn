@@ -9,7 +9,7 @@
         --set bench/results/wheels/<stamp3>-amd/sets/hip \\
         --out python/dist
 
-SIX NATIVE WHEELS BY DEFAULT (python/mojolearn/gpu_plugins.py):
+THREE NATIVE WHEELS BY DEFAULT (python/mojolearn/gpu_plugins.py):
 core and two vendor packages. NVIDIA carries Ada and Hopper together; AMD
 carries gfx942. The core requires both vendors, which pin the core exactly.
 Default pip installation still includes every released native target.
