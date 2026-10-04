@@ -566,14 +566,51 @@ comptime IDN_RAND_RESIDENT = _API_IDN and not (is_defined["MOJOLEARN_IDN_RAND_RE
 # W^T and H^T, FactorAnalysis, PLS, the svd tail's column selections, LLE.
 # Copies only: the same words. -D MOJOLEARN_IDN_RES_MOVES_OFF clears the bit.
 comptime IDN_RES_MOVES = _API_IDN and not (is_defined["MOJOLEARN_IDN_RES_MOVES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# lane fix-d1-decomp (2026-10-04, audit F7/B7): the decomp Python leftovers.
+# IDN_NMF_L2_CELL (bit 5): NMF's coordinate descent adds l2 to H H^T's
+# diagonal with one `axpy` cell against the identity mask on EVERY column of
+# an IDENTICAL build (device and host binding alike), instead of a host copy
+# of H H^T and a Python loop. Bits move on all four together: l2 is rounded
+# to float32 and added in the cell's fused step, and an off-diagonal -0.0
+# becomes +0.0. -D MOJOLEARN_IDN_NMF_L2_CELL_OFF keeps the Python loop.
+comptime IDN_NMF_L2_CELL = _API_IDN and not (is_defined["MOJOLEARN_IDN_NMF_L2_CELL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# IDN_ICA_LIM_DEV (bit 6): FastICA's parallel convergence scalar
+# max |abs(diag(W1 W^T)) - 1| is reduced on the device (`x_decomp_dev_maxabs`)
+# and one word comes down, instead of k words and a Python max. A max is
+# exact: the same value. -D MOJOLEARN_IDN_ICA_LIM_DEV_OFF.
+comptime IDN_ICA_LIM_DEV = _API_IDN and not (is_defined["MOJOLEARN_IDN_ICA_LIM_DEV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# IDN_POLAR_MAX_DEV (bit 7): varimax/quartimax `_polar`'s max |A| (it picks
+# an exact power-of-two scale) is reduced on the device, one word down,
+# instead of the k x k matrix and a Python max. The same value.
+# -D MOJOLEARN_IDN_POLAR_MAX_DEV_OFF.
+comptime IDN_POLAR_MAX_DEV = _API_IDN and not (is_defined["MOJOLEARN_IDN_POLAR_MAX_DEV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# IDN_LLE_PAD_DEV (bit 8): LLE's shift-invert loop pads its resident X
+# ((n - 1) x p) with a zero row on the device (PLACE_COLS + FILL0 moves),
+# instead of downloading X and uploading [X; 0] twice per iteration. Copies
+# only: the same words. -D MOJOLEARN_IDN_LLE_PAD_DEV_OFF.
+comptime IDN_LLE_PAD_DEV = _API_IDN and not (is_defined["MOJOLEARN_IDN_LLE_PAD_DEV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+#: the binding exports `x_decomp_dev_maxabs` (GPU binding) when a user is on
+comptime IDN_DEV_MAXABS = IDN_ICA_LIM_DEV or IDN_POLAR_MAX_DEV
 
 
 def idn_flags_py() raises -> PythonObject:
     """Bit 0: LinearRegression takes `ols_tsqr_r_py`; bit 1: solve takes
     `lu_gesv_py`; bit 2: LLE builds F0 in cells (IDN_LLE_DEV_F0); bit 3: the
     kit's `rand` stays on the device (IDN_RAND_RESIDENT); bit 4: resident
-    transpose / take_cols / rows (IDN_RES_MOVES)."""
+    transpose / take_cols / rows (IDN_RES_MOVES); bit 5: NMF l2 by a cell
+    (IDN_NMF_L2_CELL); bit 6: FastICA's limit on the device
+    (IDN_ICA_LIM_DEV); bit 7: `_polar`'s max on the device
+    (IDN_POLAR_MAX_DEV); bit 8: LLE's zero-row pad on the device
+    (IDN_LLE_PAD_DEV)."""
     var bits = 0
+    comptime if IDN_NMF_L2_CELL:
+        bits |= 32
+    comptime if IDN_ICA_LIM_DEV:
+        bits |= 64
+    comptime if IDN_POLAR_MAX_DEV:
+        bits |= 128
+    comptime if IDN_LLE_PAD_DEV:
+        bits |= 256
     comptime if IDN_RES_MOVES:
         bits |= 16
     comptime if IDN_RAND_RESIDENT:

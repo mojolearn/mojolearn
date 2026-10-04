@@ -1121,3 +1121,64 @@ def _pool_buf_view(id: Int, count: Int) raises -> DeviceBuffer[DType.float32]:
     """The first `count` floats of pooled matrix id as a sub-buffer."""
     var p = X_DECOMP_POOL.get_or_create_ptr()
     return p[].bufs[id].create_sub_buffer[DType.float32](0, count)
+
+
+# ---- lane fix-d1-decomp (2026-10-04, audit F7): a device max |.| ----
+#: FastICA's convergence scalar (IDN_ICA_LIM_DEV) and `_polar`'s scale
+#: (IDN_POLAR_MAX_DEV) took a max over values Python downloaded. Here the
+#: max is reduced on the device and one word comes down. A max is exact and
+#: does not depend on the order it is taken in, so the value is the one the
+#: host max gives (NaN: any NaN makes the result NaN). No flush of
+#: subnormals, as the Python max took the stored words.
+comptime MAXABS_SLICE = 256
+
+
+def maxabs_slice_kernel(src: F32Ptr, dst: F32Ptr, count: Int32):
+    """dst[t] = max |src[q]| over the slice [t * MAXABS_SLICE, ...) of the
+    first `count` values; NaN when the slice holds a NaN."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var cnt = Int(count)
+    var nb = (cnt + MAXABS_SLICE - 1) // MAXABS_SLICE
+    if t < nb:
+        var best = Float32(0)
+        var nanv = Float32(0)
+        var seen_nan = False
+        var q1 = min(cnt, (t + 1) * MAXABS_SLICE)
+        for q in range(t * MAXABS_SLICE, q1):
+            var v = abs(src.unsafe_load(q))
+            if v != v:
+                seen_nan = True
+                nanv = v
+            elif v > best:
+                best = v
+        dst.unsafe_store(t, nanv if seen_nan else best)
+
+
+def dev_maxabs_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+    """dst (a device matrix of >= 1 value) = max |a| over the first p[0]
+    values of the device matrix a (NaN if any is NaN). Slices of
+    MAXABS_SLICE values per thread, then the slice maxima the same way
+    until one value is left: ceil(log_256(count)) launches, no wait."""
+    var count = _n(p, 0)
+    if count < 1:
+        raise Error("x_decomp: maxabs needs at least one value")
+    var src = _ptr(_id(a), count)
+    var pd = _ptr(_id(dst), 1)
+    var ctx = xd_ctx()
+    var cur_id = -1
+    var cur = src
+    var cnt = count
+    while cnt > MAXABS_SLICE:
+        var nb = (cnt + MAXABS_SLICE - 1) // MAXABS_SLICE
+        var nid = pool_alloc(nb)
+        var pn = _ptr(nid, nb)
+        ctx.enqueue_function[maxabs_slice_kernel](cur, pn, Int32(cnt), grid_dim=_blocks(nb), block_dim=TPB)
+        if cur_id >= 0:
+            pool_free(cur_id)      # the context runs in order: a reuse comes after this read
+        cur_id = nid
+        cur = pn
+        cnt = nb
+    ctx.enqueue_function[maxabs_slice_kernel](cur, pd, Int32(cnt), grid_dim=1, block_dim=TPB)
+    if cur_id >= 0:
+        pool_free(cur_id)
+    return PythonObject(1)

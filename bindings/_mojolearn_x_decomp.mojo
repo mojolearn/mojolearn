@@ -34,6 +34,8 @@ from x_decomp.resident import IDN_CD_RESIDENT, dev_cd_rows_py
 from x_decomp.resident import IDN_SVD_RESIDENT, dev_svd_py
 from x_decomp.resident import IDN_LU_RESIDENT, dev_lu_py, dev_lu_aux_py
 from x_decomp.resident import IDN_QR_R_RESIDENT, dev_qr_r_py
+from x_decomp.resident import dev_maxabs_py
+from x_decomp.api import IDN_DEV_MAXABS
 from x_decomp.resident import IDN_CODE_RESIDENT, dev_code_rows_py
 from x_decomp.resident import IDN_EIGH_RESIDENT, dev_eigh_py
 
@@ -141,6 +143,10 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         comptime if IDN_QR_R_RESIDENT:
             # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_QR_R_RESIDENT_OFF) (x_decomp/resident.mojo)
             m.def_function[dev_qr_r_py]("x_decomp_dev_qr_r")
+        comptime if IDN_DEV_MAXABS:
+            # lane fix-d1-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_ICA_LIM_DEV_OFF and
+            # -D MOJOLEARN_IDN_POLAR_MAX_DEV_OFF) (x_decomp/resident.mojo)
+            m.def_function[dev_maxabs_py]("x_decomp_dev_maxabs")
         comptime if IDN_CODE_RESIDENT:
             # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_CODE_RESIDENT_OFF) (x_decomp/resident.mojo)
             m.def_function[dev_code_rows_py]("x_decomp_dev_code_rows")
