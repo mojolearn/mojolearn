@@ -239,6 +239,17 @@ def dev_ew_py(
     return PythonObject(count)
 
 
+struct _CovGate(Defaultable, Movable):
+    """One persistent typed gate on xd_ctx; never released between enqueues."""
+    var bufs: List[DeviceBuffer[DType.int32]]
+
+    def __init__(out self):
+        self.bufs = List[DeviceBuffer[DType.int32]]()
+
+
+comptime MCD_COV_GATE = _Global[StorageType=_CovGate, name="MojoMCDOrderedCovGate", init_fn=_CovGate.__init__]
+
+
 def dev_mcd_cov_py(a: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
     """Opt-in MCD final masked covariance Gram; no generic GEMM dispatch change."""
     comptime if not MCD_ORDERED_COV:
@@ -249,10 +260,20 @@ def dev_mcd_cov_py(a: PythonObject, c: PythonObject, p: PythonObject) raises -> 
         raise Error("ordered covariance invalid shape or Int32 bound exceeded")
     note_cov_route(False, rows, d)
     var words = ordered_cov_scratch(1, rows, d)
+    var ctx = xd_ctx()
+    var state = MCD_COV_GATE.get_or_create_ptr()
+    if len(state[].bufs) == 0:
+        var initial_gate = ctx.enqueue_create_buffer[DType.int32](1)
+        ctx.enqueue_memset(initial_gate, Int32(1))
+        state[].bufs.append(initial_gate^)
+    # The global owner retains this typed allocation past every enqueue and
+    # subsequent download/synchronize. No null pointer, cast, or local-only
+    # allocation whose destruction could add an implicit synchronization.
+    var gate = state[].bufs[0]
+    var gate_ptr = gate.unsafe_ptr[MutAnyOrigin]()
     var sid = pool_alloc(words)
-    launch_mcd_cov_ordered(xd_ctx(), _ptr(_id(a), rows*d), _ptr(_id(c), d*d),
-        _ptr(sid, words), rows, d, 1, rows*d, d*d,
-        I32Ptr(unsafe_from_address=0), True)
+    launch_mcd_cov_ordered(ctx, _ptr(_id(a), rows*d), _ptr(_id(c), d*d),
+        _ptr(sid, words), rows, d, 1, rows*d, d*d, gate_ptr, True)
     # Resident pool reuse is ordered on the same context, as dev_gemm_py.
     pool_free(sid)
     return PythonObject(d*d)

@@ -136,3 +136,7 @@ The first M2 arm A build of a47cdb339 failed before execution: `out` was used as
 ### Installed-SDK compile repair r2
 
 M2 rejected r1's `unsafe_ptr[True]`: its installed `max/mojo/max/gpu/host/device_context.mojo:1858` declares the explicit parameter as `origin: MutOrigin`, not `mut: Bool`. The r1 linked web API belongs to a different SDK revision and does not establish compatibility here. r2 requests `unsafe_ptr[MutAnyOrigin]()` directly from each locally owned mutable buffer, matching the installed compiler diagnostic and the existing `F32Ptr` / `I32Ptr` aliases. This selects the mutable-origin overload; it is not a const cast. Owners remain alive through synchronization. No fixture or threshold changes. Compilation remains owed.
+
+### Non-null gate repair r3
+
+r2 compiled arm A, but arm B instantiated `dev_mcd_cov_py` and rejected its fabricated null `I32Ptr`. r3 lazily allocates one real int32 gate word on `xd_ctx`, initializes it to 1 on the same stream, and retains ownership in a dedicated global buffer holder. The ordered covariance call borrows that allocation with the installed SDK's mutable-origin API. The global owner survives the asynchronous launch through subsequent download/synchronization; there is no per-call gate free or extra synchronize. `gate_all=True` still preserves the original dispatch behavior, but the gate address is now valid even though the kernel does not read it in this mode. No arithmetic or quality-gate changes. M2 arm B compilation and M3 quality remain owed.
