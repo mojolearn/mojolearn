@@ -4376,73 +4376,58 @@ class MDS(_Base):
         return k.ew("sqrt", k.sqdist(Y, Y))
 
     def _nm_native(self, k, Dis, n):
-        """The non-metric SMACOF bookkeeping in native calls (lane/py-decomp-nbrs):
-        Python gathered n (n - 1) / 2 pairs, fed them to IsotonicRegression as
-        lists (a lambda sort of every pair) and scattered and mirrored them back
-        one element at a time, every iteration (about 1 s per iteration at
-        n = 3000). The same positions, the same stable (x, y) order, the same
-        x_linear isotonic fit and predict calls and the same scatter, as
-        buffers. Returns the per-iteration disparity function."""
-        from . import _expansion_linear as _xlin
-        b = k.b
-        cap = max(n * (n - 1) // 2, 1)
-        pos, mir = array.array("i", [0]) * cap, array.array("i", [0]) * cap
-        m = int(b.x_decomp_triu_nonzero(Dis.addr, n, pos.buffer_info()[0], mir.buffer_info()[0]))
-        pa, ma = pos.buffer_info()[0], mir.buffer_info()[0]
-        dis_w = array.array("f", [0.0]) * max(m, 1)
-        b.x_decomp_gather(Dis.addr, pa, m, dis_w.buffer_info()[0])
-        xorder = array.array("i", [0]) * max(m, 1)
-        b.x_decomp_argsort_f32(dis_w.buffer_info()[0], m, xorder.buffer_info()[0])
-        ir = _xlin.IsotonicRegression(out_of_bounds="clip", numeric_mode=self.numeric_mode_)
-        lin = ir._bind(_xlin._BINDING)
+        """Non-metric SMACOF's disparity function (lane cpu2-l8-decomp,
+        re-audit L8 `MDS._nm_native`): one Mojo entry a fit for the setup and
+        one an iteration for the disparities (x_decomp/mds_iso.mojo, the
+        device form x_decomp/mds_iso_dev.mojo, the same words), the pairs
+        and the isotonic fit never leaving where the kit keeps them. The old
+        bookkeeping (host-address triu/gather/sort helpers and x_linear's
+        isotonic fit and predict on host buffers, every iteration) is
+        deleted. Returns disparities(d, first) -> the symmetric n x n P,
+        normalized to sum of squares n (n - 1) / 2 over the upper triangle."""
+        if k._res():
+            N2 = 1 << max(0, (n * n - 1).bit_length())
+            keys, idx, gid = k._dout(1, N2), k._dout(1, N2), k._dout(1, N2)
+            tmp, gst, word = k._dout(1, N2), k._dout(1, N2 + 1), k._dout(1, 1)
+            m, G = k.b.x_decomp_dev_mds_setup(
+                k._did(Dis), [keys._d.id, idx._d.id, gid._d.id, tmp._d.id, gst._d.id, word._d.id], [n, N2])
+            del tmp, word
+            m, G = int(m), int(G)
+            # sm, wt, end, prv, last, hf, hd0, hd1, gv: G values each
+            work = [k._dout(1, max(G, 1)) for _ in range(9)]  # glue: nine scratch matrices
+            hold = (keys, idx, gid, gst, work)
+            ids = [keys._d.id, idx._d.id, gid._d.id, gst._d.id] + [w._d.id for w in work]  # glue: buffer ids
 
-        def call(algo, X, Y, rows, ip, fp, n_out, n_fw, n_iw):
-            # _expansion_linear._run's one x_linear_fit call, its parameter
-            # list verbatim, the output kept as a buffer (no Python list)
-            out = array.array("f", [0.0]) * max(n_out, 1)
-            lin.x_linear_fit(int(algo), X.buffer_info()[0], Y.buffer_info()[0],
-                             [rows, 1, rows, len(Y), n_out, max(n_fw, 1), max(n_iw, 1), len(ip), len(fp)],
-                             [int(v) for v in ip], [float(v) for v in fp], out.buffer_info()[0])  # glue: small x_linear parameter lists
-            return out
+            def run(d, first):
+                _ = hold                # the buffers live as long as this function
+                P = k._dout(n, n)
+                k.b.x_decomp_dev_mds_disp(P._d.id if first else k._did(d), P._d.id, ids,
+                                          [n, m, G, 1 if first else 0])
+                return P
+        else:
+            cap = max(n * (n - 1) // 2, 1)
+            keys = array.array("f", [0.0]) * cap
+            idx, gid = array.array("i", [0]) * cap, array.array("i", [0]) * cap
+            gst = array.array("i", [0]) * (cap + 1)
+            m, G = k.b.x_decomp_mds_setup(Dis.addr, keys.buffer_info()[0], idx.buffer_info()[0],
+                                          gid.buffer_info()[0], gst.buffer_info()[0], [n])
+            m, G = int(m), int(G)
+            gw = max(G, 1)
+            work = [array.array("f", [0.0]) * gw] + [array.array("i", [0]) * gw for _ in range(5)] \
+                + [array.array("f", [0.0]) * gw]  # glue: seven scratch buffers
+            addrs = [a.buffer_info()[0] for a in [keys, idx, gid, gst] + work]  # glue: buffer addresses
+
+            def run(d, first):
+                _ = (keys, idx, gid, gst, work)     # alive as long as this function
+                P = _M.zeros(n, n)
+                k.b.x_decomp_mds_disp(P.addr if first else d.addr, P.addr, addrs, [n, m, G, 1 if first else 0])
+                return P
 
         def disparities(d, first):
-            # the closure holds pos and mir themselves: their addresses alone
-            # would let the arrays die when _nm_native returns
-            pa, ma = pos.buffer_info()[0], mir.buffer_info()[0]
-            if first:
-                flat = dis_w
-            else:
-                ds = array.array("f", [0.0]) * max(m, 1)
-                b.x_decomp_gather(d.addr, pa, m, ds.buffer_info()[0])
-                order = array.array("i", [0]) * max(m, 1)
-                b.x_decomp_iso_order(dis_w.buffer_info()[0], ds.buffer_info()[0], xorder.buffer_info()[0], m,
-                                     order.buffer_info()[0])
-                ob = order.buffer_info()[0]
-                xa = array.array("f", [0.0]) * max(m, 1)
-                b.x_decomp_gather(dis_w.buffer_info()[0], ob, m, xa.buffer_info()[0])
-                yy = array.array("f", [0.0]) * m
-                b.x_decomp_gather(ds.buffer_info()[0], ob, m, yy.buffer_info()[0])
-                # IsotonicRegression(out_of_bounds='clip').fit(dis_w, ds): increasing, no bounds,
-                # no sample_weight. The ABI of IsotonicRegression.fit since lane/neural-pass70:
-                # ip [increasing, has_y_min, has_y_max, has_weights], float work 6 m, int work
-                # 3 m. This call still passed the old 3 flags and 3 m / m work words, so the
-                # binding read ip[3] past the list and wrote past both work buffers: NaN
-                # thresholds on every device column ("y contains NaN or infinity", refcol
-                # smoke at 811275d5b) and the host column's heap.
-                vals = call(_xlin.ALGO_ISOTONIC, xa, yy, m, [1, 0, 0, 0], [0.0, 0.0], 3 + 2 * m, 6 * m, 3 * m)
-                kk = int(vals[0])
-                thr = vals[3:3 + kk] + vals[3 + m:3 + m + kk]
-                # .transform(dis_w): clip, the thresholds and bounds above
-                flat = call(_xlin.ALGO_ISOTONIC_PREDICT, dis_w, thr, m, [kk, 1],
-                            [float(vals[1]), float(vals[2])], m, 1, 1)
-            P = _M.zeros(n, n)
-            b.x_decomp_scatter(P.addr, pa, m, flat.buffer_info()[0])
+            P = run(d, first)
             ss = k.total(k.ew("sq", P)).s[0]
             P = k.ew("scale", P, s=math.sqrt((n * (n - 1) / 2) / ss))
-            tmp = array.array("f", [0.0]) * max(m, 1)
-            b.x_decomp_gather(P.addr, pa, m, tmp.buffer_info()[0])
-            b.x_decomp_scatter(P.addr, ma, m, tmp.buffer_info()[0])
-            return P
+            return k.ew("add", P, P.T)          # the mirror: u + 0 above, 0 + u below
 
         return disparities
 
