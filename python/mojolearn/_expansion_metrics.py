@@ -798,8 +798,12 @@ def matthews_corrcoef(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
     return float(s.prog.words(s.tail + 2, 2, "d")[0])
 
 
-def _confusion(true, pred, w, order, numeric_mode):
-    """The k x k (weighted) confusion matrix over `order`, rows true."""
+def _confusion(true, pred, w, order, numeric_mode, tail):
+    """The k x k (weighted) confusion matrix over `order`, rows true, made on
+    the device and finished by `tail(prog, cells, col)` in the same program
+    (a cm_epi stage, x_metrics/cm_epi.mojo): `cells` is the k*k groups' OFF
+    table (col 0: exact counts, read by the unit as group sizes) or their
+    Float32 PairSums (col 1). Returns (prog, what the tail returned)."""
     n, k = len(true), len(order)
     if k > 4096:
         raise ValueError("mojolearn metrics: at most 4096 labels in a confusion matrix")
@@ -810,11 +814,9 @@ def _confusion(true, pred, w, order, numeric_mode):
     prog.stage("pair_key", n, a, b, key, k, 0)
     W = _NONE if w is None else prog.put(w)
     off, out = _group(prog, key, n, k * k, weights=W)
+    keep = tail(prog, off if w is None else out, 0 if w is None else 1)
     _execute(prog, numeric_mode)
-    if w is None:
-        o = prog.ints(off, k * k + 1)
-        return [o[i + 1] - o[i] for i in range(k * k)]
-    return prog.floats(out, k * k)
+    return prog, keep
 
 
 def confusion_matrix_weighted(y_true, y_pred, labels, sample_weight, normalize, numeric_mode):
@@ -826,27 +828,22 @@ def confusion_matrix_weighted(y_true, y_pred, labels, sample_weight, normalize, 
     if not set(chosen).intersection(_label_set(true)):
         raise ValueError("At least one label specified must be in y_true")
     k = len(chosen)
-    cm = _confusion(true, pred, w, chosen, numeric_mode)
-    cm = _normalize(cm, k, normalize)
-    return Array.from_list([float(v) for v in cm], "<f8").reshape((k, k))
+    prog, out = _confusion(true, pred, w, chosen, numeric_mode,
+                           lambda prog, cells, col: _normalize(prog, cells, col, k, normalize))
+    return Array._owned(prog.words(out, 2 * k * k, "d"), (k, k), "<f8")
 
 
-def _normalize(cm, k, normalize):
-    if normalize is None:
-        return cm
-    out = list(cm)
+def _normalize(prog, cells, col, k, normalize):
+    """Stage the normalization of the k x k cells (x_metrics/cm_epi.mojo,
+    NORM: one unit per row ('true', 'all', none) or column ('pred'), each sum
+    binary64 from 0.0 in ascending index, a zero sum giving 0.0 cells; 'all'
+    first sums every cell in one unit). Returns the binary64 output slot."""
+    out = prog.want(prog.alloc(2 * k * k), 2 * k * k)
+    ts = prog.scratch(2)
     if normalize == "all":
-        t = 0.0
-        for v in cm:
-            t += v
-        return [v / t if t else 0.0 for v in cm]
-    for i in range(k):
-        t = 0.0
-        for j in range(k):
-            t += cm[i * k + j] if normalize == "true" else cm[j * k + i]
-        for j in range(k):
-            idx = i * k + j if normalize == "true" else j * k + i
-            out[idx] = cm[idx] / t if t else 0.0
+        prog.stage("cm_epi", 1, _CM_NORM, cells, k, col, 0, out, ts)
+    if k:
+        prog.stage("cm_epi", k, _CM_NORM, cells, k, col, _NORM_MODES[normalize], out, ts)
     return out
 
 
@@ -864,34 +861,28 @@ def cohen_kappa_score(y1, y2, *, labels=None, weights=None, sample_weight=None,
         raise ValueError("At least one label in `labels` must be present in `y1` (even though "
                          "`cohen_kappa_score` is otherwise agnostic to the order of `y1` and `y2`).")
     k = len(chosen)
-    cm = [float(v) for v in _confusion(true, pred, w, chosen, numeric_mode)]
-    sum0 = [0.0] * k
-    sum1 = [0.0] * k
-    for i in range(k):
-        for j in range(k):
-            sum0[j] += cm[i * k + j]
-            sum1[i] += cm[i * k + j]
-    den = 0.0
-    for v in sum0:
-        den += v
-    if den == 0:
+
+    def tail(prog, cells, col):
+        # x_metrics/cm_epi.mojo, KAPPA: row / column sums (one unit per
+        # class), den (one unit), the weighted row partials (one unit per
+        # row), then num_k / den_k summed by row and the kappa (one unit)
+        out = prog.want(prog.alloc(4), 4)
+        sc = prog.scratch(8 * k + 2)
+        wm = _KAPPA_W[weights]
+        for phase, units in ((0, k), (1, 1), (2, k), (3, 1)):  # glue: the four kappa stages
+            if units:
+                prog.stage("cm_epi", units, _CM_KAPPA, cells, k, col, phase, wm, out, sc)
+        return out
+
+    prog, out = _confusion(true, pred, w, chosen, numeric_mode, tail)
+    flags = prog.ints(out, 1)[0]
+    if flags & 1:
         _undefined_warning("`y2` contains no labels that are present in both `y1` and `labels`.")
         return replace_undefined_by
-    num_k = den_k = 0.0
-    for i in range(k):
-        for j in range(k):
-            if weights is None:
-                wm = 0.0 if i == j else 1.0
-            elif weights == "linear":
-                wm = float(abs(i - j))
-            else:
-                wm = float((i - j) * (i - j))
-            num_k += wm * cm[i * k + j]
-            den_k += wm * (sum0[i] * sum1[j] / den)
-    if den_k == 0:
+    if flags & 2:
         _undefined_warning("`y1`, `y2` and `labels` have only one label in common.")
         return replace_undefined_by
-    return float(1 - num_k / den_k)
+    return float(prog.words(out + 2, 2, "d")[0])
 
 
 def hamming_loss(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
@@ -979,24 +970,30 @@ def class_likelihood_ratios(y_true, y_pred, *, labels=None, sample_weight=None,
     if len(chosen) == 1:
         chosen = chosen + [v for v in present if v not in chosen]
     k = len(chosen)
-    cm = _confusion(true, pred, w, chosen, numeric_mode)
+    if k > 4096:
+        raise ValueError("mojolearn metrics: at most 4096 labels in a confusion matrix")
     if k != 2:
         raise ValueError("class_likelihood_ratios needs a 2 x 2 confusion matrix")
-    tn, fp, fn, tp = (float(v) for v in cm)
-    support_pos, support_neg = tp + fn, tn + fp
-    if support_pos == 0:
+
+    def tail(prog, cells, col):
+        # x_metrics/cm_epi.mojo, CLR: the supports and both ratios, binary64
+        out = prog.want(prog.alloc(6), 6)
+        prog.stage("cm_epi", 1, _CM_CLR, cells, col, out)
+        return out
+
+    prog, out = _confusion(true, pred, w, chosen, numeric_mode, tail)
+    flags = prog.ints(out, 1)[0]
+    if flags & 1:
         _undefined_warning("No samples of the positive class are present in `y_true`.")
         return nan, nan
-    if fp == 0:
+    lr = prog.words(out + 2, 4, "d")
+    lr_pos, lr_neg = lr[0], lr[1]
+    if flags & 2:
         _undefined_warning("`positive_likelihood_ratio` is ill-defined and set to `np.nan`.")
         lr_pos = rub if not isinstance(rub, dict) else rub["LR+"]
-    else:
-        lr_pos = (tp * support_neg) / (fp * support_pos)
-    if tn == 0:
+    if flags & 4:
         _undefined_warning("`negative_likelihood_ratio` is ill-defined and set to `np.nan`.")
         lr_neg = rub if not isinstance(rub, dict) else rub["LR-"]
-    else:
-        lr_neg = (fn * support_neg) / (tn * support_pos)
     return float(lr_pos), float(lr_neg)
 
 
