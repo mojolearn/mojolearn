@@ -31,12 +31,15 @@ from x_prep.common import FP, IP, STAGE_INTS, p, ld, ldi, st
 from x_prep.prims import add, sub, mul, div
 from x_prep.target import te_value
 from x_prep.iterative import ii_gram_chunk
-from x_prep.idn_fold import IDN_TE_GLOBAL_TREE, IDN_TE_ENC_TREE, IDN_II_GRAM_TILE, TREE_W, IIG_ROWS, iig_chunks
+from x_prep.idn_fold import (
+    IDN_TE_GLOBAL_TREE, IDN_TE_ENC_TREE, IDN_II_GRAM_TILE, IDN_II_CONV_TREE, TREE_W, IIG_ROWS, iig_chunks,
+)
 
 comptime OP_TE_GLOBAL = 20
 comptime OP_TE_ENC = 21
 comptime OP_II_GRAM = 54
-comptime IDN_TREE_ANY = IDN_TE_GLOBAL_TREE or IDN_TE_ENC_TREE or IDN_II_GRAM_TILE
+comptime OP_II_CONV = 59
+comptime IDN_TREE_ANY = IDN_TE_GLOBAL_TREE or IDN_TE_ENC_TREE or IDN_II_GRAM_TILE or IDN_II_CONV_TREE
 
 
 @always_inline
@@ -233,6 +236,45 @@ def ii_gram_fold_kernel(f: FP, q: IP, w: FP, chunks: Int32):
         st(f, p(q, 6) + t, g)
 
 
+def ii_conv_tree_kernel(f: FP, q: IP):
+    """`ii_conv_unit` (x_prep/iterative.mojo) on one TREE_W-thread group:
+    each thread the max of a strided share of the row sums (E1 > 0: read
+    from `ii_rowabs`; else summed here left to right, the unit's words),
+    then the max tree. A max is exact and order-free, so the word is the
+    unit's (rows with a NaN sum never win, as in the unit). Thread 0 counts
+    the round and sets FLAG when the max is below TOL."""
+    var tid = Int(thread_idx.x)
+    if ld(f, p(q, 4)) != Float32(0):
+        return
+    var d = p(q, 6)
+    var E = p(q, 7) - 1
+    var rows = p(q, 2) // d
+    var sh = stack_allocation[TREE_W, Float32, address_space = AddressSpace.SHARED]()
+    var m = Float32(0)
+    for r in range(tid, rows, TREE_W):
+        var e = Float32(0)
+        if E >= 0:
+            e = ld(f, E + r)
+        else:
+            for c in range(d):
+                e = add(e, abs(sub(ld(f, p(q, 0) + r * d + c), ld(f, p(q, 1) + r * d + c))))
+        if e > m:
+            m = e
+    sh[tid] = m
+    barrier()
+    var w = TREE_W // 2
+    while w >= 1:
+        if tid < w:
+            if sh[tid + w] > sh[tid]:
+                sh[tid] = sh[tid + w]
+        barrier()
+        w //= 2
+    if tid == 0:
+        st(f, p(q, 5), add(ld(f, p(q, 5)), Float32(1)))
+        if sh[0] < ld(f, p(q, 3)):
+            st(f, p(q, 4), Float32(1))
+
+
 # ------------------------------------------------------------------ dispatch
 def idn_tree_scratch_words(host_q: IP, stages: Int) -> Int:
     """The float words of x_prep/device.mojo's `dw` scratch the program's
@@ -271,4 +313,8 @@ def idn_tree_stage(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mut 
                 )
                 ctx.enqueue_function[ii_gram_fold_kernel](f, qp, w, Int32(chunks), grid_dim=total, block_dim=TREE_W)
                 return True
+    comptime if IDN_II_CONV_TREE:
+        if op == OP_II_CONV and Int(hq[6]) > 0:
+            ctx.enqueue_function[ii_conv_tree_kernel](f, qp, grid_dim=1, block_dim=TREE_W)
+            return True
     return False
