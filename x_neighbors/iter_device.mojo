@@ -1299,14 +1299,18 @@ def op_kernel_matmul(
     _ = ctx^
 
 
-#: MOJOLEARN_SVGP_FAST_RBFTILE: SVGP's scaled rbf (Kuu, the Kfu tiles, Ksu
-#: in predict) as one tiled launch: a block of 256 threads takes 64 rows x 64
-#: inducing points, stages 16 features of both in threadgroup memory per
-#: step, and each thread carries 4 x 4 cells; the variance scale is fused
-#: (no kbuf pass). Each cell keeps `kernel_item`'s chain (_sub, mul_add,
-#: features ascending) and `unary_item`'s identity step.
+#: SVGP_FAST_RBFTILE, DEFAULT in FAST + Apple (lane/apple-fast-w2-svgp):
+#: SVGP's scaled rbf (Kuu, the Kfu tiles, Ksu in predict) as one tiled
+#: launch, 64 rows x 64 inducing points per 256-thread block, 16 features
+#: staged in threadgroup memory per step, 4 x 4 cells per thread, variance
+#: scale fused. Each cell keeps `kernel_item`'s chain (_sub, mul_add,
+#: features ascending) and `unary_item`'s identity step. M3, one run per
+#: arm: istella 336.3 -> 299.1 ms, taxi 285.9 -> 283.9 ms; w2-svgp-rbftile-q
+#: SVGP-FAST-PAIR PASS (r2/rmse/elbo gates; A r2 taxi -0.19498, istella
+#: -0.10602). MOJOLEARN_SVGP_FAST_RBFTILE_OFF restores the per-cell kernel.
 comptime SVGP_FAST_RBFTILE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_SVGP_FAST_RBFTILE"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SVGP_FAST_RBFTILE_OFF"]()
 )
 comptime SVGP_RBF_T = 64
 comptime SVGP_RBF_TP = SVGP_RBF_T + 1

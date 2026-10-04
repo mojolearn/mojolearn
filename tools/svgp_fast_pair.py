@@ -22,7 +22,8 @@ import shutil
 import subprocess
 import sys
 
-DEFINES = ("MOJOLEARN_SVGP_FAST_BLKCHOL", "MOJOLEARN_SVGP_FAST_RBFTILE", "MOJOLEARN_SVGP_FAST_BSPLIT")
+# RBFTILE is default since its promotion; its _OFF form builds the old arm.
+DEFINES = ("MOJOLEARN_SVGP_FAST_BLKCHOL", "MOJOLEARN_SVGP_FAST_RBFTILE_OFF", "MOJOLEARN_SVGP_FAST_BSPLIT")
 DATASETS = ("taxi", "istella")
 FIXTURE = "svgp-board-v1"
 
