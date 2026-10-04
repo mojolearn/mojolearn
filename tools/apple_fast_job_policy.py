@@ -4,6 +4,7 @@ Importing this module performs no builds, imports of native modules, or jobs.
 import re
 
 POLICIES = {
+    "tools/scoped_gemm_quality.py": "verified-scoped-adapter-quality",
     "tools/arima_assoc_scan_oracle.py": "reference",
     "tools/arima_gaussian_scan_oracle.py": "reference",
     "tools/arima_k1_diagnostics.py": "reference",
@@ -34,4 +35,9 @@ def policy_for(source, script, args):
     elif policy in ("verified-downstream-quality","verified-matrix-timing","verified-scoped-caller"):
         if not args or not re.fullmatch(r"[0-9a-f]{40}",args[0]):
             raise ValueError("this helper requires an exact compiled source first")
+    if policy == "verified-scoped-adapter-quality":
+        if (len(args) != 3 or not re.fullmatch(r"[0-9a-f]{40}", args[0])
+                or not re.fullmatch(r"[A-Za-z0-9_.-]+", args[1])
+                or args[2] not in ("tall", "dense", "gram", "narrow", "gram-split", "pca", "all")):
+            raise ValueError("scoped quality requires COMPILED_SOURCE TAG PROFILE")
     return policy
