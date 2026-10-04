@@ -364,7 +364,7 @@ def _trees_shape_native(est):
     (lane fam2-forests, `x_trees_tree_shape`), or None when the binary does
     not register it (-D MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF)."""
     try:
-        entry = getattr(_trees_x_bind(est), "x_trees_tree_shape", None)
+        entry = getattr(_trees_x_bind(est), "x_trees_tree_shape", None)  # cpu-route: get_depth/get_n_leaves introspection of the fitted host model arrays, outside fit and predict
     except ImportError:    # a host facade refuses an absent export with ImportError
         entry = None
     if not callable(entry):
@@ -2555,7 +2555,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
             if Ya is not None:
                 n = Ya.shape[0]
                 col = empty((n,), "<f8")
-                self._bind().x_trees_column_f64(addr_ro(Ya, name="Y"), addr(col, name="column"), [n, m, j])
+                self._bind().x_trees_column_f64(addr_ro(Ya, name="Y"), addr(col, name="column"), [n, m, j])  # cpu-route: label column extracted for encode_labels at API entry
                 classes, codes = encode_labels(col)
             else:
                 classes, codes = encode_labels([r[j] for r in rows])
@@ -3342,7 +3342,7 @@ class KernelExplainer(_AgnosticExplainer):
         tables = (zeros((h + 1,), "<i8"), zeros((h,), "<f8"), zeros((h,), "<f8"))
         out = zeros((6,), "<i8")
         if M > 1:
-            self._bind().x_trees_kshap_schedule(tuple(addr(t, name="schedule") for t in tables),
+            self._bind().x_trees_kshap_schedule(tuple(addr(t, name="schedule") for t in tables),  # cpu-route: coalition-size weight schedule over M/2 sizes, launch parameters only
                                                 addr(out, name="schedule"), [M, nsamples])
         m, nfixed, nfull, npaired, L, wbits = out.tolist()
         return m, nfixed, nfull, npaired, tables, L, wbits
