@@ -36,7 +36,8 @@ from max.gpu.host import DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer
 
-from checks.numerics import ftz, identical_mul
+from checks.numerics import ftz, identical_mul, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
 from decomposition.tsvd_finish import TSVD_FIN_TPB, tsvd_slot_sum, tsvd_ratio
 from x_linear.ff import FF, ff_add, ff_f32
 from std.memory import stack_allocation
@@ -50,6 +51,7 @@ from core.column_stats import (
     transpose_kernel,
 )
 from core.identity_trace import IdentityTrace
+from core.xtdz_coalesced import column_mean_launch
 from core.gemm import gemm_nt
 from decomposition.impl.linalg.detail.pca import (
     PCA_FAST_GRAM_MMA,
@@ -292,6 +294,15 @@ def square_in_place_kernel(
         a.unsafe_store(i, ftz(identical_mul(v, v)))
 
 
+# lane fam2-decomp (2026-10-04), IDENTICAL: the column mean is launched
+# through core/xtdz_coalesced.mojo `column_mean_launch` (the launch
+# decomposition/impl/linalg/detail/pca.mojo already uses): the same chains,
+# fold and quotient as `column_mean_kernel`, read row-coalesced where that
+# form applies. Same words. -D MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF (or
+# -D MOJOLEARN_IDN_ALL_OFF) restores the direct one-block-per-column launch.
+comptime IDN_DECOMP_MEAN_LAUNCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+
+
 def _column_variance(
     ctx: DeviceContext,
     mut m: DeviceBuffer[DType.float32],
@@ -304,10 +315,13 @@ def _column_variance(
     mean (`column_mean_kernel`), the centering (`shift_columns_kernel`),
     the pinned square, then the column mean of the squares."""
     var cells = n_rows * n_cols
-    ctx.enqueue_function[column_mean_kernel](
-        mu.unsafe_ptr(), m.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
-        grid_dim=(n_cols, 1, 1), block_dim=(STATS_TPB, 1, 1),
-    )
+    comptime if IDN_DECOMP_MEAN_LAUNCH:
+        column_mean_launch(ctx, mu, m, n_rows, n_cols)
+    else:
+        ctx.enqueue_function[column_mean_kernel](
+            mu.unsafe_ptr(), m.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
+            grid_dim=(n_cols, 1, 1), block_dim=(STATS_TPB, 1, 1),
+        )
     ctx.enqueue_function[shift_columns_kernel](
         m.unsafe_ptr(), mu.unsafe_ptr(), Int32(n_rows), Int32(n_cols), Float32(-1.0),
         grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
@@ -316,10 +330,13 @@ def _column_variance(
         m.unsafe_ptr(), Int32(cells),
         grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
     )
-    ctx.enqueue_function[column_mean_kernel](
-        var_out.unsafe_ptr(), m.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
-        grid_dim=(n_cols, 1, 1), block_dim=(STATS_TPB, 1, 1),
-    )
+    comptime if IDN_DECOMP_MEAN_LAUNCH:
+        column_mean_launch(ctx, var_out, m, n_rows, n_cols)
+    else:
+        ctx.enqueue_function[column_mean_kernel](
+            var_out.unsafe_ptr(), m.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
+            grid_dim=(n_cols, 1, 1), block_dim=(STATS_TPB, 1, 1),
+        )
 
 
 @always_inline
