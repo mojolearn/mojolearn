@@ -1,0 +1,7 @@
+PATCH-IN-PLACE orig 4/4 patched -> mojo runtime run MATCH
+PATCH-IN-PLACE orig_stripped 4/4 patched -> mojo runtime run DIFFER
+PATCH-IN-PLACE comgr942_stripped 4/4 patched -> mojo runtime run DIFFER
+PATCH-IN-PLACE orig_nocomment 4/4 patched -> mojo runtime run MATCH
+PATCH-IN-PLACE comgr942_nc 4/4 patched -> mojo runtime run MATCH
+PATCH-IN-PLACE generic_nc 4/4 patched -> mojo runtime run MATCH
+HIP-RUNTIME-JIT clang amdgcnspirv bundle (k_fma) vs native k_pinned: MATCH

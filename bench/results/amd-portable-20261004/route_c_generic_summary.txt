@@ -1,0 +1,28 @@
+COMGR k_muladd gfx9-4-generic rc=0
+COMGR k_muladd gfx9-generic rc=0
+COMGR k_muladd gfx10-3-generic rc=0
+COMGR k_muladd gfx11-generic rc=0
+COMGR k_muladd gfx12-generic rc=0
+RUN k_muladd gfx9-4-generic-on-gfx942 rc=0 native-vs-generic=MATCH 
+ ABI Version: 4  Flags: 0x100055F, gfx9-4-generic, xnack, sramecc, generic_v1 
+COMGR k_pinned gfx9-4-generic rc=0
+COMGR k_pinned gfx9-generic rc=0
+COMGR k_pinned gfx10-3-generic rc=0
+COMGR k_pinned gfx11-generic rc=0
+COMGR k_pinned gfx12-generic rc=0
+RUN k_pinned gfx9-4-generic-on-gfx942 rc=0 native-vs-generic=MATCH 
+ ABI Version: 4  Flags: 0x100055F, gfx9-4-generic, xnack, sramecc, generic_v1 
+COMGR k_math gfx9-4-generic rc=0
+COMGR k_math gfx9-generic rc=0
+COMGR k_math gfx10-3-generic rc=0
+COMGR k_math gfx11-generic rc=0
+COMGR k_math gfx12-generic rc=0
+RUN k_math gfx9-4-generic-on-gfx942 rc=0 native-vs-generic=MATCH 
+ ABI Version: 4  Flags: 0x100055F, gfx9-4-generic, xnack, sramecc, generic_v1 
+COMGR k_dot gfx9-4-generic rc=0
+COMGR k_dot gfx9-generic rc=0
+COMGR k_dot gfx10-3-generic rc=0
+COMGR k_dot gfx11-generic rc=0
+COMGR k_dot gfx12-generic rc=0
+RUN k_dot gfx9-4-generic-on-gfx942 rc=0 native-vs-generic=MATCH 
+ ABI Version: 4  Flags: 0x100055F, gfx9-4-generic, xnack, sramecc, generic_v1 
