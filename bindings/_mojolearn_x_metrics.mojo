@@ -10,6 +10,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from std.memory import bitcast
 from x_metrics.common import PY2MOJO_CORE_ON
+from x_metrics.cls_epi import IDN_CLS_EPI
 from x_metrics.epilogue import roc_arrays, expected_mi, row_sum_range
 from x_metrics.epilogue import scatter_rows, first_rows_i32, ovo_pair
 from x_metrics.epilogue import (
@@ -228,6 +229,14 @@ def py2mojo_core_binding() raises -> PythonObject:
         return PythonObject(0)
 
 
+def idn_fam2_binding() raises -> PythonObject:
+    """Lane fam2-prep-metrics: the bits of the IDENTICAL metric switches this
+    binding was built with (1 IDN_CLS_EPI: op 55, the set-wise classification
+    epilogue, x_metrics/cls_epi.mojo), read by
+    python/mojolearn/_expansion_metrics.py `_idn_fam2`."""
+    return PythonObject(1 if IDN_CLS_EPI else 0)
+
+
 @export
 def PyInit__mojolearn_x_metrics() abi("C") -> PythonObject:
     try:
@@ -257,6 +266,7 @@ def PyInit__mojolearn_x_metrics() abi("C") -> PythonObject:
         m.def_function[numeric_mode_binding]("x_metrics_numeric_mode")
         m.def_function[vendor_binding]("x_metrics_vendor")
         m.def_function[py2mojo_core_binding]("x_metrics_py2mojo_core")
+        m.def_function[idn_fam2_binding]("x_metrics_idn_fam2")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_metrics: ", e))

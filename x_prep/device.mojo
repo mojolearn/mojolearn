@@ -15,6 +15,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.units import N_OPS, run_unit
 from x_prep.py2mojo import P2M_BASE, P2M_N, is_p2m_op, run_p2m_unit
+#: lane fam2-prep-metrics: ops F2_BASE .. (x_prep/fam2.mojo), IDENTICAL only
+from x_prep.fam2 import F2_BASE, F2_N, is_f2_op, run_f2_unit
 from x_prep.dsort import sort_cols_device, sort_scratch_words
 from x_prep.dradix import RADIX_SORT, RADIX_MIN_ROWS, radix_sort_cols_device, radix_scratch_words
 from x_prep.fastred import (
@@ -286,6 +288,13 @@ def p2m_kernel[OP: Int](f: FP, q: IP, total: Int32):
         run_p2m_unit[OP](t, f, q)
 
 
+def f2_kernel[OP: Int](f: FP, q: IP, total: Int32):
+    """Lane fam2-prep-metrics: ops F2_BASE .. (x_prep/fam2.mojo)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(total):
+        run_f2_unit[OP](t, f, q)
+
+
 def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int, scratch_len: Int = 0,
                        out_addr: Int = 0, out_len: Int = 0) raises:
     run_program_device_ptr(
@@ -307,7 +316,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     no bit."""
     for s in range(stages):
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
-        if (op < 0 or op >= N_OPS) and not is_p2m_op(op):
+        if (op < 0 or op >= N_OPS) and not is_p2m_op(op) and not is_f2_op(op):
             raise Error(String("x_prep: unknown op ", op))
     # FAST on Apple (lane prep-apple3): sort_cols by radix (x_prep/dradix.mojo, the same words).
     # Default since request 1790627886703 (M3 Ultra, 16 columns x 1M rows: RobustScaler 0.141 ->
@@ -673,6 +682,12 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         comptime for k in range(P2M_BASE, P2M_BASE + P2M_N):
             if op == k:
                 ctx.enqueue_function[p2m_kernel[k]](
+                    df.unsafe_ptr(), qp, Int32(total),
+                    grid_dim=(total + BLOCK - 1) // BLOCK, block_dim=BLOCK,
+                )
+        comptime for k in range(F2_BASE, F2_BASE + F2_N):
+            if op == k:
+                ctx.enqueue_function[f2_kernel[k]](
                     df.unsafe_ptr(), qp, Int32(total),
                     grid_dim=(total + BLOCK - 1) // BLOCK, block_dim=BLOCK,
                 )

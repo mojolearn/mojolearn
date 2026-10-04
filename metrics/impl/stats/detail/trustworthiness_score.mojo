@@ -81,7 +81,21 @@ from metrics.checks.pinned_sum import (
     linear_block_id,
     physical_block_count,
 )
-from neighbors.estimator import knn_search_traced
+from neighbors.estimator import knn_search_traced, _knn_search_traced_retaining
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+#: lane fam2-prep-metrics (2026-10-04), IDENTICAL, ON by default: the embedded
+#: k-NN's sorted index buffer stays on the device and feeds the rank kernel
+#: (`_knn_search_traced_retaining`, DEVIATION 2487's retained buffer), so the
+#: host walk that copied the n x (k+1) indices into a list and their upload
+#: are gone; the list is built only for a caller that asks (`want_idx`) or a
+#: card. The same indices, the same integer rank sum: no bit moves.
+#: -D MOJOLEARN_IDN_TRUST_DEV_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the round trip.
+comptime IDN_TRUST_DEV = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_IDN_TRUST_DEV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
 
 
 #: The threadgroup slab for the k+1 embedded-neighbor distances and ranks.
@@ -163,6 +177,7 @@ def trustworthiness_rank_sum(
     n_neighbors: Int,
     block_size_is_64: Bool,
     grid_x_override: Int,
+    want_idx: Bool = True,
 ) raises -> Tuple[Int64, List[UInt32]]:
     """The integer half: `(rank sum, emb_ind)`; exposed so the check can
     gate it EXACTLY and see the neighbor structure it rests on. `trace`
@@ -204,26 +219,53 @@ def trustworthiness_rank_sum(
     var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](n * k1)
     ctx.synchronize()
     copy_f32(x_embedded_host.unsafe_ptr(), h_emb.unsafe_ptr(), n * d)
-    _ = knn_search_traced(
-        ctx,
-        trace,
-        h_emb.unsafe_ptr(),
-        n,
-        h_emb.unsafe_ptr(),
-        n,
-        d,
-        k1,
-        h_dist.unsafe_ptr(),
-        h_idx.unsafe_ptr(),
-        True,
-    )
+    var retained = List[DeviceBuffer[DType.uint32]]()
+    comptime if IDN_TRUST_DEV:
+        _ = _knn_search_traced_retaining(
+            ctx,
+            trace,
+            retained,
+            True,
+            h_emb.unsafe_ptr(),
+            n,
+            h_emb.unsafe_ptr(),
+            n,
+            d,
+            k1,
+            h_dist.unsafe_ptr(),
+            h_idx.unsafe_ptr(),
+            True,
+        )
+    else:
+        _ = knn_search_traced(
+            ctx,
+            trace,
+            h_emb.unsafe_ptr(),
+            n,
+            h_emb.unsafe_ptr(),
+            n,
+            d,
+            k1,
+            h_dist.unsafe_ptr(),
+            h_idx.unsafe_ptr(),
+            True,
+        )
     var out_idx = List[UInt32]()
-    for i in range(n * k1):
-        out_idx.append(h_idx.unsafe_ptr().unsafe_load(i))
+    var build_idx = True
+    comptime if IDN_TRUST_DEV:
+        build_idx = want_idx or trace.enabled
+    if build_idx:
+        for i in range(n * k1):
+            out_idx.append(h_idx.unsafe_ptr().unsafe_load(i))
     var x_dev = ctx.enqueue_create_buffer[DType.float32](n * m)
     ctx.enqueue_copy(dst_buf=x_dev, src_ptr=x_host.unsafe_ptr())
-    var emb = ctx.enqueue_create_buffer[DType.uint32](n * k1)
-    ctx.enqueue_copy(dst_buf=emb, src_ptr=out_idx.unsafe_ptr())
+    var emb: DeviceBuffer[DType.uint32]
+    comptime if IDN_TRUST_DEV:
+        # the search's own sorted device indices (n x k1 uint32)
+        emb = retained.pop()
+    else:
+        emb = ctx.enqueue_create_buffer[DType.uint32](n * k1)
+        ctx.enqueue_copy(dst_buf=emb, src_ptr=out_idx.unsafe_ptr())
     var partials = ctx.enqueue_create_buffer[DType.int32](n)
     ctx.synchronize()
     var gx = n if grid_x_override <= 0 else grid_x_override
@@ -297,7 +339,7 @@ def trustworthiness_score_traced(
     if batch_size < 1:
         raise Error("trustworthiness: batchSize must be >= 1")
     var r = trustworthiness_rank_sum(
-        ctx, trace, x_host, x_embedded_host, n, m, d, n_neighbors, False, 0
+        ctx, trace, x_host, x_embedded_host, n, m, d, n_neighbors, False, 0, False
     )
     var t = Float64(r[0])
     # (:204), in double
