@@ -1802,8 +1802,13 @@ def nc_std_kernel(x: FP, lab: IP, cent: FP, std: FP, n_: Int64, d_: Int64, nc_: 
 #: 220), each walking every row; here a block is (16 features, NCC_ROWS rows)
 #: and a second launch sums the chunk partials. FAST's words move (the sums
 #: are chunked). No runtime switch: the A/B arm is main's build.
-comptime XN_NC_CHUNKED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime NCC_ROWS = 16384
+#: lane/fam-neighbors (2026-10-04): also the IDENTICAL default on every
+#: vendor (XN_NC_IDN_CHUNKED, x_neighbors/items.mojo), with the pinned
+#: arithmetic in the `comptime if XN_NC_IDN_CHUNKED` arms below; the host
+#: column folds the same chunks.
+from x_neighbors.items import XN_NC_IDN_CHUNKED, XN_NC_CHUNK_ROWS
+comptime XN_NC_CHUNKED = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()) or XN_NC_IDN_CHUNKED
+comptime NCC_ROWS = XN_NC_CHUNK_ROWS
 
 
 def nc_means_part_kernel(x: FP, lab: IP, psum: FP, pcnt: FP, n_: Int64, d_: Int64, nc_: Int64, tiles_: Int64):
@@ -1840,10 +1845,16 @@ def nc_means_part_kernel(x: FP, lab: IP, psum: FP, pcnt: FP, n_: Int64, d_: Int6
                 if c0 + c < d:
                     var a = acc[k]
                     var m = cnt[k]
-                    for r in range(rows):
-                        if g >= ncl or Int(ls[r]) == g:
-                            a += xs[r * NCS_TC + c]
-                            m += 1
+                    comptime if XN_NC_IDN_CHUNKED:
+                        for r in range(rows):
+                            if g >= ncl or Int(ls[r]) == g:
+                                a = _add(a, xs[r * NCS_TC + c])
+                                m += 1
+                    else:
+                        for r in range(rows):
+                            if g >= ncl or Int(ls[r]) == g:
+                                a += xs[r * NCS_TC + c]
+                                m += 1
                     acc[k] = a
                     cnt[k] = m
         r0 += NCS_TR
@@ -1869,13 +1880,25 @@ def nc_means_red_kernel(psum: FP, pcnt: FP, cent: FP, dsc: FP, n_: Int64, d_: In
         var f = t - g * d
         var a = Float32(0)
         var m = Float32(0)
-        for ch in range(Int(nch_)):
-            a += psum.unsafe_load((ch * (ncl + 1) + g) * d + f)
-            m += pcnt.unsafe_load((ch * (ncl + 1) + g) * d + f)
-        if g < ncl:
-            cent.unsafe_store(g * d + f, a / m if m > 0 else Float32(0))
+        comptime if XN_NC_IDN_CHUNKED:
+            for ch in range(Int(nch_)):
+                a = _add(a, psum.unsafe_load((ch * (ncl + 1) + g) * d + f))
+                m = _add(m, pcnt.unsafe_load((ch * (ncl + 1) + g) * d + f))
+            if g < ncl:
+                if m > 0:
+                    cent.unsafe_store(g * d + f, ftz(identical_div(a, m)))
+                else:
+                    cent.unsafe_store(g * d + f, Float32(0))
+            else:
+                dsc.unsafe_store(f, ftz(identical_div(a, Float32(Int(n_)))))
         else:
-            dsc.unsafe_store(f, a / Float32(Int(n_)))
+            for ch in range(Int(nch_)):
+                a += psum.unsafe_load((ch * (ncl + 1) + g) * d + f)
+                m += pcnt.unsafe_load((ch * (ncl + 1) + g) * d + f)
+            if g < ncl:
+                cent.unsafe_store(g * d + f, a / m if m > 0 else Float32(0))
+            else:
+                dsc.unsafe_store(f, a / Float32(Int(n_)))
 
 
 def nc_std_part_kernel(x: FP, lab: IP, cent: FP, pss: FP, n_: Int64, d_: Int64, tiles_: Int64):
@@ -1902,9 +1925,14 @@ def nc_std_part_kernel(x: FP, lab: IP, cent: FP, pss: FP, n_: Int64, d_: Int64, 
         barrier()
         if live:
             var rows = min(NCS_TR, hi - r0)
-            for r in range(rows):
-                var df = xs[r * NCS_TC + tid] - cent.unsafe_load(Int(ls[r]) * d + f)
-                ss += df * df
+            comptime if XN_NC_IDN_CHUNKED:
+                for r in range(rows):
+                    var df = _sub(xs[r * NCS_TC + tid], cent.unsafe_load(Int(ls[r]) * d + f))
+                    ss = ftz(identical_mul_add(df, df, ss))
+            else:
+                for r in range(rows):
+                    var df = xs[r * NCS_TC + tid] - cent.unsafe_load(Int(ls[r]) * d + f)
+                    ss += df * df
         r0 += NCS_TR
     if live:
         pss.unsafe_store(ch * d + f, ss)
@@ -1915,10 +1943,18 @@ def nc_std_red_kernel(pss: FP, std: FP, n_: Int64, d_: Int64, nc_: Int64, nch_: 
     var f = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if f < d:
         var ss = Float32(0)
-        for ch in range(Int(nch_)):
-            ss += pss.unsafe_load(ch * d + f)
         var dof = Int(n_) - Int(nc_)
-        std.unsafe_store(f, sqrt(ss / Float32(dof)) if dof > 0 else Float32(0))
+        comptime if XN_NC_IDN_CHUNKED:
+            for ch in range(Int(nch_)):
+                ss = _add(ss, pss.unsafe_load(ch * d + f))
+            if dof > 0:
+                std.unsafe_store(f, ftz(identical_sqrt(ftz(identical_div(ss, Float32(dof))))))
+            else:
+                std.unsafe_store(f, Float32(0))
+        else:
+            for ch in range(Int(nch_)):
+                ss += pss.unsafe_load(ch * d + f)
+            std.unsafe_store(f, sqrt(ss / Float32(dof)) if dof > 0 else Float32(0))
 
 
 def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int, d: Int, n_classes: Int) raises:
