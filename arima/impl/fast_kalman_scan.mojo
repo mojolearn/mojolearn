@@ -35,9 +35,9 @@ comptime LOG_2PI = Float32(1.8378770664093453)
 @always_inline
 def _mv(n: Int, alpha: Float32, a: InlineArray[Float32, RD2_MAX], v: InlineArray[Float32, RD_MAX], mut out_v: InlineArray[Float32, RD_MAX]):
     """`batched_kalman._mv` in FAST arithmetic (column-major `a`)."""
-    for i in range(n):
+    for i in range(n):  # small-loop(n: state dimension, at most RD_MAX = 8): per-thread device helper inside a kernel
         var acc = Float32(0.0)
-        for j in range(n):
+        for j in range(n):  # small-loop(n: state dimension, at most RD_MAX = 8): per-thread device helper inside a kernel
             acc += a[i + j * n] * v[j]
         out_v[i] = alpha * acc
 
@@ -45,10 +45,10 @@ def _mv(n: Int, alpha: Float32, a: InlineArray[Float32, RD2_MAX], v: InlineArray
 @always_inline
 def _mm(n: Int, a: InlineArray[Float32, RD2_MAX], b: InlineArray[Float32, RD2_MAX], bT: Bool, mut out_v: InlineArray[Float32, RD2_MAX]):
     """`batched_kalman._mm` in FAST arithmetic."""
-    for i in range(n):
-        for j in range(n):
+    for i in range(n):  # small-loop(n: state dimension, at most RD_MAX = 8): per-thread device helper inside a kernel
+        for j in range(n):  # small-loop(n: state dimension, at most RD_MAX = 8): per-thread device helper inside a kernel
             var acc = Float32(0.0)
-            for k in range(n):
+            for k in range(n):  # small-loop(n: state dimension, at most RD_MAX = 8): per-thread device helper inside a kernel
                 var bkj = b[j + k * n] if bT else b[k + j * n]
                 acc += a[i + k * n] * bkj
             out_v[i + j * n] = acc
@@ -57,12 +57,12 @@ def _mm(n: Int, a: InlineArray[Float32, RD2_MAX], b: InlineArray[Float32, RD2_MA
 @always_inline
 def _numerical_stability(n: Int, mut a: InlineArray[Float32, RD2_MAX]):
     """`A = 0.5 (A + A')`, `A_ii = |A_ii|`."""
-    for i in range(n - 1):
-        for j in range(i + 1, n):
+    for i in range(n - 1):  # small-loop(n: state dimension, at most RD_MAX = 8): per-thread device helper inside a kernel
+        for j in range(i + 1, n):  # small-loop(n: state dimension, at most RD_MAX = 8): per-thread device helper inside a kernel
             var nv = Float32(0.5) * (a[j * n + i] + a[i * n + j])
             a[j * n + i] = nv
             a[i * n + j] = nv
-    for i in range(n):
+    for i in range(n):  # small-loop(n: state dimension, at most RD_MAX = 8): per-thread device helper inside a kernel
         a[i * n + i] = abs(a[i * n + i])
 
 comptime FK_CHUNK = 512

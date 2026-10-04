@@ -200,7 +200,7 @@ def test_invparams(
     add: ONE rounding. This is NOT `invtransform`'s `sign * (a * x)`."""
     var new_params = InlineArray[Float32, JONES_MAX_PARAMS](fill=Float32(0.0))
     var tmp = InlineArray[Float32, JONES_MAX_PARAMS](fill=Float32(0.0))
-    for i in range(pq):
+    for i in range(pq):  # small-loop(pq: AR or MA order, at most JONES_MAX_PARAMS = 8): per-thread device helper inside a kernel
         var v = ftz(params.unsafe_load(base + i))
         tmp[i] = v
         new_params[i] = v
@@ -211,16 +211,16 @@ def test_invparams(
         # the operand of the multiply that fuses into the add.
         var coef_a = a if is_ar else ftz(-a)
         var den = ftz(identical_mul_add(-a, a, Float32(1.0)))
-        for k in range(j):
+        for k in range(j):  # small-loop(j: recursion step below pq <= 8): per-thread device helper inside a kernel
             var num = ftz(
                 identical_mul_add(coef_a, new_params[j - k - 1], new_params[k])
             )
             tmp[k] = ftz(num / den)
-        for it in range(j):
+        for it in range(j):  # small-loop(j: recursion step below pq <= 8): per-thread device helper inside a kernel
             new_params[it] = tmp[it]
         j -= 1
     var result = True
-    for i in range(pq):
+    for i in range(pq):  # small-loop(pq: AR or MA order, at most JONES_MAX_PARAMS = 8): per-thread device helper inside a kernel
         var v = new_params[i]
         result = result and not (v <= Float32(-1.0) or v >= Float32(1.0))
     return result
