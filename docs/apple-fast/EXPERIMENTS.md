@@ -34,6 +34,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 
 | define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
 |---|---|---|---|---|---|---|
+| `TREESHAP_FAST_TABLE` | TreeExplainer (tree-shap) / taxi, istella | lane/apple-fast-fix-treeshap @ 8fcd690cb | ab-tshap-table-taxi, ab-tshap-table-istella | taxi 21.4 -> 11.8; istella 71.6 -> 25.1 | KEEP (FAST+Apple default, `_OFF`) | additivity error identical; per-(leaf, one-fraction pattern) term table built once per call; each (row, tree) walks each leaf's path for its pattern and adds n stored terms, cells in registers (no per-row extend/unwound, cubic in path length); same terms in the same order = same bits; expect several-fold on depth-6 forests |
 | (no switch) YetiRank 256-thread block kernel | yetirank / istellarank | lane/apple-fast @ 46f0cf09f | aft-ab-yeti1 | 55,385 -> 8,290 | KEPT 269ffa57a | 6.7x; same hash |
 | `DART_DEVICE` | dart, dart-reg / istella | lane/apple-fast-dart @ b192c3353 | dart-dev-istella, dartreg-dev-istella | dart istella 45,837 -> 24,730; dart-reg istella 45,445 -> 24,837 | KEPT 741a5495d | -46% / -45%; acc .9487 -> .9486 |
 | `ET_PART_ROWS (_OFF)` | et / taxi, istella | lane/apple-fast @ 269ffa57a | aft-ab-etpr | taxi 3,866 -> 3,036; istella 4,369 -> 4,140 | KEPT 269ffa57a | -21% / -5%; same hashes |
