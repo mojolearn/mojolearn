@@ -276,6 +276,57 @@ def fused_distance_nn_kernel[
     k_in: Int32,
     is_sqrt_in: Int32,
 ):
+    """The fused assignment kernel. The body is `_fused_distance_nn_body`
+    (inlined), shared with `fused_distance_nn_gated_kernel`."""
+    _fused_distance_nn_body[veclen, kblk, tr, tc](
+        out_key, out_value, x, y, xn, yn, m_in, n_in, k_in, is_sqrt_in
+    )
+
+
+def fused_distance_nn_gated_kernel[
+    veclen: Int, kblk: Int, tr: Int, tc: Int
+](
+    gate: MutPointer[Int32, MutAnyOrigin],
+    out_key: MutPointer[UInt32, MutAnyOrigin],
+    out_value: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    xn: MutPointer[Float32, MutAnyOrigin],
+    yn: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    is_sqrt_in: Int32,
+):
+    """fam2-cluster, `IDN_KMEANS_DEVICE_CONV`: the same kernel behind a device
+    flag. `gate[0] != 0` means the Lloyd loop already converged: every thread
+    of every block returns before touching memory, so `out_key` / `out_value`
+    keep the converged assignment and a launch enqueued past convergence costs
+    a launch and nothing else. The flag is written only by
+    `kmeans_conv_step_kernel`, a separate launch, so every thread of one launch
+    reads the same value (no barrier is skipped by part of a block)."""
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    _fused_distance_nn_body[veclen, kblk, tr, tc](
+        out_key, out_value, x, y, xn, yn, m_in, n_in, k_in, is_sqrt_in
+    )
+
+
+@always_inline
+def _fused_distance_nn_body[
+    veclen: Int, kblk: Int, tr: Int, tc: Int
+](
+    out_key: MutPointer[UInt32, MutAnyOrigin],
+    out_value: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    xn: MutPointer[Float32, MutAnyOrigin],
+    yn: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    is_sqrt_in: Int32,
+):
     """`fusedDistanceNNkernel` with the L2-expanded op and a min reduce, at
     `KernelPolicy<float, veclen, kblk, 4, 4, tr, tc>`.
 

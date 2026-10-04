@@ -71,6 +71,7 @@ from core.pinned_reduce import pinned_block_sum
 from checks.numerics import ftz
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
+from std.sys.compile import is_defined
 
 
 # READ FROM THE MATRIX, not restated here. `checks/kernel_matrix.mojo`
@@ -753,7 +754,30 @@ def finish_sum_kernel(
 
 #: Rows per accumulator block. The table is `ceil(n / rows) * k * d` Int32
 #: cells, `k / BLOCK_ACC_ROWS` of the design's own size.
-comptime BLOCK_ACC_ROWS = 1024
+#:
+#: fam2-cluster CANDIDATE ARMS (default OFF, the orchestrator times them
+#: against 1024): `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_256=1` and
+#: `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096=1`. For skinny data (d about 10)
+#: only `n / 1024 * d` threads are busy at 1024; 256 quadruples the busy
+#: threads and the table (`n / 256 * k * d` Int32 cells), 4096 does the
+#: reverse for wide data. Int32 totals: no bit moves at any block size (the
+#: banner's associativity argument). Both are off under
+#: `MOJOLEARN_IDN_ALL_OFF`.
+comptime BLOCK_ACC_ROWS = (
+    256
+    if (
+        is_defined["MOJOLEARN_IDN_KMEANS_ACC_ROWS_256"]()
+        and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+    else (
+        4096
+        if (
+            is_defined["MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096"]()
+            and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+        )
+        else 1024
+    )
+)
 
 comptime BLOCK_ACC_TPB = 256
 
@@ -782,7 +806,51 @@ def accumulate_centroid_sums_blocked_kernel[
     scale_in: Float32,
 ):
     """Thread `(b, f)`: block `b`'s rows of feature `f` into `table[b][*][f]`.
-    DEVIATION 3080, see the banner above."""
+    DEVIATION 3080, see the banner above. Body: `_acc_sums_blocked_body`."""
+    _acc_sums_blocked_body[sabotage](
+        table, x, labels, weights, n_rows_in, n_features_in, n_clusters_in,
+        scale_in,
+    )
+
+
+def accumulate_centroid_sums_blocked_gated_kernel[
+    sabotage: Bool
+](
+    gate: MutPointer[Int32, MutAnyOrigin],
+    table: MutPointer[Int32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    labels: MutPointer[UInt32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_features_in: Int32,
+    n_clusters_in: Int32,
+    scale_in: Float32,
+):
+    """fam2-cluster, `IDN_KMEANS_DEVICE_CONV`: the same kernel behind the
+    Lloyd loop's device flag. `gate[0] != 0` returns before the table is
+    touched, so the table keeps the converged iteration's partials and the
+    (ungated, `k x d`) fold reproduces the converged sums."""
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    _acc_sums_blocked_body[sabotage](
+        table, x, labels, weights, n_rows_in, n_features_in, n_clusters_in,
+        scale_in,
+    )
+
+
+@always_inline
+def _acc_sums_blocked_body[
+    sabotage: Bool
+](
+    table: MutPointer[Int32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    labels: MutPointer[UInt32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_features_in: Int32,
+    n_clusters_in: Int32,
+    scale_in: Float32,
+):
     var n_rows = Int(n_rows_in)
     var n_features = Int(n_features_in)
     var n_clusters = Int(n_clusters_in)
@@ -817,6 +885,38 @@ def accumulate_weight_blocked_kernel(
     scale_in: Float32,
 ):
     """Thread `b`: block `b`'s quantized weights into `table[b][*]`."""
+    _acc_weight_blocked_body(
+        table, labels, weights, n_rows_in, n_clusters_in, scale_in
+    )
+
+
+def accumulate_weight_blocked_gated_kernel(
+    gate: MutPointer[Int32, MutAnyOrigin],
+    table: MutPointer[Int32, MutAnyOrigin],
+    labels: MutPointer[UInt32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_clusters_in: Int32,
+    scale_in: Float32,
+):
+    """fam2-cluster, `IDN_KMEANS_DEVICE_CONV`: the weights twin of
+    `accumulate_centroid_sums_blocked_gated_kernel`."""
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    _acc_weight_blocked_body(
+        table, labels, weights, n_rows_in, n_clusters_in, scale_in
+    )
+
+
+@always_inline
+def _acc_weight_blocked_body(
+    table: MutPointer[Int32, MutAnyOrigin],
+    labels: MutPointer[UInt32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_clusters_in: Int32,
+    scale_in: Float32,
+):
     var n_rows = Int(n_rows_in)
     var n_clusters = Int(n_clusters_in)
     var b = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -924,6 +1024,129 @@ def launch_accumulate_weight_per_cluster_blocked[
     `blocked_acc_table_cells(n_samples, 1, n_clusters)` cells."""
     var n_blocks = blocked_acc_blocks(n_samples)
     ctx.enqueue_function[accumulate_weight_blocked_kernel](
+        table.unsafe_ptr(),
+        labels.unsafe_ptr(),
+        weights.unsafe_ptr(),
+        Int32(n_samples),
+        Int32(n_clusters),
+        weight_scale,
+        grid_dim=((n_blocks + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
+        block_dim=(BLOCK_ACC_TPB, 1, 1),
+    )
+    comptime fold_kern_w = fold_block_table_kernel[store]
+    ctx.enqueue_function[fold_kern_w](
+        weight_i32.unsafe_ptr(),
+        table.unsafe_ptr(),
+        Int32(n_blocks),
+        Int32(n_clusters),
+        grid_dim=((n_clusters + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
+        block_dim=(BLOCK_ACC_TPB, 1, 1),
+    )
+
+
+def copy_f32_gated_kernel(
+    gate: MutPointer[Int32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """fam2-cluster, `IDN_KMEANS_DEVICE_CONV`: `copy_f32_kernel` behind the
+    Lloyd loop's device flag, so the working centroids are frozen once the
+    flag is set (the copy of the converging iteration itself still runs: the
+    flag is set by the launch AFTER it)."""
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        dst.unsafe_store(i, src.unsafe_load(i))
+
+
+def kmeans_conv_step_kernel(
+    state: MutPointer[Int32, MutAnyOrigin],
+    shift: MutPointer[Float32, MutAnyOrigin],
+    thresh: Float32,
+    it: Int32,
+):
+    """fam2-cluster, `IDN_KMEANS_DEVICE_CONV`: the stopping rule on the
+    device. One thread. `state[0]` is the done flag, `state[1]` the iteration
+    that converged. `thresh` is the host's Float64 `tol` rounded UP to Float32
+    (`kmeans_shift_threshold`), so `shift < thresh` here is exactly the
+    host's `Float64(shift) < tol` for every Float32 `shift`, NaN included
+    (false both ways). One comparison of two Float32 values: the same bit on
+    every vendor."""
+    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+        return
+    if state.unsafe_load(0) != Int32(0):
+        return
+    if shift.unsafe_load(0) < thresh:
+        state.unsafe_store(1, it)
+        state.unsafe_store(0, Int32(1))
+
+
+def launch_accumulate_centroid_sums_blocked_gated[
+    sabotage: Bool, store: Bool
+](
+    ctx: DeviceContext,
+    mut gate: DeviceBuffer[DType.int32],
+    mut sums_i32: DeviceBuffer[DType.int32],
+    mut table: DeviceBuffer[DType.int32],
+    mut x: DeviceBuffer[DType.float32],
+    mut labels: DeviceBuffer[DType.uint32],
+    mut weights: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    sum_scale: Float32,
+) raises:
+    """`launch_accumulate_centroid_sums_blocked` with the `n x d` table pass
+    gated on `gate[0]`. The `k x d` fold is not gated: past convergence it
+    refolds the untouched table into the same totals (with `store = False`
+    the caller still zeroes `sums_i32` first, as before)."""
+    var n_blocks = blocked_acc_blocks(n_samples)
+    var threads = n_blocks * n_features
+    comptime kern = accumulate_centroid_sums_blocked_gated_kernel[sabotage]
+    ctx.enqueue_function[kern](
+        gate.unsafe_ptr(),
+        table.unsafe_ptr(),
+        x.unsafe_ptr(),
+        labels.unsafe_ptr(),
+        weights.unsafe_ptr(),
+        Int32(n_samples),
+        Int32(n_features),
+        Int32(n_clusters),
+        sum_scale,
+        grid_dim=((threads + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
+        block_dim=(BLOCK_ACC_TPB, 1, 1),
+    )
+    var cells = n_clusters * n_features
+    comptime fold_kern = fold_block_table_kernel[store]
+    ctx.enqueue_function[fold_kern](
+        sums_i32.unsafe_ptr(),
+        table.unsafe_ptr(),
+        Int32(n_blocks),
+        Int32(cells),
+        grid_dim=((cells + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
+        block_dim=(BLOCK_ACC_TPB, 1, 1),
+    )
+
+
+def launch_accumulate_weight_per_cluster_blocked_gated[
+    store: Bool
+](
+    ctx: DeviceContext,
+    mut gate: DeviceBuffer[DType.int32],
+    mut weight_i32: DeviceBuffer[DType.int32],
+    mut table: DeviceBuffer[DType.int32],
+    mut labels: DeviceBuffer[DType.uint32],
+    mut weights: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_clusters: Int,
+    weight_scale: Float32,
+) raises:
+    """The weights twin of `launch_accumulate_centroid_sums_blocked_gated`."""
+    var n_blocks = blocked_acc_blocks(n_samples)
+    ctx.enqueue_function[accumulate_weight_blocked_gated_kernel](
+        gate.unsafe_ptr(),
         table.unsafe_ptr(),
         labels.unsafe_ptr(),
         weights.unsafe_ptr(),
