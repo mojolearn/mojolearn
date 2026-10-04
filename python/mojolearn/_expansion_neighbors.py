@@ -1761,8 +1761,9 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
             # labels itself in order of first appearance (`_cc_relabel`'s
             # integers) and puts n_components + 1 in info[1]; info[1] == 0
             # means the binding's main path ran and `lab` still needs
-            # `_cc_relabel`.
-            info = empty((2,), "<i4")
+            # `_cc_relabel` (zeros, not empty: the main path never writes
+            # info[1]).
+            info = zeros((2,), "<i4")
             est._op("cc_iterate_csr", [(indptr, 0), (indices, 0), (lab, 1), (info, 1)], (n, indices.shape[0]))
             k1 = int(info.tolist()[1])
             if k1 > 0:
