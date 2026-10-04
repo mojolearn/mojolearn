@@ -68,21 +68,37 @@ class NativeFirst(unittest.TestCase):
     sets = fixtures.PluginLoader.sets
     baseline = fixtures.ArchitecturePayloadLoader.baseline
 
-    def bundled(self):
+    def bundled(self, fast=False, admitted=True):
+        """`fast` adds a real FAST-tier binary to the payload and its manifest;
+        `admitted=False` writes the manifest-only vendor marker (--bundle-ptx)."""
         root, binary = self.baseline()
         os.environ.pop('MOJOLEARN_CUDA_PATH')
         os.environ.pop('MOJOLEARN_EXPERIMENTAL_PTX')
         self.plugin('cuda', ['sm_89', 'sm_90a'])
-        manifest_hash = hashlib.sha256((root / self.B.gpu_plugins.BASELINE_MANIFEST).read_bytes()).hexdigest()
-        raw = json.dumps(record(manifest_hash)).encode()
-        (root / admission.ADMISSION_FILE).write_bytes(raw)
-        bundle = dict(manifest_sha256=manifest_hash, admission_sha256=hashlib.sha256(raw).hexdigest())
         gp = self.B.gpu_plugins
+        if fast:
+            self.fast_binary = root / '_mojolearn_gbdt.so'
+            self.fast_binary.write_bytes(b'fake embedded FAST PTX, not executable')
+            doc = json.loads((root / gp.BASELINE_MANIFEST).read_text())
+            doc['files'].append(dict(file='_mojolearn_gbdt.so', numeric_mode='fast',
+                                     sha256=hashlib.sha256(self.fast_binary.read_bytes()).hexdigest(),
+                                     ptx_modules=[dict(target='sm_80', sha256='b' * 64)]))
+            (root / gp.BASELINE_MANIFEST).write_text(json.dumps(doc))
+        manifest_hash = hashlib.sha256((root / gp.BASELINE_MANIFEST).read_bytes()).hexdigest()
+        bundle = dict(manifest_sha256=manifest_hash)
+        if admitted:
+            raw = json.dumps(record(manifest_hash)).encode()
+            (root / admission.ADMISSION_FILE).write_bytes(raw)
+            bundle['admission_sha256'] = hashlib.sha256(raw).hexdigest()
         marker_path = self.site / f'mojolearn_nvidia-{self.version}.dist-info' / gp.PLUGIN_MARKER
         marker_path.write_text(json.dumps(gp.plugin_marker('cuda', self.version, ['sm_89', 'sm_90a'], bundled_ptx=bundle)))
         self.B._probe_box = lambda: fixtures.probe(self.B, cuda=True)
         self.B._device_arch = lambda vendor: ('sm_80', 'synthetic driver')
         self.B._ptx_runtime_configuration = lambda: copy.deepcopy(CONFIG)
+        state = patch.dict(os.environ, {'MOJOLEARN_PTX_ADMISSION_DIR': str(self.site.parent / 'no-local-admissions')})
+        state.start()
+        self.addCleanup(state.stop)
+        os.environ.pop('MOJOLEARN_PTX_QUALIFYING', None)
         return root, binary
 
     def test_native_priority_never_reads_admission(self):
@@ -103,13 +119,34 @@ class NativeFirst(unittest.TestCase):
         with self.assertRaises(self.B.GpuPluginError):
             self.B._record_baseline_load(str(binary))
 
+    def select(self, mode):
+        """select() with the CPU set watched: (tier, receipt), or the refusal."""
+        self.B._LAYOUT = None
+        self.B._SELECTED = None
+        # The fixture binaries are inert bytes, so the three steps of a real
+        # load are stood in for: the module object is made without dlopen, the
+        # load is recorded against the manifest exactly as _exec_binding does,
+        # and the vendor read-back (a call into the binary) is skipped.
+        import types
+        loaded = lambda loader, module: self.B._record_baseline_load(loader.path)
+        with patch.dict(os.environ, {'MOJOLEARN_NUMERIC_MODE': mode}), \
+                patch.object(self.B, 'host_binding_built', return_value=True), \
+                patch('importlib.util.module_from_spec', side_effect=lambda spec: types.ModuleType(spec.name)), \
+                patch.object(self.B, '_exec_binding', side_effect=loaded), \
+                patch.object(self.B, '_check_vendor'), \
+                patch.object(self.B, '_select_cpu_only') as cpu:
+            try:
+                return self.B.select(), self.B.baseline_selection_receipt()
+            finally:
+                cpu.assert_not_called()
+
     def test_unqualified_missing_tampered_and_unknown_fail_closed(self):
+        """IDENTICAL: every unqualified or altered state refuses and never selects CPU."""
         root, binary = self.bundled()
         admission_path = root / admission.ADMISSION_FILE
         old = admission_path.read_bytes()
-        for mutation in ('missing', 'changed', 'unknown-driver', 'payload-changed', 'fast'):
+        for mutation in ('missing', 'changed', 'unknown-driver', 'payload-changed'):
             with self.subTest(mutation=mutation):
-                self.B._LAYOUT = None
                 if mutation == 'missing':
                     admission_path.unlink()
                 elif mutation == 'changed':
@@ -118,15 +155,63 @@ class NativeFirst(unittest.TestCase):
                     self.B._ptx_runtime_configuration = lambda: {**CONFIG, 'driver_version': '999.1'}
                 elif mutation == 'payload-changed':
                     binary.write_bytes(b'changed')
-                with patch.dict(os.environ, {'MOJOLEARN_NUMERIC_MODE': 'fast' if mutation == 'fast' else 'identical'}):
-                    with patch.object(self.B, 'host_binding_built', return_value=True):
-                        with patch.object(self.B, '_select_cpu_only') as cpu:
-                            with self.assertRaises(self.B.GpuPluginError):
-                                self.B.select()
-                            cpu.assert_not_called()
+                with self.assertRaises(self.B.GpuPluginError) as refused:
+                    self.select('identical')
+                self.assertIn('PTX fallback refused', str(refused.exception))
+                if mutation == 'unknown-driver':
+                    self.assertIn(self.B.PTX_QUALIFY_COMMAND, str(refused.exception))
                 admission_path.write_bytes(old)
                 self.B._ptx_runtime_configuration = lambda: copy.deepcopy(CONFIG)
                 binary.write_bytes(b'fake embedded PTX, not executable')
+
+    def test_fast_takes_the_ptx_fallback_with_no_admission(self):
+        """FAST on a real FAST payload: selected with no admission, never IDENTICAL-qualified."""
+        for admitted, driver in ((False, CONFIG['driver_version']), (True, '999.1'), (True, CONFIG['driver_version'])):
+            with self.subTest(admitted=admitted, driver=driver):
+                self.setUp()
+                root, _ = self.bundled(fast=True, admitted=admitted)
+                self.B._ptx_runtime_configuration = lambda: {**CONFIG, 'driver_version': driver}
+                tier, receipt = self.select('fast')
+                self.assertEqual(tier, 'fast')
+                self.assertEqual(self.B._layout(), ('vendor', str(root)))
+                self.assertEqual((receipt['requested'], receipt['selected'], receipt['fallback'], receipt['numeric_mode']),
+                                 ('native-first', 'ptx-baseline', 'ptx', 'fast'))
+                covered = admitted and driver == CONFIG['driver_version']
+                self.assertEqual(receipt['admission'], 'bundled' if covered else None)
+                self.assertIs(receipt['identical_qualified'], covered)
+                self.assertFalse(receipt['qualifying'])
+                self.assertEqual([row['file'] for row in receipt['loaded_files']], ['_mojolearn_gbdt.so'])
+                self.assertIsNone(self.B._CPU_ONLY)
+                refusal = self.B._ptx_identical_refusal()
+                if covered:
+                    self.assertIsNone(refusal)
+                else:
+                    self.assertIn(self.B.PTX_QUALIFY_COMMAND, refusal)
+
+    def test_fast_still_refuses_a_payload_whose_provenance_fails(self):
+        """FAST needs no admission, but altered bytes or a marker-named admission that is gone still refuse."""
+        root, _ = self.bundled(fast=True)
+        admission_path = root / admission.ADMISSION_FILE
+        old, payload = admission_path.read_bytes(), self.fast_binary.read_bytes()
+        for mutation in ('admission-missing', 'admission-changed', 'payload-changed', 'manifest-changed'):
+            with self.subTest(mutation=mutation):
+                manifest = (root / self.B.gpu_plugins.BASELINE_MANIFEST).read_bytes()
+                if mutation == 'admission-missing':
+                    admission_path.unlink()
+                elif mutation == 'admission-changed':
+                    admission_path.write_bytes(old + b' ')
+                elif mutation == 'payload-changed':
+                    self.fast_binary.write_bytes(b'changed')
+                else:
+                    (root / self.B.gpu_plugins.BASELINE_MANIFEST).write_bytes(manifest + b' ')
+                with self.assertRaises(self.B.GpuPluginError) as refused:
+                    self.select('fast')
+                self.assertIn('PTX fallback refused', str(refused.exception))
+                self.assertIsNone(self.B.baseline_selection_receipt())
+                admission_path.write_bytes(old)
+                self.fast_binary.write_bytes(payload)
+                (root / self.B.gpu_plugins.BASELINE_MANIFEST).write_bytes(manifest)
+        self.assertEqual(self.select('fast')[1]['fallback'], 'ptx')
 
     def test_native_errors_do_not_trigger_baseline(self):
         self.bundled()
