@@ -556,162 +556,113 @@ python3 tools/strip_wheel_dir_entries.py <dist>/audit/repaired/mojolearn-*-manyl
   --receipt <dist>/final/dir-entry-strip.json
 ```
 
-### 3b. The split Linux packages (the packer's default profile)
+### 3b. Architecture payloads and vendor aggregates
 
-`tools/release.py` packs `--profile release-split` (the combined wheel of
-0.8.20 and earlier is no longer released; `release-linux3` above remains a
-packer profile only). The packer's default is the split
-(`python/mojolearn/gpu_plugins.py`), three PyPI projects released in lockstep
-so NVIDIA and AMD can ship independently:
+The Linux release is six projects at one exact version. Package ownership and
+pins come from `python/mojolearn/gpu_plugins.py`:
 
-| wheel | holds | requires |
+| Project | Contents | Exact-version dependencies |
 |---|---|---|
-| `mojolearn-<v>-py3-none-manylinux_2_35_x86_64.whl` | Python, `mojolearn/host/`, `mojolearn/.libs/`; no GPU set | its ordinary dependencies, plus `mojolearn-nvidia==<v>` and `mojolearn-amd==<v>`; no extras |
-| `mojolearn_nvidia-<v>-...whl` | `mojolearn/cuda/<arch>/...` only | `mojolearn==<v>` |
-| `mojolearn_amd-<v>-...whl` | `mojolearn/hip/<arch>/...` only | `mojolearn==<v>` |
+| `mojolearn` | Python, host bindings, shared runtime | Both vendor aggregates |
+| `mojolearn-nvidia` | Metadata only | `mojolearn-nvidia-sm89`, `mojolearn-nvidia-sm90` |
+| `mojolearn-amd` | Metadata only | `mojolearn-amd-gfx942` |
+| `mojolearn-nvidia-sm89` | `mojolearn/cuda_native/sm_89/` | `mojolearn` |
+| `mojolearn-nvidia-sm90` | `mojolearn/cuda_native/sm_90a/` (or `sm_90`) | `mojolearn` |
+| `mojolearn-amd-gfx942` | `mojolearn/hip_native/gfx942/` | `mojolearn` |
 
-`pip install mojolearn` works for everyone (since 2026-09-26): on Linux the
-core requires BOTH plugins at its own version exactly, so one command installs
-all three, and each plugin pins the core back (a cycle pip resolves). The
-core's METADATA is the combined wheel's plus exactly those two
-`Requires-Dist` lines; `tools/wheel_api_audit.py --split` and
-`packaging/verify_alpha_artifacts.py` refuse anything else. The loader picks
-the set for the GPU it finds; its "GPU without its plugin" refusal now fires
-only on a broken install and says to reinstall the core
-(`pip install --force-reinstall "mojolearn==<v>"`). The macOS wheel requires
-no plugin. The package names say the vendor; the directories inside keep the runtime
-vendor axis (`cuda`, `hip`) that the loader and `MOJOLEARN_VENDOR` use.
+Ordinary `pip install mojolearn` still installs all released native payloads;
+pip does not select a wheel by GPU model. The runtime selects the installed
+native target. This split reduces each uploaded file, not the total download.
+It adds no new native GPU support. The macOS package stays separate.
 
-The three are a partition of the combined wheel: same members, same archive
-paths, same bytes, only each `.dist-info` is its own
-(`packaging/linux/test_split_wheels.py`). A plugin installs into the core's
-package directory, so every binding's RUNPATH resolves `mojolearn/.libs`
-exactly as before. The macOS wheel is unchanged.
+The payloads preserve binary bytes. Their new directories have the same depth
+as the old vendor directories, preserving relative RUNPATHs while preventing
+pip's uninstall of an old vendor wheel from deleting a newly installed payload.
+`packaging/linux/test_plugin_upgrade.py` exercises the actual pip uninstall with
+inert fixtures; `test_split_wheels.py` checks the byte-preserving partition.
 
 ```sh
-# all three from all three legs, release checks and proofs as release-linux3
+# All six distributions, with the same native source/build proof requirements.
 pixi run -e pkg pack-linux-wheel --profile release-split \
   --set <sm89>/build/sets/cuda --set <sm90a>/build/sets/cuda --set <hip>/build/sets/hip \
   --build-proof ... --out <dist>
-# NVIDIA alone: the core and mojolearn-nvidia from the two NVIDIA legs
+# NVIDIA aggregate expands to both NVIDIA architecture payloads.
 pixi run -e pkg pack-linux-wheel --profile release-split --wheels core-linux,nvidia \
   --set <sm89>/build/sets/cuda --set <sm90a>/build/sets/cuda --build-proof ... --out <dist>
-# re-check any split set: ownership, exact pins, markers, one version, one tag
-python3 tools/wheel_api_audit.py --split --require-complete <dist>/*.whl
+python3 tools/wheel_api_audit.py --split <dist>/*.whl
+python3 tools/gpu_release_projects.py <dist> --require-complete
 ```
 
-`packaging/linux/audit.sh` runs once per wheel, the core first, all into one
-`audit/` directory. A plugin's bindings NEED the MAX runtime that only the core
-ships (`mojolearn/.libs/`), so for a plugin the script reads those library
-names from the core wheel beside it and adds them to the `--exclude` list (it
-refuses a plugin with no core beside it); the manifests still supply the
-driver libraries. The core's logs keep their names (`show.txt`, `repair.txt`,
-`twine.txt`), a plugin's are `show-mojolearn_nvidia.txt` and so on, and any
-top-level `*.libs/` directory in a repaired wheel fails the run.
+Run `packaging/linux/audit.sh` for each wheel with the core beside the payloads.
+Native payloads exclude the runtime libraries owned by the core. Metadata-only
+aggregates take a structural audit and Twine check without ELF repair. Every
+artifact must remain within the 100 MiB upload limit.
 
-Publishing the split packages, `pixi run release <version>` (the only Linux
-layout since 0.8.22), works like this. `linux-pack` packs `--profile release-split`, audits and strips each wheel and
-runs `split_audit` on the final set; each column installs the core with BOTH
-plugins, exactly what `pip install mojolearn` installs (the core requires
-both, so one plugin alone would not install), and the NVIDIA column gates
-`mojolearn-nvidia`, the AMD column `mojolearn-amd` (the expanded smoke runs on
-the AMD box too, so each plugin has a receipt of its own vendor); `linux-joint-diff` diffs every PASSED column with the Apple column;
-then three GitHub releases and three dispatches, in this order:
+Release columns install all six packages. Ada, Hopper, and AMD each need their
+own actual loaded-architecture receipt. An Ada smoke cannot qualify a Hopper
+payload. The release workflow publishes native payloads first, then vendor
+aggregates, then the core. Aggregate/core upload gates verify their dependencies
+already exist on the selected index. Experimental packages are refused. Full
+staging requires all six wheels; prepared alpha dispatches can upload individual
+packages once their dependencies are available.
 
-1. `publish-nvidia` (on the NVIDIA column) and `publish-amd` (on the AMD column),
-   the PLUGINS FIRST;
-2. `publish-core-linux` LAST, only after both plugins published, so only when
-   both vendors' columns PASSED (on the NVIDIA receipt).
+Every wheel's inventory names the frozen source commit, and the core carries
+that same identity-column COMMIT. Freeze the integrated, tested commit before
+building. Do not rewrite older wheel inventories or receipts to call them the
+current main. Full split qualification checks the entire installed set and binds
+its records to a digest over every wheel name and hash.
 
-pip can resolve `mojolearn==<v>` only once both plugins at `<v>` are on the
-index, so the core never goes up before them: the release orders the steps,
-and the workflow's core job refuses a split core unless both plugins of its
-version are already on the index (`tools/wheel_api_audit.py
---plugins-on-index`). A failed AMD column holds `mojolearn-amd` AND the core;
-`mojolearn-nvidia` may still upload, which is harmless (it requires the core
-and resolves nothing alone). A DIVERGENT cell holds all three. The same set
-can go through the full route by staging it in `~/.mojolearn-linux-wheel`
-(core, plugins, each with its `.sha256` sidecar); installed qualification of
-a split set is checked on the whole set,
-`tools/check_linux_release_qualification.py <core> <plugins> --profile release-split`,
-whose records name the set digest (sha256 over the sorted `<file> <sha256>`
-lines) where a combined qualification names the wheel's sha256.
+#### Index installation and trusted publishers
 
-#### The user's install, resolved from the index
+Test local artifacts before upload, then resolve the actual dependency graph
+from TestPyPI before PyPI. `tools/index_install_check.sh <v> <index>` is a dry
+run; `--rent` runs the NVIDIA/AMD index-install checks. Its precheck requires all
+six projects, exact dependency pins, and non-yanked manylinux files. Each receipt
+must show all six installed versions and their downloads from the intended index.
+The release's separate Hopper column is still required.
 
-The columns install local wheel files, so they never test what a user types:
-`pip install mojolearn==<v>` resolved from an index, which is where the core
-and plugin exact-pin cycle and the publish order can break. A split release
-therefore goes out in four steps, TestPyPI first:
+Existing vendor project reservations do not reserve the new payload names.
+Before the first architecture release, verify the following publishers and
+matching protected GitHub environments on both PyPI and TestPyPI:
 
-```sh
-pixi run release <v> --publish testpypi
-tools/index_install_check.sh <v> testpypi --rent     # NVIDIA and AMD boxes, in parallel
-pixi run release <v> --publish pypi
-tools/index_install_check.sh <v> pypi --rent
-```
+| Project | PyPI environment | TestPyPI environment |
+|---|---|---|
+| `mojolearn` | `pypi` | `testpypi` |
+| `mojolearn-nvidia` | `pypi-nvidia` | `testpypi-nvidia` |
+| `mojolearn-amd` | `pypi-amd` | `testpypi-amd` |
+| `mojolearn-nvidia-sm89` | `pypi-nvidia-sm89` | `testpypi-nvidia-sm89` |
+| `mojolearn-nvidia-sm90` | `pypi-nvidia-sm90` | `testpypi-nvidia-sm90` |
+| `mojolearn-amd-gfx942` | `pypi-amd-gfx942` | `testpypi-amd-gfx942` |
 
-`tools/index_install_check.sh` (without `--rent` a dry run of both legs) first
-asks the index's JSON API for `mojolearn`, `mojolearn-nvidia` and
-`mojolearn-amd` at `<v>` and refuses by name, before anything is rented, when
-one is missing, has no manylinux x86_64 wheel, is yanked, or when the core's
-METADATA does not pin both plugins at `==<v>` (a combined wheel fails here) or
-a plugin does not pin `mojolearn==<v>`. It then runs
-`tools/release_wheel_smoke.sh --from-index <index> --version <v>` on an NVIDIA
-box (RunPod, the smoke's default GPU or `--gpu`) and an AMD box (Hot Aisle,
-then DigitalOcean when Hot Aisle created nothing; `--amd-provider` changes
-that) at the same time. Each box makes a fresh venv and runs the user's
-command plus `--report`: for TestPyPI
-`pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ "mojolearn==<v>"`,
-for PyPI `pip install "mojolearn==<v>"`. `tools/index_release_check.py verify`
-then requires all three distributions installed at exactly `<v>`, each of the
-three downloaded from the index's own file host (`test-files.pythonhosted.org`
-for TestPyPI, `files.pythonhosted.org` for PyPI) and every other dependency
-from PyPI's (the guard against dependency confusion), and `import mojolearn`
-loading the box's vendor set from that vendor's plugin at `<v>`. The same
-expanded smoke as the column (`qualify_verifier_wheel.py --installed-python`)
-and the optional release column (`--nvidia-column`, `--amd-column`,
-`--ref-column`) then run from that installed package. It prints one PASS or
-FAIL line per vendor; `pip_report.json`, `index_check.json`, `dists.txt` and
-`results.json` of each leg are in
-`~/mojolearn-evidence/index-install/<v>/<index>/<stamp>/{nvidia,amd}/`.
+These names are the repository configuration, not evidence of external
+registration. Each publisher uses repository `mojolearn/mojolearn` and workflow
+`release-provenance.yml`. Keep the existing project publishers; add the three
+payload publishers and protected environments. Each workflow job uploads only
+its own project's files.
 
-#### Registering mojolearn-nvidia and mojolearn-amd on PyPI
+#### Experimental NVIDIA PTX baseline
 
-Once, by the owner of the `mojolearn` PyPI account, before the first
-split release (done for 0.8.22). Nothing in the repository changes afterwards.
+`mojolearn-nvidia-ptx80` is a local experimental payload, excluded from default
+dependencies and publication. Build it explicitly with
+`MOJOLEARN_CUDA_CODE_FORMAT=ptx-baseline MOJOLEARN_GPU_ARCHS=sm_80` through
+`packaging/linux/build_sets.sh`; pack with `--profile split --wheels nvidia-ptx80`.
+Its `cuda_ptx/sm_80/PTX_BASELINE.json` records final hashes, source, compiler,
+PTX target/ISA, rounding checks, and approximate instructions. It does not
+certify bitwise identity.
 
-1. **PyPI pending publishers** (this also reserves the names). At
-   https://pypi.org/manage/account/publishing/ add a GitHub pending publisher
-   twice:
+Selection requires both `MOJOLEARN_CUDA_PATH=ptx-baseline` and
+`MOJOLEARN_EXPERIMENTAL_PTX=1`. It never silently replaces native kernels and
+never falls back to native during a baseline run. An sm80 target is a potential
+forward-compatible CUDA path, subject to driver/toolchain and kernel support;
+it is not a claim of supporting every NVIDIA GPU.
 
-   | PyPI project name | Owner | Repository name | Workflow name | Environment name |
-   |---|---|---|---|---|
-   | `mojolearn-nvidia` | `mojolearn` | `mojolearn` | `release-provenance.yml` | `pypi-nvidia` |
-   | `mojolearn-amd` | `mojolearn` | `mojolearn` | `release-provenance.yml` | `pypi-amd` |
-
-   The environments MUST differ: PyPI refuses a second pending publisher
-   whose (repository, workflow, environment) matches one already registered
-   for a different project name ("A pending trusted publisher matching this
-   configuration has already been registered for a different project name").
-2. **TestPyPI**, the same at https://test.pypi.org/manage/account/publishing/
-   with environments `testpypi-nvidia` and `testpypi-amd`.
-3. **GitHub environments.** In the repository's Settings, Environments, create
-   `pypi-nvidia`, `pypi-amd`, `testpypi-nvidia` and `testpypi-amd`, with the
-   same protection rules (required reviewers, deployment branches and tags)
-   as `pypi` and `testpypi`. A job naming a missing environment would create
-   it unprotected on first use, so create them first.
-4. Leave the `mojolearn` project's publisher as it is (environments `pypi`
-   and `testpypi`), since it still uploads the macOS wheel and the Linux core.
-
-Each project trusts exactly one (workflow, environment) pair, and the workflow
-uploads each project from its own job in that environment
-(`publish`/`publish_alpha` for `mojolearn`, the matrix jobs
-`publish_plugins`/`publish_alpha_plugins` for the plugins), so an OIDC token
-minted for one project can never upload another. A pending publisher turns
-into the project on the first successful upload; until then the plugin jobs
-fail with an `invalid-publisher` error and nothing else is affected. A first
-`--publish testpypi` run proves the whole path before PyPI.
+Use `tools/nvidia_baseline_qualification.py collect` in separate baseline and
+native-reference processes, then `check`. The collector records actual loaded
+binary hashes, GPU UUID/capability, driver, source, and output-column hashes.
+Full comparison requires every applicable lane and fixture across at least two
+compute capabilities with native references. `--prototype` permits bounded
+investigation only. Neither comparison enables an IDENTICAL claim or changes
+release admission; such a change needs explicit review of the hardware evidence.
 
 ## 4. Install and test on real GPUs (OPTIONAL, never required for a release)
 

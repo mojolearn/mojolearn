@@ -5,8 +5,8 @@ the Mac and ships alone to a rented box.
 The release columns install LOCAL wheel files. A user runs
 `pip install mojolearn==V` against an index, and that is where the split
 Linux release can break: the core requires mojolearn-nvidia==V and
-mojolearn-amd==V, each plugin requires mojolearn==V back (a cycle pip must
-resolve), and the three are uploaded in order by separate jobs. Two
+mojolearn-amd==V; aggregates require native architecture payloads, which pin
+mojolearn==V back. All six projects upload in dependency order by separate jobs. Two
 subcommands:
 
   precheck --index testpypi|pypi --version V
@@ -17,8 +17,8 @@ subcommands:
 
   verify --index testpypi|pypi --version V --vendor cuda|hip --report R --out J
       On the box, run by the python of the venv pip installed into:
-      mojolearn, mojolearn-nvidia and mojolearn-amd are installed at exactly
-      V (importlib.metadata); in pip's --report R each of the three came from
+      all six release projects are installed at exactly
+      V (importlib.metadata); in pip's --report R each came from
       the index's own file host (TestPyPI: test-files.pythonhosted.org) and
       every other distribution from PyPI's (files.pythonhosted.org), so a
       same-named project on the other index cannot stand in for ours

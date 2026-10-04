@@ -1142,9 +1142,11 @@ for _f in pip_report.json index_check.json dists.txt install.log; do
 done
 [ -f "$OUT/remote/install.log" ] && tail -5 "$OUT/remote/install.log" | sed 's/^/  install: /'
 [ -f "$OUT/remote/index_check.log" ] && sed 's/^/  index: /' "$OUT/remote/index_check.log"
-python3 - "$OUT" "$FROM_INDEX" "$VERSION" "$VENDOR" "$COMMIT" <<'PY' | tee -a "$OUT/smoke.txt"
+python3 - "$OUT" "$FROM_INDEX" "$VERSION" "$VENDOR" "$COMMIT" "$ROOT/tools" <<'PY' | tee -a "$OUT/smoke.txt"
 import json, pathlib, sys
-out, index, version, vendor, commit = sys.argv[1:]
+out, index, version, vendor, commit, tools_dir = sys.argv[1:]
+sys.path.insert(0, tools_dir)
+from index_release_check import PROJECTS
 out = pathlib.Path(out)
 problems = []
 try:
@@ -1174,7 +1176,7 @@ if d:
     if d.get('scope') != 'expanded': problems.append('scope %s' % d.get('scope'))
     if src.get('expected_version') != version: problems.append('receipt is about version %s' % src.get('expected_version'))
     dists = src.get('distributions') or {}
-    if dists != {'mojolearn': version, 'mojolearn-nvidia': version, 'mojolearn-amd': version}:
+    if dists != {project: version for project in PROJECTS}:
         problems.append('receipt distributions %s' % dists)
     if commit and d.get('source_commit') != commit: problems.append('receipt names commit %s' % d.get('source_commit'))
     got = (d.get('installed') or {}).get('vendor')

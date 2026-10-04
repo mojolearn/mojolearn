@@ -301,18 +301,17 @@ def main():
     parser.add_argument('--require-complete', action='store_true',
                         help='fail for missing public exports or missing/stale source Python or reference payload')
     parser.add_argument('--split', action='store_true',
-                        help='the wheels are the split Linux set (mojolearn, mojolearn-nvidia, mojolearn-amd): '
+                        help='the wheels are split Linux core, vendor aggregates, or architecture payloads: '
                              'run split_audit over all and the API audit over the core alone')
     parser.add_argument('--plugins-on-index', choices=sorted(INDEX_JSON),
-                        help='refuse a split Linux core among the wheels unless mojolearn-nvidia and mojolearn-amd '
-                             'of its version are already on this index (the core publishes last)')
+                        help='require each core/vendor aggregate exact GPU dependencies on the selected index')
     args = parser.parse_args()
     if args.plugins_on_index:
         problems = plugins_on_index(args.wheels, args.plugins_on_index)
         for problem in problems:
             print('::error::' + problem)
         if not problems:
-            print(f'every split core among the wheels has both plugins on {args.plugins_on_index} (or none is a split core)')
+            print(f'GPU dependencies of core/vendor aggregates are available on {args.plugins_on_index}')
         return int(bool(problems))
     if args.split:
         split = split_audit(args.wheels)
