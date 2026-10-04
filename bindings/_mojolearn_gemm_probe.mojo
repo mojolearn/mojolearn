@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Explicit catalog G1/G5 probe; no production dispatch imports this module."""
+"""Explicit catalog G1-G10 probe; no production dispatch imports this module."""
 from std.os import abort
+from std.collections import InlineArray
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
 from std.python._cpython import GILReleased
@@ -20,18 +21,14 @@ comptime ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_acceler
 comptime FPtr = UnsafePointer[Float32, MutAnyOrigin]
 
 struct Counters(Defaultable, Movable):
-    var incumbent: Int
-    var direct: Int
-    var shared: Int
+    var counts: InlineArray[Int, 11]
     def __init__(out self):
-        self.incumbent = 0
-        self.direct = 0
-        self.shared = 0
+        self.counts = InlineArray[Int, 11](fill=0)
 
 comptime COUNTERS = _Global[StorageType=Counters, name="CatalogGemmProbeCounts", init_fn=Counters.__init__]
 
 def abi_py() raises -> PythonObject:
-    return PythonObject(1)
+    return PythonObject(2)
 
 def enabled_py() raises -> PythonObject:
     return PythonObject(Int(ENABLED))
@@ -39,13 +36,9 @@ def enabled_py() raises -> PythonObject:
 def count_py(arm_py: PythonObject) raises -> PythonObject:
     var arm = Int(py=arm_py)
     var p = COUNTERS.get_or_create_ptr()
-    if arm == 0:
-        return PythonObject(p[].incumbent)
-    if arm == 1:
-        return PythonObject(p[].direct)
-    if arm == 5:
-        return PythonObject(p[].shared)
-    raise Error("unknown catalog GEMM arm")
+    if arm < 0 or arm > 10:
+        raise Error("unknown catalog GEMM arm")
+    return PythonObject(p[].counts[arm])
 
 def gemm_py(aa: PythonObject, bb: PythonObject, cc: PythonObject, dims: PythonObject) raises -> PythonObject:
     comptime if not ENABLED:
@@ -61,7 +54,7 @@ def gemm_py(aa: PythonObject, bb: PythonObject, cc: PythonObject, dims: PythonOb
             raise Error("catalog probe invalid extent")
         if max(m * n, max(m * k, n * k)) > 2147483647:
             raise Error("catalog probe invalid or oversized shape")
-        if arm != 0 and arm != 1 and arm != 5:
+        if arm < 0 or arm > 10:
             raise Error("unknown catalog GEMM arm")
         if aliased_inputs and (not nt or m != n):
             raise Error("aliased Gram requires square NT output")
@@ -102,11 +95,51 @@ def gemm_py(aa: PythonObject, bb: PythonObject, cc: PythonObject, dims: PythonOb
                     apple_gemm_experiment[64, 64, 16, False, 0, True](ctx, dc, da, db, m, n, k)
                 else:
                     apple_gemm_experiment[64, 64, 16, False, 0, False](ctx, dc, da, db, m, n, k)
-            else:
+            elif arm == 2:
+                if nt:
+                    apple_gemm_experiment[32, 32, 16, False, 0, True](ctx, dc, da, db, m, n, k)
+                else:
+                    apple_gemm_experiment[32, 32, 16, False, 0, False](ctx, dc, da, db, m, n, k)
+            elif arm == 3:
+                if nt:
+                    apple_gemm_experiment[64, 128, 16, False, 0, True](ctx, dc, da, db, m, n, k)
+                else:
+                    apple_gemm_experiment[64, 128, 16, False, 0, False](ctx, dc, da, db, m, n, k)
+            elif arm == 4:
+                if nt:
+                    apple_gemm_experiment[128, 64, 16, False, 0, True](ctx, dc, da, db, m, n, k)
+                else:
+                    apple_gemm_experiment[128, 64, 16, False, 0, False](ctx, dc, da, db, m, n, k)
+            elif arm == 5:
                 if nt:
                     apple_gemm_experiment[64, 64, 16, True, 0, True](ctx, dc, da, db, m, n, k)
                 else:
                     apple_gemm_experiment[64, 64, 16, True, 0, False](ctx, dc, da, db, m, n, k)
+            elif arm == 6:
+                if nt:
+                    apple_gemm_experiment[64, 64, 32, True, 0, True](ctx, dc, da, db, m, n, k)
+                else:
+                    apple_gemm_experiment[64, 64, 32, True, 0, False](ctx, dc, da, db, m, n, k)
+            elif arm == 7:
+                if nt:
+                    apple_gemm_experiment[64, 64, 16, True, 4, True](ctx, dc, da, db, m, n, k)
+                else:
+                    apple_gemm_experiment[64, 64, 16, True, 4, False](ctx, dc, da, db, m, n, k)
+            elif arm == 8:
+                if nt:
+                    apple_gemm_experiment[64, 128, 32, True, 0, True](ctx, dc, da, db, m, n, k)
+                else:
+                    apple_gemm_experiment[64, 128, 32, True, 0, False](ctx, dc, da, db, m, n, k)
+            elif arm == 9:
+                if nt:
+                    apple_gemm_experiment[128, 64, 32, True, 0, True](ctx, dc, da, db, m, n, k)
+                else:
+                    apple_gemm_experiment[128, 64, 32, True, 0, False](ctx, dc, da, db, m, n, k)
+            elif arm == 10:
+                if nt:
+                    apple_gemm_experiment[64, 64, 32, True, 4, True](ctx, dc, da, db, m, n, k)
+                else:
+                    apple_gemm_experiment[64, 64, 32, True, 4, False](ctx, dc, da, db, m, n, k)
             ctx.enqueue_copy(dst_ptr=cp, src_buf=dc)
             ctx.synchronize()
             _ = dc^
@@ -115,12 +148,7 @@ def gemm_py(aa: PythonObject, bb: PythonObject, cc: PythonObject, dims: PythonOb
             _ = ctx^
         # GIL held: counter proves selected callable completed, not a flag alone.
         var counts = COUNTERS.get_or_create_ptr()
-        if arm == 0:
-            counts[].incumbent += 1
-        elif arm == 1:
-            counts[].direct += 1
-        else:
-            counts[].shared += 1
+        counts[].counts[arm] += 1
         return PythonObject(arm)
 
 @export

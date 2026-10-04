@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unscored M3 quality for incumbent/G1/G5; exact source and binary provenance.
+"""Unscored M3 quality for incumbent/G1-G10; exact source and binary provenance.
 
 SOURCE TAG: load staged gemm_probe B.so (-D MOJOLEARN_APPLE_GEMM_PROBE).
 No timing, no opponent calls, no queue changes, no builds, no production hook.
@@ -16,7 +16,8 @@ import sys
 
 DEFINE = 'MOJOLEARN_APPLE_GEMM_PROBE'
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = 'catalog-gemm-g1g5-v1'
+FIXTURE = 'catalog-gemm-all-v1'
+ARMS = tuple(range(11))
 CATALOG = '9ab2d3d3fb770498ef025db08f595a0149792bb7'
 # Bounds fixed before B results. Compare both candidates to incumbent too.
 ABS_SCALED_BOUND = 5e-6
@@ -62,10 +63,11 @@ def main():
     spec = importlib.util.spec_from_file_location('_mojolearn_gemm_probe', so)
     b = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(b)
-    assert b.abi_version() == 1 and b.enabled() == 1
-    calls = {arm: int(b.count(arm)) for arm in (0, 1, 5)}
-    assert calls == {0: 0, 1: 0, 5: 0}
+    assert b.abi_version() == 2 and b.enabled() == 1
+    calls = {arm: int(b.count(arm)) for arm in ARMS}
+    assert calls == {arm: 0 for arm in ARMS}
     records, failures = [], []
+    variant_failures = {arm: [] for arm in ARMS[1:]}
     for name, m, n, k, nt, alias, kind in CASES:
         rng = np.random.default_rng(907)
         a = rng.standard_normal((m, k)).astype('float32')
@@ -84,7 +86,7 @@ def main():
         ap = a if k else np.zeros(1, dtype='float32')
         bp = physical_b if k else np.zeros(1, dtype='float32')
         metrics, outputs = {}, {}
-        for arm in (0, 1, 5):
+        for arm in ARMS:
             c = np.full((m, n), np.nan, dtype='float32')
             reached = b.gemm(ap.ctypes.data, bp.ctypes.data, c.ctypes.data, [m, n, k, int(nt), arm, int(alias)])
             assert reached == arm
@@ -98,19 +100,36 @@ def main():
         # G1/G5 share shape and order; require exact output words, not a claim
         # that the SDK incumbent necessarily uses that same rounding order.
         same = outputs[1].tobytes() == outputs[5].tobytes()
-        good = same and all(v['finite'] and 0 <= v['scaled_error'] <= ABS_SCALED_BOUND for v in metrics.values())
-        good = good and all(metrics[arm]['scaled_error'] <= metrics[0]['scaled_error'] for arm in (1, 5))
+        variant_status = {}
+        for arm in ARMS[1:]:
+            metric = metrics[arm]
+            good_arm = (metric['finite'] and 0 <= metric['scaled_error'] <= ABS_SCALED_BOUND
+                        and metric['scaled_error'] <= metrics[0]['scaled_error']
+                        and metrics[0]['finite'])
+            if arm in (1, 5):
+                good_arm = good_arm and same
+            variant_status[arm] = 'PASS' if good_arm else 'FAIL'
+            if not good_arm:
+                variant_failures[arm].append(name)
+        good = all(v == 'PASS' for v in variant_status.values())
         if not good:
             failures.append(name)
         row = dict(case=name, shape=[m, n, k], nt=nt, alias=alias, metrics=metrics,
                    incumbent='gpu-zero-contract' if k == 0 else ('core-nt' if nt else 'sdk-nn'),
-                   direct_shared_exact=same, status='PASS' if good else 'FAIL')
+                   direct_shared_exact=same, variant_status=variant_status, status='PASS' if good else 'FAIL')
         records.append(row)
         print('CATALOG-GEMM-QUALITY ' + json.dumps(row, sort_keys=True), flush=True)
     result = dict(source_sha=args.source, catalog_source=CATALOG, binding_sha256=digest,
-                  fixture=FIXTURE, abi_version=1, bound=ABS_SCALED_BOUND, no_regression_tolerance=0,
-                  call_counts=calls, cases=records, failures=failures, status='FAIL' if failures else 'PASS')
+                  fixture=FIXTURE, abi_version=2, bound=ABS_SCALED_BOUND, no_regression_tolerance=0,
+                  call_counts=calls, cases=records, failures=failures, variant_failures=variant_failures, status='FAIL' if failures else 'PASS')
     (out / 'report.json').write_text(json.dumps(result, indent=2, sort_keys=True) + '\n')
+    for arm, failed_cases in variant_failures.items():
+        if not failed_cases:
+            receipt = dict(source_sha=args.source, catalog_source=CATALOG,
+                           binding_sha256=digest, fixture=FIXTURE, abi_version=2,
+                           variant=arm, no_regression_tolerance=0, status='PASS',
+                           cases=[row['case'] for row in records], timing=False)
+            (out / f'PASS_G{arm}.json').write_text(json.dumps(receipt, sort_keys=True) + '\n')
     if not failures:
         (out / 'PASS.json').write_text(json.dumps(result, sort_keys=True) + '\n')
     print('CATALOG-GEMM-END status=' + result['status'], flush=True)
