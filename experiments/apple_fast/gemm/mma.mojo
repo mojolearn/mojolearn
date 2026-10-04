@@ -46,7 +46,7 @@ def apple_mma_kernel[
     var bn = Int(block_idx.x) * BN
     var sr = (sg // 2) * (BM // 2)
     var sc = (sg % 2) * (BN // 2)
-    var acc = Array[SIMD[DType.float32, 2], RM * RN](fill=SIMD[DType.float32, 2](0))
+    var acc = InlineArray[SIMD[DType.float32, 2], RM * RN](fill=SIMD[DType.float32, 2](0))
     # Direct variants reserve one float, not a full shared tile.
     comptime SHARED_FLOATS = PAGE_A + PAGE_B if STAGED else 1
     var tile = stack_allocation[
@@ -80,8 +80,8 @@ def apple_mma_kernel[
                     tile.unsafe_store(PAGE_A + col * STRIDE + kk, value)
             barrier()
         for ks in range(0, BK, 8):
-            var af = Array[SIMD[DType.float32, 2], RM](uninitialized=True)
-            var bf = Array[SIMD[DType.float32, 2], RN](uninitialized=True)
+            var af = InlineArray[SIMD[DType.float32, 2], RM](fill=SIMD[DType.float32, 2](0))
+            var bf = InlineArray[SIMD[DType.float32, 2], RN](fill=SIMD[DType.float32, 2](0))
             comptime for mi in range(RM):
                 var row = sr + mi * 8 + fr
                 var fragment = SIMD[DType.float32, 2](0)

@@ -58,3 +58,15 @@ lower-triangle subtraction epilogue, while <=2048 tails call core NT. The old
 catalog README's sabotage-only Cholesky description is stale for current main.
 A high-leverage Cholesky adaptation must preserve that fused epilogue rather
 than turn on sabotage or route the whole factor through this standalone probe.
+
+## Compile-only repair r1
+
+M2 source4d5f42f1c failed parsing before arm A built: `alias` is a reserved
+Mojo keyword. New branch lane/apple-fast-catalog-gemm-probe-r1 renames the
+local to aliased_inputs. A proactive API-spelling audit also replaces the
+catalog's Array fragment containers with the repository-standard InlineArray
+and explicit zero initialization; all slots are overwritten before use, so
+fragment arithmetic/order is unchanged. This is the only copied-kernel source
+change; the original pinned catalog/source4d5 remains preserved. No scored
+output existed, and no threshold, fixture or runtime dispatch changed.
+Recompile on M2; private intrinsic ABI and actual arithmetic remain unverified.
