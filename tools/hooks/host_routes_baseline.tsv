@@ -214,31 +214,9 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_ann.p
 # why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cluster.py	0	arrs = [_buffer.as_f32_c(p, ndim=None, name="aux")[0] for p in parts if p is not None]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cluster.py	0	f, i, s = b.x_cluster_call(which, xa, xn, aa, an, [int(v) for v in ip], [float(v) for v in fp])
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cluster.py	0	nodes = [int(v) for v in _buffer.flat_bytes(self._tree_nodes).cast("i")]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	dxh = dev.get(name, int(np.prod(xshape)))
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -1604,8 +1582,6 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_trees
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_trees.py	0	raw = b"".join(conv(a, ndim=1, name="tree")[0].tobytes() for a in arrs)
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_trees.py	0	raw = b"".join(full((n,), float(v), "<f8").tobytes() for v in inits)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_trees.py	0	return Array.from_list([int(c) for c in est.classes_], "<i4")
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_trees.py	0	return Array.from_list([list(r) for r in zip(*cols)], kind)
@@ -1623,8 +1599,6 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_trees
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_trees.py	0	self._bind().x_trees_tree_shap([addr_ro(a, name="forest") for a in self._forest],
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_trees.py	0	self._bind().x_trees_tree_shap_prepare([addr_ro(a, name="forest") for a in arrays],
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_trees.py	0	self.estimators_features_ = [_trees_arange(d) for _ in range(int(forest._n_trees))]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_trees.py	0	self.named_estimators_ = dict((n, e) for (n, _), e in zip(active, self.estimators_))
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -1662,15 +1636,9 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_trees
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_trees.py	0	weights = Array.from_list([float(a) for a in self.estimator_weights_], "<f8")
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_trees.py	0	cols = Array.from_list(sorted(cols.tolist()), "<i4")
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_trees.py	0	if F > max(counts):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_trees.py	0	return Array.from_list(sorted(drawn), "<i4")
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_trees.py	0	return sum(1 for i in range(offsets[0], offsets[1]) if left[i] == -1)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_trees.py	0	self._place(meta, n, width, Xa, _trees_arange(n), sum(widths))
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_trees.py	0	used = max([i for i in range(n_splits) if cnt[i] > 0] or [0]) + 1
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
