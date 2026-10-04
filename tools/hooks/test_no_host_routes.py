@@ -26,7 +26,7 @@ TOP = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=HERE, capture_
 os.chdir(TOP)
 
 DEV = "x_decomp/device.mojo"                 # a GPU binding module
-ITER = "x_neighbors/iter_device.mojo"        # imports the dense CC host walk
+ITER = "x_neighbors/iter_device.mojo"        # GPU module; fixture supplies its own host import
 PY = "python/mojolearn/linear_model.py"      # a GPU-path estimator module
 
 
@@ -96,8 +96,11 @@ BLOCKED = [
     ("*_on_host call", {DEV: "def _p6(n: Int):\n    var l = do_labelling_on_host(n)"}, "do_labelling_on_host(n)"),
     ("*_host_rows call", {DEV: "def _p7(n: Int):\n    lu_solve_host_rows(0, 0, 0, n, 1, 0)"},
      "lu_solve_host_rows(0, 0, 0, n, 1, 0)"),
-    ("import from a *_host module", {DEV: "from x_decomp.lu_host import _solve_blocks"},
-     "x_decomp/lu_host.mojo:_solve_blocks"),
+    ("import from a *_host module",
+     {"x_decomp/audit_fixture_host.mojo": ("=", "def solve_blocks(n: Int):\n"
+          "    for i in range(n):\n        consume(i)\n"),
+      DEV: "from x_decomp.audit_fixture_host import solve_blocks"},
+     "x_decomp/audit_fixture_host.mojo:solve_blocks"),
     ("import from a host/ module without _host", {DEV: "from cluster.host.host_cells import host_cells"},
      "cluster/host/host_cells.mojo:host_cells"),
     ("host helper not named *_on_host", {DEV: "from x_neighbors.cc_sparse import _cc_rounds\n"
@@ -109,10 +112,12 @@ BLOCKED = [
      "MOJOLEARN_PR_SPARSE"),
     ("*HOST*_MIN threshold", {DEV: "comptime XD_NEW_HOST_MIN = 4096"}, "XD_NEW_HOST_MIN"),
     ("size threshold without HOST whose branch reaches host code",
-     {ITER: "def _p11(ctx: DeviceContext, a: Int, lab: Int, info: Int, n: Int) raises:\n"
+     {"x_neighbors/audit_fixture_host.mojo": ("=", "def audit_walk(n: Int):\n"
+          "    for i in range(n):\n        consume(i)\n"),
+      ITER: "from x_neighbors.audit_fixture_host import audit_walk\n"
+            "def _p11(ctx: DeviceContext, a: Int, lab: Int, info: Int, n: Int) raises:\n"
             "    if n < SMALL_N_CPU:\n"
-            "        cc_iterate_sparse(FP(unsafe_from_address=a), IP(unsafe_from_address=lab), "
-            "IP(unsafe_from_address=info), n)\n    else:\n        ctx.synchronize()"}, "if n < SMALL_N_CPU:"),
+            "        audit_walk(n)\n    else:\n        ctx.synchronize()"}, "if n < SMALL_N_CPU:"),
     ("route-table name", {PY: "_HOST_ALGOS = frozenset()"}, "_HOST_ALGOS = frozenset()"),
     ("download, synchronize, host loop, re-upload",
      {DEV: "def _p12(ctx: DeviceContext, dbuf: DeviceBuffer[DType.float32], hb: UnsafePointer[Float32], n: Int) raises:\n"
@@ -263,7 +268,16 @@ def test_passes():
 
 
 def test_removed_route_leaves_a_stale_row_until_pruned():
-    tip = scratch({"bindings/_mojolearn.mojo": ("-", "host_parallelize(_center_task, chunks)")})
+    # Supply our own debt so removing production host routes cannot invalidate
+    # the regression (or tempt tests to restore a removed route).
+    route = "var audit_fixture_exec = HostExec()"
+    baseline = _git("show", f"HEAD:{nhr.BASELINE}") + "\n"
+    baseline += "\t".join(["host-exec", "hostexec", "test-fixture", "debt", DEV, "0", route]) + "\n"
+    debt = scratch({DEV: "def _audit_debt() raises:\n    " + route,
+                    nhr.BASELINE: ("=", baseline)})
+    rc, err = run_tree(debt)
+    assert rc == 0, err
+    tip = scratch({DEV: ("-", route)}, base=debt)
     rc, err = run_tree(tip)
     assert rc == 1 and "no longer match" in err, err
     fd, path = tempfile.mkstemp(prefix="nhr_bl_", suffix=".tsv")
@@ -284,14 +298,20 @@ def test_removed_route_leaves_a_stale_row_until_pruned():
 
 
 def test_inflight_rows_serve_only_their_pr_head():
+    # Real PR heads eventually merge or disappear from shallow CI fetches.
+    # Construct known ancestry locally instead of assuming any live PR state.
+    head = _git("rev-parse", "HEAD")
+    pr = scratch({"tools/audit_ancestry_fixture.txt": ("=", "PR branch\n")}, base=head)
+    child = scratch({"tools/audit_ancestry_fixture.txt": "descendant"}, base=pr)
+    sibling = scratch({"tools/audit_ancestry_fixture.txt": ("=", "other branch\n")}, base=head)
+    state = "inflight@" + pr
+    assert nhr._inflight_ok(state, pr), "allowance must serve its PR head"
+    assert nhr._inflight_ok(state, child), "allowance must serve descendants"
+    assert not nhr._inflight_ok(state, head), "allowance cannot serve its parent"
+    assert not nhr._inflight_ok(state, sibling), "allowance cannot serve another branch"
+    assert not nhr._inflight_ok("inflight", pr), "unbound allowances must fail closed"
     rows = nhr.load_baseline(_git("show", f"HEAD:{nhr.BASELINE}"))
-    infl = [r for r in rows if r["state"].startswith("inflight@")]
-    assert infl, "the in-flight PRs' rows are in the baseline"
-    sha = infl[0]["state"].split("@", 1)[1]
-    if subprocess.run(["git", "cat-file", "-e", sha + "^{commit}"]).returncode == 0:
-        assert nhr._inflight_ok(infl[0]["state"], sha)
-    assert not nhr._inflight_ok(infl[0]["state"], _git("rev-parse", "HEAD"))
-    assert not any(r["state"] == "inflight" for r in rows)
+    assert not any(r["state"] == "inflight" for r in rows), "baseline contains an unbound allowance"
 
 
 def test_cli_tree_and_diff_modes():

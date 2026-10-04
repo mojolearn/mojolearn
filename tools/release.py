@@ -166,6 +166,8 @@ sys.path.insert(0, str(ROOT / "tools"))
 import release_ledger  # noqa: E402
 import release_reuse  # noqa: E402
 import release_tooling  # noqa: E402
+import runpy
+GPU_PACKAGES = runpy.run_path(str(ROOT / "python/mojolearn/gpu_plugins.py"))
 
 
 def sha256(path):
@@ -776,8 +778,22 @@ PIPELINES = {
     "amd": dict(builds=[], checks=["gpu-column-amd"], publish="publish-amd", platform="amd"),
 }
 #: split package -> (PyPI project, wheel-name prefix); python/mojolearn/gpu_plugins.py
-SPLIT_PACKAGES = {"linux": ("mojolearn", "mojolearn"), "nvidia": ("mojolearn-nvidia", "mojolearn_nvidia"),
-                  "amd": ("mojolearn-amd", "mojolearn_amd")}
+SPLIT_PACKAGES = {"linux": ("mojolearn", "mojolearn"), **{
+    row["profile"]: (row["distribution"], row["wheel_name"])
+    for row in GPU_PACKAGES["distribution_rows"]()}}
+# Vendor wheels retain separate native execution columns for every hardware slot.
+NATIVE_COLUMNS = {"nvidia": ("nvidia", "nvidia-hopper"), "amd": ("amd",)}
+if set(NATIVE_COLUMNS) != {r["profile"] for r in GPU_PACKAGES["distribution_rows"]()}:
+    raise RuntimeError("every released vendor requires hardware qualification columns")
+STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "gpu-column-amd")),
+                  ("gpu-column-nvidia-hopper", "nvidia", ["linux-pack", "release-check"], None))
+STEP_TABLE = [(step, pipeline, needs + (["gpu-column-nvidia-hopper"] if step == "publish-nvidia" else []), resource)
+              for step, pipeline, needs, resource in STEP_TABLE]
+PIPELINES["nvidia"]["checks"].append("gpu-column-nvidia-hopper")
+AFTER["linux-joint-diff"].append("gpu-column-nvidia-hopper")
+PUBLISH_STEPS = tuple(pipeline["publish"] for pipeline in PIPELINES.values())
+AFTER["finish-line"] = list(PUBLISH_STEPS)
+
 PIPELINE_OF = {s: p for s, p, _, _ in STEP_TABLE}
 NEEDS = {s: n for s, _, n, _ in STEP_TABLE}
 RESOURCE = {s: r for s, _, _, r in STEP_TABLE}
@@ -807,7 +823,14 @@ def merge_split(wheels, out):
                 if top.endswith(".dist-info") and n.endswith("/LINUX_PAYLOAD.json"):
                     doc = json.loads(data)
                     doc.pop("split", None)
+                    for mapping in ("extensions", "binding_origin"):
+                        if mapping in doc:
+                            doc[mapping] = {release_reuse.legacy_archive_path(k): v
+                                            for k, v in doc[mapping].items()}
                     data = (json.dumps(doc, sort_keys=True, indent=2) + "\n").encode()
+                n = release_reuse.legacy_archive_path(n)
+                if n in members and members[n] != data:
+                    raise StepFailed(f"conflicting split-wheel member: {n}")
                 members[n] = data
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(out, "w") as z:
@@ -832,8 +855,7 @@ class Release:
     #: wheel, complete release-check records); these are skipped on their record
     #: (finish-line and record: when the platforms they covered are still the
     #: published ones).
-    SKIP_IF_RECORDED = {"rehearsal", "cross-compile", "publish-macos", "finish-line", "record",
-                        "publish-core-linux", "publish-nvidia", "publish-amd"}
+    SKIP_IF_RECORDED = {"rehearsal", "cross-compile", "finish-line", "record", *PUBLISH_STEPS}
 
     def __init__(self, args, runner=None):
         self.args = args
@@ -1167,8 +1189,7 @@ class Release:
             # receipts of the frozen source stay.
             return (f"source pinned at {frozen}" + (f"; tooling runs from HEAD {head[:12]}" if head != frozen else "")
                     + ("" if head == frozen else " (--refreeze moves the source to HEAD)"))
-        if frozen and head != frozen and any(self.recorded(s) for s in ("publish-macos", "publish-core-linux",
-                                                                        "publish-nvidia", "publish-amd")):
+        if frozen and head != frozen and self.published_platforms():
             raise StepFailed(f"--refreeze refused: a wheel of {frozen[:12]} is already published; "
                              "a new source state needs a new version")
         allowed = set(release_files()) | set(docs_fact_files())
@@ -1329,7 +1350,7 @@ class Release:
             info = prev.get(platform) or {}
             return Path("<published %s wheel %s>" % (platform, info.get("wheel", "?")))
         whl = release_reuse.published_wheel(prev, platform, self.evidence)
-        plugins = [k for k in ("nvidia", "amd") if prev.get(k)] if platform == "linux" else []
+        plugins = [k for k in SPLIT_PACKAGES if k != "linux" and prev.get(k)] if platform == "linux" else []
         if plugins:
             # a split release: its Linux bytes are the core and its plugins
             wheels = [whl] + [release_reuse.published_wheel(prev, k, self.evidence) for k in plugins]
@@ -1856,30 +1877,45 @@ class Release:
     def nvidia_column_ok(self):
         final, out = self.linux_final(), self.rel / "smoke-linux"
         return (bool(final) and smoke_passed(out / "results.json", final) and self.gpu_column_ok(out, "cuda")
-                and self.plugin_installed(out / "results.json", "nvidia"))
+                and self.plugin_installed(out / "results.json", "nvidia")
+                and self.column_arch_ok(out, ("sm_89",)))
+
+    def column_arch_ok(self, out, arches):
+        # Actual installed loader selection, not the requested rental model.
+        installed = (read_json(out / "results.json") or {}).get("installed") or {}
+        return installed.get("gpu_arch") in arches
+
+    def hopper_column_ok(self):
+        final, out = self.linux_final(), self.rel / "column-nvidia-hopper"
+        return (bool(final) and smoke_passed(out / "results.json", final)
+                and self.gpu_column_ok(out, "cuda")
+                and self.plugin_installed(out / "results.json", "nvidia")
+                and self.column_arch_ok(out, ("sm_90", "sm_90a")))
 
     def amd_column_ok(self):
         out = self.rel / "column-amd"
         # the amd plugin publishes on its own receipt: the smoke runs on hip too
         final = self.linux_final()
         return (bool(final) and smoke_passed(out / "results.json", final) and self.gpu_column_ok(out, "hip")
-                and self.plugin_installed(out / "results.json", "amd"))
+                and self.plugin_installed(out / "results.json", "amd")
+                and self.column_arch_ok(out, ("gfx942",)))
 
     def plugin_installed(self, results, package):
         """The receipt installed exactly this release's final plugins beside
         the core, BOTH of them (the core requires both, so the box installs
         what `pip install mojolearn` installs), among them `package`'s."""
-        plugins = {k: self.split_final(k) for k in ("nvidia", "amd")}
+        plugins = {k: self.split_final(k) for k in SPLIT_PACKAGES if k != "linux"}
         return (all(plugins.values()) and bool(plugins[package])
                 and receipt_plugins(results) == {w.name: sha256(w) for w in plugins.values()})
 
-    def column_wheel(self, vendor):
+    def column_wheel(self, vendor, name=None):
         """The wheel a column's results are keyed to (ledger, reuse): the
         plugin it installed."""
         return self.split_final("nvidia" if vendor == "cuda" else "amd")
 
     def column_specs(self):
         return [("nvidia", "cuda", self.nvidia_column_ok, self.rel / "smoke-linux"),
+                ("nvidia-hopper", "cuda", self.hopper_column_ok, self.rel / "column-nvidia-hopper"),
                 ("amd", "hip", self.amd_column_ok, self.rel / "column-amd")]
 
     def column_candidates(self, vendor, outname, wsha, sel_digest):
@@ -1902,7 +1938,7 @@ class Release:
         the ledger) only for a BYTE-IDENTICAL wheel (sha256) and the same lane
         selection, its column file verified against its provenance; it is
         diffed again against this release's reference columns here."""
-        final, keyed = self.linux_final(), self.column_wheel(vendor)
+        final, keyed = self.linux_final(), self.column_wheel(vendor, name)
         if not final or not keyed or not sel_digest:
             return None
         wsha = sha256(keyed)
@@ -1934,7 +1970,7 @@ class Release:
             return doc
         return None
 
-    def column_legs(self, names=("nvidia", "amd")):
+    def column_legs(self, names=("nvidia", "nvidia-hopper", "amd")):
         """The two GPU wheel columns as detached legs, each only when its
         record for this wheel is not already there and no PASSED column of a
         byte-identical wheel can be taken. The NVIDIA leg carries its GPU walk
@@ -1953,13 +1989,15 @@ class Release:
             sel_digest = selection_digest(sel)
             if not self.dry and self.reuse_column(name, vendor, out, sel_digest) and ok():
                 continue
-            if name == "nvidia":
-                walk = [g for g in self.args.smoke_gpu.split("|") if g] or SMOKE_WALK
+            if vendor == "cuda":
+                arch = "sm_90a" if name == "nvidia-hopper" else "sm_89"
+                requested = [g for g in self.args.smoke_gpu.split("|") if g]
+                walk = [g for g in requested if g in NVIDIA_WALK[arch]] or NVIDIA_WALK[arch]
                 try:
-                    at = min(int((work / "nvidia.gpu").read_text()), len(walk) - 1)
+                    at = min(int((work / f"{name}.gpu").read_text()), len(walk) - 1)
                 except (OSError, ValueError):
                     at = 0
-                leg = ColumnLeg("nvidia", "cuda",
+                leg = ColumnLeg(name, "cuda",
                                 ["bash", "tools/release_wheel_smoke.sh", final, "--expected-source-commit", self.commit,
                                  "--out", str(out), "--rent", "--column", str(sel), *refs,
                                  *self.plugin_args("nvidia"), "--gpu", walk[at]], work, out, ok)
@@ -1971,7 +2009,7 @@ class Release:
                                  "--provider", self.args.amd_provider,
                                  "--column", str(sel), *refs, *self.plugin_args("amd")],
                                 work, out, ok)
-            keyed = self.column_wheel(vendor)
+            keyed = self.column_wheel(vendor, name)
             leg.provenance = dict(schema="mojolearn.release-column-provenance.v1", column=name, vendor=vendor,
                                   wheel=str(keyed) if keyed else final,
                                   wheel_sha256=sha256(keyed) if keyed and not self.dry else None,
@@ -1986,7 +2024,7 @@ class Release:
         plugin FIRST and then the other one: the core requires both, so the box
         installs all three, as `pip install mojolearn` does."""
         out = []
-        for k in (package,) + tuple(k for k in ("nvidia", "amd") if k != package):
+        for k in (package,) + tuple(k for k in SPLIT_PACKAGES if k not in (package, "linux")):
             plugin = self.split_final(k)
             out += ["--plugin", str(plugin) if plugin else f"<final {SPLIT_PACKAGES[k][1]} wheel>"]
         return out
@@ -2011,6 +2049,10 @@ class Release:
         self.run_columns(("nvidia",))
         return "NVIDIA column PASSED: no DIVERGENT cell against " + self.ref_names()
 
+    def step_gpu_column_nvidia_hopper(self):
+        self.run_columns(("nvidia-hopper",))
+        return "NVIDIA Hopper column PASSED"
+
     def step_gpu_column_amd(self):
         """The AMD column alone (core + both plugins, with the smoke); it gates mojolearn-amd."""
         self.run_columns(("amd",))
@@ -2027,6 +2069,7 @@ class Release:
         passed = self.passed_columns()
         if self.dry:
             return self.joint_diff([self.rel / "smoke-linux" / "column-cuda.json",
+                                    self.rel / "column-nvidia-hopper" / "column-cuda.json",
                                     self.rel / "column-amd" / "column-hip.json"])
         if not passed:
             raise StepFailed("neither the NVIDIA nor the AMD column PASSED for this release's wheels; "
@@ -2064,14 +2107,15 @@ class Release:
             launch_detached(self, legs)
             self.wait_columns(legs)
         failed = []
-        for (name, vendor, ok, out), label in zip(self.column_specs(), ("NVIDIA", "AMD")):
+        for name, vendor, ok, out in self.column_specs():
+            label = name
             if name not in names:
                 continue
             if ok():
                 self.say(f"  {label} column: PASSED, no DIVERGENT cell against {self.ref_names()}")
                 self.record_column(name, vendor, out)
                 continue
-            leg = next((l for l in legs if l.vendor == vendor), None)
+            leg = next((l for l in legs if l.name == name), None)
             failed.append(f"{label} column missing, not PASSED or DIVERGENT: {out}"
                           + (f" (exit {leg.exit_code()}, log {leg.log})" if leg else ""))
             self.say(f"  {failed[-1]}")
@@ -2096,7 +2140,7 @@ class Release:
                     self.say(f"  {l.name}: {walk[l.at - 1]} has no stock; trying {walk[l.at]}")
                     l.command[l.command.index("--gpu") + 1] = walk[l.at]
                     work.mkdir(parents=True, exist_ok=True)
-                    (work / "nvidia.gpu").write_text(str(l.at))
+                    (work / f"{l.name}.gpu").write_text(str(l.at))
                     again.append(l)
             if again:
                 launch_detached(self, again)
@@ -2148,11 +2192,11 @@ class Release:
         target = self.args.publish
         if target is None:
             raise StepHeld("publication needs an explicit --publish none|testpypi|pypi; stopping here")
-        witness = self.linux_final() if platform in ("nvidia", "amd") else wheel
+        witness = self.linux_final() if platform in SPLIT_PACKAGES and platform != "linux" else wheel
         if not self.dry and wheel and witness and wheel_commit(witness) != self.commit:
             raise StepFailed(f"the {platform} wheel {wheel.name} records source {wheel_commit(witness)}, not the frozen "
                              f"{self.commit}")
-        if not self.dry and platform in ("nvidia", "amd") and receipt_plugins(smoke).get(wheel.name) != sha256(wheel):
+        if not self.dry and platform in SPLIT_PACKAGES and platform != "linux" and receipt_plugins(smoke).get(wheel.name) != sha256(wheel):
             raise StepFailed(f"the {platform} smoke receipt {smoke} did not install {wheel.name}")
         if not self.dry and wheel and self.on_pypi(wheel):
             return "already on PyPI"
@@ -2170,7 +2214,7 @@ class Release:
         columns PASSED (and after both plugins published, STEP_TABLE)."""
         if self.dry:
             return self.rel / "smoke-linux" / "results.json"
-        failed = [label for label, ok in (("NVIDIA", self.nvidia_column_ok()), ("AMD", self.amd_column_ok()))
+        failed = [label for label, ok in (("NVIDIA Ada", self.nvidia_column_ok()), ("NVIDIA Hopper", self.hopper_column_ok()), ("AMD", self.amd_column_ok()))
                   if not ok]
         if failed:
             raise StepFailed("the core requires both GPU plugins and publishes only when both columns PASSED; "
@@ -2182,6 +2226,8 @@ class Release:
         return self.publish("linux", self.split_final("linux"), smoke), dict(smoke=str(smoke))
 
     def step_publish_nvidia(self):
+        if not self.dry and not (self.nvidia_column_ok() and self.hopper_column_ok()):
+            raise StepFailed("NVIDIA vendor wheel requires both Ada and Hopper columns")
         smoke = self.rel / "smoke-linux" / "results.json"
         return self.publish("nvidia", self.split_final("nvidia"), smoke), dict(smoke=str(smoke))
 
@@ -2367,7 +2413,7 @@ class Release:
     def platform_wheels(self):
         """[(platform, wheel, smoke receipt)] of every wheel this release publishes."""
         rows = []
-        for platform in ("linux", "nvidia", "amd"):
+        for platform in SPLIT_PACKAGES:
             smoke = (self.recorded(self.publish_step(platform)) or {}).get("smoke") or (
                 self.rel / ("column-amd" if platform == "amd" else "smoke-linux") / "results.json")
             rows.append((platform, self.split_final(platform), Path(smoke)))
@@ -2647,7 +2693,7 @@ class Release:
         if leg.exit_code() is not None:
             return "failed", f"exit {leg.exit_code()}, log {leg.log}", "relaunch it (the failed attempt is moved aside)"
         sel = selection_digest(self.rel / f"selection-{vendor}.json")
-        keyed = self.column_wheel(vendor)
+        keyed = self.column_wheel(vendor, name)
         if final and keyed and sel:
             e = self.ledger().get(release_ledger.column_key(vendor, sha256(keyed), sel))
             if e and e.get("verdict") == "PASS":

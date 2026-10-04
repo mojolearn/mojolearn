@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+"""Audit experimental portable PTX artifacts; never certify numerical identity.
+
+This report is a build-format witness, not permission to serve IDENTICAL.
+Native cubin gates remain independent. Hardware/driver qualification must compare
+these exact file hashes before a loader can admit this experimental pathway.
+"""
+import argparse
+import hashlib
+import json
+from pathlib import Path
+import re
+import subprocess
+
+from ptx_contract import APPROX, modules, plain_ops
+from device_glue import DEVICE_GLUE
+
+FORMAT = 'ptx-baseline'
+TARGET = 'sm_80'
+_VERSION = re.compile(rb'^\s*\.version\s+(\d+\.\d+)\s*$', re.M)
+_TARGET = re.compile(rb'^\s*\.target\s+([^\r\n]+)', re.M)
+_FATBIN = b'\x50\xed\x55\xba'
+
+
+def validate_config(code_format, arch):
+    if code_format not in ('native', FORMAT):
+        raise ValueError(f'unsupported CUDA code format: {code_format}')
+    if code_format == FORMAT and arch != TARGET:
+        raise ValueError('ptx-baseline requires explicit MOJOLEARN_GPU_ARCHS=sm_80')
+
+
+def audit_binary(data, identical=True):
+    errors, rows = [], []
+    if _FATBIN in data:
+        errors.append('native fatbin present in portable PTX artifact')
+    # Reject embedded CUDA ELF code objects, including ones outside a fatbin.
+    for m in re.finditer(b'\x7fELF', data):
+        offset = m.start()
+        if len(data) >= offset + 20 and data[offset + 5] == 1:
+            if int.from_bytes(data[offset + 18:offset + 20], 'little') == 190:
+                errors.append('native CUDA ELF code object present')
+    spans = modules(data)
+    if len(re.findall(rb'\.version \d+\.\d+', data)) != len(spans):
+        errors.append('unrecognized or malformed PTX module header')
+    for start, end in spans:
+        body = data[start:end]
+        versions, targets = _VERSION.findall(body), _TARGET.findall(body)
+        if len(versions) != 1 or len(targets) != 1:
+            errors.append('PTX module must have exactly one version and target')
+        target = targets[0].strip().decode('ascii', 'replace') if targets else ''
+        if target != TARGET:
+            errors.append(f'non-baseline PTX target: {target}')
+        if not re.search(rb'^\s*\.address_size\s+64\s*$', body, re.M):
+            errors.append('PTX module requires address_size 64')
+        if identical and plain_ops(body):
+            errors.append('IDENTICAL PTX contains unpinned floating arithmetic')
+        approx = {}
+        for op in APPROX.findall(body):
+            name = op.decode('ascii')
+            approx[name] = approx.get(name, 0) + 1
+        rows.append(dict(sha256=hashlib.sha256(body).hexdigest(), target=target,
+                         ptx_isa=versions[0].decode() if versions else '', approx=approx))
+    return rows, errors
+
+
+def audit_tree(root, source_commit, mojo_version, source_dirty=False):
+    if not re.fullmatch(r'[0-9a-f]{40}', source_commit):
+        raise ValueError('source_commit must be a full git SHA')
+    if not mojo_version.strip():
+        raise ValueError('Mojo toolchain version must be recorded')
+    root = Path(root)
+    rows, errors = [], []
+    for path in sorted(root.rglob('*.so')):
+        rel = path.relative_to(root)
+        if any(part in ('host', '.libs') for part in rel.parts):
+            continue
+        mode = rel.parts[0] if rel.parts[0] in ('identical', 'deterministic') else 'fast'
+        data = path.read_bytes()
+        mods, failures = audit_binary(data, identical=mode == 'identical')
+        errors.extend(f'{rel.as_posix()}: {error}' for error in failures)
+        rows.append(dict(file=rel.as_posix(), sha256=hashlib.sha256(data).hexdigest(),
+                         numeric_mode=mode, ptx_modules=mods))
+    indexed = {(row['numeric_mode'], Path(row['file']).stem): row for row in rows}
+    for row in rows:
+        if row['ptx_modules']:
+            continue
+        delegates = DEVICE_GLUE.get((row['numeric_mode'], Path(row['file']).stem))
+        if not delegates:
+            errors.append(f"{row['file']}: unregistered binary without PTX modules")
+            continue
+        witnesses = [indexed.get((row['numeric_mode'], name)) for name in delegates]
+        if not all(witness and witness['ptx_modules'] for witness in witnesses):
+            errors.append(f"{row['file']}: missing PTX device delegates")
+        else:
+            row['delegates'] = [dict(file=w['file'], sha256=w['sha256']) for w in witnesses]
+    if not any(row['ptx_modules'] for row in rows):
+        errors.append('baseline set contains no PTX modules')
+    return dict(schema="mojolearn.ptx-baseline.v1", code_format=FORMAT, vendor='cuda', target=TARGET,
+                min_compute_capability=[8, 0], source_commit=source_commit,
+                source_dirty=source_dirty, mojo_version=mojo_version.strip(),
+                experimental=True, identical_qualified=False, qualification_required=True,
+                files=rows, errors=errors)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest='command', required=True)
+    config = sub.add_parser('validate-config')
+    config.add_argument('--code-format', required=True)
+    config.add_argument('--arch', default='')
+    audit = sub.add_parser('audit')
+    audit.add_argument('root', type=Path)
+    audit.add_argument('--repo', required=True, type=Path)
+    audit.add_argument('--mojo-version', required=True)
+    audit.add_argument('--output', required=True, type=Path)
+    args = parser.parse_args()
+    if args.command == 'validate-config':
+        try:
+            validate_config(args.code_format, args.arch)
+        except ValueError as error:
+            parser.error(str(error))
+        return 0
+    sha = subprocess.check_output(['git', '-C', str(args.repo), 'rev-parse', 'HEAD'], text=True).strip()
+    dirty = bool(subprocess.check_output(['git', '-C', str(args.repo), 'status', '--porcelain',
+                                         '--untracked-files=no'], text=True).strip())
+    report = audit_tree(args.root, sha, args.mojo_version, dirty)
+    args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
+    for error in report['errors']:
+        print(error)
+    return int(bool(report['errors']))
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

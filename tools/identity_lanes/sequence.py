@@ -406,7 +406,9 @@ def _(ml, X, yc, yr, Xh=None):
     a = ml.MoEBlock(16, 24, num_experts=6, top_k=2, random_state=1)
     ya = a(x)
     b = ml.MoEBlock(16, 12, num_experts=5, top_k=3, norm_topk_prob=False, random_state=2)
-    b.router[3] = b.router[1]
+    router = b.router.copy()
+    router[3] = router[1]
+    b.router = router
     yb = b(x)
     return _fit(dict(ya=_h(ya), la=_h(a.router_logits_), sa=_h(a.selected_experts_), wa=_h(a.routing_weights_),
                      yb=_h(yb), sb=_h(b.selected_experts_), wb=_h(b.routing_weights_)),

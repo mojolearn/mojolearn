@@ -178,7 +178,15 @@ def test_identity_command_runs_public_reference_probes_on_a_cpu():
             assert lane in ("cross-val-folds",), "unclassified pure-Python lane"
             continue
         f = host_surface.family(family)
-        assert f["ships_in_wheel"] and f["routes"] is None, f"{lane}: not a shipped host-only family"
+        assert f["ships_in_wheel"], f"{lane}: native host family does not ship"
+        if lane == "cross-val-folds":
+            # The descriptor uses CPU helpers in the mixed core binding.
+            # A GPU install loads those same host operations through core's
+            # routed name; that does not turn fold metadata into GPU work.
+            assert family == "core" and f["routes"] == "_mojolearn"
+            assert {"fold_ids", "select_fold_i64"} <= set(f["exports"])
+        else:
+            assert f["routes"] is None, f"{lane}: not a shipped host-only family"
 
 
 def test_core_host_binding_registers_the_fold_gather():

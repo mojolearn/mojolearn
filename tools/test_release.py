@@ -337,7 +337,7 @@ class RunTests(unittest.TestCase):
         self.assertIn("amd: ", gpu)
         self.assertIn("would launch nvidia", gpu)
         self.assertIn("would launch amd", gpu)
-        self.assertEqual(gpu.count("--plugin"), 4)
+        self.assertEqual(gpu.count("--plugin"), 3 * (len(release.SPLIT_PACKAGES) - 1))
         self.assertIn("metal/column.json", gpu)
         self.assertNotIn("cpu/column.json", gpu)
         self.assertIn("identity_break.py --diff", gpu.split("-- linux-joint-diff", 1)[1])

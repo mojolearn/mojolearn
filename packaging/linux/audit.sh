@@ -58,9 +58,27 @@ BASE=$(basename "$WHL")
 DIST=${BASE%%-*}
 case "$DIST" in
   mojolearn) SUFFIX="" ;;
-  mojolearn_nvidia|mojolearn_amd) SUFFIX="-$DIST" ;;
+  mojolearn_nvidia|mojolearn_amd|mojolearn_nvidia_sm89|mojolearn_nvidia_sm90|mojolearn_amd_gfx942|mojolearn_nvidia_ptx80) SUFFIX="-$DIST" ;;
   *) echo "not a mojolearn wheel: $BASE"; exit 2 ;;
 esac
+
+# Aggregate wheels carry only metadata, so there is no ELF for auditwheel.
+# Check their ownership/dependencies with the same registry as the packer.
+AGGREGATE=$(python3 - "$WHLABS" <<'PYAGG'
+import json, sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as z:
+    markers = [n for n in z.namelist() if n.endswith('.dist-info/gpu_plugin.json')]
+    print(int(len(markers) == 1 and json.loads(z.read(markers[0])).get('role') == 'aggregate'))
+PYAGG
+)
+if [ "$AGGREGATE" = 1 ]; then
+  ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+  python3 "$ROOT/tools/wheel_api_audit.py" --split "$WHLABS" > "$OUT/show$SUFFIX.txt"
+  cp "$WHLABS" "$OUT/repaired/$BASE"
+  docker run --rm --cpus 2 --platform linux/amd64 -v "$OUT/repaired:/r:ro" python:3.12-slim \
+    sh -c "pip install -q twine >/dev/null 2>&1 && twine check /r/$BASE" 2>&1 | tee "$OUT/twine$SUFFIX.txt"
+  exit 0
+fi
 
 EXCL=""
 if [ -n "$SUFFIX" ]; then
