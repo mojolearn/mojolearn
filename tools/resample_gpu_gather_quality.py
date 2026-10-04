@@ -81,7 +81,14 @@ def main():
         try:
             value = rs.resample(*arrays, numeric_mode='fast', **kwargs)
             refusals[name] = ['returned', list(np.asarray(value).shape)]
-        except (ValueError, RuntimeError) as exc:
+        except Exception as exc:
+            # Mojo Error crosses CPython as plain Exception, including main's
+            # zero-count/null-int32 refusal. Preserve type AND exact message
+            # for A/B equality; do not swallow unrelated infrastructure errors.
+            if type(exc) not in (Exception, ValueError, RuntimeError):
+                raise
+            if type(exc) is Exception and not str(exc).startswith(("mojolearn:", "resample:")):
+                raise
             refusals[name] = [type(exc).__name__, str(exc)]
     # New gathers must not overwrite previously returned caller-owned storage.
     for seed in range(3):

@@ -110,3 +110,20 @@ usually warm up once; do not silently equate that protocol to a cold single
 call or replace accepted board cells without manager review. Each successful
 arm is retained immediately; any later failure leaves it on disk and the tag
 cannot be reused. Future work must not replay a completed scored arm.
+
+
+## Quality harness refusal capture repair
+
+`resample-gpu-recovered-q-r1-20261004` on harness
+`b5c81d0a808254fe73e440b742997415a0841025` failed in arm A's deliberate invalid
+input loop: main returned plain Python `Exception: mojolearn: null int32 buffer
+address` for zero output length, while the capture only caught ValueError and
+RuntimeError. The original A.log/tag is retained; no numeric mismatch or timing
+was produced. B did not run.
+
+Capture now recognizes native plain Exception only for the resample/mojolearn
+error prefixes and preserves the exact exception type/message. Other exception
+classes still escape. A/B refusal equality, output byte equality, lifetime and
+reach requirements are unchanged; no native source, threshold or fixture changed.
+Retry quality with a new tag and this new harness pin against the same r2
+compiled A/B and ibase artifacts. No scored arm is replayed.
