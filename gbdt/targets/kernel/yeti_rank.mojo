@@ -191,6 +191,42 @@ def yeti_est_reuse_search_for[column: Int]() -> Bool:
 comptime YETI_EST_REUSE_SEARCH = yeti_est_reuse_search_for[TARGET_COLUMN]()
 
 
+def yeti_task_fused_for[column: Int]() -> Bool:
+    """Lane af-sym-multi (2026-10-03), `-D MOJOLEARN_YR_TASK_FUSED` (or
+    `-D MOJOLEARN_SYM_MULTI_ALL`), FAST + Apple, on top of the block kernel:
+    ONE launch per YetiRank call. `launch_yeti_rank_with` runs five:
+    `compute_group_ids` (the same row -> query map every call), the gather
+    (estimation), `compute_group_means`, the centering, the task kernel and
+    the row scatter (planes, zero value partials, magnitudes).
+    `yeti_rank_task_fused_kernel` reads the point itself (through the index
+    map in estimation), takes each query's unit-weight mean inside the task
+    block (a segmented sum over the task's positions in the sort-key
+    scratch; every task holds whole queries), centers, runs the block
+    kernel's draws, sort and pairs unchanged, and stores the planes, the
+    accumulators (for `YETI_EST_REUSE_SEARCH`), the zero value partials
+    and per-TASK magnitude partials itself. The group ids are computed once
+    per fit (`make_yeti_rank_target_buffers`). The query mean's fold order
+    and the magnitude partition change (FAST bits move, fixed and
+    repeatable); the pair arithmetic is the block kernel's. A fit with more
+    tasks than 256-row blocks (never on the board data) keeps the five
+    launches."""
+    comptime if (
+        is_defined["MOJOLEARN_YR_TASK_FUSED"]()
+        or is_defined["MOJOLEARN_SYM_MULTI_ALL"]()
+    ):
+        comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+            return True
+    return False
+
+
+#: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
+#: lane/apple-fast-sym-multi@d2c832da0; the laptop built the .so (Metal side
+#: unchecked), never timed. `-D MOJOLEARN_YR_TASK_FUSED` (or SYM_MULTI_ALL).
+#: Port: the fused kernel now sorts with main's YETI_FAST_SORT arm (the
+#: block kernel's sort, both arms).
+comptime YETI_TASK_FUSED = yeti_task_fused_for[TARGET_COLUMN]()
+
+
 def yeti_fast_sort_for[column: Int]() -> Bool:
     """FAST Apple (lane apple-fast-yetirank, default): the block kernel's
     per-round 1024-key sort as (1) a bitonic sort of 128 keys per simdgroup
@@ -1122,6 +1158,477 @@ def yeti_rank_row_kernel[estimation: Bool](
             plane_magnitudes.unsafe_store(2 * Int(block_idx.x) + 1, g_total)
 
 
+def yeti_rank_task_fused_kernel[estimation: Bool](
+    predictions: MutPointer[Float32, MutAnyOrigin],
+    index_map: MutPointer[UInt32, MutAnyOrigin],
+    has_index_map: Int32,
+    relev: MutPointer[Float32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    has_weights: Int32,
+    row_qids: MutPointer[UInt32, MutAnyOrigin],
+    q_offsets: MutPointer[UInt32, MutAnyOrigin],
+    q_sizes: MutPointer[UInt32, MutAnyOrigin],
+    task_offsets: MutPointer[UInt32, MutAnyOrigin],
+    task_sizes: MutPointer[UInt32, MutAnyOrigin],
+    task_qids: MutPointer[UInt32, MutAnyOrigin],
+    cuda_seed: UInt32,
+    decay_speed: Float32,
+    permutations_in: Int32,
+    n_rows_in: Int32,
+    n_tasks_in: Int32,
+    row_blocks_in: Int32,
+    der_acc: MutPointer[Float32, MutAnyOrigin],
+    weight_acc: MutPointer[Float32, MutAnyOrigin],
+    stats: MutPointer[Float32, MutAnyOrigin],
+    function_value: MutPointer[Float32, MutAnyOrigin],
+    compute_fv: Int32,
+    plane_magnitudes: MutPointer[Float32, MutAnyOrigin],
+    compute_magnitudes: Int32,
+):
+    """`YETI_TASK_FUSED` (lane af-sym-multi): `yeti_rank_task_block_kernel`
+    with the point load, the query means, the centering and the row
+    scatter folded in. One block per task, `YETI_THREADS` threads, 4 lanes a
+    thread; every loop bound is uniform over the block.
+
+    The point: `predictions[index_map[row]]` when `has_index_map` (the
+    estimation's bin-order cursor read through the inverse order), else
+    `predictions[row]`. The mean: the task's positions hold whole queries,
+    so a segmented inclusive sum over the 1024 positions (Hillis-Steele,
+    ten steps, the query id as the segment key) leaves each query's total
+    at its last position; `mean = ftz(total / size)` is the reference's
+    `ComputeGroupMeans` with unit weights (`sum / sum of 1.0`) in another
+    fold order; `centered = ftz(approx - mean)` is `RemoveQueryMeans`. The
+    scan runs in the sort-key scratch (16 KiB: positions `[0, 1024)` and
+    `[1024, 2048)` of its float view, the query ids at `[2048, 3072)` of
+    its uint view) before the first draw writes a key, so the 32 KiB
+    budget is unchanged. The stores: `der_acc` / `weight_acc` as the block
+    kernel (the reuse arm reads them), the planes as `yeti_rank_row_kernel`
+    (SEARCH `[pair weight, der]` at the row, ESTIMATION `[der, pair
+    weight]` at `index_map[row]`), the value partials 0.0 over all
+    `row_blocks` (grid-strided over the tasks), the magnitude partials one
+    pair per TASK (the caller folds `n_tasks` of them)."""
+    var sh_keys = stack_allocation[
+        2 * YETI_TASK_POSITIONS,
+        Scalar[DType.uint64],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var sh_relev = stack_allocation[
+        YETI_TASK_POSITIONS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var sh_exp = stack_allocation[
+        YETI_TASK_POSITIONS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var sh_der = stack_allocation[
+        YETI_TASK_POSITIONS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var sh_weight = stack_allocation[
+        YETI_TASK_POSITIONS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    # the scan's views of the sort-key scratch
+    var sh_sum = sh_keys.unsafe_bitcast[Float32]()
+    var sh_qid = sh_keys.unsafe_bitcast[UInt32]()
+    comptime QID_AT = 2 * YETI_TASK_POSITIONS
+
+    var task = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var offset = Int(task_offsets.unsafe_load(task))
+    var size = Int(task_sizes.unsafe_load(task))
+    var n_rows = Int(n_rows_in)
+    var first_qid = row_qids.unsafe_load(offset)
+    var pad_qid = row_qids.unsafe_load(offset + size - 1) + UInt32(1) - first_qid
+    var perms = Int(permutations_in)
+
+    var s = _task_seed(task_qids.unsafe_load(task), tid, cuda_seed)
+
+    var lane_qid = SIMD[DType.uint32, YETI_LANES](0)
+    var lane_begin = SIMD[DType.int32, YETI_LANES](0)
+    var lane_size = SIMD[DType.int32, YETI_LANES](0)
+    var lane_approx = SIMD[DType.float32, YETI_LANES](0.0)
+    var lane_decay = SIMD[DType.float32, YETI_LANES](0.0)
+    # the point and the query ids into the scan scratch
+    for k in range(YETI_LANES):
+        var p = tid + YETI_THREADS * k
+        var qid = pad_qid
+        var begin = size
+        var qsize = 0
+        var a = Float32(0.0)
+        if p < size:
+            var row = offset + p
+            var row_qid = row_qids.unsafe_load(row)
+            qid = row_qid - first_qid
+            begin = Int(q_offsets.unsafe_load(Int(row_qid))) - offset
+            qsize = Int(q_sizes.unsafe_load(Int(row_qid)))
+            var src = row
+            if has_index_map != Int32(0):
+                src = Int(index_map.unsafe_load(row))
+            a = predictions.unsafe_load(src)
+        sh_sum.unsafe_store(p, a)
+        sh_qid.unsafe_store(QID_AT + p, qid)
+        lane_qid[k] = qid
+        lane_begin[k] = Int32(begin)
+        lane_size[k] = Int32(qsize)
+        lane_approx[k] = a
+        if p != begin:
+            lane_decay[k] = Float32(0.15) * identical_pow(
+                decay_speed, Float32(p - begin - 1)
+            )
+    barrier()
+    # the segmented inclusive sum: ten doubling steps, ping-pong halves
+    var src_at = 0
+    var dst_at = YETI_TASK_POSITIONS
+    var seg_d = 1
+    while seg_d < YETI_TASK_POSITIONS:
+        for k in range(YETI_LANES):
+            var p = tid + YETI_THREADS * k
+            var v = sh_sum.unsafe_load(src_at + p)
+            if p >= seg_d:
+                if sh_qid.unsafe_load(QID_AT + p - seg_d) == sh_qid.unsafe_load(QID_AT + p):
+                    v = v + sh_sum.unsafe_load(src_at + p - seg_d)
+            sh_sum.unsafe_store(dst_at + p, v)
+        barrier()
+        var swap = src_at
+        src_at = dst_at
+        dst_at = swap
+        seg_d = seg_d * 2
+    # the centered exps and relevances; the accumulators zeroed
+    for k in range(YETI_LANES):
+        var p = tid + YETI_THREADS * k
+        if p < size:
+            var last = Int(lane_begin[k]) + Int(lane_size[k]) - 1
+            var total = sh_sum.unsafe_load(src_at + last)
+            var mean = ftz(total / Float32(Int(lane_size[k])))
+            var centered = ftz(lane_approx[k] - mean)
+            var w = Float32(1.0)
+            if has_weights != Int32(0):
+                w = weights.unsafe_load(offset + p)
+            sh_relev.unsafe_store(p, ftz(relev.unsafe_load(offset + p) * w))
+            sh_exp.unsafe_store(p, routed_exp(min(centered, Float32(70.0))))
+        else:
+            sh_relev.unsafe_store(p, Float32(1000.0))
+            sh_exp.unsafe_store(p, Float32(1000.0))
+        sh_der.unsafe_store(p, Float32(0.0))
+        sh_weight.unsafe_store(p, Float32(0.0))
+    barrier()
+
+    for _ in range(perms):
+        # the draws (`:112-121`)
+        for k in range(YETI_LANES):
+            var p = tid + YETI_THREADS * k
+            var val = Float32(-1000.0)
+            if p < size:
+                val = sh_exp.unsafe_load(p)
+            s = _advance_seed32(s)
+            # `NextUniformFloat32`: `v * 2.328306435996595e-10f`, whose
+            # float is exactly 2^-32
+            var uni = identical_mul(Float32(s), Float32(2.328306435996595e-10))  # exact; pinned (lane/pinned-mul-contract-free)
+            val = val * (uni / (Float32(1.000001) - uni))
+            var bits = bitcast[DType.uint32](val)
+            if (bits & UInt32(0x80000000)) != UInt32(0):
+                bits = bits ^ UInt32(0xFFFFFFFF)
+            else:
+                bits = bits ^ UInt32(0x80000000)
+            # (query ascending, key descending, position ascending) as ONE
+            # ascending integer; the position makes every composite distinct
+            var composite = (
+                (UInt64(lane_qid[k]) << UInt64(42))
+                | (UInt64(bits ^ UInt32(0xFFFFFFFF)) << UInt64(10))
+                | UInt64(p)
+            )
+            sh_keys.unsafe_store(p, composite)
+        barrier()
+
+        # lane/apple-fast-rec-sym: the block kernel's sort, both arms
+        # (main's `YETI_FAST_SORT` register bitonic + merge-path, or the
+        # ten-pass merge under `-D MOJOLEARN_YETI_FAST_SORT_OFF`), so the
+        # fused call sorts exactly as the five-launch arm it replaces; the
+        # composites are distinct, so both give one order
+        var src = 0
+        comptime if YETI_FAST_SORT:
+            comptime assert YETI_THREADS * YETI_LANES == YETI_TASK_POSITIONS
+            comptime assert YETI_THREADS % YETI_SIMD_W == 0
+            # (1) a bitonic sort of each simdgroup's 128 contiguous keys in
+            # registers: element e = lane * 4 + r of the simdgroup's run
+            var ln = tid % YETI_SIMD_W
+            var run_base = (tid // YETI_SIMD_W) * YETI_SIMD_RUN + ln * YETI_LANES
+            var v = SIMD[DType.uint64, YETI_LANES](0)
+            comptime for r in range(YETI_LANES):
+                v[r] = sh_keys.unsafe_load(run_base + r)
+            comptime for kk in range(1, 8):
+                comptime k = 1 << kk
+                comptime for t in range(kk):
+                    comptime jj = kk - 1 - t
+                    comptime j = 1 << jj
+                    comptime if j < YETI_LANES:
+                        comptime for r in range(YETI_LANES):
+                            comptime if (r & j) == 0:
+                                var a = v[r]
+                                var b = v[r | j]
+                                var asc = ((ln * YETI_LANES + r) & k) == 0
+                                if (a > b) == asc:
+                                    v[r] = b
+                                    v[r | j] = a
+                    else:
+                        comptime m = j // YETI_LANES
+                        var lower = (ln & m) == 0
+                        comptime for r in range(YETI_LANES):
+                            var x = v[r]
+                            var o_hi = shuffle_xor(UInt32(x >> UInt64(32)), UInt32(m))
+                            var o_lo = shuffle_xor(
+                                UInt32(x & UInt64(0xFFFFFFFF)), UInt32(m)
+                            )
+                            var o = (UInt64(o_hi) << UInt64(32)) | UInt64(o_lo)
+                            var asc = ((ln * YETI_LANES + r) & k) == 0
+                            if lower == asc:
+                                v[r] = min(x, o)
+                            else:
+                                v[r] = max(x, o)
+            comptime for r in range(YETI_LANES):
+                sh_keys.unsafe_store(run_base + r, v[r])
+            barrier()
+            # (2) merge-path passes: thread tid writes outputs 4 * tid .. +3
+            # of the merged pair of runs; one co-rank binary search, then a
+            # sequential merge with the run heads in registers. UInt64.MAX
+            # is a sentinel no composite reaches (they are below 2^52).
+            var dst = YETI_TASK_POSITIONS
+            var width = YETI_SIMD_RUN
+            var o0 = tid * YETI_LANES
+            while width < YETI_TASK_POSITIONS:
+                var lo = (o0 // (2 * width)) * (2 * width)
+                var d = o0 - lo
+                var a_base = src + lo
+                var b_base = a_base + width
+                var i_lo = max(0, d - width)
+                var i_hi = min(d, width)
+                while i_lo < i_hi:
+                    var mid = (i_lo + i_hi) // 2
+                    if sh_keys.unsafe_load(a_base + mid) < sh_keys.unsafe_load(
+                        b_base + d - mid - 1
+                    ):
+                        i_lo = mid + 1
+                    else:
+                        i_hi = mid
+                var ia = i_lo
+                var ib = d - i_lo
+                var va = UInt64.MAX
+                if ia < width:
+                    va = sh_keys.unsafe_load(a_base + ia)
+                var vb = UInt64.MAX
+                if ib < width:
+                    vb = sh_keys.unsafe_load(b_base + ib)
+                comptime for t in range(YETI_LANES):
+                    if va < vb:
+                        sh_keys.unsafe_store(dst + o0 + t, va)
+                        ia += 1
+                        va = UInt64.MAX
+                        if ia < width:
+                            va = sh_keys.unsafe_load(a_base + ia)
+                    else:
+                        sh_keys.unsafe_store(dst + o0 + t, vb)
+                        ib += 1
+                        vb = UInt64.MAX
+                        if ib < width:
+                            vb = sh_keys.unsafe_load(b_base + ib)
+                barrier()
+                var swap = src
+                src = dst
+                dst = swap
+                width = width * 2
+        else:
+            # the two stable radix passes as a ten-pass merge: every element
+            # finds its output slot by a binary search of the sibling run (the
+            # composites are distinct, so "strictly below" needs no tie rule).
+            # Ten passes, so the order ends where it began, at `sh_keys[0:1024]`.
+            var dst = YETI_TASK_POSITIONS
+            var width = 1
+            while width < YETI_TASK_POSITIONS:
+                for k in range(YETI_LANES):
+                    var i = tid + YETI_THREADS * k
+                    var lo = (i // (2 * width)) * (2 * width)
+                    var mid = lo + width
+                    var sibling = mid
+                    var own_rank = i - lo
+                    if i >= mid:
+                        sibling = lo
+                        own_rank = i - mid
+                    var key = sh_keys.unsafe_load(src + i)
+                    var base = 0
+                    var length = width
+                    while length > 1:
+                        var half = length // 2
+                        if sh_keys.unsafe_load(src + sibling + base + half - 1) < key:
+                            base += half
+                        length -= half
+                    var below = base
+                    if sh_keys.unsafe_load(src + sibling + base) < key:
+                        below += 1
+                    sh_keys.unsafe_store(dst + lo + own_rank + below, key)
+                barrier()
+                var swap = src
+                src = dst
+                dst = swap
+                width = width * 2
+
+        # the pairs (`:130-168`): for each lane, phase 1 then phase 2
+        for k in range(YETI_LANES):
+            var j = tid + YETI_THREADS * k
+            var qb = Int(lane_begin[k])
+            var has_pair = j != qb
+            var idx1 = 0
+            var idx2 = 0
+            var pair_weight = Float32(0.0)
+            var ll = Float32(0.0)
+            if has_pair:
+                idx1 = Int(sh_keys.unsafe_load(src + j - 1) & UInt64(1023))
+                idx2 = Int(sh_keys.unsafe_load(src + j) & UInt64(1023))
+                var relev1 = sh_relev.unsafe_load(idx1)
+                var relev2 = sh_relev.unsafe_load(idx2)
+                var approx1 = sh_exp.unsafe_load(idx1)
+                var approx2 = sh_exp.unsafe_load(idx2)
+                var decay = lane_decay[k]
+                pair_weight = ftz(decay * abs(relev1 - relev2) / Float32(perms))
+                var sel = -approx1
+                if relev1 > relev2:
+                    sel = approx2
+                ll = ftz(pair_weight * sel / (approx2 + approx1))
+            comptime for step in range(2):
+                comptime phase = (1 - step) if YETI_SABOTAGE else step
+                comptime if phase == 0:
+                    if has_pair and idx1 < size:
+                        sh_weight.unsafe_store(
+                            idx1, ftz(sh_weight.unsafe_load(idx1) + pair_weight)
+                        )
+                        sh_der.unsafe_store(idx1, ftz(sh_der.unsafe_load(idx1) + ll))
+                else:
+                    if has_pair and idx2 < size:
+                        sh_weight.unsafe_store(
+                            idx2, ftz(sh_weight.unsafe_load(idx2) + pair_weight)
+                        )
+                        sh_der.unsafe_store(idx2, ftz(sh_der.unsafe_load(idx2) + (-ll)))
+                barrier()
+
+
+    # the stores: accumulators, planes, magnitudes
+    var w_abs = Float32(0.0)
+    var g_abs = Float32(0.0)
+    for k in range(YETI_LANES):
+        var p = tid + YETI_THREADS * k
+        if p < size:
+            var row = offset + p
+            var der = sh_der.unsafe_load(p)
+            var weight = sh_weight.unsafe_load(p)
+            der_acc.unsafe_store(row, der)
+            weight_acc.unsafe_store(row, weight)
+            comptime if estimation:
+                var dst = row
+                if has_index_map != Int32(0):
+                    dst = Int(index_map.unsafe_load(row))
+                stats.unsafe_store(dst, der)
+                stats.unsafe_store(n_rows + dst, weight)
+            else:
+                stats.unsafe_store(row, weight)
+                stats.unsafe_store(n_rows + row, der)
+            w_abs += abs(weight)
+            g_abs += abs(der)
+    if compute_fv != Int32(0) and tid == 0:
+        # `FillBuffer(FunctionValue, 0)`: every row block's partial
+        var b = task
+        while b < Int(row_blocks_in):
+            function_value.unsafe_store(b, Float32(0.0))
+            b += Int(n_tasks_in)
+    if compute_magnitudes != Int32(0):
+        # lane/apple-fast-rec-sym: the two block sums fold in `sh_relev` /
+        # `sh_exp` (free once the pairs are done) by a halving tree, NOT
+        # `pinned_block_sum`: its FAST arm (`block.sum`) takes its own
+        # shared slab, 64 B for the two calls, on top of this kernel's
+        # 32 KiB, and Metal refused the launch at 32,832 B
+        # (LEDGER 2026-10-03, SYM_MULTI_ALL yetirank at warm-up).
+        barrier()
+        sh_relev.unsafe_store(tid, w_abs)
+        sh_exp.unsafe_store(tid, g_abs)
+        barrier()
+        var half = YETI_THREADS // 2
+        while half > 0:
+            if tid < half:
+                sh_relev.unsafe_store(
+                    tid, sh_relev.unsafe_load(tid) + sh_relev.unsafe_load(tid + half)
+                )
+                sh_exp.unsafe_store(
+                    tid, sh_exp.unsafe_load(tid) + sh_exp.unsafe_load(tid + half)
+                )
+            barrier()
+            half = half // 2
+        if tid == 0:
+            plane_magnitudes.unsafe_store(2 * task, sh_relev.unsafe_load(0))
+            plane_magnitudes.unsafe_store(2 * task + 1, sh_exp.unsafe_load(0))
+
+
+def launch_yeti_rank_fused[estimation: Bool](
+    ctx: DeviceContext,
+    mut y: YetiRankTargetBuffers,
+    mut predictions: DeviceBuffer[DType.float32],
+    use_inverse: Bool,
+    seed: UInt64,
+    mut stats: DeviceBuffer[DType.float32],
+    mut function_value: DeviceBuffer[DType.float32],
+    compute_fv: Bool,
+    mut plane_magnitudes: DeviceBuffer[DType.float32],
+    compute_magnitudes: Bool,
+) raises:
+    """`YETI_TASK_FUSED`: `launch_yeti_rank_with` as one launch. The caller
+    checked `y.n_tasks <= row_blocks` (the magnitude partials, one pair per
+    task, must fit the caller's per-row-block buffer). `y.query.qids` was
+    filled once per fit by `make_yeti_rank_target_buffers`."""
+    var n_rows = y.query.n_rows
+    var row_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+    if use_inverse:
+        ctx.enqueue_function[yeti_rank_task_fused_kernel[estimation]](
+            predictions.unsafe_ptr(), y.query.inverse.unsafe_ptr(), Int32(1),
+            y.query.targets.unsafe_ptr(), y.query.weights.unsafe_ptr(),
+            Int32(1) if y.query.has_weights else Int32(0),
+            y.query.qids.unsafe_ptr(), y.query.q_offsets.unsafe_ptr(),
+            y.query.q_sizes.unsafe_ptr(),
+            y.d_task_offsets.unsafe_ptr(), y.d_task_sizes.unsafe_ptr(),
+            y.d_task_qids.unsafe_ptr(),
+            yeti_rank_cuda_seed(seed), y.decay, Int32(y.permutations),
+            Int32(n_rows), Int32(y.n_tasks), Int32(row_blocks),
+            y.d_der_acc.unsafe_ptr(), y.d_weight_acc.unsafe_ptr(),
+            stats.unsafe_ptr(), function_value.unsafe_ptr(),
+            Int32(1) if compute_fv else Int32(0),
+            plane_magnitudes.unsafe_ptr(),
+            Int32(1) if compute_magnitudes else Int32(0),
+            grid_dim=(y.n_tasks, 1, 1),
+            block_dim=(YETI_THREADS, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[yeti_rank_task_fused_kernel[estimation]](
+            predictions.unsafe_ptr(), y.query.no_indices.unsafe_ptr(), Int32(0),
+            y.query.targets.unsafe_ptr(), y.query.weights.unsafe_ptr(),
+            Int32(1) if y.query.has_weights else Int32(0),
+            y.query.qids.unsafe_ptr(), y.query.q_offsets.unsafe_ptr(),
+            y.query.q_sizes.unsafe_ptr(),
+            y.d_task_offsets.unsafe_ptr(), y.d_task_sizes.unsafe_ptr(),
+            y.d_task_qids.unsafe_ptr(),
+            yeti_rank_cuda_seed(seed), y.decay, Int32(y.permutations),
+            Int32(n_rows), Int32(y.n_tasks), Int32(row_blocks),
+            y.d_der_acc.unsafe_ptr(), y.d_weight_acc.unsafe_ptr(),
+            stats.unsafe_ptr(), function_value.unsafe_ptr(),
+            Int32(1) if compute_fv else Int32(0),
+            plane_magnitudes.unsafe_ptr(),
+            Int32(1) if compute_magnitudes else Int32(0),
+            grid_dim=(y.n_tasks, 1, 1),
+            block_dim=(YETI_THREADS, 1, 1),
+        )
+
+
+
 struct YetiRankTargetBuffers(Movable):
     """The querywise buffers (targets, weights, query offsets and sizes, query
     means, row query ids, inverse order, `no_indices`), the task table, the
@@ -1247,6 +1754,13 @@ def make_yeti_rank_target_buffers(
     var d_der_acc = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var d_weight_acc = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var d_point = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    comptime if YETI_TASK_FUSED:
+        # the row -> query map once per fit; the fused kernel reads it every
+        # call (the five-launch arm recomputes it per call, as the reference)
+        launch_compute_group_ids(
+            ctx, query.q_sizes, query.q_offsets, UInt32(0), query.q_count,
+            query.qids,
+        )
     ctx.synchronize()
     _ = h_off^  # past the drain (step-33 race class)
     _ = h_sz^
@@ -1298,6 +1812,14 @@ def launch_yeti_rank_with[estimation: Bool](
     call's `NextUniformL`."""
     var n_rows = y.query.n_rows
     var row_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+    comptime if YETI_TASK_FUSED:
+        # lane af-sym-multi: the whole call in one launch (its docstring)
+        if y.n_tasks <= row_blocks:
+            launch_yeti_rank_fused[estimation](
+                ctx, y, predictions, use_inverse, seed, stats, function_value,
+                compute_fv, plane_magnitudes, compute_magnitudes,
+            )
+            return
     # `ComputeGroupIds` (`kernel.h:444`), every call as the reference runs it:
     # `y.query.qids` is scratch that only this launch fills for YetiRank (the
     # QueryRMSE launcher fills its own), and the task kernel reads each row's

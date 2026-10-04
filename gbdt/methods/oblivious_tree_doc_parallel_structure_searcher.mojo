@@ -122,6 +122,9 @@ from gbdt.gpu_util.kernel.transform import (
     launch_split_planes_f32,
 )
 from gbdt.methods.pointwise_optimization_subsets import GATHER_NO_MASK
+#: lane/apple-fast-sym-iter: FAST + Apple aliases, default OFF
+#: (`gbdt/methods/sym_iter_fast.mojo`); every use below sits under one
+from gbdt.methods.sym_iter_fast import SYM_BUF_ARENA, SYM_REUSE_PARTITION
 from gbdt.methods.dynamic_boosting_folds import TFold
 from gbdt.methods.ordered_fast_switches import ORD_ALL
 from gbdt.methods.kernel.pointwise_scores import (
@@ -396,9 +399,16 @@ def fit_oblivious_tree_structure_traced(
         DeviceBuffer[DType.uint32]
     ](),
     ord_wide: Bool = False,
+    var sym_parts_out: Optional[HostBuffer[DType.uint32]] = None,
 ) raises -> List[TBinarySplit]:
     """`TDocParallelObliviousTreeSearcher::FitImpl` (`:12-160`), the
     structure half.
+
+    `sym_parts_out` (lane/apple-fast-sym-iter, read under
+    `SYM_REUSE_PARTITION` only): a host buffer of `2 * max_part_count`
+    words that receives `subsets.partitions` (offset, size per leaf) in
+    the tree's one tail drain, so the caller can reuse the searcher's
+    final partition for leaf estimation. Ignored on every other build.
 
     `permutation_id` (fold arm only): a caller id for `permutation`, fixed
     for the span of `pool`; with it the fold doc ids are built once per id
@@ -604,7 +614,16 @@ def fit_oblivious_tree_structure_traced(
             if pool[0].doc_ids_keys[i] == permutation_id:
                 cached = i
     var d_doc_ids: DeviceBuffer[DType.uint32]
-    if cached >= 0:
+    # lane/apple-fast-sym-iter, SYM_BUF_ARENA: the plain arm never reads
+    # `d_doc_ids`, `d_fold_cindex` or `d_observations` (all three are the
+    # fold arm's), so a handle onto a pooled word stands in for the three
+    # allocations main makes per tree (one of them `doc_count` wide).
+    var sym_pooled_dummies = False
+    comptime if SYM_BUF_ARENA:
+        sym_pooled_dummies = fold_count == 1
+    if sym_pooled_dummies:
+        d_doc_ids = pool[0].d_best_ids.copy()
+    elif cached >= 0:
         d_doc_ids = pool[0].doc_ids[cached].copy()
     else:
         var doc_ids_host = make_fold_doc_indices(folds, permutation) if (
@@ -633,7 +652,9 @@ def fit_oblivious_tree_structure_traced(
                 pool[0].doc_ids_keys.append(permutation_id)
                 pool[0].doc_ids.append(d_doc_ids.copy())
     var d_fold_cindex: DeviceBuffer[DType.uint32]
-    if fold_order and cached >= 0 and cached < len(pool[0].fold_cindex):
+    if sym_pooled_dummies:
+        d_fold_cindex = pool[0].d_best_ids.copy()
+    elif fold_order and cached >= 0 and cached < len(pool[0].fold_cindex):
         d_fold_cindex = pool[0].fold_cindex[cached].copy()
     elif fold_order:
         var n_cols = _cindex_columns(layout)
@@ -655,19 +676,22 @@ def fit_oblivious_tree_structure_traced(
     else:
         d_fold_cindex = ctx.enqueue_create_buffer[DType.uint32](1)
     var d_observations: DeviceBuffer[DType.uint32]
-    comptime if ORD_ALL:
-        # the caller's scratch when it hands one, one cell when the
-        # fold-order index never gathers (both only when `ord_wide`)
-        if ord_wide and len(obs_scratch) > 0 and not fold_order:
-            d_observations = obs_scratch[0].copy()
-        elif ord_wide and fold_order:
-            d_observations = ctx.enqueue_create_buffer[DType.uint32](1)
-        else:
-            d_observations = ctx.enqueue_create_buffer[DType.uint32](
-                doc_count
-            )
+    if sym_pooled_dummies:
+        d_observations = pool[0].d_best_ids.copy()
     else:
-        d_observations = ctx.enqueue_create_buffer[DType.uint32](doc_count)
+        comptime if ORD_ALL:
+            # the caller's scratch when it hands one, one cell when the
+            # fold-order index never gathers (both only when `ord_wide`)
+            if ord_wide and len(obs_scratch) > 0 and not fold_order:
+                d_observations = obs_scratch[0].copy()
+            elif ord_wide and fold_order:
+                d_observations = ctx.enqueue_create_buffer[DType.uint32](1)
+            else:
+                d_observations = ctx.enqueue_create_buffer[DType.uint32](
+                    doc_count
+                )
+        else:
+            d_observations = ctx.enqueue_create_buffer[DType.uint32](doc_count)
 
     var structure = List[TBinarySplit]()
 
@@ -932,6 +956,13 @@ def fit_oblivious_tree_structure_traced(
     ctx.enqueue_copy(
         dst_buf=pool[0].h_winners_scores, src_buf=pool[0].d_winners_scores
     )
+    # lane/apple-fast-sym-iter, SYM_REUSE_PARTITION: the final partition's
+    # (offset, size) records ride the same drain back to the caller
+    comptime if SYM_REUSE_PARTITION:
+        if sym_parts_out.__bool__():
+            ctx.enqueue_copy(
+                dst_buf=sym_parts_out.value(), src_buf=subsets.partitions
+            )
     ctx.synchronize()
     times.end(ctx, "pw.drain")
 

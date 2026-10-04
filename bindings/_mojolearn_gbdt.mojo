@@ -54,6 +54,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
+from gbdt.gpu_data.sym_feat_switches import GBDT_QUANT_DEVICE
 from gbdt.binary_prediction import binary_prediction_host
 
 from max.gpu.host import DeviceContext
@@ -69,6 +70,7 @@ from gbdt.estimator import (
     GbdtFitParams,
     GbdtFitResult,
     gbdt_fit,
+    gbdt_fit_row_major_available,
     gbdt_fit_two_level_feature_freq,
     gbdt_model_dim,
     gbdt_per_round_paths,
@@ -233,7 +235,8 @@ def _u32_ptr(addr: Int) raises -> MutPointer[UInt32, MutUntrackedOrigin]:
     return MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=addr)
 
 
-def gbdt_fit_binding(
+def _gbdt_fit_impl(
+    row_major: Bool,
     x_addr: PythonObject,
     y_addr: PythonObject,
     weights_addr: PythonObject,
@@ -542,6 +545,7 @@ def gbdt_fit_binding(
             pair_losers=pair_losers,
             pair_weights=pair_weights,
             target_dim=target_dim,
+            x_row_major=row_major,
         )
         ctx.synchronize()
 
@@ -559,6 +563,57 @@ def gbdt_fit_binding(
     out.append(learn)
     out.append(test)
     return out
+
+
+def gbdt_fit_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    weights_addr: PythonObject,
+    cat_flags_addr: PythonObject,
+    eval_x_addr: PythonObject,
+    eval_y_addr: PythonObject,
+    params: PythonObject,
+    strs: PythonObject,
+) raises -> PythonObject:
+    """`gbdt_fit`: X column-major, as documented on `_gbdt_fit_impl`."""
+    return _gbdt_fit_impl(
+        False, x_addr, y_addr, weights_addr, cat_flags_addr, eval_x_addr,
+        eval_y_addr, params, strs,
+    )
+
+
+def gbdt_fit_rowmajor_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    weights_addr: PythonObject,
+    cat_flags_addr: PythonObject,
+    eval_x_addr: PythonObject,
+    eval_y_addr: PythonObject,
+    params: PythonObject,
+    strs: PythonObject,
+) raises -> PythonObject:
+    """lane/apple-fast-sym-feat: `gbdt_fit` with X ROW-MAJOR (a C-order
+    float32 array handed over as it is; the device transposes it under
+    `GBDT_QUANT_DEVICE`). Every other argument is `gbdt_fit`'s; the eval
+    set stays column-major. Served only when
+    `gbdt_fit_row_major_available()` says so (raw float columns only, so
+    `params[3]` must be 0); the Python layer asks first."""
+    if Int(py=params[3]) != 0:
+        raise Error(
+            "gbdt_fit_rowmajor takes raw float columns only; pass categorical"
+            " or one-hot features through gbdt_fit"
+        )
+    return _gbdt_fit_impl(
+        True, x_addr, y_addr, weights_addr, cat_flags_addr, eval_x_addr,
+        eval_y_addr, params, strs,
+    )
+
+
+def gbdt_fit_row_major_available_binding() raises -> PythonObject:
+    """lane/apple-fast-sym-feat: 1 when this binary serves
+    `gbdt_fit_rowmajor` (FAST + Apple with `-D MOJOLEARN_GBDT_QUANT_DEVICE`
+    or a switch that implies it), else 0."""
+    return PythonObject(1 if gbdt_fit_row_major_available() else 0)
 
 
 def gbdt_predict_binding(
@@ -856,6 +911,15 @@ def PyInit__mojolearn_gbdt() abi("C") -> PythonObject:
         m.def_function[gbdt_parallel_available_binding]("pointwise_parallel_available")
         m.def_function[gbdt_vendor_binding]("gbdt_vendor")
         m.def_function[gbdt_fit_binding]("gbdt_fit")
+        # lane/apple-fast-sym-feat: the row-major door and its probe, only
+        # in a FAST Apple build with the device quantizer; every other
+        # binary registers main's functions (Python treats a missing probe
+        # as unavailable)
+        comptime if GBDT_QUANT_DEVICE:
+            m.def_function[gbdt_fit_rowmajor_binding]("gbdt_fit_rowmajor")
+            m.def_function[gbdt_fit_row_major_available_binding](
+                "gbdt_fit_row_major_available"
+            )
         m.def_function[gbdt_fit_ordered_rmse_binding]("gbdt_fit_ordered_rmse")
         m.def_function[gbdt_fit_two_level_feature_freq_binding](
             "gbdt_fit_two_level_feature_freq"
