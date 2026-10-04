@@ -223,7 +223,7 @@ def xty_tiled(
         grid_dim=((cells + XTY_TILE_TPB - 1) // XTY_TILE_TPB, 1, 1),
         block_dim=(XTY_TILE_TPB, 1, 1),
     )
-    ctx.enqueue_function[xty_tile_fold_kernel](  # small-launch(count_in: the mean divisor only): folds xty_tiles(n) tile partials per column, never walks n
+    ctx.enqueue_function[xty_tile_fold_kernel](  # small-launch(n_rows: the mean divisor only): folds the xty_tiles(n_rows) tile partials of one column, never walks rows
         out_p, ws.unsafe_ptr(), Int32(tiles), Int32(n_rows), mean_flag,
         grid_dim=(n_cols, 1, 1),
         block_dim=(STATS_TPB, 1, 1),
