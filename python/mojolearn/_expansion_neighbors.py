@@ -1307,7 +1307,9 @@ class _LabelPropagationBase(_XNeighbors):
             self._op("lp_clamp", [(ld, 0), (ld, 0), (unlabeled, 0), (ystatic, 1)], (n, C))
         else:
             ystatic = ys
-        if isinstance(G, tuple) and self._fast_tier() and _lp_fast_resident(self):
+        # lane/fam2-neighbors: IDENTICAL device binaries answer 1 too
+        # (LP_IDN_RESIDENT: the same items, no per-iteration host round trip)
+        if isinstance(G, tuple) and _lp_fast_resident(self):
             # lane/apple-fast-neighbors2: the loop below over the compact kNN
             # graph as ONE resident op (x_neighbors/iter_device.mojo
             # op_lp_iterate_knn), the graph uploaded once, the stopping sum
