@@ -3025,7 +3025,10 @@ original kernels through `ensure_row_major`'s `2k >= n` gate, 0.991 both.
 comptime ET_TILED_SEARCH_APPLE_IDENTICAL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and ET_TILED_SEARCH_APPLE_DEFAULT
-    and not is_defined["MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF"]()
+    and not (
+        is_defined["MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
 )
 """Apple IDENTICAL (trees-apple2, 2026-09-28): the two tiled search kernels
 under IDENTICAL too, bit-inert by construction. The range kernel folds in

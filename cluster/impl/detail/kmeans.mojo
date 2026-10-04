@@ -846,7 +846,10 @@ comptime KMEANS_FAST_INCR_INIT = IDN_KMEANS_INCR_INIT or (
         )
         or (
             GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-            and not is_defined["MOJOLEARN_KMEANS_ID_INCR_INIT_OFF"]()
+            and not (
+                is_defined["MOJOLEARN_KMEANS_ID_INCR_INIT_OFF"]()
+                or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+            )
         )
     )
 )
