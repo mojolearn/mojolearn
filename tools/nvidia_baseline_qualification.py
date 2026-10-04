@@ -311,7 +311,17 @@ def check(manifest_path, receipt_paths, *, prototype=False):
         config = validate_receipt(receipt, column, manifest, sha(manifest_path), files,
                                   harness_digest())
         values = column_values(column, h, v, lanes, fixtures, witnesses, manifest['source_commit'])
-        require(compared is None or values == compared, 'Bitwise or structural result mismatch')
+        if compared is not None and values != compared:
+            differing = sorted(key for key in compared.keys() | values.keys()
+                               if compared.get(key) != values.get(key))
+            # Bound console output while retaining the complete input columns.
+            # Include the exact lane/fixture/part so numerical triage does not
+            # require printing thousands of successful cells.
+            examples = [dict(part=key, reference=compared.get(key), actual=values.get(key))
+                        for key in differing[:8]]
+            raise ValueError('Bitwise or structural result mismatch: '
+                             + json.dumps(dict(receipt=str(path), count=len(differing),
+                                               examples=examples), sort_keys=True))
         compared = values
         (baseline_configs if receipt['role'] == 'baseline' else native_configs).add(config)
         inputs.append(dict(file=str(path), sha256=sha(path), column_sha256=sha(column_path)))

@@ -96,6 +96,17 @@ def test_complete_observed_agreement_does_not_enable_identical(campaign):
     assert not result['future_drivers_qualified'] and not result['universal_gpu_support']
 
 
+def test_mismatch_names_exact_part_without_dumping_column(campaign):
+    alter_column(campaign, lambda c: c['cells']['ridge/base'].update(hashes=['e' * 16] * 2))
+    with pytest.raises(ValueError, match='Bitwise or structural result mismatch: ') as error:
+        q.check(campaign.manifest, campaign.receipts)
+    detail = json.loads(str(error.value).split(': ', 1)[1])
+    assert detail['count'] == 1
+    assert detail['receipt'] == str(campaign.receipts[1])
+    assert detail['examples'] == [dict(part='ridge/base/train',
+                                      reference='e' * 16, actual='d' * 16)]
+
+
 @pytest.mark.parametrize('mutation', [
     lambda r: r.update(source_commit='b' * 40),
     lambda r: r.update(harness_sha256='b' * 64),
