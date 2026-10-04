@@ -144,8 +144,14 @@ comptime MI_REG_TIES = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_REG_TIES"]
                                    or not is_defined["MOJOLEARN_MI_REG_TIES_OFF"]())
 comptime MI_REG_RANKMAJOR = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_REG_RANKMAJOR"]())
 comptime MI_REG_SORTED = _MI_FA and (MI_REG_TIES or MI_REG_RANKMAJOR or is_defined["MOJOLEARN_MI_REG_SORTCOUNT"]())
+#: MI_FAST_FOLDS stays opt-in (lane/apple-fast-miv): its scores move up to 3% of the largest
+#: score and the selected set changes on the tools/miv_quality.py fixture.
 comptime MI_FAST_FOLDS = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_FAST_FOLDS"]())
-comptime MI_CLF_RANKMAJOR = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_CLF_RANKMAJOR"]())
+#: MI_CLF_RANKMAJOR: FAST + Apple DEFAULT since lane/apple-fast-miv (2026-10-03). M3 A/B vs main:
+#: select-mutual-info istella 715.2 -> 645.2 ms, taxi 202.2 -> 196.4 ms (n_selected identical);
+#: scores bit-identical (tools/miv_quality.sh, M2). -D MOJOLEARN_MI_CLF_RANKMAJOR_OFF: main's layout.
+comptime MI_CLF_RANKMAJOR = _MI_FA and (MI_ALL or is_defined["MOJOLEARN_MI_CLF_RANKMAJOR"]()
+                                        or not is_defined["MOJOLEARN_MI_CLF_RANKMAJOR_OFF"]())
 comptime OP_MI_CC = 68
 comptime OP_MI_COLSCALE = 66
 comptime OP_MI_REDUCE = 70
