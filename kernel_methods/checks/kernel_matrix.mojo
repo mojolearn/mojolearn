@@ -112,6 +112,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from kde.impl.distance.distance import pairwise_distance
 from kde.impl.distance.distance_ops import DIST_L1
+from neighbors.impl.distance.detail.distance_ops import l1_core
 from kernel_methods.checks.km_sabotage import (
     KMSAB_NONE,
     km_sabotage_touches_kernel_matrix,
@@ -581,6 +582,55 @@ def km_dot_cell_kernel(
         output.unsafe_store(j * n + i, v)
 
 
+#: fix-kg1-kernel (2026-10-04, audit B12), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_KM_LAP_CELL_OFF` or `MOJOLEARN_IDN_ALL_OFF` restores the
+#: two launches): the Laplacian kernel matrix (KernelRidge fit/predict,
+#: Nystroem basis and transform cross kernel) as ONE launch, the L1 chain of
+#: `kde pairwise_unexpanded_kernel` (`l1_core`, ascending) and the line of
+#: `laplacian_epilogue_kernel` in the same thread. NO BIT MOVES: the same
+#: operations in the same order, only the m x n intermediate store and
+#: reload and one launch are gone, so the host column is unchanged.
+#: abs(x - y) is the same word as abs(y - x), so a self-kernel computes the
+#: upper triangle and mirrors it.
+comptime KM_IDN_LAP_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_KM_LAP_CELL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def km_laplacian_cell_kernel(
+    output: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    gain: Float32,
+    sym_in: Int32,
+):
+    """KM_IDN_LAP_CELL: cell (i, j) = exp(gain * sum_c |a_ic - b_jc|), the
+    caller's `gain = -gamma`; the chain is `l1_core` over c ascending."""
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var k = Int(k_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= m * n:
+        return
+    var i = t // n
+    var j = t - i * n
+    if sym_in != Int32(0) and j < i:
+        return
+    var acc = Float32(0.0)
+    for c in range(k):
+        acc = l1_core(
+            acc, ftz(a.unsafe_load(i * k + c)), ftz(b.unsafe_load(j * k + c))
+        )
+    var d = ftz(acc)
+    var v = ftz(identical_exp(ftz(identical_mul(gain, d))))
+    output.unsafe_store(t, v)
+    if sym_in != Int32(0) and j != i:
+        output.unsafe_store(j * n + i, v)
+
+
 def chi2_cell_kernel(
     out_k: MutPointer[Float32, MutAnyOrigin],
     a: MutPointer[Float32, MutAnyOrigin],
@@ -758,9 +808,9 @@ def km_kernel_matrix(
     """`out[m x n] = K(a_i, b_j)`, row-major, for the five implemented kernels.
 
     `self_kernel` (fam2-kernel-gp): the caller states `a_input` IS `b_input`
-    and m == n. Read only by the KM_IDN_RBF_CELL and KM_IDN_DOT_CELL arms,
-    which then compute one triangle and mirror it; every other route ignores
-    it.
+    and m == n. Read only by the KM_IDN_RBF_CELL, KM_IDN_DOT_CELL and
+    KM_IDN_LAP_CELL arms, which then compute one triangle and mirror it;
+    every other route ignores it.
 
     ASYNCHRONOUS. `ws` must hold at least `km_kernel_workspace_floats(m, n,
     k)` floats and every buffer must outlive the caller's own
@@ -794,6 +844,16 @@ def km_kernel_matrix(
         # that is really an allocator.
         ctx.enqueue_memset(norm_a, Float32(0.0))
         ctx.enqueue_memset(norm_b, Float32(0.0))
+        comptime if KM_IDN_LAP_CELL:
+            if not via_copy:
+                ctx.enqueue_function[km_laplacian_cell_kernel](
+                    out.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
+                    Int32(m), Int32(n), Int32(k), Float32(-kp.gamma),
+                    Int32(1) if (self_kernel and m == n) else Int32(0),
+                    grid_dim=(grid_all, 1, 1),
+                    block_dim=(elem_tpb, 1, 1),
+                )
+                return
         # elem_tpb BY KEYWORD. `pairwise_distance` gained a `metric_arg`
         # parameter BEFORE `elem_tpb` when Minkowski landed, so this
         # positional call started handing the thread count to metric_arg.
