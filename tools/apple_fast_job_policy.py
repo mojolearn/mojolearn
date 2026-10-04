@@ -4,6 +4,7 @@ Importing this module performs no builds, imports of native modules, or jobs.
 import re
 
 POLICIES = {
+    "tools/arima_k3_df_gpu_quality.py": "verified-k3-gpu-quality",
     "tools/scoped_gemm_quality.py": "verified-scoped-adapter-quality",
     "tools/resample_gpu_gather_pair.py": "verified-downstream-quality",
     "tools/resample_gpu_gather_timing.py": "verified-scoped-caller",
@@ -56,4 +57,8 @@ def policy_for(source, script, args):
                 or not args[6] or args[7] != "--quality-sha"
                 or not re.fullmatch(r"[0-9a-f]{64}", args[8])):
             raise ValueError("timing requires quality report and SHA256")
+    if policy == "verified-k3-gpu-quality":
+        required = ["--baseline-report", "--binding", "--binding-sha256", "--source", "--output"]
+        if len(args) != 10 or args[::2] != required or args[7] != source or not re.fullmatch(r"[0-9a-f]{64}", args[5]):
+            raise ValueError("K3 requires exact source, binary hash, baseline and fresh output")
     return policy
