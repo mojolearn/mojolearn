@@ -149,6 +149,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
+from core.device_scan import device_first_nonfinite
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
 comptime _NEURAL_CTX = "MojoNeuralMambaContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralMambaContextFast"
 from checks.vendor import COMPILED_VENDOR
@@ -2366,6 +2367,9 @@ def _m3_prefill_backward_forward(mut s: Mamba3PrefillSession, a: List[Int], b: I
     s.stages_valid = True
 
 
+comptime _M3_BWD_NONFINITE_DY = "mamba3 backward: non-finite grad_output at flat index "
+
+
 def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int) raises:
     """`mamba3_backward` on the session: `a` is the entry's 21-slot list
     (x, nine weights, grad_output, grad_x, nine weight gradients).
@@ -2382,6 +2386,15 @@ def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, 
     var n_x = b * l * dm
     if not s.ctx:
         s.ctx = neural_ctx[_NEURAL_CTX]()
+    # cpu2-l11-neural (2026-10-04): the entry's refusal of a non-finite
+    # grad_output is a DEVICE scan of the uploaded buffer (one launch, one
+    # partials copy; the same first flat index the host walk reported), run
+    # before the weights or the stages are touched, so the refusal leaves
+    # the session as it was (the entry keeps it usable).
+    var d_output = _m3_upload_addr(s.ctx.value(), a[10], n_x)
+    var bad_dy = device_first_nonfinite(s.ctx.value(), d_output, n_x)
+    if bad_dy >= 0:
+        raise Error(String(_M3_BWD_NONFINITE_DY) + String(bad_dy))
     _m3_prefill_weights(s, a, dims)
     var reuse = False
     if s.stages_valid and s.stages and s.stages_b == b and s.stages_l == l and s.dx:
@@ -2396,7 +2409,6 @@ def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, 
     ref dw = s.w.value()
     ref stages = s.stages.value()
     ref dx = s.dx.value()
-    var d_output = _m3_upload_addr(ctx, a[10], n_x)
     var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
     var tk = Int(perf_counter_ns())
     var g = mamba3_prefill_backward_on(ctx, dw, stages, dx, d_output, b, l, dims, ton, tk)
@@ -2497,18 +2509,17 @@ def mamba3_prefill_session_backward_binding(session: PythonObject, addrs: Python
         if address == 0:
             raise Error("mamba3_prefill_session_backward: null buffer address at slot " + String(i))
         a.append(address)
-    # The entry's own refusal of a non-finite grad_output, before any work.
-    var dy = _f32_ptr(a[10])
-    for i in range(b * l * dm):
-        var bits = bitcast[DType.uint32](dy.unsafe_load(i))
-        if (bits & UInt32(0x7f800000)) == UInt32(0x7f800000):
-            raise Error("mamba3 backward: non-finite grad_output at flat index " + String(i))
+    # The entry's own refusal of a non-finite grad_output now runs on the
+    # device, first thing in `_m3_prefill_backward_run` (cpu2-l11-neural);
+    # that refusal touched nothing, so the session stays usable.
     owner[].busy = True
     try:
         with GILReleased(Python()):
             _m3_prefill_backward_run(owner[], a, b, l, dm)
     except error:
         owner[].busy = False
+        if String(error).startswith(_M3_BWD_NONFINITE_DY):
+            raise error
         owner[].usable = False
         owner[].release()
         raise error
