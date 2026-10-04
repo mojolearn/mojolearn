@@ -60,6 +60,9 @@ def main():
                 if result.get('warmups') != 1 or result.get('timing_samples') != 1:
                     reasons.append('contract ' + vendor + '/' + arm)
                 total = result['fit_ms'] + (result.get('infer_ms') or 0.0)
+                proven_digest = proof['cells'][arm].get(tag, {}).get(vendor, {}).get(backend)
+                if proven_digest and result.get('digest') != proven_digest:
+                    reasons.append('timed output differs from identity digest ' + vendor + '/' + arm)
                 row['samples'][vendor + '/' + arm] = {'fit_ms': result['fit_ms'], 'infer_ms': result.get('infer_ms'),
                                                      'total_ms': total, 'digest': result.get('digest'),
                                                      'result_sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
