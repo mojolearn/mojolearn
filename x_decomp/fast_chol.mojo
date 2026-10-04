@@ -234,7 +234,7 @@ def launch_chol_blocked(ctx: DeviceContext, a: F32Ptr, info: F32Ptr, n: Int) rai
     var k0 = 0
     while k0 < n:
         var k1 = min(k0 + CH_NB, n)
-        ctx.enqueue_function[chol_panel_kernel](
+        ctx.enqueue_function[chol_panel_kernel](  # small-launch(k1 - k0: panel columns): one diagonal block of at most CH_NB x CH_NB cells
             a, info, Int32(k0), Int32(ld), Int32(k1 - k0), grid_dim=1, block_dim=CH_TPB
         )
         if k1 < n:
