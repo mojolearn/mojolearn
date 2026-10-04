@@ -144,7 +144,9 @@ DISTINCT training rows drawn with the fit's seed (FAISS's `Clustering`
 rule) and handed to cluster/'s k-means as INIT_ARRAY, so its scalable
 k-means|| seeding (8 rounds of every-row-to-candidate distances, each with
 host readbacks and waits, then the candidates' own Lloyd loop) does not run.
-Untraced builds only; an INIT_ARRAY set by `IVF_FAST_SEED` wins. Moves FAST
+Untraced builds only; an INIT_ARRAY set by `IVF_FAST_SEED` wins. The rows are
+gathered on the device (`ivf_gather_rows_kernel`, 2026-10-04); only the
+seeded ids are made on the host. Moves FAST
 bits (another start): paired recall check."""
 
 comptime IVF_FAST_DEVICE_VALIDATE = (
@@ -184,6 +186,25 @@ def ivf_refused_words_kernel(
         i += step
     if bad:
         flag.unsafe_store(0, Int32(1))
+
+
+comptime IVF_GATHER_TPB = 256
+
+
+def ivf_gather_rows_kernel(
+    src: MutPointer[Float32, MutAnyOrigin], rows: MutPointer[Int32, MutAnyOrigin], dim: Int32,
+    dst: MutPointer[Float32, MutAnyOrigin],
+):
+    """`IVF_FAST_RANDOM_INIT`'s start: row `rows[l]` of the row-major `src`
+    copied to row `l` of `dst`, one block per destination row, the threads
+    striding over the columns. A copy: the same words as the host gather."""
+    var l = Int(block_idx.x)
+    var d = Int(dim)
+    var r = Int(rows.unsafe_load(l))
+    var c = Int(thread_idx.x)
+    while c < d:
+        dst.unsafe_store(l * d + c, src.unsafe_load(r * d + c))
+        c += Int(block_dim.x)
 
 
 def ivf_trainset_rows(n_rows: Int, n_train: Int, seed: UInt64) -> List[Int]:
@@ -530,6 +551,10 @@ def ivf_flat_build(
     kp.max_iter = params.kmeans_n_iters
     kp.seed = params.seed
     kp.n_init = 1
+    # KMEANS_LAZY_SHIFT (FAST on Apple default, 2026-10-04) is scoped to the
+    # callers that ask for it: the coarse quantizer does (and its k-means||
+    # recluster inherits it); a no-op in every other mode
+    kp.lazy_shift = True
 
     comptime if IVF_FAST_SEED:
         if not trace.enabled and n_train >= n_lists:
@@ -552,19 +577,34 @@ def ivf_flat_build(
 
     comptime if IVF_FAST_RANDOM_INIT:
         # lane af-vsearch: FAISS's coarse start, n_lists distinct training rows
-        # (a seeded draw) as INIT_ARRAY; the k-means|| rounds do not run
+        # (a seeded draw) as INIT_ARRAY; the k-means|| rounds do not run. The
+        # row ids come from the seeded generator (`ivf_trainset_rows`, the
+        # same seed and index stream as the measured ad265a028 arm, so the
+        # same rows); the rows are gathered ON THE DEVICE from the training
+        # rows already uploaded (dxt, or dx when every row trains) straight
+        # into `centroids` by `ivf_gather_rows_kernel`. Only the n_lists ids
+        # cross to the device (2026-10-04: the host gather is gone).
         if not trace.enabled and kp.init == INIT_KMEANS_PLUS_PLUS and n_train >= n_lists:
             var pick = ivf_trainset_rows(n_train, n_lists, UInt64(params.seed) ^ UInt64(0xD1B54A32D192ED03))
-            var seeds = List[Float32](length=n_lists * dim, fill=Float32(0.0))
+            var pick32 = List[Int32](capacity=n_lists)
+            for l in range(n_lists):
+                pick32.append(Int32(pick[l]))
+            var drows = ctx.enqueue_create_buffer[DType.int32](n_lists)
+            ctx.enqueue_copy(dst_buf=drows, src_ptr=pick32.unsafe_ptr())
             if n_train < n_rows:
-                for l in range(n_lists):
-                    memcpy(dest=seeds.unsafe_ptr() + l * dim, src=xt.unsafe_ptr() + pick[l] * dim, count=dim)
+                ctx.enqueue_function[ivf_gather_rows_kernel](
+                    dxt.unsafe_ptr(), drows.unsafe_ptr(), Int32(dim), centroids.unsafe_ptr(),
+                    grid_dim=(n_lists, 1, 1), block_dim=(IVF_GATHER_TPB, 1, 1),
+                )
             else:
-                for l in range(n_lists):
-                    memcpy(dest=seeds.unsafe_ptr() + l * dim, src=x.unsafe_ptr() + pick[l] * dim, count=dim)
-            ctx.enqueue_copy(dst_buf=centroids, src_ptr=seeds.unsafe_ptr())
+                ctx.enqueue_function[ivf_gather_rows_kernel](
+                    dx.unsafe_ptr(), drows.unsafe_ptr(), Int32(dim), centroids.unsafe_ptr(),
+                    grid_dim=(n_lists, 1, 1), block_dim=(IVF_GATHER_TPB, 1, 1),
+                )
+            # drained while the id list is alive (the copy reads it)
             ctx.synchronize()
-            _ = seeds^
+            _ = drows^
+            _ = pick32^
             _ = pick^
             kp.init = INIT_ARRAY
             st.host("random_init")

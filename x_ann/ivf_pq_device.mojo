@@ -255,6 +255,7 @@ def _codebooks(
             lab.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
             sub.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), 0,
             pq_iters, Float64(1e-4), UInt64(seed), 1, init_kind, METRIC_L2_EXPANDED, 0.0, Float64(2.0),
+            lazy_shift=True,  # KMEANS_LAZY_SHIFT (FAST on Apple default, 2026-10-04): IVF-PQ codebooks
         )
         ctx.synchronize()
         cbs.host("kmeans_fit")

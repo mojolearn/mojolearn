@@ -10,7 +10,8 @@ code unchanged.
 
 PQ_LUT_TILED and PQ_SCAN_FUSED here, IVF_FAST_RANDOM_INIT and
 IVF_FAST_DEVICE_VALIDATE in ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo
-and KMEANS_LAZY_SHIFT in cluster/impl/detail/kmeans.mojo are FAST + Apple
+and KMEANS_LAZY_SHIFT in cluster/impl/detail/kmeans.mojo (scoped to the IVF
+fits that set `KMeansParams.lazy_shift`) are FAST + Apple
 DEFAULTS since 2026-10-04 (M3 A/B, the `-D MOJOLEARN_VSEARCH_ALL` bundle at
 ad265a028: 9/9 rows faster, recall_at_10 identical); each has a rollback
 define `-D MOJOLEARN_<FLAG>_OFF`. `-D MOJOLEARN_VSEARCH_ALL` is kept as a

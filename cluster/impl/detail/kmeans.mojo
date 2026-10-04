@@ -1181,6 +1181,8 @@ def init_scalable_kmeans_plus_plus(
         var inner = KMeansParams.default()
         inner.n_clusters = k
         inner.init = INIT_ARRAY
+        # not a cuVS field: the caller's lazy-shift request reaches the recluster
+        inner.lazy_shift = params.lazy_shift
         var inner_res = kmeans_fit_main_traced(
             ctx,
             cand_buf,
@@ -1285,6 +1287,11 @@ comptime KMEANS_LAZY_SHIFT = (
 #: 2026-10-04, source ad265a028; x_ann/vsearch_fast.mojo has every row): 9/9
 #: IVF-family rows faster, recall_at_10 identical. ACCEPT;
 #: rollback `-D MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF` (shift read every iteration).
+#: SCOPE (2026-10-04): a fit takes the lazy read only when its caller sets
+#: `KMeansParams.lazy_shift` (IVF's coarse quantizer in ivf_flat_build.mojo,
+#: its k-means|| recluster through the propagated params, and IVF-PQ's
+#: subspace codebooks in x_ann/ivf_pq_device.mojo); every other caller keeps
+#: the per-iteration read.
 """FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, 2026-10-03;
 rollback `-D MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF`): the Lloyd loop reads the centroid shift
 back and tests convergence every KMEANS_LAZY_SHIFT_EVERY iterations and at
@@ -1295,7 +1302,11 @@ launches with no wait and no shift reduction. A fit that would have stopped
 at iteration i stops at the next tested iteration (at most
 KMEANS_LAZY_SHIFT_EVERY - 1 more Lloyd steps, which never raise the
 objective); a fit that runs to max_iter is unchanged bit for bit. Untraced
-fits without the inertia check only."""
+fits without the inertia check, with `params.lazy_shift` set, only."""
+#: OPT-IN (2026-10-04, unmeasured): `-D MOJOLEARN_KMEANS_FAST_LAZY_SHIFT` sets
+#: `lazy_shift` on the KMeans estimator's fits (bindings/_mojolearn.mojo
+#: `kmeans_fit` call), FAST on Apple only. A/B owed: kmeans taxi, istella.
+comptime KMEANS_FAST_LAZY_SHIFT = is_defined["MOJOLEARN_KMEANS_FAST_LAZY_SHIFT"]()
 comptime KMEANS_LAZY_SHIFT_EVERY = 4
 
 
@@ -1597,7 +1608,7 @@ def kmeans_fit_main_traced(
                 # KMEANS_LAZY_SHIFT_EVERY iterations and at the last one; the
                 # other iterations enqueue the copy back and go on
                 var lazy_skip = (
-                    (not params.inertia_check) and (not trace.enabled)
+                    params.lazy_shift and (not params.inertia_check) and (not trace.enabled)
                     and it % KMEANS_LAZY_SHIFT_EVERY != 0 and it != params.max_iter
                 )
                 if not lazy_skip:
