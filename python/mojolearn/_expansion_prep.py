@@ -963,15 +963,18 @@ def _category_block(pr, categories):
     return pr.put_list(block), kmax
 
 
-def _codes(pr, arr, categories):
+def _codes(pr, arr, categories, *, device_only=False):
     """Stages that write each element's category index (or -1) and each
     column's unknown count. Returns (codes offset, unknown-count offset)."""
     n, d = arr.shape
     xo = pr.put(arr)
     uo, kmax = _category_block(pr, categories)
     co = pr.put_list([c.size for c in categories])
-    codes = pr.alloc(n * d)
+    codes = pr.scratch(n * d) if device_only else pr.alloc(n * d)
     pr.stage("lookup", n * d, xo, n, d, uo, kmax, co, codes)
+    if device_only:
+        # TargetEncoder consumes the codes only; unknown counts are unused.
+        return codes, None
     neg = pr.alloc(d)
     pr.stage("count_neg", d, codes, n, d, neg)
     return codes, neg
@@ -1551,6 +1554,20 @@ def _target_arrays(y, target_type):
     return "multiclass", classes, codes, len(classes)
 
 
+_TARGET_SCRATCH = {}
+
+
+def _target_scratch(mode):
+    if mode != "fast":
+        return False
+    binding = _prep_binding(mode)
+    key = id(binding)
+    if key not in _TARGET_SCRATCH:
+        fn = _optional_prep_entry(binding, "x_prep_target_scratch")
+        _TARGET_SCRATCH[key] = bool(fn()) if fn is not None else False
+    return _TARGET_SCRATCH[key]
+
+
 class TargetEncoder(_PrepBase):
     """sklearn.preprocessing.TargetEncoder over numeric category columns:
     binary, continuous and multiclass targets, smooth 'auto' (empirical
@@ -1611,7 +1628,8 @@ class TargetEncoder(_PrepBase):
         cmax = max(c.size for c in cats)
         F = n_folds
         pr = _Prog()
-        codes, _neg = _codes(pr, arr, cats)
+        scratch = _target_scratch(mode)
+        codes, _neg = _codes(pr, arr, cats, device_only=scratch)
         # the target's words as arrays (lane apple-fast-py2mojo-prep /
         # cgr4-py-compute): continuous float32, codes through i2f, the
         # one-hot rows built on the device
@@ -1639,7 +1657,13 @@ class TargetEncoder(_PrepBase):
             pr.stage("te_enc", (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc)
         else:
             # each category's rows, ascending (te_bucket): te_enc walks one bucket, not every row
-            bstart, brows = pr.alloc(d * (cmax + 1)), pr.alloc(n * d)
+            if scratch:
+                bstart, brows = pr.scratch(d * (cmax + 1)), pr.scratch(n * d)
+                # te_gather also visits unused bucket tails (unknown categories).
+                # Preserve alloc's initialized zero row indices in those tails.
+                pr.stage("cat_zero", n * d, brows)
+            else:
+                bstart, brows = pr.alloc(d * (cmax + 1)), pr.alloc(n * d)
             if os.environ.get("MOJOLEARN_XPREP_TE_PBUCKET", "1") != "0":
                 # the buckets by chunks in parallel (te_hist .. te_hscatter), te_bucket's START and
                 # ROWS by construction. Default since lane prep-apple3 (M4, request 1790626651574:
@@ -1756,7 +1780,7 @@ class TargetEncoder(_PrepBase):
         n, d = arr.shape
         T, cmax = self._T, self._cmax
         pr = _Prog()
-        codes, _neg = _codes(pr, arr, self.categories_)
+        codes, _neg = _codes(pr, arr, self.categories_, device_only=_target_scratch(self.numeric_mode_))
         enc = pr.put(self._enc)
         meta = pr.put(self._meta)
         out = pr.output(n * d * T)
