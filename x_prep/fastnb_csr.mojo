@@ -63,9 +63,10 @@ comptime NB_TEXT_CSR = (
 #: `matmul_unit`'s ascending chain without the zero terms (a zero term adds
 #: nothing to a chain that starts at +0), under the same column-order flag.
 comptime IDN_NB_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_NB_CSR_OFF"]()
-#: out_flag bits of the IDENTICAL entries
-comptime CSR_FLAG_NEG = 1
-comptime CSR_FLAG_FALLBACK = 2
+#: out_flag levels of the IDENTICAL entries (the largest raised wins: a
+#: negative value is refused whatever else the input holds, as the dense fit)
+comptime CSR_FLAG_FALLBACK = 1
+comptime CSR_FLAG_NEG = 2
 #: Rows per block of the count kernel (its indptr slice in threadgroup memory).
 comptime CSR_ROWS = 64
 comptime CSR_TPB = 256
@@ -147,10 +148,11 @@ def nb_csr_count_int_kernel(
 ):
     """`nb_csr_count_kernel` with integer counts (IDENTICAL): tab[y[i] * d +
     col] += Int(val) and cnt[y[i]] += 1 as Int32 atomics (order-free, exact).
-    flag[0] |= CSR_FLAG_NEG for a negative value; |= CSR_FLAG_FALLBACK for a
-    value that is not an integer in [0, vmax] (NaN included), a column
-    outside [0, d) or not above the row's previous column, or a class code
-    outside [0, K). vmax * n < 2^31, so no count can wrap."""
+    flag[0] = max(flag[0], level): CSR_FLAG_NEG for a negative value,
+    CSR_FLAG_FALLBACK for a value that is not an integer in [0, vmax] (NaN
+    included), a column outside [0, d) or not above the row's previous
+    column, or a class code outside [0, K). vmax * n < 2^31, so no count can
+    wrap."""
     var r0 = Int(block_idx.x) * CSR_ROWS
     var tid = Int(thread_idx.x)
     var nn = Int(n)
@@ -168,7 +170,7 @@ def nb_csr_count_int_kernel(
         if k >= 0 and k < K:
             _ = Atomic.fetch_add(cnt.unsafe_offset(Int(k)), Int32(1))
         else:
-            bits = bits | Int32(CSR_FLAG_FALLBACK)
+            bits = Int32(CSR_FLAG_FALLBACK)
     barrier()
     var lo = Int(sp[0])
     var hi = Int(sp[rows])
@@ -191,25 +193,24 @@ def nb_csr_count_int_kernel(
         var ok = c >= 0 and c < dd and cls >= 0 and cls < kk
         if j > Int(sp[a]) and Int(indices.unsafe_load(j - 1)) >= c:
             ok = False
-        if v < Float32(0):
-            bits = bits | Int32(CSR_FLAG_NEG)
-            ok = False
         var iv = 0
-        if ok:
-            if v <= Float32(vmax):
-                iv = Int(v)
-                if Float32(iv) != v or iv > Int(vmax):
-                    ok = False
-            else:
-                # above vmax, or NaN
+        if v < Float32(0):
+            bits = Int32(CSR_FLAG_NEG)
+            ok = False
+        elif v <= Float32(Int(vmax)):
+            iv = Int(v)
+            if Float32(iv) != v:
                 ok = False
+        else:
+            # above vmax, or NaN
+            ok = False
         if ok:
             _ = Atomic.fetch_add(tab.unsafe_offset(cls * dd + c), Int32(iv))
-        else:
-            bits = bits | Int32(CSR_FLAG_FALLBACK)
+        elif bits == 0:
+            bits = Int32(CSR_FLAG_FALLBACK)
         j += CSR_TPB
     if bits != 0:
-        _ = Atomic.fetch_or(flag.unsafe_offset(0), bits)
+        _ = Atomic.max(flag.unsafe_offset(0), bits)
 
 
 def nb_csr_int_out_kernel(tab: IP, out: FP, flag: IP, total: Int32, limit: Int32):
@@ -221,7 +222,7 @@ def nb_csr_int_out_kernel(tab: IP, out: FP, flag: IP, total: Int32, limit: Int32
         return
     var v = tab.unsafe_load(t)
     if limit > 0 and (v < 0 or v >= limit):
-        _ = Atomic.fetch_or(flag.unsafe_offset(0), Int32(CSR_FLAG_FALLBACK))
+        _ = Atomic.max(flag.unsafe_offset(0), Int32(CSR_FLAG_FALLBACK))
     out.unsafe_store(t, Float32(Int(v)))
 
 
@@ -254,7 +255,7 @@ def nb_csr_jll_chk_kernel(
         acc = add(acc, clp.unsafe_load(k))
     dst.unsafe_store(t, acc)
     if bad and k == 0:
-        _ = Atomic.fetch_or(flag.unsafe_offset(0), Int32(CSR_FLAG_FALLBACK))
+        _ = Atomic.max(flag.unsafe_offset(0), Int32(CSR_FLAG_FALLBACK))
 
 
 def _up_i32(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.int32]:
@@ -356,8 +357,8 @@ def nb_csr_fit_int_py(
     out_fc: PythonObject, out_cnt: PythonObject, out_flag: PythonObject,
 ) raises -> PythonObject:
     """`x_prep_nb_csr_fit` of the IDENTICAL binding: `nb_csr_fit_py`'s
-    buffers; out_flag is a bit set (1: a negative value, the caller refuses
-    the input; 2: the caller runs the dense program, the tables are not to
+    buffers; out_flag is a level (2: a negative value, the caller refuses
+    the input; 1: the caller runs the dense program, the tables are not to
     be used). Returns 1."""
     var n = Int(py=sizes[0])
     var d = Int(py=sizes[1])
@@ -500,7 +501,7 @@ def nb_csr_jll_chk_py(
     sizes: PythonObject, dst: PythonObject, out_flag: PythonObject,
 ) raises -> PythonObject:
     """`x_prep_nb_csr_jll` of the IDENTICAL binding: `nb_csr_jll_py`'s
-    buffers plus out_flag (1 int32; 2: a row's columns are not strictly
+    buffers plus out_flag (1 int32; 1: a row's columns are not strictly
     ascending, the caller runs the dense program). Returns 1."""
     var n = Int(py=sizes[0])
     var d = Int(py=sizes[1])

@@ -14,6 +14,8 @@ from x_prep.host.program import run_program_host
 from x_prep.user_host import F32P, F64P, I32P, ii_rows, ii_gather, ii_scatter, ii_conv
 from x_prep.folds import kfold_folds, strat_folds
 from x_prep.py2mojo import PY2MOJO_PREP
+from x_prep.label_fast import IDN_LABEL
+from x_prep.blocked import IDN_NB_ONEPASS
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -160,6 +162,17 @@ def py2mojo_binding() raises -> PythonObject:
     return PythonObject(1)
 
 
+def label_present_binding() raises -> PythonObject:
+    return PythonObject(1)
+
+
+def idn_int_binding() raises -> PythonObject:
+    """Lane idn-int-prep: bindings/_mojolearn_x_prep.mojo `idn_int_binding`'s
+    bits for the host column (1 IDN_LABEL, 2 IDN_NB_ONEPASS; the CSR entry
+    is the device's only)."""
+    return PythonObject((1 if IDN_LABEL else 0) | (2 if IDN_NB_ONEPASS else 0))
+
+
 @export
 def PyInit__mojolearn_x_prep_host() abi("C") -> PythonObject:
     try:
@@ -179,6 +192,12 @@ def PyInit__mojolearn_x_prep_host() abi("C") -> PythonObject:
         m.def_function[kfold_folds_binding]("x_prep_kfold_folds")
         comptime if PY2MOJO_PREP:
             m.def_function[py2mojo_binding]("x_prep_py2mojo")
+        # lane idn-int-prep: the host column runs the same programs as the
+        # IDENTICAL device binding (x_prep/label_fast.mojo, x_prep/blocked.mojo)
+        comptime if IDN_LABEL:
+            m.def_function[label_present_binding]("x_prep_label_present")
+        comptime if IDN_LABEL or IDN_NB_ONEPASS:
+            m.def_function[idn_int_binding]("x_prep_idn_int")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_prep_host: ", e))
