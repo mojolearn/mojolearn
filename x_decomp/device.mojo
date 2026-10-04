@@ -26,7 +26,7 @@ from gemm.afn_apple_fast import (
 )
 from decomposition.linalg_public_device import device_qr_r
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
-from x_decomp.eigh_tangent import EIGH_FAST_TANGENT, eigh_tangent_round_kernel, eigh_tangent_copy_kernel
+from x_decomp.eigh_tangent import EIGH_FAST_TANGENT, eigh_tangent_round_kernel, eigh_tangent_copy_kernel, eigh_rayleigh_kernel
 from x_decomp.lu_fast import LU_FAST_STEP1, lfs_blocks, lu_fast_panel
 from x_decomp.lasso_grp import DECOMP_FAST_LASSO_GRP, LG_MAXK, LG_TPB, lasso_grp_kernel
 from x_decomp.cells import (
@@ -2308,6 +2308,9 @@ struct DevExec(Exec):
         var h = m // 2
         var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
         var dtangent = ctx.enqueue_create_buffer[DType.float32](n * n if EIGH_FAST_TANGENT else 1)
+        var doriginal = ctx.enqueue_create_buffer[DType.float32](n * n if EIGH_FAST_TANGENT else 1)
+        comptime if EIGH_FAST_TANGENT:
+            ctx.enqueue_copy(dst_buf=doriginal, src_buf=da)
         var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
         var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
         var dpart = ctx.enqueue_create_buffer[DType.float32](3 * _pj_off_blocks(n))
@@ -2382,6 +2385,15 @@ struct DevExec(Exec):
                 + " of " + String(fro_now) + "). An unconverged decomposition is not returned as if"
                 " it were one (DEVIATION 590)."
             )
+        comptime if EIGH_FAST_TANGENT:
+            # The converged diagonal accumulates n*sweeps FP32 roundings.
+            # Extract eigenvalues from the original matrix instead, entirely
+            # on device; reuse round scratch for A_original * V.
+            _launch_gemm_mma(ctx, _p(doriginal), _p(dv), _p(dtangent), n, n, n, False, False)
+            ctx.enqueue_function[eigh_rayleigh_kernel](
+                dv.unsafe_ptr(), dtangent.unsafe_ptr(), _p(doff) + 2 * n, Int32(n),
+                grid_dim=n, block_dim=256,
+            )
         ctx.enqueue_function[sign_flip_kernel](
             dv.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1)
         )
@@ -2400,6 +2412,7 @@ struct DevExec(Exec):
         _ = dpos^
         _ = dv^
         _ = dtangent^
+        _ = doriginal^
         _ = dcs^
         _ = doff^
         _ = dpart^
