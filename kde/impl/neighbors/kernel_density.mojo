@@ -2665,10 +2665,21 @@ comptime KDE2_KERNEL_VARIANTS = _KDE2_FAST_APPLE and (
 comptime KDE2_SAMPLE_FUSED = _KDE2_FAST_APPLE and (
     KDE2_ALL or is_defined["MOJOLEARN_KDE_SAMPLE_FUSED"]()
 )
-comptime KDE2_DIMTILE = _KDE2_FAST_APPLE and (
+#: KDE2_DIMTILE_ANY_D: the explicit defines take the tile pass at every d.
+comptime KDE2_DIMTILE_ANY_D = _KDE2_FAST_APPLE and (
     KDE2_ALL or KDE2_LSE_FUSED or KDE2_NORM_FUSED or KDE2_KERNEL_VARIANTS
     or is_defined["MOJOLEARN_KDE_DIMTILE"]()
 )
+#: FAST + Apple DEFAULT since lane/apple-fast-batchv (2026-10-03) for
+#: n_features > KDE2_DIMTILE_MIN_D: M3 A/B vs main batchv-kde-dimtile-istella3
+#: kde istella (d = 220) 137.2 -> 69.2 ms, mean_log_likelihood -222.27058 both;
+#: taxi (d = 11) 9.0 -> 17.8 ms, so d <= 32 keeps main's fused pass. Quality
+#: (tools/batchv_quality.sh, M2): score_samples within 9e-8 of the output scale.
+#: -D MOJOLEARN_KDE_DIMTILE_OFF: main's passes at every d.
+comptime KDE2_DIMTILE = KDE2_DIMTILE_ANY_D or (
+    _KDE2_FAST_APPLE and not is_defined["MOJOLEARN_KDE_DIMTILE_OFF"]()
+)
+comptime KDE2_DIMTILE_MIN_D = 32
 
 #: Threads per block, and the thread grid over (queries, train rows).
 comptime KDE2_TPB = 128
@@ -3441,7 +3452,9 @@ def kde_score_samples_device(
         # lane/apple-fast-kde2: FAST + Apple + -D MOJOLEARN_KDE_DIMTILE takes
         # the 2D tile pass (any d); every other build skips this block.
         comptime if KDE2_DIMTILE:
-            if (not staged_only) and not trace.enabled:
+            if (not staged_only) and not trace.enabled and (
+                KDE2_DIMTILE_ANY_D or n_features > KDE2_DIMTILE_MIN_D
+            ):
                 kde2_score_samples_fast_apple(
                     ctx, train, query, weights, has_weights, sum_weights,
                     n_train, n_query, n_features, bandwidth, kernel, metric,
