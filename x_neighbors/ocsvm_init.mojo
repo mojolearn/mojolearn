@@ -27,7 +27,8 @@ Nothing here imports a GPU module, so the CPU-only host binding compiles it.
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_neighbors.items import FP
-from x_linear.ff import FF, ff_of, ff_add, ff_add_f, ff_sub, ff_mul
+from x_linear.ff import FF, ff_of, ff_add, ff_add_f, ff_sub, ff_mul, ff_div, ff_f32
+from x_neighbors.items import IP
 
 #: lane/fam2-neighbors (2026-10-04), IDENTICAL, default ON: the alpha start
 #: by the three stages above on the device (and the same items on the host
@@ -104,3 +105,32 @@ def oci_nu_hi(nu: Float64) -> Float32:
 @always_inline
 def oci_nu_lo(nu: Float64) -> Float32:
     return Float32(nu - Float64(Float32(nu)))
+
+
+#: lane/fam2-neighbors (2026-10-04), IDENTICAL, default ON: PageRank's
+#: caller vectors (personalization, nstart, dangling) divided by their sum on
+#: the device: the sum is stages 0 and 1 above (nu = 1), then one item per
+#: element. Before, python/mojolearn/_expansion_neighbors.py `PageRank._unit`
+#: walked the n values in Python (fsum, the sign test, n divisions).
+#: Bits: an element can move in its last float32 bit (float-float quotient
+#: vs the binary64 one), device and host column together.
+#: -D MOJOLEARN_IDN_XN_UNIT_DEV_OFF (or MOJOLEARN_IDN_ALL_OFF) leaves the
+#: binding function unregistered and the glue keeps the Python walk.
+comptime XN_UNIT_DEV = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_XN_UNIT_DEV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+@always_inline
+def unit_ff_item(i: Int, v: FP, oh: FP, ol: FP, res: FP, info: IP, n: Int):
+    """res[i] = v[i] / total (the total is the stage-1 slot oci_chunks(n)).
+    info[0] is set when any v is negative (every writer stores the same 1);
+    item 0 sets info[1] when the total is zero. The caller zeroes info."""
+    var nc = oci_chunks(n)
+    var tot = FF(oh.unsafe_load(nc), ol.unsafe_load(nc))
+    var w = v.unsafe_load(i)
+    if w < Float32(0):
+        info.unsafe_store(0, Int32(1))
+    if i == 0 and tot.hi == Float32(0):
+        info.unsafe_store(1, Int32(1))
+    res.unsafe_store(i, ff_f32(ff_div(ff_of(w), tot)))

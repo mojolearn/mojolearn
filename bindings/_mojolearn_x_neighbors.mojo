@@ -19,7 +19,8 @@ from x_neighbors.kapprox_dev import kpca_resident_binding
 from x_neighbors.iter_device import lp_fast_resident_binding
 from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES, ocsvm_resident_binding
 from x_neighbors.ocsvm_dev import OCSVM_IDN_RES, ocsvm_alpha_init_binding
-from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT
+from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV
+from x_neighbors.ocsvm_dev import unit_ff_binding
 from x_neighbors.sort_items import purity_flags_binding
 
 
@@ -1261,6 +1262,9 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
             m.def_function[ocsvm_resident_binding]("x_neighbors_ocsvm_resident_idn")
         comptime if XN_OCSVM_DEV_INIT:
             m.def_function[ocsvm_alpha_init_binding]("x_neighbors_ocsvm_alpha_init")
+        # lane/fam2-neighbors: PageRank's caller vectors normalized by the op
+        comptime if XN_UNIT_DEV:
+            m.def_function[unit_ff_binding]("x_neighbors_unit_ff")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors: ", e))

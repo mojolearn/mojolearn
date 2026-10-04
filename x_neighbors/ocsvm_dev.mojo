@@ -40,13 +40,14 @@ from x_neighbors.items import (
     FP, IP, _add, _sub, xn_fold_blocks, ocsvm_g0, ocsvm_obj, ocsvm_pair, ocsvm_g_step,
     ocsvm_rho_part_item, ocsvm_rho_fin_item,
 )
-from x_neighbors.device_ops import xn_ctx, _grid, _tid, _buf, _buf_i, _down, BLOCK, kernel_kernel
+from x_neighbors.device_ops import xn_ctx, _grid, _tid, _buf, _buf_i, _down, _down_i, BLOCK, kernel_kernel
 from std.python import PythonObject
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from x_neighbors.ocsvm_init import (
     XN_OCSVM_DEV_INIT, oci_chunks, oci_part_item, oci_scan_item, oci_alpha_item, oci_nu_hi, oci_nu_lo,
+    XN_UNIT_DEV, unit_ff_item,
 )
 
 comptime OCSVM_TPB = 256
@@ -741,6 +742,71 @@ def ocsvm_alpha_init_binding(a_: PythonObject, i_: PythonObject, f_: PythonObjec
         raise Error("x_neighbors: null buffer address")
     var nu = Float64(py=f_[0])
     op_ocsvm_alpha_init(cv, alpha, n, oci_nu_hi(nu), oci_nu_lo(nu))
+    return PythonObject(None)
+
+
+def unit_ff_kernel(v: FP, oh: FP, ol: FP, res: FP, info: IP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < n:
+        unit_ff_item(t, v, oh, ol, res, info, n)
+
+
+def op_unit_ff(v: Int, res: Int, info: Int, n: Int) raises:
+    """res = v / sum(v) on the device (x_neighbors/ocsvm_init.mojo XN_UNIT_DEV);
+    info (int32 x 2): any negative value, a zero sum."""
+    var pinfo = IP(unsafe_from_address=info)
+    pinfo.unsafe_store(0, Int32(0))
+    pinfo.unsafe_store(1, Int32(0))
+    if n <= 0:
+        pinfo.unsafe_store(1, Int32(1))
+        return
+    var ctx = xn_ctx()
+    var nc = oci_chunks(n)
+    var d_v = _buf(ctx, v, n, True)
+    var d_res = _buf(ctx, 0, n, False)
+    var d_info = _buf_i(ctx, info, 2, True)
+    var d_ph = _buf(ctx, 0, nc, False)
+    var d_pl = _buf(ctx, 0, nc, False)
+    var d_oh = _buf(ctx, 0, nc + 1, False)
+    var d_ol = _buf(ctx, 0, nc + 1, False)
+    ctx.enqueue_function[oci_part_kernel](
+        d_v.unsafe_ptr(), d_ph.unsafe_ptr(), d_pl.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+    )
+    ctx.enqueue_function[oci_scan_kernel](
+        d_ph.unsafe_ptr(), d_pl.unsafe_ptr(), d_oh.unsafe_ptr(), d_ol.unsafe_ptr(), Int64(n),
+        Float32(1), Float32(0),
+        grid_dim=_grid(nc + 1), block_dim=BLOCK,
+    )
+    ctx.enqueue_function[unit_ff_kernel](
+        d_v.unsafe_ptr(), d_oh.unsafe_ptr(), d_ol.unsafe_ptr(), d_res.unsafe_ptr(), d_info.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    _down(ctx, d_res, res, n)
+    _down_i(ctx, d_info, info, 2)
+    ctx.synchronize()
+    _ = d_v^
+    _ = d_res^
+    _ = d_info^
+    _ = d_ph^
+    _ = d_pl^
+    _ = d_oh^
+    _ = d_ol^
+    _ = ctx^
+
+
+def unit_ff_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    """x_neighbors_unit_ff: addresses (v, res, info), ints (n,)."""
+    var v = Int(py=a_[0])
+    var res = Int(py=a_[1])
+    var info = Int(py=a_[2])
+    var n = Int(py=i_[0])
+    if n < 0:
+        raise Error("x_neighbors: a negative size was passed")
+    if info == 0 or (n > 0 and (v == 0 or res == 0)):
+        raise Error("x_neighbors: null buffer address")
+    op_unit_ff(v, res, info, n)
     return PythonObject(None)
 
 

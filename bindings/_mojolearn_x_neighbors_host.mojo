@@ -15,7 +15,8 @@ from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, op_sqdist, op_nan_sq
 from x_neighbors.iter_host import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn
 from x_neighbors.ocsvm_host import op_ocsvm
 from x_neighbors.ocsvm_host import ocsvm_alpha_init_binding
-from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT
+from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV
+from x_neighbors.ocsvm_host import unit_ff_binding
 from x_neighbors.graph_host import op_louvain
 from x_neighbors.kapprox_host import kpca_resident_binding
 from x_neighbors.iter_host import lp_fast_resident_binding
@@ -1273,6 +1274,9 @@ def PyInit__mojolearn_x_neighbors_host() abi("C") -> PythonObject:
         # lane/fam2-neighbors: the host column of the device alpha start
         comptime if XN_OCSVM_DEV_INIT:
             m.def_function[ocsvm_alpha_init_binding]("x_neighbors_ocsvm_alpha_init")
+        # lane/fam2-neighbors: PageRank's caller vectors normalized by the op
+        comptime if XN_UNIT_DEV:
+            m.def_function[unit_ff_binding]("x_neighbors_unit_ff")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors_host: ", e))

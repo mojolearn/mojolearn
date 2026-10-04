@@ -1601,10 +1601,25 @@ class PageRank(_XNeighbors):
         self.weight = weight
         self.dangling = dangling
 
-    @staticmethod
-    def _unit(v, n, what):
+    def _unit(self, v, n, what):
         """A caller's length-n non-negative vector divided by its sum (IEEE
         double, rounded once to float32), as networkx normalizes its dicts."""
+        # lane/fam2-neighbors: the sum, the sign test and the n divisions by
+        # the binding (`x_neighbors_unit_ff`, device kernels; registered in
+        # IDENTICAL unless -D MOJOLEARN_IDN_XN_UNIT_DEV_OFF)
+        unit_fn = getattr(self._bind(), "x_neighbors_unit_ff", None)
+        if unit_fn is not None:
+            wv = _f32_1d(v, what)
+            if wv.shape[0] != n:
+                raise ValueError(f"{what} must be n non-negative values, not all zero")
+            out = _empty_out((n,), "<f4")
+            uinfo = empty((2,), "<i4")
+            unit_fn([addr_ro(wv, name="xn_unit v"), addr(out, name="xn_unit out"),
+                     addr(uinfo, name="xn_unit info")], [n], [])
+            neg, zero = uinfo.tolist()
+            if neg or zero:
+                raise ValueError(f"{what} must be n non-negative values, not all zero")
+            return out
         pv = [float(t) for t in (v.tolist() if hasattr(v, "tolist") else v)]
         if len(pv) != n or any(t < 0 for t in pv) or math.fsum(pv) == 0:
             raise ValueError(f"{what} must be n non-negative values, not all zero")
