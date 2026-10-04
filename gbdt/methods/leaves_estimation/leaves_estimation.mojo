@@ -142,6 +142,28 @@ comptime IDN_GBDT_MC_ONE_STEP_DEVICE = (
     )
 )
 
+#: lane fix-g1-gbdt (audit G1, the original handoff's "symmetric-fit drain
+#: merge"; IDENTICAL, every vendor; default ON): on the SYMMETRIC estimation
+#: arm (`need_estimation`, one permutation, no eval set), a task that takes a
+#: one-step device path (F5 or `IDN_GBDT_MC_ONE_STEP_DEVICE`) no longer
+#: drains at its tail. Its cursor add, leaf-value copy and (MultiClass)
+#: fallback flags stay queued; the next tree's gradient pass and search are
+#: enqueued behind them on the same in-order queue, and that search's own
+#: drain settles the task (`doc_parallel_boosting.finish_deferred_estimation`
+#: reads the values and appends the previous tree's model right after the
+#: search returns, before the next estimation reuses the staging). Two
+#: drains per tree become one. Schedule only: the same kernels on the same
+#: queue in the same order, so no bit moves anywhere and the host column is
+#: untouched. `-D MOJOLEARN_IDN_GBDT_SYM_EST_DEFER_DRAIN_OFF` (or the master
+#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the drain per task.
+comptime IDN_GBDT_SYM_EST_DEFER_DRAIN = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_GBDT_SYM_EST_DEFER_DRAIN_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
 #: the widest class count `multiclass_one_step_kernel` solves (its
 #: per-thread system is `MC_ONE_STEP_MAX_CLASSES^2` doubles of local memory)
 comptime MC_ONE_STEP_MAX_CLASSES = 16
