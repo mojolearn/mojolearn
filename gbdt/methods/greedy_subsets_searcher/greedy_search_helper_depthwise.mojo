@@ -1159,10 +1159,26 @@ comptime GBDT_LG_BATCH = 1 if not _LG_FAST_APPLE else (
 #: rows in the same order, instead of the sum of its children's. Only the
 #: per-level score noise (`random_strength` with a Cosine score) draws per
 #: round, so a fit with noise grows one leaf per iteration.
+#:
+#: THE IDENTICAL DEFAULT since lane ml-gbdt (2026-10-04, roadmap T1): on for
+#: every vendor and the host column together, so the four columns still
+#: agree. Bits: none move against one leaf per iteration (the argument
+#: above). `-D MOJOLEARN_GBDT_LG_EXACT_ID_OFF` (or the master `-D
+#: MOJOLEARN_IDN_ALL_OFF`) is the A/B arm and restores one leaf per
+#: iteration; the old opt-in `-D MOJOLEARN_GBDT_LG_EXACT_ID` stays harmless.
+#: Memory gate (`LG_EXACT_ID_MAX_CELLS`, in the fit): the capacity doubles
+#: to min(2 * max_leaves, 1 << max_depth) leaf slots; a fit whose doubled
+#: slots would not fit the pool's leaf histograms, or whose histogram cells
+#: would pass the Int32 offset range, keeps one leaf per iteration.
 comptime LG_EXACT_ID = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_GBDT_LG_EXACT_ID"]()
+    and not is_defined["MOJOLEARN_GBDT_LG_EXACT_ID_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
+#: LG_EXACT_ID memory gate: the most histogram cells (leaf slots x stat
+#: planes x cells per leaf) a batched IDENTICAL Lossguide fit may address.
+#: Int32 offsets index the histogram and fixed-point accumulator planes.
+comptime LG_EXACT_ID_MAX_CELLS = 2147483647
 comptime LG_EXACT_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
@@ -1702,6 +1718,21 @@ def fit_non_symmetric_tree[
     var layout = build_layout(fold_counts, one_hot)
     var blocks = blocks_for(layout, n_rows)
     var hist_cells_per_leaf = layout.hist_cells
+    # LG_EXACT_ID memory gate (T1): the doubled leaf capacity must fit the
+    # leaf histograms the symmetric pool holds (`1 << max_depth` slots, see
+    # `TTreeWorkspace`) and stay inside Int32 cell offsets; otherwise this
+    # fit grows one leaf per iteration (same bits, the banner's argument).
+    comptime if LG_EXACT_ID:
+        if lg_exact and max_leaves > options.max_leaves:
+            var lg_gate_ok = max_depth < 30 and max_leaves <= (1 << max_depth)
+            if lg_gate_ok:
+                var lg_cells = max_leaves * stat_count * hist_cells_per_leaf
+                lg_gate_ok = lg_cells <= LG_EXACT_ID_MAX_CELLS
+            if not lg_gate_ok:
+                lg_exact = False
+                max_leaves = options.max_leaves
+                ws_leaves_key = options.max_leaves
+                lg_room_bound = False
     # DEVIATION 2007a: the SM count is read off the symmetric pool below
     # (one `ctx.get_attribute` per WORKSPACE build, not per tree -- the
     # query is 1.26 ms/call on Metal, the price note in
