@@ -30,6 +30,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identic
 from x_decomp.lu_fast import LU_FAST_STEP1, lfs_blocks, lu_fast_panel
 from x_decomp.lu_fast_mma import LU_FAST_MMA, lu_fast_mma_factor
 from x_decomp.lasso_grp import DECOMP_FAST_LASSO_GRP, LG_MAXK, LG_TPB, lasso_grp_kernel
+from x_decomp.fast_chol import CHOL_FAST_BLOCKED, CH_NB, launch_chol_blocked
 from x_decomp.cells import (
     lu_perm_src,
     lu_aux_clamp,
@@ -2281,11 +2282,20 @@ struct DevExec(Exec):
         # thread recomputing the pivot's chain itself, so neither the
         # one-thread kernel (MOJOLEARN_XD_CHOL_SERIAL) nor the one-thread
         # diagonal launch remains; n launches.
-        ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
-        for j in range(n):
-            ctx.enqueue_function[chol_step_kernel](
-                da.unsafe_ptr(), di.unsafe_ptr(), Int32(j), Int32(n), grid_dim=_blocks(n - j), block_dim=TPB
-            )
+        var blocked = False
+        comptime if CHOL_FAST_BLOCKED:
+            # -D MOJOLEARN_CHOL_FAST_BLOCKED (x_decomp/fast_chol.mojo, default
+            # off, FAST + Apple): `launch_chol_blocked`, 3 n / CH_NB launches;
+            # a matrix within one panel keeps the column driver below.
+            if n > CH_NB:
+                launch_chol_blocked(ctx, _p(da), _p(di), n)
+                blocked = True
+        if not blocked:
+            ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
+            for j in range(n):
+                ctx.enqueue_function[chol_step_kernel](
+                    da.unsafe_ptr(), di.unsafe_ptr(), Int32(j), Int32(n), grid_dim=_blocks(n - j), block_dim=TPB
+                )
         _down(ctx, da, a, n * n)
         _down(ctx, di, info, 1)
         ctx.synchronize()
