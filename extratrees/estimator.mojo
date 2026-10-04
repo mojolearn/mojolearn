@@ -736,12 +736,12 @@ def fit_extra_trees_regressor_device(
     bit-equal leaves, and the check requires at least one to differ.
     """
     var plan = regressor_plan(config, n_rows, n_features)
-    var ql = quantize_labels(y, n_rows)
-    var forest = fit_regression_device(
+    # cpu3-trees: the labels are quantized on the device (the scale's sum and
+    # the per-row truncation), `quantize_labels_host`'s Int32s and scale
+    var forest = fit_regression_device_f32(
         ctx,
         x_col_major,
-        ql[0],
-        ql[1],
+        y,
         n_rows,
         n_features,
         plan.params,

@@ -93,6 +93,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     train_forest_regression_device,
     upload_dataset,
     upload_dataset_labels_f32,
+    upload_dataset_labels_quantized,
 )
 from extratrees.impl.decisiontree.batched_levelalgo.dataset import Dataset
 from extratrees.checks.pcg_rng import row_sample_seed
@@ -399,6 +400,48 @@ def fit_regression_device(
     var n_sampled = resolve_n_sampled_rows(n_rows, bootstrap, n_sampled_rows)
     # DEVIATION 211: one merged-frontier trainer for the whole forest; the
     # per-group workspace lives inside it now (deviation 202, further).
+    var tree_ids = List[Int32]()
+    for tree_id in range(Int(n_trees)):  # small-loop(n_trees: forest member tree ids): one id per tree, launch parameter list
+        tree_ids.append(Int32(tree_start + tree_id))
+    var forest = Forest(1)
+    forest.trees = train_forest_regression_device(
+        ctx, dataset, scale, params, tree_ids, seed,
+        bootstrap=bootstrap, n_sampled_rows=n_sampled,
+    )
+    forest.n_trees = n_trees
+    return forest^
+
+
+def fit_regression_device_f32(
+    ctx: DeviceContext,
+    x_col_major: List[Float32],
+    y: List[Float32],
+    n_rows: Int32,
+    n_cols: Int32,
+    params: DecisionTreeParams,
+    n_trees: Int32,
+    seed: UInt64,
+    bootstrap: Bool = BOOTSTRAP_DEFAULT,
+    n_sampled_rows: Int32 = 0,
+    x_addr: Int = 0,
+    x_row_major: Bool = False,
+    tree_start: Int = 0,
+) raises -> Forest:
+    """`fit_regression_device` from the caller's FLOAT labels: the scale's
+    `sum |y|` and the DEVIATION 135 quantization run on the device
+    (`upload_dataset_labels_quantized`, cpu3-trees), so no host pass over
+    the rows remains in the GPU fit. Same Int32 labels and scale as the host
+    column's `quantize_labels_host`."""
+    if tree_start < 0 or tree_start + Int(n_trees) > 2147483647:
+        raise Error("invalid global tree range")
+    error_checking(n_rows, n_cols, n_trees)
+    validity_check(params)
+    var scale = Float64(1.0)
+    var dataset = upload_dataset_labels_quantized(
+        ctx, x_col_major, y, n_rows, n_cols, scale, x_addr=x_addr,
+        x_row_major=x_row_major,
+    )
+    var n_sampled = resolve_n_sampled_rows(n_rows, bootstrap, n_sampled_rows)
     var tree_ids = List[Int32]()
     for tree_id in range(Int(n_trees)):  # small-loop(n_trees: forest member tree ids): one id per tree, launch parameter list
         tree_ids.append(Int32(tree_start + tree_id))

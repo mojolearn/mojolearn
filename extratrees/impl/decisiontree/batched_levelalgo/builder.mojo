@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """ExtraTrees host control plane and device drivers for breadth-first and best-first tree growth, implemented from pinned cuML and sklearn implementations."""
 
-from std.memory import memcpy
+from std.memory import bitcast, memcpy
 
 from ensemble.instruments import StageTimes
 
@@ -118,6 +118,8 @@ from checks.numerics import (
     identical_mul,
 )
 from core.philox import launch_uniform_int
+from core.abs_sum_blocked import device_abs_sum_blocked
+from extratrees.checks.fixed_point import choose_scale
 from ensemble.decisiontree.batched_levelalgo.quantiles import compute_quantiles
 from extratrees.checks.pcg_rng import row_sample_seed
 
@@ -2547,6 +2549,107 @@ def upload_dataset_labels_f32(
             + "). The device score kernel would index its shared"
             " accumulator out of bounds; refused by name."
         )
+    return dataset^
+
+
+def label_scale_exponent(scale: Float64) raises -> Int:
+    """`e` with `scale == 2^e`: `choose_scale` returns a power of two
+    (DEVIATION 135), read here from its binary64 exponent field."""
+    var b = bitcast[DType.uint64](scale)
+    if (b & UInt64(0x000FFFFFFFFFFFFF)) != UInt64(0) or scale <= 0.0:
+        raise Error("label scale " + String(scale) + " is not a power of two")
+    return Int((b >> UInt64(52)) & UInt64(0x7FF)) - 1023
+
+
+def quantize_labels_device_kernel(
+    out_q: MutPointer[Int32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    n_rows: Int32,
+    scale_exp: Int32,
+):
+    """cpu3-trees: `quantize(Float64(y) * scale)` (DEVIATION 135) on the
+    device, one thread per row, in integers. `scale` is `2^scale_exp`, so the
+    binary64 product is exact and its truncation toward zero is the float's
+    significand shifted by its exponent plus `scale_exp`, sign applied after:
+    the same Int32 as the host column's multiply-and-truncate
+    (`quantize_labels_host`), with no float operation on any vendor."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_rows):
+        return
+    var bits = bitcast[DType.uint32](y[unsafe_offset=i])
+    var e = Int((bits >> UInt32(23)) & UInt32(0xFF))
+    var sig = Int64(Int(bits & UInt32(0x7FFFFF)))
+    if e == 0:
+        e = 1
+    else:
+        sig = sig | Int64(0x800000)
+    var sh = e - 150 + Int(scale_exp)
+    var q = Int64(0)
+    if sh >= 0:
+        # the scale bounds every |y| * scale below 2^31 (DEVIATION 135), so a
+        # valid label never shifts past 7 here; the cap only keeps the shift
+        # defined
+        if sh < 40:
+            q = sig << Int64(sh)
+    elif sh > -24:
+        q = sig >> Int64(-sh)
+    if (bits >> UInt32(31)) != UInt32(0):
+        q = -q
+    out_q[unsafe_offset=i] = q.cast[DType.int32]()
+
+
+def upload_dataset_labels_quantized(
+    ctx: DeviceContext,
+    x_col_major: List[Float32],
+    y: List[Float32],
+    n_rows: Int32,
+    n_cols: Int32,
+    mut scale_out: Float64,
+    x_addr: Int = 0,
+    x_row_major: Bool = False,
+) raises -> DeviceDataset:
+    """`upload_dataset` for a regressor with the labels QUANTIZED ON THE
+    DEVICE (cpu3-trees: the host `quantize_labels` row loops left the GPU
+    fit). y crosses the bus once as the caller's float32 words; the scale's
+    `sum |y|` is `core/abs_sum_blocked`'s fixed-order device sum (one word
+    back; `quantize_labels_host` restates it with `host_abs_sum_blocked`),
+    `choose_scale` runs on that one scalar, and `quantize_labels_device_kernel`
+    writes the Int32 labels into the dataset. The scale is returned in
+    `scale_out` for the leaf values."""
+    if len(y) != Int(n_rows):
+        raise Error(
+            "labels must be n_rows long; got "
+            + String(len(y))
+            + " for n_rows="
+            + String(n_rows)
+        )
+    var dataset = upload_dataset(
+        ctx, x_col_major, List[Int32](), n_rows, n_cols, 1,
+        x_addr=x_addr, x_row_major=x_row_major, labels_on_device=True,
+    )
+    var n = Int(n_rows)
+    var d_y = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    var h_y = ctx.enqueue_create_host_buffer[DType.float32](max(n, 1))
+    ctx.synchronize()
+    memcpy(dest=h_y.unsafe_ptr(), src=y.unsafe_ptr(), count=n)
+    ctx.enqueue_copy(dst_buf=d_y, src_ptr=h_y.unsafe_ptr())
+    # reads back one word, so the upload above has landed after it
+    var mag = device_abs_sum_blocked(ctx, d_y, n)
+    var scale = choose_scale(mag, n)
+    var e = label_scale_exponent(scale)
+    if n > 0:
+        ctx.enqueue_function[quantize_labels_device_kernel](
+            dataset.d_labels.unsafe_ptr(),
+            d_y.unsafe_ptr(),
+            n_rows,
+            Int32(e),
+            grid_dim=ceildiv(n, 256),
+            block_dim=256,
+        )
+    ctx.synchronize()
+    _ = d_y^
+    _ = h_y^
+    scale_out = scale
     return dataset^
 
 
