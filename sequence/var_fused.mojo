@@ -252,7 +252,7 @@ def var_fit_fused_py(mut ex: DeviceExec, addrs: PythonObject, ip: PythonObject) 
     var S = Rs + R * K
     var status = S + K * K
     var inv = Float32(1.0) / Float32(R - m)
-    ex.ctx.enqueue_function[var_fit_fused_kernel](
+    ex.ctx.enqueue_function[var_fit_fused_kernel](  # small-launch(m: design columns, at most 64): 256 threads split every cell, rows R below 32768 by the gate; one launch replaces eight fixed-cost ones
         ws, Z, Ys, Bm, Rs, S, status,
         Int32(K), Int32(p), Int32(kt), Int32(m), Int32(R), Int32(bitcast[DType.int32](inv)),
         grid_dim=(1, 1, 1), block_dim=(VFUSED_TPB, 1, 1),
