@@ -645,3 +645,11 @@ input, string/bool fallbacks and MultiLabelBinarizer inverse are not explicitly
 exercised. These remain on existing guarded fallback routes; no claim is made
 that those cases were tested. Encoder/multilabel correctness was checked but
 speed was measured only for LabelBinarizer; do not update their timing rows.
+
+## M3 repaired checks — 2026-10-04 09:00 UTC
+
+- `MOJOLEARN_CHOL_FAST_TRI_SYRK`, lane/apple-fast-chol-20261004 measured `ca5ea4b6e` (kernel `e724b7777`), `gap26-chol-fixed-synthetic`: A268.772791 -> B288.278250 ms (+7.3%), one run/arm. Digest `8818853dfae997da` and relative residual1.659095968e-7 identical. SPD/solve and failure-info quality checks pass. **DROPPED-slower**, no default or board change; comment retained beside candidate gate on its lane.
+- `MOJOLEARN_EIGH_FAST_TANGENT`, lane/apple-fast-linalg-20261004 `131a0d78a`, `gap26-eigh-rayleigh-run-ready`: A43796.817 -> B51254.836 ms (+17.0%), one run/arm. Eigenvalue error6.08669e-5 ->3.52564e-7; relative residual5.37499e-5 ->4.82917e-6. Repaired quality fixture pair passes. **HOLD-speed**: accuracy improved but no speed win; keep opt-in, optimize coefficient reuse before new measurement. Existing opponent-quality board hold remains.
+- `MOJOLEARN_MCD_BATCH_COMPAT`, lane/apple-fast-mcd-exact `ab4265c9a`, `gap26-mcdrepair-small-ready`: capped3000 taxi only, A5595.804 -> B828.962 ms. **HOLD-quality**: covariance relative difference.08568, precision.99982, support Jaccard.94143. No full-data timing or board update. Artifact review finds final covariance rank7 ->6 at pinvh cutoff despite both raw ranks10; matching all-true flags is insufficient. Failure and proposed MMA-compatible repair documented on review branch `lane/apple-fast-mcd-review` at `0b5b3db39`; do not merge rejected candidate ancestry into main.
+
+Raw M3 receipt: `~/mojolearn-evidence/apple-fast/sync/quality-repairs-results-0900.txt`; individual tags under `~/mq/out/`. Source review for queued PT `bc112b172`: subsequent main x_prep changes only add label-specific binding/dispatch/Python paths; power-transformer implementation is unchanged.
