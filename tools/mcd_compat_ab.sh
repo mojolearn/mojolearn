@@ -21,6 +21,8 @@ B_DEFINES=
 for D in ${MCD_DEFINE//,/ }; do
   case "$D" in
     MOJOLEARN_MCD_BATCH_COMPAT|MOJOLEARN_MCD_BATCH_MMA|MOJOLEARN_MCD_BMMA_OFF|MOJOLEARN_MCD_WIDE_OFF) ;;
+    # w4-mcd opt-ins (B arm on top of main's defaults)
+    MOJOLEARN_MCD_SKIP_PINVH|MOJOLEARN_MCD_DEFLATE) ;;
     MOJOLEARN_MCD_BMMA) echo "MCDQ MOJOLEARN_MCD_BMMA is default now; use MOJOLEARN_MCD_BMMA_OFF for the old arm"; exit 2 ;;
     MOJOLEARN_MCD_WIDE) echo "MCDQ MOJOLEARN_MCD_WIDE is default now; use MOJOLEARN_MCD_WIDE_OFF for the old arm"; exit 2 ;;
     *) echo "MCDQ unsupported define: $D"; exit 2 ;;
