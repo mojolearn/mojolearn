@@ -94,6 +94,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.memory import memcpy
+from std.gpu import block_dim, block_idx, thread_idx
+from training.maximize import maximize_negate
 from std.os import getenv
 from std.sys.compile import is_defined
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
@@ -673,6 +675,40 @@ comptime OPT_IO_ALL = 15
 #: (`optimizer_resident_step_io` and the put/get pair). IDENTICAL, GPU
 #: columns. `-D MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF` (or the master) hides
 #: them, and the Python optimizers then refuse `params_to_device`.
+#: lane fam2-neural: `maximize=True` ON THE DEVICE. The bindings negated the
+#: gradient on the host before the upload (a one-thread loop over N floats,
+#: `maximize_negated_copy`) and negated the clipped gradient again after the
+#: download. `identical_optimizer_step_resident_io(negate=True)` flips the
+#: sign bit in the device gradient buffer instead (`maximize_negate`, the
+#: same exact XOR, one thread per element) before the step and again after
+#: it, so the buffer and any download hold the caller's sign: the same bits.
+#: `-D MOJOLEARN_IDN_MAXIMIZE_DEV_OFF` keeps `Optimizer.step` on the host loop.
+comptime IDN_MAXIMIZE_DEV = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    and not (is_defined["MOJOLEARN_IDN_MAXIMIZE_DEV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+comptime MAXIMIZE_TPB = 256
+
+
+def maximize_negate_kernel(g: MutPointer[Float32, MutAnyOrigin], n: Int32):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        g.unsafe_store(i, maximize_negate(g.unsafe_load(i)))
+
+
+def maximize_negate_device(ctx: DeviceContext, mut g: DeviceBuffer[DType.float32], n: Int) raises:
+    """g[0:n] negated in place by the sign bit. Enqueues only."""
+    if n <= 0:
+        return
+    ctx.enqueue_function[maximize_negate_kernel](
+        g.unsafe_ptr(),
+        Int32(n),
+        grid_dim=((n + MAXIMIZE_TPB - 1) // MAXIMIZE_TPB, 1, 1),
+        block_dim=(MAXIMIZE_TPB, 1, 1),
+    )
+
+
 comptime IDN_OPT_PARAMS_RESIDENT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
@@ -706,6 +742,7 @@ def identical_optimizer_step_resident_io(
     dampening: Float32,
     max_norm: Float32,
     io: Int,
+    negate: Bool = False,
 ) raises -> Int:
     """lane fam2-neural: `io` names the transfers this call makes (OPT_IO_*:
     parameters up, gradient up, parameters down, clipped gradient down); a
@@ -798,6 +835,9 @@ def identical_optimizer_step_resident_io(
         if up_g:
             ctx.enqueue_copy(dst_buf=g_buf, src_ptr=grad_ptr)
         ctx.synchronize()
+    if negate:
+        # maximize: the step reads -g (the sign bit, on the device)
+        maximize_negate_device(ctx, g_buf, n_total)
     _step_timing_tick(ctx, rton, rtk, "resident.upload")
 
     # `denom_out` and `q_out` are written only under `MOJOLEARN_OPT_RECORD`.
@@ -871,6 +911,9 @@ def identical_optimizer_step_resident_io(
     # the downloads through the pinned stages too (a device-to-host-pointer
     # copy ran at about 3 GB/s here; the DMA into pinned memory and the
     # memcpy out together take a fifth of that)
+    if negate:
+        # back to the caller's sign (the clip scaled -g; -(-g c) = g c exactly)
+        maximize_negate_device(ctx, g_buf, n_total)
     _step_timing_tick(ctx, rton, rtk, "resident.device_step")
     if not down_p and not down_g:
         # everything stays on the device: the wait ends the entry (the

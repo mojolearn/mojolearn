@@ -91,8 +91,7 @@ from training.dev_tensors import (
 )
 # lane fam2-neural (2026-10-04): parameters and gradients resident across steps
 from training.estimator import (
-    identical_optimizer_step_resident_io, IDN_OPT_PARAMS_RESIDENT, OPT_IO_UP_P, OPT_IO_UP_G, OPT_IO_DOWN_G,
-    OPT_IO_ALL,
+    identical_optimizer_step_resident_io, IDN_OPT_PARAMS_RESIDENT, OPT_IO_ALL, IDN_MAXIMIZE_DEV,
 )
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer
@@ -635,6 +634,12 @@ def optimizer_resident_get_binding(
     return PythonObject(n)
 
 
+def maximize_dev_available_binding() raises -> PythonObject:
+    """Present when `Optimizer.step` should run maximize through
+    `optimizer_resident_step_io` (the sign flip on the device)."""
+    return PythonObject(1)
+
+
 def optimizer_resident_step_io_binding(
     param_addr: PythonObject,
     grad_addr: PythonObject,
@@ -650,8 +655,9 @@ def optimizer_resident_step_io_binding(
     that buffer is already in the handle's device buffer
     (`optimizer_resident_put`, or the previous step's result) and its
     address here is not read (pass any valid float address, e.g. `info`).
-    `params` is `optimizer_step`'s list, word for word. Maximize needs the
-    gradient to come from the host (bit 2). Returns `N`."""
+    `params` is `optimizer_step`'s list, word for word. Maximize negates
+    the gradient on the device (`maximize_negate_device`), wherever it came
+    from. Returns `N`."""
     if len(params) != 12 and len(params) != 13:
         raise Error(
             "optimizer_resident_step_io: params must contain 12 or 13 values, got "
@@ -666,8 +672,6 @@ def optimizer_resident_step_io_binding(
     var pp = _f32_ptr(Int(py=param_addr))
     var gp = _f32_ptr(Int(py=grad_addr))
     var maximize = len(params) == 13 and Int(py=params[12]) != 0
-    if maximize and (io & OPT_IO_UP_G) == 0:
-        raise Error("optimizer_resident_step_io: maximize needs the gradient uploaded by this call (io bit 2)")
     var op = _i32_ptr(Int(py=offsets_addr))
     var ip = _i32_ptr(Int(py=init_addr))
     var fp = _f32_ptr(Int(py=info_addr))
@@ -688,26 +692,11 @@ def optimizer_resident_step_io_binding(
         var ctx = neural_ctx[_NEURAL_CTX]()
         _opt_dev_pair(ctx, h)
         var pool = _OPT_POOL.get_or_create_ptr()
-        if maximize:
-            if n_tensors < 1 or op[n_tensors] < Int32(0):
-                raise Error("optimizer_resident_step_io: maximize needs a registry with offsets[J] >= 0")
-            var n_flat = Int(op[n_tensors])
-            var neg = maximize_negated_copy(gp, n_flat)
-            var np_ = neg.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-            n_total = identical_optimizer_step_resident_io(
-                ctx, pp, np_, pool[].m[h], pool[].v[h], pool[].p[h], pool[].g[h], pool[].sp[h], pool[].sg[h], op, ip,
-                fp, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps, weight_decay, momentum, dampening,
-                max_norm, io,
-            )
-            if max_norm > Float32(0.0) and (io & OPT_IO_DOWN_G) != 0:
-                for i in range(n_flat):
-                    gp[i] = maximize_negate(neg[i])
-        else:
-            n_total = identical_optimizer_step_resident_io(
-                ctx, pp, gp, pool[].m[h], pool[].v[h], pool[].p[h], pool[].g[h], pool[].sp[h], pool[].sg[h], op, ip,
-                fp, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps, weight_decay, momentum, dampening,
-                max_norm, io,
-            )
+        n_total = identical_optimizer_step_resident_io(
+            ctx, pp, gp, pool[].m[h], pool[].v[h], pool[].p[h], pool[].g[h], pool[].sp[h], pool[].sg[h], op, ip,
+            fp, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps, weight_decay, momentum, dampening,
+            max_norm, io, maximize,
+        )
     return PythonObject(n_total)
 
 
@@ -1604,6 +1593,8 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
             m.def_function[optimizer_resident_put_binding]("optimizer_resident_put")
             m.def_function[optimizer_resident_get_binding]("optimizer_resident_get")
             m.def_function[optimizer_resident_step_io_binding]("optimizer_resident_step_io")
+            comptime if IDN_MAXIMIZE_DEV:
+                m.def_function[maximize_dev_available_binding]("optimizer_maximize_dev")
         comptime if IDN_TRAIN_DEV_TENSORS:
             m.def_function[train_dev_alloc_binding]("train_dev_alloc")
             m.def_function[train_dev_free_binding]("train_dev_free")

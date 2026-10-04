@@ -758,8 +758,6 @@ class _Optimizer(NumericModeMixin):
             # device gradients: copied on the device into the handle's
             # gradient buffer, tensor by tensor; nothing crosses the bus
             self._grads_from_device(binding, grads)
-            if getattr(self, "maximize", False):
-                raise RuntimeError("mojolearn.%s.step_device: maximize needs host gradients" % self._where)
         elif grads is not None:
             gs, gprobes, flat_g, packed_g = self._flat(grads, "grads")
             io = 2 if max_norm is None else 10
@@ -767,9 +765,6 @@ class _Optimizer(NumericModeMixin):
             if not getattr(self, "_g_dev", False):
                 raise RuntimeError("mojolearn.%s.step_device: no gradient on the device "
                                    "(pass grads or call grads_to_device)" % self._where)
-            if getattr(self, "maximize", False):
-                raise RuntimeError("mojolearn.%s.step_device: maximize needs the gradient "
-                                   "passed to the step" % self._where)
         if self.lr_schedule is not None:
             self.lr = float(self.lr_schedule.lr_at(self.t + 1))
         cfg = self._config()
@@ -993,7 +988,21 @@ class _Optimizer(NumericModeMixin):
         # while the owning objects are alive (`_buffer.py`). `addr` (writable
         # required) for everything the kernel writes; `addr_ro` for the
         # offsets registry, which it only reads.
-        if self._res is not None:
+        if (self._res is not None and plist[12]
+                and callable(getattr(binding, "optimizer_maximize_dev", None))):
+            # lane fam2-neural: maximize negates on the device (the per-call
+            # entry negates the gradient in a host loop); all four transfers
+            binding.optimizer_resident_step_io(
+                addr(flat_p, name="params"),
+                addr(flat_g, name="grads"),
+                addr_ro(self.offsets, name="offsets"),
+                addr(self.buf_initialized, name="buf_initialized"),
+                addr(info, name="info"),
+                plist,
+                [int(self._res), 15],
+            )
+            self._host_fresh = False
+        elif self._res is not None:
             # the moments stay on the device; the host copies are stale
             # until the next read of `exp_avg` / `exp_avg_sq` downloads them
             binding.optimizer_resident_step(
