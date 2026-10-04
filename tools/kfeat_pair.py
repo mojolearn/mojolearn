@@ -9,7 +9,8 @@ lane's three bindings).
  timing  SOURCE QUALITY_TAG TIMING_TAG BINDING DEFINES ALGO DATASET [FAMILY]
 
 BINDING: kernel_methods | x_neighbors | x_decomp. DEFINES: the B arm's
-define names, comma-separated (A = main = none). SOURCE is the exact full
+define names, comma-separated (A = main = none; for a promoted candidate B
+names its _OFF rollback, so B is the old path). SOURCE is the exact full
 SHA. Arms: ~/mq/verified-arms/SOURCE/BINDING/{A.so,B.so,manifest.json}.
 The quality action installs each arm, runs `tools/kfeat_quality.py dump`,
 checks the arm's reach (B has the candidate compiled in, A does not), runs
@@ -29,24 +30,24 @@ import sys
 
 FIXTURE = "kfeat-v2"  # lane apple-fast-w3-kfeat: gate, lazy-weights and staged cases added
 REACH = {  # binding -> (reach key in KFEAT-CAPTURE, B's expected value from the defines)
-    # RBF_RESIDENT, SRP_STRAT and SCHI2_MOJO_MT are default since their promotion; their
-    # _OFF forms build the old arm.
+    # RBF_RESIDENT, SRP_STRAT, SCHI2_MOJO_MT, ACHI2_DEVSCAN, SCHI2_LAZYW and RBF_STAGED are
+    # default since their promotion; their _OFF forms build the old arm.
     "kernel_methods": ("rbf_resident", lambda ds: "MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF" not in ds),
-    "x_neighbors": ("kfeat_flags", lambda ds: (1 if "MOJOLEARN_XN_FAST_ACHI2_DEVSCAN" in ds else 0)
+    "x_neighbors": ("kfeat_flags", lambda ds: (1 if "MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF" not in ds else 0)
                     | (2 if "MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF" not in ds else 0)
-                    | (4 if "MOJOLEARN_XN_FAST_SCHI2_LAZYW" in ds
+                    | (4 if "MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF" not in ds
                        and "MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF" not in ds else 0)),
     "x_decomp": ("grp_cls2", None),
 }
 # extra reach keys checked as well (lane apple-fast-w3-kfeat)
 REACH_EXTRA = {
-    "kernel_methods": ("rbf_staged", lambda ds: 1 if ("MOJOLEARN_KM_FAST_RBF_STAGED" in ds
+    "kernel_methods": ("rbf_staged", lambda ds: 1 if ("MOJOLEARN_KM_FAST_RBF_STAGED_OFF" not in ds
                                                       and "MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF" not in ds) else 0),
 }
 ALLOWED = {
-    "kernel_methods": {"MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF", "MOJOLEARN_KM_FAST_RBF_STAGED"},
-    "x_neighbors": {"MOJOLEARN_XN_FAST_ACHI2_DEVSCAN", "MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF",
-                    "MOJOLEARN_XN_FAST_SCHI2_LAZYW"},
+    "kernel_methods": {"MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF", "MOJOLEARN_KM_FAST_RBF_STAGED_OFF"},
+    "x_neighbors": {"MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF", "MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF",
+                    "MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF"},
     "x_decomp": {"MOJOLEARN_XD_FAST_SRP_STRAT_OFF"},
 }
 

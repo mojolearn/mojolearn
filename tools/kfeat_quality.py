@@ -9,14 +9,16 @@
 Tolerances, fixed before any result:
 - kernel_methods (MOJOLEARN_KM_FAST_RBF_RESIDENT; default now, old arm =
   MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF) and x_neighbors
-  (MOJOLEARN_XN_FAST_ACHI2_DEVSCAN; MOJOLEARN_XN_FAST_SCHI2_MOJO_MT, default
+  (MOJOLEARN_XN_FAST_ACHI2_DEVSCAN, default now, old arm =
+  MOJOLEARN_XN_FAST_ACHI2_DEVSCAN_OFF; MOJOLEARN_XN_FAST_SCHI2_MOJO_MT, default
   now, old arm = MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF): the
   candidates run main's kernels on main's words, so every array (features,
   random_weights_, random_offset_, sigma_/scale_, transforms) must be
   BYTE-IDENTICAL and every refusal must raise the same type with the same
   text. Tolerance zero.
 - lane apple-fast-w3-kfeat (fixture kfeat-v2), same zero tolerance, fixed
-  before any result: MOJOLEARN_XN_FAST_ACHI2_DEVSCAN with its size gate
+  before any result (all three default now; old arms = their _OFF):
+  MOJOLEARN_XN_FAST_ACHI2_DEVSCAN with its size gate
   (2^22 entries; the gate's both sides and its boundary are dumped),
   MOJOLEARN_XN_FAST_SCHI2_LAZYW (transform BEFORE any random_weights_ read,
   so the pending-weights call is what is compared; then the read, a second

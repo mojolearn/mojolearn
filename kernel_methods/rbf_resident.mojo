@@ -73,7 +73,10 @@ comptime KM_FAST_RBF_RESIDENT = (
 )
 
 
-# KM_FAST_RBF_STAGED, opt-in (lane apple-fast-w3-kfeat, 2026-10-04): the
+# KM_FAST_RBF_STAGED, FAST+Apple DEFAULT (rollback -D MOJOLEARN_KM_FAST_RBF_STAGED_OFF;
+# needs KM_FAST_RBF_RESIDENT). M3, source ea6b2035e, one run per arm:
+# rbf-sampler istella 77.6 -> 57.1 ms; w2-w3kf-rbf-q PASS (byte-identical).
+# Lane apple-fast-w3-kfeat, 2026-10-04: the
 # projection (m x q; 100,000 x 256 = 102 MB at the board's istella shape)
 # comes down through core/staged_download.mojo (`download_f32_into`: 8 MiB
 # chunks DMA'd into two pooled pinned stages while one thread copies the
@@ -88,7 +91,7 @@ comptime KM_FAST_RBF_RESIDENT = (
 # first wait (which therefore also covers the GEMM and the epilogue).
 # The output stays the caller's ordinary (mapped) memory: handing out the
 # pinned stage itself would leave the caller reading write-combined memory.
-comptime KM_FAST_RBF_STAGED = KM_FAST_RBF_RESIDENT and is_defined["MOJOLEARN_KM_FAST_RBF_STAGED"]()
+comptime KM_FAST_RBF_STAGED = KM_FAST_RBF_RESIDENT and not is_defined["MOJOLEARN_KM_FAST_RBF_STAGED_OFF"]()
 comptime _RBF_STAGE_POOL = "MojoKmRbfDownloadStagesFast"
 
 

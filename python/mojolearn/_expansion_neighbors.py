@@ -185,9 +185,9 @@ _OLD_ITEMS = os.environ.get("MOJOLEARN_XN_OLD_ITEMS", "") == "1"
 
 def _kfeat_flags(est):
     """lane apple-fast-w2-kfeat: the chi2 samplers' FAST + Apple fit entries
-    compiled into the bound binary (x_neighbors/kfeat_dev.mojo: bit 1
-    MOJOLEARN_XN_FAST_ACHI2_DEVSCAN, bit 2 SCHI2_MOJO_MT, default, off under
-    MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF);
+    compiled into the bound binary (x_neighbors/kfeat_dev.mojo, all default,
+    each off under its _OFF define: bit 1 ACHI2_DEVSCAN, bit 2 SCHI2_MOJO_MT,
+    bit 4 SCHI2_LAZYW);
     0 on the FAST tier without them, on IDENTICAL and on the host column."""
     if not est._fast_tier():
         return 0
@@ -1146,7 +1146,7 @@ class AdditiveChi2Sampler(_XNeighbors):
         X = _f32(X)
         first = -2
         if X.size and _kfeat_flags(self) & 1:
-            # MOJOLEARN_XN_FAST_ACHI2_DEVSCAN: one pooled upload and device
+            # XN_FAST_ACHI2_DEVSCAN (default, rollback _OFF): one pooled upload and device
             # scan (x_neighbors_kfeat_first_negative), not a host X.min();
             # -2 = below the binding's size gate (XN_ACHI2_DEVSCAN_MIN,
             # x_neighbors/kfeat_dev.mojo): main's check below
@@ -1218,7 +1218,7 @@ class SkewedChi2Sampler(_XNeighbors):
                  and d > 0 and nc > 0 else 0)
         self.__dict__.pop("_schi2_z", None)
         if flags & 4:
-            # MOJOLEARN_XN_FAST_SCHI2_LAZYW (x_neighbors/kfeat_dev.mojo):
+            # XN_FAST_SCHI2_LAZYW (default, rollback _OFF; x_neighbors/kfeat_dev.mojo):
             # main's z = pi/2 * u and offsets drawn into our arrays, no device
             # work; the weights come from z in the first transform's one call
             # (or on the first read of random_weights_)
