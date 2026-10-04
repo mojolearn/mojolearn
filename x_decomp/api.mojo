@@ -558,13 +558,24 @@ comptime IDN_LLE_DEV_F0 = _API_IDN and not (is_defined["MOJOLEARN_IDN_LLE_DEV_F0
 # n x k init, randomized_svd's d x l test matrix, ALS's factors, MDS's
 # starts). -D MOJOLEARN_IDN_RAND_RESIDENT_OFF clears the bit.
 comptime IDN_RAND_RESIDENT = _API_IDN and not (is_defined["MOJOLEARN_IDN_RAND_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# lane fam2-decomp (2026-10-04): a device-resident matrix's transpose, column
+# selection and row range stay on the device (`x_decomp_dev_move`: TRANSPOSE,
+# the new TAKE_COLS, TAKE_ROWS; one thread a moved value) when the result
+# has at least 16,384 values, instead of downloading the operand (which then
+# lives on the host) and uploading the result at its next product: NMF's
+# W^T and H^T, FactorAnalysis, PLS, the svd tail's column selections, LLE.
+# Copies only: the same words. -D MOJOLEARN_IDN_RES_MOVES_OFF clears the bit.
+comptime IDN_RES_MOVES = _API_IDN and not (is_defined["MOJOLEARN_IDN_RES_MOVES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 
 
 def idn_flags_py() raises -> PythonObject:
     """Bit 0: LinearRegression takes `ols_tsqr_r_py`; bit 1: solve takes
     `lu_gesv_py`; bit 2: LLE builds F0 in cells (IDN_LLE_DEV_F0); bit 3: the
-    kit's `rand` stays on the device (IDN_RAND_RESIDENT)."""
+    kit's `rand` stays on the device (IDN_RAND_RESIDENT); bit 4: resident
+    transpose / take_cols / rows (IDN_RES_MOVES)."""
     var bits = 0
+    comptime if IDN_RES_MOVES:
+        bits |= 16
     comptime if IDN_RAND_RESIDENT:
         bits |= 8
     comptime if IDN_LLE_DEV_F0:
