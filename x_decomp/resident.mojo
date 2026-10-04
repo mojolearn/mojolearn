@@ -784,6 +784,48 @@ def dev_code_rows_py(g: PythonObject, q: PythonObject, w: PythonObject, p: Pytho
     return PythonObject(n)
 
 
+# ---- lane fam-decomp (2026-10-04): IDN_EIGH_RESIDENT (IDENTICAL default) ----
+#: The kit's `eigh` on a device matrix: `DevExec._eigh_on` (DevExec.eigh's
+#: launches) on a device copy of the operand, so a resident n x n operand
+#: (KernelPCA's centered Gram, ClassicalMDS / Isomap's double-centered
+#: distances, a covariance product) is not downloaded and uploaded again
+#: for its solve; w (n) and V (n x n) come down as before. The same launches
+#: on the same values: the same words.
+#: -D MOJOLEARN_IDN_EIGH_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves
+#: the entry out and Python keeps the host-address call.
+comptime IDN_EIGH_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_EIGH_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def dev_eigh_py(a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`x_decomp_eigh` of the device matrix a (n x n, left as it is: the
+    solve overwrites a device copy); w (n) and v (n x n) are host addresses.
+    p = [n, uplo]. Waits."""
+    var n = _n(p, 0)
+    var uplo = _n(p, 1)
+    if n < 1:
+        raise Error("x_decomp: the resident eigh needs n >= 1")
+    if uplo > 2:
+        raise Error("x_decomp: eigh uplo is 0, 1 (L) or 2 (U)")
+    var cells = n * n
+    if cells > 2147483647:
+        raise Error("x_decomp: eigh exceeds the Int32 index bound")
+    var ia = _id(a)
+    _ = _ptr(ia, cells)
+    var pw = F32Ptr(unsafe_from_address=Int(py=w))
+    var pv = F32Ptr(unsafe_from_address=Int(py=v))
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var ctx = xd_ctx()
+    var da = ctx.enqueue_create_buffer[DType.float32](cells)
+    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+    with GILReleased(Python()):
+        DevExec._eigh_on(ctx, da, pw, pv, n, uplo)
+    _ = da^
+    ctx.synchronize()
+    return PythonObject(n)
+
+
 # ---- lane/apple-fast-gap-cls2 (2026-10-03): GaussianRandomProjection.fit -----
 # Board (M3 FAST): gaussian-rp istella 53.7 ms vs scikit-learn 24.3, taxi 3.3
 # vs 1.6. The fit's matrix is a 10 x d device draw; the time is the host

@@ -647,6 +647,13 @@ class _Kit:
         device), 0 the whole matrix."""
         n = A.r
         w, v = _M.zeros(1, n), _M.zeros(n, n)
+        if n >= 1 and A.c == n and A._d is not None and A._d.b is self._raw() and self._opt_dev("x_decomp_dev_eigh"):
+            # lane fam-decomp: an operand already on the device is solved on
+            # a device copy (an IDENTICAL GPU build without
+            # -D MOJOLEARN_IDN_EIGH_RESIDENT_OFF); a host operand keeps the
+            # host-address call (one upload either way)
+            self.b.x_decomp_dev_eigh(A._d.id, w.addr, v.addr, [n, int(uplo)])
+            return w, v
         self.b.x_decomp_eigh(A.addr, w.addr, v.addr, [n, int(uplo)])
         return w, v
 

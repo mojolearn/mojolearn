@@ -2347,14 +2347,24 @@ struct DevExec(Exec):
         on the device; 0 the whole matrix."""
         var ctx = xd_ctx()
         var da = _up(ctx, a, n * n)
+        DevExec._eigh_on(ctx, da, w, v, n, uplo)
+        _ = da^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def _eigh_on(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int, uplo: Int
+    ) raises:
+        """`eigh` on the device matrix in `da` (n x n, overwritten): the
+        triangle mirrored when uplo != 0, then `_eigh_par_on`. `eigh` and the
+        resident entry (x_decomp/resident.mojo `dev_eigh_py`, lane
+        fam-decomp) both call it: one launch sequence."""
         if uplo != 0:
             ctx.enqueue_function[sym_from_triangle_kernel](
                 da.unsafe_ptr(), Int32(n), Int32(uplo), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
             )
         _ = DevExec._eigh_par_on(ctx, da, w, v, n)
-        _ = da^
-        ctx.synchronize()
-        _ = ctx^
 
     @staticmethod
     def _eigh_par_on(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int) raises -> Int:

@@ -35,6 +35,7 @@ from x_decomp.resident import IDN_SVD_RESIDENT, dev_svd_py
 from x_decomp.resident import IDN_LU_RESIDENT, dev_lu_py, dev_lu_aux_py
 from x_decomp.resident import IDN_QR_R_RESIDENT, dev_qr_r_py
 from x_decomp.resident import IDN_CODE_RESIDENT, dev_code_rows_py
+from x_decomp.resident import IDN_EIGH_RESIDENT, dev_eigh_py
 
 
 @export
@@ -143,6 +144,9 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         comptime if IDN_CODE_RESIDENT:
             # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_CODE_RESIDENT_OFF) (x_decomp/resident.mojo)
             m.def_function[dev_code_rows_py]("x_decomp_dev_code_rows")
+        comptime if IDN_EIGH_RESIDENT:
+            # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_EIGH_RESIDENT_OFF) (x_decomp/resident.mojo)
+            m.def_function[dev_eigh_py]("x_decomp_dev_eigh")
         comptime if DECOMP_FAST_DICT_DEV:
             # lane/apple-fast-gap-clus3: FAST + Apple default (off: -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF) (x_decomp/dict_fast.mojo)
             m.def_function[dev_dict_update_py]("x_decomp_dev_dict_update")
