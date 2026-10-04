@@ -70,6 +70,8 @@ from x_cluster.device_tree import (
     tree_scatter_kernel,
 )
 from x_cluster.device_post import (
+    IDN_OPTICS_FUSED_STEP,
+    optics_fused_kernel,
     PTPB,
     RTPB,
     SCAN_PER,
@@ -2623,19 +2625,33 @@ struct DeviceOps(ClusterOps):
         self._ph0()
         var done = self.zeros_i(n)
         var nb = (n + SCAN_PER - 1) // SCAN_PER
-        var part = self._keys(nb)
-        self.ctx.enqueue_function[optics_init_kernel](
-            self._fp(core), Int32(n), max_eps, self._fp(reach), self._ip(pred), self._ip(done),
-            grid_dim=pgrid(n), block_dim=PTPB,
-        )
-        for step in range(n):
-            self.ctx.enqueue_function[optics_part_kernel](
-                self._fp(reach), self._ip(done), Int32(n), part, grid_dim=nb, block_dim=RTPB,
+        comptime if IDN_OPTICS_FUSED_STEP:
+            # one launch a step; the partial keys are double-buffered
+            var part2 = self._keys(2 * nb)
+            self.ctx.enqueue_function[optics_init_kernel](
+                self._fp(core), Int32(n), max_eps, self._fp(reach), self._ip(pred), self._ip(done),
+                grid_dim=pgrid(n), block_dim=PTPB,
             )
-            self.ctx.enqueue_function[optics_step_kernel](
-                part, Int32(nb), self._fp(dm), self._fp(core), Int32(n), max_eps, self._ip(done), self._fp(reach),
-                self._ip(pred), self._ip(ordering), Int32(step), grid_dim=pgrid(n), block_dim=PTPB,
+            for fstep in range(-1, n):
+                self.ctx.enqueue_function[optics_fused_kernel](
+                    part2, Int32(nb), self._fp(dm), self._fp(core), Int32(n), max_eps, self._ip(done),
+                    self._fp(reach), self._ip(pred), self._ip(ordering), Int32(fstep),
+                    grid_dim=nb, block_dim=RTPB,
+                )
+        else:
+            var part = self._keys(nb)
+            self.ctx.enqueue_function[optics_init_kernel](
+                self._fp(core), Int32(n), max_eps, self._fp(reach), self._ip(pred), self._ip(done),
+                grid_dim=pgrid(n), block_dim=PTPB,
             )
+            for step in range(n):
+                self.ctx.enqueue_function[optics_part_kernel](
+                    self._fp(reach), self._ip(done), Int32(n), part, grid_dim=nb, block_dim=RTPB,
+                )
+                self.ctx.enqueue_function[optics_step_kernel](
+                    part, Int32(nb), self._fp(dm), self._fp(core), Int32(n), max_eps, self._ip(done), self._fp(reach),
+                    self._ip(pred), self._ip(ordering), Int32(step), grid_dim=pgrid(n), block_dim=PTPB,
+                )
         self._ph1("optics_order")
 
     def optics_dbscan(mut self, ordering: Int, reach: Int, core: Int, n: Int, eps: Float32, labels: Int) raises:
