@@ -88,3 +88,13 @@ compiled SHA, but rejects changes under .mojo, bindings, python or pixi.
 `tools/speed_gbdt_arm.py:_score_sklearn_like` computes these metrics from
 `model.predict_proba(d.X_test)` against `d.y_test`; they measure actual fit
 quality on held-out rows, not output shape or count.
+
+
+## Outcome: DROP-speed
+
+M3 tag `gap26-dwcurrent-taxi`, compiled source `2519f4867`: main A
+10279.095 ms, candidate B 10827.749 ms (+5.34%). Held-out AUC .632554 ->
+.632211 (-.000343), logloss .527920 -> .528002 (+.000082), noise not
+established. No default, main merge, board update or further scored rerun.
+Raw manager logs remain under `~/afc-def/gap26-dwcurrent-taxi/` and the M3
+queue's `gap26-dwcurrent-taxi` log. Source comment records the same outcome.

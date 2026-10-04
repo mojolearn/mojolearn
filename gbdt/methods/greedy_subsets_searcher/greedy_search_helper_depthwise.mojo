@@ -295,8 +295,11 @@ comptime DW2_SCAN_SMEM = (
 )
 
 #: Opt-in: fuse the quantized bridge with the shared histogram prefix scan
-#: after the root, in Depthwise only. Pending current-main M3 A/B; do not
-#: enable by default without speed plus fitted AUC/logloss approval.
+#: after the root, in Depthwise only. DROP-speed, M3 gap26-dwcurrent-taxi,
+#: source 2519f4867 (2026-10-04): 10279.095 -> 10827.749 ms (+5.34%).
+#: AUC .632554 -> .632211 (-.000343); logloss .527920 -> .528002
+#: (+.000082), quality noise unestablished. Retain opt-in only; no default,
+#: main merge or board claim. Raw evidence belongs to the original tag.
 comptime DW_BRIDGE_SCAN = (
     DW2_SCAN_SMEM
     and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
