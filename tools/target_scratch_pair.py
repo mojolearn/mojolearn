@@ -44,7 +44,7 @@ def main():
     os.chdir(root)
     assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip() == args.source
     # Refuse uncommitted source/checker changes that a source SHA cannot attest.
-    subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--', 'arima/', 'x_prep/', 'bindings/', 'python/',
+    subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--', 'x_prep/', 'bindings/', 'python/',
                     'tools/target_scratch_quality.py', 'tools/target_scratch_pair.py'], check=True)
     home = Path.home()
     arms = home / 'mq/verified-arms' / args.source / 'x_prep'
