@@ -75,11 +75,13 @@ def sgdoc_mom_part_kernel(x: FP, n: Int32, d: Int32, g: Int32, part: FP):
 
 
 def sgdoc_mom_flag_kernel(part: FP, n: Int32, d: Int32, g: Int32, flag: IP):
-    """One block: thread j folds column j's g partials ascending; adds one to
-    flag[0] when the column is not centered (or not finite)."""
+    """A thread a column (grid over d): thread j folds column j's g partials
+    ascending; adds one to flag[0] when the column is not centered (or not
+    finite)."""
     var dd = Int(d)
     var nf = Float32(Int(n))
-    for j in range(Int(thread_idx.x), dd, SGDOC_TAIL_TPB):
+    var j = Int(block_idx.x) * SGDOC_TAIL_TPB + Int(thread_idx.x)
+    if j < dd:
         var s = Float32(0)
         var s2 = Float32(0)
         for b in range(Int(g)):
@@ -106,7 +108,8 @@ def sgdoc_centered(ctx: DeviceContext, x: FP, n: Int, d: Int) raises -> Bool:
         x, Int32(n), Int32(d), Int32(g), dpart.unsafe_ptr(), grid_dim=g, block_dim=SGDOC_TAIL_TPB,
     )
     ctx.enqueue_function[sgdoc_mom_flag_kernel](
-        dpart.unsafe_ptr(), Int32(n), Int32(d), Int32(g), dflag.unsafe_ptr(), grid_dim=1, block_dim=SGDOC_TAIL_TPB,
+        dpart.unsafe_ptr(), Int32(n), Int32(d), Int32(g), dflag.unsafe_ptr(),
+        grid_dim=(d + SGDOC_TAIL_TPB - 1) // SGDOC_TAIL_TPB, block_dim=SGDOC_TAIL_TPB,
     )
     var h = List[Int32](length=1, fill=Int32(1))
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=dflag)
