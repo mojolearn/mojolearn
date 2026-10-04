@@ -73,3 +73,40 @@ not replay historical successful arms; this source has no successful scores.
 
 Local validation: Python syntax compilation and `git diff --check` only.
 Native compile, import, quality and timing are all owed to manager scheduling.
+
+## Verified r2 artifacts and tools-only harness
+
+Compiled A/B and same-source IDENTICAL base pin:
+`7eacaa2b2c1a6fa84fa3aa6e4b7d6c14b2d0d817`.
+The r2 native change uses fixed-width Int32 kernel dimensions, widened locally
+for indexing. The harness branch `lane/apple-fast-resample-gpu-harness-r1`
+permits only tools/docs descendant drift from the compiled source, records the
+separate harness SHA, and retains exact mode/defines/hash checks. No rebuild is
+needed for these helper-only changes. Quality harness checkpoint
+`b5c81d0a808254fe73e440b742997415a0841025` is independently ready.
+
+`resample_gpu_gather_spec.py quality TAG` prints the exact quality preflight
+spec for the current harness commit. Artifacts are r2 resample A/B plus r2 ibase.
+
+After quality PASS, `resample_gpu_gather_spec.py timing TAG taxi QUALITY_JSON`
+(or `istella`) prints a timing preflight spec, including the exact receipt hash
+and the existing board NPZ/metadata hashes. This metadata helper reads the
+files, so run it in a serial readiness window, outside scored work. A partial
+or failed quality job never admits timing. Root remains sole queue writer.
+
+The timing helper directly invokes unchanged `bench_board_algos.py worker`
+with lane=resample, arm=ours-fast, and the original rows-full reg-taxi/reg-istella
+files. The existing worker receives exactly `round 1`, `save`, `quit`: **one
+scored call per arm, no warmup**, no opponent, no build fallback, no retry.
+This is the actual board operation/data, not a representative synthetic timer.
+Its original `_build_fn` includes conversion and means over all returned X/y
+cells within `runner.fit`, so the first complete output read stays inside the
+clock. It saves means and the board digest outside that timed call and requires
+exact A/B agreement. Input header gates require X shapes1,000,000x11 (taxi) /
+1,000,000x220 (istella), float32 C-order, with the corresponding y and Xq.
+
+The measurement explicitly reports warmup_calls=0. Historical board races
+usually warm up once; do not silently equate that protocol to a cold single
+call or replace accepted board cells without manager review. Each successful
+arm is retained immediately; any later failure leaves it on disk and the tag
+cannot be reused. Future work must not replay a completed scored arm.
