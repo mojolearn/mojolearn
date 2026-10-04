@@ -796,10 +796,13 @@ def _ptx_runtime_configuration():
 
 #: The one command a refused IDENTICAL PTX configuration is pointed at.
 PTX_QUALIFY_COMMAND = "python -m mojolearn verify --qualify-gpu"
-#: Set by that command for its own verifier children, and by nothing else. A
-#: process that carries it loads the IDENTICAL PTX set so the comparison can
-#: run; its receipt keeps identical_qualified=False and says qualifying=True.
-#: It is not an admission and no result produced under it may be called one.
+#: Names the one-run token file the command writes for its own verifier
+#: processes (`ptx_admission.validate_qualification_token`). A process that
+#: carries a valid one loads the IDENTICAL PTX set so the comparison can run;
+#: its receipt keeps identical_qualified=False and says qualifying=True. It is
+#: not an admission and no result produced under it may be called one. The
+#: variable alone unlocks nothing: any value that is not the live token of a
+#: qualification run this process descends from is refused like no value.
 _PTX_QUALIFYING_ENV = "MOJOLEARN_PTX_QUALIFYING"
 #: Tiers that take the PTX fallback with no admission record. FAST promises
 #: nothing; DETERMINISTIC promises the same bits on the same box and build and
@@ -808,15 +811,29 @@ _PTX_QUALIFYING_ENV = "MOJOLEARN_PTX_QUALIFYING"
 _PTX_UNADMITTED_TIERS = ("fast", "deterministic")
 
 
-def _ptx_qualifying():
-    """True only inside the qualification command and its verifier children."""
-    if os.environ.get(_PTX_QUALIFYING_ENV, "").strip() == "1":
-        return True
+def _ptx_qualifying(key=None, detail=None):
+    """True only inside the qualification command and the verifier processes
+    it spawned. `key` is this process's own local-admission key; a rejected
+    token's reason goes to `detail`."""
+    from . import ptx_admission
     # `python -m mojolearn verify --qualify-gpu` imports this package before
     # its own main() can set anything, so the command line is the only signal.
-    argv = list(getattr(sys, "argv", None) or [])
-    launcher = os.path.basename(argv[0]) if argv else ""
-    return launcher in ("-m", "__main__.py") and argv[1:2] == ["verify"] and "--qualify-gpu" in argv[2:]
+    # That entry runs the qualification and nothing else (`_verify_dispatch`).
+    if ptx_admission.is_qualify_argv(getattr(sys, "argv", None)):
+        return True
+    token = os.environ.get(_PTX_QUALIFYING_ENV, "").strip()
+    if not token:
+        return False
+    try:
+        if key is None:
+            raise ValueError("this configuration could not be identified")
+        ptx_admission.validate_qualification_token(token, key)
+        return True
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        if detail is not None:
+            detail["qualifying"] = (f"{_PTX_QUALIFYING_ENV} is set but is not the live token of a "
+                                    f"qualification run ({exc}); it is ignored")
+        return False
 
 
 def _ptx_identical_admission(pkg, admission_raw, source, manifest_hash):
@@ -902,7 +919,17 @@ def _admitted_baseline_base(pkg, native_refusal):
     except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
         raise GpuPluginError(f"{native_refusal}\nPTX fallback refused: {exc}") from exc
     admission, configuration, detail = _ptx_identical_admission(pkg, admission_raw, source, manifest_hash)
-    qualifying = admission is None and mode == "identical" and _ptx_qualifying()
+    qualifying = False
+    if admission is None and mode == "identical":
+        key = None
+        if configuration is not None:
+            try:
+                from . import ptx_admission
+                key = ptx_admission.local_admission_key(source, manifest_hash, configuration,
+                                                        ptx_admission.reference_hashes(pkg))
+            except (OSError, ValueError, TypeError, KeyError):
+                key = None
+        qualifying = _ptx_qualifying(key, detail)
     if mode == "identical" and admission is None and not qualifying:
         raise GpuPluginError(
             f"{native_refusal}\nIDENTICAL PTX fallback refused: this device, driver and wheel are "

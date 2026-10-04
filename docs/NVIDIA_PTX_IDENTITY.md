@@ -139,6 +139,17 @@ While the command runs, its verifier processes load the IDENTICAL PTX set
 with `identical_qualified=False` and `qualifying=True` in the receipt. That
 state exists so the comparison can run, and it is not an admission.
 
+Only the command can put a process in that state. For each run it writes a
+private token file bound to its own process id and to this wheel, device,
+driver and reference, names the file in `MOJOLEARN_PTX_QUALIFYING` for its
+verifier processes, and removes it when the run ends. The loader accepts the
+variable only when it names such a file, the file matches this configuration,
+the process the token names is a live ancestor (read from `/proc`), and that
+ancestor's command line is `python -m mojolearn verify --qualify-gpu`. Any
+other value, including `1` exported by hand, is ignored: IDENTICAL refuses as
+it would with the variable unset, and the refusal says the variable was
+ignored.
+
 ## Evidence required before admission
 
 - Compare actual installed PTX execution with native NVIDIA execution on the

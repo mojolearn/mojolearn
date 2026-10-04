@@ -21,6 +21,7 @@ touches a device. The rules under test (docs/NVIDIA_PTX_IDENTITY.md):
   * a per-call identical request on an unqualified PTX process refuses;
   * no refusal ever selects the CPU set.
 """
+import contextlib
 import copy
 import hashlib
 import importlib
@@ -172,6 +173,32 @@ class Install(unittest.TestCase):
                     cpu.assert_not_called()
         self.assertIsNone(self.B._CPU_ONLY)
         return str(ctx.exception)
+
+    QUALIFY_COMMAND = ("/usr/bin/python3", "-m", "mojolearn", "verify", "--qualify-gpu")
+
+    def token_file(self, key=None, pid=424242, name="qualification.token"):
+        key = key or self.A.local_admission_key(SOURCE, self.manifest_hash, CONFIG, self.reference)
+        path = Path(self.tmp.name) / name
+        path.write_text(json.dumps(self.A.qualification_token(key, pid, "7" * 64)))
+        path.chmod(0o600)
+        return path
+
+    def process_tree(self, pid=424242, command=None, descends=True):
+        """Stand-ins for /proc: this process descends (two hops) from `pid`, whose command line is `command`."""
+        parents = {424240: 424241, 424241: pid if descends else 1, pid: 1}
+        command = list(self.QUALIFY_COMMAND if command is None else command)
+        stack = contextlib.ExitStack()
+        stack.enter_context(patch.object(os, "getppid", return_value=424240))
+        stack.enter_context(patch.object(self.A, "_process_parent", side_effect=lambda p: parents.get(p)))
+        stack.enter_context(patch.object(self.A, "_process_command",
+                                         side_effect=lambda p: command if p == pid else ["/bin/bash"]))
+        return stack
+
+    def qualification_process(self, **kwargs):
+        """This process as a verifier the qualification command spawned: live token, real ancestry."""
+        stack = self.process_tree()
+        stack.enter_context(patch.dict(os.environ, {"MOJOLEARN_PTX_QUALIFYING": str(self.token_file(**kwargs))}))
+        return stack
 
     def summaries(self):
         return [dict(profile=profile, verdict="VERIFIED",
@@ -447,7 +474,7 @@ class PerCallIdentical(Install):
 
 class Qualifying(Install):
     def test_the_qualification_run_loads_identical_ptx_without_claiming_it(self):
-        with patch.dict(os.environ, {"MOJOLEARN_PTX_QUALIFYING": "1"}):
+        with self.qualification_process():
             self.assertEqual(self.layout("identical"), ("vendor", str(self.root)))
         receipt = self.B.baseline_selection_receipt()
         self.assertIs(receipt["identical_qualified"], False)
@@ -456,20 +483,95 @@ class Qualifying(Install):
         self.assertIn("qualification run in progress", self.B.gpu_arch_how())
         self.assertIsNone(self.B._ptx_identical_refusal())
 
+    def test_an_exported_variable_in_an_ordinary_process_is_still_refused(self):
+        """The bypass: MOJOLEARN_PTX_QUALIFYING set by hand must unlock nothing."""
+        token = self.token_file()
+        for value in ("1", "true", "0", str(token), "relative.token", str(Path(self.tmp.name) / "absent.token")):
+            with self.subTest(value=value):
+                # No stand-in process tree: this is an ordinary process whose real
+                # ancestors are not a qualification run, even with a well-formed token.
+                with patch.dict(os.environ, {"MOJOLEARN_PTX_QUALIFYING": value}):
+                    text = self.refusal("identical")
+                self.assertIn("python -m mojolearn verify --qualify-gpu", text)
+                self.assertIn("MOJOLEARN_PTX_QUALIFYING is set but is not the live token", text)
+                self.assertIsNone(self.B.baseline_selection_receipt())
+
+    def test_a_token_is_bound_to_the_run_the_configuration_and_the_command(self):
+        A = self.A
+        key = A.local_admission_key(SOURCE, self.manifest_hash, CONFIG, self.reference)
+        other = A.local_admission_key(SOURCE, self.manifest_hash, OTHER, self.reference)
+        token = self.token_file()
+        with self.process_tree():
+            self.assertEqual(A.validate_qualification_token(str(token), key)["pid"], 424242)
+            with self.assertRaisesRegex(ValueError, "another wheel, device, driver or reference"):
+                A.validate_qualification_token(str(token), other)
+            with self.assertRaisesRegex(ValueError, "absolute"):
+                A.validate_qualification_token("qualification.token", key)
+            link = Path(self.tmp.name) / "link.token"
+            link.symlink_to(token)
+            with self.assertRaisesRegex(ValueError, "regular file"):
+                A.validate_qualification_token(str(link), key)
+            token.chmod(0o666)
+            with self.assertRaisesRegex(ValueError, "private file"):
+                A.validate_qualification_token(str(token), key)
+            token.chmod(0o600)
+            for mutate in (lambda d: d.update(schema="other"), lambda d: d.update(pid=1), lambda d: d.update(pid="424242"),
+                           lambda d: d.update(nonce="short"), lambda d: d.update(extra=1), lambda d: d.pop("nonce")):
+                doc = json.loads(token.read_text())
+                mutate(doc)
+                bad = Path(self.tmp.name) / "bad.token"
+                bad.write_text(json.dumps(doc))
+                bad.chmod(0o600)
+                with self.subTest(doc=doc), self.assertRaisesRegex(ValueError, "malformed"):
+                    A.validate_qualification_token(str(bad), key)
+        with self.process_tree(descends=False):
+            with self.assertRaisesRegex(ValueError, "not an ancestor"):
+                A.validate_qualification_token(str(token), key)
+        for command in (["/usr/bin/python3", "-m", "mojolearn", "verify", "--all"],
+                        ["/usr/bin/python3", "train.py", "-m", "mojolearn", "verify", "--qualify-gpu"],
+                        ["/usr/bin/python3", "-m", "other", "verify", "--qualify-gpu"], ["/bin/bash"], None):
+            with self.subTest(command=command), self.process_tree(command=command or []):
+                with self.assertRaisesRegex(ValueError, "not the qualification command"):
+                    A.validate_qualification_token(str(token), key)
+        # with no /proc stand-in at all (this machine), nothing is an ancestor
+        with self.assertRaisesRegex(ValueError, "not an ancestor|not the qualification command"):
+            A.validate_qualification_token(str(token), key)
+        # and the loader agrees for each: a token for another device, or a dead run, refuses IDENTICAL
+        with self.process_tree(), patch.dict(os.environ, {"MOJOLEARN_PTX_QUALIFYING":
+                                                          str(self.token_file(key=other, name="other.token"))}):
+            self.assertIn("is not the live token", self.refusal("identical"))
+        with self.process_tree(descends=False), patch.dict(os.environ, {"MOJOLEARN_PTX_QUALIFYING": str(token)}):
+            self.assertIn("not an ancestor", self.refusal("identical"))
+
+    def test_command_lines_recognized(self):
+        A = self.A
+        for command, expected in ((["python", "-m", "mojolearn", "verify", "--qualify-gpu"], True),
+                                  (["python", "-u", "-m", "mojolearn", "verify", "--json", "--qualify-gpu"], True),
+                                  (["python", "/site/mojolearn/__main__.py", "verify", "--qualify-gpu"], True),
+                                  (["python", "-m", "mojolearn", "verify", "--all"], False),
+                                  (["python", "-m", "mojolearn._verify_worker", "verify", "--qualify-gpu"], False),
+                                  (["python", "train.py", "-m", "mojolearn", "verify", "--qualify-gpu"], False),
+                                  (["python", "-c", "import mojolearn", "verify", "--qualify-gpu"], False),
+                                  (["python"], False), ([], False), (None, False)):
+            with self.subTest(command=command):
+                self.assertIs(A.is_qualify_command_line(command), expected)
+
     def test_the_command_line_is_recognized_and_nothing_else_is(self):
         for argv, expected in ((["-m", "verify", "--qualify-gpu"], True),
                                (["/site/mojolearn/__main__.py", "verify", "--json", "--qualify-gpu"], True),
                                (["-m", "verify", "--all"], False),
                                (["train.py", "verify", "--qualify-gpu"], False),
+                               (["train.py", "-m", "mojolearn", "verify", "--qualify-gpu"], False),
                                (["-m", "doctor", "--qualify-gpu"], False)):
             with self.subTest(argv=argv):
                 with patch.object(sys, "argv", argv):
                     self.assertIs(self.B._ptx_qualifying(), expected)
-        with patch.dict(os.environ, {"MOJOLEARN_PTX_QUALIFYING": "0"}):
-            self.assertIs(self.B._ptx_qualifying(), False)
+        for value in ("0", "1"):
+            with patch.dict(os.environ, {"MOJOLEARN_PTX_QUALIFYING": value}):
+                self.assertIs(self.B._ptx_qualifying(), False)
 
     def test_qualifying_never_relaxes_fast_or_an_existing_admission(self):
-        with patch.dict(os.environ, {"MOJOLEARN_PTX_QUALIFYING": "1"}):
+        with self.qualification_process():
             self.layout("fast")
             self.assertIs(self.B.baseline_selection_receipt()["qualifying"], False)
             self.write_local()
@@ -566,14 +668,22 @@ class QualifyCommand(Install):
         self.reset()
         seen = []
 
-        def run(profile, report_path, log_path, args):
+        def run(profile, report_path, log_path, args, token=None):
             seen.append(profile)
+            # the token handed to each verifier is this run's: private, bound to this
+            # process and configuration, and present only while the run lasts
+            doc = json.loads(Path(token).read_text())
+            self.assertEqual((doc["schema"], doc["pid"], doc["key"]), (self.A.QUALIFY_TOKEN_SCHEMA, os.getpid(),
+                             self.A.local_admission_key(SOURCE, self.manifest_hash, CONFIG, self.reference)))
+            self.assertEqual(os.stat(token).st_mode & 0o777, 0o600)
+            self.tokens.append((token, doc["nonce"]))
             report = reports(profile)
             if report is not None:
                 Path(report_path).write_text(json.dumps(report))
             Path(log_path).write_text("synthetic verifier log\n")
             return 0 if report is None else report.get("exit", 0)
 
+        self.tokens = []
         args = types.SimpleNamespace(json=True, cell_timeout=120.0, cpu_threads=1)
         with patch.dict(os.environ, {"MOJOLEARN_NUMERIC_MODE": mode}), patch.object(sys, "argv", list(argv)):
             self.B._layout()
@@ -581,6 +691,7 @@ class QualifyCommand(Install):
             with patch.object(sys, "stdout", out), patch.object(sys, "stderr", tempfile.TemporaryFile("w+")):
                 code = Q.cmd_qualify_gpu(args, backend=self.B, run=run)
             out.seek(0)
+            self.assertFalse([t for t, _ in self.tokens if os.path.exists(t)], "a qualification token outlived its run")
             return code, json.loads(out.read()), seen
 
     def admissions_written(self):
@@ -659,13 +770,28 @@ class QualifyCommand(Install):
         log = Path(self.tmp.name) / "child.log"
         for profile, neural in (("routine", False), ("neural-training", True)):
             with patch.object(Q.subprocess, "run", return_value=types.SimpleNamespace(returncode=0)) as run:
-                self.assertEqual(Q._run_verifier(profile, "report.json", str(log), args), 0)
+                with patch.dict(os.environ, {"MOJOLEARN_PTX_QUALIFYING": "1"}):
+                    self.assertEqual(Q._run_verifier(profile, "report.json", str(log), args, token="/state/run.token"), 0)
             command, env = run.call_args.args[0], run.call_args.kwargs["env"]
             self.assertEqual(command[1:5], ["-m", "mojolearn", "verify", "--all"])
             self.assertEqual("--neural-training" in command, neural)
             self.assertNotIn("--quick", command)
             self.assertNotIn("--lanes", command)
-            self.assertEqual((env["MOJOLEARN_NUMERIC_MODE"], env["MOJOLEARN_PTX_QUALIFYING"]), ("identical", "1"))
+            self.assertEqual((env["MOJOLEARN_NUMERIC_MODE"], env["MOJOLEARN_PTX_QUALIFYING"]),
+                             ("identical", "/state/run.token"))
+        # with no token the child inherits nothing a caller exported
+        with patch.object(Q.subprocess, "run", return_value=types.SimpleNamespace(returncode=0)) as run:
+            with patch.dict(os.environ, {"MOJOLEARN_PTX_QUALIFYING": "1"}):
+                Q._run_verifier("routine", "report.json", str(log), args)
+        self.assertNotIn("MOJOLEARN_PTX_QUALIFYING", run.call_args.kwargs["env"])
+
+    def test_each_run_writes_a_fresh_token_and_removes_it(self):
+        code, _, seen = self.command(lambda profile: clean_report(self, profile) if profile == "routine" else None)
+        first = list(self.tokens)
+        self.assertEqual((code, len(first)), (4, 2))
+        self.assertEqual(len({nonce for _, nonce in first}), 1)
+        self.command(lambda profile: None)
+        self.assertNotEqual(self.tokens[0][1], first[0][1])
 
     def test_the_cli_dispatches_the_flag(self):
         main = importlib.import_module(ALIAS + ".__main__")

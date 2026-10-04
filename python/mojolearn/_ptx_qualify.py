@@ -40,7 +40,19 @@ def _emit(text, stream=None):
     print(text, file=stream or sys.stdout, flush=True)
 
 
-def _run_verifier(profile, report_path, log_path, args):
+def _write_token(path, key):
+    """The one-run token this command's verifier processes present to the
+    loader. Private to this user, bound to this process and configuration."""
+    import secrets
+    doc = ptx_admission.qualification_token(key, os.getpid(), secrets.token_hex(32))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+        json.dump(doc, stream, sort_keys=True)
+    return path
+
+
+def _run_verifier(profile, report_path, log_path, args, token=None):
     """One full-depth verifier scope in a fresh process under the PTX payload."""
     command = [sys.executable, "-m", "mojolearn", "verify", "--all"]
     if profile == "neural-training":
@@ -51,7 +63,9 @@ def _run_verifier(profile, report_path, log_path, args):
     package_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     env["PYTHONPATH"] = package_parent + os.pathsep + env.get("PYTHONPATH", "")
     env["MOJOLEARN_NUMERIC_MODE"] = "identical"
-    env["MOJOLEARN_PTX_QUALIFYING"] = "1"
+    env.pop(ptx_admission.QUALIFY_TOKEN_ENV, None)
+    if token is not None:
+        env[ptx_admission.QUALIFY_TOKEN_ENV] = os.path.abspath(token)
     with open(log_path, "wb") as log:
         return subprocess.run(command, env=env, stdout=log, stderr=subprocess.STDOUT).returncode
 
@@ -72,6 +86,29 @@ def _finish(args, code, headline, detail, **extra):
     else:
         _emit(f"RESULT: {headline}: {detail}. exit {code}")
     return code
+
+
+def _judge_scope(profile, evidence, run, args, token, log, reference, table_fixtures, ptx_identical):
+    """Run one verifier scope and judge its report."""
+    report_path = os.path.join(evidence, f"{profile}.json")
+    log_path = os.path.join(evidence, f"{profile}.log")
+    log(f"# running the {profile} scope (log: {log_path})")
+    code = run(profile, report_path, log_path, args, token=token)
+    try:
+        with open(report_path, "rb") as stream:
+            raw = stream.read()
+        report, digest = json.loads(raw), hashlib.sha256(raw).hexdigest()
+    except (OSError, ValueError):
+        report, digest = None, None
+    result = ptx_admission.judge_report(report, profile=profile, reference=reference,
+        table_fixtures=table_fixtures, ptx_identical_sha256=ptx_identical, report_sha256=digest)
+    if code != 0 and not (result["differing"] or result["missing"] or result["incomplete"]):
+        result["incomplete"].append(f"{profile}: the verifier exited {code}")
+    summary = result["summary"] or {}
+    log(f"#   {profile}: verifier exit {code}, {summary.get('lanes_verified', 0)} of "
+        f"{summary.get('lanes_in_scope', 0)} lanes verified, {len(result['differing'])} differing, "
+        f"{len(result['missing'])} without a reference, {len(result['incomplete'])} incomplete")
+    return result
 
 
 def cmd_qualify_gpu(args, backend=None, run=None):
@@ -120,26 +157,17 @@ def cmd_qualify_gpu(args, backend=None, run=None):
         f"{configuration['driver_version']}) for IDENTICAL mode through the PTX fallback")
     log(f"# every lane, fixture and part against the shipped reference table; evidence in {evidence}")
     judged = []
-    for profile in ptx_admission.QUALIFY_PROFILES:  # glue: launch the two verifier scopes in turn
-        report_path = os.path.join(evidence, f"{profile}.json")
-        log_path = os.path.join(evidence, f"{profile}.log")
-        log(f"# running the {profile} scope (log: {log_path})")
-        code = run(profile, report_path, log_path, args)
+    token = _write_token(os.path.join(evidence, "qualification.token"), key)
+    try:
+        for profile in ptx_admission.QUALIFY_PROFILES:  # glue: launch the two verifier scopes in turn
+            judged.append(_judge_scope(profile, evidence, run, args, token, log, reference, table_fixtures,
+                                       ptx_identical))
+    finally:
+        # One run, one token: nothing later can present it.
         try:
-            with open(report_path, "rb") as stream:
-                raw = stream.read()
-            report, digest = json.loads(raw), hashlib.sha256(raw).hexdigest()
-        except (OSError, ValueError):
-            report, digest = None, None
-        result = ptx_admission.judge_report(report, profile=profile, reference=reference,
-            table_fixtures=table_fixtures, ptx_identical_sha256=ptx_identical, report_sha256=digest)
-        if code != 0 and not (result["differing"] or result["missing"] or result["incomplete"]):
-            result["incomplete"].append(f"{profile}: the verifier exited {code}")
-        judged.append(result)
-        summary = result["summary"] or {}
-        log(f"#   {profile}: verifier exit {code}, {summary.get('lanes_verified', 0)} of "
-            f"{summary.get('lanes_in_scope', 0)} lanes verified, {len(result['differing'])} differing, "
-            f"{len(result['missing'])} without a reference, {len(result['incomplete'])} incomplete")
+            os.unlink(token)
+        except OSError:
+            pass
     differing = judged[0]["differing"] + judged[1]["differing"]
     missing = judged[0]["missing"] + judged[1]["missing"]
     incomplete = judged[0]["incomplete"] + judged[1]["incomplete"]
