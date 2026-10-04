@@ -16,7 +16,7 @@ from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div
 from core.forest_inference import (
     forest_add, reached_leaf, FOREST_PACKED_NODES, device_ptr_all_finite, device_all_finite,
-    launch_forest_argmax,
+    launch_forest_argmax, forest_pack_device, forest_validate_device,
 )
 
 
@@ -92,7 +92,7 @@ struct ForestGroveOwner(Movable):
     def __init__(out self, rank: Int, offsets: List[Int32], columns: List[Int32],
         thresholds: List[Float32], left: List[Int32], leaves: List[Float32],
         starts: List[Int32], counts: List[Int32], outputs: Int,
-        owned: List[Int]) raises:
+        owned: List[Int], features: Int) raises:
         self.ctx = Optional[DeviceContext]()
         self.offsets = Optional[DeviceBuffer[DType.int32]]()
         self.columns = Optional[DeviceBuffer[DType.int32]]()
@@ -104,19 +104,8 @@ struct ForestGroveOwner(Movable):
         self.groves = owned.copy()
         self.trees = len(offsets) - 1
         self.nodes = len(columns)
-        var packed_nodes = List[Int32]()
-        var compact_leaves = List[Float32]()
-        comptime if FOREST_PACKED_NODES:
-            for node in range(len(columns)):
-                var payload = bitcast[DType.int32](thresholds[node])
-                if left[node] == -1:
-                    payload = Int32(len(compact_leaves) // outputs)
-                    for c in range(outputs):
-                        compact_leaves.append(leaves[node * outputs + c])
-                packed_nodes.append(payload)
-                packed_nodes.append(left[node])
-                packed_nodes.append(columns[node])
-                packed_nodes.append(0)
+        # the owner's trees are validated and packed on its device
+        # (`forest_pack_device`, lane cpu3-core: no host loop over nodes)
         self.ctx = DeviceContext(device_id=rank)
         try:
             self.offsets = self.ctx.value().enqueue_create_buffer[DType.int32](len(offsets))
@@ -126,12 +115,12 @@ struct ForestGroveOwner(Movable):
             self.ctx.value().enqueue_copy(dst_buf=self.starts.value(), src_ptr=starts.unsafe_ptr())
             self.ctx.value().enqueue_copy(dst_buf=self.counts.value(), src_ptr=counts.unsafe_ptr())
             comptime if FOREST_PACKED_NODES:
-                self.columns = self.ctx.value().enqueue_create_buffer[DType.int32](len(packed_nodes))
+                forest_pack_device(
+                    self.ctx.value(), offsets, columns, thresholds, left, leaves,
+                    features, outputs, self.columns, self.leaves,
+                )
                 self.thresholds = self.ctx.value().enqueue_create_buffer[DType.float32](1)
                 self.left = self.ctx.value().enqueue_create_buffer[DType.int32](1)
-                self.leaves = self.ctx.value().enqueue_create_buffer[DType.float32](len(compact_leaves))
-                self.ctx.value().enqueue_copy(dst_buf=self.columns.value(), src_ptr=packed_nodes.unsafe_ptr())
-                self.ctx.value().enqueue_copy(dst_buf=self.leaves.value(), src_ptr=compact_leaves.unsafe_ptr())
             else:
                 self.columns = self.ctx.value().enqueue_create_buffer[DType.int32](len(columns))
                 self.thresholds = self.ctx.value().enqueue_create_buffer[DType.float32](len(thresholds))
@@ -141,6 +130,11 @@ struct ForestGroveOwner(Movable):
                 self.ctx.value().enqueue_copy(dst_buf=self.thresholds.value(), src_ptr=thresholds.unsafe_ptr())
                 self.ctx.value().enqueue_copy(dst_buf=self.left.value(), src_ptr=left.unsafe_ptr())
                 self.ctx.value().enqueue_copy(dst_buf=self.leaves.value(), src_ptr=leaves.unsafe_ptr())
+                forest_validate_device(
+                    self.ctx.value(), self.offsets.value(), self.columns.value(),
+                    self.thresholds.value(), self.left.value(), self.leaves.value(),
+                    self.trees, self.nodes, features, outputs,
+                )
             self.ctx.value().synchronize()
             _ = len(offsets)
             _ = len(starts)
@@ -158,11 +152,7 @@ struct ForestGroveOwner(Movable):
             _ = len(thresholds)
             _ = len(left)
             _ = len(leaves)
-            _ = packed_nodes^
-            _ = compact_leaves^
             raise e
-        _ = packed_nodes^
-        _ = compact_leaves^
 
     def __deinit__(deinit self):
         _ = self.counts^
@@ -193,7 +183,8 @@ struct ForestGroveOwner(Movable):
         ref ctx = self.ctx.value()
         var dx = ctx.enqueue_create_buffer[DType.float32](rows * features)
         var dt = ctx.enqueue_create_buffer[DType.float32](items * 32)
-        var host = ctx.enqueue_create_host_buffer[DType.float32](items * 32)
+        # the grove totals land straight in the result list (no host copy loop)
+        var result = List[Float32](length=items * 32, fill=Float32(0.0))
         try:
             ctx.enqueue_copy(dst_buf=dx, src_ptr=x.unsafe_offset(first_row * features))
             if scan_input and not device_ptr_all_finite(
@@ -206,20 +197,15 @@ struct ForestGroveOwner(Movable):
                 self.counts.value().unsafe_ptr(), dx.unsafe_ptr(), dt.unsafe_ptr(),
                 Int32(items), Int32(relative_item), Int32(features), Int32(outputs),
                 grid_dim=(items + 3) // 4, block_dim=128)
-            ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=dt)
+            ctx.enqueue_copy(dst_ptr=result.unsafe_ptr(), src_buf=dt)
             ctx.synchronize()
         except e:
             ctx.synchronize()
             _ = dx^
             _ = dt^
-            _ = host^
             raise e
-        var result = List[Float32](capacity=items * 32)
-        for i in range(items * 32):
-            result.append(host.unsafe_ptr()[i])
         _ = dx^
         _ = dt^
-        _ = host^
         return result^
 
 
@@ -294,7 +280,7 @@ struct PooledForest(Movable):
                             vals.append(leaves[leaf_base + c])
                     loff.append(Int32(len(col)))
             self.owners.append(ForestGroveOwner(rank, loff, col, thr, child,
-                vals, starts, counts, outputs, groves))
+                vals, starts, counts, outputs, groves, features))
 
     def collect[RF_INPUT: Bool](mut self, x: MutPointer[Float32, MutAnyOrigin],
         rows: Int,

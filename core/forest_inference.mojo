@@ -842,6 +842,37 @@ def forest_validate_device(
         raise Error("forest inference tree contains unreachable nodes")
 
 
+def forest_validate_lists_device(
+    ctx: DeviceContext, offsets: List[Int32], columns: List[Int32],
+    thresholds: List[Float32], left: List[Int32], leaves: List[Float32],
+    features: Int, outputs: Int,
+) raises:
+    """Upload a flat forest to `ctx` and run `forest_validate_device` on it
+    (for routes that partition the model before their own uploads)."""
+    var nodes = len(columns)
+    var doff = ctx.enqueue_create_buffer[DType.int32](len(offsets))
+    var dcol = ctx.enqueue_create_buffer[DType.int32](nodes)
+    var dthr = ctx.enqueue_create_buffer[DType.float32](nodes)
+    var dleft = ctx.enqueue_create_buffer[DType.int32](nodes)
+    var dleaf = ctx.enqueue_create_buffer[DType.float32](nodes * outputs)
+    ctx.enqueue_copy(dst_buf=doff, src_ptr=offsets.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dcol, src_ptr=columns.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dthr, src_ptr=thresholds.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dleft, src_ptr=left.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dleaf, src_ptr=leaves.unsafe_ptr())
+    forest_validate_device(ctx, doff, dcol, dthr, dleft, dleaf, len(offsets) - 1, nodes, features, outputs)
+    _ = len(offsets)
+    _ = len(columns)
+    _ = len(thresholds)
+    _ = len(left)
+    _ = len(leaves)
+    _ = doff^
+    _ = dcol^
+    _ = dthr^
+    _ = dleft^
+    _ = dleaf^
+
+
 def forest_leaf_flag_kernel(
     left: MutPointer[Int32, MutAnyOrigin], nodes_in: Int32, flag: MutPointer[Int32, MutAnyOrigin],
 ):
