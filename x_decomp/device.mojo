@@ -2339,12 +2339,20 @@ struct DevExec(Exec):
             executed += 1
             comptime if EIGH_FAST_TANGENT:
                 for rd in range(m - 1):
-                    var src = da.unsafe_ptr() if rd % 2 == 0 else dtangent.unsafe_ptr()
-                    var dst = dtangent.unsafe_ptr() if rd % 2 == 0 else da.unsafe_ptr()
-                    ctx.enqueue_function[eigh_tangent_round_kernel](
-                        src, dst, dv.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
-                        grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
-                    )
+                    # Separate calls keep the two buffer origins disjoint to
+                    # Mojo's borrow checker; conditional pointers union them.
+                    if rd % 2 == 0:
+                        ctx.enqueue_function[eigh_tangent_round_kernel](
+                            da.unsafe_ptr(), dtangent.unsafe_ptr(), dv.unsafe_ptr(),
+                            Int32(n), Int32(m), Int32(rd),
+                            grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
+                        )
+                    else:
+                        ctx.enqueue_function[eigh_tangent_round_kernel](
+                            dtangent.unsafe_ptr(), da.unsafe_ptr(), dv.unsafe_ptr(),
+                            Int32(n), Int32(m), Int32(rd),
+                            grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
+                        )
                     if rd % PJ_SYNC_ROUNDS == PJ_SYNC_ROUNDS - 1:
                         ctx.synchronize()
                 # m is even: m-1 rounds leave the latest matrix in scratch.
