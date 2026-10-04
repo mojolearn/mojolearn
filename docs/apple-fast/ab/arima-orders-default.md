@@ -1,10 +1,10 @@
-# AutoARIMA order-batching default promotion prepared (2026-10-04)
+# AutoARIMA order-batching default promotion (2026-10-04)
 
 Promotion branch `lane/apple-fast-arima-orders-default` starts from validated
 candidate `7ba385b30`, then merges current main `d1871643b`. Changes on main
 since the measured candidate affect other algorithms/docs/tooling; no
-intervening AutoARIMA kernel change. This is a reviewable promotion, not a
-claim that the default has already merged or builds passed.
+intervening AutoARIMA kernel change. The manager compiled default/OFF successfully (both rc0), then merged
+the default on main `dc2285bc0`.
 
 | M3 tag | A: fused-tail main ms | B: order batching + fused tail ms | Change | Digest (both) | Forecast RMSE (both) |
 |---|---:|---:|---:|---|---:|
@@ -77,3 +77,14 @@ then merge under the user's existing authorization (no further permission reques
 verdict HOLD-measurement regardless of passing quality. No main merge,
 SSH, builds, queue actions or tests were performed by this agent. Preserve
 the raw measurements and taxi opponent hold in subsequent accounting.
+
+## Board accounting after merge
+
+Two successful arm-B cells folded through canonical r9 -> af_board_merge ->
+ab-fix pipeline; converted records and board note are in
+`arima-orders-evidence/`. Only AutoARIMA synthetic/taxi-hourly rows change;
+all preexisting quality flags, including taxi's opponent hold, remain.
+Complete page preview: 336/375 eligible faster, unchanged; both timings
+still exceed stored opponents. Rounded geomean remains0.247. Preview files:
+`~/mojolearn-evidence/apple-fast/orders-board/{data.json,m3-fast-vs-opponents.html}`.
+Canonical r9 evidence updated; hosted publication not performed.
