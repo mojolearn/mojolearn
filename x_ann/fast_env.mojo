@@ -66,7 +66,14 @@ comptime CAGRA_FAST_IVFG_EXACTD = CAGRA_FAST_IVFG and not is_defined["MOJOLEARN_
 #: graph is the exact graph restricted to the probe pool. Same refusals
 #: (n < 65,536 or a short probe pool -> exact graph). Rows wider than 64
 #: features are unchanged (IVFG there already).
-comptime CAGRA_FAST_IVFG_LOWD = CAGRA_FAST_IVFG and is_defined["MOJOLEARN_CAGRA_FAST_IVFG_LOWD"]()
+#: `-D MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4` (the quality fallback arm, one
+#: define for the verified-arm tools) = IVFG_LOWD + SEEDS4: if the
+#: approximate taxi graph loses recall, four times the search seeds (taxi
+#: .9979 -> .9997 on main's exact graph) may recover it; SEEDS4 moves the
+#: search (infer_ms) only, not the build the board's median_ms times.
+comptime CAGRA_FAST_IVFG_LOWD = CAGRA_FAST_IVFG and (
+    is_defined["MOJOLEARN_CAGRA_FAST_IVFG_LOWD"]() or is_defined["MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4"]()
+)
 
 #: lane/apple-fast-gap-cagra (2026-10-03), the CAGRA SEARCH (taxi recall .48
 #: vs faiss .93): taxi's 11 features are integer codes (zone ids 1..265,
@@ -81,8 +88,7 @@ comptime CAGRA_FAST_IVFG_LOWD = CAGRA_FAST_IVFG and is_defined["MOJOLEARN_CAGRA_
 #: (noise). `-D MOJOLEARN_CAGRA_FAST_SEEDS_OFF` / `_ITERS_OFF` turn each off.
 #: SEEDS4 (OPT-IN, `-D MOJOLEARN_CAGRA_FAST_SEEDS4`): four times the seed
 #: work (taxi .9997, istella untested; follow-up A/B).
-comptime CAGRA_FAST_SEEDS = ANN_FAST_APPLE and (
-    not is_defined["MOJOLEARN_CAGRA_FAST_SEEDS_OFF"]() or is_defined["MOJOLEARN_CAGRA_FAST_SEEDS4"]()
-)
-comptime CAGRA_FAST_SEED_WORK = 4 * 262144 if is_defined["MOJOLEARN_CAGRA_FAST_SEEDS4"]() else 262144
+comptime _CAGRA_SEEDS4 = is_defined["MOJOLEARN_CAGRA_FAST_SEEDS4"]() or is_defined["MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4"]()
+comptime CAGRA_FAST_SEEDS = ANN_FAST_APPLE and (not is_defined["MOJOLEARN_CAGRA_FAST_SEEDS_OFF"]() or _CAGRA_SEEDS4)
+comptime CAGRA_FAST_SEED_WORK = 4 * 262144 if _CAGRA_SEEDS4 else 262144
 comptime CAGRA_FAST_ITERS = ANN_FAST_APPLE and not is_defined["MOJOLEARN_CAGRA_FAST_ITERS_OFF"]()
