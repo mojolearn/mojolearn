@@ -40,6 +40,19 @@ from scipy.stats import chi2
 from mcd_compat_quality import load_inputs
 
 
+def json_ready(value):
+    """Normalize NumPy scalars before writing or printing evidence."""
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return json_ready(value.tolist())
+    if isinstance(value, dict):
+        return {key: json_ready(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_ready(item) for item in value]
+    return value
+
+
 def sha(path):
     h = hashlib.sha256()
     with Path(path).open('rb') as stream:
@@ -92,7 +105,7 @@ def analyze(a, b, x, q, lane):
     factor = .975 / chi2.cdf(chi2.ppf(.975, d), d + 2)
     covariance = centered.T @ centered / len(selected) * factor
     eigenvalues, vectors = np.linalg.eigh(covariance)
-    cutoff = float(np.max(np.abs(eigenvalues))) * d * np.finfo(np.float32).eps
+    cutoff = float(float(np.max(np.abs(eigenvalues))) * d * float(np.finfo(np.float32).eps))
     keep = np.abs(eigenvalues) > cutoff
     precision = (vectors[:, keep] / eigenvalues[keep]) @ vectors[:, keep].T
     train_dist = distances(x.astype(np.float64), location, precision)
@@ -135,6 +148,8 @@ def main():
     p.add_argument('--source', required=True)
     p.add_argument('--tag', required=True)
     p.add_argument('--out', type=Path, required=True)
+    p.add_argument('--extra-baseline', type=Path,
+                   help='another saved A from same fixture/source; diagnostic only, never relaxes gate')
     args = p.parse_args()
     if not re.fullmatch('[0-9a-f]{40}', args.source):
         p.error('--source must be full measured source SHA')
@@ -169,12 +184,41 @@ def main():
         script_sha256=sha(__file__), script_commit=subprocess.check_output(
             ['git', 'rev-parse', 'HEAD'], cwd=Path(__file__).resolve().parents[1], text=True).strip(),
         numpy_version=np.__version__, analysis_only=True)
+    if args.extra_baseline:
+        with np.load(args.extra_baseline, allow_pickle=False) as capture:
+            extra = dict(capture)
+        for key in ('dataset', 'lane', 'shape', 'data_sha'):
+            if not np.array_equal(a[key], extra[key]):
+                raise ValueError('extra baseline fixture mismatch: ' + key)
+        extra_source = str(extra.get('compiled_source', 'legacy-unrecorded'))
+        if extra_source != source_records['A']:
+            raise ValueError('extra baseline recorded source differs from A')
+        extra_arm = str(extra.get('arm', 'unrecorded'))
+        if extra_arm not in ('A', 'unrecorded'):
+            raise ValueError('extra baseline must be saved arm A')
+        aa = analyze(a, extra, x, q, lane)
+        eb = analyze(extra, b, x, q, lane)
+        result['extra_baseline'] = dict(
+            path=str(args.extra_baseline.resolve()), sha256=sha(args.extra_baseline),
+            recorded_source=extra_source,
+            source_verified_in_capture=extra_source == args.source,
+            A_vs_extra_A=aa, extra_A_vs_B=eb,
+            interpretation='two observed A captures; no variance estimate or threshold relaxation; primary A/B gate unchanged')
+    result = json_ready(result)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open('x') as stream:
         json.dump(result, stream, indent=2, sort_keys=True, allow_nan=False)
         stream.write('\n')
     for key, values in result.get('metrics', {}).items():
         print('MCD-SAVED-ORACLE-METRIC ' + json.dumps(dict(field=key, **values), sort_keys=True))
+    if 'extra_baseline' in result:
+        extra = result['extra_baseline']
+        for label in ('A_vs_extra_A', 'extra_A_vs_B'):
+            diagnostic = extra[label]
+            print('MCD-SAVED-BASELINE ' + json.dumps(dict(comparison=label,
+                status=diagnostic['status'], exact=diagnostic.get('exact'),
+                A_B_differences=diagnostic.get('A_B_differences'),
+                metrics=diagnostic.get('metrics')), sort_keys=True))
     print('MCD-SAVED-ORACLE ' + json.dumps(dict(status=result['status'], tag=args.tag,
         exact=result.get('exact'), report=str(args.out), provenance=result['provenance']), sort_keys=True))
     return 0 if result['status'] == 'PASS' else 1
