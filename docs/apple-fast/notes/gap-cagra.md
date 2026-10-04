@@ -75,3 +75,17 @@ IVFG still refuses back to the exact graph (n < 65,536 or a short probe pool).
 Deleted (code recoverable at the lane's pre-merge sha 0c4d268c5): DOT (slower,
 recall loss), WIDE (noise), IVFG_P32 (no recall gain), IVFG_P8 (recall loss).
 SEEDS4 stays opt-in (taxi .9997; istella untested).
+
+## w2-cagra (2026-10-04): taxi build
+
+Taxi is 400,000 x 11, so IVFG (rows wider than 64 only) never ran: the board's
+2,900 ms is the exact graph, `knn_tiled_kernel[12]` (`x_ann/knn_device.mojo`),
+one thread per row against all 400,000 rows, 1.6e11 pairs of 12 subtract + ftz +
+fma steps plus a `ts_knn_beats` test each; the prune, merge and downloads are the
+same small terms as on Istella. `MOJOLEARN_CAGRA_FAST_IVFG_LOWD` (opt-in) runs IVFG
++ EXACTD for d <= 64 too: ~6,000 candidates per row (~65x fewer pairs), and taxi's
+integer-code features make EXACTD's sums exact, so the graph is the exact graph
+restricted to each row's 16 probe lists. `_LOWD_SEEDS4` adds SEEDS4 (search only)
+as the fallback if the approximate graph costs recall. Gate (tools/cagra_lowd_pair.py):
+recall@10 vs the board's float64 brute force, B >= A on taxi and istella; for LOWD,
+istella's graph and ids byte-identical (the define must not touch d > 64).
