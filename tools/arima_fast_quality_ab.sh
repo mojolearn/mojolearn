@@ -11,6 +11,8 @@ arima_arms=$HOME/afc-def/$arima_tag
 arima_out=$HOME/mq/out/arima-quality-$arima_tag
 set --
 [[ "${ARIMA_QUALITY_SMALL:-0}" != 1 ]] || set -- --small
+# ARIMA_QUALITY_WIDE=1 adds the board-shaped 48-series fixture (fit groups).
+[[ "${ARIMA_QUALITY_WIDE:-0}" != 1 ]] || set -- "$@" --wide
 arima_so=$arima_root/python/mojolearn/_mojolearn_arima.so
 [[ -x "$arima_python" && -f "$arima_arms/A.so" && -f "$arima_arms/B.so" && -f "$arima_so" ]]
 mkdir -p "$arima_out"
