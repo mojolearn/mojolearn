@@ -2335,7 +2335,7 @@ class _BaseSearch:
             # glue: explicit scalar tail over the candidates x folds scores (Python floats, not data)
             means = [math.fsum(s) / len(s) for s in per[nm]]  # glue: one mean per candidate
             stds = [math.sqrt(math.fsum((v - m) * (v - m) for v in s) / len(s))  # glue: one std per candidate
-                    for s, m in zip(per[nm], means)]
+                    for s, m in zip(per[nm], means)]  # glue: one std per candidate
             results[f'mean_test_score{suffix}'] = Array.from_list(means, '<f8')
             results[f'std_test_score{suffix}'] = Array.from_list(stds, '<f8')
             results[f'rank_test_score{suffix}'] = Array.from_list(_rank(means), '<i4')
