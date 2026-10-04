@@ -43,7 +43,7 @@ def campaign(tmp_path, monkeypatch):
     for part in h.PROPERTY_PARTS:
         column[part + '_protocol'] = h._part_protocol(part, 16)
     receipts = []
-    for i, (role, cap) in enumerate([('baseline', [8, 0]), ('baseline', [9, 0]), ('native-reference', [8, 9])]):
+    for i, (role, cap) in enumerate([('baseline', [8, 9]), ('baseline', [9, 0]), ('native-reference', [8, 9])]):
         col_path = tmp_path / f'{i}.column.json'
         q.write(col_path, column)
         fmt = 'ptx-baseline' if role == 'baseline' else 'native'
@@ -216,6 +216,66 @@ def test_one_architecture_is_only_prototype_evidence(campaign):
     result = q.check(campaign.manifest, receipts, prototype=True)
     assert result['status'] == 'PROTOTYPE_AGREEMENT'
     assert not result['full_applicable_single_gpu_coverage']
+
+
+def add_receipt(campaign, source, name, role=None, cap=None, uuid=None):
+    receipt = q.read(campaign.receipts[source])
+    if role is not None and role != receipt['role']:
+        raise AssertionError('copy a receipt of the same role')
+    receipt['hardware'].update(compute_capability=cap, uuid=uuid, name=uuid)
+    path = campaign.manifest.parent / (name + '.json')
+    path.write_text(json.dumps(receipt))
+    return path
+
+
+def test_native_absent_device_never_counts_as_a_native_capability(campaign):
+    ampere = add_receipt(campaign, 0, 'ampere', 'baseline', [8, 0], 'GPU-A100')
+    # One natively supported baseline capability plus the A100 is not two.
+    with pytest.raises(ValueError, match='distinct GPU'):
+        q.check(campaign.manifest, [campaign.receipts[0], campaign.receipts[2], ampere])
+    # Two supported baseline capabilities but a native reference on only one.
+    with pytest.raises(ValueError, match='native reference on every natively supported capability'):
+        q.check(campaign.manifest, campaign.receipts + [ampere])
+    hopper_native = add_receipt(campaign, 2, 'hopper-native', 'native-reference', [9, 0], 'GPU-H100')
+    result = q.check(campaign.manifest, campaign.receipts + [hopper_native, ampere])
+    assert result['status'] == 'OBSERVED_CONFIGURATION_AGREEMENT'
+    assert result['native_absent_configurations'] == [('GPU-A100', (8, 0), 'test-driver')]
+    assert result['native_reference_capabilities'] == [(8, 9), (9, 0)]
+    assert result['native_absent_rule'] == q.NATIVE_ABSENT_RULE
+    assert len(result['baseline_configurations']) == 3
+    # Without the A100 the existing rule and report are unchanged.
+    plain = q.check(campaign.manifest, campaign.receipts)
+    assert plain['native_absent_configurations'] == [] and plain['native_absent_rule'] is None
+
+
+def test_native_absent_column_must_equal_native_references_cell_for_cell(campaign):
+    hopper_native = add_receipt(campaign, 2, 'hopper-native', 'native-reference', [9, 0], 'GPU-H100')
+    ampere = add_receipt(campaign, 0, 'ampere', 'baseline', [8, 0], 'GPU-A100')
+    column = campaign.manifest.parent / 'ampere.column.json'
+    doc = q.read(campaign.receipts[0].parent / q.read(campaign.receipts[0])['column_file'])
+    doc['cells']['ridge/base'].update(infer=['e' * 16] * 2, reload=['e' * 16] * 2)
+    column.write_text(json.dumps(doc))
+    alter(ampere, lambda r: r.update(column_file=column.name, column_sha256=q.sha(column)))
+    with pytest.raises(ValueError, match='Bitwise or structural result mismatch'):
+        q.check(campaign.manifest, campaign.receipts + [hopper_native, ampere])
+    with pytest.raises(ValueError, match='Bitwise or structural result mismatch'):
+        q.check(campaign.manifest, [campaign.receipts[2], ampere], prototype=True)
+
+
+def test_native_absent_prototype_needs_a_native_reference_and_no_native_role(campaign):
+    ampere = add_receipt(campaign, 0, 'ampere', 'baseline', [8, 0], 'GPU-A100')
+    with pytest.raises(ValueError, match='native reference'):
+        q.check(campaign.manifest, [ampere], prototype=True)
+    result = q.check(campaign.manifest, [campaign.receipts[2], ampere], prototype=True)
+    assert result['status'] == 'PROTOTYPE_AGREEMENT' and len(result['native_absent_configurations']) == 1
+    impossible = add_receipt(campaign, 2, 'impossible', 'native-reference', [8, 0], 'GPU-A100')
+    with pytest.raises(ValueError, match='without a native payload'):
+        q.check(campaign.manifest, [impossible, ampere], prototype=True)
+
+
+def test_native_floor_table():
+    assert [q.native_supported(cap) for cap in ([8, 0], [8, 6], [8, 9], [9, 0], [10, 0], [12, 0])] \
+        == [False, False, True, True, False, False]
 
 
 def test_scope_cannot_shrink_to_whatever_was_recorded(campaign, monkeypatch):

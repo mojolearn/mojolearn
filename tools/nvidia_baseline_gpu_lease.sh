@@ -4,7 +4,7 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 STAGE=${1:?}; OUT=${2:?}; GPU=${3:?}
-case "$GPU" in 'NVIDIA GeForce RTX 4090'|'NVIDIA H100 80GB HBM3') ;; *) exit 2 ;; esac
+case "$GPU" in 'NVIDIA GeForce RTX 4090'|'NVIDIA H100 80GB HBM3'|'NVIDIA A100 80GB PCIe') ;; *) exit 2 ;; esac
 [ -f "$STAGE/SHA256SUMS" ] && [ -d "$OUT" ] || exit 2
 TMPD=$(mktemp -d); CURLRC="$TMPD/curlrc"
 POD_NAME="mojolearn-ptx-$(date +%s)-$$"
@@ -79,7 +79,7 @@ printf '%s\n' "$POD_ID" > "$OUT/pod_id.txt"
 COST=$(rp_py cost)
 python3 - "$COST" "$GPU" <<'PY'
 import sys
-cost=float(sys.argv[1]); cap=.74 if '4090' in sys.argv[2] else 3.49
+cost=float(sys.argv[1]); cap=.74 if '4090' in sys.argv[2] else 1.99 if 'A100' in sys.argv[2] else 3.49
 if not 0 < cost <= cap + .001: raise SystemExit('Unexpected hourly price: stop and tear down')
 PY
 end=$(( $(date +%s) + 600 ))

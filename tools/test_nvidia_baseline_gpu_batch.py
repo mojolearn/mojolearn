@@ -261,6 +261,49 @@ elif args[:2]==['-m','mojolearn._identity_break']:
         self.assertNotRegex(text, r'(^|[ ;&|(])rg ')
         self.assertIn('grep -q WATCHDOG_ALIVE', text)
 
+    def test_native_absent_body_collects_only_forced_ptx(self):
+        body = batch.box_body(SHA, extra_capture=True, native_absent=True)
+        self.assertNotIn('native-reference', body)
+        self.assertNotIn('tooling-check.py check', body)
+        self.assertNotIn('native-release.sh', body)
+        self.assertEqual(body.count('for role in baseline; do'), 3)
+        self.assertIn('collect prototype "$role" 300', body)
+        self.assertIn('collect full "$role" 2400', body)
+        self.assertIn('extra-wrapper.py', body)
+        self.assertIn('cuda-config-witness.py', body)
+        self.assertIn('test "$WITNESS_FAILED" = 0', body)
+        subprocess.run(['bash', '-n'], input=body, text=True, check=True)
+        with self.assertRaisesRegex(ValueError, 'no native stage'):
+            batch.box_body(SHA, native_release_checks=True, native_absent=True)
+        # Natively supported devices keep both roles and both checks.
+        self.assertEqual(batch.box_body(SHA, extra_capture=True).count('for role in native-reference baseline; do'), 3)
+
+    def test_ampere_plan_is_native_absent_and_refuses_native_checks(self):
+        from unittest.mock import patch
+        import contextlib, io, sys
+        self.assertEqual(batch.GPUS['ampere'], 'NVIDIA A100 80GB PCIe')
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td); self.make(root)
+            argv = ['batch', SHA, '--wheels', str(root), '--out', str(root/'out'), '--gpu', 'ampere']
+            stdout = io.StringIO()
+            with patch.object(sys, 'argv', argv), patch.object(batch.subprocess, 'check_output', side_effect=[SHA, SHA + '\trefs/heads/candidate']), patch.object(batch.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)), contextlib.redirect_stdout(stdout):
+                self.assertEqual(batch.main(), 0)
+            plan = json.loads(stdout.getvalue())
+            self.assertTrue(plan['native_absent'])
+            self.assertEqual(plan['roles'], ['baseline'])
+            self.assertEqual((plan['gpu'], plan['work_seconds'], plan['lease_minutes']), ('NVIDIA A100 80GB PCIe', 6300, 120))
+            reference = root/'apple.json'
+            reference.write_text(json.dumps(dict(commit=SHA, fixtures={k: {} for k in ('base', 'denormal', 'odd')}, cells={'a/base': {}})))
+            with patch.object(sys, 'argv', argv + ['--native-release-checks', '--native-reference-column', str(reference)]), patch.object(batch.subprocess, 'check_output') as calls:
+                with self.assertRaisesRegex(ValueError, 'no native stage'):
+                    batch.main()
+                calls.assert_not_called()
+
+    def test_lease_accepts_a100_with_its_own_price_cap(self):
+        text = (ROOT / 'tools/nvidia_baseline_gpu_lease.sh').read_text()
+        self.assertIn("'NVIDIA A100 80GB PCIe') ;;", text)
+        self.assertIn("1.99 if 'A100' in sys.argv[2] else 3.49", text)
+
     def test_tooling_split_is_explicit_and_advertised(self):
         from unittest.mock import patch
         import contextlib, io, sys

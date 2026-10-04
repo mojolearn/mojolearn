@@ -7,7 +7,7 @@ import pytest
 
 import admit_nvidia_ptx as a
 import nvidia_baseline_qualification as q
-from test_nvidia_baseline_qualification import campaign  # noqa: F401
+from test_nvidia_baseline_qualification import add_receipt, campaign  # noqa: F401
 
 
 def save(path, doc):
@@ -82,6 +82,75 @@ def test_complete_evidence_keeps_shared_and_nvidia_scopes_distinct(evidence):
     assert record['coverage']['shared']['comparison_sha256'] == a.encoded_sha(reports['shared-comparison.json'])
     assert record['coverage']['nvidia']['comparison_sha256'] == a.encoded_sha(reports['nvidia-comparison.json'])
     assert not q.read(evidence.campaign.manifest)['identical_qualified']
+
+
+def with_ampere(evidence):
+    campaign = evidence.campaign
+    hopper_native = add_receipt(campaign, 2, 'hopper-native', 'native-reference', [9, 0], 'GPU-H100')
+    ampere = add_receipt(campaign, 0, 'ampere', 'baseline', [8, 0], 'GPU-A100')
+    witness = q.read(evidence.witnesses[0])
+    witness['device'].update(uuid='GPU-A100', name='GPU-A100', compute_capability='8.0')
+    path = evidence.witnesses[0].parent / 'GPU-A100.json'
+    save(path, witness)
+    campaign.receipts += [hopper_native, ampere]
+    evidence.witnesses.append(path)
+    return ampere
+
+
+def test_native_absent_device_is_admitted_under_its_own_two_scopes(evidence):
+    plain, _ = build(evidence)
+    assert 'native_absent' not in plain['coverage']
+    with_ampere(evidence)
+    record, reports = build(evidence)
+    absent = record['coverage']['native_absent']
+    assert [row['compute_capability'] for row in absent['configurations']] == [[8, 0]]
+    assert len(record['configurations']) == 3
+    assert len(absent['nvidia']['fixtures']) == 9 and len(absent['shared']['fixtures']) == 3
+    assert absent['nvidia']['native_reference_capabilities'] == [[8, 9], [9, 0]]
+    assert absent['nvidia']['comparison_sha256'] == a.encoded_sha(reports['nvidia-comparison.json'])
+    assert absent['shared']['comparison_sha256'] == a.encoded_sha(reports['native-absent-shared-comparison.json'])
+    assert absent['shared']['comparison_sha256'] != record['coverage']['shared']['comparison_sha256']
+    assert len(reports['native-absent-shared-comparison.json']) == 1
+    api = a.admission_api()
+    key = dict(source_commit=record['source_commit'], manifest_sha256=record['manifest_sha256'])
+    api.validate_admission(record, configuration=absent['configurations'][0], **key)
+    for change in (lambda c: c.update(configurations=[]),
+                   lambda c: c.update(configurations=[dict(c['configurations'][0], driver_version='1.2')]),
+                   lambda c: c['nvidia'].update(native_reference_capabilities=[[8, 9]]),
+                   lambda c: c['nvidia'].update(native_reference_capabilities=[[8, 9], [8, 0]]),
+                   lambda c: c['nvidia'].update(fixtures=['base', 'denormal', 'odd']),
+                   lambda c: c['shared'].update(vendors=['hip']),
+                   lambda c: c.pop('shared')):
+        broken = copy.deepcopy(record)
+        change(broken['coverage']['native_absent'])
+        with pytest.raises(ValueError, match='native-absent'):
+            api.validate_admission(broken, **key)
+
+
+def test_native_absent_device_needs_witness_and_both_comparisons(evidence):
+    ampere = with_ampere(evidence)
+    missing = evidence.witnesses.pop()
+    with pytest.raises(ValueError, match='Missing measured CUDA configuration'):
+        build(evidence)
+    evidence.witnesses.append(missing)
+    # Its nine-fixture column differs from the native references on one NVIDIA-only fixture.
+    receipt = q.read(ampere)
+    column = q.read(ampere.parent / receipt['column_file'])
+    column['cells']['ridge/ties'].update(infer=['f' * 16] * 2, reload=['f' * 16] * 2)
+    column_path = ampere.parent / 'ampere.column.json'
+    save(column_path, column)
+    receipt.update(column_file=column_path.name, column_sha256=q.sha(column_path))
+    save(ampere, receipt)
+    with pytest.raises(ValueError, match='Bitwise or structural result mismatch'):
+        build(evidence)
+
+
+def test_native_absent_device_cannot_replace_a_native_capability(evidence):
+    with_ampere(evidence)
+    del evidence.campaign.receipts[1]   # drop the cap 9.0 baseline
+    del evidence.witnesses[1]
+    with pytest.raises(ValueError, match='distinct GPU'):
+        build(evidence)
 
 
 def test_undeclared_exclusions_are_recorded_in_nvidia_coverage_only(evidence, monkeypatch):

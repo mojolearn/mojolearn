@@ -93,7 +93,9 @@ def build(manifest_path, receipts, references, reference_hashes, witness_paths, 
         require(uuid and uuid not in witnesses, 'Missing or duplicate witness GPU UUID')
         witnesses[uuid] = witness
         witness_inputs.append(dict(file=str(path.resolve()), sha256=baseline.sha(path)))
+    absent = {row[0] for row in nvidia['native_absent_configurations']}
     shared_reports, configs, used = [], {}, set()
+    absent_reports, absent_configs = [], {}
     for path in map(Path, receipts):
         receipt = baseline.read(path)
         if receipt['role'] != 'baseline':
@@ -114,6 +116,9 @@ def build(manifest_path, receipts, references, reference_hashes, witness_paths, 
         configs[json.dumps(config, sort_keys=True)] = config
         used.add(uuid)
         shared_reports.append(report)
+        if uuid in absent:
+            absent_configs[json.dumps(config, sort_keys=True)] = dict(config)
+            absent_reports.append(report)
     require(shared_reports and used == set(witnesses), 'Missing baseline or unused configuration witness')
     shared = dict(schema='mojolearn.ptx-admission-shared-evidence.v1', comparisons=shared_reports,
                   configuration_inputs=witness_inputs,
@@ -131,9 +136,24 @@ def build(manifest_path, receipts, references, reference_hashes, witness_paths, 
                                   parts=list(api.NVIDIA_PARTS), comparison_sha256=encoded_sha(nvidia),
                                   undeclared_exclusions=undeclared)),
                   configurations=[configs[key] for key in sorted(configs)])
+    require(len(absent_reports) == len(absent), 'Native-absent receipt lacks its cross-vendor comparison')
+    if absent:
+        # A device with no native payload has two distinct scopes of its own:
+        # nine fixtures against the native references of the natively supported
+        # devices, and the three shared fixtures against Apple and AMD.
+        record['coverage']['native_absent'] = dict(
+            configurations=[absent_configs[key] for key in sorted(absent_configs)],
+            nvidia=dict(fixtures=list(api.NVIDIA_FIXTURES), parts=list(api.NVIDIA_PARTS),
+                        rule=nvidia['native_absent_rule'],
+                        native_reference_capabilities=[list(cap) for cap in nvidia['native_reference_capabilities']],
+                        comparison_sha256=encoded_sha(nvidia)),
+            shared=dict(fixtures=list(api.SHARED_FIXTURES), parts=list(api.SHARED_PARTS),
+                        vendors=['hip', 'metal'], comparison_sha256=encoded_sha(absent_reports)))
     api.validate_admission(record, source_commit=source, manifest_sha256=baseline.sha(manifest_path))
-    return record, {'inventory.json': inventory, 'nvidia-comparison.json': nvidia,
-                    'shared-comparison.json': shared}
+    reports = {'inventory.json': inventory, 'nvidia-comparison.json': nvidia, 'shared-comparison.json': shared}
+    if absent:
+        reports['native-absent-shared-comparison.json'] = absent_reports
+    return record, reports
 
 
 def main():
@@ -160,6 +180,8 @@ def main():
     output.write_bytes(encoded(record))
     print(json.dumps(dict(admission=str(output), source_commit=record['source_commit'],
                           configurations=len(record['configurations']),
+                          native_absent_configurations=len(
+                              record['coverage'].get('native_absent', {}).get('configurations', [])),
                           shared_fixtures=record['coverage']['shared']['fixtures'])))
     return 0
 

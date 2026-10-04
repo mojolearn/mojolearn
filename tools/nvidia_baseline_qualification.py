@@ -51,6 +51,17 @@ UNDECLARED = 'n/a:UNDECLARED'
 # exactly UNDECLARED in every compared column, is reported as excluded, and
 # never enters the compared values. Any other undeclared part still fails.
 UNDECLARED_EXCLUSIONS = (('gbdt-class-weights', 'batch'), ('gbdt-multiclass-offgrid', 'batch'))
+# Native kernels ship for sm_89 and sm_90/sm_90a. A set runs on its own major
+# at its minor or later, so a device below every floor of its major (an A100,
+# capability 8.0) has no native payload: the only place the fallback triggers.
+NATIVE_FLOORS = ((8, 9), (9, 0))
+NATIVE_ABSENT_RULE = ('forced-PTX column equals every native reference column collected on the '
+                      'natively supported devices from the same source, cell for cell')
+
+
+def native_supported(capability):
+    major, minor = capability
+    return any(major == floor[0] and minor >= floor[1] for floor in NATIVE_FLOORS)
 
 
 def require(ok, message):
@@ -361,7 +372,7 @@ def check(manifest_path, receipt_paths, *, prototype=False):
     undeclared = undeclared_scope(lanes, fixtures)
     expected_excluded = {row['lane'] + '/' + fixture + '/' + row['part']
                          for row in undeclared for fixture in fixtures}
-    compared, baseline_configs, native_configs = None, set(), set()
+    compared, baseline_configs, native_configs, absent_configs = None, set(), set(), set()
     inputs = []
     for path, receipt in receipts:
         require(receipt.get('lanes') == lanes and receipt.get('fixtures') == fixtures, 'Different report scope')
@@ -386,17 +397,36 @@ def check(manifest_path, receipt_paths, *, prototype=False):
                              + json.dumps(dict(receipt=str(path), count=len(differing),
                                                examples=examples), sort_keys=True))
         compared = values
-        (baseline_configs if receipt['role'] == 'baseline' else native_configs).add(config)
+        if receipt['role'] != 'baseline':
+            require(native_supported(config[1]), 'Native reference from a device without a native payload')
+            native_configs.add(config)
+        elif native_supported(config[1]):
+            baseline_configs.add(config)
+        else:
+            # No native column can exist on this device. Its PTX column has
+            # just been compared with every other column, native ones included.
+            absent_configs.add(config)
         inputs.append(dict(file=str(path), sha256=sha(path), column_sha256=sha(column_path)))
-    require(baseline_configs and native_configs, 'Baseline and native reference runs are both required')
+    require((baseline_configs or absent_configs) and native_configs,
+            'Baseline and native reference runs are both required')
+    # Only natively supported devices count here; a native-absent device never
+    # stands in for one of the two capabilities.
     require(prototype or len({c[1] for c in baseline_configs}) >= 2,
             'Full comparison requires distinct GPU compute capabilities')
+    native_capabilities = sorted({c[1] for c in native_configs})
+    require(prototype or not absent_configs
+            or (len(native_capabilities) >= 2 and {c[1] for c in baseline_configs} <= set(native_capabilities)),
+            'Native-absent comparison requires a native reference on every natively supported capability')
     return dict(schema='mojolearn.nvidia-baseline-comparison.v1',
                 status='PROTOTYPE_AGREEMENT' if prototype else 'OBSERVED_CONFIGURATION_AGREEMENT',
                 source_commit=manifest['source_commit'], manifest_sha256=sha(manifest_path),
                 lanes=lanes, fixtures=fixtures, compared_parts=len(compared),
                 undeclared_exclusions=undeclared, excluded_parts=len(expected_excluded),
-                baseline_configurations=sorted(baseline_configs), native_configurations=sorted(native_configs),
+                baseline_configurations=sorted(baseline_configs | absent_configs),
+                native_configurations=sorted(native_configs),
+                native_absent_configurations=sorted(absent_configs),
+                native_absent_rule=NATIVE_ABSENT_RULE if absent_configs else None,
+                native_reference_capabilities=native_capabilities,
                 full_applicable_single_gpu_coverage=not prototype, excluded=scope['excluded'],
                 universal_gpu_support=False, future_drivers_qualified=False,
                 identical_qualified=False, release_qualified=False, inputs=inputs)

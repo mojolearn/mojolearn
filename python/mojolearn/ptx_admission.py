@@ -90,6 +90,29 @@ def validate_admission(doc, *, source_commit, manifest_sha256, configuration=Non
     _require(isinstance(configs, list) and bool(configs), 'no admitted configurations')
     keys = [_configuration(row) for row in configs]  # glue: validate release hardware metadata entries
     _require(len(keys) == len(set(keys)), 'duplicate configurations')
+    absent = coverage.get('native_absent')
+    if absent is not None:
+        # Devices with no native payload: nine fixtures against other devices'
+        # native references, three shared fixtures against Apple and AMD.
+        _require(isinstance(absent, dict) and isinstance(absent.get('configurations'), list)
+                 and bool(absent['configurations']), 'native-absent scope has no configurations')
+        absent_keys = [_configuration(row) for row in absent['configurations']]  # glue: validate release hardware metadata entries
+        _require(len(absent_keys) == len(set(absent_keys)) and set(absent_keys) <= set(keys),
+                 'native-absent configuration is not an admitted configuration')
+        for name, fixtures, parts in (('nvidia', NVIDIA_FIXTURES, NVIDIA_PARTS),  # glue: validate two release coverage metadata records
+                                      ('shared', SHARED_FIXTURES, SHARED_PARTS)):
+            row = absent.get(name)
+            _require(isinstance(row, dict) and _names(row.get('fixtures')) and set(row['fixtures']) == set(fixtures)
+                     and _names(row.get('parts')) and set(row['parts']) == set(parts)
+                     and _digest(row.get('comparison_sha256')), 'native-absent ' + name + ' scope incomplete')
+        caps = absent['nvidia'].get('native_reference_capabilities')
+        _require(isinstance(caps, list) and len(caps) >= 2
+                 and all(isinstance(cap, list) and len(cap) == 2 and all(type(v) is int for v in cap) for cap in caps)  # glue: validate architecture metadata integers
+                 and len({tuple(cap) for cap in caps}) == len(caps)  # glue: compare architecture metadata pairs
+                 and not {tuple(cap) for cap in caps} & {key[1] for key in absent_keys},  # glue: compare architecture metadata pairs
+                 'native-absent scope lacks two distinct native reference capabilities')
+        _require(_names(absent['shared'].get('vendors')) and set(absent['shared']['vendors']) == {'hip', 'metal'},
+                 'native-absent cross-vendor references incomplete')
     if configuration is not None:
         _require(_configuration(configuration) in keys, 'this device/driver configuration is not admitted')
     return doc

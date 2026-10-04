@@ -2,6 +2,8 @@
 """Guarded experimental native/PTX comparison on ONE GPU. Dry-run by default.
 
 Run twice with the same wheel directory and source: --gpu ada, then --gpu hopper.
+Then --gpu ampere (A100, capability 8.0, no native payload): forced-PTX
+collection, extra capture and witness only; its column is compared locally.
 All seven exact wheels are staged; no index copy of mojolearn is installed.
 Use --native-release-checks --native-reference-column APPLE.json to collect
 the separate canonical six-wheel smoke, self-test and three-fixture column
@@ -19,7 +21,13 @@ import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-GPUS = {'ada': 'NVIDIA GeForce RTX 4090', 'hopper': 'NVIDIA H100 80GB HBM3'}
+GPUS = {'ada': 'NVIDIA GeForce RTX 4090', 'hopper': 'NVIDIA H100 80GB HBM3',
+        'ampere': 'NVIDIA A100 80GB PCIe'}
+# Capability 8.0 has no native payload (sm_89 and sm_90a ship). There is no
+# native stage and no native column there: only forced-PTX collection, the
+# extra capture and the witness. Its column is compared locally against the
+# native references of ada and hopper by `check` and tools/admit_nvidia_ptx.py.
+NATIVE_ABSENT = {'ampere'}
 DISTS = {'mojolearn', 'mojolearn_nvidia', 'mojolearn_amd', 'mojolearn_nvidia_sm89',
          'mojolearn_nvidia_sm90', 'mojolearn_amd_gfx942', 'mojolearn_nvidia_ptx80'}
 LANES = 'kmeans,gemm-pinned,ridge,gbdt-symmetric,mamba2,transformer,svc'
@@ -139,8 +147,10 @@ def reference_column(path, commit):
     return sha(path)
 
 
-def box_body(commit, full=True, extra_capture=False, native_release_checks=False):
+def box_body(commit, full=True, extra_capture=False, native_release_checks=False, native_absent=False):
     # All interpolated values are validated SHA or constants. No remote credentials.
+    require(not (native_absent and native_release_checks), 'A native-absent device has no native stage')
+    roles = 'baseline' if native_absent else 'native-reference baseline'
     return '''#!/bin/bash
 set -euo pipefail
 cd /root/ptx-batch
@@ -196,28 +206,29 @@ collect() {
     wait "$pid"
 }
 WITNESS_FAILED=0
-for role in native-reference baseline; do
+for role in @ROLES@; do
     collect prototype "$role" 300 --lanes @LANES@ --fixtures base,denormal,odd
 done
-@CHECK@ --prototype --manifest "$MANIFEST" --out results/prototype-comparison.json results/prototype-native-reference.json results/prototype-baseline.json
+@PROTOTYPE_CHECK@
 @FULL@
 test "$NATIVE_FAILED" = 0
 test "$EXTRA_FAILED" = 0
 test "$WITNESS_FAILED" = 0
 ''' .replace('@SHA@', commit).replace('@LANES@', LANES).replace('@NATIVE@', native_release_body(commit) if native_release_checks else 'NATIVE_FAILED=0').replace('@EXTRA@', '''EXTRA_FAILED=0
-for role in native-reference baseline; do
+for role in @ROLES@; do
     cmd=(venv/bin/python source/tools/nvidia_serial_guard.py --seconds 120 --rss-gib 12 --cores 2 -- venv/bin/python extra-wrapper.py --script extra-capture.py --source-tools source/tools --manifest "$MANIFEST" --role "$role" --out "results/extra-$role.json")
     if [ "$role" = baseline ]; then
         timeout -k 20 140 env MOJOLEARN_CUDA_PATH=ptx-baseline MOJOLEARN_EXPERIMENTAL_PTX=1 "${cmd[@]}" > "results/extra-$role.log" 2>&1 || EXTRA_FAILED=1
     else
         timeout -k 20 140 "${cmd[@]}" > "results/extra-$role.log" 2>&1 || EXTRA_FAILED=1
     fi
-done''' if extra_capture else 'EXTRA_FAILED=0').replace('@FULL@', '''for role in native-reference baseline; do
+done''' if extra_capture else 'EXTRA_FAILED=0').replace('@FULL@', ('''for role in @ROLES@; do
     collect full "$role" 2400
 done
-# Single-pod comparison is deliberately prototype-labelled; cross-pod full
+''' + ('''# No native column exists on this device. The orchestrator's machine compares
+# this PTX column with the native references of the natively supported devices.''' if native_absent else '''# Single-pod comparison is deliberately prototype-labelled; cross-pod full
 # admission check happens locally against the complete original payload set.
-@CHECK@ --prototype --manifest "$MANIFEST" --out results/full-local-comparison.json results/full-native-reference.json results/full-baseline.json''' if full else '').replace('@CHECK@', CHECK)
+@CHECK@ --prototype --manifest "$MANIFEST" --out results/full-local-comparison.json results/full-native-reference.json results/full-baseline.json''')) if full else '').replace('@PROTOTYPE_CHECK@', '# No native column on this device: nothing to compare on the pod.' if native_absent else '@CHECK@ --prototype --manifest "$MANIFEST" --out results/prototype-comparison.json results/prototype-native-reference.json results/prototype-baseline.json').replace('@CHECK@', CHECK).replace('@ROLES@', roles)
 
 
 def main():
@@ -235,6 +246,9 @@ def main():
     p.add_argument('--tooling-commit', help='Explicit full clean runner SHA when supplementary tooling differs from payload source')
     args = p.parse_args()
     wheels, manifest = artifacts(args.wheels, args.commit)
+    native_absent = args.gpu in NATIVE_ABSENT
+    require(not (native_absent and args.native_release_checks),
+            'A native-absent device has no native stage; omit --native-release-checks')
     require(args.native_release_checks or args.native_reference_column is None, 'Reference column needs --native-release-checks')
     reference_sha = reference_column(args.native_reference_column, args.commit) if args.native_release_checks else None
     require(not args.out.exists(), 'Output already exists')
@@ -249,6 +263,8 @@ def main():
     require(any(line.startswith(args.commit + '\t') for line in refs.splitlines()), 'Push frozen source first')
     require(any(line.startswith(tooling + '\t') for line in refs.splitlines()), 'Push frozen tooling first')
     plan = dict(source_commit=args.commit, gpu=GPUS[args.gpu], lease_minutes=120,
+                native_absent=native_absent,
+                roles=['baseline'] if native_absent else ['native-reference', 'baseline'],
                 work_seconds=6300, full=not args.prototype_only,
                 tooling_commit=tooling, tooling_dirty=False,
                 native_release_checks=args.native_release_checks, native_release_seconds=1650 if args.native_release_checks else 0,
@@ -274,7 +290,8 @@ def main():
             require(sha(stage / 'wheels' / wheel.name) == plan['wheels'][wheel.name],
                     'Wheel bytes changed while staging; refuse before rental')
         artifacts(stage / 'wheels', args.commit)  # revalidate the exact staged bytes before creating a pod
-        (stage / 'body.sh').write_text(box_body(args.commit, not args.prototype_only, bool(args.extra_capture), args.native_release_checks))
+        (stage / 'body.sh').write_text(box_body(args.commit, not args.prototype_only, bool(args.extra_capture),
+                                                  args.native_release_checks, native_absent))
         files = sorted((stage / 'wheels').glob('*.whl')) + [stage / 'body.sh']
         for source, name, key in [(WITNESS, 'cuda-config-witness.py', 'configuration_witness_sha256'),
                                   (CHECKER, 'tooling-check.py', 'checker_sha256')]:
