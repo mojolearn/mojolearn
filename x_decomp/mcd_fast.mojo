@@ -1,6 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""MinCovDet's fast_mcd with every C-step of every candidate on the device
+"""MOJOLEARN_MCD_BATCH_COMPAT (2026-10-04) is a separate opt-in repair:
+compact support before legacy scalar 4096-term folds, FMA covariance/distance/LU cells,
+and a parallel round-robin eigensolve using main's rotation and convergence
+rules. It does NOT inherit the failed route's quality approval. Validate
+with tools/mcd_compat_quality.py against current main before any default.
+The initial experiment targets taxi (2 <= d <= 64); wide istella still
+uses main and needs a separate extension after narrow quality passes.
+
+MinCovDet's fast_mcd with every C-step of every candidate on the device
 (lane/apple-fast-robust, 2026-10-02; FAST + Apple only, OPT-IN since
 2026-10-03: `-D MOJOLEARN_MCD_DEVICE_CSTEPS` turns it on; the default is the
 per-candidate kit route). M3 A/B: min-cov-det taxi 79,925 -> 215 ms; M2 A/B
@@ -61,10 +69,31 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
 from x_decomp.cells import F32Ptr, I32Ptr, add, sub, mul, div0, sqrt0, log_floor, rand_cell
 from x_decomp.device import xd_ctx, _down, _down_i
 from x_decomp.kit import Mat
+from x_decomp.cells import FOLD_BLOCK
+from x_decomp.mcd_compat import mc_compact_kernel, mc_moment_kernel, mc_pinvh_kernel
+
+# FAILED gap26-mcdcompat-taxi at 948c4e7b1: B rejected by the batched
+# eigensolve gate (A=70877.713 ms). Repair: make collective entry uniform
+# before clearing needp for inactive singular candidates. Validation of
+# this race repair is recorded below; keep opt-in and retain both gates.
+# FAIL-quality gap26-mcdrepair-small-ready, ab4265c9a, M3 taxi cap3000:
+# quality-fit A5595.80ms / B828.96ms (not full-board timing); location_rel
+# .032817, covariance_rel .085678, precision_rel .999817, distances_rel
+# .997423; support Jaccard .941431, raw support .798209; both raw ranks10.
+# Both flag fractions1 are uninformative. This is a changed fitted model.
+# Source audit: main DMcd.emp_cov/pinvh/mahal use DKit.mm -> Apple MMA,
+# including split-K covariance at support sizes>=1024. COMPAT's scalar
+# 4096-term folds do not replay that arithmetic. A causal first-divergence
+# trace is still owed; do NOT interpret the race repair as quality approval.
+# See docs/apple-fast/ab/mcd-compat-review.md for the semantics-preserving plan.
+comptime MCD_BATCH_COMPAT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_MCD_BATCH_COMPAT"]()
+)
 
 # DROP-quality: mcdq4 (M2 taxi 100k), flagged-mask Jaccard vs OFF
 # .8805 MCD / .9645 EE fails .99; location/covariance shift 14%/18%.
@@ -72,7 +101,7 @@ from x_decomp.kit import Mat
 # docs/apple-fast/EXPERIMENTS.md (MCD_DEVICE_CSTEPS).
 comptime MCD_DEVICE_CSTEPS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_MCD_DEVICE_CSTEPS"]()
+    and (is_defined["MOJOLEARN_MCD_DEVICE_CSTEPS"]() or MCD_BATCH_COMPAT)
 )
 
 comptime U64Ptr = MutPointer[UInt64, MutAnyOrigin]
@@ -87,8 +116,8 @@ comptime MF_SWEEPS = 60
 #: `_F32_EPS` of mcd.mojo as float32, `_FLT_MIN` likewise.
 comptime MF_F32_EPS = Float32(1.1920928955078125e-07)
 comptime MF_FLT_MIN = Float32(1.1754943508222875e-38)
-#: Error words: [a NaN distance or draw, a candidate stopped with no pinvh].
-comptime MF_ERR = 2
+#: Error words: NaN draw/distance, no pinvh, eigensolve budget, Frobenius drift.
+comptime MF_ERR = 4
 comptime MF_SH_INT = MF_TPB * 16 + 32 + MF_TPB
 
 
@@ -310,9 +339,14 @@ def _logdet(a: F32Ptr, o: Int, dd: Int) -> Float32:
             neg += 1
         for i in range(k + 1, dd):
             var f = a.unsafe_load(o + i * dd + k) / piv
+            comptime if MCD_BATCH_COMPAT:
+                f = div0(a.unsafe_load(o + i * dd + k), ftz(piv))
             a.unsafe_store(o + i * dd + k, f)
             for j in range(k + 1, dd):
-                a.unsafe_store(o + i * dd + j, a.unsafe_load(o + i * dd + j) - f * a.unsafe_load(o + k * dd + j))
+                comptime if MCD_BATCH_COMPAT:
+                    a.unsafe_store(o + i * dd + j, ftz(identical_mul_add(-f, ftz(a.unsafe_load(o + k * dd + j)), ftz(a.unsafe_load(o + i * dd + j)))))
+                else:
+                    a.unsafe_store(o + i * dd + j, a.unsafe_load(o + i * dd + j) - f * a.unsafe_load(o + k * dd + j))
     if neg % 2 != 0:
         return _neg_inf32()
     var total = Float32(0)
@@ -457,7 +491,10 @@ def mf_dist_kernel(
             for j in range(dd):
                 var tj = Float32(0)
                 for k in range(dd):
-                    tj = add(tj, mul(xc[k], p.unsafe_load(o + k * dd + j)))
+                    comptime if MCD_BATCH_COMPAT:
+                        tj = ftz(identical_mul_add(ftz(xc[k]), ftz(p.unsafe_load(o + k * dd + j)), tj))
+                    else:
+                        tj = add(tj, mul(xc[k], p.unsafe_load(o + k * dd + j)))
                 acc = add(acc, mul(tj, xc[j]))
             if acc != acc:
                 err.unsafe_store(0, Int32(1))
@@ -638,6 +675,7 @@ struct MfPhase(Movable):
     var h: Int
     var n_iter: Int
     var tiles: Int
+    var selected: DeviceBuffer[DType.int32]
     var mask0: DeviceBuffer[DType.int32]
     var mask1: DeviceBuffer[DType.int32]
     var dist: DeviceBuffer[DType.float32]
@@ -664,9 +702,12 @@ struct MfPhase(Movable):
         self.h = h
         self.n_iter = n_iter
         self.tiles = max((r + MF_TILE - 1) // MF_TILE, 1)
+        comptime if MCD_BATCH_COMPAT:
+            self.tiles = max((h + FOLD_BLOCK - 1) // FOLD_BLOCK, 1)
         var cr = max(nc * r, 1)
         var cd = max(nc * d, 1)
         var cdd = max(nc * d * d, 1)
+        self.selected = ctx.enqueue_create_buffer[DType.int32](cr if MCD_BATCH_COMPAT else 1)
         self.mask0 = ctx.enqueue_create_buffer[DType.int32](cr)
         self.mask1 = ctx.enqueue_create_buffer[DType.int32](cr)
         self.dist = ctx.enqueue_create_buffer[DType.float32](cr)
@@ -722,10 +763,16 @@ def _run_phase(
     ctx.enqueue_function[mf_fill_i_kernel](_i(ph.fin), Int32(nc), Int32(0), grid_dim=_blocks(nc), block_dim=MF_TPB)
     if has_init:
         # P0 = pinvh(cov0), dist = mahal(X, loc0, P0), sel = the h smallest
-        ctx.enqueue_function[mf_pinvh_kernel](
-            _f(ph.cov1), _f(ph.wa), _f(ph.wv), _f(ph.pm), Int32(nc), Int32(d), _i(ph.active), _i(ph.needp),
-            grid_dim=_blocks(nc), block_dim=MF_TPB,
-        )
+        comptime if MCD_BATCH_COMPAT:
+            ctx.enqueue_function[mc_pinvh_kernel](
+                _f(ph.cov1), _f(ph.wa), _f(ph.wv), _f(ph.pm), Int32(nc), Int32(d), _i(ph.active), _i(ph.needp), _i(err),
+                grid_dim=nc, block_dim=MF_TPB,
+            )
+        else:
+            ctx.enqueue_function[mf_pinvh_kernel](
+                _f(ph.cov1), _f(ph.wa), _f(ph.wv), _f(ph.pm), Int32(nc), Int32(d), _i(ph.active), _i(ph.needp),
+                grid_dim=_blocks(nc), block_dim=MF_TPB,
+            )
         ctx.enqueue_function[mf_dist_kernel](
             _f(dx), _i(rows), Int32(ph.ident), Int32(ph.per), _f(ph.loc0), _f(ph.loc1), Int32(1), _i(ph.fin), Int32(0),
             _f(ph.pm), _f(ph.dist), Int32(nc), Int32(r), Int32(d), _i(ph.active), _i(err),
@@ -736,20 +783,40 @@ def _run_phase(
     )
     for s in range(ph.n_iter + 1):
         var par = s % 2
-        ctx.enqueue_function[mf_colsum_kernel](
-            _f(dx), _i(rows), Int32(ph.ident), Int32(ph.per), _i(ph.mask1) if par == 1 else _i(ph.mask0), _f(ph.part),
-            Int32(nc), Int32(r), Int32(ph.tiles), Int32(d), _i(ph.active),
-            grid_dim=_blocks(nc * ph.tiles * d), block_dim=MF_TPB,
-        )
+        comptime if MCD_BATCH_COMPAT:
+            ctx.enqueue_function[mc_compact_kernel](
+                _i(ph.mask1) if par == 1 else _i(ph.mask0), _i(ph.selected), Int32(r), _i(ph.active),
+                grid_dim=nc, block_dim=MF_TPB,
+            )
+            ctx.enqueue_function[mc_moment_kernel](
+                _f(dx), _i(rows), Int32(ph.ident), Int32(ph.per), _i(ph.selected),
+                _f(ph.loc1) if par == 1 else _f(ph.loc0), _i(pj), _i(pk), _f(ph.part),
+                Int32(nc), Int32(r), Int32(ph.h), Int32(ph.tiles), Int32(d), Int32(npair), Int32(0), _i(ph.active),
+                grid_dim=_blocks(nc * ph.tiles * d), block_dim=MF_TPB,
+            )
+        else:
+            ctx.enqueue_function[mf_colsum_kernel](
+                _f(dx), _i(rows), Int32(ph.ident), Int32(ph.per), _i(ph.mask1) if par == 1 else _i(ph.mask0), _f(ph.part),
+                Int32(nc), Int32(r), Int32(ph.tiles), Int32(d), _i(ph.active),
+                grid_dim=_blocks(nc * ph.tiles * d), block_dim=MF_TPB,
+            )
         ctx.enqueue_function[mf_mean_kernel](
             _f(ph.part), _f(ph.loc1) if par == 1 else _f(ph.loc0), Int32(nc), Int32(ph.tiles), Int32(d), hinv,
             _i(ph.active), grid_dim=_blocks(nc * d), block_dim=MF_TPB,
         )
-        ctx.enqueue_function[mf_cov_part_kernel](
-            _f(dx), _i(rows), Int32(ph.ident), Int32(ph.per), _i(ph.mask1) if par == 1 else _i(ph.mask0),
-            _f(ph.loc1) if par == 1 else _f(ph.loc0), _i(pj), _i(pk), _f(ph.part), Int32(nc), Int32(r), Int32(ph.tiles),
-            Int32(d), Int32(npair), _i(ph.active), grid_dim=_blocks(nc * ph.tiles * npair), block_dim=MF_TPB,
-        )
+        comptime if MCD_BATCH_COMPAT:
+            ctx.enqueue_function[mc_moment_kernel](
+                _f(dx), _i(rows), Int32(ph.ident), Int32(ph.per), _i(ph.selected),
+                _f(ph.loc1) if par == 1 else _f(ph.loc0), _i(pj), _i(pk), _f(ph.part),
+                Int32(nc), Int32(r), Int32(ph.h), Int32(ph.tiles), Int32(d), Int32(npair), Int32(1), _i(ph.active),
+                grid_dim=_blocks(nc * ph.tiles * npair), block_dim=MF_TPB,
+            )
+        else:
+            ctx.enqueue_function[mf_cov_part_kernel](
+                _f(dx), _i(rows), Int32(ph.ident), Int32(ph.per), _i(ph.mask1) if par == 1 else _i(ph.mask0),
+                _f(ph.loc1) if par == 1 else _f(ph.loc0), _i(pj), _i(pk), _f(ph.part), Int32(nc), Int32(r), Int32(ph.tiles),
+                Int32(d), Int32(npair), _i(ph.active), grid_dim=_blocks(nc * ph.tiles * npair), block_dim=MF_TPB,
+            )
         ctx.enqueue_function[mf_cov_kernel](
             _f(ph.part), _f(ph.cov1) if par == 1 else _f(ph.cov0), _i(pj), _i(pk), Int32(nc), Int32(ph.tiles), Int32(d),
             Int32(npair), hinv, _i(ph.active), grid_dim=_blocks(nc * npair), block_dim=MF_TPB,
@@ -764,10 +831,16 @@ def _run_phase(
         ctx.enqueue_copy(dst_ptr=hany.unsafe_ptr(), src_buf=anyb)
         ctx.synchronize()
         # the -inf start's pinvh (needp) runs even when no candidate is active
-        ctx.enqueue_function[mf_pinvh_kernel](
-            _f(ph.cov1) if par == 1 else _f(ph.cov0), _f(ph.wa), _f(ph.wv), _f(ph.pm), Int32(nc), Int32(d),
-            _i(ph.active), _i(ph.needp), grid_dim=_blocks(nc), block_dim=MF_TPB,
-        )
+        comptime if MCD_BATCH_COMPAT:
+            ctx.enqueue_function[mc_pinvh_kernel](
+                _f(ph.cov1) if par == 1 else _f(ph.cov0), _f(ph.wa), _f(ph.wv), _f(ph.pm), Int32(nc), Int32(d),
+                _i(ph.active), _i(ph.needp), _i(err), grid_dim=nc, block_dim=MF_TPB,
+            )
+        else:
+            ctx.enqueue_function[mf_pinvh_kernel](
+                _f(ph.cov1) if par == 1 else _f(ph.cov0), _f(ph.wa), _f(ph.wv), _f(ph.pm), Int32(nc), Int32(d),
+                _i(ph.active), _i(ph.needp), grid_dim=_blocks(nc), block_dim=MF_TPB,
+            )
         if Int(hany[0]) == 0:
             break
         ctx.enqueue_function[mf_dist_kernel](
@@ -837,6 +910,10 @@ def _finish(
         raise Error("x_decomp MinCovDet: a NaN distance or draw has no order (refused)")
     if Int(herr[1]) != 0:
         raise Error("x_decomp MinCovDet: the first C-step's log determinant is not finite")
+    if Int(herr[2]) != 0:
+        raise Error("x_decomp MinCovDet: batched round-robin eigensolve failed convergence budget")
+    if Int(herr[3]) != 0:
+        raise Error("x_decomp MinCovDet: batched round-robin eigensolve failed Frobenius gate")
     _ = herr^
 
 
