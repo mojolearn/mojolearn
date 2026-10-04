@@ -66,6 +66,10 @@ from x_decomp.cells import F32Ptr, I32Ptr, add, sub, mul, div0, sqrt0, log_floor
 from x_decomp.device import xd_ctx, _down, _down_i
 from x_decomp.kit import Mat
 
+# DROP-quality: mcdq4 (M2 taxi 100k), flagged-mask Jaccard vs OFF
+# .8805 MCD / .9645 EE fails .99; location/covariance shift 14%/18%.
+# Opt-in pending a corrected C-step; evidence above and in
+# docs/apple-fast/EXPERIMENTS.md (MCD_DEVICE_CSTEPS).
 comptime MCD_DEVICE_CSTEPS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_MCD_DEVICE_CSTEPS"]()

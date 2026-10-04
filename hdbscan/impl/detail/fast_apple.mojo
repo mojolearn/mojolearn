@@ -33,6 +33,10 @@ main batchv-hdb-smr-istella: hdbscan istella 44,879 -> 3,800 ms, n_clusters
 47 / noise 0.25381 both arms (taxi takes the d <= 64 arm: 426 / 434 ms,
 160 / 0.14222 both). -D MOJOLEARN_HDB_SMR_TILED_OFF: main's search."""
 
+# INCONCLUSIVE-speed, M3 batchv-hdb-core-taxi / -istella vs main:
+# taxi +0.8%; istella 44717 -> 45590 ms (+2%), clusters identical.
+# Old-base -11% did not carry; dropped for no demonstrated main gain.
+# See docs/apple-fast/EXPERIMENTS.md (HDB_CORE_TILE).
 comptime HDB_CORE_TILE = HDB_FAST_APPLE and (
     is_defined["MOJOLEARN_HDB_CORE_TILE"]() or HDB_ALL
 )
@@ -43,6 +47,10 @@ comptime HDB_DEV_BORUVKA = HDB_FAST_APPLE and (
 )
 """The d <= 64 arm's Boruvka rounds on the device (fast_mr_mst_device.mojo)."""
 
+# INCONCLUSIVE-speed, M3 batchv-hdb-onesync-taxi / -istella vs main:
+# 424.7 -> 425.5 / 3809 -> 3829 ms, clusters identical (SMR on both).
+# Old-base -5% did not carry; dropped for no demonstrated main gain.
+# See docs/apple-fast/EXPERIMENTS.md (HDB_ONE_SYNC).
 comptime HDB_ONE_SYNC = HDB_FAST_APPLE and (
     is_defined["MOJOLEARN_HDB_ONE_SYNC"]() or HDB_ALL
 )
