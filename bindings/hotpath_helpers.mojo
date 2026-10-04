@@ -45,6 +45,7 @@ from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 from sequence.schedule import fill_epoch_order, splitmix64
 from checks.numerics import portable_cosf, portable_log64
+from metrics.checks.pinned_sum import canonicalize_nan
 
 
 
@@ -1006,7 +1007,10 @@ def ic_running_min_f32_binding(
     var xp = _ptr[DType.int64](Int(py=best_idx_addr))
     with GILReleased(Python()):
         for b in range(count):
-            var v = Float32(-2.0) * lp.unsafe_load(b) + pen
+            # lane/review-fixes: flushed as the device's
+            # `ftz(fma(-2, ftz(ll), pen))` (arima fast_order_search); -2 x is
+            # exact, so mul + add is the fma's word
+            var v = _ftz_bits(Float32(-2.0) * _ftz_bits(lp.unsafe_load(b)) + pen)
             if v != v:
                 v = bitcast[DType.float32](UInt32(0x7FC00000))
             ip.unsafe_store(b, v)
@@ -1086,7 +1090,8 @@ def fold_pair_f32_binding(dst_addr: PythonObject, src_addr: PythonObject, n: Pyt
     var sp = _ptr[DType.float32](Int(py=src_addr))
     with GILReleased(Python()):
         for i in range(count):
-            var s = _ftz_bits(_ftz_bits(dp.unsafe_load(i)) + _ftz_bits(sp.unsafe_load(i)))
+            # NaN -> the canonical word, as the device kernel (lane/review-fixes)
+            var s = canonicalize_nan(_ftz_bits(_ftz_bits(dp.unsafe_load(i)) + _ftz_bits(sp.unsafe_load(i))))
             comptime if HOTPATH_SABOTAGE:
                 s = -s
             dp.unsafe_store(i, s)
