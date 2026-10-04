@@ -24,6 +24,7 @@ from gemm.afn_apple_fast import (
     afn_launch_tile,
     afn_zero_kernel,
 )
+from experiments.apple_fast.gemm.decomp_sdk import SDK_INTERPOSE, try_decomp_sdk
 from decomposition.linalg_public_device import device_qr_r
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
 from x_decomp.lu_fast import LU_FAST_STEP1, lfs_blocks, lu_fast_panel
@@ -1561,6 +1562,25 @@ def launch_gemm(
         )
 
 
+def launch_gemm_buffers(
+    ctx: DeviceContext, mut a: DeviceBuffer[DType.float32], mut b: DeviceBuffer[DType.float32],
+    mut c: DeviceBuffer[DType.float32], mut scratch: DeviceBuffer[DType.float32],
+    m: Int, k: Int, n: Int, ta: Bool, tb: Bool,
+) raises:
+    """Buffer-aware experiment entrance; caller retains all allocation ownership."""
+    comptime if DECOMP_FAST_GEMM_MMA and SDK_INTERPOSE:
+        var split_plan = False
+        if m > 0 and n > 0 and k > 0:
+            # Exactly the incumbent plan, before any SDK selection. Do not
+            # turn a split atomic operation into an unsplit vendor call.
+            var tiles = ((m + 63) // 64) * ((n + 63) // 64)
+            if tiles < DFG_BLOCK_TARGET and k >= 2 * DFG_MIN_SPLIT_STEPS:
+                split_plan = min(DFG_BLOCK_TARGET // tiles, k // DFG_MIN_SPLIT_STEPS) > 1
+        if try_decomp_sdk(ctx, c, a, b, m, k, n, ta, tb, split_plan):
+            return
+    launch_gemm(ctx, _p(a), _p(b), _p(c), _p(scratch), m, k, n, ta, tb)
+
+
 def launch_ew(
     ctx: DeviceContext, op: Int, a: F32Ptr, b: F32Ptr, bm: Int, c: F32Ptr, cm: Int, dst: F32Ptr,
     count: Int, d: Int, s: Float32,
@@ -2086,7 +2106,10 @@ struct DevExec(Exec):
         var dc = ctx.enqueue_create_buffer[DType.float32](m * n if m * n > 0 else 1)
         var ns = gemm_scratch(m, k, n)
         var dp = ctx.enqueue_create_buffer[DType.float32](ns if ns > 0 else 1)
-        launch_gemm(ctx, _p(da), _p(db), _p(dc), _p(dp), m, k, n, ta, tb)
+        comptime if SDK_INTERPOSE:
+            launch_gemm_buffers(ctx, da, db, dc, dp, m, k, n, ta, tb)
+        else:
+            launch_gemm(ctx, _p(da), _p(db), _p(dc), _p(dp), m, k, n, ta, tb)
         _down(ctx, dc, c, m * n)
         ctx.synchronize()
         _ = da^

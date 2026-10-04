@@ -59,7 +59,8 @@ from x_decomp.kit import (
 )
 from x_decomp.mcd import Est, _F32_EPS, _FLT_MIN, _neg_inf, _order_by_det, _pos_inf, _write, argsort_values, smallest_sorted
 from x_decomp.mcd_fast import MCD_DEVICE_CSTEPS, fast_mcd_fast
-from x_decomp.resident import X_DECOMP_POOL, _ptr, pool_alloc, pool_free
+from x_decomp.resident import X_DECOMP_POOL, _ptr, pool_alloc, pool_free, pool_gemm
+from experiments.apple_fast.gemm.decomp_sdk import SDK_INTERPOSE
 
 #: `_expansion_decomp._F64_EPS`, the `adds` of LDA's `norm_phi`
 comptime _F64_EPS: Float64 = 2.220446049250313e-16
@@ -270,7 +271,14 @@ struct DKit(Movable):
             return out^
         var ns = gemm_scratch(m, k, n)
         var sid = pool_alloc(max(ns, 1))
-        launch_gemm(self.ctx, A.p(), B.p(), out.p(), _ptr(sid, max(ns, 1)), m, k, n, ta, tb)
+        comptime if SDK_INTERPOSE:
+            if A.off == 0 and B.off == 0 and out.off == 0:
+                pool_gemm(self.ctx, A.id, B.id, out.id, sid, m, k, n, ta, tb)
+            else:
+                # Row views have pointer offsets; retain their exact old route.
+                launch_gemm(self.ctx, A.p(), B.p(), out.p(), _ptr(sid, max(ns, 1)), m, k, n, ta, tb)
+        else:
+            launch_gemm(self.ctx, A.p(), B.p(), out.p(), _ptr(sid, max(ns, 1)), m, k, n, ta, tb)
         pool_free(sid)
         return out^
 

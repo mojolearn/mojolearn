@@ -45,6 +45,7 @@ from x_decomp.device import (
     launch_colsum,
     launch_ew,
     launch_gemm,
+    launch_gemm_buffers,
     launch_project,
     PROJECT_TILED,
     launch_rowsum,
@@ -61,6 +62,8 @@ from x_decomp.device import (
     _blocks,
     xd_ctx,
 )
+
+from experiments.apple_fast.gemm.decomp_sdk import SDK_INTERPOSE
 
 comptime POOL_KEEP_BYTES = 1 << 30
 comptime POOL_CLASSES = 40
@@ -238,6 +241,27 @@ def dev_ew_py(
     return PythonObject(count)
 
 
+def pool_gemm(
+    ctx: DeviceContext, aid: Int, bid: Int, cid: Int, sid: Int,
+    m: Int, k: Int, n: Int, ta: Bool, tb: Bool,
+) raises:
+    # Validate IDs/capacities before reading the owning pool. Local buffer
+    # copies retain the same allocations; no allocation/upload is introduced.
+    var ap = _ptr(aid, m * k)
+    var bp = _ptr(bid, k * n)
+    var cp = _ptr(cid, m * n)
+    var sp = _ptr(sid, gemm_scratch(m, k, n))
+    comptime if SDK_INTERPOSE:
+        var pool = X_DECOMP_POOL.get_or_create_ptr()
+        var da = pool[].bufs[aid]
+        var db = pool[].bufs[bid]
+        var dc = pool[].bufs[cid]
+        var ds = pool[].bufs[sid]
+        launch_gemm_buffers(ctx, da, db, dc, ds, m, k, n, ta, tb)
+    else:
+        launch_gemm(ctx, ap, bp, cp, sp, m, k, n, ta, tb)
+
+
 def dev_gemm_py(a: PythonObject, b: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
     var m = _n(p, 0)
     var k = _n(p, 1)
@@ -248,8 +272,7 @@ def dev_gemm_py(a: PythonObject, b: PythonObject, c: PythonObject, p: PythonObje
     var tb = Int(py=p[4]) != 0
     var ns = gemm_scratch(m, k, n)
     var sid = pool_alloc(ns)
-    launch_gemm(xd_ctx(), _ptr(_id(a), m * k), _ptr(_id(b), k * n), _ptr(_id(c), m * n), _ptr(sid, ns),
-                m, k, n, ta, tb)
+    pool_gemm(xd_ctx(), _id(a), _id(b), _id(c), sid, m, k, n, ta, tb)
     pool_free(sid)
     return PythonObject(m * n)
 
