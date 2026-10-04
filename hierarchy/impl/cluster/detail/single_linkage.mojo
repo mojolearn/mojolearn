@@ -27,7 +27,11 @@ from hierarchy.impl.cluster.detail.agglomerative import (
     EXTRACT_TPB,
     extract_flattened_clusters,
 )
-from hierarchy.impl.cluster.detail.dendrogram_device import build_dendrogram_device
+from hierarchy.impl.cluster.detail.dendrogram_device import (
+    IDN_DENDRO_UNION,
+    build_dendrogram_device,
+)
+from hdbscan.impl.cluster.detail.dendrogram_union import build_dendrogram_union
 from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_EXPANDED,
     DISTANCE_L2_SQRT_EXPANDED,
@@ -140,10 +144,18 @@ def build_dist_linkage(
     _ = color^
 
     # `:194-204` Perform hierarchical labeling
-    build_dendrogram_device(
-        ctx, mst_rows, mst_cols, mst_weights, n_edges,
-        out_dendrogram, out_distances, out_sizes,
-    )
+    # fam2-cluster, IDN_DENDRO_UNION: the same three outputs from one
+    # lock-free union launch per level, no flag readback.
+    comptime if IDN_DENDRO_UNION:
+        build_dendrogram_union(
+            ctx, mst_rows, mst_cols, mst_weights, n_edges,
+            out_dendrogram, out_distances, out_sizes, drain=True,
+        )
+    else:
+        build_dendrogram_device(
+            ctx, mst_rows, mst_cols, mst_weights, n_edges,
+            out_dendrogram, out_distances, out_sizes,
+        )
     return rounds
 
 

@@ -61,7 +61,11 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import identical_div
 from core.identity_trace import IdentityTrace
 from hdbscan.checks.hdbscan_sabotage import HDB_SAB_NONE
-from hdbscan.impl.detail.reachability import core_distances
+from hdbscan.impl.detail.idn_switches import IDN_HDB_PREDICT_DEVICE_CAST
+from hdbscan.impl.detail.reachability import (
+    core_distances,
+    knn_inds_to_i32_kernel,
+)
 from hdbscan.impl.prediction_data import (
     PredictionData,
     prediction_neighborhood,
@@ -321,12 +325,27 @@ def approximate_predict(
     var knn_dists = ctx.enqueue_create_buffer[DType.float32](nq * neighborhood)
     var knn_inds = ctx.enqueue_create_buffer[DType.int32](nq * neighborhood)
     var i32 = List[Int32](capacity=nq * neighborhood)
-    for i in range(nq * neighborhood):
-        i32.append(Int32(Int(h_idx.unsafe_ptr().unsafe_load(i))))
-    ctx.synchronize()
-    ctx.enqueue_copy(dst_buf=knn_dists, src_ptr=h_dist.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=knn_inds, src_ptr=i32.unsafe_ptr())
-    ctx.synchronize()
+    # fam2-cluster, IDN_HDB_PREDICT_DEVICE_CAST: the UInt32 indices go up
+    # as they are and the fit's kernel narrows them (the same Int32 values).
+    var idx_u32 = ctx.enqueue_create_buffer[DType.uint32](
+        nq * neighborhood if IDN_HDB_PREDICT_DEVICE_CAST else 1
+    )
+    comptime if IDN_HDB_PREDICT_DEVICE_CAST:
+        var cells = nq * neighborhood
+        ctx.enqueue_copy(dst_buf=knn_dists, src_ptr=h_dist.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=idx_u32, src_ptr=h_idx.unsafe_ptr())
+        ctx.enqueue_function[knn_inds_to_i32_kernel](
+            knn_inds.unsafe_ptr(), idx_u32.unsafe_ptr(), Int32(cells),
+            grid_dim=((cells + tpb - 1) // tpb, 1, 1), block_dim=(tpb, 1, 1),
+        )
+        ctx.synchronize()
+    else:
+        for i in range(nq * neighborhood):
+            i32.append(Int32(Int(h_idx.unsafe_ptr().unsafe_load(i))))
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_buf=knn_dists, src_ptr=h_dist.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=knn_inds, src_ptr=i32.unsafe_ptr())
+        ctx.synchronize()
 
     # `:181-186` Slice core distances, slot min_samples - 1
     var prediction_core_dists = ctx.enqueue_create_buffer[DType.float32](nq)
@@ -406,6 +425,7 @@ def approximate_predict(
     _ = h_x^
     _ = h_q^
     _ = i32^
+    _ = idx_u32^
     _ = knn_dists^
     _ = knn_inds^
     _ = prediction_core_dists^

@@ -71,7 +71,25 @@ comptime IDN_DENDRO_RADIX_SORT = (
     )
 )
 
-#: fam2-cluster (2026-10-04), IDENTICAL: the dendrogram's hook + jump loop
+#: fam2-cluster (2026-10-04), IDENTICAL, every vendor: the per-level hook loop
+#: replaced by ONE lock-free union launch (`hdbscan/impl/cluster/detail/
+#: dendrogram_union.mojo`, written for FAST on Apple by lane af-hdbscan2), so
+#: no level reads a flag back: one wait for the whole dendrogram where the
+#: hook loop waits two or three times per level. Integer work only; the
+#: union's root is each component's smallest label, the root the converged
+#: hook loop ends at, so `par`, and with it the three outputs, are the same
+#: integers. Callers switch on this (`single_linkage.mojo` here and in
+#: hdbscan). `-D MOJOLEARN_IDN_DENDRO_UNION_OFF=1` restores the hook loop.
+comptime IDN_DENDRO_UNION = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_DENDRO_UNION_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+#: fam2-cluster (2026-10-04), IDENTICAL (the route when IDN_DENDRO_UNION is
+#: off): the dendrogram's hook + jump loop
 #: reads its "something hooked" flag once per CHUNK of pairs instead of once
 #: per pair. A pair past the fixed point changes nothing (no lower-half edge
 #: joins two roots, so the hook writes nothing and the jump finds every root

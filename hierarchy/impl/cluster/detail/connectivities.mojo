@@ -144,6 +144,7 @@ def pairwise_distances(
     tile_tpb: Int = PINNED_TILE_TPB,
     sabotage: Int32 = LINK_SAB_NONE,
     fill_indices: Bool = True,
+    nan_guard: Bool = True,
 ) raises:
     """`connectivities.cuh:133-176`. `norms` is the caller's `m`-long
     scratch for the row norms (theirs lives inside `cuvs::distance`);
@@ -272,7 +273,10 @@ def pairwise_distances(
     # refused by name here, before any stage is recorded or any gate reads
     # the matrix. `LINK_SAB_SKIP_NAN_GUARD` is the check's arm that lets the
     # NaN through to show what the guard prevents.
-    if sabotage != LINK_SAB_SKIP_NAN_GUARD:
+    # `nan_guard=False` (fam2-cluster, hdbscan's IDN_HDB_MR_FUSED_GUARD): the
+    # caller counts the NaN cells itself, in a pass it already makes over
+    # the matrix, and raises this refusal with the same count and words.
+    if sabotage != LINK_SAB_SKIP_NAN_GUARD and nan_guard:
         refuse_nan_distances(ctx, data, nnz, "hierarchy.pairwise_distances")
 
 

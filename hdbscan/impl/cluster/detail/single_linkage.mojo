@@ -55,6 +55,7 @@ from hdbscan.checks.hdbscan_sabotage import HDB_SAB_MST_ORIENT_RAW, HDB_SAB_NONE
 from hdbscan.checks.mutual_reachability_dense import (
     MR_TPB,
     mutual_reachability_dense,
+    mutual_reachability_dense_guarded,
     refuse_nonfinite_device,
 )
 from hdbscan.impl.cluster.detail.sparse_mr_mst import sparse_mr_mst_device
@@ -63,7 +64,11 @@ from hdbscan.impl.detail.reachability import (
     compute_core_dists,
 )
 from hierarchy.checks.edge_order import LINK_SAB_NONE, edge_hi, edge_lo
-from hierarchy.impl.cluster.detail.dendrogram_device import build_dendrogram_device
+from hierarchy.impl.cluster.detail.dendrogram_device import (
+    IDN_DENDRO_UNION,
+    build_dendrogram_device,
+)
+from hdbscan.impl.detail.idn_switches import IDN_HDB_MR_FUSED_GUARD
 from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
     PAIRWISE_MAX_ROWS,
@@ -267,10 +272,18 @@ def build_mr_linkage(
     var pw_dists = ctx.enqueue_create_buffer[DType.float32](nnz)
     var norms = ctx.enqueue_create_buffer[DType.float32](m)
     if not use_fast and not use_sparse:
-        pairwise_distances(
-            ctx, x, m, n, metric, indptr, indices, pw_dists, norms,
-            tile_tpb, LINK_SAB_NONE, fill_indices=False,
-        )
+        # fam2-cluster, IDN_HDB_MR_FUSED_GUARD: the NaN count of this matrix
+        # is taken inside the mutual-reachability pass below.
+        comptime if IDN_HDB_MR_FUSED_GUARD:
+            pairwise_distances(
+                ctx, x, m, n, metric, indptr, indices, pw_dists, norms,
+                tile_tpb, LINK_SAB_NONE, fill_indices=False, nan_guard=False,
+            )
+        else:
+            pairwise_distances(
+                ctx, x, m, n, metric, indptr, indices, pw_dists, norms,
+                tile_tpb, LINK_SAB_NONE, fill_indices=False,
+            )
 
     # `reachability.cuh:222` `(value_t)1.0 / alpha`, on the host as
     # theirs is, through `identical_div` (row 49's seam). At the shipped
@@ -281,13 +294,19 @@ def build_mr_linkage(
     # one m * m allocation instead of two (lane/cluster-apple)
     var mr = pw_dists.create_sub_buffer[DType.float32](0, nnz)
     if not use_fast and not use_sparse:
-        mutual_reachability_dense(
-            ctx, mr, pw_dists, core_dists, m, inv_alpha, mr_tpb, sabotage
-        )
-        refuse_nonfinite_device(
-            ctx, mr, nnz, "hdbscan.build_mr_linkage",
-            "mutual reachability cells", sabotage,
-        )
+        comptime if IDN_HDB_MR_FUSED_GUARD:
+            mutual_reachability_dense_guarded(
+                ctx, mr, pw_dists, core_dists, m, inv_alpha,
+                "hdbscan.build_mr_linkage", mr_tpb, sabotage,
+            )
+        else:
+            mutual_reachability_dense(
+                ctx, mr, pw_dists, core_dists, m, inv_alpha, mr_tpb, sabotage
+            )
+            refuse_nonfinite_device(
+                ctx, mr, nnz, "hdbscan.build_mr_linkage",
+                "mutual reachability cells", sabotage,
+            )
         trace.record_device[DType.float32](ctx, "hdbscan.mr.dists", mr, nnz)
 
     # `:81-102` color, then build_sorted_mst. The reduction op and the
@@ -418,6 +437,13 @@ def build_mr_linkage(
         build_dendrogram_union(
             ctx, mst_rows, mst_cols, mst_weights, n_edges,
             out_dendrogram, out_distances, out_sizes,
+        )
+    elif IDN_DENDRO_UNION:
+        # fam2-cluster: the same union under IDENTICAL on every vendor, with
+        # one wait before its scratch is released.
+        build_dendrogram_union(
+            ctx, mst_rows, mst_cols, mst_weights, n_edges,
+            out_dendrogram, out_distances, out_sizes, drain=True,
         )
     else:
         build_dendrogram_device(
