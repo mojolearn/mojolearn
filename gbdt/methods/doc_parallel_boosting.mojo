@@ -74,6 +74,7 @@ from gbdt.ctrs.ctr_binarization import TBinarizationOptions
 # `pointwise_non_symmetric.cpp:7-29` registers for every single-target
 # pointwise loss under `EGrowPolicy::Depthwise` and `Lossguide`
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper_depthwise import (
+    IDN_NS_SCALE_DEVICE,
     NS_INHERIT_PARTITION,
     TDepthwiseWorkspace,
     fit_non_symmetric_tree,
@@ -83,7 +84,9 @@ from gbdt.methods.greedy_subsets_searcher.structure_searcher_options import (
 )
 from gbdt.models.non_symmetric_tree import TNonSymmetricTree
 from gbdt.models.add_non_symmetric_tree_doc_parallel import (
+    IDN_NS_PREDICT_PACKED,
     add_non_symmetric_tree_to_cursor,
+    add_non_symmetric_trees_packed,
     compute_non_symmetric_bins_for_model,
 )
 from gbdt.options.catboost_options import (
@@ -135,11 +138,26 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 #: only when `estimate_can_batch` holds (single-dim pointwise loss, Newton
 #: or Gradient) and the device partitioner is on; IDENTICAL compiles the
 #: serial loop unchanged.
+#: lane/fam-gbdt (2026-10-04), IDN_CTR_PERM_BATCH: the same batched walk
+#: under IDENTICAL on every vendor, default on. No arithmetic moves: each
+#: permutation's task launches the kernels of its serial run on the same
+#: inputs in the same order (the paragraph above), and only the drains are
+#: shared, so the bits are the serial loop's on every column and the host
+#: column is untouched. `-D MOJOLEARN_IDN_GBDT_CTR_PERM_BATCH_OFF` (or the
+#: master `-D MOJOLEARN_IDN_ALL_OFF`) restores the serial loop under
+#: IDENTICAL.
+comptime IDN_CTR_PERM_BATCH = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_GBDT_CTR_PERM_BATCH_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
 comptime CTR_PERM_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF"]()
-)
+) or IDN_CTR_PERM_BATCH
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.bootstrap import (
     bootstrap_grid_blocks,
@@ -2180,7 +2198,7 @@ def fit_with_test(
     var leaf_parts = List[DeviceLeafPartitioner]()
     # CTR_PERM_BATCH: one partitioner and one estimation workspace per
     # permutation (every task's buffers live at once), and the arena the
-    # batched path carves them from. Empty under IDENTICAL.
+    # batched path carves them from. Empty when the arm is compiled out.
     var perm_leaf_parts = List[DeviceLeafPartitioner]()
     var perm_est_ws = List[List[TEstimationWorkspace]]()
     var perm_arena = BufferArena()
@@ -2628,9 +2646,17 @@ def fit_with_test(
             var wmag = Float32(0.0)
             var gmag = Float32(0.0)
             var t_mags = loop_times.start()
+            # lane/fam-gbdt (IDN_NS_SCALE_DEVICE): the driver derives the
+            # scale on the device from `mags` (as `run_tree_layout` does,
+            # DEVIATION 95), so this per-tree drain is not taken.
+            var ns_mags_opt = Optional[DeviceBuffer[DType.float32]]()
 
             @parameter
-            if _needs_magnitudes:
+            if _needs_magnitudes and IDN_NS_SCALE_DEVICE:
+                ns_mags_opt = Optional(mags.copy())
+
+            @parameter
+            if _needs_magnitudes and not IDN_NS_SCALE_DEVICE:
                 var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
                 ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
                 ctx.synchronize()
@@ -2678,6 +2704,7 @@ def fit_with_test(
                 multiclass_optimization=objective == OBJECTIVE_MULTICLASS,
                 random_seed=tree_seed,
                 tag_prefix=_tree_tag(iteration) + ".",
+                mags_dev=ns_mags_opt^,
             )
             loop_times.stop_host("iter_tree_search", t_search)
             var n_bins = tree.bin_count()
@@ -3395,12 +3422,20 @@ def predict(
         # per-tree cost on a path that runs once per predict, stated
         # rather than hidden, and the packed-once form the oblivious arm
         # below takes is the fix if anyone measures a need.
-        for t in range(model.size()):
-            add_non_symmetric_tree_to_cursor(
-                ctx, layout, model.non_symmetric_models[t], cindex, n_rows,
+        # lane/fam-gbdt (IDN_NS_PREDICT_PACKED): the ensemble packed once,
+        # the same kernels back to back, one drain
+        comptime if IDN_NS_PREDICT_PACKED:
+            add_non_symmetric_trees_packed(
+                ctx, layout, model.non_symmetric_models, cindex, n_rows,
                 cursor,
             )
-        ctx.synchronize()
+        else:
+            for t in range(model.size()):
+                add_non_symmetric_tree_to_cursor(
+                    ctx, layout, model.non_symmetric_models[t], cindex,
+                    n_rows, cursor,
+                )
+            ctx.synchronize()
         return
 
     # pack every tree's per-level records and leaf values, flat.

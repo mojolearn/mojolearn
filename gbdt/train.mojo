@@ -47,6 +47,7 @@ from gbdt.data.permutation import (
     ctrs_estimation_permutation,
 )
 from gbdt.grid_creator.binarization import (
+    IDN_ORDERED_RMSE_DEVICE_GRID,
     BORDER_TYPE_GREEDY_LOG_SUM,
     best_split,
     border_type_from_name,
@@ -64,7 +65,12 @@ from std.os import getenv
 
 # DEVIATION 258: the probability links (double, as CatBoost computes them)
 # go through the host-portable exp64 under IDENTICAL; FAST is the stdlib
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_exp64
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
+    identical_exp64,
+)
 from checks.numerics import ftz as _hr2_ftz
 from gbdt.grid_creator.gls_borders_device import device_float_borders
 from checks.soft_f64 import (
@@ -121,6 +127,27 @@ comptime CTR_FAST_FREQ = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_GBDT_CTR_FAST_FREQ_OFF"]()
+)
+
+#: lane/fam-gbdt (2026-10-04), IDN_CTR_FREQ_DEVICE: IDENTICAL, every vendor,
+#: default on. The same routing as CTR_FAST_FREQ above: the
+#: permutation-INDEPENDENT simple CTR (FeatureFreq) takes
+#: `compute_simple_ctrs_device` instead of the host stable sort and host
+#: frequency calcer, once per categorical feature. No bit moves: the device
+#: calcer's bin sums are integer-valued float counts, exact in any reduction
+#: order while they stay below 2^24, and the final `(sum + prior) / (total +
+#: prior_observations)` is one float32 divide per row on both sides. The
+#: call site keeps the host calcer for `n_rows >= 2^24` (where a count could
+#: leave the exact range) and for `counter_calc_method == Full` (no device
+#: arm). The host column (`gbdt/host/gbdt_oracle_ctr.mojo`) restates the
+#: host calcer and is unchanged. `-D MOJOLEARN_IDN_GBDT_CTR_FREQ_DEVICE_OFF`
+#: (or the master `-D MOJOLEARN_IDN_ALL_OFF`) restores the host calcer.
+comptime IDN_CTR_FREQ_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_GBDT_CTR_FREQ_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
 )
 
 from gbdt.gpu_util.kernel.bootstrap import (
@@ -1556,6 +1583,11 @@ def train(
                 indep_on_device = (
                     cat_params.counter_calc_method != COUNTER_CALC_FULL
                 )
+            comptime if IDN_CTR_FREQ_DEVICE:
+                indep_on_device = (
+                    cat_params.counter_calc_method != COUNTER_CALC_FULL
+                    and n_rows < (1 << 24)
+                )
             if indep_on_device:
                 indep = compute_simple_ctrs_device(
                     ctx, codes, unique_values, independent_configs
@@ -2498,18 +2530,52 @@ def train_ordered_rmse(
     var fold_counts = List[Int]()
     var one_hot = List[Bool]()
     var nan_treatment = List[Int]()
-    for f in range(n_features):
-        var column = List[Float32]()
-        for r in range(n_rows):
-            var value = x_colmajor[f * n_rows + r]
-            if not isfinite(value):
+    comptime if IDN_ORDERED_RMSE_DEVICE_GRID:
+        # lane/fam-gbdt: the grid on the device, over every row (see the
+        # constant in `gbdt/grid_creator/binarization.mojo`). The finite
+        # check keeps this entry's refusal and its sentence.
+        for i in range(n_rows * n_features):
+            if not isfinite(x_colmajor[i]):
                 raise Error("train_ordered_rmse requires finite numeric features")
-            column.append(value)
-        var grid = best_split(column^, border_count)
-        fold_counts.append(len(grid))
-        borders.append(grid^)
-        one_hot.append(False)
-        nan_treatment.append(NAN_TREATMENT_AS_IS)
+        var grid_cols = List[MutPointer[Float32, MutUntrackedOrigin]](
+            capacity=n_features
+        )
+        for f in range(n_features):
+            grid_cols.append(
+                rebind[MutPointer[Float32, MutUntrackedOrigin]](
+                    x_colmajor.unsafe_ptr()
+                )
+                + f * n_rows
+            )
+        var got = device_float_borders(
+            ctx, grid_cols, n_rows, n_rows, border_count, NAN_MODE_FORBIDDEN,
+            generate_seed_for_borders(UInt64(0)),
+        )
+        var dev_grids = got[0].copy()
+        if len(dev_grids) != n_features:
+            raise Error(
+                "train_ordered_rmse: the device border build returned "
+                + String(len(dev_grids)) + " grids for "
+                + String(n_features) + " features"
+            )
+        for f in range(n_features):
+            fold_counts.append(len(dev_grids[f]))
+            borders.append(dev_grids[f].copy())
+            one_hot.append(False)
+            nan_treatment.append(NAN_TREATMENT_AS_IS)
+    else:
+        for f in range(n_features):
+            var column = List[Float32]()
+            for r in range(n_rows):
+                var value = x_colmajor[f * n_rows + r]
+                if not isfinite(value):
+                    raise Error("train_ordered_rmse requires finite numeric features")
+                column.append(value)
+            var grid = best_split(column^, border_count)
+            fold_counts.append(len(grid))
+            borders.append(grid^)
+            one_hot.append(False)
+            nan_treatment.append(NAN_TREATMENT_AS_IS)
     var layout = build_layout(fold_counts)
     var cindex = _build_cindex_from_floats(ctx, x_colmajor, n_rows, borders, fold_counts)
     var result = fit_ordered_rmse(

@@ -45,7 +45,37 @@ The border between two bins is the MIDPOINT of the values either side
 
 from std.sys.compile import is_defined
 
-from checks.numerics import ftz, identical_mul_add, portable_log64
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    ftz,
+    identical_mul_add,
+    portable_log64,
+)
+
+#: lane/fam-gbdt (2026-10-04), IDN_ORDERED_RMSE_DEVICE_GRID: IDENTICAL,
+#: every column, default on. `train_ordered_rmse` (the explicit-permutation
+#: Ordered RMSE fit) built its GreedyLogSum grid on the HOST inside the fit:
+#: one `best_split` per feature, a host sort of every row. It now takes the
+#: device border build the main `train` uses (`device_float_borders`: device
+#: keys, the segmented sort, one search thread per column) over ALL rows (no
+#: subsample), NaN mode Forbidden.
+#: BITS: the device build flushes subnormal inputs by bits (`border_key`)
+#: where the host `best_split` did not, so a column holding subnormals takes
+#: a different grid; every other column takes the same one. The host column
+#: (`gbdt/host/gbdt_oracle_ordered.mojo`) takes `gbdt_host_grid`, the device
+#: build's host restatement, under the SAME constant, so NVIDIA, AMD, Apple
+#: and the host column move together. Defined here because this module is
+#: GPU-free and both sides import it.
+#: `-D MOJOLEARN_IDN_GBDT_ORDERED_RMSE_DEVICE_GRID_OFF` (or the master
+#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the host `best_split` on both sides.
+comptime IDN_ORDERED_RMSE_DEVICE_GRID = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_GBDT_ORDERED_RMSE_DEVICE_GRID_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
 
 comptime LINEAR_BOUNDS_2635 = is_defined["MOJOLEARN_2635_LINEAR_BOUNDS"]()
 """DEVIATION 2635: `-D MOJOLEARN_2635_LINEAR_BOUNDS=1` restores the linear
