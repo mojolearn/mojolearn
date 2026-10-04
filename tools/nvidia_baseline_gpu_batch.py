@@ -232,7 +232,7 @@ for role in @ROLES@; do
         timeout -k 20 140 "${cmd[@]}" > "results/extra-$role.log" 2>&1 || EXTRA_FAILED=1
     fi
 done''' if extra_capture else 'EXTRA_FAILED=0').replace('@FULL@', ('''for role in @ROLES@; do
-    collect full "$role" 2400
+    collect full "$role" ''' + ('4800' if native_absent else '2400') + '''
 done
 ''' + ('''# No native column exists on this device. The orchestrator's machine compares
 # this PTX column with the native references of the natively supported devices.''' if native_absent else '''# Single-pod comparison is deliberately prototype-labelled; cross-pod full
