@@ -145,18 +145,19 @@ def _coef_block(coef, intercept):
     return out
 
 
-def _decision(est, X, coef_rows, intercepts, link=LINK_IDENTITY):
-    """link(X @ W^T + b) through the binding, as an (n, k) float32 Array."""
+def _decision(est, X, coef, intercept, link=LINK_IDENTITY):
+    """link(X @ W^T + b) through the binding, as an (n, k) float32 Array.
+    `coef`: the float32 coef_ Array ((k, d) or (d,)); `intercept`: the
+    intercept_ Array (k) or one Python number. The [w | b] block is byte
+    copies (`_coef_block`; lane cpu2-l10-linear: was a Python list)."""
     a, n, d = _matrix(X)
     if d != est.n_features_in_:
         raise ValueError(
             f"mojolearn {type(est).__name__}: X has {d} features, the model was fitted with {est.n_features_in_}")
-    k = len(coef_rows)
-    flat = []
-    for row, b in zip(coef_rows, intercepts):
-        flat.extend(row)
-        flat.append(b)
-    wb = Array.from_list(flat, "<f4")
+    if not hasattr(intercept, "shape"):
+        intercept = full((1,), float(intercept), "<f4")
+    wb = _coef_block(coef, intercept)
+    k = wb.size // (d + 1)
     out = empty((n, k), "<f4")
     est._bind(_BINDING).x_linear_decision(
         addr_ro(a, name="X"), addr_ro(wb, name="coef"), [n, d, k, link], addr(out, name="out"))
@@ -264,8 +265,7 @@ class _LinearClassifierMixin:
     def decision_function(self, X):
         _check_fitted(self)
         k = len(self.intercept_)
-        coef = self.coef_.tolist()
-        out = _decision(self, X, coef, self.intercept_.tolist())
+        out = _decision(self, X, self.coef_, self.intercept_)
         if k == 1:
             return out.reshape((out.shape[0],))
         return out
@@ -285,9 +285,7 @@ class _LinearRegressorMixin:
 
     def predict(self, X):
         _check_fitted(self)
-        out = _decision(self, X, [self.coef_.tolist()], [float(self.intercept_)
-                                                         if not hasattr(self.intercept_, "tolist")
-                                                         else self.intercept_.tolist()[0]], self._link)
+        out = _decision(self, X, self.coef_, self.intercept_, self._link)
         return out.reshape((out.shape[0],))
 
     def score(self, X, y):
@@ -454,7 +452,7 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
         if self.loss != "log_loss":
             raise AttributeError("probability estimates are not available for loss=%r" % self.loss)
         _check_fitted(self)
-        p = _decision(self, X, self.coef_.tolist(), self.intercept_.tolist(), LINK_SIGMOID)
+        p = _decision(self, X, self.coef_, self.intercept_, LINK_SIGMOID)
         return _py2mojo_proba(self, _ROWS_SGD_PROBA, p, len(self.intercept_))
 
 
@@ -983,12 +981,12 @@ class SGDOneClassSVM(NumericModeMixin):
 
     def decision_function(self, X):
         _check_fitted(self)
-        out = _decision(self, X, [self.coef_.tolist()], [-self.offset_.tolist()[0]])
+        out = _decision(self, X, self.coef_, -float(self.offset_[0]))
         return out.reshape((out.shape[0],))
 
     def score_samples(self, X):
         _check_fitted(self)
-        out = _decision(self, X, [self.coef_.tolist()], [0.0])
+        out = _decision(self, X, self.coef_, 0.0)
         return out.reshape((out.shape[0],))
 
     def predict(self, X):
