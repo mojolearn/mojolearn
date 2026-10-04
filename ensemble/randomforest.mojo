@@ -47,6 +47,11 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
 )
 from core.device_liveness import assert_device_alive
 from std.memory import bitcast
+from ensemble.oob_device import (
+    IDN_RF_OOB_DEVICE,
+    OOB_TPB,
+    rf_oob_rows_kernel,
+)
 from ensemble.weighted_bootstrap_device import (
     IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE,
     build_weight_cdf_device,
@@ -1508,83 +1513,206 @@ def compute_oob_score[
         raise Error("cannot compute an OOB score for an empty forest")
     var num_outputs = Int(forest.trees[0].num_outputs)
 
-    # The masks, back on the host. `:717` indexes them per tree.
-    var hm = ctx.enqueue_create_host_buffer[DType.uint8](n_trees * n_rows)
-    log_launch_ctx(ctx, "xfer_oob_masks")
-    ctx.enqueue_copy(dst_buf=hm, src_buf=sampler.bootstrap_masks)
-
-    # X, row-major, because `predict_one` walks a row (`:366` does the
-    # same pointer arithmetic). Training may have been column-major.
-    # DEVIATION 2484: callers that still own training X may lend it until
-    # this synchronous call returns. Native callers retain the download arm.
-    var hx = ctx.enqueue_create_host_buffer[DType.float32](
-        n_rows * n_cols if host_x_addr == 0 else 0
-    )
-    if host_x_addr == 0:
-        log_launch_ctx(ctx, "xfer_oob_x")
-        ctx.enqueue_copy(dst_buf=hx, src_buf=x)
-
     var hy = ctx.enqueue_create_host_buffer[O.LabelT](n_rows)
-    log_launch_ctx(ctx, "xfer_oob_y")
-    ctx.enqueue_copy(dst_buf=hy, src_buf=y)
-    ctx.synchronize()
-
-    var source = MutPointer[Float32, MutUntrackedOrigin](
-        unsafe_from_address=host_x_addr
-    )
-    if host_x_addr == 0:
-        source = hx.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-    var rows = List[Scalar[O.DataT]](capacity=n_rows * n_cols)
-    for r in range(n_rows):
-        for c in range(n_cols):
-            var src = r * n_cols + c if row_major else c * n_rows + r
-            var value = source.unsafe_load(src)
-            # The device training matrix was flushed in-place before bins.
-            # Mirror that seam on borrowed original X, without mutating it.
-            comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-                value = ftz(value)
-            rows.append(rebind[Scalar[O.DataT]](value))
-
-    # `:711-712`
     var oob_predictions = List[Float64]()
-    for _ in range(n_rows * num_outputs):
-        oob_predictions.append(Float64(0.0))
     var oob_counts = List[Int]()
-    for _ in range(n_rows):
-        oob_counts.append(0)
-
-    var scratch = List[Scalar[O.DataT]]()
-    for _ in range(num_outputs):
-        scratch.append(Scalar[O.DataT](0))
-
-    # `:715-722`
-    for t in range(n_trees):
+    comptime if IDN_RF_OOB_DEVICE:
+        # fam2-forests: the (tree, row) walk, the binary64 accumulation
+        # and the division by the count run on the device
+        # (`ensemble/oob_device.mojo`); X and the masks stay there. What
+        # crosses the bus: the flat model up (control data the host
+        # owns), the averaged predictions (an attribute the API returns),
+        # the counts and y back, once.
+        var total_nodes = 0
+        for t in range(n_trees):
+            total_nodes += len(forest.trees[t].sparsetree)
+        var h_off = ctx.enqueue_create_host_buffer[DType.int32](n_trees)
+        var h_col = ctx.enqueue_create_host_buffer[DType.int32](total_nodes)
+        var h_left = ctx.enqueue_create_host_buffer[DType.int32](total_nodes)
+        var h_q = ctx.enqueue_create_host_buffer[DType.float32](total_nodes)
+        var h_leaf = ctx.enqueue_create_host_buffer[DType.float32](
+            total_nodes * num_outputs
+        )
+        var node_base = 0
+        for t in range(n_trees):
+            h_off.unsafe_ptr().unsafe_store(t, Int32(node_base))
+            var nn = len(forest.trees[t].sparsetree)
+            for jn in range(nn):
+                var nd = forest.trees[t].sparsetree[jn]
+                h_col.unsafe_ptr().unsafe_store(node_base + jn, nd.ColumnId())
+                h_left.unsafe_ptr().unsafe_store(
+                    node_base + jn, Int32(Int(nd.LeftChildId()))
+                )
+                h_q.unsafe_ptr().unsafe_store(
+                    node_base + jn, nd.QueryValue().cast[DType.float32]()
+                )
+                for k in range(num_outputs):
+                    h_leaf.unsafe_ptr().unsafe_store(
+                        (node_base + jn) * num_outputs + k,
+                        forest.trees[t].vector_leaf[
+                            jn * num_outputs + k
+                        ].cast[DType.float32](),
+                    )
+            node_base += nn
+        var d_off = ctx.enqueue_create_buffer[DType.int32](n_trees)
+        var d_col = ctx.enqueue_create_buffer[DType.int32](total_nodes)
+        var d_left = ctx.enqueue_create_buffer[DType.int32](total_nodes)
+        var d_q = ctx.enqueue_create_buffer[DType.float32](total_nodes)
+        var d_leaf = ctx.enqueue_create_buffer[DType.float32](
+            total_nodes * num_outputs
+        )
+        log_launch_ctx(ctx, "xfer_oob_forest")
+        ctx.enqueue_copy(dst_buf=d_off, src_ptr=h_off.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_col, src_ptr=h_col.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_left, src_ptr=h_left.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_q, src_ptr=h_q.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_leaf, src_ptr=h_leaf.unsafe_ptr())
+        # The sampler is borrowed immutably and a device buffer hands out
+        # a pointer only when mutable, so the masks take one device copy.
+        var d_masks = ctx.enqueue_create_buffer[DType.uint8](n_trees * n_rows)
+        log_launch_ctx(ctx, "copy_oob_masks")
+        ctx.enqueue_copy(dst_buf=d_masks, src_buf=sampler.bootstrap_masks)
+        var d_acc = ctx.enqueue_create_buffer[DType.uint64](
+            n_rows * num_outputs
+        )
+        var d_cnt = ctx.enqueue_create_buffer[DType.int32](n_rows)
+        log_launch_ctx(ctx, "oob_rows")
+        ctx.enqueue_function[rf_oob_rows_kernel](
+            x.unsafe_ptr(),
+            d_masks.unsafe_ptr(),
+            d_off.unsafe_ptr(),
+            d_col.unsafe_ptr(),
+            d_q.unsafe_ptr(),
+            d_left.unsafe_ptr(),
+            d_leaf.unsafe_ptr(),
+            d_acc.unsafe_ptr(),
+            d_cnt.unsafe_ptr(),
+            Int32(n_rows),
+            Int32(n_cols),
+            Int32(n_trees),
+            Int32(num_outputs),
+            Int32(1) if row_major else Int32(0),
+            Int32(1) if sabotage == 1 else Int32(0),
+            grid_dim=_ceildiv(n_rows, OOB_TPB),
+            block_dim=OOB_TPB,
+        )
+        var h_acc = ctx.enqueue_create_host_buffer[DType.uint64](
+            n_rows * num_outputs
+        )
+        var h_cnt = ctx.enqueue_create_host_buffer[DType.int32](n_rows)
+        log_launch_ctx(ctx, "xfer_oob_predictions")
+        ctx.enqueue_copy(dst_buf=h_acc, src_buf=d_acc)
+        ctx.enqueue_copy(dst_buf=h_cnt, src_buf=d_cnt)
+        log_launch_ctx(ctx, "xfer_oob_y")
+        ctx.enqueue_copy(dst_buf=hy, src_buf=y)
+        ctx.synchronize()
+        # Into the Lists the forest exposes: a move of the returned
+        # words, no arithmetic.
+        for i in range(n_rows * num_outputs):
+            oob_predictions.append(
+                bitcast[DType.float64](h_acc.unsafe_ptr().unsafe_load(i))
+            )
         for r in range(n_rows):
-            # `:717-718` -- oob_mask = ~in_bag_mask
-            #
-            # CHECK HOOK. 1 drops the `~`, scoring each tree on the rows
-            # it was TRAINED on. That is the failure this line exists to
-            # prevent and it does not look like a failure -- it reports a
-            # better number.
-            var in_bag = hm.unsafe_ptr().unsafe_load(t * n_rows + r) != UInt8(
-                0
-            )
-            comptime if sabotage == 1:
-                if not in_bag:
-                    continue
-            else:
-                if in_bag:
-                    continue
-            for k in range(num_outputs):
-                scratch[k] = Scalar[O.DataT](0)
-            DecisionTree.predict_one[O.DataT](
-                rows, r * n_cols, forest.trees[t], scratch, 0, num_outputs
-            )
-            # `:721` -- += , and the widening happens here
-            for k in range(num_outputs):
-                oob_predictions[r * num_outputs + k] += Float64(scratch[k])
-            # `:722`
-            oob_counts[r] += 1
+            oob_counts.append(Int(h_cnt.unsafe_ptr().unsafe_load(r)))
+        _ = h_off^
+        _ = h_col^
+        _ = h_left^
+        _ = h_q^
+        _ = h_leaf^
+        _ = d_off^
+        _ = d_col^
+        _ = d_left^
+        _ = d_q^
+        _ = d_leaf^
+        _ = d_masks^
+        _ = d_acc^
+        _ = d_cnt^
+        _ = h_acc^
+        _ = h_cnt^
+    else:
+        # The masks, back on the host. `:717` indexes them per tree.
+        var hm = ctx.enqueue_create_host_buffer[DType.uint8](n_trees * n_rows)
+        log_launch_ctx(ctx, "xfer_oob_masks")
+        ctx.enqueue_copy(dst_buf=hm, src_buf=sampler.bootstrap_masks)
+
+        # X, row-major, because `predict_one` walks a row (`:366` does the
+        # same pointer arithmetic). Training may have been column-major.
+        # DEVIATION 2484: callers that still own training X may lend it until
+        # this synchronous call returns. Native callers retain the download arm.
+        var hx = ctx.enqueue_create_host_buffer[DType.float32](
+            n_rows * n_cols if host_x_addr == 0 else 0
+        )
+        if host_x_addr == 0:
+            log_launch_ctx(ctx, "xfer_oob_x")
+            ctx.enqueue_copy(dst_buf=hx, src_buf=x)
+
+        log_launch_ctx(ctx, "xfer_oob_y")
+        ctx.enqueue_copy(dst_buf=hy, src_buf=y)
+        ctx.synchronize()
+
+        var source = MutPointer[Float32, MutUntrackedOrigin](
+            unsafe_from_address=host_x_addr
+        )
+        if host_x_addr == 0:
+            source = hx.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+        var rows = List[Scalar[O.DataT]](capacity=n_rows * n_cols)
+        for r in range(n_rows):
+            for c in range(n_cols):
+                var src = r * n_cols + c if row_major else c * n_rows + r
+                var value = source.unsafe_load(src)
+                # The device training matrix was flushed in-place before bins.
+                # Mirror that seam on borrowed original X, without mutating it.
+                comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+                    value = ftz(value)
+                rows.append(rebind[Scalar[O.DataT]](value))
+
+        # `:711-712`
+        for _ in range(n_rows * num_outputs):
+            oob_predictions.append(Float64(0.0))
+        for _ in range(n_rows):
+            oob_counts.append(0)
+
+        var scratch = List[Scalar[O.DataT]]()
+        for _ in range(num_outputs):
+            scratch.append(Scalar[O.DataT](0))
+
+        # `:715-722`
+        for t in range(n_trees):
+            for r in range(n_rows):
+                # `:717-718` -- oob_mask = ~in_bag_mask
+                #
+                # CHECK HOOK. 1 drops the `~`, scoring each tree on the rows
+                # it was TRAINED on. That is the failure this line exists to
+                # prevent and it does not look like a failure -- it reports a
+                # better number.
+                var in_bag = hm.unsafe_ptr().unsafe_load(t * n_rows + r) != UInt8(
+                    0
+                )
+                comptime if sabotage == 1:
+                    if not in_bag:
+                        continue
+                else:
+                    if in_bag:
+                        continue
+                for k in range(num_outputs):
+                    scratch[k] = Scalar[O.DataT](0)
+                DecisionTree.predict_one[O.DataT](
+                    rows, r * n_cols, forest.trees[t], scratch, 0, num_outputs
+                )
+                # `:721` -- += , and the widening happens here
+                for k in range(num_outputs):
+                    oob_predictions[r * num_outputs + k] += Float64(scratch[k])
+                # `:722`
+                oob_counts[r] += 1
+
+        # `:734-738`
+        for r in range(n_rows):
+            if oob_counts[r] > 0:
+                var d = Float64(oob_counts[r])
+                for k in range(num_outputs):
+                    oob_predictions[r * num_outputs + k] /= d
+        _ = hm^
+        _ = hx^
 
     # `:725-732`
     var n_valid = 0
@@ -1602,13 +1730,6 @@ def compute_oob_score[
             "no sample was out of bag for any tree, so there is no OOB"
             " score to report"
         )
-
-    # `:734-738`
-    for r in range(n_rows):
-        if oob_counts[r] > 0:
-            var d = Float64(oob_counts[r])
-            for k in range(num_outputs):
-                oob_predictions[r * num_outputs + k] /= d
 
     forest.has_oob = True
     comptime if O.LabelT.is_integral():
@@ -1658,8 +1779,6 @@ def compute_oob_score[
         else:
             forest.oob_score_ = Float64(1.0) - numerator / denominator
 
-    _ = hm^
-    _ = hx^
     _ = hy^
 
 
