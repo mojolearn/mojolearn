@@ -34,6 +34,7 @@ def main():
     parser.add_argument('--harness-sha', help='Optional exact commit supplying this harness, separately from numerical source')
     parser.add_argument('--vendor', required=True, choices=('cuda', 'hip', 'metal', 'cpu'))
     parser.add_argument('--arm', required=True, choices=('on', 'off'))
+    parser.add_argument('--size', choices=('small', 'medium'), default='small')
     parser.add_argument('--suite', required=True, choices=('cnn-primitives', 'cnn-training', 'sgd'))
     parser.add_argument('--out', required=True, type=Path)
     args = parser.parse_args()
@@ -55,7 +56,7 @@ def main():
         raise RuntimeError('non-source package refused')
     if ml.vendor() != args.vendor: raise RuntimeError('selected vendor differs from requested vendor')
     report = {'schema': 1, 'status': 'INCOMPLETE', 'sha': args.sha, 'vendor': args.vendor,
-              'arm': args.arm, 'suite': args.suite, 'timing_samples': 0, 'opponents_executed': 0,
+              'arm': args.arm, 'suite': args.suite, 'fixture_profile': args.size, 'timing_samples': 0, 'opponents_executed': 0,
               'harness_sha256': hashlib.sha256(harness).hexdigest(), 'harness_source_sha': harness_sha,
               'cases': {}, 'bindings': {}, 'package': str(Path(ml.__file__).resolve())}
     receipt = args.out/'gate.json'; dump(receipt, report)
@@ -144,10 +145,11 @@ def main():
     elif args.suite == 'cnn-training':
         for optimizer in ('sgd', 'adam'):
             def train(optimizer=optimizer):
-                x = (((np.arange(65*16, dtype=np.int32) % 37)-18).astype(np.float32)/np.float32(16)).reshape(65, 16)
-                y = np.arange(65, dtype=np.int32) % 3
-                model = ml.CNNClassifier(input_shape=(1, 4, 4), conv_channels=(2,), kernel_size=3,
-                                        pool_size=2, batch_size=33, max_iter=2, random_state=7,
+                n, side, channels, batch = (65, 4, 2, 33) if args.size == 'small' else (257, 16, 4, 128)
+                x = (((np.arange(n*side*side, dtype=np.int32) % 37)-18).astype(np.float32)/np.float32(16)).reshape(n, side*side)
+                y = np.arange(n, dtype=np.int32) % 3
+                model = ml.CNNClassifier(input_shape=(1, side, side), conv_channels=(channels,), kernel_size=3,
+                                        pool_size=2, batch_size=batch, max_iter=2, random_state=7,
                                         optimizer=optimizer, learning_rate=0.01, shuffle=True).fit(x, y)
                 values = {'losses': np.asarray(model.losses_, dtype=np.float64),
                           'loss_curve': np.asarray(model.loss_curve_, dtype=np.float64),
@@ -160,13 +162,16 @@ def main():
         expected_count = 2
     else:
         from mojolearn import _expansion_linear as linear
-        x = (((np.arange(513*17, dtype=np.int32) % 43)-21).astype(np.float32)/np.float32(16)).reshape(513, 17)
-        y = np.arange(513, dtype=np.int32) % 3
-        weights = ((np.arange(513, dtype=np.int32) % 4)+1).astype(np.float32)/np.float32(2)
+        n, d = (513, 17) if args.size == 'small' else (4097, 65)
+        x = (((np.arange(n*d, dtype=np.int32) % 43)-21).astype(np.float32)/np.float32(16)).reshape(n, d)
+        y = np.arange(n, dtype=np.int32) % 3
+        weights = ((np.arange(n, dtype=np.int32) % 4)+1).astype(np.float32)/np.float32(2)
         parameters = dict(max_iter=3, tol=None, shuffle=True, random_state=7, class_weight={0: 0.5, 1: 1.0, 2: 2.0})
         configs = [('sgd', ml.SGDClassifier, dict(batch_size=128, learning_rate='constant', eta0=0.01)),
                    ('perceptron', ml.Perceptron, dict(batch_size=256, eta0=0.01)),
                    ('pa', ml.PassiveAggressiveClassifier, dict(batch_size=256, C=0.1))]
+        if args.size == 'medium':
+            configs.append(('sgd-largebatch', ml.SGDClassifier, dict(batch_size=4096, learning_rate='constant', eta0=0.01)))
         for name, constructor, extra in configs:
             def train(constructor=constructor, extra=extra):
                 model = constructor(**parameters, **extra)
@@ -175,7 +180,7 @@ def main():
                 values = {'coef': np.asarray(model.coef_), 'intercept': np.asarray(model.intercept_),
                           'n_iter': np.asarray(model.n_iter_, dtype=np.int64), 't': np.asarray(model.t_, dtype=np.float64),
                           'prediction': np.asarray(model.predict(x[:33]))}
-                if values['coef'].shape != (3, 17) or not 1 <= model.n_iter_ <= 3:
+                if values['coef'].shape != (3, d) or not 1 <= model.n_iter_ <= 3:
                     raise AssertionError('SGD OVR shape/iteration coverage missing')
                 if not all(np.isfinite(v).all() for v in values.values()):
                     raise AssertionError('nonfinite SGD fitted state')
@@ -204,7 +209,7 @@ def main():
                 return {'refused': np.asarray(1, dtype=np.int32)}
             raise AssertionError('SGD accepted nonfinite fitted state')
         case('sgd-overflow-refusal', refuse_overflow)
-        expected_count = 5
+        expected_count = len(configs)+2
     source_check(root, args.sha)
     for binding in report['bindings'].values():
         if hashlib.sha256(Path(binding['path']).read_bytes()).hexdigest() != binding['sha256']:

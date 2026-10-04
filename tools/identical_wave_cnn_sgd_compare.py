@@ -21,6 +21,11 @@ def compare(paths, required):
     for path in paths:
         raw = path.read_bytes(); report = json.loads(raw)
         core = {key: report[key] for key in ('sha', 'arm', 'suite', 'harness_sha256')}
+        core['fixture_profile'] = report.get('fixture_profile', 'small')
+        if core['fixture_profile'] not in ('small', 'medium'): raise ValueError('unknown fixture profile')
+        expected = EXPECTED[core['suite']]
+        if core['suite'] == 'sgd' and core['fixture_profile'] == 'medium':
+            expected = expected | {'sgd-ovr-sgd-largebatch'}
         if not re.fullmatch('[0-9a-f]{40}', core['sha']) or core['arm'] not in ('on', 'off'):
             raise ValueError('invalid source or arm identity')
         if not re.fullmatch('[0-9a-f]{64}', core['harness_sha256']):
@@ -32,14 +37,14 @@ def compare(paths, required):
         if (binding['numeric_mode'] != 1 or binding['vendor'] != report['vendor']
                 or not re.fullmatch('[0-9a-f]{64}', binding['sha256'])):
             raise ValueError('invalid binding provenance')
-        if report.get('status') != 'PASS' or set(report['cases']) != EXPECTED[core['suite']]:
+        if report.get('status') != 'PASS' or set(report['cases']) != expected:
             raise ValueError('failed or incomplete gate receipt: '+str(path))
         if report.get('timing_samples') != 0 or report.get('opponents_executed') != 0:
             raise ValueError('receipt is not an untimed own-build gate')
         digests = {key: row['digest'] for key, row in report['cases'].items() if row['status'] == 'PASS'}
         if not all(isinstance(v, str) and re.fullmatch('[0-9a-f]{64}', v) for v in digests.values()):
             raise ValueError('invalid output digest')
-        if set(digests) != EXPECTED[core['suite']]: raise ValueError('case status failed')
+        if set(digests) != expected: raise ValueError('case status failed')
         value = {'identity': core, 'digests': digests}
         if baseline is None: baseline = value
         elif value != baseline: raise ValueError('source/arm/suite/case digest mismatch: '+str(path))
