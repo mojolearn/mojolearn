@@ -277,6 +277,28 @@ a measured one.
 """
 
 
+comptime BOUNDED_WORKSPACE_CAP_BYTES = 3 * 1024 * 1024 * 1024
+"""Ceiling on the WORST-CASE per-request workspace at the default query tile,
+for the bounded-budget rule in `plan_query_tile`.
+
+Per query row the tiled arm holds `identical_index_tile(n_index)` float32
+distance cells plus, at worst (k above the small-k selector, so no radix
+scratch shrink), `2 x n_index // 8` float32 radix pairs: `4 x index_tile +
+n_index` bytes. A policy number (under a fifth of a 16 GB device), not a
+measured one. On NVIDIA IDENTICAL (tile 4096, index tile 65,536) it admits
+every index up to 524,288 rows; larger indices take the historical halving.
+"""
+
+
+def query_tile_bounded_budget_applies(n_index: Int) -> Bool:
+    """Whether the default query tile's worst-case workspace fits
+    `BOUNDED_WORKSPACE_CAP_BYTES`. Size-derived: continuous in `n_index`,
+    no exact-shape keys. Query tiling never moves bits (each query's chain
+    and merge do not depend on its tile; `query_batch_check` asserts it)."""
+    var per_row = identical_index_tile(n_index) * 4 + n_index
+    return DEFAULT_QUERY_TILE * per_row <= BOUNDED_WORKSPACE_CAP_BYTES
+
+
 def plan_query_tile(n_index: Int, n_queries: Int, requested_tile: Int) -> Int:
     """The tile actually used, after the workspace cap and the query clamp.
 
@@ -291,14 +313,13 @@ def plan_query_tile(n_index: Int, n_queries: Int, requested_tile: Int) -> Int:
     var per_row_bytes = n_index * 4
     var budget = WORKSPACE_BUDGET_BYTES
     comptime if QUERY_TILE_512_CANDIDATE:
-        # Limit the new budgeting rule to the largest measured index. For
-        # n_index > 400000 the historical estimate necessarily halves 512
-        # to 256 (already >768MiB), then follows the exact old default path.
-        # This prevents larger radix scratch on unmeasured large indices.
         # DEVIATION 2631: the scope's tile ceiling is the default tile, and
         # the budget admits that tile's bounded distance tile (2048 x 65,536
         # cells is 512 MiB, 4096 is 1 GiB) so the row's tile is not halved.
-        if n_index <= 400000 and tile <= DEFAULT_QUERY_TILE:
+        # The scope is a workspace bound, not an index size: see
+        # `query_tile_bounded_budget_applies` (it replaced an
+        # `n_index <= 400000` cut at the benchmark's index, 2026-10-04).
+        if tile <= DEFAULT_QUERY_TILE and query_tile_bounded_budget_applies(n_index):
             per_row_bytes = identical_index_tile(n_index) * 4
             if DEFAULT_QUERY_TILE * per_row_bytes > budget:
                 budget = DEFAULT_QUERY_TILE * per_row_bytes

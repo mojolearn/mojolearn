@@ -437,6 +437,34 @@ def block_topk_applies(
     return False
 
 
+#: The large-request scope of two per-request transports in the tiled arm
+#: (2026-10-04; it replaced an exact `n_index == 400000 and n_queries ==
+#: 4000 and n_features == 32 and k in {10, 15}` key, the benchmark row):
+#: NVIDIA's vector index loads and Apple's request-local exponent metadata.
+#: Neither changes arithmetic (same chain, same bits), only cost:
+#: - vector loads save a fixed fraction of the per-(query, column) distance
+#:   pass (3.1-3.6% measured, bench/results/knn_vector_request_2026-09-10),
+#:   independent of d and k; the pass must be long enough that the saving
+#:   is above launch jitter;
+#: - the metadata costs two O((n_queries + n_index) x d) minima launches and
+#:   saves repairs over n_queries x n_index x d pair work, so it pays when
+#:   every index row's minimum is reused by many queries.
+#: Rule: at least KNN_LARGE_REQUEST_MIN_QUERIES queries and at least
+#: KNN_LARGE_REQUEST_MIN_PAIRS (query, index) pairs. Range values, not
+#: measured at their edges: needs neighbor-shape validation.
+comptime KNN_LARGE_REQUEST_MIN_QUERIES = 1024
+comptime KNN_LARGE_REQUEST_MIN_PAIRS = 1 << 28
+
+
+def knn_large_request(n_index: Int, n_queries: Int) -> Bool:
+    """Whether a request is large enough for the per-request transports
+    above. Size-derived; no exact-shape keys."""
+    return (
+        n_queries >= KNN_LARGE_REQUEST_MIN_QUERIES
+        and n_index * n_queries >= KNN_LARGE_REQUEST_MIN_PAIRS
+    )
+
+
 def tiled_radix_scratch_len(n_index: Int, k: Int) -> Int:
     """`buf_len`, the radix scratch pairs per query row the tiled arm is
     given: `n_index // 8` (at least `k`) historically. DEVIATION 2631: where
@@ -896,19 +924,21 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     # RAFT linalg/detail/contractions.cuh:193-219 loads vectors. Our pinned
     # arithmetic keeps its ascending chain; only the index transport changes.
     # Large same-process public requests save 3.1-3.6%, all output bits equal:
-    # bench/results/knn_vector_request_2026-09-10. Other shapes need their own
-    # request evidence before promotion. Per-partition alignment is checked below.
-    var use_vector = TARGET_COLUMN == COLUMN_NVIDIA and n_index == 400000 and n_queries == 4000 and n_features == 32 and (k == 10 or k == 15) and mtr == DIST_L2_SQRT_EXPANDED
+    # bench/results/knn_vector_request_2026-09-10. Scope: `knn_large_request`
+    # (size rule; was the exact benchmark row). Per-partition alignment is
+    # checked below, so any n_index that is not a multiple of 4 stays scalar.
+    var use_vector = TARGET_COLUMN == COLUMN_NVIDIA and mtr == DIST_L2_SQRT_EXPANDED and knn_large_request(n_index, n_queries)
     comptime if is_defined["MOJOLEARN_KNN_VECTOR_REQUEST_CHECK"]():
         # Named same-process check exercises scalar, vector and actual default.
         var vector_override = String(getenv("MOJOLEARN_KNN_VECTOR_TRIAL"))
         if vector_override == "0" or vector_override == "1":
             use_vector = vector_override == "1"
-    # Promotion uses the two actual large Apple targets, not the small controls.
-    # Broader shapes retain current preflight pending their own request evidence.
+    # Apple request-local metadata: same scope rule as the vector loads
+    # (`knn_large_request`; was the exact benchmark row). Bits unchanged:
+    # the metadata only admits tiles that need no repair.
     var use_metadata = KNN_PREFLIGHT_METADATA
     comptime if KNN_PREFLIGHT_METADATA_DEFAULT:
-        use_metadata = use_metadata or (use_transposed_index and KNN_REGISTER_TILE_IDENTICAL and not use_vendor_topk and mtr == DIST_L2_SQRT_EXPANDED and n_index == 400000 and n_queries == 4000 and n_features == 32 and (k == 10 or k == 15))
+        use_metadata = use_metadata or (use_transposed_index and KNN_REGISTER_TILE_IDENTICAL and not use_vendor_topk and mtr == DIST_L2_SQRT_EXPANDED and knn_large_request(n_index, n_queries))
     # DEVIATION 2629 (kernel-matrix row `knn_distance_exact_chain_for`): the
     # admission metadata rides in the same request-local scratch slot the
     # Apple minima use; the two never run in one request.

@@ -3590,10 +3590,13 @@ class QuantileTransformer(_PrepBase):
 def _pt_spec_depth(n, d):
     """The device search's speculation depth (lane prep-apple2): each round
     evaluates the 2^S - 1 candidate points of the next S golden steps side by
-    side. MOJOLEARN_XPREP_PT_SPEC = S (default 3: m4pro-b taxi 4.55 s staged,
-    S=2 3.31, S=3 2.95, S=4 3.09; 0: one evaluation per fold, the staged
-    search); the candidates' transforms (n*d words each) are capped at
-    2^28 words. Every S gives the same lambdas. IDENTICAL only: FAST keeps the
+    side. MOJOLEARN_XPREP_PT_SPEC = S (default 3; 0: one evaluation per
+    fold, the staged search). The rule is a size range, not a shape: S is
+    lowered until the (2^S - 1) candidates' transforms (n*d words each) fit
+    in 2^28 words, so every (n, d) gets the deepest speculation its buffer
+    allows. The default 3 was measured on one row (m4pro-b, 1M x 11: staged
+    4.55 s, S=2 3.31, S=3 2.95, S=4 3.09) and needs neighbor-shape
+    validation (n*d around 2^28 / 7 and 2^28 / 3, d = 8..256). Every S gives the same lambdas. IDENTICAL only: FAST keeps the
     staged search, whose folds FAST runs as threadgroup trees
     (x_prep/fastred.mojo), already short."""
     try:

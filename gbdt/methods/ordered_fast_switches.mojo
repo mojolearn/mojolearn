@@ -51,8 +51,14 @@ comptime ORD_ALL = (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_ORD_ALL_OFF"]()
 )
-#: the bundle runs only above this many compressed-index features (istella
-#: 220 gains and keeps quality; taxi 11 loses auc, see the module docstring)
+#: the bundle runs only above this many compressed-index features. A RANGE
+#: rule, not a board row: the bundle's savings are per-feature-group work
+#: (fold bins, gathers, score-noise reduce), so they grow with width, while
+#: the fold-order index's quality cost showed on narrow data. 32 lies
+#: between the two measured widths (about 3x above one, 7x below the other),
+#: so the edge is not fitted to either row. The two measured points
+#: (module docstring) are 11 and 220 features only: NEEDS NEIGHBOR-SHAPE
+#: VALIDATION (24, 32, 33, 48, 64, 128 features) before the edge is trusted.
 comptime ORD_ALL_MIN_FEATURES = 32
 
 

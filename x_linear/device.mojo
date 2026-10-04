@@ -1929,6 +1929,18 @@ comptime SGDOC_FAST_TAIL = (
     and not is_defined["MOJOLEARN_SGDOC_FAST_TAIL_OFF"]()
 )
 comptime SGDOC_TAIL_K = 262144 if is_defined["MOJOLEARN_SGDOC_FAST_TAIL_LONG"]() else 65536
+# The tail must exceed the (S, R) chain's mixing time, which grows with d
+# (x_linear/sgdoc_tail.mojo: tens of steps at d ~ 10, up to thousands at
+# d ~ 200, i.e. at most ~20 steps per feature). A fixed K was only checked at
+# those two widths, so the tail is max(SGDOC_TAIL_K, SGDOC_TAIL_K_PER_D * d):
+# a >= 10x margin over that per-feature mixing at every d. At d <= 256 this is
+# SGDOC_TAIL_K exactly (no change); wider fits get a proportionally longer
+# tail (FAST only; longer tail = closer to main's full run, never worse).
+comptime SGDOC_TAIL_K_PER_D = 256
+
+
+def sgdoc_tail_k(d: Int) -> Int:
+    return max(SGDOC_TAIL_K, SGDOC_TAIL_K_PER_D * d)
 
 
 comptime SGD_FAST_PS_SIMD = (
@@ -1937,8 +1949,14 @@ comptime SGD_FAST_PS_SIMD = (
 )
 comptime SPS_W = 32
 comptime SPS_MAXC = 8
-comptime SPS_MAX_D = 32
-"""The simdgroup form wins at taxi's d = 11 and loses at Istella's 220."""
+comptime SPS_MAX_D = SPS_W
+"""Size rule, not a board row: at d <= SPS_W every lane holds at most ONE
+weight (and its q) in registers, so each sample's predictor is a single
+butterfly over the simdgroup and no lane loops over columns. Past SPS_W the
+per-sample work grows d / SPS_W serial steps per lane on one simdgroup while
+the block form spreads the same columns over MB_DBLK-wide partials, which is
+why wide d (hundreds) loses. Same value as before (32), so no route or bit
+moves. Needs neighbor-shape validation (d 24, 32, 33, 48, 64)."""
 
 
 @always_inline
@@ -2489,9 +2507,9 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var r0 = 0
     comptime if SGDOC_FAST_TAIL:
         if (one_class and lr == LR_OPTIMAL and penalty == P_L2 and fi and do_shuffle and not need_obj
-                and not has_sw and max_iter * n > SGDOC_TAIL_K):
+                and not has_sw and max_iter * n > sgdoc_tail_k(d)):
             if sgdoc_centered(ctx, FP(unsafe_from_address=Int(dx.unsafe_ptr())), n, d):
-                var s0 = max_iter * n - SGDOC_TAIL_K
+                var s0 = max_iter * n - sgdoc_tail_k(d)
                 e0 = s0 // n
                 r0 = s0 - e0 * n
                 hpt[0] = Int32(s0 + 1)

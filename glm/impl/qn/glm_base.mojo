@@ -523,13 +523,18 @@ comptime QN_FAST_TILED = QN_LSVR_ALL
 #: lane/apple-fast-linsvr: device-side line-search decision + convergence
 #: test, one host read per QN_DCONV_POLL iterations (`qn_dconv.mojo`)
 comptime QN_FAST_DCONV = QN_LSVR_ALL
-#: QN_LSVR_ALL's width bound: n_features above it keep LS_BATCH + SLIM
-#: (M3 istella, d ~ 220, +6.2% under ALL)
-comptime QN_ALL_MAX_D = 32
 #: the fused pass: threads per block, rows per thread, the register bound on d
 comptime QNF_TPB = 256
 comptime QNF_RPT = 16
 comptime QNF_MAX_D = 32
+#: QN_LSVR_ALL's width bound, a size rule tied to the fused pass's register
+#: bound rather than to a board row: ALL's tiled objective and device line
+#: search pay off when one thread keeps the whole weight vector in registers
+#: (d <= QNF_MAX_D); wider d spills to per-column loops, where LS_BATCH + SLIM
+#: is the better plan (one wide-d A/B, d ~ 220: +6.2% under ALL). Same value
+#: as before (32): no route or bit moves. Needs neighbor-shape validation
+#: (d 24, 32, 33, 48, 64).
+comptime QN_ALL_MAX_D = QNF_MAX_D
 #: line-search candidates one fused pass sums: the point itself and the next
 #: QNF_LS_K - 1 backtracking steps
 comptime QNF_LS_K = 4

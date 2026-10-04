@@ -63,8 +63,8 @@ from gemm.checks.gemm_backward import (
 )
 from gemm.contract import OP_NT, OP_NN
 from embedding.checks.embedding_identical import (
-    ANY_EMB_SABOTAGE, emb_run_scratch_ints, identical_embedding_forward_into,
-    identical_embedding_backward_into,
+    ANY_EMB_SABOTAGE, EMB_AUTO_SORT_MIN_CELLS, emb_run_scratch_ints,
+    identical_embedding_forward_into, identical_embedding_backward_into,
 )
 from embedding.checks.embedding_oracle import EmbConfig
 from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT
@@ -1254,10 +1254,10 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
         tr.prefill_cache.s = 0
         var prefix = String("byte.block") + String(layer) + ".forward"
         var norm1_ready = layer > 0 and residual_next_norm_fusion_enabled(
-            M, tr.weights[layer].opts.norm_kind, tr.weights[layer].opts.norm_bias
+            M, config.d_model, tr.weights[layer].opts.norm_kind, tr.weights[layer].opts.norm_bias
         )
         var fuse_next = layer + 1 < config.n_layers and residual_next_norm_fusion_enabled(
-            M, tr.weights[layer + 1].opts.norm_kind,
+            M, config.d_model, tr.weights[layer + 1].opts.norm_kind,
             tr.weights[layer + 1].opts.norm_bias,
         )
         if layer == 0:
@@ -1614,11 +1614,19 @@ def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: Byt
         tr.forward.insert(layer, stages^)
     # Envelope of the whole backward loop (the blocks print `bwd.*`).
     timing_tick(ctx, ton, tk, "envelope.blocks_backward")
-    # PLAN_SCAN performs vocab*positions integer probes before the identical
-    # row fold.  At large token batches the stable total-key sort builds the
-    # same ascending-position runs much more cheaply; keep small calls on the
-    # zero-allocation scan path.
-    var emb_plan = PLAN_SORT if M >= 16384 else PLAN_SCAN
+    # PLAN_SCAN performs 2 * vocab * positions integer probes before the
+    # identical row fold; PLAN_SORT is a total-key sort over the positions
+    # alone and builds the same ascending-position runs (contract 6 clause (d):
+    # bit-identical on every vendor and the host column, so the pick moves no
+    # bit). The scan cost grows with V * M, so the pick keys on V * M with the
+    # embedding lane's own EMB_AUTO_SORT_MIN_CELLS (2^26), not on a token
+    # count (the old `M >= 16384` sat one doubling below the one measured
+    # GPT-3 row and ignored V). Tier-independent here, as before. Needs
+    # neighbor-shape validation (V 256 and 50,257; M 4,096 to 65,536).
+    var emb_plan = (
+        PLAN_SORT if config.vocab_size * M >= EMB_AUTO_SORT_MIN_CELLS
+        else PLAN_SCAN
+    )
     identical_embedding_backward_into(ctx, tr.buffers.dw_emb, tr.backward[0].d_x,
         tr.buffers.ids, tr.buffers.emb_counts, tr.buffers.emb_run_begin,
         tr.buffers.emb_perm, M, emb, emb_plan)

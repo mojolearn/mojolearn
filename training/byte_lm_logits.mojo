@@ -200,10 +200,10 @@ def _logits_enqueue(
         sc.cache.s = 0
         var prefix = String("byte.logits.block") + String(layer) + ".forward"
         var norm1_ready = layer > 0 and residual_next_norm_fusion_enabled(
-            m, weights[layer].opts.norm_kind, weights[layer].opts.norm_bias
+            m, dm, weights[layer].opts.norm_kind, weights[layer].opts.norm_bias
         )
         var fuse_next = layer + 1 < config.n_layers and residual_next_norm_fusion_enabled(
-            m, weights[layer + 1].opts.norm_kind,
+            m, dm, weights[layer + 1].opts.norm_kind,
             weights[layer + 1].opts.norm_bias,
         )
         if layer == 0:
