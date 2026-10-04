@@ -21,12 +21,29 @@ unit's). The blocked count of a block is exact in float32 (XB < 2^24).
 A partial table lives in device scratch (`_Prog.work`): a stage writes it
 whole before the next stage reads it.
 """
-from checks.numerics import ftz
-from x_prep.common import FP, IP, p, ld, st, RUN, run_block, is_nan
+from std.sys.compile import is_defined
+from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from x_prep.common import FP, IP, p, ld, st, raw, RUN, run_block, is_nan
 from x_prep.prims import add, sub, mul, div, zero_to_one, acc_add, _cs_take, _ss_take
 
 #: rows a block unit folds (python/mojolearn/_expansion_prep.py `_XB`)
 comptime XB = 2048
+
+#: lane idn-int-prep (2026-10-04), IDENTICAL on every vendor and the host
+#: column, ON by default: the discrete naive Bayes count pass as ONE thread
+#: per (block, column) (`csb1_part`, op 162) instead of one per (block, class,
+#: column), so X is read once, not once per class; BernoulliNB's binarize is
+#: folded into it (no n x d binarized copy) and its unused column-stats pass
+#: is not staged; Multinomial / Complement take their negative-input check
+#: from the same pass (`csb1_neg`, op 163) instead of a column-stats pass.
+#: Every class chain is csb_part's chain (the class's rows of the block,
+#: ascending from zero), so the words are csb_part's.
+#: -D MOJOLEARN_IDN_NB_ONEPASS_OFF restores csb_part + colb_part + binarize.
+comptime IDN_NB_ONEPASS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_NB_ONEPASS_OFF"]()
+)
+#: classes csb1_part keeps in registers (more: the partial table itself)
+comptime CSB1_REG = 8
 
 
 @always_inline
@@ -217,6 +234,103 @@ def csb_part_unit(t: Int, f: FP, q: IP):
             sw = add(sw, w)
         st(f, p(q, 6) + t, sw)
     st(f, p(q, 5) + t, s)
+
+
+@always_inline
+def _csb1_x(f: FP, at: Int, THR: Int, thr: Float32) -> Float32:
+    """The flushed word csb_part would load: X's, or `binarize_unit`'s of it
+    when THR >= 0 (1 when X > THR, else 0; a NaN is kept)."""
+    var x = raw(f, at)
+    if THR >= 0 and not is_nan(x):
+        return Float32(1) if ftz(x) > thr else Float32(0)
+    return ftz(x)
+
+
+def csb1_part_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, Y, K, PS, PC, nb, W, THR, NG]; t = b*d + c (lane
+    idn-int-prep). csb_part's partials of EVERY class of (block b, column c)
+    from one walk of the block's rows, ascending: PS[(b*K + k)*d + c] = the
+    sum of column c over the block's rows of class k from zero (W >= 0: of
+    w x) and PC[...] = their count (the weight sum). THR >= 0: X is binarized
+    at the scalar THR first (`binarize_unit`'s word). NG >= 0: NG[t] = 1 when
+    a word of the block's column is below zero, else 0. Each class's chain is
+    csb_part's (same rows, same order, same adds), so the words are its."""
+    var X = p(q, 0)
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var Y = p(q, 3)
+    var K = p(q, 4)
+    var PS = p(q, 5)
+    var PC = p(q, 6)
+    var W = p(q, 8)
+    var THR = p(q, 9)
+    var NG = p(q, 10)
+    var c = t % d
+    var b = t // d
+    var r = _span(b, n)
+    var base = b * K * d + c
+    var thr = Float32(0)
+    if THR >= 0:
+        thr = ld(f, THR)
+    var neg = False
+    if K <= CSB1_REG:
+        var s = SIMD[DType.float32, CSB1_REG](0)
+        var cw = SIMD[DType.float32, CSB1_REG](0)
+        for i in range(r[0], r[1]):
+            var x = _csb1_x(f, X + i * d + c, THR, thr)
+            if x < Float32(0):
+                neg = True
+            var k = Int(ld(f, Y + i))
+            if W < 0:
+                comptime for u in range(CSB1_REG):
+                    if k == u:
+                        s[u] = add(s[u], x)
+                        cw[u] = cw[u] + Float32(1)
+            else:
+                var w = ld(f, W + i)
+                comptime for u in range(CSB1_REG):
+                    if k == u:
+                        s[u] = add(s[u], mul(w, x))
+                        cw[u] = add(cw[u], w)
+        comptime for u in range(CSB1_REG):
+            if u < K:
+                st(f, PS + base + u * d, s[u])
+                st(f, PC + base + u * d, cw[u])
+    else:
+        for k in range(K):
+            st(f, PS + base + k * d, Float32(0))
+            st(f, PC + base + k * d, Float32(0))
+        for i in range(r[0], r[1]):
+            var x = _csb1_x(f, X + i * d + c, THR, thr)
+            if x < Float32(0):
+                neg = True
+            var k = Int(ld(f, Y + i))
+            if k < 0 or k >= K:
+                continue
+            var at = base + k * d
+            if W < 0:
+                st(f, PS + at, add(ld(f, PS + at), x))
+                st(f, PC + at, ld(f, PC + at) + Float32(1))
+            else:
+                var w = ld(f, W + i)
+                st(f, PS + at, add(ld(f, PS + at), mul(w, x)))
+                st(f, PC + at, add(ld(f, PC + at), w))
+    if NG >= 0:
+        st(f, NG + t, Float32(1) if neg else Float32(0))
+
+
+def csb1_neg_unit(t: Int, f: FP, q: IP):
+    """q = [NG, nb, d, OUT]; t = column: OUT[t] = -1 when a block of
+    csb1_part raised the column's negative flag, else 0 (the word the
+    naive Bayes fit reads where it read the column minimum: only its sign
+    is used)."""
+    var NG = p(q, 0)
+    var d = p(q, 2)
+    var neg = False
+    for b in range(p(q, 1)):
+        if ld(f, NG + b * d + t) != Float32(0):
+            neg = True
+    st(f, p(q, 3) + t, Float32(-1) if neg else Float32(0))
 
 
 def csb_fold_unit(t: Int, f: FP, q: IP):
