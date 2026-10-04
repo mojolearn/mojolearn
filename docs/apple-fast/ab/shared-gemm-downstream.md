@@ -112,3 +112,69 @@ SVR, randomized PCA, neural callers, nonfinite inputs, rank-deficient linear
 fixtures, or cached full taxi/istella fitted-estimator rows. Those are
 separate predeclared fixtures after the first focused cases pass. No
 production expansion into MCD/other batched reductions is included.
+
+## Variant-pinned pair build and installer contract
+
+The G1 and G5 follow-up branches differ only in tracked
+`tools/shared_gemm_variant.json`; each therefore has its own source SHA and
+`~/m2-arms/SOURCE/FAMILY` / `~/mq/verified-arms/SOURCE/FAMILY` namespace.
+The config fixes variant, base checkpoint, exact defines and allowed
+families. Build manifests include its SHA-256; M3 requires byte-identical
+config identity, actual artifact hashes, and runtime variant metadata.
+Do not build a second variant into an existing source/family directory.
+No manifest/arm overwrite is allowed, including a failed partial build.
+
+On the manager's **M2 private checkout** pinned to the selected G1 or G5
+branch, run these compile-only commands, one family at a time as selected:
+
+```
+SOURCE=$(git rev-parse HEAD)
+bash tools/shared_gemm_build_pair.sh "$SOURCE" core
+bash tools/shared_gemm_build_pair.sh "$SOURCE" estimators
+```
+
+The script verifies Apple M2 hardware, exact clean source, disk >=8 GiB,
+and takes the existing build lock. It invokes the real build scripts with
+FAST, `MOJOLEARN_SKIP_BUILD_GATE=1`, `MOJOLEARN_COMPILE_JOBS=1`, explicit
+`metal:1` accelerator, Apple column, and cleared inherited compiler flags.
+No extension import, model execution or numerical check occurs on M2.
+A receives exactly COUNTERS; B COUNTERS plus the pinned G1 or G5. The
+Apple column define is separately declared target metadata shared by both.
+It checks the defined CPython init symbol with `nm -gU` before writing the
+manifest. Core maps to `bindings/build.sh` and **`_mojolearn.so`**, never
+`_mojolearn_core.so`; estimators maps to `bindings/build_estimators.sh` and
+`_mojolearn_estimators.so`.
+
+This dedicated contract avoids the old `compile_arms_m2.sh` assumptions of
+empty A defines and `_mojolearn_${family}.so`. The manager still owns source
+transfer to M2, invocation, artifact transfer to M3, and serial queue intake.
+Copy each completed directory intact to M3's verified-arms namespace during
+its allowed transfer window. Do not use old `verified_arms.py`, which assumes
+empty A defines, to install these diagnostic pairs.
+
+M3 unscored pair, inside the serial queue at the same source pin:
+
+```
+MOJOLEARN_NUMERIC_MODE=fast ~/board-0834/cache/venv/bin/python tools/shared_gemm_downstream_pair.py SOURCE UNIQUE_TAG ols --features 65
+```
+
+Case selects the family: core `kmeans|knn`, estimators
+`ols|ridge|pca|kde`. Source config selects the variant, not a runtime flag.
+The helper checks manifest/source/config/defines/mode/target/hash bindings
+before installation. It acquires a nonblocking pair lock, refuses existing
+evidence tags and symlinked installed bindings, backs up an existing target,
+atomically installs each verified arm, and starts a fresh capture process.
+The capture verifies the actual loaded path and SHA. Comparison is unscored
+and has no timing path. The original target is restored and hash-checked in
+`finally`; when no original existed the temporary target is removed.
+`restore.json` records successful restoration. `PASS.json` can be issued only
+after comparison PASS **and** successful restoration; HOLD/NO_REACH cannot
+issue PASS. Exceptions preserve logs and the backup, then propagate failure.
+A hard kill/power loss cannot run `finally`: retained `intake.json` and
+`original.so` support manager recovery; never blindly rerun the same tag.
+
+Current synthetic fixture choices and strict oracle rules above remain
+unchanged. Select a small case/width set before execution using the matrix
+screen; this script does not automatically run either variant or a full
+crossproduct. Final production timings must use separately declared builds
+without COUNTERS and still need the appropriate downstream quality gate.

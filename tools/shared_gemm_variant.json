@@ -1,0 +1,8 @@
+{
+  "contract": "shared-gemm-static-downstream-v1",
+  "base_source": "0505c942788f77a460572e1d238cbdbfb6658e13",
+  "variant": 1,
+  "families": ["core", "estimators"],
+  "defines_A": "-D MOJOLEARN_APPLE_FAST_SHARED_GEMM_COUNTERS",
+  "defines_B": "-D MOJOLEARN_APPLE_FAST_SHARED_GEMM_COUNTERS -D MOJOLEARN_APPLE_FAST_SHARED_GEMM_G1"
+}

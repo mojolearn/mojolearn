@@ -12,6 +12,9 @@ from pathlib import Path
 import subprocess
 import sys
 
+if not __debug__:
+    raise RuntimeError("quality gates require Python assertions enabled")
+
 FAMILIES = {"kmeans": "_mojolearn", "knn": "_mojolearn",
             "ols": "_mojolearn_estimators", "ridge": "_mojolearn_estimators",
             "pca": "_mojolearn_estimators", "kde": "_mojolearn_estimators",
