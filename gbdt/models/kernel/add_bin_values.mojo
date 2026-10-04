@@ -521,7 +521,7 @@ def uniform_positive_depth(depths: List[Int]) -> Int:
     var d = depths[0]
     if d < 1:
         return 0
-    for t in range(1, len(depths)):
+    for t in range(1, len(depths)):  # small-loop(depths: trees): compares the per-tree depths, model metadata
         if depths[t] != d:
             return 0
     return d

@@ -110,7 +110,7 @@ def compute_non_symmetric_bins_for_model(
         h_bin.unsafe_ptr().unsafe_store(i, UInt32(0))
         h_ls.unsafe_ptr().unsafe_store(i, UInt32(1))
         h_rs.unsafe_ptr().unsafe_store(i, UInt32(1))
-    for i in range(n_nodes):
+    for i in range(n_nodes):  # small-loop(n_nodes: tree nodes): stages each model node's split descriptor, model parameters, no row data
         ref n = structure.nodes[i]
         var fid = Int(n.feature_id)
         if fid < 0 or fid >= len(layout.features):
@@ -294,7 +294,7 @@ def add_non_symmetric_trees_packed(
     var total_vals = 0
     var node_at = List[Int](capacity=n_trees)
     var val_at = List[Int](capacity=n_trees)
-    for t in range(n_trees):
+    for t in range(n_trees):  # small-loop(n_trees: trees): sizes each tree's node and leaf slabs, model parameters
         ref tree = trees[t]
         var dim = tree.dim
         if dim < 1:
@@ -339,11 +339,11 @@ def add_non_symmetric_trees_packed(
         h_rs.unsafe_ptr().unsafe_store(i, UInt32(1))
     if total_vals == 0:
         h_vals.unsafe_ptr().unsafe_store(0, Float32(0.0))
-    for t in range(n_trees):
+    for t in range(n_trees):  # small-loop(n_trees: trees): stages each tree's node descriptors and leaf values for upload, model parameters
         ref tree = trees[t]
         ref structure = tree.model_structure
         var base = node_at[t]
-        for i in range(len(structure.nodes)):
+        for i in range(len(structure.nodes)):  # small-loop(structure.nodes: nodes of one tree): stages one tree's node descriptors, model parameters
             ref n = structure.nodes[i]
             var fid = Int(n.feature_id)
             if fid < 0 or fid >= len(layout.features):
