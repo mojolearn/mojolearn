@@ -464,7 +464,7 @@ def equal_elements_binding(
 # ---------------------------------------------------------------------------
 
 
-def _encode_labels[dt: DType](
+def _encode_labels_host[dt: DType](
     src: MutPointer[Scalar[dt], MutUntrackedOrigin], n: Int,
     classes: MutPointer[Scalar[dt], MutUntrackedOrigin], max_classes: Int,
     codes: MutPointer[Int32, MutUntrackedOrigin],
@@ -539,7 +539,7 @@ def _encode_labels_binding[dt: DType](
     var dp = _ptr[DType.int32](Int(py=codes_addr))
     var k: Int
     with GILReleased(Python()):
-        k = _encode_labels[dt](sp, count, cp, cap, dp)
+        k = _encode_labels_host[dt](sp, count, cp, cap, dp)
     if k == -2:
         raise Error("mojolearn: y contains a NaN label; NaN is not a class")
     return PythonObject(k)

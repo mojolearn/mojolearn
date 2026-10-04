@@ -115,7 +115,7 @@ def arima_order_search_binding(y_addr: PythonObject, out_addr: PythonObject,
     var d = Int(py=config[2])
     var maxiter = Int(py=config[3])
     var orders = List[ARIMAOrder]()
-    for i in range(len(grid) // 3):
+    for i in range(len(grid) // 3):  # small-loop(grid: candidate p, q, k orders of the search plan): plan entries, not series data
         orders.append(ARIMAOrder(Int(py=grid[3*i]), d, Int(py=grid[3*i+1]),
                                  0, 0, 0, 0, Int(py=grid[3*i+2]), 0))
     var yp = f32_ptr(Int(py=y_addr))
@@ -158,7 +158,7 @@ def arima_order_search_device_binding(
     var want_ic = Int(py=config[6]) != 0
     var orders = List[ARIMAOrder]()
     var pen = List[Float32]()
-    for i in range(len(grid) // 5):
+    for i in range(len(grid) // 5):  # small-loop(grid: candidate seasonal orders of the search plan): plan entries, not series data
         var sp = Int(py=grid[5 * i + 2])
         var sq = Int(py=grid[5 * i + 3])
         var period = s if (sp + D + sq) > 0 else 0
@@ -167,7 +167,7 @@ def arima_order_search_device_binding(
     if want_ic:
         if len(pens) != len(orders):
             raise Error("arima_order_search_device: one penalty per order")
-        for i in range(len(orders)):
+        for i in range(len(orders)):  # small-loop(orders: one criterion penalty per candidate order): plan parameters, not series data
             pen.append(Float32(Float64(py=pens[i])))
     var yp = f32_ptr(Int(py=y_addr))
     var op = f32_ptr(Int(py=out_addr))

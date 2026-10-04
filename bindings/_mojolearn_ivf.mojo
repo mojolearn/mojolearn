@@ -413,10 +413,11 @@ def ivf_flat_extend_binding(
     var ctx = process_ctx[_DEVCTX_SLOT]()
     var out = ivf_flat_extend_host(ctx, index, new_x, n_new)
     ctx.synchronize()
-    var new_labels = List[UInt32](capacity=n_new)
+    # the new rows' labels: one memcpy of the tail (no per-row host loop)
+    var new_labels = List[UInt32](length=max(n_new, 0), fill=UInt32(0))
     var first_new = len(out.labels) - n_new
-    for j in range(n_new):
-        new_labels.append(out.labels[first_new + j])
+    if n_new > 0:
+        memcpy(dest=new_labels.unsafe_ptr(), src=out.labels.unsafe_ptr() + first_new, count=n_new)
     ivf_write_extended_arrays(
         addrs, out.n_rows, out.dim, out.n_lists, out.list_offsets,
         out.list_indices, out.list_data, new_labels, n_new,

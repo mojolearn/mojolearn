@@ -52,6 +52,7 @@ from std.python import Python, PythonObject
 from std.sys.compile import is_defined
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from hostptr import list_f32, list_u32
 
 from checks.vendor import COMPILED_VENDOR
 from gbdt.binary_prediction import binary_prediction_device, sigmoid_f64_device
@@ -403,7 +404,7 @@ def gbdt_fit_binding(
     # `params` is a Python list and touching it without the GIL is a data
     # race, not a slow path.
     var class_weights = List[Float32]()
-    for i in range(n_class_weights):
+    for i in range(n_class_weights):  # small-loop(n_class_weights: one weight per class): Python parameter list, not row data
         class_weights.append(Float32(Float64(py=params[35 + i])))
     # their `EGrowPolicy` by ORDINAL (enums.h order: SymmetricTree,
     # Depthwise, Lossguide), resolved to the spelling `train` takes
@@ -454,9 +455,8 @@ def gbdt_fit_binding(
                 "gbdt_fit: the group tail needs a positive group count, got "
                 + String(n_groups)
             )
-        var gp = _u32_ptr(Int(py=params[fixed_and_weights + 3]))
-        for g in range(n_groups):
-            group_sizes.append(gp.unsafe_load(g))
+        # one memcpy (no per-group host loop)
+        group_sizes = list_u32(_u32_ptr(Int(py=params[fixed_and_weights + 3])), n_groups)
 
     # the PairLogit pairs tail; a count of -1 means generate them
     var pair_winners = List[UInt32]()
@@ -537,10 +537,10 @@ def gbdt_fit_binding(
         ctx.synchronize()
 
     var learn = Python.list()
-    for i in range(len(result.learn_losses)):
+    for i in range(len(result.learn_losses)):  # small-loop(learn_losses: one loss per boosting iteration): result glue to Python, no compute
         learn.append(PythonObject(result.learn_losses[i]))
     var test = Python.list()
-    for i in range(len(result.test_losses)):
+    for i in range(len(result.test_losses)):  # small-loop(test_losses: one loss per boosting iteration): result glue to Python, no compute
         test.append(PythonObject(result.test_losses[i]))
 
     var out = Python.list()
@@ -823,14 +823,10 @@ def gbdt_fit_ordered_rmse_binding(
         # address once and refuses non-finite cells on the device. y, the
         # permutation and the weights (O(n)) still feed
         # `fit_ordered_rmse`'s host validation and fold plan as lists.
-        var ys = List[Float32]()
-        var ws = List[Float32]()
-        var permutation = List[UInt32]()
-        for i in range(n_rows):
-            ys.append(yp.unsafe_load(i))
-            permutation.append(pp.unsafe_load(i))
-        for i in range(n_weights):
-            ws.append(wp.unsafe_load(i))
+        # cpu3-bindings: one memcpy each (no per-row host loop)
+        var ys = list_f32(yp, n_rows)
+        var ws = list_f32(wp, n_weights)
+        var permutation = list_u32(pp, n_rows)
         with process_ctx[_DEVCTX_SLOT]() as ctx:
             var trained = train_ordered_rmse_ptr(
                 ctx, x_address, ys, n_rows, n_features, permutation,

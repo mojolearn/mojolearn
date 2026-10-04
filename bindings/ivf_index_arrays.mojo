@@ -46,7 +46,7 @@ admits them, before any search or extend statement runs.
 from std.memory import memcpy
 from std.python import Python, PythonObject
 
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+from bindings.hostptr import f32_ptr, i32_ptr, u32_ptr, read_f32, read_i32, list_u32
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import ivf_validate_index_arrays
 from x_ann.switches import ANN3_HOST_PASSES
 
@@ -126,17 +126,11 @@ def ivf_read_index_arrays(
     var centers = read_f32(Int(py=addrs[0]), n_lists * dim)
     var center_norms = read_f32(Int(py=addrs[1]), n_lists)
     var offsets = read_i32(Int(py=addrs[2]), n_lists + 1)
-    var ids = read_i32(Int(py=addrs[3]), n)
     var list_data = read_f32(Int(py=addrs[4]), n * dim)
-    var list_indices = List[UInt32](capacity=n)
-    for s in range(n):
-        var id = Int(ids[s])
-        if id < 0:
-            raise Error(
-                what + ": slot " + String(s) + " carries a negative row id "
-                + String(id)
-            )
-        list_indices.append(UInt32(id))
+    # cpu3-bindings: the int32 ids' bits in one memcpy (no per-slot host
+    # loop). A negative id reads as >= 2^31 > n, so the id range check of
+    # `ivf_validate_index_arrays` below refuses it by name.
+    var list_indices = list_u32(u32_ptr(Int(py=addrs[3])), n)
     ivf_validate_index_arrays(
         n_lists, dim, n, metric, centers, center_norms, offsets, list_indices,
         list_data, partial_storage,
