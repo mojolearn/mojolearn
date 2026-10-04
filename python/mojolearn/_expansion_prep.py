@@ -1071,7 +1071,7 @@ def _fit_infrequent(est, mode, arr, ignore_missing):
           for c in cats_all]  # glue: one size per column
     pr = _Prog()
     codes, _neg = _codes(pr, arr, cats_all)
-    kmax = max(c.size for c in cats_all)
+    kmax = max(c.size for c in cats_all)  # glue: the widest column's category count (a shape)
     cnt, kc = pr.alloc(d * kmax), pr.put_list(ks)
     m0, m1, mp = pr.work(d * kmax), pr.alloc(d * kmax), pr.alloc(d * kmax)
     maxc = -1 if est.max_categories is None else int(est.max_categories)
@@ -1083,7 +1083,7 @@ def _fit_infrequent(est, mode, arr, ignore_missing):
     masks, maps = pr.get_i32(m1, d * kmax).tolist(), pr.get_i32(mp, d * kmax).tolist()
     est._infrequent, est._grouping = [], []
     for j, k in enumerate(ks):  # glue: the device's tables as the fitted per-column lists
-        inf = [i for i in range(k) if masks[j * kmax + i]] or None
+        inf = [i for i in range(k) if masks[j * kmax + i]] or None  # glue: the device mask as the fitted index list
         est._infrequent.append(inf)
         est._grouping.append(None if inf is None else maps[j * kmax:j * kmax + k])
     est.infrequent_categories_ = [None if inf is None else Array.from_list([c.tolist()[i] for i in inf], "<f4")
