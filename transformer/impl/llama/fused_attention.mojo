@@ -1987,12 +1987,11 @@ def _dump_f32(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int, 
         var view = buf.create_sub_buffer[DType.float32](0, n)
         ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
     ctx.synchronize()
+    # cpu3-seq: the pinned buffer's bytes go to the file as they are (a
+    # span over the host buffer), no byte-by-byte copy into a List.
     var raw = host.unsafe_ptr().bitcast[UInt8]()
-    var bytes = List[UInt8]()
-    for i in range(n * 4):
-        bytes.append(raw.unsafe_load(i))
     with open(path, "w") as fh:
-        fh.write_bytes(Span(bytes))
+        fh.write_bytes(Span[UInt8, MutAnyOrigin](ptr=raw, length=n * 4))
     _ = host^
 
 
@@ -2254,7 +2253,7 @@ def device_absmax(
     step_count_sync()
     ctx.synchronize()
     var m = Float32(0.0)
-    for i in range(blocks):
+    for i in range(blocks):  # small-loop(blocks: absmax partials, at most ABSMAX_BLOCKS): max fold of the device reduction partials
         var v = host.unsafe_ptr().unsafe_load(i)
         if v > m:
             m = v
@@ -2402,7 +2401,7 @@ def _device_absmax4_cached(
         elif which == 3:
             kb = k3
         var m = Float32(0.0)
-        for i in range(lo, lo + kb):
+        for i in range(lo, lo + kb):  # small-loop(kb: one operand partials, at most ABSMAX_BLOCKS): max fold of the device reduction partials
             var v = hp.unsafe_load(i)
             if v > m:
                 m = v
@@ -2486,7 +2485,7 @@ def device_absmax4(
         elif which == 3:
             kb = k3
         var m = Float32(0.0)
-        for i in range(lo, lo + kb):
+        for i in range(lo, lo + kb):  # small-loop(kb: one operand partials, at most ABSMAX_BLOCKS): max fold of the device reduction partials
             var v = host.unsafe_ptr().unsafe_load(i)
             if v > m:
                 m = v
