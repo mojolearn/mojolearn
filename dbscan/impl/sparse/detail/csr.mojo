@@ -117,6 +117,23 @@ comptime IDN_DBSCAN_CC_CHUNK = (
     )
 )
 
+#: CANDIDATE ARMS (default 1, the one-thread-per-row walk): under
+#: `IDN_DBSCAN_CC_GATED` each row of the edge pass is shared by `S` threads,
+#: thread `t` of a row walking its edges `start + t, start + t + S, ...`.
+#: A row of several thousand neighbours is otherwise one thread's serial
+#: walk. Every thread pushes the row's label as it read it and mins its own
+#: pulled minimum into the row's label, so a pass makes the same kind of
+#: moves and the fixed point is the same labels; only the pass count can
+#: differ. `-D MOJOLEARN_IDN_DBSCAN_CC_SPLIT4=1`, `..._SPLIT8=1`,
+#: `..._SPLIT16=1`.
+comptime IDN_DBSCAN_CC_SPLIT = (
+    4 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_SPLIT4"]()
+    else (
+        8 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_SPLIT8"]()
+        else (16 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_SPLIT16"]() else 1)
+    )
+)
+
 #: Cells the caller's flag buffers (device and host) must hold: the chunk's
 #: gate cells under `IDN_DBSCAN_CC_GATED`, the one `changed` cell otherwise.
 comptime DBSCAN_CC_FLAG_CELLS = (
@@ -256,7 +273,11 @@ def weak_cc_label_gated_kernel(
     var n = Int(n_in)
     var batch_size = Int(batch_size_in)
     var start_vertex_id = Int(start_vertex_id_in)
-    var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    # `IDN_DBSCAN_CC_SPLIT` threads share a row (1 by default: `tid` is the
+    # row and `lane` is 0, the reference walk).
+    var gtid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var tid = gtid // IDN_DBSCAN_CC_SPLIT
+    var lane = gtid % IDN_DBSCAN_CC_SPLIT
     var global_id = tid + start_vertex_id
     if tid >= batch_size or global_id >= n:
         return
@@ -268,8 +289,10 @@ def weak_cc_label_gated_kernel(
     var ci_mod = False
     var ci_allow_prop = core.unsafe_load(global_id) != 0
 
-    for j in range(start, end):
+    var j = start + lane
+    while j < end:
         var j_ind = Int(col_ind.unsafe_load(j))
+        j += IDN_DBSCAN_CC_SPLIT
         var cj = labels.unsafe_load(j_ind)
         var cj_allow_prop = core.unsafe_load(j_ind) != 0
         if ci < cj and ci_allow_prop:
@@ -376,7 +399,12 @@ def weak_cc_batched(
                     Int32(start_vertex_id),
                     Int32(batch_size),
                     Int32(n_rows),
-                    grid_dim=((batch_size + WEAK_CC_TPB - 1) // WEAK_CC_TPB, 1, 1),
+                    grid_dim=(
+                        (batch_size * IDN_DBSCAN_CC_SPLIT + WEAK_CC_TPB - 1)
+                        // WEAK_CC_TPB,
+                        1,
+                        1,
+                    ),
                     block_dim=(WEAK_CC_TPB, 1, 1),
                 )
                 comptime if IDN_DBSCAN_CC_SHORTCUT:
