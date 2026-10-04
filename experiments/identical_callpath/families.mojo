@@ -43,7 +43,7 @@ def enqueue_row_norms(mut session: IdenticalCallSession, output: Int,
         if source == output:
             raise Error("row norm source/output must not alias")
         session.ctx.enqueue_function[row_norm_kernel](
-            session.f32.device[output].unsafe_ptr(), session.f32.device[source].unsafe_ptr(),
+            session.f32.device[output].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), session.f32.device[source].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
             Int32(cols), Int32(take_sqrt), grid_dim=(rows, 1, 1),
             block_dim=(NORM_TPB, 1, 1),
         )
@@ -63,7 +63,7 @@ def enqueue_column_means(mut session: IdenticalCallSession, output: Int,
         if source == output:
             raise Error("column mean source/output must not alias")
         session.ctx.enqueue_function[column_mean_kernel](
-            session.f32.device[output].unsafe_ptr(), session.f32.device[source].unsafe_ptr(),
+            session.f32.device[output].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), session.f32.device[source].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
             Int32(rows), Int32(cols), grid_dim=(cols, 1, 1),
             block_dim=(STATS_TPB, 1, 1),
         )
@@ -85,7 +85,7 @@ def enqueue_shift_columns(mut session: IdenticalCallSession, source: Int,
             raise Error("column means must not alias the shifted matrix")
         var sign = Float32(1.0) if restore else Float32(-1.0)
         session.ctx.enqueue_function[shift_columns_kernel](
-            session.f32.device[source].unsafe_ptr(), session.f32.device[means].unsafe_ptr(),
+            session.f32.device[source].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), session.f32.device[means].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
             Int32(rows), Int32(cols), sign,
             grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
         )
@@ -102,10 +102,12 @@ def enqueue_core_gemm_nt(mut session: IdenticalCallSession, output: Int,
         _require_f32(session, output, _matrix_cells(m, n))
         _require_f32(session, left, _matrix_cells(m, k))
         _require_f32(session, right, _matrix_cells(n, k))
-        if output == left or output == right:
-            raise Error("GEMM output must not alias operands")
-        gemm_nt(session.ctx, session.f32.device[output], session.f32.device[left],
-                session.f32.device[right], m, n, k)
+        if output == left or output == right or left == right:
+            raise Error("GEMM requires distinct operand and output slots")
+        # Bounds and nonalias checks above establish disjoint mutable handles.
+        # List indexing otherwise gives every element the same tracked origin.
+        var buffers = session.f32.device.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+        gemm_nt(session.ctx, buffers[output], buffers[left], buffers[right], m, n, k)
     except e:
         session.abort()
         raise e
@@ -127,11 +129,12 @@ def enqueue_identical_gemm(mut session: IdenticalCallSession, output: Int,
         _require_f32(session, left, _matrix_cells(m, k))
         _require_f32(session, right, _matrix_cells(n, k))
         _require_f32(session, workspace, identical_gemm_workspace_max_floats(m, n, k))
-        if output == left or output == right or workspace == output or workspace == left or workspace == right:
-            raise Error("GEMM output/workspace must not alias operands or each other")
-        identical_gemm_into(session.ctx, session.f32.device[output],
-            session.f32.device[left], session.f32.device[right],
-            session.f32.device[workspace], m, n, k, op)
+        if output == left or output == right or left == right or workspace == output or workspace == left or workspace == right:
+            raise Error("GEMM requires distinct operand, output and workspace slots")
+        # No list mutation occurs while these checked disjoint handles are borrowed.
+        var buffers = session.f32.device.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+        identical_gemm_into(session.ctx, buffers[output], buffers[left],
+            buffers[right], buffers[workspace], m, n, k, op)
     except e:
         session.abort()
         raise e

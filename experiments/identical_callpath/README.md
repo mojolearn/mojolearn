@@ -189,3 +189,34 @@ Do not execute these as part of this source-only task.
 6. Only after correctness approval, measure setup separately from warmed
    calls, and distinguish reuse from batching and result-materialization costs.
    Retain the baseline unless an actual bit-identical benefit is demonstrated.
+
+## Integration compile and GPU gates (2026-10-04)
+
+The later integration task authorizes compilation and NVIDIA/AMD runtime
+validation; the source-only restrictions above describe the original task.
+`compile_probe.mojo` instantiates every operation in all twelve typed banks,
+the five primitive adapters, both scaler adapters and both wait modes. Build
+it with `mojo build -j 1 -I . --target-accelerator sm_89` (NVIDIA) or `gfx942`
+(AMD), the matching `MOJOLEARN_COLUMN_NVIDIA`/`MOJOLEARN_COLUMN_AMD` define,
+plus `MOJOLEARN_NUMERIC_IDENTICAL` and
+`MOJOLEARN_EXPERIMENT_IDENTICAL_CALLPATH`. Always use the repository's compile
+semaphore and selected pixi environment. This probe is compile-only.
+
+`identity_gate.mojo` is for execution on authorized NVIDIA/AMD boxes only. It
+compares raw bits against the unchanged production transform entry points:
+48 scaler comparisons cover forward/inverse, clipping, all StandardScaler
+flag combinations, both wait modes, reused dirty slots, partial blocks,
+signed zero and subnormal inputs. It also verifies two exact UInt32 buffer
+roundtrips and refusal to collect an earlier readback during a new batch.
+Success prints `CALLPATH_GATE status=PASS comparisons=48` and a digest for
+cross-vendor comparison. This is a correctness gate, not a timing harness.
+It does not establish primitive-adapter runtime correctness, public validation
+parity, device-loss recovery, or Apple/host identity.
+
+The GEMM adapters require distinct left, right, output and workspace slots.
+Bounds and distinctness checks precede untracked mutable handle borrows;
+no slot allocation or list mutation occurs during those calls. A caller
+needing the same matrix as both operands must reserve separate operand slots.
+Kernel pointers use explicit `MutAnyOrigin` casts while storage remains owned
+by the active session. These changes accommodate the current Mojo ownership
+rules without changing kernels or dispatch.

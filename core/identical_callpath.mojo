@@ -11,9 +11,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 
 struct CallBufferBank[dtype: DType](Movable):
-    var device: List[DeviceBuffer[dtype]]
-    var upload_host: List[HostBuffer[dtype]]
-    var download_host: List[HostBuffer[dtype]]
+    var device: List[DeviceBuffer[Self.dtype]]
+    var upload_host: List[HostBuffer[Self.dtype]]
+    var download_host: List[HostBuffer[Self.dtype]]
     var sizes: List[Int]
     var staged: List[Bool]
     var uploaded: List[Bool]
@@ -21,9 +21,9 @@ struct CallBufferBank[dtype: DType](Movable):
     var ready: List[Bool]
 
     def __init__(out self):
-        self.device = List[DeviceBuffer[dtype]]()
-        self.upload_host = List[HostBuffer[dtype]]()
-        self.download_host = List[HostBuffer[dtype]]()
+        self.device = List[DeviceBuffer[Self.dtype]]()
+        self.upload_host = List[HostBuffer[Self.dtype]]()
+        self.download_host = List[HostBuffer[Self.dtype]]()
         self.sizes = List[Int]()
         self.staged = List[Bool]()
         self.uploaded = List[Bool]()
@@ -38,9 +38,9 @@ struct CallBufferBank[dtype: DType](Movable):
         if count < 0:
             raise Error("negative call buffer extent")
         var index = len(self.sizes)
-        self.device.append(ctx.enqueue_create_buffer[dtype](max(count, 1)))
-        self.upload_host.append(ctx.enqueue_create_host_buffer[dtype](max(count, 1)))
-        self.download_host.append(ctx.enqueue_create_host_buffer[dtype](max(count, 1)))
+        self.device.append(ctx.enqueue_create_buffer[Self.dtype](max(count, 1)))
+        self.upload_host.append(ctx.enqueue_create_host_buffer[Self.dtype](max(count, 1)))
+        self.download_host.append(ctx.enqueue_create_host_buffer[Self.dtype](max(count, 1)))
         self.sizes.append(count)
         self.staged.append(False)
         self.uploaded.append(False)
@@ -50,7 +50,7 @@ struct CallBufferBank[dtype: DType](Movable):
         ctx.synchronize()
         return index
 
-    def stage(mut self, index: Int, values: List[Scalar[dtype]]) raises:
+    def stage(mut self, index: Int, values: List[Scalar[Self.dtype]]) raises:
         self.check(index)
         if len(values) != self.sizes[index]:
             raise Error("call buffer shape mismatch")
@@ -86,7 +86,7 @@ struct CallBufferBank[dtype: DType](Movable):
         for i in range(len(self.sizes)):
             self.ready[i] = self.requested[i]
 
-    def collect(mut self, index: Int, mut result: List[Scalar[dtype]]) raises:
+    def collect(mut self, index: Int, mut result: List[Scalar[Self.dtype]]) raises:
         self.check(index)
         if not self.ready[index] or len(result) != self.sizes[index]:
             raise Error("readback not ready or result shape mismatch")
