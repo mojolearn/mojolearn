@@ -149,6 +149,19 @@ gathered on the device (`ivf_gather_rows_kernel`, 2026-10-04); only the
 seeded ids are made on the host. Moves FAST
 bits (another start): paired recall check."""
 
+comptime IVF_COARSE_FAISS_INIT = IVF_FAST_RANDOM_INIT and not is_defined["MOJOLEARN_IVF_COARSE_INIT_QOLD"]()
+"""FAST QUALITY FIX (lane apple-fast-q-misc, 2026-10-04; old behavior
+`-D MOJOLEARN_IVF_COARSE_INIT_QOLD`): the coarse quantizer starts from
+`IVF_FAST_RANDOM_INIT`'s n_lists distinct seeded training rows (FAISS's
+`Clustering` rule, the board opponent's) and the `IVF_FAST_SEED` k-means++
+seeding is skipped. Before this, `IVF_FAST_SEED` set INIT_ARRAY first, so
+the promoted random init never ran (the VSEARCH_ALL A/B's "recall identical"
+is that). D^2 seeding on heavy-tailed data spends lists on outlier rows."""
+#: Board quality audit 2026-10-04: ivf-sq taxi recall_at_10 FAST 0.83325 vs
+#: faiss-cpu 0.857025 (FAST 0.8.34, before IVF_FAST_SEED became the default at
+#: f2e71e548: 0.902025; IDENTICAL 0.934975); ivf-filter istella FAST 0.801 vs
+#: faiss-cpu 0.84195. Paired recall A/B owed (READY-AB).
+
 comptime IVF_FAST_DEVICE_VALIDATE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
@@ -556,7 +569,7 @@ def ivf_flat_build(
     # recluster inherits it); a no-op in every other mode
     kp.lazy_shift = True
 
-    comptime if IVF_FAST_SEED:
+    comptime if IVF_FAST_SEED and not IVF_COARSE_FAISS_INIT:
         if not trace.enabled and n_train >= n_lists:
             comptime if IVF_FAST_SEED_DEVICE:
                 if n_train < n_rows:
