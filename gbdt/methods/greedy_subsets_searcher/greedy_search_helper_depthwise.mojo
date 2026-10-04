@@ -1388,12 +1388,12 @@ def _lossguide_top_b(leaves: List[TLeaf], b: Int) raises -> List[Int]:
     for _ in range(b):  # small-loop(b: leaves per batch, a handful): batch leaf choice for the plan
         var best = -1
         var best_gain = Float32.MAX
-        for i in range(len(leaves)):
+        for i in range(len(leaves)):  # small-loop(leaves: tree leaves, at most max_leaves): argmin of stored winner gains
             if not leaves[i].best_split.defined:
                 continue
             var taken = False
-            for c in chosen:
-                if c == i:
+            for ci in range(len(chosen)):  # small-loop(chosen: leaves already taken, at most b): batch membership test
+                if chosen[ci] == i:
                     taken = True
             if taken:
                 continue
@@ -3455,7 +3455,7 @@ def fit_non_symmetric_tree[
                         var pn = lg_leaf_node[left_id]
                         lg_node_path[pn] = parent.path.copy()
                         comptime if LG_EXACT_ID:
-                            for st in range(stat_count):
+                            for st in range(stat_count):  # small-loop(stat_count: stat planes, 1 plus classes): copy of the split node's stats
                                 lg_node_stats[pn * stat_count + st] = (
                                     h_part_stats.unsafe_ptr().unsafe_load(
                                         left_id * stat_count + st
@@ -3467,7 +3467,7 @@ def fit_non_symmetric_tree[
                         lg_node_leaf.append(left_id)
                         lg_node_leaf.append(right_id)
                         for _ in range(2):
-                            for _ in range(stat_count):
+                            for _ in range(stat_count):  # small-loop(stat_count: stat planes, 1 plus classes): child node stats placeholders
                                 lg_node_stats.append(Float32(0.0))
                             lg_node_left.append(-1)
                             lg_node_right.append(-1)
@@ -4019,7 +4019,7 @@ def fit_non_symmetric_tree[
     if emit_digests:
         var flat_v = List[Float32]()
         for i in range(len(result_values)):  # small-loop(result_values: final leaves, at most max_leaves): digest flattening, trace only
-            for j in range(len(result_values[i])):
+            for j in range(len(result_values[i])):  # small-loop(result_values: approx dimension per leaf): digest flattening, trace only
                 flat_v.append(result_values[i][j])
         var flat_w = List[Float32]()
         for i in range(len(result_weights)):  # small-loop(result_weights: final leaves, at most max_leaves): digest flattening, trace only
