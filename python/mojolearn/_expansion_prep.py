@@ -567,7 +567,7 @@ class _Prog:
         else:
             run(base, host_words, prog.buffer_info()[0], nst)
         self.arena = arena
-        for fn in self._after:
+        for fn in self._after:  # glue: the program's post-run refusal hooks
             fn(self)
         if prof:
             # one line per program (the device's XPPHASE lines come in the same order)
@@ -2466,11 +2466,12 @@ def _partial_dev(est, y, n, walk):
     class is an int or float with an exact float32 word, strictly ascending
     (so `lookup`'s binary search over them is the dict's answer); else None."""
     cl = list(est.classes_)
-    if not cl or any(type(c) not in (int, float) for c in cl):
+    if not cl or any(type(c) not in (int, float) for c in cl):  # glue: the K class labels' types
         return None
-    vals = [float(c) for c in cl]
+    vals = [float(c) for c in cl]  # glue: the K class labels as floats
     cats = Array._from_flat(vals, (len(vals),), "<f4")
-    if cats.tolist() != vals or any(vals[i] >= vals[i + 1] for i in range(len(vals) - 1)):
+    ordered = all(vals[i] < vals[i + 1] for i in range(len(vals) - 1))  # glue: the K classes ascend
+    if cats.tolist() != vals or not ordered:
         return None
     lb = _label_buffer(y)
     if lb is None or lb.n != n:
@@ -2522,23 +2523,26 @@ def _partial_codes(est, y, classes, n, defer=False):
                              f"{est.classes_}")
         if first:
             est.classes_ = cl
-
-    def walk():
-        labels = flatten_labels(y)
-        if len(labels) != n:
-            raise ValueError("mojolearn: X and y have different numbers of rows")
-        index = {c: i for i, c in enumerate(est.classes_)}
-        bad = sorted({repr(v) for v in labels if v not in index})
-        if bad:
-            raise ValueError(f"mojolearn: The target label(s) {bad} in y do not exist in the initial classes "
-                             f"{est.classes_}")
-        return Array.from_list([index[v] for v in labels], "<i4")
-
     if defer:
-        dev = _partial_dev(est, y, n, walk)
+        dev = _partial_dev(est, y, n, lambda: _partial_walk(est, y, n, first)[1])
         if dev is not None:
             return first, dev
-    return first, walk()
+    return _partial_walk(est, y, n, first)
+
+
+def _partial_walk(est, y, n, first):
+    """`_partial_codes`' Python route: labels of any kind (str, lists, a
+    class list float32 cannot hold), and the refusal that names a batch's
+    unknown labels."""
+    labels = flatten_labels(y)
+    if len(labels) != n:
+        raise ValueError("mojolearn: X and y have different numbers of rows")
+    index = {c: i for i, c in enumerate(est.classes_)}
+    bad = sorted({repr(v) for v in labels if v not in index})
+    if bad:
+        raise ValueError(f"mojolearn: The target label(s) {bad} in y do not exist in the initial classes "
+                         f"{est.classes_}")
+    return first, Array.from_list([index[v] for v in labels], "<i4")
 
 
 def _copy_block(pr, src, rows, cols):
@@ -4716,7 +4720,7 @@ class _NeighbourDraws:
     def __init__(self, imp, Xf, n, dk, mode, orders):
         self.imp, self.dk = imp, dk
         self.lists, self.corr, self.at = None, None, 0
-        js = [j for order in orders for j in order]
+        js = [j for order in orders for j in order]  # glue: the (round, feature) step list
         if _idn_fam2(mode) & _F2_WPICK:
             self.k, self.start = int(imp.n_nearest_features), imp._rng
             self.lists = imp._neighbours_device(Xf, n, dk, mode, js, self.k) if js else []
@@ -4873,7 +4877,7 @@ class IterativeImputer(_PrepBase):
         pr.run(mode)
         words = pr.get_i32(out, calls * (k + 1)).tolist()
         lists = []
-        for c in range(calls):
+        for c in range(calls):  # glue: one feature list per step
             got = words[c * (k + 1) + k]
             if got < k:
                 raise ValueError("mojolearn: IterativeImputer: no feature left to draw")
@@ -5018,7 +5022,7 @@ class IterativeImputer(_PrepBase):
             check = not self.sample_posterior and bool(order)
             prev = Xt.copy() if check else None
             for j in order:
-                nbl = corr.next(j) if corr is not None else [a for a in range(dk) if a != j]
+                nbl = corr.next(j) if corr is not None else [a for a in range(dk) if a != j]  # glue: feature ids
                 est = _clone(self.estimator)
                 Xo, yo, Xm, rows, m = self._ii_take(Xt, mask, j, nbl, mode, fit=True)
                 est.fit(Xo, yo)
