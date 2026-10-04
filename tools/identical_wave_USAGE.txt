@@ -100,3 +100,35 @@ The initializer repair's different x_linear GPU entrypoint cannot be reused.
 Missing or changed evidence refuses preparation; it never silently recompiles
 or accepts incomplete evidence. External harness/plan updates need not change
 the frozen numerical SHA.
+
+Explicit opt-in candidates (not activated by ordinary ON/OFF):
+  tools/identical_candidate_recipes.json records75 builds across38 candidate
+  groups, including prerequisites and required fixtures. All remain UNQUALIFIED
+  or quarantined unless separately supported by retained evidence. No recipe
+  automatically schedules a model or timing job.
+
+  python tools/identical_wave_native_build.py --sha FULL_SHA --repo /root/mojolearn \
+    --out /root/lq/recipe-preview --python /root/mojolearn/.pixi/envs/default/bin/python \
+    --vendor nvidia --gpu-arch sm_120 --candidate-recipe rf_device_level_loop/4 \
+    --recipe-role candidate --plan-only
+
+Recipes come from FULL_SHA itself, not the mutable launcher checkout. Remove
+--plan-only only when root authorizes compilation. --recipe-role baseline and
+candidate normally BOTH use --arm on; baseline disables only the selected
+opt-in while retaining prerequisite flags. Master --arm off remains available
+for override-precedence gates and the separate all-OFF comparison.
+
+--define MOJOLEARN_NAME[=positive_integer] is repeatable for narrower diagnostics.
+Unknown/comment-only source names, duplicate flags, shell fragments, mode/vendor
+or master-OFF overrides, and=0 are refused. is_defined treats=0 as PRESENT,
+so omit a presence flag to disable it. Effective flags, frozen source references,
+recipe role and recipe-file hash enter the native receipt. Recipe dependencies
+are selected automatically; a partial builder list is refused (use explicit
+--define for deliberately partial compile diagnostics).
+
+Building a recipe is not route proof: RF device-loop requires unlimited leaves,
+extra-trees bins need>=64columns, HDB thresholds need cases on both sides, and
+Mamba angle candidates require the explicit all-column host twin. Do not label
+an ineligible default-sized case a candidate PASS. Keep per-arm raw identity,
+quality and timing receipts. Block-eigh reenable/width variants remain quarantined
+following strict convergence failure; do not silently promote them.

@@ -2763,9 +2763,10 @@
   "actionable_gaps": [
     {
       "id": "candidate_build_surface",
-      "severity": "blocks_candidate_qualification",
-      "detail": "Native builder only supports masterON/OFF; explicit candidate defines/parameters are not exposed. Default compile does not instantiate disabled candidates.",
-      "owner_next": "remote_plan add reviewed explicit-defines recipes after coordinating native-builder owner."
+      "severity": "implemented_build_surface_pending_route_and_qualification",
+      "detail": "Code recipes address explicit instantiation; remaining blockers are eligible fixture route readback, identity/quality proof and justified timing selection.",
+      "owner_next": "Root chooses candidate groups after default wave; source route and fixture prerequisites remain mandatory.",
+      "resolution": "Native runner now supports validated --define, pinned-source --candidate-recipe with baseline/candidate roles, exact flag receipts and --plan-only.75recipes cover38groups;4synthetic planning tests and73compiled source-definition lookups pass onLinux. No candidate compile/model/timing jobs launched."
     },
     {
       "id": "candidate_route_eligibility",
@@ -2809,5 +2810,7 @@
       "bindings/_mojolearn.mojo helper imports"
     ],
     "limitation": "Earlyrecheck report IN_PROGRESS contains stale owed labels; later per-gate receipts supersede only their actual tested scope, not allsites."
-  }
+  },
+  "candidate_recipe_file": "tools/identical_candidate_recipes.json",
+  "candidate_build_tests": "~/mojolearn-evidence/identical-all/amd/lq/candidate-cli-tests/"
 }

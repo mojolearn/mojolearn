@@ -18,6 +18,49 @@ import time
 DEFAULT='base,base_host,svm,svm_host,estimators,estimators_host,x_decomp,x_decomp_host,x_prep,x_prep_host,x_trees,x_trees_host,x_sequence,x_sequence_host,gp,gp_host'
 
 
+def explicit_defines(values):
+    """Only compile definitions, never shell fragments or mode/vendor overrides."""
+    result=[]; seen=set()
+    for value in values:
+        if not re.fullmatch(r'MOJOLEARN_[A-Z0-9_]+(?:=[1-9][0-9]*)?',value):
+            raise ValueError('invalid explicit compile define: '+value)
+        name=value.split('=',1)[0]
+        if name=='MOJOLEARN_IDN_ALL_OFF' or name.startswith(('MOJOLEARN_NUMERIC_','MOJOLEARN_COLUMN_')):
+            raise ValueError('use --arm/--mode/--vendor instead of overriding '+name)
+        if name in seen: raise ValueError('duplicate explicit compile define: '+name)
+        seen.add(name); result.append(value if '=' in value else value+'=1')
+    return result
+
+
+def candidate_recipe(repo,sha,name,role):
+    """Read recipes from the numerical source commit, not a mutable checkout."""
+    payload=subprocess.check_output(['git','-C',str(repo),'show',sha+':tools/identical_candidate_recipes.json'])
+    document=json.loads(payload)
+    matches=[r for r in document['recipes'] if r['id']==name]
+    if len(matches)!=1: raise ValueError('unknown/ambiguous candidate recipe: '+name)
+    row=matches[0]
+    return row, row[role+'_defines'], hashlib.sha256(payload).hexdigest()
+
+
+def define_source_locations(repo,sha,defines):
+    locations={}
+    for value in defines:
+        name=value.split('=',1)[0]
+        found=subprocess.run(['git','-C',str(repo),'grep','-n','-w','-F','-e',name,sha,'--','*.mojo'],
+                             capture_output=True,text=True)
+        if found.returncode not in (0,1): raise RuntimeError('source define lookup failed: '+name)
+        references=[]
+        for line in found.stdout.splitlines():
+            parts=line.split(':',3)
+            if len(parts)!=4: continue
+            code=parts[3].split('#',1)[0]
+            if '"'+name+'"' in code:
+                references.append({'path':parts[1],'line':int(parts[2])})
+        if not references: raise ValueError('define has no compiled source reference at pinned SHA: '+name)
+        locations[name]=references
+    return locations
+
+
 def save(path,value):
     path.parent.mkdir(parents=True,exist_ok=True)
     temp=path.with_suffix(path.suffix+'.tmp'); temp.write_text(json.dumps(value,indent=2)+'\n'); temp.replace(path)
@@ -48,18 +91,36 @@ def main():
     p.add_argument('--gpu-arch', help='Actual device target; required for new NVIDIA architectures such as sm_120')
     p.add_argument('--arm',choices=('on','off'),default='on')
     p.add_argument('--mode',choices=('identical','fast'),default='identical')
-    p.add_argument('--builders',default=DEFAULT)
+    p.add_argument('--define',action='append',default=[],help='Explicit MOJOLEARN_NAME[=positive_integer]; omit presence flags to disable, never use =0')
+    p.add_argument('--candidate-recipe',help='ID from tools/identical_candidate_recipes.json at --sha')
+    p.add_argument('--recipe-role',choices=('baseline','candidate'),default=None)
+    p.add_argument('--builders',help='Comma list; defaults to recipe dependencies or the standard batch')
+    p.add_argument('--plan-only',action='store_true',help='Validate frozen source/recipe/flags and print receipt without creating a worktree or compiling')
     p.add_argument('--timeout',type=int,default=3600)
     p.add_argument('--semaphore',type=Path,default=Path('/root/mojolearn-evidence/compile_slot.sh'))
     a=p.parse_args()
     if sys.platform!='linux': p.error('Linux GPU box required')
     if not re.fullmatch('[0-9a-f]{40}',a.sha): p.error('full immutable SHA required')
-    builders=a.builders.split(',')
-    if len(set(builders))!=len(builders) or any(not re.fullmatch('[a-z0-9_]+',b) for b in builders): p.error('unique binding names required')
-    if a.mode=='fast' and any(b.endswith('_host') for b in builders): p.error('host twins support IDENTICAL only; omit host builders for FAST')
     a.repo=a.repo.resolve(); a.out=a.out.resolve(); a.python=a.python.resolve()
+    recipe=None; recipe_hash=None
+    try:
+        values=list(a.define)
+        if a.candidate_recipe:
+            if a.mode!='identical': raise ValueError('IDENTICAL recipes require --mode identical')
+            recipe, recipe_values, recipe_hash=candidate_recipe(a.repo,a.sha,a.candidate_recipe,a.recipe_role or 'candidate')
+            values=recipe_values+values
+        elif a.recipe_role:
+            raise ValueError('--recipe-role requires --candidate-recipe')
+        defines=explicit_defines(values)
+        references=define_source_locations(a.repo,a.sha,defines)
+    except (ValueError,RuntimeError,subprocess.CalledProcessError) as exc:
+        p.error(str(exc))
+    builders=(a.builders or (','.join(recipe['recommended_builders']) if recipe else DEFAULT)).split(',')
+    if len(set(builders))!=len(builders) or any(not re.fullmatch('[a-z0-9_]+',b) for b in builders): p.error('unique binding names required')
+    if recipe and not set(recipe['recommended_builders']).issubset(builders):
+        p.error('recipe dependency builders missing; use --define for an explicitly narrower diagnostic')
+    if a.mode=='fast' and any(b.endswith('_host') for b in builders): p.error('host twins support IDENTICAL only; omit host builders for FAST')
     if not a.semaphore.is_file(): p.error('required compile semaphore missing: '+str(a.semaphore))
-    a.out.mkdir(parents=True,exist_ok=False)
     source=a.out/'source'; arch=a.gpu_arch or {'nvidia':'sm_89','amd':'gfx942'}[a.vendor]
     if not re.fullmatch(r'sm_[0-9]+[a-z]?' if a.vendor=='nvidia' else r'gfx[0-9a-f]+',arch):
         p.error('GPU architecture does not match vendor')
@@ -67,9 +128,19 @@ def main():
     env=dict(clean_env,PATH='/root/.pixi/bin:/opt/rocm/bin:'+os.environ.get('PATH',''),
              MOJOLEARN_NUMERIC_MODE=a.mode,MOJOLEARN_COMPILE_JOBS='1',MOJOLEARN_GPU_ARCHS=arch,
              MOJOLEARN_TARGET_COLUMN=a.vendor,PYTHONUNBUFFERED='1',MOJOLEARN_SKIP_BUILD_GATE='1',
-             MOJOLEARN_MOJO_BUILD_FLAGS='-D MOJOLEARN_IDN_ALL_OFF=1' if a.arm=='off' else '',
+             MOJOLEARN_MOJO_BUILD_FLAGS=' '.join('-D '+d for d in (['MOJOLEARN_IDN_ALL_OFF=1'] if a.arm=='off' else [])+defines),
              PYTHONPATH=str(source/'python'),LD_LIBRARY_PATH=str(source/'python/mojolearn/.libs')+':'+os.environ.get('LD_LIBRARY_PATH',''))
     report={'sha':a.sha,'vendor':a.vendor,'arch':arch,'arm':a.arm,'mode':a.mode,'status':'RUNNING','expected_builders':builders,'modules':{},'bootstrap':[]}
+    report.update(explicit_defines=defines,define_source_locations=references,
+                  effective_mojo_build_flags=env['MOJOLEARN_MOJO_BUILD_FLAGS'],
+                  candidate_recipe=recipe,recipe_role=a.recipe_role or ('candidate' if recipe else None),
+                  candidate_recipe_file_sha256=recipe_hash,
+                  candidate_qualification='BUILD_ONLY; fixture route/identity/quality/timing still required' if recipe or defines else None)
+    if a.plan_only:
+        report['status']='PLANNED_NOT_BUILT'
+        print(json.dumps(report,indent=2))
+        return 0
+    a.out.mkdir(parents=True,exist_ok=False)
     receipt=a.out/'native-build.json'; save(receipt,report)
     def boot(name,argv,timeout):
         row=command(argv,a.repo,env,a.out/(name+'.log'),timeout); report['bootstrap'].append(dict(id=name,**row)); save(receipt,report)
