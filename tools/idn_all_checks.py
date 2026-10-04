@@ -16,6 +16,8 @@ Each prints one verdict line last (`LU_NAN ...`, `SGD_NAN ...`, `IMPORT_OK`,
 PCA_ID lines are comparable across boxes (same fixture, same bytes hashed).
 No timing, no opponent."""
 import hashlib
+import json
+from pathlib import Path
 import os
 import subprocess
 import sys
@@ -57,28 +59,67 @@ def _lu_fixture(n):
 def _lu_child():
     import warnings
     import numpy as np
+    import mojolearn as ml
     from mojolearn import _expansion_decomp as la
     warnings.simplefilter("ignore")
+    flags = int(la._Kit(la._mode(None))._raw().x_decomp_idn_flags())
+    resident = bool(flags & 2)
+    expected_resident = os.environ.get("MOJOLEARN_IDN_ALL_OFF") != "1"
+    assert resident == expected_resident, 'compiled LU route does not match comparison arm'
+    contract = "resident-raw-solve" if resident else "public-solve-refusal"
+    artifacts = os.environ.get("MOJOLEARN_IDN_GATE_ARTIFACTS")
+    destination = Path(artifacts) / ("lu-" + ml.vendor()) if artifacts else None
+    if destination:
+        destination.mkdir(parents=True, exist_ok=False)
     h = hashlib.sha256()
     nan_words = 0
+    rows = []
     for n in (64, 257):
         a, b = _lu_fixture(n)
         lu, piv = la.lu_factor(a)
-        x = la.solve(a, b)
-        # Public lu_solve rejects nonfinite input factors, even when those
-        # factors came from finite-input overflow in lu_factor. Preserve that
-        # boundary; compare the factorization and resident solve themselves.
+        # Both arms preserve the public finite-factor boundary. The OFF
+        # solve route composes public lu_factor -> lu_solve and consequently
+        # refuses overflowed factors. The ON resident route returns raw solve
+        # words. This difference is explicit; neither arm normalizes NaNs.
         try:
             la.lu_solve((lu, piv), b)
         except ValueError as exc:
-            if 'finite' not in str(exc):
+            refusal = str(exc)
+            if 'finite' not in refusal:
                 raise
         else:
             raise AssertionError('lu_solve accepted nonfinite input factors')
-        for part in (lu, piv, x):
-            h.update(_bytes(part))
-        nan_words += int(np.isnan(np.frombuffer(_bytes(lu), dtype="<f4")).sum())
-    print("DIGEST %s nan_words=%d" % (h.hexdigest(), nan_words))
+        values = {'lu': lu, 'piv': piv}
+        if resident:
+            values['solve'] = la.solve(a, b)
+        else:
+            try:
+                la.solve(a, b)
+            except ValueError as exc:
+                assert str(exc) == refusal, 'OFF solve refused for a different reason'
+            else:
+                raise AssertionError('OFF solve accepted nonfinite intermediate factors')
+        current_nan_words = int(np.isnan(np.frombuffer(_bytes(lu), dtype="<f4")).sum())
+        assert current_nan_words > 0, 'vacuous LU NaN-word fixture'
+        words = {}
+        for name, part in values.items():
+            raw = _bytes(part)  # Unmodified factor, pivot and ON solve bytes.
+            h.update(raw)
+            words[name] = {'sha256': hashlib.sha256(raw).hexdigest(),
+                           'shape': list(np.asarray(part).shape), 'dtype': str(np.asarray(part).dtype)}
+        h.update(contract.encode() + b'\0' + refusal.encode() + b'\0')
+        nan_words += current_nan_words
+        row = {'n': n, 'contract': contract, 'lu_solve_refusal': refusal,
+               'nan_words': current_nan_words, 'outputs': words}
+        if destination:
+            path = destination / (str(n) + '.npz')
+            np.savez(path, **values)
+            row['artifact'] = {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+        rows.append(row)
+    if destination:
+        (destination / 'result.json').write_text(json.dumps({'status': 'PASS', 'vendor': ml.vendor(),
+            'compiled_flags': flags, 'contract': contract, 'digest': h.hexdigest(), 'fixtures': rows}, indent=2) + '\n')
+    print("DIGEST %s nan_words=%d contract=%s" % (h.hexdigest(), nan_words, contract))
 
 
 def _pca_child():
@@ -107,6 +148,14 @@ def _run_child(extra_env, what="lu-nan"):
     env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical", **extra_env)
     p = subprocess.run([sys.executable, os.path.abspath(__file__), what, "--child"], env=env,
                        capture_output=True, text=True)
+    artifacts = os.environ.get("MOJOLEARN_IDN_GATE_ARTIFACTS")
+    if artifacts:
+        folder = Path(artifacts)
+        folder.mkdir(parents=True, exist_ok=True)
+        tag = what + "-" + env.get("MOJOLEARN_VENDOR", "auto")
+        (folder / (tag + ".stdout.log")).write_text(p.stdout)
+        (folder / (tag + ".stderr.log")).write_text(p.stderr)
+        (folder / (tag + ".rc.json")).write_text(json.dumps({'rc': p.returncode, 'vendor': env.get('MOJOLEARN_VENDOR')}) + "\n")
     line = [ln for ln in p.stdout.splitlines() if ln.startswith("DIGEST ")]
     if p.returncode != 0 or not line:
         return None, (p.stderr or p.stdout).strip().splitlines()[-1:] or ["no output"]
@@ -119,9 +168,9 @@ def lu_nan():
     if dev is None or host is None:
         print("LU_NAN ERROR device=%s host=%s" % (e1, e2))
         return 1
-    vacuous = dev[1] == "nan_words=0"
-    ok = dev[0] == host[0] and not vacuous
-    print("LU_NAN device=%s host=%s %s %s" % (dev[0][:16], host[0][:16], dev[1],
+    vacuous = dev[1] == "nan_words=0" or host[1] == "nan_words=0"
+    ok = dev == host and not vacuous
+    print("LU_NAN device=%s host=%s %s %s" % (dev[0], host[0], " ".join(dev[1:]),
                                               "MATCH" if ok else ("VACUOUS" if vacuous else "DIFFER")))
     return 0 if ok else 1
 
@@ -133,13 +182,13 @@ def pca_id():
         print("PCA_ID ERROR device=%s host=%s" % (e1, e2))
         return 1
     ok = dev[0] == host[0]
-    print("PCA_ID device=%s host=%s %s %s" % (dev[0][:16], host[0][:16], dev[1], "MATCH" if ok else "DIFFER"))
+    print("PCA_ID device=%s host=%s %s %s" % (dev[0], host[0], " ".join(dev[1:]), "MATCH" if ok else "DIFFER"))
     return 0 if ok else 1
 
 
 def sgd_nan():
     import numpy as np
-    from mojolearn.linear_model import SGDClassifier, SGDRegressor
+    from mojolearn import SGDClassifier, SGDRegressor
     n, d = 4096, 8
     i = np.arange(n * d, dtype=np.int64).reshape(n, d)
     X = (((i * 37) % 101) - 50).astype(np.float32) / np.float32(50)
