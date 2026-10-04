@@ -627,6 +627,62 @@ def sf64_to_f32(a: UInt64) -> Float32:
     return bitcast[DType.float32](UInt32((s << 31) + (UInt64(exp) << 23) + sig))
 
 
+def sf64_sqrt(a: UInt64) -> UInt64:
+    """`sqrt(a)`, correctly rounded (round-to-nearest-even), as IEEE-754
+    requires of a hardware double `sqrt` (lane fix-g1-gbdt, 2026-10-04; NEW,
+    no existing function changed). Special cases: NaN -> `SF64_NAN`;
+    `+-0` -> itself; a negative nonzero -> `SF64_NAN`; `+inf` -> `+inf`.
+
+    Digit-by-digit (restoring) square root. The finite positive input is
+    `m * 2^(E-52)` with `m` normalized to 53 bits; an odd `E` moves one bit
+    into `m` so `E'` is even. The radicand `R = m' << 56` (110 bits) gives a
+    55-bit root `r = floor(sqrt(R))` in `[2^54, 2^55)`: 53 result bits, one
+    round bit, one more, plus the remainder as the sticky bit, so
+    `_round_pack` rounds once and correctly (a square root is never exactly
+    halfway). `R`'s low 56 bits are zero, so the two radicand bits taken at
+    step `i` are `m'` bits `53-2i` and `52-2i` while `i <= 26`, else 0. The
+    remainder stays under `2^59`, inside one word."""
+    var ea = _exp_of(a)
+    var sa = a & SF64_FRAC
+    if ea == 0x7FF:
+        if sa != 0:
+            return SF64_NAN
+        if (a >> 63) != 0:
+            return SF64_NAN
+        return a
+    if (a & ~SF64_SIGN) == 0:
+        return a
+    if (a >> 63) != 0:
+        return SF64_NAN
+    if ea == 0:
+        ea = _norm_sub_exp(sa)
+        sa = _norm_sub_sig(sa)
+    var m = sa | SF64_HIDDEN
+    var e_unb = ea - 1023
+    if (e_unb & 1) != 0:
+        m <<= 1
+        e_unb -= 1
+    var root = UInt64(0)
+    var rem = UInt64(0)
+    for i in range(55):
+        var pair = UInt64(0)
+        if i <= 26:
+            pair = (m >> UInt64(52 - 2 * i)) & UInt64(3)
+        rem = (rem << 2) | pair
+        var trial = (root << 2) | UInt64(1)
+        if rem >= trial:
+            rem -= trial
+            root = (root << 1) | UInt64(1)
+        else:
+            root = root << 1
+    var sig = root << 8
+    if rem != 0:
+        sig |= UInt64(1)
+    # value = sig * 2^(exp - 1084) and sqrt = r * 2^(E'/2 - 54), so
+    # exp = 1022 + E'/2 (E' even; `//` is exact here)
+    return _round_pack(UInt64(0), 1022 + e_unb // 2, sig)
+
+
 @always_inline
 def sf64_ftz(a: UInt64) -> UInt64:
     """A subnormal becomes its signed zero (the FTZ+DAZ host pool's
