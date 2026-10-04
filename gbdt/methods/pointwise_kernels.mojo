@@ -409,7 +409,7 @@ struct FoldsHistogram(Copyable, Movable):
                 + String(to_bit_inclusive)
             )
         var count = 0
-        for bit in range(from_bit, to_bit_inclusive + 1):
+        for bit in range(from_bit, to_bit_inclusive + 1):  # small-loop(to_bit_inclusive: bit widths, at most 8): sums a per-width feature count
             count += Int(self.counts[bit])
         return count
 
@@ -430,7 +430,7 @@ def folds_histogram_from_folds(folds: List[UInt32]) -> FoldsHistogram:
     `lowerBound = ... : 15` exists to prevent. Gate F6 pins it.
     """
     var h = FoldsHistogram()
-    for i in range(len(folds)):
+    for i in range(len(folds)):  # small-loop(folds: one fold count per feature, layout metadata): bins features by width once per pool
         var n = Int(folds[i])
         var bits = 0
         while (1 << bits) < n:

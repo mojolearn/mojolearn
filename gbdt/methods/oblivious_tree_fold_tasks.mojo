@@ -141,7 +141,7 @@ def plan_fold_layout(tasks: List[FoldTask]) raises -> FoldLayout:
         )
     var parts = List[DataPartition]()
     var cursor = 0
-    for i in range(len(tasks)):
+    for i in range(len(tasks)):  # small-loop(tasks: fold tasks, a handful): partition plan entries per task
         # LEARN first, then TEST, and the order is load-bearing: the
         # dynamic scorer reads `(fold, fold + 1)` as `(estimate, test)`.
         parts.append(DataPartition(UInt32(cursor), UInt32(tasks[i].learn_size)))
@@ -239,7 +239,7 @@ def fold_tasks_from_folds(folds: List[TFold]) raises -> List[FoldTask]:
     document per fold, each carrying that fold's own cursor value.
     """
     var tasks = List[FoldTask]()
-    for i in range(len(folds)):
+    for i in range(len(folds)):  # small-loop(folds: the fold plan, a handful of nested prefixes): fold task sizes per fold
         ref f = folds[i]
         var learn = f.estimate_samples.right - f.estimate_samples.left
         var test = (
@@ -332,7 +332,7 @@ def make_fold_doc_indices_device(
     slice, the host function's order exactly. Raises, before any launch,
     when the folds' slices do not fill `out` exactly."""
     var want = 0
-    for i in range(len(folds)):  # small-loop(folds: the fold plan, a handful of nested prefixes): slice-length arithmetic
+    for i in range(len(folds)):  # small-loop(folds: the fold plan, a handful of nested prefixes): slice-length arithmetic per fold
         want += (
             folds[i].estimate_samples.right - folds[i].estimate_samples.left
         ) + (

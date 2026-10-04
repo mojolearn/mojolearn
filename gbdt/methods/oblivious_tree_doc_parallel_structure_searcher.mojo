@@ -217,7 +217,7 @@ def fold_bins_from_table_kernel(
 
 def _cindex_columns(layout: CompressedIndexLayout) -> Int:
     var m = 0
-    for f in range(len(layout.features)):
+    for f in range(len(layout.features)):  # small-loop(layout: one entry per feature group): column count from layout metadata
         m = max(m, Int(layout.features[f].offset) + 1)
     return m
 
@@ -343,7 +343,7 @@ struct PointwiseTreeWorkspace(Movable):
         # (`len(one_hot) == len(layout.features)` or all-False)
         var table = List[UInt32]()
         var have_oh = len(one_hot) == n_features
-        for f in range(n_features):
+        for f in range(n_features):  # small-loop(n_features: feature layout entries, once per pool): launch table of offsets and masks
             table.append(UInt32(Int(layout.features[f].offset) * n_rows))
             table.append(UInt32(layout.features[f].mask))
             table.append(UInt32(layout.features[f].shift))
@@ -496,7 +496,7 @@ def fit_oblivious_tree_structure_traced(
     var stride = doc_count if fold_order else n_rows
     var blocks = blocks_for(layout, stride)
     var global_ids = List[Int]()
-    for f in range(len(layout.features)):
+    for f in range(len(layout.features)):  # small-loop(layout: one id per feature, once per tree): global feature id list for the calcer
         global_ids.append(f)
 
     # `n_rows` is the compressed index's ROW STRIDE and `doc_count` is the
@@ -586,7 +586,7 @@ def fit_oblivious_tree_structure_traced(
     # three sites. Rather than grow a tree whose histograms are a fold
     # axis short, ask the calcer what it is carrying and refuse if it
     # disagrees with the layout.
-    for i in range(len(calcer.helpers)):
+    for i in range(len(calcer.helpers)):  # small-loop(helpers: policy helpers, at most three): configuration check that only raises
         if calcer.helpers[i].hist_helper.fold_count != fold_count:
             raise Error(
                 "DEVIATION 126: the fold layout has FoldCount "
@@ -609,7 +609,7 @@ def fit_oblivious_tree_structure_traced(
     # POSITION in the concatenated array instead of at a document id.
     var cached = -1
     if fold_count > 1 and permutation_id >= 0:
-        for i in range(len(pool[0].doc_ids_keys)):
+        for i in range(len(pool[0].doc_ids_keys)):  # small-loop(doc_ids_keys: cached permutation ids, a handful): cache lookup by id only
             if pool[0].doc_ids_keys[i] == permutation_id:
                 cached = i
     var d_doc_ids: DeviceBuffer[DType.uint32]
@@ -825,7 +825,7 @@ def fit_oblivious_tree_structure_traced(
         # and the bin update are ONE launch, enqueued below where the bin
         # update stood (`pw_resolve_pack_bins_kernel`).
         var live_helpers = 0
-        for hi in range(len(calcer.helpers)):
+        for hi in range(len(calcer.helpers)):  # small-loop(helpers: policy helpers, at most three): counts live helpers for the dispatch
             if calcer.helpers[hi].feature_count != 0:
                 live_helpers += 1
         var fused_pw = PW_FUSED_SEARCH and live_helpers <= 3
@@ -878,7 +878,7 @@ def fit_oblivious_tree_structure_traced(
                 var r_ids = List[MutPointer[UInt32, MutAnyOrigin]]()
                 var r_scores = List[MutPointer[Float32, MutAnyOrigin]]()
                 var r_n = List[Int]()
-                for hi in range(len(calcer.helpers)):
+                for hi in range(len(calcer.helpers)):  # small-loop(helpers: policy helpers, at most three): result pointer launch arguments per helper
                     if calcer.helpers[hi].feature_count == 0:
                         continue
                     r_ids.append(
@@ -993,7 +993,7 @@ def fit_oblivious_tree_structure_traced(
     # in LEVEL ORDER, so the first stop at level k discards levels k..
     # exactly as the loop would never have grown them, and the returned
     # structure is unchanged record for record.
-    for depth2 in range(max_depth):
+    for depth2 in range(max_depth):  # small-loop(max_depth: tree levels, at most 16): the winner records become the split list
         var fid_u = pool[0].h_winners_ids[2 * depth2]
         var bin_u = pool[0].h_winners_ids[2 * depth2 + 1]
 
@@ -1012,7 +1012,7 @@ def fit_oblivious_tree_structure_traced(
 
         # `structure.HasSplit(bestSplit)` (`:134`), BEFORE applying it
         var seen = False
-        for i in range(len(structure)):
+        for i in range(len(structure)):  # small-loop(structure: splits so far, at most 16): the HasSplit repeat test
             if (
                 structure[i].feature_id == Int32(fid)
                 and structure[i].bin_idx == Int32(bin_u)

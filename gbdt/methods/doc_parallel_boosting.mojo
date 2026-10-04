@@ -398,7 +398,7 @@ def _apply_last_tree_to_test(
     if depth == 0:
         return
 
-    for level in range(depth):
+    for level in range(depth):  # small-loop(depth: tree levels, at most 16): per-level apply launch arguments
         ref cf = layout.features[
             Int(weak.structure.splits[level].feature_id)
         ]
@@ -1820,7 +1820,7 @@ def _estimate_prepare(
     if sm < 0:
         sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
     var ds = -1
-    for i in range(len(est_ws[0].arena_scratch)):
+    for i in range(len(est_ws[0].arena_scratch)):  # small-loop(arena_scratch: pooled scratch keys, a few shapes): cache lookup by shape only
         if est_ws[0].arena_scratch[i].matches(
             n_rows, n_leaves, dims[0], dims[1], fv_blocks, sm
         ):
@@ -1834,7 +1834,7 @@ def _estimate_prepare(
         )
         ds = len(est_ws[0].arena_scratch) - 1
     var hsi = -1
-    for i in range(len(est_ws[0].arena_host)):
+    for i in range(len(est_ws[0].arena_host)):  # small-loop(arena_host: pooled host scratch keys, a few shapes): cache lookup by shape only
         if est_ws[0].arena_host[i].matches(
             n_leaves, dims[0], dims[1], fv_blocks
         ):
@@ -2211,8 +2211,8 @@ def fit_with_test(
     # `1 + point.GetColumnCount()` (`pointwise_target_impl.h:186`).
     check_feature_fraction(feature_fraction)
     if feature_fraction < 1:
-        for flag in one_hot:
-            if flag:
+        for fi in range(len(one_hot)):  # small-loop(one_hot: one flag per feature): a parameter check that only raises
+            if one_hot[fi]:
                 raise Error("feature_fraction<1 supports numeric features only")
     var approx_dim = 1
     if objective == OBJECTIVE_MULTICLASS:
@@ -2862,13 +2862,14 @@ def fit_with_test(
                 Float32(1) if reused_workspace else Float32(0),
             )
             pw_pool.clear()
-            var selected_ids = List[Int32]()
-            for f in range(len(tree_folds)):
-                if tree_folds[f] > 0:
-                    selected_ids.append(Int32(f))
-            trace.record_list_i32(
-                _tree_tag(iteration) + ".sampled_features", selected_ids,
-            )
+            if trace.enabled:
+                var selected_ids = List[Int32]()
+                for f in range(len(tree_folds)):
+                    if tree_folds[f] > 0:
+                        selected_ids.append(Int32(f))
+                trace.record_list_i32(
+                    _tree_tag(iteration) + ".sampled_features", selected_ids,
+                )
         var lcur = cursors[learn_p].copy()
         # `TTargetAtPointTrait::Create(learnTarget, cursor)` (`:353`).
         # The gradients are taken AT THE CURRENT PREDICTIONS, which is the
@@ -3339,7 +3340,7 @@ def fit_with_test(
                     while walking:
                         ctx.synchronize()
                         walking = False
-                        for p in range(perm_count):
+                        for p in range(perm_count):  # small-loop(perm_count: learn permutations, a handful): walker orchestration per permutation task
                             if pend[p].phase != 2:
                                 if estimate_advance(pend[p]):
                                     walking = True
@@ -4018,7 +4019,7 @@ def predict(
     # `total_leaves` counts VALUES, so it carries the approx dimension.
     var total_levels = 0
     var total_leaves = 0
-    for t in range(model.size()):
+    for t in range(model.size()):  # small-loop(model: one entry per tree): sums tree depths to size the apply buffers
         total_levels += model.weak_models[t].structure.get_depth()
         total_leaves += (
             (1 << model.weak_models[t].structure.get_depth()) * approx_dim
@@ -4120,7 +4121,7 @@ def predict(
     var grouped = False
     comptime if IDN_PREDICT_FOUR or IDN_APPLY_WIDE:
         var tree_depths = List[Int](capacity=model.size())
-        for t in range(model.size()):
+        for t in range(model.size()):  # small-loop(model: one entry per tree): collects tree depths for the apply dispatch
             tree_depths.append(model.weak_models[t].structure.get_depth())
         comptime if IDN_APPLY_WIDE:
             var uniform = uniform_positive_depth(tree_depths)

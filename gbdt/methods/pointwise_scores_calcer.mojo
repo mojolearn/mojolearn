@@ -92,7 +92,7 @@ def folds_histogram_for(folds: List[UInt32]) raises -> FoldsHistogram:
     FIVE-bit kernel.
     """
     var h = FoldsHistogram()
-    for i in range(len(folds)):
+    for i in range(len(folds)):  # small-loop(folds: one fold count per feature, layout metadata): bins features by width once per pool
         var f = Int(folds[i])
         if f > 0:
             # `NCB::IntLog2` is `(ui32)ceil(log2(values))`
@@ -231,7 +231,7 @@ struct PolicyScoreHelper(Movable):
         self.folds_hist = folds_histogram_for(block.folds)
 
         var total = 0
-        for i in range(self.feature_count):
+        for i in range(self.feature_count):  # small-loop(feature_count: features in one policy block): bin feature total from layout metadata
             total += Int(block.folds[i])
         self.bin_feature_count = total
 
@@ -244,7 +244,7 @@ struct PolicyScoreHelper(Movable):
         var fol = List[UInt32]()
         var oh = List[UInt8]()
         var bf = List[UInt32]()
-        for i in range(self.feature_count):
+        for i in range(self.feature_count):  # small-loop(feature_count: features in one policy block, once per pool): launch tables from layout metadata
             # the column this feature's GROUP occupies, times the row stride
             off.append(
                 UInt32(
@@ -267,7 +267,7 @@ struct PolicyScoreHelper(Movable):
                 ].one_hot_feature else UInt8(0)
             )
             var gid = UInt32(global_feature_ids[block.feature_ids[i]])
-            for b in range(Int(block.folds[i])):
+            for b in range(Int(block.folds[i])):  # small-loop(folds: bins of one feature, at most 256): bin-feature launch table rows
                 bf.append(gid)
                 bf.append(UInt32(b))
                 bf.append(UInt32(0))  # SkipInScoreCount
@@ -322,14 +322,12 @@ struct PolicyScoreHelper(Movable):
         # `fx.n_features` and hands them in, so no check has ever built one
         # through this constructor.
         var n_feat = len(global_feature_ids)
-        var ones = List[Float32]()
-        for _ in range(n_feat):
-            ones.append(1.0)
         self.weight_count = n_feat
         self.d_cat_w = ctx.enqueue_create_buffer[DType.float32](n_feat)
         self.d_bin_w = ctx.enqueue_create_buffer[DType.float32](n_feat)
-        ctx.enqueue_copy(dst_buf=self.d_cat_w, src_ptr=ones.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=self.d_bin_w, src_ptr=ones.unsafe_ptr())
+        # lane cpu3-gbdt-a: the constant ones by device fill, no host list
+        enqueue_fill(ctx, self.d_cat_w, Float32(1.0))
+        enqueue_fill(ctx, self.d_bin_w, Float32(1.0))
 
         var blocks_n = (total + 127) // 128
         if blocks_n > 32:
