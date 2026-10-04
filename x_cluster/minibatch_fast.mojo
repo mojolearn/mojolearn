@@ -104,7 +104,10 @@ comptime MBF_RG_MAXK = 16
 # w2-mbk-sumcmp-q exact (centers, counts, labels, inertia identical).
 # MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF restores the full-chunk walk.
 comptime MBK_W2_SUMCMP = MINIBATCH_FAST_DEV and not is_defined["MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF"]()
-# lane/apple-fast-w2-clres (2026-10-04), OPEN, opt-in, FAST + Apple only.
+# DROP-speed, 2026-10-04, lane/apple-fast-w2-clres@4d80737b1:
+# w2-mbk-labrg-* quality PASS; istella146.6->144.0ms, taxi45.3->46.3ms.
+# One sample/arm does not establish a useful speed gain; default OFF.
+# See docs/apple-fast/EXPERIMENTS.md (MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG).
 # -D MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG: the fit's last pass (labels and
 # distances of all n rows, x_cluster/minibatch_ptr.mojo) is
 # `DeviceOps.nearest`, a thread per row that walks its 880-byte Istella row k

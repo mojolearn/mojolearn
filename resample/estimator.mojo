@@ -2066,8 +2066,13 @@ def resample_indices_host(
     return out^
 
 
-# OPEN, recovered from 50b96e795: historical taxi parse failure produced no
-# scored result. Current-main exact-output quality and M3 timing still owed.
+# OPEN-quality-PASS, 2026-10-04, compiled 7eacaa2b2; default OFF.
+# resample-gpu-recovered-q-r2-20261004: exact output/draw/refusal/lifetime
+# gates PASS with actual native reach; quality harness 7d66c0a05.
+# Historical parse failures and first timing NumPy-header failures produced
+# NO scores; 0c7066aae fixes that metadata API only. Board timing remains owed.
+# Keep opt-in pending matched board warmup + one scored call/arm; no speed
+# claim. See docs/apple-fast/ab/resample-gpu-recovery.md and EXPERIMENTS.md.
 comptime RESAMPLE_GPU_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_RESAMPLE_FAST_GATHER"]())

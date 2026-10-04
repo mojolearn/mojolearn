@@ -37,6 +37,9 @@ from x_linear.team import team_barrier
 from sequence.ops import FP, Args, add, fma3, gates_of, ld, op_cell_bwd, op_cell_bwd_h, op_cell_fwd, op_cell_fwd_h, st
 
 comptime _APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+# MERGED-UNMEASURED, source0d6cbc821, gaplstm-{scan,smem,all,wgrad}-*.
+# SCAN/SCAN_SMEM/WGRAD remain opt-in; no judged A/B timing or quality result.
+# See docs/apple-fast/EXPERIMENTS.md (SEQ_FAST_LSTM_*); neural lane owns validation.
 comptime SEQ_LSTM_SCAN = _APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN"]()
 comptime SEQ_LSTM_SCAN_SMEM = SEQ_LSTM_SCAN and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM"]()
 comptime SEQ_LSTM_WGRAD = _APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_WGRAD"]()

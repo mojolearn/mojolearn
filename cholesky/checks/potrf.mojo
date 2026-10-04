@@ -445,6 +445,11 @@ def chol_default_nb_hint() -> Int:
 
 
 comptime CHOL_FAST_CB = 2048
+# HOLD-speed, 2026-10-04, NB512 source19bb1c7a1:
+# w2-cholnb512-quality PASS; w2-cholnb512-synthetic260.4->265.7ms.
+# One run/arm showed no benefit; NB512 stays opt-in, default width unchanged.
+# NB64/NB128 have no admission implied by that NB512 result.
+# See docs/apple-fast/EXPERIMENTS.md (MOJOLEARN_CHOL_FAST_NB512).
 comptime CHOL_FAST_NB = 64 if is_defined["MOJOLEARN_CHOL_FAST_NB64"]() else (
     128 if is_defined["MOJOLEARN_CHOL_FAST_NB128"]() else (
         512 if is_defined["MOJOLEARN_CHOL_FAST_NB512"]() else 256

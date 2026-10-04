@@ -61,6 +61,10 @@ from x_prep.dradix import RUP, radix_word, radix_load_kernel
 #: FAST on Apple only
 comptime PREP2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 #: eigh on a 32-thread block: a build define (-D MOJOLEARN_PREP2_FAST_EIGH_BLOCK), FAST + Apple only
+# OPEN / evidence pending, source8762eb33f, prep2-ii-eigh-taxi.
+# Ledger has no judged A/B value; old queued status is not a quality/speed
+# result or proof that the job remains queued. Keep default OFF until reviewed.
+# See docs/apple-fast/EXPERIMENTS.md (PREP2_FAST_EIGH_BLOCK).
 comptime PREP2_FAST_EIGH_BLOCK = PREP2_FAST and is_defined["MOJOLEARN_PREP2_FAST_EIGH_BLOCK"]()
 comptime TGR = 256
 comptime OP_QUANTILE = 2

@@ -1693,6 +1693,11 @@ def _svgp_chol_panels(ctx: DeviceContext, wp: FP, m: Int, n: Int, nfac: Int) rai
 #: busy threads (m = 512) each 32,768 rows deep, and b's has m threads with
 #: one dependent float-float chain each: too few to fill the M3 Ultra. Bits
 #: change (float-float re-association, ~1e-14 relative in B and b).
+# OPEN / NOT-ADMITTED, 2026-10-04, lane/apple-fast-w2-svgp@146898d2c.
+# No valid judged A/B result in EXPERIMENTS.md; readiness review b1487e2e
+# is not quality or speed evidence. Default OFF. Require current-base build,
+# actual SVGP fitted quality and per-dataset timing before promotion.
+# See docs/apple-fast/EXPERIMENTS.md (SVGP_FAST_BSPLIT).
 comptime SVGP_FAST_BSPLIT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and SVGP_FAST_SYMTILE
     and is_defined["MOJOLEARN_SVGP_FAST_BSPLIT"]()
