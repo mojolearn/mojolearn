@@ -34,9 +34,10 @@ comptime OP_FLAG_SCAN = 57
 comptime OP_PROBA_ROWS = 58
 
 #: flag_scan tests: 0 the log domain (v <= -1), 1 a relevance indicator
-#: (v not 0 and not 1)
+#: (v not 0 and not 1), 2 a negative relevance (v < 0)
 comptime SCAN_LOG_DOMAIN = 0
 comptime SCAN_INDICATOR = 1
+comptime SCAN_NEGATIVE = 2
 
 #: sqrt(Float32 epsilon) rounded to Float32, widened: 0.0003452669770922512
 comptime PROBA_SUM_TOL = UInt64(0x3F36A09E60000000)
@@ -99,9 +100,8 @@ def off_diff_unit(t: Int, f: FP, q: IP):
 def flag_scan_unit(t: Int, f: FP, q: IP):
     """q = [SRC, n, MODE, FLAG]; unit t < n tests SRC[t] (the raw Float32
     word: no flush, a subnormal is neither -1 nor 0 nor 1, as on the host)
-    and stores 1 at FLAG when it fails. NaN fails neither test (numpy's
-    `min() <= -1` and `v != 0 and v != 1` see a NaN as the host did:
-    the indicator test fails it, the log-domain test does not)."""
+    and stores 1 at FLAG when it fails. A NaN fails the indicator test and
+    passes the ordered ones (`<= -1`, `< 0`), as the host comparisons did."""
     var n = p(q, 1)
     if t >= n:
         return
@@ -110,6 +110,8 @@ def flag_scan_unit(t: Int, f: FP, q: IP):
     var bad = False
     if mode == SCAN_LOG_DOMAIN:
         bad = v <= Float32(-1)
+    elif mode == SCAN_NEGATIVE:
+        bad = v < Float32(0)
     else:
         bad = v != Float32(0) and v != Float32(1)
     if bad:

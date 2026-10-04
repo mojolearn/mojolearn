@@ -372,7 +372,7 @@ def _counts(prog, off, m):
 
 
 #: flag_scan tests (x_metrics/tail.mojo)
-_SCAN_LOG_DOMAIN, _SCAN_INDICATOR = 0, 1
+_SCAN_LOG_DOMAIN, _SCAN_INDICATOR, _SCAN_NEGATIVE = 0, 1, 2
 
 
 def _scan_flag(prog, src, n, mode):
@@ -2239,9 +2239,21 @@ def top_k_accuracy_score(y_true, y_score, *, k=2, normalize=True, sample_weight=
     return float(hits / (n if w is None else prog.floats(sw, 1)[0]))
 
 
-def _row_mean(S, cols, Y, n, kind, w, numeric_mode, *, K=0, D=None, prog=None, normalize=True):
-    prog = prog or _Prog()
-    Dt = _NONE if D is None else prog.put(Array.from_list([_f32(v) for v in D], "<f4"))
+#: rank_epi kinds (x_metrics/rank_epi.mojo)
+_RANK_MEAN, _RANK_NDCG_ROW, _RANK_D2_LOG, _RANK_D2_BRIER, _RANK_DCG_DISC = 0, 1, 2, 3, 4
+
+
+def _f64_words(prog, v):
+    """A binary64 scalar as two Int32 arena words (low first), an input."""
+    bw = array.array("i")
+    bw.frombytes(array.array("d", [float(v)]).tobytes())
+    return prog.put_i32(list(bw))
+
+
+def _row_fold(prog, S, cols, Y, n, kind, w, *, K=0, Dt=_NONE):
+    """The row metric and its folds: (TOT, SW, W) offsets: the Float32
+    PairSum of the n row values (weighted when w), the weight total (None
+    unweighted) and the weights' slot."""
     out = prog.scratch(n)
     prog.stage("row_metric", n, S, cols, Y, out, _ROW[kind], K, Dt)
     zero = prog.scratch(n)
@@ -2249,18 +2261,36 @@ def _row_mean(S, cols, Y, n, kind, w, numeric_mode, *, K=0, D=None, prog=None, n
     W = _NONE if w is None else prog.put(w)
     tot = _group(prog, zero, n, 1, values=out, weights=W)[1]
     sw = _group(prog, zero, n, 1, weights=W)[1] if w is not None else None
+    return tot, sw, W
+
+
+def _row_mean(S, cols, Y, n, kind, w, numeric_mode, *, K=0, Dt=_NONE, prog=None, normalize=True, half=False,
+              after=()):
+    """The (weighted) mean of a row metric, binary64: the folds and the
+    division (`rank_epi` MEAN) in one program. `after`: checks of the
+    program's flag words, each a function of the program that raises."""
+    prog = prog or _Prog()
+    tot, sw, _ = _row_fold(prog, S, cols, Y, n, kind, w, K=K, Dt=Dt)
+    res = prog.alloc(2)
+    prog.stage("rank_epi", 1, _RANK_MEAN, tot, n, _NONE if sw is None else sw, int(bool(normalize)),
+               int(bool(half)), res)
     _execute(prog, numeric_mode)
-    total = prog.floats(tot, 1)[0]
-    if not normalize:
-        return total
-    return total / (n if w is None else prog.floats(sw, 1)[0])
+    for check in after:  # glue: the program's flag checks
+        check(prog)
+    return prog.words(res, 2, "d")[0]
+
+
+def _proba_after(flags, caller):
+    return lambda prog: _proba_check(prog, flags, caller)
 
 
 def _proba(y_true, y_proba, labels, pos_label, caller):
-    """(codes, P (n, k) Float32, k, binary): scikit-learn 1.9's validation of
-    probabilistic predictions for a binary vector or a multiclass matrix."""
+    """(codes, a, k, binary): scikit-learn 1.9's validation of the shapes and
+    labels of probabilistic predictions for a binary vector (`a` (n,)) or a
+    multiclass matrix (`a` (n, k)); stage `_put_proba(prog, a, n, k,
+    binary)` for the values' check and the (n, 2 or k) matrix."""
     from ._metrics_impl import _label_map, _selected_labels
-    from ._buffer import materialize_f32_lists, _native
+    from ._buffer import materialize_f32_lists
     true, kind, present = _targets(y_true, caller)
     n = len(true)
     a = materialize_f32_lists(y_proba, "y_proba")[0]
@@ -2294,33 +2324,23 @@ def _proba(y_true, y_proba, labels, pos_label, caller):
     if a.shape[0] != n:
         raise ValueError("y_true and y_proba have different numbers of rows")
     a = as_f32_c(a, ndim=a.ndim, name="y_proba")[0]
-    packed = empty((n, 2), "<f4") if binary else None
-    code = int(_native("probability_rows_f32")(addr_ro(a, name="y_proba"), addr_ro(packed, name="packed") if binary else 0,
-                                                n, 1 if binary else k, int(binary)))
-    if code:
-        raise ValueError(f"mojolearn {caller}: y_proba " + {1: "must be finite", 2: "must lie in [0, 1]",
-                         3: "rows must sum to one within sqrt(float32 eps)"}.get(code, "failed validation"))
-    return codes, (packed if binary else a), k, binary
+    # the values' check (finite, in [0, 1], rows summing to one) and the
+    # binary [1 - p, p] layout run in the caller's program (`_put_proba`)
+    return codes, a, k, binary
 
 
-def _class_weights(codes, w, k, numeric_mode=None):
-    """Per-class (weighted) counts and the total, binary64 in row order, from
-    the binding's class_sums (the Python fallback is gone, lane
-    apple-fast-py2mojo-core)."""
-    per = _class_sums(codes, w, k, numeric_mode)
-    return per, _fsum(per)
-
-
-def log_loss_options(y_true, y_pred, normalize, sample_weight, labels, numeric_mode):
-    """log_loss with sample_weight (lane/metrics): the clipped `-log p_true`
-    per row on the device, its weighted PairSum; the unweighted call keeps
-    its kernel."""
-    codes, P, k, _ = _proba(y_true, y_pred, labels, None, "log_loss")
+def log_loss_options(y_true, y_pred, normalize, sample_weight, labels, numeric_mode, caller="log_loss"):
+    """log_loss with sample_weight (lane/metrics), and without it since lane
+    cpu2-l7-metrics: the probabilities' check, the clipped `-log p_true` per
+    row, its (weighted) PairSum and the division in one device program."""
+    codes, a, k, binary = _proba(y_true, y_pred, labels, None, caller)
     n = len(codes)
-    w = _weights(sample_weight, n, "log_loss")
+    w = _weights(sample_weight, n, caller)
     prog = _Prog()
-    S, Y = prog.put(P), prog.put_i32(codes)
-    return float(_row_mean(S, k, Y, n, "logloss", w, numeric_mode, prog=prog, normalize=normalize))
+    S, flags = _put_proba(prog, a, n, k, binary)
+    Y = prog.put_i32(codes)
+    return float(_row_mean(S, k, Y, n, "logloss", w, numeric_mode, prog=prog, normalize=normalize,
+                           after=(_proba_after(flags, caller),)))
 
 
 def brier_score_loss(y_true, y_proba, *, sample_weight=None, pos_label=None, labels=None,
@@ -2328,52 +2348,54 @@ def brier_score_loss(y_true, y_proba, *, sample_weight=None, pos_label=None, lab
     """scikit-learn 1.9 `brier_score_loss` (binary vector or multiclass
     matrix): the mean of `sum_c (onehot - p)^2`, halved by default for the
     binary case."""
-    codes, P, k, binary = _proba(y_true, y_proba, labels, pos_label, "brier_score_loss")
+    codes, a, k, binary = _proba(y_true, y_proba, labels, pos_label, "brier_score_loss")
     n = len(codes)
     w = _weights(sample_weight, n, "brier_score_loss")
-    prog = _Prog()
-    S, Y = prog.put(P), prog.put_i32(codes)
-    score = _row_mean(S, k, Y, n, "brier", w, numeric_mode, prog=prog)
     if scale_by_half == "auto":
         scale_by_half = binary or k < 3
-    return float(score * 0.5 if scale_by_half else score)
+    prog = _Prog()
+    S, flags = _put_proba(prog, a, n, k, binary)
+    Y = prog.put_i32(codes)
+    return float(_row_mean(S, k, Y, n, "brier", w, numeric_mode, prog=prog, half=bool(scale_by_half),
+                           after=(_proba_after(flags, "brier_score_loss"),)))
+
+
+def _d2_proba(y_true, y_proba, sample_weight, labels, pos_label, numeric_mode, caller, kind):
+    """d2_log_loss_score / d2_brier_score: the row metric's folds, the
+    (weighted) class sums and `1 - num / den` (`rank_epi` D2_LOG / D2_BRIER:
+    the class-frequency denominator in binary64) in one device program."""
+    codes, a, k, binary = _proba(y_true, y_proba, labels, pos_label, caller)
+    n = len(codes)
+    if n < 2:
+        _undefined_warning("D^2 score is not well-defined with less than two samples.")
+        return float("nan")
+    w = _weights(sample_weight, n, caller)
+    prog = _Prog()
+    S, flags = _put_proba(prog, a, n, k, binary)
+    Y = prog.put_i32(codes)
+    tot, sw, W = _row_fold(prog, S, k, Y, n, kind, w)
+    off, per = _group(prog, Y, n, k, weights=W)
+    PER, weighted = (off, 0) if w is None else (per, 1)
+    res = prog.alloc(2)
+    if kind == "logloss":
+        prog.stage("rank_epi", 1, _RANK_D2_LOG, tot, PER, weighted, k, res)
+    else:
+        prog.stage("rank_epi", 1, _RANK_D2_BRIER, tot, n, _NONE if sw is None else sw, PER, weighted, k, res)
+    _execute(prog, numeric_mode)
+    _proba_check(prog, flags, caller)
+    return float(prog.words(res, 2, "d")[0])
 
 
 def d2_log_loss_score(y_true, y_proba=None, *, sample_weight=None, labels=None, numeric_mode=None):
     """scikit-learn 1.9 `d2_log_loss_score`: one minus the log loss over the
     log loss of the (weighted) class frequencies."""
-    codes, P, k, _ = _proba(y_true, y_proba, labels, None, "d2_log_loss_score")
-    n = len(codes)
-    if n < 2:
-        _undefined_warning("D^2 score is not well-defined with less than two samples.")
-        return float("nan")
-    w = _weights(sample_weight, n, "d2_log_loss_score")
-    prog = _Prog()
-    S, Y = prog.put(P), prog.put_i32(codes)
-    num = _row_mean(S, k, Y, n, "logloss", w, numeric_mode, prog=prog, normalize=False)
-    per, total = _class_weights(codes, w, k, numeric_mode)
-    eps = 1.1920928955078125e-07
-    den = _fsum([wc * -pmath.log(min(max(wc / total, eps), 1 - eps)) for wc in per if wc])
-    return float(1 - num / den)
+    return _d2_proba(y_true, y_proba, sample_weight, labels, None, numeric_mode, "d2_log_loss_score", "logloss")
 
 
 def d2_brier_score(y_true, y_proba, *, sample_weight=None, pos_label=None, labels=None, numeric_mode=None):
     """scikit-learn 1.9 `d2_brier_score`: one minus the Brier score over the
     Brier score of the (weighted) class frequencies."""
-    codes, P, k, _ = _proba(y_true, y_proba, labels, pos_label, "d2_brier_score")
-    n = len(codes)
-    if n < 2:
-        _undefined_warning("D^2 score is not well-defined with less than two samples.")
-        return float("nan")
-    w = _weights(sample_weight, n, "d2_brier_score")
-    prog = _Prog()
-    S, Y = prog.put(P), prog.put_i32(codes)
-    num = _row_mean(S, k, Y, n, "brier", w, numeric_mode, prog=prog)
-    per, total = _class_weights(codes, w, k, numeric_mode)
-    freq = [v / total for v in per]
-    den = _fsum([per[c] * _fsum([_sq((1.0 if j == c else 0.0) - freq[j]) for j in range(k)])
-                      for c in range(k)]) / total
-    return float(1 - num / den)
+    return _d2_proba(y_true, y_proba, sample_weight, labels, pos_label, numeric_mode, "d2_brier_score", "brier")
 
 
 def hinge_loss(y_true, pred_decision, *, labels=None, sample_weight=None, numeric_mode=None):
@@ -2420,13 +2442,38 @@ def _relevance(y_true, y_score, caller, *, indicator):
     s = _scores(y_score, y.shape[0], caller, ndim=2)
     if s.shape != y.shape:
         raise ValueError("y_true and y_score have different shape")
-    if indicator and any(v != 0.0 and v != 1.0 for v in y.reshape((y.size,)).tolist()):
-        raise ValueError(f"{caller} requires a binary label indicator y_true")
+    # `indicator`: the 0/1 test of y_true runs in the caller's program
+    # (`_relevance_put`: flag_scan, x_metrics/tail.mojo)
     return y, s
 
 
-def _dcg_discount(k_cols, log_base):
-    return [1 / (pmath.log(i + 2) / pmath.log(log_base)) for i in range(k_cols)]
+def _relevance_put(prog, y, s, caller, indicator):
+    """(S, Y, after): y_score and y_true in the program and, for an
+    indicator y_true, the device 0/1 test and its check."""
+    S, Y = prog.put(s), prog.put(y)
+    if not indicator:
+        return S, Y, ()
+    flag = _scan_flag(prog, Y, y.size, _SCAN_INDICATOR)
+
+    def check(prog):
+        if _flag_set(prog, flag):
+            raise ValueError(f"{caller} requires a binary label indicator y_true")
+    return S, Y, (check,)
+
+
+def _dcg_table(prog, c, log_base):
+    """The c-word Float32 DCG discount table `1 / log_b(i + 2)` (binary64,
+    narrowed), formed by the device (`rank_epi` DCG_DISC) in the program."""
+    b = float(log_base)
+    if not b > 0.0:
+        raise ValueError("math domain error")
+    if b == 1.0:
+        raise ZeroDivisionError("float division by zero")
+    B = _f64_words(prog, b)
+    D = prog.scratch(c)
+    if c:
+        prog.stage("rank_epi", c, _RANK_DCG_DISC, c, B, D)
+    return D
 
 
 def dcg_score(y_true, y_score, *, k=None, log_base=2, sample_weight=None, ignore_ties=False,
@@ -2439,46 +2486,45 @@ def dcg_score(y_true, y_score, *, k=None, log_base=2, sample_weight=None, ignore
     n, c = y.shape
     w = _weights(sample_weight, n, "dcg_score")
     prog = _Prog()
-    S, Y = prog.put(s), prog.put(y)
+    S, Y, _ = _relevance_put(prog, y, s, "dcg_score", False)
+    Dt = _dcg_table(prog, c, log_base)
     return float(_row_mean(S, c, Y, n, "dcg_ignore_ties" if ignore_ties else "dcg", w, numeric_mode,
-                           K=0 if k is None else int(k),
-                           D=_dcg_discount(c, log_base), prog=prog))
+                           K=0 if k is None else int(k), Dt=Dt, prog=prog))
 
 
 def ndcg_score(y_true, y_score, *, k=None, sample_weight=None, ignore_ties=False, numeric_mode=None):
     """scikit-learn 1.9 `ndcg_score`: each row's DCG over its ideal DCG
-    (0 when the row has no relevant item)."""
+    (0 when the row has no relevant item), (weighted) averaged. The gains,
+    the per-row ratios (`rank_epi` NDCG_ROW: the binary64 quotient narrowed
+    to Float32), their (weighted) PairSum and the mean run in one device
+    program (lane cpu2-l7-metrics: no host epilogue over the rows)."""
     y, s = _relevance(y_true, y_score, "ndcg_score", indicator=False)
     n, c = y.shape
     if c <= 1:
         raise ValueError(f"Computing NDCG is only meaningful when there is more than 1 document. Got {c} instead.")
-    if y.min() < 0:
-        raise ValueError("ndcg_score should not be used on negative y_true values.")
     w = _weights(sample_weight, n, "ndcg_score")
-    D = _dcg_discount(c, 2)
     K = 0 if k is None else int(k)
     prog = _Prog()
-    S, Y = prog.put(s), prog.put(y)
-    Dt = prog.put(Array.from_list([_f32(v) for v in D], "<f4"))
-    gain = prog.alloc(n)
-    ideal = prog.alloc(n)
+    S, Y, _ = _relevance_put(prog, y, s, "ndcg_score", False)
+    neg = _scan_flag(prog, Y, y.size, _SCAN_NEGATIVE)
+    Dt = _dcg_table(prog, c, 2)
+    gain = prog.scratch(n)
+    ideal = prog.scratch(n)
+    ratio = prog.scratch(n)
     prog.stage("row_metric", n, S, c, Y, gain, _ROW["dcg_ignore_ties" if ignore_ties else "dcg"], K, Dt)
     prog.stage("row_metric", n, Y, c, Y, ideal, _ROW["dcg"], K, Dt)
-    prog.want(gain, n)
-    prog.want(ideal, n)
+    prog.stage("rank_epi", n, _RANK_NDCG_ROW, gain, ideal, n, ratio)
+    zero = prog.scratch(n)
+    prog.stage("pair_key", n, 0, 0, zero, 1, 2)
+    W = _NONE if w is None else prog.put(w)
+    tot = _group(prog, zero, n, 1, values=ratio, weights=W)[1]
+    sw = _group(prog, zero, n, 1, weights=W)[1] if w is not None else None
+    res = prog.alloc(2)
+    prog.stage("rank_epi", 1, _RANK_MEAN, tot, n, _NONE if sw is None else sw, 1, 0, res)
     _execute(prog, numeric_mode)
-    # x_metrics/epilogue.mojo ndcg_mean (lane py-misc-metrics): the ratios,
-    # products and fsums over the arena words; the Python fallback is gone
-    # (lane apple-fast-py2mojo-core: every install's binding carries it, and
-    # its refusals, a zero weight total or a non-finite term, cannot occur
-    # for validated weights and flushed Float32 gains)
-    waddr, keep = _f32_weights_addr(w)
-    if waddr is None:
-        keep = as_f32_c(w, ndim=1, name="sample_weight")[0]
-        waddr = addr_ro(keep, name="sample_weight")
-    prog._check(gain, n)
-    prog._check(ideal, n)
-    return float(_binding(numeric_mode).x_metrics_ndcg_mean(prog.arena.buffer_info()[0], gain, ideal, n, waddr))
+    if _flag_set(prog, neg):
+        raise ValueError("ndcg_score should not be used on negative y_true values.")
+    return float(prog.words(res, 2, "d")[0])
 
 
 def _label_ranking(kind, y_true, y_score, sample_weight, numeric_mode, caller):
@@ -2486,8 +2532,8 @@ def _label_ranking(kind, y_true, y_score, sample_weight, numeric_mode, caller):
     n, c = y.shape
     w = _weights(sample_weight, n, caller)
     prog = _Prog()
-    S, Y = prog.put(s), prog.put(y)
-    return float(_row_mean(S, c, Y, n, kind, w, numeric_mode, prog=prog))
+    S, Y, after = _relevance_put(prog, y, s, caller, True)
+    return float(_row_mean(S, c, Y, n, kind, w, numeric_mode, prog=prog, after=after))
 
 
 def coverage_error(y_true, y_score, *, sample_weight=None, numeric_mode=None):
