@@ -1,4 +1,4 @@
-pos=914 lines=    1542
+pos=922 lines=    1543
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -1084,3 +1084,12 @@ pos=914 lines=    1542
 1192:FBUILD lane/apple-fast-fix-treeshap-merge@baa34698e prebuilt=m2 core=0 ibase=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 files=7
 1193:CMD apple-fast-fix-treeshap-merge@baa34698e smoke-fixtshap-merge rc=2 bash: -c: line 1: syntax error: unexpected end of file
 1194:CMD apple-fast-fastonly2@eca3e33b6 fastonly2-4-ivf-istella-m3 rc=0 AFC-DEF-SUMMARY arm=B n=0 median_ms=None all=[] quality=[] defines='-D MOJOLEARN_ANN3_COARSE_SEED -D MOJOLEARN_IVF_FAST_SEED_DEVICE'
+1195:CMD apple-fast-fastonly2@eca3e33b6 fastonly2-5-ivf-pq-istella-m3 rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=5253.2 all=[5253] quality=['{"recall_at_10":'] defines='-D MOJOLEARN_ANN3_COARSE_SEED -D MOJOLEARN_IVF_FAST_SEED_DEVICE'
+1196:FBUILD lane/apple-fast-fix-treeshap-merge@3d9bffde8 prebuilt=m2 core=0 ibase=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 files=7
+1197:CMD apple-fast-fix-treeshap-merge@3d9bffde8 tshap-smoke-merge rc=0 TSHAP-SMOKE status=ok additivity=4.77e-07
+1198:CMD apple-fast-isotonic-knn@7385fcfdd ik-iso-pair-istella-b-m3 rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=91.4 all=[91] quality=['{"finite":'] defines='-D MOJOLEARN_ISOTONIC_FAST_PAR=1 -D MOJOLEARN_ISOTONIC_FAST_PAIRMERGE=1'
+1199:CMD apple-fast-isotonic-knn@7385fcfdd ik-imp-t2-taxi-b-m3 rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=2.3 all=[2] quality=['{"masked_rmse":'] defines='-D MOJOLEARN_XN_FAST_IMPUTE_TILED2=1'
+1200:CMD apple-fast-isotonic-knn@7385fcfdd ik-lle-knn-taxi-b-m3 rc=0 AFC-AB-SUMMARY ik-lle-knn-taxi-b-m3 arm=B lane=lle ds=taxi median_of_medians_ms=4479.752208979335 runs=[4479.752208979335 ] digest=68a3bf158fd860ea 
+1201:CMD apple-fast-batch@3150d75c1 prep3-lb-taxi-x-m3 rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=559.4 all=[559] quality=['{"output_shape":'] defines='-D MOJOLEARN_PREP3_LABELS'
+1202:CMD apple-fast-batch@3150d75c1 prep3-maxabs-istella-x-m3 rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=104.2 all=[104] quality=['{"output_shape":'] defines='-D MOJOLEARN_PREP3_MAXABS'
+1203:CMD apple-fast-batch@3150d75c1 nb-mnb-csr-text-x-m3 rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=35.4 all=[35] quality=['{"accuracy":'] defines='-D MOJOLEARN_NB_TEXT_CSR=1'
