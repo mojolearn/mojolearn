@@ -80,3 +80,23 @@ Mamba/Transformer only. Read the plan's coverage notes before interpreting resul
 
 Static validation only at handoff: Python py_compile and JSON schema structure
 checks passed. No new quality/identity/timing jobs have been executed by this agent.
+
+Verified native build reuse (prepare only)
+----------------------------------------
+Pass --reuse-native-on /absolute/on/native-build.json and/or
+--reuse-native-off /absolute/off/native-build.json to the external runner.
+Keep identical_wave_reuse.py beside identical_wave_runner.py. Receipt donors
+are read-only; verified .so files are copied into fresh wave source directories,
+and only remaining plan builders run. The prepare receipt retains donor,
+attestation and complete artifact-inventory hashes. All subsequent phases still
+verify the complete copied/built .so inventory.
+
+Required donor sidecars: producer-attestation.json, native-builder-producer.py,
+and artifact-inventory.json. Source SHA, numeric mode, arm flags, GPU target,
+compiler/Python/pixi binaries and pixi.lock must match. A composite receipt may
+reuse earlier artifacts only with the reviewed conservative-repository-v1
+closure proof, a passed donor module/import, and a fresh successful import.
+The initializer repair's different x_linear GPU entrypoint cannot be reused.
+Missing or changed evidence refuses preparation; it never silently recompiles
+or accepts incomplete evidence. External harness/plan updates need not change
+the frozen numerical SHA.

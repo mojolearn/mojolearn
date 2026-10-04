@@ -51,8 +51,8 @@
     "build_training_host.sh",
     "build_transformer.sh",
     "build_transformer_host.sh",
-    "build_byte_lm.sh",
-    "build_byte_lm_host.sh"
+    "build_mamba.sh",
+    "build_mamba_host.sh"
   ],
   "required_quality_gates": [
     "compiled_route_readback",
@@ -605,7 +605,7 @@
     "Canonical neural inputs must be generated once with identical_wave_prepare_neural.py onNV, transferred viaR2 and hash verified onAMD before starting this plan.",
     "Device-handle grouping and explicit persistent-buffer adapters require separate multi-call scenarios; generic single board calls do not prove those gains.",
     "Cross-vendor aggregation must compare complete matching SHA/arm/plan/data output digests; localhost equality alone is insufficient.",
-    "Apple and Apple-vs-host bits remain unverified; user forbids all Apple access.",
+    "Apple checks are authorized only through root, one GPU job at a time; per-algorithm within-version Apple/host qualification remains required before promotion.",
     "Full neural training and other nonrepresentative workloads excluded from this bounded wave; no whole-catalog claim.",
     "Stored opponent metrics only with exact fixture/params match; do not compare medium timings directly with full-row stored cells."
   ],

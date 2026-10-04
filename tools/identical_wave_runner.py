@@ -16,6 +16,7 @@ import subprocess
 import sys
 
 from identical_wave_compare import validate_arch, validate_proof
+from identical_wave_reuse import validate_receipt, import_artifacts
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -77,6 +78,8 @@ def main():
     p.add_argument('--data',required=True,type=Path)
     p.add_argument('--cross-vendor-proof',type=Path,help='PASS proof from identical_wave_compare.py; required for timing')
     p.add_argument('--semaphore',type=Path,default=Path('/root/mojolearn-evidence/compile_slot.sh'))
+    p.add_argument('--reuse-native-on',type=Path,action='append',default=[],help='Completed audited ON native receipt to import into fresh source')
+    p.add_argument('--reuse-native-off',type=Path,action='append',default=[],help='Completed audited OFF native receipt to import into fresh source')
     a=p.parse_args()
     try: arch=validate_arch(a.vendor,a.gpu_arch)
     except ValueError as exc: p.error(str(exc))
@@ -84,6 +87,20 @@ def main():
     if not re.fullmatch('[0-9a-f]{40}',a.sha): p.error('full immutable 40-character SHA required')
     a.repo=a.repo.resolve(); a.out=a.out.resolve(); a.python=a.python.resolve(); a.data=a.data.resolve()
     plan=json.loads(a.plan.read_text()); plan_hash=hashlib.sha256(a.plan.read_bytes()).hexdigest()
+    if a.phase != 'prepare' and (a.reuse_native_on or a.reuse_native_off):
+        p.error('native reuse is a prepare-only operation')
+    reuse={'on':[], 'off':[]}
+    if a.phase=='prepare':
+        for arm,receipts in (('on',a.reuse_native_on),('off',a.reuse_native_off)):
+            supplied=set()
+            for receipt in receipts:
+                try:
+                    validated=validate_receipt(receipt,sha=a.sha,vendor=a.vendor,arch=arch,arm=arm,
+                        builders=plan['builders'],environment=a.repo,python=a.python,pixi=Path('/root/.pixi/bin/pixi'))
+                except (ValueError,KeyError,OSError,subprocess.SubprocessError) as exc:
+                    p.error(str(exc))
+                if supplied.intersection(validated['builders']): p.error('duplicate reused builder')
+                supplied.update(validated['builders']); reuse[arm].append(validated)
     resolved=subprocess.check_output(['git','-C',str(a.repo),'rev-parse',a.sha+'^{commit}'],text=True).strip()
     if resolved!=a.sha: p.error('SHA does not resolve exactly')
     manifest=a.data.parent/'rows-small-files.sha256'
@@ -168,14 +185,23 @@ def main():
             if not (pixi/'envs/default').exists(): p.error('locked base pixi environment absent')
             if (source/'pixi.lock').read_bytes()!=(a.repo/'pixi.lock').read_bytes(): p.error('source pixi.lock differs from environment checkout')
             (source/'.pixi').symlink_to(pixi,target_is_directory=True)
+            reused={}
+            for validated in reuse[arm]:
+                try: import_artifacts(validated,source)
+                except (ValueError,OSError) as exc: p.error(str(exc))
+                reused.update(validated['builders'])
+                steps.append({'id':'native-receipt-import','rc':0,'provenance':validated})
             # Portable math belongs to our source too. Never copy a published wheel.
             code="import pathlib,sys;sys.path.insert(0,'packaging/portable_math');import stage;stage.build(pathlib.Path('python/mojolearn/.libs/libMojolearnMath.so'))"
             (source/'python/mojolearn/.libs').mkdir(parents=True,exist_ok=True)
-            rc=run([str(a.python),'-c',code],source,env,folder/'portable-math.log',600)
-            steps.append({'id':'portable-math','rc':rc})
+            rc=0 if reused else run([str(a.python),'-c',code],source,env,folder/'portable-math.log',600)
+            steps.append({'id':'portable-math','rc':rc,'reused':bool(reused)})
             if rc: break
             for builder in plan['builders']:
                 if not re.fullmatch(r'build(?:_[a-z0-9_]+)?\.sh',builder): p.error('invalid builder name')
+                if builder in reused:
+                    steps.append({'id':builder,'rc':0,'reused':True,'sha256':reused[builder]['sha256']})
+                    continue
                 build_env=dict(env)
                 if builder.endswith('_host.sh'):
                     build_env.pop('MOJOLEARN_GPU_ARCHS',None); build_env['MOJOLEARN_TARGET_COLUMN']='cpu'
