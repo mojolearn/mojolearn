@@ -1135,6 +1135,11 @@ _DRIVES_DEVICE = re.compile(r"\benqueue_\w+|\bctx\b|\.synchronize\(|\blaunch\w*\
                             r"|\bdevice_\w+\s*[\[(]|\w+_(device|gpu|dev)\w*\s*[\[(]|\bDeviceBuffer\b")
 
 
+# a kernel by name, or by a thread-index helper (`_tid()`, `tid()`) in its body
+_KERNEL_NAME = re.compile(r"(^|_)kernel(_\w*)?$|_kern$")
+_KERNEL_IDX = re.compile(r"\b_?(tid|gtid|thread_id|global_id)\s*\(\s*\)")
+
+
 def _mojo_host_loops(lines, path, impl=frozenset(), skip=frozenset()):
     """[(line_no, text)] of host `for` loops over a runtime data size whose body
     touches data (indexes it with the loop variable, appends, or computes), in
@@ -1161,13 +1166,13 @@ def _mojo_host_loops(lines, path, impl=frozenset(), skip=frozenset()):
             outer = top[stack[0][1]] if stack else name
             top[i] = outer
             skipdef[i] = bool(name in impl or outer in impl or _HOST_COLUMN_FN.search(name)
-                              or _HOST_COLUMN_FN.search(outer))
+                              or _HOST_COLUMN_FN.search(outer) or _KERNEL_NAME.search(name))
             stack.append((ind, i))
             owner.append(None)
             continue
         o = stack[-1][1] if stack else None
         owner.append(o)
-        if o is not None and (_KERNEL_TOK.search(t) or _TRACE_ONLY.match(t)):
+        if o is not None and (_KERNEL_TOK.search(t) or _KERNEL_IDX.search(t) or _TRACE_ONLY.match(t)):
             skipdef[o] = True
     out = []
     ifs = []  # (indent, is_debug)

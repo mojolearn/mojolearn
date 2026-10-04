@@ -265,6 +265,9 @@ PASSES = [
     ("a host loop inside a kernel (thread work, not host work)",
      {DEV: "def _q5_kernel(x: UnsafePointer[Float32], n: Int):\n    var tid = Int(thread_idx.x)\n"
            "    for i in range(tid, n, 256):\n        x[i] = x[i] * 2"}),
+    ("a loop in a kernel that reads its thread index through a helper",
+     {DEV: "def _q10_rows_kernel(cum: UnsafePointer[Int32], splits_: Int32):\n    var j = _tid()\n"
+           "    var splits = Int(splits_)\n    for fold in range(splits):\n        cum[j * splits + fold] = 1"}),
     ("a host loop that drives the device per step (orchestration)",
      {DEV: "def _q6(ctx: DeviceContext, x: UnsafePointer[Float32], n_steps: Int) raises:\n"
            "    for s in range(n_steps):\n        x[s] = 0\n"
