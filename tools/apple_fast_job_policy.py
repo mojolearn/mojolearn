@@ -4,6 +4,7 @@ Importing this module performs no builds, imports of native modules, or jobs.
 import re
 
 POLICIES = {
+    "tools/resample_gpu_gather_pair.py": "verified-standalone-quality",
     "tools/arima_assoc_scan_oracle.py": "reference",
     "tools/arima_gaussian_scan_oracle.py": "reference",
     "tools/arima_k1_diagnostics.py": "reference",

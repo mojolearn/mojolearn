@@ -336,14 +336,17 @@ def _take(a, idx):
 
 def _gpu_gather(arrays, n, count, seed, numeric_mode):
     """Return owned results or None for unchanged public fallback."""
-    if (numeric_mode or _backend.default_mode()) != "fast" or count <= 0:
+    if (numeric_mode or _backend.default_mode()) != "fast" or count <= 0 or n <= 0:
         return None
     mod = _extension(numeric_mode)
     enabled = getattr(mod, "resample_gpu_gather_enabled", None)
     if enabled is None or not int(enabled()):
         return None
     from ._optional_numpy import require_numpy
-    np = require_numpy("resample")
+    try:
+        np = require_numpy("resample")
+    except ImportError:
+        return None
     # Never coerce input: preserve existing list/Array/strided/dtype behavior.
     if any(not isinstance(x, np.ndarray) or x.dtype != np.float32
            or x.ndim not in (1, 2) or not x.flags.c_contiguous

@@ -33,7 +33,7 @@ HAS RUN THIS UNDER IDENTICAL. See `resample/README.md` under Status.
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
-from bindings.hostptr import copy_f32, f32_ptr, i32_ptr
+from bindings.hostptr import copy_f32, f32_ptr
 from resample.gather_fast import gather_rows_f32_kernel
 from std.math import ceildiv
 from std.os import getenv
