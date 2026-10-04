@@ -68,6 +68,7 @@ from bindings.forest_export_binding import (
 )
 from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from checks.fixed_point import choose_scale
+from core.abs_sum_blocked import host_abs_sum_blocked
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -365,13 +366,10 @@ def _rf_fit_colmajor[CLASSIFIER: Bool](
         )
     else:
         var y = read_f32(y_address, n_rows)
-        # `bindings/_mojolearn_rf.mojo:594-600`: the label plane's
-        # fixed-point scale from the sum of label magnitudes, in their
-        # Float64 order.
-        var mag = Float64(0.0)
-        for i in range(n_rows):
-            var v = Float64(y[i])
-            mag += v if v >= 0.0 else -v
+        # `bindings/_mojolearn_rf.mojo`: the label plane's fixed-point
+        # scale from the sum of label magnitudes, in the blocked binary64
+        # order the device uses (`core/abs_sum_blocked`, cpu2-l6-bindings).
+        var mag = host_abs_sum_blocked(Int(y.unsafe_ptr()), n_rows)
         var scale = Float32(choose_scale(mag, n_rows))
         forest = rf_host_fit(
             x^, List[Int32](), y, n_rows, n_cols, 1, False, p, scale,
