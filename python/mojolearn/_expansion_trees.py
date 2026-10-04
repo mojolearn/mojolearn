@@ -112,7 +112,9 @@ def _trees_weighted_rows(sample_weight, class_weight, classes, codes, est=None):
     sw = _trees_f32_weights(sample_weight, n, "sample_weight", est)
     if class_weight is None:
         return sw
-    cw, _ = as_f32_c(_class_weight_rows(class_weight, classes, codes.tolist()), ndim=1, name="class_weight rows")
+    codes32 = codes if isinstance(codes, Array) and codes.dtype == "<i4" else as_i32_c(codes, ndim=1, name="codes")[0]
+    cw, _ = as_f32_c(_class_weight_rows(class_weight, classes, codes32, _trees_x_bind(est)), ndim=1,
+                     name="class_weight rows")
     out = empty((n,), "<f4")
     _trees_x_bind(est).x_trees_mul_f32(addr_ro(sw, name="sample_weight"), addr_ro(cw, name="class_weight"),
                                        addr(out, name="weights"), [n])
@@ -458,19 +460,6 @@ def _trees_member_session(member, X, row_major, x_finite=False, default="0"):
                                     default=default)
 
 
-def _class_major_fill(inits, n):
-    """K * n float64, class c's block all `inits[c]` (class-major), built
-    from one native fill per class, not a Python loop over the rows."""
-    if len(inits) == 1:
-        return full((n,), inits[0], "<f8")
-    raw = b"".join(full((n,), float(v), "<f8").tobytes() for v in inits)
-    return frombytes(raw, "<f8", (len(inits) * n,))
-
-
-def _trees_arange(n):
-    return Array.from_list(list(range(n)), "<i4")
-
-
 # lane/apple-fast-trees-ensembles (2026-10-02): the Apple FAST switches of
 # this module are BUILD-TIME defines of the x_trees binding (`-D
 # MOJOLEARN_TE_<NAME>_OFF` turns one off; xtrees/api.mojo `x_trees_fast_switches` is the bit
@@ -631,7 +620,30 @@ class _TreesEnsembleBase(NumericModeMixin):
     """The lane's binding (`_bind()`) and its row/column helpers."""
     _BINDING = "_mojolearn_x_trees"
 
+    def _arange(self, n):
+        """int32 0 .. n - 1, written by the binding (`x_trees_iota_i32`, a
+        device kernel on a GPU build), not a Python list of n ints."""
+        n = int(n)
+        out = empty((n,), "<i4")
+        if n > 0:
+            self._bind().x_trees_iota_i32(addr(out, name="iota"), [n])
+        return out
+
+    def _class_major(self, inits, n):
+        """K * n float64, class c's block all `inits[c]` (class-major), filled
+        by the binding (`x_trees_fill_class_major_f64`, a device kernel on a
+        GPU build); K = 1 is (n,)."""
+        K, n = len(inits), int(n)
+        vals = Array.from_list([float(v) for v in inits], "<f8")
+        out = empty((K * n,), "<f8")
+        if K * n > 0:
+            self._bind().x_trees_fill_class_major_f64(addr_ro(vals, name="inits"), addr(out, name="score"), [n, K])
+        return out
+
     def _indices(self, n_pool, n_draw, replace, seed, stream):
+        """`n_draw` indices of [0, n_pool): with replacement in draw order;
+        without, the drawn SET in ascending index order (xtrees/ops.mojo
+        `sample_indices`' random-key selection)."""
         out = empty((n_draw,), "<i4")
         self._bind().x_trees_sample_indices(addr(out, name="indices"),
                                             [int(n_pool), int(n_draw), 1 if replace else 0, int(seed), int(stream)])
@@ -778,7 +790,7 @@ class _BaggingBase(_TreesEnsembleBase):
         self._batched = (forest, base)
         self._estimators = None
         d = Xa.shape[1]
-        self.estimators_features_ = [_trees_arange(d) for _ in range(int(forest._n_trees))]
+        self.estimators_features_ = [self._arange(d) for _ in range(int(forest._n_trees))]
         self._oob_rows = []
         self.n_features_in_ = d
         return self
@@ -799,10 +811,11 @@ class _BaggingBase(_TreesEnsembleBase):
     def _slice_members(self):
         """The batched forest's trees as fitted member estimators."""
         forest, base = self._batched
-        offsets = forest._offsets.tolist()
+        offsets = forest._offsets.tolist()  # glue: T + 1 tree boundaries
         no = int(forest._num_outputs)
-        colid, ques = forest._colid.tolist(), forest._quesval.tolist()
-        left, leaves = forest._left_child.tolist(), forest._leaves.tolist()
+        # each member's node arrays are native block copies of the forest's
+        # (Array slicing), never Python lists of every node
+        colid, ques, left, leaves = forest._colid, forest._quesval, forest._left_child, forest._leaves
         seed = _trees_seed(self.random_state)
         out = []
         for t in range(int(forest._n_trees)):
@@ -811,10 +824,10 @@ class _BaggingBase(_TreesEnsembleBase):
             est._refresh_config()
             est._capture_fit_mode()
             est._offsets = Array.from_list([0, hi - lo], "<i4")
-            est._colid = Array.from_list(colid[lo:hi], "<i4")
-            est._quesval = Array.from_list(ques[lo:hi], "<f4")
-            est._left_child = Array.from_list(left[lo:hi], "<i4")
-            est._leaves = Array.from_list(leaves[lo * no:hi * no], "<f4")
+            est._colid = colid[lo:hi]
+            est._quesval = ques[lo:hi]
+            est._left_child = left[lo:hi]
+            est._leaves = leaves[lo * no:hi * no]
             est._n_trees = 1
             est._num_outputs = no
             est.n_features_in_ = forest.n_features_in_
@@ -838,13 +851,11 @@ class _BaggingBase(_TreesEnsembleBase):
         all_rows = n_rows == n and not self.bootstrap
         all_cols = n_feat == d and not self.bootstrap_features
         for k in range(int(self.n_estimators)):
-            rows = _trees_arange(n) if all_rows else self._indices(n, n_rows, self.bootstrap, seed, 2 * k)
+            rows = self._arange(n) if all_rows else self._indices(n, n_rows, self.bootstrap, seed, 2 * k)
             if all_cols:
-                cols = _trees_arange(d)
+                cols = self._arange(d)
             else:
                 cols = self._indices(d, n_feat, self.bootstrap_features, seed, 2 * k + 1)
-                if not self.bootstrap_features:
-                    cols = Array.from_list(sorted(cols.tolist()), "<i4")
             Xs = Xa if (all_rows and all_cols) else self._gather(Xa, rows, cols)
             ys = y_sub(rows, all_rows)
             est = _trees_clone(base, random_state=_trees_sub_seed(seed, k))
@@ -874,7 +885,7 @@ class _BaggingBase(_TreesEnsembleBase):
         """(sums n x k float64, per-row member count): each member's output on
         its out-of-bag rows, added in member order (sklearn `_set_oob_score`)."""
         n = Xa.shape[0]
-        acc = zeros((n * k,), "<f8")
+        acc = self._class_major([0.0], n * k)  # zero votes, filled by the binding
         # the member counts in the binding (x_trees_count_rows, int32 per row)
         counts = zeros((n,), "<i4")
         for est, cols, oob in zip(self.estimators_, self.estimators_features_, self._oob_rows):
@@ -959,8 +970,8 @@ class BaggingClassifier(_BaggingBase):
             # lane hr2-gbdt-host: the forest's mean of the trees' leaf
             # distributions, every tree in one device walk
             return self._batched[0].predict_proba(Xa).astype("<f8")
-        acc = zeros((n * k,), "<f8")
-        rows_all = _trees_arange(n)
+        acc = self._class_major([0.0], n * k)  # zero votes, filled by the binding
+        rows_all = self._arange(n)
         for est, cols in zip(self.estimators_, self.estimators_features_):
             Xs = self._sub_X(Xa, cols, rows_all)
             sub = _trees_sub_cols(est)
@@ -1032,7 +1043,7 @@ class BaggingRegressor(_BaggingBase):
             # lane hr2-gbdt-host: the forest's mean over the trees
             return as_f32_c(self._batched[0].predict(Xa), ndim=1, name="prediction")[0].astype("<f8")
         acc = zeros((n,), "<f8")
-        rows_all = _trees_arange(n)
+        rows_all = self._arange(n)
         for est, cols in zip(self.estimators_, self.estimators_features_):
             self._acc(acc, est.predict(self._sub_X(Xa, cols, rows_all)), n)
         self._scale(acc, len(self.estimators_))
@@ -1072,7 +1083,7 @@ def _trees_normalized_weights_native(est, sample_weight, n):
     (`fsum`'s word) and every v / total in one x_trees_exact_sum call, the
     same refusals in the same order and the same float64 words."""
     if sample_weight is None:
-        return full((n,), 1.0 / n, "<f8")
+        return est._class_major([1.0 / n], n)
     sw, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
     if len(sw) != n:
         raise ValueError(f"sample_weight has {len(sw)} entries, X has {n} rows")
@@ -1200,7 +1211,7 @@ class AdaBoostClassifier(_AdaBoostBase):
 
     def _decision(self, Xa):
         n, k = Xa.shape[0], self.n_classes_
-        acc = zeros((n * k,), "<f8")
+        acc = self._class_major([0.0], n * k)  # zero votes, filled by the binding
         for est, a in zip(self.estimators_, self.estimator_weights_):
             pred = as_i32_c(est.predict(Xa), ndim=1, name="predicted codes")[0]
             self._acc_votes(acc, pred, n, k, a, -a / (k - 1))
@@ -1266,7 +1277,7 @@ class AdaBoostRegressor(_AdaBoostBase):
         base = self.estimator if self.estimator is not None else DecisionTreeRegressor(max_depth=3)
         w = _trees_normalized_weights(sample_weight, n, self)
         stats = zeros((4,), "<f8")
-        cols = _trees_arange(d)
+        cols = self._arange(d)
         self.estimators_, self.estimator_weights_, self.estimator_errors_ = [], [], []
         b = self._bind()
         m = int(self.n_estimators)
@@ -1436,8 +1447,8 @@ class _DARTBase(_TreesEnsembleBase):
         cnt = max(int(d * frac + 0.5), min(1, d))
         if cnt >= d:
             return None
-        drawn = self._indices(d, cnt, False, _trees_seed(self.feature_fraction_seed), t).tolist()
-        return Array.from_list(sorted(drawn), "<i4")
+        # without replacement the draw is already the ascending set
+        return self._indices(d, cnt, False, _trees_seed(self.feature_fraction_seed), t)
 
     def _boost(self, Xa, y32, n_classes=1):
         n, d = Xa.shape
@@ -1458,7 +1469,7 @@ class _DARTBase(_TreesEnsembleBase):
             b.x_trees_class_counts(addr_ro(y32, name="y"), addr(cnt, name="counts"), [n, K])
             inits = [float(b.x_trees_log64(max(1e-15, c / n))) for c in cnt.tolist()]
         self.init_score_ = inits[0] if K == 1 else inits
-        score = _class_major_fill(inits, n)
+        score = self._class_major(inits, n)
         g, h, target = empty((K * n,), "<f8"), empty((K * n,), "<f8"), empty((K * n,), "<f4")
         lr = float(self.learning_rate)
         l1, mds, lam = float(self.reg_alpha), float(self.max_delta_step), float(self.reg_lambda)
@@ -1468,7 +1479,7 @@ class _DARTBase(_TreesEnsembleBase):
         train_nodes = []
         sum_w = 0.0
         max_depth = None if self.max_depth is None or int(self.max_depth) <= 0 else int(self.max_depth)
-        all_cols = _trees_arange(d)
+        all_cols = self._arange(d)
         # trees-apple3: members that fit every row and column of X share ONE
         # staged copy of it (a bagged or column-sampled member gathers its
         # own X and fits as before)
@@ -1545,7 +1556,7 @@ class _DARTBase(_TreesEnsembleBase):
                 tgt = target if K == 1 else target[c * n:(c + 1) * n]
                 Xf, yf = Xa, tgt
                 if rows is not None or cols is not None:
-                    Xf = self._gather(Xa, rows if rows is not None else _trees_arange(n),
+                    Xf = self._gather(Xa, rows if rows is not None else self._arange(n),
                                       cols if cols is not None else all_cols)
                     if rows is not None:
                         yf = self._gather_vec(tgt, rows)
@@ -1718,7 +1729,7 @@ class _DARTBase(_TreesEnsembleBase):
             raise ValueError(f"X has {Xa.shape[1]} features, fit saw {self.n_features_in_}")
         n, K = Xa.shape[0], int(getattr(self, "n_classes_", 1))
         inits = [self.init_score_] if K == 1 else list(self.init_score_)
-        score = _class_major_fill(inits, n)
+        score = self._class_major(inits, n)
         for j, (tree, values, coef) in enumerate(zip(self.trees_, self.tree_values_, self.tree_coefs_)):
             self._add(score, self._tree_nodes(tree, Xa), values, coef, j % K)
         return score
@@ -2059,7 +2070,7 @@ class _TreesWrapperBase(_TreesEnsembleBase):
 
     def _column(self, M, j):
         n = M.shape[0]
-        return self._gather(M, _trees_arange(n), Array.from_list([j], "<i4")).reshape((n,))
+        return self._gather(M, self._arange(n), Array.from_list([j], "<i4")).reshape((n,))
 
 
 # ------------------------------------------------------------------ Voting
@@ -2109,7 +2120,7 @@ class VotingClassifier(_TreesWrapperBase):
 
     def _soft(self, Xa):
         n, k = Xa.shape[0], self.n_classes_
-        acc = zeros((n * k,), "<f8")
+        acc = self._class_major([0.0], n * k)  # zero votes, filled by the binding
         w = self._weights()
         for e, wi in zip(self.estimators_, w):
             self._acc_cols(acc, e.predict_proba(Xa), _trees_sub_cols(e), n, k, wi)
@@ -2140,7 +2151,7 @@ class VotingClassifier(_TreesWrapperBase):
         n, k, m = Xa.shape[0], self.n_classes_, len(self.estimators_)
         width = m * k if self.voting == "soft" else m
         out = zeros((n * width,), "<f8")
-        rows = _trees_arange(n)
+        rows = self._arange(n)
         for j, e in enumerate(self.estimators_):
             if self.voting == "soft":
                 p = zeros((n * k,), "<f8")
@@ -2191,7 +2202,7 @@ class VotingRegressor(_TreesWrapperBase):
         Xa = self._check_X(X)
         n, m = Xa.shape[0], len(self.estimators_)
         out = zeros((n * m,), "<f8")
-        rows = _trees_arange(n)
+        rows = self._arange(n)
         for j, e in enumerate(self.estimators_):
             self._place(out, n, m, as_f32_c(e.predict(Xa), ndim=1, name="p")[0], rows, j)
         return out.reshape((n, m))
@@ -2237,7 +2248,7 @@ class _StackingBase(_TreesWrapperBase):
         if method == "predict_proba" and self._binary:
             n = Xs.shape[0]
             p = _trees_output_2d(out, n)
-            return self._gather(p, _trees_arange(n), Array.from_list([1], "<i4"))
+            return self._gather(p, self._arange(n), Array.from_list([1], "<i4"))
         return out
 
     def _widths(self, Xa, y_fit):
@@ -2258,7 +2269,7 @@ class _StackingBase(_TreesWrapperBase):
             widths.append(_trees_output_2d(self._out(e, m, Xa[0:2]), 2).shape[1])
         width = sum(widths) + (d if self.passthrough else 0)
         meta = zeros((n * width,), "<f8")
-        cols = _trees_arange(d)
+        cols = self._arange(d)
         for tr, te in splits:
             col0 = 0
             for (_, est), m, w in zip(active, self.stack_method_, widths):
@@ -2269,7 +2280,7 @@ class _StackingBase(_TreesWrapperBase):
                     raise ValueError("a member's output width changed between folds (a class missing from a fold)")
                 col0 += w
         if self.passthrough:
-            self._place(meta, n, width, Xa, _trees_arange(n), sum(widths))
+            self._place(meta, n, width, Xa, self._arange(n), sum(widths))
         self._widths_ = widths
         self.named_estimators_ = dict((nm, e) for (nm, _), e in zip(active, self.estimators_))
         self.final_estimator_ = _trees_clone(final)
@@ -2283,7 +2294,7 @@ class _StackingBase(_TreesWrapperBase):
         n, d = Xa.shape
         width = sum(self._widths_) + (d if self.passthrough else 0)
         meta = zeros((n * width,), "<f8")
-        rows, col0 = _trees_arange(n), 0
+        rows, col0 = self._arange(n), 0
         for e, m in zip(self.estimators_, self.stack_method_):
             col0 += self._place(meta, n, width, self._out(e, m, Xa), rows, col0)
         if self.passthrough:
@@ -2324,7 +2335,7 @@ class StackingClassifier(_StackingBase):
         k = len(self.classes_)
         Xm = self._meta32(X)
         n = Xm.shape[0]
-        acc = zeros((n * k,), "<f8")
+        acc = self._class_major([0.0], n * k)  # zero votes, filled by the binding
         self._acc_cols(acc, self.final_estimator_.predict_proba(Xm), _trees_sub_cols(self.final_estimator_), n, k)
         return acc.reshape((n, k))
 
@@ -2454,7 +2465,7 @@ class MultiOutputRegressor(_TreesWrapperBase):
                 addr(out, name="predictions"), [n, Xa.shape[1], m])
             return out
         out = zeros((n * m,), "<f8")
-        rows = _trees_arange(n)
+        rows = self._arange(n)
         for j, e in enumerate(self.estimators_):
             self._place(out, n, m, as_f32_c(e.predict(Xa), ndim=1, name="p")[0], rows, j)
         return out.reshape((n, m))
@@ -2627,7 +2638,7 @@ class OneVsRestClassifier(_TreesWrapperBase):
         subs = [int(c) for c in e.classes_]
         if 1 not in subs:
             return as_f32_c(zeros((n,), "<f8"), ndim=1, name="score")[0]
-        return self._gather(p, _trees_arange(n), Array.from_list([subs.index(1)], "<i4")).reshape((n,))
+        return self._gather(p, self._arange(n), Array.from_list([subs.index(1)], "<i4")).reshape((n,))
 
     def _proba_positive(self, e, Xa):
         n = Xa.shape[0]
@@ -2635,7 +2646,7 @@ class OneVsRestClassifier(_TreesWrapperBase):
         subs = [int(c) for c in e.classes_]
         if 1 not in subs:
             return as_f32_c(zeros((n,), "<f8"), ndim=1, name="p")[0]
-        return self._gather(p, _trees_arange(n), Array.from_list([subs.index(1)], "<i4")).reshape((n,))
+        return self._gather(p, self._arange(n), Array.from_list([subs.index(1)], "<i4")).reshape((n,))
 
     def predict(self, X):
         Xa = self._check_X(X)
@@ -2643,8 +2654,8 @@ class OneVsRestClassifier(_TreesWrapperBase):
         if k == 2:
             codes = as_i32_c(self.estimators_[0].predict(Xa), ndim=1, name="codes")[0]
             return decode_labels(self.classes_, codes)
-        acc = zeros((n * k,), "<f8")
-        rows = _trees_arange(n)
+        acc = self._class_major([0.0], n * k)  # zero votes, filled by the binding
+        rows = self._arange(n)
         for j, e in enumerate(self.estimators_):
             self._place(acc, n, k, self._positive(e, Xa), rows, j)
         return decode_labels(self.classes_, self._argmax(acc, n, k))
@@ -2652,8 +2663,8 @@ class OneVsRestClassifier(_TreesWrapperBase):
     def predict_proba(self, X):
         Xa = self._check_X(X)
         n, k = Xa.shape[0], len(self.classes_)
-        acc = zeros((n * k,), "<f8")
-        rows = _trees_arange(n)
+        acc = self._class_major([0.0], n * k)  # zero votes, filled by the binding
+        rows = self._arange(n)
         if k == 2:
             return _trees_binary_proba(self, self._proba_positive(self.estimators_[0], Xa), n)
         for j, e in enumerate(self.estimators_):
@@ -2739,11 +2750,11 @@ class CalibratedClassifierCV(_TreesWrapperBase):
             if blk.shape[1] == 1:
                 col = blk
             else:
-                col = self._gather(blk, _trees_arange(n), Array.from_list([subs.index(1)], "<i4"))
+                col = self._gather(blk, self._arange(n), Array.from_list([subs.index(1)], "<i4"))
             acc = zeros((n,), "<f8")
             self._acc(acc, col.reshape((n,)), n)
             return acc.reshape((n, 1))
-        acc = zeros((n * k,), "<f8")
+        acc = self._class_major([0.0], n * k)  # zero votes, filled by the binding
         self._acc_cols(acc, blk, Array.from_list(subs, "<i4"), n, k)
         return acc.reshape((n, k))
 
@@ -2827,7 +2838,7 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         nat = _trees_native_glue(self)
         splits = _trees_splits(self.cv, X, y, n, codes=codes,
                                partition=not self.ensemble, native=nat, n_classes=len(self.classes_))
-        cols = _trees_arange(d)
+        cols = self._arange(d)
         self.calibrated_classifiers_ = []
         if self.ensemble:
             for tr, te in splits:
@@ -2963,7 +2974,7 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         if getattr(self, "_cal_fast", None) is not None:
             return self._predict_proba_fast(Xa, "proba")
         n, k = Xa.shape[0], len(self.classes_)
-        acc = zeros((n * k,), "<f8")
+        acc = self._class_major([0.0], n * k)  # zero votes, filled by the binding
         for e, cals in self.calibrated_classifiers_:
             p = self._calibrated(e, cals, Xa)
             self._acc(acc, p, n * k)

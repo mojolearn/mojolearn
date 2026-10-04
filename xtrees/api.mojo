@@ -17,7 +17,8 @@ from std.memory import bitcast
 from xtrees.folds_device import device_folds, leaf_numbering
 from xtrees.glue_device import (
     binary_proba_device, indicator_codes_device, stack_w64_device, class_counts_device, remap_cols_device,
-    positive_codes_device, spread_leaves_device,
+    positive_codes_device, spread_leaves_device, code_counts_device, class_rows_device, code_counts_host,
+    class_rows_host,
 )
 from xtrees.exact_sum import ES_FLAGS, ES_MAX_ROWS, exact_sum_device, exact_sum_host
 from xtrees.oob import (
@@ -759,6 +760,40 @@ def class_counts_binding(y: PythonObject, counts: PythonObject, params: PythonOb
     return PythonObject(k)
 
 
+def code_counts_binding(codes: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, k]: counts (int32, k) = the rows of each int32 class code
+    (the forests' class_weight='balanced' counts; cpu2-l5-trees: on the
+    device in a GPU build, `glue_device.code_counts_host` on the host column)."""
+    _need(params, 2, "x_trees_code_counts")
+    var n = _count(_i(params, 0), "x_trees_code_counts")
+    var k = _i(params, 1)
+    if k < 1:
+        raise Error("x_trees_code_counts: needs k >= 1")
+    var ca = Int(py=codes)
+    var cp = i32_ptr(ca) if ca != 0 else i32_ptr(Int(py=counts))
+    comptime if XTREES_DEVICE_OPS:
+        code_counts_device(cp, n, k, i32_ptr(Int(py=counts)))
+    else:
+        code_counts_host(cp, n, k, i32_ptr(Int(py=counts)))
+    return PythonObject(k)
+
+
+def class_rows_binding(codes: PythonObject, values: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, k]: dst (float32, n) = values (float32, k) at each row's
+    int32 class code (the forests' per-row class weights; cpu2-l5-trees)."""
+    _need(params, 2, "x_trees_class_rows")
+    var n = _count(_i(params, 0), "x_trees_class_rows")
+    var k = _i(params, 1)
+    if k < 1:
+        raise Error("x_trees_class_rows: needs k >= 1")
+    if n > 0:
+        comptime if XTREES_DEVICE_OPS:
+            class_rows_device(i32_ptr(Int(py=codes)), n, k, f32_ptr(Int(py=values)), f32_ptr(Int(py=dst)))
+        else:
+            class_rows_host(i32_ptr(Int(py=codes)), n, k, f32_ptr(Int(py=values)), f32_ptr(Int(py=dst)))
+    return PythonObject(n)
+
+
 def remap_cols_binding(colid: PythonObject, cols: PythonObject, params: PythonObject) raises -> PythonObject:
     """params = [n_nodes, m]: in place colid[g] = cols[colid[g]] for a split
     node (a column-sampled DART tree back to X's columns)."""
@@ -1392,6 +1427,8 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[count_equal_binding]("x_trees_count_equal")
     m.def_function[oob_r2_binding]("x_trees_oob_r2")
     m.def_function[class_counts_binding]("x_trees_class_counts")
+    m.def_function[code_counts_binding]("x_trees_code_counts")
+    m.def_function[class_rows_binding]("x_trees_class_rows")
     m.def_function[remap_cols_binding]("x_trees_remap_cols")
     m.def_function[positive_codes_binding]("x_trees_positive_codes")
     m.def_function[spread_leaves_binding]("x_trees_spread_leaves")
