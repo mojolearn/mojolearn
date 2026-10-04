@@ -178,7 +178,7 @@ def _mat(w: FP, m: Int, n: Int, k: Int) -> FP:
 
 @always_inline
 def svgp_ff_mat(w: FP, m: Int, n: Int, k: Int) -> FP:
-    """`_mat` for the device drivers (MOJOLEARN_SVGP_FAST_BLKCHOL)."""
+    """`_mat` for the device drivers (SVGP_FAST_BLKCHOL, default; MOJOLEARN_SVGP_FAST_BLKCHOL_OFF rolls back)."""
     return _mat(w, m, n, k)
 
 

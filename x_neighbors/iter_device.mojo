@@ -1533,10 +1533,15 @@ def svgp_ff_fin_tree_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float
         svgp_ff_bound(w, info, FF(sh[0], sh[1]), FF(sh[2], sh[3]), FF(sh[4], sh[5]), sh[6], sh[7], nf, noise, kdiag)
 
 
-# ---- lane apple-fast-w2-svgp (2026-10-04): three opt-in FAST + Apple
-# candidates for SVGP's fit (and predict). Off unless defined; A/B owed on M3.
+# ---- lane apple-fast-w2-svgp (2026-10-04): FAST + Apple candidates for
+# SVGP's fit (and predict). BLKCHOL is default; BSPLIT stays opt-in.
 
-#: MOJOLEARN_SVGP_FAST_BLKCHOL: the three m x m float-float Cholesky factors
+#: SVGP_FAST_BLKCHOL, DEFAULT in FAST + Apple (lane/apple-fast-w2-svgp).
+#: M3, one run per arm (measured without RBFTILE; combined retime owed):
+#: taxi 287.0 -> 212.5 ms, istella 336.6 -> 265.7 ms; w2-svgp-blkchol-q
+#: SVGP-FAST-PAIR PASS. MOJOLEARN_SVGP_FAST_BLKCHOL_OFF restores the
+#: one-column-per-launch factor.
+#: The three m x m float-float Cholesky factors
 #: (L_u, L_s, then Q) one panel of SVGP_CHOL_PB columns per launch instead of
 #: one column per launch (m = 512: 1,024 dependent launches -> 64). Each block
 #: forms the panel's diagonal block G = A - L L^T over the columns before the
@@ -1546,7 +1551,8 @@ def svgp_ff_fin_tree_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float
 #: the row A[i,c] - L[i,k] L[c,k], k ascending from 0, then sqrt / divide.
 #: The words only move with FAST's free contraction.
 comptime SVGP_FAST_BLKCHOL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_SVGP_FAST_BLKCHOL"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SVGP_FAST_BLKCHOL_OFF"]()
 )
 #: panel width (columns per launch)
 comptime SVGP_CHOL_PB = 16
