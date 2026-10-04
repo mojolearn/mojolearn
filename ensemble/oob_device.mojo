@@ -18,11 +18,45 @@ vendor agrees by construction. X and the masks never leave the device.
 
 `-D MOJOLEARN_IDN_RF_OOB_DEVICE_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) restores
 the host walk.
+
+THE SCORE EPILOGUE (fix-r1-rescue, audit B6, `IDN_RF_OOB_EPILOGUE_DEVICE`).
+Before: the averaged predictions, the counts and y came back and the host
+ran the argmax/accuracy (classifier) or the R^2 sums (regressor, a serial
+Float64 fma chain). Now the device does both and returns two integers
+(valid rows, correct rows) and the score's binary64 word:
+  * classifier: argmax with a strict `>` from class 0 (first maximum, the
+    host's rule), integer counts by order-free atomics, score =
+    correct / n_valid correctly rounded. SAME BITS as before.
+  * regressor: `xtrees/oob.mojo`'s exact binary64 sums (each term formed
+    with correctly rounded soft ops, the sum rounded once): mean =
+    fsum(y) / n_valid, den = fsum((y - mean)^2), num = fsum((y - pred)^2),
+    score = 1 - num / den with sklearn's force_finite rules. NEW BITS for
+    `oob_score_` (old: a sequential fma chain), the same on every vendor by
+    construction (integer limb sums); a non-finite term or an overflowed
+    sum gives NaN. The OFF arm keeps the host epilogue.
+y and the counts no longer cross the bus. `-D
+MOJOLEARN_IDN_RF_OOB_EPILOGUE_DEVICE_OFF` restores the host epilogue (also
+off with `IDN_RF_OOB_DEVICE`, so under `MOJOLEARN_IDN_ALL_OFF`).
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from std.atomic import Atomic
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
-from checks.soft_f64 import sf64_add, sf64_div, sf64_from_f32, sf64_from_int
+from checks.soft_f64 import (
+    SF64_NAN,
+    SF64_ONE,
+    SF64_SIGN,
+    SF64_ZERO,
+    sf64_add,
+    sf64_div,
+    sf64_from_f32,
+    sf64_from_int,
+    sf64_gt,
+    sf64_is_nan,
+    sf64_mul,
+    sf64_sub,
+)
+from xtrees.oob import E64_LIMBS, E64_THREADS, e64_add
 
 comptime IDN_RF_OOB_DEVICE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -32,7 +66,16 @@ comptime IDN_RF_OOB_DEVICE = (
     )
 )
 
+comptime IDN_RF_OOB_EPILOGUE_DEVICE = IDN_RF_OOB_DEVICE and not is_defined[
+    "MOJOLEARN_IDN_RF_OOB_EPILOGUE_DEVICE_OFF"
+]()
+
 comptime OOB_TPB = 256
+#: words slots of the epilogue: [0] fsum(y), [1] den, [2] num, [3] mean,
+#: [4] the score
+comptime OOB_WORDS = 5
+#: stats: [0] valid rows, [1] correct rows (classifier)
+comptime OOB_STATS = 2
 
 
 def rf_oob_rows_kernel(
@@ -108,3 +151,159 @@ def rf_oob_rows_kernel(
             var cell = r * no + k
             acc.unsafe_store(cell, sf64_div(acc.unsafe_load(cell), d))
     counts.unsafe_store(r, Int32(cnt))
+
+
+# ------------------------------------------------- score epilogue (B6) --
+
+
+@always_inline
+def _gthread() -> Int:
+    return Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+
+
+def rf_oob_clf_stats_kernel[label_dt: DType](
+    acc: MutPointer[UInt64, MutAnyOrigin],
+    counts: MutPointer[Int32, MutAnyOrigin],
+    y: MutPointer[Scalar[label_dt], MutAnyOrigin],
+    n_rows: Int32,
+    n_out: Int32,
+    stats: MutPointer[Int32, MutAnyOrigin],
+):
+    """stats[0] += valid rows, stats[1] += valid rows whose argmax (strict
+    `>` from class 0: the first maximum, as the host loop and `cp.argmax`)
+    equals the label. A NaN probability never wins and a NaN running
+    maximum is never replaced (`>` with a NaN is false on the host).
+    Per-thread integer counts, one atomic each: order-free, exact."""
+    var r = _gthread()
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    var no = Int(n_out)
+    var valid = Int32(0)
+    var correct = Int32(0)
+    while r < Int(n_rows):
+        if counts.unsafe_load(r) > Int32(0):
+            valid += 1
+            var best = 0
+            var best_p = acc.unsafe_load(r * no)
+            for k in range(1, no):
+                var p = acc.unsafe_load(r * no + k)
+                if (
+                    not sf64_is_nan(p)
+                    and not sf64_is_nan(best_p)
+                    and sf64_gt(p, best_p)
+                ):
+                    best_p = p
+                    best = k
+            if Int(y.unsafe_load(r)) == best:
+                correct += 1
+        r += stride
+    if valid != Int32(0):
+        _ = Atomic.fetch_add(stats, valid)
+    if correct != Int32(0):
+        _ = Atomic.fetch_add(stats + 1, correct)
+
+
+def rf_oob_reg_ysum_kernel(
+    counts: MutPointer[Int32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    n_rows: Int32,
+    part: MutPointer[Int64, MutAnyOrigin],
+    stats: MutPointer[Int32, MutAnyOrigin],
+    flags: MutPointer[Int32, MutAnyOrigin],
+):
+    """Thread t's limb row of part: the exact sum of y over its valid rows
+    (E64_THREADS threads, grid-stride); stats[0] += its valid rows."""
+    var t = _gthread()
+    var row = part + t * E64_LIMBS
+    for k in range(E64_LIMBS):
+        row[unsafe_offset=k] = 0
+    var valid = Int32(0)
+    var i = t
+    while i < Int(n_rows):
+        if counts.unsafe_load(i) > Int32(0):
+            e64_add(row, sf64_from_f32(y.unsafe_load(i)), flags)
+            valid += 1
+        i += E64_THREADS
+    if valid != Int32(0):
+        _ = Atomic.fetch_add(stats, valid)
+
+
+def rf_oob_reg_mean_kernel(
+    words: MutPointer[UInt64, MutAnyOrigin],
+    stats: MutPointer[Int32, MutAnyOrigin],
+):
+    """words[3] = words[0] / n_valid. Its own kernel: the rounding stays in
+    `round_kernel` (the gfx942 e64_round + sf64_div codegen fault,
+    `xtrees/oob.mojo`)."""
+    if _gthread() == 0:
+        var nv = Int(stats.unsafe_load(0))
+        if nv > 0:
+            words.unsafe_store(3, sf64_div(words.unsafe_load(0), sf64_from_int(nv)))
+        else:
+            words.unsafe_store(3, SF64_ZERO)
+
+
+def rf_oob_reg_sq_kernel(
+    acc: MutPointer[UInt64, MutAnyOrigin],
+    counts: MutPointer[Int32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    n_rows: Int32,
+    n_out: Int32,
+    words: MutPointer[UInt64, MutAnyOrigin],
+    part_tot: MutPointer[Int64, MutAnyOrigin],
+    part_res: MutPointer[Int64, MutAnyOrigin],
+    flags: MutPointer[Int32, MutAnyOrigin],
+):
+    """Thread t's limb rows over its valid rows: the exact sums of
+    (y - mean)^2 and (y - pred)^2, pred = acc[r * n_out] (output 0, as the
+    host's r2), each term two correctly rounded binary64 operations."""
+    var t = _gthread()
+    var rt = part_tot + t * E64_LIMBS
+    var rr = part_res + t * E64_LIMBS
+    for k in range(E64_LIMBS):
+        rt[unsafe_offset=k] = 0
+        rr[unsafe_offset=k] = 0
+    var mu = words.unsafe_load(3)
+    var no = Int(n_out)
+    var i = t
+    while i < Int(n_rows):
+        if counts.unsafe_load(i) > Int32(0):
+            var v = sf64_from_f32(y.unsafe_load(i))
+            var d = sf64_sub(v, mu)
+            e64_add(rt, sf64_mul(d, d), flags)
+            var e = sf64_sub(v, acc.unsafe_load(i * no))
+            e64_add(rr, sf64_mul(e, e), flags)
+        i += E64_THREADS
+
+
+def rf_oob_score_kernel(
+    words: MutPointer[UInt64, MutAnyOrigin],
+    stats: MutPointer[Int32, MutAnyOrigin],
+    flags: MutPointer[Int32, MutAnyOrigin],
+    is_classifier: Int32,
+):
+    """words[4] = the score. Classifier: correct / n_valid. Regressor
+    (sklearn r2_score, force_finite=True): num == 0 -> 1; den == 0 -> 0;
+    else 1 - num / den; a non-finite term or an overflowed sum -> NaN."""
+    if _gthread() != 0:
+        return
+    var nv = Int(stats.unsafe_load(0))
+    if is_classifier != Int32(0):
+        if nv > 0:
+            words.unsafe_store(
+                4,
+                sf64_div(sf64_from_int(Int(stats.unsafe_load(1))), sf64_from_int(nv)),
+            )
+        else:
+            words.unsafe_store(4, SF64_ZERO)
+        return
+    if flags.unsafe_load(0) != Int32(0) or flags.unsafe_load(1) != Int32(0):
+        words.unsafe_store(4, SF64_NAN)
+        return
+    var den = words.unsafe_load(1)
+    var num = words.unsafe_load(2)
+    if (num & ~SF64_SIGN) == UInt64(0):
+        words.unsafe_store(4, SF64_ONE)
+    elif (den & ~SF64_SIGN) == UInt64(0):
+        words.unsafe_store(4, SF64_ZERO)
+    else:
+        words.unsafe_store(4, sf64_sub(SF64_ONE, sf64_div(num, den)))

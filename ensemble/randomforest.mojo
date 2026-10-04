@@ -49,8 +49,24 @@ from core.device_liveness import assert_device_alive
 from std.memory import bitcast
 from ensemble.oob_device import (
     IDN_RF_OOB_DEVICE,
+    IDN_RF_OOB_EPILOGUE_DEVICE,
+    OOB_STATS,
     OOB_TPB,
+    OOB_WORDS,
+    rf_oob_clf_stats_kernel,
+    rf_oob_reg_mean_kernel,
+    rf_oob_reg_sq_kernel,
+    rf_oob_reg_ysum_kernel,
     rf_oob_rows_kernel,
+    rf_oob_score_kernel,
+)
+from xtrees.oob import (
+    E64_FLAGS,
+    E64_LIMBS,
+    E64_MAX_ROWS,
+    E64_THREADS,
+    limb_reduce_kernel,
+    round_kernel,
 )
 from ensemble.weighted_bootstrap_device import (
     IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE,
@@ -1519,9 +1535,17 @@ def compute_oob_score[
         raise Error("cannot compute an OOB score for an empty forest")
     var num_outputs = Int(forest.trees[0].num_outputs)
 
-    var hy = ctx.enqueue_create_host_buffer[O.LabelT](n_rows)
+    # The device epilogue (B6) never reads y on the host.
+    var hy = ctx.enqueue_create_host_buffer[O.LabelT](
+        0 if IDN_RF_OOB_EPILOGUE_DEVICE else n_rows
+    )
     var oob_predictions = List[Float64]()
     var oob_counts = List[Int]()
+    # Set by the device epilogue (`IDN_RF_OOB_EPILOGUE_DEVICE`): the valid
+    # row count and the score's binary64 word, computed on the device.
+    var dev_epilogue = False
+    var dev_n_valid = 0
+    var dev_score = Float64(0.0)
     comptime if IDN_RF_OOB_DEVICE:
         # fam2-forests: the (tree, row) walk, the binary64 accumulation
         # and the division by the count run on the device
@@ -1605,21 +1629,152 @@ def compute_oob_score[
         var h_acc = ctx.enqueue_create_host_buffer[DType.uint64](
             n_rows * num_outputs
         )
-        var h_cnt = ctx.enqueue_create_host_buffer[DType.int32](n_rows)
-        log_launch_ctx(ctx, "xfer_oob_predictions")
-        ctx.enqueue_copy(dst_buf=h_acc, src_buf=d_acc)
-        ctx.enqueue_copy(dst_buf=h_cnt, src_buf=d_cnt)
-        log_launch_ctx(ctx, "xfer_oob_y")
-        ctx.enqueue_copy(dst_buf=hy, src_buf=y)
-        ctx.synchronize()
-        # Into the Lists the forest exposes: a move of the returned
-        # words, no arithmetic.
-        for i in range(n_rows * num_outputs):
-            oob_predictions.append(
-                bitcast[DType.float64](h_acc.unsafe_ptr().unsafe_load(i))
-            )
-        for r in range(n_rows):
-            oob_counts.append(Int(h_cnt.unsafe_ptr().unsafe_load(r)))
+        comptime if IDN_RF_OOB_EPILOGUE_DEVICE:
+            # B6 (fix-r1-rescue): the score epilogue on the device
+            # (`ensemble/oob_device.mojo`). Only the averaged predictions
+            # (an attribute the API returns), two integers and the score
+            # word come back; y and the counts stay on the device.
+            if n_rows > E64_MAX_ROWS:
+                raise Error("OOB score: more rows than the exact sum takes")
+            var d_words = ctx.enqueue_create_buffer[DType.uint64](OOB_WORDS)
+            d_words.enqueue_fill(UInt64(0))
+            var d_stats = ctx.enqueue_create_buffer[DType.int32](OOB_STATS)
+            d_stats.enqueue_fill(Int32(0))
+            var d_eflags = ctx.enqueue_create_buffer[DType.int32](E64_FLAGS)
+            d_eflags.enqueue_fill(Int32(0))
+            # The limb partials only on the regressor (2 x E64_THREADS rows).
+            comptime n_part = 0 if O.LabelT.is_integral() else E64_THREADS * E64_LIMBS
+            comptime n_tot = 0 if O.LabelT.is_integral() else E64_LIMBS
+            var d_p1 = ctx.enqueue_create_buffer[DType.int64](max(n_part, 1))
+            var d_p2 = ctx.enqueue_create_buffer[DType.int64](max(n_part, 1))
+            var d_t1 = ctx.enqueue_create_buffer[DType.int64](max(n_tot, 1))
+            var d_t2 = ctx.enqueue_create_buffer[DType.int64](max(n_tot, 1))
+            log_launch_ctx(ctx, "oob_epilogue")
+            comptime if O.LabelT.is_integral():
+                comptime clf_kernel = rf_oob_clf_stats_kernel[O.LabelT]
+                ctx.enqueue_function[clf_kernel](
+                    d_acc.unsafe_ptr(),
+                    d_cnt.unsafe_ptr(),
+                    y.unsafe_ptr(),
+                    Int32(n_rows),
+                    Int32(num_outputs),
+                    d_stats.unsafe_ptr(),
+                    grid_dim=_ceildiv(n_rows, OOB_TPB),
+                    block_dim=OOB_TPB,
+                )
+                ctx.enqueue_function[rf_oob_score_kernel](
+                    d_words.unsafe_ptr(),
+                    d_stats.unsafe_ptr(),
+                    d_eflags.unsafe_ptr(),
+                    Int32(1),
+                    grid_dim=1,
+                    block_dim=1,
+                )
+            else:
+                comptime assert (
+                    O.LabelT == DType.float32
+                ), "the OOB r2 epilogue reads float32 labels"
+                var y32 = y.unsafe_ptr().bitcast[Float32]()
+                var egrid = E64_THREADS // OOB_TPB
+                ctx.enqueue_function[rf_oob_reg_ysum_kernel](
+                    d_cnt.unsafe_ptr(),
+                    y32,
+                    Int32(n_rows),
+                    d_p1.unsafe_ptr(),
+                    d_stats.unsafe_ptr(),
+                    d_eflags.unsafe_ptr(),
+                    grid_dim=egrid,
+                    block_dim=OOB_TPB,
+                )
+                ctx.enqueue_function[limb_reduce_kernel](
+                    d_p1.unsafe_ptr(), d_t1.unsafe_ptr(),
+                    grid_dim=1, block_dim=E64_LIMBS,
+                )
+                ctx.enqueue_function[round_kernel](
+                    d_t1.unsafe_ptr(), d_words.unsafe_ptr(), Int64(0),
+                    d_eflags.unsafe_ptr(), grid_dim=1, block_dim=1,
+                )
+                ctx.enqueue_function[rf_oob_reg_mean_kernel](
+                    d_words.unsafe_ptr(), d_stats.unsafe_ptr(),
+                    grid_dim=1, block_dim=1,
+                )
+                ctx.enqueue_function[rf_oob_reg_sq_kernel](
+                    d_acc.unsafe_ptr(),
+                    d_cnt.unsafe_ptr(),
+                    y32,
+                    Int32(n_rows),
+                    Int32(num_outputs),
+                    d_words.unsafe_ptr(),
+                    d_p1.unsafe_ptr(),
+                    d_p2.unsafe_ptr(),
+                    d_eflags.unsafe_ptr(),
+                    grid_dim=egrid,
+                    block_dim=OOB_TPB,
+                )
+                ctx.enqueue_function[limb_reduce_kernel](
+                    d_p1.unsafe_ptr(), d_t1.unsafe_ptr(),
+                    grid_dim=1, block_dim=E64_LIMBS,
+                )
+                ctx.enqueue_function[limb_reduce_kernel](
+                    d_p2.unsafe_ptr(), d_t2.unsafe_ptr(),
+                    grid_dim=1, block_dim=E64_LIMBS,
+                )
+                ctx.enqueue_function[round_kernel](
+                    d_t1.unsafe_ptr(), d_words.unsafe_ptr(), Int64(1),
+                    d_eflags.unsafe_ptr(), grid_dim=1, block_dim=1,
+                )
+                ctx.enqueue_function[round_kernel](
+                    d_t2.unsafe_ptr(), d_words.unsafe_ptr(), Int64(2),
+                    d_eflags.unsafe_ptr(), grid_dim=1, block_dim=1,
+                )
+                ctx.enqueue_function[rf_oob_score_kernel](
+                    d_words.unsafe_ptr(),
+                    d_stats.unsafe_ptr(),
+                    d_eflags.unsafe_ptr(),
+                    Int32(0),
+                    grid_dim=1,
+                    block_dim=1,
+                )
+            var h_words = ctx.enqueue_create_host_buffer[DType.uint64](OOB_WORDS)
+            var h_stats = ctx.enqueue_create_host_buffer[DType.int32](OOB_STATS)
+            log_launch_ctx(ctx, "xfer_oob_predictions")
+            ctx.enqueue_copy(dst_buf=h_acc, src_buf=d_acc)
+            ctx.enqueue_copy(dst_buf=h_words, src_buf=d_words)
+            ctx.enqueue_copy(dst_buf=h_stats, src_buf=d_stats)
+            ctx.synchronize()
+            for i in range(n_rows * num_outputs):
+                oob_predictions.append(
+                    bitcast[DType.float64](h_acc.unsafe_ptr().unsafe_load(i))
+                )
+            dev_epilogue = True
+            dev_n_valid = Int(h_stats.unsafe_ptr().unsafe_load(0))
+            dev_score = bitcast[DType.float64](h_words.unsafe_ptr().unsafe_load(4))
+            _ = d_words^
+            _ = d_stats^
+            _ = d_eflags^
+            _ = d_p1^
+            _ = d_p2^
+            _ = d_t1^
+            _ = d_t2^
+            _ = h_words^
+            _ = h_stats^
+        else:
+            var h_cnt = ctx.enqueue_create_host_buffer[DType.int32](n_rows)
+            log_launch_ctx(ctx, "xfer_oob_predictions")
+            ctx.enqueue_copy(dst_buf=h_acc, src_buf=d_acc)
+            ctx.enqueue_copy(dst_buf=h_cnt, src_buf=d_cnt)
+            log_launch_ctx(ctx, "xfer_oob_y")
+            ctx.enqueue_copy(dst_buf=hy, src_buf=y)
+            ctx.synchronize()
+            # Into the Lists the forest exposes: a move of the returned
+            # words, no arithmetic.
+            for i in range(n_rows * num_outputs):
+                oob_predictions.append(
+                    bitcast[DType.float64](h_acc.unsafe_ptr().unsafe_load(i))
+                )
+            for r in range(n_rows):
+                oob_counts.append(Int(h_cnt.unsafe_ptr().unsafe_load(r)))
+            _ = h_cnt^
         _ = h_off^
         _ = h_col^
         _ = h_left^
@@ -1634,7 +1789,6 @@ def compute_oob_score[
         _ = d_acc^
         _ = d_cnt^
         _ = h_acc^
-        _ = h_cnt^
     else:
         # The masks, back on the host. `:717` indexes them per tree.
         var hm = ctx.enqueue_create_host_buffer[DType.uint8](n_trees * n_rows)
@@ -1721,10 +1875,11 @@ def compute_oob_score[
         _ = hx^
 
     # `:725-732`
-    var n_valid = 0
-    for r in range(n_rows):
-        if oob_counts[r] > 0:
-            n_valid += 1
+    var n_valid = dev_n_valid
+    if not dev_epilogue:
+        for r in range(n_rows):
+            if oob_counts[r] > 0:
+                n_valid += 1
     if n_valid != n_rows:
         print(
             "WARN: Some inputs do not have OOB scores. This probably means"
@@ -1743,47 +1898,55 @@ def compute_oob_score[
         # accuracy. `cp.argmax` keeps the FIRST maximum on a tie, which is
         # what a strict `>` from index 0 does.
         forest.oob_decision_function_ = oob_predictions.copy()
-        var correct = 0
-        for r in range(n_rows):
-            if oob_counts[r] <= 0:
-                continue
-            var best = 0
-            var best_p = oob_predictions[r * num_outputs]
-            for k in range(1, num_outputs):
-                if oob_predictions[r * num_outputs + k] > best_p:
-                    best_p = oob_predictions[r * num_outputs + k]
-                    best = k
-            if Int(hy.unsafe_ptr().unsafe_load(r)) == best:
-                correct += 1
-        # `_classification.py:102` -- float(cp.average(correct))
-        forest.oob_score_ = Float64(correct) / Float64(n_valid)
+        if dev_epilogue:
+            # B6: correct / n_valid formed on the device (same word).
+            forest.oob_score_ = dev_score
+        else:
+            var correct = 0
+            for r in range(n_rows):
+                if oob_counts[r] <= 0:
+                    continue
+                var best = 0
+                var best_p = oob_predictions[r * num_outputs]
+                for k in range(1, num_outputs):
+                    if oob_predictions[r * num_outputs + k] > best_p:
+                        best_p = oob_predictions[r * num_outputs + k]
+                        best = k
+                if Int(hy.unsafe_ptr().unsafe_load(r)) == best:
+                    correct += 1
+            # `_classification.py:102` -- float(cp.average(correct))
+            forest.oob_score_ = Float64(correct) / Float64(n_valid)
     else:
         # `:750-753` -- r2_score over the valid rows only.
         forest.oob_prediction_ = oob_predictions.copy()
-        var mean = Float64(0.0)
-        for r in range(n_rows):
-            if oob_counts[r] > 0:
-                mean += Float64(hy.unsafe_ptr().unsafe_load(r))
-        mean /= Float64(n_valid)
-        # `metrics/regression.py:136-140`
-        var numerator = Float64(0.0)
-        var denominator = Float64(0.0)
-        for r in range(n_rows):
-            if oob_counts[r] <= 0:
-                continue
-            var yt = Float64(hy.unsafe_ptr().unsafe_load(r))
-            var d1 = yt - oob_predictions[r * num_outputs]
-            numerator = fma(d1, d1, numerator)  # the default build's fused op (lane/pinned-mul-contract-free)
-            var d2 = yt - mean
-            denominator = fma(d2, d2, denominator)  # the default build's fused op (lane/pinned-mul-contract-free)
-        # `:145-157`, force_finite=True: numerator == 0 -> 1;
-        # numerator != 0 and denominator == 0 -> 0; else 1 - num/den.
-        if numerator == Float64(0.0):
-            forest.oob_score_ = Float64(1.0)
-        elif denominator == Float64(0.0):
-            forest.oob_score_ = Float64(0.0)
+        if dev_epilogue:
+            # B6: exact binary64 sums on the device (`ensemble/oob_device.mojo`).
+            forest.oob_score_ = dev_score
         else:
-            forest.oob_score_ = Float64(1.0) - numerator / denominator
+            var mean = Float64(0.0)
+            for r in range(n_rows):
+                if oob_counts[r] > 0:
+                    mean += Float64(hy.unsafe_ptr().unsafe_load(r))
+            mean /= Float64(n_valid)
+            # `metrics/regression.py:136-140`
+            var numerator = Float64(0.0)
+            var denominator = Float64(0.0)
+            for r in range(n_rows):
+                if oob_counts[r] <= 0:
+                    continue
+                var yt = Float64(hy.unsafe_ptr().unsafe_load(r))
+                var d1 = yt - oob_predictions[r * num_outputs]
+                numerator = fma(d1, d1, numerator)  # the default build's fused op (lane/pinned-mul-contract-free)
+                var d2 = yt - mean
+                denominator = fma(d2, d2, denominator)  # the default build's fused op (lane/pinned-mul-contract-free)
+            # `:145-157`, force_finite=True: numerator == 0 -> 1;
+            # numerator != 0 and denominator == 0 -> 0; else 1 - num/den.
+            if numerator == Float64(0.0):
+                forest.oob_score_ = Float64(1.0)
+            elif denominator == Float64(0.0):
+                forest.oob_score_ = Float64(0.0)
+            else:
+                forest.oob_score_ = Float64(1.0) - numerator / denominator
 
     _ = hy^
 
