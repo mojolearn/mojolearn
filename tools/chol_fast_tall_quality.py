@@ -30,6 +30,10 @@ PASS rule, fixed before any result: for every SPD fixture
   info_B == info_A == 0, every output finite, L_B upper triangle exactly 0;
 fail2500: info_B == info_A > 0 and L_B bytes == L_A bytes;
 and the board8192 L bytes must DIFFER between the arms (the define flipped).
+`compare --fail-info-only` (tools/chol_fast_nb512_pair.py, a panel-width
+candidate): the redo of a failed factor runs at the candidate's own panel
+width, so fail2500's partial L legitimately differs; there only
+info_B == info_A > 0 is required. Every other rule is unchanged.
 Why 1.5x / 5e-8: a reordered f32 blocked Cholesky keeps the backward-error
 bound (c n u); correct f32 factors of the board system already spread 3.3x
 (torch 5.45e-7, numpy 1.659e-7, ours 1.659e-7). 1.5x is well inside that;
@@ -108,7 +112,7 @@ def dump(path):
                                                   fixtures=len(rows))), flush=True)
 
 
-def compare(pa, pb):
+def compare(pa, pb, fail_info_only=False):
     ma = json.loads(Path(pa + ".json").read_text())
     mb = json.loads(Path(pb + ".json").read_text())
     assert ma["fixture"] == mb["fixture"] == FIXTURE
@@ -121,7 +125,7 @@ def compare(pa, pb):
         a, b = ra[name], rb[name]
         if name.startswith("fail"):
             good = a["info"] > 0 and b["info"] == a["info"] and \
-                za[name + "_L"].tobytes() == zb[name + "_L"].tobytes()
+                (fail_info_only or za[name + "_L"].tobytes() == zb[name + "_L"].tobytes())
             print("CHOL-TALL-AB " + json.dumps(dict(fixture=name, status="OK" if good else "FAIL",
                                                      info_A=a["info"], info_B=b["info"])), flush=True)
             ok = ok and good
@@ -151,11 +155,12 @@ def main():
     p.add_argument("action", choices=["dump", "compare"])
     p.add_argument("first")
     p.add_argument("second", nargs="?")
+    p.add_argument("--fail-info-only", action="store_true")
     args = p.parse_args()
     if args.action == "dump":
         dump(args.first)
         return 0
-    return compare(args.first, args.second)
+    return compare(args.first, args.second, args.fail_info_only)
 
 
 if __name__ == "__main__":
