@@ -102,6 +102,9 @@ def main():
         script = pinned if pinned.is_file() and digest(pinned) != digest(frozen) else frozen
         report = folder / (gate['id'] + '.json')
         argv = [str(a.python), str(script)] + [v.replace('{report}', str(report)).replace('{full_data}', str(a.data.parent / 'rows-full')) for v in gate.get('args', [])]
+        if script == pinned and "'--source'" in pinned.read_text():
+            # A harness gate defaults --source to its own location; point it at the frozen tree.
+            argv += ['--source', str(source)]
         env = environment(a.vendor, a.gpu_arch, source, arm)
         env['MOJOLEARN_IDN_GATE_ARTIFACTS'] = str(folder / 'artifacts')
         receipt = {'schema': 1, 'kind': 'quality-supplement', 'gate': gate['id'], 'arm': arm, 'attempt': n, 'identity': identity,
