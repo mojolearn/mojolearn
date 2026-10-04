@@ -54,6 +54,19 @@ def dump_prep(out):
     np.savez(out, **res)
 
 
+def dump_sk(out):
+    """sklearn PowerTransformer (float64) on the same fixtures: the reference
+    both arms' lambdas are measured against (`cmp` with label sk-*)."""
+    from sklearn.preprocessing import PowerTransformer as SkPT
+    res = {}
+    for d in (220, 11):
+        X = _data(100_000, d, d).astype(np.float64)
+        pt = SkPT(method="yeo-johnson", standardize=True).fit(X)
+        res["pt%d_lambdas" % d] = pt.lambdas_
+        res["pt%d_transform" % d] = pt.transform(X)
+    np.savez(out, **res)
+
+
 def dump_kde(out):
     from mojolearn.density import KernelDensity
     res = {}
@@ -69,7 +82,7 @@ def dump_kde(out):
 def cmp(a_path, b_path, label):
     a, b = np.load(a_path), np.load(b_path)
     worst = {}
-    for k in sorted(a.files):
+    for k in sorted(set(a.files) & set(b.files)):
         x, y = a[k], b[k]
         if x.shape != y.shape:
             print("BATCHV-Q %s %s SHAPE %s vs %s" % (label, k, x.shape, y.shape))
@@ -98,6 +111,6 @@ def cmp(a_path, b_path, label):
 
 if __name__ == "__main__":
     if sys.argv[1] == "dump":
-        {"prep": dump_prep, "kde": dump_kde}[sys.argv[2]](sys.argv[3])
+        {"prep": dump_prep, "kde": dump_kde, "sk": dump_sk}[sys.argv[2]](sys.argv[3])
     else:
         cmp(sys.argv[2], sys.argv[3], sys.argv[4])
