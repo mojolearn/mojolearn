@@ -1029,9 +1029,11 @@ comptime _XT_ADA_SESSION_SHARE = _XT_ADA_SESSION and not is_defined["MOJOLEARN_T
 #: "share"), instead of every member scanning, transposing and uploading X
 #: (the classifier) or gathering its rows on the host and uploading them
 #: (the regressor). Each member still draws its own quantile sample, so its
-#: forest is the one its own fit returns: no bit moves and the host column
-#: (which has no session) is untouched. `-D MOJOLEARN_IDN_ADA_SESSION_OFF`
-#: clears it.
+#: forest is the one its own fit returns: no bit moves. The host column
+#: takes the same session route under this switch (`_mojolearn_rf_host`
+#: exports `rf_data_session_open` / `rf_regressor_fit_session_rows_export`),
+#: so both columns follow ON, `_OFF` and ALL_OFF alike.
+#: `-D MOJOLEARN_IDN_ADA_SESSION_OFF` clears it.
 comptime _XT_IDN_ADA_SESSION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_ADA_SESSION_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )

@@ -475,8 +475,16 @@ def check_ridge_device_equals_host() raises:
     for idx in range(d * d):
         v_h[idx] = ftz(v_h[idx] * s_h[idx % d])
     var utb = List[Float32]()
-    for j in range(d):
-        utb.append(_host_halving_xty(u_dev, fx[1], n, d, j))
+    # lane/review-fixes: under IDN_XTY_TILED the tiled replay yields every
+    # column at once; compute it once, not once per column
+    var utb_done = False
+    comptime if IDN_XTY_TILED:
+        if n >= 1 and d >= 1:
+            utb = host_xty_tiled(u_dev, fx[1], n, d)
+            utb_done = True
+    if not utb_done:
+        for j in range(d):
+            utb.append(_host_halving_xty(u_dev, fx[1], n, d, j))
     var w_host = List[Float32]()
     for i in range(d):
         w_host.append(_host_pinned_dot(v_h, i * d, 1, utb, 0, 1, d))
