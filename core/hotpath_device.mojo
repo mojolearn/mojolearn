@@ -225,6 +225,46 @@ def device_gather_i32(
     return ok
 
 
+def _gather_u64_kernel(table: _U64, nt: Int32, codes: _I64, n_: Int32, dst: _U64, status: _I32):
+    """`_gather_i32_kernel` over 64-bit table words and int64 codes."""
+    var i = _tid()
+    if i >= Int(n_):
+        return
+    var c = Int(codes.unsafe_load(i))
+    if c < 0 or c >= Int(nt):
+        status.unsafe_store(0, Int32(1))
+        return
+    dst.unsafe_store(i, table.unsafe_load(c))
+
+
+def device_gather_u64(
+    ctx: DeviceContext, table_addr: Int, nt: Int, codes_addr: Int, n: Int, dst_addr: Int,
+) raises -> Bool:
+    """`gather_i64` / `gather_f64` (a move of 64-bit words, so one kernel
+    serves both): dst[i] = table[codes[i]], int64 codes. False (and no byte
+    of `dst` written) when a code is out of range."""
+    var d_t = ctx.enqueue_create_buffer[DType.uint64](nt)
+    var d_c = ctx.enqueue_create_buffer[DType.int64](n)
+    var d_d = ctx.enqueue_create_buffer[DType.uint64](n)
+    var d_status = ctx.enqueue_create_buffer[DType.int32](2)
+    enqueue_fill(ctx, d_status, Int32(0))
+    ctx.enqueue_copy(dst_buf=d_t, src_ptr=_U64(unsafe_from_address=table_addr))
+    ctx.enqueue_copy(dst_buf=d_c, src_ptr=_I64(unsafe_from_address=codes_addr))
+    ctx.enqueue_function[_gather_u64_kernel](
+        d_t.unsafe_ptr(), Int32(nt), d_c.unsafe_ptr(), Int32(n), d_d.unsafe_ptr(),
+        d_status.unsafe_ptr(), grid_dim=_blocks(n), block_dim=HPD_TPB,
+    )
+    var ok = _read_status(ctx, d_status, 0) == 0
+    if ok:
+        ctx.enqueue_copy(dst_ptr=_U64(unsafe_from_address=dst_addr), src_buf=d_d)
+        ctx.synchronize()
+    _ = d_t^
+    _ = d_c^
+    _ = d_d^
+    _ = d_status^
+    return ok
+
+
 # ===========================================================================
 # threshold_labels_i64
 # ===========================================================================

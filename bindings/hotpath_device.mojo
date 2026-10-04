@@ -17,7 +17,8 @@ Switches (IDENTICAL builds, default ON; `-D MOJOLEARN_IDN_ALL_OFF` turns all
 three off):
   IDN_HPDEV_ELEM    -D MOJOLEARN_IDN_HPDEV_ELEM_OFF    equal_elements,
                     gather_i32, threshold_labels_i64, bincount_i64,
-                    count_mask_u8, fold_pair_f32
+                    count_mask_u8, fold_pair_f32, gather_i64 and gather_f64
+                    (`hpdev_try_gather_u64`, called by the base binding)
   IDN_HPDEV_LABELS  -D MOJOLEARN_IDN_HPDEV_LABELS_OFF  encode_labels_<dtype>
                     (`hpdev_try_encode_labels`, called by the base binding)
   IDN_HPDEV_FOLDS   -D MOJOLEARN_IDN_HPDEV_FOLDS_OFF   fold_ids,
@@ -70,6 +71,7 @@ from core.hotpath_device import (
     device_first_seen_i32,
     device_fold_pair_f32,
     device_gather_i32,
+    device_gather_u64,
     device_indices_overlap_i64,
     device_kfold_ids,
     device_mask_from_indices_u8,
@@ -146,6 +148,26 @@ def gather_i32_binding(
             if ok:
                 return PythonObject(0)
     return host_gather_i32_binding(table_addr, n_table, codes_addr, n, dst_addr)
+
+
+def hpdev_try_gather_u64(
+    table_addr: Int, nt: Int, codes_addr: Int, n: Int, dst_addr: Int,
+) raises -> Bool:
+    """The device `gather_i64` / `gather_f64` for the base binding (64-bit
+    table words, int64 codes): True when the device wrote `dst`; False when
+    it did not (switch off, a size it does not cover, a code out of range)
+    and the caller runs its host loop, whose refusal is the definition."""
+    comptime if IDN_HPDEV_ELEM:
+        if n < 1 or n > HPD_MAX_N or nt < 1 or nt > HPD_MAX_N:
+            return False
+        if table_addr == 0 or codes_addr == 0 or dst_addr == 0:
+            return False
+        var ctx = process_ctx[_HPDEV_SLOT]()
+        var ok = False
+        with GILReleased(Python()):
+            ok = device_gather_u64(ctx, table_addr, nt, codes_addr, n, dst_addr)
+        return ok
+    return False
 
 
 def threshold_labels_i64_binding(

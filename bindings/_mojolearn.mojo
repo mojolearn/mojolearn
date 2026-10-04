@@ -139,6 +139,7 @@ from bindings.hotpath_device import (
     first_seen_i32_binding,
     strat_fold_assign_i32_binding,
     hpdev_try_encode_labels,
+    hpdev_try_gather_u64,
 )
 from std.os import abort
 from std.math import isfinite
@@ -1520,6 +1521,12 @@ def gather_i64_binding(
         return PythonObject(0)
     if Int(py=table_addr) == 0 or Int(py=codes_addr) == 0 or Int(py=dst_addr) == 0:
         raise Error("gather_i64: null buffer address")
+    # lane fam2-shared: the device gather first; False means it did not
+    # write (switch off, or a code out of range: the loop below raises).
+    if hpdev_try_gather_u64(
+        Int(py=table_addr), nt, Int(py=codes_addr), count, Int(py=dst_addr)
+    ):
+        return PythonObject(0)
     var tp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=table_addr))
     var cp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=codes_addr))
     var dp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=dst_addr))
@@ -1551,6 +1558,12 @@ def gather_f64_binding(
         return PythonObject(0)
     if Int(py=table_addr) == 0 or Int(py=codes_addr) == 0 or Int(py=dst_addr) == 0:
         raise Error("gather_f64: null buffer address")
+    # lane fam2-shared: the device gather first; False means it did not
+    # write (switch off, or a code out of range: the loop below raises).
+    if hpdev_try_gather_u64(
+        Int(py=table_addr), nt, Int(py=codes_addr), count, Int(py=dst_addr)
+    ):
+        return PythonObject(0)
     var tp = _f64_ptr(Int(py=table_addr))
     var cp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=codes_addr))
     var dp = _f64_ptr(Int(py=dst_addr))
