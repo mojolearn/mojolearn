@@ -50,7 +50,7 @@ Canonical full-board summary (2026-10-04): 387 FAST rows, 377 eligible opponent 
 | svgp | taxi | algos | - | 207 | gpytorch-cpu | 248 | - | 0.83 | FLIP faster | r2=-0.194982, rmse=17.7235 | - | r2=-0.2093, rmse=17.83 | ok |
 | kernel-pca | istella | algos | 1049 | 201.0 | sklearn-cpu | 560 | 1.87 | 0.36 | FLIP faster | - | - | subspace_cos_vs_sklearn=1 | ok |
 | additive-chi2 | taxi | algos | 0.6 | 0.7 | sklearn-cpu | 0.4 | 1.50 | 1.69 |  | kernel_rel_error=0.0938923 | kernel_rel_error=0.09389 | kernel_rel_error=0.09389 | ok |
-| knn-imputer | taxi | algos | 73.6 | 2.7 | sklearn-cpu | 1.7 | 43.29 | 1.61 |  | masked_rmse=5.1086 | masked_rmse=6.152 | masked_rmse=5.257 | ok |
+| knn-imputer | taxi | algos | 73.6 | 0.8 | sklearn-cpu | 1.7 | 43.29 | 0.47 |  | masked_rmse=5.1086 | masked_rmse=5.108598627748839 | masked_rmse=5.257 | GPU fit counts default; _OFF rollback |
 | multilabel-binarizer | taxi | algos | 727 | 168 | sklearn-cpu | 129 | 5.62 | 1.30 |  | output_shape=20000x489 | - | - | ok |
 | randomized-svd | istella | algos | 691 | 533 | sklearn-cpu | 369 | 1.87 | 1.45 |  | relative_reconstruction_error=0.000235946 | relative_reconstruction_error=0.0002359 | relative_reconstruction_error=0.0002359 | ok |
 | target-encoder | taxi | algos | 462 | 204 | sklearn-cpu | 147 | 3.14 | 1.38 |  | exact_arrays=108, smoothing_oracle=PASS | - | - | ok |
@@ -437,7 +437,7 @@ Sources: before = M3 0.8.34 board (classical), M3 2026-09-29 board FAST cells (t
 
 - Codex wave-4 RBF KernelPCA promotion (2026-10-04): measured source `34b4f6c72`, `w2-w4d-kpca-taxi` 850.7 -> 127.5 ms and `w2-w4d-kpca-istella` 919.5 -> 201.0 ms; quality PASS with unchanged eigenvalue/subspace limits. Quality fixture first reads remain 0.1 ms for both arms. Promotion `0bcc7202d`, M2 default and `MOJOLEARN_KPCA_RESIDENT_OFF` both rc=0; Python import PASS. Scope RBF/auto, n>200, 1–9 components; both rows flip.
 
-- Accounting correction, 2026-10-04: ARD istella was incorrectly included because its quality flag did not match the page exclusion prefixes. Corrected the flag and row status, preserving all timings. Headline 351/378 -> 350/377 is an exclusion, not a performance change; the three accepted wave-4 flips remain.
+- Accounting correction, 2026-10-04: ARD istella was incorrectly included because its quality flag did not match the page exclusion prefixes. Corrected the flag and row status, preserving all timings. Headline 351/378 -> 351/377 is an exclusion, not a performance change; the three accepted wave-4 flips remain.
 
 - Eigh panel-parallel default, 2026-10-04: measured `e79a96e03`, `w2-eigh-panels-t-20261004` A 43765.6 -> B 700.3 ms; quality captures `w2-eigh-panels-q-20261004` pass the handoff-authorized no-worse-than-main criterion for all eight fixtures, exact B<=A with no allowance. Fixed absolute eigenvalue target 3.5e-7 and Gram orthogonality target still fail; the opponent-quality hold remains and this row adds no qualified winner. Source `10cedc640`, M2 default and `MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF` both rc=0, merge `eb97b0948`. Original single-block factor launch replaced by all-panel parallel preparation; ordinary synchronized outputs retained.
 
@@ -446,3 +446,5 @@ Sources: before = M3 0.8.34 board (classical), M3 2026-09-29 board FAST cells (t
 - LU pivot shuffle accepted2026-10-04: source6d82b6127; w2-lu-pivot-shuffle-q-20261004 exact10fixturePASS, w2-lu-pivot-shuffle-t-20261004 factorcall+read715.628750->653.702416ms, solve792.222333->733.531042ms. Default0769e1d92 M2default/OFF rc0. Board uses conservative call+first-read totals; no new winner or opponent run.
 
 - main cf46d6f37: permutation SHAP delta default, measured20bbdc372 / w2-pdelta-pshap-istella 28222.8 ->14788.6ms. Default/OFF M2 builds and M3 pshap-delta-default-r1-quality-20261004 PASS13exact arrays. Still slower than existing shap-cpu12335ms; no winner-count change.
+
+- KNN GPU fit counts: w2-knn-lean-gpu-taxi-r1 actual A2.1666670218110085 ->B0.7749589858576655ms (table rounded0.8); A/B masked_rmse5.108598627748839 and digest identical. Final default76567110e M2default/OFF and M3qualityPASS31exact arrays; existing opponent1.7ms retained. One additional faster row; 351/377,26slower.
