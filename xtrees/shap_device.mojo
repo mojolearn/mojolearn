@@ -25,6 +25,7 @@ from xtrees.shap import (
     shap_parent_unit, shap_depth_unit, shap_cover_unit, shap_slot_unit, shap_ev_part_unit, shap_ev_fold_unit,
     shap_tree_unit, shap_fold_unit, shap_table_unit, shap_table_row_unit,
 )
+from xtrees.shap_tab import U64P, shap_tab_rank_unit, shap_tab_need_unit, shap_tab_row_unit
 
 comptime TPB = 128
 comptime BUF_BYTES = 128 * 1024 * 1024
@@ -46,6 +47,22 @@ leaf. Taken when the compiled width is 8 (at most 7 merged features per
 path, 128 patterns) and the table fits TABLE_BYTES; otherwise the
 per-row units run. Same terms, same cells, same order: the same bits."""
 comptime TABLE_BYTES = 256 * 1024 * 1024
+#: SHAP_TREE_TAB (FAST + Apple, on top of SHAP_TABLE; OPT-IN until its A/B
+#: passes: `-D MOJOLEARN_SHAP_TREE_TAB`): the leaf table's row unit finds
+#: each leaf's pattern from ONE decision word per (row, tree) (one x read
+#: and compare per internal node) instead of walking every leaf's root path
+#: (xtrees/shap_tab.mojo). Source lane/apple-fast-shap@13343dd51 (commit
+#: 73ceaa451), recovered 2026-10-04. Prior: never compiled on M3 (the
+#: branch failed to parse at xtrees/api.mojo:715, a parameter named `out`,
+#: and :811); the "21.4 ms vs board 25.1" lead in LOST_CANDIDATES is the
+#: pre-table taxi number of ab-tshap-table-taxi, not a measurement of this.
+#: Fixed: the old branch tabulated per leaf and pattern itself; main's
+#: SHAP_TABLE now does that, so only the decision-word row unit is kept,
+#: reading main's table, dead flags and leaf features. A tree with more
+#: than 64 internal nodes (the word's width) takes main's row unit inside
+#: the same launch: no host wait, no shape window. Same adds, same cells,
+#: same order as SHAP_TABLE's row unit: the same bits.
+comptime SHAP_TREE_TAB = SHAP_TABLE and is_defined["MOJOLEARN_SHAP_TREE_TAB"]()
 comptime TABLE_ACC = 64
 
 
@@ -146,6 +163,31 @@ def table_row_kernel[ACC: Int](units: Int32, rows: Int32, d: Int32, k: Int32, sl
         shap_table_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
                                  left, leaves, parent, slot, leaf_mf, leaf_n, table, dead, x.unsafe_offset(Int(r0) * Int(d)), buf,
                                  meta)
+
+
+def tab_rank_kernel(units: Int32, offsets: I32P, left: I32P, rank: I32P, nint: I32P):
+    var u = _uid()
+    if u < Int(units):
+        shap_tab_rank_unit(u, offsets, left, rank, nint)
+
+
+def tab_need_kernel(units: Int32, nm: Int32, offsets: I32P, n_trees: Int32, colid: I32P, left: I32P, parent: I32P,
+                    rank: I32P, leaf_mf: I32P, leaf_n: I32P, nint: I32P, needl: U64P, needr: U64P):
+    var u = _uid()
+    if u < Int(units):
+        shap_tab_need_unit(u, Int(nm), offsets, Int(n_trees), colid, left, parent, rank, leaf_mf, leaf_n, nint,
+                           needl, needr)
+
+
+def tab_row_kernel[ACC: Int](units: Int32, rows: Int32, d: Int32, k: Int32, slots: Int32, m: Int32, nm: Int32,
+                             offsets: I32P, colid: I32P, quesval: F32P, left: I32P, leaves: F32P, parent: I32P,
+                             slot: I32P, leaf_mf: I32P, leaf_n: I32P, table: F32P, dead: I32P, nint: I32P,
+                             needl: U64P, needr: U64P, x: F32P, r0: Int32, buf: F32P, meta: I32P):
+    var u = _uid()
+    if u < Int(units):
+        shap_tab_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
+                               left, leaves, parent, slot, leaf_mf, leaf_n, table, dead, nint, needl, needr,
+                               x.unsafe_offset(Int(r0) * Int(d)), buf, meta)
 
 
 def fold_kernel(units: Int32, r0: Int32, rows: Int32, n_trees: Int32, d: Int32, k: Int32, slots: Int32, slot: I32P,
@@ -291,13 +333,50 @@ def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi:
                 fo.left.unsafe_ptr(), fo.parent.unsafe_ptr(), cover.unsafe_ptr(), fo.tscale.unsafe_ptr(),
                 leaf_mf.unsafe_ptr(), leaf_n.unsafe_ptr(), table.unsafe_ptr(), dead.unsafe_ptr(),
                 fo.meta.unsafe_ptr(), grid_dim=_grid(tu0), block_dim=TPB)
+    # SHAP_TREE_TAB: ranks, internal counts and per-element decision masks
+    var tt = False
+    comptime if SHAP_TREE_TAB:
+        tt = use_table
+    var rank = ctx.enqueue_create_buffer[DType.int32](n_nodes if tt else 1)
+    var nint = ctx.enqueue_create_buffer[DType.int32](n_trees if tt else 1)
+    var needl = ctx.enqueue_create_buffer[DType.uint64](n_nodes * nm if tt else 1)
+    var needr = ctx.enqueue_create_buffer[DType.uint64](n_nodes * nm if tt else 1)
+    comptime if SHAP_TREE_TAB:
+        if tt:
+            ctx.enqueue_function[tab_rank_kernel](
+                Int32(n_trees), fo.offsets.unsafe_ptr(), fo.left.unsafe_ptr(), rank.unsafe_ptr(), nint.unsafe_ptr(),
+                grid_dim=_grid(n_trees), block_dim=TPB)
+            ctx.enqueue_function[tab_need_kernel](
+                Int32(n_nodes), Int32(nm), fo.offsets.unsafe_ptr(), Int32(n_trees), fo.colid.unsafe_ptr(),
+                fo.left.unsafe_ptr(), fo.parent.unsafe_ptr(), rank.unsafe_ptr(), leaf_mf.unsafe_ptr(),
+                leaf_n.unsafe_ptr(), nint.unsafe_ptr(), needl.unsafe_ptr(), needr.unsafe_ptr(),
+                grid_dim=_grid(n_nodes), block_dim=TPB)
     var r0 = 0
     while r0 < n:
         var rc = min(rows, n - r0)
         var tu = n_trees * rc
         var ran = False
         comptime if SHAP_TABLE:
-            if use_table:
+            if tt:
+                ran = True
+                comptime if SHAP_TREE_TAB:
+                    if sl * k <= TABLE_ACC:
+                        ctx.enqueue_function[tab_row_kernel[TABLE_ACC]](
+                            Int32(tu), Int32(rc), Int32(d), Int32(k), Int32(sl), Int32(tm), Int32(nm),
+                            fo.offsets.unsafe_ptr(), fo.colid.unsafe_ptr(), fo.quesval.unsafe_ptr(),
+                            fo.left.unsafe_ptr(), fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(),
+                            leaf_mf.unsafe_ptr(), leaf_n.unsafe_ptr(), table.unsafe_ptr(), dead.unsafe_ptr(),
+                            nint.unsafe_ptr(), needl.unsafe_ptr(), needr.unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
+                            buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(tu), block_dim=TPB)
+                    else:
+                        ctx.enqueue_function[tab_row_kernel[0]](
+                            Int32(tu), Int32(rc), Int32(d), Int32(k), Int32(sl), Int32(tm), Int32(nm),
+                            fo.offsets.unsafe_ptr(), fo.colid.unsafe_ptr(), fo.quesval.unsafe_ptr(),
+                            fo.left.unsafe_ptr(), fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(),
+                            leaf_mf.unsafe_ptr(), leaf_n.unsafe_ptr(), table.unsafe_ptr(), dead.unsafe_ptr(),
+                            nint.unsafe_ptr(), needl.unsafe_ptr(), needr.unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
+                            buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(tu), block_dim=TPB)
+            elif use_table:
                 ran = True
                 if sl * k <= TABLE_ACC:
                     ctx.enqueue_function[table_row_kernel[TABLE_ACC]](
@@ -329,6 +408,10 @@ def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi:
         r0 += rc
     ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=phi), src_buf=dphi)
     _check_meta(ctx, fo.meta, 0)
+    _ = rank^
+    _ = nint^
+    _ = needl^
+    _ = needr^
     _ = table^
     _ = dead^
     _ = leaf_mf^
