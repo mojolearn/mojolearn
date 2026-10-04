@@ -30,6 +30,8 @@ five off):
                     max, argmax and integral test (the float sum and the
                     exact integer sum stay the host helper's)
   IDN_HPDEV_INIT    -D MOJOLEARN_IDN_HPDEV_INIT_OFF    uniform_init_f32
+  IDN_HPDEV_CAST_F64  CANDIDATE, default OFF, -D MOJOLEARN_IDN_HPDEV_CAST_F64
+                    turns it on: cast_f64_to_f32 (`hpdev_try_cast_f64_to_f32`)
 The sabotage builds (`HOTPATH_SABOTAGE`) keep every host helper, so the
 negative control still answers wrong on purpose.
 """
@@ -72,6 +74,7 @@ from core.hotpath_device import (
     device_all_integral,
     device_arange_skip_i64,
     device_bincount_i64,
+    device_cast_f64_to_f32,
     device_check_indices_i64,
     device_count_mask_u8,
     device_encode_labels,
@@ -104,6 +107,11 @@ comptime IDN_HPDEV_LABELS = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_
 comptime IDN_HPDEV_FOLDS = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_FOLDS_OFF"]()
 comptime IDN_HPDEV_REDUCE = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_REDUCE_OFF"]()
 comptime IDN_HPDEV_INIT = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_INIT_OFF"]()
+#: CANDIDATE ARM, default OFF: `-D MOJOLEARN_IDN_HPDEV_CAST_F64` narrows a
+#: float64 input on the device (`cast_f64_to_f32`). The words cross the bus
+#: twice more than the host cast's, so it is on only when measured to win, or
+#: as the first half of a resident handoff.
+comptime IDN_HPDEV_CAST_F64 = _HPDEV_BASE and is_defined["MOJOLEARN_IDN_HPDEV_CAST_F64"]()
 
 #: The base binding's process-lifetime context slot
 #: (`bindings/_mojolearn.mojo::_DEVCTX_SLOT`): the same name, so the same
@@ -646,3 +654,21 @@ def uniform_init_f32_binding(
                 device_uniform_init_f32(ctx, d, count, lo, hi, seed, off)
             return PythonObject(0)
     return host_uniform_init_f32_binding(dst_addr, n, low, high, seed_lo, seed_hi, offset)
+
+
+# ---------------------------------------------------------------------------
+# IDN_HPDEV_CAST_F64 (candidate arm, default OFF)
+# ---------------------------------------------------------------------------
+
+
+def hpdev_try_cast_f64_to_f32(src_addr: Int, dst_addr: Int, n: Int) raises -> Bool:
+    """The device `cast_f64_to_f32` for the base binding: True when the
+    device wrote `dst`, False when the caller must run its host loop."""
+    comptime if IDN_HPDEV_CAST_F64:
+        if n < 1 or n > HPD_MAX_N or src_addr == 0 or dst_addr == 0:
+            return False
+        var ctx = process_ctx[_HPDEV_SLOT]()
+        with GILReleased(Python()):
+            device_cast_f64_to_f32(ctx, src_addr, dst_addr, n)
+        return True
+    return False

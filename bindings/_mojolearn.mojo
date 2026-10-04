@@ -136,6 +136,7 @@ from bindings.hotpath_device import (
     bincount_i64_binding,
     first_seen_i32_binding,
     strat_fold_assign_i32_binding,
+    hpdev_try_cast_f64_to_f32,
     hpdev_try_encode_labels,
     hpdev_try_gather_u64,
     reduce_stat_binding,
@@ -985,6 +986,10 @@ def cast_f64_to_f32_binding(
             "cast_f64_to_f32: n must be non-negative, got " + String(count)
         )
     if count == 0:
+        return PythonObject(0)
+    # lane fam2-shared: candidate arm -D MOJOLEARN_IDN_HPDEV_CAST_F64 (default
+    # OFF) narrows on the device; False means the host loop below runs.
+    if hpdev_try_cast_f64_to_f32(Int(py=src_addr), Int(py=dst_addr), count):
         return PythonObject(0)
     var sp = _f64_ptr(Int(py=src_addr))
     var dp = _f32_ptr(Int(py=dst_addr))

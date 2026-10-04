@@ -1554,3 +1554,40 @@ def device_uniform_init_f32(
     ctx.enqueue_copy(dst_ptr=_F32(unsafe_from_address=dst_addr), src_buf=d)
     ctx.synchronize()
     _ = d^
+
+
+# ===========================================================================
+# cast_f64_to_f32 (CANDIDATE ARM, default OFF: bindings/hotpath_device.mojo
+# IDN_HPDEV_CAST_F64)
+# ===========================================================================
+
+
+def _narrow_f64_kernel(src: _U64, n_: Int32, dst: _U32):
+    """dst[i] = the float32 a hardware double-to-float conversion gives:
+    round to nearest even (`sf64_to_f32`); a NaN keeps its sign and the top
+    22 payload bits and is quieted, as the host cast leaves it."""
+    var i = _tid()
+    if i >= Int(n_):
+        return
+    var w = src.unsafe_load(i)
+    if sf64_is_nan(w):
+        var sign = UInt32((w >> 63) << 31)
+        var payload = UInt32((w >> 29) & UInt64(0x003FFFFF))
+        dst.unsafe_store(i, sign | UInt32(0x7FC00000) | payload)
+    else:
+        dst.unsafe_store(i, bitcast[DType.uint32](sf64_to_f32(w)))
+
+
+def device_cast_f64_to_f32(ctx: DeviceContext, src_addr: Int, dst_addr: Int, n: Int) raises:
+    """`cast_f64_to_f32` (`1 <= n <= HPD_MAX_N`): the float64 words go up,
+    the float32 words come down."""
+    var d_s = ctx.enqueue_create_buffer[DType.uint64](n)
+    var d_d = ctx.enqueue_create_buffer[DType.uint32](n)
+    ctx.enqueue_copy(dst_buf=d_s, src_ptr=_U64(unsafe_from_address=src_addr))
+    ctx.enqueue_function[_narrow_f64_kernel](
+        d_s.unsafe_ptr(), Int32(n), d_d.unsafe_ptr(), grid_dim=_blocks(n), block_dim=HPD_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=_U32(unsafe_from_address=dst_addr), src_buf=d_d)
+    ctx.synchronize()
+    _ = d_s^
+    _ = d_d^
