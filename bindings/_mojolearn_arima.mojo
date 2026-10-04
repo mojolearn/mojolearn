@@ -93,6 +93,37 @@ from arima.estimator import (
 )
 
 
+from arima.impl.fast_order_search import order_search_loglike
+from arima.impl.fast_order_state import ARIMA_ORDER_BATCH
+from arima.impl.tsa.arima_common import ARIMAOrder
+from core.identity_trace import IdentityTrace
+
+
+def arima_order_batch_enabled_binding() raises -> PythonObject:
+    var trace = IdentityTrace()
+    return PythonObject(ARIMA_ORDER_BATCH and not trace.enabled)
+
+
+def arima_order_search_binding(y_addr: PythonObject, out_addr: PythonObject,
+                               grid: PythonObject, config: PythonObject) raises -> PythonObject:
+    if len(config) != 4 or len(grid) % 3 != 0:
+        raise Error("arima_order_search: expected [batch,nobs,d,maxiter] and (p,q,k) triples")
+    var bs = Int(py=config[0])
+    var nobs = Int(py=config[1])
+    var d = Int(py=config[2])
+    var maxiter = Int(py=config[3])
+    var orders = List[ARIMAOrder]()
+    for i in range(len(grid) // 3):
+        orders.append(ARIMAOrder(Int(py=grid[3*i]), d, Int(py=grid[3*i+1]),
+                                 0, 0, 0, 0, Int(py=grid[3*i+2]), 0))
+    var yp = f32_ptr(Int(py=y_addr))
+    var op = f32_ptr(Int(py=out_addr))
+    var written = 0
+    with GILReleased(Python()):
+        written = order_search_loglike(yp, op, orders, bs, nobs, maxiter)
+    return PythonObject(written)
+
+
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return f32_ptr(addr)
 
@@ -405,6 +436,8 @@ def PyInit__mojolearn_arima() abi("C") -> PythonObject:
         m.def_function[arima_vendor_binding]("arima_vendor")
         m.def_function[arima_numeric_mode_binding]("arima_numeric_mode")
         m.def_function[arima_fit_binding]("arima_fit")
+        m.def_function[arima_order_batch_enabled_binding]("arima_order_batch_enabled")
+        m.def_function[arima_order_search_binding]("arima_order_search")
         m.def_function[arima_predict_binding]("arima_predict")
         m.def_function[arima_forecast_binding]("arima_forecast")
         return m.finalize()

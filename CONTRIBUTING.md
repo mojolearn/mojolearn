@@ -189,6 +189,45 @@ lives. Install the hooks once per clone.
 `tools/hooks/pre-commit` refuses oversized or forbidden files, and
 `tools/hooks/pre-push` refuses a push carrying any blob over 100 MiB.
 
+### Smaller development worktrees
+
+Create a worktree that keeps recent benchmark evidence and omits older tracked
+runs:
+
+```sh
+bash tools/new_lean_worktree.sh ../mojolearn-my-change my-change origin/main
+```
+
+The default retains the three newest dated runs per result family, every run
+within the last 14 calendar days, and all undated results. Dates come from run
+directory names. Families are directory groups, not guarantees of matching
+hardware or workloads; “latest” does not mean a run passed. Adjust retention
+with `--count N` and `--days N`. Repeat `--keep bench/results/FAMILY/RUN` to pin
+older comparison baselines; pinning a file keeps its whole run.
+
+New results remain visible automatically because only specific old directories
+are excluded. Update retention and the latest-runs index after pulling or
+adding results:
+
+```sh
+bash tools/new_lean_worktree.sh ../mojolearn-my-change --refresh
+```
+
+Refresh preserves previous pins/settings and refuses working changes or ignored
+files in directories that would be excluded. It only refreshes worktrees created
+by this helper; other worktrees are unchanged. The printed
+`latest-benchmarks.json` path is an index in the worktree's Git metadata, updated
+on creation/refresh. Benchmark evidence is never overwritten.
+
+Restore all tracked results locally whenever a comparison needs them:
+
+```sh
+git -C ../mojolearn-my-change sparse-checkout disable
+```
+
+Run the focused Git/filesystem checks with
+`python3 tools/test_lean_benchmarks.py`; they do not execute benchmarks.
+
 ## Maintainership and license
 
 Contributors who repeatedly show sound review, preserve the numerical and
