@@ -6,6 +6,7 @@ identity, then timing against ONE output directory. A failed/missing gate blocks
 timing. Every subprocess writes full logs and preserved return codes under out.
 """
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import json
 import os
@@ -65,6 +66,20 @@ def run(argv, cwd, env, log, timeout):
     return rc
 
 
+def compile_batch(builders, compile_builder, jobs, steps):
+    """Persist completed independent builds; retain every failure in the batch."""
+    failed=False
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        futures={pool.submit(compile_builder,builder):builder for builder in builders}
+        for future in as_completed(futures):
+            try: step=future.result()
+            except Exception as exc:
+                step={'id':futures[future],'rc':127,'exception':str(exc)}
+            steps.append(step)
+            failed = failed or bool(step['rc'])
+    return int(failed)
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('phase',choices=('prepare','quality','identity','timing'))
@@ -80,6 +95,7 @@ def main():
     p.add_argument('--semaphore',type=Path,default=Path('/root/mojolearn-evidence/compile_slot.sh'))
     p.add_argument('--reuse-native-on',type=Path,action='append',default=[],help='Completed audited ON native receipt to import into fresh source')
     p.add_argument('--reuse-native-off',type=Path,action='append',default=[],help='Completed audited OFF native receipt to import into fresh source')
+    p.add_argument('--prepare-jobs',type=int,choices=range(1,5),default=1,help='Concurrent independent builders; shared compile semaphore remains authoritative')
     a=p.parse_args()
     try: arch=validate_arch(a.vendor,a.gpu_arch)
     except ValueError as exc: p.error(str(exc))
@@ -197,17 +213,20 @@ def main():
             rc=0 if reused else run([str(a.python),'-c',code],source,env,folder/'portable-math.log',600)
             steps.append({'id':'portable-math','rc':rc,'reused':bool(reused)})
             if rc: break
+            pending=[]
             for builder in plan['builders']:
                 if not re.fullmatch(r'build(?:_[a-z0-9_]+)?\.sh',builder): p.error('invalid builder name')
                 if builder in reused:
                     steps.append({'id':builder,'rc':0,'reused':True,'sha256':reused[builder]['sha256']})
-                    continue
+                else:
+                    pending.append(builder)
+            def compile_builder(builder):
                 build_env=dict(env)
                 if builder.endswith('_host.sh'):
                     build_env.pop('MOJOLEARN_GPU_ARCHS',None); build_env['MOJOLEARN_TARGET_COLUMN']='cpu'
-                rc=run(['bash',str(a.semaphore),'bash','bindings/'+builder],source,build_env,folder/(builder+'.log'),plan.get('build_timeout',3600))
-                steps.append({'id':builder,'rc':rc})
-                if rc: break
+                code=run(['bash',str(a.semaphore),'bash','bindings/'+builder],source,build_env,folder/(builder+'.log'),plan.get('build_timeout',3600))
+                return {'id':builder,'rc':code}
+            rc=compile_batch(pending,compile_builder,a.prepare_jobs,steps)
             if rc: break
             products=binary_inventory(source)
             if not products: p.error('no source-built binaries')

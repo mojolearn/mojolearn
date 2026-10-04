@@ -5,6 +5,9 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import tempfile
+
+import identical_sgd_dependency_proof as sgd_proof
 
 # This producer fixes the numeric mode, arm flags, architecture, host override,
 # and single compiler job in its environment. Other producers need a new audit.
@@ -140,16 +143,39 @@ def validate_receipt(receipt, *, sha, vendor, arch, arm, builders, environment, 
                     arch=arch, arm=arm, builders=[builder], environment=environment, python=python, pixi=pixi,
                     _allow_failed_donor=True, _depth=_depth + 1)
                 require(donor['builders'][builder]['sha256'] == row['sha256'], 'copied module differs from donor')
-                before = dependency_fingerprint(donor['source'], binding)
-                after = dependency_fingerprint(source, binding)
-                require(before == after, 'compiled dependency closure differs: ' + binding)
                 proof = json.loads(Path(prior['dependency_proof']).read_bytes())
                 require(proof.get('old_source_sha') == prior['source_sha']
-                        and proof.get('new_source_sha') == sha and proof.get('module') == binding
-                        and proof.get('identical_closure_sha256') == after, 'dependency proof metadata differs')
+                        and proof.get('new_source_sha') == sha and proof.get('module') == binding,
+                        'dependency proof source metadata differs')
+                if proof.get('schema') == 2:
+                    require(prior['source_sha'] == sgd_proof.OLD and sha == sgd_proof.NEW,
+                            'unreviewed v2 source transition')
+                    # Recompute the reviewed graph and every retained tracked input.
+                    # The donor-provided graph alone is never trusted.
+                    with tempfile.TemporaryDirectory(prefix='mojolearn-reuse-proof-') as scratch:
+                        expected_proof = sgd_proof.prove(source, binding, Path(scratch), proof['changed_files'])
+                        for field in ('closure_algorithm', 'own_entrypoint', 'changed_files',
+                                      'excluded_unreachable_mojo_files', 'reviewed_noncompiler_changes',
+                                      'identical_closure_sha256'):
+                            require(proof.get(field) == expected_proof[field], 'v2 proof differs: ' + field)
+                        require(len(proof.get('sources', [])) == 2, 'v2 source proof incomplete')
+                        for actual, expected_source in zip(proof['sources'], expected_proof['sources']):
+                            for field in ('source_sha', 'graph_sha256', 'compile_inputs_sha256',
+                                          'compile_inputs_digest', 'reachable_mojo_files', 'inbound_to_changed_helper'):
+                                require(actual.get(field) == expected_source[field], 'v2 source evidence differs: ' + field)
+                            for field in ('graph', 'compile_inputs'):
+                                require(digest(actual[field + '_path']) == actual[field + '_sha256'],
+                                        'v2 retained evidence changed: ' + field)
+                    after = proof['identical_closure_sha256']
+                    rule = proof['closure_algorithm']
+                else:
+                    before = dependency_fingerprint(donor['source'], binding)
+                    after = dependency_fingerprint(source, binding)
+                    require(before == after, 'compiled dependency closure differs: ' + binding)
+                    require(proof.get('identical_closure_sha256') == after, 'dependency proof metadata differs')
+                    rule = 'conservative-repository-v1'
                 selected[builder]['dependency_equivalence'] = dict(closure_sha256=after,
-                    rule='conservative-repository-v1', donor=donor,
-                    dependency_proof_sha256=prior['dependency_proof_sha256'])
+                    rule=rule, donor=donor, dependency_proof_sha256=prior['dependency_proof_sha256'])
     helper = Path('python/mojolearn/.libs/libMojolearnMath.so')
     require((source / helper).is_file() and not (source / helper).is_symlink(), 'portable math helper absent or symlinked')
     all_paths.add(helper)
