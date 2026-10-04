@@ -922,7 +922,7 @@
         8
       ],
       "requires": [
-        "DISABLE_DEVICE_CONVERGENCE_ROUTE: exact define spelling must be read from defining source before creating build recipe"
+        "MOJOLEARN_IDN_DENDRO_UNION_OFF=1"
       ],
       "source_locations": {
         "MOJOLEARN_IDN_DENDRO_HOOK_CHUNK": [
@@ -946,7 +946,7 @@
       "compile": "DEFAULT_ON_OFF_COMPILE_DOES_NOT_ACTIVATE_THIS_ARM",
       "identity_quality": {
         "status": "NO_RETAINED_QUALIFICATION_FOR_EXPLICIT_ARM_IDENTIFIED",
-        "required": "Disable device-convergence route first; hook/jump rounds must preserve exact dendrogram and convergence."
+        "required": "Disable default union kernel using MOJOLEARN_IDN_DENDRO_UNION_OFF=1; hook/jump rounds at chunk2/8 must preserve exact dendrogram and convergence."
       },
       "timing": {
         "status": "NOT_MEASURED",
@@ -956,7 +956,8 @@
         "default_on_off_activates_candidate": false,
         "explicit_plan_gate_ids": []
       },
-      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict."
+      "next_action": "Add explicit pinned-source candidate build recipe, source route readback and eligible fixture; retain disabled until proof or root keep/drop verdict.",
+      "prerequisite_source": "hierarchy/impl/cluster/detail/dendrogram_device.mojo:81"
     },
     {
       "id": "hdbscan_sparse_threshold",
@@ -2712,7 +2713,7 @@
     },
     {
       "id": "decomp_python_leftovers",
-      "requirement": "Four numeric Python leftovers in fam2-decomp report.",
+      "requirement": "NMF _cd_side L2ridge adjustment on HHt diagonal whenalpha>0; FastICA _par max overk dots; varimax/pinv max(abs(A)) scaling; LLE per-iteration zero-row padding.",
       "status": "NOT_CLOSED_BY_THIS_AUDIT",
       "next_action": "Root-owned source audit and within-version tests; none of the32original lane merges itself establishes this owed item complete."
     },
@@ -2796,5 +2797,17 @@
     "Ancestry proves preserved branch history integrated; it does not alone prove every merged hunk or candidate route survived unchanged.72explicit flags were resolved to retained source locations.",
     "Six original merge-resolution sites and deeper lane-specific eligibility still require their compile/route receipts; no blanket semantic merge PASS.",
     "Candidate inventory is report-derived and explicitly PENDING qualification; no runtime or measurement launched for this audit."
-  ]
+  ],
+  "original_merge_resolution_rechecks": {
+    "evidence": "~/mojolearn-evidence/identical-all/compile-rechecks.json",
+    "sites": [
+      "x_prep/prep3.mojo MaxAbsFASTApple pool guard",
+      "x_decomp/resident.mojo imports andGRP_FAST_FUSED FASTApple guard",
+      "python/mojolearn/_expansion_prep.py PowerTransformer anchor+blocked helper",
+      "two bindings with merged registrations (handoff does not name both)",
+      "svd_full.mojo column_mean_launch and unusedswitch removal",
+      "bindings/_mojolearn.mojo helper imports"
+    ],
+    "limitation": "Earlyrecheck report IN_PROGRESS contains stale owed labels; later per-gate receipts supersede only their actual tested scope, not allsites."
+  }
 }
