@@ -114,6 +114,11 @@ from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
 )
 from neighbors.estimator import knn_self_search_resident
+from hdbscan.impl.detail.core_tile import (
+    compute_core_dists_tile,
+    core_tile_applies,
+)
+from hdbscan.impl.detail.fast_apple import HDB_CORE_TILE
 
 
 comptime CORE_TPB = 256
@@ -270,12 +275,26 @@ def compute_core_dists(
             " distance step first, because the dense mutual reachability"
             " graph reads that matrix"
         )
-    compute_knn(ctx, trace, x, m, n, min_samples, knn_dists, knn_inds)
-    # `:121` Slice core distances (distances to kth nearest neighbor)
-    core_distances(
-        ctx, knn_dists, min_samples, min_samples, m, core_dists,
-        core_tpb, sabotage,
-    )
+    # lane af-hdbscan2 (FAST on Apple, -D MOJOLEARN_HDB_CORE_TILE): the k-th
+    # distance of every row from one tiled kernel (core_tile.mojo), no k-NN
+    # index set, no X copies, no norms, no row sort. A traced or sabotaged
+    # fit, or a shape the kernel does not take, runs the k-NN route below.
+    var core_tiled = False
+    comptime if HDB_CORE_TILE:
+        if (
+            core_tile_applies(n, min_samples)
+            and sabotage == HDB_SAB_NONE
+            and not trace.enabled
+        ):
+            compute_core_dists_tile(ctx, x, core_dists, m, n, min_samples)
+            core_tiled = True
+    if not core_tiled:
+        compute_knn(ctx, trace, x, m, n, min_samples, knn_dists, knn_inds)
+        # `:121` Slice core distances (distances to kth nearest neighbor)
+        core_distances(
+            ctx, knn_dists, min_samples, min_samples, m, core_dists,
+            core_tpb, sabotage,
+        )
     # NOT THEIRS. DEVIATION 1607: the core distances come off a different
     # code path (`neighbors/`) from the dense matrix, so `hierarchy`'s
     # DEVIATION 623 guard does not cover them.

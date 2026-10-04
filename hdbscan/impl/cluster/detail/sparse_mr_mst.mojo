@@ -59,6 +59,7 @@ from checks.numerics import ftz, identical_mul_add
 from core.row_norms import NORM_TPB, row_norm_kernel
 from hdbscan.checks.hdbscan_sabotage import HDB_SAB_NONE
 from hdbscan.impl.detail.sparse_mr import mr_edge_weight
+from hdbscan.impl.detail.fast_apple import HDB_SMR_TILED
 from hierarchy.checks.edge_order import (
     WEIGHT_KEY_SENTINEL,
     weight_order_key,
@@ -165,7 +166,18 @@ def sparse_mr_search_kernel(
 comptime SMR_TILED = (
     (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
     and not is_defined["MOJOLEARN_SMR_TILED_OFF"]()
-)
+) or HDB_SMR_TILED
+#: lane af-hdbscan2 (2026-10-03), FAST on Apple only, -D MOJOLEARN_HDB_SMR_TILED:
+#: the tiled kernel above runs on Apple too, under a launch bound of
+#: SMR_APPLE_TILED_MACS multiply-adds (16x the per-pair kernel's: the tiled
+#: kernel issues 16 FMAs per 8 threadgroup reads, so a launch of this size is
+#: milliseconds, far under the macOS command-buffer cut) and a drain every
+#: SMR_APPLE_DRAIN_EVERY launches instead of after every launch. The poison
+#: and the device fold stay, so a cut launch is still refused by name. istella
+#: round 1: ~2,084 drained 48-column launches become ~128 launches, 16 drains.
+#: IDENTICAL and every build off Apple compile main's code unchanged.
+comptime SMR_APPLE_TILED_MACS = 1 << 34
+comptime SMR_APPLE_DRAIN_EVERY = 8
 comptime SMR_TI = 64
 comptime SMR_TJ = 64
 comptime SMR_KC = 16
@@ -904,11 +916,16 @@ def _search(
         return 0
     var dd = d if d > 0 else 1
     var span = m
-    comptime if SMR_TILED:
+    comptime if HDB_SMR_TILED:
+        span = max(SMR_TJ, min(m, SMR_APPLE_TILED_MACS // (n_todo * dd)))
         if launch_macs < SPARSE_MR_LAUNCH_MACS:
             span = max(1, launch_macs // (n_todo * dd))
     else:
-        span = max(1, launch_macs // (n_todo * dd))
+        comptime if SMR_TILED:
+            if launch_macs < SPARSE_MR_LAUNCH_MACS:
+                span = max(1, launch_macs // (n_todo * dd))
+        else:
+            span = max(1, launch_macs // (n_todo * dd))
     var i_tiles = (n_todo + SMR_TI - 1) // SMR_TI
     var want_s = (SPARSE_MR_TARGET_THREADS + n_todo - 1) // n_todo
     var tgrid = (n_todo + SPARSE_MR_TPB - 1) // SPARSE_MR_TPB
@@ -969,6 +986,9 @@ def _search(
         comptime if not SMR_TILED:
             ctx.synchronize()
         launches += 1
+        comptime if HDB_SMR_TILED:
+            if launches % SMR_APPLE_DRAIN_EVERY == 0:
+                ctx.synchronize()
         _ = vj^
         j0 = j1
     return launches
