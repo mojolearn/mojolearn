@@ -7,7 +7,8 @@ WHY. The forest regressors pick their fixed-point label scale from
 `sum over all rows of |y|` (`checks/fixed_point.choose_scale`). That sum was
 a serial host loop over every row inside the GPU fit. A device sum must give
 the host column the same word, so the ORDER is part of the contract and is
-the same on every vendor and on the host:
+the same on every vendor and on the host
+(`core/abs_sum_blocked_host.mojo` holds the host column, GPU-import free):
 
 1. rows are cut into chunks of `ABS_SUM_CHUNK` consecutive rows; chunk `c`
    sums `|v[r]|` for its rows in ascending `r`, starting from +0;
@@ -29,19 +30,11 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from checks.soft_f64 import SF64_ZERO, sf64_add, sf64_from_f32
+from checks.soft_f64 import SF64_ZERO, sf64_add
+from core.abs_sum_blocked_host import ABS_SUM_CHUNK, abs_word_f64
 from core.device_zero import enqueue_fill
 
-#: rows per chunk (the serial leg of the order); part of the contract.
-comptime ABS_SUM_CHUNK = 256
 comptime ABS_SUM_TPB = 256
-
-
-@always_inline
-def _abs_word(v: Float32) -> UInt64:
-    return sf64_from_f32(
-        bitcast[DType.float32](bitcast[DType.uint32](v) & UInt32(0x7FFFFFFF))
-    )
 
 
 def abs_sum_chunks_kernel(
@@ -59,7 +52,7 @@ def abs_sum_chunks_kernel(
     var hi = min(lo + ABS_SUM_CHUNK, n)
     var acc = SF64_ZERO
     for r in range(lo, hi):
-        acc = sf64_add(acc, _abs_word(src.unsafe_load(r)))
+        acc = sf64_add(acc, abs_word_f64(src.unsafe_load(r)))
     part.unsafe_store(c, acc)
 
 
@@ -130,35 +123,6 @@ def device_abs_sum_blocked(
     _ = a^
     _ = b^
     return bitcast[DType.float64](word)
-
-
-def host_abs_sum_blocked(addr: Int, n: Int) -> Float64:
-    """The host column's restatement of `device_abs_sum_blocked`: the same
-    chunks, the same pairwise levels, the same `sf64_add` words. `addr` is
-    a Float32 buffer of `n` values."""
-    if n <= 0:
-        return Float64(0)
-    var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
-    var m = (n + ABS_SUM_CHUNK - 1) // ABS_SUM_CHUNK
-    var level = List[UInt64](capacity=m)
-    for c in range(m):
-        var lo = c * ABS_SUM_CHUNK
-        var hi = min(lo + ABS_SUM_CHUNK, n)
-        var acc = SF64_ZERO
-        for r in range(lo, hi):
-            acc = sf64_add(acc, _abs_word(src.unsafe_load(r)))
-        level.append(acc)
-    while m > 1:
-        var half = (m + 1) // 2
-        var nxt = List[UInt64](capacity=half)
-        for i in range(half):
-            if 2 * i + 1 < m:
-                nxt.append(sf64_add(level[2 * i], level[2 * i + 1]))
-            else:
-                nxt.append(level[2 * i])
-        level = nxt^
-        m = half
-    return bitcast[DType.float64](level[0])
 
 
 def index_out_of_range_kernel(

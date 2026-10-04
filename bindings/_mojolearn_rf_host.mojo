@@ -68,7 +68,7 @@ from bindings.forest_export_binding import (
 )
 from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from checks.fixed_point import choose_scale
-from core.abs_sum_blocked import host_abs_sum_blocked
+from core.abs_sum_blocked_host import host_abs_sum_blocked
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
