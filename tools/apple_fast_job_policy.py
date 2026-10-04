@@ -13,6 +13,7 @@ POLICIES = {
     "tools/shared_gemm_quality.py": "verified-standalone-quality",
     "tools/catalog_resident_quality.py": "verified-standalone-quality",
     "tools/shared_gemm_downstream_pair.py": "verified-downstream-quality",
+    "tools/shared_gemm_scoped.py": "verified-scoped-caller",
     "tools/catalog_gemm_matrix_timing.py": "verified-matrix-timing",
     "tools/catalog_resident_timing.py": "verified-resident-timing",
 }
@@ -29,7 +30,7 @@ def policy_for(source, script, args):
     if policy in ("verified-standalone-quality","verified-resident-timing"):
         if not args or args[0]!=source:
             raise ValueError("this probe must verify the exact harness source")
-    elif policy in ("verified-downstream-quality","verified-matrix-timing"):
+    elif policy in ("verified-downstream-quality","verified-matrix-timing","verified-scoped-caller"):
         if not args or not re.fullmatch(r"[0-9a-f]{40}",args[0]):
             raise ValueError("this helper requires an exact compiled source first")
     return policy
