@@ -1249,10 +1249,12 @@ def main(argv=None, _gates=True):
             # Audit independently of the package allow-list above, so adding an API
             # without updating packaging fails at build time rather than after upload.
             from wheel_api_audit import audit
-            surface = audit([w for w, vendor in built if vendor is None])
-            (out / f"API-{version}-linux.json").write_text(json.dumps(surface, indent=2) + "\n")
-            if not surface['wheels'][0]['source_payload_complete']:
-                raise SystemExit('pack_wheel: incomplete source/API payload; see API report')
+            core_wheels = [w for w, vendor in built if vendor is None]
+            if core_wheels:
+                surface = audit(core_wheels)
+                (out / f"API-{version}-linux.json").write_text(json.dumps(surface, indent=2) + "\n")
+                if not surface['wheels'][0]['source_payload_complete']:
+                    raise SystemExit('pack_wheel: incomplete source/API payload; see API report')
         if split:
             # EACH PLUGIN HOLDS EXACTLY ITS SETS AND THE CORE HOLDS NONE, the pins
             # are exact both ways (the core requires both plugins at its version,
