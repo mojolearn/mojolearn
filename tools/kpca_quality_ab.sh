@@ -3,7 +3,7 @@
 # kpca_quality_ab.sh "<defines B>": FAST x_decomp builds A (none) and B, a
 # KernelPCA fit with each (tools/kpca_quality_ab.py), then the comparison. No timing.
 set -u
-DB=$1
+DB=${1:--D MOJOLEARN_KPCA_FAST_LANCZOS_DEV}
 here=$(cd "$(dirname "$0")/.." && pwd); cd "$here"
 PY=
 for p in .pixi/envs/test/bin/python .pixi/envs/default/bin/python python3; do
