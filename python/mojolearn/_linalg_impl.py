@@ -1155,6 +1155,34 @@ def _svd_tsqr(a_arr, rows, cols):
     return SVDResult(U, S.out((cols,)), Vt.out())
 
 
+def _tsvd_tsqr_components(x, nc, mode):
+    """lane/apple-fast-q-linalg TSVD_QFIX (x_decomp/qfix.mojo bit 2; FAST
+    default, -D MOJOLEARN_TSVD_QOLD restores the Gram route): TruncatedSVD's
+    (components (nc, d), singular values (nc,)) of a tall x as the top right
+    singular vectors of its TSQR R (the one-sided Jacobi of R, `Kit.svd`),
+    each row signed so its largest-|.| entry (first on a tie) is positive
+    (DEVIATION 525's rule, the Gram route's). None when the binding does not
+    carry the repair or x is not a TSQR shape: the caller runs the Gram.
+    #: audit 2026-10-04 tsvd istella relative_reconstruction_error 2.55e-03
+    #: (sklearn 1.22e-04): the float32 Gram's rounding, about eps lambda_0 an
+    #: entry, swamps every direction under ~1e-5 lambda_0; R carries X's
+    #: conditioning, not its square."""
+    from ._expansion_decomp import _Kit
+    try:
+        k = _Kit(mode)
+        on = k.qfix_flags() & 2
+    except Exception:       # no decomp binding for this tier: the Gram route
+        return None
+    rows, cols = int(x.shape[0]), int(x.shape[1])
+    if not on or not _tsqr_on(rows, cols) or not 1 <= nc <= cols:
+        return None
+    R = _tsqr_r(k.b, x, rows, cols, False)
+    S, Vt = k.svd(_xd_matrix(R, cols, cols))
+    V = Vt.rows(0, nc)
+    V = V.neg_rows(k.absmax_flags(V, False))
+    return V.out(), S.take_cols(list(range(nc))).out((nc,))
+
+
 def _qr_q(a, mode):
     """numpy.linalg.qr's 'reduced', 'complete' and 'raw' modes: LAPACK geqrf
     (the reflectors kept, dlarfg's signs) and orgqr, through the decomp
