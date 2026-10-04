@@ -397,7 +397,7 @@ def resample_indices_binding(
     return PythonObject(0)
 
 
-def resample_gpu_gather_enabled_binding() -> PythonObject:
+def resample_gpu_gather_enabled_binding() raises -> PythonObject:
     return PythonObject(Int(RESAMPLE_GPU_GATHER))
 
 
