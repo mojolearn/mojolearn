@@ -224,6 +224,10 @@ def cls2_cat_binding() raises -> PythonObject:
     return PythonObject(f)
 
 
+def target_scratch_binding() raises -> PythonObject:
+    return PythonObject(1)
+
+
 def label_present_binding() raises -> PythonObject:
     return PythonObject(1)
 
@@ -277,6 +281,15 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
             m.def_function[fast_unique_binding]("x_prep_fast_unique")
         comptime if SPLINE_FAST_FUSED:
             m.def_function[spline_fused_binding]("x_prep_spline_fused")
+        # FAST+Apple default promotion candidate, source 4d1ea20b2, M3 tags
+        # gap26-target-current-{taxi,istella}: 270.948 -> 203.744 ms (-24.8%),
+        # 250.424 -> 179.819 ms (-28.2%); both digests identical. Quality:
+        # 108 exact fitted/output arrays plus independent smoothing oracle.
+        # Recorded scan/cleanup/backup windows do not overlap these jobs.
+        # Default/OFF builds are owed before main merge. _OFF restores counts/downloads; old opt-in is
+        # harmless. See docs/apple-fast/ab/target-scratch.md.
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_TARGET_SCRATCH_OFF"]():
+            m.def_function[target_scratch_binding]("x_prep_target_scratch")
         comptime if LABEL_PRESENT:
             m.def_function[label_present_binding]("x_prep_label_present")
         comptime if CAT_CLS2_PACK:
