@@ -175,6 +175,7 @@ from glm.impl.linear_model.qn import (
     QN_LOSS_SVR_L2,
 )
 from checks.numerics import ftz
+from glm.impl.qn.qn_tiled_rule import qn_tiled_multi_shape
 
 
 @fieldwise_init
@@ -1215,6 +1216,70 @@ def qn_tile_sum_classes(
     )
 
 
+# lane fam2-linear (2026-10-04): QN_TILED for `C > 1` (multinomial logistic).
+# `xtdz_multi_kernel` ran one block per output cell `(c, j)`, 256 lanes each
+# walking all N rows at a stride of D floats: X read C * D times. Here the
+# rows are cut into QNT_ROWS tiles as at `C == 1`: pass 1 one chain per
+# (tile, cell), rows ascending from 0.0 (`identical_mul_add(x[r, j],
+# dz[c + C r], acc)`), cells fastest so neighbouring threads read
+# neighbouring words; pass 2 folds each cell's tile partials as
+# `qnt_fold_kernel` does. The words differ from the 256-chain order and are
+# the same on NVIDIA, AMD, Apple and the host column
+# (`glm/host/qn_oracle.mojo`, `qn_tiled_multi_shape` in both).
+comptime QN_TILED_MULTI = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+
+
+def qn_tiled_multi_applies(n_rows: Int, d: Int, c: Int) -> Bool:
+    comptime if QN_TILED_MULTI:
+        return qn_tiled_multi_shape(n_rows, d, c)
+    return False
+
+
+def qntm_partial_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    dz: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    c_in: Int32,
+    tiles_in: Int32,
+):
+    """Pass 1: thread `(k, b)`, `b = c + C*j` fastest, the `X^T dZ` cell `b`
+    over tile `k`'s rows ascending. Stores `part[b * tiles + k]`."""
+    var n = Int(n_in)
+    var D = Int(d_in)
+    var C = Int(c_in)
+    var tiles = Int(tiles_in)
+    var cd = C * D
+    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var k = gid // cd
+    var b = gid - k * cd
+    if k >= tiles:
+        return
+    var c = b % C
+    var j = b // C
+    var r0 = k * QNT_ROWS
+    var r1 = min(n, r0 + QNT_ROWS)
+    var acc = strided_mul_add[1](x, D, j, dz, C, c, r1, r0)
+    part.unsafe_store(b * tiles + k, acc)
+
+
+def qntm_fold_kernel(
+    out_v: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    tiles_in: Int32,
+):
+    """Pass 2: block `b`, STATS_TPB lanes, the pinned fold of cell `b`'s
+    tile partials into `out_v[b]` (the cuBLAS epilogue follows as before)."""
+    var tiles = Int(tiles_in)
+    var b = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var acc = strided_ftz_sum[STATS_TPB](part, 1, b * tiles, tiles, tid, Float32(0.0))
+    var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
+    if tid == 0:
+        out_v.unsafe_store(b, s0)
+
+
 def linear_fwd(
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],
@@ -1286,18 +1351,37 @@ def linear_bwd(
     var d = dims.D
     # `alpha = 1.0 / X.m`: a double narrowed to T. `beta = setZero ? 0 : 1`.
     var alpha = Float32(1.0 / Float64(n_rows))
-    var distributed = gradient_columns(ctx, xtdz, x, dz, n_rows, d, dims.C)
+    # lane fam2-linear: the tiled `C > 1` gradient is decided first (one
+    # rule with the host column), so no other route computes these cells
+    var tiled_multi = qn_tiled_multi_applies(n_rows, d, dims.C)
+    var distributed = False
+    if not tiled_multi:
+        distributed = gradient_columns(ctx, xtdz, x, dz, n_rows, d, dims.C)
     # AUDIT (i): unreached at C == 1; the C == 1 body below is certified.
     if dims.C > 1:
         var cd = dims.C * d
         var fast_done = False
+        if tiled_multi:
+            var tiles_m = qnt_tiles(n_rows)
+            var threads_m = tiles_m * cd
+            ctx.enqueue_function[qntm_partial_kernel](
+                xtdz_ws.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),
+                Int32(n_rows), Int32(d), Int32(dims.C), Int32(tiles_m),
+                grid_dim=((threads_m + QNT_TPB - 1) // QNT_TPB, 1, 1),
+                block_dim=(QNT_TPB, 1, 1),
+            )
+            ctx.enqueue_function[qntm_fold_kernel](
+                xtdz.unsafe_ptr(), xtdz_ws.unsafe_ptr(), Int32(tiles_m),
+                grid_dim=(cd, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
+            fast_done = True
         comptime if QN_FAST_XTDZ:
-            if not distributed and fast_xtdz_applies(d, dims.C) and not qn_coalesced_applies(d, dims.C):
+            if not distributed and not fast_done and fast_xtdz_applies(d, dims.C) and not qn_coalesced_applies(d, dims.C):
                 fast_xtdz_into(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, dims.C)
                 fast_done = True
         # Apple IDENTICAL: the same chains and fold, row-coalesced
         # (`core/xtdz_coalesced.mojo`); a no-op test on every other column.
-        if not distributed and qn_coalesced_applies(d, dims.C):
+        if not distributed and not fast_done and qn_coalesced_applies(d, dims.C):
             xtdz_coalesced(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, dims.C)
             fast_done = True
         if not distributed and not fast_done:
@@ -1428,6 +1512,9 @@ struct GLMWithData(Movable):
         ws_floats = max(ws_floats, qnt_tiles(n_rows))
         # qn_tile_sum_classes' partials (the C > 1 bias mean)
         ws_floats = max(ws_floats, dims.C * qnt_tiles(n_rows))
+        # lane fam2-linear: the tiled C > 1 gradient's tile partials
+        if qn_tiled_multi_applies(n_rows, dims.D, dims.C):
+            ws_floats = max(ws_floats, qnt_tiles(n_rows) * dims.C * dims.D)
         comptime if QN_FAST_FUSED:
             # lane/apple-fast-linsvr: the fused pass's tile partials live here
             if qn_fused_applies(dims.D, dims.C):
