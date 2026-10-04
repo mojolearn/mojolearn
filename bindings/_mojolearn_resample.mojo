@@ -41,6 +41,7 @@ from resample.estimator import (
     resample_indices_replace_into,
     RESAMPLE_IDX_DIRECT,
 )
+from resample.gather import RESAMPLE_ROW_GATHER, gather_rows
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -395,6 +396,30 @@ def resample_indices_binding(
     return PythonObject(0)
 
 
+def resample_gather_rows_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """lane/apple-fast-w4-small RESAMPLE_ROW_GATHER (resample/gather.mojo):
+    row idx[i] of a C-contiguous source to row i of the output.
+    `addrs`: 0 idx (count int32), 1 src (n rows), 2 dst (count rows,
+    WRITTEN). `params`: 0 count, 1 row_bytes, 2 n. Returns -1, or the first
+    position whose index lies outside [0, n)."""
+    if len(addrs) != 3 or len(params) != 3:
+        raise Error("resample_gather_rows: addrs must hold 3 addresses and params 3 values (count, row_bytes, n)")
+    var ip = i32_ptr(Int(py=addrs[0]))
+    var src = Int(py=addrs[1])
+    var dst = Int(py=addrs[2])
+    var count = Int(py=params[0])
+    var row_bytes = Int(py=params[1])
+    var n = Int(py=params[2])
+    if count < 0 or row_bytes < 1 or n < 0 or (count > 0 and (src == 0 or dst == 0)):
+        raise Error("resample_gather_rows: count, n >= 0, row_bytes >= 1 and nonnull buffers")
+    var bad = -1
+    with GILReleased(Python()):
+        bad = gather_rows(ip, src, dst, count, row_bytes, n)
+    return PythonObject(bad)
+
+
 def _mc_run(
     f_id: Int,
     lower: List[Float32],
@@ -508,6 +533,8 @@ def PyInit__mojolearn_resample() abi("C") -> PythonObject:
         m.def_function[permutation_samples_binding]("permutation_samples")
         m.def_function[resample_indices_binding]("resample_indices")
         m.def_function[monte_carlo_integrate_binding]("monte_carlo_integrate")
+        comptime if RESAMPLE_ROW_GATHER:
+            m.def_function[resample_gather_rows_binding]("resample_gather_rows")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_resample: ", e))

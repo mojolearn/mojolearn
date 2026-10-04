@@ -326,6 +326,35 @@ def resample_indices(n, n_samples=None, replace=True, random_state=0, numeric_mo
     return idx
 
 
+def _take_native(a, idx, numeric_mode):
+    """lane apple-fast-w4-small MOJOLEARN_RESAMPLE_FAST_ROW_GATHER: a
+    C-contiguous numpy array's rows gathered by the binding's copy loop
+    (resample/gather.mojo) into a new array (np.empty: allocation only);
+    None when the binding lacks the entry or the array does not qualify."""
+    fn = getattr(_extension(numeric_mode), "resample_gather_rows", None)
+    if fn is None or type(a).__module__ != "numpy" or type(a).__name__ != "ndarray":
+        return None
+    if a.ndim < 1 or not a.flags.c_contiguous or a.dtype.hasobject:
+        return None
+    from ._optional_numpy import require_numpy
+    np = require_numpy('resample')
+    n = int(a.shape[0])
+    count = int(idx.shape[0])
+    out = np.empty((count,) + tuple(a.shape[1:]), dtype=a.dtype)
+    row_bytes = a.itemsize * (a.size // n) if n else a.itemsize
+    if count == 0 or row_bytes == 0:
+        return out
+    bad = int(fn([addr_ro(idx, name="indices"), a.ctypes.data, out.ctypes.data], [count, row_bytes, n]))
+    if bad >= 0:
+        raise IndexError(f"mojolearn resample: index {int(idx[bad])} is out of bounds for {n} rows")
+    return out
+
+
+def _take_or_native(a, idx, numeric_mode):
+    out = _take_native(a, idx, numeric_mode)
+    return _take(a, idx) if out is None else out
+
+
 def _take(a, idx):
     if hasattr(a, "__array__") and hasattr(a, "shape"):
         from ._optional_numpy import require_numpy
@@ -355,7 +384,7 @@ def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=Non
             raise ValueError(f"mojolearn {where}: Found input variables with inconsistent numbers of samples: "
                              f"{[len(x) for x in arrays]}")
     idx = resample_indices(n, n_samples, replace, random_state, numeric_mode)
-    out = [_take(a, idx) for a in arrays]  # glue: dispatches one gather per argument array
+    out = [_take_or_native(a, idx, numeric_mode) for a in arrays]  # glue: dispatches one gather per argument array
     return out[0] if len(out) == 1 else out
 
 
