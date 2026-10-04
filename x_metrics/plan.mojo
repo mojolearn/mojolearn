@@ -16,6 +16,7 @@ group_sort wrote) runs its sequential unit unchanged.
 """
 from x_metrics.common import IP, STAGE_INTS, PARAMS, LEAF
 from x_metrics.par import RUN, KEY_COL, KEY_CURVE, KEY_PERM
+from x_metrics.cls_epi import IDN_CLS_EPI, OP_CLS_EPI
 
 comptime OP_GROUP_SORT = 0
 comptime OP_GROUP_SUM = 1
@@ -98,7 +99,8 @@ def is_user_op(op: Int) -> Bool:
     """An op a caller may name: 0..N_USER_OPS-1, fold_rows, rows64, strat_codes, curve_fold and the
     label layout units onehot, rep_rows and pair_cols."""
     return ((op >= 0 and op < N_USER_OPS) or op == OP_FOLD_ROWS or op == OP_ROWS64 or op == OP_STRAT_CODES
-            or op == OP_CURVE_FOLD or op == OP_ONEHOT or op == OP_REP_ROWS or op == OP_PAIR_COLS)
+            or op == OP_CURVE_FOLD or op == OP_ONEHOT or op == OP_REP_ROWS or op == OP_PAIR_COLS
+            or (IDN_CLS_EPI and op == OP_CLS_EPI))
 #: the chunk length the counting sort aims for, and the bound on its
 #: (groups x chunks) count table
 comptime CS_CHUNK = 256
