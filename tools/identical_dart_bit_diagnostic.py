@@ -21,7 +21,8 @@ def child(root, out, vendor):
                   feature_fraction_seed=7, drop_rate=0.2, skip_drop=0.25)
     data=Path('/root/board-0833/cache/algos-data/rows-small')
     for kind, cls in (('clf', ml.DARTClassifier), ('reg', ml.DARTRegressor)):
-        with np.load(data / (kind + '-taxi.npz')) as z:
+        block='cls' if kind=='clf' else 'reg'
+        with np.load(data / (block + '-taxi.npz')) as z:
             x=np.ascontiguousarray(z['X'][:16384]); y=np.ascontiguousarray(z['y'][:16384])
             xq=np.ascontiguousarray(z['Xq'][:257])
         inputs[kind]={n:hashlib.sha256(v.tobytes()).hexdigest() for n,v in [('X',x),('y',y),('Xq',xq)]}
