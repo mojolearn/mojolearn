@@ -841,7 +841,7 @@ def lanczos_aux_fast(
     ctx.enqueue_copy(dst_ptr=h_ab.unsafe_ptr(), src_buf=d_alpha)
     ctx.enqueue_copy(dst_ptr=h_ab.unsafe_ptr() + ncv, src_buf=d_beta)
     ctx.synchronize()
-    for j in range(start_idx, end_idx):  # small-loop(end_idx: Lanczos alpha/beta words, end_idx <= ncv <= max of 2k+1 and 20): the Krylov basis size, independent of n
+    for j in range(start_idx, end_idx):  # small-loop(end_idx: Lanczos alpha/beta words, end_idx <= ncv <= max of 2k+1 and 20): the Krylov basis size, independent of the sample count
         alpha[j] = h_ab.unsafe_ptr().unsafe_load(j)
         beta[j] = h_ab.unsafe_ptr().unsafe_load(ncv + j)
     _ = d_alpha^
@@ -1115,7 +1115,7 @@ def lanczos_restart_fast(
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d_alpha)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr() + ncv, src_buf=d_beta)
     ctx.synchronize()
-    for j in range(k, ncv):  # small-loop(ncv: Lanczos alpha/beta words, ncv <= max of 2k+1 and 20): the Krylov basis size, independent of n
+    for j in range(k, ncv):  # small-loop(ncv: Lanczos alpha/beta words, ncv <= max of 2k+1 and 20): the Krylov basis size, independent of the sample count
         alpha[j] = h.unsafe_ptr().unsafe_load(j)
         beta[j] = h.unsafe_ptr().unsafe_load(ncv + j)
     if beta[k] == Float32(0.0):
@@ -1456,7 +1456,7 @@ def lanczos_aux_identical_dev(
     ctx.enqueue_copy(dst_ptr=h_ab.unsafe_ptr(), src_buf=d_alpha)
     ctx.enqueue_copy(dst_ptr=h_ab.unsafe_ptr() + ncv, src_buf=d_beta)
     ctx.synchronize()
-    for j in range(start_idx, end_idx):  # small-loop(end_idx: Lanczos alpha/beta words, end_idx <= ncv <= max of 2k+1 and 20): the Krylov basis size, independent of n
+    for j in range(start_idx, end_idx):  # small-loop(end_idx: Lanczos alpha/beta words, end_idx <= ncv <= max of 2k+1 and 20): the Krylov basis size, independent of the sample count
         alpha[j] = h_ab.unsafe_ptr().unsafe_load(j)
         beta[j] = h_ab.unsafe_ptr().unsafe_load(ncv + j)
         trace.record_scalar_f32(_step_tag(step0 + j - start_idx, "alpha"), alpha[j])
@@ -1631,7 +1631,7 @@ def lanczos_restart_identical_dev(
     ctx.enqueue_copy(dst_ptr=hp, src_buf=d_alpha)
     ctx.enqueue_copy(dst_ptr=hp + ncv, src_buf=d_beta)
     ctx.synchronize()
-    for j in range(k, ncv):  # small-loop(ncv: Lanczos alpha/beta words, ncv <= max of 2k+1 and 20): the Krylov basis size, independent of n
+    for j in range(k, ncv):  # small-loop(ncv: Lanczos alpha/beta words, ncv <= max of 2k+1 and 20): the Krylov basis size, independent of the sample count
         alpha[j] = hp.unsafe_load(j)
         beta[j] = hp.unsafe_load(ncv + j)
     trace.record_scalar_f32(_step_tag(step0, "alpha"), alpha[k])
@@ -1854,10 +1854,10 @@ def lanczos_solve_ritz(
     _ = d_tk^
     eigenvalues_k.clear()
     eigenvectors_k.clear()
-    for c in range(k):  # small-loop(k: selected Ritz values, one per requested eigenpair): k is the eigenpair count, independent of n
+    for c in range(k):  # small-loop(k: selected Ritz values, one per requested eigenpair): k is the eigenpair count, independent of the sample count
         eigenvalues_k.append(evals[first + c])
-    for j in range(ncv):  # small-loop(ncv: rows of the ncv x k Ritz slice, ncv <= max of 2k+1 and 20): the projected problem, independent of n
-        for c in range(k):  # small-loop(k: selected Ritz vectors, one per requested eigenpair): k is the eigenpair count, independent of n
+    for j in range(ncv):  # small-loop(ncv: the ncv x k Ritz slice, ncv <= max of 2k+1 and 20): the projected problem, independent of the sample count
+        for c in range(k):  # small-loop(k: selected Ritz vectors, one per requested eigenpair): k is the eigenpair count, independent of the sample count
             var e = evecs[j * ncv + (first + c)]
             comptime if SAB_SIGN_FLIP:
                 e = -e
@@ -1965,10 +1965,10 @@ def lanczos_solve_ritz_device_t(
     )
     eigenvalues_k.clear()
     eigenvectors_k.clear()
-    for c in range(k):  # small-loop(k: selected Ritz values, one per requested eigenpair): k is the eigenpair count, independent of n
+    for c in range(k):  # small-loop(k: selected Ritz values, one per requested eigenpair): k is the eigenpair count, independent of the sample count
         eigenvalues_k.append(evals[first + c])
-    for j in range(ncv):  # small-loop(ncv: rows of the ncv x k Ritz slice, ncv <= max of 2k+1 and 20): the projected problem, independent of n
-        for c in range(k):  # small-loop(k: selected Ritz vectors, one per requested eigenpair): k is the eigenpair count, independent of n
+    for j in range(ncv):  # small-loop(ncv: the ncv x k Ritz slice, ncv <= max of 2k+1 and 20): the projected problem, independent of the sample count
+        for c in range(k):  # small-loop(k: selected Ritz vectors, one per requested eigenpair): k is the eigenpair count, independent of the sample count
             var e = evecs[j * ncv + (first + c)]
             comptime if SAB_SIGN_FLIP:
                 e = -e
@@ -2122,7 +2122,7 @@ def lanczos_restart_pooled(
         eig_failed = True
         eig_msg = String(e)
     ctx.synchronize()
-    for j in range(k, ncv):  # small-loop(ncv: Lanczos alpha/beta words, ncv <= max of 2k+1 and 20): the Krylov basis size, independent of n
+    for j in range(k, ncv):  # small-loop(ncv: Lanczos alpha/beta words, ncv <= max of 2k+1 and 20): the Krylov basis size, independent of the sample count
         alpha[j] = hp.unsafe_load(j)
         beta[j] = hp.unsafe_load(ncv + j)
     trace.record_scalar_f32(_step_tag(step0, "alpha"), alpha[k])
@@ -2143,7 +2143,7 @@ def lanczos_restart_pooled(
     # res = ||beta_k|| through the pinned GEMM at 1 x 1 x k.
     beta_k.clear()
     var bo = 2 * ncv + ncv * k
-    for c in range(k):  # small-loop(k: restart beta_k words, one per requested eigenpair): one fma per eigenpair, independent of n
+    for c in range(k):  # small-loop(k: restart beta_k words, one per requested eigenpair): one fma per eigenpair, independent of the sample count
         var sv = eigenvectors_k[(ncv - 1) * k + c]
         var bkc = ftz(identical_mul_add(beta[ncv - 1], sv, Float32(0.0)))
         beta_k.append(bkc)
@@ -2593,7 +2593,7 @@ def _residual(
     through the device GEMM (`_norm2`, `identical_gemm` `OP_NT` at
     `1 x 1 x k`), the same pinned contract the oracle restates."""
     beta_k.clear()
-    for c in range(k):  # small-loop(k: residual beta_k words, one per requested eigenpair): one fma per eigenpair, independent of n
+    for c in range(k):  # small-loop(k: residual beta_k words, one per requested eigenpair): one fma per eigenpair, independent of the sample count
         var s = eigenvectors_k[(ncv - 1) * k + c]
         beta_k.append(ftz(identical_mul_add(beta_last, s, Float32(0.0))))
     var d_bk = upload_f32(ctx, beta_k)
