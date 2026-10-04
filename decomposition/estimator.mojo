@@ -52,6 +52,7 @@ from core.column_stats import (
 from core.identity_trace import IdentityTrace
 from core.gemm import gemm_nt
 from decomposition.impl.linalg.detail.pca import (
+    PCA_FAST_GRAM_MMA,
     compute_covariance,
     eig_and_truncate,
     pca_transform,
@@ -98,7 +99,9 @@ def pca_fit_host(
     # (row 31). `pca.cov` is the product as the solver receives it;
     # `pca.jacobi.a` keeps its name and is the matrix the solver left.
     pca_validate(n_rows, n_features, n_components)
-    compute_covariance(ctx, x, xa, xa2, mu, cov, n_rows, n_features, True)
+    # PCA_FAST_GRAM_MMA: `x` is this fit's own device copy, never read again,
+    # so its restore pass is skipped
+    compute_covariance(ctx, x, xa, xa2, mu, cov, n_rows, n_features, not PCA_FAST_GRAM_MMA)
     if trace.enabled:
         trace.record_device(ctx, "pca.mean", mu, n_features)
         trace.record_device(ctx, "pca.cov", cov, n_features * n_features)
