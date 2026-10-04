@@ -29,6 +29,7 @@ from x_decomp.resident import (
 )
 from x_decomp.resident import GRP_CLS2_ANY, GRP_CLS2_DEVSCAN, GRP_FAST_FUSED, grp_cls2_py, dev_first_nonfinite_py, grp_fit_fused_py
 from x_decomp.lanczos_dev import dev_lanczos_py, ipca_dev_on_py, kpca_lanczos_dev_on_py
+from x_decomp.w4_fast import LLE_FAST_DEV_LU, dev_lu_aux_py, w4_flags_py
 
 
 @export
@@ -104,6 +105,11 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[dev_project_py]("x_decomp_dev_project")
         m.def_function[dev_rand_py]("x_decomp_dev_rand")
         m.def_function[dev_trisolve_py]("x_decomp_dev_trisolve")
+        # lane/apple-fast-w4-decomp (x_decomp/w4_fast.mojo): the build's w4 flags
+        # (LLE_FAST_DEV_LU, RSVD_FAST_DIRECT_IN); the resident LU only when compiled in
+        m.def_function[w4_flags_py]("x_decomp_w4_flags")
+        comptime if LLE_FAST_DEV_LU:
+            m.def_function[dev_lu_aux_py]("x_decomp_dev_lu_aux")
         m.def_function[dev_knn_select_py]("x_decomp_dev_knn_select")
         m.def_function[dev_colsum_py]("x_decomp_dev_colsum")
         m.def_function[dev_rowsum_py]("x_decomp_dev_rowsum")
