@@ -36,7 +36,9 @@ def environment(vendor, arch, source, arm):
                MOJOLEARN_GPU_ARCHS=arch, MOJOLEARN_TARGET_COLUMN=vendor, MOJOLEARN_VENDOR=backend,
                MOJOLEARN_SKIP_BUILD_GATE='1', OMP_NUM_THREADS='1', OPENBLAS_NUM_THREADS='1', MKL_NUM_THREADS='1')
     env['PATH'] = '/root/.pixi/bin:/opt/rocm/bin:' + env.get('PATH', '')
-    env['PYTHONPATH'] = str(source / 'python')
+    # Frozen tools/ second: a repaired harness gate script still imports its unchanged
+    # frozen helper modules (e.g. bench_board_probe) from the frozen tree.
+    env['PYTHONPATH'] = str(source / 'python') + os.pathsep + str(source / 'tools')
     env['MOJOLEARN_MOJO_BUILD_FLAGS'] = '-D MOJOLEARN_IDN_ALL_OFF=1' if arm == 'off' else ''
     if arm == 'off':
         env['MOJOLEARN_IDN_ALL_OFF'] = '1'

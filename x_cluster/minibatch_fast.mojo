@@ -491,7 +491,7 @@ def _mbf_reassign_kernel(
                 q += 1
 
 
-def _mbf_shift_kernel(c_old: FPtr, c_new: FPtr, kd: Int32, out: FPtr):
+def _mbf_shift_kernel(c_old: FPtr, c_new: FPtr, kd: Int32, dst: FPtr):
     """lane/no-bench-tuning-2: the step's squared center shift
     `sum (c_new - c_old)^2` (the fit's `tol` early stop), one block of
     MBF_TPB threads: a strided partial per thread, then a tree. Float32 (FAST
@@ -511,7 +511,7 @@ def _mbf_shift_kernel(c_old: FPtr, c_new: FPtr, kd: Int32, out: FPtr):
         barrier()
         off //= 2
     if tid == 0:
-        out[0] = red[0]
+        dst[0] = red[0]
 
 
 def minibatch_fast_steps(
