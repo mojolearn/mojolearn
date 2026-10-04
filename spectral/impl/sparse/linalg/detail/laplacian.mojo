@@ -41,6 +41,7 @@ the hashed-weight fixture is what separates this fold from a split one.
 ======================================================================
 """
 
+from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -77,7 +78,7 @@ comptime LAPLACIAN_TPB = 256
 #: is prepared on the device. The bounds walk, the diagonal marking, the
 #: `(idx, idx, 0)` insertion, the total-order sort `(row, col, original
 #: index)`, the repeated-key test and the row offsets were host loops over
-#: `List`s (`_mark_and_insert_diagonal`, `coo_sort`, `sorted_coo_to_csr`);
+#: `List`s (the host diagonal marking, `coo_sort`, `sorted_coo_to_csr`);
 #: here they are one mark launch, one scan, two stable radix sorts
 #: (`core/fast_radix_sort`), a gather and a binary-search offsets launch.
 #: Integer keys and a stable sort give the host's permutation, so no bit
@@ -217,58 +218,40 @@ def sqrt_then_zero_to_one_kernel(
     diag.unsafe_store(i, s)
 
 
-def _mark_and_insert_diagonal(g: CooGraph) raises -> CooGraph:
-    """`laplacian.cuh:130-195` on the host: rows lacking a diagonal entry
-    get `(idx, idx, 0)` appended, then `coo_sort`, then DEVIATION 777's
-    repeated-key refusal -- here and not inside the sort, because
-    `coo_symmetrize`'s zero padding is sorted before it is compacted."""
-    var n = g.n
-    var marked = List[Bool]()
-    for _ in range(n):
-        marked.append(True)
-    for i in range(g.nnz()):
-        if g.rows[i] == g.cols[i]:
-            marked[Int(g.rows[i])] = False
-    var rows = g.rows.copy()
-    var cols = g.cols.copy()
-    var vals = g.vals.copy()
-    for idx in range(n):
-        if marked[idx]:
-            rows.append(Int32(idx))
-            cols.append(Int32(idx))
-            vals.append(Float32(0.0))
-    var sorted_g = coo_sort(CooGraph(n, rows^, cols^, vals^))
-    refuse_repeated_keys(sorted_g)
-    return sorted_g^
+#: The refusals name their entry from device keys (lane cpu3-neighbors,
+#: 2026-10-04): `lapdev_mark_kernel` keeps the smallest out-of-range and the
+#: smallest bad-value entry index, `lapdev_repeat_kernel` the smallest sorted
+#: slot that repeats its predecessor's `(row, col)`. The host walks that used
+#: to find those entries again (`_mark_and_insert_diagonal`,
+#: `refuse_out_of_range`, `refuse_bad_values`) are gone: the first offender in
+#: entry order is the smallest index, so the messages are the walks' own.
+comptime LAP_NO_KEY = Int32(0x7FFFFFFF)
 
 
-def refuse_out_of_range(g: CooGraph) raises:
-    """`compute_graph_laplacian`'s index refusal, by name."""
-    for i in range(g.nnz()):
-        var r = Int(g.rows[i])
-        var c = Int(g.cols[i])
-        if r < 0 or r >= g.n or c < 0 or c >= g.n:
-            raise Error(
-                "connectivity_graph: entry " + String(i) + " has (row, col) = ("
-                + String(r) + ", " + String(c) + ") outside [0, " + String(g.n) + ")"
-            )
+def _refuse_out_of_range_at(g: CooGraph, i: Int) raises:
+    """`compute_graph_laplacian`'s index refusal for entry `i`, the first
+    out-of-range entry (a device key)."""
+    var r = Int(g.rows[i])
+    var c = Int(g.cols[i])
+    raise Error(
+        "connectivity_graph: entry " + String(i) + " has (row, col) = ("
+        + String(r) + ", " + String(c) + ") outside [0, " + String(g.n) + ")"
+    )
 
 
-def refuse_bad_values(g: CooGraph) raises:
-    """The precomputed graph's value refusal (finite, non-negative), by
-    name: `transform_graph_keep`'s walk."""
-    for i in range(g.nnz()):
-        var v = g.vals[i]
-        if not isfinite(v):
-            raise Error(
-                "spectral: connectivity_graph has a non-finite value at entry "
-                + String(i) + " -- refused by name"
-            )
-        if v < Float32(0.0):
-            raise Error(
-                "spectral: connectivity_graph has a negative value at entry "
-                + String(i) + " -- refused by name (sqrt of a negative degree is NaN in theirs)"
-            )
+def _refuse_bad_value_at(g: CooGraph, i: Int) raises:
+    """The precomputed graph's value refusal (finite, non-negative) for
+    entry `i`, the first bad value (a device key)."""
+    var v = g.vals[i]
+    if not isfinite(v):
+        raise Error(
+            "spectral: connectivity_graph has a non-finite value at entry "
+            + String(i) + " -- refused by name"
+        )
+    raise Error(
+        "spectral: connectivity_graph has a negative value at entry "
+        + String(i) + " -- refused by name (sqrt of a negative degree is NaN in theirs)"
+    )
 
 
 def lapdev_mark_kernel(
@@ -277,12 +260,15 @@ def lapdev_mark_kernel(
     vals: MutPointer[Float32, MutAnyOrigin],
     has_diag: MutPointer[Int32, MutAnyOrigin],
     flags: MutPointer[Int32, MutAnyOrigin],
+    first: MutPointer[Int32, MutAnyOrigin],
     nnz_in: Int32,
     n_in: Int32,
 ):
     """One thread per entry. `flags[0] = 1` on an out-of-range index,
     `flags[1] = 1` on a non-finite or negative value, `has_diag[r] = 1` on
-    a diagonal entry. Every racing store writes the same word."""
+    a diagonal entry. Every racing store writes the same word. `first[0]`
+    and `first[1]` keep the smallest such entry index (an integer min,
+    order-free), the entry the refusal names."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= Int(nnz_in):
         return
@@ -290,10 +276,12 @@ def lapdev_mark_kernel(
     var v = vals.unsafe_load(i)
     if (bitcast[DType.uint32](v) & UInt32(0x7F800000)) == UInt32(0x7F800000) or v < Float32(0.0):
         flags.unsafe_store(1, Int32(1))
+        _ = Atomic.min(first.unsafe_offset(1), Int32(i))
     var r = Int(rows.unsafe_load(i))
     var c = Int(cols.unsafe_load(i))
     if r < 0 or r >= n or c < 0 or c >= n:
         flags.unsafe_store(0, Int32(1))
+        _ = Atomic.min(first, Int32(i))
         return
     if r == c:
         has_diag.unsafe_store(r, Int32(1))
@@ -400,10 +388,12 @@ def lapdev_repeat_kernel(
     o_rows: MutPointer[Int32, MutAnyOrigin],
     o_cols: MutPointer[Int32, MutAnyOrigin],
     flags: MutPointer[Int32, MutAnyOrigin],
+    first: MutPointer[Int32, MutAnyOrigin],
     m_in: Int32,
 ):
     """`flags[3] = 1` when two adjacent sorted entries share `(row, col)`
-    (DEVIATION 777's refusal, decided on the device)."""
+    (DEVIATION 777's refusal, decided on the device); `first[2]` keeps the
+    smallest such sorted slot, the pair `refuse_repeated_keys` names."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < 1 or i >= Int(m_in):
         return
@@ -412,6 +402,7 @@ def lapdev_repeat_kernel(
         and o_cols.unsafe_load(i) == o_cols.unsafe_load(i - 1)
     ):
         flags.unsafe_store(3, Int32(1))
+        _ = Atomic.min(first.unsafe_offset(2), Int32(i))
 
 
 def lapdev_indptr_kernel(
@@ -452,13 +443,15 @@ def compute_graph_laplacian_prepared_device(
     var has_diag = ctx.enqueue_create_buffer[DType.int32](n)
     var scan = ctx.enqueue_create_buffer[DType.int32](n + 1)
     var flags = ctx.enqueue_create_buffer[DType.int32](4)
+    var first = ctx.enqueue_create_buffer[DType.int32](3)
     ctx.enqueue_memset(has_diag, Int32(0))
     ctx.enqueue_memset(flags, Int32(0))
+    ctx.enqueue_memset(first, LAP_NO_KEY)
     var gn = (n + tpb - 1) // tpb
     if nnz > 0:
         ctx.enqueue_function[lapdev_mark_kernel](
             rows0.unsafe_ptr(), cols0.unsafe_ptr(), vals0.unsafe_ptr(),
-            has_diag.unsafe_ptr(), flags.unsafe_ptr(), Int32(nnz), Int32(n),
+            has_diag.unsafe_ptr(), flags.unsafe_ptr(), first.unsafe_ptr(), Int32(nnz), Int32(n),
             grid_dim=((nnz + tpb - 1) // tpb, 1, 1), block_dim=(tpb, 1, 1),
         )
     ctx.enqueue_function[lapdev_missing_kernel](
@@ -471,11 +464,11 @@ def compute_graph_laplacian_prepared_device(
         grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
     )
     var f0 = download_i32(ctx, flags, 4)
-    if check_values and f0[1] != Int32(0):
-        refuse_bad_values(g)
-    if f0[0] != Int32(0):
-        refuse_out_of_range(g)
-        raise Error("connectivity_graph: an entry is outside the matrix")
+    if f0[0] != Int32(0) or (check_values and f0[1] != Int32(0)):
+        var k0 = download_i32(ctx, first, 3)
+        if check_values and f0[1] != Int32(0):
+            _refuse_bad_value_at(g, Int(k0[1]))
+        _refuse_out_of_range_at(g, Int(k0[0]))
     var n_missing = Int(f0[2])
     var m = nnz + n_missing
     var diag_rows = ctx.enqueue_create_buffer[DType.int32](n_missing if n_missing > 0 else 1)
@@ -516,7 +509,7 @@ def compute_graph_laplacian_prepared_device(
         grid_dim=(gm, 1, 1), block_dim=(tpb, 1, 1),
     )
     ctx.enqueue_function[lapdev_repeat_kernel](
-        rows.unsafe_ptr(), cols.unsafe_ptr(), flags.unsafe_ptr(), Int32(m),
+        rows.unsafe_ptr(), cols.unsafe_ptr(), flags.unsafe_ptr(), first.unsafe_ptr(), Int32(m),
         grid_dim=(gm, 1, 1), block_dim=(tpb, 1, 1),
     )
     ctx.enqueue_function[lapdev_indptr_kernel](
@@ -524,6 +517,13 @@ def compute_graph_laplacian_prepared_device(
         grid_dim=((n + tpb) // tpb, 1, 1), block_dim=(tpb, 1, 1),
     )
     var f1 = download_i32(ctx, flags, 4)
+    var rep_r = Int32(0)
+    var rep_c = Int32(0)
+    if f1[3] != Int32(0):
+        # the pair the host walk named: two words of the sorted COO
+        var at = Int(download_i32(ctx, first, 3)[2])
+        rep_r = download_i32(ctx, rows.create_sub_buffer[DType.int32](at, 1), 1)[0]
+        rep_c = download_i32(ctx, cols.create_sub_buffer[DType.int32](at, 1), 1)[0]
     # the launches above held raw pointers into these
     _ = rows0^
     _ = cols0^
@@ -531,6 +531,7 @@ def compute_graph_laplacian_prepared_device(
     _ = has_diag^
     _ = scan^
     _ = flags^
+    _ = first^
     _ = diag_rows^
     _ = keys^
     _ = perm^
@@ -538,10 +539,11 @@ def compute_graph_laplacian_prepared_device(
     _ = tv^
     _ = counts^
     if f1[3] != Int32(0):
-        # the host walk names the pair
-        var sorted_g = _mark_and_insert_diagonal(g)
-        _ = sorted_g^
-        raise Error("connectivity_graph: repeated (row, col) pair -- refused by name (DEVIATION 775)")
+        raise Error(
+            "connectivity_graph: repeated (row, col) pair ("
+            + String(rep_r) + ", " + String(rep_c)
+            + ") -- refused by name (DEVIATION 775)"
+        )
     return laplacian_from_sorted_device(ctx, n, m, rows^, cols^, vals^, indptr^, tpb)
 
 
@@ -572,7 +574,7 @@ def laplacian_from_sorted_device(
 ) raises -> DeviceCoo:
     """`compute_graph_laplacian`'s device half (the degree fold and `D -
     A`) over a row-sorted COO that already holds one diagonal entry per
-    row, as `_mark_and_insert_diagonal` leaves it."""
+    row, as `compute_graph_laplacian_prepared_device` leaves it."""
     var g_n = n
     var degrees = ctx.enqueue_create_buffer[DType.float32](g_n)
     ctx.enqueue_memset(degrees, Float32(0.0))
