@@ -21,6 +21,8 @@ MODULE = '_mojolearn_estimators'
 A_FLAGS = '-D MOJOLEARN_SCOPED_GEMM_AUDIT'
 B_FLAGS = A_FLAGS + ' -D MOJOLEARN_SCOPED_GEMM_G1_GRAM -D MOJOLEARN_SCOPED_GEMM_SPLIT -D MOJOLEARN_SCOPED_GEMM_PCA'
 BOUND = 5e-6
+METRIC_NAMES = {name+suffix for name in ('mean','variance','ratio','singular','noise','eigen_residual','orthogonality')
+                for suffix in ('_relative','_maxabs')} | {'reconstruction_relative'}
 HARNESS_ONLY = {'tools/scoped_pca_fit.py', 'tools/scoped_pca_fit_spec.py',
                 'tools/test_scoped_pca_fit_contract.py', 'tools/apple_fast_job_policy.py',
                 'docs/apple-fast/ab/scoped-pca-fit.md'}
@@ -173,7 +175,10 @@ def admit_quality(path, identity):
     prior = json.loads(Path(path).read_text())
     assert prior['status']=='PASS' and prior['scored'] is False
     assert all(prior[k]==v for k,v in identity.items())
-    assert prior['metrics'] and all(r['pass_no_worse'] and math.isfinite(r['A']) and math.isfinite(r['B']) and r['B']<=r['A'] for r in prior['metrics'].values())
+    assert set(prior['metrics']) == METRIC_NAMES
+    assert all(r['pass_no_worse'] and math.isfinite(r['A']) and math.isfinite(r['B']) and r['B']<=r['A'] for r in prior['metrics'].values())
+    assert all(r['A'] <= BOUND and r['B'] <= BOUND for k,r in prior['metrics'].items()
+               if k.endswith('_relative') and k != 'reconstruction_relative')
     assert set(prior['packets'])=={'A.npz','B.npz','A.npz.json','B.npz.json','oracle.npz'}
     for name,digest in prior['packets'].items():
         assert sha(Path(path).parent/name)==digest
