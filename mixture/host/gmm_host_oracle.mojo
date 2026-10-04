@@ -59,6 +59,7 @@ initialization.
 
 from std.memory import bitcast
 from mixture.meanll_order import gmm_meanll_host
+from mixture.nk_order import IDN_GMM_NK_LEVELS, gmm_nk_fold_levels
 
 from checks.numerics import (
     ftz,
@@ -388,8 +389,15 @@ def gmmh_m_step(
 
     def _nk(k: Int) {imm resp, imm nkp, imm n, imm ncomp, imm ten_eps}:
         var acc = Float32(0.0)
-        for i in range(n):
-            acc = ftz(acc + ftz(resp[i * ncomp + k]))
+        comptime if IDN_GMM_NK_LEVELS:
+            # the device's chunked levels (`mixture/nk_order.mojo`)
+            var col = List[Float32](capacity=n)
+            for i in range(n):
+                col.append(resp[i * ncomp + k])
+            acc = gmm_nk_fold_levels(col)
+        else:
+            for i in range(n):
+                acc = ftz(acc + ftz(resp[i * ncomp + k]))
         nkp.unsafe_store(k, ftz(acc + ten_eps))
 
     host_cells(_nk, ncomp, 2 * n)

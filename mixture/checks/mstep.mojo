@@ -129,6 +129,11 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_max_floats,
 )
 from gemm.contract import OP_TN
+from mixture.nk_order import (
+    GMM_NK_CHUNK,
+    IDN_GMM_NK_LEVELS,
+    gmm_nk_levels_floats,
+)
 from mixture.checks.estep import (
     GMM_COMP_TPB,
     GMM_ELEM_TPB,
@@ -301,6 +306,139 @@ def nk_t_kernel(
         acc = ftz(acc + ftz(row.unsafe_load(i)))
         i += 1
     nk.unsafe_store(k, ftz(acc + ten_eps))
+
+
+# fam-cluster (2026-10-04): nk in chunked levels (`mixture/nk_order.mojo`),
+# one thread a chunk of GMM_NK_CHUNK rows a component per level, then one
+# thread a component folds the last <= GMM_NK_CHUNK partials and adds 10 eps.
+# The host columns fold the same levels.
+def nk_level1_kernel(
+    resp: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
+    dst_off: Int32,
+    n_in: Int32,
+    ncomp_in: Int32,
+):
+    """Level one: thread `(chunk b, component k)` folds rows `[b * CHUNK,
+    ...)` of column k of the row-major `resp` into `dst[dst_off + k * p +
+    b]`, `p` the chunk count. Neighbouring threads read neighbouring
+    components of the same rows."""
+    var n = Int(n_in)
+    var ncomp = Int(ncomp_in)
+    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var b = gid // ncomp
+    var k = gid - b * ncomp
+    var lo = b * GMM_NK_CHUNK
+    if lo >= n:
+        return
+    var hi = min(lo + GMM_NK_CHUNK, n)
+    var p = (n + GMM_NK_CHUNK - 1) // GMM_NK_CHUNK
+    var acc = Float32(0.0)
+    for i in range(lo, hi):
+        acc = ftz(acc + ftz(resp.unsafe_load(i * ncomp + k)))
+    dst.unsafe_store(Int(dst_off) + k * p + b, acc)
+
+
+def nk_level_kernel(
+    buf: MutPointer[Float32, MutAnyOrigin],
+    src_off: Int32,
+    dst_off: Int32,
+    cnt_in: Int32,
+    ncomp_in: Int32,
+):
+    """A later level, inside the scratch: thread `(component k, chunk b)`
+    folds `buf[src_off + k * cnt + ...]` into `buf[dst_off + k * p + b]`."""
+    var cnt = Int(cnt_in)
+    var ncomp = Int(ncomp_in)
+    var p = (cnt + GMM_NK_CHUNK - 1) // GMM_NK_CHUNK
+    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var k = gid // p
+    var b = gid - k * p
+    if k >= ncomp:
+        return
+    var lo = b * GMM_NK_CHUNK
+    var hi = min(lo + GMM_NK_CHUNK, cnt)
+    var base = Int(src_off) + k * cnt
+    var acc = Float32(0.0)
+    for i in range(lo, hi):
+        acc = ftz(acc + ftz(buf.unsafe_load(base + i)))
+    buf.unsafe_store(Int(dst_off) + k * p + b, acc)
+
+
+def nk_finish_kernel(
+    src: MutPointer[Float32, MutAnyOrigin],
+    src_off: Int32,
+    cnt_in: Int32,
+    row_major: Int32,
+    nk: MutPointer[Float32, MutAnyOrigin],
+    ncomp_in: Int32,
+    ten_eps: Float32,
+):
+    """The last level (cnt <= GMM_NK_CHUNK values a component) and the
+    `+ 10 eps`. `row_major != 0` reads `resp` itself (`src[i * ncomp + k]`,
+    n within one chunk); otherwise the scratch's `src[src_off + k * cnt +
+    i]`."""
+    var cnt = Int(cnt_in)
+    var ncomp = Int(ncomp_in)
+    var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if k >= ncomp:
+        return
+    var acc = Float32(0.0)
+    if Int(row_major) != 0:
+        for i in range(cnt):
+            acc = ftz(acc + ftz(src.unsafe_load(i * ncomp + k)))
+    else:
+        var base = Int(src_off) + k * cnt
+        for i in range(cnt):
+            acc = ftz(acc + ftz(src.unsafe_load(base + i)))
+    nk.unsafe_store(k, ftz(acc + ten_eps))
+
+
+def gmm_nk_levels_launch(
+    ctx: DeviceContext,
+    mut resp: DeviceBuffer[DType.float32],
+    mut nk: DeviceBuffer[DType.float32],
+    mut scratch: DeviceBuffer[DType.float32],
+    n: Int,
+    ncomp: Int,
+) raises:
+    """`nk` in the chunked levels. `scratch` holds at least
+    `gmm_nk_levels_floats(n, ncomp)` floats that nothing in the stream still
+    reads. Asynchronous: `scratch` must outlive the caller's next drain."""
+    if len(scratch) < gmm_nk_levels_floats(n, ncomp):
+        raise Error("gmm_nk_levels_launch: scratch below gmm_nk_levels_floats")
+    var grid_k = (ncomp + 255) // 256
+    if n <= GMM_NK_CHUNK:
+        ctx.enqueue_function[nk_finish_kernel](
+            resp.unsafe_ptr(), Int32(0), Int32(n), Int32(1), nk.unsafe_ptr(),
+            Int32(ncomp), gmm_ten_eps(),
+            grid_dim=(grid_k, 1, 1), block_dim=(256, 1, 1),
+        )
+        return
+    var p1 = (n + GMM_NK_CHUNK - 1) // GMM_NK_CHUNK
+    ctx.enqueue_function[nk_level1_kernel](
+        resp.unsafe_ptr(), scratch.unsafe_ptr(), Int32(0), Int32(n),
+        Int32(ncomp),
+        grid_dim=((p1 * ncomp + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    )
+    var src_off = 0
+    var off = p1 * ncomp
+    var cnt = p1
+    while cnt > GMM_NK_CHUNK:
+        var p = (cnt + GMM_NK_CHUNK - 1) // GMM_NK_CHUNK
+        ctx.enqueue_function[nk_level_kernel](
+            scratch.unsafe_ptr(), Int32(src_off), Int32(off), Int32(cnt),
+            Int32(ncomp),
+            grid_dim=((p * ncomp + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+        )
+        src_off = off
+        off += p * ncomp
+        cnt = p
+    ctx.enqueue_function[nk_finish_kernel](
+        scratch.unsafe_ptr(), Int32(src_off), Int32(cnt), Int32(0),
+        nk.unsafe_ptr(), Int32(ncomp), gmm_ten_eps(),
+        grid_dim=(grid_k, 1, 1), block_dim=(256, 1, 1),
+    )
 
 
 def nk_kernel(
@@ -1594,6 +1732,17 @@ def gmm_m_step(
             grid_dim=(grid_comp, 1, 1),
             block_dim=(comp_tpb, 1, 1),
         )
+    elif IDN_GMM_NK_LEVELS:
+        # `scaled` is free until the covariance loop below writes it; a
+        # shape whose levels do not fit it gets its own scratch and a drain.
+        var nk_need = gmm_nk_levels_floats(n, ncomp)
+        if nk_need <= n * d:
+            gmm_nk_levels_launch(ctx, resp, nk, scaled, n, ncomp)
+        else:
+            var nk_scratch = ctx.enqueue_create_buffer[DType.float32](nk_need)
+            gmm_nk_levels_launch(ctx, resp, nk, nk_scratch, n, ncomp)
+            ctx.synchronize()
+            _ = nk_scratch^
     elif GMM_NK_T:
         var resp_t = ctx.enqueue_create_buffer[DType.float32](n * ncomp)
         ctx.enqueue_function[resp_transpose_kernel](
