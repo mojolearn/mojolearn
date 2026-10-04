@@ -2166,16 +2166,23 @@ def fit_ordered(
     for f in range(n_folds):
         offsets.append(total)
         total += folds[f].quality_evaluate_samples.right
-    var hq = ctx.enqueue_create_host_buffer[DType.uint32](total)
+    # lane cpu3-gbdt-a: the mask on the device, two fills per fold (the
+    # learn slice 0, the quality slice 1) instead of a host walk over every
+    # position and an upload
+    var quality = ctx.enqueue_create_buffer[DType.uint32](total)
     for f in range(n_folds):
         var left = folds[f].estimate_samples.right
         var right = folds[f].quality_evaluate_samples.right
-        for i in range(right):
-            hq.unsafe_ptr().unsafe_store(
-                offsets[f] + i, UInt32(1) if i >= left else UInt32(0)
+        if left > 0:
+            var learn_part = quality.create_sub_buffer[DType.uint32](
+                offsets[f], left
             )
-    var quality = ctx.enqueue_create_buffer[DType.uint32](total)
-    ctx.enqueue_copy(dst_buf=quality, src_ptr=hq.unsafe_ptr())
+            enqueue_fill(ctx, learn_part, UInt32(0))
+        if right > left:
+            var quality_part = quality.create_sub_buffer[DType.uint32](
+                offsets[f] + left, right - left
+            )
+            enqueue_fill(ctx, quality_part, UInt32(1))
 
     # cursors: [learn permutation][fold], each over [0, R_f); the
     # estimation cursor over every row in the estimation permutation's order
@@ -2412,7 +2419,6 @@ def fit_ordered(
     var test_losses = List[Float64]()
     var stopped_early = False
     ctx.synchronize()
-    _ = hq^
     # `MOJOLEARN_STAGE_TIMES=1`: the per-stage triage table (drains per
     # stage, NOT a benchmark); one Bool test per stage when unset
     var times = StageTimes()
