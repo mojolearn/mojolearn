@@ -1,0 +1,110 @@
+ARIMA scan oracle intake -- 2026-10-04
+Status: source only; no local execution, compilation or numerical PASS.
+
+Runner: tools/arima_assoc_scan_oracle.py --output <fresh JSON path>
+Run on the authorized M3 Ultra inside its existing serial queue. This is
+reference verification, not a scored timing, opponent run, product CPU
+fallback, or forecast-quality result. The script refuses other machines,
+claims its output without overwriting, fixes BLAS threads to one, and
+records source, script hash, fixtures, every failure and separate verdicts.
+NumPy is permitted here only as an independent numerical reference.
+
+What this first stage checks
+---------------------------
+1. Float64 rank-one affine/information scan against a serial time-varying
+   filter. The algebra input Q is exactly sigma2 R R^T in float64. T, R,
+   sigma2, alpha0 and P0 are shared rounded inputs. No steady-gain freezing.
+2. Proposed float32 scan against a float64 reference with the SAME rounded
+   model that the float32 serial emulation receives. Production-style Q32
+   is not exactly rank one when lifted to float64. Its lost conditional
+   covariance is therefore part of this numerical viability gate, not
+   hidden in the algebra proof.
+3. Forward finite differences at h=2^-10 in Jones-parameter coordinates,
+   including mu and sigma2, matching the optimizer's fixed perturbation and
+   -LL/(nobs-1) objective. Report effective float32 perturbation (large
+   parameters can swallow h). Distinguish math64 gradient consistency from
+   float32 candidate gradient errors versus the same serial64 objective.
+
+The baseline is explicitly a NumPy float32 SERIAL EMULATION, not the actual
+main binary. Common initialization uses a float64 Lyapunov solve rounded
+once; device main's initializer is not being replayed or certified. BLAS,
+FMA and tanh rounding can differ. Even a full PASS only supports proceeding
+to a device implementation and a quality gate against main's actual binary.
+
+Fixtures: full p/q=0..3 board grid at n=1392, rd<=4; positive/negative near
+unit AR and MA roots, paired near-unit MA roots, repeated roots and third
+order MA; n=127/255/256/257/1391/1393/1401, scales 1e-3/1/1e3, and constant,
+impulse and alternating signals. No claim to cover actual taxi forecasting.
+Float64 field tolerance is fixed at 1e-9 + 1e-8 * reference max magnitude;
+its finite-difference bound is propagated through h. Float32 field errors
+and every gradient component must be no worse than emulation, with ZERO
+extra degradation allowance. Record failures; do not loosen these gates.
+
+Consolidated Metal intake (not yet run by this oracle)
+----------------------------------------------------
+Pinned source 9ab2d3d3fb770498ef025db08f595a0149792bb7:
+  experiments/apple_fast_path/kalman/README.md
+  experiments/apple_fast_path/kalman/gaussian_scan.metal
+Worktree: ~/CascadeProjects/mojolearn-apple-experiments
+
+K1's five-object Gaussian composition is consistent with the full monoid
+from which this rank-one four-object specialization is derived:
+  G=(I+C_left J_right)^-1, H=(I+J_right C_left)^-1
+  A=A_right G A_left
+  b=A_right G(b_left+C_left eta_right)+b_right
+  C=A_right G C_left A_right^T+C_right
+  eta=eta_left+A_left^T H(eta_right-J_right b_left)
+  J=J_left+A_left^T H J_right A_left
+When both segment C are zero, G=H=I and our reduced operator follows.
+K1 carries C through the scan, including t=0 posterior initialization.
+The reduced algorithm scans later leaves and applies the initial posterior
+afterward; compare identical chronological prefixes, not just terminal LL.
+
+Source review observations:
+* K1 leaves compute C = P - (PZ)(PZ)^T/(ZPZ). This assumes symmetric P.
+  Device-rounded Q and stationary P0 can have small asymmetry; test that
+  convention against main, and do not mistake algebraic symmetry for
+  bit-level equivalence. The two separate compose inverses deliberately
+  avoid assuming rounded C and J remain symmetric.
+* A pivot magnitude >=1e-20 is not a condition-number or solve-residual
+  guarantee. Matrix solves need residual/quality checks, not only finite
+  pivots. The source correctly refuses rather than adding jitter.
+* A full scan includes the initial posterior leaf (A0=0, b0=m0, C0=C0).
+  Ping-pong parity, one-observation inputs and K2's final partial block
+  require explicit adapters and checks; no adapter exists in this intake.
+* kalman_scan_likelihood loops over nobs on a single thread. This is a
+  deliberate source control, but violates the parallel GPU default rule.
+  It must remain experimental; a validated multiblock reduction is required
+  before any of K1/K2/K3 becomes a production default.
+* Scalar/final-state kernels also dispatch one writer; the production
+  adapter should parallelize across models/state entries rather than add
+  per-model tiny launches. K2 has bounded local chains of B observations
+  and needs a genuinely multi-block launch over time/model blocks.
+
+Candidate backlog -- independent numerical receipts, then timing
+----------------------------------------------------------------
+K1: generic Gaussian reference emulator matching source leaf/compose
+    operations, then actual Metal/Mojo capture. Extend to rd1..8, diffuse
+    n_diff exclusions, exogenous offsets, supplied initialization and
+    rank-deficient Q. Compare every innovation, F and final predictive
+    alpha/P, not just likelihood.
+K2-B8, K2-B16, K2-B32: test each separately against K1 and serial64;
+    nobs=1, B-1, B, B+1, 2B-1, 2B+1 and 1391/1392/1393. Check totals scan,
+    carry direction, zero-pass cases and partial blocks. Distinct sums and
+    matrix-association orders mean one B's PASS cannot certify the others.
+K3: independent scalar direct innovations (t0 original P0/alpha0,
+    later mean=T*y_previous+drift, F=Q), no scan. Compare scalar AR0/AR1,
+    near +/-unit AR, zero/nonzero drift, scales, refusals, nobs1 and odd
+    lengths. Do not expand it to q>0 or rd>1. Keep LL reduction changes
+    visible as a separate arithmetic decision.
+All: first-error signed status, nonpositive F, nonfinite inputs, singular
+    factor solves, host-side dimension/buffer validation, exact source and
+    binary hashes, and actual dispatch reach. Never feed unwritten/error
+    outputs into the optimizer. A stricter candidate refusal is a recorded
+    eligibility/fallback outcome, not an unnoticed successful scan.
+
+After kernel checks: same optimizer/candidate budgets, actual board inputs,
+main-vs-candidate fitted LL/parameters/selected orders and per-series
+holdout forecast RMSE. Keep taxi's existing opponent-quality HOLD. No
+opponent reruns, iteration cuts, arbitrary jitter or covariance freezing.
+Only valid quality receipts may unlock the one-arm-per-build M3 timings.
