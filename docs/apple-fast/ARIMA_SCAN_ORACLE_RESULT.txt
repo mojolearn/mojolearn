@@ -1,0 +1,88 @@
+ARIMA rank-one scan reference result: HOLD, 2026-10-04
+
+Evidence: arima-assoc-oracle-v1, compiled/helper source
+45b61672db3075e106c27917d971da0641ecbe2b. Report retained at
+~/mojolearn-evidence/apple-fast/sync/arima-assoc-oracle-v1.json.
+Reference verification only: zero scored timings, no actual main binary,
+no real AutoARIMA fit, forecast, or opponent comparison.
+
+Result
+------
+68 fixtures: float64 algebra failures 0, float32 viability failures 47,
+finite-difference gradient failures 9. Of the 47 float32 failures, 44
+already fail at their base point; grid-p1-q0, grid-p1-q1 and
+ar-near-negative-n1393 fail only on a parameter perturbation.
+At base points, worse fields occur in prediction (35), innovation (36),
+final mean (26), variance (12), final covariance (12), likelihood (6).
+No numerical exceptions were reported. The failure is accuracy, not
+infrastructure or proof that the underlying exact equations are wrong.
+
+Two distinct numerical problems
+------------------------------
+1. The reduced monoid drops conditional C on the identity
+Q=sigma2 R R^T. Production-style rounded Q32 is not exactly rank one in
+real arithmetic. Removing C changes the rounded model; its derivative
+can change significantly even when base likelihood looks close.
+
+ma-near-positive-n1393 (scale .001), raw intercept gradient:
+  rounded-model float64 reference  14,052,096.8651
+  exact-rank float64 reference     14,005,812.2403
+  serial float32 emulation         14,039,225
+  reduced-scan float32             14,005,742
+Candidate error is about 46,355 versus emulation 12,872. The candidate
+tracks the altered exact-rank model. Higher precision in its scan alone
+cannot make that model equal to the rounded-model comparison target.
+
+Constant signal (scale 1000), MA-coordinate gradient:
+  rounded-model reference -41.74436, exact-rank reference -32.75832,
+  serial emulation -38.61719, candidate -32.76953.
+Base objective error improves from about .03089 to .00000553, but the
+MA derivative error worsens from about 3.13 to 8.97. Likelihood accuracy
+alone would therefore give the wrong decision on this fixture.
+
+2. Float32 association and final objective quantization also matter even
+when there is no rank-one model discrepancy. Scalar grid-p1-q0:
+  reference gradient .0038662690331
+  serial emulation .00390625 (error .00003998)
+  candidate .0037841796875 (error .00008209).
+The raw differences are divided by h=2^-10. Tree sums can improve LL while
+moving its rounded finite difference away from the reference. K3 must
+keep its independent actual-kernel gradient and full-model quality gates.
+
+Decision and next steps
+-----------------------
+Keep the reduced four-object scan HOLD-quality. Do not implement or time
+it as a promoted product route; do not delete these hard fixtures, alter
+h, loosen tolerances, dismiss failures as noise, or replay v1 for a better
+outcome. The K3 candidate is separate and remains opt-in.
+
+The next useful reference experiment is the full five-object K1 Gaussian
+operator, retaining conditional C from the SAME rounded Q and supplied
+initial state. Check serial64 versus full-monoid64 on that rounded model
+before considering float32. Production symmetrization/absolute-diagonal
+steps must remain visible: generic Gaussian formulas cannot silently be
+claimed to reproduce those finite-precision corrections. Use the original
+v1 fixture corpus as a fixed regression set and a fresh v2 candidate tag.
+K2 B8/B16/B32 are distinct association orders, not fixes assumed to work.
+
+If the full-monoid64 comparison passes but float32 fails, test centered
+information vectors and factor/QR-based covariance algebra as independent
+reference variants. Avoid inverse(C) (singular after noiseless observation),
+jitter, artificial variance floors or frozen covariance. Retain actual
+rounded-model comparisons and solve residuals. Where QR needs a PSD input,
+a rounded indefinite residual must be recorded/refused; it cannot be
+silently repaired and counted as the same model.
+
+Compensated reductions can be evaluated separately, but cannot fix model
+mismatch. If field accuracy passes and only gradients fail, a separate
+candidate could accumulate the per-observation paired likelihood difference
+BEFORE final float32 objective rounding. That would approximate the same
+fixed-h forward difference more accurately, rather than change h/search
+budgets; it is a new gradient implementation requiring its own gates, not
+permission to relax this result or bundle it into K3.
+
+None of these reference recommendations establishes accuracy versus actual
+main or forecast quality. After reference viability comes M2 compile,
+actual main/candidate GPU output and gradient comparison, then unchanged
+full AutoARIMA fits and per-series holdout forecast quality. Timing remains
+locked until those pass; taxi's existing opponent-quality HOLD persists.
