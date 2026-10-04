@@ -388,7 +388,7 @@ def _apple_tuned_plan(
             return s[].tuned[i + 4]
         i += 5
     var need = 0
-    for j in range(len(cand)):
+    for j in range(len(cand)):  # small-loop(cand: GEMM plan candidates, a handful): largest workspace over the plans
         need = max(need, identical_gemm_workspace_floats(m, n, k, cand[j]))
     var wp = ws(ctx, GEMM_WS_SLOT, need)
     ctx.synchronize()
@@ -764,7 +764,7 @@ def res_alloc(n: Int) raises -> Int:
     comptime if RES_POOL:
         var s = _slots()
         var pick = -1
-        for j in range(len(s[].pool)):
+        for j in range(len(s[].pool)):  # small-loop(pool: freed resident arrays, under the pool cap): smallest fitting slot search, no data
             var ln = len(s[].pool[j])
             if ln >= need and ln <= 2 * need and (pick < 0 or ln < len(s[].pool[pick])):
                 pick = j
@@ -791,7 +791,7 @@ def res_free(addr: Int) raises:
     ctx.synchronize()
     _ = ctx^
     var s = _slots()
-    for k in range(len(s[].res)):
+    for k in range(len(s[].res)):  # small-loop(res: live resident arrays of the session): address lookup, no data
         if Int(s[].res[k].unsafe_ptr()) == addr:
             var b = s[].res.pop(k)
             comptime if RES_POOL:
@@ -2241,7 +2241,7 @@ def opt_many_resident[adam: Bool](
     var ctx = cnn_ctx()
     var dh = put_hyper(ctx, 3, hyper)
     var prm = List[Int32]()
-    for j in range(len(ns)):
+    for j in range(len(ns)):  # small-loop(ns: parameter tensors of the model): per-launch length list for the device
         prm.append(Int32(ns[j]))
     var dp = put_prm(ctx, 4, prm)
     var pp = ip(dp)
@@ -2399,7 +2399,7 @@ def opt_many_resident_h[adam: Bool](
     at `hyper_addr` (a row of the epoch's resident block): no upload."""
     var ctx = cnn_ctx()
     var prm = List[Int32]()
-    for j in range(len(ns)):
+    for j in range(len(ns)):  # small-loop(ns: parameter tensors of the model): per-launch length list for the device
         prm.append(Int32(ns[j]))
     var dp = put_prm(ctx, 4, prm)
     var pp = ip(dp)
