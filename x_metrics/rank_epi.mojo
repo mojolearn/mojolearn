@@ -77,6 +77,7 @@ from checks.soft_f64 import (
     sf64_neg, sf64_lt, sf64_gt, sf64_from_int, sf64_from_f32, sf64_to_f32, sf64_sqrt,
 )
 from x_metrics.common import FP, IP, p, st, ldi, sti
+from x_metrics.par import CF_OUT
 from x_metrics.tail import st64, ld64, is0, abs64, cnt_at, sum_at, f32_64
 
 comptime RANK_MEAN = 0
@@ -96,8 +97,8 @@ comptime CL_CH_FIN = 2
 comptime CL_DB_DIST = 3
 comptime CL_DB_FIN = 4
 
-#: words per problem of the curve fold (x_metrics/par.mojo CF_OUT)
-comptime CF_WORDS = 10
+#: words per problem of the curve fold
+comptime CF_WORDS = CF_OUT
 #: 1e-8 + 1e-5 (scikit-learn's row-sum tolerance, as Python adds it) and 1e-8, binary64
 comptime ROW_SUM_TOL = UInt64(0x3EE4FE13EC9BF514)
 comptime TINY8 = UInt64(0x3E45798EE2308C3A)
