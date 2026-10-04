@@ -76,9 +76,8 @@ box.
 from . import _backend, _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, frombytes
-from ._gp_impl import _MODE_CODE, ConstantKernel, Kernel, RBF, _gp_py2mojo
+from ._gp_impl import _MODE_CODE, ConstantKernel, Kernel, RBF
 from ._labels import (
-    threshold_codes,
     classes_from_member,
     classes_member,
     decode_labels,
@@ -90,6 +89,17 @@ from ._mode import NumericModeMixin
 _GPC_FORMAT = "mojolearn.gpc.v1"
 _ESTIMATOR = "GaussianProcessClassifier"
 _NAME = "mojolearn GaussianProcessClassifier"
+
+
+def _gpc_all(ext):
+    """True when the binding fits and predicts every class in one device
+    session (`gpc_fit_all` / `gpc_predict_all`,
+    `gaussian_process/gpc_ovr.mojo`, lane fam2-kernel-gp): IDENTICAL GPU
+    builds. The host binding and a `-D MOJOLEARN_IDN_GPC_OVR_OFF` build
+    answer no and the per-class binding calls below run; either way the
+    binding, never Python, forms targets, codes and probabilities."""
+    fn = getattr(ext, "gp_idn_caps", None)
+    return fn is not None and (int(fn()) & 1) == 1
 
 
 def _ovr_combine(ext, cols, n_star):
@@ -313,26 +323,70 @@ class GaussianProcessClassifier(NumericModeMixin):
         ext = self._extension()
         columns = [1] if n_classes == 2 else list(range(n_classes))
         codes32 = Array.from_list(codes, "<i4")
-        fits = []
-        for k in columns:
-            fits.append(self._fit_binary(ext, x, codes32, kinds, kparams, ls_len, ls, n_ls, k=k))
+        if _gpc_all(ext):
+            fits = self._fit_all(ext, x, codes32, kinds, kparams, ls_len, ls, n_ls, columns)
+        else:
+            fits = []
+            for k in columns:  # glue: one binding call per one-vs-rest class
+                fits.append(self._fit_binary(ext, x, codes32, kinds, kparams, ls_len, ls, n_ls, k=k))
         self._set_fitted(x, classes, fits)
         return self
 
+    def _fit_all(self, ext, x, codes32, kinds, kparams, ls_len, ls, n_ls, columns):
+        """Every binary fit in one binding call (`gpc_fit_all`): X uploaded
+        and its kernel matrix computed once, the class targets built on the
+        device. Returns the `_BinaryLaplace` list `_fit_binary` would."""
+        n_rows, n_cols = x.shape
+        codes, _ = as_i32_c(codes32, ndim=1, name="class codes")
+        # Per fit: targets, factor, pi, W_sr and (lml, n_iter, nb). Every
+        # array addressed below stays bound in `outs` for the call.
+        outs = []
+        addrs = [
+            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpc_fit_all_binding.
+            addr_ro(x, name="x"),
+            addr_ro(codes, name="codes"),
+            addr_ro(kinds, name="kinds"),
+            addr_ro(kparams, name="kparams"),
+            addr_ro(ls_len, name="ls_len"),
+            addr_ro(ls, name="ls"),
+        ]
+        for _k in columns:  # glue: allocates one output set per binary fit
+            y01 = empty((n_rows,), "<f4")
+            l_out = empty((n_rows * n_rows,), "<f4")
+            pi = empty((n_rows,), "<f4")
+            wsr = empty((n_rows,), "<f4")
+            scalars = empty((3,), "<f8")
+            outs.append((y01, l_out, pi, wsr, scalars))
+            addrs += [
+                addr(y01, name="y_out"),
+                addr(l_out, name="l_out"),
+                addr(pi, name="pi_out"),
+                addr(wsr, name="wsr_out"),
+                addr(scalars, name="scalars_out"),
+            ]
+        ext.gpc_fit_all(
+            addrs,
+            # n_train, n_features, n_nodes, n_ls, max_iter_predict, n_fits, then the classes
+            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self.max_iter_predict, len(columns)]
+            + [int(k) for k in columns],  # glue: the class of each binary fit
+        )
+        return [
+            _BinaryLaplace(y01, l_out.reshape((n_rows, n_rows)), pi, wsr,
+                           float(scalars[0]), int(scalars[1]), int(scalars[2]))
+            for y01, l_out, pi, wsr, scalars in outs  # glue: wraps each fit's outputs
+        ]
+
     def _fit_binary(self, ext, x, y01, kinds, kparams, ls_len, ls, n_ls, k=None):
         """With `k`, `y01` is the int32 class codes and the targets are
-        `code == k`: the binding builds them (lane apple-fast-py2mojo-cluster,
-        it was a Python loop per class) and writes them back for the model;
-        a `-D MOJOLEARN_PY2MOJO_cluster_OFF` build gets them from Python."""
+        `code == k`: the binding builds them and writes them back for the
+        model (every build: the Python fallback loop was removed by lane
+        fam2-kernel-gp, a GPU route does no Python arithmetic)."""
         n_rows, n_cols = x.shape
         extra_addrs, extra_params, codes = [], [], None
         if k is not None:
-            if _gp_py2mojo(ext):
-                codes, _ = as_i32_c(y01, ndim=1, name="class codes")
-                y01 = empty((n_rows,), "<f4")
-                extra_addrs, extra_params = [addr(y01, name="y_out")], [int(k)]
-            else:
-                y01 = Array.from_list([1.0 if c == k else 0.0 for c in y01.tolist()], "<f4")
+            codes, _ = as_i32_c(y01, ndim=1, name="class codes")
+            y01 = empty((n_rows,), "<f4")
+            extra_addrs, extra_params = [addr(y01, name="y_out")], [int(k)]
         l_out = empty((n_rows * n_rows,), "<f4")
         pi = empty((n_rows,), "<f4")
         wsr = empty((n_rows,), "<f4")
@@ -458,14 +512,52 @@ class GaussianProcessClassifier(NumericModeMixin):
         (DEVIATIONS 2832 and 2833)."""
         q = self._query(X)
         ext = self._extension()
+        if _gpc_all(ext):
+            return self._predict_all(ext, q, 2)
         if self.n_classes_ == 2:
-            if _gp_py2mojo(ext):
-                return self._latent(ext, self.estimators_[0], q, True, 2)[3]
-            _, _, p = self._latent(ext, self.estimators_[0], q, True)
-            return Array.from_list([[1.0 - v, v] for v in p.tolist()], "<f8")
+            # `[1 - p, p]` from the binding (`gpc_binary_out`), every build
+            return self._latent(ext, self.estimators_[0], q, True, 2)[3]
         cols = [self._latent(ext, e, q, True)[2] for e in self.estimators_]
         proba, _ = _ovr_combine(ext, cols, int(q.shape[0]))
         return proba
+
+    def _predict_all(self, ext, q, out_kind):
+        """`gpc_predict_all`: every binary fit against one cross kernel in
+        one device session. `out_kind` 1 returns the int64 class codes of
+        `predict`, 2 the float64 `predict_proba` rows."""
+        n_star = int(q.shape[0])
+        n_train, n_features = self.X_train_.shape
+        kinds, kparams, ls_len, ls, n_ls = _kernel_arrays(self.kernel)
+        fits = self.estimators_
+        k = len(fits)
+        if out_kind == 1:
+            out = empty((n_star,), "<i8")
+        else:
+            out = empty((n_star, max(k, 2)), "<f8")
+        xt = self.X_train_
+        addrs = [
+            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpc_predict_all_binding.
+            addr_ro(xt, name="xtrain"),
+            addr_ro(q, name="xstar"),
+            addr_ro(kinds, name="kinds"),
+            addr_ro(kparams, name="kparams"),
+            addr_ro(ls_len, name="ls_len"),
+            addr_ro(ls, name="ls"),
+            addr(out, name="out"),
+        ]
+        for est in fits:  # glue: four model addresses per binary fit
+            addrs += [
+                addr_ro(est.y_train_, name="y"),
+                addr_ro(est.pi_, name="pi"),
+                addr_ro(est.W_sr_, name="wsr"),
+                addr_ro(est.L_, name="l"),
+            ]
+        ext.gpc_predict_all(
+            addrs,
+            # n_train, n_features, n_star, n_nodes, n_ls, out_kind, k
+            [int(n_train), int(n_features), n_star, int(kinds.shape[0]), n_ls, int(out_kind), k],
+        )
+        return out
 
     def predict(self, X):
         """Two classes: `classes_[1]` where the latent mean is positive
@@ -473,11 +565,11 @@ class GaussianProcessClassifier(NumericModeMixin):
         unnormalized class probabilities (DEVIATION 2833)."""
         q = self._query(X)
         ext = self._extension()
+        if _gpc_all(ext):
+            return decode_labels(self.classes_, self._predict_all(ext, q, 1))
         if self.n_classes_ == 2:
-            if _gp_py2mojo(ext):
-                return decode_labels(self.classes_, self._latent(ext, self.estimators_[0], q, False, 1)[3])
-            mean, _, _ = self._latent(ext, self.estimators_[0], q, False)
-            codes = threshold_codes(mean)
+            # `mean > 0` codes from the binding (`gpc_binary_out`), every build
+            return decode_labels(self.classes_, self._latent(ext, self.estimators_[0], q, False, 1)[3])
         else:
             cols = [self._latent(ext, e, q, True)[2] for e in self.estimators_]
             _, codes32 = _ovr_combine(ext, cols, int(q.shape[0]))

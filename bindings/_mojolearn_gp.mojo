@@ -130,6 +130,8 @@ from gaussian_process.classifier import (
     gpc_ovr_combine_host,
     gpc_predict_binary_host,
 )
+# lane fam2-kernel-gp (2026-10-04): every class in one device session.
+from gaussian_process.gpc_ovr import GPC_IDN_OVR, gpc_fit_all_device, gpc_predict_all_device
 # The Cholesky door (workstream D, 2026-09-14). `cholesky/` is already
 # linked into this binary because the GP factors through it; exposing the
 # one-shot host entries here adds no kernel and no second build.
@@ -1228,6 +1230,167 @@ def gpc_ovr_combine_binding(
 
 
 # ===========================================================================
+# GPC, EVERY CLASS IN ONE CALL (lane fam2-kernel-gp, 2026-10-04;
+# gaussian_process/gpc_ovr.mojo). NEW entries: `gpc_fit`, `gpc_predict` and
+# `gpc_ovr_combine` above are unchanged. `gp_idn_caps` tells the Python glue
+# whether to take them (`-D MOJOLEARN_IDN_GPC_OVR_OFF` answers 0).
+# ===========================================================================
+
+
+def gp_idn_caps_binding() raises -> PythonObject:
+    """Bit 0: `gpc_fit_all` / `gpc_predict_all` are the route
+    (`GPC_IDN_OVR`, IDENTICAL builds, on by default)."""
+    return PythonObject(1 if GPC_IDN_OVR else 0)
+
+
+def gpc_fit_all_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Every binary Laplace fit of one classifier against one upload of X
+    and one kernel matrix. Returns 0.
+
+    `addrs`, in this exact order:
+
+        0  x        n_train * n_features float32, read
+        1  codes    n_train int32 class codes, read
+        2  kinds    n_nodes int32, read
+        3  kparams  n_nodes float32, read
+        4  ls_len   n_nodes int32, read
+        5  ls       max(n_ls, 1) float32, read
+        then, for binary fit j = 0 .. n_fits - 1, five addresses:
+        6 + 5j      y_out        n_train float32, WRITTEN (code == k_j)
+        7 + 5j      l_out        n_train * n_train float32, WRITTEN
+        8 + 5j      pi_out       n_train float32, WRITTEN
+        9 + 5j      wsr_out      n_train float32, WRITTEN
+        10 + 5j     scalars_out  3 float64 (lml, n_iter, nb), WRITTEN
+
+    `params`, in this exact order: 0 n_train, 1 n_features, 2 n_nodes,
+    3 n_ls, 4 max_iter_predict, 5 n_fits, then the n_fits class codes k_j.
+    """
+    if len(params) < 7:
+        raise Error(
+            "gpc_fit_all: params must contain n_train, n_features, n_nodes,"
+            " n_ls, max_iter_predict, n_fits and one class per fit, got "
+            + String(len(params))
+        )
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_nodes = Int(py=params[2])
+    var n_ls = Int(py=params[3])
+    var max_iter_predict = Int(py=params[4])
+    var n_fits = Int(py=params[5])
+    if n_fits < 1 or len(params) != 6 + n_fits or len(addrs) != 6 + 5 * n_fits:
+        raise Error(
+            "gpc_fit_all: n_fits="
+            + String(n_fits)
+            + " needs 6 + n_fits params and 6 + 5 n_fits addresses, got "
+            + String(len(params))
+            + " and "
+            + String(len(addrs))
+        )
+    var spec = _rebuild_kernel_spec(
+        Int(py=addrs[2]),
+        Int(py=addrs[3]),
+        Int(py=addrs[4]),
+        Int(py=addrs[5]),
+        n_nodes,
+        n_ls,
+        String("gpc_fit_all"),
+    )
+    var x_addr = Int(py=addrs[0])
+    var codes_addr = Int(py=addrs[1])
+    var ks = List[Int]()
+    var y_addrs = List[Int]()
+    var l_addrs = List[Int]()
+    var pi_addrs = List[Int]()
+    var wsr_addrs = List[Int]()
+    var scalar_addrs = List[Int]()
+    for j in range(n_fits):
+        ks.append(Int(py=params[6 + j]))
+        y_addrs.append(Int(py=addrs[6 + 5 * j]))
+        l_addrs.append(Int(py=addrs[7 + 5 * j]))
+        pi_addrs.append(Int(py=addrs[8 + 5 * j]))
+        wsr_addrs.append(Int(py=addrs[9 + 5 * j]))
+        scalar_addrs.append(Int(py=addrs[10 + 5 * j]))
+    with GILReleased(Python()):
+        gpc_fit_all_device(
+            x_addr, codes_addr, n_train, n_features, spec, max_iter_predict,
+            ks, y_addrs, l_addrs, pi_addrs, wsr_addrs, scalar_addrs,
+        )
+    return PythonObject(0)
+
+
+def gpc_predict_all_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`predict` or `predict_proba` of a fitted classifier, every binary fit
+    against one cross kernel, the outputs formed on the device. Returns 0.
+
+    `addrs`, in this exact order:
+
+        0  xtrain   n_train * n_features float32, read
+        1  xstar    n_star * n_features float32, read
+        2  kinds    n_nodes int32, read
+        3  kparams  n_nodes float32, read
+        4  ls_len   n_nodes int32, read
+        5  ls       max(n_ls, 1) float32, read
+        6  out      out_kind 1: n_star int64 class codes, WRITTEN
+                    out_kind 2: n_star * max(k, 2) float64, WRITTEN
+        then, for binary fit c = 0 .. k - 1, four addresses:
+        7 + 4c      y    n_train float32, read
+        8 + 4c      pi   n_train float32, read
+        9 + 4c      wsr  n_train float32, read
+        10 + 4c     l    n_train * n_train float32, read
+
+    `params`, in this exact order: 0 n_train, 1 n_features, 2 n_star,
+    3 n_nodes, 4 n_ls, 5 out_kind, 6 k.
+    """
+    if len(params) != 7:
+        raise Error(
+            "gpc_predict_all: params must contain 7 values (n_train,"
+            " n_features, n_star, n_nodes, n_ls, out_kind, k), got "
+            + String(len(params))
+        )
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_star = Int(py=params[2])
+    var n_nodes = Int(py=params[3])
+    var n_ls = Int(py=params[4])
+    var out_kind = Int(py=params[5])
+    var k = Int(py=params[6])
+    if k < 1 or len(addrs) != 7 + 4 * k:
+        raise Error(
+            "gpc_predict_all: k="
+            + String(k)
+            + " needs 7 + 4 k addresses, got "
+            + String(len(addrs))
+        )
+    var spec = _rebuild_kernel_spec(
+        Int(py=addrs[2]),
+        Int(py=addrs[3]),
+        Int(py=addrs[4]),
+        Int(py=addrs[5]),
+        n_nodes,
+        n_ls,
+        String("gpc_predict_all"),
+    )
+    var xt_addr = Int(py=addrs[0])
+    var xs_addr = Int(py=addrs[1])
+    var out_addr = Int(py=addrs[6])
+    var y_addrs = List[Int]()
+    var pi_addrs = List[Int]()
+    var wsr_addrs = List[Int]()
+    var l_addrs = List[Int]()
+    for c in range(k):
+        y_addrs.append(Int(py=addrs[7 + 4 * c]))
+        pi_addrs.append(Int(py=addrs[8 + 4 * c]))
+        wsr_addrs.append(Int(py=addrs[9 + 4 * c]))
+        l_addrs.append(Int(py=addrs[10 + 4 * c]))
+    with GILReleased(Python()):
+        gpc_predict_all_device(
+            xt_addr, n_train, n_features, spec, xs_addr, n_star,
+            y_addrs, pi_addrs, wsr_addrs, l_addrs, out_kind, out_addr,
+        )
+    return PythonObject(0)
+
+
+# ===========================================================================
 # KERNEL HYPERPARAMETER OPTIMIZATION (lane/gp-optimizer, 2026-09-15;
 # on the device since cgr4-device-optim-gp, 2026-10-03). `gpr_optimize` runs
 # DEVIATION 2881's whole optimizer, every start, in one call
@@ -1468,6 +1631,9 @@ def PyInit__mojolearn_gp() abi("C") -> PythonObject:
         m.def_function[gpc_fit_binding]("gpc_fit")
         m.def_function[gpc_predict_binding]("gpc_predict")
         m.def_function[gpc_ovr_combine_binding]("gpc_ovr_combine")
+        m.def_function[gp_idn_caps_binding]("gp_idn_caps")
+        m.def_function[gpc_fit_all_binding]("gpc_fit_all")
+        m.def_function[gpc_predict_all_binding]("gpc_predict_all")
         # The Cholesky door (workstream D, 2026-09-14).
         m.def_function[cholesky_parallel_available]("cholesky_parallel_available")
         m.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")
