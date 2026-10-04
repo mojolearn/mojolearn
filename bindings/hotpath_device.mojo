@@ -14,7 +14,7 @@ raises its own words. Same bytes either way: integers, comparisons and bit
 moves.
 
 Switches (IDENTICAL builds, default ON; `-D MOJOLEARN_IDN_ALL_OFF` turns all
-three off):
+five off):
   IDN_HPDEV_ELEM    -D MOJOLEARN_IDN_HPDEV_ELEM_OFF    equal_elements,
                     gather_i32, threshold_labels_i64, bincount_i64,
                     count_mask_u8, fold_pair_f32, gather_i64 and gather_f64
@@ -26,10 +26,15 @@ three off):
                     mask_from_indices_u8, arange_i64, leave_range_i64,
                     check_indices_i64, indices_overlap_i64, first_seen_i32,
                     strat_fold_assign_i32
+  IDN_HPDEV_REDUCE  -D MOJOLEARN_IDN_HPDEV_REDUCE_OFF  reduce_stat's min,
+                    max, argmax and integral test (the float sum and the
+                    exact integer sum stay the host helper's)
+  IDN_HPDEV_INIT    -D MOJOLEARN_IDN_HPDEV_INIT_OFF    uniform_init_f32
 The sabotage builds (`HOTPATH_SABOTAGE`) keep every host helper, so the
 negative control still answers wrong on purpose.
 """
 
+from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
@@ -51,7 +56,9 @@ from bindings.hotpath_helpers import (
     select_fold_i64_binding as host_select_fold_i64_binding,
     select_mask_u8_i64_binding as host_select_mask_u8_i64_binding,
     strat_fold_assign_i32_binding as host_strat_fold_assign_i32_binding,
+    reduce_stat_binding as host_reduce_stat_binding,
     threshold_labels_i64_binding as host_threshold_labels_i64_binding,
+    uniform_init_f32_binding as host_uniform_init_f32_binding,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.hotpath_device import (
@@ -62,6 +69,7 @@ from core.hotpath_device import (
     HPD_MAX_N,
     HPD_U32,
     HPD_U8,
+    device_all_integral,
     device_arange_skip_i64,
     device_bincount_i64,
     device_check_indices_i64,
@@ -75,11 +83,13 @@ from core.hotpath_device import (
     device_indices_overlap_i64,
     device_kfold_ids,
     device_mask_from_indices_u8,
+    device_reduce_arg,
     device_select_fold_i64,
     device_select_mask_u8_i64,
     device_strat_fold_assign_i32,
     device_stratified_fold_ids,
     device_threshold_labels_i64,
+    device_uniform_init_f32,
 )
 from core.neural_context import process_ctx
 
@@ -92,6 +102,8 @@ comptime _HPDEV_BASE = (
 comptime IDN_HPDEV_ELEM = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_ELEM_OFF"]()
 comptime IDN_HPDEV_LABELS = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_LABELS_OFF"]()
 comptime IDN_HPDEV_FOLDS = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_FOLDS_OFF"]()
+comptime IDN_HPDEV_REDUCE = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_REDUCE_OFF"]()
+comptime IDN_HPDEV_INIT = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_INIT_OFF"]()
 
 #: The base binding's process-lifetime context slot
 #: (`bindings/_mojolearn.mojo::_DEVCTX_SLOT`): the same name, so the same
@@ -536,3 +548,101 @@ def strat_fold_assign_i32_binding(
     return host_strat_fold_assign_i32_binding(
         enc_addr, n, k, n_folds, alloc_addr, perms_addr, counts_addr, dst_addr
     )
+
+
+# ---------------------------------------------------------------------------
+# IDN_HPDEV_REDUCE
+# ---------------------------------------------------------------------------
+
+#: `reduce_stat`'s reductions (`bindings/hotpath_helpers.mojo` HP_MIN ...).
+comptime _RS_MIN = 0
+comptime _RS_MAX = 1
+comptime _RS_ARGMAX = 3
+comptime _RS_INTEGRAL = 4
+
+
+def _peek[dt: DType](addr: Int, i: Int) -> PythonObject:
+    """Element i as `reduce_stat` returns a minimum or maximum: a float as
+    float64, an integer as an int. One scalar read of the caller's buffer."""
+    var p = MutPointer[Scalar[dt], MutUntrackedOrigin](unsafe_from_address=addr)
+    var v = p.unsafe_load(i)
+    comptime if dt.is_floating_point():
+        return PythonObject(v.cast[DType.float64]())
+    else:
+        return PythonObject(Int(v))
+
+
+def _first_is_nan(addr: Int, code: Int) -> Bool:
+    if code == HPD_F32:
+        var v = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr).unsafe_load(0)
+        return v != v
+    if code == HPD_F64:
+        var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr).unsafe_load(0)
+        return w != w
+    return False
+
+
+def reduce_stat_binding(
+    addr: PythonObject, code: PythonObject, n: PythonObject, what: PythonObject,
+) raises -> PythonObject:
+    """`reduce_stat`: min, max and argmax as a device tile reduction over
+    (ordered key, index) pairs, and the integral test as a device predicate.
+    A NaN first element (Python's answer is then that NaN, or index 0), the
+    float sum and the integer sum take the host helper."""
+    comptime if IDN_HPDEV_REDUCE:
+        var count = Int(py=n)
+        var w = Int(py=what)
+        var c = Int(py=code)
+        var a = Int(py=addr)
+        if count >= 1 and count <= HPD_MAX_N and a != 0 and c >= HPD_F32 and c <= HPD_U8:
+            if w == _RS_INTEGRAL and (c == HPD_F32 or c == HPD_F64):
+                var ctx = process_ctx[_HPDEV_SLOT]()
+                var ok = False
+                with GILReleased(Python()):
+                    ok = device_all_integral(ctx, a, c, count)
+                return PythonObject(1 if ok else 0)
+            if (w == _RS_MIN or w == _RS_MAX or w == _RS_ARGMAX) and not _first_is_nan(a, c):
+                var ctx = process_ctx[_HPDEV_SLOT]()
+                var at = 0
+                with GILReleased(Python()):
+                    at = device_reduce_arg(ctx, a, c, count, w != _RS_MIN)
+                if w == _RS_ARGMAX:
+                    return PythonObject(at)
+                if c == HPD_F32:
+                    return _peek[DType.float32](a, at)
+                if c == HPD_F64:
+                    return _peek[DType.float64](a, at)
+                if c == HPD_I32:
+                    return _peek[DType.int32](a, at)
+                if c == HPD_I64:
+                    return _peek[DType.int64](a, at)
+                if c == HPD_U32:
+                    return _peek[DType.uint32](a, at)
+                return _peek[DType.uint8](a, at)
+    return host_reduce_stat_binding(addr, code, n, what)
+
+
+# ---------------------------------------------------------------------------
+# IDN_HPDEV_INIT
+# ---------------------------------------------------------------------------
+
+
+def uniform_init_f32_binding(
+    dst_addr: PythonObject, n: PythonObject, low: PythonObject, high: PythonObject,
+    seed_lo: PythonObject, seed_hi: PythonObject, offset: PythonObject,
+) raises -> PythonObject:
+    """`uniform_init_f32`, drawn on the device: the same counter-based
+    splitmix64 stream, the arithmetic in binary64 words."""
+    comptime if IDN_HPDEV_INIT:
+        var count = Int(py=n)
+        var d = Int(py=dst_addr)
+        var lo = Float64(py=low)
+        var hi = Float64(py=high)
+        if count >= 1 and count <= HPD_MAX_N and d != 0 and isfinite(lo) and isfinite(hi) and isfinite(hi - lo):
+            var seed = (UInt64(Int(py=seed_hi)) << 32) | UInt64(Int(py=seed_lo))
+            var off = UInt64(Int(py=offset))
+            var ctx = process_ctx[_HPDEV_SLOT]()
+            with GILReleased(Python()):
+                device_uniform_init_f32(ctx, d, count, lo, hi, seed, off)
+            return PythonObject(0)
+    return host_uniform_init_f32_binding(dst_addr, n, low, high, seed_lo, seed_hi, offset)

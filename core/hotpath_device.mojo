@@ -27,7 +27,17 @@ from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz
-from checks.soft_f64 import sf64_from_f32, sf64_gt, sf64_is_nan, sf64_lt, sf64_to_f32
+from checks.soft_f64 import (
+    sf64_add,
+    sf64_floor,
+    sf64_from_f32,
+    sf64_from_int,
+    sf64_gt,
+    sf64_is_nan,
+    sf64_lt,
+    sf64_mul,
+    sf64_to_f32,
+)
 from core.device_zero import enqueue_fill
 from core.fast_radix_sort import (
     fast_radix_sort_pairs_u32,
@@ -35,6 +45,7 @@ from core.fast_radix_sort import (
     frs_exclusive_scan,
     frs_scan_blocks,
 )
+from core.label_encode import label_sort_key
 from core.label_encode_device import device_unique_inverse_resident
 
 #: The dtype codes of `bindings/hotpath_helpers.mojo` (HP_F32 ...).
@@ -46,6 +57,8 @@ comptime HPD_U32 = 4
 comptime HPD_U8 = 5
 
 comptime HPD_TPB = 256
+#: Elements one thread of a tile reduction folds.
+comptime HPD_TILE = 256
 #: Blocks of a grid-stride reduction launch.
 comptime HPD_REDUCE_BLOCKS = 1024
 #: Row counts the Int32 kernels and atomics hold.
@@ -1287,3 +1300,257 @@ def _eq_u64_status_kernel(a: _I64, b: _I64, k: Int32, status: _I32):
     var j = _tid()
     if j < Int(k) and a.unsafe_load(j) != b.unsafe_load(j):
         status.unsafe_store(0, Int32(1))
+
+
+# ===========================================================================
+# reduce_stat: min, max, argmax (first extreme wins) and the integral test
+# ===========================================================================
+#
+# Python's sequential `min` / `max` / argmax keep the FIRST element unless a
+# later one is strictly smaller (larger); a NaN after the first element never
+# wins a comparison. With the first element not NaN (the binding tests it),
+# the answer is the extreme of the non-NaN elements, the lowest index among
+# equals (-0.0 equals 0.0). That is an order-free reduction over the pairs
+# (ordered key, index): tiles of HPD_TILE elements, then tiles of tile
+# results, until one pair is left. Exact: integer compares only.
+
+
+@always_inline
+def _key_f32(b: UInt32) -> UInt64:
+    """An unsigned key in a non-NaN float32's order, -0.0 folded onto 0.0."""
+    var x = b
+    if x == UInt32(0x80000000):
+        x = UInt32(0)
+    if (x & UInt32(0x80000000)) != UInt32(0):
+        return UInt64(~x)
+    return UInt64(x ^ UInt32(0x80000000))
+
+
+def _reduce_first_kernel(
+    s8: _U8, s32: _U32, s64: _U64, code: Int32, n_: Int32, want_max: Int32,
+    key_out: _U64, idx_out: _U32,
+):
+    """Thread j folds elements [j * HPD_TILE, (j + 1) * HPD_TILE) ascending:
+    the extreme key and its first index. NaN elements are skipped; a tile of
+    NaNs stores the key that loses to every real key."""
+    var j = _tid()
+    var n = Int(n_)
+    var lo = j * HPD_TILE
+    if lo >= n:
+        return
+    var hi = min(n, lo + HPD_TILE)
+    var best_k = UInt64(0)
+    var best_i = lo
+    var have = False
+    var i = lo
+    while i < hi:
+        var valid = True
+        var k = UInt64(0)
+        if code == HPD_U8:
+            k = UInt64(s8.unsafe_load(i))
+        elif code == HPD_F64:
+            var w = s64.unsafe_load(i)
+            if sf64_is_nan(w):
+                valid = False
+            k = label_sort_key(w, 0)
+        elif code == HPD_I64:
+            k = label_sort_key(s64.unsafe_load(i), 1)
+        else:
+            var u = s32.unsafe_load(i)
+            if code == HPD_F32:
+                if (u & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000):
+                    valid = False
+                k = _key_f32(u)
+            elif code == HPD_I32:
+                k = UInt64(u ^ UInt32(0x80000000))
+            else:
+                k = UInt64(u)
+        if valid:
+            var better = not have
+            if have:
+                if want_max != 0:
+                    better = k > best_k
+                else:
+                    better = k < best_k
+            if better:
+                best_k = k
+                best_i = i
+                have = True
+        i += 1
+    if not have:
+        best_k = UInt64(0) if want_max != 0 else UInt64(0xFFFFFFFFFFFFFFFF)
+    key_out.unsafe_store(j, best_k)
+    idx_out.unsafe_store(j, UInt32(best_i))
+
+
+def _reduce_pass_kernel(
+    key_in: _U64, idx_in: _U32, m_: Int32, want_max: Int32, key_out: _U64, idx_out: _U32,
+):
+    """Thread j folds tile results [j * HPD_TILE, (j + 1) * HPD_TILE)
+    ascending; equal keys keep the earlier (lower-index) entry."""
+    var j = _tid()
+    var m = Int(m_)
+    var lo = j * HPD_TILE
+    if lo >= m:
+        return
+    var hi = min(m, lo + HPD_TILE)
+    var best_k = key_in.unsafe_load(lo)
+    var best_i = idx_in.unsafe_load(lo)
+    var i = lo + 1
+    while i < hi:
+        var k = key_in.unsafe_load(i)
+        var better = k < best_k
+        if want_max != 0:
+            better = k > best_k
+        if better:
+            best_k = k
+            best_i = idx_in.unsafe_load(i)
+        i += 1
+    key_out.unsafe_store(j, best_k)
+    idx_out.unsafe_store(j, best_i)
+
+
+@always_inline
+def _tiles(m: Int) -> Int:
+    return (m + HPD_TILE - 1) // HPD_TILE
+
+
+def device_reduce_arg(
+    ctx: DeviceContext, addr: Int, code: Int, n: Int, want_max: Bool,
+) raises -> Int:
+    """The index of the first minimum (or maximum) of the n elements of
+    dtype `code` at `addr`, NaNs skipped (`1 <= n <= HPD_MAX_N`; the caller
+    has checked that element 0 is not NaN)."""
+    var wide = code == HPD_F64 or code == HPD_I64
+    var narrow8 = code == HPD_U8
+    var d_s8 = ctx.enqueue_create_buffer[DType.uint8](n if narrow8 else 1)
+    var d_s32 = ctx.enqueue_create_buffer[DType.uint32](n if (not wide and not narrow8) else 1)
+    var d_s64 = ctx.enqueue_create_buffer[DType.uint64](n if wide else 1)
+    if narrow8:
+        ctx.enqueue_copy(dst_buf=d_s8, src_ptr=_U8(unsafe_from_address=addr))
+    elif wide:
+        ctx.enqueue_copy(dst_buf=d_s64, src_ptr=_U64(unsafe_from_address=addr))
+    else:
+        ctx.enqueue_copy(dst_buf=d_s32, src_ptr=_U32(unsafe_from_address=addr))
+    var m1 = _tiles(n)
+    var m2 = _tiles(m1)
+    var m3 = _tiles(m2)
+    var d_k1 = ctx.enqueue_create_buffer[DType.uint64](m1)
+    var d_i1 = ctx.enqueue_create_buffer[DType.uint32](m1)
+    var d_k2 = ctx.enqueue_create_buffer[DType.uint64](m2)
+    var d_i2 = ctx.enqueue_create_buffer[DType.uint32](m2)
+    var d_k3 = ctx.enqueue_create_buffer[DType.uint64](m3)
+    var d_i3 = ctx.enqueue_create_buffer[DType.uint32](m3)
+    var d_k4 = ctx.enqueue_create_buffer[DType.uint64](1)
+    var d_i4 = ctx.enqueue_create_buffer[DType.uint32](1)
+    var wm = Int32(1) if want_max else Int32(0)
+    ctx.enqueue_function[_reduce_first_kernel](
+        d_s8.unsafe_ptr(), d_s32.unsafe_ptr(), d_s64.unsafe_ptr(), Int32(code), Int32(n), wm,
+        d_k1.unsafe_ptr(), d_i1.unsafe_ptr(), grid_dim=_blocks(m1), block_dim=HPD_TPB,
+    )
+    ctx.enqueue_function[_reduce_pass_kernel](
+        d_k1.unsafe_ptr(), d_i1.unsafe_ptr(), Int32(m1), wm, d_k2.unsafe_ptr(), d_i2.unsafe_ptr(),
+        grid_dim=_blocks(m2), block_dim=HPD_TPB,
+    )
+    ctx.enqueue_function[_reduce_pass_kernel](
+        d_k2.unsafe_ptr(), d_i2.unsafe_ptr(), Int32(m2), wm, d_k3.unsafe_ptr(), d_i3.unsafe_ptr(),
+        grid_dim=_blocks(m3), block_dim=HPD_TPB,
+    )
+    # m3 <= HPD_TILE for every n <= HPD_MAX_N (n / 256^3 < 128): one thread
+    ctx.enqueue_function[_reduce_pass_kernel](
+        d_k3.unsafe_ptr(), d_i3.unsafe_ptr(), Int32(m3), wm, d_k4.unsafe_ptr(), d_i4.unsafe_ptr(),
+        grid_dim=_blocks(1), block_dim=HPD_TPB,
+    )
+    var h = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d_i4)
+    ctx.synchronize()
+    var at = Int(h.unsafe_ptr()[0])
+    _ = h^
+    _ = d_s8^
+    _ = d_s32^
+    _ = d_s64^
+    _ = d_k1^
+    _ = d_i1^
+    _ = d_k2^
+    _ = d_i2^
+    _ = d_k3^
+    _ = d_i3^
+    _ = d_k4^
+    _ = d_i4^
+    return at
+
+
+def _integral_kernel(s32: _F32, s64: _U64, code: Int32, n_: Int32, status: _I32):
+    """status[0] = 1 when an element is not finite or not integer valued
+    (binary64 words: finite, and equal to its own floor)."""
+    var i = _tid()
+    if i >= Int(n_):
+        return
+    var w = UInt64(0)
+    if code == HPD_F64:
+        w = s64.unsafe_load(i)
+    else:
+        w = sf64_from_f32(s32.unsafe_load(i))
+    var e = (w >> 52) & UInt64(0x7FF)
+    if e == UInt64(0x7FF) or sf64_floor(w) != w:
+        status.unsafe_store(0, Int32(1))
+
+
+def device_all_integral(ctx: DeviceContext, addr: Int, code: Int, n: Int) raises -> Bool:
+    """`reduce_stat`'s integral test over float32 (`HPD_F32`) or float64."""
+    var wide = code == HPD_F64
+    var d_s32 = ctx.enqueue_create_buffer[DType.float32](1 if wide else n)
+    var d_s64 = ctx.enqueue_create_buffer[DType.uint64](n if wide else 1)
+    var d_status = ctx.enqueue_create_buffer[DType.int32](2)
+    enqueue_fill(ctx, d_status, Int32(0))
+    if wide:
+        ctx.enqueue_copy(dst_buf=d_s64, src_ptr=_U64(unsafe_from_address=addr))
+    else:
+        ctx.enqueue_copy(dst_buf=d_s32, src_ptr=_F32(unsafe_from_address=addr))
+    ctx.enqueue_function[_integral_kernel](
+        d_s32.unsafe_ptr(), d_s64.unsafe_ptr(), Int32(code), Int32(n), d_status.unsafe_ptr(),
+        grid_dim=_blocks(n), block_dim=HPD_TPB,
+    )
+    var ok = _read_status(ctx, d_status, 0) == 0
+    _ = d_s32^
+    _ = d_s64^
+    _ = d_status^
+    return ok
+
+
+# ===========================================================================
+# uniform_init_f32
+# ===========================================================================
+
+
+def _uniform_init_kernel(dst: _F32, n_: Int32, seed: UInt64, off: UInt64, lo: UInt64, span: UInt64):
+    """dst[i] = float32(lo + span * u_i) in binary64 words, u_i the 53-bit
+    uniform of splitmix64 at counter off + i of the seed: the host helper's
+    statement, value for value (`sequence/schedule.mojo::splitmix64`; times
+    2^-53 is exact; one rounded multiply, one rounded add, one narrowing)."""
+    var i = _tid()
+    if i >= Int(n_):
+        return
+    var s = seed + (off + UInt64(i)) * UInt64(0x9E3779B97F4A7C15)
+    s += UInt64(0x9E3779B97F4A7C15)
+    var z = s
+    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
+    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
+    z = z ^ (z >> 31)
+    var u = sf64_mul(sf64_from_int(Int(z >> 11)), UInt64(0x3CA0000000000000))
+    dst.unsafe_store(i, sf64_to_f32(sf64_add(lo, sf64_mul(span, u))))
+
+
+def device_uniform_init_f32(
+    ctx: DeviceContext, dst_addr: Int, n: Int, low: Float64, high: Float64, seed: UInt64, offset: UInt64,
+) raises:
+    """`uniform_init_f32` (`1 <= n <= HPD_MAX_N`, finite `low` and `high`)."""
+    var d = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_function[_uniform_init_kernel](
+        d.unsafe_ptr(), Int32(n), seed, offset,
+        bitcast[DType.uint64](low), bitcast[DType.uint64](high - low),
+        grid_dim=_blocks(n), block_dim=HPD_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=_F32(unsafe_from_address=dst_addr), src_buf=d)
+    ctx.synchronize()
+    _ = d^

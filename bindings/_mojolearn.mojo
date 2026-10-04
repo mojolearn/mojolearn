@@ -93,7 +93,6 @@ from bindings.array_helpers import (
 )
 from bindings.hotpath_helpers import (
     cast_elements_binding,
-    reduce_stat_binding,
     next_combination_i64_binding,
     ic_running_min_f64_binding,
     scale_shift_ftz_f32_binding,
@@ -104,7 +103,6 @@ from bindings.hotpath_helpers import (
     count_fold_hits_i64_binding,
     split_table_i32_binding,
     scatter_rows_bytes_binding,
-    uniform_init_f32_binding,
     normal_init_f32_binding,
     epoch_order_i32_binding,
     adam_hyper_f64_binding,
@@ -117,7 +115,7 @@ from bindings.hotpath_helpers import (
     group_fold_assign_i32_binding,
     strat_group_assign_i32_binding,
 )
-# lane fam2-shared (2026-10-04): these sixteen helpers run on the device in
+# lane fam2-shared (2026-10-04): these eighteen helpers run on the device in
 # this binding (bindings/hotpath_device.mojo, same names and signatures; each
 # falls back to its host helper of bindings/hotpath_helpers.mojo when its
 # -D MOJOLEARN_IDN_HPDEV_*_OFF switch or -D MOJOLEARN_IDN_ALL_OFF is given).
@@ -140,6 +138,8 @@ from bindings.hotpath_device import (
     strat_fold_assign_i32_binding,
     hpdev_try_encode_labels,
     hpdev_try_gather_u64,
+    reduce_stat_binding,
+    uniform_init_f32_binding,
 )
 from std.os import abort
 from std.math import isfinite
