@@ -2,66 +2,52 @@
 
 Our FAST arm on the M3 Ultra Metal GPU at head 0150b04c1, 05cd07fbb, 05fffc97d, 0e743cac9, 22b3be501, 2432d5753, 24ed76679, 2dcdd949f, 37c65a3af, 3c6fb879b, 413da4d18, 417ba1ded, 4198d5a9c, 423305583, 42b6db46c, 443384b59, 4b1311c12, 550806bc0, 5990c5946, 661b818c2, 69f7a41fd, 6c0ba4379, 6c54b7e87, 6d4d55c99, 73f3a856d, 77da4a641, 7ba385b30, 829c3fb4a, 8432822f9, 8b9c91b9c, 8d43ec357, 94cb5ba59, 9525ed958, 9722e5a2b, a717feb53, a72b1deba, a7b8b9513, a8e9ee5a3, af01c6a54, b2dd5dfe5, c48ede3c1, c55b8c377, c5e1bbeb6, c65e09904, d05835681, d1fa9223b, dbe2ab85a, deee07721, e0c848afe, e2bfb8422, eb3fca1ac, ed49f2b11, f419ea9f1, f6a9e7c04, fc6c6837f, 1 warm-up + 3 timed rounds at board size (rows-full; trees MOJOLEARN_SPEED_SIZE=shipped). Opponents are not re-raced: classical times come from the M3 0.8.34 board (`~/mojolearn-evidence/board-0834-times.tsv`, quality from its board.json), trees from the 2026-09-29 M3 board (older tree params on some lanes); an opponent marked (fill) comes from the M3 opponent fill on the 0.8.34 kit. Ratio = our FAST ms / best opponent ms; below 1 is faster. Rows sort worst ratio after first. Written by `tools/af_board_merge.py`.
 
-Canonical full-board summary (2026-10-04): 387 FAST rows, 377 eligible opponent comparisons, 351 faster, geometric-mean ratio 0.225. The full page combines this refresh table with the original board. MaxAbs istella and KernelPCA taxi/istella added three speed flips; KNN imputer taxi added a fourth after GPU-only fit counts. Separately, ARD istella is now excluded for its existing opponent-quality deficit; this accounting correction removes one winner and one comparison, without changing timings.
+Canonical full-board summary (2026-10-04): 395 FAST rows, 377 eligible opponent comparisons, 351 faster, geometric-mean ratio 0.225. The full page combines this refresh table with the original board. MaxAbs istella and KernelPCA taxi/istella added three speed flips; KNN imputer taxi added a fourth after GPU-only fit counts. Separately, ARD istella is now excluded for its existing opponent-quality deficit; this accounting correction removes one winner and one comparison, without changing timings.
 
+- Board apply 2026-10-04 (`tools/af_board_apply.py`): ivf-filter taxi - -> 226 ms (ratio - -> -; VSEARCH defaults ad265a028 M3 A/B 2026-10-04) [new row]; ivf-rabitq istella - -> 1144 ms (ratio - -> -; VSEARCH defaults ad265a028 M3 A/B 2026-10-04) [new row]; ivf-rabitq taxi - -> 168 ms (ratio - -> -; VSEARCH defaults ad265a028 M3 A/B 2026-10-04) [new row]; ivf-pq istella 1676 -> 1649 ms (ratio 0.24 -> 0.24; VSEARCH defaults ad265a028 M3 A/B 2026-10-04); ivf-pq taxi - -> 221 ms (ratio - -> -; VSEARCH defaults ad265a028 M3 A/B 2026-10-04) [new row]; ivf-sq istella - -> 1335 ms (ratio - -> -; VSEARCH defaults ad265a028 M3 A/B 2026-10-04) [new row]; ivf-sq taxi - -> 176 ms (ratio - -> -; VSEARCH defaults ad265a028 M3 A/B 2026-10-04) [new row]; ivf istella - -> 1740 ms (ratio - -> -; VSEARCH defaults ad265a028 M3 A/B 2026-10-04) [new row]; ivf taxi - -> 188 ms (ratio - -> -; VSEARCH defaults ad265a028 M3 A/B 2026-10-04) [new row]; randomized-svd istella 533 -> 501 ms (ratio 1.44 -> 1.36; RSVD_FAST_DIRECT_IN e9d72edb5 M3 A/B 2026-10-04); randomized-svd taxi 199 -> 198 ms (ratio 1.22 -> 1.22; RSVD_FAST_DIRECT_IN e9d72edb5 M3 A/B 2026-10-04).
 | lane | dataset | family | FAST before ms | FAST after ms | best opponent | opp ms | ratio before | ratio after | flip | quality after (FAST) | quality before (FAST) | opponent quality | status |
 |---|---|---|---:|---:|---|---:|---:|---:|---|---|---|---|---|
-| min-cov-det | istella | algos | - | 86334 | sklearn-cpu | 43632 | - | 1.98 |  | MCDQ pair PASS vs main (cap 3000) | - | - | ok |
-| elliptic-envelope | istella | algos | - | 86641 | sklearn-cpu | 43759 | - | 1.98 |  | MCDQ pair PASS vs main (cap 3000) | - | - | ok |
-| min-cov-det | taxi | algos | 1739 | 294 | sklearn-cpu | 1413 | 1.23 | 0.21 | FLIP faster | n_features=11 | n_features=11 | n_features=11 | ok |
-| elliptic-envelope | taxi | algos | 1741 | 299 | sklearn-cpu | 1423 | 1.22 | 0.21 | FLIP faster | fraction_flagged=0.10237 | fraction_flagged=0.1024 | fraction_flagged=0.1025, jaccard_vs_sklearn=1 | ok |
-| sgd-ocsvm | taxi | algos | 945 | 154 | sklearn-cpu | 898 | 1.05 | 0.17 | FLIP faster | fraction_flagged=0.05557 | fraction_flagged=0, jaccard_vs_sklearn=0 | fraction_flagged=0.00702, jaccard_vs_sklearn=1 | ok |
 | sgd | synthetic | algos | 121 | 335 | torch-eager-fp32 | 17.9 | 6.75 | 18.71 |  | - | - | - | ok |
 | layernorm | synthetic | algos | 26.8 | 52.2 | torch-eager-bf16 | 2.8 | 9.57 | 18.64 |  | - | - | max_rel_diff_vs_torch_eager_fp32=0, rel_fro_vs_torch_eager_fp32=0 | ok |
 | adagrad | synthetic | algos | 131 | 196 | torch-eager-fp32 | 14.2 | 9.25 | 13.81 |  | - | - | - | ok |
-| sgd-ocsvm | istella | algos | 10080 | 407 | sklearn-cpu | 5734 | 1.76 | 0.07 | FLIP faster | fraction_flagged=0.04042 | fraction_flagged=0, jaccard_vs_sklearn=0 | fraction_flagged=0.09334, jaccard_vs_sklearn=1 | ok |
 | adam | synthetic | algos | 125 | 343 | torch-eager-fp32 | 29.3 | 4.27 | 11.69 |  | - | - | - | ok |
 | adamw | synthetic | algos | 114 | 338 | torch-eager-fp32 | 31.1 | 3.66 | 10.88 |  | - | - | - | ok |
-| eigh | synthetic | algos | - | 700.3 | numpy-cpu | 4813 | - | 0.15 | HOLD quality | max_eigenvalue_error=4.26951e-07, relative_residual=6.13409e-07 | - | max_eigenvalue_error=3.49e-08, relative_residual=2.824e-08 | HOLD-quality vs opponent; improved vs main |
 | rmsprop | synthetic | algos | 129 | 195 | torch-eager-fp32 | 25.2 | 5.13 | 7.74 |  | - | - | - | ok |
 | adamax | synthetic | algos | 176 | 205 | torch-eager-fp32 | 27.7 | 6.37 | 7.39 |  | - | - | - | ok |
 | nadam | synthetic | algos | 178 | 204 | torch-eager-fp32 | 32.9 | 5.40 | 6.20 |  | - | - | - | ok |
 | autoarima | taxi-hourly | algos | - | 13747 | statsforecast-cpu | 2844 | - | 4.83 |  | forecast_rmse=74.65912244133813 | - | forecast_rmse=68.21 | ok |
-| additive-chi2 | istella | algos | 11.0 | 4.4 | sklearn-cpu | 3.8 | 2.89 | 1.16 |  | kernel_rel_error=0.0877304 | kernel_rel_error=0.08773 | kernel_rel_error=0.08773 | ok |
 | autoarima | synthetic | algos | - | 9287 | statsforecast-cpu | 2880 | - | 3.22 |  | forecast_rmse=2.624119555180116 | - | forecast_rmse=17.55 | ok |
 | lr-exponential | synthetic | algos | 224 | 225 | torch-cpu | 76.7 | 2.92 | 2.93 |  | - | max_rel_diff_vs_ours=0 | max_rel_diff_vs_ours=5.933e-08 | ok |
-| cagra | taxi | algos | - | 715 | faiss-cpu | 1016 | - | 0.70 | FLIP faster | recall_at_10=0.997925 | - | recall_at_10=0.9277 | ok |
-| label-binarizer | taxi | algos | 1362 | 270 | sklearn-cpu | 118 | 11.59 | 2.29 |  | output_shape=100000x259 | - | - | ok |
 | lstm-reg | synthetic | algos | 1880 | 1878 | torch-compile-fp32 (fill) | 695 | 2.70 | 2.70 |  | r2=0.981013, rmse=0.159641 | r2=0.981, rmse=0.1596 | - | ok |
-| skewed-chi2 | taxi | algos | 2.7 | 0.4 | sklearn-cpu | 0.6 | 4.50 | 0.67 | FLIP faster | kernel_rel_error=0.0377486 | kernel_rel_error=0.03775 | kernel_rel_error=0.03775 | ok |
 | lstm-reg | taxi-hourly | algos | 1878 | 1879 | torch-compile-fp32 (fill) | 700 | 2.68 | 2.68 |  | r2=0.751679, rmse=0.540429 | r2=0.7517, rmse=0.5404 | - | ok |
 | lstm-clf | taxi-hourly | algos | 1879 | 1890 | torch-eager-fp32 (fill) | 729 | 2.58 | 2.59 |  | accuracy=0.868218, logloss=0.299901 | accuracy=0.8682, logloss=0.2999 | - | ok |
 | lstm-clf | synthetic | algos | 1878 | 1882 | torch-eager-fp32 (fill) | 729 | 2.58 | 2.58 |  | accuracy=0.968696, logloss=0.0724409 | accuracy=0.9687, logloss=0.07244 | - | ok |
 | cholesky | synthetic | algos | 960 | 261 | torch-gpu | 110 | 8.70 | 2.37 |  | relative_residual=1.6591e-07 | relative_residual=1.659e-07 | relative_residual=5.449e-07 | ok |
-| pca | istella | algos | 988 | 217.8 | sklearn-cpu | 205 | 4.82 | 1.06 |  | explained_variance_ratio_sum=1 | explained_variance_ratio_sum=1 | explained_variance_ratio_sum=1 | ok |
-| permutation-shap | istella | algos | 17214 | 14788.6 | shap-cpu | 12335 | 1.40 | 1.20 |  | rel_error_vs_exact=1.031583e-08; A/B output words exact | rel_error_vs_exact=5.339e-09 | rel_error_vs_exact=3.692e-10 | delta rows default; _OFF rollback |
-| lu-factor | synthetic | algos | 2323 | 653.702416 | scipy-cpu | 428 | 5.43 | 1.53 |  | relative_residual=3.2563e-06 | relative_residual=3.248e-06 | relative_residual=3.246e-06 | ok |
-| svgp | istella | algos | 1495 | 228 | gpytorch-cpu | 307 | 4.86 | 0.74 | FLIP faster | r2=-0.106016, rmse=0.878373 | r2=-0.106, rmse=0.8784 | r2=-0.106, rmse=0.8784 | ok |
+| label-binarizer | taxi | algos | 1362 | 270 | sklearn-cpu | 118 | 11.59 | 2.29 |  | output_shape=100000x259 | - | - | ok |
 | lle | taxi | algos | 17885 | 2570 | sklearn-cpu | 1247 | 14.35 | 2.06 |  | trustworthiness_k15=0.826083 | trustworthiness_k15=0.8398 | trustworthiness_k15=0.7708 | ok |
-| kernel-pca | taxi | algos | 847 | 127.5 | sklearn-cpu | 460 | 1.84 | 0.28 | FLIP faster | - | - | subspace_cos_vs_sklearn=1 | ok |
 | kernel-shap | istella | algos | 14386 | 15325 | shap-cpu | 7696 | 1.87 | 1.99 |  | rel_error_vs_exact=4.37806e-09 | rel_error_vs_exact=4.179e-09 | rel_error_vs_exact=1.405e-14 | ok |
-| rbf-sampler | istella | algos | 85.7 | 57.1 | sklearn-cpu | 47.6 | 1.80 | 1.20 |  | kernel_rel_error=0.14198 | kernel_rel_error=0.142 | kernel_rel_error=0.1374 | ok |
-| skewed-chi2 | istella | algos | 6.8 | 0.9 | sklearn-cpu | 3.7 | 1.84 | 0.24 | FLIP faster | kernel_rel_error=0.671898 | kernel_rel_error=0.6719 | kernel_rel_error=0.6719 | ok |
+| min-cov-det | istella | algos | - | 86334 | sklearn-cpu | 43632 | - | 1.98 |  | MCDQ pair PASS vs main (cap 3000) | - | - | ok |
+| elliptic-envelope | istella | algos | - | 86641 | sklearn-cpu | 43759 | - | 1.98 |  | MCDQ pair PASS vs main (cap 3000) | - | - | ok |
 | var | synthetic | algos | 15.9 | 5.0 | statsmodels-cpu | 2.6 | 6.12 | 1.93 |  | forecast_rmse=1.14079 | forecast_rmse=1.141 | forecast_rmse=1.145 | ok |
 | moe | synthetic | algos | 789 | 72.7 | torch-eager-bf16 | 37.7 | 20.92 | 1.93 |  | - | - | max_rel_diff_vs_torch_eager_fp32=2.234e+04, rel_fro_vs_torch_eager_fp32=0.05522 | ok |
-| lu-solve | synthetic | algos | 2320 | 733.531042 | torch-gpu | 506 | 4.59 | 1.45 |  | relative_residual=3.2563e-06 | relative_residual=3.248e-06 | relative_residual=8.234e-07 | ok |
 | sparse-rp | taxi | algos | 8.0 | 3.4 | sklearn-cpu | 1.8 | 4.44 | 1.90 |  | mean_abs_distortion=0.264 (seed 7; 40-seed mean 0.233) | mean_abs_distortion=0.1472 | mean_abs_distortion=0.381 | ok |
 | var | taxi-hourly | algos | 14.5 | 5.1 | statsmodels-cpu | 2.8 | 5.18 | 1.82 |  | forecast_rmse=33.168 | forecast_rmse=33.17 | forecast_rmse=33.17 | ok |
-| svgp | taxi | algos | - | 207 | gpytorch-cpu | 248 | - | 0.83 | FLIP faster | r2=-0.194982, rmse=17.7235 | - | r2=-0.2093, rmse=17.83 | ok |
-| kernel-pca | istella | algos | 1049 | 201.0 | sklearn-cpu | 560 | 1.87 | 0.36 | FLIP faster | - | - | subspace_cos_vs_sklearn=1 | ok |
 | additive-chi2 | taxi | algos | 0.6 | 0.7 | sklearn-cpu | 0.4 | 1.50 | 1.69 |  | kernel_rel_error=0.0938923 | kernel_rel_error=0.09389 | kernel_rel_error=0.09389 | ok |
-| knn-imputer | taxi | algos | 73.6 | 0.8 | sklearn-cpu | 1.7 | 43.29 | 0.47 | FLIP faster | masked_rmse=5.108598627748839 | masked_rmse=6.152 | masked_rmse=5.257 | GPU fit counts default; _OFF rollback |
-| multilabel-binarizer | taxi | algos | 727 | 168 | sklearn-cpu | 129 | 5.62 | 1.30 |  | output_shape=20000x489 | - | - | ok |
-| randomized-svd | istella | algos | 691 | 533 | sklearn-cpu | 369 | 1.87 | 1.45 |  | relative_reconstruction_error=0.000235946 | relative_reconstruction_error=0.0002359 | relative_reconstruction_error=0.0002359 | ok |
+| lu-factor | synthetic | algos | 2323 | 653.702416 | scipy-cpu | 428 | 5.43 | 1.53 |  | relative_residual=3.2563e-06 | relative_residual=3.248e-06 | relative_residual=3.246e-06 | ok |
+| lu-solve | synthetic | algos | 2320 | 733.531042 | torch-gpu | 506 | 4.59 | 1.45 |  | relative_residual=3.2563e-06 | relative_residual=3.248e-06 | relative_residual=8.234e-07 | ok |
 | target-encoder | taxi | algos | 462 | 204 | sklearn-cpu | 147 | 3.14 | 1.38 |  | exact_arrays=108, smoothing_oracle=PASS | - | - | ok |
+| randomized-svd | istella | algos | 691 | 501 | sklearn-cpu | 369 | 1.87 | 1.36 |  | relative_reconstruction_error=0.000235946 | relative_reconstruction_error=0.0002359 | relative_reconstruction_error=0.0002359 | ok; RSVD_FAST_DIRECT_IN e9d72edb5 M3 A/B 2026-10-04 |
 | gaussian-rp | taxi | algos | 5.9 | 2.1 | sklearn-cpu | 1.6 | 3.69 | 1.31 |  | mean_abs_distortion=0.345752 | mean_abs_distortion=0.3458 | mean_abs_distortion=0.3398 | ok |
-| randomized-svd | taxi | algos | 193 | 199 | sklearn-cpu | 163 | 1.19 | 1.22 |  | relative_reconstruction_error=0.0271968 | relative_reconstruction_error=0.0272 | relative_reconstruction_error=0.0272 | ok |
+| multilabel-binarizer | taxi | algos | 727 | 168 | sklearn-cpu | 129 | 5.62 | 1.30 |  | output_shape=20000x489 | - | - | ok |
+| randomized-svd | taxi | algos | 193 | 198 | sklearn-cpu | 163 | 1.19 | 1.22 |  | relative_reconstruction_error=0.0271968 | relative_reconstruction_error=0.0272 | relative_reconstruction_error=0.0272 | ok; RSVD_FAST_DIRECT_IN e9d72edb5 M3 A/B 2026-10-04 |
 | resample | taxi | algos | 65.2 | 62.8 | sklearn-cpu | 51.9 | 1.26 | 1.21 |  | max_mean_shift_over_std=0.0029166 | max_mean_shift_over_std=0.002917 | max_mean_shift_over_std=0.002257 | ok |
+| permutation-shap | istella | algos | 17214 | 14788.6 | shap-cpu | 12335 | 1.40 | 1.20 |  | rel_error_vs_exact=1.031583e-08; A/B output words exact | rel_error_vs_exact=5.339e-09 | rel_error_vs_exact=3.692e-10 | delta rows default; _OFF rollback |
+| rbf-sampler | istella | algos | 85.7 | 57.1 | sklearn-cpu | 47.6 | 1.80 | 1.20 |  | kernel_rel_error=0.14198 | kernel_rel_error=0.142 | kernel_rel_error=0.1374 | ok |
 | minibatch-kmeans | istella | algos | 673 | 145 | sklearn-cpu | 124 | 5.45 | 1.17 |  | n_clusters=8, silhouette=0.118168 | ari_vs_ours=1, n_clusters=8, silhouette=0.1167 | ari_vs_ours=0.6224, n_clusters=8, silhouette=0.1119 | ok |
+| additive-chi2 | istella | algos | 11.0 | 4.4 | sklearn-cpu | 3.8 | 2.89 | 1.16 |  | kernel_rel_error=0.0877304 | kernel_rel_error=0.08773 | kernel_rel_error=0.08773 | ok |
 | resample | istella | algos | 388 | 389 | sklearn-cpu | 336 | 1.16 | 1.16 |  | max_mean_shift_over_std=0.00320274 | max_mean_shift_over_std=0.003203 | max_mean_shift_over_std=0.002552 | ok |
 | adafactor | synthetic | algos | 184 | 393 | torch-eager-fp32 | 344 | 0.54 | 1.15 | FLIP slower | - | - | - | ok |
-| multilabel-binarizer | istella | algos | 770 | 126 | sklearn-cpu | 144 | 5.36 | 0.88 | FLIP faster | output_shape=20000x119 | - | - | ok |
-| maxabs-scaler | istella | algos | 134 | 17.0 | sklearn-cpu | 99.7 | 1.34 | 0.17 | FLIP faster | output_shape=100000x220 | - | - | ok |
+| pca | istella | algos | 988 | 217.8 | sklearn-cpu | 205 | 4.82 | 1.06 |  | explained_variance_ratio_sum=1 | explained_variance_ratio_sum=1 | explained_variance_ratio_sum=1 | ok |
 | gbdt-depthwise | taxi | trees | 13994 | 10812 | xgboost-cpu (fill) | 10435 | 1.34 | 1.04 |  | logloss=0.527929, auc=0.632351 | auc=0.6258, logloss=0.53 | auc=0.631 | ok |
 | lasso-lars | istella | algos | 1016 | 227 | sklearn-cpu | 228 | 4.45 | 1.00 | FLIP faster | r2=0.310837, rmse=0.69346 | r2=0.3103, rmse=0.6937 | r2=0.3111, rmse=0.6933 | ok |
 | onehot | istella | algos | 78.8 | 36.5 | sklearn-cpu | 36.7 | 2.15 | 0.99 | FLIP faster | - | - | - | ok |
@@ -71,12 +57,12 @@ Canonical full-board summary (2026-10-04): 387 FAST rows, 377 eligible opponent 
 | multioutput-reg | taxi | algos | 115 | 50.2 | sklearn-cpu | 53.7 | 2.14 | 0.94 | FLIP faster | r2=0.60424 | r2=0.6042 | r2=0.6043 | ok |
 | lle | istella | algos | 17825 | 2653 | sklearn-cpu | 2852 | 6.25 | 0.93 | FLIP faster | trustworthiness_k15=0.895277 | trustworthiness_k15=0.8724 | trustworthiness_k15=0.8491 | ok |
 | nmf | istella | algos | 9490 | 6333 | sklearn-cpu | 7059 | 1.34 | 0.90 | FLIP faster | relative_reconstruction_error=0.325174 | relative_reconstruction_error=0.3252 | relative_reconstruction_error=0.3254 | ok |
+| multilabel-binarizer | istella | algos | 770 | 126 | sklearn-cpu | 144 | 5.36 | 0.88 | FLIP faster | output_shape=20000x119 | - | - | ok |
 | qda | taxi | algos | 187 | 123 | sklearn-cpu | 141 | 1.33 | 0.87 | FLIP faster | accuracy=0.72722, logloss=1.05927 | accuracy=0.727, logloss=1.061 | accuracy=0.7272, logloss=1.059 | ok |
 | label-binarizer | istella | algos | 326 | 27.6 | sklearn-cpu | 31.7 | 10.27 | 0.87 | FLIP faster | output_shape=100000x16 | - | - | ok |
 | minibatch-kmeans | taxi | algos | 106 | 38.1 | sklearn-cpu | 43.9 | 2.40 | 0.87 | FLIP faster | n_clusters=8, silhouette=0.138023 | ari_vs_ours=1, n_clusters=8, silhouette=0.1381 | ari_vs_ours=0.5252, n_clusters=8, silhouette=0.1655 | ok |
 | iforest | istella | trees | 437 | 262 | sklearn-iforest-cpu (fill) | 304 | 1.44 | 0.86 | FLIP faster | auc=0.830358 | auc=0.8304 | auc=0.8279 | ok |
-| power-transformer | taxi | algos | 477 | 191 | sklearn-cpu | 13228 | 0.04 | 0.01 |  | PT oracle v2 PASS vs f64 centered MLE | - | - | ok |
-| power-transformer | istella | algos | 2957 | 1531 | sklearn-cpu | 276767 | 0.01 | 0.01 |  | PT oracle v2 PASS vs f64 centered MLE | - | - | ok |
+| svgp | taxi | algos | - | 207 | gpytorch-cpu | 248 | - | 0.83 | FLIP faster | r2=-0.194982, rmse=17.7235 | - | r2=-0.2093, rmse=17.83 | ok |
 | mlp-reg | taxi | algos | 8033 | 8031 | sklearn-cpu | 9959 | 0.81 | 0.81 |  | r2=0.931981, rmse=4.15387 | r2=0.932, rmse=4.154 | r2=0.9296, rmse=4.226 | ok |
 | mlp-reg | istella | algos | 10761 | 10761 | sklearn-cpu | 13651 | 0.79 | 0.79 |  | r2=0.526405, rmse=0.574862 | r2=0.5273, rmse=0.5743 | r2=0.5248, rmse=0.5758 | ok |
 | target-encoder | istella | algos | 456 | 180 | sklearn-cpu | 229 | 2.00 | 0.79 | FLIP faster | exact_arrays=108, smoothing_oracle=PASS | - | - | ok |
@@ -91,6 +77,7 @@ Canonical full-board summary (2026-10-04): 387 FAST rows, 377 eligible opponent 
 | connected-components | istella | algos | 93.4 | 5.3 | networkx-cpu | 7.0 | 13.34 | 0.76 | FLIP faster | n_components=81 | n_components=81 | n_components=81 | ok |
 | mlp-clf | istella | algos | 10766 | 10773 | sklearn-cpu | 14327 | 0.75 | 0.75 |  | accuracy=0.94435, logloss=0.136481 | accuracy=0.9446, logloss=0.1364 | accuracy=0.9438, logloss=0.1368 | ok |
 | perceptron | istella | algos | 6258 | 4280 | sklearn-cpu | 5738 | 1.09 | 0.75 | FLIP faster | accuracy=0.89569 | accuracy=0.8825 | accuracy=0.8961 | ok |
+| svgp | istella | algos | 1495 | 228 | gpytorch-cpu | 307 | 4.86 | 0.74 | FLIP faster | r2=-0.106016, rmse=0.878373 | r2=-0.106, rmse=0.8784 | r2=-0.106, rmse=0.8784 | ok |
 | lof | istella | algos | - | 7580 | sklearn-cpu | 10177 | - | 0.74 |  | fraction_flagged=0.03361 | - | fraction_flagged=0.03361, jaccard_vs_sklearn=1 | ok |
 | gmm | istella | classical2 | 6574 | 5858 | sklearn-cpu | 7866 | 0.84 | 0.74 |  | bic=-3.85139e+07, mean_log_likelihood=200.794, n_iter=24 | bic=-3.851e+07, mean_log_likelihood=200.8, n_iter=24 | bic=-3.901e+07, mean_log_likelihood=200.8, n_iter=30 | ok |
 | label-spreading | istella | algos | - | 7508 | sklearn-cpu | 10273 | - | 0.73 |  | accuracy=0.90445 | - | accuracy=0.9044 | ok |
@@ -101,9 +88,11 @@ Canonical full-board summary (2026-10-04): 387 FAST rows, 377 eligible opponent 
 | rnn-clf | taxi-hourly | algos | 1485 | 1484 | torch-eager-fp32 (fill) | 2087 | 0.71 | 0.71 |  | accuracy=0.868056, logloss=0.304864 | accuracy=0.8681, logloss=0.3049 | - | ok |
 | rnn-clf | synthetic | algos | 1568 | 1483 | torch-eager-fp32 (fill) | 2088 | 0.75 | 0.71 |  | accuracy=0.953559, logloss=0.103698 | accuracy=0.9536, logloss=0.1037 | - | ok |
 | gpr | taxi | classical2 | 206 | 116 | sklearn-cpu | 164 | 1.26 | 0.71 | FLIP faster | mean_log_predictive_density=-311.454, r2=0.88963, rmse=5.04164 | mean_log_predictive_density=-311.4, r2=0.8896, rmse=5.042 | mean_log_predictive_density=-311.5, r2=0.8896, rmse=5.042 | ok |
+| cagra | taxi | algos | - | 715 | faiss-cpu | 1016 | - | 0.70 | FLIP faster | recall_at_10=0.997925 | - | recall_at_10=0.9277 | ok |
 | mlp-clf | taxi | algos | 8052 | 8050 | sklearn-cpu | 11431 | 0.70 | 0.70 |  | accuracy=0.76783, logloss=0.530453 | accuracy=0.7678, logloss=0.5305 | accuracy=0.7678, logloss=0.5304 | ok |
 | theta | synthetic | algos | 99.6 | 72.0 | statsmodels-cpu | 104 | 0.96 | 0.69 |  | forecast_rmse=1.43661 | forecast_rmse=1.437 | forecast_rmse=1.435 | ok |
 | connected-components | taxi | algos | 88.1 | 4.9 | networkx-cpu | 7.3 | 12.07 | 0.68 | FLIP faster | n_components=588 | n_components=588 | n_components=588 | ok |
+| skewed-chi2 | taxi | algos | 2.7 | 0.4 | sklearn-cpu | 0.6 | 4.50 | 0.67 | FLIP faster | kernel_rel_error=0.0377486 | kernel_rel_error=0.03775 | kernel_rel_error=0.03775 | ok |
 | spline | istella | algos | 45.8 | 11.6 | sklearn-cpu | 17.6 | 2.60 | 0.66 | FLIP faster | output_shape=100000x112 | - | - | ok |
 | ocsvm | istella | algos | 446 | 451 | sklearn-cpu | 691 | 0.65 | 0.65 |  | fraction_flagged=0.0783 | fraction_flagged=0.0783 | fraction_flagged=0.0783, jaccard_vs_sklearn=1 | ok |
 | dart | istella | algos | 69424 | 23014 | lightgbm-cpu | 35425 | 1.96 | 0.65 | FLIP faster | accuracy=0.9486, logloss=0.134461 | accuracy=0.9487, logloss=0.1341 | accuracy=0.9519, logloss=0.1237 | ok |
@@ -111,9 +100,9 @@ Canonical full-board summary (2026-10-04): 387 FAST rows, 377 eligible opponent 
 | maxabs-scaler | taxi | algos | 13.4 | 7.9 | sklearn-cpu | 12.4 | 1.08 | 0.64 | FLIP faster | output_shape=100000x11 | - | - | ok |
 | mb-dict-learning | istella | algos | 7966 | 3185 | sklearn-cpu | 5030 | 1.58 | 0.63 | FLIP faster | component_sparsity=0.0863636, relative_reconstruction_error=0.64834 | component_sparsity=0.08636, relative_reconstruction_error=0.6483 | component_sparsity=0.08636, relative_reconstruction_error=0.644 | ok |
 | knn | istella | classical | 1592 | 357 | sklearn-cpu | 566 | 2.82 | 0.63 | FLIP faster | recall_at_k=0.982434, rows_with_repeated_ids=0 | recall_at_k=0.9766, rows_with_repeated_ids=0 | recall_at_k=1, rows_with_repeated_ids=0 | ok |
+| sparse-rp | istella | algos | 65.8 | 15.9 | sklearn-cpu | 25.3 | 2.60 | 0.63 | FLIP faster | mean_abs_distortion=0.475106 | mean_abs_distortion=1.883 | mean_abs_distortion=0.4743 | ok |
 | spline | taxi | algos | 31.9 | 10.8 | sklearn-cpu | 17.6 | 1.81 | 0.61 | FLIP faster | output_shape=100000x77 | - | - | ok |
 | knn | taxi | classical | 224 | 257 | sklearn-cpu | 426 | 0.53 | 0.60 |  | recall_at_k=0.999754, rows_with_repeated_ids=0 | recall_at_k=0.9998, rows_with_repeated_ids=0 | recall_at_k=1, rows_with_repeated_ids=0 | ok |
-| sparse-rp | istella | algos | 65.8 | 15.9 | sklearn-cpu | 25.3 | 2.60 | 0.63 | FLIP faster | mean_abs_distortion=0.475106 | mean_abs_distortion=1.883 | mean_abs_distortion=0.4743 | ok |
 | label-encoder | istella | algos | 297 | 13.4 | sklearn-cpu | 22.5 | 13.21 | 0.60 | FLIP faster | output_shape=100000 | - | - | ok |
 | bisecting-kmeans | istella | algos | 3908 | 848 | sklearn-cpu | 1428 | 2.74 | 0.59 | FLIP faster | n_clusters=8, silhouette=0.118345 | ari_vs_ours=1, n_clusters=8, silhouette=0.1183 | ari_vs_ours=0.6929, n_clusters=8, silhouette=0.09641 | ok |
 | als | taxi-zones | algos | - | 17842 | implicit-cpu | 30318 | - | 0.59 |  | recall_at_10=0.0539953 | - | recall_at_10=0.05679 | ok |
@@ -133,6 +122,7 @@ Canonical full-board summary (2026-10-04): 387 FAST rows, 377 eligible opponent 
 | label-encoder | taxi | algos | 313 | 13.9 | sklearn-cpu | 29.0 | 10.79 | 0.48 | FLIP faster | output_shape=100000 | - | - | ok |
 | select-f-regression | taxi | algos | 103 | 15.0 | sklearn-cpu | 31.3 | 3.28 | 0.48 | FLIP faster | n_selected=5 | n_selected=5 | jaccard_vs_sklearn=1, n_selected=5 | ok |
 | lda | text | algos | - | 34671 | sklearn-cpu | 72657 | - | 0.48 |  | perplexity=266.719 | - | perplexity=266.9 | ok |
+| knn-imputer | taxi | algos | 73.6 | 0.8 | sklearn-cpu | 1.7 | 43.29 | 0.47 | FLIP faster | masked_rmse=5.108598627748839 | masked_rmse=6.152 | masked_rmse=5.257 | GPU fit counts default; _OFF rollback |
 | ard | taxi | algos | 44.3 | 8.3 | sklearn-cpu | 17.5 | 2.53 | 0.47 | FLIP faster | r2=0.90919, rmse=4.79957 | r2=0.9092, rmse=4.8 | r2=0.9092, rmse=4.8 | ok |
 | gbdt-rank-yetirank | istella | trees | 25773 | 3350 | lightgbm-cpu (fill) | 7083 | 3.64 | 0.47 | FLIP faster | ndcg10=0.680466, ndcg5=0.614035, map=0.814182 | map=0.8149, ndcg10=0.681, ndcg5=0.6151 | map=0.8584 | ok |
 | sgd-reg | taxi | algos | - | 2434 | sklearn-cpu (fill) | 5242 | - | 0.46 |  | r2=0.908969, rmse=4.80541 | - | - | ok |
@@ -160,6 +150,7 @@ Canonical full-board summary (2026-10-04): 387 FAST rows, 377 eligible opponent 
 | auto-theta | synthetic | algos | 962 | 718 | statsforecast-cpu | 1953 | 0.49 | 0.37 |  | forecast_rmse=1.43688 | forecast_rmse=1.438 | forecast_rmse=1.438 | ok |
 | knn-reg | istella | classical2 | 823 | 105 | sklearn-cpu | 285 | 2.88 | 0.37 | FLIP faster | r2=0.418145, rmse=0.625388 | r2=0.4181, rmse=0.6254 | r2=0.4181, rmse=0.6254 | ok |
 | gbdt-rank-pairlogit | istella | trees | 3997 | 3064 | xgboost-cpu (fill) | 8355 | 0.48 | 0.37 |  | ndcg10=0.719953, ndcg5=0.6504, map=0.854545 | map=0.8414, ndcg10=0.7093, ndcg5=0.6398 | map=0.8728 | ok |
+| kernel-pca | istella | algos | 1049 | 201.0 | sklearn-cpu | 560 | 1.87 | 0.36 | FLIP faster | - | - | subspace_cos_vs_sklearn=1 | ok |
 | ocsvm | taxi | algos | 246 | 65.0 | sklearn-cpu | 181 | 1.36 | 0.36 | FLIP faster | fraction_flagged=0.1361 | fraction_flagged=0.1361 | fraction_flagged=0.1361, jaccard_vs_sklearn=1 | ok |
 | lars | taxi | algos | 185 | 12.1 | sklearn-cpu | 34.2 | 5.40 | 0.35 | FLIP faster | r2=0.908983, rmse=4.80505 | r2=0.909, rmse=4.805 | r2=0.909, rmse=4.805 | ok |
 | ivf-filter | istella | algos | 6190 | 2516 | faiss-cpu | 7234 | 0.86 | 0.35 |  | recall_at_10=0.801 | recall_at_10=0.6527 | recall_at_10=0.8419 | ok |
@@ -175,6 +166,7 @@ Canonical full-board summary (2026-10-04): 387 FAST rows, 377 eligible opponent 
 | minmax-scaler | istella | algos | 359 | 19.1 | sklearn-cpu | 63.0 | 5.70 | 0.30 | FLIP faster | - | - | - | ok |
 | onehot | taxi | algos | 71.8 | 5.6 | sklearn-cpu | 19.0 | 3.78 | 0.29 | FLIP faster | - | - | - | ok |
 | factor-analysis | istella | algos | - | 10351 | sklearn-cpu | 35135 | - | 0.29 |  | mean_log_likelihood=99.4872 | - | mean_log_likelihood=98.12 | ok |
+| kernel-pca | taxi | algos | 847 | 127.5 | sklearn-cpu | 460 | 1.84 | 0.28 | FLIP faster | - | - | subspace_cos_vs_sklearn=1 | ok |
 | gbdt-symmetric | istella | trees | 11943 | 16955 | catboost-cpu (fill) | 60136 | 0.20 | 0.28 |  | logloss=0.186714, auc=0.980109 | auc=0.9756, logloss=0.2112 | auc=0.9799 | ok |
 | lstsq | istella | algos | 5886 | 844 | numpy-cpu | 3086 | 1.91 | 0.27 | FLIP faster | relative_residual=0.849956 | relative_residual=0.85 | relative_residual=0.8733 | ok |
 | gbdt-symmetric-1000 | istella | trees | 21364 | 32889 | catboost-cpu (fill) | 120805 | 0.18 | 0.27 |  | logloss=0.1704, auc=0.982434 | auc=0.9756, logloss=0.2112 | auc=0.9823 | ok |
@@ -183,15 +175,18 @@ Canonical full-board summary (2026-10-04): 387 FAST rows, 377 eligible opponent 
 | dynamic-theta | synthetic | algos | 116 | 85.9 | statsforecast-cpu | 333 | 0.35 | 0.26 |  | forecast_rmse=1.43726 | forecast_rmse=1.437 | forecast_rmse=1.437 | ok |
 | gpr | istella | classical2 | 218 | 130 | sklearn-cpu | 523 | 0.42 | 0.25 |  | mean_log_predictive_density=-9.28532, r2=0.235374, rmse=0.760426 | mean_log_predictive_density=-9.285, r2=0.2354, rmse=0.7604 | mean_log_predictive_density=-9.287, r2=0.2354, rmse=0.7604 | ok |
 | gbdt-lossguide | taxi | trees | 44556 | 12721 | lightgbm-cpu (fill) | 51864 | 0.86 | 0.25 |  | logloss=0.528132, auc=0.631865 | auc=0.631, logloss=0.5283 | auc=0.6322 | ok |
+| skewed-chi2 | istella | algos | 6.8 | 0.9 | sklearn-cpu | 3.7 | 1.84 | 0.24 | FLIP faster | kernel_rel_error=0.671898 | kernel_rel_error=0.6719 | kernel_rel_error=0.6719 | ok |
 | gbdt-multiclass | istella | trees | 21754 | 25728 | xgboost-cpu (fill) | 105535 | 0.21 | 0.24 |  | mlogloss=0.258413, accuracy=0.907556 | accuracy=0.9033, mlogloss=0.2809 | accuracy=0.9101 | ok |
 | ridge-clf | taxi | algos | 410 | 19.0 | sklearn-cpu | 77.9 | 5.27 | 0.24 | FLIP faster | accuracy=0.76357 | accuracy=0.7636 | accuracy=0.7636 | ok |
-| ivf-pq | istella | algos | 6215 | 1676 | faiss-cpu | 7008 | 0.89 | 0.24 |  | recall_at_10=0.79145 | recall_at_10=0.5995 | recall_at_10=0.803 | ok |
+| ivf-pq | istella | algos | 6215 | 1649 | faiss-cpu | 7008 | 0.89 | 0.24 |  | recall_at_10=0.79145 | recall_at_10=0.5995 | recall_at_10=0.803 | ok; VSEARCH defaults ad265a028 M3 A/B 2026-10-04 |
 | lda-clf | taxi | algos | 87.4 | 43.1 | sklearn-cpu | 186 | 0.47 | 0.23 |  | accuracy=0.76253, logloss=0.539763 | accuracy=0.7626, logloss=0.5397 | accuracy=0.7625, logloss=0.5398 | ok |
 | linearsvc | taxi | classical2 | 112 | 104 | sklearn-cpu | 451 | 0.25 | 0.23 |  | accuracy=0.76333 | accuracy=0.7633 | accuracy=0.7636 | ok |
 | categorical-nb | taxi | algos | 139 | 18.0 | sklearn-cpu | 78.3 | 1.77 | 0.23 | FLIP faster | accuracy=0.76585, logloss=0.538866 | accuracy=0.7659, logloss=0.5389 | accuracy=0.7659, logloss=0.5389 | ok |
 | ovr | taxi | algos | 458 | 324 | sklearn-cpu | 1461 | 0.31 | 0.22 |  | accuracy=0.47894 | accuracy=0.4789 | accuracy=0.4789 | ok |
 | arima | synthetic | classical2 | 108 | 80.5 | statsmodels-cpu | 364 | 0.30 | 0.22 |  | forecast_rmse=1.51554, insample_rmse=0.999341, mean_aic=5680.97, mean_llf=-2836.49 | forecast_rmse=1.516, insample_rmse=0.9993, mean_aic=5681, mean_llf=-2836 | forecast_rmse=1.515, insample_rmse=0.9993, mean_aic=5681, mean_llf=-2836 | ok |
 | nearest-centroid | taxi | algos | 471 | 20.9 | sklearn-cpu | 96.9 | 4.86 | 0.22 | FLIP faster | accuracy=0.6667, logloss=0.781905 | accuracy=0.6667, logloss=0.7822 | accuracy=0.6667, logloss=0.7817 | ok |
+| min-cov-det | taxi | algos | 1739 | 294 | sklearn-cpu | 1413 | 1.23 | 0.21 | FLIP faster | n_features=11 | n_features=11 | n_features=11 | ok |
+| elliptic-envelope | taxi | algos | 1741 | 299 | sklearn-cpu | 1423 | 1.22 | 0.21 | FLIP faster | fraction_flagged=0.10237 | fraction_flagged=0.1024 | fraction_flagged=0.1025, jaccard_vs_sklearn=1 | ok |
 | bayesian-ridge | taxi | algos | 440 | 15.3 | sklearn-cpu | 73.2 | 6.01 | 0.21 | FLIP faster | r2=0.908983, rmse=4.80505 | r2=0.909, rmse=4.805 | r2=0.909, rmse=4.805 | ok |
 | iterative-imputer | taxi | algos | 219 | 218 | sklearn-cpu | 1049 | 0.21 | 0.21 |  | masked_rmse=4.69397 | masked_rmse=4.694 | masked_rmse=4.694 | ok |
 | dart | taxi | algos | 10520 | 5378 | lightgbm-cpu | 26498 | 0.40 | 0.20 |  | accuracy=0.76815, logloss=0.529149 | accuracy=0.7683, logloss=0.5291 | accuracy=0.7682, logloss=0.5291 | ok |
@@ -202,11 +197,14 @@ Canonical full-board summary (2026-10-04): 387 FAST rows, 377 eligible opponent 
 | knn-clf | taxi | classical2 | 48.5 | 28.9 | sklearn-cpu | 154 | 0.32 | 0.19 |  | accuracy=0.74175 | accuracy=0.7418 | accuracy=0.7418 | ok |
 | categorical-nb | istella | algos | 144 | 15.8 | sklearn-cpu | 84.4 | 1.71 | 0.19 | FLIP faster | accuracy=0.83885, logloss=0.412625 | accuracy=0.8388, logloss=0.4126 | accuracy=0.8388, logloss=0.4126 | ok |
 | poisson | taxi | algos | - | 79.7 | sklearn-cpu (fill) | 442 | - | 0.18 |  | r2=0.035748, rmse=15.6398 | - | - | ok |
+| sgd-ocsvm | taxi | algos | 945 | 154 | sklearn-cpu | 898 | 1.05 | 0.17 | FLIP faster | fraction_flagged=0.05557 | fraction_flagged=0, jaccard_vs_sklearn=0 | fraction_flagged=0.00702, jaccard_vs_sklearn=1 | ok |
+| maxabs-scaler | istella | algos | 134 | 17.0 | sklearn-cpu | 99.7 | 1.34 | 0.17 | FLIP faster | output_shape=100000x220 | - | - | ok |
 | tree-shap | istella | algos | 816 | 25.1 | lightgbm-cpu | 148 | 5.50 | 0.17 | FLIP faster | max_additivity_error=1.19901e-06 | max_additivity_error=1.099e-06 | max_additivity_error=4.441e-15 | ok |
 | gbdt-ordered | istella | trees | - | 63554 | catboost-cpu (fill) | 385098 | - | 0.17 |  | logloss=0.190385, auc=0.979529 | - | auc=0.9793 | ok |
 | tree-shap | taxi | algos | 338 | 11.8 | lightgbm-cpu | 72.7 | 4.65 | 0.16 | FLIP faster | max_additivity_error=3.88753e-05 | max_additivity_error=3.25e-05 | max_additivity_error=5.684e-13 | ok |
 | croston-optimized | taxi-hourly | algos | 10.4 | 9.8 | statsforecast-cpu | 60.5 | 0.17 | 0.16 |  | forecast_rmse=1.39825 | forecast_rmse=1.398 | forecast_rmse=1.398 | ok |
 | garch | synthetic | algos | 23.4 | 16.5 | arch-cpu | 106 | 0.22 | 0.16 |  | mean_llf=-1938.22 | mean_llf=-1938 | mean_llf=-1938 | ok |
+| eigh | synthetic | algos | - | 700.3 | numpy-cpu | 4813 | - | 0.15 | HOLD quality | max_eigenvalue_error=4.26951e-07, relative_residual=6.13409e-07 | - | max_eigenvalue_error=3.49e-08, relative_residual=2.824e-08 | HOLD-quality vs opponent; improved vs main |
 | adaboost-reg | taxi | algos | 2609 | 1887 | sklearn-cpu | 12197 | 0.21 | 0.15 |  | r2=-0.605962, rmse=20.1839 | r2=0.2164, rmse=14.1 | r2=0.5639, rmse=10.52 | ok |
 | rf | istella | trees | 13810 | 10162 | lightgbm-cpu | 67210 | 0.21 | 0.15 |  | logloss=0.182017, auc=0.945385 | auc=0.9454, logloss=0.182 | auc=0.9454, logloss=0.1954 | ok |
 | croston-optimized | synthetic | algos | 5.9 | 9.4 | statsforecast-cpu | 62.3 | 0.09 | 0.15 |  | forecast_rmse=1.67554 | forecast_rmse=1.675 | forecast_rmse=1.675 | ok |
@@ -244,6 +242,7 @@ Canonical full-board summary (2026-10-04): 387 FAST rows, 377 eligible opponent 
 | elasticnet | istella | classical2 | 392 | 150 | sklearn-cpu | 1809 | 0.22 | 0.08 |  | r2=0.260922, rmse=0.718134 | r2=0.2616, rmse=0.7178 | r2=0.2609, rmse=0.7181 | ok |
 | ridge | istella | classical2 | 879 | 538 | sklearn-cpu | 6717 | 0.13 | 0.08 |  | r2=0.328693, rmse=0.684417 | r2=0.3205, rmse=0.6886 | r2=0.3287, rmse=0.6844 | ok |
 | prophet | taxi-hourly | algos | 72.7 | 43.2 | prophet-cpu | 549 | 0.13 | 0.08 |  | forecast_rmse=32.0407 | forecast_rmse=32.02 | forecast_rmse=32.03 | ok |
+| sgd-ocsvm | istella | algos | 10080 | 407 | sklearn-cpu | 5734 | 1.76 | 0.07 | FLIP faster | fraction_flagged=0.04042 | fraction_flagged=0, jaccard_vs_sklearn=0 | fraction_flagged=0.09334, jaccard_vs_sklearn=1 | ok |
 | bayesian-ridge | istella | algos | 92368 | 494 | sklearn-cpu | 6831 | 13.52 | 0.07 | FLIP faster | r2=0.328404, rmse=0.684565 | r2=-4.169e+04, rmse=170.6 | r2=-890.2, rmse=24.94 | ok |
 | lda | taxi-zones | algos | 41177 | 1509 | sklearn-cpu | 20926 | 1.97 | 0.07 | FLIP faster | perplexity=45.2218 | perplexity=45.22 | perplexity=44.9 | ok |
 | calibrated | istella | algos | 2291 | 193 | sklearn-cpu | 2784 | 0.82 | 0.07 |  | accuracy=0.88509, logloss=0.289824 | accuracy=0.8851, logloss=0.2898 | accuracy=0.8851, logloss=0.2898 | ok |
@@ -275,6 +274,8 @@ Canonical full-board summary (2026-10-04): 387 FAST rows, 377 eligible opponent 
 | permutation-test | istella | algos | - | 53.5 | scipy-cpu | 3042 | - | 0.02 |  | pvalue=0.1802, statistic=0.0112 | - | pvalue=0.1844, statistic=0.0112 | ok |
 | permutation-test | taxi | algos | - | 52.9 | scipy-cpu | 3055 | - | 0.02 |  | pvalue=0.0006, statistic=-0.576702 | - | pvalue=0.001, statistic=-0.5767 | ok |
 | huber | istella | algos | 48741 | 738 | sklearn-cpu | 45995 | 1.06 | 0.02 | FLIP faster | r2=-0.00692323, rmse=0.838221 | r2=-0.008227, rmse=0.8388 | r2=-0.01018, rmse=0.8396 | ok |
+| power-transformer | taxi | algos | 477 | 191 | sklearn-cpu | 13228 | 0.04 | 0.01 |  | PT oracle v2 PASS vs f64 centered MLE | - | - | ok |
+| power-transformer | istella | algos | 2957 | 1531 | sklearn-cpu | 276767 | 0.01 | 0.01 |  | PT oracle v2 PASS vs f64 centered MLE | - | - | ok |
 | gamma | istella | algos | - | 1551 | sklearn-cpu (fill) | 107798 | - | 0.01 |  | r2=0.218164, rmse=0.738615 | - | - | ok |
 | tweedie | istella | algos | - | 1547 | sklearn-cpu (fill) | 108690 | - | 0.01 |  | r2=-24.4124, rmse=4.21098 | - | - | ok |
 | hdbscan | taxi | classical | 980 | 434 | sklearn-cpu | 30810 | 0.03 | 0.01 |  | n_clusters=160, noise_fraction=0.14222 | ari_vs_ours=0.9914, n_clusters=160, noise_agreement_vs_ours=0.9983, noise_fraction=0.1422, | ari_vs_ours=0.9912, n_clusters=160, noise_agreement_vs_ours=0.9983, noise_fraction=0.1422, | ok |
@@ -297,6 +298,14 @@ Canonical full-board summary (2026-10-04): 387 FAST rows, 377 eligible opponent 
 | lars | istella | algos | 5583 | 845 | - | - | - | - |  | r2=0.328662, rmse=0.684433 | r2=0.2157, rmse=0.7398 | - | ok |
 | lion | synthetic | algos | 137 | 201 | - | - | - | - |  | - | - | - | ok |
 | quantile | istella | algos | - | 764 | - | - | - | - |  | r2=-0.0399981, rmse=0.851877 | - | - | ok |
+| ivf-filter | taxi | algos | - | 226 | - | - | - | - |  | recall_at_10=0.984675 | - | - | ok; new row (no opponent on record); VSEARCH defaults ad265a028 M3 A/B 2026-10-04 |
+| ivf-rabitq | istella | algos | - | 1144 | - | - | - | - |  | recall_at_10=0.236775 | - | - | ok; new row (no opponent on record); VSEARCH defaults ad265a028 M3 A/B 2026-10-04 |
+| ivf-rabitq | taxi | algos | - | 168 | - | - | - | - |  | recall_at_10=0.1842 | - | - | ok; new row (no opponent on record); VSEARCH defaults ad265a028 M3 A/B 2026-10-04 |
+| ivf-pq | taxi | algos | - | 221 | - | - | - | - |  | recall_at_10=0.981025 | - | - | ok; new row (no opponent on record); VSEARCH defaults ad265a028 M3 A/B 2026-10-04 |
+| ivf-sq | istella | algos | - | 1335 | - | - | - | - |  | recall_at_10=0.60895 | - | - | ok; new row (no opponent on record); VSEARCH defaults ad265a028 M3 A/B 2026-10-04 |
+| ivf-sq | taxi | algos | - | 176 | - | - | - | - |  | recall_at_10=0.83325 | - | - | ok; new row (no opponent on record); VSEARCH defaults ad265a028 M3 A/B 2026-10-04 |
+| ivf | istella | algos | - | 1740 | - | - | - | - |  | - | - | - | ok; new row (no opponent on record); VSEARCH defaults ad265a028 M3 A/B 2026-10-04 |
+| ivf | taxi | algos | - | 188 | - | - | - | - |  | - | - | - | ok; new row (no opponent on record); VSEARCH defaults ad265a028 M3 A/B 2026-10-04 |
 
 Sources: before = M3 0.8.34 board (classical), M3 2026-09-29 board FAST cells (trees); job tags gap26-target-current-istella, gap26-target-current-taxi, ab-tshap-table-istella, ab-tshap-table-taxi, afb-eighscope, afb10-ols, afb11-arima-c2, afb12-seq-algos-1, afb12-seq-algos-2, afb12-seq-algos-3, afb12-seq-algos-4, afb13-forest, afb14-lossguide, afb15-prophet, afb16-garch-croston, afb17-gram-algos, afb18-cluster, afb19-prep, afb2-algos-2, afb2-classical-4, afb2-trees-1b, afb20-eigh, afb21-garch, afb23-opt, afb24-knn, afb25-kde, afb26-moe, afb27-ridge, afb28-linear, afb29-lp, afb3-cat-taxicat, afb3-trees-fast, afb30-cat, afb31-yeti, afb4-grp-ocsvm-main, afb5-merged-algos, afb5-merged-trees, afb5b-dart, afb6-te-algos, afb9-dw2, ann-ivffilter-devcb-istella-b, ann-ivfrefine-devcb-istella-b, batchv-hdb-smr-istella, batchv-hdb-smr-taxi, batchv-kde-dimtile-istella3, batchv-si-onepass-istella, batchv-si-onepass-taxi, bayesq-istella, clus3-bisect-zc-istella, clus3-mbdl-lassogrp-istella, clus3-mbk-rowgrp-istella, clus3-sgdoc-simd-taxi, cluster2-ap-split-istella-b, cluster2-optics-devorder-istella-b, gap-dwtaxi, gap26-label-istella, gap26-label-taxi, gap26-orders-current-synthetic, gap26-orders-current-taxi-hourly, gapcagra-ivfgxsi-istella, gapcagra-seedsiters-taxi, gapcls1-ardall-taxi, gapcls1-brall-taxi, gapcls1-k64chk-istella, gapcls1-nclabels-taxi, gapcls1-rccodes-taxi, gapcls2-all3-ocsvm-taxi, gapcls2-fusedpool-minmax-istella, gapcls2-pool-mbk-taxi, gapcls2-present-onehot-taxi, gapcls2-present-ordinal-taxi, gaptsa-kpsspack-kpss-synthetic, gaptsa-kpsspack-kpss-taxi-hourly, gaptsa-seldfused-selectd-synthetic, gaptsa-seldfused-selectd-taxi-hourly, gaptsa-thetaspec-theta-taxi-hourly, gaptsa-varonecopy-var-synthetic, gaptsa-varonecopy-var-taxi-hourly, gl2-chol-nosync-synthetic, gl2-lu-step1-synthetic, gl2-lusolve-step1-synthetic, gl2k-ipca-dev-taxi, gl2k-kpca-lzdev-istella, gl2k-kpca-lzdev-taxi, gl2p-nmf-gemmmma-istella, gl2p-pca-grammma-istella-r, gl2p-rsvd-gemmmma-istella, gl2p-rsvd-gemmmma-taxi, gmp-imp-taxi, gmp-iso-nolist-istella, gmp-lle-devf0-istella, gmp-lle-devf0-taxi, gmp-rs-idx-istella, gmp-rs-idx-taxi, gmp-staged-mlb-taxi, gmp-staged-te-taxi, ivfseed-main-istella, kap2-grp-fused-istella-r, kap2-grp-fused-taxi-r, kap2-km-nysrr-taxi, kap2-km-ptrin-rbf-istella, kap2-kshap-batch-istella, kap2-pshap-batch-istella, kap2-spl-fused-istella, kap2-spl-fused-taxi, kap2-srp-fused-istella-r, kap2-srp-fused-taxi-r, kap2-svgp-colsplit-taxi, linsvr-all-taxi-x-m3, miv-clf-rank-istella, miv-clf-rank-taxi, miv-reg-ties-istella, miv-reg-ties-taxi, nb-lda-fused-zones, nb-mnb-csr-text-x-m3, nofast-adam-synthetic, nofast-adamw-synthetic, nofast-als-taxi-zones, nofast-als-text, nofast-bayesian-gmm-istella, nofast-bootstrap-istella, nofast-bootstrap-taxi, nofast-cross-val-score-istella-b, nofast-cross-val-score-taxi-b, nofast-eigh-synthetic-c, nofast-gamma-istella-b, nofast-gamma-taxi-b, nofast-knn-imputer-istella-b, nofast-label-spreading-istella-b, nofast-lof-istella-b, nofast-logreg-cv-istella-b, nofast-logreg-cv-taxi-b, nofast-permutation-test-istella-b, nofast-permutation-test-taxi-b, nofast-poisson-istella-b, nofast-poisson-taxi-b, nofast-quantile-istella-b, nofast-sgd-clf-istella-c, nofast-sgd-clf-taxi-c, nofast-sgd-reg-istella-c, nofast-sgd-reg-taxi-c, nofast-sgd-synthetic-c, nofast-sparse-pca-istella-b, nofast-tweedie-istella-b, nofast-tweedie-taxi-b, nofast-voting-reg-istella-b, nofast-voting-reg-taxi-b, prep3-maxabs-istella-x-m3, qglm-factor-analysis-istella, qglm-factor-analysis-taxi, regress-adafactor-pipe, regress-dotm-snap, regress-layernorm-pipe, retime-additive-chi2-istella-b, retime-additive-chi2-taxi-b, retime-bisecting-kmeans-taxi-b, retime-categorical-nb-istella-b, retime-categorical-nb-taxi-b, retime-complement-nb-text-b, retime-connected-components-istella-b, retime-connected-components-taxi-b, retime-elliptic-envelope-taxi-b, retime-huber-istella-b, retime-huber-taxi-b, retime-isotonic-taxi-b, retime-label-encoder-istella-b, retime-label-encoder-taxi-b, retime-lstsq-istella-b, retime-maxabs-scaler-taxi-b, retime-min-cov-det-taxi-b, retime-multilabel-binarizer-istella-b, retime-perceptron-istella-b, retime-qr-taxi-c, retime-sgd-ocsvm-istella-b, retime-skewed-chi2-istella-b, retime-skewed-chi2-taxi-b, retime-svd-istella-c, retime-svd-taxi-c, retime-svgp-istella-b, retime-target-encoder-istella-b, sel-fcls-taxi, sel-freg-taxi-b, sel-rreg-taxi, stl-main-synthetic, sym-ordered-all-istella-x, tsa2-stl-taxi-hourly.
 
