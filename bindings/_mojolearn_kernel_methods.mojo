@@ -52,6 +52,8 @@ from kernel_methods.estimator import (
     nystroem_transform_ptr_into,
     KM_FAST_PTR_IN,
     KRR_IDN_PTR_IN,
+    NYS_IDN_FIT_PTR_IN,
+    nystroem_fit_ptr,
     kernel_ridge_fit_ptr_into,
     kernel_ridge_predict_ptr_into,
     rbf_sampler_fit_host,
@@ -459,6 +461,59 @@ def nystroem_fit_binding(
     return PythonObject(sweeps)
 
 
+def nystroem_fit_ptr_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """fam2-kernel-gp (NYS_IDN_FIT_PTR_IN; registered as `nystroem_fit_ptr`
+    only when that define is on): `nystroem_fit_binding`'s `addrs` and
+    `params`, exactly, with X read from its address on the device
+    (`nystroem_fit_ptr`). No owned host copy of X is made. Returns the
+    sweeps."""
+    if len(addrs) != 7:
+        raise Error(
+            "nystroem_fit: addrs must contain 7 addresses (x, components_out,"
+            " indices_out, normalization_out, eigenvalues_out,"
+            " eigenvectors_out, scalars_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 8:
+        raise Error(
+            "nystroem_fit: params must contain 8 values (n, d, kernel, degree,"
+            " gamma, coef0, q, seed), got "
+            + String(len(params))
+        )
+    var xaddr = Int(_f32_ptr(Int(py=addrs[0])))
+    var cp = _f32_ptr(Int(py=addrs[1]))
+    var ip = _i32_ptr(Int(py=addrs[2]))
+    var np_ = _f32_ptr(Int(py=addrs[3]))
+    var evp = _f32_ptr(Int(py=addrs[4]))
+    var ecp = _f32_ptr(Int(py=addrs[5]))
+    var sp = _f64_ptr(Int(py=addrs[6]))
+    var n = Int(py=params[0])
+    var d = Int(py=params[1])
+    var kp = KernelParams(
+        Int(py=params[2]),
+        Int(py=params[3]),
+        Float64(py=params[4]),
+        Float64(py=params[5]),
+    )
+    var q = Int(py=params[6])
+    var seed = UInt64(Int(py=params[7]))
+    var sweeps = 0
+    with GILReleased(Python()):
+        var trace = IdentityTrace()
+        var model = nystroem_fit_ptr(xaddr, n, d, kp, q, seed, trace)
+        copy_f32(model.components.unsafe_ptr(), cp, q * d)
+        for i in range(q):
+            ip.unsafe_store(i, model.component_indices[i])
+        copy_f32(model.normalization.unsafe_ptr(), np_, q * q)
+        copy_f32(model.eigenvalues.unsafe_ptr(), evp, q)
+        copy_f32(model.eigenvectors.unsafe_ptr(), ecp, q * q)
+        sp.unsafe_store(0, Float64(model.sweeps))
+        sweeps = model.sweeps
+    return PythonObject(sweeps)
+
+
 def _nystroem_transform_run(
     model: NystroemModel,
     x: List[Float32],
@@ -721,6 +776,8 @@ def PyInit__mojolearn_kernel_methods() abi("C") -> PythonObject:
             m.def_function[kernel_ridge_fit_ptr_binding]("kernel_ridge_fit_ptr")
             m.def_function[kernel_ridge_predict_ptr_binding]("kernel_ridge_predict_ptr")
         m.def_function[nystroem_fit_binding]("nystroem_fit")
+        comptime if NYS_IDN_FIT_PTR_IN:
+            m.def_function[nystroem_fit_ptr_binding]("nystroem_fit_ptr")
         m.def_function[nystroem_transform_binding]("nystroem_transform")
         m.def_function[rbf_sampler_fit_binding]("rbf_sampler_fit")
         m.def_function[rbf_sampler_transform_binding]("rbf_sampler_transform")

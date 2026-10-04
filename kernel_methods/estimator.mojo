@@ -113,6 +113,8 @@ from kernel_methods.checks.kernel_matrix import (
 from kernel_methods.checks.random_features import (
     KM_RF_TPB,
     km_basis_indices,
+    km_basis_indices_device,
+    km_gather_rows_kernel,
     km_feature_map_epilogue,
     km_feature_scale,
     km_random_offsets,
@@ -1581,6 +1583,107 @@ def nystroem_fit_host(
 
     var ctx = _family_ctx()
     var ca = _upload(ctx, comp)
+    var model = _nystroem_fit_core(
+        ctx, ca, comp^, basis^, n_features, kp, q, seed, trace, elem_tpb, scale_tpb, sabotage
+    )
+    _ = ca^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return model^
+
+
+#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF` unregisters the pointer binding, so
+#: `kernel_methods.py` takes the list route again): Nystroem fit reads X
+#: from the caller's memory straight to the device, scans it for NaN /
+#: infinity there (`_upload_checked`) and gathers the basis rows there
+#: (`km_gather_rows_kernel`), instead of an owned host copy of X
+#: (`read_f32`), a serial host finiteness walk over n x d and a host gather.
+#: The same component words reach the same kernels: no bit moves.
+comptime NYS_IDN_FIT_PTR_IN = _CTX_MODE == _CTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_NYS_DEV_BASIS_OFF` restores the host draw and radix
+#: sort): the pointer fit draws the basis rows on the device
+#: (`km_basis_indices_device`: every row's key drawn there, the rows under a
+#: threshold compacted and ranked there) instead of n_samples host draws and
+#: a host radix sort inside the device fit. Integer only, the same total
+#: order: the same rows in the same order, no bit moves. Applies on the
+#: pointer route (NYS_IDN_FIT_PTR_IN), where X is resident.
+comptime NYS_IDN_DEV_BASIS = _CTX_MODE == _CTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_NYS_DEV_BASIS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def nystroem_fit_ptr(
+    xaddr: Int,
+    n_samples: Int,
+    n_features: Int,
+    kp: KernelParams,
+    n_components: Int,
+    seed: UInt64,
+    mut trace: IdentityTrace,
+) raises -> NystroemModel:
+    """NYS_IDN_FIT_PTR_IN: `nystroem_fit_host` with X read from the caller's
+    address on the device (`_upload_checked`), the basis rows gathered
+    there, and (NYS_IDN_DEV_BASIS) drawn and ranked there. The fit proper is
+    `_nystroem_fit_core`, the list route's."""
+    if xaddr == 0:
+        raise Error("nystroem_fit: null X address")
+    var ctx = _family_ctx()
+    var dx = _upload_checked(ctx, xaddr, n_samples, n_features, "nystroem X")
+    km_validate_kernel_params(kp, "nystroem")
+    var q = n_components
+    var dbasis = ctx.enqueue_create_buffer[DType.int32](max(q, 1))
+    var basis = List[Int32]()
+    if NYS_IDN_DEV_BASIS:
+        basis = km_basis_indices_device(ctx, seed, n_samples, q, dbasis)
+    else:
+        basis = km_basis_indices(seed, n_samples, q)
+        var hb = ctx.enqueue_create_host_buffer[DType.int32](q)
+        for c in range(q):
+            hb.unsafe_ptr().unsafe_store(c, basis[c])
+        ctx.enqueue_copy(dst_buf=dbasis, src_ptr=hb.unsafe_ptr())
+        ctx.synchronize()
+        _ = hb^
+    trace.record_list_i32("nys.basis_indices", basis)
+    var ca = ctx.enqueue_create_buffer[DType.float32](q * n_features)
+    ctx.enqueue_function[km_gather_rows_kernel](
+        ca.unsafe_ptr(), dx.unsafe_ptr(), dbasis.unsafe_ptr(), Int32(q), Int32(n_features),
+        grid_dim=((q * n_features + KM_RF_TPB - 1) // KM_RF_TPB, 1, 1),
+        block_dim=(KM_RF_TPB, 1, 1),
+    )
+    var comp = _download(ctx, ca, q * n_features)
+    _ = dx^
+    _ = dbasis^
+    var model = _nystroem_fit_core(
+        ctx, ca, comp^, basis^, n_features, kp, q, seed, trace, KM_EPILOGUE_TPB, KM_TPB, KMSAB_NONE
+    )
+    _ = ca^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return model^
+
+
+def _nystroem_fit_core(
+    ctx: DeviceContext,
+    mut ca: DeviceBuffer[DType.float32],
+    var comp: List[Float32],
+    var basis: List[Int32],
+    n_features: Int,
+    kp: KernelParams,
+    q: Int,
+    seed: UInt64,
+    mut trace: IdentityTrace,
+    elem_tpb: Int,
+    scale_tpb: Int,
+    sabotage: Int,
+) raises -> NystroemModel:
+    """`nystroem_fit_host` from the uploaded components `ca` (q x n_features)
+    on: the basis kernel, its eigendecomposition, the order and the
+    normalization. `comp` and `basis` are the model's host copies."""
     var dk = ctx.enqueue_create_buffer[DType.float32](q * q)
     var na = ctx.enqueue_create_buffer[DType.float32](q)
     var nb = ctx.enqueue_create_buffer[DType.float32](q)
@@ -1735,7 +1838,6 @@ def nystroem_fit_host(
     trace.record_device(ctx, "nys.normalization", dnorm, q * q)
 
     var norm = _download(ctx, dnorm, q * q)
-    _ = ca^
     _ = dk^
     _ = na^
     _ = nb^
@@ -1748,8 +1850,6 @@ def nystroem_fit_host(
     _ = dz^
     _ = dnorm^
     _ = gws^
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
 
     return NystroemModel(
         comp^, basis^, norm^, values^, vecs_ord^,

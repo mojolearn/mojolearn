@@ -446,7 +446,10 @@ class Nystroem(_KernelMethodBase):
         eigenvalues = empty((q,), "<f4")
         eigenvectors = empty((q * q,), "<f4")
         scalars = empty((1,), "<f8")
-        sweeps = self._extension().nystroem_fit(
+        ext = self._extension()
+        # glue: the pointer entry when the binding registers it (`NYS_IDN_FIT_PTR_IN`)
+        fit_fn = getattr(ext, "nystroem_fit_ptr", None) or ext.nystroem_fit
+        sweeps = fit_fn(
             # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::nystroem_fit_binding.
             # x, components_out, indices_out, normalization_out, eigenvalues_out, eigenvectors_out, scalars_out
             [addr_ro(x, name="X"), addr(components, name="components_"), addr(indices, name="component_indices_"),
