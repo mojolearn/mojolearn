@@ -40,10 +40,10 @@ for ARM in A B; do
   echo "MCDQ-BUILD arm=$ARM head=$(git rev-parse HEAD) defines='$DEFINES'"
   cp "$OUT/$ARM.so" "$SO.tmp"
   mv "$SO.tmp" "$SO"
-  ARGS=()
-  [ -z "$ROWS" ] || ARGS=(--rows "$ROWS")
+  set --
+  [ -z "$ROWS" ] || set -- --rows "$ROWS"
   MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_VENDOR=metal PYTHONPATH="$ROOT/python" \
     "$PY" tools/mcd_compat_quality.py fit "$DATA" "$DATASET" "$OUT/$ARM.npz" \
-    --lane "$LANE" "${ARGS[@]}"
+    --lane "$LANE" "$@"
 done
 "$PY" tools/mcd_compat_quality.py compare "$OUT/A.npz" "$OUT/B.npz"
