@@ -1026,6 +1026,21 @@ def classification_report(y_true, y_pred, *, labels=None, target_names=None, sam
                                   numeric_mode)
 
 
+def _support_total(support, numeric_mode):
+    """The report's support total on the device (x_metrics/cm_epi.mojo,
+    TOTAL: one unit, from 0 in label order): an exact Int64 of the Int64
+    supports (each below 2^31), or the binary64 sum of the weighted ones
+    (Float32 PairSum images, so the Float32 copy is exact)."""
+    k = support.size
+    weighted = support.dtype == "<f8"
+    prog = _Prog()
+    src = prog.put(support) if weighted else prog.put_i32(support)
+    out = prog.want(prog.alloc(2), 2)
+    prog.stage("cm_epi", 1, _CM_TOTAL, src, k, 1 if weighted else 0, out)
+    _execute(prog, numeric_mode)
+    return prog.words(out, 2, "d" if weighted else "q")[0]
+
+
 def _classification_report(y_true, y_pred, labels_given, chosen, present, names, headers, micro_is_accuracy,
                            sample_weight, digits, output_dict, zero_division, numeric_mode):
     p, r, f, s = precision_recall_fscore_support(y_true, y_pred, labels=chosen, average=None,
@@ -1036,9 +1051,7 @@ def _classification_report(y_true, y_pred, labels_given, chosen, present, names,
     report = {}
     for name, a, b, c, d in rows:  # glue: formats the text report rows
         report[name] = dict(zip(headers, (a, b, c, d)))
-    total = 0
-    for v in s.tolist():
-        total += v
+    total = _support_total(s, numeric_mode)
     avg_rows = []
     if micro_is_accuracy:
         acc = precision_recall_fscore_support(y_true, y_pred, labels=chosen, average="micro",
@@ -1080,6 +1093,12 @@ def _f32(x):
     """The Float32 nearest a binary64 value (round to nearest even)."""
     import struct
     return struct.unpack("<f", struct.pack("<f", float(x)))[0]
+
+
+#: reg_epi (op 60, x_metrics/reg_epi.mojo): kinds, MEAN modes, AVG modes
+_RE_MEAN, _RE_PCT, _RE_ASM, _RE_AVG, _RE_SIGN = 0, 1, 2, 3, 4
+_RE_DIV, _RE_ROOT = 1, 2
+_RE_UNIFORM, _RE_CUSTOM, _RE_VARIANCE = 1, 2, 3
 
 
 class _Reg:
@@ -1125,61 +1144,123 @@ class _Reg:
             self.mo = vals
         self.caller = caller
 
-    def column_means(self, kinds, numeric_mode, *, pred_broadcast=None, scalar=None):
-        """For each (kind, Y-source) in `kinds`: the per-column (weighted)
-        mean of the term, binary64 from the Float32 sums (DEVIATION 6106)."""
-        prog = _Prog()
-        Y = prog.put(self.y)
-        P = prog.put(self.p) if pred_broadcast is None else prog.put(
-            Array.from_list([_f32(v) for v in pred_broadcast], "<f4"))
-        S = prog.put(Array.from_list([_f32(0.0 if scalar is None else scalar)], "<f4"))
-        W = _NONE if self.w is None else prog.put(self.w)
-        n, D = self.n, self.D
-        zero = prog.scratch(n)
-        prog.stage("pair_key", n, 0, 0, zero, 1, 2)
-        outs = []
-        for kind in kinds:  # glue: one term stage per requested error kind
-            term = prog.scratch(n * D)
-            prog.stage("reg_term", n * D, Y, P, term, D, _TERM[kind], S, 0 if pred_broadcast is None else 1)
-            outs.append(_group(prog, zero, n, 1, values=term, vstride=D, weights=W, width=D)[1])
-        sw_out = _group(prog, zero, n, 1, weights=W)[1] if self.w is not None else None
-        _execute(prog, numeric_mode)
-        den = float(n) if self.w is None else prog.floats(sw_out, 1)[0]
-        return [[v / den for v in prog.floats(o, D)] for o in outs]
+    # Lane cpu2-l7-metrics (2026-10-04): every regression metric is ONE
+    # program. The per-output tails (the means, roots, percentile flags, the
+    # Float32 broadcast columns, the r2 / explained variance / d2 assembly,
+    # the multioutput averages) are `reg_epi` stages (op 60,
+    # x_metrics/reg_epi.mojo) in soft binary64 next to the folds that make
+    # their inputs; only the final value(s) come back. DEVIATION 6106: the
+    # same binary64 operations, in the same order, as the Python they replace.
 
-    def percentile(self, values_off_fn, rank, numeric_mode, *, average=True):
-        """Per-column weighted percentile of the Float32 array a program
-        stage writes (`values_off_fn(prog) -> offset`, n x D)."""
-        prog = _Prog()
-        V = values_off_fn(prog)
-        n, D = self.n, self.D
-        order = prog.alloc(n * D)
+    def program(self, scalar=None):
+        """Start this metric's program: y, p, the kind's scalar (alpha or
+        power, rounded to Float32), the weights, the one-group key and the
+        weight total."""
+        prog = self.prog = _Prog()
+        self.Y, self.P = prog.put(self.y), prog.put(self.p)
+        self.S = prog.put(Array.from_list([_f32(0.0 if scalar is None else scalar)], "<f4"))
+        self.W = _NONE if self.w is None else prog.put(self.w)
+        self.key = prog.scratch(self.n)
+        prog.stage("pair_key", self.n, 0, 0, self.key, 1, 2)
+        self.SW = _NONE if self.w is None else _group(prog, self.key, self.n, 1, weights=self.W)[1]
+        return prog
+
+    def term(self, kind, V=None, P=None, broadcast=False):
+        """The n x D Float32 terms of `kind` (reg_term) of V (default y)
+        against P (default p; D per-column values when broadcast)."""
+        out = self.prog.scratch(self.n * self.D)
+        self.prog.stage("reg_term", self.n * self.D, self.Y if V is None else V, self.P if P is None else P, out,
+                        self.D, _TERM[kind], self.S, 1 if broadcast else 0)
+        return out
+
+    def sums(self, V):
+        """The D per-column (weighted) Float32 PairSums of the n x D values at V."""
+        return _group(self.prog, self.key, self.n, 1, values=V, vstride=self.D, weights=self.W, width=self.D)[1]
+
+    def fin(self, sums, mode=_RE_DIV, *, f32=False):
+        """reg_epi MEAN: D binary64 values from the Float32 sums, widened,
+        over the weight total or n (_RE_DIV), rooted (_RE_ROOT); with f32,
+        also (dst, d32) where d32 holds the Float32 nearest each, the
+        broadcast column a later reg_term reads."""
+        prog, D = self.prog, self.D
+        dst = prog.alloc(2 * D)
+        d32 = prog.scratch(D) if f32 else _NONE
+        prog.stage("reg_epi", D, _RE_MEAN, D, sums, self.SW, self.n, dst, d32, mode)
+        return (dst, d32) if f32 else dst
+
+    def mean(self, kind, mode=_RE_DIV, **kw):
+        """The per-column (weighted) mean of the term, binary64 (DEVIATION 6106)."""
+        return self.fin(self.sums(self.term(kind, **kw)), mode)
+
+    def percentile(self, V, rank, *, average=True, f32=False):
+        """Per-column weighted percentile of the n x D Float32 values at V
+        (col_sort, wpercentile) as binary64, NaN for an all-zero weight
+        column (reg_epi PCT); f32 as in `fin`."""
+        prog, n, D = self.prog, self.n, self.D
+        order = prog.scratch(n * D)
         prog.stage("col_sort", D, V, n, D, order)
-        W = _NONE if self.w is None else prog.put(self.w)
         R = prog.put(Array.from_list([_f32(rank)], "<f4"))
-        out = prog.want(prog.alloc(D), D)
-        cdf = prog.alloc(n * D)
-        for c in range(D):
-            prog.want(cdf + c * n, 1)
-        prog.stage("wpercentile", D, V, n, D, order, W, R, 1 if average else 0, out, cdf)
-        _execute(prog, numeric_mode)
-        flags = [prog.ints(cdf + c * n, 1)[0] for c in range(D)]
-        vals = prog.floats(out, D)
-        return [float("nan") if fl == -1 else v for v, fl in zip(vals, flags)]
+        out = prog.scratch(D)
+        cdf = prog.scratch(n * D)
+        prog.stage("wpercentile", D, V, n, D, order, self.W, R, 1 if average else 0, out, cdf)
+        dst = prog.alloc(2 * D)
+        d32 = prog.scratch(D) if f32 else _NONE
+        prog.stage("reg_epi", D, _RE_PCT, D, out, cdf, n, dst, d32)
+        return (dst, d32) if f32 else dst
 
-    def average(self, errors):
+    def scan_sign(self, V):
+        """Two flag words the device sets: a value < 0, a value <= 0 (reg_epi SIGN)."""
+        flags = self.prog.alloc(2)
+        self.prog.stage("reg_epi", self.n * self.D, _RE_SIGN, self.n * self.D, V, flags)
+        return self.prog.want(flags, 2)
+
+    def scan_log_domain(self):
+        """One flag word: a y or p value <= -1 (flag_scan)."""
+        N = self.n * self.D
+        flag = _scan_flag(self.prog, self.Y, N, _SCAN_LOG_DOMAIN)
+        self.prog.stage("flag_scan", N, self.P, N, _SCAN_LOG_DOMAIN, flag)
+        return self.prog.want(flag, 1)
+
+    def average(self, vals, *, nan_rule=False, variance=_NONE):
+        """The multioutput answer of the D binary64 values at `vals`: the
+        values themselves (raw_values), else one reg_epi AVG unit."""
+        prog, D, mo = self.prog, self.D, self.mo
+        if mo == "raw_values":
+            return prog.want(vals, 2 * D)
+        if mo == "uniform_average":
+            mode, w = _RE_UNIFORM, _NONE
+        elif mo == "variance_weighted":
+            mode, w = _RE_VARIANCE, variance
+        else:
+            mode, w = _RE_CUSTOM, prog.put_i32(_words64(mo))
+        dst = prog.alloc(2)
+        prog.stage("reg_epi", 1, _RE_AVG, D, vals, mode, w, dst, 1 if nan_rule else 0)
+        return prog.want(dst, 2)
+
+    def result(self, out, numeric_mode, check=None):
+        """Run the program, let `check(prog)` raise on its flags, then the
+        answer: a float, or the per-output Float64 Array for raw_values."""
+        _execute(self.prog, numeric_mode)
+        if check is not None:
+            check(self.prog)
         if self.mo == "raw_values":
-            return Array.from_list([float(v) for v in errors], "<f8")
-        if self.mo == "uniform_average":
-            s = 0.0
-            for v in errors:
-                s += v
-            return float(s / len(errors))
-        s = sw = 0.0
-        for v, w in zip(errors, self.mo):
-            s += v * w
-            sw += w
-        return float(s / sw)
+            return Array.from_list(list(self.prog.words(out, 2 * self.D, "d")), "<f8")
+        return float(self.prog.words(out, 2, "d")[0])
+
+    def scalar(self, out, numeric_mode, check=None):
+        """Run the program; the one binary64 word pair at `out` (single output)."""
+        self.prog.want(out, 2)
+        _execute(self.prog, numeric_mode)
+        if check is not None:
+            check(self.prog)
+        return float(self.prog.words(out, 2, "d")[0])
+
+
+def _words64(values):
+    """binary64 values as their Int32 word pairs, low first (reg_epi ld64)."""
+    store = array.array("i")
+    store.frombytes(array.array("d", values).tobytes())
+    return store
 
 
 def flatten_mo(values):
@@ -1188,12 +1269,15 @@ def flatten_mo(values):
 
 
 def _mean_error(kind, y_true, y_pred, sample_weight, multioutput, numeric_mode, caller, *, root=False,
-                scalar=None):
+                scalar=None, log_domain=None):
+    """The per-output (root) mean of the term, averaged, in one program;
+    `log_domain` names the metric whose log-domain refusal scans y and p
+    in the same program (raised before any result is returned)."""
     r = _Reg(y_true, y_pred, sample_weight, multioutput, caller)
-    errors = r.column_means([kind], numeric_mode, scalar=scalar)[0]
-    if root:
-        errors = [pmath.sqrt(v) for v in errors]
-    return r.average(errors)
+    r.program(scalar)
+    flag = r.scan_log_domain() if log_domain else None
+    out = r.average(r.mean(kind, _RE_DIV | (_RE_ROOT if root else 0)))
+    return r.result(out, numeric_mode, None if flag is None else lambda prog: _refuse_log_domain(prog, flag, log_domain))
 
 
 def regression_error_options(name, y_true, y_pred, sample_weight, multioutput, numeric_mode):
@@ -1210,25 +1294,22 @@ def mean_squared_log_error(y_true, y_pred, *, sample_weight=None, multioutput="u
     """scikit-learn 1.9 `mean_squared_log_error`: the mean of
     `(log1p(y) - log1p(p))^2` (portable log1p, IDENTITY_PATHS row 51);
     values <= -1 are refused as scikit-learn refuses them."""
-    _refuse_log_domain(y_true, y_pred, "Mean Squared Logarithmic Error")
     return _mean_error("sqlog", y_true, y_pred, sample_weight, multioutput, numeric_mode,
-                       "mean_squared_log_error")
+                       "mean_squared_log_error", log_domain="Mean Squared Logarithmic Error")
 
 
 def root_mean_squared_log_error(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
                                 numeric_mode=None):
     """scikit-learn 1.9 `root_mean_squared_log_error` (per-output root, then averaged)."""
-    _refuse_log_domain(y_true, y_pred, "Root Mean Squared Logarithmic Error")
     return _mean_error("sqlog", y_true, y_pred, sample_weight, multioutput, numeric_mode,
-                       "root_mean_squared_log_error", root=True)
+                       "root_mean_squared_log_error", root=True, log_domain="Root Mean Squared Logarithmic Error")
 
 
-def _refuse_log_domain(y_true, y_pred, what):
-    from ._buffer import materialize_f32_lists
-    for v in (y_true, y_pred):
-        a = materialize_f32_lists(v, "input")[0]
-        if a.size and a.min() <= -1:
-            raise ValueError(f"{what} cannot be used when targets contain values less than or equal to -1.")
+def _refuse_log_domain(prog, flag, what):
+    """The log-domain refusal from the program's flag_scan word (lane
+    cpu2-l7-metrics: the O(n) host min left the GPU route)."""
+    if _flag_set(prog, flag):
+        raise ValueError(f"{what} cannot be used when targets contain values less than or equal to -1.")
 
 
 def mean_absolute_percentage_error(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
@@ -1258,13 +1339,8 @@ def median_absolute_error(y_true, y_pred, *, multioutput="uniform_average", samp
     |y - p| (the weighted percentile at 50 with averaging when weighted, the
     same answer as numpy's median when not), from a stable device sort."""
     r = _Reg(y_true, y_pred, sample_weight, multioutput, "median_absolute_error")
-
-    def terms(prog):
-        Y, P = prog.put(r.y), prog.put(r.p)
-        out = prog.alloc(r.n * r.D)
-        prog.stage("reg_term", r.n * r.D, Y, P, out, r.D, _TERM["abs"], Y, 0)
-        return out
-    return r.average(r.percentile(terms, 50.0, numeric_mode))
+    r.program()
+    return r.result(r.average(r.percentile(r.term("abs"), 50.0)), numeric_mode)
 
 
 def max_error(y_true, y_pred, *, numeric_mode=None):
@@ -1282,102 +1358,43 @@ def max_error(y_true, y_pred, *, numeric_mode=None):
     return float(prog.floats(out, 1)[0])
 
 
-def _assemble(num, den, mo, force_finite):
-    scores = []
-    for a, b in zip(num, den):
-        if not force_finite:
-            if b != 0:
-                scores.append(1 - a / b)
-            elif a == 0:
-                scores.append(float("nan"))
-            else:
-                scores.append(float("-inf"))
-        elif b != 0 and a != 0:
-            scores.append(1 - a / b)
-        elif a != 0:
-            scores.append(0.0)
-        else:
-            scores.append(1.0)
-    if mo == "raw_values":
-        return Array.from_list(scores, "<f8")
-    if mo == "uniform_average":
-        weights = None
-    elif mo == "variance_weighted":
-        weights = den if any(v != 0 for v in den) else None
-    else:
-        weights = mo
-    if weights is None:
-        s = 0.0
-        for v in scores:
-            s += v
-        return float(s / len(scores))
-    s = sw = 0.0
-    for v, w in zip(scores, weights):
-        # A constant target with force_finite=False can have score -inf
-        # and variance weight zero. IEEE leaves the NaN sign from 0 * inf
-        # implementation-dependent (Arm +NaN, x86 -NaN). This weighted
-        # score is undefined: return the same explicit NaN as 0/0 above,
-        # before performing the invalid operation. Do not drop the term.
-        if _math.isnan(v) or (w == 0 and _math.isinf(v)):
-            return float("nan")
-        s += v * w
-        sw += w
-    return float(s / sw)
+def _assemble(r, num, den, force_finite, *, average=True):
+    """Stage the per-output scores `1 - num / den` (reg_epi ASM, the
+    force_finite convention) and their multioutput average (reg_epi AVG
+    with the NaN rule: a NaN score, or an infinite one with weight zero,
+    answers NaN; variance_weighted weighs by `den` unless it is all zero)."""
+    prog, D = r.prog, r.D
+    scores = prog.alloc(2 * D)
+    prog.stage("reg_epi", D, _RE_ASM, D, num, den, 1 if force_finite else 0, scores)
+    return r.average(scores, nan_rule=True, variance=den) if average else scores
 
 
 def explained_variance_score(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
                              force_finite=True, numeric_mode=None):
     """scikit-learn 1.9 `explained_variance_score`: `1 - Var(y - p) / Var(y)`
-    with (weighted) means, two device passes (the means, then the centered
+    with (weighted) means, one program (the means, then the centered
     squares); force_finite=False returns scikit-learn's NaN / -inf by value."""
     r = _Reg(y_true, y_pred, sample_weight, multioutput, "explained_variance_score", variance_ok=True)
-    diff_mean, y_mean = _diff_and_y_means(r, numeric_mode)
-    num = _centered(r, "diff", diff_mean, numeric_mode)
-    den = _centered(r, "y", y_mean, numeric_mode)
-    return _assemble(num, den, r.mo, force_finite)
+    r.program()
+    diff, diff_mean, y_mean = _diff_and_y_means(r)
+    num = _centered(r, diff, diff_mean)
+    den = _centered(r, r.Y, y_mean)
+    return r.result(_assemble(r, num, den, force_finite), numeric_mode)
 
 
-def _diff_and_y_means(r, numeric_mode):
-    """Per-column (weighted) means of y - p and of y."""
-    prog = _Prog()
-    Y, P = prog.put(r.y), prog.put(r.p)
-    W = _NONE if r.w is None else prog.put(r.w)
-    n, D = r.n, r.D
-    zero = prog.scratch(n)
-    prog.stage("pair_key", n, 0, 0, zero, 1, 2)
-    diff = prog.scratch(n * D)
-    prog.stage("reg_term", n * D, Y, P, diff, D, _TERM["diff"], Y, 0)
-    a = _group(prog, zero, n, 1, values=diff, vstride=D, weights=W, width=D)[1]
-    b = _group(prog, zero, n, 1, values=Y, vstride=D, weights=W, width=D)[1]
-    sw = _group(prog, zero, n, 1, weights=W)[1] if r.w is not None else None
-    _execute(prog, numeric_mode)
-    den = float(n) if r.w is None else prog.floats(sw, 1)[0]
-    return [v / den for v in prog.floats(a, D)], [v / den for v in prog.floats(b, D)]
+def _diff_and_y_means(r):
+    """Stage y - p and the per-column (weighted) means of y - p and of y,
+    each as the Float32 broadcast column the centered terms read:
+    (diff, diff_mean32, y_mean32)."""
+    diff = r.term("diff")
+    return diff, r.fin(r.sums(diff), f32=True)[1], r.fin(r.sums(r.Y), f32=True)[1]
 
 
-def _centered(r, source, means, numeric_mode, *, mean=True):
-    """Per-column (weighted) mean (or sum) of (v - mean_c)^2, v = y - p or y."""
-    prog = _Prog()
-    Y, P = prog.put(r.y), prog.put(r.p)
-    W = _NONE if r.w is None else prog.put(r.w)
-    n, D = r.n, r.D
-    zero = prog.scratch(n)
-    prog.stage("pair_key", n, 0, 0, zero, 1, 2)
-    if source == "diff":
-        V = prog.scratch(n * D)
-        prog.stage("reg_term", n * D, Y, P, V, D, _TERM["diff"], Y, 0)
-    else:
-        V = Y
-    M = prog.put(Array.from_list([_f32(m) for m in means], "<f4"))
-    sq = prog.scratch(n * D)
-    prog.stage("reg_term", n * D, V, M, sq, D, _TERM["sq"], Y, 1)
-    out = _group(prog, zero, n, 1, values=sq, vstride=D, weights=W, width=D)[1]
-    sw = _group(prog, zero, n, 1, weights=W)[1] if r.w is not None else None
-    _execute(prog, numeric_mode)
-    if not mean:
-        return prog.floats(out, D)
-    den = float(n) if r.w is None else prog.floats(sw, 1)[0]
-    return [v / den for v in prog.floats(out, D)]
+def _centered(r, V, M, *, mean=True):
+    """Stage the per-column (weighted) mean (or the sum, widened) of
+    (v - m_c)^2 over the n x D values at V and the Float32 column M:
+    D binary64 values."""
+    return r.fin(r.sums(r.term("sq", V=V, P=M, broadcast=True)), _RE_DIV if mean else 0)
 
 
 def r2_score_options(y_true, y_pred, sample_weight, multioutput, force_finite, numeric_mode):
@@ -1388,42 +1405,56 @@ def r2_score_options(y_true, y_pred, sample_weight, multioutput, force_finite, n
     if r.n < 2:
         _undefined_warning("R^2 score is not well-defined with less than two samples.")
         return float("nan")
-    _, y_mean = _diff_and_y_means(r, numeric_mode)
-    num = _centered_sse(r, numeric_mode)
-    den = _centered(r, "y", y_mean, numeric_mode, mean=False)
-    return _assemble(num, den, r.mo, force_finite)
+    r.program()
+    num, den = _r2_parts(r)
+    return r.result(_assemble(r, num, den, force_finite), numeric_mode)
 
 
-def _centered_sse(r, numeric_mode):
-    prog = _Prog()
-    Y, P = prog.put(r.y), prog.put(r.p)
-    W = _NONE if r.w is None else prog.put(r.w)
-    n, D = r.n, r.D
-    zero = prog.scratch(n)
-    prog.stage("pair_key", n, 0, 0, zero, 1, 2)
-    sq = prog.scratch(n * D)
-    prog.stage("reg_term", n * D, Y, P, sq, D, _TERM["sq"], Y, 0)
-    out = _group(prog, zero, n, 1, values=sq, vstride=D, weights=W, width=D)[1]
-    _execute(prog, numeric_mode)
-    return prog.floats(out, D)
+def _r2_parts(r):
+    """Stage SS_res and SS_tot per output (binary64 widenings of the Float32
+    sums; the y mean rounded to Float32 in the program)."""
+    y_mean = r.fin(r.sums(r.Y), f32=True)[1]
+    return _centered_sse(r), _centered(r, r.Y, y_mean, mean=False)
+
+
+def _centered_sse(r):
+    return r.fin(r.sums(r.term("sq")), 0)
+
+
+def _r2_sums_of(r, numeric_mode):
+    """(SS_res, SS_tot) of a single-output `_Reg` from one program
+    (linear_model._r2_sums)."""
+    r.program()
+    num, den = _r2_parts(r)
+    words = r.prog.want(num, 2), r.prog.want(den, 2)
+    _execute(r.prog, numeric_mode)
+    return float(r.prog.words(words[0], 2, "d")[0]), float(r.prog.words(words[1], 2, "d")[0])
 
 
 def _tweedie_domain(r, power, caller):
+    """The power refusal now; the y and p sign scans staged in r's program
+    (reg_epi SIGN, lane cpu2-l7-metrics: the O(n) host mins left the GPU
+    route). Returns the check that raises after the run, before a result."""
     msg = f"Mean Tweedie deviance error with power={power} can only be used on "
-    ymin, pmin = r.y.min(), r.p.min()
-    if power < 0:
-        if pmin <= 0:
-            raise ValueError(msg + "strictly positive y_pred.")
-    elif power == 0:
-        pass
-    elif 1 <= power < 2:
-        if ymin < 0 or pmin <= 0:
-            raise ValueError(msg + "non-negative y and strictly positive y_pred.")
-    elif power >= 2:
-        if ymin <= 0 or pmin <= 0:
-            raise ValueError(msg + "strictly positive y and y_pred.")
-    else:
+    if not (power <= 0 or power >= 1):
         raise ValueError(f"mojolearn {caller}: power in (0, 1) is not a Tweedie distribution")
+    if power == 0:
+        return None
+    fy, fp = r.scan_sign(r.Y), r.scan_sign(r.P)
+
+    def check(prog):
+        y_neg, y_nonpos = prog.ints(fy, 2)
+        p_nonpos = prog.ints(fp, 2)[1]
+        if power < 0:
+            if p_nonpos:
+                raise ValueError(msg + "strictly positive y_pred.")
+        elif 1 <= power < 2:
+            if y_neg or p_nonpos:
+                raise ValueError(msg + "non-negative y and strictly positive y_pred.")
+        elif power >= 2:
+            if y_nonpos or p_nonpos:
+                raise ValueError(msg + "strictly positive y and y_pred.")
+    return check
 
 
 def mean_tweedie_deviance(y_true, y_pred, *, sample_weight=None, power=0, numeric_mode=None):
@@ -1434,8 +1465,9 @@ def mean_tweedie_deviance(y_true, y_pred, *, sample_weight=None, power=0, numeri
     r = _Reg(y_true, y_pred, sample_weight, "uniform_average", "mean_tweedie_deviance")
     if r.D != 1:
         raise ValueError("Multioutput not supported in mean_tweedie_deviance")
-    _tweedie_domain(r, power, "mean_tweedie_deviance")
-    return r.column_means(["tweedie"], numeric_mode, scalar=float(power))[0][0]
+    r.program(float(power))
+    check = _tweedie_domain(r, power, "mean_tweedie_deviance")
+    return r.scalar(r.mean("tweedie"), numeric_mode, check)
 
 
 def mean_poisson_deviance(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
@@ -1449,7 +1481,9 @@ def mean_gamma_deviance(y_true, y_pred, *, sample_weight=None, numeric_mode=None
 
 
 def d2_tweedie_score(y_true, y_pred, *, sample_weight=None, power=0, numeric_mode=None):
-    """scikit-learn 1.9 `d2_tweedie_score`: `1 - dev(y, p) / dev(y, avg y)`."""
+    """scikit-learn 1.9 `d2_tweedie_score`: `1 - dev(y, p) / dev(y, avg y)`
+    in one program; a zero null deviance answers NaN (0/0) or -inf as
+    numpy's float division does."""
     if is_bool(power) or not isinstance(power, numbers.Real):
         raise ValueError("power must be a real number")
     r = _Reg(y_true, y_pred, sample_weight, "uniform_average", "d2_tweedie_score")
@@ -1458,26 +1492,28 @@ def d2_tweedie_score(y_true, y_pred, *, sample_weight=None, power=0, numeric_mod
     if r.n < 2:
         _undefined_warning("D^2 score is not well-defined with less than two samples.")
         return float("nan")
-    _tweedie_domain(r, power, "d2_tweedie_score")
-    num = r.column_means(["tweedie"], numeric_mode, scalar=float(power))[0][0]
-    y_avg = r.column_means(["diff"], numeric_mode, pred_broadcast=[0.0])[0][0]
-    den = r.column_means(["tweedie"], numeric_mode, pred_broadcast=[y_avg], scalar=float(power))[0][0]
-    return float(1 - num / den)
+    r.program(float(power))
+    check = _tweedie_domain(r, power, "d2_tweedie_score")
+    num = r.mean("tweedie")
+    y_avg = r.fin(r.sums(r.Y), f32=True)[1]
+    den = r.mean("tweedie", P=y_avg, broadcast=True)
+    return r.scalar(_assemble(r, num, den, False, average=False), numeric_mode, check)
 
 
 def d2_pinball_score(y_true, y_pred, *, sample_weight=None, alpha=0.5, multioutput="uniform_average",
                      numeric_mode=None):
     """scikit-learn 1.9 `d2_pinball_score`: the pinball loss against the
-    (weighted, averaged) alpha-quantile of y_true per output."""
+    (weighted, averaged) alpha-quantile of y_true per output, one program."""
     alpha = _check_alpha(alpha)
     r = _Reg(y_true, y_pred, sample_weight, multioutput, "d2_pinball_score")
     if r.n < 2:
         _undefined_warning("D^2 score is not well-defined with less than two samples.")
         return float("nan")
-    num = r.column_means(["pinball"], numeric_mode, scalar=alpha)[0]
-    quant = r.percentile(lambda prog: prog.put(r.y), alpha * 100, numeric_mode)
-    den = r.column_means(["pinball"], numeric_mode, pred_broadcast=quant, scalar=alpha)[0]
-    return _assemble(num, den, r.mo, True)
+    r.program(alpha)
+    num = r.mean("pinball")
+    quant = r.percentile(r.Y, alpha * 100, f32=True)[1]
+    den = r.mean("pinball", P=quant, broadcast=True)
+    return r.result(_assemble(r, num, den, True), numeric_mode)
 
 
 def d2_absolute_error_score(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",

@@ -199,10 +199,10 @@ def _norm(t: Int, f: FP, q: IP):
     if mode == NORM_ALL_SUM:
         if t != 0:
             return
-        var s = SF64_ZERO
+        var tsum = SF64_ZERO
         for c in range(k * k):
-            s = sf64_add(s, sum_at(f, C, c, weighted))
-        st64(f, TS, s)
+            tsum = sf64_add(tsum, sum_at(f, C, c, weighted))
+        st64(f, TS, tsum)
         return
     if t >= k:
         return
@@ -268,11 +268,11 @@ def _kappa(t: Int, f: FP, q: IP):
     if phase == 1:
         if t != 0:
             return
-        var den = SF64_ZERO
+        var d = SF64_ZERO
         for i in range(k):
-            den = sf64_add(den, ld64(f, S + 2 * i))
-        st64(f, S + 8 * k, den)
-        sti(f, OUT, 1 if is0(den) else 0)
+            d = sf64_add(d, ld64(f, S + 2 * i))
+        st64(f, S + 8 * k, d)
+        sti(f, OUT, 1 if is0(d) else 0)
         return
     var den = ld64(f, S + 8 * k)
     if is0(den):
