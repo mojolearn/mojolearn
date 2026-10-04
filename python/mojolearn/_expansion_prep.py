@@ -4919,28 +4919,6 @@ class IterativeImputer(_PrepBase):
         self._rng, z = _splitmix64(self._rng)
         return z
 
-    def _orders(self, miss, dk, rounds):
-        """The features each round imputes, in order: the reference's orders
-        (a stable argsort of the missing counts; 'descending' that order
-        reversed; 'random' a Fisher-Yates permutation per round of the
-        candidates, every feature or with skip_complete those with missing
-        entries). A feature with nothing missing is skipped whether or not
-        skip_complete (the reference fits it and changes nothing)."""
-        if self.imputation_order != "random":
-            asc = sorted(range(dk), key=lambda j: miss[j])
-            order = {"ascending": asc, "descending": asc[::-1], "roman": list(range(dk)),
-                     "arabic": list(range(dk))[::-1]}[self.imputation_order]
-            return [[j for j in order if miss[j] > 0]] * rounds
-        cand = [j for j in range(dk) if miss[j] > 0] if self.skip_complete else list(range(dk))
-        out = []
-        for _ in range(rounds):
-            perm = list(cand)
-            for i in range(len(perm) - 1, 0, -1):
-                k = self._draw() % (i + 1)
-                perm[i], perm[k] = perm[k], perm[i]
-            out.append([j for j in perm if miss[j] > 0])
-        return out
-
     def _neighbours_device(self, Xf, n, dk, mode, js, k):
         """Lane fam2-prep-metrics (every tier since lane cpu2-l3-prep): every
         (round, feature) step's n_nearest_features draw in ONE program: the
@@ -4986,19 +4964,40 @@ class IterativeImputer(_PrepBase):
         self._bounds_k = [bounds[2 * c + h] for c in self._keep for h in (0, 1)]
         # missing counts per kept column, and the tolerance scale, from the device
         pr = _Prog()
-        fo, mo, bo = self._prepare(pr, arr, Xf)
         xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
-        st, stm = pr.alloc(6 * d), pr.alloc(6 * dk)
+        st = pr.alloc(6 * d)
         _cs(pr, mode, xo, n, d, st)
-        _cs(pr, mode, mo, n, dk, stm)
-        pr.run(mode)
-        miss = [round(v * n) for v in pr.values(stm + dk, dk)]      # mean of the 0/1 mask
-        scale = max([v for v in pr.values(st + 5 * d, d)] or [0.0])
-        self._indicator = [j for j, c in enumerate(pr.values(st, d)) if int(c) < n] if self.add_indicator else []
-        self.n_features_with_missing_ = sum(1 for m in miss if m > 0)
-        self.numeric_mode_, self.n_features_in_ = mode, d
         rounds = int(self.max_iter)
-        orders = self._orders(miss, dk, rounds)
+        # lane cpu2-l3-prep: the missing counts (c2_ii_miss), each round's imputation
+        # order (c2_ii_pos + c2_ii_ord, or c2_ii_rand: the reference's Fisher-Yates on the
+        # instance's splitmix64 stream, one round a thread) and the tolerance scale
+        # (c2_colmax) on the device; the orders come back as the fit's control lists
+        R = max(rounds, 1)
+        ordw, lens, sc = pr.alloc(max(R * dk, 1)), pr.alloc(R), pr.alloc(1)
+        pr.stage("c2_colmax", 1, st + 5 * d, d, sc)
+        if dk:
+            missd = pr.work(dk)
+            pr.stage("c2_ii_miss", dk, st, pr.put_ints(self._keep), n, missd)
+            if self.imputation_order == "random":
+                pr.stage("c2_ii_rand", R, missd, dk, 1 if self.skip_complete else 0, _seed_words(pr, self._rng),
+                         ordw, lens)
+            else:
+                pos = pr.work(dk)
+                mcode = {"ascending": 0, "descending": 1, "roman": 2, "arabic": 3}[self.imputation_order]
+                pr.stage("c2_ii_pos", dk, missd, dk, mcode, pos)
+                pr.stage("c2_ii_ord", dk, missd, dk, pos, R, ordw, lens)
+        pr.run(mode)
+        scale = pr.values(sc, 1)[0]
+        self._indicator = [j for j, c in enumerate(pr.values(st, d)) if int(c) < n] if self.add_indicator else []
+        ln = pr.get_i32(lens, R).tolist() if dk else [0] * R
+        ow = pr.get_i32(ordw, R * dk).tolist() if dk else []
+        orders = [ow[r * dk:r * dk + ln[r]] for r in range(rounds)]  # glue: the device's orders as control lists
+        self.n_features_with_missing_ = ln[0]
+        if self.imputation_order == "random":
+            # the draws the rounds took: (m - 1) a round over m candidates
+            m = ln[0] if self.skip_complete else dk
+            self._rng = (self._rng + rounds * max(m - 1, 0) * 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
+        self.numeric_mode_, self.n_features_in_ = mode, d
         nnf = self.n_nearest_features
         corr = _NeighbourDraws(self, Xf, n, dk, mode, orders) if nnf is not None and nnf < dk else None
         if self.estimator is not None:
