@@ -1720,8 +1720,6 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_gpc_impl.py	0	for
 # why: one-vs-rest dispatch: one gpc_fit/gpc_predict call per class column and per-class model bookkeeping (k-sized); owed: a multi-class gpc_fit/gpc_predict binding entry that takes all k columns in one call
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_gpc_impl.py	0	for e in range(n_est):
 # why: one-vs-rest dispatch: one gpc_fit/gpc_predict call per class column and per-class model bookkeeping (k-sized); owed: a multi-class gpc_fit/gpc_predict binding entry that takes all k columns in one call
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_gpc_impl.py	0	for k in columns:
-# why: one-vs-rest dispatch: one gpc_fit/gpc_predict call per class column and per-class model bookkeeping (k-sized); owed: a multi-class gpc_fit/gpc_predict binding entry that takes all k columns in one call
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_gpc_impl.py	0	self.n_iter_ = [e.n_iter_ for e in fits]
 # why: AgglomerativeClustering post-processing over n (connectivity edge list, cosine zero-row check, tree cut, heads, label ranks); owed to x_cluster/agglo.mojo returning labels (x_cluster binding shared with pyglue-numeric)
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_hierarchy_impl.py	0	if any(not any(row) for row in flat):
