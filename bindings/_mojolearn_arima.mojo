@@ -281,10 +281,11 @@ def arima_fit_binding(
         [0 * batch_size, 1 * batch_size)   n_iter
         [1 * batch_size, 2 * batch_size)   retcode, 0 is OPT_SUCCESS
     """
-    if len(params) != 13:
+    if len(params) != 13 and len(params) != 16:
         raise Error(
             "arima_fit: params must contain 13 values (batch_size, n_obs, p,"
-            " d, q, P, D, Q, s, k, n_exog, method, max_iterations), got "
+            " d, q, P, D, Q, s, k, n_exog, method, max_iterations), or 16 with"
+            " (ic_addr, pen_aic, pen_bic), got "
             + String(len(params))
         )
     var yp = _f32_ptr(Int(py=y_addr))
@@ -308,11 +309,21 @@ def arima_fit_binding(
     var n_exog = Int(py=params[10])
     var method = Int(py=params[11])
     var max_iterations = Int(py=params[12])
+    # lane cpu3-seq (2026-10-04): AIC then BIC, `2 * batch_size` float64 at
+    # `ic_addr`, written by the fit (0 = not asked)
+    var ic_address = 0
+    var pen_aic = Float64(0.0)
+    var pen_bic = Float64(0.0)
+    if len(params) == 16:
+        ic_address = Int(py=params[13])
+        pen_aic = Float64(py=params[14])
+        pen_bic = Float64(py=params[15])
     var written = 0
     with GILReleased(Python()):
         written = arima_fit_ptr_host(
             yp, exog_address, pp, xp, x0p, sp, fp, batch_size, n_obs,
             p, d, q, P, D, Q, s, k, n_exog, method, max_iterations,
+            ic_address, pen_aic, pen_bic,
         )
     return PythonObject(written)
 
