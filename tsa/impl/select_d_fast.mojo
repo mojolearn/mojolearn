@@ -273,8 +273,11 @@ def kpss_one_wait(
         grid_dim=((total + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
     )
     var y_diff = w.create_sub_buffer[DType.float32](0, tot)
-    # d + D == 0 is `prepare_data`'s device-to-device copy
-    prepare_data(ctx, y_diff, d_y, batch_size, n_obs, d, D, s)
+    if d == 0 and D == 0:
+        # the test reads the input itself: a device-to-device copy into the workspace
+        ctx.enqueue_copy(dst_buf=y_diff, src_buf=d_y)
+    else:
+        prepare_data(ctx, y_diff, d_y, batch_size, n_obs, d, D, s)
     comptime sum_kernel = series_sum_kernel[False]
     comptime sumsq_kernel = series_sum_kernel[True]
     var nd_f = Float32(nd)
