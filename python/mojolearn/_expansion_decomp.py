@@ -4442,8 +4442,8 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     if not dev_f0:
         F0 = _hstack(Fhat, un)
     if dev_f0 and k.w4_flags() & 1:
-        # lane/apple-fast-w4-decomp LLE_FAST_DEV_LU (-D MOJOLEARN_LLE_FAST_DEV_LU,
-        # FAST + Apple): F0 factored where it lives; the same launches as the
+        # lane/apple-fast-w4-decomp LLE_FAST_DEV_LU (FAST + Apple default,
+        # -D MOJOLEARN_LLE_FAST_DEV_LU_OFF rolls back): F0 factored where it lives; the same launches as the
         # two calls below, without F0 / the factor crossing to the host 5 times
         lu, pm, im, st = k.lu_dev_aux(F0, clamp=True)
     else:
