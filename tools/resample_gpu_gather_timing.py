@@ -49,7 +49,10 @@ def main():
         for name in ('X.npy', 'y.npy', 'Xq.npy'):
             with archive.open(name) as stream:
                 version = np.lib.format.read_magic(stream)
-                shape, fortran, dtype = np.lib.format._read_array_header(stream, version)
+                assert version in ((1, 0), (2, 0)), version
+                reader = (np.lib.format.read_array_header_1_0 if version == (1, 0)
+                          else np.lib.format.read_array_header_2_0)
+                shape, fortran, dtype = reader(stream)
                 shapes[name] = list(shape)
                 if name == 'X.npy':
                     assert shape == (1000000, 11 if dataset == 'taxi' else 220), shape
