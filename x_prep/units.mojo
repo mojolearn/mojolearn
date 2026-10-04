@@ -43,6 +43,13 @@ from x_prep.blocked import (
     csb_part_unit, csb_fold_unit, csb_ss_unit, csb_var_unit, cat_hpart_unit, cat_hfold_unit,
     IDN_NB_ONEPASS, csb1_part_unit, csb1_neg_unit,
     IDN_NB_CSR_DENSE, csr_dense_unit,
+    IDN_CLASS_ONEPASS, csb1_ss_unit,
+)
+from x_prep.select_blocked import (
+    IDN_SELECT_BLOCKED, fcb_part_unit, fcb_fin_unit, frb_part1_unit, frb_mean_unit, frb_part2_unit, frb_fin_unit,
+)
+from x_prep.pt_blocked import (
+    IDN_PT_BLOCKED, ptb_part1_unit, ptb_mean_unit, ptb_part2_unit, ptb_fin_unit, ptb_step_unit,
 )
 from x_prep.label_fast import IDN_LABEL
 from naive_bayes.da import (
@@ -64,7 +71,11 @@ from x_prep.calib import (
 #: on every vendor and in the host column; the op numbers between are empty there.
 #: lane idn-all: op 164 (IDN_NB_CSR_DENSE, x_prep/blocked.mojo `csr_dense_unit`), IDENTICAL only.
 comptime IDN_INT_OPS = IDN_LABEL or IDN_NB_ONEPASS or IDN_NB_CSR_DENSE
-comptime N_OPS = 165 if IDN_INT_OPS else (162 if CAT_CLS2_PACK else (157 if CALIB_FOLDS else 142))
+#: lane fam-prep-metrics: op 165 (IDN_CLASS_ONEPASS, x_prep/blocked.mojo `csb1_ss_unit`) and ops
+#: 166-171 (IDN_SELECT_BLOCKED, x_prep/select_blocked.mojo), IDENTICAL only, every vendor and the
+#: host column; ops 172-176 (IDN_PT_BLOCKED, x_prep/pt_blocked.mojo) likewise.
+comptime IDN_FAM_OPS = IDN_CLASS_ONEPASS or IDN_SELECT_BLOCKED or IDN_PT_BLOCKED
+comptime N_OPS = 177 if IDN_FAM_OPS else (165 if IDN_INT_OPS else (162 if CAT_CLS2_PACK else (157 if CALIB_FOLDS else 142)))
 #: ops 157-161 (x_prep/cat_cls2.mojo, lane/apple-fast-gap-cls2) exist only under
 #: CAT_CLS2_PACK (FAST + Apple default, -D MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF off)
 
@@ -406,3 +417,30 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
     comptime if IDN_NB_CSR_DENSE:
         comptime if OP == 164:
             csr_dense_unit(t, f, q)
+    comptime if IDN_CLASS_ONEPASS:
+        comptime if OP == 165:
+            csb1_ss_unit(t, f, q)
+    comptime if IDN_SELECT_BLOCKED:
+        comptime if OP == 166:
+            fcb_part_unit(t, f, q)
+        comptime if OP == 167:
+            fcb_fin_unit(t, f, q)
+        comptime if OP == 168:
+            frb_part1_unit(t, f, q)
+        comptime if OP == 169:
+            frb_mean_unit(t, f, q)
+        comptime if OP == 170:
+            frb_part2_unit(t, f, q)
+        comptime if OP == 171:
+            frb_fin_unit(t, f, q)
+    comptime if IDN_PT_BLOCKED:
+        comptime if OP == 172:
+            ptb_part1_unit(t, f, q)
+        comptime if OP == 173:
+            ptb_mean_unit(t, f, q)
+        comptime if OP == 174:
+            ptb_part2_unit(t, f, q)
+        comptime if OP == 175:
+            ptb_fin_unit(t, f, q)
+        comptime if OP == 176:
+            ptb_step_unit(t, f, q)

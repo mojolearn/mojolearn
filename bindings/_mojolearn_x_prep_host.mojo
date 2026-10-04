@@ -16,6 +16,10 @@ from x_prep.folds import kfold_folds, strat_folds
 from x_prep.py2mojo import PY2MOJO_PREP
 from x_prep.label_fast import IDN_LABEL
 from x_prep.blocked import IDN_NB_ONEPASS
+from x_prep.blocked import IDN_STATS_BLOCKED, IDN_CLASS_ONEPASS
+from x_prep.select_blocked import IDN_SELECT_BLOCKED
+from x_prep.pt_blocked import IDN_PT_BLOCKED
+from x_prep.host.rr_eigh_host import IDN_RR_EIGH
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -173,6 +177,19 @@ def idn_int_binding() raises -> PythonObject:
     return PythonObject((1 if IDN_LABEL else 0) | (2 if IDN_NB_ONEPASS else 0))
 
 
+def idn_fam_binding() raises -> PythonObject:
+    """Lane fam-prep-metrics (IDENTICAL, device and host column alike): the
+    bits of the family switches this binding was built with, read by
+    python/mojolearn/_expansion_prep.py `_idn_fam` (1 IDN_STATS_BLOCKED, 2
+    IDN_CLASS_ONEPASS: op 165, 4 IDN_SELECT_BLOCKED: ops 166-171, 8
+    IDN_PT_BLOCKED: ops 172-176, 16 IDN_RR_EIGH: informational, the eigh
+    stage's order is the binding's own); registered only when one is on."""
+    return PythonObject(
+        (1 if IDN_STATS_BLOCKED else 0) | (2 if IDN_CLASS_ONEPASS else 0) | (4 if IDN_SELECT_BLOCKED else 0)
+        | (8 if IDN_PT_BLOCKED else 0) | (16 if IDN_RR_EIGH else 0)
+    )
+
+
 @export
 def PyInit__mojolearn_x_prep_host() abi("C") -> PythonObject:
     try:
@@ -198,6 +215,9 @@ def PyInit__mojolearn_x_prep_host() abi("C") -> PythonObject:
             m.def_function[label_present_binding]("x_prep_label_present")
         comptime if IDN_LABEL or IDN_NB_ONEPASS:
             m.def_function[idn_int_binding]("x_prep_idn_int")
+        comptime if IDN_STATS_BLOCKED or IDN_CLASS_ONEPASS or IDN_SELECT_BLOCKED or IDN_PT_BLOCKED or IDN_RR_EIGH:
+            # lane fam-prep-metrics
+            m.def_function[idn_fam_binding]("x_prep_idn_fam")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_prep_host: ", e))

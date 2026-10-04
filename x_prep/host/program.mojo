@@ -22,6 +22,7 @@ from x_prep.units import N_OPS, run_unit
 from x_prep.py2mojo import P2M_BASE, P2M_N, is_p2m_op, run_p2m_unit
 from x_prep.host.sort import sort_cols_host_unit
 from x_prep.host.power import pt_fit_host_unit
+from x_prep.host.rr_eigh_host import IDN_RR_EIGH, eigh_rr_host_unit
 from x_prep.kbins import kbins_edges
 from x_prep.host.target import te_enc_host_groups, te_enc_host_group
 from x_prep.host.mutual_info import mi_cc_host_stage, mi_cd_host_stage, mi_dc_host_stage
@@ -46,6 +47,7 @@ comptime OP_SORT_COLS = 0
 comptime OP_MATMUL = 13
 comptime OP_CLASS_STATS = 16
 comptime OP_TE_ENC = 21
+comptime OP_EIGH = 18
 comptime OP_KBINS_EDGES = 25
 comptime OP_QDA_COV = 40
 comptime OP_QDA_DEC = 42
@@ -65,6 +67,9 @@ def _host_unit[K: Int](t: Int, f: FP, q: IP):
         qda_dec_host_unit(t, f, q)
     elif K == OP_KBINS_EDGES:
         kbins_edges[True](t, f, q)
+    elif K == OP_EIGH and IDN_RR_EIGH:
+        # lane fam-prep-metrics: the round-robin eigh's words (x_prep/host/rr_eigh_host.mojo)
+        eigh_rr_host_unit(t, f, q)
     elif K >= P2M_BASE:
         run_p2m_unit[K](t, f, q)
     else:
