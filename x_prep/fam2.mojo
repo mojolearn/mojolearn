@@ -36,6 +36,12 @@ define that restores the old route, and turns off under MOJOLEARN_IDN_ALL_OFF.
       f2_clamp0 (an unknown label's -1 becomes class 0 so no unit indexes
       out of its table; the count refuses the batch after the run).
 
+  IDN_LABEL_INV (-D MOJOLEARN_IDN_LABEL_INV_OFF): LabelEncoder
+      inverse_transform of an integer code buffer over numeric classes. Was
+      three Python walks over the codes (int(), the range check, the class
+      gather). f2_code_gather (op 241): one thread per code checks it and
+      writes its class as the int64 or binary64 word the caller returns.
+
 Ops 236-240 are the IDENTICAL tiled Gram of LDA / QDA (x_prep/gram_blocked.mojo,
 IDN_GRAM_BLOCKED and its candidate arms).
 
@@ -46,6 +52,7 @@ it then (`x_prep_idn_fam2`, bindings/_mojolearn_x_prep*.mojo).
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.common import FP, IP, p, raw, ldi, sti, ld, st
+from checks.soft_f64 import sf64_from_f32
 from x_prep.prims import add, mul
 from x_prep.py2mojo import splitmix_at
 from x_prep.blocked import XB
@@ -58,9 +65,10 @@ comptime IDN_WDRAW = _F2_IDN and not is_defined["MOJOLEARN_IDN_WDRAW_OFF"]()
 comptime IDN_PERM_DRAW = _F2_IDN and not is_defined["MOJOLEARN_IDN_PERM_DRAW_OFF"]()
 comptime IDN_WPICK = _F2_IDN and not is_defined["MOJOLEARN_IDN_WPICK_OFF"]()
 comptime IDN_PARTIAL_CODES = _F2_IDN and not is_defined["MOJOLEARN_IDN_PARTIAL_CODES_OFF"]()
+comptime IDN_LABEL_INV = _F2_IDN and not is_defined["MOJOLEARN_IDN_LABEL_INV_OFF"]()
 
 comptime F2_BASE = 230
-comptime F2_N = 11
+comptime F2_N = 12
 
 
 @always_inline
@@ -254,6 +262,38 @@ def f2_clamp0_unit(t: Int, f: FP, q: IP):
     st(f, p(q, 1) + t, v)
 
 
+# ---------------------------------------------------------------- LabelEncoder inverse
+def f2_code_gather_unit(t: Int, f: FP, q: IP):
+    """q = [CODES, K, CATS, KIND, OUT, BAD]; t = element. CODES[t] is a
+    float code (lab_load's: NaN when the label has no exact float32 word). A
+    code that is an integer in [0, K) is valid: OUT[2t], OUT[2t + 1] = its
+    class CATS[code] as a 64-bit little-endian word, KIND 0 the int64 of the
+    (integral) class value, KIND 1 its binary64 (the exact widening);
+    BAD[t] = 0.0. Any other code: OUT = 0 and BAD[t] = -1.0 (count_neg
+    counts them and the caller refuses)."""
+    var c = ld(f, p(q, 0) + t)
+    var K = p(q, 1)
+    var ok = c == c and c >= Float32(0) and c < Float32(K)
+    var code = 0
+    if ok:
+        code = Int(c)
+        ok = Float32(code) == c
+    var lo = UInt32(0)
+    var hi = UInt32(0)
+    if ok:
+        var v = raw(f, p(q, 2) + code)
+        var bits = UInt64(0)
+        if p(q, 3) == 0:
+            bits = UInt64(Int(v))
+        else:
+            bits = sf64_from_f32(v)
+        lo = UInt32(bits & UInt64(0xFFFFFFFF))
+        hi = UInt32(bits >> UInt64(32))
+    f.bitcast[UInt32]().unsafe_store(p(q, 4) + 2 * t, lo)
+    f.bitcast[UInt32]().unsafe_store(p(q, 4) + 2 * t + 1, hi)
+    f.unsafe_store(p(q, 5) + t, Float32(0) if ok else Float32(-1))
+
+
 @always_inline
 def run_f2_unit[OP: Int](t: Int, f: FP, q: IP):
     comptime if IDN_WDRAW:
@@ -285,3 +325,6 @@ def run_f2_unit[OP: Int](t: Int, f: FP, q: IP):
     comptime if IDN_GRAM_ROWTILE:
         comptime if OP == F2_BASE + 7:
             gb_part_row_unit(t, f, q)
+    comptime if IDN_LABEL_INV:
+        comptime if OP == F2_BASE + 11:
+            f2_code_gather_unit(t, f, q)

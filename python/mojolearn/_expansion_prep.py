@@ -117,6 +117,7 @@ _OPS = dict(
     f2_wblk=230, f2_wscan=231, f2_wdraw=232, f2_perm_rows=233, f2_wpick=234, f2_clamp0=235,
     # the IDENTICAL tiled Gram (x_prep/gram_blocked.mojo): bit 16; gb_part_row is the bit 32 candidate
     gb_part=236, gb_part_row=237, gb_fold=238, qcb_part=239, qcb_fold=240,
+    f2_code_gather=241,
 )
 _PARAMS = 14
 _NONE = -1
@@ -2330,7 +2331,7 @@ def _nb_counts(pr, wo, xo, n, d, yo, K, cnt, sums, thr=_NONE, neg=_NONE):
 #: binding -> its `x_prep_idn_fam2` bits (0 when it has none), probed once
 _IDN_FAM2 = {}
 _F2_WDRAW, _F2_PERM_DRAW, _F2_WPICK, _F2_PARTIAL_CODES = 1, 2, 4, 8
-_F2_GRAM, _F2_GRAM_ROWTILE = 16, 32
+_F2_GRAM, _F2_GRAM_ROWTILE, _F2_LABEL_INV = 16, 32, 64
 #: the most partial words (blocks x cells) a blocked Gram keeps; past it the
 #: block grows, then the one-thread-per-cell stage (a function of the shape
 #: only, so the device and the host column agree)
@@ -4478,8 +4479,37 @@ class LabelEncoder(_PrepBase):
             raise ValueError("mojolearn: y contains previously unseen labels")
         return pr.get_i32(out, n)
 
+    def _inverse_device(self, y):
+        """Lane fam2-prep-metrics (IDENTICAL, `_idn_fam2` bit 64): an integer
+        code buffer over numeric classes, one program: each code checked and
+        its class written as the int64 / float64 word returned
+        (f2_code_gather, x_prep/fam2.mojo). None: the Python route."""
+        mode = self.numeric_mode_
+        if self._cats is None or not _idn_fam2(mode) & _F2_LABEL_INV:
+            return None
+        lb = _label_buffer(y)
+        if lb is None or lb.is_float:
+            return None
+        n, K = lb.n, self._cats.size
+        ints = label_kind(self._classes) == "int"
+        pr = _Prog()
+        x = _label_load(pr, lb)
+        out, bad, neg = pr.alloc(2 * n), pr.work(n), pr.alloc(1)
+        pr.stage("f2_code_gather", n, x, K, pr.put(self._cats), 0 if ints else 1, out, bad)
+        pr.stage("count_neg", 1, bad, n, 1, neg)
+        pr.run(mode)
+        if pr.values(neg, 1)[0] > 0:
+            raise ValueError("mojolearn: y contains previously unseen labels")
+        words = pr.get_i32(out, 2 * n)
+        store = array.array("q" if ints else "d")
+        store.frombytes(ctypes.string_at(words._addr, 8 * n))
+        return Array._owned(store, (n,), "<i8" if ints else "<f8", "C")
+
     def inverse_transform(self, y):
         self._check_fitted()
+        got = self._inverse_device(y)
+        if got is not None:
+            return got
         codes = [int(c) for c in flatten_labels(y)]
         if any(c < 0 or c >= len(self._classes) for c in codes):
             raise ValueError("mojolearn: y contains previously unseen labels")

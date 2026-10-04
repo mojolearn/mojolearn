@@ -20,7 +20,7 @@ from x_prep.blocked import IDN_STATS_BLOCKED, IDN_CLASS_ONEPASS
 from x_prep.select_blocked import IDN_SELECT_BLOCKED
 from x_prep.pt_blocked import IDN_PT_BLOCKED
 from x_prep.host.rr_eigh_host import IDN_RR_EIGH
-from x_prep.fam2 import IDN_WDRAW, IDN_PERM_DRAW, IDN_WPICK, IDN_PARTIAL_CODES
+from x_prep.fam2 import IDN_WDRAW, IDN_PERM_DRAW, IDN_WPICK, IDN_PARTIAL_CODES, IDN_LABEL_INV
 from x_prep.gram_blocked import IDN_GRAM_BLOCKED, IDN_GRAM_ROWTILE, IDN_GRAM_ROWS
 from x_prep.calib import CALIB_FOLDS, CAL_ST, CAL_LS
 from x_prep.py2mojo import PY2MOJO_PREP
@@ -294,12 +294,12 @@ def idn_fam2_binding() raises -> PythonObject:
     by python/mojolearn/_expansion_prep.py `_idn_fam2` (1 IDN_WDRAW: ops
     230-232, 2 IDN_PERM_DRAW: op 233, 4 IDN_WPICK: op 234, 8
     IDN_PARTIAL_CODES: op 235, 16 IDN_GRAM_BLOCKED: ops 236, 238-240, 32
-    IDN_GRAM_ROWTILE: op 237 (candidate), bits 16 and up: the Gram's rows per
+    IDN_GRAM_ROWTILE: op 237 (candidate), 64 IDN_LABEL_INV: op 241, bits 16 and up: the Gram's rows per
     block); registered only when one is on."""
     return PythonObject(
         (1 if IDN_WDRAW else 0) | (2 if IDN_PERM_DRAW else 0) | (4 if IDN_WPICK else 0)
         | (8 if IDN_PARTIAL_CODES else 0) | (16 if IDN_GRAM_BLOCKED else 0) | (32 if IDN_GRAM_ROWTILE else 0)
-        | (IDN_GRAM_ROWS << 16)
+        | (64 if IDN_LABEL_INV else 0) | (IDN_GRAM_ROWS << 16)
     )
 
 
@@ -321,7 +321,7 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         comptime if IDN_STATS_BLOCKED or IDN_CLASS_ONEPASS or IDN_SELECT_BLOCKED or IDN_PT_BLOCKED or IDN_RR_EIGH:
             # lane fam-prep-metrics
             m.def_function[idn_fam_binding]("x_prep_idn_fam")
-        comptime if IDN_WDRAW or IDN_PERM_DRAW or IDN_WPICK or IDN_PARTIAL_CODES or IDN_GRAM_BLOCKED:
+        comptime if IDN_WDRAW or IDN_PERM_DRAW or IDN_WPICK or IDN_PARTIAL_CODES or IDN_GRAM_BLOCKED or IDN_LABEL_INV:
             # lane fam2-prep-metrics: the fam2 switches (x_prep/fam2.mojo)
             m.def_function[idn_fam2_binding]("x_prep_idn_fam2")
         m.def_function[run_scratch_binding]("x_prep_run_scratch")
