@@ -168,6 +168,13 @@ comptime OP_STL_MA = 76
 comptime OP_STL_LOESS = 77
 comptime OP_STL_DESEAS = 78
 comptime OP_STL_FINISH = 79
+# nr-small (2026-10-04), sequence/mlp.mojo: the MLP fit's blocked L2 and
+# batch-loss folds, the device epoch order and the device epoch loss
+comptime OP_MLP_L2PART = 90
+comptime OP_MLP_L2FOLD = 91
+comptime OP_MLP_ROWPART = 92
+comptime OP_MLP_PERM = 93
+comptime OP_MLP_EPOCH_LOSS = 94
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0

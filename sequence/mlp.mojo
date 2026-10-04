@@ -18,6 +18,36 @@ restated).
 """
 from sequence.ops import FP, Args, add, fma3, ld, mul, op_bias, op_colsum, op_gemm, st, sub, sumsq_fold
 from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_sigmoid, identical_tanh
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from sequence.adafactor import AF_NORM_BLOCK, af_fold_parts
+from std.sys.compile import is_defined
+
+#: nr-small (2026-10-04, review item 7: "MLP fit has one-thread folds per
+#: batch"). IDENTICAL, every column and the host together (the epoch loop
+#: and these bodies are one source for the GPU and the CPU):
+#: MLP_BLOCKED_FOLDS: ||W_l||^2 per layer is THE BLOCKED ORDER of
+#:   `sequence/adafactor.mojo` (blocks of AF_NORM_BLOCK consecutive weights,
+#:   each one ascending fma chain from zero, `op_mlp_l2part`, then the block
+#:   partials added ascending from zero, `op_mlp_l2fold`), and the batch's
+#:   row-loss sum is blocks of MLP_ROW_BLOCK rows added ascending, then the
+#:   block sums ascending (`op_mlp_rowpart`, `op_mlp_bloss`). A layer of at
+#:   most AF_NORM_BLOCK weights and a batch of at most MLP_ROW_BLOCK rows is
+#:   one block: the old chain, the old bits; larger ones get new bits.
+#:   -D MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF.
+#: MLP_EPOCH_DEV (roadmap D13): the epoch order is `op_mlp_perm` on the
+#:   executor (the x_cnn Feistel permutation, integers only) instead of a
+#:   host Fisher-Yates walk and an N-word upload per epoch, and the epoch
+#:   loss is `op_mlp_epoch_loss` (float32: sum of batch loss times batch
+#:   rows, ascending fmas, divided by N) instead of a float64 fold on the
+#:   host of every batch loss; one word comes back per epoch for the
+#:   stopping rule. New shuffle order and new curve bits on every column.
+#:   -D MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF.
+#: Both also turn off under MOJOLEARN_IDN_ALL_OFF.
+comptime _MLP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime MLP_BLOCKED_FOLDS = _MLP_IDN and not is_defined["MOJOLEARN_IDN_MLP_BLOCKED_FOLDS_OFF"]()
+comptime MLP_EPOCH_DEV = _MLP_IDN and not is_defined["MOJOLEARN_IDN_MLP_EPOCH_DEV_OFF"]()
+comptime MLP_L2_BLOCK = AF_NORM_BLOCK
+comptime MLP_ROW_BLOCK = 256
 
 comptime ACT_IDENTITY = 0
 comptime ACT_LOGISTIC = 1
@@ -127,11 +157,16 @@ def op_sumsq(t: Int, a: Args):
 def op_mlp_bloss(t: Int, a: Args):
     """One thread: p2[i0] = data + reg. data = sum(p0[0:B]) / (B O) / 2
     (squared) or / B (log); reg = 0.5 alpha sum(p1[0:L]) / B.
-    i1 B, i2 O, i3 L, i4 loss; f0 = 0.5 alpha."""
+    i1 B, i2 O, i3 L, i4 loss; f0 = 0.5 alpha. i5 > 0 (MLP_BLOCKED_FOLDS):
+    sum(p0[0:B]) is the i5 block sums at p3 added ascending."""
     var B = a.i1
     var s = Float32(0.0)
-    for k in range(B):
-        s = add(s, ld(a.p0, k))
+    if a.i5 > 0:
+        # MLP_BLOCKED_FOLDS: the i5 block sums of op_mlp_rowpart (p3)
+        s = af_fold_parts(a.p3, a.i5)
+    else:
+        for k in range(B):
+            s = add(s, ld(a.p0, k))
     var data: Float32
     if a.i4 == LOSS_SQUARED:
         data = div(div(s, Float32(B * a.i2)), Float32(2.0))
@@ -239,3 +274,142 @@ def fisher_yates(mut rng: SplitMix, mut perm: List[Float32]):
         perm[i] = perm[j]
         perm[j] = t
         i -= 1
+
+
+# ------------------------------------------------------------------ nr-small blocked folds
+@always_inline
+def _layer_oc(a: Args, l: Int) -> Tuple[Int, Int]:
+    """Layer l's (offset, count) in op_sumsq's packing (i4..i11, l < 4)."""
+    if l == 0:
+        return (a.i4, a.i5)
+    if l == 1:
+        return (a.i6, a.i7)
+    if l == 2:
+        return (a.i8, a.i9)
+    return (a.i10, a.i11)
+
+
+def op_mlp_l2part(t: Int, a: Args):
+    """MLP_BLOCKED_FOLDS. The blocks of i2 = L <= 4 layers (op_sumsq's
+    (offset, count) pairs in i4..i11) concatenated in layer order, i1 = B
+    weights a block: thread t is block t, p1[t] = sum of the block's
+    p0[off + lo + k]^2, k ascending from zero (`sumsq_fold`)."""
+    var B = a.i1
+    var rest = t
+    for l in range(a.i2):
+        var oc = _layer_oc(a, l)
+        var nb = (oc[1] + B - 1) // B
+        if rest < nb:
+            var lo = rest * B
+            st(a.p1, t, sumsq_fold(a.p0, oc[0] + lo, min(B, oc[1] - lo), 1))
+            return
+        rest -= nb
+
+
+def op_mlp_l2fold(t: Int, a: Args):
+    """MLP_BLOCKED_FOLDS. i2 = L > 0 (packed, thread t = layer t): p1[t] =
+    layer t's block partials of op_mlp_l2part (p0, layers concatenated,
+    i1 = B) added ascending from zero. i2 == 0 (one layer, one thread):
+    p1[i0] = p0[0:i1] added ascending from zero."""
+    if a.i2 > 0:
+        var B = a.i1
+        var start = 0
+        for l in range(t):
+            start += (_layer_oc(a, l)[1] + B - 1) // B
+        var nb = (_layer_oc(a, t)[1] + B - 1) // B
+        st(a.p1, t, af_fold_parts(a.p0 + start, nb))
+        return
+    st(a.p1, a.i0, af_fold_parts(a.p0, a.i1))
+
+
+def op_mlp_rowpart(t: Int, a: Args):
+    """MLP_BLOCKED_FOLDS. Block t of i1 = B rows of the i0 row losses:
+    p1[t] = p0[t B + k] added ascending from zero (op_mlp_bloss's chain on
+    the block)."""
+    var B = a.i1
+    var lo = t * B
+    var hi = min(lo + B, a.i0)
+    var s = Float32(0.0)
+    for k in range(lo, hi):
+        s = add(s, ld(a.p0, k))
+    st(a.p1, t, s)
+
+
+# ------------------------------------------------------------------ nr-small device epoch (D13)
+def mlp_epoch_key(seed: UInt64, epoch: Int) -> UInt64:
+    """Epoch `epoch`'s permutation key: splitmix64's output at state
+    seed + (epoch + 1) * golden (x_cnn/ops.mojo `epoch_key`, the same words)."""
+    var z = seed + UInt64(epoch + 1) * UInt64(0x9E3779B97F4A7C15)
+    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
+    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
+    return z ^ (z >> 31)
+
+
+def mlp_perm_args(n: Int, key: UInt64, dst: FP) -> Args:
+    """`op_mlp_perm`'s arguments for an epoch over n rows (1 <= n < 2^24,
+    the rows travel as float32 words, as the host order always did)."""
+    var bits = 1
+    while (1 << bits) < n:
+        bits += 1
+    var a = Args()
+    a.p0 = dst
+    a.i0 = n
+    a.i1 = (bits + 1) // 2
+    for w in range(4):
+        var word = Int((key >> UInt64(16 * w)) & UInt64(0xFFFF))
+        if w == 0:
+            a.i2 = word
+        elif w == 1:
+            a.i3 = word
+        elif w == 2:
+            a.i4 = word
+        else:
+            a.i5 = word
+    return a
+
+
+@always_inline
+def _mlp_perm_mix(x: UInt32) -> UInt32:
+    """murmur3's 32-bit finalizer (x_cnn/ops.mojo `_perm_mix`)."""
+    var z = x
+    z = (z ^ (z >> 16)) * UInt32(0x85EBCA6B)
+    z = (z ^ (z >> 13)) * UInt32(0xC2B2AE35)
+    return z ^ (z >> 16)
+
+
+def op_mlp_perm(t: Int, a: Args):
+    """p0[t] = the row at position t of the epoch's order: six Feistel rounds
+    on the two i1-bit halves of t, cycle-walked into [0, i0) (x_cnn/ops.mojo
+    `epoch_rows_at`, the same function); i2..i5 the 64-bit key as 16-bit
+    words, low first. Integers only: the same row on every column."""
+    var n = UInt32(a.i0)
+    var h = UInt32(a.i1)
+    var mask = (UInt32(1) << h) - UInt32(1)
+    var k0 = UInt32(a.i2) | (UInt32(a.i3) << UInt32(16))
+    var k1 = UInt32(a.i4) | (UInt32(a.i5) << UInt32(16))
+    var x = UInt32(t)
+    while True:
+        var l = (x >> h) & mask
+        var r = x & mask
+        for rd in range(6):
+            var rk = _mlp_perm_mix(k0 + UInt32(rd) * UInt32(0x9E3779B9)) ^ k1
+            var f = _mlp_perm_mix(r + rk) & mask
+            var tmp = l ^ f
+            l = r
+            r = tmp
+        x = (l << h) | r
+        if x < n:
+            break
+    a.p0.unsafe_store(t, Float32(Int(x)))
+
+
+def op_mlp_epoch_loss(t: Int, a: Args):
+    """One thread: p1[i3] = (sum over batches bi ascending of p0[bi] * B_bi,
+    one fma each from zero) / i2, B_bi = min(i1, i2 - bi i1); i0 batches,
+    i1 batch rows, i2 = N rows."""
+    var acc = Float32(0.0)
+    for bi in range(a.i0):
+        var off = bi * a.i1
+        var B = a.i1 if off + a.i1 <= a.i2 else a.i2 - off
+        acc = fma3(ld(a.p0, bi), Float32(B), acc)
+    st(a.p1, a.i3, div(acc, Float32(a.i2)))
