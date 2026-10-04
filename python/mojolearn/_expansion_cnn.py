@@ -174,7 +174,10 @@ _DEVICE_IO_OFF = __import__("os").environ.get("MOJOLEARN_XCNN_DEVICE_IO_OFF", ""
 
 def _size(shape):
     """The element count of a shape tuple."""
-    return int(__import__("math").prod(shape))
+    n = 1
+    for v in shape:  # glue: a shape tuple's few ints
+        n *= int(v)
+    return n
 
 
 class DeviceTensor:
