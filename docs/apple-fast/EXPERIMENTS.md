@@ -716,3 +716,11 @@ Base b2b1c22bc. Rows: svgp istella 661 vs gpytorch-cpu 307 ms, taxi 437 vs 248 m
 | `SVGP_FAST_BLKCHOL` | 3 float-float Cholesky factors (m = 512) took 1,024 dependent column launches; one launch per 16-column panel (64 launches), diag block factored in threadgroup memory, each entry the same chain as `_chol_col` | same chains (FAST contraction only) | OPEN, A/B owed |
 | `SVGP_FAST_RBFTILE` | scaled rbf (Kuu, Kfu, Ksu) was one thread per cell reading 2 d floats from global (istella d ~220: 51M cells); 64 x 64 block tiles, 16 features staged in threadgroup memory, 4 x 4 cells per thread, variance scale fused (no kbuf pass) | same per-cell fold (FAST contraction only) | DEFAULT (FAST+Apple), rollback `MOJOLEARN_SVGP_FAST_RBFTILE_OFF`: M3 one run per arm istella 336.3 -> 299.1 ms, taxi 285.9 -> 283.9 ms; w2-svgp-rbftile-q SVGP-FAST-PAIR PASS (r2/rmse/elbo; A r2 taxi -0.19498, istella -0.10602) |
 | `SVGP_FAST_BSPLIT` | SYMTILE's B launch keeps only 8,256 threads busy (32,768 rows deep each) and b = Kuf y only m threads; 4 (B) / 32 (b) row-slice float-float partials, summed slice-ascending | changes (float-float re-association, ~1e-14 rel) | OPEN, A/B owed |
+## MiniBatchKMeans W2 residuals (lane/apple-fast-w2-clres, 2026-10-04)
+
+Binding x_cluster (`x_cluster/minibatch_fast.mojo`), FAST + Apple only. Quality pair `tools/w2_clres_quality.py`.
+
+| define | algorithm / dataset | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|
+| `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP` | MiniBatchKMeans / istella, taxi | w2-mbk-sumcmp-q | M3 one run per arm: istella 147.2 -> 144.7 ms; taxi 43.9 -> 39.9 ms; exact (centers, counts, labels, inertia identical) | DEFAULT (FAST+Apple), rollback `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF` | Sum kernel compacts its center's rows per 256-row chunk (prefix scan) and sums only those, same ascending order; same bits as main. |
+| `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG` | MiniBatchKMeans / istella, taxi | (not promoted) | n/a here | OPEN, opt-in | Last labelling pass as the CLS3_ROWGRP 32-thread-per-row assignment; reorders distance sums (labrg tolerance mode). |
