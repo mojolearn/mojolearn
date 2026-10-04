@@ -978,3 +978,13 @@ remainsbest. These individualleads guide scopedcallerwork; no universalwinner
 required, no broadregime/defaultclaim. Allmeasuredrecordsretained, noreplay.
 
 G5same-source495c30c3+harnessf40649e0: OLS65/PCA65/wide-kKNN65/KMeans65 all M3qualityPASS under g5-downstream-*-d65-q-v1. The KMeans IDENTICAL base prerequisite was verified before fits, resolving the missingbinding infrastructureissue without changing math. No actualcaller speed claim yet.
+
+ARIMA K3 actual-tail102e0d70a: arima-k3-actual-tail-quality HOLD. Thirteen
+groups total: n1PASS, twelve longerHOLD; fourcontrolsPASS. All saved input,
+stage and likelihood hashes match earlier test, isolating actual-tail correction.
+Gradient regressions against independent reference decrease53->49 of648
+components (345 other changed components improve). Prediction/variance/finalP
+pass; seveninnovation andthirteenlikelihood checks fail. No timing or promotion.
+Compensated residual/likelihood lowword reference candidate planned; no change
+to fixed finite-difference step or thresholds. Fixture supplies common states;
+it does not certify production initializer/Jones transformation equivalence.
