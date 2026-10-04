@@ -101,7 +101,11 @@ from mamba.impl.modules.ssd_minimal import (
 #: lane afn-mamba (2026-10-03): Apple FAST experiment switches (arena views
 #: and the one-readback refusal); every use is a `comptime if` whose other
 #: arm is main's spelling unchanged.
-from mamba.impl.modules.afn_defines import AFN_MAMBA_ARENA, AFN_MAMBA_DEVICE_REFUSAL
+from mamba.impl.modules.afn_defines import (
+    AFN_MAMBA_ARENA,
+    AFN_MAMBA_DEVICE_REFUSAL,
+    IDN_MAMBA_CONV_CELL,
+)
 from mamba.impl.modules.afn_arena import MambaArena
 from mamba.impl.modules.afn_refusal import AfnRefusalBatch
 #: lane w2-epi (2026-10-03): in_proj/out_proj on the FAST matrix-unit kernel,
@@ -553,6 +557,58 @@ def m2_conv_kernel(
         silu_out.unsafe_store(
             (bb * l + li) * cd + d, ftz(identical_silu(acc))
         )
+
+
+def m2_conv_cell_kernel(
+    conv_out: MutPointer[Float32, MutAnyOrigin],  # [M, CD]
+    silu_out: MutPointer[Float32, MutAnyOrigin],  # [M, CD]
+    in_proj: MutPointer[Float32, MutAnyOrigin],  # [M, dip]
+    conv_w: MutPointer[Float32, MutAnyOrigin],  # [CD, 4]
+    conv_b: MutPointer[Float32, MutAnyOrigin],  # [CD]
+    win: MutPointer[Float32, MutAnyOrigin],  # [B, CD, 4]
+    b_in: Int32,
+    l_in: Int32,
+    di_in: Int32,
+    cd_in: Int32,
+    dip_in: Int32,
+):
+    """IDN_MAMBA_CONV_CELL (roadmap B2): `m2_conv_kernel`'s per-position
+    body, one thread per (batch, position, channel) cell of [M, CD]. The
+    same bias-seeded taps 0..3 ascending, so the same bits."""
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var di = Int(di_in)
+    var cd = Int(cd_in)
+    var dip = Int(dip_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= b * l * cd:
+        return
+    var row = cell // cd
+    var d = cell - row * cd
+    var bb = row // l
+    var li = row - bb * l
+    var acc = ftz(conv_b.unsafe_load(d))
+    comptime if SAB_S6_BIAS_LAST:
+        acc = Float32(0.0)
+    for kk in range(M2_D_CONV):
+        var k = kk
+        comptime if SAB_S6_TAPS_REVERSED:
+            k = M2_D_CONV - 1 - kk
+        var p = li - (M2_D_CONV - 1) + k
+        var xv: Float32
+        if p >= 0:
+            xv = in_proj.unsafe_load((bb * l + p) * dip + di + d)
+        else:
+            xv = win.unsafe_load((bb * cd + d) * M2_D_CONV + (M2_D_CONV + p))
+        acc = ftz(
+            identical_mul_add(
+                ftz(conv_w.unsafe_load(d * M2_D_CONV + k)), ftz(xv), acc
+            )
+        )
+    comptime if SAB_S6_BIAS_LAST:
+        acc = ftz(acc + ftz(conv_b.unsafe_load(d)))
+    conv_out.unsafe_store(cell, acc)
+    silu_out.unsafe_store(cell, ftz(identical_silu(acc)))
 
 
 def m2_conv_window_kernel(
@@ -1120,21 +1176,38 @@ def mamba2_block_forward(
     )
 
     # ---- S6/S7: conv + SiLU over xBC; window updated out of place.
-    ctx.enqueue_function[m2_conv_kernel](
-        stages.conv_out.unsafe_ptr(),
-        stages.silu_out.unsafe_ptr(),
-        stages.in_proj.unsafe_ptr(),
-        w.conv_w.unsafe_ptr(),
-        w.conv_b.unsafe_ptr(),
-        state.conv_win.unsafe_ptr(),
-        Int32(b),
-        Int32(l),
-        Int32(di),
-        Int32(cd),
-        Int32(dip),
-        grid_dim=(_grid(b * cd), 1, 1),
-        block_dim=(MAMBA2_TPB, 1, 1),
-    )
+    comptime if IDN_MAMBA_CONV_CELL:
+        ctx.enqueue_function[m2_conv_cell_kernel](
+            stages.conv_out.unsafe_ptr(),
+            stages.silu_out.unsafe_ptr(),
+            stages.in_proj.unsafe_ptr(),
+            w.conv_w.unsafe_ptr(),
+            w.conv_b.unsafe_ptr(),
+            state.conv_win.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(di),
+            Int32(cd),
+            Int32(dip),
+            grid_dim=(_grid(b * l * cd), 1, 1),
+            block_dim=(MAMBA2_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[m2_conv_kernel](
+            stages.conv_out.unsafe_ptr(),
+            stages.silu_out.unsafe_ptr(),
+            stages.in_proj.unsafe_ptr(),
+            w.conv_w.unsafe_ptr(),
+            w.conv_b.unsafe_ptr(),
+            state.conv_win.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(di),
+            Int32(cd),
+            Int32(dip),
+            grid_dim=(_grid(b * cd), 1, 1),
+            block_dim=(MAMBA2_TPB, 1, 1),
+        )
     ctx.enqueue_function[m2_conv_window_kernel](
         stages.conv_win.unsafe_ptr(),
         stages.in_proj.unsafe_ptr(),

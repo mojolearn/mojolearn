@@ -111,6 +111,16 @@ comptime IDN_MAMBA_ARENA = _IDN_MAMBA_DEVICE and not is_defined["MOJOLEARN_IDN_M
 comptime IDN_MAMBA_DEVICE_REFUSAL = _IDN_MAMBA_DEVICE and not is_defined[
     "MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF"
 ]()
+#: lane nr-mamba (2026-10-04, roadmap B2) IDN_MAMBA_CONV_CELL (default ON;
+#: `-D MOJOLEARN_IDN_MAMBA_CONV_CELL_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
+#: restores main): the Mamba-1 and Mamba-2 causal depthwise conv + SiLU
+#: launch one thread per (batch, position, channel) instead of one thread per
+#: (batch, channel) walking the sequence. Every output cell is the same
+#: bias-seeded four-tap fma chain over the same inputs (no recurrence), so no
+#: bit moves; the host column keeps the walking kernel (same cells, same bits).
+comptime IDN_MAMBA_CONV_CELL = _IDN_MAMBA_DEVICE and not is_defined[
+    "MOJOLEARN_IDN_MAMBA_CONV_CELL_OFF"
+]()
 
 comptime AFN_MAMBA1_CHUNKSCAN = AFN_MAMBA_ALL or (
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"]()

@@ -12,6 +12,7 @@ comptime IDN_MAMBA3_REPORTS_ON_REQUEST = False
 comptime IDN_M3_SESSION_STAGE_REUSE = False
 comptime IDN_MAMBA_ARENA = False
 comptime IDN_MAMBA_DEVICE_REFUSAL = False
+comptime IDN_MAMBA_CONV_CELL = False
 comptime AFN_MAMBA1_CHUNKSCAN = False
 comptime AFN_MAMBA1_FUSE_IN = False
 comptime AFN_MAMBA2_SSD_MMA = False

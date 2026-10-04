@@ -202,6 +202,7 @@ from mamba.impl.modules.afn_defines import (
     AFN_MAMBA_DEVICE_REFUSAL,
     IDN_MAMBA_ALLOC_NOWAIT,
     IDN_MAMBA_ARENA,
+    IDN_MAMBA_CONV_CELL,
 )
 from mamba.impl.modules.afn_arena import MambaArena
 from mamba.impl.modules.afn_refusal import AfnRefusalBatch
@@ -1066,6 +1067,55 @@ def causal_conv1d_fn_kernel(
         silu_out.unsafe_store((bb * l + li) * di + d, ftz(identical_silu(acc)))
 
 
+def causal_conv1d_cell_kernel(
+    conv_out: MutPointer[Float32, MutAnyOrigin],
+    silu_out: MutPointer[Float32, MutAnyOrigin],
+    in_proj: MutPointer[Float32, MutAnyOrigin],
+    conv_w: MutPointer[Float32, MutAnyOrigin],
+    conv_b: MutPointer[Float32, MutAnyOrigin],
+    win: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    di_in: Int32,
+):
+    """IDN_MAMBA_CONV_CELL (roadmap B2): `causal_conv1d_fn_kernel`'s
+    per-position body, one thread per (batch, position, channel) cell of the
+    token-major [M, d_inner] output. The same bias-seeded taps, so the same
+    bits."""
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var di = Int(di_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= b * l * di:
+        return
+    var row = cell // di
+    var d = cell - row * di
+    var bb = row // l
+    var li = row - bb * l
+    var acc = ftz(conv_b.unsafe_load(d))
+    comptime if SAB_S13_BIAS_LAST:
+        acc = Float32(0.0)
+    for kk in range(D_CONV):
+        var k = kk
+        comptime if SAB_S13_TAPS_REVERSED:
+            k = D_CONV - 1 - kk
+        var p = li - (D_CONV - 1) + k
+        var xv: Float32
+        if p >= 0:
+            xv = in_proj.unsafe_load((bb * l + p) * 2 * di + d)
+        else:
+            xv = win.unsafe_load((bb * di + d) * D_CONV + (D_CONV + p))
+        acc = ftz(
+            identical_mul_add(
+                ftz(conv_w.unsafe_load(d * D_CONV + k)), ftz(xv), acc
+            )
+        )
+    comptime if SAB_S13_BIAS_LAST:
+        acc = ftz(acc + ftz(conv_b.unsafe_load(d)))
+    conv_out.unsafe_store(cell, acc)
+    silu_out.unsafe_store(cell, ftz(identical_silu(acc)))
+
+
 def causal_conv1d_window_kernel(
     new_win: MutPointer[Float32, MutAnyOrigin],
     in_proj: MutPointer[Float32, MutAnyOrigin],
@@ -1116,19 +1166,34 @@ def causal_conv1d_fn(
     """`causal_conv1d_fn(hidden_states, weight, bias, activation="silu")`
     (:81-100) plus the cache's window update (`update_conv_state`, MM:415).
     ASYNCHRONOUS."""
-    ctx.enqueue_function[causal_conv1d_fn_kernel](
-        conv_out.unsafe_ptr(),
-        silu_out.unsafe_ptr(),
-        in_proj.unsafe_ptr(),
-        conv_w.unsafe_ptr(),
-        conv_b.unsafe_ptr(),
-        old_win.unsafe_ptr(),
-        Int32(b),
-        Int32(l),
-        Int32(d_inner),
-        grid_dim=(_grid(b * d_inner), 1, 1),
-        block_dim=(MAMBA_TPB, 1, 1),
-    )
+    comptime if IDN_MAMBA_CONV_CELL:
+        ctx.enqueue_function[causal_conv1d_cell_kernel](
+            conv_out.unsafe_ptr(),
+            silu_out.unsafe_ptr(),
+            in_proj.unsafe_ptr(),
+            conv_w.unsafe_ptr(),
+            conv_b.unsafe_ptr(),
+            old_win.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(d_inner),
+            grid_dim=(_grid(b * l * d_inner), 1, 1),
+            block_dim=(MAMBA_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[causal_conv1d_fn_kernel](
+            conv_out.unsafe_ptr(),
+            silu_out.unsafe_ptr(),
+            in_proj.unsafe_ptr(),
+            conv_w.unsafe_ptr(),
+            conv_b.unsafe_ptr(),
+            old_win.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(d_inner),
+            grid_dim=(_grid(b * d_inner), 1, 1),
+            block_dim=(MAMBA_TPB, 1, 1),
+        )
     ctx.enqueue_function[causal_conv1d_window_kernel](
         new_win.unsafe_ptr(),
         in_proj.unsafe_ptr(),
