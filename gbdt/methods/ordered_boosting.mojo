@@ -186,6 +186,11 @@ from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
     LeafPartition,
 )
 from gbdt.methods.kernel.pointwise_split_resolve import PW_FUSED_LEVEL
+from gbdt.methods.ordered_fast_switches import ORD_ALL, ord_all_on
+from gbdt.methods.oblivious_tree_fold_tasks import (
+    fold_tasks_from_folds,
+    plan_fold_layout,
+)
 from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
     PointwiseTreeWorkspace,
     fit_oblivious_tree_structure_traced,
@@ -525,6 +530,70 @@ def _ord_std_combine_kernel(
     if tid == 0:
         comptime for lane in range(3):
             dst.unsafe_store(lane, red[lane * REDUCE_LANES_BLOCK])
+
+
+def _ord_std_wide_kernel(
+    sw: MutPointer[Float32, MutAnyOrigin],
+    sg: MutPointer[Float32, MutAnyOrigin],
+    quality: MutPointer[UInt32, MutAnyOrigin],
+    total_in: Int32,
+    dst: MutPointer[Float32, MutAnyOrigin],
+):
+    """`ORD_ALL` wide score-noise reduce (Apple FAST, wide data): `_ord_std_lanes_kernel`'s three
+    sums over a WIDE grid, `REDUCE_LANES_BLOCK` blocks of `ORDERED_BLOCK`
+    threads (65,536 lanes instead of 256): thread `t` of block `b` folds
+    positions `b * ORDERED_BLOCK + t`, stepping by the grid, four strides'
+    loads issued before they are added; the block's lanes meet in
+    `pinned_block_sum` (the library block sum under FAST) and thread 0
+    stores the block's three sums at `dst[b]`, `dst[REDUCE_LANES_BLOCK +
+    b]`, `dst[2 * REDUCE_LANES_BLOCK + b]`, where `_ord_std_combine_kernel`
+    folds the blocks as it folded the lanes. The per-position statements
+    are the lanes kernel's; the fold order is not (FAST bits)."""
+    var b = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var total = Int(total_in)
+    comptime STEP = REDUCE_LANES_BLOCK * ORDERED_BLOCK
+    var a0 = Float32(0.0)
+    var a1 = Float32(0.0)
+    var a2 = Float32(0.0)
+    var i = b * ORDERED_BLOCK + t
+    while i + 3 * STEP < total:
+        var w = SIMD[DType.float32, 4]()
+        var g = SIMD[DType.float32, 4]()
+        var qm = SIMD[DType.uint32, 4]()
+        comptime for k in range(4):
+            w[k] = sw.unsafe_load(i + k * STEP)
+            g[k] = sg.unsafe_load(i + k * STEP)
+            qm[k] = quality.unsafe_load(i + k * STEP)
+        comptime for k in range(4):
+            var term = Float32(0.0)
+            if qm[k] != UInt32(0):
+                if w[k] > Float32(0.0):
+                    var q = ftz(g[k] / w[k])
+                    term = ftz(ftz(q * q) * w[k])
+            a0 += term
+            a1 += abs(w[k])
+            a2 += abs(g[k])
+        i += 4 * STEP
+    while i < total:
+        var w = sw.unsafe_load(i)
+        var g = sg.unsafe_load(i)
+        var term = Float32(0.0)
+        if quality.unsafe_load(i) != UInt32(0):
+            if w > Float32(0.0):
+                var q = ftz(g / w)
+                term = ftz(ftz(q * q) * w)
+        a0 += term
+        a1 += abs(w)
+        a2 += abs(g)
+        i += STEP
+    var s0 = pinned_block_sum[block_size=ORDERED_BLOCK](a0)
+    var s1 = pinned_block_sum[block_size=ORDERED_BLOCK](a1)
+    var s2 = pinned_block_sum[block_size=ORDERED_BLOCK](a2)
+    if t == 0:
+        dst.unsafe_store(b, s0)
+        dst.unsafe_store(REDUCE_LANES_BLOCK + b, s1)
+        dst.unsafe_store(2 * REDUCE_LANES_BLOCK + b, s2)
 
 
 #: Lanes per block of `_ord_std_lanes_kernel` (one warp: its loads of
@@ -960,13 +1029,16 @@ struct _PermPartition(Movable):
         n_leaves: Int,
         mut counts: DeviceBuffer[DType.uint32],
         mut prefix: DeviceBuffer[DType.uint32],
+        readback: Bool = True,
     ) raises:
         """The leaves in permutation order, the chunked counting sort, the
         boundary snapshots, and the counts home, all enqueued (the caller
         drains once for every permutation, then calls `settle`). `counts`
         and `prefix` are the caller's scratch of `ORDERED_PART_CELLS`,
         shared by the permutations: the queue orders one permutation's
-        reads before the next one's writes."""
+        reads before the next one's writes. `readback=False` (Apple FAST,
+        `ORD_ALL` on wide data, a caller that never calls `settle`) leaves the
+        three host copies out."""
         var need = self.need
         ctx.enqueue_function[_ord_leaf_gather_kernel](
             bins.unsafe_ptr(), dperm.unsafe_ptr(), self.d_leaf.unsafe_ptr(),
@@ -1004,9 +1076,10 @@ struct _PermPartition(Movable):
             self.d_starts.unsafe_ptr(), Int32(n_chunks), Int32(n_leaves),
             grid_dim=(_grid(n_chunks), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
         )
-        ctx.enqueue_copy(dst_buf=self.h_seg, src_buf=self.d_seg)
-        ctx.enqueue_copy(dst_buf=self.h_tot, src_buf=self.d_tot)
-        ctx.enqueue_copy(dst_buf=self.h_snap, src_buf=self.d_snap)
+        if readback:
+            ctx.enqueue_copy(dst_buf=self.h_seg, src_buf=self.d_seg)
+            ctx.enqueue_copy(dst_buf=self.h_tot, src_buf=self.d_tot)
+            ctx.enqueue_copy(dst_buf=self.h_snap, src_buf=self.d_snap)
 
     def settle(mut self, n_leaves: Int) raises:
         """After the caller's drain: the counts onto the host lists, and
@@ -1949,6 +2022,41 @@ def fit_ordered(
     var fast_leaves = List[DeviceBuffer[DType.float32]]()
     var fast_est_view = List[DeviceBuffer[DType.float32]]()
     var fast_h_leaves = List[HostBuffer[DType.float32]]()
+    # the Apple FAST Ordered bundle (`ORD_ALL`, ordered_fast_switches.mojo):
+    # on only when compiled in AND the index has more than
+    # ORD_ALL_MIN_FEATURES features (istella-wide gains with equal or
+    # better quality; taxi-narrow lost auc, so it keeps main's path). One
+    # entry each when `ord_wide`, empty otherwise. `fast_part_off`: the
+    # fold layout's partition starts plus `total` for the searcher's
+    # one-launch fold bins. `fast_obs`: the searcher's per-level
+    # observation scratch; `fast_planes`: the two search planes and the
+    # score-noise partials; `fast_bins`: the tree's bins -- allocated once
+    # and rewritten every tree.
+    var ord_wide = ord_all_on(len(layout.features))
+    var fast_part_off = List[DeviceBuffer[DType.uint32]]()
+    var fast_obs = List[DeviceBuffer[DType.uint32]]()
+    var fast_planes = List[DeviceBuffer[DType.float32]]()
+    var fast_bins = List[DeviceBuffer[DType.uint32]]()
+    if ord_wide:
+        var fl = plan_fold_layout(fold_tasks_from_folds(folds))
+        var n_parts = len(fl.parts)
+        var hp = ctx.enqueue_create_host_buffer[DType.uint32](n_parts + 1)
+        for p in range(n_parts):
+            hp.unsafe_ptr().unsafe_store(p, fl.parts[p].offset)
+        hp.unsafe_ptr().unsafe_store(n_parts, UInt32(fl.total_indices))
+        var dp = ctx.enqueue_create_buffer[DType.uint32](n_parts + 1)
+        ctx.enqueue_copy(dst_buf=dp, src_ptr=hp.unsafe_ptr())
+        ctx.synchronize()
+        _ = hp^
+        fast_part_off.append(dp^)
+    if ord_wide:
+        fast_obs.append(ctx.enqueue_create_buffer[DType.uint32](total))
+        fast_planes.append(ctx.enqueue_create_buffer[DType.float32](total))
+        fast_planes.append(ctx.enqueue_create_buffer[DType.float32](total))
+        fast_planes.append(
+            ctx.enqueue_create_buffer[DType.float32](3 * REDUCE_LANES_BLOCK)
+        )
+        fast_bins.append(ctx.enqueue_create_buffer[DType.uint32](n_rows))
     comptime if ORDERED_CAT_CURSORS:
         _ord_fast_init_cursors(
             ctx, offsets, total, folds, learn_count, opts.start_value,
@@ -2150,8 +2258,17 @@ def fit_ordered(
 
         # 2. the fold derivatives, concatenated
         times.begin(ctx)
-        var sw = ctx.enqueue_create_buffer[DType.float32](total)
-        var sg = ctx.enqueue_create_buffer[DType.float32](total)
+        var sw: DeviceBuffer[DType.float32]
+        var sg: DeviceBuffer[DType.float32]
+        if ord_wide:
+            # the fit's planes, every cell rewritten below before the
+            # searcher reads it; the queue orders the last tree's reads
+            # first
+            sw = fast_planes[0].copy()
+            sg = fast_planes[1].copy()
+        else:
+            sw = ctx.enqueue_create_buffer[DType.float32](total)
+            sg = ctx.enqueue_create_buffer[DType.float32](total)
         for f in range(n_folds):
             var r = folds[f].quality_evaluate_samples.right
             # the prefix [0, r) of the learn permutation's own-order copies
@@ -2203,24 +2320,45 @@ def fit_ordered(
         var held = List[DeviceBuffer[DType.float32]]()
         var held_h = List[HostBuffer[DType.float32]]()
         if fused_sums:
-            var part = ctx.enqueue_create_buffer[DType.float32](3 * REDUCE_LANES_BLOCK)
-            var std_split = String(getenv("MOJOLEARN_ORD_STD_SPLIT")) != "0"
-            if std_split:
-                ctx.enqueue_function[_ord_std_lanes_kernel](
-                    sw.unsafe_ptr(), sg.unsafe_ptr(), quality.unsafe_ptr(),
-                    Int32(total), part.unsafe_ptr(),
-                    grid_dim=REDUCE_LANES_BLOCK // ORD_STD_LANES, block_dim=ORD_STD_LANES,
-                )
-                ctx.enqueue_function[_ord_std_combine_kernel](
-                    part.unsafe_ptr(), d_sums.unsafe_ptr(),
-                    grid_dim=1, block_dim=REDUCE_LANES_BLOCK,
-                )
+            var part: DeviceBuffer[DType.float32]
+            if ord_wide:
+                part = fast_planes[2].copy()
             else:
-                ctx.enqueue_function[_ord_std_and_mags_kernel](
-                    sw.unsafe_ptr(), sg.unsafe_ptr(), quality.unsafe_ptr(),
-                    Int32(total), d_sums.unsafe_ptr(),
-                    grid_dim=1, block_dim=REDUCE_LANES_BLOCK,
-                )
+                part = ctx.enqueue_create_buffer[DType.float32](3 * REDUCE_LANES_BLOCK)
+            var std_done = False
+            comptime if ORD_ALL:
+                # compiled only into the bundle's builds (FAST + Apple)
+                if ord_wide:
+                    # the wide reduce (`_ord_std_wide_kernel`), then the
+                    # same combine over its block sums; no env read
+                    ctx.enqueue_function[_ord_std_wide_kernel](
+                        sw.unsafe_ptr(), sg.unsafe_ptr(), quality.unsafe_ptr(),
+                        Int32(total), part.unsafe_ptr(),
+                        grid_dim=REDUCE_LANES_BLOCK, block_dim=ORDERED_BLOCK,
+                    )
+                    ctx.enqueue_function[_ord_std_combine_kernel](
+                        part.unsafe_ptr(), d_sums.unsafe_ptr(),
+                        grid_dim=1, block_dim=REDUCE_LANES_BLOCK,
+                    )
+                    std_done = True
+            if not std_done:
+                var std_split = String(getenv("MOJOLEARN_ORD_STD_SPLIT")) != "0"
+                if std_split:
+                    ctx.enqueue_function[_ord_std_lanes_kernel](
+                        sw.unsafe_ptr(), sg.unsafe_ptr(), quality.unsafe_ptr(),
+                        Int32(total), part.unsafe_ptr(),
+                        grid_dim=REDUCE_LANES_BLOCK // ORD_STD_LANES, block_dim=ORD_STD_LANES,
+                    )
+                    ctx.enqueue_function[_ord_std_combine_kernel](
+                        part.unsafe_ptr(), d_sums.unsafe_ptr(),
+                        grid_dim=1, block_dim=REDUCE_LANES_BLOCK,
+                    )
+                else:
+                    ctx.enqueue_function[_ord_std_and_mags_kernel](
+                        sw.unsafe_ptr(), sg.unsafe_ptr(), quality.unsafe_ptr(),
+                        Int32(total), d_sums.unsafe_ptr(),
+                        grid_dim=1, block_dim=REDUCE_LANES_BLOCK,
+                    )
             ctx.enqueue_copy(dst_buf=h_sums, src_buf=d_sums)
             ctx.synchronize()
             _ = part^
@@ -2361,10 +2499,17 @@ def fit_ordered(
             String("tree"), opts.l2_leaf_reg,
             score_std_dev=score_std, seed=tree_seed, one_hot=one_hot,
             folds=folds, permutation=perms[learn_p], permutation_id=learn_p,
+            fold_part_off=fast_part_off, obs_scratch=fast_obs,
+            ord_wide=ord_wide,
         )
         times.end(ctx, "ord.structure")
         times.begin(ctx)
-        var bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+        var bins: DeviceBuffer[DType.uint32]
+        if ord_wide:
+            # the fit's bins, every row rewritten by the fill or the model
+            bins = fast_bins[0].copy()
+        else:
+            bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
         if len(splits) == 0:
             enqueue_fill(ctx, bins, UInt32(0))
         else:
@@ -2376,9 +2521,17 @@ def fit_ordered(
             # one device counting sort per permutation (`_PermPartition`),
             # one drain for all of them, their counts home
             for p in range(perm_count):
-                parts[p].enqueue_sort(
-                    ctx, bins, dperms[p], n_leaves, part_counts, part_prefix
-                )
+                if ord_wide:
+                    # the batched estimation reads the counts on the
+                    # device; the three host copies are dead under it
+                    parts[p].enqueue_sort(
+                        ctx, bins, dperms[p], n_leaves, part_counts,
+                        part_prefix, readback=not fast_on,
+                    )
+                else:
+                    parts[p].enqueue_sort(
+                        ctx, bins, dperms[p], n_leaves, part_counts, part_prefix
+                    )
             if not fast_on:
                 ctx.synchronize()
                 for p in range(perm_count):
@@ -2558,6 +2711,10 @@ def fit_ordered(
     _ = fast_leaves^
     _ = fast_est_view^
     _ = fast_h_leaves^
+    _ = fast_part_off^
+    _ = fast_obs^
+    _ = fast_planes^
+    _ = fast_bins^
     _ = part_counts^
     _ = part_prefix^
     _ = dys^
