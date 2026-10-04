@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 
 
-def source_provenance(root, expected_vendor):
+def source_provenance(root, expected_vendor, require_mapped=True):
     import mojolearn as ml
     package = Path(ml.__file__).resolve()
     if not package.is_relative_to(root / 'python/mojolearn'):
@@ -26,7 +26,7 @@ def source_provenance(root, expected_vendor):
                 if not p.is_relative_to(root / 'python/mojolearn'):
                     raise RuntimeError('refused external binding: ' + str(p))
                 paths.add(str(p))
-    if not paths:
+    if not paths and require_mapped:
         raise RuntimeError('no loaded source binding mappings: provenance unverified')
     return {'package': str(package), 'vendor': vendor, 'binding_files': sorted(paths)}
 
@@ -142,7 +142,9 @@ def main():
         runner=board.Runner(original.info,original.call,original.outputs,sync=original.sync)
         block_info=metadata
     else: raise RuntimeError('unknown driver '+driver)
-    provenance = source_provenance(root, a.vendor)
+    # Pre-fit check: host-column estimators load their host binding lazily at
+    # fit, so mappings may be empty here; the post-output call below requires them.
+    provenance = source_provenance(root, a.vendor, require_mapped=False)
     info = runner.info or {}
     if info.get('numeric_mode_used') != 'identical':
         raise RuntimeError('binding IDENTICAL readback missing or wrong: ' + repr(info))
