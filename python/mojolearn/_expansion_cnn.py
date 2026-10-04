@@ -120,7 +120,10 @@ def _idn(b, bit):
 # Bit 2 (lane fix-n1-lm-neural): GCNConv's remaining self loops come from
 # `x_cnn_gcn_loops` (a stable device sort and two gathers; the host twin on a
 # CPU-only install), not host NumPy. Copies only: no bit moves.
+# Bit 3: the candidate fold block 256. Bit 4 (lane/review-fixes): the binding
+# was built with -D MOJOLEARN_IDN_ALL_OFF (read by `_device_io_off`).
 _F2_XENT_FOLD, _F2_EPOCH_DEV, _F2_GCN_LOOPS = 1, 2, 4
+_F2_FOLD_BLOCK_256, _F2_ALL_OFF = 8, 16
 _IDN2_FLAGS = {}
 
 
@@ -215,9 +218,17 @@ def _dev_of(layer, b):
 # graph layers upload their ones vector per call again. The wave's OFF arm
 # (`-D MOJOLEARN_IDN_ALL_OFF=1` in the build and `MOJOLEARN_IDN_ALL_OFF=1` in
 # the environment, tools/identical_wave_runner.py) turns it off too, so that
-# arm runs the old form throughout (audit F4).
+# arm runs the old form throughout (audit F4). lane/review-fixes: a binding
+# built with the define reports it (`x_cnn_idn2_flags` bit 4), so the OFF arm
+# holds even when the environment variable is not set (`_device_io_off`).
 _DEVICE_IO_OFF = (__import__("os").environ.get("MOJOLEARN_XCNN_DEVICE_IO_OFF", "") == "1"
                   or __import__("os").environ.get("MOJOLEARN_IDN_ALL_OFF", "") == "1")
+
+
+def _device_io_off(b):
+    """Whether the resident I/O route is off for binding `b`: the env switches
+    above, or a `-D MOJOLEARN_IDN_ALL_OFF` build of `b`."""
+    return _DEVICE_IO_OFF or _idn2(b, _F2_ALL_OFF)
 
 
 def _size(shape):
@@ -351,7 +362,10 @@ def to_device(x, numeric_mode=None):
     a = _f32(x, "x")
     if _DEVICE_IO_OFF:
         return a
-    return DeviceTensor._wrap(_backend.binding(_BINDING, numeric_mode or _backend.default_mode()), a)
+    b = _backend.binding(_BINDING, numeric_mode or _backend.default_mode())
+    if _device_io_off(b):
+        return a
+    return DeviceTensor._wrap(b, a)
 
 
 def _is_t(x):
@@ -2512,7 +2526,7 @@ class GCNConv(_Layer):
         Gh = G.h if gt else dev.upload("G", G)
         if self.bias:
             gb = np.empty((F, 1), np.float32)
-            if _DEVICE_IO_OFF:
+            if _device_io_off(b):
                 ones = np.ones(n, np.float32)
                 b.x_cnn_gemm_m([Gh, ones.ctypes.data, gb.ctypes.data], 0b001, [F, 1, n, 2])
             else:

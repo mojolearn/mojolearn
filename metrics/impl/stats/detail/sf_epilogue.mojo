@@ -159,6 +159,9 @@ def _fold_levels(
     var src_off = 0
     var n = nch
     var dst_off = nch
+    if n <= 0:
+        # lane/review-fixes: an empty fold would never reach one sum
+        raise Error("sf_epilogue: the fold needs at least one partial")
     while True:
         var nd = ceildiv(n, EPI_CH)
         ctx.enqueue_function[sf_level_kernel](
@@ -236,6 +239,9 @@ def ari_epilogue_device(
     var src_off = 0
     var n = nch
     var dst_off = nch
+    if n <= 0:
+        # lane/review-fixes: an empty fold would never reach one sum
+        raise Error("sf_epilogue: the fold needs at least one partial")
     while True:
         var nd = ceildiv(n, EPI_CH)
         ctx.enqueue_function[ari_level_kernel](
