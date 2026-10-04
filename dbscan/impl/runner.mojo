@@ -241,6 +241,21 @@ comptime IDN_DBSCAN_RBC_DEAD_READS = (
     )
 )
 
+#: fam2-cluster (2026-10-04), IDENTICAL, every column: the border pass
+#: decides on the device which batches hold a labelled non-core row. One
+#: small launch per batch writes one Int32 cell and `n_batches` cells come
+#: back, in place of downloading the core mask and the labels (5 bytes per
+#: row) and walking them on the host. Same predicate on the same values, so
+#: the same batches take the pass.
+#: `-D MOJOLEARN_IDN_DBSCAN_BORDER_NEEDS_DEVICE_OFF=1` restores the host walk.
+comptime IDN_DBSCAN_BORDER_NEEDS_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_DBSCAN_BORDER_NEEDS_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
 comptime EPS_NN_BRUTE_FORCE = 0
 comptime EPS_NN_RBC = 1
 
@@ -318,6 +333,25 @@ def relabel_for_skl_kernel(
             labels.unsafe_store(tid, Int32(-1))
         else:
             labels.unsafe_store(tid, labels.unsafe_load(tid) - Int32(1))
+
+
+def border_needs_kernel(
+    needs: MutPointer[Int32, MutAnyOrigin],
+    core: MutPointer[UInt8, MutAnyOrigin],
+    labels: MutPointer[Int32, MutAnyOrigin],
+    cell_in: Int32,
+    start_in: Int32,
+    n_points_in: Int32,
+):
+    """`needs[cell] = 1` when rows `start .. start + n_points` hold a
+    non-core row with a label (`IDN_DBSCAN_BORDER_NEEDS_DEVICE`). Every
+    writer stores the same 1, so the cell does not depend on thread order.
+    """
+    var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if tid < Int(n_points_in):
+        var r = tid + Int(start_in)
+        if core.unsafe_load(r) == 0 and labels.unsafe_load(r) != MAX_LABEL:
+            needs.unsafe_store(Int(cell_in), Int32(1))
 
 
 def border_pull_kernel(
@@ -1078,23 +1112,51 @@ their code branches on is this Bool.
         # label: a non-core row still at MAX_LABEL after the merges has no
         # core neighbour (its own batch pulls from every core neighbour, the
         # core mask being global), so it is noise in every batching.
-        var h_core = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
-        var h_lab = ctx.enqueue_create_host_buffer[DType.int32](n_rows)
-        ctx.enqueue_copy(dst_ptr=h_core.unsafe_ptr(), src_buf=core)
-        ctx.enqueue_copy(dst_ptr=h_lab.unsafe_ptr(), src_buf=labels)
+        var needs_device = False
+        comptime if IDN_DBSCAN_BORDER_NEEDS_DEVICE:
+            needs_device = True
+        var h_core = ctx.enqueue_create_host_buffer[DType.uint8](
+            1 if needs_device else n_rows
+        )
+        var h_lab = ctx.enqueue_create_host_buffer[DType.int32](
+            1 if needs_device else n_rows
+        )
+        var d_needs = ctx.enqueue_create_buffer[DType.int32](n_batches)
+        var h_needs = ctx.enqueue_create_host_buffer[DType.int32](n_batches)
+        if needs_device:
+            for nb in range(n_batches):
+                h_needs.unsafe_ptr().unsafe_store(nb, Int32(0))
+            ctx.enqueue_copy(dst_buf=d_needs, src_ptr=h_needs.unsafe_ptr())
+            for nb2 in range(n_batches):
+                var np_n = plan_rows[nb2]
+                if np_n > 0:
+                    ctx.enqueue_function[border_needs_kernel](
+                        d_needs.unsafe_ptr(), core.unsafe_ptr(),
+                        labels.unsafe_ptr(), Int32(nb2),
+                        Int32(plan_start[nb2]), Int32(np_n),
+                        grid_dim=((np_n + TPB - 1) // TPB, 1, 1),
+                        block_dim=(TPB, 1, 1),
+                    )
+            ctx.enqueue_copy(dst_ptr=h_needs.unsafe_ptr(), src_buf=d_needs)
+        else:
+            ctx.enqueue_copy(dst_ptr=h_core.unsafe_ptr(), src_buf=core)
+            ctx.enqueue_copy(dst_ptr=h_lab.unsafe_ptr(), src_buf=labels)
         ctx.synchronize()
         var bb = n_batches - 1
         while bb >= 0:
             var start_b = plan_start[bb]
             var np_b = plan_rows[bb]
             var needs = False
-            for r in range(start_b, start_b + max(np_b, 0)):
-                if (
-                    h_core.unsafe_ptr().unsafe_load(r) == 0
-                    and h_lab.unsafe_ptr().unsafe_load(r) != MAX_LABEL
-                ):
-                    needs = True
-                    break
+            if needs_device:
+                needs = h_needs.unsafe_ptr().unsafe_load(bb) != Int32(0)
+            else:
+                for r in range(start_b, start_b + max(np_b, 0)):
+                    if (
+                        h_core.unsafe_ptr().unsafe_load(r) == 0
+                        and h_lab.unsafe_ptr().unsafe_load(r) != MAX_LABEL
+                    ):
+                        needs = True
+                        break
             if not needs:
                 bb -= 1
                 continue
@@ -1147,6 +1209,8 @@ their code branches on is this Bool.
             bb -= 1
         _ = h_core^
         _ = h_lab^
+        _ = d_needs^
+        _ = h_needs^
         if phase_timing:
             print(
                 "PHASE border_pass batches " + String(n_batches) + " "
