@@ -76,7 +76,7 @@ from x_decomp.mcd_mma import mc_center_kernel, mc_publish_matrix_kernel, mc_maha
 from x_decomp.kit import Mat
 from x_decomp.cells import FOLD_BLOCK
 from x_decomp.mcd_compat import mc_compact_kernel, mc_moment_kernel, mc_pinvh_kernel
-from x_decomp.mcd_bmma import launch_gemm_mma_batched
+from x_decomp.mcd_bmma import launch_gemm_mma_batched, MCD_ORDERED_COV, ordered_cov_scratch, launch_mcd_cov_ordered, note_cov_route
 from x_decomp.jacobi2 import dev_barrier
 
 # FAILED gap26-mcdcompat-taxi at 948c4e7b1: B rejected by the batched
@@ -900,7 +900,12 @@ struct MfPhase(Movable):
         comptime if MCD_WIDE:
             if d > MF_DMAX:
                 pw = d  # the MMA route folds column sums only (npair = 24,310 at d = 220)
-        self.part = ctx.enqueue_create_buffer[DType.float32](max(nc * self.tiles * pw, 1))
+        var part_words = max(nc * self.tiles * pw, 1)
+        comptime if MCD_ORDERED_COV and MCD_BMMA:
+            # Column moments have been consumed before covariance launches;
+            # reuse this phase-owned buffer without changing its lifetime.
+            part_words = max(part_words, ordered_cov_scratch(nc, h, d))
+        self.part = ctx.enqueue_create_buffer[DType.float32](part_words)
         self.active = ctx.enqueue_create_buffer[DType.int32](max(nc, 1))
         self.needp = ctx.enqueue_create_buffer[DType.int32](max(nc, 1))
         self.fin = ctx.enqueue_create_buffer[DType.int32](max(nc, 1))
@@ -950,8 +955,13 @@ def _mma_covariance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.floa
         grid_dim=_blocks(ph.nc*ph.h*d), block_dim=MF_TPB,
     )
     comptime if MCD_BMMA:
-        launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), _f(ph.mm_out), d, ph.h, d, True, False,
-                                ph.nc, ph.r*d, ph.r*d, d*d, _i(ph.active), False)
+        comptime if MCD_ORDERED_COV:
+            note_cov_route(True, ph.h, d)
+            launch_mcd_cov_ordered(ctx, _f(ph.mm_x), _f(ph.mm_out), _f(ph.part),
+                ph.h, d, ph.nc, ph.r*d, d*d, _i(ph.active), False)
+        else:
+            launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), _f(ph.mm_out), d, ph.h, d, True, False,
+                                    ph.nc, ph.r*d, ph.r*d, d*d, _i(ph.active), False)
     else:
         for c in range(ph.nc):
             var x = _f(ph.mm_x)+c*ph.r*d

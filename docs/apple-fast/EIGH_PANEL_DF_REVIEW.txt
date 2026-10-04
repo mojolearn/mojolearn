@@ -1,0 +1,73 @@
+EIGH panel accuracy experiment, 2026-10-04
+=========================================
+Base: main a100d3b6f. Binding: x_decomp, numeric mode FAST, Apple.
+A: current panel default. B: -D MOJOLEARN_EIGH_FAST_PANEL_DF.
+Rollback: omit B define or add -D MOJOLEARN_EIGH_FAST_PANEL_DF_OFF.
+The existing MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF continues to dominate
+by disabling panel dispatch entirely. Candidate is not a new default.
+
+Numerical cause to test
+----------------------
+The current tridiagonal eigenvalue bisection and twisted vector recovery
+already use double-float, with relative bisection width about 1.4e-14.
+They solve the stored float32 tridiagonal accurately, but cannot undo its
+reduction error. Householder column updates, norms, GEMV, p/w construction,
+and the panel trailing rank-2 update still round in float32. The final
+back-transform can affect residual/orthogonality, but cannot explain the
+returned eigenvalue error because eigenvalues come from T before it.
+
+The trailing rank-2 update computes a 32-term sum of pairs of products,
+then subtracts that rounded sum from each matrix cell. Product residuals,
+summation rounding, and cancellation in the final subtraction perturb the
+trailing matrix repeatedly (128 panels at n4096). This is a concrete error
+source, not a proven attribution of most of the board error. Establishing
+dominance would require additional stage residual diagnostics. The board
+error rises from 2.01498e-7 at n1000 to 4.26951e-7 at n4096; this is consistent
+with accumulated reduction error but does not establish its cause alone.
+
+Candidate scope
+---------------
+Only td_syr2k_kernel changes under the opt-in. Existing df_mul retains
+product residuals with FMA, df_add accumulates each pair and the 32 terms,
+and df_sub subtracts the compensated sum from the original matrix cell.
+One final float32 store remains. Grid, shared tile loads, 256-thread blocks,
+panel width, ordering, allocations, host synchronization, bisection, vectors,
+refusal/fallback and public output storage are unchanged. A is the exact
+preexisting float32 source branch, not an approximation of the baseline.
+No CPU product computation, CPU float64 fallback or one-thread reduction
+is introduced. Float-float work is performed independently per tile cell.
+
+Limitations
+-----------
+This does not preserve low words between panels. Reflectors, y/p/w, column
+updates and vector back-transform retain their existing float32 errors.
+Therefore reaching numpy's ~3.49e-8 board error is NOT promised. Register
+pressure and extra instructions may cost speed; no performance prediction
+is an admission result. If this helps but is insufficient, next isolate
+compensated panel column/GEMV reductions or retained trailing low words;
+do not simply tighten the already accurate df64 bisection tolerance.
+The prior tangent/Rayleigh experiment operated on Jacobi and was slower
+(43.8 -> 51.3 seconds); it is not this panel algorithm or this experiment.
+
+Required validation (M2 compile, M3 quality before timing)
+--------------------------------------------------------
+Compile both A and B from this source on M2. Keep SHA/hash manifest proof.
+Use the existing eight cases without dropping Gram1024:
+board257, board1000, board4096, indefinite128, indefinite1024,
+repeated31, repeated1024, gram1024. Compare each finite metric B <= current
+A with zero added allowance and require ascending output. Keep absolute
+and opponent gates separate; a strict main-relative PASS cannot clear them.
+The old tools/apple_fast_eigh_quality.py history with 10%/5e-8 allowance is
+NOT suitable. Use the manager's strict eight-case harness instead.
+
+Saved current-panel B report baseline from w2-eigh-panels-q-20261004:
+board4096: eigenvalue 4.2695061514265396e-7, residual
+6.134092151174076e-7, orthogonality 1.688676693674385e-6.
+gram1024: eigenvalue 1.7785804234953773e-5, residual
+2.5900151542247842e-5, orthogonality 0.00026960937863630826.
+Gram orthogonality is an existing fallback failure, retained as such.
+Run fresh same-source current-panel A; saved numbers are evidence only,
+not a substitute for the binding-verified A/B. Outputs remain synchronized
+host storage; any later timing must include first read as usual.
+
+Source review and git diff --check only. No local builds/GPU/timing run.

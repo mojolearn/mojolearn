@@ -24,9 +24,13 @@ through f32 atomics (order free, as on main). A candidate whose gate word
 is 0 (inactive; for the weighted Gram, pinvh did not run) launches no work:
 main zeroed its operands and discarded its output (guarded publication).
 """
-from std.atomic import Atomic
 from std.ffi import _Global
+from std.python import PythonObject
+from std.atomic import Atomic
+from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from gemm.afn_apple_fast import AFN_GEMM_APPLE
 from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel
 
@@ -75,6 +79,23 @@ from gemm.afn_apple_fast import AFN_GEMM_KB, _M64, _afn_gload, _afn_load_t, _afn
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.device import DFG_BLOCK_TARGET, DFG_MIN_SPLIT_STEPS
 
+#: FAST Apple candidate, default OFF: `-D MOJOLEARN_MCD_ORDERED_COV`.
+#: Source lane/apple-fast-mcd-ordered-quality-r3@f35a57bd4 (ported
+#: 2026-10-04, lane apple-fast-rec-misc). MinCovDet / EllipticEnvelope
+#: covariance (raw C-step batched Gram and final masked covariance): split-K
+#: partials to disjoint storage, then one GPU thread per cell folds them in
+#: split order with Neumaier compensation (no atomics). No SKIP_PINVH or
+#: DEFLATE change. Known: compiled (r3); M3 mcd-ordered-direct-q-r3 quality
+#: HOLD (strict per-key f64 B <= A on rel-L2 AND max-abs, no tolerance;
+#: repeat_identical true, so B was deterministic). Cause: B kept main's
+#: split count (2..9 at the direct shapes), so most error sat in each
+#: split's fp32 MMA chain, untouched by the compensated fold. Fixed here:
+#: splits of MCD_ORD_CHAIN rows (ordered_cov_shape). Quality before timing:
+#: tools/mcd_ordered_pair.py direct, then the fitted cases (MCD_ORDERED_COV.md).
+comptime MCD_ORDERED_COV = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_MCD_ORDERED_COV"]())
+
 #: AFN_TILE_SQUARE's shape (`afn_launch_tile_aux`'s default branch).
 comptime MB_SGM = 2
 comptime MB_SGN = 2
@@ -86,7 +107,7 @@ comptime MB_NT = MB_SGM * MB_SGN * 32
 comptime MB_ZERO_TPB = 256
 
 
-def mcd_bmma_kernel[SPLIT: Bool](
+def mcd_bmma_kernel[SPLIT: Bool, ORDERED: Bool = False](
     c_in: F32Ptr,
     a_in: F32Ptr,
     b_in: F32Ptr,
@@ -137,6 +158,9 @@ def mcd_bmma_kernel[SPLIT: Bool](
     var m = Int(m_in)
     var n = Int(n_in)
     var k = Int(k_in)
+    comptime if ORDERED:
+        comptime assert SPLIT, "ordered partials require split windows"
+        c = c + Int(block_idx.y) * m * n
     var a_si = Int(a_si_in)
     var a_sp = Int(a_sp_in)
     var b_sp = Int(b_sp_in)
@@ -213,7 +237,7 @@ def mcd_bmma_kernel[SPLIT: Bool](
                 var gj = n0 + (sgn * FN + fq) * 8 + fcol + e
                 if gi < m and gj < n:
                     var v = acc[fm * FN + fq][e]
-                    comptime if SPLIT:
+                    comptime if SPLIT and not ORDERED:
                         _ = Atomic.fetch_add(c.unsafe_offset(gi * n + gj), v)
                     else:
                         c.unsafe_store(gi * n + gj, v)
@@ -325,3 +349,169 @@ def launch_gemm_mma_batched(
             Int32(a_bs), Int32(b_bs), Int32(c_bs),
             grid_dim=(tiles, 1, nc), block_dim=(MB_NT, 1, 1),
         )
+
+
+@always_inline
+def _cov_add(a: Float32, b: Float32) -> Float32:
+    # Explicit intrinsic without fast-math flags. Multiplication by one is
+    # exact; the remaining operation is one rounded addition. Ordinary FAST
+    # expressions must not reassociate the compensated fold into a plain sum.
+    return llvm_intrinsic["llvm.fma.f32", Float32, has_side_effect=False](Float32(1), a, b)
+
+
+#: Rows per ordered split: MCD_ORD_CHAIN_WINDOWS matrix-unit K windows
+#: (AFN_GEMM_KB rows each). The quality HOLD (mcd-ordered-direct-q-r3) came
+#: from keeping main's split count: with 2..9 splits per cell the error is
+#: the fp32 accumulation INSIDE each split's MMA chain (600 rows at
+#: 3000 x 220), not the cross-split fold the candidate compensated, so B and
+#: A differed by noise and the strict per-key B <= A max-abs gate became a
+#: coin flip. Short chains move the error into the compensated fold.
+comptime MCD_ORD_CHAIN_WINDOWS = 4
+comptime MCD_ORD_CHAIN = MCD_ORD_CHAIN_WINDOWS * AFN_GEMM_KB
+#: Partial-region cap (float words): the kernels' Int32 addressing bound
+#: (2^31) / 8 = 256M words (1 GiB). Past it the split count falls back
+#: toward main's (longer chains) instead of failing.
+comptime MCD_ORD_MAX_WORDS = 2147483647 // 8
+
+
+def ordered_cov_shape(nc: Int, rows: Int, d: Int) -> Tuple[Int, Int]:
+    """(splits, rows per split) of the ordered covariance: chains of
+    MCD_ORD_CHAIN rows (a multiple of AFN_GEMM_KB), at least main's split
+    count, at most what MCD_ORD_MAX_WORDS of partials hold."""
+    var tiles = ((d + MB_BM - 1) // MB_BM) * ((d + MB_BN - 1) // MB_BN)
+    var base = 1
+    if tiles < DFG_BLOCK_TARGET and rows >= 2 * DFG_MIN_SPLIT_STEPS:
+        base = min(DFG_BLOCK_TARGET // tiles, rows // DFG_MIN_SPLIT_STEPS)
+    var splits = max(base, (rows + MCD_ORD_CHAIN - 1) // MCD_ORD_CHAIN)
+    var cap = MCD_ORD_MAX_WORDS // max(max(nc, 1) * d * d, 1)
+    splits = max(min(splits, cap), 1)
+    var per = rows
+    if splits > 1:
+        per = (rows + splits - 1) // splits
+        per = ((per + AFN_GEMM_KB - 1) // AFN_GEMM_KB) * AFN_GEMM_KB
+        splits = (rows + per - 1) // per
+    return splits, per
+
+
+def ordered_cov_scratch(nc: Int, rows: Int, d: Int) raises -> Int:
+    if nc <= 0 or rows <= 0 or d <= 0:
+        return 1
+    var shape = ordered_cov_shape(nc, rows, d)
+    var words = nc * shape[0] * d * d if shape[0] > 1 else 1
+    if words > 2147483647:
+        raise Error("ordered covariance partials exceed Int32 addressing")
+    return words
+
+
+def mcd_cov_fold_kernel(part: F32Ptr, dst: F32Ptr, gate: I32Ptr, gate_all: Int32,
+                        nc_: Int32, d_: Int32, splits_: Int32, stride_: Int32):
+    # Independent thread per candidate/output cell; no atomics, global serial
+    # loop or cooperative single-block reduction. One ordered Neumaier chain
+    # over the cell's splits (ceil(rows / MCD_ORD_CHAIN), capped by
+    # MCD_ORD_MAX_WORDS).
+    var at = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var dd = Int(d_)
+    var cells = dd * dd
+    var nc = Int(nc_)
+    if at >= nc * cells:
+        return
+    var candidate = at // cells
+    if gate_all == 0 and gate.unsafe_load(candidate) == 0:
+        return
+    var cell = at % cells
+    var splits = Int(splits_)
+    var base = candidate * splits * cells + cell
+    var total = Float32(0)
+    var correction = Float32(0)
+    for split in range(splits):
+        var value = part.unsafe_load(base + split * cells)
+        var next = _cov_add(total, value)
+        var error = Float32(0)
+        if abs(total) >= abs(value):
+            error = _cov_add(_cov_add(total, -next), value)
+        else:
+            error = _cov_add(_cov_add(value, -next), total)
+        correction = _cov_add(correction, error)
+        total = next
+    dst.unsafe_store(candidate * Int(stride_) + cell, _cov_add(total, correction))
+
+
+def launch_mcd_cov_ordered(ctx: DeviceContext, x: F32Ptr, dst: F32Ptr, part: F32Ptr,
+                           rows: Int, d: Int, nc: Int, x_stride: Int, out_stride: Int,
+                           gate: I32Ptr, gate_all: Bool) raises:
+    """Only X^T X; caller owns sufficient partial storage through completion.
+    Same MMA tile/window operands as main, changed cross-window accumulation.
+    Unsplit inputs retain the original kernel and arithmetic exactly."""
+    if nc <= 0 or rows <= 0 or d <= 0:
+        return
+    var shape = ordered_cov_shape(nc, rows, d)
+    var splits = shape[0]
+    if splits == 1:
+        launch_gemm_mma_batched(ctx, x, x, dst, d, rows, d, True, False,
+                                nc, x_stride, x_stride, out_stride, gate, gate_all)
+        return
+    _ = ordered_cov_scratch(nc, rows, d)  # validate before narrowing strides
+    var ga = Int32(1 if gate_all else 0)
+    var tiles = ((d + MB_BM - 1) // MB_BM) * ((d + MB_BN - 1) // MB_BN)
+    ctx.enqueue_function[mcd_bmma_kernel[True, True]](
+        part, x, x, gate, ga, Int32(d), Int32(d), Int32(rows),
+        Int32(1), Int32(d), Int32(d), Int32(1), Int32(shape[1]),
+        Int32(x_stride), Int32(x_stride), Int32(splits*d*d),
+        grid_dim=(tiles, splits, nc), block_dim=(MB_NT, 1, 1))
+    ctx.enqueue_function[mcd_cov_fold_kernel](
+        part, dst, gate, ga, Int32(nc), Int32(d), Int32(splits), Int32(out_stride),
+        grid_dim=(nc*d*d + MB_ZERO_TPB - 1) // MB_ZERO_TPB, block_dim=MB_ZERO_TPB)
+
+
+struct _CovReach(Defaultable, Movable):
+    var raw: Int
+    var final_count: Int
+    var raw_split: Int
+    var final_split: Int
+
+    def __init__(out self):
+        self.raw = 0
+        self.final_count = 0
+        self.raw_split = 0
+        self.final_split = 0
+
+
+comptime COV_REACH = _Global[StorageType=_CovReach, name="MojoMcdOrderedCovReach", init_fn=_CovReach.__init__]
+
+
+def note_cov_route(raw: Bool, rows: Int, d: Int) raises:
+    # Host metadata only; never consumes matrix values. Counts make no-op
+    # quality passes observable. No production dispatch outside the opt-in.
+    comptime if MCD_ORDERED_COV:
+        var r = COV_REACH.get_or_create_ptr()
+        var split = ordered_cov_shape(1, rows, d)[0] > 1
+        if raw:
+            r[].raw += 1
+            if split:
+                r[].raw_split += 1
+        else:
+            r[].final_count += 1
+            if split:
+                r[].final_split += 1
+
+
+def mcd_cov_reach_py(which: PythonObject) raises -> PythonObject:
+    var i = Int(py=which)
+    var r = COV_REACH.get_or_create_ptr()
+    if i == -1:
+        r[].raw = 0
+        r[].final_count = 0
+        r[].raw_split = 0
+        r[].final_split = 0
+        return PythonObject(0)
+    if i == 0:
+        return PythonObject(1 if MCD_ORDERED_COV else 0)
+    if i == 1:
+        return PythonObject(r[].raw)
+    if i == 2:
+        return PythonObject(r[].final_count)
+    if i == 3:
+        return PythonObject(r[].raw_split)
+    if i == 4:
+        return PythonObject(r[].final_split)
+    raise Error("unknown ordered covariance reach counter")

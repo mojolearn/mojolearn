@@ -26,7 +26,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
 
-from x_decomp.cells import F32Ptr, OP_SCALE, OP_SELECT, ew_cell, rand_cell
+from x_decomp.mcd_bmma import MCD_ORDERED_COV, ordered_cov_scratch, launch_mcd_cov_ordered, launch_gemm_mma_batched, note_cov_route
+from x_decomp.cells import I32Ptr, F32Ptr, OP_SCALE, OP_SELECT, ew_cell, rand_cell
 from core.philox import philox4x32_10
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import HostBuffer
@@ -236,6 +237,46 @@ def dev_ew_py(
     var po = _ptr(_id(dst), count)
     launch_ew(xd_ctx(), op, pa, pb, bm, pc, cm, po, count, d, Float32(Float64(py=s)))
     return PythonObject(count)
+
+
+struct _CovGate(Defaultable, Movable):
+    """One persistent typed gate on xd_ctx; never released between enqueues."""
+    var bufs: List[DeviceBuffer[DType.int32]]
+
+    def __init__(out self):
+        self.bufs = List[DeviceBuffer[DType.int32]]()
+
+
+comptime MCD_COV_GATE = _Global[StorageType=_CovGate, name="MojoMCDOrderedCovGate", init_fn=_CovGate.__init__]
+
+
+def dev_mcd_cov_py(a: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
+    """Opt-in MCD final masked covariance Gram; no generic GEMM dispatch change."""
+    comptime if not MCD_ORDERED_COV:
+        raise Error("ordered MCD covariance is disabled")
+    var rows = _n(p, 0)
+    var d = _n(p, 1)
+    if rows <= 0 or d <= 0 or rows*d > 2147483647 or d*d > 2147483647:
+        raise Error("ordered covariance invalid shape or Int32 bound exceeded")
+    note_cov_route(False, rows, d)
+    var words = ordered_cov_scratch(1, rows, d)
+    var ctx = xd_ctx()
+    var state = MCD_COV_GATE.get_or_create_ptr()
+    if len(state[].bufs) == 0:
+        var initial_gate = ctx.enqueue_create_buffer[DType.int32](1)
+        ctx.enqueue_memset(initial_gate, Int32(1))
+        state[].bufs.append(initial_gate^)
+    # The global owner retains this typed allocation past every enqueue and
+    # subsequent download/synchronize. No null pointer, cast, or local-only
+    # allocation whose destruction could add an implicit synchronization.
+    var gate = state[].bufs[0]
+    var gate_ptr = gate.unsafe_ptr[MutAnyOrigin]()
+    var sid = pool_alloc(words)
+    launch_mcd_cov_ordered(ctx, _ptr(_id(a), rows*d), _ptr(_id(c), d*d),
+        _ptr(sid, words), rows, d, 1, rows*d, d*d, gate_ptr, True)
+    # Resident pool reuse is ordered on the same context, as dev_gemm_py.
+    pool_free(sid)
+    return PythonObject(d*d)
 
 
 def dev_gemm_py(a: PythonObject, b: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
@@ -762,3 +803,46 @@ def _pool_buf_view(id: Int, count: Int) raises -> DeviceBuffer[DType.float32]:
     """The first `count` floats of pooled matrix id as a sub-buffer."""
     var p = X_DECOMP_POOL.get_or_create_ptr()
     return p[].bufs[id].create_sub_buffer[DType.float32](0, count)
+
+
+# Test-only direct batched covariance seam, identical API on both arms.
+# Inactive outputs retain sentinel, partial storage is poisoned before B.
+def mcd_cov_probe_py(xaddr: PythonObject, gaddr: PythonObject, outaddr: PythonObject,
+                     p: PythonObject) raises -> PythonObject:
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_FAST or not has_apple_gpu_accelerator():
+        raise Error("covariance probe requires FAST Apple")
+    var nc = _n(p, 0)
+    var rows = _n(p, 1)
+    var d = _n(p, 2)
+    if nc <= 0 or rows <= 0 or d <= 0 or nc*rows*d > 2147483647 or nc*d*d > 2147483647:
+        raise Error("invalid ordered covariance probe shape")
+    var ctx = xd_ctx()
+    var dx = ctx.enqueue_create_buffer[DType.float32](nc*rows*d)
+    var dg = ctx.enqueue_create_buffer[DType.int32](nc)
+    var dc = ctx.enqueue_create_buffer[DType.float32](nc*d*d)
+    var scratch = ctx.enqueue_create_buffer[DType.float32](ordered_cov_scratch(nc, rows, d))
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=F32Ptr(unsafe_from_address=Int(py=xaddr)))
+    ctx.enqueue_copy(dst_buf=dg, src_ptr=I32Ptr(unsafe_from_address=Int(py=gaddr)))
+    ctx.enqueue_memset(dc, Float32(-123.5))
+    ctx.enqueue_memset(scratch, Float32(7654321))
+    # Explicit mutable borrows of owned buffers for the legacy launcher API.
+    # No integer-address reconstruction or const-removing pointer cast. Keep
+    # one x borrow and copy its pointer for X^T X, rather than borrow dx twice.
+    var xp = dx.unsafe_ptr[MutAnyOrigin]()
+    var cp = dc.unsafe_ptr[MutAnyOrigin]()
+    var sp = scratch.unsafe_ptr[MutAnyOrigin]()
+    var gp = dg.unsafe_ptr[MutAnyOrigin]()
+    comptime if MCD_ORDERED_COV:
+        note_cov_route(True, rows, d)
+        launch_mcd_cov_ordered(ctx, xp, cp, sp,
+            rows, d, nc, rows*d, d*d, gp, False)
+    else:
+        launch_gemm_mma_batched(ctx, xp, xp, cp,
+            d, rows, d, True, False, nc, rows*d, rows*d, d*d, gp, False)
+    ctx.enqueue_copy(dst_ptr=F32Ptr(unsafe_from_address=Int(py=outaddr)), src_buf=dc)
+    ctx.synchronize()
+    _ = dx^
+    _ = dg^
+    _ = dc^
+    _ = scratch^
+    return PythonObject(1 if MCD_ORDERED_COV else 0)
