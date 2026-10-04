@@ -26,7 +26,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
 
-from x_decomp.cells import F32Ptr, OP_SCALE, OP_SELECT, ew_cell, rand_cell
+from x_decomp.mcd_bmma import MCD_ORDERED_COV, ordered_cov_scratch, launch_mcd_cov_ordered
+from x_decomp.cells import I32Ptr, F32Ptr, OP_SCALE, OP_SELECT, ew_cell, rand_cell
 from core.philox import philox4x32_10
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import HostBuffer
@@ -236,6 +237,24 @@ def dev_ew_py(
     var po = _ptr(_id(dst), count)
     launch_ew(xd_ctx(), op, pa, pb, bm, pc, cm, po, count, d, Float32(Float64(py=s)))
     return PythonObject(count)
+
+
+def dev_mcd_cov_py(a: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
+    """Opt-in MCD final masked covariance Gram; no generic GEMM dispatch change."""
+    comptime if not MCD_ORDERED_COV:
+        raise Error("ordered MCD covariance is disabled")
+    var rows = _n(p, 0)
+    var d = _n(p, 1)
+    if rows <= 0 or d <= 0 or rows*d > 2147483647 or d*d > 2147483647:
+        raise Error("ordered covariance invalid shape or Int32 bound exceeded")
+    var words = ordered_cov_scratch(1, rows, d)
+    var sid = pool_alloc(words)
+    launch_mcd_cov_ordered(xd_ctx(), _ptr(_id(a), rows*d), _ptr(_id(c), d*d),
+        _ptr(sid, words), rows, d, 1, rows*d, d*d,
+        I32Ptr(unsafe_from_address=0), True)
+    # Resident pool reuse is ordered on the same context, as dev_gemm_py.
+    pool_free(sid)
+    return PythonObject(d*d)
 
 
 def dev_gemm_py(a: PythonObject, b: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:

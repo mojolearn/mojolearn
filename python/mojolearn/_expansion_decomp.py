@@ -4496,7 +4496,15 @@ def _masked_cov(k, M, m, assume_centered):
     else:
         loc = k.ew("scale", k.colsum(Xm), s=1.0 / cnt)
         Xc = k.ew("mul", k.ew("sub", M, loc), m)
-    return loc, k.ew("scale", k.mm(Xc, Xc, ta=True), s=1.0 / cnt)
+    # Experiment: only the MCD masked covariance seam; binding presence is
+    # compile-gated FAST+Apple. Python schedules device buffers, no host math.
+    ordered = getattr(k.b, "x_decomp_dev_mcd_cov", None)
+    if ordered is not None and k._use(Xc) and Xc.r > 0 and Xc.c > 0:
+        gram = k._dout(Xc.c, Xc.c)
+        ordered(k._did(Xc), gram._d.id, [Xc.r, Xc.c])
+    else:
+        gram = k.mm(Xc, Xc, ta=True)
+    return loc, k.ew("scale", gram, s=1.0 / cnt)
 
 
 def _mahal(k, X, loc, P):

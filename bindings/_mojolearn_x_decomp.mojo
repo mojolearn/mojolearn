@@ -22,8 +22,9 @@ from x_decomp.graph_device import (
     dev_graph_knn_py, dev_graph_knn_dense_py, dev_graph_radius_py, dev_graph_radius_geo_py, dev_graph_lle_iw_py, dev_graph_components_py,
     dev_graph_join_py, dev_graph_dijkstra_py,
 )
+from x_decomp.mcd_bmma import MCD_ORDERED_COV
 from x_decomp.resident import (
-    dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_gemm_py, dev_project_py, dev_rand_py, dev_trisolve_py, dev_knn_select_py, dev_rowsum_py,
+    dev_mcd_cov_py, dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_gemm_py, dev_project_py, dev_rand_py, dev_trisolve_py, dev_knn_select_py, dev_rowsum_py,
     dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_lda_rows_py,
     dev_lda_bound_py, dev_als_rows_py, dev_move_py,
 )
@@ -98,6 +99,8 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[dev_download_py]("x_decomp_dev_download")
         m.def_function[dev_ew_py]("x_decomp_dev_ew")
         m.def_function[dev_gemm_py]("x_decomp_dev_gemm")
+        comptime if MCD_ORDERED_COV:
+            m.def_function[dev_mcd_cov_py]("x_decomp_dev_mcd_cov")
         m.def_function[dev_lanczos_py]("x_decomp_dev_lanczos")
         m.def_function[kpca_lanczos_dev_on_py]("x_decomp_lanczos_dev_on")
         m.def_function[ipca_dev_on_py]("x_decomp_ipca_dev_on")

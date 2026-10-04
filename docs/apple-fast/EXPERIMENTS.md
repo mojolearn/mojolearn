@@ -815,3 +815,5 @@ metric. Taxi final oracle errors improve/equal, but raw covariance is not
 byte-identical and lacks an extra baseline. Reports preserve legacy capture
 provenance limitations. Stabilizing split-K accumulation is a new candidate,
 not retroactive validation of SKIP. DEFLATE remains HOLD for changed flags.
+
+| `MOJOLEARN_MCD_ORDERED_COV` | MinCovDet / EllipticEnvelope covariance, raw batched phases and final masked covariance | lane/apple-fast-mcd-ordered-cov; base main 8b3079d02 | none; source-only | NOT BUILT / NOT RUN / NOT TIMED | CANDIDATE off. Replace unordered cross-split covariance atomics with disjoint partials and ordered compensated GPU fold; preserve main default/other vendors/IDENTICAL, no SKIP or DEFLATE. Accuracy and repeatability before speed. Strict per-field f64 no-worse and exact masks contract in [MCD_ORDERED_COV.md](MCD_ORDERED_COV.md); specialized quality harness still owed. |
