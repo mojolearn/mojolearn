@@ -91,12 +91,15 @@ def compute_split_properties_half_byte_kernel[
     partition: MutPointer[UInt32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],
     total_feature_count_in: Int32,
-    fixed_scale: Float32,
+    fixed_scale_p: MutPointer[Float32, MutAnyOrigin],
     int_slot: Int32,
 ):
     """`ComputeSplitPropertiesHalfByteImpl` (`:23-94`), copied; under the
     ordered tiers the fixed-point accumulator (`PointHistHalfByteInt`,
     lane/neural-pass124)."""
+    # T5 drain (cpu3-gbdt-a): the fixed-point scale is a device word
+    # (the ordered fit forms it on the device); every thread loads it
+    var fixed_scale = fixed_scale_p.unsafe_load(0)
     var tid = Int(thread_idx.x)
     var total_feature_count = Int(total_feature_count_in)
 

@@ -190,7 +190,10 @@ from gbdt.methods.dynamic_boosting_folds import (
     create_folds,
 )
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import StageTimes
-from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import enqueue_snap_plane
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    enqueue_snap_plane,
+    enqueue_snap_plane_dev,
+)
 from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
     compute_bins_for_model,
     LeafPartition,
@@ -275,15 +278,16 @@ comptime IDN_ORD_ONE_STEP_DEVICE = (
 #: (`_ord_std_scale_kernel`, one thread of control plane) from the noise sum
 #: and the two magnitudes, which never come to the host: the std through
 #: the correctly rounded `sf64_sqrt` (checks/soft_f64.mojo), the scale by
-#: `choose_scale_kernel`'s exact integer search; the host reads the two
-#: floats back on the drain it already took and does no arithmetic on the
+#: `choose_scale_kernel`'s exact integer search; the host does not read the
+#: two floats back (see below) and does no arithmetic on the
 #: data. The statements are the host's, `Float32(mult * sqrt(s2 / (count +
 #: 1e-100)) * random_strength)` in binary64 with one rounding each (sqrt,
 #: like every IEEE sqrt, correctly rounded), and `choose_scale(max(m0, m1),
 #: total)`, so bits do not move and the host column (`gbdt_oracle_ordered`)
-#: is untouched. The drain itself stays: the histogram and score kernels
-#: still take the scale and the std as launch values (owed: a device-scalar
-#: form of `compute_hist2`, `find_optimal_split` and the snap).
+#: is untouched. Lane cpu3-gbdt-a removed the drain: the two floats stay
+#: in `d_ss` and the snap (`enqueue_snap_plane_dev`), the histogram kernels
+#: (`compute_hist2_dev`) and the score kernels (`find_optimal_split_dev`)
+#: read them as device words; only a traced run reads them back.
 #: `-D MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF` (or the master `-D
 #: MOJOLEARN_IDN_ALL_OFF`) restores the host arithmetic.
 comptime IDN_ORD_STD_SCALE_DEVICE = (
@@ -2552,11 +2556,10 @@ def fit_ordered(
                     Int32(total), d_ss.unsafe_ptr(),
                     grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
                 )
-                ctx.enqueue_copy(dst_buf=h_ss, src_buf=d_ss)
-                ctx.synchronize()
-                _ = part^
-                score_std = h_ss[0]
-                dev_scale = h_ss[1]
+                # T5 drain (cpu3-gbdt-a): (std, scale) stay in `d_ss` for
+                # the snap and the searcher; no readback, no drain here.
+                # `part` is held past the learn-loss drain.
+                held.append(part^)
             else:
                 ctx.enqueue_copy(dst_buf=h_sums, src_buf=d_sums)
                 ctx.synchronize()
@@ -2674,12 +2677,10 @@ def fit_ordered(
                     Int32(total), d_ss.unsafe_ptr(),
                     grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
                 )
-                ctx.enqueue_copy(dst_buf=h_ss, src_buf=d_ss)
-                ctx.synchronize()
-                _ = absv^
-                _ = mags^
-                score_std = h_ss[0]
-                dev_scale = h_ss[1]
+                # T5 drain (cpu3-gbdt-a): (std, scale) stay in `d_ss`; the
+                # temporaries are held past the learn-loss drain
+                held.append(absv^)
+                held.append(mags^)
             else:
                 var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
                 ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
@@ -2708,10 +2709,21 @@ def fit_ordered(
                         * sqrt(Float64(held_h[0][0]) / (Float64(count) + 1e-100))
                         * Float64(opts.random_strength)
                     )
-        _ = held^
         _ = held_h^
         var scale: Float32
+        # T5 drain (lane cpu3-gbdt-a): under IDN_ORD_STD_SCALE_DEVICE the
+        # std and the scale are device words (`d_ss`) that the snap, the
+        # histogram kernels and the score kernels read; the host holds
+        # neither, so the per-tree drain is gone. A traced run (not a
+        # timing) reads them back for its two records.
+        var ss_words = List[DeviceBuffer[DType.float32]]()
         comptime if IDN_ORD_STD_SCALE_DEVICE:
+            ss_words.append(d_ss.copy())
+            if trace.enabled:
+                ctx.enqueue_copy(dst_buf=h_ss, src_buf=d_ss)
+                ctx.synchronize()
+                score_std = h_ss[0]
+                dev_scale = h_ss[1]
             scale = dev_scale
         else:
             scale = Float32(choose_scale(m1 if m1 > m0 else m0, total))
@@ -2721,7 +2733,15 @@ def fit_ordered(
         # lane/sym-quality: the gradient plane onto the tree's grid before
         # the search (`enqueue_snap_plane`), after the score std dev, the
         # bootstrap and the scale, as gbdt_oracle_ordered restates it
-        enqueue_snap_plane(ctx, sg, total, scale)
+        comptime if IDN_ORD_STD_SCALE_DEVICE:
+            enqueue_snap_plane_dev(
+                ctx, sg, total,
+                rebind[MutPointer[Float32, MutAnyOrigin]](
+                    d_ss.unsafe_ptr().unsafe_offset(1)
+                ),
+            )
+        else:
+            enqueue_snap_plane(ctx, sg, total, scale)
         times.end(ctx, "ord.scale")
         # 5. the structure, on the learn permutation's folds
         times.begin(ctx)
@@ -2732,7 +2752,7 @@ def fit_ordered(
             score_std_dev=score_std, seed=tree_seed, one_hot=one_hot,
             folds=folds, permutation=perms[learn_p], permutation_id=learn_p,
             fold_part_off=fast_part_off, obs_scratch=fast_obs,
-            ord_wide=ord_wide,
+            ord_wide=ord_wide, std_scale_word=ss_words^,
         )
         times.end(ctx, "ord.structure")
         times.begin(ctx)
@@ -2909,6 +2929,8 @@ def fit_ordered(
         ctx.enqueue_copy(dst_buf=h_fv, src_buf=fv)
         ctx.synchronize()
         _ = pend_held^
+        # the score-std / scale temporaries (T5 drain), past this drain
+        _ = held^
         losses.append(-Float64(h_fv[0]) / Float64(n_rows))
         if ord_dev_leaves:
             leaves = _ordered_device_leaves(est_pools[ord_dev_slot], n_leaves)

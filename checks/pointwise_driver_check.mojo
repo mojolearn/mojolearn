@@ -70,6 +70,7 @@ GATES:
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_zero import enqueue_fill
 
 from checks.kernel_matrix import (
     TARGET_COLUMN,
@@ -139,11 +140,17 @@ def _launch[
     comptime nb_block = PW_HIST2_BLOCK if bits == 8 else (
         PW_HIST2_FLOAT_BLOCK
     )
+    # the kernel reads the scale from a device word (T5 drain, lane
+    # cpu3-gbdt-a); held past the launch
+    var scale_word = ctx.enqueue_create_buffer[DType.float32](1)
+    enqueue_fill(ctx, scale_word, scale)
     ctx.enqueue_function[compute_split_properties_nb_kernel[bits, full, m]](
         p_off, p_ffi, p_folds, Int32(N_FEATURES), p_ci, p_tgt, p_wt,
-        p_idx, p_part, p_sums, Int32(total_bin_features), scale, Int32(0),
+        p_idx, p_part, p_sums, Int32(total_bin_features),
+        scale_word.unsafe_ptr(), Int32(0),
         grid_dim=(gx, gy, 1), block_dim=(nb_block, 1, 1),
     )
+    _ = scale_word^
 
 
 def main() raises:

@@ -68,12 +68,13 @@ from gbdt.methods.histograms_helper import (
     POLICY_ONE_BYTE,
     ComputeHistogramsHelper,
 )
-from gbdt.methods.kernel.pointwise_scores import find_optimal_split
+from gbdt.methods.kernel.pointwise_scores import find_optimal_split_dev
 from gbdt.methods.kernel.pointwise_split_resolve import (
     launch_pw_fold_winner,
     launch_pw_seed_sentinel,
 )
-from gbdt.methods.pointwise_kernels import FoldsHistogram, compute_hist2
+from gbdt.methods.pointwise_kernels import FoldsHistogram, compute_hist2_dev
+from std.memory import bitcast
 from gbdt.methods.pointwise_optimization_subsets import TOptimizationSubsets
 from gbdt.data.permutation import TRandom
 from gbdt.methods.pointwise_multi_gpu import pointwise_device_count, pointwise_feature_shards
@@ -180,6 +181,16 @@ struct PolicyScoreHelper(Movable):
     # between the plain and the dynamic scorer. Was a literal 1 at three
     # sites -- DEVIATION 126.
     var fold_count: Int
+    var d_scale_word: DeviceBuffer[DType.float32]
+    var d_std_word: DeviceBuffer[DType.float32]
+    """T5 drain (lane cpu3-gbdt-a): one float each. The histogram kernels
+    read the fixed-point scale, and the score kernels the score-noise std
+    dev, from a device word. A caller holding them on the host stages
+    them here (an enqueued fill, no drain; refilled only when the value
+    changes); the ordered fit hands its own device words instead."""
+    var h_scale_staged: Float32
+    var h_std_staged: Float32
+    var words_staged: Bool
 
     def __init__(
         out self,
@@ -339,6 +350,11 @@ struct PolicyScoreHelper(Movable):
             DType.float32
         ](2 * blocks_n)
         self.d_score_scratch = ctx.enqueue_create_buffer[DType.float32](1)
+        self.d_scale_word = ctx.enqueue_create_buffer[DType.float32](1)
+        self.d_std_word = ctx.enqueue_create_buffer[DType.float32](1)
+        self.h_scale_staged = Float32(0.0)
+        self.h_std_staged = Float32(0.0)
+        self.words_staged = False
         ctx.synchronize()
 
     def submit_compute(
@@ -352,10 +368,91 @@ struct PolicyScoreHelper(Movable):
         fixed_scale: Float32,
     ) raises:
         """`TScoreHelper::SubmitCompute` (`histograms_helper.h:380-384`),
-        which is `ComputeHistogramsHelper.Compute` and nothing else."""
-        var plan = self.hist_helper.plan(Int(subsets.current_depth))
+        which is `ComputeHistogramsHelper.Compute` and nothing else. The
+        host-scalar form: the scale staged on `d_scale_word`."""
         if self.feature_count == 0:
             return
+        if pointwise_device_count() > 1:
+            self._submit(
+                ctx, subsets, cindex, docs, n_rows, sm_count, fixed_scale,
+                rebind[MutPointer[Float32, MutAnyOrigin]](
+                    self.d_scale_word.unsafe_ptr()
+                ),
+            )
+            return
+        self._stage_words(fixed_scale, self.h_std_staged)
+        self._submit(
+            ctx, subsets, cindex, docs, n_rows, sm_count, fixed_scale,
+            rebind[MutPointer[Float32, MutAnyOrigin]](
+                self.d_scale_word.unsafe_ptr()
+            ),
+        )
+
+    def _stage_words(mut self, scale: Float32, std: Float32) raises:
+        """Refill the two staged words only when a value changed (the
+        words persist across levels and trees; nothing else writes them).
+        Compared by bits, so -0.0 and NaN restage."""
+        if (
+            not self.words_staged
+            or bitcast[DType.uint32](scale) != bitcast[DType.uint32](self.h_scale_staged)
+        ):
+            self.d_scale_word.enqueue_fill(scale)
+            self.h_scale_staged = scale
+        if (
+            not self.words_staged
+            or bitcast[DType.uint32](std) != bitcast[DType.uint32](self.h_std_staged)
+        ):
+            self.d_std_word.enqueue_fill(std)
+            self.h_std_staged = std
+        self.words_staged = True
+
+    def submit_compute_dev(
+        mut self,
+        ctx: DeviceContext,
+        mut subsets: TOptimizationSubsets,
+        mut cindex: DeviceBuffer[DType.uint32],
+        mut docs: DeviceBuffer[DType.uint32],
+        n_rows: Int,
+        sm_count: Int,
+        scale_word: MutPointer[Float32, MutAnyOrigin],
+    ) raises:
+        """T5 drain (lane cpu3-gbdt-a): `submit_compute` with the scale on
+        the device (the ordered fit's `_ord_std_scale_kernel` word), never
+        read by the host on one device. The multi-GPU shards take the
+        scale as a launch value on their own contexts, so that arm alone
+        reads the one word back (a scalar, not data)."""
+        if self.feature_count == 0:
+            return
+        var host_scale = Float32(1.0)
+        if pointwise_device_count() > 1:
+            var h = ctx.enqueue_create_host_buffer[DType.float32](1)
+            var view = DeviceBuffer[DType.float32](
+                ctx, scale_word, 1, owning=False
+            )
+            ctx.enqueue_copy(dst_buf=h, src_buf=view)
+            ctx.synchronize()
+            host_scale = h[0]
+            _ = view^
+            _ = h^
+        self._submit(
+            ctx, subsets, cindex, docs, n_rows, sm_count, host_scale,
+            scale_word,
+        )
+
+    def _submit(
+        mut self,
+        ctx: DeviceContext,
+        mut subsets: TOptimizationSubsets,
+        mut cindex: DeviceBuffer[DType.uint32],
+        mut docs: DeviceBuffer[DType.uint32],
+        n_rows: Int,
+        sm_count: Int,
+        fixed_scale: Float32,
+        scale_word: MutPointer[Float32, MutAnyOrigin],
+    ) raises:
+        """The shared body: the multi-GPU shards take `fixed_scale` (a
+        host value), the one-device histogram reads `scale_word`."""
+        var plan = self.hist_helper.plan(Int(subsets.current_depth))
         var devices = pointwise_device_count()
         if devices > 1:
             pointwise_feature_shards(ctx, self.policy, self.d_offset,
@@ -373,7 +470,7 @@ struct PolicyScoreHelper(Movable):
         var weight_p = subsets.gathered_weight.unsafe_ptr()
         var target_p = subsets.gathered_target.unsafe_ptr()
         var parts_p = subsets.partitions.unsafe_ptr()
-        compute_hist2(
+        compute_hist2_dev(
             ctx,
             self.policy,
             self.d_offset.unsafe_ptr(),
@@ -402,7 +499,7 @@ struct PolicyScoreHelper(Movable):
             plan.build_from_scratch,
             self.folds_hist.copy(),
             sm_count,
-            fixed_scale,
+            scale_word,
         )
         self.hist_helper.clear_from_scratch()
 
@@ -428,7 +525,8 @@ struct PolicyScoreHelper(Movable):
         if self.feature_count == 0:
             return
         self.d_score_scratch.enqueue_fill(score_before_split)
-        find_optimal_split(
+        self._stage_words(self.h_scale_staged, score_std_dev)
+        find_optimal_split_dev(
             ctx,
             self.d_bf,
             self.bin_feature_count,
@@ -448,7 +546,9 @@ struct PolicyScoreHelper(Movable):
             Float32(1.0),
             Float32(0.0),
             False,
-            score_std_dev,
+            rebind[MutPointer[Float32, MutAnyOrigin]](
+                self.d_std_word.unsafe_ptr()
+            ),
             seed,
             False,
         )
@@ -466,10 +566,36 @@ struct PolicyScoreHelper(Movable):
     ) raises:
         """The device-score form (DEVIATION 207): `scoreBeforeSplit` is a
         one-float device buffer the blind level loop's pack kernel wrote,
-        never read by the host. Same launches, same arithmetic."""
+        never read by the host. Same launches, same arithmetic. The std dev
+        a host scalar, staged on `d_std_word`."""
         if self.feature_count == 0:
             return
-        find_optimal_split(
+        self._stage_words(self.h_scale_staged, score_std_dev)
+        self.compute_optimal_split_dev_std(
+            ctx, part_stats, part_count, score_before, score_function, l2,
+            rebind[MutPointer[Float32, MutAnyOrigin]](
+                self.d_std_word.unsafe_ptr()
+            ),
+            seed,
+        )
+
+    def compute_optimal_split_dev_std(
+        mut self,
+        ctx: DeviceContext,
+        mut part_stats: DeviceBuffer[DType.float32],
+        part_count: Int,
+        mut score_before: DeviceBuffer[DType.float32],
+        score_function: Int,
+        l2: Float32,
+        score_std_word: MutPointer[Float32, MutAnyOrigin],
+        seed: UInt64,
+    ) raises:
+        """T5 drain (lane cpu3-gbdt-a): `compute_optimal_split_dev` with the
+        score-noise std dev a device word as well (the ordered fit's
+        `_ord_std_scale_kernel` output), never read by the host."""
+        if self.feature_count == 0:
+            return
+        find_optimal_split_dev(
             ctx,
             self.d_bf,
             self.bin_feature_count,
@@ -489,7 +615,7 @@ struct PolicyScoreHelper(Movable):
             Float32(1.0),
             Float32(0.0),
             False,
-            score_std_dev,
+            score_std_word,
             seed,
             False,
         )
@@ -590,6 +716,23 @@ struct ScoresCalcerOnCompressedDataSet(Movable):
                 ctx, subsets, cindex, docs, n_rows, sm_count, fixed_scale
             )
 
+    def submit_compute_dev(
+        mut self,
+        ctx: DeviceContext,
+        mut subsets: TOptimizationSubsets,
+        mut cindex: DeviceBuffer[DType.uint32],
+        mut docs: DeviceBuffer[DType.uint32],
+        n_rows: Int,
+        sm_count: Int,
+        scale_word: MutPointer[Float32, MutAnyOrigin],
+    ) raises:
+        """T5 drain (lane cpu3-gbdt-a): `submit_compute` with the scale a
+        device word."""
+        for i in range(len(self.helpers)):
+            self.helpers[i].submit_compute_dev(
+                ctx, subsets, cindex, docs, n_rows, sm_count, scale_word
+            )
+
     def compute_optimal_split(
         mut self,
         ctx: DeviceContext,
@@ -647,6 +790,33 @@ struct ScoresCalcerOnCompressedDataSet(Movable):
                 score_function,
                 l2,
                 score_std_dev,
+                rnd.next_uniform_l(),
+            )
+
+    def compute_optimal_split_dev_std(
+        mut self,
+        ctx: DeviceContext,
+        mut part_stats: DeviceBuffer[DType.float32],
+        part_count: Int,
+        mut score_before: DeviceBuffer[DType.float32],
+        score_function: Int,
+        l2: Float32,
+        score_std_word: MutPointer[Float32, MutAnyOrigin],
+        seed: UInt64,
+    ) raises:
+        """T5 drain (lane cpu3-gbdt-a): `compute_optimal_split_dev` with the
+        score-noise std dev a device word; the same per-helper seed
+        advance."""
+        var rnd = TRandom(seed)
+        for i in range(len(self.helpers)):
+            self.helpers[i].compute_optimal_split_dev_std(
+                ctx,
+                part_stats,
+                part_count,
+                score_before,
+                score_function,
+                l2,
+                score_std_word,
                 rnd.next_uniform_l(),
             )
 

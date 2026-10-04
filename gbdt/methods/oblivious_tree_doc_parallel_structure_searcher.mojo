@@ -396,9 +396,18 @@ def fit_oblivious_tree_structure_traced(
         DeviceBuffer[DType.uint32]
     ](),
     ord_wide: Bool = False,
+    std_scale_word: List[DeviceBuffer[DType.float32]] = List[
+        DeviceBuffer[DType.float32]
+    ](),
 ) raises -> List[TBinarySplit]:
     """`TDocParallelObliviousTreeSearcher::FitImpl` (`:12-160`), the
     structure half.
+
+    `std_scale_word` (T5 drain, lane cpu3-gbdt-a): when non-empty, its
+    first buffer holds `(score std dev, fixed-point scale)` as the ordered
+    fit's `_ord_std_scale_kernel` wrote them, and the histogram and score
+    kernels read those device words; `fixed_scale` and `score_std_dev` are
+    then unread. Same values, same arithmetic, no drain to fetch them.
 
     `permutation_id` (fold arm only): a caller id for `permutation`, fixed
     for the span of `pool`; with it the fold doc ids are built once per id
@@ -734,7 +743,21 @@ def fit_oblivious_tree_structure_traced(
                 GATHER_NO_MASK,
             )
             docs = d_observations.copy()
-        if fold_order:
+        if len(std_scale_word) > 0:
+            var scale_word = rebind[MutPointer[Float32, MutAnyOrigin]](
+                std_scale_word[0].unsafe_ptr().unsafe_offset(1)
+            )
+            if fold_order:
+                calcer.submit_compute_dev(
+                    ctx, subsets, d_fold_cindex, docs, doc_count, sm_count,
+                    scale_word,
+                )
+            else:
+                calcer.submit_compute_dev(
+                    ctx, subsets, cindex, docs, doc_count, sm_count,
+                    scale_word,
+                )
+        elif fold_order:
             calcer.submit_compute(
                 ctx, subsets, d_fold_cindex, docs, doc_count, sm_count,
                 fixed_scale,
@@ -768,16 +791,30 @@ def fit_oblivious_tree_structure_traced(
 
         var pstats = subsets.partition_stats.copy()
         times.begin(ctx)
-        calcer.compute_optimal_split_dev(
-            ctx,
-            pstats,
-            1 << depth,
-            pool[0].d_score_before,
-            score_function,
-            l2_leaf_reg,
-            score_std_dev,
-            level_rand.next_uniform_l(),
-        )
+        if len(std_scale_word) > 0:
+            calcer.compute_optimal_split_dev_std(
+                ctx,
+                pstats,
+                1 << depth,
+                pool[0].d_score_before,
+                score_function,
+                l2_leaf_reg,
+                rebind[MutPointer[Float32, MutAnyOrigin]](
+                    std_scale_word[0].unsafe_ptr()
+                ),
+                level_rand.next_uniform_l(),
+            )
+        else:
+            calcer.compute_optimal_split_dev(
+                ctx,
+                pstats,
+                1 << depth,
+                pool[0].d_score_before,
+                score_function,
+                l2_leaf_reg,
+                score_std_dev,
+                level_rand.next_uniform_l(),
+            )
         times.end(ctx, "pw.score")
 
         # their fold (`:113-120`) and the record's consumption, on the
