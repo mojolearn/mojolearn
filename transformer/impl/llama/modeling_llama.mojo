@@ -3715,6 +3715,21 @@ in the same order, so the refusal raised is the one the separate scans
 raised. No float is produced: no bit moves on any column.
 `-D MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF` restores the separate scans."""
 
+comptime IDN_ATTN_CACHE_NOWAIT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF"]()
+    or is_defined["MOJOLEARN_ATTN_CACHE_WAIT"]()
+    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""lane/nr-attn (2026-10-04), default ON under IDENTICAL; ported from
+lane/neural-pass67 087231ba3 (`MOJOLEARN_ATTN_CACHE_WAIT`). The per-layer
+hard wait after the KV cache update in `llama_attention_forward` is compiled
+out: every reader of the caches is a launch on the same in-order context,
+so the wait ordered nothing (one wait per layer per forward; 0.54 ms a
+layer on the M3, 0.05 ms on the MI325X when measured on 2026-10-01). No
+arithmetic moves: same bits on every column. `-D
+MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF` (or the old `-D
+MOJOLEARN_ATTN_CACHE_WAIT=1`) restores the wait."""
+
 
 def llama_refuse_bad_call(
     ctx: DeviceContext,
@@ -4785,8 +4800,15 @@ def llama_attention_forward(
             grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
             block_dim=(LLAMA_TPB, 1, 1),
         )
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_CACHE_NOWAIT (lane/nr-attn, from lane/neural-pass67
+    # 087231ba3): the hard wait after the cache update ordered nothing.
+    # Every consumer of the cache stages (and of `kv.k`/`kv.v`) is a launch
+    # or copy on the same in-order context, and the host reads none of them
+    # before its own later wait (the fused forward's regime scan or flag
+    # read, or the next call's). No buffer local to this call is freed here.
+    comptime if not IDN_ATTN_CACHE_NOWAIT:
+        step_count_sync()
+        ctx.synchronize()
     kv.s = s_old + l
     timing_tick(ctx, ton, tk, "attn.rope_and_cache")
 
