@@ -665,7 +665,7 @@ candidate is approved or claimed fixed; full timing remains gated.
 
 | define | algorithm / dataset | branch / base | A/B tag | before -> after ms | verdict | reason / note |
 |---|---|---|---|---|---|---|
-| `MOJOLEARN_MCD_BATCH_MMA` | MinCovDet / taxi, narrow d<=64 | lane/apple-fast-mcd-mma (base d4bb2b795) | new capped-quality tag owed | unknown | OPEN, off | Actual repair after scalar COMPAT quality failure: use main's existing MMA/split-K launcher per candidate for covariance, weighted Gram and Mahalanobis. Batched control/eigen/support work retained. No host model computation, no threshold changes. See ab/mcd-mma.md; compile, capped quality and conditional full timing owed. |
+| `MOJOLEARN_MCD_BATCH_MMA` | MinCovDet / taxi, narrow d<=64 | lane/apple-fast-mcd-mma (base d4bb2b795) | gap26-mcd-mma-{small,ee-small,full,ee-full} | MCD taxi 70877.7 -> 3587.2 ms; EE taxi 70092.1 -> 3627.9 ms; all MCDQ-PAIR-PASS | DEFAULT (FAST+Apple), rollback `MOJOLEARN_MCD_BATCH_MMA_OFF` | Actual repair after scalar COMPAT quality failure: use main's existing MMA/split-K launcher per candidate for covariance, weighted Gram and Mahalanobis. Batched control/eigen/support work retained. No host model computation, no threshold changes. See ab/mcd-mma.md; compile, capped quality and conditional full timing owed. |
 ## AutoARIMA order batching current-main integration (2026-10-04)
 
 | Experiment | Branch / baseline | Evidence | Verdict / next step |

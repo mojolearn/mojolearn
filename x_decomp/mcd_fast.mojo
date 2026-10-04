@@ -94,10 +94,15 @@ from x_decomp.mcd_compat import mc_compact_kernel, mc_moment_kernel, mc_pinvh_ke
 # New candidate after gap26-mcdrepair-small-ready's scalar/MMA mismatch.
 # Keeps batching control/eigen work; main's actual MMA launches compute all
 # three products with unchanged per-candidate shapes and split-K policy.
-# Unvalidated: original 1% fitted-state / .99 support gates remain mandatory.
+# FAST+Apple DEFAULT since source 9ac9871b3 (kernel 77520069e). M3, one run
+# per arm, taxi board size: MinCovDet fit 70877.7 -> 3587.2 ms, EllipticEnvelope
+# 70092.1 -> 3627.9 ms; capped EE 5613.6 -> 956.8 ms. Quality: gap26-mcd-mma-
+# {small,ee-small,full,ee-full} all MCDQ-PAIR-PASS against the original 1%
+# fitted-state / .99 support gates (small: covariance rel 4.4e-8, masks exact).
+# MOJOLEARN_MCD_BATCH_MMA_OFF restores main's per-candidate path.
 comptime MCD_BATCH_MMA = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and DECOMP_FAST_GEMM_MMA and is_defined["MOJOLEARN_MCD_BATCH_MMA"]()
+    and DECOMP_FAST_GEMM_MMA and not is_defined["MOJOLEARN_MCD_BATCH_MMA_OFF"]()
 )
 
 comptime MCD_BATCH_COMPAT = (
