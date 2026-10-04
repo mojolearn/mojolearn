@@ -119,6 +119,11 @@ from mamba.impl.ops.mamba3_siso import (
     SISO3_ANY_SABOTAGE,
     m3_phase_tick,
     m3_mod_2pi,
+    M3_ANGLE_PARALLEL,
+    M3_ANGLE_Q_MASK,
+    m3_angle_q_from_inc,
+    m3_angle_q_from_state,
+    m3_angle_q_to_theta,
     m3_n_chunks,
     m3_q_eff,
     m3_siso_forward,
@@ -316,6 +321,22 @@ struct Mamba3DeviceState(Movable):
         self.pend_k = mamba_zeros(ctx, b * nh * M3_D_STATE)
         self.pend_v = mamba_zeros(ctx, b * nh * M3_HEADDIM)
 
+    def rezero(mut self) raises:
+        """lane/fam2-lm (IDN_M3_SESSION_STAGE_REUSE): the certified zero
+        state again, on the buffers already held."""
+        self.buf_len = 0
+        self.pending = False
+        self.theta.enqueue_fill(Float32(0.0))
+        self.h.enqueue_fill(Float32(0.0))
+        self.buf_qrot.enqueue_fill(Float32(0.0))
+        self.buf_krot.enqueue_fill(Float32(0.0))
+        self.buf_v.enqueue_fill(Float32(0.0))
+        self.buf_dt.enqueue_fill(Float32(0.0))
+        self.buf_sig.enqueue_fill(Float32(0.0))
+        self.buf_adt.enqueue_fill(Float32(0.0))
+        self.pend_k.enqueue_fill(Float32(0.0))
+        self.pend_v.enqueue_fill(Float32(0.0))
+
     def __init__(
         out self, ctx: DeviceContext, b: Int, dims: Mamba3Dims, mut arena: MambaArena
     ) raises:
@@ -493,6 +514,46 @@ struct Mamba3DeviceStages(Movable):
         self.k_last = mamba_zeros(ctx, b * nh * n_state)
         self.v_last = mamba_zeros(ctx, b * nh * p_dim)
         self.theta_last = mamba_zeros(ctx, b * nh * r_ang)
+
+    def rezero(mut self) raises:
+        """lane/fam2-lm (IDN_M3_SESSION_STAGE_REUSE): every stage back to
+        the zeros its constructor filled, on the buffers already held (no
+        allocation). Fills only, in stream order ahead of the next forward's
+        launches. Not for a guarded (poison) build, whose fills cover a
+        body view."""
+        self.norm_sumsq.enqueue_fill(Float32(0.0))
+        self.norm_out.enqueue_fill(Float32(0.0))
+        self.in_proj.enqueue_fill(Float32(0.0))
+        self.a_out.enqueue_fill(Float32(0.0))
+        self.dt_out.enqueue_fill(Float32(0.0))
+        self.adt_work.enqueue_fill(Float32(0.0))
+        self.sig_work.enqueue_fill(Float32(0.0))
+        self.dt_work.enqueue_fill(Float32(0.0))
+        self.gamma_work.enqueue_fill(Float32(0.0))
+        self.betap_work.enqueue_fill(Float32(0.0))
+        self.scale_work.enqueue_fill(Float32(0.0))
+        self.bcnorm_b.enqueue_fill(Float32(0.0))
+        self.bcnorm_c.enqueue_fill(Float32(0.0))
+        self.theta_out.enqueue_fill(Float32(0.0))
+        self.rotq_work.enqueue_fill(Float32(0.0))
+        self.rotk_work.enqueue_fill(Float32(0.0))
+        self.qkdot.enqueue_fill(Float32(0.0))
+        self.kscale_work.enqueue_fill(Float32(0.0))
+        self.v_work.enqueue_fill(Float32(0.0))
+        self.dacs.enqueue_fill(Float32(0.0))
+        self.seg_l.enqueue_fill(Float32(0.0))
+        self.qk_s.enqueue_fill(Float32(0.0))
+        self.pass_states.enqueue_fill(Float32(0.0))
+        self.yintra.enqueue_fill(Float32(0.0))
+        self.ystate.enqueue_fill(Float32(0.0))
+        self.skip_out.enqueue_fill(Float32(0.0))
+        self.gate_out.enqueue_fill(Float32(0.0))
+        self.out_proj.enqueue_fill(Float32(0.0))
+        self.residual_out.enqueue_fill(Float32(0.0))
+        self.h_last.enqueue_fill(Float32(0.0))
+        self.k_last.enqueue_fill(Float32(0.0))
+        self.v_last.enqueue_fill(Float32(0.0))
+        self.theta_last.enqueue_fill(Float32(0.0))
 
     def __init__(
         out self,
@@ -983,9 +1044,23 @@ def m3_step_angle_kernel(
         )
     )
     var inc = ftz(identical_mul(a, ftz(dt_out.unsafe_load(bb * nh + hh))))
-    theta_state.unsafe_store(
-        cell, m3_mod_2pi(ftz(ftz(theta_state.unsafe_load(cell)) + inc))
-    )
+    comptime if M3_ANGLE_PARALLEL:
+        # lane/fam2-lm candidate arm: the one-token case of the integer
+        # chain (mamba3_siso.mojo `M3_ANGLE_PARALLEL`), so a decode step
+        # continues a prefill bit for bit.
+        theta_state.unsafe_store(
+            cell,
+            m3_angle_q_to_theta(
+                (
+                    m3_angle_q_from_state(theta_state.unsafe_load(cell))
+                    + m3_angle_q_from_inc(inc)
+                ) & M3_ANGLE_Q_MASK
+            ),
+        )
+    else:
+        theta_state.unsafe_store(
+            cell, m3_mod_2pi(ftz(ftz(theta_state.unsafe_load(cell)) + inc))
+        )
 
 
 def m3_step_core_kernel(

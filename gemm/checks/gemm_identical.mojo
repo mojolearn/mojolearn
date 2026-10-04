@@ -5758,7 +5758,26 @@ comptime GEMM_KSPLIT_CPT = TUNED_CPT * 2
 comptime GEMM_KSPLIT_KS = 16
 #: `ksplit` coarsens a group while the coarser split still issues at least
 #: this many times `S` blocks (brief section 4, rule 4).
-comptime GEMM_KSPLIT_SLACK = 4
+#: lane/fam2-lm (2026-10-04) CANDIDATE ARMS, default OFF, IDENTICAL only,
+#: schedule only (groups are powers of two aligned at leaf 0, so every
+#: group size is the same fold tree and the same bits; the arms move how
+#: many blocks a grouped launch issues, nothing else):
+#:   -D MOJOLEARN_IDN_GEMM_GROUP_SLACK_2 / _8   the slack below (4 shipped)
+#:   -D MOJOLEARN_IDN_GEMM_GROUP_S_HALF / _X2   the SHIPPED row S halved /
+#:        doubled (`GEMM_KSPLIT_DEFAULT_S`; the trial row is untouched)
+#:   -D MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY     the group rule counts tiles
+#:        of the body that runs (`GEMM_KPACK_RPT x GEMM_KPACK_CPT`, 128x64
+#:        on NVIDIA) instead of 128x128 tiles, where the kernel body row is 1
+#: The rule's hand-count checks (`check_kpack_rule_hand_counts` and the
+#: section 4 counts) hold the shipped numbers, so they are expected to
+#: refuse under an arm: the arms are for timing against each other.
+comptime _IDN_GEMM_GROUP_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime GEMM_KSPLIT_SLACK = (
+    2 if (_IDN_GEMM_GROUP_ARMS and is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_2"]()) else (
+        8 if (_IDN_GEMM_GROUP_ARMS and is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_8"]()) else 4
+    )
+)
+comptime IDN_GEMM_GROUP_TILES_BODY = _IDN_GEMM_GROUP_ARMS and is_defined["MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY"]()
 #: `S` the `ksplit` TRIAL arm reads (kernel matrix SCHEDULING row, 2591;
 #: 2595 moved it to `lib_gemm_block_parallelism_trial_for`, which is the
 #: shipped row where that row is above 0 and the column's reading elsewhere,
@@ -5769,7 +5788,15 @@ comptime GEMM_KSPLIT_S = lib_gemm_block_parallelism_trial_for[TARGET_COLUMN]()
 #: default on (NVIDIA 132; AMD 110, measured 2026-09-11 on the MI300X, see
 #: `lib_gemm_block_parallelism_for`); 0 compiles the old dispatch line (Apple,
 #: every other column).
-comptime GEMM_KSPLIT_DEFAULT_S = lib_gemm_block_parallelism_for[TARGET_COLUMN]()
+comptime _GEMM_KSPLIT_ROW_S = lib_gemm_block_parallelism_for[TARGET_COLUMN]()
+comptime GEMM_KSPLIT_DEFAULT_S = (
+    (_GEMM_KSPLIT_ROW_S + 1) // 2
+    if (_IDN_GEMM_GROUP_ARMS and is_defined["MOJOLEARN_IDN_GEMM_GROUP_S_HALF"]()) else (
+        _GEMM_KSPLIT_ROW_S * 2
+        if (_IDN_GEMM_GROUP_ARMS and is_defined["MOJOLEARN_IDN_GEMM_GROUP_S_X2"]())
+        else _GEMM_KSPLIT_ROW_S
+    )
+)
 comptime GEMM_KSPLIT_DEFAULT_ON = GEMM_KSPLIT_DEFAULT_S > 0
 #: DEVIATION 2707: the KERNEL BODY row (kernel matrix `lib_gemm_kernel_body_for`).
 #: 1 routes every call the TUNED 128x128 plan serves through the `kpack_hg`
@@ -6780,6 +6807,11 @@ def gemm_step_ksplit_rule(m: Int, n: Int, k: Int, s: Int, read_s: Bool) -> Int:
         return gl
     var tt = _ksplit_tiles(m, n)
     var tiles = tt[0] * tt[1]
+    comptime if IDN_GEMM_GROUP_TILES_BODY and GEMM_BODY_KPACK_HG:
+        # lane/fam2-lm candidate arm: the blocks the packed body issues.
+        comptime BODY_BM = GEMM_KPACK_RPT * (TUNED_TPB // TUNED_TC)
+        comptime BODY_BN = GEMM_KPACK_CPT * TUNED_TC
+        tiles = ((m + BODY_BM - 1) // BODY_BM) * ((n + BODY_BN - 1) // BODY_BN)
     if tiles >= s:
         return 0
     while tiles * ((p_count + 2 * gl - 1) // (2 * gl)) >= GEMM_KSPLIT_SLACK * s:

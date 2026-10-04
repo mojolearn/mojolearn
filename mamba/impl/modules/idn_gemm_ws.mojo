@@ -30,6 +30,7 @@ from std.ffi import _Global
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.ctx_key import ctx_cache_key, ctx_cache_slot
 from core.step_phase import step_count_device_alloc, step_count_sync
 from gemm.checks.gemm_identical import (
     identical_gemm,
@@ -47,9 +48,13 @@ comptime IDN_MAMBA_GEMM_WS = (
 
 
 struct _MambaGemmWs(Defaultable, Movable):
+    # lane/fam2-lm: one workspace per device context (`ids[i]` is the key of
+    # `bufs[i]`, core/ctx_key.mojo), not one per process.
+    var ids: List[Int]
     var bufs: List[DeviceBuffer[DType.float32]]
 
     def __init__(out self):
+        self.ids = List[Int]()
         self.bufs = List[DeviceBuffer[DType.float32]]()
 
 
@@ -73,16 +78,19 @@ def mamba_proj_gemm(
     comptime if IDN_MAMBA_GEMM_WS:
         var required = identical_gemm_workspace_max_floats(m, n, k)
         var g = _MAMBA_GEMM_WS.get_or_create_ptr()
-        if len(g[].bufs) == 0:
+        var si = ctx_cache_slot(g[].ids, ctx)
+        if si < 0:
             step_count_device_alloc()
             g[].bufs.append(ctx.enqueue_create_buffer[DType.float32](required))
-        elif len(g[].bufs[0]) < required:
+            g[].ids.append(ctx_cache_key(ctx))
+            si = len(g[].ids) - 1
+        elif len(g[].bufs[si]) < required:
             # Queued GEMMs may still use the allocation being replaced.
             step_count_sync()
             ctx.synchronize()
             step_count_device_alloc()
-            g[].bufs[0] = ctx.enqueue_create_buffer[DType.float32](required)
-        var ws = g[].bufs[0].create_sub_buffer[DType.float32](0, len(g[].bufs[0]))
+            g[].bufs[si] = ctx.enqueue_create_buffer[DType.float32](required)
+        var ws = g[].bufs[si].create_sub_buffer[DType.float32](0, len(g[].bufs[si]))
         identical_gemm_into[False](ctx, c, a, b, ws, m, n, k, op)
     else:
         identical_gemm[False](ctx, c, a, b, m, n, k, op)
