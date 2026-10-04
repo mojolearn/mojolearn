@@ -817,3 +817,54 @@ provenance limitations. Stabilizing split-K accumulation is a new candidate,
 not retroactive validation of SKIP. DEFLATE remains HOLD for changed flags.
 
 | `MOJOLEARN_DECOMP_FAST_MMA_K16` | standalone decomposition GEMM, non-split only | lane/apple-fast-decomp-mma-k16@d487c814fe59d35de111d392751af9e6ce06eb66 | w2-mma-k16-q-20261004; w2-mma-k16-t-20261004 | 12 oracle fixtures PASS; dense4096 call+read 85.504250 -> 91.724583 ms (resident 43.152292 -> 47.424042); update4096x256x4096 36.670541 -> 36.401583 (resident 30.276000 -> 30.508875) | HOLD-speed: dense slower, update essentially unchanged. No caller timings/default/board changes. Harness calls transpose1024 a changed shape, but dispatcher yields256 tiles and2 splits, so it is an UNCHANGED control, alongside Gram/thin controls. Its apparent host gain6.389875 ->3.939625 cannot be attributed to K16. One scored call per route/arm retained; no replay. Resident completion timing is a fence-inclusive observation, not pure GPU throughput. |
+
+## W4 PCA pool isolated promotion (2026-10-04)
+
+`MOJOLEARN_PCA_FAST_POOL_OFF`: FAST Apple DEFAULT, merged d8e7825cf; M2 default/OFF rc0 at promotion906fe59c9.
+Measured source `34b4f6c72b489c16f8333ef1416ac23fd143cd59`, timing
+`w2-w4d-pca-istella-r1`: M3 Istella 471.2 -> 217.8 ms. Quality
+`w2-w4d-pca-q`: PASS 16 checks, 200,000 x 220 seeded ill-scaled input,
+three consecutive fits to exercise dirty pool reuse, ten components;
+means identical, eigenvalue relative differences about 1e-6, component
+angles about 2e-6 to 3.5e-6 rad, reconstruction absolute differences
+1e-12 to 1.6e-11. NaN refusal checked. Values are A/B differences, not
+independent-reference accuracy claims. Manager source and noise evidence review completed.
+
+This promotion is isolated on main `f690a6308`: estimators binding plus
+PCA input pool/unused aliases only. No RSVD, LLE, KPCA or eigensolver changes.
+The unchanged covariance MMA arm reads neither alias buffer; its input is
+fully overwritten from the caller before reuse. Pool return follows final
+synchronization and host output copies. Exceptions release owned buffers.
+Pool keeps at most 2 GiB idle; board input occupies about 1.8 GB.
+Outputs remain eager host arrays; no work is deferred to first read.
+Unconditional getenv/perf_counter_ns calls and optional stage file logging
+from the measurement source are removed entirely from the proposal.
+
+Source comparison found no intervening change in this PCA numerical path;
+main's newer x_decomp host eigh dispatch is a separate implementation.
+FAST Apple and existing PCA_FAST_GRAM_MMA eligibility are retained; split-K
+cases and IDENTICAL remain on fresh allocation. `_OFF` restores the original
+allocation policy. M2 default/OFF builds passed;
+no local compilation or timing was run. Broader shapes and modes were not
+newly measured by this quality fixture.
+
+Stored PCA reconstruction values (same X, same seed across all three fits):
+A = [0.2964381628654726, 0.2964381628635881, 0.29643816285693114];
+B = [0.296438162864011, 0.29643816286408387, 0.29643816286171426].
+Lower is better. B fit1 and fit2 worsen by about 5e-13 and 4.8e-12,
+within the observed A repeated-fit range of 8.54e-12. All three B values
+also lie inside that A range. This supports noise-level differences on
+this fixture only; three repetitions do not establish a general noise
+bound. The unchanged split MMA atomic accumulation permits such variation.
+Quality call times A [277.8, 248.0, 247.1] ms, B [264.4, 222.2, 221.9] ms;
+all first reads round to 0.0 ms (not asserted literally zero).
+
+Related candidates remain unpromoted: RSVD Istella 517.3 -> 501.3 ms and
+taxi 200.8 -> 198.5 ms are under 5% at n=1, HOLD-speed/noise. LLE taxi
+1783.8 -> 1039 ms is useful speed, but trustworthiness worsened from
+0.7490329563692009 to 0.7490198410032471 (1.31154e-5); Istella improved
+from 0.5841975142761169 to 0.584208390251185. LLE remains HOLD-quality:
+an absolute-difference PASS alone cannot establish no regression and no
+same-arm noise evidence is yet recorded. No LLE default proposal prepared.
+
+Catalog G1/G5 standalone6abb76673, w2-catalog-g1g5-q-20261004-r2: HOLD for unrestricted use. Eleven cases byte-identical to incumbent; only NT vector79x1,K65 regresses scaled error7.05755e-9 ->1.78820e-8. Preserve existing GEMV fallback; shared adapter predeclares this exclusion and needs its own quality evidence. Callpath r2 failed import (missing PyInit export), not numerical quality; repair required.

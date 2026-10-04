@@ -71,6 +71,7 @@ from kde.resident_fit import (
     kde_score_samples_resident,
 )
 from decomposition.estimator import (
+    PCA_FAST_POOL,
     inverse_transform_host,
     pca_fit_host,
     pca_fit_full_host,
@@ -279,6 +280,15 @@ def pca_fit_binding(
         )
         ctx.synchronize()
     return PythonObject(noise)
+
+
+def pca_fast_pool_on_binding() raises -> PythonObject:
+    """lane/apple-fast-w4-decomp: 1 when this build compiled
+    PCA_FAST_POOL (decomposition/estimator.mojo), else 0 (a quality
+    capture's proof of which arm is installed)."""
+    comptime if PCA_FAST_POOL:
+        return PythonObject(1)
+    return PythonObject(0)
 
 
 def pca_fit_full_binding(
@@ -1237,6 +1247,7 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[kde_fit_release_binding]("kde_fit_release")
         m.def_function[kde_score_samples_resident_binding]("kde_score_samples_resident")
         m.def_function[pca_fit_binding]("pca_fit")
+        m.def_function[pca_fast_pool_on_binding]("pca_fast_pool_on")
         m.def_function[pca_fit_full_binding]("pca_fit_full")
         m.def_function[pca_transform_binding]("pca_transform")
         m.def_function[pca_whiten_transform_binding]("pca_whiten_transform")

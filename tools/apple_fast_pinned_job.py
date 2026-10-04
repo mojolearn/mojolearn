@@ -23,6 +23,7 @@ def main():
         "tools/mcd_saved_oracle.py": "reference",
         "tools/catalog_gemm_quality.py": "verified-standalone-quality",
         "tools/callpath_probe_pair.py": "verified-standalone-quality",
+        "tools/shared_gemm_quality.py": "verified-standalone-quality",
     }
     assert script in policies
     policy = policies[script]
