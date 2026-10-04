@@ -43,3 +43,25 @@ are retained under `~/mojolearn-evidence/apple-fast/branch-audit-20261004/`.
 
 No recovered kernel has been merged into main or enabled by this checkpoint.
 Board times change only after accepted application-level evidence.
+
+## First harvested results
+
+All four admitted PCA caller timings completed and passed the unchanged output
+quality gate. Cold call plus first full output copy, one sample per arm:
+
+| Candidate / operation | A ms | B ms | Decision |
+| --- | ---: | ---: | --- |
+| G1 PCA transform | 32.633750 | 29.887000 | Measured lead; no board/default admission |
+| G1 PCA inverse | 34.177417 | 36.050709 | Slower; retain incumbent |
+| G5 PCA transform | 32.698166 | 30.608875 | Measured lead; no board/default admission |
+| G5 PCA inverse | 35.538000 | 36.727542 | Slower; retain incumbent |
+
+All pairs have equal A/B independent-oracle error metrics. Diagnostic counters
+are enabled. These cold caller samples do not establish a noise distribution or
+validate broad shape eligibility. Preserve the existing board fit timings.
+
+Compensated Kalman reference `arima-k3-df-reference-v1` passed its pinned
+preflight and was queued after position1578; admission window released. This
+is a reference-only accuracy investigation, not a GPU performance claim.
+Scoped GEMM r2 `28f06e1923cfa164fd068c31b0f986ff0126d306` compiled both
+A and all-profile B on M2 successfully; M3 quality admission is next.
