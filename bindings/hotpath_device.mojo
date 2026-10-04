@@ -34,6 +34,9 @@ five off):
                     integer sum (lane fix-s1-shared)
   IDN_HPDEV_NORMAL  -D MOJOLEARN_IDN_HPDEV_NORMAL_OFF  normal_init_f32
                     (lane fix-s1-shared)
+  IDN_HPDEV_CAST    -D MOJOLEARN_IDN_HPDEV_CAST_OFF    cast_elements between
+                    two different dtypes (lane fix-s1-shared; a same-dtype
+                    call is a byte copy and stays the host helper's)
   IDN_HPDEV_CAST_F64  CANDIDATE, default OFF, -D MOJOLEARN_IDN_HPDEV_CAST_F64
                     turns it on: cast_f64_to_f32 (`hpdev_try_cast_f64_to_f32`)
 The sabotage builds (`HOTPATH_SABOTAGE`) keep every host helper, so the
@@ -50,6 +53,7 @@ from bindings.hotpath_helpers import (
     HOTPATH_SABOTAGE,
     arange_i64_binding as host_arange_i64_binding,
     bincount_i64_binding as host_bincount_i64_binding,
+    cast_elements_binding as host_cast_elements_binding,
     check_indices_i64_binding as host_check_indices_i64_binding,
     count_mask_u8_binding as host_count_mask_u8_binding,
     equal_elements_binding as host_equal_elements_binding,
@@ -80,6 +84,7 @@ from core.hotpath_device import (
     device_all_integral,
     device_arange_skip_i64,
     device_bincount_i64,
+    device_cast_elements,
     device_cast_f64_to_f32,
     device_check_indices_i64,
     device_count_mask_u8,
@@ -117,6 +122,8 @@ comptime IDN_HPDEV_REDUCE = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_
 comptime IDN_HPDEV_INIT = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_INIT_OFF"]()
 #: lane fix-s1-shared: reduce_stat's exact integer sum as a device tile fold.
 comptime IDN_HPDEV_ISUM = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_ISUM_OFF"]()
+#: lane fix-s1-shared: cast_elements between two dtypes on the device.
+comptime IDN_HPDEV_CAST = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_CAST_OFF"]()
 #: lane fix-s1-shared: normal_init_f32 drawn on the device.
 comptime IDN_HPDEV_NORMAL = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_NORMAL_OFF"]()
 #: CANDIDATE ARM, default OFF: `-D MOJOLEARN_IDN_HPDEV_CAST_F64` narrows a
@@ -710,6 +717,42 @@ def normal_init_f32_binding(
                 device_normal_init_f32(ctx, d, count, mu, sd, seed, off)
             return PythonObject(0)
     return host_normal_init_f32_binding(dst_addr, n, mean, std, seed_lo, seed_hi, offset)
+
+
+# ---------------------------------------------------------------------------
+# IDN_HPDEV_CAST (lane fix-s1-shared)
+# ---------------------------------------------------------------------------
+
+#: `cast_elements`' dtype codes (bindings/hotpath_helpers.mojo HP_F32 ... HP_U8).
+comptime _CAST_LAST_CODE = 5
+
+
+def cast_elements_binding(
+    src_addr: PythonObject, src_code: PythonObject, dst_addr: PythonObject,
+    dst_code: PythonObject, n: PythonObject,
+) raises -> PythonObject:
+    """`cast_elements` between two different dtypes, on the device
+    (`core/hotpath_device.mojo::device_cast_elements`). A same-dtype call (a
+    byte copy, or float32's signaling-NaN quieting in place), an input the
+    device does not cover, and any element the host helper refuses run the
+    host helper, which returns its own status or raises its own words."""
+    comptime if IDN_HPDEV_CAST:
+        var count = Int(py=n)
+        var sc = Int(py=src_code)
+        var dc = Int(py=dst_code)
+        var sa = Int(py=src_addr)
+        var da = Int(py=dst_addr)
+        if (
+            count >= 1 and count <= HPD_MAX_N and sa != 0 and da != 0 and sc != dc
+            and sc >= 0 and sc <= _CAST_LAST_CODE and dc >= 0 and dc <= _CAST_LAST_CODE
+        ):
+            var ctx = process_ctx[_HPDEV_SLOT]()
+            var ok = False
+            with GILReleased(Python()):
+                ok = device_cast_elements(ctx, sa, sc, da, dc, count)
+            if ok:
+                return PythonObject(0)
+    return host_cast_elements_binding(src_addr, src_code, dst_addr, dst_code, n)
 
 
 # ---------------------------------------------------------------------------

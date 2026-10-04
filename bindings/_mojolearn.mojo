@@ -92,7 +92,6 @@ from bindings.array_helpers import (
     shard_topk_merge_f32_binding,
 )
 from bindings.hotpath_helpers import (
-    cast_elements_binding,
     next_combination_i64_binding,
     ic_running_min_f64_binding,
     ic_running_min_f32_binding,
@@ -142,6 +141,7 @@ from bindings.hotpath_device import (
     reduce_stat_binding,
     uniform_init_f32_binding,
     normal_init_f32_binding,
+    cast_elements_binding,
 )
 from std.os import abort
 from std.math import isfinite

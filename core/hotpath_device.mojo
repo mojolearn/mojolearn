@@ -1877,3 +1877,231 @@ def device_normal_init_f32(
     ctx.enqueue_copy(dst_ptr=_F32(unsafe_from_address=dst_addr), src_buf=d)
     ctx.synchronize()
     _ = d^
+
+
+# ===========================================================================
+# cast_elements (lane fix-s1-shared, IDN_HPDEV_CAST)
+# ===========================================================================
+#
+# The host helper's one conversion per element (`bindings/hotpath_helpers.mojo`
+# `_convert` / `_refused`, DEVIATION 3100) on bits: an integer source is held
+# as an Int64, a float source as its binary64 word (a float32 widens
+# exactly). Integer -> float rounds once to binary64 (round to nearest even,
+# as the C conversion) and, for a float32 target, once more to float32 (the
+# item setter's double rounding). Float -> integer refuses NaN, infinities
+# and values outside the host's bounds (the same strict/non-strict compares
+# on binary64 words) and truncates toward zero. NaN payloads move as the
+# hardware conversions move them: float32 -> float32 sets the quiet bit,
+# float32 -> float64 widens the payload with the quiet bit set,
+# float64 -> float32 keeps the top 22 payload bits, quiet. Any refused
+# element sets the status word and the binding reruns the host helper.
+
+#: Bounds of the host helper's `_refused`, as binary64 words.
+comptime _W_I64_LO = UInt64(0xC3E0000000000000)  # -2^63 (>=)
+comptime _W_I64_HI = UInt64(0x43E0000000000000)  # 2^63 (<)
+comptime _W_I32_LO = UInt64(0xC1E0000000200000)  # -2147483649.0 (>)
+comptime _W_I32_HI = UInt64(0x41E0000000000000)  # 2^31 (<)
+comptime _W_NEG1 = UInt64(0xBFF0000000000000)  # -1.0 (>)
+comptime _W_U32_HI = UInt64(0x41F0000000000000)  # 2^32 (<)
+comptime _W_U8_HI = UInt64(0x4070000000000000)  # 256.0 (<)
+
+
+@always_inline
+def _hpd_i64_to_f64(v: Int64) -> UInt64:
+    """The binary64 word of `v`, rounded to nearest even (the hardware
+    int64 -> double conversion; exact below 2^53 in magnitude)."""
+    if v == 0:
+        return UInt64(0)
+    var bits = bitcast[DType.uint64](v)
+    var s = bits >> 63
+    var u = bits
+    if s != UInt64(0):
+        u = ~bits + UInt64(1)
+    var lead = _hpd_lead(u)
+    if lead <= 52:
+        return (s << 63) | (UInt64(lead + 1023) << 52) | (
+            (u << UInt64(52 - lead)) & UInt64(0x000FFFFFFFFFFFFF)
+        )
+    var sh = lead - 52
+    var m = u >> UInt64(sh)
+    var rem = u & ((UInt64(1) << UInt64(sh)) - UInt64(1))
+    var half = UInt64(1) << UInt64(sh - 1)
+    if rem > half or (rem == half and (m & UInt64(1)) != UInt64(0)):
+        m += UInt64(1)
+        if m == (UInt64(1) << 53):
+            m = m >> 1
+            lead += 1
+    return (s << 63) | (UInt64(lead + 1023) << 52) | (m & UInt64(0x000FFFFFFFFFFFFF))
+
+
+@always_inline
+def _hpd_trunc_bits(w: UInt64) -> UInt64:
+    """The two's complement bits of the finite binary64 word `w` truncated
+    toward zero (|w| < 2^63, or w == -2^63)."""
+    var e = Int((w >> 52) & UInt64(0x7FF)) - 1023
+    if e < 0:
+        return UInt64(0)
+    var m = (w & UInt64(0x000FFFFFFFFFFFFF)) | UInt64(0x0010000000000000)
+    var v: UInt64
+    if e >= 52:
+        v = m << UInt64(e - 52)
+    else:
+        v = m >> UInt64(52 - e)
+    if (w >> 63) != UInt64(0):
+        return ~v + UInt64(1)
+    return v
+
+
+def _cast_kernel(
+    s8: _U8, s32: _U32, s64: _U64, sc: Int32, dc: Int32, n_: Int32,
+    d8: _U8, d32: _U32, d64: _U64, status: _I32,
+):
+    var i = _tid()
+    if i >= Int(n_):
+        return
+    var src_float = sc == HPD_F32 or sc == HPD_F64
+    var raw32 = UInt32(0)
+    var raw64 = UInt64(0)
+    var iv = Int64(0)
+    var w = UInt64(0)
+    var nan = False
+    if sc == HPD_U8:
+        iv = s8.unsafe_load(i).cast[DType.int64]()
+    elif sc == HPD_F64 or sc == HPD_I64:
+        raw64 = s64.unsafe_load(i)
+        if sc == HPD_I64:
+            iv = bitcast[DType.int64](raw64)
+        else:
+            nan = sf64_is_nan(raw64)
+            w = raw64
+    else:
+        raw32 = s32.unsafe_load(i)
+        if sc == HPD_I32:
+            iv = bitcast[DType.int32](raw32).cast[DType.int64]()
+        elif sc == HPD_U32:
+            iv = raw32.cast[DType.int64]()
+        else:
+            nan = (raw32 & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000)
+            if not nan:
+                w = sf64_from_f32(bitcast[DType.float32](raw32))
+    # ---- float destinations: never refused
+    if dc == HPD_F32 or dc == HPD_F64:
+        if not src_float:
+            var fw = _hpd_i64_to_f64(iv)
+            if dc == HPD_F32:
+                d32.unsafe_store(i, bitcast[DType.uint32](sf64_to_f32(fw)))
+            else:
+                d64.unsafe_store(i, fw)
+        elif dc == HPD_F32:
+            if sc == HPD_F32:
+                var q = raw32
+                if nan:
+                    q = raw32 | UInt32(0x00400000)
+                d32.unsafe_store(i, q)
+            elif nan:
+                var sign = UInt32((raw64 >> 63) << 31)
+                var payload = UInt32((raw64 >> 29) & UInt64(0x003FFFFF))
+                d32.unsafe_store(i, sign | UInt32(0x7FC00000) | payload)
+            else:
+                d32.unsafe_store(i, bitcast[DType.uint32](sf64_to_f32(raw64)))
+        else:
+            if sc == HPD_F64:
+                d64.unsafe_store(i, raw64)
+            elif nan:
+                var sign64 = raw32.cast[DType.uint64]() >> 31
+                var frac = (raw32 & UInt32(0x007FFFFF)).cast[DType.uint64]()
+                d64.unsafe_store(i, (sign64 << 63) | UInt64(0x7FF8000000000000) | (frac << 29))
+            else:
+                d64.unsafe_store(i, w)
+        return
+    # ---- integer destinations
+    var ok = False
+    var bits = UInt64(0)
+    if src_float:
+        if not nan:
+            if dc == HPD_I64:
+                ok = (not sf64_lt(w, _W_I64_LO)) and sf64_lt(w, _W_I64_HI)
+            elif dc == HPD_I32:
+                ok = sf64_gt(w, _W_I32_LO) and sf64_lt(w, _W_I32_HI)
+            elif dc == HPD_U32:
+                ok = sf64_gt(w, _W_NEG1) and sf64_lt(w, _W_U32_HI)
+            else:
+                ok = sf64_gt(w, _W_NEG1) and sf64_lt(w, _W_U8_HI)
+        if ok:
+            bits = _hpd_trunc_bits(w)
+    else:
+        if dc == HPD_I64:
+            ok = True
+        elif dc == HPD_I32:
+            ok = iv >= -2147483648 and iv <= 2147483647
+        elif dc == HPD_U32:
+            ok = iv >= 0 and iv <= 4294967295
+        else:
+            ok = iv >= 0 and iv <= 255
+        bits = bitcast[DType.uint64](iv)
+    if not ok:
+        status.unsafe_store(0, Int32(1))
+        return
+    if dc == HPD_U8:
+        d8.unsafe_store(i, (bits & UInt64(0xFF)).cast[DType.uint8]())
+    elif dc == HPD_I64:
+        d64.unsafe_store(i, bits)
+    else:
+        d32.unsafe_store(i, (bits & UInt64(0xFFFFFFFF)).cast[DType.uint32]())
+
+
+@always_inline
+def _hpd_width(code: Int) -> Int:
+    """Bytes per element of a dtype code."""
+    if code == HPD_U8:
+        return 1
+    if code == HPD_F64 or code == HPD_I64:
+        return 8
+    return 4
+
+
+def device_cast_elements(
+    ctx: DeviceContext, src_addr: Int, src_code: Int, dst_addr: Int, dst_code: Int, n: Int,
+) raises -> Bool:
+    """`cast_elements` (`1 <= n <= HPD_MAX_N`, valid codes): True when the
+    device wrote `dst`; False when some element is one the host helper
+    refuses (`dst` untouched; the caller reruns the host helper). `src` may
+    equal `dst`: the source is uploaded before anything comes down."""
+    var sw = _hpd_width(src_code)
+    var dw = _hpd_width(dst_code)
+    var d_s8 = ctx.enqueue_create_buffer[DType.uint8](n if sw == 1 else 1)
+    var d_s32 = ctx.enqueue_create_buffer[DType.uint32](n if sw == 4 else 1)
+    var d_s64 = ctx.enqueue_create_buffer[DType.uint64](n if sw == 8 else 1)
+    var d_d8 = ctx.enqueue_create_buffer[DType.uint8](n if dw == 1 else 1)
+    var d_d32 = ctx.enqueue_create_buffer[DType.uint32](n if dw == 4 else 1)
+    var d_d64 = ctx.enqueue_create_buffer[DType.uint64](n if dw == 8 else 1)
+    var d_status = ctx.enqueue_create_buffer[DType.int32](2)
+    enqueue_fill(ctx, d_status, Int32(0))
+    if sw == 1:
+        ctx.enqueue_copy(dst_buf=d_s8, src_ptr=_U8(unsafe_from_address=src_addr))
+    elif sw == 8:
+        ctx.enqueue_copy(dst_buf=d_s64, src_ptr=_U64(unsafe_from_address=src_addr))
+    else:
+        ctx.enqueue_copy(dst_buf=d_s32, src_ptr=_U32(unsafe_from_address=src_addr))
+    ctx.enqueue_function[_cast_kernel](
+        d_s8.unsafe_ptr(), d_s32.unsafe_ptr(), d_s64.unsafe_ptr(), Int32(src_code), Int32(dst_code),
+        Int32(n), d_d8.unsafe_ptr(), d_d32.unsafe_ptr(), d_d64.unsafe_ptr(), d_status.unsafe_ptr(),
+        grid_dim=_blocks(n), block_dim=HPD_TPB,
+    )
+    var ok = _read_status(ctx, d_status, 0) == 0
+    if ok:
+        if dw == 1:
+            ctx.enqueue_copy(dst_ptr=_U8(unsafe_from_address=dst_addr), src_buf=d_d8)
+        elif dw == 8:
+            ctx.enqueue_copy(dst_ptr=_U64(unsafe_from_address=dst_addr), src_buf=d_d64)
+        else:
+            ctx.enqueue_copy(dst_ptr=_U32(unsafe_from_address=dst_addr), src_buf=d_d32)
+        ctx.synchronize()
+    _ = d_s8^
+    _ = d_s32^
+    _ = d_s64^
+    _ = d_d8^
+    _ = d_d32^
+    _ = d_d64^
+    _ = d_status^
+    return ok
