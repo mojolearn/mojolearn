@@ -899,6 +899,7 @@ def sgd_rowsq_kernel(x: FP, n: Int32, d: Int32, sqp: FP, wf: IP, woff: Int32, no
     witness_end(wf, woff, nonce)
 
 
+@always_inline
 def _sgd_mb_chunk_kernel_body(
     x: FP, ys: FP, idx: IP, w: FP, bias: FP, swp: FP, dlv: FP, lv: FP, parts: FP, obj: FP, ci: IP, cf: FP,
     dotp: FP, sqp: FP,
@@ -998,6 +999,335 @@ def sgd_mb_chunk_kernel(
     witness_end(wf, woff, nonce)
 
 
+# lane fam2-linear (2026-10-04): SGD_IDN_OVR_PAR. The minibatch driver ran the
+# one-vs-rest problems one after another (`for c in range(problems)` in
+# `_sgd_mb_grid`), every chunk launch ONE block: Perceptron and the
+# passive-aggressive classifier at batch 256 used one block of the GPU for
+# C x epochs x chunks launches. The problems are independent fits, so here a
+# chunk launch runs one block a problem (grid_dim = problems): problem c's
+# targets, order, weights, bias, scratch, objective and rate words sit at
+# offset c of buffers `problems` times as long, and a stopped problem's
+# block returns at once (`act`). The epoch end is the same kernel, one small
+# launch a live problem, and ONE read brings every problem's stop words
+# home. Each problem's statements are the sequential driver's on its own
+# words: NO BIT MOVES, the host column is untouched.
+# `-D MOJOLEARN_SGD_IDN_OVR_PAR_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) restores
+# the sequential problems.
+comptime SGD_IDN_OVR_PAR = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_SGD_IDN_OVR_PAR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+#: `cf` words a problem (`_sgd_mb_chunk_kernel_body`'s nine)
+comptime SGD_OVR_CF = 9
+#: the per-problem targets and orders are problems x n words each
+comptime SGD_OVR_MAX_CELLS = 1 << 28
+
+
+def sgd_mb_chunk_ovr_kernel(
+    x: FP, ys: FP, idx: IP, w: FP, bias: FP, swp: FP, dlv: FP, lv: FP, parts: FP, obj: FP, ci: IP, cf: FP,
+    dotp: FP, sqp: FP, act: IP, start0: Int32, nbat: Int32, t0: Int32, wf: IP, woff: Int32, nonce: Int32,
+):
+    """`sgd_mb_chunk_kernel`, block c on problem c's words (see
+    SGD_IDN_OVR_PAR). `act[c] == 0` is a stopped problem: nothing runs."""
+    var c = Int(block_idx.x)
+    if ldi(act, c) != 0:
+        var nn = ldi(ci, 0)
+        var batch = ldi(ci, 1)
+        var dd = ldi(ci, 2)
+        var nsub = ldi(ci, 7)
+        var nbk = (dd + MB_DBLK - 1) // MB_DBLK
+        _sgd_mb_chunk_kernel_body(
+            x, ys + c * nn, idx + c * nn, w + c * dd, bias + c, swp, dlv + c * batch, lv + c * batch,
+            parts + c * (dd + 2) * nsub, obj + c, ci, cf + c * SGD_OVR_CF, dotp + c * batch * nbk, sqp,
+            start0, nbat, t0,
+        )
+    witness_end(wf, woff, nonce)
+
+
+def _sgd_mb_ovr_applies(problems: Int, n: Int, d: Int, batch: Int, chunk: Int) -> Bool:
+    """The parallel one-vs-rest driver serves this fit: more than one
+    problem, the chunk kernel's shape (`_sgd_mb_grid`'s own test), and
+    per-problem buffers of a bounded size."""
+    comptime if SGD_IDN_OVR_PAR:
+        return (
+            problems > 1 and n > 0 and d >= 1 and chunk > 1 and batch <= XG_TPB and d + 2 <= XG_TPB
+            and problems * n <= SGD_OVR_MAX_CELLS
+        )
+    return False
+
+
+def _sgd_mb_ovr_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
+                     n_out: Int, res: FP) raises:
+    """`_sgd_mb_grid`'s chunk arm with the one-vs-rest problems side by side
+    (SGD_IDN_OVR_PAR): the same statements per problem, the same words."""
+    var ctx = linear_ctx()
+    var k = Int(ip[0])
+    var loss = Int(ip[1])
+    var penalty = Int(ip[2])
+    var lr = Int(ip[3])
+    var fi = Int(ip[4]) != 0
+    var max_iter = Int(ip[5])
+    var nic = Int(ip[6])
+    var do_shuffle = Int(ip[7]) != 0
+    var seed = (UInt64(UInt32(ip[9])) << 32) | UInt64(UInt32(ip[8]))
+    var has_sw = Int(ip[10]) != 0
+    var has_cw = Int(ip[11]) != 0
+    var batch = Int(ip[12])
+    var bsum = len(ip) > 13 and Int(ip[13]) != 0
+    var alpha = fp[0]
+    var l1r = fp[1]
+    var eta0 = fp[2]
+    var power_t = fp[3]
+    var eps = fp[4]
+    var tol = fp[5]
+    if penalty == P_L2:
+        l1r = Float32(0)
+    elif penalty == P_L1:
+        l1r = Float32(1)
+    var problems = k
+    var sub = mb_sub_size(batch)
+    var dblk = mb_dblk(batch)
+    var nsub = mb_subs(batch, sub)
+    var nbk = (d + MB_DBLK - 1) // MB_DBLK
+    var chunk = _sgd_chunk()
+    var pa_rate = lr == LR_PA1 or lr == LR_PA2
+    var need_obj = tol > Float32(-3.0e38)
+    var opt_init = mb_optimal_init(loss, alpha, eps) if lr == LR_OPTIMAL else Float32(0)
+    var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
+    var dy = ctx.enqueue_create_buffer[DType.float32](n)
+    var dys = ctx.enqueue_create_buffer[DType.float32](problems * n)
+    var dsw = ctx.enqueue_create_buffer[DType.float32](n)
+    var didx = ctx.enqueue_create_buffer[DType.int32](problems * n)
+    var ddl = ctx.enqueue_create_buffer[DType.float32](problems * batch)
+    var dlv = ctx.enqueue_create_buffer[DType.float32](problems * batch)
+    var dparts = ctx.enqueue_create_buffer[DType.float32](problems * (d + 2) * nsub)
+    var dw = ctx.enqueue_create_buffer[DType.float32](problems * d)
+    var dbias = ctx.enqueue_create_buffer[DType.float32](problems)
+    var dobj = ctx.enqueue_create_buffer[DType.float32](problems)
+    var dws = ctx.enqueue_create_buffer[DType.float32](problems * d)
+    var dbs = ctx.enqueue_create_buffer[DType.float32](problems)
+    var ddotp = ctx.enqueue_create_buffer[DType.float32](max(problems * batch * nbk, 1))
+    var dsq = ctx.enqueue_create_buffer[DType.float32](n if pa_rate else 1)
+    var dci = ctx.enqueue_create_buffer[DType.int32](16)
+    var dcf = ctx.enqueue_create_buffer[DType.float32](problems * SGD_OVR_CF)
+    var dstt = ctx.enqueue_create_buffer[DType.float32](problems * SGD_MB_WORDS)
+    var dvp = ctx.enqueue_create_buffer[DType.float32](vscratch(d) + 16)
+    var dact = ctx.enqueue_create_buffer[DType.int32](problems)
+    var dres = ctx.enqueue_create_buffer[DType.float32](max(n_out, 1))
+    dres.enqueue_fill(Float32(0))
+    # chunk launches an epoch (each reports one word a problem), the PA
+    # row norms, the epoch end's one word a problem
+    var n_batches = (n + batch - 1) // batch
+    var launches = (n_batches + chunk - 1) // chunk
+    var wit = Witness(ctx, max(launches * problems + _xg_blocks(n) + problems, 1))
+    var hci = List[Int32](length=16, fill=Int32(0))
+    hci[0] = Int32(n)
+    hci[1] = Int32(batch)
+    hci[2] = Int32(d)
+    hci[3] = Int32(loss)
+    hci[4] = Int32(1 if has_sw else 0)
+    hci[5] = Int32(1 if has_cw else 0)
+    hci[6] = Int32(lr)
+    hci[7] = Int32(nsub)
+    hci[8] = Int32(penalty)
+    hci[9] = Int32(1 if fi else 0)
+    hci[10] = Int32(1 if need_obj else 0)
+    hci[11] = Int32(0)
+    hci[12] = Int32(1 if bsum else 0)
+    hci[13] = Int32(sub)
+    hci[14] = Int32(dblk)
+    hci[15] = Int32(1 if pa_rate else 0)
+    var hcf = List[Float32](length=problems * SGD_OVR_CF, fill=Float32(0))
+    var hstt = List[Float32](length=problems * SGD_MB_WORDS, fill=Float32(0))
+    var hact = List[Int32](length=problems, fill=Int32(1))
+    var active = List[Bool](length=problems, fill=True)
+    var failed = List[Bool](length=problems, fill=False)
+    var epochs = List[Int](length=problems, fill=0)
+    for c in range(problems):
+        var o = c * SGD_OVR_CF
+        hcf[o] = eps
+        hcf[o + 1] = fp[6 + c] if has_cw else Float32(1)
+        hcf[o + 2] = fp[6 + problems + c] if has_cw else Float32(1)
+        hcf[o + 3] = eta0
+        hcf[o + 4] = eta0
+        hcf[o + 5] = alpha
+        hcf[o + 6] = l1r
+        hcf[o + 7] = power_t
+        hcf[o + 8] = opt_init
+        hstt[c * SGD_MB_WORDS] = Float32(3.0e38)
+        hstt[c * SGD_MB_WORDS + 1] = Float32(0)
+        hstt[c * SGD_MB_WORDS + 2] = eta0
+    if n_x > 0:
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    if has_sw:
+        ctx.enqueue_copy(dst_buf=dsw, src_ptr=y + n)
+    ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    comptime if SGD_IDN_DEV_FINITE:
+        _sgd_finite_device(ctx, FP(unsafe_from_address=Int(dx.unsafe_ptr())), n_x, y, n_y)
+    ctx.enqueue_copy(dst_buf=dci, src_ptr=hci.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dcf, src_ptr=hcf.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dstt, src_ptr=hstt.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dact, src_ptr=hact.unsafe_ptr())
+    dw.enqueue_fill(Float32(0))
+    dbias.enqueue_fill(Float32(0))
+    var seed_lo = Int32(Int(UInt32(seed & UInt64(0xFFFFFFFF))))
+    var seed_hi = Int32(Int(UInt32(seed >> 32)))
+    # host-side base addresses of the per-problem buffers
+    var a_ys = Int(dys.unsafe_ptr())
+    var a_idx = Int(didx.unsafe_ptr())
+    var a_w = Int(dw.unsafe_ptr())
+    var a_bias = Int(dbias.unsafe_ptr())
+    var a_obj = Int(dobj.unsafe_ptr())
+    var a_stt = Int(dstt.unsafe_ptr())
+    var a_cf = Int(dcf.unsafe_ptr())
+    for c in range(problems):
+        # problem c's targets and identity order (sgd_fit's statements)
+        ctx.enqueue_function[sgd_ys_kernel](
+            dy.unsafe_ptr(), FP(unsafe_from_address=a_ys) + c * n, IP(unsafe_from_address=a_idx) + c * n,
+            Int32(n), Int32(k), Int32(c), Int32(0), grid_dim=_xg_blocks(n), block_dim=XG_TPB,
+        )
+    var t = 1
+    var live = problems
+    for epoch in range(max_iter):
+        if live == 0:
+            break
+        for c in range(problems):
+            if active[c]:
+                epochs[c] = epoch + 1
+        var par = epoch % 2
+        # the epoch as ONE guarded unit: a cut epoch restores every problem's
+        # weights and replays the same batches
+        ctx.enqueue_copy(dst_buf=dws, src_buf=dw)
+        ctx.enqueue_copy(dst_buf=dbs, src_buf=dbias)
+        var t_start = t
+        var tries = 0
+        while True:
+            var nonce = wit.begin()
+            var wo = 0
+            t = t_start
+            if do_shuffle:
+                ctx.enqueue_function[sgd_perm_kernel](
+                    didx.unsafe_ptr(), Int32(n), seed_lo, seed_hi, Int32(epoch), Int32(0), Int32(problems),
+                    grid_dim=_xg_blocks(problems * n), block_dim=XG_TPB,
+                )
+            dobj.enqueue_fill(Float32(0))
+            if pa_rate:
+                ctx.enqueue_function[sgd_rowsq_kernel](
+                    dx.unsafe_ptr(), Int32(n), Int32(d), dsq.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                    grid_dim=_xg_blocks(n), block_dim=XG_TPB,
+                )
+                wo += _xg_blocks(n)
+            var start = 0
+            while start < n:
+                var nbt = 0
+                var tt = t
+                var s1 = start
+                while nbt < chunk and s1 < n:
+                    var bs1 = min(batch, n - s1)
+                    tt += bs1 if bsum else 1
+                    s1 += bs1
+                    nbt += 1
+                ctx.enqueue_function[sgd_mb_chunk_ovr_kernel](
+                    dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), dw.unsafe_ptr(), dbias.unsafe_ptr(),
+                    dsw.unsafe_ptr(), ddl.unsafe_ptr(), dlv.unsafe_ptr(), dparts.unsafe_ptr(), dobj.unsafe_ptr(),
+                    dci.unsafe_ptr(), dcf.unsafe_ptr(), ddotp.unsafe_ptr(), dsq.unsafe_ptr(), dact.unsafe_ptr(),
+                    Int32(start), Int32(nbt), Int32(t),
+                    wit.p(), Int32(wo), nonce, grid_dim=problems, block_dim=SGD_CHUNK_TPB,
+                )
+                wo += problems
+                t = tt
+                start = s1
+            if wit.ok(ctx, wo, "SGD one-vs-rest epoch"):
+                break
+            tries += 1
+            if tries >= WITNESS_TRIES:
+                wit.fail()
+            ctx.enqueue_copy(dst_buf=dw, src_buf=dws)
+            ctx.enqueue_copy(dst_buf=dbias, src_buf=dbs)
+        # the epoch end: `sgd_mb_end_kernel` on each live problem's words (one
+        # block each, reads parity par, writes 1 - par), every problem's stop
+        # words home behind one synchronize
+        tries = 0
+        while True:
+            var nonce = wit.begin()
+            var we = 0
+            for c in range(problems):
+                if active[c]:
+                    ctx.enqueue_function[sgd_mb_end_kernel](  # small-launch(d: weights): one block strides the d weights and two vfold sums; n only divides the objective
+                        FP(unsafe_from_address=a_w) + c * d, FP(unsafe_from_address=a_bias) + c,
+                        FP(unsafe_from_address=a_obj) + c, FP(unsafe_from_address=a_stt) + c * SGD_MB_WORDS,
+                        FP(unsafe_from_address=a_cf) + c * SGD_OVR_CF,
+                        dvp.unsafe_ptr(), Int32(d), Int32(n), alpha, l1r, Int32(penalty), tol, Int32(nic), Int32(lr),
+                        Int32(1 if need_obj else 0), Int32(0), Int32(par), wit.p(), Int32(we), nonce,
+                        grid_dim=1, block_dim=SGD_END_TPB,
+                    )
+                    we += 1
+            ctx.enqueue_copy(dst_ptr=hstt.unsafe_ptr(), src_buf=dstt)
+            if wit.ok(ctx, we, "SGD one-vs-rest epoch end"):
+                break
+            tries += 1
+            if tries >= WITNESS_TRIES:
+                wit.fail()
+        ctx.synchronize()
+        var changed = False
+        for c in range(problems):
+            if active[c]:
+                if hstt[c * SGD_MB_WORDS + SGD_MB_FLAGS + 1] != Float32(0):
+                    failed[c] = True
+                    active[c] = False
+                elif hstt[c * SGD_MB_WORDS + SGD_MB_FLAGS] != Float32(0):
+                    active[c] = False
+                if not active[c]:
+                    hact[c] = Int32(0)
+                    live -= 1
+                    changed = True
+        if changed:
+            ctx.enqueue_copy(dst_buf=dact, src_ptr=hact.unsafe_ptr())
+            ctx.synchronize()
+    var max_epochs = 0
+    var status = 0
+    for c in range(problems):
+        ctx.enqueue_function[sgd_mb_res_kernel](
+            FP(unsafe_from_address=a_w) + c * d, FP(unsafe_from_address=a_bias) + c, dres.unsafe_ptr(),
+            Int32(c), Int32(d), Int32(problems), Int32(0), Int32(1 if failed[c] else 0),
+            grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB,
+        )
+        if failed[c]:
+            status = -1
+        elif epochs[c] > max_epochs:
+            max_epochs = epochs[c]
+    ctx.enqueue_copy(dst_ptr=res, src_buf=dres)
+    ctx.synchronize()
+    res.unsafe_store(problems * d + problems, i2f(max_epochs))
+    res.unsafe_store(problems * d + problems + 1, i2f(status))
+    _ = hci^
+    _ = hcf^
+    _ = hstt^
+    _ = hact^
+    _ = dx^
+    _ = dy^
+    _ = dys^
+    _ = dsw^
+    _ = didx^
+    _ = ddl^
+    _ = dlv^
+    _ = dparts^
+    _ = dw^
+    _ = dbias^
+    _ = dobj^
+    _ = dws^
+    _ = dbs^
+    _ = ddotp^
+    _ = dsq^
+    _ = dci^
+    _ = dcf^
+    _ = dstt^
+    _ = dvp^
+    _ = dact^
+    _ = dres^
+    _ = wit^
+
+
 def _sgd_chunk() -> Int:
     var v = String(getenv("MOJOLEARN_X_LINEAR_SGD_CHUNK"))
     if v == "":
@@ -1035,6 +1365,10 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
         l1r = Float32(1)
     var problems = k if k > 2 else 1
     var one_class = k == 1
+    # lane fam2-linear: the one-vs-rest problems side by side (SGD_IDN_OVR_PAR)
+    if _sgd_mb_ovr_applies(problems, n, d, batch, _sgd_chunk()):
+        _sgd_mb_ovr_grid(x, n_x, y, n_y, n, d, ip, fp, n_out, res)
+        return
     var sub = mb_sub_size(batch)
     var dblk = mb_dblk(batch)
     var nsub = mb_subs(batch, sub)
