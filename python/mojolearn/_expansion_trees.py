@@ -634,7 +634,7 @@ class _TreesEnsembleBase(NumericModeMixin):
         by the binding (`x_trees_fill_class_major_f64`, a device kernel on a
         GPU build); K = 1 is (n,)."""
         K, n = len(inits), int(n)
-        vals = Array.from_list([float(v) for v in inits], "<f8")
+        vals = Array.from_list([float(v) for v in inits], "<f8")  # glue: the K class inits
         out = empty((K * n,), "<f8")
         if K * n > 0:
             self._bind().x_trees_fill_class_major_f64(addr_ro(vals, name="inits"), addr(out, name="score"), [n, K])
@@ -790,7 +790,7 @@ class _BaggingBase(_TreesEnsembleBase):
         self._batched = (forest, base)
         self._estimators = None
         d = Xa.shape[1]
-        self.estimators_features_ = [self._arange(d) for _ in range(int(forest._n_trees))]
+        self.estimators_features_ = [self._arange(d)] * int(forest._n_trees)  # one shared all-columns array
         self._oob_rows = []
         self.n_features_in_ = d
         return self
@@ -2280,7 +2280,7 @@ class _StackingBase(_TreesWrapperBase):
                     raise ValueError("a member's output width changed between folds (a class missing from a fold)")
                 col0 += w
         if self.passthrough:
-            self._place(meta, n, width, Xa, self._arange(n), sum(widths))
+            self._place(meta, n, width, Xa, self._arange(n), sum(widths))  # glue: sum of the members' output widths
         self._widths_ = widths
         self.named_estimators_ = dict((nm, e) for (nm, _), e in zip(active, self.estimators_))
         self.final_estimator_ = _trees_clone(final)
