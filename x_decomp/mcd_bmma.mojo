@@ -30,8 +30,13 @@ from std.sys.compile import is_defined
 from gemm.afn_apple_fast import AFN_GEMM_APPLE
 from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel
 
-# OPEN, no measured caller acceptance: independently scope non-split MCD
-# covariance to avoid replaying held PCA full-row atomic Gram. No default.
+# SOURCE-READY / UNBUILT, 2026-10-04, lane/apple-fast-mcd-g1-gram-remote
+# source35c712d9c: no matrix/fitted quality or timing evidence. Default OFF.
+# Non-split phase-A/B self-Gram only; held PCA full-row atomic Gram excluded.
+# Admission requires gated batched FP64/no-regression checks, actual MCD/EE
+# fitted-state/support/rank gates, positive caller reach, then M3 A/B timing.
+# Existing ordered-covariance HOLD is not waived by this separate candidate.
+# See docs/apple-fast/ab/mcd-g1-gram.md and EXPERIMENTS.md (MCD_FAST_G1_GRAM).
 comptime MCD_G1_GRAM = AFN_GEMM_APPLE and is_defined["MOJOLEARN_MCD_FAST_G1_GRAM"]()
 comptime MCD_G1_AUDIT = AFN_GEMM_APPLE and is_defined["MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT"]()
 

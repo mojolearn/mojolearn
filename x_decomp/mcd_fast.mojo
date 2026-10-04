@@ -107,6 +107,12 @@ comptime MCD_BATCH_MMA = (
     and DECOMP_FAST_GEMM_MMA and not is_defined["MOJOLEARN_MCD_BATCH_MMA_OFF"]()
 )
 
+# HOLD-quality applies to the explicit legacy COMPAT-only arm, not to the
+# separately accepted default MCD_BATCH_MMA route also sharing this gate.
+# gap26-mcdrepair-small-ready / ab4265c9a: covariance_rel .085678 > .01,
+# support Jaccard .941431 < .99, final covariance rank7 ->6; no promotion.
+# Keep the explicit define opt-in; do not disable the accepted MMA default.
+# See docs/apple-fast/EXPERIMENTS.md and ab/mcd-compat-review.md.
 comptime MCD_BATCH_COMPAT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
     and (is_defined["MOJOLEARN_MCD_BATCH_COMPAT"]() or MCD_BATCH_MMA)
@@ -116,6 +122,9 @@ comptime MCD_BATCH_COMPAT = (
 # .8805 MCD / .9645 EE fails .99; location/covariance shift 14%/18%.
 # Opt-in pending a corrected C-step; evidence above and in
 # docs/apple-fast/EXPERIMENTS.md (MCD_DEVICE_CSTEPS).
+# The explicit legacy DEVICE_CSTEPS arm remains unvalidated/opt-in; this OR
+# also routes the independently accepted COMPAT+MMA implementation. The old
+# mcdq4 mask failure above does not revoke its separately measured defaults.
 comptime MCD_DEVICE_CSTEPS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
     and (is_defined["MOJOLEARN_MCD_DEVICE_CSTEPS"]() or MCD_BATCH_COMPAT)
