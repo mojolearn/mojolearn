@@ -7,6 +7,8 @@ POLICIES = {
     "tools/scoped_gemm_quality.py": "verified-scoped-adapter-quality",
     "tools/resample_gpu_gather_pair.py": "verified-downstream-quality",
     "tools/resample_gpu_gather_timing.py": "verified-scoped-caller",
+    "tools/scoped_pca_recover.py": "reference",
+    "tools/scoped_pca_fit.py": "verified-scoped-pca-fit",
     "tools/arima_assoc_scan_oracle.py": "reference",
     "tools/arima_gaussian_scan_oracle.py": "reference",
     "tools/arima_k1_diagnostics.py": "reference",
@@ -42,4 +44,16 @@ def policy_for(source, script, args):
                 or not re.fullmatch(r"[A-Za-z0-9_.-]+", args[1])
                 or args[2] not in ("tall", "dense", "gram", "narrow", "gram-split", "pca", "all")):
             raise ValueError("scoped quality requires COMPILED_SOURCE TAG PROFILE")
+    if policy == "verified-scoped-pca-fit":
+        if (len(args) not in (5, 9) or not re.fullmatch(r"[0-9a-f]{40}", args[0])
+                or not re.fullmatch(r"[A-Za-z0-9_.-]+", args[1])
+                or args[2] not in ("quality", "timing") or not args[3]
+                or not re.fullmatch(r"[0-9a-f]{64}", args[4])):
+            raise ValueError("PCA fit requires SOURCE TAG ACTION DATA SHA256")
+        if args[2] == "quality" and len(args) != 5:
+            raise ValueError("quality takes no timing receipt")
+        if args[2] == "timing" and (len(args) != 9 or args[5] != "--quality-report"
+                or not args[6] or args[7] != "--quality-sha"
+                or not re.fullmatch(r"[0-9a-f]{64}", args[8])):
+            raise ValueError("timing requires quality report and SHA256")
     return policy
