@@ -23,6 +23,7 @@ def main():
     sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
     report = {'source_sha': sha, 'source': str(root), 'purpose': 'untimed bit checks',
               'harness_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+              'fixture_sha256': hashlib.sha256(Path(__file__).with_name('idn_all_checks.py').read_bytes()).hexdigest(),
               'status': 'RUNNING', 'checks': {}}
     receipt = a.out / 'report.json'
 
@@ -39,7 +40,7 @@ root, harness, gate, vendor = sys.argv[1:]
 sys.path.insert(0, str(Path(root) / 'python'))
 sys.path.insert(0, harness)
 from identical_wave_worker import source_provenance
-sys.argv = [str(Path(root) / 'tools/idn_all_checks.py'), gate, '--child']
+sys.argv = [str(Path(harness) / 'idn_all_checks.py'), gate, '--child']
 try:
     runpy.run_path(sys.argv[0], run_name='__main__')
 except SystemExit as exc:

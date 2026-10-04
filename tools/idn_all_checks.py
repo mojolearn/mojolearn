@@ -49,9 +49,8 @@ def _lu_fixture(n):
 def _lu_child():
     import warnings
     import numpy as np
-    import mojolearn as ml
+    from mojolearn import _expansion_decomp as la
     warnings.simplefilter("ignore")
-    la = ml.linalg
     h = hashlib.sha256()
     nan_words = 0
     for n in (64, 257):
