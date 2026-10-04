@@ -72,14 +72,15 @@ existing output artifacts and writes PASS only after the comparison succeeds.
 All post-fit quality computation and NPZ compression remain inside that same
 serial job. It does not launch cloud work or edit the queue itself.
 
-Root should substitute the ACTUAL saved cap3000MCD paths below; do not infer
-them from the outer queue tag if the prior wrapper used a different inner tag.
+The cap3000MCD artifact paths below are confirmed from local queue receipt
+sync/queue-mcd-mma-0912.json (inner wrapper tag matches outer queue tag).
 Use new unique tags after checking they have not already produced artifacts.
 
 1. Capped EllipticEnvelope, after existing MCD cap3000 artifacts pass:
 
    bash tools/mcd_mma_serial.sh ee-small gap26-mcd-mma-ee-small \
-     /ACTUAL/MCD-SMALL/A.npz /ACTUAL/MCD-SMALL/B.npz
+     "$HOME/afc-def/gap26-mcd-mma-small/A.npz" \
+     "$HOME/afc-def/gap26-mcd-mma-small/B.npz"
 
 2. Full MinCovDet, only after the previous EE cap3000 pair passes:
 
