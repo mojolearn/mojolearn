@@ -1,11 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MinCovDet's fast_mcd with every C-step of every candidate on the device
-(lane/apple-fast-robust, 2026-10-02; FAST + Apple only, ON by default,
-`-D MOJOLEARN_MCD_DEVICE_CSTEPS_OFF` reverts to the per-candidate kit route).
-M3 A/B: min-cov-det taxi 79,925 -> 215 ms; M2 A/B robust-ee-taxi-x:
-elliptic-envelope taxi 64,578 -> 267.5 ms, fraction_flagged .1024 -> .1027
-(contamination target .1).
+(lane/apple-fast-robust, 2026-10-02; FAST + Apple only, OPT-IN since
+2026-10-03: `-D MOJOLEARN_MCD_DEVICE_CSTEPS` turns it on; the default is the
+per-candidate kit route). M3 A/B: min-cov-det taxi 79,925 -> 215 ms; M2 A/B
+robust-ee-taxi-x: elliptic-envelope taxi 64,578 -> 267.5 ms.
+
+DROPPED-quality (tools/mcd_quality_ab.sh, M2, taxi 100k, 2026-10-03): it
+lands on a different robust fit than the kit route. Jaccard of the flagged
+Xq mask vs the kit route (OFF) .8805 MinCovDet (chi2 .975 cut) / .9645
+EllipticEnvelope, below the .99 bar, while OFF matches IDENTICAL at .994 /
+.999; location_ shifts 14% and covariance_ 18% (relative Frobenius), the
+MinCovDet flag rate .231 -> .203. The raw h-subset covariance is singular
+in every build (exact fit), but this route keeps rank 8 where OFF and
+IDENTICAL keep rank 10. Kept as opt-in code for a future correct parallel
+C-step.
 
 x_decomp/kit_device.mojo's `fast_mcd_dev` runs x_decomp/mcd.mojo's search
 one candidate and one C-step at a time: each C-step is ten to fifteen kit
@@ -59,7 +68,7 @@ from x_decomp.kit import Mat
 
 comptime MCD_DEVICE_CSTEPS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_MCD_DEVICE_CSTEPS_OFF"]()
+    and is_defined["MOJOLEARN_MCD_DEVICE_CSTEPS"]()
 )
 
 comptime U64Ptr = MutPointer[UInt64, MutAnyOrigin]
