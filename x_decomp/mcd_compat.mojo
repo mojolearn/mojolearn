@@ -82,9 +82,10 @@ def mc_moment_kernel(
         part.unsafe_store(t, acc)
 
 
-def mc_pinvh_kernel(
+def mc_pinvh_kernel[MMA: Bool = False](
     cov: F32Ptr, work: F32Ptr, vectors: F32Ptr, precision: F32Ptr,
     nc: Int32, d: Int32, active: I32Ptr, needp: I32Ptr, err: I32Ptr,
+    sorted_v: F32Ptr, weighted_v: F32Ptr, ran: I32Ptr,
 ):
     """One block/candidate, same round-robin cells and stopping gate as main.
 
@@ -102,7 +103,17 @@ def mc_pinvh_kernel(
     if tid == 0:
         run[0] = Int32(1) if (active.unsafe_load(c) != 0 or needp.unsafe_load(c) != 0) else Int32(0)
     dev_barrier()
+    comptime if MMA:
+        if tid == 0:
+            ran.unsafe_store(c, run[0])
     if run[0] == 0:
+        comptime if MMA:
+            var at = tid
+            var cells = Int(d)*Int(d)
+            while at < cells:
+                sorted_v.unsafe_store(c*cells+at, Float32(0))
+                weighted_v.unsafe_store(c*cells+at, Float32(0))
+                at += MC_TPB
         return
     if tid == 0:
         needp.unsafe_store(c, Int32(0))
@@ -203,9 +214,15 @@ def mc_pinvh_kernel(
     while z < dd * dd:
         var i = z // dd
         var j = z % dd
-        var acc = Float32(0)
-        for rank in range(dd):
-            var k = Int(order[rank])
-            acc = ftz(identical_mul_add(mul(v.unsafe_load(i * dd + k), inv[k]), ftz(v.unsafe_load(j * dd + k)), acc))
-        precision.unsafe_store(o + z, acc)
+        comptime if MMA:
+            var k = Int(order[j])
+            var value = v.unsafe_load(i * dd + k)
+            sorted_v.unsafe_store(o + z, value)
+            weighted_v.unsafe_store(o + z, mul(value, inv[k]))
+        else:
+            var acc = Float32(0)
+            for rank in range(dd):
+                var k = Int(order[rank])
+                acc = ftz(identical_mul_add(mul(v.unsafe_load(i * dd + k), inv[k]), ftz(v.unsafe_load(j * dd + k)), acc))
+            precision.unsafe_store(o + z, acc)
         z += MC_TPB
