@@ -873,3 +873,407 @@ def isotonic_predict_strided_device(
     _ = d_ky^
     _ = d_t^
     _ = d_r^
+
+
+# -------------------------------------------------------- isotonic fit --
+# `ops.isotonic_fit` on the device: the stable sort by (x, y, index) as
+# bottom-up merge passes (each element finds its output slot by a binary
+# search in the other run: a parallel merge, the unique stable order the host
+# merge sort reaches), the unique-x sums by the segmented Hillis-Steele scan
+# (`ops.iso_seg_scan`), and pool-adjacent-violators as rounds
+# (`ops.iso_pav_round`): each round pools every maximal run of adjacent
+# violators at once; the host reads one violation count per round.
+
+
+@always_inline
+def _lt64(a: UInt64, b: UInt64) -> Bool:
+    if sf64_is_nan(a) or sf64_is_nan(b):
+        return False
+    return sf64_lt(a, b)
+
+
+@always_inline
+def _eq64(a: UInt64, b: UInt64) -> Bool:
+    if sf64_is_nan(a) or sf64_is_nan(b):
+        return False
+    return not sf64_lt(a, b) and not sf64_lt(b, a)
+
+
+@always_inline
+def _iso_less(x: MutPointer[UInt64, MutAnyOrigin], y: MutPointer[UInt64, MutAnyOrigin], a: Int, b: Int) -> Bool:
+    """Row a sorts strictly before row b: x[a] < x[b], or equal x and y[a] < y[b]."""
+    var xa = x.unsafe_load(a)
+    var xb = x.unsafe_load(b)
+    return _lt64(xa, xb) or (_eq64(xa, xb) and _lt64(y.unsafe_load(a), y.unsafe_load(b)))
+
+
+def iso_merge_kernel(
+    x: MutPointer[UInt64, MutAnyOrigin], y: MutPointer[UInt64, MutAnyOrigin], src: MutPointer[Int32, MutAnyOrigin],
+    dst: MutPointer[Int32, MutAnyOrigin], n: Int64, w: Int64,
+):
+    """One merge pass of width w: element p of the run pair [lo, lo + 2w)
+    lands at lo + (its rank in its run) + (the elements of the other run
+    that go before it: right ones strictly less, left ones not greater)."""
+    var p = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    var nn = Int(n)
+    var ww = Int(w)
+    while p < nn:
+        var lo = (p // (2 * ww)) * 2 * ww
+        var mid = min(lo + ww, nn)
+        var hi = min(lo + 2 * ww, nn)
+        var e = Int(src.unsafe_load(p))
+        var pos: Int
+        if p < mid:
+            var a = mid
+            var b = hi
+            while a < b:  # first right element not strictly before e
+                var c = (a + b) // 2
+                if _iso_less(x, y, Int(src.unsafe_load(c)), e):
+                    a = c + 1
+                else:
+                    b = c
+            pos = lo + (p - lo) + (a - mid)
+        else:
+            var a = lo
+            var b = mid
+            while a < b:  # first left element that e sorts strictly before
+                var c = (a + b) // 2
+                if _iso_less(x, y, e, Int(src.unsafe_load(c))):
+                    b = c
+                else:
+                    a = c + 1
+            pos = lo + (p - mid) + (a - lo)
+        dst.unsafe_store(pos, Int32(e))
+        p += stride
+
+
+def iso_gather_kernel(
+    x: MutPointer[UInt64, MutAnyOrigin], y: MutPointer[UInt64, MutAnyOrigin], idx: MutPointer[Int32, MutAnyOrigin],
+    n: Int64, xs: MutPointer[UInt64, MutAnyOrigin], v: MutPointer[UInt64, MutAnyOrigin],
+):
+    """xs[p] = x[idx[p]], v[p] = y[idx[p]] (copies)."""
+    var p = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while p < Int(n):
+        var i = Int(idx.unsafe_load(p))
+        xs.unsafe_store(p, x.unsafe_load(i))
+        v.unsafe_store(p, y.unsafe_load(i))
+        p += stride
+
+
+def iso_first_x_kernel(xs: MutPointer[UInt64, MutAnyOrigin], n: Int64, first: MutPointer[Int32, MutAnyOrigin]):
+    """first[p] = 1 where a new x value starts (p == 0 or xs[p] != xs[p - 1])."""
+    var p = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while p < Int(n):
+        first.unsafe_store(p, Int32(1) if (p == 0 or not _eq64(xs.unsafe_load(p), xs.unsafe_load(p - 1))) else Int32(0))
+        p += stride
+
+
+def iso_start_kernel(first: MutPointer[Int32, MutAnyOrigin], n: Int64, seg: MutPointer[Int32, MutAnyOrigin],
+                     gid: MutPointer[Int32, MutAnyOrigin]):
+    """Scan seeds: seg[p] = p at a segment start else 0 (max-scanned into
+    each entry's segment start), gid[p] = first[p] (sum-scanned into the
+    1-based segment id)."""
+    var p = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while p < Int(n):
+        var f = first.unsafe_load(p)
+        seg.unsafe_store(p, Int32(p) if f != 0 else Int32(0))
+        gid.unsafe_store(p, f)
+        p += stride
+
+
+def iso_iscan_kernel(src: MutPointer[Int32, MutAnyOrigin], dst: MutPointer[Int32, MutAnyOrigin], n: Int64, s: Int64,
+                     use_max: Int64):
+    """One Hillis-Steele pass of an inclusive integer scan (sum, or max)."""
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while j < Int(n):
+        var v = src.unsafe_load(j)
+        if j >= Int(s):
+            var u = src.unsafe_load(j - Int(s))
+            v = max(u, v) if use_max != 0 else u + v
+        dst.unsafe_store(j, v)
+        j += stride
+
+
+def iso_seg_pass_kernel(src: MutPointer[UInt64, MutAnyOrigin], dst: MutPointer[UInt64, MutAnyOrigin],
+                        seg: MutPointer[Int32, MutAnyOrigin], n: Int64, s: Int64):
+    """One pass of `ops.iso_seg_scan`: dst[j] = src[j - s] + src[j] when
+    j - s is in j's segment, else src[j]."""
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while j < Int(n):
+        var v = src.unsafe_load(j)
+        if j - Int(s) >= Int(seg.unsafe_load(j)):
+            v = sf64_add(src.unsafe_load(j - Int(s)), v)
+        dst.unsafe_store(j, v)
+        j += stride
+
+
+def iso_iota_kernel(idx: MutPointer[Int32, MutAnyOrigin], n: Int64):
+    var p = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while p < Int(n):
+        idx.unsafe_store(p, Int32(p))
+        p += stride
+
+
+def _copy_head_i32(ctx: DeviceContext, mut dst: DeviceBuffer[DType.int32], src: DeviceBuffer[DType.int32],
+                   n: Int) raises:
+    """dst[0 .. n) = src[0 .. n) on the device (the buffers may be longer)."""
+    var a = dst.create_sub_buffer[DType.int32](0, n)
+    var b = src.create_sub_buffer[DType.int32](0, n)
+    ctx.enqueue_copy(dst_buf=a, src_buf=b)
+    _ = a^
+    _ = b^
+
+
+def _copy_head_u64(ctx: DeviceContext, mut dst: DeviceBuffer[DType.uint64], src: DeviceBuffer[DType.uint64],
+                   n: Int) raises:
+    var a = dst.create_sub_buffer[DType.uint64](0, n)
+    var b = src.create_sub_buffer[DType.uint64](0, n)
+    ctx.enqueue_copy(dst_buf=a, src_buf=b)
+    _ = a^
+    _ = b^
+
+
+def _iscan(ctx: DeviceContext, mut a: DeviceBuffer[DType.int32], mut b: DeviceBuffer[DType.int32], n: Int,
+           use_max: Bool) raises:
+    """Inclusive integer scan of `a` (result in `a`), `b` scratch."""
+    var s = 1
+    while s < n:
+        ctx.enqueue_function[iso_iscan_kernel](
+            a.unsafe_ptr(), b.unsafe_ptr(), Int64(n), Int64(s), Int64(1 if use_max else 0),
+            grid_dim=_blocks(n), block_dim=OPS_TPB,
+        )
+        _copy_head_i32(ctx, a, b, n)
+        s *= 2
+
+
+def _seg_scan(ctx: DeviceContext, mut v: DeviceBuffer[DType.uint64], mut tmp: DeviceBuffer[DType.uint64],
+              seg: DeviceBuffer[DType.int32], n: Int) raises:
+    """`ops.iso_seg_scan` of `v` (result in `v`), `tmp` scratch."""
+    var s = 1
+    while s < n:
+        ctx.enqueue_function[iso_seg_pass_kernel](
+            v.unsafe_ptr(), tmp.unsafe_ptr(), seg.unsafe_ptr(), Int64(n), Int64(s),
+            grid_dim=_blocks(n), block_dim=OPS_TPB,
+        )
+        _copy_head_u64(ctx, v, tmp, n)
+        s *= 2
+
+
+def iso_unique_kernel(
+    xs: MutPointer[UInt64, MutAnyOrigin], v: MutPointer[UInt64, MutAnyOrigin], first: MutPointer[Int32, MutAnyOrigin],
+    seg: MutPointer[Int32, MutAnyOrigin], gid: MutPointer[Int32, MutAnyOrigin], n: Int64,
+    ux: MutPointer[UInt64, MutAnyOrigin], bs: MutPointer[UInt64, MutAnyOrigin], bw: MutPointer[UInt64, MutAnyOrigin],
+    blk: MutPointer[Int32, MutAnyOrigin],
+):
+    """At each x-group's last entry: knot g = its id: ux = the group's x,
+    uy = sum / count, the block sums (count * uy, count), blk[g] = g."""
+    var p = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while p < Int(n):
+        if p == Int(n) - 1 or first.unsafe_load(p + 1) != 0:
+            var g = Int(gid.unsafe_load(p)) - 1
+            var st = Int(seg.unsafe_load(p))
+            var c = sf64_from_int(p - st + 1)
+            var uy = sf64_div(v.unsafe_load(p), c)
+            ux.unsafe_store(g, xs.unsafe_load(st))
+            bs.unsafe_store(g, sf64_mul(c, uy))
+            bw.unsafe_store(g, c)
+            blk.unsafe_store(g, Int32(g))
+        p += stride
+
+
+def iso_viol_kernel(bs: MutPointer[UInt64, MutAnyOrigin], bw: MutPointer[UInt64, MutAnyOrigin], nb: Int64,
+                    first: MutPointer[Int32, MutAnyOrigin], cnt: MutPointer[Int32, MutAnyOrigin]):
+    """first[b] = 0 where block b - 1 violates b (mean[b - 1] >= mean[b]),
+    else 1; cnt[b] = 1 per violation (sum-scanned: the round's count)."""
+    var b = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while b < Int(nb):
+        var f = Int32(1)
+        if b > 0:
+            var m0 = sf64_div(bs.unsafe_load(b - 1), bw.unsafe_load(b - 1))
+            var m1 = sf64_div(bs.unsafe_load(b), bw.unsafe_load(b))
+            if _ge64(m0, m1):
+                f = Int32(0)
+        first.unsafe_store(b, f)
+        cnt.unsafe_store(b, Int32(1) - f if b > 0 else Int32(0))
+        b += stride
+
+
+def iso_pool_kernel(
+    bs: MutPointer[UInt64, MutAnyOrigin], bw: MutPointer[UInt64, MutAnyOrigin], first: MutPointer[Int32, MutAnyOrigin],
+    gid: MutPointer[Int32, MutAnyOrigin], nb: Int64, nbs: MutPointer[UInt64, MutAnyOrigin],
+    nbw: MutPointer[UInt64, MutAnyOrigin], nid: MutPointer[Int32, MutAnyOrigin],
+):
+    """After the segmented scans: each new block's sums from its last old
+    block; nid[b] = the new block of old block b."""
+    var b = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while b < Int(nb):
+        var g = Int(gid.unsafe_load(b)) - 1
+        nid.unsafe_store(b, Int32(g))
+        if b == Int(nb) - 1 or first.unsafe_load(b + 1) != 0:
+            nbs.unsafe_store(g, bs.unsafe_load(b))
+            nbw.unsafe_store(g, bw.unsafe_load(b))
+        b += stride
+
+
+def iso_relabel_kernel(blk: MutPointer[Int32, MutAnyOrigin], m: Int64, nid: MutPointer[Int32, MutAnyOrigin]):
+    var q = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while q < Int(m):
+        blk.unsafe_store(q, nid.unsafe_load(Int(blk.unsafe_load(q))))
+        q += stride
+
+
+def iso_knots_kernel(
+    ux: MutPointer[UInt64, MutAnyOrigin], bs: MutPointer[UInt64, MutAnyOrigin], bw: MutPointer[UInt64, MutAnyOrigin],
+    blk: MutPointer[Int32, MutAnyOrigin], m: Int64, kx: MutPointer[UInt64, MutAnyOrigin],
+    ky: MutPointer[UInt64, MutAnyOrigin],
+):
+    var q = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while q < Int(m):
+        var b = Int(blk.unsafe_load(q))
+        kx.unsafe_store(q, ux.unsafe_load(q))
+        ky.unsafe_store(q, sf64_div(bs.unsafe_load(b), bw.unsafe_load(b)))
+        q += stride
+
+
+def _last_i32(ctx: DeviceContext, d: DeviceBuffer[DType.int32], n: Int) raises -> Int:
+    var h = ctx.enqueue_create_host_buffer[DType.int32](1)
+    var s = d.create_sub_buffer[DType.int32](n - 1, 1)
+    ctx.enqueue_copy(dst_buf=h, src_buf=s)
+    ctx.synchronize()
+    var v = Int(h.unsafe_ptr().unsafe_load(0))
+    _ = s^
+    _ = h^
+    return v
+
+
+def isotonic_fit_device(
+    x: MutPointer[Float64, MutUntrackedOrigin], y: MutPointer[Float64, MutUntrackedOrigin], n: Int,
+    kx: MutPointer[Float64, MutUntrackedOrigin], ky: MutPointer[Float64, MutUntrackedOrigin],
+) raises -> Int:
+    """`ops.isotonic_fit` on the device (the law of its body, operation for
+    operation): x and y up once, the knots back once; one integer read per
+    pooling round (the violation count) and one for the knot count."""
+    if n < 1:
+        raise Error("x_trees isotonic_fit: no rows")
+    var ctx = _ctx()
+    var d_x = _up_f64(ctx, x, n)
+    var d_y = _up_f64(ctx, y, n)
+    var d_ia = ctx.enqueue_create_buffer[DType.int32](n)
+    var d_ib = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_function[iso_iota_kernel](d_ia.unsafe_ptr(), Int64(n), grid_dim=_blocks(n), block_dim=OPS_TPB)
+    var w = 1
+    var in_a = True
+    while w < n:
+        if in_a:
+            ctx.enqueue_function[iso_merge_kernel](
+                d_x.unsafe_ptr(), d_y.unsafe_ptr(), d_ia.unsafe_ptr(), d_ib.unsafe_ptr(), Int64(n), Int64(w),
+                grid_dim=_blocks(n), block_dim=OPS_TPB,
+            )
+        else:
+            ctx.enqueue_function[iso_merge_kernel](
+                d_x.unsafe_ptr(), d_y.unsafe_ptr(), d_ib.unsafe_ptr(), d_ia.unsafe_ptr(), Int64(n), Int64(w),
+                grid_dim=_blocks(n), block_dim=OPS_TPB,
+            )
+        in_a = not in_a
+        w *= 2
+    var d_xs = ctx.enqueue_create_buffer[DType.uint64](n)
+    var d_v = ctx.enqueue_create_buffer[DType.uint64](n)
+    var d_tmp = ctx.enqueue_create_buffer[DType.uint64](n)
+    ctx.enqueue_function[iso_gather_kernel](
+        d_x.unsafe_ptr(), d_y.unsafe_ptr(), d_ia.unsafe_ptr() if in_a else d_ib.unsafe_ptr(), Int64(n),
+        d_xs.unsafe_ptr(), d_v.unsafe_ptr(), grid_dim=_blocks(n), block_dim=OPS_TPB,
+    )
+    var d_first = ctx.enqueue_create_buffer[DType.int32](n)
+    var d_seg = ctx.enqueue_create_buffer[DType.int32](n)
+    var d_gid = ctx.enqueue_create_buffer[DType.int32](n)
+    var d_s2 = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_function[iso_first_x_kernel](d_xs.unsafe_ptr(), Int64(n), d_first.unsafe_ptr(),
+                                             grid_dim=_blocks(n), block_dim=OPS_TPB)
+    ctx.enqueue_function[iso_start_kernel](d_first.unsafe_ptr(), Int64(n), d_seg.unsafe_ptr(), d_gid.unsafe_ptr(),
+                                           grid_dim=_blocks(n), block_dim=OPS_TPB)
+    _iscan(ctx, d_seg, d_s2, n, True)
+    _iscan(ctx, d_gid, d_s2, n, False)
+    _seg_scan(ctx, d_v, d_tmp, d_seg, n)
+    var m = _last_i32(ctx, d_gid, n)
+    var d_ux = ctx.enqueue_create_buffer[DType.uint64](m)
+    var d_bs = ctx.enqueue_create_buffer[DType.uint64](m)
+    var d_bw = ctx.enqueue_create_buffer[DType.uint64](m)
+    var d_blk = ctx.enqueue_create_buffer[DType.int32](m)
+    ctx.enqueue_function[iso_unique_kernel](
+        d_xs.unsafe_ptr(), d_v.unsafe_ptr(), d_first.unsafe_ptr(), d_seg.unsafe_ptr(), d_gid.unsafe_ptr(), Int64(n),
+        d_ux.unsafe_ptr(), d_bs.unsafe_ptr(), d_bw.unsafe_ptr(), d_blk.unsafe_ptr(),
+        grid_dim=_blocks(n), block_dim=OPS_TPB,
+    )
+    # pooling rounds over nb blocks (scratch sized m, the first round's count)
+    var d_nbs = ctx.enqueue_create_buffer[DType.uint64](m)
+    var d_nbw = ctx.enqueue_create_buffer[DType.uint64](m)
+    var d_nid = ctx.enqueue_create_buffer[DType.int32](m)
+    var d_cnt = ctx.enqueue_create_buffer[DType.int32](m)
+    var nb = m
+    while nb > 1:
+        ctx.enqueue_function[iso_viol_kernel](
+            d_bs.unsafe_ptr(), d_bw.unsafe_ptr(), Int64(nb), d_first.unsafe_ptr(), d_cnt.unsafe_ptr(),
+            grid_dim=_blocks(nb), block_dim=OPS_TPB,
+        )
+        _iscan(ctx, d_cnt, d_s2, nb, False)
+        if _last_i32(ctx, d_cnt, nb) == 0:
+            break
+        ctx.enqueue_function[iso_start_kernel](d_first.unsafe_ptr(), Int64(nb), d_seg.unsafe_ptr(), d_gid.unsafe_ptr(),
+                                               grid_dim=_blocks(nb), block_dim=OPS_TPB)
+        _iscan(ctx, d_seg, d_s2, nb, True)
+        _iscan(ctx, d_gid, d_s2, nb, False)
+        _seg_scan(ctx, d_bs, d_tmp, d_seg, nb)
+        _seg_scan(ctx, d_bw, d_tmp, d_seg, nb)
+        ctx.enqueue_function[iso_pool_kernel](
+            d_bs.unsafe_ptr(), d_bw.unsafe_ptr(), d_first.unsafe_ptr(), d_gid.unsafe_ptr(), Int64(nb),
+            d_nbs.unsafe_ptr(), d_nbw.unsafe_ptr(), d_nid.unsafe_ptr(), grid_dim=_blocks(nb), block_dim=OPS_TPB,
+        )
+        ctx.enqueue_function[iso_relabel_kernel](d_blk.unsafe_ptr(), Int64(m), d_nid.unsafe_ptr(),
+                                                 grid_dim=_blocks(m), block_dim=OPS_TPB)
+        var nb2 = _last_i32(ctx, d_gid, nb)
+        _copy_head_u64(ctx, d_bs, d_nbs, nb2)
+        _copy_head_u64(ctx, d_bw, d_nbw, nb2)
+        nb = nb2
+    var d_kx = ctx.enqueue_create_buffer[DType.uint64](m)
+    var d_ky = ctx.enqueue_create_buffer[DType.uint64](m)
+    ctx.enqueue_function[iso_knots_kernel](
+        d_ux.unsafe_ptr(), d_bs.unsafe_ptr(), d_bw.unsafe_ptr(), d_blk.unsafe_ptr(), Int64(m), d_kx.unsafe_ptr(),
+        d_ky.unsafe_ptr(), grid_dim=_blocks(m), block_dim=OPS_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=kx.bitcast[UInt64](), src_buf=d_kx)
+    ctx.enqueue_copy(dst_ptr=ky.bitcast[UInt64](), src_buf=d_ky)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_y^
+    _ = d_ia^
+    _ = d_ib^
+    _ = d_xs^
+    _ = d_v^
+    _ = d_tmp^
+    _ = d_first^
+    _ = d_seg^
+    _ = d_gid^
+    _ = d_s2^
+    _ = d_ux^
+    _ = d_bs^
+    _ = d_bw^
+    _ = d_blk^
+    _ = d_nbs^
+    _ = d_nbw^
+    _ = d_nid^
+    _ = d_cnt^
+    _ = d_kx^
+    _ = d_ky^
+    return m

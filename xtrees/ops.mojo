@@ -1221,45 +1221,100 @@ def isotonic_fit(
         for q in range(n):
             idx[q] = tmp[q]
         width *= 2
-    # unique x: mean y, weight = count
+    # cpu2-l5-trees: the unique-x means and the pooling in the device's
+    # order (`iso_seg_scan`, `iso_pav_round`): no sequential chain over n.
+    var xs = List[Float64](length=n, fill=0.0)
+    var v = List[Float64](length=n, fill=0.0)
+    var first = List[Bool](length=n, fill=False)
+    for p in range(n):
+        xs[p] = x[unsafe_offset=idx[p]]
+        v[p] = y[unsafe_offset=idx[p]]
+        first[p] = p == 0 or not (xs[p] == xs[p - 1])
+    iso_seg_scan(v, first, n)
     var ux = List[Float64]()
     var uy = List[Float64]()
     var uw = List[Float64]()
-    var r = 0
-    while r < n:
-        var xv = x[unsafe_offset=idx[r]]
-        var s: Float64 = 0.0
-        var c: Float64 = 0.0
-        while r < n and x[unsafe_offset=idx[r]] == xv:
-            s = s + y[unsafe_offset=idx[r]]
-            c = c + 1.0
-            r += 1
-        ux.append(xv)
-        uy.append(s / c)
-        uw.append(c)
-    # PAV: blocks of (sum w*y, sum w), merged while decreasing
+    var start = 0
+    for p in range(n):
+        if first[p]:
+            start = p
+        if p == n - 1 or first[p + 1]:
+            var c = Float64(p - start + 1)
+            ux.append(xs[start])
+            uy.append(v[p] / c)
+            uw.append(c)
     var m = len(ux)
-    var bsum = List[Float64]()
-    var bw = List[Float64]()
-    var bstart = List[Int]()
+    var bs = List[Float64](length=m, fill=0.0)
+    var bw = List[Float64](length=m, fill=0.0)
+    var blk = List[Int](length=m, fill=0)
     for q in range(m):
-        bsum.append(identical_mul64(uw[q], uy[q]))
-        bw.append(uw[q])
-        bstart.append(q)
-        while len(bsum) > 1 and bsum[len(bsum) - 2] / bw[len(bw) - 2] >= bsum[len(bsum) - 1] / bw[len(bw) - 1]:
-            var s2 = bsum.pop()
-            var w2 = bw.pop()
-            _ = bstart.pop()
-            bsum[len(bsum) - 1] = bsum[len(bsum) - 1] + s2
-            bw[len(bw) - 1] = bw[len(bw) - 1] + w2
-    var nb = len(bsum)
-    for q in range(nb):
-        var end = bstart[q + 1] if q + 1 < nb else m
-        var v = bsum[q] / bw[q]
-        for p in range(bstart[q], end):
-            kx[unsafe_offset=p] = ux[p]
-            ky[unsafe_offset=p] = v
+        bs[q] = identical_mul64(uw[q], uy[q])
+        bw[q] = uw[q]
+        blk[q] = q
+    while iso_pav_round(bs, bw, blk, m):
+        pass
+    for q in range(m):
+        kx[unsafe_offset=q] = ux[q]
+        ky[unsafe_offset=q] = bs[blk[q]] / bw[blk[q]]
     return m
+
+
+def iso_seg_scan(mut v: List[Float64], first: List[Bool], n: Int):
+    """In place: the inclusive SEGMENTED sum of v (a segment starts where
+    `first`), by the fixed Hillis-Steele passes (s = 1, 2, 4, ... while
+    s < n: v[j] = v_prev[j - s] + v_prev[j] when j - s is in j's segment),
+    the device's `iso_seg_pass_kernel` operation for operation. A segment's
+    last entry holds its sum."""
+    var seg = List[Int](length=n, fill=0)
+    var cur = 0
+    for j in range(n):
+        if first[j]:
+            cur = j
+        seg[j] = cur
+    var s = 1
+    while s < n:
+        var prev = v.copy()
+        for j in range(s, n):
+            if j - s >= seg[j]:
+                v[j] = prev[j - s] + prev[j]
+        s *= 2
+
+
+def iso_pav_round(mut bs: List[Float64], mut bw: List[Float64], mut blk: List[Int], m: Int) -> Bool:
+    """One pooling round over the blocks (sum w y, sum w): every maximal run
+    of adjacent violators (mean[b] >= mean[b + 1], the pool-adjacent-
+    violators test) becomes one block, its sums by `iso_seg_scan`; `blk`
+    (each knot's block) follows. Returns False when nothing violated (the
+    blocks are then the isotonic fit: pooling adjacent violators in any
+    order reaches the one solution). The device's `iso_pav_round_device`."""
+    var nb = len(bs)
+    var first = List[Bool](length=nb, fill=True)
+    var hit = False
+    for b in range(1, nb):
+        var viol = bs[b - 1] / bw[b - 1] >= bs[b] / bw[b]
+        first[b] = not viol
+        if viol:
+            hit = True
+    if not hit:
+        return False
+    iso_seg_scan(bs, first, nb)
+    iso_seg_scan(bw, first, nb)
+    var nid = List[Int](length=nb, fill=0)
+    var nbs = List[Float64]()
+    var nbw = List[Float64]()
+    var g = -1
+    for b in range(nb):
+        if first[b]:
+            g += 1
+        nid[b] = g
+        if b == nb - 1 or first[b + 1]:
+            nbs.append(bs[b])
+            nbw.append(bw[b])
+    for q in range(m):
+        blk[q] = nid[blk[q]]
+    bs = nbs^
+    bw = nbw^
+    return True
 
 
 def isotonic_predict(

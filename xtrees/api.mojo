@@ -643,7 +643,12 @@ def isotonic_fit_binding(
     """params = [n]; kx, ky float64[n] receive the knots; returns their count."""
     _need(params, 1, "x_trees_isotonic_fit")
     var n = _i(params, 0)
-    var m = isotonic_fit(f64_ptr(Int(py=x)), f64_ptr(Int(py=y)), n, f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)))
+    var m: Int
+    comptime if XTREES_DEVICE_OPS:
+        m = boost_dev.isotonic_fit_device(f64_ptr(Int(py=x)), f64_ptr(Int(py=y)), n, f64_ptr(Int(py=kx)),
+                                          f64_ptr(Int(py=ky)))
+    else:
+        m = isotonic_fit(f64_ptr(Int(py=x)), f64_ptr(Int(py=y)), n, f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)))
     return PythonObject(m)
 
 
