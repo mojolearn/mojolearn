@@ -616,3 +616,30 @@ FAST bit changes are allowed. Acceptance requires faster M3 timing and no qualit
 | CTR_INDEX_FUSED | lane/apple-fast-batch @ 3150d75c1 | sym-ctr-index-fused-taxicat-x | 27240 → 25566 (-6.1%) | AUC .630808 → .630766; logloss .528548 → .528535 | HOLD: old base; candidate only, no merge without current-main A/B and quality |
 
 Gap26 accounting evidence and converted arm-B records: [ab/gap26/README.md](ab/gap26/README.md). Label-direct experiment verdict is owned by its promotion branch; its two measured board cells and independent quality receipt are preserved in this accounting bundle.
+
+
+## Label-direct promotion (2026-10-04)
+
+| define | algorithm / dataset | measured branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_LABEL_DIRECT` -> `MOJOLEARN_LABEL_DIRECT_OFF` | label-binarizer / taxi, istella | lane/apple-fast-label-direct @ dbe2ab85a (base35a72c5ac) | gap26-label-taxi, gap26-label-istella; quality gap26-label-quality | taxi348.254458 -> 327.625833; istella33.176500 -> 27.578792 | KEEP, default merged on main1975c2dc5 | One M3 run/arm, -5.9%/-16.9%, respective digests0703e6f6396640c4/de224838a841fa8c identical. Independent public-output oracle PASS both arms, 41,697,776 cells each, fitted classes/codes/inverse checked. Source review against main61ea51757: relevant drift comments only. Manager verified default/OFF builds rc0 before merge. |
+
+Quality review: `tools/label_fast_quality.py` checks every LabelBinarizer
+training/query indicator against an independent definition, actual fitted
+classes, inverse-transform values and LabelEncoder codes. It also checks
+MultiLabelBinarizer classes and train/query indicators, including empty rows,
+unseen labels and duplicates. Covered numeric cases include257 classes,
+sparse integer ranges, binary/single class, negative/range/fractional fallbacks,
+signed zero, and non-default positive/negative output labels. Actual bounded
+M3 log reports `LABEL-FAST-QUALITY status=PASS checked_cells=41697776 captures=84`
+for both arms followed by `QUALITY-PAIR-PASS gap26-label`.
+
+The wrapper did not request `--dump`, so it did not compare84 saved arrays
+between arms; each arm independently passed the mathematical oracle. Board
+quality itself is only output_shape and is insufficient alone; the oracle and
+unchanged board digests provide the quality evidence. Coverage gaps: invalid
+NaN/Inf labels, integers not exactly representable as FP32, noncontiguous/empty
+input, string/bool fallbacks and MultiLabelBinarizer inverse are not explicitly
+exercised. These remain on existing guarded fallback routes; no claim is made
+that those cases were tested. Encoder/multilabel correctness was checked but
+speed was measured only for LabelBinarizer; do not update their timing rows.
