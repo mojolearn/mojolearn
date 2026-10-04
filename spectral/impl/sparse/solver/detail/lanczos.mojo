@@ -163,7 +163,7 @@ from std.sys.info import has_accelerator, has_apple_gpu_accelerator
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_identical import (
@@ -1813,6 +1813,318 @@ def lanczos_solve_ritz(
 
 
 # ---------------------------------------------------------------------------
+# IDENTICAL: one restart on buffers pooled for the whole solve.
+# ---------------------------------------------------------------------------
+
+
+#: IDENTICAL, every GPU (fam2-cluster, 2026-10-04): a restart of the
+#: LANCZOS_ID_DEV path allocated seven buffers and waited on them, read
+#: alpha / beta back, rebuilt the projected matrix on the host and uploaded
+#: it (a buffer and a wait), and took the residual norm through a fresh
+#: upload, a fresh 1-word buffer and two more waits. Here the workspace,
+#: the device alpha / beta / E / beta_k, the scalar cells, the projected
+#: matrix and the host staging block are allocated ONCE per solve; the
+#: projected matrix is assembled on the device from the device alpha / beta
+#: / beta_k (copies of the words the host assembly copied); the alpha / beta
+#: read-back rides the Ritz solve's own wait; and the residual norm is one
+#: `identical_gemm_into` on the pooled cells. Every float operation is the
+#: one LANCZOS_ID_DEV ran, on the same words, so no bit moves and the host
+#: column is unchanged. `-D MOJOLEARN_IDN_LANCZOS_POOL_OFF=1` restores the
+#: per-restart allocations and waits.
+comptime IDN_LANCZOS_POOL = (
+    LANCZOS_ID_DEV
+    and not (
+        is_defined["MOJOLEARN_IDN_LANCZOS_POOL_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+
+def lanczos_pool_ws_floats(n: Int, k: Int, ncv: Int) -> Int:
+    """The largest `identical_gemm_into` workspace a pooled restart and its
+    residual ask for."""
+    var nws = identical_gemm_workspace_max_floats(k, n, ncv)
+    nws = max(nws, identical_gemm_workspace_max_floats(k, 1, n))
+    nws = max(nws, identical_gemm_workspace_max_floats(n, 1, k))
+    nws = max(nws, identical_gemm_workspace_max_floats(1, 1, n))
+    nws = max(nws, identical_gemm_workspace_max_floats(1, 1, k))
+    for i in range(k + 1, ncv):
+        nws = max(nws, identical_gemm_workspace_max_floats(i + 1, 1, n))
+        nws = max(nws, identical_gemm_workspace_max_floats(n, 1, i + 1))
+    return max(nws, 1)
+
+
+def lanczos_pool_host_floats(k: Int, ncv: Int) -> Int:
+    """The staging block: alpha, beta, E (`ncv x k`), beta_k, 4 scalars."""
+    return 2 * ncv + ncv * k + k + 4
+
+
+def id_build_t_kernel(
+    t: MutPointer[Float32, MutAnyOrigin],
+    d_alpha: MutPointer[Float32, MutAnyOrigin],
+    d_beta: MutPointer[Float32, MutAnyOrigin],
+    d_bk: MutPointer[Float32, MutAnyOrigin],
+    ncv_in: Int32,
+    k_in: Int32,
+):
+    """`lanczos_solve_ritz`'s projected matrix after a restart, one thread
+    per cell: `alpha` on the diagonal, `beta[row]` right of it and
+    `beta[row - 1]` left of it, then `beta_k` over row `k` and column `k`
+    (the host assembly's later stores). Copies only."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var ncv = Int(ncv_in)
+    var k = Int(k_in)
+    if i >= ncv * ncv:
+        return
+    var r = i // ncv
+    var c = i - r * ncv
+    var x = Float32(0.0)
+    if r == c:
+        x = d_alpha.unsafe_load(r)
+    elif c == r + 1:
+        x = d_beta.unsafe_load(r)
+    elif c == r - 1:
+        x = d_beta.unsafe_load(c)
+    if r == k and c < k:
+        x = d_bk.unsafe_load(c)
+    elif c == k and r < k:
+        x = d_bk.unsafe_load(r)
+    t.unsafe_store(i, x)
+
+
+def lanczos_solve_ritz_device_t(
+    ctx: DeviceContext,
+    mut d_t: DeviceBuffer[DType.float32],
+    k: Int,
+    which: Int,
+    ncv: Int,
+    mut eigenvalues_k: List[Float32],
+    mut eigenvectors_k: List[Float32],
+) raises -> Int:
+    """`lanczos_solve_ritz` from the projected matrix already on the device
+    (`id_build_t_kernel`): the same solve and the same `which` slice."""
+    var first = lanczos_which_first(which, ncv, k)
+    var evals = List[Float32](length=ncv, fill=Float32(0.0))
+    var evecs = List[Float32](length=ncv * ncv, fill=Float32(0.0))
+    var sweeps = DevExec._eigh_par_on(
+        ctx, d_t, F32Ptr(unsafe_from_address=Int(evals.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(evecs.unsafe_ptr())),
+        ncv,
+    )
+    eigenvalues_k.clear()
+    eigenvectors_k.clear()
+    for c in range(k):
+        eigenvalues_k.append(evals[first + c])
+    for j in range(ncv):
+        for c in range(k):
+            var e = evecs[j * ncv + (first + c)]
+            comptime if SAB_SIGN_FLIP:
+                e = -e
+            eigenvectors_k.append(e)
+    return sweeps
+
+
+def id_norm_scale_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    sq: MutPointer[Float32, MutAnyOrigin],
+    nrm_out: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """`id_norm_finish_kernel` then `id_scale_dev_kernel` in one launch:
+    every thread derives the same norm word from the same squared norm,
+    thread 0 stores it, each element is divided by it."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var s = ftz(_host_sqrt(sq.unsafe_load(0)))
+    if t == 0:
+        nrm_out.unsafe_store(0, s)
+    if t >= Int(n_in):
+        return
+    dst.unsafe_store(t, ftz(src.unsafe_load(t) / s))
+
+
+def lanczos_restart_pooled(
+    ctx: DeviceContext,
+    mut A: DeviceCoo,
+    mut V: DeviceBuffer[DType.float32],
+    mut u: DeviceBuffer[DType.float32],
+    mut ritz: DeviceBuffer[DType.float32],
+    mut eigenvalues_k: List[Float32],
+    mut eigenvectors_k: List[Float32],
+    mut alpha: List[Float32],
+    mut beta: List[Float32],
+    mut beta_k: List[Float32],
+    k: Int,
+    ncv: Int,
+    which: Int,
+    mut v: DeviceBuffer[DType.float32],
+    mut aux_uu: DeviceBuffer[DType.float32],
+    mut vv: DeviceBuffer[DType.float32],
+    mut tmp: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    mut d_alpha: DeviceBuffer[DType.float32],
+    mut d_beta: DeviceBuffer[DType.float32],
+    mut d_e: DeviceBuffer[DType.float32],
+    mut d_bk: DeviceBuffer[DType.float32],
+    mut d_t: DeviceBuffer[DType.float32],
+    mut scal: DeviceBuffer[DType.float32],
+    mut h: HostBuffer[DType.float32],
+    mut trace: IdentityTrace,
+    mut step: Int,
+    tpb: Int,
+    restarts: Int,
+    mut sweeps: Int,
+) raises -> Float32:
+    """`lanczos_restart_identical_dev` + `lanczos_solve_ritz` + `_residual`
+    on the solve's pooled buffers (`IDN_LANCZOS_POOL`). `alpha[0..k)` /
+    `beta[0..k)` hold the caller's restart values on entry. Returns the
+    residual; `eigenvalues_k`, `eigenvectors_k`, `beta_k`, `alpha`, `beta`
+    and `sweeps` come back as the three calls leave them."""
+    var n = A.n
+    var step0 = step
+    var hp = h.unsafe_ptr()
+    for j in range(ncv):
+        hp.unsafe_store(j, alpha[j])
+        hp.unsafe_store(ncv + j, beta[j])
+    for j in range(ncv * k):
+        hp.unsafe_store(2 * ncv + j, eigenvectors_k[j])
+    for j in range(k):
+        hp.unsafe_store(2 * ncv + ncv * k + j, beta_k[j])
+    ctx.enqueue_copy(dst_buf=d_alpha, src_ptr=hp)
+    ctx.enqueue_copy(dst_buf=d_beta, src_ptr=hp + ncv)
+    ctx.enqueue_copy(dst_buf=d_e, src_ptr=hp + 2 * ncv)
+    ctx.enqueue_copy(dst_buf=d_bk, src_ptr=hp + 2 * ncv + ncv * k)
+    var dot_c = scal.create_sub_buffer[DType.float32](0, 1)
+    var sq_c = scal.create_sub_buffer[DType.float32](1, 1)
+    var r_sq = scal.create_sub_buffer[DType.float32](2, 1)
+    var r_nrm = scal.create_sub_buffer[DType.float32](3, 1)
+    var uv = u.create_sub_buffer[DType.float32](0, n)
+    var vk = V.create_sub_buffer[DType.float32](k * n, n)
+    var dak = d_alpha.create_sub_buffer[DType.float32](k, 1)
+    var bkv = d_bk.create_sub_buffer[DType.float32](0, k)
+    var g = _grid(n, tpb)
+    # ritz = E_k^T V (the previous solve's), then V[0..k) = ritz  (:544-547)
+    identical_gemm_into(ctx, ritz, d_e, V, ws, k, n, ncv, OP_TN)
+    ctx.enqueue_function[copy_kernel](
+        V.unsafe_ptr(), ritz.unsafe_ptr(), Int32(k * n),
+        grid_dim=(_grid(k * n, tpb), 1, 1), block_dim=(tpb, 1, 1),
+    )
+    # uu = V[0..k) u; u = u - V^T uu  (:552-578)
+    identical_gemm_into(ctx, aux_uu, V, u, ws, k, 1, n, OP_NT)
+    identical_gemm_into(ctx, tmp, V, aux_uu, ws, n, 1, k, OP_TN)
+    ctx.enqueue_function[sub_kernel](
+        u.unsafe_ptr(), tmp.unsafe_ptr(), Int32(n),
+        grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
+    )
+    # unrm = ||u||; V[k] = u / unrm  (:580-592)
+    identical_gemm_into(ctx, r_sq, u, uv, ws, 1, 1, n, OP_NT)
+    ctx.enqueue_function[id_norm_scale_kernel](
+        V.unsafe_ptr().unsafe_offset(k * n), u.unsafe_ptr(),
+        r_sq.unsafe_ptr(), r_nrm.unsafe_ptr(), Int32(n),
+        grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
+    )
+    # u = A V[k]  (:594-624)
+    ctx.enqueue_function[spmv_kernel](
+        u.unsafe_ptr(),
+        A.indptr.unsafe_ptr(),
+        A.cols.unsafe_ptr(),
+        A.vals.unsafe_ptr(),
+        V.unsafe_ptr().unsafe_offset(k * n),
+        Int32(n),
+        grid_dim=(g, 1, 1),
+        block_dim=(tpb, 1, 1),
+    )
+    # alpha[k] = dot(V[k], u) straight into d_alpha[k]; u -= alpha_k V[k]
+    identical_gemm_into(ctx, dak, vk, u, ws, 1, 1, n, OP_NT)
+    ctx.enqueue_function[id_axpy_neg_dev_kernel](
+        u.unsafe_ptr(), V.unsafe_ptr().unsafe_offset(k * n),
+        d_alpha.unsafe_ptr().unsafe_offset(k), Int32(n),
+        grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
+    )
+    # temp = V[0..k)^T beta_k; u = u - temp  (:640-671)
+    identical_gemm_into(ctx, tmp, V, d_bk, ws, n, 1, k, OP_TN)
+    ctx.enqueue_function[sub_kernel](
+        u.unsafe_ptr(), tmp.unsafe_ptr(), Int32(n),
+        grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
+    )
+    # beta[k] = ||u|| into d_beta[k]; V[k + 1] = u / beta[k]  (:673-687)
+    identical_gemm_into(ctx, r_sq, u, uv, ws, 1, 1, n, OP_NT)
+    ctx.enqueue_function[id_norm_scale_kernel](
+        V.unsafe_ptr().unsafe_offset((k + 1) * n), u.unsafe_ptr(),
+        r_sq.unsafe_ptr(), d_beta.unsafe_ptr().unsafe_offset(k), Int32(n),
+        grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
+    )
+    step += 1
+    # lanczos_aux from k + 1  (:689-701)
+    _id_dev_enqueue_steps(
+        ctx, A, V, u, v, aux_uu, vv, tmp, ws, scal, dot_c, sq_c, uv, d_alpha,
+        d_beta, k + 1, ncv, ncv, step, tpb,
+    )
+    # The projected matrix from the device words, and alpha / beta on their
+    # way to the host; the Ritz solve's own wait covers both.
+    ctx.enqueue_function[id_build_t_kernel](
+        d_t.unsafe_ptr(), d_alpha.unsafe_ptr(), d_beta.unsafe_ptr(),
+        d_bk.unsafe_ptr(), Int32(ncv), Int32(k),
+        grid_dim=(_grid(ncv * ncv, tpb), 1, 1), block_dim=(tpb, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=hp, src_buf=d_alpha)
+    ctx.enqueue_copy(dst_ptr=hp + ncv, src_buf=d_beta)
+    var eig_failed = False
+    var eig_msg = String("")
+    try:
+        sweeps = lanczos_solve_ritz_device_t(
+            ctx, d_t, k, which, ncv, eigenvalues_k, eigenvectors_k
+        )
+    except e:
+        eig_failed = True
+        eig_msg = String(e)
+    ctx.synchronize()
+    for j in range(k, ncv):
+        alpha[j] = hp.unsafe_load(j)
+        beta[j] = hp.unsafe_load(ncv + j)
+    trace.record_scalar_f32(_step_tag(step0, "alpha"), alpha[k])
+    trace.record_scalar_f32(_step_tag(step0, "beta"), beta[k])
+    # The host path raises here, before the steps and the solve it would
+    # divide by zero in; they ran, the verdict is the same raise.
+    if beta[k] == Float32(0.0):
+        raise Error(
+            "lanczos: restart breakdown, beta[k] == 0 at restart "
+            + String(restarts) + " (DEVIATION 774: theirs divides by it)"
+        )
+    if eig_failed:
+        raise Error(eig_msg)
+    for j in range(k + 1, ncv):
+        trace.record_scalar_f32(_step_tag(step0 + j - k, "alpha"), alpha[j])
+        trace.record_scalar_f32(_step_tag(step0 + j - k, "beta"), beta[j])
+    # `_residual`: beta_k = fma(beta[ncv - 1], s, 0) per selected vector,
+    # res = ||beta_k|| through the pinned GEMM at 1 x 1 x k.
+    beta_k.clear()
+    var bo = 2 * ncv + ncv * k
+    for c in range(k):
+        var sv = eigenvectors_k[(ncv - 1) * k + c]
+        var bkc = ftz(identical_mul_add(beta[ncv - 1], sv, Float32(0.0)))
+        beta_k.append(bkc)
+        hp.unsafe_store(bo + c, bkc)
+    ctx.enqueue_copy(dst_buf=d_bk, src_ptr=hp + bo)
+    identical_gemm_into(ctx, r_sq, d_bk, bkv, ws, 1, 1, k, OP_NT)
+    ctx.enqueue_function[id_norm_finish_kernel](  # small-launch(1: one scalar): one thread takes one square root, no walk
+        r_sq.unsafe_ptr(), r_nrm.unsafe_ptr(),
+        grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=hp + bo + k, src_buf=scal)
+    ctx.synchronize()
+    var res = hp.unsafe_load(bo + k + 3)
+    _ = uv^
+    _ = vk^
+    _ = dak^
+    _ = bkv^
+    _ = dot_c^
+    _ = sq_c^
+    _ = r_sq^
+    _ = r_nrm^
+    return res
+
+
+# ---------------------------------------------------------------------------
 # lanczos_smallest (`:401-754`)
 # ---------------------------------------------------------------------------
 
@@ -1924,6 +2236,30 @@ def lanczos_smallest(
     var iter = ncv
     # LANCZOS_ID_DEV defers each solve's ritz GEMM to the next restart.
     var ritz_stale = False
+    # IDN_LANCZOS_POOL: the restart's buffers, once per solve (one float
+    # each when the arm is compiled out).
+    var pool_ws_n = 1
+    var pool_ab_n = 1
+    var pool_e_n = 1
+    var pool_bk_n = 1
+    var pool_t_n = 1
+    var pool_h_n = 1
+    comptime if IDN_LANCZOS_POOL:
+        pool_ws_n = lanczos_pool_ws_floats(n, k, ncv)
+        pool_ab_n = ncv
+        pool_e_n = ncv * k
+        pool_bk_n = k
+        pool_t_n = ncv * ncv
+        pool_h_n = lanczos_pool_host_floats(k, ncv)
+    var pool_ws = ctx.enqueue_create_buffer[DType.float32](pool_ws_n)
+    var pool_alpha = ctx.enqueue_create_buffer[DType.float32](pool_ab_n)
+    var pool_beta = ctx.enqueue_create_buffer[DType.float32](pool_ab_n)
+    var pool_e = ctx.enqueue_create_buffer[DType.float32](pool_e_n)
+    var pool_bk = ctx.enqueue_create_buffer[DType.float32](pool_bk_n)
+    var pool_t = ctx.enqueue_create_buffer[DType.float32](pool_t_n)
+    var pool_scal = ctx.enqueue_create_buffer[DType.float32](4)
+    var pool_h = ctx.enqueue_create_host_buffer[DType.float32](pool_h_n)
+    ctx.synchronize()
     while res > tol and iter < maxIter:
         restarts += 1
         # beta[0..k) = 0; alpha[0..k) = ritz values  (:538-542)
@@ -1946,6 +2282,19 @@ def lanczos_smallest(
                 res = _residual(ctx, beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
                 _ = E3^
                 continue
+        comptime if IDN_LANCZOS_POOL:
+            res = lanczos_restart_pooled(
+                ctx, A, V, u, ritz, eigenvalues_k, eigenvectors_k, alpha, beta,
+                beta_k, k, ncv, which, v, aux_uu, vv, tmp, pool_ws, pool_alpha,
+                pool_beta, pool_e, pool_bk, pool_t, pool_scal, pool_h, trace,
+                step, tpb, restarts, sweeps,
+            )
+            iter += ncv - k
+            trace.record_list_f32(_restart_tag(restarts, "ritz"), eigenvalues_k)
+            trace.record_scalar_f32(_restart_tag(restarts, "res"), res)
+            trace.record_list_i32(_restart_tag(restarts, "sweeps"), _one_i32(sweeps))
+            ritz_stale = True
+            continue
         comptime if LANCZOS_ID_DEV:
             lanczos_restart_identical_dev(
                 ctx, A, V, u, ritz, eigenvectors_k, alpha, beta, beta_k, k,
@@ -2074,6 +2423,14 @@ def lanczos_smallest(
     _ = aux_uu^
     _ = ritz^
     _ = E^
+    _ = pool_ws^
+    _ = pool_alpha^
+    _ = pool_beta^
+    _ = pool_e^
+    _ = pool_bk^
+    _ = pool_t^
+    _ = pool_scal^
+    _ = pool_h^
     return restarts
 
 
