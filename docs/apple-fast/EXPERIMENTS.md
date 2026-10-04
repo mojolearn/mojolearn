@@ -868,3 +868,11 @@ an absolute-difference PASS alone cannot establish no regression and no
 same-arm noise evidence is yet recorded. No LLE default proposal prepared.
 
 Catalog G1/G5 standalone6abb76673, w2-catalog-g1g5-q-20261004-r2: HOLD for unrestricted use. Eleven cases byte-identical to incumbent; only NT vector79x1,K65 regresses scaled error7.05755e-9 ->1.78820e-8. Preserve existing GEMV fallback; shared adapter predeclares this exclusion and needs its own quality evidence. Callpath r2 failed import (missing PyInit export), not numerical quality; repair required.
+
+| `MOJOLEARN_ARIMA_FAST_SCALAR_LL` | scalar Kalman likelihood, actual GPU kernels | lane/apple-fast-arima-scalar-k3-r2@6f09497abfe50dcda0b44ea7ee8c8e1540bd4aab | arima-k3-kernel-q-r2 | M2 A/B PASS; M3 kernel quality HOLD across13 groups, no scored timings | HOLD-quality: all12 n>1 groups include finite-difference gradient regression despite improved likelihood in several groups. n=1 passes. Actual full-fit/forecast validation remains owed; no optimizer or timing admission. Scalar specialization is not approved merely by exact algebra. |
+
+SHAP delta promotion preparation `e3264731af227951cb2ecfb80f81d359592486b5`
+passed M2 default and `MOJOLEARN_PSHAP_DELTA_OFF` builds plus Python import
+smoke. Measured20bbdc372 gives28222.8 ->14788.6ms and exact output words in
+all3quality cases. Final default/rollback M3 quality is queued next; not
+merged yet. Fresh source pin fixes only promotion arm ordering; no scored replay.
