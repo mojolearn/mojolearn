@@ -1106,6 +1106,20 @@ class PolynomialCountSketch(_XNeighbors):
         deg, nc = int(self.degree), int(self.n_components)
         if deg < 1 or nc < 1:
             raise ValueError("degree and n_components must be >= 1")
+        seed = self.random_state
+        draw_idn = (getattr(self._bind(), "x_neighbors_kfeat_pcs_draw_idn", None)
+                    if isinstance(seed, int) and not isinstance(seed, bool) and nf > 0 else None)
+        if draw_idn is not None:
+            # IDN_XN_SKETCH_CTR (IDENTICAL, default; _OFF rollback;
+            # x_neighbors/kfeat_rng.mojo): the tables from the counter-based
+            # generator on the device, not the MT19937 Python loop
+            ih = empty((deg, nf), "<i4")
+            bh = empty((deg, nf), "<i4")
+            draw_idn([seed & 0xFFFFFFFF, nc, deg * nf], addr(ih, name="indexHash_"), addr(bh, name="bitHash_"))
+            self.indexHash_ = ih
+            self.bitHash_ = bh
+            self.n_features_in_ = d
+            return self
         rs = _random_state(self.random_state)
         idx = rs.randint(nc, deg * nf)
         bits = [(-1, 1)[v] for v in rs.randint(2, deg * nf)]
@@ -1254,6 +1268,20 @@ class SkewedChi2Sampler(_XNeighbors):
             off = empty((nc,), "<f4")
             self._bind().x_neighbors_kfeat_schi2_fit([seed & 0xFFFFFFFF, d, nc], addr(w, name="random_weights_"),
                                                      addr(off, name="random_offset_"))
+            self.random_weights_ = w
+            self.random_offset_ = off
+            self.n_features_in_ = d
+            return self
+        fit_idn = (getattr(self._bind(), "x_neighbors_kfeat_schi2_fit_idn", None)
+                   if isinstance(seed, int) and not isinstance(seed, bool) and d > 0 and nc > 0 else None)
+        if fit_idn is not None:
+            # IDN_XN_SKETCH_CTR (IDENTICAL, default; _OFF rollback;
+            # x_neighbors/kfeat_rng.mojo): z, the weights and the offsets
+            # from the counter-based generator on the device, one call
+            w = _empty_out((d, nc), "<f4")
+            off = empty((nc,), "<f4")
+            fit_idn([seed & 0xFFFFFFFF, d, nc], addr(w, name="random_weights_"),
+                    addr(off, name="random_offset_"))
             self.random_weights_ = w
             self.random_offset_ = off
             self.n_features_in_ = d

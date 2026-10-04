@@ -31,7 +31,10 @@ from x_neighbors.kfeat_dev import (
     kfeat_schi2_fit_binding,
     kfeat_schi2_transform_binding,
     kfeat_schi2_weights_binding,
+    kfeat_schi2_fit_idn_binding,
+    kfeat_pcs_draw_idn_binding,
 )
+from x_neighbors.kfeat_rng import XN_IDN_SKETCH_CTR
 
 
 def _a(v: PythonObject, k: Int) raises -> Int:
@@ -1286,6 +1289,10 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
             m.def_function[kfeat_schi2_draw_binding]("x_neighbors_kfeat_schi2_draw")
             m.def_function[kfeat_schi2_weights_binding]("x_neighbors_kfeat_schi2_weights")
             m.def_function[kfeat_schi2_transform_binding]("x_neighbors_kfeat_schi2_transform")
+        # lane fix-k1-neighbors: the samplers' counter-based draws (IDENTICAL)
+        comptime if XN_IDN_SKETCH_CTR:
+            m.def_function[kfeat_schi2_fit_idn_binding]("x_neighbors_kfeat_schi2_fit_idn")
+            m.def_function[kfeat_pcs_draw_idn_binding]("x_neighbors_kfeat_pcs_draw_idn")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors: ", e))
