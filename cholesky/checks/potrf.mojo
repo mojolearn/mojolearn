@@ -445,6 +445,10 @@ def chol_default_nb_hint() -> Int:
 
 # FAST experiment: one launch of 64x64 lower-triangle matrix-unit tiles,
 # avoiding the 2048-column slabs' unused upper work and tail scratch traffic.
+# DROP-speed (2026-10-04): gap26-chol-fixed-synthetic, M3 synthetic,
+# source ca5ea4b6e (kernel e724b7777): 268.773 -> 288.278 ms (+7.3%).
+# Digest/residual unchanged; gap26-chol-fixed-quality passes SPD/solve and
+# failure-info checks. Kept opt-in: no measured speed win. See EXPERIMENTS.md.
 comptime CHOL_FAST_TRI_SYRK = (
     CHOL_FAST_APPLE and is_defined["MOJOLEARN_CHOL_FAST_TRI_SYRK"]()
 )
