@@ -509,9 +509,15 @@ def _upload_rowmajor_fast(
 #: cell, `poison` in the tail), so no bit moves and the host column is
 #: untouched; a non-finite cell raises `check_finite_by_name`'s message.
 #: `-D MOJOLEARN_IDN_IF_QUERY_DEVICE_OFF` restores the List route.
-comptime IDN_IF_QUERY_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+#: cpu2-l6-bindings (2026-10-04): the device route is the default on EVERY
+#: tier and vendor (FAST included); the FAST List route was a host copy of
+#: the query on a GPU route. Same words (`ftz` per cell) either way.
+comptime IDN_IF_QUERY_DEVICE = not (
     is_defined["MOJOLEARN_IDN_IF_QUERY_DEVICE_OFF"]()
-    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    or (
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
 )
 
 #: Lane fam2-forests (IDENTICAL speed wave 3): the fitted forest stays
