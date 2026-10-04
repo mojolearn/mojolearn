@@ -13,6 +13,8 @@ from sequence.mlp import (
 )
 from sequence.ops import (
     FP,
+    OP_ONE_HOT,
+    OP_PROBA2,
     OP_ACT,
     OP_ACT_BWD,
     OP_COLSUM_DIV,
@@ -125,10 +127,13 @@ def mlp_fit[E: Exec](
     loss_kind: Int, solver: Int, lr_sched: Int, nesterov: Bool, batch: Int, max_iter: Int,
     shuffle: Bool, seed: UInt64, n_iter_no_change: Int,
     lr_init: Float32, b1: Float32, b2: Float32, eps: Float32, momentum: Float32,
-    power_t: Float64, alpha: Float32, tol: Float64,
+    power_t: Float64, alpha: Float32, tol: Float64, y_codes: Int = 0,
 ) raises -> Int:
     """Returns n_iter; curve[0:n_iter] is the epoch loss (float32 of the
-    float64 accumulation)."""
+    float64 accumulation). `y_codes` (cpu2-l11-neural): 0, `Y` is the
+    dense (N, O) target; 1, `Y` holds N int32 class codes and the (N, O)
+    one-hot target is built on the executor (`OP_ONE_HOT`); 2 (O = 1), the
+    codes themselves as the float target. Not in host NumPy either way."""
     var L = net.n_layers()
     var D = net.sizes[0]
     var O = net.sizes[L]
@@ -137,7 +142,17 @@ def mlp_fit[E: Exec](
     var dX = ex.alloc(N * D)
     ex.upload(dX, X, N * D)
     var dY = ex.alloc(N * O)
-    ex.upload(dY, Y, N * O)
+    if y_codes == 1 or (y_codes == 2 and O == 1):
+        var dC = ex.alloc(N)
+        ex.upload(dC, Y, N)
+        var oh = Args()
+        oh.p0 = dC
+        oh.p1 = dY
+        oh.i0 = O
+        oh.i1 = 1 if y_codes == 2 else 0
+        ex.launch[OP_ONE_HOT](oh, N * O)
+    else:
+        ex.upload(dY, Y, N * O)
     var P = ex.alloc(np_)
     ex.upload(P, Pio, np_)
     var Gr = ex.alloc(np_)
@@ -309,7 +324,10 @@ def mlp_fit[E: Exec](
     return n_iter
 
 
-def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP, chunk: Int) raises:
+def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP, chunk: Int,
+                         proba2: Bool = False) raises:
+    """`proba2` (cpu2-l11-neural): a one-output logistic net writes the
+    (N, 2) probability `[1 - p, p]` (`OP_PROBA2` on the executor)."""
     var L = net.n_layers()
     var D = net.sizes[0]
     var O = net.sizes[L]
@@ -335,5 +353,14 @@ def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP
         d.p1 = dout + b0 * O
         ex.launch[OP_COPY](d, B * O)
         b0 += B
+    if proba2 and O == 1:
+        var two = ex.alloc(N * 2)
+        var q = Args()
+        q.p0 = dout
+        q.p1 = two
+        ex.launch[OP_PROBA2](q, N * 2)
+        ex.sync()
+        ex.download(dst, two, N * 2)
+        return
     ex.sync()
     ex.download(dst, dout, N * O)
