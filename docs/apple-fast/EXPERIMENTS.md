@@ -322,7 +322,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `DECOMP_FAST_GEMM_MMA` | randomized-svd / istella, taxi; nmf / istella | lane/apple-fast-gap-linalg2-pca @ 474241154 | gl2p-rsvd-gemmmma-istella, gl2p-rsvd-gemmmma-taxi, gl2p-nmf-gemmmma-istella | randomized-svd istella 711 -> 533; taxi -1.3%; nmf istella 8,155 -> 6,333 | KEPT | -25% / -22%; reconstruction error the same (rsvd .0002359 / .0272, nmf .3252); FAST+Apple default for every x_decomp kit GEMM, -D MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF reverts |
 | `PCA_FAST_GRAM_MMA` | pca / istella | lane/apple-fast-gap-linalg2-pca @ 474241154 | gl2p-pca-grammma-istella-r, gl2p-pca-quality (M2) | pca istella 606 -> 490 | KEPT | -19%; quality-only check: explained_variance_ rel diff 3.4e-06, subspace angle 1.8e-06 rad (nondeterministic MMA/atomic sum); FAST+Apple default, -D MOJOLEARN_PCA_FAST_GRAM_MMA_OFF reverts |
 | `CHOL_FAST_BLOCKED` | cholesky / synthetic | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-chol-blocked-synthetic | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `CHOL_FAST_BLOCKED + SVD_FAST_CHOLQR` | svd / istella | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-svd-cholqr-chol-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `CHOL_FAST_BLOCKED + SVD_FAST_CHOLQR` | svd / istella | old-batch source3150d75c1 | dlin-svd-cholqr-chol-istella-b-x-quiet1 | A failed; B15617.9 | INVALID-comparator; HOLD-quality | A hardcodes IDENTICAL kit despite ours-fast; B uses FAST. B max_rel_singular_value_error28502.645 is not acceptable quality evidence. No promotion, identical staging, or replay; raw scored B retained. |
 | `DECOMP_FAST_DICT_UPDATE` | dict-learning / istella; mb-dict-learning / istella; mb-sparse-pca / istella; sparse-pc... | lane/apple-fast-decomp-sparse @ 5fb1740cd | dsp-mbdl-upd-istella, dsp-dl-upd-istella, dsp-mbspca-upd-istella, dsp-spca-upd-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `DECOMP_FAST_GEMM_TILED` | als / taxi-zones; lstsq / istella; nmf / istella; randomized-svd / istella | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-lstsq-tiled-istella, dlin-rsvd-tiled-istella, dlin-nmf-tiled-istella, dlin-als-tiled-taxizones | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `DECOMP_FAST_LASSO_BLOCK` | dict-learning / istella; mb-dict-learning / istella; sparse-pca / taxi | lane/apple-fast-decomp-sparse @ 5fb1740cd | dsp-mbdl-lasso-istella, dsp-dl-lasso-istella, dsp-spca-lasso-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
@@ -340,7 +340,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `LU_FAST_PIVOT_GRID` | lu-factor / synthetic; lu-solve / synthetic | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-lu-pivot-synthetic, dlin-lusolve-pivot-synthetic | lu-factor synthetic 1,377 -> 1,233; lu-solve 1,367 -> 1,234 | OPEN | candidate (-10%); merge waits on the other decomp-linalg lines |
 | `MCD_DEVICE_CSTEPS` | min-cov-det / taxi; elliptic-envelope / taxi | lane/apple-fast-robust @ cfdb95e48 | M3 min-cov-det taxi; robust-ee-taxi-x (M2) | M3 mcd 79,925 -> 215; M2 ee 64,578 -> 267.5 | DROPPED-quality (Oct 3; code kept opt-in `-D MOJOLEARN_MCD_DEVICE_CSTEPS` for a future correct parallel C-step) | tools/mcd_quality_ab.sh (M2, taxi 100k, mcdq4): Jaccard flagged Xq vs OFF .8805 mcd / .9645 ee (bar .99); OFF vs IDENTICAL .994 / .999; location_ 14%, covariance_ 18% rel Frobenius shift; mcd flag rate .231 -> .203; raw covariance rank 8 vs OFF/IDENTICAL 10 (all exact-fit singular) |
 | `ANN3_COARSE_SEED + IVF_FAST_SEED_DEVICE` | ivf-pq / istella | lane/apple-fast-fastonly2 @ eca3e33b6 (via lane/apple-fast-m2b1) | fastonly2-5-ivf-pq-istella-m3, fastonly2-3-ivf-pq-istella-m3 | no seed -> seed+device 5,976 -> 5,253; host seed -> device seed 5,516 -> 5,243 | KEEP (FAST+Apple default, `_OFF`; lane/apple-fast-m2b1-m3) | -12.1% / -4.9%; recall_at_10 .5995 -> .6071 and .6017 -> .6071 (better); `-D MOJOLEARN_ANN3_COARSE_SEED_OFF` / `-D MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF` revert (M2: 18,555 -> 12,036, -1.3%) |
-| `QR_FAST_DEV` | qr / istella | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-qr-dev-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `QR_FAST_DEV` | qr / istella | old-batch source3150d75c1 | dlin-qr-dev-istella-b-x-quiet1 | A failed; B7314.5 | INVALID-comparator | A hardcodes IDENTICAL kit despite ours-fast, missing identical x_decomp; B compiled switch selects FAST. No old A repair/replay or promotion; current-main dispatch already fixed a1ef59558. Candidate absent main, needs separate current-main source review before any experiment. |
 | `SVD_FAST_CHOLQR` | svd / istella | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-svd-cholqr-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `XD_FAST_CLS2_GRP_DEVSCAN` | gaussian-rp / istella | lane/apple-fast-gap-cls2 @ 72602a339 | gapcls2-* | 54 -> 15.9 | OPEN | judged KEEP (-71%, keeps fit-time NaN refusal; beats sklearn 24.3); cls2 merge pending |
 | `XD_FAST_CLS2_GRP_NOSCAN (+ _GRP_LAZY)` | gaussian-rp / istella | lane/apple-fast-gap-cls2 @ 72602a339 | gapcls2-* | 57 -> 1.1; with LAZY 54 -> 0.5 | OPEN | semantics: moves the NaN/inf error from fit to transform; Andrew asked, not default |
@@ -684,3 +684,26 @@ Detailed isolation audit and six identified scan-window tags: [MEASUREMENT_AUDIT
 | Experiment | Measured source / tags | A → B ms | Quality | Verdict / remaining gate |
 |---|---|---|---|---|
 | `ARIMA_ORDER_BATCH` → default + `ARIMA_ORDER_BATCH_OFF` | 7ba385b30; gap26-orders-current-synthetic / taxi-hourly | synthetic13780.316917 →9287.286750 (-32.6%); taxi-hourly22706.248042 →13747.215083 (-39.5%) | Fitted/order/likelihood/forecast full-quality PASS before timing; both board digests and RMSE identical (2.624119555 /74.659122441). Existing fused tail enabled in BOTH arms | KEEP, default merged on main dc2285bc0; manager default/OFF builds both rc0. Source review against main d1871643b preserved accepted fused tail. Taxi opponent-quality HOLD remains (74.6591 vs68.21). [Raw evidence and review](ab/arima-orders-default.md) |
+
+
+### Quiet QR/SVD comparator diagnosis (2026-10-04)
+
+At old-batch source3150d75c1, `python/mojolearn/_linalg_impl.py:_xd_kit`
+explicitly returns `_Kit("identical")`; environment ours-fast cannot override
+that explicit argument. `_fast_apple_kit` selects FAST only when B's compiled
+QR_FAST_DEV/SVD_FAST_CHOLQR marker is present. Undef A therefore attempts the
+missing IDENTICAL x_decomp binding while B succeeds in FAST. This establishes
+an invalid mixed-mode comparator, not proof that A's saved FAST binary is
+corrupt. Installing an IDENTICAL binary would make the comparison misleading.
+Main already fixed normal dispatch at a1ef59558, using backend.default_mode.
+
+Raw tags `dlin-qr-dev-istella-b-x-quiet1` and
+`dlin-svd-cholqr-chol-istella-b-x-quiet1` remain intact; there is no valid A
+speed measurement. Do not repeat their scored B arms or repair/rerun the old
+comparator. QR_FAST_DEV is absent on current main (source and binding search);
+a new candidate would need current-main code review and quality gates.
+SVD B's reported max_rel_singular_value_error28502.645 independently keeps
+it held for quality. No rejected implementation was restored for this note.
+Local bounded evidence: `~/mojolearn-evidence/apple-fast/sync/quiet-retimes-summary-0959.txt`;
+full error and quality values were provided by manager M3 review. Remote raw
+job logs are `~/mq/out/<tag>.log`, scored B logs `~/mq/out/race-<tag>/race.log`.

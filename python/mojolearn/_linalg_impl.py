@@ -985,7 +985,10 @@ def _xd_kit():
     the same bytes on every column there. lane/apple-fast-gap-linalg2
     (2026-10-03): this pinned "identical", so a FAST process (the M3, FAST
     bindings only) failed qr/eigh/svd with the identical binding's
-    ImportError; the kit now follows `_backend.default_mode()`."""
+    ImportError; the kit now follows `_backend.default_mode()`.
+    The old3150d75c1 QR/SVD quiet1 A arms hit this same hardcoded-mode bug;
+    their B arms selected FAST via compiled switches. Those old comparisons
+    are invalid, not repaired by installing IDENTICAL (EXPERIMENTS.md)."""
     from ._expansion_decomp import _Kit
     return _Kit(_backend.default_mode())
 
