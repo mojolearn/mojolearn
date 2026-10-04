@@ -97,6 +97,7 @@ IMPORT_MAP = {
 # switches, and refuse if an unreachable optimized entry is nevertheless used.
 HOST_OPT_MODULE = OUT_PKG + ".device_optimizations"
 HOST_OPT_FUNCTIONS = {
+    "core/device_arena.mojo": ("arena_active", "arena_begin", "arena_end", "arena_release", "arena_take"),
     "mamba/impl/ops/afn_selective_scan.mojo": ("afn_selective_scan_chunked",),
     "mamba/impl/modeling/afn_mamba1_fused.mojo": ("afn_m1_conv_token", "afn_m1_split_a"),
     "mamba/impl/modules/afn_ssd_mma.mojo": (
@@ -544,6 +545,7 @@ def host_optimization_stubs():
         raise GenError("device optimization defines contain no recognized switches")
     out.extend("comptime " + name + " = False" for name in switches)
     out.append("comptime AFN_MAMBA_PROJ_ROUTE = False")
+    out.append("comptime IDN_MAMBA_GEMM_WS = False")
     out.append("")
     for src, names in HOST_OPT_FUNCTIONS.items():
         lines = open(os.path.join(ROOT, src)).read().splitlines()

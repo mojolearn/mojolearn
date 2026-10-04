@@ -81,7 +81,7 @@ from mamba.checks.mamba3_fixture import Mamba3Weights, Mamba3Dims
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import NUMERIC_FAST
-from core.device_arena import arena_active, arena_begin, arena_end, arena_release, arena_take
+from mamba.host.gen.device_optimizations import arena_active, arena_begin, arena_end, arena_release, arena_take
 from mamba.host.gen.mamba3_backward import (
     AFN_M3_BWD_CHUNK,
     afn_m3_theta_chunks,

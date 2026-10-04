@@ -19,6 +19,27 @@ comptime AFN_MAMBA3_SISO_FUSED = False
 comptime AFN_MAMBA_ARENA = False
 comptime AFN_MAMBA_DEVICE_REFUSAL = False
 comptime AFN_MAMBA_PROJ_ROUTE = False
+comptime IDN_MAMBA_GEMM_WS = False
+
+def arena_begin() raises -> Int:
+    abort("mamba host: device-only optimization arena_begin is disabled")
+
+
+def arena_end(id: Int) raises:
+    abort("mamba host: device-only optimization arena_end is disabled")
+
+
+def arena_release(id: Int) raises:
+    abort("mamba host: device-only optimization arena_release is disabled")
+
+
+def arena_active() raises -> Bool:
+    abort("mamba host: device-only optimization arena_active is disabled")
+
+
+def arena_take(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
+    abort("mamba host: device-only optimization arena_take is disabled")
+
 
 def afn_selective_scan_chunked[
     DSTATE: Int
