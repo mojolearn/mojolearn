@@ -27,6 +27,7 @@ from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz, portable_cosf
+from metrics.checks.pinned_sum import canonicalize_nan
 from checks.soft_f64 import (
     sf64_add,
     sf64_floor,
@@ -469,12 +470,15 @@ def device_count_mask_u8(ctx: DeviceContext, mask_addr: Int, n: Int) raises -> I
 
 
 def _fold_pair_kernel(dst: _F32, src: _F32, n_: Int32):
-    """dst[i] = ftz(ftz(dst[i]) + ftz(src[i])): one float32 rounding."""
+    """dst[i] = ftz(ftz(dst[i]) + ftz(src[i])): one float32 rounding. A NaN
+    sum is stored as the one canonical word (`canonicalize_nan`), as the
+    host column does: NVIDIA's add returns 0x7FFFFFFF for every NaN while
+    the host and AMD keep the input payload (lane/review-fixes)."""
     var i = _tid()
     if i < Int(n_):
         var a = ftz(dst.unsafe_load(i))
         var b = ftz(src.unsafe_load(i))
-        var s = ftz(a + b)
+        var s = canonicalize_nan(ftz(a + b))
         dst.unsafe_store(i, s)
 
 
