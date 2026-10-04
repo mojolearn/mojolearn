@@ -55,7 +55,8 @@ from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
-from checks.numerics import ftz, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
+from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from core.row_norms import NORM_TPB, row_norm_kernel
 from hdbscan.checks.hdbscan_sabotage import HDB_SAB_NONE
 from hdbscan.impl.detail.sparse_mr import mr_edge_weight
@@ -859,6 +860,47 @@ def smr_edge_rank_kernel(
         rank[s] = Int32(r)
 
 
+#: fam-cluster (2026-10-04), IDENTICAL: the final order of the m edge slots
+#: comes from three stable radix sorts (hi, then lo, then key; `core/
+#: fast_radix_sort.mojo`) instead of `smr_edge_rank_kernel`'s all-pairs
+#: count, which is m^2 triple compares (10^12 at a million points). The
+#: triples are distinct, so the stable lexicographic order IS the rank the
+#: count produces: same permutation, same MST arrays.
+#: `-D MOJOLEARN_IDN_SMR_RADIX_RANK_OFF=1` restores the count.
+comptime IDN_SMR_RADIX_RANK = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_SMR_RADIX_RANK_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+comptime _U32P = MutPointer[UInt32, MutAnyOrigin]
+
+
+def smr_rank_key_kernel(
+    src: _I32P, idx: _U32P, keys: _U32P, m_in: Int32, seed: Int32
+):
+    """keys[p] = the unsigned image of `src` at the slot position p holds
+    (signed order preserved by flipping the sign bit). `seed != 0` starts
+    the permutation at the identity; otherwise it is read from `idx`."""
+    var p = _gid()
+    if p >= Int(m_in):
+        return
+    var s = p
+    if Int(seed) != 0:
+        idx[p] = UInt32(p)
+    else:
+        s = Int(idx[p])
+    keys[p] = bitcast[DType.uint32](src[s]) ^ UInt32(0x80000000)
+
+
+def smr_rank_from_perm_kernel(idx: _U32P, rank: _I32P, m_in: Int32):
+    """rank[slot] = its position in the sorted order."""
+    var p = _gid()
+    if p < Int(m_in):
+        rank[Int(idx[p])] = Int32(p)
+
+
 def smr_edge_scatter_kernel(
     e_key: _I32P, e_lo: _I32P, e_hi: _I32P, rank: _I32P, rows: _I32P,
     cols: _I32P, weights: _F32P, m_in: Int32,
@@ -1251,11 +1293,56 @@ def sparse_mr_mst_device(
 
     # The m - 1 recorded slots (plus the one empty slot, last) by rank.
     var rank_d = ctx.enqueue_create_buffer[DType.int32](m)
-    ctx.enqueue_function[smr_edge_rank_kernel](
-        e_key.unsafe_ptr(), e_lo.unsafe_ptr(), e_hi.unsafe_ptr(),
-        rank_d.unsafe_ptr(), Int32(m),
-        grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
-    )
+    comptime if IDN_SMR_RADIX_RANK:
+        var rk_keys = ctx.enqueue_create_buffer[DType.uint32](m)
+        var rk_idx = ctx.enqueue_create_buffer[DType.uint32](m)
+        var rk_tk = ctx.enqueue_create_buffer[DType.uint32](m)
+        var rk_tv = ctx.enqueue_create_buffer[DType.uint32](m)
+        var rk_counts = ctx.enqueue_create_buffer[DType.int32](
+            frs_counts_len(m)
+        )
+        # least significant component first; each sort is stable
+        ctx.enqueue_function[smr_rank_key_kernel](
+            e_hi.unsafe_ptr(), rk_idx.unsafe_ptr(), rk_keys.unsafe_ptr(),
+            Int32(m), Int32(1),
+            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        fast_radix_sort_pairs_u32(
+            ctx, m, rk_keys, rk_idx, rk_tk, rk_tv, rk_counts
+        )
+        ctx.enqueue_function[smr_rank_key_kernel](
+            e_lo.unsafe_ptr(), rk_idx.unsafe_ptr(), rk_keys.unsafe_ptr(),
+            Int32(m), Int32(0),
+            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        fast_radix_sort_pairs_u32(
+            ctx, m, rk_keys, rk_idx, rk_tk, rk_tv, rk_counts
+        )
+        ctx.enqueue_function[smr_rank_key_kernel](
+            e_key.unsafe_ptr(), rk_idx.unsafe_ptr(), rk_keys.unsafe_ptr(),
+            Int32(m), Int32(0),
+            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        fast_radix_sort_pairs_u32(
+            ctx, m, rk_keys, rk_idx, rk_tk, rk_tv, rk_counts
+        )
+        ctx.enqueue_function[smr_rank_from_perm_kernel](
+            rk_idx.unsafe_ptr(), rank_d.unsafe_ptr(), Int32(m),
+            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
+        # the launches hold raw pointers into the sort's scratch
+        ctx.synchronize()
+        _ = rk_keys^
+        _ = rk_idx^
+        _ = rk_tk^
+        _ = rk_tv^
+        _ = rk_counts^
+    else:
+        ctx.enqueue_function[smr_edge_rank_kernel](
+            e_key.unsafe_ptr(), e_lo.unsafe_ptr(), e_hi.unsafe_ptr(),
+            rank_d.unsafe_ptr(), Int32(m),
+            grid_dim=(g, 1, 1), block_dim=(SMR_DEV_TPB, 1, 1),
+        )
     ctx.enqueue_function[smr_edge_scatter_kernel](
         e_key.unsafe_ptr(), e_lo.unsafe_ptr(), e_hi.unsafe_ptr(),
         rank_d.unsafe_ptr(), mst_rows.unsafe_ptr(), mst_cols.unsafe_ptr(),

@@ -38,7 +38,10 @@ from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from std.sys.compile import is_defined
 
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from hierarchy.checks.edge_order import (
     LINK_SAB_SORT_WEIGHT_ONLY,
     edge_hi,
@@ -51,6 +54,21 @@ comptime DD_TPB = 256
 comptime I32P = MutPointer[Int32, MutAnyOrigin]
 comptime F32P = MutPointer[Float32, MutAnyOrigin]
 comptime U64P = MutPointer[UInt64, MutAnyOrigin]
+comptime U32P = MutPointer[UInt32, MutAnyOrigin]
+
+#: fam-cluster (2026-10-04), IDENTICAL: the edge order comes from two stable
+#: radix sorts of the 64-bit key's halves (low, then high; `core/
+#: fast_radix_sort.mojo`) instead of `_sort_rank_kernel`'s all-pairs count
+#: (nnz^2 compares). The keys are distinct, so the sorted position IS the
+#: counted rank: same permutation. `-D MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF=1`
+#: restores the count.
+comptime IDN_DENDRO_RADIX_SORT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
 
 
 @always_inline
@@ -101,6 +119,26 @@ def _sort_rank_kernel(keys: U64P, rank: I32P, cnt: Int32):
         rank[i] = Int32(r)
 
 
+def _sort_half_kernel(keys: U64P, idx: U32P, half: U32P, cnt: Int32, high: Int32):
+    """half[p] = the low (`high == 0`) or high 32 bits of the key position p
+    holds. The low pass starts the permutation at the identity; the high
+    pass reads it from `idx`."""
+    var p = _gid()
+    if p >= Int(cnt):
+        return
+    if Int(high) == 0:
+        idx[p] = UInt32(p)
+        half[p] = UInt32(Int(keys[p] & UInt64(0xFFFFFFFF)))
+    else:
+        half[p] = UInt32(Int((keys[Int(idx[p])] >> UInt64(32)) & UInt64(0xFFFFFFFF)))
+
+
+def _sort_rank_from_perm_kernel(idx: U32P, rank: I32P, cnt: Int32):
+    var p = _gid()
+    if p < Int(cnt):
+        rank[Int(idx[p])] = Int32(p)
+
+
 def _sort_scatter_kernel(
     rows: I32P, cols: I32P, data: F32P, rank: I32P, o_rows: I32P, o_cols: I32P, o_data: F32P, cnt: Int32
 ):
@@ -141,9 +179,36 @@ def coo_sort_by_weight_device(
         rows.unsafe_ptr(), cols.unsafe_ptr(), data.unsafe_ptr(), keys.unsafe_ptr(), Int32(nnz), sabotage,
         grid_dim=(g, 1, 1), block_dim=(DD_TPB, 1, 1),
     )
-    ctx.enqueue_function[_sort_rank_kernel](
-        keys.unsafe_ptr(), rank.unsafe_ptr(), Int32(nnz), grid_dim=(g, 1, 1), block_dim=(DD_TPB, 1, 1),
-    )
+    comptime if IDN_DENDRO_RADIX_SORT:
+        var rs_half = ctx.enqueue_create_buffer[DType.uint32](nnz)
+        var rs_idx = ctx.enqueue_create_buffer[DType.uint32](nnz)
+        var rs_tk = ctx.enqueue_create_buffer[DType.uint32](nnz)
+        var rs_tv = ctx.enqueue_create_buffer[DType.uint32](nnz)
+        var rs_counts = ctx.enqueue_create_buffer[DType.int32](frs_counts_len(nnz))
+        ctx.enqueue_function[_sort_half_kernel](
+            keys.unsafe_ptr(), rs_idx.unsafe_ptr(), rs_half.unsafe_ptr(), Int32(nnz), Int32(0),
+            grid_dim=(g, 1, 1), block_dim=(DD_TPB, 1, 1),
+        )
+        fast_radix_sort_pairs_u32(ctx, nnz, rs_half, rs_idx, rs_tk, rs_tv, rs_counts)
+        ctx.enqueue_function[_sort_half_kernel](
+            keys.unsafe_ptr(), rs_idx.unsafe_ptr(), rs_half.unsafe_ptr(), Int32(nnz), Int32(1),
+            grid_dim=(g, 1, 1), block_dim=(DD_TPB, 1, 1),
+        )
+        fast_radix_sort_pairs_u32(ctx, nnz, rs_half, rs_idx, rs_tk, rs_tv, rs_counts)
+        ctx.enqueue_function[_sort_rank_from_perm_kernel](
+            rs_idx.unsafe_ptr(), rank.unsafe_ptr(), Int32(nnz), grid_dim=(g, 1, 1), block_dim=(DD_TPB, 1, 1),
+        )
+        # the launches hold raw pointers into the sort's scratch
+        ctx.synchronize()
+        _ = rs_half^
+        _ = rs_idx^
+        _ = rs_tk^
+        _ = rs_tv^
+        _ = rs_counts^
+    else:
+        ctx.enqueue_function[_sort_rank_kernel](
+            keys.unsafe_ptr(), rank.unsafe_ptr(), Int32(nnz), grid_dim=(g, 1, 1), block_dim=(DD_TPB, 1, 1),
+        )
     ctx.enqueue_function[_sort_scatter_kernel](
         rows.unsafe_ptr(), cols.unsafe_ptr(), data.unsafe_ptr(), rank.unsafe_ptr(),
         t_rows.unsafe_ptr(), t_cols.unsafe_ptr(), t_data.unsafe_ptr(), Int32(nnz),
