@@ -130,7 +130,14 @@ from core.device_scan import device_classify_nonfinite, device_first_nonfinite
 from std.sys.info import has_apple_gpu_accelerator
 from svm.impl.svm_parameter import KernelParams
 from x_decomp.cells import F32Ptr
-from x_decomp.rr import RR_OFF_TPB
+from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
+from kernel_methods.rbf_fused import (
+    RBF_FUSED_MAX_D,
+    RBF_FUSED_TPB,
+    rbf_fused_project_kernel,
+    rbf_fused_transform_kernel,
+)
+from core.device_zero import enqueue_fill
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_cs_kernel,
@@ -155,6 +162,56 @@ comptime RBF_FUSED = (
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_RBF_FUSED"]()
 )
+
+
+#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_RBF_FUSED_OFF` restores the GEMM on the device AND in
+#: the host column, `km_host_oracle.mojo::KMH_RBF_FUSED` reads the same
+#: define): RBFSampler.transform at n_features <= RBF_FUSED_MAX_D computes
+#: the projection as ONE chain per cell over the features ascending
+#: (`identical_mul_add`, rounded each step) and, when no trace and no
+#: sabotage arm needs the projection as its own stage, the offset, cosine
+#: and scale in the same kernel: one launch and one write of the
+#: n x n_components matrix where the GEMM route made a workspace, the GEMM's
+#: launches, and a second pass for the epilogue. BITS CHANGE at
+#: n_features <= 64 (the projection's fold is the ascending chain, not the
+#: GEMM profile's): NVIDIA, AMD and Apple run the same kernel and the host
+#: column runs the same chain. A chain of at most 64 fused multiply-adds is
+#: as accurate as the GEMM's fold at that length.
+comptime RBF_IDN_FUSED = _CTX_MODE == _CTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_RBF_FUSED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def _rbf_idn_fused_launch(
+    ctx: DeviceContext,
+    mut dp: DeviceBuffer[DType.float32],
+    mut dx: DeviceBuffer[DType.float32],
+    mut dw: DeviceBuffer[DType.float32],
+    mut db: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    d: Int,
+    dd: Int,
+    scale: Float32,
+    whole: Bool,
+) raises:
+    """RBF_IDN_FUSED's launch: the whole transform (`whole`) or the
+    projection alone, one thread per cell. ASYNCHRONOUS."""
+    var grid = (n_rows * dd + RBF_FUSED_TPB - 1) // RBF_FUSED_TPB
+    if whole:
+        ctx.enqueue_function[rbf_fused_transform_kernel](
+            dp.unsafe_ptr(), dx.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(),
+            Int32(n_rows), Int32(d), Int32(dd), scale,
+            grid_dim=(grid, 1, 1),
+            block_dim=(RBF_FUSED_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[rbf_fused_project_kernel](
+            dp.unsafe_ptr(), dx.unsafe_ptr(), dw.unsafe_ptr(),
+            Int32(n_rows), Int32(d), Int32(dd),
+            grid_dim=(grid, 1, 1),
+            block_dim=(RBF_FUSED_TPB, 1, 1),
+        )
 
 
 # ===========================================================================
@@ -871,6 +928,146 @@ def _nystroem_rr_eigh(
     return sweeps
 
 
+#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_NYS_RR_EIGH_OFF` restores the cyclic one-block solver
+#: on the device AND in the host column, `km_host_oracle.mojo::KMH_NYS_RR`
+#: reads the same define): Nystroem's q x q eigendecomposition is the
+#: two-sided Jacobi in the round-robin ordering (x_decomp's `eigh` order:
+#: `eigh_par_cs_kernel` + `eigh_par_update_kernel` per round, the q / 2
+#: disjoint rotations of a round across the grid, the convergence test
+#: folded on the device before every sweep, three words read) in place of
+#: `jacobi_eigh_kernel`, ONE block of 256 threads running the q (q - 1) / 2
+#: rotations of a sweep one after the other (32,640 serial rotations a sweep
+#: at q = 256). BITS CHANGE (another rotation order): NVIDIA, AMD and Apple
+#: run these same kernels and the host column runs `x_decomp/rr.mojo::
+#: host_eigh_rr`, the same rounds, test and sweep budget (RR_EIGH_SWEEPS).
+#: Not converged in the budget raises on every column, as the cyclic one does.
+comptime NYS_IDN_RR_EIGH = _CTX_MODE == _CTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_NYS_RR_EIGH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: Rounds between waits on Apple (x_decomp/device.mojo `PJ_SYNC_ROUNDS`).
+comptime NYS_IDN_RR_SYNC_ROUNDS = 512
+
+
+def _nystroem_rr_eigh_idn(
+    ctx: DeviceContext,
+    mut dk: DeviceBuffer[DType.float32],
+    mut dvec: DeviceBuffer[DType.float32],
+    q: Int,
+    sabotage: Int,
+    mut eig_diag: List[Float32],
+    mut vecs: List[Float32],
+) raises -> Int:
+    """NYS_IDN_RR_EIGH: the round-robin eigh of the q x q matrix in `dk`,
+    consumed in place (x_decomp/device.mojo `_eigh_par_on`'s rounds, test and
+    budget; `host_eigh_rr` is the host column's). `dvec` gets the sign
+    flipped eigenvectors (vector c in COLUMN c); eigenvalue c is appended to
+    `eig_diag` and the q x q vectors to `vecs`. Returns the sweeps run;
+    raises when the budget does not converge."""
+    var n = q
+    var even_q = n + (n % 2)
+    var h = even_q // 2
+    var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
+    var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
+    var hoff = ctx.enqueue_create_host_buffer[DType.float32](3 * n)
+    var nb_off = max((n + RR_OFF_TPB - 1) // RR_OFF_TPB, 1)
+    var dpart = ctx.enqueue_create_buffer[DType.float32](3 * nb_off)
+    var dres = ctx.enqueue_create_buffer[DType.float32](3)
+    var hres = ctx.enqueue_create_host_buffer[DType.float32](3)
+    ctx.enqueue_function[pj_identity_kernel](
+        dvec.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
+    )
+    var tol = Float32(JACOBI_TOL)
+    var converged = False
+    var executed = 0
+    var fro_in = Float32(-1.0)
+    var fro_now = Float32(0.0)
+    var off_last = Float32(0.0)
+    for sweep in range(RR_EIGH_SWEEPS + 1):
+        # a sum of squares is never negative: a -1 mark left in the fold is
+        # a dispatch that did not run
+        enqueue_fill(ctx, dpart, Float32(-1.0))
+        enqueue_fill(ctx, dres, Float32(-1.0))
+        ctx.enqueue_function[eigh_par_off_part_kernel](
+            dk.unsafe_ptr(), doff.unsafe_ptr(), dpart.unsafe_ptr(), Int32(n), grid_dim=nb_off, block_dim=RR_OFF_TPB
+        )
+        ctx.enqueue_function[eigh_par_off_fold_kernel](
+            dpart.unsafe_ptr(), dres.unsafe_ptr(), Int32(nb_off), grid_dim=1, block_dim=RR_OFF_TPB
+        )
+        ctx.enqueue_copy(dst_ptr=hres.unsafe_ptr(), src_buf=dres)
+        ctx.synchronize()
+        var off = hres.unsafe_ptr().unsafe_load(0)
+        var dg = hres.unsafe_ptr().unsafe_load(1)
+        if not (hres.unsafe_ptr().unsafe_load(2) >= Float32(0.0)):
+            raise Error(
+                "nystroem_fit_host: a block of the round-robin Jacobi's convergence test did not"
+                " run (its mark is still -1): a launch failure, not a convergence failure"
+            )
+        off_last = off
+        fro_now = ftz(off + dg)
+        if fro_in < Float32(0.0):
+            fro_in = fro_now
+        if rr_converged(off, dg, tol):
+            converged = True
+            break
+        if sweep == RR_EIGH_SWEEPS:
+            break
+        executed += 1
+        for rd in range(even_q - 1):
+            ctx.enqueue_function[eigh_par_cs_kernel](
+                dk.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(even_q), Int32(rd),
+                grid_dim=_pj_blocks(h), block_dim=PJ_TPB,
+            )
+            ctx.enqueue_function[eigh_par_update_kernel](
+                dk.unsafe_ptr(), dvec.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(even_q), Int32(rd),
+                grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
+            )
+            comptime if has_apple_gpu_accelerator():
+                if rd % NYS_IDN_RR_SYNC_ROUNDS == NYS_IDN_RR_SYNC_ROUNDS - 1:
+                    ctx.synchronize()
+    # J^T A J keeps ||A||_F: a solve that moved it is not an answer
+    if converged and not rr_fro_kept(fro_in, fro_now):
+        converged = False
+    if not converged:
+        raise Error(
+            "nystroem_fit_host: the device Jacobi did not converge in "
+            + String(RR_EIGH_SWEEPS)
+            + " sweeps at n_components = "
+            + String(q)
+            + "; the off-diagonal mass is still "
+            + String(off_last)
+            + " of "
+            + String(fro_now)
+            + " against a tolerance of "
+            + String(JACOBI_TOL)
+            + ". An unconverged eigendecomposition returned as if it were"
+            " one is a wrong answer with no error"
+        )
+    if sabotage != KMSAB_NO_SIGN_FLIP:
+        ctx.enqueue_function[sign_flip_kernel](
+            dvec.unsafe_ptr(),
+            Int32(n),
+            grid_dim=(n, 1, 1),
+            block_dim=(SIGNFLIP_TPB, 1, 1),
+        )
+    # the last test's kernel left the diagonal of the converged A in
+    # doff[2 n, 3 n)
+    ctx.enqueue_copy(dst_ptr=hoff.unsafe_ptr(), src_buf=doff)
+    ctx.synchronize()
+    var got = _download(ctx, dvec, n * n)
+    for c in range(n):
+        eig_diag.append(hoff.unsafe_ptr().unsafe_load(2 * n + c))
+    for i in range(n * n):
+        vecs.append(got[i])
+    _ = dcs^
+    _ = doff^
+    _ = hoff^
+    _ = dpart^
+    _ = dres^
+    _ = hres^
+    return executed
+
+
 def _nystroem_device_eigh(
     ctx: DeviceContext,
     mut dk: DeviceBuffer[DType.float32],
@@ -892,6 +1089,10 @@ def _nystroem_device_eigh(
             if got >= 0:
                 trace.record_device(ctx, "nys.eigenvectors_flipped", dvec, q * q)
                 return got
+    comptime if NYS_IDN_RR_EIGH:
+        var ran = _nystroem_rr_eigh_idn(ctx, dk, dvec, q, sabotage, eig_diag, vecs)
+        trace.record_device(ctx, "nys.eigenvectors_flipped", dvec, q * q)
+        return ran
     ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
         dk.unsafe_ptr(),
         dvec.unsafe_ptr(),
@@ -1563,13 +1764,24 @@ def rbf_sampler_transform_host(
     )
     ctx.synchronize()
 
-    identical_gemm_into(ctx, dp, dx, dw, gws, n_rows, dd, d, OP_NN)
+    # RBF_IDN_FUSED: the projection as the per-cell chain (and the whole
+    # transform in that launch when no stage needs the projection alone)
+    var chain = False
+    var whole = False
+    comptime if RBF_IDN_FUSED:
+        chain = d <= RBF_FUSED_MAX_D and n_rows * dd > 0
+        whole = chain and sabotage == KMSAB_NONE and not trace.enabled
+        if chain:
+            _rbf_idn_fused_launch(ctx, dp, dx, dw, db, n_rows, d, dd, model.scale, whole)
+    if not chain:
+        identical_gemm_into(ctx, dp, dx, dw, gws, n_rows, dd, d, OP_NN)
     ctx.synchronize()
     trace.record_device(ctx, "rf.projection", dp, n_rows * dd)
 
-    km_feature_map_epilogue(
-        ctx, dp, db, n_rows, dd, model.scale, tpb, sabotage
-    )
+    if not whole:
+        km_feature_map_epilogue(
+            ctx, dp, db, n_rows, dd, model.scale, tpb, sabotage
+        )
     ctx.synchronize()
     trace.record_device(ctx, "rf.feature_map", dp, n_rows * dd)
 
@@ -1645,8 +1857,6 @@ def _rbf_transform_dev[out_origin: MutOrigin, //](
     var t1 = Int(perf_counter_ns())
     var fused = False
     comptime if RBF_FUSED:
-        from kernel_methods.rbf_fused import RBF_FUSED_MAX_D, RBF_FUSED_TPB, rbf_fused_transform_kernel
-
         fused = d <= RBF_FUSED_MAX_D and sabotage == KMSAB_NONE and n_rows * dd > 0
         if fused:
             ctx.enqueue_function[rbf_fused_transform_kernel](
@@ -1655,7 +1865,15 @@ def _rbf_transform_dev[out_origin: MutOrigin, //](
                 grid_dim=((n_rows * dd + RBF_FUSED_TPB - 1) // RBF_FUSED_TPB, 1, 1),
                 block_dim=(RBF_FUSED_TPB, 1, 1),
             )
-    if not fused:
+    # RBF_IDN_FUSED: the projection as the per-cell chain (and the whole
+    # transform in that launch when no stage needs the projection alone)
+    var chain = False
+    comptime if RBF_IDN_FUSED:
+        chain = d <= RBF_FUSED_MAX_D and n_rows * dd > 0
+        fused = chain and sabotage == KMSAB_NONE and not trace.enabled
+        if chain:
+            _rbf_idn_fused_launch(ctx, dp, dx, dw, db, n_rows, d, dd, model.scale, fused)
+    if not fused and not chain:
         identical_gemm_into(ctx, dp, dx, dw, gws, n_rows, dd, d, OP_NN)
     ctx.synchronize()
     var t2 = Int(perf_counter_ns())
