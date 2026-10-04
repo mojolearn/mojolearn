@@ -126,3 +126,17 @@ def test_duplicate_configuration_witness_refuses(evidence):
     evidence.witnesses.append(evidence.witnesses[0])
     with pytest.raises(ValueError, match='duplicate witness'):
         build(evidence)
+
+
+@pytest.mark.parametrize('field', ['parts', 'reload'])
+def test_nvidia_only_fixture_components_cannot_escape_admission(evidence, field):
+    path = evidence.campaign.receipts[0]
+    receipt = q.read(path)
+    column_path = path.parent / receipt['column_file']
+    column = q.read(column_path)
+    column['cells']['ridge/ties'][field] = ([{'predict': 'f' * 16}] * 2 if field == 'parts' else ['f' * 16] * 2)
+    save(column_path, column)
+    receipt['column_sha256'] = q.sha(column_path)
+    save(path, receipt)
+    with pytest.raises(ValueError):
+        build(evidence)

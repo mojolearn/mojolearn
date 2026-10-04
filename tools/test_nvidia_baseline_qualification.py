@@ -31,7 +31,8 @@ def campaign(tmp_path, monkeypatch):
     manifest_path = tmp_path / 'PTX_BASELINE.json'
     q.write(manifest_path, manifest)
     train, heldout = q.fixture_witnesses(h, ['base'])
-    cell = dict(verdict='STABLE', hashes=['d' * 16] * 2)
+    cell = dict(verdict='STABLE', hashes=['d' * 16] * 2,
+                parts=[{'predict': 'd' * 16}] * 2, reload=['d' * 16] * 2)
     for part in ('infer', 'model', 'batch', *h.PROPERTY_PARTS):
         cell[part] = ['d' * 16] * 2
         cell[part + '_verdict'] = 'STABLE'
@@ -90,7 +91,7 @@ def alter_column(campaign, mutation):
 def test_complete_observed_agreement_does_not_enable_identical(campaign):
     result = q.check(campaign.manifest, campaign.receipts)
     assert result['status'] == 'OBSERVED_CONFIGURATION_AGREEMENT'
-    assert result['compared_parts'] == 8
+    assert result['compared_parts'] == 10
     assert result['full_applicable_single_gpu_coverage']
     assert not result['identical_qualified'] and not result['release_qualified']
     assert not result['future_drivers_qualified'] and not result['universal_gpu_support']

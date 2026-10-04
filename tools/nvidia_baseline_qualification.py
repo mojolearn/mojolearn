@@ -232,6 +232,33 @@ def column_values(column, h, v, lanes, fixtures, witnesses, source):
                 require(protocol is None or column.get(part + '_protocol') == protocol,
                         'Property protocol differs: ' + part)
                 values[key + '/' + part] = value
+            # Aggregate hashes do not replace retained constituent witnesses.
+            # Compare these for every fixture, including fixtures absent from
+            # the canonical three-fixture Apple/AMD columns.
+            components = cell.get('parts')
+            require(isinstance(components, list) and len(components) == column['repeats']
+                    and components and all(item == components[0] for item in components),
+                    'Missing or unstable components: ' + key)
+            component = components[0]
+            require(isinstance(component, dict) and component,
+                    'Empty component evidence: ' + key)
+            for name, digest in component.items():
+                require(isinstance(name, str) and name and isinstance(digest, str)
+                        and re.fullmatch('[0-9a-f]{16}', digest),
+                        'Invalid component hash: ' + key + '/' + str(name))
+                values[key + '/parts/' + name] = digest
+            reloads = cell.get('reload')
+            if reloads is None:
+                model = values[key + '/model']
+                require(model.startswith('n/a:'), 'Missing reload for saved model: ' + key)
+                values[key + '/reload'] = model
+            else:
+                require(isinstance(reloads, list) and len(reloads) == column['repeats']
+                        and reloads and all(item == reloads[0] for item in reloads)
+                        and isinstance(reloads[0], str) and re.fullmatch('[0-9a-f]{16}', reloads[0]),
+                        'Missing or unstable reload hash: ' + key)
+                require(reloads[0] == values[key + '/infer'], 'Reload differs from inference: ' + key)
+                values[key + '/reload'] = reloads[0]
     return values
 
 
