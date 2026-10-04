@@ -248,7 +248,9 @@ def xty_launch(
     comptime if IDN_XTY_TILED:
         if n_rows >= 1 and n_cols >= 1:
             xty_tiled(
-                ctx, out_v.unsafe_ptr(), x.unsafe_ptr(), y.unsafe_ptr(),
+                ctx, out_v.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
                 n_rows, n_cols, False,
             )
             return
@@ -348,8 +350,11 @@ def column_mean_launch(
     IDN_XTY_TILED (IDENTICAL, default): the tile order of `xty_tiled`."""
     comptime if IDN_XTY_TILED:
         if n_rows >= 1 and n_cols >= 1:
-            var xp = x.unsafe_ptr()
-            xty_tiled(ctx, mu.unsafe_ptr(), xp, xp, n_rows, n_cols, True)
+            var xp = x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            xty_tiled(
+                ctx, mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                xp, xp, n_rows, n_cols, True,
+            )
             return
     if xtdz_coalesced_applies(n_cols, 1):
         var ws = ctx.enqueue_create_buffer[DType.float32](n_cols * STATS_TPB)
