@@ -2844,9 +2844,18 @@ def _build_ts(lane, arm, D):
         def fit():
             if lane == "autoarima":           # the cuML shape: construct on the batch, search, fit
                 m = cls(Y32)
+                # QUALITY FIX (lane apple-fast-q-misc, 2026-10-04; old: env
+                # MOJOLEARN_AUTOARIMA_SEARCH_QOLD=1). The search used cuML's
+                # default maxiter=20, so every candidate order was scored on a
+                # 20-step likelihood fit while statsforecast scores each candidate
+                # at convergence; the IC then compared unconverged fits (audit:
+                # taxi-hourly forecast_rmse FAST 74.66, IDENTICAL 73.63,
+                # statsforecast 68.21). The candidates now get the fit's own
+                # maxiter (1000), the opponent's rule.
+                _sm = 20 if os.environ.get("MOJOLEARN_AUTOARIMA_SEARCH_QOLD") == "1" else 1000
                 m.search(s=1, d=range(0, p["max_d"] + 1), p=range(0, p["max_p"] + 1),
                          q=range(0, p["max_q"] + 1), P=range(1), D=range(1), Q=range(1), ic=p["ic"],
-                         fit_intercept="auto")
+                         fit_intercept="auto", maxiter=_sm)
                 m.fit()
                 S["est"] = m
             elif lane == "stl":               # statsmodels' shape: STL(endog, period).fit() -> result
