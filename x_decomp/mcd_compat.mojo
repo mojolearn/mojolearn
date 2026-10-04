@@ -90,9 +90,17 @@ def mc_pinvh_kernel(
     fold, reproducing main's ascending-eigenvalue accumulation order.
     """
     var c = Int(block_idx.x)
-    if active.unsafe_load(c) == 0 and needp.unsafe_load(c) == 0:
-        return
     var tid = Int(thread_idx.x)
+    # All lanes must agree BEFORE needp changes. For an initially singular
+    # covariance mf_det_kernel leaves active=0, needp=1. Clearing needp in
+    # lane 0 before other lanes read it let only part of the block enter
+    # this collective, invalidating every subsequent barrier/rotation.
+    var run = stack_allocation[1, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    if tid == 0:
+        run[0] = Int32(1) if (active.unsafe_load(c) != 0 or needp.unsafe_load(c) != 0) else Int32(0)
+    dev_barrier()
+    if run[0] == 0:
+        return
     if tid == 0:
         needp.unsafe_store(c, Int32(0))
     var dd = Int(d)
@@ -114,6 +122,7 @@ def mc_pinvh_kernel(
     dev_barrier()
     var fro_in = Float32(-1)
     var converged = False
+    var fro_kept = False
     for sweep in range(RR_EIGH_SWEEPS + 1):
         var off = Float32(0)
         var diag = Float32(0)
@@ -135,7 +144,8 @@ def mc_pinvh_kernel(
         if fro_in < Float32(0):
             fro_in = fro
         if rr_converged(so[0], sd[0], Float32(JACOBI_TOL)):
-            converged = rr_fro_kept(fro_in, fro)
+            converged = True
+            fro_kept = rr_fro_kept(fro_in, fro)
             break
         if sweep == RR_EIGH_SWEEPS:
             break
@@ -157,9 +167,10 @@ def mc_pinvh_kernel(
                     rr_vrow(v, cs, dd, m, rd, u // hh, u % hh)
                 z += MC_TPB
             dev_barrier()
-    if not converged:
+    if not converged or not fro_kept:
         if tid == 0:
-            err.unsafe_store(2, Int32(1))
+            # Keep distinct diagnostics without changing either threshold.
+            err.unsafe_store(2 if not converged else 3, Int32(1))
         return
     if tid < dd:
         var eig = a.unsafe_load(tid * dd + tid)

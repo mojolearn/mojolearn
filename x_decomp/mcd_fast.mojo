@@ -76,6 +76,10 @@ from x_decomp.kit import Mat
 from x_decomp.cells import FOLD_BLOCK
 from x_decomp.mcd_compat import mc_compact_kernel, mc_moment_kernel, mc_pinvh_kernel
 
+# FAILED gap26-mcdcompat-taxi at 948c4e7b1: B rejected by the batched
+# eigensolve gate (A=70877.713 ms). Repair: make collective entry uniform
+# before clearing needp for inactive singular candidates. Validation of
+# this race repair is still pending; keep opt-in and retain both gates.
 comptime MCD_BATCH_COMPAT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_MCD_BATCH_COMPAT"]()
@@ -98,8 +102,8 @@ comptime MF_SWEEPS = 60
 #: `_F32_EPS` of mcd.mojo as float32, `_FLT_MIN` likewise.
 comptime MF_F32_EPS = Float32(1.1920928955078125e-07)
 comptime MF_FLT_MIN = Float32(1.1754943508222875e-38)
-#: Error words: [a NaN distance or draw, a candidate stopped with no pinvh].
-comptime MF_ERR = 3
+#: Error words: NaN draw/distance, no pinvh, eigensolve budget, Frobenius drift.
+comptime MF_ERR = 4
 comptime MF_SH_INT = MF_TPB * 16 + 32 + MF_TPB
 
 
@@ -893,7 +897,9 @@ def _finish(
     if Int(herr[1]) != 0:
         raise Error("x_decomp MinCovDet: the first C-step's log determinant is not finite")
     if Int(herr[2]) != 0:
-        raise Error("x_decomp MinCovDet: batched round-robin eigensolve failed convergence or Frobenius gate")
+        raise Error("x_decomp MinCovDet: batched round-robin eigensolve failed convergence budget")
+    if Int(herr[3]) != 0:
+        raise Error("x_decomp MinCovDet: batched round-robin eigensolve failed Frobenius gate")
     _ = herr^
 
 
