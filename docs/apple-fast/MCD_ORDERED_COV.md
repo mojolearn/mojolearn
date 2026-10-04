@@ -140,3 +140,14 @@ M2 rejected r1's `unsafe_ptr[True]`: its installed `max/mojo/max/gpu/host/device
 ### Non-null gate repair r3
 
 r2 compiled arm A, but arm B instantiated `dev_mcd_cov_py` and rejected its fabricated null `I32Ptr`. r3 lazily allocates one real int32 gate word on `xd_ctx`, initializes it to 1 on the same stream, and retains ownership in a dedicated global buffer holder. The ordered covariance call borrows that allocation with the installed SDK's mutable-origin API. The global owner survives the asynchronous launch through subsequent download/synchronization; there is no per-call gate free or extra synchronize. `gate_all=True` still preserves the original dispatch behavior, but the gate address is now valid even though the kernel does not read it in this mode. No arithmetic or quality-gate changes. M2 arm B compilation and M3 quality remain owed.
+
+### Split-chain repair r4 (lane apple-fast-rec-misc, 2026-10-04)
+
+r3 compiled and ran: `mcd-ordered-direct-q-r3` returned HOLD with `repeat_identical` true. B kept main's split
+count (`DFG_BLOCK_TARGET` / `DFG_MIN_SPLIT_STEPS`: 1, 2, 1, 5, 9 and 184 splits at the six direct shapes). With 2
+partials the Neumaier fold equals the plain sum; with 5..9 the fp32 accumulation inside each split's MMA chain
+(about 550..600 rows) is larger than the fold's rounding, so B's error differed from A's by noise and the per-key
+max-abs comparison, with no tolerance, could go either way. r4 cuts every split to `MCD_ORD_CHAIN` = 4 K windows
+(128 rows at `AFN_GEMM_KB` 32), never fewer splits than main, with the partial region capped at the kernels' Int32
+bound / 8 (`MCD_ORD_MAX_WORDS`). The fold, the gates and the harness are unchanged. Quality is still owed, direct
+first.
