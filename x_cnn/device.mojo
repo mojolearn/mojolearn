@@ -1946,9 +1946,9 @@ def _graph_in(ctx: DeviceContext, slot: Int, addr: Int, n: Int, d: Bool, used: B
     return ws(ctx, slot, 1)
 
 
-def _graph_aux(ctx: DeviceContext, addr: Int, n: Int, d: Bool, read: Bool) raises -> DeviceBuffer[DType.float32]:
+def _graph_aux(ctx: DeviceContext, addr: Int, n: Int, d: Bool, reads_input: Bool) raises -> DeviceBuffer[DType.float32]:
     """The graph op's aux block: read by a backward, written by a forward."""
-    if read:
+    if reads_input:
         return m_in(ctx, 2, addr, n, d)
     return m_out(ctx, 2, addr, n, d)
 
