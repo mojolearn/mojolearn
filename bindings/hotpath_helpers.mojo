@@ -38,7 +38,7 @@ The per-element helpers (`cast_elements`, `equal_elements`, `gather_i32`)
 run one SIMD range on the calling thread (cpu-gpu-cleanup c-core: the host
 pool is not used from the GPU binding); no element depends on another.
 """
-from std.math import isfinite, sqrt
+from std.math import fma, isfinite, sqrt
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -1431,7 +1431,10 @@ def uniform_init_f32_binding(
         for i in range(count):
             var s = seed + (off + UInt64(i)) * UInt64(0x9E3779B97F4A7C15)
             var u = Float64(splitmix64(s) >> 11) * 1.1102230246251565e-16
-            dp.unsafe_store(i, Float32(lo + (hi - lo) * u))
+            # lane fix-s1-shared: an explicit fma (Mojo's default fp-mode
+            # contracts `lo + (hi - lo) * u` anyway); the device twin
+            # (core/hotpath_device.mojo) is the same sf64_fma
+            dp.unsafe_store(i, Float32(fma(hi - lo, u, lo)))
     return PythonObject(0)
 
 
@@ -1466,7 +1469,9 @@ def normal_init_f32_binding(
             var u2 = Float64(splitmix64(s2) >> 11) * 1.1102230246251565e-16
             var r = sqrt(-2.0 * portable_log64(u1))
             var cz = portable_cosf(Float32(6.283185307179586 * u2))
-            dp.unsafe_store(i, Float32(mu + sd * (r * Float64(cz))))
+            # lane fix-s1-shared: an explicit fma, as the device twin's
+            # sf64_fma (core/hotpath_device.mojo::_normal_init_kernel)
+            dp.unsafe_store(i, Float32(fma(sd, r * Float64(cz), mu)))
     return PythonObject(0)
 
 

@@ -92,7 +92,6 @@ from bindings.array_helpers import (
     shard_topk_merge_f32_binding,
 )
 from bindings.hotpath_helpers import (
-    cast_elements_binding,
     next_combination_i64_binding,
     ic_running_min_f64_binding,
     ic_running_min_f32_binding,
@@ -104,7 +103,6 @@ from bindings.hotpath_helpers import (
     count_fold_hits_i64_binding,
     split_table_i32_binding,
     scatter_rows_bytes_binding,
-    normal_init_f32_binding,
     epoch_order_i32_binding,
     adam_hyper_f64_binding,
     mean_std_f32_binding,
@@ -142,6 +140,8 @@ from bindings.hotpath_device import (
     hpdev_try_gather_u64,
     reduce_stat_binding,
     uniform_init_f32_binding,
+    normal_init_f32_binding,
+    cast_elements_binding,
 )
 from std.os import abort
 from std.math import isfinite
