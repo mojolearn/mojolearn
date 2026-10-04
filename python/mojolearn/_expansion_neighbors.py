@@ -107,7 +107,7 @@ def _f32_scalar(v):
 def _kpca_resident(est):
     """lane/apple-fast-kapprox: whether KernelPCA.fit builds, centers and
     solves its kernel matrix on x_decomp's resident kit with one upload of X
-    (FAST + Apple, `-D MOJOLEARN_KPCA_RESIDENT`), read back from the
+    (FAST + Apple, rollback `-D MOJOLEARN_KPCA_RESIDENT_OFF`), read back from the
     x_neighbors binding's compile-time constant (no env read)."""
     fn = getattr(est._bind(), "x_neighbors_kpca_resident", None)
     return fn is not None and int(fn()) != 0
@@ -854,7 +854,10 @@ class KernelPCA(_XNeighbors):
         self._gamma = _f32_scalar(1.0 / d if self.gamma is None else float(self.gamma))
         Kc_M = None
         kit = None
-        if (self.kernel in _KPCA_RESIDENT_KERNELS and (self.kernel != "poly" or int(self.degree) in (2, 3))
+        # w2-w4d-kpca-q validates RBF with the auto top-k solver only.
+        # Keep unmeasured kernels and dense-solver routes on their old path.
+        if (self.kernel == "rbf" and self.eigen_solver == "auto" and n > 200
+                and self.n_components is not None and 0 < int(self.n_components) < 10
                 and _kpca_resident(self)):
             # lane/apple-fast-kapprox: the kernel matrix never leaves the
             # device (main's path moved the n x n matrix through the host
