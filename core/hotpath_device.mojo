@@ -26,16 +26,19 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from checks.numerics import ftz
+from checks.numerics import ftz, portable_cosf
 from checks.soft_f64 import (
     sf64_add,
     sf64_floor,
+    sf64_fma,
     sf64_from_f32,
     sf64_from_int,
     sf64_gt,
     sf64_is_nan,
+    sf64_log,
     sf64_lt,
     sf64_mul,
+    sf64_sub,
     sf64_to_f32,
 )
 from core.device_zero import enqueue_fill
@@ -1527,7 +1530,10 @@ def _uniform_init_kernel(dst: _F32, n_: Int32, seed: UInt64, off: UInt64, lo: UI
     """dst[i] = float32(lo + span * u_i) in binary64 words, u_i the 53-bit
     uniform of splitmix64 at counter off + i of the seed: the host helper's
     statement, value for value (`sequence/schedule.mojo::splitmix64`; times
-    2^-53 is exact; one rounded multiply, one rounded add, one narrowing)."""
+    2^-53 is exact; one fused multiply-add, one narrowing). Lane
+    fix-s1-shared: the host helper's `lo + span * u` is an explicit `fma`
+    now (Mojo's default fp-mode contracts it on the host anyway, so a
+    separate multiply and add here could differ in the last bit)."""
     var i = _tid()
     if i >= Int(n_):
         return
@@ -1538,7 +1544,7 @@ def _uniform_init_kernel(dst: _F32, n_: Int32, seed: UInt64, off: UInt64, lo: UI
     z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
     z = z ^ (z >> 31)
     var u = sf64_mul(sf64_from_int(Int(z >> 11)), UInt64(0x3CA0000000000000))
-    dst.unsafe_store(i, sf64_to_f32(sf64_add(lo, sf64_mul(span, u))))
+    dst.unsafe_store(i, sf64_to_f32(sf64_fma(span, u, lo)))
 
 
 def device_uniform_init_f32(
@@ -1722,3 +1728,152 @@ def device_isum(ctx: DeviceContext, addr: Int, code: Int, n: Int) raises -> Tupl
     _ = d_h4^
     _ = d_l4^
     return (hi_w, lo_w)
+
+
+# ===========================================================================
+# normal_init_f32 (lane fix-s1-shared, IDN_HPDEV_NORMAL)
+# ===========================================================================
+
+
+@always_inline
+def _hpd_lead(u: UInt64) -> Int:
+    """The index of the highest set bit of `u` (u != 0)."""
+    var x = u
+    var n = 0
+    if (x >> 32) != UInt64(0):
+        x = x >> 32
+        n += 32
+    if (x >> 16) != UInt64(0):
+        x = x >> 16
+        n += 16
+    if (x >> 8) != UInt64(0):
+        x = x >> 8
+        n += 8
+    if (x >> 4) != UInt64(0):
+        x = x >> 4
+        n += 4
+    if (x >> 2) != UInt64(0):
+        x = x >> 2
+        n += 2
+    if (x >> 1) != UInt64(0):
+        n += 1
+    return n
+
+
+def _hpd_sf64_sqrt(a: UInt64) -> UInt64:
+    """The correctly rounded binary64 square root of the word `a` (IEEE
+    `sqrt`, round to nearest even), integers only: the host `sqrt` on every
+    vendor. A NaN or a negative gives the quiet NaN; +-0 and +inf return
+    themselves.
+
+    With a = sig * 2^e2, e2 made even, X = sig << 54 lies in [2^106, 2^108),
+    so q = floor(sqrt(X)) has exactly 54 bits: 53 result bits and the round
+    bit, the remainder X - q^2 the sticky bit. q is found two bits of X at a
+    time (the restoring digit-by-digit root) in 128-bit (hi, lo) words."""
+    if sf64_is_nan(a):
+        return UInt64(0x7FF8000000000000)
+    if (a & UInt64(0x7FFFFFFFFFFFFFFF)) == UInt64(0):
+        return a
+    if (a >> 63) != UInt64(0):
+        return UInt64(0x7FF8000000000000)
+    var e = Int((a >> 52) & UInt64(0x7FF))
+    if e == 0x7FF:
+        return a
+    var sig = a & UInt64(0x000FFFFFFFFFFFFF)
+    if e == 0:
+        var lead = _hpd_lead(sig)
+        sig = sig << UInt64(52 - lead)
+        e = 1 - (52 - lead)
+    else:
+        sig = sig | UInt64(0x0010000000000000)
+    var e2 = e - 1075
+    if (e2 & 1) != 0:
+        sig = sig << 1
+        e2 -= 1
+    # X = sig << 54
+    var xh = sig >> 10
+    var xl = sig << 54
+    var rh = UInt64(0)
+    var rl = UInt64(0)
+    # bit = 4^53 = 2^106
+    var bh = UInt64(1) << 42
+    var bl = UInt64(0)
+    for _ in range(54):
+        var tl = rl + bl
+        var th = rh + bh + (UInt64(1) if tl < rl else UInt64(0))
+        if xh > th or (xh == th and xl >= tl):
+            var borrow = UInt64(1) if xl < tl else UInt64(0)
+            xl = xl - tl
+            xh = xh - th - borrow
+            rl = (rl >> 1) | (rh << 63)
+            rh = rh >> 1
+            var sl = rl + bl
+            rh = rh + bh + (UInt64(1) if sl < rl else UInt64(0))
+            rl = sl
+        else:
+            rl = (rl >> 1) | (rh << 63)
+            rh = rh >> 1
+        bl = (bl >> 2) | (bh << 62)
+        bh = bh >> 2
+    # rh == 0 here: q < 2^54
+    var q = rl
+    var sticky = (xh | xl) != UInt64(0)
+    var m = q >> 1
+    var ex = ((e2 - 54) >> 1) + 1076
+    if (q & UInt64(1)) != UInt64(0) and (sticky or (m & UInt64(1)) != UInt64(0)):
+        m += UInt64(1)
+        if m == (UInt64(1) << 53):
+            m = m >> 1
+            ex += 1
+    return (UInt64(ex) << 52) | (m & UInt64(0x000FFFFFFFFFFFFF))
+
+
+@always_inline
+def _hpd_splitmix_at(seed: UInt64, c: UInt64) -> UInt64:
+    """`sequence/schedule.mojo::splitmix64` of the state seed + c * gamma."""
+    var s = seed + c * UInt64(0x9E3779B97F4A7C15)
+    s += UInt64(0x9E3779B97F4A7C15)
+    var z = s
+    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
+    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
+    return z ^ (z >> 31)
+
+
+def _normal_init_kernel(dst: _F32, n_: Int32, seed: UInt64, off: UInt64, mu: UInt64, sd: UInt64):
+    """dst[i] = float32(fma(sd, r * cos, mu)), the host helper's Box-Muller
+    statement for statement in binary64 words: u1 = 1 - U(2c), u2 = U(2c + 1)
+    (U the 53-bit splitmix64 uniform, times 2^-53 exact), r = sqrt(-2 log u1)
+    (`sf64_log` is `portable_log64` statement for statement, the root is
+    correctly rounded as the host `sqrt`), the angle narrowed to float32 and
+    `portable_cosf` of it, then one widening, one multiply and one fused
+    multiply-add."""
+    var i = _tid()
+    if i >= Int(n_):
+        return
+    var c = (off + UInt64(i)) * UInt64(2)
+    var a1 = sf64_mul(sf64_from_int(Int(_hpd_splitmix_at(seed, c) >> 11)), UInt64(0x3CA0000000000000))
+    var u1 = sf64_sub(UInt64(0x3FF0000000000000), a1)
+    var u2 = sf64_mul(
+        sf64_from_int(Int(_hpd_splitmix_at(seed, c + UInt64(1)) >> 11)), UInt64(0x3CA0000000000000)
+    )
+    # -2.0 * log(u1), then the root
+    var r = _hpd_sf64_sqrt(sf64_mul(UInt64(0xC000000000000000), sf64_log(u1)))
+    # 6.283185307179586 * u2, narrowed
+    var cz = portable_cosf(sf64_to_f32(sf64_mul(UInt64(0x401921FB54442D18), u2)))
+    var z = sf64_mul(r, sf64_from_f32(cz))
+    dst.unsafe_store(i, sf64_to_f32(sf64_fma(sd, z, mu)))
+
+
+def device_normal_init_f32(
+    ctx: DeviceContext, dst_addr: Int, n: Int, mean: Float64, std: Float64, seed: UInt64, offset: UInt64,
+) raises:
+    """`normal_init_f32` (`1 <= n <= HPD_MAX_N`, finite `mean` and `std`)."""
+    var d = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_function[_normal_init_kernel](
+        d.unsafe_ptr(), Int32(n), seed, offset,
+        bitcast[DType.uint64](mean), bitcast[DType.uint64](std),
+        grid_dim=_blocks(n), block_dim=HPD_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=_F32(unsafe_from_address=dst_addr), src_buf=d)
+    ctx.synchronize()
+    _ = d^

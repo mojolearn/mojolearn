@@ -32,6 +32,8 @@ five off):
   IDN_HPDEV_INIT    -D MOJOLEARN_IDN_HPDEV_INIT_OFF    uniform_init_f32
   IDN_HPDEV_ISUM    -D MOJOLEARN_IDN_HPDEV_ISUM_OFF    reduce_stat's exact
                     integer sum (lane fix-s1-shared)
+  IDN_HPDEV_NORMAL  -D MOJOLEARN_IDN_HPDEV_NORMAL_OFF  normal_init_f32
+                    (lane fix-s1-shared)
   IDN_HPDEV_CAST_F64  CANDIDATE, default OFF, -D MOJOLEARN_IDN_HPDEV_CAST_F64
                     turns it on: cast_f64_to_f32 (`hpdev_try_cast_f64_to_f32`)
 The sabotage builds (`HOTPATH_SABOTAGE`) keep every host helper, so the
@@ -57,6 +59,7 @@ from bindings.hotpath_helpers import (
     gather_i32_binding as host_gather_i32_binding,
     indices_overlap_i64_binding as host_indices_overlap_i64_binding,
     leave_range_i64_binding as host_leave_range_i64_binding,
+    normal_init_f32_binding as host_normal_init_f32_binding,
     mask_from_indices_u8_binding as host_mask_from_indices_u8_binding,
     select_fold_i64_binding as host_select_fold_i64_binding,
     select_mask_u8_i64_binding as host_select_mask_u8_i64_binding,
@@ -90,6 +93,7 @@ from core.hotpath_device import (
     device_isum,
     device_kfold_ids,
     device_mask_from_indices_u8,
+    device_normal_init_f32,
     device_reduce_arg,
     device_select_fold_i64,
     device_select_mask_u8_i64,
@@ -113,6 +117,8 @@ comptime IDN_HPDEV_REDUCE = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_
 comptime IDN_HPDEV_INIT = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_INIT_OFF"]()
 #: lane fix-s1-shared: reduce_stat's exact integer sum as a device tile fold.
 comptime IDN_HPDEV_ISUM = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_ISUM_OFF"]()
+#: lane fix-s1-shared: normal_init_f32 drawn on the device.
+comptime IDN_HPDEV_NORMAL = _HPDEV_BASE and not is_defined["MOJOLEARN_IDN_HPDEV_NORMAL_OFF"]()
 #: CANDIDATE ARM, default OFF: `-D MOJOLEARN_IDN_HPDEV_CAST_F64` narrows a
 #: float64 input on the device (`cast_f64_to_f32`). The words cross the bus
 #: twice more than the host cast's, so it is on only when measured to win, or
@@ -682,6 +688,28 @@ def uniform_init_f32_binding(
                 device_uniform_init_f32(ctx, d, count, lo, hi, seed, off)
             return PythonObject(0)
     return host_uniform_init_f32_binding(dst_addr, n, low, high, seed_lo, seed_hi, offset)
+
+
+def normal_init_f32_binding(
+    dst_addr: PythonObject, n: PythonObject, mean: PythonObject, std: PythonObject,
+    seed_lo: PythonObject, seed_hi: PythonObject, offset: PythonObject,
+) raises -> PythonObject:
+    """`normal_init_f32`, drawn on the device (lane fix-s1-shared): the same
+    counter-based Box-Muller, the arithmetic in binary64 words with a
+    correctly rounded root, `portable_cosf` for the angle."""
+    comptime if IDN_HPDEV_NORMAL:
+        var count = Int(py=n)
+        var d = Int(py=dst_addr)
+        var mu = Float64(py=mean)
+        var sd = Float64(py=std)
+        if count >= 1 and count <= HPD_MAX_N and d != 0 and isfinite(mu) and isfinite(sd):
+            var seed = (UInt64(Int(py=seed_hi)) << 32) | UInt64(Int(py=seed_lo))
+            var off = UInt64(Int(py=offset))
+            var ctx = process_ctx[_HPDEV_SLOT]()
+            with GILReleased(Python()):
+                device_normal_init_f32(ctx, d, count, mu, sd, seed, off)
+            return PythonObject(0)
+    return host_normal_init_f32_binding(dst_addr, n, mean, std, seed_lo, seed_hi, offset)
 
 
 # ---------------------------------------------------------------------------
