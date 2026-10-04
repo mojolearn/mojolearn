@@ -53,6 +53,7 @@ from core.neural_context import neural_ctx
 from std.time import perf_counter_ns
 from std.os import getenv
 from std.sys.compile import is_defined
+from std.memory import bitcast
 # ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
 # lane/neighbors-apple 2026-09-28): a new context per entry is a new Metal
 # queue and a pipeline load per call. Same kernels, same launches, same order
@@ -1240,6 +1241,7 @@ def _nystroem_rr_eigh_idn(
     sabotage: Int,
     mut eig_diag: List[Float32],
     mut vecs: List[Float32],
+    want_host: Bool = True,
 ) raises -> Int:
     """NYS_IDN_RR_EIGH: the round-robin eigh of the q x q matrix in `dk`,
     consumed in place (x_decomp/device.mojo `_eigh_par_on`'s rounds, test and
@@ -1335,13 +1337,18 @@ def _nystroem_rr_eigh_idn(
         )
     # the last test's kernel left the diagonal of the converged A in
     # doff[2 n, 3 n)
-    ctx.enqueue_copy(dst_ptr=hoff.unsafe_ptr(), src_buf=doff)
-    ctx.synchronize()
-    var got = _download(ctx, dvec, n * n)
-    for c in range(n):
-        eig_diag.append(hoff.unsafe_ptr().unsafe_load(2 * n + c))
-    for i in range(n * n):
-        vecs.append(got[i])
+    if want_host:
+        ctx.enqueue_copy(dst_ptr=hoff.unsafe_ptr(), src_buf=doff)
+        ctx.synchronize()
+        var got = _download(ctx, dvec, n * n)
+        for c in range(n):
+            eig_diag.append(hoff.unsafe_ptr().unsafe_load(2 * n + c))
+        for i in range(n * n):
+            vecs.append(got[i])
+    else:
+        # NYS_IDN_DEV_ORDER: the caller orders the pairs where they lie
+        # (`dk`'s diagonal, `dvec`); nothing is read back here.
+        ctx.synchronize()
     _ = dcs^
     _ = doff^
     _ = hoff^
@@ -1361,6 +1368,7 @@ def _nystroem_device_eigh(
     mut trace: IdentityTrace,
     mut eig_diag: List[Float32],
     mut vecs: List[Float32],
+    want_host: Bool = True,
 ) raises -> Int:
     """The eigendecomposition on the device, through decomposition/: `dk` is
     consumed (its diagonal becomes the eigenvalues), `dvec` gets the sign
@@ -1373,7 +1381,7 @@ def _nystroem_device_eigh(
                 trace.record_device(ctx, "nys.eigenvectors_flipped", dvec, q * q)
                 return got
     comptime if NYS_IDN_RR_EIGH:
-        var ran = _nystroem_rr_eigh_idn(ctx, dk, dvec, q, sabotage, eig_diag, vecs)
+        var ran = _nystroem_rr_eigh_idn(ctx, dk, dvec, q, sabotage, eig_diag, vecs, want_host)
         trace.record_device(ctx, "nys.eigenvectors_flipped", dvec, q * q)
         return ran
     ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
@@ -1417,13 +1425,99 @@ def _nystroem_device_eigh(
             " sweep budget, which is decomposition/'s parameter and not"
             " this lane's to change"
         )
-    var raw = _download(ctx, dk, q * q)
-    var got = _download(ctx, dvec, q * q)
-    for c in range(q):
-        eig_diag.append(raw[c * q + c])
-    for i in range(q * q):
-        vecs.append(got[i])
+    if want_host:
+        var raw = _download(ctx, dk, q * q)
+        var got = _download(ctx, dvec, q * q)
+        for c in range(q):
+            eig_diag.append(raw[c * q + c])
+        for i in range(q * q):
+            vecs.append(got[i])
     return Int(info_h[2])
+
+
+#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_NYS_DEV_ORDER_OFF` restores the host epilogue): after
+#: the eigendecomposition the fit ordered the q eigenpairs with a host
+#: selection sort (q^2 compares on one thread), clipped and square-rooted
+#: them on the host, permuted the q x q eigenvectors on the host and
+#: uploaded them again (plus a signed copy when an eigenvalue is negative).
+#: Now `nys_order_kernel` ranks every eigenvalue by counting (one thread per
+#: eigenvalue; the selection sort's total order: |lambda| descending, index
+#: ascending on a tie) and writes the clipped value, its `identical_sqrt`
+#: and its sign at its rank, and `nys_permute_kernel` writes the ordered and
+#: the column-signed eigenvectors, all from the resident `dk` / `dvec`. The
+#: eigenvectors are read back once, ordered, for the model. The same compare,
+#: clip, square root and negation per value: no bit moves, and the host
+#: column (`km_host_oracle.mojo`) is unchanged. A sabotage arm keeps the
+#: host epilogue (its arms live there).
+comptime NYS_IDN_DEV_ORDER = _CTX_MODE == _CTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_NYS_DEV_ORDER_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime NYS_ORDER_TPB = 256
+
+
+@always_inline
+def _nys_abs_bits(lam: Float32) -> Float32:
+    """`_singular_value_f32`'s line, inlined for the kernels."""
+    return bitcast[DType.float32](bitcast[DType.uint32](lam) & UInt32(0x7FFFFFFF))
+
+
+def nys_order_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    rank: MutPointer[Int32, MutAnyOrigin],
+    values: MutPointer[Float32, MutAnyOrigin],
+    sqrt_s: MutPointer[Float32, MutAnyOrigin],
+    signs: MutPointer[Float32, MutAnyOrigin],
+    q_in: Int32,
+    clip: Float32,
+):
+    """One thread per eigenvalue c (the diagonal of the q x q `a`): its rank
+    r under `_eigen_order_f32`'s order (the count of eigenvalues whose
+    magnitude is larger, or equal at a lower index), then values[r] = the
+    clipped magnitude, sqrt_s[r] = ftz(identical_sqrt(values[r])) and
+    signs[r] = -1 where the eigenvalue is negative, else 1. The ranks are a
+    bijection (the order includes the index), so every slot has one writer."""
+    var q = Int(q_in)
+    var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if c >= q:
+        return
+    var lam = a.unsafe_load(c * q + c)
+    var mc = _nys_abs_bits(lam)
+    var r = 0
+    for j in range(q):
+        var mj = _nys_abs_bits(a.unsafe_load(j * q + j))
+        if mj > mc or (mj == mc and j < c):
+            r += 1
+    rank.unsafe_store(c, Int32(r))
+    var sv = mc
+    if sv < clip:
+        sv = clip
+    values.unsafe_store(r, sv)
+    sqrt_s.unsafe_store(r, ftz(identical_sqrt(sv)))
+    signs.unsafe_store(r, Float32(-1.0) if lam < Float32(0.0) else Float32(1.0))
+
+
+def nys_permute_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    vec: MutPointer[Float32, MutAnyOrigin],
+    rank: MutPointer[Int32, MutAnyOrigin],
+    q_out: MutPointer[Float32, MutAnyOrigin],
+    vt_out: MutPointer[Float32, MutAnyOrigin],
+    q_in: Int32,
+):
+    """One thread per cell (f, src) of the eigenvectors (vector src in
+    COLUMN src): q_out[f, rank[src]] = the cell, vt_out[f, rank[src]] = the
+    cell negated where eigenvalue src is negative (the host loop's lines)."""
+    var q = Int(q_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= q * q:
+        return
+    var f = t // q
+    var src = t - f * q
+    var r = Int(rank.unsafe_load(src))
+    var e = vec.unsafe_load(t)
+    q_out.unsafe_store(f * q + r, e)
+    vt_out.unsafe_store(f * q + r, -e if a.unsafe_load(src * q + src) < Float32(0.0) else e)
 
 
 def nystroem_fit_host(
@@ -1517,20 +1611,16 @@ def nystroem_fit_host(
     var sweeps = 0
     var eig_diag = List[Float32]()
     var vecs = List[Float32]()
-    sweeps = _nystroem_device_eigh(ctx, dk, dvec, dinfo, q, sabotage, trace, eig_diag, vecs)
+    # NYS_IDN_DEV_ORDER: the order, clip, square root and permutation run on
+    # the device; a sabotage arm keeps the host epilogue.
+    var dev_order = NYS_IDN_DEV_ORDER and sabotage == KMSAB_NONE
+    sweeps = _nystroem_device_eigh(ctx, dk, dvec, dinfo, q, sabotage, trace, eig_diag, vecs, not dev_order)
 
     # --- the order and the clip, on the host (DEVIATIONS 1669, 1670, 1688) ---
     # THE SVD'S S, NOT THE EIGENVALUE. See `_singular_value_f32`: sklearn's
     # `S` is `|lambda|` with the sign carried by `V`, so the order, the clip
     # and the square root all read the MAGNITUDE, and a numerically negative
     # eigenvalue negates its column of the right operand below.
-    var values_raw = List[Float32]()
-    var mags = List[Float32]()
-    for c in range(q):
-        values_raw.append(eig_diag[c])
-        mags.append(_singular_value_f32(eig_diag[c]))
-    var order = _eigen_order_f32(mags, q, sabotage)
-
     var clip = _eigen_clip_f32()
     var values = List[Float32]()
     var sqrt_s = List[Float32]()
@@ -1538,34 +1628,71 @@ def nystroem_fit_host(
     var any_negative = False
     var vecs_ord = List[Float32]()
     var vt_ord = List[Float32]()
-    for _ in range(q * q):
-        vecs_ord.append(Float32(0.0))
-        vt_ord.append(Float32(0.0))
-    for c in range(q):
-        var src = order[c]
-        var s = mags[src]
-        if sabotage != KMSAB_NO_EIGEN_CLIP and s < clip:
-            s = clip
-        values.append(s)
-        sqrt_s.append(ftz(identical_sqrt(s)))
-        var negative = values_raw[src] < Float32(0.0)
-        if negative:
-            any_negative = True
-            v_signs.append(Int32(-1))
-        else:
-            v_signs.append(Int32(1))
-        for f in range(q):
-            var e = vecs[f * q + src]
-            vecs_ord[f * q + c] = e
-            vt_ord[f * q + c] = -e if negative else e
+    if not dev_order:
+        var values_raw = List[Float32]()
+        var mags = List[Float32]()
+        for c in range(q):
+            values_raw.append(eig_diag[c])
+            mags.append(_singular_value_f32(eig_diag[c]))
+        var order = _eigen_order_f32(mags, q, sabotage)
+        for _ in range(q * q):
+            vecs_ord.append(Float32(0.0))
+            vt_ord.append(Float32(0.0))
+        for c in range(q):
+            var src = order[c]
+            var s = mags[src]
+            if sabotage != KMSAB_NO_EIGEN_CLIP and s < clip:
+                s = clip
+            values.append(s)
+            sqrt_s.append(ftz(identical_sqrt(s)))
+            var negative = values_raw[src] < Float32(0.0)
+            if negative:
+                any_negative = True
+                v_signs.append(Int32(-1))
+            else:
+                v_signs.append(Int32(1))
+            for f in range(q):
+                var e = vecs[f * q + src]
+                vecs_ord[f * q + c] = e
+                vt_ord[f * q + c] = -e if negative else e
+    # the ordered eigenvectors and the clipped square roots, on the device:
+    # uploaded from the host epilogue, or written there (NYS_IDN_DEV_ORDER)
+    var dq0 = ctx.enqueue_create_buffer[DType.float32](q * q) if dev_order else _upload(ctx, vecs_ord)
+    var dsq = ctx.enqueue_create_buffer[DType.float32](q) if dev_order else _upload(ctx, sqrt_s)
+    var dvt_dev = ctx.enqueue_create_buffer[DType.float32](q * q if dev_order else 1)
+    if dev_order:
+        var drank = ctx.enqueue_create_buffer[DType.int32](q)
+        var dvals = ctx.enqueue_create_buffer[DType.float32](q)
+        var dsg = ctx.enqueue_create_buffer[DType.float32](q)
+        ctx.enqueue_function[nys_order_kernel](
+            dk.unsafe_ptr(), drank.unsafe_ptr(), dvals.unsafe_ptr(), dsq.unsafe_ptr(), dsg.unsafe_ptr(),
+            Int32(q), clip,
+            grid_dim=((q + NYS_ORDER_TPB - 1) // NYS_ORDER_TPB, 1, 1),
+            block_dim=(NYS_ORDER_TPB, 1, 1),
+        )
+        ctx.enqueue_function[nys_permute_kernel](
+            dk.unsafe_ptr(), dvec.unsafe_ptr(), drank.unsafe_ptr(), dq0.unsafe_ptr(), dvt_dev.unsafe_ptr(),
+            Int32(q),
+            grid_dim=((q * q + NYS_ORDER_TPB - 1) // NYS_ORDER_TPB, 1, 1),
+            block_dim=(NYS_ORDER_TPB, 1, 1),
+        )
+        # the model's copies (and the card's): copies, no arithmetic
+        values = _download(ctx, dvals, q)
+        vecs_ord = _download(ctx, dq0, q * q)
+        if trace.enabled:
+            sqrt_s = _download(ctx, dsq, q)
+            var sg = _download(ctx, dsg, q)
+            for c in range(q):
+                v_signs.append(Int32(-1) if sg[c] < Float32(0.0) else Int32(1))
+        _ = drank^
+        _ = dvals^
+        _ = dsg^
     trace.record_list_f32("nys.eigenvalues", values)
     trace.record_list_f32("nys.sqrt_eigenvalues", sqrt_s)
     trace.record_list_i32("nys.v_signs", v_signs)
     trace.record_list_f32("nys.eigenvectors", vecs_ord)
 
     # --- `U / sqrt(S) @ V`, on the device ---
-    var dq0 = _upload(ctx, vecs_ord)
-    var dsq = _upload(ctx, sqrt_s)
     var dz = ctx.enqueue_create_buffer[DType.float32](q * q)
     var dnorm = ctx.enqueue_create_buffer[DType.float32](q * q)
     var gws = ctx.enqueue_create_buffer[DType.float32](
@@ -1592,7 +1719,12 @@ def nystroem_fit_host(
     # stages the signed copy. Negation is exact, so each product term is
     # the unsigned term with its sign flipped and the fold order is the
     # same.
-    if any_negative:
+    if dev_order:
+        # the column-signed Q written on the device; where no eigenvalue is
+        # negative it is Q's own words, so the product is the one below
+        identical_gemm_into(ctx, dnorm, dz, dvt_dev, gws, q, q, q, OP_NT)
+        ctx.synchronize()
+    elif any_negative:
         var dvt = _upload(ctx, vt_ord)
         identical_gemm_into(ctx, dnorm, dz, dvt, gws, q, q, q, OP_NT)
         ctx.synchronize()
@@ -1612,6 +1744,7 @@ def nystroem_fit_host(
     _ = dinfo^
     _ = dq0^
     _ = dsq^
+    _ = dvt_dev^
     _ = dz^
     _ = dnorm^
     _ = gws^
