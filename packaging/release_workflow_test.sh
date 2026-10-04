@@ -118,7 +118,10 @@ stage(){ # $1=box $2=filename [$3=BAD to corrupt the sidecar]
 }
 stage_zip(){ # $1=box $2=filename [$3=split marker: 1] ; a real zip, as the split detection reads it
   python3 - "$1/stage/$2" "${3:-0}" <<'ZIP'
-import sys, zipfile
+import sys, zipfile, json, importlib.util
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("fixture_registry", Path(sys.argv[1]).parents[1] / "python/mojolearn/gpu_plugins.py")
+gp = importlib.util.module_from_spec(spec); spec.loader.exec_module(gp)
 path, marker = sys.argv[1], sys.argv[2] == '1'
 name = path.rsplit('/', 1)[-1]
 with zipfile.ZipFile(path, 'w') as z:
@@ -126,7 +129,7 @@ with zipfile.ZipFile(path, 'w') as z:
                'Metadata-Version: 2.4\nName: ' + name.split('-')[0].replace('_', '-') +
                '\nVersion: ' + name.split('-')[1] + '\n')
     if marker:
-        z.writestr(name.split('-')[0] + '-' + name.split('-')[1] + '.dist-info/gpu_plugins.json', '{}')
+        z.writestr(name.split('-')[0] + '-' + name.split('-')[1] + '.dist-info/gpu_plugins.json', json.dumps(gp.core_marker(name.split('-')[1])))
 ZIP
   ( cd "$1/stage" && shasum -a 256 "$2" > "$2.sha256" ); }
 stage_payloads(){
@@ -204,7 +207,7 @@ B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$AMD"
 refuses "$B" "a split core without the NVIDIA plugin is REFUSED" "complete Linux release"
 
 B=$(mkbox 0.3.0); stage_zip "$B" "mojolearn-0.3.0-py3-none-manylinux_2_28_x86_64.whl"; stage_zip "$B" "$NVIDIA"
-refuses "$B" "a plugin beside a COMBINED wheel is REFUSED" "complete Linux release"
+refuses "$B" "a plugin beside a COMBINED wheel is REFUSED" "split-package marker"
 
 B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "mojolearn_vulkan-0.3.0-py3-none-manylinux_2_35_x86_64.whl"
 refuses "$B" "a wheel of no known project is REFUSED" "unknown GPU release project"

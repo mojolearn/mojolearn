@@ -69,6 +69,22 @@ def classify(wheels, *, version=None, require_complete=False):
             if metadata != [expected_metadata]:
                 raise ValueError(f"unexpected distribution metadata in {path.name}")
             message = email.parser.BytesParser().parsebytes(archive.read(metadata[0]))
+            platform_tags = parts[-1][:-4].split(".")
+            linux = any(tag.startswith(("linux_", "manylinux", "musllinux")) for tag in platform_tags)
+            if prefix == "mojolearn" and linux:
+                marker_name = f"{prefix}-{wheel_version}.dist-info/{gpu_plugins.CORE_MARKER}"
+                try:
+                    marker = json.loads(archive.read(marker_name))
+                except (KeyError, ValueError):
+                    marker = None
+                if marker != gpu_plugins.core_marker(wheel_version):
+                    raise ValueError(f"Linux core requires the current split-package marker: {path.name}")
+                for member in archive.namelist():
+                    gpu_member = gpu_plugins.member_vendor(member) is not None
+                    flat_native = (member.startswith("mojolearn/") and member.endswith(".so")
+                                   and not member.startswith(("mojolearn/host/", "mojolearn/.libs/")))
+                    if gpu_member or flat_native:
+                        raise ValueError(f"Linux core carries a GPU payload member: {member}")
         if (normalize(message.get("Name", "")) != distribution
                 or message.get("Version") != wheel_version):
             raise ValueError(f"filename and metadata disagree: {path.name}")

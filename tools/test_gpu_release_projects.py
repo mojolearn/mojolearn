@@ -26,14 +26,31 @@ class ProjectClassification(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
 
-    def wheel(self, profile='core-linux', *, version='1.2.3', name=None, tag='py3-none-manylinux_2_35_x86_64'):
+    def wheel(self, profile='core-linux', *, version='1.2.3', name=None, tag='py3-none-manylinux_2_35_x86_64', split_marker=True, gpu_member=None):
         row = (dict(wheel_name='mojolearn', distribution='mojolearn') if profile == 'core-linux'
                else projects.gpu_plugins.package(profile))
         path = self.root / f"{row['wheel_name']}-{version}-{tag}.whl"
         with zipfile.ZipFile(path, 'w') as z:
             z.writestr(f"{row['wheel_name']}-{version}.dist-info/METADATA",
                        f"Metadata-Version: 2.4\nName: {name or row['distribution']}\nVersion: {version}\n")
+            if profile == 'core-linux' and split_marker and 'linux' in tag:
+                z.writestr(f"mojolearn-{version}.dist-info/{projects.gpu_plugins.CORE_MARKER}",
+                           json.dumps(projects.gpu_plugins.core_marker(version)))
+            if gpu_member:
+                z.writestr(gpu_member, b'kernel')
         return path
+
+    def test_prepared_linux_core_cannot_bypass_permanent_split(self):
+        with self.assertRaisesRegex(ValueError, 'split-package marker'):
+            projects.classify([self.wheel(split_marker=False)])
+        for path in ('mojolearn/cuda/sm_89/x.so', 'mojolearn/cuda_native/sm_89/x.so',
+                     'mojolearn/hip_native/gfx942/x.so', 'mojolearn/cuda_ptx/sm_80/x.so',
+                     'mojolearn/_mojolearn_rf.so'):
+            with self.subTest(path=path), self.assertRaisesRegex(ValueError, 'GPU payload member'):
+                projects.classify([self.wheel(gpu_member=path)])
+        self.assertTrue(projects.classify([self.wheel(gpu_member='mojolearn/host/forest.so')])['core'])
+        self.assertTrue(projects.classify([self.wheel(tag='py3-none-macosx_13_0_arm64',
+                                                    split_marker=False, gpu_member='mojolearn/_mojolearn_rf.so')])['core'])
 
     def test_complete_default_and_exact_github_outputs(self):
         wheels = [self.wheel()] + [self.wheel(r['profile']) for r in projects.gpu_plugins.distribution_rows()]
