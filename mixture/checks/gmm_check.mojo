@@ -76,7 +76,7 @@ from mixture.estimator import (
     gaussian_mixture_predict_proba,
     gaussian_mixture_score,
     gaussian_mixture_score_samples,
-    gmm_initial_resp,
+    gmm_initial_resp_host,
     init_params_from_name,
 )
 from mixture.checks.estep import (
@@ -782,7 +782,7 @@ def check_estep_vs_oracle() raises:
         # the state the first E-step actually sees. Building them through the
         # oracle rather than through a fit keeps this check independent of
         # the loop, so a failure here is the E-step's and not the driver's.
-        var resp0 = gmm_initial_resp(ctx, x, n, d, params)
+        var resp0 = gmm_initial_resp_host(ctx, x, n, d, params)
         var loginit = List[Float32]()
         for i in range(n * ncomp):
             var v = resp0[i]
@@ -1032,7 +1032,7 @@ def check_mstep_vs_oracle() raises:
         var ncomp = gmm_fixture_k(which)
         var x = gmm_fixture(which)
         var params = _params_for(which)
-        var resp0 = gmm_initial_resp(ctx, x, n, d, params)
+        var resp0 = gmm_initial_resp_host(ctx, x, n, d, params)
         var loginit = List[Float32]()
         for i in range(n * ncomp):
             var v = resp0[i]
@@ -1690,7 +1690,7 @@ def check_collapse_is_identical() raises:
     # with the device.
     var resp0 = List[Float32]()
     var ctx = DeviceContext()
-    resp0 = gmm_initial_resp(ctx, x, n, d, params)
+    resp0 = gmm_initial_resp_host(ctx, x, n, d, params)
     var to = IdentityTrace.to_path(o_path)
     var orc = oracle_fit(
         x, resp0, n, d, ncomp, params.reg_covar, params.tol,
@@ -1827,7 +1827,7 @@ def check_launch_invariance() raises:
         n_arms += 1
 
         # (b) padding and poison
-        var resp0 = gmm_initial_resp(ctx, x, n, d, params)
+        var resp0 = gmm_initial_resp_host(ctx, x, n, d, params)
         var loginit = List[Float32]()
         for i in range(n * ncomp):
             var v = resp0[i]

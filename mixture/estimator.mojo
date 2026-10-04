@@ -149,7 +149,7 @@ comptime INIT_KMEANS = 0
 #: **DEVIATION 3133.** The `oversampling_factor` the `kmeans` initialization
 #: hands `kmeans_fit`: `0.0`, the classic sequential greedy k-means++ seeding
 #: (scikit-learn's `KMeans` default, and the `kmeans-classic-pp` identity
-#: lane), never the k-means|| default of 2.0. `gmm_initial_resp` explains why.
+#: lane), never the k-means|| default of 2.0. `gmm_initial_resp_host` explains why.
 #: `mixture/host/gmm_host_oracle.mojo` passes the same constant.
 comptime GMM_KMEANS_OVERSAMPLING = Float64(0.0)
 #: `init_params="random"`. POSITION-MAPPED Philox draws, normalized per row.
@@ -446,10 +446,13 @@ def gmm_validate_params(params: GmmParams, n_samples: Int) raises:
         )
 
 
-def gmm_validate_data(
+def gmm_validate_shape(
     x: List[Float32], n_samples: Int, n_features: Int
 ) raises:
-    """No NaN and no infinity in `X`, refused BY NAME with the CELL and the
+    """The shape of `X` (lane cpu3-core: the NaN / infinity scan below moved
+    to the device, `gmm_validate_data_device`, run right after the upload).
+
+    No NaN and no infinity in `X`, refused BY NAME with the CELL and the
     BITS. DEVIATION 1738.
 
     scikit-learn's `validate_data` refuses non-finite input the same way
@@ -482,27 +485,142 @@ def gmm_validate_data(
             + " needs "
             + String(n_samples * n_features)
         )
-    for i in range(len(x)):
-        var v = x[i]
-        if v != v:
-            raise Error(
-                "GaussianMixture: X contains NaN at row "
-                + String(i // n_features)
-                + " column "
-                + String(i % n_features)
-                + "; refused by name before any upload (DEVIATION 1738)"
-            )
-        var u = bitcast[DType.uint32](v) & UInt32(0x7FFFFFFF)
-        if u == UInt32(0x7F800000):
-            raise Error(
-                "GaussianMixture: X contains an infinity at row "
-                + String(i // n_features)
-                + " column "
-                + String(i % n_features)
-                + " ("
-                + gmm_hex32(v)
-                + "); refused by name before any upload (DEVIATION 1738)"
-            )
+
+
+def gmm_bad_row_kernel(
+    x: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    bad_row: MutPointer[Int32, MutAnyOrigin],
+):
+    """One thread per row: a NaN or an infinity anywhere in row i folds i
+    into `bad_row` by atomic min, so the LOWEST such row wins whatever the
+    thread schedule (the host scan's first cell is in that row)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    var d = Int(d_in)
+    for f in range(d):
+        var u = bitcast[DType.uint32](x.unsafe_load(i * d + f)) & UInt32(0x7FFFFFFF)
+        if u >= UInt32(0x7F800000):
+            _ = Atomic[DType.int32].min(bad_row, Int32(i))
+            return
+
+
+def gmm_bad_col_kernel(
+    x: MutPointer[Float32, MutAnyOrigin],
+    row_in: Int32,
+    d_in: Int32,
+    bad_col: MutPointer[Int32, MutAnyOrigin],
+):
+    """One thread per feature of row `row_in`: the lowest non-finite column
+    by atomic min (the host scan's first cell of that row)."""
+    var f = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var d = Int(d_in)
+    if f >= d:
+        return
+    var u = bitcast[DType.uint32](x.unsafe_load(Int(row_in) * d + f)) & UInt32(0x7FFFFFFF)
+    if u >= UInt32(0x7F800000):
+        _ = Atomic[DType.int32].min(bad_col, Int32(f))
+
+
+def gmm_validate_data_device(
+    ctx: DeviceContext,
+    mut dx: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+) raises:
+    """The NaN / infinity refusal on the uploaded `X`
+    (lane cpu3-core: no host scan of X). The first non-finite cell in row
+    order is found on the device (the lowest row, then its lowest column),
+    one word at a time comes back, and the same messages are raised. It
+    runs right after the upload and before any card records the input or
+    any stage reads it, so a NaN still reaches no card stage (DEVIATION
+    1738)."""
+    var d_bad = ctx.enqueue_create_buffer[DType.int32](2)
+    var h = List[Int32](length=2, fill=GMM_INIT_NO_BAD_ROW)
+    ctx.enqueue_copy(dst_buf=d_bad, src_ptr=h.unsafe_ptr())
+    ctx.enqueue_function[gmm_bad_row_kernel](
+        dx.unsafe_ptr(),
+        Int32(n_samples),
+        Int32(n_features),
+        d_bad.unsafe_ptr(),
+        grid_dim=((n_samples + GMM_INIT_TPB - 1) // GMM_INIT_TPB, 1, 1),
+        block_dim=(GMM_INIT_TPB, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d_bad)
+    ctx.synchronize()
+    if h[0] == GMM_INIT_NO_BAD_ROW:
+        _ = d_bad^
+        return
+    var row = Int(h[0])
+    ctx.enqueue_function[gmm_bad_col_kernel](
+        dx.unsafe_ptr(),
+        Int32(row),
+        Int32(n_features),
+        d_bad.unsafe_ptr() + 1,
+        grid_dim=((n_features + GMM_INIT_TPB - 1) // GMM_INIT_TPB, 1, 1),
+        block_dim=(GMM_INIT_TPB, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d_bad)
+    ctx.synchronize()
+    var col = Int(h[1])
+    var hv = List[Float32](length=1, fill=Float32(0))
+    var cell = dx.create_sub_buffer[DType.float32](row * n_features + col, 1)
+    ctx.enqueue_copy(dst_ptr=hv.unsafe_ptr(), src_buf=cell)
+    ctx.synchronize()
+    _ = cell^
+    _ = d_bad^
+    var v = hv[0]
+    var u = bitcast[DType.uint32](v) & UInt32(0x7FFFFFFF)
+    if u > UInt32(0x7F800000):
+        raise Error(
+            "GaussianMixture: X contains NaN at row "
+            + String(row)
+            + " column "
+            + String(col)
+            + "; refused by name before any stage reads it (DEVIATION 1738)"
+        )
+    raise Error(
+        "GaussianMixture: X contains an infinity at row "
+        + String(row)
+        + " column "
+        + String(col)
+        + " ("
+        + gmm_hex32(v)
+        + "); refused by name before any stage reads it (DEVIATION 1738)"
+    )
+
+
+def gmm_log_weights_kernel(
+    w: MutPointer[Float32, MutAnyOrigin],
+    k_in: Int32,
+    dst: MutPointer[Float32, MutAnyOrigin],
+):
+    """One thread per component: `_safe_log` of its weight (the portable
+    `identical_log`, the words the host loop wrote)."""
+    var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if k < Int(k_in):
+        dst.unsafe_store(k, _safe_log(w.unsafe_load(k)))
+
+
+def _upload_log_weights(
+    ctx: DeviceContext, weights: List[Float32], ncomp: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """The device log weights of a fitted model: the weights go up, the
+    logs are taken on the device (lane cpu3-core: no host loop)."""
+    var dw = _upload(ctx, weights)
+    var dlw = ctx.enqueue_create_buffer[DType.float32](ncomp)
+    ctx.enqueue_function[gmm_log_weights_kernel](
+        dw.unsafe_ptr(),
+        Int32(ncomp),
+        dlw.unsafe_ptr(),
+        grid_dim=((ncomp + GMM_INIT_TPB - 1) // GMM_INIT_TPB, 1, 1),
+        block_dim=(GMM_INIT_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    _ = dw^
+    return dlw^
 
 
 # ===========================================================================
@@ -517,7 +635,7 @@ def gmm_validate_data(
 comptime GMM_INIT_FILL = is_defined["MOJOLEARN_GMM_INIT_FILL"]()
 
 
-def gmm_initial_resp(
+def gmm_initial_resp_host(
     ctx: DeviceContext,
     x: List[Float32],
     n_samples: Int,
@@ -673,47 +791,18 @@ def gmm_initial_resp(
 # THE INITIAL RESPONSIBILITIES, ON THE DEVICE (fam2-cluster, 2026-10-04)
 # ===========================================================================
 
-#: IDENTICAL, every column: the `n x K` initial responsibilities and their
-#: logs are WRITTEN ON THE DEVICE. The host form built both as `n x K` host
-#: lists (a one-hot row per sample, then one portable log per cell) and
-#: uploaded them; here the k-means labels go up as `n` words and one launch
-#: writes both matrices (`init_params="kmeans"`), or one launch draws,
-#: normalizes and logs every row (`init_params="random"`: the same Philox
-#: counters and key, the same ascending `ftz` row sum, one correctly rounded
-#: division and the portable log per cell). Same values as the host lists,
-#: cell for cell, so no bit moves and the host columns are unchanged.
-#: `-D MOJOLEARN_IDN_GMM_INIT_DEVICE_OFF=1` restores the host lists.
-comptime IDN_GMM_INIT_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GMM_INIT_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
-
-#: IDENTICAL, every column: `predict_proba` takes its exponential on the
-#: device (`resp_exp_kernel`) instead of a host loop over the `n x K`
-#: downloaded logs. Same `ftz(identical_exp(ftz(v)))` per cell: same words.
-#: `-D MOJOLEARN_IDN_GMM_PROBA_DEVICE_OFF=1` restores the host loop.
-comptime IDN_GMM_PROBA_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GMM_PROBA_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
-#: IDENTICAL, every column: `score` (and so `bic` / `aic`) reads the scoring
-#: E-step's device mean (`_gmm_score_device`) instead of downloading n rows
-#: and folding them on the host. The device fold and `gmm_meanll_host` are
-#: one order (`mixture/meanll_order.mojo`), so the same word.
-#: `-D MOJOLEARN_IDN_GMM_SCORE_DEVICE_OFF=1` restores the host fold.
-comptime IDN_GMM_SCORE_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GMM_SCORE_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: Every mode and column (lane cpu3-core: was IDENTICAL only, behind
+#: IDN_GMM_INIT_DEVICE / IDN_GMM_PROBA_DEVICE / IDN_GMM_SCORE_DEVICE, now the
+#: one route): the `n x K` initial responsibilities and their logs are
+#: WRITTEN ON THE DEVICE (`gmm_initial_resp_device`: the k-means labels go up
+#: as `n` words and one launch writes both matrices, or one launch draws,
+#: normalizes and logs every row: the same Philox counters and key, the
+#: same ascending `ftz` row sum, one correctly rounded division and the
+#: portable log per cell, the values of `gmm_initial_resp_host`);
+#: `predict_proba` takes its exponential on the device (`resp_exp_kernel`,
+#: `ftz(identical_exp(ftz(v)))` per cell, `_exp_resp`'s words); `score`
+#: reads the scoring E-step's device mean (`_gmm_score_device`, the order
+#: of `gmm_meanll_host`). Same words as the host forms, so no bit moves.
 
 #: IDENTICAL, every column: the mean log likelihood's copy to the host is
 #: enqueued right after the E-step instead of at the end of the iteration,
@@ -832,8 +921,8 @@ def gmm_initial_resp_device(
     mut dresp0: DeviceBuffer[DType.float32],
     mut dloginit: DeviceBuffer[DType.float32],
 ) raises:
-    """`gmm_initial_resp` and the log of it, written into two `n x K` device
-    buffers (`IDN_GMM_INIT_DEVICE`). See `gmm_initial_resp` for what the
+    """`gmm_initial_resp_host` and the log of it, written into two `n x K` device
+    buffers (every mode, lane cpu3-core). See `gmm_initial_resp_host` for what the
     values are; this is the same values without the host lists."""
     var ncomp = params.n_components
     var cells = n_samples * ncomp
@@ -863,7 +952,7 @@ def gmm_initial_resp_device(
             n_init=1,
             init=INIT_KMEANS_PLUS_PLUS,
             metric=METRIC_L2_EXPANDED,
-            # DEVIATION 3133, as in `gmm_initial_resp`.
+            # DEVIATION 3133, as in `gmm_initial_resp_host`.
             oversampling_factor=GMM_KMEANS_OVERSAMPLING,
         )
         _ = res
@@ -921,13 +1010,11 @@ def gmm_initial_resp_device(
 
 
 def _gmm_init_resp_buffer(
-    ctx: DeviceContext, resp0: List[Float32], cells: Int
+    ctx: DeviceContext, cells: Int
 ) raises -> DeviceBuffer[DType.float32]:
     """The device `resp0`: an empty `n x K` buffer for
-    `gmm_initial_resp_device` to fill, or the host list uploaded."""
-    comptime if IDN_GMM_INIT_DEVICE:
-        return ctx.enqueue_create_buffer[DType.float32](cells)
-    return _upload(ctx, resp0)
+    `gmm_initial_resp_device` to fill."""
+    return ctx.enqueue_create_buffer[DType.float32](cells)
 
 
 # ===========================================================================
@@ -951,15 +1038,13 @@ def _upload(
 def _download(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    var view = buf.create_sub_buffer[DType.float32](0, n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
-    ctx.synchronize()
-    var out = List[Float32]()
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
-    _ = view^
+    # the copy engine writes the list's own words (no host copy loop)
+    var out = List[Float32](length=n, fill=Float32(0))
+    if n > 0:
+        var view = buf.create_sub_buffer[DType.float32](0, n)
+        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
+        ctx.synchronize()
+        _ = view^
     return out^
 
 
@@ -1027,7 +1112,10 @@ def gaussian_mixture_fit(
         <prefix>.iterNNN.change                 the convergence quantity
         <prefix>.niter                          [n_iter, converged, max_iter]
     """
-    gmm_validate_data(x, n_samples, n_features)
+    gmm_validate_shape(x, n_samples, n_features)
+    var ctx = _binding_ctx()
+    var dx = _upload(ctx, x)
+    gmm_validate_data_device(ctx, dx, n_samples, n_features)
     gmm_validate_params(params, n_samples)
 
     var n = n_samples
@@ -1035,7 +1123,6 @@ def gaussian_mixture_fit(
     var ncomp = params.n_components
     var dd = d * d
 
-    var ctx = _binding_ctx()
     var trace: IdentityTrace
     if trace_path == "":
         trace = IdentityTrace()
@@ -1063,12 +1150,8 @@ def gaussian_mixture_fit(
     )
 
     var st_i0 = Int(perf_counter_ns())
-    var resp0 = List[Float32]()
-    comptime if not IDN_GMM_INIT_DEVICE:
-        resp0 = gmm_initial_resp(ctx, x, n, d, params)
     var st_i1 = Int(perf_counter_ns())
 
-    var dx = _upload(ctx, x)
     trace.record_device(ctx, card_prefix + ".input", dx, n * d)
 
     var logresp = ctx.enqueue_create_buffer[DType.float32](n * ncomp)
@@ -1112,36 +1195,17 @@ def gaussian_mixture_fit(
 
     # ---- initialization -------------------------------------------------
     # `_initialize` is handed `resp`, not `log_resp` (`_base.py:157`), and
-    # `gmm_m_step` takes logs -- so the logs are formed here, on the host,
-    # from a one-hot or a normalized uniform. It is the one place in the fit
-    # a `log` of a value we already had is taken, and it is exact for the
-    # one-hot case (`log(1) = +0.0`, `log(0) = -inf`, and `exp` of those is
-    # `1` and `+0.0` again).
-    # `_safe_log` of every cell; a one-hot start holds n * (K - 1) zeros and n
-    # ones, so the two constants are taken once (lane cluster-apple3: the
-    # same value per cell, one portable log instead of n)
+    # `gmm_m_step` takes logs -- so the logs are formed here, on the device
+    # (`gmm_initial_resp_device`), from a one-hot or a normalized uniform. It
+    # is the one place in the fit a `log` of a value we already had is
+    # taken, and it is exact for the one-hot case (`log(1) = +0.0`,
+    # `log(0) = -inf`, and `exp` of those is `1` and `+0.0` again).
     var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
     var st_i2 = Int(perf_counter_ns())
-    var loginit = List[Float32]()
-    comptime if not IDN_GMM_INIT_DEVICE:
-        comptime if GMM_INIT_FILL:
-            var log_zero = _safe_log(Float32(0.0))
-            var log_one = _safe_log(Float32(1.0))
-            loginit = List[Float32](length=n * ncomp, fill=log_zero)
-            for i in range(n * ncomp):
-                var v = resp0[i]
-                if v == Float32(0.0):
-                    continue
-                loginit[i] = log_one if v == Float32(1.0) else _safe_log(v)
-        else:
-            for i in range(n * ncomp):
-                var v = resp0[i]
-                loginit.append(_safe_log(v))
     var st_i3 = Int(perf_counter_ns())
-    var dloginit = _gmm_init_resp_buffer(ctx, loginit, n * ncomp)
-    var dresp0 = _gmm_init_resp_buffer(ctx, resp0, n * ncomp)
-    comptime if IDN_GMM_INIT_DEVICE:
-        gmm_initial_resp_device(ctx, x, n, d, params, dresp0, dloginit)
+    var dloginit = _gmm_init_resp_buffer(ctx, n * ncomp)
+    var dresp0 = _gmm_init_resp_buffer(ctx, n * ncomp)
+    gmm_initial_resp_device(ctx, x, n, d, params, dresp0, dloginit)
     # `.resp0` and not `.resp`: `gmm_m_step` records `<tag>.resp` for
     # `exp(log_resp)` and `IdentityTrace._emit` RAISES on a duplicate tag
     # (its uniqueness invariant), so the INITIAL responsibilities and the
@@ -1385,7 +1449,7 @@ def gaussian_mixture_score_samples(
     """
     var d = model.n_features
     var ncomp = model.n_components
-    gmm_validate_data(x, n_samples, d)
+    gmm_validate_shape(x, n_samples, d)
 
     var ctx = _binding_ctx()
     # **DISABLED UNLESS ASKED, and this is the opposite default from
@@ -1401,13 +1465,11 @@ def gaussian_mixture_score_samples(
     else:
         trace = IdentityTrace.to_path(trace_path)
     var dx = _upload(ctx, x)
+    gmm_validate_data_device(ctx, dx, n_samples, d)
     var dmeans = _upload(ctx, model.means)
     var dprec = _upload(ctx, model.precisions_cholesky)
     var dlogdet = _upload(ctx, model.log_det_chol)
-    var lw = List[Float32]()
-    for k in range(ncomp):
-        lw.append(_safe_log(model.weights[k]))
-    var dlw = _upload(ctx, lw)
+    var dlw = _upload_log_weights(ctx, model.weights, ncomp)
     # `linv` is only read by GMM_SAB_VENDOR_MATMUL, which no scoring path
     # drives, so the precision buffer stands in for it rather than a second
     # allocation. Stated because a reader will check.
@@ -1470,7 +1532,7 @@ def gaussian_mixture_predict_proba(
     """
     var d = model.n_features
     var ncomp = model.n_components
-    gmm_validate_data(x, n_samples, d)
+    gmm_validate_shape(x, n_samples, d)
 
     var ctx = _binding_ctx()
     # **DISABLED UNLESS ASKED, and this is the opposite default from
@@ -1486,13 +1548,11 @@ def gaussian_mixture_predict_proba(
     else:
         trace = IdentityTrace.to_path(trace_path)
     var dx = _upload(ctx, x)
+    gmm_validate_data_device(ctx, dx, n_samples, d)
     var dmeans = _upload(ctx, model.means)
     var dprec = _upload(ctx, model.precisions_cholesky)
     var dlogdet = _upload(ctx, model.log_det_chol)
-    var lw = List[Float32]()
-    for k in range(ncomp):
-        lw.append(_safe_log(model.weights[k]))
-    var dlw = _upload(ctx, lw)
+    var dlw = _upload_log_weights(ctx, model.weights, ncomp)
 
     var mahal = ctx.enqueue_create_buffer[DType.float32](n_samples * ncomp)
     var wlp = ctx.enqueue_create_buffer[DType.float32](n_samples * ncomp)
@@ -1516,25 +1576,19 @@ def gaussian_mixture_predict_proba(
         mahal, wlp, rowmax, lse, logresp, meanll, n_samples, d, ncomp,
         trace, card_prefix, elem_tpb, row_tpb, GMM_SAB_NONE,
     )
-    var out = List[Float32]()
-    comptime if IDN_GMM_PROBA_DEVICE:
-        # fam2-cluster: the exponential on the device (`resp_exp_kernel`,
-        # the M-step's own kernel: `ftz(identical_exp(ftz(v)))` per cell,
-        # the words `_exp_resp` wrote on the host), then one download.
-        var cells = n_samples * ncomp
-        ctx.enqueue_function[resp_exp_kernel](
-            logresp.unsafe_ptr(),
-            resp.unsafe_ptr(),
-            Int32(n_samples),
-            Int32(ncomp),
-            grid_dim=((cells + elem_tpb - 1) // elem_tpb, 1, 1),
-            block_dim=(elem_tpb, 1, 1),
-        )
-        out = _download(ctx, resp, cells)
-    else:
-        var out_log = _download(ctx, logresp, n_samples * ncomp)
-        for i in range(n_samples * ncomp):
-            out.append(_exp_resp(out_log[i]))
+    # fam2-cluster: the exponential on the device (`resp_exp_kernel`, the
+    # M-step's own kernel: `ftz(identical_exp(ftz(v)))` per cell, the words
+    # `_exp_resp` writes on the host), then one download.
+    var cells = n_samples * ncomp
+    ctx.enqueue_function[resp_exp_kernel](
+        logresp.unsafe_ptr(),
+        resp.unsafe_ptr(),
+        Int32(n_samples),
+        Int32(ncomp),
+        grid_dim=((cells + elem_tpb - 1) // elem_tpb, 1, 1),
+        block_dim=(elem_tpb, 1, 1),
+    )
+    var out = _download(ctx, resp, cells)
     _ = dx^
     _ = dmeans^
     _ = dprec^
@@ -1584,7 +1638,7 @@ def gaussian_mixture_predict(
     `xp.argmax`'s documented rule and `argmax_kernel`'s."""
     var d = model.n_features
     var ncomp = model.n_components
-    gmm_validate_data(x, n_samples, d)
+    gmm_validate_shape(x, n_samples, d)
 
     var ctx = _binding_ctx()
     # **DISABLED UNLESS ASKED, and this is the opposite default from
@@ -1600,13 +1654,11 @@ def gaussian_mixture_predict(
     else:
         trace = IdentityTrace.to_path(trace_path)
     var dx = _upload(ctx, x)
+    gmm_validate_data_device(ctx, dx, n_samples, d)
     var dmeans = _upload(ctx, model.means)
     var dprec = _upload(ctx, model.precisions_cholesky)
     var dlogdet = _upload(ctx, model.log_det_chol)
-    var lw = List[Float32]()
-    for k in range(ncomp):
-        lw.append(_safe_log(model.weights[k]))
-    var dlw = _upload(ctx, lw)
+    var dlw = _upload_log_weights(ctx, model.weights, ncomp)
 
     var mahal = ctx.enqueue_create_buffer[DType.float32](n_samples * ncomp)
     var wlp = ctx.enqueue_create_buffer[DType.float32](n_samples * ncomp)
@@ -1633,13 +1685,9 @@ def gaussian_mixture_predict(
     gmm_predict_labels(
         ctx, wlp, labels, n_samples, ncomp, trace, card_prefix, row_tpb
     )
-    var h = ctx.enqueue_create_host_buffer[DType.int32](n_samples)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=labels)
+    var out = List[Int32](length=n_samples, fill=Int32(0))
+    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=labels)
     ctx.synchronize()
-    var out = List[Int32]()
-    for i in range(n_samples):
-        out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
     _ = dx^
     _ = dmeans^
     _ = dprec^
@@ -1664,27 +1712,17 @@ def gaussian_mixture_score(
 ) raises -> Float32:
     """`score(X)`, `_base.py:375-393`: the mean of `score_samples`.
 
-    Folded in the chunked levels (`mixture/meanll_order.mojo`), the E-step
-    mean's arithmetic on the host. It is
-    on the host because `bic` and `aic` need the value as a host scalar and
-    a second device fold for a number that is about to be read back is a fold
-    shape nobody needs.
+    The scoring E-step's device mean, folded in the chunked levels of
+    `mixture/meanll_order.mojo` (`gmm_meanll_host`'s order), one word read
+    back (`_gmm_score_device`).
     """
-    from checks.numerics import identical_div
-
-    from mixture.meanll_order import gmm_meanll_host
-
-    comptime if IDN_GMM_SCORE_DEVICE:
-        return _gmm_score_device(model, x, n_samples)
-    var s = gaussian_mixture_score_samples(model, x, n_samples)
-    return gmm_meanll_host(s, n_samples)
+    return _gmm_score_device(model, x, n_samples)
 
 
 def _gmm_score_device(
     model: GaussianMixtureModel, x: List[Float32], n_samples: Int
 ) raises -> Float32:
-    """`score(X)` read from the device (fam2-cluster,
-    `IDN_GMM_SCORE_DEVICE`): the scoring E-step already folds `mean(lse)`
+    """`score(X)` read from the device (fam2-cluster): the scoring E-step already folds `mean(lse)`
     into its `meanll` scalar in the chunked levels of
     `mixture/meanll_order.mojo`, which are the words `gmm_meanll_host`
     writes from the downloaded rows. So ONE float comes back instead of n,
@@ -1692,18 +1730,16 @@ def _gmm_score_device(
     in step with it."""
     var d = model.n_features
     var ncomp = model.n_components
-    gmm_validate_data(x, n_samples, d)
+    gmm_validate_shape(x, n_samples, d)
 
     var ctx = _binding_ctx()
     var trace = IdentityTrace.disabled()
     var dx = _upload(ctx, x)
+    gmm_validate_data_device(ctx, dx, n_samples, d)
     var dmeans = _upload(ctx, model.means)
     var dprec = _upload(ctx, model.precisions_cholesky)
     var dlogdet = _upload(ctx, model.log_det_chol)
-    var lw = List[Float32]()
-    for k in range(ncomp):
-        lw.append(_safe_log(model.weights[k]))
-    var dlw = _upload(ctx, lw)
+    var dlw = _upload_log_weights(ctx, model.weights, ncomp)
 
     var mahal = ctx.enqueue_create_buffer[DType.float32](n_samples * ncomp)
     var wlp = ctx.enqueue_create_buffer[DType.float32](n_samples * ncomp)
@@ -1820,14 +1856,11 @@ def gaussian_mixture_sample(
     var dmeans = _upload(ctx, model.means)
     var dprec = _upload(ctx, model.precisions_cholesky)
     var dcomp = ctx.enqueue_create_buffer[DType.int32](n_samples)
-    var hcomp = ctx.enqueue_create_host_buffer[DType.int32](n_samples)
     var dx = ctx.enqueue_create_buffer[DType.float32](n_samples * d)
+    # the components go up from the tally list itself; `labels` takes it
+    ctx.enqueue_copy(dst_buf=dcomp, src_ptr=rows.unsafe_ptr())
     ctx.synchronize()
-    for i in range(n_samples):
-        hcomp.unsafe_ptr().unsafe_store(i, rows[i])
-        labels[i] = rows[i]
-    ctx.enqueue_copy(dst_buf=dcomp, src_ptr=hcomp.unsafe_ptr())
-    ctx.synchronize()
+    labels = rows.copy()
     ctx.enqueue_function[gmm_sample_kernel](
         dx.unsafe_ptr(),
         dcomp.unsafe_ptr(),
@@ -1842,7 +1875,7 @@ def gaussian_mixture_sample(
     )
     ctx.synchronize()
     var out = _download(ctx, dx, n_samples * d)
-    _ = hcomp^
+    _ = rows^
     _ = dcomp^
     _ = dmeans^
     _ = dprec^
