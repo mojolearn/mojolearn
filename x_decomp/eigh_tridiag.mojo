@@ -60,7 +60,8 @@ from x_decomp.cells import F32Ptr
 #: orthogonality .0011713 -> 1.68868e-6. Absolute 3.5e-7 target still FAIL;
 #: Gram fallback orthogonality FAIL unchanged. Opponent-quality HOLD remains.
 #: The handoff explicitly permits main-relative acceptance, not a fake strict PASS.
-#: New timing w2-eigh-panels-t-20261004 and default/OFF builds are pending.
+#: M3 w2-eigh-panels-t-20261004: 43765.6 -> 700.3 ms (one run/arm).
+#: Default/OFF builds required before merge; same synchronized output storage.
 #: OFF restores prior Jacobi, including all existing fallback behavior.
 comptime EIGH_FAST_TRIDIAG = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
