@@ -1,0 +1,41 @@
+{
+  "status": "PARTIAL_VALIDATION_NOT_PROMOTION",
+  "scope": "Preserved exact reports from the integration investigation. Reports use their recorded source snapshots; no claim of one final uniform-source qualification or measured speed improvement. Source patch-equivalence caveats remain in reports.",
+  "records": {
+    "dart-full-column-bits.json": {
+      "original_evidence": "identical-all/dart-fixed-all-column-bits.json",
+      "sha256": "44ba4e09327c60468259bc6f0aad6f5a1dd98c51dddb0b8f0c607fc4c5da71d8",
+      "bytes": 845223
+    },
+    "eigh-block-drop.json": {
+      "original_evidence": "identical-all/eigh-block-drop.json",
+      "sha256": "fa808f04376cf711bde12391a1c41fe8d3c63eb102b3e24ef975c711d3f63924",
+      "bytes": 1720
+    },
+    "lu-nan-fix.json": {
+      "original_evidence": "identical-all/lu-nan-fix-report.json",
+      "sha256": "2e4b929611a014303bc9400b633c0fd79d693a2245921e6629ec81a9cdac9c61",
+      "bytes": 1754
+    },
+    "apple-callpath-bits.json": {
+      "original_evidence": "callpath-20261004/metal-58761102d/runtime-results.json",
+      "sha256": "4ca6395079b0bcbb7ef0bf983f0da1a5227f0ea749ac576d140618851754b56b",
+      "bytes": 1400
+    },
+    "pca-bits.json": {
+      "original_evidence": "callpath-20261004/pca-221787de7/comparison.json",
+      "sha256": "1f2f4f5517683fbafbf6465f099a8d53acdc0242773684b0c1e856300b548657",
+      "bytes": 664
+    },
+    "gram-prophet-bits.json": {
+      "original_evidence": "callpath-20261004/family-bits-2191-h1c34/comparison.json",
+      "sha256": "b8e85a17ed12aa0131528024eedd6b7f6df782725491560c9d8f33f18d00c998",
+      "bytes": 1510
+    },
+    "gmm-power-bits.json": {
+      "original_evidence": "callpath-20261004/gmm-power-bits-2191/comparison.json",
+      "sha256": "9108d69c5519a051bdff2d9cdf953fd91ef9122be2947dcd3feff71e90a3158f",
+      "bytes": 1205
+    }
+  }
+}
