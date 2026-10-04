@@ -232,8 +232,8 @@ vendor `lq/callpath-scalers-18a76ee41-correct-column` logs. The full primitive
 compile probe also compiled successfully on NVIDIA after the typed launch
 helper fix (`c64f981fb`); its log is
 `~/mojolearn-evidence/callpath-20261004/remote-nvidia-probe-03.log`.
-These results do not establish primitive-adapter runtime identity, Apple or
-host identity, or a speedup. No production estimator has been routed through
+These original scaler-only results do not establish broader primitive-adapter
+identity or a speedup; subsequent narrow gates are recorded below. No production estimator has been routed through
 this experimental callpath by these changes.
 
 Two additional GPU gates use the same build definitions:
@@ -266,5 +266,16 @@ column mean, column shift, classical NT GEMM and IDENTICAL GEMM implementations
 on the same fixtures and digest order. Build with `MOJOLEARN_COLUMN_CPU` and
 `MOJOLEARN_NUMERIC_IDENTICAL`; run only as untimed Linux host verification.
 It compares to the frozen GPU digests above. It does not emulate GPU storage
-or claim a CPU equivalent for the typed-bank lifecycle checks. Host execution
-and Metal compilation remain pending at the time this gate is introduced.
+or claim a CPU equivalent for the typed-bank lifecycle checks. At `58761102d`, this host gate compiled and ran with exit status 0 on both
+Linux boxes. Its 48 scaler and 12 primitive comparisons produced the same
+digests as frozen `436bc1aaa` NVIDIA/AMD. All six imported production host
+source files are unchanged between those snapshots. Every arithmetic
+primitive in this gate has an existing host implementation; GPU storage and
+lifecycle are outside the host comparison. Evidence:
+`~/mojolearn-evidence/callpath-20261004/host-58761102d/comparison.json`.
+
+All four GPU probes/gates also compiled successfully for `metal:1` at
+`58761102d`, through the compile semaphore, with no execution. Evidence:
+`~/mojolearn-evidence/callpath-20261004/metal-58761102d/comparison.json`.
+Apple runtime identity remains unverified. These checks establish equality
+only for the recorded fixtures, not broad estimator correctness or speed.
