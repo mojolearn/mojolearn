@@ -1,0 +1,10 @@
+--- build_data.py
++++ build_data.py
+@@ -17,6 +17,7 @@
+     m=re.search(r'lane=(\S+) ds=(\S+) arm=(\S+) status=ok.*?median_ms=([\d.]+)',l)
+     if m: addopp((m.group(1),m.group(2)),m.group(3),float(m.group(4)))
+ flags={('eigh','synthetic'):'FAST quality under review (eigenvalue error 6.1e-05 vs numpy 3.5e-08)',
++       ('autoarima','taxi-hourly'):'FAST quality under review (forecast RMSE 74.6591 vs statsforecast 68.21; fused tail preserves baseline)',
+        ('kernel-pca','taxi'):'with GEMM_MMA now also default, combined retime pending',
+        ('kernel-pca','istella'):'with GEMM_MMA now also default, combined retime pending',
+        ('linearsvr','istella'):'FAST quality under review (r2 -0.107 vs sklearn -0.026)',
