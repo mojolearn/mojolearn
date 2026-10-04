@@ -61,7 +61,8 @@
     "working_evidence": "~/mojolearn-evidence/identical-all/",
     "blackwell_evidence": "~/mojolearn-evidence/identical-blackwell/",
     "remote_logs": "/root/lq/ on each rental, continuously harvested",
-    "r2": "Verified evidence backups and dataset archives; keys/checksums recorded in bench/results/r2-index.tsv"
+    "r2": "Verified evidence backups and dataset archives; keys/checksums recorded in bench/results/r2-index.tsv",
+    "committed_findings": "bench/results/identical-integration-20261004/manifest.json"
   },
   "coverage_note": "Initial decision ledger for current findings. Source toggle inventory covers the integrated flags; this ledger does not claim every candidate has completed validation."
 }
