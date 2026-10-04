@@ -63,6 +63,8 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
     build_workload_info,
     float_gain_key,
     node_feature_score_host,
+    node_feature_score_host_binned,
+    ScoredCandidate,
     leaf_kernel,
     node_split_kernel,
     node_feature_range_kernel,
@@ -1124,6 +1126,7 @@ def _exact_candidate(
     min_samples_leaf: Int32,
     seed: UInt64,
     tree_id: Int32,
+    bins: HostBins,
 ) -> SplitExact:
     """One (node, feature) cell as the device's reduction receives it:
     `node_feature_score_host` then `score_to_candidate_kernel`'s policy (a
@@ -1131,25 +1134,42 @@ def _exact_candidate(
     key; a scored cell carries cuML's float gain as the metric and the
     exact rational as the key, entropy's key being the sign-magnitude map
     of its float gain over `den = 1`, DEVIATION 459)."""
-    var extent = node_feature_min_max(dataset, item, col)
     var key = key_for(
         seed, UInt32(Int(tree_id)), UInt32(Int(item.idx)), UInt32(Int(col))
     )
-    var cell = node_feature_score_host(
-        dataset.data.unsafe_origin_cast[MutAnyOrigin](),
-        dataset.row_ids.unsafe_origin_cast[MutAnyOrigin](),
-        labels_q,
-        Int(dataset.m),
-        Int(item.instances.begin),
-        Int(item.instances.count),
-        Int(col),
-        extent,
-        key,
-        n_acc,
-        is_classification,
-        Int(min_samples_leaf),
-        True,
-    )
+    var cell: ScoredCandidate
+    if bins.on and not is_classification:
+        # `IDN_ET_BINNED`: the binned range and score passes.
+        cell = node_feature_score_host_binned(
+            bins.codes.unsafe_origin_cast[MutAnyOrigin](),
+            (bins.q + Int(col) * ET_BINS).unsafe_origin_cast[MutAnyOrigin](),
+            bins.nb[unsafe_offset = Int(col)],
+            dataset.row_ids.unsafe_origin_cast[MutAnyOrigin](),
+            labels_q,
+            Int(dataset.m),
+            Int(item.instances.begin),
+            Int(item.instances.count),
+            Int(col),
+            bins.extent(dataset, item, col),
+            key,
+            Int(min_samples_leaf),
+        )
+    else:
+        cell = node_feature_score_host(
+            dataset.data.unsafe_origin_cast[MutAnyOrigin](),
+            dataset.row_ids.unsafe_origin_cast[MutAnyOrigin](),
+            labels_q,
+            Int(dataset.m),
+            Int(item.instances.begin),
+            Int(item.instances.count),
+            Int(col),
+            node_feature_min_max(dataset, item, col),
+            key,
+            n_acc,
+            is_classification,
+            Int(min_samples_leaf),
+            True,
+        )
     if cell.status != SCORE_STATUS_SCORED:
         return SplitExact()
     var acc_left = cell.acc_left.copy()
@@ -1196,6 +1216,7 @@ def _exact_node_split(
     min_samples_leaf: Int32,
     seed: UInt64,
     tree_id: Int32,
+    bins: HostBins,
 ) -> Split:
     """The device's per-node winner: the candidates of `colids` reduced by
     `SplitExact.update` under `split_tie_salt_for(tree, node)`, then the
@@ -1206,22 +1227,51 @@ def _exact_node_split(
     for ci in range(len(colids)):
         var cand = _exact_candidate(
             dataset, labels_q, item, colids[ci], n_acc, is_classification,
-            criterion, min_samples_leaf, seed, tree_id,
+            criterion, min_samples_leaf, seed, tree_id, bins,
         )
         _ = acc.update(cand, SPLIT_SAB_NONE, tie_salt)
     var out = acc.split
+    if bins.on and not is_classification and out.colid >= 0:
+        # `et_code_threshold_kernel`: the stored threshold is the border.
+        out.quesval = bins.stored_threshold(out.colid, out.quesval)
     if acc.key.valid == 0 or out.colid < 0:
         out.best_metric_val = Float32.MIN_FINITE
     return out
 
 
+def _exact_extent(
+    dataset: Dataset, item: NodeWorkItem, col: Int32, bins: HostBins,
+    is_classification: Bool,
+) -> FeatureRange:
+    """The range pass's cell: borders of the node's codes under
+    `IDN_ET_BINNED` regression, the float min and max otherwise."""
+    if bins.on and not is_classification:
+        return bins.extent(dataset, item, col)
+    return node_feature_min_max(dataset, item, col)
+
+
+def _exact_rescue_columns(
+    dataset: Dataset, item: NodeWorkItem, bins: HostBins,
+    is_classification: Bool,
+) raises -> List[Int32]:
+    """`rescue_columns` over `_exact_extent` (the device survey runs the
+    same range pass the search runs)."""
+    var out = List[Int32]()
+    for col in range(Int(dataset.n)):
+        var extent = _exact_extent(dataset, item, Int32(col), bins, is_classification)
+        if not node_feature_is_constant(extent, item.instances.count):
+            out.append(Int32(col))
+    return out^
+
+
 def _exact_all_constant(
-    dataset: Dataset, item: NodeWorkItem, colids: List[Int32]
+    dataset: Dataset, item: NodeWorkItem, colids: List[Int32],
+    bins: HostBins, is_classification: Bool,
 ) -> Bool:
     """`node_nonconstant_flag_kernel`'s per-node answer: no sampled column
     varied on this node's rows."""
     for ci in range(len(colids)):
-        var extent = node_feature_min_max(dataset, item, colids[ci])
+        var extent = _exact_extent(dataset, item, colids[ci], bins, is_classification)
         if not node_feature_is_constant(extent, item.instances.count):
             return False
     return True
@@ -1292,6 +1342,7 @@ def train_tree_exact(
     is_classification: Bool,
     n_acc: Int,
     inv_scale: Float32,
+    bins: HostBins,
 ) raises -> TreeMetaDataNode[DType.float32]:
     """One tree grown as the device grows it, on the host: the block comment
     above. `labels_q` is the device's label plane (class ids for a
@@ -1303,7 +1354,7 @@ def train_tree_exact(
         # (et-clf-entropy-bestfirst, 2026-09-15): see the function below.
         return train_tree_exact_bestfirst(
             dataset, labels_q, params, tree_id, seed, is_classification,
-            n_acc, inv_scale,
+            n_acc, inv_scale, bins,
         )
     if Int(dataset.num_outputs) != n_acc:
         raise Error(
@@ -1333,6 +1384,7 @@ def train_tree_exact(
             var split = _exact_node_split(
                 dataset, labels_q, item, my_colids, n_acc, is_classification,
                 params.split_criterion, params.min_samples_leaf, seed, tree_id,
+                bins,
             )
             # DEVIATION 205 as the device loop keys it: every sampled column
             # constant on a non-empty node, then one non-constant column
@@ -1340,9 +1392,13 @@ def train_tree_exact(
             # alone.
             if (
                 item.instances.count > 0
-                and _exact_all_constant(dataset, item, my_colids)
+                and _exact_all_constant(
+                    dataset, item, my_colids, bins, is_classification
+                )
             ):
-                var nonconst = rescue_columns(dataset, item)
+                var nonconst = _exact_rescue_columns(
+                    dataset, item, bins, is_classification
+                )
                 if len(nonconst) > 0:
                     var u = rescue_pick(
                         rescue_key(seed, tree_id, UInt32(Int(item.idx))),
@@ -1353,7 +1409,7 @@ def train_tree_exact(
                     split = _exact_node_split(
                         dataset, labels_q, item, one, n_acc, is_classification,
                         params.split_criterion, params.min_samples_leaf, seed,
-                        tree_id,
+                        tree_id, bins,
                     )
             splits.append(split)
             if not split_not_valid(
@@ -1381,6 +1437,7 @@ def _exact_search_one(
     is_classification: Bool,
     n_acc: Int,
     k: Int32,
+    bins: HostBins,
 ) raises -> Split:
     """One node's search as `search_batch` answers it for member `i` of any
     batch, on the host: the column sample keyed by (seed, tree, node)
@@ -1394,10 +1451,14 @@ def _exact_search_one(
     _ = sample_features(colids, one_item, tree_id, seed, Int(dataset.n), Int(k))
     var split = _exact_node_split(
         dataset, labels_q, item, colids, n_acc, is_classification,
-        params.split_criterion, params.min_samples_leaf, seed, tree_id,
+        params.split_criterion, params.min_samples_leaf, seed, tree_id, bins,
     )
-    if item.instances.count > 0 and _exact_all_constant(dataset, item, colids):
-        var nonconst = rescue_columns(dataset, item)
+    if item.instances.count > 0 and _exact_all_constant(
+        dataset, item, colids, bins, is_classification
+    ):
+        var nonconst = _exact_rescue_columns(
+            dataset, item, bins, is_classification
+        )
         if len(nonconst) > 0:
             var u = rescue_pick(
                 rescue_key(seed, tree_id, UInt32(Int(item.idx))), len(nonconst)
@@ -1407,6 +1468,7 @@ def _exact_search_one(
             split = _exact_node_split(
                 dataset, labels_q, item, one, n_acc, is_classification,
                 params.split_criterion, params.min_samples_leaf, seed, tree_id,
+                bins,
             )
     return split
 
@@ -1420,6 +1482,7 @@ def train_tree_exact_bestfirst(
     is_classification: Bool,
     n_acc: Int,
     inv_scale: Float32,
+    bins: HostBins,
 ) raises -> TreeMetaDataNode[DType.float32]:
     """One tree grown BEST-FIRST as the device grows it (DEVIATION 466), on
     the host and on the exact key (the CPU training lane,
@@ -1465,7 +1528,7 @@ def train_tree_exact_bestfirst(
         for i in range(len(pending)):
             var split = _exact_search_one(
                 dataset, labels_q, pending[i], params, tree_id, seed,
-                is_classification, n_acc, k,
+                is_classification, n_acc, k, bins,
             )
             _ = queue.bestfirst_admit(pending[i], split, tree_id)
         if not queue.bestfirst_can_pop():
@@ -1917,11 +1980,30 @@ def transpose_to_row_major_kernel(
 #: the M4 at 1M rows: istellareg 86 -> 67 s, year 23.2 -> 18.0 s, RMSE equal
 #: to float X (8-bit codes from 1024 sampled rows, or thresholds drawn in
 #: code space, both moved RMSE). `-D MOJOLEARN_ET_BINNED_OFF` keeps float X.
+comptime IDN_ET_BINNED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_ET_BINNED_U16"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""fam2-forests (2026-10-04), CANDIDATE ARM, default OFF
+(`-D MOJOLEARN_IDN_ET_BINNED_U16=1`; dead under `MOJOLEARN_IDN_ALL_OFF`):
+the 16-bit binned regression search under IDENTICAL on every vendor. THE
+MODEL CHANGES (ranges are the borders of the node's lowest and highest
+codes, every threshold is snapped down to a border), so all four columns
+move together: the device arms are the FAST Apple ones (the range kernel's
+IDENTICAL arm already folds codes in key space and decodes the borders),
+and the host column (`train_tree_exact`, through `HostBins`) restates the
+same borders, codes, ranges, snap and stored threshold. Gate, per FIT and
+the same on the host: a regressor with `n_cols >= ET_BINNED_MIN_COLS` and
+`2k >= n_cols` (`et_identical_bins_wanted`). Needs the tiled search
+(`ET_RANGE_TILED and ET_SCORE_TILED`, the IDENTICAL default on every
+vendor); with those off the arm is off on device and host alike."""
+
 comptime ET_BINNED_REG = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_ET_BINNED_OFF"]()
-)
+) or IDN_ET_BINNED
 comptime ET_BINS = ET_QSTRIDE
 comptime ET_CODE = DType.uint16
 #: Binning pays in bytes per row, so it is taken only on wide data: at 16
@@ -1929,6 +2011,70 @@ comptime ET_CODE = DType.uint16
 comptime ET_BINNED_MIN_COLS = 64
 comptime ET_CODE_TILE = 8
 """Features per block for the code passes (M4 istellareg: 4 -> 53 s, 8 -> 49 s, 16 -> 67 s, 32 -> 79 s)."""
+
+
+def et_identical_bins_wanted(n_cols: Int, k: Int) -> Bool:
+    """`IDN_ET_BINNED`'s per-fit gate, ONE function for the device forest
+    loop and the host column (`host_forest.fit_forest_exact`): a regression
+    fit bins when the data is wide and the fit samples at least half of it
+    (the tiled search's own `2k >= n_cols` gate, `ensure_row_major`)."""
+    comptime if not IDN_ET_BINNED:
+        return False
+    comptime if not (ET_RANGE_TILED and ET_SCORE_TILED):
+        return False
+    return n_cols >= ET_BINNED_MIN_COLS and 2 * k >= n_cols
+
+
+@fieldwise_init
+struct HostBins(ImplicitlyCopyable, Movable):
+    """`IDN_ET_BINNED`, the host column's view of the device's binned X:
+    `codes` is COLUMN-major (`codes[col * m + row]`, the value
+    `et_bin_rows_kernel` stores at `[row * n_cols + col]`), `q` the borders
+    (`n_cols x ET_BINS`, `DeviceDataset.d_quant`), `nb` the per-column
+    border counts. `on` False means float X and the pointers are unread.
+    Built by `extratrees/impl/decisiontree/batched_levelalgo/host_binned.mojo`."""
+
+    var on: Bool
+    var codes: MutPointer[Scalar[ET_CODE], MutUntrackedOrigin]
+    var q: MutPointer[Float32, MutUntrackedOrigin]
+    var nb: MutPointer[Int32, MutUntrackedOrigin]
+
+    def extent(self, dataset: Dataset, item: NodeWorkItem, col: Int32) -> FeatureRange:
+        """`node_feature_range_tiled_kernel`'s code arm then the decode: the
+        borders of the node's lowest and highest codes, no missing count (a
+        code is never NaN). An empty node keeps `node_feature_min_max`'s
+        answer (the kernel maps nothing when no row was seen)."""
+        var begin = Int(item.instances.begin)
+        var end = begin + Int(item.instances.count)
+        if end <= begin:
+            return node_feature_min_max(dataset, item, col)
+        var base = Int(col) * Int(dataset.m)
+        var cmin = 65535
+        var cmax = 0
+        for p in range(begin, end):
+            var row = Int(dataset.row_ids[unsafe_offset=p])
+            var c = Int(self.codes[unsafe_offset = base + row])
+            if c < cmin:
+                cmin = c
+            if c > cmax:
+                cmax = c
+        var qb = Int(col) * ET_BINS
+        return FeatureRange(
+            self.q[unsafe_offset = qb + cmin],
+            self.q[unsafe_offset = qb + cmax],
+            Int32(0),
+        )
+
+    def stored_threshold(self, col: Int32, thr: Float32) -> Float32:
+        """`et_code_threshold_kernel` for one winner."""
+        var qp = (self.q + Int(col) * ET_BINS).unsafe_origin_cast[MutAnyOrigin]()
+        var n = self.nb[unsafe_offset = Int(col)]
+        var t = et_snap_code(qp, n, thr)
+        if t < 0:
+            t = 0
+        if t >= Int(n) - 1:
+            return Float32.MAX
+        return self.q[unsafe_offset = Int(col) * ET_BINS + t]
 
 
 def et_code_threshold_kernel(
@@ -2035,6 +2181,18 @@ struct DeviceDataset(Movable):
     """ET_BINNED_REG: the per-feature borders, `n_cols x ET_BINS`."""
     var d_nbins: DeviceBuffer[DType.int32]
     var has_bins: Bool
+    var bins_fit: Bool
+    """`IDN_ET_BINNED`: whether THIS fit takes the codes (set by the
+    regression forest loop from `et_identical_bins_wanted`), so a dataset a
+    session reuses with another `max_features` answers as the host column
+    does. Unread under FAST (`bins_active` is `has_bins` there)."""
+
+    @always_inline
+    def bins_active(self) -> Bool:
+        comptime if IDN_ET_BINNED:
+            return self.has_bins and self.bins_fit
+        else:
+            return self.has_bins
 
     def ensure_binned(mut self, ctx: DeviceContext) raises:
         """Build the row-major codes and their borders (RandomForest's
@@ -2185,7 +2343,7 @@ def upload_dataset(
     ctx.synchronize()
     return DeviceDataset(
         d_data^, d_labels^, n_rows, n_cols, n_classes, d_data_rm^, False,
-        d_bins_rm^, d_quant^, d_nbins^, False,
+        d_bins_rm^, d_quant^, d_nbins^, False, False,
     )
 
 
@@ -5009,7 +5167,7 @@ def search_batch_regression(
     var tiled_range = False
     comptime if ET_RANGE_TILED:
         tiled_range = dataset.has_rm
-    if tiled_range and dataset.has_bins:
+    if tiled_range and dataset.bins_active():
         ctx.enqueue_function[
             node_feature_range_tiled_kernel[TPB, ET_CODE_TILE, ET_CODE]
         ](
@@ -5121,7 +5279,7 @@ def search_batch_regression(
     var tiled_score = False
     comptime if ET_SCORE_TILED:
         tiled_score = dataset.has_rm
-    if tiled_score and dataset.has_bins:
+    if tiled_score and dataset.bins_active():
         ctx.enqueue_function[
             node_feature_score_reg_tiled_kernel[TPB, ET_CODE_TILE, ET_CODE]
         ](
@@ -5309,7 +5467,7 @@ def search_batch_regression(
         )
         ctx.enqueue_copy(dst_buf=ws.o_ties, src_buf=ws.d_ties)
 
-    if dataset.has_bins:
+    if dataset.bins_active():
         ctx.enqueue_function[et_code_threshold_kernel](
             r_q.unsafe_ptr(), r_c.unsafe_ptr(), dataset.d_quant.unsafe_ptr(),
             dataset.d_nbins.unsafe_ptr(),
@@ -5579,8 +5737,18 @@ def train_forest_regression_device_timed(
 
         dataset.ensure_row_major(ctx, Int(k))
         comptime if ET_RANGE_TILED and ET_SCORE_TILED:
-            if dataset.has_rm and Int(dataset.n_cols) >= ET_BINNED_MIN_COLS:
-                dataset.ensure_binned(ctx)
+            comptime if IDN_ET_BINNED:
+                # Per fit, and the host column's gate (`HostBins`).
+                dataset.bins_fit = et_identical_bins_wanted(
+                    Int(dataset.n_cols), Int(k)
+                )
+                if dataset.bins_fit and dataset.has_rm:
+                    dataset.ensure_binned(ctx)
+                else:
+                    dataset.bins_fit = False
+            else:
+                if dataset.has_rm and Int(dataset.n_cols) >= ET_BINNED_MIN_COLS:
+                    dataset.ensure_binned(ctx)
         var ws = make_level_workspace(
             ctx,
             Int(params.max_batch_size),

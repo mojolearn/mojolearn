@@ -1370,6 +1370,91 @@ def node_feature_score_host(
     )
 
 
+def node_feature_score_host_binned(
+    codes: MutPointer[UInt16, MutAnyOrigin],
+    quant_col: MutPointer[Float32, MutAnyOrigin],
+    nb: Int32,
+    row_ids: MutPointer[Int32, MutAnyOrigin],
+    labels_q: MutPointer[Int32, MutAnyOrigin],
+    m: Int,
+    range_start: Int,
+    range_len: Int,
+    col: Int,
+    extent: FeatureRange,
+    key: SplitKey,
+    min_samples_leaf: Int,
+) -> ScoredCandidate:
+    """`node_feature_score_host` for the REGRESSION score pass over binned
+    codes (`node_feature_score_reg_tiled_kernel`'s code arm, the IDENTICAL
+    candidate `builder.IDN_ET_BINNED`): `extent` is the border range the
+    binned range pass published, the threshold is drawn from it exactly as
+    the float pass draws, and a row goes left when its code is at most the
+    code the draw snaps down to (`et_snap_code`; -1 sends no row left).
+    `codes` is column-major (`codes[col * m + row]`), `quant_col` this
+    column's borders. The reported threshold is the UNSNAPPED draw, as the
+    finalize kernel reports it; the stored one is snapped by the caller
+    (`et_code_threshold_kernel`). Counts, status and key as the float form."""
+    if extent.n_missing != Int32(0):
+        return empty_scored_candidate(SCORE_STATUS_MISSING_REFUSED, 1)
+    if node_feature_is_constant(extent, Int32(range_len)):
+        return empty_scored_candidate(SCORE_STATUS_CONSTANT, 1)
+
+    var threshold = draw_threshold_device(key, extent)
+    var snapped = Float32(et_snap_code(quant_col, nb, threshold))
+
+    var acc_left = List[Int32](length=1, fill=Int32(0))
+    var acc_total = List[Int32](length=1, fill=Int32(0))
+    var n_left = 0
+    var n_total = 0
+    var col_offset = col * m
+
+    for p in range(range_start, range_start + range_len):
+        var row = Int(row_ids[unsafe_offset=p])
+        var c = Float32(Int(codes[unsafe_offset = col_offset + row]))
+        var lab = Int(labels_q[unsafe_offset=row])
+        n_total += 1
+        acc_total[0] += Int32(lab)
+        if c <= snapped:
+            acc_left[0] += Int32(lab)
+            n_left += 1
+
+    var n_right = n_total - n_left
+    var status = SCORE_STATUS_SCORED
+    if (
+        n_left < min_samples_leaf
+        or n_right < min_samples_leaf
+        or n_left == 0
+        or n_right == 0
+    ):
+        status = SCORE_STATUS_REJECTED_MIN_SAMPLES_LEAF
+
+    var num = Int64(0)
+    var den = Int64(0)
+    if status == SCORE_STATUS_SCORED:
+        if not regression_key(
+            Int64(Int(acc_left[0])),
+            Int64(Int(acc_total[0])),
+            n_left,
+            n_right,
+            range_len,
+            SCORE_SAB_NONE,
+            num,
+            den,
+        ):
+            status = SCORE_STATUS_REGRESSION_REFUSED
+
+    return ScoredCandidate(
+        status,
+        threshold,
+        Int32(n_left),
+        Int32(n_total),
+        acc_left^,
+        acc_total^,
+        num,
+        den,
+    )
+
+
 def scored_candidate_at(
     out_status: MutPointer[Int32, MutAnyOrigin],
     out_threshold: MutPointer[Float32, MutAnyOrigin],
