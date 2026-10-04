@@ -131,6 +131,7 @@ from neighbors.impl.knn.knn import (
     knn_classify,
     knn_regress,
 )
+from neighbors.impl.selection.knn import KNN_IDN_DEVICE_WEIGHTS, device_distance_weights
 from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     METRIC_FROM_IS_SQRT,
@@ -1492,7 +1493,14 @@ def _knn_classifier_vote(
     # the reason (the zero test is a per-row any-reduction and the
     # replacement is row-level).
     var d_w = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
-    if weighted:
+    # lane/fam2-neighbors (KNN_IDN_DEVICE_WEIGHTS): the rule as a kernel
+    # unless the call is traced (the trace records the host weights)
+    var dev_weights = False
+    comptime if KNN_IDN_DEVICE_WEIGHTS:
+        dev_weights = not trace.enabled
+    if weighted and dev_weights:
+        device_distance_weights(ctx, dist_ptr, d_w, n_queries, k)
+    if weighted and not dev_weights:
         # HOST LISTS ACROSS THE BOUNDARY, not pointers: a pointer from
         # `enqueue_create_host_buffer` is not
         # interchangeable with an arbitrary host pointer on this stack and
@@ -1684,7 +1692,14 @@ def _knn_regressor_vote(
     out_ptr: MutPointer[Float32, MutUntrackedOrigin], weighted: Bool,
 ) raises:
     var d_w = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
-    if weighted:
+    # lane/fam2-neighbors (KNN_IDN_DEVICE_WEIGHTS): the rule as a kernel
+    # unless the call is traced (the trace records the host weights)
+    var dev_weights = False
+    comptime if KNN_IDN_DEVICE_WEIGHTS:
+        dev_weights = not trace.enabled
+    if weighted and dev_weights:
+        device_distance_weights(ctx, dist_ptr, d_w, n_queries, k)
+    if weighted and not dev_weights:
         # HOST LISTS ACROSS THE BOUNDARY, not pointers: a pointer from
         # `enqueue_create_host_buffer` is not
         # interchangeable with an arbitrary host pointer on this stack and

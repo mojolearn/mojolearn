@@ -83,6 +83,7 @@ from neighbors.impl.label.classlabels import make_monotonic, map_label_kernel, L
 from neighbors.impl.selection.distance_weights import (
     weighted_class_probs_kernel,
     weighted_regress_avg_kernel,
+    distance_weights_kernel,
 )
 
 
@@ -97,6 +98,19 @@ from neighbors.impl.selection.distance_weights import (
 #: restores the old sequence.
 comptime KNN_IDN_DIRECT_RELABEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+#: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor, default ON:
+#: weights='distance' computes the weights in a kernel
+#: (`distance_weights_kernel`, `host_distance_weights`' statements, one
+#: thread per query row). Before, the vote copied the n_queries x k
+#: distances into a host list element by element, ran the rule on the host,
+#: copied the result into a pinned buffer element by element and uploaded
+#: it. No bit moves; the host column keeps `host_distance_weights`. A traced
+#: call (IdentityTrace enabled) keeps the host route, whose record it is.
+#: -D MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF (or MOJOLEARN_IDN_ALL_OFF) off.
+comptime KNN_IDN_DEVICE_WEIGHTS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
 comptime KNN_TPB_X = 32
@@ -556,4 +570,48 @@ def knn_regress(
     if trace.enabled:
         trace.record_device(
             ctx, "knn_reg.pred", out_buf, n_query_rows * len(y)
+        )
+
+
+def device_distance_weights(
+    ctx: DeviceContext,
+    dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mut d_w: DeviceBuffer[DType.float32],
+    n_queries: Int,
+    k: Int,
+) raises:
+    """KNN_IDN_DEVICE_WEIGHTS: `host_distance_weights` over the n_queries x k
+    sorted distances at `dist_ptr`, written to `d_w` on the device. One
+    upload, one launch, one 4-byte flag read (the rule's two refusals)."""
+    if n_queries <= 0 or k <= 0:
+        raise Error(
+            "knn weights='distance': n_queries and k must be positive, got "
+            + String(n_queries) + ", " + String(k)
+        )
+    var d_dist = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
+    ctx.enqueue_copy(dst_buf=d_dist, src_ptr=dist_ptr)
+    var d_flag = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(d_flag, Int32(0))
+    ctx.enqueue_function[distance_weights_kernel](
+        d_dist.unsafe_ptr(), d_w.unsafe_ptr(), d_flag.unsafe_ptr(),
+        Int32(n_queries), Int32(k),
+        grid_dim=(n_queries + KNN_TPB_X - 1) // KNN_TPB_X, block_dim=KNN_TPB_X,
+    )
+    var h_flag = List[Int32](length=1, fill=Int32(0))
+    ctx.enqueue_copy(dst_ptr=h_flag.unsafe_ptr(), src_buf=d_flag)
+    ctx.synchronize()
+    var got = Int(h_flag[0])
+    _ = h_flag^
+    _ = d_flag^
+    _ = d_dist^
+    if got == 1:
+        raise Error(
+            "knn weights='distance': a query row has a NEGATIVE distance, which no"
+            " implemented metric can produce; refusing rather than weighting it"
+        )
+    if got != 0:
+        raise Error(
+            "knn weights='distance': every neighbour of a query row has 1/d that"
+            " underflows float32, so the row's normalizer is zero on an FTZ column"
+            " and not on a denormal-honoring one (DEVIATION 555)"
         )
