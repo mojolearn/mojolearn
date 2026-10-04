@@ -2007,8 +2007,14 @@ comptime ET_BINNED_REG = (
 ) or IDN_ET_BINNED
 comptime ET_BINS = ET_QSTRIDE
 comptime ET_CODE = DType.uint16
-#: Binning pays in bytes per row, so it is taken only on wide data: at 16
-#: columns (taxi) the border pass costs more than the smaller reads save.
+#: Binning pays in bytes per row, so it is taken only on wide data: the
+#: border pass is a fixed cost per column, while the saving (uint16 codes
+#: for float32 values) is per row read; a row of 64 float32 columns is 256 B,
+#: four 64-byte lines, where halving the bytes per row starts to save whole
+#: lines per row. A RANGE rule measured at 16 columns (loses) and 220 (wins)
+#: only: NEEDS NEIGHBOR-SHAPE VALIDATION (32, 48, 64, 96, 128 columns). The
+#: device and the host column read this same gate (`et_identical_bins_wanted`),
+#: so moving it moves bits on every vendor and the host together.
 comptime ET_BINNED_MIN_COLS = 64
 comptime ET_CODE_TILE = 8
 """Features per block for the code passes (M4 istellareg: 4 -> 53 s, 8 -> 49 s, 16 -> 67 s, 32 -> 79 s)."""

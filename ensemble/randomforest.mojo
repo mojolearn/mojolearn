@@ -165,7 +165,13 @@ columns and up), where a node's rows then read the row-major bins in
 ascending order. M4 1M rows, same forest hashes: istella 18.0-19.4 ->
 13.0-14.0 s, istellareg 92 -> 88 s; taxi / taxireg (16 columns) are ~7%
 slower with it (the sort costs more than the locality saves), so they keep
-the drawn order. `-D MOJOLEARN_RF_ROWS_SORTED_OFF` keeps the drawn order."""
+the drawn order. `-D MOJOLEARN_RF_ROWS_SORTED_OFF` keeps the drawn order.
+The edge is a RANGE rule from the cache line, not a board row: below 64
+columns a row's uint8 bins fit one 64-byte line (the same boundary as
+`RF_BINS_ROW_MAJOR`), so ascending rows buy little locality and the sort is
+pure cost; from 64 up a row spans whole lines and the ascending reads pay.
+Measured at 16 and 220 columns only: NEEDS NEIGHBOR-SHAPE VALIDATION (48, 63,
+64, 96, 128 columns). Bit-inert either side (same forest bytes)."""
 comptime ROWS_SORTED_MIN_COLS = 64
 
 # The default bootstrap sampler already

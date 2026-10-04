@@ -495,7 +495,11 @@ comptime FAST_REPLICATION_PIN_2040 = is_defined[
 # ====================================================
 comptime SYM_RIDX_MAX_FEATURES = 64
 """trees-apple2: `run_tree_layout_traced` takes DEVIATION 2031 only when the
-layout has at most this many features (see `use_ridx` there)."""
+layout has at most this many features (see `use_ridx` there). A RANGE rule,
+not a board row: gathered stat loads scale with the feature groups a level
+walks, the saved reorder does not. Measured at 16 and 220 features only:
+NEEDS NEIGHBOR-SHAPE VALIDATION (32, 48, 64, 65, 96, 128 features).
+Bit-inert either side (same digests)."""
 
 comptime SYM_RIDX_SPLITS_2031 = (
     (

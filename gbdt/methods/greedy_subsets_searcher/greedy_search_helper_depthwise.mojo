@@ -227,7 +227,13 @@ comptime NONSYM_GROUP_WIDTH_2661 = is_defined[
 # spelled (hist build, split apply, end-of-tree sweep) and default to the
 # old body everywhere else.
 comptime RIDX_IDENTICAL_MAX_FEATURES = 64
-"""See `use_ridx` in `fit_non_symmetric_tree`."""
+"""See `use_ridx` in `fit_non_symmetric_tree`. A RANGE rule, not a board
+row: the ridx schedule pays one gathered stat load per row per feature group
+a level walks, against one stat-plane reorder per split, so it wins on
+narrow layouts and loses once the groups per level grow. Measured at 16 and
+220 features only: NEEDS NEIGHBOR-SHAPE VALIDATION (32, 48, 64, 65, 96, 128
+features). Bit-inert either side (same digests), so the edge only picks the
+faster same-order schedule."""
 
 comptime RIDX_ONLY_SPLITS = ridx_only_splits_for[
     TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
