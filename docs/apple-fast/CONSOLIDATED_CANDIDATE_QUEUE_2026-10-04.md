@@ -27,16 +27,16 @@ this core GEMM hook: decomposition MMA, LU and Cholesky have other launchers.
 
 | ID | Modifiers | Tile M x N x K | Intake state |
 | --- | --- | --- | --- |
-| G1 | DIRECT | 64 x 64 x 16 | M2 A/B PASS at 6abb76673; M3 quality next |
-| G2 | DIRECT, SMALL | 32 x 32 x 16 | Review/compile backlog |
-| G3 | DIRECT, WIDE | 64 x 128 x 16 | Review/compile backlog |
-| G4 | DIRECT, TALL | 128 x 64 x 16 | Review/compile backlog |
-| G5 | none | 64 x 64 x 16 | M2 A/B PASS at 6abb76673; M3 quality next |
-| G6 | DEEP | 64 x 64 x 32 | Review/compile backlog |
-| G7 | PADDED | 64 x 64 x 16 | Review/compile backlog |
-| G8 | WIDE, DEEP | 64 x 128 x 32 | Review/compile backlog |
-| G9 | TALL, DEEP | 128 x 64 x 32 | Review/compile backlog |
-| G10 | DEEP, PADDED | 64 x 64 x 32 | Review/compile backlog |
+| G1 | DIRECT | 64 x 64 x 16 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
+| G2 | DIRECT, SMALL | 32 x 32 x 16 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
+| G3 | DIRECT, WIDE | 64 x 128 x 16 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
+| G4 | DIRECT, TALL | 128 x 64 x 16 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
+| G5 | none | 64 x 64 x 16 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
+| G6 | DEEP | 64 x 64 x 32 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
+| G7 | PADDED | 64 x 64 x 16 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
+| G8 | WIDE, DEEP | 64 x 128 x 32 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
+| G9 | TALL, DEEP | 128 x 64 x 32 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
+| G10 | DEEP, PADDED | 64 x 64 x 32 | M2 A/B PASS9f1a1657c; eleven matrix fixtures exact, n1 HOLD; matrix-only one-call screen complete, no default |
 
 Overlap review: `DECOMP_FAST_MMA_K16@d487c814f` targets decomposition's
 non-split launcher; `LU_FAST_MMA_DBUF@5d4e5d5d5` targets LU's subtract-update
@@ -57,11 +57,11 @@ promotion. Forecast quality remains a separate acceptance gate.
 
 | ID | Candidate | Intake state |
 | --- | --- | --- |
-| K1 | Full Gaussian associative prefix scan | Equation/oracle and adapter backlog |
+| K1 | Full Gaussian associative prefix scan | Full Gaussian oracle HOLD: 6 math / 48 float32 / 14 gradient failures; fixed diagnostic controls queued |
 | K2-B8 | Blocked Gaussian scan, block size 8 | Equation/oracle and adapter backlog |
 | K2-B16 | Blocked Gaussian scan, block size 16 | Equation/oracle and adapter backlog |
 | K2-B32 | Blocked Gaussian scan, block size 32 | Equation/oracle and adapter backlog |
-| K3 | Scalar exact-observation specialization | Exact scalar Mojo adapter; M2 signature repair pending; quality/forecast gates owed |
+| K3 | Scalar exact-observation specialization | Actual scalar kernel M2 PASS; original quality HOLD; product-gradient-tail correction102e0d70a queued, full fit/forecast owed |
 
 ## Shared-call variants
 
@@ -73,17 +73,17 @@ These APIs need explicit FAST/Apple guards at any production integration.
 
 | ID | Candidate | Intake state |
 | --- | --- | --- |
-| C1 | ResidentCallSlot: retained transfers and scratch | M2 probe A/B PASS at 89e7d080b; M3 quality next |
-| C2 | wait_pair: one wait for two independent calls | M2 probe A/B PASS at 89e7d080b; M3 quality next |
-| C3 | PackedReadback: retained grouped readback slab | M2 probe A/B PASS at 89e7d080b; M3 quality next |
-| C4 | Resident MinMax transform adapter | M2 probe A/B PASS at 89e7d080b; M3 quality next |
+| C1 | ResidentCallSlot: retained transfers and scratch | r3 import fixed, context identity guard failed; r5 stable retained identity3491a4d4c compiling M2, lifecycle quality owed |
+| C2 | wait_pair: one wait for two independent calls | r3 import fixed, context identity guard failed; r5 stable retained identity3491a4d4c compiling M2, lifecycle quality owed |
+| C3 | PackedReadback: retained grouped readback slab | r3 import fixed, context identity guard failed; r5 stable retained identity3491a4d4c compiling M2, lifecycle quality owed |
+| C4 | Resident MinMax transform adapter | r3 import fixed, context identity guard failed; r5 stable retained identity3491a4d4c compiling M2, lifecycle quality owed |
 
 The sibling IDENTICAL call-path worktree is not included in this FAST intake.
 Manager owns queue edits and merges; delegated reviewers own isolated source
 and harness preparation. Record new jobs and verdicts in `EXPERIMENTS.md`
 when their exact compiled source and gates are ready.
 
-## First intake evidence
+## Historical first intake evidence (superseded by current table)
 
 G1/G5 probe source `6abb76673038a3f7a3eb6ebc5be331472e32747e`, binding
 `gemm_probe`, define `MOJOLEARN_APPLE_GEMM_PROBE`: M2 A/B rc0. This
@@ -119,3 +119,15 @@ from an already prepared queue branch. Their own exact source is checked out
 privately and their M2 binary manifests/hashes are verified by the original
 probe helper; no redundant native build or scored replay is involved.
 K3 `6f09497ab` passed M2 A/B and is staged/queued for kernel quality only.
+
+## Latest shared-path decisions
+
+M3 catalog-matrix-t-v1 finished all66 predeclared matrix-only records with
+exact incumbent output hashes. Cold context/transport dominates23–30ms;
+no universal geometry wins and no estimator is admitted from this screen.
+A distinct resident-input contract is under preparation; it still includes
+completion and first read, with one scored call per arm/shape after quality.
+Actual core/estimators counter-quality harness0505c9427 is source-only.
+Shared dispatcher a9e64922f passed43 route fixtures, including preserved
+GEMV/TN/K0 fallbacks. Decomposition and PCA bypass these SDK entrances;
+their next adapters must preserve strides, split policy and atomic behavior.
