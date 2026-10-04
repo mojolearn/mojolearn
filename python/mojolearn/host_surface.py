@@ -3844,8 +3844,12 @@ def lane_exposure_counts(lanes, device_class="cpu"):
 # names the tokenizer family since lane/bpe-builder-native (2026-09-18):
 # BpeVocabularyTrainer trains through that binding's bpe_train by default and
 # falls back to the pure Python reference only when the binding lacks it.
+# cross-val-folds still exercises the Python fold reference, but its
+# split_descriptor arm now reaches _native_default_folds: fold_ids and
+# select_fold_i64 are host helpers supplied by core, including on GPU installs.
+# Calling that lane pure Python would hide its real native dependency.
 PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer", "bpe-trainer": "tokenizer",
-                          "cross-val-folds": None, "bpe-vocabulary": "tokenizer",
+                          "cross-val-folds": "core", "bpe-vocabulary": "tokenizer",
                           "tokenized-corpus": "tokenizer"}
 
 #: Lanes that PASS every static condition for `public_reference_lanes()` and

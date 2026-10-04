@@ -751,12 +751,11 @@ def lane_rows(harness, surface_mod, cols):
     cpu_seen = cpu_recorded(cols)
     moves, unpaired = sabotage_moves(cols)
     covered = set(surface_mod.covered_lanes())
-    # A lane that stands on NO host family is still CPU-declared when the
-    # host-only registry names it (2026-09-19). `cross-val-folds` is pure
-    # Python over the labels and the split count -- no binding, no RNG, no
-    # native call -- so no family's `training_lanes` can ever list it, and
-    # reading the family registries alone reported it as the one lane with no
-    # CPU verifier. It has a CPU recording, an installed CPU-only wheel
+    # A lane can be CPU-declared through the host-only registry without
+    # belonging to a family's training lanes. `cross-val-folds` was pure
+    # Python originally; its descriptor now requires core's CPU fold helpers.
+    # Reading only training-lane membership would still miss its CPU verifier.
+    # It has a CPU recording, an installed CPU-only wheel
     # selects it through `public_reference_lanes()`, and the matrix's own
     # "a GPU column cannot judge" section already says it is checked on the
     # cpu-host column. The count was measuring family membership and calling

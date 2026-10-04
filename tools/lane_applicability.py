@@ -4,6 +4,10 @@
 """WHICH LANES ARE MEANINGFUL ON WHICH COLUMN, and what each one is compared
 against (lane/oracle-and-applicability-audit, 2026-09-16).
 
+Current fold-metadata route: cross-val-folds now requires core's CPU helpers
+through split_descriptor. The pure-Python discussion below describes the
+original route; PUBLIC_HOST_ONLY_LANES now names its native core dependency.
+
 `tools/lane_select.py` answers a DIFFERENT question, "which lanes can a change
 possibly move". This one answers "on which columns can a lane's proposition
 even be stated", and "when this cell passes, what did it pass against".
@@ -814,6 +818,8 @@ def scopes():
     hs = host_surface()
     excluded = set(ib.record_excluded_lanes())
     covered = covered_lanes()
+    host_families = {f['family']: f['binding'] for f in hs.FAMILIES}
+    declared_host_only = getattr(hs, 'PUBLIC_HOST_ONLY_LANES', {})
     out = {}
     disagreements = []
     for name, fn in ib.LANES.items():
@@ -829,13 +835,25 @@ def scopes():
             disagreements.append(
                 f"{name}: name says {'driver' if name.startswith('par-') else 'not a driver'}, "
                 f"body says {'reaches' if claim_devices >= 2 else 'does not reach'} _par_devices")
+        host_only = _host_only_names(ml_attrs)
+        host_family = declared_host_only.get(name)
+        if host_family is not None:
+            # Host helpers can live in the same module/binary as GPU code.
+            # A whole-module scan cannot distinguish split_descriptor's CPU
+            # fold helpers from model_selection's GPU splitters/scorers.
+            # The host-surface route names the family providing this lane;
+            # preserve it rather than attributing CPU work to every GPU.
+            if host_family not in host_families:
+                disagreements.append(f'{name}: unknown declared host family {host_family!r}')
+            else:
+                host_only.add(host_families[host_family])
         out[name] = Scope(
             name=name,
             claim_devices=claim_devices,
             oracle=oracle,
             oracle_evidence=evidence,
-            host_only=_host_only_names(ml_attrs),
-            has_cpu_route=name in covered,
+            host_only=host_only,
+            has_cpu_route=name in covered or host_family in host_families,
             is_function=_is_function_lane(node),
             record_excluded=name in excluded,
             ml_attrs=sorted(ml_attrs),
@@ -1044,25 +1062,22 @@ def _selfcheck():
         """) == "recorded",
          "a body with no comparison at all was given an oracle")
 
-    # 6b. THE PURE-PYTHON LANE IS MEANINGFUL ON THE CPU COLUMN AND VACUOUS ON
-    #     THE GPU ONES (2026-09-19). Until this arm the rule held exactly the
-    #     opposite for `cross-val-folds`: refused on cpu-host as DEGENERATE
-    #     ("host_surface declares no CPU route"), admitted on all five GPU
-    #     columns where no GPU code runs at all. Both halves are asserted here,
-    #     because fixing only the refusal would leave five vacuous cells.
-    want(s["cross-val-folds"].pure_python,
-         "cross-val-folds stands on no binding at all; it must read pure_python")
+    # 6b. Fold metadata is host-only. split_descriptor now calls core's
+    # native fold helpers, so the historical pure-Python classification no
+    # longer holds. Both routes must remain honest about the actual work.
+    want(not s["cross-val-folds"].pure_python and s["cross-val-folds"].host_only,
+         "cross-val-folds requires native CPU helpers, not GPU arithmetic")
     try:
         check(["cross-val-folds"], "cpu-host")
     except LaneNotApplicable as exc:
-        fails.append("check() REFUSED the pure-Python lane on the one column its "
+        fails.append("check() REFUSED the host fold lane on the one column its "
                      "proposition is stateable on: " + str(exc).splitlines()[1].strip())
     try:
         check(["cross-val-folds"], "apple-metal")
-        fails.append("check() did NOT refuse the pure-Python lane on a GPU column")
+        fails.append("check() did NOT refuse the host fold lane on a GPU column")
     except LaneNotApplicable as exc:
-        want("vacuous" in str(exc) and "metal" in str(exc),
-             "the GPU refusal did not say the cell is vacuous on that backend")
+        want("CPU host route" in str(exc) and "metal" in str(exc),
+             "the GPU refusal did not identify host arithmetic on that backend")
 
     # 6c. THE CPU EXEMPTION IS NARROW, watched on BOTH sides of the one branch
     #     this change touched. The exemption is for "stands on no binding
@@ -1099,8 +1114,9 @@ def _selfcheck():
               "mlp", "par-mlp", "optim-sgd", "training-primitives", "cross-entropy-arms"):
         want(not s[n].pure_python, f"{n} stands on a binding; it must not read pure_python")
     pure = sorted(n for n, sc in s.items() if sc.pure_python)
-    want(pure == ["cross-val-folds"],
-         "the pure-Python set must be exactly cross-val-folds on this registry; it is "
+    declared_pure = sorted(n for n, family in host_surface().PUBLIC_HOST_ONLY_LANES.items() if family is None)
+    want(pure == declared_pure,
+         "pure-Python derivation disagrees with current host declaration; derived set is "
          + (", ".join(pure) if pure else "empty"))
 
     # 6. THE DERIVATION IS NOT READING THE LANE NAMES. Renaming a driver lane
