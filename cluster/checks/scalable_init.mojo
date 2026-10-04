@@ -149,6 +149,32 @@ def sample_flags_kernel(
     flags.unsafe_store(i, Float32(1.0) if keep else Float32(0.0))
 
 
+def sample_flags_dev_kernel(
+    flags: MutPointer[Float32, MutAnyOrigin],
+    min_dist: MutPointer[Float32, MutAnyOrigin],
+    is_centroid: MutPointer[Int32, MutAnyOrigin],
+    psi: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    lk_in: Float32,
+    seed_lo: Int32,
+    seed_hi: Int32,
+):
+    """`sample_flags_kernel` with the round's cost read from the DEVICE
+    scalar `psi[0]` instead of arriving as a launch argument (fam2-cluster,
+    `IDN_KMEANS_INIT_PSI_DEVICE`): the round no longer drains to bring psi
+    to the host. The host form passes `Float32(Float64(psi[0]))`, which is
+    `psi[0]`, so the flags are the same flags."""
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= n:
+        return
+    var u = scalable_uniform(seed_lo, seed_hi, i)
+    var keep = is_centroid.unsafe_load(i) == Int32(0) and scalable_keep(
+        min_dist.unsafe_load(i), psi.unsafe_load(0), lk_in, u
+    )
+    flags.unsafe_store(i, Float32(1.0) if keep else Float32(0.0))
+
+
 def select_scatter_kernel(
     out_index: MutPointer[UInt32, MutAnyOrigin],
     is_centroid: MutPointer[Int32, MutAnyOrigin],

@@ -129,6 +129,11 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_max_floats,
 )
 from gemm.contract import OP_TN
+from mixture.chol_order import (
+    GMM_IDN_CHOL_TPB,
+    IDN_GMM_FUSED_CHOL,
+    gmm_idn_chol_applies,
+)
 from mixture.nk_order import (
     GMM_NK_CHUNK,
     IDN_GMM_NK_LEVELS,
@@ -163,6 +168,8 @@ from checks.numerics import (
     identical_exp,
     identical_log,
     identical_mul,
+    identical_mul_add,
+    identical_sqrt,
 )
 
 
@@ -1129,6 +1136,132 @@ def gmm_big_chol_kernel(
         log_det_chol[k] = -sl
 
 
+def idn_precision_cholesky_kernel(
+    cov: MutPointer[Float32, MutAnyOrigin],
+    chol_l: MutPointer[Float32, MutAnyOrigin],
+    linv: MutPointer[Float32, MutAnyOrigin],
+    prec: MutPointer[Float32, MutAnyOrigin],
+    log_det_chol: MutPointer[Float32, MutAnyOrigin],
+    info: MutPointer[Int32, MutAnyOrigin],
+    d_in: Int32,
+):
+    """fam2-cluster, `IDN_GMM_FUSED_CHOL` (IDENTICAL, every column): block k
+    = component k, the working matrix in `chol_l[k]` and the inverse built
+    in `linv[k]` (device memory, so d may reach the block size), every
+    operation and its order as `mixture/chol_order.mojo` states them. Launch
+    `grid_dim = ncomp`, `block_dim = GMM_IDN_CHOL_TPB`.
+
+    Each trailing cell `(r, c)` is owned by one thread per column step and
+    takes ONE pinned fma per step, so its chain is ascending in j whatever
+    the thread count; the three phases of a step are separated by block
+    barriers that order device memory (`_gmm_dev_barrier`)."""
+    var d = Int(d_in)
+    var dd = d * d
+    var k = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var base = k * dd
+    var flag = stack_allocation[
+        1, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var e = t
+    while e < dd:
+        var v = cov.unsafe_load(base + e)
+        if e // d == e % d:
+            v = ftz(ftz(v) + GMM_CHOL_JITTER)
+        chol_l.unsafe_store(base + e, v)
+        e += GMM_IDN_CHOL_TPB
+    if t == 0:
+        flag[0] = Int32(0)
+    _gmm_dev_barrier()
+    for j in range(d):
+        if t == 0:
+            var pv = chol_l.unsafe_load(base + j * d + j)
+            if pv > Float32(0.0):
+                chol_l.unsafe_store(
+                    base + j * d + j, ftz(identical_sqrt(pv))
+                )
+            else:
+                flag[0] = Int32(j + 1)
+        _gmm_dev_barrier()
+        if flag[0] != Int32(0):
+            break
+        var pj = chol_l.unsafe_load(base + j * d + j)
+        var i = j + 1 + t
+        while i < d:
+            chol_l.unsafe_store(
+                base + i * d + j,
+                ftz(identical_div(chol_l.unsafe_load(base + i * d + j), pj)),
+            )
+            i += GMM_IDN_CHOL_TPB
+        _gmm_dev_barrier()
+        # trailing update of the lower triangle, cells (r, c), j < c <= r
+        var m = d - 1 - j
+        var cell = t
+        while cell < m * m:
+            var r = j + 1 + cell // m
+            var c = j + 1 + cell % m
+            if c <= r:
+                chol_l.unsafe_store(
+                    base + r * d + c,
+                    ftz(
+                        identical_mul_add(
+                            -chol_l.unsafe_load(base + r * d + j),
+                            chol_l.unsafe_load(base + c * d + j),
+                            chol_l.unsafe_load(base + r * d + c),
+                        )
+                    ),
+                )
+            cell += GMM_IDN_CHOL_TPB
+        _gmm_dev_barrier()
+    var bad = flag[0]
+    if t == 0:
+        info.unsafe_store(k, bad)
+    if bad != Int32(0):
+        return
+    if t < d:
+        # column t of L^{-1} by forward substitution; this thread alone
+        # writes and reads its column of `linv`
+        var c = t
+        for i in range(d):
+            var v = Float32(0.0)
+            if i == c:
+                v = ftz(
+                    identical_div(
+                        Float32(1.0), chol_l.unsafe_load(base + i * d + i)
+                    )
+                )
+            elif i > c:
+                for m2 in range(c, i):
+                    v = ftz(
+                        identical_mul_add(
+                            -chol_l.unsafe_load(base + i * d + m2),
+                            linv.unsafe_load(base + m2 * d + c),
+                            v,
+                        )
+                    )
+                v = ftz(
+                    identical_div(v, chol_l.unsafe_load(base + i * d + i))
+                )
+            linv.unsafe_store(base + i * d + c, v)
+    _gmm_dev_barrier()
+    e = t
+    while e < dd:
+        var r = e // d
+        var c = e - r * d
+        if c > r:
+            chol_l.unsafe_store(base + e, Float32(0.0))
+        prec.unsafe_store(base + c * d + r, linv.unsafe_load(base + e))
+        e += GMM_IDN_CHOL_TPB
+    if t == 0:
+        var sl = Float32(0.0)
+        for j in range(d):
+            sl = ftz(
+                sl
+                + ftz(identical_log(chol_l.unsafe_load(base + j * d + j)))
+            )
+        log_det_chol.unsafe_store(k, -sl)
+
+
 def center_sqrt_scale_kernel(
     x: MutPointer[Float32, MutAnyOrigin],
     means: MutPointer[Float32, MutAnyOrigin],
@@ -1389,6 +1522,58 @@ def gmm_precision_cholesky(
 
     var grid_dd = (dd + elem_tpb - 1) // elem_tpb
 
+    comptime if IDN_GMM_FUSED_CHOL:
+        # fam2-cluster: every component in one launch, one readback of the
+        # pivot flags (`mixture/chol_order.mojo`). The sabotage arms keep the
+        # per-component chain they were written against.
+        if sabotage == GMM_SAB_NONE and gmm_idn_chol_applies(d):
+            var d_info = ctx.enqueue_create_buffer[DType.int32](ncomp)
+            var h_info = ctx.enqueue_create_host_buffer[DType.int32](ncomp)
+            ctx.enqueue_function[idn_precision_cholesky_kernel](
+                cov.unsafe_ptr(), chol_l.unsafe_ptr(), linv.unsafe_ptr(),
+                prec.unsafe_ptr(), log_det_chol.unsafe_ptr(),
+                d_info.unsafe_ptr(), Int32(d),
+                grid_dim=(ncomp, 1, 1), block_dim=(GMM_IDN_CHOL_TPB, 1, 1),
+            )
+            ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=d_info)
+            ctx.synchronize()
+            var fail_k = -1
+            var fail_info = 0
+            for kc in range(ncomp):
+                var inf_k = Int(h_info.unsafe_ptr().unsafe_load(kc))
+                if inf_k != 0 and fail_k < 0:
+                    fail_k = kc
+                    fail_info = inf_k
+            _ = d_info^
+            _ = h_info^
+            _ = identity^
+            _ = scal^
+            _ = work^
+            if trace.enabled:
+                # The per-component chain's tags, in its order: the
+                # components before the first failure, then the log
+                # determinants when none failed.
+                var upto = ncomp if fail_k < 0 else fail_k
+                for kc in range(upto):
+                    var ldst = chol_l.create_sub_buffer[DType.float32](
+                        kc * dd, dd
+                    )
+                    trace.record_device(
+                        ctx, gmm_comp_tag(tag, kc, "cholesky"), ldst, dd
+                    )
+                    var prec_k = prec.create_sub_buffer[DType.float32](
+                        kc * dd, dd
+                    )
+                    trace.record_device(
+                        ctx, gmm_comp_tag(tag, kc, "precchol"), prec_k, dd
+                    )
+                    _ = ldst^
+                    _ = prec_k^
+                if fail_k < 0:
+                    trace.record_device(
+                        ctx, tag + ".logdet", log_det_chol, ncomp
+                    )
+            return GmmMStepRun(fail_info, fail_k)
     comptime if GMM_FUSED_CHOL:
         if sabotage == GMM_SAB_NONE and not trace.enabled and d <= GMM_CHOL_MAX_D:
             var d_info = ctx.enqueue_create_buffer[DType.int32](ncomp)

@@ -21,7 +21,10 @@ from std.memory import bitcast
 
 from std.bit import count_leading_zeros
 
-from checks.numerics import ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_pow, identical_sqrt
+from std.sys.compile import is_defined
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_pow, identical_sqrt
+from mixture.nk_order import gmm_nk_fold_levels
 
 comptime FPtr = MutPointer[Float32, MutAnyOrigin]
 comptime IPtr = MutPointer[Int32, MutAnyOrigin]
@@ -462,6 +465,35 @@ def nk_cell(resp: FPtr, n: Int, kc: Int, dst: FPtr, k: Int):
     for i in range(n):
         acc = nk_step(acc, resp[i * kc + k])
     dst[k] = nk_final(acc)
+
+
+# fam2-cluster (2026-10-04), IDENTICAL, default ON: the component mass of
+# the x_cluster mixtures (BayesianGaussianMixture, and GaussianMixture where
+# it runs through `bgmm_fit`) folds in `mixture/nk_order.mojo`'s chunked
+# levels (runs of GMM_NK_CHUNK rows ascending from zero, the partials the
+# same way, `+ 10 eps` last) instead of one rows-ascending chain: on the
+# device one thread a chunk a component (`mixture/checks/mstep.mojo`'s
+# `nk_level1_kernel`, `nk_level_kernel`, `nk_finish_kernel`) where
+# `_nk_kernel` kept kc threads walking all n rows. BITS MOVE, on every
+# column together: the device (`DeviceOps._moments_gemm`), the host column
+# (`HostOps.moments`) and the check oracle (`checks/oracles.oracle_moments`)
+# read this one constant. `-D MOJOLEARN_IDN_BGMM_NK_LEVELS_OFF=1` (or the
+# master) restores the chain; the define must reach the host-column build.
+comptime IDN_BGMM_NK_LEVELS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_BGMM_NK_LEVELS_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+
+def nk_levels_cell(resp: FPtr, n: Int, kc: Int, dst: FPtr, k: Int):
+    """`nk_cell` in the chunked levels, on the host (the device's words)."""
+    var col = List[Float32](capacity=n)
+    for i in range(n):
+        col.append(resp[i * kc + k])
+    dst[k] = nk_final(gmm_nk_fold_levels(col))
 
 
 @always_inline

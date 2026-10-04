@@ -19,8 +19,10 @@ at a tolerance, never bit for bit (NOT_IMPLEMENTED.tsv)."""
 from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul, identical_mul64
-from x_cluster.bodies import SplitMix64
+from checks.numerics import NUMERIC_IDENTICAL
+from x_cluster.bodies import SPLITMIX_GAMMA, SplitMix64, splitmix_at
 from x_cluster.common import gather_rows, greedy_kmeans_pp, nearest_all, sum_f64, weighted_draw
+from x_cluster.post_bodies import FM_VAL, FOLD_CHUNK
 from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV
 from x_cluster.ops import ClusterOps
 
@@ -34,6 +36,56 @@ from x_cluster.ops import ClusterOps
 comptime MINIBATCH_ONE_PASS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_MINIBATCH_ONE_PASS"]()
 )
+
+
+# fam2-cluster (2026-10-04), IDENTICAL, default ON, BOTH COLUMNS (this is the
+# one driver): THE STEP LOOP IN GROUPS. A step uploaded its batch's row ids,
+# launched, then waited for the batch's distances and the k counts (one
+# drain a step; the host drew the ids and summed the distances). Now
+# MB_GROUP steps are enqueued between two waits: the unit-weight batch ids
+# are drawn where the data is (`ops.mb_draw`: draw t + 1 of the fit's
+# splitmix64 stream by its counter, `% n`, the stream's own values), the
+# batch inertia is the float-float fold of the distances left in a history
+# slot (`ops.fold_at`), and each step's centers and counts are copied into
+# history slots (`ops.copy_at`). One read returns the group's inertias,
+# counts and centers and the host replays `_mini_batch_convergence` and the
+# reassignment test step by step, exactly as before. A step that reassigns
+# or stops discards the steps enqueued after it: the centers, the counts and
+# the stream go back to that step's (the history has them), so every step
+# sees the state the step-by-step loop gave it.
+# BITS: the batch inertia was one ascending Float64 chain on the host; it is
+# now `post_bodies`' float-float fold (the same on the device and the host
+# column, which run this same loop). The early stop compares EWAs of it, so
+# a fit can stop a step earlier or later than before; centers of a fit that
+# runs the same steps are the same words.
+# `-D MOJOLEARN_IDN_MINIBATCH_GROUP_OFF=1` (or the master) restores the
+# per-step loop; the define must reach the host-column build too.
+# CANDIDATE ARMS for the group (default 16):
+# `-D MOJOLEARN_IDN_MINIBATCH_GROUP8=1`, `..._GROUP32=1`, `..._GROUP64=1`.
+comptime IDN_MINIBATCH_GROUP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_MINIBATCH_GROUP_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+comptime MB_GROUP = (
+    8 if is_defined["MOJOLEARN_IDN_MINIBATCH_GROUP8"]()
+    else (
+        32 if is_defined["MOJOLEARN_IDN_MINIBATCH_GROUP32"]()
+        else (64 if is_defined["MOJOLEARN_IDN_MINIBATCH_GROUP64"]() else 16)
+    )
+)
+
+
+def mb_fold_scratch(n: Int) -> Int:
+    """Floats `ops.fold_at` needs in each scratch slot for a fold of n."""
+    var total = 0
+    var nch = (n + FOLD_CHUNK - 1) // FOLD_CHUNK
+    while nch > 1:
+        total += nch
+        nch = (nch + FOLD_CHUNK - 1) // FOLD_CHUNK
+    return total if total > 0 else 1
 
 
 @fieldwise_init
@@ -192,6 +244,134 @@ def minibatch_fit[O: ClusterOps](
             ):
                 n_steps = 0
                 ops.set(cslot, c)
+    comptime if IDN_MINIBATCH_GROUP:
+        var ch = ops.zeros(MB_GROUP * k * d)
+        var wh = ops.zeros(MB_GROUP * k)
+        var eh = ops.zeros(2 * MB_GROUP)
+        var fsn = mb_fold_scratch(batch)
+        var fth = ops.alloc(fsn)
+        var ftl = ops.alloc(fsn)
+        var gstep = 0
+        var stop = False
+        # the group grows 1, 2, 4, .. MB_GROUP while no step reassigns and
+        # falls back to 1 when one does (the first steps of a fit with many
+        # centers reassign often; a discarded step is wasted device work)
+        var gsz = 1
+        while gstep < n_steps and not stop:
+            var g_n = n_steps - gstep
+            if g_n > gsz:
+                g_n = gsz
+            gsz = gsz * 2
+            if gsz > MB_GROUP:
+                gsz = MB_GROUP
+            # the stream after each step's batch draws, and (weighted) its rows
+            var states = List[UInt64](capacity=g_n)
+            var grows = List[List[Int]]()
+            for g in range(g_n):
+                if weighted:
+                    var wrows = List[Int](capacity=batch)
+                    var wi32 = List[Int32](capacity=batch)
+                    for _t in range(batch):
+                        var r = weighted_draw(cum_w, rng)
+                        wrows.append(r)
+                        wi32.append(Int32(r))
+                    ops.set_i(islot, wi32)
+                    grows.append(wrows^)
+                else:
+                    ops.mb_draw(islot, batch, n, rng.state)
+                    rng.state = rng.state + UInt64(batch) * SPLITMIX_GAMMA
+                states.append(rng.state)
+                ops.mb_assign(xs, d, islot, batch, cslot, k, lslot, dslot, bslot)
+                ops.mb_update(bslot, batch, lslot, cslot, wslot, k, d)
+                ops.fold_at(dslot, batch, FM_VAL, eh, 2 * g, fth, ftl)
+                ops.copy_at(cslot, k * d, ch, g * k * d)
+                ops.copy_at(wslot, k, wh, g * k)
+            # the one wait of the group
+            var got = ops.gets([eh, wh, ch], [2 * g_n, g_n * k, g_n * k * d])
+            for g in range(g_n):
+                var step = gstep + g
+                # _random_reassign(): counted BEFORE the step, as sklearn evaluates the argument
+                since_reassign += batch
+                var any_empty = False
+                for j in range(k):
+                    if w[j] == Float32(0):
+                        any_empty = True
+                var reassign = False
+                if any_empty or since_reassign >= 10 * k:
+                    since_reassign = 0
+                    reassign = True
+                var batch_inertia = Float64(got[0][2 * g]) + Float64(got[0][2 * g + 1])
+                for j in range(k):
+                    w[j] = got[1][g * k + j]
+                var c_new = List[Float32](capacity=k * d)
+                for t in range(k * d):
+                    c_new.append(got[2][g * k * d + t])
+                var to = List[Bool]()
+                var nre = 0
+                if reassign and p.reassignment_ratio > 0:
+                    to = mb_reassign_marks(w, k, batch, p.reassignment_ratio)
+                    for j in range(k):
+                        if to[j]:
+                            nre += 1
+                var rolled = False
+                if nre > 0:
+                    # the step-by-step order of the stream: this step's batch
+                    # draws, then its reassignment draws
+                    rng.state = states[g]
+                    var rows = List[Int](capacity=batch)
+                    if weighted:
+                        for t in range(batch):
+                            rows.append(grows[g][t])
+                    else:
+                        var st0 = states[g] - UInt64(batch) * SPLITMIX_GAMMA
+                        for t in range(batch):
+                            rows.append(Int(splitmix_at(st0, UInt64(t + 1)) % UInt64(n)))
+                    mb_reassign_apply(c_new, w, to, nre, x, rows, batch, k, d, rng)
+                    ops.set(cslot, c_new)
+                    ops.set(wslot, w)
+                    rolled = True
+                    gsz = 1
+                var diff = Float64(0)
+                if p.tol > 0:
+                    for t in range(k * d):
+                        var e = Float64(c_new[t]) - Float64(c[t])
+                        diff = diff + identical_mul64(e, e)
+                c = c_new^
+                steps_done = step + 1
+                # _mini_batch_convergence
+                var bi = batch_inertia / Float64(batch)
+                if step > 0:
+                    if not have_ewa:
+                        ewa = bi
+                        have_ewa = True
+                    else:
+                        var alpha = identical_mul64(Float64(batch), 2.0) / Float64(n + 1)
+                        if alpha > 1:
+                            alpha = 1
+                        ewa = identical_mul64(ewa, 1 - alpha) + identical_mul64(bi, alpha)
+                    if p.tol > 0 and diff <= p.tol:
+                        stop = True
+                    else:
+                        if not have_min or ewa < ewa_min:
+                            no_improvement = 0
+                            ewa_min = ewa
+                            have_min = True
+                        else:
+                            no_improvement += 1
+                        if p.max_no_improvement >= 0 and no_improvement >= p.max_no_improvement:
+                            stop = True
+                if (stop or rolled) and g + 1 < g_n:
+                    # the steps enqueued after this one are discarded: the
+                    # device and the stream go back to this step's state
+                    if not rolled:
+                        rng.state = states[g]
+                        ops.set(cslot, c)
+                        ops.set(wslot, w)
+                    break
+                if stop:
+                    break
+            gstep = steps_done
+        n_steps = 0
     for step in range(n_steps):
         var bidx = List[Int](capacity=batch)
         for _t in range(batch):

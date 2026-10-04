@@ -28,12 +28,16 @@ from x_cluster.host.moments_gemm import gemm_fold_cov, gemm_fold_means
 
 from x_cluster.bodies import (
     FPtr,
+    splitmix_at,
+    sq_dist_rows,
     IPtr,
     cov_cell,
     argmax_row,
     exp_cell,
     gauss_q_cell,
     nk_cell,
+    nk_levels_cell,
+    IDN_BGMM_NK_LEVELS,
     pdist_cell,
     resp_row,
     xk_cell,
@@ -542,7 +546,10 @@ struct HostOps(ClusterOps):
         var pc = self._fp(cov)
 
         def nk_body(t: Int) {imm pr, imm pn, imm n, imm kc}:
-            nk_cell(pr, n, kc, pn, t)
+            comptime if IDN_BGMM_NK_LEVELS:
+                nk_levels_cell(pr, n, kc, pn, t)
+            else:
+                nk_cell(pr, n, kc, pn, t)
 
         host_cells(nk_body, kc, 2 * n)
 
@@ -760,6 +767,36 @@ struct HostOps(ClusterOps):
         self.gather_rows(src, d, idx, m, dst)
         self.nearest(dst, m, c, k, d, labels, dist)
 
+    def dist_sel(mut self, a: Int, n: Int, c: Int, d: Int, lab: Int, j: Int, dst: Int) raises:
+        var pa = self._fp(a)
+        var pc = self._fp(c)
+        var pl = self._ip(lab)
+        var pd = self._fp(dst)
+        for t in range(n):
+            var l = Int(pl[t])
+            if j < 0 or l == j:
+                pd[t] = sq_dist_rows[X_CLUSTER_HOST_SABOTAGE](pa, t, pc, l, d)
+            else:
+                pd[t] = Float32(0)
+
+    def mb_draw(mut self, idx: Int, m: Int, n: Int, state: UInt64) raises:
+        var pi = self._ip(idx)
+        for t in range(m):
+            pi[t] = Int32(Int(splitmix_at(state, UInt64(t + 1)) % UInt64(n)))
+
+    def fold_at(mut self, a: Int, n: Int, mode: Int, dst: Int, off: Int, th: Int, tl: Int) raises:
+        var pa = self._fp(a)
+        var v = ff_fold_host(mode, pa, pa, pa, n)
+        var po = self._fp(dst)
+        po[off] = v.hi
+        po[off + 1] = v.lo
+
+    def copy_at(mut self, src: Int, n: Int, dst: Int, off: Int) raises:
+        var ps = self._fp(src)
+        var pd = self._fp(dst)
+        for t in range(n):
+            pd[off + t] = ps[t]
+
     # ------------------------------------------------------------------
     # lane cgr2-cluster: the post-processing primitives, host column
     def _fp_or(mut self, slot: Int) -> FPtr:
@@ -970,6 +1007,12 @@ struct HostOps(ClusterOps):
         var pv = self._fp(v)
         for i in range(n):
             ps[i * n + i] = pv[i]
+
+    def ap_loop(
+        mut self, s: Int, a: Int, r: Int, e: Int, ring: Int, n: Int, damping: Float32, max_iter: Int,
+        conv_iter: Int,
+    ) raises -> Int:
+        return -1
 
     def ap_conv(mut self, e: Int, ring: Int, n: Int, conv_iter: Int, it: Int) raises -> Bool:
         var pe = self._ip(e)

@@ -241,6 +241,29 @@ trait ClusterOps(Movable):
         lane/neural-pass133)."""
         ...
 
+    def mb_draw(mut self, idx: Int, m: Int, n: Int, state: UInt64) raises:
+        """idx[t] = draw t + 1 of the splitmix64 stream whose state is
+        `state`, `% n`, t < m: `SplitMix64.below(n)` m times, by counter
+        (fam2-cluster)."""
+        ...
+
+    def fold_at(mut self, a: Int, n: Int, mode: Int, dst: Int, off: Int, th: Int, tl: Int) raises:
+        """`fold_into` of the one slot `a` (FM_VAL, FM_SQRT: the modes that
+        read `a` alone) left in dst[off], dst[off + 1]; `th`, `tl` float
+        slots of `minibatch.mb_fold_scratch(n)` words the device's levels
+        use (the host ignores them)."""
+        ...
+
+    def copy_at(mut self, src: Int, n: Int, dst: Int, off: Int) raises:
+        """dst[off + t] = src[t], t < n (float slots)."""
+        ...
+
+    def dist_sel(mut self, a: Int, n: Int, c: Int, d: Int, lab: Int, j: Int, dst: Int) raises:
+        """dst[t] = `bodies.sq_dist_rows` of row t of `a` to row lab[t] of
+        `c` where j < 0 or lab[t] == j, else 0 (t < n; `lab` an int slot):
+        each row's distance to its OWN center (fam2-cluster)."""
+        ...
+
     def agglo_on_device(self) -> Bool:
         """True on the GPU column: `agglo_merge` runs the unconstrained
         agglomerative merge loop on the device (lane hr2-mds-agglo). The
@@ -403,6 +426,18 @@ trait ClusterOps(Movable):
         """The convergence window: e into column it % conv_iter of ring
         (n x conv_iter); True when it >= conv_iter, every row's window is
         all ones or all zeros, and some e is 1."""
+        ...
+
+    def ap_loop(
+        mut self, s: Int, a: Int, r: Int, e: Int, ring: Int, n: Int, damping: Float32, max_iter: Int,
+        conv_iter: Int,
+    ) raises -> Int:
+        """The whole message loop (`ap_r`, `ap_a`, `ap_e`, `ap_conv` per
+        iteration) with the convergence window decided where the data is
+        (fam2-cluster): returns the iteration it converged at (the `it` of
+        `affinity_fit`'s break), `max_iter` when it never did, or -1 when the
+        column does not take it (the host, FAST, the `_OFF` define): the
+        caller runs the loop."""
         ...
 
     def ap_exemplars(mut self, s: Int, e: Int, n: Int, centers: Int, labels: Int) raises -> Int:

@@ -72,10 +72,12 @@ from spectral.impl.preprocessing.detail.fast_graph import (
 from spectral.impl.sparse.linalg.detail.symmetrize import coo_symmetrize
 from spectral.impl.sparse.op.coo_ops import coo_remove_scalar, coo_sort
 from spectral.impl.sparse.solver.detail.lanczos import (
+    IDN_SPECTRAL_VECS_DEVICE,
     LANCZOS_TPB,
     SAB_MAXITER,
     SAB_NCV,
     lanczos_compute_eigenpairs,
+    lanczos_compute_eigenpairs_dev,
 )
 from spectral.impl.sparse.solver.lanczos_types import (
     LANCZOS_LA,
@@ -238,13 +240,15 @@ def create_laplacian(
     graph: CooGraph,
     mut diagonal: DeviceBuffer[DType.float32],
     tpb: Int = LAPLACIAN_TPB,
+    check_values: Bool = False,
 ) raises -> DeviceCoo:
-    """`create_laplacian` (`:31-52`): normalized or plain, then negated."""
+    """`create_laplacian` (`:31-52`): normalized or plain, then negated.
+    `check_values` adds the value refusal (finite, non-negative)."""
     var lap: DeviceCoo
     if params.norm_laplacian:
-        lap = laplacian_normalized(ctx, graph, diagonal, tpb)
+        lap = laplacian_normalized(ctx, graph, diagonal, tpb, check_values)
     else:
-        lap = compute_graph_laplacian(ctx, graph, tpb)
+        lap = compute_graph_laplacian(ctx, graph, tpb, check_values)
     ctx.enqueue_function[negate_kernel](
         lap.vals.unsafe_ptr(),
         Int32(lap.nnz),
@@ -352,13 +356,25 @@ def compute_eigenpairs_keep(
     var eigenvalues = List[Float32]()
     var eigenvectors = List[Float32]()
     var no_v0 = List[Float32]()
-    _ = lanczos_compute_eigenpairs(
-        ctx, config, laplacian, no_v0, False, eigenvalues, eigenvectors, trace,
-        lanczos_tpb, scratch_pad, scratch_poison,
-    )
-    trace.record_list_f32("spectral.ritz", eigenvalues)
-    trace.record_list_f32("spectral.ritz.vectors", eigenvectors)
-    var d_vecs = upload_f32(ctx, eigenvectors)
+    # IDN_SPECTRAL_VECS_DEVICE: an untraced run draws the start vector on
+    # the device and leaves the Ritz vectors there for the gather below.
+    var vecs_on_device = False
+    comptime if IDN_SPECTRAL_VECS_DEVICE:
+        vecs_on_device = not trace.enabled
+    var d_vecs = ctx.enqueue_create_buffer[DType.float32](k * n_samples if vecs_on_device else 1)
+    if vecs_on_device:
+        _ = lanczos_compute_eigenpairs_dev(
+            ctx, config, laplacian, eigenvalues, d_vecs, trace, lanczos_tpb,
+            scratch_pad, scratch_poison,
+        )
+    else:
+        _ = lanczos_compute_eigenpairs(
+            ctx, config, laplacian, no_v0, False, eigenvalues, eigenvectors, trace,
+            lanczos_tpb, scratch_pad, scratch_poison,
+        )
+        trace.record_list_f32("spectral.ritz", eigenvalues)
+        trace.record_list_f32("spectral.ritz.vectors", eigenvectors)
+        d_vecs = upload_f32(ctx, eigenvectors)
     if keep:
         # The prediction state in embedding column order (the reversed
         # gather of the undivided Ritz vectors), formed on the device.
@@ -444,21 +460,12 @@ def transform_graph_keep(
     var n = connectivity_graph.n
     if n <= 0:
         raise Error("spectral: connectivity_graph must have n > 0")
-    for i in range(connectivity_graph.nnz()):
-        var v = connectivity_graph.vals[i]
-        if not isfinite(v):
-            raise Error(
-                "spectral: connectivity_graph has a non-finite value at entry "
-                + String(i) + " -- refused by name"
-            )
-        if v < Float32(0.0):
-            raise Error(
-                "spectral: connectivity_graph has a negative value at entry "
-                + String(i) + " -- refused by name (sqrt of a negative degree is NaN in theirs)"
-            )
+    # The value refusal (finite, non-negative) is raised inside
+    # `compute_graph_laplacian`, first: on the device under
+    # `IDN_SPECTRAL_LAP_DEVICE`, by the host walk otherwise.
     var diagonal = ctx.enqueue_create_buffer[DType.float32](n)
     ctx.synchronize()
-    var lap = create_laplacian(ctx, params, connectivity_graph, diagonal, laplacian_tpb)
+    var lap = create_laplacian(ctx, params, connectivity_graph, diagonal, laplacian_tpb, True)
     trace.record_device[DType.int32](ctx, "spectral.L.indptr", lap.indptr, n + 1)
     trace.record_device[DType.int32](ctx, "spectral.L.cols", lap.cols, lap.nnz)
     trace.record_device[DType.float32](ctx, "spectral.L.vals", lap.vals, lap.nnz)

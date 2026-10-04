@@ -18,6 +18,11 @@ extra launches per round (`min_edge_per_vertex` below). The `sabotage`
 argument exists so `linkage_check.mojo` can put a random tie-break back and
 watch the gate fail; every production caller passes `LINK_SAB_NONE`.
 
+FAM2-CLUSTER (2026-10-04), IDENTICAL: with IDN_MST_ROUNDS_DEVICE and
+IDN_MST_LABEL_JUMP (defines in `detail/mst_kernels.mojo`) the round loop and
+`label_prop` are decided on the device and the solve reads ONE 4-cell state
+at the end; the paragraph below describes the `_OFF` form.
+
 HOST READBACKS MATCH THE REFERENCE. `mst_edge_count.value(stream)` (`:142`, `:147`,
 `:163`, `:246`, `:384`) and `done.value(stream)` (`:262`) are synchronous
 reads in the reference loop; here they are the same reads in the same places.
@@ -34,8 +39,22 @@ from hierarchy.checks.edge_order import (
 )
 from hierarchy.impl.sparse.solver.detail.mst_kernels import (
     COMPACT_TPB,
+    IDN_MST_LABEL_JUMP,
+    IDN_MST_PAR_COMPACT,
+    IDN_MST_ROUNDS_DEVICE,
+    IDN_MST_SCAN_LANES,
     MST_FILL_TPB,
     MST_WARP,
+    compact_count_kernel,
+    compact_offsets_kernel,
+    compact_scatter_kernel,
+    lp_color,
+    lp_jump,
+    lp_min,
+    lp_parent_init,
+    lp_parent_set,
+    round_advance_kernel,
+    round_close_kernel,
     add_reverse_edge,
     compact_new_edges_kernel,
     copy_i32_kernel,
@@ -76,6 +95,16 @@ struct Graph_COO(Movable):
 
 def _blocks(n: Int, tpb: Int) -> Int:
     return (n + tpb - 1) // tpb if n > 0 else 1
+
+
+def _bit_length(x: Int) -> Int:
+    """The number of bits of `x` (0 for 0): an upper bound on ceil(log2 x)."""
+    var n = 0
+    var y = x
+    while y > 0:
+        n += 1
+        y >>= 1
+    return n
 
 
 def _read_scalar(
@@ -135,6 +164,17 @@ struct MST_solver[DENSE: Bool = False](Movable):
     var temp_weights: DeviceBuffer[DType.float32]
     var done: DeviceBuffer[DType.int32]
     var h_scalar: HostBuffer[DType.int32]
+    var lp_parent: DeviceBuffer[DType.int32]
+    var lp_cmin: DeviceBuffer[DType.int32]
+    """fam2-cluster, IDN_MST_LABEL_JUMP: the supervertex forest's parent
+    pointers and each root's lowest color (one cell each when compiled out)."""
+    var rstate: DeviceBuffer[DType.int32]
+    var h_state: HostBuffer[DType.int32]
+    """fam2-cluster, IDN_MST_ROUNDS_DEVICE: `[finished, prev_count,
+    rounds_run, count]` on the device and its one host copy."""
+    var cblock: DeviceBuffer[DType.int32]
+    """fam2-cluster, IDN_MST_PAR_COMPACT: the per-block counts / offsets of
+    the `2 v` compaction slots."""
     var n_rounds: Int
     """How many Boruvka rounds ran; an integer stage for the identity card."""
 
@@ -189,8 +229,19 @@ struct MST_solver[DENSE: Bool = False](Movable):
         self.temp_weights = ctx.enqueue_create_buffer[DType.float32](2 * vv)
         self.done = ctx.enqueue_create_buffer[DType.int32](1)
         self.h_scalar = ctx.enqueue_create_host_buffer[DType.int32](1)
+        var lp_cells = 1
+        comptime if IDN_MST_LABEL_JUMP:
+            lp_cells = vv
+        self.lp_parent = ctx.enqueue_create_buffer[DType.int32](lp_cells)
+        self.lp_cmin = ctx.enqueue_create_buffer[DType.int32](lp_cells)
+        self.rstate = ctx.enqueue_create_buffer[DType.int32](4)
+        self.h_state = ctx.enqueue_create_host_buffer[DType.int32](4)
+        self.cblock = ctx.enqueue_create_buffer[DType.int32](
+            _blocks(2 * vv, COMPACT_TPB) + 1
+        )
         self.n_rounds = 0
         ctx.synchronize()
+        ctx.enqueue_memset(self.rstate, Int32(0))
 
         # `:93-95` mst_edge_count = 0, prev = 0, mst_edge memset 0
         ctx.enqueue_memset(self.mst_edge_count, Int32(0))
@@ -248,6 +299,68 @@ struct MST_solver[DENSE: Bool = False](Movable):
         # supervertex remains"; adjusted to support spanning forests.
         var mst_iterations = self.iterations if self.iterations > 0 else self.v
         self.n_rounds = 0
+
+        # fam2-cluster, IDN_MST_ROUNDS_DEVICE: the rounds are enqueued ahead
+        # and the device decides when they stop doing work; ONE state read
+        # per chunk (the first chunk is Boruvka's round bound, so one read
+        # per solve). The jump form of `label_prop` needs the forest shape
+        # (no symmetrized output: both edges of a mutual pair would be kept)
+        # and the canonical colors `initialize_colors` gives.
+        var dev_rounds = False
+        comptime if IDN_MST_ROUNDS_DEVICE:
+            dev_rounds = self.initialize_colors and not self.symmetrize_output
+        if dev_rounds:
+            ctx.enqueue_memset(self.rstate, Int32(0))
+            var enq = 0
+            var fin = 0
+            while enq < mst_iterations and fin == 0:
+                var chunk = _bit_length(self.v) + 1 if enq == 0 else 2
+                if chunk > mst_iterations - enq:
+                    chunk = mst_iterations - enq
+                for _r in range(chunk):
+                    self.min_edge_per_vertex(ctx)
+                    self.min_edge_per_supervertex(ctx)
+                    self.check_termination(ctx)
+                    ctx.enqueue_function[round_close_kernel](
+                        self.mst_edge_count.unsafe_ptr(),
+                        self.rstate.unsafe_ptr(),
+                        Int32(max_mst_edges),
+                        grid_dim=(1, 1, 1),
+                        block_dim=(1, 1, 1),
+                    )
+                    self.append_src_dst_pair[True](ctx, mst_result)
+                    enq += 1
+                    self.label_prop_jump(ctx, enq, False)
+                    ctx.enqueue_function[round_advance_kernel](
+                        self.mst_edge_count.unsafe_ptr(),
+                        self.rstate.unsafe_ptr(),
+                        grid_dim=(1, 1, 1),
+                        block_dim=(1, 1, 1),
+                    )
+                ctx.enqueue_copy(
+                    dst_ptr=self.h_state.unsafe_ptr(), src_buf=self.rstate
+                )
+                ctx.synchronize()
+                fin = Int(self.h_state.unsafe_ptr().unsafe_load(0))
+            var dev_count = Int(self.h_state.unsafe_ptr().unsafe_load(3))
+            if fin == 2:
+                raise Error(
+                    "mst: Number of edges found by MST is invalid. This may be"
+                    " due to loss in precision. Try increasing precision of"
+                    " weights. (found "
+                    + String(dev_count)
+                    + " > "
+                    + String(max_mst_edges)
+                    + ")"
+                )
+            self.prev_mst_edge_count = Int(
+                self.h_state.unsafe_ptr().unsafe_load(1)
+            )
+            self.n_rounds = Int(self.h_state.unsafe_ptr().unsafe_load(2))
+            mst_result.n_edges = dev_count
+            mst_result.n_rounds = self.n_rounds
+            return mst_result^
+
         for _i in range(mst_iterations):
             self.min_edge_per_vertex(ctx)
             self.min_edge_per_supervertex(ctx)
@@ -269,8 +382,14 @@ struct MST_solver[DENSE: Bool = False](Movable):
                 # `:147-150` exit here when reaching steady state
                 break
 
-            self.append_src_dst_pair(ctx, mst_result)
-            self.label_prop(ctx)
+            self.append_src_dst_pair[False](ctx, mst_result)
+            var jump = False
+            comptime if IDN_MST_LABEL_JUMP:
+                jump = self.initialize_colors and not self.symmetrize_output
+            if jump:
+                self.label_prop_jump(ctx, self.n_rounds, True)
+            else:
+                self.label_prop(ctx)
             self.prev_mst_edge_count = curr_mst_edge_count
 
         # `:162-166` result packaging
@@ -314,6 +433,71 @@ struct MST_solver[DENSE: Bool = False](Movable):
         )
         ctx.synchronize()
 
+    def label_prop_jump(
+        mut self, ctx: DeviceContext, round_index: Int, drain: Bool
+    ) raises:
+        """fam2-cluster, IDN_MST_LABEL_JUMP: `label_prop`'s fixed point with
+        no readback (see the define in `mst_kernels.mojo`). `round_index` is
+        1-based: at round r at most `v >> (r - 1)` supervertices still have
+        an out-edge (each productive round at least halves them), a tree is
+        no deeper than its node count, so `bit_length(v >> (r - 1))` jumps
+        reach every root; one more is enqueued as margin."""
+        var blocks = _blocks(self.v, self.tpb)
+        var active = self.v >> (round_index - 1) if round_index < 63 else 0
+        if active < 1:
+            active = 1
+        var jumps = _bit_length(active) + 1
+        ctx.enqueue_function[lp_parent_init](
+            Int32(self.v),
+            self.lp_parent.unsafe_ptr(),
+            self.lp_cmin.unsafe_ptr(),
+            grid_dim=(blocks, 1, 1),
+            block_dim=(self.tpb, 1, 1),
+        )
+        ctx.enqueue_function[lp_parent_set[Self.DENSE]](
+            Int32(self.v),
+            self.indices.unsafe_ptr(),
+            self.new_mst_edge.unsafe_ptr(),
+            self.color_index.unsafe_ptr(),
+            self.lp_parent.unsafe_ptr(),
+            grid_dim=(blocks, 1, 1),
+            block_dim=(self.tpb, 1, 1),
+        )
+        for _j in range(jumps):
+            ctx.enqueue_function[lp_jump](
+                Int32(self.v),
+                self.lp_parent.unsafe_ptr(),
+                grid_dim=(blocks, 1, 1),
+                block_dim=(self.tpb, 1, 1),
+            )
+        ctx.enqueue_function[lp_min](
+            Int32(self.v),
+            self.color.unsafe_ptr(),
+            self.color_index.unsafe_ptr(),
+            self.lp_parent.unsafe_ptr(),
+            self.lp_cmin.unsafe_ptr(),
+            grid_dim=(blocks, 1, 1),
+            block_dim=(self.tpb, 1, 1),
+        )
+        ctx.enqueue_function[lp_color](
+            Int32(self.v),
+            self.color.unsafe_ptr(),
+            self.color_index.unsafe_ptr(),
+            self.lp_parent.unsafe_ptr(),
+            self.lp_cmin.unsafe_ptr(),
+            grid_dim=(blocks, 1, 1),
+            block_dim=(self.tpb, 1, 1),
+        )
+        ctx.enqueue_function[final_color_indices](
+            Int32(self.v),
+            self.color.unsafe_ptr(),
+            self.color_index.unsafe_ptr(),
+            grid_dim=(blocks, 1, 1),
+            block_dim=(self.tpb, 1, 1),
+        )
+        if drain:
+            ctx.synchronize()
+
     def min_edge_per_vertex(mut self, ctx: DeviceContext) raises:
         """`mst_solver_inl.cuh:277-304`, plus DEVIATION 620's two phases."""
         var vblocks = _blocks(self.v, MST_FILL_TPB)
@@ -346,7 +530,13 @@ struct MST_solver[DENSE: Bool = False](Movable):
             block_dim=(MST_FILL_TPB, 1, 1),
         )
         # `:287`, `:295`: n_threads = 32, grid v -- one warp per row
-        ctx.enqueue_function[kernel_min_edge_per_vertex[Self.DENSE]](
+        # fam2-cluster: IDN_MST_SCAN_LANES threads per row (their 32 unless a
+        # candidate arm is compiled), gated on the device's finished flag.
+        ctx.enqueue_function[
+            kernel_min_edge_per_vertex[
+                Self.DENSE, IDN_MST_SCAN_LANES, IDN_MST_ROUNDS_DEVICE
+            ]
+        ](
             self.offsets.unsafe_ptr(),
             self.indices.unsafe_ptr(),
             self.weights.unsafe_ptr(),
@@ -357,8 +547,9 @@ struct MST_solver[DENSE: Bool = False](Movable):
             self.min_edge_color.unsafe_ptr(),
             Int32(self.v),
             self.sabotage,
+            self.rstate.unsafe_ptr(),
             grid_dim=(self.v, 1, 1),
-            block_dim=(MST_WARP, 1, 1),
+            block_dim=(IDN_MST_SCAN_LANES, 1, 1),
         )
         var blocks = _blocks(self.v, self.tpb)
         ctx.enqueue_function[min_edge_lo_per_color[Self.DENSE]](
@@ -445,9 +636,50 @@ struct MST_solver[DENSE: Bool = False](Movable):
             block_dim=(self.tpb, 1, 1),
         )
 
-    def append_src_dst_pair(mut self, ctx: DeviceContext, mut mst_result: Graph_COO) raises:
+    def append_src_dst_pair[DEV: Bool = False](
+        mut self, ctx: DeviceContext, mut mst_result: Graph_COO
+    ) raises:
         """`mst_solver_inl.cuh:378-404`: copy the new edges to the final
-        output after the ones from previous rounds."""
+        output after the ones from previous rounds. `DEV` (fam2-cluster,
+        IDN_MST_ROUNDS_DEVICE): the output offset is the device's
+        `prev_count` and a finished round appends nothing; it needs the
+        parallel form, so it forces it."""
+        var n = 2 * self.v
+        var par_compact = DEV
+        comptime if IDN_MST_PAR_COMPACT:
+            par_compact = True
+        if par_compact:
+            var nb = _blocks(n, COMPACT_TPB)
+            ctx.enqueue_function[compact_count_kernel](
+                self.temp_src.unsafe_ptr(),
+                self.cblock.unsafe_ptr(),
+                Int32(n),
+                grid_dim=(nb, 1, 1),
+                block_dim=(COMPACT_TPB, 1, 1),
+            )
+            ctx.enqueue_function[compact_offsets_kernel](
+                self.cblock.unsafe_ptr(),
+                Int32(nb),
+                grid_dim=(1, 1, 1),
+                block_dim=(COMPACT_TPB, 1, 1),
+            )
+            var cap = 2 * self.v - 2 if self.symmetrize_output else self.v - 1
+            ctx.enqueue_function[compact_scatter_kernel[DEV]](
+                self.temp_src.unsafe_ptr(),
+                self.temp_dst.unsafe_ptr(),
+                self.temp_weights.unsafe_ptr(),
+                mst_result.src.unsafe_ptr(),
+                mst_result.dst.unsafe_ptr(),
+                mst_result.weights.unsafe_ptr(),
+                self.cblock.unsafe_ptr(),
+                self.rstate.unsafe_ptr(),
+                Int32(n),
+                Int32(self.prev_mst_edge_count),
+                Int32(cap),
+                grid_dim=(nb, 1, 1),
+                block_dim=(COMPACT_TPB, 1, 1),
+            )
+            return
         ctx.enqueue_function[compact_new_edges_kernel](
             self.temp_src.unsafe_ptr(),
             self.temp_dst.unsafe_ptr(),

@@ -27,7 +27,11 @@ from hierarchy.impl.cluster.detail.agglomerative import (
     EXTRACT_TPB,
     extract_flattened_clusters,
 )
-from hierarchy.impl.cluster.detail.dendrogram_device import build_dendrogram_device
+from hierarchy.impl.cluster.detail.dendrogram_device import (
+    IDN_DENDRO_UNION,
+    build_dendrogram_device,
+)
+from hdbscan.impl.cluster.detail.dendrogram_union import build_dendrogram_union
 from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_EXPANDED,
     DISTANCE_L2_SQRT_EXPANDED,
@@ -36,8 +40,14 @@ from hierarchy.impl.cluster.detail.connectivities import (
 )
 from hierarchy.impl.cluster.detail.mst import build_sorted_mst
 from hierarchy.impl.cluster.detail.fast_boruvka import fast_euclidean_mst
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
+)
 from std.sys.compile import is_defined
+from std.sys.defines import get_defined_int
+from hdbscan.impl.cluster.detail.sparse_mr_mst import sparse_mr_mst_device
 from std.sys.info import has_apple_gpu_accelerator
 
 comptime SL_FAST_BORUVKA = (
@@ -48,6 +58,32 @@ comptime SL_FAST_BORUVKA = (
 """FAST on Apple: the PAIRWISE Euclidean MST from Boruvka rounds with the
 distances computed on the fly (`fast_boruvka.mojo`) instead of the dense
 `m * m` graph, which the M4 cannot allocate from ~38k rows up."""
+
+#: fam2-cluster (2026-10-04), IDENTICAL, CANDIDATE ARM (default OFF; turn on
+#: with `-D MOJOLEARN_IDN_SL_SPARSE_MST=1`, off again under
+#: `-D MOJOLEARN_IDN_ALL_OFF=1`). Single linkage on the PAIRWISE
+#: L2SqrtExpanded graph from HDBSCAN's matrix-free Boruvka
+#: (`hdbscan/impl/cluster/detail/sparse_mr_mst.mojo`, DEVIATION 1620) with
+#: every core distance +0.0 and `1 / alpha = 1.0`: the mutual reachability
+#: `max(0, 0, 1.0 * d)` is the distance `d` bit for bit, so the search
+#: returns the Euclidean MST with no m * m matrix (17 GB at 46,340 rows) and
+#: with its bound pruning, and the 46,340-row refusal does not apply.
+#: The MST under the total order is the dense arm's edge set and weights.
+#: TWO DIFFERENCES TO CHECK before adopting it: (1) the edges come oriented
+#: (lo, hi), which is the host column's order (`hierarchy/host/
+#: linkage_host.mojo`) but not Boruvka's, so the two columns of a `children`
+#: row may swap against the dense device arm (the gate compares them as an
+#: unordered pair); (2) the sparse search refuses an infinite weight where
+#: the dense arm keeps +inf. Rows at or above
+#: `-D MOJOLEARN_IDN_SL_SPARSE_MIN_ROWS=<n>` (default 4096) take it.
+comptime IDN_SL_SPARSE_MST = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_SL_SPARSE_MST"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime IDN_SL_SPARSE_MIN_ROWS = get_defined_int[
+    "MOJOLEARN_IDN_SL_SPARSE_MIN_ROWS", 4096
+]()
 
 comptime SL_FAST_BORUVKA_MIN_ROWS = 4096
 """Up to here the dense route is as fast (5,000 rows: 0.16 s either way)
@@ -110,6 +146,31 @@ def build_dist_linkage(
                 out_dendrogram, out_distances, out_sizes,
             )
             return r
+    comptime if IDN_SL_SPARSE_MST:
+        if (
+            dist_type == LINKAGE_PAIRWISE
+            and sabotage == LINK_SAB_NONE
+            and metric == DISTANCE_L2_SQRT_EXPANDED
+            and m >= IDN_SL_SPARSE_MIN_ROWS
+        ):
+            var zero_core = ctx.enqueue_create_buffer[DType.float32](m)
+            ctx.enqueue_memset(zero_core, Float32(0.0))
+            var sr = sparse_mr_mst_device(
+                ctx, x, zero_core, m, n, Float32(1.0),
+                mst_rows, mst_cols, mst_weights,
+            )
+            _ = zero_core^
+            comptime if IDN_DENDRO_UNION:
+                build_dendrogram_union(
+                    ctx, mst_rows, mst_cols, mst_weights, m - 1,
+                    out_dendrogram, out_distances, out_sizes, drain=True,
+                )
+            else:
+                build_dendrogram_device(
+                    ctx, mst_rows, mst_cols, mst_weights, m - 1,
+                    out_dendrogram, out_distances, out_sizes,
+                )
+            return sr
     # `:153-168` 1. Construct distance graph. PAIRWISE needs indptr m+1,
     # indices/data m*m (their `resize`s inside the impl, `:199-200`).
     var nnz = m * m
@@ -140,10 +201,18 @@ def build_dist_linkage(
     _ = color^
 
     # `:194-204` Perform hierarchical labeling
-    build_dendrogram_device(
-        ctx, mst_rows, mst_cols, mst_weights, n_edges,
-        out_dendrogram, out_distances, out_sizes,
-    )
+    # fam2-cluster, IDN_DENDRO_UNION: the same three outputs from one
+    # lock-free union launch per level, no flag readback.
+    comptime if IDN_DENDRO_UNION:
+        build_dendrogram_union(
+            ctx, mst_rows, mst_cols, mst_weights, n_edges,
+            out_dendrogram, out_distances, out_sizes, drain=True,
+        )
+    else:
+        build_dendrogram_device(
+            ctx, mst_rows, mst_cols, mst_weights, n_edges,
+            out_dendrogram, out_distances, out_sizes,
+        )
     return rounds
 
 

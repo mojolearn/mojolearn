@@ -1004,9 +1004,18 @@ def gmm_estep_scratch_floats(n: Int, d: Int) -> Int:
 #: so it is taken only up to GMM_ESTEP_STACK_MAX_FLOATS (1 GiB); larger
 #: shapes keep the per-component loop. `-D MOJOLEARN_GMM_ESTEP_STACK_OFF=1`
 #: reverts.
+#: fam2-cluster CANDIDATE ARM (default OFF): `-D MOJOLEARN_IDN_GMM_ESTEP_STACK=1`
+#: takes the stacked E-step on the NVIDIA and AMD columns too. Same words
+#: (the argument above is vendor neutral); whether the launches it saves
+#: outweigh the `n x Kd` operand there is for the orchestrator's A/B to say.
+#: Off under `MOJOLEARN_IDN_ALL_OFF`.
+comptime IDN_GMM_ESTEP_STACK = (
+    is_defined["MOJOLEARN_IDN_GMM_ESTEP_STACK"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 comptime GMM_ESTEP_STACK = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and has_apple_gpu_accelerator()
+    and (has_apple_gpu_accelerator() or IDN_GMM_ESTEP_STACK)
     and not is_defined["MOJOLEARN_GMM_ESTEP_STACK_OFF"]()
 )
 comptime GMM_ESTEP_STACK_MAX_FLOATS = 1 << 28

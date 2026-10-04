@@ -32,6 +32,8 @@ from x_cluster.bodies import (
     xk_term,
     gauss_q_cell,
     nk_cell,
+    IDN_BGMM_NK_LEVELS,
+    splitmix_at,
     pdist_cell,
     resp_row,
     xk_cell,
@@ -54,7 +56,15 @@ from cluster.estimator import kmeans_fit, kmeans_fit_rows
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.contract import OP_TN
-from mixture.checks.mstep import center_scale_kernel, cov_finish_kernel, means_divide_kernel
+from mixture.checks.mstep import (
+    center_scale_kernel,
+    cov_finish_kernel,
+    means_divide_kernel,
+    nk_finish_kernel,
+    nk_level1_kernel,
+    nk_level_kernel,
+)
+from mixture.nk_order import GMM_NK_CHUNK, gmm_nk_levels_floats
 from x_cluster.ops import ClusterOps
 from x_cluster.optics_xi_device import optics_xi_device
 from x_cluster.meanshift_fast import MEANSHIFT_FAST_GRID, meanshift_fast_grid
@@ -517,7 +527,8 @@ def _ap_key_index(key: UInt64) -> Int:
     return Int(UInt32(0xFFFFFFFF) - UInt32(key & UInt64(0xFFFFFFFF)))
 
 
-def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
+@always_inline
+def _ap_r_body(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
     """`ap_responsibility_row` for row `block_idx.x` on one block: the max
     of `ftz(A + S)` with its lowest index, then the second max over the
     other columns with ITS lowest index (each an integer max of `_ap_key`,
@@ -564,6 +575,10 @@ def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
         ap_r_update(s, r, N, damping, one_minus, i, k, first, second, arg)
 
 
+def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
+    _ap_r_body(s, a, r, n, damping)
+
+
 # Lane cluster-apple3, FAST, OPT-IN `-D MOJOLEARN_AP_EXACT=1`: `_ap_r_kernel`
 # with the row's max and second max taken in ONE walk of the row. The keys
 # are distinct integers (the column is their low word), so the two largest
@@ -586,7 +601,8 @@ comptime AP_R_TOP2 = (
 )
 
 
-def _ap_r_top2_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
+@always_inline
+def _ap_r_top2_body(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
     var i = Int(block_idx.x)
     var tid = Int(thread_idx.x)
     var N = Int(n)
@@ -625,6 +641,92 @@ def _ap_r_top2_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
     var one_minus = ftz(Float32(1) - damping)
     for k in range(tid, N, AP_TPB):
         ap_r_update(s, r, N, damping, one_minus, i, k, first, second, arg)
+
+
+def _ap_r_top2_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
+    _ap_r_top2_body(s, a, r, n, damping)
+
+
+# fam2-cluster (2026-10-04), IDENTICAL, default ON: THE CONVERGENCE WINDOW
+# DECIDED ON THE DEVICE. `affinity_fit` read one flag per iteration
+# (`ap_conv`: a fresh 2-int slot, a launch, a copy and a drain each time).
+# `DeviceOps.ap_loop` enqueues AP_CONV_CHUNK iterations at a time and reads
+# the state once per chunk; every kernel of an iteration starts by reading
+# st[0] (done) and returns when it is set, so the iterations enqueued past
+# convergence write nothing: A, R and e are the words the per-iteration loop
+# left at its break and st[1] is the iteration it broke at (`n_iter_` the
+# same). The exemplar flags and the window share one launch (three launches
+# and one 1-thread decision per iteration for four launches, a memset and a
+# drain). `-D MOJOLEARN_IDN_AP_DEVICE_CONV_OFF=1` restores the per-iteration
+# read. CANDIDATE ARMS for the chunk (default 8):
+# `-D MOJOLEARN_IDN_AP_CONV_CHUNK4=1`, `..._CHUNK16=1`, `..._CHUNK32=1`.
+comptime IDN_AP_DEVICE_CONV = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_AP_DEVICE_CONV_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+comptime AP_CONV_CHUNK = (
+    4 if is_defined["MOJOLEARN_IDN_AP_CONV_CHUNK4"]()
+    else (
+        16 if is_defined["MOJOLEARN_IDN_AP_CONV_CHUNK16"]()
+        else (32 if is_defined["MOJOLEARN_IDN_AP_CONV_CHUNK32"]() else 8)
+    )
+)
+
+
+def _ap_r_gated_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32, st: IPtr):
+    """`ap_r`'s kernel behind the done flag st[0] (uniform over the grid:
+    only `_ap_decide_kernel`, a launch of its own, writes it)."""
+    if st[0] != 0:
+        return
+    comptime if AP_R_TOP2:
+        _ap_r_top2_body(s, a, r, n, damping)
+    else:
+        _ap_r_body(s, a, r, n, damping)
+
+
+def _ap_a_gated_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32, st: IPtr):
+    if st[0] != 0:
+        return
+    var t = _tid()
+    if t < Int(n):
+        ap_availability_col(r, a, Int(n), damping, t)
+
+
+def _ap_e_conv_gated_kernel(a: FPtr, r: FPtr, n: Int32, e: IPtr, ring: IPtr, ci: Int32, it: Int32, st: IPtr):
+    """`_ap_e_kernel` then `ap_conv_kernel` for row t (the row's own flag
+    and window only). st[2] = 1 when some e is set, st[3] = 1 when a window
+    is mixed (every writer stores the same 1)."""
+    if st[0] != 0:
+        return
+    var t = _tid()
+    if t < Int(n):
+        ap_exemplar_cell(a, r, Int(n), e, t)
+        var C = Int(ci)
+        var ev = e[t]
+        ring[t * C + Int(it) % C] = ev
+        if ev != 0:
+            st[2] = 1
+        if Int(it) >= C:
+            var se = 0
+            for q in range(C):
+                se += Int(ring[t * C + q])
+            if se != C and se != 0:
+                st[3] = 1
+
+
+def _ap_decide_kernel(ci: Int32, it: Int32, st: IPtr):
+    """`ap_conv`'s host test on one thread: done (st[0] = 1, st[1] = it)
+    when it >= conv_iter, no window is mixed and some e is set; the two
+    marks cleared for the next iteration."""
+    if _tid() == 0 and st[0] == 0:
+        if it >= ci and st[3] == 0 and st[2] != 0:
+            st[1] = it
+            st[0] = 1
+        st[2] = 0
+        st[3] = 0
 
 
 def _ap_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32):
@@ -1490,6 +1592,22 @@ def _agg_rescan_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: I
 
 
 
+# fam2-cluster (2026-10-04), IDENTICAL, default ON: `_moments_gemm` (every EM
+# iteration of the x_cluster mixtures) allocated four buffers (two of them
+# n x d) and DRAINED the stream before returning so they could die. The
+# buffers now live in the ops object and the call returns with its work
+# enqueued: one allocation per fit, one drain less per EM iteration.
+# Scheduling only, no bit moves. `-D MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF=1`
+# restores the per-call buffers and the drain.
+comptime IDN_BGMM_MOMENTS_POOL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+
 struct _ClusterContext(Defaultable, Movable):
     """ONE process-lifetime DeviceContext for every x_cluster entry (the
     x_cnn `_Global` pattern: one DeviceContext per process). A context per call hung the SECOND
@@ -1550,6 +1668,15 @@ struct DeviceOps(ClusterOps):
     var ph_calls: List[Int]
     var u: List[DeviceBuffer[DType.uint64]]
     """The post-processing primitives' 64-bit key buffers (lane cgr2-cluster)."""
+    var mom_raw: DeviceBuffer[DType.float32]
+    """`_moments_gemm`'s scratch (fam2-cluster, IDN_BGMM_MOMENTS_POOL): the
+    GEMM output, its workspace, the centered and the scaled rows and the nk
+    levels, kept for the fit; `mom_n` their sizes (raw, ws, diff/scaled, nk)."""
+    var mom_ws: DeviceBuffer[DType.float32]
+    var mom_diff: DeviceBuffer[DType.float32]
+    var mom_scaled: DeviceBuffer[DType.float32]
+    var mom_nk: DeviceBuffer[DType.float32]
+    var mom_n: List[Int]
 
     def __init__(out self) raises:
         self.ctx = x_cluster_ctx()
@@ -1565,6 +1692,12 @@ struct DeviceOps(ClusterOps):
         self.ph_ns = List[Int]()
         self.ph_calls = List[Int]()
         self.u = List[DeviceBuffer[DType.uint64]]()
+        self.mom_raw = self.ctx.enqueue_create_buffer[DType.float32](1)
+        self.mom_ws = self.ctx.enqueue_create_buffer[DType.float32](1)
+        self.mom_diff = self.ctx.enqueue_create_buffer[DType.float32](1)
+        self.mom_scaled = self.ctx.enqueue_create_buffer[DType.float32](1)
+        self.mom_nk = self.ctx.enqueue_create_buffer[DType.float32](1)
+        self.mom_n = [0, 0, 0, 0]
 
     def __del__(deinit self):
         # the buffers and the pending sources die with this value: drain first
@@ -2077,9 +2210,6 @@ struct DeviceOps(ClusterOps):
         component, cov = ((resp * diff)^T . diff) / nk + reg on the diagonal,
         both products through `identical_gemm_into` at OP_TN
         (`mixture/checks/mstep.mojo`'s kernels around them)."""
-        self.ctx.enqueue_function[_nk_kernel](
-            self._fp(resp), Int32(n), Int32(kc), self._fp(nk), grid_dim=_grid(kc), block_dim=TPB,
-        )
         var wsn = identical_gemm_workspace_max_floats(kc, d, n)
         var w2 = identical_gemm_workspace_max_floats(d, d, n)
         if w2 > wsn:
@@ -2088,10 +2218,86 @@ struct DeviceOps(ClusterOps):
             wsn = 1
         var rawn = kc * d if kc * d > d * d else d * d
         var nd = n * d if n * d > 0 else 1
-        var raw = self.ctx.enqueue_create_buffer[DType.float32](rawn)
-        var ws = self.ctx.enqueue_create_buffer[DType.float32](wsn)
-        var diff = self.ctx.enqueue_create_buffer[DType.float32](nd)
-        var scaled = self.ctx.enqueue_create_buffer[DType.float32](nd)
+        var pooled = False
+        comptime if IDN_BGMM_MOMENTS_POOL:
+            pooled = True
+        var nkn = 1
+        comptime if IDN_BGMM_NK_LEVELS:
+            nkn = gmm_nk_levels_floats(n, kc)
+            if nkn < 1:
+                nkn = 1
+        if pooled:
+            # the scratch lives in the ops object: grown (after a drain, the
+            # stream may still hold the old buffers' pointers) only when a
+            # call needs more, so an EM loop allocates once and never drains
+            if rawn > self.mom_n[0] or wsn > self.mom_n[1] or nd > self.mom_n[2] or nkn > self.mom_n[3]:
+                self.ctx.synchronize()
+                if rawn > self.mom_n[0]:
+                    self.mom_raw = self.ctx.enqueue_create_buffer[DType.float32](rawn)
+                    self.mom_n[0] = rawn
+                if wsn > self.mom_n[1]:
+                    self.mom_ws = self.ctx.enqueue_create_buffer[DType.float32](wsn)
+                    self.mom_n[1] = wsn
+                if nd > self.mom_n[2]:
+                    self.mom_diff = self.ctx.enqueue_create_buffer[DType.float32](nd)
+                    self.mom_scaled = self.ctx.enqueue_create_buffer[DType.float32](nd)
+                    self.mom_n[2] = nd
+                if nkn > self.mom_n[3]:
+                    self.mom_nk = self.ctx.enqueue_create_buffer[DType.float32](nkn)
+                    self.mom_n[3] = nkn
+        # handle copies when pooled (the same device memory as the fields)
+        var raw: DeviceBuffer[DType.float32]
+        var ws: DeviceBuffer[DType.float32]
+        var diff: DeviceBuffer[DType.float32]
+        var scaled: DeviceBuffer[DType.float32]
+        var nks: DeviceBuffer[DType.float32]
+        if pooled:
+            raw = self.mom_raw.copy()
+            ws = self.mom_ws.copy()
+            diff = self.mom_diff.copy()
+            scaled = self.mom_scaled.copy()
+            nks = self.mom_nk.copy()
+        else:
+            raw = self.ctx.enqueue_create_buffer[DType.float32](rawn)
+            ws = self.ctx.enqueue_create_buffer[DType.float32](wsn)
+            diff = self.ctx.enqueue_create_buffer[DType.float32](nd)
+            scaled = self.ctx.enqueue_create_buffer[DType.float32](nd)
+            nks = self.ctx.enqueue_create_buffer[DType.float32](nkn)
+        comptime if IDN_BGMM_NK_LEVELS:
+            # `mixture/checks/mstep.mojo::gmm_nk_levels_launch`'s launches
+            var pr = self._fp(resp)
+            var pk = self._fp(nk)
+            var psc = nks.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            var ten_eps = Float32(1.1920929e-06)
+            var grid_k = (kc + 255) // 256
+            if n <= GMM_NK_CHUNK:
+                self.ctx.enqueue_function[nk_finish_kernel](
+                    pr, Int32(0), Int32(n), Int32(1), pk, Int32(kc), ten_eps, grid_dim=grid_k, block_dim=256,
+                )
+            else:
+                var p1 = (n + GMM_NK_CHUNK - 1) // GMM_NK_CHUNK
+                self.ctx.enqueue_function[nk_level1_kernel](
+                    pr, psc, Int32(0), Int32(n), Int32(kc), grid_dim=(p1 * kc + 255) // 256, block_dim=256,
+                )
+                var src_off = 0
+                var off = p1 * kc
+                var cnt = p1
+                while cnt > GMM_NK_CHUNK:
+                    var pl = (cnt + GMM_NK_CHUNK - 1) // GMM_NK_CHUNK
+                    self.ctx.enqueue_function[nk_level_kernel](
+                        psc, Int32(src_off), Int32(off), Int32(cnt), Int32(kc),
+                        grid_dim=(pl * kc + 255) // 256, block_dim=256,
+                    )
+                    src_off = off
+                    off += pl * kc
+                    cnt = pl
+                self.ctx.enqueue_function[nk_finish_kernel](
+                    psc, Int32(src_off), Int32(cnt), Int32(0), pk, Int32(kc), ten_eps, grid_dim=grid_k, block_dim=256,
+                )
+        else:
+            self.ctx.enqueue_function[_nk_kernel](
+                self._fp(resp), Int32(n), Int32(kc), self._fp(nk), grid_dim=_grid(kc), block_dim=TPB,
+            )
         # handle copies: the same device memory as the slots
         var rb = self.f[resp].copy()
         var xb = self.f[x].copy()
@@ -2110,12 +2316,15 @@ struct DeviceOps(ClusterOps):
                 raw.unsafe_ptr(), self._fp(nk), self._fp(cov), Int32(d), Int32(k), reg, Int32(1),
                 grid_dim=_grid(d * d), block_dim=TPB,
             )
-        # the scratch buffers die with this call: drain first
-        self.ctx.synchronize()
+        # the scratch buffers die with this call: drain first (pooled: they
+        # are handles of the ops object's buffers, nothing dies)
+        if not pooled:
+            self.ctx.synchronize()
         _ = raw^
         _ = ws^
         _ = diff^
         _ = scaled^
+        _ = nks^
         _ = rb^
         _ = xb^
 
@@ -2429,6 +2638,63 @@ struct DeviceOps(ClusterOps):
                 Int32(batch), self._ip(labels), self._fp(w), Int32(k), grid_dim=_grid(k), block_dim=TPB,
             )
         self._ph1("mb_update")
+
+    def dist_sel(mut self, a: Int, n: Int, c: Int, d: Int, lab: Int, j: Int, dst: Int) raises:
+        self._ph0()
+        if n > 0:
+            self.ctx.enqueue_function[_dist_sel_kernel](
+                self._fp(a), Int32(n), self._fp(c), Int32(d), self._ip(lab), Int32(j), self._fp(dst),
+                grid_dim=_grid(n), block_dim=TPB,
+            )
+        self._ph1("dist_sel")
+
+    def mb_draw(mut self, idx: Int, m: Int, n: Int, state: UInt64) raises:
+        self._ph0()
+        self.ctx.enqueue_function[_mb_draw_kernel](
+            self._ip(idx), Int32(m), Int32(n), state, grid_dim=_grid(m), block_dim=TPB,
+        )
+        self._ph1("mb_draw")
+
+    def fold_at(mut self, a: Int, n: Int, mode: Int, dst: Int, off: Int, th: Int, tl: Int) raises:
+        self._ph0()
+        var po = self._fp(dst)
+        var pa = self._fp(a)
+        if n <= FOLD_CHUNK:
+            # one chunk (or none): `_fold` allocates nothing
+            self._fold(mode, pa, pa, pa, n, po, po + 1, off)
+        else:
+            # `_fold`'s levels with the partials in the caller's two scratch
+            # slots (level by level, each after the last) and no allocation
+            var ph = self._fp(th)
+            var pl = self._fp(tl)
+            var nch = (n + FOLD_CHUNK - 1) // FOLD_CHUNK
+            var md = mode
+            var xa = pa
+            var xb = pa
+            var cnt = n
+            var so = 0
+            while nch > 1:
+                self.ctx.enqueue_function[ff_chunk_kernel](
+                    Int32(md), xa, xb, xa, Int32(cnt), ph + so, pl + so, Int32(0), grid_dim=nch, block_dim=RTPB,
+                )
+                md = FM_FF
+                xa = ph + so
+                xb = pl + so
+                cnt = nch
+                so += nch
+                nch = (nch + FOLD_CHUNK - 1) // FOLD_CHUNK
+            self.ctx.enqueue_function[ff_chunk_kernel](
+                Int32(md), xa, xb, xa, Int32(cnt), po, po + 1, Int32(off), grid_dim=1, block_dim=RTPB,
+            )
+        self._ph1("fold_at")
+
+    def copy_at(mut self, src: Int, n: Int, dst: Int, off: Int) raises:
+        self._ph0()
+        if n > 0:
+            self.ctx.enqueue_function[_copy_at_kernel](
+                self._fp(src), Int32(n), self._fp(dst), Int32(off), grid_dim=_grid(n), block_dim=TPB,
+            )
+        self._ph1("copy_at")
 
     # ------------------------------------------------------------------
     # lane cgr2-cluster: the post-processing primitives on the device
@@ -2865,6 +3131,44 @@ struct DeviceOps(ClusterOps):
         self._ph1("ap_conv")
         return it >= conv_iter and h[1] == 0 and h[0] > 0
 
+    def ap_loop(
+        mut self, s: Int, a: Int, r: Int, e: Int, ring: Int, n: Int, damping: Float32, max_iter: Int,
+        conv_iter: Int,
+    ) raises -> Int:
+        var res = -1
+        comptime if IDN_AP_DEVICE_CONV:
+            if n > 0 and conv_iter > 0:
+                self._ph0()
+                var st = self.zeros_i(4)
+                res = max_iter
+                var it = 0
+                while it < max_iter:
+                    var stop = it + AP_CONV_CHUNK
+                    if stop > max_iter:
+                        stop = max_iter
+                    while it < stop:
+                        self.ctx.enqueue_function[_ap_r_gated_kernel](
+                            self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, self._ip(st),
+                            grid_dim=n, block_dim=AP_TPB,
+                        )
+                        self.ctx.enqueue_function[_ap_a_gated_kernel](
+                            self._fp(r), self._fp(a), Int32(n), damping, self._ip(st), grid_dim=_grid(n), block_dim=TPB,
+                        )
+                        self.ctx.enqueue_function[_ap_e_conv_gated_kernel](
+                            self._fp(a), self._fp(r), Int32(n), self._ip(e), self._ip(ring), Int32(conv_iter), Int32(it),
+                            self._ip(st), grid_dim=_grid(n), block_dim=TPB,
+                        )
+                        self.ctx.enqueue_function[_ap_decide_kernel](
+                            Int32(conv_iter), Int32(it), self._ip(st), grid_dim=1, block_dim=TPB,
+                        )
+                        it += 1
+                    var h = self.get_i(st, 2)
+                    if h[0] != 0:
+                        res = Int(h[1])
+                        break
+                self._ph1("ap_loop")
+        return res
+
     def ap_exemplars(mut self, s: Int, e: Int, n: Int, centers: Int, labels: Int) raises -> Int:
         self._ph0()
         var sc = self._scan(self._ip(e), n)
@@ -2964,6 +3268,33 @@ struct DeviceOps(ClusterOps):
 
 
 
+
+
+def _dist_sel_kernel(a: FPtr, n: Int32, c: FPtr, d: Int32, lab: IPtr, j: Int32, dst: FPtr):
+    """Row t's squared distance to its own center (row lab[t] of `c`), 0
+    where j >= 0 and lab[t] != j (fam2-cluster: BisectingKMeans' scores and
+    inertia without the n x k matrix)."""
+    var t = _tid()
+    if t < Int(n):
+        var l = Int(lab[t])
+        if Int(j) < 0 or l == Int(j):
+            dst[t] = sq_dist_rows(a, t, c, l, Int(d))
+        else:
+            dst[t] = Float32(0)
+
+
+def _mb_draw_kernel(idx: IPtr, m: Int32, n: Int32, state: UInt64):
+    """idx[t] = `SplitMix64.below(n)`'s draw t + 1 of the stream at `state`
+    (fam2-cluster: the unit-weight batch rows, drawn where the data is)."""
+    var t = _tid()
+    if t < Int(m):
+        idx[t] = Int32(Int(splitmix_at(state, UInt64(t + 1)) % UInt64(Int(n))))
+
+
+def _copy_at_kernel(src: FPtr, n: Int32, dst: FPtr, off: Int32):
+    var t = _tid()
+    if t < Int(n):
+        dst[Int(off) + t] = src[t]
 
 
 def _mb_centers_kernel(b: FPtr, batch: Int32, labels: IPtr, c: FPtr, w: FPtr, k: Int32, d: Int32):

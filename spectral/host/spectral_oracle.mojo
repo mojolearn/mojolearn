@@ -67,6 +67,7 @@ from spectral.host.spectral_predict_host import (
     spectral_keep_embedding_order,
 )
 from spectral.impl.sparse.coo import CooGraph
+from spectral.spmv_order import IDN_SPMV_LANES, SPMV_LANES
 from spectral.impl.sparse.op.coo_ops import (
     coo_remove_diagonal,
     coo_remove_scalar,
@@ -265,13 +266,35 @@ def host_laplacian[dt: DType](g: CooGraph, norm_laplacian: Bool) raises -> HostL
 
 
 def host_spmv[dt: DType](L: HostLaplacian[dt], x: List[Scalar[dt]]) -> List[Scalar[dt]]:
-    """`spmv_kernel`: per row ascending, `fma` from `+0.0`, flushed."""
+    """`spmv_enqueue`'s row fold: under `IDN_SPMV_LANES` the lane order of
+    `spectral/spmv_order.mojo` (SPMV_LANES strided `fma` chains from `+0.0`,
+    then the fixed pairwise tree); otherwise `spmv_kernel`'s ascending
+    chain. Flushed either way."""
     var out = List[Scalar[dt]]()
-    for r in range(L.n):
-        var acc = Scalar[dt](0)
-        for j in range(Int(L.indptr[r]), Int(L.indptr[r + 1])):
-            acc = hflush[dt](hfma[dt](L.vals[j], x[Int(L.cols[j])], acc))
-        out.append(acc)
+    comptime if IDN_SPMV_LANES:
+        for r in range(L.n):
+            var lo = Int(L.indptr[r])
+            var hi = Int(L.indptr[r + 1])
+            var part = List[Scalar[dt]](length=SPMV_LANES, fill=Scalar[dt](0))
+            for l in range(SPMV_LANES):
+                var acc = Scalar[dt](0)
+                var j = lo + l
+                while j < hi:
+                    acc = hflush[dt](hfma[dt](L.vals[j], x[Int(L.cols[j])], acc))
+                    j += SPMV_LANES
+                part[l] = acc
+            var w = SPMV_LANES // 2
+            while w >= 1:
+                for l in range(w):
+                    part[l] = hflush[dt](part[l] + part[l + w])
+                w = w // 2
+            out.append(part[0])
+    else:
+        for r in range(L.n):
+            var acc = Scalar[dt](0)
+            for j in range(Int(L.indptr[r]), Int(L.indptr[r + 1])):
+                acc = hflush[dt](hfma[dt](L.vals[j], x[Int(L.cols[j])], acc))
+            out.append(acc)
     return out^
 
 
