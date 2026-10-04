@@ -861,13 +861,15 @@ comptime XTREES_FAST_SWITCHES = (
     + (2 if _XT_ADA_SESSION else 0)
     + (4 if _XT_ADA_SESSION_SHARE else 0)
     + (8 if agn_dev.KSHAP_FAST_BATCH else 0)
+    + (16 if agn_dev.AGN_IDN_SYN_POOL else 0)
 )
 
 
 def fast_switches_binding() raises -> PythonObject:
     """`XTREES_FAST_SWITCHES`: bit 1 MOJOLEARN_TE_NATIVE_SPLITS, bit 2
     MOJOLEARN_TE_ADA_SESSION, bit 4 MOJOLEARN_TE_ADA_SESSION_SHARE, bit 8
-    MOJOLEARN_KSHAP_FAST_BATCH (xtrees/agnostic_device.mojo)."""
+    MOJOLEARN_KSHAP_FAST_BATCH, bit 16 MOJOLEARN_AGN_IDN_SYN_POOL (an
+    IDENTICAL build's switch; both in xtrees/agnostic_device.mojo)."""
     return PythonObject(XTREES_FAST_SWITCHES)
 
 
