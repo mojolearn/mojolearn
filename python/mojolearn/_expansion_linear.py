@@ -20,7 +20,6 @@ binding and on the device); every score is `x_linear_decision`. Python only
 validates, encodes labels, assigns CV folds (integers) and unpacks the flat
 float32 result. NumPy-free (NUMPY_FREE_CONTRACT.md).
 """
-import collections
 import os
 from . import _portable_math as _pm
 from . import _backend
@@ -187,6 +186,18 @@ def _concat_f32(a, b):
     return out
 
 
+def _concat_f32_parts(parts):
+    """The parts' float32 elements, in order, as one flat float32 Array (one
+    byte copy per part)."""
+    out = empty((sum(p.size for p in parts),), "<f4")  # glue: one size per part
+    o = addr(out, name="y")
+    at = 0
+    for p in parts:                     # glue: one byte copy per part
+        memcopy(o + 4 * at, addr_ro(p, name="y"), 4 * p.size)
+        at += p.size
+    return out
+
+
 def _with_weights(yv, sample_weight, n):
     """(targets | weights, 1) with a sample_weight, (targets, 0) without:
     the kernels take the weights as the second half of y."""
@@ -232,12 +243,18 @@ def _seed(random_state):
     return (lo - (1 << 32) if lo >= 1 << 31 else lo), (hi - (1 << 32) if hi >= 1 << 31 else hi)
 
 
-def _classes(est, y, n):
+def _class_codes(est, y, n):
+    """(classes, int32 codes): the labels encoded once at entry."""
     classes, codes = encode_labels(y)
     if len(codes) != n:
         raise ValueError(f"mojolearn {type(est).__name__}: X and y lengths differ")
     if len(classes) < 2:
         raise ValueError(f"mojolearn {type(est).__name__}: y has one class")
+    return classes, codes
+
+
+def _classes(est, y, n):
+    classes, codes = _class_codes(est, y, n)
     return classes, codes.astype("<f4")
 
 
@@ -302,25 +319,39 @@ def _sgd_refuse(est, early_stopping, average, class_weight=None, warm_start=Fals
         raise ValueError(f"mojolearn {name}: warm_start is not implemented (x_linear/NOT_IMPLEMENTED.tsv)")
 
 
-def _expanded_class_weight(class_weight, classes, codes, sample_weight=None):
-    """scikit-learn's compute_class_weight: 'balanced' is total / (k * count)
-    over the (weighted, when sample_weight is given) class counts, a dict
-    maps labels to weights (1 for a label it does not name)."""
+def _class_prep(est, class_weight, classes, codes, sample_weight=None, weighted=False, rows=False):
+    """scikit-learn's compute_class_weight and compute_sample_weight in the
+    binding (`x_linear_class_prep`, x_linear/class_prep.mojo: on the device
+    on a GPU install; lane cpu2-l10-linear removed the Python row loops).
+
+    `codes`: the int32 class codes. 'balanced' is total / (k * count) over
+    the class counts (weighted by `sample_weight` when `weighted`), computed
+    in the binding; a dict maps labels to weights (1 for a label it does not
+    name), None weighs every class 1. `sample_weight`: a checked float32
+    Array (`_weights_f32`) or None. Returns (the k class weights as a
+    float32 Array, the n row weights `sample_weight * cw[code]` as a float32
+    Array when `rows` else None, the largest unweighted class count)."""
     labels = classes.tolist() if hasattr(classes, "tolist") else list(classes)
     k = len(labels)
-    if class_weight == "balanced":
-        counts = [0.0] * k
-        ws = [1.0] * len(codes) if sample_weight is None else sample_weight
-        for c, w in zip(codes, ws):
-            counts[int(c)] += w
-        total = sum(counts)
-        return [total / (k * cnt) if cnt else 0.0 for cnt in counts]
-    if isinstance(class_weight, dict):
-        for key in class_weight:
+    n = codes.shape[0]
+    balanced = class_weight == "balanced"
+    if balanced:
+        cw = empty((k,), "<f4")
+    elif class_weight is None:
+        cw = full((k,), 1.0, "<f4")
+    elif isinstance(class_weight, dict):
+        for key in class_weight:  # glue: one entry per named label (label -> class map, G5)
             if key not in labels:
                 raise ValueError(f"The classes, {[key]}, are not in class_weight")
-        return [float(class_weight.get(lab, 1.0)) for lab in labels]
-    raise ValueError("mojolearn: class_weight must be None, 'balanced' or a dict")
+        cw = Array.from_list([float(class_weight.get(lab, 1.0)) for lab in labels], "<f4")  # glue: label -> class weight
+    else:
+        raise ValueError("mojolearn: class_weight must be None, 'balanced' or a dict")
+    out = empty((n,), "<f4") if rows else None
+    largest = _fit_module(est, ALGO_LOGCV).x_linear_class_prep(
+        addr_ro(codes, name="class codes"), 0 if sample_weight is None else addr_ro(sample_weight, name="sample_weight"),
+        addr(cw, name="class weights"), [n, k, int(balanced), int(balanced and weighted and sample_weight is not None)],
+        0 if out is None else addr(out, name="row weights"))
+    return cw, out, int(largest)
 
 
 def _sgd_fit(est, X, y, n_classes, loss_code, penalty, lr, alpha, l1_ratio, eta0, power_t,
@@ -345,7 +376,7 @@ def _sgd_fit(est, X, y, n_classes, loss_code, penalty, lr, alpha, l1_ratio, eta0
     y, has_sw = _with_weights(y, sample_weight, n)
     has_cw = 0
     if class_weight is not None and n_classes >= 2:
-        cw = _expanded_class_weight(class_weight, classes, codes)
+        cw = _class_prep(est, class_weight, classes, codes)[0].tolist()  # k scalars: the fit's parameters
         if n_classes == 2:
             pos, neg = [cw[1]], [cw[0]]
         else:
@@ -407,13 +438,14 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
         if self.loss not in _SGD_CLF_LOSS:
             raise ValueError(f"mojolearn SGDClassifier: loss must be one of {sorted(_SGD_CLF_LOSS)}")
         Xm = _matrix(X)
-        classes, codes = _classes(self, y, Xm[1])
+        classes, icodes = _class_codes(self, y, Xm[1])
+        codes = icodes.astype("<f4")
         self.classes_ = classes
         self.coef_, self.intercept_ = _sgd_fit(
             self, Xm, codes, len(classes), _SGD_CLF_LOSS[self.loss], self.penalty, self.learning_rate,
             self.alpha, self.l1_ratio, self.eta0, self.power_t, self.epsilon, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight, self.class_weight, classes, codes.tolist() if self.class_weight == "balanced" else None, batch_size=self.batch_size)
+            sample_weight, self.class_weight, classes, icodes, batch_size=self.batch_size)
         return self
 
     def predict_proba(self, X):
@@ -814,13 +846,14 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
     def fit(self, X, y, sample_weight=None):
         _sgd_refuse(self, self.early_stopping, False, None, self.warm_start)
         Xm = _matrix(X)
-        classes, codes = _classes(self, y, Xm[1])
+        classes, icodes = _class_codes(self, y, Xm[1])
+        codes = icodes.astype("<f4")
         self.classes_ = classes
         self.coef_, self.intercept_ = _sgd_fit(
             self, Xm, codes, len(classes), _SGD_CLF_LOSS["perceptron"], self.penalty, "constant",
             self.alpha, self.l1_ratio, self.eta0, 0.5, 0.1, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight, self.class_weight, classes, codes.tolist() if self.class_weight == "balanced" else None, batch_size=self.batch_size,
+            sample_weight, self.class_weight, classes, icodes, batch_size=self.batch_size,
             batch_sum=True)
         return self
 
@@ -853,14 +886,15 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
         if not self.C > 0:
             raise ValueError("mojolearn PassiveAggressiveClassifier: C must be > 0")
         Xm = _matrix(X)
-        classes, codes = _classes(self, y, Xm[1])
+        classes, icodes = _class_codes(self, y, Xm[1])
+        codes = icodes.astype("<f4")
         self.classes_ = classes
         lr = "pa1" if self.loss == "hinge" else "pa2"
         self.coef_, self.intercept_ = _sgd_fit(
             self, Xm, codes, len(classes), _SGD_CLF_LOSS["hinge"], None, lr,
             1.0, 0.0, self.C, 0.5, 0.1, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight, self.class_weight, classes, codes.tolist() if self.class_weight == "balanced" else None, batch_size=self.batch_size)
+            sample_weight, self.class_weight, classes, icodes, batch_size=self.batch_size)
         return self
 
 
@@ -1008,38 +1042,24 @@ class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
         if not self.alpha >= 0:
             raise ValueError("mojolearn RidgeClassifier: alpha must be >= 0")
         a, n, d = _matrix(X)
-        if self.class_weight is None:
-            # the int32 codes go to the binding as they are and the +-1
-            # targets are built in it (x_linear/cls1_fast.mojo's kernel on
-            # every column; lane pyglue-numeric: Python lists over the rows)
-            classes, icodes = encode_labels(y)
-            if icodes.size != n:
-                raise ValueError("mojolearn RidgeClassifier: X and y lengths differ")
-            if len(classes) < 2:
-                raise ValueError("mojolearn RidgeClassifier: y has one class")
-            k = len(classes)
-            T = 1 if k == 2 else k
-            vals = _ridge_run(self, a, n, d, icodes, T, [self.alpha], sample_weight, codes_mode=True)
-            self.classes_ = classes
-            self.coef_ = Array.from_list(_rows(vals, T, d), "<f4")
-            self.intercept_ = Array.from_list(vals[T * d:T * d + T], "<f4")
-            self.n_features_in_ = d
-            return self
-        # class_weight: the per-row weights (owed: still Python lists over the rows)
-        classes, codes = _classes(self, y, n)
+        # the int32 codes go to the binding as they are and the +-1 targets
+        # are built in it (x_linear/cls1_fast.mojo's kernel on every column;
+        # lane pyglue-numeric: Python lists over the rows); with class_weight
+        # the row weights sample_weight * cw[code] come from the binding too
+        # (x_linear/class_prep.mojo, lane cpu2-l10-linear)
+        classes, icodes = encode_labels(y)
+        if icodes.size != n:
+            raise ValueError("mojolearn RidgeClassifier: X and y lengths differ")
+        if len(classes) < 2:
+            raise ValueError("mojolearn RidgeClassifier: y has one class")
         k = len(classes)
         T = 1 if k == 2 else k
-        cl = codes.tolist()
-        if T == 1:
-            Y = [1.0 if c == 1 else -1.0 for c in cl]
-        else:
-            Y = [1.0 if c == t else -1.0 for c in cl for t in range(T)]
         if self.class_weight is not None:
-            # theirs: sample_weight * compute_sample_weight(class_weight, y)
-            cw = _expanded_class_weight(self.class_weight, classes, cl)
-            base = [1.0] * n if sample_weight is None else _vector(sample_weight, n, "sample_weight").tolist()
-            sample_weight = [b * cw[int(c)] for b, c in zip(base, cl)]
-        vals = _ridge_run(self, a, n, d, Array.from_list(Y, "<f4"), T, [self.alpha], sample_weight)
+            # theirs: sample_weight * compute_sample_weight(class_weight, y),
+            # 'balanced' from the unweighted class counts
+            sw = None if sample_weight is None else _weights_f32(sample_weight, n)
+            sample_weight = _class_prep(self, self.class_weight, classes, icodes, sw, rows=True)[1]
+        vals = _ridge_run(self, a, n, d, icodes, T, [self.alpha], sample_weight, codes_mode=True)
         self.classes_ = classes
         self.coef_ = Array.from_list(_rows(vals, T, d), "<f4")
         self.intercept_ = Array.from_list(vals[T * d:T * d + T], "<f4")
@@ -1226,11 +1246,11 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
 # Reference: scikit-learn sklearn/linear_model/_logistic.py; kernel
 # x_linear/logcv.mojo (L-BFGS on their LinearModelLoss objective).
 
-def _check_stratified_folds(codes, k):
+def _check_stratified_folds(largest, k):
     """cv must be an int in [2, the largest class size] (StratifiedKFold's
-    refusal). The fold ids themselves are built from the labels inside the
-    binding (x_linear/logcv.mojo `lcv_fold_table`, on the grid on a GPU)."""
-    largest = max(collections.Counter(codes).values())
+    refusal; `largest` from the binding's class counts, `_class_prep`). The
+    fold ids themselves are built from the labels inside the binding
+    (x_linear/logcv.mojo `lcv_fold_table`, on the grid on a GPU)."""
     if not isinstance(k, int) or isinstance(k, bool) or k < 2 or k > largest:
         raise ValueError("mojolearn: cv must be None or an int in [2, the largest class size]")
 
@@ -1257,8 +1277,7 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         if self.solver not in ("lbfgs", "newton-cg", "newton-cholesky"):
             raise ValueError("mojolearn LogisticRegressionCV: solver must be lbfgs (newton-* run L-BFGS too)")
         a, n, d = _matrix(X)
-        classes, codes = _classes(self, y, n)
-        cl = [int(c) for c in codes.tolist()]
+        classes, icodes = _class_codes(self, y, n)
         K = len(classes)
         kp = 1 if K == 2 else K
         if isinstance(self.Cs, int) and not isinstance(self.Cs, bool):
@@ -1268,20 +1287,24 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         else:
             Cs = [float(c) for c in self.Cs]
         folds = 5 if self.cv is None else self.cv
-        _check_stratified_folds(cl, folds)
+        # lane cpu2-l10-linear: the class counts, the 'balanced' weights
+        # (theirs: from the weighted counts of all of y) and the row weights
+        # in the binding (x_linear/class_prep.mojo); y is assembled by byte
+        # copies: codes n | fold ids n (zeros: the binding builds them from
+        # the labels) | fit weights n | raw weights n
+        raw = None if sample_weight is None else _weights_f32(sample_weight, n)
+        weigh = sample_weight is not None or self.class_weight is not None
+        _, fitw, largest = _class_prep(self, self.class_weight, classes, icodes, raw, weighted=True,
+                                       rows=self.class_weight is not None)
+        _check_stratified_folds(largest, folds)
+        parts = [icodes.astype("<f4"), zeros((n,), "<f4")]
         has_sw = 0
-        tail = []
-        if sample_weight is not None or self.class_weight is not None:
-            raw = [1.0] * n if sample_weight is None else _with_weights(zeros((n,), "<f4"), sample_weight, n)[0].tolist()[n:]
-            fitw = raw
-            if self.class_weight is not None:
-                # theirs: 'balanced' from the weighted counts of all of y
-                cw = _expanded_class_weight(self.class_weight, classes, cl,
-                                            None if sample_weight is None else raw)
-                fitw = [b * cw[c] for b, c in zip(raw, cl)]
-            tail, has_sw = fitw + raw, 1
-        # the fold ids' slot is zeros: the binding builds them from the labels
-        yy = Array.from_list([float(c) for c in cl] + [0.0] * n + tail, "<f4")
+        if weigh:
+            if raw is None:
+                raw = full((n,), 1.0, "<f4")
+            parts += [raw if fitw is None else fitw, raw]
+            has_sw = 1
+        yy = _concat_f32_parts(parts)
         p = kp * (d + 1)
         nc = len(Cs)
         vals = _run(self, ALGO_LOGCV, a, n, d, yy, [self.max_iter, int(bool(self.fit_intercept)), kp, nc, folds, has_sw],
