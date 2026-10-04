@@ -305,18 +305,20 @@ def kernel_ridge_fit_ptr_binding(
     )
     var alpha = Float32(Float64(py=params[7]))
     var sw = List[Float32]()
+    var waddr = 0
     if len(addrs) == 5:
-        # the per-row factors sqrt(sample_weight), as `kernel_ridge_fit_binding`
-        var wp = _f64_ptr(Int(py=addrs[4]))
-        sw.reserve(max(0, n))
-        for i in range(n):
-            sw.append(Float32(sqrt(wp[i])))
+        # cpu2-l6-bindings: the per-row factors sqrt(sample_weight) are
+        # formed and refused on the device from the caller's float64
+        # weights (`_krr_sqrt_weights_dev`), not in a host loop
+        waddr = Int(_f64_ptr(Int(py=addrs[4])))
     var xaddr = Int(xp)
     var yaddr = Int(yp)
     var info = 0
     with GILReleased(Python()):
         var trace = IdentityTrace()
-        info = kernel_ridge_fit_ptr_into(xaddr, yaddr, n, d, t, kp, alpha, sw, dp, trace)
+        info = kernel_ridge_fit_ptr_into(
+            xaddr, yaddr, n, d, t, kp, alpha, sw, dp, trace, waddr=waddr
+        )
         sp.unsafe_store(0, Float64(info))
     return PythonObject(info)
 
