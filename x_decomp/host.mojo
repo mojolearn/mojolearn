@@ -73,6 +73,7 @@ from core.host_lanes import host_row_tasks
 from core.host_parallel import host_parallelize
 from x_decomp.exec_trait import Exec
 from x_decomp.tsqr_host import ts_apply_host, ts_factor_host, ts_free_host
+from glm.host.center_host import center_on_cpu, col_sums_on_cpu
 from x_decomp.qr_sliced_host import qs_geqrf_host, qs_orgqr_host
 from x_decomp.host_qr import fast_qr_finish, qr_slice, qr_slices
 from x_decomp.host_ew import ew_range
@@ -729,6 +730,53 @@ struct HostExec(Exec):
             ts_free_host()
             return
         ts_apply_host(c, q, m, n, k)
+
+    @staticmethod
+    def ols_tsqr_factor(
+        a: F32Ptr, b: F32Ptr, r: F32Ptr, mu: F32Ptr, ymean: MutPointer[UInt64, MutAnyOrigin], m: Int, d: Int
+    ) raises:
+        """The host column of DevExec.ols_tsqr_factor: the same items
+        (glm/host/center_host.mojo), then the TSQR's host replay."""
+        var sums = List[UInt64](length=d + 1, fill=UInt64(0))
+        var sp = Int(sums.unsafe_ptr())
+        col_sums_on_cpu(Int(a), sp, m, d)
+        col_sums_on_cpu(Int(b), sp + 8 * d, m, 1)
+        var mf = List[Float32](length=d + 1, fill=Float32(0.0))
+        for j in range(d + 1):
+            var mean = bitcast[DType.float64](sums[j]) / Float64(m)
+            mf[j] = mean.cast[DType.float32]()
+            if j < d:
+                mu.unsafe_store(j, mf[j])
+            else:
+                ymean.unsafe_store(0, bitcast[DType.uint64](mean))
+        var ca = List[Float32](length=m * d, fill=Float32(0.0))
+        var cb = List[Float32](length=m, fill=Float32(0.0))
+        var mp = Int(mf.unsafe_ptr())
+        center_on_cpu(Int(a), mp, Int(ca.unsafe_ptr()), m, d)
+        center_on_cpu(Int(b), mp + 4 * d, Int(cb.unsafe_ptr()), m, 1)
+        ts_factor_host(
+            F32Ptr(unsafe_from_address=Int(ca.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(cb.unsafe_ptr())),
+            r, m, d, 1, False,
+        )
+        _ = sums^
+        _ = mf^
+        _ = ca^
+        _ = cb^
+
+    @staticmethod
+    def lu_gesv(a: F32Ptr, b: F32Ptr, info: F32Ptr, n: Int, nrhs: Int) raises:
+        if n <= 0 or nrhs <= 0:
+            return
+        var f = List[Float32](length=n * n, fill=Float32(0.0))
+        for t in range(n * n):
+            f[t] = a.unsafe_load(t)
+        var pv = List[Int32](length=n, fill=Int32(0))
+        var fp = F32Ptr(unsafe_from_address=Int(f.unsafe_ptr()))
+        var pp = I32Ptr(unsafe_from_address=Int(pv.unsafe_ptr()))
+        HostExec.lu(fp, pp, info, n)
+        HostExec.lu_solve(fp, pp, b, n, nrhs, 0)
+        _ = f^
+        _ = pv^
 
     @staticmethod
     def vendor() -> String:

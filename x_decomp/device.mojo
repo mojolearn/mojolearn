@@ -4,6 +4,7 @@
 cell of `x_decomp/cells.mojo` verbatim; the serial routines run on ONE
 device thread. Host in, host dst: upload, launch, download."""
 from std.sys.compile import is_defined
+from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
@@ -118,7 +119,10 @@ from x_decomp.lle_device import (
 )
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from x_decomp.qr_sliced_device import qs_geqrf_device, qs_orgqr_device
-from x_decomp.tsqr_device import ts_apply_device, ts_factor_device, ts_free_device, ts_pack_device
+from x_decomp.tsqr_device import (
+    ts_apply_device, ts_factor_device, ts_free_device, ts_pack_center_device, ts_pack_device,
+)
+from glm.impl.center_device import col_means_buf, col_sums_buf
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_cs_kernel,
@@ -137,6 +141,38 @@ from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
 
 #: rounds enqueued between two synchronize() calls
 comptime PJ_SYNC_ROUNDS = 512
+
+# lane idn-dense-linalg (2026-10-04), IDENTICAL speed on NVIDIA and AMD; -D
+# MOJOLEARN_IDN_XD_SWEEP_OFF restores the old forms. No bit moves (waits and
+# a readback only):
+# - the Jacobi rounds of eigh and svd wait every PJ_SYNC_ROUNDS rounds on the
+#   Apple column only (macOS cuts a long command buffer; NVIDIA and AMD
+#   queues take a whole sweep);
+# - svd's per-sweep convergence test reads ONE word, the lowest set flag
+#   (`xd_flag_first_kernel`, an atomic min on the device), not the h flags
+#   and a host loop over them;
+# - `tsqr_factor` with a right-hand side does not wait between the pack and
+#   the factorization off Apple.
+comptime IDN_XD_SWEEP = not is_defined["MOJOLEARN_IDN_XD_SWEEP_OFF"]()
+comptime IDN_XD_NO_WAIT = IDN_XD_SWEEP and TARGET_COLUMN != COLUMN_APPLE
+comptime XD_NO_FLAG = Int32(2147483647)
+
+
+@always_inline
+def _round_sync(ctx: DeviceContext, rd: Int) raises:
+    """The wait after round `rd` of a Jacobi sweep (see IDN_XD_SWEEP)."""
+    comptime if not IDN_XD_NO_WAIT:
+        if rd % PJ_SYNC_ROUNDS == PJ_SYNC_ROUNDS - 1:
+            ctx.synchronize()
+
+
+def xd_flag_first_kernel(flags: F32Ptr, count: Int32, first: I32Ptr):
+    """first[0] = the lowest t < count with flags[t] != 0 (left at XD_NO_FLAG
+    when there is none)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(count):
+        if flags.unsafe_load(t) != Float32(0.0):
+            _ = Atomic.min(first, Int32(t))
 
 
 struct _XdContext(Defaultable, Movable):
@@ -2344,8 +2380,7 @@ struct DevExec(Exec):
                     da.unsafe_ptr(), dv.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
                     grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
                 )
-                if rd % PJ_SYNC_ROUNDS == PJ_SYNC_ROUNDS - 1:
-                    ctx.synchronize()
+                _round_sync(ctx, rd)
         # J^T A J keeps ||A||_F: a solve that moved it is not an answer
         if converged and not rr_fro_kept(fro_in, fro_now):
             converged = False
@@ -2643,6 +2678,8 @@ struct DevExec(Exec):
         var h = mm // 2
         var flags = ctx.enqueue_create_buffer[DType.float32](max(h, 1))
         var hflags = List[Float32](length=max(h, 1), fill=Float32(0.0))
+        var dfirst = ctx.enqueue_create_buffer[DType.int32](1)
+        var hfirst = ctx.enqueue_create_host_buffer[DType.int32](1)
         ctx.synchronize()
         # bounded in work per launch and poisoned (x_decomp/qr_bounded.mojo):
         # a launch macOS cut short leaves NaN in R, hence in s, refused below
@@ -2659,14 +2696,22 @@ struct DevExec(Exec):
                     _p(rt), _p(vt), _p(flags), Int32(n), Int32(mm), Int32(rd), X_DECOMP_SVD_TOL,
                     grid_dim=h, block_dim=RS_TPB,
                 )
-                if rd % PJ_SYNC_ROUNDS == PJ_SYNC_ROUNDS - 1:
-                    ctx.synchronize()
-            _down(ctx, flags, F32Ptr(unsafe_from_address=Int(hflags.unsafe_ptr())), h)
-            ctx.synchronize()
+                _round_sync(ctx, rd)
             var any = False
-            for b in range(h):
-                if hflags[b] != Float32(0.0):
-                    any = True
+            comptime if IDN_XD_SWEEP:
+                enqueue_fill(ctx, dfirst, XD_NO_FLAG)
+                ctx.enqueue_function[xd_flag_first_kernel](
+                    _p(flags), Int32(h), dfirst.unsafe_ptr(), grid_dim=_blocks(h), block_dim=TPB
+                )
+                ctx.enqueue_copy(dst_buf=hfirst, src_buf=dfirst)
+                ctx.synchronize()
+                any = hfirst.unsafe_ptr().unsafe_load(0) != XD_NO_FLAG
+            else:
+                _down(ctx, flags, F32Ptr(unsafe_from_address=Int(hflags.unsafe_ptr())), h)
+                ctx.synchronize()
+                for b in range(h):
+                    if hflags[b] != Float32(0.0):
+                        any = True
             if not any:
                 converged = True
         if not converged:
@@ -2694,6 +2739,8 @@ struct DevExec(Exec):
         _ = s_buf^
         _ = flags^
         _ = hflags^
+        _ = dfirst^
+        _ = hfirst^
         ctx.synchronize()
         _ = ctx^
 
@@ -3056,11 +3103,93 @@ struct DevExec(Exec):
             var ta = _up(ctx, a, m * d)
             var tb = _up(ctx, b, m * nrhs)
             var da = ts_pack_device(ctx, ta, tb, m, d, nrhs)
-            ctx.synchronize()
-            _ = ta^
-            _ = tb^
-            ts_factor_device(ctx, da, m, n, r, keep)
+            comptime if IDN_XD_NO_WAIT:
+                # no wait before the factorization: a and b live until its own
+                ts_factor_device(ctx, da, m, n, r, keep)
+                _ = ta^
+                _ = tb^
+            else:
+                ctx.synchronize()
+                _ = ta^
+                _ = tb^
+                ts_factor_device(ctx, da, m, n, r, keep)
             _ = da^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def ols_tsqr_factor(
+        a: F32Ptr, b: F32Ptr, r: F32Ptr, mu: F32Ptr, ymean: MutPointer[UInt64, MutAnyOrigin], m: Int, d: Int
+    ) raises:
+        """LinearRegression's centered TSQR in ONE entry (lane
+        idn-dense-linalg): X (m x d) and y (m) go up once; the exact column
+        sums (`col_sums_buf`), the means (`col_means_buf`), the centering
+        (`center_cell`, inside the pack) and the blocked TSQR of
+        [X - mu | y - ymean] all read the resident buffers. The words of
+        lm_col_sums + lm_center + tsqr_factor, which crossed X four times."""
+        var ctx = xd_ctx()
+        var n = d + 1
+        var ta = _up(ctx, a, m * d)
+        var tb = _up(ctx, b, m)
+        var d_sx = ctx.enqueue_create_buffer[DType.uint64](d)
+        var d_sy = ctx.enqueue_create_buffer[DType.uint64](1)
+        col_sums_buf(ctx, ta, d_sx, m, d)
+        col_sums_buf(ctx, tb, d_sy, m, 1)
+        var d_mx = ctx.enqueue_create_buffer[DType.float32](d)
+        var d_my = ctx.enqueue_create_buffer[DType.float32](1)
+        var d_m64 = ctx.enqueue_create_buffer[DType.uint64](n)
+        col_means_buf(ctx, d_sx, d_sy, d_mx, d_my, d_m64, m, d)
+        var da = ts_pack_center_device(ctx, ta, tb, d_mx, d_my, m, d)
+        # the fit's outputs: mu (float32) and the y mean (binary64 bits)
+        ctx.enqueue_copy(dst_ptr=mu, src_buf=d_mx)
+        ctx.enqueue_copy(dst_ptr=ymean, src_buf=d_m64.create_sub_buffer[DType.uint64](d, 1))
+        comptime if TARGET_COLUMN == COLUMN_APPLE:
+            ctx.synchronize()
+        ts_factor_device(ctx, da, m, n, r, False)
+        ctx.synchronize()
+        _ = ta^
+        _ = tb^
+        _ = d_sx^
+        _ = d_sy^
+        _ = d_mx^
+        _ = d_my^
+        _ = d_m64^
+        _ = da^
+        _ = ctx^
+
+    @staticmethod
+    def lu_gesv(a: F32Ptr, b: F32Ptr, info: F32Ptr, n: Int, nrhs: Int) raises:
+        """numpy.linalg.solve with the factor resident (lane
+        idn-dense-linalg): `lu`'s launches, then `lu_solve`'s on the same
+        device buffers; b (n x nrhs) becomes X, a is only read, info as
+        `lu`'s. The factor and the pivots never visit the host."""
+        if n <= 0 or nrhs <= 0:
+            return
+        var ctx = xd_ctx()
+        var da = _up(ctx, a, n * n)
+        var dp = ctx.enqueue_create_buffer[DType.int32](n)
+        var di = ctx.enqueue_create_buffer[DType.float32](1)
+        var ds = ctx.enqueue_create_buffer[DType.float32](LU_SCAL_LEN)
+        var dact = ctx.enqueue_create_buffer[DType.float32](n)
+        var pp = I32Ptr(unsafe_from_address=Int(dp.unsafe_ptr()))
+        launch_lu(ctx, _p(da), pp, _p(di), _p(ds), _p(dact), n)
+        comptime if TARGET_COLUMN == COLUMN_APPLE:
+            ctx.synchronize()
+        var ub = _up(ctx, b, n * nrhs)
+        var ui = ctx.enqueue_create_buffer[DType.float32](n)
+        var ud = ctx.enqueue_create_buffer[DType.float32](n * nrhs)
+        launch_lu_solve(ctx, _p(da), pp, _p(ub), _p(ui), _p(ud), n, nrhs, 0)
+        _down(ctx, ud, b, n * nrhs)
+        _down(ctx, di, info, 1)
+        ctx.synchronize()
+        _ = da^
+        _ = dp^
+        _ = di^
+        _ = ds^
+        _ = dact^
+        _ = ub^
+        _ = ui^
+        _ = ud^
         ctx.synchronize()
         _ = ctx^
 
