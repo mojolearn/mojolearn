@@ -1200,17 +1200,63 @@ class _Kit:
                                     float(reg))
         return X
 
-    def qr_r(self, A):
-        """R (n x n) of the Householder QR of a tall A (decomposition/'s TSQR)."""
+    def qr_r(self, A, consume=False):
+        """R (n x n) of the Householder QR of a tall A (decomposition/'s TSQR).
+
+        consume=True: the caller gives A up (it is not read again). A device
+        A may then be factored in place (lane fix-d1-decomp,
+        IDN_QR_R_INPLACE: no second m x n device buffer); A is left empty
+        (0 x 0) when the binding consumed it."""
         R = _M.zeros(A.c, A.c)
         if A.r >= A.c >= 1 and self._opt_dev("x_decomp_dev_qr_r") and self._use(A):
             # lane fam-decomp: the QR of a device copy of the resident
             # operand (an IDENTICAL GPU build without
             # -D MOJOLEARN_IDN_QR_R_RESIDENT_OFF); only R comes down
-            self.b.x_decomp_dev_qr_r(self._did(A), R.addr, [A.r, A.c])
+            used = self.b.x_decomp_dev_qr_r(self._did(A), R.addr, [A.r, A.c, 1 if consume else 0])
+            if consume and int(used) == 1:
+                # its buffer holds the destroyed factorization: drop it
+                # (back to the pool) and leave A an empty matrix
+                A._s, A._d, A.r, A.c = array.array("f"), None, 0, 0
             return R
         self.b.x_decomp_qr_r(A.addr, R.addr, [A.r, A.c])
         return R
+
+    def maxabs_on(self, bit):
+        """Whether `maxabs_dev` can run with flag `bit` on this binding."""
+        return bool(self._res() and self._idn_flags() & bit and self._opt_dev("x_decomp_dev_maxabs"))
+
+    def maxabs_dev(self, A, bit):
+        """max |A| as a float, reduced on the device (`x_decomp_dev_maxabs`,
+        one word down) when A is a device matrix and the binding's
+        `x_decomp_idn_flags` has `bit` (lane fix-d1-decomp: 64 FastICA's
+        limit, 128 `_polar`'s scale); None otherwise (the caller keeps its
+        host read). A max is exact: the value the host max gives (a NaN
+        anywhere gives NaN)."""
+        n = A.r * A.c
+        if n and A._d is not None and self._use(A) and self.maxabs_on(bit):
+            out = self._dout(1, 1)
+            self.b.x_decomp_dev_maxabs(self._did(A), out._d.id, [n])
+            return float(out.s[0])
+        return None
+
+    def pad_zero_row(self, X):
+        """[X; 0]: X ((r) x c) over one zero row. A device X stays on the
+        device (lane fix-d1-decomp, `x_decomp_idn_flags` bit 8,
+        IDN_LLE_PAD_DEV: a PLACE_COLS move and a FILL0 move, copies only);
+        else the host stack."""
+        r, c = X.r, X.c
+        if c and X._d is not None and self._use(X) and self._idn_flags() & 256:
+            tot = (r + 1) * c
+            out = self._dout(r + 1, c)
+            one = _M._dev_one(self)
+            cnt = r * c
+            if cnt:
+                self.b.x_decomp_dev_move(self._did(X), one, out._d.id,
+                                         [_MV_PLACE_COLS, cnt, c, c, 0, 0, 0, cnt, tot, 1])
+            did = out._d.id
+            self.b.x_decomp_dev_move(did, one, did, [_MV_FILL0, c, cnt, 1, 0, 0, 0, tot, tot, 1])
+            return out
+        return _M(array.array("f", X.s) + array.array("f", [0.0]) * c, r + 1, c)
 
     def absmax_flags(self, A, by_col):
         """Per column (by_col) or row of A: True when its largest-|.| entry
@@ -1981,7 +2027,13 @@ class NMF(_Base):
     def _cd_side(self, k, M, W, Ht, l1, l2, perm, trans):
         HHt = k.mm(Ht, Ht, ta=True)
         XHt = k.mm(M, Ht, ta=trans)
-        if l2:
+        if l2 and k._idn_flags() & 32:
+            # lane fix-d1-decomp (IDN_NMF_L2_CELL, every column of an
+            # IDENTICAL build): HHt + l2 I in one fused `axpy` cell against
+            # the identity mask (made on the device for a device HHt)
+            mask = k.diag_mask(HHt.r) if HHt._d is not None else None
+            HHt = k.ew("axpy", HHt, mask if mask is not None else _eye(HHt.r), s=l2)
+        elif l2:
             HHt = HHt.copy()
             for t in range(HHt.r):
                 HHt.s[t * HHt.c + t] = _f32(HHt.s[t * HHt.c + t] + l2)
@@ -2145,7 +2197,11 @@ class FastICA(_Base):
             W1 = _sym_decorrelation(k, k.ew("sub", k.ew("scale", k.mm(gx, X1, tb=True), s=1.0 / p),
                                             k.ew("mul", W, gp)))
             dots = k.rowsum(k.ew("mul", W1, W))
-            lim = max(k.ew("abs", k.ew("adds", k.ew("abs", dots), s=-1.0)).s)
+            lim = None
+            if k.maxabs_on(64):     # lane fix-d1-decomp: one word down (IDN_ICA_LIM_DEV)
+                lim = k.maxabs_dev(k.ew("abs", k.ew("adds", k.ew("abs", dots), s=-1.0)), 64)
+            if lim is None:
+                lim = max(k.ew("abs", k.ew("adds", k.ew("abs", dots), s=-1.0)).s)
             W = W1
             if lim < self.tol:
                 break
@@ -2334,7 +2390,9 @@ def _polar(k, A):
     reference's `wide` fixture, columns up to 1e4) cubed them into an A whose
     A^T A was inf in float32, and eigh refused it (DEVIATION 590) on every
     column. A is n_components x n_components: the max is a k x k host read."""
-    m = max((abs(float(v)) for v in A.s), default=0.0)
+    m = k.maxabs_dev(A, 128)     # lane fix-d1-decomp: one word down (IDN_POLAR_MAX_DEV)
+    if m is None:
+        m = max((abs(float(v)) for v in A.s), default=0.0)
     # clamped so 2^-e stays a normal float32 in the device's scale
     e = max(-120, min(120, math.frexp(m)[1])) if m > 0.0 and math.isfinite(m) else 0
     if e:
@@ -2404,6 +2462,7 @@ class FactorAnalysis(_Base):
         mean = k.colmean(M)
         mean = k.ew("add", mean, k.colmean(k.ew("sub", M, mean)))
         Xc = k.ew("sub", M, mean)
+        M = None     # not read again: the input's device copy goes back to the pool before the QR
         nsqrt = math.sqrt(n)
         llconst = d * _LOG_2PI + nc
         if self.noise_variance_init is None:
@@ -2415,7 +2474,8 @@ class FactorAnalysis(_Base):
         SMALL = 1e-12
         # Xc = Q R once; the scaled data Xc D / sqrt(n) then has the singular
         # values and right vectors of the d x d R D / sqrt(n) (Q orthogonal)
-        Rx = k.qr_r(Xc) if n >= d else None
+        # (n >= d never reads Xc again, so the QR may consume it: one copy of X on the device)
+        Rx = k.qr_r(Xc, consume=True) if n >= d else None
         old_ll = -math.inf
         loglike = []
         it = 0
@@ -4512,11 +4572,11 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
         # [X; 0] (range(F^), n x p), then F^+ of that = the first n - 1 rows
         # of F0^-1; each half stretches the block by 1 / sigma, not
         # 1 / sigma^2, so the columns stay far from float32 dependence
-        Y = solve_t(_M(array.array("f", X.s) + array.array("f", [0.0]) * X.c, n, X.c))
+        Y = solve_t(k.pad_zero_row(X))      # [X; 0] (lane fix-d1-decomp: on the device, IDN_LLE_PAD_DEV)
         Y = _lle_orth(k, k.ew("sub", Y, k.mm(z, k.mm(z, Y, ta=True))))
         X = _lle_orth(k, solve(Y).rows(0, n1))
         if dev_f0:          # F^ X = F0 [X; 0] (the last column of F0 meets a zero row)
-            S, Vt = k.svd(k.mm(F0, _M(array.array("f", X.s) + array.array("f", [0.0]) * X.c, n, X.c)))
+            S, Vt = k.svd(k.mm(F0, k.pad_zero_row(X)))
         else:
             S, Vt = k.svd(k.mm(Fhat, X))
         X = k.mm(X, Vt, tb=True)
@@ -4538,7 +4598,7 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     sv = S.take_cols(want)
     # back to R^n: H [Y; 0] = [Y; 0] - coef h (h^T [Y; 0])
     t = k.mm(hrow, Y)
-    full = _M(array.array("f", Y.s) + array.array("f", [0.0]) * nc, n, nc)
+    full = k.pad_zero_row(Y)
     V = k.ew("sub", full, k.ew("scale", k.mm(h, t), s=coef))
     # the columns are unit vectors or the solve is not an answer (an
     # overflow, a dropped launch): refuse rather than return them
