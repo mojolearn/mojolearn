@@ -2622,49 +2622,15 @@ py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/parallel_neighbors_re
 # why: _vote: per-output-target class counts, class-set check and probability slicing (outputs x classes bookkeeping around knn_classify_neighbors); owed to the binding returning per-target views and checking the class sets itself
 py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/parallel_neighbors_reference.py	0	uniq = empty((sum(counts),), '<i4')
 # why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	cn = pr.put_list([1.0 if c else 0.0 for c in colnan])
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	colnan = [(self.with_mean_ and mv[c] != mv[c]) or (self.with_std_ and sv[c] != sv[c]) for c in range(d)]
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	colnan = [c == 0 for c in counts]
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	colnan = [lo_old[c] != lo_old[c] or lo_new[c] != lo_new[c] for c in range(d)]
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	for c in live):
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	for c in range(d)]
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	for c, gone in enumerate(colnan):
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	for r in (lo_old, hi_old, lo_new, hi_new):
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	for r in rows:
 # why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	if any(math.isinf(v) for v in lo + hi):
 # why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	live = [c for c in range(d) if seen[c] != 0]
 # why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	mean = Array.from_list([0.0 if colnan[c] else mv[c] for c in range(d)], '<f4')
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	offset = Array.from_list([0.0 if colnan[c] else stats["min_"][c] for c in range(d)], '<f4')
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	return [float(v) for v in seen.tolist()]
 # why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	return [int(v) for v in seen.tolist()]
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	return pr.get(out, (n, d)), [int(v) for v in pr.values(st, d)]
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	rows = [output[i].tolist() for i in range(5)]
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	rows.extend(0.0 if colnan[c] else r[c] for c in range(d))
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	scale = Array.from_list([1.0 if colnan[c] else stats["scale_"][c] for c in range(d)], '<f4')
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	scale = Array.from_list([1.0 if colnan[c] else sv[c] for c in range(d)], '<f4')
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	total = [a + b for a, b in zip(old_n, new_n)]
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	total = [int(a) + int(b) for a, b in zip(_per_feature_int(self.n_samples_seen_, d),
 # why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	vals = [float(v) for v in counts]
 # why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
