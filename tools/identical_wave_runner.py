@@ -15,12 +15,37 @@ import signal
 import subprocess
 import sys
 
+from identical_wave_compare import validate_proof
+
 ROOT=Path(__file__).resolve().parents[1]
 
 
 def write(path,obj):
     path.parent.mkdir(parents=True,exist_ok=True)
-    path.write_text(json.dumps(obj,indent=2,default=str)+'\n')
+    temporary=path.with_suffix(path.suffix+'.new')
+    temporary.write_text(json.dumps(obj,indent=2,default=str)+'\n')
+    temporary.replace(path)
+
+
+
+def binary_inventory(source):
+    return {str(path.relative_to(source)):hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in (source/'python/mojolearn').rglob('*.so')}
+
+
+def verify_products(source, recorded):
+    if not recorded or binary_inventory(source) != recorded:
+        raise ValueError('complete binary inventory changed (added, removed or modified .so)')
+
+
+class ProgressSteps(list):
+    def __init__(self, persist):
+        super().__init__()
+        self.persist = persist
+
+    def append(self, step):
+        super().append(step)
+        self.persist()
 
 
 def run(argv, cwd, env, log, timeout):
@@ -49,6 +74,7 @@ def main():
     p.add_argument('--out',required=True,type=Path)
     p.add_argument('--python',required=True,type=Path,help='Existing Python with NumPy/SciPy; no mojolearn install used')
     p.add_argument('--data',required=True,type=Path)
+    p.add_argument('--cross-vendor-proof',type=Path,help='PASS proof from identical_wave_compare.py; required for timing')
     p.add_argument('--semaphore',type=Path,default=Path('/root/mojolearn-evidence/compile_slot.sh'))
     a=p.parse_args()
     if sys.platform!='linux': p.error('remote Linux NVIDIA/AMD only')
@@ -87,21 +113,50 @@ def main():
     required=set(plan['required_quality_gates'])
     if set(g['id'] for g in plan['quality_gates'])!=required: p.error('quality inventory does not match required gates')
     if a.phase in ('prepare','quality') and not a.semaphore.is_file(): p.error('required compile semaphore missing')
+    if a.phase != 'prepare':
+        prep=a.out/'prepare.json'
+        if not prep.exists(): p.error('successful prepare receipt required')
+        prepared=json.loads(prep.read_text())
+        if prepared.get('status')!='PASS' or prepared.get('identity')!=identity:
+            p.error('successful prepare receipt for this identity required')
+        # Check BOTH arms before any phase executes, including unexpected .so files.
+        for arm in ('on','off'):
+            source=a.out/arm/'source'
+            if subprocess.check_output(['git','-C',str(source),'rev-parse','HEAD'],text=True).strip()!=a.sha:
+                p.error('source HEAD changed')
+            if subprocess.run(['git','diff','--quiet','HEAD','--'],cwd=source).returncode:
+                p.error('tracked source changed after frozen checkout')
+            try:
+                verify_products(source,json.loads((a.out/arm/'build-products.json').read_text()))
+            except (ValueError,OSError) as exc:
+                p.error(str(exc))
     if a.phase=='timing':
         for phase in ('quality','identity'):
             receipt=a.out/(phase+'.json')
             if not receipt.exists(): p.error('timing blocked: '+phase+' receipt missing')
             doc=json.loads(receipt.read_text())
             if doc.get('identity')!=identity or doc.get('status')!='PASS': p.error('timing blocked: '+phase+' incomplete or failed')
-        if (a.out/'timing.json').exists(): p.error('one run per arm: timing receipt already exists')
-        write(a.out/'timing.json',report)  # durable one-shot reservation survives interruption
+        if a.cross_vendor_proof is None: p.error('timing blocked: --cross-vendor-proof required')
+        try:
+            proof_bytes=a.cross_vendor_proof.read_bytes()
+            validate_proof(json.loads(proof_bytes),(a.out/'identity.json').read_bytes(),a.vendor,a.plan.read_bytes())
+        except (ValueError,KeyError,TypeError,OSError) as exc:
+            p.error('timing blocked: '+str(exc))
+        report['cross_vendor_proof_sha256']=hashlib.sha256(proof_bytes).hexdigest()
+        try:
+            with (a.out/'timing.json').open('x') as reservation:
+                reservation.write(json.dumps(report,indent=2)+'\n')
+        except FileExistsError:
+            p.error('one run per arm: timing receipt already exists')
+        # The exclusive reservation survives interruption or competing runners.
+    write(a.out/(a.phase+'.json'),report)
     for arm in ('on','off'):
         source=a.out/arm/'source'; folder=a.out/arm/a.phase
         env=dict(envbase,PYTHONPATH=str(source/'python'))
         flags='-D MOJOLEARN_IDN_ALL_OFF=1' if arm=='off' else ''
         env['MOJOLEARN_MOJO_BUILD_FLAGS']=flags
         if arm=='off': env['MOJOLEARN_IDN_ALL_OFF']='1'
-        steps=[]; report['arms'][arm]=steps
+        steps=ProgressSteps(lambda:write(a.out/(a.phase+'.json'),report)); report['arms'][arm]=steps
         if a.phase=='prepare':
             if source.exists(): p.error('fresh source directory required; existing '+str(source))
             rc=run(['git','worktree','add','--detach',str(source),a.sha],a.repo,env,folder/'worktree.log',120)
@@ -126,18 +181,10 @@ def main():
                 steps.append({'id':builder,'rc':rc})
                 if rc: break
             if rc: break
-            products={str(x.relative_to(source)):hashlib.sha256(x.read_bytes()).hexdigest() for x in (source/'python/mojolearn').rglob('*.so')}
+            products=binary_inventory(source)
             if not products: p.error('no source-built binaries')
             write(a.out/arm/'build-products.json',products)
         else:
-            prep=a.out/'prepare.json'
-            if not prep.exists() or json.loads(prep.read_text()).get('status')!='PASS': p.error('successful prepare receipt required')
-            if subprocess.check_output(['git','-C',str(source),'rev-parse','HEAD'],text=True).strip()!=a.sha: p.error('source HEAD changed')
-            # A rebuild between ID/quality and timing invalidates prior evidence.
-            products=json.loads((a.out/arm/'build-products.json').read_text())
-            for relative,sha in products.items():
-                if hashlib.sha256((source/relative).read_bytes()).hexdigest()!=sha: p.error('binary changed: '+relative)
-            if subprocess.run(['git','diff','--quiet','HEAD','--'],cwd=source).returncode: p.error('tracked source changed after frozen checkout')
             if a.phase=='quality':
                 for gate in plan['quality_gates']:
                     if arm not in gate.get('arms',['on','off']):
