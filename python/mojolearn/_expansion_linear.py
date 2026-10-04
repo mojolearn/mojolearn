@@ -468,8 +468,8 @@ class _GLMBase(_LinearRegressorMixin, NumericModeMixin):
     _BINDING = _BINDING
     _power = 0.0
 
-    def _check_y(self, y):
-        return None
+    #: the loss name in the out-of-range ValueError; None: every target is valid
+    _loss_name = None
 
     def _link_code(self):
         return 1
@@ -483,21 +483,18 @@ class _GLMBase(_LinearRegressorMixin, NumericModeMixin):
             raise ValueError(f"mojolearn {type(self).__name__}: alpha must be >= 0")
         a, n, d = _matrix(X)
         yv = _vector(y, n)
-        # lane fam2-linear: the targets' range is checked by the fit itself
-        # (x_linear/glm_ydom.mojo: on the device on a GPU route); a binding
-        # without `x_linear_glm_ydom` keeps the walk here
-        native_range = getattr(_fit_module(self, ALGO_GLM), "x_linear_glm_ydom", None)
-        if native_range is None:
-            self._check_y(yv.tolist())
+        # the targets' range is checked by the fit itself (x_linear/glm_ydom.mojo,
+        # on the device on a GPU route; lane cpu2-l10-linear removed the
+        # Python walk and its `_OFF` arm): a refused fit returns -1 in the
+        # converged word
         link = self._link_code()
         m = d + 1
         yv, has_sw = _with_weights(yv, sample_weight, n)
         vals = _run(self, ALGO_GLM, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept)), link, has_sw],
                     [self._power_value(), self.alpha, self.tol], d + 3, 3 * n + m * m + 3 * m, 1)
-        if native_range is not None and vals[d + 2] < 0:
-            # the class's own message: its rule fails on a negative target
-            self._check_y([-1.0])
-            raise ValueError("mojolearn: some value(s) of y are out of the valid range of the loss")
+        if vals[d + 2] < 0:
+            raise ValueError("Some value(s) of y are out of the valid range of the loss "
+                             f"'{self._loss_name or 'HalfTweedieLoss'}'.")
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
         self.n_iter_ = int(vals[d + 1])
@@ -522,9 +519,7 @@ class PoissonRegressor(_GLMBase):
                  warm_start=False, verbose=0):
         _glm_init(self, alpha, fit_intercept, solver, max_iter, tol, warm_start, verbose)
 
-    def _check_y(self, y):
-        if min(y) < 0 or sum(y) <= 0:
-            raise ValueError("Some value(s) of y are out of the valid range of the loss 'HalfPoissonLoss'.")
+    _loss_name = "HalfPoissonLoss"
 
 
 class GammaRegressor(_GLMBase):
@@ -535,9 +530,7 @@ class GammaRegressor(_GLMBase):
                  warm_start=False, verbose=0):
         _glm_init(self, alpha, fit_intercept, solver, max_iter, tol, warm_start, verbose)
 
-    def _check_y(self, y):
-        if min(y) <= 0:
-            raise ValueError("Some value(s) of y are out of the valid range of the loss 'HalfGammaLoss'.")
+    _loss_name = "HalfGammaLoss"
 
 
 class TweedieRegressor(_GLMBase):
@@ -570,12 +563,7 @@ class TweedieRegressor(_GLMBase):
             return 1
         raise ValueError("mojolearn TweedieRegressor: link must be 'auto', 'identity' or 'log'")
 
-    def _check_y(self, y):
-        p = float(self.power)
-        if 1 <= p < 2 and (min(y) < 0 or sum(y) <= 0):
-            raise ValueError("Some value(s) of y are out of the valid range of the loss 'HalfTweedieLoss'.")
-        if p >= 2 and min(y) <= 0:
-            raise ValueError("Some value(s) of y are out of the valid range of the loss 'HalfTweedieLoss'.")
+    _loss_name = "HalfTweedieLoss"
 
 
 # -------------------------------------------------------------------- Huber

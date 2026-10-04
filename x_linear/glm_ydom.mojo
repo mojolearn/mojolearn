@@ -12,25 +12,25 @@ The check is now the fit's own: the device grid (`x_linear/device.mojo`
     has_pos   some y > 0
     has_zero  some y == 0
 
-scikit-learn's rule (`_check_y` in `_expansion_linear.py`): for 1 <= power < 2
+scikit-learn's rule (their `_check_y`; the message in `_expansion_linear.py` `_GLMBase.fit`): for 1 <= power < 2
 the range fails when `min(y) < 0 or sum(y) <= 0`; with no negative target the
 sum is `<= 0` exactly when no target is positive, so that is `has_neg or not
 has_pos`. For power >= 2 it fails when `min(y) <= 0`: `has_neg or has_zero`.
 A failed range returns `res[d + 2] = -1` (the converged word) and no fit; the
 Python layer raises the same ValueError.
 
-`-D MOJOLEARN_XLIN_GLM_YDOM_OFF` (or the master `MOJOLEARN_IDN_ALL_OFF`)
-leaves `x_linear_glm_ydom` unregistered and the Python walk in place.
-This file has no device import: both bindings read it.
+Lane cpu2-l10-linear (2026-10-04): the check is the only route. The
+`MOJOLEARN_XLIN_GLM_YDOM_OFF` arm (and its `MOJOLEARN_IDN_ALL_OFF` hook) that
+left the Python walk in place is removed: a fix, not an optimization
+(CPU data work on a GPU route). This file has no device import: both
+bindings read it.
 """
 
 from std.memory import bitcast
-from std.sys.compile import is_defined
 from x_linear.ops import FP
 
-comptime XLIN_GLM_DEV_YDOM = not (
-    is_defined["MOJOLEARN_XLIN_GLM_YDOM_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+comptime XLIN_GLM_DEV_YDOM = True
+"""Always on (no `_OFF` arm): kept as a name for its comptime callers."""
 #: `res[d + 2]` of a fit refused for its targets' range
 comptime GLM_YDOM_REFUSED = Float32(-1)
 
