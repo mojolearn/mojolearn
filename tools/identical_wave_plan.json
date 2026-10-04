@@ -52,7 +52,9 @@
     "build_transformer.sh",
     "build_transformer_host.sh",
     "build_mamba.sh",
-    "build_mamba_host.sh"
+    "build_mamba_host.sh",
+    "build_linalg.sh",
+    "build_linalg_host.sh"
   ],
   "required_quality_gates": [
     "compiled_route_readback",
