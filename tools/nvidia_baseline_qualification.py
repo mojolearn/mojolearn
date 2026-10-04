@@ -31,12 +31,15 @@ files are resolved against the installed loader's validated baseline root.
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
 import sys
 
-ROOT = Path(__file__).resolve().parents[1]
+# A staged copy of this checker (newer tooling than the frozen payload source)
+# reads the harness of the checkout named here; collectors never set it.
+ROOT = Path(os.environ.get('MOJOLEARN_QUALIFICATION_ROOT') or Path(__file__).resolve().parents[1]).resolve()
 SCHEMA = 'mojolearn.nvidia-baseline-run.v1'
 UNDECLARED = 'n/a:UNDECLARED'
 # The harness declares no batch probe for these lanes (no `_batch_decl` entry
@@ -404,6 +407,8 @@ def collect(args):
     import mojolearn as ml
     from mojolearn import _backend
     from mojolearn._verify import binding_artifacts
+    require(not os.environ.get('MOJOLEARN_QUALIFICATION_ROOT'),
+            'Collectors run from the frozen payload checkout only')
     manifest_path = args.manifest.resolve()
     manifest = read(manifest_path)
     files = manifest_files(manifest)

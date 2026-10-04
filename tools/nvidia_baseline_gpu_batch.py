@@ -23,6 +23,12 @@ GPUS = {'ada': 'NVIDIA GeForce RTX 4090', 'hopper': 'NVIDIA H100 80GB HBM3'}
 DISTS = {'mojolearn', 'mojolearn_nvidia', 'mojolearn_amd', 'mojolearn_nvidia_sm89',
          'mojolearn_nvidia_sm90', 'mojolearn_amd_gfx942', 'mojolearn_nvidia_ptx80'}
 LANES = 'kmeans,gemm-pinned,ridge,gbdt-symmetric,mamba2,transformer,svc'
+# Staged from the runner's tooling commit, not the payload checkout: the
+# measured-configuration witness and the checker that pins undeclared parts.
+WITNESS = ROOT / 'tools/cuda_runtime_config_witness.py'
+CHECKER = ROOT / 'tools/nvidia_baseline_qualification.py'
+CHECK = ('env PYTHONPATH=source/tools MOJOLEARN_QUALIFICATION_ROOT="$PWD/source" '
+         'venv/bin/python tooling-check.py check')
 
 
 def require(ok, message):
@@ -171,19 +177,33 @@ collect() {
     local scope=$1 role=$2 bound=$3
     shift 3
     local cmd=(venv/bin/python source/tools/nvidia_baseline_qualification.py collect --role "$role" --manifest "$MANIFEST" --out "results/$scope-$role.json" "$@")
+    local run=(timeout -k 20 "$bound")
+    local witness=cuda-runtime-config
     if [ "$role" = baseline ]; then
-        timeout -k 20 "$bound" env MOJOLEARN_CUDA_PATH=ptx-baseline MOJOLEARN_EXPERIMENTAL_PTX=1 "${cmd[@]}" > "results/$scope-$role.log" 2>&1
-    else
-        timeout -k 20 "$bound" "${cmd[@]}" > "results/$scope-$role.log" 2>&1
+        run+=(env MOJOLEARN_CUDA_PATH=ptx-baseline MOJOLEARN_EXPERIMENTAL_PTX=1)
+        witness=cuda-runtime-config-ptx
     fi
+    if [ "$scope" != full ]; then
+        "${run[@]}" "${cmd[@]}" > "results/$scope-$role.log" 2>&1
+        return
+    fi
+    # Measure the CUDA configuration while this full collector is live and has
+    # the driver mapped. A missing witness fails the batch after collection.
+    "${run[@]}" "${cmd[@]}" > "results/$scope-$role.log" 2>&1 &
+    local pid=$!
+    timeout -k 10 400 venv/bin/python cuda-config-witness.py --source @SHA@ --out "results/$witness.json" \
+        --require-collector "results/$scope-$role.json" --wait 300 > "results/$witness.log" 2>&1 || WITNESS_FAILED=1
+    wait "$pid"
 }
+WITNESS_FAILED=0
 for role in native-reference baseline; do
     collect prototype "$role" 300 --lanes @LANES@ --fixtures base,denormal,odd
 done
-venv/bin/python source/tools/nvidia_baseline_qualification.py check --prototype --manifest "$MANIFEST" --out results/prototype-comparison.json results/prototype-native-reference.json results/prototype-baseline.json
+@CHECK@ --prototype --manifest "$MANIFEST" --out results/prototype-comparison.json results/prototype-native-reference.json results/prototype-baseline.json
 @FULL@
 test "$NATIVE_FAILED" = 0
 test "$EXTRA_FAILED" = 0
+test "$WITNESS_FAILED" = 0
 ''' .replace('@SHA@', commit).replace('@LANES@', LANES).replace('@NATIVE@', native_release_body(commit) if native_release_checks else 'NATIVE_FAILED=0').replace('@EXTRA@', '''EXTRA_FAILED=0
 for role in native-reference baseline; do
     cmd=(venv/bin/python source/tools/nvidia_serial_guard.py --seconds 120 --rss-gib 12 --cores 2 -- venv/bin/python extra-wrapper.py --script extra-capture.py --source-tools source/tools --manifest "$MANIFEST" --role "$role" --out "results/extra-$role.json")
@@ -197,7 +217,7 @@ done''' if extra_capture else 'EXTRA_FAILED=0').replace('@FULL@', '''for role in
 done
 # Single-pod comparison is deliberately prototype-labelled; cross-pod full
 # admission check happens locally against the complete original payload set.
-venv/bin/python source/tools/nvidia_baseline_qualification.py check --prototype --manifest "$MANIFEST" --out results/full-local-comparison.json results/full-native-reference.json results/full-baseline.json''' if full else '')
+@CHECK@ --prototype --manifest "$MANIFEST" --out results/full-local-comparison.json results/full-native-reference.json results/full-baseline.json''' if full else '').replace('@CHECK@', CHECK)
 
 
 def main():
@@ -238,6 +258,7 @@ def main():
                 extra_capture_sha256=sha(args.extra_capture) if args.extra_capture else None,
                 extra_wrapper_sha256=sha(ROOT / 'tools/nvidia_extra_capture.py') if args.extra_capture else None,
                 extra_capture_seconds_per_role=120 if args.extra_capture else 0,
+                configuration_witness_sha256=sha(WITNESS), checker_sha256=sha(CHECKER),
                 wheels={w.name: sha(w) for w in wheels}, identical_qualified=False)
     print(json.dumps(plan, indent=2), flush=True)
     if not args.rent:
@@ -255,6 +276,11 @@ def main():
         artifacts(stage / 'wheels', args.commit)  # revalidate the exact staged bytes before creating a pod
         (stage / 'body.sh').write_text(box_body(args.commit, not args.prototype_only, bool(args.extra_capture), args.native_release_checks))
         files = sorted((stage / 'wheels').glob('*.whl')) + [stage / 'body.sh']
+        for source, name, key in [(WITNESS, 'cuda-config-witness.py', 'configuration_witness_sha256'),
+                                  (CHECKER, 'tooling-check.py', 'checker_sha256')]:
+            shutil.copyfile(source, stage / name)
+            require(sha(stage / name) == plan[key], 'Staged tooling changed while staging')
+            files.append(stage / name)
         (stage / 'plan.json').write_text(json.dumps(plan, indent=2) + '\n')
         files.append(stage / 'plan.json')
         if args.native_release_checks:

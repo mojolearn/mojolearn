@@ -93,7 +93,7 @@ done
 [ -n "$SSH_TARGET" ] || die 'SSH ready timeout'
 MOJOLEARN_LEASE_DIR="$OUT/lease" with_timeout 180 sh "$ROOT/tools/runpod_guard.sh" arm "$POD_ID" "$SSH_TARGET" 120 > "$OUT/arm.log" 2>&1 || die 'On-pod watchdog refused'
 with_timeout 60 ssh $SSH_OPTS $SSH_TARGET "p=\$(cat /tmp/mojolearn-lease.pid); kill -0 \"\$p\" && echo WATCHDOG_ALIVE; curl -s --max-time 20 -o /dev/null -w 'TOKEN_GET_%{http_code}' -K /tmp/mojolearn-lease.curlrc $RP/pods/$POD_ID" > "$OUT/watchdog.txt"
-rg -q WATCHDOG_ALIVE "$OUT/watchdog.txt" && rg -q TOKEN_GET_200 "$OUT/watchdog.txt" || die 'Watchdog/token verification failed'
+grep -q WATCHDOG_ALIVE "$OUT/watchdog.txt" && grep -q TOKEN_GET_200 "$OUT/watchdog.txt" || die 'Watchdog/token verification failed'
 tar czf "$TMPD/stage.tgz" -C "$STAGE" .
 with_timeout 300 ssh $SSH_OPTS $SSH_TARGET 'mkdir -p /root/ptx-batch && tar xzf - -C /root/ptx-batch' < "$TMPD/stage.tgz" || die 'Upload failed'
 FETCH_READY=1

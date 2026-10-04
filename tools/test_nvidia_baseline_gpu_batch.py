@@ -203,6 +203,64 @@ elif args[:2]==['-m','mojolearn._identity_break']:
         self.assertGreater(body.index('test "$EXTRA_FAILED" = 0'), body.index('full-local-comparison.json'))
         subprocess.run(['bash', '-n'], input=body, text=True, check=True)
 
+    def test_full_collectors_capture_the_configuration_witness_themselves(self):
+        body = batch.box_body(SHA)
+        self.assertIn('cuda-config-witness.py --source ' + SHA, body)
+        self.assertIn('--require-collector "results/$scope-$role.json" --wait 300', body)
+        self.assertIn('witness=cuda-runtime-config-ptx', body)
+        self.assertIn('|| WITNESS_FAILED=1', body)
+        self.assertGreater(body.index('test "$WITNESS_FAILED" = 0'), body.index('full-local-comparison.json'))
+        # Collectors stay on the frozen payload checkout; only checks use staged tooling.
+        self.assertIn('venv/bin/python source/tools/nvidia_baseline_qualification.py collect', body)
+        self.assertEqual(body.count('venv/bin/python tooling-check.py check --prototype'), 2)
+        self.assertNotIn('source/tools/nvidia_baseline_qualification.py check', body)
+        self.assertIn('MOJOLEARN_QUALIFICATION_ROOT="$PWD/source"', body)
+
+    def test_collect_function_runs_witness_only_while_full_collector_is_live(self):
+        body = batch.box_body(SHA)
+        function = body[body.index('collect() {'):body.index('WITNESS_FAILED=0')]
+        for witness_rc, expected in ((0, '0'), (3, '1')):
+            with self.subTest(witness_rc=witness_rc), tempfile.TemporaryDirectory() as td:
+                root = Path(td); (root/'venv/bin').mkdir(parents=True); (root/'bin').mkdir(); (root/'results').mkdir()
+                python = root/'venv/bin/python'
+                python.write_text('#!/bin/bash\necho "$MOJOLEARN_CUDA_PATH|$*" >> calls\n'
+                                  'case "$*" in *cuda-config-witness.py*) exit ' + str(witness_rc) + ';; esac\n')
+                python.chmod(0o755)
+                timeout = root/'bin/timeout'; timeout.write_text('#!/bin/bash\nshift 3\nexec "$@"\n'); timeout.chmod(0o755)
+                script = ('set -euo pipefail\nMANIFEST=m.json\n' + function + 'WITNESS_FAILED=0\n'
+                          'collect prototype baseline 300 --lanes a\ncollect full native-reference 2400\n'
+                          'collect full baseline 2400\necho "$WITNESS_FAILED" > failed\n')
+                result = subprocess.run(['bash', '-c', script], cwd=root, capture_output=True, text=True, timeout=20,
+                                        env={**os.environ, 'PATH': str(root/'bin') + os.pathsep + os.environ['PATH']})
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual((root/'failed').read_text().strip(), expected)
+                calls = (root/'calls').read_text().splitlines()
+                witnesses = [c for c in calls if 'cuda-config-witness.py' in c]
+                self.assertEqual(len(witnesses), 2)
+                self.assertIn('--out results/cuda-runtime-config.json --require-collector results/full-native-reference.json', witnesses[0])
+                self.assertIn('--out results/cuda-runtime-config-ptx.json --require-collector results/full-baseline.json', witnesses[1])
+                self.assertTrue(all(c.startswith('|') for c in witnesses))  # witness never forces the PTX path
+                collectors = [c for c in calls if ' collect ' in c]
+                self.assertEqual([c.split('|')[0] for c in collectors], ['ptx-baseline', '', 'ptx-baseline'])
+
+    def test_plan_pins_staged_witness_and_checker(self):
+        from unittest.mock import patch
+        import contextlib, io, sys
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td); self.make(root)
+            argv = ['batch', SHA, '--wheels', str(root), '--out', str(root/'out'), '--gpu', 'ada']
+            stdout = io.StringIO()
+            with patch.object(sys, 'argv', argv), patch.object(batch.subprocess, 'check_output', side_effect=[SHA, SHA + '\trefs/heads/candidate']), patch.object(batch.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)), contextlib.redirect_stdout(stdout):
+                self.assertEqual(batch.main(), 0)
+            plan = json.loads(stdout.getvalue())
+            self.assertEqual(plan['configuration_witness_sha256'], batch.sha(ROOT / 'tools/cuda_runtime_config_witness.py'))
+            self.assertEqual(plan['checker_sha256'], batch.sha(ROOT / 'tools/nvidia_baseline_qualification.py'))
+
+    def test_lease_script_needs_no_ripgrep(self):
+        text = (ROOT / 'tools/nvidia_baseline_gpu_lease.sh').read_text()
+        self.assertNotRegex(text, r'(^|[ ;&|(])rg ')
+        self.assertIn('grep -q WATCHDOG_ALIVE', text)
+
     def test_tooling_split_is_explicit_and_advertised(self):
         from unittest.mock import patch
         import contextlib, io, sys
