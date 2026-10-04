@@ -52,9 +52,12 @@ _BINDING = "_mojolearn_x_metrics"
 #: op name -> id; x_metrics/units.mojo `run_unit` holds the same table.
 _OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wpercentile=5, col_max=6, bin_curve=7, row_metric=8, row_centroid_dist=9, permute=10,
             fold_rows=36, rows64=41, strat_codes=45, curve_fold=46, onehot=52, rep_rows=53, pair_cols=54,
-            # lane fam2-prep-metrics (x_metrics/cls_epi.mojo): only a binding whose
-            # `x_metrics_idn_fam2` has bit 1 runs it (IDENTICAL)
-            cls_epi=55)
+            # lane fam2-prep-metrics (x_metrics/cls_epi.mojo), both numeric modes
+            # since lane cpu2-l7-metrics
+            cls_epi=55,
+            # lane cpu2-l7-metrics: the metric tails and scans on the device
+            # (x_metrics/tail.mojo, cm_epi.mojo, reg_epi.mojo, rank_epi.mojo)
+            off_diff=56, flag_scan=57, proba_rows=58, cm_epi=59, reg_epi=60, rank_epi=61, cl_epi=62)
 _PARAMS = 14
 _NONE = -1
 
@@ -153,21 +156,6 @@ def _put_weights(prog, w):
         prog.stage("rep_rows", w.n * w.k, W, out, w.k)
         return out
     return prog.put(w)
-
-
-def _class_sums(codes, w, k, numeric_mode):
-    """Per-class (weighted) counts, binary64 in row order, from the binding
-    (x_metrics/epilogue.mojo class_sums); `codes` int32, `w` Float32 or None."""
-    codes = _i32_c(codes)
-    waddr, wkeep = _f32_weights_addr(w)
-    if waddr is None:
-        wkeep = as_f32_c(w, ndim=1, name="sample_weight")[0]
-        waddr = addr_ro(wkeep, name="sample_weight")
-    out = _f64_out(k)
-    _binding(numeric_mode).x_metrics_class_sums(addr_ro(codes, name="codes"), waddr, codes.size, k,
-                                                out.buffer_info()[0])
-    del wkeep
-    return out.tolist()[:k]
 
 
 class _Prog:
@@ -359,6 +347,64 @@ def _group(prog, key, n, m, *, values=_NONE, vstride=1, weights=_NONE, width=1):
     return off, out
 
 
+def _counts(prog, off, m):
+    """The m group sizes of a `group_sort` OFF table as an Int32 slot the
+    device fills (`off_diff`, x_metrics/tail.mojo); read with prog.ints."""
+    out = prog.alloc(m)
+    if m:
+        prog.stage("off_diff", m, off, m, out)
+    return out
+
+
+#: flag_scan tests (x_metrics/tail.mojo)
+_SCAN_LOG_DOMAIN, _SCAN_INDICATOR, _SCAN_NEGATIVE = 0, 1, 2
+
+
+def _scan_flag(prog, src, n, mode):
+    """One Int32 flag word the device sets to 1 when any of the n Float32
+    values at `src` fails the test (`flag_scan`); 0 otherwise."""
+    flag = prog.alloc(1)
+    if n:
+        prog.stage("flag_scan", n, src, n, mode, flag)
+    return flag
+
+
+def _flag_set(prog, flag):
+    return prog.ints(flag, 1)[0] != 0
+
+
+def _put_proba(prog, a, n, k, binary):
+    """The probabilities' check and layout in the program (`proba_rows`,
+    x_metrics/tail.mojo): (S, FLAGS). S is the (n, k) Float32 matrix the
+    metric reads: `a` itself, or for a binary column the `[1 - p, p]` rows
+    the device packs. FLAGS: three Int32 words (non-finite, outside [0, 1],
+    a row sum off one), read by `_proba_check` after the run."""
+    A = prog.put(a)
+    flags = prog.alloc(3)
+    S = A
+    if binary:
+        S = prog.scratch(2 * n)
+    if n:
+        prog.stage("proba_rows", n, A, n, 1 if binary else k, 1 if binary else 0, S, flags)
+    return S, flags
+
+
+#: probability_rows codes 1..3, in the order the check reports them
+_PROBA_REASONS = ("must be finite", "must lie in [0, 1]", "rows must sum to one within sqrt(float32 eps)")
+
+
+def _proba_code(prog, flags):
+    """0, or the first failed check (1 non-finite, 2 outside [0, 1], 3 a row sum)."""
+    f = prog.ints(flags, 3)
+    return 1 if f[0] else (2 if f[1] else (3 if f[2] else 0))
+
+
+def _proba_check(prog, flags, caller):
+    code = _proba_code(prog, flags)
+    if code:
+        raise ValueError(f"mojolearn {caller}: y_proba " + _PROBA_REASONS[code - 1])
+
+
 # ---------------------------------------------------------------------------
 # Shared validation
 # ---------------------------------------------------------------------------
@@ -400,24 +446,6 @@ def _codes(labels_seq, order):
     return _label_map(labels_seq, lambda v: index.get(v, -1))
 
 
-#: binding -> its `x_metrics_idn_fam2` bits (0 when it has none), probed once
-_IDN_FAM2 = {}
-
-
-def _idn_fam2(numeric_mode):
-    """Lane fam2-prep-metrics: the binding's IDENTICAL metric switches
-    (bindings/_mojolearn_x_metrics*.mojo `idn_fam2_binding`: 1 IDN_CLS_EPI,
-    op 55 `cls_epi`), 0 on the FAST tier or a build without them."""
-    b = _binding(numeric_mode)
-    key = id(b)
-    v = _IDN_FAM2.get(key)
-    if v is None:
-        fn = _optional_metrics_entry(b, "x_metrics_idn_fam2")
-        v = int(fn()) if fn is not None else 0
-        _IDN_FAM2[key] = v
-    return v
-
-
 def _epi_codes(average, zero_division):
     """(AVG, ZD) of x_metrics/cls_epi.mojo: 0 per label, 1 micro, 3 weighted,
     2 the plain mean (macro, binary); 0 / 1 / 2 = zero_division 0.0, 1.0, NaN."""
@@ -428,15 +456,20 @@ def _epi_codes(average, zero_division):
 class _Sums:
     """Per-label tp / pred / true sums and the total, over `order` (every
     label that can occur; the caller selects a prefix). Unweighted sums are
-    exact integers (the group sizes); weighted ones are the Float32 PairSum
-    of each group's weights, read as Python floats. `epi` (lane
-    fam2-prep-metrics; kind, k, AVG, ZD, FMODE, beta^2) stages the set-wise
-    epilogue in the same program when the binding has it (`cls_epi`,
+    exact integers (the group sizes, differenced on the device: `off_diff`);
+    weighted ones are the Float32 PairSum of each group's weights, read as
+    Python floats. `epi` (lane fam2-prep-metrics; kind, k, AVG, ZD, FMODE,
+    beta^2) stages the set-wise epilogue in the same program (`cls_epi`,
     x_metrics/cls_epi.mojo: the ratios, micro sums and averages as binary64
-    on the device): `self.epi` = (flags, kept, scalars, per-label values),
-    else None and the caller runs its Python epilogue."""
+    on the device, both numeric modes since lane cpu2-l7-metrics): `self.epi`
+    = (flags, kept, scalars, per-label values), else None (a list of
+    `epi` tuples stages one epilogue each and `self.epi` is the list of
+    results). `self.prog` and
+    `self.groups` (the three (OFF, OUT) groupings, then the total's) let a
+    caller that staged its own tail (`tail`: a function of (prog, groups)
+    that stages it and returns what to keep) read it back as `self.tail`."""
 
-    def __init__(self, true, pred, w, order, numeric_mode, epi=None):
+    def __init__(self, true, pred, w, order, numeric_mode, epi=None, tail=None):
         n, L = len(true), len(order)
         yt, yp = _codes(true, order), _codes(pred, order)
         prog = _Prog()
@@ -446,14 +479,13 @@ class _Sums:
         prog.stage("pair_key", n, a, b, match, L, 1)
         W = _NONE if w is None else prog.put(w)
         groups = [_group(prog, k, n, L, weights=W) for k in (match, a, b)]  # glue: the three count groupings
-        total = None
         if w is not None:
             zero = prog.scratch(n)          # every row in group 0: the total weight
             prog.stage("pair_key", n, a, a, zero, 1, 2)
             groups.append(_group(prog, zero, n, 1, weights=W))
-        eo = None
-        if epi is not None and _idn_fam2(numeric_mode) & 1:
-            kind, k, avg, zd, fmode, b2 = epi
+        cnt = [_counts(prog, off, L) for off, _ in groups] if w is None else None  # glue: the three count slots
+        eos = []
+        for kind, k, avg, zd, fmode, b2 in ([epi] if isinstance(epi, tuple) else (epi or [])):  # glue: one cls_epi stage per requested average
             col = 0 if w is None else 1
             bo = 0
             if fmode == 2:
@@ -463,23 +495,25 @@ class _Sums:
             eo = prog.alloc(8 + 6 * max(L, 1))
             prog.stage("cls_epi", 1, groups[0][col], groups[1][col], groups[2][col], k, col, kind, avg, zd, eo,
                        fmode, bo)
+            eos.append(eo)
+        self.tail = None
+        keep = tail(prog, groups) if tail is not None else None
         _execute(prog, numeric_mode)
-        self.epi = None
-        if eo is not None:
+        self.prog, self.groups = prog, groups
+        res = []
+        for eo in eos:  # glue: reads each staged epilogue's flags, scalars and values
             head = prog.ints(eo, 2)
-            self.epi = (head[0], head[1], prog.words(eo + 2, 6, "d"), prog.words(eo + 8, 6 * max(L, 1), "d"))
+            res.append((head[0], head[1], prog.words(eo + 2, 6, "d"), prog.words(eo + 8, 6 * max(L, 1), "d")))
+        self.epi = (res[0] if res else None) if (epi is None or isinstance(epi, tuple)) else res
         if w is None:
-            sums = []
-            for off, _ in groups:  # glue: reads the three count groupings
-                o = prog.ints(off, L + 1)
-                sums.append([o[i + 1] - o[i] for i in range(L)])
-            total = n
+            self.tp, self.true, self.pred = (prog.ints(c, L) for c in cnt)  # glue: reads the three count slots
+            self.total = n
         else:
-            sums = [prog.floats(out, L) for _, out in groups[:3]]  # glue: reads the three weighted groupings
-            total = prog.floats(groups[3][1], 1)[0]
-        self.tp, self.true, self.pred = sums
-        self.total = total
+            self.tp, self.true, self.pred = (prog.floats(out, L) for _, out in groups[:3])  # glue: reads the weighted sums
+            self.total = prog.floats(groups[3][1], 1)[0]
         self.weighted = w is not None
+        if tail is not None:
+            self.tail = keep
 
 
 class UndefinedMetricWarning(UserWarning):
@@ -511,44 +545,6 @@ def _zero_division_value(zero_division):
         if pmath.isnan(float(zero_division)):
             return float("nan")
     raise ValueError("zero_division must be 'warn', 0.0, 1.0 or np.nan")
-
-
-def _divide(num, den, zero_division, what, warn_list):
-    out = []
-    bad = False
-    zv = _zero_division_value(zero_division)
-    for a, b in zip(num, den):
-        if b == 0:
-            out.append(zv)
-            bad = True
-        else:
-            out.append(a / b)
-    if bad and isinstance(zero_division, str) and warn_list is not None:
-        warn_list.append(what)
-    return out
-
-
-def _nanaverage(values, weights=None):
-    keep = [i for i, v in enumerate(values) if not pmath.isnan(v)]
-    if not values or not keep:
-        return float("nan")
-    if weights is None:
-        s = 0.0
-        for i in keep:
-            s += values[i]
-        return s / len(keep)
-    sw = 0.0
-    for i in keep:
-        sw += weights[i]
-    if sw == 0:
-        s = 0.0
-        for i in keep:
-            s += values[i]
-        return s / len(keep)
-    s = 0.0
-    for i in keep:
-        s += values[i] * weights[i]
-    return s / sw
 
 
 def _set_wise_labels(present, kind, average, labels, pos_label, caller):
@@ -588,6 +584,41 @@ def _label_order(labels, present):
 # Classification
 # ---------------------------------------------------------------------------
 
+#: cm_epi kinds (x_metrics/cm_epi.mojo, op 59; lane cpu2-l7-metrics)
+_CM_MLCM, _CM_MCC, _CM_COUNT, _CM_NORM, _CM_KAPPA, _CM_CLR, _CM_TOTAL = range(7)
+#: the NORM modes: the 'all' total, then 'all', 'true', 'pred', none
+_NORM_MODES = {"all": 1, "true": 2, "pred": 3, None: 4}
+#: the kappa weight modes
+_KAPPA_W = {None: 0, "linear": 1, "quadratic": 2}
+
+
+def _cm_stage(prog, groups, w, n, k, kind, size):
+    """Stage a cm_epi tail over a `_Sums` program's groupings (`tail=`):
+    the match / true / pred sums' OFF tables (unweighted) or PairSums
+    (weighted), the first k labels; the total is the row count n or the
+    total grouping's PairSum. Returns the `size`-word output slot."""
+    col = 0 if w is None else 1
+    out = prog.alloc(max(size, 1))
+    tp, tr, pr = groups[0][col], groups[1][col], groups[2][col]
+    tot = n if w is None else groups[3][1]
+    if kind == _CM_MLCM:
+        if k:
+            prog.stage("cm_epi", k, kind, tp, tr, pr, k, col, tot, out)
+    elif kind == _CM_MCC:
+        prog.stage("cm_epi", 1, kind, tp, tr, pr, k, col, out)
+    else:
+        prog.stage("cm_epi", 1, kind, tp, k, col, tot, out)
+    return out
+
+
+def _cm_count(true, pred, w, present, numeric_mode):
+    """The COUNT tail (x_metrics/cm_epi.mojo) over the match sums: the
+    program and its 11-word output (see `_count` there)."""
+    s = _Sums(true, pred, w, present, numeric_mode,
+              tail=lambda prog, groups: _cm_stage(prog, groups, w, len(true), len(present), _CM_COUNT, 11))
+    return s.prog, s.tail, s.weighted
+
+
 def multilabel_confusion_matrix(y_true, y_pred, *, sample_weight=None, labels=None,
                                 samplewise=False, numeric_mode=None):
     """Per-label one-vs-rest 2x2 confusion matrices, `[[tn, fp], [fn, tp]]`.
@@ -603,17 +634,14 @@ def multilabel_confusion_matrix(y_true, y_pred, *, sample_weight=None, labels=No
     from ._metrics_impl import _selected_labels
     true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "multilabel_confusion_matrix")
     chosen = list(present) if labels is None else _selected_labels(labels, kind, present)
-    s = _Sums(true, pred, w, _label_order(chosen, present), numeric_mode)
-    rows = []
-    for i in range(len(chosen)):
-        tp = s.tp[i]
-        fp = s.pred[i] - tp
-        fn = s.true[i] - tp
-        tn = s.total - tp - fp - fn
-        rows.extend([tn, fp, fn, tp])
+    k = len(chosen)
+    # the device tail (x_metrics/cm_epi.mojo, MLCM): one unit per label writes
+    # tn, fp, fn, tp, exact Int64 counts or binary64 (weighted)
+    s = _Sums(true, pred, w, _label_order(chosen, present), numeric_mode,
+              tail=lambda prog, groups: _cm_stage(prog, groups, w, len(true), k, _CM_MLCM, 8 * k))
     if s.weighted:
-        return Array.from_list([float(v) for v in rows], "<f8").reshape((len(chosen), 2, 2))
-    return Array.from_list([int(v) for v in rows], "<i8").reshape((len(chosen), 2, 2))
+        return Array._owned(s.prog.words(s.tail, 8 * k, "d"), (k, 2, 2), "<f8")
+    return Array._owned(s.prog.words(s.tail, 8 * k, "q"), (k, 2, 2), "<i8")
 
 
 import threading as _threading
@@ -646,69 +674,43 @@ def precision_recall_fscore_support(y_true, y_pred, *, beta=1.0, labels=None, po
     true, pred, kind, present, w = hit
     chosen = _set_wise_labels(present, kind, average, labels, pos_label, "precision_recall_fscore_support")
     order = _label_order(chosen, present)
-    key = ("sums", same, tuple(order), numeric_mode)
-    s = None if memo is None else memo.get(key)
     k = len(chosen)
-    if s is None:
-        epi = None
-        if memo is None:
-            # outside classification_report (whose memo shares one `_Sums` between
-            # averages): the epilogue runs in the sums' program (x_metrics/cls_epi.mojo)
-            fb = float(beta)
-            epi = (2, k) + _epi_codes(average, zero_division) + (0 if pmath.isinf(fb) else (1 if fb == 0 else 2),
-                                                                   fb * fb)
-        s = _Sums(true, pred, w, order, numeric_mode, epi=epi)
-        if memo is not None:
-            memo[key] = s
-    if memo is None and s.epi is not None:
-        bad, _, scal, vals = s.epi
-        if isinstance(zero_division, str):
-            for bit, what in ((1, "precision"), (2, "recall"), (4, "f-score")):  # glue: the three metric names
-                if bad & bit and what in warn_for:
-                    _undefined_warning(f"{what.capitalize()} is ill-defined and being set to 0.0 in labels "
-                                       "with no predicted/true samples. Use `zero_division` parameter to "
-                                       "control this behavior.")
-        if average is None:
-            ts = s.true[:k]
-            support = (Array.from_list([float(v) for v in ts], "<f8") if s.weighted  # glue: the k label supports
-                       else Array.from_list([int(v) for v in ts], "<i8"))  # glue: the k label supports
-            return (Array.from_list(list(vals[:k]), "<f8"), Array.from_list(list(vals[k:2 * k]), "<f8"),
-                    Array.from_list(list(vals[2 * k:3 * k]), "<f8"), support)
-        return (scal[0], scal[1], scal[2], None)
-    tp, ps, ts = s.tp[:k], s.pred[:k], s.true[:k]
-    if average == "micro":
-        a = b = c = 0
-        for i in range(k):
-            a += tp[i]
-            b += ps[i]
-            c += ts[i]
-        tp, ps, ts = [a], [b], [c]
-    warned = []
-    precision = _divide(tp, ps, zero_division, "precision", warned)
-    recall = _divide(tp, ts, zero_division, "recall", warned)
-    beta = float(beta)
-    if pmath.isinf(beta):
-        fscore = recall
-    elif beta == 0:
-        fscore = precision
+    fb = float(beta)
+    fmode = 0 if pmath.isinf(fb) else (1 if fb == 0 else 2)
+    if memo is None:
+        # the epilogue runs in the sums' program (x_metrics/cls_epi.mojo)
+        s = _Sums(true, pred, w, order, numeric_mode,
+                  epi=(2, k) + _epi_codes(average, zero_division) + (fmode, fb * fb))
+        res = s.epi
     else:
-        b2 = beta * beta
-        fscore = _divide([(1 + b2) * v for v in tp], [b2 * t + p for t, p in zip(ts, ps)],
-                         zero_division, "f-score", warned)
-    for what in warned:  # glue: the names of ill-defined metrics
-        if what in warn_for:
-            _undefined_warning(f"{what.capitalize()} is ill-defined and being set to 0.0 in labels "
-                               "with no predicted/true samples. Use `zero_division` parameter to "
-                               "control this behavior.")
+        # classification_report asks for the four averages of one input: one
+        # program makes the sums and stages all four epilogues
+        key = ("sums", same, tuple(order), numeric_mode, zero_division if isinstance(zero_division, str)
+               else float(zero_division), fb)
+        hit = memo.get(key)
+        if hit is None:
+            s = _Sums(true, pred, w, order, numeric_mode,
+                      epi=[(2, k) + _epi_codes(a, zero_division) + (fmode, fb * fb) for a in _REPORT_AVERAGES])  # glue: the report's four averages
+            hit = memo[key] = (s, dict(zip(_REPORT_AVERAGES, s.epi)))
+        s, res = hit[0], hit[1][average]
+    bad, _, scal, vals = res
+    if isinstance(zero_division, str):
+        for bit, what in ((1, "precision"), (2, "recall"), (4, "f-score")):  # glue: the three metric names
+            if bad & bit and what in warn_for:
+                _undefined_warning(f"{what.capitalize()} is ill-defined and being set to 0.0 in labels "
+                                   "with no predicted/true samples. Use `zero_division` parameter to "
+                                   "control this behavior.")
     if average is None:
-        dtype = "<f8"
-        support = (Array.from_list([float(v) for v in ts], "<f8") if s.weighted
-                   else Array.from_list([int(v) for v in ts], "<i8"))
-        return (Array.from_list(precision, dtype), Array.from_list(recall, dtype),
-                Array.from_list(fscore, dtype), support)
-    weights = ts if average == "weighted" else None
-    return (_nanaverage(precision, weights), _nanaverage(recall, weights),
-            _nanaverage(fscore, weights), None)
+        ts = s.true[:k]
+        support = (Array.from_list([float(v) for v in ts], "<f8") if s.weighted  # glue: the k label supports
+                   else Array.from_list([int(v) for v in ts], "<i8"))  # glue: the k label supports
+        return (Array.from_list(list(vals[:k]), "<f8"), Array.from_list(list(vals[k:2 * k]), "<f8"),
+                Array.from_list(list(vals[2 * k:3 * k]), "<f8"), support)
+    return (scal[0], scal[1], scal[2], None)
+
+
+#: the averages classification_report asks precision_recall_fscore_support for
+_REPORT_AVERAGES = (None, "micro", "macro", "weighted")
 
 
 def fbeta_score(y_true, y_pred, *, beta, labels=None, pos_label=1, average="binary",
@@ -745,44 +747,14 @@ def jaccard_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
     k = len(chosen)
     s = _Sums(true, pred, w, _label_order(chosen, present), numeric_mode,
               epi=(0, k) + _epi_codes(average, zero_division) + (0, 0.0))
-    if s.epi is not None:
-        # the device epilogue (x_metrics/cls_epi.mojo): the same binary64 operations
-        bad, _, scal, vals = s.epi
-        if bad and isinstance(zero_division, str):
-            _undefined_warning("Jaccard is ill-defined and being set to 0.0 in labels with no true or "
-                               "predicted samples. Use `zero_division` parameter to control this behavior.")
-        if average is None:
-            return Array.from_list(list(vals[:k]), "<f8")
-        return scal[0]
-    num = list(s.tp[:k])
-    den = [s.pred[i] + s.true[i] - s.tp[i] for i in range(k)]
-    if average == "micro":
-        a = b = 0
-        for i in range(k):
-            a += num[i]
-            b += den[i]
-        num, den = [a], [b]
-    warned = []
-    jac = _divide(num, den, zero_division, "jaccard", warned)
-    if warned:
+    # the device epilogue (x_metrics/cls_epi.mojo): the binary64 ratios and averages
+    bad, _, scal, vals = s.epi
+    if bad and isinstance(zero_division, str):
         _undefined_warning("Jaccard is ill-defined and being set to 0.0 in labels with no true or "
                            "predicted samples. Use `zero_division` parameter to control this behavior.")
     if average is None:
-        return Array.from_list(jac, "<f8")
-    weights = None
-    if average == "weighted":
-        weights = [s.true[i] for i in range(k)]
-        if not any(weights):
-            weights = None
-    return _nanaverage(jac, weights) if weights is None else _average_plain(jac, weights)
-
-
-def _average_plain(values, weights):
-    s = sw = 0.0
-    for v, w in zip(values, weights):
-        s += v * w
-        sw += w
-    return s / sw
+        return Array.from_list(list(vals[:k]), "<f8")
+    return scal[0]
 
 
 def balanced_accuracy_score(y_true, y_pred, *, sample_weight=None, adjusted=False, numeric_mode=None):
@@ -791,59 +763,32 @@ def balanced_accuracy_score(y_true, y_pred, *, sample_weight=None, adjusted=Fals
     dropped with sklearn's warning), chance-adjusted when `adjusted`."""
     true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "balanced_accuracy_score")
     s = _Sums(true, pred, w, present, numeric_mode, epi=(1, len(present), 0, 1 if adjusted else 0, 0, 0.0))
-    if s.epi is not None:
-        # the device epilogue (x_metrics/cls_epi.mojo): the mean recall over the kept
-        # classes and the chance adjustment, the same binary64 operations
-        if s.epi[1] != len(present):
-            warnings.warn("y_pred contains classes not in y_true", stacklevel=2)
-        return float(s.epi[2][0])
-    per_class = [s.tp[i] / s.true[i] for i in range(len(present)) if s.true[i] != 0]
-    if len(per_class) != len(present):
+    # the device epilogue (x_metrics/cls_epi.mojo): the mean recall over the kept
+    # classes and the chance adjustment, binary64
+    if s.epi[1] != len(present):
         warnings.warn("y_pred contains classes not in y_true", stacklevel=2)
-    if not per_class:
-        return float("nan")
-    score = 0.0
-    for v in per_class:
-        score += v
-    score /= len(per_class)
-    if adjusted:
-        chance = 1 / len(per_class)
-        score -= chance
-        if chance == 1:
-            return float("nan")     # numpy's 0 / 0 in scikit-learn, chosen by value here
-        score /= 1 - chance
-    return float(score)
+    return float(s.epi[2][0])
 
 
 def matthews_corrcoef(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
     """scikit-learn 1.9 `matthews_corrcoef` (binary and multiclass): the
     covariance form over the per-class true / predicted sums and the trace."""
     true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "matthews_corrcoef")
-    s = _Sums(true, pred, w, present, numeric_mode)
-    t_sum = [float(v) for v in s.true]
-    p_sum = [float(v) for v in s.pred]
-    n_correct = 0.0
-    for v in s.tp:
-        n_correct += v
-    n = 0.0
-    for v in p_sum:
-        n += v
-    tp_dot = pp_dot = tt_dot = 0.0
-    for a, b in zip(t_sum, p_sum):
-        tp_dot += a * b
-        pp_dot += b * b
-        tt_dot += a * a
-    cov_ytyp = n_correct * n - tp_dot
-    cov_ypyp = n * n - pp_dot
-    cov_ytyt = n * n - tt_dot
-    prod = cov_ypyp * cov_ytyt
-    if prod == 0:
-        return 0.0
-    return float(cov_ytyp / pmath.sqrt(prod))
+    # the device tail (x_metrics/cm_epi.mojo, MCC): the sums, dots and
+    # covariances in binary64, one unit; flag 1 = a negative product
+    s = _Sums(true, pred, w, present, numeric_mode,
+              tail=lambda prog, groups: _cm_stage(prog, groups, w, len(true), len(present), _CM_MCC, 4))
+    if s.prog.ints(s.tail, 1)[0]:
+        raise ValueError("math domain error")
+    return float(s.prog.words(s.tail + 2, 2, "d")[0])
 
 
-def _confusion(true, pred, w, order, numeric_mode):
-    """The k x k (weighted) confusion matrix over `order`, rows true."""
+def _confusion(true, pred, w, order, numeric_mode, tail):
+    """The k x k (weighted) confusion matrix over `order`, rows true, made on
+    the device and finished by `tail(prog, cells, col)` in the same program
+    (a cm_epi stage, x_metrics/cm_epi.mojo): `cells` is the k*k groups' OFF
+    table (col 0: exact counts, read by the unit as group sizes) or their
+    Float32 PairSums (col 1). Returns (prog, what the tail returned)."""
     n, k = len(true), len(order)
     if k > 4096:
         raise ValueError("mojolearn metrics: at most 4096 labels in a confusion matrix")
@@ -854,11 +799,9 @@ def _confusion(true, pred, w, order, numeric_mode):
     prog.stage("pair_key", n, a, b, key, k, 0)
     W = _NONE if w is None else prog.put(w)
     off, out = _group(prog, key, n, k * k, weights=W)
+    keep = tail(prog, off if w is None else out, 0 if w is None else 1)
     _execute(prog, numeric_mode)
-    if w is None:
-        o = prog.ints(off, k * k + 1)
-        return [o[i + 1] - o[i] for i in range(k * k)]
-    return prog.floats(out, k * k)
+    return prog, keep
 
 
 def confusion_matrix_weighted(y_true, y_pred, labels, sample_weight, normalize, numeric_mode):
@@ -870,27 +813,22 @@ def confusion_matrix_weighted(y_true, y_pred, labels, sample_weight, normalize, 
     if not set(chosen).intersection(_label_set(true)):
         raise ValueError("At least one label specified must be in y_true")
     k = len(chosen)
-    cm = _confusion(true, pred, w, chosen, numeric_mode)
-    cm = _normalize(cm, k, normalize)
-    return Array.from_list([float(v) for v in cm], "<f8").reshape((k, k))
+    prog, out = _confusion(true, pred, w, chosen, numeric_mode,
+                           lambda prog, cells, col: _normalize(prog, cells, col, k, normalize))
+    return Array._owned(prog.words(out, 2 * k * k, "d"), (k, k), "<f8")
 
 
-def _normalize(cm, k, normalize):
-    if normalize is None:
-        return cm
-    out = list(cm)
+def _normalize(prog, cells, col, k, normalize):
+    """Stage the normalization of the k x k cells (x_metrics/cm_epi.mojo,
+    NORM: one unit per row ('true', 'all', none) or column ('pred'), each sum
+    binary64 from 0.0 in ascending index, a zero sum giving 0.0 cells; 'all'
+    first sums every cell in one unit). Returns the binary64 output slot."""
+    out = prog.want(prog.alloc(2 * k * k), 2 * k * k)
+    ts = prog.scratch(2)
     if normalize == "all":
-        t = 0.0
-        for v in cm:
-            t += v
-        return [v / t if t else 0.0 for v in cm]
-    for i in range(k):
-        t = 0.0
-        for j in range(k):
-            t += cm[i * k + j] if normalize == "true" else cm[j * k + i]
-        for j in range(k):
-            idx = i * k + j if normalize == "true" else j * k + i
-            out[idx] = cm[idx] / t if t else 0.0
+        prog.stage("cm_epi", 1, _CM_NORM, cells, k, col, 0, out, ts)
+    if k:
+        prog.stage("cm_epi", k, _CM_NORM, cells, k, col, _NORM_MODES[normalize], out, ts)
     return out
 
 
@@ -908,45 +846,39 @@ def cohen_kappa_score(y1, y2, *, labels=None, weights=None, sample_weight=None,
         raise ValueError("At least one label in `labels` must be present in `y1` (even though "
                          "`cohen_kappa_score` is otherwise agnostic to the order of `y1` and `y2`).")
     k = len(chosen)
-    cm = [float(v) for v in _confusion(true, pred, w, chosen, numeric_mode)]
-    sum0 = [0.0] * k
-    sum1 = [0.0] * k
-    for i in range(k):
-        for j in range(k):
-            sum0[j] += cm[i * k + j]
-            sum1[i] += cm[i * k + j]
-    den = 0.0
-    for v in sum0:
-        den += v
-    if den == 0:
+
+    def tail(prog, cells, col):
+        # x_metrics/cm_epi.mojo, KAPPA: row / column sums (one unit per
+        # class), den (one unit), the weighted row partials (one unit per
+        # row), then num_k / den_k summed by row and the kappa (one unit)
+        out = prog.want(prog.alloc(4), 4)
+        sc = prog.scratch(8 * k + 2)
+        wm = _KAPPA_W[weights]
+        for phase, units in ((0, k), (1, 1), (2, k), (3, 1)):  # glue: the four kappa stages
+            if units:
+                prog.stage("cm_epi", units, _CM_KAPPA, cells, k, col, phase, wm, out, sc)
+        return out
+
+    prog, out = _confusion(true, pred, w, chosen, numeric_mode, tail)
+    flags = prog.ints(out, 1)[0]
+    if flags & 1:
         _undefined_warning("`y2` contains no labels that are present in both `y1` and `labels`.")
         return replace_undefined_by
-    num_k = den_k = 0.0
-    for i in range(k):
-        for j in range(k):
-            if weights is None:
-                wm = 0.0 if i == j else 1.0
-            elif weights == "linear":
-                wm = float(abs(i - j))
-            else:
-                wm = float((i - j) * (i - j))
-            num_k += wm * cm[i * k + j]
-            den_k += wm * (sum0[i] * sum1[j] / den)
-    if den_k == 0:
+    if flags & 2:
         _undefined_warning("`y1`, `y2` and `labels` have only one label in common.")
         return replace_undefined_by
-    return float(1 - num_k / den_k)
+    return float(prog.words(out + 2, 2, "d")[0])
 
 
 def hamming_loss(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
     """scikit-learn 1.9 `hamming_loss` for binary / multiclass 1-D targets:
     the (weighted) fraction of mismatched labels."""
     true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "hamming_loss")
-    s = _Sums(true, pred, w, present, numeric_mode)
-    hit = 0.0
-    for v in s.tp:
-        hit += v
-    return float((s.total - hit) / s.total)
+    # the device tail (x_metrics/cm_epi.mojo, COUNT): (total - hit) / total
+    prog, out, _ = _cm_count(true, pred, w, present, numeric_mode)
+    if prog.ints(out, 1)[0]:
+        raise ZeroDivisionError("float division by zero")
+    return float(prog.words(out + 6, 2, "d")[0])
 
 
 def zero_one_loss(y_true, y_pred, *, normalize=True, sample_weight=None, numeric_mode=None):
@@ -954,23 +886,28 @@ def zero_one_loss(y_true, y_pred, *, normalize=True, sample_weight=None, numeric
     if not is_bool(normalize):
         raise ValueError("normalize must be a bool")
     true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "zero_one_loss")
-    s = _Sums(true, pred, w, present, numeric_mode)
-    hit = 0
-    for v in s.tp:
-        hit += v
+    # the device tail (x_metrics/cm_epi.mojo, COUNT): total - hit and its ratio
+    prog, out, weighted = _cm_count(true, pred, w, present, numeric_mode)
     if normalize:
-        return float((s.total - hit) / s.total)
-    return (s.total - hit) if s.weighted else int(s.total - hit)
+        if prog.ints(out, 1)[0]:
+            raise ZeroDivisionError("float division by zero" if weighted else "division by zero")
+        return float(prog.words(out + 6, 2, "d")[0])
+    return float(prog.words(out + 4, 2, "d")[0]) if weighted else prog.ints(out + 10, 1)[0]
 
 
 def _accuracy_sums(y_true, y_pred, sample_weight, numeric_mode):
-    """(the (weighted) number of matches, the row count or weight total)."""
+    """(the (weighted) number of matches, their fraction of the row count
+    (at least 1) or the weight total), both from the device tail
+    (x_metrics/cm_epi.mojo, COUNT). A zero weight total raises as the
+    division did."""
     true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "accuracy_score")
-    s = _Sums(true, pred, w, present, numeric_mode)
-    hit = 0
-    for v in s.tp:
-        hit += v
-    return (float(hit) if s.weighted else int(hit)), s.total
+    prog, out, weighted = _cm_count(true, pred, w, present, numeric_mode)
+    if not weighted:
+        return prog.ints(out + 1, 1)[0], float(prog.words(out + 8, 2, "d")[0])
+    hit = float(prog.words(out + 2, 2, "d")[0])
+    if prog.ints(out, 1)[0]:
+        return hit, None
+    return hit, float(prog.words(out + 8, 2, "d")[0])
 
 
 def accuracy_count(y_true, y_pred, sample_weight, numeric_mode):
@@ -985,10 +922,10 @@ def accuracy_fraction(y_true, y_pred, sample_weight=None, numeric_mode=None):
     weight total is the program's PairSum, not a host sum). Lane
     cgr4-py-compute: the estimators' `score` methods called this instead of
     a per-row Python comparison."""
-    hit, total = _accuracy_sums(y_true, y_pred, sample_weight, numeric_mode)
-    if sample_weight is None:
-        return float(hit) / max(total, 1)
-    return float(hit) / total
+    frac = _accuracy_sums(y_true, y_pred, sample_weight, numeric_mode)[1]
+    if frac is None:
+        raise ZeroDivisionError("float division by zero")
+    return frac
 
 
 def class_likelihood_ratios(y_true, y_pred, *, labels=None, sample_weight=None,
@@ -1018,24 +955,30 @@ def class_likelihood_ratios(y_true, y_pred, *, labels=None, sample_weight=None,
     if len(chosen) == 1:
         chosen = chosen + [v for v in present if v not in chosen]
     k = len(chosen)
-    cm = _confusion(true, pred, w, chosen, numeric_mode)
+    if k > 4096:
+        raise ValueError("mojolearn metrics: at most 4096 labels in a confusion matrix")
     if k != 2:
         raise ValueError("class_likelihood_ratios needs a 2 x 2 confusion matrix")
-    tn, fp, fn, tp = (float(v) for v in cm)
-    support_pos, support_neg = tp + fn, tn + fp
-    if support_pos == 0:
+
+    def tail(prog, cells, col):
+        # x_metrics/cm_epi.mojo, CLR: the supports and both ratios, binary64
+        out = prog.want(prog.alloc(6), 6)
+        prog.stage("cm_epi", 1, _CM_CLR, cells, col, out)
+        return out
+
+    prog, out = _confusion(true, pred, w, chosen, numeric_mode, tail)
+    flags = prog.ints(out, 1)[0]
+    if flags & 1:
         _undefined_warning("No samples of the positive class are present in `y_true`.")
         return nan, nan
-    if fp == 0:
+    lr = prog.words(out + 2, 4, "d")
+    lr_pos, lr_neg = lr[0], lr[1]
+    if flags & 2:
         _undefined_warning("`positive_likelihood_ratio` is ill-defined and set to `np.nan`.")
         lr_pos = rub if not isinstance(rub, dict) else rub["LR+"]
-    else:
-        lr_pos = (tp * support_neg) / (fp * support_pos)
-    if tn == 0:
+    if flags & 4:
         _undefined_warning("`negative_likelihood_ratio` is ill-defined and set to `np.nan`.")
         lr_neg = rub if not isinstance(rub, dict) else rub["LR-"]
-    else:
-        lr_neg = (fn * support_neg) / (tn * support_pos)
     return float(lr_pos), float(lr_neg)
 
 
@@ -1068,6 +1011,21 @@ def classification_report(y_true, y_pred, *, labels=None, target_names=None, sam
                                   numeric_mode)
 
 
+def _support_total(support, numeric_mode):
+    """The report's support total on the device (x_metrics/cm_epi.mojo,
+    TOTAL: one unit, from 0 in label order): an exact Int64 of the Int64
+    supports (each below 2^31), or the binary64 sum of the weighted ones
+    (Float32 PairSum images, so the Float32 copy is exact)."""
+    k = support.size
+    weighted = support.dtype == "<f8"
+    prog = _Prog()
+    src = prog.put(support) if weighted else prog.put_i32(support)
+    out = prog.want(prog.alloc(2), 2)
+    prog.stage("cm_epi", 1, _CM_TOTAL, src, k, 1 if weighted else 0, out)
+    _execute(prog, numeric_mode)
+    return prog.words(out, 2, "d" if weighted else "q")[0]
+
+
 def _classification_report(y_true, y_pred, labels_given, chosen, present, names, headers, micro_is_accuracy,
                            sample_weight, digits, output_dict, zero_division, numeric_mode):
     p, r, f, s = precision_recall_fscore_support(y_true, y_pred, labels=chosen, average=None,
@@ -1078,9 +1036,7 @@ def _classification_report(y_true, y_pred, labels_given, chosen, present, names,
     report = {}
     for name, a, b, c, d in rows:  # glue: formats the text report rows
         report[name] = dict(zip(headers, (a, b, c, d)))
-    total = 0
-    for v in s.tolist():
-        total += v
+    total = _support_total(s, numeric_mode)
     avg_rows = []
     if micro_is_accuracy:
         acc = precision_recall_fscore_support(y_true, y_pred, labels=chosen, average="micro",
@@ -1122,6 +1078,12 @@ def _f32(x):
     """The Float32 nearest a binary64 value (round to nearest even)."""
     import struct
     return struct.unpack("<f", struct.pack("<f", float(x)))[0]
+
+
+#: reg_epi (op 60, x_metrics/reg_epi.mojo): kinds, MEAN modes, AVG modes
+_RE_MEAN, _RE_PCT, _RE_ASM, _RE_AVG, _RE_SIGN = 0, 1, 2, 3, 4
+_RE_DIV, _RE_ROOT = 1, 2
+_RE_UNIFORM, _RE_CUSTOM, _RE_VARIANCE = 1, 2, 3
 
 
 class _Reg:
@@ -1167,61 +1129,123 @@ class _Reg:
             self.mo = vals
         self.caller = caller
 
-    def column_means(self, kinds, numeric_mode, *, pred_broadcast=None, scalar=None):
-        """For each (kind, Y-source) in `kinds`: the per-column (weighted)
-        mean of the term, binary64 from the Float32 sums (DEVIATION 6106)."""
-        prog = _Prog()
-        Y = prog.put(self.y)
-        P = prog.put(self.p) if pred_broadcast is None else prog.put(
-            Array.from_list([_f32(v) for v in pred_broadcast], "<f4"))
-        S = prog.put(Array.from_list([_f32(0.0 if scalar is None else scalar)], "<f4"))
-        W = _NONE if self.w is None else prog.put(self.w)
-        n, D = self.n, self.D
-        zero = prog.scratch(n)
-        prog.stage("pair_key", n, 0, 0, zero, 1, 2)
-        outs = []
-        for kind in kinds:  # glue: one term stage per requested error kind
-            term = prog.scratch(n * D)
-            prog.stage("reg_term", n * D, Y, P, term, D, _TERM[kind], S, 0 if pred_broadcast is None else 1)
-            outs.append(_group(prog, zero, n, 1, values=term, vstride=D, weights=W, width=D)[1])
-        sw_out = _group(prog, zero, n, 1, weights=W)[1] if self.w is not None else None
-        _execute(prog, numeric_mode)
-        den = float(n) if self.w is None else prog.floats(sw_out, 1)[0]
-        return [[v / den for v in prog.floats(o, D)] for o in outs]
+    # Lane cpu2-l7-metrics (2026-10-04): every regression metric is ONE
+    # program. The per-output tails (the means, roots, percentile flags, the
+    # Float32 broadcast columns, the r2 / explained variance / d2 assembly,
+    # the multioutput averages) are `reg_epi` stages (op 60,
+    # x_metrics/reg_epi.mojo) in soft binary64 next to the folds that make
+    # their inputs; only the final value(s) come back. DEVIATION 6106: the
+    # same binary64 operations, in the same order, as the Python they replace.
 
-    def percentile(self, values_off_fn, rank, numeric_mode, *, average=True):
-        """Per-column weighted percentile of the Float32 array a program
-        stage writes (`values_off_fn(prog) -> offset`, n x D)."""
-        prog = _Prog()
-        V = values_off_fn(prog)
-        n, D = self.n, self.D
-        order = prog.alloc(n * D)
+    def program(self, scalar=None):
+        """Start this metric's program: y, p, the kind's scalar (alpha or
+        power, rounded to Float32), the weights, the one-group key and the
+        weight total."""
+        prog = self.prog = _Prog()
+        self.Y, self.P = prog.put(self.y), prog.put(self.p)
+        self.S = prog.put(Array.from_list([_f32(0.0 if scalar is None else scalar)], "<f4"))
+        self.W = _NONE if self.w is None else prog.put(self.w)
+        self.key = prog.scratch(self.n)
+        prog.stage("pair_key", self.n, 0, 0, self.key, 1, 2)
+        self.SW = _NONE if self.w is None else _group(prog, self.key, self.n, 1, weights=self.W)[1]
+        return prog
+
+    def term(self, kind, V=None, P=None, broadcast=False):
+        """The n x D Float32 terms of `kind` (reg_term) of V (default y)
+        against P (default p; D per-column values when broadcast)."""
+        out = self.prog.scratch(self.n * self.D)
+        self.prog.stage("reg_term", self.n * self.D, self.Y if V is None else V, self.P if P is None else P, out,
+                        self.D, _TERM[kind], self.S, 1 if broadcast else 0)
+        return out
+
+    def sums(self, V):
+        """The D per-column (weighted) Float32 PairSums of the n x D values at V."""
+        return _group(self.prog, self.key, self.n, 1, values=V, vstride=self.D, weights=self.W, width=self.D)[1]
+
+    def fin(self, sums, mode=_RE_DIV, *, f32=False):
+        """reg_epi MEAN: D binary64 values from the Float32 sums, widened,
+        over the weight total or n (_RE_DIV), rooted (_RE_ROOT); with f32,
+        also (dst, d32) where d32 holds the Float32 nearest each, the
+        broadcast column a later reg_term reads."""
+        prog, D = self.prog, self.D
+        dst = prog.alloc(2 * D)
+        d32 = prog.scratch(D) if f32 else _NONE
+        prog.stage("reg_epi", D, _RE_MEAN, D, sums, self.SW, self.n, dst, d32, mode)
+        return (dst, d32) if f32 else dst
+
+    def stage_mean(self, kind, mode=_RE_DIV, **kw):
+        """The per-column (weighted) mean of the term, binary64 (DEVIATION 6106)."""
+        return self.fin(self.sums(self.term(kind, **kw)), mode)
+
+    def percentile(self, V, rank, *, average=True, f32=False):
+        """Per-column weighted percentile of the n x D Float32 values at V
+        (col_sort, wpercentile) as binary64, NaN for an all-zero weight
+        column (reg_epi PCT); f32 as in `fin`."""
+        prog, n, D = self.prog, self.n, self.D
+        order = prog.scratch(n * D)
         prog.stage("col_sort", D, V, n, D, order)
-        W = _NONE if self.w is None else prog.put(self.w)
         R = prog.put(Array.from_list([_f32(rank)], "<f4"))
-        out = prog.want(prog.alloc(D), D)
-        cdf = prog.alloc(n * D)
-        for c in range(D):
-            prog.want(cdf + c * n, 1)
-        prog.stage("wpercentile", D, V, n, D, order, W, R, 1 if average else 0, out, cdf)
-        _execute(prog, numeric_mode)
-        flags = [prog.ints(cdf + c * n, 1)[0] for c in range(D)]
-        vals = prog.floats(out, D)
-        return [float("nan") if fl == -1 else v for v, fl in zip(vals, flags)]
+        out = prog.scratch(D)
+        cdf = prog.scratch(n * D)
+        prog.stage("wpercentile", D, V, n, D, order, self.W, R, 1 if average else 0, out, cdf)
+        dst = prog.alloc(2 * D)
+        d32 = prog.scratch(D) if f32 else _NONE
+        prog.stage("reg_epi", D, _RE_PCT, D, out, cdf, n, dst, d32)
+        return (dst, d32) if f32 else dst
 
-    def average(self, errors):
+    def scan_sign(self, V):
+        """Two flag words the device sets: a value < 0, a value <= 0 (reg_epi SIGN)."""
+        flags = self.prog.alloc(2)
+        self.prog.stage("reg_epi", self.n * self.D, _RE_SIGN, self.n * self.D, V, flags)
+        return self.prog.want(flags, 2)
+
+    def scan_log_domain(self):
+        """One flag word: a y or p value <= -1 (flag_scan)."""
+        N = self.n * self.D
+        flag = _scan_flag(self.prog, self.Y, N, _SCAN_LOG_DOMAIN)
+        self.prog.stage("flag_scan", N, self.P, N, _SCAN_LOG_DOMAIN, flag)
+        return self.prog.want(flag, 1)
+
+    def average(self, vals, *, nan_rule=False, variance=_NONE):
+        """The multioutput answer of the D binary64 values at `vals`: the
+        values themselves (raw_values), else one reg_epi AVG unit."""
+        prog, D, mo = self.prog, self.D, self.mo
+        if mo == "raw_values":
+            return prog.want(vals, 2 * D)
+        if mo == "uniform_average":
+            mode, w = _RE_UNIFORM, _NONE
+        elif mo == "variance_weighted":
+            mode, w = _RE_VARIANCE, variance
+        else:
+            mode, w = _RE_CUSTOM, prog.put_i32(_words64(mo))
+        dst = prog.alloc(2)
+        prog.stage("reg_epi", 1, _RE_AVG, D, vals, mode, w, dst, 1 if nan_rule else 0)
+        return prog.want(dst, 2)
+
+    def result(self, out, numeric_mode, check=None):
+        """Run the program, let `check(prog)` raise on its flags, then the
+        answer: a float, or the per-output Float64 Array for raw_values."""
+        _execute(self.prog, numeric_mode)
+        if check is not None:
+            check(self.prog)
         if self.mo == "raw_values":
-            return Array.from_list([float(v) for v in errors], "<f8")
-        if self.mo == "uniform_average":
-            s = 0.0
-            for v in errors:
-                s += v
-            return float(s / len(errors))
-        s = sw = 0.0
-        for v, w in zip(errors, self.mo):
-            s += v * w
-            sw += w
-        return float(s / sw)
+            return Array.from_list(list(self.prog.words(out, 2 * self.D, "d")), "<f8")
+        return float(self.prog.words(out, 2, "d")[0])
+
+    def scalar(self, out, numeric_mode, check=None):
+        """Run the program; the one binary64 word pair at `out` (single output)."""
+        self.prog.want(out, 2)
+        _execute(self.prog, numeric_mode)
+        if check is not None:
+            check(self.prog)
+        return float(self.prog.words(out, 2, "d")[0])
+
+
+def _words64(values):
+    """binary64 values as their Int32 word pairs, low first (reg_epi ld64)."""
+    store = array.array("i")
+    store.frombytes(array.array("d", values).tobytes())
+    return store
 
 
 def flatten_mo(values):
@@ -1230,12 +1254,15 @@ def flatten_mo(values):
 
 
 def _mean_error(kind, y_true, y_pred, sample_weight, multioutput, numeric_mode, caller, *, root=False,
-                scalar=None):
+                scalar=None, log_domain=None):
+    """The per-output (root) mean of the term, averaged, in one program;
+    `log_domain` names the metric whose log-domain refusal scans y and p
+    in the same program (raised before any result is returned)."""
     r = _Reg(y_true, y_pred, sample_weight, multioutput, caller)
-    errors = r.column_means([kind], numeric_mode, scalar=scalar)[0]
-    if root:
-        errors = [pmath.sqrt(v) for v in errors]
-    return r.average(errors)
+    r.program(scalar)
+    flag = r.scan_log_domain() if log_domain else None
+    out = r.average(r.stage_mean(kind, _RE_DIV | (_RE_ROOT if root else 0)))
+    return r.result(out, numeric_mode, None if flag is None else lambda prog: _refuse_log_domain(prog, flag, log_domain))
 
 
 def regression_error_options(name, y_true, y_pred, sample_weight, multioutput, numeric_mode):
@@ -1252,25 +1279,22 @@ def mean_squared_log_error(y_true, y_pred, *, sample_weight=None, multioutput="u
     """scikit-learn 1.9 `mean_squared_log_error`: the mean of
     `(log1p(y) - log1p(p))^2` (portable log1p, IDENTITY_PATHS row 51);
     values <= -1 are refused as scikit-learn refuses them."""
-    _refuse_log_domain(y_true, y_pred, "Mean Squared Logarithmic Error")
     return _mean_error("sqlog", y_true, y_pred, sample_weight, multioutput, numeric_mode,
-                       "mean_squared_log_error")
+                       "mean_squared_log_error", log_domain="Mean Squared Logarithmic Error")
 
 
 def root_mean_squared_log_error(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
                                 numeric_mode=None):
     """scikit-learn 1.9 `root_mean_squared_log_error` (per-output root, then averaged)."""
-    _refuse_log_domain(y_true, y_pred, "Root Mean Squared Logarithmic Error")
     return _mean_error("sqlog", y_true, y_pred, sample_weight, multioutput, numeric_mode,
-                       "root_mean_squared_log_error", root=True)
+                       "root_mean_squared_log_error", root=True, log_domain="Root Mean Squared Logarithmic Error")
 
 
-def _refuse_log_domain(y_true, y_pred, what):
-    from ._buffer import materialize_f32_lists
-    for v in (y_true, y_pred):
-        a = materialize_f32_lists(v, "input")[0]
-        if a.size and a.min() <= -1:
-            raise ValueError(f"{what} cannot be used when targets contain values less than or equal to -1.")
+def _refuse_log_domain(prog, flag, what):
+    """The log-domain refusal from the program's flag_scan word (lane
+    cpu2-l7-metrics: the O(n) host min left the GPU route)."""
+    if _flag_set(prog, flag):
+        raise ValueError(f"{what} cannot be used when targets contain values less than or equal to -1.")
 
 
 def mean_absolute_percentage_error(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
@@ -1300,13 +1324,8 @@ def median_absolute_error(y_true, y_pred, *, multioutput="uniform_average", samp
     |y - p| (the weighted percentile at 50 with averaging when weighted, the
     same answer as numpy's median when not), from a stable device sort."""
     r = _Reg(y_true, y_pred, sample_weight, multioutput, "median_absolute_error")
-
-    def terms(prog):
-        Y, P = prog.put(r.y), prog.put(r.p)
-        out = prog.alloc(r.n * r.D)
-        prog.stage("reg_term", r.n * r.D, Y, P, out, r.D, _TERM["abs"], Y, 0)
-        return out
-    return r.average(r.percentile(terms, 50.0, numeric_mode))
+    r.program()
+    return r.result(r.average(r.percentile(r.term("abs"), 50.0)), numeric_mode)
 
 
 def max_error(y_true, y_pred, *, numeric_mode=None):
@@ -1324,102 +1343,43 @@ def max_error(y_true, y_pred, *, numeric_mode=None):
     return float(prog.floats(out, 1)[0])
 
 
-def _assemble(num, den, mo, force_finite):
-    scores = []
-    for a, b in zip(num, den):
-        if not force_finite:
-            if b != 0:
-                scores.append(1 - a / b)
-            elif a == 0:
-                scores.append(float("nan"))
-            else:
-                scores.append(float("-inf"))
-        elif b != 0 and a != 0:
-            scores.append(1 - a / b)
-        elif a != 0:
-            scores.append(0.0)
-        else:
-            scores.append(1.0)
-    if mo == "raw_values":
-        return Array.from_list(scores, "<f8")
-    if mo == "uniform_average":
-        weights = None
-    elif mo == "variance_weighted":
-        weights = den if any(v != 0 for v in den) else None
-    else:
-        weights = mo
-    if weights is None:
-        s = 0.0
-        for v in scores:
-            s += v
-        return float(s / len(scores))
-    s = sw = 0.0
-    for v, w in zip(scores, weights):
-        # A constant target with force_finite=False can have score -inf
-        # and variance weight zero. IEEE leaves the NaN sign from 0 * inf
-        # implementation-dependent (Arm +NaN, x86 -NaN). This weighted
-        # score is undefined: return the same explicit NaN as 0/0 above,
-        # before performing the invalid operation. Do not drop the term.
-        if _math.isnan(v) or (w == 0 and _math.isinf(v)):
-            return float("nan")
-        s += v * w
-        sw += w
-    return float(s / sw)
+def _assemble(r, num, den, force_finite, *, average=True):
+    """Stage the per-output scores `1 - num / den` (reg_epi ASM, the
+    force_finite convention) and their multioutput average (reg_epi AVG
+    with the NaN rule: a NaN score, or an infinite one with weight zero,
+    answers NaN; variance_weighted weighs by `den` unless it is all zero)."""
+    prog, D = r.prog, r.D
+    scores = prog.alloc(2 * D)
+    prog.stage("reg_epi", D, _RE_ASM, D, num, den, 1 if force_finite else 0, scores)
+    return r.average(scores, nan_rule=True, variance=den) if average else scores
 
 
 def explained_variance_score(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
                              force_finite=True, numeric_mode=None):
     """scikit-learn 1.9 `explained_variance_score`: `1 - Var(y - p) / Var(y)`
-    with (weighted) means, two device passes (the means, then the centered
+    with (weighted) means, one program (the means, then the centered
     squares); force_finite=False returns scikit-learn's NaN / -inf by value."""
     r = _Reg(y_true, y_pred, sample_weight, multioutput, "explained_variance_score", variance_ok=True)
-    diff_mean, y_mean = _diff_and_y_means(r, numeric_mode)
-    num = _centered(r, "diff", diff_mean, numeric_mode)
-    den = _centered(r, "y", y_mean, numeric_mode)
-    return _assemble(num, den, r.mo, force_finite)
+    r.program()
+    diff, diff_mean, y_mean = _diff_and_y_means(r)
+    num = _centered(r, diff, diff_mean)
+    den = _centered(r, r.Y, y_mean)
+    return r.result(_assemble(r, num, den, force_finite), numeric_mode)
 
 
-def _diff_and_y_means(r, numeric_mode):
-    """Per-column (weighted) means of y - p and of y."""
-    prog = _Prog()
-    Y, P = prog.put(r.y), prog.put(r.p)
-    W = _NONE if r.w is None else prog.put(r.w)
-    n, D = r.n, r.D
-    zero = prog.scratch(n)
-    prog.stage("pair_key", n, 0, 0, zero, 1, 2)
-    diff = prog.scratch(n * D)
-    prog.stage("reg_term", n * D, Y, P, diff, D, _TERM["diff"], Y, 0)
-    a = _group(prog, zero, n, 1, values=diff, vstride=D, weights=W, width=D)[1]
-    b = _group(prog, zero, n, 1, values=Y, vstride=D, weights=W, width=D)[1]
-    sw = _group(prog, zero, n, 1, weights=W)[1] if r.w is not None else None
-    _execute(prog, numeric_mode)
-    den = float(n) if r.w is None else prog.floats(sw, 1)[0]
-    return [v / den for v in prog.floats(a, D)], [v / den for v in prog.floats(b, D)]
+def _diff_and_y_means(r):
+    """Stage y - p and the per-column (weighted) means of y - p and of y,
+    each as the Float32 broadcast column the centered terms read:
+    (diff, diff_mean32, y_mean32)."""
+    diff = r.term("diff")
+    return diff, r.fin(r.sums(diff), f32=True)[1], r.fin(r.sums(r.Y), f32=True)[1]
 
 
-def _centered(r, source, means, numeric_mode, *, mean=True):
-    """Per-column (weighted) mean (or sum) of (v - mean_c)^2, v = y - p or y."""
-    prog = _Prog()
-    Y, P = prog.put(r.y), prog.put(r.p)
-    W = _NONE if r.w is None else prog.put(r.w)
-    n, D = r.n, r.D
-    zero = prog.scratch(n)
-    prog.stage("pair_key", n, 0, 0, zero, 1, 2)
-    if source == "diff":
-        V = prog.scratch(n * D)
-        prog.stage("reg_term", n * D, Y, P, V, D, _TERM["diff"], Y, 0)
-    else:
-        V = Y
-    M = prog.put(Array.from_list([_f32(m) for m in means], "<f4"))
-    sq = prog.scratch(n * D)
-    prog.stage("reg_term", n * D, V, M, sq, D, _TERM["sq"], Y, 1)
-    out = _group(prog, zero, n, 1, values=sq, vstride=D, weights=W, width=D)[1]
-    sw = _group(prog, zero, n, 1, weights=W)[1] if r.w is not None else None
-    _execute(prog, numeric_mode)
-    if not mean:
-        return prog.floats(out, D)
-    den = float(n) if r.w is None else prog.floats(sw, 1)[0]
-    return [v / den for v in prog.floats(out, D)]
+def _centered(r, V, M, *, mean=True):
+    """Stage the per-column (weighted) mean (or the sum, widened) of
+    (v - m_c)^2 over the n x D values at V and the Float32 column M:
+    D binary64 values."""
+    return r.fin(r.sums(r.term("sq", V=V, P=M, broadcast=True)), _RE_DIV if mean else 0)
 
 
 def r2_score_options(y_true, y_pred, sample_weight, multioutput, force_finite, numeric_mode):
@@ -1430,42 +1390,56 @@ def r2_score_options(y_true, y_pred, sample_weight, multioutput, force_finite, n
     if r.n < 2:
         _undefined_warning("R^2 score is not well-defined with less than two samples.")
         return float("nan")
-    _, y_mean = _diff_and_y_means(r, numeric_mode)
-    num = _centered_sse(r, numeric_mode)
-    den = _centered(r, "y", y_mean, numeric_mode, mean=False)
-    return _assemble(num, den, r.mo, force_finite)
+    r.program()
+    num, den = _r2_parts(r)
+    return r.result(_assemble(r, num, den, force_finite), numeric_mode)
 
 
-def _centered_sse(r, numeric_mode):
-    prog = _Prog()
-    Y, P = prog.put(r.y), prog.put(r.p)
-    W = _NONE if r.w is None else prog.put(r.w)
-    n, D = r.n, r.D
-    zero = prog.scratch(n)
-    prog.stage("pair_key", n, 0, 0, zero, 1, 2)
-    sq = prog.scratch(n * D)
-    prog.stage("reg_term", n * D, Y, P, sq, D, _TERM["sq"], Y, 0)
-    out = _group(prog, zero, n, 1, values=sq, vstride=D, weights=W, width=D)[1]
-    _execute(prog, numeric_mode)
-    return prog.floats(out, D)
+def _r2_parts(r):
+    """Stage SS_res and SS_tot per output (binary64 widenings of the Float32
+    sums; the y mean rounded to Float32 in the program)."""
+    y_mean = r.fin(r.sums(r.Y), f32=True)[1]
+    return _centered_sse(r), _centered(r, r.Y, y_mean, mean=False)
+
+
+def _centered_sse(r):
+    return r.fin(r.sums(r.term("sq")), 0)
+
+
+def _r2_sums_of(r, numeric_mode):
+    """(SS_res, SS_tot) of a single-output `_Reg` from one program
+    (linear_model._r2_sums)."""
+    r.program()
+    num, den = _r2_parts(r)
+    words = r.prog.want(num, 2), r.prog.want(den, 2)
+    _execute(r.prog, numeric_mode)
+    return float(r.prog.words(words[0], 2, "d")[0]), float(r.prog.words(words[1], 2, "d")[0])
 
 
 def _tweedie_domain(r, power, caller):
+    """The power refusal now; the y and p sign scans staged in r's program
+    (reg_epi SIGN, lane cpu2-l7-metrics: the O(n) host mins left the GPU
+    route). Returns the check that raises after the run, before a result."""
     msg = f"Mean Tweedie deviance error with power={power} can only be used on "
-    ymin, pmin = r.y.min(), r.p.min()
-    if power < 0:
-        if pmin <= 0:
-            raise ValueError(msg + "strictly positive y_pred.")
-    elif power == 0:
-        pass
-    elif 1 <= power < 2:
-        if ymin < 0 or pmin <= 0:
-            raise ValueError(msg + "non-negative y and strictly positive y_pred.")
-    elif power >= 2:
-        if ymin <= 0 or pmin <= 0:
-            raise ValueError(msg + "strictly positive y and y_pred.")
-    else:
+    if not (power <= 0 or power >= 1):
         raise ValueError(f"mojolearn {caller}: power in (0, 1) is not a Tweedie distribution")
+    if power == 0:
+        return None
+    fy, fp = r.scan_sign(r.Y), r.scan_sign(r.P)
+
+    def check(prog):
+        y_neg, y_nonpos = prog.ints(fy, 2)
+        p_nonpos = prog.ints(fp, 2)[1]
+        if power < 0:
+            if p_nonpos:
+                raise ValueError(msg + "strictly positive y_pred.")
+        elif 1 <= power < 2:
+            if y_neg or p_nonpos:
+                raise ValueError(msg + "non-negative y and strictly positive y_pred.")
+        elif power >= 2:
+            if y_nonpos or p_nonpos:
+                raise ValueError(msg + "strictly positive y and y_pred.")
+    return check
 
 
 def mean_tweedie_deviance(y_true, y_pred, *, sample_weight=None, power=0, numeric_mode=None):
@@ -1476,8 +1450,9 @@ def mean_tweedie_deviance(y_true, y_pred, *, sample_weight=None, power=0, numeri
     r = _Reg(y_true, y_pred, sample_weight, "uniform_average", "mean_tweedie_deviance")
     if r.D != 1:
         raise ValueError("Multioutput not supported in mean_tweedie_deviance")
-    _tweedie_domain(r, power, "mean_tweedie_deviance")
-    return r.column_means(["tweedie"], numeric_mode, scalar=float(power))[0][0]
+    r.program(float(power))
+    check = _tweedie_domain(r, power, "mean_tweedie_deviance")
+    return r.scalar(r.stage_mean("tweedie"), numeric_mode, check)
 
 
 def mean_poisson_deviance(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
@@ -1491,7 +1466,9 @@ def mean_gamma_deviance(y_true, y_pred, *, sample_weight=None, numeric_mode=None
 
 
 def d2_tweedie_score(y_true, y_pred, *, sample_weight=None, power=0, numeric_mode=None):
-    """scikit-learn 1.9 `d2_tweedie_score`: `1 - dev(y, p) / dev(y, avg y)`."""
+    """scikit-learn 1.9 `d2_tweedie_score`: `1 - dev(y, p) / dev(y, avg y)`
+    in one program; a zero null deviance answers NaN (0/0) or -inf as
+    numpy's float division does."""
     if is_bool(power) or not isinstance(power, numbers.Real):
         raise ValueError("power must be a real number")
     r = _Reg(y_true, y_pred, sample_weight, "uniform_average", "d2_tweedie_score")
@@ -1500,26 +1477,28 @@ def d2_tweedie_score(y_true, y_pred, *, sample_weight=None, power=0, numeric_mod
     if r.n < 2:
         _undefined_warning("D^2 score is not well-defined with less than two samples.")
         return float("nan")
-    _tweedie_domain(r, power, "d2_tweedie_score")
-    num = r.column_means(["tweedie"], numeric_mode, scalar=float(power))[0][0]
-    y_avg = r.column_means(["diff"], numeric_mode, pred_broadcast=[0.0])[0][0]
-    den = r.column_means(["tweedie"], numeric_mode, pred_broadcast=[y_avg], scalar=float(power))[0][0]
-    return float(1 - num / den)
+    r.program(float(power))
+    check = _tweedie_domain(r, power, "d2_tweedie_score")
+    num = r.stage_mean("tweedie")
+    y_avg = r.fin(r.sums(r.Y), f32=True)[1]
+    den = r.stage_mean("tweedie", P=y_avg, broadcast=True)
+    return r.scalar(_assemble(r, num, den, False, average=False), numeric_mode, check)
 
 
 def d2_pinball_score(y_true, y_pred, *, sample_weight=None, alpha=0.5, multioutput="uniform_average",
                      numeric_mode=None):
     """scikit-learn 1.9 `d2_pinball_score`: the pinball loss against the
-    (weighted, averaged) alpha-quantile of y_true per output."""
+    (weighted, averaged) alpha-quantile of y_true per output, one program."""
     alpha = _check_alpha(alpha)
     r = _Reg(y_true, y_pred, sample_weight, multioutput, "d2_pinball_score")
     if r.n < 2:
         _undefined_warning("D^2 score is not well-defined with less than two samples.")
         return float("nan")
-    num = r.column_means(["pinball"], numeric_mode, scalar=alpha)[0]
-    quant = r.percentile(lambda prog: prog.put(r.y), alpha * 100, numeric_mode)
-    den = r.column_means(["pinball"], numeric_mode, pred_broadcast=quant, scalar=alpha)[0]
-    return _assemble(num, den, r.mo, True)
+    r.program(alpha)
+    num = r.stage_mean("pinball")
+    quant = r.percentile(r.Y, alpha * 100, f32=True)[1]
+    den = r.stage_mean("pinball", P=quant, broadcast=True)
+    return r.result(_assemble(r, num, den, True), numeric_mode)
 
 
 def d2_absolute_error_score(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
@@ -1681,7 +1660,7 @@ def _ap_of(cur):
 
 
 def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds=True, keep_flags=True,
-            lazy=False, compact=False, fold=None, max_fpr=None):
+            lazy=False, compact=False, fold=None, max_fpr=None, tail=None):
     """[(fps, tps, thresholds)] per problem, from the device sort and the
     cumulative counts (Python floats; unweighted counts are exact). An
     unweighted curve also carries `.keep` (lane metrics-apple). Only the
@@ -1698,10 +1677,13 @@ def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds
     fold="auc" (compact) or "ap" (lane cgr2-metrics-shap) adds the device
     curve fold (x_metrics/par.mojo curve_fold_unit) and brings back only its
     CF_OUT words per problem, no curve: the list holds `_FoldCurve`s.
-    max_fpr (fold="auc") folds the partial AUC instead."""
+    max_fpr (fold="auc") folds the partial AUC instead. tail (fold only):
+    see `_fold_curves`."""
     if fold is not None:
         return _fold_curves(scores, flags, w, n, problems, numeric_mode, stride=stride, fold=fold,
-                            max_fpr=max_fpr)
+                            max_fpr=max_fpr, tail=tail)
+    if tail is not None:
+        raise ValueError("mojolearn metrics: a curve tail needs the device fold")
     prog = _Prog()
     S = prog.put(scores)
     POS = _put_flags(prog, flags)
@@ -1759,16 +1741,13 @@ def _f32_split(x):
     return bits[0], bits[1]
 
 
-def _fold_curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, fold="auc", max_fpr=None):
-    """`_curves` with the device curve fold: the curve stays on the device
-    (compacted for the AUCs) and only the fold's words come back."""
-    prog = _Prog()
-    S = prog.put(scores)
-    POS = _put_flags(prog, flags)
-    W = _put_weights(prog, w)
+def _fold_stages(prog, S, stride, POS, W, n, problems, auc, max_fpr=None, out=None):
+    """The curve (bin_curve) and its fold (curve_fold) as stages of `prog`
+    over scores at S, flags at POS, weights at W (_NONE: none): the fold's
+    CF_OUT words per problem at `out` (allocated and declared when None),
+    returned. Shared by `_fold_curves` and the one-vs-one pairs."""
     N = n * problems
     order = prog.scratch(N)
-    auc = fold == "auc"
     cnt = prog.scratch(problems)
     fps = prog.scratch(N)
     tps = prog.scratch(N)
@@ -1781,12 +1760,39 @@ def _fold_curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, fold=
         CM = prog.scratch(problems)
     prog.stage("bin_curve", problems, S, stride, POS, W, n, order, fps, tps, thr, cnt,
                keep, 1 if auc else 0, CF, CM)
-    out = prog.want(prog.alloc(_CF_OUT * problems), _CF_OUT * problems)
+    if out is None:
+        out = prog.want(prog.alloc(_CF_OUT * problems), _CF_OUT * problems)
     mode, mh, ml = (1, 0, 0) if not auc else ((0, 0, 0) if max_fpr is None else (2,) + _f32_split(max_fpr))
     if auc:
         prog.stage("curve_fold", problems, n, CF, CF + N, CM, out, mode, mh, ml, _CF_CHUNK)
     else:
         prog.stage("curve_fold", problems, n, fps, tps, cnt, out, mode, mh, ml, _CF_CHUNK)
+    return out
+
+
+def _fold_curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, fold="auc", max_fpr=None, tail=None):
+    """`_curves` with the device curve fold: the curve stays on the device
+    (compacted for the AUCs) and only the fold's words come back.
+
+    tail (lane cpu2-l7-metrics S3b): a function `(prog, S, W, C, out, n,
+    problems)` that stages more units in this program before it runs (S the
+    scores, W the weights or _NONE, C the int32 codes of an `_OneHot` or
+    _NONE, out the fold words); it keeps its own offsets."""
+    prog = _Prog()
+    S = prog.put(scores)
+    C = _NONE
+    if tail is not None and isinstance(flags, _OneHot):
+        # `_put_flags`'s onehot stage, with the codes' offset kept for the tail
+        C = prog.put_i32(flags.codes)
+        POS = prog.scratch(flags.n * flags.k)
+        prog.stage("onehot", flags.n * flags.k, C, POS, flags.n, flags.k, flags.layout)
+    else:
+        POS = _put_flags(prog, flags)
+    W = _put_weights(prog, w)
+    auc = fold == "auc"
+    out = _fold_stages(prog, S, stride, POS, W, n, problems, auc, max_fpr)
+    if tail is not None:
+        tail(prog, S, W, C, out, n, problems)
     _execute(prog, numeric_mode)
     holder = {}
 
@@ -2011,8 +2017,96 @@ def _binary_ap(fps, tps):
     return float(max(0.0, _fsum(list(terms))))
 
 
-def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode, keep_flags=True, fold=None):
-    """Binarized one-vs-rest problems over the class columns of y_score."""
+#: rank_epi kinds of the ranking averages (x_metrics/rank_epi.mojo, lane cpu2-l7-metrics S3b)
+_RANK_ROW_SUM, _RANK_CURVE_SCORE, _RANK_AVERAGE, _RANK_OVO_MASK, _RANK_OVO_PAIR = 5, 6, 7, 8, 9
+_ROC_ONE_CLASS = "Only one class is present in y_true. ROC AUC score is not defined in that case."
+
+
+def _f64_bits(prog, vals):
+    """Binary64 values as Int32 arena words (low first), an input."""
+    bw = array.array("i")
+    bw.frombytes(array.array("d", vals).tobytes())
+    return prog.put_i32(bw)
+
+
+def _stage_average(prog, SC, SUP, m, average):
+    """`rank_epi` AVERAGE over m binary64 scores at SC (weights at SUP):
+    the declared binary64 result's offset."""
+    res = prog.want(prog.alloc(2), 2)
+    prog.stage("rank_epi", 1, _RANK_AVERAGE, SC, SUP, m, 1 if average == "weighted" else 0, res)
+    return res
+
+
+class _OvrTail:
+    """The one-vs-rest curve program's tail (`_fold_curves` tail=): the
+    multiclass row-sum check (`rank_epi` ROW_SUM), the per-class supports
+    (group sums over the codes: exact counts, or the Float32 PairSums of
+    the weights), the per-class scores from the fold words (CURVE_SCORE) and
+    their average (AVERAGE), all in the program that folds the curves. The
+    host class_sums / row_sum_range walks and the Python averages are gone
+    (lane cpu2-l7-metrics S3b)."""
+
+    def __init__(self, fold, check_rows, average, numeric_mode):
+        """average: None (per-class scores), "macro", "weighted", or
+        "micro" (no per-class work: the row check only)."""
+        self.fold, self.check_rows, self.average = fold, check_rows, average
+        self.score = average != "micro"
+        self.numeric_mode = numeric_mode
+        self.prog = None
+
+    def __call__(self, prog, S, W, C, out, n, k):
+        self.n, self.k = n, k
+        self.prog = prog
+        if self.check_rows:
+            self.rows = prog.want(prog.alloc(1), 1)
+            if n:
+                prog.stage("rank_epi", n, _RANK_ROW_SUM, S, n, k, self.rows)
+        if not self.score:
+            return
+        weighted = W != _NONE
+        off, sums = _group(prog, C, n, k, weights=W)
+        self.sc = prog.want(prog.alloc(2 * k), 2 * k)
+        self.fl = prog.want(prog.alloc(k), k)
+        self.sup = prog.want(prog.alloc(2 * k), 2 * k)
+        prog.stage("rank_epi", k, _RANK_CURVE_SCORE, out, k, 0 if self.fold == "auc" else 1, self.sc, self.fl,
+                   sums if weighted else off, 1 if weighted else 0, self.sup)
+        self.res = _stage_average(prog, self.sc, self.sup, k, self.average) if self.average is not None else _NONE
+
+    def rows_ok(self):
+        return not _flag_set(self.prog, self.rows)
+
+    def result(self, curves):
+        """The averaged score (binary64) or, average=None, the per-class
+        Float64 array. A class whose AP needs the curve rule (a zero
+        precision denominator) takes `_FoldCurve.ap`, and the average then
+        runs in a second small program over the device words."""
+        prog, k = self.prog, self.k
+        fl = prog.ints(self.fl, k)
+        if self.fold == "auc":
+            for c in range(k):  # glue: one warning per class without both labels
+                if fl[c] == 1:
+                    _undefined_warning(_ROC_ONE_CLASS)
+        edge = [c for c in range(k) if fl[c] == 2]  # glue: the classes whose AP takes the curve rule
+        if not edge:
+            if self.average is None:
+                return Array.from_list(list(prog.words(self.sc, 2 * k, "d")), "<f8")
+            return prog.words(self.res, 2, "d")[0]
+        sc = list(prog.words(self.sc, 2 * k, "d"))
+        for c in edge:  # glue: the curve rule's per-class scores
+            sc[c] = curves[c].ap()
+        if self.average is None:
+            return Array.from_list(sc, "<f8")
+        p2 = _Prog()
+        SC = _f64_bits(p2, sc)
+        SUP = p2.put_i32(prog.words(self.sup, 2 * k, "i"))
+        res = _stage_average(p2, SC, SUP, k, self.average)
+        _execute(p2, self.numeric_mode)
+        return p2.words(res, 2, "d")[0]
+
+
+def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode, keep_flags=True, fold=None, tail=None):
+    """Binarized one-vs-rest problems over the class columns of y_score.
+    `tail` (an `_OvrTail`, fold only) rides in the curve program."""
     from ._metrics_impl import _label_map, _selected_labels
     true, kind, present = _targets(y_true, caller)
     n = len(true)
@@ -2030,44 +2124,16 @@ def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode, keep_flag
     index = {c: i for i, c in enumerate(classes)}
     codes = _label_map(true, lambda v: index[v])
     # the class-major flags formed by the onehot unit inside the curve
-    # program, the support by the binding's class_sums (the same counts,
-    # binary64 in row order); no n*k host walk (lane pyglue-sweep: the
-    # Python byte layouts, the -D MOJOLEARN_PY2MOJO_core_OFF arm, are gone)
+    # program, the supports, scores and average by the tail's units in the
+    # same program; no n*k host walk (lane pyglue-sweep: the Python byte
+    # layouts, the -D MOJOLEARN_PY2MOJO_core_OFF arm, are gone)
     codes = _i32_c(codes)
     curves = _curves(s, _OneHot(codes, n, k, 0), w, n, k, numeric_mode, stride=k, thresholds=False,
-                     keep_flags=keep_flags, lazy=True, compact=True, fold=fold)
-    return curves, _class_sums(codes, w, k, numeric_mode), s, codes, classes, w
+                     keep_flags=keep_flags, lazy=True, compact=True, fold=fold, tail=tail)
+    return curves, tail, s, codes, classes, w
 
 
 _LITTLE = array.array("i", [1]).tobytes()[0] == 1
-
-
-def _rows_sum_to_one(s, k, numeric_mode=None):
-    """No row's correctly rounded sum is farther than 1e-8 + 1e-5 from 1
-    (scikit-learn's check; the scores are finite float32): the row fsums in
-    the binding (x_metrics/epilogue.mojo row_sum_range; lane metrics-apple2),
-    whose largest and smallest decide every row since |fl(s - 1)| is monotone
-    on either side of 1. The Python fallback is gone (lane
-    apple-fast-py2mojo-core: every install's x_metrics binding carries
-    `x_metrics_row_sum_range`)."""
-    n = s.size // k if k else 0
-    if n <= 0:
-        return True
-    if not (s.dtype == "<f4" and s._has_order("C")):
-        s = as_f32_c(s, ndim=s.ndim, name="y_score")[0]
-    out = array.array("d", [0.0, 0.0])
-    _binding(numeric_mode).x_metrics_row_sum_range(addr_ro(s, name="y_score"), n, k, out.buffer_info()[0])
-    tol = 1e-8 + 1e-5
-    return not (abs(out[0] - 1) > tol or abs(out[1] - 1) > tol)
-
-
-def _average_scores(scores, support, average):
-    if average is None:
-        return Array.from_list(scores, "<f8")
-    if average == "weighted":
-        total = _fsum(support)
-        return float(_fsum([a * b for a, b in zip(scores, support)]) / total) if total else 0.0
-    return float(_fsum(scores) / len(scores))
 
 
 def _micro_inputs(codes, w, n, k, numeric_mode=None):
@@ -2087,53 +2153,87 @@ def _micro_inputs(codes, w, n, k, numeric_mode=None):
     return _OneHot(codes, n, k, 1), wm
 
 
-def _ovo_native(true, index, s, n, k, numeric_mode):
-    """(pair_scores, prevalence) of one-vs-one ROC AUC with each pair's
-    rows, scores and flags selected by the binding (`x_metrics_ovo_pair`,
-    lane metrics-apple3): the rows of the pair in ascending order, their
-    Float32 scores in the pair's two columns and the 0/1 flags, the words
-    `[vals[r][col] for r in rows]` and `[1 if codes[r] == pos else 0 for r
-    in rows]` would hold. The two curve programs and AUCs per pair are
-    scikit-learn's definition. cpu-gpu-cleanup c-metrics-prep: the only
-    path (no size threshold, no per-row Python selection)."""
+#: arena words one one-vs-one program may hold (its pairs' curve slots);
+#: more pairs go to further programs
+_OVO_WORDS = 1 << 26
+_ROWS_MSG = ("Target scores need to be probabilities for multiclass roc_auc, i.e. they "
+             "should sum up to 1.0 over classes")
+
+
+def _ovo_native(true, index, s, n, k, numeric_mode, average):
+    """One-vs-one ROC AUC (scikit-learn _average_multiclass_ovo_score), on
+    the device (lane cpu2-l7-metrics S3b): per program, the scores and codes
+    go up once, the onehot unit forms every class's flags, `rank_epi`
+    OVO_MASK marks each pair's rows as 0/1 curve weights (the curve drops
+    the others: the host `x_metrics_ovo_pair` selection is gone), two curve
+    folds per pair (column a with class a positive, column b with class b),
+    CURVE_SCORE their AUCs, OVO_PAIR the pair score (mean of the two) and
+    prevalence ((count_a + count_b) / n, the counts from a group over the
+    codes: the host class_sums walk is gone), AVERAGE the macro or weighted
+    mean. The first program also runs the multiclass row-sum check
+    (ROW_SUM). Pairs whose curve slots exceed `_OVO_WORDS` go to further
+    programs; their pair words then meet in one small AVERAGE program."""
     from ._metrics_impl import _label_map
-    b = _binding(numeric_mode)
-    pair = b.x_metrics_ovo_pair
-    sums = b.x_metrics_class_sums
-    if not s._has_order("C"):
-        s = as_f32_c(s, ndim=2, name="y_score")[0]
-    codes = _label_map(true, lambda v: index[v])
-    if not isinstance(codes, Array) or codes.dtype != "<i4":
-        codes = Array.from_list(list(codes.tolist() if isinstance(codes, Array) else codes), "<i4")
+    codes = _i32_c(_label_map(true, lambda v: index[v]))
     if codes.size != n:
         raise ValueError("mojolearn roc_auc_score: y_true and y_score lengths differ")
-    per = array.array("d", bytes(8 * k))
-    sums(addr_ro(codes, name="codes"), 0, n, k, per.buffer_info()[0])
-    counts = [int(v) for v in per]
-    if sum(counts) != n:
-        raise ValueError("mojolearn roc_auc_score: a y_true label is not among the classes")
-    pair_scores, prevalence = [], []
-    for a in range(k):
-        for bcol in range(a + 1, k):
-            m = counts[a] + counts[bcol]
-            prevalence.append(m / n)
-            if m < 1:
-                sa, sb = Array.from_list([], "<f4"), Array.from_list([], "<f4")
-                fa, fb = Array.from_list([], "<i4"), Array.from_list([], "<i4")
-            else:
-                sa, sb = empty((m,), "<f4"), empty((m,), "<f4")
-                fa, fb = empty((m,), "<i4"), empty((m,), "<i4")
-                got = int(pair(addr_ro(codes, name="codes"), addr_ro(s, name="y_score"), (n, k, a, bcol, m),
-                               (sa._addr, sb._addr, fa._addr, fb._addr)))
-                if got != m:
-                    raise RuntimeError("mojolearn roc_auc_score: x_metrics_ovo_pair selected %d rows, "
-                                       "counted %d" % (got, m))
-            both = []
-            for sv, fl in ((sa, fa), (sb, fb)):  # glue: the pair's two one-vs-one directions
-                cur = _curves(sv, fl, None, m, 1, numeric_mode, fold="auc")[0]
-                both.append(_auc_of(cur, None))
-            pair_scores.append((both[0] + both[1]) / 2)
-    return pair_scores, prevalence
+    P = k * (k - 1) // 2
+    per_pair = 17 * n + 4 + 4 * _CF_OUT
+    chunk = max(1, min(P, _OVO_WORDS // max(per_pair, 1)))
+    pairs = [(a, b) for a in range(k) for b in range(a + 1, k)]  # glue: the stage parameters of each pair
+    ps_words, prev_words = [], []
+    g0 = 0
+    while g0 < P:  # glue: one program per chunk of pairs
+        m = min(chunk, P - g0)
+        last_only = g0 == 0 and m == P
+        prog = _Prog()
+        S = prog.put(s)
+        C = prog.put_i32(codes)
+        OH = prog.scratch(n * k)
+        if n:
+            prog.stage("onehot", n * k, C, OH, n, k, 0)
+        rows = _NONE
+        if g0 == 0:
+            rows = prog.want(prog.alloc(1), 1)
+            if n:
+                prog.stage("rank_epi", n, _RANK_ROW_SUM, S, n, k, rows)
+        off, _ = _group(prog, C, n, k)
+        prog.want(off + k, 1)
+        CF = prog.scratch(2 * m * _CF_OUT)
+        for t in range(m):  # glue: stages each pair's mask and its two curve folds
+            a, b = pairs[g0 + t]
+            W = prog.scratch(n)
+            if n:
+                prog.stage("rank_epi", n, _RANK_OVO_MASK, C, n, a, b, W)
+            _fold_stages(prog, S + a, k, OH + a * n, W, n, 1, True, out=CF + 2 * t * _CF_OUT)
+            _fold_stages(prog, S + b, k, OH + b * n, W, n, 1, True, out=CF + (2 * t + 1) * _CF_OUT)
+        SC = prog.scratch(4 * m)
+        FL = prog.want(prog.alloc(2 * m), 2 * m)
+        prog.stage("rank_epi", 2 * m, _RANK_CURVE_SCORE, CF, 2 * m, 0, SC, FL, _NONE, 0, 0)
+        if last_only:
+            PS, PREV = prog.scratch(2 * m), prog.scratch(2 * m)
+        else:
+            PS, PREV = prog.want(prog.alloc(2 * m), 2 * m), prog.want(prog.alloc(2 * m), 2 * m)
+        prog.stage("rank_epi", m, _RANK_OVO_PAIR, SC, off, k, n, g0, m, PS, PREV)
+        res = _stage_average(prog, PS, PREV, P, average) if last_only else _NONE
+        _execute(prog, numeric_mode)
+        if g0 == 0:
+            if _flag_set(prog, rows):
+                raise ValueError(_ROWS_MSG)
+            if prog.ints(off + k, 1)[0] != n:
+                raise ValueError("mojolearn roc_auc_score: a y_true label is not among the classes")
+        for v in prog.ints(FL, 2 * m):  # glue: one warning per direction without both labels
+            if v == 1:
+                _undefined_warning(_ROC_ONE_CLASS)
+        if last_only:
+            return prog.words(res, 2, "d")[0]
+        ps_words.extend(prog.words(PS, 2 * m, "i"))
+        prev_words.extend(prog.words(PREV, 2 * m, "i"))
+        g0 += m
+    p2 = _Prog()
+    res = _stage_average(p2, p2.put_i32(ps_words), p2.put_i32(prev_words), P, average)
+    _execute(p2, numeric_mode)
+    return p2.words(res, 2, "d")[0]
 
 
 def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_class, labels, numeric_mode):
@@ -2176,29 +2276,27 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
                          "'sample_weight' must be None in this case.")
     s_check = _scores(y_score, len(true), "roc_auc_score", ndim=2)
     k = s_check.shape[1]
-    if not _rows_sum_to_one(s_check, k, numeric_mode):
-        raise ValueError("Target scores need to be probabilities for multiclass roc_auc, i.e. they "
-                         "should sum up to 1.0 over classes")
+    # the multiclass row-sum check runs in the curve program that follows
+    # (`rank_epi` ROW_SUM; the host row_sum_range walk is gone)
     if multi_class == "ovr":
-        curves, support, s, codes, classes, w = _ovr(y_true, y_score, sample_weight, labels, "roc_auc_score",
-                                                     numeric_mode, fold="auc")
+        tail = _OvrTail("auc", True, average, numeric_mode)
+        curves, tail, s, codes, classes, w = _ovr(y_true, y_score, sample_weight, labels, "roc_auc_score",
+                                                  numeric_mode, fold="auc", tail=tail)
+        if not tail.rows_ok():
+            raise ValueError(_ROWS_MSG)
         if average == "micro":
             n = len(codes)
             flags, wm = _micro_inputs(codes, w, n, k, numeric_mode)
             cur = _curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, fold="auc")[0]
             return _auc_of(cur, None)
-        scores = [_auc_of(c, None) for c in curves]
-        return _average_scores(scores, support, average)
+        return tail.result(curves)
     # one-vs-one (scikit-learn _average_multiclass_ovo_score)
     from ._metrics_impl import _selected_labels
     classes = present if labels is None else _selected_labels(labels, kind, present)
     if len(classes) != k:
         raise ValueError("Number of classes in y_true not equal to the number of columns in 'y_score'")
     index = {c: i for i, c in enumerate(classes)}
-    pair_scores, prevalence = _ovo_native(true, index, s_check, len(true), k, numeric_mode)
-    if average == "weighted":
-        return float(_fsum([x * y for x, y in zip(pair_scores, prevalence)]) / _fsum(prevalence))
-    return float(_fsum(pair_scores) / len(pair_scores))
+    return _ovo_native(true, index, s_check, len(true), k, numeric_mode, average)
 
 
 def average_precision_score(y_true, y_score, *, average="macro", pos_label=1, sample_weight=None,
@@ -2223,15 +2321,15 @@ def average_precision_score(y_true, y_score, *, average="macro", pos_label=1, sa
     if average == "samples":
         raise NotImplementedError("mojolearn average_precision_score: average='samples' applies to "
                                   "multilabel targets, which are NOT IMPLEMENTED")
-    curves, support, s, codes, classes, w = _ovr(y_true, y_score, sample_weight, None,
-                                                 "average_precision_score", numeric_mode, keep_flags=False,
-                                                 fold="ap")
+    curves, tail, s, codes, classes, w = _ovr(y_true, y_score, sample_weight, None,
+                                              "average_precision_score", numeric_mode, keep_flags=False,
+                                              fold="ap", tail=_OvrTail("ap", False, average, numeric_mode))
     k = len(classes)
     if average == "micro":
         n = len(codes)
         flags, wm = _micro_inputs(codes, w, n, k, numeric_mode)
         return _ap_of(_curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, fold="ap")[0])
-    return _average_scores([_ap_of(c) for c in curves], support, average)
+    return tail.result(curves)
 
 
 def top_k_accuracy_score(y_true, y_score, *, k=2, normalize=True, sample_weight=None, labels=None,
@@ -2301,9 +2399,21 @@ def top_k_accuracy_score(y_true, y_score, *, k=2, normalize=True, sample_weight=
     return float(hits / (n if w is None else prog.floats(sw, 1)[0]))
 
 
-def _row_mean(S, cols, Y, n, kind, w, numeric_mode, *, K=0, D=None, prog=None, normalize=True):
-    prog = prog or _Prog()
-    Dt = _NONE if D is None else prog.put(Array.from_list([_f32(v) for v in D], "<f4"))
+#: rank_epi kinds (x_metrics/rank_epi.mojo)
+_RANK_MEAN, _RANK_NDCG_ROW, _RANK_D2_LOG, _RANK_D2_BRIER, _RANK_DCG_DISC = 0, 1, 2, 3, 4
+
+
+def _f64_words(prog, v):
+    """A binary64 scalar as two Int32 arena words (low first), an input."""
+    bw = array.array("i")
+    bw.frombytes(array.array("d", [float(v)]).tobytes())
+    return prog.put_i32(list(bw))
+
+
+def _row_fold(prog, S, cols, Y, n, kind, w, *, K=0, Dt=_NONE):
+    """The row metric and its folds: (TOT, SW, W) offsets: the Float32
+    PairSum of the n row values (weighted when w), the weight total (None
+    unweighted) and the weights' slot."""
     out = prog.scratch(n)
     prog.stage("row_metric", n, S, cols, Y, out, _ROW[kind], K, Dt)
     zero = prog.scratch(n)
@@ -2311,18 +2421,36 @@ def _row_mean(S, cols, Y, n, kind, w, numeric_mode, *, K=0, D=None, prog=None, n
     W = _NONE if w is None else prog.put(w)
     tot = _group(prog, zero, n, 1, values=out, weights=W)[1]
     sw = _group(prog, zero, n, 1, weights=W)[1] if w is not None else None
+    return tot, sw, W
+
+
+def _row_mean(S, cols, Y, n, kind, w, numeric_mode, *, K=0, Dt=_NONE, prog=None, normalize=True, half=False,
+              after=()):
+    """The (weighted) mean of a row metric, binary64: the folds and the
+    division (`rank_epi` MEAN) in one program. `after`: checks of the
+    program's flag words, each a function of the program that raises."""
+    prog = prog or _Prog()
+    tot, sw, _ = _row_fold(prog, S, cols, Y, n, kind, w, K=K, Dt=Dt)
+    res = prog.alloc(2)
+    prog.stage("rank_epi", 1, _RANK_MEAN, tot, n, _NONE if sw is None else sw, int(bool(normalize)),
+               int(bool(half)), res)
     _execute(prog, numeric_mode)
-    total = prog.floats(tot, 1)[0]
-    if not normalize:
-        return total
-    return total / (n if w is None else prog.floats(sw, 1)[0])
+    for check in after:  # glue: the program's flag checks
+        check(prog)
+    return prog.words(res, 2, "d")[0]
+
+
+def _proba_after(flags, caller):
+    return lambda prog: _proba_check(prog, flags, caller)
 
 
 def _proba(y_true, y_proba, labels, pos_label, caller):
-    """(codes, P (n, k) Float32, k, binary): scikit-learn 1.9's validation of
-    probabilistic predictions for a binary vector or a multiclass matrix."""
+    """(codes, a, k, binary): scikit-learn 1.9's validation of the shapes and
+    labels of probabilistic predictions for a binary vector (`a` (n,)) or a
+    multiclass matrix (`a` (n, k)); stage `_put_proba(prog, a, n, k,
+    binary)` for the values' check and the (n, 2 or k) matrix."""
     from ._metrics_impl import _label_map, _selected_labels
-    from ._buffer import materialize_f32_lists, _native
+    from ._buffer import materialize_f32_lists
     true, kind, present = _targets(y_true, caller)
     n = len(true)
     a = materialize_f32_lists(y_proba, "y_proba")[0]
@@ -2356,33 +2484,23 @@ def _proba(y_true, y_proba, labels, pos_label, caller):
     if a.shape[0] != n:
         raise ValueError("y_true and y_proba have different numbers of rows")
     a = as_f32_c(a, ndim=a.ndim, name="y_proba")[0]
-    packed = empty((n, 2), "<f4") if binary else None
-    code = int(_native("probability_rows_f32")(addr_ro(a, name="y_proba"), addr_ro(packed, name="packed") if binary else 0,
-                                                n, 1 if binary else k, int(binary)))
-    if code:
-        raise ValueError(f"mojolearn {caller}: y_proba " + {1: "must be finite", 2: "must lie in [0, 1]",
-                         3: "rows must sum to one within sqrt(float32 eps)"}.get(code, "failed validation"))
-    return codes, (packed if binary else a), k, binary
+    # the values' check (finite, in [0, 1], rows summing to one) and the
+    # binary [1 - p, p] layout run in the caller's program (`_put_proba`)
+    return codes, a, k, binary
 
 
-def _class_weights(codes, w, k, numeric_mode=None):
-    """Per-class (weighted) counts and the total, binary64 in row order, from
-    the binding's class_sums (the Python fallback is gone, lane
-    apple-fast-py2mojo-core)."""
-    per = _class_sums(codes, w, k, numeric_mode)
-    return per, _fsum(per)
-
-
-def log_loss_options(y_true, y_pred, normalize, sample_weight, labels, numeric_mode):
-    """log_loss with sample_weight (lane/metrics): the clipped `-log p_true`
-    per row on the device, its weighted PairSum; the unweighted call keeps
-    its kernel."""
-    codes, P, k, _ = _proba(y_true, y_pred, labels, None, "log_loss")
+def log_loss_options(y_true, y_pred, normalize, sample_weight, labels, numeric_mode, caller="log_loss"):
+    """log_loss with sample_weight (lane/metrics), and without it since lane
+    cpu2-l7-metrics: the probabilities' check, the clipped `-log p_true` per
+    row, its (weighted) PairSum and the division in one device program."""
+    codes, a, k, binary = _proba(y_true, y_pred, labels, None, caller)
     n = len(codes)
-    w = _weights(sample_weight, n, "log_loss")
+    w = _weights(sample_weight, n, caller)
     prog = _Prog()
-    S, Y = prog.put(P), prog.put_i32(codes)
-    return float(_row_mean(S, k, Y, n, "logloss", w, numeric_mode, prog=prog, normalize=normalize))
+    S, flags = _put_proba(prog, a, n, k, binary)
+    Y = prog.put_i32(codes)
+    return float(_row_mean(S, k, Y, n, "logloss", w, numeric_mode, prog=prog, normalize=normalize,
+                           after=(_proba_after(flags, caller),)))
 
 
 def brier_score_loss(y_true, y_proba, *, sample_weight=None, pos_label=None, labels=None,
@@ -2390,52 +2508,54 @@ def brier_score_loss(y_true, y_proba, *, sample_weight=None, pos_label=None, lab
     """scikit-learn 1.9 `brier_score_loss` (binary vector or multiclass
     matrix): the mean of `sum_c (onehot - p)^2`, halved by default for the
     binary case."""
-    codes, P, k, binary = _proba(y_true, y_proba, labels, pos_label, "brier_score_loss")
+    codes, a, k, binary = _proba(y_true, y_proba, labels, pos_label, "brier_score_loss")
     n = len(codes)
     w = _weights(sample_weight, n, "brier_score_loss")
-    prog = _Prog()
-    S, Y = prog.put(P), prog.put_i32(codes)
-    score = _row_mean(S, k, Y, n, "brier", w, numeric_mode, prog=prog)
     if scale_by_half == "auto":
         scale_by_half = binary or k < 3
-    return float(score * 0.5 if scale_by_half else score)
+    prog = _Prog()
+    S, flags = _put_proba(prog, a, n, k, binary)
+    Y = prog.put_i32(codes)
+    return float(_row_mean(S, k, Y, n, "brier", w, numeric_mode, prog=prog, half=bool(scale_by_half),
+                           after=(_proba_after(flags, "brier_score_loss"),)))
+
+
+def _d2_proba(y_true, y_proba, sample_weight, labels, pos_label, numeric_mode, caller, kind):
+    """d2_log_loss_score / d2_brier_score: the row metric's folds, the
+    (weighted) class sums and `1 - num / den` (`rank_epi` D2_LOG / D2_BRIER:
+    the class-frequency denominator in binary64) in one device program."""
+    codes, a, k, binary = _proba(y_true, y_proba, labels, pos_label, caller)
+    n = len(codes)
+    if n < 2:
+        _undefined_warning("D^2 score is not well-defined with less than two samples.")
+        return float("nan")
+    w = _weights(sample_weight, n, caller)
+    prog = _Prog()
+    S, flags = _put_proba(prog, a, n, k, binary)
+    Y = prog.put_i32(codes)
+    tot, sw, W = _row_fold(prog, S, k, Y, n, kind, w)
+    off, per = _group(prog, Y, n, k, weights=W)
+    PER, weighted = (off, 0) if w is None else (per, 1)
+    res = prog.alloc(2)
+    if kind == "logloss":
+        prog.stage("rank_epi", 1, _RANK_D2_LOG, tot, PER, weighted, k, res)
+    else:
+        prog.stage("rank_epi", 1, _RANK_D2_BRIER, tot, n, _NONE if sw is None else sw, PER, weighted, k, res)
+    _execute(prog, numeric_mode)
+    _proba_check(prog, flags, caller)
+    return float(prog.words(res, 2, "d")[0])
 
 
 def d2_log_loss_score(y_true, y_proba=None, *, sample_weight=None, labels=None, numeric_mode=None):
     """scikit-learn 1.9 `d2_log_loss_score`: one minus the log loss over the
     log loss of the (weighted) class frequencies."""
-    codes, P, k, _ = _proba(y_true, y_proba, labels, None, "d2_log_loss_score")
-    n = len(codes)
-    if n < 2:
-        _undefined_warning("D^2 score is not well-defined with less than two samples.")
-        return float("nan")
-    w = _weights(sample_weight, n, "d2_log_loss_score")
-    prog = _Prog()
-    S, Y = prog.put(P), prog.put_i32(codes)
-    num = _row_mean(S, k, Y, n, "logloss", w, numeric_mode, prog=prog, normalize=False)
-    per, total = _class_weights(codes, w, k, numeric_mode)
-    eps = 1.1920928955078125e-07
-    den = _fsum([wc * -pmath.log(min(max(wc / total, eps), 1 - eps)) for wc in per if wc])
-    return float(1 - num / den)
+    return _d2_proba(y_true, y_proba, sample_weight, labels, None, numeric_mode, "d2_log_loss_score", "logloss")
 
 
 def d2_brier_score(y_true, y_proba, *, sample_weight=None, pos_label=None, labels=None, numeric_mode=None):
     """scikit-learn 1.9 `d2_brier_score`: one minus the Brier score over the
     Brier score of the (weighted) class frequencies."""
-    codes, P, k, _ = _proba(y_true, y_proba, labels, pos_label, "d2_brier_score")
-    n = len(codes)
-    if n < 2:
-        _undefined_warning("D^2 score is not well-defined with less than two samples.")
-        return float("nan")
-    w = _weights(sample_weight, n, "d2_brier_score")
-    prog = _Prog()
-    S, Y = prog.put(P), prog.put_i32(codes)
-    num = _row_mean(S, k, Y, n, "brier", w, numeric_mode, prog=prog)
-    per, total = _class_weights(codes, w, k, numeric_mode)
-    freq = [v / total for v in per]
-    den = _fsum([per[c] * _fsum([_sq((1.0 if j == c else 0.0) - freq[j]) for j in range(k)])
-                      for c in range(k)]) / total
-    return float(1 - num / den)
+    return _d2_proba(y_true, y_proba, sample_weight, labels, pos_label, numeric_mode, "d2_brier_score", "brier")
 
 
 def hinge_loss(y_true, pred_decision, *, labels=None, sample_weight=None, numeric_mode=None):
@@ -2482,13 +2602,38 @@ def _relevance(y_true, y_score, caller, *, indicator):
     s = _scores(y_score, y.shape[0], caller, ndim=2)
     if s.shape != y.shape:
         raise ValueError("y_true and y_score have different shape")
-    if indicator and any(v != 0.0 and v != 1.0 for v in y.reshape((y.size,)).tolist()):
-        raise ValueError(f"{caller} requires a binary label indicator y_true")
+    # `indicator`: the 0/1 test of y_true runs in the caller's program
+    # (`_relevance_put`: flag_scan, x_metrics/tail.mojo)
     return y, s
 
 
-def _dcg_discount(k_cols, log_base):
-    return [1 / (pmath.log(i + 2) / pmath.log(log_base)) for i in range(k_cols)]
+def _relevance_put(prog, y, s, caller, indicator):
+    """(S, Y, after): y_score and y_true in the program and, for an
+    indicator y_true, the device 0/1 test and its check."""
+    S, Y = prog.put(s), prog.put(y)
+    if not indicator:
+        return S, Y, ()
+    flag = _scan_flag(prog, Y, y.size, _SCAN_INDICATOR)
+
+    def check(prog):
+        if _flag_set(prog, flag):
+            raise ValueError(f"{caller} requires a binary label indicator y_true")
+    return S, Y, (check,)
+
+
+def _dcg_table(prog, c, log_base):
+    """The c-word Float32 DCG discount table `1 / log_b(i + 2)` (binary64,
+    narrowed), formed by the device (`rank_epi` DCG_DISC) in the program."""
+    b = float(log_base)
+    if not b > 0.0:
+        raise ValueError("math domain error")
+    if b == 1.0:
+        raise ZeroDivisionError("float division by zero")
+    B = _f64_words(prog, b)
+    D = prog.scratch(c)
+    if c:
+        prog.stage("rank_epi", c, _RANK_DCG_DISC, c, B, D)
+    return D
 
 
 def dcg_score(y_true, y_score, *, k=None, log_base=2, sample_weight=None, ignore_ties=False,
@@ -2501,46 +2646,45 @@ def dcg_score(y_true, y_score, *, k=None, log_base=2, sample_weight=None, ignore
     n, c = y.shape
     w = _weights(sample_weight, n, "dcg_score")
     prog = _Prog()
-    S, Y = prog.put(s), prog.put(y)
+    S, Y, _ = _relevance_put(prog, y, s, "dcg_score", False)
+    Dt = _dcg_table(prog, c, log_base)
     return float(_row_mean(S, c, Y, n, "dcg_ignore_ties" if ignore_ties else "dcg", w, numeric_mode,
-                           K=0 if k is None else int(k),
-                           D=_dcg_discount(c, log_base), prog=prog))
+                           K=0 if k is None else int(k), Dt=Dt, prog=prog))
 
 
 def ndcg_score(y_true, y_score, *, k=None, sample_weight=None, ignore_ties=False, numeric_mode=None):
     """scikit-learn 1.9 `ndcg_score`: each row's DCG over its ideal DCG
-    (0 when the row has no relevant item)."""
+    (0 when the row has no relevant item), (weighted) averaged. The gains,
+    the per-row ratios (`rank_epi` NDCG_ROW: the binary64 quotient narrowed
+    to Float32), their (weighted) PairSum and the mean run in one device
+    program (lane cpu2-l7-metrics: no host epilogue over the rows)."""
     y, s = _relevance(y_true, y_score, "ndcg_score", indicator=False)
     n, c = y.shape
     if c <= 1:
         raise ValueError(f"Computing NDCG is only meaningful when there is more than 1 document. Got {c} instead.")
-    if y.min() < 0:
-        raise ValueError("ndcg_score should not be used on negative y_true values.")
     w = _weights(sample_weight, n, "ndcg_score")
-    D = _dcg_discount(c, 2)
     K = 0 if k is None else int(k)
     prog = _Prog()
-    S, Y = prog.put(s), prog.put(y)
-    Dt = prog.put(Array.from_list([_f32(v) for v in D], "<f4"))
-    gain = prog.alloc(n)
-    ideal = prog.alloc(n)
+    S, Y, _ = _relevance_put(prog, y, s, "ndcg_score", False)
+    neg = _scan_flag(prog, Y, y.size, _SCAN_NEGATIVE)
+    Dt = _dcg_table(prog, c, 2)
+    gain = prog.scratch(n)
+    ideal = prog.scratch(n)
+    ratio = prog.scratch(n)
     prog.stage("row_metric", n, S, c, Y, gain, _ROW["dcg_ignore_ties" if ignore_ties else "dcg"], K, Dt)
     prog.stage("row_metric", n, Y, c, Y, ideal, _ROW["dcg"], K, Dt)
-    prog.want(gain, n)
-    prog.want(ideal, n)
+    prog.stage("rank_epi", n, _RANK_NDCG_ROW, gain, ideal, n, ratio)
+    zero = prog.scratch(n)
+    prog.stage("pair_key", n, 0, 0, zero, 1, 2)
+    W = _NONE if w is None else prog.put(w)
+    tot = _group(prog, zero, n, 1, values=ratio, weights=W)[1]
+    sw = _group(prog, zero, n, 1, weights=W)[1] if w is not None else None
+    res = prog.alloc(2)
+    prog.stage("rank_epi", 1, _RANK_MEAN, tot, n, _NONE if sw is None else sw, 1, 0, res)
     _execute(prog, numeric_mode)
-    # x_metrics/epilogue.mojo ndcg_mean (lane py-misc-metrics): the ratios,
-    # products and fsums over the arena words; the Python fallback is gone
-    # (lane apple-fast-py2mojo-core: every install's binding carries it, and
-    # its refusals, a zero weight total or a non-finite term, cannot occur
-    # for validated weights and flushed Float32 gains)
-    waddr, keep = _f32_weights_addr(w)
-    if waddr is None:
-        keep = as_f32_c(w, ndim=1, name="sample_weight")[0]
-        waddr = addr_ro(keep, name="sample_weight")
-    prog._check(gain, n)
-    prog._check(ideal, n)
-    return float(_binding(numeric_mode).x_metrics_ndcg_mean(prog.arena.buffer_info()[0], gain, ideal, n, waddr))
+    if _flag_set(prog, neg):
+        raise ValueError("ndcg_score should not be used on negative y_true values.")
+    return float(prog.words(res, 2, "d")[0])
 
 
 def _label_ranking(kind, y_true, y_score, sample_weight, numeric_mode, caller):
@@ -2548,8 +2692,8 @@ def _label_ranking(kind, y_true, y_score, sample_weight, numeric_mode, caller):
     n, c = y.shape
     w = _weights(sample_weight, n, caller)
     prog = _Prog()
-    S, Y = prog.put(s), prog.put(y)
-    return float(_row_mean(S, c, Y, n, kind, w, numeric_mode, prog=prog))
+    S, Y, after = _relevance_put(prog, y, s, caller, True)
+    return float(_row_mean(S, c, Y, n, kind, w, numeric_mode, prog=prog, after=after))
 
 
 def coverage_error(y_true, y_score, *, sample_weight=None, numeric_mode=None):
@@ -2737,86 +2881,59 @@ def _cluster_inputs(X, labels, caller):
     return Xa, _codes(lab, classes), len(classes)
 
 
-class _Cents:
-    """lane py-misc-metrics: the centroid program left in place for the
-    host epilogue (x_metrics/epilogue.mojo centroids_f32, ch_extra,
-    db_score), which reads the per-cluster sums and the global sum words in
-    the arena instead of Python lists of k * d floats."""
-
-    def __init__(self, Xa, codes, k, numeric_mode):
-        n, d = Xa.shape
-        prog = _Prog()
-        X = prog.put(Xa)
-        L = prog.put_i32(codes)
-        off, self.sums = _group(prog, L, n, k, values=X, vstride=d, width=d)
-        zero = prog.scratch(n)
-        prog.stage("pair_key", n, 0, 0, zero, 1, 2)
-        _, self.gsum = _group(prog, zero, n, 1, values=X, vstride=d, width=d)
-        _execute(prog, numeric_mode)
-        o = prog.ints(off, k + 1)
-        self.counts = [o[i + 1] - o[i] for i in range(k)]
-        self.q = array.array("q", self.counts)
-        prog._check(self.sums, k * d)
-        prog._check(self.gsum, d)
-        self.prog, self.k, self.d = prog, k, d
-
-    def args(self):
-        return self.prog.arena.buffer_info()[0], self.sums
-
-    def f32(self, fn):
-        """The Float32 centroid words `_row_dists` uploads."""
-        k, d = self.k, self.d
-        out = empty((k * d,), "<f4")
-        fn(*self.args(), self.q.buffer_info()[0], k, d, addr_ro(out, name="centroids"))
-        return out
+#: cl_epi kinds (x_metrics/rank_epi.mojo, lane cpu2-l7-metrics S3b)
+_CL_CENT, _CL_CH_ROW, _CL_CH_FIN, _CL_DB_DIST, _CL_DB_FIN = 0, 1, 2, 3, 4
 
 
-def _cluster_native(Xa, codes, k, numeric_mode, name):
-    """(_Cents, the centroid entry, the score entry): every install's
-    binding carries both (the Python centroid fallback is gone, lane
-    pyglue-sweep: a present cluster's count is never 0)."""
-    return (_Cents(Xa, codes, k, numeric_mode), _epilogue("x_metrics_centroids", numeric_mode),
-            _epilogue(name, numeric_mode))
-
-
-def _row_dists_f32(Xa, codes, C32, k, root, numeric_mode):
-    """Per-cluster sums of the row distances to the Float32 centroid words."""
+def _cluster_score(X, labels, numeric_mode, caller, db):
+    """calinski_harabasz_score (db False) or davies_bouldin_score (db True)
+    as ONE device program (lane cpu2-l7-metrics S3b): the per-cluster and
+    global column sums (group sums), the centroids (`cl_epi` CENT: binary64
+    sums / counts, and their Float32 words), the row distances to the
+    Float32 centroids (row_centroid_dist, PairSum, sqrt for DB) and their
+    per-cluster sums, then CH_ROW + CH_FIN or DB_DIST + DB_FIN in binary64.
+    The host centroid / ch_extra / db_score epilogues, the Python count
+    differences and the second upload of X are gone; one binary64 word
+    comes back."""
+    Xa, codes, k = _cluster_inputs(X, labels, caller)
     n, d = Xa.shape
     prog = _Prog()
-    X = prog.put(Xa)
+    X0 = prog.put(Xa)
     L = prog.put_i32(codes)
-    C = prog.put(C32)
-    out = prog.scratch(n)
-    prog.stage("row_centroid_dist", n, X, d, L, C, out, 1 if root else 0)
-    off, per = _group(prog, L, n, k, values=out)
+    off, sums = _group(prog, L, n, k, values=X0, vstride=d, width=d)
+    C32 = prog.scratch(k * d)
+    CB = prog.scratch(2 * k * d)
+    prog.stage("cl_epi", k * d, _CL_CENT, off, sums, k, d, C32, CB)
+    dist = prog.scratch(n)
+    prog.stage("row_centroid_dist", n, X0, d, L, C32, dist, 1 if db else 0)
+    _, per = _group(prog, L, n, k, values=dist)
+    res = prog.want(prog.alloc(2), 2)
+    if db:
+        D = prog.scratch(2 * k * k)
+        prog.stage("cl_epi", k * k, _CL_DB_DIST, CB, k, d, D)
+        prog.stage("cl_epi", 1, _CL_DB_FIN, off, per, D, k, res)
+    else:
+        zero = prog.scratch(n)
+        prog.stage("pair_key", n, 0, 0, zero, 1, 2)
+        _, gsum = _group(prog, zero, n, 1, values=X0, vstride=d, width=d)
+        inner = prog.scratch(2 * k)
+        prog.stage("cl_epi", k, _CL_CH_ROW, CB, gsum, n, d, k, inner)
+        prog.stage("cl_epi", 1, _CL_CH_FIN, off, inner, per, n, k, res)
     _execute(prog, numeric_mode)
-    return prog.floats(per, k)
+    return float(prog.words(res, 2, "d")[0])
 
 
 def calinski_harabasz_score(X, labels, *, numeric_mode=None):
     """scikit-learn 1.9 `calinski_harabasz_score`: the between- over the
-    within-cluster dispersion, scaled by (n - k) / (k - 1)
-    (x_metrics/epilogue.mojo centroids_f32 and ch_extra, lane
-    py-misc-metrics)."""
-    Xa, codes, k = _cluster_inputs(X, labels, "calinski_harabasz_score")
-    n, d = Xa.shape
-    cen, cfn, sfn = _cluster_native(Xa, codes, k, numeric_mode, "x_metrics_ch_extra")
-    C32 = cen.f32(cfn)
-    extra = float(sfn(*cen.args(), cen.gsum, cen.q.buffer_info()[0], k, d, n))
-    intra = _fsum(_row_dists_f32(Xa, codes, C32, k, False, numeric_mode))
-    return float(1.0 if intra == 0.0 else extra * (n - k) / (intra * (k - 1.0)))
+    within-cluster dispersion, scaled by (n - k) / (k - 1), in one device
+    program (`_cluster_score`)."""
+    return _cluster_score(X, labels, numeric_mode, "calinski_harabasz_score", False)
 
 
 def davies_bouldin_score(X, labels, *, numeric_mode=None):
     """scikit-learn 1.9 `davies_bouldin_score`: the mean over clusters of the
-    worst (s_i + s_j) / d(c_i, c_j) (x_metrics/epilogue.mojo centroids_f32
-    and db_score, lane py-misc-metrics)."""
-    Xa, codes, k = _cluster_inputs(X, labels, "davies_bouldin_score")
-    n, d = Xa.shape
-    cen, cfn, sfn = _cluster_native(Xa, codes, k, numeric_mode, "x_metrics_db_score")
-    C32 = cen.f32(cfn)
-    per = array.array("d", _row_dists_f32(Xa, codes, C32, k, True, numeric_mode))
-    return float(sfn(*cen.args(), cen.q.buffer_info()[0], k, d, per.buffer_info()[0]))
+    worst (s_i + s_j) / d(c_i, c_j), in one device program (`_cluster_score`)."""
+    return _cluster_score(X, labels, numeric_mode, "davies_bouldin_score", True)
 
 
 # ---------------------------------------------------------------------------

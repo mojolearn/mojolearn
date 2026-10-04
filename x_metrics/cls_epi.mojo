@@ -19,21 +19,17 @@ Python's float() widened it.
 
 One unit (t = 0) over k <= L labels: an O(k) fold next to the O(n) sums.
 
-IDENTICAL only, ON by default; -D MOJOLEARN_IDN_CLS_EPI_OFF (or
-MOJOLEARN_IDN_ALL_OFF) leaves the op empty and the binding reports it
-(`x_metrics_idn_fam2`), so the Python epilogue runs.
+ON in both numeric modes, the only route (lane cpu2-l7-metrics, 2026-10-04:
+the Python epilogue left the GPU route; MOJOLEARN_IDN_CLS_EPI_OFF and the
+IDENTICAL-only gate are gone). `IDN_CLS_EPI` stays True for the bindings'
+`x_metrics_idn_fam2` report.
 """
-from std.sys.compile import is_defined
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.soft_f64 import (
     SF64_NAN, SF64_ZERO, SF64_ONE, sf64_add, sf64_sub, sf64_mul, sf64_div, sf64_is_nan, sf64_from_int, sf64_from_f32,
 )
 from x_metrics.common import FP, IP, p, ld, ldi, sti, ldu, stu
 
-comptime IDN_CLS_EPI = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (is_defined["MOJOLEARN_IDN_CLS_EPI_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-)
+comptime IDN_CLS_EPI = True
 comptime OP_CLS_EPI = 55
 
 comptime KIND_JACCARD = 0

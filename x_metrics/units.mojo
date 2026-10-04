@@ -19,16 +19,23 @@ from x_metrics.par import (
     ck_cnt_unit, ck_off_unit, ck_fill_unit,
     curve_fold_unit, cf_chunk_unit, cf_final_unit, wpct_csum_unit, wpct_coff_unit, wpct_cfill_unit,
 )
-from x_metrics.cls_epi import IDN_CLS_EPI, cls_epi_unit
+from x_metrics.cls_epi import cls_epi_unit
+from x_metrics.tail import off_diff_unit, flag_scan_unit, proba_rows_unit
+from x_metrics.cm_epi import cm_epi_unit
+from x_metrics.reg_epi import reg_epi_unit
+from x_metrics.rank_epi import rank_epi_unit, cl_epi_unit
 
 #: ops 0..10, 36 (fold_rows), 41 (rows64), 45 (strat_codes) (lane metrics-apple2) and 46
 #: (curve_fold, lane cgr2-metrics-shap) are the caller's (x_metrics/plan.mojo
 #: `is_user_op`); the others are the planner's parallel schedules
 #: (x_metrics/par.mojo). 23 and 25 (the retired sequential prefixes) run nothing.
 #: 52..54 (onehot, rep_rows, pair_cols; lane apple-fast-py2mojo-core) are the caller's too.
-#: 55 (cls_epi, x_metrics/cls_epi.mojo; lane fam2-prep-metrics) is the caller's; it is empty
-#: unless IDN_CLS_EPI (IDENTICAL, -D MOJOLEARN_IDN_CLS_EPI_OFF off), and `is_user_op` refuses it then.
-comptime N_OPS = 56
+#: 55 (cls_epi, x_metrics/cls_epi.mojo; lane fam2-prep-metrics) is the caller's, ON in both
+#: numeric modes since lane cpu2-l7-metrics (2026-10-04: the Python epilogue left the GPU route).
+#: 56..62 (lane cpu2-l7-metrics) are the caller's: off_diff, flag_scan, proba_rows
+#: (x_metrics/tail.mojo), cm_epi (x_metrics/cm_epi.mojo), reg_epi (x_metrics/reg_epi.mojo),
+#: rank_epi and cl_epi (x_metrics/rank_epi.mojo): the metric tails and scans on the device.
+comptime N_OPS = 63
 
 
 @always_inline
@@ -139,6 +146,19 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         rep_rows_unit(t, f, q)
     comptime if OP == 54:
         pair_cols_unit(t, f, q)
-    comptime if IDN_CLS_EPI:
-        comptime if OP == 55:
-            cls_epi_unit(t, f, q)
+    comptime if OP == 55:
+        cls_epi_unit(t, f, q)
+    comptime if OP == 56:
+        off_diff_unit(t, f, q)
+    comptime if OP == 57:
+        flag_scan_unit(t, f, q)
+    comptime if OP == 58:
+        proba_rows_unit(t, f, q)
+    comptime if OP == 59:
+        cm_epi_unit(t, f, q)
+    comptime if OP == 60:
+        reg_epi_unit(t, f, q)
+    comptime if OP == 61:
+        rank_epi_unit(t, f, q)
+    comptime if OP == 62:
+        cl_epi_unit(t, f, q)

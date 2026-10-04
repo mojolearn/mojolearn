@@ -243,14 +243,12 @@ def _r2_sums(pred, y):
     pyglue-sweep (Oct 3): these were sequential Python float64 loops over
     the rows (DEVIATION 2365); the bits of `score()` move. Callers apply
     their own convention for `SS_tot == 0`."""
-    from ._expansion_metrics import _Reg, _centered, _centered_sse, _diff_and_y_means
+    from ._expansion_metrics import _Reg, _r2_sums_of
     t, _ = as_f32_c(y, ndim=1, name="y")
     p, _ = as_f32_c(pred, ndim=1, name="predictions")
     r = _Reg(t, p, None, "uniform_average", "score", variance_ok=True)
-    ss_res = _centered_sse(r, None)[0]
-    _, y_mean = _diff_and_y_means(r, None)
-    ss_tot = _centered(r, "y", y_mean, None, mean=False)[0]
-    return float(ss_res), float(ss_tot)
+    # lane cpu2-l7-metrics: one program, the y mean rounded on the device
+    return _r2_sums_of(r, None)
 
 
 def _r2_host(pred, y):
