@@ -24,14 +24,15 @@ def digest(path):
     return h.hexdigest()
 
 
-def main():
-    source, tag, ibase_source = sys.argv[1:]
+def verify_artifacts(source, ibase_source):
     assert re.fullmatch('[0-9a-f]{40}', source)
     assert re.fullmatch('[0-9a-f]{40}', ibase_source)
-    assert re.fullmatch('[A-Za-z0-9_.-]+', tag)
     root = Path(__file__).resolve().parents[1]
     os.chdir(root)
-    assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip() == source
+    harness = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+    subprocess.run(['git', 'merge-base', '--is-ancestor', source, harness], check=True)
+    drift = subprocess.check_output(['git', 'diff', '--name-only', source, harness], text=True).splitlines()
+    assert all(p.startswith(('tools/', 'docs/')) for p in drift), drift
     subprocess.run(['git', 'diff', '--exit-code', 'HEAD', '--'], check=True, stdout=subprocess.DEVNULL)
     assert not subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard'], text=True).strip()
     assert 'Apple M3 Ultra' in subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True)
@@ -55,6 +56,13 @@ def main():
     allowed = {'resample/estimator.mojo', 'resample/gather_fast.mojo',
                'bindings/_mojolearn_resample.mojo', 'python/mojolearn/resample.py'}
     assert all(p in allowed or p.startswith(('tools/', 'docs/')) for p in changed), changed
+    return root, arms, hashes, bm, base_binary, harness
+
+
+def main():
+    source, tag, ibase_source = sys.argv[1:]
+    assert re.fullmatch('[A-Za-z0-9_.-]+', tag)
+    root, arms, hashes, bm, base_binary, harness = verify_artifacts(source, ibase_source)
     out = Path.home() / 'mq/out' / (tag + '-quality')
     out.mkdir(parents=True, exist_ok=False)
     pkg = root / 'python/mojolearn'
@@ -91,7 +99,7 @@ def main():
                 assert a[key].shape == b[key].shape and a[key].dtype == b[key].dtype
                 assert a[key].tobytes() == b[key].tobytes(), key
         assert records['A']['refusals'] == records['B']['refusals']
-        receipt = dict(status='PASS', fixture=FIXTURE, source_sha=source, hashes=hashes,
+        receipt = dict(status='PASS', fixture=FIXTURE, source_sha=source, harness_source=harness, hashes=hashes,
                        defines_A='', defines_B=DEFINE, ibase_source=ibase_source,
                        ibase_sha256=bm['sha256'], arrays=records['A']['arrays'], records=records,
                        quality_script_sha256=digest(root / 'tools/resample_gpu_gather_quality.py'))
