@@ -2000,6 +2000,24 @@ comptime RESAMPLE_IDX_DIRECT = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_appl
                                 and not is_defined["MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF"]())
 
 
+# lane/apple-fast-w2-clres (2026-10-04), OPEN, opt-in. resample's row gather
+# stays on the host (a device gather downloads the output at ~3 GB/s through
+# Metal, slower than the gather; docs/apple-fast/EXPERIMENTS.md RESAMPLE_FAST_GATHER),
+# but python/mojolearn/resample.py takes a faster host form of the SAME copy
+# when this build says so (`resample_fast_flags` in the binding):
+#  * -D MOJOLEARN_RESAMPLE_FAST_W2_TAKE: `numpy.take(a, idx, axis=0,
+#    mode='clip')` (one memmove per row) instead of `a[idx]` (the advanced
+#    index iterator); the drawn indices are always in range, so the same rows.
+#  * -D MOJOLEARN_RESAMPLE_FAST_W2_OUTPOOL: TAKE written into an output buffer
+#    reused between calls (returned to a small pool when the caller drops the
+#    result), so a repeated resample of a 1M-row matrix does not fault in a
+#    fresh 880 MB output on every call. Same bytes in every output.
+comptime RESAMPLE_W2_TAKE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                             and is_defined["MOJOLEARN_RESAMPLE_FAST_W2_TAKE"]())
+comptime RESAMPLE_W2_OUTPOOL = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                                and is_defined["MOJOLEARN_RESAMPLE_FAST_W2_OUTPOOL"]())
+
+
 def resample_indices_replace_into(
     n: Int, count: Int, seed: UInt64, dst: MutPointer[Int32, MutUntrackedOrigin], tpb: Int = 256
 ) raises:

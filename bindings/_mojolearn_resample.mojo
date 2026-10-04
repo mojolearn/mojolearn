@@ -40,6 +40,8 @@ from resample.estimator import (
     resample_indices_host,
     resample_indices_replace_into,
     RESAMPLE_IDX_DIRECT,
+    RESAMPLE_W2_OUTPOOL,
+    RESAMPLE_W2_TAKE,
 )
 
 
@@ -55,6 +57,18 @@ def resample_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER as the `NUMERIC_*` code: 0 FAST, 1 IDENTICAL, 2
     DETERMINISTIC."""
     return PythonObject(GLOBAL_NUMERIC_MODE)
+
+
+def resample_fast_flags_binding() raises -> PythonObject:
+    """The host gather forms `resample` may take in this build (lane
+    apple-fast-w2-clres, FAST + Apple only, both opt-in): bit 0
+    `RESAMPLE_W2_TAKE`, bit 1 `RESAMPLE_W2_OUTPOOL`; 0 = `a[idx]`."""
+    var f = 0
+    comptime if RESAMPLE_W2_TAKE:
+        f |= 1
+    comptime if RESAMPLE_W2_OUTPOOL:
+        f |= 2
+    return PythonObject(f)
 
 
 def resample_vendor_binding() raises -> PythonObject:
@@ -501,6 +515,7 @@ def PyInit__mojolearn_resample() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_resample")
         m.def_function[resample_ranges_parallel_available]("resample_ranges_parallel_available")
         m.def_function[resample_vendor_binding]("resample_vendor")
+        m.def_function[resample_fast_flags_binding]("resample_fast_flags")
         m.def_function[resample_numeric_mode_binding]("resample_numeric_mode")
         m.def_function[bootstrap_binding]("bootstrap")
         m.def_function[bootstrap_unpaired_binding]("bootstrap_unpaired")
