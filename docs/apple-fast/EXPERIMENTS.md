@@ -14,7 +14,8 @@ Sources: `~/mojolearn-evidence/apple-fast/LEDGER.md` (every KEEP / DROP / MERGED
 
 - **Winners** become FAST + Apple defaults. Each one gets a `<NAME>_OFF` define that restores the old path, and a code comment citing its A/B (tag and numbers). IDENTICAL mode never changes.
 - **Losers are not kept in main's code.** They stay on their branch at the recorded sha. A dropped define that is still on main is a dead toggle; a cleanup lane removes those.
-- Quality comes before speed: a faster arm with worse quality is DROPPED-quality, and a slower arm with better quality can be KEPT (see `X_PREP_CLASS_COV_GRID`).
+- **User clarification (Oct 4):** "it is OK if bits change for fast work.. do you understand that? but quality cannot go down beyond noise". FAST does not require bit identity; judge quality using the relevant metric and measured noise. A quality change beyond noise is DROPPED-quality; a bit change alone is not a failure. A slower arm with better quality can be KEPT (see `X_PREP_CLASS_COV_GRID`).
+- Keep concise evidence comments next to surviving failed or held opt-in toggles: dataset, A/B tag, measured effect, status, and this record. Distinguish an inconclusive/noise result or an old-base hold from an established regression; a bundle failure does not prove each component failed alone. Do not restore deleted code to annotate it.
 
 ## Verdicts
 
@@ -378,12 +379,12 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `HDB_ONE_SYNC` | hdbscan / istella; hdbscan / taxi | lane/apple-fast-batchv @ c8251211d | batchv-hdb-onesync-taxi, batchv-hdb-onesync-istella | taxi 424.7 -> 425.5 (+0.2%); istella 3,809 -> 3,829 (+0.5%, SMR on both) | DROP | clusters identical; old-base -5% did not carry; opt-in only |
 | `HDB_SELECT_DEVICE` | hdbscan / istella; hdbscan / taxi | lane/apple-fast-hdbscan2 @ 2fdb9114f | hdbscan2-select-taxi, hdbscan2-select-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `HDB_SMR_TILED` | hdbscan / istella; hdbscan / taxi | lane/apple-fast-batchv @ c7ede6e47 | batchv-hdb-smr-istella, batchv-hdb-smr-taxi | istella 44,879 -> 3,800 (-91.5%); taxi 426 -> 434 (+2%, noise: taxi takes the d <= 64 arm) | KEEP (FAST + Apple default, _OFF) | vs main, one run per arm; n_clusters 47 / noise 0.25381 (istella), 160 / 0.14222 (taxi) identical both arms |
-| `OPTICS2_ALL` | optics / istella; optics / taxi | lane/apple-fast-optics2 @ 3e192fdb7 | optics2-all-istella, optics2-all-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `OPTICS_CORE_SQ` | optics / istella; optics / taxi | lane/apple-fast-optics2 @ 3e192fdb7 | optics2-sq-istella, optics2-sq-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `OPTICS2_ALL` | optics / istella; optics / taxi | lane/apple-fast-batch @ 3150d75c1 | optics2-all-taxi-x | taxi 411 -> 34,474 (84x slower) | DROP | includes STEP_BATCH; never merged |
+| `OPTICS_CORE_SQ` | optics / istella; optics / taxi | lane/apple-fast-batch @ 3150d75c1 | optics2-sq-taxi-x | taxi +6.1% | DROP | never merged |
 | `OPTICS_FAST_DEVICE_ORDER` | optics / istella | lane/apple-fast-cluster2 @ ded4ea07b | cluster2-optics-devorder-istella | - | OPEN | A/B queued, no judged result yet |
-| `OPTICS_FRONTIER_DEVICE` | optics / istella; optics / taxi | lane/apple-fast-optics2 @ 3e192fdb7 | optics2-fd-istella, optics2-fd-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `OPTICS_LIVEBUF` | optics / istella; optics / taxi | lane/apple-fast-optics2 @ 3e192fdb7 | optics2-lb-istella, optics2-lb-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `OPTICS_STEP_BATCH` | optics / istella; optics / taxi | lane/apple-fast-optics2 @ 3e192fdb7 | optics2-sb-istella, optics2-sb-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `OPTICS_FRONTIER_DEVICE` | optics / istella; optics / taxi | lane/apple-fast-opv @ 9a844772e | opv-fd-istella, opv-fd-taxi (old base: optics2-fd-istella-x 433 -> 259) | vs main istella 272.8 -> 272.0 (-0.3%); taxi 253.3 -> 250.5 (-1.1%) | DROP | main's OPTICS_FAST_DEVICE_ORDER (cluster2) already took the gain; clusters/silhouette identical; never merged |
+| `OPTICS_LIVEBUF` | optics / istella; optics / taxi | lane/apple-fast-opv @ 9a844772e | opv-lb-istella, opv-lb-taxi (old base -8.6%) | vs main istella 271.4 -> 405.8 (+50%); taxi 253.1 -> 383.4 (+52%) | DROP | turns on optics2's route, which bypasses main's faster device order; never merged |
+| `OPTICS_STEP_BATCH` | optics / istella; optics / taxi | lane/apple-fast-batch @ 3150d75c1 | optics2-sb-taxi-x | taxi 416 -> 22,564 (54x slower) | DROP | never merged |
 | `X_CLUSTER_FAST_CLS2_MBK_G128 / _MBK_FIN / _MBK_POOL` | minibatch-kmeans / istella | lane/apple-fast-gap-cls2 @ 72602a339 | gapcls2-* | - | OPEN | merge guard: never default MBK_FIN (one-block kernel) |
 | MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL | minibatch-kmeans / istella, taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-pool-mbk-{istella,taxi} | 256.7 -> 170.7, 42.5 -> 38.1 | KEEP, FAST+Apple default (`_OFF` off) | pooled X buffer; quality identical (n=1) |
 | MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_G128 | minibatch-kmeans / istella, taxi | lane/apple-fast-gap-cls2@72602a339 (deleted before merge) | gapcls2-g128-mbk-{istella,taxi} | +14%, +22% | DROP, deleted before merge | slower |
@@ -597,3 +598,48 @@ Fixes of UNOWNED rows of `tools/hooks/host_routes_baseline.tsv`. Arm A of each A
 |---|---|---|---|---|---|---|
 | `KPCA_FAST_LANCZOS_DEV` | kernel-pca / taxi; kernel-pca / istella | lane/apple-fast-gap-linalg2-kpca @ 134dca742 | gl2k-kpca-lzdev-taxi, gl2k-kpca-lzdev-istella | kernel-pca taxi -9%; istella -12.5% | KEPT | M2 quality-only gl2k-kpca-quality-r3: eig rel diff 1.795e-07, transform angle 1.879e-06 rad; FAST+Apple default, -D MOJOLEARN_KPCA_FAST_LANCZOS_DEV_OFF reverts |
 | `IPCA_FAST_DEV` | incremental-pca / taxi | lane/apple-fast-gap-linalg2-kpca @ 134dca742 | gl2k-ipca-dev-taxi | incremental-pca taxi 159 -> 136 | KEPT | -14.5%; output digest bit-identical; each batch stacked on the device, public arrays read once; FAST+Apple default, -D MOJOLEARN_IPCA_FAST_DEV_OFF reverts |
+
+## Oct 4 manager takeover
+
+FAST bit changes are allowed. Acceptance requires faster M3 timing and no quality decline beyond noise; bitwise identity is sufficient evidence in some cases, not a universal requirement. Near-noise single-run results remain inconclusive.
+
+| Experiment | Branch / measured head | M3 tag | A → B (ms) | Quality | Verdict |
+|---|---|---|---|---|---|
+| SGDOC_FAST_PAR, Istella | lane/apple-fast-sgdoc-parallel @ 61710a5c8 | sgdocp-istella | 75537.985 → 181.313 | J .10000456 → .1; flagged .04042 → 0 | HOLD: anomaly behavior unresolved; old-base comparator |
+| SGDOC_FAST_PAR, taxi | lane/apple-fast-sgdoc-parallel @ 61710a5c8 | sgdocp-taxi | 58334.248 → 16.521 | candidate J .1, flagged 0 | HOLD: anomaly behavior unresolved; current-main comparison owed |
+| ARIMA_FUSED_EVAL_TAIL | lane/apple-fast-arima-batched @ 1a627f709; kernel 217e821e5 | gap26-arima-tail-synthetic / taxi-hourly | synthetic 14498.225 → 13569.230 (-6.4%); taxi-hourly 24231.028 → 22705.348 (-6.3%) | Both digests and RMSE unchanged; gap26-arima-quality-fixed PASS, 44 byte-identical selected-order/parameter/likelihood/forecast arrays | KEEP: default/OFF promotion 311d5233e; taxi RMSE 74.6591 remains worse than opponent 68.21, quality gap under review |
+| EIGH_FAST_TANGENT | lane/apple-fast-linalg-20261004 | gap26-eigh-tangent (proposed) | Pending | residual/eigenvalue error/orthogonality required | OPEN; first compile alias error fixed, rebuild pending |
+| MCD_BATCH_COMPAT | lane/apple-fast-mcd-exact | gap26-mcdcompat-taxi (proposed) | Pending | fitted covariance, precision, support, Mahalanobis distances, predictions | OPEN; compilation pending |
+| ARIMA_EXACT_STEADY | lane/apple-fast-arima-batched @ a670ce8c2 (removed in 217e821e5) | NOT RUN | No new timing | Equivalent to earlier failed P_FIX covariance fixed-point experiment | ABANDONED before M3; prior P_FIX +165%, combined ASYNC +22–64%; avoids duplicate experiment |
+| SYM_CTR_PERM_BATCH | lane/apple-fast-batch @ 3150d75c1 | sym-ctr-perm-batch-taxicat-x | 27161 → 27196 (+0.1%) | AUC .630994 → .631048, logloss .528561 → .528534 | DROP-speed: no gain on old base |
+| CTR_PREP_SHARED | lane/apple-fast-batch @ 3150d75c1 | sym-ctr-prep-shared-taxicat-x | 27548 → 26357 (-4.3%) | AUC .631249 → .630964; noise not established | HOLD: old base; quality decline requires assessment before any current-main verification |
+| CTR_INDEX_FUSED | lane/apple-fast-batch @ 3150d75c1 | sym-ctr-index-fused-taxicat-x | 27240 → 25566 (-6.1%) | AUC .630808 → .630766; logloss .528548 → .528535 | HOLD: old base; candidate only, no merge without current-main A/B and quality |
+
+Gap26 accounting evidence and converted arm-B records: [ab/gap26/README.md](ab/gap26/README.md). Label-direct experiment verdict is owned by its promotion branch; its two measured board cells and independent quality receipt are preserved in this accounting bundle.
+
+
+## Label-direct promotion (2026-10-04)
+
+| define | algorithm / dataset | measured branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_LABEL_DIRECT` -> `MOJOLEARN_LABEL_DIRECT_OFF` | label-binarizer / taxi, istella | lane/apple-fast-label-direct @ dbe2ab85a (base35a72c5ac) | gap26-label-taxi, gap26-label-istella; quality gap26-label-quality | taxi348.254458 -> 327.625833; istella33.176500 -> 27.578792 | KEEP, default merged on main1975c2dc5 | One M3 run/arm, -5.9%/-16.9%, respective digests0703e6f6396640c4/de224838a841fa8c identical. Independent public-output oracle PASS both arms, 41,697,776 cells each, fitted classes/codes/inverse checked. Source review against main61ea51757: relevant drift comments only. Manager verified default/OFF builds rc0 before merge. |
+
+Quality review: `tools/label_fast_quality.py` checks every LabelBinarizer
+training/query indicator against an independent definition, actual fitted
+classes, inverse-transform values and LabelEncoder codes. It also checks
+MultiLabelBinarizer classes and train/query indicators, including empty rows,
+unseen labels and duplicates. Covered numeric cases include257 classes,
+sparse integer ranges, binary/single class, negative/range/fractional fallbacks,
+signed zero, and non-default positive/negative output labels. Actual bounded
+M3 log reports `LABEL-FAST-QUALITY status=PASS checked_cells=41697776 captures=84`
+for both arms followed by `QUALITY-PAIR-PASS gap26-label`.
+
+The wrapper did not request `--dump`, so it did not compare84 saved arrays
+between arms; each arm independently passed the mathematical oracle. Board
+quality itself is only output_shape and is insufficient alone; the oracle and
+unchanged board digests provide the quality evidence. Coverage gaps: invalid
+NaN/Inf labels, integers not exactly representable as FP32, noncontiguous/empty
+input, string/bool fallbacks and MultiLabelBinarizer inverse are not explicitly
+exercised. These remain on existing guarded fallback routes; no claim is made
+that those cases were tested. Encoder/multilabel correctness was checked but
+speed was measured only for LabelBinarizer; do not update their timing rows.
