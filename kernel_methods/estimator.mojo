@@ -187,10 +187,27 @@ def _upload(
 #: (`read_f32`, fresh pages), a serial host finiteness walk and a second
 #: copy into a fresh pinned stage (`_upload`). The same X words reach the
 #: same kernels: bit-inert; the same refusal text.
-comptime KM_FAST_PTR_IN = (
+#:
+#: fam-kernel-gp (2026-10-04): IDENTICAL takes the same route on every
+#: vendor, ON by default (`KM_IDN_PTR_IN`; `-D MOJOLEARN_IDN_KM_PTR_IN_OFF`
+#: restores the owned host copy, the host walk and the staged upload). The
+#: transforms' X is the one large operand (n_rows x n_features), and it
+#: crossed host memory three times on one thread before the first launch.
+comptime KM_IDN_PTR_IN = _CTX_MODE == _CTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_KM_PTR_IN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime KM_FAST_PTR_IN = KM_IDN_PTR_IN or (
     _CTX_MODE == _NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_KM_FAST_PTR_IN_OFF"]()
+)
+
+#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF` restores the appends):
+#: `_download` fills a list of the final length 8 floats a step instead of n
+#: appends into a growing one. The same words: no bit moves.
+comptime KM_IDN_BULK_DOWNLOAD = _CTX_MODE == _CTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
 
@@ -236,6 +253,20 @@ def _download(
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
     ctx.synchronize()
+    comptime if KM_IDN_BULK_DOWNLOAD:
+        var packed = List[Float32](unsafe_uninit_length=n)
+        var pdst = packed.unsafe_ptr()
+        var psrc = h.unsafe_ptr()
+        var pi = 0
+        var pbody = n - n % 8
+        while pi < pbody:
+            pdst.unsafe_store[width=8](pi, psrc.unsafe_load[width=8](pi))
+            pi += 8
+        while pi < n:
+            pdst.unsafe_store(pi, psrc.unsafe_load(pi))
+            pi += 1
+        _ = h^
+        return packed^
     var out = List[Float32]()
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
