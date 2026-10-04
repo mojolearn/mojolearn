@@ -20,6 +20,8 @@ from x_prep.py2mojo import PY2MOJO_PREP
 from x_prep.prep3 import PREP3_MAXABS
 from x_prep.fastmaxabs import maxabs_fit_direct
 
+from x_prep.fastpt import PTIMPUTE_FLAGS
+
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
                 stages: PythonObject) raises -> PythonObject:
@@ -221,6 +223,14 @@ def cls2_cat_binding() raises -> PythonObject:
     return PythonObject(f)
 
 
+def ptimpute_flags_binding() raises -> PythonObject:
+    """Lane af-ptimpute (FAST + Apple, each switch its own define, default off):
+    the bits of x_prep/fastpt.mojo PTIMPUTE_FLAGS (1 PT_COLBATCH, 2 PT_SPEC,
+    4 PT_FUSED_TRANSFORM, 8 SI_ONEPASS, 16 PT_FOLD_NOX); registered only
+    when one is on, so the Python layer's probe is the switch."""
+    return PythonObject(PTIMPUTE_FLAGS)
+
+
 def calib_folds_binding() raises -> PythonObject:
     """Lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_CALIB_GNB_FOLDS_OFF turns it off):
     the CalibratedClassifierCV(GaussianNB) program's constants [words per
@@ -268,6 +278,8 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
             m.def_function[calib_folds_binding]("x_prep_calib_folds")
         comptime if PY2MOJO_PREP:
             m.def_function[py2mojo_binding]("x_prep_py2mojo")
+        comptime if PTIMPUTE_FLAGS != 0:
+            m.def_function[ptimpute_flags_binding]("x_prep_ptimpute_flags")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_prep: ", e))

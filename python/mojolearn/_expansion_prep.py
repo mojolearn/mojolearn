@@ -253,6 +253,31 @@ def _col_stats(pr, xo, n, d, out, var=True):
         pr.stage("colb_var", d, ss, nb, d, out)
 
 
+#: lane af-ptimpute (2026-10-03): binding -> the bits of `x_prep_ptimpute_flags`
+#: (bindings/_mojolearn_x_prep.mojo, x_prep/fastpt.mojo PTIMPUTE_FLAGS: 1
+#: PT_COLBATCH, 2 PT_SPEC, 4 PT_FUSED_TRANSFORM, 8 SI_ONEPASS, 16 PT_FOLD_NOX),
+#: probed once per binding; 0 on a build without them (every other tier and
+#: vendor, and the host). The device's own comptime switches do the fusing;
+#: a program only shrinks the arena blocks the device no longer touches.
+_PTIMPUTE_FLAGS = {}
+#: PT_SPEC: the FAST search speculates this many golden steps a round (2^3 - 1
+#: = 7 candidates, x_prep/fastpt.mojo PT_MAXM); no candidates' buffer exists,
+#: so `_pt_spec_depth`'s 2^28-word cap does not apply. Fixed: no env read.
+_PT_FAST_SPEC = 3
+
+
+def _ptimpute_flags(mode):
+    if mode != "fast":
+        return 0
+    binding = _prep_binding(mode)
+    key = id(binding)
+    v = _PTIMPUTE_FLAGS.get(key)
+    if v is None:
+        entry = _optional_prep_entry(binding, "x_prep_ptimpute_flags")
+        v = _PTIMPUTE_FLAGS[key] = int(entry()) if entry is not None else 0
+    return v
+
+
 #: lane/apple-fast-prep2: the QSELECT switch, read once at import (not on a fit path)
 _X_PREP2_QSELECT = os.environ.get("MOJOLEARN_X_PREP_FAST_QSELECT") == "1"
 
@@ -3194,18 +3219,32 @@ class PowerTransformer(_PrepBase):
             # the device: pt_fit_unit's golden-section search as stages (x_prep/transform.mojo),
             # each element's logarithm once, the transform of every element at once per
             # evaluation, then the column folds
-            spec = _pt_spec_depth(n, d) if mode == "identical" else 0
+            # lane af-ptimpute (FAST + Apple builds with the defines, `_ptimpute_flags`): the
+            # device folds each evaluation as a row-tiled grid with the transform in registers
+            # (x_prep/fastpt.mojo), so the T and LG blocks are never read or written: they shrink
+            # to a word and `pt_log` is not staged. PT_SPEC (bit 2) runs that fold over the
+            # speculated search's candidates; PT_COLBATCH (bit 1) over the staged search.
+            flags = _ptimpute_flags(mode)
+            tiled = bool(flags & 1)
+            if flags & 2:
+                spec = _PT_FAST_SPEC
+            else:
+                spec = _pt_spec_depth(n, d) if mode == "identical" else 0
             if spec:
                 # the search speculated `spec` evaluations deep (transform.mojo pt_spts ..
                 # pt_sres): the same points, values and decisions, fewer dependent folds
                 mmax = max(2 ** spec - 1, 2)   # the opening round's two points (see _pt_spec_depth)
                 # the candidates' transforms: contiguous per candidate (0) or one row's side by side (1)
-                il = 1 if os.environ.get("MOJOLEARN_XPREP_PT_INTERLEAVE", "0") == "1" else 0
+                il = 0 if tiled else (1 if os.environ.get("MOJOLEARN_XPREP_PT_INTERLEAVE", "0") == "1" else 0)
                 state, leval = pr.alloc(_PT_STATE * d), pr.alloc(d)
                 spl, vals = pr.alloc(d * mmax), pr.alloc(d * mmax)
-                lg, tv = pr.scratch(n * d), pr.scratch(n * d * mmax)
+                if tiled:
+                    lg, tv = pr.scratch(1), pr.scratch(1)
+                else:
+                    lg, tv = pr.scratch(n * d), pr.scratch(n * d * mmax)
                 pr.stage("pt_init", d, method, st, d, lam, state, leval)
-                pr.stage("pt_log", n * d, xo, n, d, method, lg)
+                if not tiled:
+                    pr.stage("pt_log", n * d, xo, n, d, method, lg)
                 k0 = 0
                 while k0 <= _PT_EVALS - 2:
                     steps = 2 if k0 == 0 else min(spec, _PT_EVALS - 1 - k0)
@@ -3216,15 +3255,22 @@ class PowerTransformer(_PrepBase):
                     pr.stage("pt_sres", d, state, leval, m, vals, k0, steps, lam)
                     k0 += steps
             else:
-                state, leval, tv, lg = pr.alloc(_PT_STATE * d), pr.alloc(d), pr.alloc(n * d), pr.alloc(n * d)
+                state, leval = pr.alloc(_PT_STATE * d), pr.alloc(d)
+                tv, lg = (pr.alloc(1), pr.alloc(1)) if tiled else (pr.alloc(n * d), pr.alloc(n * d))
                 pr.stage("pt_init", d, method, st, d, lam, state, leval)
-                pr.stage("pt_log", n * d, xo, n, d, method, lg)
+                if not tiled:
+                    pr.stage("pt_log", n * d, xo, n, d, method, lg)
                 for k in range(_PT_EVALS):
-                    pr.stage("pt_map", n * d, xo, n, d, method, leval, tv, lg + 1)
+                    # tiled: the device skips pt_map and fuses it into pt_fold (LG1 = 0 either way)
+                    pr.stage("pt_map", n * d, xo, n, d, method, leval, tv, 0 if tiled else lg + 1)
                     pr.stage("pt_fold", d, xo, n, d, method, tv, k, state, leval, lam)
         mean, scale = pr.alloc(d), pr.alloc(d)
         if self.standardize:
-            tx, st2 = pr.alloc(n * d), pr.alloc(6 * d)
+            # PT_FUSED_TRANSFORM (bit 4, FAST + Apple): the device folds col_stats of the transform
+            # straight from X (x_prep/fastpt.mojo cs_tile_kernel) and skips this col_stats stage, so
+            # the transformed block is never written: a word
+            fused = bool(_ptimpute_flags(mode) & 4)
+            tx, st2 = pr.alloc(1) if fused else pr.alloc(n * d), pr.alloc(6 * d)
             pr.stage("pt_apply", n * d, xo, n, d, lam, method, _NONE, _NONE, tx)
             pr.stage("col_stats", d, tx, n, d, st2)
             pr.stage("std_params", d, st2, d, mean, scale)
