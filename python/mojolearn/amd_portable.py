@@ -341,6 +341,7 @@ def materialize(root, doc, manifest_hash, gfx):
         dst.parent.mkdir(parents=True, exist_ok=True)
         tmp = dst.with_suffix(dst.suffix + ".tmp")
         tmp.write_bytes(patched)
+        os.chmod(tmp, (root / so).stat().st_mode & 0o777)  # keep the binding's mode
         os.replace(tmp, dst)
         files[so] = hashlib.sha256(patched).hexdigest()
     record = dict(schema="mojolearn.amd-portable-materialized.v1", manifest_sha256=manifest_hash,
