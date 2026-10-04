@@ -49,6 +49,7 @@ def main():
     p.add_argument('--mode',choices=('identical','fast'),default='identical')
     p.add_argument('--builders',default=DEFAULT)
     p.add_argument('--timeout',type=int,default=3600)
+    p.add_argument('--semaphore',type=Path,default=Path('/root/mojolearn-evidence/compile_slot.sh'))
     a=p.parse_args()
     if sys.platform!='linux': p.error('Linux GPU box required')
     if not re.fullmatch('[0-9a-f]{40}',a.sha): p.error('full immutable SHA required')
@@ -56,9 +57,11 @@ def main():
     if len(set(builders))!=len(builders) or any(not re.fullmatch('[a-z0-9_]+',b) for b in builders): p.error('unique binding names required')
     if a.mode=='fast' and any(b.endswith('_host') for b in builders): p.error('host twins support IDENTICAL only; omit host builders for FAST')
     a.repo=a.repo.resolve(); a.out=a.out.resolve(); a.python=a.python.resolve()
+    if not a.semaphore.is_file(): p.error('required compile semaphore missing: '+str(a.semaphore))
     a.out.mkdir(parents=True,exist_ok=False)
     source=a.out/'source'; arch={'nvidia':'sm_89','amd':'gfx942'}[a.vendor]
-    env=dict(os.environ,PATH='/root/.pixi/bin:/opt/rocm/bin:'+os.environ.get('PATH',''),
+    clean_env={k:v for k,v in os.environ.items() if not k.startswith(('MOJOLEARN_', 'MODULAR_MOJO_', 'MOJO_COMPILE_'))}
+    env=dict(clean_env,PATH='/root/.pixi/bin:/opt/rocm/bin:'+os.environ.get('PATH',''),
              MOJOLEARN_NUMERIC_MODE=a.mode,MOJOLEARN_COMPILE_JOBS='1',MOJOLEARN_GPU_ARCHS=arch,
              MOJOLEARN_TARGET_COLUMN=a.vendor,PYTHONUNBUFFERED='1',MOJOLEARN_SKIP_BUILD_GATE='1',
              MOJOLEARN_MOJO_BUILD_FLAGS='-D MOJOLEARN_IDN_ALL_OFF=1' if a.arm=='off' else '',
@@ -83,7 +86,7 @@ def main():
             log=a.out/('build-'+binding+'.log'); build_env=dict(env)
             if binding.endswith('_host'):
                 build_env.pop('MOJOLEARN_GPU_ARCHS',None); build_env['MOJOLEARN_TARGET_COLUMN']='cpu'
-            row=command(['bash','bindings/build_'+binding+'.sh'],source,build_env,log,a.timeout)
+            row=command(['bash',str(a.semaphore),'bash','bindings/build_'+binding+'.sh'],source,build_env,log,a.timeout)
             row['status']='BUILD_FAILED' if row['rc'] else 'BUILT'
             report['modules'][binding]=row; save(receipt,report)
             if row['rc']: continue
@@ -102,9 +105,12 @@ assert names,'numeric mode export absent'
 modes={n:getattr(m,n)() for n in names}
 assert all(v==int(sys.argv[3]) for v in modes.values()),modes
 vendors={n:getattr(m,n)() for n in dir(m) if n.endswith('_vendor')}
-print(json.dumps({'artifact':path,'numeric_modes':modes,'vendors':vendors}))
+assert vendors,'vendor export absent'
+expected_vendor=sys.argv[4]
+assert all(v==expected_vendor for v in vendors.values()),(vendors,expected_vendor)
+print(json.dumps({'artifact':path,'numeric_modes':modes,'vendors':vendors,'expected_vendor':expected_vendor}))
 """
-            smoke_result=command([str(a.python),'-c',smoke,str(artifact),'_mojolearn_'+binding,str(expected_mode)],source,build_env,a.out/('import-'+binding+'.log'),120)
+            smoke_result=command([str(a.python),'-c',smoke,str(artifact),'_mojolearn_'+binding,str(expected_mode),'cpu' if binding.endswith('_host') else {'nvidia':'cuda','amd':'hip'}[a.vendor]],source,build_env,a.out/('import-'+binding+'.log'),120)
             row.update(status='PASS' if smoke_result['rc']==0 else 'IMPORT_FAILED',import_smoke=smoke_result,
                        artifact=str(artifact),sha256=hashlib.sha256(artifact.read_bytes()).hexdigest())
             save(receipt,report)
