@@ -113,6 +113,17 @@ order:
      install always did). More than one and no answer refuses, naming
      `MOJOLEARN_GPU_ARCH`.
 
+THE PTX FALLBACK (2026-10-04, docs/NVIDIA_PTX_IDENTITY.md)
+---------------------------------------------------------
+The native sets above still carry no PTX. `mojolearn-nvidia` may also bundle
+one PTX build, `cuda_ptx/sm_80`, which the driver compiles on the machine. It
+is reached only when a detected NVIDIA device has no compatible native set
+(`_NoCompatibleNative`). FAST and DETERMINISTIC take it with no admission.
+IDENTICAL takes it only on a configuration a bundled release admission or a
+local qualification (`python -m mojolearn verify --qualify-gpu`) names
+exactly, and otherwise refuses with that command. See
+`_admitted_baseline_base`.
+
 THE PLUGIN PACKAGES (2026-09-25, gpu_plugins.py)
 -----------------------------------------------
 Since the split, the Linux `mojolearn` wheel carries no GPU set: the CUDA sets
