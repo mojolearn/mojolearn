@@ -970,3 +970,9 @@ are per-tested-shape leads, not broad regime guarantees. Resident screen will
 compare the same kernels under a distinct resident-input contract. Scoped
 stride/split-aware decomposition/PCA adapters are in source preparation; no
 production GEMM default promoted and no dataset-specific dispatch introduced.
+
+Resident GEMM66recordscreen completed with alloutputsexact, no qualityreview
+flags. See RESIDENT_GEMM_RESULTS_2026-10-04.md: G1tall6.826875->3.524167ms,
+G1Gram3.563291->2.027875ms, G2narrow1.203750->0.865583ms. SquareNNincumbent
+remainsbest. These individualleads guide scopedcallerwork; no universalwinner
+required, no broadregime/defaultclaim. Allmeasuredrecordsretained, noreplay.
