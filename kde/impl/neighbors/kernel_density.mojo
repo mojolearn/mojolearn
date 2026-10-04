@@ -2686,14 +2686,20 @@ comptime KDE2_DIMTILE_ANY_D = _KDE2_FAST_APPLE and (
     or is_defined["MOJOLEARN_KDE_DIMTILE"]()
 )
 #: FAST + Apple DEFAULT since lane/apple-fast-batchv (2026-10-03) for
-#: n_features > KDE2_DIMTILE_MIN_D: M3 A/B vs main batchv-kde-dimtile-istella3
+#: every n_features since 2026-10-04 (old n_features > 32 gate behind
+#: MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE): M3 A/B vs main batchv-kde-dimtile-istella3
 #: kde istella (d = 220) 137.2 -> 69.2 ms, mean_log_likelihood -222.27058 both;
-#: taxi (d = 11) 9.0 -> 17.8 ms, so d <= 32 keeps main's fused pass. Quality
+#: taxi (d = 11) 9.0 -> 17.8 ms (the old gate kept main's fused pass). Quality
 #: (tools/batchv_quality.sh, M2): score_samples within 9e-8 of the output scale.
 #: -D MOJOLEARN_KDE_DIMTILE_OFF: main's passes at every d.
 comptime KDE2_DIMTILE = KDE2_DIMTILE_ANY_D or (
     _KDE2_FAST_APPLE and not is_defined["MOJOLEARN_KDE_DIMTILE_OFF"]()
 )
+#: LEGACY, default OFF: the old gate took the tile pass only for
+#: n_features > 32, chosen between taxi (d 11, slower) and istella (d 220,
+#: faster). Removed as benchmark-tuned on 2026-10-04: the tile pass (which
+#: runs at any d) now serves every d; UNMEASURED.
+comptime KDE2_DIMTILE_LEGACY_NARROW = is_defined["MOJOLEARN_LEGACY_NARROW_KDE_DIMTILE"]()
 comptime KDE2_DIMTILE_MIN_D = 32
 
 #: Threads per block, and the thread grid over (queries, train rows).
@@ -3468,7 +3474,8 @@ def kde_score_samples_device(
         # the 2D tile pass (any d); every other build skips this block.
         comptime if KDE2_DIMTILE:
             if (not staged_only) and not trace.enabled and (
-                KDE2_DIMTILE_ANY_D or n_features > KDE2_DIMTILE_MIN_D
+                KDE2_DIMTILE_ANY_D or not KDE2_DIMTILE_LEGACY_NARROW
+                or n_features > KDE2_DIMTILE_MIN_D
             ):
                 kde2_score_samples_fast_apple(
                     ctx, train, query, weights, has_weights, sum_weights,
