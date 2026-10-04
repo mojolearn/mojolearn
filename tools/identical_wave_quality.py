@@ -50,9 +50,50 @@ def pca():
     return rows
 
 
+
+def gram_cd():
+    from mojolearn import ElasticNet
+    rows=[]
+    n,d=4096,16
+    i=np.arange(n,dtype=np.uint32)
+    x=np.empty((n,d),dtype=np.float32,order='F')
+    for j in range(d):
+        bits=i & np.uint32(j+1)
+        parity=np.zeros(n,dtype=np.uint32)
+        for b in range(12): parity ^= (bits >> np.uint32(b)) & np.uint32(1)
+        x[:,j]=1-2*parity.astype(np.int32)
+    beta=np.zeros(d,dtype=np.float32); beta[[0,1,5]]=[0.8,-0.6,0.2]
+    y=x@beta
+    assert not os.environ.get('MOJOLEARN_IDENTITY_TRACE'), 'trace would bypass Gram route'
+    for ratio in (1.0,0.5):
+        alpha=0.05
+        fit=ElasticNet(alpha=alpha,l1_ratio=ratio,fit_intercept=False,max_iter=1000,tol=1e-7,numeric_mode='identical').fit(x,y)
+        expected=np.sign(beta)*np.maximum(np.abs(beta)-alpha*ratio,0)/(1+alpha*(1-ratio))
+        coef=np.asarray(fit.coef_,dtype=np.float64)
+        error=float(np.max(np.abs(coef-expected)))
+        assert error<3e-5,(ratio,error)
+        rows.append(dict(n=n,d=d,l1_ratio=ratio,coefficient_max_error=error,route='untraced F-order public fit; no residual; cd_idn_gram_shape(4096,16)'))
+    return rows
+
+
+def small_eigh():
+    from mojolearn import linalg
+    rows=[]
+    for n in (1,2,7,31,32,33):
+        u=(1+(np.arange(n)%7)).astype(np.float32); u/=np.linalg.norm(u)
+        x=np.eye(n,dtype=np.float32)*2+np.outer(u,u)
+        values,vectors=linalg.eigh(x)
+        w=np.asarray(values,dtype=np.float64);v=np.asarray(vectors,dtype=np.float64)
+        residual=float(np.linalg.norm(x.astype(np.float64)@v-v*w)/np.linalg.norm(x))
+        orth=float(np.linalg.norm(v.T@v-np.eye(n)))
+        assert residual<2e-4 and orth<2e-4,(n,residual,orth)
+        rows.append(dict(n=n,residual=residual,orthogonality=orth))
+    return rows
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('gate',choices=('eigh','pca'))
+    p.add_argument('gate',choices=('eigh','pca','gram_cd','small_eigh'))
     p.add_argument('--report',type=Path,required=True)
     a=p.parse_args()
     rows=globals()[a.gate]()

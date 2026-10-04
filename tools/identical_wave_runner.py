@@ -145,7 +145,7 @@ def main():
                         cmd+=[str(path)]
                     else:
                         cmd=[str(a.python),str(path)]
-                    cmd += [v.replace('{report}',str(folder/(gate['id']+'.json'))) for v in gate.get('args',[])]
+                    cmd += [v.replace('{report}',str(folder/(gate['id']+'.json'))).replace('{full_data}',str(a.data.parent/'rows-full')) for v in gate.get('args',[])]
                     rc=run(cmd,source,env,log,gate.get('timeout',3600))
                     step={'id':gate['id'],'rc':rc,'status':'PASS' if rc==0 else 'FAIL'}
                     if gate.get('owed'):
