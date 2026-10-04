@@ -76,7 +76,7 @@ from x_linear.quantile_grid import quantile_fit_grid
 from x_linear.ard_grid import ard_fit_grid
 from x_linear.ridge_grid import ridge_fit_grid
 from x_linear.lars import lars_fit
-from x_linear.isotonic import iso_predict_one, iso_gather_one, iso_group, ISO_CHUNK, iso_pava_chunk, iso_pava_merge, iso_pava_levels, iso_reverse_one, iso_clip_one, iso_keep
+from x_linear.isotonic import iso_predict_one, iso_oob_flag, OOB_RAISE, iso_gather_one, iso_group, ISO_CHUNK, iso_pava_chunk, iso_pava_merge, iso_pava_levels, iso_reverse_one, iso_clip_one, iso_keep
 from std.memory import bitcast
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -4324,6 +4324,7 @@ def _iso_predict_kernel_body(x: FP, thr: FP, n: Int32, m: Int32, oob: Int32, fp:
     var q = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     if q < Int(n):
         iso_predict_one(q, x, thr, Int(m), Int(oob), fp, res)
+        iso_oob_flag(q, Int(n), x, Int(oob), fp, res)
 
 
 def iso_predict_kernel(x: FP, thr: FP, n: Int32, m: Int32, oob: Int32, fp: FP, res: FP, wf: IP, woff: Int32, nonce: Int32):
@@ -4572,7 +4573,10 @@ def _iso_predict_grid(x: FP, n_x: Int, thr: FP, n_thr: Int, n: Int, ip: List[Int
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
     var dt = ctx.enqueue_create_buffer[DType.float32](max(n_thr, 1))
     var dfp = ctx.enqueue_create_buffer[DType.float32](max(len(hfp), 1))
-    var dout = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    # OOB_RAISE: one more word, res[n], the out-of-bounds flag (zeroed here)
+    var n_res = n + 1 if (len(ip) > 1 and Int(ip[1]) == OOB_RAISE) else n
+    var dout = ctx.enqueue_create_buffer[DType.float32](max(n_res, 1))
+    dout.enqueue_fill(Float32(0))
     ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     ctx.enqueue_copy(dst_buf=dt, src_ptr=thr)
     comptime if XLIN_IDN_DEV_FINITE:

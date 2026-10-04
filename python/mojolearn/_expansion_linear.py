@@ -1380,16 +1380,24 @@ class IsotonicRegression(NumericModeMixin):
         if not hasattr(self, "X_thresholds_"):
             raise RuntimeError("mojolearn IsotonicRegression: call fit first")
         t = _column(T, "T")
-        vals = t.tolist()
-        if self.out_of_bounds == "raise" and any(v < self.X_min_ or v > self.X_max_ for v in vals):
-            raise ValueError("A value in x_new is below/above the interpolation range.")
-        n = len(vals)
+        n = t.shape[0]
         k = len(self.X_thresholds_)
-        thr = Array.from_list(self.X_thresholds_.tolist() + self.y_thresholds_.tolist(), "<f4")
+        # lane cpu2-l10-linear: no list round trip; the thresholds are two
+        # byte copies, the predictions stay the binding's float32 Array, and
+        # out_of_bounds='raise' is tested by the predict itself (one flag
+        # word after the n predictions, x_linear/isotonic.mojo OOB_RAISE)
+        thr = _concat_f32(as_f32_c(self.X_thresholds_, ndim=None, name="X_thresholds_")[0],
+                          as_f32_c(self.y_thresholds_, ndim=None, name="y_thresholds_")[0])
         q = t.reshape((n, 1))
-        out = _run(self, ALGO_ISOTONIC_PREDICT, q, n, 1, thr, [k, 1 if self.out_of_bounds == "clip" else 0],
-                   [self.X_min_, self.X_max_], n, 1, 1)
-        return Array.from_list(out, "<f4")
+        raise_oob = self.out_of_bounds == "raise"
+        oob = 2 if raise_oob else (1 if self.out_of_bounds == "clip" else 0)
+        out = _run_array(self, ALGO_ISOTONIC_PREDICT, q, n, 1, thr, [k, oob],
+                         [self.X_min_, self.X_max_], n + 1 if raise_oob else n, 1, 1)
+        if raise_oob:
+            if out[n] != 0:
+                raise ValueError("A value in x_new is below/above the interpolation range.")
+            return out[:n]
+        return out
 
     def fit_transform(self, X, y, sample_weight=None):
         return self.fit(X, y, sample_weight).transform(X)
