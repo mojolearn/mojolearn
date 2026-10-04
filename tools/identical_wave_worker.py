@@ -95,7 +95,11 @@ def main():
                         if model.numeric_mode_!='identical': raise RuntimeError('fitted numeric_mode_ '+repr(model.numeric_mode_))
                         return {'numeric_mode_':model.numeric_mode_}
                     if case['class']=='ElasticNet':
-                        solver=model._solver(); path=Path(solver.__file__).resolve()
+                        solver=model._solver()
+                        if a.vendor=='cpu':  # host column: _HostBinding proxy over the host module
+                            from mojolearn import _backend
+                            solver=_backend.load_host_module(getattr(solver,'_HostBinding__basename'))
+                        path=Path(solver.__file__).resolve()
                         tree=root/'python/mojolearn'/('host' if a.vendor=='cpu' else 'identical')
                         if not path.is_relative_to(tree): raise RuntimeError('solver binding outside identical tree: '+str(path))
                         return {'solver_binding':str(path)}
