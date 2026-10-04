@@ -1464,13 +1464,12 @@ class _DARTBase(_TreesEnsembleBase):
                 raise ValueError("y must hold both classes")
             inits = [float(b.x_trees_log64(p / (1.0 - p)))]
         else:
-            # the class counts in the binding; glue: K log calls
+            # the class counts in the binding; glue: K log calls (K-sized
+            # scalar setup of the class priors, not data work)
             cnt = empty((K,), "<i4")
             b.x_trees_class_counts(addr_ro(y32, name="y"), addr(cnt, name="counts"), [n, K])
             inits = [float(b.x_trees_log64(max(1e-15, c / n))) for c in cnt.tolist()]
         self.init_score_ = inits[0] if K == 1 else inits
-        score = self._class_major(inits, n)
-        g, h, target = empty((K * n,), "<f8"), empty((K * n,), "<f8"), empty((K * n,), "<f4")
         lr = float(self.learning_rate)
         l1, mds, lam = float(self.reg_alpha), float(self.max_delta_step), float(self.reg_lambda)
         self.n_classes_ = K
@@ -1479,7 +1478,6 @@ class _DARTBase(_TreesEnsembleBase):
         train_nodes = []
         sum_w = 0.0
         max_depth = None if self.max_depth is None or int(self.max_depth) <= 0 else int(self.max_depth)
-        all_cols = self._arange(d)
         # trees-apple3: members that fit every row and column of X share ONE
         # staged copy of it (a bagged or column-sampled member gathers its
         # own X and fits as before)
@@ -1504,6 +1502,13 @@ class _DARTBase(_TreesEnsembleBase):
                 self._boost_loop_device(Xa, y32, K, b, seed, drop_seed, inits, lr, l1, mds, lam, max_depth,
                                         session)
             else:
+                # lane cpu2-l5-trees: the host K x n score and gradient buffers
+                # exist only for main's loop; the device round's score starts
+                # on the device from the k class starts (`x_trees_dart_open`'s
+                # dart_init_kernel), so nothing n-sized is built for it here
+                score = self._class_major(inits, n)
+                all_cols = self._arange(d)
+                g, h, target = empty((K * n,), "<f8"), empty((K * n,), "<f8"), empty((K * n,), "<f4")
                 self._boost_loop(Xa, y32, K, b, seed, drop_seed, score, g, h, target, lr, l1, mds, lam,
                                  max_depth, all_cols, session)
         finally:
@@ -1665,6 +1670,11 @@ class _DARTBase(_TreesEnsembleBase):
                         if int(self.max_drop) > 0:
                             rate = min(rate, int(self.max_drop) / t)
                         thr = [self._dart_thr(rate)] * t
+                # glue: the t-sized coefficient and threshold words are scalars per
+                # tree. The K n-sized targets come back from `x_trees_dart_step`
+                # only because a member tree's fit takes host labels (its own
+                # binding stages them); the score, gradients and leaf sums stay
+                # on the device
                 coef32 = Array.from_list([float(v) for v in self.tree_coefs_] or [0.0], "<f4")
                 thr64 = Array.from_list(thr or [0], "<i8")
                 flags = empty((max(t, 1),), "<i4")
