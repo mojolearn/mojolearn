@@ -209,8 +209,12 @@ def _dev_of(layer, b):
 # `__array__`) takes the host entry on the downloaded words.
 # MOJOLEARN_XCNN_DEVICE_IO_OFF=1 is the A/B before arm (the same device
 # kernels either way): `to_device` returns the array it was given and the
-# graph layers upload their ones vector per call again.
-_DEVICE_IO_OFF = __import__("os").environ.get("MOJOLEARN_XCNN_DEVICE_IO_OFF", "") == "1"
+# graph layers upload their ones vector per call again. The wave's OFF arm
+# (`-D MOJOLEARN_IDN_ALL_OFF=1` in the build and `MOJOLEARN_IDN_ALL_OFF=1` in
+# the environment, tools/identical_wave_runner.py) turns it off too, so that
+# arm runs the old form throughout (audit F4).
+_DEVICE_IO_OFF = (__import__("os").environ.get("MOJOLEARN_XCNN_DEVICE_IO_OFF", "") == "1"
+                  or __import__("os").environ.get("MOJOLEARN_IDN_ALL_OFF", "") == "1")
 
 
 def _size(shape):
