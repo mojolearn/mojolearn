@@ -119,8 +119,8 @@ def df_log_positive(x: Float32) -> DF:
         exponent -= 1
     var z = df_div(df_sub(DF(mantissa), DF(Float32(1))), df_add(DF(mantissa), DF(Float32(1))))
     var z2 = df_mul(z, z)
-    var term = z
-    var total = z
+    var term = z.copy()
+    var total = z.copy()
     for denominator in range(3, 26, 2):
         term = df_mul(term, z2)
         total = df_add(total, df_div(term, DF(Float32(denominator))))
