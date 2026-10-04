@@ -2429,9 +2429,8 @@ struct DevExec(Exec):
         comptime if EIGH_FAST_TRIDIAG:
             if n >= TD_MIN_N:
                 if DevExec._eigh_td_try(ctx, da, w, v, n):
-                    _ = da^
-                    ctx.synchronize()
-                    _ = ctx^
+                    # The caller owns the matrix and context (including the
+                    # resident path); this borrowed helper must not release them.
                     return
         _ = DevExec._eigh_par_on(ctx, da, w, v, n)
 
