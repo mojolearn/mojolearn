@@ -252,5 +252,19 @@ Two additional GPU gates use the same build definitions:
   `CALLPATH_TRANSPORT status=PASS banks=12 roundtrips=24` with
   `lifecycle_checks=9`. No device-loss simulation is attempted.
 
-At addition time these two gates have not run; do not infer a runtime pass
-from their compile status. Their digests can be compared between vendors.
+At frozen `436bc1aaa`, NVIDIA and AMD each compiled all four GPU gate/probe
+units and ran all three runtime gates successfully (exit status 0 throughout).
+The source SHA, recorded source checksums and all three digests matched:
+scalers `138198733663681093`, primitives `12251619760217914789`, and typed
+transport `16740757882212384037`. Expected coverage above was present on both
+vendors. Structured evidence:
+`~/mojolearn-evidence/callpath-20261004/validation-436bc1aaa/comparison.json`.
+No timing or package installation was performed.
+
+`host_gate.mojo` separately calls the existing shipped host scaler, row norm,
+column mean, column shift, classical NT GEMM and IDENTICAL GEMM implementations
+on the same fixtures and digest order. Build with `MOJOLEARN_COLUMN_CPU` and
+`MOJOLEARN_NUMERIC_IDENTICAL`; run only as untimed Linux host verification.
+It compares to the frozen GPU digests above. It does not emulate GPU storage
+or claim a CPU equivalent for the typed-bank lifecycle checks. Host execution
+and Metal compilation remain pending at the time this gate is introduced.
