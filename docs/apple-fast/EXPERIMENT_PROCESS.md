@@ -23,6 +23,16 @@ process for new lanes and manager reviews. Historical outcomes live in
   datasets/fixtures, mode, vendor, defines, compiler environment and binary hashes.
   Validate the M3 checkout against the built arms: a pushed GitHub branch does
   not imply that the cloud mirror has that revision.
+- Measurement isolation includes manager activity: do not run disk scans, cleanup,
+  artifact compression, dependency installation, bulk transfers or other heavy
+  maintenance alongside scored M3 work. Put heavy maintenance in the same serial
+  queue, or wait for an explicit idle boundary. Subagents do not run M3 work
+  independently. Lightweight progress checks are allowed.
+- If isolation is uncertain, retain raw results but mark the affected comparison
+  inconclusive. One sample per arm does not estimate variance or establish a
+  small gain/regression; do not call the noise range known without evidence.
+  Any additional measurements must respect the current run budget and replay
+  policy; do not silently rerun pairs until a preferred result appears.
 - M3 is the timing authority; M2 may compile. Serialize scored M3 work. Under the
   current run budget, use one scored run per arm; do not replay completed arms,
   rerace opponents or rerun the whole board to improve a result. If evidence is

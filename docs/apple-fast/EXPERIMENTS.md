@@ -655,3 +655,17 @@ speed was measured only for LabelBinarizer; do not update their timing rows.
 Raw M3 receipt: `~/mojolearn-evidence/apple-fast/sync/quality-repairs-results-0900.txt`; individual tags under `~/mq/out/`. Source review for queued PT `bc112b172`: subsequent main x_prep changes only add label-specific binding/dispatch/Python paths; power-transformer implementation is unchanged.
 
 - `MOJOLEARN_GBDT_DW_BRIDGE_SCAN`, measured kernel `2519f4867`, helper `f193454e7`, `gap26-dwcurrent-taxi`: A10279.095 -> B10827.749 ms (+5.34%), one M3 run/arm. AUC .632554 -> .632211; logloss .527920 -> .528002. **DROPPED-slower**; changed quality has no established noise bound, so no quality-equivalence claim. No default or board change. Receipt `~/mojolearn-evidence/apple-fast/sync/dwcurrent-result-0905.txt`; full M3 `~/afc-def/gap26-dwcurrent-taxi/`.
+
+### Measurement isolation audit — 2026-10-04 09:13 UTC
+
+The M3 runner serializes jobs and A/B arms, but the manager ran filesystem scans
+and cleanup outside the queue during this session. This violates full machine
+isolation even though no simultaneous scored benchmarks were found. Recent
+single-pair speed verdicts whose maintenance overlap cannot be excluded must be
+treated as **HOLD-measurement**, superseding firm speed-only rejection claims
+above (in particular the current depthwise tree comparison). Preserve raw times
+and independent quality evidence; do not merge a candidate on an uncertain speed
+result. No affected candidate was promoted from those recent rejected pairs.
+Future heavy maintenance must share the serial queue or an explicit idle boundary.
+The earlier ARIMA/label measurements predate this session's maintenance; this
+audit alone does not establish interference with those measured promotions.
