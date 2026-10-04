@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""MOJOLEARN_X_PREP_HOST_OUT (lane/apple-fast-w3-prep, 2026-10-04): FAST +
+"""MOJOLEARN_X_PREP_PINNED_OUT (lane/apple-fast-w3-prep, 2026-10-04): FAST +
 Apple candidate, opt-in, default OFF. IDENTICAL and other vendors compile
 none of it.
 
@@ -16,9 +16,9 @@ stages are a few ms).
 Here the output region goes device -> pinned HostBuffer in ONE DMA (Apple
 unified memory: the pinned buffer IS host memory the CPU reads directly) and
 the HostBuffer itself becomes the caller's output: Python wraps its address
-(no copy, no fresh mapping) and calls `x_prep_host_out_free(id)` when the
+(no copy, no fresh mapping) and calls `x_prep_pinned_out_free(id)` when the
 last view of it dies. Freed buffers stay in an exact-size idle pool (at most
-HOST_OUT_KEEP_BYTES) so a repeated call of the same shape reuses resident
+PINNED_OUT_KEEP_BYTES) so a repeated call of the same shape reuses resident
 pages. Copies only: the same words land in the caller's array; no bit moves.
 
 Registry ops run while the binding has released the GIL, as core/
@@ -31,13 +31,13 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
-comptime X_PREP_HOST_OUT = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                            and is_defined["MOJOLEARN_X_PREP_HOST_OUT"]())
+comptime X_PREP_PINNED_OUT = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                            and is_defined["MOJOLEARN_X_PREP_PINNED_OUT"]())
 #: idle pinned bytes kept for reuse (a 972 MB output fits twice)
-comptime HOST_OUT_KEEP_BYTES = 2 * 1024 * 1024 * 1024
+comptime PINNED_OUT_KEEP_BYTES = 2 * 1024 * 1024 * 1024
 
 
-struct _HostOutSlots(Defaultable, Movable):
+struct _PinnedOutSlots(Defaultable, Movable):
     """Live outputs (owned by a Python view, by id) and idle pooled ones."""
     var live: List[HostBuffer[DType.float32]]
     var ids: List[Int]
@@ -53,16 +53,16 @@ struct _HostOutSlots(Defaultable, Movable):
         self.next_id = 1
 
 
-comptime HOST_OUT = _Global[StorageType=_HostOutSlots, name="MojoXPrepHostOutFast", init_fn=_HostOutSlots.__init__]
+comptime PINNED_OUT = _Global[StorageType=_PinnedOutSlots, name="MojoXPrepPinnedOutFast", init_fn=_PinnedOutSlots.__init__]
 
 
-def host_out_download(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], out_at: Int, out_n: Int,
+def pinned_out_download(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], out_at: Int, out_n: Int,
                       receipt_addr: Int) raises:
     """`df[out_at, out_at + out_n)` into a pinned HostBuffer of exactly
     out_n floats (an idle pooled one when one fits, else a new one), one DMA,
     waited on here. Writes Int64 [id, host address] at receipt_addr; the
-    buffer stays alive until `host_out_free(id)`."""
-    var p = HOST_OUT.get_or_create_ptr()
+    buffer stays alive until `pinned_out_free(id)`."""
+    var p = PINNED_OUT.get_or_create_ptr()
     var need = out_n if out_n > 0 else 1
     var found = -1
     for i in range(len(p[].idle)):
@@ -91,11 +91,11 @@ def host_out_download(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], o
     p[].live.append(hb^)
 
 
-def host_out_free(id: Int) raises -> Bool:
+def pinned_out_free(id: Int) raises -> Bool:
     """The caller's last view of output `id` died: back to the idle pool
-    (oldest idle freed first above HOST_OUT_KEEP_BYTES). False when `id` is
+    (oldest idle freed first above PINNED_OUT_KEEP_BYTES). False when `id` is
     not live (a double free is refused, never applied twice)."""
-    var p = HOST_OUT.get_or_create_ptr()
+    var p = PINNED_OUT.get_or_create_ptr()
     var at = -1
     for i in range(len(p[].ids)):
         if p[].ids[i] == id:
@@ -106,10 +106,10 @@ def host_out_free(id: Int) raises -> Bool:
     _ = p[].ids.pop(at)
     var hb = p[].live.pop(at)
     var nb = len(hb) * 4
-    if nb > HOST_OUT_KEEP_BYTES:
+    if nb > PINNED_OUT_KEEP_BYTES:
         _ = hb^
         return True
-    while len(p[].idle) > 0 and p[].idle_bytes + nb > HOST_OUT_KEEP_BYTES:
+    while len(p[].idle) > 0 and p[].idle_bytes + nb > PINNED_OUT_KEEP_BYTES:
         p[].idle_bytes -= len(p[].idle[0]) * 4
         _ = p[].idle.pop(0)
     p[].idle_bytes += nb
@@ -117,6 +117,6 @@ def host_out_free(id: Int) raises -> Bool:
     return True
 
 
-def host_out_live() raises -> Int:
+def pinned_out_live() raises -> Int:
     """Live (caller-held) outputs, for checkers."""
-    return len(HOST_OUT.get_or_create_ptr()[].ids)
+    return len(PINNED_OUT.get_or_create_ptr()[].ids)

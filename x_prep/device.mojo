@@ -40,7 +40,7 @@ from x_prep.dmi_fast import mi_cc_device, mi_cd_device_rank, mi_colscale_fast_ke
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
 from core.staged_download import download_f32_into
 from core.device_pool import pool_take, pool_give
-from x_prep.host_out import X_PREP_HOST_OUT, host_out_download
+from x_prep.pinned_out import X_PREP_PINNED_OUT, pinned_out_download
 
 #: lane/apple-fast-gap-manprep: on FAST + Apple the program's output region
 #: (and arena ranges of 1M+ words) download through core/staged_download.mojo.
@@ -266,7 +266,7 @@ comptime X_PREP_STORE = _Global[StorageType=DeviceStore, name=_STORE_NAME, init_
 
 def run_program_device_ranges(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int, scratch_len: Int,
                               out_addr: Int, out_len: Int, ins_addr: Int, nins: Int, outs_addr: Int,
-                              nouts: Int, host_out_addr: Int = 0) raises:
+                              nouts: Int, pinned_out_addr: Int = 0) raises:
     """`run_program_device` whose host arena crosses by RANGES (lane
     py-shared, core/arena_io.mojo): only the `nins` input triples go up
     (every other arena word starts zero on the device, as the host's do;
@@ -277,7 +277,7 @@ def run_program_device_ranges(arena_addr: Int, arena_len: Int, prog_addr: Int, s
     check_out_ranges(outs_addr, nouts, arena_len)
     run_program_device_ptr(
         FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages, scratch_len,
-        out_addr, out_len, ins_addr, nins, outs_addr, nouts, host_out_addr,
+        out_addr, out_len, ins_addr, nins, outs_addr, nouts, pinned_out_addr,
     )
 
 
@@ -325,7 +325,7 @@ def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: 
 
 def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, scratch_len: Int = 0,
                            out_addr: Int = 0, out_len: Int = 0, ins_addr: Int = 0, nins: Int = -1,
-                           outs_addr: Int = 0, nouts: Int = -1, host_out_addr: Int = 0) raises:
+                           outs_addr: Int = 0, nouts: Int = -1, pinned_out_addr: Int = 0) raises:
     """scratch_len (lane prep-apple2): words of DEVICE-ONLY arena after the
     host's arena_len words (offsets arena_len ..); they never cross to or
     from the host and start undefined, so a program writes each scratch word
@@ -334,9 +334,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     host arena's words arrive zeroed), never uploaded, and copied back into
     the host buffer at out_addr, not into the arena. Where a word lives moves
     no bit.
-    host_out_addr (MOJOLEARN_X_PREP_HOST_OUT, x_prep/host_out.mojo): in
+    pinned_out_addr (MOJOLEARN_X_PREP_PINNED_OUT, x_prep/pinned_out.mojo): in
     place of out_addr, the output region goes into a pinned HostBuffer the
-    caller keeps; Int64 [id, address] are written at host_out_addr."""
+    caller keeps; Int64 [id, address] are written at pinned_out_addr."""
     for s in range(stages):
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
         if (op < 0 or op >= N_OPS) and not is_p2m_op(op):
@@ -423,12 +423,12 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     var dre = ctx.enqueue_create_buffer[DType.float32](rre_scr)
     var dmw = ctx.enqueue_create_buffer[DType.uint64](mi_w if mi_sorted else 1)
     var dmu = ctx.enqueue_create_buffer[DType.uint32](mi_u if mi_sorted else 1)
-    comptime if not X_PREP_HOST_OUT:
-        if host_out_addr != 0:
-            raise Error("x_prep: host_out_addr needs a MOJOLEARN_X_PREP_HOST_OUT build")
-    if host_out_addr != 0 and out_addr != 0:
-        raise Error("x_prep: out_addr and host_out_addr are exclusive")
-    var out_n = out_len if (out_addr != 0 or host_out_addr != 0) and out_len > 0 else 0
+    comptime if not X_PREP_PINNED_OUT:
+        if pinned_out_addr != 0:
+            raise Error("x_prep: pinned_out_addr needs a MOJOLEARN_X_PREP_PINNED_OUT build")
+    if pinned_out_addr != 0 and out_addr != 0:
+        raise Error("x_prep: out_addr and pinned_out_addr are exclusive")
+    var out_n = out_len if (out_addr != 0 or pinned_out_addr != 0) and out_len > 0 else 0
     var out_at = arena_len + max(scratch_len, 0)
     var dev_len = out_at + out_n
     var pooled = False
@@ -735,14 +735,14 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             ctx.enqueue_copy(dst_ptr=host_f, src_buf=df.create_sub_buffer[DType.float32](0, arena_len))
         else:
             ctx.enqueue_copy(dst_ptr=host_f, src_buf=df)
-    var host_out = False
-    comptime if X_PREP_HOST_OUT:
-        if host_out_addr != 0:
-            # MOJOLEARN_X_PREP_HOST_OUT: one DMA into the pinned buffer the caller keeps
-            host_out = True
-            host_out_download(ctx, df, out_at, out_n, host_out_addr)
+    var pinned_out = False
+    comptime if X_PREP_PINNED_OUT:
+        if pinned_out_addr != 0:
+            # MOJOLEARN_X_PREP_PINNED_OUT: one DMA into the pinned buffer the caller keeps
+            pinned_out = True
+            pinned_out_download(ctx, df, out_at, out_n, pinned_out_addr)
     comptime if X_PREP_STAGED_OUT:
-        if out_n > 0 and not host_out:
+        if out_n > 0 and not pinned_out:
             # lane/apple-fast-gap-manprep (2026-10-03): the output region
             # (LabelBinarizer's 1M x 259 int32 words at the board, 1 GB)
             # through the pooled pinned-stage pipeline instead of one raw
@@ -753,7 +753,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                                               MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_addr))
             _ = oview^
     else:
-        if out_n > 0 and not host_out:
+        if out_n > 0 and not pinned_out:
             ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=out_addr), src_buf=df.create_sub_buffer[DType.float32](out_at, out_n))
     ctx.synchronize()
     if prof:
