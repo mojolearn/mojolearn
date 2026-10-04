@@ -711,7 +711,7 @@ struct PlattDevice(PlattSums):
         out self, ctx: DeviceContext, var d_f: DeviceBuffer[DType.uint64], var d_y: DeviceBuffer[DType.int32],
         var d_p: DeviceBuffer[DType.uint64], n: Int, hi: Float64, lo: Float64,
     ):
-        self.ctx = ctx
+        self.ctx = ctx.copy()
         self.d_f = d_f^
         self.d_y = d_y^
         self.d_p = d_p^
