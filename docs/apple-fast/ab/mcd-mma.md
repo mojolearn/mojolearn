@@ -56,3 +56,71 @@ only one full-size scored fit per arm, and do not rerace opponents. If quality
 still diverges, instrument the first candidate/step covariance/determinant/
 reciprocal mask before revising kernels again. This candidate changes no
 thresholds, seed streams, tie rules or selection/stopping semantics.
+
+## Serial queue progression after capped MCD PASS
+
+Measured kernel77520069e compiled both arms and passed gap26-mcd-mma-small:
+location/raw covariance exact, covariance_rel4.39e-8, precision_rel1.09e-7,
+distances about1.5e-7, support/raw support/flags exact. This establishes capped
+MinCovDet quality only; no full-size speed claim follows.
+
+New helper tools/mcd_mma_serial.sh is intended ONLY for serial M3 CMD jobs.
+It verifies prerequisite artifact lane/size and re-runs the artifact comparison
+(no fit), verifies the existing77520069e binary manifests/source scope, stages
+arms within that queued job, then runs one fit per missing arm. It refuses
+existing output artifacts and writes PASS only after the comparison succeeds.
+All post-fit quality computation and NPZ compression remain inside that same
+serial job. It does not launch cloud work or edit the queue itself.
+
+Root should substitute the ACTUAL saved cap3000MCD paths below; do not infer
+them from the outer queue tag if the prior wrapper used a different inner tag.
+Use new unique tags after checking they have not already produced artifacts.
+
+1. Capped EllipticEnvelope, after existing MCD cap3000 artifacts pass:
+
+   bash tools/mcd_mma_serial.sh ee-small gap26-mcd-mma-ee-small \
+     /ACTUAL/MCD-SMALL/A.npz /ACTUAL/MCD-SMALL/B.npz
+
+2. Full MinCovDet, only after the previous EE cap3000 pair passes:
+
+   bash tools/mcd_mma_serial.sh mcd-full gap26-mcd-mma-full \
+     "$HOME/afc-def/gap26-mcd-mma-ee-small/A.npz" \
+     "$HOME/afc-def/gap26-mcd-mma-ee-small/B.npz" \
+     "$HOME/afc-def/gap26-mcdcompat-taxi/A.npz"
+
+3. Full EllipticEnvelope, only after the full MinCovDet pair passes:
+
+   bash tools/mcd_mma_serial.sh ee-full gap26-mcd-mma-ee-full \
+     "$HOME/afc-def/gap26-mcd-mma-full/A.npz" \
+     "$HOME/afc-def/gap26-mcd-mma-full/B.npz"
+
+Each is a distinct serial CMD on this lane branch after root syncs the remote
+ref. A failed prerequisite exits before staging or fitting. There is no second
+timing pass: fit_ms and fitted-state quality come from the same single fit.
+EE additionally checks actual offset_ and decision_function using the existing
+1% numeric bound; all previous support/flag/rank gates remain unchanged.
+
+### Existing baseline reuse review
+
+Source review through current main12fdd6697: since88a94a86f, x_decomp,
+_mojolearn_x_decomp, _expansion_decomp and bench_board_algos have only four
+comment lines changed in mcd_fast. Other main changes are ARIMA, label prep,
+HDBSCAN/KDE/comments and management/docs; none changes numeric MCD fitting.
+Therefore the saved full main A at gap26-mcdcompat-taxi is eligible for QUALITY
+reuse conditional on its original binary/source provenance and exact fixture
+hash. New verify-baseline preflight loads current fixture and checks dataset,
+lane,shape,data_sha BEFORE running B; its mismatch aborts with no new fit.
+The capped MCD A cannot substitute for full data, and MinCovDet A cannot serve
+as EllipticEnvelope A. No old EE baseline is assumed.
+
+The old70.878s A timing is not automatically certified isolated. Root must
+review its run window against the maintenance audit/provenance before using
+it for a speed verdict. If isolation remains uncertain, keep speed
+HOLD-measurement while retaining the quality comparison and new B timing;
+do not silently rerun that already-measured A. A fresh scored A replacement
+requires applicable user authorization. One pair does not estimate noise.
+
+Existing compiled77520069e arms remain reusable: revisions after that SHA
+modify tools/docs only. verify_arms.py enforces the numerical-source equality.
+No new compilation, scored work or remote scheduling was performed by this
+preparation task.

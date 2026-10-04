@@ -20,12 +20,19 @@ esac
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 OUT="$HOME/afc-def/$TAG"
+if [ -e "$OUT/A.npz" ] || [ -e "$OUT/B.npz" ] || [ -e "$OUT/PASS" ]; then
+  echo "MCDQ refusing to replay/overwrite existing fit artifacts: $OUT" >&2
+  exit 2
+fi
 mkdir -p "$OUT"
 PY="$HOME/board-0834/cache/venv/bin/python"
 DATA="$HOME/board-0834/cache/algos-data/rows-full"
 SO="$ROOT/python/mojolearn/_mojolearn_x_decomp.so"
 for ARM in A B; do
   if [ "$ARM" = A ] && [ -n "${MCD_BASELINE_NPZ:-}" ]; then
+    set --
+    [ -z "$ROWS" ] || set -- --rows "$ROWS"
+    PYTHONPATH="$ROOT/python" "$PY" tools/mcd_compat_quality.py verify-baseline       "$DATA" "$DATASET" "$MCD_BASELINE_NPZ" --lane "$LANE" "$@"
     cp "$MCD_BASELINE_NPZ" "$OUT/A.npz"
     echo "MCDQ-REUSE arm=A source=$MCD_BASELINE_NPZ (manager source review required)"
     continue
@@ -37,7 +44,7 @@ for ARM in A B; do
     DEFINES="-D $MCD_DEFINE"
   fi
   if [ -n "$PREBUILT" ]; then
-    cp "$PREBUILT" "$OUT/$ARM.so"
+    [ "$PREBUILT" = "$OUT/$ARM.so" ] || cp "$PREBUILT" "$OUT/$ARM.so"
   else
     if MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_MOJO_BUILD_FLAGS="$DEFINES" \
        MOJOLEARN_COMPILE_JOBS=1 MOJOLEARN_SKIP_BUILD_GATE=1 \
@@ -54,8 +61,10 @@ for ARM in A B; do
   mv "$SO.tmp" "$SO"
   set --
   [ -z "$ROWS" ] || set -- --rows "$ROWS"
-  MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_VENDOR=apple PYTHONPATH="$ROOT/python" \
+  MCD_FIT_ARM="$ARM" MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_VENDOR=apple PYTHONPATH="$ROOT/python" \
     "$PY" tools/mcd_compat_quality.py fit "$DATA" "$DATASET" "$OUT/$ARM.npz" \
     --lane "$LANE" "$@"
 done
 "$PY" tools/mcd_compat_quality.py compare "$OUT/A.npz" "$OUT/B.npz"
+touch "$OUT/PASS"
+echo "MCDQ-PAIR-PASS $TAG"

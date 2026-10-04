@@ -9,16 +9,15 @@ No opponents are fitted. The CPU only evaluates saved fitted quantities.
 import argparse
 import hashlib
 import json
+import os
 import time
 from pathlib import Path
 
 import numpy as np
 
 
-def fit(args):
+def load_inputs(args):
     import bench_board_algos as board
-    import mojolearn as ml
-    from scipy.stats import chi2
 
     block, _ = board._load_block(args.lane, args.dataset, args.data)
     data = board.lane_arrays(args.lane, block)
@@ -26,6 +25,32 @@ def fit(args):
     q = np.ascontiguousarray(data['Xq'], dtype=np.float32)
     if args.rows:
         x, q = x[:args.rows], q[:args.rows]
+    return x, q
+
+
+def verify_baseline(args):
+    x, q = load_inputs(args)
+    with np.load(args.baseline) as saved:
+        expected = dict(dataset=args.dataset, lane=args.lane, shape=x.shape,
+                        data_sha=hashlib.sha256(x.tobytes() + q.tobytes()).hexdigest())
+        for key, value in expected.items():
+            if not np.array_equal(saved[key], value):
+                raise ValueError('Baseline preflight mismatch: ' + key)
+        if args.lane == 'elliptic-envelope':
+            for key in ('offset_', 'decision_function'):
+                if key not in saved:
+                    raise ValueError('EE baseline lacks fitted threshold evidence: ' + key)
+    print('MCDQ-BASELINE-VERIFIED fixture_hash=' + expected['data_sha'], flush=True)
+    return 0
+
+
+def fit(args):
+    import bench_board_algos as board
+    import mojolearn as ml
+    from scipy.stats import chi2
+    if Path(args.out).exists():
+        raise FileExistsError('Refusing to overwrite completed fit: ' + args.out)
+    x, q = load_inputs(args)
     cls = ml.MinCovDet if args.lane == 'min-cov-det' else ml.EllipticEnvelope
     model = cls(random_state=board.SEED, numeric_mode='fast')
     before = time.perf_counter()
@@ -37,6 +62,12 @@ def fit(args):
     payload = {name: np.asarray(getattr(model, name)) for name in (
         'location_', 'covariance_', 'precision_', 'support_', 'raw_location_',
         'raw_covariance_', 'raw_support_', 'dist_')}
+    if args.lane == 'elliptic-envelope':
+        payload['offset_'] = np.asarray(model.offset_, dtype=np.float64)
+        payload['decision_function'] = np.asarray(model.decision_function(q), dtype=np.float64)
+    payload.update(compiled_source=os.environ.get('MCD_COMPILED_SOURCE', 'legacy-unrecorded'),
+                   arm=os.environ.get('MCD_FIT_ARM', 'unrecorded'),
+                   execution_policy=os.environ.get('MCD_EXECUTION_POLICY', 'unrecorded'))
     payload.update(distances=distances, flags=flags, fit_ms=ms,
                    dataset=args.dataset, lane=args.lane, shape=x.shape,
                    data_sha=hashlib.sha256(x.tobytes() + q.tobytes()).hexdigest())
@@ -54,7 +85,10 @@ def compare(args):
                 raise ValueError('Different inputs: ' + key)
         metrics = {}
         ok = True
-        for key in ('location_', 'covariance_', 'precision_', 'raw_location_', 'raw_covariance_', 'distances', 'dist_'):
+        fields = ['location_', 'covariance_', 'precision_', 'raw_location_', 'raw_covariance_', 'distances', 'dist_']
+        if str(a['lane']) == 'elliptic-envelope':
+            fields += ['offset_', 'decision_function']
+        for key in fields:
             av, bv = a[key].astype(np.float64), b[key].astype(np.float64)
             finite = bool(np.isfinite(av).all() and np.isfinite(bv).all())
             rel = float(np.linalg.norm(av - bv) / max(np.linalg.norm(av), 1e-12))
@@ -85,11 +119,21 @@ def main():
     p.add_argument('out')
     p.add_argument('--rows', type=int)
     p.add_argument('--lane', choices=('min-cov-det', 'elliptic-envelope'), default='min-cov-det')
+    p = sub.add_parser('verify-baseline')
+    p.add_argument('data')
+    p.add_argument('dataset')
+    p.add_argument('baseline')
+    p.add_argument('--rows', type=int)
+    p.add_argument('--lane', choices=('min-cov-det', 'elliptic-envelope'), default='min-cov-det')
     p = sub.add_parser('compare')
     p.add_argument('a')
     p.add_argument('b')
     args = parser.parse_args()
-    return fit(args) if args.command == 'fit' else compare(args)
+    if args.command == 'fit':
+        return fit(args)
+    if args.command == 'verify-baseline':
+        return verify_baseline(args)
+    return compare(args)
 
 
 if __name__ == '__main__':
