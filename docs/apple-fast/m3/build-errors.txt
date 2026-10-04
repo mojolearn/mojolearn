@@ -1,0 +1,5 @@
+== lane_apple-fast-batchv-fbuild-estimators.log (02:25Z)
+./kde/resident_fit.mojo:261:13: error: cannot implicitly convert 'None' value to 'Float32'
+            return
+            ^~~~~~
+Imported from ~/mq/wt/lane_apple-fast-batchv/bindings/_mojolearn_estimators.mojo:85:

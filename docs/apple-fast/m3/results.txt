@@ -1,4 +1,4 @@
-pos=936 lines=    1548
+pos=956 lines=    1558
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -1109,3 +1109,27 @@ pos=936 lines=    1548
 1217:CMD apple-fast-batch@3150d75c1 kde2-lse-taxi-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=13.3 all=[13] quality=['{"mean_log_likelihood":'] defines='-D MOJOLEARN_KDE_DIMTILE -D MOJOLEARN_KDE_LSE_FUSED'
 1218:CMD apple-fast-batch@3150d75c1 kde2-norm-taxi-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=19.4 all=[19] quality=['{"mean_log_likelihood":'] defines='-D MOJOLEARN_KDE_DIMTILE -D MOJOLEARN_KDE_NORM_FUSED'
 1219:CMD apple-fast-batch@3150d75c1 kde2-variants-taxi-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=15.4 all=[15] quality=['{"mean_log_likelihood":'] defines='-D MOJOLEARN_KDE_DIMTILE -D MOJOLEARN_KDE_KERNEL_VARIANTS'
+1220:FBUILD lane/apple-fast-m2b1-m3@665ae1caf core=0 ibase=0 estimators=0 x_ann=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+1221:CMD apple-fast-m2b1-m3@665ae1caf m2b1m3-smoke3 rc=0 M2B1M3-SMOKE status=ok
+1222:CMD apple-fast-m2b1-m3@665ae1caf m2b1m3-smoke4 rc=0 M2B1M3-SMOKE status=ok
+1223:CMD apple-fast-batch@3150d75c1 kde2-sample-taxi-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=38.1 all=[38] quality=['{"mean_log_likelihood":'] defines='-D MOJOLEARN_KDE_SAMPLE_FUSED'
+1224:CMD apple-fast-batch@3150d75c1 kde2-all-istella-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=63.1 all=[63] quality=['{"mean_log_likelihood":'] defines='-D MOJOLEARN_KDE2_ALL'
+1225:CMD apple-fast-batch@3150d75c1 kde2-all-vs-dimtile-istella-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=73.4 all=[73] quality=['{"mean_log_likelihood":'] defines='-D MOJOLEARN_KDE2_ALL'
+1226:CMD apple-fast-batch@3150d75c1 ptimpute-pt-colbatch-istella-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=910.2 all=[910] quality=['{"output_shape":'] defines='-D MOJOLEARN_PT_COLBATCH'
+1227:CMD apple-fast-batch@3150d75c1 ptimpute-pt-fusedtx-istella-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=2416.1 all=[2416] quality=['{"output_shape":'] defines='-D MOJOLEARN_PT_FUSED_TRANSFORM'
+1228:CMD apple-fast-batch@3150d75c1 ptimpute-pt-all-istella-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=512.3 all=[512] quality=['{"output_shape":'] defines='-D MOJOLEARN_PTIMPUTE_ALL'
+1229:CMD apple-fast-batch@3150d75c1 ptimpute-pt-colbatch-taxi-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=76.9 all=[77] quality=['{"output_shape":'] defines='-D MOJOLEARN_PT_COLBATCH'
+1230:CMD apple-fast-batch@3150d75c1 ptimpute-pt-fusedtx-taxi-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=307.1 all=[307] quality=['{"output_shape":'] defines='-D MOJOLEARN_PT_FUSED_TRANSFORM'
+1231:CMD apple-fast-batch@3150d75c1 ptimpute-si-onepass-istella-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=273.2 all=[273] quality=['{"masked_rmse":'] defines='-D MOJOLEARN_SI_ONEPASS'
+1232:CMD apple-fast-batch@3150d75c1 ptimpute-pt-spec-vs-colbatch-istella-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1011.8 all=[1012] quality=['{"output_shape":'] defines='-D MOJOLEARN_PT_SPEC'
+1233:CMD apple-fast-batch@3150d75c1 symhist-sort-swap-taxi-x rc=0 AFT-MEDIAN arm=B n=1 median_ms=9606.5 all=[9607] hashes=['ee77e5880b78b029'] acc={'logloss': [0.528595], 'auc': [0.630376]}
+1234:CMD apple-fast-batch@3150d75c1 symhist-resolve-block-taxi-x rc=0 AFT-MEDIAN arm=B n=1 median_ms=9568.7 all=[9569] hashes=['ee77e5880b78b029'] acc={'logloss': [0.528595], 'auc': [0.630376]}
+1235:FBUILD lane/apple-fast@8432822f9 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+1236:CMD apple-fast@8432822f9 ivfseed-main-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=2504.9 all=[2505] quality=['{"recall_at_10":'] defines='-D MOJOLEARN_ANN3_COARSE_SEED_OFF -D MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF'
+1237:FBUILD lane/apple-fast-ordall@fa999cd9d prebuilt=m2 core=0 ibase=0 gbdt=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 files=8
+1238:CMD apple-fast-ordall@fa999cd9d ordall-smoke rc=0 ORDALL-SMOKE status=ok
+1239:FBUILD lane/apple-fast-batchv@77f1f5afb core=0 ibase=0 estimators=1 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+1240:CMD apple-fast-batchv@77f1f5afb batchv-pt-all-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=512.1 all=[512] quality=['{"output_shape":'] defines='-D MOJOLEARN_PTIMPUTE_ALL'
+1241:CMD apple-fast-batchv@77f1f5afb batchv-pt-all-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=65.5 all=[66] quality=['{"output_shape":'] defines='-D MOJOLEARN_PTIMPUTE_ALL'
+1242:CMD apple-fast-batchv@77f1f5afb batchv-pt-nospec-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=425.4 all=[425] quality=['{"output_shape":'] defines='-D MOJOLEARN_PT_COLBATCH -D MOJOLEARN_PT_FUSED_TRANSFORM -D MOJOLEARN_SI_ONEPASS'
+1243:CMD apple-fast-batchv@77f1f5afb batchv-pt-nospec-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=54.1 all=[54] quality=['{"output_shape":'] defines='-D MOJOLEARN_PT_COLBATCH -D MOJOLEARN_PT_FUSED_TRANSFORM -D MOJOLEARN_SI_ONEPASS'
