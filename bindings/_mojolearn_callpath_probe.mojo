@@ -7,7 +7,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from std.sys.info import has_apple_gpu_accelerator
 from experiments.apple_callpath.resident_slot import CALLPATH_ENABLED
-from bench.apple_callpath_quality import main as fixture
+from bench.apple_callpath_quality import run_quality as fixture
 
 
 def mode_binding() raises -> PythonObject:

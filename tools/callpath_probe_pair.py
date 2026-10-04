@@ -24,7 +24,8 @@ def main():
     root = Path(__file__).resolve().parents[1]
     assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip() == source
     subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--', 'experiments/apple_callpath',
-                    'bench/apple_callpath_quality.mojo', 'bindings/_mojolearn_callpath_probe.mojo',
+                    'bench/apple_callpath_quality.mojo', 'bench/apple_callpath_quality_main.mojo',
+                    'preprocessing/minmax.mojo', 'metrics/checks/device_io.mojo', 'bindings/_mojolearn_callpath_probe.mojo',
                     'tools/callpath_probe_pair.py'], cwd=root, check=True)
     arms = Path.home() / 'mq/verified-arms' / source / 'callpath_probe'
     manifest = json.loads((arms / 'manifest.json').read_text())

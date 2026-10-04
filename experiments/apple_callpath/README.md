@@ -95,7 +95,7 @@ clipped and inverse transforms. No speed or runtime pass is yet claimed.
 M2 compile only:
 
 ```
-mojo build -j 1 --target-cpu apple-m1 --target-accelerator metal:1 -I . -D MOJOLEARN_APPLE_FAST_CALLPATH_CANDIDATES bench/apple_callpath_quality.mojo -o apple-callpath-quality
+mojo build -j 1 --target-cpu apple-m1 --target-accelerator metal:1 -I . -D MOJOLEARN_APPLE_FAST_CALLPATH_CANDIDATES bench/apple_callpath_quality_main.mojo -o apple-callpath-quality
 ```
 
 The manager stages this native executable with its source SHA and SHA256 to

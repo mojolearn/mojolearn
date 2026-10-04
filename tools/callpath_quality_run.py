@@ -19,7 +19,8 @@ def main():
     root = Path(__file__).resolve().parents[1]
     assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip() == source
     subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--', 'experiments/apple_callpath',
-                    'bench/apple_callpath_quality.mojo', 'tools/callpath_quality_run.py'], cwd=root, check=True)
+                    'bench/apple_callpath_quality.mojo', 'bench/apple_callpath_quality_main.mojo',
+                    'preprocessing/minmax.mojo', 'metrics/checks/device_io.mojo', 'tools/callpath_quality_run.py'], cwd=root, check=True)
     binary = Path(name).expanduser()
     actual = hashlib.sha256(binary.read_bytes()).hexdigest()
     assert actual == expected, 'staged binary hash mismatch'

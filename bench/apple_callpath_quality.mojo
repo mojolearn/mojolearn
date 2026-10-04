@@ -2,7 +2,7 @@
 """M3-only correctness/lifecycle fixture. M2 compiles; never time this driver.
 Pinned proposal source: 9ab2d3d3fb770498ef025db08f595a0149792bb7.
 Compile: mojo build -j 1 --target-cpu apple-m1 --target-accelerator metal:1 -I . -D MOJOLEARN_APPLE_FAST_CALLPATH_CANDIDATES
-         bench/apple_callpath_quality.mojo -o apple-callpath-quality
+         bench/apple_callpath_quality_main.mojo -o apple-callpath-quality
 """
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
@@ -178,7 +178,7 @@ def minmax_case(ctx: DeviceContext, n: Int) raises:
     print("CALLPATH-QUALITY C4 n=", n, " status=PASS", sep="")
 
 
-def main() raises:
+def run_quality() raises:
     comptime if not CALLPATH_ENABLED:
         raise Error("requires opt-in FAST Apple build")
     var ctx = DeviceContext()
