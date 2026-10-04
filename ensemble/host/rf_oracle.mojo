@@ -120,7 +120,7 @@ from std.sys.compile import is_defined
 from core.host_parallel import host_parallelize
 
 from checks.fixed_point import choose_scale
-from checks.numerics import ftz, identical_log, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_log, identical_mul_add
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from ensemble.host_layout import has_nan_f32_threaded
 from ensemble.nan_refusal import RF_NAN_REFUSAL
@@ -1086,7 +1086,8 @@ def host_quantile_bin_index(bin: Int, sample_count: Int, max_n_bins: Int) -> Int
     exact integers (`quantile_bin_index_exact`), and this host column
     computes the same expression; `-D MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF`
     (or `MOJOLEARN_IDN_ALL_OFF`) restores the Float64 form on both."""
-    comptime if not (
+    # lane/review-fixes: the device gate's mode term too (quantiles.mojo)
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
         is_defined["MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF"]()
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     ):
@@ -1307,7 +1308,7 @@ def host_weight_cdf(weights: List[Float32], n_rows: Int) raises -> List[Float64]
     return cdf^
 
 
-comptime RF_ORACLE_WBOOT_INT = not (
+comptime RF_ORACLE_WBOOT_INT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE_OFF"]()
     or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )

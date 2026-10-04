@@ -111,7 +111,10 @@ comptime VALUE_SUM_64 = 64 // HOST_FW
 #: flush, so every head size keeps its bits (the host column needs no
 #: change). `-D MOJOLEARN_BYTE_LM_VSUM_HD_GENERIC_OFF=1` restores the
 #: special cases.
-comptime BYTE_LM_VSUM_HD_GENERIC_OFF = is_defined["MOJOLEARN_BYTE_LM_VSUM_HD_GENERIC_OFF"]()
+#: lane/review-fixes: off under MOJOLEARN_IDN_ALL_OFF too (the wave's OFF arm).
+comptime BYTE_LM_VSUM_HD_GENERIC_OFF = is_defined["MOJOLEARN_BYTE_LM_VSUM_HD_GENERIC_OFF"]() or is_defined[
+    "MOJOLEARN_IDN_ALL_OFF"
+]()
 comptime U32V = SIMD[DType.uint32, HOST_FW]
 #: SIMD accumulators `gemm_nt_rows` advances together per p step at one leaf
 #: (spelled out as eight locals there). A schedule knob: every lane still runs

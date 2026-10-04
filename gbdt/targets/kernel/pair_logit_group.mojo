@@ -85,7 +85,12 @@ def pairlogit_group_fused_for[column: Int]() -> Bool:
     n=2, same hash, ndcg10 .71995, map .85455): 4,802 -> 3,760 ms.
     `-D MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF` restores the pair-list path
     (and turns `PAIRLOGIT_EST_REUSE` off with it); the old
-    `-D MOJOLEARN_PAIRLOGIT_GROUP_FUSED` is accepted and changes nothing."""
+    `-D MOJOLEARN_PAIRLOGIT_GROUP_FUSED` is accepted and changes nothing.
+    Under IDENTICAL `MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF` does NOT turn the
+    group kernel off (the host column restates it under
+    `IDN_PAIRLOGIT_GROUP`): the IDENTICAL before arm is
+    `-D MOJOLEARN_IDN_GBDT_PAIRLOGIT_GROUP_OFF` (or MOJOLEARN_IDN_ALL_OFF),
+    which moves the device and the host column together (lane/review-fixes)."""
     comptime if not is_defined["MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF"]():
         comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
             return True

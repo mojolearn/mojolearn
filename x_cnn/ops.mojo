@@ -1585,7 +1585,12 @@ comptime IDN_GCN_LOOPS_DEV = _FAM2_IDN and not is_defined["MOJOLEARN_IDN_GCN_LOO
 #: (one level up to 32 rows, two up to 1,024): fewer launches per loss, a
 #: longer one-thread chain per block. A different fold order, so different
 #: bits, on every column together (the host column reads the same constant).
-comptime LOSS_FOLD_BLOCK = 256 if is_defined["MOJOLEARN_IDN_XENT_FOLD_BLOCK_256"]() else 32
+#: Dead under MOJOLEARN_IDN_ALL_OFF and reported as `x_cnn_idn2_flags` bit 3
+#: (lane/review-fixes), so the glue can see which fold a binding was built with.
+comptime IDN_XENT_FOLD_BLOCK_256 = is_defined["MOJOLEARN_IDN_XENT_FOLD_BLOCK_256"]() and not is_defined[
+    "MOJOLEARN_IDN_ALL_OFF"
+]()
+comptime LOSS_FOLD_BLOCK = 256 if IDN_XENT_FOLD_BLOCK_256 else 32
 
 
 @always_inline
@@ -1845,7 +1850,10 @@ def adam_hyper_base(lr: Float64, b1: Float64, b2: Float64, eps: Float64, wd: Flo
 def idn2_flags() -> Int:
     """The lane fam2-neural switches this build has on (both bindings export
     it as `x_cnn_idn2_flags`): bit 0 IDN_XENT_DEV_FOLD, bit 1 IDN_CNN_EPOCH_DEV,
-    bit 2 IDN_GCN_LOOPS_DEV (lane fix-n1-lm-neural)."""
+    bit 2 IDN_GCN_LOOPS_DEV (lane fix-n1-lm-neural); bit 3 the candidate
+    IDN_XENT_FOLD_BLOCK_256 and bit 4 a `-D MOJOLEARN_IDN_ALL_OFF` build
+    (lane/review-fixes: the glue reads the build's OFF arm from here, not
+    only from the environment)."""
     var f = 0
     comptime if IDN_XENT_DEV_FOLD:
         f |= 1
@@ -1853,4 +1861,8 @@ def idn2_flags() -> Int:
         f |= 2
     comptime if IDN_GCN_LOOPS_DEV:
         f |= 4
+    comptime if IDN_XENT_FOLD_BLOCK_256:
+        f |= 8
+    comptime if is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+        f |= 16
     return f
