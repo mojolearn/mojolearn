@@ -63,3 +63,28 @@ Uniform borders or supply a GPU border builder. No old code/default was
 copied into this narrow depthwise candidate. CTR needs a separate current-main
 A/B on gbdt-categorical taxicat, with both prediction AUC and logloss, before
 any adoption; its prior 6.1% gain is not assumed to transfer.
+
+## Running the compiled 2519f4867 arms
+
+Manager has built both arms on M2. Transfer that source's manifest, A.so and
+B.so to M3 `~/mq/verified-arms/2519f4867d76b534cd630c6f00d7152f41fccaf2/gbdt/`
+using the existing manager process. Provision the FAST base binding first.
+The committed helper validates/stages through `~/mq/verified_arms.py`, points
+`AFT_OUT` at its `~/afc-def/<tag>` output (A.so and B.so), sets
+`AFT_SKIP_BUILD=1`, runs one arm pair, and refuses replay/overwritten evidence.
+It requires both finite AUC/logloss metrics and one timing per arm; it reports
+metric deltas for manager approval rather than declaring quality equivalence.
+
+Exact M3 queue CMD on this branch:
+
+```sh
+MOJOLEARN_NUMERIC_MODE=fast "$HOME/board-0834/cache/venv/bin/python" tools/aft_verified_dw.py gap26-dwcurrent-taxi taxi
+```
+
+No new kernel compilation is required for this helper-only commit. Output:
+`~/afc-def/gap26-dwcurrent-taxi/{aft.log,run_A_1.log,run_B_1.log}`.
+The existing manifest validator accepts helper/docs-only changes from the
+compiled SHA, but rejects changes under .mojo, bindings, python or pixi.
+`tools/speed_gbdt_arm.py:_score_sklearn_like` computes these metrics from
+`model.predict_proba(d.X_test)` against `d.y_test`; they measure actual fit
+quality on held-out rows, not output shape or count.
