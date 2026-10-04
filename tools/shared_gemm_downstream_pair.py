@@ -17,7 +17,7 @@ import tempfile
 if not __debug__:
     raise RuntimeError('quality gates require Python assertions enabled')
 
-FAMILY = {"kmeans": "core", "knn": "core", "ols": "estimators",
+FAMILY = {"kmeans": "core", "knn": "core", "knn-wide-k": "core", "ols": "estimators",
           "ridge": "estimators", "pca": "estimators", "kde": "estimators"}
 ARTIFACT = {"core": "_mojolearn.so", "estimators": "_mojolearn_estimators.so"}
 
@@ -60,8 +60,8 @@ def main():
     assert re.fullmatch('[A-Za-z0-9_.-]+', args.tag)
     root = Path(__file__).resolve().parents[1]
     os.chdir(root)
-    assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip() == args.source
-    subprocess.run(['git', 'diff', '--quiet', 'HEAD'], check=True)
+    from shared_gemm_source_contract import validate_source
+    provenance = validate_source(root, args.source)
     config_path = root/'tools/shared_gemm_variant.json'
     config = json.loads(config_path.read_text())
     variant = config['variant']
@@ -97,7 +97,7 @@ def main():
     if had_original:
         shutil.copy2(so, original)
         assert sha(original) == original_sha
-    record(out/'intake.json', dict(source=args.source,case=args.case,features=args.features,
+    record(out/'intake.json', dict(source=args.source,provenance=provenance,case=args.case,features=args.features,
         variant=variant,family=family,artifact=artifact,hashes=hashes,manifest_sha=sha(manifest_path),
         original_sha=original_sha,scored=False))
     env = dict(os.environ, MOJOLEARN_NUMERIC_MODE='fast', MOJOLEARN_VENDOR='apple',
@@ -114,6 +114,7 @@ def main():
             assert run_logged(command, out/(arm+'.log'), env) == 0, 'capture failed: '+arm
             meta = json.loads((out/(arm+'.json')).read_text())
             assert meta['source'] == args.source and meta['binary_sha'] == hashes[arm]
+            assert meta['provenance'] == provenance
             assert meta['variant'] == selected and meta['case'] == args.case and meta['features'] == args.features
             assert Path(meta['binary']) == so.resolve(), 'capture loaded another package path'
         rc = run_logged([sys.executable, helper, 'compare', str(out/'A.npz'), str(out/'B.npz'),
@@ -128,7 +129,7 @@ def main():
             so.unlink(missing_ok=True)
         record(out/'restore.json', dict(restored=True,had_original=had_original,original_sha=original_sha))
     # No PASS receipt until restoration succeeds. HOLD and NO_REACH are rc1.
-    receipt = dict(source_sha=args.source,variant=variant,case=args.case,features=args.features,
+    receipt = dict(source_sha=args.source,provenance=provenance,variant=variant,case=args.case,features=args.features,
         family=family,hashes=hashes,manifest_sha=sha(manifest_path),scored=False,
         status=report.get('status', 'ERROR'),report_sha=sha(out/'report.json') if (out/'report.json').exists() else None)
     record(out/('PASS.json' if success else 'HOLD.json'), receipt)

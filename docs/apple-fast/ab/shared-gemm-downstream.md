@@ -9,8 +9,8 @@ selects the variant and caller shapes before downstream M2 builds.
 
 | Priority | Family / extension / build script | Cases and actual routes | Coverage caveats |
 |---|---|---|---|
-| 1 | core / `_mojolearn` / `bindings/build.sh` | `kmeans`: kmeans++ and transform call core NT (route 0); `knn`: brute distance product calls core NT | KMeans fused assignment is not shared GEMM. KNN Apple distance specializations can bypass it. Reach must come from measured phase deltas. |
-| 1 | estimators / `_mojolearn_estimators` / `bindings/build_estimators.sh` | `ols`, `ridge`: solve products; `pca`: dense full fit, transform and inverse; `kde`: expanded distance calls core NT | OLS prediction n=1 takes GEMV unchanged; PCA TN Gram and direct decomposition kernels are not this adapter. KDE fused distance/density paths may bypass NT. |
+| 1 | core / `_mojolearn` / `bindings/build.sh` | `kmeans`: kmeans++ candidate seeding calls core NT (route 0); `knn-wide-k`: tiled brute distance product calls core NT | KMeans assignment, predict and transform are fused/direct cells, not shared GEMM. Default small-k KNN Apple distance specializations bypass it. Reach must come from measured phase deltas. |
+| 1 | estimators / `_mojolearn_estimators` / `bindings/build_estimators.sh` | `ols`: inverse solve product; `pca`: transform and inverse call core NT; `ridge` and `kde`: controls under current defaults | OLS prediction n=1 takes GEMV unchanged; PCA TN Gram and direct decomposition kernels are not this adapter. Ridge NO_U removes its NT product. KDE default fused path bypasses NT at all fixture widths. |
 | 2/control | kernel_methods / `_mojolearn_kernel_methods` / `bindings/build_kernel_methods.sh` | `rbf`: actual RBFSampler resident fit_transform and ordinary transform; vendor NN is route 2 | Resident `_rbf_gemm` tries AFN first. An AFN hit is an intentional non-reaching control, not proof that shared G1/G5 accelerated RBF. Do not disable AFN just to force coverage for a board claim. |
 | 2 | svm / `_mojolearn_svm` / `bindings/build_svm.sh` | `svc`: actual binary RBF fit, decisions and predictions through kernel_op/core NT | SVC/SVR are **not** in estimators. LinearSVC is a different algorithm. RBF d<=64 can take fused tiles; d=65/220 supplies a plausible NT case, while d=11 is a useful control. |
 
@@ -178,3 +178,70 @@ unchanged. Select a small case/width set before execution using the matrix
 screen; this script does not automatically run either variant or a full
 crossproduct. Final production timings must use separately declared builds
 without COUNTERS and still need the appropriate downstream quality gate.
+
+## Predeclared first downstream set and corrected tooling revision
+
+This source audit is prior to downstream quality results. Runtime counters
+remain required; the following expected routes are not measured claims.
+Use the same selected native variant for this small set, then inspect all
+metrics before extending coverage:
+
+| Order | Case / width | Expected candidate phase and shape | Intentional non-reaching phases |
+|---|---|---|---|
+| 1 | `ols --features 65` | fit inverse product, core NT route 0, 65x65 output with K=65 (`lstsq.mojo:571`) | single-target predict GEMV |
+| 2 | `pca --features 65` | transform core NT: M=73,N=7,K=65; inverse core NT: M=73,N=65,K=7 (`decomposition/estimator.mojo:453`) | covariance TN/fused fit stages do not prove shared reach |
+| 3 | `knn-wide-k --features 65` | k=65 excludes certified MMA (max24), FAST MMA (max64), FAST top-k and fused-L2 (max64); tiled L2 product core NT M=73,N=513,K=65 | index fit has no candidate launch |
+| 4 | `kmeans --features 65` | default scalable seeding can invoke classic kmeans++ on candidate rows (`kmeans.mojo:1141`), NT with N=n_trials=4,K=65 | main assignment, predict and transform are fused/direct cells; transform is **squared L2** for this API's default `euclidean` metric |
+
+If scalable initialization does not collect more than seven candidates,
+it may skip the classic seed reduction; count zero is NO_REACH, never
+permission to claim a KMeans speedup. The fixture uses the real default
+oversampling=2 and does not force a branch just to produce a reach count.
+
+Minimal control: `knn --features 11` (k=7) should take certified MMA before
+shared dispatch, hence NO_REACH. Further cheap controls when useful:
+`ridge --features 65` has default NO_U, TN Gram plus vector reductions,
+and `kde --features 65` has the default fused pass. KDE also remains fused
+at d=11 and d=220 (`n_features <= KDE_FUSED_TILE_FLOATS`); no need to
+blindly run all widths. All NO_REACH cases remain non-passing for promotion
+and timing regardless of oracle agreement. Ridge d=220 also uses default
+Apple TN-v1 rather than this shared adapter; do not interpret that as NN.
+
+These initial cases cover **core NT route 0**, not every shared route.
+PCA inverse is mathematically an NN reconstruction, but it transposes the
+components explicitly and enters core NT; it does not exercise vendor NN
+route 2. Aliased Gram route 1 needs a separate underdetermined OLS fixture
+(the current tall fixture does not reach it). Vendor NN/NT routes 2/3 need
+real eligible callers beyond this first group, with AFN/fused precedence
+checked before selecting them. RBF's AFN-first path is a control unless
+actual counts demonstrate otherwise. This is a bounded first gate, not an
+'all callers passed' statement. Default small-k KNN cannot benefit from
+this adapter merely because its fallback imports core GEMM.
+
+`shared-downstream-f64-independent-errors-v2` corrects the KMeans transform
+oracle from sqrt distance to the public API's squared distance. This is a
+source-contract correction discovered before execution, not a tolerated
+quality regression. It adds the predeclared k=65 KNN case; original k=7
+remains the control. Every metric still requires B relative-L2 and
+max-absolute error <= A independently, without an epsilon. Exact KNN
+indices, KMeans labels/query labels/iteration counts and saved-state gates
+remain. PCA sign-independent projector/reconstruction checks and its
+separate transform-arithmetic residual remain. No metric is averaged.
+
+### Reuse unchanged native artifacts with newer quality tooling
+
+`SOURCE` in the pair/dump CLI is now explicitly the **compiled source**.
+The running harness HEAD may be a descendant only if
+`shared_gemm_source_contract.validate_source` verifies ancestry, clean
+tracked source and zero diff outside an exact allowlist of the two quality
+helpers, source-contract validator and this documentation file. Untracked
+possible source files are rejected. Any `.mojo`, production Python,
+build/config/lockfile, or variant-config change outside that exact allowlist
+rejects reuse. G1 and G5 retain their separate tracked variant identities;
+there is no cross-variant reuse. The manifest/config/binary SHA and actual
+runtime variant checks are unchanged. Captures, reports and receipts store
+both compiled and harness source SHAs plus hashes of every allowlisted
+harness file. A/B must use identical harness provenance. Old v1 captures
+cannot be compared under v2. Do not rebuild native code for this tools-only
+repair; compile sources remain G1 `30e4562c2129569ed03d93d878ec6a903ea51691`
+and G5 `495c30c33a8805a1944b45f9bc911446f7e89ed8`.
