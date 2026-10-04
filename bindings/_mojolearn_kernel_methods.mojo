@@ -51,6 +51,9 @@ from kernel_methods.estimator import (
     nystroem_transform_host_into,
     nystroem_transform_ptr_into,
     KM_FAST_PTR_IN,
+    KRR_IDN_PTR_IN,
+    kernel_ridge_fit_ptr_into,
+    kernel_ridge_predict_ptr_into,
     rbf_sampler_fit_host,
     rbf_sampler_transform_host_into,
     rbf_sampler_transform_ptr_into,
@@ -261,6 +264,98 @@ def kernel_ridge_predict_binding(
     )
     with GILReleased(Python()):
         _kernel_ridge_predict_run(model, x_new, q, op)
+    return PythonObject(0)
+
+
+def kernel_ridge_fit_ptr_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """fam2-kernel-gp (KRR_IDN_PTR_IN; registered as `kernel_ridge_fit_ptr`
+    only when that define is on): `kernel_ridge_fit_binding`'s `addrs` and
+    `params`, exactly, with X and y read from their addresses on the device
+    and `dual_out` written by the device copy (`kernel_ridge_fit_ptr_into`).
+    No owned host copy of X or y is made. Returns `info`."""
+    if len(addrs) != 4 and len(addrs) != 5:
+        raise Error(
+            "kernel_ridge_fit: addrs must contain 4 addresses (x, y,"
+            " dual_out, scalars_out) and optionally sw, got "
+            + String(len(addrs))
+        )
+    if len(params) != 8:
+        raise Error(
+            "kernel_ridge_fit: params must contain 8 values (n, d, t, kernel,"
+            " degree, gamma, coef0, alpha), got "
+            + String(len(params))
+        )
+    var xp = _f32_ptr(Int(py=addrs[0]))
+    var yp = _f32_ptr(Int(py=addrs[1]))
+    var dp = _f32_ptr(Int(py=addrs[2]))
+    var sp = _f64_ptr(Int(py=addrs[3]))
+    var n = Int(py=params[0])
+    var d = Int(py=params[1])
+    var t = Int(py=params[2])
+    var kp = KernelParams(
+        Int(py=params[3]),
+        Int(py=params[4]),
+        Float64(py=params[5]),
+        Float64(py=params[6]),
+    )
+    var alpha = Float32(Float64(py=params[7]))
+    var sw = List[Float32]()
+    if len(addrs) == 5:
+        # the per-row factors sqrt(sample_weight), as `kernel_ridge_fit_binding`
+        var wp = _f64_ptr(Int(py=addrs[4]))
+        sw.reserve(max(0, n))
+        for i in range(n):
+            sw.append(Float32(sqrt(wp[i])))
+    var xaddr = Int(xp)
+    var yaddr = Int(yp)
+    var info = 0
+    with GILReleased(Python()):
+        var trace = IdentityTrace()
+        info = kernel_ridge_fit_ptr_into(xaddr, yaddr, n, d, t, kp, alpha, sw, dp, trace)
+        sp.unsafe_store(0, Float64(info))
+    return PythonObject(info)
+
+
+def kernel_ridge_predict_ptr_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """fam2-kernel-gp (KRR_IDN_PTR_IN; registered as
+    `kernel_ridge_predict_ptr` only when that define is on):
+    `kernel_ridge_predict_binding`'s `addrs` and `params`, exactly, with
+    X_fit, the dual and the query read from their addresses on the device
+    and `out` written by the device copy (`kernel_ridge_predict_ptr_into`).
+    Returns 0."""
+    if len(addrs) != 4:
+        raise Error(
+            "kernel_ridge_predict: addrs must contain 4 addresses (x_fit,"
+            " dual, x_new, out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 10:
+        raise Error(
+            "kernel_ridge_predict: params must contain 10 values (n, d, t,"
+            " kernel, degree, gamma, coef0, alpha, info, q), got "
+            + String(len(params))
+        )
+    var xfaddr = Int(_f32_ptr(Int(py=addrs[0])))
+    var daddr = Int(_f32_ptr(Int(py=addrs[1])))
+    var xnaddr = Int(_f32_ptr(Int(py=addrs[2])))
+    var op = _f32_ptr(Int(py=addrs[3]))
+    var n = Int(py=params[0])
+    var d = Int(py=params[1])
+    var t = Int(py=params[2])
+    var kp = KernelParams(
+        Int(py=params[3]),
+        Int(py=params[4]),
+        Float64(py=params[5]),
+        Float64(py=params[6]),
+    )
+    var q = Int(py=params[9])
+    with GILReleased(Python()):
+        var trace = IdentityTrace()
+        kernel_ridge_predict_ptr_into(xfaddr, daddr, xnaddr, n, d, t, kp, q, op, trace)
     return PythonObject(0)
 
 
@@ -622,6 +717,9 @@ def PyInit__mojolearn_kernel_methods() abi("C") -> PythonObject:
         )
         m.def_function[kernel_ridge_fit_binding]("kernel_ridge_fit")
         m.def_function[kernel_ridge_predict_binding]("kernel_ridge_predict")
+        comptime if KRR_IDN_PTR_IN:
+            m.def_function[kernel_ridge_fit_ptr_binding]("kernel_ridge_fit_ptr")
+            m.def_function[kernel_ridge_predict_ptr_binding]("kernel_ridge_predict_ptr")
         m.def_function[nystroem_fit_binding]("nystroem_fit")
         m.def_function[nystroem_transform_binding]("nystroem_transform")
         m.def_function[rbf_sampler_fit_binding]("rbf_sampler_fit")

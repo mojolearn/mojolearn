@@ -417,6 +417,121 @@ def krr_scale_rows(v: List[Float32], sw: List[Float32], n: Int, t: Int) -> List[
     return out^
 
 
+#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_KRR_DEV_SCALE_OFF` restores the host loops): the
+#: weighted fit's `y * sw[:, None]` and `dual_coef *= sw[:, None]` run as one
+#: launch each on the resident buffers (`krr_scale_rows_kernel`, one thread
+#: per cell, `krr_scale_rows`'s line) instead of two host loops over n x t
+#: cells around the device solve. One multiplication per cell rounded once
+#: either way: no bit moves, and `kmh_scale_rows` stays the host column.
+comptime KRR_IDN_DEV_SCALE = _CTX_MODE == _CTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_KRR_DEV_SCALE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_KRR_PTR_IN_OFF` unregisters the pointer bindings, so
+#: `kernel_methods.py` takes the list route again): KernelRidge fit and
+#: predict read X, y, X_fit and the dual from the caller's memory straight
+#: to the device, X and y are scanned for NaN / infinity there
+#: (`_upload_checked`) and the result is copied into the caller's output,
+#: instead of an owned host copy of every operand (`read_f32`), a serial
+#: host finiteness walk, a staged second copy (`_upload`), a host list of
+#: the result and a model copy of X. The same words reach the same
+#: kernels: no bit moves; the same refusal texts.
+comptime KRR_IDN_PTR_IN = _CTX_MODE == _CTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_KRR_PTR_IN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+#: SCHEDULING: one thread per target cell.
+comptime KRR_SCALE_TPB = 256
+
+
+def krr_scale_rows_kernel(
+    v_io: MutPointer[Float32, MutAnyOrigin],
+    s: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    t_in: Int32,
+):
+    """`krr_scale_rows` in place, one thread per cell (i, c):
+    `ftz(ftz(v) * ftz(s_i))`."""
+    var t = Int(t_in)
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if idx >= Int(n_in) * t:
+        return
+    var i = idx // t
+    v_io.unsafe_store(idx, ftz(ftz(v_io.unsafe_load(idx)) * ftz(s.unsafe_load(i))))
+
+
+def _krr_scale_rows_dev(
+    ctx: DeviceContext,
+    mut v: DeviceBuffer[DType.float32],
+    mut s: DeviceBuffer[DType.float32],
+    n: Int,
+    t: Int,
+) raises:
+    """Launch `krr_scale_rows_kernel` over the n x t cells of `v`. ASYNCHRONOUS."""
+    if n <= 0 or t <= 0:
+        return
+    ctx.enqueue_function[krr_scale_rows_kernel](
+        v.unsafe_ptr(), s.unsafe_ptr(), Int32(n), Int32(t),
+        grid_dim=((n * t + KRR_SCALE_TPB - 1) // KRR_SCALE_TPB, 1, 1),
+        block_dim=(KRR_SCALE_TPB, 1, 1),
+    )
+
+
+def _krr_not_pd_message(info: Int, kernel: Int, n_samples: Int) -> String:
+    """DEVIATION 1662's refusal text (one copy for the list and pointer fits)."""
+    return (
+        "kernel_ridge_fit_host: the ridged kernel matrix K + alpha I is"
+        " NOT positive definite (info="
+        + String(info)
+        + ", the leading minor of order "
+        + String(info)
+        + " failed). kernel="
+        + km_kernel_name(kernel)
+        + ", n_samples="
+        + String(n_samples)
+        + ". cuML catches this and silently returns a LEAST-SQUARES"
+        " solution instead (kernel_ridge.py:26-44, behind a"
+        " warnings.warn); this lane refuses, because a fit that returns"
+        " a different estimator than the one it was asked for is a"
+        " wrong answer with no error. THE CLOSURE IS alpha: raise it."
+        " A float32 kernel matrix needs a larger ridge than cuML's"
+        " float64 one at the same data (DEVIATION 1661). To close it"
+        " properly, implementation an SVD-based least-squares arm -- there is one"
+        " at solver/checks/lstsq.mojo -- and gate BOTH sides of the"
+        " branch; kernel_methods/NOT_IMPLEMENTED.tsv carries the row"
+    )
+
+
+def _krr_validate_alpha(alpha: Float32) raises:
+    """`kernel_ridge_fit_host`'s alpha refusals (NaN, negative)."""
+    if alpha != alpha:
+        raise Error("kernel_ridge_fit_host: alpha is NaN; refused by name")
+    if alpha < Float32(0.0):
+        raise Error(
+            "kernel_ridge_fit_host: alpha must be non-negative, got a"
+            " negative value. scikit-learn's own parameter constraint is"
+            " Interval(Real, 0, None, closed='left') and a negative ridge"
+            " SUBTRACTS from the diagonal, which can turn a positive"
+            " definite kernel matrix indefinite and make the Cholesky fail"
+            " on data that is perfectly well conditioned. DEVIATION 1686"
+        )
+
+
+def _upload_ptr(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """`n` floats at a caller's host address onto the device, unchecked (a
+    fitted array the list route did not validate either). The copy is
+    waited on here: the caller's memory is read before this returns."""
+    var buf = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    if n > 0:
+        var sub = buf.create_sub_buffer[DType.float32](0, n)
+        ctx.enqueue_copy(dst_buf=sub, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=addr))
+        ctx.synchronize()
+        _ = sub^
+    return buf^
+
+
 def krr_validate_weights(sw: List[Float32], n: Int) raises:
     """The per-row sqrt(sample_weight) factors: n of them, finite, >= 0."""
     if len(sw) != n:
@@ -506,7 +621,12 @@ def kernel_ridge_fit_host(
 
     # DEVIATION 2487: self-kernel operands share one uploaded allocation.
     var xa = _upload(ctx, x)
-    var dy = _upload(ctx, krr_scale_rows(y, sw, n_samples, n_targets)) if weighted else _upload(ctx, y)
+    # KRR_IDN_DEV_SCALE: the weighted targets are scaled where they lie.
+    var dev_scale = weighted and KRR_IDN_DEV_SCALE
+    var dy = _upload(ctx, krr_scale_rows(y, sw, n_samples, n_targets)) if (weighted and not dev_scale) else _upload(ctx, y)
+    var dsw = _upload(ctx, sw) if dev_scale else ctx.enqueue_create_buffer[DType.float32](1)
+    if dev_scale:
+        _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
     trace.record_device(ctx, "krr.input", xa, n_samples * n_features)
 
     var dk = ctx.enqueue_create_buffer[DType.float32](n_samples * n_samples)
@@ -573,9 +693,12 @@ def kernel_ridge_fit_host(
             " branch; kernel_methods/NOT_IMPLEMENTED.tsv carries the row"
         )
 
+    if dev_scale:
+        _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
     var dual = _download(ctx, dy, n_samples * n_targets)
-    if weighted:
+    if weighted and not dev_scale:
         dual = krr_scale_rows(dual, sw, n_samples, n_targets)
+    _ = dsw^
     _ = xa^
     _ = dy^
     _ = dk^
@@ -661,6 +784,166 @@ def kernel_ridge_predict_host(
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
     return out^
+
+
+def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
+    xaddr: Int,
+    yaddr: Int,
+    n_samples: Int,
+    n_features: Int,
+    n_targets: Int,
+    kp: KernelParams,
+    alpha: Float32,
+    sw: List[Float32],
+    dual_out: MutPointer[Float32, out_origin],
+    mut trace: IdentityTrace,
+) raises -> Int:
+    """KRR_IDN_PTR_IN: `kernel_ridge_fit_host` with X and y read from the
+    caller's addresses on the device (`_upload_checked`: shape refused on
+    the host, NaN / infinity on the device, X before y as the list route
+    walks them) and `dual_coef_` copied into `dual_out` (n_samples x
+    n_targets). The same launches in the same order as the list route at
+    its default scheduling and no sabotage; the weighted arm scales on the
+    device (`krr_scale_rows_kernel`, the host loop's line). Returns `info`
+    (0; a failed factorization raises DEVIATION 1662's refusal)."""
+    if xaddr == 0 or yaddr == 0:
+        raise Error("kernel_ridge_fit: null X or y address")
+    var ctx = _family_ctx()
+    var xa = _upload_checked(ctx, xaddr, n_samples, n_features, "kernel_ridge X")
+    var dy = _upload_checked(ctx, yaddr, n_samples, n_targets, "kernel_ridge y")
+    var precomputed = kp.kernel == KM_KERNEL_PRECOMPUTED
+    if precomputed:
+        if n_features != n_samples:
+            raise Error(
+                "kernel_ridge_fit_host: kernel='precomputed' needs a square"
+                " kernel matrix, got " + String(n_samples) + " x "
+                + String(n_features)
+            )
+    else:
+        km_validate_kernel_params(kp, "kernel_ridge")
+    var weighted = len(sw) > 0
+    if weighted:
+        krr_validate_weights(sw, n_samples)
+    _krr_validate_alpha(alpha)
+
+    var dsw = _upload(ctx, sw) if weighted else ctx.enqueue_create_buffer[DType.float32](1)
+    if weighted:
+        _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
+    trace.record_device(ctx, "krr.input", xa, n_samples * n_features)
+
+    var dk = ctx.enqueue_create_buffer[DType.float32](n_samples * n_samples)
+    var na = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    var nb = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    var kws = ctx.enqueue_create_buffer[DType.float32](
+        km_kernel_workspace_floats(n_samples, n_samples, n_features)
+    )
+    var cws = ctx.enqueue_create_buffer[DType.float32](
+        kernel_ridge_workspace_floats(n_samples)
+    )
+    ctx.synchronize()
+
+    if precomputed:
+        ctx.enqueue_copy(dst_buf=dk, src_buf=xa)
+    else:
+        km_kernel_matrix(
+            ctx, kp, dk, xa, xa, n_samples, n_samples, n_features,
+            na, nb, kws, KM_EPILOGUE_TPB, KMSAB_NONE,
+        )
+    trace.record_device(ctx, "krr.kernel", dk, n_samples * n_samples)
+    if weighted:
+        var cells = n_samples * n_samples
+        ctx.enqueue_function[krr_weight_kernel](
+            dk.unsafe_ptr(), dsw.unsafe_ptr(), Int32(n_samples),
+            grid_dim=((cells + KRR_WEIGHT_TPB - 1) // KRR_WEIGHT_TPB, 1, 1),
+            block_dim=(KRR_WEIGHT_TPB, 1, 1),
+        )
+        trace.record_device(ctx, "krr.weighted", dk, cells)
+
+    var info = kernel_ridge_solve(
+        ctx, dk, dy, cws, n_samples, n_targets, alpha, trace,
+        CHOL_PANEL_TPB, CHOL_ELEM_TPB, CHOL_SOLVE_TPB, KRR_RIDGE_TPB, KMSAB_NONE,
+    )
+    if info != 0:
+        ctx.synchronize()
+        raise Error(_krr_not_pd_message(info, kp.kernel, n_samples))
+    if weighted:
+        _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
+    _download_into(ctx, dy, dual_out, n_samples * n_targets)
+    _ = dsw^
+    _ = xa^
+    _ = dy^
+    _ = dk^
+    _ = na^
+    _ = nb^
+    _ = kws^
+    _ = cws^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return 0
+
+
+def kernel_ridge_predict_ptr_into[out_origin: MutOrigin, //](
+    xfit_addr: Int,
+    dual_addr: Int,
+    xnew_addr: Int,
+    n: Int,
+    d: Int,
+    t: Int,
+    kp: KernelParams,
+    n_query: Int,
+    output: MutPointer[Float32, out_origin],
+    mut trace: IdentityTrace,
+) raises:
+    """KRR_IDN_PTR_IN: `kernel_ridge_predict_host` with the fit's X and dual
+    and the query X read from the caller's addresses on the device (the
+    query scanned there, `_upload_checked`; the fitted arrays unchecked as
+    on the list route) and the n_query x t predictions copied into
+    `output`. The same launches as the list route."""
+    if xfit_addr == 0 or dual_addr == 0 or xnew_addr == 0:
+        raise Error("kernel_ridge_predict: null X_fit, dual or X address")
+    if n <= 0 or d <= 0 or t <= 0:
+        raise Error(
+            "kernel_ridge_predict: the model needs positive n, d and n_targets, got "
+            + String(n) + ", " + String(d) + ", " + String(t)
+        )
+    var ctx = _family_ctx()
+    var dq = _upload_checked(ctx, xnew_addr, n_query, d, "predict X")
+    var dfit = _upload_ptr(ctx, xfit_addr, n * d)
+    var ddual = _upload_ptr(ctx, dual_addr, n * t)
+    var dk = ctx.enqueue_create_buffer[DType.float32](n_query * n)
+    var na = ctx.enqueue_create_buffer[DType.float32](n_query)
+    var nb = ctx.enqueue_create_buffer[DType.float32](n)
+    var kws = ctx.enqueue_create_buffer[DType.float32](
+        km_kernel_workspace_floats(n_query, n, d)
+    )
+    var dpred = ctx.enqueue_create_buffer[DType.float32](n_query * t)
+    var gws = ctx.enqueue_create_buffer[DType.float32](
+        identical_gemm_workspace_max_floats(n_query, t, n)
+    )
+    ctx.synchronize()
+
+    if kp.kernel == KM_KERNEL_PRECOMPUTED:
+        # X IS the n_query x n_samples cross-kernel matrix.
+        ctx.enqueue_copy(dst_buf=dk, src_buf=dq)
+    else:
+        km_kernel_matrix(
+            ctx, kp, dk, dq, dfit, n_query, n, d, na, nb, kws, KM_EPILOGUE_TPB, KMSAB_NONE
+        )
+    trace.record_device(ctx, "krr.cross_kernel", dk, n_query * n)
+    identical_gemm_into(ctx, dpred, dk, ddual, gws, n_query, t, n, OP_NN)
+    trace.record_device(ctx, "krr.predictions", dpred, n_query * t)
+    _download_into(ctx, dpred, output, n_query * t)
+    _ = dq^
+    _ = dfit^
+    _ = ddual^
+    _ = dk^
+    _ = na^
+    _ = nb^
+    _ = kws^
+    _ = dpred^
+    _ = gws^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
 
 
 def kernel_ridge_primal_weights(
