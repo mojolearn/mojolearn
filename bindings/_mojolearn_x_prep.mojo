@@ -17,7 +17,7 @@ from x_prep.folds import I32P, kfold_folds, strat_folds
 from x_prep.fastnb_csr import NB_TEXT_CSR, nb_csr_fit_py, nb_csr_jll_py
 from x_prep.calib import CALIB_FOLDS, CAL_ST, CAL_LS
 from x_prep.py2mojo import PY2MOJO_PREP
-from x_prep.prep3 import PREP3_MAXABS
+from x_prep.prep3 import PREP3_MAXABS, PREP3_MAXABS_POOL
 from x_prep.fastmaxabs import maxabs_fit_direct
 
 from x_prep.fastpt import PTIMPUTE_FLAGS
@@ -144,6 +144,14 @@ def kfold_folds_binding(out_addr: PythonObject, ints: PythonObject, seed: Python
     if oa == 0 or n < 0:
         raise Error("x_prep: invalid fold buffers")
     kfold_folds(n, Int(py=ints[1]), _seed(seed), Int(py=ints[2]) != 0, I32P(unsafe_from_address=oa))
+    return PythonObject(0)
+
+
+def maxabs_pool_binding() raises -> PythonObject:
+    """1 when this binary's direct MaxAbsScaler fit uses pooled buffers
+    (lane/apple-fast-w4-small PREP3_MAXABS_POOL): the quality pair's reach."""
+    comptime if PREP3_MAXABS_POOL:
+        return PythonObject(1)
     return PythonObject(0)
 
 
@@ -280,6 +288,7 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         m.def_function[kfold_folds_binding]("x_prep_kfold_folds")
         comptime if PREP3_MAXABS:
             m.def_function[maxabs_fit_direct_binding]("x_prep_maxabs_fit_direct")
+        m.def_function[maxabs_pool_binding]("x_prep_maxabs_pool")
         m.def_function[numeric_mode_binding]("x_prep_numeric_mode")
         m.def_function[vendor_binding]("x_prep_vendor")
         comptime if X_PREP_FAST_UNIQUE:
