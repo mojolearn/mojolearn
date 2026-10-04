@@ -411,7 +411,7 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
             self, Xm, codes, len(classes), _SGD_CLF_LOSS[self.loss], self.penalty, self.learning_rate,
             self.alpha, self.l1_ratio, self.eta0, self.power_t, self.epsilon, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight, self.class_weight, classes, codes.tolist(), batch_size=self.batch_size)
+            sample_weight, self.class_weight, classes, codes.tolist() if self.class_weight == "balanced" else None, batch_size=self.batch_size)
         return self
 
     def predict_proba(self, X):
@@ -821,7 +821,7 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
             self, Xm, codes, len(classes), _SGD_CLF_LOSS["perceptron"], self.penalty, "constant",
             self.alpha, self.l1_ratio, self.eta0, 0.5, 0.1, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight, self.class_weight, classes, codes.tolist(), batch_size=self.batch_size,
+            sample_weight, self.class_weight, classes, codes.tolist() if self.class_weight == "balanced" else None, batch_size=self.batch_size,
             batch_sum=True)
         return self
 
@@ -861,7 +861,7 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
             self, Xm, codes, len(classes), _SGD_CLF_LOSS["hinge"], None, lr,
             1.0, 0.0, self.C, 0.5, 0.1, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight, self.class_weight, classes, codes.tolist(), batch_size=self.batch_size)
+            sample_weight, self.class_weight, classes, codes.tolist() if self.class_weight == "balanced" else None, batch_size=self.batch_size)
         return self
 
 

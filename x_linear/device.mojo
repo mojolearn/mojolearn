@@ -724,6 +724,147 @@ def sgd_mb_step_kernel(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP, bias:
 # batch a launch (the three kernels).
 comptime SGD_CHUNK_DEFAULT = 64
 
+# lane/idn-sgd-multiblock (2026-10-04): IDENTICAL on NVIDIA and AMD runs the
+# chunk kernel's one block at 1024 threads instead of XG_TPB. Every task of a
+# batch (a (row, column-block) dot, a row, a (sub-block, column) partial, a
+# weight) writes its own slot and the kernel strides them over block_dim, so
+# the words do not depend on the width: at batch 256 and istella's 220
+# columns the 1,792 dots and 1,776 partials were 7 tasks a thread.
+# `-D MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF` restores XG_TPB.
+comptime SGD_IDN_CHUNK_WIDE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF"]()
+)
+comptime SGD_CHUNK_TPB = 1024 if SGD_IDN_CHUNK_WIDE else XG_TPB
+
+# lane/idn-sgd-multiblock: batches above the chunk kernel's (SGDClassifier /
+# SGDRegressor at 4096) were three launches each (rows, partials, step). Here
+# batch b's step and batch b + 1's rows are ONE launch: every block applies
+# the step from the weights w0 into w1 (the same word from every block, so
+# the stores agree), crosses a device-ordering barrier and runs its rows on
+# w1; block 0 alone folds the objective. The weights alternate between two
+# buffers so no block reads a word another block is replacing. The same
+# helpers on the same operands in the same order: no bit moves.
+# `-D MOJOLEARN_SGD_IDN_MB_FUSE_OFF` restores three launches a batch.
+comptime SGD_IDN_MB_FUSE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_SGD_IDN_MB_FUSE_OFF"]()
+)
+
+
+def sgd_mb_steprows_kernel(
+    parts: FP, w0: FP, b0: FP, w1: FP, b1: FP, obj: FP, x: FP, ys: FP, idx: IP, swp: FP, dlv: FP, lv: FP,
+    ci: IP, cf: FP, etp: FP, start: Int32, bs_prev: Int32, bs: Int32, eta: Float32, dev_eta: Int32,
+    wf: IP, woff: Int32, nonce: Int32,
+):
+    """ci / cf: `_sgd_mb_chunk_kernel_body`'s. The step of the batch of
+    bs_prev rows (`sgd_mb_step_kernel`'s statements, w0 -> w1), then the rows
+    [start, start + bs) of the next batch (`sgd_mb_rows_kernel`'s) on w1;
+    bs == 0 is the step alone."""
+    var dd = ldi(ci, 2)
+    var loss = ldi(ci, 3)
+    var has_sw = ldi(ci, 4) != 0
+    var has_cw = ldi(ci, 5) != 0
+    var lr = ldi(ci, 6)
+    var nsub = ldi(ci, 7)
+    var penalty = ldi(ci, 8)
+    var fi = ldi(ci, 9) != 0
+    var need_obj = ldi(ci, 10) != 0
+    var one_class = ldi(ci, 11) != 0
+    var bsum = ldi(ci, 12) != 0
+    var sub = ldi(ci, 13)
+    var dblk = ldi(ci, 14)
+    var eps = ld(cf, 0)
+    var wpos = ld(cf, 1)
+    var wneg = ld(cf, 2)
+    var eta0 = ld(cf, 3)
+    var alpha = ld(cf, 5)
+    var l1r = ld(cf, 6)
+    var e = ld(etp, 0) if dev_eta != 0 else eta
+    var tid = Int(thread_idx.x)
+    var nt = Int(block_dim.x)
+    var bp = Int(bs_prev)
+    var subs = mb_subs(bp, sub)
+    for j in range(tid, dd + 2, nt):
+        var g = Float32(0)
+        for s in range(subs):
+            g = fa(g, ld(parts, j * nsub + s))
+        if j < dd:
+            st(w1, j, mb_step(ld(w0, j), g, bp, e, alpha, l1r, penalty, bsum))
+        elif j == dd:
+            if fi:
+                st(b1, 0, mb_bias_step(ld(b0, 0), g, bp, e, alpha, one_class, bsum))
+            else:
+                st(b1, 0, ld(b0, 0))
+        elif need_obj and Int(block_idx.x) == 0:
+            st(obj, 0, fa(ld(obj, 0), g))
+    team_barrier()
+    var r = Int(block_idx.x) * nt + tid
+    if r < Int(bs):
+        var i = Int(idx.unsafe_load(Int(start) + r))
+        var o = mb_row(x, ys, i, dd, w1, 0, ld(b1, 0), loss, eps, swp, has_sw, wpos, wneg, has_cw, lr, eta0, dblk)
+        st(dlv, r, o[0])
+        st(lv, r, o[1])
+    witness_end(wf, woff, nonce)
+
+
+# lane/idn-sgd-multiblock: the fit's finiteness check on the device (IDENTICAL,
+# NVIDIA and AMD). The binding walked all n x d host words one at a time
+# before every fit (bindings/_mojolearn_x_linear.mojo `_finite`); here one
+# thread tests SGD_FIN_RUN words of the uploaded X (and of y) and a bad word
+# raises the flag: the same verdict (exponent all ones = NaN or infinity),
+# the same error. Apple keeps the host walk (a cut Metal launch would leave
+# the flag clear). `-D MOJOLEARN_SGD_IDN_DEV_FINITE_OFF` restores the walk.
+comptime SGD_IDN_DEV_FINITE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SGD_IDN_DEV_FINITE_OFF"]()
+)
+comptime SGD_FIN_RUN = 64
+
+
+def sgd_finite_kernel(p: FP, count: Int32, flag: IP, slot: Int32):
+    var q = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var lo = q * SGD_FIN_RUN
+    var hi = min(lo + SGD_FIN_RUN, Int(count))
+    var bad = False
+    for i in range(lo, hi):
+        var bits = bitcast[DType.uint32](ld(p, i))
+        if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
+            bad = True
+    if bad:
+        sti(flag, Int(slot), 1)
+
+
+def _sgd_finite_device(mut ctx: DeviceContext, dxp: FP, n_x: Int, y: FP, n_y: Int) raises:
+    """Raises the binding's error when the uploaded X (dxp, n_x words) or the
+    host y block (n_y words: labels, then sample weights) holds a NaN or an
+    infinity; X is named first, as the host walk names it."""
+    var dfl = ctx.enqueue_create_buffer[DType.int32](2)
+    dfl.enqueue_fill(Int32(0))
+    var dyf = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
+    if n_x > 0:
+        ctx.enqueue_function[sgd_finite_kernel](
+            dxp, Int32(n_x), dfl.unsafe_ptr(), Int32(0),
+            grid_dim=_xg_blocks((n_x + SGD_FIN_RUN - 1) // SGD_FIN_RUN), block_dim=XG_TPB,
+        )
+    if n_y > 0:
+        ctx.enqueue_copy(dst_buf=dyf, src_ptr=y)
+        ctx.enqueue_function[sgd_finite_kernel](
+            dyf.unsafe_ptr(), Int32(n_y), dfl.unsafe_ptr(), Int32(1),
+            grid_dim=_xg_blocks((n_y + SGD_FIN_RUN - 1) // SGD_FIN_RUN), block_dim=XG_TPB,
+        )
+    var hfl = List[Int32](length=2, fill=Int32(0))
+    ctx.enqueue_copy(dst_ptr=hfl.unsafe_ptr(), src_buf=dfl)
+    ctx.synchronize()
+    var bx = hfl[0] != 0
+    var by = hfl[1] != 0
+    _ = hfl^
+    _ = dfl^
+    _ = dyf^
+    if bx:
+        raise Error("mojolearn: X contains NaN or infinity")
+    if by:
+        raise Error("mojolearn: y contains NaN or infinity")
+
 
 def sgd_rowsq_kernel(x: FP, n: Int32, d: Int32, sqp: FP, wf: IP, woff: Int32, nonce: Int32):
     """sqp[i] = `mb_rowsq` of row i: the PA rates' |x_i|^2, the chain
@@ -885,6 +1026,9 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var dobj = ctx.enqueue_create_buffer[DType.float32](1)
     var dws = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
     var dbs = ctx.enqueue_create_buffer[DType.float32](1)
+    # SGD_IDN_MB_FUSE: the pair the fused step writes while it reads dw / dbias
+    var dw2 = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    var dbias2 = ctx.enqueue_create_buffer[DType.float32](1)
     var wcap = 0
     var ws0 = 0
     while ws0 < n:
@@ -927,6 +1071,8 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var dy = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     if not one_class and n > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    comptime if SGD_IDN_DEV_FINITE:
+        _sgd_finite_device(ctx, FP(unsafe_from_address=Int(dx.unsafe_ptr())), n_x, y, n_y)
     var seed_lo = Int32(Int(UInt32(seed & UInt64(0xFFFFFFFF))))
     var seed_hi = Int32(Int(UInt32(seed >> 32)))
     # the epoch end on the device (x_linear/sgd_end.mojo): its state, the
@@ -1010,11 +1156,77 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                             dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), dw.unsafe_ptr(), dbias.unsafe_ptr(),
                             dsw.unsafe_ptr(), ddl.unsafe_ptr(), dlv.unsafe_ptr(), dparts.unsafe_ptr(), dobj.unsafe_ptr(),
                             dci.unsafe_ptr(), dcf.unsafe_ptr(), ddotp.unsafe_ptr(), dsq.unsafe_ptr(), Int32(start), Int32(nbt), Int32(t),
-                            wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=XG_TPB,
+                            wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=SGD_CHUNK_TPB,
                         )
                         wo += 1
                         t = tt
                         start = s1
+                elif SGD_IDN_MB_FUSE:
+                    # the weights are in dw / dbias at the epoch's start (and
+                    # after a restore); cur names the pair the last step wrote
+                    var cur = 0
+                    var bs_prev = 0
+                    var et_prev = eta0
+                    var etp = FP(unsafe_from_address=Int(dstt.unsafe_ptr())) + 4 * par + 2
+                    # host-side addresses (the two pairs swap roles a batch)
+                    var wa = Int(dw.unsafe_ptr())
+                    var wb = Int(dw2.unsafe_ptr())
+                    var ba = Int(dbias.unsafe_ptr())
+                    var bb = Int(dbias2.unsafe_ptr())
+                    while start < n:
+                        var bs = min(batch, n - start)
+                        var et = mb_eta(lr, eta0, eta0, alpha, power_t, opt_init, t)
+                        if bs_prev == 0:
+                            ctx.enqueue_function[sgd_mb_rows_kernel](
+                                dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), Int32(start), Int32(bs), Int32(d),
+                                dw.unsafe_ptr(), dbias.unsafe_ptr(), Int32(loss), eps, dsw.unsafe_ptr(), Int32(1 if has_sw else 0),
+                                wpos, wneg, Int32(1 if has_cw else 0), ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(lr), eta0, Int32(dblk),
+                                wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(bs), block_dim=XG_TPB,
+                            )
+                        else:
+                            var w_src = FP(unsafe_from_address=wa if cur == 0 else wb)
+                            var b_src = FP(unsafe_from_address=ba if cur == 0 else bb)
+                            var w_dst = FP(unsafe_from_address=wb if cur == 0 else wa)
+                            var b_dst = FP(unsafe_from_address=bb if cur == 0 else ba)
+                            ctx.enqueue_function[sgd_mb_steprows_kernel](
+                                dparts.unsafe_ptr(), w_src, b_src, w_dst, b_dst,
+                                dobj.unsafe_ptr(), dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), dsw.unsafe_ptr(),
+                                ddl.unsafe_ptr(), dlv.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), etp,
+                                Int32(start), Int32(bs_prev), Int32(bs), et_prev, Int32(dev_eta),
+                                wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(bs), block_dim=XG_TPB,
+                            )
+                            cur = 1 - cur
+                        wo += _xg_blocks(bs)
+                        ctx.enqueue_function[sgd_mb_parts_kernel](
+                            dx.unsafe_ptr(), Int32(d), didx.unsafe_ptr(), Int32(start), ddl.unsafe_ptr(), dlv.unsafe_ptr(),
+                            Int32(bs), Int32(nsub), dparts.unsafe_ptr(), Int32(sub), wit.p(), Int32(wo), nonce,
+                            grid_dim=_xg_blocks((d + 2) * mb_subs(bs, sub)), block_dim=XG_TPB,
+                        )
+                        wo += _xg_blocks((d + 2) * mb_subs(bs, sub))
+                        bs_prev = bs
+                        et_prev = et
+                        t += bs if bsum else 1
+                        start += bs
+                    # the last batch's step, landing in dw / dbias: in place
+                    # when the weights are there, else the step-only launch
+                    if bs_prev > 0 and cur == 0:
+                        ctx.enqueue_function[sgd_mb_step_kernel](
+                            dparts.unsafe_ptr(), Int32(nsub), Int32(bs_prev), Int32(d), dw.unsafe_ptr(), dbias.unsafe_ptr(),
+                            dobj.unsafe_ptr(), et_prev, alpha, l1r, Int32(penalty), Int32(1 if fi else 0), Int32(1 if need_obj else 0),
+                            Int32(1 if one_class else 0), Int32(1 if bsum else 0), Int32(sub),
+                            etp, Int32(dev_eta), wit.p(), Int32(wo), nonce,
+                            grid_dim=_xg_blocks(d + 2), block_dim=XG_TPB,
+                        )
+                        wo += _xg_blocks(d + 2)
+                    elif bs_prev > 0:
+                        ctx.enqueue_function[sgd_mb_steprows_kernel](
+                            dparts.unsafe_ptr(), dw2.unsafe_ptr(), dbias2.unsafe_ptr(), dw.unsafe_ptr(), dbias.unsafe_ptr(),
+                            dobj.unsafe_ptr(), dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), dsw.unsafe_ptr(),
+                            ddl.unsafe_ptr(), dlv.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), etp,
+                            Int32(start), Int32(bs_prev), Int32(0), et_prev, Int32(dev_eta),
+                            wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=XG_TPB,
+                        )
+                        wo += 1
                 else:
                     while start < n:
                         var bs = min(batch, n - start)
@@ -1102,6 +1314,8 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     _ = dobj^
     _ = dws^
     _ = dbs^
+    _ = dw2^
+    _ = dbias2^
     _ = wit^
 
 
@@ -1537,6 +1751,229 @@ def _sgd_ps_simd_body(
         sti(pt, c, t)
 
 
+# lane/idn-sgd-multiblock (2026-10-04): SGD_IDN_PS_WARP, IDENTICAL on NVIDIA
+# and AMD for d <= SPS_W * MB_DBLK (off: -D MOJOLEARN_SGD_IDN_PS_WARP_OFF).
+# The block form above pays, per SAMPLE, the partials' stores, two device-
+# ordering barriers and a device load and store of every weight. Here a
+# problem is ONE warp of SPS_W lanes: lane l keeps the weights (and q) of
+# column block l (MB_DBLK columns) in registers for the whole launch and
+# runs that block's chain (`mb_block_dot`'s, `sgd_reg_block`'s); every lane
+# then folds the blocks' partials ascending from zero, each read from its
+# lane (`shuffle_idx`), so the scalars are uniform without a barrier, and
+# updates its own block's weights. The same chains folded in the same order
+# as the block form and the host's `sgd_one`: no bit moves.
+comptime SGD_IDN_PS_WARP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SGD_IDN_PS_WARP_OFF"]()
+)
+
+
+@always_inline
+def _spw_fold(v: Float32, nb: Int) -> Float32:
+    """fa-fold of lanes 0 .. nb - 1's words, ascending from zero."""
+    var acc = Float32(0)
+    for b in range(nb):
+        acc = fa(acc, shuffle_idx(v, UInt32(b)))
+    return acc
+
+
+def _sgd_ps_warp_body(
+    x: FP, lab: FP, swp: FP, idx: IP, w: FP, q: FP, sqp: FP, part: FP,
+    ps: FP, pt: IP, act: IP, pf: FP, ci: IP, cf: FP, start: Int32, cnt: Int32,
+):
+    """ci: n, d, loss, penalty, lr, fit_intercept, need_obj, one_class, has_sw,
+    has_cw, k, has_sq; cf: alpha, l1_ratio (the penalty's), eta0, power_t,
+    eps, optimal_init, decay_factor; per problem c: pf[3c..] eta, wpos, wneg;
+    ps[SGD_PS_ST c..] intercept, u, objective, intercept lo (one-class), wscale hi, lo; pt[c] t; act[c] 1 while it trains."""
+    var c = Int(block_idx.x)
+    if ldi(act, c) == 0:
+        return
+    var nn = ldi(ci, 0)
+    var d = ldi(ci, 1)
+    var loss = ldi(ci, 2)
+    var penalty = ldi(ci, 3)
+    var lr = ldi(ci, 4)
+    var fi = ldi(ci, 5) != 0
+    var need_obj = ldi(ci, 6) != 0
+    var one_class = ldi(ci, 7) != 0
+    var has_sw = ldi(ci, 8) != 0
+    var has_cw = ldi(ci, 9) != 0
+    var k = ldi(ci, 10)
+    var alpha = ld(cf, 0)
+    var l1_ratio = ld(cf, 1)
+    var eta0 = ld(cf, 2)
+    var power_t = ld(cf, 3)
+    var eps = ld(cf, 4)
+    var optimal_init = ld(cf, 5)
+    var decay_factor = ld(cf, 6)
+    var pa_rate = lr == LR_PA1 or lr == LR_PA2
+    var tid = Int(thread_idx.x)
+    var nt = Int(block_dim.x)
+    var nb = (d + MB_DBLK - 1) // MB_DBLK
+    var need_reg = need_obj and penalty != P_NONE and not pa_rate
+    var ntask = 2 * nb if need_reg else nb
+    var woff = c * d
+    var j0 = tid * MB_DBLK
+    var poff = c * 3 * nb
+    var do_decay = penalty == P_L2 or penalty == P_EN
+    var do_l1 = penalty == P_L1 or penalty == P_EN
+    var intercept = ld(ps, SGD_PS_ST * c)
+    var u = ld(ps, SGD_PS_ST * c + 1)
+    var objective = Float32(0) if Int(start) == 0 else ld(ps, SGD_PS_ST * c + 2)
+    var il = ld(ps, SGD_PS_ST * c + 3)
+    var whi = ld(ps, SGD_PS_ST * c + 4)
+    var wlo = ld(ps, SGD_PS_ST * c + 5)
+    var t = ldi(pt, c)
+    var eta = ld(pf, 3 * c)
+    var wpos = ld(pf, 3 * c + 1)
+    var wneg = ld(pf, 3 * c + 2)
+    var wv = SIMD[DType.float32, MB_DBLK](0)
+    var qv = SIMD[DType.float32, MB_DBLK](0)
+    comptime for uu in range(MB_DBLK):
+        var j = j0 + uu
+        if j < d:
+            wv[uu] = ld(w, woff + j)
+            if do_l1:
+                qv[uu] = ld(q, woff + j)
+    for r in range(Int(start), Int(start) + Int(cnt)):
+        var i = ldi(idx, c * nn + r)
+        # A: lane l's block (`mb_block_dot`'s chain, the weights from the
+        # registers); the blocks' partials folded ascending in every lane
+        var ixd = i * d
+        var accd = Float32(0)
+        comptime for ua in range(MB_DBLK):
+            var j = j0 + ua
+            if j < d:
+                accd = fmad(ld(x, ixd + j), wv[ua], accd)
+        var dot = _spw_fold(accd, nb)
+        var y = _sgd_target(k, c, ld(lab, i))
+        var dotw = ws_mul(dot, whi, wlo)
+        var p = fa(fa(dotw, il), intercept) if one_class else fa(dotw, intercept)
+        if lr == LR_OPTIMAL:
+            eta = fd(Float32(1), fm(alpha, fs(fa(optimal_init, i2f(t)), Float32(1))))
+        elif lr == LR_INVSCALING:
+            eta = fd(eta0, identical_pow(i2f(t), power_t))
+        var oc = one_class and loss == L_HINGE
+        var och = oc_hinge(dotw, intercept, il)
+        var cur = och[0] if oc else sgd_loss(loss, y, p, eps)
+        if need_obj:
+            objective = fa(objective, cur)
+            if not pa_rate:
+                if penalty != P_NONE:
+                    var a2 = Float32(0)
+                    var a1 = Float32(0)
+                    comptime for ub in range(MB_DBLK):
+                        if j0 + ub < d:
+                            a2 = fmad(wv[ub], wv[ub], a2)
+                            a1 = fa(a1, fabs(wv[ub]))
+                    var n2 = _spw_fold(a2, nb)
+                    var n1 = _spw_fold(a1, nb)
+                    n2 = fm(fm(whi, whi), n2)
+                    n1 = fm(whi, n1)
+                    var reg = fa(fm(fm(fs(Float32(1), l1_ratio), Float32(0.5)), n2), fm(l1_ratio, n1))
+                    objective = fa(objective, fm(alpha, reg))
+                if one_class:
+                    objective = fa(objective, fm(intercept, alpha))
+        var skip = False
+        var update = Float32(0)
+        if pa_rate:
+            var sq = ld(sqp, i)
+            if lr == LR_PA1:
+                if sq == 0:
+                    skip = True
+                else:
+                    update = fmin(eta0, fd(cur, sq))
+            else:
+                update = fd(cur, fa(sq, fd(Float32(0.5), eta0)))
+            if not skip:
+                if loss == L_HINGE:
+                    update = fm(update, y)
+                elif fs(y, p) < 0:
+                    update = -update
+        else:
+            var dl = och[1] if oc else sgd_dloss(loss, y, p, eps)
+            if dl < Float32(-1e12):
+                dl = Float32(-1e12)
+            elif dl > Float32(1e12):
+                dl = Float32(1e12)
+            update = fm(-eta, dl)
+        if not skip:
+            if has_cw or has_sw:
+                var cwv = Float32(1)
+                if has_cw:
+                    cwv = wpos if y > 0 else wneg
+                var swi = ld(swp, i) if has_sw else Float32(1)
+                update = fm(update, fm(cwv, swi))
+            # their w.scale on wscale, the fold into v below 1e-9 (C)
+            var fold = False
+            var fhi = Float32(1)
+            var flo = Float32(0)
+            if do_decay:
+                var ws = ws_decay(whi, wlo, fm(decay_factor, eta))
+                whi = ws[0]
+                wlo = ws[1]
+                if whi < WS_RESET:
+                    fold = True
+                    fhi = whi
+                    flo = wlo
+                    whi = Float32(1)
+                    wlo = Float32(0)
+            var cu = Float32(0)
+            if update != 0:
+                cu = ws_div(update, whi, wlo)
+            if fi:
+                var iu = update
+                if one_class:
+                    iu = fs(iu, fm(eta, alpha))
+                if iu != 0:
+                    if one_class:
+                        var ia = ff_add(intercept, il, iu)
+                        intercept = ia[0]
+                        il = ia[1]
+                    else:
+                        intercept = fa(intercept, iu)
+            if do_l1:
+                u = fa(u, fm(fm(l1_ratio, eta), alpha))
+            # C: the weights, thread j
+            comptime for uu in range(MB_DBLK):
+                var j = j0 + uu
+                if j < d:
+                    var wj = wv[uu]
+                    if fold:
+                        wj = ws_mul(wj, fhi, flo)
+                    if update != 0:
+                        wj = fmad(cu, ld(x, ixd + j), wj)
+                    if do_l1:
+                        var rq = ws_clip(wj, u, qv[uu], whi)
+                        qv[uu] = rq[1]
+                        wj = rq[0]
+                    wv[uu] = wj
+            t += 1
+    comptime for uu in range(MB_DBLK):
+        var j = j0 + uu
+        if j < d:
+            st(w, woff + j, wv[uu])
+            if do_l1:
+                st(q, woff + j, qv[uu])
+    if tid == 0:
+        st(ps, SGD_PS_ST * c, intercept)
+        st(ps, SGD_PS_ST * c + 1, u)
+        st(ps, SGD_PS_ST * c + 2, objective)
+        st(ps, SGD_PS_ST * c + 3, il)
+        st(ps, SGD_PS_ST * c + 4, whi)
+        st(ps, SGD_PS_ST * c + 5, wlo)
+        sti(pt, c, t)
+
+
+def sgd_ps_warp_kernel(
+    x: FP, lab: FP, swp: FP, idx: IP, w: FP, q: FP, sqp: FP, part: FP,
+    ps: FP, pt: IP, act: IP, pf: FP, ci: IP, cf: FP, start: Int32, cnt: Int32,
+    wf: IP, woff: Int32, nonce: Int32,
+):
+    _sgd_ps_warp_body(x, lab, swp, idx, w, q, sqp, part, ps, pt, act, pf, ci, cf, start, cnt)
+    witness_end(wf, woff, nonce)
+
+
 def sgd_ps_simd_kernel(
     x: FP, lab: FP, swp: FP, idx: IP, w: FP, q: FP, sqp: FP, part: FP,
     ps: FP, pt: IP, act: IP, pf: FP, ci: IP, cf: FP, start: Int32, cnt: Int32,
@@ -1592,6 +2029,9 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var sps = False
     comptime if SGD_FAST_PS_SIMD:
         sps = d >= 1 and d <= SPS_MAX_D
+    var spw = False
+    comptime if SGD_IDN_PS_WARP:
+        spw = d >= 1 and nb <= SPS_W
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
     var dlab = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     var dsw = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
@@ -1661,6 +2101,8 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     ctx.enqueue_copy(dst_buf=dlab, src_ptr=y)
     if has_sw:
         ctx.enqueue_copy(dst_buf=dsw, src_ptr=y + n)
+    comptime if SGD_IDN_DEV_FINITE:
+        _sgd_finite_device(ctx, FP(unsafe_from_address=Int(dx.unsafe_ptr())), n_x, y, n_y)
     ctx.enqueue_copy(dst_buf=dci, src_ptr=hci.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=dcf, src_ptr=hcf.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=dps, src_ptr=hps.unsafe_ptr())
@@ -1701,7 +2143,14 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
             var start = 0
             while start < n:
                 var cnt = min(chunk, n - start)
-                if sps:
+                if spw:
+                    ctx.enqueue_function[sgd_ps_warp_kernel](
+                        dx.unsafe_ptr(), dlab.unsafe_ptr(), dsw.unsafe_ptr(), didx.unsafe_ptr(), dw.unsafe_ptr(),
+                        dq.unsafe_ptr(), dsq.unsafe_ptr(), dpart.unsafe_ptr(), dps.unsafe_ptr(), dpt.unsafe_ptr(),
+                        dact.unsafe_ptr(), dpf.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), Int32(start), Int32(cnt),
+                        wit.p(), Int32(wo), nonce, grid_dim=problems, block_dim=SPS_W,
+                    )
+                elif sps:
                     ctx.enqueue_function[sgd_ps_simd_kernel](
                         dx.unsafe_ptr(), dlab.unsafe_ptr(), dsw.unsafe_ptr(), didx.unsafe_ptr(), dw.unsafe_ptr(),
                         dq.unsafe_ptr(), dsq.unsafe_ptr(), dpart.unsafe_ptr(), dps.unsafe_ptr(), dpt.unsafe_ptr(),
