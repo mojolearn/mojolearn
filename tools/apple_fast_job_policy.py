@@ -7,6 +7,7 @@ POLICIES = {
     "tools/arima_assoc_scan_oracle.py": "reference",
     "tools/arima_gaussian_scan_oracle.py": "reference",
     "tools/arima_k1_diagnostics.py": "reference",
+    "tools/arima_k3_df_reference.py": "reference",
     "tools/mcd_saved_oracle.py": "reference",
     "tools/catalog_gemm_quality.py": "verified-standalone-quality",
     "tools/callpath_probe_pair.py": "verified-standalone-quality",
