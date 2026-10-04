@@ -63,9 +63,9 @@ from ensemble.decisiontree.batched_levelalgo.kernels.level_loop_kernels import (
     LOOP_NODE_INTS,
     LOOP_QUEUE_INTS,
     launch_loop_finalize,
-    launch_loop_init,
     launch_loop_pop,
     launch_loop_push,
+    loop_root_words,
     loop_scan_words,
 )
 from ensemble.decisiontree.decisiontree import (
@@ -1343,6 +1343,11 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     var loop_nodes_i: DeviceBuffer[DType.int32]
     var loop_nodes_f: DeviceBuffer[Self.O.DataT]
     var loop_scan: DeviceBuffer[DType.int32]
+    # the root's initial control words (pinned, written once: they depend
+    # only on `n_sampled_rows`) and the two device views they upload into
+    var loop_h_root: HostBuffer[DType.int32]
+    var loop_root_queue: DeviceBuffer[DType.int32]
+    var loop_root_node: DeviceBuffer[DType.int32]
     # node capacity of the tables above; 0 = arm not available
     var loop_cap: Int
     # batches enqueued for the tree in flight (bounds the batch width)
@@ -1632,6 +1637,16 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             self.loop_scan = ctx.enqueue_create_buffer[DType.int32](
                 loop_scan_words(max_batch)
             )
+            self.loop_h_root = ctx.enqueue_create_host_buffer[DType.int32](
+                LOOP_HDR_WORDS + LOOP_QUEUE_INTS + LOOP_NODE_INTS
+            )
+            loop_root_words(self.loop_h_root.unsafe_ptr(), n_sampled_rows)
+            self.loop_root_queue = self.loop_queue.create_sub_buffer[
+                DType.int32
+            ](0, LOOP_QUEUE_INTS)
+            self.loop_root_node = self.loop_nodes_i.create_sub_buffer[
+                DType.int32
+            ](0, LOOP_NODE_INTS)
         else:
             self.loop_hdr = ctx.enqueue_create_buffer[DType.int32](1)
             self.loop_h_hdr = ctx.enqueue_create_host_buffer[DType.int32](1)
@@ -1639,6 +1654,13 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             self.loop_nodes_i = ctx.enqueue_create_buffer[DType.int32](1)
             self.loop_nodes_f = ctx.enqueue_create_buffer[Self.O.DataT](1)
             self.loop_scan = ctx.enqueue_create_buffer[DType.int32](1)
+            self.loop_h_root = ctx.enqueue_create_host_buffer[DType.int32](1)
+            self.loop_root_queue = self.loop_queue.create_sub_buffer[
+                DType.int32
+            ](0, 1)
+            self.loop_root_node = self.loop_nodes_i.create_sub_buffer[
+                DType.int32
+            ](0, 1)
 
         ctx.enqueue_memset(self.mutex, Int32(0))
         ctx.synchronize()
@@ -3424,15 +3446,24 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             ):
                 self.loop_active = True
                 self.loop_batch = 0
-                launch_loop_init(
-                    ctx,
-                    self.loop_hdr.unsafe_ptr()
-                    .unsafe_origin_cast[MutUntrackedOrigin](),
-                    self.loop_queue.unsafe_ptr()
-                    .unsafe_origin_cast[MutUntrackedOrigin](),
-                    self.loop_nodes_i.unsafe_ptr()
-                    .unsafe_origin_cast[MutUntrackedOrigin](),
-                    self.n_sampled_rows,
+                # The root: header, queue item 0, node 0 (control words
+                # fixed at construction, `loop_root_words`).
+                log_launch_ctx(ctx, "xfer_loop_root")
+                ctx.enqueue_copy(
+                    dst_buf=self.loop_hdr,
+                    src_ptr=self.loop_h_root.unsafe_ptr(),
+                )
+                ctx.enqueue_copy(
+                    dst_buf=self.loop_root_queue,
+                    src_ptr=self.loop_h_root.unsafe_ptr().unsafe_offset(
+                        LOOP_HDR_WORDS
+                    ),
+                )
+                ctx.enqueue_copy(
+                    dst_buf=self.loop_root_node,
+                    src_ptr=self.loop_h_root.unsafe_ptr().unsafe_offset(
+                        LOOP_HDR_WORDS + LOOP_QUEUE_INTS
+                    ),
                 )
                 self._enqueue_loop_batches(
                     ctx, ts.ds, quantiles, ts.smem_config, instr

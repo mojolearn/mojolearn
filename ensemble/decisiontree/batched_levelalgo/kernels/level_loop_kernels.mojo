@@ -48,6 +48,11 @@ entries itself (at most `LOOP_TPB - 1` integer reads), writes the block
 total, and a second launch adds the earlier blocks' totals. Integer adds in
 any order give the same value.
 
+THE ROOT (`NodeQueue`'s constructor, `builder.cuh:50-62`) is not a kernel:
+the header, node 0 and queue item 0 of an expandable root are a few control
+words that depend only on the sampled row count, so the builder uploads them
+from one pinned buffer at the start of each tree (`loop_root_words`).
+
 HEADER WORDS (`Int32`, `LOOP_HDR_WORDS` of them): see the `LOOP_H_*`
 constants. NODE TABLE: `LOOP_NODE_INTS` Int32 per node
 `[colid, left_child, instance_count, range_begin, range_count, depth]` and
@@ -88,33 +93,6 @@ comptime LOOP_H_BLOCKS = 5
 comptime LOOP_H_PEND_APPEND = 6
 #: valid splits of the batch in flight (committed likewise)
 comptime LOOP_H_PEND_VALID = 7
-
-
-def loop_init_kernel(
-    hdr: MutPointer[Int32, MutAnyOrigin],
-    queue: MutPointer[Int32, MutAnyOrigin],
-    nodes_i: MutPointer[Int32, MutAnyOrigin],
-    n_rows: Int32,
-):
-    """`NodeQueue`'s constructor (`builder.cuh:50-62`) for an expandable
-    root: one leaf holding every sampled row, queued as the first work
-    item. One thread; a dozen words."""
-    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
-        return
-    for w in range(LOOP_HDR_WORDS):
-        hdr[unsafe_offset=w] = Int32(0)
-    hdr[unsafe_offset=LOOP_H_TAIL] = Int32(1)
-    hdr[unsafe_offset=LOOP_H_NODES] = Int32(1)
-    nodes_i[unsafe_offset=0] = Int32(-1)
-    nodes_i[unsafe_offset=1] = Int32(-1)
-    nodes_i[unsafe_offset=2] = n_rows
-    nodes_i[unsafe_offset=3] = Int32(0)
-    nodes_i[unsafe_offset=4] = n_rows
-    nodes_i[unsafe_offset=5] = Int32(0)
-    queue[unsafe_offset=0] = Int32(0)
-    queue[unsafe_offset=1] = Int32(0)
-    queue[unsafe_offset=2] = Int32(0)
-    queue[unsafe_offset=3] = n_rows
 
 
 @always_inline
@@ -495,28 +473,37 @@ def loop_commit_kernel(hdr: MutPointer[Int32, MutAnyOrigin]):
 # ===========================================================================
 
 
+def loop_root_words[
+    o: MutOrigin, //
+](dst: MutPointer[Int32, o], n_rows: Int):
+    """Fill `LOOP_HDR_WORDS + LOOP_QUEUE_INTS + LOOP_NODE_INTS` host words
+    with an expandable root's initial state, in upload order: the header
+    (queue holds one item, tree holds one node), queue item 0
+    `[idx 0, depth 0, begin 0, count n_rows]`, node 0 (a leaf holding every
+    sampled row: `[colid -1, left -1, count, begin 0, range count, depth
+    0]`)."""
+    for w in range(LOOP_HDR_WORDS):
+        dst[unsafe_offset=w] = Int32(0)
+    dst[unsafe_offset=LOOP_H_TAIL] = Int32(1)
+    dst[unsafe_offset=LOOP_H_NODES] = Int32(1)
+    var q = LOOP_HDR_WORDS
+    dst[unsafe_offset=q] = Int32(0)
+    dst[unsafe_offset = q + 1] = Int32(0)
+    dst[unsafe_offset = q + 2] = Int32(0)
+    dst[unsafe_offset = q + 3] = Int32(n_rows)
+    var nd = LOOP_HDR_WORDS + LOOP_QUEUE_INTS
+    dst[unsafe_offset=nd] = Int32(-1)
+    dst[unsafe_offset = nd + 1] = Int32(-1)
+    dst[unsafe_offset = nd + 2] = Int32(n_rows)
+    dst[unsafe_offset = nd + 3] = Int32(0)
+    dst[unsafe_offset = nd + 4] = Int32(n_rows)
+    dst[unsafe_offset = nd + 5] = Int32(0)
+
+
 def loop_scan_words(max_batch: Int) -> Int:
     """Int32 words of the scan scratch: three per-slot prefix arrays and
     three per-launch-block total arrays."""
     return 3 * max_batch + 3 * ceildiv(max_batch, LOOP_TPB)
-
-
-def launch_loop_init(
-    ctx: DeviceContext,
-    hdr: MutPointer[Int32, MutUntrackedOrigin],
-    queue: MutPointer[Int32, MutUntrackedOrigin],
-    nodes_i: MutPointer[Int32, MutUntrackedOrigin],
-    n_rows: Int,
-) raises:
-    log_launch_ctx(ctx, "loop_init")
-    ctx.enqueue_function[loop_init_kernel](
-        hdr.unsafe_origin_cast[MutAnyOrigin](),
-        queue.unsafe_origin_cast[MutAnyOrigin](),
-        nodes_i.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(n_rows),
-        grid_dim=1,
-        block_dim=1,
-    )
 
 
 def launch_loop_pop(
