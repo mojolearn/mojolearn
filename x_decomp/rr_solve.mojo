@@ -34,8 +34,8 @@ def host_eigh_rr_sorted(mut m: List[Float32], n: Int, mut w: List[Float32], mut 
     """`m` (n x n row major, consumed): w = n values ascending, v = n x n row
     major, vector c in COLUMN c. Not converged in RR_EIGH_SWEEPS raises (no
     cyclic fallback). Returns the sweeps run."""
-    # lane fam2-decomp: the block Jacobi at large n, the device's choice
-    # (`rb_use`, x_decomp/rr_block.mojo; `DevExec._eigh_par_on`)
+    # Experimental block Jacobi is opt-in only, the device's same shared
+    # choice (`rb_use`, x_decomp/rr_block.mojo; `DevExec._eigh_par_on`).
     if rb_use(n):
         return host_eigh_rb_sorted(m, n, w, v)
     var vr = List[Float32](length=n * n, fill=Float32(0.0))

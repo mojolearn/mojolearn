@@ -41,10 +41,17 @@ a real one stays zero there. The pivot solves sort, so pads wander among
 the columns; the tail finds them by their pad-row cell and ranks the real
 columns only (`rb_rank_real`).
 
+EXPERIMENTAL ONLY: the default is disabled after the IDENTICAL 4096 rank-one
+quality fixture produced an intrinsically unconverged local pivot (outer
+sweep 0, round 183, group 71). Exact-word host replay also refuses after
+60/120/180/240 sweeps at the required local tolerance. Do not relax that
+tolerance or the final convergence/accuracy gates to enable this candidate.
+
 BITS: a different solver, so different words from the rotation solver at
 n >= RB_MIN_N, on NVIDIA, AMD, Apple and the host column together (the gate
 below is one comptime constant every one of them imports; the cells here
-are the only arithmetic). -D MOJOLEARN_IDN_EIGH_BLOCK_OFF (or
+are the only arithmetic). -D MOJOLEARN_IDN_EIGH_BLOCK_ON explicitly enables
+the experimental candidate; -D MOJOLEARN_IDN_EIGH_BLOCK_OFF (or
 -D MOJOLEARN_IDN_ALL_OFF) restores the rotation solver at every size.
 
 CANDIDATE ARMS (default off, each moves the words on all four columns):
@@ -58,7 +65,7 @@ from std.memory import bitcast
 from x_decomp.cells import F32Ptr
 from x_decomp.rr import pj_first, pj_second
 
-comptime IDN_EIGH_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_EIGH_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+comptime IDN_EIGH_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_EIGH_BLOCK_ON"]() and not (is_defined["MOJOLEARN_IDN_EIGH_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 
 comptime _RB_B_WIDE = 32 if is_defined["MOJOLEARN_IDN_EIGH_BLOCK_B32"]() else 16
 #: columns a block

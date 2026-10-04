@@ -76,7 +76,8 @@
     "pca_bits",
     "import_smoke",
     "cnn_seams",
-    "cnn_epoch_adam_controls"
+    "cnn_epoch_adam_controls",
+    "eigh_block_expected_refusal"
   ],
   "quality_gates": [
     {
@@ -278,6 +279,12 @@
         "on"
       ],
       "coverage": "Permutation n1,2,3,1000,65537 and Adam steps1..100000 at two beta pairs against source portable_float64, <=1ULP."
+    },
+    {
+      "id": "eigh_block_expected_refusal",
+      "kind": "mojo",
+      "path": "tools/identical_wave_eigh_block_refusal.mojo",
+      "coverage": "Exact captured32x32 unsafe block pivot must refuse60sweeps, default all-column block route disabled. This is a refusal regression, not a passed decomposition."
     }
   ],
   "cases": [

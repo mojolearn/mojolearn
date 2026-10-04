@@ -2493,8 +2493,8 @@ struct DevExec(Exec):
                 _ = bw^
                 _ = bv^
                 return 0
-        # lane fam2-decomp: the block Jacobi at large n (x_decomp/rr_block.mojo;
-        # `rb_use` is False under -D MOJOLEARN_IDN_EIGH_BLOCK_OFF and in FAST)
+        # Experimental block Jacobi is opt-in only (x_decomp/rr_block.mojo);
+        # shared rb_use keeps GPU and host defaults and OFF precedence aligned.
         if rb_use(n):
             return DevExec._eigh_block_on(ctx, da, w, v, n)
         var m = n + (n % 2)
