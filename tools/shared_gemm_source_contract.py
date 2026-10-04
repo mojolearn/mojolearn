@@ -7,6 +7,8 @@ import subprocess
 # Exact allowlist: no native/production input or variant config may drift.
 TOOL_ONLY = frozenset((
     'tools/shared_gemm_source_contract.py',
+    'tools/shared_gemm_preflight.py',
+    'tools/shared_gemm_build_ibase.sh',
     'tools/shared_gemm_downstream_pair.py',
     'tools/shared_gemm_downstream_quality.py',
     'docs/apple-fast/ab/shared-gemm-downstream.md',
