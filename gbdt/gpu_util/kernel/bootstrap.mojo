@@ -100,6 +100,24 @@ from gbdt.gpu_util.kernel.random_gen import (
     next_poisson_f,
     next_uniform_f,
 )
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+#: lane/fam2-gbdt F1 (IDENTICAL, every vendor; default ON): the 65,536
+#: splitmix64 seeds are written by one device launch instead of a host loop,
+#: an upload and a drain. Seed `i` is the mix of `base_seed + (i + 1) *
+#: golden`, which IS the host loop's running `x` at step `i` (wrapping mod
+#: 2^64 the same way), so every seed keeps its value: integer work only, no
+#: bit moves, the host column (`gbdt/host/gbdt_oracle.mojo`) is untouched.
+#: `-D MOJOLEARN_IDN_GBDT_BOOT_SEEDS_DEVICE_OFF` (or the master
+#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the host loop.
+comptime IDN_BOOT_SEEDS_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_GBDT_BOOT_SEEDS_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
 
 #: the three arms of their `Bootstrap` dispatch this file draws
 #: (`gpu_data/bootstrap.h:41-92`). The names are their `EBootstrapType`
@@ -252,6 +270,21 @@ def bootstrap_kernel[bootstrap_type: Int](
             )
 
 
+def bootstrap_seed_fill_kernel(
+    seeds: MutPointer[UInt64, MutAnyOrigin], base_seed: UInt64
+):
+    """`IDN_BOOT_SEEDS_DEVICE`: seed `i` is splitmix64 of `base_seed +
+    (i + 1) * 0x9E3779B97F4A7C15`, the host loop's `x` at step `i`."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= BOOTSTRAP_SEED_COUNT:
+        return
+    var z = base_seed + UInt64(i + 1) * UInt64(0x9E3779B97F4A7C15)
+    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
+    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
+    z = z ^ (z >> 31)
+    seeds.unsafe_store(i, z)
+
+
 def create_bootstrap_seeds(
     ctx: DeviceContext, base_seed: UInt64
 ) raises -> DeviceBuffer[DType.uint64]:
@@ -260,21 +293,30 @@ def create_bootstrap_seeds(
     var seeds = ctx.enqueue_create_buffer[DType.uint64](
         BOOTSTRAP_SEED_COUNT
     )
-    var h = ctx.enqueue_create_host_buffer[DType.uint64](
-        BOOTSTRAP_SEED_COUNT
-    )
-    var x = base_seed
-    for i in range(BOOTSTRAP_SEED_COUNT):
-        # splitmix64: the standard seed-expansion mix
-        x += UInt64(0x9E3779B97F4A7C15)
-        var z = x
-        z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
-        z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
-        z = z ^ (z >> 31)
-        h.unsafe_ptr().unsafe_store(i, z)
-    ctx.enqueue_copy(dst_buf=seeds, src_ptr=h.unsafe_ptr())
-    ctx.synchronize()
-    _ = h^  # past the drain (step-33 race class)
+    comptime if IDN_BOOT_SEEDS_DEVICE:
+        # one launch, no host loop, no upload, no drain: the first kernel
+        # that reads the seeds is enqueued behind this one on the stream
+        ctx.enqueue_function[bootstrap_seed_fill_kernel](
+            seeds.unsafe_ptr(), base_seed,
+            grid_dim=(BOOTSTRAP_SEED_COUNT // BOOTSTRAP_BLOCK_SIZE, 1, 1),
+            block_dim=(BOOTSTRAP_BLOCK_SIZE, 1, 1),
+        )
+    else:
+        var h = ctx.enqueue_create_host_buffer[DType.uint64](
+            BOOTSTRAP_SEED_COUNT
+        )
+        var x = base_seed
+        for i in range(BOOTSTRAP_SEED_COUNT):
+            # splitmix64: the standard seed-expansion mix
+            x += UInt64(0x9E3779B97F4A7C15)
+            var z = x
+            z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
+            z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
+            z = z ^ (z >> 31)
+            h.unsafe_ptr().unsafe_store(i, z)
+        ctx.enqueue_copy(dst_buf=seeds, src_ptr=h.unsafe_ptr())
+        ctx.synchronize()
+        _ = h^  # past the drain (step-33 race class)
     return seeds^
 
 
