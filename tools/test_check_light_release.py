@@ -202,16 +202,16 @@ class LightReleaseTests(unittest.TestCase):
         jobs = workflow['jobs']
         self.assertEqual(jobs['alpha_stage']['needs'], 'validate_inputs')
         self.assertEqual(jobs['build']['needs'], 'validate_inputs')
-        self.assertIn("validation_profile != 'light'", jobs['build']['if'])
+        self.assertIn("validation_profile == 'full'", jobs['build']['if'])
         self.assertIn('exit 2', jobs['validate_inputs']['steps'][0]['run'])
-        self.assertIn("validation_profile != 'light'", jobs['cpu_certification']['if'])
+        self.assertIn("validation_profile == 'full'", jobs['cpu_certification']['if'])
         publish = jobs['publish_alpha']['if']
         self.assertIn("needs.alpha_stage.result == 'success'", publish)
         self.assertIn("needs.cpu_certification.result == 'success'", publish)
         build_publish = jobs['publish']['if']
         self.assertIn("needs.build.result == 'success'", build_publish)
         self.assertIn("needs.cpu_certification.result == 'success'", build_publish)
-        self.assertIn("inputs.validation_profile != 'light'", build_publish)
+        self.assertIn("inputs.validation_profile == 'full'", build_publish)
         for name in ('alpha_stage', 'publish_alpha'):
             self.assertIn('tools/check_light_release.py', '\n'.join(step.get('run', '') for step in jobs[name]['steps']))
 
@@ -256,14 +256,14 @@ class LightReleaseTests(unittest.TestCase):
         self.assertIn('tools/check_light_release.py',
                       '\n'.join(s.get('run', '') for s in jobs['publish_alpha_plugins']['steps']))
         self.assertIn("needs.alpha_stage.outputs.core == 'true'", jobs['publish_alpha']['if'])
-        self.assertEqual(set(jobs['alpha_stage']['outputs']), {'linux_qualification', 'core', 'plugins'})
+        self.assertEqual(set(jobs['alpha_stage']['outputs']), {'linux_qualification', 'core', 'plugins', 'payloads'})
         # the matrix value is the plugin's name, so the environments are
         # <target>-nvidia and <target>-amd (docs/RELEASE_CHECKLIST.md 3b)
         build = '\n'.join(s.get('run', '') for s in jobs['build']['steps'])
-        self.assertIn('"mojolearn_nvidia-$v_toml-"*) plugins="$plugins nvidia" ;;', build)
-        self.assertIn('"mojolearn_amd-$v_toml-"*) plugins="$plugins amd" ;;', build)
+        self.assertIn('gpu_release_projects.py "$DIR" --version "$v_toml" --require-complete --github-output', build)
         stage = '\n'.join(s.get('run', '') for s in jobs['alpha_stage']['steps'])
-        self.assertIn("('mojolearn_nvidia-', 'mojolearn_amd-')", stage)
+        self.assertIn('gpu_release_projects.py dist --github-output', stage)
+
 
 
 if __name__ == '__main__':
