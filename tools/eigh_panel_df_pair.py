@@ -47,7 +47,7 @@ def main():
     root = Path(__file__).resolve().parents[1]
     os.chdir(root)
     assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip() == args.source
-    subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--', 'x_decomp/', 'bindings/', 'python/',
+    subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--', '*.mojo', 'bindings/', 'python/', 'pixi.toml', 'pixi.lock',
                     'tools/eigh_w4_quality.py', 'tools/eigh_panel_df_pair.py'], check=True)
     home = Path.home()
     arms = home / 'mq/verified-arms' / args.source / BIND
