@@ -541,6 +541,39 @@ class SourceAndTooling(Base):
                 r.step_freeze_commit()
         self.assertIn("already published", str(cm.exception))
 
+    def test_refreeze_is_refused_when_only_a_native_payload_published(self):
+        for profile in ("nvidia-sm89", "nvidia-sm90", "amd-gfx942"):
+            with self.subTest(profile=profile):
+                r = self.release(commit=X, refreeze=True)
+                r.state["steps"] = {"publish-" + profile: dict(done=True, commit=X, at="t", result="pypi")}
+                with mock.patch.object(release, "git", return_value=Y):
+                    with self.assertRaisesRegex(release.StepFailed, "already published"):
+                        r.step_freeze_commit()
+                self.assertEqual(r.state["commit"], X)
+
+    def test_resume_does_not_dispatch_an_already_published_native_payload(self):
+        for profile in ("nvidia-sm89", "nvidia-sm90", "amd-gfx942"):
+            with self.subTest(profile=profile):
+                r = self.release(commit=X)
+                step = "publish-" + profile
+                r.state["steps"] = {step: dict(done=True, commit=X, at="t", result="pypi")}
+                dispatch = mock.Mock(side_effect=AssertionError("must not dispatch twice"))
+                setattr(r, "step_" + step.replace("-", "_"), dispatch)
+                self.assertEqual(r.run_step(step), "done")
+                dispatch.assert_not_called()
+
+    def test_finish_record_is_invalidated_by_a_new_payload_publication(self):
+        r = self.release(commit=X)
+        r.state["steps"] = {"publish-nvidia-sm89": dict(done=True, commit=X, at="t", result="pypi")}
+        receipt = dict(platforms=["nvidia-sm89"])
+        self.assertTrue(r.skip_recorded("finish-line", receipt))
+        self.assertTrue(r.skip_recorded("record", receipt))
+        r.state["steps"]["publish-nvidia-sm90"] = dict(done=True, commit=X, at="t", result="pypi")
+        self.assertFalse(r.skip_recorded("finish-line", receipt))
+        self.assertFalse(r.skip_recorded("record", receipt))
+        for step in ("publish-nvidia-sm89", "publish-nvidia-sm90", "publish-amd-gfx942"):
+            self.assertIn(step, release.AFTER["finish-line"])
+
     def test_publish_ships_the_frozen_source_from_the_tooling_checkout(self):
         r = self.release(commit=Y, publish="pypi")
         calls = []

@@ -799,7 +799,8 @@ STEP_TABLE = [(step, pipeline,
                         if step in ("publish-nvidia", "publish-amd") else []), resource)
               for step, pipeline, needs, resource in STEP_TABLE]
 AFTER["linux-joint-diff"].append("gpu-column-nvidia-hopper")
-AFTER["finish-line"] += ["publish-" + profile for profile in PAYLOAD_COLUMNS]
+PUBLISH_STEPS = tuple(pipeline["publish"] for pipeline in PIPELINES.values())
+AFTER["finish-line"] = list(PUBLISH_STEPS)
 
 PIPELINE_OF = {s: p for s, p, _, _ in STEP_TABLE}
 NEEDS = {s: n for s, _, n, _ in STEP_TABLE}
@@ -862,8 +863,7 @@ class Release:
     #: wheel, complete release-check records); these are skipped on their record
     #: (finish-line and record: when the platforms they covered are still the
     #: published ones).
-    SKIP_IF_RECORDED = {"rehearsal", "cross-compile", "publish-macos", "finish-line", "record",
-                        "publish-core-linux", "publish-nvidia", "publish-amd"}
+    SKIP_IF_RECORDED = {"rehearsal", "cross-compile", "finish-line", "record", *PUBLISH_STEPS}
 
     def __init__(self, args, runner=None):
         self.args = args
@@ -1197,8 +1197,7 @@ class Release:
             # receipts of the frozen source stay.
             return (f"source pinned at {frozen}" + (f"; tooling runs from HEAD {head[:12]}" if head != frozen else "")
                     + ("" if head == frozen else " (--refreeze moves the source to HEAD)"))
-        if frozen and head != frozen and any(self.recorded(s) for s in ("publish-macos", "publish-core-linux",
-                                                                        "publish-nvidia", "publish-amd")):
+        if frozen and head != frozen and self.published_platforms():
             raise StepFailed(f"--refreeze refused: a wheel of {frozen[:12]} is already published; "
                              "a new source state needs a new version")
         allowed = set(release_files()) | set(docs_fact_files())
