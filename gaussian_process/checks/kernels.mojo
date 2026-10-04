@@ -95,7 +95,18 @@ number of roundings and the order they happen in. sklearn's `Sum` and
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast
+from std.memory import bitcast, stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from gaussian_process.gp_var_seg import (
+    GP_IDN_VAR_SEG,
+    GP_VAR_PTS,
+    GP_VAR_SEGS,
+    GP_VAR_SMEM_FLOATS,
+    GP_VAR_SMEM_LIMIT_BYTES,
+    gp_var_seg_len,
+    gp_var_tree8,
+)
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.multi_gpu import peer_clone
 from std.os import getenv
@@ -1076,6 +1087,58 @@ def gp_variance_kernel(
     std_out.unsafe_store(t, ftz(identical_sqrt(outv)))
 
 
+def gp_variance_seg_kernel(
+    var_out: MutPointer[Float32, MutAnyOrigin],
+    std_out: MutPointer[Float32, MutAnyOrigin],
+    clamped: MutPointer[Int32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    n_train_in: Int32,
+    n_star_in: Int32,
+    kss: Float32,
+):
+    """GP_IDN_VAR_SEG (`gaussian_process/gp_var_seg.mojo`): `gp_variance_kernel`
+    with the training-axis fold cut into GP_VAR_SEGS segments, one per
+    thread_idx.y, combined in the fixed tree; block (GP_VAR_PTS,
+    GP_VAR_SEGS). The clamp, its flag and the root are the lines of
+    `gp_variance_kernel`. Every thread reaches the barrier: no early return
+    before it."""
+    comptime assert GP_VAR_SMEM_FLOATS * 4 <= GP_VAR_SMEM_LIMIT_BYTES, "gp var smem fits"
+    var n_train = Int(n_train_in)
+    var n_star = Int(n_star_in)
+    var tx = Int(thread_idx.x)
+    var ty = Int(thread_idx.y)
+    var t = Int(block_idx.x) * GP_VAR_PTS + tx
+    var part = stack_allocation[
+        GP_VAR_SMEM_FLOATS, Float32, address_space=AddressSpace.SHARED
+    ]()
+    var seg_len = gp_var_seg_len(n_train)
+    var lo = ty * seg_len
+    var hi = min(lo + seg_len, n_train)
+    var acc = Float32(0.0)
+    if t < n_star:
+        for i in range(lo, hi):
+            var vv = ftz(v.unsafe_load(i * n_star + t))
+            acc = ftz(identical_mul_add(vv, vv, acc))
+    part[unsafe_offset=ty * GP_VAR_PTS + tx] = acc
+    barrier()
+    if ty != 0 or t >= n_star:
+        return
+    var total = gp_var_tree8(
+        part[unsafe_offset=0 * GP_VAR_PTS + tx], part[unsafe_offset=1 * GP_VAR_PTS + tx],
+        part[unsafe_offset=2 * GP_VAR_PTS + tx], part[unsafe_offset=3 * GP_VAR_PTS + tx],
+        part[unsafe_offset=4 * GP_VAR_PTS + tx], part[unsafe_offset=5 * GP_VAR_PTS + tx],
+        part[unsafe_offset=6 * GP_VAR_PTS + tx], part[unsafe_offset=7 * GP_VAR_PTS + tx],
+    )
+    var raw = ftz(ftz(kss) - total)
+    var outv = raw
+    if not (raw > Float32(0.0)):
+        outv = Float32(0.0)
+    var moved = bitcast[DType.uint32](outv) != bitcast[DType.uint32](raw)
+    var_out.unsafe_store(t, outv)
+    clamped.unsafe_store(t, Int32(1) if moved else Int32(0))
+    std_out.unsafe_store(t, ftz(identical_sqrt(outv)))
+
+
 # ===========================================================================
 # THE DRIVER
 # ===========================================================================
@@ -1446,17 +1509,30 @@ def gp_predictive_variance(
             block_dim=(elem_tpb, 1, 1),
         )
     else:
-        ctx.enqueue_function[gp_variance_kernel](
-            var_out.unsafe_ptr(),
-            std_out.unsafe_ptr(),
-            clamped.unsafe_ptr(),
-            v.unsafe_ptr(),
-            Int32(n_train),
-            Int32(n_star),
-            kss,
-            grid_dim=(grid, 1, 1),
-            block_dim=(elem_tpb, 1, 1),
-        )
+        comptime if GP_IDN_VAR_SEG:
+            ctx.enqueue_function[gp_variance_seg_kernel](
+                var_out.unsafe_ptr(),
+                std_out.unsafe_ptr(),
+                clamped.unsafe_ptr(),
+                v.unsafe_ptr(),
+                Int32(n_train),
+                Int32(n_star),
+                kss,
+                grid_dim=((n_star + GP_VAR_PTS - 1) // GP_VAR_PTS, 1, 1),
+                block_dim=(GP_VAR_PTS, GP_VAR_SEGS, 1),
+            )
+        else:
+            ctx.enqueue_function[gp_variance_kernel](
+                var_out.unsafe_ptr(),
+                std_out.unsafe_ptr(),
+                clamped.unsafe_ptr(),
+                v.unsafe_ptr(),
+                Int32(n_train),
+                Int32(n_star),
+                kss,
+                grid_dim=(grid, 1, 1),
+                block_dim=(elem_tpb, 1, 1),
+            )
     trace.record_device(ctx, "gp.var", var_out, n_star)
     trace.record_device(ctx, "gp.clamped", clamped, n_star)
     trace.record_device(ctx, "gp.std", std_out, n_star)

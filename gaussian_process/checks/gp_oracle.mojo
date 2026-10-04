@@ -67,6 +67,7 @@ one thing.
 """
 
 from gaussian_process.gpc_items import gpr_ydot_host
+from gaussian_process.gp_var_seg import GP_IDN_VAR_SEG, gp_var_seg_sumsq_host
 from std.math import exp, log, sqrt
 
 from cholesky.checks.cholesky_oracle import (
@@ -316,9 +317,12 @@ def gp_oracle_variance(
     var n_clamped = 0
     for t in range(n_star):
         var acc = Float32(0.0)
-        for i in range(n_train):
-            var vv = ftz(v[i * n_star + t])
-            acc = ftz(identical_mul_add(vv, vv, acc))
+        comptime if GP_IDN_VAR_SEG:
+            acc = gp_var_seg_sumsq_host(v, n_train, n_star, t)
+        else:
+            for i in range(n_train):
+                var vv = ftz(v[i * n_star + t])
+                acc = ftz(identical_mul_add(vv, vv, acc))
         var raw = ftz(ftz(kss) - acc)
         var outv = raw
         if not (raw > Float32(0.0)):

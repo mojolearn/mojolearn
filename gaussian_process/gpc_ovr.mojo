@@ -96,7 +96,7 @@ from gaussian_process.estimator import _length_scale_table, _upload
 from gaussian_process.gpc_common import gpc_neg_inf32, gpc_stop, gpc_validate_max_iter
 from gaussian_process.gpc_device_var import (
     GPC_VAR_TPB,
-    gpc_latent_var_kernel,
+    gpc_latent_var_launch,
     gpc_scale_rows_kernel,
 )
 from gaussian_process.gpc_items import gpc_fold_blocks, gpc_lml_fin
@@ -613,11 +613,7 @@ def gpc_predict_all_device(
                 block_dim=(GPC_VAR_TPB, 1, 1),
             )
             trsm_lower(ctx, dl2, dv2, n_train, n_star, trace, "gpc.v", CHOL_SOLVE_TPB)
-            ctx.enqueue_function[gpc_latent_var_kernel](
-                dvar.unsafe_ptr(), dv2.unsafe_ptr(), Int32(n_train), Int32(n_star), kss,
-                grid_dim=((n_star + GPC_VAR_TPB - 1) // GPC_VAR_TPB, 1, 1),
-                block_dim=(GPC_VAR_TPB, 1, 1),
-            )
+            gpc_latent_var_launch(ctx, dvar, dv2, n_train, n_star, kss)
             var col = dcols.create_sub_buffer[DType.uint64](c * n_star, n_star)
             ctx.enqueue_function[gpc_proba_kernel](
                 _fp(dmean), _fp(dvar), _up(col), Int32(n_star),
