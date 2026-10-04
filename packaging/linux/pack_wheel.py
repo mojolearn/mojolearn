@@ -973,6 +973,9 @@ def main(argv=None, _gates=True):
                          + '; default the core plus the plugin of every vendor given')
     ap.add_argument('--bundle-ptx-admission', type=pathlib.Path,
                     help='bundle sm_80 PTX inside nvidia using this separately qualified identity admission')
+    ap.add_argument('--bundle-ptx', action='store_true',
+                    help='bundle sm_80 PTX inside nvidia with no identity admission: the FAST and '
+                         'DETERMINISTIC fallback; IDENTICAL then needs a local qualification on each machine')
     ap.add_argument('--build-proof', action='append', default=[],
                     help='complete per-architecture build-provenance.json; one per built set for '
                          + RELEASE_PROFILE + ' and ' + RELEASE_SPLIT_PROFILE)
@@ -1011,21 +1014,26 @@ def main(argv=None, _gates=True):
         raise SystemExit('pack_wheel: reuse.json (bindings taken from a published wheel) needs the release profile')
     kinds = split_kinds(a.wheels, {v for v, _ in keys}, keys) if split else ()
     bundle = None
-    if a.bundle_ptx_admission:
+    if a.bundle_ptx_admission and a.bundle_ptx:
+        raise SystemExit("pack_wheel: give --bundle-ptx (no admission) or --bundle-ptx-admission, not both")
+    if a.bundle_ptx_admission or a.bundle_ptx:
         if not split or "nvidia" not in kinds or "nvidia-ptx80" in kinds or ("cuda", "sm_80") not in keys:
             raise SystemExit("pack_wheel: bundling PTX needs nvidia plus sm_80 and excludes the separate experimental wheel")
         baseline_set = next(s for s in sets if (s.vendor, s.arch) == ("cuda", "sm_80"))
         manifest_path = baseline_set.files["cuda/sm_80/" + gpu_plugins.BASELINE_MANIFEST]
         manifest_bytes = manifest_path.read_bytes()
-        admission_bytes = a.bundle_ptx_admission.read_bytes()
-        bundle = dict(manifest_sha256=hashlib.sha256(manifest_bytes).hexdigest(),
-                      admission_sha256=hashlib.sha256(admission_bytes).hexdigest())
+        bundle = dict(manifest_sha256=hashlib.sha256(manifest_bytes).hexdigest())
+        admission_bytes = None
+        if a.bundle_ptx_admission:
+            admission_bytes = a.bundle_ptx_admission.read_bytes()
+            bundle["admission_sha256"] = hashlib.sha256(admission_bytes).hexdigest()
         try:
             gpu_plugins.validate_bundled_ptx(bundle, manifest_bytes, admission_bytes,
                 {rel.split("/", 2)[2]: sha(path).hex() for rel, path in baseline_set.files.items() if rel.endswith(".so")})
         except ValueError as exc:
-            raise SystemExit(f"pack_wheel: unqualified bundled PTX: {exc}") from exc
-        baseline_set.files["cuda/sm_80/" + gpu_plugins.BASELINE_ADMISSION] = a.bundle_ptx_admission
+            raise SystemExit(f"pack_wheel: {'unqualified' if a.bundle_ptx_admission else 'invalid'} bundled PTX: {exc}") from exc
+        if a.bundle_ptx_admission:
+            baseline_set.files["cuda/sm_80/" + gpu_plugins.BASELINE_ADMISSION] = a.bundle_ptx_admission
     if ("cuda", "sm_80") in keys and not bundle and (not split or "nvidia-ptx80" not in kinds):
         raise SystemExit("pack_wheel: PTX baseline must be requested explicitly with --wheels nvidia-ptx80")
     if a.profile == RELEASE_PROFILE:
@@ -1048,7 +1056,8 @@ def main(argv=None, _gates=True):
     if inventory is not None:
         if bundle:
             # Native legs retain their original build proofs. PTX's separate
-            # source/identity admission is recorded without relabeling a leg.
+            # source (and identity admission, when one is bundled) is recorded
+            # without relabeling a leg; only an admitted bundle reads qualified.
             baseline_doc = json.loads(manifest_bytes)
             if baseline_doc["source_commit"] != inventory["source_commit"]:
                 raise SystemExit("pack_wheel: bundled PTX and native source commits differ")
@@ -1058,7 +1067,7 @@ def main(argv=None, _gates=True):
                 if rel.endswith(".so"):
                     arc = "mojolearn/" + rel
                     inventory["extensions"][arc] = sha(path).hex()
-                    inventory["binding_origin"][arc] = dict(origin="qualified-ptx-bundle", **bundle)
+                    inventory["binding_origin"][arc] = dict(origin=gpu_plugins.bundled_ptx_origin(bundle), **bundle)
         if split:
             for mapping in ("extensions", "binding_origin"):
                 inventory[mapping] = {gpu_plugins.installed_member(k): v

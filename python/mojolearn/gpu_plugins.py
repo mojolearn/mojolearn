@@ -248,13 +248,28 @@ BUNDLED_PTX_ROOT = "mojolearn/cuda_ptx/sm_80"
 BASELINE_ADMISSION = "PTX_IDENTITY_ADMISSION.json"
 
 
+#: binding_origin labels of bundled PTX bytes in a release inventory. Only a
+#: bundle that carries a release identity admission may be called qualified.
+BUNDLED_PTX_ORIGIN_ADMITTED = "qualified-ptx-bundle"
+BUNDLED_PTX_ORIGIN_FALLBACK = "ptx-fallback-bundle"
+
+
 def validate_bundle_descriptor(descriptor):
-    """The vendor marker binds both payload and separate identity admission."""
+    """The vendor marker binds the PTX payload manifest, and the separate
+    release identity admission when the wheel ships one. A manifest-only
+    descriptor is the FAST/DETERMINISTIC fallback with no IDENTICAL claim."""
     import re
-    if (not isinstance(descriptor, dict) or set(descriptor) != {"manifest_sha256", "admission_sha256"}
+    if (not isinstance(descriptor, dict)
+            or set(descriptor) not in ({"manifest_sha256"}, {"manifest_sha256", "admission_sha256"})
             or not all(isinstance(value, str) and re.fullmatch("[0-9a-f]{64}", value)
-                       for value in descriptor.values())):  # glue: check two SHA256 metadata fields
+                       for value in descriptor.values())):  # glue: check one or two SHA256 metadata fields
         raise ValueError("invalid bundled PTX digest descriptor")
+
+
+def bundled_ptx_origin(descriptor):
+    """The inventory origin label a bundle descriptor earns."""
+    validate_bundle_descriptor(descriptor)
+    return BUNDLED_PTX_ORIGIN_ADMITTED if "admission_sha256" in descriptor else BUNDLED_PTX_ORIGIN_FALLBACK
 
 
 def owns_member(profile, member, bundled_ptx=None):
@@ -267,7 +282,8 @@ def owns_member(profile, member, bundled_ptx=None):
 
 
 def validate_bundled_ptx(descriptor, manifest_bytes, admission_bytes, files):
-    """Validate transported bundle bytes; return the separate admission record.
+    """Validate transported bundle bytes; return the separate admission record,
+    or None for a manifest-only bundle (which must carry no admission bytes).
 
     files is the complete relative GPU .so SHA256 map under cuda_ptx/sm_80.
     No record is generated and no measured configuration is broadened here.
@@ -277,13 +293,18 @@ def validate_bundled_ptx(descriptor, manifest_bytes, admission_bytes, files):
     import json
     from pathlib import Path
     validate_bundle_descriptor(descriptor)
+    admitted = "admission_sha256" in descriptor
+    if admitted != (admission_bytes is not None):
+        raise ValueError("bundled PTX admission bytes and vendor marker disagree")
     if (hashlib.sha256(manifest_bytes).hexdigest() != descriptor["manifest_sha256"]
-            or hashlib.sha256(admission_bytes).hexdigest() != descriptor["admission_sha256"]):
+            or (admitted and hashlib.sha256(admission_bytes).hexdigest() != descriptor["admission_sha256"])):
         raise ValueError("bundled PTX metadata bytes differ from vendor marker")
     manifest = json.loads(manifest_bytes)
     validate_baseline_manifest(manifest, files)
     if manifest.get("source_dirty") is not False:
         raise ValueError("bundled PTX needs a clean source manifest")
+    if not admitted:
+        return None
     admission = json.loads(admission_bytes)
     # This module is also loaded without package initialization by build tools.
     spec = importlib.util.spec_from_file_location("_mojolearn_ptx_admission", Path(__file__).with_name("ptx_admission.py"))

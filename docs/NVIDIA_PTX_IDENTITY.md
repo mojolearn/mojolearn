@@ -63,9 +63,14 @@ capability, driver text and CUDA API version of each measured configuration.
 A release can only list the configurations that were measured before
 publication. No production admission record is provided here.
 
-The loader also accepts a vendor marker that binds the PTX manifest alone,
-with no release admission. The packer does not write that form yet: today it
-bundles PTX only together with an admission (`--bundle-ptx-admission`).
+A vendor wheel can also bundle the PTX payload with no release admission. Its
+marker then binds the PTX manifest alone. The packer writes that form with
+`--bundle-ptx` and the admitted form with `--bundle-ptx-admission`; the two
+options exclude each other. A manifest-only bundle gives FAST and
+DETERMINISTIC their fallback and leaves IDENTICAL to local qualification. The
+wheel audit and the release gate refuse an admission file that the marker does
+not bind, and a release inventory labels these bytes `ptx-fallback-bundle`,
+never `qualified-ptx-bundle`.
 
 ## Local qualification
 

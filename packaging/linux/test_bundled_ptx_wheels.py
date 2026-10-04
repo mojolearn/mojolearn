@@ -43,9 +43,11 @@ def inputs(root, include_byte_lm=False):
     return dirs, baseline, admission_path
 
 
-def pack(root, dirs, admission, wheels='nvidia'):
+def pack(root, dirs, admission, wheels='nvidia', extra=()):
+    """`admission=None` packs the manifest-only bundle (--bundle-ptx)."""
     args = [arg for directory in dirs for arg in ('--set', directory)]
-    args += ['--wheels', wheels, '--bundle-ptx-admission', str(admission), '--out', str(root/'out')]
+    args += ['--wheels', wheels, '--out', str(root/'out'), *extra]
+    args += ['--bundle-ptx'] if admission is None else ['--bundle-ptx-admission', str(admission)]
     assert pw.main(args, _gates=False) == 0
     return next((root/'out').glob('mojolearn_nvidia-*.whl'))
 
@@ -144,3 +146,118 @@ def test_release_routes_only_native_sets_to_native_build_proof_verifier(tmp_path
     with pytest.raises(NativeProofReached):
         pw.main(args+['--profile','release-split','--wheels','nvidia','--bundle-ptx-admission',str(admission),
                      '--out',str(tmp_path/'out')],_gates=False)
+
+
+# ---- manifest-only bundle: the FAST/DETERMINISTIC fallback, no admission ----
+
+def test_descriptor_accepts_manifest_only_and_nothing_else():
+    gp = pw.gpu_plugins
+    gp.validate_bundle_descriptor(dict(manifest_sha256='a'*64))
+    gp.validate_bundle_descriptor(dict(manifest_sha256='a'*64, admission_sha256='b'*64))
+    assert gp.bundled_ptx_origin(dict(manifest_sha256='a'*64)) == 'ptx-fallback-bundle'
+    assert gp.bundled_ptx_origin(dict(manifest_sha256='a'*64, admission_sha256='b'*64)) == 'qualified-ptx-bundle'
+    for bad in ({}, dict(admission_sha256='b'*64), dict(manifest_sha256='A'*64), dict(manifest_sha256='a'*63),
+                dict(manifest_sha256='a'*64, admission_sha256=None), dict(manifest_sha256='a'*64, other='b'*64), None):
+        with pytest.raises(ValueError):
+            gp.validate_bundle_descriptor(bad)
+
+
+def test_bundle_bytes_and_descriptor_must_agree_about_the_admission(tmp_path):
+    dirs,baseline,admission=inputs(tmp_path);gp=pw.gpu_plugins
+    manifest=(baseline/gp.BASELINE_MANIFEST).read_bytes()
+    files={row['file']:row['sha256'] for row in json.loads(manifest)['files']}
+    only=dict(manifest_sha256=hashlib.sha256(manifest).hexdigest())
+    assert gp.validate_bundled_ptx(only,manifest,None,files) is None
+    with pytest.raises(ValueError,match='disagree'):gp.validate_bundled_ptx(only,manifest,admission.read_bytes(),files)
+    both=dict(only,admission_sha256=hashlib.sha256(admission.read_bytes()).hexdigest())
+    with pytest.raises(ValueError,match='disagree'):gp.validate_bundled_ptx(both,manifest,None,files)
+    with pytest.raises(ValueError):gp.validate_bundled_ptx(only,manifest+b' ',None,files)
+
+
+def test_manifest_only_bundle_ships_ptx_with_no_admission(tmp_path):
+    dirs,baseline,admission=inputs(tmp_path)
+    wheel=pack(tmp_path,dirs,None)
+    files=members(wheel);prefix=pw.gpu_plugins.BUNDLED_PTX_ROOT+'/'
+    manifest=(baseline/pw.gpu_plugins.BASELINE_MANIFEST).read_bytes()
+    for row in json.loads(manifest)['files']:
+        assert files[prefix+row['file']]==(baseline/row['file']).read_bytes()
+    assert files[prefix+pw.gpu_plugins.BASELINE_MANIFEST]==manifest
+    assert prefix+pw.gpu_plugins.BASELINE_ADMISSION not in files
+    marker=json.loads(next(data for name,data in files.items() if name.endswith('/gpu_plugin.json')))
+    assert marker['arches']==['sm_89','sm_90a']
+    assert marker['bundled_ptx']==dict(manifest_sha256=hashlib.sha256(manifest).hexdigest())
+    report=wheel_api_audit.split_audit([wheel])
+    assert not report['problems']
+    assert not any('nvidia_ptx80-' in path.name for path in (tmp_path/'out').glob('*.whl'))
+
+
+def test_bundle_flags_are_exclusive_and_keep_the_other_refusals(tmp_path):
+    dirs,baseline,admission=inputs(tmp_path)
+    with pytest.raises(SystemExit,match='not both'):pack(tmp_path,dirs,admission,extra=('--bundle-ptx',))
+    with pytest.raises(SystemExit,match='excludes the separate'):pack(tmp_path,dirs,None,wheels='nvidia,nvidia-ptx80')
+    path=baseline/pw.gpu_plugins.BASELINE_MANIFEST;doc=json.loads(path.read_text());doc['source_dirty']=True;path.write_text(json.dumps(doc))
+    with pytest.raises(SystemExit,match='clean source manifest'):pack(tmp_path,dirs,None)
+
+
+@pytest.mark.parametrize('mutation', ['binary','manifest','extra','stray-admission','marker','marker-claims-admission'])
+def test_audit_detects_manifest_only_bundle_tampering(tmp_path,mutation):
+    dirs,baseline,admission=inputs(tmp_path);wheel=pack(tmp_path,dirs,None);files=members(wheel);prefix=pw.gpu_plugins.BUNDLED_PTX_ROOT+'/'
+    name=next(n for n in files if n.endswith('/gpu_plugin.json'));doc=json.loads(files[name])
+    if mutation=='binary':files[next(n for n in files if n.startswith(prefix) and n.endswith('.so'))]+=b'tamper'
+    elif mutation=='manifest':files[prefix+pw.gpu_plugins.BASELINE_MANIFEST]+=b' '
+    elif mutation=='extra':files[prefix+'unexpected.txt']=b'undeclared'
+    elif mutation=='stray-admission':files[prefix+pw.gpu_plugins.BASELINE_ADMISSION]=admission.read_bytes()
+    elif mutation=='marker':del doc['bundled_ptx'];files[name]=json.dumps(doc).encode()
+    else:
+        doc['bundled_ptx']['admission_sha256']=hashlib.sha256(admission.read_bytes()).hexdigest();files[name]=json.dumps(doc).encode()
+    rewrite(wheel,files)
+    assert wheel_api_audit.split_audit([wheel])['problems']
+
+
+def test_release_gate_checks_a_manifest_only_bundle_and_never_calls_it_qualified(tmp_path):
+    dirs,baseline,admission=inputs(tmp_path);wheel=pack(tmp_path,dirs,None);files=members(wheel)
+    prefix=pw.gpu_plugins.BUNDLED_PTX_ROOT+'/'
+    hashes={n:hashlib.sha256(data).hexdigest() for n,data in files.items() if n.startswith(prefix) and n.endswith('.so')}
+    marker=json.loads(next(data for name,data in files.items() if name.endswith('/gpu_plugin.json')))
+    descriptor=marker['bundled_ptx'];source=json.loads(files[prefix+pw.gpu_plugins.BASELINE_MANIFEST])['source_commit']
+    payload=dict(source_commit=source,bundled_ptx=dict(descriptor,root=prefix[:-1],source_commit=source),
+                 binding_origin={name:dict(origin='ptx-fallback-bundle',**descriptor) for name in hashes})
+    with zipfile.ZipFile(wheel) as archive:
+        assert release_gate.inspect_bundled_ptx(archive,payload,hashes)['extension_hashes']==hashes
+        bad=copy.deepcopy(payload)
+        for row in bad['binding_origin'].values():row['origin']='qualified-ptx-bundle'
+        with pytest.raises(ValueError):release_gate.inspect_bundled_ptx(archive,bad,hashes)
+        bad=copy.deepcopy(payload);bad['bundled_ptx']['admission_sha256']='0'*64
+        with pytest.raises((ValueError,KeyError)):release_gate.inspect_bundled_ptx(archive,bad,hashes)
+        bad=copy.deepcopy(payload);bad['source_commit']='0'*40
+        with pytest.raises(ValueError):release_gate.inspect_bundled_ptx(archive,bad,hashes)
+    # An admitted wheel whose inventory drops the admission is not a fallback bundle.
+    admitted=pack(tmp_path/'admitted',dirs,admission)
+    with zipfile.ZipFile(admitted) as archive:
+        with pytest.raises(ValueError):release_gate.inspect_bundled_ptx(archive,payload,hashes)
+
+
+def test_release_profile_records_fallback_origin_for_a_manifest_only_bundle(tmp_path, monkeypatch):
+    dirs,baseline,admission=inputs(tmp_path, include_byte_lm=True)
+    source=json.loads((baseline/pw.gpu_plugins.BASELINE_MANIFEST).read_text())['source_commit']
+    seen={}
+    def native_proof(sets, proofs, version, **kwargs):
+        assert {(s.vendor,s.arch) for s in sets} == {('cuda','sm_89'),('cuda','sm_90a')}
+        return dict(source_commit=source, extensions={}, binding_origin={}, sets={},
+                    reuse=dict(built=0, reused=0, from_release=None))
+    class Captured(Exception):
+        pass
+    def capture(out, kinds, entries, generated, dist, proj, version, tag, inventory, sets, readme, bundled_ptx=None):
+        seen.update(inventory=inventory, bundled_ptx=bundled_ptx)
+        raise Captured()
+    monkeypatch.setattr(pw,'release_inventory',native_proof)
+    monkeypatch.setattr(pw,'write_split',capture)
+    # The tree-at-commit gate is not under test; it would tie this case to a clean checkout.
+    monkeypatch.setattr(pw,'require_shipped_python_at_commit',lambda entries,commit,**kw:None)
+    args=[arg for directory in dirs for arg in ('--set',directory)]
+    with pytest.raises(Captured):
+        pw.main(args+['--profile','release-split','--wheels','nvidia','--bundle-ptx','--out',str(tmp_path/'out')],_gates=False)
+    assert set(seen['bundled_ptx'])=={'manifest_sha256'}
+    assert seen['inventory']['bundled_ptx']==dict(seen['bundled_ptx'],root=pw.gpu_plugins.BUNDLED_PTX_ROOT,source_commit=source)
+    origins={row['origin'] for name,row in seen['inventory']['binding_origin'].items() if '/cuda_ptx/' in name}
+    assert origins=={'ptx-fallback-bundle'}

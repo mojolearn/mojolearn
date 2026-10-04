@@ -38,7 +38,7 @@ MANIFEST_MEMBER = 'mojolearn/cuda_ptx/sm_80/PTX_BASELINE.json'
 ADMISSION_MEMBER = 'mojolearn/cuda_ptx/sm_80/PTX_IDENTITY_ADMISSION.json'
 # The stage owns these packer flags; everything else (sets, profile, proofs,
 # the Linux math helper) is the orchestrator's retained build description.
-OWNED_PACK_FLAGS = ('--wheels', '--bundle-ptx-admission', '--out')
+OWNED_PACK_FLAGS = ('--wheels', '--bundle-ptx-admission', '--bundle-ptx', '--out')
 # Sum of the body's own step bounds; the lease refuses to start it with less.
 BODY_SECONDS = 2200
 require = baseline.require

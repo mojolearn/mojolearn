@@ -200,26 +200,34 @@ def split_audit(wheels):
                     prefix = plugins.BUNDLED_PTX_ROOT + '/'
                     manifest_member = prefix + plugins.BASELINE_MANIFEST
                     admission_member = prefix + plugins.BASELINE_ADMISSION
+                    plugins.validate_bundle_descriptor(bundle)
+                    # A manifest-only bundle is the FAST/DETERMINISTIC fallback:
+                    # it carries no admission and none may ride along unbound.
+                    admitted = 'admission_sha256' in bundle
+                    origin = plugins.bundled_ptx_origin(bundle)
                     with zipfile.ZipFile(wheel) as archive:
                         files = {m[len(prefix):]: hashlib.sha256(archive.read(m)).hexdigest()
                                  for m in payload if m.startswith(prefix) and m.endswith('.so')}
-                        admission = plugins.validate_bundled_ptx(bundle, archive.read(manifest_member), archive.read(admission_member), files)
+                        manifest_bytes = archive.read(manifest_member)
+                        plugins.validate_bundled_ptx(bundle, manifest_bytes,
+                                                     archive.read(admission_member) if admitted else None, files)
+                        bundle_source = json.loads(manifest_bytes)['source_commit']
                         inventory_member = dist + '/LINUX_PAYLOAD.json'
                         if inventory_member in archive.namelist():
                             inventory = json.loads(archive.read(inventory_member))
-                            if (inventory.get('source_commit') != admission['source_commit']
+                            if (inventory.get('source_commit') != bundle_source
                                     or inventory.get('bundled_ptx') != dict(bundle, root=plugins.BUNDLED_PTX_ROOT,
-                                                                          source_commit=admission['source_commit'])):
+                                                                          source_commit=bundle_source)):
                                 raise ValueError('bundled PTX and release inventory source/descriptor differ')
                             for name, digest in files.items():
                                 member = prefix + name
                                 if (inventory.get('extensions', {}).get(member) != digest
-                                        or inventory.get('binding_origin', {}).get(member) != dict(origin='qualified-ptx-bundle', **bundle)):
+                                        or inventory.get('binding_origin', {}).get(member) != dict(origin=origin, **bundle)):
                                     raise ValueError('bundled PTX release inventory bytes/provenance differ')
-                    allowed = {prefix + name for name in files} | {manifest_member, admission_member}
+                    allowed = {prefix + name for name in files} | {manifest_member} | ({admission_member} if admitted else set())
                     if {m for m in payload if m.startswith(prefix)} != allowed:
                         raise ValueError('undeclared bundled PTX files')
-                    row['bundled_ptx'] = dict(bundle, source_commit=admission['source_commit'])
+                    row['bundled_ptx'] = dict(bundle, source_commit=bundle_source, identical_admission=admitted)
                 except (ValueError, KeyError, TypeError) as exc:
                     problems.append(f'{wheel.name}: invalid bundled PTX: {exc}')
             arches = []

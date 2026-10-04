@@ -315,18 +315,26 @@ def inspect_bundled_ptx(archive, payload, extensions):
     if not record:
         require(not members and not extensions, 'Unrecorded bundled PTX payload')
         return None
-    require(isinstance(record, dict) and set(record) == {'manifest_sha256', 'admission_sha256', 'root', 'source_commit'}
+    require(isinstance(record, dict)
+            and set(record) in ({'manifest_sha256', 'root', 'source_commit'},
+                                {'manifest_sha256', 'admission_sha256', 'root', 'source_commit'})
             and record['root'] == plugins.BUNDLED_PTX_ROOT and record['source_commit'] == payload.get('source_commit'),
             'Bundled PTX source/ownership inventory differs')
-    descriptor = {key: record[key] for key in ('manifest_sha256', 'admission_sha256')}
+    # A manifest-only record is the FAST/DETERMINISTIC fallback: no admission
+    # member may exist, and its bytes never read as a qualified bundle.
+    admitted = 'admission_sha256' in record
+    descriptor = {key: record[key] for key in ('manifest_sha256', 'admission_sha256') if key in record}
     manifest_member = prefix + plugins.BASELINE_MANIFEST
     admission_member = prefix + plugins.BASELINE_ADMISSION
-    require(members == set(extensions) | {manifest_member, admission_member}, 'Bundled PTX inventory has extra/missing files')
-    admission = plugins.validate_bundled_ptx(descriptor, archive.read(manifest_member), archive.read(admission_member),
-                                            {name[len(prefix):]: value for name, value in extensions.items()})
-    require(admission['source_commit'] == payload.get('source_commit'), 'Bundled PTX admission source differs')
+    require(members == set(extensions) | {manifest_member} | ({admission_member} if admitted else set()),
+            'Bundled PTX inventory has extra/missing files')
+    manifest_bytes = archive.read(manifest_member)
+    plugins.validate_bundled_ptx(descriptor, manifest_bytes, archive.read(admission_member) if admitted else None,
+                                 {name[len(prefix):]: value for name, value in extensions.items()})
+    require(json.loads(manifest_bytes)['source_commit'] == payload.get('source_commit'), 'Bundled PTX source differs')
+    origin = plugins.bundled_ptx_origin(descriptor)
     for name in extensions:
-        require(payload.get('binding_origin', {}).get(name) == dict(origin='qualified-ptx-bundle', **descriptor),
+        require(payload.get('binding_origin', {}).get(name) == dict(origin=origin, **descriptor),
                 'Bundled PTX binding provenance differs: ' + name)
     return dict(record, extension_hashes=extensions)
 
