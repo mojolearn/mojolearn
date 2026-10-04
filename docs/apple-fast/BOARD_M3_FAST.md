@@ -17,7 +17,7 @@ Canonical full-board summary (2026-10-04): 387 FAST rows, 377 eligible opponent 
 | sgd-ocsvm | istella | algos | 10080 | 407 | sklearn-cpu | 5734 | 1.76 | 0.07 | FLIP faster | fraction_flagged=0.04042 | fraction_flagged=0, jaccard_vs_sklearn=0 | fraction_flagged=0.09334, jaccard_vs_sklearn=1 | ok |
 | adam | synthetic | algos | 125 | 343 | torch-eager-fp32 | 29.3 | 4.27 | 11.69 |  | - | - | - | ok |
 | adamw | synthetic | algos | 114 | 338 | torch-eager-fp32 | 31.1 | 3.66 | 10.88 |  | - | - | - | ok |
-| eigh | synthetic | algos | - | 43722 | numpy-cpu | 4813 | - | 9.08 |  | max_eigenvalue_error=6.08669e-05, relative_residual=5.37499e-05 | - | max_eigenvalue_error=3.49e-08, relative_residual=2.824e-08 | ok |
+| eigh | synthetic | algos | - | 700.3 | numpy-cpu | 4813 | - | 0.15 | HOLD quality | max_eigenvalue_error=4.26951e-07, relative_residual=6.13409e-07 | - | max_eigenvalue_error=3.49e-08, relative_residual=2.824e-08 | HOLD-quality vs opponent; improved vs main |
 | rmsprop | synthetic | algos | 129 | 195 | torch-eager-fp32 | 25.2 | 5.13 | 7.74 |  | - | - | - | ok |
 | adamax | synthetic | algos | 176 | 205 | torch-eager-fp32 | 27.7 | 6.37 | 7.39 |  | - | - | - | ok |
 | nadam | synthetic | algos | 178 | 204 | torch-eager-fp32 | 32.9 | 5.40 | 6.20 |  | - | - | - | ok |
@@ -438,3 +438,5 @@ Sources: before = M3 0.8.34 board (classical), M3 2026-09-29 board FAST cells (t
 - Codex wave-4 RBF KernelPCA promotion (2026-10-04): measured source `34b4f6c72`, `w2-w4d-kpca-taxi` 850.7 -> 127.5 ms and `w2-w4d-kpca-istella` 919.5 -> 201.0 ms; quality PASS with unchanged eigenvalue/subspace limits. Quality fixture first reads remain 0.1 ms for both arms. Promotion `0bcc7202d`, M2 default and `MOJOLEARN_KPCA_RESIDENT_OFF` both rc=0; Python import PASS. Scope RBF/auto, n>200, 1–9 components; both rows flip.
 
 - Accounting correction, 2026-10-04: ARD istella was incorrectly included because its quality flag did not match the page exclusion prefixes. Corrected the flag and row status, preserving all timings. Headline 351/378 -> 350/377 is an exclusion, not a performance change; the three accepted wave-4 flips remain.
+
+- Eigh panel-parallel default, 2026-10-04: measured `e79a96e03`, `w2-eigh-panels-t-20261004` A 43765.6 -> B 700.3 ms; quality captures `w2-eigh-panels-q-20261004` pass the handoff-authorized no-worse-than-main criterion for all eight fixtures, exact B<=A with no allowance. Fixed absolute eigenvalue target 3.5e-7 and Gram orthogonality target still fail; the opponent-quality hold remains and this row adds no qualified winner. Source `10cedc640`, M2 default and `MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF` both rc=0, merge `eb97b0948`. Original single-block factor launch replaced by all-panel parallel preparation; ordinary synchronized outputs retained.
