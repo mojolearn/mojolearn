@@ -19,7 +19,7 @@ Three kernels, all one launch, all parallel, no host step:
     folds its own draws in registers, then `block.sum`) instead of one
     `virtual_block_sum` per 256-draw chunk. Same draws (`draw_row_index` at
     the same positions); FAST's summation order is not pinned.
-  * `perm_select_fast_kernel` (-D MOJOLEARN_RESAMPLE_FAST_PERM_SELECT): the
+  * `perm_select_fast_kernel` (RESAMPLE_FAST_PERM_SELECT, default; _OFF): the
     permutation null by a 4-bit radix select (16 counters per thread in a
     SIMD register, block totals through threadgroup memory, no atomics, keys
     recomputed from Philox) instead of main's `perm_select_stat_kernel` (8

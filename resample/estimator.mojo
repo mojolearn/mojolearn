@@ -195,6 +195,9 @@ comptime RESAMPLE_MAP_TPB = 256
 #: (KEPT) has since replaced, so the remaining gain is launch count only.
 #: Fixed here: the kernel's own bound RANK_SORT_MAX (= 256^2; O(n^2) work)
 #: above which the radix sort stays; old code had no bound.
+#: DROPPED-slower, stays OFF (M3 afc_ab_def, full board size, 1 run per arm,
+#: 2026-10-04): bootstrap taxi 14.38 -> 13.64 ms, istella 11.59 -> 14.46 ms
+#: (mixed: slower on istella).
 comptime RESAMPLE_FAST_RANK_SORT = (
     RESAMPLE_FAST_APPLE and is_defined["MOJOLEARN_RESAMPLE_FAST_RANK_SORT"]()
 )
@@ -208,6 +211,9 @@ comptime RESAMPLE_FAST_RANK_SORT = (
 #: lane/apple-fast-resample@50b96e795. Known: never compiled, never
 #: measured. Fixed here: current syntax; the launch reports False for any
 #: other statistic so main's launch runs.
+#: DROPPED-slower, stays OFF (M3 afc_ab_def, full board size, 1 run per arm,
+#: 2026-10-04): bootstrap taxi 16.31 -> 13.89 ms, istella 12.84 -> 14.23 ms
+#: (mixed: slower on istella).
 comptime RESAMPLE_FAST_ONE_FOLD = (
     RESAMPLE_FAST_APPLE and is_defined["MOJOLEARN_RESAMPLE_FAST_ONE_FOLD"]()
 )
@@ -222,8 +228,13 @@ comptime RESAMPLE_FAST_ONE_FOLD = (
 #: Known: never compiled, never measured; main's select already runs the
 #: board's 20,000 + 20,000 (no refusal to lift), so this is an A/B of two
 #: selects. 16 KB + 64 B threadgroup memory per block (Apple: 32 KB).
+#: FAST + Apple DEFAULT (rollback -D MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF).
+#: M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04 (ab1 d51f4b4bf):
+#: permutation-test taxi 55.41 -> 35.49 ms, istella 55.28 -> 35.28 ms;
+#: pvalue identical.
 comptime RESAMPLE_FAST_PERM_SELECT = (
-    RESAMPLE_FAST_APPLE and is_defined["MOJOLEARN_RESAMPLE_FAST_PERM_SELECT"]()
+    RESAMPLE_FAST_APPLE
+    and not is_defined["MOJOLEARN_RESAMPLE_FAST_PERM_SELECT_OFF"]()
 )
 
 #: `-D MOJOLEARN_CV_FAST_SLICE` (python/mojolearn/model_selection.py
@@ -1794,7 +1805,7 @@ def permutation_test_host(
     var null_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
     var owners = resample_device_count()
-    # -D MOJOLEARN_RESAMPLE_FAST_PERM_SELECT (FAST + Apple, default OFF): the
+    # RESAMPLE_FAST_PERM_SELECT (FAST + Apple default; _OFF rolls back): the
     # null by fast_apple.mojo's 4-bit radix select (no atomics, FAST's fold);
     # the same permutation. Mean and diff_means; anything else: main's launch.
     # (Owners > 1 is IDENTICAL only, resample_device_count.)
