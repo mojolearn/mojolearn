@@ -1290,11 +1290,14 @@ class CNNClassifier(_Layer):
             dev_epoch = _idn2(b, _F2_EPOCH_DEV)
             seed64 = int(order_state[0])
             seed_lo, seed_hi = seed64 & 0xFFFFFFFF, seed64 >> 32
-            for ep in range(self.max_iter):
+            ep = -1
+            for _ in range(self.max_iter):
+                ep += 1
                 if epoch_entry and dev_epoch:
                     losses = np.empty(nsteps, dtype=np.float64)
                     if self.optimizer == "sgd":
-                        fpar = [float(v) for v in sgd_row]
+                        fpar = [float(self.learning_rate), float(self.momentum), float(self.weight_decay),
+                                float(self.dampening), 1.0 if self.nesterov else 0.0, 0.0]
                     else:
                         fpar = [float(self.learning_rate), float(self.betas[0]), float(self.betas[1]),
                                 float(self.eps), float(self.weight_decay),
