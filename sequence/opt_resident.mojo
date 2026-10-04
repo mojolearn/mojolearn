@@ -163,7 +163,7 @@ def _open_sized(kind: Int, n: Int, n0: Int, n1: Int, n2: Int, used: Int, nt: Int
     if len(tab) > 0:
         nb = Int(bitcast[DType.int32](tab[len(tab) - 1]))
     var h = -1
-    for j in range(len(pool[].n)):
+    for j in range(len(pool[].n)):  # small-loop(pool: resident optimizer handles): free handle slot search, no data
         if pool[].n[j] == 0 and h < 0:
             h = j
     if h < 0:
@@ -347,7 +347,7 @@ def _upload_all(mut ex: DeviceExec, P: FP, G: FP, ps: List[Int], gs: List[Int], 
             o += sizes[j]
         return
     var off = 0
-    for j in range(len(sizes)):
+    for j in range(len(sizes)):  # small-loop(sizes: parameter tensors of the model): one upload per tensor, no host arithmetic
         ex.upload(P + off, FP(unsafe_from_address=ps[j]), sizes[j])
         ex.upload(G + off, FP(unsafe_from_address=gs[j]), sizes[j])
         off += sizes[j]
@@ -402,7 +402,7 @@ def _map_download(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) ra
     """OPT_MAP_DOWN: every tensor through `map_to_host` (the mapping waits
     for the queue) and one memcpy into the caller's array."""
     var off = 0
-    for j in range(len(sizes)):
+    for j in range(len(sizes)):  # small-loop(sizes: parameter tensors of the model): one mapped download per tensor into caller memory
         var f = ex._find(P + off, sizes[j])
         var v = ex._sub(f[0], f[1], sizes[j])
         with v.map_to_host() as h:
@@ -441,7 +441,7 @@ def _download_all(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) ra
         _pipe_download(ex, P, ps, sizes)
         return
     var off = 0
-    for j in range(len(sizes)):
+    for j in range(len(sizes)):  # small-loop(sizes: parameter tensors of the model): one async download per tensor
         ex.download_async(FP(unsafe_from_address=ps[j]), P + off, sizes[j])
         off += sizes[j]
     ex.sync()
@@ -522,7 +522,7 @@ def lamb_resident_step_py(handle: PythonObject, addrs: PythonObject, ip: PythonO
     if J != nt or len(addrs) != 2 * J + 1 or t < 1:
         raise Error("lamb_resident_step: the handle's " + String(nt) + " tensors, 2 J + 1 addresses and t >= 1")
     var sizes = List[Int]()
-    for k in range(nt):
+    for k in range(nt):  # small-loop(nt: parameter tensors of the handle): per-tensor sizes from the offset table
         sizes.append(pool[].offs[h][k + 1] - pool[].offs[h][k])
     var pg = _tensors(addrs, J, sizes, n)
     var t0 = 0

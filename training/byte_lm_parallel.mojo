@@ -111,7 +111,7 @@ struct ByteParallelTrainer(Movable, Writable):
         comptime if STEP_PHASE_TIMERS:
             if len(devices) > 1:
                 raise Error("byte LM parallel: process-global phase counters cannot profile concurrent devices")
-        for i in range(len(devices)):
+        for i in range(len(devices)):  # small-loop(devices: device ids, at most the visible GPUs): negative and duplicate device-id refusal
             if devices[i] < 0:
                 raise Error("byte LM parallel: negative device index")
             for j in range(i):
@@ -126,7 +126,7 @@ struct ByteParallelTrainer(Movable, Writable):
         self.logical_shards = shards
         # Each physical replica begins from exactly the same host bytes.
         try:
-            for i in range(len(devices)):
+            for i in range(len(devices)):  # small-loop(devices: device ids, at most the visible GPUs): one context and replica trainer per device
                 self.contexts.append(DeviceContext(device_id=devices[i]))
                 self.trainers.append(ByteTrainer(self.contexts[i], p, m, v,
                     flags, completed, opt, shape,
@@ -168,7 +168,7 @@ struct ByteParallelTrainer(Movable, Writable):
     def broadcast_parameters(mut self) raises:
         # Every source range is authoritative on exactly one device. Copies
         # never overwrite another device's owned range.
-        for source in range(len(self.trainers)):
+        for source in range(len(self.trainers)):  # small-loop(trainers: replicas, one per device): device-to-device parameter broadcast per owner range
             var first = self.trainers[source].buffers.optimizer_first
             var n = self.trainers[source].buffers.optimizer_count
             var part = self.trainers[source].buffers.param.create_sub_buffer[DType.float32](first,n)
@@ -345,7 +345,7 @@ struct ByteParallelTrainer(Movable, Writable):
             raise Error("byte LM parallel: step bound reached")
         for i in range(len(shards)):
             byte_validate_tokens(shards[i], self.trainers[0].config)
-        for i in range(len(self.trainers)):
+        for i in range(len(self.trainers)):  # small-loop(trainers: replicas, one per device): replica health and step-count admission
             if not self.trainers[i].healthy or self.trainers[i].completed_steps != completed:
                 raise Error("byte LM parallel: replica state mismatch")
         self.busy = True
@@ -387,7 +387,7 @@ struct ByteParallelTrainer(Movable, Writable):
                     _gradient_task(0)
                 else:
                     host_parallelize(_gradient_task, active)
-                for rank in range(active):
+                for rank in range(active):  # small-loop(active: replicas in this wave, one per device): failed-shard flags of the wave
                     if failed[rank] != 0:
                         raise Error("byte LM parallel: gradient shard " + String(start + rank) + " failed")
                 # Every parameter keeps the same logical left fold. Owners
@@ -450,7 +450,7 @@ struct ByteParallelTrainer(Movable, Writable):
             # owner ranges. Complete ALL copies/scans before any update.
             for i in range(len(self.trainers)):
                 if self.pool_optimizer:
-                    for owner in range(width):
+                    for owner in range(width):  # small-loop(width: optimizer owners, one per device): device-to-device gradient range transfers
                         var first = self.trainers[owner].buffers.optimizer_first
                         var owned = self.trainers[owner].buffers.optimizer_count
                         var target = self.trainers[i].buffers.grad.create_sub_buffer[DType.float32](first,owned)

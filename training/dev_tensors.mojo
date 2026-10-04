@@ -68,7 +68,7 @@ def train_dev_alloc(ctx: DeviceContext, n: Int) raises -> Int:
     var pool = _DEV_POOL.get_or_create_ptr()
     var buf = ctx.enqueue_create_buffer[DType.float32](n)
     var h = -1
-    for j in range(len(pool[].n)):
+    for j in range(len(pool[].n)):  # small-loop(pool: live device-array handles): free handle slot search, no data
         if pool[].n[j] == 0 and h < 0:
             h = j
     if h < 0:

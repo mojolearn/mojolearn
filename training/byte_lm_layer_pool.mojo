@@ -122,7 +122,7 @@ struct ByteLayerPool(Movable):
         for i in range(len(devices)):  # small-loop(devices: device ids, at most 64): duplicate-id refusal on the device list
             if devices[i] < 0:
                 raise Error("byte layer pool: negative device index")
-            for j in range(i):
+            for j in range(i):  # small-loop(i: earlier device ids, at most 64): duplicate-id refusal on the device list
                 if devices[i] == devices[j]:
                     raise Error("byte layer pool: duplicate device index")
         self.config = shape.copy()

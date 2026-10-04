@@ -356,7 +356,7 @@ def _pool_dev(ctx: DeviceContext, count: Int) raises -> Int:
     """A free device buffer of exactly `count` floats from the pool, or a
     new one added to it; returns its index (held until released)."""
     var pool = X_SEQUENCE_POOL.get_or_create_ptr()
-    for i in range(len(pool[].dev)):
+    for i in range(len(pool[].dev)):  # small-loop(pool: pooled device buffers): free-buffer slot search, no data
         if pool[].dev_free[i] and pool[].dev_n[i] == count:
             pool[].dev_free[i] = False
             return i
@@ -489,7 +489,7 @@ struct DeviceExec(Exec):
 
     def _find(self, p: FP, n: Int) raises -> Tuple[Int, Int]:
         var addr = Int(p)
-        for i in range(len(self.base)):
+        for i in range(len(self.base)):  # small-loop(base: buffers this Exec allocated): address-to-buffer lookup, no data
             var off = (addr - self.base[i]) // 4
             if addr >= self.base[i] and off + n <= self.size[i]:
                 return (i, off)
@@ -885,7 +885,7 @@ struct DeviceExec(Exec):
         its half is reused (that half was last read for chunk i - 2, before
         the previous wait). Returns with every byte in place."""
         comptime if SEQ_MAP_DOWN:
-            for j in range(len(self.pipe_n)):
+            for j in range(len(self.pipe_n)):  # small-loop(pipe_n: deferred download chunks): one mapped DMA copy per chunk into caller memory
                 var nj = self.pipe_n[j]
                 var f = self._find(FP(unsafe_from_address=self.pipe_src[j]), nj)
                 var v = self._sub(f[0], f[1], nj)
