@@ -158,21 +158,6 @@ def _put_weights(prog, w):
     return prog.put(w)
 
 
-def _class_sums(codes, w, k, numeric_mode):
-    """Per-class (weighted) counts, binary64 in row order, from the binding
-    (x_metrics/epilogue.mojo class_sums); `codes` int32, `w` Float32 or None."""
-    codes = _i32_c(codes)
-    waddr, wkeep = _f32_weights_addr(w)
-    if waddr is None:
-        wkeep = as_f32_c(w, ndim=1, name="sample_weight")[0]
-        waddr = addr_ro(wkeep, name="sample_weight")
-    out = _f64_out(k)
-    _binding(numeric_mode).x_metrics_class_sums(addr_ro(codes, name="codes"), waddr, codes.size, k,
-                                                out.buffer_info()[0])
-    del wkeep
-    return out.tolist()[:k]
-
-
 class _Prog:
     """One program: an arena layout, the inputs copied into it, and stages."""
 
@@ -2896,86 +2881,59 @@ def _cluster_inputs(X, labels, caller):
     return Xa, _codes(lab, classes), len(classes)
 
 
-class _Cents:
-    """lane py-misc-metrics: the centroid program left in place for the
-    host epilogue (x_metrics/epilogue.mojo centroids_f32, ch_extra,
-    db_score), which reads the per-cluster sums and the global sum words in
-    the arena instead of Python lists of k * d floats."""
-
-    def __init__(self, Xa, codes, k, numeric_mode):
-        n, d = Xa.shape
-        prog = _Prog()
-        X = prog.put(Xa)
-        L = prog.put_i32(codes)
-        off, self.sums = _group(prog, L, n, k, values=X, vstride=d, width=d)
-        zero = prog.scratch(n)
-        prog.stage("pair_key", n, 0, 0, zero, 1, 2)
-        _, self.gsum = _group(prog, zero, n, 1, values=X, vstride=d, width=d)
-        _execute(prog, numeric_mode)
-        o = prog.ints(off, k + 1)
-        self.counts = [o[i + 1] - o[i] for i in range(k)]
-        self.q = array.array("q", self.counts)
-        prog._check(self.sums, k * d)
-        prog._check(self.gsum, d)
-        self.prog, self.k, self.d = prog, k, d
-
-    def args(self):
-        return self.prog.arena.buffer_info()[0], self.sums
-
-    def f32(self, fn):
-        """The Float32 centroid words `_row_dists` uploads."""
-        k, d = self.k, self.d
-        out = empty((k * d,), "<f4")
-        fn(*self.args(), self.q.buffer_info()[0], k, d, addr_ro(out, name="centroids"))
-        return out
+#: cl_epi kinds (x_metrics/rank_epi.mojo, lane cpu2-l7-metrics S3b)
+_CL_CENT, _CL_CH_ROW, _CL_CH_FIN, _CL_DB_DIST, _CL_DB_FIN = 0, 1, 2, 3, 4
 
 
-def _cluster_native(Xa, codes, k, numeric_mode, name):
-    """(_Cents, the centroid entry, the score entry): every install's
-    binding carries both (the Python centroid fallback is gone, lane
-    pyglue-sweep: a present cluster's count is never 0)."""
-    return (_Cents(Xa, codes, k, numeric_mode), _epilogue("x_metrics_centroids", numeric_mode),
-            _epilogue(name, numeric_mode))
-
-
-def _row_dists_f32(Xa, codes, C32, k, root, numeric_mode):
-    """Per-cluster sums of the row distances to the Float32 centroid words."""
+def _cluster_score(X, labels, numeric_mode, caller, db):
+    """calinski_harabasz_score (db False) or davies_bouldin_score (db True)
+    as ONE device program (lane cpu2-l7-metrics S3b): the per-cluster and
+    global column sums (group sums), the centroids (`cl_epi` CENT: binary64
+    sums / counts, and their Float32 words), the row distances to the
+    Float32 centroids (row_centroid_dist, PairSum, sqrt for DB) and their
+    per-cluster sums, then CH_ROW + CH_FIN or DB_DIST + DB_FIN in binary64.
+    The host centroid / ch_extra / db_score epilogues, the Python count
+    differences and the second upload of X are gone; one binary64 word
+    comes back."""
+    Xa, codes, k = _cluster_inputs(X, labels, caller)
     n, d = Xa.shape
     prog = _Prog()
-    X = prog.put(Xa)
+    X0 = prog.put(Xa)
     L = prog.put_i32(codes)
-    C = prog.put(C32)
-    out = prog.scratch(n)
-    prog.stage("row_centroid_dist", n, X, d, L, C, out, 1 if root else 0)
-    off, per = _group(prog, L, n, k, values=out)
+    off, sums = _group(prog, L, n, k, values=X0, vstride=d, width=d)
+    C32 = prog.scratch(k * d)
+    CB = prog.scratch(2 * k * d)
+    prog.stage("cl_epi", k * d, _CL_CENT, off, sums, k, d, C32, CB)
+    dist = prog.scratch(n)
+    prog.stage("row_centroid_dist", n, X0, d, L, C32, dist, 1 if db else 0)
+    _, per = _group(prog, L, n, k, values=dist)
+    res = prog.want(prog.alloc(2), 2)
+    if db:
+        D = prog.scratch(2 * k * k)
+        prog.stage("cl_epi", k * k, _CL_DB_DIST, CB, k, d, D)
+        prog.stage("cl_epi", 1, _CL_DB_FIN, off, per, D, k, res)
+    else:
+        zero = prog.scratch(n)
+        prog.stage("pair_key", n, 0, 0, zero, 1, 2)
+        _, gsum = _group(prog, zero, n, 1, values=X0, vstride=d, width=d)
+        inner = prog.scratch(2 * k)
+        prog.stage("cl_epi", k, _CL_CH_ROW, CB, gsum, n, d, k, inner)
+        prog.stage("cl_epi", 1, _CL_CH_FIN, off, inner, per, n, k, res)
     _execute(prog, numeric_mode)
-    return prog.floats(per, k)
+    return float(prog.words(res, 2, "d")[0])
 
 
 def calinski_harabasz_score(X, labels, *, numeric_mode=None):
     """scikit-learn 1.9 `calinski_harabasz_score`: the between- over the
-    within-cluster dispersion, scaled by (n - k) / (k - 1)
-    (x_metrics/epilogue.mojo centroids_f32 and ch_extra, lane
-    py-misc-metrics)."""
-    Xa, codes, k = _cluster_inputs(X, labels, "calinski_harabasz_score")
-    n, d = Xa.shape
-    cen, cfn, sfn = _cluster_native(Xa, codes, k, numeric_mode, "x_metrics_ch_extra")
-    C32 = cen.f32(cfn)
-    extra = float(sfn(*cen.args(), cen.gsum, cen.q.buffer_info()[0], k, d, n))
-    intra = _fsum(_row_dists_f32(Xa, codes, C32, k, False, numeric_mode))
-    return float(1.0 if intra == 0.0 else extra * (n - k) / (intra * (k - 1.0)))
+    within-cluster dispersion, scaled by (n - k) / (k - 1), in one device
+    program (`_cluster_score`)."""
+    return _cluster_score(X, labels, numeric_mode, "calinski_harabasz_score", False)
 
 
 def davies_bouldin_score(X, labels, *, numeric_mode=None):
     """scikit-learn 1.9 `davies_bouldin_score`: the mean over clusters of the
-    worst (s_i + s_j) / d(c_i, c_j) (x_metrics/epilogue.mojo centroids_f32
-    and db_score, lane py-misc-metrics)."""
-    Xa, codes, k = _cluster_inputs(X, labels, "davies_bouldin_score")
-    n, d = Xa.shape
-    cen, cfn, sfn = _cluster_native(Xa, codes, k, numeric_mode, "x_metrics_db_score")
-    C32 = cen.f32(cfn)
-    per = array.array("d", _row_dists_f32(Xa, codes, C32, k, True, numeric_mode))
-    return float(sfn(*cen.args(), cen.q.buffer_info()[0], k, d, per.buffer_info()[0]))
+    worst (s_i + s_j) / d(c_i, c_j), in one device program (`_cluster_score`)."""
+    return _cluster_score(X, labels, numeric_mode, "davies_bouldin_score", True)
 
 
 # ---------------------------------------------------------------------------
