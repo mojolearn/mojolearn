@@ -181,7 +181,7 @@ class Embedding(NumericModeMixin):
 
     def __getstate__(self):
         state = dict(self.__dict__)
-        state.pop("_table_token", None)
+        state.pop("_table_tok", None)
         return state
 
     def __del__(self):
@@ -192,7 +192,7 @@ class Embedding(NumericModeMixin):
 
     def _drop_table(self):
         """Release this layer's resident device table, if it has one."""
-        tok = self.__dict__.pop("_table_token", None)
+        tok = self.__dict__.pop("_table_tok", None)
         if tok is None:
             return
         try:
@@ -207,10 +207,10 @@ class Embedding(NumericModeMixin):
         resident table (the host bindings)."""
         if getattr(mod, "embedding_table_release", None) is None:
             return None
-        tok = self.__dict__.get("_table_token")
+        tok = self.__dict__.get("_table_tok")
         if tok is None:
             tok = next(_TABLE_TOKENS)
-            self.__dict__["_table_token"] = tok
+            self.__dict__["_table_tok"] = tok
         return tok
 
     def _extension(self):
