@@ -5022,7 +5022,7 @@ class IterativeImputer(_PrepBase):
             check = not self.sample_posterior and bool(order)
             prev = Xt.copy() if check else None
             for j in order:
-                nbl = corr.next(j) if corr is not None else [a for a in range(dk) if a != j]  # glue: feature ids
+                nbl = corr.next(j) if corr is not None else [a for a in range(dk) if a != j]  # glue: the other feature ids
                 est = _clone(self.estimator)
                 Xo, yo, Xm, rows, m = self._ii_take(Xt, mask, j, nbl, mode, fit=True)
                 est.fit(Xo, yo)
