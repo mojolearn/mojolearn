@@ -304,8 +304,8 @@ class _M:
         """Data movement by strided slices: one C-level copy per column."""
         idx = list(idx)
         w = len(idx)
-        if (self._d is not None and _res_moves(self, self.r * w)
-                and all(0 <= j < self.c for j in idx)):
+        in_range = all(0 <= j < self.c for j in idx)  # glue: range check of the caller's column-index argument
+        if self._d is not None and in_range and _res_moves(self, self.r * w):
             # lane fam2-decomp: the columns gathered on the device (TAKE_COLS)
             return _dev_gather(self, _MV_TAKE_COLS, idx)
         out = array.array("f", [0.0]) * (self.r * w)
