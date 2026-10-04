@@ -41,7 +41,7 @@ from std.sys import llvm_intrinsic
 from std.sys.info import is_gpu
 from std.sys.compile import is_defined
 from std.sys.info import is_apple_gpu
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.team import Team, team_at
 from x_linear.vfold import vdot, vabssum
 from checks.numerics import identical_pow
@@ -420,6 +420,38 @@ def _sgd_target(k: Int, c: Int, v: Float32) -> Float32:
     return Float32(1) if v == i2f(c) else Float32(-1)
 
 
+#: lane apple-fast-q-clf (2026-10-04), QUALITY-FIX, FAST default (every vendor
+#: and the FAST host column); -D MOJOLEARN_SGD_PERC_QOLD restores the final
+#: iterate. The minibatch Perceptron (constant rate, the batch-SUM step,
+#: tol=None never settles on non-separable data) returns the MEAN of its
+#: epoch-end iterates from epoch max_iter // 2 on (weights and intercept),
+#: not the last one. Audit: perceptron taxi FAST accuracy 0.46538 vs
+#: scikit-learn 0.75052 (board-quality-audit-2026-10-04). The last iterate is
+#: a lottery: a float32 numpy model of this exact step on the board's taxi
+#: block (1M rows, batch 256, 20 epochs, standardized) gave last-iterate
+#: accuracy 0.543 / 0.774 / 0.668 / 0.757 over four shuffle seeds and the
+#: second-half epoch-end mean 0.771 / 0.769 / 0.774 (base rate 0.7596;
+#: ~/mojolearn-evidence/apple-fast-q-clf/sim_mb_perceptron.py). IDENTICAL
+#: is untouched. Applies to loss perceptron at learning_rate 'constant' only,
+#: never the one-class problem; a fit that stops before epoch max_iter // 2
+#: keeps its last iterate.
+comptime SGD_PERC_AVG = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_SGD_PERC_QOLD"]()
+
+
+@always_inline
+def sgd_perc_avg_on(loss: Int, lr: Int, k: Int, max_iter: Int) -> Bool:
+    """Whether problem fits average their epoch-end iterates (SGD_PERC_AVG)."""
+    comptime if SGD_PERC_AVG:
+        return loss == L_PERCEPTRON and lr == LR_CONSTANT and k != 1 and max_iter >= 2
+    return False
+
+
+@always_inline
+def sgd_perc_avg_from(max_iter: Int) -> Int:
+    """The first 0-based epoch whose end iterate enters the mean."""
+    return max_iter // 2
+
+
 @always_inline
 def sgd_mb_on(batch: Int, k: Int, lr: Int) -> Bool:
     """Whether a problem takes the minibatch form (lane/neural-pass103): a batch
@@ -492,14 +524,16 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
             var ep: Int
             if sgd_mb_on(batch, k, lr):
                 # lane/neural-pass103: the minibatch form (x_linear/sgd_mb.mojo)
-                var sl = List[Float32](length=2 * batch + (d + 2) * mb_subs(batch, mb_sub_size(batch)), fill=Float32(0))
+                var avg_from = sgd_perc_avg_from(max_iter) if sgd_perc_avg_on(loss, lr, k, max_iter) else -1
+                var sl = List[Float32](length=2 * batch + (d + 2) * mb_subs(batch, mb_sub_size(batch)) + d + 1,
+                                       fill=Float32(0))
                 ep = sgd_mb_one(
                     x, ys, n, d, loss, penalty, alpha, l1r, lr, eta0, power_t, eps,
                     fit_intercept, max_iter, tol, nic, do_shuffle,
                     seed + UInt64(1000003) * UInt64(c), res, c * d, res, problems * d + c, idx,
                     swp, has_sw, ld(fp, 6 + c) if has_cw else Float32(1),
                     ld(fp, 6 + problems + c) if has_cw else Float32(1), has_cw, batch,
-                    FP(unsafe_from_address=Int(sl.unsafe_ptr())), k == 1, bsum,
+                    FP(unsafe_from_address=Int(sl.unsafe_ptr())), k == 1, bsum, avg_from,
                 )
                 _ = sl^
             else:
@@ -1059,17 +1093,22 @@ def sgd_mb_one(
     lr: Int, eta0: Float32, power_t: Float32, eps: Float32, fit_intercept: Bool, max_iter: Int, tol: Float32,
     nic: Int, do_shuffle: Bool, seed: UInt64, w: FP, woff: Int, b: FP, boff: Int, idx: IP,
     swp: FP, has_sw: Bool, wpos: Float32, wneg: Float32, has_cw: Bool, batch: Int, scratch: FP,
-    one_class: Bool = False, bsum: Bool = False,
+    one_class: Bool = False, bsum: Bool = False, avg_from: Int = -1,
 ) -> Int:
     """One problem on the host (the CPU binding's form of the device's batches).
-    scratch: dl batch | loss batch | partials (d + 2) * subs. Returns epochs,
-    -1 on a non-finite weight."""
+    scratch: dl batch | loss batch | partials (d + 2) * subs, then (avg_from
+    >= 0, SGD_PERC_AVG) d + 1 sums of the epoch-end weights and intercept.
+    Returns epochs, -1 on a non-finite weight."""
     var dlv = scratch
     var lv = scratch + batch
     var parts = lv + batch
     var sub = mb_sub_size(batch)
     var dblk = mb_dblk(batch)
     var nsub = mb_subs(batch, sub)
+    var acc = parts + (d + 2) * nsub
+    var navg = 0
+    if avg_from >= 0:
+        fill(acc, 0, d + 1, Float32(0))
     fill(w, woff, d, Float32(0))
     var bias = Float32(1) if one_class else Float32(0)
     for i in range(n):
@@ -1126,6 +1165,12 @@ def sgd_mb_one(
             st(b, boff, Float32(0))
             fill(w, woff, d, Float32(0))
             return -1
+        if avg_from >= 0 and epoch >= avg_from:
+            # SGD_PERC_AVG: this epoch's end iterate enters the mean
+            for j in range(d):
+                st(acc, j, fa(ld(acc, j), ld(w, woff + j)))
+            st(acc, d, fa(ld(acc, d), bias))
+            navg += 1
         if need_obj:
             var mean_obj = fa(fd(objective, i2f(n)), mb_penalty(w, woff, d, alpha, l1r, penalty))
             if one_class:
@@ -1142,5 +1187,11 @@ def sgd_mb_one(
                     no_improve = 0
                 else:
                     break
+    if navg > 0:
+        # SGD_PERC_AVG: the mean of the epoch-end iterates replaces the last
+        var inv = fd(Float32(1), i2f(navg))
+        for j in range(d):
+            st(w, woff + j, fm(ld(acc, j), inv))
+        bias = fm(ld(acc, d), inv)
     st(b, boff, fs(Float32(1), bias) if one_class else bias)
     return epochs

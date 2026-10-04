@@ -14,6 +14,7 @@ from x_prep.host.program import run_program_host
 from x_prep.user_host import F32P, F64P, I32P, ii_rows, ii_gather, ii_scatter, ii_conv
 from x_prep.folds import kfold_folds, strat_folds
 from x_prep.py2mojo import PY2MOJO_PREP
+from x_prep.proba64 import PROBA64
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -155,6 +156,13 @@ def kfold_folds_binding(out_addr: PythonObject, ints: PythonObject, seed: Python
     return PythonObject(0)
 
 
+def proba64_binding() raises -> PythonObject:
+    """Lane apple-fast-q-clf (x_prep/proba64.mojo): registered only under
+    PROBA64 (FAST, not -D MOJOLEARN_PROBA64_QOLD); Python's probe for staging
+    `q64_softmax` (float64 predict_proba)."""
+    return PythonObject(1)
+
+
 def py2mojo_binding() raises -> PythonObject:
     """Lane apple-fast-py2mojo-prep: present unless -D MOJOLEARN_PY2MOJO_prep_OFF."""
     return PythonObject(1)
@@ -179,6 +187,8 @@ def PyInit__mojolearn_x_prep_host() abi("C") -> PythonObject:
         m.def_function[kfold_folds_binding]("x_prep_kfold_folds")
         comptime if PY2MOJO_PREP:
             m.def_function[py2mojo_binding]("x_prep_py2mojo")
+        comptime if PROBA64:
+            m.def_function[proba64_binding]("x_prep_proba64")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_prep_host: ", e))

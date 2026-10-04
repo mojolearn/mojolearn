@@ -40,6 +40,8 @@ from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.sgd_end import sgd_ys_kernel, sgd_iota_kernel, sgd_perm_kernel, sgd_mb_end_kernel, sgd_mb_res_kernel, sgd_ps_end_kernel, sgd_ps_res_kernel, SGD_END_ST, SGD_END_TPB, SGD_MB_FLAGS, SGD_MB_WORDS
 from x_linear.vfold import vscratch
 from x_linear.sgd import LR_INVSCALING
+from x_linear.sgd import sgd_perc_avg_on, sgd_perc_avg_from
+from x_linear.sgd_avg import sgd_avg_acc_kernel, sgd_avg_fin_kernel
 from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
 from x_linear.bayes import bayes_wy_part, bayes_wx_part, bayes_wgram_part, bayes_wxty_part, bayes_wvar_part, bayes_coef_one
 from x_linear.bayes import bayes_prep, bayes_coef, bayes_step, bayes_finish, _sse_part, bayes_eig_prep, bayes_yvar_part, GRAM_SSE_TRUST
@@ -943,7 +945,14 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var need_obj = tol > Float32(-3.0e38)
     var max_epochs = 0
     var status = 0
+    # SGD_PERC_AVG (x_linear/sgd_avg.mojo): the epoch-end iterate sums
+    var avg = sgd_perc_avg_on(loss, lr, k, max_iter)
+    var avg_from = sgd_perc_avg_from(max_iter)
+    var dacc = ctx.enqueue_create_buffer[DType.float32](d + 1)
     for c in range(problems):
+        var navg = 0
+        if avg:
+            dacc.enqueue_fill(Float32(0))
         # the targets and the identity order on the device (sgd_fit's statements)
         ctx.enqueue_function[sgd_ys_kernel](
             dy.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), Int32(n), Int32(k), Int32(c),
@@ -1072,8 +1081,19 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
             if hfl[1] != Float32(0):
                 failed = True
                 break
+            if avg and epoch >= avg_from:
+                ctx.enqueue_function[sgd_avg_acc_kernel](
+                    dw.unsafe_ptr(), dbias.unsafe_ptr(), dacc.unsafe_ptr(), Int32(d),
+                    grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB,
+                )
+                navg += 1
             if hfl[0] != Float32(0):
                 break
+        if navg > 0 and not failed:
+            ctx.enqueue_function[sgd_avg_fin_kernel](
+                dw.unsafe_ptr(), dbias.unsafe_ptr(), dacc.unsafe_ptr(), Int32(d), Float32(1) / Float32(navg),
+                grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB,
+            )
         ctx.enqueue_function[sgd_mb_res_kernel](
             dw.unsafe_ptr(), dbias.unsafe_ptr(), dres.unsafe_ptr(), Int32(c), Int32(d), Int32(problems),
             Int32(1 if one_class else 0), Int32(1 if failed else 0), grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB,
@@ -1103,6 +1123,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     _ = dbias^
     _ = dobj^
     _ = dws^
+    _ = dacc^
     _ = dbs^
     _ = wit^
 

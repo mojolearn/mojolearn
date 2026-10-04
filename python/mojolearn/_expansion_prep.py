@@ -97,6 +97,9 @@ _OPS = dict(
     p2m_ccount=200, p2m_cscan=201, p2m_cstart=202, p2m_cwrite=203, p2m_rgather=204, p2m_smrows=205,
     p2m_sel_count=206, p2m_sel_scan=207, p2m_sel_write=208, p2m_transpose=209, p2m_rowflag=210,
     p2m_abscorr_cell=211, p2m_abscorr_norm=212,
+    # lane apple-fast-q-clf (x_prep/proba64.mojo, in the py2mojo range): staged only when the
+    # binding exports x_prep_proba64 (FAST, not -D MOJOLEARN_PROBA64_QOLD)
+    q64_softmax=213,
 )
 _PARAMS = 14
 _NONE = -1
@@ -585,6 +588,15 @@ class _Prog:
 
     def get_i32(self, off, shape):
         return self._read(off, shape, "i")
+
+    def get_f64(self, off, shape):
+        """An (rows, cols) block of float64 values written as word pairs (low, high) by `q64_softmax`:
+        the 2 * prod(shape) words reinterpreted as bytes (glue: no arithmetic)."""
+        rows, cols = shape
+        words = self._read(off, (2 * rows * cols,), "i")
+        out = array.array("d")
+        out.frombytes(words.tobytes())
+        return Array._owned(out, shape, "<f8", "C")
 
     def values(self, off, n):
         """Python floats of n arena entries (for integer bookkeeping)."""
@@ -2155,6 +2167,26 @@ class KBinsDiscretizer(_PrepBase):
 
 
 # ---------------------------------------------------------------- naive Bayes
+#: mode -> whether its binding exports `x_prep_proba64` (lane apple-fast-q-clf)
+_PROBA64 = {}
+
+
+def _proba64_on(mode):
+    """predict_proba as float64 (x_prep/proba64.mojo `q64_softmax_unit`): the
+    FAST binding's default (QUALITY-FIX: a float32 probability saturates at
+    exactly 1.0 past a ~16.6-nat gap; Istella log loss gaussian-nb 3.574 vs
+    scikit-learn 3.417, bernoulli-nb 5.351 vs 4.279); a build with
+    -D MOJOLEARN_PROBA64_QOLD (or IDENTICAL) has no export and keeps the
+    float32 `row_softmax` probabilities."""
+    key = str(mode)
+    if key not in _PROBA64:
+        try:
+            _PROBA64[key] = _optional_prep_entry(_prep_binding(mode), "x_prep_proba64") is not None
+        except Exception:  # noqa: BLE001  (no binding: the float32 route)
+            _PROBA64[key] = False
+    return _PROBA64[key]
+
+
 class _Classifier(_PrepBase):
     """predict / predict_proba / predict_log_proba from a subclass's joint
     log likelihood stages (`_jll_stages`), normalised on the device."""
@@ -2184,15 +2216,20 @@ class _Classifier(_PrepBase):
         """The scoring program after the joint log likelihood: its softmax
         and argmax stages, the run, the input refusals, the offsets."""
         lp = pr.alloc(n * K) if "log" in want else _NONE
-        pp = pr.alloc(n * K) if "proba" in want else _NONE
+        p64 = "proba" in want and _proba64_on(self.numeric_mode_)
+        pp = pr.alloc((2 if p64 else 1) * n * K) if "proba" in want else _NONE
         am = pr.alloc(n) if "predict" in want else _NONE
-        if lp != _NONE or pp != _NONE:
+        if p64:
+            pr.stage("q64_softmax", n, jll, n, K, pp)
+            if lp != _NONE:
+                pr.stage("row_softmax", n, jll, n, K, lp, _NONE)
+        elif lp != _NONE or pp != _NONE:
             pr.stage("row_softmax", n, jll, n, K, lp, pp)
         if am != _NONE:
             pr.stage("row_argmax", n, jll, n, K, am)
         pr.run(self.numeric_mode_)
         self._score_refusals(pr, d, chk)
-        return pr, n, K, dict(jll=jll, log=lp, proba=pp, predict=am)
+        return pr, n, K, dict(jll=jll, log=lp, proba=pp, predict=am, proba64=p64)
 
     def _score_checks(self, pr, xo, n, d):
         """Stages a subclass adds to check its input in the scoring program
@@ -2208,6 +2245,8 @@ class _Classifier(_PrepBase):
 
     def predict_proba(self, X):
         pr, n, K, o = self._scores(X, ("proba",))
+        if o.get("proba64"):
+            return pr.get_f64(o["proba"], (n, K))
         return pr.get(o["proba"], (n, K))
 
     def predict_log_proba(self, X):
