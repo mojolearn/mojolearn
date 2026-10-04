@@ -107,8 +107,11 @@ from x_cluster.device_post import (
     bin_key_kernel,
     bin_scatter_kernel,
     compact_rows_kernel,
+    center_cols_kernel,
     count_neg_kernel,
     ff_chunk_kernel,
+    ff_col_mean_kernel,
+    ff_cols_chunk_kernel,
     fill_i_kernel,
     first_equal_kernel,
     kpp_search_kernel,
@@ -2974,6 +2977,41 @@ struct DeviceOps(ClusterOps):
         var po = self._fp(dst)
         self._fold(mode, self._fp(a), self._fp(b if b >= 0 else a), self._fp(c if c >= 0 else a), n, po, po + 1, 0)
         self._ph1("fold_into")
+
+    def center_cols(mut self, x: Int, n: Int, d: Int, mean: Int, dst: Int) raises:
+        self._ph0()
+        # level 1: column f's rows in chunks of FOLD_CHUNK, block (f, q)
+        var nch = (n + FOLD_CHUNK - 1) // FOLD_CHUNK
+        var th = self.alloc(d * nch)
+        var tl = self.alloc(d * nch)
+        self.ctx.enqueue_function[ff_cols_chunk_kernel](
+            Int32(0), self._fp(x), self._fp(x), Int32(n), Int32(1), Int32(d),
+            self._fp(th), self._fp(tl), Int32(nch),
+            grid_dim=(d, nch), block_dim=RTPB,
+        )
+        # the chunk totals of each column, the same way, until one is left
+        var cnt = nch
+        while cnt > 1:
+            var m = (cnt + FOLD_CHUNK - 1) // FOLD_CHUNK
+            var nh = self.alloc(d * m)
+            var nl = self.alloc(d * m)
+            self.ctx.enqueue_function[ff_cols_chunk_kernel](
+                Int32(1), self._fp(th), self._fp(tl), Int32(cnt), Int32(cnt), Int32(1),
+                self._fp(nh), self._fp(nl), Int32(m),
+                grid_dim=(d, m), block_dim=RTPB,
+            )
+            th = nh
+            tl = nl
+            cnt = m
+        self.ctx.enqueue_function[ff_col_mean_kernel](
+            self._fp(th), self._fp(tl), Int32(d), Int32(n), self._fp(mean),
+            grid_dim=_grid(d), block_dim=TPB,
+        )
+        self.ctx.enqueue_function[center_cols_kernel](
+            self._fp(x), n * d, Int32(d), self._fp(mean), self._fp(dst),
+            grid_dim=_grid(n * d), block_dim=TPB,
+        )
+        self._ph1("center_cols")
 
     def bgmm_step(
         mut self, step: Int, kc: Int, d: Int, cfg: Int, aux: Int, w: Int, p1: Int, p2: Int, p3: Int

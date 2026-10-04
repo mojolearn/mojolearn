@@ -67,9 +67,12 @@ from x_cluster.post_bodies import (
     FOLD_CHUNK,
     bin_key,
     bin_value,
+    center_cell,
     center_greater,
     ff_chunk_host,
+    ff_col_fold_host,
     ff_fold_host,
+    ff_mean_cell,
     ff_of_f64,
     ff_to_f64,
     first_equal_cell,
@@ -451,9 +454,12 @@ struct HostOps(ClusterOps):
         tol: Float64, seed: UInt64, n_init: Int, init: Int, mut centers: List[Float32],
         mut labels: List[Int32],
     ) raises -> Float64:
+        # the gathered copy in slot `sub` (the same words a gather of `x`
+        # gives), so `x` may be a placeholder (lane fix-c1-cluster: the
+        # centered matrix lives in a slot under IDN_BISECT_DEVICE_CENTER)
         var g = List[Float32](length=len(rows) * d, fill=Float32(0))
-        for t in range(len(rows)):
-            memcpy(dest=g.unsafe_ptr() + t * d, src=x.unsafe_ptr() + rows[t] * d, count=d)
+        if len(rows) * d > 0:
+            memcpy(dest=g.unsafe_ptr(), src=self.f[sub].unsafe_ptr(), count=len(rows) * d)
         return self.kmeans(g, len(rows), d, k, max_iter, tol, seed, n_init, init, centers, labels)
 
     def shrink(mut self, slot: Int) raises:
@@ -868,6 +874,18 @@ struct HostOps(ClusterOps):
 
     def sum_ff(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int) raises -> Float64:
         return ff_to_f64(ff_fold_host(mode, self._fp(a), self._fp_or(b), self._fp_or(c), n))
+
+    def center_cols(mut self, x: Int, n: Int, d: Int, mean: Int, dst: Int) raises:
+        var px = self._fp(x)
+        var pm = self._fp(mean)
+        var pd = self._fp(dst)
+        for f in range(d):
+            var v = ff_col_fold_host(px, n, d, f)
+            pm[f] = ff_mean_cell(v.hi, v.lo, n)
+        for r in range(n):
+            var row = r * d
+            for f in range(d):
+                pd[row + f] = center_cell(px[row + f], pm[f])
 
     def fold_into(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int, dst: Int) raises:
         var v = ff_fold_host(mode, self._fp(a), self._fp_or(b), self._fp_or(c), n)

@@ -107,15 +107,23 @@ trait ClusterOps(Movable):
         """dst[t * d + f] = src[idx[t] * d + f], t < m (lane/neural-pass108)."""
         ...
 
+    def center_cols(mut self, x: Int, n: Int, d: Int, mean: Int, dst: Int) raises:
+        """mean (d) = each column's float32 mean of x (n x d row-major), the
+        `post_bodies.ff_col_fold_host` float-float fold and `ff_mean_cell`;
+        dst (n x d) = `post_bodies.center_cell`(x, mean) (lane
+        fix-c1-cluster: BisectingKMeans' centering on the device)."""
+        ...
+
     def kmeans_rows(
         mut self, sub: Int, x: List[Float32], rows: List[Int], d: Int, k: Int, max_iter: Int,
         tol: Float64, seed: UInt64, n_init: Int, init: Int, mut centers: List[Float32],
         mut labels: List[Int32],
     ) raises -> Float64:
         """`kmeans` (unit weights) of the rows `rows` of the host matrix `x`
-        in that order, whose gathered copy is the slot `sub` (the device
-        fits it in place; the host gathers `x`). The same words as `kmeans`
-        on the gathered list (lane/neural-pass108)."""
+        in that order, whose gathered copy is the slot `sub` (both columns
+        fit that slot; `x` is only kept alive and may be a one-word
+        placeholder). The same words as `kmeans` on the gathered list
+        (lane/neural-pass108)."""
         ...
 
     def shrink(mut self, slot: Int) raises:
