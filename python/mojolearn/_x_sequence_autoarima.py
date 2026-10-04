@@ -32,9 +32,9 @@ from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_autoarima')
 
 from . import _portable_math as _pm
-from ._arima_impl import ARIMA
+from ._arima_impl import ARIMA, _input_ndim, _no_exog, _series_major
 from ._tsa_impl import select_d
-from ._buffer import _native
+from ._buffer import _native, addr, addr_ro
 
 _IC = ("aic", "aicc", "bic")
 
@@ -240,10 +240,46 @@ class AutoARIMA:
             raise RuntimeError("AutoARIMA: call search() before fit()")
         if h != 1e-8 or truncate or method != "ml":
             raise NotImplementedError("AutoARIMA.fit: method 'ml' with the default h only")
+        if self._fit_grouped(maxiter):
+            return self
         for i, (order, sorder, k) in enumerate(self.models):  # glue: chosen order groups, at most the grid
             self._fitted[i] = ARIMA(order=order, seasonal_order=sorder, trend="c" if k else "n",
                                     maxiter=maxiter).fit(_take(self.endog, self._ids[i]))
         return self
+
+    def _fit_grouped(self, maxiter):
+        """Every chosen order refitted in ONE native call
+        (`arima/impl/fast_fit_groups.mojo`, `-D MOJOLEARN_ARIMA_FIT_GROUPS`,
+        FAST + Apple): each order on its own series, the same per-order
+        state machine as `ARIMA.fit`, orders of one Kalman shape sharing a
+        filter launch. Returns False (nothing fitted) when the binding lacks
+        it, it is off, or an order is outside its nonseasonal r <= 4 scope;
+        the per-order loop then runs as before."""
+        binding = ARIMA()._extension()
+        enabled = getattr(binding, "arima_fit_groups_enabled", None)
+        if enabled is None or not enabled() or self.n_obs <= 2:
+            return False
+        for (p_, d_, q_), (P_, D_, Q_, s_), _ in self.models:  # glue: chosen order metadata, no series data
+            if P_ or D_ or Q_ or s_ or d_ > 2 or max(p_, q_ + 1) > 4:
+                return False
+        fits, addrs, grid = [], [], []
+        for i, (order, sorder, k) in enumerate(self.models):  # glue: chosen order groups, buffer addresses only
+            m = ARIMA(order=order, seasonal_order=sorder, trend="c" if k else "n", maxiter=maxiter)
+            sub = _take(self.endog, self._ids[i])
+            y_ndim = _input_ndim(sub)
+            arr, bs, n_obs, copied = _series_major(sub, "y")
+            N = order[0] + order[2] + m.k_ + 1
+            bufs = m._fit_buffers(bs, N)
+            addrs += [addr_ro(arr, name="y"), addr(bufs[0], name="params"), addr(bufs[1], name="x"),
+                      addr(bufs[2], name="x0"), addr(bufs[3], name="stats"), addr(bufs[4], name="flags")]
+            grid += [order[0], order[1], order[2], m.k_, bs]
+            fits.append((m, arr, y_ndim, bs, n_obs, copied, N, bufs))
+        written = binding.arima_fit_orders(addrs, grid, [self.n_obs, int(maxiter)])
+        if int(written) != sum(f[3] * f[6] for f in fits):  # glue: chosen order counts
+            raise RuntimeError("AutoARIMA: incomplete grouped refit output")
+        for i, (m, arr, y_ndim, bs, n_obs, copied, N, bufs) in enumerate(fits):  # glue: chosen order groups
+            self._fitted[i] = m._adopt_fit(arr, y_ndim, bs, n_obs, copied, _no_exog(), 0, N, *bufs)
+        return True
 
     def _gather(self, fn, width):
         if any(m is None for m in self._fitted):  # glue: chosen order groups, at most the grid

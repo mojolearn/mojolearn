@@ -95,6 +95,7 @@ from arima.estimator import (
 
 from arima.impl.fast_order_search import order_search_loglike
 from arima.impl.fast_order_state import ARIMA_ORDER_BATCH
+from arima.impl.fast_fit_groups import ARIMA_FIT_GROUPS, fit_orders_grouped
 from arima.impl.tsa.arima_common import ARIMAOrder
 from core.identity_trace import IdentityTrace
 
@@ -121,6 +122,38 @@ def arima_order_search_binding(y_addr: PythonObject, out_addr: PythonObject,
     var written = 0
     with GILReleased(Python()):
         written = order_search_loglike(yp, op, orders, bs, nobs, maxiter)
+    return PythonObject(written)
+
+
+def arima_fit_groups_enabled_binding() raises -> PythonObject:
+    """True when `arima_fit_orders` may replace AutoARIMA's per-order refit
+    (`-D MOJOLEARN_ARIMA_FIT_GROUPS`, FAST + Apple, no identity trace)."""
+    var trace = IdentityTrace()
+    return PythonObject(ARIMA_FIT_GROUPS and not trace.enabled)
+
+
+def arima_fit_orders_binding(addrs: PythonObject, grid: PythonObject,
+                             config: PythonObject) raises -> PythonObject:
+    """AutoARIMA's refit of every chosen order in one call
+    (`arima/impl/fast_fit_groups.mojo`). `addrs`: six addresses per order
+    (y, params, x, x0, stats, flags, each as `arima_fit`'s); `grid`: five
+    ints per order (p, d, q, k, n_series); `config`: [n_obs, maxiter]."""
+    if len(config) != 2 or len(grid) % 5 != 0 or len(addrs) != 6 * (len(grid) // 5):
+        raise Error("arima_fit_orders: expected [n_obs, maxiter], (p,d,q,k,n) per order and six addresses each")
+    var nobs = Int(py=config[0])
+    var maxiter = Int(py=config[1])
+    var orders = List[ARIMAOrder]()
+    var sizes = List[Int]()
+    for i in range(len(grid) // 5):
+        orders.append(ARIMAOrder(Int(py=grid[5*i]), Int(py=grid[5*i+1]), Int(py=grid[5*i+2]),
+                                 0, 0, 0, 0, Int(py=grid[5*i+3]), 0))
+        sizes.append(Int(py=grid[5*i+4]))
+    var host = List[Int]()
+    for i in range(len(addrs)):
+        host.append(Int(py=addrs[i]))
+    var written = 0
+    with GILReleased(Python()):
+        written = fit_orders_grouped(host, orders, sizes, nobs, maxiter)
     return PythonObject(written)
 
 
@@ -438,6 +471,8 @@ def PyInit__mojolearn_arima() abi("C") -> PythonObject:
         m.def_function[arima_fit_binding]("arima_fit")
         m.def_function[arima_order_batch_enabled_binding]("arima_order_batch_enabled")
         m.def_function[arima_order_search_binding]("arima_order_search")
+        m.def_function[arima_fit_groups_enabled_binding]("arima_fit_groups_enabled")
+        m.def_function[arima_fit_orders_binding]("arima_fit_orders")
         m.def_function[arima_predict_binding]("arima_predict")
         m.def_function[arima_forecast_binding]("arima_forecast")
         return m.finalize()
