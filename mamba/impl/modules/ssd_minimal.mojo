@@ -73,6 +73,7 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 #: lane afn-mamba (2026-10-03): FAST + Apple + `-D MOJOLEARN_AFN_MAMBA2_SSD_MMA`
 #: runs S12, S13/S14 and S15/S16 on simdgroup 8x8 tiles (afn_ssd_mma.mojo);
 #: every other build takes the three cell kernels below unchanged.
@@ -112,6 +113,19 @@ comptime SAB_FOLD_SERIAL_ZERO_SEED = is_defined[
     "MOJOLEARN_MAMBA2_SABOTAGE_FOLD_SERIAL_ZERO_SEED"
 ]()
 
+#: lane nr-mamba (2026-10-04, roadmap B9) IDN_M2_CB_LOWER (IDENTICAL, default
+#: ON; `-D MOJOLEARN_IDN_M2_CB_LOWER_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
+#: restores main): S12's G = C.B folds only j <= i and writes an explicit
+#: +0.0 above the diagonal (never leaves the cell unwritten: cb.G is a
+#: recorded, arena-allocated stage). Every reader (S13's M = G o L, the
+#: backward's ydiag and cb gradients) reads j <= i only, so no output bit
+#: moves; the RECORDED cb.G stage changes above the diagonal, on every column
+#: together with the oracle (mamba/checks/mamba2_oracle.mojo, same define).
+comptime IDN_M2_CB_LOWER = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_IDN_M2_CB_LOWER_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 comptime SSD_ANY_SABOTAGE = (
     SAB_SEGSUM_DESCENDING
     or SAB_CHUNK_SIZE_128
@@ -381,7 +395,11 @@ def m2_cb_g_kernel(
     if real > qv:
         real = qv
     var acc = Float32(0.0)
-    if i < real and j < real:
+    var live = i < real and j < real
+    comptime if IDN_M2_CB_LOWER:
+        # B9: above the diagonal is never read; explicit +0.0 (below).
+        live = live and j <= i
+    if live:
         var ti = bb * t_work + c0 + i
         var tj = bb * t_work + c0 + j
         for n in range(M2_D_STATE):

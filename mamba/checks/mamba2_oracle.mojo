@@ -74,6 +74,8 @@ from checks.numerics import (
     identical_silu,
     identical_softplus,
 )
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from gemm.checks.gemm_oracle import gemm_oracle, gemm_oracle_right_zero_padded
 from gemm.host.gemm_host_rows import gemm_host_rows, gemm_host_rows_right_zero_padded
@@ -86,6 +88,15 @@ from mamba.checks.mamba2_fixture import (
     M2_RMS_EPS,
     Mamba2Dims,
     Mamba2Weights,
+)
+
+#: lane nr-mamba (2026-10-04, roadmap B9): the oracle's spelling of
+#: `ssd_minimal.mojo`'s IDN_M2_CB_LOWER (the same expression): cb.G holds
+#: +0.0 above the diagonal.
+comptime IDN_M2_CB_LOWER_ORACLE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_IDN_M2_CB_LOWER_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
 
@@ -418,6 +429,11 @@ def ssd_core_oracle(
             var g_mat = _zeros(q * q)
             for i in range(real):
                 for j in range(real):
+                    comptime if IDN_M2_CB_LOWER_ORACLE:
+                        # B9 (ssd_minimal IDN_M2_CB_LOWER): +0.0 above
+                        # the diagonal, the device's explicit write.
+                        if j > i:
+                            continue
                     g_mat[i * q + j] = g_small[i * real + j]
             var gbase = ((bb * nc + c) * 1) * q * q
             for i in range(q * q):
