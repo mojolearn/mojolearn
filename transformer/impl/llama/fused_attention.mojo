@@ -115,6 +115,7 @@ from core.step_phase import (
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
+from core.ctx_key import ctx_cache_key, ctx_cache_slot
 from core.device_scan import (
     NONFINITE_NONE,
     device_first_nonfinite,
@@ -2268,30 +2269,50 @@ comptime _SCAN_CACHE_FLAGS = 4
 
 
 struct _AttnScanCache(Defaultable, Movable):
-    var part: Optional[DeviceBuffer[DType.float32]]  # [_SCAN_CACHE_PART]
-    var flag: Optional[DeviceBuffer[DType.float32]]  # [_SCAN_CACHE_FLAGS]
-    var host: Optional[HostBuffer[DType.float32]]  # [_SCAN_CACHE_PART + _SCAN_CACHE_FLAGS]
+    # lane/fam2-lm: one entry per device context (`ids[i]` is the key of
+    # entry i, core/ctx_key.mojo); the first pass held one entry per process,
+    # which handed context A's buffers to context B in a two-GPU process.
+    var ids: List[Int]
+    var part: List[DeviceBuffer[DType.float32]]  # each [_SCAN_CACHE_PART]
+    var flag: List[DeviceBuffer[DType.float32]]  # each [_SCAN_CACHE_FLAGS]
+    var host: List[HostBuffer[DType.float32]]  # each [_SCAN_CACHE_PART + _SCAN_CACHE_FLAGS]
 
     def __init__(out self):
-        self.part = Optional[DeviceBuffer[DType.float32]]()
-        self.flag = Optional[DeviceBuffer[DType.float32]]()
-        self.host = Optional[HostBuffer[DType.float32]]()
+        self.ids = List[Int]()
+        self.part = List[DeviceBuffer[DType.float32]]()
+        self.flag = List[DeviceBuffer[DType.float32]]()
+        self.host = List[HostBuffer[DType.float32]]()
 
 
 comptime _ATTN_SCAN_CACHE = _Global[StorageType=_AttnScanCache,
     name="MojolearnAttnScanCacheV1", init_fn=_AttnScanCache.__init__]
 
 
+def _scan_cache_slot(ctx: DeviceContext) raises -> Int:
+    """This context's entry in the scan cache, created (all three buffers)
+    on the context's first use."""
+    var g = _ATTN_SCAN_CACHE.get_or_create_ptr()
+    var si = ctx_cache_slot(g[].ids, ctx)
+    if si >= 0:
+        return si
+    step_count_device_alloc()
+    g[].part.append(ctx.enqueue_create_buffer[DType.float32](_SCAN_CACHE_PART))
+    step_count_device_alloc()
+    g[].flag.append(ctx.enqueue_create_buffer[DType.float32](_SCAN_CACHE_FLAGS))
+    step_count_host_alloc()
+    g[].host.append(
+        ctx.enqueue_create_host_buffer[DType.float32](_SCAN_CACHE_PART + _SCAN_CACHE_FLAGS)
+    )
+    g[].ids.append(ctx_cache_key(ctx))
+    return len(g[].ids) - 1
+
+
 def _scan_cache_host(ctx: DeviceContext) raises -> MutPointer[Float32, MutAnyOrigin]:
     """The cached pinned buffer: the scan's partials at `[0,
     _SCAN_CACHE_PART)`, the flag words after them. Created on first use."""
     var g = _ATTN_SCAN_CACHE.get_or_create_ptr()
-    if not g[].host:
-        step_count_host_alloc()
-        g[].host = ctx.enqueue_create_host_buffer[DType.float32](
-            _SCAN_CACHE_PART + _SCAN_CACHE_FLAGS
-        )
-    return g[].host.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var si = _scan_cache_slot(ctx)
+    return g[].host[si].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
 
 def _device_absmax4_cached(
@@ -2313,10 +2334,8 @@ def _device_absmax4_cached(
     if total == 0:
         return out
     var g = _ATTN_SCAN_CACHE.get_or_create_ptr()
-    if not g[].part:
-        step_count_device_alloc()
-        g[].part = ctx.enqueue_create_buffer[DType.float32](_SCAN_CACHE_PART)
-    var part = g[].part.value().create_sub_buffer[DType.float32](0, total)
+    var si = _scan_cache_slot(ctx)
+    var part = g[].part[si].create_sub_buffer[DType.float32](0, total)
     var hp = _scan_cache_host(ctx)
     var off = 0
     if k0 > 0:
@@ -7664,10 +7683,8 @@ def _zero_flag(ctx: DeviceContext) raises -> DeviceBuffer[DType.float32]:
         # lane/fam-lm: a view of the cached flag buffer, zero-filled for
         # this call exactly as the fresh one is.
         var g = _ATTN_SCAN_CACHE.get_or_create_ptr()
-        if not g[].flag:
-            step_count_device_alloc()
-            g[].flag = ctx.enqueue_create_buffer[DType.float32](_SCAN_CACHE_FLAGS)
-        var cf = g[].flag.value().create_sub_buffer[DType.float32](
+        var si = _scan_cache_slot(ctx)
+        var cf = g[].flag[si].create_sub_buffer[DType.float32](
             0, 3 if ATTN_REPAIR_MASKED_TAIL else 1
         )
         step_count_launch()
@@ -8901,11 +8918,19 @@ by two calls. Every kernel writes each cell it later reads within the call
 no bit moves. `-D MOJOLEARN_ATTN_NO_SCRATCH_CACHE` allocates per call."""
 
 
+comptime _ATTN_SCRATCH_SLOTS = 3
+
+
 struct _AttnScratch(Defaultable, Movable):
+    # lane/fam2-lm: `_ATTN_SCRATCH_SLOTS` buffers per device context; context
+    # entry e (key `ids[e]`, core/ctx_key.mojo) owns
+    # `bufs[e * _ATTN_SCRATCH_SLOTS + slot]`.
+    var ids: List[Int]
     var bufs: List[DeviceBuffer[DType.float32]]
     var cells: List[Int]
 
     def __init__(out self):
+        self.ids = List[Int]()
         self.bufs = List[DeviceBuffer[DType.float32]]()
         self.cells = List[Int]()
 
@@ -8923,13 +8948,18 @@ def _attn_scratch(ctx: DeviceContext, slot: Int, cells: Int) raises -> DeviceBuf
     comptime if not ATTN_SCRATCH_CACHE:
         return ctx.enqueue_create_buffer[DType.float32](cells)
     var g = _ATTN_SCRATCH.get_or_create_ptr()
-    while len(g[].bufs) <= slot:
-        g[].bufs.append(ctx.enqueue_create_buffer[DType.float32](1))
-        g[].cells.append(1)
-    if g[].cells[slot] < cells:
-        g[].bufs[slot] = ctx.enqueue_create_buffer[DType.float32](cells)
-        g[].cells[slot] = cells
-    return g[].bufs[slot].create_sub_buffer[DType.float32](0, cells)
+    var e = ctx_cache_slot(g[].ids, ctx)
+    if e < 0:
+        for _ in range(_ATTN_SCRATCH_SLOTS):
+            g[].bufs.append(ctx.enqueue_create_buffer[DType.float32](1))
+            g[].cells.append(1)
+        g[].ids.append(ctx_cache_key(ctx))
+        e = len(g[].ids) - 1
+    var at = e * _ATTN_SCRATCH_SLOTS + slot
+    if g[].cells[at] < cells:
+        g[].bufs[at] = ctx.enqueue_create_buffer[DType.float32](cells)
+        g[].cells[at] = cells
+    return g[].bufs[at].create_sub_buffer[DType.float32](0, cells)
 
 
 def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool = False](
