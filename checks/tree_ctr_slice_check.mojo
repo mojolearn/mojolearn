@@ -52,7 +52,7 @@ from core.identity_trace import IdentityTrace
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import StageTimes
 from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 from gbdt.methods.doc_parallel_boosting import (
-    fit_two_level_feature_freq_tree, two_level_weighted_leaf_value,
+    fit_two_level_feature_freq_tree, two_level_weighted_leaf_value_host,
 )
 from gbdt.train import TrainedModel, predict_floats
 
@@ -573,11 +573,11 @@ def main() raises:
                 )
         # Two real rows occupy the zero-mass partition; their nonzero
         # targets sum to four, so ignoring weights cannot accidentally pass.
-        var zero_leaf = two_level_weighted_leaf_value(
+        var zero_leaf = two_level_weighted_leaf_value_host(
             oracle_targets, oracle_weights, fixed_rows, 0, 2,
             Float32(0.5), oracle_l2,
         )
-        var positive_leaf = two_level_weighted_leaf_value(
+        var positive_leaf = two_level_weighted_leaf_value_host(
             oracle_targets, oracle_weights, fixed_rows, 2, 4,
             Float32(0.5), oracle_l2,
         )
