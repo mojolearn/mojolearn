@@ -1,4 +1,4 @@
-pos=889 lines=    1176
+pos=890 lines=    1176
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -1052,3 +1052,5 @@ pos=889 lines=    1176
 1160:CMD apple-fast@39ce814d0 nofast-min-cov-det-istella-c rc=0 AFC-AB-SUMMARY nofast-min-cov-det-istella-c arm=A lane=min-cov-det ds=istella median_of_medians_ms=none runs=[ ] digest= 
 1161:CMD apple-fast-opp@8157809e8 opp8-ord-istella rc=0 OPP-DONE tag=opp8-ord-istella out=~/mq/out/opp-opp8-ord-istella
 1162:CMD apple-fast-opp@8157809e8 opp8-svm-istella rc=0 OPP-DONE tag=opp8-svm-istella out=~/mq/out/opp-opp8-svm-istella
+1163:FBUILD lane/apple-fast-gap-linalg2-pcagram@b0c133eff core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+1164:CMD apple-fast-gap-linalg2-pcagram@b0c133eff gl2-pcagram-smoke rc=0 SMOKE-OK 0.09432952105998993
