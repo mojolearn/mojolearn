@@ -170,7 +170,7 @@ def td_finite(x: Float32) -> Bool:
 
 
 @always_inline
-def td_sturm(dd: F32Ptr, ee: F32Ptr, n: Int, sc: Float32, x: DF) -> Int:
+def td_sturm_kern(dd: F32Ptr, ee: F32Ptr, n: Int, sc: Float32, x: DF) -> Int:
     """Eigenvalues of the scaled T below x (negative pivots of T - x)."""
     var q = df_guard(df_sub(DF(dd.unsafe_load(0) * sc, Float32(0.0)), x))
     var cnt = 0
@@ -197,7 +197,7 @@ def td_copy_kernel(src: F32Ptr, dst: F32Ptr, count_in: Int32):
 
 
 @always_inline
-def _td_cell(a: F32Ptr, vp: F32Ptr, wp: F32Ptr, n: Int, i: Int, c: Int, jj: Int) -> Float32:
+def _td_cell_kern(a: F32Ptr, vp: F32Ptr, wp: F32Ptr, n: Int, i: Int, c: Int, jj: Int) -> Float32:
     """A_cur[i, c] = A[i, c] - sum_p (V[i, p] W[c, p] + W[i, p] V[c, p]) over
     the panel's first jj reflectors (A is stale by exactly those)."""
     var x = a.unsafe_load(i * n + c)
@@ -222,7 +222,7 @@ def td_col_kernel(
     var i = j + 1 + b * TD_TPB + tid
     var s = Float32(0.0)
     if i < n:
-        var x = _td_cell(a, vp, wp, n, i, j, jj)
+        var x = _td_cell_kern(a, vp, wp, n, i, j, jj)
         xcol.unsafe_store(i, x)
         if i >= j + 2:
             s = x * x
@@ -237,9 +237,9 @@ def td_col_kernel(
     if tid == 0:
         part.unsafe_store(b, red[0])
     if b == 0 and tid == 1:
-        dd.unsafe_store(j, _td_cell(a, vp, wp, n, j, j, jj))
+        dd.unsafe_store(j, _td_cell_kern(a, vp, wp, n, j, j, jj))
         if j == n - 2:
-            dd.unsafe_store(n - 1, _td_cell(a, vp, wp, n, n - 1, n - 1, jj))
+            dd.unsafe_store(n - 1, _td_cell_kern(a, vp, wp, n, n - 1, n - 1, jj))
 
 
 @always_inline
@@ -476,7 +476,7 @@ def td_syr2k_kernel(a: F32Ptr, vp: F32Ptr, wp: F32Ptr, n_in: Int32, kend_in: Int
 
 
 @always_inline
-def td_scale(dd: F32Ptr, ee: F32Ptr, n: Int) -> SIMD[DType.float32, 2]:
+def td_scale_kern(dd: F32Ptr, ee: F32Ptr, n: Int) -> SIMD[DType.float32, 2]:
     """(sc, bad): sc the power of two bringing max(|d|, |e|) into [0.5, 2)
     (exact scaling), bad = 1 when T is nonfinite or max outside
     [1e-30, 1e30]. Every thread computes it (O(n), the same everywhere)."""
@@ -514,7 +514,7 @@ def td_bisect_kernel(dd: F32Ptr, ee: F32Ptr, info: F32Ptr, wh: F32Ptr, wl: F32Pt
     var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if k >= n:
         return
-    var sb = td_scale(dd, ee, n)
+    var sb = td_scale_kern(dd, ee, n)
     var sc = sb[0]
     if sb[1] != Float32(0.0):
         info.unsafe_store(2, Float32(1.0))
@@ -539,7 +539,7 @@ def td_bisect_kernel(dd: F32Ptr, ee: F32Ptr, info: F32Ptr, wh: F32Ptr, wl: F32Pt
         if wd[0] <= TD_EPS_DF * max(abs(lo[0]), abs(hi[0])) + TD_PIVMIN:
             break
         var mid = df_add(lo, DF(wd[0] * Float32(0.5), wd[1] * Float32(0.5)))
-        if td_sturm(dd, ee, n, sc, mid) > k:
+        if td_sturm_kern(dd, ee, n, sc, mid) > k:
             hi = mid
         else:
             lo = mid
