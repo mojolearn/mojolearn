@@ -6,7 +6,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 from apple_fast_job_policy import policy_for
-from scoped_pca_fit import admit_quality, source_contract, METRIC_NAMES
+from scoped_pca_fit import admit_quality, source_contract, METRIC_NAMES, compare, record
 from scoped_pca_fit_spec import make_spec
 
 H='a'*40
@@ -42,6 +42,25 @@ class ContractTests(unittest.TestCase):
         with patch('scoped_pca_fit.subprocess.check_output',side_effect=[H,'tools/scoped_pca_fit.py\n']), \
              patch('scoped_pca_fit.subprocess.run'):
             self.assertEqual(source_contract(C),H)
+
+    def test_foreign_scalar_comparisons_serialize_as_builtin_bool(self):
+        class ForeignBool:
+            def __init__(self, value): self.value=value
+            def __bool__(self): return self.value
+        class ForeignFloat(float):
+            def __le__(self, other): return ForeignBool(super().__le__(other))
+        foreign=ForeignFloat(0.0)
+        with self.assertRaises(TypeError): json.dumps(foreign <= foreign)
+        with patch('scoped_pca_fit.metrics', return_value={k:foreign for k in METRIC_NAMES}):
+            ok,rows=compare(Path('/unused'))
+        self.assertIs(ok,True)
+        self.assertTrue(all(type(v['A']) is float and type(v['pass_no_worse']) is bool for v in rows.values()))
+        json.dumps(rows,allow_nan=False)
+
+    def test_serialization_failure_creates_no_partial_receipt(self):
+        with patch.object(Path,'open') as opened,self.assertRaises(TypeError):
+            record(Path('/unused'),dict(unsupported=object()))
+        opened.assert_not_called()
 
     def receipt(self):
         return dict(status='PASS',scored=False,source_sha=C,

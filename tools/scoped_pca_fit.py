@@ -37,9 +37,11 @@ def sha(path):
 
 
 def record(path, obj):
+    # Finish serialization before creating a receipt; an encoder error must not
+    # leave a truncated file that looks like a finished quality report.
+    payload = json.dumps(obj, indent=2, allow_nan=False) + '\n'
     with Path(path).open('x') as stream:
-        json.dump(obj, stream, indent=2, allow_nan=False)
-        stream.write('\n')
+        stream.write(payload)
 
 
 def source_contract(compiled):
@@ -163,7 +165,11 @@ def metrics(packet, reference):
 
 def compare(directory):
     import math
-    a,b = [metrics(directory/(arm+'.npz'),directory/'oracle.npz') for arm in 'AB']
+    # NumPy scalar division (orthogonality / sqrt(10)) returns np.float64;
+    # its comparison returns np.bool_, which JSON cannot encode. Convert only
+    # scalar representation, preserving the same binary64 values and gates.
+    a,b = [{k: float(v) for k,v in metrics(directory/(arm+'.npz'),directory/'oracle.npz').items()}
+           for arm in 'AB']
     rows = {k:dict(A=a[k],B=b[k],pass_no_worse=math.isfinite(a[k]) and math.isfinite(b[k]) and b[k]<=a[k]) for k in a}
     bounded = [k for k in a if k.endswith('_relative') and k!='reconstruction_relative']
     ok = all(v['pass_no_worse'] for v in rows.values()) and all(a[k]<=BOUND and b[k]<=BOUND for k in bounded)

@@ -103,3 +103,27 @@ Before any promotion: compare native source C to current main, resolve any
 relevant drift, assess authoritative dataset/opponent-quality status, validate
 production non-audit default and rollback, and admit only useful measured scope.
 Probe PASS alone is not estimator acceptance; estimator PASS alone is not speed.
+
+
+## Serialization repair after first full Istella capture
+
+`scoped-pca-fit-istella-q-v1` captured both arms and the independent oracle,
+then failed while writing `report.json`. Orthogonality normalization produces
+a NumPy float64; comparison produces a NumPy bool (named `bool` in NumPy2),
+which the standard JSON encoder rejects. The repaired comparator converts
+scalar representations to built-in float before unchanged comparisons; no
+values, tolerance or metric definitions are relaxed. Receipt serialization
+now completes before a file is created, avoiding encoder-truncated receipts.
+
+The original M3 output is preserved untouched. Both A/B NPZ packets and their
+metadata exist, as does oracle.npz. The partial report already records HOLD:
+for example eigen-residual errors exceed5e-6, and a maximum-absolute error
+regresses. Do not classify this as a passing quality job or replay the fits.
+The full metrics can be reconstructed from saved A/B/oracle packets through
+`compare(existing_output_directory)` without GPU work, fitting, timing or
+rebuilding the full-data covariance. Any recovered report must be a NEW file
+with original capture harness c982d77989a42e89034082dcdc86cae6aaf6bc7d, recovery
+harness separately recorded, and hashes of all saved packets and original
+partial report; never overwrite the failed report or substitute recovery
+source for capture provenance. Such recovery remains manager-owned serialized
+host analysis; it was not executed by this repair lane.
