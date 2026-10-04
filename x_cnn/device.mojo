@@ -574,7 +574,7 @@ def ws_i(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType.int
 #: workspace slot, filled when it first grows to a size and read by every
 #: later backward. The same operand words into the same GEMM: no bit moves.
 #: `-D MOJOLEARN_XCNN_ONES_CACHE_OFF` is the before arm (a fill per call).
-comptime ONES_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_XCNN_ONES_CACHE_OFF"]()
+comptime ONES_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_XCNN_ONES_CACHE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 comptime ONES_WS_SLOT = 30
 
 

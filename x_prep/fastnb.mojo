@@ -31,7 +31,7 @@ from x_prep.common import FP, IP, p, ld, st
 #: host column keeps the units. -D MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF restores
 #: the unit path on the device.
 comptime IDN_NB_CAT_ATOMIC = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 #: The switch: FAST, Apple, and the define (default OFF); or IDENTICAL (above).
 comptime NB_CAT_ATOMIC = (

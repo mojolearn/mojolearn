@@ -28,7 +28,7 @@ comptime LABEL_DIRECT = _FAST_APPLE and not is_defined["MOJOLEARN_LABEL_DIRECT_O
 #: presence flags, the ascending flag scan and the scattered indicator are
 #: integer words, so the classes, codes and indicator are the sort route's
 #: words. -D MOJOLEARN_IDN_LABEL_OFF restores the device sort + per-cell lookup.
-comptime IDN_LABEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_LABEL_OFF"]()
+comptime IDN_LABEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_LABEL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 comptime LABEL_PRESENT = LABEL_DIRECT or IDN_LABEL
 comptime LABEL_SCATTER = LABEL_DIRECT or IDN_LABEL
 

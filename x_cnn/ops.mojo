@@ -840,7 +840,7 @@ def bn_bwd_red_at(c: Int, x: FP, g: FP, aux: FP, f3: FP, q: IP, p: IP):
 # host and every core count. With one block the result is the single
 # chain's. It replaced one thread folding a whole channel.
 # `-D MOJOLEARN_BN_FOLD_BLOCK_OFF` restores the single chain.
-comptime BN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_BN_FOLD_BLOCK_OFF"]()
+comptime BN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_BN_FOLD_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 
 
 @always_inline
@@ -1000,7 +1000,7 @@ def bn_bwd_eval_dx_at(i: Int, x: FP, g: FP, aux: FP, dst: FP, q: IP, p: IP):
 # per element. Same draw, same threshold, same product: no bit moves.
 # IDENTICAL only. `-D MOJOLEARN_DROPOUT2D_CH_MASK_OFF` restores the
 # per-element draw. The host column keeps dropout2d_at (the same words).
-comptime DROPOUT2D_CH_MASK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_DROPOUT2D_CH_MASK_OFF"]()
+comptime DROPOUT2D_CH_MASK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_DROPOUT2D_CH_MASK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 
 
 @always_inline

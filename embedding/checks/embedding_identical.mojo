@@ -186,7 +186,7 @@ def emb_sabotage_name() -> String:
 comptime PLAN_AUTO = 2
 comptime EMB_AUTO_SORT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_EMB_AUTO_SORT_OFF"]()
+    and not (is_defined["MOJOLEARN_EMB_AUTO_SORT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 comptime EMB_AUTO_SORT_MIN_CELLS = get_defined_int["MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS", 1 << 26]()
 

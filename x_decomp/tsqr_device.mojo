@@ -92,8 +92,8 @@ comptime TS_SMEM_BYTES = 4 * (TS_PART + 3 * _TT + TS_TPB + TS_P)
 # reflector. The same fmas in the same order: no bit moves.
 # IDENTICAL builds only: a FAST build keeps its launches as they were.
 comptime _TS_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-comptime TS_GRID_UPDATE = _TS_IDN and not is_defined["MOJOLEARN_IDN_TSQR_GRID_OFF"]()
-comptime TS_NORM_FUSED = _TS_IDN and not is_defined["MOJOLEARN_IDN_TSQR_NORM_OFF"]()
+comptime TS_GRID_UPDATE = _TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_GRID_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+comptime TS_NORM_FUSED = _TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_NORM_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 comptime TS_SMEM_OK = lib_smem_page_fits_for[TARGET_COLUMN, TS_SMEM_BYTES]()
 
 

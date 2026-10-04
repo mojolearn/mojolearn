@@ -154,7 +154,7 @@ comptime PJ_SYNC_ROUNDS = 512
 # - `tsqr_factor` with a right-hand side does not wait between the pack and
 #   the factorization off Apple.
 # IDENTICAL builds only: a FAST build keeps its waits and readbacks.
-comptime IDN_XD_SWEEP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_XD_SWEEP_OFF"]()
+comptime IDN_XD_SWEEP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_XD_SWEEP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 comptime IDN_XD_NO_WAIT = IDN_XD_SWEEP and TARGET_COLUMN != COLUMN_APPLE
 comptime XD_NO_FLAG = Int32(2147483647)
 

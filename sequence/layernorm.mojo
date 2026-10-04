@@ -19,7 +19,7 @@ from std.sys.compile import is_defined
 #: size is a function of M alone. One block (M <= 64) is the single chain.
 #: It replaced one M-term chain per column.
 #: `-D MOJOLEARN_LN_FOLD_BLOCK_OFF` restores the single chain.
-comptime LN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_LN_FOLD_BLOCK_OFF"]()
+comptime LN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_LN_FOLD_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 
 
 def ln_fold_rows(M: Int) -> Int:

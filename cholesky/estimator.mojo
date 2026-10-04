@@ -230,7 +230,7 @@ def cholesky_factor_host(
 comptime CHOL_FAST_DEVIO = (
     (
         (_CTX_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
-        or (_CTX_MODE == _CTX_IDENTICAL and not is_defined["MOJOLEARN_IDN_GATES_OFF"]())
+        or (_CTX_MODE == _CTX_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
     )
     and not is_defined["MOJOLEARN_CHOL_FAST_DEVIO_OFF"]()
 )

@@ -542,8 +542,8 @@ def tsqr_r_py[E: Exec](a: PythonObject, b: PythonObject, r: PythonObject, p: Pyt
 # clear the bit, and Python keeps the old call sequence. IDENTICAL builds
 # only: a FAST build's bits are 0 and its routes are as they were.
 comptime _API_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-comptime IDN_OLS_ONE_ENTRY = _API_IDN and not is_defined["MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF"]()
-comptime IDN_LU_GESV = _API_IDN and not is_defined["MOJOLEARN_IDN_LU_GESV_OFF"]()
+comptime IDN_OLS_ONE_ENTRY = _API_IDN and not (is_defined["MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+comptime IDN_LU_GESV = _API_IDN and not (is_defined["MOJOLEARN_IDN_LU_GESV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 
 
 def idn_flags_py() raises -> PythonObject:

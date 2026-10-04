@@ -51,7 +51,7 @@ from x_decomp.cells import F32Ptr, I32Ptr, div0
 comptime LU_FAST_STEP1 = (
     (
         (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
-        or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_GATES_OFF"]())
+        or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
     )
     and not is_defined["MOJOLEARN_LU_FAST_STEP1_OFF"]()
 )

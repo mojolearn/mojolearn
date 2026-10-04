@@ -520,7 +520,7 @@ comptime GRP_CLS2_NOSCAN = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CL
 #: on every vendor (the refusal is a predicate: no output word depends on
 #: where it runs); -D MOJOLEARN_IDN_GATES_OFF (or the _OFF) restores the host
 #: walk in IDENTICAL. NOSCAN, LAZY and FUSED stay FAST + Apple.
-comptime _CLS2_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_GATES_OFF"]()
+comptime _CLS2_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 comptime GRP_CLS2_DEVSCAN = (
     (_CLS2_FAST_APPLE or _CLS2_IDN)
     and not is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF"]()

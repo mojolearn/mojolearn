@@ -66,10 +66,10 @@ comptime OPT_RAW_UP = _OPT_APPLE_FAST and is_defined["MOJOLEARN_OPT_RAW_UP"]()
 #: -D MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF restore IDENTICAL's old transport.
 comptime _OPT_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime OPT_PIPE_DOWN = (_OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_PIPE_DOWN_OFF"]()) or (
-    _OPT_IDN and not is_defined["MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF"]()
+    _OPT_IDN and not (is_defined["MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 comptime OPT_ZERO_OPEN = (_OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_ZERO_OPEN_OFF"]()) or (
-    _OPT_IDN and not is_defined["MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF"]()
+    _OPT_IDN and not (is_defined["MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 #: the pipelined download's chunk, floats (8 MB; lane apple-fast-gap-optim:
 #: -D MOJOLEARN_OPT_FAST_PIPE_CH=<floats> for the A/B)
@@ -97,7 +97,7 @@ comptime OPT_RAW_DOWN = _OPT_APPLE_FAST and is_defined["MOJOLEARN_OPT_FAST_RAW_D
 #: entry (the Python side falls back when the entry points are absent).
 #: The same `adafactor_core` launches on the same values: no bit moves.
 comptime AF_RESIDENT = (_OPT_APPLE_FAST and is_defined["MOJOLEARN_AF_FAST_RESIDENT"]()) or (
-    _OPT_IDN and not is_defined["MOJOLEARN_IDN_AF_RESIDENT_OFF"]()
+    _OPT_IDN and not (is_defined["MOJOLEARN_IDN_AF_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
 #: the handle kinds

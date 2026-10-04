@@ -62,7 +62,7 @@ comptime NB_TEXT_CSR = (
 #: the caller runs the dense program. Scoring (`nb_csr_jll_chk_kernel`) is
 #: `matmul_unit`'s ascending chain without the zero terms (a zero term adds
 #: nothing to a chain that starts at +0), under the same column-order flag.
-comptime IDN_NB_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_NB_CSR_OFF"]()
+comptime IDN_NB_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_NB_CSR_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 #: out_flag levels of the IDENTICAL entries (the largest raised wins: a
 #: negative value is refused whatever else the input holds, as the dense fit)
 comptime CSR_FLAG_FALLBACK = 1

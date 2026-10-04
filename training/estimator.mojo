@@ -413,7 +413,7 @@ def identical_optimizer_step_host(
 comptime IDN_OPT_SCRATCH_POOL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
-    and not is_defined["MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF"]()
+    and not (is_defined["MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 comptime OPT_SCRATCH_POOL = AFN_OPT_RESIDENT_STATE or IDN_OPT_SCRATCH_POOL
 

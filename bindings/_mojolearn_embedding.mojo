@@ -144,8 +144,8 @@ comptime EMB_COPY_TASKS_MAX = 16
 #     The same kernels on the same values: no bit moves.
 #   PLAN_AUTO (embedding_identical.mojo; off: -D MOJOLEARN_EMB_AUTO_SORT_OFF).
 comptime _EMB_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-comptime EMB_RESIDENT = _EMB_IDENTICAL and not is_defined["MOJOLEARN_EMB_RESIDENT_OFF"]()
-comptime EMB_DEVICE_SCRATCH = _EMB_IDENTICAL and not is_defined["MOJOLEARN_EMB_DEVICE_SCRATCH_OFF"]()
+comptime EMB_RESIDENT = _EMB_IDENTICAL and not (is_defined["MOJOLEARN_EMB_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+comptime EMB_DEVICE_SCRATCH = _EMB_IDENTICAL and not (is_defined["MOJOLEARN_EMB_DEVICE_SCRATCH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 #: buffers kept per element type (the oldest is retired past these)
 comptime EMB_POOL_F32_KEEP = 3
 comptime EMB_POOL_I32_KEEP = 6

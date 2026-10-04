@@ -84,10 +84,10 @@ comptime _SEQ_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu
 #: FAST on NVIDIA and AMD is unchanged.
 comptime _SEQ_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime SEQ_PIPE_UP = (_SEQ_APPLE_FAST and not is_defined["MOJOLEARN_SEQ_FAST_PIPE_UP_OFF"]()) or (
-    _SEQ_IDN and not is_defined["MOJOLEARN_IDN_SEQ_PIPE_UP_OFF"]()
+    _SEQ_IDN and not (is_defined["MOJOLEARN_IDN_SEQ_PIPE_UP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 comptime SEQ_PIPE_DOWN = (_SEQ_APPLE_FAST and not is_defined["MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF"]()) or (
-    _SEQ_IDN and not is_defined["MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF"]()
+    _SEQ_IDN and not (is_defined["MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 #: the pipelined chunk, floats (8 MB; lane apple-fast-gap-optim:
 #: -D MOJOLEARN_SEQ_FAST_PIPE_CH=<floats> for the A/B)

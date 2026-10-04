@@ -108,7 +108,7 @@ def o_conv_dw(
 # ---------------------------------------------------------------- 5702
 #: The oracle's own reading of the blocked-fold switch (x_cnn/ops.mojo
 #: BN_FOLD_BLOCK; lane idn-loss-norm-folds).
-comptime O_BN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_BN_FOLD_BLOCK_OFF"]()
+comptime O_BN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_BN_FOLD_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 
 
 def _o_blocked_sum(v: List[Float32]) -> Float32:

@@ -22,5 +22,5 @@ comptime PREP3_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gp
 #: every vendor's GPU binding (a maximum has one answer in any order: the
 #: program route's max_abs_ and scale_ words); -D MOJOLEARN_IDN_GATES_OFF (or
 #: the _OFF) restores the program route in IDENTICAL.
-comptime PREP3_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_GATES_OFF"]()
+comptime PREP3_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 comptime PREP3_MAXABS = (PREP3_FAST_APPLE or PREP3_IDN) and not is_defined["MOJOLEARN_PREP3_MAXABS_OFF"]()
