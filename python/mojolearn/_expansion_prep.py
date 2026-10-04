@@ -1573,6 +1573,7 @@ def _target_codes(pr, arr, cats, scratch):
     n, d = arr.shape
     xo = pr.put(arr)
     uo, kmax = _category_block(pr, cats)
+    # glue: per-column category-array lengths form the GPU lookup arguments.
     co = pr.put_list([c.size for c in cats])
     codes = pr.scratch(n * d)
     pr.stage("lookup", n * d, xo, n, d, uo, kmax, co, codes)
