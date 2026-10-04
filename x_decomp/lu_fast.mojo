@@ -33,6 +33,7 @@ same compare rule), so the words are the blocked route's.
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.gpu import block_dim, block_idx, thread_idx
+from std.gpu.primitives.warp import shuffle_xor
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.host import DeviceContext
@@ -50,6 +51,10 @@ comptime LU_FAST_STEP1 = (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_LU_FAST_STEP1_OFF"]()
 )
+#: Candidate, default off. Same pivot tree/comparator; replace its last
+#: 32-lane shared stages with shuffles and skip only invalid upper inputs
+#: for the <=32-partial initial fold. Strict factor/pivot/solve equality owed.
+comptime LU_FAST_PIVOT_SHUFFLE = LU_FAST_STEP1 and is_defined["MOJOLEARN_LU_FAST_PIVOT_SHUFFLE"]()
 comptime LFS_TPB = 256
 
 
@@ -66,6 +71,26 @@ def _lfs_better(ov: Float32, oi: Int32, cv: Float32, ci: Int32) -> Bool:
     if ci < 0:
         return True
     return ov > cv or (ov == cv and oi < ci)
+
+
+@always_inline
+def _lfs_warp_fold(cv_in: Float32, ci_in: Int32, lane: Int) -> Tuple[Float32, Int32]:
+    """Exact final shared-tree stages16,8,4,2,1; first warp only.
+
+    Preserve the directed compare tree, including NaN/tie behavior. Do not
+    turn this into an all-lane butterfly or reassociated max reduction.
+    """
+    var cv = cv_in
+    var ci = ci_in
+    comptime for stage in range(5):
+        comptime offset = 16 >> stage
+        var ov = shuffle_xor(cv, UInt32(offset))
+        var oi = shuffle_xor(ci, UInt32(offset))
+        if lane < offset:
+            if _lfs_better(ov, oi, cv, ci):
+                cv = ov
+                ci = oi
+    return (cv, ci)
 
 
 def lu_fast_load_kernel(
@@ -94,15 +119,31 @@ def lu_fast_load_kernel(
     ri[tid] = ci
     barrier()
     var active = LFS_TPB // 2
-    while active > 0:
-        if tid < active:
-            var ov = rv[tid + active]
-            var oi = ri[tid + active]
-            if _lfs_better(ov, oi, rv[tid], ri[tid]):
-                rv[tid] = ov
-                ri[tid] = oi
-        barrier()
-        active = active // 2
+    comptime if LU_FAST_PIVOT_SHUFFLE:
+        while active >= 32:
+            if tid < active:
+                var ov = rv[tid + active]
+                var oi = ri[tid + active]
+                if _lfs_better(ov, oi, rv[tid], ri[tid]):
+                    rv[tid] = ov
+                    ri[tid] = oi
+            barrier()
+            active = active // 2
+        if tid < 32:
+            var folded = _lfs_warp_fold(rv[tid], ri[tid], tid)
+            if tid == 0:
+                rv[0] = folded[0]
+                ri[0] = folded[1]
+    else:
+        while active > 0:
+            if tid < active:
+                var ov = rv[tid + active]
+                var oi = ri[tid + active]
+                if _lfs_better(ov, oi, rv[tid], ri[tid]):
+                    rv[tid] = ov
+                    ri[tid] = oi
+            barrier()
+            active = active // 2
     if tid == 0:
         part.unsafe_store(b, rv[0])
         part.unsafe_store(Int(maxb) + b, Float32(Int(ri[0])))
@@ -136,19 +177,31 @@ def lu_fast_step_kernel(
             cv = ov
             ci = oi
         q += LFS_TPB
-    rv[tid] = cv
-    ri[tid] = ci
-    barrier()
-    var active = LFS_TPB // 2
-    while active > 0:
-        if tid < active:
-            var ov = rv[tid + active]
-            var oi = ri[tid + active]
-            if _lfs_better(ov, oi, rv[tid], ri[tid]):
-                rv[tid] = ov
-                ri[tid] = oi
+    var short_fold = False
+    comptime if LU_FAST_PIVOT_SHUFFLE:
+        short_fold = Int(gin) <= 32
+    if short_fold:
+        # Threads32..255 contain invalid rows. The old128/64/32 directed
+        # tree levels never change a live lane, even if its value is NaN.
+        if tid < 32:
+            var folded = _lfs_warp_fold(cv, ci, tid)
+            if tid == 0:
+                ri[0] = folded[1]
         barrier()
-        active = active // 2
+    else:
+        rv[tid] = cv
+        ri[tid] = ci
+        barrier()
+        var active = LFS_TPB // 2
+        while active > 0:
+            if tid < active:
+                var ov = rv[tid + active]
+                var oi = ri[tid + active]
+                if _lfs_better(ov, oi, rv[tid], ri[tid]):
+                    rv[tid] = ov
+                    ri[tid] = oi
+            barrier()
+            active = active // 2
     var p = Int(ri[0])
     if p < kk:
         p = kk
@@ -192,15 +245,31 @@ def lu_fast_step_kernel(
     ri[tid] = ci
     barrier()
     var active2 = LFS_TPB // 2
-    while active2 > 0:
-        if tid < active2:
-            var ov = rv[tid + active2]
-            var oi = ri[tid + active2]
-            if _lfs_better(ov, oi, rv[tid], ri[tid]):
-                rv[tid] = ov
-                ri[tid] = oi
-        barrier()
-        active2 = active2 // 2
+    comptime if LU_FAST_PIVOT_SHUFFLE:
+        while active2 >= 32:
+            if tid < active2:
+                var ov = rv[tid + active2]
+                var oi = ri[tid + active2]
+                if _lfs_better(ov, oi, rv[tid], ri[tid]):
+                    rv[tid] = ov
+                    ri[tid] = oi
+            barrier()
+            active2 = active2 // 2
+        if tid < 32:
+            var folded = _lfs_warp_fold(rv[tid], ri[tid], tid)
+            if tid == 0:
+                rv[0] = folded[0]
+                ri[0] = folded[1]
+    else:
+        while active2 > 0:
+            if tid < active2:
+                var ov = rv[tid + active2]
+                var oi = ri[tid + active2]
+                if _lfs_better(ov, oi, rv[tid], ri[tid]):
+                    rv[tid] = ov
+                    ri[tid] = oi
+            barrier()
+            active2 = active2 // 2
     if tid == 0:
         part_out.unsafe_store(b, rv[0])
         part_out.unsafe_store(mb + b, Float32(Int(ri[0])))
