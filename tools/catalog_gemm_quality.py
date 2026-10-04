@@ -62,7 +62,7 @@ def main():
     spec = importlib.util.spec_from_file_location('_mojolearn_gemm_probe', so)
     b = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(b)
-    assert b.enabled() == 1
+    assert b.abi_version() == 1 and b.enabled() == 1
     calls = {arm: int(b.count(arm)) for arm in (0, 1, 5)}
     assert calls == {0: 0, 1: 0, 5: 0}
     records, failures = [], []
@@ -107,7 +107,7 @@ def main():
         records.append(row)
         print('CATALOG-GEMM-QUALITY ' + json.dumps(row, sort_keys=True), flush=True)
     result = dict(source_sha=args.source, catalog_source=CATALOG, binding_sha256=digest,
-                  fixture=FIXTURE, bound=ABS_SCALED_BOUND, no_regression_tolerance=0,
+                  fixture=FIXTURE, abi_version=1, bound=ABS_SCALED_BOUND, no_regression_tolerance=0,
                   call_counts=calls, cases=records, failures=failures, status='FAIL' if failures else 'PASS')
     (out / 'report.json').write_text(json.dumps(result, indent=2, sort_keys=True) + '\n')
     if not failures:

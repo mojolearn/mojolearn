@@ -1,5 +1,5 @@
 #!/bin/sh
-# The decomp expansion lane's GPU binding (lane/algos-decomp).
+# Catalog G1/G5 explicit probe binding; compile only, never execute on M2.
 set -eu
 MACOS_FLOOR="11.0"
 cd "$(dirname "$0")/.."
@@ -49,7 +49,7 @@ tmpdir=$(mktemp -d "build/probe-tmp/gemm.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
 out=$tmpdir/_mojolearn_gemm_probe.so
 # Intentionally split compiler option lists, consistent with existing builders.
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} \
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-1}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} \
     $target_flags $link_flags $mode_flags $column_flags -I . -I bindings \
     bindings/_mojolearn_gemm_probe.mojo -o "$out"
 # Compile only, including on Darwin: manager runs quality on M3 only.

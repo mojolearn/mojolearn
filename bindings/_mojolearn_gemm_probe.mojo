@@ -29,6 +29,9 @@ struct Counters(Defaultable, Movable):
 
 comptime COUNTERS = _Global[StorageType=Counters, name="CatalogGemmProbeCounts", init_fn=Counters.__init__]
 
+def abi_py() raises -> PythonObject:
+    return PythonObject(1)
+
 def enabled_py() raises -> PythonObject:
     return PythonObject(Int(ENABLED))
 
@@ -53,7 +56,9 @@ def gemm_py(aa: PythonObject, bb: PythonObject, cc: PythonObject, dims: PythonOb
         var nt = Int(py=dims[3]) != 0
         var arm = Int(py=dims[4])
         var alias = Int(py=dims[5]) != 0
-        if m <= 0 or n <= 0 or k < 0 or max(m * n, max(m * k, n * k)) > 2147483647:
+        if m <= 0 or n <= 0 or k < 0 or max(m, max(n, k)) > 2147483647:
+            raise Error("catalog probe invalid extent")
+        if max(m * n, max(m * k, n * k)) > 2147483647:
             raise Error("catalog probe invalid or oversized shape")
         if arm != 0 and arm != 1 and arm != 5:
             raise Error("unknown catalog GEMM arm")
@@ -121,6 +126,7 @@ def gemm_py(aa: PythonObject, bb: PythonObject, cc: PythonObject, dims: PythonOb
 def PyInit__mojolearn_gemm_probe() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_gemm_probe")
+        m.def_function[abi_py]("abi_version")
         m.def_function[enabled_py]("enabled")
         m.def_function[count_py]("count")
         m.def_function[gemm_py]("gemm")
