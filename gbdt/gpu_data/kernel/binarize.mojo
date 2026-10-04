@@ -304,7 +304,9 @@ def pack_cindex_words_kernel(
 
             @parameter
             for j in range(PACK_DOCS):
-                if vals[j] > bv:
+                # bit-pattern compare, as `binarize_float_feature_kernel`
+                # (`exact_f32_gt`: Metal flushes subnormal compare operands)
+                if exact_f32_gt(vals[j], bv):
                     bins[j] += 1
 
         @parameter
