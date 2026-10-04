@@ -549,7 +549,6 @@ def _prepare_folds(estimator, X, y, cv, scoring, groups, error_score):
     if groups is not None:
         if getattr(groups, "ndim", 1) != 1 or len(groups) != len(X):
             raise ValueError('groups must be 1-D and match X rows')
-    folds = []
     # -D MOJOLEARN_CV_FAST_TRUST_FOLDS (FAST + Apple build of the resample
     # binding, default OFF; resample/estimator.mojo CV_FAST_TRUST_FOLDS): the
     # native default folds (`fold_ids` + `select_fold_i64`) are a partition
@@ -557,14 +556,15 @@ def _prepare_folds(estimator, X, y, cv, scoring, groups, error_score):
     # `_overlap` on every fold's two int64 arrays are skipped. A splitter,
     # groups, a bool cv or the sabotage control: validated as before.
     if _cv_fast_on(_CV_TRUST_FOLDS_BIT) and _native_default_cv(cv, groups):
-        folds = _native_default_folds(y, 5 if cv is None else cv, _classifier(estimator))
-    else:
-        for train, test in _folds(cv, estimator, X, y, groups):
-            train = _indices(train, len(X), 'train')
-            test = _indices(test, len(X), 'test')
-            if _overlap(train, test, len(X)):
-                raise ValueError('train and test indices overlap')
-            folds.append((train, test))
+        # n_splits >= 2 is checked inside, so this is never empty.
+        return X, y, _native_default_folds(y, 5 if cv is None else cv, _classifier(estimator))
+    folds = []
+    for train, test in _folds(cv, estimator, X, y, groups):
+        train = _indices(train, len(X), 'train')
+        test = _indices(test, len(X), 'test')
+        if _overlap(train, test, len(X)):
+            raise ValueError('train and test indices overlap')
+        folds.append((train, test))
     if not folds:
         raise ValueError('cv must produce at least one fold')
     return X, y, folds
