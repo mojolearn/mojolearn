@@ -67,3 +67,39 @@ Manager: one M3 timing per arm for power-transformer on istella and taxi,
 against current main; no opponent reruns. No local builds/tests/SSH were
 run by this lane. No queue was submitted; manager owns machines. Keep held
 unless both speed and real quality pass, then obtain manager merge approval.
+
+## Verified compiled-arm queue support
+
+Compiled source: `bc112b1726f03cf058f71f781575f8659534b7ba` (both M2 arms rc0,
+manager evidence). Helper branch `lane/apple-fast-pt-queue` changes tools/docs
+only. Manager stages `manifest.json`, `A.so`, `B.so` under
+`~/mq/verified-arms/bc112b1726f03cf058f71f781575f8659534b7ba/x_prep/` on M3,
+and provisions FAST base/board venv before running the following CMDs.
+
+First, quality only (100000 rows per fixture):
+
+```sh
+MOJOLEARN_NUMERIC_MODE=fast "$HOME/board-0834/cache/venv/bin/python" tools/pt_score_verified.py quality gap26-pt-score
+```
+
+Then two conditional one-run-per-arm timing CMDs, on the same helper branch:
+
+```sh
+MOJOLEARN_NUMERIC_MODE=fast "$HOME/board-0834/cache/venv/bin/python" tools/pt_score_verified.py timing gap26-pt-score gap26-pt-score-taxi taxi
+MOJOLEARN_NUMERIC_MODE=fast "$HOME/board-0834/cache/venv/bin/python" tools/pt_score_verified.py timing gap26-pt-score gap26-pt-score-istella istella
+```
+
+Each timing refuses to run unless the quality PASS matches the exact compiled
+source manifest, checker, fixture helper, row count, and saved quality artifacts.
+It then invokes the manager's `verified_arms.py` with `afc_ab_def.sh`, which
+validates both hashes, source scope and defines, sets `AFC_SKIP_BUILD=1`, and
+refuses to replay an existing scored race. No kernel recompilation is needed.
+A quality failure creates no PASS marker; do not bypass it to obtain timings.
+
+Quality evidence:
+`~/mq/out/gap26-pt-score-quality/{A.log,B.log,A.npz,B.npz,compare.log,PASS.json}`.
+Timing evidence:
+`~/mq/out/race-gap26-pt-score-{taxi,istella}/race.log`.
+No new quality thresholds: the original per-column fitted lambda, transformed
+values, NLL and reference-normality comparisons decide the quality gate.
+The baseline computes the sklearn oracle once for untimed quality only.
