@@ -46,8 +46,14 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_prep.common import FP, IP, STAGE_INTS, p, is_nan, sti
 from x_prep.prims import logf, sub, mul
 from x_prep.transform import PT_STATE, pt_finish, power_log, power_from_log
+from x_prep.pt_score import SCORE_WORDS, score_tile, score_finish
 
 comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+# EXPERIMENT (unmeasured): analytic NLL score + compensated centered moments
+# removes absolute-f32-objective comparisons near a flat minimum. Prior
+# COLBATCH drift 9.5e-3 failed quality; see docs/apple-fast/PT_SCORE.md.
+# Explicitly disables speculation, whose objective tree is incompatible.
+comptime PT_SCORE = _FAST_APPLE and is_defined["MOJOLEARN_PT_SCORE"]()
 # DROP-quality (2026-10-03), M3 batchv-pt-all-istella: 2258 -> 512 ms.
 # M2 quality (100k x 220 / x 11): lambda max relative shift 9.5e-3;
 # sklearn-f64 lambda error 5.7e-3 -> 6.3e-3 fails the 1e-4 gate.
@@ -57,13 +63,13 @@ comptime PT_FOLD_NOX = _FAST_APPLE and (is_defined["MOJOLEARN_PT_FOLD_NOX"]() or
 # DROP-speed, M3 ptimpute-pt-spec-vs-colbatch-istella: adding SPEC to
 # COLBATCH on the old base costs 910 -> 1012 ms (+11%); not a standalone
 # comparison with current main. See docs/apple-fast/EXPERIMENTS.md.
-comptime PT_SPEC = _FAST_APPLE and (is_defined["MOJOLEARN_PT_SPEC"]() or PTIMPUTE_ALL)
+comptime PT_SPEC = _FAST_APPLE and not PT_SCORE and (is_defined["MOJOLEARN_PT_SPEC"]() or PTIMPUTE_ALL)
 #: PT_SPEC runs COLBATCH's kernels, so it turns COLBATCH on
 # DROP-quality, M3 batchv-pt-nospec-istella / batchv-pt-nospec-taxi2:
 # COLBATCH + FUSED_TRANSFORM + SI_ONEPASS: 2262 -> 425 / 305 -> 54.5 ms.
 # M2 quality attributes the 9.5e-3 relative lambda shift to COLBATCH;
 # SI alone keeps lambdas exact. See docs/apple-fast/EXPERIMENTS.md.
-comptime PT_COLBATCH = _FAST_APPLE and (is_defined["MOJOLEARN_PT_COLBATCH"]() or PT_SPEC)
+comptime PT_COLBATCH = _FAST_APPLE and (is_defined["MOJOLEARN_PT_COLBATCH"]() or PT_SPEC or PT_SCORE)
 # HOLD: failed quality only in the COLBATCH bundle (batchv-pt-nospec-*);
 # no isolated A/B vs main establishes a failure of this transform itself.
 # Keep opt-in; see docs/apple-fast/EXPERIMENTS.md (PT_FUSED_TRANSFORM).
@@ -125,6 +131,8 @@ def tile_cgroups(d: Int) -> Int:
 def pt_part_words(n: Int, d: Int, m: Int) -> Int:
     """Words of one evaluation's (chunk, column) partials over m candidates:
     count, sum J, then (mean, M2) per candidate."""
+    comptime if PT_SCORE:
+        return tile_chunks(n, d) * d * SCORE_WORDS
     return tile_chunks(n, d) * d * (2 + 2 * m)
 
 
@@ -448,6 +456,11 @@ def pt_colbatch_fold(mut ctx: DeviceContext, f: FP, pp: FP, hq: IP, qp: IP) rais
     var d = Int(hq[2])
     var chunks = tile_chunks(n, d)
     var tpb = tile_tpb(d)
+    comptime if PT_SCORE:
+        ctx.enqueue_function[score_tile](f, pp, qp, Int32(tile_rows(d)), Int32(tpb),
+            grid_dim=(chunks, tile_cgroups(d)), block_dim=tpb)
+        ctx.enqueue_function[score_finish](f, pp, qp, Int32(chunks), grid_dim=d, block_dim=TGR)
+        return
     var first = Int32(1) if Int(hq[5]) == 0 else Int32(0)
     ctx.enqueue_function[pt_tile_kernel](
         f, pp, hq[0], hq[1], hq[2], hq[3], hq[7], Int32(1), Int32(1), hq[6], first, Int32(tile_rows(d)), Int32(tpb),
