@@ -94,6 +94,10 @@ def capture(action, out):
             finally:
                 for handle in ids:
                     binding.x_decomp_dev_free(handle)
+        assert rows[name]['finite'], 'nonfinite output: ' + name
+        if action == 'timing':
+            assert rows[name]['resident']['finite'], 'nonfinite resident output: ' + name
+        rows[name]['shape'] = dict(m=m, k=k, n=n, ta=ta, tb=tb)
         print('MMA-K16 ' + json.dumps(dict(case=name, **rows[name])), flush=True)
     so = ROOT / 'python/mojolearn/_mojolearn_x_decomp.so'
     (out / 'metrics.json').write_text(json.dumps(dict(action=action, cases=rows,
