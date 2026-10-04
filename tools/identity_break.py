@@ -3159,7 +3159,7 @@ def _lowbit_operands(A):
 # the oracle stays here, in the harness, so `lowbit-conversions` still checks
 # the compiled seam against an independent construction and never NumPy.
 def _lbpy_f32(v):
-    import math
+    from mojolearn import _portable_math as math  # portable (the wheel refuses platform math)
     import struct
     try:
         return struct.unpack("<f", struct.pack("<f", v))[0]
@@ -3174,14 +3174,14 @@ def _lbpy_ftz_bits(x):
 
 
 def _lbpy_ftz(v):
-    import math
+    from mojolearn import _portable_math as math  # portable (the wheel refuses platform math)
     if v != 0.0 and abs(v) < 1.1754943508222875e-38 and not math.isinf(v) and v == v:
         return math.copysign(0.0, v)
     return v
 
 
 def _lbpy_pow2_f32(e):
-    import math
+    from mojolearn import _portable_math as math  # portable (the wheel refuses platform math)
     if e > 127:
         return math.inf
     if e < -126:
@@ -3210,7 +3210,7 @@ def _lbpy_from_bf16(bits):
 
 def _lbpy_quantize_int8(a):
     """`quantize_rows_int8` (DEVIATIONS 2902, 2903, 2905)."""
-    import math
+    from mojolearn import _portable_math as math  # portable (the wheel refuses platform math)
     import struct
     a = np.ascontiguousarray(a, dtype=np.float32)
     rows, cols = a.shape

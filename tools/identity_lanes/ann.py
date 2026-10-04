@@ -74,7 +74,7 @@ def _(ml, X, yc, yr, Xh=None):
     # the scaled start TSNE builds in the binding (x_ann/tsne_init.mojo mode 2),
     # restated here because TSNE no longer exposes it: the first column's
     # population std by math.fsum, then (pca / std) * 1e-4 in float32
-    import math
+    from mojolearn import _portable_math as math  # portable (the wheel refuses platform math)
     p32 = np.ascontiguousarray(np.asarray(pca, dtype=np.float32))
     col = [float(v) for v in p32[:, 0]]
     mean = math.fsum(col) / len(col)
