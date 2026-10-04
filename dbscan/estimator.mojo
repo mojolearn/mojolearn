@@ -200,6 +200,19 @@ def cosine_unit_rows_kernel(
         )
 
 
+def _cosine_unit_rows_host(
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_samples: Int,
+    n_features: Int,
+) raises -> List[Float32]:
+    """DEVIATION 5113's host scaling, the `IDN_DBSCAN_COSINE_DEVICE` off
+    arm (and every non-IDENTICAL mode): unchanged."""
+    var raw = List[Float32](length=n_samples * n_features, fill=Float32(0))
+    for i in range(n_samples * n_features):
+        raw[i] = x_ptr.unsafe_load(i)
+    return cosine_unit_rows(raw, n_samples, n_features, "dbscan_fit")
+
+
 def dbscan_fit(
     ctx: DeviceContext,
     x_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -339,10 +352,7 @@ def dbscan_fit(
                 " refused by name"
             )
     elif metric == DBSCAN_METRIC_COSINE:
-        var raw = List[Float32](length=n_samples * n_features, fill=Float32(0))
-        for i in range(n_samples * n_features):
-            raw[i] = x_ptr.unsafe_load(i)
-        unit = cosine_unit_rows(raw, n_samples, n_features, "dbscan_fit")
+        unit = _cosine_unit_rows_host(x_ptr, n_samples, n_features)
         ctx.enqueue_copy(dst_buf=x, src_ptr=unit.unsafe_ptr())
     else:
         ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
