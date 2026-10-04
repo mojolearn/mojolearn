@@ -4,8 +4,8 @@
 
 The existing device state machine is unchanged. Launching and polling are
 separate methods so a group can evaluate multiple orders together before
-ONE synchronization. The single-order entrypoint is the refactor's opt-in
-quality gate; defaults continue to call the original function.
+ONE synchronization. The single-order entrypoint shares the validated refactor. Apple FAST
+defaults to it; MOJOLEARN_ARIMA_ORDER_BATCH_OFF restores the original path.
 """
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.sys.compile import is_defined
@@ -21,12 +21,18 @@ from arima.impl.lbfgs_device import LBFGS_TPB, lbfgs_init_kernel
 from arima.impl.tsa.arima_common import ARIMAOrder
 from glm.impl.qn.qn_util import LBFGSParam
 
-# OPEN, 2026-10-04: old-base small quality passed 18 arrays; full-quality
-# and current-main M3 speed remain unmeasured. Current integration retains
-# fused eval tail in BOTH arms; rebuild required, old binaries are stale.
-# See docs/apple-fast/ab/arima-orders-current.md and EXPERIMENTS.md.
+# KEEP candidate for default promotion, M3 2026-10-04, source 7ba385b30:
+# gap26-orders-current-synthetic 13780.317 -> 9287.287 ms (-32.6%);
+# gap26-orders-current-taxi-hourly 22706.248 -> 13747.215 ms (-39.5%).
+# Digests/RMSE unchanged; FULL_PASS paired 512/2048-observation fitted,
+# order, likelihood and forecast arrays exact. Accepted fused tail in both.
+# Taxi's existing opponent-quality hold remains (RMSE74.659 vs68.21).
+# Default only within existing FAST+Apple guards; named OFF restores the
+# pre-batching GPU optimizer/search while leaving fused eval tail enabled.
+# See docs/apple-fast/ab/arima-orders-default.md and EXPERIMENTS.md.
 comptime ARIMA_ORDER_BATCH = (
-    KALMAN_FAST_EVAL_WS and KALMAN_LL_ONLY and is_defined["MOJOLEARN_ARIMA_ORDER_BATCH"]()
+    KALMAN_FAST_EVAL_WS and KALMAN_LL_ONLY
+    and not is_defined["MOJOLEARN_ARIMA_ORDER_BATCH_OFF"]()
 )
 
 

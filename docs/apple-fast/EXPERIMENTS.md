@@ -678,3 +678,9 @@ The earlier ARIMA/label measurements predate this session's maintenance; this
 audit alone does not establish interference with those measured promotions.
 
 Detailed isolation audit and six identified scan-window tags: [MEASUREMENT_AUDIT_2026-10-04.md](MEASUREMENT_AUDIT_2026-10-04.md). Their speed verdict is HOLD-measurement, superseding historical speed-only verdicts. No overlap claim is made solely from a cleanup start timestamp.
+
+## AutoARIMA order-batching default promotion prepared (2026-10-04)
+
+| Experiment | Measured source / tags | A → B ms | Quality | Verdict / remaining gate |
+|---|---|---|---|---|
+| `ARIMA_ORDER_BATCH` → default + `ARIMA_ORDER_BATCH_OFF` | 7ba385b30; gap26-orders-current-synthetic / taxi-hourly | synthetic13780.316917 →9287.286750 (-32.6%); taxi-hourly22706.248042 →13747.215083 (-39.5%) | Fitted/order/likelihood/forecast full-quality PASS before timing; both board digests and RMSE identical (2.624119555 /74.659122441). Existing fused tail enabled in BOTH arms | KEEP candidate, promotion prepared on lane/apple-fast-arima-orders-default against main d1871643b; manager default/OFF builds, isolation review and merge owed. Taxi opponent-quality HOLD remains (74.6591 vs68.21). [Raw evidence and review](ab/arima-orders-default.md) |
