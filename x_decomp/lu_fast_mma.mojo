@@ -71,6 +71,10 @@ from x_decomp.lu_fast import LFS_TPB, LU_FAST_STEP1, lfs_blocks, lu_fast_panel
 #: restores main's per-32-column scalar trailing updates.
 comptime LU_FAST_MMA = LU_FAST_STEP1 and AFN_GEMM_APPLE and not is_defined["MOJOLEARN_LU_FAST_MMA_OFF"]()
 #: The outer block (the big GEMM's k). A multiple of the 32-column panel.
+#: Candidate, default off: preserve pivots/MMA accumulation order and use
+#: KB16 ping-pong shared pages. No evidence yet; require exact output equality
+#: on the hard-pivot fixtures before considering timing/promotion.
+comptime LU_FAST_MMA_DBUF = LU_FAST_MMA and is_defined["MOJOLEARN_LU_FAST_MMA_DBUF"]()
 comptime LFM_NB = get_defined_int["MOJOLEARN_LU_FAST_MMA_NB", 256]()
 comptime LFM_PANEL = 32
 
@@ -91,7 +95,8 @@ def lfm_gemm_sub_kernel(
     i < m, j < nc, p < k (row stride n), one block per 64 x 64 tile of
     (i, j). The operands are addressed absolutely through the loaders'
     outer base and step offset (no pointer arithmetic on the host)."""
-    comptime KB = AFN_GEMM_KB
+    comptime KB = 16 if LU_FAST_MMA_DBUF else AFN_GEMM_KB
+    comptime NPG = 2 if LU_FAST_MMA_DBUF else 1
     comptime SGN = LFM_SGN
     comptime FM = LFM_FM
     comptime FN = LFM_FN
@@ -104,7 +109,7 @@ def lfm_gemm_sub_kernel(
     comptime ASZ = KB * AST
     comptime BSZ = BN * BST
     comptime PAGE_BYTES = (ASZ + BSZ) * 4
-    comptime assert lib_smem_page_fits_for[COLUMN_APPLE, PAGE_BYTES](), (
+    comptime assert lib_smem_page_fits_for[COLUMN_APPLE, PAGE_BYTES * NPG](), (
         "lfm_gemm_sub_kernel: one staged page must fit Apple's threadgroup memory"
     )
     comptime assert KB % 8 == 0, "lfm_gemm_sub_kernel: whole 8-step fragments"
@@ -127,32 +132,51 @@ def lfm_gemm_sub_kernel(
     var qd = lane // 4
     var frow = (qd & 4) + ((lane // 2) % 4)
     var fcol = (qd & 2) * 2 + (lane % 2) * 2
-    var at = stack_allocation[ASZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var bt = stack_allocation[BSZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var at = stack_allocation[ASZ * NPG, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var bt = stack_allocation[BSZ * NPG, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var acc = InlineArray[_M64, NF](fill=_M64(0))
     # A_eff[i, p] = a[(r0 + i) * n + p0 + p]: outer = row (stride n), step stride 1.
     # B_eff[p, j] = a[(p0 + p) * n + c0 + j]: outer = column (stride 1), step stride n.
     var windows = (k + KB - 1) // KB
     var ra = _afn_gload[BM, KB, NT, DType.float32](a, n, 1, r0 + m0, r0 + m, p0, min(KB, k), tid, False)
     var rb = _afn_gload[BN, KB, NT, DType.float32](a, 1, n, c0 + n0, c0 + nc, p0, min(KB, k), tid, True)
-    for w in range(windows):
+    comptime if LU_FAST_MMA_DBUF:
         _afn_stage[BM, KB, NT, True, AST](at, ra, tid, False)
         _afn_stage[BN, KB, NT, False, BST](bt, rb, tid, True)
         barrier()
-        if w + 1 < windows:
-            var k1 = (w + 1) * KB
-            ra = _afn_gload[BM, KB, NT, DType.float32](a, n, 1, r0 + m0, r0 + m, p0 + k1, min(KB, k - k1), tid, False)
-            rb = _afn_gload[BN, KB, NT, DType.float32](a, 1, n, c0 + n0, c0 + nc, p0 + k1, min(KB, k - k1), tid, True)
+        if windows > 1:
+            ra = _afn_gload[BM, KB, NT, DType.float32](a, n, 1, r0 + m0, r0 + m, p0 + KB, min(KB, k - KB), tid, False)
+            rb = _afn_gload[BN, KB, NT, DType.float32](a, 1, n, c0 + n0, c0 + nc, p0 + KB, min(KB, k - KB), tid, True)
+    for w in range(windows):
+        var atc = at + (w % NPG) * ASZ
+        var btc = bt + (w % NPG) * BSZ
+        comptime if not LU_FAST_MMA_DBUF:
+            _afn_stage[BM, KB, NT, True, AST](atc, ra, tid, False)
+            _afn_stage[BN, KB, NT, False, BST](btc, rb, tid, True)
+            barrier()
+            if w + 1 < windows:
+                var k1 = (w + 1) * KB
+                ra = _afn_gload[BM, KB, NT, DType.float32](a, n, 1, r0 + m0, r0 + m, p0 + k1, min(KB, k - k1), tid, False)
+                rb = _afn_gload[BN, KB, NT, DType.float32](a, 1, n, c0 + n0, c0 + nc, p0 + k1, min(KB, k - k1), tid, True)
         comptime for p8 in range(KB // 8):
             var af = InlineArray[_M64, FM](fill=_M64(0))
             var bf = InlineArray[_M64, FN](fill=_M64(0))
             comptime for fm in range(FM):
-                af[fm] = _afn_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                af[fm] = _afn_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
             comptime for fq in range(FN):
-                bf[fq] = _afn_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                bf[fq] = _afn_load_t(btc + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
             comptime for fm in range(FM):
                 comptime for fq in range(FN):
                     acc[fm * FN + fq] = _afn_mma(af[fm], bf[fq], acc[fm * FN + fq])
+        comptime if LU_FAST_MMA_DBUF:
+            if w + 1 < windows:
+                var nxt = (w + 1) % NPG
+                _afn_stage[BM, KB, NT, True, AST](at + nxt * ASZ, ra, tid, False)
+                _afn_stage[BN, KB, NT, False, BST](bt + nxt * BSZ, rb, tid, True)
+                if w + 2 < windows:
+                    var k2 = (w + 2) * KB
+                    ra = _afn_gload[BM, KB, NT, DType.float32](a, n, 1, r0 + m0, r0 + m, p0 + k2, min(KB, k - k2), tid, False)
+                    rb = _afn_gload[BN, KB, NT, DType.float32](a, 1, n, c0 + n0, c0 + nc, p0 + k2, min(KB, k - k2), tid, True)
         barrier()
     comptime for fm in range(FM):
         comptime for fq in range(FN):
