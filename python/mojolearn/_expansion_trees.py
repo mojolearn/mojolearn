@@ -3089,6 +3089,46 @@ class TreeExplainer(_TreesEnsembleBase):
 
 #: xtrees/agnostic.mojo AGN_BUDGET: synthetic words per explainer chunk
 _AGN_BUDGET = 1 << 25
+#: MOJOLEARN_IDN_SHAP_DEVICE_MODEL (lane fam2-forests; an IDENTICAL GPU
+#: build's switch, `x_trees_fast_switches` bit 64, -D
+#: MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF clears it): Kernel/Permutation SHAP
+#: over one of this library's flat forests evaluate the model on the device
+#: inside the explainer (xtrees/agnostic_device.mojo `model_kernel`): no
+#: synthetic matrix, no model call per chunk. Moves no bit.
+_AGN_IDN_DEVICE_MODEL = 64
+
+
+def _agn_device_forest(explainer, model):
+    """(arrays, k, n_trees, rf_input) when `model` is one of this library's
+    flat forests whose predict is the strict increasing-tree device kernel
+    (IDENTICAL, the `sequential` engine served resident) and the explainer's
+    binding carries MOJOLEARN_IDN_SHAP_DEVICE_MODEL; else None (the model
+    callback). The arrays are the snapshot the forest's own predict
+    validated and froze (`_prepare_resident_forest`). rf_input: the random
+    forest's predict flushes the compared feature, ExtraTrees' does not."""
+    if _trees_fast_tier(explainer) or not _trees_build_switch(explainer, _AGN_IDN_DEVICE_MODEL):
+        return None
+    m = getattr(model, "_random_inner", None)
+    if m is None:
+        m = model
+    if isinstance(m, (RandomForestClassifier, RandomForestRegressor)):
+        rf_input = 1
+    elif isinstance(m, (_ET_CLS, ExtraTreesRegressor)):
+        rf_input = 0
+    else:
+        return None
+    if not type(m).__module__.startswith(__package__ + "."):   # a subclass outside the library may predict otherwise
+        return None
+    if not hasattr(m, "_offsets") or not callable(getattr(m, "_ordered_resident_auto", None)):
+        return None
+    try:
+        if m._effective_mode() != "identical" or not m._ordered_resident_auto():
+            return None
+        m._prepare_resident_forest()
+    except (AttributeError, ImportError, RuntimeError, ValueError):
+        return None
+    arrays = tuple(getattr(m, name) for name in ("_offsets", "_colid", "_quesval", "_left_child", "_leaves"))
+    return arrays, int(m._num_outputs), int(m._n_trees), rf_input
 
 
 def _f64_word(x):
@@ -3125,6 +3165,23 @@ class _AgnosticExplainer(_TreesEnsembleBase):
         self._fnull = ev
         self.expected_value = ev.tolist()[0] if self.n_outputs_ == 1 else ev
         self.n_features_in_ = bg.shape[1]
+        dev = _agn_device_forest(self, model)
+        if dev is not None and (dev[1] != self.n_outputs_ or int(getattr(model, "n_features_in_", -1)) != bg.shape[1]):
+            dev = None
+        self._dev = dev
+
+    def _model_load(self, b):
+        """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: uploads the explained forest and
+        the background for this `shap_values` call (`x_trees_agn_model_load`);
+        True when the chunks run the model on the device, False for the
+        callback route. The caller releases it (`x_trees_agn_model_release`)."""
+        dev = getattr(self, "_dev", None)
+        if dev is None:
+            return False
+        arrays, k, n_trees, rf_input = dev
+        b.x_trees_agn_model_load([addr_ro(a, name="forest") for a in arrays], addr_ro(self._bg, name="data"),
+                                 [n_trees, arrays[1].size, k, self._bg.shape[1], self._bg.shape[0], rf_input])
+        return True
 
     def _eval(self, X):
         """The model output on X as a float32 (n, k) Array."""
@@ -3213,6 +3270,19 @@ class KernelExplainer(_AgnosticExplainer):
         if m > 0 and _trees_switch(self, _KSHAP_FAST_BATCH):
             self._batched(b, Xa, fx, taddr, phi, n, d, k, nb, m, nfixed, nfull, npaired, L, seed, wbits, R)
             return self._shape(phi, n, d)
+        if self._model_load(b):
+            # the forest on the device: masks -> model -> means -> solve per
+            # chunk, nothing crossing but the chunk's rows and phi
+            link = 1 if self.link == "logit" else 0
+            nl = addr_ro(fnull, name="fnull")
+            try:
+                for r0 in range(0, n, R):  # glue: chunk loop (one binding call per chunk)
+                    rows = min(R, n - r0)
+                    b.x_trees_kshap_solve_model(x0 + 4 * r0 * d, f0 + 4 * r0 * k, nl, taddr, p0 + 8 * r0 * d * k,
+                                                [rows, nb, d, nfixed, m, nfull, L, npaired, r0, seed, wbits, k, link])
+            finally:
+                b.x_trees_agn_model_release()
+            return self._shape(phi, n, d)
         reuse = _trees_build_switch(self, _AGN_IDN_SYN_POOL)   # one synthetic buffer for every chunk
         syn = None
         try:
@@ -3292,6 +3362,16 @@ class PermutationExplainer(_AgnosticExplainer):
         mm = npm * (2 * d + 1)
         x0, p0 = addr_ro(Xa, name="X"), addr(phi, name="phi")
         R = self._chunk(mm * nb * d, n)
+        if self._model_load(b):
+            # the forest on the device: permutations -> model -> means ->
+            # marginals per chunk, nothing crossing but the chunk's rows and phi
+            try:
+                for r0 in range(0, n, R):  # glue: chunk loop (one binding call per chunk)
+                    rows = min(R, n - r0)
+                    b.x_trees_pshap_values_model(x0 + 4 * r0 * d, p0 + 8 * r0 * d * k, [rows, nb, d, npm, r0, seed, k])
+            finally:
+                b.x_trees_agn_model_release()
+            return self._shape(phi, n, d)
         # one synthetic buffer for every chunk
         idn_pool = _trees_build_switch(self, _AGN_IDN_SYN_POOL)
         reuse = _trees_switch(self, _KSHAP_FAST_BATCH) or idn_pool
