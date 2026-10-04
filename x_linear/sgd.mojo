@@ -462,7 +462,8 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
     var has_sw = ldi(ip, 10) != 0
     var has_cw = ldi(ip, 11) != 0
     # ip[12] (lane/neural-pass103): the minibatch size, 0 the per-sample fit
-    var batch = ldi(ip, 12) if ldi(ip, 12) > 0 else 0
+    # (fix-l1-linear: negative is "auto", `sgd_batch`)
+    var batch = sgd_batch(Int(ldi(ip, 12)), Int(k))
     # ip[13] (lane/neural-pass132): the per-sample-equivalent batch step (`mb_step`)
     var bsum = ldi(ip, 13) != 0
     var swp = y + n
@@ -1034,6 +1035,200 @@ def mb_bias_step(b: Float32, gb: Float32, bs: Int, eta: Float32, alpha: Float32,
     return nb
 
 
+# fix-l1-linear (2026-10-04), ported by hand from lane/neural-pass139
+# 69dedf9dc + 6742f58be onto today's minibatch drivers (host `sgd_mb_one`,
+# device chunk / fused / three-launch forms in x_linear/device.mojo).
+# The one-class minibatch intercept. With w near 0 every row's margin is
+# nearly one value, while the batch's intercept step eta_b (k / bs - nu) (k
+# flagged rows) is orders above the margins' spread: the explicit step is
+# bang-bang, every row flagged then none, and the final intercept lands
+# anywhere in that cycle (istella nu 0.1 flagged 0.374 of the training rows
+# at batch 256, sklearn 0.055). Their per-sample fit moves the intercept
+# after EVERY row, so each row's flag sees the steps of the rows before it.
+# The minibatch takes the same feedback in one parallel step: the IMPLICIT
+# step, delta = eta (k / bs - nu) with k the rows flagged at the moved
+# intercept, m_r + delta <= 0. k - C(k) (C(k) the rows flagged at delta_k)
+# is strictly increasing in k, so the least k with k >= C(k) is unique and a
+# bisection over k in [0, bs] finds it with integer counts (exact in any
+# order, so the device's split counts equal the host's); each count is a
+# parallel pass over the batch. Its fixed point: E[delta] = 0 gives
+# E[k] / bs = nu, sklearn's stationary point, with no overshoot past the
+# batch's own nu-quantile. The rows' dl (the weights' step) are then the
+# flags at the moved intercept, exactly k of them: when rows tie (every
+# margin is 0 at w = 0) C jumps past k at the solution, so the jump rows
+# fill the count in batch position order (`oc_solve`). The intercept is a
+# float-float (hi, lo) (`ff_add`), the result `oc_offset`.
+# Mode `ocm`: 0 the old statements (not one-class, or the arm off), 1 the
+# float-float explicit step (sample weights, or no intercept), 2 the
+# implicit step. New bits for the one-class minibatch on every column
+# (host `sgd_mb_one` and every device driver take the same `ocm`).
+# `-D MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores
+# the explicit single-word step. IDENTICAL only (FAST keeps its form).
+comptime SGD_OC_MB_IMPLICIT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_SGD_OC_MB_IMPLICIT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+
+# fix-l1-linear (lane/neural-pass139's default): SGDOneClassSVM's default
+# batch_size is None, sent as -1 ("auto"); in IDENTICAL with the implicit
+# step on it resolves to the minibatch at MB_BATCH_DEFAULT (4096, the mean
+# step, like SGDClassifier / SGDRegressor), which runs on the device grid
+# in parallel instead of the per-sample chain (one sample after the next).
+# Elsewhere (FAST, or the arm off) auto is the per-sample fit, the old
+# default. `-D MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF` (or MOJOLEARN_IDN_ALL_OFF)
+# restores the per-sample default. An explicit batch_size is always kept.
+comptime SGD_OC_IDN_MB_DEFAULT = (
+    SGD_OC_MB_IMPLICIT
+    and not (is_defined["MOJOLEARN_SGD_OC_IDN_MB_DEFAULT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+
+
+@always_inline
+def sgd_batch(ipb: Int, k: Int) -> Int:
+    """The minibatch size of a fit from ip[12]: positive is the caller's,
+    0 the per-sample fit, negative "auto" (SGDOneClassSVM's default, see
+    SGD_OC_IDN_MB_DEFAULT)."""
+    if ipb > 0:
+        return ipb
+    if ipb < 0 and k == 1:
+        comptime if SGD_OC_IDN_MB_DEFAULT:
+            return MB_BATCH_DEFAULT
+    return 0
+
+
+@always_inline
+def mb_oc_mode(one_class: Bool, fit_intercept: Bool, has_sw: Bool) -> Int:
+    comptime if not SGD_OC_MB_IMPLICIT:
+        return 0
+    if not one_class:
+        return 0
+    if fit_intercept and not has_sw:
+        return 2
+    return 1
+
+
+@always_inline
+def oc_margin(dot: Float32, ih: Float32, il: Float32) -> Float32:
+    """`oc_hinge`'s margin m = (ih - 1) + il + dot."""
+    return fa(fa(fs(ih, Float32(1)), il), dot)
+
+
+@always_inline
+def mb_oc_row(dot: Float32, ih: Float32, il: Float32, ocm: Int, swi: Float32, has_sw: Bool) -> Tuple[Float32, Float32]:
+    """A one-class row of the batch: ocm 2 (the margin, 0), the implicit step
+    then converts it (`oc_hinge_at`); ocm 1 (dl weighted, loss) of `oc_hinge`."""
+    if ocm == 2:
+        return (oc_margin(dot, ih, il), Float32(0))
+    var h = oc_hinge(dot, ih, il)
+    var dl = fm(h[1], swi) if has_sw else h[1]
+    return (dl, h[0])
+
+
+@always_inline
+def oc_delta(k: Int, bs: Int, eta: Float32, alpha: Float32, bsum: Bool) -> Float32:
+    """The intercept step with k rows flagged: mean eta (k / bs - alpha), sum
+    eta (k - bs alpha). Nondecreasing in k."""
+    if bsum:
+        return fm(eta, fs(i2f(k), fm(i2f(bs), alpha)))
+    return fm(eta, fs(fd(i2f(k), i2f(bs)), alpha))
+
+
+@always_inline
+def oc_count(mv: FP, lo: Int, hi: Int, step: Int, dlt: Float32) -> Int:
+    """Rows r = lo, lo + step, .. < hi flagged at the step dlt: fa(m_r, dlt) <= 0."""
+    var c = 0
+    var r = lo
+    while r < hi:
+        if fa(ld(mv, r), dlt) <= 0:
+            c += 1
+        r += step
+    return c
+
+
+@always_inline
+def oc_tie(m0: Float32, dhi: Float32, dlo: Float32) -> Bool:
+    """A row flagged at the step dlo = delta_{k-1} but not at dhi = delta_k:
+    its margin sits in the jump of C at the solution (`oc_solve`)."""
+    return fa(m0, dlo) <= 0 and fa(m0, dhi) > 0
+
+
+@always_inline
+def oc_count_tie(mv: FP, lo: Int, hi: Int, step: Int, dhi: Float32, dlo: Float32, cut: Int) -> Int:
+    """Rows r = lo, lo + step, .. < min(hi, cut) in the jump (`oc_tie`)."""
+    var c = 0
+    var r = lo
+    var e = min(hi, cut)
+    while r < e:
+        if oc_tie(ld(mv, r), dhi, dlo):
+            c += 1
+        r += step
+    return c
+
+
+@always_inline
+def oc_hinge_at(m0: Float32, r: Int, dhi: Float32, dlo: Float32, cut: Int) -> Tuple[Float32, Float32]:
+    """(dl, loss) of batch row r of margin m0 after the step dhi: flagged
+    when fa(m0, dhi) <= 0 (`oc_count`'s flag), or when it is a jump row
+    (`oc_tie`) before position cut (loss 0: its margin is at the jump)."""
+    var m = fa(m0, dhi)
+    if m <= 0:
+        return (Float32(-1), fs(Float32(0), m))
+    if r < cut and fa(m0, dlo) <= 0:
+        return (Float32(-1), Float32(0))
+    return (Float32(0), Float32(0))
+
+
+def oc_solve(mv: FP, bs: Int, eta: Float32, alpha: Float32, bsum: Bool) -> Tuple[Float32, Float32, Int]:
+    """The implicit step (host): k* the least k in [0, bs] with k >= C(k), by
+    bisection; dhi = delta_{k*}. C jumps at k* when rows share a margin
+    (every row at w = 0): C(k* - 1) >= k* > C(k*) can hold, and flagging
+    only the C(k*) rows past the step would flag none of a tied batch, so
+    the weights never move. Exactly k* rows are flagged: the C(k*) and the
+    first (batch position, a shuffled order) k* - C(k*) of the jump rows
+    (`oc_tie` with dlo = delta_{k* - 1}), the cut found by a second
+    bisection over positions. Returns (dhi, dlo, cut); the device runs the
+    same probes with the counts split over a block (x_linear/device.mojo
+    `sgd_mb_oc_team`)."""
+    var lo = 0
+    var hi = bs
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        var c = oc_count(mv, 0, bs, 1, oc_delta(mid, bs, eta, alpha, bsum))
+        if mid >= c:
+            hi = mid
+        else:
+            lo = mid + 1
+    var dhi = oc_delta(lo, bs, eta, alpha, bsum)
+    if lo == 0:
+        return (dhi, dhi, 0)
+    var dlo = oc_delta(lo - 1, bs, eta, alpha, bsum)
+    var need = lo - oc_count(mv, 0, bs, 1, dhi)
+    var a = 0
+    var b = bs
+    while a < b:
+        var mid = (a + b) // 2
+        if oc_count_tie(mv, 0, bs, 1, dhi, dlo, mid) >= need:
+            b = mid
+        else:
+            a = mid + 1
+    return (dhi, dlo, a)
+
+
+@always_inline
+def mb_oc_bias_step(ih: Float32, il: Float32, gb: Float32, bs: Int, eta: Float32, alpha: Float32, bsum: Bool,
+                    ocm: Int, dlt: Float32) -> Tuple[Float32, Float32]:
+    """The one-class intercept (float-float, `ff_add`) after the batch: ocm 2
+    the implicit step dlt; ocm 1 `mb_bias_step`'s explicit step as one word."""
+    if ocm == 2:
+        return ff_add(ih, il, dlt)
+    var a: Float32
+    if bsum:
+        a = fs(fm(fs(Float32(0), eta), gb), fm(fm(i2f(bs), eta), alpha))
+    else:
+        a = fs(fm(fs(Float32(0), eta), fd(gb, i2f(bs))), fm(eta, alpha))
+    return ff_add(ih, il, a)
+
+
 @always_inline
 def mb_penalty_t(v: Team, w: FP, woff: Int, d: Int, alpha: Float32, l1r: Float32, penalty: Int,
                  parts: FP) -> Float32:
@@ -1072,6 +1267,8 @@ def sgd_mb_one(
     var nsub = mb_subs(batch, sub)
     fill(w, woff, d, Float32(0))
     var bias = Float32(1) if one_class else Float32(0)
+    var bl = Float32(0)  # one-class (SGD_OC_MB_IMPLICIT): the intercept's low word
+    var ocm = mb_oc_mode(one_class, fit_intercept, has_sw)
     for i in range(n):
         sti(idx, i, i)
     var rng = seed
@@ -1090,16 +1287,32 @@ def sgd_mb_one(
         var start = 0
         while start < n:
             var bs = min(batch, n - start)
+            var et = mb_eta(lr, eta, eta0, alpha, power_t, opt_init, t)
             for r in range(bs):
-                var dl_l = mb_row(x, ys, Int(ldi(idx, start + r)), d, w, woff, bias, loss, eps, swp, has_sw, wpos, wneg, has_cw,
+                var ir = Int(ldi(idx, start + r))
+                if ocm != 0:
+                    var oc = mb_oc_row(mb_dot(x, ir, d, w, woff, dblk), bias, bl, ocm,
+                                       ld(swp, ir) if has_sw else Float32(1), has_sw)
+                    st(dlv, r, oc[0])
+                    st(lv, r, oc[1])
+                    continue
+                var dl_l = mb_row(x, ys, ir, d, w, woff, bias, loss, eps, swp, has_sw, wpos, wneg, has_cw,
                                   lr, eta0, dblk)
                 st(dlv, r, dl_l[0])
                 st(lv, r, dl_l[1])
+            var dlt = Float32(0)
+            if ocm == 2:
+                # the implicit intercept step, then each row's (dl, loss) at it
+                var so = oc_solve(dlv, bs, et, alpha, bsum)
+                dlt = so[0]
+                for r in range(bs):
+                    var o = oc_hinge_at(ld(dlv, r), r, so[0], so[1], so[2])
+                    st(dlv, r, o[0])
+                    st(lv, r, o[1])
             var subs = mb_subs(bs, sub)
             for j in range(d + 2):
                 for s in range(subs):
                     st(parts, j * nsub + s, mb_part(x, d, idx, start, dlv, lv, j, s, bs, sub))
-            var et = mb_eta(lr, eta, eta0, alpha, power_t, opt_init, t)
             for j in range(d):
                 var g = Float32(0)
                 for s in range(subs):
@@ -1109,7 +1322,12 @@ def sgd_mb_one(
                 var gb = Float32(0)
                 for s in range(subs):
                     gb = fa(gb, ld(parts, d * nsub + s))
-                bias = mb_bias_step(bias, gb, bs, et, alpha, one_class, bsum)
+                if ocm != 0:
+                    var nb = mb_oc_bias_step(bias, bl, gb, bs, et, alpha, bsum, ocm, dlt)
+                    bias = nb[0]
+                    bl = nb[1]
+                else:
+                    bias = mb_bias_step(bias, gb, bs, et, alpha, one_class, bsum)
             if need_obj:
                 var lb = Float32(0)
                 for s in range(subs):
@@ -1142,5 +1360,6 @@ def sgd_mb_one(
                     no_improve = 0
                 else:
                     break
-    st(b, boff, fs(Float32(1), bias) if one_class else bias)
+    # one-class: the slot holds offset_ = 1 - intercept (`oc_offset`; bl is 0 with ocm 0)
+    st(b, boff, (oc_offset(bias, bl) if ocm != 0 else fs(Float32(1), bias)) if one_class else bias)
     return epochs
