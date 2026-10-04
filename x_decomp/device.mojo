@@ -32,6 +32,7 @@ from x_decomp.lu_fast import LU_FAST_STEP1, lfs_blocks, lu_fast_panel
 from x_decomp.lu_fast_mma import LU_FAST_MMA, lu_fast_mma_factor
 from x_decomp.lasso_grp import DECOMP_FAST_LASSO_GRP, LG_MAXK, LG_TPB, lasso_grp_kernel
 from x_decomp.fast_chol import CHOL_FAST_BLOCKED, CH_NB, launch_chol_blocked
+from x_decomp.omp_block import DECOMP_FAST_OMP_BLOCK, OMP_TPB, omp_block_fits, omp_block_kernel
 from x_decomp.fast_gemm import DECOMP_FAST_GEMM_TILED, FG_TPB, fg_gemm_tiled_kernel, fg_tiles
 from x_decomp.fast_qr import (
     FQ_TPB,
@@ -3038,15 +3039,27 @@ struct DevExec(Exec):
     def omp_rows(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, na: F32Ptr, n: Int, k: Int, nnz: Int) raises:
         var ctx = xd_ctx()
         var per = k * k + 3 * k
+        # -D MOJOLEARN_DECOMP_FAST_OMP_BLOCK (x_decomp/omp_block.mojo, default
+        # off, FAST + Apple): one block per row, no per-row device scratch
+        var block = False
+        comptime if DECOMP_FAST_OMP_BLOCK:
+            block = n > 0 and omp_block_fits(k, nnz)
         var dg = _up(ctx, g, k * k)
         var dq = _up(ctx, q, n * k)
         var dw = ctx.enqueue_create_buffer[DType.float32](n * k if n * k > 0 else 1)
-        var ds = ctx.enqueue_create_buffer[DType.float32](n * per if n * per > 0 else 1)
+        var ds = ctx.enqueue_create_buffer[DType.float32](n * per if (n * per > 0 and not block) else 1)
         var dn = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        ctx.enqueue_function[omp_rows_kernel](
-            dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
-            Int32(nnz), grid_dim=_blocks(n), block_dim=TPB,
-        )
+        comptime if DECOMP_FAST_OMP_BLOCK:
+            if block:
+                ctx.enqueue_function[omp_block_kernel](
+                    dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
+                    Int32(nnz), grid_dim=n, block_dim=OMP_TPB,
+                )
+        if not block:
+            ctx.enqueue_function[omp_rows_kernel](
+                dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
+                Int32(nnz), grid_dim=_blocks(n), block_dim=TPB,
+            )
         _down(ctx, dw, w, n * k)
         _down(ctx, dn, na, n)
         ctx.synchronize()
