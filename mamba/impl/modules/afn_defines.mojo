@@ -88,6 +88,16 @@ comptime _IDN_MAMBA_DEVICE = (
 comptime IDN_MAMBA_ALLOC_NOWAIT = _IDN_MAMBA_DEVICE and not is_defined[
     "MOJOLEARN_IDN_MAMBA_ALLOC_NOWAIT_OFF"
 ]()
+#: lane/fam2-lm (2026-10-04) IDN_MAMBA3_REPORTS_ON_REQUEST (default ON;
+#: `-D MOJOLEARN_IDN_MAMBA3_REPORTS_ON_REQUEST_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
+#: restores the refusal of a null report address): the Mamba-3 prefill
+#: session forward downloads a report (h_last, k_last, v_last, theta_last)
+#: only where the caller passed an address for it. A stack forward (Samba)
+#: reads none of them, and h_last alone is B * H * 64 * 128 floats per layer
+#: per call. The device computes the same stages either way; y is unchanged.
+comptime IDN_MAMBA3_REPORTS_ON_REQUEST = _IDN_MAMBA_DEVICE and not is_defined[
+    "MOJOLEARN_IDN_MAMBA3_REPORTS_ON_REQUEST_OFF"
+]()
 comptime IDN_MAMBA_ARENA = _IDN_MAMBA_DEVICE and not is_defined["MOJOLEARN_IDN_MAMBA_ARENA_OFF"]()
 comptime IDN_MAMBA_DEVICE_REFUSAL = _IDN_MAMBA_DEVICE and not is_defined[
     "MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF"

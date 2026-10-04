@@ -177,6 +177,7 @@ from mamba.impl.modules.mamba_simple import mamba_step
 #: every block call's device buffers are views of ONE arena and the caller's
 #: arrays are copied in with no per-buffer wait (`_mamba{1,2,3}_run_arena`).
 from mamba.impl.modules.afn_defines import AFN_MAMBA_ARENA, IDN_MAMBA_ALLOC_NOWAIT
+from mamba.impl.modules.afn_defines import IDN_MAMBA3_REPORTS_ON_REQUEST
 from mamba.impl.modules.afn_arena import MambaArena
 from mamba.impl.modeling.modeling_mamba import mamba1_arena_floats
 from mamba.impl.modules.mamba2 import mamba2_arena_floats
@@ -2245,10 +2246,18 @@ def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, d
     )
     m3_phase_tick(ctx, phase_tick, String("surface.block"))
     _m3_download_addr[False](ctx, dstages.residual_out, n_x, a[20])
-    _m3_download_addr[False](ctx, dstages.h_last, h_n, a[21])
-    _m3_download_addr[False](ctx, dstages.k_last, k_n, a[22])
-    _m3_download_addr[False](ctx, dstages.v_last, v_n, a[23])
-    _m3_download_addr[False](ctx, dstages.theta_last, theta_n, a[24])
+    # lane/fam2-lm (IDN_MAMBA3_REPORTS_ON_REQUEST): a report comes down only
+    # where the caller gave it an address; the session forward entry admits
+    # a null report address only under that switch, so with it off every
+    # address here is non-null and all four copies run as before.
+    if a[21] != 0:
+        _m3_download_addr[False](ctx, dstages.h_last, h_n, a[21])
+    if a[22] != 0:
+        _m3_download_addr[False](ctx, dstages.k_last, k_n, a[22])
+    if a[23] != 0:
+        _m3_download_addr[False](ctx, dstages.v_last, v_n, a[23])
+    if a[24] != 0:
+        _m3_download_addr[False](ctx, dstages.theta_last, theta_n, a[24])
     ctx.synchronize()
     m3_phase_tick(ctx, phase_tick, String("surface.downloads"))
     var out_len = dstate.buf_len
@@ -2413,7 +2422,14 @@ def mamba3_prefill_session_forward_binding(session: PythonObject, addrs: PythonO
         a.append(0)
     for i in range(10, 15):
         var p = Int(py=addrs[i])
-        if p == 0: raise Error("mamba3_prefill_session_forward: null buffer address")
+        if p == 0:
+            # lane/fam2-lm: a null REPORT address (11..14) means "do not
+            # download this report"; y (10) is always required.
+            var report_optional = False
+            comptime if IDN_MAMBA3_REPORTS_ON_REQUEST:
+                report_optional = i >= 11
+            if not report_optional:
+                raise Error("mamba3_prefill_session_forward: null buffer address")
         a.append(p)
     var b = Int(py=params[0])
     var l = Int(py=params[1])
@@ -2474,6 +2490,16 @@ def mamba3_prefill_session_backward_binding(session: PythonObject, addrs: Python
         raise error
     owner[].busy = False
     return PythonObject(0)
+
+
+def mamba3_prefill_session_reports_optional_binding() raises -> PythonObject:
+    """True where `mamba3_prefill_session_forward` admits a null report
+    address (IDN_MAMBA3_REPORTS_ON_REQUEST); the Python block asks before
+    it passes one."""
+    comptime if IDN_MAMBA3_REPORTS_ON_REQUEST:
+        return PythonObject(True)
+    else:
+        return PythonObject(False)
 
 
 def mamba3_prefill_session_info_binding(session: PythonObject) raises -> PythonObject:
@@ -2772,6 +2798,9 @@ def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
             m.def_function[mamba3_prefill_session_forward_binding]("mamba3_prefill_session_forward")
             m.def_function[mamba3_prefill_session_backward_binding]("mamba3_prefill_session_backward")
             m.def_function[mamba3_prefill_session_info_binding]("mamba3_prefill_session_info")
+            m.def_function[mamba3_prefill_session_reports_optional_binding](
+                "mamba3_prefill_session_reports_optional"
+            )
         m.def_function[mamba3_decode_step_binding]("mamba3_decode_step")
         _ = m.add_type[Mamba3DecodeSession]("_Mamba3DecodeSession")
         m.def_function[mamba3_session_create_binding]("mamba3_session_create")
