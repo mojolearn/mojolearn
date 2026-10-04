@@ -34,7 +34,7 @@ from x_cluster.bodies import SplitMix64
 from x_cluster.common import greedy_kmeans_pp, nearest_all, sum_f64, weighted_draw
 from x_cluster.device_ops import DeviceOps
 from x_cluster.minibatch import MiniBatchParams
-from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV, MBK_CLS2_POOL
+from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV, MBK_CLS2_POOL, MBK_W2_LABRG, MBF_RG_MAXK, mbk_labels_rg
 from core.device_pool import pool_give, pool_take
 from x_cluster.out import ClusterOut
 
@@ -165,7 +165,19 @@ def minibatch_entry_ptr(
                 raise Error("MiniBatchKMeans: the device steps refused a shape the zero-copy path admitted")
         var labels = List[Int32]()
         var dist = List[Float32]()
-        nearest_all(ops, xs, n, c, k, d, labels, dist)
+        var labeled = False
+        comptime if MBK_W2_LABRG:
+            # lane/apple-fast-w2-clres, opt-in: the all-rows labelling as a
+            # 32-thread group per row (x_cluster/minibatch_fast.mojo)
+            if k <= MBF_RG_MAXK:
+                var cs = ops.put(c)
+                var ls = ops.zeros_i(n)
+                var ds = ops.zeros(n)
+                labeled = mbk_labels_rg(ops.ctx, ops._fp(xs), n, ops._fp(cs), k, d, ops._ip(ls), ops._fp(ds))
+                if labeled:
+                    ops.get_if(ls, n, ds, n, labels, dist)
+        if not labeled:
+            nearest_all(ops, xs, n, c, k, d, labels, dist)
         comptime if MBK_CLS2_POOL:
             # nearest_all read its labels back (a synchronize): no launch
             # still reads X; the slot's later entries are not used again
