@@ -35,6 +35,118 @@ from neighbors.impl.selection.knn import (
 )
 from neighbors.impl.selection.knn import knn_classify as selection_knn_classify
 from neighbors.impl.selection.knn import knn_regress as selection_knn_regress
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+#: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor, default ON:
+#: a resident index keeps the training labels and their sorted unique sets
+#: on the device after the first vote (`KnnVoteCache`, owned by
+#: neighbors/resident_index.mojo's entry). Before, every predict uploaded
+#: n_index labels per output and sorted them on the device for the unique
+#: set. The same buffers feed the same vote kernels: no bit moves, the host
+#: column is untouched. A traced call takes the uncached route (its records).
+#: -D MOJOLEARN_IDN_KNN_VOTE_CACHE_OFF (or MOJOLEARN_IDN_ALL_OFF) off.
+comptime KNN_IDN_VOTE_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_KNN_VOTE_CACHE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+struct KnnVoteCache(Movable):
+    """The classifier vote's inputs that depend on the fit alone: the
+    labels per output on the device, their sorted unique sets (device and
+    host). Keyed by the label array's address and shape: one fit owns one
+    resident handle and one label array, so a key match is the same labels;
+    a different key rebuilds."""
+
+    var key: Int
+    var n_index: Int
+    var n_outputs: Int
+    var y: List[DeviceBuffer[DType.int32]]
+    var uniq: List[DeviceBuffer[DType.int32]]
+    var n_unique: List[Int]
+    var uniq_host: List[List[Int32]]
+
+    def __init__(out self):
+        self.key = 0
+        self.n_index = 0
+        self.n_outputs = 0
+        self.y = List[DeviceBuffer[DType.int32]]()
+        self.uniq = List[DeviceBuffer[DType.int32]]()
+        self.n_unique = List[Int]()
+        self.uniq_host = List[List[Int32]]()
+
+    def ensure(
+        mut self,
+        ctx: DeviceContext,
+        mut trace: IdentityTrace,
+        y_ptr: MutPointer[Int32, MutUntrackedOrigin],
+        n_index: Int,
+        n_outputs: Int,
+    ) raises:
+        """Upload the labels and build the unique sets unless this cache
+        already holds them for (y_ptr, n_index, n_outputs)."""
+        var key = Int(y_ptr)
+        if self.key == key and self.n_index == n_index and self.n_outputs == n_outputs and len(self.y) == n_outputs:
+            return
+        self.key = 0
+        self.y = List[DeviceBuffer[DType.int32]]()
+        self.uniq = List[DeviceBuffer[DType.int32]]()
+        self.n_unique = List[Int]()
+        self.uniq_host = List[List[Int32]]()
+        for i in range(n_outputs):
+            var buf = ctx.enqueue_create_buffer[DType.int32](n_index)
+            ctx.enqueue_copy(dst_buf=buf, src_ptr=y_ptr.unsafe_offset(i * n_index))
+            self.y.append(buf^)
+        ctx.synchronize()
+        _unique_label_sets(ctx, trace, self.y, n_index, self.uniq, self.n_unique, self.uniq_host)
+        self.key = key
+        self.n_index = n_index
+        self.n_outputs = n_outputs
+
+    def uniq_copy(self) -> List[List[Int32]]:
+        var out = List[List[Int32]]()
+        for i in range(len(self.uniq_host)):
+            out.append(self.uniq_host[i].copy())
+        return out^
+
+    def class_proba(
+        mut self,
+        ctx: DeviceContext,
+        mut trace: IdentityTrace,
+        mut outs: List[DeviceBuffer[DType.float32]],
+        mut knn_indices: DeviceBuffer[DType.uint32],
+        n_query_rows: Int,
+        k: Int,
+        mut weights: DeviceBuffer[DType.float32],
+        has_weights: Bool,
+    ) raises -> List[List[Int32]]:
+        """`knn_class_proba` over the cached labels and sets."""
+        class_probs(
+            ctx, trace, outs, knn_indices, self.y, self.n_index, n_query_rows, k,
+            self.uniq, self.n_unique, weights, has_weights,
+        )
+        return self.uniq_copy()
+
+    def classify(
+        mut self,
+        ctx: DeviceContext,
+        mut trace: IdentityTrace,
+        mut out_buf: DeviceBuffer[DType.int32],
+        mut knn_indices: DeviceBuffer[DType.uint32],
+        n_query_rows: Int,
+        k: Int,
+        mut weights: DeviceBuffer[DType.float32],
+        has_weights: Bool,
+    ) raises -> List[List[Int32]]:
+        """`knn_classify` over the cached labels and sets."""
+        selection_knn_classify(
+            ctx, trace, out_buf, knn_indices, self.y, self.n_index, n_query_rows, k,
+            self.uniq, self.n_unique, weights, has_weights,
+        )
+        return self.uniq_copy()
+
+
+comptime KnnVoteCachePointer = Optional[MutPointer[KnnVoteCache, MutAnyOrigin]]
 
 
 def _unique_label_sets(
