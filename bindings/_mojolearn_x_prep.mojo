@@ -243,7 +243,7 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_prep")
         m.def_function[run_binding]("x_prep_run")
         comptime if NB_TEXT_CSR:
-            # lane apple-fast-nb: FAST + Apple + -D MOJOLEARN_NB_TEXT_CSR only (x_prep/fastnb_csr.mojo)
+            # lane apple-fast-nb: FAST + Apple default (M3 A/B 186.9 -> 35.4 ms), -D MOJOLEARN_NB_TEXT_CSR_OFF reverts (x_prep/fastnb_csr.mojo)
             m.def_function[nb_csr_fit_py]("x_prep_nb_csr_fit")
             m.def_function[nb_csr_jll_py]("x_prep_nb_csr_jll")
         m.def_function[run_scratch_binding]("x_prep_run_scratch")

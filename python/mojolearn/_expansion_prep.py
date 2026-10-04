@@ -2389,9 +2389,10 @@ class _DiscreteNB(_Classifier):
     def _nb_csr_ready(cls):
         """Whether this class fits a scipy.sparse CSR matrix without
         densifying it: FAST mode and the x_prep binding built on Apple with
-        -D MOJOLEARN_NB_TEXT_CSR (lane apple-fast-nb; it exports
+        NB_TEXT_CSR (lane apple-fast-nb, default since the M3 A/B; it exports
         `x_prep_nb_csr_fit`). The bench hands such a build the text block as
-        CSR. False everywhere else: IDENTICAL, other vendors, no define."""
+        CSR. False everywhere else: IDENTICAL, other vendors,
+        -D MOJOLEARN_NB_TEXT_CSR_OFF."""
         if not cls._csr_ok or _mode() != "fast":
             return False
         try:
