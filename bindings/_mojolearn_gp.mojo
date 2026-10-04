@@ -132,6 +132,7 @@ from gaussian_process.classifier import (
 )
 # lane fam2-kernel-gp (2026-10-04): every class in one device session.
 from gaussian_process.gpc_ovr import GPC_IDN_OVR, gpc_fit_all_device, gpc_predict_all_device
+from gaussian_process.gpr_resident import GPR_IDN_PTR, gpr_fit_ptr_device, gpr_predict_ptr_device
 # The Cholesky door (workstream D, 2026-09-14). `cholesky/` is already
 # linked into this binary because the GP factors through it; exposing the
 # one-shot host entries here adds no kernel and no second build.
@@ -1239,8 +1240,109 @@ def gpc_ovr_combine_binding(
 
 def gp_idn_caps_binding() raises -> PythonObject:
     """Bit 0: `gpc_fit_all` / `gpc_predict_all` are the route
-    (`GPC_IDN_OVR`, IDENTICAL builds, on by default)."""
-    return PythonObject(1 if GPC_IDN_OVR else 0)
+    (`GPC_IDN_OVR`, IDENTICAL builds, on by default). Bit 1: `gpr_fit_ptr` /
+    `gpr_predict_ptr` are (`GPR_IDN_PTR`, the same)."""
+    return PythonObject((1 if GPC_IDN_OVR else 0) | (2 if GPR_IDN_PTR else 0))
+
+
+def gpr_fit_ptr_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`gpr_fit` with the same `addrs` (9) and `params` (5) in the same
+    order and the same outputs, read from and written to the caller's memory
+    by the device (`gaussian_process/gpr_resident.mojo`): no host list, no
+    host finiteness walk. Returns LAPACK's `info`."""
+    if len(addrs) != 9:
+        raise Error(
+            "gpr_fit_ptr: addrs must contain 9 addresses (x, y, kinds, kparams,"
+            " ls_len, ls, l_out, dual_out, scalars_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 5:
+        raise Error(
+            "gpr_fit_ptr: params must contain 5 values (n_train, n_features,"
+            " n_nodes, n_ls, alpha), got "
+            + String(len(params))
+        )
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_nodes = Int(py=params[2])
+    var n_ls = Int(py=params[3])
+    var alpha = Float32(Float64(py=params[4]))
+    var spec = _rebuild_kernel_spec(
+        Int(py=addrs[2]),
+        Int(py=addrs[3]),
+        Int(py=addrs[4]),
+        Int(py=addrs[5]),
+        n_nodes,
+        n_ls,
+        String("gpr_fit_ptr"),
+    )
+    var x_addr = Int(py=addrs[0])
+    var y_addr = Int(py=addrs[1])
+    var l_addr = Int(py=addrs[6])
+    var dual_addr = Int(py=addrs[7])
+    var scalars_addr = Int(py=addrs[8])
+    var info = 0
+    with GILReleased(Python()):
+        info = gpr_fit_ptr_device(
+            x_addr, y_addr, n_train, n_features, spec, alpha, l_addr, dual_addr, scalars_addr
+        )
+    return PythonObject(info)
+
+
+def gpr_predict_ptr_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`gpr_predict` with the same `addrs` (12) and `params` (7, or 10 with
+    normalize_y, y_std, y_mean) in the same order and the same outputs, the
+    model and the query read from the caller's memory by the device
+    (`gaussian_process/gpr_resident.mojo`). Returns `n_clamped`."""
+    if len(addrs) != 12:
+        raise Error(
+            "gpr_predict_ptr: addrs must contain 12 addresses (xtrain, l,"
+            " dual, xstar, kinds, kparams, ls_len, ls, mean_out, var_out,"
+            " std_out, clamped_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 7 and len(params) != 10:
+        raise Error(
+            "gpr_predict_ptr: params must contain 7 values (n_train,"
+            " n_features, n_star, n_nodes, n_ls, return_std, info), or 10"
+            " (+ normalize_y, y_std, y_mean), got "
+            + String(len(params))
+        )
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_star = Int(py=params[2])
+    var n_nodes = Int(py=params[3])
+    var n_ls = Int(py=params[4])
+    var return_std = Int(py=params[5]) != 0
+    var info = Int(py=params[6])
+    var unnorm = len(params) == 10 and Int(py=params[7]) != 0
+    var y_std = Float32(Float64(py=params[8])) if len(params) == 10 else Float32(1.0)
+    var y_mean = Float32(Float64(py=params[9])) if len(params) == 10 else Float32(0.0)
+    var spec = _rebuild_kernel_spec(
+        Int(py=addrs[4]),
+        Int(py=addrs[5]),
+        Int(py=addrs[6]),
+        Int(py=addrs[7]),
+        n_nodes,
+        n_ls,
+        String("gpr_predict_ptr"),
+    )
+    var xt_addr = Int(py=addrs[0])
+    var l_addr = Int(py=addrs[1])
+    var dual_addr = Int(py=addrs[2])
+    var xs_addr = Int(py=addrs[3])
+    var mean_addr = Int(py=addrs[8])
+    var var_addr = Int(py=addrs[9])
+    var std_addr = Int(py=addrs[10])
+    var clamped_addr = Int(py=addrs[11])
+    var n_clamped = 0
+    with GILReleased(Python()):
+        n_clamped = gpr_predict_ptr_device(
+            xt_addr, l_addr, dual_addr, xs_addr, n_train, n_features, n_star, spec,
+            return_std, info, unnorm, y_std, y_mean,
+            mean_addr, var_addr, std_addr, clamped_addr,
+        )
+    return PythonObject(n_clamped)
 
 
 def gpc_fit_all_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1634,6 +1736,8 @@ def PyInit__mojolearn_gp() abi("C") -> PythonObject:
         m.def_function[gp_idn_caps_binding]("gp_idn_caps")
         m.def_function[gpc_fit_all_binding]("gpc_fit_all")
         m.def_function[gpc_predict_all_binding]("gpc_predict_all")
+        m.def_function[gpr_fit_ptr_binding]("gpr_fit_ptr")
+        m.def_function[gpr_predict_ptr_binding]("gpr_predict_ptr")
         # The Cholesky door (workstream D, 2026-09-14).
         m.def_function[cholesky_parallel_available]("cholesky_parallel_available")
         m.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")
