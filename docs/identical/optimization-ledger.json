@@ -45,6 +45,26 @@
       "validation": "Three scalar/primitive/transport fixture digests match NVIDIA4090, Blackwell, AMD and Apple GPU; arithmetic fixtures also match Linux host.",
       "evidence": "~/mojolearn-evidence/callpath-20261004/metal-58761102d/runtime-results.json",
       "main_promoted": false
+    },
+    {
+      "candidate": "Combined-source NVIDIA PTX qualification",
+      "implementation": [
+        "tools/nvidia_baseline_gpu_batch.py",
+        "tools/nvidia_baseline_qualification.py",
+        "python/mojolearn/ptx_admission.py"
+      ],
+      "status": "REQUIRES_NEW_COMBINED_SOURCE_QUALIFICATION",
+      "source_branch": "integration/identical-all-20261004",
+      "historical_evidence": "Earlier5c156c5f rehearsal is historical only and does not admit current source.",
+      "current_work": "Pinned combined-source tooling tests and source-built sm80 PTX/native checks on held NVIDIA hardware. No Apple checks.",
+      "final_matrix": [
+        "RTX4090 native sm89 versus forced sm80 PTX",
+        "H100 native sm90a versus forced sm80 PTX",
+        "A100 forced sm80 PTX, automatic fallback and local qualify-gpu"
+      ],
+      "release_policy": "Final full receipts/admission bind the final frozen combined source; incomplete preliminary probes cannot create release qualification. No CPU fallback.",
+      "main_promoted": false,
+      "publishing": "Out of scope."
     }
   ],
   "correctness_repairs": [
