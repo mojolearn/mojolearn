@@ -139,6 +139,9 @@ from gemm.checks.gemm_identical import (
     identical_gemm_leaf_kernel,
 )
 from solver.impl.linalg.norm import col_norm_l2_squared
+from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
+from gemm.contract import OP_NT
+from solver.impl.cd_gram_rule import CD_IDN_GRAM_ON, cd_idn_gram_shape
 from checks.rtf_seam import rtf_mul_add
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 from solver.impl.shuffle import init_shuffle
@@ -971,6 +974,138 @@ def cd_fold_update_kernel(
         cd_update_coef(coef, ci_in, squared, conv, l1_alpha)
 
 
+# ===========================================================================
+# lane/fam-linear (2026-10-04): IDENTICAL GRAM SWEEPS, EVERY VENDOR
+# ===========================================================================
+#
+# The row sweeps read the residual and a column of X once per coordinate:
+# n_cols launches over n_rows rows per epoch, and one host read per epoch.
+# CD_IDN_GRAM forms the Gram once, G = X^T X and q = X^T y through the
+# profile GEMM (`identical_gemm_into`, OP_NT over the column-major design:
+# the same contract partition and fold tree on every vendor), and then runs
+# the SAME cyclic algorithm on the n_cols x n_cols Gram, where q stays
+# X^T residual:
+#
+#     old   = ftz(coef[j])
+#     c     = ftz(fma(ftz(G[j, j]), old, q[j]))      x_j . (residual + old x_j)
+#     r     = SoftThreshold(c, l1_alpha) / squared[j]   (`cd_update_coef`'s
+#             statements, guard included), r = ftz(r)
+#     delta = ftz(old - r)
+#     q[k]  = ftz(fma(delta, ftz(G[k, j]), q[k]))    every k, one thread each
+#
+# with `cd_update_coef`'s strict-`<` maxima and the same stopping test
+# (`coef_max < tol or diff_max / coef_max < tol`), decided ON THE DEVICE:
+# one launch runs up to CD_IDN_GRAM_EPOCHS epochs and freezes at the epoch
+# that converged; the host reads four words per launch. The sweep is one
+# block because the algorithm is sequential in j; inside a coordinate every
+# q[k] moves in parallel (thread k owns q[k] in a register, the shared page
+# carries delta and the two maxima between barriers).
+#
+# BITS CHANGE (the rounding of each coordinate's dot differs from the row
+# form) on NVIDIA, AMD, Apple and the host column together:
+# `solver/host/cd_oracle.mojo::cd_oracle_fit(gram=True)` is the same
+# arithmetic, and `solver/impl/cd_gram_rule.mojo` is the one shape rule both
+# read. A traced fit (MOJOLEARN_IDENTITY_TRACE) and a fit that wants the
+# residual keep the row sweeps on both columns, so the stage card and its
+# checks are unchanged. `-D MOJOLEARN_CD_IDN_GRAM_OFF` restores the row
+# sweeps (pass it to the host build too).
+comptime CD_IDN_GRAM = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and CD_IDN_GRAM_ON
+    and not SAB_SOFT_SWAP
+    and not SAB_ZERO_FOLD_MAX
+    and not SAB_ZERO_FOLD_MAX_SWAPPED
+)
+comptime CD_IDN_GRAM_TPB = 256
+comptime CD_IDN_GRAM_EPOCHS = 16
+
+
+def cd_idn_gram_sweep_kernel(
+    g: MutPointer[Float32, MutAnyOrigin],
+    q: MutPointer[Float32, MutAnyOrigin],
+    coef: MutPointer[Float32, MutAnyOrigin],
+    squared: MutPointer[Float32, MutAnyOrigin],
+    state: MutPointer[Float32, MutAnyOrigin],
+    p_in: Int32,
+    epochs_in: Int32,
+    l1_alpha: Float32,
+    tol: Float32,
+):
+    """Up to `epochs_in` Gram sweeps in one block of CD_IDN_GRAM_TPB threads
+    (n_cols <= CD_IDN_GRAM_TPB). `state`: [0] 1 once converged, [1] the
+    epochs run so far, [2] coef_max and [3] diff_max of the last epoch run.
+    After convergence the remaining epochs do no work (the barriers stay
+    unconditional so every thread takes the same path)."""
+    var tid = Int(thread_idx.x)
+    var p = Int(p_in)
+    # sh: 0 delta, 1 coef_max, 2 diff_max, 3 done
+    var sh = stack_allocation[
+        4, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var qk = Float32(0.0)
+    if tid < p:
+        qk = ftz(q.unsafe_load(tid))
+    if tid == 0:
+        sh[unsafe_offset = 0] = Float32(0.0)
+        sh[unsafe_offset = 1] = Float32(0.0)
+        sh[unsafe_offset = 2] = Float32(0.0)
+        sh[unsafe_offset = 3] = state.unsafe_load(0)
+    barrier()
+    var e = 0
+    while e < Int(epochs_in):
+        var live = sh[unsafe_offset = 3] == Float32(0.0)
+        barrier()
+        if live and tid == 0:
+            sh[unsafe_offset = 1] = Float32(0.0)
+            sh[unsafe_offset = 2] = Float32(0.0)
+        for j in range(p):
+            if live and tid == j:
+                var old = ftz(coef.unsafe_load(j))
+                var c = ftz(identical_mul_add(ftz(g.unsafe_load(j * p + j)), old, qk))
+                var r: Float32
+                if c > l1_alpha:
+                    r = c - l1_alpha
+                elif c < -l1_alpha:
+                    r = c + l1_alpha
+                else:
+                    r = Float32(0.0)
+                var sq = ftz(squared.unsafe_load(j))
+                if sq > CD_SQUARED_GUARD:
+                    r = r / sq
+                else:
+                    r = Float32(0.0)
+                r = ftz(r)
+                var diff = ftz(abs(old - r))
+                if sh[unsafe_offset = 2] < diff:
+                    sh[unsafe_offset = 2] = diff
+                var absv = abs(r)
+                if sh[unsafe_offset = 1] < absv:
+                    sh[unsafe_offset = 1] = absv
+                coef.unsafe_store(j, r)
+                sh[unsafe_offset = 0] = ftz(old - r)
+            barrier()
+            if live and tid < p:
+                qk = ftz(
+                    identical_mul_add(
+                        sh[unsafe_offset = 0], ftz(g.unsafe_load(tid * p + j)), qk
+                    )
+                )
+            barrier()
+        if live and tid == 0:
+            var cmax = sh[unsafe_offset = 1]
+            var dmax = sh[unsafe_offset = 2]
+            state.unsafe_store(1, state.unsafe_load(1) + Float32(1.0))
+            state.unsafe_store(2, cmax)
+            state.unsafe_store(3, dmax)
+            if cmax < tol or (dmax / cmax) < tol:
+                sh[unsafe_offset = 3] = Float32(1.0)
+                state.unsafe_store(0, Float32(1.0))
+        barrier()
+        e += 1
+    if tid < p:
+        q.unsafe_store(tid, qk)
+
+
 @fieldwise_init
 struct CdLaunch(Copyable, Movable, ImplicitlyCopyable):
     """SCHEDULING knobs. `dot_plan < 0` lets the gemm lane's dispatcher pick
@@ -1500,6 +1635,54 @@ def cd_fit_traced(
                     bb -= gmu[j] * w[j]
                 rm_intercept = bb
             _ = gmu^
+    # lane/fam-linear: the IDENTICAL Gram sweeps (see CD_IDN_GRAM above); a
+    # traced fit and a fit that wants the residual keep the row sweeps.
+    comptime if CD_IDN_GRAM:
+        if (
+            not trace.enabled
+            and not want_residual
+            and not row_major
+            and cd_idn_gram_shape(n_rows, n_cols)
+        ):
+            device_sweeps = False
+            var gp = n_cols
+            var gram = ctx.enqueue_create_buffer[DType.float32](gp * gp)
+            var gq = ctx.enqueue_create_buffer[DType.float32](gp)
+            var gst = ctx.enqueue_create_buffer[DType.float32](4)
+            var h_gst = ctx.enqueue_create_host_buffer[DType.float32](4)
+            var gws_a = identical_gemm_workspace_max_floats(gp, gp, n_rows)
+            var gws_b = identical_gemm_workspace_max_floats(gp, 1, n_rows)
+            var gws_n = gws_a if gws_a > gws_b else gws_b
+            if gws_n < 1:
+                gws_n = 1
+            var gws = ctx.enqueue_create_buffer[DType.float32](gws_n)
+            var x_b = x.create_sub_buffer[DType.float32](0, gp * n_rows)
+            # X is column-major n_rows x n_cols: its columns are the rows of
+            # an n_cols x n_rows NT operand. G = X^T X, q = X^T y.
+            identical_gemm_into(ctx, gram, x, x_b, gws, gp, gp, n_rows, OP_NT)
+            identical_gemm_into(ctx, gq, x, labels, gws, gp, 1, n_rows, OP_NT)
+            ctx.enqueue_memset(gst, Float32(0.0))
+            while n_iter < epochs:
+                var e_here = epochs - n_iter
+                if e_here > CD_IDN_GRAM_EPOCHS:
+                    e_here = CD_IDN_GRAM_EPOCHS
+                ctx.enqueue_function[cd_idn_gram_sweep_kernel](
+                    gram.unsafe_ptr(), gq.unsafe_ptr(), coef.unsafe_ptr(),
+                    squared.unsafe_ptr(), gst.unsafe_ptr(), Int32(gp),
+                    Int32(e_here), l1_alpha, tol,
+                    grid_dim=(1, 1, 1), block_dim=(CD_IDN_GRAM_TPB, 1, 1),
+                )
+                ctx.enqueue_copy(dst_ptr=h_gst.unsafe_ptr(), src_buf=gst)
+                ctx.synchronize()
+                n_iter = Int(h_gst.unsafe_ptr().unsafe_load(1))
+                if h_gst.unsafe_ptr().unsafe_load(0) != Float32(0.0):
+                    break
+            _ = x_b^
+            _ = gws^
+            _ = gram^
+            _ = gq^
+            _ = gst^
+            _ = h_gst^
     # lane/linear-apple2: the three-launch coordinate (see
     # cd_axpy_pair_kernel) where the profile dot is PLAN_SPLITK on one device.
     var three = False

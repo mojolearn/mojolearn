@@ -73,6 +73,8 @@ from hierarchy.impl.cluster.detail.connectivities import (
     PAIRWISE_MAX_ROWS,
 )
 from solver.host.cd_oracle import cd_oracle_fit
+from solver.impl.cd_gram_rule import cd_idn_gram_shape
+from std.os import getenv
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -237,8 +239,12 @@ def cd_fit_binding(
         var y = read_f32(y_address, n_rows)
         # THE ONE CALL THAT COMPUTES ANYTHING. `coef` starts at zero inside
         # the oracle, as `cd_fit_host` zeroes it on the device.
+        # lane/fam-linear: the device's rule (solver/impl/cd_gram_rule.mojo):
+        # the Gram sweeps for the shapes the device takes them, the row
+        # sweeps under a trace, as `cd_fit_traced` keeps them.
+        var gram = cd_idn_gram_shape(n_rows, n_cols) and String(getenv("MOJOLEARN_IDENTITY_TRACE")) == ""
         var out = cd_oracle_fit(
-            x, y, n_rows, n_cols, fit_intercept, epochs, alpha, l1_ratio, tol, True, False
+            x, y, n_rows, n_cols, fit_intercept, epochs, alpha, l1_ratio, tol, True, False, gram
         )
         if len(out.coef) != n_cols:
             raise Error("cd_fit: the host oracle returned coef of an unexpected length; nothing written")
