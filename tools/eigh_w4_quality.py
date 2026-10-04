@@ -123,9 +123,36 @@ def compare(pa, pb):
     raise SystemExit(0 if ok else 1)
 
 
+def no_regression(pa, pb):
+    """Separate original main-relative criterion; never relax the strict gate.
+
+    Exact metric comparison, no new tolerance. Report only; the strict compare
+    remains the sole source of the existing quality PASS receipt.
+    """
+    A = json.loads(Path(pa).read_text())['cases']
+    B = json.loads(Path(pb).read_text())['cases']
+    assert set(A) == set(B) == set(ROUTED + OTHER), 'case set mismatch'
+    rows = {}
+    for key in ROUTED + OTHER:
+        a, b = A[key], B[key]
+        fails = []
+        for name in METRICS:
+            x, ref = b[name], a[name]
+            if not (math.isfinite(x) and math.isfinite(ref) and 0 <= x <= ref):
+                fails.append(name)
+        if not b['ascending']:
+            fails.append('ascending')
+        rows[key] = dict(status='FAIL' if fails else 'PASS', failures=fails,
+                         A=a, B=b)
+    passed = all(row['status'] == 'PASS' for row in rows.values())
+    print('EIGH-MAIN-NO-REGRESSION ' + json.dumps(dict(
+        criterion='finite nonnegative B metric <= A metric, ascending',
+        tolerance=0, status='PASS' if passed else 'FAIL', cases=rows), sort_keys=True))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('mode', choices=('dump', 'compare'))
+    ap.add_argument('mode', choices=('dump', 'compare', 'no-regression'))
     ap.add_argument('paths', nargs='+')
     args = ap.parse_args()
     if args.mode == 'dump':
@@ -133,7 +160,10 @@ def main():
         dump(args.paths[0])
     else:
         assert len(args.paths) == 2
-        compare(*args.paths)
+        if args.mode == 'no-regression':
+            no_regression(*args.paths)
+        else:
+            compare(*args.paths)
 
 
 if __name__ == '__main__':

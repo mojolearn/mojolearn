@@ -86,6 +86,8 @@ def main():
             got = json.loads((out / (arm + '.json')).read_text())
             assert got['binding_sha256'] == hashes[arm]
             print('EIGH-W4-PAIR arm=' + arm + ' capture=PASS', flush=True)
+        run_logged([sys.executable, 'tools/eigh_w4_quality.py', 'no-regression',
+                    str(out / 'A.json'), str(out / 'B.json')], out / 'no-regression.log')
         run_logged([sys.executable, 'tools/eigh_w4_quality.py', 'compare',
                     str(out / 'A.json'), str(out / 'B.json')], out / 'compare.log')
         assert 'EIGH-W4-AB status=PASS' in (out / 'compare.log').read_text()

@@ -1,9 +1,10 @@
 # Eigh panel review and next MMA experiment, 2026-10-04
 
-Recommendation: HOLD original tridiagonal solver, do not promote. Numerical
-quality substantially improves relative to main, but its preregistered absolute
-quality gate failed and its panel T-factor launch uses a single block. The new
-panel scheduling candidate repairs the latter only and remains opt-in.
+Recommendation: HOLD the original solver because its panel T-factor launch
+uses one block. The panel repair remains opt-in pending M2/M3 validation. The
+handoff authorizes considering the original no-worse-than-main criterion
+separately; manager may review that criterion after the parallelism repair.
+The preregistered absolute gate remains FAIL, and the board stays quality-held.
 
 ## Original evidence and scope
 
@@ -76,3 +77,13 @@ fixtures; downstream PCA/RSVD reconstruction and LU factor/solve residual
 checks unchanged. One sample cannot establish a noise bound; tiny speed gains
 stay inconclusive. No standalone harness or GEMM implementation is claimed
 complete by this review.
+
+## Separate original no-regression report
+
+The manager requests review against the handoff's original main-relative
+criterion without relaxing the lane's absolute targets. The quality pair now
+writes no-regression.log before the strict comparison, using B <= A for every
+metric, zero tolerance, finite nonnegative metrics, and ascending eigenvalues.
+Its status is distinct from the strict comparator; it creates no PASS receipt
+and never unlocks the existing strict-gated timing helper. Manager owns any
+explicit acceptance decision under the original criterion.
