@@ -14,6 +14,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from core.py2mojo_rows import py2mojo_rows_device_binding
 from core.py2mojo_linear import py2mojo_linear_flags
+from x_linear.spearman_device import spearman_sign_device
 from x_linear.device import linear_ctx as _p2m_ctx
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -25,6 +26,7 @@ from x_linear.dispatch import isotonic_abi_check, ALGO_SGD
 from x_linear.finite_device import XLIN_IDN_DEV_FINITE
 from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM
 from x_linear.cls1_fast import cls1_flags
+from x_linear.class_prep_device import class_prep_device
 
 
 def _fp(addr: Int) raises -> FP:
@@ -160,6 +162,49 @@ def py2mojo_linear_flags_binding() raises -> PythonObject:
     return PythonObject(py2mojo_linear_flags())
 
 
+def spearman_sign_binding(x_addr: PythonObject, y_addr: PythonObject, n_obj: PythonObject) raises -> PythonObject:
+    """The sign (-1, 0, 1) of Spearman's rho of n float32 x and y, exact
+    (x_linear/spearman.mojo, lane cpu2-l10-linear)."""
+    var n = Int(py=n_obj)
+    var xa = Int(py=x_addr)
+    var ya = Int(py=y_addr)
+    if n <= 0 or xa == 0 or ya == 0:
+        raise Error("x_linear spearman: n > 0 and two buffers required")
+    var sign = 0
+    with GILReleased(Python()):
+        sign = spearman_sign_device(_p2m_ctx(), FP(unsafe_from_address=xa), FP(unsafe_from_address=ya), n)
+    return PythonObject(sign)
+
+
+def class_prep_binding(codes_addr: PythonObject, sw_addr: PythonObject, cw_addr: PythonObject,
+                       dims: PythonObject, out_addr: PythonObject) raises -> PythonObject:
+    """Class counts, 'balanced' class weights and per-row class weights on
+    the device (x_linear/class_prep.mojo, lane cpu2-l10-linear). codes: n
+    int32 class codes in [0, k); sw: n float32 sample weights or 0; cw: k
+    float32 (written when balanced, else read); out: n float32 row weights
+    or 0. dims = [n, k, balanced, weighted]. Returns the largest unweighted
+    class count."""
+    var n = Int(py=dims[0])
+    var k = Int(py=dims[1])
+    var balanced = Int(py=dims[2]) != 0
+    var weighted = Int(py=dims[3]) != 0
+    var ca = Int(py=codes_addr)
+    var sa = Int(py=sw_addr)
+    var wa = Int(py=cw_addr)
+    var oa = Int(py=out_addr)
+    if n <= 0 or k < 1 or ca == 0 or wa == 0:
+        raise Error("x_linear class prep: n > 0, k > 0, codes and class weights required")
+    if weighted and sa == 0:
+        raise Error("x_linear class prep: weighted counts need sample weights")
+    var largest = 0
+    with GILReleased(Python()):
+        largest = class_prep_device(
+            _p2m_ctx(), IP(unsafe_from_address=ca), FP(unsafe_from_address=sa if sa != 0 else wa), sa != 0,
+            FP(unsafe_from_address=wa), n, k, balanced, weighted, FP(unsafe_from_address=oa if oa != 0 else wa),
+            oa != 0)
+    return PythonObject(largest)
+
+
 def glm_ydom_binding() raises -> PythonObject:
     """1: a GLM fit checks its targets' range itself and returns -1 in the
     converged word when it fails (x_linear/glm_ydom.mojo, lane fam2-linear)."""
@@ -173,6 +218,8 @@ def PyInit__mojolearn_x_linear() abi("C") -> PythonObject:
         m.def_function[fit_binding]("x_linear_fit")
         comptime if XLIN_GLM_DEV_YDOM:
             m.def_function[glm_ydom_binding]("x_linear_glm_ydom")
+        m.def_function[class_prep_binding]("x_linear_class_prep")
+        m.def_function[spearman_sign_binding]("x_linear_spearman_sign")
         m.def_function[decision_binding]("x_linear_decision")
         m.def_function[decision_codes_binding]("x_linear_decision_codes")
         m.def_function[numeric_mode_binding]("x_linear_numeric_mode")

@@ -440,15 +440,9 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linea
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	Cs = [float(c) for c in self.Cs]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	Y = [1.0 if c == 1 else -1.0 for c in cl]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	Y = [1.0 if c == t else -1.0 for c in cl for t in range(T)]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	[[ms[(l * grid + k) * folds:(l * grid + k + 1) * folds] for k in range(grid)] for l in range(L)], "<f4")
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	alphas = [float(v) for v in (self.alphas if hasattr(self.alphas, "__len__") else [self.alphas])]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	cl = [int(c) for c in codes.tolist()]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	est.active_ = [int(v) for v in vals[d + 4:d + 4 + k]]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -456,17 +450,7 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linea
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	est.mse_path_ = Array.from_list([ms[k * folds:(k + 1) * folds] for k in range(grid)], "<f4")
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	fitw = [b * cw[c] for b, c in zip(raw, cl)]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	for c, w in zip(codes, ws):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	for i in range(A):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	for key in class_weight:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	for row, b in zip(coef_rows, intercepts):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	for t in range(i, j + 1):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	fp = [est.eps, est.tol] + [float(r) for r in l1_ratios] + (values if explicit else [])
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -478,19 +462,9 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linea
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	if not alphas or any(not v > 0 for v in alphas):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	if self.out_of_bounds == "raise" and any(v < self.X_min_ or v > self.X_max_ for v in vals):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	ip = [int(v) for v in ip]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	return [float(class_weight.get(lab, 1.0)) for lab in labels]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	return [total / (k * cnt) if cnt else 0.0 for cnt in counts]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	return [values[c * d:(c + 1) * d] for c in range(k)]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	return sum((a - mx) * (b - my) for a, b in zip(rx, ry))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	sample_weight = [b * cw[int(c)] for b, c in zip(base, cl)]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	self.l1_ratio_ = _enetcv_fit(self, X, y, [float(r) for r in ratios])
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -498,29 +472,9 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linea
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	values = sorted((float(v) for v in alphas), reverse=True)
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	yy = Array.from_list([float(c) for c in cl] + [0.0] * n + tail, "<f4")
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	best_c = Cs[min(range(nc), key=lambda i: abs(Cs[i] - vals[kp * d + kp]))]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	if 1 <= p < 2 and (min(y) < 0 or sum(y) <= 0):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	if min(y) < 0 or sum(y) <= 0:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	if min(y) <= 0:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	if p >= 2 and min(y) <= 0:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	largest = max(collections.Counter(codes).values())
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	mx, my = sum(rx) / len(rx), sum(ry) / len(ry)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	order = sorted(range(len(v)), key=lambda i: v[i])
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	return min(l1_ratios, key=lambda r: abs(r - l1_best))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	return sum((a - mx) * (b - my) for a, b in zip(rx, ry))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	total = sum(counts)
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	values = sorted((float(v) for v in alphas), reverse=True)
 # why: O(classes)/O(outputs) epilogue after the device folds (per-class P/R/F, zero_division, averaging, confusion normalize, per-output regression finish, d2/brier class terms, ovo pair orchestration, StratifiedKFold class x fold offsets) plus the rare _FoldCurve edge cases (partial AUC past the last point, AP zero denominator); owed to x_metrics finish stages per family (pyglue-sweep A)
@@ -1532,12 +1486,6 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_svm_impl.py	1	f
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_svm_impl.py	0	for r in keys:
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_svm_impl.py	0	for s in idx:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_svm_impl.py	0	idx = [int(s) for s in support]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_svm_impl.py	0	if any(isinstance(v, float) and v != v for v in labels):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_svm_impl.py	0	if not all(isinstance(c, numbers.Real) for c in classes):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_svm_impl.py	0	ms = [p["dual"].shape[1] for p in pairs]
@@ -2398,13 +2346,11 @@ host-call	host-import	PR#86	debt	x_linear/bayes.mojo	0	par_rows(rows_map, n)
 host-call	host-import	PR#86	debt	x_linear/glm.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	debt	x_linear/glm.mojo	0	par_rows(rows_gh, n)
 host-call	host-import	PR#86	debt	x_linear/glm.mojo	0	par_rows(rows_map, n)
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/glm.mojo	0	par_rows(units_fold, units, 1)
 host-call	host-import	PR#86	debt	x_linear/huber.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	debt	x_linear/huber.mojo	0	par_rows(rows_map, n)
 host-call	host-import	PR#86	debt	x_linear/logcv.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	debt	x_linear/logcv.mojo	0	par_rows(rows_hit, n)
 host-call	host-import	PR#86	debt	x_linear/logcv.mojo	0	par_rows(rows_map, n)
-host-env	host-env/threshold	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/ops.mojo	0	comptime if is_defined["MOJOLEARN_X_LINEAR_HOST_SERIAL"]():
 host-threads	host-threads	PR#86	debt	x_linear/ops.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	PR#86	debt	x_linear/ops.mojo	0	host_parallelize(group, groups)
 host-call	host-import	PR#86	debt	x_linear/quantile.mojo	0	import x_linear/ops.mojo:par_rows
@@ -2413,7 +2359,6 @@ host-call	host-import	PR#86	debt	x_linear/ridge.mojo	0	import x_linear/ops.mojo:
 host-call	host-import	PR#86	debt	x_linear/ridge.mojo	0	par_rows(rows_loo, n)
 host-call	host-import	PR#86	debt	x_linear/sgd.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	debt	x_linear/sgd.mojo	0	par_rows(run_problems, problems, 1)
-host-env	host-env/threshold	PR#85	inflight@6a483da91d76ae2560b5316910738e7b3328e375	x_linear/sgd.mojo	0	and not is_defined["MOJOLEARN_SGD_HOST_LEGACY"]()
 # why: OWED (block-per-n, rule added by lane cgr5-owed2): one block per output column / class / feature walking all n rows; needs a row-tile then fold order (glm qn_tile_sum_classes' shape) with the host column in the same order
 block-per-n	serial-gpu	UNOWNED	owed2	x_prep/select_fast.mojo	0	ctx.enqueue_function[sel_fcls_score_kernel](
 # why: OWED (block-per-n, rule added by lane cgr5-owed2): one block per output column / class / feature walking all n rows; needs a row-tile then fold order (glm qn_tile_sum_classes' shape) with the host column in the same order
