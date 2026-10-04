@@ -169,7 +169,11 @@
       "arms": [
         "on"
       ],
-      "coverage": "Resident token, restore/refit, cache eviction and bounded process teardown; needs svm native binding."
+      "coverage": "Resident token, restore/refit, cache eviction and bounded process teardown; needs svm native binding.",
+      "args": [
+        "--out",
+        "{report}"
+      ]
     },
     {
       "id": "dbscan_edge_split",
