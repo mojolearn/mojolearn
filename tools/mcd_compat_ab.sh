@@ -13,10 +13,10 @@ DATASET=$2
 LANE=${3:-min-cov-det}
 ROWS=${4:-}
 MCD_DEFINE=${MCD_DEFINE:-MOJOLEARN_MCD_BATCH_COMPAT}
-# MCD_DEFINE may list several defines, space separated (w2-mcd2: B =
+# MCD_DEFINE may list several defines, space or comma separated (w2-mcd2: B =
 # "MOJOLEARN_MCD_BMMA" or "MOJOLEARN_MCD_BMMA MOJOLEARN_MCD_WIDE").
 B_DEFINES=
-for D in $MCD_DEFINE; do
+for D in ${MCD_DEFINE//,/ }; do
   case "$D" in
     MOJOLEARN_MCD_BATCH_COMPAT|MOJOLEARN_MCD_BATCH_MMA|MOJOLEARN_MCD_BMMA|MOJOLEARN_MCD_WIDE) ;;
     *) echo "MCDQ unsupported define: $D"; exit 2 ;;
