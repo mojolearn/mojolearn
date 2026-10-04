@@ -12,6 +12,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from xtrees.api import register
 from xtrees.shap_device import shap_prepare, tree_shap_values
 from xtrees.dart_device import DART_DEVICE, dart_open, dart_step, dart_add, dart_close
+from xtrees.dart_units import IDN_DART_DEVICE
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -127,6 +128,14 @@ def dart_close_binding(handle: PythonObject, bad: PythonObject) raises -> Python
     return PythonObject(0)
 
 
+def dart_idn_binding() raises -> PythonObject:
+    """Present only under `IDN_DART_DEVICE` (lane fam2-forests): the
+    IDENTICAL DART round, the same words as the host twin
+    (xtrees/dart_host.mojo). The Python layer then takes the device loop
+    with or without a forest data session."""
+    return PythonObject(1)
+
+
 @export
 def PyInit__mojolearn_x_trees() abi("C") -> PythonObject:
     try:
@@ -141,6 +150,8 @@ def PyInit__mojolearn_x_trees() abi("C") -> PythonObject:
             m.def_function[dart_step_binding]("x_trees_dart_step")
             m.def_function[dart_add_binding]("x_trees_dart_add")
             m.def_function[dart_close_binding]("x_trees_dart_close")
+        comptime if IDN_DART_DEVICE:
+            m.def_function[dart_idn_binding]("x_trees_dart_idn")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_trees: ", e))

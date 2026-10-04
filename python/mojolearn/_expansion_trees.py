@@ -1571,16 +1571,29 @@ class _DARTBase(_TreesEnsembleBase):
 
     # -------------------------------------------- lane/apple-fast-dart
     # The boosting round on the device (xtrees/dart_device.mojo): FAST +
-    # Apple only, default unless -D MOJOLEARN_DART_DEVICE_OFF; the only build
-    # that registers x_trees_dart_open. Same drop set, shrink factors and
+    # Apple (default unless -D MOJOLEARN_DART_DEVICE_OFF) and, since lane
+    # fam2-forests, every IDENTICAL build (GPU kernels and the host twin
+    # xtrees/dart_host.mojo, default unless -D MOJOLEARN_IDN_DART_DEVICE_OFF);
+    # the only builds that register x_trees_dart_open. Same drop set, shrink factors and
     # tree fits as `_boost_loop`; the score, gradients and leaf values are
     # float32 on the device and the dropped trees come off and go back as
     # one gathered sum per row (the docstring of dart_device.mojo).
     _DART_VALUES_CAP = 1 << 26
 
     def _dart_device(self, b, session, K):
-        if session is None or not callable(getattr(b, "x_trees_dart_open", None)):
+        if not callable(getattr(b, "x_trees_dart_open", None)):
             return False
+        if session is None:
+            # lane fam2-forests (IDN_DART_DEVICE): an IDENTICAL binary (GPU
+            # or host, both expose x_trees_dart_idn) takes the round without
+            # a forest data session too, each member fitting X itself, so
+            # the host column and the devices run the same loop. A bagged or
+            # column-sampled fit keeps main's loop on every column.
+            if not callable(getattr(b, "x_trees_dart_idn", None)):
+                return False
+            if (float(self.subsample) < 1.0 and int(self.subsample_freq) > 0) \
+                    or float(self.colsample_bytree) < 1.0:
+                return False
         node_cap = 2 * int(self.num_leaves) - 1
         return 1 <= node_cap <= 65535 and int(self.n_estimators) * K * node_cap <= self._DART_VALUES_CAP
 
@@ -1646,7 +1659,10 @@ class _DARTBase(_TreesEnsembleBase):
                         max_leaves=int(self.num_leaves), min_samples_leaf=int(self.min_child_samples),
                         n_bins=int(self.max_bin), random_state=_trees_sub_seed(seed, j), n_streams=1,
                         numeric_mode=self.numeric_mode)
-                    tree._fit_in_session(session, targets[c])
+                    if session is not None:
+                        tree._fit_in_session(session, targets[c])
+                    else:
+                        tree.fit(Xa, targets[c])
                     offs = tree._offsets.tolist()
                     lo, n_nodes = int(offs[0]), int(offs[1]) - int(offs[0])
                     values = empty((n_nodes,), "<f4")
