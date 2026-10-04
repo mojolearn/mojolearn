@@ -926,10 +926,6 @@ def eigh_td_on(
         _ = dtau^
         _ = ddd^
         _ = dee^
-    _ = dx^
-    _ = dpb^
-    _ = dpart^
-    _ = dpart2^
         _ = dx^
         _ = dpb^
         _ = dpart^
