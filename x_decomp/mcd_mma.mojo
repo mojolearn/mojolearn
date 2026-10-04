@@ -28,7 +28,7 @@ def mc_center_kernel[SKIP: Bool = False](
     var target = c*rr*dd+i*dd+j
     # MMA calls for inactive candidates may still run; zero their source
     # and guard destination publication, retaining frozen fit state.
-    # SKIP (MOJOLEARN_MCD_BMMA): the batched GEMM launches no block for an
+    # SKIP (MCD_BMMA): the batched GEMM launches no block for an
     # inactive candidate, so its source is never read; skip the zero store.
     if use_fin == 0 and active.unsafe_load(c) == 0:
         comptime if not SKIP:

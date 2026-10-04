@@ -14,11 +14,13 @@ LANE=${3:-min-cov-det}
 ROWS=${4:-}
 MCD_DEFINE=${MCD_DEFINE:-MOJOLEARN_MCD_BATCH_COMPAT}
 # MCD_DEFINE may list several defines, space or comma separated (w2-mcd2: B =
-# "MOJOLEARN_MCD_BMMA" or "MOJOLEARN_MCD_BMMA MOJOLEARN_MCD_WIDE").
+# "MOJOLEARN_MCD_WIDE"; BMMA is default since its promotion, so
+# "MOJOLEARN_MCD_BMMA_OFF" builds the pre-promotion path).
 B_DEFINES=
 for D in ${MCD_DEFINE//,/ }; do
   case "$D" in
-    MOJOLEARN_MCD_BATCH_COMPAT|MOJOLEARN_MCD_BATCH_MMA|MOJOLEARN_MCD_BMMA|MOJOLEARN_MCD_WIDE) ;;
+    MOJOLEARN_MCD_BATCH_COMPAT|MOJOLEARN_MCD_BATCH_MMA|MOJOLEARN_MCD_BMMA_OFF|MOJOLEARN_MCD_WIDE) ;;
+    MOJOLEARN_MCD_BMMA) echo "MCDQ MOJOLEARN_MCD_BMMA is default now; use MOJOLEARN_MCD_BMMA_OFF for the old arm"; exit 2 ;;
     *) echo "MCDQ unsupported define: $D"; exit 2 ;;
   esac
   B_DEFINES="$B_DEFINES -D $D"

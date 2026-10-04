@@ -121,15 +121,15 @@ comptime MCD_DEVICE_CSTEPS = (
     and (is_defined["MOJOLEARN_MCD_DEVICE_CSTEPS"]() or MCD_BATCH_COMPAT)
 )
 
-# lane/apple-fast-w2-mcd2 (2026-10-04), OPT-IN, FAST + Apple, on top of the
-# MCD_BATCH_MMA default (no effect with MOJOLEARN_MCD_BATCH_MMA_OFF):
-# MOJOLEARN_MCD_BMMA: each of the three per-candidate GEMM loops becomes ONE
-# launch over the phase's candidates (x_decomp/mcd_bmma.mojo: main's tile
-# kernel, same tiles / K windows / split-K per candidate) and inactive
-# candidates launch no GEMM work. Taxi phase B enqueued up to ~310,000
-# GEMMs (3,330 candidates x 3 x up to 31 steps); that enqueue cost is the
-# hypothesis for most of the 3.6 s. Same arithmetic per output cell.
-comptime MCD_BMMA = MCD_BATCH_MMA and is_defined["MOJOLEARN_MCD_BMMA"]()
+# DEFAULT (FAST + Apple, on top of MCD_BATCH_MMA; lane/apple-fast-w2-mcd2):
+# each of the three per-candidate GEMM loops is ONE launch over the phase's
+# candidates (x_decomp/mcd_bmma.mojo: main's tile kernel, same tiles / K
+# windows / split-K per candidate); inactive candidates launch no GEMM work.
+# M3, one run per arm: MinCovDet taxi 3002.9 -> 294.3 ms (w2-mcdb-t-mcd-taxi),
+# EllipticEnvelope taxi 3010.3 -> 299.3 ms (w2-mcdb-t-ee-taxi); quality
+# w2-mcdb-q-mcd-taxi, w2-mcdb-q-ee-taxi MCDQ-PAIR-PASS (1% fitted state,
+# .99 support). MOJOLEARN_MCD_BMMA_OFF restores the per-candidate launches.
+comptime MCD_BMMA = MCD_BATCH_MMA and not is_defined["MOJOLEARN_MCD_BMMA_OFF"]()
 # MOJOLEARN_MCD_WIDE: this batched search for 64 < d <= MF_WIDE_DMAX too
 # (istella d = 220 fell back to fast_mcd_dev: per candidate, per C-step kit
 # launches + host syncs + a 220-wide round-robin eigh with a sync per sweep,
