@@ -1274,10 +1274,138 @@ def mamba3_angle_reduce_kernel(
         d_dt.unsafe_store(cell,accdt)
 
 
+# ---------------------------------------------------------------------------
+# lane nr-mamba (2026-10-04, roadmap B3 as the review corrected it)
+# IDN_M3_ANGLE_DT_SUFFIX (default ON; `-D MOJOLEARN_IDN_M3_ANGLE_DT_SUFFIX_OFF`
+# or `-D MOJOLEARN_IDN_ALL_OFF` restores main). Every numeric mode on every
+# column but the Apple FAST chunk arm (AFN_M3_BWD_CHUNK keeps its own).
+#
+# Main folded, for each (token, head, angle), the suffix d_theta[li..L-1]
+# ascending from +0.0 in one thread: O(L^2) adds per (head, angle). Here
+# each (batch, head, angle) chain's reverse cumulative sum is computed ONCE
+# and every token reads its own entry:
+#   carry(t) = sum over u >= t of d_theta(u), as fixed chunks of
+#   M3_ANGLE_SUFFIX_CHUNK tokens pinned to absolute position t (chunk k is
+#   tokens [64k, 64k + 64)): each chunk's total folds descending from +0.0;
+#   a token's carry is (the totals of the later chunks, folded descending
+#   from +0.0) seeded into its own chunk's descending walk.
+# d_rate = carry * dt (main's theta_reverse product) and
+# d_dt = fold over the 32 angles ascending of fma(carry, rate, acc) (main's
+# chain over r, from the new carry). The chunk is a constant, not a shape
+# rule, and no fold depends on the launch.
+# BITS CHANGE: d_rate and d_dt, so d_angle, d_dt_bias, d_dt_raw, the in_proj
+# dt and angle columns, d_W_in and through d_x every upstream gradient and
+# the optimizer state. One source serves the device columns (NVIDIA, AMD,
+# Metal; IDENTICAL and FAST on NVIDIA/AMD), the generated host column and the
+# backward checks generated from it; both prefill-backward call sites and the
+# tail dump pass the chunk-sum scratch.
+# ---------------------------------------------------------------------------
+comptime IDN_M3_ANGLE_DT_SUFFIX = (
+    not is_defined["MOJOLEARN_IDN_M3_ANGLE_DT_SUFFIX_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime M3_ANGLE_SUFFIX_CHUNK = 64
+
+
+def mamba3_angle_suffix_sums_cells(b: Int, l: Int, nh: Int) -> Int:
+    """Floats of the chunk-sum scratch `mamba3_backward_angle_into` takes."""
+    var k = (l + M3_ANGLE_SUFFIX_CHUNK - 1) // M3_ANGLE_SUFFIX_CHUNK
+    if k < 1:
+        k = 1
+    return b * nh * M3_NUM_ROPE_ANGLES * k
+
+
+def mamba3_angle_chunk_sum_kernel(
+    sums: MutPointer[Float32, MutAnyOrigin], d_theta: MutPointer[Float32, MutAnyOrigin],
+    b_in:Int32,l_in:Int32,nh_in:Int32,
+):
+    """One thread per (chain, chunk): the chunk's d_theta total, descending
+    from +0.0. sums[chain * K + k], chain = (b * nh + h) * R + r."""
+    var b=Int(b_in);var l=Int(l_in);var nh=Int(nh_in)
+    var nk=(l+M3_ANGLE_SUFFIX_CHUNK-1)//M3_ANGLE_SUFFIX_CHUNK
+    var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if cell>=b*nh*M3_NUM_ROPE_ANGLES*nk:return
+    var k=cell%nk;var chain=cell//nk
+    var r=chain%M3_NUM_ROPE_ANGLES;var bh=chain//M3_NUM_ROPE_ANGLES
+    var h=bh%nh;var bb=bh//nh
+    var t0=k*M3_ANGLE_SUFFIX_CHUNK;var t1=t0+M3_ANGLE_SUFFIX_CHUNK
+    if t1>l:t1=l
+    var s=Float32(0.0)
+    var t=t1-1
+    while t>=t0:
+        s=ftz(s+ftz(d_theta.unsafe_load(((bb*l+t)*nh+h)*M3_NUM_ROPE_ANGLES+r)))
+        t-=1
+    sums.unsafe_store(cell,s)
+
+
+def mamba3_angle_suffix_kernel(
+    carry_out: MutPointer[Float32, MutAnyOrigin], d_theta: MutPointer[Float32, MutAnyOrigin],
+    sums: MutPointer[Float32, MutAnyOrigin], b_in:Int32,l_in:Int32,nh_in:Int32,
+):
+    """One thread per (chain, chunk): seed = the later chunks' totals
+    folded descending from +0.0, then the chunk walked descending; each
+    token's carry lands in carry_out (the d_rate buffer, [B, L, H, R])."""
+    var b=Int(b_in);var l=Int(l_in);var nh=Int(nh_in)
+    var nk=(l+M3_ANGLE_SUFFIX_CHUNK-1)//M3_ANGLE_SUFFIX_CHUNK
+    var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if cell>=b*nh*M3_NUM_ROPE_ANGLES*nk:return
+    var k=cell%nk;var chain=cell//nk
+    var r=chain%M3_NUM_ROPE_ANGLES;var bh=chain//M3_NUM_ROPE_ANGLES
+    var h=bh%nh;var bb=bh//nh
+    var carry=Float32(0.0)
+    var kk=nk-1
+    while kk>k:
+        carry=ftz(carry+ftz(sums.unsafe_load(chain*nk+kk)))
+        kk-=1
+    var t0=k*M3_ANGLE_SUFFIX_CHUNK;var t1=t0+M3_ANGLE_SUFFIX_CHUNK
+    if t1>l:t1=l
+    var t=t1-1
+    while t>=t0:
+        var idx=((bb*l+t)*nh+h)*M3_NUM_ROPE_ANGLES+r
+        carry=ftz(carry+ftz(d_theta.unsafe_load(idx)))
+        carry_out.unsafe_store(idx,carry)
+        t-=1
+
+
+def mamba3_angle_suffix_dt_kernel(
+    d_dt: MutPointer[Float32, MutAnyOrigin], d_rate: MutPointer[Float32, MutAnyOrigin],
+    angle_raw: MutPointer[Float32, MutAnyOrigin], dt: MutPointer[Float32, MutAnyOrigin],
+    m_in:Int32,nh_in:Int32,dip_in:Int32,col_angle_in:Int32,
+):
+    """One thread per (token, head): d_dt = fold over r ascending of
+    fma(carry, rate, acc) from +0.0, then the row's carries become
+    d_rate = carry * dt in place (this thread alone reads and writes them)."""
+    var m=Int(m_in);var nh=Int(nh_in);var dip=Int(dip_in);var ca=Int(col_angle_in)
+    var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if cell>=m*nh:return
+    var token=cell//nh
+    var dtv=ftz(dt.unsafe_load(cell))
+    var accdt=Float32(0.0)
+    for r in range(M3_NUM_ROPE_ANGLES):
+        var raw=ftz(angle_raw.unsafe_load(token*dip+ca+r));var rate=ftz(identical_mul(ftz(identical_tanh(raw)),M3_PI))
+        var carry=ftz(d_rate.unsafe_load(cell*M3_NUM_ROPE_ANGLES+r))
+        accdt=ftz(identical_mul_add(carry,rate,accdt))
+        d_rate.unsafe_store(cell*M3_NUM_ROPE_ANGLES+r,ftz(identical_mul(carry,dtv)))
+    d_dt.unsafe_store(cell,accdt)
+
+
 def mamba3_backward_angle_into(
     ctx:DeviceContext,mut d_rate:DeviceBuffer[DType.float32],mut d_angle:DeviceBuffer[DType.float32],mut d_dt:DeviceBuffer[DType.float32],
     mut d_theta:DeviceBuffer[DType.float32],mut dt:DeviceBuffer[DType.float32],mut in_proj:DeviceBuffer[DType.float32],b:Int,l:Int,dims:Mamba3Dims,
+    mut sums:DeviceBuffer[DType.float32],
 ) raises:
+    """`sums` holds `mamba3_angle_suffix_sums_cells(b, l, nh)` floats (read
+    only under IDN_M3_ANGLE_DT_SUFFIX)."""
+    comptime if IDN_M3_ANGLE_DT_SUFFIX:
+        var nk=(l+M3_ANGLE_SUFFIX_CHUNK-1)//M3_ANGLE_SUFFIX_CHUNK
+        var work=b*dims.nheads*M3_NUM_ROPE_ANGLES*nk
+        ctx.enqueue_function[mamba3_angle_chunk_sum_kernel](sums.unsafe_ptr(),d_theta.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(work),1,1),block_dim=(M3_BWD_TPB,1,1))
+        ctx.enqueue_function[mamba3_angle_suffix_kernel](d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),sums.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(work),1,1),block_dim=(M3_BWD_TPB,1,1))
+        var m=b*l
+        ctx.enqueue_function[mamba3_angle_suffix_dt_kernel](d_dt.unsafe_ptr(),d_rate.unsafe_ptr(),in_proj.unsafe_ptr(),dt.unsafe_ptr(),Int32(m),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),grid_dim=(_grid(m*dims.nheads),1,1),block_dim=(M3_BWD_TPB,1,1))
+        # d_angle half only (do_dt = 0): it reads the finished d_rate.
+        ctx.enqueue_function[mamba3_angle_reduce_kernel](d_angle.unsafe_ptr(),d_dt.unsafe_ptr(),d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),in_proj.unsafe_ptr(),dt.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),Int32(0),grid_dim=(_grid(m*M3_NUM_ROPE_ANGLES),1,1),block_dim=(M3_BWD_TPB,1,1))
+        return
     var chains=b*dims.nheads*M3_NUM_ROPE_ANGLES
     ctx.enqueue_function[mamba3_theta_reverse_kernel](d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),dt.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(chains),1,1),block_dim=(M3_BWD_TPB,1,1))
     var m=b*l;var cells=m*M3_NUM_ROPE_ANGLES if m*M3_NUM_ROPE_ANGLES>m*dims.nheads else m*dims.nheads

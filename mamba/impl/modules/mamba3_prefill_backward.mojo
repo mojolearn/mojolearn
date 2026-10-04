@@ -51,6 +51,7 @@ from mamba.impl.modules.mamba3_backward import (
     mamba3_backward_join_rotary_into,
     mamba3_backward_join_current_into,
     mamba3_backward_angle_into,
+    mamba3_angle_suffix_sums_cells,
     mamba3_backward_dt_partial_into,
     mamba3_backward_seg_adt_into,
     mamba3_backward_adt_product_into,
@@ -447,7 +448,9 @@ def mamba3_prefill_backward_on(
             mamba3_afn_backward_angle_into(ctx,d_angle_rate,d_angle_raw,d_dt_angle,d_theta_rot,stages.dt_work,stages.in_proj,afn_sums,b,l,dims)
             afn_arena.keep.append(afn_sums^)
         else:
-            mamba3_backward_angle_into(ctx,d_angle_rate,d_angle_raw,d_dt_angle,d_theta_rot,stages.dt_work,stages.in_proj,b,l,dims)
+            var sums_rot=_m3_scratch(afn_own, ctx,mamba3_angle_suffix_sums_cells(b,l,dims.nheads))
+            mamba3_backward_angle_into(ctx,d_angle_rate,d_angle_raw,d_dt_angle,d_theta_rot,stages.dt_work,stages.in_proj,b,l,dims,sums_rot)
+            afn_arena.keep.append(sums_rot^)
         _mtick(ctx, ton, tk, "angle")
     var d_dt_available=_m3_scratch(afn_own, ctx,head_cells);var d_dt_raw=_m3_scratch(afn_own, ctx,head_cells);var d_dt_bias_rows=_m3_scratch(afn_own, ctx,head_cells);var d_dt_bias=_m3_scratch(afn_own, ctx,dims.nheads)
     comptime if not IDN_M3_BWD_SKIP_DEAD:
@@ -501,7 +504,9 @@ def mamba3_prefill_backward_on(
         mamba3_afn_backward_angle_into(ctx,d_angle_rate_join,d_angle_raw_join,d_dt_angle_join,d_theta_join,stages.dt_work,stages.in_proj,afn_sums,b,l,dims)
         afn_arena.keep.append(afn_sums^)
     else:
-        mamba3_backward_angle_into(ctx,d_angle_rate_join,d_angle_raw_join,d_dt_angle_join,d_theta_join,stages.dt_work,stages.in_proj,b,l,dims)
+        var sums_join=_m3_scratch(afn_own, ctx,mamba3_angle_suffix_sums_cells(b,l,dims.nheads))
+        mamba3_backward_angle_into(ctx,d_angle_rate_join,d_angle_raw_join,d_dt_angle_join,d_theta_join,stages.dt_work,stages.in_proj,b,l,dims,sums_join)
+        afn_arena.keep.append(sums_join^)
     _mtick(ctx, ton, tk, "angle")
     var d_dt_join_base=_m3_scratch(afn_own, ctx,head_cells);mamba3_backward_join_two_into(ctx,d_dt_join_base,d_dt_join_current,d_dt_join_adt,head_cells)
     _mtick(ctx, ton, tk, "join_two")
