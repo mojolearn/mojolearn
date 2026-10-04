@@ -352,12 +352,6 @@ py-np-compute	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-np-compute	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	w = np.concatenate([w[keep], loop_w]).astype(np.float32)
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	Yk = k.ew("mul", Yk, _M.of([0.0 if d else 1.0 for d in dead], 1, q))
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	dead = [v == 0.0 for v in live.s]
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	diag = _M.of([lu.s[i * A.r + i] for i in range(A.r)], 1, A.r)
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for _ in range(80):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for _ in range(int(n_iter)):
@@ -375,10 +369,6 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for a in range(self._knn):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for i in range(1, rank + 1):
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for i in range(G.r):
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for i in range(d):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for ii in range(1, max_iter + 1):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
@@ -402,8 +392,6 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for it in range(max(1, int(max_iter))):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for j in range(Y.c):
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for j in range(nc):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	1	for j in range(nc):
@@ -420,31 +408,15 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for t in range(1, nc):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for t in range(HHt.r):
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for t in range(nc):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for t, j in enumerate(idx):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for v in values:
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	if any(abs(v) > eps for v in col.s):
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	if it >= 2 and max(float(v) for v in S.take_cols(want).s) <= floor:
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	inv = _M.of([keep.s[j] if abs(w.s[j]) > cut else 0.0 for j in range(w.c)], 1, w.c)
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	lg = k.ew("lgamma", _M.of([(d - i + 1) / 2.0 for i in range(1, d + 1)], 1, d)).s
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	live = [j for j, v in enumerate(k.colsum(k.ew("abs", Q)).s) if v != 0.0]
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	nr = [float(v) for v in k.colsum(k.ew("abs", Z)).s]
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	psi = _M.of([float(v) for v in self.noise_variance_init], 1, len(self.noise_variance_init))
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	rank = sum(1 for v in S.s if v > cut)
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	1	rank = sum(1 for v in S.s if v > cut)
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	return [v < 0 for v in out.s]
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
@@ -454,27 +426,13 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	return k.ew("mul", self, _M.of([-1.0 if f else 1.0 for f in flags], self.r, 1))
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	sc = _M.of([1.0 / v if v > 0.0 and math.isfinite(v) else 1.0 for v in nr], 1, Z.c)
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	sp = [float(v) for v in spectrum]
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	starts = [k.rand(n, nc, seed, 70 + r, 0) for r in range(int(self.n_init))]
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	terms = [k.ew("add", k.ew("add", zero, ddt.cols(t, t + 1)), dcomp.rows(t, t + 1)) for t in range(nc)]
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	wmax = max(abs(v) for v in w.s) if w.c else 0.0
 # why: k-sized folds over singular values, components or restarts (rank counts, max of nc values, NMF component permutation); owed to x_decomp count/max moves
 py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	if a.ndim != 2 or min(a.shape) == 0:
-# why: k-sized folds over singular values, components or restarts (rank counts, max of nc values, NMF component permutation); owed to x_decomp count/max moves
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	if it >= 2 and max(float(v) for v in S.take_cols(want).s) <= floor:
-# why: k-sized folds over singular values, components or restarts (rank counts, max of nc values, NMF component permutation); owed to x_decomp count/max moves
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	rank = sum(1 for v in S.s if v > cut)
-# why: k-sized folds over singular values, components or restarts (rank counts, max of nc values, NMF component permutation); owed to x_decomp count/max moves
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	1	rank = sum(1 for v in S.s if v > cut)
-# why: k-sized folds over singular values, components or restarts (rank counts, max of nc values, NMF component permutation); owed to x_decomp count/max moves
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	return sorted(range(kc), key=lambda i: (u[i], i))
-# why: k-sized folds over singular values, components or restarts (rank counts, max of nc values, NMF component permutation); owed to x_decomp count/max moves
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	wmax = max(abs(v) for v in w.s) if w.c else 0.0
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	if n == 0 or not (w.min() >= 0) or not (w.sum() > 0):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
