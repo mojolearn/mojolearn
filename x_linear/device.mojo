@@ -36,6 +36,7 @@ from x_linear.sgd import (
     L_HINGE, LR_INVSCALING, P_NONE, P_EN,
 )
 from checks.numerics import identical_pow
+from x_linear.finite_device import XLIN_IDN_DEV_FINITE, xlin_finite_device, xlin_finite_host
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.sgd_end import sgd_ys_kernel, sgd_iota_kernel, sgd_perm_kernel, sgd_mb_end_kernel, sgd_mb_res_kernel, sgd_ps_end_kernel, sgd_ps_res_kernel, SGD_END_ST, SGD_END_TPB, SGD_MB_FLAGS, SGD_MB_WORDS
 from x_linear.vfold import vscratch
@@ -135,6 +136,8 @@ def _ridge_device(
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    comptime if XLIN_IDN_DEV_FINITE:
+        xlin_finite_device(ctx, dx, n_x, y, n_y)
     var dxp = FP(unsafe_from_address=Int(dx.unsafe_ptr()))
     var dyp = FP(unsafe_from_address=Int(dy.unsafe_ptr()))
     # ip[4] == 1 means y holds the n int32 class codes (RidgeClassifier),
@@ -2595,6 +2598,8 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    comptime if XLIN_IDN_DEV_FINITE:
+        xlin_finite_device(ctx, dx, n_x, y, n_y)
     dsc.enqueue_fill(Float32(0))
     dh.enqueue_fill(Float32(0))
     dtw.enqueue_fill(Float32(0))
@@ -2908,6 +2913,8 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    comptime if XLIN_IDN_DEV_FINITE:
+        xlin_finite_device(ctx, dx, n_x, y, n_y)
     ctx.enqueue_copy(dst_buf=dal, src_ptr=hfp.unsafe_ptr())
     dsum.enqueue_fill(Float32(0))
     var cells = d * (d + 1) // 2
@@ -3767,6 +3774,8 @@ def _iso_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, ip: List[Int32], fp:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    comptime if XLIN_IDN_DEV_FINITE:
+        xlin_finite_device(ctx, dx, n_x, y, n_y)
     ctx.enqueue_copy(dst_buf=dip, src_ptr=hip.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=dfp, src_ptr=hfp.unsafe_ptr())
     var dm = ctx.enqueue_create_buffer[DType.int32](1)
@@ -3976,6 +3985,8 @@ def _iso_predict_grid(x: FP, n_x: Int, thr: FP, n_thr: Int, n: Int, ip: List[Int
     var dout = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     ctx.enqueue_copy(dst_buf=dt, src_ptr=thr)
+    comptime if XLIN_IDN_DEV_FINITE:
+        xlin_finite_device(ctx, dx, n_x, thr, n_thr)
     ctx.enqueue_copy(dst_buf=dfp, src_ptr=hfp.unsafe_ptr())
     # the whole isotonic predict as ONE guarded unit from zeroed scratch (x_linear/witness.mojo)
     var wit = Witness(ctx, _xg_blocks(n))
@@ -4056,6 +4067,11 @@ def fit_device(
         _ridge_device(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
         return
     if not ((algo == ALGO_LARS or algo == ALGO_BAYES) and n > 0 and d > 0):
+        # no grid uploads X on this path: the binding's walk, so the
+        # NaN refusal still comes first
+        comptime if XLIN_IDN_DEV_FINITE:
+            xlin_finite_host(x, n_x, "X")
+            xlin_finite_host(y, n_y, "y")
         raise Error("x_linear: no device route for fit " + String(algo) + " at this shape")
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
     var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
@@ -4128,6 +4144,8 @@ def fit_device(
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    comptime if XLIN_IDN_DEV_FINITE:
+        xlin_finite_device(ctx, dx, n_x, y, n_y)
     if algo == ALGO_LOGCV and n > 0:
         # the StratifiedKFold ids from the device labels (x_linear/logcv_grid.mojo)
         lcv_fold_ids_device(ctx.copy(), FP(unsafe_from_address=Int(dy.unsafe_ptr())), n, max(Int(ip[2]), 2), Int(ip[4]))

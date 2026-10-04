@@ -22,6 +22,7 @@ from std.sys.compile import is_defined
 from x_linear.ops import FP, IP
 from x_linear.device import fit_device, decision_device, decision_codes_device, SGD_IDN_DEV_FINITE
 from x_linear.dispatch import isotonic_abi_check, ALGO_SGD
+from x_linear.finite_device import XLIN_IDN_DEV_FINITE
 from x_linear.cls1_fast import cls1_flags
 
 
@@ -86,7 +87,9 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     var out = _fp(Int(py=out_addr))
     # lane/idn-sgd-multiblock: the SGD grids test the uploaded words on the
     # device (x_linear/device.mojo SGD_IDN_DEV_FINITE; the same error)
-    if not (SGD_IDN_DEV_FINITE and a == ALGO_SGD):
+    # lane/fam-linear: every other route does the same on the X it uploads
+    # (x_linear/finite_device.mojo XLIN_IDN_DEV_FINITE; the same error)
+    if not ((SGD_IDN_DEV_FINITE and a == ALGO_SGD) or (XLIN_IDN_DEV_FINITE and a != ALGO_SGD)):
         _finite(x, Int(py=dims[2]), "X")
         _finite(y, Int(py=dims[3]), "y")
     with GILReleased(Python()):
