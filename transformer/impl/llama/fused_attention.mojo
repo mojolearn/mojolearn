@@ -632,6 +632,28 @@ instantiates them at 16 rows, which halves a block's threadgroup page
 the Apple column where a 256-thread block with a 27.6 KB page sits alone on
 a core. The chains per row are the same; only which block owns a row moves."""
 
+comptime ATTN_FWD_TQ_RULE = (
+    is_defined["MOJOLEARN_ATTN_FWD_TQ_RULE"]()
+    and not is_defined["MOJOLEARN_ATTN_FWD_TQ16"]()
+    and not is_defined["MOJOLEARN_ATTN_TILE_RULE_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and lib_smem_page_fits_for[TARGET_COLUMN, _fwd_r2_page_bytes(16, True)]()
+)
+"""lane/nr-attn (2026-10-04), CANDIDATE (opt-in `-D
+MOJOLEARN_ATTN_FWD_TQ_RULE=1`): the lane/neural-pass46/pass59 forward TQ16
+arm ported onto the per-launch tile rule. The shipped estash forward
+(`_launch_fwd_r2_keep`, NVIDIA's and AMD's default word) takes its query
+rows per block (16 or 32) from `attn_fwd_rows_for`, i.e.
+`attn_rows_tile_rule` over `b * n_heads` groups of `l` rows at two waves
+(the dk/dv rule's: an output and a score accumulator per thread), instead of
+the comptime `ATTN_FWD_TQ`. Compiled only when the 16-row Q-resident page
+fits the column (`lib_smem_page_fits_for`; NVIDIA's 48 KB static page; the
+r2 page at 16 rows is about 11.5 KB, the MFMA copy's 10.4 KB). The page fix
+of lane/neural-pass59 ba90adec2 / pass67 dec693302 (the page never smaller
+than the V tile) is already in both kernels. Which block owns a row touches
+no chain: same bits at either tile, on every vendor. The forward's `ran`
+word keeps reporting 32 rows, as the comptime TQ16 arm did."""
+
 
 def _attn_arm_base_from_name(base: String, full: String) raises -> Int:
     """The first-round base of an arm name (section 12.1)."""
@@ -4465,6 +4487,12 @@ def attn_dq_rows_for(ctx: DeviceContext, b: Int, nh: Int, l: Int, hd: Int) -> In
     comptime if ATTN_DQ_TQ_PINNED:
         return ATTN_DQ_TQ
     return attn_rows_tile_rule(b * nh, l, hd, attn_device_units(ctx), 4, 16, 64)
+
+
+def attn_fwd_rows_for(ctx: DeviceContext, b: Int, nh: Int, l: Int) -> Int:
+    """Query rows per block (16 or 32) of the shipped estash forward under
+    `ATTN_FWD_TQ_RULE`: the tile rule at two waves, head_dim 64."""
+    return attn_rows_tile_rule(b * nh, l, ATTN_STASH_HD, attn_device_units(ctx), 2, 16, 32)
 
 
 def attn_dkdv_keys_r32_for(ctx: DeviceContext, b: Int, nkv: Int, s: Int, hd: Int) -> Int:
@@ -10863,11 +10891,22 @@ def fused_forward_launch_estash_ran(
                             scale,
                         )
                 else:
-                    _launch_fwd_r2_keep[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, False, ATTN_DEFAULT_BSWZ](
-                        ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
-                        k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
-                        scale,
-                    )
+                    var fwd_tq = ATTN_FWD_TQ
+                    comptime if ATTN_FWD_TQ_RULE:
+                        fwd_tq = attn_fwd_rows_for(ctx, b, nh, l)
+                    if fwd_tq == 16 and ATTN_FWD_TQ != 16:
+                        comptime if ATTN_FWD_TQ_RULE:
+                            _launch_fwd_r2_keep[ATTN_STASH_HD, 16, True, True, False, ATTN_DEFAULT_BSWZ](
+                                ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
+                                k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
+                                scale,
+                            )
+                    else:
+                        _launch_fwd_r2_keep[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, False, ATTN_DEFAULT_BSWZ](
+                            ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
+                            k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
+                            scale,
+                        )
             # DEVIATION 2900 leaves the FORWARD's `ran` word alone: the
             # word `fused_attention_arm_forward_resolved` predicts has no
             # estash slot either, and the backward's word carries the bit
