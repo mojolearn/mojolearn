@@ -103,6 +103,7 @@ from std.sys.compile import is_defined
 from std.sys.info import is_amd_gpu
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from max.gpu.host.device_attribute import DeviceAttribute
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
 from core.step_phase import (
@@ -4245,6 +4246,130 @@ comptime TILED_TT = 16
 """Queries per staged tile of `fused_bwd_dkdv_tiled_kernel`."""
 
 
+#: lane/no-bench-tuning-2 (2026-10-04): the two constants above were measured
+#: at one board shape (192 dq blocks / 384 dkdv blocks on 142 SMs and 304
+#: CUs). They now stay only as the explicit A/B arms and as the rollback:
+#: `-D MOJOLEARN_ATTN_TILE_RULE_OFF=1` (or any explicit DQ_TQ* / DKDV_BJ*
+#: define) launches the comptime constants exactly as before. By default the
+#: rows (dq) or keys (dkdv) per block are chosen per launch from the grid,
+#: the head size and the device by one stated rule, `attn_rows_tile_rule`:
+#:   - the largest tile in [lo, hi] (powers of two) whose grid
+#:     `groups * ceil(rows / tile)` still gives every SM / CU at least
+#:     `per_sm = max(1, waves * 64 // max(hd, 64))` blocks; `lo` if none does;
+#:   - never a tile at least twice the sequence (half its rows would idle);
+#:   - `waves` = 4 for dq (one accumulator set per thread) and 2 for dk/dv
+#:     (two sets, dk and dv, so about half the blocks fit per SM); a head
+#:     twice as wide doubles the accumulators per thread and halves `per_sm`.
+#: Reproduces the measured picks at the board (L40S dq 16 / dkdv 32, MI325X
+#: 16 / 16, M2 Pro 64 / 32) and moves with sequence length, head size and
+#: device for every other shape. Which thread or block holds a cell's chain
+#: is an execution-plan choice the contract does not read: same bits at
+#: every tile, on every vendor (no host-column change).
+comptime ATTN_TILE_RULE_OFF = is_defined["MOJOLEARN_ATTN_TILE_RULE_OFF"]()
+comptime ATTN_DQ_TQ_PINNED = (
+    ATTN_TILE_RULE_OFF
+    or is_defined["MOJOLEARN_ATTN_DQ_TQ16"]()
+    or is_defined["MOJOLEARN_ATTN_DQ_TQ32"]()
+    or is_defined["MOJOLEARN_ATTN_DQ_TQ64"]()
+)
+comptime ATTN_DKDV_BJ_PINNED = (
+    ATTN_TILE_RULE_OFF
+    or is_defined["MOJOLEARN_ATTN_DKDV_BJ16"]()
+    or is_defined["MOJOLEARN_ATTN_DKDV_BJ32"]()
+)
+
+
+def attn_device_units(ctx: DeviceContext) -> Int:
+    """SMs (NVIDIA) or CUs (AMD) of `ctx`; 0 when the driver does not report
+    it (the rule then takes the largest tile)."""
+    try:
+        return ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+    except:
+        return 0
+
+
+def attn_rows_tile_rule(
+    groups: Int, rows: Int, hd: Int, units: Int, waves: Int, lo: Int, hi: Int
+) -> Int:
+    """The tile rule stated above `ATTN_TILE_RULE_OFF`. Pure: the checks call
+    it at neighbor shapes."""
+    var per_sm = waves * 64 // max(hd, 64)
+    if per_sm < 1:
+        per_sm = 1
+    var want = per_sm * units
+    var t = hi
+    while t > lo and (t // 2) >= rows:
+        t //= 2
+    while t > lo:
+        if groups * ((rows + t - 1) // t) >= want:
+            return t
+        t //= 2
+    return lo
+
+
+def attn_dq_rows_for(ctx: DeviceContext, b: Int, nh: Int, l: Int, hd: Int) -> Int:
+    """Query rows per block of `fused_bwd_dq_tiled_pf_kernel` for this launch."""
+    comptime if ATTN_DQ_TQ_PINNED:
+        return ATTN_DQ_TQ
+    return attn_rows_tile_rule(b * nh, l, hd, attn_device_units(ctx), 4, 16, 64)
+
+
+def attn_dkdv_keys_r32_for(ctx: DeviceContext, b: Int, nkv: Int, s: Int, hd: Int) -> Int:
+    """Keys per block of the `_r32` dk/dv arm (16 or 32) for this launch."""
+    comptime if ATTN_DKDV_BJ_PINNED:
+        return ATTN_DKDV_BJ_R32
+    return attn_rows_tile_rule(b * nkv, s, hd, attn_device_units(ctx), 2, 16, 32)
+
+
+def _enqueue_dq_tiled_pf[HD: Int, SWZ: Bool = False](
+    ctx: DeviceContext,
+    tq: Int,
+    mut dq: DeviceBuffer[DType.float32],
+    mut corner: DeviceBuffer[DType.float32],
+    mut y_st: DeviceBuffer[DType.float32],
+    mut dy_st: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut zdot: DeviceBuffer[DType.float32],
+    b: Int, l: Int, nh: Int, nkv: Int, s: Int, pos0: Int, key_lo: Int,
+    window: Int, scale: Float32,
+    mut dctx: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+) raises:
+    """`fused_bwd_dq_tiled_pf_kernel` at `tq` rows per block (16, 32 or 64,
+    from `attn_dq_rows_for`); same bits at each."""
+    var blocks = b * nh * ((l + tq - 1) // tq)
+    if tq == 16:
+        comptime k16 = fused_bwd_dq_tiled_pf_kernel[HD, SWZ, 16]
+        ctx.enqueue_function[k16](
+            dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+            dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
+            Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
+            Int32(pos0), Int32(key_lo), Int32(window), scale,
+            dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
+            grid_dim=(blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+        )
+    elif tq == 32:
+        comptime k32 = fused_bwd_dq_tiled_pf_kernel[HD, SWZ, 32]
+        ctx.enqueue_function[k32](
+            dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+            dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
+            Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
+            Int32(pos0), Int32(key_lo), Int32(window), scale,
+            dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
+            grid_dim=(blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+        )
+    else:
+        comptime k64 = fused_bwd_dq_tiled_pf_kernel[HD, SWZ, 64]
+        ctx.enqueue_function[k64](
+            dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+            dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
+            Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
+            Int32(pos0), Int32(key_lo), Int32(window), scale,
+            dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
+            grid_dim=(blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+        )
+
+
 def fused_bwd_dq_tiled_kernel[HD: Int, SABOTAGE: Bool](
     dq: MutPointer[Float32, MutAnyOrigin],
     corner: MutPointer[Float32, MutAnyOrigin],
@@ -5013,7 +5138,7 @@ def _masked_tail_dy[HD: Int](
 
 
 @__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(ATTN_DQ_LAUNCH_BOUND)))
-def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
+def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False, TQP: Int = ATTN_DQ_TQ](
     dq: MutPointer[Float32, MutAnyOrigin],
     corner: MutPointer[Float32, MutAnyOrigin],
     y_st: MutPointer[Float32, MutAnyOrigin],
@@ -5034,9 +5159,12 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
 ):
     """`fused_bwd_dq_tiled_kernel` (clean) with the dq fold stepped by
     `_step_preflushed` (DEVIATION 2533): `dcell` is a `_pmul` output and the
-    K tile is staged through `ftz`. 256 threads; `TQ = 64` rows per block."""
+    K tile is staged through `ftz`. 256 threads; `TQ = TQP` rows per block
+    (16, 32 or 64; `attn_dq_rows_for` picks it per launch). The rows a block
+    holds touch no chain: same bits at every TQ."""
     _attn_mode_enter()
-    comptime TQ = ATTN_DQ_TQ
+    comptime TQ = TQP
+    comptime assert TQ == 16 or TQ == 32 or TQ == 64, "dq_tiled_pf rows per block"
     comptime RPT = TQ // 16
     comptime CPT = HD // 16
     comptime TK = TILED_TK
@@ -9140,17 +9268,12 @@ def _launch_bwd_stash_tiled_pf[HD: Int, ZSAB: Bool](
             block_dim=(FUSED_THREADS, 1, 1),
         )
     _attn_tick(ctx, on, tk, "bwd_zdot_stash_pf")
-    var dq_blocks = b * nh * ((l + ATTN_DQ_TQ - 1) // ATTN_DQ_TQ)
     var kv_blocks = b * nkv * ((s + 63) // 64)
-    comptime qp = fused_bwd_dq_tiled_pf_kernel[HD]
     step_count_launch()
-    ctx.enqueue_function[qp](
-        dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
-        dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
-        Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
-        Int32(pos0), Int32(key_lo), Int32(window), scale,
-        dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
-        grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+    _enqueue_dq_tiled_pf[HD](
+        ctx, attn_dq_rows_for(ctx, b, nh, l, HD), dq, corner, y_st, dy_st,
+        k_cache, zdot, b, l, nh, nkv, s, pos0, key_lo, window, scale, dctx,
+        v_cache,
     )
     _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
     comptime kvp = fused_bwd_dkdv_tiled_pf_kernel[HD]
@@ -9324,16 +9447,11 @@ def _launch_bwd_stash_zdq_pf[HD: Int](
         _attn_tick(ctx, on, tk, "bwd_zdot_zdefer_pf")
     else:
         _attn_tick(ctx, on, tk, "bwd_zdot_stash_pf")
-    var dq_blocks = b * nh * ((l + ATTN_DQ_TQ - 1) // ATTN_DQ_TQ)
-    comptime qp = fused_bwd_dq_tiled_pf_kernel[HD]
     step_count_launch()
-    ctx.enqueue_function[qp](
-        dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
-        dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
-        Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
-        Int32(pos0), Int32(key_lo), Int32(window), scale,
-        dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
-        grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+    _enqueue_dq_tiled_pf[HD](
+        ctx, attn_dq_rows_for(ctx, b, nh, l, HD), dq, corner, y_st, dy_st,
+        k_cache, zdot, b, l, nh, nkv, s, pos0, key_lo, window, scale, dctx,
+        v_cache,
     )
     _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
 
@@ -9749,7 +9867,6 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
     else:
         _attn_tick(ctx, on, tk, "bwd_zdot_estash_pf")
     var dq_blocks = b * nh * ((l + ATTN_DQ_TQ - 1) // ATTN_DQ_TQ)
-    comptime qp = fused_bwd_dq_tiled_pf_kernel[HD, SWZ]
     step_count_launch()
     comptime if ATTN_DQ_MFMA and HD == 64:
         comptime qm = fused_bwd_dq_mfma_kernel[HD, SWZ]
@@ -9758,15 +9875,23 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
         else:
             ctx.enqueue_function[qm](dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(), dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale, dctx.unsafe_ptr(), v_cache.unsafe_ptr(), Float32(1.0), grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1))
     elif ATTN_V1_ALIAS_Y_ESTASH:
-        ctx.enqueue_function[qp](dq.unsafe_ptr(), corner.unsafe_ptr(), kept.unsafe_ptr(), dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale, dctx.unsafe_ptr(), v_cache.unsafe_ptr(), grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1))
+        _enqueue_dq_tiled_pf[HD, SWZ](ctx, attn_dq_rows_for(ctx, b, nh, l, HD), dq, corner, kept, dy_st, k_cache, zdot, b, l, nh, nkv, s, pos0, key_lo, window, scale, dctx, v_cache)
     else:
-        ctx.enqueue_function[qp](dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(), dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale, dctx.unsafe_ptr(), v_cache.unsafe_ptr(), grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1))
+        _enqueue_dq_tiled_pf[HD, SWZ](ctx, attn_dq_rows_for(ctx, b, nh, l, HD), dq, corner, y_st, dy_st, k_cache, zdot, b, l, nh, nkv, s, pos0, key_lo, window, scale, dctx, v_cache)
     _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
     if keys == 32:
-        comptime if ATTN_V1_ALIAS_Y_ESTASH:
-            _estash_dkdv_launch[HD, ATTN_DKDV_BJ_R32, SWZ](ctx, dk, dv, corner, kept, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
+        # Keys per block by `attn_dkdv_keys_r32_for` (the comptime
+        # `ATTN_DKDV_BJ_R32` under the OFF / explicit defines); same bits.
+        if attn_dkdv_keys_r32_for(ctx, b, nkv, s, HD) == 16:
+            comptime if ATTN_V1_ALIAS_Y_ESTASH:
+                _estash_dkdv_launch[HD, 16, SWZ](ctx, dk, dv, corner, kept, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
+            else:
+                _estash_dkdv_launch[HD, 16, SWZ](ctx, dk, dv, corner, y_st, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
         else:
-            _estash_dkdv_launch[HD, ATTN_DKDV_BJ_R32, SWZ](ctx, dk, dv, corner, y_st, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
+            comptime if ATTN_V1_ALIAS_Y_ESTASH:
+                _estash_dkdv_launch[HD, 32, SWZ](ctx, dk, dv, corner, kept, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
+            else:
+                _estash_dkdv_launch[HD, 32, SWZ](ctx, dk, dv, corner, y_st, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
     else:
         comptime if ATTN_V1_ALIAS_Y_ESTASH:
             _estash_dkdv_launch[HD, 64, SWZ](ctx, dk, dv, corner, kept, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
@@ -9846,15 +9971,11 @@ def _launch_bwd_ztiled[HD: Int, TQZ: Int, ZSAB: Bool, PF: Bool](
     var dq_blocks = b * nh * ((l + ATTN_DQ_TQ - 1) // ATTN_DQ_TQ)
     var kv_blocks = b * nkv * ((s + 63) // 64)
     comptime if PF:
-        comptime qp = fused_bwd_dq_tiled_pf_kernel[HD]
         step_count_launch()
-        ctx.enqueue_function[qp](
-            dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
-            dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
-            Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
-            Int32(pos0), Int32(key_lo), Int32(window), scale,
-            dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
-            grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+        _enqueue_dq_tiled_pf[HD](
+            ctx, attn_dq_rows_for(ctx, b, nh, l, HD), dq, corner, y_st, dy_st,
+            k_cache, zdot, b, l, nh, nkv, s, pos0, key_lo, window, scale, dctx,
+            v_cache,
         )
         _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
         comptime kvp = fused_bwd_dkdv_tiled_pf_kernel[HD]

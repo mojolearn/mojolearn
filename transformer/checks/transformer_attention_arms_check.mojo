@@ -140,6 +140,7 @@ from transformer.impl.llama.fused_attention import (
     fused_attention_arm_forward_resolved,
     fused_attention_arm_reach_bit,
     fused_attention_arm_zsched,
+    attn_rows_tile_rule,
     fused_backward_launch_estash_ran,
     fused_forward_launch_estash_ran,
 )
@@ -201,6 +202,45 @@ def arms() -> List[Int]:
     out.append(r3kv | ATTN_ARM_BWD_ESTASH | ATTN_ARM_BSWZ)
     out.append(r3kv | ATTN_ARM_BWD_ESTASH | ATTN_ARM_ESTASH_DRES | ATTN_ARM_BSWZ)
     return out^
+
+
+def _tile_case(
+    mut failures: List[String], name: String, groups: Int, rows: Int, hd: Int,
+    units: Int, waves: Int, hi: Int, want: Int,
+):
+    var got = attn_rows_tile_rule(groups, rows, hd, units, waves, 16, hi)
+    if got != want:
+        failures.append(
+            "tile rule " + name + ": groups " + String(groups) + " rows "
+            + String(rows) + " hd " + String(hd) + " units " + String(units)
+            + " -> " + String(got) + ", want " + String(want)
+        )
+
+
+def check_tile_rule(mut failures: List[String]):
+    """lane/no-bench-tuning-2: the dq rows / dkdv keys per block rule
+    (`attn_rows_tile_rule`) reproduces the board picks measured on the L40S
+    (142 SMs), MI325X (304 CUs) and M2 Pro (19 cores), and moves at the
+    neighbor shapes (other sequence lengths, head sizes, devices). The tile
+    touches no chain; the RAN-vs-eager cases below cover the bits."""
+    # Board: dq 48 (b*nh) x 256 rows, dkdv 48 (b*nkv) x 256 keys, hd 64.
+    _tile_case(failures, "dq board L40S", 48, 256, 64, 142, 4, 64, 16)
+    _tile_case(failures, "dq board MI325X", 48, 256, 64, 304, 4, 64, 16)
+    _tile_case(failures, "dq board M2 Pro", 48, 256, 64, 19, 4, 64, 64)
+    _tile_case(failures, "dq no unit count", 48, 256, 64, 0, 4, 64, 64)
+    _tile_case(failures, "dkdv board L40S", 48, 256, 64, 142, 2, 32, 32)
+    _tile_case(failures, "dkdv board MI325X", 48, 256, 64, 304, 2, 32, 16)
+    _tile_case(failures, "dkdv board M2 Pro", 48, 256, 64, 19, 2, 32, 32)
+    # Neighbors: long sequence, short sequence, wider head, one batch.
+    _tile_case(failures, "dq L 4096 B 1", 8, 4096, 64, 142, 4, 64, 32)
+    _tile_case(failures, "dq L 4096 B 8", 64, 4096, 64, 142, 4, 64, 64)
+    _tile_case(failures, "dq L 8", 48, 8, 64, 0, 4, 64, 16)
+    _tile_case(failures, "dq L 24", 48, 24, 64, 0, 4, 64, 32)
+    _tile_case(failures, "dq hd 128 L40S", 48, 256, 128, 142, 4, 64, 32)
+    _tile_case(failures, "dkdv hd 128 MI325X", 48, 256, 128, 304, 2, 32, 32)
+    _tile_case(failures, "dkdv L 1024 MI325X", 48, 1024, 64, 304, 2, 32, 32)
+    _tile_case(failures, "dkdv L 512 MI325X", 48, 512, 64, 304, 2, 32, 32)
+    _tile_case(failures, "dkdv L 384 MI325X", 48, 384, 64, 304, 2, 32, 16)
 
 
 def check_names(mut failures: List[String]) raises:
@@ -676,6 +716,7 @@ def main() raises:
         print("NOTE: no -D MOJOLEARN_ATTN_ARM_TRIAL=1: every non-default arm runs the default kernels; reach will FAIL")
     var failures = List[String]()
     check_names(failures)
+    check_tile_rule(failures)
     var ctx = DeviceContext()
     var all_cases = cases()
     var n = 0
