@@ -104,6 +104,8 @@ _OPS = dict(
     # none; bit 4: the blocked univariate scores, x_prep/select_blocked.mojo,
     # -D MOJOLEARN_IDN_SELECT_BLOCKED_OFF has none)
     csb1_ss=165, fcb_part=166, fcb_fin=167, frb_part1=168, frb_mean=169, frb_part2=170, frb_fin=171,
+    # bit 8: PowerTransformer's blocked folds, x_prep/pt_blocked.mojo, -D MOJOLEARN_IDN_PT_BLOCKED_OFF has none
+    ptb_part1=172, ptb_mean=173, ptb_part2=174, ptb_fin=175, ptb_step=176,
     # lane apple-fast-py2mojo-prep (x_prep/py2mojo.mojo, a range of its own): every binding
     # runs them (lane pyglue-numeric deleted the OFF arm and its Python loops)
     p2m_ccount=200, p2m_cscan=201, p2m_cstart=202, p2m_cwrite=203, p2m_rgather=204, p2m_smrows=205,
@@ -2299,7 +2301,7 @@ def _nb_counts(pr, wo, xo, n, d, yo, K, cnt, sums, thr=_NONE, neg=_NONE):
 
 #: binding -> its `x_prep_idn_fam` bits (0 when it has none), probed once
 _IDN_FAM = {}
-_IDN_STATS_BLOCKED, _IDN_CLASS_ONEPASS, _IDN_SELECT_BLOCKED = 1, 2, 4
+_IDN_STATS_BLOCKED, _IDN_CLASS_ONEPASS, _IDN_SELECT_BLOCKED, _IDN_PT_BLOCKED = 1, 2, 4, 8
 #: `_cls`: the most partial words (blocks x classes x columns) a blocked
 #: class_stats stage keeps; past it the serial stage (a function of the shape
 #: only, so the device and the host column agree)
@@ -2309,7 +2311,8 @@ _CLS_BLOCK_WORDS = 2 ** 26
 def _idn_fam(mode):
     """Lane fam-prep-metrics: the IDENTICAL binding's family switches
     (bindings/_mojolearn_x_prep*.mojo `idn_fam_binding`: 1 IDN_STATS_BLOCKED,
-    2 IDN_CLASS_ONEPASS, 4 IDN_SELECT_BLOCKED), 0 on another tier or a build
+    2 IDN_CLASS_ONEPASS, 4 IDN_SELECT_BLOCKED, 8 IDN_PT_BLOCKED, 16
+    IDN_RR_EIGH: informational), 0 on another tier or a build
     with none. The device and the host column export the same bits, so both
     stage the same program."""
     if mode != "identical":
@@ -3441,7 +3444,12 @@ class PowerTransformer(_PrepBase):
         xo = pr.put(arr)
         st, lam = pr.alloc(6 * d), pr.alloc(d)
         _cs(pr, mode, xo, n, d, st)
-        if _optional_prep_entry(_prep_binding(mode), "x_prep_host_column") is not None:
+        # lane fam-prep-metrics, IDN_PT_BLOCKED (IDENTICAL, `_idn_fam` bit 8): every fold of the
+        # search by row blocks (x_prep/pt_blocked.mojo). The host column then stages the SAME
+        # program as the device (its pt_fit folds in row order), so both take the blocked order.
+        fam_pt = _blocked() and bool(_idn_fam(mode) & _IDN_PT_BLOCKED)
+        nb = (n + _XB - 1) // _XB
+        if not fam_pt and _optional_prep_entry(_prep_binding(mode), "x_prep_host_column") is not None:
             # the host binding: its own pt_fit (x_prep/host/power.mojo), the same words
             pr.stage("pt_fit", d, xo, n, d, method, st, lam)
         else:
@@ -3474,13 +3482,23 @@ class PowerTransformer(_PrepBase):
                 pr.stage("pt_init", d, method, st, d, lam, state, leval)
                 if not tiled:
                     pr.stage("pt_log", n * d, xo, n, d, method, lg)
+                if fam_pt:
+                    bps, bpc, bss = pr.work(nb * d * mmax), pr.work(nb * d * mmax), pr.work(nb * d * mmax)
+                    bpj, bmean, bcnt = pr.work(nb * d), pr.work(d * mmax), pr.work(d * mmax)
                 k0 = 0
                 while k0 <= _PT_EVALS - 2:
                     steps = 2 if k0 == 0 else min(spec, _PT_EVALS - 1 - k0)
                     m = 2 if k0 == 0 else 2 ** steps - 1
                     pr.stage("pt_spts", d, state, leval, spl, m, k0)
                     pr.stage("pt_smap", m * n * d, xo, n, d, method, spl, m, tv, lg, il)
-                    pr.stage("pt_sfold", d * m, xo, n, d, method, tv, m, state, spl, vals, 1 if k0 == 0 else 0, il)
+                    if fam_pt:
+                        first = 1 if k0 == 0 else 0
+                        pr.stage("ptb_part1", nb * d * m, xo, n, d, method, tv, m, state, bps, bpc, bpj, nb, first, il)
+                        pr.stage("ptb_mean", d * m, bps, bpc, bpj, nb, d, m, state, bmean, bcnt, first)
+                        pr.stage("ptb_part2", nb * d * m, tv, n, d, m, state, bmean, bcnt, bss, nb, il)
+                        pr.stage("ptb_fin", d * m, bss, nb, d, m, state, spl, vals, bcnt)
+                    else:
+                        pr.stage("pt_sfold", d * m, xo, n, d, method, tv, m, state, spl, vals, 1 if k0 == 0 else 0, il)
                     pr.stage("pt_sres", d, state, leval, m, vals, k0, steps, lam)
                     k0 += steps
             else:
@@ -3489,10 +3507,21 @@ class PowerTransformer(_PrepBase):
                 pr.stage("pt_init", d, method, st, d, lam, state, leval)
                 if not tiled:
                     pr.stage("pt_log", n * d, xo, n, d, method, lg)
+                if fam_pt:
+                    bps, bpc, bss = pr.work(nb * d), pr.work(nb * d), pr.work(nb * d)
+                    bpj, bmean, bcnt = pr.work(nb * d), pr.work(d), pr.work(d)
                 for k in range(_PT_EVALS):
                     # tiled: the device skips pt_map and fuses it into pt_fold (LG1 = 0 either way)
                     pr.stage("pt_map", n * d, xo, n, d, method, leval, tv, 0 if tiled else lg + 1)
-                    pr.stage("pt_fold", d, xo, n, d, method, tv, k, state, leval, lam)
+                    if fam_pt:
+                        # one candidate a column (M = 1, contiguous): the blocked fold, then pt_finish's step
+                        first = 1 if k == 0 else 0
+                        pr.stage("ptb_part1", nb * d, xo, n, d, method, tv, 1, state, bps, bpc, bpj, nb, first, 0)
+                        pr.stage("ptb_mean", d, bps, bpc, bpj, nb, d, 1, state, bmean, bcnt, first)
+                        pr.stage("ptb_part2", nb * d, tv, n, d, 1, state, bmean, bcnt, bss, nb, 0)
+                        pr.stage("ptb_step", d, xo, n, d, method, tv, k, state, leval, lam, bss, nb, bcnt)
+                    else:
+                        pr.stage("pt_fold", d, xo, n, d, method, tv, k, state, leval, lam)
         mean, scale = pr.alloc(d), pr.alloc(d)
         if self.standardize:
             # PT_FUSED_TRANSFORM (bit 4, FAST + Apple): the device folds col_stats of the transform
