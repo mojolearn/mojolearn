@@ -3,7 +3,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # batchv_smoke.sh: import smoke, FAST mode, for the lane/apple-fast-batchv
 # defaults (x_prep/fastpt.mojo PowerTransformer / col_stats row-tiled grids,
-# kde/impl/neighbors/kernel_density.mojo KDE_DIMTILE). One line per
+# kde/impl/neighbors/kernel_density.mojo KDE_DIMTILE,
+# hdbscan HDB_SMR_TILED). One line per
 # estimator, then BATCHV-SMOKE status=ok|FAIL. Run in a built tree (wrap in
 # ~/mq/ensure_so.sh). Times nothing.
 set -u
@@ -14,6 +15,7 @@ import traceback
 import numpy as np
 from mojolearn._expansion_prep import PowerTransformer, SimpleImputer, _ptimpute_flags
 from mojolearn.density import KernelDensity
+from mojolearn.hdbscan import HDBSCAN
 
 r = np.random.default_rng(0)
 bad = []
@@ -57,7 +59,17 @@ def kde():
     return s.shape == (500,) and np.isfinite(s).all(), "mean_ll=%.4f" % s.mean()
 
 
+def hdb():
+    # d = 80 > 64: the sparse arm, HDB_SMR_TILED's kernel
+    c = r.standard_normal((4, 80)) * 6
+    X = (c[r.integers(0, 4, 3000)] + r.standard_normal((3000, 80))).astype(np.float32)
+    lab = np.asarray(HDBSCAN(min_cluster_size=50).fit(X).labels_)
+    k = len(set(lab.tolist()) - {-1})
+    return lab.shape == (3000,) and k >= 2, "n_clusters=%d noise=%.3f" % (k, float((lab == -1).mean()))
+
+
 check("power-transformer", pt)
+check("hdbscan", hdb)
 check("simple-imputer", si)
 check("kde", kde)
 print("BATCHV-SMOKE status=%s%s" % ("FAIL " if bad else "ok", " ".join(bad)))
