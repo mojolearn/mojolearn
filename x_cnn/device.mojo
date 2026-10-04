@@ -50,6 +50,11 @@ from x_cnn.ops import (
     sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at, gather_rows_at, argmax_row_at,
     chan_slice_at, chan_place_at,
 )
+# lane fam2-neural (2026-10-04): the device loss fold, epoch order and Adam step scalars
+from x_cnn.ops import (
+    IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan, EP_LEN, epoch_rows_at, epoch_rows_prm,
+    AH_ROW, adam_hyper_at,
+)
 
 comptime TPB = 256
 #: lane/cnn-apple2: the FAST tier on Apple measures its GEMM plans (the
@@ -1220,6 +1225,29 @@ def linear_backward_into[resident: Bool = False](
     linear_backward_m([_a(x), _a(w), _a(g), _a(gx_out), _a(gw_out), _a(gb_out)], 63 if resident else 0, n, d_in, d_out)
 
 
+def fold_launch(ctx: DeviceContext, a: FP, b: FP, final_dst: FP, pp: IP, count: Int) raises:
+    """lane fam2-neural: the blocked fold of a[0:count] (`blk_fold_at`, the
+    levels of `fold_plan` at `pp`): level sums ping-pong between `a` and
+    `b` (b holds ceil(count / LOSS_FOLD_BLOCK) words); the last level writes
+    its one word to final_dst[the plan's index]. Enqueues only."""
+    var c = count
+    var src = a
+    var dst = b
+    var lvl = 0
+    while True:
+        var nb = (c + LOSS_FOLD_BLOCK - 1) // LOSS_FOLD_BLOCK
+        var lp_ = pp + 3 * lvl
+        if nb <= 1:
+            launch[blk_fold_at](ctx, src, final_dst, final_dst, final_dst, lp_, lp_, 1)
+            break
+        launch[blk_fold_at](ctx, src, dst, dst, dst, lp_, lp_, nb)
+        var t = src
+        src = dst
+        dst = t
+        c = nb
+        lvl += 1
+
+
 def softmax_xent_into[resident: Bool = False](
     logits: FP, labels: IP, n: Int, k: Int, grad_out: FP, proba_out: FP
 ) raises -> Float32:
@@ -1235,6 +1263,35 @@ def softmax_xent_into[resident: Bool = False](
     grad.enqueue_fill(Float32(0))
     rl.enqueue_fill(Float32(0))
     launch[softmax_xent_row_at](ctx, fp(dl), fp(grad), fp(proba), fp(rl), ip(dy), ip(dp), n)
+    comptime if IDN_XENT_DEV_FOLD:
+        # lane fam2-neural: the mean is folded on the device (`blk_fold_at`,
+        # the host column's fold too); one word comes down instead of n
+        if n > 0:
+            var fprm = fold_plan(n, n, 0)
+            var dfp = put_prm(ctx, 7, fprm)
+            var pong = ws(ctx, 6, (n + LOSS_FOLD_BLOCK - 1) // LOSS_FOLD_BLOCK)
+            var red = ws(ctx, 8, 1)
+            fold_launch(ctx, fp(rl), fp(pong), fp(red), ip(dfp), n)
+            var mean = List[Float32](length=1, fill=Float32(0))
+            fetch[resident](ctx, grad, grad_out, n * k)
+            fetch[resident](ctx, proba, proba_out, n * k)
+            down(ctx, red, lp(mean), 1)
+            ctx.synchronize()
+            var loss = mean[0]
+            _ = mean^
+            _ = fprm^
+            _ = prm^
+            _ = dfp^
+            _ = pong^
+            _ = red^
+            _ = dl^
+            _ = dy^
+            _ = dp^
+            _ = grad^
+            _ = proba^
+            _ = rl^
+            _ = ctx^
+            return loss
     var rows = List[Float32](length=n, fill=Float32(0))
     fetch[resident](ctx, grad, grad_out, n * k)
     fetch[resident](ctx, proba, proba_out, n * k)
@@ -2097,6 +2154,172 @@ def res_gather_pair(
     _ = prm^
     _ = di^
     _ = dp^
+    _ = ctx^
+
+
+# ------------------------------------------------ lane fam2-neural: the device epoch
+# IDN_CNN_EPOCH_DEV (x_cnn/ops.mojo): the pieces `x_cnn_fit_epoch_d` runs so
+# a fit epoch has no host arithmetic and one download (its losses).
+
+
+def epoch_rows_download(dst: IP, n: Int, pos: Int, count: Int, shuffle: Bool, key: UInt64) raises:
+    """Host dst[0:count] = positions pos .. pos + count - 1 of the epoch's
+    order over n rows (`epoch_rows_at` on the device, then down): for the
+    trainers whose batch is gathered from host memory."""
+    if count <= 0:
+        return
+    var ctx = cnn_ctx()
+    var prm = epoch_rows_prm(n, pos, shuffle, key)
+    var dp = put_prm(ctx, 1, prm)
+    var out = ws_i(ctx, 0, count)
+    var none = ws(ctx, 2, 1)
+    launch[epoch_rows_at](ctx, fp(none), fp(none), fp(none), fp(none), ip(out), ip(dp), count)
+    down_i(ctx, out, dst, count)
+    ctx.synchronize()
+    _ = prm^
+    _ = dp^
+    _ = out^
+    _ = none^
+    _ = ctx^
+
+
+def res_gather_pair_perm(
+    dst_addr: Int, src_addr: Int, row: Int, dst2_addr: Int, src2_addr: Int, row2: Int, n: Int, pos: Int,
+    m: Int, shuffle: Bool, key: UInt64,
+) raises:
+    """`res_gather_pair` with the step's rows computed on the device
+    (`epoch_rows_at`, positions pos .. pos + m - 1 of the epoch over n rows)
+    instead of uploaded: nothing crosses the bus."""
+    if m <= 0:
+        return
+    var ctx = cnn_ctx()
+    var prm = epoch_rows_prm(n, pos, shuffle, key)
+    prm.append(Int32(row))
+    prm.append(Int32(row2))
+    var dp = put_prm(ctx, 1, prm)
+    var pp = ip(dp)
+    var di = ws_i(ctx, 0, m)
+    launch[epoch_rows_at](
+        ctx, FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr),
+        FP(unsafe_from_address=dst_addr), ip(di), pp, m,
+    )
+    if row > 0:
+        launch[gather_rows_at](
+            ctx, FP(unsafe_from_address=src_addr), FP(unsafe_from_address=dst_addr),
+            FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr), ip(di), pp + EP_LEN, m * row,
+        )
+    if row2 > 0:
+        launch[gather_rows_at](
+            ctx, FP(unsafe_from_address=src2_addr), FP(unsafe_from_address=dst2_addr),
+            FP(unsafe_from_address=dst2_addr), FP(unsafe_from_address=dst2_addr), ip(di), pp + EP_LEN + 1,
+            m * row2,
+        )
+    ctx.synchronize()
+    _ = prm^
+    _ = di^
+    _ = dp^
+    _ = ctx^
+
+
+def adam_hyper_resident(base: List[Float32], step0: Int, nsteps: Int, dst_addr: Int) raises:
+    """Resident dst[9 t : 9 t + 9] = Adam's hyper block of 1-based step
+    step0 + t for t < nsteps (`adam_hyper_at`, one thread per step)."""
+    if nsteps <= 0:
+        return
+    var ctx = cnn_ctx()
+    var db = put_hyper(ctx, 3, base)
+    var prm: List[Int32] = [Int32(step0)]
+    var dp = put_prm(ctx, 4, prm)
+    var dst = FP(unsafe_from_address=dst_addr)
+    launch[adam_hyper_at](ctx, fp(db), dst, dst, dst, ip(dp), ip(dp), nsteps)
+    ctx.synchronize()
+    _ = prm^
+    _ = db^
+    _ = dp^
+    _ = ctx^
+
+
+def adam_hyper_download(base: List[Float32], step0: Int, nsteps: Int, dst: FP) raises:
+    """Host dst[0 : 9 nsteps] = the same blocks (for the per-step entries,
+    which take the block from the caller)."""
+    if nsteps <= 0:
+        return
+    var ctx = cnn_ctx()
+    var db = put_hyper(ctx, 3, base)
+    var prm: List[Int32] = [Int32(step0)]
+    var dp = put_prm(ctx, 4, prm)
+    var out = ws(ctx, 5, nsteps * AH_ROW)
+    launch[adam_hyper_at](ctx, fp(db), fp(out), fp(out), fp(out), ip(dp), ip(dp), nsteps)
+    down(ctx, out, dst, nsteps * AH_ROW)
+    ctx.synchronize()
+    _ = prm^
+    _ = db^
+    _ = dp^
+    _ = out^
+    _ = ctx^
+
+
+def opt_many_resident_h[adam: Bool](
+    ws_: List[Int], gs: List[Int], bs: List[Int], ns: List[Int], hyper_addr: Int
+) raises:
+    """`opt_many_resident` with the step's hyper block already on the device
+    at `hyper_addr` (a row of the epoch's resident block): no upload."""
+    var ctx = cnn_ctx()
+    var prm = List[Int32]()
+    for j in range(len(ns)):
+        prm.append(Int32(ns[j]))
+    var dp = put_prm(ctx, 4, prm)
+    var pp = ip(dp)
+    var ph = FP(unsafe_from_address=hyper_addr)
+    for j in range(len(ns)):
+        var pw = FP(unsafe_from_address=ws_[j])
+        var pg = FP(unsafe_from_address=gs[j])
+        var pb = FP(unsafe_from_address=bs[j])
+        comptime if adam:
+            launch[adam_at](ctx, pw, pg, pb, ph, pp + j, pp + j, ns[j])
+        else:
+            launch[sgd_at](ctx, pw, pg, pb, ph, pp + j, pp + j, ns[j])
+    ctx.synchronize()
+    _ = prm^
+    _ = dp^
+    _ = ctx^
+
+
+def softmax_xent_res_loss(
+    logits: FP, labels: IP, n: Int, k: Int, grad_out: FP, proba_out: FP, loss_addr: Int, index: Int
+) raises:
+    """`softmax_xent_into[True]` with the mean loss left on the device:
+    resident loss[index] = the blocked fold of the row losses over n
+    (`blk_fold_at`, what `softmax_xent_into` returns under
+    IDN_XENT_DEV_FOLD). Nothing comes down."""
+    if n <= 0:
+        return
+    var ctx = cnn_ctx()
+    var dl = view(ctx, logits, n * k)
+    var dy = view_i(ctx, labels, n)
+    var prm: List[Int32] = [Int32(n), Int32(k)]
+    var dp = put_prm(ctx, 2, prm)
+    var grad = view(ctx, grad_out, n * k)
+    var proba = view(ctx, proba_out, n * k)
+    var rl = ws(ctx, 5, n)
+    grad.enqueue_fill(Float32(0))
+    rl.enqueue_fill(Float32(0))
+    launch[softmax_xent_row_at](ctx, fp(dl), fp(grad), fp(proba), fp(rl), ip(dy), ip(dp), n)
+    var fprm = fold_plan(n, n, index)
+    var dfp = put_prm(ctx, 7, fprm)
+    var pong = ws(ctx, 6, (n + LOSS_FOLD_BLOCK - 1) // LOSS_FOLD_BLOCK)
+    fold_launch(ctx, fp(rl), fp(pong), FP(unsafe_from_address=loss_addr), ip(dfp), n)
+    ctx.synchronize()
+    _ = fprm^
+    _ = prm^
+    _ = dfp^
+    _ = pong^
+    _ = dl^
+    _ = dy^
+    _ = dp^
+    _ = grad^
+    _ = proba^
+    _ = rl^
     _ = ctx^
 
 

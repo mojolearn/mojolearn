@@ -1462,3 +1462,295 @@ def l2norm_bwd_at(r: Int, y: FP, g: FP, aux: FP, dst: FP, q: IP, p: IP):
     for f in range(F):
         var t = ftz(ftz(g.unsafe_load(r * F + f)) - ftz(identical_mul(ftz(y.unsafe_load(r * F + f)), dot)))
         dst.unsafe_store(r * F + f, ftz(identical_div(t, den)))
+
+
+# ------------------------------------------------- lane fam2-neural (2026-10-04)
+# CNNClassifier.fit's last host steps, as element functions every column
+# runs (the device launches them; x_cnn/host/ops_host.mojo loops them):
+#
+# IDN_XENT_DEV_FOLD: the mean of the softmax row losses was n words read
+#   back and folded on the host in row order (`seq_mean`). It is now a
+#   BLOCKED fold on the device: blocks of LOSS_FOLD_BLOCK consecutive values
+#   folded ascending, the block sums folded the same way, level by level,
+#   and one division by n at the last level (`blk_fold_at`). The fold order
+#   depends on n alone; the host column runs the same function, so the bits
+#   move on all four columns together. `-D MOJOLEARN_IDN_XENT_DEV_FOLD_OFF`.
+# IDN_CNN_EPOCH_DEV: (a) the epoch's row order was a Fisher-Yates walk on the
+#   CPU (`epoch_order_i32`), uploaded per step. It is now a counter-based
+#   permutation each thread computes for its own position (`epoch_rows_at`:
+#   a six-round Feistel network over the smallest even-width domain holding
+#   n, cycle-walked into [0, n); 32-bit integers only). (b) Adam's step
+#   scalars were double arithmetic on the CPU (`adam_hyper_f64`). They are
+#   now computed on the device per step (`adam_hyper_at`) in double-float32
+#   arithmetic (error-free sums and Dekker products, every product pinned),
+#   about 2^-45 relative before the final rounding to float32. Both change
+#   bits, on every column together. `-D MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF`.
+comptime _FAM2_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime IDN_XENT_DEV_FOLD = _FAM2_IDN and not is_defined["MOJOLEARN_IDN_XENT_DEV_FOLD_OFF"]()
+comptime IDN_CNN_EPOCH_DEV = IDN_XENT_DEV_FOLD and not is_defined["MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF"]()
+comptime LOSS_FOLD_BLOCK = 32
+
+
+@always_inline
+def blk_fold_at(t: Int, src: FP, dst: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """dst[p[2] + t] = src[t*B : min((t+1)*B, p[0])] added ascending from
+    +0.0 (B = LOSS_FOLD_BLOCK); when p[1] > 0 (the last level) the sum is
+    divided by p[1]."""
+    var count = _g(p, 0)
+    var div = _g(p, 1)
+    var lo = t * LOSS_FOLD_BLOCK
+    var hi = lo + LOSS_FOLD_BLOCK
+    if hi > count:
+        hi = count
+    var acc = Float32(0)
+    for i in range(lo, hi):
+        acc = ftz(acc + ftz(src.unsafe_load(i)))
+    if div > 0:
+        acc = ftz(identical_div(acc, Float32(div)))
+    dst.unsafe_store(_g(p, 2) + t, canon(acc))
+
+
+def fold_plan(count: Int, div: Int, index: Int) -> List[Int32]:
+    """`blk_fold_at`'s parameter triples, one per level, for `count` values:
+    [values at this level, 0, 0] until the level that leaves one block,
+    which is [values, div, index]."""
+    var prm = List[Int32]()
+    var c = count
+    while True:
+        var nb = (c + LOSS_FOLD_BLOCK - 1) // LOSS_FOLD_BLOCK
+        var last = nb <= 1
+        prm.append(Int32(c))
+        prm.append(Int32(div if last else 0))
+        prm.append(Int32(index if last else 0))
+        if last:
+            break
+        c = nb
+    return prm^
+
+
+# ---- the epoch order
+comptime EP_N = 0  # rows
+comptime EP_POS = 1  # the position of element 0 in the epoch
+comptime EP_SHUFFLE = 2
+comptime EP_HALF = 3  # the Feistel half width in bits
+comptime EP_KEY = 4  # the 64-bit epoch key as four 16-bit words, low first
+comptime EP_LEN = 8
+
+
+@always_inline
+def _perm_mix(x: UInt32) -> UInt32:
+    """murmur3's 32-bit finalizer (a bijection of the 32-bit words)."""
+    var z = x
+    z = (z ^ (z >> 16)) * UInt32(0x85EBCA6B)
+    z = (z ^ (z >> 13)) * UInt32(0xC2B2AE35)
+    return z ^ (z >> 16)
+
+
+def epoch_key(seed: UInt64, epoch: Int) -> UInt64:
+    """Epoch `epoch`'s permutation key: splitmix64's output at state
+    seed + (epoch + 1) * golden (the counter is the epoch)."""
+    var z = seed + UInt64(epoch + 1) * UInt64(0x9E3779B97F4A7C15)
+    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
+    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
+    return z ^ (z >> 31)
+
+
+def epoch_rows_prm(n: Int, pos: Int, shuffle: Bool, key: UInt64) -> List[Int32]:
+    """`epoch_rows_at`'s parameter block for positions pos, pos + 1, ... of
+    an epoch over n rows (1 <= n < 2^31)."""
+    var bits = 1
+    while (1 << bits) < n:
+        bits += 1
+    var prm = List[Int32]()
+    prm.append(Int32(n))
+    prm.append(Int32(pos))
+    prm.append(Int32(1 if shuffle else 0))
+    prm.append(Int32((bits + 1) // 2))
+    for w in range(4):
+        prm.append(Int32(Int((key >> UInt64(16 * w)) & UInt64(0xFFFF))))
+    return prm^
+
+
+@always_inline
+def epoch_rows_at(i: Int, f0: FP, f1: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """q[i] = the row at position p[EP_POS] + i of the epoch's order: the
+    position itself without shuffle, else its image under the epoch's
+    permutation of [0, n): six Feistel rounds on the two EP_HALF-bit halves
+    (round function `_perm_mix` of the half plus the round key, masked),
+    repeated until the image is below n (cycle walking: the image of a
+    permutation of the 2^(2 half) words restricted to [0, n) is a
+    permutation of [0, n)). Integers only: the same row on every column."""
+    var n = UInt32(_g(p, EP_N))
+    var pos = _g(p, EP_POS) + i
+    if _g(p, EP_SHUFFLE) == 0:
+        q.unsafe_store(i, Int32(pos))
+        return
+    var h = UInt32(_g(p, EP_HALF))
+    var mask = (UInt32(1) << h) - UInt32(1)
+    var k0 = UInt32(_g(p, EP_KEY)) | (UInt32(_g(p, EP_KEY + 1)) << UInt32(16))
+    var k1 = UInt32(_g(p, EP_KEY + 2)) | (UInt32(_g(p, EP_KEY + 3)) << UInt32(16))
+    var x = UInt32(pos)
+    while True:
+        var l = (x >> h) & mask
+        var r = x & mask
+        for rd in range(6):
+            var rk = _perm_mix(k0 + UInt32(rd) * UInt32(0x9E3779B9)) ^ k1
+            var f = _perm_mix(r + rk) & mask
+            var t = l ^ f
+            l = r
+            r = t
+        x = (l << h) | r
+        if x < n:
+            break
+    q.unsafe_store(i, Int32(Int(x)))
+
+
+# ---- Adam's step scalars in double-float32
+@always_inline
+def _two_sum(a: Float32, b: Float32) -> Tuple[Float32, Float32]:
+    """(s, e) with s = fl(a + b) and s + e = a + b exactly (Knuth)."""
+    var s = ftz(a + b)
+    var bb = ftz(s - a)
+    var e = ftz(ftz(a - ftz(s - bb)) + ftz(b - bb))
+    return (s, e)
+
+
+@always_inline
+def _two_prod(a: Float32, b: Float32) -> Tuple[Float32, Float32]:
+    """(p, e) with p = fl(a b) and p + e = a b exactly (Dekker's split, no
+    fused operation; every product pinned)."""
+    var p = ftz(identical_mul(a, b))
+    var ca = ftz(identical_mul(Float32(4097), a))
+    var ah = ftz(ca - ftz(ca - a))
+    var al = ftz(a - ah)
+    var cb = ftz(identical_mul(Float32(4097), b))
+    var bh = ftz(cb - ftz(cb - b))
+    var bl = ftz(b - bh)
+    var e = ftz(ftz(identical_mul(ah, bh)) - p)
+    e = ftz(e + ftz(identical_mul(ah, bl)))
+    e = ftz(e + ftz(identical_mul(al, bh)))
+    e = ftz(e + ftz(identical_mul(al, bl)))
+    return (p, e)
+
+
+@always_inline
+def _dd_mul(ah: Float32, al: Float32, bh: Float32, bl: Float32) -> Tuple[Float32, Float32]:
+    """(ah + al)(bh + bl) as a normalized pair."""
+    var pe = _two_prod(ah, bh)
+    var e = ftz(pe[1] + ftz(ftz(identical_mul(ah, bl)) + ftz(identical_mul(al, bh))))
+    return _two_sum(pe[0], e)
+
+
+@always_inline
+def _dd_powi(bh: Float32, bl: Float32, e: Int) -> Tuple[Float32, Float32]:
+    """(bh + bl) ** e for e >= 0 by squaring, in one fixed order."""
+    var rh = Float32(1)
+    var rl = Float32(0)
+    var xh = bh
+    var xl = bl
+    var k = e
+    while k > 0:
+        if (k & 1) != 0:
+            var r = _dd_mul(rh, rl, xh, xl)
+            rh = r[0]
+            rl = r[1]
+        var x = _dd_mul(xh, xl, xh, xl)
+        xh = x[0]
+        xl = x[1]
+        k >>= 1
+    return (rh, rl)
+
+
+@always_inline
+def _dd_one_minus(h: Float32, l: Float32) -> Tuple[Float32, Float32]:
+    """1 - (h + l) as a normalized pair."""
+    var se = _two_sum(Float32(1), -h)
+    return _two_sum(se[0], ftz(se[1] - l))
+
+
+comptime AH_BASE = 10  # [lr hi, lr lo, b1 hi, b1 lo, b2 hi, b2 lo, eps, wd hi, wd lo, decoupled]
+comptime AH_ROW = 9
+
+
+@always_inline
+def adam_hyper_at(t: Int, base: FP, hy: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """hy[9 t : 9 t + 9] = `adam_at`'s hyper block of 1-based step p[0] + t:
+    [lr / bc1, 1 - b1, b2, 1 - b2, eps, sqrt(bc2), wd, decoupled, 1 - lr wd]
+    with bc = 1 - beta ** step, each value the float32 nearest a
+    double-float32 result (the pairs in `base` are the float32 nearest the
+    caller's double and the float32 nearest the remainder)."""
+    var step = _g(p, 0) + t
+    var lrh = base.unsafe_load(0)
+    var lrl = base.unsafe_load(1)
+    var b1h = base.unsafe_load(2)
+    var b1l = base.unsafe_load(3)
+    var b2h = base.unsafe_load(4)
+    var b2l = base.unsafe_load(5)
+    var wdh = base.unsafe_load(7)
+    var wdl = base.unsafe_load(8)
+    var p1 = _dd_powi(b1h, b1l, step)
+    var c1 = _dd_one_minus(p1[0], p1[1])
+    var p2 = _dd_powi(b2h, b2l, step)
+    var c2 = _dd_one_minus(p2[0], p2[1])
+    # lr / bc1: the float32 quotient plus its correction
+    var q0 = ftz(identical_div(lrh, c1[0]))
+    var step_size = q0
+    if c1[0] != Float32(0):
+        var pe = _two_prod(q0, c1[0])
+        var rem = ftz(ftz(ftz(lrh - pe[0]) - pe[1]) + lrl)
+        rem = ftz(rem - ftz(identical_mul(q0, c1[1])))
+        step_size = ftz(q0 + ftz(identical_div(rem, c1[0])))
+    # sqrt(bc2): the float32 root plus one Newton correction
+    var s0 = ftz(identical_sqrt(c2[0]))
+    var sq = s0
+    if s0 > Float32(0):
+        var ps = _two_prod(s0, s0)
+        var rs = ftz(ftz(ftz(c2[0] - ps[0]) - ps[1]) + c2[1])
+        sq = ftz(s0 + ftz(identical_div(rs, ftz(s0 + s0))))
+    var o1 = _dd_one_minus(b1h, b1l)
+    var o2 = _dd_one_minus(b2h, b2l)
+    var lw = _dd_mul(lrh, lrl, wdh, wdl)
+    var ow = _dd_one_minus(lw[0], lw[1])
+    var row = t * AH_ROW
+    hy.unsafe_store(row + 0, canon(step_size))
+    hy.unsafe_store(row + 1, canon(o1[0]))
+    hy.unsafe_store(row + 2, b2h)
+    hy.unsafe_store(row + 3, canon(o2[0]))
+    hy.unsafe_store(row + 4, base.unsafe_load(6))
+    hy.unsafe_store(row + 5, canon(sq))
+    hy.unsafe_store(row + 6, wdh)
+    hy.unsafe_store(row + 7, base.unsafe_load(9))
+    hy.unsafe_store(row + 8, canon(ow[0]))
+
+
+def adam_hyper_base(lr: Float64, b1: Float64, b2: Float64, eps: Float64, wd: Float64, dec: Float64) -> List[Float32]:
+    """`adam_hyper_at`'s base block: each double hyperparameter as the
+    float32 nearest it and the float32 nearest the remainder (two casts and
+    one exact subtraction; no step arithmetic)."""
+    var out = List[Float32]()
+    var lrh = Float32(lr)
+    out.append(lrh)
+    out.append(Float32(lr - Float64(lrh)))
+    var b1h = Float32(b1)
+    out.append(b1h)
+    out.append(Float32(b1 - Float64(b1h)))
+    var b2h = Float32(b2)
+    out.append(b2h)
+    out.append(Float32(b2 - Float64(b2h)))
+    out.append(Float32(eps))
+    var wdh = Float32(wd)
+    out.append(wdh)
+    out.append(Float32(wd - Float64(wdh)))
+    out.append(Float32(dec))
+    return out^
+
+
+def idn2_flags() -> Int:
+    """The lane fam2-neural switches this build has on (both bindings export
+    it as `x_cnn_idn2_flags`): bit 0 IDN_XENT_DEV_FOLD, bit 1 IDN_CNN_EPOCH_DEV."""
+    var f = 0
+    comptime if IDN_XENT_DEV_FOLD:
+        f |= 1
+    comptime if IDN_CNN_EPOCH_DEV:
+        f |= 2
+    return f
