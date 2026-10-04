@@ -45,6 +45,7 @@ def main():
     p.add_argument('--out',required=True,type=Path)
     p.add_argument('--python',required=True,type=Path)
     p.add_argument('--vendor',required=True,choices=('nvidia','amd'))
+    p.add_argument('--gpu-arch', help='Actual device target; required for new NVIDIA architectures such as sm_120')
     p.add_argument('--arm',choices=('on','off'),default='on')
     p.add_argument('--mode',choices=('identical','fast'),default='identical')
     p.add_argument('--builders',default=DEFAULT)
@@ -59,7 +60,9 @@ def main():
     a.repo=a.repo.resolve(); a.out=a.out.resolve(); a.python=a.python.resolve()
     if not a.semaphore.is_file(): p.error('required compile semaphore missing: '+str(a.semaphore))
     a.out.mkdir(parents=True,exist_ok=False)
-    source=a.out/'source'; arch={'nvidia':'sm_89','amd':'gfx942'}[a.vendor]
+    source=a.out/'source'; arch=a.gpu_arch or {'nvidia':'sm_89','amd':'gfx942'}[a.vendor]
+    if not re.fullmatch(r'sm_[0-9]+[a-z]?' if a.vendor=='nvidia' else r'gfx[0-9a-f]+',arch):
+        p.error('GPU architecture does not match vendor')
     clean_env={k:v for k,v in os.environ.items() if not k.startswith(('MOJOLEARN_', 'MODULAR_MOJO_', 'MOJO_COMPILE_'))}
     env=dict(clean_env,PATH='/root/.pixi/bin:/opt/rocm/bin:'+os.environ.get('PATH',''),
              MOJOLEARN_NUMERIC_MODE=a.mode,MOJOLEARN_COMPILE_JOBS='1',MOJOLEARN_GPU_ARCHS=arch,
