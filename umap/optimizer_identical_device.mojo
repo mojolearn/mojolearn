@@ -46,6 +46,7 @@ edge, SplitMix64 negatives, stdlib pow); it is not compared to this.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import memcpy
 from dbscan.impl.adjgraph.algo import exclusive_scan, scan_blocks_needed
+from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from std.memory import bitcast
@@ -1313,13 +1314,20 @@ def _optimize_sparse_layout_device_csr(
     var g = umap_sparse_graph_to_device(
         ctx, initial_embedding, offsets, indices, values, n_samples, False
     )
+    var g_first = g.first^
+    var g_offsets = g.offsets^
+    var g_tails = g.tails^
+    var g_weights = g.weights^
     var second = ctx.enqueue_create_buffer[DType.float32](n_init)
     var out = _umap_epochs_download(
-        ctx, g.first, second, g.offsets, g.tails, g.weights, n_init, n_samples, n_components,
+        ctx, g_first, second, g_offsets, g_tails, g_weights, n_init, n_samples, n_components,
         n_epochs, learning_rate, negative_rate, neg2ab, rep2b, a, b, seed,
     )
     _ = second^
-    _ = g^
+    _ = g_first^
+    _ = g_offsets^
+    _ = g_tails^
+    _ = g_weights^
     return out^
 
 
@@ -1376,11 +1384,18 @@ def optimize_dense_layout_identical_device(
     var rep2b = Float32(2.0) * repulsion_strength * b
     var n_init = len(initial_embedding)
     var g = umap_dense_graph_to_device(ctx, initial_embedding, weights, n_samples, False)
+    var g_first = g.first^
+    var g_offsets = g.offsets^
+    var g_tails = g.tails^
+    var g_weights = g.weights^
     var second = ctx.enqueue_create_buffer[DType.float32](n_init)
     var out = _umap_epochs_download(
-        ctx, g.first, second, g.offsets, g.tails, g.weights, n_init, n_samples, n_components,
+        ctx, g_first, second, g_offsets, g_tails, g_weights, n_init, n_samples, n_components,
         n_epochs, initial_learning_rate, negative_sample_rate, neg2ab, rep2b, a, b, seed,
     )
     _ = second^
-    _ = g^
+    _ = g_first^
+    _ = g_offsets^
+    _ = g_tails^
+    _ = g_weights^
     return out^

@@ -297,6 +297,10 @@ def optimize_sparse_layout_fast(
         ctx, initial, graph.offsets, graph.indices, graph.values, n_samples, True
     )
     var max_weight = g.max_weight
+    var g_first = g.first^
+    var g_offsets = g.offsets^
+    var g_tails = g.tails^
+    var g_weights = g.weights^
     var second = ctx.enqueue_create_buffer[DType.float32](len(initial))
     # the fused kernel is 2D/3D; other dimensions take the per-component
     # kernel, which reads the dimension at run time
@@ -305,21 +309,21 @@ def optimize_sparse_layout_fast(
         for epoch in range(n_epochs if fused else 0):
             if n_components == 2:
                 _fused_epoch[2](
-                    ctx, g.first, second, g.offsets, g.tails, g.weights,
+                    ctx, g_first, second, g_offsets, g_tails, g_weights,
                     epoch, n_samples, n_epochs, learning_rate, negative_rate,
                     repulsion, a, b, max_weight, seed,
                 )
             else:
                 _fused_epoch[3](
-                    ctx, g.first, second, g.offsets, g.tails, g.weights,
+                    ctx, g_first, second, g_offsets, g_tails, g_weights,
                     epoch, n_samples, n_epochs, learning_rate, negative_rate,
                     repulsion, a, b, max_weight, seed,
                 )
     for epoch in range(n_epochs if not fused else 0):
         if epoch % 2 == 0:
             ctx.enqueue_function[umap_jacobi_epoch_kernel](
-                g.first.unsafe_ptr(), g.offsets.unsafe_ptr(),
-                g.tails.unsafe_ptr(), g.weights.unsafe_ptr(),
+                g_first.unsafe_ptr(), g_offsets.unsafe_ptr(),
+                g_tails.unsafe_ptr(), g_weights.unsafe_ptr(),
                 second.unsafe_ptr(),
                 Int32(n_samples), Int32(n_components), Int32(epoch),
                 Int32(n_epochs), learning_rate, Int32(negative_rate),
@@ -329,9 +333,9 @@ def optimize_sparse_layout_fast(
             )
         else:
             ctx.enqueue_function[umap_jacobi_epoch_kernel](
-                second.unsafe_ptr(), g.offsets.unsafe_ptr(),
-                g.tails.unsafe_ptr(), g.weights.unsafe_ptr(),
-                g.first.unsafe_ptr(),
+                second.unsafe_ptr(), g_offsets.unsafe_ptr(),
+                g_tails.unsafe_ptr(), g_weights.unsafe_ptr(),
+                g_first.unsafe_ptr(),
                 Int32(n_samples), Int32(n_components), Int32(epoch),
                 Int32(n_epochs), learning_rate, Int32(negative_rate),
                 repulsion, a, b, max_weight, seed,
@@ -340,12 +344,15 @@ def optimize_sparse_layout_fast(
             )
     var out = List[Float32](length=len(initial), fill=Float32(0.0))
     if n_epochs % 2 == 0:
-        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=g.first)
+        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=g_first)
     else:
         ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=second)
     ctx.synchronize()
     _ = second^
-    _ = g^
+    _ = g_first^
+    _ = g_offsets^
+    _ = g_tails^
+    _ = g_weights^
     return out^
 
 

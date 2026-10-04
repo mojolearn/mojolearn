@@ -149,12 +149,16 @@ def optimize_layout_fast(
     # (`umap_dense_graph_to_device`, lane cpu3-neighbors).
     var g = umap_dense_graph_to_device(ctx, initial, weights, n_samples, True)
     var max_weight = g.max_weight
+    var g_first = g.first^
+    var g_offsets = g.offsets^
+    var g_tails = g.tails^
+    var g_weights = g.weights^
     var second = ctx.enqueue_create_buffer[DType.float32](len(initial))
     for epoch in range(n_epochs):
         if epoch % 2 == 0:
             ctx.enqueue_function[umap_jacobi_epoch_kernel](
-                g.first.unsafe_ptr(), g.offsets.unsafe_ptr(),
-                g.tails.unsafe_ptr(), g.weights.unsafe_ptr(),
+                g_first.unsafe_ptr(), g_offsets.unsafe_ptr(),
+                g_tails.unsafe_ptr(), g_weights.unsafe_ptr(),
                 second.unsafe_ptr(),
                 Int32(n_samples), Int32(n_components), Int32(epoch),
                 Int32(n_epochs), learning_rate, Int32(negative_rate),
@@ -164,9 +168,9 @@ def optimize_layout_fast(
             )
         else:
             ctx.enqueue_function[umap_jacobi_epoch_kernel](
-                second.unsafe_ptr(), g.offsets.unsafe_ptr(),
-                g.tails.unsafe_ptr(), g.weights.unsafe_ptr(),
-                g.first.unsafe_ptr(),
+                second.unsafe_ptr(), g_offsets.unsafe_ptr(),
+                g_tails.unsafe_ptr(), g_weights.unsafe_ptr(),
+                g_first.unsafe_ptr(),
                 Int32(n_samples), Int32(n_components), Int32(epoch),
                 Int32(n_epochs), learning_rate, Int32(negative_rate),
                 repulsion, a, b, max_weight, seed,
@@ -175,12 +179,15 @@ def optimize_layout_fast(
             )
     var out = List[Float32](length=len(initial), fill=Float32(0.0))
     if n_epochs % 2 == 0:
-        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=g.first)
+        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=g_first)
     else:
         ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=second)
     ctx.synchronize()
     _ = second^
-    _ = g^
+    _ = g_first^
+    _ = g_offsets^
+    _ = g_tails^
+    _ = g_weights^
     return out^
 
 
