@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The radix form of the `sort_cols` stage (lane prep-apple3, 2026-09-28).
-FAST on the Apple GPU only: x_prep/device.mojo gates every call on
-RADIX_SORT, so the IDENTICAL binding and the other vendors never compile a
-launch of these kernels.
+FAST on the Apple GPU, and (K1, lane ml-cluster-nbrs 2026-10-04) IDENTICAL on
+every vendor: x_prep/device.mojo gates every call on RADIX_SORT. The sort has
+one answer, so IDENTICAL keeps its bits (the host heapsort is unchanged).
+`-D MOJOLEARN_IDN_XPREP_RADIX_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores the
+bitonic sort under IDENTICAL. RBS = 64 assumes no wave width.
 
 A sort has ONE answer under a total order on the words (x_prep/dsort.mojo),
 so this sort writes the words the bitonic sort and the host heapsort write,
@@ -28,14 +30,19 @@ phase of every estimator that sorts.
 """
 from std.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
+from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_prep.common import FP, canon
 
 comptime RUP = MutPointer[UInt32, MutAnyOrigin]
-#: FAST on Apple only
-comptime RADIX_SORT = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+#: K1 (IDENTICAL, every vendor): the radix sort of sort_cols, same words as the bitonic sort
+comptime IDN_XPREP_RADIX = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_XPREP_RADIX_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: FAST on Apple, IDENTICAL everywhere unless IDN_XPREP_RADIX is off
+comptime RADIX_SORT = (GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()) or IDN_XPREP_RADIX
 comptime RBITS = 8
 comptime RBINS = 256
 comptime RPASSES = 4

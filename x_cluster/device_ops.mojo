@@ -68,6 +68,8 @@ from mixture.nk_order import GMM_NK_CHUNK, gmm_nk_levels_floats
 from x_cluster.ops import ClusterOps
 from x_cluster.optics_xi_device import optics_xi_device
 from x_cluster.meanshift_fast import MEANSHIFT_FAST_GRID, meanshift_fast_grid
+from x_cluster.meanshift_idn import meanshift_idn_grid
+from x_cluster.bodies import IDN_MEANSHIFT_GRID
 from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV, minibatch_fast_steps
 from x_cluster.device_tree import (
     agc_edges_mode_kernel,
@@ -337,7 +339,9 @@ comptime MST_T = 1024
 comptime MST_MAX_D = 1024
 comptime MST_U = 16
 comptime MST_BYTES = (2 * MST_MAX_D + MST_T + MST_TPB + 4) * 4
-comptime MEANSHIFT_TEAM = lib_smem_page_fits_for[TARGET_COLUMN, MST_BYTES]()
+# K6: under IDN_MEANSHIFT_GRID the team kernel's one-chain fold is not the
+# blocked fold of `meanshift_seed`, so it never runs.
+comptime MEANSHIFT_TEAM = lib_smem_page_fits_for[TARGET_COLUMN, MST_BYTES]() and not IDN_MEANSHIFT_GRID
 
 
 def _meanshift_team_kernel(
@@ -1938,6 +1942,16 @@ struct DeviceOps(ClusterOps):
         # bin seeding: 18 blocks for the whole fit).
         comptime if MEANSHIFT_FAST_GRID:
             if meanshift_fast_grid(
+                self.ctx, self._fp(x), n, d, bw, stop, max_iter, self._fp(centers), ns,
+                self._ip(intensity), self._ip(iters),
+            ):
+                self._ph1("meanshift")
+                return
+        # K6 (IDENTICAL, every vendor): the (seed, row chunk) grid with the
+        # blocked fold (x_cluster/meanshift_idn.mojo); False falls through to
+        # `_meanshift_kernel`, whose body is the same fold
+        comptime if IDN_MEANSHIFT_GRID:
+            if meanshift_idn_grid(
                 self.ctx, self._fp(x), n, d, bw, stop, max_iter, self._fp(centers), ns,
                 self._ip(intensity), self._ip(iters),
             ):

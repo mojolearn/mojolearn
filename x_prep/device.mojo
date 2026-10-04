@@ -18,7 +18,7 @@ from x_prep.py2mojo import P2M_BASE, P2M_N, is_p2m_op, run_p2m_unit
 #: lane fam2-prep-metrics: ops F2_BASE .. (x_prep/fam2.mojo), IDENTICAL only
 from x_prep.fam2 import F2_BASE, F2_N, is_f2_op, run_f2_unit
 from x_prep.dsort import sort_cols_device, sort_scratch_words
-from x_prep.dradix import RADIX_SORT, RADIX_MIN_ROWS, radix_sort_cols_device, radix_scratch_words
+from x_prep.dradix import RADIX_SORT, IDN_XPREP_RADIX, RADIX_MIN_ROWS, radix_sort_cols_device, radix_scratch_words
 from x_prep.fastred import (
     TGR, col_stats_fast_kernel, pt_fold_fast_kernel, class_stats_fast_kernel, ii_mean_fast_kernel,
     ii_gram_fast_kernel,
@@ -357,7 +357,10 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     # MOJOLEARN_XPREP_SORT_CHUNK = positions per chunk (512 to 4096 measured within 0.006 s).
     var radix = False
     var radix_rows = 2048
-    comptime if RADIX_SORT:
+    comptime if IDN_XPREP_RADIX:
+        # K1: IDENTICAL takes the radix sort by define, not by env (the same words either way)
+        radix = True
+    elif RADIX_SORT:
         radix = getenv("MOJOLEARN_XPREP_SORT_RADIX", "1") != "0"
         radix_rows = max(1, _env_int("MOJOLEARN_XPREP_SORT_CHUNK", 2048))
     # MOJOLEARN_XPREP_PROFILE=1: XPPHASE lines (a wait after every phase; timing only)

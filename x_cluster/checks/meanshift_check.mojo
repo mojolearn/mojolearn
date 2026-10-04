@@ -16,6 +16,7 @@ from x_cluster.checks.seam_util import count_diff_f32, count_diff_i32, require_e
 from x_cluster.device_ops import DeviceOps
 from x_cluster.host.host_ops import HostOps
 from x_cluster.ops import ClusterOps
+from x_cluster.bodies import MSI_SCRATCH_PER_SEED
 
 
 def _same(seam: String, differing: Int) raises:
@@ -28,7 +29,7 @@ def _same(seam: String, differing: Int) raises:
 def run[O: ClusterOps](mut ops: O, x: List[Float32], n: Int, d: Int, bw: Float32, stop: Float32) raises -> List[Float32]:
     var sx = ops.put(x)
     var sc = ops.put(x)
-    var ss = ops.zeros(n * d)
+    var ss = ops.zeros(MSI_SCRATCH_PER_SEED * n * d)
     var si = ops.zeros_i(n)
     var st = ops.zeros_i(n)
     ops.meanshift(sx, n, d, bw, stop, 300, sc, n, ss, si, st)
