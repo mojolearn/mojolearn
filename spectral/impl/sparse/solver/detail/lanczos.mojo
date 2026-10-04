@@ -841,7 +841,7 @@ def lanczos_aux_fast(
     ctx.enqueue_copy(dst_ptr=h_ab.unsafe_ptr(), src_buf=d_alpha)
     ctx.enqueue_copy(dst_ptr=h_ab.unsafe_ptr() + ncv, src_buf=d_beta)
     ctx.synchronize()
-    for j in range(start_idx, end_idx):  # small-loop(end_idx: Lanczos alpha/beta words, end_idx <= ncv <= max of 2k+1 and 20): the Krylov basis size, independent of the sample count
+    for j in range(start_idx, end_idx):  # small-loop(end_idx: Lanczos alpha/beta words, end_idx <= ncv <= max of 2k+1 and 20): the Krylov basis dimension, independent of the sample count
         alpha[j] = h_ab.unsafe_ptr().unsafe_load(j)
         beta[j] = h_ab.unsafe_ptr().unsafe_load(ncv + j)
     _ = d_alpha^
@@ -1115,7 +1115,7 @@ def lanczos_restart_fast(
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d_alpha)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr() + ncv, src_buf=d_beta)
     ctx.synchronize()
-    for j in range(k, ncv):  # small-loop(ncv: Lanczos alpha/beta words, ncv <= max of 2k+1 and 20): the Krylov basis size, independent of the sample count
+    for j in range(k, ncv):  # small-loop(ncv: Lanczos alpha/beta words, ncv <= max of 2k+1 and 20): the Krylov basis dimension, independent of the sample count
         alpha[j] = h.unsafe_ptr().unsafe_load(j)
         beta[j] = h.unsafe_ptr().unsafe_load(ncv + j)
     if beta[k] == Float32(0.0):
@@ -1456,7 +1456,7 @@ def lanczos_aux_identical_dev(
     ctx.enqueue_copy(dst_ptr=h_ab.unsafe_ptr(), src_buf=d_alpha)
     ctx.enqueue_copy(dst_ptr=h_ab.unsafe_ptr() + ncv, src_buf=d_beta)
     ctx.synchronize()
-    for j in range(start_idx, end_idx):  # small-loop(end_idx: Lanczos alpha/beta words, end_idx <= ncv <= max of 2k+1 and 20): the Krylov basis size, independent of the sample count
+    for j in range(start_idx, end_idx):  # small-loop(end_idx: Lanczos alpha/beta words, end_idx <= ncv <= max of 2k+1 and 20): the Krylov basis dimension, independent of the sample count
         alpha[j] = h_ab.unsafe_ptr().unsafe_load(j)
         beta[j] = h_ab.unsafe_ptr().unsafe_load(ncv + j)
         trace.record_scalar_f32(_step_tag(step0 + j - start_idx, "alpha"), alpha[j])
@@ -1631,7 +1631,7 @@ def lanczos_restart_identical_dev(
     ctx.enqueue_copy(dst_ptr=hp, src_buf=d_alpha)
     ctx.enqueue_copy(dst_ptr=hp + ncv, src_buf=d_beta)
     ctx.synchronize()
-    for j in range(k, ncv):  # small-loop(ncv: Lanczos alpha/beta words, ncv <= max of 2k+1 and 20): the Krylov basis size, independent of the sample count
+    for j in range(k, ncv):  # small-loop(ncv: Lanczos alpha/beta words, ncv <= max of 2k+1 and 20): the Krylov basis dimension, independent of the sample count
         alpha[j] = hp.unsafe_load(j)
         beta[j] = hp.unsafe_load(ncv + j)
     trace.record_scalar_f32(_step_tag(step0, "alpha"), alpha[k])
@@ -2122,7 +2122,7 @@ def lanczos_restart_pooled(
         eig_failed = True
         eig_msg = String(e)
     ctx.synchronize()
-    for j in range(k, ncv):  # small-loop(ncv: Lanczos alpha/beta words, ncv <= max of 2k+1 and 20): the Krylov basis size, independent of the sample count
+    for j in range(k, ncv):  # small-loop(ncv: Lanczos alpha/beta words, ncv <= max of 2k+1 and 20): the Krylov basis dimension, independent of the sample count
         alpha[j] = hp.unsafe_load(j)
         beta[j] = hp.unsafe_load(ncv + j)
     trace.record_scalar_f32(_step_tag(step0, "alpha"), alpha[k])
