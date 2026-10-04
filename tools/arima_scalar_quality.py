@@ -22,7 +22,7 @@ import numpy as np
 
 
 H = np.float32(2.0**-10)
-FIXTURE = "arima-scalar-k3-v1"
+FIXTURE = "arima-scalar-k3-v2-actual-gradient-tail"
 
 
 def model(raw):
@@ -112,16 +112,24 @@ def fixture(binding,n):
     checks["final_covariance"] = compare_field(stats[2],stats[3],finalP)
     grad = None
     if n>1:
-        fa = np.float32(-stats[0]/np.float32(n-1)).reshape(-1,4)
-        fb = np.float32(-stats[1]/np.float32(n-1)).reshape(-1,4)
+        # Copy captured LL words into the production member-major layout.
+        # Invoke the actual fused GPU tail, including identical_div and FTZ.
+        assert np.isfinite(stats[:2]).all() and np.all(info == 0)
+        packed = np.ascontiguousarray(stats[:2].reshape(2,-1,4).transpose(0,2,1))
+        gradients = np.full((2,len(labels),3),np.nan,np.float32)
+        objectives = np.full((2,len(labels)),np.nan,np.float32)
+        reached = binding._arima_scalar_gradient_probe(packed.ctypes.data,
+            gradients.ctypes.data,objectives.ctypes.data,[len(labels),n])
+        assert int(reached) == 2 and np.isfinite(gradients).all() and np.isfinite(objectives).all()
+        ga,gb = gradients
+        # Keep the original independent FP64 reference unchanged; repair
+        # only the measured gradient, not oracle values or acceptance bounds.
         fr = (-ll/(n-1)).reshape(-1,4)
-        ga = np.float32((fa[:,1:]-fa[:,:1])/H)
-        gb = np.float32((fb[:,1:]-fb[:,:1])/H)
         gr = (fr[:,1:]-fr[:,:1])/float(H)
         # Strict PER-COMPONENT comparison; a large improvement in one raw
         # parameter cannot hide a degradation in another parameter's gradient.
         ea,eb = np.abs(ga.astype(np.float64)-gr),np.abs(gb.astype(np.float64)-gr)
-        grad = dict(ok=bool(np.all(eb<=ea)),baseline=ga.tolist(),candidate=gb.tolist(),
+        grad = dict(ok=bool(np.all(eb<=ea)),source="actual GPU ew_finish_kernel",objective=objectives.tolist(),baseline=ga.tolist(),candidate=gb.tolist(),
                     reference=gr.tolist(),baseline_error=ea.tolist(),candidate_error=eb.tolist())
     finite = bool(np.isfinite(stats).all() and np.isfinite(actual).all())
     valid = finite and bool(np.all(info==0)) and all(c["ok"] for c in checks.values()) and (grad is None or grad["ok"])
@@ -179,7 +187,7 @@ def main():
         binding=str(binding.__file__),binding_sha256=hashlib.sha256(Path(binding.__file__).read_bytes()).hexdigest(),
         baseline="actual existing batched_kalman_loop_kernel[1,False]",candidate="actual K3 kernels",
         initialization="common supplied scalar state, not device initializer certification",
-        gradient_step=float(H),degradation_allowance=0,scored_timings=0,promotion_authorized=False)
+        gradient_step=float(H),gradient_source="actual GPU ew_finish_kernel",degradation_allowance=0,scored_timings=0,promotion_authorized=False)
     temp=out.with_suffix(out.suffix+".next")
     with temp.open("x") as stream: json.dump(report,stream,indent=2,allow_nan=False)
     os.replace(temp,out)

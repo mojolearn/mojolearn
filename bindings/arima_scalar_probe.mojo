@@ -14,6 +14,7 @@ from core.neural_context import process_ctx
 from bindings.hostptr import f32_ptr, i32_ptr, copy_f32
 from arima.estimator import _upload_f32
 from arima.impl.batched_kalman import KalmanWorkspace, batched_kalman_loop_kernel
+from arima.impl.fast_eval_ws import ew_finish_kernel
 from arima.impl.fast_scalar_ll import ARIMA_FAST_SCALAR_LL, SCALAR_LL_MAX_OBS, launch_scalar_ll
 from arima.impl.tsa.arima_common import ARIMAOrder
 
@@ -101,3 +102,58 @@ def arima_scalar_probe_binding(y: PythonObject, state: PythonObject,
     with GILReleased(Python()):
         _probe(yp, sp, op, lp, ip, batch, nobs, intercept)
     return PythonObject(1)
+
+
+def _gradient_tail(ll_address: Int, gradient_address: Int, objective_address: Int,
+                   batch: Int, nobs: Int) raises:
+    """Replay captured LL words through actual GPU fit tail; no host math.
+
+    Two arms; each LL block is [base, raw0+h, raw1+h, raw2+h] x batch.
+    Valid fixtures only: caller checks finite LL and zero filter info.
+    """
+    var ctx = process_ctx["MojoArimaScalarQuality"]()
+    var count = 3 * batch
+    var inputs = ctx.enqueue_create_buffer[DType.float32](count)
+    ctx.enqueue_memset(inputs, Float32(0))
+    var xpert = ctx.enqueue_create_buffer[DType.float32](count)
+    var raw = ctx.enqueue_create_buffer[DType.float32](count)
+    var gradient = ctx.enqueue_create_buffer[DType.float32](count)
+    var objective = ctx.enqueue_create_buffer[DType.float32](batch)
+    var info0 = ctx.enqueue_create_buffer[DType.int32](4 * batch)
+    var info1 = ctx.enqueue_create_buffer[DType.int32](4 * batch)
+    var bad = ctx.enqueue_create_buffer[DType.int32](batch)
+    ctx.enqueue_memset(info0, Int32(0))
+    ctx.enqueue_memset(info1, Int32(0))
+    for arm in range(2):
+        var ll = _upload_f32(ctx, f32_ptr(ll_address + arm * 4 * 4 * batch), 4 * batch)
+        ctx.enqueue_function[ew_finish_kernel](
+            objective.unsafe_ptr(), gradient.unsafe_ptr(), raw.unsafe_ptr(),
+            xpert.unsafe_ptr(), inputs.unsafe_ptr(), ll.unsafe_ptr(),
+            info0.unsafe_ptr(), info1.unsafe_ptr(), bad.unsafe_ptr(),
+            Int32(batch), Int32(3), Float32(0.0009765625), Float32(nobs - 1),
+            grid_dim=((batch + 127) // 128, 1, 1), block_dim=(128, 1, 1),
+        )
+        _download(ctx, gradient, gradient_address + arm * 4 * count, count)
+        _download(ctx, objective, objective_address + arm * 4 * batch, batch)
+        _ = ll^
+
+
+def arima_scalar_gradient_probe_binding(likelihoods: PythonObject, gradients: PythonObject,
+        objectives: PythonObject, config: PythonObject) raises -> PythonObject:
+    """ABI2: config=[models,nobs], LL=(2,4,models), gradient=(2,models,3),
+    objective=(2,models), all f32. Fixed h=2^-10. Valid-filter fixtures only.
+    """
+    if len(config) != 2:
+        raise Error("K3 tail probe: expected [models,nobs]")
+    var batch = Int(py=config[0])
+    var nobs = Int(py=config[1])
+    if batch < 1 or batch > 1024 or nobs < 2 or nobs > SCALAR_LL_MAX_OBS:
+        raise Error("K3 tail probe: unsupported dimensions")
+    var lp = Int(py=likelihoods)
+    var gp = Int(py=gradients)
+    var fp = Int(py=objectives)
+    if lp == 0 or gp == 0 or fp == 0:
+        raise Error("K3 tail probe: null input/output")
+    with GILReleased(Python()):
+        _gradient_tail(lp, gp, fp, batch, nobs)
+    return PythonObject(2)

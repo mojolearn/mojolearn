@@ -28,7 +28,7 @@ import sys
 
 
 DEFINE = "MOJOLEARN_ARIMA_FAST_SCALAR_LL"
-FIXTURE = "arima-scalar-k3-v1"
+FIXTURE = "arima-scalar-k3-v2-actual-gradient-tail"
 
 
 def digest(path):
