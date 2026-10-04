@@ -733,7 +733,7 @@ comptime SGD_CHUNK_DEFAULT = 64
 # `-D MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF` restores XG_TPB.
 comptime SGD_IDN_CHUNK_WIDE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF"]()
+    and not (is_defined["MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 comptime SGD_CHUNK_TPB = 1024 if SGD_IDN_CHUNK_WIDE else XG_TPB
 
@@ -747,7 +747,7 @@ comptime SGD_CHUNK_TPB = 1024 if SGD_IDN_CHUNK_WIDE else XG_TPB
 # helpers on the same operands in the same order: no bit moves.
 # `-D MOJOLEARN_SGD_IDN_MB_FUSE_OFF` restores three launches a batch.
 comptime SGD_IDN_MB_FUSE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_SGD_IDN_MB_FUSE_OFF"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_SGD_IDN_MB_FUSE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
 
@@ -807,21 +807,27 @@ def sgd_mb_steprows_kernel(
     witness_end(wf, woff, nonce)
 
 
-# lane/idn-sgd-multiblock: the fit's finiteness check on the device (IDENTICAL,
-# NVIDIA and AMD). The binding walked all n x d host words one at a time
-# before every fit (bindings/_mojolearn_x_linear.mojo `_finite`); here one
-# thread tests SGD_FIN_RUN words of the uploaded X (and of y) and a bad word
-# raises the flag: the same verdict (exponent all ones = NaN or infinity),
-# the same error. Apple keeps the host walk (a cut Metal launch would leave
-# the flag clear). `-D MOJOLEARN_SGD_IDN_DEV_FINITE_OFF` restores the walk.
+# lane/idn-sgd-multiblock: the fit's finiteness check on the device
+# (IDENTICAL). The binding walked all n x d host words one at a time before
+# every fit (bindings/_mojolearn_x_linear.mojo `_finite`); here one thread
+# tests SGD_FIN_RUN words of the uploaded X (and of y) and a bad word raises
+# the flag: the same verdict (exponent all ones = NaN or infinity), the same
+# error. `-D MOJOLEARN_SGD_IDN_DEV_FINITE_OFF` restores the walk.
+# Lane idn-all (2026-10-04): Apple runs the device check too. No Metal limit
+# prevents it; the one hazard (macOS cutting a command buffer would leave the
+# flag clear) is closed by the completion witness (x_linear/witness.mojo):
+# every block reports, the check is idempotent, a cut launch reruns and after
+# WITNESS_TRIES the fit raises. `-D MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF`
+# restores the host walk on Apple only.
 comptime SGD_IDN_DEV_FINITE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_SGD_IDN_DEV_FINITE_OFF"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_SGD_IDN_DEV_FINITE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    and not (has_apple_gpu_accelerator() and is_defined["MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF"]())
 )
 comptime SGD_FIN_RUN = 64
 
 
-def sgd_finite_kernel(p: FP, count: Int32, flag: IP, slot: Int32):
+def sgd_finite_kernel(p: FP, count: Int32, flag: IP, slot: Int32, wf: IP, woff: Int32, nonce: Int32):
     var q = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var lo = q * SGD_FIN_RUN
     var hi = min(lo + SGD_FIN_RUN, Int(count))
@@ -832,34 +838,49 @@ def sgd_finite_kernel(p: FP, count: Int32, flag: IP, slot: Int32):
             bad = True
     if bad:
         sti(flag, Int(slot), 1)
+    witness_end(wf, woff, nonce)
 
 
 def _sgd_finite_device(mut ctx: DeviceContext, dxp: FP, n_x: Int, y: FP, n_y: Int) raises:
     """Raises the binding's error when the uploaded X (dxp, n_x words) or the
     host y block (n_y words: labels, then sample weights) holds a NaN or an
-    infinity; X is named first, as the host walk names it."""
+    infinity; X is named first, as the host walk names it. One witness-
+    guarded unit (the flags are rebuilt from inputs the launches do not
+    write, so a cut Apple launch reruns)."""
     var dfl = ctx.enqueue_create_buffer[DType.int32](2)
-    dfl.enqueue_fill(Int32(0))
     var dyf = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
-    if n_x > 0:
-        ctx.enqueue_function[sgd_finite_kernel](
-            dxp, Int32(n_x), dfl.unsafe_ptr(), Int32(0),
-            grid_dim=_xg_blocks((n_x + SGD_FIN_RUN - 1) // SGD_FIN_RUN), block_dim=XG_TPB,
-        )
-    if n_y > 0:
-        ctx.enqueue_copy(dst_buf=dyf, src_ptr=y)
-        ctx.enqueue_function[sgd_finite_kernel](
-            dyf.unsafe_ptr(), Int32(n_y), dfl.unsafe_ptr(), Int32(1),
-            grid_dim=_xg_blocks((n_y + SGD_FIN_RUN - 1) // SGD_FIN_RUN), block_dim=XG_TPB,
-        )
+    var gx = _xg_blocks((n_x + SGD_FIN_RUN - 1) // SGD_FIN_RUN) if n_x > 0 else 0
+    var gy = _xg_blocks((n_y + SGD_FIN_RUN - 1) // SGD_FIN_RUN) if n_y > 0 else 0
+    var wit = Witness(ctx, max(gx + gy, 1))
     var hfl = List[Int32](length=2, fill=Int32(0))
-    ctx.enqueue_copy(dst_ptr=hfl.unsafe_ptr(), src_buf=dfl)
-    ctx.synchronize()
+    var tries = 0
+    while True:
+        var nonce = wit.begin()
+        dfl.enqueue_fill(Int32(0))
+        if n_x > 0:
+            ctx.enqueue_function[sgd_finite_kernel](
+                dxp, Int32(n_x), dfl.unsafe_ptr(), Int32(0), wit.p(), Int32(0), nonce,
+                grid_dim=gx, block_dim=XG_TPB,
+            )
+        if n_y > 0:
+            ctx.enqueue_copy(dst_buf=dyf, src_ptr=y)
+            ctx.enqueue_function[sgd_finite_kernel](
+                dyf.unsafe_ptr(), Int32(n_y), dfl.unsafe_ptr(), Int32(1), wit.p(), Int32(gx), nonce,
+                grid_dim=gy, block_dim=XG_TPB,
+            )
+        ctx.enqueue_copy(dst_ptr=hfl.unsafe_ptr(), src_buf=dfl)
+        ctx.synchronize()
+        if wit.ok(ctx, gx + gy, "SGD finite check"):
+            break
+        tries += 1
+        if tries >= WITNESS_TRIES:
+            wit.fail()
     var bx = hfl[0] != 0
     var by = hfl[1] != 0
     _ = hfl^
     _ = dfl^
     _ = dyf^
+    _ = wit^
     if bx:
         raise Error("mojolearn: X contains NaN or infinity")
     if by:
@@ -1764,7 +1785,7 @@ def _sgd_ps_simd_body(
 # as the block form and the host's `sgd_one`: no bit moves.
 comptime SGD_IDN_PS_WARP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_SGD_IDN_PS_WARP_OFF"]()
+    and not (is_defined["MOJOLEARN_SGD_IDN_PS_WARP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
 
 
