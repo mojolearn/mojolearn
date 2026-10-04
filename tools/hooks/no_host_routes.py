@@ -508,7 +508,9 @@ class Tree:
     _REGISTER = re.compile(r"def_function\[\s*([\w.]+)[^\]]*\]\s*\(\s*\"(\w+)\"")
     # device work in a function body: a context, a buffer, a launch, a
     # device-side helper call (`device_x(`, `x_device(`) or a kernel index
-    _ON_DEVICE = re.compile(r"process_ctx|DeviceContext|DeviceBuffer|enqueue_\w+|\bctx\b"
+    # (or a device executor whose methods launch on its own context: the
+    # resident decomp kit `DKit`, x_decomp/kit_device.mojo; `DeviceExec`)
+    _ON_DEVICE = re.compile(r"process_ctx|DeviceContext|DeviceBuffer|enqueue_\w+|\bctx\b|\bDKit\s*\(|\bDeviceExec\s*\("
                             r"|\bdevice_\w+\s*\(|\w+_device\w*\s*\(|thread_idx|block_idx")
     _LOOP = re.compile(r"^\s*for\s+\w+\s+in\s+range\(([^)]*)\)|^\s*while\b")
     _CALLEE = re.compile(r"\b([A-Za-z_]\w*)\s*[\[(]")

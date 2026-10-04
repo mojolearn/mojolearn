@@ -292,9 +292,13 @@ class _M:
             idx = _M(a, len(a), 1)
         I = idx
         m = I.r * I.c
+        if m * self.c and k._res():
+            # lane cpu3-python: the kit's device TAKE_ROWS move on a GPU
+            # binding (the operand goes up once if it is a host matrix)
+            return k.take_rows(self, I)
         out = _M.zeros(m, self.c)
         if m * self.c:
-            k.b.x_decomp_move(self.addr, I.addr, out.addr,
+            k.b.x_decomp_move(self.addr, I.addr, out.addr,  # cpu-route: host binding only (CPU-only installs), the GPU binding moved above
                               [_MV_TAKE_ROWS, m * self.c, self.c, 0, 0, 1, 0, len(self.s), m * self.c, m])
         return out
 
@@ -319,11 +323,18 @@ class _M:
     def T(self):
         d = self._d
         n = self.r * self.c
+        if d is None and n and self.r != 1 and self.c != 1 and n < _I32_MAX:
+            # lane cpu3-python: a host matrix on a GPU binding goes up once
+            # (it moves) and is transposed there; the move has no index operand
+            k = _host_kit()
+            if k._res():
+                k._did(self)
+                d = self._d
         if d is not None and (self.r == 1 or self.c == 1):
             # lane cpu2-l8-decomp: a vector's transpose is the same words, a
             # view of the same device buffer (as the host form shares its store)
             return _M._on_device(d, self.c, self.r)
-        if d is not None and _res_moves(self, n):
+        if d is not None and n < _I32_MAX:
             # lane fam2-decomp: transposed on the device (the TRANSPOSE move's
             # index functions; the index operand is unused, so the source's
             # own id stands in for it)
@@ -335,7 +346,7 @@ class _M:
         k = _host_kit()
         out = _M.zeros(self.c, self.r)
         n = self.r * self.c
-        k.b.x_decomp_move(self.addr, _M._one.addr, out.addr, [_MV_TRANSPOSE, n, self.r, self.c, 0, 0, 0, n, n, 1])
+        k.b.x_decomp_move(self.addr, _M._one.addr, out.addr, [_MV_TRANSPOSE, n, self.r, self.c, 0, 0, 0, n, n, 1])  # cpu-route: host binding only (CPU-only installs); a GPU binding transposed above
         return out
 
     def reshape(self, r, c):
@@ -393,6 +404,7 @@ _M._dev_one = staticmethod(_dev_one)
 _MV_TAKE_ROWS, _MV_TRANSPOSE, _MV_PLACE_COLS, _MV_FILL0 = 0, 1, 2, 3
 _MV_TAKE_COLS = 4
 _F32_INDEX_MAX = 1 << 24
+_I32_MAX = (1 << 31) - 1    # the move entries' int32 counts
 
 
 def _res_moves(M, count):
@@ -455,7 +467,7 @@ def _hstack(*ms):
     off = 0
     for m in ms:  # glue: one Mojo move per argument matrix
         if m.r * m.c:
-            k.b.x_decomp_move(m.addr, _M._one.addr, out.addr,
+            k.b.x_decomp_move(m.addr, _M._one.addr, out.addr,  # cpu-route: host binding only, _Kit.hstack moves on a GPU binding
                               [_MV_PLACE_COLS, m.r * m.c, m.c, w, off, 0, 0, m.r * m.c, r * w, 1])
         off += m.c
     return out
@@ -803,7 +815,7 @@ class _Kit:
             return out
         out = _M.zeros(m, A.c)
         if count:
-            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)
+            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
         return out
 
     def copy(self, A):
@@ -826,7 +838,7 @@ class _Kit:
             did = self._did(A)
             self.b.x_decomp_dev_move(did, _M._dev_one(self), did, p)
             return A
-        self.b.x_decomp_move(A.addr, _M._one.addr, A.addr, p)
+        self.b.x_decomp_move(A.addr, _M._one.addr, A.addr, p)  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
         return A
 
     # ---- lane cpu2-l8-decomp (2026-10-04, re-audit L8): scalar decisions
@@ -847,7 +859,7 @@ class _Kit:
             self.b.x_decomp_dev_reduce(self._did(A), out._d.id, [n, int(op)])
             return out
         out = _M.zeros(1, 1)
-        self.b.x_decomp_reduce(A.addr, out.addr, [n, int(op)])
+        self.b.x_decomp_reduce(A.addr, out.addr, [n, int(op)])  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
         return out
 
     def word(self, A, i=0):
@@ -872,7 +884,7 @@ class _Kit:
             return out
         out = _M.zeros(1, count)
         if count:
-            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)
+            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
         return out
 
     def place_strided(self, D, V, stride, off=0):
@@ -885,7 +897,7 @@ class _Kit:
         if self._use(D, V):
             self.b.x_decomp_dev_move(self._did(V), _M._dev_one(self), self._did(D), p)
             return D
-        self.b.x_decomp_move(V.addr, _M._one.addr, D.addr, p)
+        self.b.x_decomp_move(V.addr, _M._one.addr, D.addr, p)  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
         return D
 
     def place_rows(self, D, V, row):
@@ -912,7 +924,7 @@ class _Kit:
             return out
         out = _M.zeros(n, 1)
         if n:
-            self.b.x_decomp_order_small(A.addr, out.addr, [n])
+            self.b.x_decomp_order_small(A.addr, out.addr, [n])  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
         return out
 
     def take_cols_m(self, A, idx, w):
@@ -925,7 +937,7 @@ class _Kit:
             return out
         out = _M.zeros(A.r, w)
         if A.r * w:
-            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)
+            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
         return out
 
     def count_gt(self, A, s):
@@ -974,13 +986,37 @@ class _Kit:
         """-1 where V < 0, else +1 (NaN: +1), elementwise: select(-V > 0)."""
         return self.ew("select", self.ew("scale", V, s=-1.0), _M.of([-1.0], 1, 1), _M.of([1.0], 1, 1), s=0.0)
 
+    def _refuse_nan(self, A):
+        """A device operand's NaN refusal (the host forms' `f32_key`): its max
+        is NaN when any value is, one word down."""
+        v = self.word(self.reduce(A, self._SEL_MAX))
+        if v != v:
+            raise ValueError("x_decomp: a NaN has no order (refused)")
+
+    def _order_dev(self, A, neg=0, skip=None):
+        """(order, count) of `x_decomp_dev_order_f` on a resident kit: the
+        n x 1 device order and the number of positions not skipped."""
+        n = A.r * A.c
+        if n >= _F32_INDEX_MAX:
+            raise ValueError("x_decomp: order_f exceeds the float32 index bound")
+        self._refuse_nan(A)
+        out = self._dout(n, 1)
+        cnt = self._dout(1, 1)
+        sid = self._did(skip) if skip is not None else self._did(A)
+        self.b.x_decomp_dev_order_f(self._did(A), sid, out._d.id, cnt._d.id,
+                                    [n, int(neg), 1 if skip is not None else 0])
+        return out, cnt
+
     def order(self, A):
         """The stable ascending order of A's values (ties to the lower index)
-        as an n x 1 _M of exact floats; NaN refused."""
+        as an n x 1 _M of exact floats; NaN refused. Lane cpu3-python: a
+        radix sort on the device for a resident kit."""
         n = A.r * A.c
+        if n and self._use(A):
+            return self._order_dev(A)[0]
         out = _M.zeros(n, 1)
         if n:
-            self.b.x_decomp_order_f(A.addr, n, out.addr)
+            self.b.x_decomp_order_f(A.addr, n, out.addr)  # cpu-route: host binding only (CPU-only installs); a GPU binding sorts on the device above
         return out
 
     def select_smallest(self, A, h):
@@ -988,17 +1024,35 @@ class _Kit:
         ascending by position (h x 1 exact floats), and the int32 membership
         of every position."""
         n = A.r * A.c
+        if n and self._use(A):
+            # lane cpu3-python: two stable radix sorts on the device; the
+            # membership is an n x 1 device matrix of 0 / 1
+            if n >= _F32_INDEX_MAX or h < 0 or h > n:
+                raise ValueError("x_decomp: select_smallest out of range")
+            self._refuse_nan(A)
+            sel, mask = self._dout(h, 1), self._dout(n, 1)
+            self.b.x_decomp_dev_select_smallest(self._did(A), sel._d.id, mask._d.id, [n, h])
+            return sel, mask
         sel = _M.zeros(h, 1)
         mask = array.array("i", [0]) * n
         if n:
-            self.b.x_decomp_select_smallest(A.addr, [n, h], sel.addr, mask.buffer_info()[0])
+            self.b.x_decomp_select_smallest(A.addr, [n, h], sel.addr, mask.buffer_info()[0])  # cpu-route: host binding only (CPU-only installs); a GPU binding selects on the device above
         return sel, mask
 
     def argmin_all(self, A):
         """Every position (exact floats, c x 1) whose value equals the minimum."""
         n = A.r * A.c
+        if n and self._use(A):
+            # lane cpu3-python: the min, an equality key and a stable sort on
+            # the device; the count is one word down
+            if n >= _F32_INDEX_MAX:
+                raise ValueError("x_decomp: argmin_all exceeds the float32 index bound")
+            out, cnt = self._dout(n, 1), self._dout(1, 1)
+            self.b.x_decomp_dev_argmin_all(self._did(A), out._d.id, cnt._d.id, [n])
+            c = int(self.word(cnt))
+            return out.rows(0, c) if c else _M.zeros(0, 1)
         buf = _M.zeros(max(n, 1), 1)
-        c = int(self.b.x_decomp_argmin_all(A.addr, n, buf.addr)) if n else 0
+        c = int(self.b.x_decomp_argmin_all(A.addr, n, buf.addr)) if n else 0  # cpu-route: host binding only (CPU-only installs); a GPU binding finds them on the device above
         return _M(buf.s[:c], c, 1)
 
     def lu_solve(self, lu, piv, B, trans=0):
@@ -2467,10 +2521,20 @@ def _support_of(mask, n):
 
 
 def _dsum_sq(k, M):
-    """The in-order float64 sum of the squares of M's float32 values
-    (x_decomp/moves.mojo `dsum_sq`, the product pinned)."""
+    """The binary64 sum of the squares of M's float32 values (each square
+    exact), DSUM_CHUNK values per partial then the partials folded the same
+    way: on the device in software binary64 for a resident kit (lane
+    cpu3-python), the same words on the host binding (`dsum_sq_host`)."""
     n = M.r * M.c
-    return float(k.b.x_decomp_dsum_sq(M.addr, n)) if n else 0.0
+    if not n:
+        return 0.0
+    if k._use(M):
+        out = k._dout(1, 2)
+        k.b.x_decomp_dev_dsum_sq(k._did(M), out._d.id, [n])
+        w = array.array("d")
+        w.frombytes(out.s.tobytes())   # glue: the binary64 result's two words, as bytes
+        return w[0]
+    return float(k.b.x_decomp_dsum_sq(M.addr, n))  # cpu-route: host binding only (CPU-only installs); a GPU binding sums on the device above
 
 
 def _dsum(values):
@@ -4288,11 +4352,10 @@ class Isomap(_Base):
     def reconstruction_error(self):
         self._check("embedding_m_")
         k = self._kit()
-        # a difference of two nearly equal sums: accumulated in float64
-        # (sequential IEEE adds of exact float32 squares) or it cancels
+        # a difference of two nearly equal sums: accumulated in binary64
+        # (exact float32 squares, `_dsum_sq`'s chunked adds) or it cancels
         Kc, ev = self._Kc, self.eigenvalues_m_
-        t = (float(k.b.x_decomp_dsum_sq(Kc.addr, len(Kc.s))) if Kc.r * Kc.c else 0.0) - \
-            (float(k.b.x_decomp_dsum_sq(ev.addr, len(ev.s))) if ev.r * ev.c else 0.0)
+        t = _dsum_sq(k, Kc) - _dsum_sq(k, ev)
         return math.sqrt(t) / self._Kc.r if t > 0 else 0.0
 
 
@@ -4927,7 +4990,8 @@ class MinCovDet(_Base):
             cen = k.ew("abs", k.ew("sub", X, loc))
             sel, mask = k.select_smallest(cen, h)
             Xs = k.take_rows(X, sel)
-            support = _support_of(mask, n)
+            # the device form's membership is a 0 / 1 float matrix (lane cpu3-python)
+            support = mask.out((n,)).astype("<u1") if isinstance(mask, _M) else _support_of(mask, n)
         else:
             loc = k.colmean(X)
             Xs = X
@@ -5047,13 +5111,14 @@ class EllipticEnvelope(MinCovDet):
         # is -(d in ascending order)[n - 1 - i] (negation is exact)
         dm = self.dist_m_
         nv = dm.r * dm.c
-        o = array.array("i", [0]) * nv
-        k.b.x_decomp_argsort_f32(dm.addr, nv, o.buffer_info()[0])
-        ds = dm.s
         q = 100.0 * self.contamination / 100.0 * (nv - 1)
         lo = int(math.floor(q))
         hi = min(lo + 1, nv - 1)
-        vlo, vhi = -ds[o[nv - 1 - lo]], -ds[o[nv - 1 - hi]]
+        # lane cpu3-python: the kit's order (a device radix sort on a GPU
+        # binding), then the two order statistics one word each
+        o = k.order(dm)
+        vlo = -k.word(dm, int(k.word(o, nv - 1 - lo)))
+        vhi = -k.word(dm, int(k.word(o, nv - 1 - hi)))
         self.offset_ = vlo + (vhi - vlo) * (q - lo)
         return self
 
@@ -5072,10 +5137,13 @@ class EllipticEnvelope(MinCovDet):
         k = self._kit()
         d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
         dec = k.ew("adds", k.ew("scale", d, s=-1.0), s=-self.offset_)
-        out = array.array("i", [0]) * d.r
-        if d.r:
-            k.b.x_decomp_sign_labels(dec.addr, d.r, out.buffer_info()[0])
-        return _fb(out.tobytes(), "<i4", (len(out),))
+        if not d.r:
+            return _fb(b"", "<i4", (0,))
+        # lane cpu3-python: 1 where dec >= 0 (-dec <= 0), else -1 (NaN: -1),
+        # in the kit's cells on either binding
+        ge = k.ew("le", k.ew("scale", dec, s=-1.0), _M.of([0.0], 1, 1))
+        lab = k.ew("select", ge, _M.of([1.0], 1, 1), _M.of([-1.0], 1, 1), s=0.5)
+        return lab.out((d.r,)).astype("<i4")
 
     def fit_predict(self, X, y=None):
         return self.fit(X).predict(X)
@@ -5189,11 +5257,25 @@ class AlternatingLeastSquares(_Base):
         from ._buffer import frombytes as _fb
         m = S.r * S.c
         n = max(min(N, m), 0)
+        if n and k._use(S):
+            # lane cpu3-python: the (-score, id) order on the device, the
+            # skipped items last; the N first ids and their scores gathered there
+            sk = None
+            if skip:
+                sk = _M.zeros(1, m)
+                ctypes.memmove(sk.addr, skip, 4 * m)   # glue: the caller's skip row, one C copy
+            o, cnt = k._order_dev(S, neg=1, skip=sk)
+            c = min(n, int(k.word(cnt)))
+            if not c:
+                return (_fb(b"", "<i4", (0,)), _fb(b"", "<f4", (0,)))
+            ids = o.rows(0, c)
+            vals = k.take_cols_m(S.reshape(1, m), ids, c)
+            return (ids.out((c,)).astype("<i4"), vals.out((c,)))
         order = array.array("i", [0]) * max(n, 1)
-        c = int(k.b.x_decomp_topn_desc(S.addr, [m, n], skip, order.buffer_info()[0])) if n else 0
+        c = int(k.b.x_decomp_topn_desc(S.addr, [m, n], skip, order.buffer_info()[0])) if n else 0  # cpu-route: host binding only (CPU-only installs); a GPU binding orders on the device above
         vals = array.array("f", [0.0]) * max(c, 1)
         if c:
-            k.b.x_decomp_gather(S.addr, order.buffer_info()[0], c, vals.buffer_info()[0])
+            k.b.x_decomp_gather(S.addr, order.buffer_info()[0], c, vals.buffer_info()[0])  # cpu-route: host binding only, the device route returned above
         return (_fb(order[:c].tobytes(), "<i4", (c,)), _fb(vals[:c].tobytes(), "<f4", (c,)))
 
     def recommend(self, userid, user_items, N=10, filter_already_liked_items=True):

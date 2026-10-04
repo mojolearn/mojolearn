@@ -5,6 +5,7 @@ both executors: `bindings/_mojolearn_x_decomp.mojo` registers `*_py[DevExec]`,
 `bindings/_mojolearn_x_decomp_host.mojo` registers `*_py[HostExec]` under the
 same names, so the GPU binding and the CPU host binding share the address
 contract by construction. Every address is a host buffer the caller owns."""
+from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
@@ -16,7 +17,7 @@ from x_decomp.kit import mat_from
 from x_decomp.mcd import fast_mcd
 from x_decomp.lda_online import lda_online_pass
 from x_decomp.moves import (
-    F64Ptr, PY2MOJO_DECOMP, accuracy, argmin_all, argsort_f32, dsum_sq, gather, iso_order, move_host, order_f,
+    F64Ptr, PY2MOJO_DECOMP, accuracy, argmin_all, argsort_f32, dsum_sq_host, gather, iso_order, move_host, order_f,
     scatter, select_smallest, sign_labels, topn_desc, triu_nonzero,
 )
 from x_decomp.tsqr_core import TS_MAX_N
@@ -895,15 +896,16 @@ def move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonOb
 
 
 def dsum_sq_py(x: PythonObject, m: PythonObject) raises -> PythonObject:
-    """The in-order float64 sum of the squares of m float32 values."""
+    """The binary64 sum of the squares of m float32 values in the device
+    form's chunked order (`dsum_sq_host`): the host column."""
     var n = Int(py=m)
     if n <= 0:
         return PythonObject(Float64(0))
     var px = _f(x)
-    var t = Float64(0)
+    var t = UInt64(0)
     with GILReleased(Python()):
-        t = dsum_sq(px, n)
-    return PythonObject(t)
+        t = dsum_sq_host(px, n)
+    return PythonObject(bitcast[DType.float64](t))
 
 
 def order_f_py(x: PythonObject, m: PythonObject, dst: PythonObject) raises -> PythonObject:
