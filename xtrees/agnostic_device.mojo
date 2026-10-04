@@ -36,6 +36,21 @@ comptime AGN_TPB = 128
 #:   (-43.3%), rel_error_vs_exact 4.378e-09 both arms.
 comptime _AGN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime KSHAP_FAST_BATCH = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_KSHAP_FAST_BATCH_OFF"]()
+#: lane apple-fast-w2-shap (2026-10-04), OPT-IN candidate (FAST + Apple
+#: only, needs -D MOJOLEARN_SHAP_FAST_PIPE; off in every other build):
+#: MOJOLEARN_SHAP_FAST_PIPE  Kernel/Permutation SHAP double-buffer the
+#:   synthetic matrix. `kshap_synth_start` / `pshap_synth_start` enqueue the
+#:   next chunk's masks, synthesis and device-to-host copy into one of two
+#:   pooled slots and return WITHOUT synchronizing, so that chunk's
+#:   synthesis and its 180-390 MB download run while the caller's model
+#:   evaluates the previous chunk on the host. The next `*_values` /
+#:   `kshap_means` call (it synchronizes the same stream) completes it.
+#:   Bit-inert: the same units in the same order per row; only the time the
+#:   host waits for the copy moves. Hypothesis: M3 istella permutation-shap
+#:   28,236 ms and kernel-shap 15,325 ms are about half download (~3 GB/s
+#:   raw host-pointer copies, 388 / 180 MB per row) and half the model.
+comptime SHAP_FAST_PIPE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                           and is_defined["MOJOLEARN_SHAP_FAST_PIPE"]())
 comptime AGN_MAX_BLOCKS = 65535 * 16
 comptime _CTX = "MojoXTreesAgnosticIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXTreesAgnosticFast"
 
@@ -176,7 +191,7 @@ def _up_i64(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.
     return b^
 
 
-struct _Masks(Movable):
+struct _Masks(Copyable, Movable):
     """A chunk's coalition masks and weights, on the device."""
     var masks: DeviceBuffer[DType.int32]
     var w: DeviceBuffer[DType.uint64]
@@ -499,3 +514,127 @@ def bg_mean(y: Int, res: Int, m: Int, nb: Int, k: Int) raises:
     ctx.synchronize()
     _ = dy^
     _ = dr^
+
+
+struct _PipeSlot(Defaultable, Movable):
+    """One slot of MOJOLEARN_SHAP_FAST_PIPE: the slot's synthetic device
+    buffer (grown on demand, never shrunk) and every device buffer its last
+    `*_synth_start` enqueued work on, held until the slot is started again
+    (by then a `*_values` / `kshap_means` / `agn_sync` call has
+    synchronized the stream, so nothing here is still in flight)."""
+    var syn: Optional[DeviceBuffer[DType.float32]]
+    var cap: Int
+    var mk: Optional[_Masks]
+    var i0: Optional[DeviceBuffer[DType.int32]]
+    var i1: Optional[DeviceBuffer[DType.int32]]
+    var f0: Optional[DeviceBuffer[DType.float32]]
+    var f1: Optional[DeviceBuffer[DType.float32]]
+
+    def __init__(out self):
+        self.syn = Optional[DeviceBuffer[DType.float32]]()
+        self.cap = 0
+        self.mk = Optional[_Masks]()
+        self.i0 = Optional[DeviceBuffer[DType.int32]]()
+        self.i1 = Optional[DeviceBuffer[DType.int32]]()
+        self.f0 = Optional[DeviceBuffer[DType.float32]]()
+        self.f1 = Optional[DeviceBuffer[DType.float32]]()
+
+
+struct _AgnPipe(Defaultable, Movable):
+    var s0: _PipeSlot
+    var s1: _PipeSlot
+
+    def __init__(out self):
+        self.s0 = _PipeSlot()
+        self.s1 = _PipeSlot()
+
+
+comptime AGN_PIPE = _Global[StorageType=_AgnPipe, name="MojoXTreesAgnosticPipeFast", init_fn=_AgnPipe.__init__]
+
+
+def _slot_syn(ctx: DeviceContext, mut s: _PipeSlot, total: Int) raises -> F32P:
+    if s.cap < total:
+        s.syn = Optional[DeviceBuffer[DType.float32]]()
+        s.syn = ctx.enqueue_create_buffer[DType.float32](total)
+        s.cap = total
+    return F32P(unsafe_from_address=Int(s.syn.value().unsafe_ptr()))
+
+
+def _kstart(ctx: DeviceContext, mut s: _PipeSlot, x: Int, bg: Int, size_off: Int, size_w: Int, cdf: Int, syn: Int,
+            R: Int, nb: Int, d: Int, m: Int, nfixed: Int, nfull: Int, npaired: Int, L: Int, seed: Int, row0: Int,
+            wrand: UInt64, total: Int) raises:
+    var ps = _slot_syn(ctx, s, total)
+    var mk = _Masks(ctx, size_off, size_w, cdf, R, d, m, nfixed, nfull, npaired, L, seed, row0, wrand)
+    var dx = _up_f32(ctx, x, R * d)
+    var dbg = _up_f32(ctx, bg, nb * d)
+    ctx.enqueue_function[ksynth_kernel](
+        Int64(total), Int32(nb), Int32(d), Int32(m), dx.unsafe_ptr(), dbg.unsafe_ptr(), mk.masks.unsafe_ptr(),
+        ps, grid_dim=_blocks(total), block_dim=AGN_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=syn),
+                     src_buf=s.syn.value().create_sub_buffer[DType.float32](0, total))
+    s.mk = mk^
+    s.f0 = dx^
+    s.f1 = dbg^
+
+
+def kshap_synth_start(x: Int, bg: Int, size_off: Int, size_w: Int, cdf: Int, syn: Int, R: Int, nb: Int, d: Int,
+                      m: Int, nfixed: Int, nfull: Int, npaired: Int, L: Int, seed: Int, row0: Int, wrand: UInt64,
+                      slot: Int) raises:
+    """MOJOLEARN_SHAP_FAST_PIPE: `kshap_synth` into slot 0 or 1 without
+    synchronizing; the host buffer `syn` is complete after the next call
+    that synchronizes (`kshap_means`, `agn_sync`). The caller keeps `x`,
+    `bg`, the tables and `syn` alive until then."""
+    var total = R * m * nb * d
+    if total <= 0:
+        return
+    var ctx = _ctx()
+    var pp = AGN_PIPE.get_or_create_ptr()
+    if slot == 0:
+        _kstart(ctx, pp[].s0, x, bg, size_off, size_w, cdf, syn, R, nb, d, m, nfixed, nfull, npaired, L, seed,
+                row0, wrand, total)
+    else:
+        _kstart(ctx, pp[].s1, x, bg, size_off, size_w, cdf, syn, R, nb, d, m, nfixed, nfull, npaired, L, seed,
+                row0, wrand, total)
+
+
+def _pstart(ctx: DeviceContext, mut s: _PipeSlot, x: Int, bg: Int, syn: Int, R: Int, nb: Int, d: Int, np: Int,
+            seed: Int, row0: Int, total: Int) raises:
+    var ps = _slot_syn(ctx, s, total)
+    var perm = ctx.enqueue_create_buffer[DType.int32](R * np * d)
+    var inv = ctx.enqueue_create_buffer[DType.int32](R * np * d)
+    _perms(ctx, R, d, np, seed, row0, perm, inv)
+    var dx = _up_f32(ctx, x, R * d)
+    var dbg = _up_f32(ctx, bg, nb * d)
+    ctx.enqueue_function[psynth_kernel](
+        Int64(total), Int32(nb), Int32(d), Int32(np), dx.unsafe_ptr(), dbg.unsafe_ptr(), inv.unsafe_ptr(),
+        ps, grid_dim=_blocks(total), block_dim=AGN_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=syn),
+                     src_buf=s.syn.value().create_sub_buffer[DType.float32](0, total))
+    s.i0 = perm^
+    s.i1 = inv^
+    s.f0 = dx^
+    s.f1 = dbg^
+
+
+def pshap_synth_start(x: Int, bg: Int, syn: Int, R: Int, nb: Int, d: Int, np: Int, seed: Int, row0: Int,
+                      slot: Int) raises:
+    """MOJOLEARN_SHAP_FAST_PIPE: `pshap_synth` into slot 0 or 1 without
+    synchronizing; `syn` is complete after the next call that synchronizes
+    (`pshap_values`, `agn_sync`). The caller keeps `x`, `bg` and `syn`
+    alive until then."""
+    var total = R * np * (2 * d + 1) * nb * d
+    if total <= 0:
+        return
+    var ctx = _ctx()
+    var pp = AGN_PIPE.get_or_create_ptr()
+    if slot == 0:
+        _pstart(ctx, pp[].s0, x, bg, syn, R, nb, d, np, seed, row0, total)
+    else:
+        _pstart(ctx, pp[].s1, x, bg, syn, R, nb, d, np, seed, row0, total)
+
+
+def agn_sync() raises:
+    """MOJOLEARN_SHAP_FAST_PIPE: wait for every started chunk."""
+    _ctx().synchronize()
