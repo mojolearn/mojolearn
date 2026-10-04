@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""lane/apple-fast-w2-linalg (2026-10-04): LU_FAST_MMA (opt-in, `-D MOJOLEARN_LU_FAST_MMA`),
+"""lane/apple-fast-w2-linalg (2026-10-04): LU_FAST_MMA (FAST+Apple default, rollback `-D MOJOLEARN_LU_FAST_MMA_OFF`),
 the blocked LU with delayed trailing updates on the Apple matrix unit (FAST
 on Apple only; needs LU_FAST_STEP1, so `-D MOJOLEARN_LU_FAST_STEP1_OFF`
 turns it off too).
@@ -64,8 +64,12 @@ from gemm.afn_apple_fast import AFN_GEMM_APPLE, AFN_GEMM_KB, _afn_gload, _afn_lo
 from x_decomp.cells import F32Ptr, I32Ptr, lu_swap_elem
 from x_decomp.lu_fast import LFS_TPB, LU_FAST_STEP1, lfs_blocks, lu_fast_panel
 
-#: Opt-in candidate (M3 A/B owed: tags w2-lumma-*). `-D MOJOLEARN_LU_FAST_MMA`.
-comptime LU_FAST_MMA = LU_FAST_STEP1 and AFN_GEMM_APPLE and is_defined["MOJOLEARN_LU_FAST_MMA"]()
+#: DEFAULT in FAST + Apple (lane/apple-fast-w2-linalg). M3, one run per arm:
+#: lu-factor synthetic 971.7 -> 849.3 ms, lu-solve synthetic 971.9 -> 852.1 ms;
+#: w2-lumma-quality PASS (factor/solve residual gates, info equal, finite).
+#: Still needs LU_FAST_STEP1 and AFN_GEMM_APPLE. `-D MOJOLEARN_LU_FAST_MMA_OFF`
+#: restores main's per-32-column scalar trailing updates.
+comptime LU_FAST_MMA = LU_FAST_STEP1 and AFN_GEMM_APPLE and not is_defined["MOJOLEARN_LU_FAST_MMA_OFF"]()
 #: The outer block (the big GEMM's k). A multiple of the 32-column panel.
 comptime LFM_NB = get_defined_int["MOJOLEARN_LU_FAST_MMA_NB", 256]()
 comptime LFM_PANEL = 32

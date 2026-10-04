@@ -1982,7 +1982,7 @@ def launch_lu(
         var lfs_p1 = ctx.enqueue_create_buffer[DType.float32](n * nb if step1 else 1)
         var lfs_pa = ctx.enqueue_create_buffer[DType.float32](2 * lfs_mb if step1 else 1)
         var lfs_pb = ctx.enqueue_create_buffer[DType.float32](2 * lfs_mb if step1 else 1)
-        # LU_FAST_MMA (opt-in, x_decomp/lu_fast_mma.mojo; -D MOJOLEARN_LU_FAST_MMA):
+        # LU_FAST_MMA (FAST + Apple default, x_decomp/lu_fast_mma.mojo; rollback -D MOJOLEARN_LU_FAST_MMA_OFF):
         # 256-column outer blocks, the trailing updates delayed and run on
         # the Apple matrix unit (one pass over the trailing square per 256
         # columns instead of per 32). Off: main's loop below.

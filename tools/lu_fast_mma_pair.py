@@ -8,7 +8,7 @@
   timing  SOURCE QUALITY_TAG TIMING_TAG lu-factor|lu-solve
 
 SOURCE is the exact full SHA; ~/mq/verified-arms/SOURCE/x_decomp holds A.so
-(main, no define), B.so (-D MOJOLEARN_LU_FAST_MMA) and manifest.json. The
+(no define = MMA default), B.so (-D MOJOLEARN_LU_FAST_MMA_OFF) and manifest.json. The
 quality job runs tools/lu_fast_mma_quality.py dump on each arm, then compare,
 and writes PASS.json only on LU-MMA-AB status=PASS. The timing job refuses
 without that receipt. No builds, SSH, queue edits or opponent runs.
@@ -23,7 +23,7 @@ import shutil
 import subprocess
 import sys
 
-DEFINE = "MOJOLEARN_LU_FAST_MMA"
+DEFINE = "MOJOLEARN_LU_FAST_MMA_OFF"  # after promotion B=_OFF is the old path
 FIXTURE = "lu-fast-mma-v1"
 BINDING = "x_decomp"
 
