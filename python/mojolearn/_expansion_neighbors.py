@@ -1144,10 +1144,15 @@ class AdditiveChi2Sampler(_XNeighbors):
 
     def fit(self, X, y=None):
         X = _f32(X)
+        first = -2
         if X.size and _kfeat_flags(self) & 1:
             # MOJOLEARN_XN_FAST_ACHI2_DEVSCAN: one pooled upload and device
-            # scan (x_neighbors_kfeat_first_negative), not a host X.min()
-            neg = int(self._bind().x_neighbors_kfeat_first_negative(addr_ro(X, name="X"), X.size)) >= 0
+            # scan (x_neighbors_kfeat_first_negative), not a host X.min();
+            # -2 = below the binding's size gate (XN_ACHI2_DEVSCAN_MIN,
+            # x_neighbors/kfeat_dev.mojo): main's check below
+            first = int(self._bind().x_neighbors_kfeat_first_negative(addr_ro(X, name="X"), X.size))
+        if first != -2:
+            neg = first >= 0
         else:
             neg = X.size and X.min() < 0
         if neg:

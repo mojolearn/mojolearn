@@ -87,12 +87,34 @@ def kfeat_flags_binding() raises -> PythonObject:
     return PythonObject(f)
 
 
+# lane apple-fast-w3-kfeat: ACHI2_DEVSCAN's size gate. The device scan only
+# from XN_ACHI2_DEVSCAN_MIN entries; below it the binding answers -2 and
+# AdditiveChi2Sampler.fit keeps main's host `X.min()` (same refusals).
+# From the two M3 points (one run per arm, w2-kfeat-achi2-*), with the
+# board's n = 100,000 rows: taxi d = 11 (1.1M entries) host 0.9 / device
+# 1.9 ms, istella d = 220 (22.0M) host 11.6 / device 2.9 ms. Host: about
+# 0.34 ms + 0.51 ms per million entries (the sequential min); device: about
+# 1.85 ms + 0.048 ms per million (the fixed upload-launch-wait round trip
+# dominates, the 88 MB upload is ~1 ms). They cross at ~3.3M entries. The
+# gate sits at 2^22 = 4,194,304 entries (16 MiB of float32), above the
+# crossing, where the model gives device 2.05 vs host 2.49 ms: a margin
+# larger than the 0.2 ms the same row moved between two main runs (taxi
+# 0.7 board vs 0.9 A arm), so one noisy fixed cost cannot put a small X on
+# the slower route. Taxi keeps main's route and time; istella keeps the
+# device scan.
+comptime XN_ACHI2_DEVSCAN_MIN = 1 << 22
+
+
 def kfeat_first_negative_binding(xaddr: PythonObject, n: PythonObject) raises -> PythonObject:
     """The first flat index i < n with X[i] < 0 by bits (sign set, magnitude
-    nonzero), or -1: one upload into a pooled buffer, one scan, one wait."""
+    nonzero), or -1: one upload into a pooled buffer, one scan, one wait.
+    -2 below XN_ACHI2_DEVSCAN_MIN entries: not scanned, the caller takes
+    main's host minimum."""
     var cnt = Int(py=n)
     if cnt <= 0:
         return PythonObject(-1)
+    if cnt < XN_ACHI2_DEVSCAN_MIN:
+        return PythonObject(-2)
     if cnt > 2147483647:
         raise Error("x_neighbors_kfeat_first_negative: more than 2^31 - 1 entries")
     var src = FP(unsafe_from_address=Int(py=xaddr))
