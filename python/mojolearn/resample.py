@@ -334,6 +334,33 @@ def _take(a, idx):
     return [a[int(i)] for i in idx]
 
 
+def _gpu_gather(arrays, n, count, seed, numeric_mode):
+    """Return owned results or None for unchanged public fallback."""
+    if (numeric_mode or _backend.default_mode()) != "fast" or count <= 0:
+        return None
+    mod = _extension(numeric_mode)
+    enabled = getattr(mod, "resample_gpu_gather_enabled", None)
+    if enabled is None or not int(enabled()):
+        return None
+    from ._optional_numpy import require_numpy
+    np = require_numpy("resample")
+    # Never coerce input: preserve existing list/Array/strided/dtype behavior.
+    if any(not isinstance(x, np.ndarray) or x.dtype != np.float32
+           or x.ndim not in (1, 2) or not x.flags.c_contiguous
+           or (x.ndim == 2 and not 0 < x.shape[1] <= 2147483647)
+           for x in arrays):
+        return None
+    outputs = [np.empty((count,) + x.shape[1:], dtype=np.float32) for x in arrays]
+    addresses = []
+    widths = []
+    for x, output in zip(arrays, outputs):  # glue: one native span per argument
+        addresses.extend((addr_ro(x, name="array"), addr(output, name="resampled")))
+        widths.append(1 if x.ndim == 1 else x.shape[1])
+    if int(mod.resample_gather_gpu(addresses, [n, count, seed] + widths)):
+        return outputs
+    return None
+
+
 def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=None,
              sample_weight=None, numeric_mode=None):
     """`sklearn.utils.resample(*arrays, replace=..., n_samples=...,
@@ -354,6 +381,11 @@ def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=Non
         if len(a) != n:
             raise ValueError(f"mojolearn {where}: Found input variables with inconsistent numbers of samples: "
                              f"{[len(x) for x in arrays]}")
+    if replace:
+        count = n if n_samples is None else _int(n_samples, "n_samples", where)
+        gathered = _gpu_gather(arrays, n, count, _int(random_state, "random_state", where), numeric_mode)
+        if gathered is not None:
+            return gathered[0] if len(gathered) == 1 else gathered
     idx = resample_indices(n, n_samples, replace, random_state, numeric_mode)
     out = [_take(a, idx) for a in arrays]  # glue: dispatches one gather per argument array
     return out[0] if len(out) == 1 else out
