@@ -88,6 +88,7 @@ from cholesky.checks.cholesky_oracle import (
     oracle_trsm_lower,
 )
 from cholesky.checks.potrf import CHOL_NB_PINNED
+from mixture.chol_order import gmm_idn_chol_applies, gmm_idn_chol_host
 from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_oracle import OP_NN, OP_TN, gemm_oracle
 from mixture.checks.estep import (
@@ -236,6 +237,27 @@ def oracle_precision_cholesky(
         logdet.append(Float32(0.0))
 
     var quiet = IdentityTrace.disabled()
+
+    if gmm_idn_chol_applies(d):
+        # fam2-cluster, IDN_GMM_FUSED_CHOL: the one-launch order
+        # (`mixture/chol_order.mojo`), with the driver's tags in its order.
+        for kc in range(ncomp):
+            var fc = gmm_idn_chol_host(cov, kc * dd, d, GMM_CHOL_JITTER)
+            if fc.info != 0:
+                return GmmPrecOracle(fc.info, kc, chol_l^, prec^, logdet^)
+            for i in range(dd):
+                chol_l[kc * dd + i] = fc.l[i]
+            _record(trace, gmm_comp_tag(tag, kc, "cholesky"), fc.l, dd)
+            logdet[kc] = fc.logdet
+            var pk2 = List[Float32]()
+            for i in range(d):
+                for j in range(d):
+                    pk2.append(fc.linv[j * d + i])
+            for i in range(dd):
+                prec[kc * dd + i] = pk2[i]
+            _record(trace, gmm_comp_tag(tag, kc, "precchol"), pk2, dd)
+        _record(trace, tag + ".logdet", logdet, ncomp)
+        return GmmPrecOracle(0, -1, chol_l^, prec^, logdet^)
 
     for kc in range(ncomp):
         var block = _sub(cov, kc * dd, dd)
