@@ -7,7 +7,15 @@
 # n_features <= 32, the old path above). One line per estimator, then
 # M2B1M3-SMOKE status=ok|FAIL. Run in a built tree.
 set -u
-cd "$(dirname "$0")/../python"
+cd "$(dirname "$0")/.."
+# the FAST bindings this smoke imports; build any the queue did not
+for b in ivf estimators x_ann x_prep; do
+    [ -f "python/mojolearn/_mojolearn_$b.so" ] || {
+        MOJOLEARN_NUMERIC_MODE=fast bash "bindings/build_$b.sh" > "/tmp/m2b1m3_build_$b.log" 2>&1
+        echo "M2B1M3 build $b rc=$?"
+    }
+done
+cd python
 PY=${M2B1M3_PY:-$HOME/board-0834/cache/venv/bin/python}
 MOJOLEARN_NUMERIC_MODE=fast "$PY" - <<'PYEOF'
 import traceback
@@ -74,7 +82,7 @@ def lsvr(d):
         X = r.standard_normal((20000, d)).astype(np.float32)
         w = r.standard_normal(d).astype(np.float32)
         y = (X @ w + 0.1 * r.standard_normal(20000)).astype(np.float32)
-        p = np.asarray(ml.LinearSVR(random_state=0).fit(X, y).predict(X))
+        p = np.asarray(ml.LinearSVR().fit(X, y).predict(X))
         r2 = 1.0 - float(((p - y) ** 2).sum() / ((y - y.mean()) ** 2).sum())
         return r2 > 0.95, "d=%d r2=%.4f" % (d, r2)
     return run
