@@ -66,8 +66,8 @@ def validate_admission(doc, *, source_commit, manifest_sha256, configuration=Non
     _require(isinstance(coverage, dict) and _digest(coverage.get('inventory_sha256'))
              and _digest(coverage.get('harness_sha256')), 'missing coverage provenance')
     shared, native = coverage.get('shared'), coverage.get('nvidia')
-    for name, row, fixtures, parts in (('shared', shared, SHARED_FIXTURES, SHARED_PARTS),
-                                      ('nvidia', native, NVIDIA_FIXTURES, NVIDIA_PARTS)):  # glue: validate two release coverage metadata records
+    for name, row, fixtures, parts in (('shared', shared, SHARED_FIXTURES, SHARED_PARTS),  # glue: validate two release coverage metadata records
+                                      ('nvidia', native, NVIDIA_FIXTURES, NVIDIA_PARTS)):
         _require(isinstance(row, dict) and _names(row.get('lanes')), name + ' lanes missing or duplicated')
         _require(_names(row.get('fixtures')) and set(row['fixtures']) == set(fixtures), name + ' fixtures incomplete')
         _require(_names(row.get('parts')) and set(row['parts']) == set(parts), name + ' parts incomplete')
