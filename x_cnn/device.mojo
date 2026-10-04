@@ -90,6 +90,9 @@ struct _CnnContext(Defaultable, Movable):
     #: lane/cnn-apple2: freed resident arrays kept for reuse by `res_alloc`
     #: (at most `RES_POOL_MAX_FLOATS` in all).
     var pool: List[DeviceBuffer[DType.float32]]
+    #: lane idn-cnn-resident: the leading words of workspace slot
+    #: `ONES_WS_SLOT` that already hold 1.0f (`ones_buf`).
+    var ones_n: Int
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
@@ -97,6 +100,7 @@ struct _CnnContext(Defaultable, Movable):
         self.res = List[DeviceBuffer[DType.float32]]()
         self.tuned = List[Int]()
         self.pool = List[DeviceBuffer[DType.float32]]()
+        self.ones_n = 0
 
 
 #: The pinned stages of this binding's downloads (core/staged_download.mojo),
@@ -563,6 +567,34 @@ def ws_i(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType.int
     return view_i(ctx, b.unsafe_ptr().bitcast[Int32]().unsafe_origin_cast[MutAnyOrigin](), n)
 
 
+#: lane idn-cnn-resident (2026-10-04): THE DEVICE ONES VECTOR. The bias
+#: gradient is the pinned GEMM's fold of G against a vector of ones; every
+#: backward filled that vector again (a launch over the rows, or a fill).
+#: IDENTICAL now keeps one resident vector of 1.0f words in its own
+#: workspace slot, filled when it first grows to a size and read by every
+#: later backward. The same operand words into the same GEMM: no bit moves.
+#: `-D MOJOLEARN_XCNN_ONES_CACHE_OFF` is the before arm (a fill per call).
+comptime ONES_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_XCNN_ONES_CACHE_OFF"]()
+comptime ONES_WS_SLOT = 30
+
+
+def ones_buf(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """`n` floats for a backward's ones operand. With `ONES_CACHE` they are
+    the resident ones (already 1.0f; filled here, in order, when the vector
+    grows); without it they are workspace slot `slot`, which the caller
+    fills as it always did."""
+    comptime if ONES_CACHE:
+        var need = n if n > 0 else 1
+        var b = ws(ctx, ONES_WS_SLOT, need)
+        var s = _slots()
+        if s[].ones_n < need:
+            # a grown slot is a new buffer (`ws`), so every word is filled
+            b.enqueue_fill(Float32(1))
+            s[].ones_n = need
+        return b^
+    return ws(ctx, slot, n)
+
+
 def put[resident: Bool](ctx: DeviceContext, slot: Int, src: FP, n: Int) raises -> DeviceBuffer[DType.float32]:
     """An entry's input: the resident array itself, or host `src` copied into slot `slot`."""
     comptime if resident:
@@ -900,7 +932,7 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var dp = put_prm(ctx, 3, prm)
     var cols = ws(ctx, 4, rows * ckk)
     var g = ws(ctx, 5, rows * OC)
-    var ones = ws(ctx, 6, rows)
+    var ones = ones_buf(ctx, 6, rows)
     var gw = m_out(ctx, 7, a[4], OC * ckk, isdev(dev, 4))
     var gb = m_out(ctx, 8, a[5], OC, isdev(dev, 5))
     var dcols = ws(ctx, 9, rows * ckk)
@@ -914,7 +946,8 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
         )
     else:
         launch[dout_rows_at](ctx, fp(ddout), fp(g), fp(g), fp(g), ip(dp), ip(dp), rows * OC)
-    launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
+    comptime if not ONES_CACHE:
+        launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the weight gradient's reduction over the N*OH*OW rows is
     # the pinned GEMM's (leaves + balanced fold), never an atomic accumulation.
     device_gemm(ctx, gw, g, cols, OC, ckk, rows, OP_TN)
@@ -1156,8 +1189,9 @@ def linear_backward_m(a: List[Int], dev: Int, n: Int, d_in: Int, d_out: Int) rai
     var dx = m_in(ctx, 0, a[0], n * d_in, isdev(dev, 0))
     var dw = m_in(ctx, 1, a[1], d_out * d_in, isdev(dev, 1))
     var dg = m_in(ctx, 2, a[2], n * d_out, isdev(dev, 2))
-    var dones = ws(ctx, 3, n)
-    dones.enqueue_fill(Float32(1))
+    var dones = ones_buf(ctx, 3, n)
+    comptime if not ONES_CACHE:
+        dones.enqueue_fill(Float32(1))
     var gx = m_out(ctx, 4, a[3], n * d_in, isdev(dev, 3))
     var gw = m_out(ctx, 5, a[4], d_out * d_in, isdev(dev, 4))
     var gb = m_out(ctx, 6, a[5], d_out, isdev(dev, 5))
@@ -2030,10 +2064,11 @@ def conv_block_backward_into[resident: Bool = False](
     else:
         launch[relu_bwd_at](ctx, fp(yconv), fp(dgo), fp(gy), fp(gy), ip(dp), ip(dp), ny)
         launch[dout_rows_at](ctx, fp(gy), fp(grow), fp(grow), fp(grow), ip(dp), ip(dp), ny)
-    var ones = ws(ctx, 13, rows)
+    var ones = ones_buf(ctx, 13, rows)
     var gw = outb[resident](ctx, 14, gw_out, OC * ckk)
     var gb = outb[resident](ctx, 15, gb_out, OC)
-    launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
+    comptime if not ONES_CACHE:
+        launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the pinned GEMM's fold over the rows, never an atomic.
     device_gemm(ctx, gw, grow, cols, OC, ckk, rows, OP_TN)
     device_gemm(ctx, gb, grow, ones, OC, 1, rows, OP_TN)
