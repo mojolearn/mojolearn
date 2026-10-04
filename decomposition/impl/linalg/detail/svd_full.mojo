@@ -145,6 +145,7 @@ from std.gpu import thread_idx, block_idx
 from std.memory import stack_allocation
 
 from checks.numerics import ftz, identical_mul_add, identical_sqrt, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.xtdz_coalesced import column_mean_launch
 from core.column_stats import (
     STATS_TPB,
     column_mean_kernel,
@@ -449,14 +450,12 @@ def pca_fit_full(
     # its fused split-K arm does not center in place at all (DEVIATION 42):
     # it folds `x - mu` into the Gram's tile read, and there is no Gram here
     # to fold anything into.
-    ctx.enqueue_function[column_mean_kernel](
-        mu.unsafe_ptr(),
-        x.unsafe_ptr(),
-        Int32(n_rows),
-        Int32(n_cols),
-        grid_dim=(n_cols, 1, 1),
-        block_dim=(STATS_TPB, 1, 1),
-    )
+    # lane fam2-shared (2026-10-04): the covariance arm's mean is
+    # `core/xtdz_coalesced.mojo::column_mean_launch` (the row-tile order
+    # under IDN_XTY_TILED), so this arm calls the same function and `mean_`
+    # still agrees bitwise between the arms. With -D
+    # MOJOLEARN_IDN_XTY_TILED_OFF it is `column_mean_kernel`'s value again.
+    column_mean_launch(ctx, mu, x, n_rows, n_cols)
     var cells = n_rows * n_cols
     ctx.enqueue_function[shift_columns_kernel](
         x.unsafe_ptr(),

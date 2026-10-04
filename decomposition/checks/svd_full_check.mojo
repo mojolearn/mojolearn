@@ -53,6 +53,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.column_stats import STATS_TPB, column_mean_kernel
+from core.xtdz_coalesced import column_mean_launch
 from core.householder_qr import (
     QR_MAX_SLICES,
     QR_TPB,
@@ -1029,14 +1030,8 @@ def check_full_mean_matches_covariance_arm() raises:
     ctx.synchronize()
     _upload(ctx, x1, xs)
     _upload(ctx, x2, xs)
-    ctx.enqueue_function[column_mean_kernel](
-        mu1.unsafe_ptr(),
-        x1.unsafe_ptr(),
-        Int32(SVD_ROWS),
-        Int32(SVD_COLS),
-        grid_dim=(SVD_COLS, 1, 1),
-        block_dim=(STATS_TPB, 1, 1),
-    )
+    # the dense arm's mean (`pca_fit_full` calls this launch; lane fam2-shared)
+    column_mean_launch(ctx, mu1, x1, SVD_ROWS, SVD_COLS)
     ctx.synchronize()
     compute_covariance(
         ctx, x2, xa, xa2, mu2, cov, SVD_ROWS, SVD_COLS, True
@@ -1052,7 +1047,7 @@ def check_full_mean_matches_covariance_arm() raises:
         raise Error(
             String(differ) + " of " + String(SVD_COLS) + " column means"
             " differ between the dense arm and the covariance arm. Both call"
-            " column_mean_kernel with the same geometry, so a difference"
+            " column_mean_launch with the same geometry, so a difference"
             " means one of them has acquired a second centering path"
         )
 
