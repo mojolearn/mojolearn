@@ -46,8 +46,11 @@ from core.identity_trace import IdentityTrace
 from core.device_fold import device_sum_f32_fixed
 from kde.impl.kde import score_samples
 from kde.impl.neighbors.kernel_density import (
+    KDE2_SAMPLE_FUSED,
     KDE_ELEM_TPB,
+    KDE_FUSED_TILE_FLOATS,
     KDE_LSE_TPB,
+    kde2_score_samples_fast_apple_to_host,
     host_sum_weights,
     kde_fit_validate,
     kde_validate_data_ptr,
@@ -241,6 +244,21 @@ def kde_score_samples_resident(
         + " metric=" + metric + " metric_arg=" + String(metric_arg)
         + " weighted=" + String(entry.has_weights)
     )
+    # lane/apple-fast-kde2, -D MOJOLEARN_KDE_SAMPLE_FUSED (FAST + Apple only):
+    # the score enqueued without its own drain, the download enqueued behind
+    # it straight into `scores`, one synchronize for the call. Every other
+    # build runs main's sequence below unchanged.
+    comptime if KDE2_SAMPLE_FUSED:
+        if not trace.enabled and n_features <= KDE_FUSED_TILE_FLOATS:
+            kde2_score_samples_fast_apple_to_host(
+                entry.ctx, entry.train, dquery, entry.weights, entry.has_weights,
+                entry.sum_w, entry.n_train, n_query, n_features, bandwidth, k, m,
+                metric_arg, dout, elem_tpb, scores,
+            )
+            _ = host^
+            _ = dquery^
+            _ = dout^
+            return
     score_samples(
         entry.ctx, dquery, entry.train, entry.weights, entry.has_weights, dout,
         n_query, entry.n_train, n_features, bandwidth, entry.sum_w, k, m,
