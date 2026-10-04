@@ -39,6 +39,7 @@ from x_prep.fastpt import (
 from x_prep.dmi_fast import mi_cc_device, mi_cd_device_rank, mi_colscale_fast_kernel, mi_reduce_fast_kernel, TGF
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
 from core.staged_download import download_f32_into
+from core.device_pool import pool_take, pool_give
 
 #: lane/apple-fast-gap-manprep: on FAST + Apple the program's output region
 #: (and arena ranges of 1M+ words) download through core/staged_download.mojo.
@@ -49,6 +50,31 @@ from core.staged_download import download_f32_into
 comptime X_PREP_STAGED_OUT = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
                               and not is_defined["MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF"]())
 comptime _XP_STAGE_POOL = "MojoXPrepDownloadStagesFast"
+
+#: lane/apple-fast-w2-prep (2026-10-04), CANDIDATE, opt-in: -D MOJOLEARN_X_PREP_POOL_ARENA
+#: (FAST + Apple only; IDENTICAL and other vendors compile none of it). The
+#: program's device buffer `df` (arena + scratch + output region) comes from
+#: core/device_pool.mojo instead of a fresh allocation when it is at least
+#: _XP_POOL_MIN_WORDS long, and goes back to the pool after the final wait.
+#: Cause: the M3 profile of label-binarizer taxi (prep-apple3 request
+#: 1790627886703, XPPHASE) spent 60 ms in the "upload" phase, which for that
+#: program is the memset of a FRESH 972 MB output region (first touch of new
+#: device pages, ~16 GB/s); the same memset on resident pages is bandwidth
+#: bound (~2 ms). The board times one round after a warm-up of the same
+#: shape, so the exact-size pool hits. A pooled buffer's words are whatever
+#: the last program left, so every region is defined before any stage reads
+#: it: upload_ranges zeroes every arena word outside the inputs (the
+#: non-ranges path copies the whole arena), the output region keeps its
+#: memset, and the scratch region is cleared here (a fresh buffer's scratch
+#: was zero pages; the contract says a stage writes scratch before reading
+#: it, and the clear keeps a pooled run word-identical even if one does not).
+#: Copies and clears only: no bit moves. Idle pooled bytes are capped by
+#: core/device_pool.mojo POOL_KEEP_BYTES (2 GB).
+comptime X_PREP_POOL_ARENA = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                             and is_defined["MOJOLEARN_X_PREP_POOL_ARENA"]())
+comptime _XP_DF_POOL = "MojoXPrepArenaPoolFast"
+#: 2^24 words = 64 MB: smaller programs keep the fresh allocation
+comptime _XP_POOL_MIN_WORDS = 1 << 24
 
 
 def _download_ranges_staged(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], host_addr: Int,
@@ -391,7 +417,14 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     var out_n = out_len if out_addr != 0 and out_len > 0 else 0
     var out_at = arena_len + max(scratch_len, 0)
     var dev_len = out_at + out_n
-    var df = ctx.enqueue_create_buffer[DType.float32](dev_len if dev_len > 0 else 1)
+    var pooled = False
+    comptime if X_PREP_POOL_ARENA:
+        pooled = dev_len >= _XP_POOL_MIN_WORDS
+    var df: DeviceBuffer[DType.float32]
+    if pooled:
+        df = pool_take[_XP_DF_POOL](ctx, dev_len)
+    else:
+        df = ctx.enqueue_create_buffer[DType.float32](dev_len if dev_len > 0 else 1)
     var dw = ctx.enqueue_create_buffer[DType.uint32](scratch)
     var dq = ctx.enqueue_create_buffer[DType.int32](stages * STAGE_INTS if stages > 0 else 1)
     if prof:
@@ -409,6 +442,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             ctx.enqueue_copy(dst_buf=df, src_ptr=host_f)
     if out_n > 0:
         ctx.enqueue_memset(df.create_sub_buffer[DType.float32](out_at, out_n), Float32(0))
+    if pooled and scratch_len > 0:
+        # X_PREP_POOL_ARENA: a pooled buffer's scratch words start zero, as a fresh one's did
+        ctx.enqueue_memset(df.create_sub_buffer[DType.float32](arena_len, scratch_len), Float32(0))
     if stages > 0:
         ctx.enqueue_copy(dst_buf=dq, src_ptr=host_q)
     if prof:
@@ -711,7 +747,11 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     _ = dre^
     _ = dpt^
     _ = dq^
-    _ = df^
+    if pooled:
+        # every use of df was waited on by the synchronize above
+        pool_give[_XP_DF_POOL](df^)
+    else:
+        _ = df^
     _ = ctx^
     if prof:
         print("XPPHASE release us", (perf_counter_ns() - t_last) // 1000)
