@@ -3580,7 +3580,7 @@ def fit_with_test(
                         y_est^,
                         y_seed,
                         tail_drain=not sym_fuse,
-                        d_hook^,
+                        derivs_hook=d_hook^,
                     )
                 else:
                     var d_bins = ctx.enqueue_create_buffer[DType.uint32](
