@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture/compare real AutoARIMA fits for the exact-covariance experiment.
+"""Capture/compare real AutoARIMA fits for the ARIMA evaluation experiments.
 
 Run capture once per freshly built FAST Apple arm on the M3. No CPU model
 or opponent is run. The comparison requires identical orders, criteria,
@@ -19,7 +19,7 @@ def capture(path):
     if os.environ.get("MOJOLEARN_NUMERIC_MODE") != "fast":
         raise RuntimeError("This check requires MOJOLEARN_NUMERIC_MODE=fast")
     binding = ml.ARIMA()._extension()
-    if str(binding.arima_vendor()) != "metal" or int(binding.arima_numeric_mode()) == 1:
+    if str(binding.arima_vendor()) != "metal" or int(binding.arima_numeric_mode()) != 0:
         raise RuntimeError("This check requires the FAST Metal binding")
     arrays = {}
     metrics = {}
@@ -60,7 +60,7 @@ def capture(path):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez(path, **arrays)
-    print("ARIMA_EXACT_CAPTURE " + json.dumps(dict(output=str(path), binding=str(binding.__file__),
+    print("ARIMA_FAST_CAPTURE " + json.dumps(dict(output=str(path), binding=str(binding.__file__),
           binding_sha256=hashlib.sha256(Path(binding.__file__).read_bytes()).hexdigest(), metrics=metrics), sort_keys=True))
 
 
@@ -73,7 +73,7 @@ def compare(a, b):
                or left[k].tobytes() != right[k].tobytes()]
         if bad:
             raise AssertionError("Fitted quality bytes differ: " + ", ".join(bad))
-        print(f"ARIMA_EXACT_QUALITY status=PASS arrays={len(left.files)} forecast=identical loglike=identical")
+        print(f"ARIMA_FAST_QUALITY status=PASS arrays={len(left.files)} forecast=identical loglike=identical")
 
 
 if __name__ == "__main__":

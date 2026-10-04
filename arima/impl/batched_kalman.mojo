@@ -191,17 +191,6 @@ the serial filter is the FAST default; `-D MOJOLEARN_KALMAN_TIME_SCAN=1` is
 the trial arm (20,000-point fits ~0.46 -> ~0.14 s on the M4)."""
 comptime KALMAN_TIME_SCAN_MIN_OBS = 4096
 
-# Opt-in exact fixed-point experiment. Unlike KALMAN_TIME_SCAN, this does
-# not approximate convergence or reassociate the state/likelihood sums.
-# Only the LL_ONLY optimizer evaluations use it; prediction/card paths do
-# not change. A covariance that never becomes bitwise stationary executes
-# the original recurrence for every observation.
-comptime KALMAN_EXACT_STEADY = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_ARIMA_EXACT_STEADY"]()
-)
-
 #: lane/apple-fast-tsa (2026-10-02). `batched_kalman_loop_kernel` stores
 #: `pred`, `vs` and `Fs` to device memory at EVERY step (:548-563 of this
 #: file) on a kernel of one thread per (series, member) with nothing to hide
@@ -608,11 +597,6 @@ def batched_kalman_loop_kernel[
     var b_ys = bid * nobs
     var mu = ftz(d_mu.unsafe_load(bid)) if intercept_in != 0 else Float32(0.0)
 
-    comptime exact_steady = KALMAN_EXACT_STEADY and LL_ONLY
-    var covariance_fixed = False
-    var fixed_F = Float32(0.0)
-    var previous_P = InlineArray[Float32, RD2_MAX](fill=Float32(0.0))
-
     for it in range(nobs):
         # 1. v = y - Z*alpha
         var pred = Float32(0.0)
@@ -631,18 +615,14 @@ def batched_kalman_loop_kernel[
             d_vs.unsafe_store(b_ys + it, vs_it)
 
         # 2. F = Z*P*Z'
-        var _Fs = fixed_F
-        if not covariance_fixed:
-            _Fs = Float32(0.0)
-            if n_diff == 0:
-                _Fs = l_P[0]
-            else:
-                for i in range(rd):
-                    for j in range(rd):
-                        var t0 = ftz(l_P[j * rd + i] * l_Z[i])
-                        _Fs = ftz(identical_mul_add(t0, l_Z[j], _Fs))
-            comptime if exact_steady:
-                fixed_F = _Fs
+        var _Fs = Float32(0.0)
+        if n_diff == 0:
+            _Fs = l_P[0]
+        else:
+            for i in range(rd):
+                for j in range(rd):
+                    var t0 = ftz(l_P[j * rd + i] * l_Z[i])
+                    _Fs = ftz(identical_mul_add(t0, l_Z[j], _Fs))
         comptime if not LL_ONLY:
             d_Fs.unsafe_store(b_ys + it, _Fs)
 
@@ -659,15 +639,14 @@ def batched_kalman_loop_kernel[
                 b_ll_s2 = ftz(b_ll_s2 + ftz(v2 / _Fs))
             n_obs_ll += 1
 
-        if not covariance_fixed:
-            # 3. K = 1/Fs * T*P*Z'
-            _mm(rd, l_T, l_P, False, l_TP)
-            var _1_Fs = ftz(Float32(1.0) / _Fs)
-            if n_diff == 0:
-                for i in range(rd):
-                    l_K[i] = ftz(_1_Fs * l_TP[i])
-            else:
-                _mv(rd, _1_Fs, l_TP, l_Z, l_K)
+        # 3. K = 1/Fs * T*P*Z'
+        _mm(rd, l_T, l_P, False, l_TP)
+        var _1_Fs = ftz(Float32(1.0) / _Fs)
+        if n_diff == 0:
+            for i in range(rd):
+                l_K[i] = ftz(_1_Fs * l_TP[i])
+        else:
+            _mv(rd, _1_Fs, l_TP, l_Z, l_K)
 
         # 4. alpha = T*alpha + K*vs + c
         _mv(rd, Float32(1.0), l_T, l_alpha, l_v)
@@ -675,36 +654,22 @@ def batched_kalman_loop_kernel[
             l_alpha[i] = ftz(identical_mul_add(l_K[i], vs_it, l_v[i]))
         l_alpha[n_diff] = ftz(l_alpha[n_diff] + mu)
 
-        if not covariance_fixed:
-            comptime if exact_steady:
-                for i in range(rd2):
-                    previous_P[i] = l_P[i]
-            # 5. L = T - K*Z
-            for i in range(rd2):
-                l_tmp[i] = l_T[i]
-            if n_diff == 0:
-                for i in range(rd):
-                    l_tmp[i] = ftz(l_tmp[i] - l_K[i])
-            else:
-                for i in range(rd):
-                    for j in range(rd):
-                        l_tmp[j * rd + i] = ftz(identical_mul_add(-l_K[i], l_Z[j], l_tmp[j * rd + i]))
+        # 5. L = T - K*Z
+        for i in range(rd2):
+            l_tmp[i] = l_T[i]
+        if n_diff == 0:
+            for i in range(rd):
+                l_tmp[i] = ftz(l_tmp[i] - l_K[i])
+        else:
+            for i in range(rd):
+                for j in range(rd):
+                    l_tmp[j * rd + i] = ftz(identical_mul_add(-l_K[i], l_Z[j], l_tmp[j * rd + i]))
 
-            # 6. P = T*P*L' + R*Q*R'
-            _mm(rd, l_TP, l_tmp, True, l_P)
-            for i in range(rd2):
-                l_P[i] = ftz(l_P[i] + l_RQR[i])
-            _numerical_stability(rd, l_P)
-
-            comptime if exact_steady:
-                # P alone determines F, K and the next P. Signed zero is
-                # distinguished; NaNs never establish a fixed point.
-                var same = True
-                for i in range(rd2):
-                    same = same and (l_P[i] == previous_P[i]) and (
-                        bitcast[DType.uint32](l_P[i]) == bitcast[DType.uint32](previous_P[i])
-                    )
-                covariance_fixed = same
+        # 6. P = T*P*L' + R*Q*R'
+        _mm(rd, l_TP, l_tmp, True, l_P)
+        for i in range(rd2):
+            l_P[i] = ftz(l_P[i] + l_RQR[i])
+        _numerical_stability(rd, l_P)
 
     # THE FINAL P, written back (added 2026-08-24). Theirs never does: the
     # loop kernel loads `P` into registers and the caller never looks again.
