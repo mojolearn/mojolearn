@@ -6,6 +6,7 @@ from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT, embedding_sort
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
+from std.sys.defines import get_defined_int
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_fold import device_first_nonneg_i32
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
@@ -167,6 +168,37 @@ def emb_sabotage_name() -> String:
         return String("SORT_KEY_ID_ONLY_UNSTABLE")
     return String("none")
 
+
+
+# ---- the run plan picked by size (lane idn-embedding, 2026-10-04) -----------------
+# PLAN_SCAN walks all T ids once per vocabulary row in the counts kernel and
+# again in the perm kernel: 2 * V * T id reads (2.1e9 at the board's
+# V = T = 32,768). PLAN_SORT is the device total-key bitonic sort over T
+# keys (120 passes of 32,768 exchanges there) and two binary-search
+# launches. Contract 6 clause (d) holds counts, run_begin, perm and dW
+# bit-identical across the two plans on every vendor and the host column,
+# so the pick moves no bit. `PLAN_AUTO` resolves to PLAN_SORT from
+# EMB_AUTO_SORT_MIN_CELLS = V * T upward (IDENTICAL tier only; the
+# crossover is not measured, the board cell sits 16x above it), else
+# PLAN_SCAN. `-D MOJOLEARN_EMB_AUTO_SORT_OFF` resolves PLAN_AUTO to
+# PLAN_SCAN always (the old form); `-D MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS=<n>`
+# moves the threshold. An explicit PLAN_SCAN or PLAN_SORT is never changed.
+comptime PLAN_AUTO = 2
+comptime EMB_AUTO_SORT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_EMB_AUTO_SORT_OFF"]()
+)
+comptime EMB_AUTO_SORT_MIN_CELLS = get_defined_int["MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS", 1 << 26]()
+
+
+def emb_resolve_plan(plan: Int, vocab: Int, n_positions: Int) -> Int:
+    """PLAN_AUTO resolved to PLAN_SORT or PLAN_SCAN; any other code unchanged."""
+    if plan != PLAN_AUTO:
+        return plan
+    comptime if EMB_AUTO_SORT:
+        if vocab * n_positions >= EMB_AUTO_SORT_MIN_CELLS:
+            return PLAN_SORT
+    return PLAN_SCAN
 
 
 comptime EMB_TPB_WANT = 256
@@ -718,6 +750,44 @@ def identical_embedding_forward_into(
     """Seams G1 and G2, enqueued. `[[mojo-buffer-freed-at-last-use]]`: a `DeviceBuffer` is dead at its `.unsafe_ptr()`, so every one of these must outlive the caller's `ctx.synchronize()`."""
     emb_refuse_device_ids(ctx, ids, n_positions, cfg)
     _emb_forward_launch(ctx, out_y, weight, ids, n_positions, cfg)
+
+
+def identical_embedding_forward_prerefused_into(
+    ctx: DeviceContext,
+    mut out_y: DeviceBuffer[DType.float32],
+    mut weight: DeviceBuffer[DType.float32],
+    mut ids: DeviceBuffer[DType.int32],
+    n_positions: Int,
+    cfg: EmbConfig,
+) raises:
+    """Seams G1 and G2 for a caller that ALREADY refused the ids on the host
+    list it uploaded (`emb_refuse_ids`, contract 8) and owns 9.1: the gather
+    launch only. `identical_embedding_forward_into` reads the device ids back
+    into a new pinned buffer and walks them on the host a second time (two
+    waits); a caller that uploaded a refused host list repeats nothing here
+    (lane idn-embedding, 2026-10-04)."""
+    _emb_forward_launch(ctx, out_y, weight, ids, n_positions, cfg)
+
+
+def identical_embedding_backward_prerefused_into(
+    ctx: DeviceContext,
+    mut dw: DeviceBuffer[DType.float32],
+    mut dy: DeviceBuffer[DType.float32],
+    mut ids: DeviceBuffer[DType.int32],
+    mut counts: DeviceBuffer[DType.int32],
+    mut run_begin: DeviceBuffer[DType.int32],
+    mut perm: DeviceBuffer[DType.int32],
+    n_positions: Int,
+    cfg: EmbConfig,
+    plan: Int = PLAN_SCAN,
+    block_threads: Int = EMB_TPB,
+) raises:
+    """Seams E0 through E4 for a caller that already refused the ids on the
+    host list it uploaded; `identical_embedding_backward_into` without the
+    device id read-back. `counts`, `run_begin` and `perm` need no initial
+    value: both plans write every cell the fold reads."""
+    _emb_backward_refuse_launch(ctx, plan, block_threads)
+    _emb_backward_launch(ctx, dw, dy, ids, counts, run_begin, perm, n_positions, cfg, plan, block_threads)
 
 
 def identical_embedding_forward_refusing_into(
