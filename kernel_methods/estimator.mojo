@@ -831,8 +831,14 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
     _krr_validate_alpha(alpha)
 
     var dsw = _upload(ctx, sw) if weighted else ctx.enqueue_create_buffer[DType.float32](1)
-    if weighted:
-        _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
+    # lane/review-fixes: the pointer route honors KRR_IDN_DEV_SCALE's _OFF
+    # arm too (the host loop on the downloaded y, the list route's old form).
+    comptime if KRR_IDN_DEV_SCALE:
+        if weighted:
+            _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
+    else:
+        if weighted:
+            dy = _upload(ctx, krr_scale_rows(_download(ctx, dy, n_samples * n_targets), sw, n_samples, n_targets))
     trace.record_device(ctx, "krr.input", xa, n_samples * n_features)
 
     var dk = ctx.enqueue_create_buffer[DType.float32](n_samples * n_samples)
@@ -870,9 +876,17 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
     if info != 0:
         ctx.synchronize()
         raise Error(_krr_not_pd_message(info, kp.kernel, n_samples))
-    if weighted:
-        _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
-    _download_into(ctx, dy, dual_out, n_samples * n_targets)
+    comptime if KRR_IDN_DEV_SCALE:
+        if weighted:
+            _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
+        _download_into(ctx, dy, dual_out, n_samples * n_targets)
+    else:
+        if weighted:
+            var dual = krr_scale_rows(_download(ctx, dy, n_samples * n_targets), sw, n_samples, n_targets)
+            for i in range(n_samples * n_targets):
+                dual_out.unsafe_store(i, dual[i])
+        else:
+            _download_into(ctx, dy, dual_out, n_samples * n_targets)
     _ = dsw^
     _ = xa^
     _ = dy^

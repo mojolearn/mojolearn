@@ -57,6 +57,7 @@ which is what the gates and the card use.
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from bindings.hostptr import copy_f32
+from std.atomic import Atomic
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import neural_ctx
@@ -730,7 +731,9 @@ comptime IDN_GMM_ONE_DRAIN = (
 )
 
 comptime GMM_INIT_TPB = 256
-comptime GMM_INIT_NO_BAD_ROW = Int32(-1)
+#: lane/review-fixes: the largest Int32, so `Atomic.min` keeps the LOWEST
+#: failing row whatever the thread schedule (the error text is deterministic)
+comptime GMM_INIT_NO_BAD_ROW = Int32(2147483647)
 
 
 def gmm_init_onehot_kernel(
@@ -775,7 +778,8 @@ def gmm_init_random_kernel(
     the ascending `ftz` row sum, then each cell `ftz(u / s)` and its
     `_safe_log`. The draws are recomputed for the second walk (a pure
     function of the position), so no per-row storage is needed. A row with
-    no normalizer stores its index in `bad_row` and writes nothing."""
+    no normalizer folds its index into `bad_row` by atomic min (the lowest
+    such row wins) and writes nothing."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= Int(n_in):
         return
@@ -796,7 +800,7 @@ def gmm_init_random_kernel(
         var u = Float32(Int(draw[0] >> UInt32(8))) * scale
         s = ftz(s + u)
     if not (s > Float32(0.0)):
-        bad_row.unsafe_store(0, Int32(i))
+        _ = Atomic[DType.int32].min(bad_row, Int32(i))
         return
     for k in range(ncomp):
         var ctr = SIMD[DType.uint32, 4](
