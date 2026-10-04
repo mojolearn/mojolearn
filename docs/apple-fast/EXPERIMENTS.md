@@ -14,7 +14,8 @@ Sources: `~/mojolearn-evidence/apple-fast/LEDGER.md` (every KEEP / DROP / MERGED
 
 - **Winners** become FAST + Apple defaults. Each one gets a `<NAME>_OFF` define that restores the old path, and a code comment citing its A/B (tag and numbers). IDENTICAL mode never changes.
 - **Losers are not kept in main's code.** They stay on their branch at the recorded sha. A dropped define that is still on main is a dead toggle; a cleanup lane removes those.
-- Quality comes before speed: a faster arm with worse quality is DROPPED-quality, and a slower arm with better quality can be KEPT (see `X_PREP_CLASS_COV_GRID`).
+- **User clarification (Oct 4):** "it is OK if bits change for fast work.. do you understand that? but quality cannot go down beyond noise". FAST does not require bit identity; judge quality using the relevant metric and measured noise. A quality change beyond noise is DROPPED-quality; a bit change alone is not a failure. A slower arm with better quality can be KEPT (see `X_PREP_CLASS_COV_GRID`).
+- Keep concise evidence comments next to surviving failed or held opt-in toggles: dataset, A/B tag, measured effect, status, and this record. Distinguish an inconclusive/noise result or an old-base hold from an established regression; a bundle failure does not prove each component failed alone. Do not restore deleted code to annotate it.
 
 ## Verdicts
 
