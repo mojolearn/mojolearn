@@ -646,6 +646,13 @@ exercised. These remain on existing guarded fallback routes; no claim is made
 that those cases were tested. Encoder/multilabel correctness was checked but
 speed was measured only for LabelBinarizer; do not update their timing rows.
 
+## AutoARIMA order batching current-main integration (2026-10-04)
+
+| Experiment | Branch / baseline | Evidence | Verdict / next step |
+|---|---|---|---|
+| `ARIMA_ORDER_BATCH`, original small quality | lane/apple-fast-arima-orders @ eae73e1f0; kernel457160e23 | Manager reports gap26-orders-quality PASS18 arrays on the 128-observation fixture; no new timing | Historical small-only evidence; not a full-quality or current-main acceptance |
+| `ARIMA_ORDER_BATCH`, fused-tail integration | lane/apple-fast-arima-orders-current; merged main d4bb2b795 (includes accepted fused-tail311d5233e) | Both arms now use current-main fused tail in shared prepare/finish; source changed, stale arms invalid | OPEN, opt-in only. Rebuild arima A/B, full512/2048 quality before one M3 timing/arm on synthetic and taxi-hourly; no opponent reruns. [Plan and exact commands](ab/arima-orders-current.md) |
+
 ## M3 repaired checks — 2026-10-04 09:00 UTC
 
 - `MOJOLEARN_CHOL_FAST_TRI_SYRK`, lane/apple-fast-chol-20261004 measured `ca5ea4b6e` (kernel `e724b7777`), `gap26-chol-fixed-synthetic`: A268.772791 -> B288.278250 ms (+7.3%), one run/arm. Digest `8818853dfae997da` and relative residual1.659095968e-7 identical. SPD/solve and failure-info quality checks pass. **DROPPED-slower**, no default or board change; comment retained beside candidate gate on its lane.
@@ -671,3 +678,9 @@ The earlier ARIMA/label measurements predate this session's maintenance; this
 audit alone does not establish interference with those measured promotions.
 
 Detailed isolation audit and six identified scan-window tags: [MEASUREMENT_AUDIT_2026-10-04.md](MEASUREMENT_AUDIT_2026-10-04.md). Their speed verdict is HOLD-measurement, superseding historical speed-only verdicts. No overlap claim is made solely from a cleanup start timestamp.
+
+## AutoARIMA order-batching default promotion prepared (2026-10-04)
+
+| Experiment | Measured source / tags | A → B ms | Quality | Verdict / remaining gate |
+|---|---|---|---|---|
+| `ARIMA_ORDER_BATCH` → default + `ARIMA_ORDER_BATCH_OFF` | 7ba385b30; gap26-orders-current-synthetic / taxi-hourly | synthetic13780.316917 →9287.286750 (-32.6%); taxi-hourly22706.248042 →13747.215083 (-39.5%) | Fitted/order/likelihood/forecast full-quality PASS before timing; both board digests and RMSE identical (2.624119555 /74.659122441). Existing fused tail enabled in BOTH arms | KEEP candidate, promotion prepared on lane/apple-fast-arima-orders-default against main d1871643b; manager default/OFF builds, isolation review and merge owed. Taxi opponent-quality HOLD remains (74.6591 vs68.21). [Raw evidence and review](ab/arima-orders-default.md) |
