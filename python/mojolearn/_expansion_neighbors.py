@@ -702,14 +702,26 @@ class OneClassSVM(_XNeighbors):
             # lane/apple-fast-gap-cls2 (FAST + Apple default; -D MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF off):
             # the binding forms the same Gram on the device and solves over it
             # there (no 400 MB download into a fresh host array and upload back)
-            res_fn = getattr(self._bind(), "x_neighbors_ocsvm_resident", None) if self._fast_tier() else None
+            # lane/fam2-neighbors: IDENTICAL takes the same resident solve on
+            # every vendor (`x_neighbors_ocsvm_resident_idn`, registered unless
+            # -D MOJOLEARN_IDN_OCSVM_RES_OFF; the host binding has none)
+            res_fn = getattr(self._bind(), "x_neighbors_ocsvm_resident" if self._fast_tier()
+                             else "x_neighbors_ocsvm_resident_idn", None)
             Q = None if res_fn is not None else self._kernel(Xw, Xw, self.kernel, self._gamma, self.coef0, self.degree)
         # libsvm's start (solve_one_class) by the base binding's
         # `ocsvm_alpha_init_f32` (lane pyglue-numeric: a Python loop)
         from ._buffer import _native
         alpha = empty((m,), "<f4")
-        _native("ocsvm_alpha_init_f32")(addr_ro(cv, name="C"), m, float(self.nu),
-                                        0 if sample_weight is None else 1, addr(alpha, name="alpha"))
+        # lane/fam2-neighbors (cpu-gpu audit case 2): the start as three device
+        # launches (x_neighbors/ocsvm_init.mojo; the host binding runs the same
+        # items), registered in IDENTICAL unless -D MOJOLEARN_IDN_OCSVM_DEV_INIT_OFF
+        init_fn = getattr(self._bind(), "x_neighbors_ocsvm_alpha_init", None)
+        if init_fn is not None:
+            init_fn([addr_ro(cv, name="xn_ocsvm_init C"), addr(alpha, name="xn_ocsvm_init alpha")],
+                    [m], [float(self.nu)])
+        else:
+            _native("ocsvm_alpha_init_f32")(addr_ro(cv, name="C"), m, float(self.nu),
+                                            0 if sample_weight is None else 1, addr(alpha, name="alpha"))
         info = _empty_out((1,), "<f4")
         iters = empty((1,), "<i4")
         cap = 10_000_000 if int(self.max_iter) < 0 else int(self.max_iter)
@@ -1295,7 +1307,9 @@ class _LabelPropagationBase(_XNeighbors):
             self._op("lp_clamp", [(ld, 0), (ld, 0), (unlabeled, 0), (ystatic, 1)], (n, C))
         else:
             ystatic = ys
-        if isinstance(G, tuple) and self._fast_tier() and _lp_fast_resident(self):
+        # lane/fam2-neighbors: IDENTICAL device binaries answer 1 too
+        # (LP_IDN_RESIDENT: the same items, no per-iteration host round trip)
+        if isinstance(G, tuple) and _lp_fast_resident(self):
             # lane/apple-fast-neighbors2: the loop below over the compact kNN
             # graph as ONE resident op (x_neighbors/iter_device.mojo
             # op_lp_iterate_knn), the graph uploaded once, the stopping sum
@@ -1587,10 +1601,25 @@ class PageRank(_XNeighbors):
         self.weight = weight
         self.dangling = dangling
 
-    @staticmethod
-    def _unit(v, n, what):
+    def _unit(self, v, n, what):
         """A caller's length-n non-negative vector divided by its sum (IEEE
         double, rounded once to float32), as networkx normalizes its dicts."""
+        # lane/fam2-neighbors: the sum, the sign test and the n divisions by
+        # the binding (`x_neighbors_unit_ff`, device kernels; registered in
+        # IDENTICAL unless -D MOJOLEARN_IDN_XN_UNIT_DEV_OFF)
+        unit_fn = getattr(self._bind(), "x_neighbors_unit_ff", None)
+        if unit_fn is not None:
+            wv = _f32_1d(v, what)
+            if wv.shape[0] != n:
+                raise ValueError(f"{what} must be n non-negative values, not all zero")
+            out = _empty_out((n,), "<f4")
+            uinfo = empty((2,), "<i4")
+            unit_fn([addr_ro(wv, name="xn_unit v"), addr(out, name="xn_unit out"),
+                     addr(uinfo, name="xn_unit info")], [n], [])
+            neg, zero = uinfo.tolist()
+            if neg or zero:
+                raise ValueError(f"{what} must be n non-negative values, not all zero")
+            return out
         pv = [float(t) for t in (v.tolist() if hasattr(v, "tolist") else v)]
         if len(pv) != n or any(t < 0 for t in pv) or math.fsum(pv) == 0:
             raise ValueError(f"{what} must be n non-negative values, not all zero")

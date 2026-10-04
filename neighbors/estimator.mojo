@@ -131,6 +131,8 @@ from neighbors.impl.knn.knn import (
     knn_classify,
     knn_regress,
 )
+from neighbors.impl.selection.knn import KNN_IDN_DEVICE_WEIGHTS, device_distance_weights
+from neighbors.impl.knn.knn import KNN_IDN_VOTE_CACHE, KnnVoteCache, KnnVoteCachePointer
 from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     METRIC_FROM_IS_SQRT,
@@ -1368,6 +1370,7 @@ def knn_classifier_predict_resident(
     metric_arg: Float32 = Float32(2.0),
     weights: Int = WEIGHTS_UNIFORM,
     cache: KnnIndexCachePointer = None,
+    vote_cache: KnnVoteCachePointer = None,
 ) raises -> Int:
     """`knn_classifier_predict` over an index ALREADY ON THE DEVICE
     (DEVIATION 3002, lane/knn-tiled-distance, 2026-09-17; the same door as
@@ -1414,7 +1417,7 @@ def knn_classifier_predict_resident(
     )
     _knn_classifier_vote(ctx, trace, retained_indices, h_dist.unsafe_ptr(),
         n_index, n_queries, k, y_ptr, n_outputs, n_classes, out_labels_ptr,
-        out_proba_ptr, out_uniq_ptr, want_proba, weighted)
+        out_proba_ptr, out_uniq_ptr, want_proba, weighted, vote_cache)
     _ = h_dist^
     _ = h_idx^
     return used_tile
@@ -1485,14 +1488,28 @@ def _knn_classifier_vote(
     out_proba_ptr: MutPointer[Float32, MutUntrackedOrigin],
     out_uniq_ptr: MutPointer[Int32, MutUntrackedOrigin], want_proba: Bool,
     weighted: Bool,
+    vote_cache: KnnVoteCachePointer = None,
 ) raises:
+    # lane/fam2-neighbors (KNN_IDN_VOTE_CACHE): a resident handle's labels
+    # and unique sets stay on the device between predicts
+    var use_vc = False
+    comptime if KNN_IDN_VOTE_CACHE:
+        if vote_cache and not trace.enabled:
+            use_vc = True
     # DEVIATION 554: the weights are computed on the HOST, over the sorted
     # distances the search just wrote, exactly as scikit-learn computes
     # them in numpy over the same matrix. `distance_weights.mojo` carries
     # the reason (the zero test is a per-row any-reduction and the
     # replacement is row-level).
     var d_w = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
-    if weighted:
+    # lane/fam2-neighbors (KNN_IDN_DEVICE_WEIGHTS): the rule as a kernel
+    # unless the call is traced (the trace records the host weights)
+    var dev_weights = False
+    comptime if KNN_IDN_DEVICE_WEIGHTS:
+        dev_weights = not trace.enabled
+    if weighted and dev_weights:
+        device_distance_weights(ctx, dist_ptr, d_w, n_queries, k)
+    if weighted and not dev_weights:
         # HOST LISTS ACROSS THE BOUNDARY, not pointers: a pointer from
         # `enqueue_create_host_buffer` is not
         # interchangeable with an arbitrary host pointer on this stack and
@@ -1520,14 +1537,17 @@ def _knn_classifier_vote(
     # permutation only if necessary; reuse the allocation for class_probs.
     var d_idx = retained_indices.pop()
     var y = List[DeviceBuffer[DType.int32]]()
-    for i in range(n_outputs):
-        y.append(ctx.enqueue_create_buffer[DType.int32](n_index))
-    ctx.synchronize()
-    for i in range(n_outputs):
-        ctx.enqueue_copy(
-            dst_buf=y[i], src_ptr=y_ptr.unsafe_offset(i * n_index)
-        )
-    ctx.synchronize()
+    if use_vc:
+        vote_cache.value()[].ensure(ctx, trace, y_ptr, n_index, n_outputs)
+    else:
+        for i in range(n_outputs):
+            y.append(ctx.enqueue_create_buffer[DType.int32](n_index))
+        ctx.synchronize()
+        for i in range(n_outputs):
+            ctx.enqueue_copy(
+                dst_buf=y[i], src_ptr=y_ptr.unsafe_offset(i * n_index)
+            )
+        ctx.synchronize()
 
     var uniq: List[List[Int32]]
     if want_proba:
@@ -1539,10 +1559,15 @@ def _knn_classifier_vote(
                 )
             )
         ctx.synchronize()
-        uniq = knn_class_proba(
-            ctx, trace, probas, d_idx, y, n_index, n_queries, k, d_w,
-            weighted,
-        )
+        if use_vc:
+            uniq = vote_cache.value()[].class_proba(
+                ctx, trace, probas, d_idx, n_queries, k, d_w, weighted,
+            )
+        else:
+            uniq = knn_class_proba(
+                ctx, trace, probas, d_idx, y, n_index, n_queries, k, d_w,
+                weighted,
+            )
         _check_class_counts(uniq, n_classes)
         var off = 0
         for i in range(n_outputs):
@@ -1562,10 +1587,15 @@ def _knn_classifier_vote(
             n_queries * n_outputs
         )
         ctx.synchronize()
-        uniq = knn_classify(
-            ctx, trace, labels, d_idx, y, n_index, n_queries, k, d_w,
-            weighted,
-        )
+        if use_vc:
+            uniq = vote_cache.value()[].classify(
+                ctx, trace, labels, d_idx, n_queries, k, d_w, weighted,
+            )
+        else:
+            uniq = knn_classify(
+                ctx, trace, labels, d_idx, y, n_index, n_queries, k, d_w,
+                weighted,
+            )
         _check_class_counts(uniq, n_classes)
         var h = ctx.enqueue_create_host_buffer[DType.int32](
             n_queries * n_outputs
@@ -1684,7 +1714,14 @@ def _knn_regressor_vote(
     out_ptr: MutPointer[Float32, MutUntrackedOrigin], weighted: Bool,
 ) raises:
     var d_w = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
-    if weighted:
+    # lane/fam2-neighbors (KNN_IDN_DEVICE_WEIGHTS): the rule as a kernel
+    # unless the call is traced (the trace records the host weights)
+    var dev_weights = False
+    comptime if KNN_IDN_DEVICE_WEIGHTS:
+        dev_weights = not trace.enabled
+    if weighted and dev_weights:
+        device_distance_weights(ctx, dist_ptr, d_w, n_queries, k)
+    if weighted and not dev_weights:
         # HOST LISTS ACROSS THE BOUNDARY, not pointers: a pointer from
         # `enqueue_create_host_buffer` is not
         # interchangeable with an arbitrary host pointer on this stack and

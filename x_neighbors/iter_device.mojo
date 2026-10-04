@@ -58,6 +58,7 @@ from core.pinned_reduce import pinned_block_sum
 from checks.numerics import NUMERIC_IDENTICAL
 from checks.numerics import identical_exp
 from x_neighbors.items import lp_clamp_item, ls_clamp_item
+from x_neighbors.items import absdiff_part_item, absdiff_fin_item
 
 
 def _absdiff_launch(ctx: DeviceContext, a: FP, b: FP, s: FP, part: FP, count: Int) raises:
@@ -596,6 +597,51 @@ comptime KNN_TILE_TPB = 128
 comptime KNN_TILE_ROWS = 64
 comptime KNN_TILE_MAX_D = 64
 
+#: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor, the fused
+#: k-NN behind LocalOutlierFactor, LabelPropagation / LabelSpreading and
+#: KNNImputer's neighbor search (`knn_sq_tiled_kernel`, `knn_sq_tiled2_kernel`).
+#: Neither switch changes a bit, so the host column (`knn_sq_item`) is untouched.
+#:
+#: XN_KNN_LEAN (default ON; -D MOJOLEARN_IDN_XN_KNN_LEAN_OFF): one ftz per
+#: pair-feature, not four. `knn_sq_item`'s step is
+#: acc = ftz(fma(df, df, acc)), df = ftz(ftz(x) - ftz(y)). The inputs are
+#: flushed once when they are staged (ftz is idempotent). The flush of df is
+#: dropped: a subnormal df has df * df < 2^-252, so fma(df, df, acc) is acc
+#: itself (acc is +0 or a normal number after its own ftz, and a term that
+#: far under half an ulp of either never moves the rounding), the value the
+#: flushed df = +-0 gives; a device that reads a subnormal operand as zero
+#: computes the same.
+#:
+#: XN_KNN_PRUNE (default ON; -D MOJOLEARN_IDN_XN_KNN_PRUNE_OFF): a pair's
+#: chain stops once its partial sum is not below its row's current k-th
+#: distance. The chain never decreases (every term is >= 0), so the full
+#: value would fail the insertion's strict `<` too: the same lists. In the
+#: 2-D kernel a thread skips a feature chunk once all 16 of its pairs are
+#: out (the rows' k-th distances are published in threadgroup memory per y
+#: tile); in the row kernel the check runs every 8 features.
+#: Both off under MOJOLEARN_IDN_ALL_OFF.
+comptime _XN_KNN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime XN_KNN_LEAN = _XN_KNN_IDN and not is_defined["MOJOLEARN_IDN_XN_KNN_LEAN_OFF"]()
+comptime XN_KNN_PRUNE = _XN_KNN_IDN and not is_defined["MOJOLEARN_IDN_XN_KNN_PRUNE_OFF"]()
+
+
+@always_inline
+def _knn_in(v: Float32) -> Float32:
+    """A staged input: flushed once under XN_KNN_LEAN."""
+    comptime if XN_KNN_LEAN:
+        return ftz(v)
+    return v
+
+
+@always_inline
+def _knn_step(xv: Float32, yv: Float32, acc: Float32) -> Float32:
+    """One feature of `knn_sq_item`'s chain; xv and yv are `_knn_in` values."""
+    comptime if XN_KNN_LEAN:
+        var dl = xv - yv
+        return ftz(identical_mul_add(dl, dl, acc))
+    var df = _sub(xv, yv)
+    return ftz(identical_mul_add(df, df, acc))
+
 
 def knn_sq_tiled_kernel(
     x: FP, y: FP, dist: FP, idx: IP, n_: Int64, m_: Int64, d_: Int64, k_: Int64, ex_: Int64,
@@ -626,7 +672,7 @@ def knn_sq_tiled_kernel(
         var rows = min(KNN_TILE_ROWS, m - j0)
         var q = tid
         while q < rows * d:
-            ys[q] = y.unsafe_load(j0 * d + q)
+            ys[q] = _knn_in(y.unsafe_load(j0 * d + q))
             q += KNN_TILE_TPB
         barrier()
         if live:
@@ -636,8 +682,10 @@ def knn_sq_tiled_kernel(
                     continue
                 var acc = Float32(0)
                 for f in range(d):
-                    var df = _sub(x.unsafe_load(t * d + f), ys[jj * d + f])
-                    acc = ftz(identical_mul_add(df, df, acc))
+                    acc = _knn_step(_knn_in(x.unsafe_load(t * d + f)), ys[jj * d + f], acc)
+                    comptime if XN_KNN_PRUNE:
+                        if (f & 7) == 7 and not (acc < worst):
+                            break
                 var v = acc
                 if not (v < worst):
                     continue
@@ -671,7 +719,7 @@ comptime KNN2_TPB = 256
 #: a thread's register block: KNN2_R x rows by KNN2_R y rows (16 x 16 threads)
 comptime KNN2_R = 4
 comptime KNN2_XS = KNN2_FC + 1  # padded rows (bank spread)
-comptime KNN2_SMEM_BYTES = 4 * (KNN2_TX * KNN2_XS + KNN2_TY * KNN2_XS + KNN2_TX * (KNN2_TY + 1))
+comptime KNN2_SMEM_BYTES = 4 * (KNN2_TX * KNN2_XS + KNN2_TY * KNN2_XS + KNN2_TX * (KNN2_TY + 1) + KNN2_TX)
 
 
 def knn_sq_tiled2_kernel(
@@ -687,6 +735,8 @@ def knn_sq_tiled2_kernel(
     var xs = stack_allocation[KNN2_TX * KNN2_XS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var ys = stack_allocation[KNN2_TY * KNN2_XS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var dt = stack_allocation[KNN2_TX * (KNN2_TY + 1), Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    # XN_KNN_PRUNE: the block's rows' current k-th distances
+    var ws = stack_allocation[KNN2_TX, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var inf = _bc[DType.float32](UInt32(0x7F800000))
     var t = x0 + tid
     var owner = tid < KNN2_TX and t < n
@@ -697,10 +747,22 @@ def knn_sq_tiled2_kernel(
             idx.unsafe_store(t * k + s, Int32(-1))
     var ta = tid // 16
     var tb = tid - ta * 16
+    comptime if XN_KNN_PRUNE:
+        if tid < KNN2_TX:
+            ws[tid] = worst
+        barrier()
     var j0 = 0
     while j0 < m:
         var rows = min(KNN2_TY, m - j0)
         var acc = InlineArray[Float32, KNN2_R * KNN2_R](fill=Float32(0))
+        # XN_KNN_PRUNE: this thread's four rows' k-th distances for this y
+        # tile (written before the barrier that ended the last tile), and
+        # whether all 16 of its pairs are out
+        var wv = InlineArray[Float32, KNN2_R](fill=inf)
+        var dead = False
+        comptime if XN_KNN_PRUNE:
+            comptime for i in range(KNN2_R):
+                wv[i] = ws[ta + 16 * i]
         var f0 = 0
         while f0 < d:
             var fc = min(KNN2_FC, d - f0)
@@ -708,20 +770,27 @@ def knn_sq_tiled2_kernel(
             while q < KNN2_TX * KNN2_FC:
                 var r = q // KNN2_FC
                 var f = q - r * KNN2_FC
-                xs[r * KNN2_XS + f] = x.unsafe_load((x0 + r) * d + f0 + f) if (x0 + r < n and f < fc) else Float32(0)
-                ys[r * KNN2_XS + f] = y.unsafe_load((j0 + r) * d + f0 + f) if (r < rows and f < fc) else Float32(0)
+                xs[r * KNN2_XS + f] = _knn_in(x.unsafe_load((x0 + r) * d + f0 + f)) if (x0 + r < n and f < fc) else Float32(0)
+                ys[r * KNN2_XS + f] = _knn_in(y.unsafe_load((j0 + r) * d + f0 + f)) if (r < rows and f < fc) else Float32(0)
                 q += KNN2_TPB
             barrier()
-            for f in range(fc):
-                var xv = InlineArray[Float32, KNN2_R](fill=Float32(0))
-                var yv = InlineArray[Float32, KNN2_R](fill=Float32(0))
-                comptime for i in range(KNN2_R):
-                    xv[i] = xs[(ta + 16 * i) * KNN2_XS + f]
-                    yv[i] = ys[(tb + 16 * i) * KNN2_XS + f]
-                comptime for i in range(KNN2_R):
-                    comptime for jj in range(KNN2_R):
-                        var df = _sub(xv[i], yv[jj])
-                        acc[i * KNN2_R + jj] = ftz(identical_mul_add(df, df, acc[i * KNN2_R + jj]))
+            if not dead:
+                for f in range(fc):
+                    var xv = InlineArray[Float32, KNN2_R](fill=Float32(0))
+                    var yv = InlineArray[Float32, KNN2_R](fill=Float32(0))
+                    comptime for i in range(KNN2_R):
+                        xv[i] = xs[(ta + 16 * i) * KNN2_XS + f]
+                        yv[i] = ys[(tb + 16 * i) * KNN2_XS + f]
+                    comptime for i in range(KNN2_R):
+                        comptime for jj in range(KNN2_R):
+                            acc[i * KNN2_R + jj] = _knn_step(xv[i], yv[jj], acc[i * KNN2_R + jj])
+                comptime if XN_KNN_PRUNE:
+                    var alive = False
+                    comptime for i in range(KNN2_R):
+                        comptime for jj in range(KNN2_R):
+                            if acc[i * KNN2_R + jj] < wv[i]:
+                                alive = True
+                    dead = not alive
             barrier()
             f0 += KNN2_FC
         comptime for i in range(KNN2_R):
@@ -744,6 +813,8 @@ def knn_sq_tiled2_kernel(
                 dist.unsafe_store(t * k + s, v)
                 idx.unsafe_store(t * k + s, Int32(j))
                 worst = dist.unsafe_load(t * k + k - 1)
+            comptime if XN_KNN_PRUNE:
+                ws[tid] = worst
         barrier()
         j0 += rows
 
@@ -1641,6 +1712,36 @@ def lp_knn_product_kernel(cols: IP, vals: FP, x: FP, res: FP, n_: Int64, m_: Int
 
 
 def op_lp_knn_product(cols: Int, vals: Int, x: Int, res: Int, n: Int, m: Int, k: Int, c: Int) raises:
+    comptime if LP_IDN_RESIDENT:
+        # lane/fam2-neighbors: the finiteness scan of x on the device (a
+        # host walk over m x c before, `lp_knn_finite`); the same product
+        var ctx_i = xn_ctx()
+        var dc_i = _buf_i(ctx_i, cols, n * k, True)
+        var dv_i = _buf(ctx_i, vals, n * k, True)
+        var dx_i = _buf(ctx_i, x, m * c, True)
+        var dr_i = _buf(ctx_i, 0, n * c, False)
+        var d_fl = ctx_i.enqueue_create_buffer[DType.int32](4)
+        ctx_i.enqueue_memset(d_fl, Int32(0))
+        if m * c > 0:
+            ctx_i.enqueue_function[lpki_nonfinite_kernel](
+                dx_i.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m * c),
+                grid_dim=_grid(m * c), block_dim=(BLOCK if m * c > 1 else 1),
+            )
+        if n * c > 0:
+            ctx_i.enqueue_function[lpki_product_kernel](
+                dc_i.unsafe_ptr(), dv_i.unsafe_ptr(), dx_i.unsafe_ptr(), dr_i.unsafe_ptr(), d_fl.unsafe_ptr(),
+                Int64(n), Int64(m), Int64(k), Int64(c),
+                grid_dim=_grid(n * c), block_dim=(BLOCK if n * c > 1 else 1),
+            )
+        _down(ctx_i, dr_i, res, n * c)
+        ctx_i.synchronize()
+        _ = dc_i^
+        _ = dv_i^
+        _ = dx_i^
+        _ = dr_i^
+        _ = d_fl^
+        _ = ctx_i^
+        return
     var finite = lp_knn_finite(FP(unsafe_from_address=x), m * c)
     var ctx = xn_ctx()
     var dc = _buf_i(ctx, cols, n * k, True)
@@ -2051,11 +2152,178 @@ comptime LP_FAST_RESIDENT = (
 )
 
 
+#: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor, default ON:
+#: the same loop resident in IDENTICAL. The Python loop paid three binding
+#: calls per iteration (absdiff_sum, lp_knn_product, lp_clamp / ls_clamp:
+#: the distributions up and down three times, a host finiteness walk over
+#: them, `lp_knn_finite`, and a scalar readback every iteration). Here the
+#: graph goes up once and every launch is the op's own item:
+#: `absdiff_part_item` + `absdiff_fin_item` (the `absdiff_sum` op's bits),
+#: the stopping test against the float32 ceiling of tol (the same decision
+#: as Python's float64 compare of a float32 sum), the finiteness scan on the
+#: device, `lp_knn_product_item`, `lp_clamp_item` / `ls_clamp_item`. The
+#: stop flag gates the later launches of the batch; LPK_BATCH iterations per
+#: drain. No bit changes: the host column keeps the Python loop over the
+#: same items. -D MOJOLEARN_IDN_LP_RESIDENT_OFF (or MOJOLEARN_IDN_ALL_OFF)
+#: restores the Python loop.
+comptime LP_IDN_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_LP_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
 def lp_fast_resident_binding() raises -> PythonObject:
-    """1 when this binary takes the resident kNN-graph loop by default."""
-    comptime if LP_FAST_RESIDENT:
+    """1 when this binary takes the resident kNN-graph loop by default
+    (LP_FAST_RESIDENT on FAST + Apple, LP_IDN_RESIDENT on IDENTICAL)."""
+    comptime if LP_FAST_RESIDENT or LP_IDN_RESIDENT:
         return PythonObject(1)
     return PythonObject(0)
+
+
+def lpki_absdiff_part_kernel(a: FP, b: FP, part: FP, flag: IP, count_: Int64):
+    """`absdiff_part_item` per fold block; nothing once the flag is set."""
+    if flag.unsafe_load(0) != 0:
+        return
+    var count = Int(count_)
+    var t = _tid()
+    if t < xn_fold_blocks(count):
+        absdiff_part_item(t, a, b, part, part, count)
+
+
+def lpki_check_kernel(a: FP, b: FP, sres: FP, part: FP, flag: IP, count_: Int64, tol_: Float32):
+    """ONE item: `absdiff_fin_item`, then the stopping test. Below tol the
+    stop flag (flag[0]) is set (the loop stops before this step), else the
+    step is counted (flag[1]) and the finiteness flag (flag[2]) is cleared
+    for this step's scan."""
+    if flag.unsafe_load(0) != 0:
+        return
+    var t = _tid()
+    if t < 1:
+        absdiff_fin_item(t, a, b, sres, part, Int(count_))
+        if sres.unsafe_load(0) < tol_:
+            flag.unsafe_store(0, Int32(1))
+        else:
+            flag.unsafe_store(1, flag.unsafe_load(1) + Int32(1))
+            flag.unsafe_store(2, Int32(0))
+
+
+def lpki_nonfinite_kernel(x: FP, flag: IP, count_: Int64):
+    """flag[2] = 1 when any x is Inf or NaN (`lp_knn_finite`'s test, every
+    element its own thread); nothing once the stop flag is set."""
+    if flag.unsafe_load(0) != 0:
+        return
+    var t = _tid()
+    if t < Int(count_):
+        var bits = bitcast[DType.uint32](x.unsafe_load(t)) & UInt32(0x7F800000)
+        if bits == UInt32(0x7F800000):
+            flag.unsafe_store(2, Int32(1))
+
+
+def lpki_product_kernel(cols: IP, vals: FP, x: FP, res: FP, flag: IP, n_: Int64, m_: Int64, k_: Int64, c_: Int64):
+    """`lp_knn_product_item` with the device's finiteness flag; nothing once
+    the stop flag is set."""
+    if flag.unsafe_load(0) != 0:
+        return
+    var t = _tid()
+    if t < Int(n_) * Int(c_):
+        lp_knn_product_item(t, cols, vals, x, res, Int(n_), Int(m_), Int(k_), Int(c_), flag.unsafe_load(2) == 0)
+
+
+def _lpki_tol_ceil(tol: Float64) -> Float32:
+    """The least float32 >= tol, so `s < result` decides `Float64(s) < tol`
+    for every float32 s (the sum is >= 0: a tol <= 0 never stops)."""
+    if not (tol > Float64(0)):
+        return Float32(0)
+    var t32 = Float32(tol)
+    if Float64(t32) < tol:
+        t32 = bitcast[DType.float32](bitcast[DType.uint32](t32) + UInt32(1))
+    return t32
+
+
+def _op_lp_iterate_knn_idn(
+    cols: Int, vals: Int, ld: Int, ystatic: Int, unlabeled: Int, info: Int,
+    n: Int, k: Int, c: Int, max_iter: Int, variant: Int, tol: Float64, alpha: Float32,
+) raises:
+    """LP_IDN_RESIDENT: `_LabelPropagationBase.fit`'s Python loop over the
+    compact kNN graph, resident, every launch the op's own item."""
+    var nc = n * c
+    var nfb = xn_fold_blocks(nc)
+    var ctx = xn_ctx()
+    var d_cols = _buf_i(ctx, cols, n * k, True)
+    var d_vals = _buf(ctx, vals, n * k, True)
+    var d_a = _buf(ctx, ld, nc, True)
+    var d_b = _buf(ctx, 0, nc, False)
+    ctx.enqueue_memset(d_b, Float32(0))
+    var d_nxt = _buf(ctx, 0, nc, False)
+    var d_ys = _buf(ctx, ystatic, nc, True)
+    var d_unl = _buf_i(ctx, unlabeled, n, True)
+    var d_s = _buf(ctx, 0, 1, False)
+    var d_part = _buf(ctx, 0, nfb, False)
+    var h_fl = List[Int32](length=4, fill=Int32(0))
+    var d_fl = _buf_i(ctx, Int(h_fl.unsafe_ptr()), 4, True)
+    var flp: IP = d_fl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var prev: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var tol32 = _lpki_tol_ceil(tol)
+    var done = 0
+    var converged = False
+    while done < max_iter and not converged and nc > 0:
+        var steps = min(LPK_BATCH, max_iter - done)
+        for _ in range(steps):
+            ctx.enqueue_function[lpki_absdiff_part_kernel](
+                cur, prev, d_part.unsafe_ptr(), flp, Int64(nc),
+                grid_dim=_grid(nfb), block_dim=(BLOCK if nfb > 1 else 1),
+            )
+            ctx.enqueue_function[lpki_check_kernel](
+                cur, prev, d_s.unsafe_ptr(), d_part.unsafe_ptr(), flp, Int64(nc), tol32,
+                grid_dim=1, block_dim=1,
+            )
+            ctx.enqueue_function[lpki_nonfinite_kernel](
+                cur, flp, Int64(nc), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+            )
+            ctx.enqueue_function[lpki_product_kernel](
+                d_cols.unsafe_ptr(), d_vals.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), flp,
+                Int64(n), Int64(n), Int64(k), Int64(c), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+            )
+            # prev = ld; ld = clamp(nxt): the clamp writes over the buffer
+            # the old prev held, then the two names swap (op_lp_iterate)
+            ctx.enqueue_function[lpk_clamp_kernel](
+                d_nxt.unsafe_ptr(), d_ys.unsafe_ptr(), d_unl.unsafe_ptr(), prev, flp,
+                Int64(n), Int64(c), Int64(variant), alpha,
+                grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+            )
+            var t = cur
+            cur = prev
+            prev = t
+        ctx.enqueue_copy(dst_ptr=h_fl.unsafe_ptr(), src_buf=d_fl)
+        ctx.synchronize()
+        converged = h_fl[0] != 0
+        done += steps
+    # steps taken: the loop's n_iter_ whether it converged (it) or ran out
+    var n_iter = Int(h_fl[1])
+    if nc == 0:
+        # the Python loop over nothing: the empty sum 0 against tol
+        converged = Float64(0) < tol
+        n_iter = 0 if (converged or max_iter <= 0) else max_iter
+    elif n_iter % 2 == 0:
+        _down(ctx, d_a, ld, nc)
+    else:
+        _down(ctx, d_b, ld, nc)
+    ctx.synchronize()
+    var inf = IP(unsafe_from_address=info)
+    inf.unsafe_store(0, Int32(n_iter))
+    inf.unsafe_store(1, Int32(1 if converged else 0))
+    _ = h_fl^
+    _ = d_fl^
+    _ = d_s^
+    _ = d_part^
+    _ = d_cols^
+    _ = d_vals^
+    _ = d_a^
+    _ = d_b^
+    _ = d_nxt^
+    _ = d_ys^
+    _ = d_unl^
+    _ = ctx^
 
 
 def lpk_absdiff_partial_kernel(a: FP, b: FP, part: FP, flag: IP, count_: Int64):
@@ -2127,7 +2395,13 @@ def op_lp_iterate_knn(
     out: the last. info (int32 x 2): n_iter_, converged. tol is Python's
     float64 bits."""
     comptime if not LPK_FAST_BUILD:
-        raise Error("lp_iterate_knn: the FAST tier only (LP_FAST_RESIDENT)")
+        comptime if LP_IDN_RESIDENT:
+            _op_lp_iterate_knn_idn(
+                cols, vals, ld, ystatic, unlabeled, info, n, k, c, max_iter, variant,
+                bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo)), alpha,
+            )
+        else:
+            raise Error("lp_iterate_knn: the FAST tier only (LP_FAST_RESIDENT), or IDENTICAL without MOJOLEARN_IDN_LP_RESIDENT_OFF")
     else:
         var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
         var nc = n * c
