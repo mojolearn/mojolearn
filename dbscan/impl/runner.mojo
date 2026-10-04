@@ -202,9 +202,26 @@ from neighbors.impl.ball_cover.scan import (
 #: from loop 1 and loop 2 scans them instead of re-running the count pass,
 #: so a fit walks the dataset twice instead of three times. The counts are
 #: the same kernel's output on the same rows, so the CSR is the same.
+#: fam-cluster (2026-10-04): IDENTICAL on the NVIDIA and AMD columns keeps
+#: the counts too (it was Apple only), so a fit the edge cap splits into
+#: several batches does not re-run the count pass in loop 2. Same counts, so
+#: the same CSR. `-D MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF=1` re-counts there.
+comptime IDN_DBSCAN_KEEP_COUNTS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not has_apple_gpu_accelerator()
+    and not (
+        is_defined["MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
 comptime DBSCAN_RBC_KEEP_COUNTS = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-    and has_apple_gpu_accelerator()
+    (
+        (
+            (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
+            and has_apple_gpu_accelerator()
+        )
+        or IDN_DBSCAN_KEEP_COUNTS
+    )
     and not is_defined["MOJOLEARN_DBSCAN_RBC_KEEP_COUNTS_OFF"]()
 )
 
