@@ -211,9 +211,9 @@ def merge_stage_times(mut dst: StageTimes, src: StageTimes):
     method on."""
     if not src.enabled:
         return
-    for i in range(len(src.tags)):
+    for i in range(len(src.tags)):  # small-loop(tags: stage-time tags, a few dozen): merges timing counters, not data
         var found = False
-        for j in range(len(dst.tags)):
+        for j in range(len(dst.tags)):  # small-loop(tags: stage-time tags, a few dozen): finds the matching timing counter
             if dst.tags[j] == src.tags[i]:
                 dst.ns[j] += src.ns[i]
                 found = True
@@ -1908,7 +1908,7 @@ struct OracleScratchPool(Movable):
             n_rows, dims[1], fv_blocks
         ):
             self.entries.clear()
-        for i in range(len(self.entries)):
+        for i in range(len(self.entries)):  # small-loop(entries: pooled scratch keys, at most ORACLE_POOL_MAX_BIN_KEYS): cache lookup by shape only
             if self.entries[i].matches(
                 n_rows, bin_count, dims[0], dims[1], fv_blocks, sm
             ):
