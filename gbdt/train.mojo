@@ -38,6 +38,7 @@ from gbdt.models.kernel.resident_link import (
     LINK_SOFTMAX,
     resident_link_kernel,
 )
+from gbdt.data.group_layout import device_group_layout
 from gbdt.data.cat_code_scan import (
     cat_column_codes,
     cat_column_max_code,
@@ -1184,18 +1185,11 @@ def train(
                 " implemented here"
             )
     if len(group_sizes) > 0:
-        var covered = 0
-        for g in range(len(group_sizes)):
-            if group_sizes[g] == UInt32(0):
-                raise Error(
-                    "group_id: group " + String(g) + " has no rows"
-                )
-            covered += Int(group_sizes[g])
-        if covered != n_rows:
-            raise Error(
-                "group_id: the group sizes cover " + String(covered)
-                + " rows of " + String(n_rows)
-            )
+        # checked on the device (`gbdt/data/group_layout.mojo`), same words
+        _ = device_group_layout(
+            ctx, group_sizes, n_rows, "group_id: group ",
+            "group_id: the group sizes cover ",
+        )
         if not is_querywise:
             raise Error(
                 "group_id is read only by the querywise and pairwise losses"

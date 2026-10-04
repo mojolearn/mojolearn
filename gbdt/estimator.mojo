@@ -65,6 +65,7 @@ from max.gpu.host import DeviceContext
 from ensemble.instruments import StageTimes as HostStageTimes
 from std.memory import memcpy
 from std.math import isfinite
+from core.device_scan import device_first_nonfinite
 
 from gbdt.models.model_text import load_model_text, model_text
 from gbdt.options.catboost_options import (
@@ -141,9 +142,12 @@ def gbdt_fit_two_level_feature_freq(
     var target = List[Float32]()
     target.resize(n_rows, Float32(0.0))
     memcpy(dest=target.unsafe_ptr(), src=y, count=n_rows)
-    for r in range(n_rows):
-        if not isfinite(target[r]):
-            raise Error("two-level FeatureFreq target is not finite")
+    # lane/cpu3-gbdt-b: the finiteness walk on the device, one word back
+    var d_target = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    ctx.enqueue_copy(dst_buf=d_target, src_ptr=y)
+    if device_first_nonfinite(ctx, d_target, n_rows) >= 0:
+        raise Error("two-level FeatureFreq target is not finite")
+    _ = d_target^
     var weights = List[Float32]()
     if n_weights != 0:
         weights.resize(n_rows, Float32(0.0))
@@ -151,7 +155,7 @@ def gbdt_fit_two_level_feature_freq(
     var source_ids = List[Int]()
     var seen_source = List[Bool]()
     seen_source.resize(n_features, False)
-    for i in range(n_sources):
+    for i in range(n_sources):  # small-loop(n_sources: source feature ids): validates the caller's few source column ids, no row data
         var source = Int(sources.unsafe_load(i))
         if source < 0 or source >= n_features or seen_source[source]:
             raise Error("two-level FeatureFreq source is invalid or duplicated")
@@ -525,7 +529,7 @@ def gbdt_fit(
     var cats = List[Bool]()
     var one_hot = List[Bool]()
     if n_flags != 0:
-        for f in range(n_features):
+        for f in range(n_features):  # small-loop(n_features: per-feature option flags): decodes one flag word per feature, no row data
             var w = cat_flags.unsafe_load(f)
             cats.append((w & UInt32(1)) != UInt32(0))
             one_hot.append((w & UInt32(2)) != UInt32(0))
