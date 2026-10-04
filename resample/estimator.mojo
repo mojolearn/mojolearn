@@ -2110,7 +2110,7 @@ def resample_gather_gpu(
             copy_f32(src, hsrc.unsafe_ptr(), n * d)
             ctx.enqueue_copy(dst_buf=dsrc, src_ptr=hsrc.unsafe_ptr())
             ctx.enqueue_function[gather_rows_f32_kernel](
-                dout.unsafe_ptr(), dsrc.unsafe_ptr(), rows.unsafe_ptr(), count, d,
+                dout.unsafe_ptr(), dsrc.unsafe_ptr(), rows.unsafe_ptr(), Int32(count), Int32(d),
                 grid_dim=(ceildiv(count * d, 256), 1, 1), block_dim=(256, 1, 1),
             )
             ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=dout)
