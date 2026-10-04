@@ -64,6 +64,33 @@ from decomposition.impl.linalg.detail.svd_full import (
     pca_fit_full,
     pca_full_scratch_cells,
 )
+from core.device_pool import pool_give, pool_take
+from core.gram_splitk import gram_splitk_applies
+from std.os import getenv
+from std.sys.compile import is_defined
+from std.time import perf_counter_ns
+
+#: lane/apple-fast-w4-decomp (2026-10-04), opt-in `-D MOJOLEARN_PCA_FAST_POOL`
+#: (FAST + Apple, on top of PCA_FAST_GRAM_MMA): when the fit takes the MMA
+#: Gram arm (d past the split-K Gram, Istella's 220), the fit's n x d device
+#: copy of X comes from core/device_pool (kept between calls, up to
+#: POOL_KEEP_BYTES: 1.8 GB idle at the board's 2,043,304 x 220) instead of a
+#: fresh allocation each call (fresh-page cost; x_prep's POOL_ARENA measured
+#: ~50 ms per GB), and the two n x d alias buffers that arm never reads are
+#: 1 float. Copies and allocations only: no bit moves.
+comptime PCA_FAST_POOL = PCA_FAST_GRAM_MMA and is_defined["MOJOLEARN_PCA_FAST_POOL"]()
+comptime _PCA_POOL = "MojoEstimatorsPcaFastX"
+
+
+def _pca_stage_log(path: String, line: String):
+    """MOJOLEARN_PCA_STAGE_LOG=<file>: one line a fit appended there (the
+    stage waits below already exist; nothing is added to the timed path
+    when the variable is unset)."""
+    try:
+        with open(path, "a") as fh:
+            fh.write(line + "\n")
+    except:
+        pass
 
 
 def pca_fit_host(
@@ -78,13 +105,22 @@ def pca_fit_host(
     n_features: Int,
     n_components: Int,
 ) raises -> Float64:
-    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    var stage_log = String(getenv("MOJOLEARN_PCA_STAGE_LOG"))
+    var t0 = perf_counter_ns()
+    var big = n_rows * n_features
+    var pooled = False
+    comptime if PCA_FAST_POOL:
+        # the MMA arm of compute_covariance reads neither alias buffer
+        pooled = not gram_splitk_applies(n_features, n_features, n_rows)
+    var x = pool_take[_PCA_POOL](ctx, big) if pooled else ctx.enqueue_create_buffer[DType.float32](big)
+    var alias_n = 1 if pooled else big
+    var xa = ctx.enqueue_create_buffer[DType.float32](alias_n)
+    var xa2 = ctx.enqueue_create_buffer[DType.float32](alias_n)
     var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
     var cov = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.synchronize()
+    var t1 = perf_counter_ns()
     var trace = IdentityTrace()
     if trace.enabled:
         trace.header(
@@ -102,12 +138,14 @@ def pca_fit_host(
     # PCA_FAST_GRAM_MMA: `x` is this fit's own device copy, never read again,
     # so its restore pass is skipped
     compute_covariance(ctx, x, xa, xa2, mu, cov, n_rows, n_features, not PCA_FAST_GRAM_MMA)
+    var t2 = perf_counter_ns()
     if trace.enabled:
         trace.record_device(ctx, "pca.mean", mu, n_features)
         trace.record_device(ctx, "pca.cov", cov, n_features * n_features)
     var result = eig_and_truncate(
         ctx, cov, n_features, n_components, n_rows - 1
     )
+    var t3 = perf_counter_ns()
     if trace.enabled:
         trace.record_device(ctx, "pca.jacobi.a", cov, n_features * n_features)
     var comp32 = List[Float32]()
@@ -132,6 +170,22 @@ def pca_fit_host(
     ctx.synchronize()
     for i in range(n_features):
         mean_ptr.unsafe_store(i, hmu.unsafe_ptr().unsafe_load(i))
+    if pooled:
+        pool_give[_PCA_POOL](x^)
+    else:
+        _ = x^
+    if stage_log != "":
+        var t4 = perf_counter_ns()
+        _pca_stage_log(
+            stage_log,
+            String("PCA-STAGES n=") + String(n_rows) + " d=" + String(n_features)
+            + " pooled=" + String(Int(pooled))
+            + " alloc_upload_ms=" + String(Float64(t1 - t0) / 1e6)
+            + " cov_ms=" + String(Float64(t2 - t1) / 1e6)
+            + " eig_ms=" + String(Float64(t3 - t2) / 1e6)
+            + " tail_ms=" + String(Float64(t4 - t3) / 1e6)
+            + " total_ms=" + String(Float64(t4 - t0) / 1e6),
+        )
     return result.noise_var
 
 
