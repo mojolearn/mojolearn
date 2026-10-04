@@ -432,6 +432,16 @@ def softmax_rows(x: MutPointer[Float64, MutUntrackedOrigin], n: Int, k: Int):
 
 
 # ------------------------------------------------------------- AdaBoost
+# cpu2-l5-trees (2026-10-04): every n-sized float64 sum of the AdaBoost
+# steps runs in xtrees/fold_order.mojo's fixed order (chunk partials, then
+# the pairwise tree), the order of `ops_device_boost`'s kernels, so a GPU
+# install runs these steps on the device with the host column's words. Up to
+# FOLD_CHUNK rows the order IS the old sequential one.
+def samme_alpha(err: Float64, k: Float64, learning_rate: Float64) -> Float64:
+    """SAMME's estimator weight lr * (log((1 - err) / err) + log(k - 1))."""
+    return identical_mul64(learning_rate, identical_log64((1.0 - err) / err) + identical_log64(k - 1.0))
+
+
 def samme_step(
     w: MutPointer[Float64, MutUntrackedOrigin], pred: MutPointer[Int32, MutUntrackedOrigin],
     y: MutPointer[Int32, MutUntrackedOrigin], n: Int, n_classes: Int,
@@ -441,14 +451,22 @@ def samme_step(
     ensemble/_weight_boosting.py). `w` sums to one on entry. Writes
     stats = [status, estimator_weight, estimator_error, sum of new w]:
     status 0 continue, 1 perfect fit (weight 1, stop), 2 worse than chance
-    (discard, stop). Updates `w` in place (not on the last iteration)."""
-    var err: Float64 = 0.0
-    var tot: Float64 = 0.0
-    for i in range(n):
-        tot = tot + w[unsafe_offset=i]
-        if pred[unsafe_offset=i] != y[unsafe_offset=i]:
-            err = err + w[unsafe_offset=i]
-    err = err / tot
+    (discard, stop). Updates `w` in place (not on the last iteration). The
+    error, the total and the new sum fold in the fixed order."""
+    var m = fold_chunks(n)
+    var p = List[Float64](length=2 * m, fill=0.0)
+    for c in range(m):
+        var e: Float64 = 0.0
+        var t: Float64 = 0.0
+        for i in range(c * FOLD_CHUNK, min((c + 1) * FOLD_CHUNK, n)):
+            t = t + w[unsafe_offset=i]
+            if pred[unsafe_offset=i] != y[unsafe_offset=i]:
+                e = e + w[unsafe_offset=i]
+        p[2 * c] = e
+        p[2 * c + 1] = t
+    fold_tree_host(p, m, 2)
+    var tot = p[1]
+    var err = p[0] / tot
     if err <= 0.0:
         stats[unsafe_offset=0] = 1.0
         stats[unsafe_offset=1] = 1.0
@@ -462,22 +480,41 @@ def samme_step(
         stats[unsafe_offset=2] = err
         stats[unsafe_offset=3] = tot
         return
-    var alpha = identical_mul64(
-        learning_rate, identical_log64((1.0 - err) / err) + identical_log64(k - 1.0))
-    var s: Float64 = 0.0
+    var alpha = samme_alpha(err, k, learning_rate)
+    var s: Float64
     if not last:
         # DEVIATION 5603: the pinned exp.
         var boost = identical_exp64(alpha)
-        for i in range(n):
-            if pred[unsafe_offset=i] != y[unsafe_offset=i] and w[unsafe_offset=i] > 0.0:
-                w[unsafe_offset=i] = identical_mul64(w[unsafe_offset=i], boost)
-            s = s + w[unsafe_offset=i]
+        var q = List[Float64](length=m, fill=0.0)
+        for c in range(m):
+            var run: Float64 = 0.0
+            for i in range(c * FOLD_CHUNK, min((c + 1) * FOLD_CHUNK, n)):
+                if pred[unsafe_offset=i] != y[unsafe_offset=i] and w[unsafe_offset=i] > 0.0:
+                    w[unsafe_offset=i] = identical_mul64(w[unsafe_offset=i], boost)
+                run = run + w[unsafe_offset=i]
+            q[c] = run
+        fold_tree_host(q, m, 1)
+        s = q[0]
     else:
         s = tot
     stats[unsafe_offset=0] = 0.0
     stats[unsafe_offset=1] = alpha
     stats[unsafe_offset=2] = err
     stats[unsafe_offset=3] = s
+
+
+@always_inline
+def r2_error(p: Float32, t: Float32, emax: Float64, loss: Int) -> Float64:
+    """AdaBoost.R2's per-row loss: |p - t| / emax, then squared (1) or
+    1 - exp(-e) (2)."""
+    var e = abs(Float64(p) - Float64(t))
+    if emax != 0.0:
+        e = e / emax
+    if loss == 1:
+        e = identical_mul64(e, e)
+    elif loss == 2:
+        e = 1.0 - identical_exp64(-e)
+    return e
 
 
 def r2_step(
@@ -487,26 +524,26 @@ def r2_step(
 ):
     """sklearn `AdaBoostRegressor._boost` (AdaBoost.R2, Drucker 1997).
     loss 0 linear, 1 square, 2 exponential. stats as `samme_step`'s, status 2
-    meaning estimator_error >= 0.5."""
+    meaning estimator_error >= 0.5. The error and the new sum fold in the
+    fixed order; the reweighting factor beta ** ((1 - e) lr) is spelled
+    exp(((1 - e) lr) log(beta)) with the pinned exp and log (cpu2-l5-trees:
+    the device has no pow; the same spelling on every column)."""
     var emax: Float64 = 0.0
     for i in range(n):
         if w[unsafe_offset=i] > 0.0:
             var e = abs(Float64(pred[unsafe_offset=i]) - Float64(y[unsafe_offset=i]))
             if e > emax:
                 emax = e
-    var err: Float64 = 0.0
-    var ev = List[Float64](length=n, fill=0.0)
-    for i in range(n):
-        if w[unsafe_offset=i] > 0.0:
-            var e = abs(Float64(pred[unsafe_offset=i]) - Float64(y[unsafe_offset=i]))
-            if emax != 0.0:
-                e = e / emax
-            if loss == 1:
-                e = identical_mul64(e, e)
-            elif loss == 2:
-                e = 1.0 - identical_exp64(-e)
-            ev[i] = e
-            err = err + identical_mul64(w[unsafe_offset=i], e)
+    var m = fold_chunks(n)
+    var p = List[Float64](length=m, fill=0.0)
+    for c in range(m):
+        var run: Float64 = 0.0
+        for i in range(c * FOLD_CHUNK, min((c + 1) * FOLD_CHUNK, n)):
+            if w[unsafe_offset=i] > 0.0:
+                run = run + identical_mul64(w[unsafe_offset=i], r2_error(pred[unsafe_offset=i], y[unsafe_offset=i], emax, loss))
+        p[c] = run
+    fold_tree_host(p, m, 1)
+    var err = p[0]
     if err <= 0.0:
         stats[unsafe_offset=0] = 1.0
         stats[unsafe_offset=1] = 1.0
@@ -519,50 +556,76 @@ def r2_step(
         return
     var beta = err / (1.0 - err)
     var alpha = identical_mul64(learning_rate, identical_log64(1.0 / beta))
-    var s: Float64 = 0.0
-    for i in range(n):
-        if not last and w[unsafe_offset=i] > 0.0:
-            w[unsafe_offset=i] = identical_mul64(w[unsafe_offset=i], identical_pow64(beta, identical_mul64(1.0 - ev[i], learning_rate)))
-        s = s + w[unsafe_offset=i]
+    var lb = identical_log64(beta)
+    var q = List[Float64](length=m, fill=0.0)
+    for c in range(m):
+        var run: Float64 = 0.0
+        for i in range(c * FOLD_CHUNK, min((c + 1) * FOLD_CHUNK, n)):
+            if not last and w[unsafe_offset=i] > 0.0:
+                var e = r2_error(pred[unsafe_offset=i], y[unsafe_offset=i], emax, loss)
+                var t = identical_mul64(1.0 - e, learning_rate)
+                w[unsafe_offset=i] = identical_mul64(w[unsafe_offset=i], identical_exp64(identical_mul64(t, lb)))
+            run = run + w[unsafe_offset=i]
+        q[c] = run
+    fold_tree_host(q, m, 1)
     stats[unsafe_offset=0] = 0.0
     stats[unsafe_offset=1] = alpha
     stats[unsafe_offset=2] = err
-    stats[unsafe_offset=3] = s
+    stats[unsafe_offset=3] = q[0]
+
+
+def median_total(weights: MutPointer[Float64, MutUntrackedOrigin], m: Int) -> Float64:
+    """The estimator weights' total, in estimator order (m-sized: one scalar
+    for every row)."""
+    var total: Float64 = 0.0
+    for j in range(m):
+        total = total + weights[unsafe_offset=j]
+    return total
+
+
+@always_inline
+def median_pick(
+    preds: MutPointer[Float32, MutUntrackedOrigin], weights: MutPointer[Float64, MutUntrackedOrigin], n: Int, m: Int,
+    i: Int, half: Float64,
+) -> Int:
+    """Row i's weighted-median estimator: the smallest key (prediction, then
+    estimator index) whose cumulative weight -- the weights of every key at
+    or below it, added in estimator order -- reaches `half`; none: the
+    largest key."""
+    var pick = -1
+    var pick_v = Float32(0)
+    var last = 0
+    var last_v = preds[unsafe_offset=i]
+    for j in range(m):
+        var v = preds[unsafe_offset=j * n + i]
+        if j > 0 and not (v < last_v):
+            last = j
+            last_v = v
+        var c: Float64 = 0.0
+        for l in range(m):
+            var u = preds[unsafe_offset=l * n + i]
+            if u < v or (u == v and l <= j):
+                c = c + weights[unsafe_offset=l]
+        if c >= half and (pick < 0 or v < pick_v or (v == pick_v and j < pick)):
+            pick = j
+            pick_v = v
+    return pick if pick >= 0 else last
 
 
 def weighted_median(
     preds: MutPointer[Float32, MutUntrackedOrigin], weights: MutPointer[Float64, MutUntrackedOrigin],
     n: Int, m: Int, res: MutPointer[Float32, MutUntrackedOrigin],
 ):
-    """sklearn `AdaBoostRegressor._get_median_predict`: per row, the
-    estimators sorted by prediction (ties by estimator index), the first
-    whose cumulative weight reaches half the total. `preds` is estimator
-    major (m rows of n)."""
-    var order = List[Int](length=m, fill=0)
+    """sklearn `AdaBoostRegressor._get_median_predict`: per row, over the
+    estimators ordered by (prediction, estimator index), the first whose
+    cumulative weight reaches half the total. `preds` is estimator major (m
+    rows of n). cpu2-l5-trees: the total is one estimator-order sum for every
+    row and each estimator's cumulative weight is the sum of the weights at
+    or below its key in estimator order (`median_pick`), a per-row law with
+    no sort, the device's (one thread per row) on every column."""
+    var half = identical_mul64(0.5, median_total(weights, m))
     for i in range(n):
-        for j in range(m):
-            order[j] = j
-        # insertion sort, stable: m is the estimator count
-        for a in range(1, m):
-            var key = order[a]
-            var kv = preds[unsafe_offset=key * n + i]
-            var b = a - 1
-            while b >= 0 and preds[unsafe_offset=order[b] * n + i] > kv:
-                order[b + 1] = order[b]
-                b -= 1
-            order[b + 1] = key
-        var total: Float64 = 0.0
-        for j in range(m):
-            total = total + weights[unsafe_offset=order[j]]
-        var half = identical_mul64(0.5, total)
-        var c: Float64 = 0.0
-        var pick = order[m - 1]
-        for j in range(m):
-            c = c + weights[unsafe_offset=order[j]]
-            if c >= half:
-                pick = order[j]
-                break
-        res[unsafe_offset=i] = preds[unsafe_offset=pick * n + i]
+        res[unsafe_offset=i] = preds[unsafe_offset=median_pick(preds, weights, n, m, i, half) * n + i]
 
 
 # ------------------------------------------------------ flat trees (apply)
@@ -712,22 +775,57 @@ def _newton_values(
         values[unsafe_offset=k] = Float32(ret)
 
 
+def leaf_sums(
+    nodes: MutPointer[Int32, MutUntrackedOrigin], rows: MutPointer[Int32, MutUntrackedOrigin], use_rows: Bool,
+    m: Int, g: MutPointer[Float64, MutUntrackedOrigin], h: MutPointer[Float64, MutUntrackedOrigin], n_nodes: Int,
+) -> List[Float64]:
+    """The per-leaf g / h sums (cpu2-l5-trees, xtrees/fold_order.mojo's
+    order): list positions r in [0, m) (row i = rows[r], or r) fall in chunks
+    of `fold_chunk_size(m, 2 n_nodes)`; a chunk's partial for node k adds its
+    rows of that node in position order from +0.0; the partials fold by the
+    pairwise tree. Returns 2 n_nodes words: [sum g, sum h] per node. The
+    device runs one unit per (chunk, node) with the same statements
+    (`ops_device_boost.leaf_newton_device`). Indices are checked by the
+    caller."""
+    var w = 2 * n_nodes
+    var cs = fold_chunk_size(m, w)
+    var nc = max(1, (m + cs - 1) // cs)
+    var p = List[Float64](length=nc * w, fill=0.0)
+    for c in range(nc):
+        for r in range(c * cs, min((c + 1) * cs, m)):
+            var i = Int(rows[unsafe_offset=r]) if use_rows else r
+            var k = Int(nodes[unsafe_offset=i])
+            p[c * w + 2 * k] = p[c * w + 2 * k] + g[unsafe_offset=i]
+            p[c * w + 2 * k + 1] = p[c * w + 2 * k + 1] + h[unsafe_offset=i]
+    fold_tree_host(p, nc, w)
+    return p^
+
+
+def _newton_values_rec(
+    p: List[Float64], n_nodes: Int, reg_lambda: Float64, l1: Float64, max_delta_step: Float64,
+    values: MutPointer[Float32, MutUntrackedOrigin],
+):
+    var sg = List[Float64](length=n_nodes, fill=0.0)
+    var sh = List[Float64](length=n_nodes, fill=0.0)
+    for k in range(n_nodes):
+        sg[k] = p[2 * k]
+        sh[k] = p[2 * k + 1]
+    _newton_values(sg, sh, n_nodes, reg_lambda, l1, max_delta_step, values)
+
+
 def leaf_newton(
     nodes: MutPointer[Int32, MutUntrackedOrigin], g: MutPointer[Float64, MutUntrackedOrigin],
     h: MutPointer[Float64, MutUntrackedOrigin], n: Int, n_nodes: Int, reg_lambda: Float64,
     values: MutPointer[Float32, MutUntrackedOrigin], l1: Float64 = 0.0, max_delta_step: Float64 = 0.0,
 ) raises:
     """values[node] = `_newton_values` of the sums over the rows in that leaf,
-    sums in row order."""
-    var sg = List[Float64](length=n_nodes, fill=0.0)
-    var sh = List[Float64](length=n_nodes, fill=0.0)
+    folded in `leaf_sums`' fixed order."""
     for i in range(n):
         var k = Int(nodes[unsafe_offset=i])
         if k < 0 or k >= n_nodes:
             raise Error("x_trees leaf_newton: node out of range")
-        sg[k] = sg[k] + g[unsafe_offset=i]
-        sh[k] = sh[k] + h[unsafe_offset=i]
-    _newton_values(sg, sh, n_nodes, reg_lambda, l1, max_delta_step, values)
+    var p = leaf_sums(nodes, nodes, False, n, g, h, n_nodes)
+    _newton_values_rec(p, n_nodes, reg_lambda, l1, max_delta_step, values)
 
 
 def leaf_newton_rows(
@@ -736,10 +834,9 @@ def leaf_newton_rows(
     n_nodes: Int, reg_lambda: Float64, l1: Float64, max_delta_step: Float64,
     values: MutPointer[Float32, MutUntrackedOrigin],
 ) raises:
-    """leaf_newton over rows[0 .. m) only, in that order (the bagged rows);
-    nodes / g / h are indexed by the full row (n of them)."""
-    var sg = List[Float64](length=n_nodes, fill=0.0)
-    var sh = List[Float64](length=n_nodes, fill=0.0)
+    """leaf_newton over rows[0 .. m) only (the bagged rows), folded in
+    `leaf_sums`' fixed order over the list positions; nodes / g / h are
+    indexed by the full row (n of them)."""
     for r in range(m):
         var i = Int(rows[unsafe_offset=r])
         if i < 0 or i >= n:
@@ -747,9 +844,8 @@ def leaf_newton_rows(
         var k = Int(nodes[unsafe_offset=i])
         if k < 0 or k >= n_nodes:
             raise Error("x_trees leaf_newton_rows: node out of range")
-        sg[k] = sg[k] + g[unsafe_offset=i]
-        sh[k] = sh[k] + h[unsafe_offset=i]
-    _newton_values(sg, sh, n_nodes, reg_lambda, l1, max_delta_step, values)
+    var p = leaf_sums(nodes, rows, True, m, g, h, n_nodes)
+    _newton_values_rec(p, n_nodes, reg_lambda, l1, max_delta_step, values)
 
 
 def tree_score_add(
@@ -894,63 +990,109 @@ def _log1pexp(x: Float64) -> Float64:
     return identical_log64(1.0 + identical_exp64(x))
 
 
-def _platt_value(f: MutPointer[Float64, MutUntrackedOrigin], t: List[Float64], n: Int, a: Float64, b: Float64) -> Float64:
-    var v: Float64 = 0.0
-    for i in range(n):
-        var z = identical_mul64(f[unsafe_offset=i], a) + b
-        # -T log p - (1 - T) log(1 - p), p = 1 / (1 + exp(z))
-        v = v + identical_mul64(t[i], _log1pexp(z)) + identical_mul64(1.0 - t[i], _log1pexp(-z))
-    return v
+@always_inline
+def platt_target(yi: Int32, hi: Float64, lo: Float64) -> Float64:
+    return hi if yi > 0 else lo
 
 
-def platt_fit(
-    f: MutPointer[Float64, MutUntrackedOrigin], y: MutPointer[Int32, MutUntrackedOrigin], n: Int,
-    ab: MutPointer[Float64, MutUntrackedOrigin],
-):
-    """Platt scaling (sklearn calibration.py `_sigmoid_calibration`: the
-    targets T = (N+ + 1)/(N+ + 2) and 1/(N- + 2), the start B =
-    log((N- + 1)/(N+ + 1))), minimised by Newton with backtracking (Lin, Lin,
-    Weng 2007) where sklearn runs L-BFGS on the same objective. Writes
-    ab = [A, B]; P(y=1 | f) = 1 / (1 + exp(A f + B))."""
-    var prior1: Float64 = 0.0
-    for i in range(n):
-        if y[unsafe_offset=i] > 0:
-            prior1 = prior1 + 1.0
+trait PlattSums:
+    """The two n-sized sums Platt's Newton driver needs, in
+    xtrees/fold_order.mojo's fixed order: the objective at (a, b) and the
+    five gradient / Hessian sums [sum f^2 d2, sum d2, sum f d2, sum f d1,
+    sum d1]. `PlattHost` is the host column's; `ops_device_boost.PlattDevice`
+    holds f and y on the device and folds there (the same words)."""
+
+    def value(mut self, a: Float64, b: Float64) raises -> Float64:
+        ...
+
+    def grad(mut self, a: Float64, b: Float64, mut out: List[Float64]) raises:
+        ...
+
+
+struct PlattHost(PlattSums):
+    var f: MutPointer[Float64, MutUntrackedOrigin]
+    var y: MutPointer[Int32, MutUntrackedOrigin]
+    var n: Int
+    var hi: Float64
+    var lo: Float64
+
+    def __init__(out self, f: MutPointer[Float64, MutUntrackedOrigin], y: MutPointer[Int32, MutUntrackedOrigin],
+                 n: Int, hi: Float64, lo: Float64):
+        self.f = f
+        self.y = y
+        self.n = n
+        self.hi = hi
+        self.lo = lo
+
+    def value(mut self, a: Float64, b: Float64) raises -> Float64:
+        var m = fold_chunks(self.n)
+        var p = List[Float64](length=m, fill=0.0)
+        for c in range(m):
+            var run: Float64 = 0.0
+            for i in range(c * FOLD_CHUNK, min((c + 1) * FOLD_CHUNK, self.n)):
+                var t = platt_target(self.y[unsafe_offset=i], self.hi, self.lo)
+                var z = identical_mul64(self.f[unsafe_offset=i], a) + b
+                # -T log p - (1 - T) log(1 - p), p = 1 / (1 + exp(z))
+                run = run + identical_mul64(t, _log1pexp(z)) + identical_mul64(1.0 - t, _log1pexp(-z))
+            p[c] = run
+        fold_tree_host(p, m, 1)
+        return p[0]
+
+    def grad(mut self, a: Float64, b: Float64, mut out: List[Float64]) raises:
+        var m = fold_chunks(self.n)
+        var p = List[Float64](length=5 * m, fill=0.0)
+        for c in range(m):
+            var s0: Float64 = 0.0
+            var s1: Float64 = 0.0
+            var s2: Float64 = 0.0
+            var s3: Float64 = 0.0
+            var s4: Float64 = 0.0
+            for i in range(c * FOLD_CHUNK, min((c + 1) * FOLD_CHUNK, self.n)):
+                var fi = self.f[unsafe_offset=i]
+                var z = identical_mul64(fi, a) + b
+                var pp: Float64
+                var q: Float64
+                if z >= 0.0:
+                    var e = identical_exp64(-z)
+                    pp = e / (1.0 + e)
+                    q = 1.0 / (1.0 + e)
+                else:
+                    var e = identical_exp64(z)
+                    pp = 1.0 / (1.0 + e)
+                    q = e / (1.0 + e)
+                var d2 = identical_mul64(pp, q)
+                var d1 = platt_target(self.y[unsafe_offset=i], self.hi, self.lo) - pp
+                s0 = s0 + identical_mul64(identical_mul64(fi, fi), d2)
+                s1 = s1 + d2
+                s2 = s2 + identical_mul64(fi, d2)
+                s3 = s3 + identical_mul64(fi, d1)
+                s4 = s4 + d1
+            p[5 * c] = s0
+            p[5 * c + 1] = s1
+            p[5 * c + 2] = s2
+            p[5 * c + 3] = s3
+            p[5 * c + 4] = s4
+        fold_tree_host(p, m, 5)
+        for q in range(5):
+            out[q] = p[q]
+
+
+def platt_drive[S: PlattSums](mut sums: S, prior1: Float64, n: Int) raises -> Tuple[Float64, Float64]:
+    """Platt scaling's Newton with backtracking over `sums` (the one driver of
+    every column: only the sums differ in where they run). prior1 = the
+    positive count."""
     var prior0 = Float64(n) - prior1
-    var hi = (prior1 + 1.0) / (prior1 + 2.0)
-    var lo = 1.0 / (prior0 + 2.0)
-    var t = List[Float64](length=n, fill=0.0)
-    for i in range(n):
-        t[i] = hi if y[unsafe_offset=i] > 0 else lo
     var a: Float64 = 0.0
     var b = identical_log64((prior0 + 1.0) / (prior1 + 1.0))
-    var fval = _platt_value(f, t, n, a, b)
+    var fval = sums.value(a, b)
+    var gs = List[Float64](length=5, fill=0.0)
     for _ in range(100):
-        var h11: Float64 = 1e-12
-        var h22: Float64 = 1e-12
-        var h21: Float64 = 0.0
-        var g1: Float64 = 0.0
-        var g2: Float64 = 0.0
-        for i in range(n):
-            var fi = f[unsafe_offset=i]
-            var z = identical_mul64(fi, a) + b
-            var p: Float64
-            var q: Float64
-            if z >= 0.0:
-                var e = identical_exp64(-z)
-                p = e / (1.0 + e)
-                q = 1.0 / (1.0 + e)
-            else:
-                var e = identical_exp64(z)
-                p = 1.0 / (1.0 + e)
-                q = e / (1.0 + e)
-            var d2 = identical_mul64(p, q)
-            h11 = h11 + identical_mul64(identical_mul64(fi, fi), d2)
-            h22 = h22 + d2
-            h21 = h21 + identical_mul64(fi, d2)
-            var d1 = t[i] - p
-            g1 = g1 + identical_mul64(fi, d1)
-            g2 = g2 + d1
+        sums.grad(a, b, gs)
+        var h11 = 1e-12 + gs[0]
+        var h22 = 1e-12 + gs[1]
+        var h21 = gs[2]
+        var g1 = gs[3]
+        var g2 = gs[4]
         if abs(g1) < 1e-5 and abs(g2) < 1e-5:
             break
         var det = identical_mul64(h11, h22) - identical_mul64(h21, h21)
@@ -962,7 +1104,7 @@ def platt_fit(
         while step >= 1e-10:
             var na = a + identical_mul64(step, da)
             var nb = b + identical_mul64(step, db)
-            var nf = _platt_value(f, t, n, na, nb)
+            var nf = sums.value(na, nb)
             if nf < fval + identical_mul64(identical_mul64(0.0001, step), gd):
                 a = na
                 b = nb
@@ -972,8 +1114,40 @@ def platt_fit(
             step = step / 2.0
         if not moved:
             break
-    ab[unsafe_offset=0] = a
-    ab[unsafe_offset=1] = b
+    return (a, b)
+
+
+def platt_priors(y: MutPointer[Int32, MutUntrackedOrigin], n: Int) -> Tuple[Float64, Float64, Float64]:
+    """(positive count, T+, T-): the count is an integer, exact in any order."""
+    var cnt = 0
+    for i in range(n):
+        if y[unsafe_offset=i] > 0:
+            cnt += 1
+    return platt_targets(cnt, n)
+
+
+def platt_targets(cnt: Int, n: Int) -> Tuple[Float64, Float64, Float64]:
+    var prior1 = Float64(cnt)
+    var prior0 = Float64(n) - prior1
+    return (prior1, (prior1 + 1.0) / (prior1 + 2.0), 1.0 / (prior0 + 2.0))
+
+
+def platt_fit(
+    f: MutPointer[Float64, MutUntrackedOrigin], y: MutPointer[Int32, MutUntrackedOrigin], n: Int,
+    ab: MutPointer[Float64, MutUntrackedOrigin],
+) raises:
+    """Platt scaling (sklearn calibration.py `_sigmoid_calibration`: the
+    targets T = (N+ + 1)/(N+ + 2) and 1/(N- + 2), the start B =
+    log((N- + 1)/(N+ + 1))), minimised by Newton with backtracking (Lin, Lin,
+    Weng 2007) where sklearn runs L-BFGS on the same objective. Writes
+    ab = [A, B]; P(y=1 | f) = 1 / (1 + exp(A f + B)). cpu2-l5-trees: the
+    objective and gradient sums fold in xtrees/fold_order.mojo's order (the
+    Hessian diagonal's 1e-12 is added to the folded sum), the device's."""
+    var pr = platt_priors(y, n)
+    var sums = PlattHost(f, y, n, pr[1], pr[2])
+    var res = platt_drive(sums, pr[0], n)
+    ab[unsafe_offset=0] = res[0]
+    ab[unsafe_offset=1] = res[1]
 
 
 def platt_apply(

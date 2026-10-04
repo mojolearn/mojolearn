@@ -43,6 +43,21 @@ def fold_chunks(n: Int) -> Int:
     return max(1, ceildiv(n, FOLD_CHUNK))
 
 
+#: the most chunk-partial words a record fold may hold (2^22 words, 32 MB).
+comptime FOLD_MAX_WORDS = 1 << 22
+
+
+def fold_chunk_size(n: Int, w: Int) -> Int:
+    """The chunk length of a w-field record fold over n rows: FOLD_CHUNK,
+    doubled while the partials would exceed FOLD_MAX_WORDS (wide records,
+    e.g. one field pair per tree node). A pure function of (n, w), so every
+    column picks the same chunks."""
+    var c = FOLD_CHUNK
+    while ceildiv(max(n, 1), c) * max(w, 1) > FOLD_MAX_WORDS:
+        c *= 2
+    return c
+
+
 def fold_tree_host(mut p: List[Float64], m: Int, w: Int):
     """In place: the TREE fold of m records of w float64 fields; the answers
     land in p[0 .. w)."""
