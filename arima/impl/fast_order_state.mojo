@@ -9,7 +9,7 @@ quality gate; defaults continue to call the original function.
 """
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.sys.compile import is_defined
-from arima.impl.batched_kalman import KALMAN_FAST_EVAL_WS
+from arima.impl.batched_kalman import KALMAN_FAST_EVAL_WS, KALMAN_LL_ONLY
 from arima.impl.fast_eval_ws import FastEvalWS
 from arima.impl.fast_lbfgs_async import (
     ASYNC_READ_EVERY, AsyncLBFGSOut, I_N, F_N, F_FX, F_FXC, F_FXP,
@@ -22,7 +22,7 @@ from arima.impl.tsa.arima_common import ARIMAOrder
 from glm.impl.qn.qn_util import LBFGSParam
 
 comptime ARIMA_ORDER_BATCH = (
-    KALMAN_FAST_EVAL_WS and is_defined["MOJOLEARN_ARIMA_ORDER_BATCH"]()
+    KALMAN_FAST_EVAL_WS and KALMAN_LL_ONLY and is_defined["MOJOLEARN_ARIMA_ORDER_BATCH"]()
 )
 
 
