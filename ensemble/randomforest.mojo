@@ -124,6 +124,21 @@ comptime IDN_RF_ROWS_SORTED = (
     and is_defined["MOJOLEARN_IDN_RF_ROWS_SORTED"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
+# fam2-forests (2026-10-04), IDENTICAL, every vendor: the weighted
+# non-bootstrap row set (AdaBoost members, any `sample_weight` fit with
+# `bootstrap=False`) no longer drains the queue per tree
+# (`IDN_RF_WEIGHT_ROWS_DEVICE`). With no zero weight the set is 0..n-1 and
+# the device sequence kernel writes it (no upload); with zero weights the
+# host-compacted set still uploads but without the per-tree synchronize.
+# Same Int32 row ids either way: no bit moves.
+# `-D MOJOLEARN_IDN_RF_WEIGHT_ROWS_DEVICE_OFF` restores upload + drain.
+comptime IDN_RF_WEIGHT_ROWS_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_RF_WEIGHT_ROWS_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
 comptime ROWS_SORTED_SAMPLE = (
     is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
     or IDN_RF_ROWS_SORTED
@@ -2360,13 +2375,44 @@ struct RowSampler(Movable):
                     "sample_weight values must contain at least one"
                     " positive value (randomforest.cuh:94)"
                 )
-            log_launch_ctx(ctx, "xfer_sampled_rows")
-            ctx.enqueue_copy(
-                dst_buf=self.selected_rows_[slot],
-                src_ptr=self.h_rows.unsafe_ptr(),
-            )
-            ctx.synchronize()
-            return
+            comptime if IDN_RF_WEIGHT_ROWS_DEVICE:
+                # The kept set is strictly increasing, so its last entry
+                # equals `n_selected - 1` exactly when it is the identity
+                # prefix (no zero weight among the first rows): then the
+                # device sequence kernel writes the same Int32s and
+                # nothing crosses the bus.
+                if Int(
+                    self.h_rows.unsafe_ptr().unsafe_load(self.n_selected - 1)
+                ) == self.n_selected - 1:
+                    log_launch_ctx(ctx, "sampled_rows_sequence")
+                    ctx.enqueue_function[row_ids_tiled_sequence_kernel](
+                        self.selected_rows_[slot].unsafe_ptr(),
+                        Int32(self.n_selected),
+                        Int32(self.n_rows),
+                        grid_dim=_ceildiv(self.n_selected, 256),
+                        block_dim=256,
+                    )
+                    return
+                # Zero weights present: the host-compacted set uploads as
+                # before, WITHOUT the drain. On this arm (`bootstrap`
+                # False) `h_rows` is written once, by `prepare_weights`,
+                # and never again, so no later host write can race the
+                # in-flight copy; the sampler outlives `fit_forest`'s
+                # final synchronize (`_ = sampler^` after it).
+                log_launch_ctx(ctx, "xfer_sampled_rows")
+                ctx.enqueue_copy(
+                    dst_buf=self.selected_rows_[slot],
+                    src_ptr=self.h_rows.unsafe_ptr(),
+                )
+                return
+            else:
+                log_launch_ctx(ctx, "xfer_sampled_rows")
+                ctx.enqueue_copy(
+                    dst_buf=self.selected_rows_[slot],
+                    src_ptr=self.h_rows.unsafe_ptr(),
+                )
+                ctx.synchronize()
+                return
         # DEVIATION 2484: `:155-157` thrust::sequence, reusing ET's device
         # fill. Consumers use this queue, so no host staging or wait is needed.
         # Weighted arms above retain their original sampling and synchronization.
