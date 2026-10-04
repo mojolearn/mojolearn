@@ -55,7 +55,7 @@ from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_sqrt
 from core.device_fold import device_exclusive_scan_total
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
-from spectral.checks.device_io import download_i32, upload_f32, upload_i32
+from spectral.checks.device_io import download_f32, download_i32, upload_f32, upload_i32
 from spectral.impl.sparse.coo import CooGraph
 from spectral.spmv_order import IDN_LAP_DEGREE_LANES, SPMV_LANES
 from spectral.impl.sparse.matrix.detail.diagonal import (
@@ -228,21 +228,28 @@ def sqrt_then_zero_to_one_kernel(
 comptime LAP_NO_KEY = Int32(0x7FFFFFFF)
 
 
-def _refuse_out_of_range_at(g: CooGraph, i: Int) raises:
+def _lap_word_i32(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], i: Int) raises -> Int32:
+    """One word of a device buffer (a refusal names its entry)."""
+    return download_i32(ctx, buf.create_sub_buffer[DType.int32](i, 1), 1)[0]
+
+
+def _refuse_out_of_range_at(
+    ctx: DeviceContext, rows0: DeviceBuffer[DType.int32], cols0: DeviceBuffer[DType.int32], n: Int, i: Int
+) raises:
     """`compute_graph_laplacian`'s index refusal for entry `i`, the first
-    out-of-range entry (a device key)."""
-    var r = Int(g.rows[i])
-    var c = Int(g.cols[i])
+    out-of-range entry (a device key); its two indices are read back."""
+    var r = Int(_lap_word_i32(ctx, rows0, i))
+    var c = Int(_lap_word_i32(ctx, cols0, i))
     raise Error(
         "connectivity_graph: entry " + String(i) + " has (row, col) = ("
-        + String(r) + ", " + String(c) + ") outside [0, " + String(g.n) + ")"
+        + String(r) + ", " + String(c) + ") outside [0, " + String(n) + ")"
     )
 
 
-def _refuse_bad_value_at(g: CooGraph, i: Int) raises:
+def _refuse_bad_value_at(ctx: DeviceContext, vals0: DeviceBuffer[DType.float32], i: Int) raises:
     """The precomputed graph's value refusal (finite, non-negative) for
-    entry `i`, the first bad value (a device key)."""
-    var v = g.vals[i]
+    entry `i`, the first bad value (a device key); its value is read back."""
+    var v = download_f32(ctx, vals0.create_sub_buffer[DType.float32](i, 1), 1)[0]
     if not isfinite(v):
         raise Error(
             "spectral: connectivity_graph has a non-finite value at entry "
@@ -432,14 +439,31 @@ def compute_graph_laplacian_prepared_device(
     ctx: DeviceContext, g: CooGraph, check_values: Bool, tpb: Int
 ) raises -> DeviceCoo:
     """`compute_graph_laplacian` with the preparation on the device
-    (`IDN_SPECTRAL_LAP_DEVICE`). Two scalar readbacks, both for sizing and
-    refusal: the number of appended diagonal entries with the input flags,
-    then the repeated-key flag."""
-    var n = g.n
-    var nnz = g.nnz()
-    var rows0 = upload_i32(ctx, g.rows)
-    var cols0 = upload_i32(ctx, g.cols)
-    var vals0 = upload_f32(ctx, g.vals)
+    (`IDN_SPECTRAL_LAP_DEVICE`): the COO goes up, then
+    `compute_graph_laplacian_device_input`."""
+    return compute_graph_laplacian_device_input(
+        ctx, g.n, g.nnz(), upload_i32(ctx, g.rows), upload_i32(ctx, g.cols),
+        upload_f32(ctx, g.vals), check_values, tpb,
+    )
+
+
+def compute_graph_laplacian_device_input(
+    ctx: DeviceContext,
+    n: Int,
+    nnz: Int,
+    var rows0: DeviceBuffer[DType.int32],
+    var cols0: DeviceBuffer[DType.int32],
+    var vals0: DeviceBuffer[DType.float32],
+    check_values: Bool,
+    tpb: Int = LAPLACIAN_TPB,
+) raises -> DeviceCoo:
+    """`compute_graph_laplacian` over a COO already on the device (`nnz`
+    entries; buffers of at least one cell). Two scalar readbacks, both for
+    sizing and refusal: the number of appended diagonal entries with the
+    input flags, then the repeated-key flag; a refusal reads its entry's
+    words back to name it."""
+    if n <= 0:
+        raise Error("compute_graph_laplacian: n must be positive")
     var has_diag = ctx.enqueue_create_buffer[DType.int32](n)
     var scan = ctx.enqueue_create_buffer[DType.int32](n + 1)
     var flags = ctx.enqueue_create_buffer[DType.int32](4)
@@ -467,8 +491,8 @@ def compute_graph_laplacian_prepared_device(
     if f0[0] != Int32(0) or (check_values and f0[1] != Int32(0)):
         var k0 = download_i32(ctx, first, 3)
         if check_values and f0[1] != Int32(0):
-            _refuse_bad_value_at(g, Int(k0[1]))
-        _refuse_out_of_range_at(g, Int(k0[0]))
+            _refuse_bad_value_at(ctx, vals0, Int(k0[1]))
+        _refuse_out_of_range_at(ctx, rows0, cols0, n, Int(k0[0]))
     var n_missing = Int(f0[2])
     var m = nnz + n_missing
     var diag_rows = ctx.enqueue_create_buffer[DType.int32](n_missing if n_missing > 0 else 1)

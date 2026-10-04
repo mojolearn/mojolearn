@@ -17,7 +17,7 @@ file is a SECOND spelling of that path in the device's order, so the metrics
 CPU host binding can serve `UMAP` on a CPU-only install.
 
 THE HOST LOOP IS NOT THE CONTRACT. `umap/sparse_optimizer.mojo::
-optimize_sparse_layout_identical` is a Gauss-Seidel sweep; the device fold is
+optimize_sparse_layout_identical_reference` is a Gauss-Seidel sweep; the device fold is
 Jacobi over an epoch snapshot and produces DIFFERENT bits
 (`checks/kernel_matrix.mojo::umap_device_optimizer_for`). The IDENTICAL
 contract on every GPU column is the device fold, so `host_umap_vertex` below

@@ -62,6 +62,7 @@ from spectral.impl.sparse.linalg.detail.laplacian import (
     DeviceCoo,
     LAPLACIAN_TPB,
     compute_graph_laplacian,
+    compute_graph_laplacian_device_input,
     laplacian_normalize_device,
     laplacian_normalized,
 )
@@ -475,6 +476,54 @@ def transform_graph_keep(
     var n_out = compute_eigenpairs_keep(
         ctx, params, n, lap, diagonal, embedding, state, keep, trace, lanczos_tpb,
         scratch_pad, scratch_poison,
+    )
+    _ = diagonal^
+    _ = lap^
+    return n_out
+
+
+def transform_device_coo(
+    ctx: DeviceContext,
+    params: SpectralEmbeddingParams,
+    n: Int,
+    nnz: Int,
+    var rows: DeviceBuffer[DType.int32],
+    var cols: DeviceBuffer[DType.int32],
+    var vals: DeviceBuffer[DType.float32],
+    mut embedding: List[Float32],
+    mut trace: IdentityTrace,
+    laplacian_tpb: Int = LAPLACIAN_TPB,
+    lanczos_tpb: Int = LANCZOS_TPB,
+) raises -> Int:
+    """`transform_graph` over a COO already on the device (lane
+    cpu3-neighbors, 2026-10-04: the UMAP spectral init builds its positive
+    edges on the device instead of a host COO). The same Laplacian (the
+    device-input core of `compute_graph_laplacian`, value refusal on), the
+    same negation and eigenpairs, keeping nothing. Returns `n_out`."""
+    if n <= 0:
+        raise Error("spectral: connectivity_graph must have n > 0")
+    var diagonal = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.synchronize()
+    var lap = compute_graph_laplacian_device_input(
+        ctx, n, nnz, rows^, cols^, vals^, True, laplacian_tpb
+    )
+    if params.norm_laplacian:
+        lap = laplacian_normalize_device(ctx, lap^, diagonal, laplacian_tpb)
+    ctx.enqueue_function[negate_kernel](
+        lap.vals.unsafe_ptr(),
+        Int32(lap.nnz),
+        grid_dim=((lap.nnz + laplacian_tpb - 1) // laplacian_tpb, 1, 1),
+        block_dim=(laplacian_tpb, 1, 1),
+    )
+    ctx.synchronize()
+    trace.record_device[DType.int32](ctx, "spectral.L.indptr", lap.indptr, n + 1)
+    trace.record_device[DType.int32](ctx, "spectral.L.cols", lap.cols, lap.nnz)
+    trace.record_device[DType.float32](ctx, "spectral.L.vals", lap.vals, lap.nnz)
+    if params.norm_laplacian:
+        trace.record_device[DType.float32](ctx, "spectral.diag", diagonal, n)
+    var state = SpectralPredictionState()
+    var n_out = compute_eigenpairs_keep(
+        ctx, params, n, lap, diagonal, embedding, state, False, trace, lanczos_tpb,
     )
     _ = diagonal^
     _ = lap^

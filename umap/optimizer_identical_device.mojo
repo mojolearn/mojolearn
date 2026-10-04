@@ -4,8 +4,8 @@
 epoch snapshot, every vertex's update a fixed-order fold.
 
 Kernel-matrix row `umap_device_optimizer_for` (2026-09-09, lane/umap-optimizer).
-The serial host loops (`umap/optimizer.mojo::optimize_layout_identical`,
-`umap/sparse_optimizer.mojo::optimize_sparse_layout_identical`) apply every
+The serial host loops (`umap/optimizer.mojo::optimize_layout_identical_reference`,
+`umap/sparse_optimizer.mojo::optimize_sparse_layout_identical_reference`) apply every
 attractive and repulsive move in program order into one embedding, so vertex
 `v`'s epoch is a Gauss-Seidel sweep that depends on every earlier edge in the
 epoch. That order has no parallel form, which is why the 100,000-row IDENTICAL
@@ -1054,6 +1054,149 @@ def umap_dense_graph_to_device(
     _ = out_off^
     _ = bs^
     return UmapDeviceGraph(first^, d_offsets^, d_tails^, d_w^, max_weight, n_edges)
+
+
+def umap_csr_pos_count_kernel(offs: _UC_I32P, vals: _UC_F32P, counts: _UC_I32P, n_: Int32):
+    """Row `head`'s positive entries counted (a validated CSR)."""
+    var head = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if head >= Int(n_):
+        return
+    var c = Int32(0)
+    for e in range(Int(offs.unsafe_load(head)), Int(offs.unsafe_load(head + 1))):
+        if vals.unsafe_load(e) > Float32(0.0):
+            c += 1
+    counts.unsafe_store(head, c)
+
+
+def umap_csr_pos_fill_kernel(
+    offs: _UC_I32P, idx: _UC_U32P, vals: _UC_F32P, out_off: _UC_I32P,
+    rows: _UC_I32P, cols: _UC_I32P, ovals: _UC_F32P, n_: Int32,
+):
+    """Row `head`'s positive entries as COO `(head, col, value)` at its
+    scanned offset, in edge order: the row-major positive COO."""
+    var head = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if head >= Int(n_):
+        return
+    var at = Int(out_off.unsafe_load(head))
+    for e in range(Int(offs.unsafe_load(head)), Int(offs.unsafe_load(head + 1))):
+        var v = vals.unsafe_load(e)
+        if v > Float32(0.0):
+            rows.unsafe_store(at, Int32(head))
+            cols.unsafe_store(at, Int32(idx.unsafe_load(e)))
+            ovals.unsafe_store(at, v)
+            at += 1
+
+
+struct UmapDeviceCoo(Movable):
+    """The positive entries of a validated UMAP graph as a row-major COO on
+    the device (the spectral initialization's input)."""
+
+    var nnz: Int
+    var rows: DeviceBuffer[DType.int32]
+    var cols: DeviceBuffer[DType.int32]
+    var vals: DeviceBuffer[DType.float32]
+
+    def __init__(
+        out self,
+        nnz: Int,
+        var rows: DeviceBuffer[DType.int32],
+        var cols: DeviceBuffer[DType.int32],
+        var vals: DeviceBuffer[DType.float32],
+    ):
+        self.nnz = nnz
+        self.rows = rows^
+        self.cols = cols^
+        self.vals = vals^
+
+
+def umap_positive_coo_device(
+    ctx: DeviceContext,
+    offsets: List[Int],
+    indices: List[UInt32],
+    values: List[Float32],
+    n_samples: Int,
+) raises -> UmapDeviceCoo:
+    """`sparse_spectral_initialize`'s graph step on the device (lane
+    cpu3-neighbors, 2026-10-04): `validate_sparse_weights`' refusals (the
+    validation kernel the optimizer uses), then the positive entries in
+    row-major order as a COO, the host loop's order; "no edges" when there
+    are none. The CSR goes up once; the COO stays on the device."""
+    var n = n_samples
+    var nnz = len(indices)
+    if n < 2 or len(offsets) != n + 1 or nnz != len(values):
+        raise Error("UMAP sparse graph shape mismatch")
+    if offsets[0] != 0 or offsets[n] != len(values):
+        raise Error("UMAP sparse graph terminal offset mismatch")
+    if n > 2147483646 or nnz > 2147483647:
+        raise Error("UMAP sparse graph exceeds the kernel Int32 range")
+    var cap = max(nnz, 1)
+    var h_off = ctx.enqueue_create_host_buffer[DType.int64](n + 1)
+    var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](cap)
+    var h_val = ctx.enqueue_create_host_buffer[DType.float32](cap)
+    ctx.synchronize()
+    memcpy(dest=h_off.unsafe_ptr(), src=offsets.unsafe_ptr().bitcast[Int64](), count=n + 1)
+    if nnz > 0:
+        memcpy(dest=h_idx.unsafe_ptr(), src=indices.unsafe_ptr(), count=nnz)
+        memcpy(dest=h_val.unsafe_ptr(), src=values.unsafe_ptr(), count=nnz)
+    var g_off64 = ctx.enqueue_create_buffer[DType.int64](n + 1)
+    var g_off = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var g_idx = ctx.enqueue_create_buffer[DType.uint32](cap)
+    var g_val = ctx.enqueue_create_buffer[DType.float32](cap)
+    var codes = ctx.enqueue_create_buffer[DType.int32](n)
+    var err = ctx.enqueue_create_buffer[DType.int32](1)
+    var maxbits = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_buf=g_off64, src_ptr=h_off.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=g_idx, src_ptr=h_idx.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=g_val, src_ptr=h_val.unsafe_ptr())
+    ctx.enqueue_memset(err, UMAP_NO_ROW)
+    ctx.enqueue_memset(maxbits, Int32(0))
+    ctx.enqueue_function[umap_csr_validate_kernel](
+        g_off64.unsafe_ptr(), g_idx.unsafe_ptr(), g_val.unsafe_ptr(), g_off.unsafe_ptr(),
+        codes.unsafe_ptr(), err.unsafe_ptr(), maxbits.unsafe_ptr(), Int32(n), Int32(nnz),
+        grid_dim=((n + 1 + _UC_TPB - 1) // _UC_TPB, 1, 1), block_dim=(_UC_TPB, 1, 1),
+    )
+    var er = _uc_read_i32(ctx, err, 0, 1)[0]
+    if er != UMAP_NO_ROW:
+        var code = _uc_read_i32(ctx, codes, Int(er), 1)[0]
+        if code == Int32(1):
+            raise Error("UMAP sparse graph offset out of range")
+        if code == Int32(2):
+            raise Error("UMAP sparse graph needs unique sorted nonself columns")
+        raise Error("UMAP sparse graph weight is invalid")
+    var counts = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_function[umap_csr_pos_count_kernel](
+        g_off.unsafe_ptr(), g_val.unsafe_ptr(), counts.unsafe_ptr(), Int32(n),
+        grid_dim=((n + _UC_TPB - 1) // _UC_TPB, 1, 1), block_dim=(_UC_TPB, 1, 1),
+    )
+    var out_off = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var bs = ctx.enqueue_create_buffer[DType.int32](scan_blocks_needed(n) + 1)
+    exclusive_scan(ctx, out_off, counts, bs, n)
+    var m = Int(_uc_read_i32(ctx, out_off, n, 1)[0])
+    if m == 0:
+        raise Error("UMAP spectral graph has no edges")
+    var rows = ctx.enqueue_create_buffer[DType.int32](m)
+    var cols = ctx.enqueue_create_buffer[DType.int32](m)
+    var vals = ctx.enqueue_create_buffer[DType.float32](m)
+    ctx.enqueue_function[umap_csr_pos_fill_kernel](
+        g_off.unsafe_ptr(), g_idx.unsafe_ptr(), g_val.unsafe_ptr(), out_off.unsafe_ptr(),
+        rows.unsafe_ptr(), cols.unsafe_ptr(), vals.unsafe_ptr(), Int32(n),
+        grid_dim=((n + _UC_TPB - 1) // _UC_TPB, 1, 1), block_dim=(_UC_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    _ = h_off^
+    _ = h_idx^
+    _ = h_val^
+    _ = g_off64^
+    _ = g_off^
+    _ = g_idx^
+    _ = g_val^
+    _ = codes^
+    _ = err^
+    _ = maxbits^
+    _ = counts^
+    _ = out_off^
+    _ = bs^
+    return UmapDeviceCoo(m, rows^, cols^, vals^)
 
 
 def _optimize_sparse_layout_device_csr(

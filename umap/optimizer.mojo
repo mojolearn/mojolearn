@@ -35,7 +35,7 @@ def _clip(value: Float32) -> Float32:
     return value
 
 
-def optimize_layout_identical(
+def optimize_layout_identical_reference(
     initial_embedding: List[Float32],
     weights: List[Float32],
     n_samples: Int,
@@ -186,19 +186,10 @@ def optimize_layout_identical_on_device(
         raise Error("UMAP optimizer negative sampling parameters are invalid")
     if not (a > Float32(0.0)) or not (b > Float32(0.0)):
         raise Error("UMAP optimizer curve parameters must be positive")
-    var max_weight = Float32(0.0)
-    for i in range(n_samples * n_samples):
-        if not _finite(weights[i]) or weights[i] < Float32(0.0):
-            raise Error("UMAP optimizer graph weight is invalid")
-        if weights[i] > max_weight:
-            max_weight = weights[i]
-    if not (max_weight > Float32(0.0)):
-        raise Error("UMAP optimizer graph has no positive edges")
-    for i in range(len(initial_embedding)):
-        if not _finite(initial_embedding[i]):
-            raise Error("UMAP optimizer initialization is not finite")
+    # The weights' validation, the positive-edge check and the init check
+    # run on the device, in this order (`umap_dense_graph_to_device`).
     return optimize_dense_layout_identical_device(
-        ctx, initial_embedding, weights, max_weight, n_samples, n_components,
+        ctx, initial_embedding, weights, n_samples, n_components,
         n_epochs, initial_learning_rate, negative_sample_rate,
         repulsion_strength, a, b, seed,
     )
@@ -224,15 +215,8 @@ def optimize_layout(
             n_epochs, initial_learning_rate, negative_sample_rate,
             repulsion_strength, a, b, seed,
         )
-    # Kernel launch and graph-upload overhead dominates small layouts on the
-    # currently supported devices.  Keep FAST on the serial reference below
-    # the measured crossover instead of making the "fast" API slower.
-    if n_samples < 1024:
-        return optimize_layout_identical(
-            initial_embedding, weights, n_samples, n_components, n_epochs,
-            initial_learning_rate, negative_sample_rate, repulsion_strength,
-            a, b, seed,
-        )
+    # FAST runs the device Jacobi optimizer at every size (owner rule: no
+    # serial host layout below a row threshold; lane cpu3-neighbors).
     return optimize_layout_fast(
         ctx, initial_embedding, weights, n_samples, n_components, n_epochs,
         initial_learning_rate, negative_sample_rate, repulsion_strength,

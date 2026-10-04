@@ -486,6 +486,31 @@ def ug_merge_kernel[WRITE: Bool](
         mcount[row] = Int32(out)
 
 
+def ug_nonfinite_kernel(v: UG_F32P, flag: UG_I32P, n_in: Int32):
+    """`flag[0] = 1` on a NaN or infinity (every writer stores the same 1)."""
+    var i = _ug_gid()
+    if i >= Int(n_in):
+        return
+    if not _finite(v[i]):
+        flag[0] = Int32(1)
+
+
+def ug_device_all_finite(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int) raises -> Bool:
+    """True when the first `n` values of `buf` are finite: one launch, one
+    word back."""
+    if n <= 0:
+        return True
+    var flag = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(flag, Int32(0))
+    ctx.enqueue_function[ug_nonfinite_kernel](
+        buf.unsafe_ptr(), flag.unsafe_ptr(), Int32(n),
+        grid_dim=_ug_blocks(n), block_dim=UG_TPB,
+    )
+    var ok = _ug_get_i32(ctx, flag, 0, 1)[0] == Int32(0)
+    _ = flag^
+    return ok
+
+
 def _ug_scan(
     ctx: DeviceContext, mut counts: DeviceBuffer[DType.int32], n: Int
 ) raises -> DeviceBuffer[DType.int32]:

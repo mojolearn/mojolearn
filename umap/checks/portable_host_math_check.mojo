@@ -12,8 +12,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from umap.curve import fit_umap_curve
 from umap.graph import fuzzy_simplicial_graph
 from umap.host.sparse_graph_host import sparse_fuzzy_simplicial_graph
-from umap.optimizer import optimize_layout_identical
-from umap.sparse_optimizer import optimize_sparse_layout_identical, sparse_weight_at
+from umap.optimizer import optimize_layout_identical_reference
+from umap.sparse_optimizer import optimize_sparse_layout_identical_reference, sparse_weight_at
 from umap.transform import transform_memberships, initialize_transform, refine_transform
 
 
@@ -52,7 +52,7 @@ def main() raises:
 
     var initial: List[Float32] = [-1, 0, 1, 0, 0, -1, 0, 1]
     var weights: List[Float32] = [0, 1, 0.25, 1, 1, 0, 1, 0.25, 0.25, 1, 0, 1, 1, 0.25, 1, 0]
-    var result = optimize_layout_identical(initial, weights, 4, 2, 5, seed=UInt64(23))
+    var result = optimize_layout_identical_reference(initial, weights, 4, 2, 5, seed=UInt64(23))
     # Independent scalar NumPy transcription, tools/umap_optimizer_oracle.py.
     var expected: List[Float32] = [1.2685416, -0.6511254, 2.4828997, 0.14019474, 3.115171, -2.3527641, 0.102951676, -0.2911698]
     for i in range(len(expected)):
@@ -82,8 +82,8 @@ def main() raises:
         var start = List[Float32]()
         for i in range(3 * components):
             start.append(Float32(i % 5 - 2) * Float32(0.25))
-        var dense_result = optimize_layout_identical(start, graph.weights, 3, components, 7, a=custom.a, b=custom.b, seed=UInt64(29))
-        var sparse_result = optimize_sparse_layout_identical(start, sparse, 3, components, 7, a=custom.a, b=custom.b, seed=UInt64(29))
+        var dense_result = optimize_layout_identical_reference(start, graph.weights, 3, components, 7, a=custom.a, b=custom.b, seed=UInt64(29))
+        var sparse_result = optimize_sparse_layout_identical_reference(start, sparse, 3, components, 7, a=custom.a, b=custom.b, seed=UInt64(29))
         equal(dense_result, sparse_result, "dense/CSR optimizer")
         emit("graph_layout_" + String(components), dense_result)
 

@@ -9,19 +9,20 @@ query-tile workspace is O(tile*n), not an n*n distance matrix. No whole-
 process memory or speed claim follows without main-lane measurements.
 """
 
+from bindings.hostptr import copy_f32
 from max.gpu.host import DeviceContext
-from std.math import isfinite
-from neighbors.estimator import knn_search
+from neighbors.estimator import knn_search_resident
 from umap.sparse_graph import (
     SparseFuzzySimplicialGraph,
     categorical_intersection,
     general_intersection,
     sparse_fuzzy_simplicial_graph_device,
+    ug_device_all_finite,
 )
-from umap.sparse_optimizer import optimize_sparse_layout, validate_sparse_weights
+from umap.sparse_optimizer import optimize_sparse_layout
+from umap.optimizer_identical_device import umap_positive_coo_device
 from umap.params import UMAPParams, UMAP_MAX_COMPONENTS
-from umap.spectral_init import spectral_initialize_coo
-from spectral.impl.sparse.coo import CooGraph
+from umap.spectral_init import spectral_initialize_device_coo
 
 
 def sparse_fuzzy_graph_from_data(
@@ -35,31 +36,38 @@ def sparse_fuzzy_graph_from_data(
     params.validate(n_samples)
     if n_features < 1 or len(x_rowmajor) != n_samples * n_features:
         raise Error("UMAP input does not match its declared shape")
-    for i in range(len(x_rowmajor)):
-        if not isfinite(x_rowmajor[i]):
-            raise Error("UMAP input coordinates must be finite")
-    var hx = ctx.enqueue_create_host_buffer[DType.float32](len(x_rowmajor))
-    for i in range(len(x_rowmajor)):
-        hx.unsafe_ptr().unsafe_store(i, x_rowmajor[i])
+    # The input goes up once (a bulk copy through pinned memory), is checked
+    # for finiteness on the device (one word back) and is the k-NN's
+    # resident index (lane cpu3-neighbors, 2026-10-04: the host walked every
+    # coordinate twice, a finiteness test and an element-by-element store).
+    var nx = len(x_rowmajor)
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](nx)
     var hd = ctx.enqueue_create_host_buffer[DType.float32](
         n_samples * params.n_neighbors
     )
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](
         n_samples * params.n_neighbors
     )
+    ctx.synchronize()
+    copy_f32(x_rowmajor.unsafe_ptr(), hx.unsafe_ptr(), nx)
+    var d_x = ctx.enqueue_create_buffer[DType.float32](nx)
+    ctx.enqueue_copy(dst_buf=d_x, src_ptr=hx.unsafe_ptr())
+    if not ug_device_all_finite(ctx, d_x, nx):
+        raise Error("UMAP input coordinates must be finite")
     if params.metric == -1:
-        _ = knn_search(
-            ctx, hx.unsafe_ptr(), n_samples, hx.unsafe_ptr(), n_samples,
+        _ = knn_search_resident(
+            ctx, d_x, hx.unsafe_ptr(), n_samples, hx.unsafe_ptr(), n_samples,
             n_features, params.n_neighbors, hd.unsafe_ptr(), hi.unsafe_ptr(),
         )
     else:
         # the metric option (lane/algos-decomp, 2026-09-27): the kNN's own
         # metric arms, the knn-<metric> lanes' contracts
-        _ = knn_search(
-            ctx, hx.unsafe_ptr(), n_samples, hx.unsafe_ptr(), n_samples,
+        _ = knn_search_resident(
+            ctx, d_x, hx.unsafe_ptr(), n_samples, hx.unsafe_ptr(), n_samples,
             n_features, params.n_neighbors, hd.unsafe_ptr(), hi.unsafe_ptr(),
             metric=params.metric, metric_arg=params.metric_arg,
         )
+    _ = d_x^
     # The k-NN's rows go up once; the self-first adapter and the whole graph
     # build run on the device (`sparse_fuzzy_simplicial_graph_device`).
     var nk = n_samples * params.n_neighbors
@@ -84,23 +92,16 @@ def sparse_spectral_initialize(
     ctx: DeviceContext, graph: SparseFuzzySimplicialGraph,
     n_components: Int, seed: UInt64,
 ) raises -> List[Float32]:
-    """Feed the exact dense adapter's positive row-major COO to its solver."""
-    _ = validate_sparse_weights(graph)
-    var rows = List[Int32]()
-    var cols = List[Int32]()
-    var vals = List[Float32]()
-    for row in range(graph.n_samples):
-        for edge in range(graph.offsets[row], graph.offsets[row + 1]):
-            var value = graph.values[edge]
-            if value > Float32(0.0):
-                rows.append(Int32(row))
-                cols.append(Int32(graph.indices[edge]))
-                vals.append(value)
-    if len(vals) == 0:
-        raise Error("UMAP spectral graph has no edges")
-    var coo = CooGraph(graph.n_samples, rows^, cols^, vals^)
-    return spectral_initialize_coo(
-        ctx, coo^, graph.n_samples, n_components, graph.n_neighbors, seed
+    """Feed the exact dense adapter's positive row-major COO to its solver.
+    The graph's validation and the COO run on the device and the COO stays
+    there (`umap_positive_coo_device`, lane cpu3-neighbors)."""
+    var coo = umap_positive_coo_device(
+        ctx, graph.offsets, graph.indices, graph.values, graph.n_samples
+    )
+    var nnz = coo.nnz
+    return spectral_initialize_device_coo(
+        ctx, graph.n_samples, nnz, coo.rows^, coo.cols^, coo.vals^,
+        n_components, graph.n_neighbors, seed,
     )
 
 

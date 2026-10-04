@@ -65,7 +65,7 @@ def sparse_weight_at(graph: SparseFuzzySimplicialGraph, row: Int, col: Int) -> F
     return Float32(0.0)
 
 
-def optimize_sparse_layout_identical(
+def optimize_sparse_layout_identical_reference(
     initial_embedding: List[Float32],
     graph: SparseFuzzySimplicialGraph,
     n_samples: Int,
