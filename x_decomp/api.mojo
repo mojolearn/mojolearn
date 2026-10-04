@@ -9,7 +9,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 
-from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import mat_from
@@ -539,9 +539,11 @@ def tsqr_r_py[E: Exec](a: PythonObject, b: PythonObject, r: PythonObject, p: Pyt
 # lane idn-dense-linalg (2026-10-04): the one-entry routes Python takes when
 # `idn_flags_py` says so (both bindings; the same words as the calls they
 # replace). -D MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF / -D MOJOLEARN_IDN_LU_GESV_OFF
-# clear the bit, and Python keeps the old call sequence.
-comptime IDN_OLS_ONE_ENTRY = not is_defined["MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF"]()
-comptime IDN_LU_GESV = not is_defined["MOJOLEARN_IDN_LU_GESV_OFF"]()
+# clear the bit, and Python keeps the old call sequence. IDENTICAL builds
+# only: a FAST build's bits are 0 and its routes are as they were.
+comptime _API_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+comptime IDN_OLS_ONE_ENTRY = _API_IDN and not is_defined["MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF"]()
+comptime IDN_LU_GESV = _API_IDN and not is_defined["MOJOLEARN_IDN_LU_GESV_OFF"]()
 
 
 def idn_flags_py() raises -> PythonObject:

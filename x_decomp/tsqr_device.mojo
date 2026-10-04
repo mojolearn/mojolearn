@@ -45,7 +45,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
-from checks.numerics import ftz, identical_div, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
 from core.device_zero import enqueue_fill
 from glm.impl.center_items import center_cell
 from x_decomp.cells import F32Ptr
@@ -90,8 +90,10 @@ comptime TS_SMEM_BYTES = 4 * (TS_PART + 3 * _TT + TS_TPB + TS_P)
 # squares the very words it stores), so the separate norm pass (TS_P live
 # threads of TS_TPB) runs only for a panel's first column and after a zero
 # reflector. The same fmas in the same order: no bit moves.
-comptime TS_GRID_UPDATE = not is_defined["MOJOLEARN_IDN_TSQR_GRID_OFF"]()
-comptime TS_NORM_FUSED = not is_defined["MOJOLEARN_IDN_TSQR_NORM_OFF"]()
+# IDENTICAL builds only: a FAST build keeps its launches as they were.
+comptime _TS_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+comptime TS_GRID_UPDATE = _TS_IDN and not is_defined["MOJOLEARN_IDN_TSQR_GRID_OFF"]()
+comptime TS_NORM_FUSED = _TS_IDN and not is_defined["MOJOLEARN_IDN_TSQR_NORM_OFF"]()
 comptime TS_SMEM_OK = lib_smem_page_fits_for[TARGET_COLUMN, TS_SMEM_BYTES]()
 
 

@@ -483,6 +483,33 @@ def _ols_tsqr(x, y, rows, cols, mode):
     return X.out((cols,))
 
 
+def _ols_tsqr_centered(x, y, rows, cols, mode):
+    """`(coef_, column means, y mean)` of the unweighted fit with an
+    intercept in ONE binding entry (lane idn-dense-linalg,
+    `x_decomp_ols_tsqr_r`): X and y cross to the device once; the exact
+    column sums, the means, the centering and the blocked TSQR of
+    [X - mu | y - mean] read the resident buffers, then `_ols_tsqr`'s solve
+    on the small R. The same words as `_column_means` + `_center` +
+    `_ols_tsqr`, which crossed X four times. None when the binding does not
+    route here (an older binding, a FAST build, or one built with -D
+    MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF): the caller keeps that sequence."""
+    from ._expansion_decomp import _F32_EPS, _Kit, _M, _mode, _tsqr_lstsq_core
+    k = _Kit(_mode(mode))
+    flags = _optional_export(k._raw(), "x_decomp_idn_flags")
+    if flags is None or not int(flags()) & 1:
+        return None
+    n = cols + 1
+    Ra = _M.zeros(n, n)
+    mu = empty((cols,), "<f4")
+    ymean = empty((1,), "<f8")
+    # ORDER MATCHES x_decomp/api.mojo ols_tsqr_r_py: (a, b, r_out, mu, ymean), (m, d)
+    k.b.x_decomp_ols_tsqr_r(addr_ro(x, name="X"), addr_ro(y, name="y"), Ra.addr,
+                            addr(mu, name="column means"), addr(ymean, name="y mean"),
+                            [int(rows), int(cols)])
+    X, _, _, _ = _tsqr_lstsq_core(k, x, y, rows, cols, 1, _F32_EPS * cols, equilibrate=True, Ra=Ra)
+    return X.out((cols,)), mu, float(ymean.tolist()[0])
+
+
 class LinearRegression(NumericModeMixin):
     """Ordinary least squares on the GPU.
 
@@ -624,6 +651,13 @@ class LinearRegression(NumericModeMixin):
                 self._y_mean = 0.0
             self._set_intercept(cols)
             return self
+        if self.fit_intercept and weights is None and not normal_eq:
+            # lane idn-dense-linalg: center + TSQR in one entry, X up once
+            got = _ols_tsqr_centered(x, target, rows, cols, getattr(self, "numeric_mode", None))
+            if got is not None:
+                self.coef_, self._x_mean, self._y_mean = got
+                self._set_intercept(cols)
+                return self
         if self.fit_intercept:
             # float64 column means -> float32, then a float32 subtraction.
             # The means come from exact column sums rounded once to float64
