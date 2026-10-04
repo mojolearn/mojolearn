@@ -1924,6 +1924,17 @@ class SimpleImputer(_PrepBase):
             # comp + j*n (p2m_sel_*), in place of the Python transpose and filter
             comp = pr.alloc(n * d)
             ctot = _p2m_sel(pr, xo, n, d, 0, comp)
+        # lane cpu2-l3-prep: statistics_ and the fill on the device (c2_imp_stats: an
+        # all-missing column's statistic is NaN, or with keep_empty_features 0 / the
+        # constant; its fill 0 / the constant), read back as the fitted vectors
+        konst = self.strategy == "constant"
+        src = so2 = fo2 = None
+        if not callable(self.strategy):
+            fv = pr.put_scalar(0.0 if self.fill_value is None else float(self.fill_value)) if konst else _NONE
+            src = st + d if konst else {"mean": st + d, "median": med, "most_frequent": mf}[self.strategy]
+            so2, fo2 = pr.alloc(d), pr.alloc(d)
+            pr.stage("c2_imp_stats", d, st, src, d, 1 if self.keep_empty_features else 0, 1 if konst else 0, fv,
+                     so2, fo2)
         pr.run(mode)
         counts = [int(v) for v in pr.values(st, d)]
         empty = [c == 0 for c in counts]
@@ -1933,24 +1944,9 @@ class SimpleImputer(_PrepBase):
         if callable(self.strategy):
             # missing_values NaN: the marked block is the input itself, which never comes back
             return self._fit_callable(arr if xo == x_in else pr.get(xo, (n, d)), counts, mode)
-        if self.strategy == "constant":
-            fv = 0.0 if self.fill_value is None else float(self.fill_value)
-            stats = [fv] * d
-            fill = list(stats)
-        else:
-            src = {"mean": st + d, "median": med, "most_frequent": mf}[self.strategy]
-            stats = pr.values(src, d)
-            fill = [0.0 if e else s for s, e in zip(stats, empty)]
-        # the reference: an all-missing column's statistic is NaN and the
-        # column is dropped, unless keep_empty_features (then 0, or fill_value)
-        for j in range(d):
-            if empty[j] and not self.keep_empty_features:
-                stats[j] = float("nan")
-            elif empty[j] and self.strategy != "constant":
-                stats[j] = 0.0
-        if self.strategy == "constant" or any(empty):
-            self.statistics_ = Array.from_list(stats, "<f4")
-            self._fill = Array.from_list(fill, "<f4")
+        if konst or any(empty):
+            self.statistics_ = pr.get(so2, d)
+            self._fill = pr.get(fo2, d)
         else:
             self.statistics_ = pr.get(src, d)
             self._fill = self.statistics_
@@ -5300,6 +5296,34 @@ def _pred_f64(v):
     return Array._owned(array.array("d", vals), (len(vals),), "<f8", "C")
 
 
+def _f64_words(pr, value):
+    """A Python float as its binary64 word (two int32 words) -> offset."""
+    w = array.array("i")
+    w.frombytes(array.array("d", [float(value)]).tobytes())
+    return pr.put_words(Array._owned(w, (2,), "<i4", "C"))
+
+
+def _key_words(values, d):
+    """(int32 words, c2_key64 KIND) of d values: a float32 / float64 / int32 /
+    int64 buffer as its own words; anything else (a user score function's
+    list) converted once to float64 (the explicit input-prep step)."""
+    lb = _label_buffer(values)
+    if lb is not None and lb.kind in (0, 1, 3, 4) and lb.n == d:
+        return lb.words, lb.kind
+    vals = values.tolist() if hasattr(values, "tolist") else values
+    flat = array.array("d", [float(v) for v in vals])  # glue: a user callable's scores, converted once
+    if len(flat) != d:
+        raise ValueError(f"mojolearn: expected {d} scores, got {len(flat)}")
+    w = array.array("i")
+    w.frombytes(flat.tobytes())
+    return Array._owned(w, (2 * d,), "<i4", "C"), 4
+
+
+def _mask_list(pr, off, d):
+    """A device 0.0 / 1.0 mask read back as the fitted bool list."""
+    return [v != 0.0 for v in pr.values(off, d)]  # glue: the device's mask as the fitted list
+
+
 # ---------------------------------------------------------------- feature selection
 class _SelectorMixin(_PrepBase):
     def get_support(self, indices=False):
@@ -5342,9 +5366,13 @@ class VarianceThreshold(_SelectorMixin):
         st, var = pr.alloc(6 * d), pr.alloc(d)
         _cs(pr, mode, xo, n, d, st)
         pr.stage("var_ptp", d, st, d, var, 1 if self.threshold == 0 else 0)
+        # lane cpu2-l3-prep: variance > threshold on the device, in binary64 (c2_key64, c2_gt)
+        key, mask = pr.work(2 * d), pr.alloc(d)
+        pr.stage("c2_key64", d, var, 0, key)
+        pr.stage("c2_gt", d, key, _f64_words(pr, self.threshold), mask)
         pr.run(mode)
         self.variances_ = pr.get(var, d)
-        self._mask = [v > self.threshold for v in pr.values(var, d)]
+        self._mask = _mask_list(pr, mask, d)
         if not any(self._mask):
             raise ValueError(f"mojolearn: No feature in X meets the variance threshold {self.threshold:.5f}")
         self.numeric_mode_, self.n_features_in_ = mode, d
@@ -5457,17 +5485,21 @@ class SelectKBest(_SelectorMixin):
         out = self.score_func(arr, y)
         scores, pvals = out if isinstance(out, (tuple, list)) else (out, None)
         self.scores_, self.pvalues_ = scores, pvals
-        vals = [float(v) for v in (scores.tolist() if hasattr(scores, "tolist") else scores)]
-        vals = [(-float("inf") if v != v else v) for v in vals]
         if self.k == "all":
             self._mask = [True] * d
         else:
             k = int(self.k)
             if not 0 <= k <= d:
                 raise ValueError(f"mojolearn: k should be 0 <= k <= n_features = {d}; got {k}")
-            order = sorted(range(d), key=lambda j: vals[j])       # stable, ascending
-            chosen = set(order[d - k:]) if k else set()
-            self._mask = [j in chosen for j in range(d)]
+            # lane cpu2-l3-prep: the top k on the device (c2_key64: binary64 ordered keys, a
+            # NaN as -inf; c2_topk: stable ascending rank, the later of tied columns wins)
+            pr = _Prog()
+            key, mask = pr.work(2 * d), pr.alloc(d)
+            words, kind = _key_words(scores, d)
+            pr.stage("c2_key64", d, pr.put_words(words), kind, key)
+            pr.stage("c2_topk", d, key, d, k, mask)
+            pr.run(_mode())
+            self._mask = _mask_list(pr, mask, d)
         self.numeric_mode_, self.n_features_in_ = _mode(), d
         return self
 
@@ -5567,9 +5599,9 @@ def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_s
     if cont:
         term, outc = work(n * dc), pr.alloc(dc)
         if discrete_target:
-            used = sum(c for c in counts if c > 1)
             pr.stage("mi_cd", n * dc, z, n, dc, yo, lc, k, term, _plus1(zs))
-            pr.stage("mi_reduce", dc, term, n, dc, 1, k, used, outc)
+            # the rows of the classes with more than one (KIND 3: summed on the device)
+            pr.stage("mi_reduce", dc, term, n, dc, 3, k, 0, outc, lc, len(counts))
         else:
             pr.stage("mi_cc", n * dc, z, n, dc, zy, k, term, _plus1(zs), _plus1(zys))
             pr.stage("mi_reduce", dc, term, n, dc, 0, k, n, outc)
@@ -5637,30 +5669,34 @@ def _gather(arr, cols, mode):
     return pr.get(out, (n, len(cols)))
 
 
-def _importances(est, mode, getter="auto"):
-    """The squared importance of each column of a fitted estimator: coef_
-    squared (summed over rows when 2-D) on the device, else
-    feature_importances_ as given (a monotone stand-in for its square).
-    A str getter (a dotted attribute path, as operator.attrgetter) or a
-    callable picks the importances instead; they are squared (summed over
-    rows when 2-D) on the device, as the reference's transform_func='square'."""
+def _stage_importance_keys(pr, est, m, getter="auto"):
+    """Stages the ordered keys (c2_key64) of a fitted estimator's m column
+    importances: coef_ squared (summed over rows when 2-D, sqsum_cols) on the
+    device, else feature_importances_ as given (a monotone stand-in for its
+    square). A str getter (a dotted attribute path, as operator.attrgetter)
+    or a callable picks the importances instead; they are squared (summed
+    over rows when 2-D) on the device, as the reference's
+    transform_func='square'. Returns the keys' offset."""
     if getter != "auto":
         coef = operator.attrgetter(getter)(est) if isinstance(getter, str) else getter(est)
     else:
         coef = getattr(est, "coef_", None)
+    key = pr.work(2 * m)
     if coef is None and getter == "auto":
         imp = getattr(est, "feature_importances_", None)
         if imp is None:
             raise ValueError("mojolearn: RFE needs an estimator with coef_ or feature_importances_")
-        return [float(v) for v in (imp.tolist() if hasattr(imp, "tolist") else imp)]
+        words, kind = _key_words(imp, m)
+        pr.stage("c2_key64", m, pr.put_words(words), kind, key)
+        return key
     c = as_f32_c(coef, ndim=None, name="coef_")[0]
     rows, d = (1, c.shape[0]) if c.ndim == 1 else c.shape
-    pr = _Prog()
-    co = pr.put(c)
-    out = pr.alloc(d)
-    pr.stage("sqsum_cols", d, co, rows, d, out)
-    pr.run(mode)
-    return pr.values(out, d)
+    if d != m:
+        raise ValueError(f"mojolearn: RFE importances have {d} columns, expected {m}")
+    out = pr.work(d)
+    pr.stage("sqsum_cols", d, pr.put(c), rows, d, out)
+    pr.stage("c2_key64", d, out, 0, key)
+    return key
 
 
 class RFE(_SelectorMixin):
@@ -5700,22 +5736,29 @@ class RFE(_SelectorMixin):
         if step <= 0:
             raise ValueError("mojolearn: step must be > 0")
         support = [True] * d
-        ranking = [1] * d
-        while sum(support) > nsel:
-            features = [j for j in range(d) if support[j]]
+        ranking = full((d,), 1, "<f4")
+        nsup = d
+        while nsup > nsel:
+            features = [j for j in range(d) if support[j]]  # glue: the supported column list (control)
             est = self._clone().fit(_gather(arr, features, mode), y, **fit_params)
-            imp = _importances(est, mode, self.importance_getter)
-            ranks = sorted(range(len(features)), key=lambda r: imp[r])
-            threshold = min(step, sum(support) - nsel)
-            for r in ranks[:threshold]:
-                support[features[r]] = False
-            for j in range(d):
-                if not support[j]:
-                    ranking[j] += 1
+            # lane cpu2-l3-prep: the ranking and elimination on the device (c2_rfe_step: the
+            # `step` weakest by a stable ascending sort of the importance keys leave the
+            # support; c2_rfe_rank: every unsupported column's ranking + 1)
+            pr = _Prog()
+            key = _stage_importance_keys(pr, est, len(features), self.importance_getter)
+            sup = pr.put_list([1.0 if v else 0.0 for v in support], inout=True)  # glue: the support mask up
+            rk = pr.put(ranking, inout=True)
+            pr.stage("c2_rfe_step", len(features), key, pr.put_ints(features), len(features),
+                     min(step, nsup - nsel), sup)
+            pr.stage("c2_rfe_rank", d, sup, rk)
+            pr.run(mode)
+            support = _mask_list(pr, sup, d)
+            ranking = pr.get(rk, d)
+            nsup = len([1 for v in support if v])  # glue: the support size (control)
         features = [j for j in range(d) if support[j]]
         self.estimator_ = self._clone().fit(_gather(arr, features, mode), y, **fit_params)
         self._mask, self.support_ = support, list(support)
-        self.ranking_ = Array.from_list(ranking, "<i8")
+        self.ranking_ = ranking.astype("<i8")
         self.n_features_ = sum(support)
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self

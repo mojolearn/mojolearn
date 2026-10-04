@@ -410,10 +410,10 @@ def c2_rfe_step_unit(t: Int, f: FP, q: IP):
 
 
 def c2_rfe_rank_unit(t: Int, f: FP, q: IP):
-    """q = [SUP, RANK]; t = column: RANK[t] (int32 bits) + 1 when the
-    column is no longer supported."""
+    """q = [SUP, RANK]; t = column: RANK[t] (a float count, exact below
+    2^24) + 1 when the column is no longer supported."""
     if ld(f, p(q, 0) + t) == Float32(0):
-        sti(f, p(q, 1) + t, ldi(f, p(q, 1) + t) + 1)
+        st(f, p(q, 1) + t, ld(f, p(q, 1) + t) + Float32(1))
 
 
 # ---------------------------------------------------------------- 258-262 IterativeImputer

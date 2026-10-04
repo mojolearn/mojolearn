@@ -655,10 +655,12 @@ def mi_reduce_fast_kernel(f: FP, q: IP):
         mi = sub(add(digammaf(Float32(n)), digammaf(Float32(p(q, 4)))), div(s, Float32(n)))
     else:
         var used = p(q, 5)
-        if p(q, 3) == 2:
+        if p(q, 3) >= 2:
+            # KIND 3 (lane cpu2-l3-prep): one count table shared by every column
+            var cb = p(q, 7) + (0 if p(q, 3) == 3 else c * p(q, 8))
             used = 0
             for kk in range(p(q, 8)):
-                var cnt = Int(ld(f, p(q, 7) + c * p(q, 8) + kk))
+                var cnt = Int(ld(f, cb + kk))
                 if cnt > 1:
                     used += cnt
         mi = add(digammaf(Float32(used)), div(s, Float32(used))) if used > 0 else Float32(0)
