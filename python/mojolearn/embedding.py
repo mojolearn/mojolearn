@@ -28,11 +28,19 @@ The semantics are `torch.nn.Embedding`'s forward and its dense
 forward gathers that row like any other, and the backward drops its
 positions at the source and STORES +0.0 in its row (contract section 8).
 `plan` selects the backward's execution plan for the run structure (contract
-section 6): "scan" (PLAN_SCAN, the default) or "sort" (PLAN_SORT, the device
-total-key bitonic sort). The plan is not the specification: both enumerate
-each row's contributors in ascending position, and the contract's clause (d)
-holds counts, perm and dW bit-identical across the two. No dispatch threshold
-is measured, so nothing picks "sort" for you.
+section 6): "scan" (PLAN_SCAN), "sort" (PLAN_SORT, the device total-key
+bitonic sort) or "auto" (the default: the GPU binding takes "sort" from
+V * T = 2**26 upward on the IDENTICAL tier and "scan" below; a binding
+without the pick runs "scan"). The plan is not the specification: both
+enumerate each row's contributors in ascending position, and the contract's
+clause (d) holds counts, perm and dW bit-identical across the two.
+
+THE TABLE IS THE LAYER'S OWN COPY, taken at construction (and again when
+`weight` is assigned). On the IDENTICAL GPU binding its device copy is
+uploaded and scanned at the first `forward` and kept until `weight` is
+assigned or the layer is collected, so a forward does not move the table
+again. Assign `layer.weight = new_table` to change it; writing into the
+array that was passed in does not reach the layer.
 
 `backward(ids, dy, grad=...)` is the microbatch CARRY (contract 7.4): the
 fold continues from `grad`'s bits, so microbatches presented in ascending
@@ -43,6 +51,8 @@ calls; `weight` is never updated by this module.
 
 NO SPEED CLAIM.
 """
+import itertools
+
 from . import _backend, _serialize
 from ._array import Array
 from ._buffer import _materialize, addr, addr_ro, as_f32_c, as_i32_c, empty, frombytes
@@ -51,7 +61,11 @@ from ._mode import NumericModeMixin
 _MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
 _NO_PADDING = -1
 #: ORDER MATCHES embedding/checks/embedding_sort.mojo's PLAN_SCAN = 0, PLAN_SORT = 1.
-_PLAN_CODE = {"scan": 0, "sort": 1}
+#: PLAN_AUTO = 2 is embedding/checks/embedding_identical.mojo's.
+_PLAN_CODE = {"scan": 0, "sort": 1, "auto": 2}
+#: Table tokens for the binding's resident device copy (one per layer and
+#: per assignment of `weight`; never pickled or copied with the layer).
+_TABLE_TOKENS = itertools.count(1)
 #: The saved-table format tag (`save`, `load`, `mojolearn.host_model`;
 #: lane/inference-embedding-ivf-cholesky, 2026-09-15).
 _EMBEDDING_FORMAT = "mojolearn-embedding-1"
@@ -75,9 +89,10 @@ class Embedding(NumericModeMixin):
         Only False.
     weight : array-like (num_embeddings, embedding_dim), required
         The table, copied to float32 C order at construction.
-    plan : {"scan", "sort"}, default "scan"
+    plan : {"auto", "scan", "sort"}, default "auto"
         The backward's run-structure execution plan (contract section 6).
-        Both give the same bits; anything else is refused by name.
+        Both plans give the same bits; "auto" lets the binding pick by
+        V * T. Anything else is refused by name.
 
     Attributes
     ----------
@@ -87,7 +102,7 @@ class Embedding(NumericModeMixin):
     _BINDING = "_mojolearn_embedding"
 
     def __init__(self, num_embeddings, embedding_dim, padding_idx=None, max_norm=None,
-                 norm_type=2.0, scale_grad_by_freq=False, sparse=False, weight=None, plan="scan"):
+                 norm_type=2.0, scale_grad_by_freq=False, sparse=False, weight=None, plan="auto"):
         for name, v in (("num_embeddings", num_embeddings), ("embedding_dim", embedding_dim)):  # glue: validates two int arguments
             if isinstance(v, bool) or not isinstance(v, int):
                 raise TypeError(f"mojolearn Embedding: {name} must be an int, got {type(v).__name__}")
@@ -110,7 +125,7 @@ class Embedding(NumericModeMixin):
             raise ValueError("mojolearn Embedding: sparse=True is REFUSED (DEVIATION 1314: the dense (V, d) gradient only)")
         if not isinstance(plan, str) or plan not in _PLAN_CODE:
             raise ValueError(
-                f"mojolearn Embedding: plan must be 'scan' or 'sort' (contract section 6's "
+                f"mojolearn Embedding: plan must be 'auto', 'scan' or 'sort' (contract section 6's "
                 f"PLAN_SCAN and PLAN_SORT), got {plan!r}"
             )
         if padding_idx is not None:
@@ -128,11 +143,15 @@ class Embedding(NumericModeMixin):
                 "the profile (a host normal draw is not pinned across platforms); pass "
                 "the table, or use Embedding.from_pretrained"
             )
-        w, _ = as_f32_c(weight, ndim=2, name="weight")
+        w, copied = as_f32_c(weight, ndim=2, name="weight")
         if tuple(w.shape) != (num_embeddings, embedding_dim):
             raise ValueError(
                 f"mojolearn Embedding: weight has shape {tuple(w.shape)}, want ({num_embeddings}, {embedding_dim})"
             )
+        if not copied:
+            # the layer's own bytes: the binding keeps a device copy of the
+            # table across forwards, so the caller's array must not alias it
+            w = frombytes(w.tobytes(), "<f4", (num_embeddings, embedding_dim))
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
@@ -145,13 +164,54 @@ class Embedding(NumericModeMixin):
 
     @classmethod
     def from_pretrained(cls, embeddings, padding_idx=None, max_norm=None, norm_type=2.0,
-                        scale_grad_by_freq=False, sparse=False, numeric_mode=None, plan="scan"):
+                        scale_grad_by_freq=False, sparse=False, numeric_mode=None, plan="auto"):
         """torch's `Embedding.from_pretrained` without `freeze` (nothing here trains the table)."""
         w, _ = as_f32_c(embeddings, ndim=2, name="embeddings")
         v, d = (int(s) for s in w.shape)  # glue: two shape dimensions only
         return cls(v, d, padding_idx=padding_idx, max_norm=max_norm, norm_type=norm_type,
                    scale_grad_by_freq=scale_grad_by_freq, sparse=sparse, weight=w,
                    numeric_mode=numeric_mode, plan=plan)
+
+    # -- the resident device table (bindings/_mojolearn_embedding.mojo) ------
+
+    def __setattr__(self, name, value):
+        if name == "weight":
+            self._drop_table()
+        super().__setattr__(name, value)
+
+    def __getstate__(self):
+        state = dict(self.__dict__)
+        state.pop("_table_token", None)
+        return state
+
+    def __del__(self):
+        try:
+            self._drop_table()
+        except Exception:
+            pass
+
+    def _drop_table(self):
+        """Release this layer's resident device table, if it has one."""
+        tok = self.__dict__.pop("_table_token", None)
+        if tok is None:
+            return
+        try:
+            release = getattr(self._extension(), "embedding_table_release", None)
+            if release is not None:
+                release(tok)
+        except Exception:
+            pass
+
+    def _table_token(self, mod):
+        """This layer's table token, or None for a binding without the
+        resident table (the host bindings)."""
+        if getattr(mod, "embedding_table_release", None) is None:
+            return None
+        tok = self.__dict__.get("_table_token")
+        if tok is None:
+            tok = next(_TABLE_TOKENS)
+            self.__dict__["_table_token"] = tok
+        return tok
 
     def _extension(self):
         mod = self._bind()
@@ -182,12 +242,14 @@ class Embedding(NumericModeMixin):
         flat, shape = self._ids(ids)
         t, d = int(flat.size), self.embedding_dim
         y = empty((t * d,), "<f4")
-        self._extension().embedding_forward(
+        mod = self._extension()
+        tok = self._table_token(mod)
+        mod.embedding_forward(
             # ORDER MATCHES bindings/_mojolearn_embedding.mojo::embedding_forward_binding.
             # weight, ids, y_out
             [addr_ro(self.weight, name="weight"), addr_ro(flat, name="ids"), addr(y, name="y")],
-            # V, d, T
-            [self.num_embeddings, d, t],
+            # V, d, T[, token]
+            [self.num_embeddings, d, t] if tok is None else [self.num_embeddings, d, t, tok],
         )
         return y.reshape(shape + (d,))
 
@@ -221,12 +283,16 @@ class Embedding(NumericModeMixin):
             dw = frombytes(prev.tobytes(), "<f4", (v * d,))
             accumulate = 1
         pad = _NO_PADDING if self.padding_idx is None else int(self.padding_idx)
-        self._extension().embedding_backward(
+        mod = self._extension()
+        plan = _PLAN_CODE[self.plan]
+        if self.plan == "auto" and getattr(mod, "embedding_table_release", None) is None:
+            plan = _PLAN_CODE["scan"]  # a binding without PLAN_AUTO (the host bindings)
+        mod.embedding_backward(
             # ORDER MATCHES bindings/_mojolearn_embedding.mojo::embedding_backward_binding.
             # dy, ids, dw (read first when accumulate)
             [addr_ro(g, name="dy"), addr_ro(flat, name="ids"), addr(dw, name="dw")],
             # V, d, T, padding_idx, accumulate, plan
-            [v, d, t, pad, accumulate, _PLAN_CODE[self.plan]],
+            [v, d, t, pad, accumulate, plan],
         )
         return dw.reshape((v, d))
 
