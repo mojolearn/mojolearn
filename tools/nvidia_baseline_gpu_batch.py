@@ -3,6 +3,10 @@
 
 Run twice with the same wheel directory and source: --gpu ada, then --gpu hopper.
 All seven exact wheels are staged; no index copy of mojolearn is installed.
+Use --native-release-checks --native-reference-column APPLE.json to collect
+the separate canonical six-wheel smoke, self-test and three-fixture column
+before PTX qualification. Its 1650-second cap consumes the existing overall
+6300-second budget; a timeout retains evidence and fails the batch.
 This does not grant release admission or universal IDENTICAL qualification.
 """
 import argparse
@@ -64,7 +68,72 @@ def artifacts(directory, commit):
     return wheels, manifest
 
 
-def box_body(commit, full=True, extra_capture=False):
+def native_release_body(commit):
+    # Keep the canonical qualifier's receipt unchanged. Its fresh install and
+    # the column install contain exactly the six released distributions.
+    return r'''NATIVE_FAILED=0
+cat > native-release.sh <<'NATIVE_SCRIPT'
+#!/bin/bash
+set -euo pipefail
+mkdir -p results/native-release
+exec > results/native-release/body.log 2>&1
+ROOT=$PWD
+OUT=$ROOT/results/native-release
+trap 'rc=$?; echo "$rc" > "$OUT/body.exit"' EXIT
+CORE=()
+PLUGINS=()
+NATIVE=()
+for wheel in "$ROOT"/wheels/*.whl; do
+    name=${wheel##*/}
+    case "$name" in
+        mojolearn_nvidia_ptx80-*) continue ;;
+        mojolearn-*) CORE=("$wheel") ;;
+        *) PLUGINS+=(--plugin "$wheel") ;;
+    esac
+    NATIVE+=("$wheel")
+done
+test "${#NATIVE[@]}" = 6
+test "${#CORE[@]}" = 1
+# Genuine expanded receipt, exact installed GPU architecture and all five
+# plugin wheel hashes are emitted by the existing frozen-source qualifier.
+timeout -k 20 320 venv/bin/python source/tools/nvidia_serial_guard.py --seconds 300 --rss-gib 12 --cores 2 -- \
+    venv/bin/python source/tools/qualify_verifier_wheel.py "${CORE[0]}" "${PLUGINS[@]}" \
+    --scope expanded --python "$ROOT/venv/bin/python" --expected-source-commit @SHA@ --output "$OUT/out"
+timeout -k 20 60 python3 -m venv native-venv
+timeout -k 20 180 native-venv/bin/python -m pip install --no-input --only-binary=:all: "${NATIVE[@]}" numpy > "$OUT/install.log" 2>&1
+native-venv/bin/python -m pip freeze > "$OUT/pip-freeze.txt"
+timeout -k 20 120 native-venv/bin/python source/tools/verify_lanes.py --gpu-pass cuda --all --write-selection "$OUT/selection.json" > "$OUT/selection.log" 2>&1
+LANES=$(native-venv/bin/python -c 'import json,sys; print(",".join(json.load(open(sys.argv[1]))["lanes"]))' "$OUT/selection.json")
+cp native-reference.json "$OUT/reference.json"
+export MOJOLEARN_COMMIT=@SHA@
+# Run outside the checkout, with no baseline distribution installed.
+cd "$OUT"
+timeout -k 20 140 "$ROOT/venv/bin/python" "$ROOT/source/tools/nvidia_serial_guard.py" --seconds 120 --rss-gib 12 --cores 2 -- \
+    "$ROOT/native-venv/bin/python" -m mojolearn verify --self-test > selftest.log 2>&1
+echo 'selftest_exit=0' > column.txt
+timeout -k 20 920 "$ROOT/venv/bin/python" "$ROOT/source/tools/nvidia_serial_guard.py" --seconds 900 --rss-gib 12 --cores 2 -- \
+    "$ROOT/native-venv/bin/python" -m mojolearn._identity_break --lanes "$LANES" --json column-cuda.json \
+    --repeats 1 --fixtures base,denormal,odd --fail-on-refused --require-backend cuda --no-batch --no-rlpair > column.log 2>&1
+echo 0 > column.exit
+"$ROOT/native-venv/bin/python" "$ROOT/source/tools/identity_break.py" --diff reference.json column-cuda.json \
+    --require-columns 2 --lanes "$LANES" --json diff-ref-cuda.json > diff-ref-cuda.txt 2>&1
+NATIVE_SCRIPT
+mkdir -p results/native-release
+timeout -k 20 1650 bash native-release.sh || NATIVE_FAILED=1
+'''.replace('@SHA@', commit)
+
+
+def reference_column(path, commit):
+    require(path is not None and path.is_file(), 'Canonical native checks require an Apple reference column')
+    doc = json.loads(path.read_text())
+    require(doc.get('commit') == commit, 'Native reference column source differs')
+    require(set(doc.get('fixtures', {})) == {'base', 'denormal', 'odd'},
+            'Native reference requires the canonical three fixtures')
+    require(doc.get('cells'), 'Native reference column is empty')
+    return sha(path)
+
+
+def box_body(commit, full=True, extra_capture=False, native_release_checks=False):
     # All interpolated values are validated SHA or constants. No remote credentials.
     return '''#!/bin/bash
 set -euo pipefail
@@ -96,6 +165,7 @@ INNER
 cp "$MANIFEST" results/PTX_BASELINE.json
 export MOJOLEARN_NUMERIC_MODE=identical PYTHONNOUSERSITE=1
 unset PYTHONPATH MOJOLEARN_CUDA_PATH MOJOLEARN_EXPERIMENTAL_PTX
+@NATIVE@
 @EXTRA@
 collect() {
     local scope=$1 role=$2 bound=$3
@@ -112,8 +182,9 @@ for role in native-reference baseline; do
 done
 venv/bin/python source/tools/nvidia_baseline_qualification.py check --prototype --manifest "$MANIFEST" --out results/prototype-comparison.json results/prototype-native-reference.json results/prototype-baseline.json
 @FULL@
+test "$NATIVE_FAILED" = 0
 test "$EXTRA_FAILED" = 0
-''' .replace('@SHA@', commit).replace('@LANES@', LANES).replace('@EXTRA@', '''EXTRA_FAILED=0
+''' .replace('@SHA@', commit).replace('@LANES@', LANES).replace('@NATIVE@', native_release_body(commit) if native_release_checks else 'NATIVE_FAILED=0').replace('@EXTRA@', '''EXTRA_FAILED=0
 for role in native-reference baseline; do
     cmd=(venv/bin/python source/tools/nvidia_serial_guard.py --seconds 120 --rss-gib 12 --cores 2 -- venv/bin/python extra-wrapper.py --script extra-capture.py --source-tools source/tools --manifest "$MANIFEST" --role "$role" --out "results/extra-$role.json")
     if [ "$role" = baseline ]; then
@@ -137,10 +208,15 @@ def main():
     p.add_argument('--gpu', choices=GPUS, required=True)
     p.add_argument('--prototype-only', action='store_true')
     p.add_argument('--rent', action='store_true')
+    p.add_argument('--native-release-checks', action='store_true',
+                   help='Also collect canonical native-six expanded receipt, self-test and three-fixture column')
+    p.add_argument('--native-reference-column', type=Path, help='Same-source Apple three-fixture column for canonical native diff')
     p.add_argument('--extra-capture', type=Path, help='Supplemental script, native and PTX, 120 seconds each')
     p.add_argument('--tooling-commit', help='Explicit full clean runner SHA when supplementary tooling differs from payload source')
     args = p.parse_args()
     wheels, manifest = artifacts(args.wheels, args.commit)
+    require(args.native_release_checks or args.native_reference_column is None, 'Reference column needs --native-release-checks')
+    reference_sha = reference_column(args.native_reference_column, args.commit) if args.native_release_checks else None
     require(not args.out.exists(), 'Output already exists')
     actual = subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip()
     tooling = args.tooling_commit or args.commit
@@ -155,6 +231,10 @@ def main():
     plan = dict(source_commit=args.commit, gpu=GPUS[args.gpu], lease_minutes=120,
                 work_seconds=6300, full=not args.prototype_only,
                 tooling_commit=tooling, tooling_dirty=False,
+                native_release_checks=args.native_release_checks, native_release_seconds=1650 if args.native_release_checks else 0,
+                native_reference_sha256=reference_sha,
+                native_release_wheels={w.name: sha(w) for w in wheels if w.name.split('-')[0] != 'mojolearn_nvidia_ptx80'} if args.native_release_checks else {},
+                native_release_step_seconds=dict(smoke=300, install=180, selftest=120, column=900) if args.native_release_checks else {},
                 extra_capture_sha256=sha(args.extra_capture) if args.extra_capture else None,
                 extra_wrapper_sha256=sha(ROOT / 'tools/nvidia_extra_capture.py') if args.extra_capture else None,
                 extra_capture_seconds_per_role=120 if args.extra_capture else 0,
@@ -173,10 +253,14 @@ def main():
             require(sha(stage / 'wheels' / wheel.name) == plan['wheels'][wheel.name],
                     'Wheel bytes changed while staging; refuse before rental')
         artifacts(stage / 'wheels', args.commit)  # revalidate the exact staged bytes before creating a pod
-        (stage / 'body.sh').write_text(box_body(args.commit, not args.prototype_only, bool(args.extra_capture)))
+        (stage / 'body.sh').write_text(box_body(args.commit, not args.prototype_only, bool(args.extra_capture), args.native_release_checks))
         files = sorted((stage / 'wheels').glob('*.whl')) + [stage / 'body.sh']
         (stage / 'plan.json').write_text(json.dumps(plan, indent=2) + '\n')
         files.append(stage / 'plan.json')
+        if args.native_release_checks:
+            shutil.copyfile(args.native_reference_column, stage / 'native-reference.json')
+            require(sha(stage / 'native-reference.json') == reference_sha, 'Native reference changed while staging')
+            files.append(stage / 'native-reference.json')
         if args.extra_capture:
             for source, name, digest in [(args.extra_capture, 'extra-capture.py', plan['extra_capture_sha256']),
                                          (ROOT / 'tools/nvidia_extra_capture.py', 'extra-wrapper.py', plan['extra_wrapper_sha256'])]:
