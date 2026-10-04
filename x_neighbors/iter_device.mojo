@@ -597,6 +597,51 @@ comptime KNN_TILE_TPB = 128
 comptime KNN_TILE_ROWS = 64
 comptime KNN_TILE_MAX_D = 64
 
+#: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor, the fused
+#: k-NN behind LocalOutlierFactor, LabelPropagation / LabelSpreading and
+#: KNNImputer's neighbor search (`knn_sq_tiled_kernel`, `knn_sq_tiled2_kernel`).
+#: Neither switch changes a bit, so the host column (`knn_sq_item`) is untouched.
+#:
+#: XN_KNN_LEAN (default ON; -D MOJOLEARN_IDN_XN_KNN_LEAN_OFF): one ftz per
+#: pair-feature, not four. `knn_sq_item`'s step is
+#: acc = ftz(fma(df, df, acc)), df = ftz(ftz(x) - ftz(y)). The inputs are
+#: flushed once when they are staged (ftz is idempotent). The flush of df is
+#: dropped: a subnormal df has df * df < 2^-252, so fma(df, df, acc) is acc
+#: itself (acc is +0 or a normal number after its own ftz, and a term that
+#: far under half an ulp of either never moves the rounding), the value the
+#: flushed df = +-0 gives; a device that reads a subnormal operand as zero
+#: computes the same.
+#:
+#: XN_KNN_PRUNE (default ON; -D MOJOLEARN_IDN_XN_KNN_PRUNE_OFF): a pair's
+#: chain stops once its partial sum is not below its row's current k-th
+#: distance. The chain never decreases (every term is >= 0), so the full
+#: value would fail the insertion's strict `<` too: the same lists. In the
+#: 2-D kernel a thread skips a feature chunk once all 16 of its pairs are
+#: out (the rows' k-th distances are published in threadgroup memory per y
+#: tile); in the row kernel the check runs every 8 features.
+#: Both off under MOJOLEARN_IDN_ALL_OFF.
+comptime _XN_KNN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime XN_KNN_LEAN = _XN_KNN_IDN and not is_defined["MOJOLEARN_IDN_XN_KNN_LEAN_OFF"]()
+comptime XN_KNN_PRUNE = _XN_KNN_IDN and not is_defined["MOJOLEARN_IDN_XN_KNN_PRUNE_OFF"]()
+
+
+@always_inline
+def _knn_in(v: Float32) -> Float32:
+    """A staged input: flushed once under XN_KNN_LEAN."""
+    comptime if XN_KNN_LEAN:
+        return ftz(v)
+    return v
+
+
+@always_inline
+def _knn_step(xv: Float32, yv: Float32, acc: Float32) -> Float32:
+    """One feature of `knn_sq_item`'s chain; xv and yv are `_knn_in` values."""
+    comptime if XN_KNN_LEAN:
+        var dl = xv - yv
+        return ftz(identical_mul_add(dl, dl, acc))
+    var df = _sub(xv, yv)
+    return ftz(identical_mul_add(df, df, acc))
+
 
 def knn_sq_tiled_kernel(
     x: FP, y: FP, dist: FP, idx: IP, n_: Int64, m_: Int64, d_: Int64, k_: Int64, ex_: Int64,
@@ -627,7 +672,7 @@ def knn_sq_tiled_kernel(
         var rows = min(KNN_TILE_ROWS, m - j0)
         var q = tid
         while q < rows * d:
-            ys[q] = y.unsafe_load(j0 * d + q)
+            ys[q] = _knn_in(y.unsafe_load(j0 * d + q))
             q += KNN_TILE_TPB
         barrier()
         if live:
@@ -637,8 +682,10 @@ def knn_sq_tiled_kernel(
                     continue
                 var acc = Float32(0)
                 for f in range(d):
-                    var df = _sub(x.unsafe_load(t * d + f), ys[jj * d + f])
-                    acc = ftz(identical_mul_add(df, df, acc))
+                    acc = _knn_step(_knn_in(x.unsafe_load(t * d + f)), ys[jj * d + f], acc)
+                    comptime if XN_KNN_PRUNE:
+                        if (f & 7) == 7 and not (acc < worst):
+                            break
                 var v = acc
                 if not (v < worst):
                     continue
@@ -672,7 +719,7 @@ comptime KNN2_TPB = 256
 #: a thread's register block: KNN2_R x rows by KNN2_R y rows (16 x 16 threads)
 comptime KNN2_R = 4
 comptime KNN2_XS = KNN2_FC + 1  # padded rows (bank spread)
-comptime KNN2_SMEM_BYTES = 4 * (KNN2_TX * KNN2_XS + KNN2_TY * KNN2_XS + KNN2_TX * (KNN2_TY + 1))
+comptime KNN2_SMEM_BYTES = 4 * (KNN2_TX * KNN2_XS + KNN2_TY * KNN2_XS + KNN2_TX * (KNN2_TY + 1) + KNN2_TX)
 
 
 def knn_sq_tiled2_kernel(
@@ -688,6 +735,8 @@ def knn_sq_tiled2_kernel(
     var xs = stack_allocation[KNN2_TX * KNN2_XS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var ys = stack_allocation[KNN2_TY * KNN2_XS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var dt = stack_allocation[KNN2_TX * (KNN2_TY + 1), Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    # XN_KNN_PRUNE: the block's rows' current k-th distances
+    var ws = stack_allocation[KNN2_TX, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var inf = _bc[DType.float32](UInt32(0x7F800000))
     var t = x0 + tid
     var owner = tid < KNN2_TX and t < n
@@ -698,10 +747,22 @@ def knn_sq_tiled2_kernel(
             idx.unsafe_store(t * k + s, Int32(-1))
     var ta = tid // 16
     var tb = tid - ta * 16
+    comptime if XN_KNN_PRUNE:
+        if tid < KNN2_TX:
+            ws[tid] = worst
+        barrier()
     var j0 = 0
     while j0 < m:
         var rows = min(KNN2_TY, m - j0)
         var acc = InlineArray[Float32, KNN2_R * KNN2_R](fill=Float32(0))
+        # XN_KNN_PRUNE: this thread's four rows' k-th distances for this y
+        # tile (written before the barrier that ended the last tile), and
+        # whether all 16 of its pairs are out
+        var wv = InlineArray[Float32, KNN2_R](fill=inf)
+        var dead = False
+        comptime if XN_KNN_PRUNE:
+            comptime for i in range(KNN2_R):
+                wv[i] = ws[ta + 16 * i]
         var f0 = 0
         while f0 < d:
             var fc = min(KNN2_FC, d - f0)
@@ -709,20 +770,27 @@ def knn_sq_tiled2_kernel(
             while q < KNN2_TX * KNN2_FC:
                 var r = q // KNN2_FC
                 var f = q - r * KNN2_FC
-                xs[r * KNN2_XS + f] = x.unsafe_load((x0 + r) * d + f0 + f) if (x0 + r < n and f < fc) else Float32(0)
-                ys[r * KNN2_XS + f] = y.unsafe_load((j0 + r) * d + f0 + f) if (r < rows and f < fc) else Float32(0)
+                xs[r * KNN2_XS + f] = _knn_in(x.unsafe_load((x0 + r) * d + f0 + f)) if (x0 + r < n and f < fc) else Float32(0)
+                ys[r * KNN2_XS + f] = _knn_in(y.unsafe_load((j0 + r) * d + f0 + f)) if (r < rows and f < fc) else Float32(0)
                 q += KNN2_TPB
             barrier()
-            for f in range(fc):
-                var xv = InlineArray[Float32, KNN2_R](fill=Float32(0))
-                var yv = InlineArray[Float32, KNN2_R](fill=Float32(0))
-                comptime for i in range(KNN2_R):
-                    xv[i] = xs[(ta + 16 * i) * KNN2_XS + f]
-                    yv[i] = ys[(tb + 16 * i) * KNN2_XS + f]
-                comptime for i in range(KNN2_R):
-                    comptime for jj in range(KNN2_R):
-                        var df = _sub(xv[i], yv[jj])
-                        acc[i * KNN2_R + jj] = ftz(identical_mul_add(df, df, acc[i * KNN2_R + jj]))
+            if not dead:
+                for f in range(fc):
+                    var xv = InlineArray[Float32, KNN2_R](fill=Float32(0))
+                    var yv = InlineArray[Float32, KNN2_R](fill=Float32(0))
+                    comptime for i in range(KNN2_R):
+                        xv[i] = xs[(ta + 16 * i) * KNN2_XS + f]
+                        yv[i] = ys[(tb + 16 * i) * KNN2_XS + f]
+                    comptime for i in range(KNN2_R):
+                        comptime for jj in range(KNN2_R):
+                            acc[i * KNN2_R + jj] = _knn_step(xv[i], yv[jj], acc[i * KNN2_R + jj])
+                comptime if XN_KNN_PRUNE:
+                    var alive = False
+                    comptime for i in range(KNN2_R):
+                        comptime for jj in range(KNN2_R):
+                            if acc[i * KNN2_R + jj] < wv[i]:
+                                alive = True
+                    dead = not alive
             barrier()
             f0 += KNN2_FC
         comptime for i in range(KNN2_R):
@@ -745,6 +813,8 @@ def knn_sq_tiled2_kernel(
                 dist.unsafe_store(t * k + s, v)
                 idx.unsafe_store(t * k + s, Int32(j))
                 worst = dist.unsafe_load(t * k + k - 1)
+            comptime if XN_KNN_PRUNE:
+                ws[tid] = worst
         barrier()
         j0 += rows
 
