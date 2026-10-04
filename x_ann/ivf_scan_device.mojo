@@ -660,14 +660,14 @@ def scan_stride(offsets: List[Int32], n_lists: Int, n_probes: Int) -> Int:
     """The longest candidate row a query can have: the n_probes longest
     lists, summed (at least 1)."""
     var lens = List[Int](capacity=n_lists)
-    for l in range(n_lists):  # small-loop(n_lists: one length per IVF list): sizes the candidate buffer, a shape not data
+    for l in range(n_lists):  # small-loop(n_lists: one count per IVF list): sizes the candidate buffer, a shape not data
         lens.append(Int(offsets[l + 1]) - Int(offsets[l]))
     var total = 0
     var taken = List[Bool](length=n_lists, fill=False)
     var np = n_probes if n_probes < n_lists else n_lists
     for _ in range(np):
         var best = -1
-        for l in range(n_lists):  # small-loop(n_lists: one length per IVF list): picks the longest lists for the buffer shape
+        for l in range(n_lists):  # small-loop(n_lists: one count per IVF list): picks the longest lists for the buffer shape
             if not taken[l] and (best < 0 or lens[l] > lens[best]):
                 best = l
         taken[best] = True

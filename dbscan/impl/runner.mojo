@@ -865,7 +865,7 @@ their code branches on is this Bool.
 
     # `Index_ maxadjlen = *std::max_element(...); adj_graph.resize(maxadjlen)`
     var maxadjlen = 1
-    for b in range(n_batches):  # small-loop(n_batches: one adjacency length per row batch): max of the plan's per-batch lengths sizes one buffer
+    for b in range(n_batches):  # small-loop(n_batches: one adjacency count per row batch): max of the plan's per-batch counts, shapes one buffer
         if batchadjlen[b] > maxadjlen:
             maxadjlen = batchadjlen[b]
     var col_ind = ctx.enqueue_create_buffer[DType.int32](maxadjlen)

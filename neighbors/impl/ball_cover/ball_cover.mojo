@@ -223,7 +223,7 @@ def _floyd_sample(m: Int, n_landmarks: Int, seed: UInt64) -> List[Int32]:
     """
     var picked = List[Int32]()
     var step = UInt64(0)
-    for j in range(m - n_landmarks, m):  # small-loop(n_landmarks: about sqrt of m landmark ids drawn from the seed): integer draw reads no data, a launch-plan list
+    for j in range(m - n_landmarks, m):  # small-loop(n_landmarks: about the square root of the row count, landmark ids drawn from the seed): integer draw reads no data, a launch-plan list
         var z = seed + step * UInt64(0x9E3779B97F4A7C15)
         z = (z ^ (z >> UInt64(30))) * UInt64(0xBF58476D1CE4E5B9)
         z = (z ^ (z >> UInt64(27))) * UInt64(0x94D049BB133111EB)
@@ -231,7 +231,7 @@ def _floyd_sample(m: Int, n_landmarks: Int, seed: UInt64) -> List[Int32]:
         step += UInt64(1)
         var t = Int32(Int(z % UInt64(j + 1)))
         var hit = False
-        for q in range(len(picked)):  # small-loop(picked: the landmark ids drawn so far, under sqrt of m): duplicate test of the integer draw
+        for q in range(len(picked)):  # small-loop(picked: the landmark ids drawn so far, under the square root of the row count): duplicate test of the integer draw
             if picked[q] == t:
                 hit = True
                 break
