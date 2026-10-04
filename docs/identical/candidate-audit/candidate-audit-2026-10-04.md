@@ -129,6 +129,30 @@ neighbors 10, decomp 7, timeseries 7, lm 6, shared 6, plus the 15 owed CPU items
 | F11 | Work at risk: /private/tmp checkout with an unpushed OOB fix; idle60 worktree (17.6k dirty paths) | section 1 | orchestrator: push / reclaim |
 | F12 | 4 Metal OFF compiles CANCELLED_USER; Apple verification deferred | `codex-compile-live-summary.json` | deferred (no Apple now) |
 
+## 3b. Skipped to protect old bits (owner rule: only same-version cross-vendor identity matters)
+
+Sources searched: `fam/fam*.md`, `idn-all/`, `no-bench-tuning/inv*.md`, `docs/identical/*`, `docs/apple-fast/EXPERIMENTS.md`.
+Excluded: block eigh (fam-decomp:39, later dropped for convergence) and atomic or nondeterminism items. Already
+written later, so not lost: QN_TILED C>1 (now `QN_TILED_MULTI`), CNN xent device fold (`XENT_FOLD_BLOCK_256`),
+Mamba-3 parallel angle (`IDN_M3_ANGLE_PARALLEL`, default-OFF candidate in recipes), and the XTY tile 64/1024 arms.
+
+| # | File | Idea | Why skipped | Retry now? | Lane |
+|---|---|---|---|---|---|
+| B1 | `gemm/contract.mojo` + every host oracle (fam2-lm.md:35) | GEMM fold-order arm: wider leaf or a different partition | moves bits of every GEMM caller; "not attempted blind" | YES, the largest NV/AMD lever; after no-bench-tuning lands | new G2 |
+| B2 | gemm plan rules (no-bench-tuning SUBAGENT_PROMPT:49) | plan rewrites limited to "bits-safe" / documented bit-equal plans | prompt told the lane to keep bits | YES: fold into B1 | G2 |
+| B3 | `solver/impl/cd_gram_rule.mojo:26` `CD_IDN_GRAM_MAX_COLS=64` (inv-linear:12) | widen the Gram CD column cap | Gram vs row sweeps fold differently | YES; `CD_IDN_GRAM_WIDE` (LOST) is this arm; validate n_cols 48/64/65/128 | L1 |
+| B4 | `glm/impl/qn/qn_linesearch.mojo` (fam2-linear.md:37, fam2-linear "not impl" 2) | batched QN line search in IDENTICAL (K steps priced in one pass) | z = x.xp + step*x.drt is not a full evaluation's word, so forward arithmetic on 4 columns would change | MAYBE: the gain is 1-2 evals per fit; worth it for small-iteration fits | L1 |
+| B5 | `python/mojolearn/_arima_impl.py:397` (fam-timeseries.md:40) | ARIMA aic/bic on the device in float32 | float64 to float32 changes bits | YES: it is also an owed CPU item (F7) | T1 |
+| B6 | `xtrees/oob.mojo`, forests epilogue (fam2-forests.md:90) | RF OOB accuracy/r2 epilogue on the device | changes `oob_score_` bits | YES: CPU in the GPU path; pair with the diagnose/amd-oob exact-sum fix | R1 |
+| B7 | `_expansion_decomp.py` NMF `_cd_side` (fam2-decomp.md:38) | l2 ridge via an `axpy` with `diag_mask` in float32 | float32 rounding moves bits on all four columns | YES (decomp leftover, F7) | D1 |
+| B8 | `x_neighbors/kfeat_dev.mojo` and others, MT19937 tables (fam2-neighbors.md:38) | counter-based device RNG instead of a numpy-compatible stream | keeps sklearn random_state bits | YES (handoff: "old bits do not matter") | K1 |
+| B9 | `x_cnn` global average pool forward (fam-neural.md:30, fam2-neural.md:43) | blocked fold over H*W | bits change for a small window | MAYBE: cheap, small gain | N1 |
+| B10 | `spectral/impl/sparse/linalg/detail/laplacian.mojo` `degree_kernel` (fam2-cluster.md:274) | lane+tree degree fold (serial chain per row) | bits change, `host_laplacian` must follow; once per fit | MAYBE: a serial chain on a GPU path | C1 |
+| B11 | `kernel_methods` `KM_RBF_CELL` for polynomial/sigmoid (fam2-kernel-gp.md:92) | fused cell kernel | changes the dot's fold order on both columns | YES for small d | new KG1 |
+| B12 | Nystroem transform fused cross-kernel cell (fam-kernel-gp.md:37) | distance + epilogue in one cell | `svm/` kernel_op form restated, so bits move | YES for small d | KG1 |
+| B13 | `gp_variance_kernel` / `gpc_latent_var_kernel` (fam-kernel-gp.md:36, fam2-kernel-gp.md:53) | blocked fold per test point | bits plus host column; helps only tiny n_star | LOW | KG1 |
+| B14 | `DevExec.cholesky` in x_decomp (fam-decomp.md:41, fam2-decomp.md:49) | blocked right-looking Cholesky | bits change; no Python caller found | LOW, only if a caller appears | - |
+
 ## 4. Proposed code-only fix lanes (disjoint files; none overlaps the running lanes)
 
 Running lanes and the files they own: wave-ops (`tools/identical_wave_*`, `tools/idn_all_checks.py`, `docs/identical/*`,
@@ -148,6 +172,12 @@ no-bench-tuning.
 | G1 gbdt | `gbdt/methods/leaves_estimation/*`, `gbdt/train.mojo`, symmetric drain, `greedy_search_helper_depthwise.mojo`, `checks/kernel_matrix.mojo` | Multiclass one-step leaf solve on the device, symmetric-fit drain merge; recipes for `GBDT_ID_RIDX`/`DEFER_COPY` (F7) |
 | D1 decomp | `python/mojolearn/_expansion_decomp.py`, `x_decomp/resident.mojo`, `x_prep/prep3.mojo` (review only), `python/mojolearn/_expansion_prep.py` | 4 Python numeric leftovers on the device; resident QR without a second X; semantic audit of the merge hotspots (F8, F9); recipe for `XPREP_BLOCKED` |
 | L1 linear-svm | `x_linear/{sgd,device,logcv}.mojo`, `glm/*`, `svm/impl/*`, `solver/impl/cd_gram_rule.mojo` | Port neural-pass139 SGDOneClass minibatch/k* ties; decide neural-pass94; list the 34 unplanned defines (most are here) for wave-ops to add to inventory/recipes; `CD_IDN_GRAM_WIDE` recipe |
+
+| KG1 kernel-gp | `kernel_methods/*` (KM_RBF_CELL), Nystroem transform, `gaussian_process/*` variance kernels | B11-B13: new fold orders on device and host column together, behind `_OFF` and IDN_ALL_OFF |
+| G2 gemm-fold (after no-bench-tuning merges) | `gemm/contract.mojo`, `gemm/*` IDENTICAL plans, `gemm/host`, the contract docs | B1/B2: wider-leaf or partition fold arm with every host oracle following it; then time the 13 LOST GEMM arms |
+
+The bit-skip items from 3b are added to the lanes above: B3/B4 to L1, B5 to T1, B6 to R1, B7 to D1, B8 to K1,
+B9 to N1 and B10 to C1. Each changes device and host column together in the new version.
 
 The inventory, recipe and plan edits for the unplanned/LOST rows belong to wave-ops files. Each lane writes its rows
 to `~/mojolearn-evidence/candidate-audit/additions-<lane>.tsv`, and wave-ops merges them, so no two lanes edit those
