@@ -200,10 +200,11 @@ def ff_col_mean_kernel(th: FPtr, tl: FPtr, d: Int32, n: Int32, mean: FPtr):
         mean[f] = ff_mean_cell(th[f], tl[f], Int(n))
 
 
-def center_cols_kernel(x: FPtr, total: Int, d: Int32, mean: FPtr, dst: FPtr):
-    """dst[i] = `post_bodies.center_cell`(x[i], mean[i % d]), i < total."""
+def center_cols_kernel(x: FPtr, total: Int64, d: Int32, mean: FPtr, dst: FPtr):
+    """dst[i] = `post_bodies.center_cell`(x[i], mean[i % d]), i < total.
+    `total` is Int64: a kernel argument cannot be Int (not DevicePassable)."""
     var i = _tid()
-    if i < total:
+    if i < Int(total):
         dst[i] = center_cell(x[i], mean[i % Int(d)])
 
 

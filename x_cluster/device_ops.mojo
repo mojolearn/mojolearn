@@ -3009,7 +3009,7 @@ struct DeviceOps(ClusterOps):
             grid_dim=_grid(d), block_dim=TPB,
         )
         self.ctx.enqueue_function[center_cols_kernel](
-            self._fp(x), n * d, Int32(d), self._fp(mean), self._fp(dst),
+            self._fp(x), Int64(n * d), Int32(d), self._fp(mean), self._fp(dst),
             grid_dim=_grid(n * d), block_dim=TPB,
         )
         self._ph1("center_cols")
