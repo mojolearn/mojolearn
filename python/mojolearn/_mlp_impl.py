@@ -238,6 +238,18 @@ def _resident_enabled(binding):
     return _fused_enabled(binding) and callable(getattr(binding, 'mlp_resident_open', None))
 
 
+def _native_step(entry, *args):
+    """One fused/resident step call. The native step refuses a non-finite
+    result on the device (cpu2-l11-neural); that refusal surfaces as the
+    RuntimeError the host scans raised before."""
+    try:
+        return entry(*args)
+    except Exception as exc:
+        if 'nonfinite' in str(exc) or 'not finite' in str(exc):
+            raise RuntimeError('SmallMLPTrainer step returned an invalid result: ' + str(exc)) from exc
+        raise
+
+
 def _optimizer(parameters, config, state=None):
     # `resident=False`: this trainer builds an optimizer object per step
     # (transactional publication), so device-resident moments would be
@@ -439,22 +451,16 @@ class SmallMLPTrainer:
                   float(config['beta1']), float(config['beta2']), float(config['eps']),
                   float(config['weight_decay']), 1 if return_input_grad else 0]
         entry = binding.mlp_resident_steps if k > 1 else binding.mlp_resident_step
-        written = entry(handle, addresses, params)
-        if written != logits.size or not all_finite(logits):
+        # cpu2-l11-neural (2026-10-04): the session scans the logits, losses,
+        # gradients and dx on the device (one flag word) and raises; no host
+        # walk of the results here.
+        written = _native_step(entry, handle, addresses, params)
+        if written != logits.size:
             raise RuntimeError('SmallMLPTrainer step returned an invalid result')
         if mode == _MODE_FORWARD:
             return None, logits, None, None
         values = [float(v) for v in flat_view(losses, 'f')]  # glue: converts the k returned step losses
-        if not all(math.isfinite(v) for v in values):  # glue: checks the k returned step losses
-            raise RuntimeError('SmallMLPTrainer loss is not finite')
-        for g in grads:  # glue: iterates the four gradient arrays
-            if not all_finite(g):
-                raise RuntimeError('SmallMLPTrainer step returned an invalid result')
-        input_grad = None
-        if return_input_grad:
-            if not all_finite(dx):
-                raise RuntimeError('SmallMLPTrainer step returned an invalid result')
-            input_grad = dx
+        input_grad = dx if return_input_grad else None
         if mode == _MODE_TRAIN:
             opt.t = t + k - 1
             opt.packed_ = True
@@ -623,22 +629,18 @@ class SmallMLPTrainer:
         params = [int(rows), int(mode), int(t), float(config['lr']), float(config['beta1']),
                   float(config['beta2']), float(config['eps']), float(config['weight_decay']),
                   1 if return_input_grad else 0]
-        written = binding.mlp_train_step(addresses, params)
-        if written != logits.size or not all_finite(logits):
+        # cpu2-l11-neural (2026-10-04): the fused step refuses a non-finite
+        # logit, loss, gradient or dx on the device before anything comes
+        # down; no host walk of the results here.
+        written = _native_step(binding.mlp_train_step, addresses, params)
+        if written != logits.size:
             raise RuntimeError('SmallMLPTrainer step returned an invalid result')
         if mode == _MODE_FORWARD:
             return 0.0, logits, None, None
         value = float(loss[0])
         if not math.isfinite(value):
             raise RuntimeError('SmallMLPTrainer loss is not finite')
-        for g in grads:  # glue: finiteness check per tensor
-            if not all_finite(g):
-                raise RuntimeError('SmallMLPTrainer step returned an invalid result')
-        input_grad = None
-        if return_input_grad:
-            if not all_finite(dx):
-                raise RuntimeError('SmallMLPTrainer step returned an invalid result')
-            input_grad = dx
+        input_grad = dx if return_input_grad else None
         if train:
             # What `opt.step` records beside the buffers it wrote.
             opt.t = t

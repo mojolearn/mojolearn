@@ -482,12 +482,19 @@ def mlp_train_step_host(
         ctx, dhidden.unsafe_ptr(), incoming.unsafe_ptr(), g_d.unsafe_ptr() + MLP_OFF_B1,
         rows, MLP_HID, 3,
     )
+    # cpu2-l11-neural (2026-10-04): the gradients' (and dx's) refusal is a
+    # device scan here, before any result or state leaves the device; the
+    # Python trainer no longer walks them on the host after the call.
+    if device_first_nonfinite(ctx, g_d, MLP_TOTAL) >= 0:
+        raise Error("small MLP operation has nonfinite input or output")
     var dx_n = 1
     if want_input_grad != 0:
         dx_n = rows * MLP_IN
     var dx_d = ctx.enqueue_create_buffer[DType.float32](dx_n)
     if want_input_grad != 0:
         _gemm(ctx, dx_d, dhidden, w1_v, ws, rows, MLP_IN, MLP_HID, OP_NN)
+        if device_first_nonfinite(ctx, dx_d, dx_n) >= 0:
+            raise Error("small MLP operation has nonfinite input or output")
         ctx.enqueue_copy(dst_ptr=dx_ptr, src_buf=dx_d)
     # The gradients are a result whatever the mode; the optimizer (no clip)
     # never writes them, so their download may sit ahead of it in the queue.

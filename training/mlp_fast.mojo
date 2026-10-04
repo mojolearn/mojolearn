@@ -55,6 +55,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from core.device_scan import device_first_nonfinite
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 comptime _AFN_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
@@ -467,6 +468,19 @@ def mlp_fast_step_host(
                 base + off_p, base + off_m, base + off_v, 1 if train else 0, sc,
                 beta1, beta2, eps,
             )
+        # cpu2-l11-neural (2026-10-04): the refusal of a non-finite logit,
+        # loss, gradient or dx is a device scan here, before any result or
+        # state is downloaded; the Python trainer no longer walks them.
+        if device_first_nonfinite(ctx, lg_v, rows * FT_OUT) >= 0:
+            raise Error("small MLP operation has nonfinite input or output")
+        if grads:
+            var g_all = arena.create_sub_buffer[DType.float32](off_g, FT_TOTAL)
+            var bad_g = device_first_nonfinite(ctx, g_all, FT_TOTAL)
+            _ = g_all^
+            if bad_g >= 0 or device_first_nonfinite(ctx, loss_v, 1) >= 0:
+                raise Error("small MLP operation has nonfinite input or output")
+            if want_input_grad != 0 and device_first_nonfinite(ctx, dx_v, dx_n) >= 0:
+                raise Error("small MLP operation has nonfinite input or output")
         ctx.enqueue_copy(dst_ptr=logits_ptr, src_buf=lg_v)
         if grads:
             ctx.enqueue_copy(dst_ptr=loss_ptr, src_buf=loss_v)
