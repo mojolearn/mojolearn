@@ -253,7 +253,7 @@ def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonOb
         var tod = List[Float32]()
         var toi = List[Int32]()
         with GILReleased(Python()):
-            refine_device_team(x_addr, n, d, tq, m, tcand, k0, k, tod, toi)
+            refine_device_team(x_addr, n, d, tq, m, tcand, k0, k, tod, toi, root)
         out_f32(tod, addrs, 3)
         out_i32(toi, addrs, 4)
         return PythonObject(m)

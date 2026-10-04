@@ -24,7 +24,7 @@ from cluster.estimator import kmeans_fit
 from cluster.impl.kmeans_params import INIT_ARRAY, INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
 from ivf.estimator import ivf_flat_build_host
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import ivf_trainset_rows
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add, identical_sqrt
 from std.sys.compile import is_defined
 from x_ann.io import upload_f32, upload_i32, download_f32, download_i32
 from x_ann.refine_core import refine_cell
@@ -642,6 +642,7 @@ comptime REFINE_DIM_MAX = 512
 
 def refine_team_kernel(
     x: F32P, n: Int32, d: Int32, queries: F32P, cand: I32P, k0: Int32, k: Int32, out_d: F32P, out_i: I32P,
+    root: Int32,
 ):
     """FAST on Apple, OPT-IN (lane af-vsearch, `IVF_REFINE_TEAM`): `refine_cell`
     with one threadgroup of REFINE_T per query (k0 <= REFINE_T, d <=
@@ -688,11 +689,14 @@ def refine_team_kernel(
             var id = sv[u]
             if id >= 0:
                 pq_insert(kk, base, sd[u], id, out_d, out_i)
+        if root != 0:  # refine_cell's `root` rule (main, lane apple-fast-py2mojo-cluster)
+            for s in range(kk):
+                out_d.unsafe_store(base + s, identical_sqrt(out_d.unsafe_load(base + s)))
 
 
 def refine_device_team(
     x_addr: Int, n: Int, d: Int, queries: List[Float32], m: Int, cand: List[Int32], k0: Int, k: Int,
-    mut out_d: List[Float32], mut out_i: List[Int32],
+    mut out_d: List[Float32], mut out_i: List[Int32], root: Bool = False,
 ) raises:
     """FAST on Apple, OPT-IN (lane af-vsearch, `IVF_REFINE_TEAM`): `refine_device`
     with the dataset uploaded straight from the caller's n x d float32 array
@@ -711,12 +715,12 @@ def refine_device_team(
     if k0 <= REFINE_T and d <= REFINE_DIM_MAX:
         ctx.enqueue_function[refine_team_kernel](
             dx.unsafe_ptr(), Int32(n), Int32(d), dq.unsafe_ptr(), dcand.unsafe_ptr(), Int32(k0), Int32(k),
-            dd.unsafe_ptr(), di.unsafe_ptr(), grid_dim=m, block_dim=REFINE_T,
+            dd.unsafe_ptr(), di.unsafe_ptr(), Int32(1) if root else Int32(0), grid_dim=m, block_dim=REFINE_T,
         )
     else:
         ctx.enqueue_function[refine_kernel](Int32(m), dx.unsafe_ptr(), Int32(n), Int32(d), dq.unsafe_ptr(),
                                             dcand.unsafe_ptr(), Int32(k0), Int32(k), dd.unsafe_ptr(), di.unsafe_ptr(),
-                                            grid_dim=_grid(m), block_dim=TPB)
+                                            Int32(1) if root else Int32(0), grid_dim=_grid(m), block_dim=TPB)
     ctx.synchronize()
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)
