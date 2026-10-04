@@ -95,8 +95,15 @@ def main():
     p.add_argument('--semaphore',type=Path,default=Path('/root/mojolearn-evidence/compile_slot.sh'))
     p.add_argument('--reuse-native-on',type=Path,action='append',default=[],help='Completed audited ON native receipt to import into fresh source')
     p.add_argument('--reuse-native-off',type=Path,action='append',default=[],help='Completed audited OFF native receipt to import into fresh source')
+    p.add_argument('--worker',type=Path,help='Pinned repaired identity/timing worker (recorded by hash); default is the frozen source tools/identical_wave_worker.py')
+    p.add_argument('--tag',default='',help='identity/timing only: write <phase>-<tag>.json and <arm>/<phase>-<tag>/ so a rerun never overwrites earlier evidence')
+    p.add_argument('--cases',default='',help='identity/timing only: comma-separated lane--dataset subset (reruns of failed cases, or timing only proven cases)')
+    p.add_argument('--identity-receipt',type=Path,help='timing only: complete identity receipt (e.g. merged after reruns); default <out>/identity.json')
     p.add_argument('--prepare-jobs',type=int,choices=range(1,5),default=1,help='Concurrent independent builders; shared compile semaphore remains authoritative')
     a=p.parse_args()
+    if (a.tag or a.cases) and a.phase not in ('identity','timing'): p.error('--tag/--cases apply to identity and timing only')
+    if a.tag and not re.fullmatch('[a-z0-9-]+',a.tag): p.error('invalid tag')
+    stem=a.phase+('-'+a.tag if a.tag else '')
     try: arch=validate_arch(a.vendor,a.gpu_arch)
     except ValueError as exc: p.error(str(exc))
     if sys.platform!='linux': p.error('remote Linux NVIDIA/AMD only')
@@ -166,32 +173,44 @@ def main():
             except (ValueError,OSError) as exc:
                 p.error(str(exc))
     if a.phase=='timing':
-        for phase in ('quality','identity'):
-            receipt=a.out/(phase+'.json')
+        identity_receipt=a.identity_receipt or a.out/'identity.json'
+        for phase,receipt in (('quality',a.out/'quality.json'),('identity',identity_receipt)):
             if not receipt.exists(): p.error('timing blocked: '+phase+' receipt missing')
             doc=json.loads(receipt.read_text())
             if doc.get('identity')!=identity or doc.get('status')!='PASS': p.error('timing blocked: '+phase+' incomplete or failed')
         if a.cross_vendor_proof is None: p.error('timing blocked: --cross-vendor-proof required')
         try:
             proof_bytes=a.cross_vendor_proof.read_bytes()
-            validate_proof(json.loads(proof_bytes),(a.out/'identity.json').read_bytes(),a.vendor,a.plan.read_bytes())
+            validate_proof(json.loads(proof_bytes),identity_receipt.read_bytes(),a.vendor,a.plan.read_bytes())
         except (ValueError,KeyError,TypeError,OSError) as exc:
             p.error('timing blocked: '+str(exc))
         report['cross_vendor_proof_sha256']=hashlib.sha256(proof_bytes).hexdigest()
+        report['identity_receipt']={'path':str(identity_receipt),'sha256':hashlib.sha256(identity_receipt.read_bytes()).hexdigest()}
         try:
-            with (a.out/'timing.json').open('x') as reservation:
+            with (a.out/(stem+'.json')).open('x') as reservation:
                 reservation.write(json.dumps(report,indent=2)+'\n')
         except FileExistsError:
             p.error('one run per arm: timing receipt already exists')
         # The exclusive reservation survives interruption or competing runners.
-    write(a.out/(a.phase+'.json'),report)
+    if a.phase in ('identity','timing'):
+        worker=a.worker.resolve() if a.worker else None
+        report['worker']={'path':str(worker) if worker else 'frozen source tools/identical_wave_worker.py',
+                          'sha256':hashlib.sha256(worker.read_bytes()).hexdigest() if worker else None}
+    selected=plan['cases']
+    if a.cases:
+        wanted=a.cases.split(',')
+        selected=[c for c in plan['cases'] if c['lane']+'--'+c['dataset'] in wanted]
+        if len(selected)!=len(set(wanted)): p.error('unknown case in --cases')
+        report['cases']=sorted(wanted)
+    if a.phase=='identity' and (a.out/(stem+'.json')).exists(): p.error('identity receipt exists; use a fresh --tag')
+    write(a.out/(stem+'.json'),report)
     for arm in ('on','off'):
-        source=a.out/arm/'source'; folder=a.out/arm/a.phase
+        source=a.out/arm/'source'; folder=a.out/arm/stem
         env=dict(envbase,PYTHONPATH=str(source/'python'))
         flags='-D MOJOLEARN_IDN_ALL_OFF=1' if arm=='off' else ''
         env['MOJOLEARN_MOJO_BUILD_FLAGS']=flags
         if arm=='off': env['MOJOLEARN_IDN_ALL_OFF']='1'
-        steps=ProgressSteps(lambda:write(a.out/(a.phase+'.json'),report)); report['arms'][arm]=steps
+        steps=ProgressSteps(lambda:write(a.out/(stem+'.json'),report)); report['arms'][arm]=steps
         if a.phase=='prepare':
             if source.exists(): p.error('fresh source directory required; existing '+str(source))
             rc=run(['git','worktree','add','--detach',str(source),a.sha],a.repo,env,folder/'worktree.log',120)
@@ -253,14 +272,14 @@ def main():
                         step.update(status='OWED' if rc==0 else 'FAIL',reason=gate['owed'])
                     steps.append(step)
             else:
-                for case in plan['cases']:
+                for case in selected:
                     tag=case['lane']+'--'+case['dataset']
                     if not re.fullmatch('[a-zA-Z0-9_-]+',tag): p.error('invalid case tag')
                     vendors=(backend,'cpu') if a.phase=='identity' else (backend,)
                     digests={}
                     for vendor in vendors:
                         out=folder/(tag+'--'+vendor)
-                        cmd=[str(a.python),str(source/'tools/identical_wave_worker.py'),'--source',str(source),'--lane',case['lane'],'--dataset',case['dataset'],'--data',str(a.data),'--operation',a.phase,'--vendor',vendor,'--out',str(out),'--case-json',json.dumps(case),'--timing-contract',plan.get('timing_contract','board-warm-single-call')]
+                        cmd=[str(a.python),str(a.worker.resolve() if a.worker else source/'tools/identical_wave_worker.py'),'--source',str(source),'--lane',case['lane'],'--dataset',case['dataset'],'--data',str(a.data),'--operation',a.phase,'--vendor',vendor,'--out',str(out),'--case-json',json.dumps(case),'--timing-contract',plan.get('timing_contract','board-warm-single-call')]
                         rc=run(cmd,source,dict(env,MOJOLEARN_VENDOR=vendor),folder/(tag+'--'+vendor+'.log'),case.get('timeout',1800))
                         steps.append({'id':tag+'--'+vendor,'rc':rc,'status':'PASS' if rc==0 else 'FAIL'})
                         if rc==0: digests[vendor]=json.loads((out/'result.json').read_text())['digest']
@@ -270,8 +289,8 @@ def main():
     good=len(report['arms'])==2 and all(counts) and all(s.get('status','PASS' if s.get('rc')==0 else 'FAIL')in ('PASS','NOT_APPLICABLE') for s in all_steps)
     if a.phase=='quality': good=good and all({s['id'] for s in steps}==required for steps in report['arms'].values())
     report['status']='PASS' if good else 'INCOMPLETE_OR_FAILED'
-    write(a.out/(a.phase+'.json'),report)
-    print('IDENTICAL_WAVE',a.phase,report['status'],'steps',len(all_steps),'receipt',a.out/(a.phase+'.json'))
+    write(a.out/(stem+'.json'),report)
+    print('IDENTICAL_WAVE',a.phase,report['status'],'steps',len(all_steps),'receipt',a.out/(stem+'.json'))
     return 0 if good else 1
 
 if __name__=='__main__':sys.exit(main())

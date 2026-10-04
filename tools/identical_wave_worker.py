@@ -66,6 +66,12 @@ def main():
         import classical_two_datasets as ctd
         if driver=='classical':
             cls={'pca':ctd.OursPCA,'ols':ctd.OursOLS,'kmeans':ctd.OursKMeans}[a.lane]
+            if a.lane=='kmeans' and 'init' not in arrays:
+                # The canonical reg-* blocks carry no shared k-means rows (only the
+                # classical "big" blocks do). OursKMeans stores them but fits with
+                # k-means++; derive the same deterministic rows the big block uses.
+                arrays['init'],init_rows=ctd.distinct_init_rows(arrays['X'],ctd.KMEANS_K)
+                block_info=dict(block_info,kmeans_init_rows=init_rows)
             original=cls(arrays,block_info)
             runner=board.Runner(original.info,original.call,original.outputs,sync=original.sync)
         else:
@@ -73,10 +79,31 @@ def main():
             cls=getattr(ml,case['class'])
             state={};params=case['params']
             example=cls(**params)
-            info=ctd._ours_info(ml,example)
+            post_fit_readback=None
+            if hasattr(example,'numeric_mode_used'):
+                info=ctd._ours_info(ml,example)
+            else:
+                # Some public estimators expose no pre-fit numeric_mode_used():
+                # GBDT adapters verify gbdt_numeric_mode() of the loaded binary
+                # during fit and record numeric_mode_; the CD solver binding has
+                # no compiled getter, so its loaded module path must sit in the
+                # identical/ (device) or host/ (cpu) tree of this source. Checked
+                # after the fit, before any output is digested.
+                info={'library':'mojolearn','numeric_mode_used':'identical','readback':'post-fit','device':'gpu'}
+                def post_fit_readback(model):
+                    if hasattr(model,'numeric_mode_'):
+                        if model.numeric_mode_!='identical': raise RuntimeError('fitted numeric_mode_ '+repr(model.numeric_mode_))
+                        return {'numeric_mode_':model.numeric_mode_}
+                    if case['class']=='ElasticNet':
+                        solver=model._solver(); path=Path(solver.__file__).resolve()
+                        tree=root/'python/mojolearn'/('host' if a.vendor=='cpu' else 'identical')
+                        if not path.is_relative_to(tree): raise RuntimeError('solver binding outside identical tree: '+str(path))
+                        return {'solver_binding':str(path)}
+                    raise RuntimeError('no IDENTICAL readback for '+case['class'])
             def fit():
                 model=cls(**params)
                 state['model']=model.fit(arrays['X'],arrays['y']) if case.get('fit_target',True) else model.fit(arrays['X'])
+                if post_fit_readback: info['post_fit_readback']=post_fit_readback(state['model'])
             def infer(): state['pred']=state['model'].predict(arrays['Xq'])
             if case.get('output_attribute'):
                 runner=board.Runner(info,fit,lambda:{case['output_attribute']:np.asarray(getattr(state['model'],case['output_attribute']))})
