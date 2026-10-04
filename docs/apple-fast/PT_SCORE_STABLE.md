@@ -74,23 +74,47 @@ Reviewed against the math; fixes are in the commit that adds this section.
   lambda far below the gate (lambda gate needs only beating main's 0.89
   relative error; objective must not be worse than main's by 1e-7).
 
-### Reference correction and its justification
+### Reference correction and its justification (v2, `centered-mle-v2`)
 
-sklearn's lambdas are kept (52.6079, -63.3852). Evidence they are the MLE,
-not optimizer noise: (1) the scipy llf at those lambdas beats both GPU arms
-by 1.4e-5 and 3.5e-5 per observation (diagnosis.jsonl), consistent with
-skew-driven optima of a 1e-3-wide normal column (sample skew sd 0.0077
-needs |l - 1| ~ 30); (2) new committed check `check_objective_oracle`
-computes the f64 NLL in centered coordinates (log Var(g) = log Var(v) +
-2a log t(anchor), no saturated term) and asserts scipy's llf equals it
-within 1e-9 per observation at reference AND arm lambdas, and that the
-reference lambda is a local minimum (steps 1e-2 max(1,|l|)). Only the
-reference *transform* is replaced: sklearn's own transform materializes
-(11^-63 - 1)/-63 = 1/63 exactly in f64, so its column 7 is constant (std
-0, normality NaN); the stable centered transform is the same standardized
-function (positive affine map), checked against 160-digit Decimal on 17
-rows. Gates, thresholds and fixtures are unchanged; the new checks can only
-fail a run.
+**v1 premise refuted.** v1 kept sklearn's lambdas (52.6079, -63.3852). M3
+job w2-pt-centered-quality (f88ed2cf6) failed in arm A's reference dump:
+`check_objective_oracle` found that scipy's llf and the centered f64 NLL
+agree at sklearn's column 7 lambda, but a step of 1e-2 * 63.4 lowers that
+NLL. So sklearn's column 7 lambda is not even a local optimum of its own
+objective. Cause: sklearn's YJ objective forms ((x+1)^l - 1)/l naively; at
+l ~ -63 every row rounds to 1/63 in f64 (the same collapse as its column 7
+output, std 0), so its optimizer works on rounding noise there.
+
+**v2 reference = the likelihood optimum, computed stably.** For every
+homogeneous-sign column (all Box-Cox columns; YJ columns with min >= 0 or
+max <= 0), `centered_mle` minimizes scipy's NLL definition evaluated in
+centered f64 coordinates (log Var(g) = log Var(v) + 2a log t(anchor), no
+saturated term). The range is the device's standardized bracket
+mid +- max(8, 8/span), widened to contain sklearn's lambda, and widened
+again x4 while the minimum sits on an edge. A 401-point scan then bounded
+Brent (xatol 1e-12 relative) finds it. Mixed-sign columns keep sklearn's
+lambda: they are well conditioned and passed before. sklearn's lambdas stay in
+the artifact as `<fixture>_reference_sklearn_lambda`, and every moved column
+is printed (`PT-ORACLE-LAMBDA`), but they are not the target.
+
+Why this is the right target: PowerTransformer's contract is the maximum
+likelihood lambda. sklearn is only one f64 implementation of it, and here it
+is shown wrong by its own llf. No arm output enters the computation, and arm A
+(main) is scored against the same target, so the comparison stays fair. On
+well-conditioned columns the optimum equals sklearn's to optimizer tolerance
+(the printed max_relative_shift shows this). Checks that guard the target,
+which can only fail a run:
+1. scipy llf equals the centered NLL within 1e-9 per observation at the
+   reference and stress arm lambdas.
+2. The reference lambda is a local minimum (steps 1e-2 max(1,|l|)), now on
+   every fixture.
+3. The stable transform at the reference lambda matches a 160-digit
+   Decimal evaluation of the original formula (stress, 17 rows).
+
+The reference output, objective and normality all derive from the v2
+lambda. Gate thresholds (lambda 1e-5, output RMS 1e-5, NLL 1e-7, normality
+1e-4, roundtrip 1e-5, all relative to main's error) and fixtures are
+unchanged. `compare` refuses an artifact that is not `centered-mle-v2`.
 
 Known limits: mixed-sign near-constant columns (e.g. 0 +- 1e-3) keep the
 [-8, 8] raw-coordinate search (no fixture; any lambda there gives nearly the

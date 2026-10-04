@@ -38,7 +38,7 @@ def measure(x, method, lam, transformed):
     return objective, normality
 
 
-ORACLE_VERSION = "centered-standardization-v1"
+ORACLE_VERSION = "centered-mle-v2"
 
 
 def stable_reference_transform(x, method, lam):
@@ -94,6 +94,67 @@ def stable_objective(x, method, lam):
         dev = v - v.mean()
         log_var = np.log(np.mean(dev ** 2)) + 2 * a * np.log(norm)
         out[j] = -(float(lam[j]) - 1) * jac.mean() + 0.5 * log_var
+    return out
+
+
+def _centered_nll_fn(col, method):
+    """Closure: lambda -> stable_objective of one homogeneous column, with the
+    centered log and Jacobian mean computed once; None for mixed sign/constant."""
+    col = np.asarray(col, dtype=np.float64)
+    positive = method == "box-cox" or np.min(col) >= 0
+    negative = method != "box-cox" and np.max(col) <= 0
+    if not (positive or negative) or np.ptp(col) == 0:
+        return None
+    anchor = float(np.mean(col))
+    sign = 1.0 if positive else -1.0
+    norm = anchor if method == "box-cox" else 1 + abs(anchor)
+    lg = np.log1p(sign * (col - anchor) / norm)
+    jac = float((np.log(col) if method == "box-cox" else np.sign(col) * np.log1p(np.abs(col))).mean())
+    mid = 0.0 if positive else 2.0
+    span = float(np.max(np.abs(lg)))
+
+    def nll(lam):
+        a = lam if positive else 2 - lam
+        v = lg if a == 0 else np.expm1(a * lg) / a
+        dev = v - v.mean()
+        return -(lam - 1) * jac + 0.5 * (np.log(np.mean(dev ** 2)) + 2 * a * np.log(norm))
+    return nll, mid, span
+
+
+def centered_mle(x, method, start):
+    """Reference lambdas: the global minimizer of the float64 centered NLL
+    (stable_objective, scipy's llf definition) for homogeneous-sign columns;
+    sklearn's lambda (start) is kept for mixed-sign columns.
+
+    Range: the device's standardized bracket mid +- max(8, 8/span) (mid 0
+    positive, 2 negative; span = max |centered log|), widened to contain
+    sklearn's lambda, and widened x4 (up to 4 times) while the scan minimum
+    sits on an edge. A 401-point scan picks the cell, bounded Brent refines.
+    No GPU output or arm lambda enters this computation.
+    """
+    from scipy.optimize import minimize_scalar
+    x = np.asarray(x, dtype=np.float64)
+    out = np.array(start, dtype=np.float64)
+    for j in range(x.shape[1]):
+        parts = _centered_nll_fn(x[:, j], method)
+        if parts is None:
+            continue
+        nll, mid, span = parts
+        radius = max(8.0, min(1e6, 8.0 / max(span, 1e-12)), 1.25 * abs(float(start[j]) - mid))
+        for _ in range(5):
+            grid = mid + np.linspace(-radius, radius, 401)
+            vals = np.array([nll(g) for g in grid])
+            vals[~np.isfinite(vals)] = np.inf
+            k = int(np.argmin(vals))
+            if 0 < k < len(grid) - 1:
+                break
+            radius *= 4
+        else:
+            raise AssertionError(f"centered MLE column {j}: minimum on the widest range edge")
+        res = minimize_scalar(nll, bounds=(grid[k - 1], grid[k + 1]), method="bounded",
+                              options={"xatol": 1e-12 * max(1.0, abs(grid[k]))})
+        best = float(res.x) if np.isfinite(res.fun) and res.fun <= vals[k] else float(grid[k])
+        out[j] = best
     return out
 
 
@@ -155,21 +216,33 @@ def check_decimal_oracle(x, method, lam):
     print("PT-ORACLE-DECIMAL status=PASS rows=17 columns=" + str(subset.shape[1]))
 
 
+def report_reference_lambdas(name, sklearn_lam, lam):
+    sk, lam = np.asarray(sklearn_lam, dtype=np.float64), np.asarray(lam, dtype=np.float64)
+    moved = np.flatnonzero(np.abs(lam - sk) > 1e-6 * np.maximum(1, np.abs(sk)))
+    print("PT-ORACLE-LAMBDA " + json.dumps({"fixture": name, "moved_columns": moved.tolist()[:32],
+        "sklearn": sk[moved].tolist()[:32], "centered_mle": lam[moved].tolist()[:32],
+        "max_relative_shift": float((np.abs(lam - sk) / np.maximum(1, np.abs(sk))).max())}))
+
+
 def repair_reference(args):
     """Artifact-only oracle correction; GPU outputs/lambdas/objectives unchanged."""
     saved = np.load(args.main)
     result = {key: saved[key] for key in saved.files}
     n = result["stress_output"].shape[0]
     for name, method, x in fixtures(n):
-        lam = result[name + "_reference_lambda"]
+        sk = result.get(name + "_reference_sklearn_lambda", result[name + "_reference_lambda"])
+        result[name + "_reference_sklearn_lambda"] = sk
+        lam = centered_mle(x, method, sk)
+        report_reference_lambdas(name, sk, lam)
+        result[name + "_reference_lambda"] = lam
         repaired = stable_reference_transform(x, method, lam)
         result[name + "_legacy_reference_normality"] = result[name + "_reference_normality"]
         result[name + "_legacy_reference_output_std"] = np.std(result[name + "_reference_output"], axis=0)
         result[name + "_reference_output"] = repaired
-        result[name + "_reference_normality"] = stats.skew(repaired, axis=0)**2 + stats.kurtosis(repaired, axis=0)**2
+        result[name + "_reference_objective"], result[name + "_reference_normality"] = measure(x, method, lam, repaired)
         if name == "stress":
             check_decimal_oracle(x, method, lam)
-            check_objective_oracle(x, method, lam, "reference", optimum=True)
+        check_objective_oracle(x, method, lam, "reference-" + name, optimum=True)
     result["reference_version"] = np.array(ORACLE_VERSION)
     np.savez(args.out, **result)
 
@@ -203,13 +276,16 @@ def dump(args):
             legacy = ref.transform(x.astype(np.float64))
             res[name + "_legacy_reference_output_std"] = np.std(legacy, axis=0)
             res[name + "_legacy_reference_normality"] = stats.skew(legacy, axis=0)**2 + stats.kurtosis(legacy, axis=0)**2
-            ry = stable_reference_transform(x, method, ref.lambdas_)
+            res[name + "_reference_sklearn_lambda"] = np.asarray(ref.lambdas_, dtype=np.float64)
+            rlam = centered_mle(x, method, ref.lambdas_)
+            report_reference_lambdas(name, ref.lambdas_, rlam)
+            ry = stable_reference_transform(x, method, rlam)
             if name == "stress":
-                check_decimal_oracle(x, method, ref.lambdas_)
-                check_objective_oracle(x, method, ref.lambdas_, "reference", optimum=True)
+                check_decimal_oracle(x, method, rlam)
+            check_objective_oracle(x, method, rlam, "reference-" + name, optimum=True)
             res["reference_version"] = np.array(ORACLE_VERSION)
-            ro, rn = measure(x, method, ref.lambdas_, ry)
-            for key, val in (("lambda", ref.lambdas_), ("output", ry), ("objective", ro), ("normality", rn)):
+            ro, rn = measure(x, method, rlam, ry)
+            for key, val in (("lambda", rlam), ("output", ry), ("objective", ro), ("normality", rn)):
                 res[name + "_reference_" + key] = val
     np.savez(args.out, **res)
 
