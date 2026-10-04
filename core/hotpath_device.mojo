@@ -1563,8 +1563,8 @@ def device_uniform_init_f32(
 
 
 # ===========================================================================
-# cast_f64_to_f32 (CANDIDATE ARM, default OFF: bindings/hotpath_device.mojo
-# IDN_HPDEV_CAST_F64)
+# cast_f64_to_f32 (the default since lane cpu2-l1-input; it was the candidate
+# arm IDN_HPDEV_CAST_F64: bindings/hotpath_device.mojo)
 # ===========================================================================
 
 
