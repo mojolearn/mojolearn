@@ -1,0 +1,52 @@
+algorithm	dataset	fast_ms	opponent_ms	ratio	owner_or_next_lane	status	quality_flag
+min-cov-det	taxi	79657.0	1413.4	56.3584	mcd	ACTIVE	faster C-step switch reverted: changed the fit (Jaccard .88); correct parallel MCD owed
+elliptic-envelope	taxi	78766.0	1423.3	55.3404	mcd	ACTIVE	faster C-step switch reverted: changed the fit (Jaccard .88); correct parallel MCD owed
+sgd-ocsvm	taxi	42252.0	898.0	47.0512	sgd-quality-hold	HOLD	0.8.34 time was a host-CPU route; parallel GPU algorithm in progress
+sgd-ocsvm	istella	75550.0	5734.0	13.1758	sgd-quality-hold	HOLD	0.8.34 time was a host-CPU route; parallel GPU algorithm in progress
+eigh	synthetic	43722.0	4813.1	9.084	linalg	ACTIVE	FAST quality under review (eigenvalue error 6.1e-05 vs numpy 3.5e-08)
+autoarima	taxi-hourly	24563.0	2844.1	8.6365	autoarima	ACTIVE	
+autoarima	synthetic	14918.0	2880.0	5.1799	autoarima	ACTIVE	
+additive-chi2	istella	12.3	3.8	3.2368	kernel-features-next	QUEUED_FOR_AGENT	
+label-binarizer	taxi	345.0	117.5	2.9362	preprocessing-next	QUEUED_FOR_AGENT	
+cagra	taxi	2900.0	1015.6	2.8555	ann-next	QUEUED_FOR_AGENT	
+skewed-chi2	taxi	1.6	0.6	2.6667	kernel-features-next	QUEUED_FOR_AGENT	
+cholesky	synthetic	271.0	110.3	2.4569	linalg	ACTIVE	
+pca	istella	490.0	205.2	2.3879	linalg	ACTIVE	
+permutation-shap	istella	28236.0	12334.7	2.2892	forest-explainers-next	QUEUED_FOR_AGENT	
+lu-factor	synthetic	977.0	428.0	2.2827	linalg	ACTIVE	
+svgp	istella	661.0	307.3	2.151	gp-next	QUEUED_FOR_AGENT	
+lle	taxi	2570.0	1246.8	2.0613	linalg	ACTIVE	
+kernel-pca	taxi	921.0	460.5	2.0	linalg	ACTIVE	with GEMM_MMA now also default, combined retime pending
+kernel-shap	istella	15325.0	7695.5	1.9914	forest-explainers-next	QUEUED_FOR_AGENT	
+skewed-chi2	istella	7.3	3.7	1.973	kernel-features-next	QUEUED_FOR_AGENT	
+rbf-sampler	istella	93.6	47.6	1.9664	kernel-features-next	QUEUED_FOR_AGENT	
+var	synthetic	5.0	2.6	1.9231	autoarima	ACTIVE	
+lu-solve	synthetic	971.0	505.5	1.9209	linalg	ACTIVE	
+sparse-rp	taxi	3.4	1.8	1.8889	kernel-features-next	QUEUED_FOR_AGENT	
+target-encoder	taxi	272.0	147.3	1.8466	preprocessing-next	QUEUED_FOR_AGENT	
+var	taxi-hourly	5.1	2.8	1.8214	autoarima	ACTIVE	
+svgp	taxi	437.0	247.8	1.7635	gp-next	QUEUED_FOR_AGENT	A/B time with SYMTILE also on; combined main retime pending
+additive-chi2	taxi	0.7	0.4	1.75	kernel-features-next	QUEUED_FOR_AGENT	
+kernel-pca	istella	979.0	559.7	1.7492	linalg	ACTIVE	with GEMM_MMA now also default, combined retime pending
+knn-imputer	taxi	2.7	1.7	1.5882	preprocessing-next	QUEUED_FOR_AGENT	
+multilabel-binarizer	taxi	192.0	129.4	1.4838	preprocessing-next	QUEUED_FOR_AGENT	
+randomized-svd	istella	533.0	368.9	1.4448	linalg	ACTIVE	
+label-binarizer	istella	43.2	31.7	1.3628	preprocessing-next	QUEUED_FOR_AGENT	
+gaussian-rp	taxi	2.1	1.6	1.3125	kernel-features-next	QUEUED_FOR_AGENT	
+randomized-svd	taxi	199.0	162.8	1.2224	linalg	ACTIVE	
+resample	taxi	62.8	51.9	1.21	cluster-resample-next	QUEUED_FOR_AGENT	
+minibatch-kmeans	istella	148.0	123.5	1.1984	cluster-resample-next	QUEUED_FOR_AGENT	
+target-encoder	istella	267.0	228.8	1.167	preprocessing-next	QUEUED_FOR_AGENT	
+resample	istella	389.0	335.8	1.1584	cluster-resample-next	QUEUED_FOR_AGENT	
+multilabel-binarizer	istella	163.0	143.5	1.1359	preprocessing-next	QUEUED_FOR_AGENT	
+maxabs-scaler	istella	104.0	99.7	1.0431	preprocessing-next	QUEUED_FOR_AGENT	
+gbdt-depthwise	taxi	10812.0	10435.4	1.0361	forest-explainers-next	QUEUED_FOR_AGENT	
+sparse-rp	istella	15.2	25.3	0.6008	kernel-features-next	QUEUED_FOR_AGENT	FAST quality under review (mean_abs_distortion 1.88 vs sklearn 0.47)
+factor-analysis	istella	10351.0	35135.4	0.2946	quality-followup	QUEUED_FOR_AGENT	quality fixed in 0150b04c1: mean log-likelihood 99.49 (sklearn 98.12)
+ard	istella	863.0	10421.2	0.0828	quality-followup	QUEUED_FOR_AGENT	FAST r2 -0.14 vs sklearn 0.33: quality below opponent
+bayesian-ridge	istella	494.0	6831.2	0.0723	quality-followup	QUEUED_FOR_AGENT	FAST quality fixed in 9525ed958: r2 0.328 (sklearn float64 0.329; sklearn-cpu float32 cell -890)
+tweedie	istella	1547.0	108689.52	0.0142	quality-followup	QUEUED_FOR_AGENT	FAST quality under review (r2 -24.4 vs sklearn -21.9; same in IDENTICAL; exp-link on unscaled features)
+linearsvr	istella	217.0	704105.16	0.0003	quality-followup	QUEUED_FOR_AGENT	FAST quality under review (r2 -0.107 vs sklearn -0.026)
+elliptic-envelope	istella		43758.6		mcd	UNMEASURED	sklearn-cpu · FAST too slow to time (killed >20 min, wide-data MCD gap)
+gmm	taxi				missing-result-followup	UNMEASURED	opponent refused (sklearn: ill-defined covariance) · FAST run returned no time; investigating
+min-cov-det	istella		43631.7		mcd	UNMEASURED	sklearn-cpu · FAST too slow to time (killed >20 min, wide-data MCD gap)
