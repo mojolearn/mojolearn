@@ -1,0 +1,426 @@
+{
+  "schema": 1,
+  "kind": "opt-in candidate targeted identity",
+  "source_sha": "a4d01a130c8d05ff0208a39989d36b86b69aa0ed",
+  "gate": "tools/identical_candidate_gate.py @ 2d95ffe87 (sha256 3b2b71e5...)",
+  "baseline": "v2 ON tree /root/lq/medium-wave-a4d-qualified-v2/on/source (master ON, no candidate define)",
+  "boxes": {
+    "nvidia": "Blackwell sm_120 /root/lq/cand-a4d-identity",
+    "amd": "MI325X gfx942 /root/lq/cand-a4d-identity"
+  },
+  "candidates": {
+    "gmm-estep-stack": {
+      "lane": "gmm",
+      "define": "MOJOLEARN_IDN_GMM_ESTEP_STACK=1",
+      "builds": {
+        "nv": {
+          "status": "PASS",
+          "explicit_defines": [
+            "MOJOLEARN_IDN_GMM_ESTEP_STACK=1"
+          ],
+          "define_source_locations": {
+            "MOJOLEARN_IDN_GMM_ESTEP_STACK": [
+              {
+                "path": "mixture/checks/estep.mojo",
+                "line": 1013
+              }
+            ]
+          },
+          "arch": "sm_120",
+          "arm": "on",
+          "modules": {
+            "base": {
+              "status": "PASS",
+              "sha256": "e46e1bfd080f9d30f910785b55684b1a5fb54298ee332ff2fbd6156498d8307d"
+            },
+            "base_host": {
+              "status": "PASS",
+              "sha256": "dbf1c094674bf8c1a278ff3e317868c4aac4bfc7f08b746df0942c89770b3d43"
+            },
+            "mixture": {
+              "status": "PASS",
+              "sha256": "bf33458c1d84d6db1a5ed579c66c21216b470a8a113436cba97165663f7119d4"
+            },
+            "mixture_host": {
+              "status": "PASS",
+              "sha256": "224d67d9b7b0fa0616bfb14e22122298551bf780238bdceacad901a7a42727c2"
+            }
+          }
+        },
+        "amd": {
+          "status": "PASS",
+          "explicit_defines": [
+            "MOJOLEARN_IDN_GMM_ESTEP_STACK=1"
+          ],
+          "define_source_locations": {
+            "MOJOLEARN_IDN_GMM_ESTEP_STACK": [
+              {
+                "path": "mixture/checks/estep.mojo",
+                "line": 1013
+              }
+            ]
+          },
+          "arch": "gfx942",
+          "arm": "on",
+          "modules": {
+            "base": {
+              "status": "PASS",
+              "sha256": "c06ac7aa608df4a1b36b6e87b108f58c1cd28b03afe2c7f70a90eeda5cdf8425"
+            },
+            "base_host": {
+              "status": "PASS",
+              "sha256": "5497bd6160a4de2ca07e8fb30aa071a543c2db528ff02cdebdc487581bf51af3"
+            },
+            "mixture": {
+              "status": "PASS",
+              "sha256": "ac3203e9cf3cc05c67eb32f2332255812c22697fe9ca8dcd5b36232c003da4ef"
+            },
+            "mixture_host": {
+              "status": "PASS",
+              "sha256": "edd6d1e0a2b577f60c2ac2811c77794329edc9ae8e774d86b9d95a1738eca0dd"
+            }
+          }
+        }
+      },
+      "cells": {
+        "nv/base/cuda": {
+          "digest": "a8a88675e82e65f262f0b6a76e502b20b534dc2941093976f9a752cfe705d661",
+          "n_iter": 20,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": null
+        },
+        "nv/base/cpu": {
+          "digest": "a8a88675e82e65f262f0b6a76e502b20b534dc2941093976f9a752cfe705d661",
+          "n_iter": 20,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": null
+        },
+        "nv/cand/cuda": {
+          "digest": "a8a88675e82e65f262f0b6a76e502b20b534dc2941093976f9a752cfe705d661",
+          "n_iter": 20,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": [
+            "/root/lq/cand-a4d-gmm-estep-stack/source/python/mojolearn/identical/_mojolearn.so",
+            "/root/lq/cand-a4d-gmm-estep-stack/source/python/mojolearn/identical/_mojolearn_mixture.so"
+          ]
+        },
+        "nv/cand/cpu": {
+          "digest": "a8a88675e82e65f262f0b6a76e502b20b534dc2941093976f9a752cfe705d661",
+          "n_iter": 20,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": [
+            "/root/lq/cand-a4d-gmm-estep-stack/source/python/mojolearn/host/_mojolearn_mixture_host.so"
+          ]
+        },
+        "amd/base/hip": {
+          "digest": "a8a88675e82e65f262f0b6a76e502b20b534dc2941093976f9a752cfe705d661",
+          "n_iter": 20,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": null
+        },
+        "amd/base/cpu": {
+          "digest": "a8a88675e82e65f262f0b6a76e502b20b534dc2941093976f9a752cfe705d661",
+          "n_iter": 20,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": null
+        },
+        "amd/cand/hip": {
+          "digest": "a8a88675e82e65f262f0b6a76e502b20b534dc2941093976f9a752cfe705d661",
+          "n_iter": 20,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": [
+            "/root/lq/cand-a4d-gmm-estep-stack/source/python/mojolearn/identical/_mojolearn.so",
+            "/root/lq/cand-a4d-gmm-estep-stack/source/python/mojolearn/identical/_mojolearn_mixture.so"
+          ]
+        },
+        "amd/cand/cpu": {
+          "digest": "a8a88675e82e65f262f0b6a76e502b20b534dc2941093976f9a752cfe705d661",
+          "n_iter": 20,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": [
+            "/root/lq/cand-a4d-gmm-estep-stack/source/python/mojolearn/host/_mojolearn_mixture_host.so"
+          ]
+        }
+      },
+      "identity": "PROVEN",
+      "candidate_equals_baseline_bits": true,
+      "route_evidence": "compile receipt (explicit define + compiled source location) and candidate-tree binaries mapped at run; no compiled route getter exists at a4d"
+    },
+    "kmeans-acc256": {
+      "lane": "kmeans",
+      "define": "MOJOLEARN_IDN_KMEANS_ACC_ROWS_256=1",
+      "builds": {
+        "nv": {
+          "status": "PASS",
+          "explicit_defines": [
+            "MOJOLEARN_IDN_KMEANS_ACC_ROWS_256=1"
+          ],
+          "define_source_locations": {
+            "MOJOLEARN_IDN_KMEANS_ACC_ROWS_256": [
+              {
+                "path": "cluster/checks/reduce_by_key.mojo",
+                "line": 769
+              }
+            ]
+          },
+          "arch": "sm_120",
+          "arm": "on",
+          "modules": {
+            "base": {
+              "status": "PASS",
+              "sha256": "1e0e66651c9290a5007a2c295dbdaff0fb20d56a826e2980e03382b781238add"
+            },
+            "base_host": {
+              "status": "PASS",
+              "sha256": "5daf4217e429c573d61218ff1a762c4cb2ecf47e7e7c143dd1aec8d053759b6b"
+            },
+            "estimators": {
+              "status": "PASS",
+              "sha256": "d2078cdf9712be2ea0f5ba064a656014592502868bd9ddb2185771447c0ab12c"
+            },
+            "estimators_host": {
+              "status": "PASS",
+              "sha256": "e74f2526f98d3018f3ef2f5197b99c34cb985e8ee73922a324b6c246753369c5"
+            }
+          }
+        },
+        "amd": {
+          "status": "PASS",
+          "explicit_defines": [
+            "MOJOLEARN_IDN_KMEANS_ACC_ROWS_256=1"
+          ],
+          "define_source_locations": {
+            "MOJOLEARN_IDN_KMEANS_ACC_ROWS_256": [
+              {
+                "path": "cluster/checks/reduce_by_key.mojo",
+                "line": 769
+              }
+            ]
+          },
+          "arch": "gfx942",
+          "arm": "on",
+          "modules": {
+            "base": {
+              "status": "PASS",
+              "sha256": "c1a68763bae915c37897cea18b5b1582067dff3fbe12803326b8ddb52d3cc5ef"
+            },
+            "base_host": {
+              "status": "PASS",
+              "sha256": "81919c67af516884345531ad459acdbf6e5da350f92dd5059e19111cb46b5ff7"
+            },
+            "estimators": {
+              "status": "PASS",
+              "sha256": "e2a32bb9c87bd397b7d7d406582983d718871baf3166d57e347ca42a27df4a64"
+            },
+            "estimators_host": {
+              "status": "PASS",
+              "sha256": "ca91c79db7306485f4f314eac4e0d2e3dec717417d680fe83f8ecc172e6561e2"
+            }
+          }
+        }
+      },
+      "cells": {
+        "nv/base/cuda": {
+          "digest": "0454b9f3c5fb73dfc33fea1cc48ea40c690278f391fdf7e97c4a0f9dece3c290",
+          "n_iter": 38,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": null
+        },
+        "nv/base/cpu": {
+          "digest": "0454b9f3c5fb73dfc33fea1cc48ea40c690278f391fdf7e97c4a0f9dece3c290",
+          "n_iter": 38,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": null
+        },
+        "nv/cand/cuda": {
+          "digest": "0454b9f3c5fb73dfc33fea1cc48ea40c690278f391fdf7e97c4a0f9dece3c290",
+          "n_iter": 38,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": [
+            "/root/lq/cand-a4d-kmeans-acc256/source/python/mojolearn/identical/_mojolearn.so",
+            "/root/lq/cand-a4d-kmeans-acc256/source/python/mojolearn/identical/_mojolearn_estimators.so"
+          ]
+        },
+        "nv/cand/cpu": {
+          "digest": "0454b9f3c5fb73dfc33fea1cc48ea40c690278f391fdf7e97c4a0f9dece3c290",
+          "n_iter": 38,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": [
+            "/root/lq/cand-a4d-kmeans-acc256/source/python/mojolearn/host/_mojolearn_core_host.so"
+          ]
+        },
+        "amd/base/hip": {
+          "digest": "0454b9f3c5fb73dfc33fea1cc48ea40c690278f391fdf7e97c4a0f9dece3c290",
+          "n_iter": 38,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": null
+        },
+        "amd/base/cpu": {
+          "digest": "0454b9f3c5fb73dfc33fea1cc48ea40c690278f391fdf7e97c4a0f9dece3c290",
+          "n_iter": 38,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": null
+        },
+        "amd/cand/hip": {
+          "digest": "0454b9f3c5fb73dfc33fea1cc48ea40c690278f391fdf7e97c4a0f9dece3c290",
+          "n_iter": 38,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": [
+            "/root/lq/cand-a4d-kmeans-acc256/source/python/mojolearn/identical/_mojolearn.so",
+            "/root/lq/cand-a4d-kmeans-acc256/source/python/mojolearn/identical/_mojolearn_estimators.so"
+          ]
+        },
+        "amd/cand/cpu": {
+          "digest": "0454b9f3c5fb73dfc33fea1cc48ea40c690278f391fdf7e97c4a0f9dece3c290",
+          "n_iter": 38,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": [
+            "/root/lq/cand-a4d-kmeans-acc256/source/python/mojolearn/host/_mojolearn_core_host.so"
+          ]
+        }
+      },
+      "identity": "PROVEN",
+      "candidate_equals_baseline_bits": true,
+      "route_evidence": "compile receipt (explicit define + compiled source location) and candidate-tree binaries mapped at run; no compiled route getter exists at a4d"
+    },
+    "ocsvm-chunk256": {
+      "lane": "ocsvm",
+      "define": "MOJOLEARN_IDN_OCSVM_CHUNK256=1",
+      "builds": {
+        "nv": {
+          "status": "PASS",
+          "explicit_defines": [
+            "MOJOLEARN_IDN_OCSVM_CHUNK256=1"
+          ],
+          "define_source_locations": {
+            "MOJOLEARN_IDN_OCSVM_CHUNK256": [
+              {
+                "path": "x_neighbors/ocsvm_dev.mojo",
+                "line": 100
+              }
+            ]
+          },
+          "arch": "sm_120",
+          "arm": "on",
+          "modules": {
+            "base": {
+              "status": "PASS",
+              "sha256": "1443e1597f5ff68b3398e29f7ef431dbe0a34ae388b7c5b8a153748e3b66e904"
+            },
+            "base_host": {
+              "status": "PASS",
+              "sha256": "52b45bdd63dc77960aeef5bdc0f8355dc2c18985ff52eecddb64778f95d1e4fa"
+            },
+            "x_neighbors": {
+              "status": "PASS",
+              "sha256": "d95b32038c65fc8ee6cb6e3309613a3f00f706d5068906e24d573fd61b0a71e9"
+            },
+            "x_neighbors_host": {
+              "status": "PASS",
+              "sha256": "5da26f57f19046cb9fe051e8311283b6beec844ec841b0318690f66c9a4dc1e1"
+            }
+          }
+        },
+        "amd": {
+          "status": "PASS",
+          "explicit_defines": [
+            "MOJOLEARN_IDN_OCSVM_CHUNK256=1"
+          ],
+          "define_source_locations": {
+            "MOJOLEARN_IDN_OCSVM_CHUNK256": [
+              {
+                "path": "x_neighbors/ocsvm_dev.mojo",
+                "line": 100
+              }
+            ]
+          },
+          "arch": "gfx942",
+          "arm": "on",
+          "modules": {
+            "base": {
+              "status": "PASS",
+              "sha256": "008373499d0319491e730132f1342c49ad702acfcedd7d5809cab3ffc53b0f63"
+            },
+            "base_host": {
+              "status": "PASS",
+              "sha256": "e6696ff538761dc9a52a80b46c0216d08a413de6809d75d2be4f9938df7256bc"
+            },
+            "x_neighbors": {
+              "status": "PASS",
+              "sha256": "8998d76747a6bb821cca3e911d04a3c8f43eb101660c433f2123d52120b9e23c"
+            },
+            "x_neighbors_host": {
+              "status": "PASS",
+              "sha256": "e63b84bf91a1fb5559db4c5b5927ac91bca8b78f24f354b1f308f86e4ba709a1"
+            }
+          }
+        }
+      },
+      "cells": {
+        "nv/base/cuda": {
+          "digest": "835f77cb2cadc98ec45c2a7c6c78a5828fe50571f0b736718c4af33406e8ac3b",
+          "n_iter": 973,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": null
+        },
+        "nv/base/cpu": {
+          "digest": "835f77cb2cadc98ec45c2a7c6c78a5828fe50571f0b736718c4af33406e8ac3b",
+          "n_iter": 973,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": null
+        },
+        "nv/cand/cuda": {
+          "digest": "835f77cb2cadc98ec45c2a7c6c78a5828fe50571f0b736718c4af33406e8ac3b",
+          "n_iter": 973,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": [
+            "/root/lq/cand-a4d-ocsvm-chunk256/source/python/mojolearn/identical/_mojolearn.so",
+            "/root/lq/cand-a4d-ocsvm-chunk256/source/python/mojolearn/identical/_mojolearn_x_neighbors.so"
+          ]
+        },
+        "nv/cand/cpu": {
+          "digest": "835f77cb2cadc98ec45c2a7c6c78a5828fe50571f0b736718c4af33406e8ac3b",
+          "n_iter": 973,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": [
+            "/root/lq/cand-a4d-ocsvm-chunk256/source/python/mojolearn/host/_mojolearn_core_host.so",
+            "/root/lq/cand-a4d-ocsvm-chunk256/source/python/mojolearn/host/_mojolearn_x_neighbors_host.so"
+          ]
+        },
+        "amd/base/hip": {
+          "digest": "835f77cb2cadc98ec45c2a7c6c78a5828fe50571f0b736718c4af33406e8ac3b",
+          "n_iter": 973,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": null
+        },
+        "amd/base/cpu": {
+          "digest": "835f77cb2cadc98ec45c2a7c6c78a5828fe50571f0b736718c4af33406e8ac3b",
+          "n_iter": 973,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": null
+        },
+        "amd/cand/hip": {
+          "digest": "835f77cb2cadc98ec45c2a7c6c78a5828fe50571f0b736718c4af33406e8ac3b",
+          "n_iter": 973,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": [
+            "/root/lq/cand-a4d-ocsvm-chunk256/source/python/mojolearn/identical/_mojolearn.so",
+            "/root/lq/cand-a4d-ocsvm-chunk256/source/python/mojolearn/identical/_mojolearn_x_neighbors.so"
+          ]
+        },
+        "amd/cand/cpu": {
+          "digest": "835f77cb2cadc98ec45c2a7c6c78a5828fe50571f0b736718c4af33406e8ac3b",
+          "n_iter": 973,
+          "numeric_mode_used": "identical",
+          "candidate_binaries_loaded": [
+            "/root/lq/cand-a4d-ocsvm-chunk256/source/python/mojolearn/host/_mojolearn_core_host.so",
+            "/root/lq/cand-a4d-ocsvm-chunk256/source/python/mojolearn/host/_mojolearn_x_neighbors_host.so"
+          ]
+        }
+      },
+      "identity": "PROVEN",
+      "candidate_equals_baseline_bits": true,
+      "route_evidence": "compile receipt (explicit define + compiled source location) and candidate-tree binaries mapped at run; no compiled route getter exists at a4d"
+    }
+  }
+}
