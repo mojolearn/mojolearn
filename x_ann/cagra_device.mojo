@@ -16,7 +16,7 @@ from max.gpu.host import DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
 from x_ann.knn_device import knn_enqueue
-from x_ann.fast_env import CAGRA_FAST_IVFG, CAGRA_FAST_IVFG_PROBES, CAGRA_FAST_IVFG_EXACTD
+from x_ann.fast_env import CAGRA_FAST_IVFG, CAGRA_FAST_IVFG_PROBES, CAGRA_FAST_IVFG_EXACTD, CAGRA_FAST_IVFG_LOWD
 from x_ann.fast_env import CAGRA_FAST_SEEDS, CAGRA_FAST_SEED_WORK, CAGRA_FAST_ITERS
 from x_ann.cagra_fast_knn import cg_ivfg_enqueue
 from max.gpu.host import DeviceBuffer
@@ -513,9 +513,10 @@ def cagra_knn_enqueue(
     (x_ann/fast_env.mojo, x_ann/cagra_fast_knn.mojo): IVFG, the
     approximate graph, which refuses (returns False) back to the exact
     graph when n is small or a probe pool is too small; otherwise
-    `knn_enqueue`."""
+    `knn_enqueue`. lane/apple-fast-w2-cagra (opt-in CAGRA_FAST_IVFG_LOWD):
+    IVFG for rows of 64 features or fewer as well (CAGRA taxi, d = 11)."""
     comptime if CAGRA_FAST_IVFG:
-        if d > 64:
+        if d > 64 or CAGRA_FAST_IVFG_LOWD:
             if cg_ivfg_enqueue[CAGRA_FAST_IVFG_PROBES, CAGRA_FAST_IVFG_EXACTD](ctx, dx, n, d, kdeg, dnd, dni):
                 return
     knn_enqueue(ctx, dx, n, d, kdeg, dnd, dni)

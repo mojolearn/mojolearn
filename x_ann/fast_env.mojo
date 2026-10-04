@@ -55,6 +55,19 @@ comptime CAGRA_FAST_IVFG = ANN_FAST_APPLE and not is_defined["MOJOLEARN_CAGRA_FA
 comptime CAGRA_FAST_IVFG_PROBES = 16
 comptime CAGRA_FAST_IVFG_EXACTD = CAGRA_FAST_IVFG and not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF"]()
 
+#: lane/apple-fast-w2-cagra (2026-10-04), OPT-IN (`-D MOJOLEARN_CAGRA_FAST_IVFG_LOWD`):
+#: IVFG (with EXACTD) for rows of 64 features or fewer too. Cause: CAGRA
+#: taxi (400,000 x 11) still builds the exact graph (`knn_tiled_kernel[12]`,
+#: one thread per row against all 400,000 rows: 1.6e11 pairs, each 12
+#: subtract + ftz + fma steps and a `ts_knn_beats` test), 2,900 ms vs
+#: faiss-cpu HNSW 1,016 ms. IVFG offers each row ~6,000 candidates (16
+#: probe lists of ~384 rows), ~65x fewer pairs. Taxi's features are
+#: integer codes, so EXACTD's difference-form sums are exact integers: the
+#: graph is the exact graph restricted to the probe pool. Same refusals
+#: (n < 65,536 or a short probe pool -> exact graph). Rows wider than 64
+#: features are unchanged (IVFG there already).
+comptime CAGRA_FAST_IVFG_LOWD = CAGRA_FAST_IVFG and is_defined["MOJOLEARN_CAGRA_FAST_IVFG_LOWD"]()
+
 #: lane/apple-fast-gap-cagra (2026-10-03), the CAGRA SEARCH (taxi recall .48
 #: vs faiss .93): taxi's 11 features are integer codes (zone ids 1..265,
 #: hour, day), so each row's 64 nearest rows sit in its own (pickup,
