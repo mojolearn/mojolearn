@@ -43,6 +43,8 @@ def validate(args):
     assert re.fullmatch('[A-Za-z0-9_.-]+', args.tag)
     assert args.report_sha256 == REPORT_SHA256, 'not the reviewed matrix-only quality report'
     os.chdir(ROOT)
+    brand = subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True).strip()
+    assert brand == 'Apple M3 Ultra', 'timing requires Apple M3 Ultra, found: ' + brand
     subprocess.run(['git', 'merge-base', '--is-ancestor', SOURCE, 'HEAD'], check=True)
     paths = ['*.mojo', 'bindings/', 'python/', 'pixi.toml', 'pixi.lock',
              'tools/catalog_gemm_quality.py']
@@ -166,16 +168,21 @@ def main():
             assert len(lines) == 1
             row = json.loads(lines[0].split(' ', 1)[1])
             assert row['variant'] == arm and row['shape'] == shape[0]
-            if arm:
-                assert row['input_sha256'] == records[-arm]['input_sha256']
+            incumbent = records[-arm] if arm else row
+            assert row['input_sha256'] == incumbent['input_sha256']
+            row['output_equal_incumbent'] = row['output_sha256'] == incumbent['output_sha256']
+            row['quality_needs_review'] = not row['output_equal_incumbent']
+            # Preserve the sole scored result even if words differ; no retries.
             records.append(row)
-            print(lines[0], flush=True)
+            print('CATALOG-MATRIX-TIME ' + json.dumps(row, sort_keys=True), flush=True)
     report = dict(source_sha=SOURCE, harness_sha=subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
                   binding_hashes=manifest['hashes'], quality_report_sha256=args.report_sha256,
                   eligibility='matrix n>=2 only; vector quality FAIL excluded by predeclared contract',
                   quality_status='MATRIX_ONLY: 11 fixtures PASS; unrestricted FAIL nt-vector',
                   scored_calls_per_shape_arm=1, fresh_process_per_call=True,
                   warmups=0, opponents=0, production_admission=False,
+                  quality_needs_review=any(r['quality_needs_review'] for r in records),
+                  machine='Apple M3 Ultra',
                   required_next='actual estimator quality before any production integration', records=records)
     (out / 'report.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
 

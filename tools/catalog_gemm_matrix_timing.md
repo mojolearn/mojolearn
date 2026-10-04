@@ -48,10 +48,17 @@ After manager review, use the M3 serial queue with REPORT_PATH pointing to
 the original report (not a modified report):
 
 ```
-CMD lane/apple-fast-catalog-matrix-timing catalog-matrix-t-v1 MOJOLEARN_NUMERIC_MODE=fast ~/board-0834/cache/venv/bin/python tools/catalog_gemm_matrix_timing.py 9f1a1657c6e054573a495425e223fd73e0c174db catalog-matrix-t-v1 REPORT_PATH f2bcde131ffea5ff54cea85920c3a49ec7888b5d4b2824e2077189b50aa973a0
+CMD lane/apple-fast-catalog-matrix-timing-r1 catalog-matrix-t-v1 MOJOLEARN_NUMERIC_MODE=fast ~/board-0834/cache/venv/bin/python tools/catalog_gemm_matrix_timing.py 9f1a1657c6e054573a495425e223fd73e0c174db catalog-matrix-t-v1 REPORT_PATH f2bcde131ffea5ff54cea85920c3a49ec7888b5d4b2824e2077189b50aa973a0
 ```
 
 Result: `~/mq/out/catalog-matrix-t-v1-timing/report.json`. Geometry selection
 only; any production candidate still needs actual estimator quality and
 call-plus-first-read timing. Shape-scale accuracy is not established by the
 small standalone quality fixtures alone. No result clears opponent quality.
+
+The helper asserts `sysctl -n machdep.cpu.brand_string` is exactly
+`Apple M3 Ultra` in parent and children. Each scored record reports
+`output_equal_incumbent` from saved output hashes and `quality_needs_review`
+for a mismatch. A mismatch preserves the result and continues the fixed
+schedule without stopping, repeating or rescoring; production admission
+remains false even when all words agree.
