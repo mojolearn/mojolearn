@@ -1566,7 +1566,11 @@ class KNNImputer(_XNeighbors):
         colmiss_only=1 (fit): a build with MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY
         may skip the cell list; the counts are the same integers."""
         n, d = X.shape
-        cells = empty((max(n * d, 1),), "<i4")
+        # FAST Apple default MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU (_OFF rollback): a binary
+        # whose fit-time op ignores the cell list gets a one-slot one (no
+        # n * d allocation)
+        lean = colmiss_only and int(getattr(self._bind(), "x_neighbors_nc_fit_lean", lambda: 0)())
+        cells = empty((1 if lean else max(n * d, 1),), "<i4")
         colmiss = empty((max(d, 1),), "<i4")
         info = empty((1,), "<i4")
         self._op("nan_cells", [(X, 0), (cells, 1), (colmiss, 1), (info, 1)], (n, d, colmiss_only))
