@@ -4265,7 +4265,8 @@ comptime TILED_TT = 16
 #: device for every other shape. Which thread or block holds a cell's chain
 #: is an execution-plan choice the contract does not read: same bits at
 #: every tile, on every vendor (no host-column change).
-comptime ATTN_TILE_RULE_OFF = is_defined["MOJOLEARN_ATTN_TILE_RULE_OFF"]()
+#: lane/review-fixes: off under MOJOLEARN_IDN_ALL_OFF too (the wave's OFF arm).
+comptime ATTN_TILE_RULE_OFF = is_defined["MOJOLEARN_ATTN_TILE_RULE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime ATTN_DQ_TQ_PINNED = (
     ATTN_TILE_RULE_OFF
     or is_defined["MOJOLEARN_ATTN_DQ_TQ16"]()

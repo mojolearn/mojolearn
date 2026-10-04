@@ -105,7 +105,7 @@ sentence true.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.memory import stack_allocation
+from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
@@ -1033,7 +1033,7 @@ def cd_idn_gram_sweep_kernel(
 ):
     """Up to `epochs_in` Gram sweeps in one block of CD_IDN_GRAM_TPB threads
     (n_cols <= CD_IDN_GRAM_TPB). `state`: [0] 1 once converged, [1] the
-    epochs run so far, [2] coef_max and [3] diff_max of the last epoch run.
+    epochs run so far (UInt32 bits), [2] coef_max and [3] diff_max of the last epoch run.
     After convergence the remaining epochs do no work (the barriers stay
     unconditional so every thread takes the same path)."""
     var tid = Int(thread_idx.x)
@@ -1094,7 +1094,11 @@ def cd_idn_gram_sweep_kernel(
         if live and tid == 0:
             var cmax = sh[unsafe_offset = 1]
             var dmax = sh[unsafe_offset = 2]
-            state.unsafe_store(1, state.unsafe_load(1) + Float32(1.0))
+            # lane/review-fixes: the epoch count is an integer (UInt32 bits
+            # in the float32 slot); a Float32 counter stops at 2^24.
+            state.unsafe_store(
+                1, bitcast[DType.float32](bitcast[DType.uint32](state.unsafe_load(1)) + UInt32(1))
+            )
             state.unsafe_store(2, cmax)
             state.unsafe_store(3, dmax)
             if cmax < tol or (dmax / cmax) < tol:
@@ -1674,7 +1678,7 @@ def cd_fit_traced(
                 )
                 ctx.enqueue_copy(dst_ptr=h_gst.unsafe_ptr(), src_buf=gst)
                 ctx.synchronize()
-                n_iter = Int(h_gst.unsafe_ptr().unsafe_load(1))
+                n_iter = Int(bitcast[DType.uint32](h_gst.unsafe_ptr().unsafe_load(1)))
                 if h_gst.unsafe_ptr().unsafe_load(0) != Float32(0.0):
                     break
             _ = x_b^

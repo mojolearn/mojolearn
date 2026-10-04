@@ -34,7 +34,7 @@ THE SHAPES ARE THE HAZARDS, not round numbers:
 
 THE CENTERED-FUSED ARM IS HELD TO `!=`, NOT TO A TOLERANCE.
 `check_gram_centered_fused` runs the exact shipped center pipeline
-(`column_mean_kernel` then `shift_columns_kernel(-1)` then
+(`column_mean_launch` then `shift_columns_kernel(-1)` then
 `gemm_tn_splitk`) against `gram_centered_splitk` on the SAME device mu and
 the same hashed X with a deliberately nonzero column mean, and compares
 every cell BITWISE -- the fused tile load performs the identical fp32
@@ -97,11 +97,8 @@ from std.memory import bitcast
 from std.math import sqrt
 
 from core.gemm import gemm_tn, gemm_tn_via_transpose
-from core.column_stats import (
-    STATS_TPB,
-    column_mean_kernel,
-    shift_columns_kernel,
-)
+from core.column_stats import shift_columns_kernel
+from core.xtdz_coalesced import column_mean_launch
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.kernel_matrix import (
     TARGET_COLUMN,
@@ -416,14 +413,9 @@ def _centered_one(
 
     # mu from the REAL producer, on the UNCENTERED data -- exactly what
     # compute_covariance feeds the fused arm.
-    ctx.enqueue_function[column_mean_kernel](
-        mu.unsafe_ptr(),
-        x.unsafe_ptr(),
-        Int32(k),
-        Int32(m),
-        grid_dim=(m, 1, 1),
-        block_dim=(STATS_TPB, 1, 1),
-    )
+    # lane/review-fixes: through `column_mean_launch`, the producer the
+    # shipped route calls (the tiled order under IDN_XTY_TILED).
+    column_mean_launch(ctx, mu, x, k, m)
     # Arm 1: the shipped center pass, then the plain split-K Gram.
     ctx.enqueue_function[shift_columns_kernel](
         xc.unsafe_ptr(),
