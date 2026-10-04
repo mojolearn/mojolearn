@@ -754,14 +754,30 @@ def _assign_to_candidates(
 #: the launch), and the fold's strict `<` returns the full argmin's
 #: (value, lowest index). `-D MOJOLEARN_KMEANS_ID_INCR_INIT_OFF` reassigns in
 #: full there.
-comptime KMEANS_FAST_INCR_INIT = has_apple_gpu_accelerator() and (
-    (
-        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        and not is_defined["MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF"]()
+#: fam-cluster (2026-10-04): IDENTICAL on the NVIDIA and AMD columns takes
+#: it too. Same argument as Apple IDENTICAL above (per-pair distance bits do
+#: not depend on the launch's candidate set; strict `<` keeps the lowest
+#: index), so no bit moves; the eight rounds plus step 7 stop paying
+#: `n * |C so far| * d` each. `-D MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF=1`
+#: reassigns in full there.
+comptime IDN_KMEANS_INCR_INIT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+    and not (
+        is_defined["MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
-    or (
-        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        and not is_defined["MOJOLEARN_KMEANS_ID_INCR_INIT_OFF"]()
+)
+comptime KMEANS_FAST_INCR_INIT = IDN_KMEANS_INCR_INIT or (
+    has_apple_gpu_accelerator() and (
+        (
+            GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+            and not is_defined["MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF"]()
+        )
+        or (
+            GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+            and not is_defined["MOJOLEARN_KMEANS_ID_INCR_INIT_OFF"]()
+        )
     )
 )
 
