@@ -65,18 +65,18 @@ def validate_manifest(doc, actual):
     if not isinstance(files, dict) or not files:
         raise AmdPortableError("manifest lists no files")
     if files != actual:
-        missing = sorted(set(files) - set(actual))
-        extra = sorted(set(actual) - set(files))
-        changed = sorted(k for k in set(files) & set(actual) if files[k] != actual[k])
+        missing = sorted(set(files) - set(actual))  # glue: manifest file-table comparison
+        extra = sorted(set(actual) - set(files))  # glue: manifest file-table comparison
+        changed = sorted(k for k in set(files) & set(actual) if files[k] != actual[k])  # glue: manifest file-table comparison
         raise AmdPortableError(f"payload differs from manifest (missing {missing[:3]}, "
                                f"extra {extra[:3]}, changed {changed[:3]})")
     bindings = doc.get("bindings")
     if not isinstance(bindings, dict) or not bindings:
         raise AmdPortableError("manifest lists no bindings")
-    for so, row in bindings.items():
+    for so, row in bindings.items():  # glue: manifest binding table
         if so not in files:
             raise AmdPortableError(f"binding {so} is not in the file table")
-        for kernel, bc in row.get("kernels", {}).items():
+        for kernel, bc in row.get("kernels", {}).items():  # glue: manifest kernel table
             if bc not in files:
                 raise AmdPortableError(f"kernel {kernel} of {so} has no bitcode file")
     return doc
@@ -106,7 +106,7 @@ def embedded_objects(data):
                 size = shoff + shentsize * shnum
                 if 0 < size <= len(data) - i:
                     blob = data[i:i + size]
-                    names = sorted({m.decode() for m in
+                    names = sorted({m.decode() for m in  # glue: byte scan for embedded ELF headers
                                     re.findall(rb"([A-Za-z0-9_$.]{6,})\.kd\x00", blob)})
                     out.append((i, size, names))
                     i += size
@@ -121,14 +121,14 @@ def _sections(elf):
     shoff = struct.unpack_from("<Q", elf, 0x28)[0]
     shentsize, shnum, shstrndx = struct.unpack_from("<HHH", elf, 0x3A)
     rows = []
-    for k in range(shnum):
+    for k in range(shnum):  # glue: ELF section header table
         b = shoff + k * shentsize
         name, typ, flags, addr, off, size, link, info, align, ent = struct.unpack_from(
             "<IIQQQQIIQQ", elf, b)
         rows.append(dict(k=k, hdr=b, name_off=name, flags=flags, off=off, size=size,
                          align=max(1, align), type=typ))
     strtab = rows[shstrndx]
-    for r in rows:
+    for r in rows:  # glue: ELF section names
         end = elf.index(b"\0", strtab["off"] + r["name_off"])
         r["name"] = elf[strtab["off"] + r["name_off"]:end].decode()
     return rows
@@ -142,28 +142,28 @@ def trim_comment(elf):
     instead is NOT allowed: the Mojo runtime crashes without it (measured)."""
     elf = bytes(elf)
     rows = _sections(elf)
-    com = [r for r in rows if r["name"] == ".comment"]
+    com = [r for r in rows if r["name"] == ".comment"]  # glue: ELF section table
     if not com:
         return elf
     c = com[0]
-    later = [r for r in rows if r["off"] > c["off"] and r["type"] != 8]  # not NOBITS
-    if any(r["flags"] & 0x2 for r in later):
+    later = [r for r in rows if r["off"] > c["off"] and r["type"] != 8]  # not NOBITS  # glue: ELF section table
+    if any(r["flags"] & 0x2 for r in later):  # glue: ELF program headers
         return elf  # a loaded section follows; leave the object alone
     phoff = struct.unpack_from("<Q", elf, 0x20)[0]
     phentsize, phnum = struct.unpack_from("<HH", elf, 0x36)
-    for k in range(phnum):
+    for k in range(phnum):  # glue: ELF program headers
         p_off, p_filesz = struct.unpack_from("<Q", elf, phoff + k * phentsize + 8)[0], \
             struct.unpack_from("<Q", elf, phoff + k * phentsize + 32)[0]
         if p_off + p_filesz > c["off"]:
             return elf  # a segment covers the comment; leave the object alone
     if struct.unpack_from("<Q", elf, 0x28)[0] < c["off"]:
         return elf  # section headers precede the comment; nothing to slide
-    align = max([8] + [r["align"] for r in later])
+    align = max([8] + [r["align"] for r in later])  # glue: ELF section table
     shift = (c["size"] // align) * align
     if shift <= 0:
         return elf
     buf = bytearray(elf[:c["off"] + c["size"] - shift] + elf[c["off"] + c["size"]:])
-    for r in later:
+    for r in later:  # glue: ELF section header offsets
         struct.pack_into("<Q", buf, r["hdr"] - shift + 0x18, r["off"] - shift)
     shoff = struct.unpack_from("<Q", elf, 0x28)[0]
     struct.pack_into("<Q", buf, 0x28, shoff - shift)
@@ -180,7 +180,7 @@ def patch_in_place(binary, objects):
     found = embedded_objects(bytes(data))
     if not found:
         raise AmdPortableError("binding embeds no AMDGPU code object")
-    for off, size, names in found:
+    for off, size, names in found:  # glue: one entry per embedded code object
         if len(names) != 1:
             raise AmdPortableError(f"embedded object at {off} holds {len(names)} kernels")
         new = objects.get(names[0])
@@ -210,7 +210,7 @@ def _comgr():
     names += ["libamd_comgr.so.3", "libamd_comgr.so.2", f"{rocm}/lib/libamd_comgr.so.3",
               f"{rocm}/lib/libamd_comgr.so"]
     errors = []
-    for n in names:
+    for n in names:  # glue: loader library candidates
         try:
             return ctypes.CDLL(n)
         except OSError as exc:
@@ -264,11 +264,11 @@ def compile_bitcode(bc, isa, options=("-O3",)):
     ck(lib.amd_comgr_create_action_info(ctypes.byref(info)), "create_action_info")
     ck(lib.amd_comgr_action_info_set_isa_name(info, isa.encode()), "set_isa_name")
     ck(lib.amd_comgr_action_info_set_logging(info, ctypes.c_bool(True)), "set_logging")
-    opts = (ctypes.c_char_p * len(options))(*[o.encode() for o in options])
+    opts = (ctypes.c_char_p * len(options))(*[o.encode() for o in options])  # glue: COMGR option strings
     ck(lib.amd_comgr_action_info_set_option_list(info, opts, ctypes.c_size_t(len(options))),
        "set_option_list")
     s_rel, s_exe = new_set(), new_set()
-    for act, src, dst, what in ((_ACT_CODEGEN_BC_TO_RELOCATABLE, s_in, s_rel, "codegen"),
+    for act, src, dst, what in ((_ACT_CODEGEN_BC_TO_RELOCATABLE, s_in, s_rel, "codegen"),  # glue: the two COMGR actions
                                 (_ACT_LINK_RELOCATABLE_TO_EXECUTABLE, s_rel, s_exe, "link")):
         if lib.amd_comgr_do_action(act, info, src, dst):
             raise AmdPortableError(f"COMGR {what} for {isa} failed:\n{log_of(dst)}")
@@ -279,9 +279,9 @@ def compile_bitcode(bc, isa, options=("-O3",)):
     ck(lib.amd_comgr_get_data(exe, ctypes.byref(sz), None), "get_data size")
     buf = ctypes.create_string_buffer(sz.value)
     ck(lib.amd_comgr_get_data(exe, ctypes.byref(sz), buf), "get_data")
-    for d in (exe, data):
+    for d in (exe, data):  # glue: release COMGR handles
         lib.amd_comgr_release_data(d)
-    for s in (s_in, s_rel, s_exe):
+    for s in (s_in, s_rel, s_exe):  # glue: release COMGR handles
         lib.amd_comgr_destroy_data_set(s)
     lib.amd_comgr_destroy_action_info(info)
     return buf.raw[:sz.value]
@@ -299,7 +299,7 @@ def load_payload(pkg, source_commit):
     root = payload_root(pkg)
     raw = (root / MANIFEST).read_bytes()
     actual = {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-              for p in root.rglob("*") if p.is_file() and p.name != MANIFEST}
+              for p in root.rglob("*") if p.is_file() and p.name != MANIFEST}  # glue: payload file inventory
     doc = validate_manifest(json.loads(raw), actual)
     if doc.get("source_commit") != source_commit or doc.get("source_dirty") is not False:
         raise AmdPortableError("portable payload was not built from the clean installed source")
@@ -324,16 +324,16 @@ def materialize(root, doc, manifest_hash, gfx):
             prev = json.loads(stamp.read_text())
             if prev.get("manifest_sha256") == manifest_hash and all(
                     hashlib.sha256((out / so).read_bytes()).hexdigest() == h
-                    for so, h in prev["files"].items()):
+                    for so, h in prev["files"].items()):  # glue: cached file digests
                 return out, prev
         except (OSError, ValueError, KeyError, TypeError):
             pass
     files = {}
-    for so, row in sorted(doc["bindings"].items()):
+    for so, row in sorted(doc["bindings"].items()):  # glue: one entry per binding
         native = (root / so).read_bytes()
         if row["kernels"]:
             objects = {k: compile_bitcode((root / bc).read_bytes(), isa)
-                       for k, bc in row["kernels"].items()}
+                       for k, bc in row["kernels"].items()}  # glue: one COMGR compile per kernel
             patched = patch_in_place(native, objects)
         else:
             patched = native  # no device code: carried unchanged
