@@ -38,6 +38,7 @@ from x_linear.sgd import (
 from checks.numerics import identical_pow
 from x_linear.finite_device import XLIN_IDN_DEV_FINITE, xlin_finite_device, xlin_finite_host
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
+from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM, GLM_YDOM_REFUSED, glm_ydom_bad
 from x_linear.sgd_end import sgd_ys_kernel, sgd_iota_kernel, sgd_perm_kernel, sgd_mb_end_kernel, sgd_mb_res_kernel, sgd_ps_end_kernel, sgd_ps_res_kernel, SGD_END_ST, SGD_END_TPB, SGD_MB_FLAGS, SGD_MB_WORDS
 from x_linear.vfold import vscratch
 from x_linear.sgd import LR_INVSCALING
@@ -2613,6 +2614,22 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
 # glm_start's blocks); then one thread folds the partials ascending, the same
 # words as glm_fit's blocked folds. The one-thread prologue walked all n rows
 # twice (removed, cpu-gpu-cleanup c-linear).
+def glm_ydom_kernel(y: FP, n: Int32, flag: IP, wf: IP, woff: Int32, nonce: Int32):
+    """The targets' range facts (x_linear/glm_ydom.mojo), one thread a row,
+    by bits: flag[0] some y < 0, flag[1] some y > 0, flag[2] some y == 0.
+    Every writer stores the same 1; idempotent."""
+    var i = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if i < Int(n):
+        var b = bitcast[DType.uint32](ld(y, i))
+        if (b & UInt32(0x7FFFFFFF)) == UInt32(0):
+            sti(flag, 2, 1)
+        elif (b >> 31) != UInt32(0):
+            sti(flag, 0, 1)
+        else:
+            sti(flag, 1, 1)
+    witness_end(wf, woff, nonce)
+
+
 def glm_init_parts_kernel(y: FP, n: Int32, nb: Int32, sw: Int32, parts: FP, wf: IP, woff: Int32, nonce: Int32):
     """parts[b] = the block's weight sum (sw), parts[nb + b] = its y sum (sum w y with sw)."""
     var b = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
@@ -2945,6 +2962,8 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
     var rows_slice = _glm_rows_slice(n, _glm_slot_count(d, m))
     var blocks_slice = _glm_blocks_slice(nb, _glm_slot_count(d, m))
     var wit = Witness(ctx, max(rows_grid + _xg_blocks(nb) + 1, max(_xg_blocks(slot_ub * blocks_slice), slot_grid + 1)))
+    var dydom = ctx.enqueue_create_buffer[DType.int32](4)
+    dydom.enqueue_fill(Int32(0))
     var tries0 = 0
     while True:
         var nonce = wit.begin()
@@ -2955,11 +2974,28 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
                                                      Int32(link), Int32(sw), dres.unsafe_ptr(), dsc.unsafe_ptr(),
                                                      wit.p(), Int32(_xg_blocks(nbi)), nonce, grid_dim=1, block_dim=1)
         var count0 = _xg_blocks(nbi) + 1
+        comptime if XLIN_GLM_DEV_YDOM:
+            # lane fam2-linear: the targets' range on the device, in the same
+            # guarded unit (the Python layer no longer walks y)
+            ctx.enqueue_function[glm_ydom_kernel](dy.unsafe_ptr(), Int32(n), dydom.unsafe_ptr(),
+                                                  wit.p(), Int32(count0), nonce, grid_dim=rows_grid, block_dim=XG_TPB)
+            count0 += rows_grid
         if wit.ok(ctx, count0, "GLM init"):
             break
         tries0 += 1
         if tries0 >= WITNESS_TRIES:
             wit.fail()
+    comptime if XLIN_GLM_DEV_YDOM:
+        var hyd = List[Int32](length=4, fill=Int32(0))
+        ctx.enqueue_copy(dst_ptr=hyd.unsafe_ptr(), src_buf=dydom)
+        ctx.synchronize()
+        var yd_bad = glm_ydom_bad(power, hyd[0] != Int32(0), hyd[1] != Int32(0), hyd[2] != Int32(0))
+        _ = hyd^
+        if yd_bad:
+            for i in range(d + 2):
+                res.unsafe_store(i, Float32(0))
+            res.unsafe_store(d + 2, GLM_YDOM_REFUSED)
+            return
 
     var iters = 0
     var converged = False

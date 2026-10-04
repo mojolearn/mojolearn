@@ -23,6 +23,7 @@ from x_linear.ops import FP, IP
 from x_linear.device import fit_device, decision_device, decision_codes_device, SGD_IDN_DEV_FINITE
 from x_linear.dispatch import isotonic_abi_check, ALGO_SGD
 from x_linear.finite_device import XLIN_IDN_DEV_FINITE
+from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM
 from x_linear.cls1_fast import cls1_flags
 
 
@@ -160,10 +161,18 @@ def py2mojo_linear_flags_binding() raises -> PythonObject:
 
 
 @export
+def glm_ydom_binding() raises -> PythonObject:
+    """1: a GLM fit checks its targets' range itself and returns -1 in the
+    converged word when it fails (x_linear/glm_ydom.mojo, lane fam2-linear)."""
+    return PythonObject(1)
+
+
 def PyInit__mojolearn_x_linear() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_linear")
         m.def_function[fit_binding]("x_linear_fit")
+        comptime if XLIN_GLM_DEV_YDOM:
+            m.def_function[glm_ydom_binding]("x_linear_glm_ydom")
         m.def_function[decision_binding]("x_linear_decision")
         m.def_function[decision_codes_binding]("x_linear_decision_codes")
         m.def_function[numeric_mode_binding]("x_linear_numeric_mode")
