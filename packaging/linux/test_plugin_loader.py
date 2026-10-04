@@ -397,6 +397,35 @@ class ArchitecturePayloadLoader(PluginLoader):
         (self.pkg / "identity_columns" / "COMMIT").write_text("a" * 40)
         self.assertIn("Ampere-or-newer", str(self.refusal(cuda=True, device=("sm_75", "fixture"))))
 
+    def test_malformed_baseline_records_never_select_cpu(self):
+        root, _ = self.baseline()
+        self.host_binding()
+        path = root / self.B.gpu_plugins.BASELINE_MANIFEST
+        original = json.loads(path.read_text())
+        for files in ([None], ["wrong"], [dict(original["files"][0], file={})],
+                      [dict(original["files"][0], ptx_modules="wrong")]):
+            with self.subTest(files=files):
+                path.write_text(json.dumps(dict(original, files=files)))
+                self.box(cuda=True)
+                with self.assertRaises(self.B.GpuPluginError):
+                    self.B.select()
+                self.assertIsNone(self.B._CPU_ONLY)
+
+    def test_missing_baseline_tier_never_selects_cpu(self):
+        root, binary = self.baseline()
+        self.host_binding()
+        binary.rename(root / binary.name)
+        path = root / self.B.gpu_plugins.BASELINE_MANIFEST
+        doc = json.loads(path.read_text())
+        doc["files"][0].update(file=binary.name, numeric_mode="fast")
+        path.write_text(json.dumps(doc))
+        self.box(cuda=True)
+        self.B.requested_mode = lambda: "identical"
+        self.B._MODULES = ("_mojolearn_gbdt",)
+        with self.assertRaisesRegex(self.B.GpuPluginError, "cannot fall back to CPU"):
+            self.B.select()
+        self.assertIsNone(self.B._CPU_ONLY)
+
     def test_baseline_never_selected_automatically(self):
         self.baseline()
         os.environ.pop("MOJOLEARN_CUDA_PATH")

@@ -1751,6 +1751,8 @@ def select():
         # CPU-only set (see GpuPluginError).
         raise
     except (ImportError, AttributeError) as exc:
+        if os.environ.get("MOJOLEARN_CUDA_PATH", "").strip().lower() == "ptx-baseline":
+            raise GpuPluginError(f"mojolearn: explicit PTX baseline selection failed: {exc}") from exc
         if not host_binding_built():
             raise
         return _select_cpu_only(pkg, mode, str(exc))
@@ -1844,6 +1846,8 @@ def select():
             f"binary exists under {ident_dir}. Build them with\n    "
             f"MOJOLEARN_NUMERIC_MODE={mode} bash bindings/build*.sh"
         )
+        if _BASELINE_SELECTION is not None:
+            raise GpuPluginError(refusal + "; an explicit PTX baseline cannot fall back to CPU")
         if host_binding_built():
             return _select_cpu_only(pkg, mode, refusal)
         raise ImportError(refusal)

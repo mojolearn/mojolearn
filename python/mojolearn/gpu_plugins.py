@@ -221,19 +221,28 @@ def validate_baseline_manifest(doc, files):
             or doc.get("qualification_required") is not True or doc.get("errors") != []
             or not re.fullmatch(r"[0-9a-f]{40}", doc.get("source_commit", ""))):
         raise ValueError("invalid or qualified-as-production experimental PTX manifest")
+    rows = doc.get("files")
+    if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+        raise ValueError("PTX manifest files must be a list of file records")
     declared = {}
-    for row in doc.get("files", []):
+    for row in rows:
         name = row.get("file", "")
-        if not name or name.startswith("/") or ".." in name.split("/") or name in declared:
+        if (not isinstance(name, str) or not name or name.startswith("/")
+                or ".." in name.split("/") or name in declared):
             raise ValueError("invalid or duplicate PTX manifest file")
         mode = name.split("/", 1)[0] if "/" in name else "fast"
         if mode not in ("fast", "deterministic", "identical") or row.get("numeric_mode") != mode:
             raise ValueError(f"missing or mismatched numerical-mode evidence for {name}")
-        if not row.get("ptx_modules"):
+        modules = row.get("ptx_modules")
+        if not isinstance(modules, list) or not all(isinstance(module, dict) for module in modules):
+            raise ValueError(f"PTX module evidence must be a list of records for {name}")
+        if not modules:
             prefix = name.rsplit("/", 1)[0] + "/" if "/" in name else ""
             expected = {prefix + "_mojolearn_rf.so", prefix + "_mojolearn_gbdt.so"}
             delegates = row.get("delegates", [])
             if (name != prefix + "_mojolearn_x_trees.so"
+                    or not isinstance(delegates, list)
+                    or not all(isinstance(delegate, dict) for delegate in delegates)
                     or {d.get("file") for d in delegates} != expected
                     or len(delegates) != len(expected)
                     or any(d.get("sha256") != files.get(d.get("file")) for d in delegates)
