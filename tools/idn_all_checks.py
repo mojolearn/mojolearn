@@ -65,8 +65,17 @@ def _lu_child():
         a, b = _lu_fixture(n)
         lu, piv = la.lu_factor(a)
         x = la.solve(a, b)
-        x2 = la.lu_solve((lu, piv), b)
-        for part in (lu, piv, x, x2):
+        # Public lu_solve rejects nonfinite input factors, even when those
+        # factors came from finite-input overflow in lu_factor. Preserve that
+        # boundary; compare the factorization and resident solve themselves.
+        try:
+            la.lu_solve((lu, piv), b)
+        except ValueError as exc:
+            if 'finite' not in str(exc):
+                raise
+        else:
+            raise AssertionError('lu_solve accepted nonfinite input factors')
+        for part in (lu, piv, x):
             h.update(_bytes(part))
         nan_words += int(np.isnan(np.frombuffer(_bytes(lu), dtype="<f4")).sum())
     print("DIGEST %s nan_words=%d" % (h.hexdigest(), nan_words))

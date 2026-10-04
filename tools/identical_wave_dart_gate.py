@@ -35,10 +35,12 @@ def main():
         runner.fit();runner.infer()  # Exactly one untimed own fit; zero opponent calls.
         output=runner.outputs();q=board.quality(lane,arrays,{'ours':output})['ours']
         value=q[row['metric']]
-        if not np.isfinite(value) or value<row['minimum']:
-            raise AssertionError((lane,'quality degraded',q,'minimum',row['minimum']))
-        results.append({'lane':lane,'dataset':row['dataset'],'status':'PASS','quality':q,'metric':row['metric'],'minimum':row['minimum'],'tolerance':row['tolerance'],'stored_opponent_quality':row['stored_opponent_quality'],'source_reference_sha256':row['source_sha256'],'provenance':provenance})
+        passed=bool(np.isfinite(value) and value>=row['minimum'])
+        results.append({'lane':lane,'dataset':row['dataset'],'status':'PASS' if passed else 'FAILED','quality':q,'metric':row['metric'],'minimum':row['minimum'],'tolerance':row['tolerance'],'stored_opponent_quality':row['stored_opponent_quality'],'source_reference_sha256':row['source_sha256'],'provenance':provenance})
+        print('DART_STORED_ROW',lane,results[-1]['status'],json.dumps(q),flush=True)
     a.report.parent.mkdir(parents=True,exist_ok=True)
-    a.report.write_text(json.dumps({'status':'PASS','opponents_executed':0,'checks':results},indent=2)+'\n')
-    print('DART_STORED_QUALITY PASS checks',len(results),'opponents_executed=0')
-if __name__=='__main__':main()
+    status='PASS' if all(r['status']=='PASS' for r in results) else 'FAILED'
+    a.report.write_text(json.dumps({'status':status,'opponents_executed':0,'checks':results},indent=2)+'\n')
+    print('DART_STORED_QUALITY',status,'checks',len(results),'opponents_executed=0')
+    return 0 if status=='PASS' else 1
+if __name__=='__main__':sys.exit(main())
