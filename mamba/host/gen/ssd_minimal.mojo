@@ -75,6 +75,16 @@ from std.sys.compile import is_defined
 from mamba.host.device_shim import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul
+#: lane afn-mamba (2026-10-03): FAST + Apple + `-D MOJOLEARN_AFN_MAMBA2_SSD_MMA`
+#: runs S12, S13/S14 and S15/S16 on simdgroup 8x8 tiles (afn_ssd_mma.mojo);
+#: every other build takes the three cell kernels below unchanged.
+from mamba.host.gen.device_optimizations import AFN_MAMBA2_SSD_MMA
+from mamba.host.gen.device_optimizations import (
+    afn_m2_cb_g_mma,
+    afn_m2_cstate_mma,
+    afn_m2_ydiag_mma,
+    afn_ssd_mma_applies,
+)
 from mamba.checks.mamba2_fixture import (
     M2_CHUNK_SIZE,
     M2_D_STATE,
@@ -171,7 +181,7 @@ def _grid(n: Int) -> Int:
 # ===========================================================================
 
 
-def m2_discretize_kernel(gid_: Int, 
+def m2_discretize_kernel(gid_: Int,
     xd: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
     da: MutPointer[Float32, MutAnyOrigin],  # [B, T, H]
     xbc: MutPointer[Float32, MutAnyOrigin],  # [B, T, CD]
@@ -217,7 +227,7 @@ def m2_discretize_kernel(gid_: Int,
 # ===========================================================================
 
 
-def m2_chunk_cumsum_kernel(gid_: Int, 
+def m2_chunk_cumsum_kernel(gid_: Int,
     dacs: MutPointer[Float32, MutAnyOrigin],  # [B, H, C, Q]
     da: MutPointer[Float32, MutAnyOrigin],  # [B, T, H]
     b_in: Int32,
@@ -278,7 +288,7 @@ def m2_chunk_cumsum_kernel(gid_: Int,
 # ===========================================================================
 
 
-def m2_seg_l_kernel(gid_: Int, 
+def m2_seg_l_kernel(gid_: Int,
     seg_l: MutPointer[Float32, MutAnyOrigin],  # [B, C, H, Q, Q]
     da: MutPointer[Float32, MutAnyOrigin],  # [B, T, H]
     b_in: Int32,
@@ -343,7 +353,7 @@ def m2_seg_l_kernel(gid_: Int,
 # ===========================================================================
 
 
-def m2_cb_g_kernel(gid_: Int, 
+def m2_cb_g_kernel(gid_: Int,
     cb_g: MutPointer[Float32, MutAnyOrigin],  # [B, C, Q, Q]
     xbc: MutPointer[Float32, MutAnyOrigin],  # [B, T, CD]
     b_in: Int32,
@@ -401,7 +411,7 @@ def m2_cb_g_kernel(gid_: Int,
 # ===========================================================================
 
 
-def m2_ydiag_kernel(gid_: Int, 
+def m2_ydiag_kernel(gid_: Int,
     ydiag: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
     cb_g: MutPointer[Float32, MutAnyOrigin],  # [B, C, Q, Q]
     seg_l: MutPointer[Float32, MutAnyOrigin],  # [B, C, H, Q, Q]
@@ -511,7 +521,7 @@ def m2_ydiag_kernel(gid_: Int,
 # ===========================================================================
 
 
-def m2_decay_kernel(gid_: Int, 
+def m2_decay_kernel(gid_: Int,
     decay: MutPointer[Float32, MutAnyOrigin],  # [B, H, C, Q]
     dacs: MutPointer[Float32, MutAnyOrigin],  # [B, H, C, Q]
     n_in: Int32,  # B * H * C * Q
@@ -535,7 +545,7 @@ def m2_decay_kernel(gid_: Int,
 # ===========================================================================
 
 
-def m2_cstate_kernel(gid_: Int, 
+def m2_cstate_kernel(gid_: Int,
     cstate: MutPointer[Float32, MutAnyOrigin],  # [B, C, H, P, N]
     xbc: MutPointer[Float32, MutAnyOrigin],  # [B, T, CD]
     decay: MutPointer[Float32, MutAnyOrigin],  # [B, H, C, Q]
@@ -630,7 +640,7 @@ def m2_cstate_kernel(gid_: Int,
 # ===========================================================================
 
 
-def m2_statepass_kernel(gid_: Int, 
+def m2_statepass_kernel(gid_: Int,
     pass_states: MutPointer[Float32, MutAnyOrigin],  # [B, C, H, P, N]
     h_last: MutPointer[Float32, MutAnyOrigin],  # [B, H, P, N]
     h_state: MutPointer[Float32, MutAnyOrigin],  # [B, H, P, N] in/out
@@ -749,7 +759,7 @@ def m2_statepass_kernel(gid_: Int,
 # ===========================================================================
 
 
-def m2_yoff_y_kernel(gid_: Int, 
+def m2_yoff_y_kernel(gid_: Int,
     yoff: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
     y_out: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
     ydiag: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
@@ -885,30 +895,37 @@ def ssd_forward(
     def _launch_3(gid_: Int) {imm _l3_a0, imm _l3_a1, imm _l3_a2, imm _l3_a3, imm _l3_a4, imm _l3_a5, imm _l3_a6}:
         m2_seg_l_kernel(gid_, _l3_a0, _l3_a1, _l3_a2, _l3_a3, _l3_a4, _l3_a5, _l3_a6)
     host_launch(_launch_3, launch_count((_grid(b * nc * nh * qv), 1, 1), (MAMBA2_TPB, 1, 1)))
-    var _l4_a0 = cb_g.unsafe_ptr()
-    var _l4_a1 = xbc_work.unsafe_ptr()
-    var _l4_a2 = Int32(b)
-    var _l4_a3 = Int32(t_work)
-    var _l4_a4 = Int32(di)
-    var _l4_a5 = Int32(cd)
-    var _l4_a6 = Int32(nc)
-    var _l4_a7 = Int32(qv)
-    def _launch_4(gid_: Int) {imm _l4_a0, imm _l4_a1, imm _l4_a2, imm _l4_a3, imm _l4_a4, imm _l4_a5, imm _l4_a6, imm _l4_a7}:
-        m2_cb_g_kernel(gid_, _l4_a0, _l4_a1, _l4_a2, _l4_a3, _l4_a4, _l4_a5, _l4_a6, _l4_a7)
-    host_launch(_launch_4, launch_count((_grid(b * nc * qv * qv), 1, 1), (MAMBA2_TPB, 1, 1)))
-    var _l5_a0 = ydiag.unsafe_ptr()
-    var _l5_a1 = cb_g.unsafe_ptr()
-    var _l5_a2 = seg_l.unsafe_ptr()
-    var _l5_a3 = xd.unsafe_ptr()
-    var _l5_a4 = dt_work.unsafe_ptr()
-    var _l5_a5 = Int32(b)
-    var _l5_a6 = Int32(t_work)
-    var _l5_a7 = Int32(nh)
-    var _l5_a8 = Int32(nc)
-    var _l5_a9 = Int32(qv)
-    def _launch_5(gid_: Int) {imm _l5_a0, imm _l5_a1, imm _l5_a2, imm _l5_a3, imm _l5_a4, imm _l5_a5, imm _l5_a6, imm _l5_a7, imm _l5_a8, imm _l5_a9}:
-        m2_ydiag_kernel(gid_, _l5_a0, _l5_a1, _l5_a2, _l5_a3, _l5_a4, _l5_a5, _l5_a6, _l5_a7, _l5_a8, _l5_a9)
-    host_launch(_launch_5, launch_count((_grid(b * t_work * nh * M2_HEADDIM), 1, 1), (MAMBA2_TPB, 1, 1)))
+    var mma = False
+    comptime if AFN_MAMBA2_SSD_MMA:
+        mma = afn_ssd_mma_applies(qv)
+    if mma:
+        afn_m2_cb_g_mma(ctx, cb_g, xbc_work, b, t_work, di, cd, nc, qv)
+        afn_m2_ydiag_mma(ctx, ydiag, cb_g, seg_l, xd, b, t_work, nh, nc, qv)
+    else:
+        var _l4_a0 = cb_g.unsafe_ptr()
+        var _l4_a1 = xbc_work.unsafe_ptr()
+        var _l4_a2 = Int32(b)
+        var _l4_a3 = Int32(t_work)
+        var _l4_a4 = Int32(di)
+        var _l4_a5 = Int32(cd)
+        var _l4_a6 = Int32(nc)
+        var _l4_a7 = Int32(qv)
+        def _launch_4(gid_: Int) {imm _l4_a0, imm _l4_a1, imm _l4_a2, imm _l4_a3, imm _l4_a4, imm _l4_a5, imm _l4_a6, imm _l4_a7}:
+            m2_cb_g_kernel(gid_, _l4_a0, _l4_a1, _l4_a2, _l4_a3, _l4_a4, _l4_a5, _l4_a6, _l4_a7)
+        host_launch(_launch_4, launch_count((_grid(b * nc * qv * qv), 1, 1), (MAMBA2_TPB, 1, 1)))
+        var _l5_a0 = ydiag.unsafe_ptr()
+        var _l5_a1 = cb_g.unsafe_ptr()
+        var _l5_a2 = seg_l.unsafe_ptr()
+        var _l5_a3 = xd.unsafe_ptr()
+        var _l5_a4 = dt_work.unsafe_ptr()
+        var _l5_a5 = Int32(b)
+        var _l5_a6 = Int32(t_work)
+        var _l5_a7 = Int32(nh)
+        var _l5_a8 = Int32(nc)
+        var _l5_a9 = Int32(qv)
+        def _launch_5(gid_: Int) {imm _l5_a0, imm _l5_a1, imm _l5_a2, imm _l5_a3, imm _l5_a4, imm _l5_a5, imm _l5_a6, imm _l5_a7, imm _l5_a8, imm _l5_a9}:
+            m2_ydiag_kernel(gid_, _l5_a0, _l5_a1, _l5_a2, _l5_a3, _l5_a4, _l5_a5, _l5_a6, _l5_a7, _l5_a8, _l5_a9)
+        host_launch(_launch_5, launch_count((_grid(b * t_work * nh * M2_HEADDIM), 1, 1), (MAMBA2_TPB, 1, 1)))
     var _l6_a0 = decay.unsafe_ptr()
     var _l6_a1 = dacs.unsafe_ptr()
     var _l6_a2 = Int32(b * nh * nc * qv)
@@ -916,21 +933,26 @@ def ssd_forward(
     def _launch_6(gid_: Int) {imm _l6_a0, imm _l6_a1, imm _l6_a2, imm _l6_a3}:
         m2_decay_kernel(gid_, _l6_a0, _l6_a1, _l6_a2, _l6_a3)
     host_launch(_launch_6, launch_count((_grid(b * nh * nc * qv), 1, 1), (MAMBA2_TPB, 1, 1)))
-    var _l7_a0 = cstate.unsafe_ptr()
-    var _l7_a1 = xbc_work.unsafe_ptr()
-    var _l7_a2 = decay.unsafe_ptr()
-    var _l7_a3 = xd.unsafe_ptr()
-    var _l7_a4 = dt_work.unsafe_ptr()
-    var _l7_a5 = Int32(b)
-    var _l7_a6 = Int32(t_work)
-    var _l7_a7 = Int32(nh)
-    var _l7_a8 = Int32(di)
-    var _l7_a9 = Int32(cd)
-    var _l7_a10 = Int32(nc)
-    var _l7_a11 = Int32(qv)
-    def _launch_7(gid_: Int) {imm _l7_a0, imm _l7_a1, imm _l7_a2, imm _l7_a3, imm _l7_a4, imm _l7_a5, imm _l7_a6, imm _l7_a7, imm _l7_a8, imm _l7_a9, imm _l7_a10, imm _l7_a11}:
-        m2_cstate_kernel(gid_, _l7_a0, _l7_a1, _l7_a2, _l7_a3, _l7_a4, _l7_a5, _l7_a6, _l7_a7, _l7_a8, _l7_a9, _l7_a10, _l7_a11)
-    host_launch(_launch_7, launch_count((_grid(b * nc * nh * M2_HEADDIM * M2_D_STATE), 1, 1), (MAMBA2_TPB, 1, 1)))
+    if mma:
+        afn_m2_cstate_mma(
+            ctx, cstate, xbc_work, decay, xd, b, t_work, nh, di, cd, nc, qv
+        )
+    else:
+        var _l7_a0 = cstate.unsafe_ptr()
+        var _l7_a1 = xbc_work.unsafe_ptr()
+        var _l7_a2 = decay.unsafe_ptr()
+        var _l7_a3 = xd.unsafe_ptr()
+        var _l7_a4 = dt_work.unsafe_ptr()
+        var _l7_a5 = Int32(b)
+        var _l7_a6 = Int32(t_work)
+        var _l7_a7 = Int32(nh)
+        var _l7_a8 = Int32(di)
+        var _l7_a9 = Int32(cd)
+        var _l7_a10 = Int32(nc)
+        var _l7_a11 = Int32(qv)
+        def _launch_7(gid_: Int) {imm _l7_a0, imm _l7_a1, imm _l7_a2, imm _l7_a3, imm _l7_a4, imm _l7_a5, imm _l7_a6, imm _l7_a7, imm _l7_a8, imm _l7_a9, imm _l7_a10, imm _l7_a11}:
+            m2_cstate_kernel(gid_, _l7_a0, _l7_a1, _l7_a2, _l7_a3, _l7_a4, _l7_a5, _l7_a6, _l7_a7, _l7_a8, _l7_a9, _l7_a10, _l7_a11)
+        host_launch(_launch_7, launch_count((_grid(b * nc * nh * M2_HEADDIM * M2_D_STATE), 1, 1), (MAMBA2_TPB, 1, 1)))
     var _l8_a0 = pass_states.unsafe_ptr()
     var _l8_a1 = h_last.unsafe_ptr()
     var _l8_a2 = h_state.unsafe_ptr()

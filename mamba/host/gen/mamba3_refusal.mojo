@@ -23,7 +23,7 @@ comptime M3_REFUSAL_NONE: Int64 = 9223372036854775807
 comptime M3_DEVICE_REFUSAL = False
 
 
-def m3_nonfinite_partial_kernel(gid_: Int, 
+def m3_nonfinite_partial_kernel(gid_: Int,
     part: MutPointer[Int64, MutAnyOrigin],
     values: MutPointer[Float32, MutAnyOrigin],
     n_in: Int64,

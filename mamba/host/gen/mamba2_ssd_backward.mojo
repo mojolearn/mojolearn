@@ -85,7 +85,7 @@ struct Mamba2SSDBackwardState(Movable):
         )
 
 
-def mamba2_cstate_ddecay_kernel(gid_: Int, 
+def mamba2_cstate_ddecay_kernel(gid_: Int,
     d_decay: MutPointer[Float32, MutAnyOrigin],
     d_cstate: MutPointer[Float32, MutAnyOrigin],
     xd: MutPointer[Float32, MutAnyOrigin],
@@ -147,7 +147,7 @@ def mamba2_cstate_ddecay_into(
     host_launch(_launch_1, launch_count((_grid(cells), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
 
 
-def mamba2_s18_direct_dpass_kernel(gid_: Int, 
+def mamba2_s18_direct_dpass_kernel(gid_: Int,
     direct_d_pass: MutPointer[Float32, MutAnyOrigin],
     d_yoff: MutPointer[Float32, MutAnyOrigin],  # [B,T,H,P]
     xbc: MutPointer[Float32, MutAnyOrigin],  # [B,T,CD]
@@ -210,7 +210,7 @@ def mamba2_s18_direct_dpass_kernel(gid_: Int,
     direct_d_pass.unsafe_store(cell, result)
 
 
-def mamba2_s18_dc_ddacs_kernel(gid_: Int, 
+def mamba2_s18_dc_ddacs_kernel(gid_: Int,
     d_c: MutPointer[Float32, MutAnyOrigin],
     d_dacs: MutPointer[Float32, MutAnyOrigin],
     d_yoff: MutPointer[Float32, MutAnyOrigin],
@@ -292,7 +292,7 @@ def mamba2_s18_dc_ddacs_kernel(gid_: Int,
         d_dacs.unsafe_store(da_cell, total)
 
 
-def mamba2_cb_backward_kernel(gid_: Int, 
+def mamba2_cb_backward_kernel(gid_: Int,
     d_b: MutPointer[Float32, MutAnyOrigin],
     d_c: MutPointer[Float32, MutAnyOrigin],
     d_cb: MutPointer[Float32, MutAnyOrigin],
@@ -418,7 +418,7 @@ struct Mamba2SSDScaleReduction(Movable):
         self.d_dacs_decay = mamba_scratch(ctx, rows * qv)
 
 
-def mamba2_decay_to_dacs_kernel(gid_: Int, 
+def mamba2_decay_to_dacs_kernel(gid_: Int,
     dst: MutPointer[Float32, MutAnyOrigin],
     d_decay: MutPointer[Float32, MutAnyOrigin],
     decay: MutPointer[Float32, MutAnyOrigin],
@@ -514,7 +514,7 @@ struct Mamba2ConvBackward(Movable):
         self.d_b = mamba_scratch(ctx, cd)
 
 
-def mamba2_conv_backward_kernel(gid_: Int, 
+def mamba2_conv_backward_kernel(gid_: Int,
     d_conv: MutPointer[Float32, MutAnyOrigin], d_in: MutPointer[Float32, MutAnyOrigin],
     d_w: MutPointer[Float32, MutAnyOrigin], d_b: MutPointer[Float32, MutAnyOrigin],
     dx: MutPointer[Float32, MutAnyOrigin], dbv: MutPointer[Float32, MutAnyOrigin],
@@ -586,7 +586,7 @@ def mamba2_conv_backward_prefill_into(
     host_launch(_launch_4, launch_count((_grid(cd),1,1), (M2_SSD_BWD_TPB,1,1)))
 
 
-def mamba2_postconv_merge_kernel(gid_: Int, 
+def mamba2_postconv_merge_kernel(gid_: Int,
     d_c_total: MutPointer[Float32, MutAnyOrigin],
     d_x_total: MutPointer[Float32, MutAnyOrigin],
     d_c_yoff: MutPointer[Float32, MutAnyOrigin],
@@ -626,7 +626,7 @@ def mamba2_postconv_merge_into(
     def _launch_5(gid_: Int) {imm _l5_a0, imm _l5_a1, imm _l5_a2, imm _l5_a3, imm _l5_a4, imm _l5_a5, imm _l5_a6, imm _l5_a7}:
         mamba2_postconv_merge_kernel(gid_, _l5_a0, _l5_a1, _l5_a2, _l5_a3, _l5_a4, _l5_a5, _l5_a6, _l5_a7)
     host_launch(_launch_5, launch_count((_grid(cells), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
-def mamba2_cstate_dxd_db_kernel(gid_: Int, 
+def mamba2_cstate_dxd_db_kernel(gid_: Int,
     d_xd: MutPointer[Float32, MutAnyOrigin], d_b: MutPointer[Float32, MutAnyOrigin],
     d_b_total: MutPointer[Float32, MutAnyOrigin], d_b_cb: MutPointer[Float32, MutAnyOrigin],
     d_cstate: MutPointer[Float32, MutAnyOrigin], xd: MutPointer[Float32, MutAnyOrigin],
@@ -662,7 +662,7 @@ def mamba2_cstate_dxd_db_kernel(gid_: Int,
                     ftz(identical_mul(ftz(xd.unsafe_load(((bb*t+tt)*nh+hh)*M2_HEADDIM+pp)),dec)),acc))
         d_b.unsafe_store(cell,acc)
         d_b_total.unsafe_store(cell,ftz(acc+ftz(d_b_cb.unsafe_load(cell))))
-def mamba2_seg_backward_kernel(gid_: Int, 
+def mamba2_seg_backward_kernel(gid_: Int,
     d_da_seg: MutPointer[Float32, MutAnyOrigin],
     d_da_total: MutPointer[Float32, MutAnyOrigin],
     d_seg: MutPointer[Float32, MutAnyOrigin],
@@ -698,7 +698,7 @@ def mamba2_seg_backward_kernel(gid_: Int,
     d_da_total.unsafe_store(cell, ftz(ftz(d_da_s11.unsafe_load(cell)) + acc))
 
 
-def mamba2_ydiag_matrix_backward_kernel(gid_: Int, 
+def mamba2_ydiag_matrix_backward_kernel(gid_: Int,
     d_cb: MutPointer[Float32, MutAnyOrigin],
     d_seg: MutPointer[Float32, MutAnyOrigin],
     d_y: MutPointer[Float32, MutAnyOrigin],
@@ -740,7 +740,7 @@ def mamba2_ydiag_matrix_backward_kernel(gid_: Int,
     d_cb.unsafe_store(cell, dcb)
 
 
-def mamba2_reverse_cumsum_kernel(gid_: Int, 
+def mamba2_reverse_cumsum_kernel(gid_: Int,
     d_da: MutPointer[Float32, MutAnyOrigin],
     d_dacs: MutPointer[Float32, MutAnyOrigin],
     b_in: Int32, t_in: Int32, nh_in: Int32, nc_in: Int32, q_in: Int32,
@@ -774,7 +774,7 @@ def mamba2_reverse_cumsum_kernel(gid_: Int,
         ii -= 1
 
 
-def mamba2_da_product_backward_kernel(gid_: Int, 
+def mamba2_da_product_backward_kernel(gid_: Int,
     d_a: MutPointer[Float32, MutAnyOrigin],
     d_a_log: MutPointer[Float32, MutAnyOrigin],
     d_dt: MutPointer[Float32, MutAnyOrigin],
@@ -803,7 +803,7 @@ def mamba2_da_product_backward_kernel(gid_: Int,
     d_a_log.unsafe_store(hh, ftz(identical_mul(acc, av)))
 
 
-def mamba2_dt_backward_kernel(gid_: Int, 
+def mamba2_dt_backward_kernel(gid_: Int,
     d_dtraw: MutPointer[Float32, MutAnyOrigin],
     d_dt_bias: MutPointer[Float32, MutAnyOrigin],
     d_dt: MutPointer[Float32, MutAnyOrigin],
@@ -836,7 +836,7 @@ def mamba2_dt_backward_kernel(gid_: Int,
     d_dt_bias.unsafe_store(hh, dbias)
 
 
-def mamba2_ydiag_xd_backward_kernel(gid_: Int, 
+def mamba2_ydiag_xd_backward_kernel(gid_: Int,
     d_xd: MutPointer[Float32, MutAnyOrigin],
     d_x: MutPointer[Float32, MutAnyOrigin],
     d_dt_xd: MutPointer[Float32, MutAnyOrigin],
@@ -1059,7 +1059,7 @@ def mamba2_ydiag_xd_and_partial_dt_into(
     host_launch(_launch_14, launch_count((_grid(nh), 1, 1), (M2_SSD_BWD_TPB, 1, 1)))
 
 
-def mamba2_merge_dacs_kernel(gid_: Int, 
+def mamba2_merge_dacs_kernel(gid_: Int,
     dst: MutPointer[Float32, MutAnyOrigin],
     yoff: MutPointer[Float32, MutAnyOrigin],
     state: MutPointer[Float32, MutAnyOrigin],
@@ -1074,7 +1074,7 @@ def mamba2_merge_dacs_kernel(gid_: Int,
         )
 
 
-def mamba2_scale_to_dacs_kernel(gid_: Int, 
+def mamba2_scale_to_dacs_kernel(gid_: Int,
     d_dacs_state: MutPointer[Float32, MutAnyOrigin],
     d_scale: MutPointer[Float32, MutAnyOrigin],
     dacs: MutPointer[Float32, MutAnyOrigin],
@@ -1102,7 +1102,7 @@ def mamba2_scale_to_dacs_kernel(gid_: Int,
     )
 
 
-def mamba2_reverse_chunk_state_kernel(gid_: Int, 
+def mamba2_reverse_chunk_state_kernel(gid_: Int,
     d_pass: MutPointer[Float32, MutAnyOrigin],
     d_cstate: MutPointer[Float32, MutAnyOrigin],
     d_scale_product: MutPointer[Float32, MutAnyOrigin],
