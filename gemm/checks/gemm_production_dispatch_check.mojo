@@ -5,18 +5,50 @@ lane/no-bench-tuning (2026-10-04): the Apple rules, the AMD short-contraction
 rule and the NVIDIA fold-stack rule are range rules now, so this gate checks
 NEIGHBORS of the board shapes (640, 767, 769, 896, 1024 around d_model 768;
 k = 640..1024 around 768) and the band edges, not only the board rows."""
-from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
+from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.testing import assert_true
 from gemm.checks.gemm_identical import (
+    GEMM_IDENTICAL_MFMA,
+    IDN_GEMM_AMD_BAND_MFMA,
+    IDN_GEMM_MFMA_NO_LONE_GROUP,
+    IDN_GEMM_MFMA_REUSE_WS,
     PLAN_TUNED_64_4X4,
     PLAN_TUNED_128_8X8,
+    _mfma_group_leaves,
     amd_short_contract_large_output,
     choose_gemm_plan,
     contract_partition,
     gemm_default_ksplit_leaves,
     gemm_kpack_fold_slots_for,
+    identical_gemm_workspace_max_floats,
 )
+
+
+def _check_mfma_groups(m: Int, n: Int, k: Int) raises:
+    """lane/nr-gemm: the matrix-core group size never resolves to ONE
+    group (that is the all-leaves launch), and where the AMD band runs the
+    matrix-core body grouped, the shipped workspace holds its nodes."""
+    var p = contract_partition(k)[1]
+    var g = _mfma_group_leaves(m, n, k)
+    comptime if IDN_GEMM_MFMA_NO_LONE_GROUP:
+        if g > 0:
+            assert_true((p + g - 1) // g >= 2)
+    comptime if (
+        GEMM_IDENTICAL_MFMA
+        and IDN_GEMM_AMD_BAND_MFMA
+        and IDN_GEMM_MFMA_REUSE_WS
+        and TARGET_COLUMN == COLUMN_AMD
+    ):
+        if (
+            choose_gemm_plan(m, n, k) != PLAN_TUNED_128_8X8
+            and amd_short_contract_large_output(m, n, k)
+            and g > 0
+        ):
+            assert_true(
+                identical_gemm_workspace_max_floats(m, n, k)
+                >= m * n * ((p + g - 1) // g)
+            )
 
 
 def main() raises:
@@ -86,4 +118,13 @@ def main() raises:
                 gemm_default_ksplit_leaves(768, 768, 2048),
             ) == 4
         )
+    # lane/nr-gemm: MFMA group sizes and the AMD band's workspace on board
+    # neighbors (k = 256..1152 around 384/768/1024, short and long outputs).
+    var ms: List[Int] = [384, 1024, 2048, 2049, 4096, 8192]
+    var ns: List[Int] = [256, 384, 640, 768, 1024, 1025, 3072]
+    var ks: List[Int] = [256, 384, 385, 512, 513, 640, 768, 896, 1024, 1025, 1152, 2048]
+    for mi in range(len(ms)):
+        for ni in range(len(ns)):
+            for ki in range(len(ks)):
+                _check_mfma_groups(ms[mi], ns[ni], ks[ki])
     print("production GEMM dispatch gate: PASS")

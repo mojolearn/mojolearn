@@ -3193,6 +3193,42 @@ workspace is smaller takes `_mfma_run` unchanged.
 `-D MOJOLEARN_IDN_GEMM_MFMA_REUSE_WS_OFF` restores `_mfma_run` everywhere."""
 
 
+comptime IDN_GEMM_MFMA_NO_LONE_GROUP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_GEMM_MFMA_NO_LONE_GROUP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""lane/nr-gemm (2026-10-04), default ON under IDENTICAL; reached only where
+`lib_gemm_mfma_for` is on (the AMD column). The leaf split's rule answers a
+group size with at least two groups, but raising it to
+`GEMM_MFMA_MIN_GROUP_LEAVES` (4) makes ONE group whenever `P <= 4` (the rule's
+`gl` was 1 or 2). One group used to write a full `m n` node plane and run a
+fold launch over a single node per cell. Now a size that resolves to one
+group answers 0: the all-leaves launch writes `ftz(root)` straight into `c`.
+PRESERVED ORDER: groups are powers of two aligned at leaf 0, so a group of
+size >= P holds leaves 0..P-1 and its in-register fold IS the contract tree
+over P leaves (the same `_fold_push_local` pushes in ascending leaf order);
+the old fold launch over one node only flushed it (`fold(P=1)` = ftz(node)),
+which the non-group store applies itself. Same bits.
+`-D MOJOLEARN_IDN_GEMM_MFMA_NO_LONE_GROUP_OFF` restores the one-group launch."""
+
+
+comptime IDN_GEMM_AMD_BAND_MFMA = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_GEMM_AMD_BAND_MFMA_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""lane/nr-gemm (2026-10-04, review rank 1 "A4 fix"), default ON under
+IDENTICAL; reached only on the AMD column with `lib_gemm_mfma_for` on. The
+short-contraction band rule (`amd_short_contract_large_output`, 512 < k <=
+1024 with a large output) forces PLAN_TUNED_128_8X8, and
+`identical_gemm_with_plan` runs that plan on the scalar `_launch_tuned`
+128x128 kernel; every other TUNED_128 call on this column already runs the
+matrix-core body. The band now runs `_mfma_run_ws`, the TUNED_128 plan's
+matrix-core body. PRESERVED ORDER: the same 128-wide leaves of
+`contract_partition(k)`, each leaf one K=1 `fma_rn` chain per cell in
+ascending k from +0.0, flushed at the leaf boundary, and the leaves folded in
+ascending order through the contract's balanced tree (`_fold_push_local`);
+the same order the scalar TUNED kernel runs, so no bit moves.
+`-D MOJOLEARN_IDN_GEMM_AMD_BAND_MFMA_OFF` restores the scalar plan."""
+
+
 def _mfma_group_leaves(m: Int, n: Int, k: Int) -> Int:
     """The group size the shipped matrix-core dispatch passes `_mfma_run`:
     the leaf split's rule, raised to `GEMM_MFMA_MIN_GROUP_LEAVES`; 0 runs
@@ -3203,6 +3239,10 @@ def _mfma_group_leaves(m: Int, n: Int, k: Int) -> Int:
     var mgl = gemm_step_ksplit_rule(m, n, k, 0, False)
     if mgl > 0 and mgl < GEMM_MFMA_MIN_GROUP_LEAVES:
         mgl = GEMM_MFMA_MIN_GROUP_LEAVES
+    comptime if IDN_GEMM_MFMA_NO_LONE_GROUP:
+        # lane/nr-gemm: a group that holds every leaf is the all-leaves launch.
+        if mgl > 0 and mgl >= contract_partition(k)[1]:
+            return 0
     return mgl
 
 
@@ -6448,6 +6488,10 @@ def _shipped_body_kpack_hg[
                 var mgl = gemm_step_ksplit_group_leaves(GEMM_GEOM_KSPLIT_LEAF, m, n, k)
                 if mgl > 0 and mgl < GEMM_MFMA_MIN_GROUP_LEAVES:
                     mgl = GEMM_MFMA_MIN_GROUP_LEAVES
+                comptime if IDN_GEMM_MFMA_NO_LONE_GROUP:
+                    # lane/nr-gemm: one group of every leaf is the all-leaves launch.
+                    if mgl > 0 and mgl >= contract_partition(k)[1]:
+                        mgl = 0
                 _mfma_run(ctx, c, a, b, m, n, k, op, mgl)
             return
     # lane/amd-step-time (2026-09-24): `lib_gemm_leaf_split_for` (AMD): the
@@ -6483,6 +6527,22 @@ def _shipped_body_kpack_hg[
                 identical_gemm_with_plan(
                     ctx, c, a, b, ws, m, n, k, op, PLAN_TUNED_64_4X4
                 )
+            elif GEMM_IDENTICAL_MFMA and IDN_GEMM_AMD_BAND_MFMA:
+                # lane/nr-gemm (review rank 1): the band forces the TUNED
+                # 128x128 plan, whose matrix-core body is `_mfma_run_ws`; the
+                # scalar `_launch_tuned` ran here before. The band's calls are
+                # not TUNED_128 under `choose_gemm_plan`, but the leaf split's
+                # tile chooser may still say TUNED_128 (the step-down ran
+                # after it), so the leaf split's rule can answer a group:
+                # it runs grouped only when the caller's workspace holds the
+                # nodes (sized by `identical_gemm_workspace_max_floats`),
+                # else all leaves in one launch, never an allocation + wait.
+                var bgl = _mfma_group_leaves(m, n, k)
+                if bgl > 0:
+                    var bp = contract_partition(k)[1]
+                    if len(ws) < m * n * ((bp + bgl - 1) // bgl):
+                        bgl = 0
+                _mfma_run_ws(ctx, c, a, b, ws, m, n, k, op, bgl)
             else:
                 identical_gemm_with_plan(
                     ctx, c, a, b, ws, m, n, k, op, PLAN_TUNED_128_8X8
@@ -9121,6 +9181,26 @@ def identical_gemm_workspace_max_floats(m: Int, n: Int, k: Int) -> Int:
                 var mreq = m * n * ((mp + mgl - 1) // mgl)
                 if mreq > w:
                     w = mreq
+    comptime if (
+        IDN_GEMM_MFMA_REUSE_WS
+        and GEMM_IDENTICAL_MFMA
+        and IDN_GEMM_AMD_BAND_MFMA
+        and TARGET_COLUMN == COLUMN_AMD
+        and not is_defined["MOJOLEARN_GEMM_AMD_NO_K768_TUNED"]()
+        and not is_defined["MOJOLEARN_GEMM_AMD_K768_PLAN64"]()
+    ):
+        # lane/nr-gemm: the AMD band's matrix-core group nodes, where the
+        # dispatch reaches the band (not TUNED_128 under `choose_gemm_plan`).
+        if (
+            choose_gemm_plan(m, n, k) != PLAN_TUNED_128_8X8
+            and amd_short_contract_large_output(m, n, k)
+        ):
+            var bgl = _mfma_group_leaves(m, n, k)
+            var bp = contract_partition(k)[1]
+            if bgl > 0 and bp > 1:
+                var breq = m * n * ((bp + bgl - 1) // bgl)
+                if breq > w:
+                    w = breq
     if w < 1:
         return 1
     return w
