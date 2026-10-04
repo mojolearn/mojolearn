@@ -41,6 +41,24 @@ from std.sys.info import is_gpu
 comptime FP = MutPointer[Float32, MutAnyOrigin]
 comptime IP = MutPointer[Int32, MutAnyOrigin]
 
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+#: lane/fam-neighbors (2026-10-04): NearestCentroid's statistics in IDENTICAL
+#: fold the rows in chunks of XN_NC_CHUNK_ROWS (each chain's rows ascending
+#: inside a chunk, then the chunk partials ascending), on every vendor and on
+#: the host column (x_neighbors/iter_host.mojo `_nc_stats_chunked`). Before,
+#: one block per 16 features walked every row: 1 block at d = 11, 14 at
+#: d = 220. The kernels are the FAST + Apple chunked ones
+#: (x_neighbors/iter_device.mojo `nc_means_part_kernel` ...) with the pinned
+#: arithmetic. Bits change (centroids, the pooled std, the dataset centroid)
+#: when n > XN_NC_CHUNK_ROWS, on all four columns together.
+#: -D MOJOLEARN_IDN_NC_CHUNKED_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the
+#: whole-column chains.
+comptime XN_NC_IDN_CHUNKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_NC_CHUNKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime XN_NC_CHUNK_ROWS = 16384
+
 
 @always_inline
 def _sub(a: Float32, b: Float32) -> Float32:

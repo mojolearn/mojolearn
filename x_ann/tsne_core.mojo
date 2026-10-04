@@ -38,6 +38,31 @@ from checks.numerics import (
 comptime F32P = MutPointer[Float32, MutAnyOrigin]
 comptime I32P = MutPointer[Int32, MutAnyOrigin]
 
+from std.sys.compile import is_defined
+
+#: lane/fam-neighbors (2026-10-04), IDENTICAL on every vendor and the host
+#: column: THE REPULSION FOLDS IN TS_LANES LANES. Row i's three sums (z,
+#: rep_x, rep_y) were one chain over j = 0 .. n - 1; on NVIDIA and AMD that
+#: chain forced every term through threadgroup memory to one owner thread
+#: per row, which folded 64 terms per tile while the block's other threads
+#: waited. Now lane s (s = j mod TS_LANES) folds its own j ascending with
+#: `ts_repulse_fold`'s statements (j == i skipped) from +0, and the row's
+#: sums are the lane partials added in ascending s from +0, each add
+#: flushed: z = ftz(z + z_s), r = ftz(r + r_s), all TS_LANES lanes (an
+#: empty lane adds +0). On the device a thread keeps its lanes in registers
+#: for the whole pass (`x_ann/tsne_device.mojo` `repulse_split_kernel`,
+#: `repulse_tiled_kernel`); the host column folds the same lanes
+#: (`x_ann/host/tsne_host.mojo` `_repulse_lane`). Sixty-four shorter chains
+#: per sum, so the rounding error is no larger than the single chain's.
+#: Bits change (the embedding and kl_divergence_) on all four columns
+#: together. `ts_repulse_cell` below keeps the single chain (FAST and the
+#: _OFF arm). -D MOJOLEARN_IDN_TSNE_LANE_FOLD_OFF (or MOJOLEARN_IDN_ALL_OFF)
+#: restores the single chain everywhere.
+comptime TS_LANE_FOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_TSNE_LANE_FOLD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime TS_LANES = 64
+
 
 @always_inline
 def ts_ftz_nonneg(x: Float32) -> Float32:
