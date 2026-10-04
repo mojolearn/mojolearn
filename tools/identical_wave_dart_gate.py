@@ -18,6 +18,7 @@ def main():
     sys.path.insert(0,str(root/'tools'));sys.path.insert(0,str(root/'python'))
     import numpy as np
     import bench_board_algos as board
+    from classical_two_datasets import sha256_array
     from identical_wave_worker import source_provenance
     stored=json.loads(a.reference.read_text());results=[]
     for row in stored['rows']:
@@ -25,7 +26,7 @@ def main():
         for name,expected in row['input_arrays'].items():
             value=np.ascontiguousarray(block[name])
             assert list(value.shape)==expected['shape'] and str(value.dtype)==expected['dtype'],(lane,name,'shape/dtype mismatch')
-            assert hashlib.sha256(value.tobytes()).hexdigest()==expected['sha256'],(lane,name,'fixture hash mismatch')
+            assert sha256_array(value)==expected['sha256'],(lane,name,'fixture hash mismatch')
         assert board.lane_config(lane)['params']==row['params'],(lane,'parameters changed from stored fixture')
         arrays=board.lane_arrays(lane,block)
         runner=board.build(lane,'ours',arrays)
