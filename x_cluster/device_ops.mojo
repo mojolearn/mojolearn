@@ -2588,7 +2588,7 @@ struct DeviceOps(ClusterOps):
     def minibatch_fast(
         mut self, xs: Int, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,
         ratio: Float64, seed: UInt64, mut rng: SplitMix64, mut c: List[Float32], mut w: List[Float32],
-        mut steps_done: Int,
+        mut steps_done: Int, tol: Float64, cum_w: List[Float64],
     ) raises -> Bool:
         # lane/apple-fast-cluster (2026-10-02), FAST on Apple only, ON by
         # default (MINIBATCH_FAST_DEV; `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF=1`
@@ -2597,7 +2597,7 @@ struct DeviceOps(ClusterOps):
             self._ph0()
             var took = minibatch_fast_steps(
                 self.ctx, self._fp(xs), n, d, k, batch, n_steps, max_no_improvement, ratio, seed, rng, c, w,
-                steps_done,
+                steps_done, tol, cum_w,
             )
             self._ph1("minibatch_fast")
             return took

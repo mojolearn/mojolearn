@@ -232,15 +232,19 @@ def minibatch_fit[O: ClusterOps](
     # x_cluster/minibatch_fast.mojo for the M3 A/B): MINIBATCH_FAST_DEV runs the
     # steps resident on the device (x_cluster/minibatch_fast.mojo: no upload,
     # read-back or host center fold per step; the loop below pays all three
-    # every step). Unit weights and tol <= 0 only (the board's shape); `c`,
-    # `w` and `steps_done` come back as the loop would leave them, the loop
-    # is skipped (n_steps = 0) and `cslot` holds the final centers for the
-    # readback after the loop (else it would hand back the centers uploaded
-    # above).
+    # every step). `c`, `w` and `steps_done` come back as the loop would
+    # leave them, the loop is skipped (n_steps = 0) and `cslot` holds the
+    # final centers for the readback after the loop (else it would hand back
+    # the centers uploaded above). lane/no-bench-tuning-2 (2026-10-04): was
+    # unit weights and tol <= 0 only (the board's configuration); weighted
+    # draws and the tol stop now run on the device too
+    # (`-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF=1` restores the gate).
     comptime if MINIBATCH_FAST_DEV:
-        if not weighted and p.tol <= 0:
+        var general = not is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF"]()
+        if general or (not weighted and p.tol <= 0):
             if ops.minibatch_fast(
-                xs, n, d, k, batch, n_steps, p.max_no_improvement, p.reassignment_ratio, p.seed, rng, c, w, steps_done
+                xs, n, d, k, batch, n_steps, p.max_no_improvement, p.reassignment_ratio, p.seed, rng, c, w,
+                steps_done, p.tol, cum_w,
             ):
                 n_steps = 0
                 ops.set(cslot, c)
