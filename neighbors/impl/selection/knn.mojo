@@ -77,12 +77,27 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 from checks.numerics import ftz
-from neighbors.impl.label.classlabels import make_monotonic
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from neighbors.impl.label.classlabels import make_monotonic, map_label_kernel, LABEL_TPB
 from neighbors.impl.selection.distance_weights import (
     weighted_class_probs_kernel,
     weighted_regress_avg_kernel,
 )
 
+
+#: lane/fam-neighbors (2026-10-04), IDENTICAL on every vendor: the vote
+#: relabels the training labels with ONE launch over the unique set the
+#: caller already holds on the device, instead of `make_monotonic` (a
+#: second device sort + unique of all n_index labels, two n_index-sized
+#: copies, a host round trip of the set, five drains) and a subtract-one
+#: pass, on every predict. Integer only; the tally reads the same column
+#: indices, so no output bit moves and the host column is untouched.
+#: -D MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF (or MOJOLEARN_IDN_ALL_OFF)
+#: restores the old sequence.
+comptime KNN_IDN_DIRECT_RELABEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 
 comptime KNN_TPB_X = 32
 """`template <int TPB_X = 32>` on all three launchers. A scheduling number;
@@ -337,35 +352,54 @@ def class_probs(
         var y_normalized = ctx.enqueue_create_buffer[DType.int32](
             n_index_rows + n_unique_labels
         )
-        var y_tmp = ctx.enqueue_create_buffer[DType.int32](
-            n_index_rows + n_unique_labels
-        )
-        ctx.synchronize()
-        # `raft::update_device(y_tmp, y[i], n_index_rows)` then
-        # `update_device(y_tmp + n_index_rows, uniq_labels[i], n_unique)`:
-        # device-to-device copies into the two halves.
-        ctx.enqueue_copy(
-            dst_buf=y_tmp.create_sub_buffer[DType.int32](0, n_index_rows),
-            src_buf=y[i],
-        )
-        ctx.enqueue_copy(
-            dst_buf=y_tmp.create_sub_buffer[DType.int32](
-                n_index_rows, n_unique_labels
-            ),
-            src_buf=uniq_labels[i],
-        )
-        ctx.synchronize()
+        comptime if KNN_IDN_DIRECT_RELABEL:
+            # lane/fam-neighbors: `uniq_labels[i]` IS `getUniquelabels(y[i])`
+            # (`_unique_label_sets`), so the set `make_monotonic` would
+            # sort out of [y; uniq] again is the one already on the device.
+            # One `map_label_kernel` launch, zero-based, writes the same
+            # column index the map-then-subtract-one pair wrote.
+            ctx.enqueue_memset(y_normalized, Int32(0))
+            ctx.enqueue_function[map_label_kernel](
+                uniq_labels[i].unsafe_ptr(),
+                Int32(n_unique_labels),
+                y[i].unsafe_ptr(),
+                y_normalized.unsafe_ptr(),
+                Int32(n_index_rows),
+                Int32(1),
+                grid_dim=((n_index_rows + LABEL_TPB - 1) // LABEL_TPB, 1, 1),
+                block_dim=(LABEL_TPB, 1, 1),
+            )
+        else:
+            var y_tmp = ctx.enqueue_create_buffer[DType.int32](
+                n_index_rows + n_unique_labels
+            )
+            ctx.synchronize()
+            # `raft::update_device(y_tmp, y[i], n_index_rows)` then
+            # `update_device(y_tmp + n_index_rows, uniq_labels[i], n_unique)`:
+            # device-to-device copies into the two halves.
+            ctx.enqueue_copy(
+                dst_buf=y_tmp.create_sub_buffer[DType.int32](0, n_index_rows),
+                src_buf=y[i],
+            )
+            ctx.enqueue_copy(
+                dst_buf=y_tmp.create_sub_buffer[DType.int32](
+                    n_index_rows, n_unique_labels
+                ),
+                src_buf=uniq_labels[i],
+            )
+            ctx.synchronize()
 
-        make_monotonic(
-            ctx, y_normalized, y_tmp, n_index_rows + n_unique_labels, False
-        )
-        ctx.enqueue_function[_subtract_one_kernel](
-            y_normalized.unsafe_ptr(),
-            Int32(n_index_rows),
-            grid_dim=((n_index_rows + 255) // 256, 1, 1),
-            block_dim=(256, 1, 1),
-        )
-        ctx.synchronize()
+            make_monotonic(
+                ctx, y_normalized, y_tmp, n_index_rows + n_unique_labels, False
+            )
+            ctx.enqueue_function[_subtract_one_kernel](
+                y_normalized.unsafe_ptr(),
+                Int32(n_index_rows),
+                grid_dim=((n_index_rows + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
+            ctx.synchronize()
+            _ = y_tmp^
 
         if has_weights:
             ctx.enqueue_function[weighted_class_probs_kernel](
@@ -397,7 +431,6 @@ def class_probs(
                 ctx, _clf_tag("votes", i, len(y)), outs[i], cur_size
             )
         _ = y_normalized^
-        _ = y_tmp^
 
 
 def knn_classify(
