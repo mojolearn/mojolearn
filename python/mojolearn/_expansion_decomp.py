@@ -445,6 +445,31 @@ class _Kit:
             self._res_ok = r
         return r
 
+    def w4_flags(self):
+        """lane/apple-fast-w4-decomp: the binding's compiled w4 candidates
+        (`x_decomp_w4_flags`: bit 1 LLE_FAST_DEV_LU, bit 2
+        RSVD_FAST_DIRECT_IN; 0 on a binding without the entry)."""
+        f = self.__dict__.get("_w4_flags")
+        if f is None:
+            try:
+                f = int(getattr(self._raw(), "x_decomp_w4_flags")())
+            except Exception:
+                f = 0
+            self._w4_flags = f
+        return f
+
+    def lu_dev_aux(self, A, clamp=False):
+        """lane/apple-fast-w4-decomp LLE_FAST_DEV_LU: `lu` then `lu_aux` on
+        the device (x_decomp/w4_fast.mojo `dev_lu_aux_py`, the same launches
+        on the same words), A untouched. Returns (lu n x n, pm n x 1, im
+        n x 1, stats as four floats), lu / pm / im device-resident."""
+        n = A.r
+        lu, pm, im = self._dout(n, n), self._dout(n, 1), self._dout(n, 1)
+        diag, st = self._dout(1, n), self._dout(1, 4)
+        self.b.x_decomp_dev_lu_aux(self._did(A), lu._d.id, pm._d.id, im._d.id, diag._d.id, st._d.id,
+                                   [n, int(bool(clamp))])
+        return lu, pm, im, [float(v) for v in st.s]  # glue: the four-field lu_aux status
+
     def _use(self, *ms):
         """The resident path for this call: the GPU binding, and an operand
         already on the device or one of at least _RES_MIN values. A small
@@ -2501,10 +2526,38 @@ def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_it
     the basis differs. The small SVD of Q^T M is exact (Gram eigh).
     Returns (U, s, Vt)."""
     k = _Kit(_mode(numeric_mode))
-    U, S, Vt = _rsvd_core(k, _M.from_input(M, "M"), n_components, n_oversamples, n_iter,
+    A = _rsvd_direct_input(k, M, transpose) if k.w4_flags() & 2 else None
+    U, S, Vt = _rsvd_core(k, A if A is not None else _M.from_input(M, "M"), n_components, n_oversamples, n_iter,
                           power_iteration_normalizer, transpose, flip_sign, random_state)
     kc = n_components
     return U.out(), S.out((kc,)), Vt.out()
+
+
+def _rsvd_direct_input(k, M, transpose):
+    """lane/apple-fast-w4-decomp RSVD_FAST_DIRECT_IN (FAST + Apple default;
+    -D MOJOLEARN_RSVD_FAST_DIRECT_IN_OFF rolls back): M up from its own buffer into a pooled device matrix, as
+    KernelPCA's resident route and the random projections' transform do,
+    instead of `_M.from_input`'s copy into a fresh host store that the first
+    product uploads (880 MB of fresh host pages at the board's 1M x 220).
+    The same refusals in the same order (2-D nonempty, then the host
+    finiteness scan); the same words reach the device. None (the caller
+    takes `_M.from_input`) for sparse input, a binding without the resident
+    entries, or a wide input (`_rsvd_core` transposes it on the host)."""
+    if _is_sparse(M) or not k._res():
+        return None
+    a = as_f32_c(M, ndim=2, name="M")[0]
+    if a.ndim != 2 or min(a.shape) == 0:  # glue: smaller of two shape dims
+        raise ValueError("M: a nonempty two-dimensional input is required")
+    if transpose is True or (transpose == "auto" and a.shape[0] < a.shape[1]):
+        return None     # `_rsvd_core` transposes on the host: main's route
+    fin = _host_all_finite(a)
+    if fin is None:
+        return None
+    if fin is False:
+        raise ValueError("M: input must be finite; NaN/inf are unsupported")
+    A = _M._on_device(_DevBuf(k._raw(), a.size), a.shape[0], a.shape[1])
+    k.b.x_decomp_dev_upload(A._d.id, addr_ro(a, name="M"), a.size)
+    return A
 
 
 def _rsvd_core(k, A, n_components, n_oversamples, n_iter, power_iteration_normalizer, transpose, flip_sign,
@@ -2605,7 +2658,6 @@ def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond, equilibrate=False):
     R S is what the TSQR of A S gives; every step stays on the binding's
     cells (the same words on every column)."""
     from ._linalg_impl import _svd_tall
-    from ._buffer import addr_ro
     n = nn + nrhs
     Ra = _M.zeros(n, n)
     # ORDER MATCHES x_decomp/api.mojo tsqr_r_py: (a, b, r_out), (m, d, nrhs, keep)
@@ -4269,14 +4321,20 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     floor = _LLE_NULL_FLOOR * _F32_EPS * rms
     if not dev_f0:
         F0 = _hstack(Fhat, un)
-    lu, piv, _ = k.lu(F0)
+    if dev_f0 and k.w4_flags() & 1:
+        # lane/apple-fast-w4-decomp LLE_FAST_DEV_LU (-D MOJOLEARN_LLE_FAST_DEV_LU,
+        # FAST + Apple): F0 factored where it lives; the same launches as the
+        # two calls below, without F0 / the factor crossing to the host 5 times
+        lu, pm, im, st = k.lu_dev_aux(F0, clamp=True)
+    else:
+        lu, piv, _ = k.lu(F0)
+        st, _, pm, im = k.lu_aux(lu, piv, clamp=True)
     # a pivot under float32 resolution (an exactly zero one skipped its
     # step) is set to eps times the largest: inverse iteration's usual
     # perturbation (LAPACK's stein/hsein); the factor is only the spectral
     # transform, the Rayleigh-Ritz step below uses F^ itself. The floor and
     # the swaps' row order (and its inverse) are cells (`lu_aux`), no host
     # loop over the rows.
-    st, _, pm, im = k.lu_aux(lu, piv, clamp=True)
     big = st[0]
     if not (big > 0.0 and math.isfinite(big)):
         return None
