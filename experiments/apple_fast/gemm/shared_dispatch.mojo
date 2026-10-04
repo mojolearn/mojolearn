@@ -18,8 +18,6 @@ comptime G1 = is_defined["MOJOLEARN_APPLE_FAST_SHARED_GEMM_G1"]()
 comptime G5 = is_defined["MOJOLEARN_APPLE_FAST_SHARED_GEMM_G5"]()
 comptime AUDIT = is_defined["MOJOLEARN_APPLE_FAST_SHARED_GEMM_AUDIT"]()
 comptime ENABLED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]() and TARGET_COLUMN == COLUMN_APPLE and (G1 or G5 or AUDIT)
-comptime assert not (G1 and G5), "select exactly one shared GEMM candidate"
-comptime assert not (AUDIT and (G1 or G5)), "audit selector is isolated from production selection"
 
 struct AuditState(Defaultable, Movable):
     var arm: Int
@@ -49,6 +47,8 @@ def try_shared_gemm[TRANSPOSE_B: Bool, ROUTE: Int](
     mut b: DeviceBuffer[DType.float32],
     m: Int, n: Int, k: Int,
 ) raises -> Bool:
+    comptime assert not (G1 and G5), "select exactly one shared GEMM candidate"
+    comptime assert not (AUDIT and (G1 or G5)), "audit selector is isolated from production selection"
     comptime assert ROUTE >= 0 and ROUTE < 4
     comptime if not ENABLED:
         return False

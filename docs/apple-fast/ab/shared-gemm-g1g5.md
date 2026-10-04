@@ -69,3 +69,9 @@ this two-entry integration does not claim to accelerate them.
 Only after relevant quality passes should the manager authorize one
 call+first-full-read measurement per arm for covered algorithm/dataset
 rows. No scored jobs are included in this helper.
+
+Compile-only repair r1: original 5a2bc66d212634e7d2a3385ddffa72309994df39
+failed M2 parsing because module-level `comptime assert` is unsupported.
+Move mutual-exclusion assertions into `try_shared_gemm` before its enabled
+branch; keep original SHA and all quality thresholds unchanged. No GPU
+evidence existed for the failed source. New tag: shared-gemm-routes-r1-q-20261004.
