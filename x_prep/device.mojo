@@ -83,7 +83,10 @@ def _download_ranges_staged(ctx: DeviceContext, mut df: DeviceBuffer[DType.float
             ctx.enqueue_copy(dst_ptr=hf + lo, src_buf=df.create_sub_buffer[DType.float32](lo, hi - lo))
 from core.device_store import DeviceStore
 from x_linear.fast_gram import fast_sym_gram_into, fg_part_words
-from x_prep.rr_eigh import rr_eigh_into, rre_words
+from x_prep.rr_eigh import rr_eigh_into, rre_words, rr_eigh_clear
+#: lane fam-prep-metrics: IDENTICAL takes the round-robin eigh on every vendor (the host column runs
+#: the same rounds, x_prep/host/rr_eigh_host.mojo; -D MOJOLEARN_IDN_RR_EIGH_OFF: `eigh_unit`)
+from x_prep.host.rr_eigh_host import IDN_RR_EIGH, eigh_rr_takes
 from x_prep.da_par import (
     DA_TPB, DT, DT_TPB, lda2_rank_kernel, lda2_scal1_kernel, lda2_ms_kernel, lda2_g2_kernel, lda3_rank_kernel,
     lda3_scal_kernel, lda3_tmp_kernel, lda3_inter_kernel, lda3_coef_kernel, lda3_dot_kernel, qda_prep_scal_kernel,
@@ -370,13 +373,13 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                     cov_words = max(cov_words, fg_part_words(Int(cq[8]), Int(cq[7])))
     # the round-robin eigh's scratch and done marks, sized over the program
     var rre_scr = 1
-    comptime if RR_EIGH:
+    comptime if RR_EIGH or IDN_RR_EIGH:
         for s in range(stages):
             if (Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_EIGH
                     and Int(host_q.unsafe_load(s * STAGE_INTS + 2 + EIGH_CYCLIC_Q)) == 0):
                 var eb = Int(host_q.unsafe_load(s * STAGE_INTS + 1))
                 var en = Int(host_q.unsafe_load(s * STAGE_INTS + 3))
-                if eb > 0 and en > 0:
+                if eb > 0 and en > 0 and eigh_rr_takes(en):
                     rre_scr = max(rre_scr, rre_words(en, eb))
     # lane af-ptimpute: the row-tiled folds' per-(chunk, column) partials, sized over the program
     var ptw = 1
@@ -500,13 +503,17 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         comptime if PREP2_FAST:
             if prep2_fast_stage(ctx, df, dw, host_q, s, op, total, IP(unsafe_from_address=Int(qp)), p2):
                 continue
-        comptime if RR_EIGH:
-            if op == OP_EIGH and Int(host_q.unsafe_load(s * STAGE_INTS + 2 + EIGH_CYCLIC_Q)) == 0:
+        comptime if RR_EIGH or IDN_RR_EIGH:
+            if (op == OP_EIGH and Int(host_q.unsafe_load(s * STAGE_INTS + 2 + EIGH_CYCLIC_Q)) == 0
+                    and eigh_rr_takes(Int(host_q.unsafe_load(s * STAGE_INTS + 3)))):
                 # q = [A, m, astride, EVAL, EVEC, cyclic], one unit a matrix
                 var hq = host_q + (s * STAGE_INTS + 2)
                 var pf = FP(unsafe_from_address=Int(df.unsafe_ptr()))
                 var pr = FP(unsafe_from_address=Int(dre.unsafe_ptr()))
                 rr_eigh_into(ctx, pf, Int(hq[0]), Int(hq[1]), Int(hq[2]), total, Int(hq[3]), Int(hq[4]), pr)
+                comptime if IDN_RR_EIGH:
+                    # the destroyed A zeroed, as the host column leaves it
+                    rr_eigh_clear(ctx, pf, Int(hq[0]), Int(hq[1]), Int(hq[2]), total)
                 continue
         comptime if PAR_STAGES:
             if op == OP_LDA_STAGE2 or op == OP_LDA_STAGE3 or op == OP_QDA_PREP:
