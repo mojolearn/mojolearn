@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 from std.math import isfinite
+from std.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
@@ -13,6 +14,8 @@ from metrics.checks.device_io import upload_f32
 from core.device_scan import device_first_nonfinite
 from core.device_pool import pool_give, pool_take
 from preprocessing.minmax import PREP_CLS2_MINMAX_FUSED, PREP_CLS2_MINMAX_POOL, minmax_fit_flagged
+from preprocessing.minmax import minmax_fit_fast_dev, minmax_fit_flagged_dev
+from preprocessing.standard import standard_fit_dev
 from preprocessing.minmax import PREP_FAST_MINMAX, minmax_fit, minmax_fit_fast, minmax_transform, minmax_transform_into
 from preprocessing.standard import standard_fit, standard_transform, standard_transform_into
 
@@ -207,6 +210,73 @@ def _upload_direct(
     return buf^
 
 
+# ---- device checks of the fitted rows (lane cpu3-core) --------------------
+# The direct fits used to download the fitted rows, walk them on the host for
+# a nonfinite value and a bad scale or variance, and copy them into the
+# caller's buffer word by word. The walk is a kernel now: one flag vector
+# comes back, then the rows go to the caller in one copy.
+
+
+def prep_rows_check_kernel(
+    res: MutPointer[Float32, MutAnyOrigin], n_fin: Int32,
+    pos_lo: Int32, pos_n: Int32, nonneg_lo: Int32, nonneg_n: Int32,
+    zero_lo: Int32, zero_n: Int32, flag: MutPointer[Int32, MutAnyOrigin],
+):
+    """One thread a value of the fitted rows. flag[0]: a nonfinite value in
+    [0, n_fin); flag[1]: a value <= 0 in the positive span or < 0 in the
+    nonnegative span; flag[2]: a nonzero value in the zero span (the FUSED
+    fit's nonfinite-input row). Every writer stores the same 1."""
+    var i = Int(block_idx.x) * 256 + Int(thread_idx.x)
+    var end = max(Int(n_fin), max(Int(zero_lo) + Int(zero_n), 0))
+    if i >= end:
+        return
+    var v = res.unsafe_load(i)
+    if i < Int(n_fin) and not isfinite(v):
+        flag.unsafe_store(0, Int32(1))
+    if i >= Int(pos_lo) and i < Int(pos_lo) + Int(pos_n) and v <= Float32(0):
+        flag.unsafe_store(1, Int32(1))
+    if i >= Int(nonneg_lo) and i < Int(nonneg_lo) + Int(nonneg_n) and v < Float32(0):
+        flag.unsafe_store(1, Int32(1))
+    if i >= Int(zero_lo) and i < Int(zero_lo) + Int(zero_n) and v != Float32(0):
+        flag.unsafe_store(2, Int32(1))
+
+
+def _prep_rows_check(
+    ctx: DeviceContext, mut res: DeviceBuffer[DType.float32], n_fin: Int,
+    pos_lo: Int, pos_n: Int, nonneg_lo: Int, nonneg_n: Int, zero_lo: Int, zero_n: Int,
+) raises -> SIMD[DType.int32, 4]:
+    """`prep_rows_check_kernel` over the fitted rows; the three flags home."""
+    var total = max(n_fin, zero_lo + zero_n)
+    var flag = ctx.enqueue_create_buffer[DType.int32](4)
+    ctx.enqueue_memset(flag, Int32(0))
+    ctx.enqueue_function[prep_rows_check_kernel](
+        res.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n_fin),
+        Int32(pos_lo), Int32(pos_n), Int32(nonneg_lo), Int32(nonneg_n),
+        Int32(zero_lo), Int32(zero_n), flag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        grid_dim=(total + 255) // 256, block_dim=256,
+    )
+    var h = ctx.enqueue_create_host_buffer[DType.int32](4)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=flag)
+    ctx.synchronize()
+    var out = SIMD[DType.int32, 4](
+        h.unsafe_ptr().unsafe_load(0), h.unsafe_ptr().unsafe_load(1), h.unsafe_ptr().unsafe_load(2), 0,
+    )
+    _ = h^
+    _ = flag^
+    return out
+
+
+def _prep_rows_emit(
+    ctx: DeviceContext, mut res: DeviceBuffer[DType.float32], count: Int,
+    output: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    """The first `count` fitted values into the caller's buffer, one copy."""
+    var head = res.create_sub_buffer[DType.float32](0, count)
+    ctx.enqueue_copy(dst_ptr=output, src_buf=head)
+    ctx.synchronize()
+    _ = head^
+
+
 def minmax_fit_direct(
     x: MutPointer[Float32, MutUntrackedOrigin], n: Int, d: Int, lower: Float32, upper: Float32,
     output: MutPointer[Float32, MutUntrackedOrigin],
@@ -223,15 +293,18 @@ def minmax_fit_direct(
         return 0
     # lane/apple-fast-prep: under PREP_FAST_MINMAX the extrema pass is the
     # row-tiled kernel (minmax_fit_fast); otherwise minmax_fit itself
-    var result = minmax_fit_fast(ctx,dx,n,d,lower,upper)
+    # the five rows stay on the device, are checked there, and go to the
+    # caller in one copy (lane cpu3-core)
+    var res = minmax_fit_fast_dev(ctx,dx,n,d,lower,upper)
+    var f = _prep_rows_check(ctx,res,5*d,3*d,d,0,0,0,0)
     _ = dx^
+    if f[0] != 0:
+        raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
+    if f[1] != 0:
+        raise Error("MinMaxScaler: Float32 scale underflow")
+    _prep_rows_emit(ctx,res,5*d,output)
+    _ = res^
     _ = ctx^
-    finite_values(result)
-    for c in range(d):
-        if result[3*d+c] <= 0:
-            raise Error("MinMaxScaler: Float32 scale underflow")
-    for i in range(5*d):
-        output[i] = result[i]
     return 1
 
 
@@ -250,34 +323,38 @@ def _minmax_fit_direct_cls2(
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     else:
         dx = _upload_direct(ctx,x,n*d)
-    var result: List[Float32]
+    var res: DeviceBuffer[DType.float32]
     var ok = True
+    var f: SIMD[DType.int32, 4]
     comptime if PREP_CLS2_MINMAX_FUSED:
-        result = minmax_fit_flagged(ctx,dx,n,d,lower,upper)
-        for c in range(d):
-            if result[5*d+c] != 0:
-                ok = False
+        # the sixth row holds the per-column nonfinite-input flags
+        res = minmax_fit_flagged_dev(ctx,dx,n,d,lower,upper)
+        f = _prep_rows_check(ctx,res,5*d,3*d,d,0,0,5*d,d)
+        if f[2] != 0:
+            ok = False
     else:
         if device_first_nonfinite(ctx,dx,n*d) >= 0:
             ok = False
-            result = List[Float32]()
+            res = ctx.enqueue_create_buffer[DType.float32](1)
+            f = SIMD[DType.int32, 4](0)
         else:
-            result = minmax_fit_fast(ctx,dx,n,d,lower,upper)
+            res = minmax_fit_fast_dev(ctx,dx,n,d,lower,upper)
+            f = _prep_rows_check(ctx,res,5*d,3*d,d,0,0,0,0)
     comptime if PREP_CLS2_MINMAX_POOL:
         pool_give["MojoPrepCls2MinmaxX"](dx^)
     else:
         _ = dx^
-    _ = ctx^
     if not ok:
+        _ = res^
+        _ = ctx^
         return 0
-    for i in range(5*d):
-        if not isfinite(result[i]):
-            raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
-    for c in range(d):
-        if result[3*d+c] <= 0:
-            raise Error("MinMaxScaler: Float32 scale underflow")
-    for i in range(5*d):
-        output[i] = result[i]
+    if f[0] != 0:
+        raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
+    if f[1] != 0:
+        raise Error("MinMaxScaler: Float32 scale underflow")
+    _prep_rows_emit(ctx,res,5*d,output)
+    _ = res^
+    _ = ctx^
     return 1
 
 
@@ -293,15 +370,18 @@ def standard_fit_direct(
     if device_first_nonfinite(ctx,dx,n*d) >= 0:
         _ = dx^
         return 0
-    var result = standard_fit(ctx,dx,n,d,with_mean,with_std)
+    # the three rows stay on the device, are checked there, and go to the
+    # caller in one copy (lane cpu3-core)
+    var res = standard_fit_dev(ctx,dx,n,d,with_mean,with_std)
+    var f = _prep_rows_check(ctx,res,3*d,2*d,d,d,d,0,0)
     _ = dx^
+    if f[0] != 0:
+        raise Error("StandardScaler: nonfinite input or Float32 arithmetic overflow")
+    if f[1] != 0:
+        raise Error("StandardScaler: invalid variance or scale")
+    _prep_rows_emit(ctx,res,3*d,output)
+    _ = res^
     _ = ctx^
-    standard_finite(result)
-    for c in range(d):
-        if result[d+c] < 0 or result[2*d+c] <= 0:
-            raise Error("StandardScaler: invalid variance or scale")
-    for i in range(3*d):
-        output[i] = result[i]
     return 1
 
 
