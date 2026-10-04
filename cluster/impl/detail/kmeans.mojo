@@ -1303,9 +1303,11 @@ at iteration i stops at the next tested iteration (at most
 KMEANS_LAZY_SHIFT_EVERY - 1 more Lloyd steps, which never raise the
 objective); a fit that runs to max_iter is unchanged bit for bit. Untraced
 fits without the inertia check, with `params.lazy_shift` set, only."""
-#: OPT-IN (2026-10-04, unmeasured): `-D MOJOLEARN_KMEANS_FAST_LAZY_SHIFT` sets
-#: `lazy_shift` on the KMeans estimator's fits (bindings/_mojolearn.mojo
-#: `kmeans_fit` call), FAST on Apple only. A/B owed: kmeans taxi, istella.
+#: DROPPED-slower, stays OFF (opt-in `-D MOJOLEARN_KMEANS_FAST_LAZY_SHIFT` sets
+#: `lazy_shift` on the KMeans estimator's fits, bindings/_mojolearn.mojo
+#: `kmeans_fit` call, FAST on Apple only). M3 afc_ab_def, full board size, 1 run
+#: per arm, 2026-10-04: kmeans istella 1451.5 -> 1527.7 ms (slower), taxi
+#: 977.6 -> 974.8 ms (flat); inertia equal.
 comptime KMEANS_FAST_LAZY_SHIFT = is_defined["MOJOLEARN_KMEANS_FAST_LAZY_SHIFT"]()
 comptime KMEANS_LAZY_SHIFT_EVERY = 4
 
