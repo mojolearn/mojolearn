@@ -124,6 +124,7 @@ from dbscan.impl.neighbors.epsilon_neighborhood import (
 )
 from dbscan.impl.label.classlabels import make_monotonic
 from dbscan.impl.sparse.detail.csr import (
+    DBSCAN_CC_FLAG_CELLS,
     MAX_LABEL,
     weak_cc_batched,
 )
@@ -453,8 +454,12 @@ their code branches on is this Bool.
         batch = n_rows
     var n_batches = (n_rows + batch - 1) // batch
 
-    var d_flag = ctx.enqueue_create_buffer[DType.int32](1)
-    var h_flag = ctx.enqueue_create_host_buffer[DType.int32](1)
+    # `DBSCAN_CC_FLAG_CELLS` is 1 unless `IDN_DBSCAN_CC_GATED` keeps the
+    # convergence cells of a whole chunk of passes on the device.
+    var d_flag = ctx.enqueue_create_buffer[DType.int32](DBSCAN_CC_FLAG_CELLS)
+    var h_flag = ctx.enqueue_create_host_buffer[DType.int32](
+        DBSCAN_CC_FLAG_CELLS
+    )
     var h_adjlen = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.synchronize()
 
