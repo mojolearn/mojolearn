@@ -54,10 +54,10 @@ def main():
     manifest = json.loads((arms / 'manifest.json').read_text())
     assert manifest['source_sha'] == args.source and manifest['binding'] == 'x_trees'
     assert manifest['numeric_mode'] == 'fast'
-    assert manifest['defines_A'] == '-D MOJOLEARN_PSHAP_DELTA_OFF'
-    assert manifest['defines_B'] == ''
+    assert manifest['defines_A'] == ''
+    assert manifest['defines_B'] == '-D MOJOLEARN_PSHAP_DELTA_OFF'
     define = 'DEFAULT_VS_MOJOLEARN_PSHAP_DELTA_OFF'
-    delta_expected = {'A': False, 'B': True}
+    delta_expected = {'A': True, 'B': False}
     hashes = {arm: digest(arms / (arm + '.so')) for arm in ('A', 'B')}
     assert hashes == manifest['hashes']
     out = home / 'mq/out' / (args.quality_tag + '-quality')
@@ -82,12 +82,15 @@ def main():
             assert records[0] == dict(binding_sha256=hashes[arm], delta=delta_expected[arm], batch=True,
                                       fixture='pshap-delta-v1-seed913', arrays=13)
             print('PSHAP-DELTA-PAIR arm=' + arm + ' capture=PASS', flush=True)
+        # promote_build: A=default, B=OFF. Comparator arguments are
+        # reference then candidate: compare rollback B against default A.
+        print('PSHAP-DELTA-ORDER reference=B_OFF candidate=A_default', flush=True)
         run_logged([sys.executable, 'tools/pshap_delta_quality.py', 'compare',
-                    str(out / 'A.npz'), str(out / 'B.npz')], out / 'compare.log')
+                    str(out / 'B.npz'), str(out / 'A.npz')], out / 'compare.log')
         assert 'PSHAP-DELTA-AB status=PASS cases=3' in (out / 'compare.log').read_text()
         with receipt_path.open('x') as stream:
             json.dump(dict(source_sha=args.source, hashes=hashes, status='PASS',
-                           fixture='pshap-delta-v1-seed913', arrays=13, define=define), stream, sort_keys=True)
+                           fixture='pshap-delta-v1-seed913', arrays=13, define=define, reference_arm='B', candidate_arm='A'), stream, sort_keys=True)
         print('PSHAP-DELTA-PAIR status=PASS source=' + args.source + ' receipt=' + str(receipt_path))
     finally:
         temporary = installed.with_suffix('.so.restore')

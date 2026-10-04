@@ -22,8 +22,14 @@ math stay on GPU. Callback must remain deterministic per row, as already
 assumed by existing chunked model evaluation. The benchmark's NumPy ridge
 callback is the existing boundary; this change adds no NumPy product math.
 
-Manager validation: compile x_trees A=-D MOJOLEARN_PSHAP_DELTA_OFF and B=empty,
+Manager validation: compile x_trees A=empty (default) and B=-D MOJOLEARN_PSHAP_DELTA_OFF,
 then run `python3 tools/pshap_delta_pair.py quality SOURCE_SHA
-pshap-delta-default-quality-20261004` on M3. Pair helper now accepts only quality
+pshap-delta-default-r1-quality-20261004` on M3. Pair helper now accepts only quality
 and checks rollback/default manifest, switches and hashes. Fixed original
 quality thresholds preserved. No default merge until compile/quality approval.
+
+Promotion-build order: A is default, B is rollback. The unchanged comparator
+receives B.npz as its reference and A.npz as its candidate, retaining the
+model-row reduction gate in the correct direction. Both captures remain
+named by build arm; PASS receipt records reference_arm=B and candidate_arm=A.
+Original preparation cfd023b842044264a30fe5fe75ea93e97883a153 was not compiled.
