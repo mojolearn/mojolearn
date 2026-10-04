@@ -200,6 +200,7 @@ from mamba.impl.modules.afn_defines import (
     AFN_MAMBA1_FUSE_IN,
     AFN_MAMBA_ARENA,
     AFN_MAMBA_DEVICE_REFUSAL,
+    IDN_MAMBA_ALLOC_NOWAIT,
     IDN_MAMBA_ARENA,
 )
 from mamba.impl.modules.afn_arena import MambaArena
@@ -490,7 +491,7 @@ def mamba_zeros[wait: Bool = True](
     else:
         dev.enqueue_fill(Float32(0.0))
     # The guarded sub-buffer is local; keep its existing completion fence.
-    comptime if wait or MAMBA_GUARD > 0:
+    comptime if (wait and not IDN_MAMBA_ALLOC_NOWAIT) or MAMBA_GUARD > 0:
         step_count_sync()
         ctx.synchronize()
     return dev^
@@ -583,7 +584,8 @@ def mamba_scratch(
     var dev = mamba_device_alloc(ctx, n_buf)
     comptime if not MAMBA_POISON:
         dev.enqueue_fill(Float32(0.0))
-    ctx.synchronize()
+    comptime if not IDN_MAMBA_ALLOC_NOWAIT:
+        ctx.synchronize()
     return dev^
 
 

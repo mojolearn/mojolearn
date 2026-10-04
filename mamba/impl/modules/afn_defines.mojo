@@ -76,6 +76,18 @@ comptime _IDN_MAMBA_DEVICE = (
     and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
+#: IDN_MAMBA_ALLOC_NOWAIT (default ON; `-D MOJOLEARN_IDN_MAMBA_ALLOC_NOWAIT_OFF`
+#: or `-D MOJOLEARN_IDN_ALL_OFF` restores main): `mamba_zeros` and
+#: `mamba_scratch` return without waiting for their fill. The buffer is
+#: returned to its owner and the fill is ahead of every reader on the same
+#: in-order context, so the wait ordered nothing; it was one host round trip
+#: per stage, state and scratch buffer on every path the arena does not
+#: serve (the prefill sessions, the Mamba-2 and Mamba-3 backward: about
+#: forty to sixty waits per call). The poison build's guarded fill keeps its
+#: wait.
+comptime IDN_MAMBA_ALLOC_NOWAIT = _IDN_MAMBA_DEVICE and not is_defined[
+    "MOJOLEARN_IDN_MAMBA_ALLOC_NOWAIT_OFF"
+]()
 comptime IDN_MAMBA_ARENA = _IDN_MAMBA_DEVICE and not is_defined["MOJOLEARN_IDN_MAMBA_ARENA_OFF"]()
 comptime IDN_MAMBA_DEVICE_REFUSAL = _IDN_MAMBA_DEVICE and not is_defined[
     "MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF"
