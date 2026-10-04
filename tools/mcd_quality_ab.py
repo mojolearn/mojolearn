@@ -34,8 +34,17 @@ def _arrays(data):
 
 
 def _logdet(c):
+    """log|det| of a covariance (sign dropped: _eig reports a nonpositive spectrum)."""
     s, v = np.linalg.slogdet(np.asarray(c, dtype=np.float64))
-    return float(v) if s > 0 else float("nan")
+    return float(v)
+
+
+def _eig(c):
+    """(min eigenvalue, max eigenvalue, sign of det, pseudo log det over eigenvalues > 1e-12 * max)."""
+    c = np.asarray(c, dtype=np.float64)
+    w = np.linalg.eigvalsh((c + c.T) / 2)
+    keep = w > 1e-12 * max(w.max(), 0.0)
+    return float(w.min()), float(w.max()), int(np.linalg.slogdet(c)[0]), float(np.log(w[keep]).sum()), int(keep.sum())
 
 
 def fit(a):
@@ -56,6 +65,7 @@ def fit(a):
         # the MCD objective itself: log det of the plain covariance of the raw h-subset
         S = X[out[tag + "_rawsup"]].astype(np.float64)
         out[tag + "_objld"] = np.array(_logdet(np.cov(S, rowvar=False, bias=True)))
+    out["Xstd"] = X.astype(np.float64).std(axis=0)
     # MinCovDet has no predict: flag Xq rows past the chi2(p) 0.975 quantile of its robust distance
     from scipy.stats import chi2
     d2 = np.asarray(mc.mahalanobis(Xq), dtype=np.float64).reshape(-1)
@@ -87,11 +97,14 @@ def compare(a):
     res = {}
     for tag, name in (("ee", "EllipticEnvelope"), ("mcd", "MinCovDet")):
         print("\n== %s (taxi, X 100k, Xq held out) ==" % name)
-        print("%-10s %8s %16s %16s %8s" % ("build", "frac_Xq", "logdet_rawcov", "logdet_hsubset", "|rawsup|"))
+        print("%-10s %8s %16s %5s %11s %11s %16s %4s %16s %8s" % ("build", "frac_Xq", "log|det|raw", "sign", "eig_min",
+              "eig_max", "pseudo_logdet", "rank", "logdet_hsubset", "|rawsup|"))
         for L in labs:
             r = R[L]
-            print("%-10s %8.4f %16.8f %16.8f %8d" % (L, r[tag + "_flag"].mean(), _logdet(r[tag + "_rawcov"]),
-                                                    float(r[tag + "_objld"]), int(r[tag + "_rawsup"].sum())))
+            e = _eig(r[tag + "_rawcov"])
+            print("%-10s %8.4f %16.8f %5d %11.3e %11.3e %16.8f %4d %16.8f %8d" % (L, r[tag + "_flag"].mean(),
+                  _logdet(r[tag + "_rawcov"]), e[2], e[0], e[1], e[3], e[4], float(r[tag + "_objld"]),
+                  int(r[tag + "_rawsup"].sum())))
         print("%-18s %10s %10s %12s %12s %12s" % ("pair", "J_flagXq", "J_support", "J_rawsup", "loc_rel", "cov_relF"))
         for i in range(len(labs)):
             for j in range(i + 1, len(labs)):
@@ -102,11 +115,13 @@ def compare(a):
                         _rel(x[tag + "_loc"], y[tag + "_loc"]), _rel(x[tag + "_cov"], y[tag + "_cov"]))
                 res[(tag, pr)] = vals
                 print("%-18s %10.6f %10.6f %12.6f %12.3e %12.3e" % ((pr,) + vals))
+    if labs and "Xstd" in R[labs[0]]:
+        print("X column std (constant columns make every det 0):", np.array2string(R[labs[0]]["Xstd"], precision=3))
     ok = "fast" in R and "off" in R
     verdict = []
     if ok:
         for tag in ("ee", "mcd"):
-            lf, lo = _logdet(R["fast"][tag + "_rawcov"]), _logdet(R["off"][tag + "_rawcov"])
+            lf, lo = _eig(R["fast"][tag + "_rawcov"])[3], _eig(R["off"][tag + "_rawcov"])[3]  # pseudo log det
             jf = res[(tag, "fast-off")][0]
             good = lf <= lo + 1e-6 * abs(lo) and jf >= 0.99
             verdict.append(good)
