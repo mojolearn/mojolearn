@@ -233,8 +233,12 @@ comptime RESAMPLE_FAST_PERM_SELECT = (
 #: Same rows in the same order. Python glue (data movement only); this
 #: binding reports the define so Python reads no environment. Source
 #: lane/apple-fast-resample@50b96e795. Known: never compiled, never
-#: measured. Fixed here: y must be an Array (a label list keeps the gather);
-#: the fold check also verifies ascending endpoints of both sides.
+#: measured. Fixed here: only on `_native_default_folds`' folds (ascending
+#: partitions by construction, so the O(1) endpoint check is exact; the old
+#: check accepted any splitter's folds and could reorder rows); y must be an
+#: Array (a label list keeps the gather); the views are read-only so an
+#: estimator cannot write into the caller's X / y. Interacts with
+#: CV_FAST_TRUST_FOLDS only in that both read the same native folds.
 comptime CV_FAST_SLICE = (
     RESAMPLE_FAST_APPLE and is_defined["MOJOLEARN_CV_FAST_SLICE"]()
 )
