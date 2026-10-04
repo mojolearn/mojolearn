@@ -351,9 +351,9 @@ def _gpu_gather(arrays, n, count, seed, numeric_mode):
     if any(not isinstance(x, np.ndarray) or x.dtype != np.float32
            or x.ndim not in (1, 2) or not x.flags.c_contiguous
            or (x.ndim == 2 and not 0 < x.shape[1] <= 2147483647)
-           for x in arrays):
+           for x in arrays):  # glue: inspect dtype rank and strides of each argument
         return None
-    outputs = [np.empty((count,) + x.shape[1:], dtype=np.float32) for x in arrays]
+    outputs = [np.empty((count,) + x.shape[1:], dtype=np.float32) for x in arrays]  # glue: allocate one caller-owned output per argument
     addresses = []
     widths = []
     for x, output in zip(arrays, outputs):  # glue: one native span per argument
