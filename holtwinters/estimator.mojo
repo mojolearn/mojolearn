@@ -29,7 +29,9 @@ from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 from checks.numerics import ftz
 from std.gpu import block_dim, block_idx, thread_idx
+from std.math import isfinite
 from std.memory import bitcast
+from std.sys.compile import is_defined
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
@@ -46,7 +48,39 @@ from holtwinters.impl.runner import (
     holtwinters_validate_data,
     holtwinters_validate_params,
 )
-from holtwinters.impl.tsa.holtwinters_params import SEASONAL_ADDITIVE, seasonal_from_name
+from holtwinters.impl.tsa.holtwinters_params import (
+    SEASONAL_ADDITIVE,
+    SEASONAL_MULTIPLICATIVE,
+    seasonal_from_name,
+)
+
+#: lane/fam-timeseries (2026-10-04), IDENTICAL on every vendor: the binding's
+#: fit (`holtwinters_fit_ptr`) uploads from the caller's address, checks the
+#: input with a device kernel (one flag word) and brings every output down
+#: into the caller's buffers with ONE wait, instead of a host copy of the
+#: input into a list, a host walk over every value, eleven downloads each
+#: with its own wait (the 64-iteration trace among them, which the binding
+#: never hands out) and element-by-element copies out. The fit itself is
+#: `fit(...)` with the same arguments, so no bit moves. An input the host
+#: walk would refuse, and a run with the identity trace on, take the old
+#: sequence (which raises the refusal by name, series and time).
+#: `-D MOJOLEARN_IDN_HW_FIT_DIRECT_OFF=1` (or MOJOLEARN_IDN_ALL_OFF)
+#: restores the old sequence. FAST is unchanged.
+comptime HW_FIT_DIRECT = _DEVCTX_MODE == _DEVCTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_HW_FIT_DIRECT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime HW_FLAG_TPB = 256
+#: lane/fam-timeseries (2026-10-04), IDENTICAL on every vendor: the binding's
+#: forecast (`holtwinters_forecast_ptr`) uploads the three component blocks
+#: from the caller's packed buffer and downloads into the caller's output in
+#: bulk, instead of three element-by-element host copies of every component,
+#: three uploads each with its own wait and an element-by-element copy out.
+#: The forecast is `forecast(...)` with the same arguments; no bit moves.
+#: `-D MOJOLEARN_IDN_HW_FORECAST_DIRECT_OFF=1` (or MOJOLEARN_IDN_ALL_OFF)
+#: restores the old sequence, which a traced run and `h <= 0` still take.
+comptime HW_FORECAST_DIRECT = _DEVCTX_MODE == _DEVCTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_HW_FORECAST_DIRECT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 
 
 struct HWFit(Movable):
@@ -292,6 +326,132 @@ def holtwinters_forecast_host(fitted: HWFit, h: Int) raises -> List[Float32]:
 # why the three copies of the order are meant to be diffable by eye.
 
 
+def hw_input_flag_kernel(
+    flag: MutPointer[UInt32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    cells_in: Int64,
+    positive_in: Int32,
+):
+    """flag[0] = 1 when any input value is one `holtwinters_validate_data`
+    refuses: non-finite, or (multiplicative) not strictly positive. Every
+    such thread writes the same word; the flag starts 0."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(cells_in):
+        return
+    var v = y.unsafe_load(i)
+    var refused = not isfinite(v)
+    if positive_in != 0 and not (v > Float32(0.0)):
+        refused = True
+    if refused:
+        flag.unsafe_store(0, UInt32(1))
+
+
+def _holtwinters_fit_direct(
+    data_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    comps_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    stats_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    flags_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    n: Int,
+    batch_size: Int,
+    frequency: Int,
+    start_periods: Int,
+    seasonal: String,
+    eps: Float32,
+    init_method: Int,
+) raises -> Int:
+    """HW_FIT_DIRECT (lane/fam-timeseries): `holtwinters_fit_ptr`'s answer
+    with the input and the outputs moved in bulk and one wait after the fit.
+    Returns `components_len`, or -1 with nothing written when the caller
+    must take the old sequence (the identity trace is on, or the input holds
+    a value the host walk refuses by name). The caller has checked
+    `batch_size`, `n` and their product."""
+    var trace = IdentityTrace()
+    if trace.enabled:
+        return -1
+    # the old sequence's refusals, in its order
+    var st = seasonal_from_name(seasonal)
+    holtwinters_validate_params(n, batch_size, frequency, start_periods, eps)
+    var cells = batch_size * n
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var sizes = buffer_size(n, batch_size, frequency)
+    var ddata = ctx.enqueue_create_buffer[DType.float32](cells)
+    ctx.enqueue_copy(dst_buf=ddata, src_ptr=data_ptr)
+    var flag_d = ctx.enqueue_create_buffer[DType.uint32](1)
+    var flag_h = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    flag_d.enqueue_fill(UInt32(0))
+    ctx.enqueue_function[hw_input_flag_kernel](
+        flag_d.unsafe_ptr(), ddata.unsafe_ptr(), Int64(cells),
+        Int32(1 if st == SEASONAL_MULTIPLICATIVE else 0),
+        grid_dim=(cells + HW_FLAG_TPB - 1) // HW_FLAG_TPB,
+        block_dim=HW_FLAG_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=flag_h.unsafe_ptr(), src_buf=flag_d)
+    ctx.synchronize()
+    var refused = flag_h.unsafe_ptr().unsafe_load(0) != UInt32(0)
+    _ = flag_h^
+    _ = flag_d^
+    if refused:
+        _ = ddata^
+        _ = ctx^
+        return -1
+    var cl = sizes.components_len
+    var n_trace = HW_DEFAULT_TRACE_ITERS * 3 * batch_size
+    var level_d = ctx.enqueue_create_buffer[DType.float32](cl)
+    var trend_d = ctx.enqueue_create_buffer[DType.float32](cl)
+    var season_d = ctx.enqueue_create_buffer[DType.float32](cl)
+    var error_d = ctx.enqueue_create_buffer[DType.float32](batch_size)
+    var alpha_d = ctx.enqueue_create_buffer[DType.float32](batch_size)
+    var beta_d = ctx.enqueue_create_buffer[DType.float32](batch_size)
+    var gamma_d = ctx.enqueue_create_buffer[DType.float32](batch_size)
+    var criterion_d = ctx.enqueue_create_buffer[DType.int32](batch_size)
+    var niter_d = ctx.enqueue_create_buffer[DType.int32](batch_size)
+    var decisions_d = ctx.enqueue_create_buffer[DType.int32](batch_size)
+    var iter_trace_d = ctx.enqueue_create_buffer[DType.float32](n_trace if n_trace > 0 else 1)
+    # `holtwinters_fit_host_traced`'s fills (no padding, poison 0.0)
+    level_d.enqueue_fill(Float32(0.0))
+    trend_d.enqueue_fill(Float32(0.0))
+    season_d.enqueue_fill(Float32(0.0))
+    error_d.enqueue_fill(Float32(0.0))
+    iter_trace_d.enqueue_fill(Float32(0.0))
+    criterion_d.enqueue_fill(Int32(-7))
+    niter_d.enqueue_fill(Int32(-7))
+    decisions_d.enqueue_fill(Int32(-7))
+    ctx.synchronize()
+    fit(
+        ctx, n, batch_size, frequency, start_periods, st, eps, ddata,
+        level_d, trend_d, season_d, error_d, alpha_d, beta_d, gamma_d,
+        criterion_d, niter_d, decisions_d, iter_trace_d, trace, HW_DEFAULT_TRACE_ITERS,
+        -1, HW_OPTIM_TPB, 0, Float32(0.0), init_method,
+    )
+    # every output the binding hands out, in `holtwinters_fit_ptr`'s packed
+    # order, one wait
+    ctx.enqueue_copy(dst_ptr=comps_ptr, src_buf=level_d)
+    ctx.enqueue_copy(dst_ptr=comps_ptr + cl, src_buf=trend_d)
+    ctx.enqueue_copy(dst_ptr=comps_ptr + 2 * cl, src_buf=season_d)
+    ctx.enqueue_copy(dst_ptr=stats_ptr, src_buf=error_d)
+    ctx.enqueue_copy(dst_ptr=stats_ptr + batch_size, src_buf=alpha_d)
+    ctx.enqueue_copy(dst_ptr=stats_ptr + 2 * batch_size, src_buf=beta_d)
+    ctx.enqueue_copy(dst_ptr=stats_ptr + 3 * batch_size, src_buf=gamma_d)
+    ctx.enqueue_copy(dst_ptr=flags_ptr, src_buf=niter_d)
+    ctx.enqueue_copy(dst_ptr=flags_ptr + batch_size, src_buf=criterion_d)
+    ctx.synchronize()
+    _ = ddata^
+    _ = level_d^
+    _ = trend_d^
+    _ = season_d^
+    _ = error_d^
+    _ = alpha_d^
+    _ = beta_d^
+    _ = gamma_d^
+    _ = criterion_d^
+    _ = niter_d^
+    _ = decisions_d^
+    _ = iter_trace_d^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return cl
+
+
 def holtwinters_fit_ptr(
     data_ptr: MutPointer[Float32, MutUntrackedOrigin],
     comps_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -382,6 +542,16 @@ def holtwinters_fit_ptr(
             "holtwinters fit: batch_size * n overflowed (batch_size="
             + String(batch_size) + ", n=" + String(n) + ")"
         )
+    comptime if HW_FIT_DIRECT:
+        # IDENTICAL on every vendor (lane/fam-timeseries): bulk transfers,
+        # a device input check and one wait after the fit; -1 hands the call
+        # to the sequence below (trace on, or a refusal it raises by name).
+        var direct = _holtwinters_fit_direct(
+            data_ptr, comps_ptr, stats_ptr, flags_ptr, n, batch_size, frequency,
+            start_periods, seasonal, eps, init_method,
+        )
+        if direct >= 0:
+            return direct
     var data = List[Float32]()
     data.reserve(_cells)
     for i in range(_cells):
@@ -440,6 +610,30 @@ def holtwinters_forecast_ptr(
             + String(batch_size) + ")"
         )
     var components_len = (n - frequency) * batch_size
+    comptime if HW_FORECAST_DIRECT:
+        var direct_trace = IdentityTrace()
+        if h > 0 and not direct_trace.enabled:
+            var ctx = process_ctx[_DEVCTX_SLOT]()
+            var level_d = ctx.enqueue_create_buffer[DType.float32](components_len)
+            var trend_d = ctx.enqueue_create_buffer[DType.float32](components_len)
+            var season_d = ctx.enqueue_create_buffer[DType.float32](components_len)
+            var fc_d = ctx.enqueue_create_buffer[DType.float32](h * batch_size)
+            ctx.enqueue_copy(dst_buf=level_d, src_ptr=comps_ptr)
+            ctx.enqueue_copy(dst_buf=trend_d, src_ptr=comps_ptr + components_len)
+            ctx.enqueue_copy(dst_buf=season_d, src_ptr=comps_ptr + 2 * components_len)
+            forecast(
+                ctx, n, batch_size, frequency, h, st,
+                level_d, trend_d, season_d, fc_d, direct_trace, -1,
+            )
+            ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=fc_d)
+            ctx.synchronize()
+            _ = level_d^
+            _ = trend_d^
+            _ = season_d^
+            _ = fc_d^
+            # DEVIATION 1946: the context dies LAST, after every value built on it.
+            _ = ctx^
+            return h * batch_size
     var fitted = HWFit(n, batch_size, frequency, st, 0)
     fitted.level.reserve(components_len)
     fitted.trend.reserve(components_len)

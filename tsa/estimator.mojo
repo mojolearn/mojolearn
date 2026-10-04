@@ -55,6 +55,7 @@ from tsa.impl.timeSeries.kpss_fused import (
     KPSS_FUSED_MAX_N, KPSS_PACK_W, TSA_KPSS_PACK, TSA_SELD_FUSED, kpss_rounds,
 )
 from tsa.impl.auto_arima import select_d
+from tsa.impl.select_d_fast import KPSS_ONE_WAIT, kpss_one_wait
 from tsa.impl.stationarity import kpss_test
 
 
@@ -125,6 +126,16 @@ def kpss_test_host(
             for b in range(batch_size):
                 stat_ptr.unsafe_store(b, res[b * KPSS_PACK_W])
                 flags_ptr.unsafe_store(b, Int32(1) if res[b * KPSS_PACK_W + 1] != Float32(0.0) else Int32(0))
+            _ = ctx^
+            return batch_size
+    comptime if KPSS_ONE_WAIT:
+        # IDENTICAL on every vendor (lane/fam-timeseries; -D
+        # MOJOLEARN_IDN_KPSS_ONE_WAIT_OFF off): one wait instead of four,
+        # the primitive's kernels (select_d_fast.mojo::kpss_one_wait). False
+        # is a refusal, raised by name by the sequence below.
+        if kpss_one_wait(
+            ctx, y_ptr, flags_ptr, stat_ptr, batch_size, n_obs, d, D, s, pval_threshold
+        ):
             _ = ctx^
             return batch_size
     var y = _upload_f32(ctx, y_ptr, batch_size * n_obs)

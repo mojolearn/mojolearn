@@ -50,7 +50,7 @@ from arima.impl.lbfgs_device import (
 )
 from arima.impl.timeSeries.arima_helpers import batched_jones_transform
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, unpack, validate_order
-from checks.numerics import ftz, identical_div
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div
 
 comptime EW_TPB = 128
 # FAST + Apple default after M3 gap26-arima-tail-{synthetic,taxi-hourly}:
@@ -59,8 +59,17 @@ comptime EW_TPB = 128
 # selected-order, parameter, likelihood and forecast arrays unchanged.
 # MOJOLEARN_ARIMA_FUSED_EVAL_TAIL_OFF restores the separate launches.
 # See docs/apple-fast/EXPERIMENTS.md; IDENTICAL/other vendors unchanged.
+# IDENTICAL on every vendor since lane/fam-timeseries (2026-10-04), with the
+# held workspace: one tail launch per evaluation instead of four, the same
+# finite differences and FTZ sites (`ew_finish_kernel`).
+# -D MOJOLEARN_IDN_ARIMA_FUSED_TAIL_OFF=1 restores the separate launches
+# under IDENTICAL.
 comptime ARIMA_FUSED_EVAL_TAIL = (
     KALMAN_FAST_EVAL_WS and not is_defined["MOJOLEARN_ARIMA_FUSED_EVAL_TAIL_OFF"]()
+    and not (
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and is_defined["MOJOLEARN_IDN_ARIMA_FUSED_TAIL_OFF"]()
+    )
 )
 
 

@@ -19,6 +19,7 @@ from arima.impl.fast_lbfgs_async import (
 )
 from arima.impl.lbfgs_device import LBFGS_TPB, lbfgs_init_kernel
 from arima.impl.tsa.arima_common import ARIMAOrder
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from glm.impl.qn.qn_util import LBFGSParam
 
 # KEEP candidate for default promotion, M3 2026-10-04, source 7ba385b30:
@@ -30,9 +31,23 @@ from glm.impl.qn.qn_util import LBFGSParam
 # Default only within existing FAST+Apple guards; named OFF restores the
 # pre-batching GPU optimizer/search while leaving fused eval tail enabled.
 # See docs/apple-fast/ab/arima-orders-default.md and EXPERIMENTS.md.
+# IDENTICAL ON EVERY VENDOR since lane/fam-timeseries (2026-10-04), with
+# IDN_ARIMA_EVAL_WS and IDN_ARIMA_LLONLY (`batched_kalman.mojo`): AutoARIMA's
+# nonseasonal order grid runs as grouped device fits (one filter launch per
+# state dimension for every order's gradient members, one wait per
+# ASYNC_READ_EVERY rounds) instead of one full fit per order from Python.
+# Every order keeps its own parameters, Jones transform and L-BFGS state and
+# every member is its own filter thread, so each order's fitted point and
+# re-evaluated log-likelihood are the single-order fit's.
+# -D MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF=1 restores the per-order fits under
+# IDENTICAL; MOJOLEARN_IDN_ALL_OFF turns the workspace, and so this, off.
 comptime ARIMA_ORDER_BATCH = (
     KALMAN_FAST_EVAL_WS and KALMAN_LL_ONLY
     and not is_defined["MOJOLEARN_ARIMA_ORDER_BATCH_OFF"]()
+    and not (
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and is_defined["MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF"]()
+    )
 )
 
 
