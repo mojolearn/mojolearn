@@ -786,8 +786,11 @@ class KernelDensity(NumericModeMixin):
                     "mojolearn KernelDensity: sample_weight must be finite "
                     "and non-negative"
                 )
-            # `Array.sum()` is a host reduction; only its SIGN is read here.
-            if float(w.sum()) <= 0.0:
+            # Only the sum's SIGN is read, and for finite non-negative weights
+            # sum > 0 exactly when max > 0 (lane cpu2-l9-neighbors): `max` is
+            # the base binding's device `reduce_stat`, where the float `sum`
+            # was a host fold.
+            if float(w.max()) <= 0.0:
                 raise ValueError(
                     "mojolearn KernelDensity: sample_weight must sum to > 0"
                 )

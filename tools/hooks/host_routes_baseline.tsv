@@ -594,13 +594,7 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neigh
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	keep = [f for f in range(d) if self._valid[f]]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	keep = [i for i, v in enumerate(vals) if not self.remove_zero_eig or v > 0]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	keep = [j for j in range(c) if vals[j] > 0]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	names = [str(v) for v in input_features]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	order = [order[j] for j in keep]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	out += [f"missingindicator_{names[f]}" for f in self._miss_cols]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -646,15 +640,7 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neigh
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	self.bitHash_ = Array.from_list([bits[p * nf:(p + 1) * nf] for p in range(deg)], "<i4")
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	self.eigenvalues_ = Array._from_flat([vals[i] for i in keep], (len(keep),), "<f4")
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	self.indexHash_ = Array.from_list([idx[p * nf:(p + 1) * nf] for p in range(deg)], "<i4")
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	vals = [max(float(v), 0.0) for v in values.s]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	vals = [max(wl[i], 0.0) for i in order]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	vals = [vals[j] for j in keep]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	z = Array.from_list([[math.pi / 2.0 * u[f * nc + c] for c in range(nc)] for f in range(d)], "<f4")
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -1343,8 +1329,6 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_gpc_impl.py	0	for
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_gpc_impl.py	0	for e in range(n_est):
 # why: one-vs-rest dispatch: one gpc_fit/gpc_predict call per class column and per-class model bookkeeping (k-sized); owed: a multi-class gpc_fit/gpc_predict binding entry that takes all k columns in one call
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_gpc_impl.py	0	self.n_iter_ = [e.n_iter_ for e in fits]
-# why: AgglomerativeClustering post-processing over n (connectivity edge list, cosine zero-row check, tree cut, heads, label ranks); owed to x_cluster/agglo.mojo returning labels (x_cluster binding shared with pyglue-numeric)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_hierarchy_impl.py	0	if any(not any(row) for row in flat):
 # why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	classes = [bool(classes_store[i]) for i in range(k)]
 # why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
@@ -1489,10 +1473,6 @@ py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_portable_math.py	0	for value in values:
 # why: scale_gamma is the reference definition kept for tests only; no runtime path calls it since scale_gamma_x refuses instead of falling back
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_scale_gamma.py	0	for value in values:
-# why: error-path only: counts a bad row's stored distances for the message; owed to knn_affinity_f32 writing the count into its status (core binding)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_spectral_impl.py	0	count = (int(sum(1 for r in rows.tolist() if r == row)) if sp else n)
-# why: error-path only: counts a bad row's stored distances for the message; owed to knn_affinity_f32 writing the count into its status (core binding)
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_spectral_impl.py	0	count = (int(sum(1 for r in rows.tolist() if r == row)) if sp else n)
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_svm_impl.py	0	[addr_ro(a, name="pair support") if m else 0 for a, m in zip(sup_arrays, ms)],
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -1723,8 +1703,6 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/decomposition.py	0
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/decomposition.py	0	for i, r in enumerate(ratios):
 # why: PCA float n_components: cumulative explained-variance-ratio fold and tail sum over components; owed to the estimators binding's PCA finish
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/decomposition.py	0	for v in rest:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/density.py	0	if float(w.sum()) <= 0.0:
 # why: CatBoost Pool argument walks over Python objects (group_id runs of str/bytes/int ids, pairs and pairs_weight entries, a list permutation's element types) and the O(leaves) model-text parse of get_leaf_values / get_tree_leaf_counts; owed to a native group-run helper for integer id buffers and a binding export of the leaf table; FeatureFreq's per-feature constant check dispatches reduce_stat per column (one helper call per feature, a per-column range helper owed)
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/ensemble.py	0	for f in range(n_features):
 # why: CatBoost Pool argument walks over Python objects (group_id runs of str/bytes/int ids, pairs and pairs_weight entries, a list permutation's element types) and the O(leaves) model-text parse of get_leaf_values / get_tree_leaf_counts; owed to a native group-run helper for integer id buffers and a binding export of the leaf table; FeatureFreq's per-feature constant check dispatches reduce_stat per column (one helper call per feature, a per-column range helper owed)

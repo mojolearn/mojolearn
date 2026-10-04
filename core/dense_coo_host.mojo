@@ -25,9 +25,9 @@ def knn_affinity_f32(
     """A (n x n, the caller's zeroed float32 buffer) = 0.5 (C + C^T), C the
     k-smallest (value, column) candidates of each row: every column of the
     dense matrix, or a sparse row's stored COO entries (duplicates kept, as
-    the Python lists kept them). `status` (2 int32): [0, 0] done; [1, i] row
-    i holds a NaN or negative distance; [2, i] row i has fewer than k
-    candidates; the FIRST failing row in row order, the checks in the
+    the Python lists kept them). `status` (3 int32): [0, 0, 0] done; [1, i, c]
+    row i holds a NaN or negative distance; [2, i, c] row i has fewer than k
+    candidates; c is row i's candidate count (n for a dense matrix); the FIRST failing row in row order, the checks in the
     Python loop's order (NaN or negative first, then the count). A COO
     entry outside [0, n) is refused by name."""
     # candidates per row (sparse: COO order, grouped by a counting pass)
@@ -101,6 +101,7 @@ def knn_affinity_f32(
         if b != Int32(0):
             status.unsafe_store(0, b)
             status.unsafe_store(1, Int32(i))
+            status.unsafe_store(2, Int32(start[i + 1] - start[i]) if sparse else Int32(n))
             return
     for i in range(n):
         for j in range(n):
@@ -109,6 +110,7 @@ def knn_affinity_f32(
             aff.unsafe_store(i * n + j, Float32(0.5) if t == 1 else (Float32(1) if t == 2 else Float32(0)))
     status.unsafe_store(0, Int32(0))
     status.unsafe_store(1, Int32(0))
+    status.unsafe_store(2, Int32(0))
     _ = C^
     _ = bad_kind^
     _ = start^

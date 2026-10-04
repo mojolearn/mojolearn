@@ -1741,7 +1741,7 @@ def nonzero_f32_fill_binding(
 
 
 def knn_affinity_f32_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """addrs = [dense, rows, cols, vals, affinity, status] (0 where unused);
+    """addrs = [dense, rows, cols, vals, affinity, status (3 int32)] (0 where unused);
     params = [n, k, nnz, sparse]. See `core/dense_coo.mojo::knn_affinity_f32`."""
     if len(addrs) != 6 or len(params) != 4:
         raise Error("knn_affinity_f32: needs 6 addresses and 4 parameters")

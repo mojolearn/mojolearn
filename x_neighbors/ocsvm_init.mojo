@@ -30,17 +30,16 @@ from x_neighbors.items import FP
 from x_linear.ff import FF, ff_of, ff_add, ff_add_f, ff_sub, ff_mul, ff_div, ff_f32
 from x_neighbors.items import IP
 
-#: lane/fam2-neighbors (2026-10-04), IDENTICAL, default ON: the alpha start
-#: by the three stages above on the device (and the same items on the host
-#: column), not by the base binding's host loop `ocsvm_alpha_init_f32`.
-#: Bits: alpha's start can move in its last float32 bit at the one
-#: fractional sample (float-float vs binary64), on all four columns together.
-#: -D MOJOLEARN_IDN_OCSVM_DEV_INIT_OFF (or MOJOLEARN_IDN_ALL_OFF) leaves the
-#: binding function unregistered and the Python glue falls back to the host
-#: helper.
-comptime XN_OCSVM_DEV_INIT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_OCSVM_DEV_INIT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: lane/fam2-neighbors (2026-10-04): the alpha start by the three stages
+#: above on the device (and the same items on the host column), not by the
+#: base binding's host loop `ocsvm_alpha_init_f32`. Bits: alpha's start can
+#: move in its last float32 bit at the one fractional sample (float-float vs
+#: binary64), on all four columns together.
+#: lane cpu2-l9-neighbors (2026-10-04): every mode (FAST too) and no _OFF
+#: arm: the host loop is not a GPU route (owner rule, fixes not
+#: optimizations), so `MOJOLEARN_IDN_OCSVM_DEV_INIT_OFF` is retired and the
+#: Python glue has no host fallback.
+comptime XN_OCSVM_DEV_INIT = True
 
 #: samples per chunk (stage 2 walks at most OCI_CHUNK - 1 of them per item)
 comptime OCI_CHUNK = 256

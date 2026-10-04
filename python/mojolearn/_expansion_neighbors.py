@@ -726,14 +726,11 @@ class OneClassSVM(_XNeighbors):
         alpha = empty((m,), "<f4")
         # lane/fam2-neighbors (cpu-gpu audit case 2): the start as three device
         # launches (x_neighbors/ocsvm_init.mojo; the host binding runs the same
-        # items), registered in IDENTICAL unless -D MOJOLEARN_IDN_OCSVM_DEV_INIT_OFF
-        init_fn = getattr(self._bind(), "x_neighbors_ocsvm_alpha_init", None)
-        if init_fn is not None:
-            init_fn([addr_ro(cv, name="xn_ocsvm_init C"), addr(alpha, name="xn_ocsvm_init alpha")],
-                    [m], [float(self.nu)])
-        else:
-            _native("ocsvm_alpha_init_f32")(addr_ro(cv, name="C"), m, float(self.nu),
-                                            0 if sample_weight is None else 1, addr(alpha, name="alpha"))
+        # items), registered in every mode since lane cpu2-l9-neighbors (no
+        # host fallback)
+        self._bind().x_neighbors_ocsvm_alpha_init(
+            [addr_ro(cv, name="xn_ocsvm_init C"), addr(alpha, name="xn_ocsvm_init alpha")],
+            [m], [float(self.nu)])
         info = _empty_out((1,), "<f4")
         iters = empty((1,), "<i4")
         cap = 10_000_000 if int(self.max_iter) < 0 else int(self.max_iter)
@@ -810,6 +807,17 @@ class OneClassSVM(_XNeighbors):
 
 
 # ====================================================================== KernelPCA
+def _kpca_clamp_count(kit, w):
+    """KernelPCA's eigenvalue tail on the kit's cells (lane
+    cpu2-l9-neighbors): `w` (1 x c, descending) clamped at zero (`maxs`,
+    `x if x > 0 else 0`), and the count of positive clamped values (`gts`
+    flags folded by `total`; 0/1 sums are exact in float32 below 2^24).
+    Returns (clamped 1 x c matrix, count); only the count word is read."""
+    wc = kit.ew("maxs", w, s=0.0)
+    npos = int(kit.total(kit.ew("gts", wc, s=0.0)).s[0])
+    return wc, npos
+
+
 class KernelPCA(_XNeighbors):
     """Kernel principal component analysis.
 
@@ -917,11 +925,17 @@ class KernelPCA(_XNeighbors):
         if result is not None:
             values, vectors = result
             vectors = vectors.neg_cols(kit.absmax_flags(vectors, True))
-            vals = [max(float(v), 0.0) for v in values.s]
-            keep = [i for i, v in enumerate(vals) if not self.remove_zero_eig or v > 0]
-            vectors = vectors.take_cols(keep)
-            self.eigenvalues_ = Array._from_flat([vals[i] for i in keep], (len(keep),), "<f4")
-            self.eigenvectors_ = Array._from_flat(vectors.s, (n, len(keep)), "<f4")
+            # lane cpu2-l9-neighbors: the clamp and the positive count on the
+            # kit's cells (values come back descending, so the kept set is a
+            # prefix); one count word read back, no host list of the values
+            nv = values.r * values.c
+            vals_m, npos = _kpca_clamp_count(kit, values if values.r == 1 else values.reshape(1, nv))
+            kept = npos if self.remove_zero_eig else nv
+            if kept < nv:
+                vectors = vectors.cols(0, kept)
+                vals_m = vals_m.cols(0, kept)
+            self.eigenvalues_ = vals_m.out((kept,))
+            self.eigenvectors_ = Array._from_flat(vectors.s, (n, kept), "<f4")
             self._fit_X, self._fit_cols, self._fit_all = X, cols, all_
             self.n_features_in_ = d
             return self
@@ -939,15 +953,21 @@ class KernelPCA(_XNeighbors):
             store.frombytes(Kc.tobytes())
             Kc_M = _M(store, n, n)
         wm, Vm = kit.eigh(Kc_M)
-        wl = list(wm.s)
-        order = list(range(n - 1, -1, -1))           # descending; equal values: higher index first
-        order = order[:c]
-        vals = [max(wl[i], 0.0) for i in order]
-        if self.n_components is None or self.remove_zero_eig:
-            keep = [j for j in range(c) if vals[j] > 0]
-            order = [order[j] for j in keep]
-            vals = [vals[j] for j in keep]
-        self.eigenvalues_ = Array.from_list(vals, "<f4")
+        # descending (eigh is ascending; equal values: higher index first);
+        # lane cpu2-l9-neighbors: only the top c values are taken, and the
+        # clamp and the positive count run on the kit's cells (a prefix of
+        # the descending order is kept); one count word read back
+        order = range(n - 1, n - 1 - c, -1)
+        kept = c
+        vals_m = _M(array.array("f"), 1, 0)
+        if c:
+            vals_m, npos = _kpca_clamp_count(kit, wm.take_cols(order))  # wm is 1 x n
+            if self.n_components is None or self.remove_zero_eig:
+                kept = npos
+            if kept < c:
+                vals_m = vals_m.cols(0, kept)
+        order = list(range(n - 1, n - 1 - kept, -1))  # glue: the kept column indices
+        self.eigenvalues_ = vals_m.out((kept,))
         # sklearn's svd_flip(u, None) on the kept columns: each column's
         # largest-|.| entry (ties to the lower row) made positive
         vecs = Vm.take_cols(order)
@@ -1062,6 +1082,21 @@ def _random_state(seed):
     raise ValueError(f"{seed!r} cannot be used to seed a numpy.random.RandomState instance")
 
 
+def _seed_word(seed):
+    """The sketch samplers' seed (lane cpu2-l9-neighbors): an int as given;
+    None (numpy's global RandomState) or a caller's numpy RandomState gives
+    ONE draw, a word in [0, 2^31), and that word seeds the device
+    counter-based generator exactly as an int random_state would. The
+    O(d * n_components) table is then drawn on the device, never in a Python
+    loop over the caller's generator. Not scikit-learn's numbers for those
+    two inputs (theirs are not reproducible for None either); the
+    distribution is the same. Anything else is refused as `_random_state`
+    refuses it."""
+    if isinstance(seed, int) and not isinstance(seed, bool):
+        return seed
+    return int(_random_state(seed).randint(1 << 31, 1)[0])
+
+
 class _NumpyRandomState:
     """The `_LegacyRandomState` draws, from a numpy RandomState."""
 
@@ -1106,7 +1141,7 @@ class PolynomialCountSketch(_XNeighbors):
         deg, nc = int(self.degree), int(self.n_components)
         if deg < 1 or nc < 1:
             raise ValueError("degree and n_components must be >= 1")
-        seed = self.random_state
+        seed = _seed_word(self.random_state)
         draw_idn = (getattr(self._bind(), "x_neighbors_kfeat_pcs_draw_idn", None)
                     if isinstance(seed, int) and not isinstance(seed, bool) and nf > 0 else None)
         if draw_idn is not None:
@@ -1120,7 +1155,7 @@ class PolynomialCountSketch(_XNeighbors):
             self.bitHash_ = bh
             self.n_features_in_ = d
             return self
-        rs = _random_state(self.random_state)
+        rs = _random_state(seed)
         idx = rs.randint(nc, deg * nf)
         bits = [(-1, 1)[v] for v in rs.randint(2, deg * nf)]
         self.indexHash_ = Array.from_list([idx[p * nf:(p + 1) * nf] for p in range(deg)], "<i4")
@@ -1242,7 +1277,7 @@ class SkewedChi2Sampler(_XNeighbors):
         X = _f32(X)
         d = X.shape[1]
         nc = int(self.n_components)
-        seed = self.random_state
+        seed = _seed_word(self.random_state)
         flags = (_kfeat_flags(self) if isinstance(seed, int) and not isinstance(seed, bool)
                  and d > 0 and nc > 0 else 0)
         self.__dict__.pop("_schi2_z", None)
@@ -1286,7 +1321,7 @@ class SkewedChi2Sampler(_XNeighbors):
             self.random_offset_ = off
             self.n_features_in_ = d
             return self
-        rs = _random_state(self.random_state)
+        rs = _random_state(seed)
         u = rs.random_sample(d * nc)
         z = Array.from_list([[math.pi / 2.0 * u[f * nc + c] for c in range(nc)] for f in range(d)], "<f4")
         w = _empty_out((d, nc), "<f4")
