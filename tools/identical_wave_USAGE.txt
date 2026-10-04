@@ -1,0 +1,63 @@
+IDENTICAL NVIDIA/AMD wave tools
+
+No Apple access. No published mojolearn or plugins. No opponent execution.
+Keep complete logs on box beneath /root/lq; supervisor harvests that directory.
+Inspect return codes, JSON receipts, and bounded grep before expanding diagnostics.
+
+Native compilation (root already launched source SHA2191cd1ec...):
+  python3 tools/identical_wave_native_build.py --repo /root/mojolearn \
+    --sha FULL_40_HEX_SHA --vendor nvidia --out /root/lq/native-SHA \
+    --python /root/mojolearn/.pixi/envs/default/bin/python
+Use amd on the MI325X. Optional --arm off; --mode fast must omit host builders.
+Each binding compile holds compile_slot.sh, runs -j1, then direct native import
+checks numeric mode and actual vendor. Failures do not prevent independent
+modules compiling. A failed module cannot inherit an old binary from a wheel.
+No algorithm fit is part of this import smoke.
+
+Quality/identity/timing conductor:
+  python3 tools/identical_wave_runner.py PHASE \
+    --repo /root/mojolearn --sha FULL_40_HEX_SHA --vendor nvidia \
+    --plan /path/to/reviewed-plan.json --out /root/lq/medium-SHA \
+    --python /root/mojolearn/.pixi/envs/default/bin/python \
+    --data /root/board-0833/cache/algos-data/rows-small
+PHASE order: prepare, quality, identity, timing. Same plan/out/SHA/data each time.
+The plan contains builders, quality obligations and exact lane/dataset cases.
+Prepare creates separate ON/OFF source trees, source portable math, builds every
+explicit binding with global OFF reaching GPU AND host builders. It never installs
+anything. Existing Python must already have NumPy/SciPy and required dependencies.
+Environment strips inherited MojoLearn/candidate compile settings. Mandatory
+compile semaphore covers native and Mojo quality compiles. Preserve AMD Mojo cache.
+
+Plan file is an owed-coverage template, not a claim that all checks are ready.
+Its two example board cases do NOT represent whole-wave coverage. Expand cases
+and their binding closure before using it as the measurement batch. Gates whose
+path is absent or whose owed reason remains produce OWED even if related checks
+pass. Timing refuses unless every applicable gate and every per-arm GPU/host
+identity case passes. IF resident lifecycle and default chunked KDE gates are
+ON-only; Mamba angle explicitly enables candidate on ON, rather than pretending
+default-OFF code covers it. Large eigh checks sizes4096 and513 against analytic
+spectrum; PCA covers220,33,7 columns with residual/orthogonality quality metrics.
+References are analytic/NumPy or existing check oracles, never opponent training.
+DART still needs a selected immutable stored reference with parameters and
+acceptance metric. Old test_dart runs LightGBM and must not be used.
+
+Identity executes fit/infer once and saves full raw outputs plus SHA256 including
+names, dtypes and shapes. Host identity does NOT start timers. Timing executes
+one GPU fit/infer per ON/OFF arm, ZERO warmups. It records one sample, NOT a median
+or confidence interval. A durable timing receipt reserves the run before work;
+a partial/failed run cannot be silently repeated. Runtime package and all mapped
+_mojolearn native files must originate inside frozen source; vendor and IDENTICAL
+mode readbacks must match. No missing outputs or missing mode readbacks can pass.
+
+Each box's GPU/host match still needs cross-box aggregation: compare same full
+SHA, plan hash, canonical-data manifest hash, ON/OFF arm, lane/dataset and complete
+output digest between NVIDIA and AMD. Never compare ON to OFF as an identity
+requirement when an accepted arithmetic change deliberately moves version bits.
+Apple identity remains UNVERIFIED because user forbids all Apple access. Do not
+claim four-vendor verification or promote winners as fully verified from NV/AMD.
+Stored opponent rows need matching workload/parameters; absence stays missing.
+PCA/OLS classical_two_datasets timing, device-handle CNN/graph/optimizer callers,
+and data-path GPU-only audit remain explicit owed coverage in the plan.
+
+Static validation only at handoff: Python py_compile and JSON schema structure
+checks passed. No new quality/identity/timing jobs have been executed by this agent.

@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "description": "Reviewable owed coverage. Default plan intentionally blocks timing until missing quality references and route reachability are resolved. No opponent execution. Classical PCA/OLS timing requires a separate adapter; their omission is explicit.",
+  "build_timeout": 3600,
+  "builders": ["build_svm.sh", "build_svm_host.sh", "build_estimators.sh", "build_estimators_host.sh", "build_x_decomp.sh", "build_x_decomp_host.sh", "build_x_prep.sh", "build_x_prep_host.sh", "build_x_trees.sh", "build_x_trees_host.sh", "build_x_sequence.sh", "build_x_sequence_host.sh", "build_gp.sh", "build_gp_host.sh"],
+  "required_quality_gates": ["dart_reference", "block_eigh", "gram_cd", "pca_60_sweeps", "gmm_fused_cholesky", "prophet", "mamba3_angle", "iforest_lifetime", "dbscan_edge_split", "dbscan_edge_split_scale", "kde_legacy_staged", "kde_chunked_host", "gbdt_depth_zero_mixed", "small_eigh_guard", "resident_qr_memory", "lu_nan", "sgd_nan", "pca_bits", "import_smoke", "cnn_seams"],
+  "quality_gates": [
+    {"id": "dart_reference", "owed": "Select stored DART reference fixture, model parameters, predicted values and acceptance metric from store. Existing test_x_trees_sanity.test_dart executes LightGBM and is forbidden. Compare our source output to frozen reference; don't substitute self-consistency for quality."},
+    {"id": "block_eigh", "kind": "python", "path": "tools/identical_wave_quality.py", "args": ["eigh", "--report", "{report}"], "timeout": 7200, "coverage": "n=4096 and n=513, eigenvalue error/residual/orthogonality against analytic dense rank-one spectrum. Requires separate source review for branch reachability."},
+    {"id": "gram_cd", "kind": "mojo", "path": "solver/checks/cd_check.mojo", "timeout": 7200, "owed": "Existing coefficient/support/oracle gate is useful, but confirm new Gram CD route is actually reached; old trace/card paths can bypass optimized estimator route. Add public Lasso/ElasticNet analytic-reference gate if not reached."},
+    {"id": "pca_60_sweeps", "kind": "python", "path": "tools/identical_wave_quality.py", "args": ["pca", "--report", "{report}"], "timeout": 7200, "owed": "Verify compiled round-robin route really uses 60-sweep budget. Quality probe covers 4096x220,1500x33,900x7 covariance spectra, residual and orthogonality; no source budget readback exists yet."},
+    {"id": "gmm_fused_cholesky", "kind": "mojo", "path": "mixture/checks/gmm_check.mojo", "timeout": 7200, "owed": "Confirm fused Cholesky branch is active under this checker (trace/card builds may bypass optimized route). Need public-estimator fused-route reference fixture if bypassed."},
+    {"id": "prophet", "kind": "python", "path": "python/mojolearn/tests/test_x_sequence_prophet.py", "coverage": "Known planted trend break, weekly seasonality, holiday, finite forecast, batch/single equality; no external Prophet run."},
+    {"id": "mamba3_angle", "kind": "mojo", "path": "mamba/checks/mamba3_check.mojo", "defines": ["MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1"], "timeout": 7200, "arms": ["on"], "coverage": "Explicit candidate enabled; 18-case stage/oracle/decode checks include seam-crossing fixtures. Requires recorded actual compile/run, not default-OFF run."},
+    {"id": "iforest_lifetime", "kind": "python", "path": "tools/identical_iforest_lifetime_gate.py", "arms": ["on"], "coverage": "Resident token, restore/refit, cache eviction and bounded process teardown; needs svm native binding."},
+    {"id": "dbscan_edge_split", "kind": "mojo", "path": "dbscan/checks/dbscan_edge_split_check.mojo"},
+    {"id": "dbscan_edge_split_scale", "kind": "mojo", "path": "dbscan/checks/dbscan_edge_split_scale_check.mojo"},
+    {"id": "kde_legacy_staged", "kind": "mojo", "path": "kde/checks/kde_check.mojo", "defines": ["MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF=1"], "timeout": 7200, "coverage": "Explicit legacy staged trace arithmetic; does not qualify default chunked route."},
+    {"id": "kde_chunked_host", "kind": "mojo", "path": "kde/checks/kde_chunked_check.mojo", "timeout": 7200, "arms": ["on"], "coverage": "Default chunk vs matching host fold, explicit legacy routes vs staged oracle."},
+    {"id": "gbdt_depth_zero_mixed", "owed": "Add grouped-four prediction zero-depth and mixed-depth fixture. Main already contains depth-zero fix; avoid claiming its presence validates grouped-four candidate."},
+    {"id": "small_eigh_guard", "owed": "Audit host-route guard against n<=32 existing batched RR parallel cells and run identity. Do not enable N64/N128 candidate limits."},
+    {"id": "resident_qr_memory", "owed": "Record retained input/workspace allocation for QR and FactorAnalysis tall n>=d; preserve input unless proven dead. Do not remove copy from inspection alone."},
+    {"id": "lu_nan", "kind": "python", "path": "tools/idn_all_checks.py", "args": ["lu-nan"]},
+    {"id": "sgd_nan", "kind": "python", "path": "tools/idn_all_checks.py", "args": ["sgd-nan"]},
+    {"id": "pca_bits", "kind": "python", "path": "tools/idn_all_checks.py", "args": ["pca-id"], "timeout": 7200},
+    {"id": "import_smoke", "kind": "python", "path": "tools/idn_all_checks.py", "args": ["import-smoke"]},
+    {"id": "cnn_seams", "owed": "Select x_cnn seams main and builder; check epoch-row permutation at1,2,3,1000,65537 and Adam scalar rounding across1..100000 steps. Do not report device-handle coverage from host-array board rows."}
+  ],
+  "cases": [
+    {"lane": "maxabs-scaler", "dataset": "taxi"},
+    {"lane": "knn-imputer", "dataset": "taxi"}
+  ],
+  "owed_measurement_coverage": ["Expand cases from affected algorithm families; two illustrative rows are NOT whole-wave coverage.", "PCA and OLS require classical_two_datasets adapter; no substitutions.", "CNN/graph/optimizer/cross-entropy require device-handle callers, separate from kernel timings.", "Cross-vendor aggregation compares full output digests at same SHA/arm/data; local host equality alone is insufficient.", "Apple and Apple-vs-host bits remain unverified; user forbids all Apple machine access.", "Load opponent metrics from store only with matched dataset/parameters/hardware context; never run competitor models."]
+}
