@@ -4,7 +4,7 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
-### 0.8.37 candidate
+## 0.8.37 (unreleased 2026-10-04)
 
 - Split Linux native GPU binaries into Ada, Hopper, and gfx942 payload packages, retaining `mojolearn-nvidia` and `mojolearn-amd` as vendor aggregates. Ordinary `pip install mojolearn` still installs all native payloads. New ownership paths protect upgrades from the old vendor wheels.
 - Publish payloads before vendor aggregates and core; require architecture-specific smoke receipts and one frozen source commit throughout the release. Oversized and mixed-architecture payloads are rejected.
