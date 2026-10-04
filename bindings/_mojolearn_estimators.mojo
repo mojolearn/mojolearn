@@ -89,6 +89,8 @@ from glm.estimator import (
     qn_fit_host,
     qn_predict_binary_host,
     qn_predict_multiclass_host,
+    qn_fit_ovr_host,
+    QN_OVR_ONE_UPLOAD,
     QN_DEV_ARGMAX,
     ridge_fit_host,
     ridge_fit_resident_host,
@@ -850,6 +852,49 @@ def qn_fit_binding(
     return PythonObject(iters)
 
 
+def qn_fit_ovr_binding(
+    x_addr: PythonObject,
+    codes_addr: PythonObject,
+    coef_addr: PythonObject,
+    info_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """One-vs-rest `qnFit` with X uploaded once (lane fam2-linear). params:
+    n_rows, n_features, first_class, n_fits, penalty_l1, penalty_l2,
+    grad_tol, change_tol, max_iter, linesearch_max_iter, lbfgs_memory,
+    fit_intercept, penalty_normalized, loss (an SVC or the logistic id).
+    codes: int32 dense class codes. coef: n_fits rows of n_features +
+    fit_intercept floats. info: per fit objective, retcode, num_iters."""
+    if len(params) != 14:
+        raise Error("qn_fit_ovr: params must carry 14 fields (see the docstring)")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var cp = _i32_ptr(Int(py=codes_addr))
+    var wp = _f32_ptr(Int(py=coef_addr))
+    var ip = _f32_ptr(Int(py=info_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var first = Int(py=params[2])
+    var n_fits = Int(py=params[3])
+    var l1 = Float64(py=params[4])
+    var l2 = Float64(py=params[5])
+    var grad_tol = Float64(py=params[6])
+    var change_tol = Float64(py=params[7])
+    var max_iter = Int(py=params[8])
+    var ls_max = Int(py=params[9])
+    var mem = Int(py=params[10])
+    var fit_intercept = Int(py=params[11]) != 0
+    var normalized = Int(py=params[12]) != 0
+    var loss = Int(py=params[13])
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        qn_fit_ovr_host(
+            ctx, xp, cp, wp, ip, nr, nf, first, n_fits, l1, l2, grad_tol,
+            change_tol, max_iter, ls_max, mem, fit_intercept, normalized, loss,
+        )
+        ctx.synchronize()
+    return PythonObject(0)
+
+
 def qn_decision_function_binding(
     x_addr: PythonObject,
     coef_addr: PythonObject,
@@ -1286,6 +1331,8 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
             m.def_function[ridge_fit_multi_binding]("ridge_fit_multi")
             m.def_function[ridge_predict_multi_binding]("ridge_predict_multi")
         m.def_function[qn_fit_binding]("qn_fit")
+        comptime if QN_OVR_ONE_UPLOAD:
+            m.def_function[qn_fit_ovr_binding]("qn_fit_ovr")
         m.def_function[qn_decision_function_binding]("qn_decision_function")
         m.def_function[qn_predict_binary_binding]("qn_predict_binary")
         comptime if QN_DEV_ARGMAX:

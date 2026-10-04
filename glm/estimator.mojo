@@ -690,6 +690,119 @@ def qn_fit_host(
     return iters
 
 
+#: lane fam2-linear (2026-10-04): LinearSVC one-vs-rest crossed the bus with
+#: X once per class (`svm.py` called `qn_fit` per class, each uploading the
+#: whole design and a host-built 0/1 target). `qn_fit_ovr_host` uploads X and
+#: the int32 class codes once, builds every 0/1 target on the device and
+#: hands each class's solver a device copy of X. Same fits, same bits.
+#: `-D MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF` (or the master
+#: `MOJOLEARN_IDN_ALL_OFF`) leaves the entry unregistered and the Python
+#: layer keeps one `qn_fit` call per class.
+comptime QN_OVR_ONE_UPLOAD = not (
+    is_defined["MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def _ovr_target_kernel(
+    codes: MutPointer[Int32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    cls: Int32,
+):
+    """y[i] = 1.0 where codes[i] == cls, else 0.0 (`OvrSelector`,
+    `linear.cu:50-54`). Integer compare; both stored values are exact."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        var hit = codes.unsafe_load(i) == cls
+        y.unsafe_store(i, Float32(1.0) if hit else Float32(0.0))
+
+
+def qn_fit_ovr_host(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    codes_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    info_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    first_class: Int,
+    n_fits: Int,
+    penalty_l1: Float64,
+    penalty_l2: Float64,
+    grad_tol: Float64,
+    change_tol: Float64,
+    max_iter: Int,
+    linesearch_max_iter: Int,
+    lbfgs_memory: Int,
+    fit_intercept: Bool,
+    penalty_normalized: Bool,
+    loss: Int,
+) raises:
+    """One-vs-rest `qnFit` for the binary classification losses: `n_fits`
+    independent fits, fit `k` on the target `codes == first_class + k`, each
+    exactly `qn_fit_host(..., n_classes=2, loss)` on that target. X and the
+    codes cross the bus once. `coef_ptr` receives `n_fits` rows of
+    `n_features + fit_intercept` floats (row k = fit k); `info_ptr` receives
+    three floats per fit: objective, OPT_RETCODE, num_iters."""
+    qn_check_loss_args(loss, 2, 0.0)
+    if n_fits <= 0 or n_rows <= 0:
+        raise Error("qn_fit_ovr: n_rows and n_fits must be positive")
+    var n_param = n_features + (1 if fit_intercept else 0)
+    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    var codes = ctx.enqueue_create_buffer[DType.int32](n_rows)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    ctx.enqueue_copy(dst_buf=codes, src_ptr=codes_ptr)
+    ctx.synchronize()
+    var pams = QNParams.default()
+    pams.loss = loss
+    pams.penalty_l1 = penalty_l1
+    pams.penalty_l2 = penalty_l2
+    pams.grad_tol = grad_tol
+    pams.change_tol = change_tol
+    pams.max_iter = max_iter
+    pams.linesearch_max_iter = linesearch_max_iter
+    pams.lbfgs_memory = lbfgs_memory
+    pams.fit_intercept = fit_intercept
+    pams.penalty_normalized = penalty_normalized
+    var hw = ctx.enqueue_create_host_buffer[DType.float32](n_param)
+    for k in range(n_fits):
+        # the solver takes X and y by transfer: a device-to-device copy of X
+        # and a device-built target per class, nothing over the bus
+        var xk = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+        var yk = ctx.enqueue_create_buffer[DType.float32](n_rows)
+        var w = ctx.enqueue_create_buffer[DType.float32](n_param)
+        ctx.enqueue_copy(dst_buf=xk, src_buf=x)
+        ctx.enqueue_function[_ovr_target_kernel](
+            codes.unsafe_ptr(), yk.unsafe_ptr(), Int32(n_rows), Int32(first_class + k),
+            grid_dim=((n_rows + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+        )
+        ctx.enqueue_memset(w, Float32(0.0))
+        ctx.synchronize()
+        var trace = IdentityTrace()
+        if trace.enabled:
+            trace.header(
+                qn_loss_name(loss) + " n=" + String(n_rows) + " d=" + String(n_features)
+                + " loss=" + String(loss)
+            )
+        var fx = Float32(0.0)
+        var iters = 0
+        var ret = qn_fit_x(
+            ctx, pams, xk^, yk^, n_rows, n_features, 2, w, fx, iters,
+            False, trace, Float32(0.0),
+        )
+        ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
+        ctx.synchronize()
+        for i in range(n_param):
+            coef_ptr.unsafe_store(k * n_param + i, hw.unsafe_ptr().unsafe_load(i))
+        info_ptr.unsafe_store(3 * k, fx)
+        info_ptr.unsafe_store(3 * k + 1, Float32(ret))
+        info_ptr.unsafe_store(3 * k + 2, Float32(iters))
+        _ = w^
+    _ = hw^
+    _ = codes^
+    _ = x^
+
+
 def qn_decision_function_host(
     ctx: DeviceContext,
     x_ptr: MutPointer[Float32, MutUntrackedOrigin],
