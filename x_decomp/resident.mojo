@@ -62,12 +62,14 @@ from x_decomp.device import (
     _up_i,
     cd_rows_kernel,
     DevExec,
+    IDN_QR_R_DIRECT,
     LU_SCAL_LEN,
     launch_lu,
     _down_i,
     _p,
 )
 from x_decomp.qr_bounded import QRB_CELLS
+from decomposition.linalg_types import _validate_shape
 
 comptime POOL_KEEP_BYTES = 1 << 30
 comptime POOL_CLASSES = 40
@@ -664,6 +666,42 @@ def dev_lu_aux_py(
     var ctx = xd_ctx()
     with GILReleased(Python()):
         DevExec._lu_aux_on(ctx, pl, pv, p1, p2, pd, ps, n, clamp)
+    return PythonObject(n)
+
+
+# ---- lane fam-decomp (2026-10-04): IDN_QR_R_RESIDENT (IDENTICAL default) ----
+#: The kit's `qr_r` on a device matrix: `DevExec._qr_r_on` on a device copy
+#: of the operand, so a resident operand (FactorAnalysis's centered X, an
+#: elementwise result of the whole n x d input) is not downloaded and
+#: uploaded again for its QR; only R (d x d) comes down. The same launch on
+#: the same values: the same words. Needs IDN_QR_R_DIRECT (its helper).
+#: -D MOJOLEARN_IDN_QR_R_RESIDENT_OFF (or -D MOJOLEARN_IDN_ALL_OFF) leaves the
+#: entry out and Python keeps the host-address call.
+comptime IDN_QR_R_RESIDENT = IDN_QR_R_DIRECT and not is_defined["MOJOLEARN_IDN_QR_R_RESIDENT_OFF"]()
+
+
+def dev_qr_r_py(a: PythonObject, r: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`x_decomp_qr_r` of the device matrix a (m x n, left as it is: the QR
+    destroys a device copy); r (n x n) is a host address. p = [m, n]. Waits."""
+    var m = _n(p, 0)
+    var n = _n(p, 1)
+    if n <= 0 or m < n:
+        raise Error("x_decomp: qr_r needs m >= n >= 1")
+    _validate_shape(m, n, "qr")
+    var cells = m * n
+    if cells > 2147483647:
+        raise Error("x_decomp: qr_r exceeds the Int32 index bound")
+    var ia = _id(a)
+    _ = _ptr(ia, cells)
+    var pr = F32Ptr(unsafe_from_address=Int(py=r))
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var ctx = xd_ctx()
+    var da = ctx.enqueue_create_buffer[DType.float32](cells)
+    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+    with GILReleased(Python()):
+        DevExec._qr_r_on(ctx, da, m, n, pr)
+    _ = da^
+    ctx.synchronize()
     return PythonObject(n)
 
 

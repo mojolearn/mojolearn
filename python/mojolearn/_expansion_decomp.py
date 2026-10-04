@@ -1095,6 +1095,12 @@ class _Kit:
     def qr_r(self, A):
         """R (n x n) of the Householder QR of a tall A (decomposition/'s TSQR)."""
         R = _M.zeros(A.c, A.c)
+        if A.r >= A.c >= 1 and self._opt_dev("x_decomp_dev_qr_r") and self._use(A):
+            # lane fam-decomp: the QR of a device copy of the resident
+            # operand (an IDENTICAL GPU build without
+            # -D MOJOLEARN_IDN_QR_R_RESIDENT_OFF); only R comes down
+            self.b.x_decomp_dev_qr_r(self._did(A), R.addr, [A.r, A.c])
+            return R
         self.b.x_decomp_qr_r(A.addr, R.addr, [A.r, A.c])
         return R
 

@@ -26,6 +26,7 @@ from gemm.afn_apple_fast import (
     afn_zero_kernel,
 )
 from decomposition.linalg_public_device import device_qr_r
+from decomposition.linalg_types import _validate_shape
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
 from x_decomp.lu_fast import LU_FAST_STEP1, lfs_blocks, lu_fast_panel
 from x_decomp.lasso_grp import DECOMP_FAST_LASSO_GRP, LG_MAXK, LG_TPB, lasso_grp_kernel
@@ -172,6 +173,16 @@ comptime XD_NO_FLAG = Int32(2147483647)
 # -D MOJOLEARN_IDN_EIGH_SMALL_OFF restores the per-round launches.
 comptime IDN_EIGH_SMALL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_EIGH_SMALL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 comptime IDN_EIGH_SMALL_N = 32
+
+# lane fam-decomp (2026-10-04), IDENTICAL: `DevExec.qr_r` uploads the caller's
+# matrix straight from its address and takes R straight into the caller's
+# array (`_qr_r_on`: `device_qr_r`'s buffers and its one `qr_factor`), instead
+# of appending every one of its m n values to a List on ONE host thread
+# (220 M appends at the board's 1 M x 220 FactorAnalysis), copying that List
+# into a staging buffer, and copying R through a second List. Copies only:
+# the same launches on the same values, the same words.
+# -D MOJOLEARN_IDN_QR_R_DIRECT_OFF restores the List route.
+comptime IDN_QR_R_DIRECT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_QR_R_DIRECT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 
 
 @always_inline
@@ -3134,12 +3145,35 @@ struct DevExec(Exec):
 
     @staticmethod
     def qr_r(a: F32Ptr, m: Int, n: Int, r: F32Ptr) raises:
-        var w = List[Float32](capacity=m * n)
-        for t in range(m * n):
-            w.append(a.unsafe_load(t))
-        var got = device_qr_r(xd_ctx(), w, m, n)
-        for t in range(n * n):
-            r.unsafe_store(t, got[t])
+        comptime if IDN_QR_R_DIRECT:
+            _validate_shape(m, n, "qr")
+            var ctx = xd_ctx()
+            var da = _up(ctx, a, m * n)
+            DevExec._qr_r_on(ctx, da, m, n, r)
+            _ = da^
+            ctx.synchronize()
+            _ = ctx^
+        else:
+            var w = List[Float32](capacity=m * n)
+            for t in range(m * n):
+                w.append(a.unsafe_load(t))
+            var got = device_qr_r(xd_ctx(), w, m, n)
+            for t in range(n * n):
+                r.unsafe_store(t, got[t])
+
+    @staticmethod
+    def _qr_r_on(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, r: F32Ptr) raises:
+        """R (n x n, host memory at `r`) of the Householder QR of the device
+        matrix in `da` (m x n, destroyed by `qr_factor`): `device_qr_r`'s
+        buffers and launch. Waits. The caller has validated the shape."""
+        var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, n) * n * n)
+        var r_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
+        ctx.synchronize()
+        _ = qr_factor(ctx, da, scratch, r_buf, m, n)
+        _down(ctx, r_buf, r, n * n)
+        ctx.synchronize()
+        _ = scratch^
+        _ = r_buf^
 
     @staticmethod
     def tsqr_factor(a: F32Ptr, b: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:
