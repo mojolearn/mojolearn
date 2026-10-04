@@ -110,7 +110,7 @@ def order_x0_flag_kernel(
 
 
 def order_ll_kernel(
-    out: MutPointer[Float32, MutAnyOrigin],
+    output: MutPointer[Float32, MutAnyOrigin],
     ll: MutPointer[Float32, MutAnyOrigin],
     info0: MutPointer[Int32, MutAnyOrigin],
     info1: MutPointer[Int32, MutAnyOrigin],
@@ -127,7 +127,7 @@ def order_ll_kernel(
     var v = ll.unsafe_load(b)
     if info0.unsafe_load(b) != Int32(0) or info1.unsafe_load(b) != Int32(0):
         v = -inf[DType.float32]()
-    out.unsafe_store(Int(row_in) * bs + b, v)
+    output.unsafe_store(Int(row_in) * bs + b, v)
 
 
 def order_ic_argmin_kernel(
