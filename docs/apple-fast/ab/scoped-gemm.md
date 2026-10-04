@@ -74,3 +74,7 @@ SDK cold or resident contracts. A new AFN comparison must be named explicitly.
 Probe r1 lifecycle repair: GEMM and covariance fixtures share one process-lifetime
 DeviceContext via process_ctx; buffers remain alive through download/synchronize.
 The original04d source pin is preserved; no measurements or gates are changed.
+
+M2 initial04d compile HOLD: kernel arguments used host Int, which is not
+DevicePassable. r2 uses Int32 launch arguments and widens on device, matching
+the established AFN kernel ABI. No numerical execution or gate changes.

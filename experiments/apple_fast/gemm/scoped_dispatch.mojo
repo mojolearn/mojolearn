@@ -45,8 +45,17 @@ def scoped_last(index: Int) raises -> Int:
 
 def scoped_kernel[BM: Int, BN: Int, SPLIT: Bool](
     dst: FPtr, a: FPtr, b: FPtr,
-    m: Int, n: Int, k: Int, a_si: Int, a_sp: Int, b_sp: Int, b_sj: Int, per: Int,
+    m_in: Int32, n_in: Int32, k_in: Int32,
+    a_si_in: Int32, a_sp_in: Int32, b_sp_in: Int32, b_sj_in: Int32, per_in: Int32,
 ):
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var k = Int(k_in)
+    var a_si = Int(a_si_in)
+    var a_sp = Int(a_sp_in)
+    var b_sp = Int(b_sp_in)
+    var b_sj = Int(b_sj_in)
+    var per = Int(per_in)
     comptime assert BM % 16 == 0 and BN % 16 == 0
     comptime RM = BM // 16
     comptime RN = BN // 16
@@ -155,12 +164,12 @@ def try_scoped_gemm[SPLIT: Bool, ROUTE: Int](
             state[].last[14] = Int(nt)
         if arm == 1:
             ctx.enqueue_function[scoped_kernel[64, 64, SPLIT]](
-                dst, a, b, m, n, k, a_si, a_sp, b_sp, b_sj, per,
+                dst, a, b, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per),
                 grid_dim=(((m + 63) // 64) * ((n + 63) // 64), splits, 1), block_dim=(128, 1, 1),
             )
         elif arm == 2:
             ctx.enqueue_function[scoped_kernel[32, 32, SPLIT]](
-                dst, a, b, m, n, k, a_si, a_sp, b_sp, b_sj, per,
+                dst, a, b, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per),
                 grid_dim=(((m + 31) // 32) * ((n + 31) // 32), splits, 1), block_dim=(128, 1, 1),
             )
         return arm != 0
