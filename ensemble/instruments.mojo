@@ -109,7 +109,7 @@ struct StageTimes(Movable):
         self._add(stage, Int(perf_counter_ns()) - t0)
 
     def _add(mut self, stage: StringSlice, dt: Int):
-        for i in range(len(self.names)):
+        for i in range(len(self.names)):  # small-loop(self.names: stage-timer names): a few dozen stage labels, timing only
             if self.names[i] == String(stage):
                 self.ns[i] += dt
                 return
@@ -127,12 +127,12 @@ struct StageTimes(Movable):
         print("   NOT a certifiable timing -- see ensemble/instruments.mojo)")
         var total = 0
         var named = 0
-        for i in range(len(self.names)):
+        for i in range(len(self.names)):  # small-loop(self.names: stage-timer names): a few dozen stage labels, timing only
             if self.names[i] == "fit_total":
                 total = self.ns[i]
             else:
                 named += self.ns[i]
-        for i in range(len(self.names)):
+        for i in range(len(self.names)):  # small-loop(self.names: stage-timer names): a few dozen stage labels, timing only
             print(
                 "  "
                 + self.names[i]
