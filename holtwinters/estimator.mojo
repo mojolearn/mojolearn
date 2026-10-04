@@ -70,6 +70,17 @@ comptime HW_FIT_DIRECT = _DEVCTX_MODE == _DEVCTX_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_HW_FIT_DIRECT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime HW_FLAG_TPB = 256
+#: lane/fam-timeseries (2026-10-04), IDENTICAL on every vendor: the binding's
+#: forecast (`holtwinters_forecast_ptr`) uploads the three component blocks
+#: from the caller's packed buffer and downloads into the caller's output in
+#: bulk, instead of three element-by-element host copies of every component,
+#: three uploads each with its own wait and an element-by-element copy out.
+#: The forecast is `forecast(...)` with the same arguments; no bit moves.
+#: `-D MOJOLEARN_IDN_HW_FORECAST_DIRECT_OFF=1` (or MOJOLEARN_IDN_ALL_OFF)
+#: restores the old sequence, which a traced run and `h <= 0` still take.
+comptime HW_FORECAST_DIRECT = _DEVCTX_MODE == _DEVCTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_HW_FORECAST_DIRECT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 
 
 struct HWFit(Movable):
@@ -599,6 +610,30 @@ def holtwinters_forecast_ptr(
             + String(batch_size) + ")"
         )
     var components_len = (n - frequency) * batch_size
+    comptime if HW_FORECAST_DIRECT:
+        var direct_trace = IdentityTrace()
+        if h > 0 and not direct_trace.enabled:
+            var ctx = process_ctx[_DEVCTX_SLOT]()
+            var level_d = ctx.enqueue_create_buffer[DType.float32](components_len)
+            var trend_d = ctx.enqueue_create_buffer[DType.float32](components_len)
+            var season_d = ctx.enqueue_create_buffer[DType.float32](components_len)
+            var fc_d = ctx.enqueue_create_buffer[DType.float32](h * batch_size)
+            ctx.enqueue_copy(dst_buf=level_d, src_ptr=comps_ptr)
+            ctx.enqueue_copy(dst_buf=trend_d, src_ptr=comps_ptr + components_len)
+            ctx.enqueue_copy(dst_buf=season_d, src_ptr=comps_ptr + 2 * components_len)
+            forecast(
+                ctx, n, batch_size, frequency, h, st,
+                level_d, trend_d, season_d, fc_d, direct_trace, -1,
+            )
+            ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=fc_d)
+            ctx.synchronize()
+            _ = level_d^
+            _ = trend_d^
+            _ = season_d^
+            _ = fc_d^
+            # DEVIATION 1946: the context dies LAST, after every value built on it.
+            _ = ctx^
+            return h * batch_size
     var fitted = HWFit(n, batch_size, frequency, st, 0)
     fitted.level.reserve(components_len)
     fitted.trend.reserve(components_len)
