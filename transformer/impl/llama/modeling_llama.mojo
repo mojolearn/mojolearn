@@ -373,6 +373,8 @@ from transformer.impl.llama.afn_apple_fast import (
 )
 
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
     identical_mul,
     ftz,
     identical_cos,
@@ -3677,6 +3679,21 @@ def _refuse_nonfinite_at(
     )
 
 
+comptime IDN_LLAMA_REFUSE_BATCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""lane/fam-lm (2026-10-04), default ON under IDENTICAL: the per-call
+refusal scans of `llama_refuse_bad_call` (hidden states, rotary inv_freq
+and, on a decode step, the key and value caches) are enqueued together on
+one `DeviceNonfiniteBatch` and read with ONE wait and one pair of
+allocations, where each scan had its own partials buffer, pinned host
+buffer and wait (two per layer per forward, four on a decode step). Same
+kernel, same geometry, same integer first-index fold; the names are tested
+in the same order, so the refusal raised is the one the separate scans
+raised. No float is produced: no bit moves on any column.
+`-D MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF` restores the separate scans."""
+
+
 def llama_refuse_bad_call(
     ctx: DeviceContext,
     mut w: LlamaDeviceWeights,
@@ -3706,6 +3723,30 @@ def llama_refuse_bad_call(
     var dims = w.dims.copy()
     var dm = dims.d_model
     var hd = dims.head_dim
+    comptime if IDN_LLAMA_REFUSE_BATCH:
+        var has_kv = kv.s > 0
+        var kv_used = kv.s
+        if kv.window > 0:
+            kv_used = kv.cap
+        var lens = List[Int]()
+        lens.append(b * l * dm)
+        lens.append(rope.half)
+        if has_kv:
+            lens.append(b * dims.n_kv * kv_used * hd)
+            lens.append(b * dims.n_kv * kv_used * hd)
+        var batch = DeviceNonfiniteBatch(ctx, lens)
+        batch.enqueue(ctx, 0, x)
+        batch.enqueue(ctx, 1, rope.inv_freq)
+        if has_kv:
+            batch.enqueue(ctx, 2, kv.k)
+            batch.enqueue(ctx, 3, kv.v)
+        var hits = batch.finish(ctx)
+        _refuse_nonfinite_at(ctx, "hidden_states", x, hits[0])
+        _refuse_nonfinite_at(ctx, "rotary_emb.inv_freq", rope.inv_freq, hits[1])
+        if has_kv:
+            _refuse_nonfinite_at(ctx, "past_key_values.key_cache", kv.k, hits[2])
+            _refuse_nonfinite_at(ctx, "past_key_values.value_cache", kv.v, hits[3])
+        return
     # ON THE DEVICE (2026-09-09): the download-and-walk of the block input
     # was 65 ms per call at the Samba shape, a fifth of the forward.
     _refuse_nonfinite_device(ctx, "hidden_states", x, b * l * dm)
