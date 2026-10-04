@@ -13,16 +13,14 @@ the Jacobi's cost. This is a different algorithm (LAPACK's ssytrd + bisection
 + inverse iteration, laid out for the GPU):
 
 1. Tridiagonalize, A = Q T Q^T, in panels of TD_NB columns (LAPACK latrd,
-   lower). Per column three launches: `td_col_kernel` (the column updated by
-   the panel's earlier reflectors, its Householder reflector, d_j, e_j, tau_j;
-   v is kept in A's column j below the diagonal for step 4),
-   `td_gemv_kernel` (y = A_trail v, one threadgroup a row, plus the 2 jj
-   panel dot products as extra blocks) and `td_w_kernel` (w = tau (y - V W^T v
-   - W V^T v) - tau/2 (w^T v) v). Per panel one rank-2 TD_NB update of the
-   trailing square on the whole grid (`td_syr2k_kernel`, 32 x 32 tiles).
-   The per-column vector steps are O(n) work on one threadgroup of TD_TPB
-   threads (parallel inside the group); every O(n^2) and O(n^3) step is a
-   grid.
+   lower). Per column four grid launches: `td_col_kernel` (the column
+   updated by the panel's earlier reflectors, block partial norms, d_j),
+   `td_gemv_kernel` (every block folds the partials into the reflector, then
+   y = A_trail v one threadgroup a row, the 2 jj panel dot products, and the
+   v / e_j / tau_j stores; v is kept in A's column j below the diagonal for
+   step 4), `td_p_kernel` (p = tau (y - V W^T v - W V^T v), partial p . v)
+   and `td_w_kernel` (w = p - tau/2 (p . v) v). Per panel one rank-2 TD_NB
+   update of the trailing square (`td_syr2k_kernel`, 32 x 32 tiles).
 2. Eigenvalues of T by Sturm-count bisection in double-float (two float32
    words, error-free two-sum / fma two-product, the compensated arithmetic
    131a0d78a already ran on the M3), one thread per eigenvalue index, T
@@ -191,37 +189,35 @@ def td_copy_kernel(src: F32Ptr, dst: F32Ptr, count_in: Int32):
 
 
 @always_inline
-def _td_colval(a: F32Ptr, vp: F32Ptr, wp: F32Ptr, vj: F32Ptr, wj: F32Ptr, n: Int, i: Int, j: Int, jj: Int) -> Float32:
-    """A_cur[i, j] = A[i, j] - sum_p (V[i, p] W[j, p] + W[i, p] V[j, p])
-    over the panel's first jj reflectors (vj / wj hold row j of V / W)."""
-    var x = a.unsafe_load(i * n + j)
+def _td_cell(a: F32Ptr, vp: F32Ptr, wp: F32Ptr, n: Int, i: Int, c: Int, jj: Int) -> Float32:
+    """A_cur[i, c] = A[i, c] - sum_p (V[i, p] W[c, p] + W[i, p] V[c, p]) over
+    the panel's first jj reflectors (A is stale by exactly those)."""
+    var x = a.unsafe_load(i * n + c)
     for p in range(jj):
-        x -= vp.unsafe_load(i * TD_NB + p) * wj.unsafe_load(p) + wp.unsafe_load(i * TD_NB + p) * vj.unsafe_load(p)
+        x -= vp.unsafe_load(i * TD_NB + p) * wp.unsafe_load(c * TD_NB + p) + wp.unsafe_load(i * TD_NB + p) * vp.unsafe_load(c * TD_NB + p)
     return x
 
 
 def td_col_kernel(
-    a: F32Ptr, vp: F32Ptr, wp: F32Ptr, vv: F32Ptr, tau: F32Ptr, dd: F32Ptr, ee: F32Ptr,
-    n_in: Int32, j_in: Int32, jj_in: Int32,
+    a: F32Ptr, vp: F32Ptr, wp: F32Ptr, xcol: F32Ptr, part: F32Ptr, dd: F32Ptr, n_in: Int32, j_in: Int32, jj_in: Int32
 ):
-    """Column j: its reflector (slarfg), d_j, e_j, tau_j; v into vv (dense,
-    zeros at rows <= j), V[:, jj] and A[j + 1 :, j]. ONE block of TD_TPB."""
+    """Column j updated by the panel's earlier reflectors: xcol[i] = A_cur[i, j]
+    (rows > j), part[b] = block b's sum of xcol[i]^2 over rows > j + 1, and
+    (block 0) d_j = A_cur[j, j]; at j = n - 2 also d_{n-1} (the last
+    reflector is the identity). grid ceil((n - j - 1) / TD_TPB)."""
     var n = Int(n_in)
     var j = Int(j_in)
     var jj = Int(jj_in)
+    var b = Int(block_idx.x)
     var tid = Int(thread_idx.x)
     var red = stack_allocation[TD_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var scal = stack_allocation[4, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    # row j of V and W, read by every thread (global, written by the
-    # previous launches; no in-kernel device-memory exchange)
-    var vj = vp + j * TD_NB
-    var wj = wp + j * TD_NB
+    var i = j + 1 + b * TD_TPB + tid
     var s = Float32(0.0)
-    var i = j + 2 + tid
-    while i < n:
-        var x = _td_colval(a, vp, wp, vj, wj, n, i, j, jj)
-        s += x * x
-        i += TD_TPB
+    if i < n:
+        var x = _td_cell(a, vp, wp, n, i, j, jj)
+        xcol.unsafe_store(i, x)
+        if i >= j + 2:
+            s = x * x
     red[tid] = s
     barrier()
     var w = TD_TPB // 2
@@ -231,47 +227,47 @@ def td_col_kernel(
         barrier()
         w = w // 2
     if tid == 0:
-        var alpha = _td_colval(a, vp, wp, vj, wj, n, j + 1, j, jj)
-        var diag = _td_colval(a, vp, wp, vj, wj, n, j, j, jj)
-        var xn2 = red[0]
-        var t = Float32(0.0)
-        var beta = alpha
-        var scale = Float32(0.0)
-        if xn2 > Float32(0.0):
-            var nrm = sqrt(alpha * alpha + xn2)
-            beta = -nrm if alpha >= Float32(0.0) else nrm
-            t = (beta - alpha) / beta
-            scale = Float32(1.0) / (alpha - beta)
-        dd.unsafe_store(j, diag)
-        ee.unsafe_store(j, beta)
-        tau.unsafe_store(j, t)
-        scal[0] = scale
-    barrier()
-    var sc = scal[0]
-    # pass 2: v (each thread reads then writes only its own rows)
-    i = j + 2 + tid
-    while i < n:
-        var v = _td_colval(a, vp, wp, vj, wj, n, i, j, jj) * sc
-        vv.unsafe_store(i, v)
-        vp.unsafe_store(i * TD_NB + jj, v)
-        a.unsafe_store(i * n + j, v)
-        i += TD_TPB
-    i = tid
-    while i <= j:
-        vv.unsafe_store(i, Float32(0.0))
-        i += TD_TPB
-    if tid == 0:
-        vv.unsafe_store(j + 1, Float32(1.0))
-        vp.unsafe_store((j + 1) * TD_NB + jj, Float32(1.0))
-        a.unsafe_store((j + 1) * n + j, Float32(1.0))
+        part.unsafe_store(b, red[0])
+    if b == 0 and tid == 1:
+        dd.unsafe_store(j, _td_cell(a, vp, wp, n, j, j, jj))
+        if j == n - 2:
+            dd.unsafe_store(n - 1, _td_cell(a, vp, wp, n, n - 1, n - 1, jj))
+
+
+@always_inline
+def _td_house(alpha: Float32, xn2: Float32) -> SIMD[DType.float32, 4]:
+    """slarfg from alpha = x[0] and xn2 = ||x[1:]||^2: (beta, tau,
+    scale = 1 / (alpha - beta), 0); xn2 = 0 is the identity (tau 0)."""
+    var t = Float32(0.0)
+    var beta = alpha
+    var scale = Float32(0.0)
+    if xn2 > Float32(0.0):
+        var nrm = sqrt(alpha * alpha + xn2)
+        beta = -nrm if alpha >= Float32(0.0) else nrm
+        t = (beta - alpha) / beta
+        scale = Float32(1.0) / (alpha - beta)
+    return SIMD[DType.float32, 4](beta, t, scale, Float32(0.0))
+
+
+@always_inline
+def _td_v(xcol: F32Ptr, j: Int, scale: Float32, c: Int) -> Float32:
+    """v[c] for c > j: 1 at j + 1, xcol[c] scale below."""
+    if c == j + 1:
+        return Float32(1.0)
+    return xcol.unsafe_load(c) * scale
 
 
 def td_gemv_kernel(
-    a: F32Ptr, vv: F32Ptr, vp: F32Ptr, wp: F32Ptr, y: F32Ptr, tv: F32Ptr, n_in: Int32, j_in: Int32, jj_in: Int32
+    a: F32Ptr, xcol: F32Ptr, part: F32Ptr, vp: F32Ptr, wp: F32Ptr, vv: F32Ptr, tau: F32Ptr, ee: F32Ptr,
+    y: F32Ptr, tv: F32Ptr, n_in: Int32, j_in: Int32, jj_in: Int32, np_in: Int32,
 ):
-    """Blocks 0 .. m - 1 (m = n - j - 1): y[j + 1 + b] = A[j + 1 + b, j + 1 :] . v
-    (stale A: the panel's earlier reflectors are folded in by td_w_kernel).
-    Blocks m + q: tv[q] = W[:, q] . v (q < jj), V[:, q - jj] . v (q >= jj)."""
+    """Every block first forms column j's reflector (`_td_house` of the
+    td_col_kernel partials), then:
+    blocks 0 .. m - 1 (m = n - j - 1): y[j + 1 + b] = A[j + 1 + b, j + 1 :] . v
+    (stale A; td_p_kernel folds in the panel's earlier reflectors);
+    blocks m .. m + 2 jj - 1: tv[q] = W[:, q] . v (q < jj), V[:, q - jj] . v;
+    the last ceil(m / TD_TPB) blocks store v (vv, V[:, jj], A[j + 1 :, j])
+    and e_j, tau_j."""
     var n = Int(n_in)
     var j = Int(j_in)
     var jj = Int(jj_in)
@@ -279,24 +275,54 @@ def td_gemv_kernel(
     var b = Int(block_idx.x)
     var tid = Int(thread_idx.x)
     var red = stack_allocation[TD_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    # column j's reflector from the partial sums, folded in the same order
+    # in every block (so every block holds the same scalars)
+    var np_ = Int(np_in)
+    var s0 = Float32(0.0)
+    var q0 = tid
+    while q0 < np_:
+        s0 += part.unsafe_load(q0)
+        q0 += TD_TPB
+    red[tid] = s0
+    barrier()
+    var w0 = TD_TPB // 2
+    while w0 > 0:
+        if tid < w0:
+            red[tid] = red[tid] + red[tid + w0]
+        barrier()
+        w0 = w0 // 2
+    var hh = _td_house(xcol.unsafe_load(j + 1), red[0])
+    barrier()
+    var scale = hh[2]
+    if b >= m + 2 * jj:
+        var i = j + 1 + (b - m - 2 * jj) * TD_TPB + tid
+        if i < n:
+            var v = _td_v(xcol, j, scale, i)
+            vv.unsafe_store(i, v)
+            vp.unsafe_store(i * TD_NB + jj, v)
+            a.unsafe_store(i * n + j, v)
+        if b == m + 2 * jj and tid == 0:
+            ee.unsafe_store(j, hh[0])
+            tau.unsafe_store(j, hh[1])
+        return
     var s = Float32(0.0)
     if b < m:
         var row = (j + 1 + b) * n
         var c = j + 1 + tid
         while c < n:
-            s += a.unsafe_load(row + c) * vv.unsafe_load(c)
+            s += a.unsafe_load(row + c) * _td_v(xcol, j, scale, c)
             c += TD_TPB
     else:
         var q = b - m
         var i = j + 1 + tid
         if q < jj:
             while i < n:
-                s += wp.unsafe_load(i * TD_NB + q) * vv.unsafe_load(i)
+                s += wp.unsafe_load(i * TD_NB + q) * _td_v(xcol, j, scale, i)
                 i += TD_TPB
         else:
             var q2 = q - jj
             while i < n:
-                s += vp.unsafe_load(i * TD_NB + q2) * vv.unsafe_load(i)
+                s += vp.unsafe_load(i * TD_NB + q2) * _td_v(xcol, j, scale, i)
                 i += TD_TPB
     red[tid] = s
     barrier()
@@ -313,29 +339,31 @@ def td_gemv_kernel(
             tv.unsafe_store(b - m, red[0])
 
 
-def td_w_kernel(
-    vp: F32Ptr, wp: F32Ptr, vv: F32Ptr, y: F32Ptr, tv: F32Ptr, tau: F32Ptr, n_in: Int32, j_in: Int32, jj_in: Int32
+def td_p_kernel(
+    vp: F32Ptr, wp: F32Ptr, vv: F32Ptr, y: F32Ptr, tv: F32Ptr, tau: F32Ptr, pb: F32Ptr, part: F32Ptr,
+    n_in: Int32, j_in: Int32, jj_in: Int32,
 ):
-    """W[:, jj] = p - tau/2 (p . v) v, p = tau (y - V (W^T v) - W (V^T v)),
-    rows > j. ONE block of TD_TPB."""
+    """pb[i] = tau (y - V (W^T v) - W (V^T v))[i] for rows > j, part[b] = block
+    b's sum of pb[i] v[i]. grid ceil((n - j - 1) / TD_TPB)."""
     var n = Int(n_in)
     var j = Int(j_in)
     var jj = Int(jj_in)
+    var b = Int(block_idx.x)
     var tid = Int(thread_idx.x)
     var red = stack_allocation[TD_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var sh = stack_allocation[2 * TD_NB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     if tid < 2 * jj:
         sh[tid] = tv.unsafe_load(tid)
     barrier()
-    var tj = tau.unsafe_load(j)
+    var i = j + 1 + b * TD_TPB + tid
     var s = Float32(0.0)
-    var i = j + 1 + tid
-    while i < n:
+    if i < n:
         var u = y.unsafe_load(i)
         for p in range(jj):
             u -= vp.unsafe_load(i * TD_NB + p) * sh[p] + wp.unsafe_load(i * TD_NB + p) * sh[jj + p]
-        s += (tj * u) * vv.unsafe_load(i)
-        i += TD_TPB
+        var pv = tau.unsafe_load(j) * u
+        pb.unsafe_store(i, pv)
+        s = pv * vv.unsafe_load(i)
     red[tid] = s
     barrier()
     var w = TD_TPB // 2
@@ -344,14 +372,39 @@ def td_w_kernel(
             red[tid] = red[tid] + red[tid + w]
         barrier()
         w = w // 2
-    var alpha2 = Float32(-0.5) * tj * red[0]
-    i = j + 1 + tid
-    while i < n:
-        var u = y.unsafe_load(i)
-        for p in range(jj):
-            u -= vp.unsafe_load(i * TD_NB + p) * sh[p] + wp.unsafe_load(i * TD_NB + p) * sh[jj + p]
-        wp.unsafe_store(i * TD_NB + jj, tj * u + alpha2 * vv.unsafe_load(i))
-        i += TD_TPB
+    if tid == 0:
+        part.unsafe_store(b, red[0])
+
+
+def td_w_kernel(
+    wp: F32Ptr, vv: F32Ptr, pb: F32Ptr, part: F32Ptr, tau: F32Ptr, n_in: Int32, j_in: Int32, jj_in: Int32, np_in: Int32
+):
+    """W[i, jj] = pb[i] - tau/2 (p . v) v[i], rows > j; every block folds the
+    np partial dots in the same order. grid ceil((n - j - 1) / TD_TPB)."""
+    var n = Int(n_in)
+    var j = Int(j_in)
+    var jj = Int(jj_in)
+    var np_ = Int(np_in)
+    var b = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var red = stack_allocation[TD_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var s = Float32(0.0)
+    var q = tid
+    while q < np_:
+        s += part.unsafe_load(q)
+        q += TD_TPB
+    red[tid] = s
+    barrier()
+    var w = TD_TPB // 2
+    while w > 0:
+        if tid < w:
+            red[tid] = red[tid] + red[tid + w]
+        barrier()
+        w = w // 2
+    var alpha2 = Float32(-0.5) * tau.unsafe_load(j) * red[0]
+    var i = j + 1 + b * TD_TPB + tid
+    if i < n:
+        wp.unsafe_store(i * TD_NB + jj, pb.unsafe_load(i) + alpha2 * vv.unsafe_load(i))
 
 
 def td_syr2k_kernel(a: F32Ptr, vp: F32Ptr, wp: F32Ptr, n_in: Int32, kend_in: Int32, g_in: Int32):
@@ -409,29 +462,19 @@ def td_syr2k_kernel(a: F32Ptr, vp: F32Ptr, wp: F32Ptr, n_in: Int32, kend_in: Int
                 a.unsafe_store(ri * n + ci, a.unsafe_load(ri * n + ci) - acc[ra * 2 + cb])
 
 
-def td_lastdiag_kernel(a: F32Ptr, dd: F32Ptr, n_in: Int32):
-    var n = Int(n_in)
-    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
-        dd.unsafe_store(n - 1, a.unsafe_load((n - 1) * n + n - 1))
-
-
 # ===========================================================================
 # 2-3. Eigenvalues and eigenvectors of T (df64, one thread per eigenvalue)
 # ===========================================================================
 
 
-def td_info_kernel(dd: F32Ptr, ee: F32Ptr, info: F32Ptr, n_in: Int32):
-    """info[0] = the power-of-two scale bringing max(|d|, |e|) into [0.5, 2),
-    info[1] = TD_PIVMIN, info[2] = 1 when T is nonfinite or out of range
-    (the caller zero-fills info). ONE block of TD_TPB."""
-    var n = Int(n_in)
-    var tid = Int(thread_idx.x)
-    var rm = stack_allocation[TD_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var rf = stack_allocation[TD_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+@always_inline
+def td_scale(dd: F32Ptr, ee: F32Ptr, n: Int) -> SIMD[DType.float32, 2]:
+    """(sc, bad): sc the power of two bringing max(|d|, |e|) into [0.5, 2)
+    (exact scaling), bad = 1 when T is nonfinite or max outside
+    [1e-30, 1e30]. Every thread computes it (O(n), the same everywhere)."""
     var m = Float32(0.0)
     var bad = Float32(0.0)
-    var i = tid
-    while i < n:
+    for i in range(n):
         var x = dd.unsafe_load(i)
         if not td_finite(x):
             bad = Float32(1.0)
@@ -443,31 +486,16 @@ def td_info_kernel(dd: F32Ptr, ee: F32Ptr, info: F32Ptr, n_in: Int32):
                 bad = Float32(1.0)
             else:
                 m = max(m, abs(e))
-        i += TD_TPB
-    rm[tid] = m
-    rf[tid] = bad
-    barrier()
-    var w = TD_TPB // 2
-    while w > 0:
-        if tid < w:
-            rm[tid] = max(rm[tid], rm[tid + w])
-            rf[tid] = max(rf[tid], rf[tid + w])
-        barrier()
-        w = w // 2
-    if tid == 0:
-        var mm = rm[0]
-        var sc = Float32(1.0)
-        if rf[0] > Float32(0.0) or not (mm <= Float32(1.0e30)) or not (mm >= Float32(1.0e-30)):
-            info.unsafe_store(2, Float32(1.0))
-        else:
-            while mm >= Float32(2.0):
-                mm = mm * Float32(0.5)
-                sc = sc * Float32(0.5)
-            while mm < Float32(0.5):
-                mm = mm * Float32(2.0)
-                sc = sc * Float32(2.0)
-        info.unsafe_store(0, sc)
-        info.unsafe_store(1, TD_PIVMIN)
+    var sc = Float32(1.0)
+    if bad > Float32(0.0) or not (m <= Float32(1.0e30)) or not (m >= Float32(1.0e-30)):
+        return SIMD[DType.float32, 2](sc, Float32(1.0))
+    while m >= Float32(2.0):
+        m = m * Float32(0.5)
+        sc = sc * Float32(0.5)
+    while m < Float32(0.5):
+        m = m * Float32(2.0)
+        sc = sc * Float32(2.0)
+    return SIMD[DType.float32, 2](sc, Float32(0.0))
 
 
 def td_bisect_kernel(dd: F32Ptr, ee: F32Ptr, info: F32Ptr, wh: F32Ptr, wl: F32Ptr, n_in: Int32):
@@ -478,7 +506,12 @@ def td_bisect_kernel(dd: F32Ptr, ee: F32Ptr, info: F32Ptr, wh: F32Ptr, wl: F32Pt
     var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if k >= n:
         return
-    var sc = info.unsafe_load(0)
+    var sb = td_scale(dd, ee, n)
+    var sc = sb[0]
+    if sb[1] != Float32(0.0):
+        info.unsafe_store(2, Float32(1.0))
+    if k == 0:
+        info.unsafe_store(0, sc)  # read by td_gap_kernel / td_vec_kernel
     var glo = Float32(3.0e38)
     var ghi = Float32(-3.0e38)
     for i in range(n):
@@ -803,6 +836,10 @@ def eigh_td_on(
     var ddd = ctx.enqueue_create_buffer[DType.float32](n)
     var dee = ctx.enqueue_create_buffer[DType.float32](n)
     enqueue_fill(ctx, dee, Float32(0.0))
+    var dx = ctx.enqueue_create_buffer[DType.float32](n)
+    var dpb = ctx.enqueue_create_buffer[DType.float32](n)
+    var dpart = ctx.enqueue_create_buffer[DType.float32](_td_grid(n, TD_TPB))
+    var dpart2 = ctx.enqueue_create_buffer[DType.float32](_td_grid(n, TD_TPB))
     # 1. tridiagonalize
     var k = 0
     var panel = 0
@@ -812,21 +849,28 @@ def eigh_td_on(
         enqueue_fill(ctx, dW, Float32(0.0))
         for jj in range(cnt):
             var j = k + jj
-            ctx.enqueue_function[td_col_kernel](
-                da.unsafe_ptr(), dV.unsafe_ptr(), dW.unsafe_ptr(), dvv.unsafe_ptr(),
-                dtau.unsafe_ptr(), ddd.unsafe_ptr(), dee.unsafe_ptr(), Int32(n), Int32(j), Int32(jj),
-                grid_dim=1, block_dim=TD_TPB,
-            )
             var m = n - j - 1
-            ctx.enqueue_function[td_gemv_kernel](
-                da.unsafe_ptr(), dvv.unsafe_ptr(), dV.unsafe_ptr(), dW.unsafe_ptr(), dy.unsafe_ptr(), dtv.unsafe_ptr(),
+            var nbm = _td_grid(m, TD_TPB)
+            ctx.enqueue_function[td_col_kernel](
+                da.unsafe_ptr(), dV.unsafe_ptr(), dW.unsafe_ptr(), dx.unsafe_ptr(), dpart.unsafe_ptr(), ddd.unsafe_ptr(),
                 Int32(n), Int32(j), Int32(jj),
-                grid_dim=m + 2 * jj, block_dim=TD_TPB,
+                grid_dim=nbm, block_dim=TD_TPB,
+            )
+            ctx.enqueue_function[td_gemv_kernel](
+                da.unsafe_ptr(), dx.unsafe_ptr(), dpart.unsafe_ptr(), dV.unsafe_ptr(), dW.unsafe_ptr(), dvv.unsafe_ptr(),
+                dtau.unsafe_ptr(), dee.unsafe_ptr(), dy.unsafe_ptr(), dtv.unsafe_ptr(),
+                Int32(n), Int32(j), Int32(jj), Int32(nbm),
+                grid_dim=m + 2 * jj + nbm, block_dim=TD_TPB,
+            )
+            ctx.enqueue_function[td_p_kernel](
+                dV.unsafe_ptr(), dW.unsafe_ptr(), dvv.unsafe_ptr(), dy.unsafe_ptr(), dtv.unsafe_ptr(), dtau.unsafe_ptr(),
+                dpb.unsafe_ptr(), dpart2.unsafe_ptr(), Int32(n), Int32(j), Int32(jj),
+                grid_dim=nbm, block_dim=TD_TPB,
             )
             ctx.enqueue_function[td_w_kernel](
-                dV.unsafe_ptr(), dW.unsafe_ptr(), dvv.unsafe_ptr(), dy.unsafe_ptr(), dtv.unsafe_ptr(), dtau.unsafe_ptr(),
-                Int32(n), Int32(j), Int32(jj),
-                grid_dim=1, block_dim=TD_TPB,
+                dW.unsafe_ptr(), dvv.unsafe_ptr(), dpb.unsafe_ptr(), dpart2.unsafe_ptr(), dtau.unsafe_ptr(),
+                Int32(n), Int32(j), Int32(jj), Int32(nbm),
+                grid_dim=nbm, block_dim=TD_TPB,
             )
         var kend = k + cnt
         var mm = n - kend
@@ -840,13 +884,9 @@ def eigh_td_on(
         panel += 1
         if panel % TD_SYNC_PANELS == 0:
             ctx.synchronize()
-    ctx.enqueue_function[td_lastdiag_kernel](da.unsafe_ptr(), ddd.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
     # 2. eigenvalues
     var dinfo = ctx.enqueue_create_buffer[DType.float32](4)
     enqueue_fill(ctx, dinfo, Float32(0.0))
-    ctx.enqueue_function[td_info_kernel](
-        ddd.unsafe_ptr(), dee.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=TD_TPB
-    )
     var dwh = ctx.enqueue_create_buffer[DType.float32](n)
     var dwl = ctx.enqueue_create_buffer[DType.float32](n)
     ctx.enqueue_function[td_bisect_kernel](
@@ -885,6 +925,14 @@ def eigh_td_on(
         _ = dtau^
         _ = ddd^
         _ = dee^
+    _ = dx^
+    _ = dpb^
+    _ = dpart^
+    _ = dpart2^
+        _ = dx^
+        _ = dpb^
+        _ = dpart^
+        _ = dpart2^
         _ = dinfo^
         _ = dwh^
         _ = dwl^
@@ -940,6 +988,10 @@ def eigh_td_on(
     _ = dtau^
     _ = ddd^
     _ = dee^
+    _ = dx^
+    _ = dpb^
+    _ = dpart^
+    _ = dpart2^
     _ = dinfo^
     _ = dwh^
     _ = dwl^
