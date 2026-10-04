@@ -98,6 +98,22 @@ comptime IDN_TRUST_DEV = (
 )
 
 
+#: lane fix-c1-cluster (2026-10-04), IDENTICAL, ON by default: the k-NN reads
+#: X_embedded straight from the caller's list (an untracked-origin view of the
+#: same bytes; the caller holds the list across the call), so the n x d host
+#: staging copy into a pinned host buffer (and that buffer) are gone.
+#: The search uploads the same bytes, so the same indices and rank sum: no bit
+#: moves. -D MOJOLEARN_IDN_TRUST_NO_STAGE_OFF (or MOJOLEARN_IDN_ALL_OFF)
+#: restores the staging copy.
+comptime IDN_TRUST_NO_STAGE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_TRUST_NO_STAGE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+
 #: The threadgroup slab for the k+1 embedded-neighbor distances and ranks.
 comptime TRUST_MAX_K = 256
 
@@ -214,11 +230,22 @@ def trustworthiness_rank_sum(
     # knn_search's boundary is MutUntrackedOrigin host pointers, which a
     # host buffer provides (neighbors/checks/estimator_check.mojo does
     # the same).
-    var h_emb = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    var stage_len = n * d
+    comptime if IDN_TRUST_NO_STAGE:
+        stage_len = 1
+    var h_emb = ctx.enqueue_create_host_buffer[DType.float32](stage_len)
     var h_dist = ctx.enqueue_create_host_buffer[DType.float32](n * k1)
     var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](n * k1)
     ctx.synchronize()
-    copy_f32(x_embedded_host.unsafe_ptr(), h_emb.unsafe_ptr(), n * d)
+    var emb_ptr: MutPointer[Float32, MutUntrackedOrigin]
+    comptime if IDN_TRUST_NO_STAGE:
+        # MOJOLEARN_IDN_TRUST_NO_STAGE: the caller's list, read in place
+        emb_ptr = x_embedded_host.unsafe_ptr().unsafe_origin_cast[
+            MutUntrackedOrigin
+        ]()
+    else:
+        copy_f32(x_embedded_host.unsafe_ptr(), h_emb.unsafe_ptr(), n * d)
+        emb_ptr = h_emb.unsafe_ptr()
     var retained = List[DeviceBuffer[DType.uint32]]()
     comptime if IDN_TRUST_DEV:
         _ = _knn_search_traced_retaining(
@@ -226,9 +253,9 @@ def trustworthiness_rank_sum(
             trace,
             retained,
             True,
-            h_emb.unsafe_ptr(),
+            emb_ptr,
             n,
-            h_emb.unsafe_ptr(),
+            emb_ptr,
             n,
             d,
             k1,
@@ -240,9 +267,9 @@ def trustworthiness_rank_sum(
         _ = knn_search_traced(
             ctx,
             trace,
-            h_emb.unsafe_ptr(),
+            emb_ptr,
             n,
-            h_emb.unsafe_ptr(),
+            emb_ptr,
             n,
             d,
             k1,
