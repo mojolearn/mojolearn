@@ -76,7 +76,6 @@ from max.gpu.host import DeviceContext, HostBuffer
 from training.clip_multi_gpu import parallel_clip_grad_norm_host, clip_pool_fault_available
 from training.accumulate_multi_gpu import parallel_accumulate_host, accumulate_pool_fault_available
 from training.optimizer_multi_gpu import parallel_optimizer_step_host
-from training.maximize import maximize_negate, maximize_negated_copy
 from training.estimator import (
     identical_clip_grad_norm_addrs_host,
     identical_ce_loss_host,
@@ -92,6 +91,7 @@ from training.dev_tensors import (
 # lane fam2-neural (2026-10-04): parameters and gradients resident across steps
 from training.estimator import (
     identical_optimizer_step_resident_io, IDN_OPT_PARAMS_RESIDENT, OPT_IO_ALL, IDN_MAXIMIZE_DEV,
+    maximize_negate_device,
 )
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer
@@ -139,6 +139,27 @@ def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
 
 def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
     return i32_ptr(addr)
+
+
+def _negate_through_device(
+    ctx: DeviceContext,
+    src: MutPointer[Float32, MutUntrackedOrigin],
+    dst: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+) raises:
+    """dst[0:n] = `maximize_negate(src[0:n])` ON THE DEVICE: one bulk upload,
+    one sign-flip launch (`maximize_negate_device`), one bulk download
+    (cpu3-bindings; the host loops it replaces flipped n floats on the CPU).
+    The flip is exact, so the bits are the host loop's on every column.
+    `src` and `dst` may be the same buffer."""
+    if n <= 0:
+        return
+    var d = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_copy(dst_buf=d, src_ptr=src)
+    maximize_negate_device(ctx, d, n)
+    ctx.enqueue_copy(dst_ptr=dst, src_buf=d)
+    ctx.synchronize()
+    _ = d^
 
 
 def training_numeric_mode_binding() raises -> PythonObject:
@@ -293,16 +314,17 @@ def optimizer_step_binding(
             if n_tensors < 1 or op[n_tensors] < Int32(0):
                 raise Error("optimizer_step: maximize needs a registry with offsets[J] >= 0")
             var n_flat = Int(op[n_tensors])
-            var neg = maximize_negated_copy(gp, n_flat)
+            var neg = List[Float32](length=max(n_flat, 1), fill=Float32(0.0))
             var np_ = neg.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+            _negate_through_device(ctx, gp, np_, n_flat)
             n_total = parallel_optimizer_step_host(
                 ctx, pp, np_, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov,
                 lr, beta1, beta2, eps, weight_decay, momentum, dampening,
                 max_norm,
             )
             if max_norm > Float32(0.0):
-                for i in range(n_flat):
-                    gp[i] = maximize_negate(neg[i])
+                _negate_through_device(ctx, np_, gp, n_flat)
+            _ = neg^  # `np_` is untracked: keep the copy alive past its last use
         else:
             n_total = parallel_optimizer_step_host(
                 ctx, pp, gp, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov,
@@ -400,7 +422,7 @@ def optimizer_resident_open_binding(n_total: PythonObject) raises -> PythonObjec
         var n_stage = n if opt_download_staged() else 1
         var spin = ctx.enqueue_create_host_buffer[DType.float32](n_stage)
         var sgin = ctx.enqueue_create_host_buffer[DType.float32](n_stage)
-        for j in range(len(pool[].n)):
+        for j in range(len(pool[].n)):  # small-loop(n: optimizer handle slots in the pool): finds a free handle, not data
             if pool[].n[j] == 0 and h < 0:
                 h = j
         if h < 0:
@@ -521,8 +543,9 @@ def optimizer_resident_step_binding(
             if n_tensors < 1 or op[n_tensors] < Int32(0):
                 raise Error("optimizer_resident_step: maximize needs a registry with offsets[J] >= 0")
             var n_flat = Int(op[n_tensors])
-            var neg = maximize_negated_copy(gp, n_flat)
+            var neg = List[Float32](length=max(n_flat, 1), fill=Float32(0.0))
             var np_ = neg.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+            _negate_through_device(ctx, gp, np_, n_flat)
             # the parameter/gradient device buffers: the handle's pooled pair on
             # Apple, a fresh pair per step elsewhere (lane neural-pass34)
             var pooled = opt_pool_buffers()
@@ -541,8 +564,8 @@ def optimizer_resident_step_binding(
                     momentum, dampening, max_norm,
                 )
             if max_norm > Float32(0.0):
-                for i in range(n_flat):
-                    gp[i] = maximize_negate(neg[i])
+                _negate_through_device(ctx, np_, gp, n_flat)
+            _ = neg^  # `np_` is untracked: keep the copy alive past its last use
         else:
             # the parameter/gradient device buffers: the handle's pooled pair on
             # Apple, a fresh pair per step elsewhere (lane neural-pass34)
@@ -712,7 +735,7 @@ def _handles(handles: PythonObject, want: Int, name: String) raises -> List[Int]
     if len(handles) != want:
         raise Error(name + ": handles must contain " + String(want) + " entries, got " + String(len(handles)))
     var out = List[Int]()
-    for i in range(want):
+    for i in range(want):  # small-loop(want: device array handles of one op call): reads handle list, not data
         out.append(Int(py=handles[i]))
     return out^
 
@@ -935,7 +958,7 @@ def clip_grad_norm_multi_binding(
             + String(n_tensors) + " tensors"
         )
     var addrs = List[Int]()
-    for j in range(n_tensors):
+    for j in range(n_tensors):  # small-loop(n_tensors: gradient tensors of the model): one pointer per tensor, not data
         var a = Int(py=grad_addrs[j])
         if a == 0:
             raise Error("clip_grad_norm_multi: null gradient address at " + String(j))
@@ -1293,7 +1316,7 @@ def _addrs(addresses: PythonObject, want: Int, name: String) raises -> List[Int]
             + String(len(addresses))
         )
     var out = List[Int]()
-    for i in range(want):
+    for i in range(want):  # small-loop(want: buffer addresses of one op call): reads pointer list, not data
         var a = Int(py=addresses[i])
         if a == 0:
             raise Error(name + ": null buffer address at slot " + String(i))
