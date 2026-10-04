@@ -160,7 +160,6 @@ from decomposition.checks.jacobi_eigh_device import (
     _rot_sub,
     jacobi_rotation_cs,
 )
-from core.xtdz_coalesced import column_mean_launch
 from std.sys.compile import is_defined
 from decomposition.impl.linalg.detail.pca import (
     PCAResult,
@@ -177,13 +176,6 @@ from decomposition.impl.linalg.detail.pca import (
 #: eigensolver solves. Written as an assignment rather than restated so it
 #: cannot be moved on one side only.
 comptime SVD_TPB = JACOBI_TPB
-
-#: lane fam2-decomp (2026-10-04): see decomposition/estimator.mojo
-#: IDN_DECOMP_MEAN_LAUNCH (the same define; restated here because the
-#: estimator imports this module). -D MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF
-#: (or -D MOJOLEARN_IDN_ALL_OFF) restores the direct launch.
-comptime SVD_FULL_MEAN_LAUNCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
-
 
 def one_sided_jacobi_svd_kernel[wide_rotation: Bool = False](
     r: MutPointer[Float32, MutAnyOrigin],
