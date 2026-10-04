@@ -666,6 +666,8 @@ candidate is approved or claimed fixed; full timing remains gated.
 | define | algorithm / dataset | branch / base | A/B tag | before -> after ms | verdict | reason / note |
 |---|---|---|---|---|---|---|
 | `MOJOLEARN_MCD_BATCH_MMA` | MinCovDet / taxi, narrow d<=64 | lane/apple-fast-mcd-mma (base d4bb2b795) | gap26-mcd-mma-{small,ee-small,full,ee-full} | MCD taxi 70877.7 -> 3587.2 ms; EE taxi 70092.1 -> 3627.9 ms; all MCDQ-PAIR-PASS | DEFAULT (FAST+Apple), rollback `MOJOLEARN_MCD_BATCH_MMA_OFF` | Actual repair after scalar COMPAT quality failure: use main's existing MMA/split-K launcher per candidate for covariance, weighted Gram and Mahalanobis. Batched control/eigen/support work retained. No host model computation, no threshold changes. See ab/mcd-mma.md; compile, capped quality and conditional full timing owed. |
+| `MOJOLEARN_MCD_BMMA` | MinCovDet, EllipticEnvelope / taxi | lane/apple-fast-w2-mcd2 (base b2b1c22bc) | w2-mcdb-* (proposed) | Pending | OPEN, opt-in | One batched matrix-unit GEMM launch per product per step instead of 3 x nc launches; inactive candidates skipped. Same tile/K split per candidate as main. Hypothesis: ~310k phase-B launches dominate 3.6 s. See ab/mcd-next.md. |
+| `MOJOLEARN_MCD_WIDE` | MinCovDet, EllipticEnvelope / istella (d220) | lane/apple-fast-w2-mcd2 (base b2b1c22bc) | w2-mcdw-* (proposed) | A does not finish (> 20 min) | OPEN, opt-in | Batched search for 64 < d <= 256: block-per-candidate LU, 256-entry pinvh tables. B-only timing gated on istella cap3000 quality PASS. ~20 GB peak at board size. |
 ## AutoARIMA order batching current-main integration (2026-10-04)
 
 | Experiment | Branch / baseline | Evidence | Verdict / next step |
