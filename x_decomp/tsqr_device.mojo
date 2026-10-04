@@ -107,7 +107,7 @@ def _fold_sh(sh: _SH, base: Int, stride: Int) -> Float32:
 
 
 @always_inline
-def _wy_chunk[transpose: Bool](
+def _wy_chunk_kern[transpose: Bool](
     y: F32Ptr, ldy: Int, x: F32Ptr, ldx: Int, c0: Int, c_hi: Int, mb: Int, j0: Int, pw: Int,
     tsh: _SH, part: _SH, zsh: _SH, wsh: _SH, g: Int, l: Int,
 ):
@@ -315,7 +315,7 @@ def ts_leaf_panel_kernel(a: F32Ptr, tst: F32Ptr, m_in: Int32, n_in: Int32, nb_in
     comptime if not TS_GRID_UPDATE:
         var c0 = j0 + pw
         while c0 < n:
-            _wy_chunk[True](blk, n, blk, n, c0, n, mb, j0, pw, tsh, part, zsh, wsh, g, l)
+            _wy_chunk_kern[True](blk, n, blk, n, c0, n, mb, j0, pw, tsh, part, zsh, wsh, g, l)
             c0 += TS_NB
 
 
@@ -354,7 +354,7 @@ def ts_leaf_update_kernel(
         return
     tsh[tid] = tst.unsafe_load((b * npan + pan) * _TT + tid)
     barrier()
-    _wy_chunk[True](blk, n, blk, n, c0, n, mb, j0, pw, tsh, part, zsh, wsh, g, l)
+    _wy_chunk_kern[True](blk, n, blk, n, c0, n, mb, j0, pw, tsh, part, zsh, wsh, g, l)
 
 
 def ts_rtile_kernel(a: F32Ptr, tiles: F32Ptr, m_in: Int32, n_in: Int32, nb_in: Int32):
@@ -521,11 +521,11 @@ def ts_leaf_apply_kernel(
     tsh[tid] = tst.unsafe_load((b * npan + pan) * _TT + tid)
     barrier()
     if nch > 0:
-        _wy_chunk[False](a + lo * n, n, q + lo * k, k, ch * TS_NB, k, mb, j0, pw, tsh, part, zsh, wsh, g, l)
+        _wy_chunk_kern[False](a + lo * n, n, q + lo * k, k, ch * TS_NB, k, mb, j0, pw, tsh, part, zsh, wsh, g, l)
     else:
         var c0 = 0
         while c0 < k:
-            _wy_chunk[False](a + lo * n, n, q + lo * k, k, c0, k, mb, j0, pw, tsh, part, zsh, wsh, g, l)
+            _wy_chunk_kern[False](a + lo * n, n, q + lo * k, k, c0, k, mb, j0, pw, tsh, part, zsh, wsh, g, l)
             c0 += TS_NB
 
 

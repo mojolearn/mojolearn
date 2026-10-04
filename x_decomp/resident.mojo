@@ -30,7 +30,7 @@ from x_decomp.cells import F32Ptr, I32Ptr, LARS_ROW_EXTRA, OP_SCALE, OP_SELECT, 
 from core.philox import philox4x32_10
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import HostBuffer
-from core.device_scan import NONFINITE_NONE, SCAN_TPB, _scan_blocks, nonfinite_partial_kernel
+from core.device_scan import NONFINITE_NONE, SCAN_TPB, _scan_blocks, nonfinite_partial_kernel, min_partials_kernel
 from x_decomp.moves import MOVE_FILL0, MOVE_LAST, MOVE_TAKE_ROWS
 from x_decomp.moves_device import launch_move
 from x_decomp.device import (
@@ -1079,8 +1079,9 @@ def grp_fit_fused_py(
         var ctx = xd_ctx()
         var st = GRP_STAGE.get_or_create_ptr()
         if not st[].part:
-            st[].part = ctx.enqueue_create_buffer[DType.int32](512)
-            st[].host = ctx.enqueue_create_host_buffer[DType.int32](512)
+            # 512 partials plus the slot their device-folded minimum lands in
+            st[].part = ctx.enqueue_create_buffer[DType.int32](513)
+            st[].host = ctx.enqueue_create_host_buffer[DType.int32](1)
         var blocks = _scan_blocks(cnt) if cnt > 0 else 0
         var buf = pool_take["MojoXDecompCls2Scan"](ctx, max(cnt, 1))
         if cnt > 0:
@@ -1089,8 +1090,13 @@ def grp_fit_fused_py(
                 st[].part.value().unsafe_ptr(), buf.unsafe_ptr(), Int32(cnt),
                 grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
             )
+            # the partials fold on the device; one word home (lane cpu3-core)
+            ctx.enqueue_function[min_partials_kernel](
+                st[].part.value().unsafe_ptr() + 512, st[].part.value().unsafe_ptr(),
+                Int32(blocks), grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+            )
             ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(),
-                             src_buf=st[].part.value().create_sub_buffer[DType.int32](0, blocks))
+                             src_buf=st[].part.value().create_sub_buffer[DType.int32](512, 1))
         if count > 0:
             var strat = False
             comptime if GRP_FAST_SRP_STRAT:
@@ -1108,11 +1114,8 @@ def grp_fit_fused_py(
                 )
             ctx.enqueue_copy(dst_ptr=host_out, src_buf=_pool_buf_view(_id(dst), count))
         ctx.synchronize()
-        var hp = st[].host.value().unsafe_ptr()
-        for i in range(blocks):
-            var v = hp[i]
-            if v < best:
-                best = v
+        if cnt > 0:
+            best = st[].host.value().unsafe_ptr()[0]
         pool_give["MojoXDecompCls2Scan"](buf^)
     return PythonObject(-1 if best == NONFINITE_NONE else Int(best))
 
