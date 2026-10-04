@@ -91,6 +91,9 @@ def receipt(path, prediction_path, target_path, arm):
     require(r.get('targets_sha256') == digest(target_path), 'target artifact hash mismatch')
     require(set(r.get('parameter_sha256', {})) == {'classification', 'regression'},
             'both model parameter hashes required')
+    require(all(isinstance(v, str) and len(v) == 64 and
+                all(c in '0123456789abcdef' for c in v)
+                for v in r['parameter_sha256'].values()), 'invalid parameter SHA256')
     builds = r.get('native_build_receipts', [])
     require(builds, 'our source-build receipts required; no wheel fallback')
     built_artifacts = {}
