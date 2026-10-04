@@ -30,6 +30,8 @@ from core.column_stats import STATS_TPB
 from checks.numerics import ftz, identical_mul_add
 from tsa.impl.timeSeries.arima_helpers import prepare_data_host
 from tsa.impl.timeSeries.stationarity import (
+    KPSS_SCAN_BLOCKED,
+    KPSS_SCAN_TPB,
     kpss_lags,
     kpss_pvalue,
     kpss_s2B_coefficients,
@@ -70,6 +72,33 @@ def pinned_fold_host(partials: List[Float32]) -> Float32:
             red[t] = ftz(red[t] + red[t + step])
         step //= 2
     return red[0]
+
+
+def cumsum_blocked_host(data: List[Float32], base: Int, n: Int, mut out_v: List[Float32]):
+    """`stationarity.mojo::cumsum_blocked_kernel` for one series, appended
+    to `out_v`: the same chunks, the same chunk totals, the same ascending
+    offset fold over every lower chunk (the empty ones' +0.0 included) and
+    the same in-chunk chain (lane/fam-timeseries, KPSS_SCAN_BLOCKED)."""
+    var per = (n + KPSS_SCAN_TPB - 1) // KPSS_SCAN_TPB
+    var totals = List[Float32]()
+    for tid in range(KPSS_SCAN_TPB):
+        var begin = min(tid * per, n)
+        var end = min(begin + per, n)
+        var local = Float32(0.0)
+        for i in range(begin, end):
+            local = ftz(local + ftz(data[base + i]))
+        totals.append(local)
+    for tid in range(KPSS_SCAN_TPB):
+        var begin = min(tid * per, n)
+        var end = min(begin + per, n)
+        if begin >= end:
+            continue
+        var running = Float32(0.0)
+        for c in range(tid):
+            running = ftz(running + ftz(totals[c]))
+        for i in range(begin, end):
+            running = ftz(running + ftz(data[base + i]))
+            out_v.append(running)
 
 
 def series_sum_host[
@@ -168,10 +197,13 @@ def kpss_host_f32(
     for b in range(batch_size):
         s2B.append(series_sum_host[False](s2B_acc, b * n, n, Float32(1.0)))
     for b in range(batch_size):
-        var acc = Float32(0.0)
-        for t in range(n):
-            acc = ftz(acc + ftz(y_cent[b * n + t]))
-            cumsum.append(acc)
+        comptime if KPSS_SCAN_BLOCKED:
+            cumsum_blocked_host(y_cent, b * n, n, cumsum)
+        else:
+            var acc = Float32(0.0)
+            for t in range(n):
+                acc = ftz(acc + ftz(y_cent[b * n + t]))
+                cumsum.append(acc)
     for b in range(batch_size):
         eta.append(series_sum_host[True](cumsum, b * n, n, Float32(1.0)))
     for b in range(batch_size):
