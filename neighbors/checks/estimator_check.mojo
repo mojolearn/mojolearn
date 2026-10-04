@@ -59,6 +59,8 @@ from neighbors.estimator import (
     MIN_QUERY_TILE,
     knn_search,
     plan_query_tile,
+    QUERY_TILE_512_CANDIDATE,
+    query_tile_bounded_budget_applies,
 )
 from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
@@ -108,10 +110,25 @@ def check_plan_query_tile() raises:
 
     # 2. The cap fires, and halves rather than collapsing. 1,000,000 x 4 x 256
     #    is 1024 MB, over budget; 128 gives 512 MB, under it.
+    #    A build whose bounded workspace admits a million rows keeps the
+    #    default tile there instead (the rule is a workspace bound, not a
+    #    row count); the neighbors of the benchmark index plan like it.
     var capped = plan_query_tile(1000000, 4000, DEFAULT_QUERY_TILE)
-    if capped != 128:
+    var capped_want = 128
+    if QUERY_TILE_512_CANDIDATE and query_tile_bounded_budget_applies(1000000):
+        capped_want = bench_want
+    for n_nb in [399999, 400001, 450000]:
+        var nb_tile = plan_query_tile(n_nb, 4000, DEFAULT_QUERY_TILE)
+        if nb_tile != bench_want:
+            raise Error(
+                "plan_query_tile: neighbor index " + String(n_nb)
+                + " must plan like the benchmark index (" + String(bench_want)
+                + "), got " + String(nb_tile)
+            )
+    if capped != capped_want:
         raise Error(
-            "plan_query_tile: n_index=1000000 should halve 256 -> 128, got "
+            "plan_query_tile: n_index=1000000 should plan "
+            + String(capped_want) + ", got "
             + String(capped)
         )
 
