@@ -1,0 +1,4 @@
+ARIMA_FAST_QUALITY status=PASS arrays=44 forecast=identical loglike=identical
+ARIMA_ORDER_FULL_QUALITY status=PASS tag=gap26-orders-current-full source=7ba385b300e5334c0e204bb7788a6ab150ab74ea
+2026-10-04T09:14:02Z /Users/ec2-user/mq/out/gap26-orders-current-synthetic.log
+2026-10-04T09:15:17Z /Users/ec2-user/mq/out/gap26-orders-current-taxi-hourly.log

@@ -610,6 +610,7 @@ FAST bit changes are allowed. Acceptance requires faster M3 timing and no qualit
 | SGDOC_FAST_PAR, Istella | lane/apple-fast-sgdoc-parallel @ 61710a5c8 | sgdocp-istella | 75537.985 → 181.313 | J .10000456 → .1; flagged .04042 → 0 | HOLD: anomaly behavior unresolved; old-base comparator |
 | SGDOC_FAST_PAR, taxi | lane/apple-fast-sgdoc-parallel @ 61710a5c8 | sgdocp-taxi | 58334.248 → 16.521 | candidate J .1, flagged 0 | HOLD: anomaly behavior unresolved; current-main comparison owed |
 | ARIMA_FUSED_EVAL_TAIL | lane/apple-fast-arima-batched @ 1a627f709; kernel 217e821e5 | gap26-arima-tail-synthetic / taxi-hourly | synthetic 14498.225 → 13569.230 (-6.4%); taxi-hourly 24231.028 → 22705.348 (-6.3%) | Both digests and RMSE unchanged; gap26-arima-quality-fixed PASS, 44 byte-identical selected-order/parameter/likelihood/forecast arrays | KEEP: default/OFF promotion 311d5233e; taxi RMSE 74.6591 remains worse than opponent 68.21, quality gap under review |
+| TARGET_SCRATCH (`_OFF` rollback) | lane/apple-fast-target-current @ 4d1ea20b2; promotion on main12fdd6697 | gap26-target-current-taxi / istella | taxi 270.947625 → 203.743667 (-24.8%); istella 250.423916 → 179.818916 (-28.2%) | Same per-dataset digests; gap26-target-current-quality PASS108 exact arrays plus independent smoothing oracle | KEEP for promotion: recorded maintenance windows clear; one pair per arm, variance unestimated; default/OFF compilation owed, not merged |
 | EIGH_FAST_TANGENT | lane/apple-fast-linalg-20261004 | gap26-eigh-tangent (proposed) | Pending | residual/eigenvalue error/orthogonality required | OPEN; first compile alias error fixed, rebuild pending |
 | MCD_BATCH_COMPAT | lane/apple-fast-mcd-exact | gap26-mcdcompat-taxi (proposed) | Pending | fitted covariance, precision, support, Mahalanobis distances, predictions | OPEN; compilation pending |
 | ARIMA_EXACT_STEADY | lane/apple-fast-arima-batched @ a670ce8c2 (removed in 217e821e5) | NOT RUN | No new timing | Equivalent to earlier failed P_FIX covariance fixed-point experiment | ABANDONED before M3; prior P_FIX +165%, combined ASYNC +22–64%; avoids duplicate experiment |
@@ -665,3 +666,41 @@ candidate is approved or claimed fixed; full timing remains gated.
 | define | algorithm / dataset | branch / base | A/B tag | before -> after ms | verdict | reason / note |
 |---|---|---|---|---|---|---|
 | `MOJOLEARN_MCD_BATCH_MMA` | MinCovDet / taxi, narrow d<=64 | lane/apple-fast-mcd-mma (base d4bb2b795) | new capped-quality tag owed | unknown | OPEN, off | Actual repair after scalar COMPAT quality failure: use main's existing MMA/split-K launcher per candidate for covariance, weighted Gram and Mahalanobis. Batched control/eigen/support work retained. No host model computation, no threshold changes. See ab/mcd-mma.md; compile, capped quality and conditional full timing owed. |
+## AutoARIMA order batching current-main integration (2026-10-04)
+
+| Experiment | Branch / baseline | Evidence | Verdict / next step |
+|---|---|---|---|
+| `ARIMA_ORDER_BATCH`, original small quality | lane/apple-fast-arima-orders @ eae73e1f0; kernel457160e23 | Manager reports gap26-orders-quality PASS18 arrays on the 128-observation fixture; no new timing | Historical small-only evidence; not a full-quality or current-main acceptance |
+| `ARIMA_ORDER_BATCH`, fused-tail integration | lane/apple-fast-arima-orders-current; merged main d4bb2b795 (includes accepted fused-tail311d5233e) | Both arms now use current-main fused tail in shared prepare/finish; source changed, stale arms invalid | OPEN, opt-in only. Rebuild arima A/B, full512/2048 quality before one M3 timing/arm on synthetic and taxi-hourly; no opponent reruns. [Plan and exact commands](ab/arima-orders-current.md) |
+
+## M3 repaired checks — 2026-10-04 09:00 UTC
+
+- `MOJOLEARN_CHOL_FAST_TRI_SYRK`, lane/apple-fast-chol-20261004 measured `ca5ea4b6e` (kernel `e724b7777`), `gap26-chol-fixed-synthetic`: A268.772791 -> B288.278250 ms (+7.3%), one run/arm. Digest `8818853dfae997da` and relative residual1.659095968e-7 identical. SPD/solve and failure-info quality checks pass. **DROPPED-slower**, no default or board change; comment retained beside candidate gate on its lane.
+- `MOJOLEARN_EIGH_FAST_TANGENT`, lane/apple-fast-linalg-20261004 `131a0d78a`, `gap26-eigh-rayleigh-run-ready`: A43796.817 -> B51254.836 ms (+17.0%), one run/arm. Eigenvalue error6.08669e-5 ->3.52564e-7; relative residual5.37499e-5 ->4.82917e-6. Repaired quality fixture pair passes. **HOLD-speed**: accuracy improved but no speed win; keep opt-in, optimize coefficient reuse before new measurement. Existing opponent-quality board hold remains.
+- `MOJOLEARN_MCD_BATCH_COMPAT`, lane/apple-fast-mcd-exact `ab4265c9a`, `gap26-mcdrepair-small-ready`: capped3000 taxi only, A5595.804 -> B828.962 ms. **HOLD-quality**: covariance relative difference.08568, precision.99982, support Jaccard.94143. No full-data timing or board update. Artifact review finds final covariance rank7 ->6 at pinvh cutoff despite both raw ranks10; matching all-true flags is insufficient. Failure and proposed MMA-compatible repair documented on review branch `lane/apple-fast-mcd-review` at `0b5b3db39`; do not merge rejected candidate ancestry into main.
+
+Raw M3 receipt: `~/mojolearn-evidence/apple-fast/sync/quality-repairs-results-0900.txt`; individual tags under `~/mq/out/`. Source review for queued PT `bc112b172`: subsequent main x_prep changes only add label-specific binding/dispatch/Python paths; power-transformer implementation is unchanged.
+
+- `MOJOLEARN_GBDT_DW_BRIDGE_SCAN`, measured kernel `2519f4867`, helper `f193454e7`, `gap26-dwcurrent-taxi`: A10279.095 -> B10827.749 ms (+5.34%), one M3 run/arm. AUC .632554 -> .632211; logloss .527920 -> .528002. **DROPPED-slower**; changed quality has no established noise bound, so no quality-equivalence claim. No default or board change. Receipt `~/mojolearn-evidence/apple-fast/sync/dwcurrent-result-0905.txt`; full M3 `~/afc-def/gap26-dwcurrent-taxi/`.
+
+### Measurement isolation audit — 2026-10-04 09:13 UTC
+
+The M3 runner serializes jobs and A/B arms, but the manager ran filesystem scans
+and cleanup outside the queue during this session. This violates full machine
+isolation even though no simultaneous scored benchmarks were found. Recent
+single-pair speed verdicts whose maintenance overlap cannot be excluded must be
+treated as **HOLD-measurement**, superseding firm speed-only rejection claims
+above (in particular the current depthwise tree comparison). Preserve raw times
+and independent quality evidence; do not merge a candidate on an uncertain speed
+result. No affected candidate was promoted from those recent rejected pairs.
+Future heavy maintenance must share the serial queue or an explicit idle boundary.
+The earlier ARIMA/label measurements predate this session's maintenance; this
+audit alone does not establish interference with those measured promotions.
+
+Detailed isolation audit and six identified scan-window tags: [MEASUREMENT_AUDIT_2026-10-04.md](MEASUREMENT_AUDIT_2026-10-04.md). Their speed verdict is HOLD-measurement, superseding historical speed-only verdicts. No overlap claim is made solely from a cleanup start timestamp.
+
+## AutoARIMA order-batching default promotion prepared (2026-10-04)
+
+| Experiment | Measured source / tags | A → B ms | Quality | Verdict / remaining gate |
+|---|---|---|---|---|
+| `ARIMA_ORDER_BATCH` → default + `ARIMA_ORDER_BATCH_OFF` | 7ba385b30; gap26-orders-current-synthetic / taxi-hourly | synthetic13780.316917 →9287.286750 (-32.6%); taxi-hourly22706.248042 →13747.215083 (-39.5%) | Fitted/order/likelihood/forecast full-quality PASS before timing; both board digests and RMSE identical (2.624119555 /74.659122441). Existing fused tail enabled in BOTH arms | KEEP, default merged on main dc2285bc0; manager default/OFF builds both rc0. Source review against main d1871643b preserved accepted fused tail. Taxi opponent-quality HOLD remains (74.6591 vs68.21). [Raw evidence and review](ab/arima-orders-default.md) |
