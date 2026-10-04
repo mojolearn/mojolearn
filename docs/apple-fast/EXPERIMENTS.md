@@ -7,7 +7,7 @@ Process: [experiment validation, toggle lifecycle and promotion](EXPERIMENT_PROC
 
 ## Rule: FAST needs no identical anything (2026-10-04)
 
-FAST never needs identical results: not bits, digests or arm-A equality, and not across vendors or runs. A FAST A/B is judged on speed, and on quality being good. Good means the board quality metric is at least as good as the best opponent's, or within noise of FAST main. A noise-level difference, a new fold order or new bits is never a reason to hold. Only a real quality loss is. Strict "B <= A on every metric, zero allowance" gates are retired for FAST verdicts; they may still be reported as information.
+FAST never needs identical results: not bits, digests or arm-A equality, and not across vendors or runs. A FAST A/B is judged on speed, and on quality not going down. The board quality metric must show no material drop against FAST main (arm A), and must be at least as good as the best opponent's. A noise-level difference, a new fold order or new bits is never a reason to hold. Any real quality loss is. Strict "B <= A on every metric, zero allowance" gates are retired for FAST verdicts; they may still be reported as information.
 
 ## How to use it
 
