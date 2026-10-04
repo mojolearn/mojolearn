@@ -61,3 +61,48 @@ AFC_FAMILY=algos bash tools/afc_ab_def.sh gap26-eigh-cache-synthetic x_decomp ei
 Manager should stage/validate precompiled A.so/B.so and set AFC_SKIP_BUILD=1
 through verified_arms.py, as for earlier candidates. No queue was submitted.
 Record measured outcome beside EIGH_TANGENT_CACHE and in EXPERIMENTS.md.
+
+## Executable staging, quality receipt and conditional timing
+
+Manager has compiled both arms at `14764dbb846b882443858cff3c05c3d95b1b9876`.
+`tools/eigh_cache_verified.py` validates/stages that source using the manager's
+verified_arms.py. Its default repaired-small reference is exactly the old
+helper's `<tag>-quality/B.json` for tag `gap26-eigh-rayleigh`:
+`~/mq/out/gap26-eigh-rayleigh-quality/B.json`. The helper cannot verify that
+remote file locally; it refuses absent or mismatched fixture keys at runtime.
+
+Exact first M3 CMD, on this branch:
+
+```sh
+MOJOLEARN_NUMERIC_MODE=fast "$HOME/board-0834/cache/venv/bin/python" tools/eigh_cache_verified.py quality gap26-eigh-cache
+```
+
+Small A/B quality must pass against both current main and the saved repaired
+reference. Then it runs board4096 A/B quality and compares against both main
+and repaired. Supply `--repaired-board /path/to/existing.json` to reuse an
+existing matching reference; otherwise it verifies old source131a0d78a's
+manifest and B.so hash in `~/mq/verified-arms/<full-old-sha>/x_decomp/`, checks
+the original checker/linalg import surface, and generates a **quality-only**
+repaired board4096 reference. It never reruns any old scored tag.
+
+Exact separate conditional timing CMD:
+
+```sh
+MOJOLEARN_NUMERIC_MODE=fast "$HOME/board-0834/cache/venv/bin/python" tools/eigh_cache_verified.py timing gap26-eigh-cache gap26-eigh-cache-synthetic
+```
+
+The receipt is `~/mq/out/gap26-eigh-cache-quality/PASS.json`, issued only
+when all 12 small cases and board4096 pass all three metrics against BOTH
+references. Same existing checker thresholds: finite errors <=2e-4, sorted
+eigenvalues, each candidate metric <=max(reference*1.1,reference+5e-8).
+Receipt binds source, define, compiled manifest, checker/helper hashes, and
+all saved result/reference JSON hashes. Timing verifies the receipt before
+calling verified_arms.py; that validates compiled hashes/source scope and
+refuses existing scored race.log, then runs one arm pair with AFC_SKIP_BUILD.
+This admits a speed experiment, not removal of the stricter opponent-quality
+hold or automatic promotion.
+
+Quality logs and metrics live at
+`~/mq/out/gap26-eigh-cache-quality/{A-small,B-small,repaired-board,A-board,B-board}.{log,json}`;
+repaired-small.json is a preserved reference copy. Scored evidence lands in
+`~/mq/out/race-gap26-eigh-cache-synthetic/race.log`.
