@@ -1345,6 +1345,7 @@ def svdvals(a):
 #: A v / s, which would divide rounding noise (numpy's gesdd returns SOME
 #: orthonormal basis of that null space too).
 _SVD_NULL_RTOL = 2.0 ** -20
+_SVD_NULL_RTOL_MODULE = _SVD_NULL_RTOL
 
 
 def _svd_stage_timer():
@@ -1389,8 +1390,9 @@ def _svd_tall(k, A, full, null_rtol=None, householder=False):
     S, Vt = k.svd(A)
     tick("svd (sliced QR + Jacobi of R)")
     s0 = S.s[0] if n else 0.0
-    rtol = _SVD_NULL_RTOL if null_rtol is None else null_rtol
-    r = sum(1 for v in S.s if v > 0.0 and v > s0 * rtol)
+    # a local of the module constant's name: SVD_QFIX's override, if any
+    _SVD_NULL_RTOL = _SVD_NULL_RTOL_MODULE if null_rtol is None else null_rtol
+    r = sum(1 for v in S.s if v > 0.0 and v > s0 * _SVD_NULL_RTOL)
     AV = k.mm(A, Vt, tb=True)                                   # m x n
     tick("A V (gemm)")
     Ug = k.ew("div", AV.take_cols(list(range(r))) if r < n else AV, S.take_cols(list(range(r))) if r < n else S)
