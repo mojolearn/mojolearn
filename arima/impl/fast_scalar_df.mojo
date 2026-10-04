@@ -18,7 +18,7 @@ from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, pinned_mul_f32
 
 # PRIVATE-KERNEL-QUALITY PASS / default OFF, 2026-10-04, source fe5df7ab0:
-# arima-k3-df-gpu-q-v1.json:13/13groups PASS,4 refusal controls PASS,
+# arima-k3-df-gpu-q-v1.json:13/13groups PASS,4 controls PASS,
 # degradation_allowance=0; fixed step0.0009765625, supplied-state hashes checked.
 # Actual compensated GPU stages/retained-low-word gradients pass versus saved
 # actual-main GPU errors; zero scored timings, promotion_authorized=false.
@@ -29,8 +29,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, pinned_mul_f32
 # components of648 (345 changed components improve). No timing admission.
 # The former r2 harness gradient mismatch was repaired; do not cite that
 # harness defect to dismiss the corrected actual-gradient failures.
-# This compensated DF proposal requires every stage and gradient component
-# to pass unchanged zero-degradation gates, then actual fit/forecast checks.
+# Private stage/gradient gates now pass as above; this does not discharge
+# the separate actual fit/forecast checks or permit default promotion.
 # Reference-only K1/K3 studies do not authorize product defaults.
 # See docs/apple-fast/ARIMA_K3_DF_REFERENCE_PLAN.txt and
 # docs/apple-fast/ARIMA_K3_DF_GPU_PLAN.txt; original scalar hold stays separate.
