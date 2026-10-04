@@ -45,8 +45,11 @@ comptime KSHAP_FAST_BATCH = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_KSHAP_
 #: Device counts/compaction/mapping, same background mean/marginal order;
 #: callback retains the existing chunked, row-independent model contract.
 comptime PSHAP_DELTA = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_PSHAP_DELTA_OFF"]()
-#: SHAP_PERM_CACHE (FAST + Apple, on top of PSHAP_DELTA; OPT-IN until its
-#: A/B passes: `-D MOJOLEARN_SHAP_PERM_CACHE`): `pshap_dsynth` keeps its
+#: SHAP_PERM_CACHE (FAST + Apple DEFAULT, on top of PSHAP_DELTA; rollback
+#: `-D MOJOLEARN_SHAP_PERM_CACHE_OFF`). M3 afc_ab_def, full board size, 1 run
+#: per arm, 2026-10-04 (ab1 d51f4b4bf): permutation-shap taxi 102.77 -> 85.42
+#: ms, istella 15229.5 -> 14991.0 ms; rel_error_vs_exact identical.
+#: `pshap_dsynth` keeps its
 #: chunk's `_Delta` (permutations, uploaded x and background, counts, the
 #: prefix sum, the varying-row index and its total) for the process, and the
 #: matching `pshap_dvalues` (same addresses, counts, seed and row0: the next
@@ -63,7 +66,7 @@ comptime PSHAP_DELTA = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_PSHAP_DELTA
 #: (and pooled the synthetic buffer under KSHAP_FAST_BATCH), so the same
 #: idea, caching the per-chunk device state, is re-aimed at the work
 #: PSHAP_DELTA still does twice per chunk.
-comptime SHAP_PERM_CACHE = PSHAP_DELTA and is_defined["MOJOLEARN_SHAP_PERM_CACHE"]()
+comptime SHAP_PERM_CACHE = PSHAP_DELTA and not is_defined["MOJOLEARN_SHAP_PERM_CACHE_OFF"]()
 comptime AGN_MAX_BLOCKS = 65535 * 16
 comptime _CTX = "MojoXTreesAgnosticIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXTreesAgnosticFast"
 
