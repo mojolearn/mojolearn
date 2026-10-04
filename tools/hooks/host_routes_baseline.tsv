@@ -1659,8 +1659,6 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_gpc_impl.py	0	for
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_gpc_impl.py	0	for e in range(n_est):
 # why: one-vs-rest dispatch: one gpc_fit/gpc_predict call per class column and per-class model bookkeeping (k-sized); owed: a multi-class gpc_fit/gpc_predict binding entry that takes all k columns in one call
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_gpc_impl.py	0	self.n_iter_ = [e.n_iter_ for e in fits]
-# why: AgglomerativeClustering post-processing over n (connectivity edge list, cosine zero-row check, tree cut, heads, label ranks); owed to x_cluster/agglo.mojo returning labels (x_cluster binding shared with pyglue-numeric)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_hierarchy_impl.py	0	if any(not any(row) for row in flat):
 # why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	classes = [bool(classes_store[i]) for i in range(k)]
 # why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
@@ -2035,8 +2033,6 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/decomposition.py	0
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/decomposition.py	0	for i, r in enumerate(ratios):
 # why: PCA float n_components: cumulative explained-variance-ratio fold and tail sum over components; owed to the estimators binding's PCA finish
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/decomposition.py	0	for v in rest:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/density.py	0	if float(w.sum()) <= 0.0:
 # why: CatBoost Pool argument walks over Python objects (group_id runs of str/bytes/int ids, pairs and pairs_weight entries, a list permutation's element types) and the O(leaves) model-text parse of get_leaf_values / get_tree_leaf_counts; owed to a native group-run helper for integer id buffers and a binding export of the leaf table; FeatureFreq's per-feature constant check dispatches reduce_stat per column (one helper call per feature, a per-column range helper owed)
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/ensemble.py	0	for f in range(n_features):
 # why: CatBoost Pool argument walks over Python objects (group_id runs of str/bytes/int ids, pairs and pairs_weight entries, a list permutation's element types) and the O(leaves) model-text parse of get_leaf_values / get_tree_leaf_counts; owed to a native group-run helper for integer id buffers and a binding export of the leaf table; FeatureFreq's per-feature constant check dispatches reduce_stat per column (one helper call per feature, a per-column range helper owed)
