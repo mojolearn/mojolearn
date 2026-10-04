@@ -1044,70 +1044,48 @@ def _check_infrequent_params(est):
     return mc is not None or mf is not None
 
 
-def _category_counts(mode, arr, categories):
-    """Per column, how many training rows hold each category (the device's
-    lookup and a per-column count, integers)."""
-    n, d = arr.shape
-    pr = _Prog()
-    codes, _neg = _codes(pr, arr, categories)
-    kmax = max(c.size for c in categories)
-    out = pr.alloc(d * kmax)
-    pr.stage("code_counts", d, codes, n, d, kmax, out)
-    pr.run(mode)
-    flat = pr.get_i32(out, d * kmax).tolist()
-    return [flat[j * kmax:j * kmax + c.size] for j, c in enumerate(categories)]
-
-
-def _identify_infrequent(counts, n, min_frequency, max_categories):
-    """sklearn `_identify_infrequent`: the sorted infrequent indices, or None.
-    Integer counts; the fractional threshold is n * min_frequency in float64."""
+def _infrequent_threshold(n, min_frequency):
+    """The integer count a frequent category reaches (THR of c2_inf_m0): an
+    int min_frequency as is; a fraction f, ceil(n * f) in binary64 (count <
+    n * f exactly when count < ceil(n * f)); none, 0. A scalar."""
     if min_frequency is None:
-        mask = [False] * len(counts)
-    elif isinstance(min_frequency, numbers.Integral):
-        mask = [c < min_frequency for c in counts]
-    else:
-        lim = n * float(min_frequency)
-        mask = [c < lim for c in counts]
-    current = len(counts) - sum(mask) + 1
-    if max_categories is not None and max_categories < current:
-        keep = max_categories - 1
-        if keep == 0:
-            mask = [True] * len(counts)
-        else:
-            order = sorted(range(len(counts)), key=lambda i: counts[i])   # stable, as mergesort
-            for i in order[:-keep]:
-                mask[i] = True
-    idx = [i for i, m in enumerate(mask) if m]
-    return idx or None
+        return 0
+    if isinstance(min_frequency, numbers.Integral):
+        return int(min_frequency)
+    return int(math.ceil(n * float(min_frequency)))
 
 
 def _fit_infrequent(est, mode, arr, ignore_missing):
     """Sets est._infrequent (per column: sorted infrequent indices or None)
     and est._grouping (per column: category index -> grouped code, or None),
-    as the reference's `_fit_infrequent_category_mapping`. With
-    ignore_missing (OrdinalEncoder) a trailing NaN category is left out of
-    the grouping."""
-    counts = _category_counts(mode, arr, est.categories_)
-    n = arr.shape[0]
+    as the reference's `_identify_infrequent` and
+    `_fit_infrequent_category_mapping`. With ignore_missing (OrdinalEncoder)
+    a trailing NaN category is left out of the grouping. Lane cpu2-l3-prep:
+    one program, the counts (code_counts), the min_frequency mask
+    (c2_inf_m0), the max_categories cut by a stable count rank (c2_inf_m1)
+    and the grouped codes (c2_inf_map) on the device; the masks and codes
+    come back as the fitted tables."""
+    n, d = arr.shape
+    cats_all = est.categories_
+    ks = [c.size - 1 if (ignore_missing and c.size and _is_nan_value(c.tolist()[-1])) else c.size
+          for c in cats_all]  # glue: one size per column
+    pr = _Prog()
+    codes, _neg = _codes(pr, arr, cats_all)
+    kmax = max(c.size for c in cats_all)
+    cnt, kc = pr.alloc(d * kmax), pr.put_list(ks)
+    m0, m1, mp = pr.work(d * kmax), pr.alloc(d * kmax), pr.alloc(d * kmax)
+    maxc = -1 if est.max_categories is None else int(est.max_categories)
+    pr.stage("code_counts", d, codes, n, d, kmax, cnt)
+    pr.stage("c2_inf_m0", d * kmax, cnt, kc, kmax, _infrequent_threshold(n, est.min_frequency), m0)
+    pr.stage("c2_inf_m1", d * kmax, cnt, kc, kmax, m0, maxc, m1)
+    pr.stage("c2_inf_map", d * kmax, kc, kmax, m1, mp)
+    pr.run(mode)
+    masks, maps = pr.get_i32(m1, d * kmax).tolist(), pr.get_i32(mp, d * kmax).tolist()
     est._infrequent, est._grouping = [], []
-    for cats, cnt in zip(est.categories_, counts):
-        if ignore_missing and cats.size and _is_nan_value(cats.tolist()[-1]):
-            cnt = cnt[:-1]
-        inf = _identify_infrequent(cnt, n, est.min_frequency, est.max_categories)
+    for j, k in enumerate(ks):  # glue: the device's tables as the fitted per-column lists
+        inf = [i for i in range(k) if masks[j * kmax + i]] or None
         est._infrequent.append(inf)
-        if inf is None:
-            est._grouping.append(None)
-            continue
-        infset = set(inf)
-        nf = len(cnt) - len(inf)
-        mapping, g = [], 0
-        for i in range(len(cnt)):
-            if i in infset:
-                mapping.append(nf)
-            else:
-                mapping.append(g)
-                g += 1
-        est._grouping.append(mapping)
+        est._grouping.append(None if inf is None else maps[j * kmax:j * kmax + k])
     est.infrequent_categories_ = [None if inf is None else Array.from_list([c.tolist()[i] for i in inf], "<f4")
                                   for c, inf in zip(est.categories_, est._infrequent)]
 
