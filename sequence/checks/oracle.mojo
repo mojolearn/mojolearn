@@ -1335,3 +1335,49 @@ def o_prophet_features(frac: List[Float32], orders: List[Int], hol: List[Float32
         for h in range(nh):
             out.append(_z(hol[t * nh + h]))
     return out^
+
+
+def _o_fmix32(x: UInt32) -> UInt32:
+    """murmur3's 32-bit finalizer."""
+    var z = x ^ (x >> 16)
+    z = z * UInt32(0x85EBCA6B)
+    z = z ^ (z >> 13)
+    z = z * UInt32(0xC2B2AE35)
+    return z ^ (z >> 16)
+
+
+def o_mlp_perm(n: Int, seed: UInt64, epoch: Int, alt: Bool) -> List[Float32]:
+    """Seam 5545 (lane cpu3-python): the MLP device epoch order (roadmap D13,
+    `sequence/mlp.mojo::op_mlp_perm`) restated: the epoch key is splitmix64's
+    output at state seed + (epoch + 1) * golden; position t maps through six
+    Feistel rounds on two h-bit halves (h = ceil(bits / 2), 2^bits >= n),
+    round key fmix32(k0 + round * 0x9E3779B9) ^ k1, then cycle-walks until
+    the value is below n. alt: five rounds (a dropped round)."""
+    var z = seed + UInt64(epoch + 1) * UInt64(0x9E3779B97F4A7C15)
+    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
+    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
+    var key = z ^ (z >> 31)
+    var k0 = UInt32(key & UInt64(0xFFFFFFFF))
+    var k1 = UInt32(key >> UInt64(32))
+    var bits = 1
+    while (1 << bits) < n:
+        bits += 1
+    var h = UInt32((bits + 1) // 2)
+    var mask = (UInt32(1) << h) - UInt32(1)
+    var rounds = 5 if alt else 6
+    var out = List[Float32]()
+    for t in range(n):
+        var x = UInt32(t)
+        while True:
+            var l = (x >> h) & mask
+            var r = x & mask
+            for rd in range(rounds):
+                var f = _o_fmix32(r + (_o_fmix32(k0 + UInt32(rd) * UInt32(0x9E3779B9)) ^ k1)) & mask
+                var nl = r
+                r = l ^ f
+                l = nl
+            x = (l << h) | r
+            if Int(x) < n:
+                break
+        out.append(Float32(Int(x)))
+    return out^
