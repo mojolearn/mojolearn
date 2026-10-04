@@ -222,3 +222,35 @@ Small typed DeviceBuffer helpers launch the unchanged kernels with native
 failure on direct session/list-element launches. Storage remains owned by
 the active session. These changes accommodate the current Mojo ownership
 rules without changing kernels or dispatch.
+
+Recorded validation on the integration task (2026-10-04): NVIDIA and AMD
+compiled and ran `identity_gate.mojo` at frozen `18a76ee41`, each with exit
+status 0, 48 scaler comparisons, two UInt32 roundtrips, and stale-readback
+refusal. Both reported digest `138198733663681093`. Evidence is
+`~/mojolearn-evidence/identical-all/callpath-scalers-comparison.json` and the
+vendor `lq/callpath-scalers-18a76ee41-correct-column` logs. The full primitive
+compile probe also compiled successfully on NVIDIA after the typed launch
+helper fix (`c64f981fb`); its log is
+`~/mojolearn-evidence/callpath-20261004/remote-nvidia-probe-03.log`.
+These results do not establish primitive-adapter runtime identity, Apple or
+host identity, or a speedup. No production estimator has been routed through
+this experimental callpath by these changes.
+
+Two additional GPU gates use the same build definitions:
+
+- `primitive_gate.mojo`: all five primitive adapters on exactly representable
+  fixtures, 257-row/771-cell tails, changing inputs across two reused-buffer
+  rounds, both centering and restoration. Expected summary:
+  `CALLPATH_PRIMITIVES status=PASS comparisons=12 adapters=5 reuse_rounds=2`.
+  This is a targeted smoke check, not broad GEMM/numerical identity coverage.
+- `transport_gate.mojo`: all twelve typed banks, two transfers of 257 cells
+  per bank with changed sentinel order; floating storage preserves negative
+  zero, subnormal and quiet-NaN payloads without arithmetic on those types.
+  Nine safe lifecycle checks cover staging/result shapes, overlapping begin,
+  empty slots, duplicate readback, poisoned reuse, negative reservation and
+  scaler capacity refusal without writing caller results. Expected summary:
+  `CALLPATH_TRANSPORT status=PASS banks=12 roundtrips=24` with
+  `lifecycle_checks=9`. No device-loss simulation is attempted.
+
+At addition time these two gates have not run; do not infer a runtime pass
+from their compile status. Their digests can be compared between vendors.
