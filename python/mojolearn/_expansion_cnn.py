@@ -1129,24 +1129,21 @@ def _adam_hyper(step, lr, betas, eps, weight_decay, decoupled, binding=None):
 
 def _adam_hyper_block(step0, nsteps, lr, betas, eps, weight_decay, decoupled, binding=None):
     """`_adam_hyper` of steps step0 .. step0 + nsteps - 1 as an (nsteps, 9)
-    float64 array, made in Mojo (the base binding's `adam_hyper_f64`; lane
-    cgr4-py-compute): beta ** step by squaring in one fixed order, the
-    correctly rounded sqrt, the same bits on every column."""
+    float64 array, made by the binding's `x_cnn_adam_hyper_d` kernel (lane
+    fam2-neural; the host `adam_hyper_f64` arm left the GPU route in lane
+    cpu3-python): the same bits on every column."""
     np = _np()
-    from ._buffer import _native
     out = np.empty((max(int(nsteps), 1), 9), dtype=np.float64)
-    if binding is not None and _idn2(binding, _F2_EPOCH_DEV):
-        # lane fam2-neural: the step scalars from the binding's own kernel
-        # (`adam_hyper_at`, float32 pairs; the same words on every column)
-        if int(step0) < 1:
-            raise ValueError("Adam step must be at least 1")
-        binding.x_cnn_adam_hyper_d(out.ctypes.data, [int(step0), int(nsteps)],
-                                   [float(lr), float(betas[0]), float(betas[1]), float(eps), float(weight_decay),
-                                    1.0 if decoupled else 0.0])
-        return out[:int(nsteps)]
-    _native("adam_hyper_f64")(out.ctypes.data, int(step0), int(nsteps),
-                              [float(lr), float(betas[0]), float(betas[1]), float(eps), float(weight_decay),
-                               1.0 if decoupled else 0.0])
+    if binding is None:
+        raise ValueError("mojolearn CNN: the Adam step scalars come from the binding's kernel; pass the binding")
+    # lane fam2-neural: the step scalars from the binding's own kernel
+    # (`adam_hyper_at`, float32 pairs; the same words on every column). Lane
+    # cpu3-python: on every build, the host `adam_hyper_f64` arm is gone.
+    if int(step0) < 1:
+        raise ValueError("Adam step must be at least 1")
+    binding.x_cnn_adam_hyper_d(out.ctypes.data, [int(step0), int(nsteps)],
+                               [float(lr), float(betas[0]), float(betas[1]), float(eps), float(weight_decay),
+                                1.0 if decoupled else 0.0])
     return out[:int(nsteps)]
 
 
@@ -1340,9 +1337,9 @@ class CNNClassifier(_Layer):
         b = self._binding()
         per = 2 if self.optimizer != "sgd" else 1
         params = self._params()
-        # the epoch orders from one splitmix64 state, permuted in Mojo
-        # (`epoch_order_i32`, sequence/schedule.mojo; lane cgr4-py-compute)
-        from ._buffer import InitStream, _native
+        # the epoch orders from one splitmix64 seed, permuted on the device
+        # (`x_cnn_epoch_rows` / `x_cnn_fit_epoch_d`, lane fam2-neural)
+        from ._buffer import InitStream
         order_state = np.array([InitStream(self.random_state).seed], dtype=np.uint64)
         n = x.shape[0]
         k = len(self.classes_)
@@ -1365,17 +1362,17 @@ class CNNClassifier(_Layer):
             # the list forms (one optimizer call, one gather per step) on the
             # GPU binding only: the host twin's list forms are unmeasured
             lists = (not _LEGACY_STEP) and str(b.x_cnn_vendor()) != "cpu"
-            # the whole X and its labels resident once when they fit a GiB:
-            # each step then gathers its rows on the binding's side (a word
-            # copy) instead of uploading them
-            whole = x.nbytes <= (1 << 30)
-            if whole:
-                row = int(np.prod(self.input_shape))
-                xall, yall = R.new(x.size), R.new(n)
-                R.put(xall, x)
-                R.put(yall, yi)
+            # the whole X and its labels resident once, at every size (lane
+            # cpu3-python: the >1 GiB route that gathered each batch's rows on
+            # the host with `gather_rows_bytes` and uploaded them is gone; GPU
+            # path, GPU only): each step gathers its rows on the binding's side
+            # (a word copy) instead of uploading them
+            row = int(np.prod(self.input_shape))
+            xall, yall = R.new(x.size), R.new(n)
+            R.put(xall, x)
+            R.put(yall, yi)
             step = 0
-            epoch_entry = (whole and _EPOCH_ENTRY and not _LEGACY_STEP and hasattr(b, "x_cnn_fit_epoch_r"))
+            epoch_entry = (_EPOCH_ENTRY and not _LEGACY_STEP and hasattr(b, "x_cnn_fit_epoch_r"))
             if epoch_entry:
                 bs = self.batch_size
                 nsteps = (n + bs - 1) // bs
@@ -1392,8 +1389,12 @@ class CNNClassifier(_Layer):
                             plan_last=[[list(p[0]), list(p[1])] for p in self._plan(m_last)[0]])
                 sgd_row = [self.learning_rate, self.momentum, self.weight_decay, self.dampening,
                            1.0 if self.nesterov else 0.0, 0.0]
-            # lane fam2-neural: the order, Adam's scalars and the losses on the device
-            dev_epoch = _idn2(b, _F2_EPOCH_DEV)
+            # lane fam2-neural: the order, Adam's scalars and the losses on the
+            # device. Lane cpu3-python: on every build (the `_F2_EPOCH_DEV`
+            # bit only reports the define now): the host Fisher-Yates order
+            # (`epoch_order_i32`) and the host Adam scalars (`adam_hyper_f64`)
+            # are off the GPU route, no `_OFF` arm (owner rule, 2026-10-04).
+            dev_epoch = True
             seed64 = int(order_state[0])
             seed_lo, seed_hi = seed64 & 0xFFFFFFFF, seed64 >> 32
             ep = -1
@@ -1417,11 +1418,7 @@ class CNNClassifier(_Layer):
                     self.loss_curve_.append(_pm.nsum(epoch) / len(epoch))
                     continue
                 order = np.empty(n, dtype=np.int32)
-                if dev_epoch:
-                    b.x_cnn_epoch_rows(order.ctypes.data, [n, ep, 1 if self.shuffle else 0, seed_lo, seed_hi])
-                else:
-                    _native("epoch_order_i32")(order.ctypes.data, n, 1 if self.shuffle else 0,
-                                               order_state.ctypes.data)
+                b.x_cnn_epoch_rows(order.ctypes.data, [n, ep, 1 if self.shuffle else 0, seed_lo, seed_hi])
                 if epoch_entry:
                     rows = np.ascontiguousarray(order, dtype=np.int32)
                     if self.optimizer == "sgd":
@@ -1445,26 +1442,12 @@ class CNNClassifier(_Layer):
                 for s in range(0, n, self.batch_size):
                     idx = order[s:s + self.batch_size]
                     m = len(idx)
-                    if whole:
-                        rows = np.ascontiguousarray(idx, dtype=np.int32)
-                        if not lists:
-                            b.x_cnn_res_gather(a["x"], xall, rows.ctypes.data, [m, row])
-                            b.x_cnn_res_gather(a["y"], yall, rows.ctypes.data, [m, 1])
-                        else:
-                            b.x_cnn_res_gather([a["x"], a["y"]], [xall, yall], rows.ctypes.data, [m, row, 1])
+                    rows = np.ascontiguousarray(idx, dtype=np.int32)
+                    if not lists:
+                        b.x_cnn_res_gather(a["x"], xall, rows.ctypes.data, [m, row])
+                        b.x_cnn_res_gather(a["y"], yall, rows.ctypes.data, [m, 1])
                     else:
-                        # X above a GiB stays on the host: the batch rows into
-                        # one staging block by the base binding's byte gather
-                        # (lane pyglue-numeric: numpy fancy indexing), then up
-                        rows64 = idx.astype(np.int64)
-                        xb = np.empty((m,) + x.shape[1:], np.float32)
-                        yb = np.empty(m, np.int32)
-                        _native("gather_rows_bytes")(x.ctypes.data, xb.ctypes.data, rows64.ctypes.data,
-                                                     n, m, x.nbytes // n)
-                        _native("gather_rows_bytes")(yi.ctypes.data, yb.ctypes.data, rows64.ctypes.data,
-                                                     n, m, 4)
-                        R.put(a["x"], xb)
-                        R.put(a["y"], yb)
+                        b.x_cnn_res_gather([a["x"], a["y"]], [xall, yall], rows.ctypes.data, [m, row, 1])
                     plans = self._forward_r(b, a, m)
                     loss = float(b.x_cnn_softmax_xent_r(a["logits"], a["y"], a["glog"], a["proba"], [m, k]))
                     hw, _, hgw, hgb = self._rw[id(self.head_)]
