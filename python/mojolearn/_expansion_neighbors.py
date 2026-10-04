@@ -619,6 +619,14 @@ class NearestCentroid(_XNeighbors):
 
     def predict_proba(self, X):
         dec = self.decision_function(X)
+        if hasattr(self._bind(), "xn_softmax64"):
+            # lane apple-fast-q-clf (x_neighbors/proba64_nc.mojo, QUALITY-FIX, FAST
+            # default; -D MOJOLEARN_PROBA64_QOLD has no export): float64 probabilities,
+            # the winner's 1 - c exact (float32 saturated at 1.0: Istella log loss
+            # 4.299 vs scikit-learn 4.118, accuracy equal)
+            out = empty(dec.shape, "<f8")
+            self._op("softmax64", [(dec, 0), (out, 1)], dec.shape)
+            return out
         out = empty(dec.shape, "<f4")
         self._op("softmax", [(dec, 0), (out, 1)], dec.shape)
         return out

@@ -32,58 +32,10 @@ from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_prep.common import FP, IP, p, ld
 from x_prep.prims import add, sub, div, expf
+from checks.f64_words import widen_bits, one_minus_bits, put64
 
 #: The switch the binding's `x_prep_proba64` export reports (Python's probe).
 comptime PROBA64 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_PROBA64_QOLD"]()
-
-
-@always_inline
-def widen_bits(v: Float32) -> UInt64:
-    """The IEEE float64 bits of float32 v, exactly (subnormals normalised)."""
-    var b = UInt64(bitcast[DType.uint32](v))
-    var sign = (b >> 31) << 63
-    var e = Int((b >> 23) & 0xFF)
-    var man = b & 0x7FFFFF
-    if e == 0:
-        if man == 0:
-            return sign
-        var e64 = 897  # 1 - 127 + 1023
-        while (man & 0x800000) == 0:
-            man = man << 1
-            e64 -= 1
-        return sign | (UInt64(e64) << 52) | ((man & 0x7FFFFF) << 29)
-    if e == 255:
-        return sign | (UInt64(0x7FF) << 52) | (man << 29)
-    return sign | (UInt64(e - 127 + 1023) << 52) | (man << 29)
-
-
-@always_inline
-def one_minus_bits(c: Float32) -> UInt64:
-    """The float64 bits of 1 - c for 0 <= c <= 1/2 (c a float32): 1 - c lies
-    in [1/2, 1], so its fraction field is 2^52 - c * 2^53, c * 2^53 being
-    c's 24-bit significand shifted (rounded to nearest when it shifts right)."""
-    var b = UInt64(bitcast[DType.uint32](c))
-    var e = Int((b >> 23) & 0xFF)
-    var v = UInt64(0)
-    if e != 0:
-        var m = (b & 0x7FFFFF) | 0x800000
-        var sh = e - 97  # c * 2^53 = m * 2^(e - 150 + 53)
-        if sh >= 0:
-            v = m << UInt64(sh)
-        elif -sh < 25:
-            var r = -sh
-            v = (m + (UInt64(1) << UInt64(r - 1))) >> UInt64(r)
-    var two52 = UInt64(1) << 52
-    if v >= two52:
-        return UInt64(0x3FE) << 52  # c rounds to 1/2
-    return (UInt64(0x3FE) << 52) + (two52 - v)
-
-
-@always_inline
-def _put64(f: FP, w: Int, bits: UInt64):
-    """Words w (low) and w + 1 (high) of a float64, stored raw (no flush)."""
-    f.unsafe_store(w, bitcast[DType.float32](UInt32(bits & 0xFFFFFFFF)))
-    f.unsafe_store(w + 1, bitcast[DType.float32](UInt32(bits >> 32)))
 
 
 def q64_softmax_unit(t: Int, f: FP, q: IP):
@@ -103,7 +55,7 @@ def q64_softmax_unit(t: Int, f: FP, q: IP):
     if m == neg_inf:
         var u = widen_bits(div(Float32(1), Float32(K)))
         for k in range(K):
-            _put64(f, o + 2 * k, u)
+            put64(f, o + 2 * k, u)
         return
     var tail = Float32(0)
     for k in range(K):
@@ -112,9 +64,9 @@ def q64_softmax_unit(t: Int, f: FP, q: IP):
     var den = add(Float32(1), tail)
     for k in range(K):
         if k != km:
-            _put64(f, o + 2 * k, widen_bits(div(expf(sub(ld(f, S + k), m)), den)))
+            put64(f, o + 2 * k, widen_bits(div(expf(sub(ld(f, S + k), m)), den)))
     var c = div(tail, den)
     if c <= Float32(0.5):
-        _put64(f, o + 2 * km, one_minus_bits(c))
+        put64(f, o + 2 * km, one_minus_bits(c))
     else:
-        _put64(f, o + 2 * km, widen_bits(div(Float32(1), den)))
+        put64(f, o + 2 * km, widen_bits(div(Float32(1), den)))
