@@ -55,16 +55,16 @@ PAYLOADS["nvidia-ptx80"] = dict(distribution="mojolearn-nvidia-ptx80", wheel_nam
 
 
 def distribution_rows(include_experimental=False):
-    return tuple(row for row in (*PLUGINS.values(), *PAYLOADS.values())
+    return tuple(row for row in (*PLUGINS.values(), *PAYLOADS.values())  # glue: filter package registry records for release metadata
                  if include_experimental or row["release_enabled"])
 
 
 def package(profile):
-    return next(row for row in distribution_rows(include_experimental=True) if row["profile"] == profile)
+    return next(row for row in distribution_rows(include_experimental=True) if row["profile"] == profile)  # glue: look up one package profile in the distribution registry
 
 
 def payload_for(vendor, arch):
-    for row in PAYLOADS.values():
+    for row in PAYLOADS.values():  # glue: look up metadata for a vendor and architecture target
         if row["vendor"] == vendor and arch in row["arches"]:
             return row
     raise KeyError((vendor, arch))
@@ -75,7 +75,7 @@ def native_directory(vendor):
 
 
 def payload_requirements(vendor, version):
-    return [f"{row['distribution']}=={version}" for row in PAYLOADS.values()
+    return [f"{row['distribution']}=={version}" for row in PAYLOADS.values()  # glue: generate exact package dependency strings from registry records
             if row["vendor"] == vendor and row["release_enabled"]]
 
 
@@ -83,7 +83,7 @@ def member_payload(arcname):
     parts = arcname.split("/")
     if len(parts) < 4 or parts[0] != "mojolearn":
         return None
-    for key, row in PAYLOADS.items():
+    for key, row in PAYLOADS.items():  # glue: map an archive member path to its registered package owner
         if parts[1] in (row["vendor"], row["directory"]) and parts[2] in row["arches"]:
             return key
     if parts[1] in (*PLUGINS, "cuda_native", "hip_native", "cuda_ptx"):
@@ -144,7 +144,7 @@ def member_vendor(arcname):
     if len(parts) > 2 and parts[0] == "mojolearn":
         if parts[1] in PLUGINS:
             return parts[1]
-        for vendor in PLUGINS:
+        for vendor in PLUGINS:  # glue: classify a package directory by vendor metadata
             if parts[1] == native_directory(vendor) or (vendor == "cuda" and parts[1] == "cuda_ptx"):
                 return vendor
     return None
@@ -176,14 +176,14 @@ def plugin_marker(vendor, version, arches):
     return {"schema": PLUGIN_SCHEMA, "role": "aggregate", "vendor": vendor, "version": version,
             "distribution": PLUGINS[vendor]["distribution"],
             "requires": payload_requirements(vendor, version), "arches": [],
-            "payloads": [r["distribution"] for r in PAYLOADS.values() if r["vendor"] == vendor and r["release_enabled"]]}
+            "payloads": [r["distribution"] for r in PAYLOADS.values() if r["vendor"] == vendor and r["release_enabled"]]}  # glue: serialize aggregate dependency package names
 
 
 def payload_marker(profile, version, arches):
     row = PAYLOADS[profile]
     return {"schema": PAYLOAD_SCHEMA, "role": "payload", "vendor": row["vendor"],
             "version": version, "distribution": row["distribution"],
-            "requires": f"{CORE_DISTRIBUTION}=={version}", "arches": sorted(arches),
+            "requires": f"{CORE_DISTRIBUTION}=={version}", "arches": sorted(arches),  # glue: canonicalize architecture identifier strings in package metadata
             "directory": row["directory"], "code_format": row["code_format"]}
 
 
@@ -222,10 +222,10 @@ def validate_baseline_manifest(doc, files):
             or not re.fullmatch(r"[0-9a-f]{40}", doc.get("source_commit", ""))):
         raise ValueError("invalid or qualified-as-production experimental PTX manifest")
     rows = doc.get("files")
-    if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+    if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):  # glue: validate JSON file-manifest record shapes
         raise ValueError("PTX manifest files must be a list of file records")
     declared = {}
-    for row in rows:
+    for row in rows:  # glue: validate file-manifest names and recorded SHA256 metadata
         name = row.get("file", "")
         if (not isinstance(name, str) or not name or name.startswith("/")
                 or ".." in name.split("/") or name in declared):
@@ -234,7 +234,7 @@ def validate_baseline_manifest(doc, files):
         if mode not in ("fast", "deterministic", "identical") or row.get("numeric_mode") != mode:
             raise ValueError(f"missing or mismatched numerical-mode evidence for {name}")
         modules = row.get("ptx_modules")
-        if not isinstance(modules, list) or not all(isinstance(module, dict) for module in modules):
+        if not isinstance(modules, list) or not all(isinstance(module, dict) for module in modules):  # glue: validate JSON PTX evidence record shapes
             raise ValueError(f"PTX module evidence must be a list of records for {name}")
         if not modules:
             prefix = name.rsplit("/", 1)[0] + "/" if "/" in name else ""
@@ -242,12 +242,12 @@ def validate_baseline_manifest(doc, files):
             delegates = row.get("delegates", [])
             if (name != prefix + "_mojolearn_x_trees.so"
                     or not isinstance(delegates, list)
-                    or not all(isinstance(delegate, dict) for delegate in delegates)
-                    or {d.get("file") for d in delegates} != expected
+                    or not all(isinstance(delegate, dict) for delegate in delegates)  # glue: validate JSON delegated-file record shapes
+                    or {d.get("file") for d in delegates} != expected  # glue: compare declared delegated filenames against allowed file ownership
                     or len(delegates) != len(expected)
-                    or any(d.get("sha256") != files.get(d.get("file")) for d in delegates)
-                    or any(not next((r.get("ptx_modules") for r in doc["files"]
-                                     if r.get("file") == target), None) for target in expected)):
+                    or any(d.get("sha256") != files.get(d.get("file")) for d in delegates)  # glue: match delegated-file digest strings to the file manifest
+                    or any(not next((r.get("ptx_modules") for r in doc["files"]  # glue: look up delegated-file PTX evidence in manifest records
+                                     if r.get("file") == target), None) for target in expected)):  # glue: check evidence exists for each declared delegate filename
                 raise ValueError(f"missing PTX or registered delegation evidence for {name}")
         declared[name] = row.get("sha256")
     if not declared or declared != files:
