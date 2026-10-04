@@ -436,31 +436,82 @@ def afn_rope_cache(
 # FLASH (+ GQA_TILE): one-launch online-softmax attention on the matrix unit.
 # ---------------------------------------------------------------------------
 
+#: lane/no-bench-tuning-2 (2026-10-04): the kernel was head_dim 64 only (the
+#: board's GPT-3-small 768 / 12). It is now templated on a padded head class
+#: `HDP` (a multiple of 16: whole 8 x 8 context fragments over 8 simdgroups)
+#: and reads the real `hd` at run time: Q, K and V columns `p >= hd` stage as
+#: +0.0 (an exact zero term on the matrix unit), context columns `>= hd` are
+#: never stored. The classes are the multiples of 16 whose shared page
+#: (`afn_fl_page_bytes`, 272 * HDP + 9728 bytes at TQ = BK = 32) fits
+#: Apple's 32 KB: 16, 32, 48, 64, 80; a head is served by the smallest class
+#: >= hd (`afn_flash_head_class`), so every hd <= 80 with hd % 4 == 0 (the
+#: vector-4 row loads) takes the same route, and at hd 64 (class 64, no
+#: padding) the arithmetic is exactly the old kernel's. Wider heads do not fit
+#: one page at BK = 32: they take main's fused launch (a capacity limit, not a
+#: shape key). `-D MOJOLEARN_AFN_FLASH_HD_GENERIC_OFF=1` restores hd == 64 only.
+comptime AFN_FLASH_HD_GENERIC_OFF = is_defined["MOJOLEARN_AFN_FLASH_HD_GENERIC_OFF"]()
 comptime AFN_FL_HD = 64
+"""The old single head class (kept for the OFF rule and the docs)."""
 comptime AFN_FL_TQ = 32
 comptime AFN_FL_BK = 32
 comptime AFN_FL_NSG = AFN_TPB // 32
-comptime AFN_FL_KST = AFN_FL_HD + 4  # K tile: kT[key * KST + p]
 comptime AFN_FL_VST = AFN_FL_BK + 4  # V tile transposed: vT[c * VST + key]
 comptime AFN_FL_QST = AFN_FL_TQ + 4  # Q transposed: qT[p * QST + r]
 comptime AFN_FL_WST = AFN_FL_TQ + 4  # P transposed: wT[key * WST + r]
 comptime AFN_FL_TST = AFN_FL_BK + 1  # scores: tile[r * TST + key]
 comptime AFN_FL_NFR = AFN_FL_TQ // 8
 comptime AFN_FL_NFK = AFN_FL_BK // 8
-comptime AFN_FL_NFC = AFN_FL_HD // 8
 comptime AFN_FL_SPS = (AFN_FL_NFR * AFN_FL_NFK) // AFN_FL_NSG  # score fragments per simdgroup
-comptime AFN_FL_CPS = (AFN_FL_NFR * AFN_FL_NFC) // AFN_FL_NSG  # context fragments per simdgroup
-comptime AFN_FL_KSZ = AFN_FL_BK * AFN_FL_KST
-comptime AFN_FL_VSZ = AFN_FL_HD * AFN_FL_VST
-comptime AFN_FL_QSZ = AFN_FL_HD * AFN_FL_QST
 comptime AFN_FL_WSZ = AFN_FL_BK * AFN_FL_WST
 comptime AFN_FL_TSZ = AFN_FL_TQ * AFN_FL_TST
-#: the V page also stages Q before the first key block
-comptime AFN_FL_VQSZ = AFN_FL_VSZ if AFN_FL_VSZ >= AFN_FL_QSZ else AFN_FL_QSZ
-comptime AFN_FL_PAGE_BYTES = 4 * (AFN_FL_KSZ + AFN_FL_VQSZ + AFN_FL_WSZ + AFN_FL_TSZ + 3 * AFN_FL_TQ)
 
 
-def afn_flash_forward_kernel[GROUP: Int](
+def afn_fl_kst(hdp: Int) -> Int:
+    """K tile row stride: kT[key * KST + p]."""
+    return hdp + 4
+
+
+def afn_fl_ksz(hdp: Int) -> Int:
+    return AFN_FL_BK * afn_fl_kst(hdp)
+
+
+def afn_fl_vqsz(hdp: Int) -> Int:
+    """The V page (V transposed), which also stages Q before the first key
+    block: the larger of the two."""
+    var vsz = hdp * AFN_FL_VST
+    var qsz = hdp * AFN_FL_QST
+    return vsz if vsz >= qsz else qsz
+
+
+def afn_fl_cps(hdp: Int) -> Int:
+    """Context fragments per simdgroup."""
+    return (AFN_FL_NFR * (hdp // 8)) // AFN_FL_NSG
+
+
+def afn_fl_page_bytes(hdp: Int) -> Int:
+    """The flash kernel's shared page at head class `hdp`."""
+    return 4 * (afn_fl_ksz(hdp) + afn_fl_vqsz(hdp) + AFN_FL_WSZ + AFN_FL_TSZ + 3 * AFN_FL_TQ)
+
+
+comptime AFN_FL_PAGE_BYTES = afn_fl_page_bytes(AFN_FL_HD)
+
+
+def afn_flash_head_class(hd: Int) -> Int:
+    """The padded head class serving `hd`, or 0 when no class does (the
+    caller then runs main's launches): the smallest multiple of 16 >= hd
+    whose page fits `AFN_APPLE_TG_BYTES`; `hd % 4 == 0` for the vector-4
+    row loads."""
+    comptime if AFN_FLASH_HD_GENERIC_OFF:
+        return AFN_FL_HD if hd == AFN_FL_HD else 0
+    if hd <= 0 or hd % 4 != 0:
+        return 0
+    var c = ((hd + 15) // 16) * 16
+    if c > 80 or afn_fl_page_bytes(c) > AFN_APPLE_TG_BYTES:
+        return 0
+    return c
+
+
+def afn_flash_forward_kernel[GROUP: Int, HDP: Int](
     ctxv: MutPointer[Float32, MutAnyOrigin],
     amax: MutPointer[Float32, MutAnyOrigin],
     denom: MutPointer[Float32, MutAnyOrigin],
@@ -476,6 +527,7 @@ def afn_flash_forward_kernel[GROUP: Int](
     key_lo_in: Int32,
     window_in: Int32,
     scale_in: Float32,
+    hd_in: Int32,
 ):
     """One block per (batch, head group, 32 query rows); 256 threads = 8
     simdgroups. Row `r` of the tile is head `h0 + r // TQG`, token
@@ -488,14 +540,21 @@ def afn_flash_forward_kernel[GROUP: Int](
     accumulators rescaled by `exp(m_old - m_new)` and advanced by P V on
     the matrix unit. Writes `ctxv`, `amax` (the row max) and `denom` (the
     row sum), what main's fused forward writes. Shared page
-    `AFN_FL_PAGE_BYTES`."""
-    comptime HD = AFN_FL_HD
+    `afn_fl_page_bytes(HDP)`. `HDP` is the padded head class, `hd_in` the
+    real head size (columns `hd..HDP` stage as zero, never stored)."""
+    comptime HD = HDP
+    comptime AFN_FL_KST = afn_fl_kst(HD)
+    comptime AFN_FL_KSZ = afn_fl_ksz(HD)
+    comptime AFN_FL_VQSZ = afn_fl_vqsz(HD)
+    comptime AFN_FL_NFC = HD // 8
+    comptime AFN_FL_CPS = afn_fl_cps(HD)
     comptime TQ = AFN_FL_TQ
     comptime BK = AFN_FL_BK
     comptime TQG = TQ // GROUP
     comptime assert TQG * GROUP == TQ and TQG >= 8, "flash: GROUP in {1, 2, 4}"
     comptime assert AFN_FL_SPS * AFN_FL_NSG == AFN_FL_NFR * AFN_FL_NFK, "flash: whole score fragments"
-    comptime assert AFN_FL_PAGE_BYTES <= AFN_APPLE_TG_BYTES, "flash: the threadgroup page fits Apple's 32 KB"
+    comptime assert HD % 16 == 0, "flash: head class a multiple of 16"
+    comptime assert afn_fl_page_bytes(HD) <= AFN_APPLE_TG_BYTES, "flash: the threadgroup page fits Apple's 32 KB"
     comptime assert AFN_FL_CPS * AFN_FL_NSG == AFN_FL_NFR * AFN_FL_NFC, "flash: whole context fragments"
     comptime KST = AFN_FL_KST
     comptime VST = AFN_FL_VST
@@ -523,6 +582,7 @@ def afn_flash_forward_kernel[GROUP: Int](
     var key_lo = Int(key_lo_in)
     var window = Int(window_in)
     var scale = scale_in
+    var hd = Int(hd_in)
     var n_rep = nh // nkv
     var ngroups = nh // GROUP
     var ntb = (l + TQG - 1) // TQG
@@ -534,7 +594,7 @@ def afn_flash_forward_kernel[GROUP: Int](
     var t0 = tile_i * TQG
     var h0 = g * GROUP
     var kvh = h0 // n_rep
-    var kvbase = (bb * nkv + kvh) * s * HD
+    var kvbase = (bb * nkv + kvh) * s * hd
     var t_last = t0 + TQG - 1
     if t_last > l - 1:
         t_last = l - 1
@@ -552,8 +612,8 @@ def afn_flash_forward_kernel[GROUP: Int](
         var hh = h0 + r // TQG
         var t = t0 + r % TQG
         var x4 = SIMD[DType.float32, 4](0.0)
-        if t < l:
-            x4 = q_rope.unsafe_load[width=4]((bb * l + t) * nh * HD + hh * HD + p)
+        if t < l and p < hd:
+            x4 = q_rope.unsafe_load[width=4]((bb * l + t) * nh * hd + hh * hd + p)
         vT[p * QST + r] = x4[0]
         vT[(p + 1) * QST + r] = x4[1]
         vT[(p + 2) * QST + r] = x4[2]
@@ -586,9 +646,9 @@ def afn_flash_forward_kernel[GROUP: Int](
             var j = kb * BK + r
             var k4 = SIMD[DType.float32, 4](0.0)
             var v4 = SIMD[DType.float32, 4](0.0)
-            if j < s:
-                k4 = k_cache.unsafe_load[width=4](kvbase + j * HD + p)
-                v4 = v_cache.unsafe_load[width=4](kvbase + j * HD + p)
+            if j < s and p < hd:
+                k4 = k_cache.unsafe_load[width=4](kvbase + j * hd + p)
+                v4 = v_cache.unsafe_load[width=4](kvbase + j * hd + p)
             (kT + r * KST + p).store[alignment=16](k4)
             vT[p * VST + r] = v4[0]
             vT[(p + 1) * VST + r] = v4[1]
@@ -660,10 +720,12 @@ def afn_flash_forward_kernel[GROUP: Int](
         comptime for q in range(AFN_FL_CPS):
             var fc = (sg % SPAN) * AFN_FL_CPS + q
             comptime for e in range(2):
-                ctxv.unsafe_store(
-                    (bb * l + tt) * nh * HD + hh * HD + fc * 8 + fcol + e,
-                    cacc[q][e] * inv,
-                )
+                var col = fc * 8 + fcol + e
+                if col < hd:
+                    ctxv.unsafe_store(
+                        (bb * l + tt) * nh * hd + hh * hd + col,
+                        cacc[q][e] * inv,
+                    )
     if tid < TQ:
         var hs = h0 + tid // TQG
         var ts = t0 + tid % TQG
@@ -680,6 +742,53 @@ def afn_flash_group(n_rep: Int) -> Int:
         if n_rep == 2 or n_rep == 4:
             return n_rep
     return 1
+
+
+def _afn_flash_launch[HDP: Int](
+    ctx: DeviceContext,
+    ctxv: MutPointer[Float32, MutAnyOrigin],
+    amax: MutPointer[Float32, MutAnyOrigin],
+    denom: MutPointer[Float32, MutAnyOrigin],
+    q_rope: MutPointer[Float32, MutAnyOrigin],
+    k_cache: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
+    b: Int,
+    l: Int,
+    nh: Int,
+    nkv: Int,
+    s: Int,
+    pos0: Int,
+    key_lo: Int,
+    window: Int,
+    scale: Float32,
+    hd: Int,
+) raises:
+    """The flash launch at head class `HDP` for each GQA group."""
+    var group = afn_flash_group(nh // nkv)
+    var tqg = AFN_FL_TQ // group
+    var blocks = b * (nh // group) * ((l + tqg - 1) // tqg)
+    step_count_launch()
+    if group == 4:
+        ctx.enqueue_function[afn_flash_forward_kernel[4, HDP]](
+            ctxv, amax, denom, q_rope, k_cache, v_cache, Int32(b), Int32(l),
+            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+            Int32(window), scale, Int32(hd),
+            grid_dim=(blocks, 1, 1), block_dim=(AFN_TPB, 1, 1),
+        )
+    elif group == 2:
+        ctx.enqueue_function[afn_flash_forward_kernel[2, HDP]](
+            ctxv, amax, denom, q_rope, k_cache, v_cache, Int32(b), Int32(l),
+            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+            Int32(window), scale, Int32(hd),
+            grid_dim=(blocks, 1, 1), block_dim=(AFN_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[afn_flash_forward_kernel[1, HDP]](
+            ctxv, amax, denom, q_rope, k_cache, v_cache, Int32(b), Int32(l),
+            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+            Int32(window), scale, Int32(hd),
+            grid_dim=(blocks, 1, 1), block_dim=(AFN_TPB, 1, 1),
+        )
 
 
 def afn_flash_forward(
@@ -699,35 +808,25 @@ def afn_flash_forward(
     key_lo: Int,
     window: Int,
     scale: Float32,
+    hd: Int,
 ) raises:
-    """The one launch. `head_dim == 64` (the caller checks). No wait: the
-    kernel is enqueued on the in-order context like every other stage."""
+    """The one launch, at `afn_flash_head_class(hd)` (the caller checks it is
+    nonzero). No wait: the kernel is enqueued on the in-order context like
+    every other stage."""
     comptime if AFN_ATTN_FLASH:
-        var group = afn_flash_group(nh // nkv)
-        var tqg = AFN_FL_TQ // group
-        var blocks = b * (nh // group) * ((l + tqg - 1) // tqg)
-        step_count_launch()
-        if group == 4:
-            ctx.enqueue_function[afn_flash_forward_kernel[4]](
-                ctxv, amax, denom, q_rope, k_cache, v_cache, Int32(b), Int32(l),
-                Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
-                Int32(window), scale,
-                grid_dim=(blocks, 1, 1), block_dim=(AFN_TPB, 1, 1),
-            )
-        elif group == 2:
-            ctx.enqueue_function[afn_flash_forward_kernel[2]](
-                ctxv, amax, denom, q_rope, k_cache, v_cache, Int32(b), Int32(l),
-                Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
-                Int32(window), scale,
-                grid_dim=(blocks, 1, 1), block_dim=(AFN_TPB, 1, 1),
-            )
+        var c = afn_flash_head_class(hd)
+        if c == 16:
+            _afn_flash_launch[16](ctx, ctxv, amax, denom, q_rope, k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window, scale, hd)
+        elif c == 32:
+            _afn_flash_launch[32](ctx, ctxv, amax, denom, q_rope, k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window, scale, hd)
+        elif c == 48:
+            _afn_flash_launch[48](ctx, ctxv, amax, denom, q_rope, k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window, scale, hd)
+        elif c == 64:
+            _afn_flash_launch[64](ctx, ctxv, amax, denom, q_rope, k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window, scale, hd)
+        elif c == 80:
+            _afn_flash_launch[80](ctx, ctxv, amax, denom, q_rope, k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window, scale, hd)
         else:
-            ctx.enqueue_function[afn_flash_forward_kernel[1]](
-                ctxv, amax, denom, q_rope, k_cache, v_cache, Int32(b), Int32(l),
-                Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
-                Int32(window), scale,
-                grid_dim=(blocks, 1, 1), block_dim=(AFN_TPB, 1, 1),
-            )
+            raise Error("afn_flash_forward: head_dim " + String(hd) + " has no head class")
     else:
         raise Error("afn_flash_forward: not compiled on this build")
 
@@ -785,13 +884,18 @@ def afn_gemm_nt_kernel[EPI: Int, ANORM: Bool](
     nh_in: Int32,
     nkv_in: Int32,
     pos0_in: Int32,
+    hd_in: Int32,
 ):
     """`ANORM`: A's row `i` is `a[i] * rstd[i] * nw` with `rstd[i] = 1 /
     sqrt(sumsq[i] / k + eps)` (RMSNorm folded into the staging; `k` is the
     model width; `sumsq` is read only, into the block's `rs` page).
     `EPI_PLAIN`: `c[i, j] = acc`. `EPI_RESIDUAL`: `c[i, j] = c2[i, j] +
     acc`. `EPI_SWIGLU`: `w0` gate, `w1` up, `c = silu(g) * u`.
-    `EPI_ROPE_QKV`: `n = (nh + 2 nkv) * 64`; head tile `nt = n0 / 64`:
+    `EPI_ROPE_QKV`: one BN = 64 column tile per head, `n = (nh + 2 nkv) *
+    64`, head tile `nt = n0 / 64`, real head size `hd_in <= 64` (columns
+    `d >= hd` of the tile load zero weight rows and are never stored;
+    lane/no-bench-tuning-2, was hd == 64 only; at hd 64 the arithmetic is
+    the old kernel's):
     `nt < nh` is q head `nt` from `w0`, then the k heads from `w1`, then
     the v heads from `w2`. q and k take RoPE at absolute position
     `pos0 + t` (the whole head is this block's tile, so the partner column
@@ -838,18 +942,19 @@ def afn_gemm_nt_kernel[EPI: Int, ANORM: Bool](
     # The weight rows this block multiplies.
     var wsel = w0
     var wrow0 = n0
+    var hdr = Int(hd_in)
     comptime if EPI == AFN_EPI_ROPE_QKV:
         var nh = Int(nh_in)
         var nkv = Int(nkv_in)
         var nt = n0 // BN
         if nt >= nh + nkv:
             wsel = w2
-            wrow0 = (nt - nh - nkv) * BN
+            wrow0 = (nt - nh - nkv) * hdr
         elif nt >= nh:
             wsel = w1
-            wrow0 = (nt - nh) * BN
+            wrow0 = (nt - nh) * hdr
         else:
-            wrow0 = nt * BN
+            wrow0 = nt * hdr
     comptime if ANORM:
         if tid < BM:
             var i = m0 + tid
@@ -887,7 +992,8 @@ def afn_gemm_nt_kernel[EPI: Int, ANORM: Bool](
             var gj = wrow0 + j
             var y4 = SIMD[DType.float32, 4](0.0)
             comptime if EPI == AFN_EPI_ROPE_QKV:
-                y4 = wsel.unsafe_load[width=4](gj * k + k0 + p4)
+                if j < hdr:
+                    y4 = wsel.unsafe_load[width=4](gj * k + k0 + p4)
             else:
                 if n0 + j < n:
                     y4 = w0.unsafe_load[width=4](gj * k + k0 + p4)
@@ -928,19 +1034,20 @@ def afn_gemm_nt_kernel[EPI: Int, ANORM: Bool](
         var nkv = Int(nkv_in)
         var pos0 = Int(pos0_in)
         var nt = n0 // BN
-        var half = BN // 2
+        var hd = hdr
+        var half = hd // 2
         for cell in range(tid, BM * BN, AFN_TPB):
             var li = cell // BN
             var d = cell % BN
             var gi = m0 + li
-            if gi >= m:
+            if gi >= m or d >= hd:
                 continue
             var bb = gi // l
             var t = gi - bb * l
             var x = ct[li * CST + d]
             if nt >= nh + nkv:
                 var kvh = nt - nh - nkv
-                var ci = ((bb * nkv + kvh) * l + t) * BN + d
+                var ci = ((bb * nkv + kvh) * l + t) * hd + d
                 c5.unsafe_store(ci, x)
                 c6.unsafe_store(ci, x)
             else:
@@ -957,11 +1064,11 @@ def afn_gemm_nt_kernel[EPI: Int, ANORM: Bool](
                     rh = ct[li * CST + d - half]
                 var y = x * cos_v + rh * sin_v
                 if nt < nh:
-                    c.unsafe_store(gi * (nh * BN) + nt * BN + d, y)
+                    c.unsafe_store(gi * (nh * hd) + nt * hd + d, y)
                 else:
                     var kvh = nt - nh
-                    c2.unsafe_store(gi * (nkv * BN) + kvh * BN + d, y)
-                    var ci = ((bb * nkv + kvh) * l + t) * BN + d
+                    c2.unsafe_store(gi * (nkv * hd) + kvh * hd + d, y)
+                    var ci = ((bb * nkv + kvh) * l + t) * hd + d
                     c3.unsafe_store(ci, y)
                     c4.unsafe_store(ci, y)
     else:
@@ -980,6 +1087,18 @@ def afn_gemm_nt_kernel[EPI: Int, ANORM: Bool](
                             c.unsafe_store(gi * n + gj, sil * u)
                         else:
                             c.unsafe_store(gi * n + gj, v)
+
+
+def afn_pre_head_ok(hd: Int) -> Bool:
+    """lane/no-bench-tuning-2: the fused QKV + RoPE launch serves every even
+    head size that fits one BN-column tile (the RoPE partner column must be
+    in the block's staged C tile), not hd == 64 only. BN = 64 is the widest
+    tile whose page (A + two W pages) fits Apple's 32 KB, so wider heads take
+    main's launches (a capacity limit). `-D MOJOLEARN_AFN_FLASH_HD_GENERIC_OFF=1`
+    restores hd == 64 only."""
+    comptime if AFN_FLASH_HD_GENERIC_OFF:
+        return hd == AFN_FL_HD
+    return hd > 0 and hd % 2 == 0 and hd <= AFN_GEMM_BN
 
 
 def afn_gemm_ok(m: Int, n: Int, k: Int) -> Bool:
@@ -1011,6 +1130,7 @@ def _afn_gemm_launch[EPI: Int, ANORM: Bool](
     nh: Int,
     nkv: Int,
     pos0: Int,
+    hd: Int = AFN_GEMM_BN,
 ) raises:
     comptime if AFN_ATTN_ON:
         var blocks = ((m + AFN_GEMM_BM - 1) // AFN_GEMM_BM) * ((n + AFN_GEMM_BN - 1) // AFN_GEMM_BN)
@@ -1018,7 +1138,7 @@ def _afn_gemm_launch[EPI: Int, ANORM: Bool](
         ctx.enqueue_function[afn_gemm_nt_kernel[EPI, ANORM]](
             c, c2, c3, c4, c5, c6, a, w0, w1, w2, sumsq, nw, cos_tab, sin_tab,
             Int32(m), Int32(n), Int32(k), eps, Int32(l), Int32(nh), Int32(nkv),
-            Int32(pos0),
+            Int32(pos0), Int32(hd),
             grid_dim=(blocks, 1, 1), block_dim=(AFN_TPB, 1, 1),
         )
     else:
@@ -1117,19 +1237,21 @@ def afn_proj_qkv_rope_cache(
     nkv: Int,
     pos0: Int,
     anorm: Bool,
+    hd: Int,
 ) raises:
     """The q, k and v projections of a fresh prefill in one launch, RoPE on
-    q and k, both caches written. `head_dim == 64 == rope_dim`. `anorm`: A
+    q and k, both caches written. `afn_pre_head_ok(hd)` and `rope_dim == hd`
+    (the caller checks): one 64-column tile per head. `anorm`: A
     is `a` (the block input) normalized by `sumsq` and `nw` (norm1, whose
     output never round-trips); otherwise A is `norm1_out`."""
-    var n = (nh + 2 * nkv) * AFN_FL_HD
+    var n = (nh + 2 * nkv) * AFN_GEMM_BN
     if anorm:
         _afn_gemm_launch[AFN_EPI_ROPE_QKV, True](
             ctx, q_rope, k_rope, k_stage, k_carry, v_stage, v_carry, a, w_q, w_k, w_v,
-            sumsq, nw, cos_tab, sin_tab, m, n, k, eps, l, nh, nkv, pos0,
+            sumsq, nw, cos_tab, sin_tab, m, n, k, eps, l, nh, nkv, pos0, hd,
         )
     else:
         _afn_gemm_launch[AFN_EPI_ROPE_QKV, False](
             ctx, q_rope, k_rope, k_stage, k_carry, v_stage, v_carry, a, w_q, w_k, w_v,
-            sumsq, nw, cos_tab, sin_tab, m, n, k, eps, l, nh, nkv, pos0,
+            sumsq, nw, cos_tab, sin_tab, m, n, k, eps, l, nh, nkv, pos0, hd,
         )
