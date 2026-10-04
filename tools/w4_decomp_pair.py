@@ -12,7 +12,8 @@ tools/w4_decomp_quality.py ALGOS; A = main = no define, B = every w4 define
 of that binding: estimators -D MOJOLEARN_PCA_FAST_POOL; x_neighbors
 -D MOJOLEARN_KPCA_RESIDENT; x_decomp -D MOJOLEARN_LLE_FAST_DEV_LU
 -D MOJOLEARN_RSVD_FAST_DIRECT_IN, one B build for both).
-SOURCE is the exact full SHA. Arms: ~/mq/verified-arms/SOURCE/BINDING/
+SOURCE is the exact full compiled SHA. A tools/docs-only descendant may
+reuse its verified arms and existing quality receipt. Arms: ~/mq/verified-arms/SOURCE/BINDING/
 {A.so,B.so,manifest.json}. The quality action installs each arm, runs
 `tools/w4_decomp_quality.py dump`, checks the arm's reach (B compiled the
 candidate in, A did not) and the binary's sha, runs `compare`, writes
@@ -80,7 +81,11 @@ def main():
     binding = modname.removeprefix("_mojolearn_")
     root = Path(__file__).resolve().parents[1]
     os.chdir(root)
-    assert subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() == args.source
+    # Harness repairs may reuse a binary only if source is an ancestor and
+    # all compiled/runtime inputs match. Never restamp old evidence as a new SHA.
+    subprocess.run(["git", "merge-base", "--is-ancestor", args.source, "HEAD"], check=True)
+    subprocess.run(["git", "diff", "--quiet", args.source, "HEAD", "--",
+                    "*.mojo", "bindings/", "python/", "pixi.lock", "pixi.toml"], check=True)
     subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "decomposition/", "x_decomp/", "x_neighbors/",
                     "bindings/", "python/", "tools/w4_decomp_quality.py", "tools/w4_decomp_pair.py"], check=True)
     home = Path.home()
@@ -102,10 +107,17 @@ def main():
         os.environ["AFC_FAMILY"] = FAMILY[algo]
         if algo == "pca":
             os.environ["MOJOLEARN_PCA_STAGE_LOG"] = str(home / "mq/out" / (timing_tag + "-stages.log"))
-        os.execv(sys.executable, [sys.executable, str(home / "mq/verified_arms.py"),
-                 args.source, binding, define, timing_tag,
-                 "bash", "tools/afc_ab_def.sh", timing_tag, binding, algo, dataset, "1", "1", "",
-                 " ".join("-D " + d for d in defines)])
+        # verified_arms expects a single string after its implicit "-D ".
+        # x_decomp's B binary carries two defines, both pinned by the manifest.
+        # Stage-only retains all source/hash/replay checks but avoids the
+        # wrapper's unconditional AFC_FAMILY=algos (PCA needs classical).
+        subprocess.run([sys.executable, str(home / "mq/verified_arms.py"),
+                        args.source, binding, " -D ".join(defines), timing_tag,
+                        "--stage-only"], check=True)
+        os.environ["AFC_SKIP_BUILD"] = "1"
+        os.execvp("bash", ["bash", str(home / "mq/ensure_so.sh"),
+                  "bash", "tools/afc_ab_def.sh", timing_tag, binding, algo, dataset,
+                  "1", "1", "", " ".join("-D " + d for d in defines)])
     out.mkdir(parents=True, exist_ok=False)  # never silently reuse partial captures
     os.environ.update(MOJOLEARN_NUMERIC_MODE="fast", MOJOLEARN_VENDOR="apple",
                       MOJOLEARN_BENCH_INSTALLED="0", PYTHONPATH=str(root / "python"),
