@@ -291,7 +291,7 @@ def device_strided_copy(
     var smax = smin
     var dmin = Int(dp[3 * nd + 1])
     var dmax = dmin
-    for k in range(nd):
+    for k in range(nd):  # small-loop(nd: array dimensions): extents of one strided copy descriptor, a few axes
         var ext = Int(dp[k]) - 1
         var s = Int(dp[nd + k]) * ext
         var d = Int(dp[2 * nd + k]) * ext

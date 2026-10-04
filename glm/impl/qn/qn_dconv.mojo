@@ -477,7 +477,7 @@ def dconv_run(
         else:
             end = _f2i(p.unsafe_load(DC_END))
             n_vec = _f2i(p.unsafe_load(DC_NVEC))
-            for i in range(len(fx_hist)):
+            for i in range(len(fx_hist)):  # small-loop(fx_hist: objective history window): the L-BFGS stopping window, a handful of past values
                 fx_hist[i] = p.unsafe_load(DC_HIST + i)
         _ = len(dst)
         _ = hs.unsafe_ptr()
@@ -681,7 +681,7 @@ def dconv_idn_run(
         else:
             end = _f2i(p.unsafe_load(DC_END))
             n_vec = _f2i(p.unsafe_load(DC_NVEC))
-            for i in range(len(fx_hist)):
+            for i in range(len(fx_hist)):  # small-loop(fx_hist: objective history window): the L-BFGS stopping window, a handful of past values
                 fx_hist[i] = p.unsafe_load(DC_HIST + i)
         _ = len(dst)
         _ = hs.unsafe_ptr()
