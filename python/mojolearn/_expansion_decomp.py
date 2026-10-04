@@ -2403,7 +2403,9 @@ class FactorAnalysis(_Base):
         eigh of D G D / n, main's psi update) or as ONE binding call
         (MOJOLEARN_FA_ITER_DEVICE, `fa_em_py`)."""
         psi = self._psi_init(k, d)
-        G = k._dout(d, d)
+        # MOJOLEARN_FA_GRAM_DF (lane/apple-fast-fa-quality): the binding forms
+        # G in double-float, hi words then lo words, so G's buffer is 2 d x d
+        G = k._dout(2 * d if "MOJOLEARN_FA_GRAM_DF" in fdefs else d, d)
         var = k._dout(1, d)
         k.b.x_decomp_fa_gram(k._did(M), k._did(mean), G._d.id, var._d.id, [n, d])
         if "MOJOLEARN_FA_ITER_DEVICE" in fdefs:
