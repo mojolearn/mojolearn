@@ -186,7 +186,8 @@ _OLD_ITEMS = os.environ.get("MOJOLEARN_XN_OLD_ITEMS", "") == "1"
 def _kfeat_flags(est):
     """lane apple-fast-w2-kfeat: the chi2 samplers' FAST + Apple fit entries
     compiled into the bound binary (x_neighbors/kfeat_dev.mojo: bit 1
-    MOJOLEARN_XN_FAST_ACHI2_DEVSCAN, bit 2 MOJOLEARN_XN_FAST_SCHI2_MOJO_MT);
+    MOJOLEARN_XN_FAST_ACHI2_DEVSCAN, bit 2 SCHI2_MOJO_MT, default, off under
+    MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF);
     0 on the FAST tier without them, on IDENTICAL and on the host column."""
     if not est._fast_tier():
         return 0
@@ -1210,7 +1211,7 @@ class SkewedChi2Sampler(_XNeighbors):
         seed = self.random_state
         if (isinstance(seed, int) and not isinstance(seed, bool) and d > 0 and nc > 0
                 and _kfeat_flags(self) & 2):
-            # MOJOLEARN_XN_FAST_SCHI2_MOJO_MT: _LegacyRandomState(seed)'s
+            # SCHI2_MOJO_MT (default; _OFF rollback): _LegacyRandomState(seed)'s
             # stream, pi/2 * u, the weights kernel and the offsets in one
             # binding call (x_neighbors_kfeat_schi2_fit): main's words
             w = _empty_out((d, nc), "<f4")

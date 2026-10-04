@@ -9,7 +9,8 @@
 Tolerances, fixed before any result:
 - kernel_methods (MOJOLEARN_KM_FAST_RBF_RESIDENT; default now, old arm =
   MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF) and x_neighbors
-  (MOJOLEARN_XN_FAST_ACHI2_DEVSCAN, MOJOLEARN_XN_FAST_SCHI2_MOJO_MT): the
+  (MOJOLEARN_XN_FAST_ACHI2_DEVSCAN; MOJOLEARN_XN_FAST_SCHI2_MOJO_MT, default
+  now, old arm = MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF): the
   candidates run main's kernels on main's words, so every array (features,
   random_weights_, random_offset_, sigma_/scale_, transforms) must be
   BYTE-IDENTICAL and every refusal must raise the same type with the same

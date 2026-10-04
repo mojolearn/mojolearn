@@ -130,14 +130,21 @@ comptime MCD_DEVICE_CSTEPS = (
 # w2-mcdb-q-mcd-taxi, w2-mcdb-q-ee-taxi MCDQ-PAIR-PASS (1% fitted state,
 # .99 support). MOJOLEARN_MCD_BMMA_OFF restores the per-candidate launches.
 comptime MCD_BMMA = MCD_BATCH_MMA and not is_defined["MOJOLEARN_MCD_BMMA_OFF"]()
-# MOJOLEARN_MCD_WIDE: this batched search for 64 < d <= MF_WIDE_DMAX too
+# MCD_WIDE, DEFAULT (FAST + Apple, only with MCD_BMMA on; lane/apple-fast-w2-mcd2):
+# this batched search for 64 < d <= MF_WIDE_DMAX too
 # (istella d = 220 fell back to fast_mcd_dev: per candidate, per C-step kit
 # launches + host syncs + a 220-wide round-robin eigh with a sync per sweep,
 # killed > 20 min on the board). Wide d adds a block-per-candidate LU
 # (mf_det_wide_kernel, the same pivots / cells / log sum as mf_det_kernel)
 # and mc_pinvh_kernel with 256-entry eigen tables; everything else is the
 # narrow MMA path (the distance never holds a row in registers there).
-comptime MCD_WIDE = MCD_BATCH_MMA and is_defined["MOJOLEARN_MCD_WIDE"]()
+# Quality w2-mcdw-q-mcd-istella-r1, w2-mcdw-q-ee-istella-r1 MCDQ-PAIR-PASS
+# (istella cap 3000, B = BMMA + WIDE). M3 full istella, B only (w2-mcdw-t-*):
+# MinCovDet 86333.5 ms, EllipticEnvelope 86640.8 ms; main's fallback measured
+# 1253937 ms for EE istella (py2mojo-decomp-elliptic-envelope-istella arm A).
+# Cost: ~20 GB peak memory at the istella board size. MOJOLEARN_MCD_WIDE_OFF (or
+# MOJOLEARN_MCD_BMMA_OFF) restores the fast_mcd_dev fallback for d > 64.
+comptime MCD_WIDE = MCD_BMMA and not is_defined["MOJOLEARN_MCD_WIDE_OFF"]()
 comptime MF_WIDE_DMAX = 256
 
 comptime U64Ptr = MutPointer[UInt64, MutAnyOrigin]
@@ -431,7 +438,7 @@ def mf_det_wide_kernel(
     cov: F32Ptr, work: F32Ptr, det: F32Ptr, det_prev: F32Ptr, nc: Int32, d: Int32, step: Int32, n_iter: Int32,
     active: I32Ptr, needp: I32Ptr, fin: I32Ptr, err: I32Ptr,
 ):
-    """MOJOLEARN_MCD_WIDE: mf_det_kernel with one BLOCK per candidate. The
+    """MCD_WIDE: mf_det_kernel with one BLOCK per candidate. The
     LU is _logdet's (MCD_BATCH_COMPAT cells): the pivot is the first largest
     |a_ik| by `>` (a block reduction, ties to the lower row), the row swap,
     the factors and the trailing update are parallel over rows / cells (row
@@ -970,7 +977,7 @@ def _mma_distance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.float3
 
 def _compat_pinvh(ctx: DeviceContext, ph: MfPhase, cov: F32Ptr, d: Int,
                   err: DeviceBuffer[DType.int32]) raises:
-    """mc_pinvh_kernel over the phase (64-entry tables; MOJOLEARN_MCD_WIDE
+    """mc_pinvh_kernel over the phase (64-entry tables; MCD_WIDE
     takes the 256-entry instance for d > MF_DMAX)."""
     comptime if MCD_WIDE:
         if d > MF_DMAX:
@@ -988,7 +995,7 @@ def _compat_pinvh(ctx: DeviceContext, ph: MfPhase, cov: F32Ptr, d: Int,
 
 
 def _det(ctx: DeviceContext, ph: MfPhase, d: Int, s: Int, err: DeviceBuffer[DType.int32]) raises:
-    """Step s's log determinant + C-step control (MOJOLEARN_MCD_WIDE: one
+    """Step s's log determinant + C-step control (MCD_WIDE: one
     block per candidate for d > MF_DMAX)."""
     var par = s % 2
     comptime if MCD_WIDE:
