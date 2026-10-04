@@ -28,23 +28,38 @@ anything. Existing Python must already have NumPy/SciPy and required dependencie
 Environment strips inherited MojoLearn/candidate compile settings. Mandatory
 compile semaphore covers native and Mojo quality compiles. Preserve AMD Mojo cache.
 
-Plan file is an owed-coverage template, not a claim that all checks are ready.
-Its two example board cases do NOT represent whole-wave coverage. Expand cases
-and their binding closure before using it as the measurement batch. Gates whose
-path is absent or whose owed reason remains produce OWED even if related checks
-pass. Timing refuses unless every applicable gate and every per-arm GPU/host
-identity case passes. IF resident lifecycle and default chunked KDE gates are
-ON-only; Mamba angle explicitly enables candidate on ON, rather than pretending
-default-OFF code covers it. Large eigh checks sizes4096 and513 against analytic
-spectrum; PCA covers220,33,7 columns with residual/orthogonality quality metrics.
-References are analytic/NumPy or existing check oracles, never opponent training.
-DART still needs a selected immutable stored reference with parameters and
-acceptance metric. Old test_dart runs LightGBM and must not be used.
+The reviewed plan contains 47 representative cases across all 11 affected
+families, 22 concrete quality gates, and 50 GPU/host binding build scripts.
+Coverage includes VAR, knn-imputer, Gaussian/sparse random projections,
+additive-chi2 and maxabs-scaler fixed-cost rows. This is bounded representative
+coverage, not every estimator or a full race. The classical PCA/OLS/KMeans
+adapters use canonical medium regression blocks, not stored full classical data.
+
+Before prepare, generate neural inputs ONCE on the NVIDIA Linux box:
+  python3 tools/identical_wave_prepare_neural.py --source /path/to/frozen/source \
+    --out /root/board-0833/cache/algos-data/wave-neural
+Transfer that directory unchanged through R2 to AMD; verify manifest SHA256s.
+Preparation generates seeded arrays only and executes zero models/opponents.
+The wave identity pins those hashes as well as all medium file checksums.
+
+Timing refuses unless every applicable gate and every per-arm GPU/host identity
+case passes. ON-only gates are explicitly marked in the plan. Mamba angle
+explicitly enables its candidate on ON; this does not claim default activation.
+Large eigh tests4096/513; PCA tests220/33/7 columns; analytic GramCD reaches the
+optimized route. Tree checks cover zero/mixed depths. CNN controls cover epoch
+permutations and 100000 Adam steps against the source float64 control helper.
+QR memory is a call-end driver measurement, not a transient allocation peak.
+DART quality verifies exact full-row input hashes/parameters against stored own
+quality and stored LightGBM metrics, then runs our code only. Medium timing has
+no direct comparison against those full-row stored timing cells.
 
 Identity executes fit/infer once and saves full raw outputs plus SHA256 including
 names, dtypes and shapes. Host identity does NOT start timers. Timing executes
-one GPU fit/infer per ON/OFF arm, ZERO warmups. It records one sample, NOT a median
-or confidence interval. A durable timing receipt reserves the run before work;
+one untimed GPU fit/infer warmup followed by one reported fit/infer sample per
+ON/OFF arm. This matches the warm board contract without a repeated timing race.
+Cold-single-call is an explicit alternative contract requiring a separate plan;
+neither contract claims grouped-caller performance. No median or confidence
+interval is inferred from one sample. A durable timing receipt reserves the run before work;
 a partial/failed run cannot be silently repeated. Runtime package and all mapped
 _mojolearn native files must originate inside frozen source; vendor and IDENTICAL
 mode readbacks must match. No missing outputs or missing mode readbacks can pass.
@@ -56,8 +71,9 @@ requirement when an accepted arithmetic change deliberately moves version bits.
 Apple identity remains UNVERIFIED because user forbids all Apple access. Do not
 claim four-vendor verification or promote winners as fully verified from NV/AMD.
 Stored opponent rows need matching workload/parameters; absence stays missing.
-PCA/OLS classical_two_datasets timing, device-handle CNN/graph/optimizer callers,
-and data-path GPU-only audit remain explicit owed coverage in the plan.
+Explicit grouped/device-handle callers, a complete GPU-only call-path audit,
+and full neural training remain separate coverage; forward fixtures cover
+Mamba/Transformer only. Read the plan's coverage notes before interpreting results.
 
 Static validation only at handoff: Python py_compile and JSON schema structure
 checks passed. No new quality/identity/timing jobs have been executed by this agent.

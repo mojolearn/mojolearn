@@ -1,24 +1,58 @@
 {
   "schema": 1,
-  "description": "Reviewable owed coverage. Default plan intentionally blocks timing until missing quality references and route reachability are resolved. No opponent execution. Classical PCA/OLS timing requires a separate adapter; their omission is explicit.",
+  "description": "Runnable representative medium wave spanning all11 handed-off families; stored DART quality separately uses exact full-row fixtures. All gates fail closed. No opponent execution.",
   "build_timeout": 3600,
   "builders": [
     "build.sh",
     "build_core_host.sh",
-    "build_svm.sh",
-    "build_svm_host.sh",
     "build_estimators.sh",
     "build_estimators_host.sh",
+    "build_svm.sh",
+    "build_svm_host.sh",
+    "build_solver.sh",
+    "build_solver_host.sh",
+    "build_gp.sh",
+    "build_gp_host.sh",
+    "build_mixture.sh",
+    "build_mixture_host.sh",
+    "build_gbdt.sh",
+    "build_gbdt_host.sh",
+    "build_rf.sh",
+    "build_rf_host.sh",
+    "build_metrics.sh",
+    "build_metrics_host.sh",
+    "build_preprocessing.sh",
+    "build_preprocessing_host.sh",
+    "build_arima.sh",
+    "build_arima_host.sh",
+    "build_tsa.sh",
+    "build_tsa_host.sh",
+    "build_kernel_methods.sh",
+    "build_kernel_methods_host.sh",
+    "build_x_linear.sh",
+    "build_x_linear_host.sh",
+    "build_x_neighbors.sh",
+    "build_x_neighbors_host.sh",
     "build_x_decomp.sh",
     "build_x_decomp_host.sh",
+    "build_x_cluster.sh",
+    "build_x_cluster_host.sh",
     "build_x_prep.sh",
     "build_x_prep_host.sh",
     "build_x_trees.sh",
     "build_x_trees_host.sh",
     "build_x_sequence.sh",
     "build_x_sequence_host.sh",
-    "build_gp.sh",
-    "build_gp_host.sh"
+    "build_x_cnn.sh",
+    "build_x_cnn_host.sh",
+    "build_embedding.sh",
+    "build_embedding_host.sh",
+    "build_training.sh",
+    "build_training_host.sh",
+    "build_transformer.sh",
+    "build_transformer_host.sh",
+    "build_byte_lm.sh",
+    "build_byte_lm_host.sh"
   ],
   "required_quality_gates": [
     "compiled_route_readback",
@@ -41,7 +75,8 @@
     "sgd_nan",
     "pca_bits",
     "import_smoke",
-    "cnn_seams"
+    "cnn_seams",
+    "cnn_epoch_adam_controls"
   ],
   "quality_gates": [
     {
@@ -182,7 +217,14 @@
     },
     {
       "id": "resident_qr_memory",
-      "owed": "Record retained input/workspace allocation for QR and FactorAnalysis tall n>=d; preserve input unless proven dead. Do not remove copy from inspection alone."
+      "kind": "python",
+      "path": "tools/identical_wave_quality.py",
+      "args": [
+        "qr_memory",
+        "--report",
+        "{report}"
+      ],
+      "coverage": "Input immutability+QR residual,FA finite state; driver memory reading with exact counter scope. Records call-end memory, never claims transient allocation peak."
     },
     {
       "id": "lu_nan",
@@ -219,25 +261,354 @@
     },
     {
       "id": "cnn_seams",
-      "owed": "Select x_cnn seams main and builder; check epoch-row permutation at1,2,3,1000,65537 and Adam scalar rounding across1..100000 steps. Do not report device-handle coverage from host-array board rows."
+      "kind": "mojo",
+      "path": "x_cnn/checks/seams_check.mojo",
+      "timeout": 7200
+    },
+    {
+      "id": "cnn_epoch_adam_controls",
+      "kind": "python",
+      "path": "tools/identical_wave_quality.py",
+      "args": [
+        "cnn_controls",
+        "--report",
+        "{report}"
+      ],
+      "arms": [
+        "on"
+      ],
+      "coverage": "Permutation n1,2,3,1000,65537 and Adam steps1..100000 at two beta pairs against source portable_float64, <=1ULP."
     }
   ],
   "cases": [
     {
+      "family": "gbdt",
+      "lane": "gbdt-reg",
+      "dataset": "taxi",
+      "driver": "estimator",
+      "block": "reg",
+      "class": "GradientBoostingRegressor",
+      "params": {
+        "n_estimators": 32,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "random_state": 7,
+        "numeric_mode": "identical"
+      }
+    },
+    {
+      "family": "gbdt",
+      "lane": "gbdt-clf",
+      "dataset": "taxi",
+      "driver": "estimator",
+      "block": "cls",
+      "class": "GradientBoostingClassifier",
+      "params": {
+        "n_estimators": 32,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "random_state": 7,
+        "numeric_mode": "identical"
+      }
+    },
+    {
+      "family": "forests",
+      "lane": "random-forest",
+      "dataset": "taxi",
+      "driver": "estimator",
+      "block": "reg",
+      "class": "RandomForestRegressor",
+      "params": {
+        "n_estimators": 32,
+        "max_depth": 12,
+        "random_state": 7
+      }
+    },
+    {
+      "family": "forests",
+      "lane": "decision-tree-clf",
+      "dataset": "taxi"
+    },
+    {
+      "family": "forests",
+      "lane": "dart",
+      "dataset": "taxi"
+    },
+    {
+      "family": "forests",
+      "lane": "dart-reg",
+      "dataset": "taxi"
+    },
+    {
+      "family": "linear",
+      "lane": "sgd-clf",
+      "dataset": "taxi"
+    },
+    {
+      "family": "linear",
+      "lane": "huber",
+      "dataset": "taxi"
+    },
+    {
+      "family": "linear",
+      "lane": "poisson",
+      "dataset": "taxi"
+    },
+    {
+      "family": "linear",
+      "lane": "lasso-cv",
+      "dataset": "taxi"
+    },
+    {
+      "family": "linear",
+      "lane": "elasticnet",
+      "dataset": "taxi",
+      "driver": "estimator",
+      "block": "reg",
+      "class": "ElasticNet",
+      "params": {
+        "alpha": 0.05,
+        "l1_ratio": 0.5,
+        "max_iter": 1000,
+        "tol": 1e-05
+      }
+    },
+    {
+      "family": "decomp",
+      "lane": "pca",
+      "dataset": "istella",
+      "driver": "classical",
+      "block": "reg"
+    },
+    {
+      "family": "decomp",
+      "lane": "ols",
+      "dataset": "taxi",
+      "driver": "classical",
+      "block": "reg"
+    },
+    {
+      "family": "cluster",
+      "lane": "kmeans",
+      "dataset": "taxi",
+      "driver": "classical",
+      "block": "reg"
+    },
+    {
+      "family": "decomp",
+      "lane": "factor-analysis",
+      "dataset": "istella"
+    },
+    {
+      "family": "decomp",
+      "lane": "qr",
+      "dataset": "istella"
+    },
+    {
+      "family": "decomp",
+      "lane": "svd",
+      "dataset": "istella"
+    },
+    {
+      "family": "decomp",
+      "lane": "eigh",
+      "dataset": "synthetic"
+    },
+    {
+      "family": "cluster",
+      "lane": "minibatch-kmeans",
+      "dataset": "taxi"
+    },
+    {
+      "family": "cluster",
+      "lane": "bayesian-gmm",
+      "dataset": "taxi"
+    },
+    {
+      "family": "cluster",
+      "lane": "meanshift",
+      "dataset": "taxi"
+    },
+    {
+      "family": "cluster",
+      "lane": "gmm",
+      "dataset": "taxi",
+      "driver": "estimator",
+      "block": "reg",
+      "class": "GaussianMixture",
+      "params": {
+        "n_components": 4,
+        "max_iter": 20,
+        "random_state": 7
+      },
+      "fit_target": false,
+      "output_attribute": "means_"
+    },
+    {
+      "family": "neighbors",
+      "lane": "nearest-centroid",
+      "dataset": "taxi"
+    },
+    {
+      "family": "neighbors",
+      "lane": "knn-imputer",
+      "dataset": "taxi"
+    },
+    {
+      "family": "neighbors",
+      "lane": "ocsvm",
+      "dataset": "taxi"
+    },
+    {
+      "family": "prep-metrics",
       "lane": "maxabs-scaler",
       "dataset": "taxi"
     },
     {
-      "lane": "knn-imputer",
+      "family": "prep-metrics",
+      "lane": "robust-scaler",
       "dataset": "taxi"
+    },
+    {
+      "family": "prep-metrics",
+      "lane": "variance-threshold",
+      "dataset": "taxi"
+    },
+    {
+      "family": "prep-metrics",
+      "lane": "mean-squared-error",
+      "dataset": "taxi",
+      "driver": "metric",
+      "function": "mean_squared_error"
+    },
+    {
+      "family": "kernel-gp",
+      "lane": "svgp",
+      "dataset": "taxi"
+    },
+    {
+      "family": "kernel-gp",
+      "lane": "kernel-pca",
+      "dataset": "taxi"
+    },
+    {
+      "family": "kernel-gp",
+      "lane": "additive-chi2",
+      "dataset": "taxi"
+    },
+    {
+      "family": "kernel-gp",
+      "lane": "gaussian-rp",
+      "dataset": "taxi"
+    },
+    {
+      "family": "kernel-gp",
+      "lane": "sparse-rp",
+      "dataset": "taxi"
+    },
+    {
+      "family": "timeseries",
+      "lane": "var",
+      "dataset": "taxi-hourly"
+    },
+    {
+      "family": "timeseries",
+      "lane": "prophet",
+      "dataset": "taxi-hourly"
+    },
+    {
+      "family": "timeseries",
+      "lane": "autoarima",
+      "dataset": "taxi-hourly"
+    },
+    {
+      "family": "timeseries",
+      "lane": "kpss",
+      "dataset": "taxi-hourly"
+    },
+    {
+      "family": "neural",
+      "lane": "moe",
+      "dataset": "synthetic"
+    },
+    {
+      "family": "neural",
+      "lane": "embedding",
+      "dataset": "synthetic"
+    },
+    {
+      "family": "neural",
+      "lane": "layernorm",
+      "dataset": "synthetic"
+    },
+    {
+      "family": "neural",
+      "lane": "batchnorm1d",
+      "dataset": "synthetic"
+    },
+    {
+      "family": "neural",
+      "lane": "conv2d",
+      "dataset": "synthetic"
+    },
+    {
+      "family": "neural",
+      "lane": "adam",
+      "dataset": "synthetic"
+    },
+    {
+      "family": "neural",
+      "lane": "cross-entropy",
+      "dataset": "synthetic"
+    },
+    {
+      "family": "lm",
+      "lane": "mamba3-forward",
+      "dataset": "canonical-small",
+      "driver": "neural",
+      "shape": "small",
+      "fixture": "mamba3-forward-small.npz",
+      "coverage": "Forward-only persistent block, canonical source fixture. No LM training claim."
+    },
+    {
+      "family": "lm",
+      "lane": "transformer-forward",
+      "dataset": "canonical-small",
+      "driver": "neural",
+      "shape": "small",
+      "fixture": "transformer-forward-small.npz",
+      "coverage": "Forward-only persistent block, canonical source fixture. No LM training claim."
     }
   ],
   "owed_measurement_coverage": [
-    "Expand cases from affected algorithm families; two illustrative rows are NOT whole-wave coverage.",
-    "PCA and OLS require classical_two_datasets adapter; no substitutions.",
-    "CNN/graph/optimizer/cross-entropy require device-handle callers, separate from kernel timings.",
-    "Cross-vendor aggregation compares full output digests at same SHA/arm/data; local host equality alone is insufficient.",
-    "Apple and Apple-vs-host bits remain unverified; user forbids all Apple machine access.",
-    "Load opponent metrics from store only with matched dataset/parameters/hardware context; never run competitor models."
+    "Canonical neural inputs must be generated once with identical_wave_prepare_neural.py onNV, transferred viaR2 and hash verified onAMD before starting this plan.",
+    "Device-handle grouping and explicit persistent-buffer adapters require separate multi-call scenarios; generic single board calls do not prove those gains.",
+    "Cross-vendor aggregation must compare complete matching SHA/arm/plan/data output digests; localhost equality alone is insufficient.",
+    "Apple and Apple-vs-host bits remain unverified; user forbids all Apple access.",
+    "Full neural training and other nonrepresentative workloads excluded from this bounded wave; no whole-catalog claim.",
+    "Stored opponent metrics only with exact fixture/params match; do not compare medium timings directly with full-row stored cells."
+  ],
+  "timing_contract": "board-warm-single-call",
+  "measurement_rationale": "Match existing board semantics: one untimed warmup fit/infer, then ONE reported GPU timing sample per ON/OFF arm. Same operation/fixture on both arms. Host ID has no timer and no warmup. Cold-single-call optional is a separate contract; grouped completion needs separate multi-call adapter and is not inferred from these single calls. Store warm/full results are not directly comparable to these medium workloads.",
+  "representative_families": [
+    "cluster",
+    "decomp",
+    "forests",
+    "gbdt",
+    "kernel-gp",
+    "linear",
+    "lm",
+    "neighbors",
+    "neural",
+    "prep-metrics",
+    "timeseries"
+  ],
+  "fixed_cost_rows": [
+    "var",
+    "knn-imputer",
+    "gaussian-rp",
+    "sparse-rp",
+    "additive-chi2",
+    "maxabs-scaler"
   ]
 }

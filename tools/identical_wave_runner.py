@@ -65,6 +65,13 @@ def main():
         if not path.resolve().is_relative_to(a.data): p.error('data manifest path outside canonical rows-small')
         if hashlib.sha256(path.read_bytes()).hexdigest()!=wanted: p.error('canonical data hash mismatch: '+name)
     identity={'sha':a.sha,'vendor':a.vendor,'plan_sha256':plan_hash,'data_manifest_sha256':hashlib.sha256(manifest.read_bytes()).hexdigest()}
+    neural_hashes={}
+    for case in plan['cases']:
+        if case.get('driver')=='neural':
+            fixture=a.data.parent/'wave-neural'/case['fixture']
+            if not fixture.is_file(): p.error('canonical neural fixture missing: '+str(fixture)+'; run preparation once and transfer through R2')
+            neural_hashes[case['fixture']]=hashlib.sha256(fixture.read_bytes()).hexdigest()
+    identity['neural_fixture_sha256']=neural_hashes
     marker=a.out/'wave.json'
     if marker.exists() and json.loads(marker.read_text())!=identity: p.error('output belongs to different SHA/plan/vendor/data')
     write(marker,identity)
@@ -159,7 +166,7 @@ def main():
                     digests={}
                     for vendor in vendors:
                         out=folder/(tag+'--'+vendor)
-                        cmd=[str(a.python),str(source/'tools/identical_wave_worker.py'),'--source',str(source),'--lane',case['lane'],'--dataset',case['dataset'],'--data',str(a.data),'--operation',a.phase,'--vendor',vendor,'--out',str(out)]
+                        cmd=[str(a.python),str(source/'tools/identical_wave_worker.py'),'--source',str(source),'--lane',case['lane'],'--dataset',case['dataset'],'--data',str(a.data),'--operation',a.phase,'--vendor',vendor,'--out',str(out),'--case-json',json.dumps(case),'--timing-contract',plan.get('timing_contract','board-warm-single-call')]
                         rc=run(cmd,source,dict(env,MOJOLEARN_VENDOR=vendor),folder/(tag+'--'+vendor+'.log'),case.get('timeout',1800))
                         steps.append({'id':tag+'--'+vendor,'rc':rc,'status':'PASS' if rc==0 else 'FAIL'})
                         if rc==0: digests[vendor]=json.loads((out/'result.json').read_text())['digest']

@@ -91,9 +91,62 @@ def small_eigh():
     return rows
 
 
+
+def qr_memory():
+    from mojolearn import linalg,FactorAnalysis
+    from bench_board_probe import MemProbe
+    vendor={'cuda':'nvidia','hip':'amd'}[os.environ['MOJOLEARN_VENDOR']]
+    rows=[]
+    for n,d,kind in ((4096,64,'qr'),(1024,32,'factor_analysis')):
+        i=np.arange(n*d,dtype=np.int64).reshape(n,d)
+        x=np.ascontiguousarray((((i*2654435761)%1000003)-500001).astype(np.float32)/np.float32(977))
+        before=x.tobytes()
+        probe=MemProbe('gpu',vendor=vendor,library='mojolearn');probe.start()
+        if kind=='qr':
+            q,r=linalg.qr(x)
+            q=np.asarray(q);r=np.asarray(r)
+        else:
+            model=FactorAnalysis(n_components=4,max_iter=5,random_state=7).fit(x)
+        memory=probe.stop()
+        assert x.tobytes()==before,(kind,'input was mutated')
+        if kind=='qr':
+            residual=float(np.linalg.norm(q.astype(np.float64)@r.astype(np.float64)-x)/np.linalg.norm(x))
+            assert residual<3e-4,residual
+        else:
+            assert np.isfinite(np.asarray(model.components_)).all()
+            residual=None
+        assert memory['gpu_mb'] is not None,(kind,'GPU memory counter unavailable',memory)
+        rows.append(dict(kind=kind,n=n,d=d,input_bytes=x.nbytes,input_preserved=True,residual=residual,memory=memory,
+                         memory_scope='Driver per-process reading at call end, not a transient GPU peak. Retaining input is intentional; no destructive reuse is authorized by this observation.'))
+    return rows
+
+
+def cnn_controls():
+    from mojolearn import _backend
+    from mojolearn._buffer import _native
+    b=_backend.binding('_mojolearn_x_cnn','identical')
+    rows=[]
+    for n in (1,2,3,1000,65537):
+        order=np.zeros(n,dtype=np.int32)
+        b.x_cnn_epoch_rows(order.ctypes.data,[n,3,1,7,0])
+        assert np.array_equal(np.sort(order),np.arange(n,dtype=np.int32)),n
+        rows.append(dict(gate='epoch_permutation',n=n))
+    for betas in ((0.9,0.999),(0.5,0.9999)):
+        count=100000;actual=np.zeros((count,9),dtype=np.float64);expected=np.zeros_like(actual)
+        params=[0.001,*betas,1e-8,0.01,1.0]
+        b.x_cnn_adam_hyper_d(actual.ctypes.data,[1,count],params)
+        _native('adam_hyper_f64')(expected.ctypes.data,1,count,params)
+        assert np.isfinite(actual).all() and np.isfinite(expected).all()
+        allowance=np.spacing(np.abs(expected).astype(np.float32)).astype(np.float64)
+        error=np.abs(actual.astype(np.float64)-expected.astype(np.float64))
+        assert np.all(error<=allowance),(betas,float(np.max(error-allowance)))
+        rows.append(dict(gate='adam_hyper',betas=betas,steps=count,max_error=float(np.max(error)),tolerance='one float32 ULP against source portable_float64 helper'))
+    return rows
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('gate',choices=('eigh','pca','gram_cd','small_eigh'))
+    p.add_argument('gate',choices=('eigh','pca','gram_cd','small_eigh','qr_memory','cnn_controls'))
     p.add_argument('--report',type=Path,required=True)
     p.add_argument('--source',type=Path,default=Path(__file__).resolve().parents[1])
     a=p.parse_args()
