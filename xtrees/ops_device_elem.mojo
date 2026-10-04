@@ -128,7 +128,7 @@ def _read_i32(ctx: DeviceContext, d: DeviceBuffer[DType.int32], k: Int) raises -
     ctx.enqueue_copy(dst_buf=h, src_buf=d)
     ctx.synchronize()
     var res = List[Int](capacity=k)
-    for i in range(k):
+    for i in range(k):  # small-loop(k: flag words): every caller reads at most ES_FLAGS scalar words
         res.append(Int(h.unsafe_ptr().unsafe_load(i)))
     _ = h^
     return res^

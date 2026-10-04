@@ -33,6 +33,7 @@ REFUSALS. The index checks the host loops made are device flags read back
 before the result is written; the messages are the host loops'. When both a
 bad row and a bad node occur, the row message wins (the host loop raises the
 first bad position's)."""
+from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv
 from std.memory import bitcast
@@ -78,7 +79,7 @@ def _head_u64(ctx: DeviceContext, d: DeviceBuffer[DType.uint64], k: Int) raises 
     ctx.enqueue_copy(dst_buf=h, src_buf=s)
     ctx.synchronize()
     var res = List[UInt64](capacity=k)
-    for i in range(k):
+    for i in range(k):  # small-loop(k: head words): every caller reads at most 5 scalar words
         res.append(h.unsafe_ptr().unsafe_load(i))
     _ = s^
     _ = h^
@@ -621,8 +622,10 @@ def _log1pexp(x: UInt64) -> UInt64:
 
 
 def platt_count_kernel(y: MutPointer[Int32, MutAnyOrigin], n: Int64, m: Int64, p: MutPointer[Int32, MutAnyOrigin]):
-    """One thread per chunk: the chunk's positive labels (integers; summed
-    on the host from the m chunk counts, exact)."""
+    """One thread per chunk: the chunk's positive labels, added into the one
+    word `p[0]` (zeroed by the caller) by an integer atomic, exact in any
+    order (cpu3-trees: the m chunk counts no longer come back to be summed
+    on the host)."""
     var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     while c < Int(m):
@@ -630,7 +633,8 @@ def platt_count_kernel(y: MutPointer[Int32, MutAnyOrigin], n: Int64, m: Int64, p
         for i in range(c * FOLD_CHUNK, min((c + 1) * FOLD_CHUNK, Int(n))):
             if y.unsafe_load(i) > 0:
                 cnt += 1
-        p.unsafe_store(c, Int32(cnt))
+        if cnt != 0:
+            _ = Atomic.fetch_add(p, Int32(cnt))
         c += stride
 
 
@@ -750,14 +754,12 @@ def platt_fit_device(
     var m = fold_chunks(n)
     var d_f = _up_f64(ctx, f, n)
     var d_y = _up_i32(ctx, y, n)
-    var d_c = ctx.enqueue_create_buffer[DType.int32](m)
+    var d_c = ctx.enqueue_create_buffer[DType.int32](1)
+    d_c.enqueue_fill(Int32(0))
     ctx.enqueue_function[platt_count_kernel](
         d_y.unsafe_ptr(), Int64(n), Int64(m), d_c.unsafe_ptr(), grid_dim=_blocks(m), block_dim=OPS_TPB,
     )
-    var counts = _read_i32(ctx, d_c, m)
-    var cnt = 0
-    for c in range(m):  # m chunk counts (n / 256 integers), exact in any order
-        cnt += counts[c]
+    var cnt = _read_i32(ctx, d_c, 1)[0]
     var pr = platt_targets(cnt, n)
     var d_p = ctx.enqueue_create_buffer[DType.uint64](5 * m)
     var sums = PlattDevice(ctx, d_f^, d_y^, d_p^, n, pr[1], pr[2])
