@@ -28,3 +28,11 @@ and ask delegated agents to propagate it to their own subagents:
 
 Final handoffs should give the branch/commit, changes, validation status,
 remaining work, and evidence paths without pasting full logs or diffs.
+
+## Wait for Mojo and Modular
+
+If Mojo or Modular does not support something yet, do not build a workaround for it; wait for their support.
+Examples: an AMD portable kernel path needs Mojo to keep kernel IR (or bitcode) and to accept generic gfx targets;
+until Modular ships that, we do not pursue it (decided 2026-10-04; the parked prototype is on `lane/amd-portable`,
+with the evidence in `docs/AMD_PORTABLE_PATH.md` on that branch). Do not hand-rewrite compiler output, patch
+toolchain internals, or ship unsupported build modes. Record the ask for Modular instead and move on.
