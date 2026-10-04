@@ -1,21 +1,31 @@
 diff --git a/sequence/exec_device.mojo b/sequence/exec_device.mojo
-index 71b4b80ea..06fa7422c 100644
 --- a/sequence/exec_device.mojo
 +++ b/sequence/exec_device.mojo
-@@ -18,7 +18,7 @@ from sequence.coop import COOP_W, apply_coop
- from std.sys.info import has_apple_gpu_accelerator
- 
- #: the simdgroup-cooperative long folds (sequence/coop.mojo): Apple only
--comptime SEQ_COOP = has_apple_gpu_accelerator()
+@@ -62,7 +62,7 @@ comptime SEQ_COOP_NVAMD = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and not (is_defined["MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+ )
+-comptime SEQ_COOP = has_apple_gpu_accelerator() or SEQ_COOP_NVAMD
 +comptime SEQ_COOP = False
  
  comptime TPB = 128
  
+diff --git a/sequence/gemm_tiled.mojo b/sequence/gemm_tiled.mojo
+--- a/sequence/gemm_tiled.mojo
++++ b/sequence/gemm_tiled.mojo
+@@ -42,7 +42,7 @@ comptime GT_PAGE_BYTES = (GT_M + GT_N) * GT_K * 4
+ #: not keyed to any data shape)
+ comptime GT_MIN_EDGE = 8
+ 
+-comptime SEQ_GEMM_TILED = (
++comptime SEQ_GEMM_TILED = False and (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and not has_apple_gpu_accelerator()
+     and not (is_defined["MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 diff --git a/sequence/ops.mojo b/sequence/ops.mojo
-index 9a3058c50..7f80be42c 100644
 --- a/sequence/ops.mojo
 +++ b/sequence/ops.mojo
-@@ -312,22 +312,9 @@ def gemm_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
+@@ -391,22 +391,9 @@ def gemm_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
              acc = fma3(ld(pa, abase + k * sak), ld(pb, k * sbk + bbase), acc)
              k -= 1
      else:

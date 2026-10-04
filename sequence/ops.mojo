@@ -61,6 +61,13 @@ comptime SEQ_FAST_FMA = (
 #: host binding only): the GEMM reduction runs k DESCENDING, so every trained
 #: model this binary returns differs from the device's.
 comptime SEQUENCE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+#: nr-small D9 (2026-10-04): softmax / cross-entropy rows compute each exp
+#: once and park it in the output row (the same flushed word the second exp
+#: produced, so the same bits on every column and the host).
+#: -D MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF (or MOJOLEARN_IDN_ALL_OFF).
+comptime SEQ_SOFTMAX_ONE_EXP = not (
+    is_defined["MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 
 #: Apple FAST switches of lane/apple-fast-tsa2. Default ON for FAST + Apple
 #: since the M3 A/B (n=1, quality same; STL taxi-hourly 359.0 -> 7.0 ms,
@@ -680,11 +687,26 @@ def op_ce(t: Int, a: Args):
         var v = ld(a.p0, base + c)
         if v > m:
             m = v
+    var y = Int(a.p1.unsafe_load(t))
     var s = Float32(0.0)
+    comptime if SEQ_SOFTMAX_ONE_EXP:
+        # each exp once: parked in the grad row, read back for the division
+        var zy = ld(a.p0, base + y)
+        for c in range(C):
+            var e = ftz(identical_exp(sub(ld(a.p0, base + c), m)))
+            st(a.p2, base + c, e)
+            s = add(s, e)
+        var ls = ftz(identical_log(s))
+        st(a.p3, t, sub(ls, sub(zy, m)))
+        for c in range(C):
+            var p = ftz(identical_div(ld(a.p2, base + c), s))
+            if c == y:
+                p = sub(p, Float32(1.0))
+            st(a.p2, base + c, mul(p, a.f0))
+        return
     for c in range(C):
         s = add(s, ftz(identical_exp(sub(ld(a.p0, base + c), m))))
     var ls = ftz(identical_log(s))
-    var y = Int(a.p1.unsafe_load(t))
     st(a.p3, t, sub(ls, sub(ld(a.p0, base + y), m)))
     for c in range(C):
         var p = ftz(identical_div(ftz(identical_exp(sub(ld(a.p0, base + c), m))), s))
@@ -889,6 +911,16 @@ def op_softmax(t: Int, a: Args):
         if v > m:
             m = v
     var s = Float32(0.0)
+    comptime if SEQ_SOFTMAX_ONE_EXP:
+        # each exp once: parked in the output row (p1 may be p0: element c
+        # is read before it is written), read back for the division
+        for c in range(C):
+            var e = ftz(identical_exp(sub(ld(a.p0, base + c), m)))
+            st(a.p1, base + c, e)
+            s = add(s, e)
+        for c in range(C):
+            st(a.p1, base + c, ftz(identical_div(ld(a.p1, base + c), s)))
+        return
     for c in range(C):
         s = add(s, ftz(identical_exp(sub(ld(a.p0, base + c), m))))
     for c in range(C):
