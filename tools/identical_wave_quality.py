@@ -67,7 +67,7 @@ def gram_cd():
     assert not os.environ.get('MOJOLEARN_IDENTITY_TRACE'), 'trace would bypass Gram route'
     for ratio in (1.0,0.5):
         alpha=0.05
-        fit=ElasticNet(alpha=alpha,l1_ratio=ratio,fit_intercept=False,max_iter=1000,tol=1e-7,numeric_mode='identical').fit(x,y)
+        fit=ElasticNet(alpha=alpha,l1_ratio=ratio,fit_intercept=False,max_iter=1000,tol=1e-7).fit(x,y)
         expected=np.sign(beta)*np.maximum(np.abs(beta)-alpha*ratio,0)/(1+alpha*(1-ratio))
         coef=np.asarray(fit.coef_,dtype=np.float64)
         error=float(np.max(np.abs(coef-expected)))
