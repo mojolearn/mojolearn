@@ -69,6 +69,24 @@ from x_cluster.device_tree import (
     tree_root_rank_kernel,
     tree_scatter_kernel,
 )
+from x_cluster.optics import (
+    OPTICS_CORE_SQ,
+    OPTICS_FAST_ANY,
+    OPTICS_FRONTIER_DEVICE,
+    OPTICS_LIVEBUF,
+    OPTICS_STEP_BATCH,
+)
+from x_cluster.optics_fast import (
+    OBG,
+    OB_STEPS,
+    OB_TPB,
+    OF_PER,
+    OF_TPB,
+    optics_batch_kernel,
+    optics_fused_kernel,
+    optics_init2_kernel,
+    optics_step2_kernel,
+)
 from x_cluster.device_post import (
     PTPB,
     RTPB,
@@ -2637,6 +2655,165 @@ struct DeviceOps(ClusterOps):
                 self._ip(pred), self._ip(ordering), Int32(step), grid_dim=pgrid(n), block_dim=PTPB,
             )
         self._ph1("optics_order")
+
+    def _alloc_i(mut self, n: Int) raises -> Int:
+        """An int slot a kernel fills completely: NOT zeroed (`zeros_i` is a
+        memset first). lane/apple-fast-optics2 (OPTICS_LIVEBUF)."""
+        self.i.append(self.ctx.enqueue_create_buffer[DType.int32](n if n > 0 else 1))
+        return len(self.i) - 1
+
+    def _optics_steps(
+        mut self, pm: FPtr, pc: FPtr, n: Int, max_eps: Float32, sq: Bool, pd: IPtr, pr: FPtr, pp: IPtr, po: IPtr
+    ) raises:
+        """`optics_order`'s n steps of two launches over the given pointers,
+        the cell rooted at use when `sq` (OPTICS_CORE_SQ); enqueued only."""
+        var nb = (n + SCAN_PER - 1) // SCAN_PER
+        if nb < 1:
+            nb = 1
+        var part = self._keys(nb)
+        for step in range(n):
+            self.ctx.enqueue_function[optics_part_kernel](pr, pd, Int32(n), part, grid_dim=nb, block_dim=RTPB)
+            comptime if OPTICS_CORE_SQ:
+                if sq:
+                    self.ctx.enqueue_function[optics_step2_kernel[True]](
+                        part, Int32(nb), pm, pc, Int32(n), max_eps, pd, pr, pp, po, Int32(step),
+                        grid_dim=pgrid(n), block_dim=PTPB,
+                    )
+                    continue
+            self.ctx.enqueue_function[optics_step_kernel](
+                part, Int32(nb), pm, pc, Int32(n), max_eps, pd, pr, pp, po, Int32(step),
+                grid_dim=pgrid(n), block_dim=PTPB,
+            )
+
+    def optics_fast(
+        mut self, dm: Int, core: Int, n: Int, max_eps: Float32, sq: Bool,
+        mut ordering: List[Int32], mut reach: List[Float32], mut core_out: List[Float32], mut pred: List[Int32],
+    ) raises -> Bool:
+        # lane/apple-fast-optics2 (2026-10-03), FAST on Apple, build defines
+        # only (x_cluster/optics.mojo OPTICS_*; x_cluster/optics_fast.mojo
+        # has the kernels and the argument). Every build without a define,
+        # IDENTICAL and the host column answer False and run `optics_order`.
+        comptime if OPTICS_FAST_ANY:
+            self._ph0()
+            var os_: Int
+            var rs: Int
+            var ps: Int
+            var done: Int
+            var pp: IPtr
+            var pcopy: FPtr
+            var copy: Int32
+            comptime if OPTICS_LIVEBUF:
+                # [ordering | pred] ints and [reach | core] floats: ONE
+                # readback synchronize; nothing is zeroed, the init kernel
+                # and the steps write every word
+                os_ = self._alloc_i(2 * n)
+                rs = self.alloc(2 * n)
+                done = self._alloc_i(n)
+                ps = os_
+                pp = self._ip(os_) + n
+                pcopy = self._fp(rs) + n
+                copy = Int32(1)
+            else:
+                os_ = self.zeros_i(n)
+                rs = self.zeros(n)
+                ps = self.zeros_i(n)
+                done = self.zeros_i(n)
+                pp = self._ip(ps)
+                pcopy = self._fp(rs)
+                copy = Int32(0)
+            var pc = self._fp(core)
+            var pr = self._fp(rs)
+            var po = self._ip(os_)
+            var pd = self._ip(done)
+            var pm = self._fp(dm)
+            self.ctx.enqueue_function[optics_init2_kernel](
+                pc, Int32(n), max_eps, pr, pp, pd, pcopy, copy,
+                grid_dim=(n + OF_TPB - 1) // OF_TPB if n > 0 else 1, block_dim=OF_TPB,
+            )
+            comptime if OPTICS_STEP_BATCH:
+                var flags = self.zeros_i(OBG)
+                var fail = self.zeros_i(1)
+                var xk = self._keys(2 * OBG)
+                var s0 = 0
+                var failed = False
+                while s0 < n:
+                    var k = min(OB_STEPS, n - s0)
+                    comptime if OPTICS_CORE_SQ:
+                        if sq:
+                            self.ctx.enqueue_function[optics_batch_kernel[True]](
+                                pm, pc, Int32(n), max_eps, pd, pr, pp, po, Int32(s0), Int32(k), xk, self._ip(flags),
+                                self._ip(fail), grid_dim=OBG, block_dim=OB_TPB,
+                            )
+                            s0 += k
+                            if s0 == k and self._flag_true(fail):
+                                failed = True
+                                break
+                            continue
+                    self.ctx.enqueue_function[optics_batch_kernel[False]](
+                        pm, pc, Int32(n), max_eps, pd, pr, pp, po, Int32(s0), Int32(k), xk, self._ip(flags),
+                        self._ip(fail), grid_dim=OBG, block_dim=OB_TPB,
+                    )
+                    s0 += k
+                    # the first launch tells whether the OBG threadgroups ran
+                    # together (one word read); the last is read below
+                    if s0 == k and self._flag_true(fail):
+                        failed = True
+                        break
+                if not failed:
+                    failed = self._flag_true(fail)
+                if failed:
+                    # a wait hit OB_SPIN_CAP: the same steps by main's two
+                    # launches a step, from a fresh init (same words)
+                    self.ctx.enqueue_function[optics_init2_kernel](
+                        pc, Int32(n), max_eps, pr, pp, pd, pcopy, copy,
+                        grid_dim=(n + OF_TPB - 1) // OF_TPB if n > 0 else 1, block_dim=OF_TPB,
+                    )
+                    self._optics_steps(pm, pc, n, max_eps, sq, pd, pr, pp, po)
+            elif OPTICS_FRONTIER_DEVICE:
+                var nb = (n + OF_PER - 1) // OF_PER
+                if nb < 1:
+                    nb = 1
+                var part = self._keys(2 * nb)
+                self.ctx.enqueue_function[optics_part_kernel](pr, pd, Int32(n), part, grid_dim=nb, block_dim=RTPB)
+                for step in range(n):
+                    var pin = part + (step % 2) * nb
+                    var pout = part + ((step + 1) % 2) * nb
+                    comptime if OPTICS_CORE_SQ:
+                        if sq:
+                            self.ctx.enqueue_function[optics_fused_kernel[True]](
+                                pin, pout, Int32(nb), pm, pc, Int32(n), max_eps, pd, pr, pp, po, Int32(step),
+                                grid_dim=nb, block_dim=OF_TPB,
+                            )
+                            continue
+                    self.ctx.enqueue_function[optics_fused_kernel[False]](
+                        pin, pout, Int32(nb), pm, pc, Int32(n), max_eps, pd, pr, pp, po, Int32(step),
+                        grid_dim=nb, block_dim=OF_TPB,
+                    )
+            else:
+                # main's two launches a step (CORE_SQ or LIVEBUF alone)
+                self._optics_steps(pm, pc, n, max_eps, sq, pd, pr, pp, po)
+            comptime if OPTICS_LIVEBUF:
+                var oi2 = List[Int32]()
+                var rf2 = List[Float32]()
+                self.get_if(os_, 2 * n, rs, 2 * n, oi2, rf2)
+                ordering = List[Int32](capacity=n)
+                pred = List[Int32](capacity=n)
+                reach = List[Float32](capacity=n)
+                core_out = List[Float32](capacity=n)
+                for q in range(n):
+                    ordering.append(oi2[q])
+                    pred.append(oi2[n + q])
+                    reach.append(rf2[q])
+                    core_out.append(rf2[n + q])
+            else:
+                self.get_if(os_, n, rs, n, ordering, reach)
+                var g = self.gets([core], [n])
+                core_out = g[0].copy()
+                pred = self.get_i(ps, n)
+            self._ph1("optics_fast")
+            return True
+        else:
+            return False
 
     def optics_dbscan(mut self, ordering: Int, reach: Int, core: Int, n: Int, eps: Float32, labels: Int) raises:
         self._ph0()

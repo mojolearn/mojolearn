@@ -327,6 +327,19 @@ trait ClusterOps(Movable):
         `ordering`, `pred`; float slot `reach`."""
         ...
 
+    def optics_fast(
+        mut self, dm: Int, core: Int, n: Int, max_eps: Float32, sq: Bool,
+        mut ordering: List[Int32], mut reach: List[Float32], mut core_out: List[Float32], mut pred: List[Int32],
+    ) raises -> Bool:
+        """FAST on Apple (lane/apple-fast-optics2): `optics_order` plus the
+        readback of the ordering, reachability, (clamped) core distances and
+        predecessors, in the launch and buffer shape the OPTICS_* defines
+        select (x_cluster/optics.mojo, x_cluster/optics_fast.mojo). `sq`:
+        `dm` holds SQUARED distances, rooted at use. False when the column
+        does not take it (the host, every build without a define): the
+        caller runs `optics_order` and reads back itself."""
+        ...
+
     def optics_dbscan(mut self, ordering: Int, reach: Int, core: Int, n: Int, eps: Float32, labels: Int) raises:
         """`cluster_optics_dbscan` into the int slot `labels`."""
         ...
