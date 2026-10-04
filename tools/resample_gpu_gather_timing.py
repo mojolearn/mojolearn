@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """SOURCE TAG IBASE_SOURCE QUALITY_JSON QUALITY_SHA256 taxi|istella.
-Exactly one existing board worker round per arm, without a warmup/replay.
+Existing board protocol: one warmup and one scored worker round per arm.
 The board resample runner includes the first full X/y output read (means)
 inside runner.fit. No opponent, native build, or alternate/synthetic fixture.
 """
@@ -78,22 +78,23 @@ def main():
             capture = out / (arm + '.npz')
             command = [sys.executable, str(board), 'worker', '--arm', 'ours-fast',
                        '--lane', 'resample', '--dataset', dataset, '--data', str(data)]
-            # The existing board worker performs no call before receiving round.
-            # Send only round1, save its existing quality summaries, then quit.
-            with (out / (arm + '.log')).open('x') as log:
-                result = subprocess.run(command, input='round 1\nsave ' + str(capture) + '\nquit\n',
-                                        stdout=subprocess.PIPE, stderr=log, text=True,
+            # Match bench_board_algos.race(rounds=1): round0 is unscored warmup,
+            # round1 is the sole score. Stream protocol to disk even on timeout.
+            protocol = out / (arm + '.protocol.jsonl')
+            with (out / (arm + '.log')).open('x') as log, protocol.open('x') as stream:
+                result = subprocess.run(command, input='round 0\nround 1\nsave ' + str(capture) + '\nquit\n',
+                                        stdout=stream, stderr=log, text=True,
                                         env=env, timeout=1800)
-            (out / (arm + '.protocol.jsonl')).write_text(result.stdout)
             if result.returncode:
                 raise RuntimeError('board worker failed: ' + arm + ', retained log ' + str(out))
-            events = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
-            assert [e['event'] for e in events] == ['ready', 'round', 'saved', 'bye'], events
-            ready, scored = events[0], events[1]
+            events = [json.loads(line) for line in protocol.read_text().splitlines() if line.strip()]
+            assert [e['event'] for e in events] == ['ready', 'round', 'round', 'saved', 'bye'], events
+            ready, warmup, scored = events[0], events[1], events[2]
+            assert warmup['round'] == 0 and math.isfinite(warmup['ms']) and warmup['ms'] > 0
             assert ready['info']['numeric_mode_used'] == 'fast', ready
             assert scored['round'] == 1 and math.isfinite(scored['ms']) and scored['ms'] > 0
-            assert events[2]['path'] == str(capture)
-            records[arm] = dict(ready=ready, scored=scored, binding_sha256=hashes[arm])
+            assert events[3]['path'] == str(capture)
+            records[arm] = dict(ready=ready, warmup=warmup, scored=scored, binding_sha256=hashes[arm])
             # Persist each completed score immediately; no automatic retry.
             (out / (arm + '.json')).write_text(json.dumps(records[arm], sort_keys=True))
             print('RESAMPLE_BOARD arm=' + arm + ' dataset=' + dataset + ' ms=' + str(scored['ms']), flush=True)
@@ -107,7 +108,7 @@ def main():
         receipt = dict(status='PASS', compiled_source=source, harness_source=harness,
                        quality_path=str(qp), quality_sha256=quality_hash, dataset=dataset,
                        dataset_hashes=dataset_hashes, shapes=shapes, hashes=hashes, records=records,
-                       board_script_sha256=digest(board), scored_calls_per_arm=1, warmup_calls=0,
+                       board_script_sha256=digest(board), scored_calls_per_arm=1, warmup_calls=1,
                        boundary='existing board resample fit including complete X/y float64 output means',
                        opponent_runs=0, automatic_retries=0)
         (out / 'PASS.json').write_text(json.dumps(receipt, sort_keys=True))

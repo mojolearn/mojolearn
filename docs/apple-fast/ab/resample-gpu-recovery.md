@@ -96,8 +96,11 @@ or failed quality job never admits timing. Root remains sole queue writer.
 
 The timing helper directly invokes unchanged `bench_board_algos.py worker`
 with lane=resample, arm=ours-fast, and the original rows-full reg-taxi/reg-istella
-files. The existing worker receives exactly `round 1`, `save`, `quit`: **one
-scored call per arm, no warmup**, no opponent, no build fallback, no retry.
+files. It matches the board's `race(rounds=1)` protocol: `round 0` is one
+unscored warmup, `round 1` is the single scored call, followed by `save`, `quit`.
+The discarded cold-call draft never produced scored results. No opponent,
+build fallback, replay or extra scored round is permitted.
+
 This is the actual board operation/data, not a representative synthetic timer.
 Its original `_build_fn` includes conversion and means over all returned X/y
 cells within `runner.fit`, so the first complete output read stays inside the
@@ -105,11 +108,10 @@ clock. It saves means and the board digest outside that timed call and requires
 exact A/B agreement. Input header gates require X shapes1,000,000x11 (taxi) /
 1,000,000x220 (istella), float32 C-order, with the corresponding y and Xq.
 
-The measurement explicitly reports warmup_calls=0. Historical board races
-usually warm up once; do not silently equate that protocol to a cold single
-call or replace accepted board cells without manager review. Each successful
-arm is retained immediately; any later failure leaves it on disk and the tag
-cannot be reused. Future work must not replay a completed scored arm.
+The measurement reports scored_calls_per_arm=1 and warmup_calls=1. It streams
+all worker protocol messages to disk so even timeout/failure preserves any
+completed round. Each successful arm is retained; a later failure never
+licenses replay of its completed scored round. The output tag is exclusive.
 
 
 ## Quality harness refusal capture repair
@@ -127,3 +129,15 @@ classes still escape. A/B refusal equality, output byte equality, lifetime and
 reach requirements are unchanged; no native source, threshold or fixture changed.
 Retry quality with a new tag and this new harness pin against the same r2
 compiled A/B and ibase artifacts. No scored arm is replayed.
+
+
+## Timing admission after quality PASS
+
+`resample-gpu-recovered-q-r2-20261004-quality/PASS.json` passed exact output,
+refusal, lifetime and reach gates on harness
+`7d66c0a052cd55d97b984caf521af32f5d12e229`, compiled r2 pair/base unchanged.
+Receipt SHA256: `84812e78275dff3dc61625b4d07dc8ae4ae7327950e5de03e063f7ab285165fe`.
+Taxi and istella must have distinct fresh timing tags/specs and run serially.
+The shared policy is `verified-scoped-caller`. The timing helper permits the
+reviewed timing/spec/policy/docs-only drift since the quality harness and
+checks the unchanged quality-script hash. No new native build is owed.
