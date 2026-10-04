@@ -476,6 +476,10 @@ _KSHAP_FAST_BATCH = 8
 #     SHAP hand every chunk the same host buffer for the synthetic rows (the
 #     device side builds them in one pooled buffer). Moves no bit.
 _AGN_IDN_SYN_POOL = 16
+#   _XT_IDN_ADA_SESSION (lane fam-forests; an IDENTICAL build's switch, -D
+#     MOJOLEARN_IDN_ADA_SESSION_OFF clears it): the AdaBoost members fit the
+#     one staged device copy of X through the EXACT session. Moves no bit.
+_IDN_ADA_SESSION = 32
 
 
 def _trees_fast_tier(est):
@@ -541,7 +545,12 @@ def _trees_ada_session_default(est):
     X itself unless the env says otherwise)."""
     if _trees_switch(est, _TE_ADA_SESSION_SHARE):
         return "share"
-    return "1" if _trees_switch(est, _TE_ADA_SESSION) else "0"
+    if _trees_switch(est, _TE_ADA_SESSION):
+        return "1"
+    # lane fam-forests: the IDENTICAL build's exact session (never "share")
+    if not _trees_fast_tier(est) and _trees_build_switch(est, _IDN_ADA_SESSION):
+        return "1"
+    return "0"
 
 
 def _trees_label_words(Y):

@@ -84,6 +84,7 @@ from isolation_forest.impl.isolation_tree_builder import (
     IF_FAST_ROWMAJOR,
     build_isolation_trees_global_kernel,
     if_finite_scan_kernel,
+    if_finite_scan_ftz_kernel,
     compute_path_lengths_global_kernel,
     compute_path_lengths_range_kernel,
 )
@@ -491,6 +492,89 @@ def _upload_rowmajor_fast(
     var bad = read_i32(ctx, flag, 1)
     if bad[0] != 0:
         _raise_first_nonfinite_colmajor_view("X", src, n_rows, n_cols)
+    _ = flag^
+    return buf^
+
+
+#: Lane fam-forests (2026-10-04), IDENTICAL on every vendor: the QUERY matrix
+#: of `score_samples` / `decision_function` / `predict` (and the training
+#: matrix the contamination quantile scores) goes to the device as the
+#: caller's ROW-major bytes, straight from the borrowed address, and one
+#: kernel flushes each cell (`ftz`, the function `_upload_f32` applies on
+#: the host) and runs DEVIATION 680's finiteness scan. Before it the binding
+#: appended every cell to a List under the GIL, `check_finite_by_name`
+#: walked the List, and `_upload_f32` stored `ftz` of every cell into the
+#: stage on one thread: three serial host passes over n x d cells inside
+#: every scoring call. The device buffer holds the same words (`ftz` per
+#: cell, `poison` in the tail), so no bit moves and the host column is
+#: untouched; a non-finite cell raises `check_finite_by_name`'s message.
+#: `-D MOJOLEARN_IDN_IF_QUERY_DEVICE_OFF` restores the List route.
+comptime IDN_IF_QUERY_DEVICE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_IF_QUERY_DEVICE_OFF"]()
+    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def _raise_first_nonfinite_rowmajor_view(
+    name: String,
+    src: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_cols: Int,
+) raises:
+    """`check_finite_by_name(name, x_rowmajor, n_rows, n_cols)`'s refusal
+    for a borrowed ROW-major block: the same message at the same index."""
+    for i in range(n_rows * n_cols):
+        var v = src.unsafe_load(i)
+        var bits = bitcast[DType.uint32](v)
+        if (bits & 0x7F800000) == 0x7F800000:
+            var what = String("infinity")
+            if (bits & 0x007FFFFF) != 0:
+                what = String("NaN")
+            raise Error(
+                "Input "
+                + name
+                + " contains "
+                + what
+                + " at flat index "
+                + String(i)
+                + " (row "
+                + String(i // n_cols)
+                + ", column "
+                + String(i % n_cols)
+                + " row-major); Isolation Forest does not accept non-finite"
+                + " values (DEVIATION 680)"
+            )
+    raise Error("Input " + name + ": the device finite scan and the named scan disagree")
+
+
+def _upload_rowmajor_query_device(
+    ctx: DeviceContext, name: String, src_addr: Int, n_rows: Int, n_cols: Int, pad: Int,
+    poison: Float32,
+) raises -> DeviceBuffer[DType.float32]:
+    """`IDN_IF_QUERY_DEVICE`: `check_finite_by_name` + `_upload_f32` of a
+    borrowed ROW-major block, on the device (one raw host-pointer copy, then
+    `if_finite_scan_ftz_kernel`). The same words as `_upload_f32` stages."""
+    var n = n_rows * n_cols
+    var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=src_addr)
+    var buf = ctx.enqueue_create_buffer[DType.float32](n + pad)
+    var flag = ctx.enqueue_create_buffer[DType.int32](1)
+    flag.enqueue_fill(Int32(0))
+    ctx.enqueue_copy(dst_buf=buf.create_sub_buffer[DType.float32](0, n), src_ptr=src)
+    comptime tpb = 256
+    var blocks = min((n + tpb * 16 - 1) // (tpb * 16), 65535)
+    blocks = max(blocks, (pad + tpb - 1) // tpb)
+    ctx.enqueue_function[if_finite_scan_ftz_kernel](
+        buf.unsafe_ptr(),
+        Int64(n),
+        Int64(pad),
+        poison,
+        flag.unsafe_ptr(),
+        grid_dim=(blocks, 1, 1),
+        block_dim=(tpb, 1, 1),
+    )
+    var bad = read_i32(ctx, flag, 1)
+    if bad[0] != 0:
+        _raise_first_nonfinite_rowmajor_view(name, src, n_rows, n_cols)
     _ = flag^
     return buf^
 
@@ -1045,10 +1129,13 @@ def _score_samples_device(
     n_cols: Int,
     mut trace: IdentityTrace,
     knobs: IFLaunchKnobs,
+    src_addr: Int = 0,
 ) raises -> DeviceBuffer[DType.float32]:
     """The device half of `ML::score_samples` (`isolation_forest.cu:
     161-177`): path lengths, then scores, both left on the device (so
-    `predict` thresholds them there as theirs does)."""
+    `predict` thresholds them there as theirs does). A nonzero `src_addr`
+    (`IDN_IF_QUERY_DEVICE`) lends the ROW-major query block instead of
+    `input_rowmajor`."""
     if not forest.fitted:
         raise Error("Model has not been fitted. Call fit() first.")
     if n_rows <= 0:
@@ -1060,9 +1147,15 @@ def _score_samples_device(
             + " features, the model was fitted with "
             + String(forest.n_features)
         )
-    check_finite_by_name("X_query", input_rowmajor, n_rows, n_cols)
+    var data: DeviceBuffer[DType.float32]
+    if src_addr != 0:
+        data = _upload_rowmajor_query_device(
+            ctx, "X_query", src_addr, n_rows, n_cols, knobs.pad, knobs.poison
+        )
+    else:
+        check_finite_by_name("X_query", input_rowmajor, n_rows, n_cols)
+        data = _upload_f32(ctx, input_rowmajor, n_rows * n_cols, knobs.pad, knobs.poison)
     var if_model = IsolationForest(forest.params)
-    var data = _upload_f32(ctx, input_rowmajor, n_rows * n_cols, knobs.pad, knobs.poison)
     var avg_path_lengths = _poisoned_f32(ctx, n_rows, knobs.pad, knobs.poison)
     var scores = _poisoned_f32(ctx, n_rows, knobs.pad, knobs.poison)
     if_model.compute_path_lengths(
@@ -1086,13 +1179,14 @@ def score_samples(
     n_cols: Int,
     mut trace: IdentityTrace,
     knobs: IFLaunchKnobs = IFLaunchKnobs.default(),
+    src_addr: Int = 0,
 ) raises -> List[Float32]:
     """`ML::score_samples` (`isolation_forest.cu:161-177`), PAPER
     convention (1 = anomaly, 0.5 = normal). The Python layer negates
     (`isolation_forest.pyx:959`). The card records `if.pathlen` and
     `if.scores`."""
     var scores = _score_samples_device(
-        ctx, forest, input_rowmajor, n_rows, n_cols, trace, knobs
+        ctx, forest, input_rowmajor, n_rows, n_cols, trace, knobs, src_addr
     )
     var out = read_f32(ctx, scores, n_rows)
     _ = scores^
@@ -1132,12 +1226,13 @@ def predict(
     n_cols: Int,
     threshold: Float32 = Float32(0.5),
     knobs: IFLaunchKnobs = IFLaunchKnobs.default(),
+    src_addr: Int = 0,
 ) raises -> List[Int32]:
     """`ML::predict` (`isolation_forest.cu:201-224`): scores, then `score
     > threshold ? 1 : -1` (1 = anomaly). The Python layer negates."""
     var trace = IdentityTrace.disabled()
     var scores = _score_samples_device(
-        ctx, forest, input_rowmajor, n_rows, n_cols, trace, knobs
+        ctx, forest, input_rowmajor, n_rows, n_cols, trace, knobs, src_addr
     )
     var preds = _poisoned_i32(ctx, n_rows, knobs.pad, knobs.poison)
     var blocks = (n_rows + knobs.path_tpb - 1) // knobs.path_tpb

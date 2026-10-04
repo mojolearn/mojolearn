@@ -387,6 +387,7 @@ from std.gpu import (
     thread_idx,
 )
 from std.sys.info import (
+    has_amd_gpu_accelerator,
     has_apple_gpu_accelerator,
     has_nvidia_gpu_accelerator,
 )
@@ -461,10 +462,21 @@ comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 
 comptime SPLIT_REDUCE_PINNED_DEFAULT = BUILD_MODE == NUMERIC_IDENTICAL
 
+comptime IDN_RF_SAMPLE_PER_NODE = BUILD_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF"]()
+    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""fam-forests (2026-10-04), IDENTICAL on every vendor: the per-node feature
+sampler below (`SAMPLE_PER_NODE_DEFAULT`). `sampled_columns_for_node` writes
+the same integers as `k` calls of `sampled_column_at` (one Feistel bijection
+per node instead of one per (node, column)), so no bit of a forest moves and
+the host column needs no change. `-D MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF`
+restores the per-column arm."""
+
 comptime SAMPLE_PER_NODE_DEFAULT = (
     BUILD_MODE == NUMERIC_FAST
     and not is_defined["MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN"]()
-)
+) or IDN_RF_SAMPLE_PER_NODE
 """FAST only: the fused setup's feature sampler runs one thread per node
 (`sampled_columns_for_node`) instead of one per (node, column), drawing
 each node's 24-key bijection once instead of `k` times. Same columns.
@@ -521,10 +533,25 @@ comptime SMALL_NODE_ROWS = 256 if is_defined[
 ]() else 4096
 """The largest node `small_node_split_kernel` takes."""
 
+comptime IDN_RF_HIST_ZERO = (
+    BUILD_MODE == NUMERIC_IDENTICAL
+    and not has_apple_gpu_accelerator()
+    and not (
+        is_defined["MOJOLEARN_IDN_RF_HIST_ZERO_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+"""fam-forests (2026-10-04), IDENTICAL on NVIDIA and AMD: zero-after-read
+(`HIST_ZERO_AFTER_READ_DEFAULT`, below), which Apple IDENTICAL already takes.
+One `hist_zero` launch fewer per column pass of every sampling round; zeros
+are zeros, so no bit moves. `-D MOJOLEARN_IDN_RF_HIST_ZERO_OFF` restores the
+per-round zero launch on NVIDIA and AMD."""
+
 comptime HIST_ZERO_AFTER_READ_DEFAULT = (
     (
         BUILD_MODE == NUMERIC_FAST
         or (BUILD_MODE == NUMERIC_IDENTICAL and has_apple_gpu_accelerator())
+        or IDN_RF_HIST_ZERO
     )
     and not is_defined["MOJOLEARN_RF_FAST_HIST_ZERO_OFF"]()
 )
@@ -2505,10 +2532,26 @@ def build_histograms_kernel[
 
 
 
+comptime IDN_RF_HIST_SIMD_AGG = (
+    BUILD_MODE == NUMERIC_IDENTICAL
+    and not has_apple_gpu_accelerator()
+    and not (
+        is_defined["MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+"""fam-forests (2026-10-04), IDENTICAL on NVIDIA and AMD: the warp
+aggregation below (`HIST_SIMD_AGG_DEFAULT`) in the column-tile histogram.
+A skewed column (Istella: the median column holds 74% of its rows in one
+value) otherwise sends most of a warp to one shared-memory address, where
+the atomics retry against each other. Unweighted bins only, whose fields
+are integers: the same per-bin totals in another order, so no bit moves.
+`-D MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF` restores one atomic per lane."""
+
 comptime HIST_SIMD_AGG_DEFAULT = (
     has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_RF_HIST_SIMD_AGG_OFF"]()
-)
+) or IDN_RF_HIST_SIMD_AGG
 """Apple, FAST since 2026-09-25 and IDENTICAL since 2026-09-28: in the column-tile histogram, the lanes of a SIMD group
 whose bin equals lane 0's bin add their contributions with one SIMD sum and
 lane 0 issues ONE threadgroup atomic for them; the other lanes add as
@@ -2753,6 +2796,22 @@ def launch_build_histograms_kernel[
                 and (
                     has_nvidia_gpu_accelerator()
                     or has_apple_gpu_accelerator()
+                    # fam-forests (2026-10-04), IDENTICAL on AMD: the
+                    # four-column tile there too (integer / fixed-point
+                    # bins added by atomics, so the same histogram cells
+                    # as the one-column route: no bit moves). `-D
+                    # MOJOLEARN_IDN_RF_HIST_COLUMNS4_AMD_OFF` restores the
+                    # one-column route on AMD.
+                    or (
+                        has_amd_gpu_accelerator()
+                        and BUILD_MODE == NUMERIC_IDENTICAL
+                        and not (
+                            is_defined[
+                                "MOJOLEARN_IDN_RF_HIST_COLUMNS4_AMD_OFF"
+                            ]()
+                            or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+                        )
+                    )
                 )
             )
             comptime USE4 = (
