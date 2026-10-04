@@ -7,6 +7,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from std.atomic import Atomic
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.device_zero import enqueue_fill
@@ -1039,7 +1040,7 @@ def upload_scale(
 # leaves followed by an upload (or preceded by a readback). They are integer
 # work, so moving them changes no bit on any vendor or in the host column.
 
-#: Threads of the one-block leaf-size fold. Its shared page is
+#: Threads per block of the leaf-size fold. Its shared page is
 #: `LEAF_REDUCE_BLOCK` words (1 KiB), far under every vendor's limit.
 comptime LEAF_REDUCE_BLOCK = 256
 comptime LEAF_REDUCE_SUM = Int32(0)
@@ -1110,10 +1111,11 @@ def leaf_size_reduce_kernel(
 ):
     """`sizes[0..n)` folded to ONE word at `dst[out_slot]`: the sum
     (`LEAF_REDUCE_SUM`, the root-coverage invariant) or the max
-    (`LEAF_REDUCE_MAX`, the next level's launch bound). ONE block of
-    `LEAF_REDUCE_BLOCK` threads, each striding the leaves, then a shared
-    tree. Integer arithmetic: every vendor and every fold order give the
-    same word."""
+    (`LEAF_REDUCE_MAX`, the next level's launch bound). One thread per
+    leaf over `ceil(n / LEAF_REDUCE_BLOCK)` blocks; each block folds its
+    tile in shared memory and thread 0 merges it into the (pre-zeroed)
+    word with an integer atomic. Integer add and max are order-free, so
+    every vendor and every block schedule give the same word."""
     comptime assert LEAF_REDUCE_BLOCK * 4 <= 16384, "leaf fold shared page"
     var sh = stack_allocation[
         LEAF_REDUCE_BLOCK,
@@ -1121,34 +1123,31 @@ def leaf_size_reduce_kernel(
         address_space=AddressSpace.SHARED,
     ]()
     var tid = Int(thread_idx.x)
-    var n = Int(n_in)
+    var i = Int(block_idx.x) * LEAF_REDUCE_BLOCK + tid
     var want_max = op == LEAF_REDUCE_MAX
     var acc = UInt32(0)
-    var i = tid
-    while i < n:
-        var v = sizes.unsafe_load(i)
-        if want_max:
-            if v > acc:
-                acc = v
-        else:
-            acc = acc + v
-        i += LEAF_REDUCE_BLOCK
+    if i < Int(n_in):
+        acc = sizes.unsafe_load(i)
     sh[unsafe_offset=tid] = acc
     barrier()
     var active = LEAF_REDUCE_BLOCK // 2
     while active > 0:
         if tid < active:
-            var a = sh[unsafe_offset=tid]
-            var b = sh[unsafe_offset=tid + active]
+            var x = sh[unsafe_offset=tid]
+            var y = sh[unsafe_offset=tid + active]
             if want_max:
-                if b > a:
-                    sh[unsafe_offset=tid] = b
+                if y > x:
+                    sh[unsafe_offset=tid] = y
             else:
-                sh[unsafe_offset=tid] = a + b
+                sh[unsafe_offset=tid] = x + y
         barrier()
         active = active // 2
     if tid == 0:
-        dst.unsafe_store(Int(out_slot), sh[unsafe_offset=0])
+        var v = sh[unsafe_offset=0]
+        if want_max:
+            _ = Atomic.max(dst.unsafe_offset(Int(out_slot)), v)
+        else:
+            _ = Atomic.fetch_add(dst.unsafe_offset(Int(out_slot)), v)
 
 
 def enqueue_leaf_iota(
@@ -1175,10 +1174,15 @@ def enqueue_leaf_size_reduce(
     mut dst: DeviceBuffer[DType.uint32],
     out_slot: Int = 0,
 ) raises:
-    """One-word fold of the first `n` leaf sizes; see the kernel."""
+    """One-word fold of the first `n` leaf sizes; see the kernel. `dst` is
+    zeroed first (the blocks merge into it atomically)."""
+    enqueue_fill(ctx, dst, UInt32(0))
+    var blocks = (n + LEAF_REDUCE_BLOCK - 1) // LEAF_REDUCE_BLOCK
+    if blocks < 1:
+        return
     ctx.enqueue_function[leaf_size_reduce_kernel](
         sizes.unsafe_ptr(), Int32(n), op, dst.unsafe_ptr(), Int32(out_slot),
-        grid_dim=(1, 1, 1),
+        grid_dim=(blocks, 1, 1),
         block_dim=(LEAF_REDUCE_BLOCK, 1, 1),
     )
 
