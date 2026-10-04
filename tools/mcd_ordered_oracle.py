@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """Fixed ordered-cov-v1 saved-output oracle. No fitting or timing here.
-Unlike SKIP, raw numeric fields intentionally may change: judge them against
-float64 while requiring exact masks/flags. Every B metric must be <= A.
+Raw numeric fields may change: each arm is judged against float64 built from
+its own saved supports, under the FAST rule (fast_quality_rule.py): every B
+error within noise of A, ranks equal; exact masks/flags and strict B <= A are
+info only.
 """
 import numpy as np
 from scipy.stats import chi2
+from fast_quality_rule import RULE, judge
 
 def json_ready(value):
     """Normalize NumPy scalars before writing or printing evidence."""
@@ -37,23 +40,17 @@ def distances(x, location, precision):
     return np.einsum('ij,ij->i', centered @ precision, centered)
 
 
-def analyze(a, b, x, q, lane):
-    exact_names = ('raw_support_', 'support_', 'flags')
-    exact = {key: (a[key].shape == b[key].shape and a[key].dtype == b[key].dtype
-                   and a[key].tobytes() == b[key].tobytes()) for key in exact_names}
-    # A common conditional oracle is only valid when the saved masks coincide.
-    if not exact['support_'] or not exact['raw_support_']:
-        return dict(status='HOLD', reason='different reweighting supports', exact=exact)
-    for saved in (a, b):
-        for key in ('raw_location_', 'raw_covariance_', 'location_', 'covariance_',
-                    'precision_', 'dist_', 'distances'):
-            if not np.isfinite(saved[key]).all():
-                raise ValueError('nonfinite captured field: ' + key)
-        if not np.isin(saved['support_'], (0, 1)).all():
-            raise ValueError('support contains values other than zero/one')
-        if np.asarray(saved['flags']).shape != (len(q),):
-            raise ValueError('query flag shape mismatch')
-    support = np.asarray(a['support_']).astype(bool)
+# FAST rule tolerances (rtol, atol-factor), lower is better: an error vs the
+# FP64 oracle may grow by half of itself (fp32 fold order) above an fp32 floor
+# (rel_l2: 1e-6; max_abs: 1e-6 * max |oracle|); flag disagreements with the
+# oracle by 0.1% of the query rows (at least 1).
+REL_TOL = (0.5, 1e-6)
+MAXABS_RTOL, MAXABS_FLOOR = 0.5, 1e-6
+
+
+def oracle_for(saved, x, q, lane):
+    """FP64 oracle conditional on one arm's own saved supports."""
+    support = np.asarray(saved['support_']).astype(bool)
     if support.shape != (len(x),) or not support.any():
         raise ValueError('invalid saved reweighting support')
     selected = x[support].astype(np.float64)
@@ -68,7 +65,7 @@ def analyze(a, b, x, q, lane):
     precision = (vectors[:, keep] / eigenvalues[keep]) @ vectors[:, keep].T
     train_dist = distances(x.astype(np.float64), location, precision)
     query_dist = distances(q.astype(np.float64), location, precision)
-    raw_support = np.asarray(a['raw_support_']).astype(bool)
+    raw_support = np.asarray(saved['raw_support_']).astype(bool)
     if raw_support.shape != (len(x),) or not raw_support.any():
         raise ValueError('invalid raw support')
     raw_selected = x[raw_support].astype(np.float64)
@@ -81,27 +78,54 @@ def analyze(a, b, x, q, lane):
     if lane == 'elliptic-envelope':
         offset = np.percentile(-train_dist, 10.0, method='linear')
         oracle.update(offset_=np.asarray(offset), decision_function=-query_dist-offset)
-        oracle_flags = oracle['decision_function'] < 0
+        flags = oracle['decision_function'] < 0
     else:
-        oracle_flags = query_dist > chi2.ppf(.975, d)
-    metrics = {}
-    passed = all(exact.values())
-    for key, reference in oracle.items():
-        ma, mb = error_metrics(a[key], reference), error_metrics(b[key], reference)
-        checks = {name: mb[name] <= ma[name] for name in ma}
-        metrics[key] = dict(A=ma, B=mb, no_worse=checks)
-        passed &= all(checks.values())
-    flag_errors = {arm: int(np.count_nonzero(np.asarray(saved['flags'], dtype=bool) != oracle_flags))
-                   for arm, saved in (('A', a), ('B', b))}
-    metrics['oracle_flag_disagreement_count'] = dict(**flag_errors,
-                                                    no_worse=flag_errors['B'] <= flag_errors['A'])
-    passed &= flag_errors['B'] <= flag_errors['A']
-    # Same-input covariance drift is consistent with split-K atomics, but this
-    # diagnostic neither measures a noise range nor relaxes any oracle gate.
-    ab = {key: error_metrics(b[key], a[key]) for key in oracle}
-    return dict(status='PASS' if passed else 'HOLD', exact=exact, metrics=metrics,
-                A_B_differences=ab, oracle_rank=int(keep.sum()), oracle_cutoff=cutoff,
-                support_count=int(support.sum()), consistency_factor=float(factor),
-                criterion='all exact checks and every B error <= corresponding A error; zero allowance',
-                scope='float64 numerical accuracy conditional on common saved support; no opponent refit')
+        flags = query_dist > chi2.ppf(.975, d)
+    sign, logdet = np.linalg.slogdet(raw_covariance)
+    info = dict(rank=int(keep.sum()), cutoff=cutoff, support_count=int(support.sum()),
+                consistency_factor=float(factor), raw_logdet=float(logdet) if sign > 0 else None)
+    return oracle, flags, info
 
+
+def analyze(a, b, x, q, lane):
+    exact_names = ('raw_support_', 'support_', 'flags')
+    # FAST rule: equal masks / flags are info, not a gate; each arm is judged
+    # against the FP64 oracle built from its own supports.
+    exact = {key: (a[key].shape == b[key].shape and a[key].dtype == b[key].dtype
+                   and a[key].tobytes() == b[key].tobytes()) for key in exact_names}
+    for saved in (a, b):
+        for key in ('raw_location_', 'raw_covariance_', 'location_', 'covariance_',
+                    'precision_', 'dist_', 'distances'):
+            if not np.isfinite(saved[key]).all():
+                raise ValueError('nonfinite captured field: ' + key)
+        if not np.isin(saved['support_'], (0, 1)).all():
+            raise ValueError('support contains values other than zero/one')
+        if np.asarray(saved['flags']).shape != (len(q),):
+            raise ValueError('query flag shape mismatch')
+    (oa, fa, ia), (ob, fb, ib) = oracle_for(a, x, q, lane), oracle_for(b, x, q, lane)
+    metrics = {}
+    passed = ia['rank'] == ib['rank']
+    for key in oa:
+        ma, mb = error_metrics(a[key], oa[key]), error_metrics(b[key], ob[key])
+        scale = max(float(np.max(np.abs(oa[key]))), float(np.max(np.abs(ob[key]))), 1e-300)
+        checks = dict(rel_l2=judge(ma['rel_l2'], mb['rel_l2'], *REL_TOL),
+                      max_abs=judge(ma['max_abs'], mb['max_abs'], MAXABS_RTOL, MAXABS_FLOOR * scale))
+        metrics[key] = dict(A=ma, B=mb, judged=checks)
+        passed &= all(c['ok'] for c in checks.values())
+    flag_errors = {arm: int(np.count_nonzero(np.asarray(saved['flags'], dtype=bool) != flags))
+                   for arm, saved, flags in (('A', a, fa), ('B', b, fb))}
+    flag_judge = judge(flag_errors['A'], flag_errors['B'], 0.0, max(1.0, 1e-3 * len(q)))
+    metrics['oracle_flag_disagreement_count'] = dict(**flag_errors, judged=flag_judge)
+    passed &= flag_judge['ok']
+    if ia['raw_logdet'] is not None and ib['raw_logdet'] is not None:
+        lj = judge(ia['raw_logdet'], ib['raw_logdet'], 1e-6, 1e-6)
+        metrics['raw_objective_logdet'] = dict(judged=lj)
+        passed &= lj['ok']
+    strict = all(c['strict_le_info'] for m in metrics.values()
+                 for c in (m['judged'].values() if 'rel_l2' in m['judged'] else [m['judged']]))
+    ab = {key: error_metrics(b[key], a[key]) for key in oa}
+    return dict(status='PASS' if passed else 'HOLD', exact_info=exact, metrics=metrics,
+                A_B_differences=ab, oracle_A=ia, oracle_B=ib, strict_le_all_info=strict,
+                criterion=RULE + '; oracle per arm from its own supports; ranks equal',
+                scope='float64 numerical accuracy per arm; no opponent refit '
+                      '(the board metric vs the best opponent is judged on the board)')

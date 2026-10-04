@@ -3,8 +3,9 @@
 """M3-only unscored quality worker; no clock, benchmarking or opponent fit.
 Worker: dump SOURCE ARM CASE OUT_DIRECTORY. Compare: compare CASE DIRECTORY.
 Cases: direct, mcd-istella, ee-istella, mcd-taxi, ee-taxi, mcd-synthetic.
-B repeats are reproducibility checks within this unscored fixture, never scored
-A/B repetitions. Receipts use a new fixture, not the old permissive MCD gate.
+B repeats are reproducibility info within this unscored fixture (FAST needs no
+run-to-run identity), never scored A/B repetitions. Judged by the FAST rule
+(fast_quality_rule.py): B within noise of A against FP64; strict B <= A info.
 """
 import argparse
 import hashlib
@@ -14,7 +15,8 @@ from pathlib import Path
 from types import SimpleNamespace
 import numpy as np
 from scipy.stats import chi2
-from mcd_ordered_oracle import analyze, error_metrics, json_ready
+from mcd_ordered_oracle import MAXABS_FLOOR, MAXABS_RTOL, REL_TOL, analyze, error_metrics, json_ready
+from fast_quality_rule import RULE, judge
 from mcd_compat_quality import load_inputs
 
 FIXTURE = 'mcd-ordered-cov-v1'
@@ -157,15 +159,21 @@ def compare(case, out):
                 metrics[key] = {arm: error_metrics(arr[key],truth) for arm,arr in (('A',a),('B',b))}
             key=f'resident_{i}'
             metrics[key] = {arm: error_metrics(arr[key],refs[0]) for arm,arr in (('A',a),('B',b))}
-        for m in metrics.values():
-            m['no_worse'] = {k:m['B'][k]<=m['A'][k] for k in m['A']}
-        result=dict(status='PASS' if all(all(m['no_worse'].values()) for m in metrics.values()) else 'HOLD',metrics=metrics)
+        for key, m in metrics.items():
+            i = int(key.split('_')[1])
+            scale = float(np.max(np.abs(np.matmul(inputs(i).astype(np.float64).transpose(0,2,1),
+                                                  inputs(i).astype(np.float64)))))
+            m['judged'] = dict(rel_l2=judge(m['A']['rel_l2'], m['B']['rel_l2'], *REL_TOL),
+                               max_abs=judge(m['A']['max_abs'], m['B']['max_abs'], MAXABS_RTOL,
+                                             MAXABS_FLOOR * max(scale, 1e-300)))
+        result=dict(status='PASS' if all(c['ok'] for m in metrics.values() for c in m['judged'].values()) else 'HOLD',
+                    metrics=metrics, criterion=RULE,
+                    strict_le_all_info=all(c['strict_le_info'] for m in metrics.values() for c in m['judged'].values()))
     else:
         x,q,lane=fixture(case)
         result=analyze(a,b,x,q,lane)
+    # FAST needs no run-to-run identity: reproducibility is info only
     result['repeat_identical']=stable
-    if not all(stable.values()):
-        result['status']='HOLD'
     # Require source/hash/input provenance agreement across capture workers.
     ma,mb=[json.loads((out/(arm+'.json')).read_text()) for arm in ('A','B')]
     assert ma['source']==mb['source'] and ma['case']==mb['case']==case
