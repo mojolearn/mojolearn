@@ -196,7 +196,7 @@ def _rbc_rows(
         except:
             fp[rank] = 1
     host_parallelize(task, count)
-    for rank in range(count):
+    for rank in range(count):  # small-loop(count: one entry per GPU shard): reads each device's failure word, no data
         if failures[rank] != 0:
             raise Error("DBSCAN neighborhood shard failed: " + String(rank))
     # COUNT MODE NEVER REFUSES. Each shard's count is exact (the count pass
@@ -206,7 +206,7 @@ def _rbc_rows(
     # rather than refusing; nothing is merged and nothing reads `ia` or `vd`.
     if mode == 0:
         var exact = 0
-        for rank in range(count):
+        for rank in range(count):  # small-loop(count: one entry per GPU shard): adds the per-device exact edge counts, no data
             exact += shards[rank].edges
         if exact > 2147483647:
             _ = shards^

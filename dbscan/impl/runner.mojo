@@ -247,7 +247,8 @@ comptime IDN_DBSCAN_RBC_DEAD_READS = (
 #: back, in place of downloading the core mask and the labels (5 bytes per
 #: row) and walking them on the host. Same predicate on the same values, so
 #: the same batches take the pass.
-#: `-D MOJOLEARN_IDN_DBSCAN_BORDER_NEEDS_DEVICE_OFF=1` restores the host walk.
+#: cpu3-neighbors (2026-10-04): the device decision is now the only route in
+#: every mode; the host walk and this define's off arm are gone from the fit.
 comptime IDN_DBSCAN_BORDER_NEEDS_DEVICE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
@@ -658,7 +659,7 @@ their code branches on is this Bool.
     var maxklen = List[Int]()
     var pend_start = List[Int]()
     var pend_rows = List[Int]()
-    for b0 in range(n_batches):
+    for b0 in range(n_batches):  # small-loop(n_batches: one pending range per row batch): builds the batch plan, a launch-argument list
         pend_start.append(b0 * batch)
         pend_rows.append(min(n_rows - b0 * batch, batch))
     var n_splits = 0
@@ -864,7 +865,7 @@ their code branches on is this Bool.
 
     # `Index_ maxadjlen = *std::max_element(...); adj_graph.resize(maxadjlen)`
     var maxadjlen = 1
-    for b in range(n_batches):
+    for b in range(n_batches):  # small-loop(n_batches: one adjacency length per row batch): max of the plan's per-batch lengths sizes one buffer
         if batchadjlen[b] > maxadjlen:
             maxadjlen = batchadjlen[b]
     var col_ind = ctx.enqueue_create_buffer[DType.int32](maxadjlen)
@@ -895,7 +896,7 @@ their code branches on is this Bool.
         # `registers.cuh:1431` allocates the `n x max_k` scratch inside
         # each max_k call; `maxklen` is fully known here, so ours is one
         # buffer at the largest size any one-pass batch will ask for.
-        for b1 in range(1, n_batches):
+        for b1 in range(1, n_batches):  # small-loop(n_batches: one plan entry per row batch): sizes the max-k scratch from the plan, no row data
             var np_b = plan_rows[b1]
             if np_b <= 0:
                 break
@@ -1112,51 +1113,29 @@ their code branches on is this Bool.
         # label: a non-core row still at MAX_LABEL after the merges has no
         # core neighbour (its own batch pulls from every core neighbour, the
         # core mask being global), so it is noise in every batching.
-        var needs_device = False
-        comptime if IDN_DBSCAN_BORDER_NEEDS_DEVICE:
-            needs_device = True
-        var h_core = ctx.enqueue_create_host_buffer[DType.uint8](
-            1 if needs_device else n_rows
-        )
-        var h_lab = ctx.enqueue_create_host_buffer[DType.int32](
-            1 if needs_device else n_rows
-        )
+        # cpu3-neighbors: the device decision is the only route (every mode
+        # and column); the host walk over the downloaded core mask and
+        # labels is gone from the GPU fit.
         var d_needs = ctx.enqueue_create_buffer[DType.int32](n_batches)
         var h_needs = ctx.enqueue_create_host_buffer[DType.int32](n_batches)
-        if needs_device:
-            for nb in range(n_batches):
-                h_needs.unsafe_ptr().unsafe_store(nb, Int32(0))
-            ctx.enqueue_copy(dst_buf=d_needs, src_ptr=h_needs.unsafe_ptr())
-            for nb2 in range(n_batches):
-                var np_n = plan_rows[nb2]
-                if np_n > 0:
-                    ctx.enqueue_function[border_needs_kernel](
-                        d_needs.unsafe_ptr(), core.unsafe_ptr(),
-                        labels.unsafe_ptr(), Int32(nb2),
-                        Int32(plan_start[nb2]), Int32(np_n),
-                        grid_dim=((np_n + TPB - 1) // TPB, 1, 1),
-                        block_dim=(TPB, 1, 1),
-                    )
-            ctx.enqueue_copy(dst_ptr=h_needs.unsafe_ptr(), src_buf=d_needs)
-        else:
-            ctx.enqueue_copy(dst_ptr=h_core.unsafe_ptr(), src_buf=core)
-            ctx.enqueue_copy(dst_ptr=h_lab.unsafe_ptr(), src_buf=labels)
+        ctx.enqueue_memset(d_needs, Int32(0))
+        for nb2 in range(n_batches):
+            var np_n = plan_rows[nb2]
+            if np_n > 0:
+                ctx.enqueue_function[border_needs_kernel](
+                    d_needs.unsafe_ptr(), core.unsafe_ptr(),
+                    labels.unsafe_ptr(), Int32(nb2),
+                    Int32(plan_start[nb2]), Int32(np_n),
+                    grid_dim=((np_n + TPB - 1) // TPB, 1, 1),
+                    block_dim=(TPB, 1, 1),
+                )
+        ctx.enqueue_copy(dst_ptr=h_needs.unsafe_ptr(), src_buf=d_needs)
         ctx.synchronize()
         var bb = n_batches - 1
         while bb >= 0:
             var start_b = plan_start[bb]
             var np_b = plan_rows[bb]
-            var needs = False
-            if needs_device:
-                needs = h_needs.unsafe_ptr().unsafe_load(bb) != Int32(0)
-            else:
-                for r in range(start_b, start_b + max(np_b, 0)):
-                    if (
-                        h_core.unsafe_ptr().unsafe_load(r) == 0
-                        and h_lab.unsafe_ptr().unsafe_load(r) != MAX_LABEL
-                    ):
-                        needs = True
-                        break
+            var needs = h_needs.unsafe_ptr().unsafe_load(bb) != Int32(0)
             if not needs:
                 bb -= 1
                 continue
@@ -1207,8 +1186,6 @@ their code branches on is this Bool.
                 )
                 ctx.synchronize()
             bb -= 1
-        _ = h_core^
-        _ = h_lab^
         _ = d_needs^
         _ = h_needs^
         if phase_timing:

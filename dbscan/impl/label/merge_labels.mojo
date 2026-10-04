@@ -220,7 +220,7 @@ def merge_labels(
                 )
             ctx.enqueue_copy(dst_ptr=h_m.unsafe_ptr(), src_buf=d_m)
             ctx.synchronize()
-            for pr2 in range(1, gruns + 1):
+            for pr2 in range(1, gruns + 1):  # small-loop(gruns: at most IDN_DBSCAN_CC_CHUNK per-pass flags): reads the chunk's convergence words, no data
                 git += 1
                 if h_m.unsafe_ptr().unsafe_load(pr2) == Int32(0):
                     merged = True

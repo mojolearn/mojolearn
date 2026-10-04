@@ -44,7 +44,7 @@ give the same arrays.
 
 THE ONE ORDER CHOICE. Their `thrust::sort_by_key` of the exemplars by
 original label (`:208-211`) is not specified stable. Ours sorts on the
-packed key `(label << 32) | point index` (the `merge_sort_u64_with_index`
+packed key `(label << 32) | point index` (the `merge_sort_u64_with_index_host`
 DEVIATION 1611 already uses), a total order that equals a stable sort of
 the ascending `copy_if` output. The exemplar ORDER feeds nothing but a
 minimum over each label's exemplars in `membership_vector`, which does not
@@ -79,7 +79,7 @@ from hdbscan.impl.detail.tree_device import (
     td_upload_i32,
 )
 from hierarchy.checks.edge_order import weight_order_key, weight_order_unkey
-from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index
+from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index_host
 
 
 comptime PD_FLOAT32_LOWEST = Float32(-3.4028234663852886e38)
@@ -224,7 +224,7 @@ def generate_prediction_data_host(
             var lab = UInt64(Int(exemplar_labels[j])) & UInt64(0xFFFFFFFF)
             keys.append((lab << UInt64(32)) | UInt64(Int(exemplar_idx[j])))
             order.append(j)
-        merge_sort_u64_with_index(keys, order)
+        merge_sort_u64_with_index_host(keys, order)
         var s_idx = List[Int32](capacity=n_exemplars)
         var s_lab = List[Int32](capacity=n_exemplars)
         for j in range(n_exemplars):

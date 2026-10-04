@@ -105,7 +105,7 @@ from hierarchy.checks.linkage_oracle import (
     host_pinned_distance,
     host_row_norms_pinned,
 )
-from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index
+from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index_host
 from checks.numerics import (
     ftz,
     identical_div,
@@ -1335,7 +1335,7 @@ def hdbh_fit(
             var v = mst.dst[i]
             keys.append(pack_edge_key(weight_order_key(mst.weights[i]), edge_lo(u, v), edge_hi(u, v)))
             order.append(i)
-        merge_sort_u64_with_index(keys, order)
+        merge_sort_u64_with_index_host(keys, order)
         for t in range(n_edges):
             var i = order[t]
             lo.append(edge_lo(mst.src[i], mst.dst[i]))
