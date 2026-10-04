@@ -54,7 +54,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
-from gbdt.binary_prediction import binary_prediction_host
+from gbdt.binary_prediction import binary_prediction_device, sigmoid_f64_device
 
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
@@ -79,13 +79,6 @@ from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
     identical_exp64,
-)
-from std.memory import bitcast as _hr2_bitcast
-from checks.soft_f64 import (
-    SF64_ONE,
-    sf64_ftz,
-    sf64_sigmoid_f64,
-    sf64_sub,
 )
 from gbdt.resident_model import (
     gbdt_resident_info,
@@ -142,19 +135,17 @@ def gbdt_binary_prediction_binding[probabilities: Bool, dtype: DType](
     var n = Int(py=params[0])
     if n <= 0 or n > 2147483647:
         raise Error("binary prediction: positive n<=Int32.max required")
-    var rp = _f32_ptr(Int(py=raw_addr))
+    var raw_address = Int(py=raw_addr)
     var address = Int(py=out_addr)
+    if raw_address == 0:
+        raise Error("mojolearn: null buffer address")
     if address == 0:
         raise Error("binary prediction: null output")
-    var op = MutPointer[Scalar[dtype], MutUntrackedOrigin](unsafe_from_address=address)
-    var raw = List[Float32]()
-    for i in range(n):
-        raw.append(rp.unsafe_load(i))
     var count = 2*n if probabilities else n
     with GILReleased(Python()):
-        var result = binary_prediction_host[probabilities,dtype](raw,n)
-        for i in range(count):
-            op.unsafe_store(i,result[i])
+        # cpu2-l6-bindings: upload from the caller's pointer, device
+        # finiteness scan, output copied straight into the caller's buffer
+        binary_prediction_device[probabilities,dtype](raw_address,address,n)
     return PythonObject(count)
 
 
@@ -167,13 +158,17 @@ def gbdt_sigmoid_binding(
     used numpy's exp, whose last bit is the host libm's); under FAST this
     is the host stdlib and the wrapper keeps numpy. Both buffers are
     float64, the caller's."""
-    var rp = _f64_ptr(Int(py=raw_addr))
-    var op = _f64_ptr(Int(py=out_addr))
     var count = Int(py=n)
-    for i in range(count):
-        var r = rp.unsafe_load(i)
-        # lane hr2-gbdt-host: soft binary64, every column's words
-        op.unsafe_store(i, _hr2_bitcast[DType.float64](sf64_sigmoid_f64(_hr2_bitcast[DType.uint64](r))))
+    if count < 0:
+        raise Error("gbdt_sigmoid: n must be non-negative")
+    var raw_address = Int(py=raw_addr)
+    var out_address = Int(py=out_addr)
+    if count > 0 and (raw_address == 0 or out_address == 0):
+        raise Error("mojolearn: null buffer address")
+    with GILReleased(Python()):
+        # cpu2-l6-bindings: soft binary64 on the device (`sigmoid_f64_kernel`),
+        # the words the host loop wrote; the host column keeps its loop
+        sigmoid_f64_device(raw_address, out_address, count, False, False)
     return PythonObject(count)
 
 
@@ -195,23 +190,19 @@ def gbdt_sigmoid_pair_binding(
     (DEVIATION 2333, retired where the binary carries this entry point);
     a lone subtraction has no fusion partner and no association, so the
     column's bits are the Python column's on every host."""
-    var rp = _f64_ptr(Int(py=raw_addr))
-    var op = _f64_ptr(Int(py=out_addr))
     var count = Int(py=n)
     if count < 0:
         raise Error("gbdt_sigmoid_pair: n must be non-negative")
-    for i in range(count):
-        var r = rp.unsafe_load(i)
-        # lane hr2-gbdt-host: `resident_link_kernel`'s pair, soft binary64
-        var pb = sf64_ftz(sf64_sigmoid_f64(_hr2_bitcast[DType.uint64](r)))
-        var p = _hr2_bitcast[DType.float64](pb)
-        var q = _hr2_bitcast[DType.float64](sf64_sub(SF64_ONE, pb))
-        comptime if GBDT_PAIR_SABOTAGE:
-            op.unsafe_store(2 * i, p)
-            op.unsafe_store(2 * i + 1, q)
-        else:
-            op.unsafe_store(2 * i, q)
-            op.unsafe_store(2 * i + 1, p)
+    var raw_address = Int(py=raw_addr)
+    var out_address = Int(py=out_addr)
+    if count > 0 and (raw_address == 0 or out_address == 0):
+        raise Error("mojolearn: null buffer address")
+    with GILReleased(Python()):
+        # cpu2-l6-bindings: `resident_link_kernel`'s pair, soft binary64,
+        # on the device (`sigmoid_f64_kernel`); same words as the host loop
+        sigmoid_f64_device(
+            raw_address, out_address, count, True, GBDT_PAIR_SABOTAGE
+        )
     return PythonObject(count)
 
 
