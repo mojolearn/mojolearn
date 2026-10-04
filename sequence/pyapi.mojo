@@ -675,8 +675,17 @@ def mlp_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Py
     if N < 1 or D < 1 or O < 1 or N >= 16777216:
         raise Error("mlp_fit: N, D, O >= 1 and N < 2^24")
     var net = _mlp_net(ip, 14, D, O, ival(ip, 3), ival(ip, 4))
-    if len(ip) != 15 + len(net.sizes) - 2:
+    var n_ip = 15 + len(net.sizes) - 2
+    # cpu2-l11-neural: an optional trailing flag: 1 = Y holds N int32 class
+    # codes and the one-hot target is built on the executor, 2 = the codes
+    # are the (N, 1) float target.
+    if len(ip) != n_ip and len(ip) != n_ip + 1:
         raise Error("mlp_fit: the hidden layer count does not match the sizes given")
+    var y_codes = 0
+    if len(ip) == n_ip + 1:
+        y_codes = ival(ip, n_ip)
+        if y_codes < 0 or y_codes > 2 or (y_codes == 2 and O != 1):
+            raise Error("mlp_fit: the target-codes flag must be 0, 1 or 2 (2 with one output)")
     var batch = ival(ip, 9)
     var max_iter = ival(ip, 10)
     if batch < 1 or max_iter < 1:
@@ -685,7 +694,7 @@ def mlp_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Py
                          fptr(addrs[3], "loss_curve"), ival(ip, 5), ival(ip, 6), ival(ip, 7), ival(ip, 8) != 0,
                          batch, max_iter, ival(ip, 11) != 0, UInt64(ival(ip, 12)), ival(ip, 13),
                          fval(fp, 0), fval(fp, 1), fval(fp, 2), fval(fp, 3), fval(fp, 4),
-                         Float64(py=fp[5]), fval(fp, 6), Float64(py=fp[7]))
+                         Float64(py=fp[5]), fval(fp, 6), Float64(py=fp[7]), y_codes)
     return PythonObject(n_iter)
 
 
@@ -701,7 +710,13 @@ def mlp_predict_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) ra
     if N < 1 or D < 1 or O < 1 or chunk < 1:
         raise Error("mlp_predict: N, D, O, chunk >= 1")
     var net = _mlp_net(ip, 6, D, O, ival(ip, 3), ival(ip, 4))
-    mlp_predict(ex, net, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"), chunk)
+    # cpu2-l11-neural: an optional trailing flag, 1 = a one-output net writes
+    # the (N, 2) probability [1 - p, p] into `out`.
+    var n_ip = 7 + len(net.sizes) - 2
+    var proba2 = len(ip) == n_ip + 1 and ival(ip, n_ip) == 1 and O == 1
+    mlp_predict(ex, net, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"), chunk, proba2)
+    if proba2:
+        return PythonObject(N * 2)
     return PythonObject(N * O)
 
 

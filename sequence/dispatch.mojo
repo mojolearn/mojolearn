@@ -83,6 +83,10 @@ from sequence.ops import (
     OP_STL_LOESS,
     OP_STL_DESEAS,
     OP_STL_FINISH,
+    OP_ONE_HOT,
+    OP_PROBA2,
+    op_one_hot,
+    op_proba2,
     op_gemm,
     op_gemm_splitk,
     op_bias,
@@ -283,3 +287,7 @@ def apply[OP: Int](t: Int, a: Args):
         op_stl_deseas(t, a)
     elif OP == OP_STL_FINISH:
         op_stl_finish(t, a)
+    elif OP == OP_ONE_HOT:
+        op_one_hot(t, a)
+    elif OP == OP_PROBA2:
+        op_proba2(t, a)

@@ -35,6 +35,7 @@ from checks.numerics import (
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.math import fma as _std_fma
+from std.memory import bitcast
 
 comptime FP = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -168,6 +169,10 @@ comptime OP_STL_MA = 76
 comptime OP_STL_LOESS = 77
 comptime OP_STL_DESEAS = 78
 comptime OP_STL_FINISH = 79
+#: cpu2-l11-neural (2026-10-04): MLPClassifier's target and binary
+#: probability layouts on the executor, not in host NumPy.
+comptime OP_ONE_HOT = 80
+comptime OP_PROBA2 = 81
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0
@@ -857,6 +862,34 @@ def op_fill(t: Int, a: Args):
 
 def op_copy(t: Int, a: Args):
     a.p1.unsafe_store(t, a.p0.unsafe_load(t))
+
+
+def op_one_hot(t: Int, a: Args):
+    """From int32 class codes (their bits in p0's words): with i1 = 0,
+    p1[r, c] = 1.0 if code[r] is c else 0.0 over an (N, i0) row-major
+    target; with i1 = 1 (i0 = 1), p1[r] = Float32(code[r]). Exact."""
+    var k = a.i0
+    var r = t // k
+    var code = Int(bitcast[DType.int32](a.p0.unsafe_load(r)))
+    if a.i1 == 1:
+        a.p1.unsafe_store(t, Float32(code))
+        return
+    var c = t - r * k
+    var v = Float32(0.0)
+    if code == c:
+        v = Float32(1.0)
+    a.p1.unsafe_store(t, v)
+
+
+def op_proba2(t: Int, a: Args):
+    """p1[r, 0] = 1 - p0[r], p1[r, 1] = p0[r]: a logistic output as the
+    two-column probability (one float32 subtraction, as NumPy's `1 - p`)."""
+    var r = t // 2
+    var p = a.p0.unsafe_load(r)
+    if t - r * 2 == 0:
+        a.p1.unsafe_store(t, Float32(1.0) - p)
+    else:
+        a.p1.unsafe_store(t, p)
 
 
 def op_seq_out(t: Int, a: Args):

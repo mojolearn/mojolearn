@@ -1627,10 +1627,6 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_umap_impl.py	0	if
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_umap_impl.py	0	order = sorted({v for v in vals if v != -1}, key=lambda v: (str(type(v)), v))
 # why: pca-init zero singular value check (nc values) and the categorical target label coding over n Python objects; owed to the _labels Mojo encoder
 py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_umap_impl.py	0	order = sorted({v for v in vals if v != -1}, key=lambda v: (str(type(v)), v))
-# why: MLPClassifier one-hot target scatter (n x k) and the binary predict_proba [1 - p, p] (n rows) owed to mlp_fit taking int class codes and mlp_predict writing both columns (sequence/pyapi.mojo)
-py-np-compute	py-compute	pyglue-sweep	owed-py	python/mojolearn/_x_sequence_mlp.py	0	Y[np.arange(len(y)), inv] = 1.0
-# why: MLPClassifier one-hot target scatter (n x k) and the binary predict_proba [1 - p, p] (n rows) owed to mlp_fit taking int class codes and mlp_predict writing both columns (sequence/pyapi.mojo)
-py-np-compute	py-compute	pyglue-sweep	owed-py	python/mojolearn/_x_sequence_mlp.py	0	return np.ascontiguousarray(np.hstack([1 - p, p]), dtype=np.float32)
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_x_sequence_moe.py	0	for name, shape in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`

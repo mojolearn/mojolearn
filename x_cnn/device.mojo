@@ -17,7 +17,7 @@ from std.ffi import _Global
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_rsqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_rsqrt
 from checks.rtf_seam import rtf_mul_add
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_identical import (
@@ -1881,7 +1881,13 @@ def graph_op_device(a: List[Float32], b: List[Float32], aux: List[Float32], csr:
 # IDENTICAL only. The entries are always compiled; `idn_flags()` tells the
 # Python glue which of them to use (bit k = switch k is on), so each has its
 # own before arm and all are off under MOJOLEARN_IDN_ALL_OFF.
-comptime _FAM_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# cpu2-l11-neural (2026-10-04): FAST takes these plumbing forms too, on every
+# vendor (no bit moves, so nothing for FAST to keep on the host); the `_OFF`
+# defines still restore the List forms for an A/B, and MOJOLEARN_IDN_ALL_OFF
+# stays an IDENTICAL-only master.
+comptime _FAM_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_FAST or (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 #: bit 0: adaptive pooling through `adaptive_pool_m`. `-D MOJOLEARN_IDN_ADAPT_M_OFF`.
 comptime IDN_ADAPT_M = _FAM_IDN and not is_defined["MOJOLEARN_IDN_ADAPT_M_OFF"]()
 #: bit 1: SAGE max / L2 normalize / gcn_norm through `graph_op_m`, `gcn_norm_m`. `-D MOJOLEARN_IDN_GRAPH_M_OFF`.
