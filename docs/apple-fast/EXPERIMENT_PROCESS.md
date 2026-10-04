@@ -58,6 +58,55 @@ process for new lanes and manager reviews. Historical outcomes live in
   not a valid measurement. Repair infrastructure separately and preserve logs.
   Retry only the work that did not produce valid evidence, using explicit tags.
 
+## Efficient execution for new submissions
+
+These rules apply to future submissions. Do not restart, rewrite or interrupt
+claimed jobs to adopt them; preserve existing source pins, output directories
+and evidence. The manager remains the sole queue writer.
+
+1. **Prepare complete artifacts on M2.** Compile only the affected bindings and
+   explicit auxiliary dependencies. Record mode, defines, full source and binary
+   hashes for every artifact. FAST estimators can depend on an IDENTICAL base
+   binding for existing API validation; FAST core alone does not supply that
+   dependency. Check the actual API and required exports before submission.
+2. **Use verified binaries on M3.** New jobs use an allowlisted pinned-source
+   helper from an already prepared queue branch. No automatic native build,
+   dependency installation or build fallback on M3. A fresh isolated source tree
+   is acceptable; the helper installs/restores the verified artifacts. Do not
+   modify the running legacy runner to retrofit this rule into claimed jobs.
+3. **Preflight before queue insertion.** Verify the source exists in the M3
+   mirror, all required artifacts are staged and hash-correct, helper arguments
+   match their source contract, and the tag has no prior queue/result/output.
+   Missing prerequisites are infrastructure errors, never numerical failures.
+   A preflight receipt is readiness evidence only: quality and timing helpers
+   must revalidate source and artifacts when executing.
+4. **Reuse unchanged builds safely.** A tools-only harness repair may reuse an
+   older compiled source only after ancestor checks, an explicit changed-file
+   allowlist, zero native/production/config drift and exact manifest/hash checks.
+   Record both harness and compiled sources. Use a fresh tag for the repaired
+   job; never replay successful scored arms.
+5. **Prove useful reach before scaling out.** Use actual caller counters and
+   independent output-quality checks. NO_REACH is a control result, not admission
+   for timing. Start with representative reachable operations; expand to each
+   affected route and precision/layout contract before any broad default.
+6. **Separate measurement contracts.** Host-input and resident-input routes have
+   different setup costs. Declare boundaries and shapes before results; retain
+   completion and first output read. Do not infer kernel throughput from a
+   context/transfer-dominated total or create a new label just to repeat a score.
+7. **Keep compilation ahead of measurement.** Maintain source-ready,
+   build-verified, quality-passed and timing-admitted states. Compile the next
+   reviewed candidate on M2 while M3 works serially. Bound build concurrency by
+   memory/disk; remove only completed owned build trees, keeping source refs,
+   binary manifests and evidence. M3 cleanup/transfers remain serial queue jobs.
+8. **Batch readiness work, not timing workers.** Stage several completed pairs
+   in one transfer window and release it promptly. Reuse a prepared runner
+   branch and fetch bounded result summaries. Do not repeatedly copy full logs
+   or rebuild every family for a one-binding quality check.
+
+A passing miniature fixture does not certify all board shapes. Preserve broad
+coverage where needed; efficiency comes from removing redundant setup and
+uninformative experiments, not from shrinking quality requirements.
+
 ## Decide and maintain the toggle
 
 | State | Runtime default | Required action |
