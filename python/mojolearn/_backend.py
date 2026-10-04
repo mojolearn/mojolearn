@@ -630,48 +630,32 @@ def _read_plugin_marker(dist, filename, expected):
 
 
 def _check_plugins(pkg, present):
-    """Check aggregate/payload versions, declared target and ownership before selection."""
+    """Validate both vendor wheels and every registered architecture slot."""
     _PLUGINS_FOUND.clear()
     fix = gpu_plugins.reinstall_command(_CORE_VERSION)
     for vendor in gpu_plugins.vendors():
         row = gpu_plugins.plugin(vendor)
         dist = _find_distribution(row["distribution"], [_site_dir()])
         vdir = os.path.join(pkg, gpu_plugins.native_directory(vendor))
-        # Old vendor roots are never eligible on the new layout. In particular,
-        # their survival after an interrupted upgrade cannot override payloads.
         if _vendor_has_set(os.path.join(pkg, vendor)):
-            raise GpuPluginError(f"mojolearn: legacy {vendor} sets remain in a new payload install; {fix}")
-        payload_rows = [r for r in gpu_plugins.PAYLOADS.values()
-                        if r["vendor"] == vendor and r["release_enabled"]]
+            raise GpuPluginError(f"mojolearn: legacy {vendor} sets remain in a new vendor install; {fix}")
         if dist is None:
-            if vendor in present or any(_find_distribution(r["distribution"], [_site_dir()])
-                                        for r in payload_rows):
+            if vendor in present:
                 raise GpuPluginError(f"mojolearn: {vdir} carries sets but no {row['distribution']} "
                                      f"is installed beside this core; incomplete install; {fix}")
             continue
         if dist.version != _CORE_VERSION:
             raise GpuPluginError(f"mojolearn: {row['distribution']} {dist.version} and mojolearn "
                                  f"{_CORE_VERSION} must be the same version exactly; {fix}")
-        owned = []
-        for payload in payload_rows:
-            pdist = _find_distribution(payload["distribution"], [_site_dir()])
-            if pdist is None or pdist.version != _CORE_VERSION:
-                raise GpuPluginError(f"mojolearn: {payload['distribution']} is missing or is not "
-                                     f"the same version exactly ({_CORE_VERSION}); {fix}")
-            arches = [arch for arch in _arch_dirs(vdir) if arch in payload["arches"]]
-            if len(arches) != 1:
-                raise GpuPluginError(f"mojolearn: {payload['distribution']} holds no set or multiple "
-                                     f"sets; plugin files are missing or invalid; {fix}")
-            _read_plugin_marker(pdist, gpu_plugins.PAYLOAD_MARKER,
-                                gpu_plugins.payload_marker(payload["profile"], _CORE_VERSION, arches))
-            owned.extend(arches)
-        if sorted(owned) != _arch_dirs(vdir):
-            raise GpuPluginError(f"mojolearn: {vdir} contains sets no payload owns; {fix}")
+        arches = _arch_dirs(vdir)
+        if not gpu_plugins.valid_arches(row["profile"], arches):
+            raise GpuPluginError(f"mojolearn: {row['distribution']} has missing or unexpected "
+                                 f"architecture sets {arches}; {fix}")
         _read_plugin_marker(dist, gpu_plugins.PLUGIN_MARKER,
-                            gpu_plugins.plugin_marker(vendor, _CORE_VERSION, owned))
+                            gpu_plugins.plugin_marker(vendor, _CORE_VERSION, arches))
         _PLUGINS_FOUND[vendor] = {"distribution": row["distribution"], "version": dist.version,
                                   "location": _site_dir(), "code_format": "native",
-                                  "payloads": [r["distribution"] for r in payload_rows]}
+                                  "payloads": [row["distribution"]]}
 
 
 _BASELINE_SELECTION = None

@@ -2,6 +2,7 @@
 """Admit a bounded release smoke, without claiming full numerical certification."""
 import argparse
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -28,8 +29,10 @@ def digest(path):
 
 #: THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py): wheel-name
 #: prefix of each GPU plugin -> the runtime vendor its receipt must report.
-from verify_linux_surface_qualification import load_gpu_plugins
-_GPU_PACKAGES = load_gpu_plugins()
+_registry = Path(__file__).resolve().parents[1] / "python/mojolearn/gpu_plugins.py"
+_spec = importlib.util.spec_from_file_location("light_gpu_packages", _registry)
+_GPU_PACKAGES = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_GPU_PACKAGES)
 PLUGIN_ROWS = {r['wheel_name']: r for r in _GPU_PACKAGES.distribution_rows()}
 PLUGIN_VENDORS = {name: _GPU_PACKAGES.by_profile(row['profile'])
                   for name, row in PLUGIN_ROWS.items()}
@@ -106,7 +109,7 @@ def check(directory, source_commit, platform="all"):
                 require(len(inventories) == 1 and json.loads(archive.read(inventories[0])).get('source_commit') == source_commit,
                         'plugin packaged source mismatch')
             row = PLUGIN_ROWS[wheel.split('-', 1)[0]]
-            if row['role'] == 'payload':
+            if row['role'] in ('vendor', 'payload'):
                 require(report.get('installed', {}).get('gpu_arch') in row['arches'],
                         'payload receipt loaded another GPU architecture')
             require(core.split('-')[:2] == ['mojolearn', wheel.split('-')[1]],

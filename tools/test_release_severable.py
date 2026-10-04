@@ -126,7 +126,7 @@ class Pipelines(Base):
         self.assertIn("release-check", order, "the Apple column still runs: the Linux columns are diffed against it")
         self.assertIn("gpu-column-nvidia", order)
         self.assertIn("gpu-column-amd", order)
-        self.assertEqual(sorted(r.recorded("finish-line")["platforms"]), ["amd", "amd-gfx942", "linux", "nvidia", "nvidia-sm89", "nvidia-sm90"])
+        self.assertEqual(sorted(r.recorded("finish-line")["platforms"]), ["amd", "linux", "nvidia"])
         text = "\n".join(r.lines)
         self.assertIn("macos: FAILED at macos-smoke", text)
         self.assertIn("core-linux: PUBLISHED", text)
@@ -156,7 +156,7 @@ class Pipelines(Base):
         r.step_publish_macos = pub
         self.assertEqual(r.go(), 0)
         self.assertLess(order.index("publish-macos"), order.index("linux-assemble"))
-        self.assertEqual(sorted(r.recorded("finish-line")["platforms"]), ["amd", "amd-gfx942", "linux", "macos", "nvidia", "nvidia-sm89", "nvidia-sm90"])
+        self.assertEqual(sorted(r.recorded("finish-line")["platforms"]), ["amd", "linux", "macos", "nvidia"])
 
     def test_a_rerun_resumes_only_what_is_not_done(self):
         r, _ = self.staged(fail={"linux-joint-diff"})
@@ -170,20 +170,20 @@ class Pipelines(Base):
         self.assertIn("linux-joint-diff", order)
         # the finish line and the record run again for the newly published platforms
         self.assertIn("finish-line", order)
-        self.assertEqual(sorted(r2.recorded("record")["platforms"]), ["amd", "amd-gfx942", "linux", "macos", "nvidia", "nvidia-sm89", "nvidia-sm90"])
+        self.assertEqual(sorted(r2.recorded("record")["platforms"]), ["amd", "linux", "macos", "nvidia"])
         self.assertNotIn("linux-joint-diff", r2.state.get("failures", {}))
 
     def test_without_publish_both_pipelines_are_held(self):
         r, order = self.staged(publish=None)
-        for platform in ("nvidia-sm89", "nvidia-sm90", "amd-gfx942", "nvidia", "amd", "core-linux", "macos"):
+        for platform in ("nvidia", "amd", "core-linux", "macos"):
             setattr(r, "step_publish_" + platform.replace("-", "_"),
                     lambda platform=platform: r.publish(platform, None, None))
         self.assertEqual(r.go(), 1)
         text = "\n".join(r.lines)
-        self.assertIn("nvidia-sm89: HELD at publish-nvidia-sm89", text)
-        self.assertIn("amd-gfx942: HELD at publish-amd-gfx942", text)
+        self.assertIn("nvidia: HELD at publish-nvidia", text)
+        self.assertIn("amd: HELD at publish-amd", text)
         self.assertIn("macos: HELD at publish-macos", text)
-        self.assertTrue(r.state["failures"]["publish-nvidia-sm89"]["held"])
+        self.assertTrue(r.state["failures"]["publish-nvidia"]["held"])
         self.assertFalse(r.recorded("publish-core-linux"), "the core never publishes before both plugins")
 
     def test_the_pipelines_are_generic(self):
@@ -378,7 +378,7 @@ class Columns(Base):
             z.writestr("x", wheel_bytes)
         # the split set: both plugins beside the core
         self.plugins = []
-        for prefix in ("mojolearn_nvidia", "mojolearn_amd", "mojolearn_nvidia_sm89", "mojolearn_nvidia_sm90", "mojolearn_amd_gfx942"):
+        for prefix in ("mojolearn_nvidia", "mojolearn_amd"):
             p = final.parent / f"{prefix}-0.8.99-py3-none-manylinux_2_35_x86_64.whl"
             with zipfile.ZipFile(p, "w") as z:
                 z.writestr(f"mojolearn/{prefix}.txt", prefix)
@@ -422,7 +422,7 @@ class Columns(Base):
 
     def test_a_column_is_taken_for_a_byte_identical_wheel(self):
         r, final = self.setup_release()
-        self.earlier_amd(release.sha256(r.split_final("amd-gfx942")), final)
+        self.earlier_amd(release.sha256(r.split_final("amd")), final)
         self.assertIn("AMD column PASSED", r.step_gpu_column_amd())
         self.assertEqual(self.spawned, [], "nothing launched")
         out = r.rel / "column-amd"
@@ -448,7 +448,7 @@ class Columns(Base):
         self.tmp = pathlib.Path(self._t2.name)
         with mock.patch.dict(os.environ, MOJOLEARN_RELEASE_CHECK_DIR=str(self.tmp / "release-check")):
             r, final = self.setup_release()
-            self.earlier_amd(release.sha256(r.split_final("amd-gfx942")), final, lanes=("rf-clf", "knn"))
+            self.earlier_amd(release.sha256(r.split_final("amd")), final, lanes=("rf-clf", "knn"))
             with self.assertRaises(release.StepFailed):
                 r.step_gpu_column_amd()
         self.assertEqual(len(self.spawned), 1, "another lane selection: launched")
@@ -548,7 +548,7 @@ class SourceAndTooling(Base):
         self.assertIn("already published", str(cm.exception))
 
     def test_refreeze_is_refused_when_only_a_native_payload_published(self):
-        for profile in ("nvidia-sm89", "nvidia-sm90", "amd-gfx942"):
+        for profile in ("nvidia", "amd"):
             with self.subTest(profile=profile):
                 r = self.release(commit=X, refreeze=True)
                 r.state["steps"] = {"publish-" + profile: dict(done=True, commit=X, at="t", result="pypi")}
@@ -558,7 +558,7 @@ class SourceAndTooling(Base):
                 self.assertEqual(r.state["commit"], X)
 
     def test_resume_does_not_dispatch_an_already_published_native_payload(self):
-        for profile in ("nvidia-sm89", "nvidia-sm90", "amd-gfx942"):
+        for profile in ("nvidia", "amd"):
             with self.subTest(profile=profile):
                 r = self.release(commit=X)
                 step = "publish-" + profile
@@ -570,14 +570,14 @@ class SourceAndTooling(Base):
 
     def test_finish_record_is_invalidated_by_a_new_payload_publication(self):
         r = self.release(commit=X)
-        r.state["steps"] = {"publish-nvidia-sm89": dict(done=True, commit=X, at="t", result="pypi")}
-        receipt = dict(platforms=["nvidia-sm89"])
+        r.state["steps"] = {"publish-nvidia": dict(done=True, commit=X, at="t", result="pypi")}
+        receipt = dict(platforms=["nvidia"])
         self.assertTrue(r.skip_recorded("finish-line", receipt))
         self.assertTrue(r.skip_recorded("record", receipt))
-        r.state["steps"]["publish-nvidia-sm90"] = dict(done=True, commit=X, at="t", result="pypi")
+        r.state["steps"]["publish-amd"] = dict(done=True, commit=X, at="t", result="pypi")
         self.assertFalse(r.skip_recorded("finish-line", receipt))
         self.assertFalse(r.skip_recorded("record", receipt))
-        for step in ("publish-nvidia-sm89", "publish-nvidia-sm90", "publish-amd-gfx942"):
+        for step in ("publish-nvidia", "publish-amd"):
             self.assertIn(step, release.AFTER["finish-line"])
 
     def test_publish_ships_the_frozen_source_from_the_tooling_checkout(self):

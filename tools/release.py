@@ -781,23 +781,15 @@ PIPELINES = {
 SPLIT_PACKAGES = {"linux": ("mojolearn", "mojolearn"), **{
     row["profile"]: (row["distribution"], row["wheel_name"])
     for row in GPU_PACKAGES["distribution_rows"]()}}
-PAYLOAD_COLUMNS = {"nvidia-sm89": "nvidia", "nvidia-sm90": "nvidia-hopper", "amd-gfx942": "amd"}
-if set(PAYLOAD_COLUMNS) != {r["profile"] for r in GPU_PACKAGES["PAYLOADS"].values() if r["release_enabled"]}:
-    raise RuntimeError("every released payload requires its own hardware qualification column")
-# Each native architecture must execute before its payload publishes. Vendor
-# aggregates publish only after every payload they require; the core remains last.
+# Vendor wheels retain separate native execution columns for every hardware slot.
+NATIVE_COLUMNS = {"nvidia": ("nvidia", "nvidia-hopper"), "amd": ("amd",)}
+if set(NATIVE_COLUMNS) != {r["profile"] for r in GPU_PACKAGES["distribution_rows"]()}:
+    raise RuntimeError("every released vendor requires hardware qualification columns")
 STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "gpu-column-amd")),
-                  ("gpu-column-nvidia-hopper", "nvidia-sm90", ["linux-pack", "release-check"], None))
-for profile, column in PAYLOAD_COLUMNS.items():
-    STEP_TABLE.insert(STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "publish-nvidia")),
-        ("publish-" + profile, profile, ["gpu-column-" + column, "linux-joint-diff"], "dispatch"))
-    PIPELINES[profile] = dict(builds=[], checks=["gpu-column-" + column],
-                             publish="publish-" + profile, platform=profile)
-STEP_TABLE = [(step, pipeline,
-               needs + (["publish-" + r["profile"] for r in GPU_PACKAGES["PAYLOADS"].values()
-                         if r["release_enabled"] and r["vendor"] == GPU_PACKAGES["by_profile"](pipeline)]
-                        if step in ("publish-nvidia", "publish-amd") else []), resource)
+                  ("gpu-column-nvidia-hopper", "nvidia", ["linux-pack", "release-check"], None))
+STEP_TABLE = [(step, pipeline, needs + (["gpu-column-nvidia-hopper"] if step == "publish-nvidia" else []), resource)
               for step, pipeline, needs, resource in STEP_TABLE]
+PIPELINES["nvidia"]["checks"].append("gpu-column-nvidia-hopper")
 AFTER["linux-joint-diff"].append("gpu-column-nvidia-hopper")
 PUBLISH_STEPS = tuple(pipeline["publish"] for pipeline in PIPELINES.values())
 AFTER["finish-line"] = list(PUBLISH_STEPS)
@@ -1897,7 +1889,7 @@ class Release:
         final, out = self.linux_final(), self.rel / "column-nvidia-hopper"
         return (bool(final) and smoke_passed(out / "results.json", final)
                 and self.gpu_column_ok(out, "cuda")
-                and self.plugin_installed(out / "results.json", "nvidia-sm90")
+                and self.plugin_installed(out / "results.json", "nvidia")
                 and self.column_arch_ok(out, ("sm_90", "sm_90a")))
 
     def amd_column_ok(self):
@@ -1919,7 +1911,7 @@ class Release:
     def column_wheel(self, vendor, name=None):
         """The wheel a column's results are keyed to (ledger, reuse): the
         plugin it installed."""
-        return self.split_final("nvidia-sm90" if name == "nvidia-hopper" else "nvidia-sm89" if vendor == "cuda" else "amd-gfx942")
+        return self.split_final("nvidia" if vendor == "cuda" else "amd")
 
     def column_specs(self):
         return [("nvidia", "cuda", self.nvidia_column_ok, self.rel / "smoke-linux"),
@@ -2234,30 +2226,14 @@ class Release:
         return self.publish("linux", self.split_final("linux"), smoke), dict(smoke=str(smoke))
 
     def step_publish_nvidia(self):
+        if not self.dry and not (self.nvidia_column_ok() and self.hopper_column_ok()):
+            raise StepFailed("NVIDIA vendor wheel requires both Ada and Hopper columns")
         smoke = self.rel / "smoke-linux" / "results.json"
         return self.publish("nvidia", self.split_final("nvidia"), smoke), dict(smoke=str(smoke))
 
     def step_publish_amd(self):
         smoke = self.rel / "column-amd" / "results.json"
         return self.publish("amd", self.split_final("amd"), smoke), dict(smoke=str(smoke))
-
-    def publish_payload(self, profile):
-        column = PAYLOAD_COLUMNS[profile]
-        checks = {name: (ok, out) for name, _, ok, out in self.column_specs()}
-        ok, out = checks[column]
-        if not self.dry and not ok():
-            raise StepFailed(f"{profile} requires its own {column} architecture column")
-        smoke = out / "results.json"
-        return self.publish(profile, self.split_final(profile), smoke), dict(smoke=str(smoke))
-
-    def step_publish_nvidia_sm89(self):
-        return self.publish_payload("nvidia-sm89")
-
-    def step_publish_nvidia_sm90(self):
-        return self.publish_payload("nvidia-sm90")
-
-    def step_publish_amd_gfx942(self):
-        return self.publish_payload("amd-gfx942")
 
     def previous_gpu_columns(self):
         """The NVIDIA and AMD columns of the newest EARLIER release recorded on
@@ -2439,7 +2415,7 @@ class Release:
         rows = []
         for platform in SPLIT_PACKAGES:
             smoke = (self.recorded(self.publish_step(platform)) or {}).get("smoke") or (
-                self.rel / ("column-amd" if platform in ("amd", "amd-gfx942") else "column-nvidia-hopper" if platform == "nvidia-sm90" else "smoke-linux") / "results.json")
+                self.rel / ("column-amd" if platform == "amd" else "smoke-linux") / "results.json")
             rows.append((platform, self.split_final(platform), Path(smoke)))
         return rows + [("macos", self.macos_wheel(), self.rel / "smoke-macos" / "results.json")]
 

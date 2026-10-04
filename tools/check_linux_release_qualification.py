@@ -534,7 +534,7 @@ def split_combined(wheels, out_dir):
     expected_roles = {plugins.CORE_PROFILE}
     expected_roles.update(plugins.plugin(v)['profile'] for v in packed)
     expected_roles.update(plugins.payload_for(*key.split('/'))['profile'] for key in payload.get('sets', {}))
-    require(set(roles) == expected_roles, 'Stage every architecture payload and vendor aggregate')
+    require(set(roles) == expected_roles, 'Stage the core and every native vendor package')
     members = {}
     for wheel in wheels:
         with zipfile.ZipFile(wheel) as archive:

@@ -57,7 +57,6 @@ class PluginUpgrade(unittest.TestCase):
                     data = {n: b for n, b in expected.items()
                             if pw.gpu_plugins.member_payload(n) == row['profile']}
                     install(write_fixture(row['wheel_name'], '0.0.2', data))
-            install(write_fixture('mojolearn_nvidia', '0.0.2', {}))
             site = Path(subprocess.check_output(
                 [str(python), '-c', 'import sysconfig; print(sysconfig.get_path("purelib"))'],
                 text=True).strip())

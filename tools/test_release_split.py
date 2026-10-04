@@ -58,13 +58,13 @@ class Switch(SplitBase):
 
     def test_the_split_pipelines(self):
         r = self.release()
-        self.assertEqual(list(r.PIPELINES), ["macos", "core-linux", "nvidia", "amd", "nvidia-sm89", "nvidia-sm90", "amd-gfx942"])
+        self.assertEqual(list(r.PIPELINES), ["macos", "core-linux", "nvidia", "amd"])
         for p in r.PIPELINES.values():
             for s in p["builds"] + p["checks"] + [p["publish"]]:
                 self.assertIn(s, r.STEPS)
         # THE PLUGINS FIRST, THE CORE LAST: the core requires both plugins
-        self.assertEqual(set(r.NEEDS["publish-nvidia"]), {"gpu-column-nvidia", "linux-joint-diff", "publish-nvidia-sm89", "publish-nvidia-sm90"})
-        self.assertEqual(set(r.NEEDS["publish-amd"]), {"gpu-column-amd", "linux-joint-diff", "publish-amd-gfx942"})
+        self.assertEqual(set(r.NEEDS["publish-nvidia"]), {"gpu-column-nvidia", "linux-joint-diff", "gpu-column-nvidia-hopper"})
+        self.assertEqual(set(r.NEEDS["publish-amd"]), {"gpu-column-amd", "linux-joint-diff"})
         self.assertEqual(set(r.NEEDS["publish-core-linux"]), {"linux-joint-diff", "publish-nvidia", "publish-amd"})
         self.assertEqual(set(r.AFTER["linux-joint-diff"]), {"gpu-column-nvidia", "gpu-column-nvidia-hopper", "gpu-column-amd"})
 
@@ -100,7 +100,7 @@ class Gates(SplitBase):
     def test_everything_passing_publishes_the_three_packages_and_macos(self):
         r, order = self.staged()
         self.assertEqual(r.go(), 0)
-        self.assertEqual(self.published(r), ["amd", "amd-gfx942", "linux", "macos", "nvidia", "nvidia-sm89", "nvidia-sm90"])
+        self.assertEqual(self.published(r), ["amd", "linux", "macos", "nvidia"])
         # the plugins first, the core last: pip resolves mojolearn==<v> only
         # once both plugins at <v> are on the index
         self.assertGreater(order.index("publish-core-linux"), order.index("publish-nvidia"))
@@ -110,21 +110,21 @@ class Gates(SplitBase):
         r, order = self.staged(fail={"gpu-column-amd"})
         self.assertEqual(r.go(), 1)
         # the NVIDIA plugin may upload (unresolvable alone, it requires the core)
-        self.assertEqual(self.published(r), ["macos", "nvidia", "nvidia-sm89", "nvidia-sm90"])
+        self.assertEqual(self.published(r), ["macos", "nvidia"])
         self.assertNotIn("publish-core-linux", order)
         self.assertIn("amd: FAILED at gpu-column-amd", "\n".join(r.lines))
 
     def test_a_failed_nvidia_column_holds_nvidia_and_the_core(self):
         r, order = self.staged(fail={"gpu-column-nvidia"})
         self.assertEqual(r.go(), 1)
-        self.assertEqual(self.published(r), ["amd", "amd-gfx942", "macos", "nvidia-sm90"])
+        self.assertEqual(self.published(r), ["amd", "macos"])
         self.assertNotIn("publish-core-linux", order)
 
     def test_failed_hopper_holds_its_payload_vendor_aggregate_and_core(self):
         r, order = self.staged(fail={"gpu-column-nvidia-hopper"})
         self.assertEqual(r.go(), 1)
-        self.assertEqual(self.published(r), ["amd", "amd-gfx942", "macos", "nvidia-sm89"])
-        for step in ("publish-nvidia-sm90", "publish-nvidia", "publish-core-linux"):
+        self.assertEqual(self.published(r), ["amd", "macos"])
+        for step in ("publish-nvidia", "publish-core-linux"):
             self.assertNotIn(step, order)
 
     def test_a_divergent_joint_diff_holds_all_three(self):
@@ -137,19 +137,19 @@ class Gates(SplitBase):
     def test_a_failed_nvidia_publish_holds_the_core(self):
         r, order = self.staged(fail={"publish-nvidia"})
         self.assertEqual(r.go(), 1)
-        self.assertEqual(self.published(r), ["amd", "amd-gfx942", "macos", "nvidia-sm89", "nvidia-sm90"])
+        self.assertEqual(self.published(r), ["amd", "macos"])
         self.assertNotIn("publish-core-linux", order)
 
     def test_a_failed_amd_publish_holds_the_core(self):
         r, order = self.staged(fail={"publish-amd"})
         self.assertEqual(r.go(), 1)
-        self.assertEqual(self.published(r), ["amd-gfx942", "macos", "nvidia", "nvidia-sm89", "nvidia-sm90"])
+        self.assertEqual(self.published(r), ["macos", "nvidia"])
         self.assertNotIn("publish-core-linux", order)
 
     def test_a_failed_core_publish_leaves_both_plugins_published(self):
         r, order = self.staged(fail={"publish-core-linux"})
         self.assertEqual(r.go(), 1)
-        self.assertEqual(self.published(r), ["amd", "amd-gfx942", "macos", "nvidia", "nvidia-sm89", "nvidia-sm90"])
+        self.assertEqual(self.published(r), ["amd", "macos", "nvidia"])
 
     def test_the_joint_diff_waits_for_both_columns_to_settle(self):
         r, order = self.staged(fail={"gpu-column-nvidia"})
@@ -162,7 +162,7 @@ class Pack(SplitBase):
     """linux-pack: pack (the real packer over fake sets), audit
     each wheel core first, strip each, split_audit the final set."""
 
-    def test_six_wheels_packed_audited_stripped_and_audited_as_a_set(self):
+    def test_three_wheels_packed_audited_stripped_and_audited_as_a_set(self):
         import test_split_wheels as tsw
         sets_root = self.tmp / "fake"
         set_dirs = tsw.make_sets(sets_root)
@@ -195,8 +195,8 @@ class Pack(SplitBase):
         self.assertIn("--profile", calls[0])
         self.assertEqual(calls[0][calls[0].index("--profile") + 1], "release-split")
         audits = [pathlib.Path(c[2]).name.split("-")[0] for c in calls if c[:2] == ["bash", "packaging/linux/audit.sh"]]
-        self.assertEqual(audits, ["mojolearn", "mojolearn_nvidia", "mojolearn_amd", "mojolearn_nvidia_sm89", "mojolearn_nvidia_sm90", "mojolearn_amd_gfx942"], "the core first")
-        self.assertEqual(sum(1 for c in calls if c[1].endswith("strip_wheel_dir_entries.py")), 6)
+        self.assertEqual(audits, ["mojolearn", "mojolearn_nvidia", "mojolearn_amd"], "the core first")
+        self.assertEqual(sum(1 for c in calls if c[1].endswith("strip_wheel_dir_entries.py")), 3)
         report = json.loads((r.rel / "linux" / "final" / "split-audit.json").read_text())
         self.assertEqual(report["problems"], [])
         self.assertEqual(r.state["linux_layout"], "split")
@@ -223,9 +223,6 @@ class ColumnsAndPublish(SplitBase):
         cuda = fake_wheel(final / "mojolearn_nvidia-0.8.99-py3-none-manylinux_2_35_x86_64.whl", data=b"cuda")
         rocm = fake_wheel(final / "mojolearn_amd-0.8.99-py3-none-manylinux_2_35_x86_64.whl", data=b"rocm")
         self.plugins = [cuda, rocm]
-        for prefix in ("mojolearn_nvidia_sm89", "mojolearn_nvidia_sm90", "mojolearn_amd_gfx942"):
-            self.plugins.append(fake_wheel(final / f"{prefix}-0.8.99-py3-none-manylinux_2_35_x86_64.whl",
-                                           data=prefix.encode()))
         return core, cuda, rocm
 
     def receipt(self, out, core, plugins, vendor, arch=None):
@@ -261,7 +258,7 @@ class ColumnsAndPublish(SplitBase):
         self.assertEqual(plugins(nv), [str(p) for p in self.plugins])
         self.assertEqual(plugins(amd), [str(rocm), *[str(p) for p in self.plugins if p != rocm]])
         self.assertEqual(plugins(legs["nvidia-hopper"].command), [str(p) for p in self.plugins])
-        self.assertEqual(legs["amd"].provenance["wheel_sha256"], release.sha256(r.split_final("amd-gfx942")), "keyed to the native payload")
+        self.assertEqual(legs["amd"].provenance["wheel_sha256"], release.sha256(r.split_final("amd")), "keyed to the native payload")
         self.assertEqual(legs["amd"].provenance["core_sha256"], release.sha256(core))
         self.assertEqual(r.column_legs(("amd",))[0].name, "amd")
 
@@ -319,16 +316,12 @@ class ColumnsAndPublish(SplitBase):
         self.receipt(r.rel / "smoke-linux", core, self.plugins, "cuda")
         self.receipt(r.rel / "column-amd", core, self.plugins, "hip")
         self.receipt(r.rel / "column-nvidia-hopper", core, self.plugins, "cuda", "sm_90a")
-        for step in ("publish_nvidia_sm89", "publish_nvidia_sm90", "publish_amd_gfx942",
-                     "publish_nvidia", "publish_amd", "publish_core_linux"):
+        for step in ("publish_nvidia", "publish_amd", "publish_core_linux"):
             result, data = getattr(r, "step_" + step)()
             self.assertIn("testpypi via alpha-api-0.8.99-", result)
         published = [(pathlib.Path(c[2]).name.split("-")[0], pathlib.Path(c[-1]).parent.name)
                      for c in calls]
-        self.assertEqual(published, [("mojolearn_nvidia_sm89", "smoke-linux"),
-                                    ("mojolearn_nvidia_sm90", "column-nvidia-hopper"),
-                                    ("mojolearn_amd_gfx942", "column-amd"),
-                                    ("mojolearn_nvidia", "smoke-linux"), ("mojolearn_amd", "column-amd"),
+        self.assertEqual(published, [("mojolearn_nvidia", "smoke-linux"), ("mojolearn_amd", "column-amd"),
                                     ("mojolearn", "smoke-linux")])
 
     def test_a_plugin_is_not_published_on_a_receipt_that_did_not_install_it(self):

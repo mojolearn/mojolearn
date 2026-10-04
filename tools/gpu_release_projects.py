@@ -40,7 +40,7 @@ def wheel_prefix(profile):
 
 def classify(wheels, *, version=None, require_complete=False):
     rows = {r["wheel_name"]: r for r in gpu_plugins.distribution_rows(include_experimental=True)}
-    roles = {"aggregate": set(), "payload": set()}
+    roles = {"vendor": set(), "payload": set()}
     profiles, versions, core_wheels = set(), set(), []
     paths = sorted(map(Path, wheels))
     if not paths:
@@ -96,9 +96,8 @@ def classify(wheels, *, version=None, require_complete=False):
     if require_complete:
         expected = {r["profile"] for r in gpu_plugins.distribution_rows()}
         if profiles != expected or len(core_wheels) != 1:
-            raise ValueError("complete Linux release requires one core, both vendor aggregates, "
-                             "and every native architecture payload")
-    return dict(core=bool(core_wheels), plugins=sorted(roles["aggregate"]),
+            raise ValueError("complete Linux release requires one core and both native vendor packages")
+    return dict(core=bool(core_wheels), plugins=sorted(roles["vendor"]),
                 payloads=sorted(roles["payload"]), version=next(iter(versions)))
 
 
