@@ -15,7 +15,12 @@ host binding and the other vendors compile main's code unchanged.
 """
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 comptime PREP3_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime PREP3_MAXABS = PREP3_FAST_APPLE and not is_defined["MOJOLEARN_PREP3_MAXABS_OFF"]()
+#: lane/idn-gates (2026-10-04): PREP3_MAXABS is also the IDENTICAL default on
+#: every vendor's GPU binding (a maximum has one answer in any order: the
+#: program route's max_abs_ and scale_ words); -D MOJOLEARN_IDN_GATES_OFF (or
+#: the _OFF) restores the program route in IDENTICAL.
+comptime PREP3_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_GATES_OFF"]()
+comptime PREP3_MAXABS = (PREP3_FAST_APPLE or PREP3_IDN) and not is_defined["MOJOLEARN_PREP3_MAXABS_OFF"]()

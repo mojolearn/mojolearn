@@ -1320,17 +1320,20 @@ def matmul_tn_acc_ff_kernel(a: FP, b: FP, rh: FP, rl: FP, rows_: Int64, n_: Int6
 #: lane apple-fast-gap-kapprox2: the FAST + Apple default since the M3 A/B
 #: kap2-svgp-symtile-taxi (svgp taxi 611 -> 463 ms, r2/rmse identical); -D
 #: MOJOLEARN_SVGP_FAST_SYMTILE_OFF reverts.
-comptime SVGP_FAST_SYMTILE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_SVGP_FAST_SYMTILE_OFF"]()
+#: lane/idn-gates (2026-10-04): SYMTILE and COLSPLIT are also the IDENTICAL
+#: default on every vendor (two_prod commutes bit for bit and every entry
+#: keeps its p-ascending fold; the four solves are the column item's own);
+#: -D MOJOLEARN_IDN_GATES_OFF (or either _OFF) restores the old IDENTICAL form.
+comptime _SVGP_GATE_ON = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()) or (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_GATES_OFF"]()
 )
+comptime SVGP_FAST_SYMTILE = _SVGP_GATE_ON and not is_defined["MOJOLEARN_SVGP_FAST_SYMTILE_OFF"]()
 
 
 #: lane apple-fast-gap-kapprox2: the FAST + Apple default since the M3 A/B
 #: kap2-svgp-colsplit-taxi (svgp taxi 613 -> 438 ms, r2/rmse identical); -D
 #: MOJOLEARN_SVGP_FAST_COLSPLIT_OFF reverts.
-comptime SVGP_FAST_COLSPLIT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_SVGP_FAST_COLSPLIT_OFF"]()
-)
+comptime SVGP_FAST_COLSPLIT = _SVGP_GATE_ON and not is_defined["MOJOLEARN_SVGP_FAST_COLSPLIT_OFF"]()
 
 
 def svgp_ff_col_solve_kernel(kuu: FP, bh: FP, bl: FP, w: FP, xb: FP, m_: Int64, n_: Int64, jitter: Float32):

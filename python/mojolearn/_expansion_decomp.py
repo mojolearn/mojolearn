@@ -1378,7 +1378,8 @@ class _RandomProjection(_Base):
         # (lane neural-pass27: fit_transform converted the 880 MB input
         # twice at the board's shape)
         k = self._kit()
-        cls2 = _grp_cls2(k) if self.numeric_mode_ == "fast" else 0
+        # lane/idn-gates: the IDENTICAL GPU binding compiles DEVSCAN (bit 2) too
+        cls2 = _grp_cls2(k)
         if cls2 & 8 and not _is_sparse(X) and self._fused_fit(k, X):
             return self
         if cls2 & 3 and not _is_sparse(X):

@@ -30,9 +30,15 @@ comptime TPB = 128
 comptime BUF_BYTES = 128 * 1024 * 1024
 comptime UNITS_MAX = 1 << 20
 
+# lane/idn-gates (2026-10-04): also the IDENTICAL default on every vendor
+# (the table's terms are `shap_tree_unit`'s statements on the same operands,
+# added in the same order); -D MOJOLEARN_IDN_GATES_OFF (or the _OFF below)
+# restores the per-row units in IDENTICAL.
 comptime SHAP_TABLE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    (
+        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
+        or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_GATES_OFF"]())
+    )
     and not is_defined["MOJOLEARN_TREESHAP_FAST_TABLE_OFF"]()
 )
 """FAST + Apple DEFAULT (lane fix-treeshap; M3 A/B ab-tshap-table-taxi

@@ -22,7 +22,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
 
@@ -516,8 +516,13 @@ def dev_als_rows_py(
 
 comptime _CLS2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime GRP_CLS2_NOSCAN = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN"]()
+#: lane/idn-gates (2026-10-04): DEVSCAN alone is also the IDENTICAL default
+#: on every vendor (the refusal is a predicate: no output word depends on
+#: where it runs); -D MOJOLEARN_IDN_GATES_OFF (or the _OFF) restores the host
+#: walk in IDENTICAL. NOSCAN, LAZY and FUSED stay FAST + Apple.
+comptime _CLS2_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_GATES_OFF"]()
 comptime GRP_CLS2_DEVSCAN = (
-    _CLS2_FAST_APPLE
+    (_CLS2_FAST_APPLE or _CLS2_IDN)
     and not is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF"]()
     and not GRP_CLS2_NOSCAN
 )
@@ -536,7 +541,7 @@ comptime GRP_CLS2_LAZY = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2
 #: download), allocates the partials and a pinned host buffer per fit and
 #: launches rand and scale separately. Refusal stays in fit; bit 8 of
 #: `x_decomp_grp_cls2`. Needs DEVSCAN (not NOSCAN).
-comptime GRP_FAST_FUSED = GRP_CLS2_DEVSCAN and not is_defined["MOJOLEARN_XD_FAST_GRP_FUSED_OFF"]()
+comptime GRP_FAST_FUSED = _CLS2_FAST_APPLE and GRP_CLS2_DEVSCAN and not is_defined["MOJOLEARN_XD_FAST_GRP_FUSED_OFF"]()
 comptime GRP_CLS2_ANY = GRP_CLS2_NOSCAN or GRP_CLS2_DEVSCAN or GRP_CLS2_LAZY
 
 
