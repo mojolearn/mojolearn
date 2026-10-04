@@ -36,12 +36,20 @@ def _bytes(o):
 
 
 def _lu_fixture(n):
-    """n x n float32 with entries near 1e37 (the elimination's products
-    overflow to infinity and inf - inf is NaN) and a right-hand side."""
+    """Finite Wilkinson growth matrix with two growing trailing columns.
+
+    Partial pivoting leaves the tied lower entries in place. Repeated growth
+    overflows the trailing columns during elimination, then inf/inf produces
+    NaN. The old 48 * 1e37 fixture already overflowed before entering LU.
+    """
     import numpy as np
     i = np.arange(n, dtype=np.int64)
-    a = (((i[:, None] * 131 + i[None, :] * 71) % 97) - 48).astype(np.float32) * np.float32(1e37)
-    a[np.arange(n), np.arange(n)] += np.float32(3e37)
+    a = np.where(i[:, None] > i[None, :], -1, 0).astype(np.float32)
+    a[i, i] = 1
+    a[:, -1] = 1
+    a[:-1, -2] = 1
+    a *= np.float32(1e30)
+    assert np.isfinite(a).all(), 'LU overflow must originate inside the solver'
     b = (((i[:, None] * 17 + np.arange(3)[None, :] * 5) % 13) - 6).astype(np.float32)
     return np.ascontiguousarray(a), np.ascontiguousarray(b)
 
