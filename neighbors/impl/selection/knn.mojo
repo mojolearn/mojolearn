@@ -639,7 +639,7 @@ def index_range_kernel(
 
 def device_check_index_range(
     ctx: DeviceContext,
-    d_idx: DeviceBuffer[DType.uint32],
+    mut d_idx: DeviceBuffer[DType.uint32],
     count: Int,
     n_index: Int,
 ) raises:
