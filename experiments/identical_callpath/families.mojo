@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Uncompiled internal session adapters; existing arithmetic and dispatch.
+"""Experimental internal session adapters; existing arithmetic and dispatch.
 
 These are device-stage building blocks, not replacements for estimator host
 validation, tracing, initialization, convergence checks or model ownership.

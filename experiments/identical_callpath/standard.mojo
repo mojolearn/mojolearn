@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Vendor-neutral source-only adapter for the existing StandardScaler kernel."""
+"""Vendor-neutral experimental adapter for the existing StandardScaler kernel."""
 from max.gpu.host import DeviceBuffer
 from preprocessing.standard import standard_transform_into
 from experiments.identical_callpath.storage import IdenticalCallStorage

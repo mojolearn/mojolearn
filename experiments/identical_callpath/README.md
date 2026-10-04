@@ -1,14 +1,14 @@
-# IDENTICAL shared callpath experiments (source only)
+# IDENTICAL shared callpath experiments (opt-in)
 
 Requested as a separate Git worktree from the Apple FAST/GEMM/Kalman work.
 The corrected scope is shared call overhead for **all algorithms and all GPU
 vendors**, rather than an Apple-only or millisecond-row-only facility. The
 branch is `experiment/identical-callpath-all-algorithms-20261004`; the source
 API has no vendor restriction. CPU-only algorithms retain their existing host execution path.
-Baseline: `c96137714`. This lane does not change production dispatch, kernels,
-numeric helpers, or default behavior. Nothing here has been compiled, executed,
-benchmarked, timed, or checked for bitwise equality. These are candidates,
-not a verified identity or performance improvement.
+Original baseline: `c96137714`. Production dispatch, kernels, numeric helpers,
+and default behavior remain unchanged. The original lane was source-only;
+the integration validation recorded below now includes compilation and narrow
+NVIDIA/AMD scaler checks. Broad identity and performance remain unverified.
 
 The hypothesis is that persistent buffers and fewer host completion boundaries
 can reduce fixed per-call costs without changing arithmetic. This can preserve

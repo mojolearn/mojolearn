@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Source-only candidate: context-owned, fixed-shape reusable call storage.
+"""Experimental candidate: context-owned, fixed-shape reusable call storage.
 
 Internal to synchronous adapters. No public asynchronous result handles and
 no caller-supplied contexts: queued work cannot accidentally switch queues.

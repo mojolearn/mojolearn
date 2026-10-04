@@ -1,7 +1,8 @@
 # Shared IDENTICAL call-path source coverage
 
-**Source inventory and opt-in proposals only. No compilation, execution,
-correctness comparison, benchmark or measurement was performed.** The scope is
+**Source inventory and opt-in proposals.** The original inventory was not
+compiled or executed; subsequent narrow integration gate results are recorded
+in [README.md](README.md). They do not validate every family below. The scope is
 all available algorithm families and all existing GPU vendor columns, not an
 Apple-only dispatch. Applicability in this inventory does **not** mean that an
 estimator has been migrated, validated, or accelerated.

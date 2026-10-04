@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""SOURCE ONLY: opt-in vendor-neutral storage and completion for any GPU algorithm.
+"""Experimental opt-in vendor-neutral storage and completion for any GPU algorithm.
 
 No math, replacement kernels, implicit zeroing, global cache, or hidden queue.
 Existing algorithms enqueue their exact kernels against the typed device slots.
