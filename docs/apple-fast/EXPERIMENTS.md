@@ -690,6 +690,14 @@ Raw M3 receipt: `~/mojolearn-evidence/apple-fast/sync/quality-repairs-results-09
 
 - `MOJOLEARN_GBDT_DW_BRIDGE_SCAN`, measured kernel `2519f4867`, helper `f193454e7`, `gap26-dwcurrent-taxi`: A10279.095 -> B10827.749 ms (+5.34%), one M3 run/arm. AUC .632554 -> .632211; logloss .527920 -> .528002. **DROPPED-slower**; changed quality has no established noise bound, so no quality-equivalence claim. No default or board change. Receipt `~/mojolearn-evidence/apple-fast/sync/dwcurrent-result-0905.txt`; full M3 `~/afc-def/gap26-dwcurrent-taxi/`.
 
+## PowerTransformer compensated score failure (2026-10-04)
+
+| Experiment | Source / tag | Quality | Verdict / next step |
+|---|---|---|---|
+| `PT_SCORE` | lane/apple-fast-pt-precision @ bc112b172; gap26-pt-score-quality | Stress per-column worst regression: lambda .01330737 vs1e-5 tolerance; NLL/sample4.083e-7 vs1e-7; transform RMS9.606e-5 vs1e-5; normality nonfinite/shape failure. Box-Cox improves and passes | HOLD-quality; timing skipped, no speed claim/default. Diagnose saved stress columns and distinguish nonfinite reference from candidate before repair. Tolerances unchanged; source context [PT_SCORE.md](PT_SCORE.md) |
+
+Saved-array diagnosis: PT stress columns0–5 improve to ~1.5–1.8e-7 transform RMS. Regressions are near-constant columns6/7: reference lambdas52.6079/-63.3852 exceed main and candidate[-8,8] interval; f32 per-row log/transform/derivative precision remains before compensated reduction. The normality NaN belongs to reference column7 (constant sklearn transform, std0), not GPU outputs. No threshold relaxation or speculative kernel repair; a stable shared score/output transform and corrected stable oracle are needed before retry. See [PT_SCORE.md](PT_SCORE.md) for exact per-column evidence.
+
 ### Measurement isolation audit — 2026-10-04 09:13 UTC
 
 The M3 runner serializes jobs and A/B arms, but the manager ran filesystem scans
@@ -751,4 +759,16 @@ Binding x_cluster (`x_cluster/minibatch_fast.mojo`), FAST + Apple only. Quality 
 | `MOJOLEARN_SHAP_FAST_PIPE` | permutation-shap / kernel-shap istella | lane/apple-fast-w2-shap abd933572 | w2-shap-pipe-*-r1 | quality PASS (phi byte-identical); pshap 28217.4 -> 28271.8 ms, kshap 15418.1 -> 15446.0 ms | DROP-speed (no overlap gained), opt-in only |
 | `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG` | minibatch-kmeans | lane/apple-fast-w2-clres 4d80737b1 | w2-mbk-labrg-* | quality PASS; istella 146.6 -> 144.0, taxi 45.3 -> 46.3 ms | DROP-speed (noise), opt-in only |
 | `MOJOLEARN_ARIMA_FIT_GROUPS` | autoarima | lane/apple-fast-w2-ts 596d0abbb | w2-ts-fitgroups-*-r2 | quality PASS bit-exact; synthetic 9225.3 -> 9268.2, taxi-hourly 13749.1 -> 13072.9 ms; diag: search 8.2 s of 13.7 s; 200-iter search RMSE 75.71 (worse than 74.66) | HOLD (no gain on eligible synthetic row) |
-| PT_SCORE_STABLE centered | power-transformer | lane/apple-fast-pt-precision f88ed2cf6 | w2-pt-centered-quality | arm A dump failed: sklearn reference lambda col 7 not a local f64 NLL minimum (new oracle) | OPEN, reference rework |
+| PT_SCORE_STABLE centered | power-transformer | lane/apple-fast-pt-precision f88ed2cf6 | w2-pt-centered-quality | arm A dump failed: sklearn reference lambda col 7 not a local f64 NLL minimum (new oracle) | superseded: oracle v2 row below (DEFAULT) |
+| PT_SCORE_STABLE centered (oracle v2) | power-transformer | lane/apple-fast-pt-precision 9c458698d | w2-pt-centered2-quality | quality PASS vs f64 centered-MLE reference (tolerances unchanged); taxi 293.4 -> 190.8 ms, istella 2206.6 -> 1530.5 ms | DEFAULT (FAST+Apple), rollback MOJOLEARN_PT_SCORE_STABLE_OFF |
+
+## PT centered-score WIP checkpoint (2026-10-04)
+
+`MOJOLEARN_PT_SCORE_STABLE`, lane/apple-fast-pt-precision, merged baseline12fdd6697:
+uncompiled/unvalidated repair of heldbc112b172. Centered affine-equivalent
+score/standardized output/inverse, span-derived bracket, stable same-lambda
+float64 oracle with independent Decimal check; existing thresholds unchanged.
+No builds/quality/timings yet; checkpointed for manager handoff, **not accepted**.
+Update: oracle v2 (9c458698d) w2-pt-centered2-quality PASS; promoted to
+FAST+Apple DEFAULT, rollback `MOJOLEARN_PT_SCORE_STABLE_OFF`.
+See [PT_SCORE_STABLE.md](PT_SCORE_STABLE.md) for code scope and exact owed checks.

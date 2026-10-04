@@ -46,8 +46,20 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_prep.common import FP, IP, STAGE_INTS, p, is_nan, sti
 from x_prep.prims import logf, sub, mul
 from x_prep.transform import PT_STATE, pt_finish, power_log, power_from_log
+from x_prep.pt_score import SCORE_WORDS, score_tile, score_finish
+from x_prep.pt_center import PT_SCORE_STABLE
 
 comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+# HOLD-quality, 2026-10-04, gap26-pt-score-quality, source bc112b172:
+# stress worst per-column regressions: lambda .01330737 (gate 1e-5),
+# NLL/sample 4.083e-7 (1e-7), transform RMS 9.606e-5 (1e-5);
+# normality nonfinite/shape gate also failed. Timing correctly skipped.
+# Near-constant stress cols6/7 still round per-row log/y/dy in f32;
+# f64 optima52.61/-63.39 exceed fixed[-8,8]. Reference col7 transform
+# itself has std0/NaN normality. Cols0-5 improve; no isolated fix accepted.
+# See docs/apple-fast/PT_SCORE.md; diagnostics preserve all thresholds.
+# Explicitly disables speculation, whose objective tree is incompatible.
+comptime PT_SCORE = _FAST_APPLE and (is_defined["MOJOLEARN_PT_SCORE"]() or PT_SCORE_STABLE)
 # DROP-quality (2026-10-03), M3 batchv-pt-all-istella: 2258 -> 512 ms.
 # M2 quality (100k x 220 / x 11): lambda max relative shift 9.5e-3;
 # sklearn-f64 lambda error 5.7e-3 -> 6.3e-3 fails the 1e-4 gate.
@@ -57,17 +69,17 @@ comptime PT_FOLD_NOX = _FAST_APPLE and (is_defined["MOJOLEARN_PT_FOLD_NOX"]() or
 # DROP-speed, M3 ptimpute-pt-spec-vs-colbatch-istella: adding SPEC to
 # COLBATCH on the old base costs 910 -> 1012 ms (+11%); not a standalone
 # comparison with current main. See docs/apple-fast/EXPERIMENTS.md.
-comptime PT_SPEC = _FAST_APPLE and (is_defined["MOJOLEARN_PT_SPEC"]() or PTIMPUTE_ALL)
+comptime PT_SPEC = _FAST_APPLE and not PT_SCORE and (is_defined["MOJOLEARN_PT_SPEC"]() or PTIMPUTE_ALL)
 #: PT_SPEC runs COLBATCH's kernels, so it turns COLBATCH on
 # DROP-quality, M3 batchv-pt-nospec-istella / batchv-pt-nospec-taxi2:
 # COLBATCH + FUSED_TRANSFORM + SI_ONEPASS: 2262 -> 425 / 305 -> 54.5 ms.
 # M2 quality attributes the 9.5e-3 relative lambda shift to COLBATCH;
 # SI alone keeps lambdas exact. See docs/apple-fast/EXPERIMENTS.md.
-comptime PT_COLBATCH = _FAST_APPLE and (is_defined["MOJOLEARN_PT_COLBATCH"]() or PT_SPEC)
+comptime PT_COLBATCH = _FAST_APPLE and (is_defined["MOJOLEARN_PT_COLBATCH"]() or PT_SPEC or PT_SCORE)
 # HOLD: failed quality only in the COLBATCH bundle (batchv-pt-nospec-*);
 # no isolated A/B vs main establishes a failure of this transform itself.
 # Keep opt-in; see docs/apple-fast/EXPERIMENTS.md (PT_FUSED_TRANSFORM).
-comptime PT_FUSED_TRANSFORM = _FAST_APPLE and (is_defined["MOJOLEARN_PT_FUSED_TRANSFORM"]() or PTIMPUTE_ALL)
+comptime PT_FUSED_TRANSFORM = _FAST_APPLE and not PT_SCORE_STABLE and (is_defined["MOJOLEARN_PT_FUSED_TRANSFORM"]() or PTIMPUTE_ALL)
 #: SI_ONEPASS: FAST + Apple DEFAULT since lane/apple-fast-batchv (2026-10-03), M3 A/B vs main:
 #: simple-imputer istella 303.7 -> 273.7 ms, taxi 26.4 -> 21.0 ms; quality (tools/batchv_quality.sh,
 #: M2): median statistics exact, mean statistics within 1.2e-7 absolute (one float32 ulp).
@@ -77,7 +89,7 @@ comptime SI_ONEPASS = _FAST_APPLE and (is_defined["MOJOLEARN_SI_ONEPASS"]() or P
 #: the bits `x_prep_ptimpute_flags` exports (registered only when nonzero):
 #: the Python layer shrinks the buffers the device no longer touches by them
 comptime PTIMPUTE_FLAGS = ((1 if PT_COLBATCH else 0) + (2 if PT_SPEC else 0) + (4 if PT_FUSED_TRANSFORM else 0)
-                           + (8 if SI_ONEPASS else 0) + (16 if PT_FOLD_NOX else 0))
+                           + (8 if SI_ONEPASS else 0) + (16 if PT_FOLD_NOX else 0) + (32 if PT_SCORE_STABLE else 0))
 
 #: threads per block of the finish kernels (a block a column, a tree)
 comptime TGR = 256
@@ -125,6 +137,8 @@ def tile_cgroups(d: Int) -> Int:
 def pt_part_words(n: Int, d: Int, m: Int) -> Int:
     """Words of one evaluation's (chunk, column) partials over m candidates:
     count, sum J, then (mean, M2) per candidate."""
+    comptime if PT_SCORE:
+        return tile_chunks(n, d) * d * SCORE_WORDS
     return tile_chunks(n, d) * d * (2 + 2 * m)
 
 
@@ -448,6 +462,11 @@ def pt_colbatch_fold(mut ctx: DeviceContext, f: FP, pp: FP, hq: IP, qp: IP) rais
     var d = Int(hq[2])
     var chunks = tile_chunks(n, d)
     var tpb = tile_tpb(d)
+    comptime if PT_SCORE:
+        ctx.enqueue_function[score_tile](f, pp, qp, Int32(tile_rows(d)), Int32(tpb),
+            grid_dim=(chunks, tile_cgroups(d)), block_dim=tpb)
+        ctx.enqueue_function[score_finish](f, pp, qp, Int32(chunks), grid_dim=d, block_dim=TGR)
+        return
     var first = Int32(1) if Int(hq[5]) == 0 else Int32(0)
     ctx.enqueue_function[pt_tile_kernel](
         f, pp, hq[0], hq[1], hq[2], hq[3], hq[7], Int32(1), Int32(1), hq[6], first, Int32(tile_rows(d)), Int32(tpb),
