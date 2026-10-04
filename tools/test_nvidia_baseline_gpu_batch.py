@@ -268,7 +268,7 @@ elif args[:2]==['-m','mojolearn._identity_break']:
         self.assertNotIn('native-release.sh', body)
         self.assertEqual(body.count('for role in baseline; do'), 3)
         self.assertIn('collect prototype "$role" 300', body)
-        self.assertIn('collect full "$role" 2400', body)
+        self.assertIn('collect full "$role" 4800', body)
         self.assertIn('extra-wrapper.py', body)
         self.assertIn('cuda-config-witness.py', body)
         self.assertIn('test "$WITNESS_FAILED" = 0', body)
