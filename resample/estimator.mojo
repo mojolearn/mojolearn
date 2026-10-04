@@ -33,7 +33,8 @@ HAS RUN THIS UNDER IDENTICAL. See `resample/README.md` under Status.
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
-from bindings.hostptr import copy_f32
+from bindings.hostptr import copy_f32, f32_ptr
+from resample.gather_fast import gather_rows_f32_kernel
 from std.math import ceildiv
 from std.os import getenv
 from std.sys.compile import is_defined
@@ -2063,3 +2064,65 @@ def resample_indices_host(
     # DEVIATION 1946: the context dies LAST.
     _ = ctx^
     return out^
+
+
+# OPEN, recovered from 50b96e795: historical taxi parse failure produced no
+# scored result. Current-main exact-output quality and M3 timing still owed.
+comptime RESAMPLE_GPU_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_RESAMPLE_FAST_GATHER"]())
+
+
+def resample_gather_gpu(
+    n: Int, count: Int, seed: UInt64, srcs: List[Int],
+    dsts: List[Int], widths: List[Int],
+) raises -> Bool:
+    """Synchronized caller-owned float32 outputs; only GPU draws/gathers.
+    Input/output copies are transport, not host row indexing. No retained pointers.
+    """
+    comptime if RESAMPLE_GPU_GATHER:
+        utils_validate(n, count, True)
+        if len(srcs) == 0 or len(srcs) != len(dsts) or len(srcs) != len(widths):
+            raise Error("resample: invalid gather array spans")
+        if count <= 0:
+            return False
+        for a in range(len(widths)):
+            if widths[a] <= 0 or widths[a] > 2147483647:
+                return False
+        var key = resample_key(seed, RESAMPLE_KIND_UTILS_REPLACE)
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var rows = ctx.enqueue_create_buffer[DType.int32](count)
+        var keys = ctx.enqueue_create_buffer[DType.uint64](1)
+        ctx.enqueue_function[utils_draw_kernel](
+            rows.unsafe_ptr(), keys.unsafe_ptr(), key_lo(key), key_hi(key),
+            Int32(n), Int32(count), Int32(1),
+            grid_dim=(ceildiv(count, 256), 1, 1), block_dim=(256, 1, 1),
+        )
+        for a in range(len(srcs)):
+            var d = widths[a]
+            var src = f32_ptr(srcs[a])
+            var dst = f32_ptr(dsts[a])
+            var hsrc = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+            var dsrc = ctx.enqueue_create_buffer[DType.float32](n * d)
+            var dout = ctx.enqueue_create_buffer[DType.float32](count * d)
+            var hout = ctx.enqueue_create_host_buffer[DType.float32](count * d)
+            ctx.synchronize()
+            copy_f32(src, hsrc.unsafe_ptr(), n * d)
+            ctx.enqueue_copy(dst_buf=dsrc, src_ptr=hsrc.unsafe_ptr())
+            ctx.enqueue_function[gather_rows_f32_kernel](
+                dout.unsafe_ptr(), dsrc.unsafe_ptr(), rows.unsafe_ptr(), Int32(count), Int32(d),
+                grid_dim=(ceildiv(count * d, 256), 1, 1), block_dim=(256, 1, 1),
+            )
+            ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=dout)
+            ctx.synchronize()
+            copy_f32(hout.unsafe_ptr(), dst, count * d)
+            _ = hsrc^
+            _ = dsrc^
+            _ = dout^
+            _ = hout^
+        _ = rows^
+        _ = keys^
+        _ = ctx^
+        return True
+    else:
+        return False

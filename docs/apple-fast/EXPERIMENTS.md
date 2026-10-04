@@ -988,3 +988,9 @@ pass; seveninnovation andthirteenlikelihood checks fail. No timing or promotion.
 Compensated residual/likelihood lowword reference candidate planned; no change
 to fixed finite-difference step or thresholds. Fixture supplies common states;
 it does not certify production initializer/Jones transformation equivalence.
+
+## Recovered branch candidate, 2026-10-04
+
+| Define | Source | Prior evidence | State / next gate |
+|---|---|---|---|
+| `MOJOLEARN_RESAMPLE_FAST_GATHER` | `lane/apple-fast-resample-gpu-recovery`, base `34795a43c23f64790859977f5520048c51378771`; recovery checkpoint `9e68ac913`; original `origin/lane/apple-fast-resample@50b96e795` | Historical `resample-rs-gather-taxi` parse failure, no measured result; no istella result found by manager | OPEN, opt-in only. Minimal GPU draw/gather recovery; distinct from held host `RESAMPLE_FAST_ROW_GATHER`. M2 compile, pinned exact quality/reach/lifetime and M3 one-run caller-read timings owed. See `ab/resample-gpu-recovery.md`. |
