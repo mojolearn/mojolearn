@@ -24,7 +24,7 @@ from cluster.estimator import kmeans_fit
 from cluster.impl.kmeans_params import INIT_ARRAY, INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
 from ivf.estimator import ivf_flat_build_host
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import ivf_trainset_rows
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add, identical_sqrt
 from std.sys.compile import is_defined
 from x_ann.io import upload_f32, upload_i32, download_f32, download_i32
 from x_ann.refine_core import refine_cell
@@ -32,9 +32,10 @@ from x_ann.ivf_rabitq_core import rq_encode_cell, rq_pow2, rq_scale
 from x_ann.ivf_sq_core import sq_encode_cell, sq_hi_takes, sq_lo_takes, sq_range_finish
 from std.memory import bitcast
 from x_ann.ivf_pq_core import (
-    F32P, I32P, IvfPqIndex, pq_assign_cell, pq_labels_from_lists,
+    F32P, I32P, IvfPqIndex, pq_assign_cell, pq_inf, pq_insert, pq_labels_from_lists,
     pq_len_of, pq_residual_cell, pq_validate,
 )
+from x_ann.vsearch_fast import IVF_REFINE_TEAM
 
 comptime TPB = 128
 
@@ -631,6 +632,104 @@ def refine_kernel(m: Int32, x: F32P, n: Int32, d: Int32, queries: F32P, cand: I3
     var q = _tid()
     if q < Int(m):
         refine_cell(q, x, Int(n), Int(d), queries, cand, Int(k0), Int(k), out_d, out_i, root != 0)
+
+
+#: the refine team (lane af-vsearch): threads per query (candidates at most),
+#: the widest query row staged in threadgroup memory
+comptime REFINE_T = 128
+comptime REFINE_DIM_MAX = 512
+
+
+def refine_team_kernel(
+    x: F32P, n: Int32, d: Int32, queries: F32P, cand: I32P, k0: Int32, k: Int32, out_d: F32P, out_i: I32P,
+    root: Int32,
+):
+    """FAST on Apple, OPT-IN (lane af-vsearch, `IVF_REFINE_TEAM`): `refine_cell`
+    with one threadgroup of REFINE_T per query (k0 <= REFINE_T, d <=
+    REFINE_DIM_MAX; the launch checks). The query row is staged in
+    threadgroup memory as ftz(q); thread t < k0 scores candidate t by the
+    cell's statements (a padding id or a repeat of an earlier slot is skipped;
+    the ascending fused square sum of `ftz(ftz(q) - ftz(x))`, the same words)
+    into threadgroup memory; thread 0 runs the cell's `pq_insert` over the
+    scored slots in slot order. The same words in the same insertion order:
+    the same result."""
+    var qi = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var dd = Int(d)
+    var kk0 = Int(k0)
+    var kk = Int(k)
+    var sq = stack_allocation[REFINE_DIM_MAX, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var sd = stack_allocation[REFINE_T, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var sv = stack_allocation[REFINE_T, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    for c in range(t, dd, REFINE_T):
+        sq[c] = ftz(queries.unsafe_load(qi * dd + c))
+    barrier()
+    if t < kk0:
+        var v = Int(cand.unsafe_load(qi * kk0 + t))
+        var keep = v >= 0 and v < Int(n)
+        if keep:
+            for u in range(t):
+                if Int(cand.unsafe_load(qi * kk0 + u)) == v:
+                    keep = False
+                    break
+        var acc = Float32(0.0)
+        if keep:
+            for c in range(dd):
+                var diff = ftz(sq[c] - ftz(x.unsafe_load(v * dd + c)))
+                acc = ftz(identical_mul_add(diff, diff, acc))
+        sd[t] = acc
+        sv[t] = Int32(v) if keep else Int32(-1)
+    barrier()
+    if t == 0:
+        var base = qi * kk
+        for s in range(kk):
+            out_d.unsafe_store(base + s, pq_inf())
+            out_i.unsafe_store(base + s, Int32(-1))
+        for u in range(kk0):
+            var id = sv[u]
+            if id >= 0:
+                pq_insert(kk, base, sd[u], id, out_d, out_i)
+        if root != 0:  # refine_cell's `root` rule (main, lane apple-fast-py2mojo-cluster)
+            for s in range(kk):
+                out_d.unsafe_store(base + s, identical_sqrt(out_d.unsafe_load(base + s)))
+
+
+def refine_device_team(
+    x_addr: Int, n: Int, d: Int, queries: List[Float32], m: Int, cand: List[Int32], k0: Int, k: Int,
+    mut out_d: List[Float32], mut out_i: List[Int32], root: Bool = False,
+) raises:
+    """FAST on Apple, OPT-IN (lane af-vsearch, `IVF_REFINE_TEAM`): `refine_device`
+    with the dataset uploaded straight from the caller's n x d float32 array
+    at `x_addr` (no host copy into a List first; the binding holds the array
+    under the released GIL for the whole call) and `refine_team_kernel` when
+    it applies (k0 <= REFINE_T, d <= REFINE_DIM_MAX), `refine_kernel`
+    otherwise. The same words either way."""
+    var ctx = x_ann_ctx()
+    var dx = ctx.enqueue_create_buffer[DType.float32](n * d)
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=F32P(unsafe_from_address=x_addr))
+    ctx.synchronize()
+    var dq = upload_f32(ctx, queries)
+    var dcand = upload_i32(ctx, cand)
+    var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
+    var di = ctx.enqueue_create_buffer[DType.int32](m * k)
+    if k0 <= REFINE_T and d <= REFINE_DIM_MAX:
+        ctx.enqueue_function[refine_team_kernel](
+            dx.unsafe_ptr(), Int32(n), Int32(d), dq.unsafe_ptr(), dcand.unsafe_ptr(), Int32(k0), Int32(k),
+            dd.unsafe_ptr(), di.unsafe_ptr(), Int32(1) if root else Int32(0), grid_dim=m, block_dim=REFINE_T,
+        )
+    else:
+        ctx.enqueue_function[refine_kernel](Int32(m), dx.unsafe_ptr(), Int32(n), Int32(d), dq.unsafe_ptr(),
+                                            dcand.unsafe_ptr(), Int32(k0), Int32(k), dd.unsafe_ptr(), di.unsafe_ptr(),
+                                            Int32(1) if root else Int32(0), grid_dim=_grid(m), block_dim=TPB)
+    ctx.synchronize()
+    out_d = download_f32(ctx, dd, m * k)
+    out_i = download_i32(ctx, di, m * k)
+    _ = di^
+    _ = dd^
+    _ = dcand^
+    _ = dq^
+    _ = dx^
+    _ = ctx^
 
 
 def refine_device(
