@@ -3534,7 +3534,7 @@ def _stage_upload_if_changed[
         # DEVIATION 2488: full-capacity byte equality, 16 bytes at a time.
         # The retained scalar build arm isolates this one mechanism in A/B.
         comptime if is_defined["MOJOLEARN_ET_SCALAR_STAGE_COMPARE"]():
-            for i in range(n):
+            for i in range(n):  # small-loop(n: staging slot capacity of launch descriptors): A/B arm compares host staging bytes only
                 if hp.unsafe_load(i) != sp.unsafe_load(i):
                     same = False
                     break
@@ -3597,7 +3597,7 @@ def stage_batch(
             + " tree ids"
         )
     var items_ptr = h_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem]()
-    for i in range(n_nodes):
+    for i in range(n_nodes):  # small-loop(n_nodes: batch work-item descriptors): launch parameter list, batch capped by max_batch_size
         items_ptr[unsafe_offset=i] = work_items[i]
         # DEVIATION 211: the per-item tree id rides with the item.
         ws.h_tree.unsafe_ptr().unsafe_store(i, item_trees[i])
@@ -3610,10 +3610,10 @@ def stage_batch(
             ),
         )
     var wl_ptr = h_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo]()
-    for i in range(plan.n_blocks_dimx):
+    for i in range(plan.n_blocks_dimx):  # small-loop(plan.n_blocks_dimx: workload map entries): one launch descriptor per grid block
         wl_ptr[unsafe_offset=i] = plan.info[i]
     var base_acc = 0
-    for i in range(n_nodes):
+    for i in range(n_nodes):  # small-loop(n_nodes: per-node block offsets): launch parameter list, batch capped by max_batch_size
         h_nb.unsafe_ptr().unsafe_store(i, Int32(i * Int(k)))
         h_nc.unsafe_ptr().unsafe_store(i, Int32(Int(k)))
         # Where node `i`'s blocks start in the flattened workload array.
@@ -3805,6 +3805,32 @@ def _enqueue_classification_score[MAX_ACC: Int](
         Int32(0),
         grid_dim=ceildiv(n_cells, 64),
         block_dim=64,
+    )
+
+
+def pack_splits_kernel(
+    out_splits: MutPointer[Split, MutAnyOrigin],
+    r_q: MutPointer[Float32, MutAnyOrigin],
+    r_c: MutPointer[Int32, MutAnyOrigin],
+    r_m: MutPointer[Float32, MutAnyOrigin],
+    r_v: MutPointer[Int32, MutAnyOrigin],
+    r_l: MutPointer[Int32, MutAnyOrigin],
+    n_nodes: Int32,
+):
+    """cpu3-trees: one thread per node, the batch's `Split` exactly as the
+    host loop built it (`builder.cuh:492-494`): the winner's threshold,
+    column, gain and left count, with the gain forced to `MIN_FINITE` when
+    the node has no valid candidate (`r_v == 0`) or no column. Pure moves
+    and one select: no bit moves."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_nodes):
+        return
+    var colid = r_c[unsafe_offset=i]
+    var metric = r_m[unsafe_offset=i]
+    if r_v[unsafe_offset=i] == 0 or colid < 0:
+        metric = Float32.MIN_FINITE
+    out_splits[unsafe_offset=i] = Split(
+        r_q[unsafe_offset=i], colid, metric, r_l[unsafe_offset=i]
     )
 
 
@@ -4273,20 +4299,27 @@ def search_batch(
     # at `builder.cuh:492-494`. The gain travels WITH the candidate now
     # (DEVIATION 183, second form), so no per-level readback of the node
     # totals is needed and none happens.
-    ref o_q = ws.o_q
+    # cpu3-trees: the batch's `Split` records are packed ON THE DEVICE
+    # (`pack_splits_kernel`: the invalid-candidate metric mask included)
+    # and cross as one block, copied into the host scheduler's list whole.
+    ctx.enqueue_function[pack_splits_kernel](
+        ws.d_splits.unsafe_ptr().unsafe_bitcast[Split](),
+        r_q.unsafe_ptr(),
+        r_c.unsafe_ptr(),
+        r_m.unsafe_ptr(),
+        r_v.unsafe_ptr(),
+        r_l.unsafe_ptr(),
+        Int32(n_nodes),
+        grid_dim=ceildiv(n_nodes, 64),
+        block_dim=64,
+    )
+    ctx.enqueue_copy(dst_buf=ws.h_splits, src_buf=ws.d_splits)
     ref o_c = ws.o_c
-    ref o_l = ws.o_l
     ref o_nu = ws.o_nu
     ref o_de = ws.o_de
-    ref o_v = ws.o_v
-    ref o_m = ws.o_m
-    ctx.enqueue_copy(dst_buf=o_q, src_buf=r_q)
     ctx.enqueue_copy(dst_buf=o_c, src_buf=r_c)
-    ctx.enqueue_copy(dst_buf=o_l, src_buf=r_l)
     ctx.enqueue_copy(dst_buf=o_nu, src_buf=r_nu)
     ctx.enqueue_copy(dst_buf=o_de, src_buf=r_de)
-    ctx.enqueue_copy(dst_buf=o_v, src_buf=r_v)
-    ctx.enqueue_copy(dst_buf=o_m, src_buf=r_m)
     ctx.synchronize()
     clock.tick(ctx, PHASE_REDUCE)
 
@@ -4294,25 +4327,20 @@ def search_batch(
     # in the range pass; the sync above is the batch's ONE drain, so the
     # values are complete here and nowhere earlier did the host need them.
     var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
-    for i in range(n_nodes):
-        any_nonconst[i] = ws.h_nonconst.unsafe_ptr()[unsafe_offset=i]
+    memcpy(
+        dest=any_nonconst.unsafe_ptr(),
+        src=ws.h_nonconst.unsafe_ptr(),
+        count=n_nodes,
+    )
 
-    # --- 8. build the batch's splits on the host, as `:492-494` does --
-    var splits = List[Split]()
-    for i in range(n_nodes):
-        var colid = o_c.unsafe_ptr()[unsafe_offset=i]
-        var n_left = o_l.unsafe_ptr()[unsafe_offset=i]
-        # The winning candidate's gain came off the DEVICE with it --
-        # `r_m`, written by `score_to_candidate_kernel` and carried
-        # through the reduction. `split_not_valid` below is unchanged.
-        var metric = o_m.unsafe_ptr()[unsafe_offset=i]
-        if o_v.unsafe_ptr()[unsafe_offset=i] == 0 or colid < 0:
-            metric = Float32.MIN_FINITE
-        splits.append(
-            Split(
-                o_q.unsafe_ptr()[unsafe_offset=i], colid, metric, n_left
-            )
-        )
+    # --- 8. the batch's splits, as `:492-494` hands them to the host --
+    # (packed by `pack_splits_kernel` above; one block copy, no host loop)
+    var splits = List[Split](length=n_nodes, fill=Split())
+    memcpy(
+        dest=splits.unsafe_ptr(),
+        src=ws.h_splits.unsafe_ptr().unsafe_bitcast[Split](),
+        count=n_nodes,
+    )
 
     # DEVIATION 463: report the batch's exact-tie tally. The counter cells
     # rode the queue with the reduce readback, so the sync above completed
@@ -4589,7 +4617,7 @@ def train_forest_classification_device_timed(
         )
 
         var queues = List[NodeQueue[DType.float32]]()
-        for s in range(g):
+        for s in range(g):  # small-loop(g: tree slots in this group): one queue per in-flight tree, g capped by group_cap
             var base = Int32(s) * slot_rows
             if sabotage == FOREST_SAB_SHARED_ROW_BASE:
                 base = Int32(0)
@@ -4618,9 +4646,9 @@ def train_forest_classification_device_timed(
         var bf_pending = List[NodeWorkItem]()
         var bf_pending_q = List[Int]()
         if bestfirst:
-            for s in range(g):
+            for s in range(g):  # small-loop(g: tree slots in this group): one root seed per tree, g capped by group_cap
                 var seeds = queues[s].bestfirst_seed()
-                for i in range(len(seeds)):
+                for i in range(len(seeds)):  # small-loop(seeds: one tree's root work item): bestfirst_seed returns at most the root
                     bf_pending.append(seeds[i])
                     bf_pending_q.append(s)
         while True:
@@ -4665,7 +4693,7 @@ def train_forest_classification_device_timed(
                 # plus the budget test at `:454`.
                 var bf_more = False
                 if bestfirst:
-                    for s in range(g):
+                    for s in range(g):  # small-loop(g: tree slots in this group): one flag test per tree, g capped by group_cap
                         if queues[s].bestfirst_can_pop():
                             bf_more = True
                 if not bf_more:
@@ -4842,7 +4870,7 @@ def train_forest_classification_device_timed(
                     _ = queues[bf_pending_q[i]].bestfirst_admit(
                         work_items[i], splits[i], item_trees[i]
                     )
-                for s in range(g):
+                for s in range(g):  # small-loop(g: tree slots in this group): one best-first pop per tree, g capped by group_cap
                     if not queues[s].bestfirst_can_pop():
                         continue
                     var rec = queues[s].bestfirst_pop()
@@ -4900,8 +4928,7 @@ def train_forest_classification_device_timed(
             # below is queue-ordered ahead of the partition kernels that
             # read `d_splits`.
             var splits_ptr = ws.h_splits.unsafe_ptr().unsafe_bitcast[Split]()
-            for i in range(n_part):
-                splits_ptr[unsafe_offset=i] = part_splits[i]
+            memcpy(dest=splits_ptr, src=part_splits.unsafe_ptr(), count=n_part)
             ctx.enqueue_copy(
                 dst_buf=ws.d_splits, src_ptr=ws.h_splits.unsafe_ptr()
             )
@@ -5025,7 +5052,7 @@ def train_forest_classification_device_timed(
         var trees_g = List[TreeMetaDataNode[DType.float32]]()
         var leaf_base = List[Int]()
         var total_nodes = 0
-        for s in range(g):
+        for s in range(g):  # small-loop(g: tree slots in this group): collects one output tree per slot, g capped by group_cap
             leaf_base.append(total_nodes)
             total_nodes += len(queues[s].node_instances)
             trees_g.append(queues[s].get_tree())
@@ -5664,38 +5691,42 @@ def search_batch_regression(
             dataset.d_nbins.unsafe_ptr(),
             Int32(n_nodes), grid_dim=ceildiv(n_nodes, 64), block_dim=64,
         )
-    ref o_q = ws.o_q
+    # cpu3-trees: the batch's `Split` records are packed ON THE DEVICE
+    # (`pack_splits_kernel`: the invalid-candidate metric mask included)
+    # and cross as one block, copied into the host scheduler's list whole.
+    ctx.enqueue_function[pack_splits_kernel](
+        ws.d_splits.unsafe_ptr().unsafe_bitcast[Split](),
+        r_q.unsafe_ptr(),
+        r_c.unsafe_ptr(),
+        r_m.unsafe_ptr(),
+        r_v.unsafe_ptr(),
+        r_l.unsafe_ptr(),
+        Int32(n_nodes),
+        grid_dim=ceildiv(n_nodes, 64),
+        block_dim=64,
+    )
+    ctx.enqueue_copy(dst_buf=ws.h_splits, src_buf=ws.d_splits)
     ref o_c = ws.o_c
-    ref o_l = ws.o_l
-    ref o_v = ws.o_v
     ref o_m = ws.o_m
-    ctx.enqueue_copy(dst_buf=o_q, src_buf=r_q)
     ctx.enqueue_copy(dst_buf=o_c, src_buf=r_c)
-    ctx.enqueue_copy(dst_buf=o_l, src_buf=r_l)
-    ctx.enqueue_copy(dst_buf=o_v, src_buf=r_v)
     ctx.enqueue_copy(dst_buf=o_m, src_buf=r_m)
     ctx.synchronize()
     clock.tick(ctx, PHASE_REDUCE)
 
     # DEVIATION 450: the deferred `h_nonconst` read -- see the twin.
     var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
-    for i in range(n_nodes):
-        any_nonconst[i] = ws.h_nonconst.unsafe_ptr()[unsafe_offset=i]
+    memcpy(
+        dest=any_nonconst.unsafe_ptr(),
+        src=ws.h_nonconst.unsafe_ptr(),
+        count=n_nodes,
+    )
 
-    var splits = List[Split]()
-    for i in range(n_nodes):
-        var colid = o_c.unsafe_ptr()[unsafe_offset=i]
-        var metric = o_m.unsafe_ptr()[unsafe_offset=i]
-        if o_v.unsafe_ptr()[unsafe_offset=i] == 0 or colid < 0:
-            metric = Float32.MIN_FINITE
-        splits.append(
-            Split(
-                o_q.unsafe_ptr()[unsafe_offset=i],
-                colid,
-                metric,
-                o_l.unsafe_ptr()[unsafe_offset=i],
-            )
-        )
+    var splits = List[Split](length=n_nodes, fill=Split())
+    memcpy(
+        dest=splits.unsafe_ptr(),
+        src=ws.h_splits.unsafe_ptr().unsafe_bitcast[Split](),
+        count=n_nodes,
+    )
 
     # DEVIATION 463: report the batch's exact-tie tally. The counter cells
     # rode the queue with the reduce readback, so the sync above completed
@@ -5951,7 +5982,7 @@ def train_forest_regression_device_timed(
         )
 
         var queues = List[NodeQueue[DType.float32]]()
-        for s in range(g):
+        for s in range(g):  # small-loop(g: tree slots in this group): one queue per in-flight tree, g capped by group_cap
             var base = Int32(s) * slot_rows
             if sabotage == FOREST_SAB_SHARED_ROW_BASE:
                 base = Int32(0)
@@ -5971,9 +6002,9 @@ def train_forest_regression_device_timed(
         var bf_pending = List[NodeWorkItem]()
         var bf_pending_q = List[Int]()
         if bestfirst:
-            for s in range(g):
+            for s in range(g):  # small-loop(g: tree slots in this group): one root seed per tree, g capped by group_cap
                 var seeds = queues[s].bestfirst_seed()
-                for i in range(len(seeds)):
+                for i in range(len(seeds)):  # small-loop(seeds: one tree's root work item): bestfirst_seed returns at most the root
                     bf_pending.append(seeds[i])
                     bf_pending_q.append(s)
         while True:
@@ -6017,7 +6048,7 @@ def train_forest_regression_device_timed(
                 # plus the budget test at `:454`.
                 var bf_more = False
                 if bestfirst:
-                    for s in range(g):
+                    for s in range(g):  # small-loop(g: tree slots in this group): one flag test per tree, g capped by group_cap
                         if queues[s].bestfirst_can_pop():
                             bf_more = True
                 if not bf_more:
@@ -6174,7 +6205,7 @@ def train_forest_regression_device_timed(
                     _ = queues[bf_pending_q[i]].bestfirst_admit(
                         work_items[i], splits[i], item_trees[i]
                     )
-                for s in range(g):
+                for s in range(g):  # small-loop(g: tree slots in this group): one best-first pop per tree, g capped by group_cap
                     if not queues[s].bestfirst_can_pop():
                         continue
                     var rec = queues[s].bestfirst_pop()
@@ -6225,8 +6256,7 @@ def train_forest_regression_device_timed(
             # --- the PARTITION (deviation 203, the regression half) -------
             # DEVIATION 450: no pre-partition synchronize -- see the twin.
             var splits_ptr = ws.h_splits.unsafe_ptr().unsafe_bitcast[Split]()
-            for i in range(n_part):
-                splits_ptr[unsafe_offset=i] = part_splits[i]
+            memcpy(dest=splits_ptr, src=part_splits.unsafe_ptr(), count=n_part)
             ctx.enqueue_copy(
                 dst_buf=ws.d_splits, src_ptr=ws.h_splits.unsafe_ptr()
             )
@@ -6343,7 +6373,7 @@ def train_forest_regression_device_timed(
         var trees_g = List[TreeMetaDataNode[DType.float32]]()
         var leaf_base = List[Int]()
         var total_nodes = 0
-        for s in range(g):
+        for s in range(g):  # small-loop(g: tree slots in this group): collects one output tree per slot, g capped by group_cap
             leaf_base.append(total_nodes)
             total_nodes += len(queues[s].node_instances)
             trees_g.append(queues[s].get_tree())
