@@ -704,3 +704,12 @@ Detailed isolation audit and six identified scan-window tags: [MEASUREMENT_AUDIT
 | Experiment | Measured source / tags | A → B ms | Quality | Verdict / remaining gate |
 |---|---|---|---|---|
 | `ARIMA_ORDER_BATCH` → default + `ARIMA_ORDER_BATCH_OFF` | 7ba385b30; gap26-orders-current-synthetic / taxi-hourly | synthetic13780.316917 →9287.286750 (-32.6%); taxi-hourly22706.248042 →13747.215083 (-39.5%) | Fitted/order/likelihood/forecast full-quality PASS before timing; both board digests and RMSE identical (2.624119555 /74.659122441). Existing fused tail enabled in BOTH arms | KEEP, default merged on main dc2285bc0; manager default/OFF builds both rc0. Source review against main d1871643b preserved accepted fused tail. Taxi opponent-quality HOLD remains (74.6591 vs68.21). [Raw evidence and review](ab/arima-orders-default.md) |
+
+## MiniBatchKMeans W2 residuals (lane/apple-fast-w2-clres, 2026-10-04)
+
+Binding x_cluster (`x_cluster/minibatch_fast.mojo`), FAST + Apple only. Quality pair `tools/w2_clres_quality.py`.
+
+| define | algorithm / dataset | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|
+| `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP` | MiniBatchKMeans / istella, taxi | w2-mbk-sumcmp-q | M3 one run per arm: istella 147.2 -> 144.7 ms; taxi 43.9 -> 39.9 ms; exact (centers, counts, labels, inertia identical) | DEFAULT (FAST+Apple), rollback `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF` | Sum kernel compacts its center's rows per 256-row chunk (prefix scan) and sums only those, same ascending order; same bits as main. |
+| `MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG` | MiniBatchKMeans / istella, taxi | (not promoted) | n/a here | OPEN, opt-in | Last labelling pass as the CLS3_ROWGRP 32-thread-per-row assignment; reorders distance sums (labrg tolerance mode). |

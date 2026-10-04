@@ -95,16 +95,16 @@ comptime MBF_RG_W = 32
 comptime MBF_RG_ROWS = MBF_TPB // MBF_RG_W
 comptime MBF_RG_MAXK = 16
 
+# MBK_W2_SUMCMP, DEFAULT in FAST + Apple (lane/apple-fast-w2-clres):
+# `_mbf_sum_kernel` first compacts its center's rows of the 256-row chunk (a
+# 256-wide prefix scan of the flags, row offsets in threadgroup memory) and
+# each feature thread sums only those rows, in the SAME ascending row order,
+# instead of walking all 256 rows per feature: same float sums, same bits.
+# M3, one run per arm: istella 147.2 -> 144.7 ms, taxi 43.9 -> 39.9 ms;
+# w2-mbk-sumcmp-q exact (centers, counts, labels, inertia identical).
+# MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF restores the full-chunk walk.
+comptime MBK_W2_SUMCMP = MINIBATCH_FAST_DEV and not is_defined["MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF"]()
 # lane/apple-fast-w2-clres (2026-10-04), OPEN, opt-in, FAST + Apple only.
-# -D MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP: `_mbf_sum_kernel` walks all 256
-# rows of its chunk for every feature, testing a flag and re-reading the row's
-# index from device memory for each of the ~1/k rows that belong to its center
-# (256 dependent iterations per thread, per step). With the switch the block
-# first compacts its center's rows (a 256-wide prefix scan of the flags, the
-# row offsets kept in threadgroup memory) and each feature thread sums only
-# those rows, in the SAME ascending row order: the same float sums, the same
-# centers, same bits as main.
-comptime MBK_W2_SUMCMP = MINIBATCH_FAST_DEV and is_defined["MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP"]()
 # -D MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG: the fit's last pass (labels and
 # distances of all n rows, x_cluster/minibatch_ptr.mojo) is
 # `DeviceOps.nearest`, a thread per row that walks its 880-byte Istella row k

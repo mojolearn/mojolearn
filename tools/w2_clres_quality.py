@@ -11,7 +11,8 @@ Data and parameters are the board's (tools/bench_board_algos.py LANES,
 _load_block, lane_arrays), so the fit is the timed one.
 
 Modes and tolerances, fixed before any result:
-  exact  (MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP): the compacted sum adds the
+  exact  (SUMCMP; default now, old arm = MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF):
+         the compacted sum adds the
          same rows in the same order, so centers, counts, labels and inertia
          must be BIT-IDENTICAL to main.
   labrg  (MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG): only the last labelling
