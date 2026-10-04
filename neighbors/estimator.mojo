@@ -1877,7 +1877,7 @@ def _rbc_index_and_count(
     _ = nearest^
     _ = nearest_dist^
     _ = counts^
-    # The count is EXACT (summed in 64-bit, `scan.mojo::rbc_exact_edge_total`)
+    # The count is EXACT (summed in 64-bit, `scan.mojo::rbc_exact_edge_total_host`)
     # but this surface hands back int32 `indptr`, which cannot address it.
     # Refused by name with the true count, never returned wrapped.
     if nnz > 2147483647:

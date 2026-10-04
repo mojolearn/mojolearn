@@ -1402,24 +1402,16 @@ def sparse_mr_mst(
         ctx, x, core_d, m, d, inv_alpha, rows, cols, wts, sabotage,
         launch_macs,
     )
-    var h_r = ctx.enqueue_create_host_buffer[DType.int32](m - 1)
-    var h_c = ctx.enqueue_create_host_buffer[DType.int32](m - 1)
-    var h_w = ctx.enqueue_create_host_buffer[DType.float32](m - 1)
-    ctx.enqueue_copy(dst_ptr=h_r.unsafe_ptr(), src_buf=rows)
-    ctx.enqueue_copy(dst_ptr=h_c.unsafe_ptr(), src_buf=cols)
-    ctx.enqueue_copy(dst_ptr=h_w.unsafe_ptr(), src_buf=wts)
+    # cpu3-neighbors: the three edge arrays are copied straight into the
+    # returned lists (no staging buffers, no host copy walk).
+    var lo = List[Int32](length=m - 1, fill=Int32(0))
+    var hi = List[Int32](length=m - 1, fill=Int32(0))
+    var w = List[Float32](length=m - 1, fill=Float32(0.0))
+    ctx.enqueue_copy(dst_ptr=lo.unsafe_ptr(), src_buf=rows)
+    ctx.enqueue_copy(dst_ptr=hi.unsafe_ptr(), src_buf=cols)
+    ctx.enqueue_copy(dst_ptr=w.unsafe_ptr(), src_buf=wts)
     ctx.synchronize()
-    var lo = List[Int32](capacity=m - 1)
-    var hi = List[Int32](capacity=m - 1)
-    var w = List[Float32](capacity=m - 1)
-    for e in range(m - 1):
-        lo.append(h_r.unsafe_ptr().unsafe_load(e))
-        hi.append(h_c.unsafe_ptr().unsafe_load(e))
-        w.append(h_w.unsafe_ptr().unsafe_load(e))
     _ = rows^
     _ = cols^
     _ = wts^
-    _ = h_r^
-    _ = h_c^
-    _ = h_w^
     return SparseMst(lo^, hi^, w^, rounds)

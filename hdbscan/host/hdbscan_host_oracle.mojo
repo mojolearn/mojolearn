@@ -74,7 +74,7 @@ from hdbscan.impl.prediction_data import (
     refuse_nonfinite_queries,
     refuse_soft_clustering_inputs,
 )
-from hdbscan.impl.detail.condense import _add_edge, _collapse, bfs_from_node
+from hdbscan.impl.detail.condense import _add_edge, _collapse_host, bfs_from_node_host
 from hdbscan.host.labelling_host import do_labelling_on_host
 from hdbscan.impl.detail.sparse_mr import (
     boruvka_rounds_on_tree,
@@ -267,7 +267,7 @@ comptime HDBH_SOFT_ALL_POINTS = 1
 
 
 def hdbh_soft_normalize(mut v: List[Float32], base: Int, n: Int):
-    """`soft_clustering.mojo::soft_normalize_row`: the ascending L1 fold,
+    """`soft_clustering.mojo::soft_normalize_row_kern`: the ascending L1 fold,
     saturated at FLT_MAX, a zero sum left at zero (DEVIATION 1616)."""
     var s = Float32(0.0)
     for c in range(n):
@@ -1015,7 +1015,7 @@ def hdbh_condense(
     )
     var next_label = n_samples + 1
     var node_list = List[Int32]()
-    bfs_from_node(root, n_samples, h_children, node_list, HDB_SAB_NONE)
+    bfs_from_node_host(root, n_samples, h_children, node_list, HDB_SAB_NONE)
     var relabel = List[Int](length=root + 1, fill=0)
     var ignore = List[Int](length=root + 1, fill=0)
     relabel[root] = n_samples
@@ -1053,26 +1053,26 @@ def hdbh_condense(
                 relabel[node], relabel[right], lambda_value, right_count,
             )
         elif left_count < min_cluster_size and right_count < min_cluster_size:
-            _collapse(
+            _collapse_host(
                 left, node, n_samples, h_children, relabel, ignore,
                 out_parent, out_child, out_lambda, out_size, lambda_value,
                 HDB_SAB_NONE,
             )
-            _collapse(
+            _collapse_host(
                 right, node, n_samples, h_children, relabel, ignore,
                 out_parent, out_child, out_lambda, out_size, lambda_value,
                 HDB_SAB_NONE,
             )
         elif left_count < min_cluster_size:
             relabel[right] = relabel[node]
-            _collapse(
+            _collapse_host(
                 left, node, n_samples, h_children, relabel, ignore,
                 out_parent, out_child, out_lambda, out_size, lambda_value,
                 HDB_SAB_NONE,
             )
         else:
             relabel[left] = relabel[node]
-            _collapse(
+            _collapse_host(
                 right, node, n_samples, h_children, relabel, ignore,
                 out_parent, out_child, out_lambda, out_size, lambda_value,
                 HDB_SAB_NONE,

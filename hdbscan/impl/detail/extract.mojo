@@ -183,7 +183,7 @@ def get_probabilities_host(
     return out^
 
 
-def probabilities_from_labels(
+def probabilities_from_labels_host(
     tree: CondensedHierarchy,
     labels: List[Int32],
     inverse_label_map: List[Int32],

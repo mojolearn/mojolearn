@@ -126,7 +126,7 @@ struct PredictionData(Copyable, Movable):
         self.index_into_children = index_into_children^
 
 
-def generate_prediction_data(
+def generate_prediction_data_host(
     parents: List[Int32],
     children: List[Int32],
     lambdas: List[Float32],
@@ -541,13 +541,15 @@ def generate_prediction_data_device(
                 "hdbscan.generate_prediction_data: a child is outside [0,"
                 " n_edges]; refused by name"
             )
-        var h_vals = ctx.enqueue_create_host_buffer[DType.uint32](n_exemplars)
-        ctx.enqueue_copy(dst_ptr=h_vals.unsafe_ptr(), src_buf=vals)
-        ctx.synchronize()
-        exemplar_idx = List[Int32](capacity=n_exemplars)
-        for j in range(n_exemplars):
-            exemplar_idx.append(Int32(Int(h_vals.unsafe_ptr().unsafe_load(j))))
-        _ = h_vals^
+        # cpu3-neighbors: the exemplar row ids (each below n_leaves < 2^31,
+        # so their uint32 words ARE the int32 words) are copied straight
+        # into the output list, with no host conversion walk.
+        exemplar_idx = List[Int32](length=n_exemplars, fill=Int32(0))
+        if n_exemplars > 0:
+            ctx.enqueue_copy(
+                dst_ptr=exemplar_idx.unsafe_ptr().bitcast[UInt32](), src_buf=vals
+            )
+            ctx.synchronize()
         exemplar_label_offsets = td_download_i32(
             ctx, counts, n_selected_clusters + 1
         )

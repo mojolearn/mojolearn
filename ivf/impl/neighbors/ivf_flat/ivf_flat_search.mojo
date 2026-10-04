@@ -558,7 +558,7 @@ struct IvfFlatDevice(Movable):
                 index.list_data.copy(),
             )
         self.list_sizes = List[Int32]()
-        for l in range(n_lists):
+        for l in range(n_lists):  # small-loop(n_lists: one size per IVF list): list-length plan for the probe launches, no row data
             self.list_sizes.append(Int32(index.list_size(l)))
 
     def ensure_layout(mut self, index: IvfFlatIndex):
