@@ -159,7 +159,10 @@ comptime SPLIT_COST_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime DEFER_HIST_COPY_1903 = not SPLIT_COST_IDENTICAL or (
     (
         has_apple_gpu_accelerator()
-        or is_defined["MOJOLEARN_GBDT_ID_DEFER_COPY"]()
+        or (
+            is_defined["MOJOLEARN_GBDT_ID_DEFER_COPY"]()
+            and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+        )
     )
     and not is_defined["MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY"]()
 )
@@ -174,7 +177,9 @@ propagated partition stats, which re-associate; 1904's device fold) stay
 as they were. `-D MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY` restores the
 split-time copy and the full zero pass on Apple IDENTICAL. Lane
 gap-trees-nv: `-D MOJOLEARN_GBDT_ID_DEFER_COPY` takes the same schedule
-under IDENTICAL on NVIDIA and AMD (opt-in until its A/B)."""
+under IDENTICAL on NVIDIA and AMD (opt-in until its A/B); fix-g1-gbdt:
+that opt-in arm also turns off under `-D MOJOLEARN_IDN_ALL_OFF` (Apple's
+default stays)."""
 
 # Cache unchanged partitions under IDENTICAL without propagating histogram
 # sums (which would change rounding). CatBoost updates only split children
