@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""lane/apple-fast-gap-linalg2-kpca (2026-10-03): -D MOJOLEARN_KPCA_FAST_LANCZOS_DEV,
+"""lane/apple-fast-gap-linalg2-kpca (2026-10-03): KPCA_FAST_LANCZOS_DEV (default; _OFF reverts),
 the Lanczos steps of `_expansion_decomp._lanczos_top` on the device with no
 host read inside a batch (FAST on Apple only).
 
@@ -34,10 +34,16 @@ from x_decomp.cells import F32Ptr
 from x_decomp.device import TPB, _blocks, gemm_scratch, launch_gemm, xd_ctx
 from x_decomp.resident import _id, _n, _ptr, pool_alloc, pool_free
 
+#: The FAST + Apple default since 2026-10-03 (M3 A/B, one run per arm:
+#: kernel-pca taxi -9%, istella -12.5%, tags gl2k-kpca-lzdev-taxi/-istella;
+#: the board reports no kernel-pca quality, so the M2 quality-only check
+#: gl2k-kpca-quality-r3: eigenvalues max relative difference 1.795e-07,
+#: transform subspace angle 1.879e-06 rad against arm A).
+#: -D MOJOLEARN_KPCA_FAST_LANCZOS_DEV_OFF restores the host-driven loop.
 comptime KPCA_FAST_LANCZOS_DEV = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_KPCA_FAST_LANCZOS_DEV"]()
+    and not is_defined["MOJOLEARN_KPCA_FAST_LANCZOS_DEV_OFF"]()
 )
 
 
