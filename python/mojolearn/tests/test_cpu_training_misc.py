@@ -195,7 +195,12 @@ def test_core_host_binding_registers_the_fold_gather():
     assert "gather_rows_bytes" in host_surface.family("core")["exports"]
     helpers = _read("bindings/host_helpers.mojo")
     assert "def gather_rows_bytes_binding(" in helpers
-    assert '_native("gather_rows_bytes")' in _read("python/mojolearn/model_selection.py")
+    # lane cpu2-l4-modelsel: cross-validation's fold rows are the msel store's
+    # device gather; the core host binding carries its host column
+    assert "_native('msel_take_rows')" in _read("python/mojolearn/model_selection.py")
+    for name in ("msel_put", "msel_take_rows", "msel_free"):
+        assert '("%s")' % name in src
+        assert name in host_surface.family("core")["exports"]
 
 
 def test_oracle_refuses_an_unknown_metric_in_the_device_words():

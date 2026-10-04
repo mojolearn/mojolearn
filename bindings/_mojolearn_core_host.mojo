@@ -75,6 +75,22 @@ that `_spectral_impl._coo_triples` reaches through `_native` on a dense
 precomputed affinity; bodies copied from `bindings/_mojolearn.mojo`, a
 comparison and one narrowing per kept value, no fold to sabotage.
 """
+# lane cpu2-l4-modelsel (2026-10-04): model selection's resident fold store,
+# fold-row gather, cross_val_predict scatter, binary proba column and the
+# parallel forest's offset merge (bindings/msel_host.mojo).
+from bindings.msel_host import (
+    msel_put_binding,
+    msel_alloc_binding,
+    msel_read_binding,
+    msel_free_binding,
+    msel_live_binding,
+    msel_take_rows_binding,
+    msel_scatter_rows_binding,
+    msel_proba_column_binding,
+    msel_rebase_offsets_i32_binding,
+    msel_split_table_i32_binding,
+    msel_group_fold_perm_i32_binding,
+)
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -1449,6 +1465,18 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[gather_i64_binding]("gather_i64")
         module.def_function[gather_f64_binding]("gather_f64")
         module.def_function[gather_rows_bytes_binding]("gather_rows_bytes")
+        # lane cpu2-l4-modelsel: model selection on the device (host column on the core host binding)
+        module.def_function[msel_put_binding]("msel_put")
+        module.def_function[msel_alloc_binding]("msel_alloc")
+        module.def_function[msel_read_binding]("msel_read")
+        module.def_function[msel_free_binding]("msel_free")
+        module.def_function[msel_live_binding]("msel_live")
+        module.def_function[msel_take_rows_binding]("msel_take_rows")
+        module.def_function[msel_scatter_rows_binding]("msel_scatter_rows")
+        module.def_function[msel_proba_column_binding]("msel_proba_column")
+        module.def_function[msel_rebase_offsets_i32_binding]("msel_rebase_offsets_i32")
+        module.def_function[msel_split_table_i32_binding]("msel_split_table_i32")
+        module.def_function[msel_group_fold_perm_i32_binding]("msel_group_fold_perm_i32")
         module.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
         module.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
         module.def_function[probability_rows_f32_binding]("probability_rows_f32")
