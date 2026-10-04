@@ -19,6 +19,7 @@ from checks.numerics import identical_ndtr, identical_ndtri, ftz
 from x_prep.common import FP, IP, p, ld, st, ldi, sti, raw, RUN, run_block
 from x_prep.prims import add, acc_add, sub, mul, div, logf, sqrtf
 from x_prep.mutual_info import _splitmix
+from x_prep.idn_fold import IDN_II_GRAM_TILE, IIG_ROWS, TREE_W, LTLanes, lt_tree, iig_chunks
 
 comptime BR_MAX_ITER = 300
 comptime BR_TOL = Float32(1.0e-3)
@@ -72,11 +73,52 @@ def ii_mean_unit(t: Int, f: FP, q: IP):
         st(f, p(q, 6), Float32(cnt))
 
 
+@always_inline
+def ii_gram_chunk(f: FP, X: Int, d: Int, M: Int, j: Int, a: Int, b: Int, ma: Float32, mb: Float32, lo: Int,
+                  hi: Int) -> Float32:
+    """Rows [lo, hi) of the centred cross product of columns a and b over
+    feature j's observed rows, ascending from zero (the old unit's chain on
+    one chunk). x_prep/idn_tree.mojo's chunk kernel calls this too."""
+    var s = Float32(0)
+    for i in range(lo, hi):
+        if ld(f, M + i * d + j) != Float32(0):
+            continue
+        s = add(s, mul(sub(ld(f, X + i * d + a), ma), sub(ld(f, X + i * d + b), mb)))
+    return s
+
+
+def ii_gram_lt(t: Int, f: FP, q: IP):
+    """`ii_gram_unit`'s q and t (FLAG already tested) in the chunked
+    lane-tree order (x_prep/idn_fold.mojo): chunk c of IIG_ROWS rows gives
+    `ii_gram_chunk` of (min(a,b), max(a,b)), lane c mod TREE_W takes the
+    chunks ascending, then the tree. G[a,b] and G[b,a] are one word."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var j = p(q, 4)
+    var M = p(q, 3)
+    var X = p(q, 0)
+    var a = min(t // d, t % d)
+    var b = max(t // d, t % d)
+    var ma = ld(f, p(q, 5) + a)
+    var mb = ld(f, p(q, 5) + b)
+    var lanes = LTLanes(fill=Float32(0))
+    for c in range(iig_chunks(n)):
+        var lo = c * IIG_ROWS
+        var hi = min(n, lo + IIG_ROWS)
+        var l = c % TREE_W
+        lanes[l] = add(lanes[l], ii_gram_chunk(f, X, d, M, j, a, b, ma, mb, lo, hi))
+    st(f, p(q, 6) + t, lt_tree(lanes))
+
+
 def ii_gram_unit(t: Int, f: FP, q: IP):
     """q = [X, n, d, MASK, j, MEANS, G, FLAG]; t = a*d + b. The centred cross
     product of columns a and b over feature j's observed rows (rows loaded RUN
-    at a time, folded ascending)."""
+    at a time, folded ascending). IDN_II_GRAM_TILE: the chunked lane-tree
+    order (`ii_gram_lt`)."""
     if _done(f, q, 7):
+        return
+    comptime if IDN_II_GRAM_TILE:
+        ii_gram_lt(t, f, q)
         return
     var n = p(q, 1)
     var d = p(q, 2)
