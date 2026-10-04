@@ -120,7 +120,10 @@ def main():
                                'device_value': float(left.ravel()[i]), 'host_value': float(right.ravel()[i])}
                                for i in indices[:4]])
             report['outputs'].append(row)
-    report['status'] = 'PASS' if all(row['status'] == 'PASS' for row in report['outputs']) and all(r['status']=='PASS' for r in report['repeatability'].values()) else 'DIFFER'
+    report['repeatability_requested'] = a.repeats > 1
+    repeat_ok = not report['repeatability_requested'] or all(
+        r['status'] == 'PASS' for r in report['repeatability'].values())
+    report['status'] = 'PASS' if all(row['status'] == 'PASS' for row in report['outputs']) and repeat_ok else 'DIFFER'
     (a.out / 'comparison.json').write_text(json.dumps(report, indent=2))
     print('DART_DIAGNOSTIC', report['status'], 'outputs=' + str(len(report['outputs'])),
           'differing=' + str(sum(row['status'] != 'PASS' for row in report['outputs'])), flush=True)
