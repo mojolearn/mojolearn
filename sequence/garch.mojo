@@ -35,10 +35,25 @@ from std.sys.info import has_apple_gpu_accelerator
 #: Apple since the M3 A/B (lane/apple-fast-seq 8b3f1d90e, n=1, mean_llf
 #: identical): garch taxi-hourly 2,770 -> 968 ms. -D MOJOLEARN_SEQ_GARCH_REG_OFF
 #: restores the stored code; the old -D MOJOLEARN_SEQ_GARCH_REG=1 is harmless.
+#: lane/fam2-timeseries (2026-10-04), IDENTICAL ON EVERY VENDOR and the host
+#: column: both switches below are schedules of the stored code's own
+#: operations in its own order (their banners; `_garch_step_reg` is
+#: `garch_sigma2`'s step statement for statement, the grid's argmin keeps
+#: the serial loop's strict `<` in candidate order), so no bit moves and the
+#: host executor, which runs the same op, needs no change.
+#: `-D MOJOLEARN_IDN_GARCH_REG_OFF=1` / `-D MOJOLEARN_IDN_GARCH_GRID_OFF=1`
+#: restore the stored evaluation / the serial grid under IDENTICAL;
+#: `MOJOLEARN_IDN_ALL_OFF` turns both off. FAST builds are unchanged.
+comptime _GARCH_IDN = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 comptime GARCH_REG = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_SEQ_GARCH_REG_OFF"]()
+    (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+        and has_apple_gpu_accelerator()
+        and not is_defined["MOJOLEARN_SEQ_GARCH_REG_OFF"]()
+    )
+    or (_GARCH_IDN and not is_defined["MOJOLEARN_IDN_GARCH_REG_OFF"]())
 )
 #: lane/apple-fast-seq (2026-10-02). `op_garch`'s starting values are the
 #: best of arch's 4 x 4 x 4 grid, 64 serial `garch_nll` passes over the
@@ -55,9 +70,12 @@ comptime GARCH_REG = (
 #: 528 ms. -D MOJOLEARN_SEQ_GARCH_GRID_OFF restores the serial grid; the old
 #: -D MOJOLEARN_SEQ_GARCH_GRID=1 is harmless.
 comptime GARCH_GRID = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_SEQ_GARCH_GRID_OFF"]()
+    (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+        and has_apple_gpu_accelerator()
+        and not is_defined["MOJOLEARN_SEQ_GARCH_GRID_OFF"]()
+    )
+    or (_GARCH_IDN and not is_defined["MOJOLEARN_IDN_GARCH_GRID_OFF"]())
 )
 comptime GARCH_GRID_N = 64
 
