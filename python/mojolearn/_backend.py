@@ -681,6 +681,14 @@ def baseline_selection_receipt():
     return copy.deepcopy(_BASELINE_SELECTION)
 
 
+def ptx_payload_files():
+    """{relative path: sha256} of the PTX payload this process selected, as
+    verified against its manifest; empty when no PTX payload is selected."""
+    if _BASELINE_SELECTION is None:
+        return {}
+    return dict(_BASELINE_FILES)
+
+
 def _baseline_layout(pkg):
     global _BASELINE_SELECTION, _BASELINE_FILES, _BASELINE_ROOT
     global _LAYOUT, _VENDOR_SELECTED, _VENDOR_HOW, _ARCH_SELECTED, _ARCH_HOW
@@ -800,7 +808,7 @@ def _ptx_qualifying():
     return launcher in ("-m", "__main__.py") and argv[1:2] == ["verify"] and "--qualify-gpu" in argv[2:]
 
 
-def _ptx_identical_admission(pkg, root, bundle, source, manifest_hash):
+def _ptx_identical_admission(pkg, admission_raw, source, manifest_hash):
     """(admission, configuration, detail): 'bundled', 'local' or None.
 
     Never raises: an unreadable device, record or reference is a reason this
@@ -814,18 +822,29 @@ def _ptx_identical_admission(pkg, root, bundle, source, manifest_hash):
     except failures as exc:
         return None, None, dict(error=f"device configuration could not be read: {exc}")
     detail = {}
-    if "admission_sha256" in bundle:
+    if admission_raw is not None:
         try:
-            admission_raw = (root / ptx_admission.ADMISSION_FILE).read_bytes()
-            if hashlib.sha256(admission_raw).hexdigest() != bundle["admission_sha256"]:
-                raise ValueError("bundled PTX admission differs from vendor ownership marker")
             ptx_admission.validate_admission(json.loads(admission_raw), source_commit=source,
                                             manifest_sha256=manifest_hash, configuration=configuration)
-            return "bundled", configuration, dict(admission_sha256=bundle["admission_sha256"])
+            return "bundled", configuration, dict(admission_sha256=hashlib.sha256(admission_raw).hexdigest())
         except failures as exc:
             detail["bundled"] = str(exc)
     else:
         detail["bundled"] = "this release bundles no PTX identity admission"
+    try:
+        reference = ptx_admission.reference_hashes(pkg)
+        path = ptx_admission.local_admission_path(
+            ptx_admission.local_admission_dir(),
+            ptx_admission.local_admission_key(source, manifest_hash, configuration, reference))
+        local_raw = open(path, "rb").read()
+        ptx_admission.validate_local_admission(json.loads(local_raw), source_commit=source,
+            manifest_sha256=manifest_hash, configuration=configuration, reference=reference)
+        return "local", configuration, dict(admission_sha256=hashlib.sha256(local_raw).hexdigest(),
+                                            admission_path=path)
+    except FileNotFoundError:
+        detail["local"] = "no local qualification exists for this exact wheel, device and driver"
+    except failures as exc:
+        detail["local"] = str(exc)
     return None, configuration, detail
 
 
@@ -848,12 +867,20 @@ def _admitted_baseline_base(pkg, native_refusal):
         bundle = info.get("bundled_ptx")
         if (not isinstance(bundle, dict) or info.get("distribution") != "mojolearn-nvidia"
                 or set(bundle) not in ({"manifest_sha256"}, {"manifest_sha256", "admission_sha256"})):
-            raise ValueError("NVIDIA vendor wheel carries no PTX fallback")
+            raise ValueError("NVIDIA vendor wheel carries no PTX fallback (no admitted PTX payload is bundled)")
         root = Path(pkg) / "cuda_ptx" / "sm_80"
         raw = (root / gpu_plugins.BASELINE_MANIFEST).read_bytes()
         manifest_hash = hashlib.sha256(raw).hexdigest()
         if manifest_hash != bundle["manifest_sha256"]:
             raise ValueError("bundled PTX metadata differs from vendor ownership marker")
+        # A release admission the marker names is part of the payload's
+        # provenance: missing or altered bytes refuse in every tier.
+        admission_raw = None
+        if "admission_sha256" in bundle:
+            from . import ptx_admission
+            admission_raw = (root / ptx_admission.ADMISSION_FILE).read_bytes()
+            if hashlib.sha256(admission_raw).hexdigest() != bundle["admission_sha256"]:
+                raise ValueError("bundled PTX metadata differs from vendor ownership marker")
         doc = json.loads(raw)
         actual = {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                   for p in root.rglob("*.so")}  # glue: inventory installed binary paths and file digests
@@ -863,7 +890,7 @@ def _admitted_baseline_base(pkg, native_refusal):
             raise ValueError("PTX build source differs from the clean installed core")
     except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
         raise GpuPluginError(f"{native_refusal}\nPTX fallback refused: {exc}") from exc
-    admission, configuration, detail = _ptx_identical_admission(pkg, root, bundle, source, manifest_hash)
+    admission, configuration, detail = _ptx_identical_admission(pkg, admission_raw, source, manifest_hash)
     qualifying = admission is None and mode == "identical" and _ptx_qualifying()
     if mode == "identical" and admission is None and not qualifying:
         raise GpuPluginError(
