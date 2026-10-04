@@ -957,68 +957,6 @@ def _admitted_baseline_base(pkg, native_refusal):
     return str(root)
 
 
-#: Receipt of the AMD portable route (prototype), or None when not taken.
-_AMD_PORTABLE_SELECTION = None
-
-
-def amd_portable_selection_receipt():
-    """Evidence that this process runs bindings compiled on this machine from
-    the AMD portable payload; never an IDENTICAL qualification."""
-    if _AMD_PORTABLE_SELECTION is None:
-        return None
-    import copy
-    return copy.deepcopy(_AMD_PORTABLE_SELECTION)
-
-
-def _amd_portable_base(pkg, native_refusal):
-    """The AMD portable route (PROTOTYPE). Only called after a detected AMD
-    GPU lacks a native set (`_NoCompatibleNative`). The payload must exist,
-    match its manifest and the clean installed source, and name the device's
-    family; every kernel is then compiled for the device by the ROCm runtime's
-    own COMGR and patched into copies of the native bindings
-    (`amd_portable.materialize`). FAST and DETERMINISTIC take it with no
-    admission. IDENTICAL always refuses: no AMD admission scheme exists yet.
-    Every refusal is a `GpuPluginError`; the CPU is never substituted."""
-    global _AMD_PORTABLE_SELECTION, _ARCH_SELECTED, _ARCH_HOW
-    from pathlib import Path
-    from . import amd_portable
-    mode = requested_mode()
-    gfx, how = _device_arch("hip")
-    if gfx is None:
-        raise GpuPluginError(f"{native_refusal}\nAMD portable route refused: the device "
-                             f"architecture is unknown ({how})")
-    if not amd_portable.payload_root(pkg).joinpath(amd_portable.MANIFEST).is_file():
-        raise GpuPluginError(f"{native_refusal}\nAMD portable route: this install carries no "
-                             "portable AMD payload")
-    if mode == "identical":
-        raise GpuPluginError(amd_portable.identical_refusal(native_refusal, gfx))
-    try:
-        source = (Path(pkg) / "identity_columns" / "COMMIT").read_text().strip()
-        root, doc, manifest_hash = amd_portable.load_payload(pkg, source)
-        out, record = amd_portable.materialize(root, doc, manifest_hash, gfx)
-    except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
-        raise GpuPluginError(f"{native_refusal}\nAMD portable route refused: {exc}") from exc
-    _AMD_PORTABLE_SELECTION = dict(schema="mojolearn.amd-portable-selection.v1",
-        selected="amd-portable", fallback="amd-portable", code_format=amd_portable.CODE_FORMAT,
-        numeric_mode=mode, device=gfx, isa=record["isa"], comgr=record["comgr"],
-        manifest_sha256=manifest_hash, source_commit=source, identical_qualified=False,
-        materialized=str(out))
-    _ARCH_SELECTED = gfx
-    _ARCH_HOW = (f"native unavailable; AMD portable payload compiled here by COMGR "
-                 f"{record['comgr']} for {record['isa']}; not IDENTICAL-qualified")
-    return str(out)
-
-
-def _amd_portable_identical_refusal():
-    """IDENTICAL on a process that runs the AMD portable route always refuses."""
-    sel = _AMD_PORTABLE_SELECTION
-    if sel is None:
-        return None
-    return ("mojolearn: numeric_mode='identical' refused. This process runs the AMD portable "
-            f"route in {sel.get('numeric_mode')} mode (code compiled on this machine for "
-            f"{sel.get('device')}), which has no IDENTICAL admission. No CPU substitution is made.")
-
-
 def _ptx_identical_refusal():
     """The refusal for IDENTICAL on a PTX fallback process no admission covers,
     or None. The forced experimental route is an investigation path with its
@@ -1284,11 +1222,6 @@ def _vendor_base(pkg, vendor):
     try:
         arch, how = _pick_arch(vendor, vdir, archs)
     except _NoCompatibleNative as exc:
-        if vendor == "hip":
-            # AMD portable payload (PROTOTYPE, docs/AMD_PORTABLE_PATH.md): the
-            # same "no compatible native set" case as the PTX fallback, never
-            # anything else; refuses (never the CPU) when no payload serves.
-            return _amd_portable_base(pkg, exc)
         if vendor != "cuda":
             raise
         return _admitted_baseline_base(pkg, exc)
@@ -2325,8 +2258,7 @@ def load_set(mode):
         )
     def refuse_unqualified_ptx():
         helper = getattr(_HOST_HELPER, "active", False)
-        refusal = None if helper or mode != "identical" else (
-            _ptx_identical_refusal() or _amd_portable_identical_refusal())
+        refusal = None if helper or mode != "identical" else _ptx_identical_refusal()
         if refusal is not None:
             raise GpuPluginError(refusal)
     # BEFORE the cache: a helper load may already hold this set, and a cached
