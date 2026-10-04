@@ -38,7 +38,11 @@ import urllib.request
 #: spelled here because this file ships to the box without the package).
 CORE = "mojolearn"
 PLUGINS = {"cuda": "mojolearn-nvidia", "hip": "mojolearn-amd"}
-PROJECTS = (CORE, PLUGINS["cuda"], PLUGINS["hip"])
+PAYLOADS = {"cuda": ("mojolearn-nvidia-sm89", "mojolearn-nvidia-sm90"),
+            "hip": ("mojolearn-amd-gfx942",)}
+PROJECTS = (CORE, *PLUGINS.values(), *(p for rows in PAYLOADS.values() for p in rows))
+REQUIRES = {CORE: tuple(PLUGINS.values()), **{PLUGINS[v]: rows for v, rows in PAYLOADS.items()},
+            **{p: (CORE,) for rows in PAYLOADS.values() for p in rows}}
 
 #: index -> (simple index, JSON API root, file host of OUR three projects)
 INDEXES = {
@@ -127,18 +131,13 @@ def precheck(index, version, api=None, fetch=fetch_json, fetch_meta=fetch_text):
             problems.append(f"{project}=={version} on {index} has yanked file(s): {', '.join(yanked)}")
         if info.get("requires_dist") is None:
             facts += "; Requires-Dist not reported by the index (the box's resolution checks the pins)"
-        elif project == CORE:
-            want = {norm(p): version for p in PLUGINS.values()}
-            got = {k: v for k, v in pins.items() if k in want}
-            if got != want:
-                problems.append(f"{CORE}=={version} on {index} requires {got or 'no plugin'}, not both plugins "
-                                f"at =={version} (this is not the split core: a combined wheel, or a broken pin)")
-            facts += f"; requires {', '.join(f'{k}=={v}' for k, v in sorted(got.items())) or 'no plugin'}"
         else:
-            if pins.get(CORE) != version:
-                problems.append(f"{project}=={version} on {index} does not require {CORE}=={version} "
-                                f"(requires {info.get('requires_dist')})")
-            facts += f"; requires {CORE}=={pins.get(CORE, '?')}"
+            want = {norm(p): version for p in REQUIRES[project]}
+            got = {k: v for k, v in pins.items() if k in PROJECTS}
+            if got != want:
+                problems.append(f"{project}=={version} on {index} has invalid release requirements: "
+                                f"{got}, expected {want}" + (" (not the split core)" if project == CORE else ""))
+            facts += f"; requires {', '.join(f'{k}=={v}' for k, v in sorted(got.items()))}"
         lines.append(f"  {project}=={version}: on {index}, {facts}")
     return lines, problems
 
@@ -204,7 +203,9 @@ def load_check(vendor, version):
     plugin = facts["plugin"] or {}
     if plugin.get("distribution") != PLUGINS[vendor] or plugin.get("version") != version:
         problems.append(f"the loaded GPU set is not from {PLUGINS[vendor]} {version} (gpu_plugin() = {facts['plugin']})")
-    want_dir = os.path.join(facts["package"], vendor) + os.sep
+    if set(plugin.get("payloads") or []) != set(PAYLOADS[vendor]):
+        problems.append(f"loaded vendor aggregate has missing or unexpected native payloads: {plugin}")
+    want_dir = os.path.join(facts["package"], {"cuda": "cuda_native", "hip": "hip_native"}[vendor]) + os.sep
     if not (facts["tier_dir"] + os.sep).startswith(want_dir):
         problems.append(f"the loaded tier directory {facts['tier_dir']} is not under {want_dir}")
     return facts, problems
