@@ -342,8 +342,11 @@ from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
     ATTN_STICKY,
     ATTN_SHIPPED_BWD_ESTASH,
+    AttnFwdScan,
     FUSED_RAN,
     FUSED_SKIPPED_STICKY,
+    attention_fwd_scan_clear,
+    attention_fwd_scan_take,
     device_first_nonfinite,
     fused_attention_arm_estash_runs,
     fused_attention_arm_from_env,
@@ -1708,6 +1711,15 @@ struct LlamaDeviceStages(Movable):
     shipped build reads). `llama_decoder_layer_backward_device` hands it
     with `aexp` to `fused_backward_launch_estash_ran`, which runs the
     DEVIATION 2650 backward only when it equals this call's cell count."""
+    var attn_fwd_scan: AttnFwdScan
+    """IDN_ATTN_BWD_SCAN_REUSE (lane/nr-attn): the LAST call's fused forward
+    regime-scan maxima of `q_rope`, `k_cache` and `v_cache`, keyed by their
+    addresses and lengths; empty when the last call ran no fused scan.
+    Cleared at the start of every `eager_attention_forward` (the attention
+    forward of every layer call, which follows the only writes of those
+    three buffers) and on the AFN flash path; set after a fused forward.
+    The fused backward takes the three maxima from it instead of scanning
+    the three buffers again."""
 
     def __init__(
         out self,
@@ -1801,6 +1813,7 @@ struct LlamaDeviceStages(Movable):
         self.attn_fused_off = False
         self.attn_materialized = False
         self.attn_estash_cells = 0
+        self.attn_fwd_scan = AttnFwdScan()
 
         # All 30 buffers are owned by self through this fence. Preserve every
         # zero fill, but submit them together instead of waiting per buffer.
@@ -1880,6 +1893,7 @@ struct LlamaDeviceStages(Movable):
         self.attn_fused_off = False
         self.attn_materialized = False
         self.attn_estash_cells = 0
+        self.attn_fwd_scan = AttnFwdScan()
         step_count_sync()
         ctx.synchronize()
 
@@ -3992,6 +4006,8 @@ def eager_attention_forward(
     var status = -1
     # DEVIATION 2652: nothing kept until this call keeps it.
     stages.attn_estash_cells = 0
+    # IDN_ATTN_BWD_SCAN_REUSE: no forward scan recorded until this call's.
+    stages.attn_fwd_scan.clear()
     if need_eager:
         attention_eager_core(
             ctx, stages, b, l, s, pos0, key_lo, window, dims, plant_at,
@@ -4019,6 +4035,7 @@ def eager_attention_forward(
                 plant_idx, plant_bits, trace, prefix, softcap,
             )
     elif choice != ATTN_PATH_EAGER:
+        attention_fwd_scan_clear()
         var kept_estash = False
         comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
             # DEVIATION 2652 (brief section 20.3): under an `_estash` arm,
@@ -4046,6 +4063,13 @@ def eager_attention_forward(
                 dims.head_dim, s, pos0, key_lo, window,
                 llama_attention_scale(dims.head_dim),
             )
+        # IDN_ATTN_BWD_SCAN_REUSE: keep this call's forward scan (empty
+        # unless it was taken over exactly these three buffers).
+        stages.attn_fwd_scan = attention_fwd_scan_take(
+            ctx, Int(stages.q_rope.unsafe_ptr()), b * l * dims.n_heads * dims.head_dim,
+            Int(stages.k_cache.unsafe_ptr()), Int(stages.v_cache.unsafe_ptr()),
+            b * dims.n_kv * s * dims.head_dim,
+        )
         if status != FUSED_RAN and not need_eager:
             stages.attn_fused_off = True
         if status != FUSED_RAN and not need_eager:
@@ -5343,6 +5367,7 @@ def _afn_attention_forward(
         # (hd <= 80, hd % 4 == 0; `afn_flash_head_class`), not hd == 64 only.
         if afn_flash_head_class(hd) != 0:
             stages.attn_estash_cells = 0
+            stages.attn_fwd_scan.clear()
             afn_flash_forward(
                 ctx, _afn_p(stages.ctxv), _afn_p(stages.amax), _afn_p(stages.denom),
                 _afn_p(stages.q_rope), _afn_p(stages.k_cache), _afn_p(stages.v_cache),

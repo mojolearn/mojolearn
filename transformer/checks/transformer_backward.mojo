@@ -3578,6 +3578,20 @@ def llama_decoder_layer_backward_device(
     elif choice != ATTN_PATH_EAGER:
         var status = -1
         var estash_done = False
+        # IDN_ATTN_BWD_SCAN_REUSE: the forward's q/k/v regime maxima when
+        # its record matches these very buffers and lengths (-1 otherwise:
+        # the launcher then scans all four buffers as before).
+        var fqmax = Float64(-1.0)
+        var fkmax = Float64(-1.0)
+        var fvmax = Float64(-1.0)
+        if fwd.attn_fwd_scan.valid_for(
+            Int(fwd.q_rope.unsafe_ptr()), b * l * nh * hd,
+            Int(fwd.k_cache.unsafe_ptr()), Int(fwd.v_cache.unsafe_ptr()),
+            b * nkv * s * hd,
+        ):
+            fqmax = fwd.attn_fwd_scan.qmax
+            fkmax = fwd.attn_fwd_scan.kmax
+            fvmax = fwd.attn_fwd_scan.vmax
         comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
             # DEVIATION 2652 (brief section 20.3): under an `_estash` arm the
             # backward reads the exp stash this call's forward kept in
@@ -3595,6 +3609,7 @@ def llama_decoder_layer_backward_device(
                     fwd.q_rope, bst.d_attn_ctx, fwd.k_cache, fwd.v_cache, fwd.amax,
                     fwd.denom, fwd.aexp, kept_cells, b, l, nh, nkv, hd, s, pos0,
                     key_lo, window, scale, arm, ran, bst.attn_repaired,
+                    fwd_qmax=fqmax, fwd_kmax=fkmax, fwd_vmax=fvmax,
                 )
                 estash_done = True
         comptime if ATTN_APPLE_ESTASH_RECOMPUTE:
@@ -3614,6 +3629,7 @@ def llama_decoder_layer_backward_device(
                 ctx, bst.attn_zdot, bst.d_q_rope, bst.d_k_cache, bst.d_v_cache,
                 fwd.q_rope, bst.d_attn_ctx, fwd.k_cache, fwd.v_cache, fwd.amax,
                 fwd.denom, b, l, nh, nkv, hd, s, pos0, key_lo, window, scale,
+                fwd_qmax=fqmax, fwd_kmax=fkmax, fwd_vmax=fvmax,
             )
         bst.attn_backward_status = status
         if status != FUSED_RAN and not need_eager:
