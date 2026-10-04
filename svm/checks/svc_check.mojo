@@ -103,7 +103,7 @@ from svm.impl.smosolver import (
     SmoGridScratch,
     SmoSolver,
     SmoTrace,
-    fold_order_for,
+    fold_order_for_host,
     launch_block_solve,
 )
 from svm.impl.svc_impl import (
@@ -1177,7 +1177,7 @@ def check_nan_never_recorded(ctx: DeviceContext) raises:
 #     return, exactly as F1/F2 do.
 #   * `ws_idx % n_rows` COLLIDES. Whenever `i` and `i + n` are both in the
 #     working set with nonzero delta_alpha, `GetNonzeroDeltaAlpha` hands
-#     `fold_order_for` the SAME index twice. On R1-R4 the working set is the
+#     `fold_order_for_host` the SAME index twice. On R1-R4 the working set is the
 #     whole domain, so EVERY row collides; on R5/R6 a subset does. See
 #     `check_svr_fold_order`.
 #   * `f = +-epsilon - y` can carry BOTH ZERO SIGNS. See R6 and
@@ -1333,7 +1333,7 @@ def fixture_svr_dup() -> RegFixture:
     two rows of `X` are bitwise equal and their kernel columns are bitwise
     equal. Two things this reaches that R1 does not:
 
-      * `fold_order_for` sees the same PROJECTED index twice (as it does on
+      * `fold_order_for_host` sees the same PROJECTED index twice (as it does on
         every SVR fixture whose working set is the whole domain) AND, on top
         of that, two DIFFERENT projected indices whose kernel rows are
         identical, so the fold's order decides a float sum between equal
@@ -1367,7 +1367,7 @@ def fixture_svr_big() -> RegFixture:
     from the previous set, `SimpleSelect`'s two `GatherAvailable` halves and
     the radix sort over the doubled domain all run. The projected indices
     collide only PARTIALLY here, which is the harder case for
-    `fold_order_for` (a mix of distinct and repeated keys in one list).
+    `fold_order_for_host` (a mix of distinct and repeated keys in one list).
 
     Capped at 8 outer iterations: the oracle is one host thread over a
     1024 x 1024 tile per iteration. The global KKT gap is REPORTED, not
@@ -1719,7 +1719,7 @@ def check_svr_eps_tube(rfx: RegFixture, res: OracleResult[DType.float32]) raises
 
 
 def check_svr_fold_order(rfx: RegFixture, res: OracleResult[DType.float32]) raises:
-    """`fold_order_for`'s docstring says working-set indices are distinct.
+    """`fold_order_for_host`'s docstring says working-set indices are distinct.
     THAT IS FALSE UNDER SVR, and this measures how false it is here.
 
     NOT A FIX: the function is deliberately untouched (out of this lane's
@@ -1733,7 +1733,7 @@ def check_svr_fold_order(rfx: RegFixture, res: OracleResult[DType.float32]) rais
     CODE IS RIGHT, and the device-vs-oracle gate on these fixtures is what
     holds the two spellings of that order together.
 
-    Asserts (a) `fold_order_for` returns a permutation ascending in
+    Asserts (a) `fold_order_for_host` returns a permutation ascending in
     `(projected index, position)` over the WORST working set this fit
     produced, and (b) collisions actually occur -- but (b) ONLY WHERE THEY
     ARE PROVABLE, which is not everywhere:
@@ -1771,7 +1771,7 @@ def check_svr_fold_order(rfx: RegFixture, res: OracleResult[DType.float32]) rais
     var proj = List[Int32]()
     for t in range(len(ws0)):
         proj.append(Int32(_vec_index(Int(ws0[t]), rfx.n, True)))
-    var order = fold_order_for(proj)
+    var order = fold_order_for_host(proj)
     var used = List[Bool]()
     for _ in range(len(proj)):
         used.append(False)
@@ -1779,7 +1779,7 @@ def check_svr_fold_order(rfx: RegFixture, res: OracleResult[DType.float32]) rais
     for r in range(len(order)):
         var j = Int(order[r])
         if j < 0 or j >= len(proj) or used[j]:
-            bad = "fold_order_for is not a permutation, rank " + String(r)
+            bad = "fold_order_for_host is not a permutation, rank " + String(r)
             break
         used[j] = True
         if r > 0:
@@ -1787,7 +1787,7 @@ def check_svr_fold_order(rfx: RegFixture, res: OracleResult[DType.float32]) rais
             var ok = (proj[jp] < proj[j]) or (proj[jp] == proj[j] and jp < j)
             if not ok:
                 bad = (
-                    "fold_order_for is not ascending in (index, position) at"
+                    "fold_order_for_host is not ascending in (index, position) at"
                     " rank " + String(r)
                 )
                 break
@@ -1797,7 +1797,7 @@ def check_svr_fold_order(rfx: RegFixture, res: OracleResult[DType.float32]) rais
         " worst working set is iteration " + String(best_t) + ", holding "
         + String(len(ws0)) + " of " + String(2 * rfx.n) + " domain points over "
         + String(rfx.n) + " rows; " + String(n_collide) + " rows appear TWICE"
-        " (ws_idx % n_rows collides, and fold_order_for's docstring says they"
+        " (ws_idx % n_rows collides, and fold_order_for_host's docstring says they"
         " cannot); the order is "
         + ("TOTAL and ascending in (index, position)" if bad == "" else bad)
         + ("; collisions ASSERTED" if must_collide else "; collisions REPORTED (n >= SMO_WS_SIZE: not provable from the shapes)")

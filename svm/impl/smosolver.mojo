@@ -467,7 +467,18 @@ def hash_i32_list(values: List[Int32]) -> UInt64:
     return h
 
 
-def fold_order_for(nz_idx: List[Int32]) -> List[Int32]:
+def tile_rows_f32_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin], src: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32, n_in: Int32,
+):
+    """dst[i] = src[i % n_rows] for i < n (the `InitPenalty` weighted arm:
+    row i's bound at i and, under EPSILON_SVR, again at i + n_rows)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        dst.unsafe_store(i, src.unsafe_load(i % Int(n_rows_in)))
+
+
+def fold_order_for_host(nz_idx: List[Int32]) -> List[Int32]:
     """DEVIATION 634's rank permutation: `order[r]` is the POSITION (in the
     nonzero list) of the r-th smallest training index. Indices are
     distinct within a working set, so the order is total."""
@@ -699,13 +710,16 @@ struct SmoSolver(Movable):
             # `InitPenalty` weighted arm: `C_vec[i] = C * sample_weight[i]`,
             # the product formed once on the host (the caller's bounds), row
             # i's bound at i and, under EPSILON_SVR, again at i + n_rows.
-            var host_c = ctx.enqueue_create_host_buffer[DType.float32](nt)
+            # (lane cpu3-core) the n_rows bounds go up once and a kernel
+            # tiles them over n_train, no host loop over the rows
+            var dc = ctx.enqueue_create_buffer[DType.float32](self.n_rows)
+            ctx.enqueue_copy(dst_buf=dc, src_ptr=self.c_rows.unsafe_ptr())
+            ctx.enqueue_function[tile_rows_f32_kernel](
+                self.C_vec.unsafe_ptr(), dc.unsafe_ptr(), Int32(self.n_rows), Int32(nt),
+                grid_dim=_grid(nt), block_dim=SEL_TPB,
+            )
             ctx.synchronize()
-            for i in range(nt):
-                host_c[i] = self.c_rows[i % self.n_rows]
-            ctx.enqueue_copy(dst_buf=self.C_vec, src_buf=host_c)
-            ctx.synchronize()
-            _ = host_c^
+            _ = dc^
         if self.svmType == C_SVC:
             ctx.enqueue_function[svc_init_kernel](
                 self.f.unsafe_ptr(), y.unsafe_ptr(), Int32(nt),
