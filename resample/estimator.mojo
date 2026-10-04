@@ -1790,7 +1790,19 @@ def permutation_test_host(
     var null_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
     var owners = resample_device_count()
-    if owners > 1 and n_resamples > 1:
+    # -D MOJOLEARN_RESAMPLE_FAST_PERM_SELECT (FAST + Apple, default OFF): the
+    # null by fast_apple.mojo's 4-bit radix select (no atomics, FAST's fold);
+    # the same permutation. Mean and diff_means; anything else: main's launch.
+    # (Owners > 1 is IDENTICAL only, resample_device_count.)
+    var selected = False
+    comptime if RESAMPLE_FAST_PERM_SELECT:
+        selected = perm_select_fast(
+            ctx, null_buf, dpool, key, r_first, n_resamples, n_pooled, n_x,
+            statistic,
+        )
+    if selected:
+        pass
+    elif owners > 1 and n_resamples > 1:
         _perm_null_owners(
             ctx, null_buf, pooled, key, r_first, n_resamples, n_pooled, n_x,
             statistic, tpb, owners,
