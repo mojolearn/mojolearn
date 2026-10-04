@@ -113,6 +113,17 @@ order:
      install always did). More than one and no answer refuses, naming
      `MOJOLEARN_GPU_ARCH`.
 
+THE PTX FALLBACK (2026-10-04, docs/NVIDIA_PTX_IDENTITY.md)
+---------------------------------------------------------
+The native sets above still carry no PTX. `mojolearn-nvidia` may also bundle
+one PTX build, `cuda_ptx/sm_80`, which the driver compiles on the machine. It
+is reached only when a detected NVIDIA device has no compatible native set
+(`_NoCompatibleNative`). FAST and DETERMINISTIC take it with no admission.
+IDENTICAL takes it only on a configuration a bundled release admission or a
+local qualification (`python -m mojolearn verify --qualify-gpu`) names
+exactly, and otherwise refuses with that command. See
+`_admitted_baseline_base`.
+
 THE PLUGIN PACKAGES (2026-09-25, gpu_plugins.py)
 -----------------------------------------------
 Since the split, the Linux `mojolearn` wheel carries no GPU set: the CUDA sets
@@ -149,6 +160,7 @@ fail. `vendor()` reports what was picked, cross-checked against the loaded
 binaries; `NumericModeMixin.vendor_used()` reports it per estimator.
 """
 
+import contextlib
 import importlib
 import importlib.machinery
 import importlib.util
@@ -156,6 +168,7 @@ import json
 import os
 import re
 import sys
+import threading
 
 from . import gpu_plugins, host_surface
 from ._version import __version__ as _CORE_VERSION
@@ -679,6 +692,14 @@ def baseline_selection_receipt():
     return copy.deepcopy(_BASELINE_SELECTION)
 
 
+def ptx_payload_files():
+    """{relative path: sha256} of the PTX payload this process selected, as
+    verified against its manifest; empty when no PTX payload is selected."""
+    if _BASELINE_SELECTION is None:
+        return {}
+    return dict(_BASELINE_FILES)
+
+
 def _baseline_layout(pkg):
     global _BASELINE_SELECTION, _BASELINE_FILES, _BASELINE_ROOT
     global _LAYOUT, _VENDOR_SELECTED, _VENDOR_HOW, _ARCH_SELECTED, _ARCH_HOW
@@ -773,28 +794,104 @@ def _ptx_runtime_configuration():
                 driver_version=fields[3], cuda_driver_version=api.value)
 
 
+#: The one command a refused IDENTICAL PTX configuration is pointed at.
+PTX_QUALIFY_COMMAND = "python -m mojolearn verify --qualify-gpu"
+#: Set by that command for its own verifier children, and by nothing else. A
+#: process that carries it loads the IDENTICAL PTX set so the comparison can
+#: run; its receipt keeps identical_qualified=False and says qualifying=True.
+#: It is not an admission and no result produced under it may be called one.
+_PTX_QUALIFYING_ENV = "MOJOLEARN_PTX_QUALIFYING"
+#: Tiers that take the PTX fallback with no admission record. FAST promises
+#: nothing; DETERMINISTIC promises the same bits on the same box and build and
+#: "says NOTHING about a second box" (module docstring), so neither makes the
+#: cross-device claim an admission exists to back.
+_PTX_UNADMITTED_TIERS = ("fast", "deterministic")
+
+
+def _ptx_qualifying():
+    """True only inside the qualification command and its verifier children."""
+    if os.environ.get(_PTX_QUALIFYING_ENV, "").strip() == "1":
+        return True
+    # `python -m mojolearn verify --qualify-gpu` imports this package before
+    # its own main() can set anything, so the command line is the only signal.
+    argv = list(getattr(sys, "argv", None) or [])
+    launcher = os.path.basename(argv[0]) if argv else ""
+    return launcher in ("-m", "__main__.py") and argv[1:2] == ["verify"] and "--qualify-gpu" in argv[2:]
+
+
+def _ptx_identical_admission(pkg, admission_raw, source, manifest_hash):
+    """(admission, configuration, detail): 'bundled', 'local' or None.
+
+    Never raises: an unreadable device, record or reference is a reason this
+    configuration is not IDENTICAL-qualified, reported in `detail`."""
+    import hashlib
+    import subprocess
+    from . import ptx_admission
+    failures = (OSError, ValueError, TypeError, KeyError, AttributeError, subprocess.SubprocessError)
+    try:
+        configuration = _ptx_runtime_configuration()
+    except failures as exc:
+        return None, None, dict(error=f"device configuration could not be read: {exc}")
+    detail = {}
+    if admission_raw is not None:
+        try:
+            ptx_admission.validate_admission(json.loads(admission_raw), source_commit=source,
+                                            manifest_sha256=manifest_hash, configuration=configuration)
+            return "bundled", configuration, dict(admission_sha256=hashlib.sha256(admission_raw).hexdigest())
+        except failures as exc:
+            detail["bundled"] = str(exc)
+    else:
+        detail["bundled"] = "this release bundles no PTX identity admission"
+    try:
+        reference = ptx_admission.reference_hashes(pkg)
+        path = ptx_admission.local_admission_path(
+            ptx_admission.local_admission_dir(),
+            ptx_admission.local_admission_key(source, manifest_hash, configuration, reference))
+        local_raw = open(path, "rb").read()
+        ptx_admission.validate_local_admission(json.loads(local_raw), source_commit=source,
+            manifest_sha256=manifest_hash, configuration=configuration, reference=reference)
+        return "local", configuration, dict(admission_sha256=hashlib.sha256(local_raw).hexdigest(),
+                                            admission_path=path)
+    except FileNotFoundError:
+        detail["local"] = "no local qualification exists for this exact wheel, device and driver"
+    except failures as exc:
+        detail["local"] = str(exc)
+    return None, configuration, detail
+
+
 def _admitted_baseline_base(pkg, native_refusal):
-    """Only called after a detected NVIDIA device lacks compatible native code."""
+    """The PTX fallback. Only called after a detected NVIDIA device lacks
+    compatible native code (`_NoCompatibleNative`); nothing else reaches it.
+
+    The payload must be present, hash to the vendor marker and match the clean
+    installed source in every tier, or the import refuses. FAST and
+    DETERMINISTIC then take it with no admission. IDENTICAL takes it only on a
+    configuration a bundled release admission or a local qualification names
+    exactly; otherwise it refuses and names `PTX_QUALIFY_COMMAND`. Nothing
+    here ever selects the CPU set (every refusal is a `GpuPluginError`)."""
     global _BASELINE_SELECTION, _BASELINE_FILES, _BASELINE_ROOT, _ARCH_SELECTED, _ARCH_HOW
     from pathlib import Path
     import hashlib
-    from . import ptx_admission
-    import subprocess
+    mode = requested_mode()
     try:
-        if os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical").strip().lower() != "identical":
-            raise ValueError("no automatic PTX policy is admitted for this numeric mode")
         info = _PLUGINS_FOUND.get("cuda", {})
         bundle = info.get("bundled_ptx")
-        if (not isinstance(bundle, dict) or set(bundle) != {"manifest_sha256", "admission_sha256"}
-                or info.get("distribution") != "mojolearn-nvidia"):
-            raise ValueError("NVIDIA vendor wheel carries no admitted PTX fallback")
+        if (not isinstance(bundle, dict) or info.get("distribution") != "mojolearn-nvidia"
+                or set(bundle) not in ({"manifest_sha256"}, {"manifest_sha256", "admission_sha256"})):
+            raise ValueError("NVIDIA vendor wheel carries no PTX fallback (no admitted PTX payload is bundled)")
         root = Path(pkg) / "cuda_ptx" / "sm_80"
         raw = (root / gpu_plugins.BASELINE_MANIFEST).read_bytes()
-        admission_raw = (root / ptx_admission.ADMISSION_FILE).read_bytes()
         manifest_hash = hashlib.sha256(raw).hexdigest()
-        admission_hash = hashlib.sha256(admission_raw).hexdigest()
-        if manifest_hash != bundle["manifest_sha256"] or admission_hash != bundle["admission_sha256"]:
+        if manifest_hash != bundle["manifest_sha256"]:
             raise ValueError("bundled PTX metadata differs from vendor ownership marker")
+        # A release admission the marker names is part of the payload's
+        # provenance: missing or altered bytes refuse in every tier.
+        admission_raw = None
+        if "admission_sha256" in bundle:
+            from . import ptx_admission
+            admission_raw = (root / ptx_admission.ADMISSION_FILE).read_bytes()
+            if hashlib.sha256(admission_raw).hexdigest() != bundle["admission_sha256"]:
+                raise ValueError("bundled PTX metadata differs from vendor ownership marker")
         doc = json.loads(raw)
         actual = {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                   for p in root.rglob("*.so")}  # glue: inventory installed binary paths and file digests
@@ -802,19 +899,50 @@ def _admitted_baseline_base(pkg, native_refusal):
         source = (Path(pkg) / "identity_columns" / "COMMIT").read_text().strip()
         if source != doc["source_commit"] or doc.get("source_dirty") is not False:
             raise ValueError("PTX build source differs from the clean installed core")
-        configuration = _ptx_runtime_configuration()
-        ptx_admission.validate_admission(json.loads(admission_raw), source_commit=source,
-                                        manifest_sha256=manifest_hash, configuration=configuration)
-    except (OSError, ValueError, TypeError, KeyError, AttributeError, subprocess.SubprocessError) as exc:
-        raise GpuPluginError(f"{native_refusal}\nIDENTICAL PTX fallback refused: {exc}") from exc
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
+        raise GpuPluginError(f"{native_refusal}\nPTX fallback refused: {exc}") from exc
+    admission, configuration, detail = _ptx_identical_admission(pkg, admission_raw, source, manifest_hash)
+    qualifying = admission is None and mode == "identical" and _ptx_qualifying()
+    if mode == "identical" and admission is None and not qualifying:
+        raise GpuPluginError(
+            f"{native_refusal}\nIDENTICAL PTX fallback refused: this device, driver and wheel are "
+            "not qualified for bitwise-identical results "
+            f"({'; '.join(f'{k}: {v}' for k, v in sorted(detail.items()))}).\n"  # glue: join refusal reasons
+            f"Qualify this configuration once with\n    {PTX_QUALIFY_COMMAND}\n"
+            "or run without the cross-vendor guarantee with MOJOLEARN_NUMERIC_MODE=fast. "
+            "No CPU substitution is made.")
     _BASELINE_ROOT, _BASELINE_FILES = str(root), actual
     _BASELINE_SELECTION = dict(schema="mojolearn.ptx-baseline-selection.v1", requested="native-first",
-        selected="ptx-baseline", native_fallback=False, code_format="ptx-baseline",
-        manifest_sha256=manifest_hash, admission_sha256=admission_hash, source_commit=source,
-        identical_qualified=True, configuration=configuration, loaded_files=[])
-    _ARCH_SELECTED, _ARCH_HOW = "sm_80", "native unavailable; admitted IDENTICAL PTX fallback"
-    info.update(code_format="ptx-baseline", identical_qualified=True)
+        selected="ptx-baseline", fallback="ptx", native_fallback=False, code_format="ptx-baseline",
+        numeric_mode=mode, manifest_sha256=manifest_hash, source_commit=source,
+        identical_qualified=admission is not None, admission=admission, qualifying=qualifying,
+        admission_detail=detail, configuration=configuration, loaded_files=[])
+    if "admission_sha256" in detail:
+        _BASELINE_SELECTION["admission_sha256"] = detail["admission_sha256"]
+    _ARCH_SELECTED = "sm_80"
+    _ARCH_HOW = ("native unavailable; PTX fallback, " + (
+        f"IDENTICAL-qualified by {admission} admission" if admission is not None
+        else "qualification run in progress; not IDENTICAL-qualified" if qualifying
+        else "not IDENTICAL-qualified"))
+    info.update(code_format="ptx-baseline", identical_qualified=admission is not None, admission=admission)
     return str(root)
+
+
+def _ptx_identical_refusal():
+    """The refusal for IDENTICAL on a PTX fallback process no admission covers,
+    or None. The forced experimental route is an investigation path with its
+    own switches and is not judged here."""
+    sel = _BASELINE_SELECTION
+    if (sel is None or sel.get("requested") != "native-first" or sel.get("identical_qualified")
+            or sel.get("qualifying")):
+        return None
+    detail = "; ".join(f"{k}: {v}" for k, v in sorted(sel.get("admission_detail", {}).items()))  # glue: join refusal reasons
+    return (
+        "mojolearn: numeric_mode='identical' refused. This process runs the NVIDIA PTX fallback "
+        f"in {sel.get('numeric_mode')} mode (no native kernels for this device), and this device, "
+        f"driver and wheel are not qualified for bitwise-identical results ({detail}).\n"
+        f"Qualify this configuration once with\n    {PTX_QUALIFY_COMMAND}\n"
+        "No CPU substitution is made.")
 
 
 def _record_baseline_load(path):
@@ -1936,7 +2064,7 @@ def select():
             f"MOJOLEARN_NUMERIC_MODE={mode} bash bindings/build*.sh"
         )
         if _BASELINE_SELECTION is not None:
-            raise GpuPluginError(refusal + "; an explicit PTX baseline cannot fall back to CPU")
+            raise GpuPluginError(refusal + "; a PTX selection cannot fall back to CPU")
         if host_binding_built():
             return _select_cpu_only(pkg, mode, refusal)
         raise ImportError(refusal)
@@ -2073,6 +2201,23 @@ def _load_member(mode, name, path):
     return module
 
 
+_HOST_HELPER = threading.local()
+
+
+@contextlib.contextmanager
+def host_helper_scope():
+    """For `_buffer._native` alone. The host-side byte helpers (cast,
+    transpose, finiteness) live in the IDENTICAL base binary in every tier and
+    launch no kernel, so resolving them is not an IDENTICAL request and is not
+    refused on an unqualified PTX fallback process."""
+    previous = getattr(_HOST_HELPER, "active", False)
+    _HOST_HELPER.active = True
+    try:
+        yield
+    finally:
+        _HOST_HELPER.active = previous
+
+
 def load_set(mode):
     """Load (and cache) every binding for one tier, side by side with the
     others. The mechanism behind a per-call `numeric_mode=`."""
@@ -2082,12 +2227,22 @@ def load_set(mode):
             f"mojolearn: numeric_mode={mode!r}; it must be 'fast', "
             "'deterministic' or 'identical' (the default)"
         )
+    def refuse_unqualified_ptx():
+        helper = getattr(_HOST_HELPER, "active", False)
+        refusal = None if helper or mode != "identical" else _ptx_identical_refusal()
+        if refusal is not None:
+            raise GpuPluginError(refusal)
+    # BEFORE the cache: a helper load may already hold this set, and a cached
+    # set must not turn a refused request into an answered one.
+    refuse_unqualified_ptx()
     if mode in _SETS:
         return _SETS[mode]
     # The vendor axis is folded in by tier_dir(): the same `<vendor>/` root
     # `select()` used, so a per-call `numeric_mode=` can never reach across
     # to the other vendor's set.
     tier_dir_ = tier_dir(mode)
+    # AND AFTER the layout is known, for a first call that decided it.
+    refuse_unqualified_ptx()
     modules, missing, deferred = {}, [], {}
     for name in _MODULES:
         # An identical-only lane is not "not built yet" in the lower tiers, it

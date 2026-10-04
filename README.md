@@ -129,6 +129,27 @@ macOS arm64 wheels include Apple Metal support. In 0.8.25 on Linux x86-64,
 `mojolearn-amd` GPU packages and selects the backend for the GPU it finds.
 Both platforms also support CPU training and inference.
 
+On NVIDIA, native kernels are used first; this release ships them for the
+sm_89 and sm_90a architectures. Any other NVIDIA GPU with compute capability
+8.0 or newer uses the bundled PTX build, which the driver compiles on your
+machine:
+
+- `fast` and `deterministic` modes use it automatically.
+- `identical` mode uses it only on a device and driver that the release
+  admitted or that you qualified yourself. Otherwise it refuses and names the
+  command to run once:
+
+  ```sh
+  python -m mojolearn verify --qualify-gpu
+  ```
+
+  The command runs every identity check through the PTX build on your GPU and
+  compares each result with the reference results in the wheel. It records the
+  qualification only if all of them match, and only for that exact wheel,
+  device and driver. See [NVIDIA PTX fallback](docs/NVIDIA_PTX_IDENTITY.md).
+
+mojolearn never substitutes the CPU for a GPU it cannot serve.
+
 ```sh
 mojolearn doctor
 ```
