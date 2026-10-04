@@ -2196,6 +2196,28 @@ def _ortho_rotation(k, C, method, tol=1e-6, max_iter=100):
     return k.mm(C, R).T
 
 
+#: x_decomp/fa_fast.mojo's limits (kernel-derived): FA_MAX_D, FA_TR_MAXK, FA_TR_FLOATS
+_FA_MAX_D = 256
+_FA_TR_MAXK = 16
+_FA_TR_FLOATS = 4096
+
+
+def _fa_fast_defines(k):
+    """The FactorAnalysis FAST defines this binding was built with (a FAST
+    Apple build registers `x_decomp_fa_defines`; every other binding has no
+    such entry: the empty set). Asked once per kit; no env read."""
+    got = k.__dict__.get("_fa_defs")
+    if got is None:
+        got = frozenset()
+        if k._res():
+            try:
+                got = frozenset(x for x in str(getattr(k._raw(), "x_decomp_fa_defines")()).split(",") if x)
+            except Exception:
+                got = frozenset()
+        k._fa_defs = got
+    return got
+
+
 class FactorAnalysis(_Base):
     """sklearn.decomposition.FactorAnalysis (reference: scikit-learn
     `decomposition/_factor_analysis.py`: `fit`, `transform`,
@@ -2235,15 +2257,18 @@ class FactorAnalysis(_Base):
         # to the word, the residuals are 0). Device launches only.
         mean = k.colmean(M)
         mean = k.ew("add", mean, k.colmean(k.ew("sub", M, mean)))
+        llconst = d * _LOG_2PI + nc
+        # FAST on Apple (lane/apple-fast-fa, recovered 2026-10-04): taken only
+        # when the binding was built with -D MOJOLEARN_FA_GRAM_ONCE or
+        # MOJOLEARN_FA_ITER_DEVICE (x_decomp/fa_fast.mojo); an IDENTICAL
+        # binding registers no FA entry, so this never runs there
+        fdefs = _fa_fast_defines(k)
+        if (("MOJOLEARN_FA_GRAM_ONCE" in fdefs or "MOJOLEARN_FA_ITER_DEVICE" in fdefs)
+                and d <= _FA_MAX_D and 1 <= nc <= d and self.max_iter >= 1):
+            return self._fit_fast(k, M, mean, n, d, nc, llconst, fdefs)
         Xc = k.ew("sub", M, mean)
         nsqrt = math.sqrt(n)
-        llconst = d * _LOG_2PI + nc
-        if self.noise_variance_init is None:
-            psi = k.const(1.0, 1, d)
-        else:
-            psi = _M.of([float(v) for v in self.noise_variance_init], 1, len(self.noise_variance_init))
-            if psi.c != d:
-                raise ValueError(f"noise_variance_init dimension does not match the number of features : {psi.c} != {d}")
+        psi = self._psi_init(k, d)
         SMALL = 1e-12
         # Xc = Q R once; the scaled data Xc D / sqrt(n) then has the singular
         # values and right vectors of the d x d R D / sqrt(n) (Q orthogonal)
@@ -2295,6 +2320,68 @@ class FactorAnalysis(_Base):
             wts = k.ew("add", k.ew("mul", k.ew("mins", s2, s=1.0), keep), k.ew("mul", s2, drop))
             share = k.mm(wts, k.ew("sq", Vfull))
             psi = k.ew("maxs", k.ew("mul", k.ew("sq", sqrt_psi), share), s=SMALL)
+        return self._fit_store(k, W, psi, mean, loglike, it, d, nc)
+
+    def _psi_init(self, k, d):
+        if self.noise_variance_init is None:
+            return k.const(1.0, 1, d)
+        psi = _M.of([float(v) for v in self.noise_variance_init], 1, len(self.noise_variance_init))
+        if psi.c != d:
+            raise ValueError(f"noise_variance_init dimension does not match the number of features : {psi.c} != {d}")
+        return psi
+
+    def _fit_fast(self, k, M, mean, n, d, nc, llconst, fdefs):
+        """FAST on Apple (lane/apple-fast-fa@3efbce2af; x_decomp/fa_fast.mojo):
+        the centred Gram G (d x d) in ONE pass over the resident X
+        (MOJOLEARN_FA_GRAM_ONCE: X D / sqrt(n) has the spectrum and right
+        vectors of D G D / n), then the EM loop on G only, either here (the
+        eigh of D G D / n, main's psi update) or as ONE binding call
+        (MOJOLEARN_FA_ITER_DEVICE, `fa_em_py`)."""
+        psi = self._psi_init(k, d)
+        G = k._dout(d, d)
+        var = k._dout(1, d)
+        k.b.x_decomp_fa_gram(k._did(M), k._did(mean), G._d.id, var._d.id, [n, d])
+        if "MOJOLEARN_FA_ITER_DEVICE" in fdefs:
+            p0 = array.array("f", psi.s)
+            wa = array.array("f", [0.0]) * (nc * d)
+            pa = array.array("f", [0.0]) * d
+            la = array.array("d", [0.0]) * self.max_iter
+            it = int(k.b.x_decomp_fa_em(G._d.id, p0.buffer_info()[0], wa.buffer_info()[0], pa.buffer_info()[0],
+                                        la.buffer_info()[0], [d, nc, n, self.max_iter], float(self.tol)))
+            return self._fit_store(k, _M(wa, nc, d), _M(pa, 1, d), mean, list(la[:it]), it, d, nc)
+        SMALL = 1e-12
+        old_ll = -math.inf
+        loglike = []
+        order = list(range(d - 1, -1, -1))
+        keep = _M.of([1.0] * nc + [0.0] * (d - nc), 1, d)
+        drop = _M.of([0.0] * nc + [1.0] * (d - nc), 1, d)
+        it = 0
+        W = None
+        for it in range(1, self.max_iter + 1):
+            sqrt_psi = k.ew("adds", k.ew("sqrt", psi), s=SMALL)
+            ev, V = k.eigh(k.ew("scale", k.ew("div", k.ew("div", G, sqrt_psi), sqrt_psi.T), s=1.0 / n))
+            s2 = k.ew("maxs", ev.take_cols(order), s=0.0)
+            # the nc leading right vectors signed as main's SVD route signs them
+            Vfull = V.take_cols(order).T
+            Vt = _svd_flip_v(Vfull.rows(0, nc))
+            sk = s2.cols(0, nc)
+            unexp = _dsum(s2.cols(nc, d).s) if nc < d else 0.0
+            W = k.ew("mul", Vt, k.ew("sqrt", k.ew("maxs", k.ew("adds", sk, s=-1.0), s=0.0)).T)
+            W = k.ew("mul", W, sqrt_psi)
+            slog = _dsum(k.ew("logs", sk, s=1.1754943508222875e-38).s)
+            plog = _dsum(k.ew("logs", psi, s=1.1754943508222875e-38).s)
+            ll = (llconst + slog + unexp + plog) * (-n / 2.0)
+            loglike.append(ll)
+            if (ll - old_ll) < self.tol:
+                break
+            old_ll = ll
+            # main's cancellation-free psi update (lane/apple-fast-quality-glmfa)
+            wts = k.ew("add", k.ew("mul", k.ew("mins", s2, s=1.0), keep), k.ew("mul", s2, drop))
+            share = k.mm(wts, k.ew("sq", Vfull))
+            psi = k.ew("maxs", k.ew("mul", k.ew("sq", sqrt_psi), share), s=SMALL)
+        return self._fit_store(k, W, psi, mean, loglike, it, d, nc)
+
+    def _fit_store(self, k, W, psi, mean, loglike, it, d, nc):
         if self.rotation is not None:
             W = _ortho_rotation(k, W.T, self.rotation).rows(0, nc)
         self.components_m_ = W
@@ -2311,8 +2398,22 @@ class FactorAnalysis(_Base):
     def transform(self, X):
         self._check()
         k = self._kit()
-        M = k.ew("sub", _M.from_input(X), self.mean_m_)
         W = self.components_m_
+        if ("MOJOLEARN_FA_TRANSFORM_FUSED" in _fa_fast_defines(k)
+                and W.r <= _FA_TR_MAXK and W.c * (W.r + 1) <= _FA_TR_FLOATS):
+            # FAST on Apple (lane/apple-fast-fa, recovered): (X - mean) P in
+            # ONE launch over rows, P = (W / psi)^T cov_z (d x nc) in
+            # threadgroup memory (x_decomp/fa_fast.mojo fa_transform_kernel)
+            Xm = _M.from_input(X)
+            if Xm.c != W.c:
+                raise ValueError(f"x_decomp: cannot broadcast 1x{W.c} against {Xm.r}x{Xm.c}")
+            Wpsi = k.ew("div", W, self.noise_variance_m_)
+            cov_z = _inv(k, k.ew("add", _eye(W.r), k.mm(Wpsi, W, tb=True)))
+            P = k.mm(Wpsi, cov_z, ta=True)
+            out = k._dout(Xm.r, W.r)
+            k.b.x_decomp_fa_transform(k._did(Xm), k._did(self.mean_m_), k._did(P), out._d.id, [Xm.r, Xm.c, W.r])
+            return out.out()
+        M = k.ew("sub", _M.from_input(X), self.mean_m_)
         Wpsi = k.ew("div", W, self.noise_variance_m_)
         cov_z = _inv(k, k.ew("add", _eye(W.r), k.mm(Wpsi, W, tb=True)))
         return k.mm(k.mm(M, Wpsi, tb=True), cov_z).out()
