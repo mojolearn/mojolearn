@@ -76,7 +76,10 @@ def transfer_case(ctx: DeviceContext, foreign: DeviceContext, n: Int) raises:
             ctx.enqueue_copy(dst_buf=second.device_output, src_buf=second.device_input)
         var scratch = values(3, round)
         var scratch_out = List[Float32](length=3, fill=Float32(0))
-        var indexes = List[Int32](Int32(16777217), Int32(-2147483647), Int32(round))
+        var indexes = List[Int32](capacity=3)
+        indexes.append(Int32(16777217))
+        indexes.append(Int32(-2147483647))
+        indexes.append(Int32(round))
         var indexes_out = List[Int32](length=3, fill=Int32(0))
         ctx.enqueue_copy(dst_buf=first.scratch, src_ptr=scratch.unsafe_ptr())
         ctx.enqueue_copy(dst_ptr=scratch_out.unsafe_ptr(), src_buf=first.scratch)
@@ -145,8 +148,14 @@ def transfer_case(ctx: DeviceContext, foreign: DeviceContext, n: Int) raises:
 
 
 def minmax_case(ctx: DeviceContext, n: Int) raises:
-    var scale_values = List[Float32](Float32(2), Float32(-0.5), Float32(0.0001))
-    var offset_values = List[Float32](Float32(1), Float32(-2), Float32(0))
+    var scale_values = List[Float32](capacity=3)
+    scale_values.append(Float32(2))
+    scale_values.append(Float32(-0.5))
+    scale_values.append(Float32(0.0001))
+    var offset_values = List[Float32](capacity=3)
+    offset_values.append(Float32(1))
+    offset_values.append(Float32(-2))
+    offset_values.append(Float32(0))
     var scale = upload_f32(ctx, scale_values)
     var offset = upload_f32(ctx, offset_values)
     var slot = ResidentCallSlot(ctx, n, n, 0, 0)
