@@ -114,7 +114,7 @@ struct ByteParallelTrainer(Movable, Writable):
         for i in range(len(devices)):  # small-loop(devices: device ids, at most the visible GPUs): negative and duplicate device-id refusal
             if devices[i] < 0:
                 raise Error("byte LM parallel: negative device index")
-            for j in range(i):
+            for j in range(i):  # small-loop(i: earlier device ids, at most the visible GPUs): duplicate-id refusal on the device list
                 if devices[i] == devices[j]:
                     raise Error("byte LM parallel: duplicate device index")
         if pool_optimizer and len(devices) > shape.n_total():
@@ -172,7 +172,7 @@ struct ByteParallelTrainer(Movable, Writable):
             var first = self.trainers[source].buffers.optimizer_first
             var n = self.trainers[source].buffers.optimizer_count
             var part = self.trainers[source].buffers.param.create_sub_buffer[DType.float32](first,n)
-            for target in range(len(self.trainers)):
+            for target in range(len(self.trainers)):  # small-loop(trainers: replicas, one per device): device-to-device copy of one owner range to each replica
                 if target == source:
                     continue
                 var dest = self.trainers[target].buffers.param.create_sub_buffer[DType.float32](first,n)

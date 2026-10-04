@@ -798,7 +798,7 @@ def res_free(addr: Int) raises:
                 # keep it for reuse while the pool stays under its cap
                 # (the wait above ended every use of it)
                 var held = len(b)
-                for j in range(len(s[].pool)):
+                for j in range(len(s[].pool)):  # small-loop(pool: freed resident arrays, under the pool cap): pool size total for the cap test
                     held += len(s[].pool[j])
                 if held <= RES_POOL_MAX_FLOATS:
                     s[].pool.append(b^)
