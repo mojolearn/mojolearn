@@ -58,6 +58,7 @@ from kernel_methods.checks.random_features import (
     km_weight_sigma,
 )
 from kernel_methods.estimator import _family_ctx
+from core.staged_download import download_f32_into
 
 
 # KM_FAST_RBF_RESIDENT, DEFAULT in FAST + Apple (lane/apple-fast-w2-kfeat):
@@ -70,6 +71,28 @@ comptime KM_FAST_RBF_RESIDENT = (
     and not is_defined["MOJOLEARN_KM_FAST_RBF_RESIDENT_OFF"]()
     and not is_defined["MOJOLEARN_FAMILY_CTX_PER_CALL"]()  # the pools belong to the one context
 )
+
+
+# KM_FAST_RBF_STAGED, FAST+Apple DEFAULT (rollback -D MOJOLEARN_KM_FAST_RBF_STAGED_OFF;
+# needs KM_FAST_RBF_RESIDENT). M3, source ea6b2035e, one run per arm:
+# rbf-sampler istella 77.6 -> 57.1 ms; w2-w3kf-rbf-q PASS (byte-identical).
+# Lane apple-fast-w3-kfeat, 2026-10-04: the
+# projection (m x q; 100,000 x 256 = 102 MB at the board's istella shape)
+# comes down through core/staged_download.mojo (`download_f32_into`: 8 MiB
+# chunks DMA'd into two pooled pinned stages while one thread copies the
+# other stage out into the caller's array) instead of ONE raw host-pointer
+# copy, which on Apple runs at ~3 GB/s (about 21 ms per 64 MB measured on the
+# M4, so ~33 ms of rbf-sampler istella's 76.3 ms). The same transport took
+# x_prep's GB outputs from 563 to 345 ms (label-binarizer taxi, M3,
+# X_PREP_FAST_STAGED_OUT), i.e. ~7.5 ms per 64 MB end to end. Below
+# DOWNLOAD_STAGE_MIN (1M floats) the helper keeps the raw copy. A transport
+# choice: the same bytes land in the same places. W, b and the scan partials
+# are small and keep their raw copies, queued before the staged pipeline's
+# first wait (which therefore also covers the GEMM and the epilogue).
+# The output stays the caller's ordinary (mapped) memory: handing out the
+# pinned stage itself would leave the caller reading write-combined memory.
+comptime KM_FAST_RBF_STAGED = KM_FAST_RBF_RESIDENT and not is_defined["MOJOLEARN_KM_FAST_RBF_STAGED_OFF"]()
+comptime _RBF_STAGE_POOL = "MojoKmRbfDownloadStagesFast"
 
 
 struct _RbfStage(Defaultable, Movable):
@@ -176,8 +199,12 @@ def rbf_sampler_fit_transform_resident(
     ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(), src_buf=psub)
     ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=w_addr), src_buf=dw)
     ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=b_addr), src_buf=db)
-    ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=z_addr), src_buf=dz)
-    ctx.synchronize()
+    comptime if KM_FAST_RBF_STAGED:
+        # waits inside (its first wait covers everything queued above)
+        download_f32_into[_RBF_STAGE_POOL](ctx, dz, nz, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=z_addr))
+    else:
+        ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=z_addr), src_buf=dz)
+        ctx.synchronize()
     _ = psub^
     var best = NONFINITE_NONE
     var hp = st[].host.value().unsafe_ptr()
@@ -228,4 +255,11 @@ def rbf_sampler_fit_transform_binding(addrs: PythonObject, params: PythonObject)
     var sp = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=sa)
     sp.unsafe_store(0, Float64(r[0]))
     sp.unsafe_store(1, Float64(r[1]))
+    return PythonObject(0)
+
+
+def rbf_staged_binding() raises -> PythonObject:
+    """1 when KM_FAST_RBF_STAGED is compiled in (the quality pair's reach)."""
+    comptime if KM_FAST_RBF_STAGED:
+        return PythonObject(1)
     return PythonObject(0)
