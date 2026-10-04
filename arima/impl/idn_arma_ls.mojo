@@ -55,9 +55,9 @@ def _ils_merge_solve[so: MutOrigin, xo: MutOrigin, io: MutOrigin](
     if tid == 0:
         var x = InlineArray[Float32, ILS_MAX_COLS](fill=Float32(0.0))
         var info = ils_solve(r, qb, n, x)
-        if info == Int32(0):
-            for j in range(n):
-                x_out[j] = x[j]
+        # the at most ILS_MAX_COLS unknowns (zeros past n)
+        comptime for j in range(ILS_MAX_COLS):
+            x_out[j] = x[j]
         info_out[0] = info
     barrier()
 
