@@ -103,7 +103,7 @@ def qr_memory():
         before=x.tobytes()
         probe=MemProbe('gpu',vendor=vendor,library='mojolearn');probe.start()
         if kind=='qr':
-            q,r=linalg.qr(x)
+            q,r=linalg.qr(x,mode='reduced')  # default mode 'r' returns R only
             q=np.asarray(q);r=np.asarray(r)
         else:
             model=FactorAnalysis(n_components=4,max_iter=5,random_state=7).fit(x)

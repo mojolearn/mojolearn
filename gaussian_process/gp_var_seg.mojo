@@ -17,9 +17,11 @@ On the device one block is GP_VAR_PTS test points x GP_VAR_SEGS segments
 (256 threads): threads with adjacent thread_idx.x read adjacent test points,
 so every load stays coalesced, and a test point's chain is eight times
 shorter than the serial one. BITS CHANGE (a different bracketing of the same
-squares): `gp_variance_kernel` / `gpc_latent_var_kernel`'s replacements, the
-sabotage copy, `gpr_oracle.mojo`, `gpc_steps.mojo` and `gp_oracle.mojo`
-all fold this way under the same gate.
+squares): `gp_variance_kernel` / `gpc_latent_var_kernel`'s replacements,
+`gpr_oracle.mojo`, `gpc_steps.mojo` and `gp_oracle.mojo` all fold this way
+under the same gate. The sabotage copy (`checks/gp_sabotage.mojo`) still
+folds serially (lane/review-fixes: docstring corrected), so its variance
+stage differs from production by the fold as well as by its planted fault.
 
 Shared memory: GP_VAR_PTS * GP_VAR_SEGS floats = 1 KiB, a static page far
 below every vendor's per-block limit (the fits gate is the comptime assert
