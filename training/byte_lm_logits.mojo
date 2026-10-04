@@ -37,6 +37,8 @@ from training.byte_lm import (
     ByteTrainer,
     _bind_emb_head,
     _block_weights,
+    _block_weights_dev,
+    _param_dev_copy,
     _byte_check_gemm,
     _byte_recover,
     _require_profile,
@@ -45,7 +47,7 @@ from training.byte_lm import (
 )
 from training.checks.train_loop import _copy_into, _upload, _zeros, _zeros_i32, download_f32, download_f32_into, download_f32_into_scanned
 from core.device_arena import arena_begin, arena_end, arena_release
-from core.device_scan import device_first_nonfinite
+from core.device_scan import device_first_nonfinite, device_first_token_oob
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.contract import OP_NT
 from embedding.checks.embedding_identical import identical_embedding_forward_into
@@ -81,10 +83,9 @@ def byte_logits_validate(inputs: List[Int32], batch: Int, length: Int, config: B
         raise Error("byte LM logits: batch * length * vocab exceeds the admitted span")
     if len(inputs) != m:
         raise Error("byte LM logits: ids must hold batch * length tokens")
-    for t in range(m):
-        var v = Int(inputs[t])
-        if v < 0 or v >= config.vocab_size:
-            raise Error("byte LM logits: token id outside [0, vocab) at " + String(t))
+    # cpu3-seq: the token-range refusal moved to the device
+    # (`_logits_enqueue`, `device_first_token_oob` on the uploaded ids, same
+    # message and first index), before the embedding gather reads them.
     var widths: List[Int] = [config.d_model, config.n_kv * config.head_dim,
                              config.intermediate, config.vocab_size]
     for width in widths:
@@ -100,9 +101,25 @@ def byte_logits_validate_params(params: List[Float32], config: ByteConfig) raise
     if len(params) != config.n_total():
         raise Error("byte LM logits: expected " + String(config.n_total()) + " parameters, got "
                     + String(len(params)))
-    for i in range(len(params)):
-        if (bitcast[DType.uint32](params[i]) & UInt32(0x7F800000)) == UInt32(0x7F800000):
-            raise Error("byte LM logits: non-finite parameter at flat index " + String(i))
+    # cpu3-seq: the finite refusal runs on the device after the one upload
+    # (`_logits_params_upload`: same first flat index, same message).
+
+
+def _logits_params_upload(ctx: DeviceContext, params: List[Float32], config: ByteConfig) raises -> DeviceBuffer[DType.float32]:
+    """cpu3-seq: the flat parameters in ONE upload, then the non-finite
+    refusal as a device scan (one partials readback and the wait that also
+    completes the upload, so `params` may be released after). Every slice
+    the stateless logits call needs is then copied device to device."""
+    var n = config.n_total()
+    if len(params) != n:
+        raise Error("byte LM logits: expected " + String(n) + " parameters, got "
+                    + String(len(params)))
+    var flat = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_copy(dst_buf=flat, src_ptr=params.unsafe_ptr())
+    var bad = device_first_nonfinite(ctx, flat, n)
+    if bad >= 0:
+        raise Error("byte LM logits: non-finite parameter at flat index " + String(bad))
+    return flat^
 
 
 struct ByteLogitsScratch(Movable):
@@ -189,6 +206,11 @@ def _logits_enqueue(
     var ton = timing_on()
     var tk = Int(perf_counter_ns())
     ctx.enqueue_copy(dst_buf=sc.ids, src_ptr=inputs.unsafe_ptr())
+    # cpu3-seq: the token-range refusal on the uploaded ids (one scan, one
+    # partials readback), before the embedding gather reads them.
+    var bad_id = device_first_token_oob(ctx, sc.ids, m, vocab)
+    if bad_id >= 0:
+        raise Error("byte LM logits: token id outside [0, vocab) at " + String(bad_id))
     identical_embedding_forward_into(ctx, sc.x, emb_w, sc.ids, m, EmbConfig.llama(vocab, dm))
     timing_tick(ctx, ton, tk, "logits.ids_and_embedding")
 
@@ -256,16 +278,18 @@ def _logits_forward(
     var m = batch * length
     var vocab = config.vocab_size
     _logits_enqueue(ctx, weights, emb_w, lm_w, rope, sc, inputs, batch, length, config)
+    # cpu3-seq: the non-finite refusal is the device scan `_logits_forward_into`
+    # runs (same first flat index, same message), before the download; no
+    # host walk over the m * vocab logits.
+    var bad = device_first_nonfinite(ctx, sc.logits, m * vocab)
+    if bad >= 0:
+        _raise_nonfinite_logit(bad)
     var out = download_f32(ctx, sc.logits, m * vocab)
     comptime if is_defined["MOJOLEARN_BYTE_LM_LOGITS_SABOTAGE"]():
         # The negative control for this lane's sweeps: one output bit moved
         # after the arithmetic, so a passing sweep on this build would be a
         # sweep that compares nothing. Never in a shipped binary.
         out[0] = bitcast[DType.float32](bitcast[DType.uint32](out[0]) ^ UInt32(1))
-    for i in range(len(out)):
-        if (bitcast[DType.uint32](out[i]) & UInt32(0x7F800000)) == UInt32(0x7F800000):
-            raise Error("byte LM logits: non-finite logit at flat index " + String(i)
-                        + " REFUSED (NaN payloads are vendor-shaped, IDENTITY_PATHS row 39)")
     return out^
 
 
@@ -354,17 +378,16 @@ def byte_logits_from_params(ctx: DeviceContext, params: List[Float32], inputs: L
     byte_logits_validate_params(params, config)
     var offsets = config.offsets()
     var vd = config.vocab_size * config.d_model
+    # cpu3-seq: one upload of the flat parameters, the finite refusal on the
+    # device, and every block/embedding/head slice copied device to device
+    # (no host slice loops; same values in the same buffers as before).
+    var flat = _logits_params_upload(ctx, params, config)
     var weights = List[LlamaDeviceWeights]()
     for layer in range(config.n_layers):
-        weights.append(_block_weights(ctx, params, layer, config))
-    var emb_host = List[Float32](capacity=vd)
-    var head_host = List[Float32](capacity=vd)
+        weights.append(_block_weights_dev(ctx, flat, layer, config))
     var head_base = offsets[config.n_tensors() - 1]
-    for i in range(vd):
-        emb_host.append(params[i])
-        head_host.append(params[head_base + i])
-    var emb_w = _upload(ctx, emb_host)
-    var lm_w = _upload(ctx, head_host)
+    var emb_w = _param_dev_copy(ctx, flat, 0, vd)
+    var lm_w = _param_dev_copy(ctx, flat, head_base, vd)
     var rope = LlamaRopeTable(ctx, byte_dims(config), Float32(10000), config.length)
     var sc = ByteLogitsScratch(ctx, batch, length, config)
     var out = _logits_forward(ctx, weights, emb_w, lm_w, rope, sc, inputs, batch, length, config)
@@ -382,17 +405,16 @@ def byte_logits_from_params_into(ctx: DeviceContext, params: List[Float32], inpu
     byte_logits_validate_params(params, config)
     var offsets = config.offsets()
     var vd = config.vocab_size * config.d_model
+    # cpu3-seq: one upload of the flat parameters, the finite refusal on the
+    # device, and every block/embedding/head slice copied device to device
+    # (no host slice loops; same values in the same buffers as before).
+    var flat = _logits_params_upload(ctx, params, config)
     var weights = List[LlamaDeviceWeights]()
     for layer in range(config.n_layers):
-        weights.append(_block_weights(ctx, params, layer, config))
-    var emb_host = List[Float32](capacity=vd)
-    var head_host = List[Float32](capacity=vd)
+        weights.append(_block_weights_dev(ctx, flat, layer, config))
     var head_base = offsets[config.n_tensors() - 1]
-    for i in range(vd):
-        emb_host.append(params[i])
-        head_host.append(params[head_base + i])
-    var emb_w = _upload(ctx, emb_host)
-    var lm_w = _upload(ctx, head_host)
+    var emb_w = _param_dev_copy(ctx, flat, 0, vd)
+    var lm_w = _param_dev_copy(ctx, flat, head_base, vd)
     var rope = LlamaRopeTable(ctx, byte_dims(config), Float32(10000), config.length)
     var sc = ByteLogitsScratch(ctx, batch, length, config)
     _logits_forward_into(ctx, weights, emb_w, lm_w, rope, sc, inputs, batch, length, config, destination)

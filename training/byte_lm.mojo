@@ -39,7 +39,7 @@ from core.step_glue import (
     step_glue_arm_from_env,
     step_glue_blocks,
 )
-from core.device_scan import DeviceScanScratch
+from core.device_scan import DeviceScanScratch, device_first_token_oob
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
@@ -372,9 +372,24 @@ def byte_validate_tokens(ids: List[Int32], config: ByteConfig = ByteConfig()) ra
     config.validate()
     if len(ids) != config.batch * (config.length + 1):
         raise Error("byte LM: token count differs from row-major [batch,length+1]")
-    for i in range(len(ids)):
-        if ids[i] < 0 or ids[i] >= Int32(config.vocab_size):
-            raise Error("byte LM: token ID outside configured vocabulary")
+    # cpu3-seq: the per-token range refusal runs on the device after the
+    # upload (`byte_require_tokens_device`, same message), before the
+    # embedding gather reads the ids. Only the shape is checked here.
+
+
+def byte_require_tokens_device(ctx: DeviceContext, mut ids_dev: DeviceBuffer[DType.int32],
+                               mut targets_dev: DeviceBuffer[DType.int32],
+                               config: ByteConfig) raises:
+    """cpu3-seq: the token-range refusal of `byte_validate_tokens` on the
+    uploaded inputs and targets (`[b, 0:L]` and `[b, 1:L+1]` cover every
+    token of the row-major `[batch, length+1]` ids). Two device scans, one
+    partials readback and one wait each; the first wait also completes the
+    uploads queued before it on the same context."""
+    var m = config.batch * config.length
+    if device_first_token_oob(ctx, ids_dev, m, config.vocab_size) >= 0:
+        raise Error("byte LM: token ID outside configured vocabulary")
+    if device_first_token_oob(ctx, targets_dev, m, config.vocab_size) >= 0:
+        raise Error("byte LM: token ID outside configured vocabulary")
 
 
 def _require_profile() raises:
@@ -683,6 +698,37 @@ def _block_weights(ctx: DeviceContext, params: List[Float32], block: Int, config
     step_count_sync()
     ctx.synchronize()
     return w^
+
+
+def _param_dev_copy(ctx: DeviceContext, mut flat: DeviceBuffer[DType.float32], lo: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """cpu3-seq: `flat[lo:lo+n]` copied device to device into its own buffer
+    (no host slice). Enqueue only; the in-order context orders its readers."""
+    if lo < 0 or n < 0 or lo + n > len(flat):
+        raise Error("byte LM: parameter tensor outside the flat device parameters")
+    if n < 1:
+        return _zeros(ctx, 1)
+    var buf = ctx.enqueue_create_buffer[DType.float32](n)
+    var view = flat.create_sub_buffer[DType.float32](lo, n)
+    ctx.enqueue_copy(dst_buf=buf, src_buf=view)
+    _ = view^
+    return buf^
+
+
+def _block_weights_dev(ctx: DeviceContext, mut flat: DeviceBuffer[DType.float32], block: Int, config: ByteConfig) raises -> LlamaDeviceWeights:
+    """`_block_weights` from the flat parameters already on the device: the
+    nine tensors in the same constructor order, copied device to device."""
+    var base = 1 + 9 * block
+    var o = byte_offsets(config)
+    return LlamaDeviceWeights(ctx, byte_dims(config), Float32(1e-6),
+        _param_dev_copy(ctx, flat, o[base], o[base + 1] - o[base]),
+        _param_dev_copy(ctx, flat, o[base + 5], o[base + 6] - o[base + 5]),
+        _param_dev_copy(ctx, flat, o[base + 1], o[base + 2] - o[base + 1]),
+        _param_dev_copy(ctx, flat, o[base + 2], o[base + 3] - o[base + 2]),
+        _param_dev_copy(ctx, flat, o[base + 3], o[base + 4] - o[base + 3]),
+        _param_dev_copy(ctx, flat, o[base + 4], o[base + 5] - o[base + 4]),
+        _param_dev_copy(ctx, flat, o[base + 6], o[base + 7] - o[base + 6]),
+        _param_dev_copy(ctx, flat, o[base + 7], o[base + 8] - o[base + 7]),
+        _param_dev_copy(ctx, flat, o[base + 8], o[base + 9] - o[base + 8]))
 
 
 def _block_offsets(o: List[Int], base: Int) raises -> List[Int]:
@@ -1068,6 +1114,7 @@ def byte_train_step(ctx: DeviceContext, mut trainer: ByteTrainer,
     timing_tick(ctx, ton, tk, "step.mirror_download_before")
     timing_bytes(ton, "step.mirror_download_before_bytes", 3 * config.n_total() * 4)
     byte_validate_state(before_p, before_m, before_v, before_flags, trainer.completed_steps, config)
+    _byte_admit_tokens(ctx, trainer, token_ids)
     timing_tick(ctx, ton, tk, "step.validate_before")
     trainer.healthy = False
     trainer.shadow_valid = False
@@ -1107,6 +1154,17 @@ struct ByteLeanResult(Movable):
     var loss: Float32
     var completed_steps: Int
     var flags: List[Bool]
+
+
+def _byte_admit_tokens(ctx: DeviceContext, mut tr: ByteTrainer, ids: List[Int32]) raises:
+    """cpu3-seq: the token admission of the non-resident step and eval,
+    BEFORE they mark the trainer unhealthy (as the host walk did): the ids
+    go up into the scratch input/target buffers and are range-checked on
+    the device. Writes only those scratch buffers, which the forward
+    rewrites with the same bytes."""
+    var config = tr.config.copy()
+    afn_upload_ids(ctx, tr.buffers.ids, tr.buffers.targets, ids, config.batch, config.length)
+    byte_require_tokens_device(ctx, tr.buffers.ids, tr.buffers.targets, config)
 
 
 def _byte_recover(ctx: DeviceContext, mut tr: ByteTrainer, message: String) raises:
@@ -1215,16 +1273,16 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
     var M = config.batch * config.length
     var ton = timing_on()
     var tk = Int(perf_counter_ns())
-    comptime if AFN_LM_NOSYNC and deferred:
-        afn_upload_ids(ctx, tr.buffers.ids, tr.buffers.targets, ids, config.batch, config.length)
-    else:
-        # cpu3-seq: no host split or staging loop. The rows of `ids` go
-        # straight into the device input/target buffers (two DMA copies per
-        # row, the same bytes the old host split produced), then one wait so
-        # `ids` may be released by the caller as before.
-        afn_upload_ids(ctx, tr.buffers.ids, tr.buffers.targets, ids, config.batch, config.length)
-        step_count_sync()
-        ctx.synchronize()
+    # cpu3-seq: no host split or staging loop on any path. The rows of `ids`
+    # go straight into the device input/target buffers (two DMA copies per
+    # row, the same bytes the old host split produced), then the token-range
+    # refusal runs on the device (`byte_require_tokens_device`, the message
+    # `byte_validate_tokens` raised) before the embedding gather reads them;
+    # its wait also completes the uploads, so `ids` may be released after.
+    # Under AFN NOSYNC this adds the scan's wait to the step (the host walk
+    # it replaces was data-sized CPU work on the GPU route).
+    afn_upload_ids(ctx, tr.buffers.ids, tr.buffers.targets, ids, config.batch, config.length)
+    byte_require_tokens_device(ctx, tr.buffers.ids, tr.buffers.targets, config)
     timing_tick(ctx, ton, tk, "step.upload_inputs")
     timing_bytes(ton, "step.upload_inputs_bytes", 2 * M * 4)
     for layer in range(config.n_layers):
@@ -1958,6 +2016,7 @@ def byte_eval_loss(ctx: DeviceContext, mut trainer: ByteTrainer,
     var m = download_f32(ctx, trainer.buffers.m_state, config.n_total())
     var v = download_f32(ctx, trainer.buffers.v_state, config.n_total())
     byte_validate_state(p, m, v, trainer.buffers.buf_initialized, trainer.completed_steps, config)
+    _byte_admit_tokens(ctx, trainer, token_ids)
     trainer.healthy = False
     var trace = IdentityTrace.disabled()
     var loss = _byte_forward_loss(ctx, trainer, token_ids, trace)

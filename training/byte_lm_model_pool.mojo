@@ -8,11 +8,12 @@ initial schedule is sequential; pooling capacity does not imply speedup.
 from max.gpu.host import DeviceContext, DeviceBuffer
 from core.device_scan import DeviceScanScratch
 from training.byte_lm import (
-    byte_validate_state, byte_validate_optimizer, byte_validate_tokens,
+    byte_validate_state, byte_validate_optimizer, byte_validate_tokens, byte_require_tokens_device,
     _require_profile, _byte_validate_allocations, _require_device_finite,
     _require_finite, byte_glue_update_launch, _FAULT_NAN, _FAULT_INF, _FAULT_MINUS_ONE,
 )
 from training.byte_lm_optimizer_pool import pool_maybe_fault
+from training.byte_lm_afn import afn_upload_ids
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_layer_pool import ByteLayerPool
 from training.byte_lm_pooled_head import BytePooledHead
@@ -29,11 +30,17 @@ from training.checks.loss import identical_ce_forward_into, identical_ce_backwar
 from training.checks.loss_contract import CeConfig
 
 
-def _host_range(values: List[Float32], first: Int, n: Int) -> List[Float32]:
-    var result = List[Float32]()
-    for i in range(first,first+n):
-        result.append(values[i])
-    return result^
+def _dev_range(ctx: DeviceContext, values: List[Float32], first: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """cpu3-seq: `values[first:first+n]` uploaded straight from the List
+    (one DMA), no host slice copy. The caller waits before `values` may be
+    released (the chunk constructor's wait)."""
+    if first < 0 or n < 0 or first + n > len(values):
+        raise Error("byte model pool: chunk range outside the flat state")
+    if n < 1:
+        return _zeros(ctx,1)
+    var buf = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_copy(dst_buf=buf,src_ptr=values.unsafe_ptr()+first)
+    return buf^
 
 
 struct ByteModelChunk(Movable):
@@ -54,9 +61,9 @@ struct ByteModelChunk(Movable):
                  p: List[Float32], m: List[Float32], v: List[Float32]) raises:
         self.owner = owner
         self.first = first
-        self.p = _upload(ctx,_host_range(p,first,n))
-        self.m = _upload(ctx,_host_range(m,first,n))
-        self.v = _upload(ctx,_host_range(v,first,n))
+        self.p = _dev_range(ctx,p,first,n)
+        self.m = _dev_range(ctx,m,first,n)
+        self.v = _dev_range(ctx,v,first,n)
         self.g = _zeros(ctx,n)
         self.shadow_p = _zeros(ctx,n)
         self.shadow_m = _zeros(ctx,n)
@@ -179,7 +186,7 @@ struct ByteModelPool(Movable, Writable):
         self.head = BytePooledHead(self.head_context.value(),shape)
         var o = shape.offsets()
         self.chunks.append(ByteModelChunk(self.layers.contexts[0],0,0,o[1],p,m,v))
-        for layer in range(shape.n_layers):
+        for layer in range(shape.n_layers):  # small-loop(n_layers: model layers): one chunk per block, uploaded by DMA
             var owner = self.layers.layers[layer].owner
             var first = o[1+9*layer]
             self.chunks.append(ByteModelChunk(self.layers.contexts[owner],owner,first,o[10+9*layer]-first,p,m,v))
@@ -222,18 +229,11 @@ struct ByteModelPool(Movable, Writable):
         # the layer pool itself across its mutating forward/backward methods.
         ref ctx = self.head_context.value()
         ref h = self.head.value()
-        var hi = ctx.enqueue_create_host_buffer[DType.int32](M)
-        var ht = ctx.enqueue_create_host_buffer[DType.int32](M)
-        ctx.synchronize()
-        for b in range(config.batch):
-            for l in range(config.length):
-                hi.unsafe_ptr().unsafe_store(b*config.length+l,ids[b*(config.length+1)+l])
-                ht.unsafe_ptr().unsafe_store(b*config.length+l,ids[b*(config.length+1)+l+1])
-        ctx.enqueue_copy(dst_buf=h.ids,src_ptr=hi.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=h.targets,src_ptr=ht.unsafe_ptr())
-        ctx.synchronize()
-        _ = hi^
-        _ = ht^
+        # cpu3-seq: the rows go straight from `ids` into the device input and
+        # target buffers (no host split/staging loop), then the token-range
+        # refusal on the device, whose wait also completes the uploads.
+        afn_upload_ids(ctx,h.ids,h.targets,ids,config.batch,config.length)
+        byte_require_tokens_device(ctx,h.ids,h.targets,config)
         var emb = EmbConfig.llama(config.vocab_size,config.d_model)
         var ce = CeConfig.causal_lm(config.vocab_size)
         identical_embedding_forward_into(ctx,h.x,h.emb_w,h.ids,M,emb)
@@ -288,7 +288,7 @@ struct ByteModelPool(Movable, Writable):
         var losses = List[Float32]()
         try:
             self.refresh_weights()
-            for i in range(len(shards)):
+            for i in range(len(shards)):  # small-loop(shards: logical shards): one whole device gradient per shard
                 losses.append(self.gradient(shards[i],i))
             for i in range(self.config.n_layers):
                 var owner = self.chunks[i+1].owner
@@ -327,20 +327,26 @@ struct ByteModelPool(Movable, Writable):
         self.require_open()
         if slot < 0 or slot > 3 or (slot == 3 and self.gradient_step != self.completed):
             raise Error("byte model pool: invalid export slot or no committed gradient")
-        var result = List[Float32]()
+        # cpu3-seq: the chunks partition the flat state ([first, first+n)),
+        # so each one goes down by DMA straight into its place; no host
+        # element-by-element append.
+        var n_all = self.config.n_total()
+        var result = List[Float32](length=n_all, fill=Float32(0.0))
         for i in range(len(self.chunks)):
             ref chunk = self.chunks[i]
             ref ctx = self.layers.contexts[chunk.owner]
             chunk.validate(ctx)
-            var values = List[Float32]()
+            if chunk.first < 0 or chunk.first + len(chunk.p) > n_all:
+                raise Error("byte model pool: chunk outside the flat state")
+            var dst = result.unsafe_ptr() + chunk.first
             if slot == 0:
-                values = download_f32(ctx,chunk.p,len(chunk.p))
+                ctx.enqueue_copy(dst_ptr=dst,src_buf=chunk.p)
             elif slot == 1:
-                values = download_f32(ctx,chunk.m,len(chunk.m))
+                ctx.enqueue_copy(dst_ptr=dst,src_buf=chunk.m)
             elif slot == 2:
-                values = download_f32(ctx,chunk.v,len(chunk.v))
+                ctx.enqueue_copy(dst_ptr=dst,src_buf=chunk.v)
             else:
-                values = download_f32(ctx,chunk.g,len(chunk.g))
-            for value in values:
-                result.append(value)
+                ctx.enqueue_copy(dst_ptr=dst,src_buf=chunk.g)
+        for i in range(len(self.layers.contexts)):  # small-loop(contexts: devices, at most 64): one wait per device context
+            self.layers.contexts[i].synchronize()
         return result^

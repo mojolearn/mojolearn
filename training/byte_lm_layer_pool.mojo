@@ -9,6 +9,7 @@ not a complete training driver or a throughput claim.
 from max.gpu.host import DeviceContext, DeviceBuffer
 from core.identity_trace import IdentityTrace
 from core.device_scan import DeviceScanScratch
+from core.step_phase import step_count_d2h
 from training.byte_lm import (
     byte_dims, _block_weights, _require_profile, _byte_validate_allocations,
     _require_finite, _require_device_finite,
@@ -118,18 +119,18 @@ struct ByteLayerPool(Movable):
         _require_finite(p, "parameters")
         if len(devices) < 1 or len(devices) > min(64,shape.n_layers+Int(reserve_head_device)):
             raise Error("byte layer pool: too many devices for the layer/head owners")
-        for i in range(len(devices)):
+        for i in range(len(devices)):  # small-loop(devices: device ids, at most 64): duplicate-id refusal on the device list
             if devices[i] < 0:
                 raise Error("byte layer pool: negative device index")
             for j in range(i):
                 if devices[i] == devices[j]:
                     raise Error("byte layer pool: duplicate device index")
         self.config = shape.copy()
-        for i in range(len(devices)):
+        for i in range(len(devices)):  # small-loop(devices: device ids, at most 64): one context, rope table and cache per device
             self.contexts.append(DeviceContext(device_id=devices[i]))
             self.ropes.append(LlamaRopeTable(self.contexts[i], byte_dims(shape), Float32(10000), shape.length))
             self.caches.append(LlamaKVCache(self.contexts[i], shape.batch, byte_dims(shape), shape.length))
-        for layer in range(shape.n_layers):
+        for layer in range(shape.n_layers):  # small-loop(n_layers: model layers): one owned layer per block, its weights go up by DMA
             var owner = (layer+Int(reserve_head_device)) * len(devices) // (shape.n_layers+Int(reserve_head_device))
             self.layers.append(ByteOwnedLayer(self.contexts[owner], owner, layer, p, shape))
         self.usable = True
@@ -240,10 +241,17 @@ struct ByteLayerPool(Movable):
         self.require_open()
         if self.accumulated == 0:
             raise Error("byte layer pool: no accumulated gradients")
-        var result = List[Float32]()
+        # cpu3-seq: each layer's gradient goes down by DMA straight into its
+        # place in the result (every layer has the same length), no host
+        # element-by-element append.
+        var per = len(self.layers[0].total) if len(self.layers) > 0 else 0
+        var result = List[Float32](length=per * len(self.layers), fill=Float32(0.0))
         for i in range(len(self.layers)):
             var owner = self.layers[i].owner
-            var values = download_f32(self.contexts[owner], self.layers[i].total, len(self.layers[i].total))
-            for value in values:
-                result.append(value)
+            if len(self.layers[i].total) != per:
+                raise Error("byte layer pool: layer gradient lengths differ")
+            step_count_d2h()
+            self.contexts[owner].enqueue_copy(dst_ptr=result.unsafe_ptr() + i * per, src_buf=self.layers[i].total)
+        for i in range(len(self.contexts)):  # small-loop(contexts: devices, at most 64): one wait per device context
+            self.contexts[i].synchronize()
         return result^
