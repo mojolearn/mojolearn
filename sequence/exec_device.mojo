@@ -77,8 +77,18 @@ comptime TPB = 128
 #: -D MOJOLEARN_SEQ_FAST_PIPE_UP=1 / _DOWN=1 are harmless. IDENTICAL and
 #: the other vendors compile the main path unchanged.
 comptime _SEQ_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime SEQ_PIPE_UP = _SEQ_APPLE_FAST and not is_defined["MOJOLEARN_SEQ_FAST_PIPE_UP_OFF"]()
-comptime SEQ_PIPE_DOWN = _SEQ_APPLE_FAST and not is_defined["MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF"]()
+#: lane idn-opt-resident (2026-10-04): IDENTICAL takes the same pipelined
+#: copies on every vendor (NVIDIA, AMD, Apple). Copies only: the same bytes,
+#: the same launches, no bit moves. -D MOJOLEARN_IDN_SEQ_PIPE_UP_OFF /
+#: -D MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF restore IDENTICAL's serial copies.
+#: FAST on NVIDIA and AMD is unchanged.
+comptime _SEQ_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+comptime SEQ_PIPE_UP = (_SEQ_APPLE_FAST and not is_defined["MOJOLEARN_SEQ_FAST_PIPE_UP_OFF"]()) or (
+    _SEQ_IDN and not is_defined["MOJOLEARN_IDN_SEQ_PIPE_UP_OFF"]()
+)
+comptime SEQ_PIPE_DOWN = (_SEQ_APPLE_FAST and not is_defined["MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF"]()) or (
+    _SEQ_IDN and not is_defined["MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF"]()
+)
 #: the pipelined chunk, floats (8 MB; lane apple-fast-gap-optim:
 #: -D MOJOLEARN_SEQ_FAST_PIPE_CH=<floats> for the A/B)
 comptime SEQ_PIPE_CH = get_defined_int["MOJOLEARN_SEQ_FAST_PIPE_CH", 1 << 21]()
@@ -91,8 +101,8 @@ comptime SEQ_PIPE_CH = get_defined_int["MOJOLEARN_SEQ_FAST_PIPE_CH", 1 << 21]()
 #:    into the caller's array in SEQ_PIPE_CH chunks, all queued, one wait
 #:    (no stage and no host read).
 #: Copies only: the same bytes.
-comptime SEQ_MAP_DOWN = SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_MAP_DOWN"]()
-comptime SEQ_RAW_DOWN = SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_RAW_DOWN"]() and not SEQ_MAP_DOWN
+comptime SEQ_MAP_DOWN = _SEQ_APPLE_FAST and SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_MAP_DOWN"]()
+comptime SEQ_RAW_DOWN = _SEQ_APPLE_FAST and SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_RAW_DOWN"]() and not SEQ_MAP_DOWN
 
 
 struct _SeqContext(Defaultable, Movable):
