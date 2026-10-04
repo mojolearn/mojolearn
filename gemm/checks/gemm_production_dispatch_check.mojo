@@ -13,9 +13,16 @@ from gemm.checks.gemm_identical import (
     IDN_GEMM_AMD_BAND_MFMA,
     IDN_GEMM_MFMA_NO_LONE_GROUP,
     IDN_GEMM_MFMA_REUSE_WS,
+    PLAN_SPLIT_32_2X2,
+    PLAN_SPLIT_64_4X4,
+    PLAN_TUNED_32_2X2,
     PLAN_TUNED_64_4X4,
     PLAN_TUNED_128_8X8,
     _mfma_group_leaves,
+    choose_gemm_plan_tiles,
+    gemm_mfma16_waves,
+    gemm_nv_step_kpack_rows,
+    gemm_tile_min_blocks,
     amd_short_contract_large_output,
     choose_gemm_plan,
     contract_partition,
@@ -49,6 +56,39 @@ def _check_mfma_groups(m: Int, n: Int, k: Int) raises:
                 identical_gemm_workspace_max_floats(m, n, k)
                 >= m * n * ((p + g - 1) // g)
             )
+
+
+def _check_small_bodies(m: Int, n: Int, k: Int) raises:
+    """lane/nr-gemm: the small-tile matrix-core rule (AMD body, a pure host
+    rule checked on every column) and the NVIDIA packed step-down rule."""
+    var p = contract_partition(k)[1]
+    var big = m * n * p + 1
+    var plans: List[Int] = [
+        PLAN_TUNED_64_4X4, PLAN_TUNED_32_2X2, PLAN_SPLIT_64_4X4, PLAN_SPLIT_32_2X2,
+    ]
+    for pi in range(len(plans)):
+        var plan = plans[pi]
+        var split = plan == PLAN_SPLIT_64_4X4 or plan == PLAN_SPLIT_32_2X2
+        var r = gemm_mfma16_waves(m, n, k, plan, big)
+        var nw = -r if r < 0 else r
+        assert_true(r == 0 or nw == 1 or nw == 2 or nw == 4)
+        assert_true(r == 0 or ((r < 0) == split))
+        if n < 64:
+            assert_true(r == 0)
+        if split:
+            # A split launch never runs without its leaf-major workspace.
+            assert_true(gemm_mfma16_waves(m, n, k, plan, m * n * p - 1) == 0)
+    # Plans the rule does not serve keep their plan.
+    assert_true(gemm_mfma16_waves(m, n, k, PLAN_TUNED_128_8X8, big) == 0)
+    var rows = gemm_nv_step_kpack_rows(m, n, k)
+    assert_true(rows == 0 or rows == 64 or rows == 128)
+    if rows != 0:
+        assert_true(choose_gemm_plan_tiles(m, n, k) == PLAN_TUNED_128_8X8)
+        var plan2 = choose_gemm_plan(m, n, k)
+        assert_true(plan2 == PLAN_TUNED_64_4X4 or plan2 == PLAN_TUNED_32_2X2)
+        # The chosen packed tile fills the device (128 or 64 rows x 64 cols
+        # on NVIDIA's narrow packed geometry).
+        assert_true(((m + rows - 1) // rows) * ((n + 63) // 64) >= gemm_tile_min_blocks())
 
 
 def main() raises:
@@ -127,4 +167,25 @@ def main() raises:
         for ni in range(len(ns)):
             for ki in range(len(ks)):
                 _check_mfma_groups(ms[mi], ns[ni], ks[ki])
+                _check_small_bodies(ms[mi], ns[ni], ks[ki])
+    # Narrow outputs and the edges of the 64-column tile.
+    _check_small_bodies(2048, 63, 384)
+    _check_small_bodies(2048, 64, 384)
+    _check_small_bodies(2048, 65, 384)
+    _check_small_bodies(17, 4096, 384)
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_AMD:
+        if gemm_tile_min_blocks() == 1024:
+            # Hand counts at the shipped 1024-block floor (board neighbors):
+            # 2048 x 384: 64-row tiles 192, 32-row 384, so the one-wave tile.
+            assert_true(gemm_mfma16_waves(2048, 384, 384, PLAN_TUNED_32_2X2, 0) == 1)
+            assert_true(gemm_mfma16_waves(2048, 385, 384, PLAN_TUNED_32_2X2, 0) == 1)
+            # 4096 x 1024: 64 x 16 = 1024 blocks of 64 rows.
+            assert_true(gemm_mfma16_waves(4096, 1024, 384, PLAN_TUNED_64_4X4, 0) == 4)
+            # 4096 x 512: 64-row 512, 32-row 1024 blocks.
+            assert_true(gemm_mfma16_waves(4096, 512, 384, PLAN_TUNED_64_4X4, 0) == 2)
+            # Split: 384 x 384 x 2048 (dW), P = 16: 36 x 16 = 576 64-row
+            # blocks, 72 x 16 = 1152 32-row blocks.
+            assert_true(
+                gemm_mfma16_waves(384, 384, 2048, PLAN_SPLIT_64_4X4, 384 * 384 * 16) == -2
+            )
     print("production GEMM dispatch gate: PASS")
