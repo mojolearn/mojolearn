@@ -2141,8 +2141,8 @@ class KBinsDiscretizer(_PrepBase):
                 if strat == 3:
                     pr.stage("kbins_wkm", d, ug, n, d, ucnt, nbo, nbmax, st, stw, edges, cen, lab)
                 else:
-                    levels = [[i * (100.0 / b) for i in range(b)] + [100.0] for b in nb]
-                    _weighted_levels(pr, ug, ucnt, n, d, levels, strat == 1, edges)
+                    # the percent levels i * (100 / b) on the device (c2_grid KIND 0)
+                    _weighted_levels(pr, ug, ucnt, n, d, nb, 0, strat == 1, edges)
                 pr.stage("kbins_edges", d, so, n, d, nbo, nbmax, 11, stw, edges, ne, 0, 0)
         pr.run(mode)
         counts = [int(v) for v in pr.values(ne, d)]
@@ -3531,7 +3531,6 @@ class QuantileTransformer(_PrepBase):
         if perm is not None:
             n = perm[1]
         nq = max(1, min(int(self.n_quantiles), n))
-        refs = [i / (nq - 1) if nq > 1 else 0.0 for i in range(nq)]
         pr = _Prog()
         xo = pr.put(arr)
         if perm is not None:
@@ -3539,10 +3538,9 @@ class QuantileTransformer(_PrepBase):
             pr.stage("f2_perm_rows", n, _seed_words(pr, perm[0]), n_all, ro)
             pr.stage("p2m_rgather", n * d, xo, d, ro, xs)
             xo = xs
-        # the references are an input no stage writes: the fitted attribute is
-        # the array that went up (the same float32 words the arena held)
-        refs_arr = Array._from_flat([float(v) for v in refs], (nq,), "<f4")
-        so, st, qf = pr.work(n * d), pr.alloc(6 * d), pr.put(refs_arr)
+        # the references i / (nq - 1) (0 for one quantile) on the device, in binary64
+        # rounded to float32 as the Python list was (c2_grid KIND 1, lane cpu2-l3-prep)
+        so, st, qf = pr.work(n * d), pr.alloc(6 * d), _grid(pr, [nq - 1], nq, 1)
         qo = pr.alloc(nq * d)
         pr.stage("sort_cols", d, xo, n, d, so, 0)
         _cs(pr, mode, xo, n, d, st, var=False)
@@ -3554,7 +3552,7 @@ class QuantileTransformer(_PrepBase):
         pr.run(mode)
         self._q = pr.get(qo, nq * d)
         self.quantiles_ = pr.get(qt, (nq, d))
-        self.references_ = refs_arr
+        self.references_ = pr.get(qf, nq)
         self.n_quantiles_, self.numeric_mode_, self.n_features_in_ = nq, mode, d
         return self
 
@@ -3907,16 +3905,24 @@ def _weighted_groups(pr, arr, w, n, d):
     return ug, ucnt
 
 
-def _weighted_levels(pr, ug, ucnt, n, d, levels, average, out):
+def _grid(pr, nb, w, kind):
+    """Stages c2_grid (lane cpu2-l3-prep): one level row of stride w per entry
+    b of nb (KIND 0: i * (100 / b), then 100; 1: i / b; 2: 100 * (i * (1 /
+    b)), then 100; zeros past b), binary64 rounded to float32 as the Python
+    lists were. Returns the (len(nb), w) block's offset."""
+    out = pr.alloc(len(nb) * w)
+    pr.stage("c2_grid", len(nb) * w, pr.put_list(nb), w, kind, out)
+    return out
+
+
+def _weighted_levels(pr, ug, ucnt, n, d, nb, kind, average, out):
     """A stage of the reference's `_weighted_percentile` of every column at
-    the percent `levels` (one list per column, padded to a common stride
-    max + 1) into `out` (column c at c * stride), over `_weighted_groups`."""
-    nb = [len(lv) - 1 for lv in levels]
-    nbmax = max(nb)
-    flat = []
-    for lv in levels:
-        flat += list(lv) + [0.0] * (nbmax + 1 - len(lv))
-    pr.stage("kbins_wq", d, ug, n, d, ucnt, pr.put_list(nb), nbmax, pr.put_list(flat), int(average), out)
+    the percent levels `_grid` writes for nb (one b per column, a common
+    stride max + 1) into `out` (column c at c * stride), over
+    `_weighted_groups`."""
+    nbmax = max(nb)  # glue: the widest level row (a shape)
+    lv = _grid(pr, nb, nbmax + 1, kind)
+    pr.stage("kbins_wq", d, ug, n, d, ucnt, pr.put_list(nb), nbmax, lv, int(average), out)
 
 
 def _spline_fused(mode):
@@ -4041,14 +4047,12 @@ class SplineTransformer(_PrepBase):
         elif self.knots == "quantile":
             base = pr.alloc(d * nk)
             if w is None:
-                qf = pr.put_list([i / (nk - 1) for i in range(nk)])
+                qf = _grid(pr, [nk - 1], nk, 1)
                 pr.stage("sort_cols", d, xo, n, d, so, 0)
                 pr.stage("quantile", d * nk, so, n, d, qf, nk, base, st)
             else:
-                step = 1.0 / (nk - 1)
-                lv = [100.0 * (i * step) for i in range(nk - 1)] + [100.0]
                 ug, ucnt = _weighted_groups(pr, arr, w, n, d)
-                _weighted_levels(pr, ug, ucnt, n, d, [lv] * d, False, base)
+                _weighted_levels(pr, ug, ucnt, n, d, [nk - 1] * d, 2, False, base)
         else:
             base, uniform = pr.alloc(d * nk), 1
             if w is not None and wl < n:
