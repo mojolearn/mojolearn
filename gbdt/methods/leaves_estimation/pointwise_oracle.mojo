@@ -143,7 +143,7 @@ from std.sys.compile import is_defined
 from std.gpu import block_idx, thread_idx
 
 from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 # ================= DEVIATION BLOCK 2030 =================
 # FUSED MoveTo + evaluation for the Newton walker (single-dim losses).
@@ -1135,6 +1135,59 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                                 second_der[base + col * hbs + row] = val
                 return
 
+        comptime if IDN_MULTI_HESS_ONE_WAIT:
+            # lane/fam-gbdt: the loop below with ONE wait. Row `row`'s copy
+            # of the whole `d_multi_stats` (`hbs * bin_count` floats, the
+            # scratch's `multi_planes * bin_count`) goes to slot `row` of
+            # `h_multi_stats` (`_oracle_multi_host_len`).
+            var stats_len = hbs * self.bin_count
+            for row in range(hbs):
+                var column_count = row + 1
+                if self.objective == OBJECTIVE_MULTIRMSE:
+                    launch_multi_rmse_second_der(
+                        self.ctx, self.n_rows,
+                        self.d_weights, self.has_weights,
+                        self.d_multi_der, row, self.n_rows,
+                    )
+                else:
+                    launch_multilogit_second_der(
+                        self.ctx, self.num_classes, self.n_rows,
+                        self.d_weights, self.has_weights,
+                        self.d_cursor, self.n_rows,
+                        self.d_multi_der, row, self.n_rows,
+                    )
+                compute_partition_stats(
+                    self.ctx, self.bin_count, 0, column_count, self.n_rows,
+                    self.d_leaves, self.d_p_off, self.d_p_sz,
+                    self.d_multi_der, self.d_multi_partials,
+                    self.d_multi_stats,
+                    sm_count=self.sm_count,
+                )
+                self.ctx.enqueue_copy(
+                    dst_ptr=self.h_multi_stats.unsafe_ptr() + row * stats_len,
+                    src_buf=self.d_multi_stats,
+                )
+            self.ctx.synchronize()
+            for row in range(hbs):
+                var column_count = row + 1
+                var slot = row * stats_len
+                for bin in range(self.bin_count):
+                    var base = bin * matrix_size
+                    for col in range(column_count):
+                        var val = Float64(
+                            self.h_multi_stats.unsafe_ptr().unsafe_load(
+                                slot + bin * column_count + col
+                            )
+                        )
+                        if col == row:
+                            second_der[base + row * hbs + row] = (
+                                val + self.lambda_reg
+                            )
+                        else:
+                            second_der[base + row * hbs + col] = val
+                            second_der[base + col * hbs + row] = val
+            return
+
         for row in range(hbs):
             var column_count = row + 1
             if self.objective == OBJECTIVE_MULTIRMSE:
@@ -1301,6 +1354,36 @@ def multiclass_hessian_batch_for[column: Int]() -> Bool:
 
 
 comptime MULTICLASS_HESSIAN_BATCH = multiclass_hessian_batch_for[TARGET_COLUMN]()
+
+#: lane/fam-gbdt (2026-10-04), IDN_MULTI_HESS_ONE_WAIT: IDENTICAL, every
+#: vendor, default on. The blocked Hessian's row loop
+#: (`_write_blocked_second_derivatives`, DEVIATION 75) keeps its launch and
+#: its reduce PER ROW, at the row's own column count, but waits ONCE for all
+#: `numClasses` rows instead of once per row: each row's whole-buffer copy
+#: of `d_multi_stats` lands in its own slot of `h_multi_stats` (the stream
+#: orders the copy before the next row's reduce rewrites the buffer), and
+#: the mirror reads the slots after the one wait. Same kernels, same grids,
+#: same order: no bit moves on any column and the host column is untouched.
+#: The host staging buffer is `multi_planes` times longer (floats per leaf,
+#: not per row). `-D MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF` (or the
+#: master `-D MOJOLEARN_IDN_ALL_OFF`) restores the wait per row.
+comptime IDN_MULTI_HESS_ONE_WAIT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not MULTICLASS_HESSIAN_BATCH
+    and not (
+        is_defined["MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+
+def _oracle_multi_host_len(multi_planes: Int, bin_count: Int) -> Int:
+    """The length of `h_multi_stats`: `d_multi_stats`' own length, times one
+    slot per Hessian row under `IDN_MULTI_HESS_ONE_WAIT`."""
+    comptime if IDN_MULTI_HESS_ONE_WAIT:
+        return multi_planes * multi_planes * bin_count
+    else:
+        return multi_planes * bin_count
 #: the widest class count batched: `d_multi_der` is `K (K + 1) / 2` planes
 #: of `n_rows` floats under the batch (36 at 8), the row loop above that
 comptime MULTICLASS_HESSIAN_BATCH_MAX_CLASSES = 8
@@ -1591,7 +1674,7 @@ struct OracleHostScratch(Movable):
             ctx, 2 * bin_count
         )
         self.h_multi_stats = arena.host_buffer[DType.float32](
-            ctx, multi_planes * bin_count
+            ctx, _oracle_multi_host_len(multi_planes, bin_count)
         )
         # the size of `d_part_stats`, the WHOLE-BUFFER copy's source (the
         # weight fold fills its first `bin_count` cells): a staging buffer
@@ -1952,7 +2035,7 @@ def make_bin_optimized_oracle(
             2 * bin_count
         )
         h_multi_stats = ctx.enqueue_create_host_buffer[DType.float32](
-            multi_planes * bin_count
+            _oracle_multi_host_len(multi_planes, bin_count)
         )
 
     # `CurrentPoint` lives in the CURSOR's gauge -- `cursorDim` per bin,
