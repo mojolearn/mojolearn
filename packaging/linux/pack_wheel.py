@@ -9,35 +9,23 @@
         --set bench/results/wheels/<stamp3>-amd/sets/hip \\
         --out python/dist
 
-THREE WHEELS BY DEFAULT (2026-09-25, python/mojolearn/gpu_plugins.py), so
-NVIDIA and AMD release independently:
+SIX NATIVE WHEELS BY DEFAULT (python/mojolearn/gpu_plugins.py):
+core, two metadata-only vendor aggregates, and three architecture payloads.
+The core requires both aggregates; aggregates require all their native payloads;
+payloads pin the core exactly. Default pip installation still includes all GPUs.
 
-    mojolearn-<v>-py3-none-manylinux_2_35_x86_64.whl         core-linux: Python,
-                                    mojolearn/host/, mojolearn/.libs/, no set
-    mojolearn_nvidia-<v>-py3-none-manylinux_2_35_x86_64.whl  nvidia: mojolearn/cuda/ only
-    mojolearn_amd-<v>-py3-none-manylinux_2_35_x86_64.whl     amd: mojolearn/hip/ only
-
-`pip install mojolearn` works for everyone (2026-09-26): the core requires
-BOTH plugins at its own version exactly (Requires-Dist: mojolearn-nvidia==<v>,
-Requires-Dist: mojolearn-amd==<v>), each plugin requires exactly
-mojolearn==<v> back, and there are no extras. The core's METADATA is the
-combined wheel's plus exactly those two lines.
-`--profile split` (the default) or `release-split` (release-linux3's checks
-and proofs, per plugin); `--wheels core-linux,nvidia,amd` picks a subset, so
-the core and the NVIDIA plugin can be packed from the NVIDIA legs alone.
-The three are a PARTITION of the one combined payload: every member is
-written from the same file to the same archive path it has in the combined
-wheel, and only each wheel's .dist-info is its own (test_split_wheels.py
-proves the union equals the combined wheel byte for byte). A plugin's files
-install into the core's package directory, where each binding's RUNPATH
-finds mojolearn/.libs exactly as before. `--profile generic` and
-`release-linux3` still write the ONE combined wheel (tools/release.py asks
-for release-linux3 by name).
+`--wheels nvidia` includes its aggregate and native payloads; `--wheels
+nvidia-sm89` emits just that architecture payload. The experimental `nvidia-ptx80`
+payload must be explicitly requested and cannot use a release profile.
+Kernel bytes are unchanged. Native roots move to cuda_native/ and hip_native/
+at the same directory depth, preserving RUNPATH while avoiding ownership overlap
+with old vendor wheels during upgrades. Only the core carries the shared runtime.
+Combined profiles retain their previous native layout.
 
 EVERY SET CARRIES AN ARCHITECTURE LEVEL (2026-08-30): a `--set` directory is
 `sets/<vendor>/` holding one or more `<arch>/` subdirectories (`sm_80`,
 `gfx942`, ...), because one `mojo build` emits device code for exactly one
-architecture and no PTX -- the sm_90a-only 0.3.0 wheel failed 27 of 29 lanes
+architecture on the native release path -- the sm_90a-only 0.3.0 wheel failed 27 of 29 lanes
 on an A40 (LEGS_2026-08-30.md). Different architectures of one vendor come
 from different legs, so the same vendor may be given several times; the same
 (vendor, architecture) twice is refused. An arch-less set (binaries directly
@@ -277,7 +265,7 @@ SPLIT_PROFILE = "split"
 RELEASE_SPLIT_PROFILE = "release-split"
 SPLIT_PROFILES = (SPLIT_PROFILE, RELEASE_SPLIT_PROFILE)
 #: The wheels a split profile can emit; `--wheels` picks a subset.
-WHEEL_KINDS = (gpu_plugins.CORE_PROFILE,) + tuple(r["profile"] for r in gpu_plugins.PLUGINS.values())
+WHEEL_KINDS = (gpu_plugins.CORE_PROFILE,) + tuple(r["profile"] for r in gpu_plugins.distribution_rows(include_experimental=True))
 #: The platform tag the split profiles write. MEASURED, not typed: auditwheel
 #: measured the combined 0.8.16 and 0.8.18 wheels at manylinux_2_35_x86_64
 #: (packaging/linux/audit.sh, show.txt), and every split wheel holds a subset
@@ -582,26 +570,18 @@ def core_project(proj, version):
 
 
 def plugin_project(proj, vendor, version, arches):
-    """The pyproject-shaped fields of one plugin distribution: the core's
-    authorship, licence, URLs, classifiers and Python floor, its own name and
-    summary, and exactly one requirement, the core at this very version."""
-    row = gpu_plugins.plugin(vendor)
+    """Project metadata for an aggregate or architecture payload profile."""
+    row = gpu_plugins.package(vendor)
     out = {k: proj[k] for k in ("authors", "maintainers", "license", "urls", "keywords",
                                 "classifiers", "requires-python", "license-files") if k in proj}
     out.update(name=row["distribution"], version=version,
                description=(f"{row['label']} GPU binaries for mojolearn {version} "
                             f"({', '.join(sorted(arches))}); installed by pip install mojolearn"),
-               dependencies=[f"{gpu_plugins.CORE_DISTRIBUTION}=={version}"])
+               dependencies=gpu_plugins.package_requirements(vendor, version))
     readme = (f"# {row['distribution']}\n\n"
-              f"The {row['label']} binary sets of [mojolearn](https://pypi.org/project/mojolearn/) "
-              f"{version}: every numeric tier for {', '.join(sorted(arches))}. It holds no Python "
-              f"and is not installed on its own: on Linux, mojolearn requires it at its own "
-              f"version, so\n\n"
-              f"    pip install mojolearn\n\n"
-              f"installs it (with {', '.join(r['distribution'] for r in gpu_plugins.PLUGINS.values())}). "
-              f"It is released in lockstep with mojolearn and requires exactly mojolearn=={version} back. "
-              f"Its files install at mojolearn/{vendor}/, the paths the combined wheel used, so the "
-              "binaries and the way they load are those of the combined wheel byte for byte.\n")
+              f"{row['label']} {row['role']} for mojolearn {version}. "
+              "The default Linux install includes both vendor aggregates and all released native targets. "
+              "Payloads contain one architecture slot; aggregates contain only dependency metadata.\n")
     return out, readme
 
 
@@ -822,6 +802,19 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
                 rel = (f"{vendor}/{arch}/{n}.so" if tier == "fast"
                        else f"{vendor}/{arch}/{tier}/{n}.so")
                 files[rel] = so
+        baseline_path = adir / gpu_plugins.BASELINE_MANIFEST
+        if vendor == "cuda" and arch == "sm_80":
+            if not baseline_path.is_file():
+                raise SystemExit("pack_wheel: sm_80 payload requires an explicit PTX_BASELINE.json")
+            doc = json.loads(baseline_path.read_text())
+            digests = {rel.split("/", 2)[2]: sha(src).hex() for rel, src in files.items()}
+            try:
+                gpu_plugins.validate_baseline_manifest(doc, digests)
+            except ValueError as exc:
+                raise SystemExit(f"pack_wheel: invalid PTX baseline: {exc}") from exc
+            files[f"{vendor}/{arch}/{gpu_plugins.BASELINE_MANIFEST}"] = baseline_path
+        elif baseline_path.exists():
+            raise SystemExit("pack_wheel: PTX manifest on a native architecture set")
         libs = {p.name: p for p in sorted((adir / ".libs").glob("*"))}
         if not libs:
             raise SystemExit(f"pack_wheel: {adir}/.libs is empty; stage_libs.py did not run")
@@ -985,6 +978,10 @@ def main(argv=None, _gates=True):
     strict = a.profile in (RELEASE_PROFILE, RELEASE_SPLIT_PROFILE)
     if a.wheels and not split:
         raise SystemExit("pack_wheel: --wheels needs a split profile (split, release-split)")
+    if strict and any(k.strip() in gpu_plugins.PAYLOADS and
+                      not gpu_plugins.PAYLOADS[k.strip()]["release_enabled"]
+                      for k in a.wheels.split(",")):
+        raise SystemExit("pack_wheel: experimental payloads cannot use the release profile")
     plat = a.plat or (SPLIT_PLAT if split else "linux_x86_64")
 
     proj = tomllib.loads((PY_DIR / "pyproject.toml").read_text())["project"]
@@ -1003,11 +1000,16 @@ def main(argv=None, _gates=True):
         raise SystemExit('--build-proof requires an explicit release profile')
     if not strict and any(s.reuse for s in sets):
         raise SystemExit('pack_wheel: reuse.json (bindings taken from a published wheel) needs the release profile')
-    kinds = split_kinds(a.wheels, {v for v, _ in keys}) if split else ()
+    kinds = split_kinds(a.wheels, {v for v, _ in keys}, keys) if split else ()
+    if ("cuda", "sm_80") in keys and (not split or "nvidia-ptx80" not in kinds):
+        raise SystemExit("pack_wheel: PTX baseline must be requested explicitly with --wheels nvidia-ptx80")
     if a.profile == RELEASE_PROFILE:
         inventory = release_inventory(sets, a.build_proof, version)
     elif a.profile == RELEASE_SPLIT_PROFILE:
-        plugin_vendors = {gpu_plugins.by_profile(k) for k in kinds if k != gpu_plugins.CORE_PROFILE}
+        if any(not gpu_plugins.package(k)["release_enabled"] for k in kinds if k != gpu_plugins.CORE_PROFILE):
+            raise SystemExit("pack_wheel: experimental payloads cannot use the release profile")
+        plugin_vendors = {gpu_plugins.by_profile(k) for k in kinds
+                          if k != gpu_plugins.CORE_PROFILE and gpu_plugins.package(k)["role"] == "aggregate"}
         # A plugin is packed from its own vendor's sets and nothing else; the
         # core alone (host bindings and runtime) from whichever release sets
         # were given. Either way every set given is proven like release-linux3's.
@@ -1018,6 +1020,10 @@ def main(argv=None, _gates=True):
     else:
         inventory = None
     if inventory is not None:
+        if split:
+            for mapping in ("extensions", "binding_origin"):
+                inventory[mapping] = {gpu_plugins.installed_member(k): v
+                                      for k, v in inventory[mapping].items()}
         r = inventory['reuse']
         print(f"pack_wheel: {r['built']} binding(s) built by the legs, {r['reused']} taken from "
               + (f"{r['from_release']['version']} ({r['from_release']['wheel']}, sha256 "
@@ -1151,6 +1157,12 @@ def main(argv=None, _gates=True):
         raise SystemExit("pack_wheel: no commit witness for the identity columns "
                          "(no release proof and no git checkout)")
 
+    for source_set in sets:
+        for rel, path in source_set.files.items():
+            if rel.endswith("/" + gpu_plugins.BASELINE_MANIFEST):
+                if json.loads(path.read_text())["source_commit"] != witness:
+                    raise SystemExit("pack_wheel: PTX baseline and core source commits differ")
+
     dist = f"mojolearn-{version}.dist-info"
     tag = f"py3-none-{plat}"
     generated = {
@@ -1272,7 +1284,7 @@ def main(argv=None, _gates=True):
         for whl, vendor in built:
             size = whl.stat().st_size
             wheels[whl.name] = {
-                "distribution": (gpu_plugins.plugin(vendor)["distribution"] if vendor
+                "distribution": (gpu_plugins.package(vendor)["distribution"] if vendor
                                  else gpu_plugins.CORE_DISTRIBUTION),
                 "compressed_bytes": size, "compressed_mb": round(size / 1e6, 2),
                 "over_limit": size > PYPI_LIMIT}
@@ -1291,7 +1303,7 @@ def main(argv=None, _gates=True):
     return 0
 
 
-def split_kinds(text, vendors_given):
+def split_kinds(text, vendors_given, keys=None):
     """The wheels a split profile emits, in WHEEL_KINDS order: `--wheels`
     when given, else the core plus the plugin of every vendor a set was given
     for. A plugin asked for with no set of its vendor is refused."""
@@ -1308,28 +1320,42 @@ def split_kinds(text, vendors_given):
         if kind != gpu_plugins.CORE_PROFILE and gpu_plugins.by_profile(kind) not in vendors_given:
             raise SystemExit(f"pack_wheel: --wheels names {kind} but no "
                              f"{gpu_plugins.by_profile(kind)} set was given")
+    # Asking for a vendor includes its payload wheels; publishing the aggregate
+    # alone before those exist would create an uninstallable release.
+    for kind in tuple(kinds):
+        if kind != gpu_plugins.CORE_PROFILE and gpu_plugins.package(kind)["role"] == "aggregate":
+            vendor = gpu_plugins.by_profile(kind)
+            kinds += [r["profile"] for r in gpu_plugins.PAYLOADS.values()
+                      if r["vendor"] == vendor and r["release_enabled"]]
+    if keys is not None:
+        for kind in kinds:
+            if kind in gpu_plugins.PAYLOADS:
+                row = gpu_plugins.PAYLOADS[kind]
+                matches = [(v, a) for v, a in keys if v == row["vendor"] and a in row["arches"]]
+                if len(matches) != 1:
+                    raise SystemExit(f"pack_wheel: {kind} requires exactly one architecture set; found {matches}")
     return tuple(k for k in WHEEL_KINDS if k in kinds)
 
 
 def split_payload(entries, generated, dist):
-    """Partition the combined wheel's payload by owner: vendor -> (entries,
-    generated) for each plugin and None -> the core's. Every member lands in
-    exactly one part by construction (gpu_plugins.member_vendor); the
-    combined wheel's .dist-info is left out, each wheel writes its own."""
+    """Partition by payload profile, remapping legacy roots at equal depth.
+
+    None owns the core; aggregate distributions have no payload members.
+    """
     parts = {}
     for arc, src in entries.items():
-        parts.setdefault(gpu_plugins.member_vendor(arc), ({}, {}))[0][arc] = src
+        parts.setdefault(gpu_plugins.member_payload(arc), ({}, {}))[0][gpu_plugins.installed_member(arc)] = src
     for arc, data in generated.items():
         if arc.startswith(dist + "/"):
             continue
-        parts.setdefault(gpu_plugins.member_vendor(arc), ({}, {}))[1][arc] = data
+        parts.setdefault(gpu_plugins.member_payload(arc), ({}, {}))[1][gpu_plugins.installed_member(arc)] = data
     return parts
 
 
 def write_split(out, kinds, entries, generated, dist, proj, version, tag, inventory, sets, readme):
     """Write the split wheels `kinds` asks for from the combined payload.
-    Returns [(wheel path, vendor or None for the core), ...]. The bytes of
-    every member are the combined wheel's; only the .dist-info differs."""
+    Returns [(wheel path, profile or None for the core), ...]. Native bytes
+    are preserved while GPU roots move to disjoint equal-depth directories."""
     parts = split_payload(entries, generated, dist)
     core_entries, core_payload = parts.get(None, ({}, {}))
     licenses = {k: v for k, v in generated.items() if k.startswith(f"{dist}/licenses/")}
@@ -1361,12 +1387,13 @@ def write_split(out, kinds, entries, generated, dist, proj, version, tag, invent
                 built.append((write_wheel(whl, core_entries, core_generated, dist), None))
                 continue
             vendor = gpu_plugins.by_profile(kind)
-            row = gpu_plugins.plugin(vendor)
-            ventries, vpayload = parts.get(vendor, ({}, {}))
-            if not ventries:
+            row = gpu_plugins.package(kind)
+            ventries, vpayload = parts.get(kind, ({}, {}))
+            if row["role"] == "payload" and not ventries:
                 raise SystemExit(f"pack_wheel: {row['distribution']} would be empty; no {vendor} set")
-            arches = sorted({s.arch for s in sets if s.vendor == vendor})
-            pproj, preadme = plugin_project(proj, vendor, version, arches)
+            arches = sorted({s.arch for s in sets if s.vendor == vendor and
+                             (row["role"] == "aggregate" or s.arch in row["arches"])})
+            pproj, preadme = plugin_project(proj, kind, version, arches)
             pdist = f"{row['wheel_name']}-{version}.dist-info"
             pgen = {
                 f"{pdist}/METADATA": metadata_text(pproj, preadme).encode(),
@@ -1376,11 +1403,12 @@ def write_split(out, kinds, entries, generated, dist, proj, version, tag, invent
                 pgen[f"{pdist}/LINUX_PAYLOAD.json"] = payload_doc(kind, row["distribution"], ventries)
             for arc, data in licenses.items():
                 pgen[pdist + arc[len(dist):]] = data
-            pgen[f"{pdist}/{gpu_plugins.PLUGIN_MARKER}"] = (json.dumps(
-                gpu_plugins.plugin_marker(vendor, version, arches), sort_keys=True, indent=2) + "\n").encode()
+            marker_name = gpu_plugins.PLUGIN_MARKER if row["role"] == "aggregate" else gpu_plugins.PAYLOAD_MARKER
+            pgen[f"{pdist}/{marker_name}"] = (json.dumps(
+                gpu_plugins.package_marker(kind, version, arches), sort_keys=True, indent=2) + "\n").encode()
             pgen.update(vpayload)
             whl = out / f"{row['wheel_name']}-{version}-{tag}.whl"
-            built.append((write_wheel(whl, ventries, pgen, pdist), vendor))
+            built.append((write_wheel(whl, ventries, pgen, pdist), kind))
     except BaseException:
         for whl, _ in built:
             whl.unlink(missing_ok=True)

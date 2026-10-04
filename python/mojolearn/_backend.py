@@ -191,6 +191,7 @@ def _exec_binding(loader, module):
     before = {k: os.environ.get(k) for k in _RUNTIME_ENV}
     try:
         loader.exec_module(module)
+        _record_baseline_load(getattr(loader, "path", None))
     finally:
         for k, v in before.items():
             if v is None:
@@ -617,41 +618,147 @@ def gpu_plugin():
     return _PLUGINS_FOUND.get(_VENDOR_SELECTED)
 
 
+def _read_plugin_marker(dist, filename, expected):
+    try:
+        doc = json.loads(dist.read_text(filename) or "null")
+    except (ValueError, OSError, TypeError):
+        doc = None
+    if doc != expected:
+        raise GpuPluginError(f"mojolearn: invalid {filename} for {dist.metadata['Name']}; "
+                             "reinstall this release's GPU packages")
+    return doc
+
+
 def _check_plugins(pkg, present):
-    """On the split core: every plugin installed beside it must be this
-    core's version and must own the sets on disk, and every set on disk must
-    be owned by an installed plugin. Records what it found."""
+    """Check aggregate/payload versions, declared target and ownership before selection."""
     _PLUGINS_FOUND.clear()
+    fix = gpu_plugins.reinstall_command(_CORE_VERSION)
     for vendor in gpu_plugins.vendors():
         row = gpu_plugins.plugin(vendor)
         dist = _find_distribution(row["distribution"], [_site_dir()])
-        vdir = os.path.join(pkg, vendor)
-        fix = gpu_plugins.reinstall_command(_CORE_VERSION)
+        vdir = os.path.join(pkg, gpu_plugins.native_directory(vendor))
+        # Old vendor roots are never eligible on the new layout. In particular,
+        # their survival after an interrupted upgrade cannot override payloads.
+        if _vendor_has_set(os.path.join(pkg, vendor)):
+            raise GpuPluginError(f"mojolearn: legacy {vendor} sets remain in a new payload install; {fix}")
+        payload_rows = [r for r in gpu_plugins.PAYLOADS.values()
+                        if r["vendor"] == vendor and r["release_enabled"]]
         if dist is None:
-            if vendor in present:
-                raise GpuPluginError(
-                    f"mojolearn: {vdir} carries {row['label']} sets but no "
-                    f"{row['distribution']} is installed beside this mojolearn "
-                    f"{_CORE_VERSION} ({_site_dir()}) to own them; they are not "
-                    f"this release's. This install is incomplete; reinstall it:\n    {fix}")
+            if vendor in present or any(_find_distribution(r["distribution"], [_site_dir()])
+                                        for r in payload_rows):
+                raise GpuPluginError(f"mojolearn: {vdir} carries sets but no {row['distribution']} "
+                                     f"is installed beside this core; incomplete install; {fix}")
             continue
-        version = dist.version
-        if version != _CORE_VERSION:
-            raise GpuPluginError(
-                f"mojolearn: {row['distribution']} {version} is installed beside "
-                f"mojolearn {_CORE_VERSION}; the two are released together and must "
-                f"be the same version exactly. This install is incomplete; reinstall it:\n    {fix}")
-        if vendor not in present:
-            raise GpuPluginError(
-                f"mojolearn: {row['distribution']} {version} is installed but {vdir} "
-                f"holds no set; the plugin's files are missing. This install is "
-                f"incomplete; reinstall it:\n    {fix}")
-        try:
-            location = str(dist.locate_file(""))
-        except Exception:
-            location = _site_dir()
-        _PLUGINS_FOUND[vendor] = {"distribution": row["distribution"],
-                                  "version": version, "location": location}
+        if dist.version != _CORE_VERSION:
+            raise GpuPluginError(f"mojolearn: {row['distribution']} {dist.version} and mojolearn "
+                                 f"{_CORE_VERSION} must be the same version exactly; {fix}")
+        owned = []
+        for payload in payload_rows:
+            pdist = _find_distribution(payload["distribution"], [_site_dir()])
+            if pdist is None or pdist.version != _CORE_VERSION:
+                raise GpuPluginError(f"mojolearn: {payload['distribution']} is missing or is not "
+                                     f"the same version exactly ({_CORE_VERSION}); {fix}")
+            arches = [arch for arch in _arch_dirs(vdir) if arch in payload["arches"]]
+            if len(arches) != 1:
+                raise GpuPluginError(f"mojolearn: {payload['distribution']} holds no set or multiple "
+                                     f"sets; plugin files are missing or invalid; {fix}")
+            _read_plugin_marker(pdist, gpu_plugins.PAYLOAD_MARKER,
+                                gpu_plugins.payload_marker(payload["profile"], _CORE_VERSION, arches))
+            owned.extend(arches)
+        if sorted(owned) != _arch_dirs(vdir):
+            raise GpuPluginError(f"mojolearn: {vdir} contains sets no payload owns; {fix}")
+        _read_plugin_marker(dist, gpu_plugins.PLUGIN_MARKER,
+                            gpu_plugins.plugin_marker(vendor, _CORE_VERSION, owned))
+        _PLUGINS_FOUND[vendor] = {"distribution": row["distribution"], "version": dist.version,
+                                  "location": _site_dir(), "code_format": "native",
+                                  "payloads": [r["distribution"] for r in payload_rows]}
+
+
+_BASELINE_SELECTION = None
+_BASELINE_FILES = {}
+_BASELINE_ROOT = None
+
+
+def baseline_selection_receipt():
+    """Evidence of actual extension loads; not an IDENTICAL qualification."""
+    if _BASELINE_SELECTION is None:
+        return None
+    import copy
+    return copy.deepcopy(_BASELINE_SELECTION)
+
+
+def _baseline_layout(pkg):
+    global _BASELINE_SELECTION, _BASELINE_FILES, _BASELINE_ROOT
+    global _LAYOUT, _VENDOR_SELECTED, _VENDOR_HOW, _ARCH_SELECTED, _ARCH_HOW
+    request = os.environ.get("MOJOLEARN_CUDA_PATH", "native").strip().lower()
+    if request == "native":
+        return None
+    if request != "ptx-baseline" or os.environ.get("MOJOLEARN_EXPERIMENTAL_PTX") != "1":
+        raise GpuPluginError("mojolearn: experimental PTX needs MOJOLEARN_CUDA_PATH=ptx-baseline "
+                             "and MOJOLEARN_EXPERIMENTAL_PTX=1; it is not IDENTICAL-qualified")
+    if os.environ.get("MOJOLEARN_VENDOR", "cuda") not in ("", "cuda"):
+        raise GpuPluginError("mojolearn: PTX baseline conflicts with the requested vendor")
+    if os.environ.get("MOJOLEARN_GPU_ARCH", "sm_80") not in ("", "sm_80"):
+        raise GpuPluginError("mojolearn: PTX baseline conflicts with MOJOLEARN_GPU_ARCH")
+    row = gpu_plugins.PAYLOADS["nvidia-ptx80"]
+    dist = _find_distribution(row["distribution"], [_site_dir()])
+    if dist is None or dist.version != _CORE_VERSION:
+        raise GpuPluginError("mojolearn: the matching experimental PTX payload is not installed")
+    _read_plugin_marker(dist, gpu_plugins.PAYLOAD_MARKER,
+                        gpu_plugins.payload_marker(row["profile"], _CORE_VERSION, ["sm_80"]))
+    dev, why = _device_arch("cuda")
+    if not dev or not dev.startswith("sm_") or _sm_parts(dev)[:2] < (8, 0):
+        raise GpuPluginError(f"mojolearn: PTX baseline needs a detected Ampere-or-newer device: {dev} ({why})")
+    from pathlib import Path
+    import hashlib
+    root = Path(pkg) / row["directory"] / "sm_80"
+    try:
+        raw = (root / gpu_plugins.BASELINE_MANIFEST).read_bytes()
+        doc = json.loads(raw)
+        actual = {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                  for p in root.rglob("*.so")}
+        gpu_plugins.validate_baseline_manifest(doc, actual)
+        source = (Path(pkg) / "identity_columns" / "COMMIT").read_text().strip()
+        if source != doc["source_commit"]:
+            raise ValueError("baseline and core source commits differ")
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        raise GpuPluginError(f"mojolearn: invalid experimental PTX payload: {exc}") from exc
+    _BASELINE_ROOT = str(root)
+    _BASELINE_FILES = actual
+    _BASELINE_SELECTION = dict(schema="mojolearn.ptx-baseline-selection.v1", requested=request,
+        selected="ptx-baseline", native_fallback=False, code_format="ptx-baseline",
+        manifest_sha256=hashlib.sha256(raw).hexdigest(), source_commit=source,
+        identical_qualified=False, device_arch=dev, loaded_files=[])
+    _ARCH_SELECTED, _ARCH_HOW = "sm_80", "explicit experimental PTX baseline; not IDENTICAL-qualified"
+    _VENDOR_SELECTED, _VENDOR_HOW = "cuda", _ARCH_HOW
+    _PLUGINS_FOUND["cuda"] = dict(distribution=row["distribution"], version=dist.version,
+                                  location=_site_dir(), code_format="ptx-baseline", identical_qualified=False)
+    _LAYOUT = ("vendor", str(root))
+    return _LAYOUT
+
+
+def _record_baseline_load(path):
+    if _BASELINE_SELECTION is None:
+        return
+    from pathlib import Path
+    import hashlib
+    candidate = Path(path).resolve()
+    root = Path(_BASELINE_ROOT).resolve()
+    if root not in candidate.parents:
+        if "cuda_native" in candidate.parts or "hip_native" in candidate.parts:
+            raise GpuPluginError("mojolearn: native GPU binding loaded during forced PTX baseline")
+        return  # host inference/runtime bindings are not GPU fallback
+    rel = candidate.relative_to(root).as_posix()
+    digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+    if _BASELINE_FILES.get(rel) != digest:
+        raise GpuPluginError(f"mojolearn: PTX binding changed after manifest verification: {rel}")
+    row = dict(file=rel, sha256=digest)
+    if row not in _BASELINE_SELECTION["loaded_files"]:
+        _BASELINE_SELECTION["loaded_files"].append(row)
+
+
+def _vendor_directory(pkg, vendor):
+    return os.path.join(pkg, gpu_plugins.native_directory(vendor) if _split_core() else vendor)
 
 
 def _missing_plugin_error(vendors, probe, present, forced=None):
@@ -865,7 +972,7 @@ def _vendor_base(pkg, vendor):
     directory itself on the arch-less layout, or the chosen architecture
     subdirectory. Sets _ARCH_SELECTED/_ARCH_HOW either way."""
     global _ARCH_SELECTED, _ARCH_HOW
-    vdir = os.path.join(pkg, vendor)
+    vdir = _vendor_directory(pkg, vendor)
     archs = _arch_dirs(vdir)
     if not archs:
         _ARCH_SELECTED = None
@@ -909,8 +1016,11 @@ def _layout():
     if _LAYOUT is not None:
         return _LAYOUT
     pkg = _pkg_dir()
+    baseline = _baseline_layout(pkg)
+    if baseline is not None:
+        return baseline
     present = [v for v in _LINUX_VENDORS
-               if _vendor_has_set(os.path.join(pkg, v))]
+               if _vendor_has_set(_vendor_directory(pkg, v))]
     forced = os.environ.get("MOJOLEARN_VENDOR", "").strip().lower()
     probe = None
     if _split_core() is not None:
