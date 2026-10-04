@@ -14,6 +14,8 @@ for the ops below on an Apple GPU only; every other column (and the host)
 runs the one-thread op."""
 from std.gpu.primitives.warp import shuffle_idx
 
+from sequence.coop_lane import COOP_CELL_W, coop_src
+
 from sequence.ops import (
     FP,
     Args,
@@ -31,8 +33,9 @@ from sequence.ops import OP_THETA
 from sequence.theta_spec import THETA_SPEC, op_theta_spec
 from sequence.adafactor import af_alpha_tail, af_denom_tail, lamb_ratio_tail, op_af_alpha, op_af_denom, op_lamb_ratio, op_seg_sumsq
 
-#: the Apple simdgroup
-comptime COOP_W = 32
+#: the Apple simdgroup; shuffles go through `coop_src` so a 64-lane wave
+#: (two cells) stays correct (sequence/coop_lane.mojo)
+comptime COOP_W = COOP_CELL_W
 #: blocks of COOP_W each lane loads ahead of the fold
 comptime COOP_R = 8
 
@@ -48,14 +51,14 @@ def coop_sumsq(p: FP, start: Int, n: Int, lane: Int) -> Float32:
             v[r] = ld(p, start + k + r * COOP_W + lane)
         comptime for r in range(COOP_R):
             comptime for j in range(COOP_W):
-                var x = shuffle_idx(v[r], UInt32(j))
+                var x = shuffle_idx(v[r], coop_src(lane, j))
                 acc = fma3(x, x, acc)
         k += COOP_W * COOP_R
     while k < n:
         var m = min(COOP_W, n - k)
         var x0 = ld(p, start + k + lane) if lane < m else Float32(0.0)
         for j in range(m):
-            var x = shuffle_idx(x0, UInt32(j))
+            var x = shuffle_idx(x0, coop_src(lane, j))
             acc = fma3(x, x, acc)
         k += COOP_W
     return acc
@@ -77,7 +80,7 @@ def coop_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
             vb[r] = ld(pb, kk * sbk + bbase)
         comptime for r in range(COOP_R):
             comptime for j in range(COOP_W):
-                acc = fma3(shuffle_idx(va[r], UInt32(j)), shuffle_idx(vb[r], UInt32(j)), acc)
+                acc = fma3(shuffle_idx(va[r], coop_src(lane, j)), shuffle_idx(vb[r], coop_src(lane, j)), acc)
         k += COOP_W * COOP_R
     while k < K:
         var m = min(COOP_W, K - k)
@@ -85,7 +88,7 @@ def coop_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
         var x0 = ld(pa, abase + kk * sak) if lane < m else Float32(0.0)
         var y0 = ld(pb, kk * sbk + bbase) if lane < m else Float32(0.0)
         for j in range(m):
-            acc = fma3(shuffle_idx(x0, UInt32(j)), shuffle_idx(y0, UInt32(j)), acc)
+            acc = fma3(shuffle_idx(x0, coop_src(lane, j)), shuffle_idx(y0, coop_src(lane, j)), acc)
         k += COOP_W
     return acc
 
