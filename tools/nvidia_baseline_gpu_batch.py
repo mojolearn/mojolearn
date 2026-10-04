@@ -64,7 +64,7 @@ def artifacts(directory, commit):
     return wheels, manifest
 
 
-def box_body(commit, full=True):
+def box_body(commit, full=True, extra_capture=False):
     # All interpolated values are validated SHA or constants. No remote credentials.
     return '''#!/bin/bash
 set -euo pipefail
@@ -73,6 +73,7 @@ mkdir -p results
 exec > results/body.log 2>&1
 trap 'rc=$?; echo "$rc" > results/body.exit' EXIT
 sha256sum -c SHA256SUMS
+cp plan.json results/plan.json
 nvidia-smi > results/nvidia-smi.txt
 python3 -m venv venv
 timeout -k 20 300 venv/bin/python -m pip install --no-input wheels/*.whl numpy > results/install.log 2>&1
@@ -95,6 +96,7 @@ INNER
 cp "$MANIFEST" results/PTX_BASELINE.json
 export MOJOLEARN_NUMERIC_MODE=identical PYTHONNOUSERSITE=1
 unset PYTHONPATH MOJOLEARN_CUDA_PATH MOJOLEARN_EXPERIMENTAL_PTX
+@EXTRA@
 collect() {
     local scope=$1 role=$2 bound=$3
     shift 3
@@ -110,7 +112,16 @@ for role in native-reference baseline; do
 done
 venv/bin/python source/tools/nvidia_baseline_qualification.py check --prototype --manifest "$MANIFEST" --out results/prototype-comparison.json results/prototype-native-reference.json results/prototype-baseline.json
 @FULL@
-''' .replace('@SHA@', commit).replace('@LANES@', LANES).replace('@FULL@', '''for role in native-reference baseline; do
+test "$EXTRA_FAILED" = 0
+''' .replace('@SHA@', commit).replace('@LANES@', LANES).replace('@EXTRA@', '''EXTRA_FAILED=0
+for role in native-reference baseline; do
+    cmd=(venv/bin/python source/tools/nvidia_serial_guard.py --seconds 120 --rss-gib 12 --cores 2 -- venv/bin/python extra-wrapper.py --script extra-capture.py --source-tools source/tools --manifest "$MANIFEST" --role "$role" --out "results/extra-$role.json")
+    if [ "$role" = baseline ]; then
+        timeout -k 20 140 env MOJOLEARN_CUDA_PATH=ptx-baseline MOJOLEARN_EXPERIMENTAL_PTX=1 "${cmd[@]}" > "results/extra-$role.log" 2>&1 || EXTRA_FAILED=1
+    else
+        timeout -k 20 140 "${cmd[@]}" > "results/extra-$role.log" 2>&1 || EXTRA_FAILED=1
+    fi
+done''' if extra_capture else 'EXTRA_FAILED=0').replace('@FULL@', '''for role in native-reference baseline; do
     collect full "$role" 2400
 done
 # Single-pod comparison is deliberately prototype-labelled; cross-pod full
@@ -126,18 +137,27 @@ def main():
     p.add_argument('--gpu', choices=GPUS, required=True)
     p.add_argument('--prototype-only', action='store_true')
     p.add_argument('--rent', action='store_true')
+    p.add_argument('--extra-capture', type=Path, help='Supplemental script, native and PTX, 120 seconds each')
+    p.add_argument('--tooling-commit', help='Explicit full clean runner SHA when supplementary tooling differs from payload source')
     args = p.parse_args()
     wheels, manifest = artifacts(args.wheels, args.commit)
     require(not args.out.exists(), 'Output already exists')
     actual = subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip()
-    require(actual == args.commit, 'Run the runner from the frozen candidate checkout')
+    tooling = args.tooling_commit or args.commit
+    require(re.fullmatch('[0-9a-f]{40}', tooling) and actual == tooling,
+            'Run the runner from the frozen candidate checkout or name its exact tooling commit')
     require(subprocess.run(['git', '-C', str(ROOT), 'diff', '--quiet', 'HEAD']).returncode == 0,
             'Tracked source dirty')
     refs = subprocess.check_output(['git', 'ls-remote', '--refs', 'https://github.com/mojolearn/mojolearn.git'],
                                    text=True, timeout=60)
     require(any(line.startswith(args.commit + '\t') for line in refs.splitlines()), 'Push frozen source first')
+    require(any(line.startswith(tooling + '\t') for line in refs.splitlines()), 'Push frozen tooling first')
     plan = dict(source_commit=args.commit, gpu=GPUS[args.gpu], lease_minutes=120,
                 work_seconds=6300, full=not args.prototype_only,
+                tooling_commit=tooling, tooling_dirty=False,
+                extra_capture_sha256=sha(args.extra_capture) if args.extra_capture else None,
+                extra_wrapper_sha256=sha(ROOT / 'tools/nvidia_extra_capture.py') if args.extra_capture else None,
+                extra_capture_seconds_per_role=120 if args.extra_capture else 0,
                 wheels={w.name: sha(w) for w in wheels}, identical_qualified=False)
     print(json.dumps(plan, indent=2), flush=True)
     if not args.rent:
@@ -153,8 +173,16 @@ def main():
             require(sha(stage / 'wheels' / wheel.name) == plan['wheels'][wheel.name],
                     'Wheel bytes changed while staging; refuse before rental')
         artifacts(stage / 'wheels', args.commit)  # revalidate the exact staged bytes before creating a pod
-        (stage / 'body.sh').write_text(box_body(args.commit, not args.prototype_only))
+        (stage / 'body.sh').write_text(box_body(args.commit, not args.prototype_only, bool(args.extra_capture)))
         files = sorted((stage / 'wheels').glob('*.whl')) + [stage / 'body.sh']
+        (stage / 'plan.json').write_text(json.dumps(plan, indent=2) + '\n')
+        files.append(stage / 'plan.json')
+        if args.extra_capture:
+            for source, name, digest in [(args.extra_capture, 'extra-capture.py', plan['extra_capture_sha256']),
+                                         (ROOT / 'tools/nvidia_extra_capture.py', 'extra-wrapper.py', plan['extra_wrapper_sha256'])]:
+                shutil.copyfile(source, stage / name)
+                require(sha(stage / name) == digest, 'Supplemental capture changed while staging')
+                files.append(stage / name)
         (stage / 'SHA256SUMS').write_text(''.join(f'{sha(f)}  {f.relative_to(stage)}\n' for f in files))
         return subprocess.run(['bash', str(ROOT / 'tools/nvidia_baseline_gpu_lease.sh'),
                                str(stage), str(args.out.resolve()), GPUS[args.gpu]], check=False).returncode
