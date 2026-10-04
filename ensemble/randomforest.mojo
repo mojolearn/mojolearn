@@ -648,7 +648,7 @@ def check_random_seed(random_state: Int) raises -> UInt64:
     return UInt64(random_state)
 
 
-def class_weight_uniform(n_classes: Int) -> List[Float64]:
+def class_weight_uniform_host(n_classes: Int) -> List[Float64]:
     """`common/classification.py:70-72` -- the `class_weight is None` arm,
     `np.ones(n_classes, dtype=np.float64)`."""
     var w = List[Float64]()
@@ -657,7 +657,7 @@ def class_weight_uniform(n_classes: Int) -> List[Float64]:
     return w^
 
 
-def class_weight_balanced(
+def class_weight_balanced_host(
     n_classes: Int,
     y_ind: List[Int32],
     sample_weight: List[Float32] = List[Float32](),
@@ -706,7 +706,7 @@ def class_weight_balanced(
     return w^
 
 
-def class_weight_explicit(
+def class_weight_explicit_host(
     n_classes: Int, weights: List[Float64]
 ) raises -> List[Float64]:
     """`common/classification.py:81-91` -- the dict arm.
@@ -738,7 +738,7 @@ def class_weight_explicit(
     return weights.copy()
 
 
-def apply_class_weight(
+def apply_class_weight_host(
     class_weight: List[Float64],
     y_ind: List[Int32],
     sample_weight: List[Float32] = List[Float32](),
@@ -787,10 +787,10 @@ def apply_class_weight(
     return out^
 
 
-def preprocess_labels(
+def preprocess_labels_host(
     n_rows: Int, mut labels: List[Int32]
 ) raises -> Dict[Int32, Int32]:
-    """`preprocess_labels`, `randomforest.cu:113-131`.
+    """`preprocess_labels_host`, `randomforest.cu:113-131`.
 
         for (int i = 0; i < n_rows; i++) {
           ret = labels_map.insert(pair<int,int>(labels[i], n_unique_labels));
@@ -831,10 +831,10 @@ def preprocess_labels(
     return labels_map^
 
 
-def postprocess_labels(
+def postprocess_labels_host(
     n_rows: Int, mut labels: List[Int32], labels_map: Dict[Int32, Int32]
 ) raises:
-    """`postprocess_labels`, `randomforest.cu:140-161`.
+    """`postprocess_labels_host`, `randomforest.cu:140-161`.
 
         reverse_map.resize(labels_map.size());
         for (it = labels_map.begin(); it != labels_map.end(); it++)
@@ -1077,7 +1077,7 @@ struct RandomForest[dtype: DType, label_dtype: DType](
             row_major,
         )
 
-    def predict(
+    def predict_host(
         self,
         input: List[Scalar[Self.dtype]],
         n_rows: Int,
@@ -1181,7 +1181,7 @@ struct RandomForest[dtype: DType, label_dtype: DType](
                     Self.label_dtype
                 ]()
 
-    def predict_proba(
+    def predict_proba_host(
         self,
         input: List[Scalar[Self.dtype]],
         n_rows: Int,
@@ -1270,7 +1270,7 @@ struct RandomForest[dtype: DType, label_dtype: DType](
                 ] / Scalar[Self.dtype](n_trees)
 
     @staticmethod
-    def score(
+    def score_host(
         ref_labels: List[Scalar[Self.label_dtype]],
         n_rows: Int,
         predictions: List[Scalar[Self.label_dtype]],
@@ -1354,7 +1354,7 @@ struct RandomForest[dtype: DType, label_dtype: DType](
 
 
 # ---------------------------------------------------------------------------
-# compute_feature_importances -- `randomforest.cu:797-860`
+# compute_feature_importances_host -- `randomforest.cu:797-860`
 
 # ---------------------------------------------------------------------------
 # store_bootstrap_mask's two device ops -- `randomforest.cuh:170-183`
@@ -1543,7 +1543,7 @@ def compute_oob_score[
     # owns), the averaged predictions (an attribute the API returns),
     # the counts and y back, once.
     var total_nodes = 0
-    for t in range(n_trees):
+    for t in range(n_trees):  # small-loop(n_trees: per-tree node counts): sums list lengths into one buffer size, no data
         total_nodes += len(forest.trees[t].sparsetree)
     var h_off = ctx.enqueue_create_host_buffer[DType.int32](n_trees)
     var h_col = ctx.enqueue_create_host_buffer[DType.int32](total_nodes)
@@ -1798,13 +1798,13 @@ def compute_oob_score[
 # ---------------------------------------------------------------------------
 
 
-def compute_feature_importances[
+def compute_feature_importances_host[
     dtype: DType, label_dtype: DType
 ](
     forest: RandomForestMetaData[dtype, label_dtype],
     mut importances: List[Scalar[dtype]],
 ) raises:
-    """`ML::compute_feature_importances`, `randomforest.cu:799-860`.
+    """`ML::compute_feature_importances_host`, `randomforest.cu:799-860`.
 
     Pure host code over `sparsetree`, so it implements whole. Their structure,
     which is not the obvious one:
@@ -2586,34 +2586,34 @@ def _record_tree[
     FOREST index, a position in the algorithm, identical under any
     pipeline width K (DEVIATION 117's output-freedom is what makes that
     true)."""
-    if not instr.trace.enabled:
-        return
-    var flat = List[UInt32]()
-    for i in range(len(tree.sparsetree)):
-        ref node = tree.sparsetree[i]
-        flat.append(UInt32(Int(node.ColumnId()) & 0xFFFFFFFF))
-        var qb = UInt64(node.QueryValue().to_bits())
-        flat.append(UInt32(qb & 0xFFFFFFFF))
-        flat.append(UInt32(qb >> 32))
-        var mb = UInt64(node.BestMetric().to_bits())
-        flat.append(UInt32(mb & 0xFFFFFFFF))
-        flat.append(UInt32(mb >> 32))
-        flat.append(UInt32(Int(node.LeftChildId()) & 0xFFFFFFFF))
-        flat.append(UInt32(Int(node.InstanceCount()) & 0xFFFFFFFF))
-    instr.trace.record_host(
-        "tree" + String(idx) + ".nodes", flat.unsafe_ptr(), len(flat)
-    )
-    # `[[mojo-buffer-freed-at-last-use]]` -- keep the list past the hash.
-    _ = flat^
-    var leaves = List[UInt32]()
-    for i in range(len(tree.vector_leaf)):
-        var lb = UInt64(tree.vector_leaf[i].to_bits())
-        leaves.append(UInt32(lb & 0xFFFFFFFF))
-        leaves.append(UInt32(lb >> 32))
-    instr.trace.record_host(
-        "tree" + String(idx) + ".leaves", leaves.unsafe_ptr(), len(leaves)
-    )
-    _ = leaves^
+    # identity-trace only (DEVIATION 401): nothing runs unless tracing is on
+    if instr.trace.enabled:
+        var flat = List[UInt32]()
+        for i in range(len(tree.sparsetree)):
+            ref node = tree.sparsetree[i]
+            flat.append(UInt32(Int(node.ColumnId()) & 0xFFFFFFFF))
+            var qb = UInt64(node.QueryValue().to_bits())
+            flat.append(UInt32(qb & 0xFFFFFFFF))
+            flat.append(UInt32(qb >> 32))
+            var mb = UInt64(node.BestMetric().to_bits())
+            flat.append(UInt32(mb & 0xFFFFFFFF))
+            flat.append(UInt32(mb >> 32))
+            flat.append(UInt32(Int(node.LeftChildId()) & 0xFFFFFFFF))
+            flat.append(UInt32(Int(node.InstanceCount()) & 0xFFFFFFFF))
+        instr.trace.record_host(
+            "tree" + String(idx) + ".nodes", flat.unsafe_ptr(), len(flat)
+        )
+        # `[[mojo-buffer-freed-at-last-use]]` -- keep the list past the hash.
+        _ = flat^
+        var leaves = List[UInt32]()
+        for i in range(len(tree.vector_leaf)):
+            var lb = UInt64(tree.vector_leaf[i].to_bits())
+            leaves.append(UInt32(lb & 0xFFFFFFFF))
+            leaves.append(UInt32(lb >> 32))
+        instr.trace.record_host(
+            "tree" + String(idx) + ".leaves", leaves.unsafe_ptr(), len(leaves)
+        )
+        _ = leaves^
 
 
 struct ForestPrep(Movable):
@@ -3086,7 +3086,7 @@ def fit_forest_prepared[
     # the block above `k_streams`). Trees finish out of order, so the
     # forest is preallocated and each tree lands at ITS index.
     var n_trees = Int(rf_params.n_trees)
-    for _ in range(n_trees):
+    for _ in range(n_trees):  # small-loop(n_trees: empty output tree slots): preallocates the host model container, no data
         forest.trees.append(
             TreeMetaDataNode[O.DataT](
                 Int32(-1),
