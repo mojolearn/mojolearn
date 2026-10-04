@@ -24,6 +24,7 @@ from gemm.afn_apple_fast import (
     afn_launch_tile,
     afn_zero_kernel,
 )
+from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
 from decomposition.linalg_public_device import device_qr_r
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
 from x_decomp.lu_fast import LU_FAST_STEP1, lfs_blocks, lu_fast_panel
@@ -1529,13 +1530,15 @@ def _launch_gemm_mma(
             grid_dim=((m * n + 4 * AFN_ZERO_TPB - 1) // (4 * AFN_ZERO_TPB), 1, 1),
             block_dim=(AFN_ZERO_TPB, 1, 1),
         )
-        afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
-            ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, splits, per
-        )
+        if not try_scoped_gemm[True, 1](ctx, c, a, b, m, n, k, a_si, a_sp, b_sp, b_sj, splits, per):
+            afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
+                ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, splits, per
+            )
     else:
-        afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_NONE](
-            ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, 1, k
-        )
+        if not try_scoped_gemm[False, 0](ctx, c, a, b, m, n, k, a_si, a_sp, b_sp, b_sj, 1, k):
+            afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_NONE](
+                ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, 1, k
+            )
 
 
 def launch_gemm(

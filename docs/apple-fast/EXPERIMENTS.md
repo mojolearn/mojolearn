@@ -955,3 +955,11 @@ For batch_4_1, maximum error0.0398175029 ->0.0710675029 and relativeL2
 1.2517670343e-7 ->1.6478564181e-7; resident_3 relativeL2 also regresses.
 Several other cases improve. Preserve strict all-field no-regression failure;
 no fitted-model tests, speed measurements or default promotion admitted.
+
+## 2026-10-04 scoped decomp/PCA direct G1/G2 — OPEN, default OFF
+
+Source-only strided adapter and actual-caller quality probe, based on resident
+catalog per-shape leads. No compilation/runtime or quality/speed claim yet.
+Separate operation flags, split and PCA permissions; original split/zero/center/
+scale/restore policies retained. Baseline is current AFN, not SDK screen G0.
+See [scoped adapter contract](ab/scoped-gemm.md). M2/M3 manager gates required.
