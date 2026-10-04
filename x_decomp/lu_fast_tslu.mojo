@@ -21,12 +21,12 @@ picks the panel's 32 pivot rows with a reduction tree instead:
             ORIGINAL rows of the candidates, 32 indices out, until one set
             is left (n = 8192: 64 -> 16 -> 4 -> 1 sets, 4 launches);
   last      the final block's pivot order is the panel's pivot order and its
-            factored candidates are L11 \ U11 (the LU of the winners in that
+            factored candidates are L11, U11 (the LU of the winners in that
             order depends only on the winners). It also writes piv (getrf's
             sequential swaps, k0 .. k1-1), act / info, the moved rows' map
             (at most 64 positions) and the moved rows' original panel cells;
   post      ONE launch, three disjoint column ranges by block: every panel
-            row i >= k0 (rows < k1 take L11 \ U11; the others solve their
+            row i >= k0 (rows < k1 take L11, U11; the others solve their
             source row against U11, a 32-step row solve, one thread a row);
             the swaps on every column left of k0; and on every column right
             of the panel the swaps then, for columns inside the outer block,
@@ -202,7 +202,7 @@ def lts_tour_kernel(
     elif tid < W:
         cout.unsafe_store(b * W + tid, Float32(-1))
     if Int(last) != 0:
-        # L11 \ U11 of the winners (identity padding past w)
+        # L11, U11 of the winners (identity padding past w)
         if tid < W:
             var ws = Int(wslot[tid]) if tid < w else -1
             for c2 in range(W):
