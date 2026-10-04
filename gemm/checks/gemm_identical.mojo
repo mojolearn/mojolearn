@@ -3177,6 +3177,76 @@ def _mfma_run(
     _ = ws
 
 
+comptime IDN_GEMM_MFMA_REUSE_WS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_GEMM_MFMA_REUSE_WS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""lane/fam-lm (2026-10-04), default ON under IDENTICAL; reached only where
+`lib_gemm_mfma_for` is on (the AMD column). The matrix-core GROUP launch
+writes its `m n groups` node partials into the CALLER's workspace when it
+is large enough (`identical_gemm_workspace_max_floats` sizes for it) and
+returns without waiting, as the NVIDIA packed body has since
+`GEMM_REUSE_GROUP_WS`. `_mfma_run` allocated a fresh node workspace, waited
+and freed it on every grouped call (every projection of an LM forward or
+train step). The same group kernel, the same groups, the same fold launch:
+the same partials through the same fold DAG, so no bit moves. A caller whose
+workspace is smaller takes `_mfma_run` unchanged.
+`-D MOJOLEARN_IDN_GEMM_MFMA_REUSE_WS_OFF` restores `_mfma_run` everywhere."""
+
+
+def _mfma_group_leaves(m: Int, n: Int, k: Int) -> Int:
+    """The group size the shipped matrix-core dispatch passes `_mfma_run`:
+    the leaf split's rule, raised to `GEMM_MFMA_MIN_GROUP_LEAVES`; 0 runs
+    all leaves in one launch. One spelling for the dispatch and for the
+    workspace sizing, so the two cannot disagree."""
+    comptime if is_defined["MOJOLEARN_GEMM_MFMA_NO_GROUPS"]():
+        return 0
+    var mgl = gemm_step_ksplit_rule(m, n, k, 0, False)
+    if mgl > 0 and mgl < GEMM_MFMA_MIN_GROUP_LEAVES:
+        mgl = GEMM_MFMA_MIN_GROUP_LEAVES
+    return mgl
+
+
+def _mfma_run_ws(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+    group_leaves: Int,
+) raises:
+    """`_mfma_run` with the group partials in the caller's `ws` when it
+    holds `m n groups` floats: the group launch and the fold, asynchronous,
+    no allocation and no wait. Every other call is `_mfma_run`."""
+    if m <= 0 or n <= 0:
+        return
+    comptime KS = 16
+    comptime SSTRIDE = KS + TUNED_VECLEN
+    comptime PAGE_BYTES = (128 + 128) * SSTRIDE * 4
+    comptime PAGES = 1 if is_defined["MOJOLEARN_GEMM_ONE_PAGE"]() else lib_smem_pages_for[TARGET_COLUMN, PAGE_BYTES]()
+    var part = contract_partition(k)
+    if group_leaves > 0 and part[1] > 1:
+        var rg = _ksplit_resolve_leaves(group_leaves, part[1])
+        if len(ws) >= m * n * rg[1]:
+            var st = gemm_operand_strides(op, m, n, k)
+            var tiles = ((m + 127) // 128) * ((n + 127) // 128)
+            comptime kern_g = identical_gemm_mfma_kernel[KS, TUNED_FOLD_SLOTS, PAGES, True, GEMM_MFMA_ADMIT]
+            step_count_launch()
+            ctx.enqueue_function[kern_g](
+                ws.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
+                Int32(m), Int32(n), Int32(k), Int32(part[0]), Int32(part[1]),
+                Int32(st[0]), Int32(st[1]), Int32(st[2]), Int32(st[3]),
+                Int32(rg[0]), Int32(rg[1]), Float32(1.0),
+                grid_dim=(tiles, rg[1], 1), block_dim=(TUNED_TPB, 1, 1),
+            )
+            _ksplit_fold_launch(ctx, c, ws, m, n, rg[1])
+            return
+    _mfma_run(ctx, c, a, b, m, n, k, op, group_leaves)
+
+
 # THE HOST ENTRY POINTS
 # ===========================================================================
 
@@ -6316,6 +6386,11 @@ def _shipped_body_kpack_hg[
             # the call); 0 runs all leaves in one launch.
             comptime if is_defined["MOJOLEARN_GEMM_MFMA_NO_GROUPS"]():
                 _mfma_run(ctx, c, a, b, m, n, k, op, 0)
+            elif IDN_GEMM_MFMA_REUSE_WS:
+                # lane/fam-lm: the same group size, the partials in the
+                # caller's workspace when it fits them (no allocation, no
+                # wait); `_mfma_run` otherwise.
+                _mfma_run_ws(ctx, c, a, b, ws, m, n, k, op, _mfma_group_leaves(m, n, k))
             else:
                 var mgl = gemm_step_ksplit_group_leaves(GEMM_GEOM_KSPLIT_LEAF, m, n, k)
                 if mgl > 0 and mgl < GEMM_MFMA_MIN_GROUP_LEAVES:
@@ -8932,6 +9007,16 @@ def identical_gemm_workspace_max_floats(m: Int, n: Int, k: Int) -> Int:
                 var required = m * n * ((p + gl - 1) // gl)
                 if required > w:
                     w = required
+    comptime if IDN_GEMM_MFMA_REUSE_WS and GEMM_IDENTICAL_MFMA:
+        # lane/fam-lm: the matrix-core group launch's node partials
+        # (`_mfma_run_ws`), at the group size the dispatch resolves.
+        if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
+            var mgl = _mfma_group_leaves(m, n, k)
+            var mp = contract_partition(k)[1]
+            if mgl > 0 and mp > 1:
+                var mreq = m * n * ((mp + mgl - 1) // mgl)
+                if mreq > w:
+                    w = mreq
     if w < 1:
         return 1
     return w
