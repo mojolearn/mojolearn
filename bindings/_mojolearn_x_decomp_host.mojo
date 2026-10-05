@@ -19,6 +19,7 @@ from x_decomp.api import (
 )
 from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
 from x_decomp.select_ops import order_small_py, reduce_py
+from x_decomp.nmf import nmf_solve_py
 from x_decomp.lanczos_host import lanczos_py
 from x_decomp.mds_iso import mds_disp_host_py, mds_setup_host_py
 from x_decomp.graph_host import (
@@ -95,6 +96,7 @@ def PyInit__mojolearn_x_decomp_host() abi("C") -> PythonObject:
         m.def_function[als_cg_rows_py[HostExec]]("x_decomp_als_cg_rows")
         m.def_function[mcd_py[HostExec]]("x_decomp_mcd")
         m.def_function[lda_online_py[HostExec]]("x_decomp_lda_online")
+        m.def_function[nmf_solve_py[HostExec]]("x_decomp_nmf_solve")
         m.def_function[gather_py]("x_decomp_gather")
         m.def_function[scatter_py]("x_decomp_scatter")
         m.def_function[triu_nonzero_py]("x_decomp_triu_nonzero")

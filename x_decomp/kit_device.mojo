@@ -48,6 +48,7 @@ from x_decomp.device import (
     launch_gemm,
     launch_lu,
     launch_rowsum,
+    cd_rows_kernel,
     lda_rows_kernel,
     rand_kernel,
     rowsum_scratch,
@@ -65,6 +66,10 @@ from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from x_decomp.mcd import Est, _key, _F32_EPS, _FLT_MIN, _neg_inf, _order_by_det, _pos_inf, _write, argsort_values, smallest_sorted
 from x_decomp.mcd_fast import MCD_DEVICE_CSTEPS, fast_mcd_fast
 from x_decomp.resident import X_DECOMP_POOL, _ptr, pool_alloc, pool_free
+from x_decomp.moves import MOVE_TRANSPOSE
+from x_decomp.moves_device import launch_move
+from x_decomp.select_dev import order_small_kernel
+from x_decomp.select_ops import SEL_ORDER_MAX
 
 #: `_expansion_decomp._F64_EPS`, the `adds` of LDA's `norm_phi`
 comptime _F64_EPS: Float64 = 2.220446049250313e-16
@@ -426,6 +431,95 @@ struct DKit(Movable):
             return out^
         launch_ew(self.ctx, op, A.p(), B.p(), bm, self.one.p(), 3, out.p(), A.n(), A.c, Float32(0))
         return out^
+
+    def zeros(self, r: Int, c: Int) raises -> DMat:
+        """`_M.zeros(r, c)` on the device."""
+        var out = DMat(r, c)
+        if r * c > 0:
+            var sb = self._sub(out)
+            enqueue_fill(self.ctx, sb, Float32(0))
+            _ = sb^
+        return out^
+
+    def ew2s(self, op: Int, A: DMat, B: DMat, s: Float64) raises -> DMat:
+        """`ew(op, A, B, s=s)` (lane py-runtime-b)."""
+        var bm = _mode(B.r, B.c, A.r, A.c)
+        var out = DMat(A.r, A.c)
+        if A.n() == 0:
+            return out^
+        launch_ew(self.ctx, op, A.p(), B.p(), bm, self.one.p(), 3, out.p(), A.n(), A.c, Float32(s))
+        return out^
+
+    def ew3(self, op: Int, A: DMat, B: DMat, C: DMat, s: Float64) raises -> DMat:
+        """`ew(op, A, B, C, s=s)` (lane py-runtime-b)."""
+        var bm = _mode(B.r, B.c, A.r, A.c)
+        var cm = _mode(C.r, C.c, A.r, A.c)
+        var out = DMat(A.r, A.c)
+        if A.n() == 0:
+            return out^
+        launch_ew(self.ctx, op, A.p(), B.p(), bm, C.p(), cm, out.p(), A.n(), A.c, Float32(s))
+        return out^
+
+    def word(mut self, A: DMat) raises -> Float64:
+        """`A.s[0]` as Python reads it: one word home (a sync)."""
+        var h = self.get(A)
+        self.sync()
+        return Float64(h.d[0])
+
+    def t(self, A: DMat) raises -> DMat:
+        """`_M.T`: a vector's same words, else the TRANSPOSE move on the device."""
+        var out = DMat(A.c, A.r)
+        if A.n() == 0:
+            return out^
+        if A.r == 1 or A.c == 1:
+            self.ctx.enqueue_copy(dst_buf=self._sub(out), src_buf=self._sub(A))
+            return out^
+        launch_move(self.ctx, MOVE_TRANSPOSE, A.p(), A.p(), out.p(), A.n(), A.r, A.c, 0, 0, 0)
+        return out^
+
+    def vec_t(self, var A: DMat) -> DMat:
+        """A vector's transpose: the same buffer, the dimensions swapped."""
+        var r = A.r
+        A.r = A.c
+        A.c = r
+        return A^
+
+    def order_small(mut self, A: DMat) raises -> List[Int32]:
+        """`_Kit.order_small` read as ints (the kernel's exact floats, home)."""
+        var n = A.n()
+        if n > SEL_ORDER_MAX:
+            raise Error("x_decomp: order_small exceeds its bound")
+        var out = DMat(n, 1)
+        if n > 0:
+            self.ctx.enqueue_function[order_small_kernel](A.p(), out.p(), Int32(n), grid_dim=_blocks(n), block_dim=TPB)
+        var h = self.get(out)
+        self.sync()
+        var res = List[Int32](length=max(n, 1), fill=Int32(0))
+        for i in range(n):  # small-loop(n: components): the coordinate order's int32 words for cd_rows
+            res[i] = Int32(Int(h.d[i]))
+        return res^
+
+    def cd_rows(mut self, W: DMat, HHt: DMat, XHt: DMat, perm: List[Int32]) raises -> Float64:
+        """`_Kit.cd_rows` on device matrices (`cd_rows_kernel`): W swept in
+        place, the violation folded by `total` and read."""
+        var n = W.r
+        var kc = W.c
+        var viol = DMat(n, 1)
+        if n * kc > 0:
+            var pd = DMat(kc, 1)
+            var words = List[Float32](length=max(kc, 1), fill=Float32(0))
+            for j in range(kc):  # small-loop(kc: components): the permutation's int32 bits as upload words
+                words[j] = bitcast[DType.float32](perm[j])
+            self.upload_into(pd, words^)
+            self.ctx.enqueue_function[cd_rows_kernel](
+                W.p(), HHt.p(), XHt.p(), pd.p().bitcast[Int32](), viol.p(), Int32(n), Int32(kc),
+                grid_dim=_blocks(n), block_dim=TPB,
+            )
+            var tv = self.total(viol)
+            var w = self.word(tv)
+            _ = pd^
+            return w
+        return 0.0
 
     def mm(self, A: DMat, B: DMat, ta: Bool, tb: Bool) raises -> DMat:
         var m = A.c if ta else A.r

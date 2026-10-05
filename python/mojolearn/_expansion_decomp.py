@@ -2170,139 +2170,24 @@ class NMF(_Base):
             res = dsum - M.r * M.c - lsum
         return math.sqrt(2 * res) if res > 0 else 0.0
 
-    def _mu_ratio(self, k, M, W, H, beta):
-        """(X / WH) for KL, (X / WH^2) for IS, WH clamped at EPSILON; and WH^(beta-1)."""
-        WH = k.ew("maxs", k.mm(W, H), s=_F32_EPS)
-        if beta == 1.0:
-            return k.ew("div", M, WH), None
-        return k.ew("div", k.ew("div", M, WH), WH), k.ew("recip", WH)
-
     # ---- solvers
-    def _mu(self, k, M, W, H, update_H, regs):
+    def _solve(self, k, M, W, H, update_H, regs):
+        """`_cd` (solver 'cd') or `_mu` (frobenius) / `_mu_beta` (KL, IS) in
+        ONE binding call (lane py-runtime-b: x_decomp/nmf.mojo on the host
+        column, x_decomp/nmf_dev.mojo on resident device matrices): the same
+        cells, broadcast modes and float32 scalars as the Python drivers it
+        replaces, their float64 convergence tests in the same order, the
+        shuffle orders from the same Philox streams (200 + draw). W and H
+        are copied; the binding replaces the copies."""
         l1W, l1H, l2W, l2H = regs
-        beta = self._beta()
-        if beta != 2.0:
-            return self._mu_beta(k, M, W, H, update_H, regs, beta)
-        err0 = self._err(k, M, W, H)
-        prev = err0
-        it = 0
-        for it in range(1, self.max_iter + 1):
-            num = k.mm(M, H, tb=True)
-            den = k.mm(W, k.mm(H, H, tb=True))
-            if l1W > 0:
-                den = k.ew("adds", den, s=l1W)
-            if l2W > 0:
-                den = k.ew("axpy", den, W, s=l2W)
-            W = k.ew("muz", W, num, den, s=_F32_EPS)
-            if update_H:
-                num = k.mm(W, M, ta=True)
-                den = k.mm(k.mm(W, W, ta=True), H)
-                if l1H > 0:
-                    den = k.ew("adds", den, s=l1H)
-                if l2H > 0:
-                    den = k.ew("axpy", den, H, s=l2H)
-                H = k.ew("muz", H, num, den, s=_F32_EPS)
-            if self.tol > 0 and it % 10 == 0:
-                err = self._err(k, M, W, H)
-                if (prev - err) / err0 < self.tol:
-                    break
-                prev = err
+        W, H = W.copy(), H.copy()
+        p = [M.r, M.c, W.c, 0 if self.solver == "cd" else 1, int(bool(update_H)), int(self.max_iter),
+             int(bool(self.shuffle)), _seed_of(self.random_state) & 0xFFFFFFFF]
+        f = [self._beta(), float(self.tol), float(l1W), float(l1H), float(l2W), float(l2H)]
+        it = int(k.b.x_decomp_nmf_solve(M.addr, W.addr, H.addr, p, f))
+        if it < 0:
+            raise ZeroDivisionError("float division by zero")
         return W, H, it
-
-    def _mu_beta(self, k, M, W, H, update_H, regs, beta):
-        """sklearn `_multiplicative_update_w/_h` for beta 1 (KL) and 0 (IS):
-        the ratio matrix through H^T (W^T), the denominator H's row sums (W's
-        column sums, a zero replaced by 1) for KL or WH^-1 H^T (W^T WH^-1)
-        for IS, a zero denominator replaced by EPSILON, and for IS the
-        update's square root (gamma = 1 / (2 - beta))."""
-        l1W, l1H, l2W, l2H = regs
-        err0 = self._err(k, M, W, H)
-        prev = err0
-        it = 0
-        for it in range(1, self.max_iter + 1):
-            R, P = self._mu_ratio(k, M, W, H, beta)
-            num = k.mm(R, H, tb=True)
-            den = k.rowsum(H).T if beta == 1.0 else k.mm(P, H, tb=True)
-            if beta == 1.0:
-                den = k.ew("add", _M.zeros(W.r, W.c), den)
-            if l1W > 0:
-                den = k.ew("adds", den, s=l1W)
-            if l2W > 0:
-                den = k.ew("axpy", den, W, s=l2W)
-            den = k.ew("select", k.ew("abs", den), den, k.const(_F32_EPS), s=0.0)
-            delta = k.ew("div", num, den)
-            if beta == 0.0:
-                delta = k.ew("sqrt", delta)
-            W = k.ew("mul", W, delta)
-            if update_H:
-                R, P = self._mu_ratio(k, M, W, H, beta)
-                num = k.mm(W, R, ta=True)
-                if beta == 1.0:
-                    ws = k.colsum(W)
-                    ws = k.ew("select", k.ew("abs", ws), ws, k.const(1.0), s=0.0)
-                    den = k.ew("add", _M.zeros(H.r, H.c), ws.T)
-                else:
-                    den = k.mm(W, P, ta=True)
-                if l1H > 0:
-                    den = k.ew("adds", den, s=l1H)
-                if l2H > 0:
-                    den = k.ew("axpy", den, H, s=l2H)
-                den = k.ew("select", k.ew("abs", den), den, k.const(_F32_EPS), s=0.0)
-                delta = k.ew("div", num, den)
-                if beta == 0.0:
-                    delta = k.ew("sqrt", delta)
-                H = k.ew("mul", H, delta)
-            if self.tol > 0 and it % 10 == 0:
-                err = self._err(k, M, W, H)
-                if (prev - err) / err0 < self.tol:
-                    break
-                prev = err
-        return W, H, it
-
-    def _cd_side(self, k, M, W, Ht, l1, l2, perm, trans):
-        HHt = k.mm(Ht, Ht, ta=True)
-        XHt = k.mm(M, Ht, ta=trans)
-        if l2:
-            # lane fix-d1-decomp: HHt + l2 I in one fused `axpy` cell against
-            # the identity mask (made on the device for a device HHt); lane
-            # cpu2-l8-decomp: in every mode (the host diagonal edit is gone)
-            mask = k.diag_mask(HHt.r) if HHt._d is not None else None
-            HHt = k.ew("axpy", HHt, mask if mask is not None else _eye(HHt.r), s=l2)
-        if l1:
-            XHt = k.ew("adds", XHt, s=-l1)
-        return k.cd_rows(W, HHt, XHt, perm)
-
-    def _perm(self, k, kc):
-        """The coordinate order of one `_update_coordinate_descent` call: the
-        identity, or with shuffle=True a Philox permutation (a sort of draws,
-        ties to the lower index; DEVIATION 5306)."""
-        if not self.shuffle:
-            return list(range(kc))
-        self._draws = getattr(self, "_draws", 0) + 1
-        # lane cpu2-l8-decomp: the order of the draws (ties to the lower
-        # index) made where they are drawn (x_decomp/select_*.mojo
-        # `order_small`); cd_rows takes the int32 list, kc words
-        u = k.rand(1, kc, _seed_of(self.random_state), 200 + self._draws, 0)
-        return [int(v) for v in k.order_small(u).s]  # glue: kc exact-float positions to the int32 argument list
-
-    def _cd(self, k, M, W, H, update_H, regs):
-        l1W, l1H, l2W, l2H = regs
-        self._draws = 0
-        Ht = H.T
-        W = W.copy()
-        v_init = None
-        it = 0
-        for it in range(1, self.max_iter + 1):
-            viol = self._cd_side(k, M, W, Ht, l1W, l2W, self._perm(k, W.c), False)
-            if update_H:
-                viol += self._cd_side(k, M, Ht, W, l1H, l2H, self._perm(k, W.c), True)
-            if v_init is None:
-                v_init = viol
-            if v_init == 0:
-                break
-            if viol / v_init <= self.tol:
-                break
-        return W, Ht.T if update_H else H, it
 
     def _fit_transform(self, M, H=None, update_H=True):
         k = self._kit()
@@ -2326,8 +2211,7 @@ class NMF(_Base):
                 W = k.const(math.sqrt(xmean / nc), n, nc)
             else:
                 W = _M.zeros(n, nc)
-        solve = self._cd if self.solver == "cd" else self._mu
-        W, H, it = solve(k, M, W, H, update_H, regs)
+        W, H, it = self._solve(k, M, W, H, update_H, regs)
         return W, H, it, nc
 
     def fit_transform(self, X, y=None, W=None, H=None):
@@ -2338,8 +2222,7 @@ class NMF(_Base):
             k = self._kit()
             Wm, Hm = _M.from_input(W, "W"), _M.from_input(H, "H")
             regs = self._reg(M.r, M.c)
-            solve = self._cd if self.solver == "cd" else self._mu
-            Wm, Hm, it = solve(k, M, Wm, Hm, True, regs)
+            Wm, Hm, it = self._solve(k, M, Wm, Hm, True, regs)
             nc = Hm.r
         else:
             Wm, Hm, it, nc = self._fit_transform(M)
