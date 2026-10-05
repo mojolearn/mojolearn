@@ -65,6 +65,7 @@ from decomposition.impl.linalg.detail.svd_full import (
     pca_full_scratch_cells,
 )
 from core.device_pool import pool_give, pool_take
+from core.xtdz_coalesced import column_mean_launch
 from core.gram_splitk import gram_splitk_applies
 from std.sys.compile import is_defined
 
@@ -80,6 +81,24 @@ from std.sys.compile import is_defined
 #: 1 float. Copies and allocations only: no bit moves.
 comptime PCA_FAST_POOL = PCA_FAST_GRAM_MMA and not is_defined["MOJOLEARN_PCA_FAST_POOL_OFF"]()
 comptime _PCA_POOL = "MojoEstimatorsPcaFastX"
+#: lane/apple-fast-s-linalg (2026-10-04), default OFF, FAST + Apple only.
+#: TruncatedSVD.fit's `tsvd_explained_host` (every fit, both component
+#: routes) reads the whole X again. Board: tsvd istella 864 ms (TSVD_QFIX),
+#: 363 ms on the old Gram route, of which this step is a fixed share.
+#: TSVD_FAST_POOL (`-D MOJOLEARN_TSVD_FAST_POOL`): its n x d device copy of X
+#: (880 MB at istella 1M x 220) comes from PCA's pool (`_PCA_POOL`) instead
+#: of a fresh allocation every fit, the fresh-page cost PCA_FAST_POOL removed
+#: from PCA (471.2 -> 217.8 ms); `tsvd_transform_host` too. Copies and
+#: allocations only: no bit moves.
+comptime TSVD_FAST_POOL = PCA_FAST_GRAM_MMA and is_defined["MOJOLEARN_TSVD_FAST_POOL"]()
+#: TSVD_FAST_COLVAR (`-D MOJOLEARN_TSVD_FAST_COLVAR`): `_column_variance`'s
+#: two column means (of X and of X V^T) run the row-coalesced two-pass form
+#: (core/xtdz_coalesced.mojo `column_mean_launch`) instead of
+#: `column_mean_kernel`, whose one block per column reads a column at a
+#: D-float stride (every load its own cache line, X re-read per column; the
+#: pattern measured at 99.8 ms for 1M x 220 on the M4). Same chains and fold:
+#: the same bits.
+comptime TSVD_FAST_COLVAR = PCA_FAST_GRAM_MMA and is_defined["MOJOLEARN_TSVD_FAST_COLVAR"]()
 
 
 def pca_fit_host(
@@ -330,10 +349,13 @@ def _column_variance(
     mean (`column_mean_kernel`), the centering (`shift_columns_kernel`),
     the pinned square, then the column mean of the squares."""
     var cells = n_rows * n_cols
-    ctx.enqueue_function[column_mean_kernel](
-        mu.unsafe_ptr(), m.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
-        grid_dim=(n_cols, 1, 1), block_dim=(STATS_TPB, 1, 1),
-    )
+    comptime if TSVD_FAST_COLVAR:
+        column_mean_launch[True](ctx, mu, m, n_rows, n_cols)
+    else:
+        ctx.enqueue_function[column_mean_kernel](
+            mu.unsafe_ptr(), m.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
+            grid_dim=(n_cols, 1, 1), block_dim=(STATS_TPB, 1, 1),
+        )
     ctx.enqueue_function[shift_columns_kernel](
         m.unsafe_ptr(), mu.unsafe_ptr(), Int32(n_rows), Int32(n_cols), Float32(-1.0),
         grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
@@ -342,10 +364,13 @@ def _column_variance(
         m.unsafe_ptr(), Int32(cells),
         grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
     )
-    ctx.enqueue_function[column_mean_kernel](
-        var_out.unsafe_ptr(), m.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
-        grid_dim=(n_cols, 1, 1), block_dim=(STATS_TPB, 1, 1),
-    )
+    comptime if TSVD_FAST_COLVAR:
+        column_mean_launch[True](ctx, var_out, m, n_rows, n_cols)
+    else:
+        ctx.enqueue_function[column_mean_kernel](
+            var_out.unsafe_ptr(), m.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
+            grid_dim=(n_cols, 1, 1), block_dim=(STATS_TPB, 1, 1),
+        )
 
 
 @always_inline
@@ -399,7 +424,11 @@ def tsvd_explained_host(
     binding (lane/algos-decomp, 2026-09-27; it had run through the x_decomp
     expansion binding). X V^T is `tsvd_transform_host`'s `gemm_nt`."""
     pca_validate(n_rows, n_features, n_components)
-    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    var x: DeviceBuffer[DType.float32]
+    comptime if TSVD_FAST_POOL:
+        x = pool_take[_PCA_POOL](ctx, n_rows * n_features)
+    else:
+        x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var components = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
     var xt = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
     var mu_t = ctx.enqueue_create_buffer[DType.float32](n_components)
@@ -426,6 +455,11 @@ def tsvd_explained_host(
     ctx.synchronize()
     _ = d_exp^
     _ = d_rat^
+    comptime if TSVD_FAST_POOL:
+        # after the final wait: no launch still reads x
+        pool_give[_PCA_POOL](x^)
+    else:
+        _ = x^
 
 
 def tsvd_transform_host(
@@ -437,7 +471,11 @@ def tsvd_transform_host(
     n_features: Int,
     n_components: Int,
 ) raises:
-    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    var x: DeviceBuffer[DType.float32]
+    comptime if TSVD_FAST_POOL:
+        x = pool_take[_PCA_POOL](ctx, n_rows * n_features)
+    else:
+        x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var components = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
     var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
@@ -446,6 +484,10 @@ def tsvd_transform_host(
     gemm_nt(ctx, out, x, components, n_rows, n_components, n_features)
     ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
     ctx.synchronize()
+    comptime if TSVD_FAST_POOL:
+        pool_give[_PCA_POOL](x^)
+    else:
+        _ = x^
 
 
 def inverse_transform_host(

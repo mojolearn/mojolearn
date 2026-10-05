@@ -233,7 +233,7 @@ def mean_fold_kernel(
         mu.unsafe_store(j, m)
 
 
-def column_mean_launch(
+def column_mean_launch[force_coalesced: Bool = False](
     ctx: DeviceContext,
     mut mu: DeviceBuffer[DType.float32],
     mut x: DeviceBuffer[DType.float32],
@@ -244,7 +244,9 @@ def column_mean_launch(
     allocates its workspace here and SYNCHRONIZES before releasing it;
     otherwise the one-block-per-column launch, asynchronous as before."""
     var co = xtdz_coalesced_applies(n_cols, 1)
-    comptime if PCA_FAST_COLMEAN:
+    # force_coalesced: a FAST caller's own switch (TSVD_FAST_COLVAR,
+    # decomposition/estimator.mojo); same bits either way
+    comptime if PCA_FAST_COLMEAN or force_coalesced:
         co = co or (n_cols >= 1 and n_cols <= XTDZ_CO_MAX_CELLS)
     if co:
         var ws = ctx.enqueue_create_buffer[DType.float32](n_cols * STATS_TPB)
