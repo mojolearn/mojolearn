@@ -2316,6 +2316,46 @@ def resample_gather_gpu(
             raise Error("resample: invalid gather array spans")
         if count <= 0:
             return False
+        for a in range(len(widths)):
+            if widths[a] <= 0 or widths[a] > 2147483647:
+                return False
+        var key = resample_key(seed, RESAMPLE_KIND_UTILS_REPLACE)
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var rows = ctx.enqueue_create_buffer[DType.int32](count)
+        var keys = ctx.enqueue_create_buffer[DType.uint64](1)
+        ctx.enqueue_function[utils_draw_kernel](
+            rows.unsafe_ptr(), keys.unsafe_ptr(), key_lo(key), key_hi(key),
+            Int32(n), Int32(count), Int32(1),
+            grid_dim=(ceildiv(count, 256), 1, 1), block_dim=(256, 1, 1),
+        )
+        for a in range(len(srcs)):
+            var d = widths[a]
+            var src = f32_ptr(srcs[a])
+            var dst = f32_ptr(dsts[a])
+            var hsrc = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+            var dsrc = ctx.enqueue_create_buffer[DType.float32](n * d)
+            var dout = ctx.enqueue_create_buffer[DType.float32](count * d)
+            var hout = ctx.enqueue_create_host_buffer[DType.float32](count * d)
+            ctx.synchronize()
+            copy_f32(src, hsrc.unsafe_ptr(), n * d)
+            ctx.enqueue_copy(dst_buf=dsrc, src_ptr=hsrc.unsafe_ptr())
+            ctx.enqueue_function[gather_rows_f32_kernel](
+                dout.unsafe_ptr(), dsrc.unsafe_ptr(), rows.unsafe_ptr(), Int32(count), Int32(d),
+                grid_dim=(ceildiv(count * d, 256), 1, 1), block_dim=(256, 1, 1),
+            )
+            ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=dout)
+            ctx.synchronize()
+            copy_f32(hout.unsafe_ptr(), dst, count * d)
+            _ = hsrc^
+            _ = dsrc^
+            _ = dout^
+            _ = hout^
+        _ = rows^
+        _ = keys^
+        _ = ctx^
+        return True
+    else:
+        return False
 
 
 #: `-D MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW` (lane apple-fast-s-shap,
@@ -2391,43 +2431,3 @@ def resample_gather_narrow(
         return done
     else:
         return -1
-        for a in range(len(widths)):
-            if widths[a] <= 0 or widths[a] > 2147483647:
-                return False
-        var key = resample_key(seed, RESAMPLE_KIND_UTILS_REPLACE)
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var rows = ctx.enqueue_create_buffer[DType.int32](count)
-        var keys = ctx.enqueue_create_buffer[DType.uint64](1)
-        ctx.enqueue_function[utils_draw_kernel](
-            rows.unsafe_ptr(), keys.unsafe_ptr(), key_lo(key), key_hi(key),
-            Int32(n), Int32(count), Int32(1),
-            grid_dim=(ceildiv(count, 256), 1, 1), block_dim=(256, 1, 1),
-        )
-        for a in range(len(srcs)):
-            var d = widths[a]
-            var src = f32_ptr(srcs[a])
-            var dst = f32_ptr(dsts[a])
-            var hsrc = ctx.enqueue_create_host_buffer[DType.float32](n * d)
-            var dsrc = ctx.enqueue_create_buffer[DType.float32](n * d)
-            var dout = ctx.enqueue_create_buffer[DType.float32](count * d)
-            var hout = ctx.enqueue_create_host_buffer[DType.float32](count * d)
-            ctx.synchronize()
-            copy_f32(src, hsrc.unsafe_ptr(), n * d)
-            ctx.enqueue_copy(dst_buf=dsrc, src_ptr=hsrc.unsafe_ptr())
-            ctx.enqueue_function[gather_rows_f32_kernel](
-                dout.unsafe_ptr(), dsrc.unsafe_ptr(), rows.unsafe_ptr(), Int32(count), Int32(d),
-                grid_dim=(ceildiv(count * d, 256), 1, 1), block_dim=(256, 1, 1),
-            )
-            ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=dout)
-            ctx.synchronize()
-            copy_f32(hout.unsafe_ptr(), dst, count * d)
-            _ = hsrc^
-            _ = dsrc^
-            _ = dout^
-            _ = hout^
-        _ = rows^
-        _ = keys^
-        _ = ctx^
-        return True
-    else:
-        return False
