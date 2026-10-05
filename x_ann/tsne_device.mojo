@@ -315,7 +315,7 @@ def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P,
     var rows_here = RS_ROWS if nr - i0 > RS_ROWS else nr - i0
     if tid < rows_here:
         zs[tid] = z
-    var root = _tree_shared(zs, rows_here, tid, RS_TPB)
+    var root = _tree_shared_kern(zs, rows_here, tid, RS_TPB)
     if tid == 0:
         parts.unsafe_store(Int(block_idx.x), root)
         fence[ordering = Ordering.RELEASE]()
@@ -336,7 +336,7 @@ def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P,
             var w = ZT_CHUNK if count - c0 > ZT_CHUNK else count - c0
             for e in range(tid, w, RS_TPB):
                 zs[e] = parts.unsafe_load(c0 + e)
-            var r = _tree_shared(zs, w, tid, RS_TPB)
+            var r = _tree_shared_kern(zs, w, tid, RS_TPB)
             if tid == 0:
                 parts.unsafe_store(nc, r)
             barrier()
@@ -350,7 +350,7 @@ def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P,
 
 
 @always_inline
-def _tree_shared(
+def _tree_shared_kern(
     buf: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED], w_in: Int, tid: Int, nth: Int
 ) -> Float32:
     """The pinned pairwise tree over buf[0 : w_in] in place: level by level

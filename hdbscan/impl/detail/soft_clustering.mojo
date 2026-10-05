@@ -146,7 +146,7 @@ comptime SOFT_MODE_ALL_POINTS: Int32 = 1
 """`all_points_membership_vectors`: rows are training points."""
 
 
-def soft_normalize_row(
+def soft_normalize_row_kern(
     p: MutPointer[Float32, MutAnyOrigin], base: Int, n: Int
 ):
     """`Utils::normalize` (`utils.h:176-194`) for one row. DEVIATION 1616:
@@ -243,7 +243,7 @@ def dist_membership_kernel(
             dst.unsafe_store(
                 base + c, identical_div(SOFT_FLOAT32_MAX, Float32(ns))
             )
-    soft_normalize_row(dst, base, ns)
+    soft_normalize_row_kern(dst, base, ns)
 
 
 def soft_row_prep_kernel(
@@ -386,7 +386,7 @@ def soft_outlier_kernel(
         dst.unsafe_store(
             base + c, identical_exp(ftz(dst.unsafe_load(base + c) - mx))
         )
-    soft_normalize_row(dst, base, ns)
+    soft_normalize_row_kern(dst, base, ns)
 
 
 def soft_prob_kernel(
@@ -457,7 +457,7 @@ def soft_combine_kernel(
         else:
             v = ftz(identical_mul(dm, m))
         dst.unsafe_store(base + c, v)
-    soft_normalize_row(dst, base, ns)
+    soft_normalize_row_kern(dst, base, ns)
     var p = prob.unsafe_load(idx)
     for c in range(ns):
         dst.unsafe_store(

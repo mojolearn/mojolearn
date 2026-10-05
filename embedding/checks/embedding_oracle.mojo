@@ -163,7 +163,7 @@ def pack_emb_key(token_id: Int32, position: Int) -> UInt64:
     return (hi << 32) | lo
 
 
-def merge_sort_u64_with_index(mut keys: List[UInt64], mut idx: List[Int32]):
+def merge_sort_u64_with_index_host(mut keys: List[UInt64], mut idx: List[Int32]):
     """Bottom-up merge sort of `keys` carrying `idx` along. Deterministic and STABLE, so a caller who packs a NON-total key still gets a defined (discovery) order among ties."""
     var n = len(keys)
     if n < 2:
@@ -227,7 +227,7 @@ def emb_perm_by_total_order_key(
             continue
         keys.append(pack_emb_key(ids[t], t))
         idx.append(Int32(t))
-    merge_sort_u64_with_index(keys, idx)
+    merge_sort_u64_with_index_host(keys, idx)
     return idx^
 
 

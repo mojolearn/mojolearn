@@ -131,7 +131,7 @@ from neighbors.impl.knn.knn import (
     knn_classify,
     knn_regress,
 )
-from neighbors.impl.selection.knn import KNN_IDN_DEVICE_WEIGHTS, device_distance_weights
+from neighbors.impl.selection.knn import device_distance_weights, device_check_index_range
 from neighbors.impl.knn.knn import KNN_IDN_VOTE_CACHE, KnnVoteCache, KnnVoteCachePointer
 from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
@@ -147,7 +147,6 @@ from neighbors.impl.detail.knn_brute_force import (
 from neighbors.impl.selection.distance_weights import (
     WEIGHTS_DISTANCE,
     WEIGHTS_UNIFORM,
-    host_distance_weights,
 )
 from neighbors.impl.distance.detail.distance_ops import (
     DIST_BRAY_CURTIS,
@@ -1523,36 +1522,15 @@ def _knn_classifier_vote(
     # the reason (the zero test is a per-row any-reduction and the
     # replacement is row-level).
     var d_w = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
-    # lane/fam2-neighbors (KNN_IDN_DEVICE_WEIGHTS): the rule as a kernel
-    # unless the call is traced (the trace records the host weights)
-    var dev_weights = False
-    comptime if KNN_IDN_DEVICE_WEIGHTS:
-        dev_weights = not trace.enabled
-    if weighted and dev_weights:
+    # cpu3-neighbors: the weight rule runs as a kernel on every GPU route
+    # and mode (the host loop over the n_queries x k distances is gone from
+    # the GPU path; `host_distance_weights` stays the host column). A
+    # traced call records the device weights, which match the host rule bit
+    # for bit (`distance_weights_kernel` is its statements).
+    if weighted:
         device_distance_weights(ctx, dist_ptr, d_w, n_queries, k)
-    if weighted and not dev_weights:
-        # HOST LISTS ACROSS THE BOUNDARY, not pointers: a pointer from
-        # `enqueue_create_host_buffer` is not
-        # interchangeable with an arbitrary host pointer on this stack and
-        # that the failure is SILENT. The copy is `n_queries * k` floats,
-        # the size of the answer the caller is already receiving.
-        var d_in = List[Float32](capacity=n_queries * k)
-        for i in range(n_queries * k):
-            d_in.append(dist_ptr.unsafe_load(i))
-        var wl = host_distance_weights(d_in, n_queries, k)
-        var h_w = ctx.enqueue_create_host_buffer[DType.float32](
-            n_queries * k
-        )
-        ctx.synchronize()
-        for i in range(n_queries * k):
-            h_w.unsafe_ptr().unsafe_store(i, wl[i])
-        ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
-        ctx.synchronize()
         if trace.enabled:
-            trace.record_host(
-                "knn_clf.weights", h_w.unsafe_ptr(), n_queries * k
-            )
-        _ = h_w^
+            trace.record_device(ctx, "knn_clf.weights", d_w, n_queries * k)
 
     # Search returned its owned, sorted index buffer. It uploaded a host
     # permutation only if necessary; reuse the allocation for class_probs.
@@ -1632,7 +1610,7 @@ def _knn_classifier_vote(
     # compare them to `classes_` -- the only way a caller can SEE policy
     # 7's agreement rather than trust it.
     var off = 0
-    for i in range(n_outputs):
+    for i in range(n_outputs):  # small-loop(n_outputs: target columns): hands out the per-output class sets, a few labels each
         for j in range(len(uniq[i])):
             out_uniq_ptr.unsafe_store(off + j, uniq[i][j])
         off += len(uniq[i])
@@ -1644,7 +1622,7 @@ def _knn_classifier_vote(
 
 def _check_class_counts(got: List[List[Int32]], want: List[Int]) raises:
     """Policy 7: the implementation's `getUniquelabels` count against the wrapper's."""
-    for i in range(len(want)):
+    for i in range(len(want)):  # small-loop(want: one class count per target column): compares set sizes only, no data
         if len(got[i]) != want[i]:
             raise Error(
                 "knn_classifier_predict: the implemented getUniquelabels found "
@@ -1733,38 +1711,18 @@ def _knn_regressor_vote(
     n_index: Int, n_queries: Int, k: Int,
     y_ptr: MutPointer[Float32, MutUntrackedOrigin], n_outputs: Int,
     out_ptr: MutPointer[Float32, MutUntrackedOrigin], weighted: Bool,
+    check_index_range: Bool = False,
 ) raises:
     var d_w = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
-    # lane/fam2-neighbors (KNN_IDN_DEVICE_WEIGHTS): the rule as a kernel
-    # unless the call is traced (the trace records the host weights)
-    var dev_weights = False
-    comptime if KNN_IDN_DEVICE_WEIGHTS:
-        dev_weights = not trace.enabled
-    if weighted and dev_weights:
+    # cpu3-neighbors: the weight rule runs as a kernel on every GPU route
+    # and mode (the host loop over the n_queries x k distances is gone from
+    # the GPU path; `host_distance_weights` stays the host column). A
+    # traced call records the device weights, which match the host rule bit
+    # for bit (`distance_weights_kernel` is its statements).
+    if weighted:
         device_distance_weights(ctx, dist_ptr, d_w, n_queries, k)
-    if weighted and not dev_weights:
-        # HOST LISTS ACROSS THE BOUNDARY, not pointers: a pointer from
-        # `enqueue_create_host_buffer` is not
-        # interchangeable with an arbitrary host pointer on this stack and
-        # that the failure is SILENT. The copy is `n_queries * k` floats,
-        # the size of the answer the caller is already receiving.
-        var d_in = List[Float32](capacity=n_queries * k)
-        for i in range(n_queries * k):
-            d_in.append(dist_ptr.unsafe_load(i))
-        var wl = host_distance_weights(d_in, n_queries, k)
-        var h_w = ctx.enqueue_create_host_buffer[DType.float32](
-            n_queries * k
-        )
-        ctx.synchronize()
-        for i in range(n_queries * k):
-            h_w.unsafe_ptr().unsafe_store(i, wl[i])
-        ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
-        ctx.synchronize()
         if trace.enabled:
-            trace.record_host(
-                "knn_reg.weights", h_w.unsafe_ptr(), n_queries * k
-            )
-        _ = h_w^
+            trace.record_device(ctx, "knn_reg.weights", d_w, n_queries * k)
 
     var d_idx = ctx.enqueue_create_buffer[DType.uint32](n_queries * k)
     var y = List[DeviceBuffer[DType.float32]]()
@@ -1773,6 +1731,8 @@ def _knn_regressor_vote(
     var out = ctx.enqueue_create_buffer[DType.float32](n_queries * n_outputs)
     ctx.synchronize()
     ctx.enqueue_copy(dst_buf=d_idx, src_ptr=idx_ptr)
+    if check_index_range:
+        device_check_index_range(ctx, d_idx, n_queries * k, n_index)
     for i in range(n_outputs):
         ctx.enqueue_copy(
             dst_buf=y[i], src_ptr=y_ptr.unsafe_offset(i * n_index)
@@ -1917,7 +1877,7 @@ def _rbc_index_and_count(
     _ = nearest^
     _ = nearest_dist^
     _ = counts^
-    # The count is EXACT (summed in 64-bit, `scan.mojo::rbc_exact_edge_total`)
+    # The count is EXACT (summed in 64-bit, `scan.mojo::rbc_exact_edge_total_host`)
     # but this surface hands back int32 `indptr`, which cannot address it.
     # Refused by name with the true count, never returned wrapped.
     if nnz > 2147483647:
@@ -2374,9 +2334,8 @@ def _validate_neighbors(idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
         raise Error("precomputed neighbors: invalid shape")
     if weights != WEIGHTS_UNIFORM and weights != WEIGHTS_DISTANCE:
         raise Error("precomputed neighbors: unsupported weights")
-    for i in range(n_queries * k):
-        if UInt64(idx_ptr[i]) >= UInt64(n_index):
-            raise Error("precomputed neighbor index outside reference data")
+    # cpu3-neighbors: the index bounds check runs on the device after the
+    # upload (`device_check_index_range`), not as a host walk here.
 
 
 def knn_classifier_from_neighbors(
@@ -2392,14 +2351,14 @@ def knn_classifier_from_neighbors(
     _validate_neighbors(idx_ptr, n_index, n_queries, k, n_outputs, weights)
     if len(n_classes) != n_outputs:
         raise Error("precomputed neighbors: class-count shape mismatch")
-    for count in n_classes:
-        if count < 1:
+    for c in range(len(n_classes)):  # small-loop(n_classes: one count per target column): shape check, no data
+        if n_classes[c] < 1:
             raise Error("precomputed neighbors: class counts must be positive")
     var trace = IdentityTrace()
     var retained = List[DeviceBuffer[DType.uint32]]()
     var indices = ctx.enqueue_create_buffer[DType.uint32](n_queries * k)
     ctx.enqueue_copy(dst_buf=indices, src_ptr=idx_ptr)
-    ctx.synchronize()
+    device_check_index_range(ctx, indices, n_queries * k, n_index)
     retained.append(indices^)
     _knn_classifier_vote(ctx, trace, retained, dist_ptr, n_index, n_queries, k,
         y_ptr, n_outputs, n_classes, out_labels_ptr, out_proba_ptr,
@@ -2416,4 +2375,5 @@ def knn_regressor_from_neighbors(
     _validate_neighbors(idx_ptr, n_index, n_queries, k, n_outputs, weights)
     var trace = IdentityTrace()
     _knn_regressor_vote(ctx, trace, dist_ptr, idx_ptr, n_index, n_queries, k,
-                        y_ptr, n_outputs, out_ptr, weights == WEIGHTS_DISTANCE)
+                        y_ptr, n_outputs, out_ptr, weights == WEIGHTS_DISTANCE,
+                        check_index_range=True)

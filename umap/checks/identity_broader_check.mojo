@@ -11,7 +11,7 @@ from max.gpu.host import DeviceContext
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from umap.curve import fit_umap_curve
-from umap.estimator import fit_transform, fuzzy_graph_from_data
+from umap.estimator import fit_transform, fuzzy_graph_from_data_reference
 from umap.optimizer import optimize_layout
 from umap.params import UMAPParams
 from umap.spectral_init import spectral_initialize
@@ -41,7 +41,7 @@ def main() raises:
     )
     print("UMAP_PROFILE umap.identical.16x3.3d.e12.seed7.mix05.v1")
     record("input", x)
-    var graph = fuzzy_graph_from_data(ctx, x, 16, 3, params)
+    var graph = fuzzy_graph_from_data_reference(ctx, x, 16, 3, params)
     record("rho", graph.rhos)
     record("sigma", graph.sigmas)
     record("directed", graph.directed)

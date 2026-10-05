@@ -5,7 +5,7 @@
 
 A GPU fit builds the graph on the device
 (`umap/sparse_graph.mojo::sparse_fuzzy_simplicial_graph_device`). Both call
-the same per-row statements (`ug_row_rho`, `ug_row_sigma`, `ug_member`,
+the same per-row statements (`ug_row_rho_kern`, `ug_row_sigma`, `ug_member`,
 `ug_merge_weight` in `umap/sparse_graph.mojo`): binary64 arithmetic through
 `checks/soft_f64.mojo` (integer instructions, correctly rounded), float32
 through the pinned `identical_*` seams. So the two columns return the same
@@ -32,7 +32,7 @@ from umap.sparse_graph import (
     ug_constants,
     ug_member,
     ug_merge_weight,
-    ug_row_rho,
+    ug_row_rho_kern,
     ug_row_sigma,
 )
 
@@ -76,7 +76,7 @@ def sparse_fuzzy_simplicial_graph(
             ):
                 raise Error("UMAP k-NN distances must be finite and sorted")
             previous = d
-        rhos[i] = ug_row_rho(dp, i, n_neighbors, local_connectivity, tol)
+        rhos[i] = ug_row_rho_kern(dp, i, n_neighbors, local_connectivity, tol)
     var tasks = host_predict_task_count(n_samples)
     # The thread-pool join is not worthwhile for small graph builds.
     if n_samples < 256:

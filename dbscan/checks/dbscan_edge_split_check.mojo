@@ -12,7 +12,7 @@ wraps back POSITIVE and would have passed the check with a garbage CSR.
 
 The fix, and what this driver gates:
 
-1. `rbc_exact_edge_total` (`neighbors/impl/ball_cover/scan.mojo`) recovers
+1. `rbc_exact_edge_total_host` (`neighbors/impl/ball_cover/scan.mojo`) recovers
    the exact 64-bit count from a wrapped int32 scan. Gated on synthetic
    scans whose totals pass 2^31 and 2^32, where the tail reads negative and
    small-positive respectively.
@@ -43,7 +43,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from dbscan.impl.adjgraph.algo import scan_blocks_needed
 from dbscan.impl.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC, dbscan_fit
 from dbscan.impl.sparse.detail.csr import MAX_LABEL
-from neighbors.impl.ball_cover.scan import rbc_exact_edge_total
+from neighbors.impl.ball_cover.scan import rbc_exact_edge_total_host
 
 
 comptime ES_BLOBS = 6
@@ -156,10 +156,10 @@ def check_exact_total_past_the_wrap(ctx: DeviceContext) raises:
             run = run + Int32(cases[c][r])   # the device scan's int32 wrap
             h.unsafe_ptr().unsafe_store(r + 1, run)
         tails.append(Int(h.unsafe_ptr().unsafe_load(ROWS)))
-        var got = rbc_exact_edge_total(h, ROWS)
+        var got = rbc_exact_edge_total_host(h, ROWS)
         if got != want:
             raise Error(
-                "rbc_exact_edge_total case " + String(c) + ": got "
+                "rbc_exact_edge_total_host case " + String(c) + ": got "
                 + String(got) + ", the exact count is " + String(want)
                 + " (the wrapped int32 tail reads "
                 + String(Int(h.unsafe_ptr().unsafe_load(ROWS))) + ")"

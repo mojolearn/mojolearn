@@ -158,7 +158,7 @@ def kfeat_first_negative_binding(xaddr: PythonObject, n: PythonObject) raises ->
         ctx.synchronize()
         _ = psub^
         var hp = st[].host.value().unsafe_ptr()
-        for i in range(blocks):
+        for i in range(blocks):  # small-loop(blocks: at most SCAN_BLOCKS = 512 block partials, independent of the input): integer min of the scan's per-block answers, as core/device_scan _fold_partials
             var v = hp[i]
             if v < best:
                 best = v

@@ -106,9 +106,11 @@ comptime KNN_IDN_DIRECT_RELABEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and n
 #: thread per query row). Before, the vote copied the n_queries x k
 #: distances into a host list element by element, ran the rule on the host,
 #: copied the result into a pinned buffer element by element and uploaded
-#: it. No bit moves; the host column keeps `host_distance_weights`. A traced
-#: call (IdentityTrace enabled) keeps the host route, whose record it is.
-#: -D MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF (or MOJOLEARN_IDN_ALL_OFF) off.
+#: it. No bit moves; the host column keeps `host_distance_weights`.
+#: cpu3-neighbors (2026-10-04): the kernel is now the only GPU route, in
+#: every mode and when traced (the trace records the device weights); the
+#: host loop and this define's off arm are gone from the vote. The constant
+#: stays for callers that still read it.
 comptime KNN_IDN_DEVICE_WEIGHTS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
@@ -615,3 +617,48 @@ def device_distance_weights(
             " underflows float32, so the row's normalizer is zero on an FTZ column"
             " and not on a denormal-honoring one (DEVIATION 555)"
         )
+
+
+def index_range_kernel(
+    idx: MutPointer[UInt32, MutAnyOrigin],
+    flag: MutPointer[Int32, MutAnyOrigin],
+    count: Int,
+    n_index: Int,
+):
+    """cpu3-neighbors: the precomputed-neighbours bounds check as a kernel,
+    one thread per slot. A slot naming a row outside the reference data sets
+    flag[0] to 1 (every writer stores the same word, so the race is benign);
+    the caller zeroes it and raises on a nonzero value. Integer compares
+    only, no float work, so no column can differ."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= count:
+        return
+    if UInt64(idx.unsafe_load(i)) >= UInt64(n_index):
+        flag.unsafe_store(0, Int32(1))
+
+
+def device_check_index_range(
+    ctx: DeviceContext,
+    mut d_idx: DeviceBuffer[DType.uint32],
+    count: Int,
+    n_index: Int,
+) raises:
+    """Refuses a precomputed neighbour index outside [0, n_index) on the
+    device: one launch over the resident index buffer and one 4-byte flag
+    read, instead of a host walk over the n_queries x k indices."""
+    if count <= 0:
+        return
+    var d_flag = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(d_flag, Int32(0))
+    ctx.enqueue_function[index_range_kernel](
+        d_idx.unsafe_ptr(), d_flag.unsafe_ptr(), count, n_index,
+        grid_dim=(count + KNN_TPB_X - 1) // KNN_TPB_X, block_dim=KNN_TPB_X,
+    )
+    var h_flag = List[Int32](length=1, fill=Int32(0))
+    ctx.enqueue_copy(dst_ptr=h_flag.unsafe_ptr(), src_buf=d_flag)
+    ctx.synchronize()
+    var got = Int(h_flag[0])
+    _ = h_flag^
+    _ = d_flag^
+    if got != 0:
+        raise Error("precomputed neighbor index outside reference data")

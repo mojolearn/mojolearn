@@ -1739,8 +1739,8 @@ def check_hdbscan_sabotages() raises:
     #
     # `condense()` sorts the condensed arrays on (parent, child)
     # (DEVIATION 1611), so the order in which edges were appended is
-    # erased and `_collapse`'s leaf edges are an order-free SET. The one
-    # channel from `bfs_from_node`'s order to the output is the VALUE
+    # erased and `_collapse_host`'s leaf edges are an order-free SET. The one
+    # channel from `bfs_from_node_host`'s order to the output is the VALUE
     # written into `relabel` in their case 1. Two case-1 nodes are
     # therefore ordered differently by the two walks only when neither is
     # an ancestor of the other AND the one in the left branch is deeper.

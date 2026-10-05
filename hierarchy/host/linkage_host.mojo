@@ -27,7 +27,7 @@ module:
     argmin is combined in chunk order, and since every key is distinct the
     minimum is the same whatever the split;
   * sorts the m - 1 tree edges by the packed key (the oracle's
-    `merge_sort_u64_with_index`) and builds the dendrogram with a
+    `merge_sort_u64_with_index_host`) and builds the dendrogram with a
     path-compressing union-find (the root a find returns does not depend
     on compression, so every `children` row is the oracle's).
 THE NEGATIVE CONTROL is the oracle's: `-D MOJOLEARN_HOST_SABOTAGE=1` selects
@@ -44,7 +44,7 @@ from cluster.host.host_cells import ftz_v, host_cells, mul_add_v
 from core.host_predict_threads import host_list_ptr
 from hierarchy.checks.edge_order import pack_edge_key, unpack_edge_hi, unpack_edge_lo, weight_order_key
 from hierarchy.checks.linkage_oracle import host_row_norms_pinned
-from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index
+from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index_host
 
 comptime LINKAGE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -182,7 +182,7 @@ def host_prim_mst(x: List[Float32], m: Int, d: Int, is_sqrt: Bool) -> LinkageHos
     var idx = List[Int](capacity=m - 1)
     for i in range(m - 1):
         idx.append(i)
-    merge_sort_u64_with_index(e_sel, idx)
+    merge_sort_u64_with_index_host(e_sel, idx)
     var slo = List[Int32](capacity=m - 1)
     var shi = List[Int32](capacity=m - 1)
     var sw = List[Float32](capacity=m - 1)

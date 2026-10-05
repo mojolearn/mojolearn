@@ -58,7 +58,7 @@ nothing is a fixture whose green line means nothing:
 WHY HFIX_NESTED HAD TO BE ADDED: THE OTHER FIVE CANNOT SEPARATE A
 TRAVERSAL ORDER, AND THAT IS ARITHMETIC, NOT A GUESS.
 ======================================================================
-`condense.mojo` assigns `next_label` in `bfs_from_node`'s visit order,
+`condense.mojo` assigns `next_label` in `bfs_from_node_host`'s visit order,
 and `condensed_hierarchy.condense()` then SORTS the four output arrays on
 `(parent, child)` (DEVIATION 1611). The sort erases the order in which
 the edges were APPENDED, so the ONLY way a traversal order can reach the

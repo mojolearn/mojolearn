@@ -68,7 +68,7 @@ def coarse_kernel(count: Int32, q0: Int32, queries: F32P, dim: Int32, centers: F
 
 
 @always_inline
-def _probe_walk_seq(lq: Int, cd: F32P, nl: Int, np: Int, offsets: I32P, probes: I32P, pstart: I32P):
+def _probe_walk_seq_kern(lq: Int, cd: F32P, nl: Int, np: Int, offsets: I32P, probes: I32P, pstart: I32P):
     """`pq_next_probe`'s walk for query lq over its stored coarse distances,
     one thread (the cell's comparisons in the cell's order)."""
     var row = lq * nl
@@ -104,7 +104,7 @@ def probe_kernel(mc: Int32, cd: F32P, n_lists: Int32, n_probes: Int32, offsets: 
     candidate row (probes in walk order, slots in list order)."""
     var lq = _tid()
     if lq < Int(mc):
-        _probe_walk_seq(lq, cd, Int(n_lists), Int(n_probes), offsets, probes, pstart)
+        _probe_walk_seq_kern(lq, cd, Int(n_lists), Int(n_probes), offsets, probes, pstart)
 
 
 @always_inline
@@ -126,7 +126,7 @@ def probe_group_kernel(cd: F32P, n_lists: Int32, n_probes: Int32, offsets: I32P,
     the threads keeps the lesser pair. With no NaN distance the order is
     total, so the minimum is the one element the one-thread walk finds, and
     its own words are stored: the same bits. A NaN anywhere in the query's
-    row sends the query to the one-thread walk itself (`_probe_walk_seq`),
+    row sends the query to the one-thread walk itself (`_probe_walk_seq_kern`),
     since NaN makes the walk's result depend on list order."""
     var lq = Int(block_idx.x)
     var t = Int(thread_idx.x)
@@ -152,7 +152,7 @@ def probe_group_kernel(cd: F32P, n_lists: Int32, n_probes: Int32, offsets: I32P,
     barrier()
     if any_nan:
         if t == 0:
-            _probe_walk_seq(lq, cd, nl, np, offsets, probes, pstart)
+            _probe_walk_seq_kern(lq, cd, nl, np, offsets, probes, pstart)
         return
     var prev_d = Float32(0.0)
     var prev_l = -1
@@ -379,7 +379,7 @@ def rq_score_kernel(
 
 
 @always_inline
-def _select_seq(
+def _select_seq_kern(
     lq: Int, qi: Int, np: Int, offsets: I32P, list_indices: I32P, mask: I32P, probes: I32P, pstart: I32P,
     stride: Int, cand: F32P, kk: Int, out_d: F32P, out_i: I32P, out_n: I32P,
 ):
@@ -415,7 +415,7 @@ def select_kernel(
     order, masked rows skipped and not counted."""
     var lq = _tid()
     if lq < Int(mc):
-        _select_seq(lq, Int(q0) + lq, Int(n_probes), offsets, list_indices, mask, probes, pstart, Int(stride),
+        _select_seq_kern(lq, Int(q0) + lq, Int(n_probes), offsets, list_indices, mask, probes, pstart, Int(stride),
                     cand, Int(k), out_d, out_i, out_n)
 
 
@@ -513,7 +513,7 @@ def select_merge_kernel(
     lists are the k least of all candidates, the list the cell's sequential
     insertion keeps: the same words (an empty slot stays (+inf, -1)). A NaN
     candidate makes the cell's result depend on insertion order, so that
-    query runs the cell's own sequential insertion (`_select_seq`). The
+    query runs the cell's own sequential insertion (`_select_seq_kern`). The
     count is the sum of the partial counts (integers)."""
     var lq = _tid()
     if lq < Int(mc):
@@ -528,7 +528,7 @@ def select_merge_kernel(
             else:
                 n_cand += c
         if any_nan:
-            _select_seq(lq, qi, Int(n_probes), offsets, list_indices, mask, probes, pstart, Int(stride), cand, kk,
+            _select_seq_kern(lq, qi, Int(n_probes), offsets, list_indices, mask, probes, pstart, Int(stride), cand, kk,
                         out_d, out_i, out_n)
             return
         var base = qi * kk
@@ -567,7 +567,7 @@ def select_group_kernel(
     thread 0 writes list 0 and the summed count. Row ids are distinct, so
     `pq_better` is a strict total order and the k least are the entries the
     cell keeps. A NaN candidate sends the query to the cell's sequential
-    insertion (`_select_seq`), as `select_merge_kernel` does."""
+    insertion (`_select_seq_kern`), as `select_merge_kernel` does."""
     var lq = Int(block_idx.x)
     var t = Int(thread_idx.x)
     var np = Int(n_probes)
@@ -647,7 +647,7 @@ def select_group_kernel(
             else:
                 total += c
         if any_nan:
-            _select_seq(lq, qi, np, offsets, list_indices, mask, probes, pstart, Int(stride), cand, kk,
+            _select_seq_kern(lq, qi, np, offsets, list_indices, mask, probes, pstart, Int(stride), cand, kk,
                         out_d, out_i, out_n)
         else:
             for s in range(kk):
@@ -660,14 +660,14 @@ def scan_stride(offsets: List[Int32], n_lists: Int, n_probes: Int) -> Int:
     """The longest candidate row a query can have: the n_probes longest
     lists, summed (at least 1)."""
     var lens = List[Int](capacity=n_lists)
-    for l in range(n_lists):
+    for l in range(n_lists):  # small-loop(n_lists: one count per IVF list): sizes the candidate buffer, a shape not data
         lens.append(Int(offsets[l + 1]) - Int(offsets[l]))
     var total = 0
     var taken = List[Bool](length=n_lists, fill=False)
     var np = n_probes if n_probes < n_lists else n_lists
     for _ in range(np):
         var best = -1
-        for l in range(n_lists):
+        for l in range(n_lists):  # small-loop(n_lists: one count per IVF list): picks the longest lists for the buffer shape
             if not taken[l] and (best < 0 or lens[l] > lens[best]):
                 best = l
         taken[best] = True

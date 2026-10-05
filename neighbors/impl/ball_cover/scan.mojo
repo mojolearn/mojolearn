@@ -85,7 +85,7 @@ def rbc_exclusive_scan_kernel(
         ex_scan.unsafe_store(n, offset + total)
 
 
-def rbc_exact_edge_total(mut ia: HostBuffer[DType.int32], n: Int) -> Int:
+def rbc_exact_edge_total_host(mut ia: HostBuffer[DType.int32], n: Int) -> Int:
     """The EXACT edge count of an int32 exclusive scan, however far it wrapped.
 
     `rbc_exclusive_scan_kernel` accumulates in Int32, so `ia[n]` is the edge
@@ -165,7 +165,7 @@ def rbc_clamp_kernel(
 # chunks with the chunk totals out, one small block scanning the chunk
 # totals, and an add of each chunk's offset. Integer adds in Int32 with the
 # same wrap as the one-block kernel, so `ex_scan[n]` is the same value
-# (`rbc_exact_edge_total` reads it the same way). FAST + Apple only,
+# (`rbc_exact_edge_total_host` reads it the same way). FAST + Apple only,
 # default off.
 comptime RBC_PSCAN_PER_THREAD = 8
 comptime RBC_PSCAN_CHUNK = RBC_SCAN_TPB * RBC_PSCAN_PER_THREAD

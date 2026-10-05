@@ -1082,7 +1082,7 @@ Cited from elsewhere and never redefined: 621, 1505, 1938.
    `optimizer_oracle.mojo:162` and `loss_oracle.mojo:167`. It belongs in
    `checks/numerics.mojo` and **three lanes now want the same edit.**
 8. **The merge sort in `embedding_oracle.mojo` duplicates
-   `hierarchy/impl/sparse/op/sort.mojo::merge_sort_u64_with_index`**, copied
+   `hierarchy/impl/sparse/op/sort.mojo::merge_sort_u64_with_index_host`**, copied
    rather than imported because that module imports `max.gpu.host.DeviceBuffer`
    at module scope and a host-only oracle that drags the GPU host module in
    will not build without a device. A shared host utility is the right home

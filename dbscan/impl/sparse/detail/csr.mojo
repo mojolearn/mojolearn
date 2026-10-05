@@ -419,7 +419,7 @@ def weak_cc_batched(
                     )
             ctx.enqueue_copy(dst_ptr=h_changed.unsafe_ptr(), src_buf=d_changed)
             ctx.synchronize()
-            for r2 in range(1, gruns + 1):
+            for r2 in range(1, gruns + 1):  # small-loop(gruns: at most IDN_DBSCAN_CC_CHUNK per-pass flags): reads the chunk's convergence words, no data
                 passes += 1
                 git += 1
                 if h_changed.unsafe_ptr().unsafe_load(r2) == Int32(0):

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """UMAP spectral initialization over the shipped cuVS/Lanczos path."""
 
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
 
 from core.identity_trace import IdentityTrace
@@ -12,7 +12,7 @@ from spectral.impl.spectral_embedding import (
     to_cuvs,
     transform_connectivity,
 )
-from spectral.impl.preprocessing.detail.spectral_embedding import transform_graph
+from spectral.impl.preprocessing.detail.spectral_embedding import transform_device_coo, transform_graph
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -38,33 +38,12 @@ accuracy in the embedding within noise (-0.0004, -0.0014). FAST may move
 bits but not quality, so the reference solve is the FAST default;
 `-D MOJOLEARN_UMAP_INIT_TOL=1` is the trial arm."""
 from umap.graph import FuzzySimplicialGraph
+from umap.optimizer_identical_device import umap_dense_positive_coo_device
 
 
 def _finite(v: Float32) -> Bool:
     var bits = bitcast[DType.uint32](v)
     return ((bits >> UInt32(23)) & UInt32(0xFF)) != UInt32(0xFF)
-
-
-def _weights_to_coo(
-    weights: List[Float32], n_samples: Int
-) raises -> CooGraph:
-    if len(weights) != n_samples * n_samples:
-        raise Error("UMAP spectral graph has the wrong dense shape")
-    var rows = List[Int32]()
-    var cols = List[Int32]()
-    var vals = List[Float32]()
-    for i in range(n_samples):
-        for j in range(n_samples):
-            var value = weights[i * n_samples + j]
-            if not _finite(value) or value < Float32(0.0):
-                raise Error("UMAP spectral graph contains an invalid weight")
-            if i != j and value > Float32(0.0):
-                rows.append(Int32(i))
-                cols.append(Int32(j))
-                vals.append(value)
-    if len(vals) == 0:
-        raise Error("UMAP spectral graph has no edges")
-    return CooGraph(n_samples, rows^, cols^, vals^)
 
 
 def spectral_initialize_weights(
@@ -89,9 +68,13 @@ def spectral_initialize_weights(
     # ncv=n-k > k+1 at these small shapes.
     if n_samples < 2 * n_components + 4:
         raise Error("UMAP spectral initialization has too few samples")
-    var graph = _weights_to_coo(weights, n_samples)
-    return spectral_initialize_coo(
-        ctx, graph^, n_samples, n_components, n_neighbors, seed
+    # the dense graph's validation and positive COO on the device
+    # (`umap_dense_positive_coo_device`, lane cpu3-neighbors)
+    var coo = umap_dense_positive_coo_device(ctx, weights, n_samples)
+    var nnz = coo.nnz
+    return spectral_initialize_device_coo(
+        ctx, n_samples, nnz, coo.rows^, coo.cols^, coo.vals^,
+        n_components, n_neighbors, seed,
     )
 
 
@@ -134,6 +117,13 @@ def spectral_initialize_coo(
         n_out = transform_connectivity(ctx, config, graph^, embedding, trace)
     if n_out != n_components or len(embedding) != n_samples * n_components:
         raise Error("UMAP spectral solver returned the wrong shape")
+    _spectral_post_pass(embedding, n_samples, n_components)
+    return embedding^
+
+
+def _spectral_post_pass(mut embedding: List[Float32], n_samples: Int, n_components: Int) raises:
+    """The ordered post-pass both entries share: the largest-magnitude entry
+    of each column made positive, each column scaled to max magnitude 10."""
     for c in range(n_components):
         var pivot = 0
         var peak = Float32(0.0)
@@ -152,6 +142,48 @@ def spectral_initialize_coo(
             scale = -scale
         for i in range(n_samples):
             embedding[i * n_components + c] *= scale
+
+
+def spectral_initialize_device_coo(
+    ctx: DeviceContext,
+    n_samples: Int,
+    nnz: Int,
+    var rows: DeviceBuffer[DType.int32],
+    var cols: DeviceBuffer[DType.int32],
+    var vals: DeviceBuffer[DType.float32],
+    n_components: Int,
+    n_neighbors: Int,
+    seed: UInt64,
+) raises -> List[Float32]:
+    """`spectral_initialize_coo` over a positive row-major COO already on the
+    device (lane cpu3-neighbors, 2026-10-04): the same refusals, the same
+    solver configuration and tolerance, the same post-pass; the COO is never
+    built on the host."""
+    if n_components < 1:
+        raise Error("UMAP spectral initialization needs n_components >= 1")
+    if n_samples < 2 * n_components + 4:
+        raise Error("UMAP spectral initialization has too few samples")
+    var config = MLSpectralEmbeddingParams(
+        n_components=n_components + 1,
+        n_neighbors=n_neighbors,
+        norm_laplacian=True,
+        drop_first=True,
+        has_seed=True,
+        seed=seed,
+    )
+    var embedding = List[Float32]()
+    var trace = IdentityTrace.disabled()
+    var cp = to_cuvs(config)
+    comptime if UMAP_INIT_TOL_FAST:
+        cp.tolerance = Float32(1e-3)
+    else:
+        cp.tolerance = Float32(1e-5)
+    var n_out = transform_device_coo(
+        ctx, cp, n_samples, nnz, rows^, cols^, vals^, embedding, trace
+    )
+    if n_out != n_components or len(embedding) != n_samples * n_components:
+        raise Error("UMAP spectral solver returned the wrong shape")
+    _spectral_post_pass(embedding, n_samples, n_components)
     return embedding^
 
 

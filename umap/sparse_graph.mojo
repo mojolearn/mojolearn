@@ -15,7 +15,7 @@ build; the finished CSR is read back once into the struct the spectral
 init and the optimizer take.
 
 THE SAME WORDS ON EVERY COLUMN. The per-row arithmetic is shared with the
-CPU column's builder (`umap/host/sparse_graph_host.mojo`): `ug_row_rho`,
+CPU column's builder (`umap/host/sparse_graph_host.mojo`): `ug_row_rho_kern`,
 `ug_row_sigma`, `ug_member` and `ug_merge_weight` below. Their binary64
 steps are `checks/soft_f64.mojo` (integer instructions, correctly rounded,
 `sf64_exp` is `portable_exp64` statement for statement), since the Apple GPU
@@ -136,7 +136,7 @@ def ug_constants(n_neighbors: Int) -> Tuple[UInt64, UInt64, UInt64]:
 
 
 @always_inline
-def _ug_nz(dp: UG_F32P, base: Int, k: Int, which: Int) -> Float32:
+def _ug_nz_kern(dp: UG_F32P, base: Int, k: Int, which: Int) -> Float32:
     """The `which`-th (0-based) positive distance of the row, in rank order."""
     var seen = 0
     for j in range(k):
@@ -148,7 +148,7 @@ def _ug_nz(dp: UG_F32P, base: Int, k: Int, which: Int) -> Float32:
     return Float32(0.0)
 
 
-def ug_row_rho(dp: UG_F32P, row: Int, k: Int, lc: Float32, tol: UInt64) -> Float32:
+def ug_row_rho_kern(dp: UG_F32P, row: Int, k: Int, lc: Float32, tol: UInt64) -> Float32:
     """rho: the first positive distance; at a local_connectivity other than
     1, DEVIATION 5323 (PIN): the positive distances in rank order, index =
     floor(lc), rho = nz[index - 1] + interp (nz[index] - nz[index - 1]) as
@@ -171,9 +171,9 @@ def ug_row_rho(dp: UG_F32P, row: Int, k: Int, lc: Float32, tol: UInt64) -> Float
         var index = sf64_to_int(lc64)  # floor: lc >= 0
         var interp = sf64_sub(lc64, sf64_from_int(index))
         if index > 0:
-            var rho = _ug_nz(dp, base, k, index - 1)
+            var rho = _ug_nz_kern(dp, base, k, index - 1)
             if sf64_gt(interp, tol):
-                var diff = _ug_nz(dp, base, k, index) - rho
+                var diff = _ug_nz_kern(dp, base, k, index) - rho
                 rho = sf64_to_f32(
                     sf64_fma(interp, sf64_from_f32(diff), sf64_from_f32(rho))
                 )
@@ -182,12 +182,12 @@ def ug_row_rho(dp: UG_F32P, row: Int, k: Int, lc: Float32, tol: UInt64) -> Float
             return sf64_to_f32(sf64_mul(interp, sf64_from_f32(first)))
         return Float32(0.0)
     if cnt > 0:
-        return _ug_nz(dp, base, k, cnt - 1)
+        return _ug_nz_kern(dp, base, k, cnt - 1)
     return Float32(0.0)
 
 
 @always_inline
-def _ug_msum(dp: UG_F32P, base: Int, k: Int, rho: UInt64, sigma: UInt64) -> UInt64:
+def _ug_msum_kern(dp: UG_F32P, base: Int, k: Int, rho: UInt64, sigma: UInt64) -> UInt64:
     """`sum_{j >= 1} (1 if d_j - rho <= 0 else exp(-(d_j - rho) / sigma))`,
     binary64, ascending j."""
     var total = SF64_ZERO
@@ -211,7 +211,7 @@ def ug_row_sigma(
     var base = row * k
     var rho = sf64_from_f32(rho_f32)
     var hi = SF64_ONE
-    while sf64_lt(_ug_msum(dp, base, k, rho, hi), target):
+    while sf64_lt(_ug_msum_kern(dp, base, k, rho, hi), target):
         hi = sf64_mul(hi, UG_TWO)
         if sf64_gt(hi, big):
             return SF64_NAN
@@ -220,7 +220,7 @@ def ug_row_sigma(
     var step = 0
     while step < 64:
         sigma = sf64_mul(sf64_add(lo, hi), UG_HALF)
-        var value = _ug_msum(dp, base, k, rho, sigma)
+        var value = _ug_msum_kern(dp, base, k, rho, sigma)
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
             var err = sf64_sub(value, target)
             if sf64_lt(err, SF64_ZERO):
@@ -332,7 +332,7 @@ def ug_rho_kernel(
             _ = Atomic.min(err, Int32(n + 2 * row + 1))
             return
         previous = d
-    rhos[row] = ug_row_rho(dist, row, k, lc, tol)
+    rhos[row] = ug_row_rho_kern(dist, row, k, lc, tol)
 
 
 def ug_sigma_kernel(
@@ -486,6 +486,31 @@ def ug_merge_kernel[WRITE: Bool](
         mcount[row] = Int32(out)
 
 
+def ug_nonfinite_kernel(v: UG_F32P, flag: UG_I32P, n_in: Int32):
+    """`flag[0] = 1` on a NaN or infinity (every writer stores the same 1)."""
+    var i = _ug_gid()
+    if i >= Int(n_in):
+        return
+    if not _finite(v[i]):
+        flag[0] = Int32(1)
+
+
+def ug_device_all_finite(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int) raises -> Bool:
+    """True when the first `n` values of `buf` are finite: one launch, one
+    word back."""
+    if n <= 0:
+        return True
+    var flag = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(flag, Int32(0))
+    ctx.enqueue_function[ug_nonfinite_kernel](
+        buf.unsafe_ptr(), flag.unsafe_ptr(), Int32(n),
+        grid_dim=_ug_blocks(n), block_dim=UG_TPB,
+    )
+    var ok = _ug_get_i32(ctx, flag, 0, 1)[0] == Int32(0)
+    _ = flag^
+    return ok
+
+
 def _ug_scan(
     ctx: DeviceContext, mut counts: DeviceBuffer[DType.int32], n: Int
 ) raises -> DeviceBuffer[DType.int32]:
@@ -527,11 +552,28 @@ def _ug_get_i32(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], at: Int, n: 
     return out^
 
 
-def _ug_get_offsets(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int) raises -> List[Int]:
-    var h = _ug_get_i32(ctx, buf, 0, n)
-    var out = List[Int](capacity=n)
-    for i in range(n):
-        out.append(Int(h[i]))
+def ug_widen_kernel(src: UG_I32P, dst: MutPointer[Int64, MutAnyOrigin], n_in: Int32):
+    """One offset per thread, Int32 to the 64-bit `Int` the CSR lists hold."""
+    var i = _ug_gid()
+    if i >= Int(n_in):
+        return
+    dst[i] = Int64(src[i])
+
+
+def _ug_get_offsets(ctx: DeviceContext, mut buf: DeviceBuffer[DType.int32], n: Int) raises -> List[Int]:
+    """The offsets widened on the device (`ug_widen_kernel`) and copied
+    straight into the list's storage (`Int` is 64-bit on every supported
+    host): no per-element host pass (lane cpu3-neighbors, 2026-10-04)."""
+    var out = List[Int](length=n, fill=0)
+    if n > 0:
+        var wide = ctx.enqueue_create_buffer[DType.int64](n)
+        ctx.enqueue_function[ug_widen_kernel](
+            buf.unsafe_ptr(), wide.unsafe_ptr(), Int32(n),
+            grid_dim=_ug_blocks(n), block_dim=UG_TPB,
+        )
+        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr().bitcast[Int64](), src_buf=wide)
+        ctx.synchronize()
+        _ = wide^
     return out^
 
 

@@ -105,7 +105,7 @@ struct KnnVoteCache(Movable):
 
     def uniq_copy(self) -> List[List[Int32]]:
         var out = List[List[Int32]]()
-        for i in range(len(self.uniq_host)):
+        for i in range(len(self.uniq_host)):  # small-loop(uniq_host: one class set per target column): copies the resident handle's label sets, no compute
             out.append(self.uniq_host[i].copy())
         return out^
 

@@ -23,7 +23,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.identity_trace import IdentityTrace
 from hdbscan.checks.sparse_mr_check import FIX_BLOBS, FIX_DUPS, fixture
 from hdbscan.host.hdbscan_host_oracle import hdbh_fit
-from hdbscan.impl.detail.extract import probabilities_from_labels
+from hdbscan.impl.detail.extract import probabilities_from_labels_host
 from hdbscan.impl.detail.select import CLUSTER_SELECTION_EOM
 from hdbscan.impl.runner import GRAPH_BUILD_BRUTE_FORCE_KNN, HDBSCANParams, fit_hdbscan
 from hierarchy.impl.cluster.detail.connectivities import DISTANCE_L2_SQRT_EXPANDED
@@ -89,7 +89,7 @@ def main() raises:
     var t0 = Int(perf_counter_ns())
     var g = fit_hdbscan(ctx, trace, xh, xd, m, d, DISTANCE_L2_SQRT_EXPANDED, params)
     var t1 = Int(perf_counter_ns())
-    var gp = probabilities_from_labels(g.condensed, g.labels, g.inverse_label_map, m)
+    var gp = probabilities_from_labels_host(g.condensed, g.labels, g.inverse_label_map, m)
     print("device fit s=" + String(Float64(t1 - t0) / 1.0e9) + " clusters=" + String(g.n_clusters)
           + " noise=" + String(g.n_outliers) + " rounds=" + String(g.n_boruvka_rounds))
 
@@ -97,7 +97,7 @@ def main() raises:
     var c = hdbh_fit(x, m, d, ms, mcs, 0, Float32(1.0), False, CLUSTER_SELECTION_EOM, Float32(0.0),
                      DISTANCE_L2_SQRT_EXPANDED)
     t1 = Int(perf_counter_ns())
-    var cp = probabilities_from_labels(c.tree, c.labels, c.inverse_label_map, m)
+    var cp = probabilities_from_labels_host(c.tree, c.labels, c.inverse_label_map, m)
     print("cpu fit s=" + String(Float64(t1 - t0) / 1.0e9) + " clusters=" + String(c.n_clusters)
           + " noise=" + String(c.n_outliers) + " rounds=" + String(c.n_boruvka_rounds))
 

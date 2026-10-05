@@ -28,6 +28,7 @@ from max.gpu.sync import barrier
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 from x_neighbors.items import FP, IP
 from x_neighbors.device_ops import xn_ctx, _down_i
+from core.device_fold import device_sum_i32
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
@@ -233,13 +234,13 @@ def nan_cells_device(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int
                 var threads1 = nrb1 * d
                 ctx.enqueue_function[nan_colmiss_kernel](d_x1.unsafe_ptr(), d_cm1.unsafe_ptr(), Int64(n), Int64(d),
                                                          grid_dim=(threads1 + NC_TPB - 1) // NC_TPB, block_dim=NC_TPB)
+            # cpu3-neighbors: the missing-column count is an exact Int64 sum
+            # on the device (one word back), not a host walk over the d flags
+            var cnt = 0
             if d > 0:
+                cnt = Int(device_sum_i32(ctx, d_cm1, d))
                 _down_i(ctx, d_cm1, colmiss, d)
             ctx.synchronize()
-            var cnt = 0
-            var cmp = IP(unsafe_from_address=colmiss)
-            for f in range(d):
-                cnt += Int(cmp.unsafe_load(f))
             IP(unsafe_from_address=info).unsafe_store(0, Int32(cnt))
             _ = d_x1^
             _ = d_cm1^

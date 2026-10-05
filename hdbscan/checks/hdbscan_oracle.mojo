@@ -79,7 +79,7 @@ from hierarchy.checks.linkage_oracle import (
 )
 from hdbscan.impl.detail.stabilities import STAB_FOLD
 from hierarchy.impl.cluster.detail.connectivities import FLOAT32_MAX
-from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index
+from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index_host
 from checks.numerics import (
     ftz,
     identical_div,
@@ -149,7 +149,7 @@ def oracle_core_dists(
             # by the same bound `hierarchy` refuses past.
             keys.append(pack_edge_key(weight_order_key(v), Int32(j), Int32(0)))
             idx.append(j)
-        merge_sort_u64_with_index(keys, idx)
+        merge_sort_u64_with_index_host(keys, idx)
         var slot = idx[k - 1]
         var w = dists[i * m + slot]
         if i == slot:
