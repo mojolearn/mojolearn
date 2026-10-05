@@ -65,10 +65,10 @@ def cp_weights_kernel(ic: IP, wc: FP, n: Int32, k: Int32, weighted: Int32, balan
     witness_end(wf, woff, nonce)
 
 
-def cp_rows_kernel(codes: IP, sw: FP, has_sw: Int32, cw: FP, n: Int32, out: FP, wf: IP, woff: Int32, nonce: Int32):
+def cp_rows_kernel(codes: IP, sw: FP, has_sw: Int32, cw: FP, n: Int32, dst: FP, wf: IP, woff: Int32, nonce: Int32):
     var i = Int(block_idx.x) * CP_TPB + Int(thread_idx.x)
     if i < Int(n):
-        st(out, i, cp_row_weight(codes, sw, has_sw != 0, cw, i))
+        st(dst, i, cp_row_weight(codes, sw, has_sw != 0, cw, i))
     witness_end(wf, woff, nonce)
 
 

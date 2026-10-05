@@ -295,36 +295,37 @@ def mlp_fit[E: Exec](
             ex.launch[OP_MLP_ROWLOSS](a, B)
             comptime if MLP_BLOCKED_FOLDS:
                 _l2_blocked(ex, net, P, l2, l2parts)
-            elif L <= 4:
-                # every layer's ||W||^2 in one launch, a thread each (apple2)
-                var q = Args()
-                q.p0 = P
-                q.p1 = l2
-                q.i2 = L
-                for i in range(L):
-                    var o_ = net.w_off(i)
-                    var c_ = net.sizes[i] * net.sizes[i + 1]
-                    if i == 0:
-                        q.i4 = o_
-                        q.i5 = c_
-                    elif i == 1:
-                        q.i6 = o_
-                        q.i7 = c_
-                    elif i == 2:
-                        q.i8 = o_
-                        q.i9 = c_
-                    else:
-                        q.i10 = o_
-                        q.i11 = c_
-                ex.launch[OP_SUMSQ](q, L)
-            else:
-                for i in range(L):
+            else:  # runtime L: a plain if inside the comptime else (box-run-2 compile fix)
+                if L <= 4:
+                    # every layer's ||W||^2 in one launch, a thread each (apple2)
                     var q = Args()
-                    q.p0 = P + net.w_off(i)
+                    q.p0 = P
                     q.p1 = l2
-                    q.i0 = i
-                    q.i1 = net.sizes[i] * net.sizes[i + 1]
-                    ex.launch[OP_SUMSQ](q, 1)
+                    q.i2 = L
+                    for i in range(L):
+                        var o_ = net.w_off(i)
+                        var c_ = net.sizes[i] * net.sizes[i + 1]
+                        if i == 0:
+                            q.i4 = o_
+                            q.i5 = c_
+                        elif i == 1:
+                            q.i6 = o_
+                            q.i7 = c_
+                        elif i == 2:
+                            q.i8 = o_
+                            q.i9 = c_
+                        else:
+                            q.i10 = o_
+                            q.i11 = c_
+                    ex.launch[OP_SUMSQ](q, L)
+                else:
+                    for i in range(L):
+                        var q = Args()
+                        q.p0 = P + net.w_off(i)
+                        q.p1 = l2
+                        q.i0 = i
+                        q.i1 = net.sizes[i] * net.sizes[i + 1]
+                        ex.launch[OP_SUMSQ](q, 1)
             var bl = Args()
             bl.p0 = rowloss
             bl.p1 = l2

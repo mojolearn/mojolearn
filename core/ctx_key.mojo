@@ -35,7 +35,8 @@ def ctx_cache_key(ctx: DeviceContext) raises -> Int:
         comptime if is_defined["MOJOLEARN_IDN_CACHE_CTX_KEY_DEVICE_ID"]():
             return Int(ctx.id())
         else:
-            return Int(ctx._handle)
+            # _handle is Optional[pointer] in Mojo 1.0 (box-run-2 compile fix).
+            return Int(ctx._handle.value())
     else:
         return 0
 

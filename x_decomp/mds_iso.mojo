@@ -196,8 +196,8 @@ def mds_setup_host_py(
     return Python.tuple(m, g)
 
 
-def mds_disp_host_py(d: PythonObject, out: PythonObject, a: PythonObject, p: PythonObject) raises -> PythonObject:
-    """One iteration's upper-triangle disparities into out (n x n, zeroed
+def mds_disp_host_py(d: PythonObject, dst: PythonObject, a: PythonObject, p: PythonObject) raises -> PythonObject:
+    """One iteration's upper-triangle disparities into dst (n x n, zeroed
     here) on host buffers. a = [keys, idx, gid, gst, sm, wt, end, prv,
     last, hf, gv] addresses; p = [n, m, G, first]."""
     var n = Int(py=p[0])
@@ -205,7 +205,7 @@ def mds_disp_host_py(d: PythonObject, out: PythonObject, a: PythonObject, p: Pyt
     var G = Int(py=p[2])
     var first = Int(py=p[3]) != 0
     var pd = _fp(d)
-    var po = _fp(out)
+    var po = _fp(dst)
     var pk = _fp(a[0])
     var pi = _ip(a[1])
     var pg = _ip(a[2])

@@ -128,17 +128,17 @@ def _ord_rmse_check_kernel(
 
 def _ord_rmse_check_combine_kernel(
     partials: MutPointer[Float32, MutAnyOrigin],
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
 ):
     """lane cpu3-gbdt-a: the `_ORD_RMSE_GRID` block partials, one per
-    thread, max-folded per lane into `out[0:_ORD_RMSE_LANES]`."""
+    thread, max-folded per lane into `dst[0:_ORD_RMSE_LANES]`."""
     var t = Int(thread_idx.x)
     comptime for lane in range(_ORD_RMSE_LANES):
         var r = pinned_block_max[_ORD_RMSE_GRID](
             partials.unsafe_load(t * _ORD_RMSE_LANES + lane)
         )
         if t == 0:
-            out.unsafe_store(lane, r)
+            dst.unsafe_store(lane, r)
 
 
 def _ordered_target_kernel(

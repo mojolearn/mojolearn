@@ -2856,10 +2856,10 @@ def predict_multi_linked_into(
     x_colmajor: List[Float32],
     n_rows: Int,
     link_mode: Int,
-    out: MutPointer[Float32, MutUntrackedOrigin],
+    dst: MutPointer[Float32, MutUntrackedOrigin],
 ) raises -> Int:
     """lane/cpu3-gbdt-b: `predict_multi_floats` with the row-major reshape
-    and the probability link ON THE DEVICE, written straight into `out`.
+    and the probability link ON THE DEVICE, written straight into `dst`.
     `link_mode` is `LINK_RAW` (`approx_dim` wide, the reshape the host loop
     did), `LINK_SOFTMAX` (`approx_dim + 1` wide, `multiclass_probabilities`'
     words) or `LINK_SIGMOID` (`approx_dim` wide, `one_vs_all_probabilities`'
@@ -2917,7 +2917,7 @@ def predict_multi_linked_into(
         Int32(0), Int32(0),
         grid_dim=link_blocks, block_dim=LINK_BLOCK,
     )
-    ctx.enqueue_copy(dst_ptr=out, src_buf=d_out)
+    ctx.enqueue_copy(dst_ptr=dst, src_buf=d_out)
     ctx.synchronize()
     # past the drain (step-33 race class)
     _ = cursor^

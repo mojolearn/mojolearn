@@ -257,15 +257,15 @@ def dev_mds_setup_py(dis: PythonObject, ids: PythonObject, p: PythonObject) rais
     return Python.tuple(m, G)
 
 
-def dev_mds_disp_py(d: PythonObject, out: PythonObject, ids: PythonObject, p: PythonObject) raises -> PythonObject:
-    """One iteration's upper-triangle disparities into out (n x n), enqueued.
+def dev_mds_disp_py(d: PythonObject, dst: PythonObject, ids: PythonObject, p: PythonObject) raises -> PythonObject:
+    """One iteration's upper-triangle disparities into dst (n x n), enqueued.
     ids = [keys, idx, gid, gst, sm, wt, end, prv, last, hf, hd0, hd1, gv]
     device matrices; p = [n, m, G, first]."""
     var n = _n(p, 0)
     var m = _n(p, 1)
     var G = _n(p, 2)
     var first = Int(py=p[3]) != 0
-    var po = _ptr(_id(out), n * n)
+    var po = _ptr(_id(dst), n * n)
     var ctx = xd_ctx()
     ctx.enqueue_function[zero_kernel](po, Int32(n * n), grid_dim=_blocks(n * n), block_dim=TPB)
     if m == 0:

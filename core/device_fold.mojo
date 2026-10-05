@@ -268,9 +268,9 @@ def _scan_tail_kernel(buf: _I32P, n_in: Int32):
 # ------------------------------------------------------------ host side ----
 
 
-def _sum_i64_kernel(out: _I64P, part: _I64P, n_in: Int32):
+def _sum_i64_kernel(dst: _I64P, part: _I64P, n_in: Int32):
     """One block: the Int64 sum of `part[0:n]` (n <= 2 * SCAN_TPB partials),
-    written to `out[0]`. Integer, so exact in any order."""
+    written to `dst[0]`. Integer, so exact in any order."""
     var n = Int(n_in)
     var red = stack_allocation[SCAN_TPB, Scalar[DType.int64], address_space = AddressSpace.SHARED]()
     var tid = Int(thread_idx.x)
@@ -288,7 +288,7 @@ def _sum_i64_kernel(out: _I64P, part: _I64P, n_in: Int32):
         barrier()
         active = active // 2
     if tid == 0:
-        out.unsafe_store(0, red.unsafe_load(0))
+        dst.unsafe_store(0, red.unsafe_load(0))
 
 
 def _min_i32_kernel(out: _I32P, part: _I32P, n_in: Int32):
