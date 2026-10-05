@@ -1,0 +1,159 @@
+C1-C4 call-path timing and real-caller audit, 2026-10-04
+======================================================
+Catalog lifecycle source: 3491a4d4cab94ad76a04e779952daa8ba64ef1c8 (r5).
+Manager reports M3 callpath-probe-quality-r5 PASS bits/lifecycle.
+Caller source snapshot: main 5e5070a83a1883ea8af55b37aeb47a415e3cb243.
+Source-only plan: no timing implementation, build, execution or queue edit.
+
+Decision
+--------
+Do not time r5 probe A versus B: A is a reach=0 no-op and B runs an entire
+quality fixture. Do not claim production MinMax speed from its older List
+upload/download fixture. Prefer a concrete caller allocation experiment over
+building a generic new timing framework. VAR already has most catalog
+mechanisms; C1-C3 are not a missing fast path for its current defaults.
+
+Actual VAR path and redundancy
+------------------------------
+python/mojolearn/_x_sequence_var.py VAR.fit allocates params, sigma, resid;
+_x_sequence binding constructs DeviceExec then calls sequence/pyapi.mojo
+var_fit_py. FAST Apple TSA2_VAR defaults ON; _var_fit_queued binds the input
+without zero filling it, allocates one workspace, queues the design, scale,
+products, solve, residual/sigma and rescale operations. It does not wait for
+the Cholesky status midway; status returns with all outputs. Singular status
+still causes the public Python exception rather than a returned fit.
+
+sequence/exec_device.mojo already provides:
+- process-lifetime context per numeric tier;
+- exact-size device and pinned host pools (3 GiB cap, MOJOLEARN_SEQ_POOL=0
+  rollback); retained storage is not newly introduced by C1;
+- queued upload without an immediate wait, pinned staging retained until sync;
+- deferred downloads, with copies followed by one completion boundary;
+- default FAST Apple pipelined copies for >=2*SEQ_PIPE_CH floats, so very
+  large outputs can have extra chunk synchronization within sync().
+
+SEQ_FAST_VAR_ONECOPY is also already default. Params, residuals, sigma and
+status occupy one contiguous workspace span. One download reaches a fresh
+host List tmp, then memcpy scatters to the three caller-owned output arrays.
+This is stronger copy coalescing than C3, which still submits one DMA per
+appended result. Existing ledger: onecopy taxi-hourly5.9->5.1ms and synthetic
+6.2->5.0ms, main6c0ba4379; TSA2_VAR previously7.6->5.0ms. Do not reattribute
+those gains to catalog helpers. C2's batching two independent fits would be
+a new caller contract, not a speedup to one ordinary VAR.fit.
+
+Remaining concrete VAR costs, NOT measured bottleneck claims:
+- Fresh zero-filled tmp of m*K+R*K+K*K+1 words each call, after a pooled
+  pinned download stage; pinned->tmp then tmp->three outputs is extra host
+  traffic and allocation. Direct segmented copy out of the already-complete
+  pinned span could remove tmp without changing the numerical path, but
+  current DeviceExec API does not expose that storage/lifetime contract.
+- DeviceExec.__deinit__ synchronizes unconditionally after explicit completion.
+  Removing a redundant wait requires tracking pending work across every
+  enqueue/error path, not assuming successful VAR completion for all Exec users.
+- The one pooled workspace is zero-filled each call. Removing this needs a
+  proof every read is preceded by a write, including rank-deficient exits.
+- Python creates public outputs and VARResults derives coefs/intercept and
+  fittedvalues. These existing host operations are in the actual API cost;
+  catalog C1-C4 neither reaches nor fixes them. The fittedvalues subtraction
+  is existing host arithmetic, not a route to extend for new GPU work.
+
+Do not replace DeviceExec with CallpathContext/ResidentCallSlot: it duplicates
+pooling, adds List staging/collection and risks changing initialization,
+status and teardown. Prioritize mapping actual VAR board dimensions and
+transfer span before implementing a narrow readback-scatter candidate. The
+prior W4 VAR_FUSED lane is parked for compile failure and one-block GPU work;
+that is separate from this allocation audit and not a ready alternative.
+
+Actual MinMax path and remaining opportunity
+------------------------------------------
+python/mojolearn/preprocessing.py _transform selects minmax_transform_direct
+on FAST Apple, performs fitted-model/shape validation and handles NaN columns,
+mutable scale_/min_, positive scale, overflow refusal and copy semantics.
+The binding calls preprocessing/estimator.mojo minmax_transform_direct:
+process_ctx (already retained), fresh dx/ds/dm uploads from caller pointers,
+fresh dout, unchanged minmax_transform_into kernel, device_first_nonfinite,
+and only for finite results a direct output copy plus synchronization.
+An invalid output returns0 without exposing the temporary result so Python
+can distinguish overflow from the NaN-aware route. This is the baseline.
+
+The catalog C4 fixture instead uses upload_f32(List) and download_f32(List),
+and candidate stage/collect adds List-to-pinned and pinned-to-List copies.
+Its model is already resident and it omits the production nonfinite gate.
+It proves unchanged kernel wiring/lifecycle only, not this public contract.
+
+MinMax fit already has PREP_CLS2_MINMAX_POOL / fused fit pathways. Transform
+still allocates its four device buffers each call. The least intrusive first
+real integration is transform buffer reuse inside the existing direct API,
+using existing pool_take/pool_give and retained process_ctx, direct pointers,
+unchanged kernel and device_first_nonfinite refusal. Avoid adding a new
+context owner or handle registry solely to imitate C1. Keep model uploads:
+public scale_/min_ arrays can be replaced or mutated between transforms;
+resident model caching needs explicit invalidation and must not be assumed.
+Return pools only after completion; preserve fresh public output ownership.
+FAST Apple opt-in and OFF required; no implementation prepared here.
+
+Necessary MinMax coverage before timing: forward/inverse/clipped transforms,
+odd/tail dimensions, changing input/shape, mutation/replacement of fitted
+statistics, positive-scale refusal, NaN/all-NaN columns, overflow, dtype and
+copy behavior, repeated calls without output aliasing, exceptions and reuse.
+Compare actual current Python/binding A to candidate B, not obsolete List A.
+Preserve existing bits if only storage changes. Initial fit/setup cost remains
+separate and reported; one selected call per arm/shape, no warmup or replay.
+
+Minimal standalone contract IF a mechanistic screen is still useful
+------------------------------------------------------------------
+Do not score four separate synthetic lanes. Combine C1 storage with C4's
+unchanged MinMax operation; C2 and C3 are separate contracts. Two fixed sizes
+are enough initially: 257x3 and65536x11 (rows x features), forward unclipped.
+Exactly one scored invocation per arm/route/size in a fresh process:12 total.
+No runtime quality fixture or unscored transform is run beforehand.
+
+Route1 C1+C4: actual shared upload_f32 + minmax_transform API against actual
+slot.stage -> enqueue_minmax_transform -> wait -> collect. Both begin with
+host input and resident model and return a newly owned host List; charge new
+public List creation to the candidate call, not retained setup. Label this
+legacy shared-List API screen, never current MinMax estimator admission.
+Route2 C2: two independent slot/kernel operations, each wait/collect, versus
+the same two operations sealed then wait_pair/collect. Report the whole
+pair, never halve it into a fictional single-call latency. Baseline here is
+C1's synchronous contract, not production VAR. Both output lists fully read.
+Route3 C3: two already-ready device result buffers, download_f32 twice versus
+PackedReadback append twice/finish/collect twice. Same fresh host output
+ownership, same source buffers. Setup uploads+completion are separately
+reported; no claim this includes an estimator's compute. VAR already merges
+these transfers and is not an eligible direct consumer of this comparison.
+
+For every route: separately timestamp retained context/identity/buffer/model
+setup (including constructor synchronizations), the sole call through wait,
+full collection, full first read, and final teardown. Report setup+call+read
+as the cold lifecycle subtotal alongside retained-call cost; one no-warmup
+sample is not evidence for steady-state warmed latency. Source/hash-bound
+reach counters identify real adapter/helper calls, not just compile flags.
+First read consumes all output words. Existing fixture is not timed, and
+no candidate win or public quality claim follows from this screen alone.
+
+Recommendation: defer this standalone timing implementation unless the
+manager needs mechanism attribution. For speed work, first a narrow actual
+MinMax transform allocation candidate; for slow VAR, quantify the existing
+onecopy span and consider eliminating its fresh tmp/scatter stage only if
+that can matter at board dimensions. No blind generic framework migration.
+
+Board dimension follow-up from the same source snapshot
+------------------------------------------------------
+bench_board_algos.py uses K=16, maxlags=2, trend='c'. Uncapped synthetic
+series length is1440, with TS_H=48 held out: fit n1392, R1390, m33.
+The ONECOPY span is23025 floats (92100 bytes, about90KiB); input is89088
+bytes and pooled fit workspace is369028 bytes. This is far below the default
+pipeline threshold of4194304 floats. Eliminating tmp would save modest host
+traffic, not a large tensor readback; do not prioritize a new generic slab
+API on the assumption that VAR is bandwidth-bound. Taxi length depends on
+its source block/cap and must be read from its saved manifest, not guessed.
+
+The board's VAR fit and inference closures are separate: inference invokes
+forecast on the fitted result and uploads last p rows plus params through a
+new DeviceExec, then returns forecast. Any attempt to remove executor waits
+or retain forecast state must account for both contracts and mutation of
+public params. Existing board source lists fit5.0ms synthetic /5.1ms taxi
+versus statsmodels2.6/2.8ms; these bytes alone cannot attribute that gap.
+Given the small spans, source evidence favors investigating fixed launch /
+completion costs within actual VAR rather than recreating C1-C3 storage.
