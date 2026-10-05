@@ -18,3 +18,4 @@ if git merge-base --is-ancestor origin/main m2/main && [ "$(git rev-parse m2/mai
 for r in m2 m3; do [ "$(git rev-parse $r/main)" = "$(git rev-parse origin/main)" ] || { git push -q $r origin/main:refs/heads/main 2>/dev/null && echo "SYNC $r main -> GitHub $(git rev-parse --short origin/main)" || echo "ALERT $r main diverged from GitHub"; }; done
 # keep opponent-only jobs at the end of the M3 queue (Andrew, Oct 4)
 ssh -o ConnectTimeout=20 -i $K ec2-user@54.157.1.251 'python3 ~/mq/opp_to_end.py' 2>&1 | grep -E 'OPP_TO_END|Error|retry'
+bash ~/CascadeProjects/mojolearn/tools/af_board_render_watch.sh 2>&1 | grep -E "ALERT|NOTE"

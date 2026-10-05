@@ -10,3 +10,8 @@ Copies of the scripts the Apple FAST manager runs. The live copies are in ~/mojo
 
 Verdict rule (CLAUDE.md): FAST flips on when it's faster and quality doesn't go down (no material drop vs FAST main, >= best opponent). Bits are free.
 Board: tools/af_board_apply.py (quality-gated), tools/af_board_quality_audit.py.
+
+## Source of truth (2026-10-05)
+These files in git ARE the source of truth. ~/mojolearn-evidence is for disposable outputs only: on 2026-10-05 ~23:46 every top-level file there was deleted
+(scripts and handoffs lost; no backup). Restore a live copy with: cp tools/apple_fast_ops/<file> ~/mojolearn-evidence/ (laptop),
+scp it to M3 ~/mq/ (opp_to_end.py, ab_extract.py) or M2 ~/m2-arms/ (m2_build_ab.py, m2_bq.sh). Edit here first, then copy out.
