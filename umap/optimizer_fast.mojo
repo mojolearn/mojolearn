@@ -149,10 +149,13 @@ def optimize_layout_fast(
     # (`umap_dense_graph_to_device`, lane cpu3-neighbors).
     var g = umap_dense_graph_to_device(ctx, initial, weights, n_samples, True)
     var max_weight = g.max_weight
-    var g_first = g.first^
-    var g_offsets = g.offsets^
-    var g_tails = g.tails^
-    var g_weights = g.weights^
+    # shared handles (DeviceBuffer copies retain the same allocation, no data
+    # copy): Mojo 1.0 refuses moving a field out of g, and the mut calls
+    # need distinct locals, not refs into one value; g lives to the end.
+    var g_first = g.first.copy()
+    var g_offsets = g.offsets.copy()
+    var g_tails = g.tails.copy()
+    var g_weights = g.weights.copy()
     var second = ctx.enqueue_create_buffer[DType.float32](len(initial))
     for epoch in range(n_epochs):
         if epoch % 2 == 0:
@@ -188,6 +191,7 @@ def optimize_layout_fast(
     _ = g_offsets^
     _ = g_tails^
     _ = g_weights^
+    _ = g^
     return out^
 
 

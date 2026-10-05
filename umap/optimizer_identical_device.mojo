@@ -1379,10 +1379,13 @@ def optimize_dense_layout_identical_device(
     var rep2b = Float32(2.0) * repulsion_strength * b
     var n_init = len(initial_embedding)
     var g = umap_dense_graph_to_device(ctx, initial_embedding, weights, n_samples, False)
-    var g_first = g.first^
-    var g_offsets = g.offsets^
-    var g_tails = g.tails^
-    var g_weights = g.weights^
+    # shared handles (DeviceBuffer copies retain the same allocation, no data
+    # copy): Mojo 1.0 refuses moving a field out of g, and the mut calls
+    # need distinct locals, not refs into one value; g lives to the end.
+    var g_first = g.first.copy()
+    var g_offsets = g.offsets.copy()
+    var g_tails = g.tails.copy()
+    var g_weights = g.weights.copy()
     var second = ctx.enqueue_create_buffer[DType.float32](n_init)
     var out = _umap_epochs_download(
         ctx, g_first, second, g_offsets, g_tails, g_weights, n_init, n_samples, n_components,
@@ -1393,4 +1396,5 @@ def optimize_dense_layout_identical_device(
     _ = g_offsets^
     _ = g_tails^
     _ = g_weights^
+    _ = g^
     return out^

@@ -58,6 +58,11 @@ from x_decomp.resident import _id, _n, _ptr
 #: taxi 1783.8 -> 1039.0 ms, but trustworthiness_k15 0.8662 -> 0.8410 vs FAST
 #: main (arm A) is a real drop, not noise, so default OFF (FAST quality must
 #: not go down vs FAST main and must match the best opponent).
+#: 2026-10-05 re-check with LLE_FAST_NULL_CANON (M3 rab14, 1 run per arm), DEV_LU + CANON vs FAST main:
+#:   lle istella 1803.9 -> 1048.9 ms (-41.9%), trustworthiness_k15 0.8851 -> 0.8615 (-2.7%, consistent across runs);
+#:   lle taxi    1745.1 ->  968.0 ms (-44.5%), trustworthiness_k15 0.8105 -> 0.8420 (arm A itself ranges 0.81-0.87 run to run).
+#:   sklearn-cpu trustworthiness: istella 0.8491, taxi 0.7708, so DEV_LU stays above the opponent on both.
+#:   Andrew (2026-10-05): 2.7% on istella is a lot, so it stays OFF. Re-judge if the istella drop goes away.
 comptime LLE_FAST_DEV_LU = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()

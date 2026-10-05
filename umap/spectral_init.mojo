@@ -209,10 +209,14 @@ def spectral_initialize_weights(
     # (`umap_dense_positive_coo_device`, lane cpu3-neighbors)
     var coo = umap_dense_positive_coo_device(ctx, weights, n_samples)
     var nnz = coo.nnz
-    return spectral_initialize_device_coo(
-        ctx, n_samples, nnz, coo.rows^, coo.cols^, coo.vals^,
+    # shared handles (DeviceBuffer copies retain the same allocation, no data
+    # copy): moving fields out of coo is refused (Mojo 1.0 partial move)
+    var res = spectral_initialize_device_coo(
+        ctx, n_samples, nnz, coo.rows.copy(), coo.cols.copy(), coo.vals.copy(),
         n_components, n_neighbors, seed,
     )
+    _ = coo^
+    return res^
 
 
 def spectral_initialize_coo(
