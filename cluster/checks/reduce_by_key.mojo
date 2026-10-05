@@ -755,27 +755,31 @@ def finish_sum_kernel(
 #: Rows per accumulator block. The table is `ceil(n / rows) * k * d` Int32
 #: cells, `k / BLOCK_ACC_ROWS` of the design's own size.
 #:
-#: fam2-cluster CANDIDATE ARMS (default OFF, the orchestrator times them
-#: against 1024): `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_256=1` and
-#: `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096=1`. For skinny data (d about 10)
+#: fam2-cluster arms. 256 rows is the DEFAULT since idn-promote (2026-10-05):
+#: box-run-2 timed it against 1024 at af93ebe0a (kmeans taxi fit, NVIDIA RTX
+#: 4090 15.89 -> 10.05 ms, AMD MI325X 58.66 -> 44.35 ms, digest 0454b9f3 equal
+#: to 1024's and the host column's on both; evidence
+#: bench/results/box-run-2-20261005/candidate/). For skinny data (d about 10)
 #: only `n / 1024 * d` threads are busy at 1024; 256 quadruples the busy
-#: threads and the table (`n / 256 * k * d` Int32 cells), 4096 does the
-#: reverse for wide data. Int32 totals: no bit moves at any block size (the
-#: banner's associativity argument). Both are off under
-#: `MOJOLEARN_IDN_ALL_OFF`.
+#: threads and the table (`n / 256 * k * d` Int32 cells).
+#: `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_256_OFF=1` (or `MOJOLEARN_IDN_ALL_OFF`)
+#: restores 1024. `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096=1` stays an opt-in
+#: candidate for wide data and wins over the default. The old opt-in
+#: `-D MOJOLEARN_IDN_KMEANS_ACC_ROWS_256=1` is now a no-op. Int32 totals: no
+#: bit moves at any block size (the banner's associativity argument).
 comptime BLOCK_ACC_ROWS = (
-    256
+    4096
     if (
-        is_defined["MOJOLEARN_IDN_KMEANS_ACC_ROWS_256"]()
+        is_defined["MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096"]()
         and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
     else (
-        4096
+        1024
         if (
-            is_defined["MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096"]()
-            and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+            is_defined["MOJOLEARN_IDN_KMEANS_ACC_ROWS_256_OFF"]()
+            or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
         )
-        else 1024
+        else 256
     )
 )
 
