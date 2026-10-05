@@ -109,6 +109,22 @@ class Provenance(unittest.TestCase):
         rec['skipped_opponents']=['ours','sklearn'];rec['cells']=[]
         self.assertTrue(B.smoke_verdict(race,rec,'nvidia'))
 
+    def test_source_native_requires_clean_exact_checkout_and_rejects_ptx(self):
+        import subprocess
+        repo=self.root/'repo';package=repo/'python/mojolearn';package.mkdir(parents=True)
+        (package/'__init__.py').write_text('# frozen source\n')
+        subprocess.run(['git','init','-q',str(repo)],check=True)
+        subprocess.run(['git','-C',str(repo),'add','.'],check=True)
+        subprocess.run(['git','-C',str(repo),'-c','user.name=Test','-c','user.email=test@example.invalid','commit','-qm','frozen'],check=True)
+        head=subprocess.check_output(['git','-C',str(repo),'rev-parse','HEAD'],text=True).strip()
+        manifest=dict(self.native,source_commit=head,installation='source',source_root=str(repo))
+        P.source_check(manifest,package)
+        (package/'__init__.py').write_text('# changed source\n')
+        with self.assertRaisesRegex(ValueError,'clean frozen'):P.source_check(manifest,package)
+        f=self.root/'source-manifest.json';f.write_text(json.dumps(dict(manifest,code_path='ptx-baseline')))
+        with patch.dict(os.environ,{'MOJOLEARN_CUDA_PATH':'ptx-baseline','MOJOLEARN_EXPERIMENTAL_PTX':'1'}):
+            with self.assertRaisesRegex(ValueError,'native-only'):P.identity(f)
+
     def test_comparison_refuses_mismatched_source_settings_data_hardware(self):
         import copy
         def board(identity):

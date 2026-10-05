@@ -52,14 +52,34 @@ def identity(path):
         p = Path(name)
         if p.is_absolute() or '..' in p.parts or not name.endswith('.so') or len(digest) != 64:
             raise ValueError('Invalid artifact inventory member')
-    return dict(schema=SCHEMA, source_commit=d['source_commit'], code_path=d['code_path'],
-                numeric_mode=d['numeric_mode'], files=files)
+    out = dict(schema=SCHEMA, source_commit=d['source_commit'], code_path=d['code_path'],
+               numeric_mode=d['numeric_mode'], files=files)
+    if d.get('installation') == 'source':
+        if d['code_path'] != 'native' or not Path(d.get('source_root', '')).is_absolute():
+            raise ValueError('Source layout is explicit native-only with absolute source_root')
+        out.update(installation='source', source_root=d['source_root'])
+    elif d.get('installation') not in (None, 'wheel'):
+        raise ValueError('Unknown installation layout')
+    return out
+
+
+def source_check(manifest, package):
+    package = Path(package).resolve()
+    if manifest.get('installation') == 'source':
+        root = Path(manifest['source_root']).resolve()
+        if package != root / 'python' / 'mojolearn':
+            raise ValueError('Loaded package is outside the declared benchmark source checkout')
+        head = subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip()
+        if head != manifest['source_commit'] or subprocess.run(
+                ['git', '-C', str(root), 'diff', '--quiet', 'HEAD'], capture_output=True).returncode:
+            raise ValueError('Benchmark source must be the clean frozen numerical commit')
+    elif (package / 'identity_columns/COMMIT').read_text().strip() != manifest['source_commit']:
+        raise ValueError('Installed numerical source differs from artifact manifest')
 
 
 def installed_check(manifest, package):
     package = Path(package).resolve()
-    if (package / 'identity_columns/COMMIT').read_text().strip() != manifest['source_commit']:
-        raise ValueError('Installed numerical source differs from artifact manifest')
+    source_check(manifest, package)
     for rel, digest in manifest['files'].items():
         path = (package / rel).resolve()
         if not path.is_relative_to(package) or sha(path) != digest:
@@ -78,10 +98,10 @@ def collect(manifest):
     # The parent verifies the whole inventory once before any race. Hash
     # only actually loaded extensions here, after timings, so a large full
     # wheel inventory is not repeatedly scanned at every worker shutdown.
-    if (package / "identity_columns/COMMIT").read_text().strip() != manifest["source_commit"]:
-        raise ValueError("Worker installed source differs from manifest")
+    source_check(manifest, package)
     plugin = backend.gpu_plugin() or {}
-    if plugin.get('code_format') != manifest['code_path'] or ml.vendor() != 'cuda':
+    source_native = manifest.get('installation') == 'source' and manifest['code_path'] == 'native' and not plugin
+    if (not source_native and plugin.get('code_format') != manifest['code_path']) or ml.vendor() != 'cuda':
         raise ValueError('Worker selected wrong CUDA code path/vendor')
     if ml.numeric_mode() != manifest['numeric_mode']:
         raise ValueError('Worker numeric mode differs')
