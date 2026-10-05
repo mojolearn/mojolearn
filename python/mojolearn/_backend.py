@@ -1645,7 +1645,7 @@ def host_families_built():
 #:   _mojolearn_tsa -> _mojolearn_tsa_host: holtwinters_fit and
 #:     holtwinters_forecast over holtwinters/host/hw_oracle.mojo, and
 #:     (batch 3, 2026-09-14) kpss_test over tsa/checks/kpss_oracle.mojo;
-#:     select_d (ARIMA's) is absent.
+#:     select_d (ARIMA's) over the same KPSS host test (lane py-runtime-b).
 #:   _mojolearn_solver -> _mojolearn_solver_host: cd_fit and cd_predict over
 #:     solver/host/cd_oracle.mojo and gemm_oracle; agglomerative (phase 1b,
 #:     2026-09-14) adds linkage_fit over hierarchy/checks/linkage_oracle.mojo
