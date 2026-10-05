@@ -1397,8 +1397,9 @@ def knn_distance_register_tile_for[column: Int, identical: Bool]() -> Bool:
 
 
 def knn_selector_specialize_common_for[column: Int, identical: Bool]() -> Bool:
-    """Compile-time k=10/15 removes dynamic insertion guards and threshold
-    selection. NVIDIA 400k/4000q/k10: selector 20.3 -> 9.1 ms on the L40S
+    """Compile-time K (every k <= 16 since Oct 4; k=10/15 only before, now
+    behind MOJOLEARN_LEGACY_SHAPE_KNN_K10_15) removes dynamic insertion guards
+    and threshold selection. NVIDIA 400k/4000q/k10: selector 20.3 -> 9.1 ms on the L40S
     (2026-09-09 selector resume). The same integer composite-key scan and
     block minimum are retained. Other columns can force the specialization
     for qualification; the generic capacity buckets remain the A/B arm.

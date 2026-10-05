@@ -2050,12 +2050,25 @@ def smallk_select_launch(
     if k < 1 or k > SMALLK_MAX_K or k > length:
         raise Error("small-k selector supports only 1 <= k <= min(64, length)")
     comptime if knn_selector_specialize_common_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]():
-        if k == 10:
-            _smallk_launch_bucket[16, 10](ctx, values, out_values, out_indices, rows, length, k, select_min, arm)
-            return
-        elif k == 15:
-            _smallk_launch_bucket[16, 15](ctx, values, out_values, out_indices, rows, length, k, select_min, arm)
-            return
+        comptime if is_defined["MOJOLEARN_LEGACY_SHAPE_KNN_K10_15"]():
+            # LEGACY (default OFF): compile-time K only at k = 10 and 15, the
+            # knn board's k values. Removed Oct 4 as benchmark-shape tuning;
+            # the every-k rule below is unmeasured.
+            if k == 10:
+                _smallk_launch_bucket[16, 10](ctx, values, out_values, out_indices, rows, length, k, select_min, arm)
+                return
+            elif k == 15:
+                _smallk_launch_bucket[16, 15](ctx, values, out_values, out_indices, rows, length, k, select_min, arm)
+                return
+        else:
+            # Every k the 16-capacity bucket holds gets its compile-time-K
+            # list (static loop bounds, no dynamic insertion guards), not
+            # just the board's k. Same composite-key scan and block minimum,
+            # so the selected keys are unchanged. Unmeasured (Oct 4).
+            comptime for KS in range(1, 17):
+                if k == KS:
+                    _smallk_launch_bucket[16, KS](ctx, values, out_values, out_indices, rows, length, k, select_min, arm)
+                    return
     if k <= 16:
         _smallk_launch_bucket[16, 0](ctx, values, out_values, out_indices, rows, length, k, select_min, arm)
     elif k <= 32:

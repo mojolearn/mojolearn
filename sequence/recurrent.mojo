@@ -35,6 +35,8 @@ from sequence.ops import (
     OP_MSE,
     OP_OPT,
     OP_SEQ_OUT,
+    OP_SEQ_IOTA,
+    OP_MLP_PERM,
     OP_SOFTMAX,
     OP_SUM,
     OPT_ADAGRAD,
@@ -44,6 +46,7 @@ from sequence.ops import (
     OPT_NADAM,
     gates_of,
 )
+from sequence.mlp import mlp_epoch_key, mlp_perm_args
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, SEQ_LSTM_WGRAD, scan_applies
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div, identical_mul, identical_pow64, identical_sqrt, ftz
 
@@ -636,26 +639,29 @@ def opt_step[E: Exec](
 def rnn_fit[E: Exec](
     mut ex: E, net: Net, task: Int,
     X: FP, Y: FP, N: Int, T: Int,
-    order: FP, n_order: Int, steps: MutPointer[Int32, MutUntrackedOrigin], n_steps: Int,
+    epochs: Int, bs: Int, shuffle: Bool, seed: UInt64,
     Pio: FP, losses: FP, lrs: FP, cfg: OptConfig, init_acc: Float32,
 ) raises:
-    """`n_steps` optimizer steps; step k trains on the samples
-    order[steps[2k] : steps[2k] + steps[2k+1]] (indices as floats). Pio holds
-    the starting parameters and receives the trained ones; losses[k] is the
-    mean loss of step k before its update."""
+    """`epochs * ceil(N / bs)` optimizer steps; step k of epoch e trains on
+    the samples order_e[j bs : j bs + B] (j = k mod per, B = min(bs, N - j
+    bs)), order_e the epoch's row order. Lane cpu4-python: the order is built
+    on the executor each epoch (`op_mlp_perm`, the MLP's Feistel permutation
+    keyed by `mlp_epoch_key(seed, e)`, integers only; or `op_seq_iota`
+    without shuffle) instead of a host Fisher-Yates schedule uploaded whole:
+    a new shuffle order on every column together (host column: the same
+    ops on the host executor). Pio holds the starting parameters and
+    receives the trained ones; losses[k] is the mean loss of step k before
+    its update."""
     var np_ = net.n_params()
     var ycols = net.O if task == TASK_MSE else 1
-    var bmax = 1
-    for k in range(n_steps):
-        var c = Int(steps.unsafe_load(2 * k + 1))
-        if c > bmax:
-            bmax = c
+    var per = (N + bs - 1) // bs
+    var n_steps = epochs * per
+    var bmax = min(bs, N)
     var dX = ex.alloc(N * T * net.D)
     ex.upload(dX, X, N * T * net.D)
     var dY = ex.alloc(N * ycols)
     ex.upload(dY, Y, N * ycols)
-    var dord = ex.alloc(n_order)
-    ex.upload(dord, order, n_order)
+    var dord = ex.alloc(N)
     var P = ex.alloc(np_)
     ex.upload(P, Pio, np_)
     var Gr = ex.alloc(np_)
@@ -668,8 +674,16 @@ def rnn_fit[E: Exec](
     var w = Work(ex, net, T, bmax, True)
     var st = OptState()
     for k in range(n_steps):
-        var off = Int(steps.unsafe_load(2 * k))
-        var B = Int(steps.unsafe_load(2 * k + 1))
+        var j = k % per
+        if j == 0:
+            if shuffle:
+                ex.launch[OP_MLP_PERM](mlp_perm_args(N, mlp_epoch_key(seed, k // per), dord), N)
+            else:
+                var ia = Args()
+                ia.p0 = dord
+                ex.launch[OP_SEQ_IOTA](ia, N)
+        var off = j * bs
+        var B = min(bs, N - off)
         gather_seq(ex, dX, dord, w.xb, T, B, net.D, off)
         var hT = forward(ex, net, P, w.xb, T, B, w)
         head(ex, net, P, hT, B, w.yhat)

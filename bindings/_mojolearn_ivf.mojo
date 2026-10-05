@@ -66,7 +66,8 @@ from ivf.resident import (
     ivf_resident_release,
     ivf_resident_search,
 )
-from bindings.ivf_index_arrays import ivf_merge_shards_binding, ivf_shard_plan_binding, ivf_read_resident_filter, ivf_write_resident_result
+from bindings.ivf_index_arrays import ivf_read_resident_filter, ivf_write_resident_result
+from core.shard_merge_device import device_ivf_merge_shards, device_ivf_shard_plan, device_root_f32
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -303,16 +304,64 @@ def ivf_flat_partial_search_binding(addrs: PythonObject, params: PythonObject) r
 
 
 def ivf_finalize_distances_binding(address: PythonObject, count: PythonObject, metric: PythonObject) raises -> PythonObject:
-    from ivf.impl.neighbors.ivf_common import postprocess_distances
+    """`postprocess_distances` over the merged distances, on the device
+    (lane cpu4-python: `ftz(identical_sqrt(d))` per word, the host
+    statement; the host walk stays the host bindings')."""
+    from ivf.impl.neighbors.ivf_common import postprocess_distances_is_identity
     var n = Int(py=count)
     if n < 0:
         raise Error("distance count must be nonnegative")
-    var distances = read_f32(Int(py=address), n)
-    postprocess_distances(distances, Int(py=metric))
-    var dst = f32_ptr(Int(py=address))
-    for i in range(n):
-        dst.unsafe_store(i, distances[i])
+    if postprocess_distances_is_identity(Int(py=metric)) or n == 0:
+        return PythonObject(0)
+    if Int(py=address) == 0:
+        raise Error("ivf_finalize_distances: null buffer address")
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    device_root_f32(ctx, Int(py=address), n)
     return PythonObject(0)
+
+
+def ivf_merge_shards_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`ivf_merge_shards` (bindings/ivf_index_arrays.mojo's contract) on the
+    device (lane cpu4-python, core/shard_merge_device.mojo): [status, row]."""
+    var shards = Int(py=params[0])
+    var m = Int(py=params[1])
+    var k = Int(py=params[2])
+    if shards < 1 or m < 0 or k < 1:
+        raise Error("ivf_merge_shards: need at least one shard and k >= 1")
+    if len(addrs) != 3 + 4 * shards or len(params) != 3 + shards:
+        raise Error("ivf_merge_shards: address or parameter count differs from the shard count")
+    var d_addrs = List[Int]()
+    var i_addrs = List[Int]()
+    var c_addrs = List[Int]()
+    var m_addrs = List[Int]()
+    var sizes = List[Int]()
+    for s in range(shards):  # small-loop(shards: one shard per device): reads the shard addresses, launch arguments only
+        d_addrs.append(Int(py=addrs[3 + 4 * s]))
+        i_addrs.append(Int(py=addrs[4 + 4 * s]))
+        c_addrs.append(Int(py=addrs[5 + 4 * s]))
+        m_addrs.append(Int(py=addrs[6 + 4 * s]))
+        sizes.append(Int(py=params[3 + s]))
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var r = device_ivf_merge_shards(ctx, m, k, d_addrs, i_addrs, c_addrs, m_addrs, sizes,
+                                    Int(py=addrs[0]), Int(py=addrs[1]), Int(py=addrs[2]))
+    var out = Python.list()
+    out.append(PythonObject(Int(r[0])))
+    out.append(PythonObject(Int(r[1])))
+    return out
+
+
+def ivf_shard_plan_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`ivf_shard_plan` (bindings/ivf_index_arrays.mojo's contract) on the
+    device (lane cpu4-python, core/shard_merge_device.mojo)."""
+    var n = Int(py=params[0])
+    var n_lists = Int(py=params[1])
+    var shards = Int(py=params[2])
+    if n < 0 or n_lists < 1 or shards < 1 or len(addrs) != 5:
+        raise Error("ivf_shard_plan: needs 5 addresses, n >= 0, n_lists >= 1 and shards >= 1")
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    return PythonObject(device_ivf_shard_plan(
+        ctx, Int(py=addrs[0]), Int(py=addrs[1]), Int(py=addrs[2]), Int(py=addrs[3]), Int(py=addrs[4]),
+        n, n_lists, shards))
 
 
 # ===========================================================================

@@ -869,7 +869,7 @@ _add("decision-tree-reg", xlane="trees", ours="DecisionTreeRegressor", task="reg
      cuml="cuml.ensemble:RandomForestRegressor",
      cuml_params=dict(n_estimators=1, bootstrap=False, max_features=1.0, max_depth=16, n_bins=128,
                       random_state=SEED),
-     mism=["cuml-gpu is cuML's forest with one tree (see decision-tree-clf)", "ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
+     mism=["cuml-gpu is cuML's forest with one tree (see decision-tree-clf)", "ours' DecisionTree* is its forest builder with one tree: it splits on n_bins quantile bins per feature (128; 256 in FAST, rf_dt_default_bins) (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("bagging-clf", xlane="trees", ours="BaggingClassifier", task="clf", block="cls",
      sk="sklearn.ensemble:BaggingClassifier",
      params=dict(estimator=_E("DecisionTreeClassifier", max_depth=12, random_state=SEED),
@@ -879,7 +879,7 @@ _add("bagging-reg", xlane="trees", ours="BaggingRegressor", task="reg", block="r
      sk="sklearn.ensemble:BaggingRegressor",
      params=dict(estimator=_E("DecisionTreeRegressor", max_depth=12, random_state=SEED),
                  n_estimators=10, random_state=SEED), sk_extra=dict(n_jobs=-1),
-     mism=["ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
+     mism=["ours' DecisionTree* is its forest builder with one tree: it splits on n_bins quantile bins per feature (128; 256 in FAST, rf_dt_default_bins) (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("adaboost-clf", xlane="trees", ours="AdaBoostClassifier", task="clf", block="cls",
      sk="sklearn.ensemble:AdaBoostClassifier",
      params=dict(estimator=_E("DecisionTreeClassifier", max_depth=3, random_state=SEED),
@@ -889,7 +889,7 @@ _add("adaboost-reg", xlane="trees", ours="AdaBoostRegressor", task="reg", block=
      sk="sklearn.ensemble:AdaBoostRegressor",
      params=dict(estimator=_E("DecisionTreeRegressor", max_depth=3, random_state=SEED),
                  n_estimators=50, learning_rate=1.0, loss="linear", random_state=SEED),
-     mism=["ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
+     mism=["ours' DecisionTree* is its forest builder with one tree: it splits on n_bins quantile bins per feature (128; 256 in FAST, rf_dt_default_bins) (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 #: DART: ours takes LightGBM's DART parameter set; every one is passed explicitly
 #: to ours and LightGBM, and the ones XGBoost has to XGBoost (_build_dart).
 _DART = dict(n_estimators=200, learning_rate=0.1, max_depth=8, num_leaves=255, drop_rate=0.1,
@@ -928,7 +928,7 @@ _add("voting-reg", xlane="trees", ours="VotingRegressor", task="reg", block="reg
      sk="sklearn.ensemble:VotingRegressor",
      params=dict(estimators=[("ridge", _E("Ridge", alpha=1.0)), ("lasso", _E("Lasso", alpha=0.01, tol=1e-3, max_iter=1000, random_state=SEED)),
                              ("dt", _E("DecisionTreeRegressor", max_depth=8, random_state=SEED))]),
-     mism=["nested DecisionTreeRegressor(max_depth=8): ours is its forest builder with one tree, splitting on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
+     mism=["nested DecisionTreeRegressor(max_depth=8): ours is its forest builder with one tree, splitting on n_bins quantile bins per feature (128; 256 in FAST, rf_dt_default_bins) (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("stacking-clf", xlane="trees", ours="StackingClassifier", task="clf", block="cls",
      sk="sklearn.ensemble:StackingClassifier",
      params=dict(estimators=[("nb", _E("GaussianNB")),
@@ -940,7 +940,7 @@ _add("stacking-reg", xlane="trees", ours="StackingRegressor", task="reg", block=
      params=dict(estimators=[("lasso", _E("Lasso", alpha=0.01, tol=1e-3, max_iter=1000, random_state=SEED)),
                              ("dt", _E("DecisionTreeRegressor", max_depth=8, random_state=SEED))],
                  final_estimator=_E("Ridge", alpha=1.0), cv=5),
-     mism=["nested DecisionTreeRegressor(max_depth=8): ours is its forest builder with one tree, splitting on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
+     mism=["nested DecisionTreeRegressor(max_depth=8): ours is its forest builder with one tree, splitting on n_bins quantile bins per feature (128; 256 in FAST, rf_dt_default_bins) (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("multioutput-clf", xlane="trees", ours="MultiOutputClassifier", task="multiclf", block="cls",
      sk="sklearn.multioutput:MultiOutputClassifier",
      params=dict(estimator=_E("LogisticRegression", max_iter=200)),
@@ -2844,9 +2844,18 @@ def _build_ts(lane, arm, D):
         def fit():
             if lane == "autoarima":           # the cuML shape: construct on the batch, search, fit
                 m = cls(Y32)
+                # QUALITY FIX (lane apple-fast-q-misc, 2026-10-04; old: env
+                # MOJOLEARN_AUTOARIMA_SEARCH_QOLD=1). The search used cuML's
+                # default maxiter=20, so every candidate order was scored on a
+                # 20-step likelihood fit while statsforecast scores each candidate
+                # at convergence; the IC then compared unconverged fits (audit:
+                # taxi-hourly forecast_rmse FAST 74.66, IDENTICAL 73.63,
+                # statsforecast 68.21). The candidates now get the fit's own
+                # maxiter (1000), the opponent's rule.
+                _sm = 20 if os.environ.get("MOJOLEARN_AUTOARIMA_SEARCH_QOLD") == "1" else 1000
                 m.search(s=1, d=range(0, p["max_d"] + 1), p=range(0, p["max_p"] + 1),
                          q=range(0, p["max_q"] + 1), P=range(1), D=range(1), Q=range(1), ic=p["ic"],
-                         fit_intercept="auto")
+                         fit_intercept="auto", maxiter=_sm)
                 m.fit()
                 S["est"] = m
             elif lane == "stl":               # statsmodels' shape: STL(endog, period).fit() -> result

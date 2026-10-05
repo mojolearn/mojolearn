@@ -130,8 +130,8 @@ from bindings.hotpath_helpers import (
     select_mask_u8_i64_binding,
     count_mask_u8_binding,
     next_combination_i64_binding,
-    ic_running_min_f64_binding,
-    ic_running_min_f32_binding,
+    ic_running_min_f64_host_binding,
+    ic_running_min_f32_host_binding,
     fold_pair_f32_binding,
     threshold_labels_i64_binding,
     scale_shift_ftz_f32_binding,
@@ -142,7 +142,7 @@ from bindings.hotpath_helpers import (
     assign_fold_i64_binding,
     count_fold_hits_i64_binding,
     split_table_i32_binding,
-    scatter_rows_bytes_binding,
+    scatter_rows_bytes_host_binding,
     uniform_init_f32_binding,
     normal_init_f32_binding,
     epoch_order_i32_binding,
@@ -163,7 +163,7 @@ from bindings.array_helpers import (
     check_lengths_i64_binding,
     ragged_rows_bytes_binding,
     nsum_f64_binding,
-    shard_topk_merge_f32_binding,
+    shard_topk_merge_f32_host_binding,
 )
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, u32_ptr
 from core.dense_coo import (
@@ -1504,8 +1504,8 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[select_mask_u8_i64_binding]("select_mask_u8_i64")
         module.def_function[count_mask_u8_binding]("count_mask_u8")
         module.def_function[next_combination_i64_binding]("next_combination_i64")
-        module.def_function[ic_running_min_f64_binding]("ic_running_min_f64")
-        module.def_function[ic_running_min_f32_binding]("ic_running_min_f32")
+        module.def_function[ic_running_min_f64_host_binding]("ic_running_min_f64")
+        module.def_function[ic_running_min_f32_host_binding]("ic_running_min_f32")
         module.def_function[fold_pair_f32_binding]("fold_pair_f32")
         module.def_function[threshold_labels_i64_binding]("threshold_labels_i64")
         module.def_function[scale_shift_ftz_f32_binding]("scale_shift_ftz_f32")
@@ -1516,7 +1516,7 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[assign_fold_i64_binding]("assign_fold_i64")
         module.def_function[count_fold_hits_i64_binding]("count_fold_hits_i64")
         module.def_function[split_table_i32_binding]("split_table_i32")
-        module.def_function[scatter_rows_bytes_binding]("scatter_rows_bytes")
+        module.def_function[scatter_rows_bytes_host_binding]("scatter_rows_bytes")
         module.def_function[uniform_init_f32_binding]("uniform_init_f32")
         module.def_function[normal_init_f32_binding]("normal_init_f32")
         module.def_function[epoch_order_i32_binding]("epoch_order_i32")
@@ -1535,7 +1535,7 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[check_lengths_i64_binding]("check_lengths_i64")
         module.def_function[ragged_rows_bytes_binding]("ragged_rows_bytes")
         module.def_function[nsum_f64_binding]("nsum_f64")
-        module.def_function[shard_topk_merge_f32_binding]("shard_topk_merge_f32")
+        module.def_function[shard_topk_merge_f32_host_binding]("shard_topk_merge_f32")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_core_host: ", error))

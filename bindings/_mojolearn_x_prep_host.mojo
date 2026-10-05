@@ -22,6 +22,7 @@ from x_prep.pt_blocked import IDN_PT_BLOCKED
 from x_prep.host.rr_eigh_host import IDN_RR_EIGH
 from x_prep.fam2 import IDN_WDRAW, IDN_PERM_DRAW, IDN_WPICK, IDN_PARTIAL_CODES, IDN_LABEL_INV
 from x_prep.gram_blocked import IDN_GRAM_BLOCKED, IDN_GRAM_ROWTILE, IDN_GRAM_ROWS
+from x_prep.proba64 import PROBA64
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -163,6 +164,13 @@ def kfold_folds_binding(out_addr: PythonObject, ints: PythonObject, seed: Python
     return PythonObject(0)
 
 
+def proba64_binding() raises -> PythonObject:
+    """Lane apple-fast-q-clf (x_prep/proba64.mojo): registered only under
+    PROBA64 (FAST, not -D MOJOLEARN_PROBA64_QOLD); Python's probe for staging
+    `q64_softmax` (float64 predict_proba)."""
+    return PythonObject(1)
+
+
 def py2mojo_binding() raises -> PythonObject:
     """Lane apple-fast-py2mojo-prep: present unless -D MOJOLEARN_PY2MOJO_prep_OFF."""
     return PythonObject(1)
@@ -238,6 +246,8 @@ def PyInit__mojolearn_x_prep_host() abi("C") -> PythonObject:
         comptime if IDN_WDRAW or IDN_PERM_DRAW or IDN_WPICK or IDN_PARTIAL_CODES or IDN_GRAM_BLOCKED or IDN_LABEL_INV:
             # lane fam2-prep-metrics: the fam2 switches (x_prep/fam2.mojo)
             m.def_function[idn_fam2_binding]("x_prep_idn_fam2")
+        comptime if PROBA64:
+            m.def_function[proba64_binding]("x_prep_proba64")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_prep_host: ", e))

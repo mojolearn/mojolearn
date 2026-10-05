@@ -12,10 +12,22 @@ from x_decomp.api import (
     cd_rows_py, chol_py, colsum_py, eigh_py, eigh_batch_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, knn_select_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py,
     geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, als_cg_rows_py, gather_py, scatter_py, triu_nonzero_py, argsort_f32_py, iso_order_py,
     py2mojo_py, move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, sign_labels_py, accuracy_py, pca_mle_rank_host_py, topn_desc_py,
-    rowsum_py, sqdist_py, vendor_py,
+    rowsum_py, sqdist_py, vendor_py, fast_defines_py,
     idn_flags_py, lu_gesv_py, ols_tsqr_r_py,
 )
 from x_decomp.device import DevExec
+from x_decomp.fa_fast import FA_FAST_APPLE, fa_defines_py, fa_em_py, fa_gram_py, fa_transform_py
+from x_decomp.mcd_bmma import MCD_G1_GRAM, MCD_G1_AUDIT, mcd_g1_count, mcd_g1_last
+
+def mcd_g1_gram_on_py() raises -> PythonObject:
+    return PythonObject(Int(MCD_G1_GRAM))
+
+def mcd_g1_gram_count_py(index: PythonObject) raises -> PythonObject:
+    return PythonObject(mcd_g1_count(Int(py=index)))
+
+def mcd_g1_gram_last_py(index: PythonObject) raises -> PythonObject:
+    return PythonObject(mcd_g1_last(Int(py=index)))
+
 from x_decomp.kit_device import lda_online_dev_py, mcd_dev_py
 from x_decomp.lda_fast import LDA_FUSED_SS, dev_lda_estep_ss_py
 from x_decomp.dict_fast import DECOMP_FAST_DICT_DEV, dev_dict_update_py
@@ -29,8 +41,9 @@ from x_decomp.graph_device import (
     dev_graph_knn_py, dev_graph_knn_dense_py, dev_graph_radius_py, dev_graph_radius_geo_py, dev_graph_lle_iw_py, dev_graph_components_py,
     dev_graph_join_py, dev_graph_dijkstra_py,
 )
+from x_decomp.mcd_bmma import MCD_ORDERED_COV, mcd_cov_reach_py
 from x_decomp.resident import (
-    dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_gemm_py, dev_project_py, dev_rand_py, dev_trisolve_py, dev_knn_select_py, dev_rowsum_py,
+    mcd_cov_probe_py, dev_mcd_cov_py, dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_gemm_py, dev_project_py, dev_rand_py, dev_trisolve_py, dev_knn_select_py, dev_rowsum_py,
     dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_lda_rows_py,
     dev_lda_bound_py, dev_als_rows_py, dev_move_py,
 )
@@ -44,12 +57,21 @@ from x_decomp.resident import dev_maxabs_py
 from x_decomp.api import IDN_DEV_MAXABS
 from x_decomp.resident import IDN_CODE_RESIDENT, dev_code_rows_py
 from x_decomp.resident import IDN_EIGH_RESIDENT, dev_eigh_py
+# merge 2026-10-05: both sides export `dev_lu_aux_py`; the w4 (FAST + Apple) one is
+# aliased here. Same Python name "x_decomp_dev_lu_aux" for both: LLE_FAST_DEV_LU is
+# FAST-only and IDN_LU_RESIDENT is IDENTICAL-only, so one build registers at most one.
+from x_decomp.w4_fast import LLE_FAST_DEV_LU, dev_lu_aux_py as w4_dev_lu_aux_py, w4_flags_py
+from x_decomp.qfix import LU_QFIX, lu_resid_py, qfix_flags_py
 
 
 @export
 def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_decomp")
+        comptime if MCD_G1_AUDIT:
+            m.def_function[mcd_g1_gram_on_py]("mcd_g1_gram_on")
+            m.def_function[mcd_g1_gram_count_py]("mcd_g1_gram_count")
+            m.def_function[mcd_g1_gram_last_py]("mcd_g1_gram_last")
         m.def_function[gemm_py[DevExec]]("x_decomp_gemm")
         m.def_function[ew_py[DevExec]]("x_decomp_ew")
         m.def_function[colsum_py[DevExec]]("x_decomp_colsum")
@@ -128,12 +150,26 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[dev_download_py]("x_decomp_dev_download")
         m.def_function[dev_ew_py]("x_decomp_dev_ew")
         m.def_function[dev_gemm_py]("x_decomp_dev_gemm")
+        m.def_function[mcd_cov_reach_py]("x_decomp_mcd_cov_reach")
+        m.def_function[mcd_cov_probe_py]("x_decomp_mcd_cov_probe")
+        comptime if MCD_ORDERED_COV:
+            m.def_function[dev_mcd_cov_py]("x_decomp_dev_mcd_cov")
         m.def_function[dev_lanczos_py]("x_decomp_dev_lanczos")
         m.def_function[kpca_lanczos_dev_on_py]("x_decomp_lanczos_dev_on")
         m.def_function[ipca_dev_on_py]("x_decomp_ipca_dev_on")
         m.def_function[dev_project_py]("x_decomp_dev_project")
         m.def_function[dev_rand_py]("x_decomp_dev_rand")
         m.def_function[dev_trisolve_py]("x_decomp_dev_trisolve")
+        # lane/apple-fast-w4-decomp (x_decomp/w4_fast.mojo): the build's w4 flags
+        # (LLE_FAST_DEV_LU, RSVD_FAST_DIRECT_IN); the resident LU only when compiled in
+        m.def_function[w4_flags_py]("x_decomp_w4_flags")
+        # lane/apple-fast-q-linalg (x_decomp/qfix.mojo): FAST quality repairs
+        # (bits SVD_QFIX 1, TSVD_QFIX 2, LU_QFIX 4; QOLD defines restore)
+        m.def_function[qfix_flags_py]("x_decomp_qfix_flags")
+        comptime if LU_QFIX:
+            m.def_function[lu_resid_py]("x_decomp_lu_resid")
+        comptime if LLE_FAST_DEV_LU:
+            m.def_function[w4_dev_lu_aux_py]("x_decomp_dev_lu_aux")
         m.def_function[dev_knn_select_py]("x_decomp_dev_knn_select")
         m.def_function[dev_colsum_py]("x_decomp_dev_colsum")
         m.def_function[dev_rowsum_py]("x_decomp_dev_rowsum")
@@ -190,8 +226,18 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
             m.def_function[dev_first_nonfinite_py]("x_decomp_dev_first_nonfinite")
         comptime if GRP_FAST_FUSED:
             m.def_function[grp_fit_fused_py]("x_decomp_grp_fit_fused")
+        # FactorAnalysis on the Apple GPU, FAST only (x_decomp/fa_fast.mojo,
+        # lane/apple-fast-fa recovered by lane/apple-fast-rec-fa-robust):
+        # registered only in a FAST build for Apple; each route also needs its
+        # -D MOJOLEARN_FA_<NAME> (reported by x_decomp_fa_defines, empty when none)
+        comptime if FA_FAST_APPLE:
+            m.def_function[fa_defines_py]("x_decomp_fa_defines")
+            m.def_function[fa_gram_py]("x_decomp_fa_gram")
+            m.def_function[fa_em_py]("x_decomp_fa_em")
+            m.def_function[fa_transform_py]("x_decomp_fa_transform")
         m.def_function[numeric_mode_py]("x_decomp_numeric_mode")
         m.def_function[vendor_py[DevExec]]("x_decomp_vendor")
+        m.def_function[fast_defines_py]("x_decomp_fast_defines")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_decomp: ", e))

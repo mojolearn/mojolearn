@@ -45,6 +45,20 @@ def _ordered_add_kernel(
         total[i] = ftz(identical_mul_add(Float32(1), ftz(total[i]), ftz(shard[i])))
 
 
+def _upload_from(
+    ctx: DeviceContext, src: MutPointer[Float32, MutUntrackedOrigin], n: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """Lane cpu4-python: `n` floats from caller memory into a new device
+    buffer in one copy (`_upload` walked a List into a host buffer first)."""
+    var d = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    if n > 0:
+        var head = d.create_sub_buffer[DType.float32](0, n)
+        ctx.enqueue_copy(dst_buf=head, src_ptr=src)
+        ctx.synchronize()
+        _ = head^
+    return d^
+
+
 struct ByteParallelTrainer(Movable, Writable):
     var contexts: List[DeviceContext]
     var trainers: List[ByteTrainer]
@@ -236,15 +250,15 @@ struct ByteParallelTrainer(Movable, Writable):
         self.busy = False
         return loss
 
-    def apply_gradient(mut self, total: List[Float32]) raises:
+    def apply_gradient(mut self, total: MutPointer[Float32, MutUntrackedOrigin]) raises:
         """Commit one step with a summed gradient folded elsewhere (the same
         ordered left fold `step` runs, done by the caller). From here on this
         is `step`'s replicated tail verbatim: the total lands in
-        `buffers.grad`, is scanned, and `byte_update_device` updates."""
+        `buffers.grad`, is scanned, and `byte_update_device` updates.
+        Lane cpu4-python: `total` is the caller's `n_total` floats, copied
+        straight to the device (no host List, no host staging loop)."""
         self._require_single_replicated()
         var n = self.trainers[0].config.n_total()
-        if len(total) != n:
-            raise Error("byte LM parallel: summed gradient has the wrong length")
         if self.trainers[0].completed_steps >= 999999:
             raise Error("byte LM parallel: step bound reached")
         self.busy = True
@@ -252,7 +266,7 @@ struct ByteParallelTrainer(Movable, Writable):
         self.trainers[0].grad_step = -1
         self.trainers[0].healthy = False
         try:
-            var staged = _upload(self.contexts[0], total)
+            var staged = _upload_from(self.contexts[0], total, n)
             _copy_into(self.contexts[0], self.trainers[0].buffers.grad, staged, 0, 0, n)
             self.contexts[0].synchronize()
             _ = staged^
@@ -276,15 +290,17 @@ struct ByteParallelTrainer(Movable, Writable):
     # folds it in; `fold_add` folds in a gradient held on the host (a shard
     # computed before the prefix arrived); `fold_export` downloads the total.
 
-    def fold_reset(mut self, prefix: List[Float32]) raises:
+    def fold_clear(mut self) raises:
+        """Start this worker's fold empty."""
+        self._require_single_replicated()
+        self.fold_started = False
+
+    def fold_reset(mut self, prefix: MutPointer[Float32, MutUntrackedOrigin]) raises:
+        """Start the fold from a received prefix: the caller's `n_total`
+        floats, copied straight to the device (lane cpu4-python)."""
         self._require_single_replicated()
         var n = self.trainers[0].config.n_total()
-        if len(prefix) == 0:
-            self.fold_started = False
-            return
-        if len(prefix) != n:
-            raise Error("byte LM parallel: the fold prefix has the wrong length")
-        var staged = _upload(self.contexts[0], prefix)
+        var staged = _upload_from(self.contexts[0], prefix, n)
         _copy_into(self.contexts[0], self.total.value(), staged, 0, 0, n)
         self.contexts[0].synchronize()
         _ = staged^
@@ -304,12 +320,12 @@ struct ByteParallelTrainer(Movable, Writable):
         self.contexts[0].synchronize()
         return loss
 
-    def fold_add(mut self, gradient: List[Float32]) raises:
+    def fold_add(mut self, gradient: MutPointer[Float32, MutUntrackedOrigin]) raises:
+        """Fold in a gradient held on the host: the caller's `n_total`
+        floats, copied straight to the device (lane cpu4-python)."""
         self._require_single_replicated()
         var n = self.trainers[0].config.n_total()
-        if len(gradient) != n:
-            raise Error("byte LM parallel: the folded gradient has the wrong length")
-        var staged = _upload(self.contexts[0], gradient)
+        var staged = _upload_from(self.contexts[0], gradient, n)
         if not self.fold_started:
             _copy_into(self.contexts[0], self.total.value(), staged, 0, 0, n)
             self.fold_started = True

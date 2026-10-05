@@ -483,7 +483,7 @@ comptime KRR_SQRT_W_TPB = 256
 
 def krr_sqrt_weights_kernel(
     w: MutPointer[UInt64, MutAnyOrigin],
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
 ):
     """cpu2-l6-bindings: the per-row factor `sqrt(sample_weight)`, the
@@ -495,7 +495,7 @@ def krr_sqrt_weights_kernel(
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= Int(n_in):
         return
-    out.unsafe_store(i, sf64_to_f32(sf64_sqrt(w.unsafe_load(i))))
+    dst.unsafe_store(i, sf64_to_f32(sf64_sqrt(w.unsafe_load(i))))
 
 
 def _krr_sqrt_weights_dev(

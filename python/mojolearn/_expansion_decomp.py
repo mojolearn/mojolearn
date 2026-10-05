@@ -486,6 +486,25 @@ def _kit_vendor(kit):
     return v
 
 
+def _kit_fast_define(kit, name):
+    """lane/apple-fast-rec-decomp (2026-10-04; from
+    lane/apple-fast-decomp-linalg@74d52352b): whether the kit's binding is a
+    FAST Metal build compiled with `-D <name>` (asked of the binding's
+    `x_decomp_fast_defines` once per kit; no env read). False for every
+    IDENTICAL kit, another vendor and a binding without the entry, so the
+    default never takes one of these routes."""
+    if kit.mode != "fast" or _kit_vendor(kit) != "metal":
+        return False
+    d = kit.__dict__.get("_fast_defines")
+    if d is None:
+        try:
+            d = str(kit._raw().x_decomp_fast_defines()).split(",")
+        except Exception:
+            d = []
+        kit._fast_defines = d
+    return name in d
+
+
 class _Kit:
     """The binding's cells, called on `_M` matrices."""
 
@@ -512,6 +531,52 @@ class _Kit:
                 r = False
             self._res_ok = r
         return r
+
+    def w4_flags(self):
+        """lane/apple-fast-w4-decomp: the binding's compiled w4 candidates
+        (`x_decomp_w4_flags`: bit 1 LLE_FAST_DEV_LU, bit 2
+        RSVD_FAST_DIRECT_IN; 0 on a binding without the entry)."""
+        f = self.__dict__.get("_w4_flags")
+        if f is None:
+            try:
+                f = int(getattr(self._raw(), "x_decomp_w4_flags")())
+            except Exception:
+                f = 0
+            self._w4_flags = f
+        return f
+
+    def qfix_flags(self):
+        """lane/apple-fast-q-linalg: the binding's FAST quality repairs
+        (`x_decomp_qfix_flags`, x_decomp/qfix.mojo: bit 1 SVD_QFIX, bit 2
+        TSVD_QFIX, bit 4 LU_QFIX; each off with its -D MOJOLEARN_*_QOLD; 0 on
+        an IDENTICAL or host binding, which keep the old routes)."""
+        f = self.__dict__.get("_qfix_flags")
+        if f is None:
+            try:
+                f = int(getattr(self._raw(), "x_decomp_qfix_flags")())
+            except Exception:
+                f = 0
+            self._qfix_flags = f
+        return f
+
+    def lu_resid(self, A, X, B):
+        """B - A X (n x nrhs), the sum folded in float-float on the device
+        (x_decomp/qfix.mojo `lu_resid_ff_kernel`) and rounded once."""
+        R = _M.zeros(B.r, B.c)
+        self.b.x_decomp_lu_resid(A.addr, X.addr, B.addr, R.addr, [A.r, B.c])
+        return R
+
+    def lu_dev_aux(self, A, clamp=False):
+        """lane/apple-fast-w4-decomp LLE_FAST_DEV_LU: `lu` then `lu_aux` on
+        the device (x_decomp/w4_fast.mojo `dev_lu_aux_py`, the same launches
+        on the same words), A untouched. Returns (lu n x n, pm n x 1, im
+        n x 1, stats as four floats), lu / pm / im device-resident."""
+        n = A.r
+        lu, pm, im = self._dout(n, n), self._dout(n, 1), self._dout(n, 1)
+        diag, st = self._dout(1, n), self._dout(1, 4)
+        self.b.x_decomp_dev_lu_aux(self._did(A), lu._d.id, pm._d.id, im._d.id, diag._d.id, st._d.id,
+                                   [n, int(bool(clamp))])
+        return lu, pm, im, [float(v) for v in st.s]  # glue: the four-field lu_aux status
 
     def _use(self, *ms):
         """The resident path for this call: the GPU binding, and an operand
@@ -2611,6 +2676,28 @@ def _ortho_rotation(k, C, method, tol=1e-6, max_iter=100):
     return k.mm(C, R).T
 
 
+#: x_decomp/fa_fast.mojo's limits (kernel-derived): FA_MAX_D, FA_TR_MAXK, FA_TR_FLOATS
+_FA_MAX_D = 256
+_FA_TR_MAXK = 16
+_FA_TR_FLOATS = 4096
+
+
+def _fa_fast_defines(k):
+    """The FactorAnalysis FAST defines this binding was built with (a FAST
+    Apple build registers `x_decomp_fa_defines`; every other binding has no
+    such entry: the empty set). Asked once per kit; no env read."""
+    got = k.__dict__.get("_fa_defs")
+    if got is None:
+        got = frozenset()
+        if k._res():
+            try:
+                got = frozenset(filter(None, str(getattr(k._raw(), "x_decomp_fa_defines")()).split(",")))
+            except Exception:
+                got = frozenset()
+        k._fa_defs = got
+    return got
+
+
 class FactorAnalysis(_Base):
     """sklearn.decomposition.FactorAnalysis (reference: scikit-learn
     `decomposition/_factor_analysis.py`: `fit`, `transform`,
@@ -2650,16 +2737,21 @@ class FactorAnalysis(_Base):
         # to the word, the residuals are 0). Device launches only.
         mean = k.colmean(M)
         mean = k.ew("add", mean, k.colmean(k.ew("sub", M, mean)))
+        llconst = d * _LOG_2PI + nc
+        # FAST on Apple (lane/apple-fast-fa, recovered 2026-10-04): taken only
+        # when the binding reports MOJOLEARN_FA_GRAM_ONCE or
+        # MOJOLEARN_FA_ITER_DEVICE (x_decomp/fa_fast.mojo; ITER_DEVICE is the
+        # FAST + Apple default since 2026-10-04, rollback
+        # -D MOJOLEARN_FA_ITER_DEVICE_OFF); an IDENTICAL
+        # binding registers no FA entry, so this never runs there
+        fdefs = _fa_fast_defines(k)
+        if (("MOJOLEARN_FA_GRAM_ONCE" in fdefs or "MOJOLEARN_FA_ITER_DEVICE" in fdefs)
+                and d <= _FA_MAX_D and 1 <= nc <= d and self.max_iter >= 1):
+            return self._fit_fast(k, M, mean, n, d, nc, llconst, fdefs)
         Xc = k.ew("sub", M, mean)
         M = None     # not read again: the input's device copy goes back to the pool before the QR
         nsqrt = math.sqrt(n)
-        llconst = d * _LOG_2PI + nc
-        if self.noise_variance_init is None:
-            psi = k.const(1.0, 1, d)
-        else:
-            psi = _M.of([float(v) for v in self.noise_variance_init], 1, len(self.noise_variance_init))
-            if psi.c != d:
-                raise ValueError(f"noise_variance_init dimension does not match the number of features : {psi.c} != {d}")
+        psi = self._psi_init(k, d)
         SMALL = 1e-12
         # Xc = Q R once; the scaled data Xc D / sqrt(n) then has the singular
         # values and right vectors of the d x d R D / sqrt(n) (Q orthogonal)
@@ -2712,6 +2804,70 @@ class FactorAnalysis(_Base):
             wts = k.ew("add", k.ew("mul", k.ew("mins", s2, s=1.0), keep), k.ew("mul", s2, drop))
             share = k.mm(wts, k.ew("sq", Vfull))
             psi = k.ew("maxs", k.ew("mul", k.ew("sq", sqrt_psi), share), s=SMALL)
+        return self._fit_store(k, W, psi, mean, loglike, it, d, nc)
+
+    def _psi_init(self, k, d):
+        if self.noise_variance_init is None:
+            return k.const(1.0, 1, d)
+        psi = _M.of([float(v) for v in self.noise_variance_init], 1, len(self.noise_variance_init))
+        if psi.c != d:
+            raise ValueError(f"noise_variance_init dimension does not match the number of features : {psi.c} != {d}")
+        return psi
+
+    def _fit_fast(self, k, M, mean, n, d, nc, llconst, fdefs):
+        """FAST on Apple (lane/apple-fast-fa@3efbce2af; x_decomp/fa_fast.mojo):
+        the centred Gram G (d x d) in ONE pass over the resident X
+        (MOJOLEARN_FA_GRAM_ONCE: X D / sqrt(n) has the spectrum and right
+        vectors of D G D / n), then the EM loop on G only, either here (the
+        eigh of D G D / n, main's psi update) or as ONE binding call
+        (MOJOLEARN_FA_ITER_DEVICE, `fa_em_py`)."""
+        psi = self._psi_init(k, d)
+        # MOJOLEARN_FA_GRAM_DF (lane/apple-fast-fa-quality): the binding forms
+        # G in double-float, hi words then lo words, so G's buffer is 2 d x d
+        G = k._dout(2 * d if "MOJOLEARN_FA_GRAM_DF" in fdefs else d, d)
+        var = k._dout(1, d)
+        k.b.x_decomp_fa_gram(k._did(M), k._did(mean), G._d.id, var._d.id, [n, d])
+        if "MOJOLEARN_FA_ITER_DEVICE" in fdefs:
+            p0 = array.array("f", psi.s)
+            wa = array.array("f", [0.0]) * (nc * d)
+            pa = array.array("f", [0.0]) * d
+            la = array.array("d", [0.0]) * self.max_iter
+            it = int(k.b.x_decomp_fa_em(G._d.id, p0.buffer_info()[0], wa.buffer_info()[0], pa.buffer_info()[0],
+                                        la.buffer_info()[0], [d, nc, n, self.max_iter], float(self.tol)))
+            return self._fit_store(k, _M(wa, nc, d), _M(pa, 1, d), mean, list(la[:it]), it, d, nc)
+        SMALL = 1e-12
+        old_ll = -math.inf
+        loglike = []
+        order = list(range(d - 1, -1, -1))
+        keep = _M.of([1.0] * nc + [0.0] * (d - nc), 1, d)
+        drop = _M.of([0.0] * nc + [1.0] * (d - nc), 1, d)
+        it = 0
+        W = None
+        for it in range(1, self.max_iter + 1):  # glue: EM iteration driver; every step is device launches (main's loop form)
+            sqrt_psi = k.ew("adds", k.ew("sqrt", psi), s=SMALL)
+            ev, V = k.eigh(k.ew("scale", k.ew("div", k.ew("div", G, sqrt_psi), sqrt_psi.T), s=1.0 / n))
+            s2 = k.ew("maxs", ev.take_cols(order), s=0.0)
+            # the nc leading right vectors signed as main's SVD route signs them
+            Vfull = V.take_cols(order).T
+            Vt = _svd_flip_v(Vfull.rows(0, nc))
+            sk = s2.cols(0, nc)
+            unexp = _dsum(s2.cols(nc, d).s) if nc < d else 0.0
+            W = k.ew("mul", Vt, k.ew("sqrt", k.ew("maxs", k.ew("adds", sk, s=-1.0), s=0.0)).T)
+            W = k.ew("mul", W, sqrt_psi)
+            slog = _dsum(k.ew("logs", sk, s=1.1754943508222875e-38).s)
+            plog = _dsum(k.ew("logs", psi, s=1.1754943508222875e-38).s)
+            ll = (llconst + slog + unexp + plog) * (-n / 2.0)
+            loglike.append(ll)
+            if (ll - old_ll) < self.tol:
+                break
+            old_ll = ll
+            # main's cancellation-free psi update (lane/apple-fast-quality-glmfa)
+            wts = k.ew("add", k.ew("mul", k.ew("mins", s2, s=1.0), keep), k.ew("mul", s2, drop))
+            share = k.mm(wts, k.ew("sq", Vfull))
+            psi = k.ew("maxs", k.ew("mul", k.ew("sq", sqrt_psi), share), s=SMALL)
+        return self._fit_store(k, W, psi, mean, loglike, it, d, nc)
+
+    def _fit_store(self, k, W, psi, mean, loglike, it, d, nc):
         if self.rotation is not None:
             W = _ortho_rotation(k, W.T, self.rotation).rows(0, nc)
         self.components_m_ = W
@@ -2728,8 +2884,22 @@ class FactorAnalysis(_Base):
     def transform(self, X):
         self._check()
         k = self._kit()
-        M = k.ew("sub", _M.from_input(X), self.mean_m_)
         W = self.components_m_
+        if ("MOJOLEARN_FA_TRANSFORM_FUSED" in _fa_fast_defines(k)
+                and W.r <= _FA_TR_MAXK and W.c * (W.r + 1) <= _FA_TR_FLOATS):
+            # FAST on Apple (lane/apple-fast-fa, recovered): (X - mean) P in
+            # ONE launch over rows, P = (W / psi)^T cov_z (d x nc) in
+            # threadgroup memory (x_decomp/fa_fast.mojo fa_transform_kernel)
+            Xm = _M.from_input(X)
+            if Xm.c != W.c:
+                raise ValueError(f"x_decomp: cannot broadcast 1x{W.c} against {Xm.r}x{Xm.c}")
+            Wpsi = k.ew("div", W, self.noise_variance_m_)
+            cov_z = _inv(k, k.ew("add", _eye(W.r), k.mm(Wpsi, W, tb=True)))
+            P = k.mm(Wpsi, cov_z, ta=True)
+            out = k._dout(Xm.r, W.r)
+            k.b.x_decomp_fa_transform(k._did(Xm), k._did(self.mean_m_), k._did(P), out._d.id, [Xm.r, Xm.c, W.r])
+            return out.out()
+        M = k.ew("sub", _M.from_input(X), self.mean_m_)
         Wpsi = k.ew("div", W, self.noise_variance_m_)
         cov_z = _inv(k, k.ew("add", _eye(W.r), k.mm(Wpsi, W, tb=True)))
         return k.mm(k.mm(M, Wpsi, tb=True), cov_z).out()
@@ -2830,7 +3000,28 @@ def lu_factor(a, *, numeric_mode=None):
     if info:
         import warnings
         warnings.warn(f"Diagonal number {info} is exactly zero. Singular matrix.", RuntimeWarning, stacklevel=2)
-    return lu.out(), frombytes(piv.tobytes(), "<i4", (A.r,))
+    pair = (lu.out(), frombytes(piv.tobytes(), "<i4", (A.r,)))
+    if not info and k.qfix_flags() & 4:
+        # LU_QFIX (FAST default; -D MOJOLEARN_LU_QOLD off): the pair carries
+        # this call's own copy of A so `lu_solve` can refine (see _LUPair)
+        return _LUPair(pair, A)
+    return pair
+
+
+class _LUPair(tuple):
+    """`lu_factor`'s (lu, piv), unpacked and indexed as the plain tuple
+    scipy returns, plus `_qfix_a`: the float32 copy of A the factor came
+    from (lane/apple-fast-q-linalg LU_QFIX). `lu_solve` uses it for one
+    step of iterative refinement, x += LU^-1 (B - A x), the residual in
+    float-float on the device. #: audit 2026-10-04: lu-solve / lu-factor
+    synthetic relative_residual 3.26e-06 vs numpy 3.26e-08, torch-gpu
+    8.23e-07; -D MOJOLEARN_LU_QOLD restores the unrefined solve. KEPT for
+    quality 2026-10-04 (rab5-lu: 2.59e-6 -> 3.26e-8, +14-15% time)."""
+
+    def __new__(cls, pair, a_m):
+        obj = super().__new__(cls, pair)
+        obj._qfix_a = a_m
+        return obj
 
 
 def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
@@ -2854,6 +3045,10 @@ def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
     if B.r != n:
         raise ValueError(f"b has {B.r} rows, the factorization has {n}")
     X = k.lu_solve(L, pv, B, trans=1 if trans else 0)
+    A0 = getattr(lu_and_piv, "_qfix_a", None)
+    if A0 is not None and not trans and A0.r == n and A0.c == n and k.qfix_flags() & 4:
+        # LU_QFIX: one refinement step (lane/apple-fast-q-linalg; see _LUPair)
+        X = k.ew("add", X, k.lu_solve(L, pv, k.lu_resid(A0, X, B)))
     return X.out((n,)) if vec else X.out()
 
 
@@ -2922,10 +3117,38 @@ def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_it
     the basis differs. The small SVD of Q^T M is exact (Gram eigh).
     Returns (U, s, Vt)."""
     k = _Kit(_mode(numeric_mode))
-    U, S, Vt = _rsvd_core(k, _M.from_input(M, "M"), n_components, n_oversamples, n_iter,
+    A = _rsvd_direct_input(k, M, transpose) if k.w4_flags() & 2 else None
+    U, S, Vt = _rsvd_core(k, A if A is not None else _M.from_input(M, "M"), n_components, n_oversamples, n_iter,
                           power_iteration_normalizer, transpose, flip_sign, random_state)
     kc = n_components
     return U.out(), S.out((kc,)), Vt.out()
+
+
+def _rsvd_direct_input(k, M, transpose):
+    """lane/apple-fast-w4-decomp RSVD_FAST_DIRECT_IN (FAST + Apple default;
+    -D MOJOLEARN_RSVD_FAST_DIRECT_IN_OFF rolls back): M up from its own buffer into a pooled device matrix, as
+    KernelPCA's resident route and the random projections' transform do,
+    instead of `_M.from_input`'s copy into a fresh host store that the first
+    product uploads (880 MB of fresh host pages at the board's 1M x 220).
+    The same refusals in the same order (2-D nonempty, then the host
+    finiteness scan); the same words reach the device. None (the caller
+    takes `_M.from_input`) for sparse input, a binding without the resident
+    entries, or a wide input (`_rsvd_core` transposes it on the host)."""
+    if _is_sparse(M) or not k._res():
+        return None
+    a = as_f32_c(M, ndim=2, name="M")[0]
+    if a.ndim != 2 or min(a.shape) == 0:  # glue: smaller of two shape dims
+        raise ValueError("M: a nonempty two-dimensional input is required")
+    if transpose is True or (transpose == "auto" and a.shape[0] < a.shape[1]):
+        return None     # `_rsvd_core` transposes on the host: main's route
+    fin = _host_all_finite(a)
+    if fin is None:
+        return None
+    if fin is False:
+        raise ValueError("M: input must be finite; NaN/inf are unsupported")
+    A = _M._on_device(_DevBuf(k._raw(), a.size), a.shape[0], a.shape[1])
+    k.b.x_decomp_dev_upload(A._d.id, addr_ro(a, name="M"), a.size)
+    return A
 
 
 def _rsvd_core(k, A, n_components, n_oversamples, n_iter, power_iteration_normalizer, transpose, flip_sign,
@@ -3035,7 +3258,6 @@ def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond, equilibrate=False, Ra=
     (`linear_model._ols_tsqr_centered`'s one entry); a_arr and b_arr are
     then not read."""
     from ._linalg_impl import _svd_tall
-    from ._buffer import addr_ro
     n = nn + nrhs
     if Ra is None:
         Ra = _M.zeros(n, n)
@@ -4675,14 +4897,20 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     floor = _LLE_NULL_FLOOR * _F32_EPS * rms
     if not dev_f0:
         F0 = k.hstack([Fhat, un])
-    lu, piv, _ = k.lu(F0)
+    if dev_f0 and k.w4_flags() & 1:
+        # lane/apple-fast-w4-decomp LLE_FAST_DEV_LU (-D MOJOLEARN_LLE_FAST_DEV_LU,
+        # FAST + Apple): F0 factored where it lives; the same launches as the
+        # two calls below, without F0 / the factor crossing to the host 5 times
+        lu, pm, im, st = k.lu_dev_aux(F0, clamp=True)
+    else:
+        lu, piv, _ = k.lu(F0)
+        st, _, pm, im = k.lu_aux(lu, piv, clamp=True)
     # a pivot under float32 resolution (an exactly zero one skipped its
     # step) is set to eps times the largest: inverse iteration's usual
     # perturbation (LAPACK's stein/hsein); the factor is only the spectral
     # transform, the Rayleigh-Ritz step below uses F^ itself. The floor and
     # the swaps' row order (and its inverse) are cells (`lu_aux`), no host
     # loop over the rows.
-    st, _, pm, im = k.lu_aux(lu, piv, clamp=True)
     big = st[0]
     if not (big > 0.0 and math.isfinite(big)):
         return None
@@ -4906,7 +5134,15 @@ def _masked_cov(k, M, m, assume_centered):
     else:
         loc = k.ew("scale", k.colsum(Xm), s=1.0 / cnt)
         Xc = k.ew("mul", k.ew("sub", M, loc), m)
-    return loc, k.ew("scale", k.mm(Xc, Xc, ta=True), s=1.0 / cnt)
+    # Experiment: only the MCD masked covariance seam; binding presence is
+    # compile-gated FAST+Apple. Python schedules device buffers, no host math.
+    ordered = getattr(k.b, "x_decomp_dev_mcd_cov", None)
+    if ordered is not None and k._use(Xc) and Xc.r > 0 and Xc.c > 0:
+        gram = k._dout(Xc.c, Xc.c)
+        ordered(k._did(Xc), gram._d.id, [Xc.r, Xc.c])
+    else:
+        gram = k.mm(Xc, Xc, ta=True)
+    return loc, k.ew("scale", gram, s=1.0 / cnt)
 
 
 def _mahal(k, X, loc, P):
@@ -5151,24 +5387,23 @@ class EllipticEnvelope(MinCovDet):
     def score(self, X, y, sample_weight=None):
         """sklearn OutlierMixin/ClassifierMixin.score: accuracy_score(y,
         predict(X), sample_weight), the (weighted) share of exact label
-        matches as an IEEE double (weights summed in order)."""
-        k = self._kit()
+        matches. Lane cpu4-python: the x_metrics device program
+        (`accuracy_fraction`: exact match counts, the weight total its
+        PairSum, the ratio binary64 on the device; the host column runs the
+        same units) replaces the host loop `x_decomp_accuracy`."""
+        from ._expansion_metrics import accuracy_fraction
         pa = self.predict(X)
         n = len(pa)
         ya = as_f64_c(y, ndim=1, name="y")[0]
         if len(ya) != n:
             raise ValueError("y and X have different numbers of rows")
-        if sample_weight is None:
-            hit, tot = k.b.x_decomp_accuracy(addr_ro(ya, name="y"), addr_ro(pa, name="pred"), 0, n)
-            return float(hit) / n
-        wa = as_f64_c(sample_weight, ndim=1, name="sample_weight")[0]
-        if len(wa) != n:
+        if sample_weight is not None and len(as_f64_c(sample_weight, ndim=1, name="sample_weight")[0]) != n:
             raise ValueError("sample_weight and X have different numbers of rows")
-        hit, tw = k.b.x_decomp_accuracy(addr_ro(ya, name="y"), addr_ro(pa, name="pred"),
-                                        addr_ro(wa, name="sample_weight"), n)
-        if float(tw) == 0:
-            raise ZeroDivisionError("Weights sum to zero, can't be normalized")
-        return float(hit) / float(tw)
+        # both sides Float64 labels: one label kind for the encoder
+        try:
+            return accuracy_fraction(ya, pa.astype("<f8"), sample_weight, self.numeric_mode_)
+        except ZeroDivisionError:
+            raise ZeroDivisionError("Weights sum to zero, can't be normalized") from None
 
 
 # ================================================================ implicit ALS

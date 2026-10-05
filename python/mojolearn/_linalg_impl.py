@@ -990,6 +990,19 @@ def _xd_kit():
     return _Kit(_backend.default_mode())
 
 
+def _fast_apple_kit(switch):
+    """lane/apple-fast-rec-decomp (2026-10-04; from
+    lane/apple-fast-decomp-linalg@74d52352b): the FAST x_decomp kit when the
+    process tier is FAST and its binding is a Metal build compiled with
+    `-D <switch>` (`_kit_fast_define`; no env read), else None (the default
+    route stands)."""
+    if _backend.default_mode() != "fast":
+        return None
+    from ._expansion_decomp import _kit_fast_define
+    k = _xd_kit()
+    return k if _kit_fast_define(k, switch) else None
+
+
 def _xd_matrix(a_arr, rows, cols):
     import array as _array
     from ._expansion_decomp import _M
@@ -1138,7 +1151,15 @@ def _svd_tsqr(a_arr, rows, cols):
     b = k.b
     R = _tsqr_r(b, a_arr, rows, cols, True)
     try:
-        Ur, S, Vt = _svd_tall(k, _xd_matrix(R, cols, cols), False)
+        if k.qfix_flags() & 1:
+            # SVD_QFIX (see _SVD_QFIX_NULL_RTOL): every direction above
+            # 2^-40 s_0 kept, orthonormalized by Householder QR of the small
+            # n x n A V / s (the orth route's two A R^-1 passes lose
+            # orthogonality on its ill-conditioned columns)
+            Ur, S, Vt = _svd_tall(k, _xd_matrix(R, cols, cols), False,
+                                  null_rtol=_SVD_QFIX_NULL_RTOL, householder=True)
+        else:
+            Ur, S, Vt = _svd_tall(k, _xd_matrix(R, cols, cols), False)
         C = Ur.out()
     except BaseException:
         _tsqr_release(b)
@@ -1147,16 +1168,51 @@ def _svd_tsqr(a_arr, rows, cols):
     return SVDResult(U, S.out((cols,)), Vt.out())
 
 
+def _tsvd_tsqr_components(x, nc, mode):
+    """lane/apple-fast-q-linalg TSVD_QFIX (x_decomp/qfix.mojo bit 2; FAST
+    default, -D MOJOLEARN_TSVD_QOLD restores the Gram route; KEPT for quality
+    2026-10-04, rab8-tsvd: istella reconstruction 2.554e-3 -> 1.219e-4 vs
+    sklearn 1.22e-4 at 362.9 -> 864.1 ms, speed follow-up in lane
+    apple-fast-s-linalg): TruncatedSVD's
+    (components (nc, d), singular values (nc,)) of a tall x as the top right
+    singular vectors of its TSQR R (the one-sided Jacobi of R, `Kit.svd`),
+    each row signed so its largest-|.| entry (first on a tie) is positive
+    (DEVIATION 525's rule, the Gram route's). None when the binding does not
+    carry the repair or x is not a TSQR shape: the caller runs the Gram.
+    #: audit 2026-10-04 tsvd istella relative_reconstruction_error 2.55e-03
+    #: (sklearn 1.22e-04): the float32 Gram's rounding, about eps lambda_0 an
+    #: entry, swamps every direction under ~1e-5 lambda_0; R carries X's
+    #: conditioning, not its square."""
+    from ._expansion_decomp import _Kit
+    try:
+        k = _Kit(mode)
+        on = k.qfix_flags() & 2
+    except Exception:       # no decomp binding for this tier: the Gram route
+        return None
+    rows, cols = int(x.shape[0]), int(x.shape[1])
+    if not on or not _tsqr_on(rows, cols) or not 1 <= nc <= cols:
+        return None
+    R = _tsqr_r(k.b, x, rows, cols, False)
+    S, Vt = k.svd(_xd_matrix(R, cols, cols))
+    V = Vt.rows(0, nc)
+    V = V.neg_rows(k.absmax_flags(V, False))
+    return V.out(), S.take_cols(list(range(nc))).out((nc,))
+
+
 def _qr_q(a, mode):
     """numpy.linalg.qr's 'reduced', 'complete' and 'raw' modes: LAPACK geqrf
     (the reflectors kept, dlarfg's signs) and orgqr, through the decomp
     lane's sliced order (x_decomp/qr_sliced.mojo, DEVIATION 5320;
     lane/algos-decomp, 2026-09-27; sliced by lane hr-qr, 2026-10-02). Any shape, wide included."""
     a_arr, rows, cols = _two_d(a, "a")
-    if mode == "reduced" and _tsqr_on(rows, cols):
+    # -D MOJOLEARN_QR_FAST_DEV (default off, FAST on Apple; x_decomp/fast_qr.mojo):
+    # the FAST kit's geqrf / orgqr take the grid-fold route there, ahead of
+    # the blocked TSQR (the A/B's A arm)
+    kf = _fast_apple_kit("MOJOLEARN_QR_FAST_DEV")
+    if kf is None and mode == "reduced" and _tsqr_on(rows, cols):
         return _qr_tsqr(a_arr, rows, cols)
-    k = _xd_kit()
-    h, tau = _qr_q_factor(a_arr, rows, cols)
+    k = kf or _xd_kit()
+    h, tau = k.geqrf(_xd_matrix(a_arr, rows, cols))
     kk = min(rows, cols)
     if mode == "raw":
         # numpy returns geqrf's Fortran-ordered array seen in C order: the
@@ -1337,6 +1393,7 @@ def svdvals(a):
 #: A v / s, which would divide rounding noise (numpy's gesdd returns SOME
 #: orthonormal basis of that null space too).
 _SVD_NULL_RTOL = 2.0 ** -20
+_SVD_NULL_RTOL_MODULE = _SVD_NULL_RTOL
 
 
 def _svd_stage_timer():
@@ -1355,26 +1412,43 @@ def _svd_stage_timer():
     return tick
 
 
-def _svd_tall(k, A, full):
+#: lane/apple-fast-q-linalg SVD_QFIX (x_decomp/qfix.mojo bit 1; REVERTED
+#: 2026-10-04 to opt-in -D MOJOLEARN_SVD_QFIX: rab5-svd showed no quality
+#: gain and taxi +13.2%, so _SVD_NULL_RTOL and the orth route are the
+#: default again; this cut applies only when the bit is set): the
+#: null cut for U_R on the TSQR route. Directions with 2^-40 s_0 < s_j were
+#: replaced by arbitrary complement columns under the 2^-20 cut, up to 2 s_j
+#: of error each in U S V^T. #: audit 2026-10-04 svd istella
+#: relative_reconstruction_error_100k_rows 3.84e-05 (numpy 4.10e-08), taxi
+#: 1.83e-06 (numpy 4.31e-08); float32 model of the route
+#: (~/mojolearn-evidence/q-linalg/sim_svd2.py): 2^-20 2.1e-06, 2^-30 and
+#: below 3.2e-07.
+_SVD_QFIX_NULL_RTOL = 2.0 ** -40
+
+
+def _svd_tall(k, A, full, null_rtol=None, householder=False):
     """(U, S, Vt) of a tall A (m >= n) as _M: S and V from the decomp lane's
     QR + one-sided Jacobi (`Kit.svd`, descending, ties to the lower index);
     U from the geqrf + orgqr of the columns A v_j / s_j with s_j > 2^-20 s_0
     (the cells' gemm and division), each Q column signed by its R[j, j],
     the null directions and the m - n more of full_matrices its trailing
-    columns."""
+    columns. `null_rtol` overrides _SVD_NULL_RTOL and `householder` skips
+    the orth route (SVD_QFIX, `_svd_tsqr` only: A is then the n x n R)."""
     from ._expansion_decomp import _M
     m, n = A.r, A.c
     tick = _svd_stage_timer()
     S, Vt = k.svd(A)
     tick("svd (sliced QR + Jacobi of R)")
     s0 = S.s[0] if n else 0.0
+    # a local of the module constant's name: SVD_QFIX's override, if any
+    _SVD_NULL_RTOL = _SVD_NULL_RTOL_MODULE if null_rtol is None else null_rtol
     r = sum(1 for v in S.s if v > 0.0 and v > s0 * _SVD_NULL_RTOL)
     AV = k.mm(A, Vt, tb=True)                                   # m x n
     tick("A V (gemm)")
     Ug = k.ew("div", AV.take_cols(list(range(r))) if r < n else AV, S.take_cols(list(range(r))) if r < n else S)
     tick("A V / s")
     width = m if full else n
-    if r == n and width == n:
+    if r == n and width == n and not householder:
         # lane neural-pass17: with every direction kept and no trailing
         # columns wanted, U is the orthonormalized A V / s: the kit's orth
         # (two sliced-QR passes and a row-parallel A R^-1, DEVIATION 5309),
@@ -1440,9 +1514,14 @@ def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
     a_arr, rows, cols = _two_d(a, "a")
     if not compute_uv:
         return svdvals(a_arr)
-    if not hermitian and not full_matrices and _tsqr_on(rows, cols):
+    # -D MOJOLEARN_SVD_FAST_CHOLQR (default off, FAST on Apple; x_decomp/
+    # device.mojo SVD_FAST_CHOLQR): the whole-matrix route below, whose
+    # orth_diag then runs CholeskyQR2 passes, instead of the blocked TSQR
+    # (the A/B's A arm)
+    kf = _fast_apple_kit("MOJOLEARN_SVD_FAST_CHOLQR")
+    if kf is None and not hermitian and not full_matrices and _tsqr_on(rows, cols):
         return _svd_tsqr(a_arr, rows, cols)
-    k = _xd_kit()
+    k = kf or _xd_kit()
     A = _xd_matrix(a_arr, rows, cols)
     if hermitian:
         if rows != cols:

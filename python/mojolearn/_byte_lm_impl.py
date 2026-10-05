@@ -492,18 +492,16 @@ def _logits_ids(ids, shape):
     raise ValueError(f'ids must be byte values in [0, {vocab}); got {int(flat[first])} at row {r}, position {c}')
 
 
-def _last_position_rows(logits, batch, length, vocab):
-    """`(batch, vocab)` float32: each row's LAST position of float32 logits
-    `[batch, length, vocab]`, copied by the base binding's row gather
-    (`gather_rows_bytes`), so no Python loop touches the logits."""
-    if length == 1:
-        return logits.reshape((batch, vocab))
-    import array as _pyarray
-    rows = empty((batch, vocab), '<f4')
-    index = _pyarray.array('q', range(length - 1, batch * length, length))
-    _buffers._native('gather_rows_bytes')(addr_ro(logits, name='logits'), addr(rows, name='rows'),
-                                          index.buffer_info()[0], batch * length, batch, vocab * 4)
-    return rows
+def _argmax_last_positions(logits, batch, length, vocab):
+    """int64 `(batch,)`: the first-max argmax of each row's LAST position of
+    float32 logits `[batch, length, vocab]`, by the base binding's
+    `argmax_last_rows_f32` (the `argmax_rows_f32` rule; lane cpu4-python:
+    the last-position rows are read on the device, the host byte gather
+    `gather_rows_bytes` is gone)."""
+    out = empty((batch,), '<i8')
+    _buffers._native('argmax_last_rows_f32')(addr_ro(logits, name='logits'), [batch, length, vocab],
+                                             addr(out, name='next bytes'))
+    return out
 
 
 def _greedy_next_bytes(logits):
@@ -518,8 +516,7 @@ def _greedy_next_bytes(logits):
         return []
     if not vocab:
         return [0] * batch
-    from ._labels import argmax_rows
-    return argmax_rows(_last_position_rows(logits, batch, length, vocab)).tolist()
+    return _argmax_last_positions(logits, batch, length, vocab).tolist()
 
 
 def _gpu_logits_ids(ids, shape):

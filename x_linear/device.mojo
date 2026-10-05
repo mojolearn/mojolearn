@@ -46,6 +46,8 @@ from x_linear.sgd import LR_INVSCALING
 from x_linear.sgd import (
     sgd_batch, mb_dot, mb_oc_mode, mb_oc_row, oc_delta, oc_count, oc_count_tie, oc_hinge_at, mb_oc_bias_step,
 )
+from x_linear.sgd import sgd_perc_avg_on, sgd_perc_avg_from
+from x_linear.sgd_avg import sgd_avg_acc_kernel, sgd_avg_fin_kernel
 from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
 from x_linear.bayes import bayes_wy_part, bayes_wx_part, bayes_wgram_part, bayes_wxty_part, bayes_wvar_part, bayes_coef_one
 from x_linear.bayes import bayes_prep, bayes_coef, bayes_step, bayes_finish, _sse_part, bayes_eig_prep, bayes_yvar_part, GRAM_SSE_TRUST
@@ -61,6 +63,7 @@ from x_linear.tops import upper_cell, fold_fa, chain_cfmad, chain_fmad
 from std.os import getenv
 from x_linear.logcv_grid import logcv_fit_grid, lcv_fold_ids_device
 from x_linear.huber_grid import huber_fit_grid
+from x_linear.huber_fast import HUBER_DEVICE_LBFGS, huber_fit_fast
 from x_linear.dispatch import ALGO_HUBER, ALGO_ENETCV
 from x_linear.enetcv_fast import enetcv_fast
 from x_linear.fast_gram import fast_gram_into, XL_RIDGE_FAST_GRAM
@@ -1595,7 +1598,14 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var need_obj = tol > Float32(-3.0e38)
     var max_epochs = 0
     var status = 0
+    # SGD_PERC_AVG (x_linear/sgd_avg.mojo): the epoch-end iterate sums
+    var avg = sgd_perc_avg_on(loss, lr, k, max_iter)
+    var avg_from = sgd_perc_avg_from(max_iter)
+    var dacc = ctx.enqueue_create_buffer[DType.float32](d + 1)
     for c in range(problems):
+        var navg = 0
+        if avg:
+            dacc.enqueue_fill(Float32(0))
         # the targets and the identity order on the device (sgd_fit's statements)
         ctx.enqueue_function[sgd_ys_kernel](
             dy.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), Int32(n), Int32(k), Int32(c),
@@ -1808,8 +1818,19 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
             if hfl[1] != Float32(0):
                 failed = True
                 break
+            if avg and epoch >= avg_from:
+                ctx.enqueue_function[sgd_avg_acc_kernel](
+                    dw.unsafe_ptr(), dbias.unsafe_ptr(), dacc.unsafe_ptr(), Int32(d),
+                    grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB,
+                )
+                navg += 1
             if hfl[0] != Float32(0):
                 break
+        if navg > 0 and not failed:
+            ctx.enqueue_function[sgd_avg_fin_kernel](
+                dw.unsafe_ptr(), dbias.unsafe_ptr(), dacc.unsafe_ptr(), Int32(d), Float32(1) / Float32(navg),
+                grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB,
+            )
         ctx.enqueue_function[sgd_mb_res_kernel](
             dw.unsafe_ptr(), dbias.unsafe_ptr(), dres.unsafe_ptr(), Int32(c), Int32(d), Int32(problems),
             Int32((2 if ocm != 0 else 1) if one_class else 0), Int32(1 if failed else 0), grid_dim=_xg_blocks(d + 1),
@@ -1840,6 +1861,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     _ = dbias^
     _ = dobj^
     _ = dws^
+    _ = dacc^
     _ = dbs^
     _ = dw2^
     _ = dbias2^
@@ -2061,10 +2083,12 @@ def _sgd_ps_kernel_body(
 
 
 # lane/apple-fast-gap-clus3 (2026-10-03): SGD_FAST_PS_SIMD, FAST + Apple default
-# for d <= SPS_MAX_D (off: -D MOJOLEARN_SGD_FAST_PS_SIMD_OFF). M3 A/Bs (n=1):
+# for d <= SPS_MAX_D = SPS_W * SPS_MAXC, the register bound (off:
+# -D MOJOLEARN_SGD_FAST_PS_SIMD_OFF; old d <= 32 gate behind
+# MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD). M3 A/Bs (n=1):
 # sgd-ocsvm taxi (d 11) 58,334 -> 42,252 ms (-27.6%), fraction_flagged .05557
 # identical (clus3-sgdoc-simd-taxi); sgd-ocsvm istella (d 220) 75,506 ->
-# 106,443 ms (+41%, clus3-sgdoc-simd-istella), hence the small-d gate. Cause: the per-sample fit above runs a
+# 106,443 ms (+41%, clus3-sgdoc-simd-istella), hence the old small-d gate. Cause: the per-sample fit above runs a
 # whole block per problem and, per SAMPLE, writes the MB_DBLK block partials
 # to device memory, crosses a device-memory `team_barrier`, re-reads them and
 # reloads/stores every weight from device memory: ~3.7 us a sample on the M3,
@@ -2112,14 +2136,14 @@ comptime SGD_FAST_PS_SIMD = (
 )
 comptime SPS_W = 32
 comptime SPS_MAXC = 8
-comptime SPS_MAX_D = SPS_W
-"""Size rule, not a board row: at d <= SPS_W every lane holds at most ONE
-weight (and its q) in registers, so each sample's predictor is a single
-butterfly over the simdgroup and no lane loops over columns. Past SPS_W the
-per-sample work grows d / SPS_W serial steps per lane on one simdgroup while
-the block form spreads the same columns over MB_DBLK-wide partials, which is
-why wide d (hundreds) loses. Same value as before (32), so no route or bit
-moves. Needs neighbor-shape validation (d 24, 32, 33, 48, 64)."""
+#: Kernel limit (register footprint): each of the SPS_W lanes holds SPS_MAXC
+#: weights and their q in registers, so d <= SPS_W * SPS_MAXC.
+comptime SPS_MAX_D = SPS_W * SPS_MAXC
+#: LEGACY, default OFF: the old gate admitted only d <= 32, chosen between
+#: taxi (d 11, -27.6%) and istella (d 220, +41%). Removed as benchmark-tuned
+#: on 2026-10-04; the register-bound replacement is UNMEASURED.
+comptime SPS_LEGACY_NARROW = is_defined["MOJOLEARN_LEGACY_NARROW_SGD_PS_SIMD"]()
+comptime SPS_LEGACY_MAX_D = 32
 
 
 @always_inline
@@ -2595,6 +2619,8 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var sps = False
     comptime if SGD_FAST_PS_SIMD:
         sps = d >= 1 and d <= SPS_MAX_D
+        comptime if SPS_LEGACY_NARROW:
+            sps = sps and d <= SPS_LEGACY_MAX_D
     var spw = False
     comptime if SGD_IDN_PS_WARP:
         spw = d >= 1 and nb <= SPS_W
@@ -4646,6 +4672,13 @@ def fit_device(
     if algo == ALGO_LOGCV and n > 0:
         logcv_fit_grid(ctx, algo, x, n_x, y, n_y, n, d, ip, fp, n_out, n_fw, n_iw, res)
         return
+    # HuberRegressor with the line search batched on the device
+    # (x_linear/huber_fast.mojo, lane/apple-fast-robust recovered):
+    # -D MOJOLEARN_HUBER_DEVICE_LBFGS (or HUBER_FAST_BLOCK512), FAST + Apple only
+    comptime if HUBER_DEVICE_LBFGS:
+        if algo == ALGO_HUBER and n > 0:
+            huber_fit_fast(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
+            return
     if algo == ALGO_HUBER and n > 0:
         huber_fit_grid(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, n_fw, n_iw, res)
         return

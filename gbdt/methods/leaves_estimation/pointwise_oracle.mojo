@@ -105,9 +105,15 @@ from gbdt.methods.leaves_estimation.leaves_estimation import (
     f32_stash_kernel,
 )
 from gbdt.targets.kernel.multilogit import (
+    MC_CLASS_BATCH_DERIV,
+    MC_CLASS_BATCH_EST,
+    MC_REG_MAX_CLASSES,
+    launch_multilogit_est_fused,
     launch_multilogit_second_der,
     launch_multilogit_second_der_all_rows,
+    launch_multilogit_second_der_all_rows_reg,
     launch_multilogit_value_and_der,
+    launch_multilogit_value_and_der_reg,
     launch_multi_rmse_second_der,
     launch_multi_rmse_value_and_der,
     launch_one_vs_all_second_der,
@@ -222,6 +228,34 @@ def merge_stage_times(mut dst: StageTimes, src: StageTimes):
             dst.tags.append(src.tags[i].copy())
             dst.ns.append(src.ns[i])
 
+
+def _mirror_second_der_row(
+    mut second_der: List[Float64],
+    h_stats: HostBuffer[DType.float32],
+    off: Int,
+    bin_stride: Int,
+    row: Int,
+    hbs: Int,
+    bin_count: Int,
+    lambda_reg: Float64,
+):
+    """Mirror Hessian row `row` of every bin from the read-back partition
+    stats (`h_stats[off + bin * bin_stride + col]`, `col <= row`) into both
+    triangles of the per-bin `hbs x hbs` blocks (`:166-180`); the diagonal
+    takes `+ lambda` (`:178`). Shared by the per-row wait path and the
+    IDENTICAL one-wait arm (`IDN_MULTI_HESS_ONE_WAIT`) so both mirror the
+    same way."""
+    var matrix_size = hbs * hbs
+    var column_count = row + 1
+    for bin in range(bin_count):  # small-loop(bin_count: feature borders, never rows): the per-bin Hessian block of one class row
+        var base = bin * matrix_size
+        for col in range(column_count):
+            var val = Float64(h_stats[off + bin * bin_stride + col])
+            if col == row:
+                second_der[base + row * hbs + row] = val + lambda_reg
+            else:
+                second_der[base + row * hbs + col] = val
+                second_der[base + col * hbs + row] = val
 
 @fieldwise_init
 struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
@@ -804,15 +838,38 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 self.d_mag_dummy, False,
             )
         else:
-            launch_multilogit_value_and_der(
-                self.ctx, self.num_classes, self.n_rows,
-                self.d_target, self.d_weights, self.has_weights,
-                self.d_cursor, self.n_rows,
-                self.d_identity, False,
-                self.d_fv, True,
-                self.d_multi_der, self.n_rows,
-                self.d_mag_dummy, False,
-            )
+            comptime if MC_EST_ACTIVE:
+                if (
+                    self.estimation_method == LEAF_ESTIMATION_NEWTON
+                    and self.single_bin_dim <= MULTICLASS_HESSIAN_BATCH_MAX_CLASSES
+                ):
+                    self._write_multiclass_fused_evaluation(value, gradient)
+                    return
+            var reg_launch = False
+            comptime if MC_CLASS_BATCH_DERIV:
+                reg_launch = self.num_classes <= MC_REG_MAX_CLASSES
+            if reg_launch:
+                # FAST Apple (`MC_CLASS_BATCH_DERIV`): the softmax in
+                # registers, the same element values
+                launch_multilogit_value_and_der_reg[False](
+                    self.ctx, self.num_classes, self.n_rows,
+                    self.d_target, self.d_weights, self.has_weights,
+                    self.d_cursor, self.n_rows,
+                    self.d_identity, False,
+                    self.d_fv, True,
+                    self.d_multi_der, self.n_rows,
+                    self.d_mag_dummy, False,
+                )
+            else:
+                launch_multilogit_value_and_der(
+                    self.ctx, self.num_classes, self.n_rows,
+                    self.d_target, self.d_weights, self.has_weights,
+                    self.d_cursor, self.n_rows,
+                    self.d_identity, False,
+                    self.d_fv, True,
+                    self.d_multi_der, self.n_rows,
+                    self.d_mag_dummy, False,
+                )
         self.times.end(self.ctx, "est.approx")
         # `ComputePartitionStats(der, Offsets, &reducedDer)` (`:83`), with
         # `cursorDim` columns instead of one
@@ -943,7 +1000,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         )
         self._stash_multi_stats(d_grad, 0, self.bin_count * self.cursor_dim)
         var hbs = self.single_bin_dim
-        for row in range(hbs):
+        for row in range(hbs):  # small-loop(hbs: the class dimensions of one cursor): enqueues one launch pair per class row
             var column_count = row + 1
             launch_multilogit_second_der(
                 self.ctx, self.num_classes, self.n_rows,
@@ -966,6 +1023,93 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         self.times.end(self.ctx, "est.pstats")
         self.der_at_point.clear()
         self.cached_der2.clear()
+
+    def _write_multiclass_fused_evaluation(
+        mut self, mut value: Float64, mut gradient: List[Float64]
+    ) raises:
+        """FAST Apple (`MC_CLASS_BATCH_EST`, lane af-sym-multi): the
+        MultiClass Newton evaluation in ONE launch, one partition reduce
+        over `(K - 1) + K (K + 1) / 2` columns, one copy and one wait. The
+        der planes feed `der_at_point` and the gradient exactly as the
+        two-launch arm does; the lower-triangle planes are kept in
+        `cached_der2` (`bin_count * K (K + 1) / 2` doubles, bin-major, the
+        row-slot order of `multilogit_second_der_all_rows_kernel`) for
+        `_write_blocked_second_derivatives`, which the walker calls next
+        at the same point. `move_to` clears the cache, so a moved point can
+        never read a stale Hessian. Only compiled under `MC_EST_ACTIVE`;
+        the caller checks Newton and the class cap."""
+        comptime if MC_EST_ACTIVE:
+            var eff = self.cursor_dim
+            var hbs = self.single_bin_dim
+            var tri = hbs * (hbs + 1) // 2
+            var width = eff + tri
+            var ml_blocks = multilogit_blocks(self.n_rows)
+            # the caller opened "est.approx"
+            launch_multilogit_est_fused(
+                self.ctx, self.num_classes, self.n_rows,
+                self.d_target, self.d_weights, self.has_weights,
+                self.d_cursor, self.n_rows,
+                self.d_fv,
+                self.d_multi_der, self.n_rows,
+            )
+            self.times.end(self.ctx, "est.approx")
+            self.times.begin(self.ctx)
+            compute_partition_stats(
+                self.ctx, self.bin_count, 0, width, self.n_rows,
+                self.d_leaves, self.d_p_off, self.d_p_sz,
+                self.d_multi_der, self.d_multi_partials, self.d_multi_stats,
+                sm_count=self.sm_count,
+            )
+            self.times.end(self.ctx, "est.pstats")
+            self.times.begin(self.ctx)
+            self.ctx.enqueue_copy(
+                dst_ptr=self.h_multi_stats.unsafe_ptr(),
+                src_buf=self.d_multi_stats,
+            )
+            self.ctx.enqueue_copy(
+                dst_ptr=self.h_fv.unsafe_ptr(), src_buf=self.d_fv
+            )
+            self.ctx.synchronize()
+            self.times.end(self.ctx, "est.readback")
+            # `DerAtPoint = ReadReduce(reducedDer)`: the der planes
+            self.der_at_point.clear()
+            for bin in range(self.bin_count):
+                for dim in range(eff):
+                    self.der_at_point.append(
+                        Float64(
+                            self.h_multi_stats.unsafe_ptr().unsafe_load(
+                                bin * width + dim
+                            )
+                        )
+                    )
+            # the MultiClass reconstruction of the pinned component
+            gradient.clear()
+            for _ in range(self.bin_count * hbs):
+                gradient.append(Float64(0.0))
+            for bin in range(self.bin_count):
+                var total = Float64(0.0)
+                for dim in range(eff):
+                    var val = self.der_at_point[bin * eff + dim]
+                    gradient[bin * hbs + dim] = val
+                    total += val
+                gradient[bin * hbs + eff] = -total
+            # the Hessian's lower triangle, served to the next call
+            self.cached_der2.clear()
+            for bin in range(self.bin_count):
+                for slot in range(tri):
+                    self.cached_der2.append(
+                        Float64(
+                            self.h_multi_stats.unsafe_ptr().unsafe_load(
+                                bin * width + eff + slot
+                            )
+                        )
+                    )
+            var mfv32 = Float32(0.0)
+            for b in range(ml_blocks):
+                mfv32 += self.h_fv.unsafe_ptr().unsafe_load(b)
+            value = Float64(mfv32)
+        else:
+            raise Error("_write_multiclass_fused_evaluation is a FAST + Apple path")
 
     def write_second_derivatives(mut self, mut second_der: List[Float64]) raises:
         """`WriteSecondDerivatives` (`pointwise_oracle.cpp:114-195`).
@@ -1181,19 +1325,54 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         for _ in range(matrix_size * self.bin_count):
             second_der.append(Float64(0.0))
 
+        comptime if MC_EST_ACTIVE:
+            # FAST Apple (`MC_CLASS_BATCH_EST`): the fused evaluation at
+            # this point left the lower triangle in `cached_der2`; the
+            # same mirror, no launch, no wait
+            var tri_c = hbs * (hbs + 1) // 2
+            if (
+                self.objective == OBJECTIVE_MULTICLASS
+                and len(self.cached_der2) == tri_c * self.bin_count
+            ):
+                for row in range(hbs):
+                    var column_count = row + 1
+                    var slot = row * (row + 1) // 2
+                    for bin in range(self.bin_count):
+                        var base = bin * matrix_size
+                        for col in range(column_count):
+                            var val = self.cached_der2[bin * tri_c + slot + col]
+                            if col == row:
+                                second_der[base + row * hbs + row] = (
+                                    val + self.lambda_reg
+                                )
+                            else:
+                                second_der[base + row * hbs + col] = val
+                                second_der[base + col * hbs + row] = val
+                return
+
         comptime if MULTICLASS_HESSIAN_BATCH:
             # FAST Apple: every row in one launch into the lower-triangle
-            # planes the scratch was sized for (`_oracle_multi_planes`),
+            # planes the scratch was sized for (`_oracle_tri_planes`),
             # one reduce over all of them, one copy, one wait; then the
             # same mirror per row from the row's slot
-            var tri = _oracle_multi_planes(self.objective, hbs)
+            var tri = _oracle_tri_planes(self.objective, hbs)
             if tri != hbs:
-                launch_multilogit_second_der_all_rows(
-                    self.ctx, self.num_classes, self.n_rows,
-                    self.d_weights, self.has_weights,
-                    self.d_cursor, self.n_rows,
-                    self.d_multi_der, self.n_rows,
-                )
+                comptime if MC_CLASS_BATCH_DERIV:
+                    # the softmax in registers (`MC_CLASS_BATCH_DERIV`); the
+                    # cap is `MC_REG_MAX_CLASSES`, the same 8
+                    launch_multilogit_second_der_all_rows_reg(
+                        self.ctx, self.num_classes, self.n_rows,
+                        self.d_weights, self.has_weights,
+                        self.d_cursor, self.n_rows,
+                        self.d_multi_der, self.n_rows,
+                    )
+                else:
+                    launch_multilogit_second_der_all_rows(
+                        self.ctx, self.num_classes, self.n_rows,
+                        self.d_weights, self.has_weights,
+                        self.d_cursor, self.n_rows,
+                        self.d_multi_der, self.n_rows,
+                    )
                 compute_partition_stats(
                     self.ctx, self.bin_count, 0, tri, self.n_rows,
                     self.d_leaves, self.d_p_off, self.d_p_sz,
@@ -1259,24 +1438,11 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                     src_buf=self.d_multi_stats,
                 )
             self.ctx.synchronize()
-            for row in range(hbs):
-                var column_count = row + 1
-                var slot = row * stats_len
-                for bin in range(self.bin_count):
-                    var base = bin * matrix_size
-                    for col in range(column_count):
-                        var val = Float64(
-                            self.h_multi_stats.unsafe_ptr().unsafe_load(
-                                slot + bin * column_count + col
-                            )
-                        )
-                        if col == row:
-                            second_der[base + row * hbs + row] = (
-                                val + self.lambda_reg
-                            )
-                        else:
-                            second_der[base + row * hbs + col] = val
-                            second_der[base + col * hbs + row] = val
+            for row in range(hbs):  # small-loop(hbs: class dimensions of one cursor): one mirror call per class row
+                _mirror_second_der_row(
+                    second_der, self.h_multi_stats, row * stats_len, row + 1,
+                    row, hbs, self.bin_count, self.lambda_reg,
+                )
             return
 
         for row in range(hbs):
@@ -1312,22 +1478,10 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             self.ctx.synchronize()
 
             # mirror this row into both triangles (`:166-180`)
-            for bin in range(self.bin_count):
-                var base = bin * matrix_size
-                for col in range(column_count):
-                    var val = Float64(
-                        self.h_multi_stats.unsafe_ptr().unsafe_load(
-                            bin * column_count + col
-                        )
-                    )
-                    if col == row:
-                        # `sigma[row*hbs + row] = ... + lambda` (`:178`)
-                        second_der[base + row * hbs + row] = (
-                            val + self.lambda_reg
-                        )
-                    else:
-                        second_der[base + row * hbs + col] = val
-                        second_der[base + col * hbs + row] = val
+            _mirror_second_der_row(
+                second_der, self.h_multi_stats, 0, column_count,
+                row, hbs, self.bin_count, self.lambda_reg,
+            )
 
     def make_estimation_result(
         self, point: List[Float32]
@@ -1480,12 +1634,15 @@ def _oracle_multi_host_len(multi_planes: Int, bin_count: Int) -> Int:
 comptime MULTICLASS_HESSIAN_BATCH_MAX_CLASSES = 8
 
 
-def _oracle_multi_planes(objective: Int, single_bin_dim: Int) -> Int:
-    """The width of `d_multi_der` / `d_multi_stats`: `single_bin_dim`
-    (the widest Hessian row) as main's, or the whole lower triangle under
-    `MULTICLASS_HESSIAN_BATCH` for a MultiClass oracle within the cap. The
-    pool's key, the factory and the Hessian pass all derive it from here,
-    so the layout allocated is the layout written."""
+#: `MC_CLASS_BATCH_EST` (lane af-sym-multi) rides on the batched Hessian's
+#: scratch layout, so it is active only with `MULTICLASS_HESSIAN_BATCH`
+comptime MC_EST_ACTIVE = MC_CLASS_BATCH_EST and MULTICLASS_HESSIAN_BATCH
+
+
+def _oracle_tri_planes(objective: Int, single_bin_dim: Int) -> Int:
+    """The Hessian pass's plane count: `single_bin_dim` (the widest row) as
+    main's, or the whole lower triangle under `MULTICLASS_HESSIAN_BATCH` for
+    a MultiClass oracle within the cap."""
     comptime if MULTICLASS_HESSIAN_BATCH:
         if (
             objective == OBJECTIVE_MULTICLASS
@@ -1493,6 +1650,22 @@ def _oracle_multi_planes(objective: Int, single_bin_dim: Int) -> Int:
         ):
             return single_bin_dim * (single_bin_dim + 1) // 2
     return single_bin_dim
+
+
+def _oracle_multi_planes(objective: Int, single_bin_dim: Int) -> Int:
+    """The width of `d_multi_der` / `d_multi_stats`: `_oracle_tri_planes`,
+    or under `MC_EST_ACTIVE` the der planes AND the triangle,
+    `(K - 1) + K (K + 1) / 2`, for a MultiClass oracle within the cap (the
+    fused evaluation writes both in one launch). The pool's key, the
+    factory and the passes all derive it from here, so the layout allocated
+    is the layout written."""
+    comptime if MC_EST_ACTIVE:
+        if (
+            objective == OBJECTIVE_MULTICLASS
+            and single_bin_dim <= MULTICLASS_HESSIAN_BATCH_MAX_CLASSES
+        ):
+            return (single_bin_dim - 1) + single_bin_dim * (single_bin_dim + 1) // 2
+    return _oracle_tri_planes(objective, single_bin_dim)
 #: negative control for DEVIATION 3041 (default off): a task that REUSES the
 #: fit's buffers gets ONE cell of `d_bins` moved to another leaf after the
 #: fill, in range. It stands in for the stale read this DEVIATION must never

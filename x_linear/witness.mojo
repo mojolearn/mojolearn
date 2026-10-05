@@ -48,17 +48,17 @@ def witness_end(wf: IP, woff: Int32, nonce: Int32):
             sti(wf, Int(woff) + Int(block_idx.x), v)
 
 
-def witness_check_kernel(wf: IP, count_in: Int32, nonce: Int32, out: IP):
+def witness_check_kernel(wf: IP, count_in: Int32, nonce: Int32, dst: IP):
     """One thread a witness word (lane cpu3-core: the host no longer walks
-    them). out[0]: count minus the first block whose word is not the nonce
-    (atomic max from 0, so 0 means every word matched); out[1]: how many
+    them). dst[0]: count minus the first block whose word is not the nonce
+    (atomic max from 0, so 0 means every word matched); dst[1]: how many
     words were checked (atomic count), so a cut check reads as incomplete
     rather than as a pass. Both start at 0 (a memset)."""
     var i = Int(block_idx.x) * 256 + Int(thread_idx.x)
     if i < Int(count_in):
         if wf.unsafe_load(i) != nonce:
-            _ = Atomic.max(out, count_in - Int32(i))
-        _ = Atomic.fetch_add(out.unsafe_offset(1), Int32(1))
+            _ = Atomic.max(dst, count_in - Int32(i))
+        _ = Atomic.fetch_add(dst.unsafe_offset(1), Int32(1))
 
 
 struct Witness(Movable):

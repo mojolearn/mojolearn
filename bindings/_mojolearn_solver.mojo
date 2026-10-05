@@ -229,6 +229,15 @@ def linkage_fit_binding(
     return PythonObject(rounds)
 
 
+def solver_numeric_mode_binding() raises -> PythonObject:
+    """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST, 1
+    IDENTICAL, 2 DETERMINISTIC; the same read-back as `svm_numeric_mode`.
+    box-run-2 (2026-10-05): this binding exported no `*_numeric_mode`, so the
+    wave native import smoke (tools/identical_wave_native_build.py) refused it
+    in both arms. Read-back only; no kernel or bits change."""
+    return PythonObject(_DEVCTX_MODE)
+
+
 def solver_vendor_binding() raises -> PythonObject:
     """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
     'hip' or 'none'. A compile-time constant folded in from
@@ -250,6 +259,7 @@ def PyInit__mojolearn_solver() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_solver")
         m.def_function[hierarchy_parallel_available_binding]("hierarchy_parallel_available")
         m.def_function[solver_vendor_binding]("solver_vendor")
+        m.def_function[solver_numeric_mode_binding]("solver_numeric_mode")
         m.def_function[solver_parallel_available]("solver_parallel_available")
         m.def_function[cd_fit_binding]("cd_fit")
         m.def_function[cd_predict_binding]("cd_predict")

@@ -99,6 +99,7 @@ from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     SYM_GROUP_WIDTH_2581,
     SYM_LEVEL_QUANT_2580,
 )
+from gbdt.gpu_data.sym_feat_switches import GBDT_QUANT_DEVICE
 from gbdt.train import (
     BORROW_X_COLUMNS,
     TrainedModel,
@@ -454,6 +455,9 @@ def gbdt_fit(
     # MultiRMSE's target dimension (`train`'s `target_dim`): `y` then holds
     # `target_dim` DIM-MAJOR planes of `n_rows`; 1 for every other loss
     target_dim: Int = 1,
+    # lane/apple-fast-sym-feat: `x` is ROW-MAJOR (`gbdt_fit_rowmajor`);
+    # served only under `GBDT_QUANT_DEVICE`, raw float columns only
+    x_row_major: Bool = False,
 ) raises -> GbdtFitResult:
     """Fit and return the model as `model_text`, plus both loss curves.
 
@@ -609,6 +613,7 @@ def gbdt_fit(
         fold_len_multiplier=params.fold_len_multiplier,
         fold_permutation_block=params.fold_permutation_block,
         x_borrow=x_borrow,
+        x_row_major=x_row_major,
         group_sizes=group_sizes,
         pair_winners=pair_winners,
         pair_losers=pair_losers,
@@ -630,6 +635,17 @@ def gbdt_fit(
         learn_losses^,
         test_losses^,
     )
+
+
+def gbdt_fit_row_major_available() -> Bool:
+    """lane/apple-fast-sym-feat: whether this binary serves
+    `gbdt_fit_rowmajor` (the FAST Apple device quantizer,
+    `GBDT_QUANT_DEVICE`). The Python layer asks before handing a C-order
+    array over as it is instead of transposing it on the host."""
+    comptime if GBDT_QUANT_DEVICE:
+        return True
+    else:
+        return False
 
 
 def gbdt_per_round_paths() -> String:

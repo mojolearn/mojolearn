@@ -347,12 +347,12 @@ def make_fold_doc_indices_device(
     var cursor = 0
     for i in range(len(folds)):
         ref f = folds[i]
-        var lo = InlineArray[Int, 2](
+        var lo: InlineArray[Int, 2] = [
             f.estimate_samples.left, f.quality_evaluate_samples.left
-        )
-        var hi = InlineArray[Int, 2](
+        ]
+        var hi: InlineArray[Int, 2] = [
             f.estimate_samples.right, f.quality_evaluate_samples.right
-        )
+        ]
         for s in range(2):
             var n = hi[s] - lo[s]
             if n <= 0:

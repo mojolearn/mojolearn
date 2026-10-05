@@ -308,9 +308,9 @@ def _ord_std_scale_kernel(
     mult_bits: UInt64,
     random_strength: Float32,
     row_count: Int32,
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
 ):
-    """IDN_ORD_STD_SCALE_DEVICE: `out[0]` = the score std dev, `out[1]` =
+    """IDN_ORD_STD_SCALE_DEVICE: `dst[0]` = the score std dev, `dst[1]` =
     the fixed-point scale. One thread; control plane, not compute.
 
     std (`has_std`), the host's binary64 statements in soft-float64 (no
@@ -336,14 +336,14 @@ def _ord_std_scale_kernel(
             sf64_mul(mult_bits, sf64_sqrt(q)), sf64_from_f32(random_strength)
         )
         std = sf64_to_f32(v)
-    out.unsafe_store(0, std)
+    dst.unsafe_store(0, std)
     var w = mags.unsafe_load(Int(mag_at))
     var g = mags.unsafe_load(Int(mag_at) + 1)
     var m = w
     if g > m:
         m = g
     if m == Float32(0.0):
-        out.unsafe_store(1, Float32(1.0))
+        dst.unsafe_store(1, Float32(1.0))
         return
     var limit = Int64((1 << 30) - 1) - Int64(Int(row_count))
     var floor_limit = Int64((1 << 28) - 1)
@@ -371,7 +371,7 @@ def _ord_std_scale_kernel(
     else:
         for _ in range(-k):
             scale = scale * Float32(0.5)
-    out.unsafe_store(1, scale)
+    dst.unsafe_store(1, scale)
 
 
 @fieldwise_init
@@ -1088,7 +1088,7 @@ struct _PermPartition(Movable):
         var uniq = List[Int]()
         for i in range(len(bounds)):  # small-loop(bounds: fold prefixes, a handful): the unique sorted prefix list
             var seen = False
-            for j in range(len(uniq)):  # small-loop(uniq: unique fold prefixes, a handful): duplicate test
+            for j in range(len(uniq)):  # small-loop(uniq: unique fold prefixes, a handful): the duplicate prefix test
                 if uniq[j] == bounds[i]:
                     seen = True
             if not seen:
@@ -2199,9 +2199,8 @@ def fit_ordered(
     var fast_est_view = List[DeviceBuffer[DType.float32]]()
     var fast_h_leaves = List[HostBuffer[DType.float32]]()
     # the Apple FAST Ordered bundle (`ORD_ALL`, ordered_fast_switches.mojo):
-    # on only when compiled in AND the index has more than
-    # ORD_ALL_MIN_FEATURES features (istella-wide gains with equal or
-    # better quality; taxi-narrow lost auc, so it keeps main's path). One
+    # on whenever compiled in (any width since 2026-10-04; the old width
+    # gate is MOJOLEARN_LEGACY_NARROW_ORD_ALL, default off). One
     # entry each when `ord_wide`, empty otherwise. `fast_part_off`: the
     # fold layout's partition starts plus `total` for the searcher's
     # one-launch fold bins. `fast_obs`: the searcher's per-level
@@ -2554,9 +2553,12 @@ def fit_ordered(
                     )
             comptime if IDN_ORD_STD_SCALE_DEVICE:
                 # d_sums = (noise sum, weight magnitude, gradient magnitude)
-                var sums_p = d_sums.unsafe_ptr()
+                # the same buffer is read (sums) and written (scale) by
+                # design; two untracked views pass the aliasing check (box-run-2).
+                var sums_p = d_sums.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+                var sums_w = d_sums.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
                 ctx.enqueue_function[_ord_std_scale_kernel](
-                    sums_p, Int32(0), Int32(1), sums_p, Int32(1),
+                    sums_p, Int32(0), Int32(1), sums_w, Int32(1),
                     Int32(ord_count), bitcast[DType.uint64](Float64(1e-100)),
                     bitcast[DType.uint64](ord_mult), opts.random_strength,
                     Int32(total), d_ss.unsafe_ptr(),
@@ -2941,7 +2943,7 @@ def fit_ordered(
         if ord_dev_leaves:
             leaves = _ordered_device_leaves(est_pools[ord_dev_slot], n_leaves)
             var weak_dev = weak_later.pop()
-            for leaf in range(n_leaves):
+            for leaf in range(n_leaves):  # small-loop(n_leaves: one oblivious tree, 2^depth leaves): scale the read-back leaf values
                 weak_dev.leaf_values.append(
                     identical_mul(leaves[leaf], opts.learning_rate)
                 )
@@ -2951,7 +2953,7 @@ def fit_ordered(
             comptime if ORDERED_BATCH_EST:
                 leaves = _ord_fast_take_leaves(fast_h_leaves, n_leaves)
                 var weak_fast = weak_later.pop()
-                for leaf in range(n_leaves):
+                for leaf in range(n_leaves):  # small-loop(n_leaves: one oblivious tree, 2^depth leaves): scale the read-back leaf values
                     weak_fast.leaf_values.append(
                         identical_mul(leaves[leaf], opts.learning_rate)
                     )

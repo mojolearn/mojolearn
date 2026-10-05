@@ -57,7 +57,12 @@ _OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wperc
             cls_epi=55,
             # lane cpu2-l7-metrics: the metric tails and scans on the device
             # (x_metrics/tail.mojo, cm_epi.mojo, reg_epi.mojo, rank_epi.mojo)
-            off_diff=56, flag_scan=57, proba_rows=58, cm_epi=59, reg_epi=60, rank_epi=61, cl_epi=62)
+            off_diff=56, flag_scan=57, proba_rows=58, cm_epi=59, reg_epi=60, rank_epi=61, cl_epi=62,
+            # lane cpu4-python: the curve arrays on the device (x_metrics/curve_out.mojo)
+            curve_out=63, auc_xy=67,
+            # lane cpu4-python: the contingency statistics, MI and expected MI
+            # on the device (x_metrics/contingency.mojo)
+            cont_stats=70)
 _PARAMS = 14
 _NONE = -1
 
@@ -179,8 +184,14 @@ class _Prog:
         return off
 
     def put(self, arr):
-        """A float32 C-contiguous Array (or anything as_f32_c takes) -> offset."""
-        if not (isinstance(arr, Array) and arr.dtype == "<f4" and arr._has_order("C")):
+        """A float32 C-contiguous Array (or anything as_f32_c takes) -> offset.
+        A float32 `_arena_io.DeviceRows` (a fold's rows, lane cpu4-misc) is
+        kept as it is: `_execute` gathers it on the device, or copies its
+        host rows when the binding cannot."""
+        if isinstance(arr, _arena_io.DeviceRows) and arr.dtype != "<f4":
+            arr = arr.materialize()
+        if not (isinstance(arr, _arena_io.DeviceRows)
+                or (isinstance(arr, Array) and arr.dtype == "<f4" and arr._has_order("C"))):
             arr = as_f32_c(arr, ndim=None, name="input")[0]
         off = self.alloc(arr.size)
         self._inputs.append((off, arr))
@@ -306,9 +317,23 @@ def _execute(prog, numeric_mode):
     merged = prog._download()
     run_ranges = _optional_metrics_entry(b, "x_metrics_run_ranges") if _arena_io.ranges_enabled() else None
     spans = []
+    direct, gathered = None, []
     for off, arr in prog._inputs:  # glue: copies each program input once
         if not arr.size:
             continue
+        if isinstance(arr, _arena_io.DeviceRows):
+            # device-rows input (lane cpu4-misc): gathered on the device out
+            # of the base put once into this binding's store
+            slot = None
+            if run_ranges is not None:
+                if direct is None and _arena_io.DeviceCache.supports(b, "x_metrics"):
+                    direct = _arena_io.DeviceCache(b, "x_metrics")
+                slot = _arena_io.rows_slot(b, "x_metrics", arr, direct)
+            if slot is not None:
+                gathered.append(slot)
+                spans.append((off, off + arr.size, slot))
+                continue
+            arr = arr.materialize()
         cache = _arena_io.active_cache(b, "x_metrics", arr.size) if run_ranges is not None else None
         if cache is not None:
             # resident (lane py-shared): the device copies it from the store;
@@ -324,8 +349,14 @@ def _execute(prog, numeric_mode):
         ins = _arena_io.input_ranges(spans)
         outs = [list(r) for r in merged] if merged is not None else [[0, prog.size, -1, 1]]  # glue: the download range descriptors
         ia, oa = _arena_io.pack_ins(ins), _arena_io.pack_outs(outs)
-        run_ranges(base, stages.buffer_info()[0], (prog.size, len(prog._stages), len(ins), len(outs)),
-                   ia.buffer_info()[0], oa.buffer_info()[0])
+        try:
+            run_ranges(base, stages.buffer_info()[0], (prog.size, len(prog._stages), len(ins), len(outs)),
+                       ia.buffer_info()[0], oa.buffer_info()[0])
+        finally:
+            for slot in gathered:  # glue: frees each fold-rows slot
+                b.x_metrics_dev_free(slot)
+            if direct is not None:
+                direct.close()
     elif run_out is not None:
         outs = array.array("i", [v for r in merged for v in r] or [0, 0, -1, 1])  # glue: packs the download range descriptors
         run_out(base, prog.size, stages.buffer_info()[0], len(prog._stages), outs.buffer_info()[0], len(merged))
@@ -1576,19 +1607,6 @@ class _DevCurve:
         p = self.prog
         return p.floats(self.fps + self.c - 1, 1)[0], p.floats(self.tps + self.c - 1, 1)[0]
 
-    def native(self, name):
-        """The binding's epilogue entry `name`, its words checked readable."""
-        fn = _epilogue(name, self.numeric_mode)
-        p = self.prog
-        p._check(self.fps, self.c)
-        p._check(self.tps, self.c)
-        if self.keep >= 0:
-            p._check(self.keep, self.c)
-        return fn
-
-    def addr(self):
-        return self.prog.arena.buffer_info()[0]
-
     def lists(self):
         p, c = self.prog, self.c
         cur = _Curve((p.floats(self.fps, c), p.floats(self.tps, c),
@@ -1600,36 +1618,6 @@ class _DevCurve:
         elif self.keep == -2:
             cur.keep = b"\x01" * c       # the device dropped the collinear points already
         return cur
-
-
-def _epilogue(name, numeric_mode):
-    """The binding's epilogue entry `name` (x_metrics/epilogue.mojo, lane
-    py-misc-metrics). Every install's x_metrics binding carries it: the
-    MOJOLEARN_METRICS_EPILOGUE=python and MOJOLEARN_HOTPATH=python reference
-    arms are gone (lane pyglue-sweep: Python is glue only)."""
-    return getattr(_binding(numeric_mode), name)
-
-
-def _dev_epilogue(dev, name):
-    """`_epilogue` for a `_DevCurve` with thresholds, its fps, tps and
-    thresholds words checked readable (declared outputs)."""
-    if dev.c <= 0 or dev.thr < 0:
-        raise ValueError("mojolearn metrics: an empty curve has no thresholds")
-    fn = _epilogue(name, dev.numeric_mode)
-    p = dev.prog
-    p._check(dev.fps, dev.c)
-    p._check(dev.tps, dev.c)
-    p._check(dev.thr, dev.c)
-    return fn
-
-
-def _f64_out(n):
-    return array.array("d", bytes(8 * max(int(n), 1)))
-
-
-def _f64_array(buf, m):
-    del buf[m:]
-    return Array._owned(buf, (m,), "<f8", "C")
 
 
 def _f32_weights_addr(w):
@@ -1851,19 +1839,6 @@ class _FoldCurve:
         return float(max(0.0, s / T))
 
 
-def _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, caller, lazy=False, compact=False):
-    from ._metrics_impl import _label_map
-    true, kind, classes = _targets(y_true, caller)
-    if len(classes) > 2 and pos_label is None:
-        raise ValueError("multiclass format is not supported")
-    pos = _pos_label(pos_label, kind, classes, caller)
-    n = len(true)
-    s = _scores(y_score, n, caller, ndim=1)
-    w = _weights(sample_weight, n, caller)
-    flags = _label_map(true, lambda v: int(v == pos))
-    return _curves(s, flags, w, n, 1, numeric_mode, lazy=lazy, compact=compact)[0], classes
-
-
 def _drop_collinear(fps, tps, thr, keep=None):
     """Keep the first and last points and every point where either step
     changes: (f[i+1] - f[i]) != (f[i] - f[i-1]), the same binary64
@@ -1881,60 +1856,108 @@ def _drop_collinear(fps, tps, thr, keep=None):
             list(itertools.compress(thr, keep)))
 
 
+#: x_metrics/curve_out.mojo kinds and statuses
+_CO_ROC, _CO_PR, _CO_DET = 0, 1, 2
+_CO_EMPTY, _CO_ZERO_CLASS = 1, 2
+
+
+def _curve_out(y_true, y_score, pos_label, sample_weight, numeric_mode, caller, kind, drop):
+    """One binary curve's three Float64 output arrays, formed on the device
+    (lane cpu4-python: x_metrics/curve_out.mojo, the units the host column
+    runs too) in the program that sorts and counts: bin_curve (compacted by
+    its collinear drop for a dropping ROC), then curve_out. Only the arrays
+    (up to their length) and six head words come back. Returns (arrays,
+    length, F, T, classes): F, T the last fps and tps."""
+    from ._metrics_impl import _label_map
+    true, kind_y, classes = _targets(y_true, caller)
+    if len(classes) > 2 and pos_label is None:
+        raise ValueError("multiclass format is not supported")
+    pos = _pos_label(pos_label, kind_y, classes, caller)
+    n = len(true)
+    s = _scores(y_score, n, caller, ndim=1)
+    w = _weights(sample_weight, n, caller)
+    flags = _label_map(true, lambda v: int(v == pos))
+    if n <= 0:
+        raise ValueError("mojolearn metrics: an empty curve has no thresholds")
+    prog = _Prog()
+    S = prog.put(s)
+    POS = _put_flags(prog, flags)
+    W = _put_weights(prog, w)
+    order = prog.scratch(n)
+    cnt = prog.scratch(1)
+    fps = prog.scratch(n)
+    tps = prog.scratch(n)
+    thr = prog.scratch(n)
+    roc_drop = kind == _CO_ROC and bool(drop)
+    keep = _NONE
+    CF = CM = 0
+    if roc_drop:
+        keep = prog.scratch(n)
+        CF = prog.scratch(3 * n)
+        CM = prog.scratch(1)
+    prog.stage("bin_curve", 1, S, 1, POS, W, n, order, fps, tps, thr, cnt, keep, 1 if roc_drop else 0, CF, CM)
+    LEN = prog.want(prog.alloc(6), 6)
+    OUT = prog.alloc(6 * (n + 1))
+    for b in range(3):  # glue: declares the three output arrays, each up to its length
+        prog.want(OUT + 2 * b * (n + 1), 2 * (n + 1), count=LEN, mult=2)
+    src = (CF, CF + n, CF + 2 * n, CM) if roc_drop else (fps, tps, thr, cnt)
+    prog.stage("curve_out", 1, kind, n, *src, 1 if (drop and kind != _CO_ROC) else 0, OUT, LEN)
+    _execute(prog, numeric_mode)
+    m, status = prog.ints(LEN, 2)
+    if status == _CO_EMPTY:
+        raise ValueError("mojolearn metrics: an empty curve has no thresholds")
+    F, T = prog.words(LEN + 2, 4, "d")
+    if status == _CO_ZERO_CLASS:
+        return None, 0, F, T, classes
+    # precision-recall's thresholds hold one word fewer than its precision and recall
+    lens = (m, m, m - 1) if kind == _CO_PR else (m, m, m)
+    arrays = tuple(Array._owned(prog.words(OUT + 2 * b * (n + 1), 2 * lens[b], "d"), (lens[b],), "<f8", "C")
+                   for b in range(3))  # glue: wraps the three downloaded arrays
+    return arrays, m, F, T, classes
+
+
 def roc_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_intermediate=True,
               numeric_mode=None):
     """scikit-learn 1.9 `roc_curve` for binary targets: fpr, tpr, thresholds
-    (Float64; the first threshold is +inf). The sort and the cumulative
-    counts run on the device; drop_intermediate removes collinear points."""
-    dev, _ = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, "roc_curve", lazy=True,
-                           compact=bool(drop_intermediate))
-    # the three Float64 arrays straight from the arena words
-    # (x_metrics/epilogue.mojo roc_arrays; lane metrics-apple2), an empty
-    # class's NaN rates there too (lane pyglue-sweep)
-    F, T = dev.last()
+    (Float64; the first threshold is +inf). The sort, the cumulative
+    counts, the collinear drop and the rates run on the device (lane
+    cpu4-python: x_metrics/curve_out.mojo; an empty class's NaN rates
+    there too)."""
+    arrays, _, F, T, _ = _curve_out(y_true, y_score, pos_label, sample_weight, numeric_mode, "roc_curve",
+                                    _CO_ROC, drop_intermediate)
     if F <= 0:
         _undefined_warning("No negative samples in y_true, false positive value should be meaningless")
     if T <= 0:
         _undefined_warning("No positive samples in y_true, true positive value should be meaningless")
-    fn = dev.native("x_metrics_curve_roc")
-    bufs = [_f64_out(dev.c + 1) for _ in range(3)]  # glue: three output buffers
-    m = int(fn(dev.addr(), (dev.fps, dev.tps, dev.thr, dev.keep), dev.c,
-               1 if drop_intermediate else 0, tuple(b.buffer_info()[0] for b in bufs)))  # glue: three buffer addresses
-    return tuple(_f64_array(b, m) for b in bufs)  # glue: three output arrays
+    return arrays
 
 
 def precision_recall_curve_options(y_true, y_score, pos_label, sample_weight, drop_intermediate, numeric_mode):
     """precision_recall_curve with sample_weight or drop_intermediate=True
-    (lane/metrics): Float64 outputs; the default call keeps its kernel."""
-    dev, _ = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, "precision_recall_curve",
-                           lazy=True)
-    # the three Float64 arrays straight from the arena words
-    # (x_metrics/epilogue.mojo pr_arrays; lane py-misc-metrics), no
-    # positives' recall of one there too (lane pyglue-sweep)
-    fn = _dev_epilogue(dev, "x_metrics_curve_pr")
-    if dev.last()[1] == 0:
+    (lane/metrics): Float64 outputs, formed on the device (lane cpu4-python:
+    x_metrics/curve_out.mojo; no positives' recall of one there too); the
+    default call keeps its kernel."""
+    arrays, _, _, T, _ = _curve_out(y_true, y_score, pos_label, sample_weight, numeric_mode,
+                                    "precision_recall_curve", _CO_PR, drop_intermediate)
+    if T == 0:
         warnings.warn("No positive class found in y_true, recall is set to one for all thresholds.",
                       UserWarning, stacklevel=3)
-    bufs = [_f64_out(dev.c + 1) for _ in range(3)]  # glue: three output buffers
-    m = int(fn(dev.addr(), (dev.fps, dev.tps, dev.thr), dev.c, 1 if drop_intermediate else 0,
-               tuple(b.buffer_info()[0] for b in bufs)))  # glue: three buffer addresses
-    return _f64_array(bufs[0], m + 1), _f64_array(bufs[1], m + 1), _f64_array(bufs[2], m)
+    return arrays
 
 
 def det_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_intermediate=False,
               numeric_mode=None):
-    """scikit-learn 1.9 `det_curve`: fpr, fnr, thresholds."""
-    dev, classes = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, "det_curve", lazy=True)
+    """scikit-learn 1.9 `det_curve`: fpr, fnr, thresholds, formed on the
+    device (lane cpu4-python: x_metrics/curve_out.mojo); a zero class
+    weight raises as the Python division by zero did."""
+    arrays, _, _, _, classes = _curve_out(y_true, y_score, pos_label, sample_weight, numeric_mode, "det_curve",
+                                          _CO_DET, drop_intermediate)
     if len(classes) != 2:
         raise ValueError("Only one class is present in y_true. Detection error tradeoff curve is not "
                          "defined in that case.")
-    # x_metrics/epilogue.mojo det_arrays (lane py-misc-metrics); a zero class
-    # weight raises there as the Python division by zero did
-    fn = _dev_epilogue(dev, "x_metrics_curve_det")
-    bufs = [_f64_out(dev.c + 1) for _ in range(3)]  # glue: three output buffers
-    m = int(fn(dev.addr(), (dev.fps, dev.tps, dev.thr), dev.c, 1 if drop_intermediate else 0,
-               tuple(b.buffer_info()[0] for b in bufs)))  # glue: three buffer addresses
-    return tuple(_f64_array(b, m) for b in bufs)  # glue: three output arrays
+    if arrays is None:
+        raise ZeroDivisionError("float division by zero")
+    return arrays
 
 
 def _trapezoid(x, y):
@@ -1946,13 +1969,27 @@ def _trapezoid(x, y):
     return _fsum(list(terms))
 
 
+#: terms per chunk of the device trapezoid sum (x_metrics/curve_out.mojo
+#: ax_chunk); the fold order is a function of n and this constant only
+_AX_CHUNK = 1024
+_AX_NEG, _AX_POS = 1, 2
+
+
+def _f64_words(a):
+    """A C-order Float64 Array's values as their Int32 word pairs (low
+    first), an Int32 Array over a copy of the bytes (no per-value Python)."""
+    store = array.array("i")
+    store.frombytes(a.tobytes())
+    return Array._owned(store, (len(store),), "<i4", "C")
+
+
 def auc(x, y):
-    """scikit-learn 1.9 `auc`: the trapezoid rule over a monotonic x (host
-    binary64, a correctly rounded `fsum`; a non-finite term's IEEE sum), in
-    the binding (x_metrics/epilogue.mojo auc_xy, lane py-misc-metrics) for
-    every input: a list or an integer buffer is converted to Float64 first
-    (lane apple-fast-py2mojo-core; the Python trapezoid route is gone, lane
-    pyglue-sweep)."""
+    """scikit-learn 1.9 `auc`: the trapezoid rule over a monotonic x, on
+    the device (lane cpu4-python: x_metrics/curve_out.mojo auc_xy; the host
+    column runs the same units): binary64 terms (x[i] - x[i-1]) * (y[i] +
+    y[i-1]) / 2, summed as a float-float in fixed chunks (the host fsum
+    left the route); a non-finite term's IEEE answer. A list or an integer
+    buffer is converted to Float64 first."""
     xa, ya = _auc_f64(x), _auc_f64(y)
     if xa is None:
         xa = Array.from_list(flatten_mo(x), "<f8")
@@ -1962,12 +1999,17 @@ def auc(x, y):
         raise ValueError("x and y must have the same length")
     if xa.size < 2:
         raise ValueError(f"At least 2 points are needed to compute area under curve, but x.shape = ({xa.size},)")
-    try:
-        return float(_binding(None).x_metrics_auc_xy(addr_ro(xa, name="x"), addr_ro(ya, name="y"), xa.size))
-    except Exception as exc:
-        if "non-monotonic" in str(exc):
-            raise ValueError(f"x is neither increasing nor decreasing : {xa.tolist()}.") from None
-        raise
+    n = xa.size
+    prog = _Prog()
+    X = prog.put_i32(_f64_words(xa))
+    Y = prog.put_i32(_f64_words(ya))
+    OUT = prog.want(prog.alloc(3), 3)
+    prog.stage("auc_xy", 1, n, X, Y, OUT, _AX_CHUNK)
+    _execute(prog, None)
+    flags = prog.ints(OUT + 2, 1)[0]
+    if (flags & _AX_NEG) and (flags & _AX_POS):
+        raise ValueError(f"x is neither increasing nor decreasing : {xa.tolist()}.")
+    return float(prog.words(OUT, 2, "d")[0])
 
 
 def _auc_f64(v):
@@ -2729,17 +2771,18 @@ def _clusterings(labels_true, labels_pred, caller):
 
 class _Contingency:
     """The exact contingency counts of two clusterings and what the
-    clustering metrics read from them, all formed by the binding
-    (x_metrics/epilogue.mojo contingency_stats, lane pyglue-sweep): `C`
-    (ka x kb Int64, rows = classes of `a`, columns = classes of `b`), `F`
-    (C + eps as Float64, when eps is given), `rows` and `cols` (Int64
-    sums), `pairs` (the 2 x 2 pair confusion counts, Int64) and `ent` (the
-    row and column entropies, Float64)."""
+    clustering metrics read from them, all formed on the device (lane
+    cpu4-python: x_metrics/contingency.mojo cont_stats, units the host
+    column runs too): `C` (ka x kb Int64, rows = classes of `a`, columns =
+    classes of `b`), `F` (C + eps as Float64, when eps is given), `rows` and
+    `cols` (Int64 sums), `pairs` (the 2 x 2 pair confusion counts, Int64),
+    `ent` (the row and column entropies, Float64), and, when asked, `mi`
+    (the MI in nats) and `emi` (the expected MI)."""
 
-    __slots__ = ("ka", "kb", "C", "F", "rows", "cols", "pairs", "ent")
+    __slots__ = ("ka", "kb", "C", "F", "rows", "cols", "pairs", "ent", "mi", "emi")
 
 
-def _contingency(a, b, ca, cb, numeric_mode, eps=None):
+def _contingency(a, b, ca, cb, numeric_mode, eps=None, mi=False, emi=False):
     n, ka, kb = len(a), len(ca), len(cb)
     if ka * kb > 16777216:
         raise ValueError("mojolearn metrics: the contingency matrix exceeds 2^24 cells")
@@ -2750,19 +2793,30 @@ def _contingency(a, b, ca, cb, numeric_mode, eps=None):
     kk = max(ka, kb)
     prog.stage("pair_key", n, A, B, key, kk, 0)
     m = kk * kk
-    off, _ = _group(prog, key, n, m)
+    off = prog.scratch(m + 1)
+    prog.stage("group_sort", 1, key, n, m, off, prog.scratch(n))
+    cells = ka * kb
+    EPS = prog.put_i32(_words64([float(eps)])) if eps is not None else _NONE
+    C = prog.want(prog.alloc(2 * cells), 2 * cells)
+    F = prog.want(prog.alloc(2 * cells), 2 * cells) if eps is not None else _NONE
+    R = prog.want(prog.alloc(2 * ka), 2 * ka)
+    K = prog.want(prog.alloc(2 * kb), 2 * kb)
+    P = prog.want(prog.alloc(8), 8)
+    E = prog.want(prog.alloc(4), 4)
+    MI = prog.want(prog.alloc(2), 2) if mi else _NONE
+    EMI = prog.want(prog.alloc(2), 2) if emi else _NONE
+    prog.stage("cont_stats", 1, off, ka, kb, kk, EPS, C, F, R, K, P, E, MI, EMI, n)
     _execute(prog, numeric_mode)
-    o = prog.words(off, m + 1, "i")
     r = _Contingency()
     r.ka, r.kb = ka, kb
-    r.C = empty((ka, kb), "<i8")
-    r.F = empty((ka, kb), "<f8") if eps is not None else None
-    r.rows, r.cols = empty((ka,), "<i8"), empty((kb,), "<i8")
-    r.pairs, r.ent = empty((2, 2), "<i8"), empty((2,), "<f8")
-    _binding(numeric_mode).x_metrics_contingency_stats(
-        o.buffer_info()[0], (ka, kb, kk), float(eps) if eps is not None else 0.0,
-        (r.C._addr, r.F._addr if r.F is not None else 0, r.rows._addr, r.cols._addr, r.pairs._addr,
-         r.ent._addr))
+    r.C = Array._owned(prog.words(C, 2 * cells, "q"), (ka, kb), "<i8", "C")
+    r.F = Array._owned(prog.words(F, 2 * cells, "d"), (ka, kb), "<f8", "C") if eps is not None else None
+    r.rows = Array._owned(prog.words(R, 2 * ka, "q"), (ka,), "<i8", "C")
+    r.cols = Array._owned(prog.words(K, 2 * kb, "q"), (kb,), "<i8", "C")
+    r.pairs = Array._owned(prog.words(P, 8, "q"), (2, 2), "<i8", "C")
+    r.ent = Array._owned(prog.words(E, 4, "d"), (2,), "<f8", "C")
+    r.mi = float(prog.words(MI, 2, "d")[0]) if mi else None
+    r.emi = float(prog.words(EMI, 2, "d")[0]) if emi else None
     return r
 
 
@@ -2793,13 +2847,6 @@ def pair_confusion_matrix(labels_true, labels_pred, *, numeric_mode=None):
     return _contingency(a, b, ca, cb, numeric_mode).pairs
 
 
-def _mi_from_contingency(r, numeric_mode=None):
-    """MI of the counts in nats (x_metrics/epilogue.mojo mi_contingency, lane
-    py-misc-metrics; the Python fallback is gone, lane pyglue-sweep: the
-    counts of a clustering are never negative and total below 2^31)."""
-    return float(_binding(numeric_mode).x_metrics_mi_contingency(r.C._addr, r.ka, r.kb))
-
-
 def _generalized_average(U, V, method):
     if method == "min":
         return min(U, V)
@@ -2820,29 +2867,12 @@ def normalized_mutual_info_score(labels_true, labels_pred, *, average_method="ar
     a, b, ca, cb = _clusterings(labels_true, labels_pred, "normalized_mutual_info_score")
     if len(ca) == len(cb) == 1 or len(ca) == len(cb) == 0:
         return 1.0
-    r = _contingency(a, b, ca, cb, numeric_mode)
-    mi = _mi_from_contingency(r, numeric_mode)
+    r = _contingency(a, b, ca, cb, numeric_mode, mi=True)
+    mi = r.mi
     if mi == 0:
         return 0.0
     ht, hp = r.ent[0], r.ent[1]
     return float(mi / _generalized_average(ht, hp, average_method))
-
-
-def _expected_mi(a_counts, b_counts, n, numeric_mode=None):
-    """E[MI] under the permutation model (Vinh, Epps and Bailey 2010), the sum
-    scikit-learn's `expected_mutual_information` evaluates through gammaln.
-    Here each hypergeometric pmf is built by its ratio recurrence from the
-    mode and normalized by its own sum over the full support: no difference
-    of large log-gamma values, portable binary64 log / exp only."""
-    if a_counts.size == 1 or b_counts.size == 1:
-        return 0.0
-    # the walks and terms in the binding's host binary64, the log the C of
-    # mojolearn._portable_math.log (x_metrics/epilogue.mojo expected_mi; lane
-    # metrics-apple2). The Python walk is gone (lane apple-fast-py2mojo-core):
-    # every install's binding carries it, and its refusals (n outside
-    # [1, 2**31), a non-finite term) cannot occur for a clustering's counts.
-    return float(_binding(numeric_mode).x_metrics_expected_mi(a_counts._addr, a_counts.size, b_counts._addr,
-                                                              b_counts.size, n))
 
 
 def adjusted_mutual_info_score(labels_true, labels_pred, *, average_method="arithmetic", numeric_mode=None):
@@ -2854,10 +2884,12 @@ def adjusted_mutual_info_score(labels_true, labels_pred, *, average_method="arit
         return 1.0
     if len(ca) == 1 or len(cb) == 1:
         return 0.0
-    r = _contingency(a, b, ca, cb, numeric_mode)
-    n = len(a)
-    mi = _mi_from_contingency(r, numeric_mode)
-    emi = _expected_mi(r.rows, r.cols, n, numeric_mode)
+    # MI and E[MI] under the permutation model (Vinh, Epps and Bailey 2010):
+    # each hypergeometric pmf built by its ratio recurrence from the mode and
+    # normalized by its own sum, portable binary64 log only, on the device
+    # (lane cpu4-python: x_metrics/contingency.mojo mi_cell, emi_cell)
+    r = _contingency(a, b, ca, cb, numeric_mode, mi=True, emi=True)
+    mi, emi = r.mi, r.emi
     norm = _generalized_average(r.ent[0], r.ent[1], average_method)
     eps = 2.220446049250313e-16
     den = norm - emi

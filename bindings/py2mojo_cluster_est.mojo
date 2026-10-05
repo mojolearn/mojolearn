@@ -33,7 +33,7 @@ def _array_addr(a: PythonObject) raises -> Int:
     return Int(py=a.buffer_info()[0])
 
 
-def dbscan_core_arrays_binding(
+def dbscan_core_arrays_host_binding(
     x_addr: PythonObject, labels_addr: PythonObject, core_addr: PythonObject, params: PythonObject
 ) raises -> PythonObject:
     if len(params) != 2:

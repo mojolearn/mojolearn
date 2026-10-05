@@ -175,6 +175,31 @@ comptime KNN_REGISTER_TILE_IDENTICAL = knn_distance_register_tile_for[
 ]()
 comptime KNN_PREFLIGHT_METADATA = knn_distance_metadata_for[TARGET_COLUMN, IDENTICAL_BUILD]()
 comptime KNN_PREFLIGHT_METADATA_DEFAULT = knn_distance_metadata_default_for[TARGET_COLUMN, IDENTICAL_BUILD]()
+
+# Large-request gate for the vector index transport and the preflight
+# metadata default. Both add a fixed cost (alignment branches; two
+# O((n_queries + n_index) x n_features) minimum passes) that only pays back
+# over the n_queries x n_index distance cells, so they admit any request
+# with at least KNN_LARGE_MIN_QUERIES query rows (eight 128-row query tiles,
+# enough to fill the SMs/CUs several times over) and KNN_LARGE_MIN_INDEX
+# index rows (the index no longer fits one small column tile), at small k.
+# Replacement rule is UNMEASURED.
+comptime KNN_LARGE_MIN_QUERIES = 1024
+comptime KNN_LARGE_MIN_INDEX = 65536
+
+
+@always_inline
+def knn_large_request(n_index: Int, n_queries: Int, n_features: Int, k: Int) -> Bool:
+    comptime if is_defined["MOJOLEARN_LEGACY_SHAPE_KNN_BOARD"]():
+        # LEGACY (default OFF): the exact knn board shape (400k index,
+        # 4k queries, 32 features, k in {10, 15}). Removed Oct 4 as
+        # benchmark-shape tuning; the size rule below is unmeasured.
+        return n_index == 400000 and n_queries == 4000 and n_features == 32 and (k == 10 or k == 15)
+    # merge 2026-10-05: main's KNN_LARGE_MIN_* rule and the IDENTICAL lane's
+    # pair-count rule both replaced the board shape; the IDENTICAL lane's
+    # `knn_large_request(n_index, n_queries)` (below) is the one rule, the
+    # legacy board-shape arm above stays. KNN_LARGE_MIN_* are kept for reference.
+    return knn_large_request(n_index, n_queries)
 comptime KNN_INDEX_TILE_IDENTICAL = knn_index_tile_columns_for[
     TARGET_COLUMN, IDENTICAL_BUILD
 ]()
@@ -927,7 +952,7 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     # bench/results/knn_vector_request_2026-09-10. Scope: `knn_large_request`
     # (size rule; was the exact benchmark row). Per-partition alignment is
     # checked below, so any n_index that is not a multiple of 4 stays scalar.
-    var use_vector = TARGET_COLUMN == COLUMN_NVIDIA and mtr == DIST_L2_SQRT_EXPANDED and knn_large_request(n_index, n_queries)
+    var use_vector = TARGET_COLUMN == COLUMN_NVIDIA and mtr == DIST_L2_SQRT_EXPANDED and knn_large_request(n_index, n_queries, n_features, k)
     comptime if is_defined["MOJOLEARN_KNN_VECTOR_REQUEST_CHECK"]():
         # Named same-process check exercises scalar, vector and actual default.
         var vector_override = String(getenv("MOJOLEARN_KNN_VECTOR_TRIAL"))
@@ -938,7 +963,7 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     # the metadata only admits tiles that need no repair.
     var use_metadata = KNN_PREFLIGHT_METADATA
     comptime if KNN_PREFLIGHT_METADATA_DEFAULT:
-        use_metadata = use_metadata or (use_transposed_index and KNN_REGISTER_TILE_IDENTICAL and not use_vendor_topk and mtr == DIST_L2_SQRT_EXPANDED and knn_large_request(n_index, n_queries))
+        use_metadata = use_metadata or (use_transposed_index and KNN_REGISTER_TILE_IDENTICAL and not use_vendor_topk and mtr == DIST_L2_SQRT_EXPANDED and knn_large_request(n_index, n_queries, n_features, k))
     # DEVIATION 2629 (kernel-matrix row `knn_distance_exact_chain_for`): the
     # admission metadata rides in the same request-local scratch slot the
     # Apple minima use; the two never run in one request.
