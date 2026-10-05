@@ -500,6 +500,21 @@ class _Kit:
         self.mode = mode
         self.b = _backend.binding("_mojolearn_x_decomp", mode) if binding is None else binding
 
+    def enable_lle_precision(self):
+        """LLE's near-null solve needs ordered products and accurate LU updates.
+
+        The optional entries exist only in Apple FAST bindings; all arithmetic
+        remains on the GPU. Older bindings and other modes keep their entries.
+        """
+        if self.mode != "fast" or _kit_vendor(self) != "metal":
+            return
+        try:
+            mm = getattr(self.b, "x_decomp_lle_gemm_ordered")
+            lu = getattr(self.b, "x_decomp_lle_lu_ordered")
+        except (AttributeError, ImportError):
+            return
+        self._lle_mm, self._lle_lu = mm, lu
+
     # ---- device-resident path (GPU binding only; x_decomp/resident.mojo)
     def _raw(self):
         try:        # through bench/decomp_speed.py's profiler proxy (never the binding's own __getattr__)
@@ -699,6 +714,11 @@ class _Kit:
         k2, n = (B.c, B.r) if tb else (B.r, B.c)
         if k != k2:
             raise ValueError(f"x_decomp: gemm inner dimensions {k} and {k2} differ")
+        precise = getattr(self, "_lle_mm", None)
+        if precise is not None:
+            out = _M.zeros(m, n)
+            precise(A.addr, B.addr, out.addr, [m, k, n, int(ta), int(tb)])
+            return out
         if m * n and m * k and k * n and self._use(A, B):
             out = self._dout(m, n)
             self.b.x_decomp_dev_gemm(self._did(A), self._did(B), out._d.id, [m, k, n, int(ta), int(tb)])
@@ -825,6 +845,11 @@ class _Kit:
         n = A.r
         piv = array.array("i", [0] * n)
         info = _M.zeros(1, 1)
+        precise = getattr(self, "_lle_lu", None)
+        if precise is not None:
+            lu = A.copy()
+            precise(lu.addr, piv.buffer_info()[0], info.addr, [n])
+            return lu, piv, int(info.s[0])
         if n >= 1 and A.c == n and self._opt_dev("x_decomp_dev_lu") and self._use(A):
             # lane fam-decomp: the factor made in a device matrix from a
             # device copy of A (an IDENTICAL GPU build without
@@ -4597,6 +4622,7 @@ class LocallyLinearEmbedding(_Base):
         got = None
         if (self.method == "standard" and self.eigen_solver == "auto" and n > _LLE_ITER_MIN_N
                 and nc + 1 < _LLE_ITER_MAX_K):
+            k.enable_lle_precision()
             got = _lle_smallest(k, IW, nc, int(self.max_iter), _seed_of(self.random_state), M)
         if got is not None:
             self.embedding_m_, sv = got

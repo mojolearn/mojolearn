@@ -2323,12 +2323,15 @@ def orth_on_device_diag(
 
 
 def launch_lu(
-    ctx: DeviceContext, a: F32Ptr, piv: I32Ptr, info: F32Ptr, scal: F32Ptr, act: F32Ptr, n: Int
+    ctx: DeviceContext, a: F32Ptr, piv: I32Ptr, info: F32Ptr, scal: F32Ptr, act: F32Ptr, n: Int, precise: Bool = False
 ) raises:
     """DevExec.lu's launches on device pointers, enqueued (no sync): `a`
     (n x n) factored in place, `piv` (n), `info` (1), `scal` (LU_SCAL_LEN) and `act`
     (n) scratch. DevExec.lu and the resident kit (x_decomp/kit_device.mojo)
-    both call it, so the two run one launch sequence."""
+    both call it, so the two run one launch sequence. `precise` is LLE's
+    near-null spectral transform: retain scalar trailing updates, whose
+    rounding is needed by its ill-conditioned triangular solves. Ordinary
+    callers keep the existing MMA choice."""
     # lu_serial's cells, step by step at every n: the pivot search over
     # every block (a parallel reduction, `lu_pivot`'s choice), the swap (with
     # the diagonal step on column k's thread), the
@@ -2371,7 +2374,7 @@ def launch_lu(
         # the Apple matrix unit (one pass over the trailing square per 256
         # columns instead of per 32). Off: main's loop below.
         comptime if LU_FAST_MMA:
-            if nb == LU_PANEL_NB:
+            if not precise and nb == LU_PANEL_NB:
                 lu_fast_mma_factor(
                     ctx, a, piv, info, act, _p(lfs_p0), _p(lfs_p1), _p(lfs_pa), _p(lfs_pb), n, lfs_mb
                 )
@@ -2571,6 +2574,29 @@ struct DevExec(Exec):
         var dact = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
         launch_lu(
             ctx, _p(da), I32Ptr(unsafe_from_address=Int(dp.unsafe_ptr())), _p(di), _p(ds), _p(dact), n
+        )
+        _down(ctx, da, a, n * n)
+        _down_i(ctx, dp, piv, n)
+        _down(ctx, di, info, 1)
+        ctx.synchronize()
+        _ = da^
+        _ = dp^
+        _ = di^
+        _ = ds^
+        _ = dact^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def lu_ordered(a: F32Ptr, piv: I32Ptr, info: F32Ptr, n: Int) raises:
+        var ctx = xd_ctx()
+        var da = _up(ctx, a, n * n)
+        var dp = ctx.enqueue_create_buffer[DType.int32](n if n > 0 else 1)
+        var di = ctx.enqueue_create_buffer[DType.float32](1)
+        var ds = ctx.enqueue_create_buffer[DType.float32](LU_SCAL_LEN)
+        var dact = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        launch_lu(
+            ctx, _p(da), I32Ptr(unsafe_from_address=Int(dp.unsafe_ptr())), _p(di), _p(ds), _p(dact), n, True
         )
         _down(ctx, da, a, n * n)
         _down_i(ctx, dp, piv, n)
