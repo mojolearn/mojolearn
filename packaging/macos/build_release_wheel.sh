@@ -164,7 +164,7 @@ if [ "$PACKAGE_BYTE_LM" = 1 ]; then
     # every other extension, so the stale copy goes first; the refusal inside
     # build_byte_lm.sh stays, for anyone running it by hand. A CI checkout
     # never has the file.
-    rm -f "$PKG/identical/_mojolearn_byte_lm.so"
+    rm -f "$PKG/_mojolearn_byte_lm.so" "$PKG/identical/_mojolearn_byte_lm.so"
 fi
 
 # THE PER-SCRIPT GATES ARE OFF HERE, AND THE REASON IS A CLEAN CHECKOUT.
@@ -228,13 +228,15 @@ if [ "$PACKAGE_BYTE_LM" = 1 ]; then
     case " $MODES " in *' identical '*) ;; *) echo 'Byte LM requires the identical tier' >&2; exit 2 ;; esac
 fi
 # Refuse stale unsupported-mode artifacts rather than silently packaging them.
-for byte_path in "$PKG/_mojolearn_byte_lm.so" "$PKG/deterministic/_mojolearn_byte_lm.so"; do
-    [ ! -e "$byte_path" ] && [ ! -L "$byte_path" ] || { echo 'Byte LM is IDENTICAL only' >&2; exit 2; }
+for byte_path in "$PKG/deterministic/_mojolearn_byte_lm.so"; do
+    [ ! -e "$byte_path" ] && [ ! -L "$byte_path" ] || { echo 'Apple Byte LM supports FAST and IDENTICAL only' >&2; exit 2; }
 done
 if [ "$PACKAGE_BYTE_LM" = 0 ]; then
-    [ ! -e "$PKG/identical/_mojolearn_byte_lm.so" ] && [ ! -L "$PKG/identical/_mojolearn_byte_lm.so" ] || {
-        echo 'Legacy build refuses an unrequested byte LM binary' >&2; exit 2;
-    }
+    for byte_path in "$PKG/_mojolearn_byte_lm.so" "$PKG/identical/_mojolearn_byte_lm.so"; do
+        [ ! -e "$byte_path" ] && [ ! -L "$byte_path" ] || {
+            echo 'Legacy build refuses an unrequested byte LM binary' >&2; exit 2;
+        }
+    done
 fi
 
 # DEVIATION 2501: the builds run MOJOLEARN_BUILD_JOBS at a time through
@@ -332,6 +334,7 @@ build_pairs() {
         for script in $BUILD_SCRIPTS; do printf '%s %s\n' "$mode" "$script"; done
         if [ "$mode" = fast ]; then
             for script in $FAST_CLASSICAL_SCRIPTS; do printf '%s %s\n' "$mode" "$script"; done
+            if [ "$PACKAGE_BYTE_LM" = 1 ]; then printf '%s %s\n' "$mode" build_byte_lm.sh; fi
         fi
     done
 }
@@ -371,14 +374,14 @@ ordered_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
     # THE ONE FILE THIS PAIR WRITES, declared for the compile cache. Named
     # the way the gates below name it: build.sh is _mojolearn, build_X.sh is
     # _mojolearn_X, a host shim is host/_mojolearn_X_host, the byte LM lives
-    # in identical/, and the fast tier is the package directory itself.
+    # in its selected tier, and the fast tier is the package directory itself.
     case "$script" in
         build_*_host.sh) f="${script#build_}"; output="python/mojolearn/host/_mojolearn_${f%_host.sh}_host.so" ;;
-        build_byte_lm.sh) output="python/mojolearn/identical/_mojolearn_byte_lm.so" ;;
+        build_byte_lm.sh) ext=_mojolearn_byte_lm ;;
         build.sh) ext=_mojolearn ;;
         *) e="${script#build_}"; ext="_mojolearn_${e%.sh}" ;;
     esac
-    case "$script" in build_*_host.sh|build_byte_lm.sh) ;; *)
+    case "$script" in build_*_host.sh) ;; *)
         if [ "$mode" = fast ]; then output="python/mojolearn/$ext.so"; else output="python/mojolearn/$mode/$ext.so"; fi ;;
     esac
     # A REUSED BINDING IS PLACED, NOT BUILT (the header above BUILD_JOBS).
@@ -497,18 +500,24 @@ print(json.dumps(dict(extension=name, native_vendor='cpu', column='cpu',
     unsupported_modes=['fast', 'deterministic'])))
 PYHOST
     done
-    ALL_SOS="$ALL_SOS $PKG/identical/_mojolearn_byte_lm.so"
-    pixi run -e pkg python - "$PKG/identical/_mojolearn_byte_lm.so" <<'PYBYTE'
+    for byte_mode in $MODES; do
+        case "$byte_mode" in fast) byte_path="$PKG/_mojolearn_byte_lm.so" ;;
+            identical) byte_path="$PKG/identical/_mojolearn_byte_lm.so" ;;
+            *) continue ;;
+        esac
+        ALL_SOS="$ALL_SOS $byte_path"
+        pixi run -e pkg python - "$byte_path" "$byte_mode" <<'PYBYTE'
 import importlib.util, json, sys
 spec = importlib.util.spec_from_file_location('_mojolearn_byte_lm', sys.argv[1])
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
-assert module.byte_lm_numeric_mode() == 1
+assert module.byte_lm_numeric_mode() == {"fast": 0, "identical": 1}[sys.argv[2]]
 assert module.byte_lm_vendor() == 'metal'
 assert module.byte_lm_profile() == 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
-print(json.dumps(dict(extension='_mojolearn_byte_lm', native_vendor='metal', numeric_mode=1,
-    profile=module.byte_lm_profile(), supported_modes=['identical'], unsupported_modes=['fast', 'deterministic'])))
+print(json.dumps(dict(extension='_mojolearn_byte_lm', native_vendor='metal', numeric_mode=module.byte_lm_numeric_mode(),
+    profile=module.byte_lm_profile(), supported_modes=['fast', 'identical'], unsupported_modes=['deterministic'])))
 PYBYTE
+    done
 fi
 # macOS /bin/sh's -nt compares whole seconds. A reused binding can be
 # placed after STAMP within that same second; preserve the strict freshness

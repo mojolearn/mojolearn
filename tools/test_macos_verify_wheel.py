@@ -25,7 +25,7 @@ class WheelMatrixTests(unittest.TestCase):
         (self.dist / 'mojolearn-candidate.whl').touch()
         self.bin = self.root / 'bin'
         self.bin.mkdir()
-        for name in ('dirname', 'basename', 'mktemp', 'rm', 'mkdir'):
+        for name in ('dirname', 'basename', 'mktemp', 'rm', 'mkdir', 'env'):
             (self.bin / name).symlink_to(shutil.which(name))
         self.env = dict(os.environ, PATH=str(self.bin), MOJOLEARN_RELEASE_MODES='fast deterministic identical')
 
@@ -109,7 +109,9 @@ class WheelMatrixTests(unittest.TestCase):
         for fails in (False, True):
             self.interpreters(smoke_fail=fails, smoke_output=evidence)
             result = self.run_gate()
-            self.assertEqual(result.stdout.count(evidence), 20, result.stdout)
+            # Runtime, FAST/IDENTICAL ByteLM availability, language-model smoke,
+            # and three numeric-mode smoke jobs, for each of five interpreters.
+            self.assertEqual(result.stdout.count(evidence), 35, result.stdout)
             self.assertEqual(result.returncode == 0, not fails)
 
 
