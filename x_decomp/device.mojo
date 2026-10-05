@@ -5,6 +5,7 @@ cell of `x_decomp/cells.mojo` verbatim; the serial routines run on ONE
 device thread. Host in, host dst: upload, launch, download."""
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
+from std.time import perf_counter_ns
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.ffi import _Global
@@ -873,6 +874,28 @@ def orgqr_dot_staged_kernel(
         c0 += STAGE
     if tid == 0:
         w.unsafe_store(j, acc)
+
+
+
+
+def _qr_plain_dot() -> Bool:
+    """MOJOLEARN_XD_QR_PLAIN_DOT=1: the reflector dots as one thread per
+    column (geqrf_dot_kernel / orgqr_dot_kernel, the same chain) instead of
+    the staged one-block-per-column kernels. An A/B arm: no bit moves."""
+    return String(getenv("MOJOLEARN_XD_QR_PLAIN_DOT")) == "1"
+
+
+def _qr_tick(ctx: DeviceContext, mut qrt: List[Int], mut qrk: List[Int], slot: Int) raises:
+    """MOJOLEARN_XD_QR_TIMING=1: a sync before and after each launch kind, the
+    wall accumulated per kind (slot -1 starts a span). Off by default: no
+    sync, no bit."""
+    if qrk[0] != 1:
+        return
+    ctx.synchronize()
+    var now = Int(perf_counter_ns())
+    if slot >= 0:
+        qrt[slot] += now - qrk[1]
+    qrk[1] = now
 
 
 def _blocks(count: Int) -> Int:
@@ -2062,6 +2085,9 @@ struct DevExec(Exec):
 
     @staticmethod
     def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
+        var qrt = List[Int](length=4, fill=0)
+        var qrk = List[Int](length=2, fill=0)
+        qrk[0] = 1 if String(getenv("MOJOLEARN_XD_QR_TIMING")) == "1" else 0
         var ctx = xd_ctx()
         var kk = m if m < n else n
         var da = _up(ctx, a, m * n)
@@ -2073,22 +2099,36 @@ struct DevExec(Exec):
         # A[k:, k+1:] updated (one thread per cell): geqrf_serial's cells, in
         # its order per column, with no host round trip between the steps
         for k in range(kk):
+            _qr_tick(ctx, qrt, qrk, -1)
             ctx.enqueue_function[geqrf_head_staged_kernel](
                 da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(m), Int32(n), grid_dim=1, block_dim=STAGE_TPB
             )
+            _qr_tick(ctx, qrt, qrk, 0)
             if m - k - 1 > 0:
+                _qr_tick(ctx, qrt, qrk, -1)
                 ctx.enqueue_function[geqrf_scale_kernel](
                     da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(m), Int32(n), grid_dim=_blocks(m - k - 1), block_dim=TPB
                 )
+                _qr_tick(ctx, qrt, qrk, 1)
             if n - k - 1 > 0:
-                ctx.enqueue_function[geqrf_dot_staged_kernel](
-                    da.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
-                    grid_dim=n - k - 1, block_dim=STAGE_TPB,
-                )
+                _qr_tick(ctx, qrt, qrk, -1)
+                if _qr_plain_dot():
+                    ctx.enqueue_function[geqrf_dot_kernel](
+                        da.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
+                        grid_dim=_blocks(n - k - 1), block_dim=TPB,
+                    )
+                else:
+                    ctx.enqueue_function[geqrf_dot_staged_kernel](
+                        da.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
+                        grid_dim=n - k - 1, block_dim=STAGE_TPB,
+                    )
+                _qr_tick(ctx, qrt, qrk, 2)
+                _qr_tick(ctx, qrt, qrk, -1)
                 ctx.enqueue_function[geqrf_update_kernel](
                     da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
                     grid_dim=_blocks((m - k) * (n - k - 1)), block_dim=TPB,
                 )
+                _qr_tick(ctx, qrt, qrk, 3)
         _down(ctx, da, a, m * n)
         _down(ctx, dt, tau, kk)
         ctx.synchronize()
@@ -2096,11 +2136,21 @@ struct DevExec(Exec):
         _ = dt^
         _ = ds^
         _ = dw^
+        if qrk[0] == 1:
+            print("geqrf geqrf_head_staged_kernel", qrt[0] // 1000000, "ms")
+            print("geqrf geqrf_scale_kernel", qrt[1] // 1000000, "ms")
+            print("geqrf geqrf_dot_staged_kernel", qrt[2] // 1000000, "ms")
+            print("geqrf geqrf_update_kernel", qrt[3] // 1000000, "ms")
+        _ = qrt^
+        _ = qrk^
         ctx.synchronize()
         _ = ctx^
 
     @staticmethod
     def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
+        var qrt = List[Int](length=3, fill=0)
+        var qrk = List[Int](length=2, fill=0)
+        qrk[0] = 1 if String(getenv("MOJOLEARN_XD_QR_TIMING")) == "1" else 0
         var ctx = xd_ctx()
         var dh = _up(ctx, h, m * n)
         var dt = _up(ctx, tau, kk if kk > 0 else 1)
@@ -2108,24 +2158,42 @@ struct DevExec(Exec):
         var dw = ctx.enqueue_create_buffer[DType.float32](qc if qc > 0 else 1)
         # orgqr_col's cells: e_j, then H_k for k descending (w per column, rows
         # ascending; then every cell of the rows k.. updated)
+        _qr_tick(ctx, qrt, qrk, -1)
         ctx.enqueue_function[orgqr_init_kernel](dq.unsafe_ptr(), Int32(m), Int32(qc), grid_dim=_blocks(m * qc), block_dim=TPB)
+        _qr_tick(ctx, qrt, qrk, 0)
         for r in range(kk):
             var k = kk - 1 - r
             if qc > 0:
-                ctx.enqueue_function[orgqr_dot_staged_kernel](
-                    dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
-                    grid_dim=qc, block_dim=STAGE_TPB,
-                )
+                _qr_tick(ctx, qrt, qrk, -1)
+                if _qr_plain_dot():
+                    ctx.enqueue_function[orgqr_dot_kernel](
+                        dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
+                        grid_dim=_blocks(qc), block_dim=TPB,
+                    )
+                else:
+                    ctx.enqueue_function[orgqr_dot_staged_kernel](
+                        dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
+                        grid_dim=qc, block_dim=STAGE_TPB,
+                    )
+                _qr_tick(ctx, qrt, qrk, 1)
+            _qr_tick(ctx, qrt, qrk, -1)
             ctx.enqueue_function[orgqr_update_kernel](
                 dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
                 grid_dim=_blocks((m - k) * qc), block_dim=TPB,
             )
+            _qr_tick(ctx, qrt, qrk, 2)
         _down(ctx, dq, q, m * qc)
         ctx.synchronize()
         _ = dh^
         _ = dt^
         _ = dq^
         _ = dw^
+        if qrk[0] == 1:
+            print("orgqr orgqr_init_kernel", qrt[0] // 1000000, "ms")
+            print("orgqr orgqr_dot_staged_kernel", qrt[1] // 1000000, "ms")
+            print("orgqr orgqr_update_kernel", qrt[2] // 1000000, "ms")
+        _ = qrt^
+        _ = qrk^
         ctx.synchronize()
         _ = ctx^
 
