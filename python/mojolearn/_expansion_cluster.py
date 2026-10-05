@@ -29,12 +29,13 @@ __all__ = ["MiniBatchKMeans", "BisectingKMeans", "MeanShift", "OPTICS", "Affinit
 _E_NEAREST, _E_DISTANCES, _E_MINIBATCH, _E_BISECT, _E_BISECT_PREDICT, _E_MEANSHIFT, _E_OPTICS, _E_AFFINITY, _E_BGMM, _E_BGMM_SCORE, _E_MINIBATCH_PARTIAL = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
 
 
-def _f32(X, name="X"):
+def _f32(X, name="X", scan=True):
     x, _ = _buffer.as_f32_c(X, ndim=2, name=name)
     if x.shape[0] < 1 or x.shape[1] < 1:
         raise ValueError(f"mojolearn: {name} must be a non-empty 2-D array, got shape {x.shape}")
-    # the base binding's native scan (`_buffer.all_finite`)
-    if not _buffer.all_finite(x):
+    # the base binding's native scan (`_buffer.all_finite`); scan=False only
+    # when the binding scans X itself (MiniBatchKMeans, MBK_FAST_DEVSCAN)
+    if scan and not _buffer.all_finite(x):
         raise ValueError(f"mojolearn: {name} contains NaN or infinity")
     return x
 
@@ -193,8 +194,18 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
         self.n_init = n_init
         self.reassignment_ratio = reassignment_ratio
 
+    def _devscan(self):
+        """lane/apple-fast-s-linalg MBK_FAST_DEVSCAN (default off, FAST +
+        Apple; x_cluster/minibatch_ptr.mojo): whether the binding scans X for
+        NaN/inf itself (on the device copy), so the host scan is skipped."""
+        try:
+            return int(self._bind().x_cluster_mbk_devscan()) == 1
+        except Exception:
+            return False
+
     def fit(self, X, y=None, sample_weight=None):
-        x = _f32(X)
+        devscan = self._devscan()
+        x = _f32(X, scan=not devscan)
         n, d = x.shape
         k = int(self.n_clusters)
         if k < 1 or k > n:
@@ -222,7 +233,14 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
               1 if init_arr is not None else 0, _seed(self.random_state),
               1 if (init_arr is None and self.init == "random") else 0, 1 if weights is not None else 0]
         a = _aux(init_arr, weights)
-        f, i, s = self._call(_E_MINIBATCH, x, a, ip, [float(self.tol), float(self.reassignment_ratio)])
+        if devscan:
+            ip.append(1)    # ip[12]: the binding owes the NaN/inf scan
+        try:
+            f, i, s = self._call(_E_MINIBATCH, x, a, ip, [float(self.tol), float(self.reassignment_ratio)])
+        except Exception as e:
+            if devscan and "contains NaN or infinity" in str(e):
+                raise ValueError("mojolearn: X contains NaN or infinity") from None
+            raise
         self.cluster_centers_ = Array._from_flat(f[0], (k, d), "<f4")
         self.counts_ = Array._from_flat(f[1], (k,), "<f4")
         self.labels_ = Array._from_flat(i[0], (n,), "<i4")

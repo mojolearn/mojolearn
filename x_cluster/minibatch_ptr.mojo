@@ -36,12 +36,28 @@ from x_cluster.device_ops import DeviceOps
 from x_cluster.minibatch import MiniBatchParams
 from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV, MBK_CLS2_POOL, MBK_W2_LABRG, MBF_RG_MAXK, mbk_labels_rg
 from core.device_pool import pool_give, pool_take
+from core.device_scan import device_first_nonfinite
 from x_cluster.out import ClusterOut
 
 comptime MBK_ZEROCOPY = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and MINIBATCH_FAST_DEV
     and not is_defined["MOJOLEARN_MBK_ZEROCOPY_OFF"]()
 )  # default since the M3 A/B (docstring above); MINIBATCH_FAST_DEV is required
+
+#: lane/apple-fast-s-linalg (2026-10-04), default OFF, FAST + Apple only
+#: (`-D MOJOLEARN_MBK_FAST_DEVSCAN`). What: MiniBatchKMeans.fit refuses NaN/inf
+#: with the base binding's `all_finite_f32` (python/mojolearn/_expansion_cluster.py
+#: `_f32`), a single-thread host loop with an early-exit branch over every
+#: value: 220 million floats (880 MB) at the board's istella 1M x 220, on the
+#: host, before this path uploads X anyway. With the define, Python skips that
+#: scan and sets ip[12] = 1; this path scans the uploaded device copy
+#: (`core/device_scan.mojo device_first_nonfinite`, one device read) and
+#: raises the same message; the binding's copying fallback scans its host
+#: list instead. Expect: minibatch-kmeans istella 145 -> ~80-110 ms (the host
+#: scan is ~1 cycle a float); no arithmetic change.
+comptime MBK_FAST_DEVSCAN = MBK_ZEROCOPY and is_defined["MOJOLEARN_MBK_FAST_DEVSCAN"]()
+#: the message Python maps back to its ValueError
+comptime MBK_NONFINITE_MSG = "mojolearn: X contains NaN or infinity"
 
 comptime XPtr = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -111,6 +127,14 @@ def minibatch_entry_ptr(
         else:
             xbuf = ops.ctx.enqueue_create_buffer[DType.float32](nx)
         ops.ctx.enqueue_copy(dst_buf=xbuf, src_ptr=xp)
+        comptime if MBK_FAST_DEVSCAN:
+            # Python skipped its host scan (ip[12] = 1): scan the device copy
+            if len(ip) > 12 and ip[12] != 0:
+                if device_first_nonfinite(ops.ctx, xbuf, nx) >= 0:
+                    ops.ctx.synchronize()
+                    comptime if MBK_CLS2_POOL:
+                        pool_give["MojoXClusterCls2MbkX"](xbuf^)
+                    raise Error(MBK_NONFINITE_MSG)
         ops.f.append(xbuf^)
         var xs = len(ops.f) - 1
 
