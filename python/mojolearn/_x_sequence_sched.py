@@ -54,7 +54,7 @@ _F32_MAX_EXP = 127
 #:    fallback).
 _SCHED_INLINE = _os.environ.get("MOJOLEARN_SCHED_FAST_INLINE", "0") == "1"
 #: MOJOLEARN_SCHED_FAST_TABLE (a -D of the FAST + Apple sequence binding,
-#: sequence/sched_table.mojo; default off, READY-AB): ExponentialLR fills
+#: sequence/sched_table.mojo; FAST + Apple default, rollback _OFF): ExponentialLR fills
 #: blocks of _TAB_BLOCK values natively (the contract's bits, an undecided
 #: entry decided here on the exact path) and lr_at is one list index.
 _TAB_BLOCK = 8192
@@ -196,8 +196,8 @@ def _cos_fx(x):
 
 # ------------------------------------------------------------------ schedules
 def _sched_block_fn():
-    """The FAST sequence binding's `sched_exp_block` when it was compiled
-    with -D MOJOLEARN_SCHED_FAST_TABLE, else None."""
+    """The FAST sequence binding's `sched_exp_block` when it was compiled in
+    (the FAST + Apple default; not under -D MOJOLEARN_SCHED_FAST_TABLE_OFF), else None."""
     try:
         from . import _backend
         return getattr(_backend.binding("_mojolearn_x_sequence"), "sched_exp_block", None)  # cpu-route: a learning-rate schedule is one host scalar per optimizer step (CPU-ONLY ROUTE, sequence/sched_table.mojo)

@@ -94,12 +94,15 @@ comptime ORDER_TPB = 128
 #: (rounds = max over groups, not sum). Merge 2026-10-05: rebuilt on main's
 #: device search (device start + finite flag, chunked groups, the final
 #: grouped re-evaluation into the device log-likelihood table).
+#: GROUPS_CONCURRENT OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
+#: 2026-10-05, verdicts batch 6): autoarima +14-16% slower. DROPPED: stays
+#: off (opt-in only).
 comptime ARIMA_FAST_GROUPS_CONCURRENT = (
     ARIMA_ORDER_BATCH and is_defined["MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT"]()
 )
 
-#: MOJOLEARN_ARIMA_FAST_SEARCH_REUSE (FAST+Apple via ARIMA_ORDER_BATCH,
-#: default off, READY-AB). The search already runs every candidate order to
+#: MOJOLEARN_ARIMA_FAST_SEARCH_REUSE (FAST+Apple via ARIMA_ORDER_BATCH; the
+#: default since verdicts batch 6, rollback -D MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF). The search already runs every candidate order to
 #: the fit's own optimizer (same estimate_x0 start, same per-series device
 #: L-BFGS, same h, same scale); AutoARIMA.fit then refitted every chosen
 #: order from scratch, the same work again. With this switch the search also
@@ -108,8 +111,14 @@ comptime ARIMA_FAST_GROUPS_CONCURRENT = (
 #: `_enqueue_fit_block`), and AutoARIMA.fit reuses them when the fit's maxiter
 #: equals the search's (the only case where the refit is the same
 #: optimization). Python side: _x_sequence_autoarima.py.
+#: SEARCH_REUSE OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
+#: 2026-10-05, rab16-arimareuse): autoarima synthetic 18229.7 -> 13688.1 ms,
+#: taxi-hourly 16386.5 -> 9872.2 ms, forecast_rmse identical. KEEP: the
+#: FAST + Apple default; rollback -D MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF.
+#: The bundle with GROUPS/D_CONCURRENT (rab16-arimaall) was slower than this
+#: alone, so only this one is on.
 comptime ARIMA_FAST_SEARCH_REUSE = (
-    ARIMA_ORDER_BATCH and is_defined["MOJOLEARN_ARIMA_FAST_SEARCH_REUSE"]()
+    ARIMA_ORDER_BATCH and not is_defined["MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF"]()
 )
 
 #: MOJOLEARN_ARIMA_FAST_D_CONCURRENT (needs GROUPS_CONCURRENT; default off,
@@ -119,6 +128,9 @@ comptime ARIMA_FAST_SEARCH_REUSE = (
 #: switch `order_search_multi` takes every d group at once and all their
 #: groups share one concurrent round loop (`_search_tasks`); each group's
 #: rounds and stopping are unchanged, so every order's optimum is.
+#: D_CONCURRENT OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
+#: 2026-10-05, verdicts batch 6): autoarima +5-7% slower. DROPPED: stays off
+#: (opt-in only).
 comptime ARIMA_FAST_D_CONCURRENT = (
     ARIMA_FAST_GROUPS_CONCURRENT and is_defined["MOJOLEARN_ARIMA_FAST_D_CONCURRENT"]()
 )

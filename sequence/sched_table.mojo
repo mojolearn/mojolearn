@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""MOJOLEARN_SCHED_FAST_TABLE (FAST + Apple, default off, READY-AB): a block
+"""MOJOLEARN_SCHED_FAST_TABLE (FAST + Apple default since rab13-schedtable,
+rollback -D MOJOLEARN_SCHED_FAST_TABLE_OFF): a block
 of ExponentialLR values base_lr gamma^e, e = e0 .. e0 + n - 1, for
 `python/mojolearn/_x_sequence_sched.py` to serve one list index per
 `lr_at` call. CPU-ONLY ROUTE by nature (a learning-rate schedule is one

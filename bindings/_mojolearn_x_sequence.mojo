@@ -22,10 +22,13 @@ from checks.numerics import NUMERIC_FAST
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
-#: MOJOLEARN_SCHED_FAST_TABLE (FAST + Apple, default off; sequence/sched_table.mojo):
-#: registers `sched_exp_block`, which ExponentialLR uses when present
+#: MOJOLEARN_SCHED_FAST_TABLE (FAST + Apple; sequence/sched_table.mojo):
+#: registers `sched_exp_block`, which ExponentialLR uses when present.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
+#: rab13-schedtable): lr-exponential 231.8 -> 19.2 ms, digest same. KEEP: the
+#: FAST + Apple default; rollback -D MOJOLEARN_SCHED_FAST_TABLE_OFF.
 comptime SCHED_FAST_TABLE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                             and is_defined["MOJOLEARN_SCHED_FAST_TABLE"]())
+                             and not is_defined["MOJOLEARN_SCHED_FAST_TABLE_OFF"]())
 from sequence.prophet_prep import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from sequence.moe_weights import moe_weights_put, moe_weights_ptrs, moe_weights_free
 

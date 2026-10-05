@@ -139,6 +139,9 @@ comptime SEQ_MAP_DOWN = _SEQ_APPLE_FAST and SEQ_PIPE_DOWN and is_defined["MOJOLE
 #: a sync with nothing queued after it, so they mark the executor drained
 #: (`mark_drained`) and __deinit__ skips the empty wait: one Metal wait fewer
 #: per call, two per board fit + forecast.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
+#: verdicts batch 6): mixed, var taxi-hourly +10.6% slower. DROPPED: stays
+#: off (opt-in only).
 comptime SEQ_FAST_VAR_NODRAIN = _SEQ_APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_VAR_NODRAIN"]()
 comptime SEQ_RAW_DOWN = _SEQ_APPLE_FAST and SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_RAW_DOWN"]() and not SEQ_MAP_DOWN
 
