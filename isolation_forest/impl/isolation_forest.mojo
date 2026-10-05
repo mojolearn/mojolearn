@@ -57,7 +57,7 @@ Spelling only; gated by `check_if_refusals` over n = 1..4097.
 """
 
 from std.math import log2
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 from std.sys import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
@@ -660,9 +660,9 @@ def read_f32(
     var h = ctx.enqueue_create_host_buffer[DType.float32](len(buf))
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
     ctx.synchronize()
-    var out = List[Float32]()
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
+    # one bulk copy into the returned List (no host pass)
+    var out = List[Float32](length=n, fill=Float32(0))
+    memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     _ = h^
     return out^
 
@@ -673,9 +673,9 @@ def read_i32(
     var h = ctx.enqueue_create_host_buffer[DType.int32](len(buf))
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
     ctx.synchronize()
-    var out = List[Int32]()
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
+    # one bulk copy into the returned List (no host pass)
+    var out = List[Int32](length=n, fill=Int32(0))
+    memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     _ = h^
     return out^
 
@@ -686,9 +686,9 @@ def read_i64(
     var h = ctx.enqueue_create_host_buffer[DType.int64](len(buf))
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
     ctx.synchronize()
-    var out = List[Int64]()
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
+    # one bulk copy into the returned List (no host pass)
+    var out = List[Int64](length=n, fill=Int64(0))
+    memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
     _ = h^
     return out^
 
@@ -1485,13 +1485,13 @@ def _fit_tree_shards(ctx: DeviceContext, input_colmajor: List[Float32],
         task(0)
     else:
         host_parallelize(task, active)
-    for rank in range(active):
+    for rank in range(active):  # small-loop(active: tree-shard owners): one entry per device owner, per-tree metadata words
         if failures[rank] != 0:
             raise Error("IsolationForest tree shard failed: " + String(rank))
     var node_counts = List[Int32]()
     var max_depths = List[Int32]()
-    for rank in range(active):
-        for tree in range(shards[rank].count):
+    for rank in range(active):  # small-loop(active: tree-shard owners): one entry per device owner, per-tree metadata words
+        for tree in range(shards[rank].count):  # small-loop(shards[rank].count: trees of one owner): two metadata words per tree, no rows
             node_counts.append(shards[rank].tree_n_nodes_host[tree])
             max_depths.append(shards[rank].tree_max_depth_host[tree])
     model.tree_n_nodes_host = node_counts^

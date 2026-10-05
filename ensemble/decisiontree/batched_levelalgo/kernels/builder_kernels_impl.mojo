@@ -781,7 +781,7 @@ struct DeviceArgs[F: Copyable & Deinitable](Movable):
         var cp = self.cmp.unsafe_ptr()
         if self.staged:
             var same = True
-            for i in range(nbytes):
+            for i in range(nbytes):  # small-loop(nbytes: launch-argument bytes): compares one staged args struct
                 if hp.unsafe_load(i) != cp.unsafe_load(i):
                     same = False
                     break

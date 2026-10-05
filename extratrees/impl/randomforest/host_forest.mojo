@@ -173,7 +173,7 @@ def fit_forest_exact(
     training lane, 2026-09-14; the block comment above `train_tree_exact`
     in `builder.mojo`). `labels_q` is the device's label plane: the class
     ids `class_ids_for` derives for a classifier (`num_outputs = n_classes`,
-    `inv_scale = 1`), `quantize_labels`'s fixed point for a regressor
+    `inv_scale = 1`), `quantize_labels_host`'s fixed point for a regressor
     (`num_outputs = 1`, `inv_scale = Float32(1 / scale)`). `labels` is the
     float plane the `Dataset` carries beside it; the exact search never
     reads it. The device's own refusal on the class count

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """ExtraTrees host control plane and device drivers for breadth-first and best-first tree growth, implemented from pinned cuML and sklearn implementations."""
 
-from std.memory import memcpy
+from std.memory import bitcast, memcpy
 
 from ensemble.instruments import StageTimes
 
@@ -105,6 +105,7 @@ from extratrees.checks.pcg_rng import PCGenerator, uniform_int_u32
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv, fma
+from std.atomic import Atomic
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator, size_of
 
@@ -117,6 +118,8 @@ from checks.numerics import (
     identical_mul,
 )
 from core.philox import launch_uniform_int
+from core.abs_sum_blocked import device_abs_sum_blocked
+from extratrees.checks.fixed_point import choose_scale
 from ensemble.decisiontree.batched_levelalgo.quantiles import compute_quantiles
 from extratrees.checks.pcg_rng import row_sample_seed
 
@@ -1347,7 +1350,7 @@ def train_tree_exact(
 ) raises -> TreeMetaDataNode[DType.float32]:
     """One tree grown as the device grows it, on the host: the block comment
     above. `labels_q` is the device's label plane (class ids for a
-    classifier, `quantize_labels`'s fixed point for a regressor; `n_acc`
+    classifier, `quantize_labels_host`'s fixed point for a regressor; `n_acc`
     is the class count or 1; `inv_scale` is `Float32(1 / scale)` or 1)."""
     validity_check(params)
     if params.max_leaf_nodes != -1:
@@ -2089,30 +2092,18 @@ struct HostBins(ImplicitlyCopyable, Movable):
         return self.q[unsafe_offset = Int(col) * ET_BINS + t]
 
 
-comptime IDN_ET_RESCUE_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_ET_RESCUE_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
-"""fam2-forests (2026-10-04), IDENTICAL on every vendor, default ON:
-DEVIATION 205's rescue column is picked ON THE DEVICE. Before, a cycle with
-an all-constant node drained the queue after the survey, downloaded the
-survey's `3 * n_sub * n_cols` range cells, walked them on the host (the
-constant test and `rescue_pick` per node) and uploaded the chosen columns,
-after building and uploading an `n_sub * n_cols` identity column table on
-the host. Now `ident_colids_kernel` writes the survey's columns,
-`rescue_pick_kernel` runs the same constant test over the same cells in the
-same ascending column order with the same keyed draw, and the rescued
-search reads its column from `d_colids`; the host reads back one Int32 per
-surveyed node (riding the rescued search's own drain) to know which nodes
-had a column to rescue. The rescued search covers every surveyed node (a
-node with no varying column searches column 0, constant on its rows by the
-survey, and its split is left as the first search found it), so the staged
-work items are the survey's own bytes and no drain separates the two. Same
-columns, same splits: no bit moves, the host column is untouched.
-`-D MOJOLEARN_IDN_ET_RESCUE_DEVICE_OFF` restores the host walk."""
+# THE DEVICE RESCUE (fam2-forests 2026-10-04; unconditional since cpu3-trees,
+# in IDENTICAL and FAST, every vendor): DEVIATION 205's rescue column is
+# picked ON THE DEVICE. `ident_colids_kernel` writes the survey's columns,
+# `rescue_pick_kernel` runs the constant test over the survey's cells in
+# ascending column order with `rescue_pick`'s keyed draw, and the rescued
+# search reads its column from `d_colids`; the host reads back one Int32 per
+# surveyed node (riding the rescued search's own drain). The rescued search
+# covers every surveyed node (a node with no varying column searches column
+# 0, constant on its rows by the survey, and its split is left as the first
+# search found it). Same columns, same splits as the host column. The old
+# host walk (download `3 * n_sub * n_cols` cells, pick on the host, upload
+# the columns) and its `MOJOLEARN_IDN_ET_RESCUE_DEVICE_OFF` arm are removed.
 
 
 def ident_colids_kernel(
@@ -2139,7 +2130,7 @@ def rescue_pick_kernel(
     n_cols: Int32,
     seed: UInt64,
 ):
-    """`IDN_ET_RESCUE_DEVICE`: one thread per surveyed node. Counts the
+    """THE DEVICE RESCUE: one thread per surveyed node. Counts the
     node's non-constant columns over the survey's cells (`n_sub x n_cols`,
     ascending column order, `node_feature_is_constant`), draws
     `rescue_pick`'s index from `rescue_key(seed, tree, node)` and stores
@@ -2395,8 +2386,13 @@ def upload_dataset(
     n_classes: Int32,
     x_addr: Int = 0,
     x_row_major: Bool = False,
+    labels_on_device: Bool = False,
 ) raises -> DeviceDataset:
     """Put the immutable half of the fit on the device, once. DEVIATION 184.
+
+    `labels_on_device` (cpu3-trees): `class_ids` is ignored and `d_labels`
+    is allocated but not written; `upload_dataset_labels_f32` fills it with
+    `class_ids_device_kernel`.
 
     A nonzero `x_addr` borrows the caller's float32 block through this
     synchronous upload (DEVIATION 2481); `x_row_major` says it is ROW-major
@@ -2408,7 +2404,7 @@ def upload_dataset(
         raise Error("upload_dataset: a row-major X must be a borrowed address")
     if x_addr == 0 and len(x_col_major) != Int(n_rows) * Int(n_cols):
         raise Error("x_col_major must be n_rows * n_cols long, column major")
-    if len(class_ids) != Int(n_rows):
+    if not labels_on_device and len(class_ids) != Int(n_rows):
         raise Error("class_ids must be n_rows long")
     var count = Int(n_rows) * Int(n_cols)
     var boundary_times = StageTimes()
@@ -2431,10 +2427,17 @@ def upload_dataset(
         ctx.synchronize()
         _ = h_data^
     var d_labels = ctx.enqueue_create_buffer[DType.int32](Int(n_rows))
-    var h_labels = ctx.enqueue_create_host_buffer[DType.int32](Int(n_rows))
+    var h_labels = ctx.enqueue_create_host_buffer[DType.int32](
+        1 if labels_on_device else Int(n_rows)
+    )
     ctx.synchronize()
-    memcpy(dest=h_labels.unsafe_ptr(), src=class_ids.unsafe_ptr(), count=Int(n_rows))
-    ctx.enqueue_copy(dst_buf=d_labels, src_ptr=h_labels.unsafe_ptr())
+    if not labels_on_device:
+        memcpy(
+            dest=h_labels.unsafe_ptr(),
+            src=class_ids.unsafe_ptr(),
+            count=Int(n_rows),
+        )
+        ctx.enqueue_copy(dst_buf=d_labels, src_ptr=h_labels.unsafe_ptr())
     var d_data_rm = ctx.enqueue_create_buffer[DType.float32](1)
     # FAST on Apple (lane apple-fast-rfet-scan): the non-finite refusal is
     # this device scan of the uploaded X; the Python fit skips its host scan
@@ -2457,6 +2460,197 @@ def upload_dataset(
         d_data^, d_labels^, n_rows, n_cols, n_classes, d_data_rm^, False,
         d_bins_rm^, d_quant^, d_nbins^, False, False,
     )
+
+
+def class_ids_device_kernel(
+    out_ids: MutPointer[Int32, MutAnyOrigin],
+    labels: MutPointer[Float32, MutAnyOrigin],
+    first_bad: MutPointer[Int32, MutAnyOrigin],
+    n_rows: Int32,
+    n_classes: Int32,
+):
+    """cpu3-trees: `class_ids_for` (`randomforest.mojo`) on the device, one
+    thread per row. The id is the SAME truncation (`Int(label)`); a label
+    whose truncation falls outside `[0, n_classes)` (or a NaN) stores 0 and
+    lowers `first_bad[0]` to its row (an integer minimum: order-free)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_rows):
+        return
+    var v = labels[unsafe_offset=i]
+    if v > Float32(-1.0) and v < Float32(Int(n_classes)):
+        out_ids[unsafe_offset=i] = Int32(Int(v))
+    else:
+        out_ids[unsafe_offset=i] = Int32(0)
+        _ = Atomic[DType.int32].min(first_bad, Int32(i))
+
+
+def upload_dataset_labels_f32(
+    ctx: DeviceContext,
+    x_col_major: List[Float32],
+    labels: List[Float32],
+    n_rows: Int32,
+    n_cols: Int32,
+    n_classes: Int32,
+    x_addr: Int = 0,
+    x_row_major: Bool = False,
+) raises -> DeviceDataset:
+    """`upload_dataset` with the float labels converted to class ids ON THE
+    DEVICE (cpu3-trees: the host `class_ids_for` row loop left the GPU fit).
+    The labels cross the bus once as the caller's float32 words; the ids are
+    `class_ids_device_kernel`'s, the same truncation as the host column's
+    `class_ids_for`, so no bit moves. One Int32 comes back: the first row
+    whose label is out of range, refused with `class_ids_for`'s message."""
+    if len(labels) != Int(n_rows):
+        raise Error(
+            "labels must be n_rows long; got "
+            + String(len(labels))
+            + " for n_rows="
+            + String(n_rows)
+        )
+    var dataset = upload_dataset(
+        ctx, x_col_major, List[Int32](), n_rows, n_cols, n_classes,
+        x_addr=x_addr, x_row_major=x_row_major, labels_on_device=True,
+    )
+    var n = Int(n_rows)
+    var d_lf = ctx.enqueue_create_buffer[DType.float32](n)
+    var h_lf = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var d_bad = ctx.enqueue_create_buffer[DType.int32](1)
+    var h_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.synchronize()
+    memcpy(dest=h_lf.unsafe_ptr(), src=labels.unsafe_ptr(), count=n)
+    ctx.enqueue_copy(dst_buf=d_lf, src_ptr=h_lf.unsafe_ptr())
+    ctx.enqueue_memset(d_bad, Int32(n))
+    ctx.enqueue_function[class_ids_device_kernel](
+        dataset.d_labels.unsafe_ptr(),
+        d_lf.unsafe_ptr(),
+        d_bad.unsafe_ptr(),
+        n_rows,
+        n_classes,
+        grid_dim=ceildiv(n, 256),
+        block_dim=256,
+    )
+    ctx.enqueue_copy(dst_buf=h_bad, src_buf=d_bad)
+    ctx.synchronize()
+    var bad = Int(h_bad.unsafe_ptr()[unsafe_offset=0])
+    _ = d_lf^
+    _ = h_lf^
+    _ = d_bad^
+    _ = h_bad^
+    if bad < n:
+        raise Error(
+            "label "
+            + String(labels[bad])
+            + " at row "
+            + String(bad)
+            + " truncates to class id "
+            + String(Int(labels[bad]))
+            + ", which is outside [0, "
+            + String(n_classes)
+            + "). The device score kernel would index its shared"
+            " accumulator out of bounds; refused by name."
+        )
+    return dataset^
+
+
+def label_scale_exponent(scale: Float64) raises -> Int:
+    """`e` with `scale == 2^e`: `choose_scale` returns a power of two
+    (DEVIATION 135), read here from its binary64 exponent field."""
+    var b = bitcast[DType.uint64](scale)
+    if (b & UInt64(0x000FFFFFFFFFFFFF)) != UInt64(0) or scale <= 0.0:
+        raise Error("label scale " + String(scale) + " is not a power of two")
+    return Int((b >> UInt64(52)) & UInt64(0x7FF)) - 1023
+
+
+def quantize_labels_device_kernel(
+    out_q: MutPointer[Int32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    n_rows: Int32,
+    scale_exp: Int32,
+):
+    """cpu3-trees: `quantize(Float64(y) * scale)` (DEVIATION 135) on the
+    device, one thread per row, in integers. `scale` is `2^scale_exp`, so the
+    binary64 product is exact and its truncation toward zero is the float's
+    significand shifted by its exponent plus `scale_exp`, sign applied after:
+    the same Int32 as the host column's multiply-and-truncate
+    (`quantize_labels_host`), with no float operation on any vendor."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_rows):
+        return
+    var bits = bitcast[DType.uint32](y[unsafe_offset=i])
+    var e = Int((bits >> UInt32(23)) & UInt32(0xFF))
+    var sig = Int64(Int(bits & UInt32(0x7FFFFF)))
+    if e == 0:
+        e = 1
+    else:
+        sig = sig | Int64(0x800000)
+    var sh = e - 150 + Int(scale_exp)
+    var q = Int64(0)
+    if sh >= 0:
+        # the scale bounds every |y| * scale below 2^31 (DEVIATION 135), so a
+        # valid label never shifts past 7 here; the cap only keeps the shift
+        # defined
+        if sh < 40:
+            q = sig << Int64(sh)
+    elif sh > -24:
+        q = sig >> Int64(-sh)
+    if (bits >> UInt32(31)) != UInt32(0):
+        q = -q
+    out_q[unsafe_offset=i] = q.cast[DType.int32]()
+
+
+def upload_dataset_labels_quantized(
+    ctx: DeviceContext,
+    x_col_major: List[Float32],
+    y: List[Float32],
+    n_rows: Int32,
+    n_cols: Int32,
+    mut scale_out: Float64,
+    x_addr: Int = 0,
+    x_row_major: Bool = False,
+) raises -> DeviceDataset:
+    """`upload_dataset` for a regressor with the labels QUANTIZED ON THE
+    DEVICE (cpu3-trees: the host `quantize_labels_host` row loops left the GPU
+    fit). y crosses the bus once as the caller's float32 words; the scale's
+    `sum |y|` is `core/abs_sum_blocked`'s fixed-order device sum (one word
+    back; `quantize_labels_host` restates it with `host_abs_sum_blocked`),
+    `choose_scale` runs on that one scalar, and `quantize_labels_device_kernel`
+    writes the Int32 labels into the dataset. The scale is returned in
+    `scale_out` for the leaf values."""
+    if len(y) != Int(n_rows):
+        raise Error(
+            "labels must be n_rows long; got "
+            + String(len(y))
+            + " for n_rows="
+            + String(n_rows)
+        )
+    var dataset = upload_dataset(
+        ctx, x_col_major, List[Int32](), n_rows, n_cols, 1,
+        x_addr=x_addr, x_row_major=x_row_major, labels_on_device=True,
+    )
+    var n = Int(n_rows)
+    var d_y = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    var h_y = ctx.enqueue_create_host_buffer[DType.float32](max(n, 1))
+    ctx.synchronize()
+    memcpy(dest=h_y.unsafe_ptr(), src=y.unsafe_ptr(), count=n)
+    ctx.enqueue_copy(dst_buf=d_y, src_ptr=h_y.unsafe_ptr())
+    # reads back one word, so the upload above has landed after it
+    var mag = device_abs_sum_blocked(ctx, d_y, n)
+    var scale = choose_scale(mag, n)
+    var e = label_scale_exponent(scale)
+    if n > 0:
+        ctx.enqueue_function[quantize_labels_device_kernel](
+            dataset.d_labels.unsafe_ptr(),
+            d_y.unsafe_ptr(),
+            n_rows,
+            Int32(e),
+            grid_dim=ceildiv(n, 256),
+            block_dim=256,
+        )
+    ctx.synchronize()
+    _ = d_y^
+    _ = h_y^
+    scale_out = scale
+    return dataset^
 
 
 def train_classification_device(
@@ -3443,7 +3637,7 @@ def _stage_upload_if_changed[
         # DEVIATION 2488: full-capacity byte equality, 16 bytes at a time.
         # The retained scalar build arm isolates this one mechanism in A/B.
         comptime if is_defined["MOJOLEARN_ET_SCALAR_STAGE_COMPARE"]():
-            for i in range(n):
+            for i in range(n):  # small-loop(n: staging slot capacity of launch descriptors): A/B arm compares host staging bytes only
                 if hp.unsafe_load(i) != sp.unsafe_load(i):
                     same = False
                     break
@@ -3506,7 +3700,7 @@ def stage_batch(
             + " tree ids"
         )
     var items_ptr = h_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem]()
-    for i in range(n_nodes):
+    for i in range(n_nodes):  # small-loop(n_nodes: batch work-item descriptors): launch parameter list, batch capped by max_batch_size
         items_ptr[unsafe_offset=i] = work_items[i]
         # DEVIATION 211: the per-item tree id rides with the item.
         ws.h_tree.unsafe_ptr().unsafe_store(i, item_trees[i])
@@ -3519,10 +3713,10 @@ def stage_batch(
             ),
         )
     var wl_ptr = h_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo]()
-    for i in range(plan.n_blocks_dimx):
+    for i in range(plan.n_blocks_dimx):  # small-loop(plan.n_blocks_dimx: workload map entries): one launch descriptor per grid block
         wl_ptr[unsafe_offset=i] = plan.info[i]
     var base_acc = 0
-    for i in range(n_nodes):
+    for i in range(n_nodes):  # small-loop(n_nodes: per-node block offsets): launch parameter list, batch capped by max_batch_size
         h_nb.unsafe_ptr().unsafe_store(i, Int32(i * Int(k)))
         h_nc.unsafe_ptr().unsafe_store(i, Int32(Int(k)))
         # Where node `i`'s blocks start in the flattened workload array.
@@ -3714,6 +3908,32 @@ def _enqueue_classification_score[MAX_ACC: Int](
         Int32(0),
         grid_dim=ceildiv(n_cells, 64),
         block_dim=64,
+    )
+
+
+def pack_splits_kernel(
+    out_splits: MutPointer[Split, MutAnyOrigin],
+    r_q: MutPointer[Float32, MutAnyOrigin],
+    r_c: MutPointer[Int32, MutAnyOrigin],
+    r_m: MutPointer[Float32, MutAnyOrigin],
+    r_v: MutPointer[Int32, MutAnyOrigin],
+    r_l: MutPointer[Int32, MutAnyOrigin],
+    n_nodes: Int32,
+):
+    """cpu3-trees: one thread per node, the batch's `Split` exactly as the
+    host loop built it (`builder.cuh:492-494`): the winner's threshold,
+    column, gain and left count, with the gain forced to `MIN_FINITE` when
+    the node has no valid candidate (`r_v == 0`) or no column. Pure moves
+    and one select: no bit moves."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_nodes):
+        return
+    var colid = r_c[unsafe_offset=i]
+    var metric = r_m[unsafe_offset=i]
+    if r_v[unsafe_offset=i] == 0 or colid < 0:
+        metric = Float32.MIN_FINITE
+    out_splits[unsafe_offset=i] = Split(
+        r_q[unsafe_offset=i], colid, metric, r_l[unsafe_offset=i]
     )
 
 
@@ -3925,14 +4145,19 @@ def search_batch(
     # --- 3. the range pass -------------------------------------------
     # --- feature sampling, WHERE cuML DOES IT (deviation 201), unless the
     # caller already chose the columns. DEVIATION 205's rescue does: its
-    # column comes from the host, which is the only place the survey's cells
-    # were read.
-    var dev_colids = False
-    comptime if IDN_ET_RESCUE_DEVICE:
-        # No host column table: the survey's identity columns are written
-        # by `ident_colids_kernel`, the rescue's by `rescue_pick_kernel`
-        # (already queued by the caller).
-        dev_colids = (not use_sampler) and len(host_colids) == 0
+    # column comes from `rescue_pick_kernel` (THE DEVICE RESCUE).
+    # cpu3-trees: the rescue's columns are always the DEVICE's (the host
+    # survey walk and its host column table are gone): the survey's identity
+    # columns are written by `ident_colids_kernel`, the rescue's by
+    # `rescue_pick_kernel` (already queued by the caller).
+    if len(host_colids) != 0:
+        raise Error(
+            "host_colids: caller-chosen columns were the host rescue walk,"
+            " removed (cpu3-trees); pass an empty list"
+        )
+    var dev_colids = not use_sampler
+    if range_only and not dev_colids:
+        raise Error("the survey (range_only) runs on the device columns only")
     if dev_colids:
         if range_only:
             if Int(k) != Int(n_cols):
@@ -3947,20 +4172,6 @@ def search_batch(
                 grid_dim=ceildiv(n_cells, 256),
                 block_dim=256,
             )
-    elif not use_sampler:
-        if len(host_colids) != n_cells:
-            raise Error(
-                "host_colids must be n_nodes * k long; got "
-                + String(len(host_colids))
-                + " for "
-                + String(n_cells)
-            )
-        for i in range(n_cells):
-            h_colids.unsafe_ptr().unsafe_store(i, host_colids[i])
-        # DEVIATION 450: no synchronize after this copy -- queue-ordered
-        # ahead of the kernels reading `d_colids`, and `h_colids` is next
-        # rewritten only after a required drain.
-        ctx.enqueue_copy(dst_buf=d_colids, src_ptr=h_colids.unsafe_ptr())
     if use_sampler:
         # --- feature sampling, WHERE cuML DOES IT (deviation 201) --------
         # `d_report` is the DEVICE's own statement of which kernel ran;
@@ -4059,34 +4270,15 @@ def search_batch(
     # this pass loses its per-cycle stall -- cuML's `doSplit` shape, which
     # drains ONCE per batch. `clock.tick` still syncs when the clock is
     # ENABLED: the timed program was always the serialized one.
-    if range_only and not dev_colids:
-        ctx.enqueue_copy(dst_buf=ws.o_rmin, src_buf=d_min)
-        ctx.enqueue_copy(dst_buf=ws.o_rmax, src_buf=d_max)
-        ctx.enqueue_copy(dst_buf=ws.o_rmiss, src_buf=d_missing)
-        ctx.synchronize()
     clock.tick(ctx, PHASE_RANGE)
 
-    if range_only and dev_colids:
-        # `IDN_ET_RESCUE_DEVICE`: the cells stay on the device for
+    if range_only:
+        # The device rescue: the cells stay on the device for
         # `rescue_pick_kernel`; nothing drains and nothing is read here.
         return (
             List[Split](), List[Int32](), List[Float32](), List[Float32](),
             List[Int32](),
         )
-    if range_only:
-        # THE SURVEY. The rescue needs the cells themselves so the host can
-        # pick a column; nothing else does, so nothing else pays for them.
-        var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
-        for i in range(n_nodes):
-            any_nonconst[i] = ws.h_nonconst.unsafe_ptr()[unsafe_offset=i]
-        var rmin = List[Float32](length=n_cells, fill=Float32(0.0))
-        var rmax = List[Float32](length=n_cells, fill=Float32(0.0))
-        var rmiss = List[Int32](length=n_cells, fill=Int32(0))
-        for i in range(n_cells):
-            rmin[i] = ws.o_rmin.unsafe_ptr()[unsafe_offset=i]
-            rmax[i] = ws.o_rmax.unsafe_ptr()[unsafe_offset=i]
-            rmiss[i] = ws.o_rmiss.unsafe_ptr()[unsafe_offset=i]
-        return (List[Split](), any_nonconst^, rmin^, rmax^, rmiss^)
 
     # --- 4. the draw and score pass ----------------------------------
     # DEVIATION 470: the score cells and class accumulators were seeded
@@ -4210,20 +4402,27 @@ def search_batch(
     # at `builder.cuh:492-494`. The gain travels WITH the candidate now
     # (DEVIATION 183, second form), so no per-level readback of the node
     # totals is needed and none happens.
-    ref o_q = ws.o_q
+    # cpu3-trees: the batch's `Split` records are packed ON THE DEVICE
+    # (`pack_splits_kernel`: the invalid-candidate metric mask included)
+    # and cross as one block, copied into the host scheduler's list whole.
+    ctx.enqueue_function[pack_splits_kernel](
+        ws.d_splits.unsafe_ptr().unsafe_bitcast[Split](),
+        r_q.unsafe_ptr(),
+        r_c.unsafe_ptr(),
+        r_m.unsafe_ptr(),
+        r_v.unsafe_ptr(),
+        r_l.unsafe_ptr(),
+        Int32(n_nodes),
+        grid_dim=ceildiv(n_nodes, 64),
+        block_dim=64,
+    )
+    ctx.enqueue_copy(dst_buf=ws.h_splits, src_buf=ws.d_splits)
     ref o_c = ws.o_c
-    ref o_l = ws.o_l
     ref o_nu = ws.o_nu
     ref o_de = ws.o_de
-    ref o_v = ws.o_v
-    ref o_m = ws.o_m
-    ctx.enqueue_copy(dst_buf=o_q, src_buf=r_q)
     ctx.enqueue_copy(dst_buf=o_c, src_buf=r_c)
-    ctx.enqueue_copy(dst_buf=o_l, src_buf=r_l)
     ctx.enqueue_copy(dst_buf=o_nu, src_buf=r_nu)
     ctx.enqueue_copy(dst_buf=o_de, src_buf=r_de)
-    ctx.enqueue_copy(dst_buf=o_v, src_buf=r_v)
-    ctx.enqueue_copy(dst_buf=o_m, src_buf=r_m)
     ctx.synchronize()
     clock.tick(ctx, PHASE_REDUCE)
 
@@ -4231,25 +4430,20 @@ def search_batch(
     # in the range pass; the sync above is the batch's ONE drain, so the
     # values are complete here and nowhere earlier did the host need them.
     var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
-    for i in range(n_nodes):
-        any_nonconst[i] = ws.h_nonconst.unsafe_ptr()[unsafe_offset=i]
+    memcpy(
+        dest=any_nonconst.unsafe_ptr(),
+        src=ws.h_nonconst.unsafe_ptr(),
+        count=n_nodes,
+    )
 
-    # --- 8. build the batch's splits on the host, as `:492-494` does --
-    var splits = List[Split]()
-    for i in range(n_nodes):
-        var colid = o_c.unsafe_ptr()[unsafe_offset=i]
-        var n_left = o_l.unsafe_ptr()[unsafe_offset=i]
-        # The winning candidate's gain came off the DEVICE with it --
-        # `r_m`, written by `score_to_candidate_kernel` and carried
-        # through the reduction. `split_not_valid` below is unchanged.
-        var metric = o_m.unsafe_ptr()[unsafe_offset=i]
-        if o_v.unsafe_ptr()[unsafe_offset=i] == 0 or colid < 0:
-            metric = Float32.MIN_FINITE
-        splits.append(
-            Split(
-                o_q.unsafe_ptr()[unsafe_offset=i], colid, metric, n_left
-            )
-        )
+    # --- 8. the batch's splits, as `:492-494` hands them to the host --
+    # (packed by `pack_splits_kernel` above; one block copy, no host loop)
+    var splits = List[Split](length=n_nodes, fill=Split())
+    memcpy(
+        dest=splits.unsafe_ptr(),
+        src=ws.h_splits.unsafe_ptr().unsafe_bitcast[Split](),
+        count=n_nodes,
+    )
 
     # DEVIATION 463: report the batch's exact-tie tally. The counter cells
     # rode the queue with the reduce readback, so the sync above completed
@@ -4526,7 +4720,7 @@ def train_forest_classification_device_timed(
         )
 
         var queues = List[NodeQueue[DType.float32]]()
-        for s in range(g):
+        for s in range(g):  # small-loop(g: tree slots in this group): one queue per in-flight tree, g capped by group_cap
             var base = Int32(s) * slot_rows
             if sabotage == FOREST_SAB_SHARED_ROW_BASE:
                 base = Int32(0)
@@ -4555,9 +4749,9 @@ def train_forest_classification_device_timed(
         var bf_pending = List[NodeWorkItem]()
         var bf_pending_q = List[Int]()
         if bestfirst:
-            for s in range(g):
+            for s in range(g):  # small-loop(g: tree slots in this group): one root seed per tree, g capped by group_cap
                 var seeds = queues[s].bestfirst_seed()
-                for i in range(len(seeds)):
+                for i in range(len(seeds)):  # small-loop(seeds: one tree's root work item): bestfirst_seed returns at most the root
                     bf_pending.append(seeds[i])
                     bf_pending_q.append(s)
         while True:
@@ -4573,7 +4767,7 @@ def train_forest_classification_device_timed(
             # FIFO pop. `seg_*` stays empty; the best-first expansion is per
             # popped node and does not use it.
             if bestfirst:
-                for i in range(len(bf_pending)):
+                for i in range(len(bf_pending)):  # small-loop(bf_pending: children of the last pops): at most two per tree slot, g capped
                     work_items.append(bf_pending[i])
                     item_trees.append(tree_ids[first + bf_pending_q[i]])
             else:
@@ -4602,15 +4796,16 @@ def train_forest_classification_device_timed(
                 # plus the budget test at `:454`.
                 var bf_more = False
                 if bestfirst:
-                    for s in range(g):
+                    for s in range(g):  # small-loop(g: tree slots in this group): one flag test per tree, g capped by group_cap
                         if queues[s].bestfirst_can_pop():
                             bf_more = True
                 if not bf_more:
                     clock.tick(ctx, PHASE_HOST_QUEUE)
                     break
-            if sabotage == FOREST_SAB_SCALAR_TREE:
-                for i in range(len(item_trees)):
-                    item_trees[i] = item_trees[0]
+            if sabotage == FOREST_SAB_SCALAR_TREE and len(item_trees) > 0:
+                item_trees = List[Int32](
+                    length=len(item_trees), fill=item_trees[0]
+                )
             var n_nodes = len(work_items)
             st_nodes += n_nodes
 
@@ -4702,102 +4897,46 @@ def train_forest_classification_device_timed(
                     sub.append(work_items[retry[j]])
                     sub_trees.append(item_trees[retry[j]])
 
-                comptime if IDN_ET_RESCUE_DEVICE:
-                    # The survey, the pick and the rescued search, queued
-                    # back to back (see `IDN_ET_RESCUE_DEVICE`).
-                    var n_sub = len(sub)
-                    _ = search_batch(
-                        ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
-                        n_classes, n_rows, n_cols, sub_trees, seed, False,
-                        List[Int32](), True, clock,
-                    )
-                    var d_pick = ctx.enqueue_create_buffer[DType.int32](n_sub)
-                    var h_pick = ctx.enqueue_create_host_buffer[DType.int32](
-                        n_sub
-                    )
-                    ctx.enqueue_function[rescue_pick_kernel](
-                        d_pick.unsafe_ptr(),
-                        ws.d_colids.unsafe_ptr(),
-                        ws.d_min.unsafe_ptr(),
-                        ws.d_max.unsafe_ptr(),
-                        ws.d_missing.unsafe_ptr(),
-                        ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-                        ws.d_tree.unsafe_ptr(),
-                        Int32(n_sub),
-                        n_cols,
-                        seed,
-                        grid_dim=ceildiv(n_sub, 64),
-                        block_dim=64,
-                    )
-                    ctx.enqueue_copy(dst_buf=h_pick, src_buf=d_pick)
-                    # Drains at its reduce readback, `h_pick` with it.
-                    var res2 = search_batch(
-                        ctx, ws, dataset, d_row_ids, sub, 1, params,
-                        n_classes, n_rows, n_cols, sub_trees, seed, False,
-                        List[Int32](), False, clock,
-                    )
-                    var rescued = res2[0].copy()
-                    for j in range(n_sub):
-                        if h_pick.unsafe_ptr()[unsafe_offset=j] >= 0:
-                            splits[retry[j]] = rescued[j]
-                            st_rescued += 1
-                    _ = d_pick^
-                    _ = h_pick^
-                else:
-                    var ident = List[Int32](
-                        length=len(sub) * Int(n_cols), fill=Int32(0)
-                    )
-                    for j in range(len(sub)):
-                        for c in range(Int(n_cols)):
-                            ident[j * Int(n_cols) + c] = Int32(c)
-                    var survey = search_batch(
-                        ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
-                        n_classes, n_rows, n_cols, sub_trees, seed, False,
-                        ident, True, clock,
-                    )
-
-                    var s_min = survey[2].copy()
-                    var s_max = survey[3].copy()
-                    var s_miss = survey[4].copy()
-
-                    var chosen_items = List[NodeWorkItem]()
-                    var chosen_trees = List[Int32]()
-                    var chosen_cols = List[Int32]()
-                    var chosen_slot = List[Int]()
-                    for j in range(len(sub)):
-                        var nonconst = List[Int32]()
-                        for c in range(Int(n_cols)):
-                            var idx = j * Int(n_cols) + c
-                            var extent = FeatureRange(
-                                s_min[idx], s_max[idx], s_miss[idx]
-                            )
-                            if not node_feature_is_constant(
-                                extent, sub[j].instances.count
-                            ):
-                                nonconst.append(Int32(c))
-                        if len(nonconst) == 0:
-                            continue
-                        var u = rescue_pick(
-                            rescue_key(
-                                seed, sub_trees[j], UInt32(Int(sub[j].idx))
-                            ),
-                            len(nonconst),
-                        )
-                        chosen_items.append(sub[j])
-                        chosen_trees.append(sub_trees[j])
-                        chosen_cols.append(nonconst[u])
-                        chosen_slot.append(retry[j])
-
-                    if len(chosen_items) > 0:
-                        st_rescued += len(chosen_items)
-                        var res2 = search_batch(
-                            ctx, ws, dataset, d_row_ids, chosen_items, 1, params,
-                            n_classes, n_rows, n_cols, chosen_trees, seed, False,
-                            chosen_cols, False, clock,
-                        )
-                        var rescued = res2[0].copy()
-                        for t in range(len(chosen_slot)):
-                            splits[chosen_slot[t]] = rescued[t]
+                # The survey, the pick and the rescued search, queued
+                # back to back (see THE DEVICE RESCUE).
+                var n_sub = len(sub)
+                _ = search_batch(
+                    ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
+                    n_classes, n_rows, n_cols, sub_trees, seed, False,
+                    List[Int32](), True, clock,
+                )
+                var d_pick = ctx.enqueue_create_buffer[DType.int32](n_sub)
+                var h_pick = ctx.enqueue_create_host_buffer[DType.int32](
+                    n_sub
+                )
+                ctx.enqueue_function[rescue_pick_kernel](
+                    d_pick.unsafe_ptr(),
+                    ws.d_colids.unsafe_ptr(),
+                    ws.d_min.unsafe_ptr(),
+                    ws.d_max.unsafe_ptr(),
+                    ws.d_missing.unsafe_ptr(),
+                    ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+                    ws.d_tree.unsafe_ptr(),
+                    Int32(n_sub),
+                    n_cols,
+                    seed,
+                    grid_dim=ceildiv(n_sub, 64),
+                    block_dim=64,
+                )
+                ctx.enqueue_copy(dst_buf=h_pick, src_buf=d_pick)
+                # Drains at its reduce readback, `h_pick` with it.
+                var res2 = search_batch(
+                    ctx, ws, dataset, d_row_ids, sub, 1, params,
+                    n_classes, n_rows, n_cols, sub_trees, seed, False,
+                    List[Int32](), False, clock,
+                )
+                var rescued = res2[0].copy()
+                for j in range(n_sub):
+                    if h_pick.unsafe_ptr()[unsafe_offset=j] >= 0:
+                        splits[retry[j]] = rescued[j]
+                        st_rescued += 1
+                _ = d_pick^
+                _ = h_pick^
 
             if trace.enabled and n_nodes > 0:
                 # The SELECTED splits -- post-rescue. Under depth-wise
@@ -4835,7 +4974,7 @@ def train_forest_classification_device_timed(
                     _ = queues[bf_pending_q[i]].bestfirst_admit(
                         work_items[i], splits[i], item_trees[i]
                     )
-                for s in range(g):
+                for s in range(g):  # small-loop(g: tree slots in this group): one best-first pop per tree, g capped by group_cap
                     if not queues[s].bestfirst_can_pop():
                         continue
                     var rec = queues[s].bestfirst_pop()
@@ -4848,10 +4987,9 @@ def train_forest_classification_device_timed(
                     clock.tick(ctx, PHASE_HOST_QUEUE)
                     break
             else:
-                for i in range(n_nodes):
-                    part_items.append(work_items[i])
-                    part_trees.append(item_trees[i])
-                    part_splits.append(splits[i])
+                part_items = work_items.copy()
+                part_trees = item_trees.copy()
+                part_splits = splits.copy()
             var n_part = len(part_items)
 
             var plan = build_workload_info(
@@ -4893,8 +5031,7 @@ def train_forest_classification_device_timed(
             # below is queue-ordered ahead of the partition kernels that
             # read `d_splits`.
             var splits_ptr = ws.h_splits.unsafe_ptr().unsafe_bitcast[Split]()
-            for i in range(n_part):
-                splits_ptr[unsafe_offset=i] = part_splits[i]
+            memcpy(dest=splits_ptr, src=part_splits.unsafe_ptr(), count=n_part)
             ctx.enqueue_copy(
                 dst_buf=ws.d_splits, src_ptr=ws.h_splits.unsafe_ptr()
             )
@@ -5018,7 +5155,7 @@ def train_forest_classification_device_timed(
         var trees_g = List[TreeMetaDataNode[DType.float32]]()
         var leaf_base = List[Int]()
         var total_nodes = 0
-        for s in range(g):
+        for s in range(g):  # small-loop(g: tree slots in this group): collects one output tree per slot, g capped by group_cap
             leaf_base.append(total_nodes)
             total_nodes += len(queues[s].node_instances)
             trees_g.append(queues[s].get_tree())
@@ -5310,12 +5447,18 @@ def search_batch_regression(
             block_dim=PHASE_SETUP_TPB,
         )
 
-    var dev_colids = False
-    comptime if IDN_ET_RESCUE_DEVICE:
-        # No host column table: the survey's identity columns are written
-        # by `ident_colids_kernel`, the rescue's by `rescue_pick_kernel`
-        # (already queued by the caller).
-        dev_colids = (not use_sampler) and len(host_colids) == 0
+    # cpu3-trees: the rescue's columns are always the DEVICE's (the host
+    # survey walk and its host column table are gone): the survey's identity
+    # columns are written by `ident_colids_kernel`, the rescue's by
+    # `rescue_pick_kernel` (already queued by the caller).
+    if len(host_colids) != 0:
+        raise Error(
+            "host_colids: caller-chosen columns were the host rescue walk,"
+            " removed (cpu3-trees); pass an empty list"
+        )
+    var dev_colids = not use_sampler
+    if range_only and not dev_colids:
+        raise Error("the survey (range_only) runs on the device columns only")
     if dev_colids:
         if range_only:
             if Int(k) != Int(n_cols):
@@ -5330,22 +5473,6 @@ def search_batch_regression(
                 grid_dim=ceildiv(n_cells, 256),
                 block_dim=256,
             )
-    elif not use_sampler:
-        # DEVIATION 205's rescue chose these columns on the host, from the
-        # survey's own cells. Nothing draws here.
-        if len(host_colids) != n_cells:
-            raise Error(
-                "host_colids must be n_nodes * k long; got "
-                + String(len(host_colids))
-                + " for "
-                + String(n_cells)
-            )
-        for i in range(n_cells):
-            h_colids.unsafe_ptr().unsafe_store(i, host_colids[i])
-        # DEVIATION 450: no synchronize after this copy either -- it is
-        # queue-ordered ahead of the kernels that read `d_colids`, and
-        # `h_colids` is next rewritten only after a required drain.
-        ctx.enqueue_copy(dst_buf=d_colids, src_ptr=h_colids.unsafe_ptr())
     else:
         # --- feature sampling, WHERE cuML DOES IT (deviation 201) --------
         # `d_report` is the DEVICE's own statement of which kernel ran;
@@ -5458,32 +5585,15 @@ def search_batch_regression(
     ctx.enqueue_copy(dst_buf=ws.h_nonconst, src_buf=ws.d_nonconst)
     # DEVIATION 450: drain only for the survey -- see the classification
     # twin's range pass.
-    if range_only and not dev_colids:
-        ctx.enqueue_copy(dst_buf=ws.o_rmin, src_buf=d_min)
-        ctx.enqueue_copy(dst_buf=ws.o_rmax, src_buf=d_max)
-        ctx.enqueue_copy(dst_buf=ws.o_rmiss, src_buf=d_missing)
-        ctx.synchronize()
     clock.tick(ctx, PHASE_RANGE)
 
-    if range_only and dev_colids:
-        # `IDN_ET_RESCUE_DEVICE`: the cells stay on the device for
+    if range_only:
+        # The device rescue: the cells stay on the device for
         # `rescue_pick_kernel`; nothing drains and nothing is read here.
         return (
             List[Split](), List[Int32](), List[Float32](), List[Float32](),
             List[Int32](),
         )
-    if range_only:
-        var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
-        for i in range(n_nodes):
-            any_nonconst[i] = ws.h_nonconst.unsafe_ptr()[unsafe_offset=i]
-        var rmin = List[Float32](length=n_cells, fill=Float32(0.0))
-        var rmax = List[Float32](length=n_cells, fill=Float32(0.0))
-        var rmiss = List[Int32](length=n_cells, fill=Int32(0))
-        for i in range(n_cells):
-            rmin[i] = ws.o_rmin.unsafe_ptr()[unsafe_offset=i]
-            rmax[i] = ws.o_rmax.unsafe_ptr()[unsafe_offset=i]
-            rmiss[i] = ws.o_rmiss.unsafe_ptr()[unsafe_offset=i]
-        return (List[Split](), any_nonconst^, rmin^, rmax^, rmiss^)
     # DEVIATION 470: the score cells and the one-output accumulators were
     # seeded by fused half B above (the survey skips half B and returned
     # already).
@@ -5684,38 +5794,42 @@ def search_batch_regression(
             dataset.d_nbins.unsafe_ptr(),
             Int32(n_nodes), grid_dim=ceildiv(n_nodes, 64), block_dim=64,
         )
-    ref o_q = ws.o_q
+    # cpu3-trees: the batch's `Split` records are packed ON THE DEVICE
+    # (`pack_splits_kernel`: the invalid-candidate metric mask included)
+    # and cross as one block, copied into the host scheduler's list whole.
+    ctx.enqueue_function[pack_splits_kernel](
+        ws.d_splits.unsafe_ptr().unsafe_bitcast[Split](),
+        r_q.unsafe_ptr(),
+        r_c.unsafe_ptr(),
+        r_m.unsafe_ptr(),
+        r_v.unsafe_ptr(),
+        r_l.unsafe_ptr(),
+        Int32(n_nodes),
+        grid_dim=ceildiv(n_nodes, 64),
+        block_dim=64,
+    )
+    ctx.enqueue_copy(dst_buf=ws.h_splits, src_buf=ws.d_splits)
     ref o_c = ws.o_c
-    ref o_l = ws.o_l
-    ref o_v = ws.o_v
     ref o_m = ws.o_m
-    ctx.enqueue_copy(dst_buf=o_q, src_buf=r_q)
     ctx.enqueue_copy(dst_buf=o_c, src_buf=r_c)
-    ctx.enqueue_copy(dst_buf=o_l, src_buf=r_l)
-    ctx.enqueue_copy(dst_buf=o_v, src_buf=r_v)
     ctx.enqueue_copy(dst_buf=o_m, src_buf=r_m)
     ctx.synchronize()
     clock.tick(ctx, PHASE_REDUCE)
 
     # DEVIATION 450: the deferred `h_nonconst` read -- see the twin.
     var any_nonconst = List[Int32](length=n_nodes, fill=Int32(0))
-    for i in range(n_nodes):
-        any_nonconst[i] = ws.h_nonconst.unsafe_ptr()[unsafe_offset=i]
+    memcpy(
+        dest=any_nonconst.unsafe_ptr(),
+        src=ws.h_nonconst.unsafe_ptr(),
+        count=n_nodes,
+    )
 
-    var splits = List[Split]()
-    for i in range(n_nodes):
-        var colid = o_c.unsafe_ptr()[unsafe_offset=i]
-        var metric = o_m.unsafe_ptr()[unsafe_offset=i]
-        if o_v.unsafe_ptr()[unsafe_offset=i] == 0 or colid < 0:
-            metric = Float32.MIN_FINITE
-        splits.append(
-            Split(
-                o_q.unsafe_ptr()[unsafe_offset=i],
-                colid,
-                metric,
-                o_l.unsafe_ptr()[unsafe_offset=i],
-            )
-        )
+    var splits = List[Split](length=n_nodes, fill=Split())
+    memcpy(
+        dest=splits.unsafe_ptr(),
+        src=ws.h_splits.unsafe_ptr().unsafe_bitcast[Split](),
+        count=n_nodes,
+    )
 
     # DEVIATION 463: report the batch's exact-tie tally. The counter cells
     # rode the queue with the reduce readback, so the sync above completed
@@ -5971,7 +6085,7 @@ def train_forest_regression_device_timed(
         )
 
         var queues = List[NodeQueue[DType.float32]]()
-        for s in range(g):
+        for s in range(g):  # small-loop(g: tree slots in this group): one queue per in-flight tree, g capped by group_cap
             var base = Int32(s) * slot_rows
             if sabotage == FOREST_SAB_SHARED_ROW_BASE:
                 base = Int32(0)
@@ -5991,9 +6105,9 @@ def train_forest_regression_device_timed(
         var bf_pending = List[NodeWorkItem]()
         var bf_pending_q = List[Int]()
         if bestfirst:
-            for s in range(g):
+            for s in range(g):  # small-loop(g: tree slots in this group): one root seed per tree, g capped by group_cap
                 var seeds = queues[s].bestfirst_seed()
-                for i in range(len(seeds)):
+                for i in range(len(seeds)):  # small-loop(seeds: one tree's root work item): bestfirst_seed returns at most the root
                     bf_pending.append(seeds[i])
                     bf_pending_q.append(s)
         while True:
@@ -6008,7 +6122,7 @@ def train_forest_regression_device_timed(
             # FIFO pop. `seg_*` stays empty; the best-first expansion is per
             # popped node and does not use it.
             if bestfirst:
-                for i in range(len(bf_pending)):
+                for i in range(len(bf_pending)):  # small-loop(bf_pending: children of the last pops): at most two per tree slot, g capped
                     work_items.append(bf_pending[i])
                     item_trees.append(tree_ids[first + bf_pending_q[i]])
             else:
@@ -6037,15 +6151,16 @@ def train_forest_regression_device_timed(
                 # plus the budget test at `:454`.
                 var bf_more = False
                 if bestfirst:
-                    for s in range(g):
+                    for s in range(g):  # small-loop(g: tree slots in this group): one flag test per tree, g capped by group_cap
                         if queues[s].bestfirst_can_pop():
                             bf_more = True
                 if not bf_more:
                     clock.tick(ctx, PHASE_HOST_QUEUE)
                     break
-            if sabotage == FOREST_SAB_SCALAR_TREE:
-                for i in range(len(item_trees)):
-                    item_trees[i] = item_trees[0]
+            if sabotage == FOREST_SAB_SCALAR_TREE and len(item_trees) > 0:
+                item_trees = List[Int32](
+                    length=len(item_trees), fill=item_trees[0]
+                )
             var n_nodes = len(work_items)
 
             clock.tick(ctx, PHASE_HOST_QUEUE)
@@ -6120,98 +6235,45 @@ def train_forest_regression_device_timed(
                 for j in range(len(retry)):
                     sub.append(work_items[retry[j]])
                     sub_trees.append(item_trees[retry[j]])
-                comptime if IDN_ET_RESCUE_DEVICE:
-                    # The survey, the pick and the rescued search, queued
-                    # back to back (see `IDN_ET_RESCUE_DEVICE`).
-                    var n_sub = len(sub)
-                    _ = search_batch_regression(
-                        ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
-                        n_rows, n_cols, sub_trees, seed, False,
-                        List[Int32](), True, clock,
-                    )
-                    var d_pick = ctx.enqueue_create_buffer[DType.int32](n_sub)
-                    var h_pick = ctx.enqueue_create_host_buffer[DType.int32](
-                        n_sub
-                    )
-                    ctx.enqueue_function[rescue_pick_kernel](
-                        d_pick.unsafe_ptr(),
-                        ws.d_colids.unsafe_ptr(),
-                        ws.d_min.unsafe_ptr(),
-                        ws.d_max.unsafe_ptr(),
-                        ws.d_missing.unsafe_ptr(),
-                        ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-                        ws.d_tree.unsafe_ptr(),
-                        Int32(n_sub),
-                        n_cols,
-                        seed,
-                        grid_dim=ceildiv(n_sub, 64),
-                        block_dim=64,
-                    )
-                    ctx.enqueue_copy(dst_buf=h_pick, src_buf=d_pick)
-                    # Drains at its reduce readback, `h_pick` with it.
-                    var res2 = search_batch_regression(
-                        ctx, ws, dataset, d_row_ids, sub, 1, params,
-                        n_rows, n_cols, sub_trees, seed, False,
-                        List[Int32](), False, clock,
-                    )
-                    var rescued = res2[0].copy()
-                    for j in range(n_sub):
-                        if h_pick.unsafe_ptr()[unsafe_offset=j] >= 0:
-                            splits[retry[j]] = rescued[j]
-                    _ = d_pick^
-                    _ = h_pick^
-                else:
-                    var ident = List[Int32](
-                        length=len(sub) * Int(n_cols), fill=Int32(0)
-                    )
-                    for j in range(len(sub)):
-                        for c in range(Int(n_cols)):
-                            ident[j * Int(n_cols) + c] = Int32(c)
-                    var survey = search_batch_regression(
-                        ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
-                        n_rows, n_cols, sub_trees, seed, False, ident, True, clock,
-                    )
-                    var s_min = survey[2].copy()
-                    var s_max = survey[3].copy()
-                    var s_miss = survey[4].copy()
-
-                    var chosen_items = List[NodeWorkItem]()
-                    var chosen_trees = List[Int32]()
-                    var chosen_cols = List[Int32]()
-                    var chosen_slot = List[Int]()
-                    for j in range(len(sub)):
-                        var nonconst = List[Int32]()
-                        for c in range(Int(n_cols)):
-                            var idx = j * Int(n_cols) + c
-                            var extent = FeatureRange(
-                                s_min[idx], s_max[idx], s_miss[idx]
-                            )
-                            if not node_feature_is_constant(
-                                extent, sub[j].instances.count
-                            ):
-                                nonconst.append(Int32(c))
-                        if len(nonconst) == 0:
-                            continue
-                        var u = rescue_pick(
-                            rescue_key(
-                                seed, sub_trees[j], UInt32(Int(sub[j].idx))
-                            ),
-                            len(nonconst),
-                        )
-                        chosen_items.append(sub[j])
-                        chosen_trees.append(sub_trees[j])
-                        chosen_cols.append(nonconst[u])
-                        chosen_slot.append(retry[j])
-
-                    if len(chosen_items) > 0:
-                        var res2 = search_batch_regression(
-                            ctx, ws, dataset, d_row_ids, chosen_items, 1, params,
-                            n_rows, n_cols, chosen_trees, seed, False,
-                            chosen_cols, False, clock,
-                        )
-                        var rescued = res2[0].copy()
-                        for t in range(len(chosen_slot)):
-                            splits[chosen_slot[t]] = rescued[t]
+                # The survey, the pick and the rescued search, queued
+                # back to back (see THE DEVICE RESCUE).
+                var n_sub = len(sub)
+                _ = search_batch_regression(
+                    ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
+                    n_rows, n_cols, sub_trees, seed, False,
+                    List[Int32](), True, clock,
+                )
+                var d_pick = ctx.enqueue_create_buffer[DType.int32](n_sub)
+                var h_pick = ctx.enqueue_create_host_buffer[DType.int32](
+                    n_sub
+                )
+                ctx.enqueue_function[rescue_pick_kernel](
+                    d_pick.unsafe_ptr(),
+                    ws.d_colids.unsafe_ptr(),
+                    ws.d_min.unsafe_ptr(),
+                    ws.d_max.unsafe_ptr(),
+                    ws.d_missing.unsafe_ptr(),
+                    ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+                    ws.d_tree.unsafe_ptr(),
+                    Int32(n_sub),
+                    n_cols,
+                    seed,
+                    grid_dim=ceildiv(n_sub, 64),
+                    block_dim=64,
+                )
+                ctx.enqueue_copy(dst_buf=h_pick, src_buf=d_pick)
+                # Drains at its reduce readback, `h_pick` with it.
+                var res2 = search_batch_regression(
+                    ctx, ws, dataset, d_row_ids, sub, 1, params,
+                    n_rows, n_cols, sub_trees, seed, False,
+                    List[Int32](), False, clock,
+                )
+                var rescued = res2[0].copy()
+                for j in range(n_sub):
+                    if h_pick.unsafe_ptr()[unsafe_offset=j] >= 0:
+                        splits[retry[j]] = rescued[j]
+                _ = d_pick^
+                _ = h_pick^
 
             if trace.enabled and n_nodes > 0:
                 # The SELECTED splits -- post-rescue; see the twin, and
@@ -6247,7 +6309,7 @@ def train_forest_regression_device_timed(
                     _ = queues[bf_pending_q[i]].bestfirst_admit(
                         work_items[i], splits[i], item_trees[i]
                     )
-                for s in range(g):
+                for s in range(g):  # small-loop(g: tree slots in this group): one best-first pop per tree, g capped by group_cap
                     if not queues[s].bestfirst_can_pop():
                         continue
                     var rec = queues[s].bestfirst_pop()
@@ -6260,10 +6322,9 @@ def train_forest_regression_device_timed(
                     clock.tick(ctx, PHASE_HOST_QUEUE)
                     break
             else:
-                for i in range(n_nodes):
-                    part_items.append(work_items[i])
-                    part_trees.append(item_trees[i])
-                    part_splits.append(splits[i])
+                part_items = work_items.copy()
+                part_trees = item_trees.copy()
+                part_splits = splits.copy()
             var n_part = len(part_items)
 
             var plan = build_workload_info(
@@ -6298,8 +6359,7 @@ def train_forest_regression_device_timed(
             # --- the PARTITION (deviation 203, the regression half) -------
             # DEVIATION 450: no pre-partition synchronize -- see the twin.
             var splits_ptr = ws.h_splits.unsafe_ptr().unsafe_bitcast[Split]()
-            for i in range(n_part):
-                splits_ptr[unsafe_offset=i] = part_splits[i]
+            memcpy(dest=splits_ptr, src=part_splits.unsafe_ptr(), count=n_part)
             ctx.enqueue_copy(
                 dst_buf=ws.d_splits, src_ptr=ws.h_splits.unsafe_ptr()
             )
@@ -6416,7 +6476,7 @@ def train_forest_regression_device_timed(
         var trees_g = List[TreeMetaDataNode[DType.float32]]()
         var leaf_base = List[Int]()
         var total_nodes = 0
-        for s in range(g):
+        for s in range(g):  # small-loop(g: tree slots in this group): collects one output tree per slot, g capped by group_cap
             leaf_base.append(total_nodes)
             total_nodes += len(queues[s].node_instances)
             trees_g.append(queues[s].get_tree())

@@ -1309,15 +1309,15 @@ def host_weight_cdf(weights: List[Float32], n_rows: Int) raises -> List[Float64]
     return cdf^
 
 
-comptime RF_ORACLE_WBOOT_INT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE_OFF"]()
-    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+comptime RF_ORACLE_WBOOT_INT = True
 """fam2-forests `IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE`: the weighted bootstrap
 in exact integers, the host column of
 `ensemble/weighted_bootstrap_device.mojo` (quantum, UInt64 CDF, PCG bounded
-draw, upper_bound). The `_OFF` define restores the Float64 CDF and the
-Philox `uniform<double>` draws here and on the device together."""
+draw, upper_bound). cpu3-trees (2026-10-04): the device form is the only
+weighted route in IDENTICAL and FAST alike (its host Float64 arm and the
+`_OFF` define are gone), so the host column draws the integer stream in
+every mode too; the Float64 `weight_cdf` arm below is no longer reached
+for a weighted bootstrap."""
 
 
 def host_weight_quantum(bits: UInt32, max_bits: UInt32) -> UInt64:

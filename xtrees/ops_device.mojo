@@ -232,7 +232,7 @@ def apply_trees_device(
     var nt = t1 - t0
     if n <= 0 or nt <= 0:
         return
-    for t in range(t0, t1):
+    for t in range(t0, t1):  # small-loop(t1: per-tree node offsets): empty-tree refusal on model metadata, no rows
         if Int(offsets[unsafe_offset=t + 1]) - Int(offsets[unsafe_offset=t]) < 1:
             raise Error("x_trees apply: empty tree")
     var n_nodes = Int(offsets[unsafe_offset=t1])

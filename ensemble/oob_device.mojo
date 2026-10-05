@@ -16,8 +16,8 @@ hardware Float64 chain produces, in the same order, so the
 `oob_decision_function_` / `oob_prediction_` words do not move and every
 vendor agrees by construction. X and the masks never leave the device.
 
-`-D MOJOLEARN_IDN_RF_OOB_DEVICE_OFF` (or `MOJOLEARN_IDN_ALL_OFF`) restores
-the host walk.
+cpu3-trees (2026-10-04): this is the only OOB route, in IDENTICAL and FAST
+alike; the host walk, the host epilogue and their `_OFF` defines are gone.
 
 THE SCORE EPILOGUE (fix-r1-rescue, audit B6, `IDN_RF_OOB_EPILOGUE_DEVICE`).
 Before: the averaged predictions, the counts and y came back and the host
@@ -33,10 +33,8 @@ Float64 fma chain). Now the device does both and returns two integers
     score = 1 - num / den with sklearn's force_finite rules. NEW BITS for
     `oob_score_` (old: a sequential fma chain), the same on every vendor by
     construction (integer limb sums); a non-finite term or an overflowed
-    sum gives NaN. The OFF arm keeps the host epilogue.
-y and the counts no longer cross the bus. `-D
-MOJOLEARN_IDN_RF_OOB_EPILOGUE_DEVICE_OFF` restores the host epilogue (also
-off with `IDN_RF_OOB_DEVICE`, so under `MOJOLEARN_IDN_ALL_OFF`).
+    sum gives NaN.
+y and the counts no longer cross the bus.
 """
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
@@ -57,18 +55,6 @@ from checks.soft_f64 import (
     sf64_sub,
 )
 from xtrees.oob import E64_LIMBS, E64_THREADS, e64_add
-
-comptime IDN_RF_OOB_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_RF_OOB_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
-
-comptime IDN_RF_OOB_EPILOGUE_DEVICE = IDN_RF_OOB_DEVICE and not is_defined[
-    "MOJOLEARN_IDN_RF_OOB_EPILOGUE_DEVICE_OFF"
-]()
 
 comptime OOB_TPB = 256
 #: words slots of the epilogue: [0] fsum(y), [1] den, [2] num, [3] mean,

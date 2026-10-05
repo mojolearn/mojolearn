@@ -831,7 +831,7 @@ def compute_quantiles(
     h_offsets.unsafe_ptr().unsafe_store(0, UInt64(0))
     h_offsets.unsafe_ptr().unsafe_store(1, UInt64(n_rows))
     var acc = UInt64(0)
-    for i in range(n_offsets):
+    for i in range(n_offsets):  # small-loop(n_offsets: rank offsets): comm_size + 1 words, one rank here
         acc += h_offsets.unsafe_ptr().unsafe_load(i)
         h_offsets.unsafe_ptr().unsafe_store(i, acc)
     # `:187-190`

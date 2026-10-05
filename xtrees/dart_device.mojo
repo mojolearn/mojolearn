@@ -308,7 +308,7 @@ struct DartRegistry(Defaultable, Movable):
         self.next_id = 1
 
     def find(self, id: Int) raises -> Int:
-        for i in range(len(self.sessions)):
+        for i in range(len(self.sessions)):  # small-loop(self.sessions: open DART sessions): a handle lookup over live fits
             if self.sessions[i].id == id:
                 return i
         raise Error("x_trees dart: unknown or closed session handle")
@@ -567,28 +567,26 @@ def dart_predict(
     # glue: the T + 1 node offsets and the T + k float64 words (model metadata, T-sized)
     var toff = List[Int32](length=nt + 1, fill=0)
     var total = 0
-    for j in range(nt):
+    for j in range(nt):  # small-loop(nt: per-tree node offsets): T + 1 model offsets, metadata not data
         if sizes[j] < 1:
             raise Error("x_trees dart_predict: empty tree")
         total += sizes[j]
         if total >= (1 << 31):
             raise Error("x_trees dart_predict: more than 2^31 forest nodes")
         toff[j + 1] = Int32(total)
-    var cw = List[UInt64](length=nt, fill=0)
-    for j in range(nt):  # glue: T coefficient words
-        cw[j] = bitcast[DType.uint64](coefs[j])
-    var iw = List[UInt64](length=k, fill=0)
-    for c in range(k):  # glue: k class-start words
-        iw[c] = bitcast[DType.uint64](inits[c])
+    # the T coefficient and k class-start float64 words cross as their bit
+    # patterns, one bulk copy each (no host pass over them)
+    var cw = coefs.copy()
+    var iw = inits.copy()
     var ctx = process_ctx[_DART_CTX]()
     var x = ctx.enqueue_create_buffer[DType.float32](n * d)
     ctx.enqueue_copy(dst_buf=x, src_ptr=F32P(unsafe_from_address=x_addr))
     var toff_d = ctx.enqueue_create_buffer[DType.int32](nt + 1)
     ctx.enqueue_copy(dst_buf=toff_d, src_ptr=toff.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]())
     var coef_d = ctx.enqueue_create_buffer[DType.uint64](nt)
-    ctx.enqueue_copy(dst_buf=coef_d, src_ptr=cw.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]())
+    ctx.enqueue_copy(dst_buf=coef_d, src_ptr=cw.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]().bitcast[UInt64]())
     var inits_d = ctx.enqueue_create_buffer[DType.uint64](k)
-    ctx.enqueue_copy(dst_buf=inits_d, src_ptr=iw.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]())
+    ctx.enqueue_copy(dst_buf=inits_d, src_ptr=iw.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]().bitcast[UInt64]())
     var colid = ctx.enqueue_create_buffer[DType.int32](total)
     var quesval = ctx.enqueue_create_buffer[DType.float32](total)
     var left = ctx.enqueue_create_buffer[DType.int32](total)

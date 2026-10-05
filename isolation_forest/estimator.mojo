@@ -622,7 +622,7 @@ def if_resident_take(token: Int, key: IFResidentKey) raises -> List[IFResidentEn
         return held^
     var p = IF_RESIDENT_STORE.get_or_create_ptr()
     var found = -1
-    for i in range(len(p[].entries)):
+    for i in range(len(p[].entries)):  # small-loop(p[].entries: resident forests held): a token lookup over live entries
         if p[].entries[i].token == token:
             found = i
             break
