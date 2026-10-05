@@ -1,0 +1,1416 @@
+{
+  "schema": 1,
+  "rule": "KEEP iff ON total (fit+infer, one sample after one untimed warmup) < OFF on NVIDIA AND AMD, case PROVEN cross-vendor in both arms, quality PASS on both boxes",
+  "tag": "t1",
+  "proof_sha256": "2911d066fb443c29065b5bb3527c706efdf28675f0f975656aef15e6582e0192",
+  "timing_receipts": {
+    "nvidia": "/Users/andrewhendel/mojolearn-evidence/box-run-2/nv/lq/br2-wave-af93ebe0a/timing-t1.json",
+    "amd": "/Users/andrewhendel/mojolearn-evidence/box-run-2/amd/lq/br2-wave-af93ebe0a/timing-t1.json"
+  },
+  "quality_status": {
+    "nvidia": "PASS",
+    "amd": "PASS"
+  },
+  "rows": [
+    {
+      "case": "adam--synthetic",
+      "family": "neural",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 256.90116500481963,
+          "infer_ms": null,
+          "total_ms": 256.90116500481963,
+          "digest": "82e8de76f51ace5c6adef36b65163cb5952736a217955fe5151084b4738198f8",
+          "result_sha256": "746ac13d5a83da38c2c2cc6740166b14217fb0d92421dc0907e70aee6559010b"
+        },
+        "nvidia/off": {
+          "fit_ms": 254.45877388119698,
+          "infer_ms": null,
+          "total_ms": 254.45877388119698,
+          "digest": "82e8de76f51ace5c6adef36b65163cb5952736a217955fe5151084b4738198f8",
+          "result_sha256": "9d9e1f68fed615bede8d171502c23925fe3faab3ba4b1329012e155f09321ece"
+        },
+        "amd/on": {
+          "fit_ms": 90.85065999897779,
+          "infer_ms": null,
+          "total_ms": 90.85065999897779,
+          "digest": "82e8de76f51ace5c6adef36b65163cb5952736a217955fe5151084b4738198f8",
+          "result_sha256": "4446dca48aff684ac8cd5d225c6703000b49775dfeb136fbb5338095dfe1f4a0"
+        },
+        "amd/off": {
+          "fit_ms": 87.99695199923008,
+          "infer_ms": null,
+          "total_ms": 87.99695199923008,
+          "digest": "82e8de76f51ace5c6adef36b65163cb5952736a217955fe5151084b4738198f8",
+          "result_sha256": "2c486276f9dd0a7a7a59fe3a8d3130fbef5ac86295a9086fa25af9f332582797"
+        }
+      },
+      "nvidia_on_over_off": 1.0096,
+      "amd_on_over_off": 1.0324,
+      "verdict": "DROP",
+      "reasons": [
+        "ON not faster on nvidia,amd"
+      ]
+    },
+    {
+      "case": "additive-chi2--taxi",
+      "family": "kernel-gp",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 1.0632099583745003,
+          "infer_ms": 1.0113092139363289,
+          "total_ms": 2.074519172310829,
+          "digest": "5ffcb191a8631cb58299e4b4d1704d00c1da8871c6dc915b8cedf2ae4d82ce07",
+          "result_sha256": "722903d518b3b15a1d9a4dd58605ed0f6942134ee00115d5a0d41cd34b90f292"
+        },
+        "nvidia/off": {
+          "fit_ms": 0.6014378741383553,
+          "infer_ms": 0.5768961273133755,
+          "total_ms": 1.1783340014517307,
+          "digest": "5ffcb191a8631cb58299e4b4d1704d00c1da8871c6dc915b8cedf2ae4d82ce07",
+          "result_sha256": "f0f9b5fdf252d37ac80d3ef7c70e34b09db7e765b08a8efd502603ab15fa1993"
+        },
+        "amd/on": {
+          "fit_ms": 0.7167990006564651,
+          "infer_ms": 0.3516910001053475,
+          "total_ms": 1.0684900007618126,
+          "digest": "5ffcb191a8631cb58299e4b4d1704d00c1da8871c6dc915b8cedf2ae4d82ce07",
+          "result_sha256": "88f673a05788bc4b776bca10ac98e5aa6fb68a051998c785800f52e825c908a8"
+        },
+        "amd/off": {
+          "fit_ms": 0.3977090018452145,
+          "infer_ms": 0.1819989993236959,
+          "total_ms": 0.5797080011689104,
+          "digest": "5ffcb191a8631cb58299e4b4d1704d00c1da8871c6dc915b8cedf2ae4d82ce07",
+          "result_sha256": "b7a8e3db11de116b532afe8a76acf7c916cc5919c9f1ee043b15c655aaf30fc3"
+        }
+      },
+      "nvidia_on_over_off": 1.7606,
+      "amd_on_over_off": 1.8432,
+      "verdict": "DROP",
+      "reasons": [
+        "ON not faster on nvidia,amd"
+      ]
+    },
+    {
+      "case": "bayesian-gmm--taxi",
+      "family": "cluster",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 80.49816498532891,
+          "infer_ms": 1.9489871338009834,
+          "total_ms": 82.4471521191299,
+          "digest": "16c9d28895045c08cc7fbdac8930186c527730815bc99c207bc79e5a40183c6c",
+          "result_sha256": "e4df95356df817cb7ac1b794495dc26e9379f6208bfd3f6cf40dada94ec35451"
+        },
+        "nvidia/off": {
+          "fit_ms": 315.1039402000606,
+          "infer_ms": 1.900344155728817,
+          "total_ms": 317.0042843557894,
+          "digest": "51428781b348c29370b42899167341614e543752d842f3ea9f2e883f8970e1b6",
+          "result_sha256": "e7624bcec301c1a795182288d6b964c2487a9aef5c3df298627150edd3112f45"
+        },
+        "amd/on": {
+          "fit_ms": 194.17191600223305,
+          "infer_ms": 0.62243000138551,
+          "total_ms": 194.79434600361856,
+          "digest": "16c9d28895045c08cc7fbdac8930186c527730815bc99c207bc79e5a40183c6c",
+          "result_sha256": "6ad76c22af92bb4d7cb5e17c40862a2374ed400b23e2e0443590d99186af25b4"
+        },
+        "amd/off": {
+          "fit_ms": 847.9288890011958,
+          "infer_ms": 0.5722300011257175,
+          "total_ms": 848.5011190023215,
+          "digest": "51428781b348c29370b42899167341614e543752d842f3ea9f2e883f8970e1b6",
+          "result_sha256": "25a7c8f36cf38f3cc06060a41b399af8241a66db795413af885e2c8ec48e14c2"
+        }
+      },
+      "nvidia_on_over_off": 0.2601,
+      "amd_on_over_off": 0.2296,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "cross-entropy--synthetic",
+      "family": "neural",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 325.2395619638264,
+          "infer_ms": null,
+          "total_ms": 325.2395619638264,
+          "digest": "12084400c0f38ee8682079c2205098bcc7d64371182167946bde8eadc6340582",
+          "result_sha256": "c593d65911649bc4b66192651c4a1a5b977f94e007a88417cf97325610a51293"
+        },
+        "nvidia/off": {
+          "fit_ms": 311.76758417859674,
+          "infer_ms": null,
+          "total_ms": 311.76758417859674,
+          "digest": "12084400c0f38ee8682079c2205098bcc7d64371182167946bde8eadc6340582",
+          "result_sha256": "9f5ea22e805770c4f84208884a5f47ee46568c9ce18b33e000250081037249ed"
+        },
+        "amd/on": {
+          "fit_ms": 106.15858299934189,
+          "infer_ms": null,
+          "total_ms": 106.15858299934189,
+          "digest": "12084400c0f38ee8682079c2205098bcc7d64371182167946bde8eadc6340582",
+          "result_sha256": "f2ef30f44b3bd7da2a09cc0a1bf62ea5d9e7a49c0ee8f1973c9b2a38b39cc1cc"
+        },
+        "amd/off": {
+          "fit_ms": 101.53272599927732,
+          "infer_ms": null,
+          "total_ms": 101.53272599927732,
+          "digest": "12084400c0f38ee8682079c2205098bcc7d64371182167946bde8eadc6340582",
+          "result_sha256": "6401d5ae92f743c40180fda1cdccaa1933b7dc5d4c309acfd07fa2ca2d9bc06d"
+        }
+      },
+      "nvidia_on_over_off": 1.0432,
+      "amd_on_over_off": 1.0456,
+      "verdict": "DROP",
+      "reasons": [
+        "ON not faster on nvidia,amd"
+      ]
+    },
+    {
+      "case": "decision-tree-clf--taxi",
+      "family": "forests",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 15.361934900283813,
+          "infer_ms": 1.5844660811126232,
+          "total_ms": 16.946400981396437,
+          "digest": "d1e42ff850a69d53d2b71a80b960c5068a7ab8316c538bf6ebc134a5edb65ad6",
+          "result_sha256": "829d3b791f61ce6c562668ca603b40e74bcee1f6c9528e2a4b14e56fab802915"
+        },
+        "nvidia/off": {
+          "fit_ms": 12.624773196876049,
+          "infer_ms": 1.5577347949147224,
+          "total_ms": 14.182507991790771,
+          "digest": "d1e42ff850a69d53d2b71a80b960c5068a7ab8316c538bf6ebc134a5edb65ad6",
+          "result_sha256": "050b4bcabb1b4371bc60fc71262a44b28829fa70ac833e703f0d12ba010e9264"
+        },
+        "amd/on": {
+          "fit_ms": 28.32162699996843,
+          "infer_ms": 1.1301000013190787,
+          "total_ms": 29.45172700128751,
+          "digest": "d1e42ff850a69d53d2b71a80b960c5068a7ab8316c538bf6ebc134a5edb65ad6",
+          "result_sha256": "4e68378eae628638adca9f9667fbf29e745148cb3cea692cb7cd279464b96835"
+        },
+        "amd/off": {
+          "fit_ms": 13.23899399721995,
+          "infer_ms": 1.1359800009813625,
+          "total_ms": 14.374973998201312,
+          "digest": "d1e42ff850a69d53d2b71a80b960c5068a7ab8316c538bf6ebc134a5edb65ad6",
+          "result_sha256": "16c80194ac28ea8e7d13366158702e4de75aff07c4f6b6f063e809ec3c1e5454"
+        }
+      },
+      "nvidia_on_over_off": 1.1949,
+      "amd_on_over_off": 2.0488,
+      "verdict": "DROP",
+      "reasons": [
+        "ON not faster on nvidia,amd"
+      ]
+    },
+    {
+      "case": "elasticnet--taxi",
+      "family": "linear",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 2.060339320451021,
+          "infer_ms": 1.4438717626035213,
+          "total_ms": 3.5042110830545425,
+          "digest": "6123253c00934bae45f2357f584b4ceb410bb7999de7e7a9bf200a732e310ddd",
+          "result_sha256": "306a6b8f5b8f72d708086fbb1f615d5489f8445cadbf4d0967aba6b6040f2c95"
+        },
+        "nvidia/off": {
+          "fit_ms": 4.394256975501776,
+          "infer_ms": 1.4532008208334446,
+          "total_ms": 5.84745779633522,
+          "digest": "99d43d828bb4f4826b87f75ff3c743ed4257fc6b6c01487db9b40236a9111bdc",
+          "result_sha256": "0583327f177f2a14c3c0ca4d4ccfcdbffcb9752972bd54ae641c6008ddfabb5c"
+        },
+        "amd/on": {
+          "fit_ms": 1.7977890020119958,
+          "infer_ms": 0.3658200002973899,
+          "total_ms": 2.1636090023093857,
+          "digest": "6123253c00934bae45f2357f584b4ceb410bb7999de7e7a9bf200a732e310ddd",
+          "result_sha256": "17e9647ad7c63dc61047c8230f6e8721d39b8d1a0a4eece266e443e46936a9ee"
+        },
+        "amd/off": {
+          "fit_ms": 7.937255999422632,
+          "infer_ms": 0.3522299994074274,
+          "total_ms": 8.28948599883006,
+          "digest": "99d43d828bb4f4826b87f75ff3c743ed4257fc6b6c01487db9b40236a9111bdc",
+          "result_sha256": "d979c707508d34299498e01303e5805574ac686097b203d32f6f399d6a0c6cf9"
+        }
+      },
+      "nvidia_on_over_off": 0.5993,
+      "amd_on_over_off": 0.261,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "factor-analysis--istella",
+      "family": "decomp",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 1058.168416377157,
+          "infer_ms": 10.013800114393234,
+          "total_ms": 1068.1822164915502,
+          "digest": "1e680dd8b89e96c3bac395a58ace745b8fb615e6d5441f58c5db9928cb013c84",
+          "result_sha256": "d0e30e348f2610e3d719a9c1e3e219211e6e7459299365e6f99485bd4e158f2c"
+        },
+        "nvidia/off": {
+          "fit_ms": 1082.5613103806973,
+          "infer_ms": 10.160432197153568,
+          "total_ms": 1092.7217425778508,
+          "digest": "1e680dd8b89e96c3bac395a58ace745b8fb615e6d5441f58c5db9928cb013c84",
+          "result_sha256": "a0958feb5472d9f3f6eeda7ac7bc1299eeea4ecc57f49be5372874f4290bafa7"
+        },
+        "amd/on": {
+          "fit_ms": 1581.110521001392,
+          "infer_ms": 4.162877998169279,
+          "total_ms": 1585.2733989995613,
+          "digest": "1e680dd8b89e96c3bac395a58ace745b8fb615e6d5441f58c5db9928cb013c84",
+          "result_sha256": "bb739598f3232d3b5a3615d56ef45aa3b37939103effecf95f34ebb1ffa5e4a7"
+        },
+        "amd/off": {
+          "fit_ms": 1588.5952250027913,
+          "infer_ms": 3.8010989992471877,
+          "total_ms": 1592.3963240020385,
+          "digest": "1e680dd8b89e96c3bac395a58ace745b8fb615e6d5441f58c5db9928cb013c84",
+          "result_sha256": "8778c144a3ee38ee7cfd7c668404a2f17faf8b75dbfd0adccb01aa9817f05469"
+        }
+      },
+      "nvidia_on_over_off": 0.9775,
+      "amd_on_over_off": 0.9955,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "gaussian-rp--taxi",
+      "family": "kernel-gp",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 0.4197917878627777,
+          "infer_ms": 0.30434923246502876,
+          "total_ms": 0.7241410203278065,
+          "digest": "9500297c3accbf36f78f74f3ad8e42531f59aae774bfb4551c8deab56e51a640",
+          "result_sha256": "31f57414de826c74d22c7726102aa2affa9e17d3d0597d6e1ef12da23039943c"
+        },
+        "nvidia/off": {
+          "fit_ms": 0.7861331105232239,
+          "infer_ms": 0.3176787868142128,
+          "total_ms": 1.1038118973374367,
+          "digest": "9500297c3accbf36f78f74f3ad8e42531f59aae774bfb4551c8deab56e51a640",
+          "result_sha256": "1dd23ed7bdff1b554d735dadd3a5d585367154cd14dca428bef327ea8a321c14"
+        },
+        "amd/on": {
+          "fit_ms": 0.26091000108863227,
+          "infer_ms": 0.14090000331634656,
+          "total_ms": 0.4018100044049788,
+          "digest": "9500297c3accbf36f78f74f3ad8e42531f59aae774bfb4551c8deab56e51a640",
+          "result_sha256": "882ae9a4aea7d139886983599834211c245886fcb7e47fae8b345f57bd91aee3"
+        },
+        "amd/off": {
+          "fit_ms": 0.39996899795369245,
+          "infer_ms": 0.15666999752284028,
+          "total_ms": 0.5566389954765327,
+          "digest": "9500297c3accbf36f78f74f3ad8e42531f59aae774bfb4551c8deab56e51a640",
+          "result_sha256": "73531d210e27ac9d113f6363f788cba66872e0d950c175c8d8dca5b178580c4d"
+        }
+      },
+      "nvidia_on_over_off": 0.656,
+      "amd_on_over_off": 0.7219,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "gbdt-clf--taxi",
+      "family": "gbdt",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 45.15659995377064,
+          "infer_ms": 4.476299975067377,
+          "total_ms": 49.632899928838015,
+          "digest": "738c7937d260dfa8275d2e366e1e63c777f13a063185a0ccbd3d91c5991bfcaf",
+          "result_sha256": "bd0fb524e2d1e7e813c56ac524cd6fb611345f9cd569994874a0315f12abc623"
+        },
+        "nvidia/off": {
+          "fit_ms": 42.55264485254884,
+          "infer_ms": 4.375605843961239,
+          "total_ms": 46.92825069651008,
+          "digest": "738c7937d260dfa8275d2e366e1e63c777f13a063185a0ccbd3d91c5991bfcaf",
+          "result_sha256": "28051b96570b5f8b561a60f81f624f78c78c8b8f148dcc4af650cf93f3a0aab3"
+        },
+        "amd/on": {
+          "fit_ms": 58.731794997584075,
+          "infer_ms": 2.2821200000180397,
+          "total_ms": 61.013914997602114,
+          "digest": "738c7937d260dfa8275d2e366e1e63c777f13a063185a0ccbd3d91c5991bfcaf",
+          "result_sha256": "3c3b107afce5ac25fed427621a1c23c485b4656ff82c88e5f0092e9e4db35b14"
+        },
+        "amd/off": {
+          "fit_ms": 54.755215998739004,
+          "infer_ms": 2.2999700013315305,
+          "total_ms": 57.055186000070535,
+          "digest": "738c7937d260dfa8275d2e366e1e63c777f13a063185a0ccbd3d91c5991bfcaf",
+          "result_sha256": "3fd1c6e426e68a03a97f58c5f7bd1df17a3423e6e84c6d901477b0379bc59a78"
+        }
+      },
+      "nvidia_on_over_off": 1.0576,
+      "amd_on_over_off": 1.0694,
+      "verdict": "DROP",
+      "reasons": [
+        "ON not faster on nvidia,amd"
+      ]
+    },
+    {
+      "case": "gbdt-reg--taxi",
+      "family": "gbdt",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 37.24821098148823,
+          "infer_ms": 3.878992050886154,
+          "total_ms": 41.12720303237438,
+          "digest": "1a0fab289d846dc56f899d96ec254839f15ae2d9418d4d5597224c9d6e79c46b",
+          "result_sha256": "ca0a2d7c632875cb3bc30f98041bdfe537a938e31be3605a79f8fb48ebc1473d"
+        },
+        "nvidia/off": {
+          "fit_ms": 37.15872997418046,
+          "infer_ms": 3.8692811504006386,
+          "total_ms": 41.0280111245811,
+          "digest": "1a0fab289d846dc56f899d96ec254839f15ae2d9418d4d5597224c9d6e79c46b",
+          "result_sha256": "2edc0de76faec57db4d80f007b3eff9e04ab549414fac1d0f4826caec46a9646"
+        },
+        "amd/on": {
+          "fit_ms": 48.458118999406,
+          "infer_ms": 1.6972589983197395,
+          "total_ms": 50.155377997725736,
+          "digest": "1a0fab289d846dc56f899d96ec254839f15ae2d9418d4d5597224c9d6e79c46b",
+          "result_sha256": "8e05c67ea8163a5ed558f69be3af24207cda6d929fb7821a511dd496146970c2"
+        },
+        "amd/off": {
+          "fit_ms": 47.75228899961803,
+          "infer_ms": 1.8599289978737943,
+          "total_ms": 49.612217997491825,
+          "digest": "1a0fab289d846dc56f899d96ec254839f15ae2d9418d4d5597224c9d6e79c46b",
+          "result_sha256": "e3217d6e58dc6ffffe1942d883cec0f4ec7f490bb291c3b4d4f24a863c536fc3"
+        }
+      },
+      "nvidia_on_over_off": 1.0024,
+      "amd_on_over_off": 1.0109,
+      "verdict": "DROP",
+      "reasons": [
+        "ON not faster on nvidia,amd"
+      ]
+    },
+    {
+      "case": "gmm--taxi",
+      "family": "cluster",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 13.680687174201012,
+          "infer_ms": null,
+          "total_ms": 13.680687174201012,
+          "digest": "00dfc0849cace5e68ce4b4b3545ec6410be4b00f83e29601d8b26463cb1f1568",
+          "result_sha256": "27ad214a6c931be35b9d57f0a48d6bbe13c098cbec77ef2c6b4cc32c41dc02df"
+        },
+        "nvidia/off": {
+          "fit_ms": 35.99730599671602,
+          "infer_ms": null,
+          "total_ms": 35.99730599671602,
+          "digest": "b20d3dd989f68c801fa8d6f4c63b10d09e9a7aaa435d6bae86749879af1a4805",
+          "result_sha256": "3a6e772d3f02d8ef17a1eea640a26e2ca40dee8d3d5776a3cae7f8266f6d850d"
+        },
+        "amd/on": {
+          "fit_ms": 20.020151998323854,
+          "infer_ms": null,
+          "total_ms": 20.020151998323854,
+          "digest": "00dfc0849cace5e68ce4b4b3545ec6410be4b00f83e29601d8b26463cb1f1568",
+          "result_sha256": "ac531c6bef37d145053346fee356a256608fe29a50ca3f74bf8b2c7a30300645"
+        },
+        "amd/off": {
+          "fit_ms": 51.56734800038976,
+          "infer_ms": null,
+          "total_ms": 51.56734800038976,
+          "digest": "b20d3dd989f68c801fa8d6f4c63b10d09e9a7aaa435d6bae86749879af1a4805",
+          "result_sha256": "e8f03eaa8c1412598b5cfa80795577977ef406f5df8271f99db9554bd3ab9998"
+        }
+      },
+      "nvidia_on_over_off": 0.38,
+      "amd_on_over_off": 0.3882,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "huber--taxi",
+      "family": "linear",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 95.2967437915504,
+          "infer_ms": 0.5385861732065678,
+          "total_ms": 95.83532996475697,
+          "digest": "07620c8c4df8153cf1048f96b74e3be2bfd33e0473f2b4b8854754888bb864e3",
+          "result_sha256": "8822b6a17d6787d1825f1404fe7f7495d019c372b6ed4eea9e02864ce67416d4"
+        },
+        "nvidia/off": {
+          "fit_ms": 96.59561095759273,
+          "infer_ms": 0.5422546528279781,
+          "total_ms": 97.1378656104207,
+          "digest": "07620c8c4df8153cf1048f96b74e3be2bfd33e0473f2b4b8854754888bb864e3",
+          "result_sha256": "f7c03a0bc2d413dfea6aa706951d7fd7e0080d6bfa7ee653bfe4d2dca755dee5"
+        },
+        "amd/on": {
+          "fit_ms": 213.34724800180993,
+          "infer_ms": 0.17480899987276644,
+          "total_ms": 213.5220570016827,
+          "digest": "07620c8c4df8153cf1048f96b74e3be2bfd33e0473f2b4b8854754888bb864e3",
+          "result_sha256": "83386ff31fb41a61951dba06cd5bba68969efad2f3aa8d2f4fdb1399053c57fe"
+        },
+        "amd/off": {
+          "fit_ms": 214.43892599927494,
+          "infer_ms": 0.20204999964335002,
+          "total_ms": 214.6409759989183,
+          "digest": "07620c8c4df8153cf1048f96b74e3be2bfd33e0473f2b4b8854754888bb864e3",
+          "result_sha256": "59765d5b729e544dbf64f780156e8863354534026e2d9af02b5cae8af8c4e828"
+        }
+      },
+      "nvidia_on_over_off": 0.9866,
+      "amd_on_over_off": 0.9948,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "kernel-pca--taxi",
+      "family": "kernel-gp",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 1552.672530990094,
+          "infer_ms": 13.07416707277298,
+          "total_ms": 1565.746698062867,
+          "digest": "0f09870d9914594f22f3dcc125304a65e984505a86a08e00488094efb10d15a9",
+          "result_sha256": "d301edc5c92aa6172142b886d123383e34e6b1320ad0cce3bf819413786b1bed"
+        },
+        "nvidia/off": {
+          "fit_ms": 1556.9109041243792,
+          "infer_ms": 13.266861904412508,
+          "total_ms": 1570.1777660287917,
+          "digest": "0f09870d9914594f22f3dcc125304a65e984505a86a08e00488094efb10d15a9",
+          "result_sha256": "05aef40692f86626204a4d9cc20cc77f5676d01c5e13cac970fa87485124d5b7"
+        },
+        "amd/on": {
+          "fit_ms": 556.6218780004419,
+          "infer_ms": 18.92550100092194,
+          "total_ms": 575.5473790013639,
+          "digest": "0f09870d9914594f22f3dcc125304a65e984505a86a08e00488094efb10d15a9",
+          "result_sha256": "fcbf4f74158be9d42464d7fc401ec976fa57d6ce13729be2eecc658d276af9ba"
+        },
+        "amd/off": {
+          "fit_ms": 556.867407001846,
+          "infer_ms": 19.011951000720728,
+          "total_ms": 575.8793580025667,
+          "digest": "0f09870d9914594f22f3dcc125304a65e984505a86a08e00488094efb10d15a9",
+          "result_sha256": "50f538746970a742d3bc7ceb0bebe630b908b73048bd9f1541997798a1da78fc"
+        }
+      },
+      "nvidia_on_over_off": 0.9972,
+      "amd_on_over_off": 0.9994,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "kmeans--taxi",
+      "family": "cluster",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 7.449856027960777,
+          "infer_ms": null,
+          "total_ms": 7.449856027960777,
+          "digest": "26521d86e77bcc6c0b9a6c95092469c45acc0470290dc608221db2be15d945d7",
+          "result_sha256": "2b08fdc0fa1e8353aa716d1e6e80206e1fdd667f35d2b3713b359720d675da3d"
+        },
+        "nvidia/off": {
+          "fit_ms": 7.675811182707548,
+          "infer_ms": null,
+          "total_ms": 7.675811182707548,
+          "digest": "26521d86e77bcc6c0b9a6c95092469c45acc0470290dc608221db2be15d945d7",
+          "result_sha256": "3bb256243b4cdbd149a41439d997435ad671d9362f4316c6af7260c1b5e0e991"
+        },
+        "amd/on": {
+          "fit_ms": 13.650693999807118,
+          "infer_ms": null,
+          "total_ms": 13.650693999807118,
+          "digest": "26521d86e77bcc6c0b9a6c95092469c45acc0470290dc608221db2be15d945d7",
+          "result_sha256": "8c32f8dda428cb22504c8eb4572396538d56dedfbdd761b1817ef84a1aaba410"
+        },
+        "amd/off": {
+          "fit_ms": 4.266816999006551,
+          "infer_ms": null,
+          "total_ms": 4.266816999006551,
+          "digest": "26521d86e77bcc6c0b9a6c95092469c45acc0470290dc608221db2be15d945d7",
+          "result_sha256": "660b008eff58c7d12355047f5b92bd589680cdf93d5bcdf96ea44fdda1eca37d"
+        }
+      },
+      "nvidia_on_over_off": 0.9706,
+      "amd_on_over_off": 3.1993,
+      "verdict": "DROP",
+      "reasons": [
+        "ON not faster on amd"
+      ]
+    },
+    {
+      "case": "knn-imputer--taxi",
+      "family": "neighbors",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 2.5433641858398914,
+          "infer_ms": 39.04970269650221,
+          "total_ms": 41.5930668823421,
+          "digest": "6be74e4be662edbc1ab415c91dfe332bba86a9ff4b9c43950e3ccddcd19b905c",
+          "result_sha256": "cae5f1cd65d1bc5483a5b9fcae0ea6610918a5e469b7147ca7d0f8b7a0958674"
+        },
+        "nvidia/off": {
+          "fit_ms": 2.5225020945072174,
+          "infer_ms": 39.2037290148437,
+          "total_ms": 41.72623110935092,
+          "digest": "6be74e4be662edbc1ab415c91dfe332bba86a9ff4b9c43950e3ccddcd19b905c",
+          "result_sha256": "192814040c66bd4fff93716553b788dac6dad75f846c0e368229781995342f1d"
+        },
+        "amd/on": {
+          "fit_ms": 0.9648990017012693,
+          "infer_ms": 72.21676900007878,
+          "total_ms": 73.18166800178005,
+          "digest": "6be74e4be662edbc1ab415c91dfe332bba86a9ff4b9c43950e3ccddcd19b905c",
+          "result_sha256": "8f7912d77e81f6b19aa2eb3e4c14ffd5cda3787d96adfb6e2b4ebdb7ec933cd6"
+        },
+        "amd/off": {
+          "fit_ms": 0.9718200017232448,
+          "infer_ms": 72.71806800054037,
+          "total_ms": 73.68988800226361,
+          "digest": "6be74e4be662edbc1ab415c91dfe332bba86a9ff4b9c43950e3ccddcd19b905c",
+          "result_sha256": "afe463748a9f6a838e6d016571851061fc1f043c9cb4e4e59117e0d979b1ab2d"
+        }
+      },
+      "nvidia_on_over_off": 0.9968,
+      "amd_on_over_off": 0.9931,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "kpss--taxi-hourly",
+      "family": "timeseries",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 3.246433101594448,
+          "infer_ms": null,
+          "total_ms": 3.246433101594448,
+          "digest": "ac107938c7711fc867509ee763911c244ca170d995145b7e4aa60352aedb69aa",
+          "result_sha256": "466c1c8bd03fb3fe782d940524b74769e090eee5d28d43b623c42bcdeb9aa14d"
+        },
+        "nvidia/off": {
+          "fit_ms": 1.7417310737073421,
+          "infer_ms": null,
+          "total_ms": 1.7417310737073421,
+          "digest": "3d76c336f0413dd059d4c381ab483d2bf6fb3373b26a4c5ec4cce407fbe915ea",
+          "result_sha256": "4f48fa97c823a9bf0a448596e248d631e7bf75ebe814849438afb8a43ba26a16"
+        },
+        "amd/on": {
+          "fit_ms": 0.6069199989724439,
+          "infer_ms": null,
+          "total_ms": 0.6069199989724439,
+          "digest": "ac107938c7711fc867509ee763911c244ca170d995145b7e4aa60352aedb69aa",
+          "result_sha256": "cc5445bb8d544f4c0a5d2678298425384a7d5f1fcc207e10bc462491f3b6b9c3"
+        },
+        "amd/off": {
+          "fit_ms": 0.9818899998208508,
+          "infer_ms": null,
+          "total_ms": 0.9818899998208508,
+          "digest": "3d76c336f0413dd059d4c381ab483d2bf6fb3373b26a4c5ec4cce407fbe915ea",
+          "result_sha256": "e8c4ab638f557d0c1a730a03b26b32f2c458594d3b6724e4b4afddd3232f0b00"
+        }
+      },
+      "nvidia_on_over_off": 1.8639,
+      "amd_on_over_off": 0.6181,
+      "verdict": "DROP",
+      "reasons": [
+        "ON not faster on nvidia"
+      ]
+    },
+    {
+      "case": "lasso-cv--taxi",
+      "family": "linear",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 8.238129317760468,
+          "infer_ms": 0.5252859555184841,
+          "total_ms": 8.763415273278952,
+          "digest": "b52789e4d3970226612fe28dd8e0af087463bd5a04a29ed298a6b081b949efad",
+          "result_sha256": "b929d2610e580ad5a4ad3572a78f58e8ba8051efd5533983f4531f5b25179b1b"
+        },
+        "nvidia/off": {
+          "fit_ms": 8.676868863403797,
+          "infer_ms": 0.5225259810686111,
+          "total_ms": 9.199394844472408,
+          "digest": "b52789e4d3970226612fe28dd8e0af087463bd5a04a29ed298a6b081b949efad",
+          "result_sha256": "9ed5042038efb633282db64b50ef869b44227b0270b42cfabce7935168849b5b"
+        },
+        "amd/on": {
+          "fit_ms": 24.97599900016212,
+          "infer_ms": 0.16058000255725347,
+          "total_ms": 25.136579002719373,
+          "digest": "b52789e4d3970226612fe28dd8e0af087463bd5a04a29ed298a6b081b949efad",
+          "result_sha256": "68162be72068fbd4191517691cdd4350d56edfef09ffdf16f254844e8617607f"
+        },
+        "amd/off": {
+          "fit_ms": 24.16646799974842,
+          "infer_ms": 0.1727599992591422,
+          "total_ms": 24.339227999007562,
+          "digest": "b52789e4d3970226612fe28dd8e0af087463bd5a04a29ed298a6b081b949efad",
+          "result_sha256": "a45b39bf537f14fe5f49b762f06568f97fb602b6a114bee909a1d56120e5133d"
+        }
+      },
+      "nvidia_on_over_off": 0.9526,
+      "amd_on_over_off": 1.0328,
+      "verdict": "DROP",
+      "reasons": [
+        "ON not faster on amd"
+      ]
+    },
+    {
+      "case": "maxabs-scaler--taxi",
+      "family": "prep-metrics",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 1.1394442990422249,
+          "infer_ms": 2.2578448988497257,
+          "total_ms": 3.3972891978919506,
+          "digest": "f3bb19a2d02cb1ef914f878aace653254a4b836afc8e61b609ea0d6ae9b33720",
+          "result_sha256": "7e22bafc7773d9f540a6c4351668b61ee1fa143446acc51bc8f40a0ece584549"
+        },
+        "nvidia/off": {
+          "fit_ms": 3.6222138442099094,
+          "infer_ms": 2.1473318338394165,
+          "total_ms": 5.769545678049326,
+          "digest": "f3bb19a2d02cb1ef914f878aace653254a4b836afc8e61b609ea0d6ae9b33720",
+          "result_sha256": "e2a2c0a9a864367ad89345bd59f93f336f88e1989478c34a3f9c73ef187b1942"
+        },
+        "amd/on": {
+          "fit_ms": 0.5942999996477738,
+          "infer_ms": 0.48867900113691576,
+          "total_ms": 1.0829790007846896,
+          "digest": "f3bb19a2d02cb1ef914f878aace653254a4b836afc8e61b609ea0d6ae9b33720",
+          "result_sha256": "f72ed49c0ec732b3595b9c756159417d81131699ab191fcacb78f247108a47ec"
+        },
+        "amd/off": {
+          "fit_ms": 1.6402289984398521,
+          "infer_ms": 0.49627900079940446,
+          "total_ms": 2.1365079992392566,
+          "digest": "f3bb19a2d02cb1ef914f878aace653254a4b836afc8e61b609ea0d6ae9b33720",
+          "result_sha256": "3f8968154f60446b634d424a87d170e10afad0dd8e1f720adea632be0e5a4c43"
+        }
+      },
+      "nvidia_on_over_off": 0.5888,
+      "amd_on_over_off": 0.5069,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "mean-squared-error--taxi",
+      "family": "prep-metrics",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 1.2545171193778515,
+          "infer_ms": null,
+          "total_ms": 1.2545171193778515,
+          "digest": "262c85baf1370afd0da456c0c3788ba99efac2c0bd83d2149ebb494d4bf1441b",
+          "result_sha256": "0cf3cd453e4a9cd72ea091ff2b69cc2b553dcd45f8e36457124ab92f0beb9ca8"
+        },
+        "nvidia/off": {
+          "fit_ms": 1.2601260095834732,
+          "infer_ms": null,
+          "total_ms": 1.2601260095834732,
+          "digest": "262c85baf1370afd0da456c0c3788ba99efac2c0bd83d2149ebb494d4bf1441b",
+          "result_sha256": "b4912f07dd6e0c35b7019c4978cfec141625af41ae36f4d3817bf3d85bb8f17e"
+        },
+        "amd/on": {
+          "fit_ms": 0.5485100009536836,
+          "infer_ms": null,
+          "total_ms": 0.5485100009536836,
+          "digest": "262c85baf1370afd0da456c0c3788ba99efac2c0bd83d2149ebb494d4bf1441b",
+          "result_sha256": "6edffb8b2dea9eb41bba8146e277a846703b63958427e3482777219826e623c6"
+        },
+        "amd/off": {
+          "fit_ms": 0.5482710002979729,
+          "infer_ms": null,
+          "total_ms": 0.5482710002979729,
+          "digest": "262c85baf1370afd0da456c0c3788ba99efac2c0bd83d2149ebb494d4bf1441b",
+          "result_sha256": "4e4f42873fc0b0d6e093891b3fb0361027fcdd50dc94c68ad5dce4d1977fae12"
+        }
+      },
+      "nvidia_on_over_off": 0.9955,
+      "amd_on_over_off": 1.0004,
+      "verdict": "DROP",
+      "reasons": [
+        "ON not faster on amd"
+      ]
+    },
+    {
+      "case": "meanshift--taxi",
+      "family": "cluster",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 20.22508718073368,
+          "infer_ms": 1.3099675998091698,
+          "total_ms": 21.53505478054285,
+          "digest": "424f4b3b2fb3869ded4d8fb35169f93bddf7ff8df512700746cdc83c597c0feb",
+          "result_sha256": "a692db9fdadf44e94ec3e005295e88acd11218d32df53c711b8f405420199b58"
+        },
+        "nvidia/off": {
+          "fit_ms": 23.135375697165728,
+          "infer_ms": 1.3223681598901749,
+          "total_ms": 24.457743857055902,
+          "digest": "424f4b3b2fb3869ded4d8fb35169f93bddf7ff8df512700746cdc83c597c0feb",
+          "result_sha256": "bfd26aee1300cb5671a0e2d51b1b0fc208a5ee4ea75b448f13855adcbb97919f"
+        },
+        "amd/on": {
+          "fit_ms": 24.250750000646804,
+          "infer_ms": 0.9292090035160072,
+          "total_ms": 25.17995900416281,
+          "digest": "424f4b3b2fb3869ded4d8fb35169f93bddf7ff8df512700746cdc83c597c0feb",
+          "result_sha256": "1243ca2cf7306cee4fd0eaa0b019c2d9e1c6076098d7114ecaa0fb709f62d628"
+        },
+        "amd/off": {
+          "fit_ms": 37.90287200172315,
+          "infer_ms": 0.8302789974550251,
+          "total_ms": 38.73315099917818,
+          "digest": "424f4b3b2fb3869ded4d8fb35169f93bddf7ff8df512700746cdc83c597c0feb",
+          "result_sha256": "0cb9d22acb9d1f0417942ce5a7ec64f00ce5115f56d3fd5f6ea696ee99e22029"
+        }
+      },
+      "nvidia_on_over_off": 0.8805,
+      "amd_on_over_off": 0.6501,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "minibatch-kmeans--taxi",
+      "family": "cluster",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 13.551163021475077,
+          "infer_ms": 1.1994950473308563,
+          "total_ms": 14.750658068805933,
+          "digest": "84befa47746689a1d53526a711ccb7250b36b186f9a636de8d0c0e12fc4951fd",
+          "result_sha256": "3d6bdda8b5b61d7ab5318b37021338328ea600e5e9730bc8298956b2a4e77d3d"
+        },
+        "nvidia/off": {
+          "fit_ms": 15.066764317452908,
+          "infer_ms": 1.1596931144595146,
+          "total_ms": 16.226457431912422,
+          "digest": "84befa47746689a1d53526a711ccb7250b36b186f9a636de8d0c0e12fc4951fd",
+          "result_sha256": "c95f285a6d2f0b0a6ba72607f599e1d2ba5c71e71a9bb62fe3d01bb49d7f1043"
+        },
+        "amd/on": {
+          "fit_ms": 18.469412003469188,
+          "infer_ms": 0.362540999049088,
+          "total_ms": 18.831953002518276,
+          "digest": "84befa47746689a1d53526a711ccb7250b36b186f9a636de8d0c0e12fc4951fd",
+          "result_sha256": "5cea896427e2c3ccca66c84aacfd49b2f2f0cb9315bfbca50f735dc382957a18"
+        },
+        "amd/off": {
+          "fit_ms": 16.42010299838148,
+          "infer_ms": 0.36145999911241233,
+          "total_ms": 16.781562997493893,
+          "digest": "84befa47746689a1d53526a711ccb7250b36b186f9a636de8d0c0e12fc4951fd",
+          "result_sha256": "8d2eb9216a6ea475ba65a719400073ddafd07e3efd114b814e98d1341737f359"
+        }
+      },
+      "nvidia_on_over_off": 0.909,
+      "amd_on_over_off": 1.1222,
+      "verdict": "DROP",
+      "reasons": [
+        "ON not faster on amd"
+      ]
+    },
+    {
+      "case": "nearest-centroid--taxi",
+      "family": "neighbors",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 5.577182397246361,
+          "infer_ms": 2.7794199995696545,
+          "total_ms": 8.356602396816015,
+          "digest": "65823b334e442a4021b6b628e4b0a1574698e0b9acff80b6c20400a52daf05a9",
+          "result_sha256": "18a61c01735083f55c1a8406f3db3618f1dab39b6ff205f9a96d3808af93cc6c"
+        },
+        "nvidia/off": {
+          "fit_ms": 6.777834612876177,
+          "infer_ms": 2.336337696760893,
+          "total_ms": 9.11417230963707,
+          "digest": "b03d97ae5e876bf4c84928646f474884142e1eb5a09f97154ebca2653dee22e2",
+          "result_sha256": "d9ad2fcd788f05036cf8917e246edcadf4fae7873ff7dea59310da1ee1aadc6b"
+        },
+        "amd/on": {
+          "fit_ms": 7.938617000036174,
+          "infer_ms": 0.7937100017443299,
+          "total_ms": 8.732327001780504,
+          "digest": "65823b334e442a4021b6b628e4b0a1574698e0b9acff80b6c20400a52daf05a9",
+          "result_sha256": "2d173d2fc1b27248ccb8d271e17e73b42dd8af7b5bfa9334c48f802b07173458"
+        },
+        "amd/off": {
+          "fit_ms": 11.542243999429047,
+          "infer_ms": 0.5721800007449929,
+          "total_ms": 12.11442400017404,
+          "digest": "b03d97ae5e876bf4c84928646f474884142e1eb5a09f97154ebca2653dee22e2",
+          "result_sha256": "bbb23e5053639ef7d6c4712ca33b7ca5dce1ba634e1169b183a45be16554a079"
+        }
+      },
+      "nvidia_on_over_off": 0.9169,
+      "amd_on_over_off": 0.7208,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "ocsvm--taxi",
+      "family": "neighbors",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 19.007211085408926,
+          "infer_ms": 3.479571081697941,
+          "total_ms": 22.486782167106867,
+          "digest": "0102f4b38d2870498d36e848e591d1b83aa5880c279f98973213085dd48f6c03",
+          "result_sha256": "43507b3d05b3e88793630908cbe944d3f39f922fe4b6613f7af01c102f0df116"
+        },
+        "nvidia/off": {
+          "fit_ms": 405.1767918281257,
+          "infer_ms": 3.6932663060724735,
+          "total_ms": 408.8700581341982,
+          "digest": "0102f4b38d2870498d36e848e591d1b83aa5880c279f98973213085dd48f6c03",
+          "result_sha256": "30f43d2f83fb5c772f3b748c0a64eb9f018de43f6634fb1880a5de0d49231cc7"
+        },
+        "amd/on": {
+          "fit_ms": 19.57741200021701,
+          "infer_ms": 1.04208000266226,
+          "total_ms": 20.61949200287927,
+          "digest": "0102f4b38d2870498d36e848e591d1b83aa5880c279f98973213085dd48f6c03",
+          "result_sha256": "51f9a5e7935af63eddf3f54b7e84f3c514d0d306a94789327388fc76d35ec267"
+        },
+        "amd/off": {
+          "fit_ms": 137.00524999876507,
+          "infer_ms": 1.131689001340419,
+          "total_ms": 138.13693900010549,
+          "digest": "0102f4b38d2870498d36e848e591d1b83aa5880c279f98973213085dd48f6c03",
+          "result_sha256": "28c6efb99469de9ccc2fd328b1a079d9db294ac738086a784fb0b0cf9be6fbfc"
+        }
+      },
+      "nvidia_on_over_off": 0.055,
+      "amd_on_over_off": 0.1493,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "ols--taxi",
+      "family": "decomp",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 4.195191897451878,
+          "infer_ms": null,
+          "total_ms": 4.195191897451878,
+          "digest": "b986e05a6a08acf04c58fcecdbaf9cfabd3812354de1b7f214df9a4691ffc8b0",
+          "result_sha256": "bd2662c3b44a96936057ac77a5660c869b4f0f3d13c96be56d498838efb3e79b"
+        },
+        "nvidia/off": {
+          "fit_ms": 7.629428990185261,
+          "infer_ms": null,
+          "total_ms": 7.629428990185261,
+          "digest": "b986e05a6a08acf04c58fcecdbaf9cfabd3812354de1b7f214df9a4691ffc8b0",
+          "result_sha256": "48eea403d786fd2a6bbbe7f00ab320e44070aea3a3297c7593b74ba1bafa1b76"
+        },
+        "amd/on": {
+          "fit_ms": 5.1668089981831145,
+          "infer_ms": null,
+          "total_ms": 5.1668089981831145,
+          "digest": "b986e05a6a08acf04c58fcecdbaf9cfabd3812354de1b7f214df9a4691ffc8b0",
+          "result_sha256": "c917111a4cf92fbfbe7d530c2c92ce735e291a7698d201461c0f287fce53980e"
+        },
+        "amd/off": {
+          "fit_ms": 6.747606999851996,
+          "infer_ms": null,
+          "total_ms": 6.747606999851996,
+          "digest": "b986e05a6a08acf04c58fcecdbaf9cfabd3812354de1b7f214df9a4691ffc8b0",
+          "result_sha256": "865d9183e9228146368476dc97377c0977b0fd931c0fe7c3bccee308d0fa7a14"
+        }
+      },
+      "nvidia_on_over_off": 0.5499,
+      "amd_on_over_off": 0.7657,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "pca--istella",
+      "family": "decomp",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 27.518458664417267,
+          "infer_ms": null,
+          "total_ms": 27.518458664417267,
+          "digest": "9a31ffb3d6a84aabf1d969bcae10047f7adcd58d36043fce52946deb9a7fed79",
+          "result_sha256": "38f66e323bc6bb6227e2027f6aacd401757dc1705c417035d29be010b086c96b"
+        },
+        "nvidia/off": {
+          "fit_ms": 463.06168800219893,
+          "infer_ms": null,
+          "total_ms": 463.06168800219893,
+          "digest": "95b3370188a500f861e97dd4d75a34ab9114c65386cf994378524c868dc3b0f0",
+          "result_sha256": "22f52f1999485b65b27ff4d894d54e9616a1bae72b9b0f6a19d16c7e5e167dee"
+        },
+        "amd/on": {
+          "fit_ms": 28.209007999976166,
+          "infer_ms": null,
+          "total_ms": 28.209007999976166,
+          "digest": "9a31ffb3d6a84aabf1d969bcae10047f7adcd58d36043fce52946deb9a7fed79",
+          "result_sha256": "8f6ced9357ef17046e4a0438a848935a8863fb6694da006bf19dc8923d722dd7"
+        },
+        "amd/off": {
+          "fit_ms": 861.4057730010245,
+          "infer_ms": null,
+          "total_ms": 861.4057730010245,
+          "digest": "95b3370188a500f861e97dd4d75a34ab9114c65386cf994378524c868dc3b0f0",
+          "result_sha256": "257a4279f3db8b66572ba87a466a928668cb16bbc7eda78a491f9c6d9a218211"
+        }
+      },
+      "nvidia_on_over_off": 0.0594,
+      "amd_on_over_off": 0.0327,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "poisson--taxi",
+      "family": "linear",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 5.250902380794287,
+          "infer_ms": 0.6887400522828102,
+          "total_ms": 5.939642433077097,
+          "digest": "dfe1d0dc9e9c34222ded80bcb3e97eccf46b5e0988c54ca67e55c26142032dec",
+          "result_sha256": "330db9ab83f822fd15437f118aef7d01a46371bc03e76f531f4f8ee65ea9df82"
+        },
+        "nvidia/off": {
+          "fit_ms": 6.547919008880854,
+          "infer_ms": 0.6924602203071117,
+          "total_ms": 7.240379229187965,
+          "digest": "dfe1d0dc9e9c34222ded80bcb3e97eccf46b5e0988c54ca67e55c26142032dec",
+          "result_sha256": "f9454a6495510702ff3651b8d71a1cced995a73c76e18b756f471b870f4cc7d5"
+        },
+        "amd/on": {
+          "fit_ms": 8.096075998764718,
+          "infer_ms": 0.1616890003788285,
+          "total_ms": 8.257764999143546,
+          "digest": "dfe1d0dc9e9c34222ded80bcb3e97eccf46b5e0988c54ca67e55c26142032dec",
+          "result_sha256": "69381daf9c57a34d973d72f0e9fa4004ac6e879fb18b04bb1f25c118a755f1b7"
+        },
+        "amd/off": {
+          "fit_ms": 8.629875999758951,
+          "infer_ms": 0.17352099894196726,
+          "total_ms": 8.803396998700919,
+          "digest": "dfe1d0dc9e9c34222ded80bcb3e97eccf46b5e0988c54ca67e55c26142032dec",
+          "result_sha256": "d7b7835f2b8e5c87062487d0cdaad9a04c6b8c98f5e7a06973d9ec8738a6bb83"
+        }
+      },
+      "nvidia_on_over_off": 0.8203,
+      "amd_on_over_off": 0.938,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "prophet--taxi-hourly",
+      "family": "timeseries",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 24.914866778999567,
+          "infer_ms": null,
+          "total_ms": 24.914866778999567,
+          "digest": "43bce4da51f4b22630a8944e9891300949c710c7b8f0220f9c8724d21d814768",
+          "result_sha256": "ab5721e64ae8f3577a66f8fed246fc7a34885dae74fa33aa201f14201756138d"
+        },
+        "nvidia/off": {
+          "fit_ms": 217.86038111895323,
+          "infer_ms": null,
+          "total_ms": 217.86038111895323,
+          "digest": "2c8fe3de57b23c55a67bffebfcb7cfc46ea96c125452cf07223390a92954eb23",
+          "result_sha256": "aff25faa277872ebc942c629d5f150ca7b8d24f3fcc5d5326e2799a4ca3823f0"
+        },
+        "amd/on": {
+          "fit_ms": 57.12259599749814,
+          "infer_ms": null,
+          "total_ms": 57.12259599749814,
+          "digest": "43bce4da51f4b22630a8944e9891300949c710c7b8f0220f9c8724d21d814768",
+          "result_sha256": "c8eef74ab7c2d71d71e5d17eacdbf462af98ec53cfdd4376dd642469b6e567de"
+        },
+        "amd/off": {
+          "fit_ms": 627.4114139996527,
+          "infer_ms": null,
+          "total_ms": 627.4114139996527,
+          "digest": "2c8fe3de57b23c55a67bffebfcb7cfc46ea96c125452cf07223390a92954eb23",
+          "result_sha256": "11334b98c7d36b59b4a4032e48c290b9b8e6df79e6c30b440d0200eca5d764f2"
+        }
+      },
+      "nvidia_on_over_off": 0.1144,
+      "amd_on_over_off": 0.091,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "qr--istella",
+      "family": "decomp",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 103.49385300651193,
+          "infer_ms": null,
+          "total_ms": 103.49385300651193,
+          "digest": "49afab7e05a1d204d64368f530bd76318f64116e821e234c19ff78f55dd48c1e",
+          "result_sha256": "4ce14ddcfa429a3f8a3b01ad4aa1929061a05c8e3cd5a783e04aa131a79b44d6"
+        },
+        "nvidia/off": {
+          "fit_ms": 270.2354178763926,
+          "infer_ms": null,
+          "total_ms": 270.2354178763926,
+          "digest": "49afab7e05a1d204d64368f530bd76318f64116e821e234c19ff78f55dd48c1e",
+          "result_sha256": "92d67970ee0e9d993ba893d567b7eb1ffbb9089b87d24801358586952ff1677f"
+        },
+        "amd/on": {
+          "fit_ms": 172.77524499877472,
+          "infer_ms": null,
+          "total_ms": 172.77524499877472,
+          "digest": "49afab7e05a1d204d64368f530bd76318f64116e821e234c19ff78f55dd48c1e",
+          "result_sha256": "405adcdb89ea9c59ec5c3c05cd74519444a791cebc08b3a44070f568fa720c3b"
+        },
+        "amd/off": {
+          "fit_ms": 586.0665629988944,
+          "infer_ms": null,
+          "total_ms": 586.0665629988944,
+          "digest": "49afab7e05a1d204d64368f530bd76318f64116e821e234c19ff78f55dd48c1e",
+          "result_sha256": "50cab3ddde7c05f735316c6cb3787b4843629128f323083fe8f7eb86901664b1"
+        }
+      },
+      "nvidia_on_over_off": 0.383,
+      "amd_on_over_off": 0.2948,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "random-forest--taxi",
+      "family": "forests",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 167.02371509745717,
+          "infer_ms": 2.283156383782625,
+          "total_ms": 169.3068714812398,
+          "digest": "7388e68ad081c5242eec17ae8ad3703c1b782272aad66ae5b0dfbdb479ab7ac8",
+          "result_sha256": "bb0e36049d684f240c7d871b2888e42fdb8e06f9a99f6465c4cf4eddaa121802"
+        },
+        "nvidia/off": {
+          "fit_ms": 106.26567807048559,
+          "infer_ms": 2.0529888570308685,
+          "total_ms": 108.31866692751646,
+          "digest": "7388e68ad081c5242eec17ae8ad3703c1b782272aad66ae5b0dfbdb479ab7ac8",
+          "result_sha256": "83a068a49de642a842c6dc41972b3744cbf299e49e550eb58c8e63aba46d3855"
+        },
+        "amd/on": {
+          "fit_ms": 503.65742000212776,
+          "infer_ms": 1.1230400014028419,
+          "total_ms": 504.7804600035306,
+          "digest": "7388e68ad081c5242eec17ae8ad3703c1b782272aad66ae5b0dfbdb479ab7ac8",
+          "result_sha256": "a284ccd6af131f5ad50e9f22c1ff48bea7b22497f25d99dfa8fc61421259caab"
+        },
+        "amd/off": {
+          "fit_ms": 165.7001269995817,
+          "infer_ms": 1.012618999084225,
+          "total_ms": 166.71274599866592,
+          "digest": "7388e68ad081c5242eec17ae8ad3703c1b782272aad66ae5b0dfbdb479ab7ac8",
+          "result_sha256": "c358f869fb24e8d51963a2ad5a7ddfdfb81fdd68e362ced047b3375cf9aa4577"
+        }
+      },
+      "nvidia_on_over_off": 1.563,
+      "amd_on_over_off": 3.0278,
+      "verdict": "DROP",
+      "reasons": [
+        "ON not faster on nvidia,amd"
+      ]
+    },
+    {
+      "case": "robust-scaler--taxi",
+      "family": "prep-metrics",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 7.002383004873991,
+          "infer_ms": 2.154603134840727,
+          "total_ms": 9.156986139714718,
+          "digest": "5aaef9ce49c7df99cf072d879de8a9a903b9a1686df0199cfe262fbdb1a42fee",
+          "result_sha256": "ee5a807c022c84cc0f7c62d7782c2a7cb98e91a5f70b0ffe8d70d0ee665467ae"
+        },
+        "nvidia/off": {
+          "fit_ms": 4.1694301180541515,
+          "infer_ms": 2.156382892280817,
+          "total_ms": 6.325813010334969,
+          "digest": "5aaef9ce49c7df99cf072d879de8a9a903b9a1686df0199cfe262fbdb1a42fee",
+          "result_sha256": "62949d3524da4f54a1e3b311833d182a35847e7aa3c8bd6e70743e8157c9ba38"
+        },
+        "amd/on": {
+          "fit_ms": 9.479415999521734,
+          "infer_ms": 0.5408600009104703,
+          "total_ms": 10.020276000432204,
+          "digest": "5aaef9ce49c7df99cf072d879de8a9a903b9a1686df0199cfe262fbdb1a42fee",
+          "result_sha256": "96619d578832d08800f43d373b0ad732b675b3d587e7dcc7f70e97272d9bca51"
+        },
+        "amd/off": {
+          "fit_ms": 2.1423789985419717,
+          "infer_ms": 0.5025600003136788,
+          "total_ms": 2.6449389988556504,
+          "digest": "5aaef9ce49c7df99cf072d879de8a9a903b9a1686df0199cfe262fbdb1a42fee",
+          "result_sha256": "e86823ef3870c3c88dcd61948477709bb45cfd1da8fd0dfd9898f2d6268ffa32"
+        }
+      },
+      "nvidia_on_over_off": 1.4476,
+      "amd_on_over_off": 3.7885,
+      "verdict": "DROP",
+      "reasons": [
+        "ON not faster on nvidia,amd"
+      ]
+    },
+    {
+      "case": "sgd-clf--taxi",
+      "family": "linear",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 57.758485432714224,
+          "infer_ms": 1.5170639380812645,
+          "total_ms": 59.27554937079549,
+          "digest": "bfd397e1a36ca92ca9dbceed23f86ba296a41b012332107ed350e401128e19fe",
+          "result_sha256": "4b7605d0e6317e31b9812aa5b73b859068c9bf946fca5d036ea3f740d5449b4e"
+        },
+        "nvidia/off": {
+          "fit_ms": 59.20371413230896,
+          "infer_ms": 1.1249920353293419,
+          "total_ms": 60.3287061676383,
+          "digest": "bfd397e1a36ca92ca9dbceed23f86ba296a41b012332107ed350e401128e19fe",
+          "result_sha256": "90ed7ef8a75a94384036ffc87e151164595d602698b0cd475f3030bdb06bd9b7"
+        },
+        "amd/on": {
+          "fit_ms": 119.36521900133812,
+          "infer_ms": 0.47794899728614837,
+          "total_ms": 119.84316799862427,
+          "digest": "bfd397e1a36ca92ca9dbceed23f86ba296a41b012332107ed350e401128e19fe",
+          "result_sha256": "26eced2e4c8408f2fb12723b4b67e43b71d45d189116024a4c5c4373c03a9f41"
+        },
+        "amd/off": {
+          "fit_ms": 120.43086799894809,
+          "infer_ms": 0.35748899972531945,
+          "total_ms": 120.78835699867341,
+          "digest": "bfd397e1a36ca92ca9dbceed23f86ba296a41b012332107ed350e401128e19fe",
+          "result_sha256": "e0f17aace8bb0e6b93051159b55b22729339cc68445826051fc703c97ad26bfa"
+        }
+      },
+      "nvidia_on_over_off": 0.9825,
+      "amd_on_over_off": 0.9922,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "sparse-rp--taxi",
+      "family": "kernel-gp",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 0.4766937345266342,
+          "infer_ms": 0.33049890771508217,
+          "total_ms": 0.8071926422417164,
+          "digest": "cc22c858c240e8ac9d282ff83d44e446feb3e4ea76a527cf937229a42a5b4ed2",
+          "result_sha256": "935de55eb13ed0b174e6789a1408c94037eabd370646f2af5fc3142f0001c7ce"
+        },
+        "nvidia/off": {
+          "fit_ms": 0.822744332253933,
+          "infer_ms": 0.3095977008342743,
+          "total_ms": 1.1323420330882072,
+          "digest": "cc22c858c240e8ac9d282ff83d44e446feb3e4ea76a527cf937229a42a5b4ed2",
+          "result_sha256": "08ad602e7379fe6f2e4a98e35a41adfe6c9ea484b08cf67933ec68187171a642"
+        },
+        "amd/on": {
+          "fit_ms": 0.3275700000813231,
+          "infer_ms": 0.14565999663318507,
+          "total_ms": 0.47322999671450816,
+          "digest": "cc22c858c240e8ac9d282ff83d44e446feb3e4ea76a527cf937229a42a5b4ed2",
+          "result_sha256": "5320e1c9d705e80bd4eb5d99f3b748b2f960eaa4b0ca99075b621385bb04caf0"
+        },
+        "amd/off": {
+          "fit_ms": 0.42926899914164096,
+          "infer_ms": 0.1512300004833378,
+          "total_ms": 0.5804989996249788,
+          "digest": "cc22c858c240e8ac9d282ff83d44e446feb3e4ea76a527cf937229a42a5b4ed2",
+          "result_sha256": "b7b4ef7730a6318c7cc541876c037bfb377f1ba64dc7de212b69db05110ac49c"
+        }
+      },
+      "nvidia_on_over_off": 0.7129,
+      "amd_on_over_off": 0.8152,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "svd--istella",
+      "family": "decomp",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 130.655060056597,
+          "infer_ms": null,
+          "total_ms": 130.655060056597,
+          "digest": "6d2fa169d8be33cb503eedbf59dcf750fcce929d8fe45ecd9e9960a147b7a1b5",
+          "result_sha256": "9ea1aeefb9bb19f22e99503ce289356b7040885462b89f650861d6595484fa01"
+        },
+        "nvidia/off": {
+          "fit_ms": 295.902987010777,
+          "infer_ms": null,
+          "total_ms": 295.902987010777,
+          "digest": "6d2fa169d8be33cb503eedbf59dcf750fcce929d8fe45ecd9e9960a147b7a1b5",
+          "result_sha256": "2afda015a484a2886eac932e2fce9c1d22393024465307824c45635b1fc74adf"
+        },
+        "amd/on": {
+          "fit_ms": 218.45300500353915,
+          "infer_ms": null,
+          "total_ms": 218.45300500353915,
+          "digest": "6d2fa169d8be33cb503eedbf59dcf750fcce929d8fe45ecd9e9960a147b7a1b5",
+          "result_sha256": "85cdbcaf3b6b77c12904a43cf3b3cf4177078ff75b827bf8e051711b4bdca419"
+        },
+        "amd/off": {
+          "fit_ms": 635.940820997348,
+          "infer_ms": null,
+          "total_ms": 635.940820997348,
+          "digest": "6d2fa169d8be33cb503eedbf59dcf750fcce929d8fe45ecd9e9960a147b7a1b5",
+          "result_sha256": "bad2fc7db768004676ee7e9b656e6350b518070029ec0eb1da679db57952242f"
+        }
+      },
+      "nvidia_on_over_off": 0.4415,
+      "amd_on_over_off": 0.3435,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "svgp--taxi",
+      "family": "kernel-gp",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 238.44791715964675,
+          "infer_ms": 15.549901872873306,
+          "total_ms": 253.99781903252006,
+          "digest": "b78bc9f4df90180a80f7ae879e4d2b74971e8db5677e5639ae09209aceee7227",
+          "result_sha256": "fd6f1a683f12ca4d6da0a9ea97418d3112905d3f5a71c3e8a6ea529eca0a428c"
+        },
+        "nvidia/off": {
+          "fit_ms": 808.1692918203771,
+          "infer_ms": 15.850295778363943,
+          "total_ms": 824.019587598741,
+          "digest": "4da1849fe6d452c9256142fe3667270eebe852f37565f049e7419ea56b37012e",
+          "result_sha256": "fbdfe4cb9c3d8c67a3f3c8fc14a0295beb6ce24c16d82ea95cc4ab3d8ef66d6b"
+        },
+        "amd/on": {
+          "fit_ms": 787.2588959980931,
+          "infer_ms": 45.52507100015646,
+          "total_ms": 832.7839669982495,
+          "digest": "b78bc9f4df90180a80f7ae879e4d2b74971e8db5677e5639ae09209aceee7227",
+          "result_sha256": "5981f584124192d72fc7ebf7744b980be6fed03b30b081d4a5e04ca441671505"
+        },
+        "amd/off": {
+          "fit_ms": 2038.8571259973105,
+          "infer_ms": 45.70347000117181,
+          "total_ms": 2084.5605959984823,
+          "digest": "4da1849fe6d452c9256142fe3667270eebe852f37565f049e7419ea56b37012e",
+          "result_sha256": "6ce01f7682c54aa3f1bef7d6b27fe7756c87b2d2cc90d2df35c5561d4c2d7ab5"
+        }
+      },
+      "nvidia_on_over_off": 0.3082,
+      "amd_on_over_off": 0.3995,
+      "verdict": "KEEP",
+      "reasons": []
+    },
+    {
+      "case": "var--taxi-hourly",
+      "family": "timeseries",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 0.9332960471510887,
+          "infer_ms": null,
+          "total_ms": 0.9332960471510887,
+          "digest": "637ea43442757a6461d97a6efd57f005846013038c5ace3e9aec3cb7c7bc37ae",
+          "result_sha256": "f7136b18cea6ba8120791bb4806627d8e7b96adafa0b0e633d15a2beb56d3912"
+        },
+        "nvidia/off": {
+          "fit_ms": 0.9121261537075043,
+          "infer_ms": null,
+          "total_ms": 0.9121261537075043,
+          "digest": "637ea43442757a6461d97a6efd57f005846013038c5ace3e9aec3cb7c7bc37ae",
+          "result_sha256": "10cbcb690274bd33529b9b7f047232200bc7e346212678de69ebad6328cb1726"
+        },
+        "amd/on": {
+          "fit_ms": 1.6186789980565663,
+          "infer_ms": null,
+          "total_ms": 1.6186789980565663,
+          "digest": "637ea43442757a6461d97a6efd57f005846013038c5ace3e9aec3cb7c7bc37ae",
+          "result_sha256": "ab17bc7e9dced425572b6665fa672c2093b481e171af34a8196799d2b379fad7"
+        },
+        "amd/off": {
+          "fit_ms": 1.3881099985155743,
+          "infer_ms": null,
+          "total_ms": 1.3881099985155743,
+          "digest": "637ea43442757a6461d97a6efd57f005846013038c5ace3e9aec3cb7c7bc37ae",
+          "result_sha256": "2af99a914c1413593f8e469ec83095786aefe7c27df1454e10d4af0556fb84e3"
+        }
+      },
+      "nvidia_on_over_off": 1.0232,
+      "amd_on_over_off": 1.1661,
+      "verdict": "DROP",
+      "reasons": [
+        "ON not faster on nvidia,amd"
+      ]
+    },
+    {
+      "case": "variance-threshold--taxi",
+      "family": "prep-metrics",
+      "samples": {
+        "nvidia/on": {
+          "fit_ms": 3.7487177178263664,
+          "infer_ms": 2.0658103749156,
+          "total_ms": 5.814528092741966,
+          "digest": "8c1a5928b8c6af57186228ff1f546cfa06ae98cf3e56d6875964b5837136bb7b",
+          "result_sha256": "9ca8ec6b392cb76d6298497dc3b45f92120db57aa296ff8bca50616a4458ce65"
+        },
+        "nvidia/off": {
+          "fit_ms": 5.938881076872349,
+          "infer_ms": 2.0855101756751537,
+          "total_ms": 8.024391252547503,
+          "digest": "8c1a5928b8c6af57186228ff1f546cfa06ae98cf3e56d6875964b5837136bb7b",
+          "result_sha256": "b8df956d7810d65afc7379600703bb5253854afdcdf5bf5f55ef8dce76badbe7"
+        },
+        "amd/on": {
+          "fit_ms": 1.9128290005028248,
+          "infer_ms": 0.5055000001448207,
+          "total_ms": 2.4183290006476454,
+          "digest": "8c1a5928b8c6af57186228ff1f546cfa06ae98cf3e56d6875964b5837136bb7b",
+          "result_sha256": "5dcd3673727d5d6a23be5dd736026cd25c6e7ef8b638168b1790ad0473487d75"
+        },
+        "amd/off": {
+          "fit_ms": 11.384574998373864,
+          "infer_ms": 0.49039900113712065,
+          "total_ms": 11.874973999510985,
+          "digest": "8c1a5928b8c6af57186228ff1f546cfa06ae98cf3e56d6875964b5837136bb7b",
+          "result_sha256": "64bb9359dc7583cd1ce6c4abeaf558a8001c7e0cf1161f23007061b46f918912"
+        }
+      },
+      "nvidia_on_over_off": 0.7246,
+      "amd_on_over_off": 0.2036,
+      "verdict": "KEEP",
+      "reasons": []
+    }
+  ],
+  "counts": {
+    "KEEP": 22,
+    "DROP": 14
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "status": "PASS",
+  "lane": "kmeans",
+  "vendor": "cuda",
+  "operation": "identity",
+  "fixture": {
+    "block": "reg-taxi.npz",
+    "fit_rows": 50000,
+    "query_rows": 0
+  },
+  "warmups": 0,
+  "timing_samples": 0,
+  "digest": "0454b9f3c5fb73dfc33fea1cc48ea40c690278f391fdf7e97c4a0f9dece3c290",
+  "outputs": {
+    "centers": {
+      "dtype": "<f4",
+      "shape": [
+        8,
+        11
+      ],
+      "bytes": 352,
+      "sha256": "a0fcba437e35cf0e1f906b28b0b0f7cb698dc7725600ab4b0e38d92b374eeb22"
+    },
+    "inertia": {
+      "dtype": "<f8",
+      "shape": [
+        1
+      ],
+      "bytes": 8,
+      "sha256": "55704c788ecd39f8c55d66484cecce41be6073bda60a0fd42c7f7a011c05367a"
+    },
+    "labels": {
+      "dtype": "<i4",
+      "shape": [
+        50000
+      ],
+      "bytes": 200000,
+      "sha256": "4bebf831727b42bdb25a744bf72b7ca8137cc25c2c32a42f5be65fceefc66c49"
+    },
+    "n_iter": {
+      "dtype": "<i8",
+      "shape": [
+        1
+      ],
+      "bytes": 8,
+      "sha256": "427b4d443e4c7f008af332e9acfc1539b4369ddc4f1915eea321a96caab10798"
+    }
+  },
+  "n_iter": 38,
+  "bindings": [
+    "/root/lq/br2-cand-kmeans-acc256-af93ebe0a/source/python/mojolearn/identical/_mojolearn.so",
+    "/root/lq/br2-cand-kmeans-acc256-af93ebe0a/source/python/mojolearn/identical/_mojolearn_estimators.so"
+  ],
+  "numeric_mode_env": "identical",
+  "numeric_mode_used": "identical"
+}

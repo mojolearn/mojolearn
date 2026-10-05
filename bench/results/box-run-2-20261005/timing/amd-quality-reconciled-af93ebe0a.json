@@ -1,0 +1,592 @@
+{
+  "identity": {
+    "sha": "af93ebe0ab05676c550f02f68741261018c0751b",
+    "vendor": "amd",
+    "gpu_arch": "gfx942",
+    "plan_sha256": "a2fde2fca175210c597e478d3785e84fd45f8a42f4972991deaea65f9db65828",
+    "data_manifest_sha256": "08b39f9422842634895fba03008b1be7e1fc0d50361648e82aa4aec86628a7f9",
+    "neural_fixture_sha256": {
+      "mamba3-forward-small.npz": "3194cf74795006ecfa8d889052a457cad23a21127ca2e2fd16d244f1fb3d92c0",
+      "transformer-forward-small.npz": "16646ee3d0cc741f43606150dcccdb2024508cc90007744fbdf5ca294ee50aaa"
+    }
+  },
+  "phase": "quality",
+  "status": "PASS",
+  "arms": {
+    "on": [
+      {
+        "id": "compiled_route_readback",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/compiled_route_readback.log"
+      },
+      {
+        "id": "dart_reference",
+        "original": {
+          "status": "FAIL",
+          "rc": 1
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "adjudication",
+        "adjudication": "/root/br2-harness/bench/results/box-run-2-20261005/dart-adjudication-carry-af93ebe0a.json",
+        "adjudication_sha256": "5f43d30b1ab4b5fa9df79d809e9651d6d0b75dd031f023c951342e252e80ee89",
+        "on_receipt": "/root/br2-harness/bench/results/box-run-2-20261005/dart-on-receipt-af93ebe0a.json",
+        "on_receipt_sha256": "7e09d2cd9dee840990b6436cbce19436f38c07d93d7bf51c4701926a01d5633f",
+        "local_prediction_sha256": {
+          "dart": "0aadbd2b15cc114416efe061612b59948597d67a493a0297c0285e8d3537a0ec",
+          "dart-reg": "f4ad9d8f2abc6710e16ec67a028cc0c7417f858c688bd2de6d903d00a7ea088d"
+        },
+        "predictions_match_adjudicated": true,
+        "decisions": {
+          "4096": "PASS",
+          "1024": "PASS",
+          "2048": "PASS"
+        }
+      },
+      {
+        "id": "block_eigh",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/block_eigh.log"
+      },
+      {
+        "id": "gram_cd",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/gram_cd.log"
+      },
+      {
+        "id": "pca_60_sweeps",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/pca_60_sweeps.log"
+      },
+      {
+        "id": "gmm_fused_cholesky",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/gmm_fused_cholesky.log"
+      },
+      {
+        "id": "prophet",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/prophet.log"
+      },
+      {
+        "id": "mamba3_angle",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/mamba3_angle.log"
+      },
+      {
+        "id": "iforest_lifetime",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/iforest_lifetime.log"
+      },
+      {
+        "id": "dbscan_edge_split",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/dbscan_edge_split.log"
+      },
+      {
+        "id": "dbscan_edge_split_scale",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/dbscan_edge_split_scale.log"
+      },
+      {
+        "id": "kde_legacy_staged",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/kde_legacy_staged.log"
+      },
+      {
+        "id": "kde_chunked_host",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/kde_chunked_host.log"
+      },
+      {
+        "id": "gbdt_depth_zero_mixed",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/gbdt_depth_zero_mixed.log"
+      },
+      {
+        "id": "small_eigh_guard",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/small_eigh_guard.log"
+      },
+      {
+        "id": "resident_qr_memory",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/resident_qr_memory.log"
+      },
+      {
+        "id": "lu_nan",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/lu_nan.log"
+      },
+      {
+        "id": "sgd_nan",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/sgd_nan.log"
+      },
+      {
+        "id": "pca_bits",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/pca_bits.log"
+      },
+      {
+        "id": "import_smoke",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/import_smoke.log"
+      },
+      {
+        "id": "cnn_seams",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/cnn_seams.log"
+      },
+      {
+        "id": "cnn_epoch_adam_controls",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/cnn_epoch_adam_controls.log"
+      },
+      {
+        "id": "eigh_block_expected_refusal",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/eigh_block_expected_refusal.log"
+      },
+      {
+        "id": "lu_result_word",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/lu_result_word.log"
+      },
+      {
+        "id": "rf_phase_upload_lifetime",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/on/quality/rf_phase_upload_lifetime.log"
+      }
+    ],
+    "off": [
+      {
+        "id": "compiled_route_readback",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/compiled_route_readback.log"
+      },
+      {
+        "id": "dart_reference",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/dart_reference.log"
+      },
+      {
+        "id": "block_eigh",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/block_eigh.log"
+      },
+      {
+        "id": "gram_cd",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/gram_cd.log"
+      },
+      {
+        "id": "pca_60_sweeps",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/pca_60_sweeps.log"
+      },
+      {
+        "id": "gmm_fused_cholesky",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/gmm_fused_cholesky.log"
+      },
+      {
+        "id": "prophet",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/prophet.log"
+      },
+      {
+        "id": "mamba3_angle",
+        "original": {
+          "status": "NOT_APPLICABLE",
+          "rc": null
+        },
+        "status": "NOT_APPLICABLE",
+        "source": "original"
+      },
+      {
+        "id": "iforest_lifetime",
+        "original": {
+          "status": "NOT_APPLICABLE",
+          "rc": null
+        },
+        "status": "NOT_APPLICABLE",
+        "source": "original"
+      },
+      {
+        "id": "dbscan_edge_split",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/dbscan_edge_split.log"
+      },
+      {
+        "id": "dbscan_edge_split_scale",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/dbscan_edge_split_scale.log"
+      },
+      {
+        "id": "kde_legacy_staged",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/kde_legacy_staged.log"
+      },
+      {
+        "id": "kde_chunked_host",
+        "original": {
+          "status": "NOT_APPLICABLE",
+          "rc": null
+        },
+        "status": "NOT_APPLICABLE",
+        "source": "original"
+      },
+      {
+        "id": "gbdt_depth_zero_mixed",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/gbdt_depth_zero_mixed.log"
+      },
+      {
+        "id": "small_eigh_guard",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/small_eigh_guard.log"
+      },
+      {
+        "id": "resident_qr_memory",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/resident_qr_memory.log"
+      },
+      {
+        "id": "lu_nan",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/lu_nan.log"
+      },
+      {
+        "id": "sgd_nan",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/sgd_nan.log"
+      },
+      {
+        "id": "pca_bits",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/pca_bits.log"
+      },
+      {
+        "id": "import_smoke",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/import_smoke.log"
+      },
+      {
+        "id": "cnn_seams",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/cnn_seams.log"
+      },
+      {
+        "id": "cnn_epoch_adam_controls",
+        "original": {
+          "status": "NOT_APPLICABLE",
+          "rc": null
+        },
+        "status": "NOT_APPLICABLE",
+        "source": "original"
+      },
+      {
+        "id": "eigh_block_expected_refusal",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/eigh_block_expected_refusal.log"
+      },
+      {
+        "id": "lu_result_word",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/lu_result_word.log"
+      },
+      {
+        "id": "rf_phase_upload_lifetime",
+        "original": {
+          "status": "PASS",
+          "rc": 0
+        },
+        "status": "PASS",
+        "rc": 0,
+        "source": "original",
+        "log": "/root/lq/br2-wave-af93ebe0a/off/quality/rf_phase_upload_lifetime.log"
+      }
+    ]
+  },
+  "method": "reconciled: original successes carried, failed cells replaced only by append-only PASS supplements",
+  "original_quality": {
+    "path": "/root/lq/br2-wave-af93ebe0a/quality.json",
+    "sha256": "8c25351635e361ae8f4eb341407d4799630c1e87c1d4a271ac4cea338504885a"
+  },
+  "opponents": "store only; never executed",
+  "reconciled_utc": "2026-10-05T05:52:42Z",
+  "counts": {
+    "on": {
+      "PASS": 25
+    },
+    "off": {
+      "PASS": 21,
+      "NOT_APPLICABLE": 4
+    }
+  }
+}

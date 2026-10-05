@@ -1,0 +1,1676 @@
+{
+  "identity": {
+    "sha": "af93ebe0ab05676c550f02f68741261018c0751b",
+    "vendor": "amd",
+    "gpu_arch": "gfx942",
+    "plan_sha256": "a2fde2fca175210c597e478d3785e84fd45f8a42f4972991deaea65f9db65828",
+    "data_manifest_sha256": "08b39f9422842634895fba03008b1be7e1fc0d50361648e82aa4aec86628a7f9",
+    "neural_fixture_sha256": {
+      "mamba3-forward-small.npz": "3194cf74795006ecfa8d889052a457cad23a21127ca2e2fd16d244f1fb3d92c0",
+      "transformer-forward-small.npz": "16646ee3d0cc741f43606150dcccdb2024508cc90007744fbdf5ca294ee50aaa"
+    }
+  },
+  "phase": "identity",
+  "status": "INCOMPLETE_OR_FAILED",
+  "arms": {
+    "on": [
+      {
+        "id": "gbdt-reg--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gbdt-reg--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gbdt-reg--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "1a0fab289d846dc56f899d96ec254839f15ae2d9418d4d5597224c9d6e79c46b",
+          "cpu": "1a0fab289d846dc56f899d96ec254839f15ae2d9418d4d5597224c9d6e79c46b"
+        }
+      },
+      {
+        "id": "gbdt-clf--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gbdt-clf--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gbdt-clf--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "738c7937d260dfa8275d2e366e1e63c777f13a063185a0ccbd3d91c5991bfcaf",
+          "cpu": "738c7937d260dfa8275d2e366e1e63c777f13a063185a0ccbd3d91c5991bfcaf"
+        }
+      },
+      {
+        "id": "random-forest--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "random-forest--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "random-forest--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "7388e68ad081c5242eec17ae8ad3703c1b782272aad66ae5b0dfbdb479ab7ac8",
+          "cpu": "7388e68ad081c5242eec17ae8ad3703c1b782272aad66ae5b0dfbdb479ab7ac8"
+        }
+      },
+      {
+        "id": "decision-tree-clf--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "decision-tree-clf--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "decision-tree-clf--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "d1e42ff850a69d53d2b71a80b960c5068a7ab8316c538bf6ebc134a5edb65ad6",
+          "cpu": "d1e42ff850a69d53d2b71a80b960c5068a7ab8316c538bf6ebc134a5edb65ad6"
+        }
+      },
+      {
+        "id": "dart--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "dart--taxi--cpu",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "dart--taxi--bits",
+        "status": "FAIL",
+        "digests": {
+          "hip": "44f2f5167b215e4526eaf302f7032019d257ca1e86b8f4e20bacf23368deb3da"
+        }
+      },
+      {
+        "id": "dart-reg--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "dart-reg--taxi--cpu",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "dart-reg--taxi--bits",
+        "status": "FAIL",
+        "digests": {
+          "hip": "f0f9edab734d683b25c984bd5196f1a6081f6161d95ee7d21f86894b5228c0f0"
+        }
+      },
+      {
+        "id": "sgd-clf--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "sgd-clf--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "sgd-clf--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "bfd397e1a36ca92ca9dbceed23f86ba296a41b012332107ed350e401128e19fe",
+          "cpu": "bfd397e1a36ca92ca9dbceed23f86ba296a41b012332107ed350e401128e19fe"
+        }
+      },
+      {
+        "id": "huber--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "huber--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "huber--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "07620c8c4df8153cf1048f96b74e3be2bfd33e0473f2b4b8854754888bb864e3",
+          "cpu": "07620c8c4df8153cf1048f96b74e3be2bfd33e0473f2b4b8854754888bb864e3"
+        }
+      },
+      {
+        "id": "poisson--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "poisson--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "poisson--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "dfe1d0dc9e9c34222ded80bcb3e97eccf46b5e0988c54ca67e55c26142032dec",
+          "cpu": "dfe1d0dc9e9c34222ded80bcb3e97eccf46b5e0988c54ca67e55c26142032dec"
+        }
+      },
+      {
+        "id": "lasso-cv--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "lasso-cv--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "lasso-cv--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "b52789e4d3970226612fe28dd8e0af087463bd5a04a29ed298a6b081b949efad",
+          "cpu": "b52789e4d3970226612fe28dd8e0af087463bd5a04a29ed298a6b081b949efad"
+        }
+      },
+      {
+        "id": "elasticnet--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "elasticnet--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "elasticnet--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "6123253c00934bae45f2357f584b4ceb410bb7999de7e7a9bf200a732e310ddd",
+          "cpu": "6123253c00934bae45f2357f584b4ceb410bb7999de7e7a9bf200a732e310ddd"
+        }
+      },
+      {
+        "id": "pca--istella--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "pca--istella--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "pca--istella--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "9a31ffb3d6a84aabf1d969bcae10047f7adcd58d36043fce52946deb9a7fed79",
+          "cpu": "9a31ffb3d6a84aabf1d969bcae10047f7adcd58d36043fce52946deb9a7fed79"
+        }
+      },
+      {
+        "id": "ols--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "ols--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "ols--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "b986e05a6a08acf04c58fcecdbaf9cfabd3812354de1b7f214df9a4691ffc8b0",
+          "cpu": "b986e05a6a08acf04c58fcecdbaf9cfabd3812354de1b7f214df9a4691ffc8b0"
+        }
+      },
+      {
+        "id": "kmeans--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "kmeans--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "kmeans--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "26521d86e77bcc6c0b9a6c95092469c45acc0470290dc608221db2be15d945d7",
+          "cpu": "26521d86e77bcc6c0b9a6c95092469c45acc0470290dc608221db2be15d945d7"
+        }
+      },
+      {
+        "id": "factor-analysis--istella--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "factor-analysis--istella--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "factor-analysis--istella--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "1e680dd8b89e96c3bac395a58ace745b8fb615e6d5441f58c5db9928cb013c84",
+          "cpu": "1e680dd8b89e96c3bac395a58ace745b8fb615e6d5441f58c5db9928cb013c84"
+        }
+      },
+      {
+        "id": "qr--istella--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "qr--istella--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "qr--istella--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "49afab7e05a1d204d64368f530bd76318f64116e821e234c19ff78f55dd48c1e",
+          "cpu": "49afab7e05a1d204d64368f530bd76318f64116e821e234c19ff78f55dd48c1e"
+        }
+      },
+      {
+        "id": "svd--istella--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "svd--istella--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "svd--istella--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "6d2fa169d8be33cb503eedbf59dcf750fcce929d8fe45ecd9e9960a147b7a1b5",
+          "cpu": "6d2fa169d8be33cb503eedbf59dcf750fcce929d8fe45ecd9e9960a147b7a1b5"
+        }
+      },
+      {
+        "id": "eigh--synthetic--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "eigh--synthetic--cpu",
+        "rc": 124,
+        "status": "FAIL"
+      },
+      {
+        "id": "eigh--synthetic--bits",
+        "status": "FAIL",
+        "digests": {
+          "hip": "f6560604fce405ea8b838a077d5e9397a11e922e550b2602f1123c2a3d6a11fd"
+        }
+      },
+      {
+        "id": "minibatch-kmeans--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "minibatch-kmeans--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "minibatch-kmeans--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "84befa47746689a1d53526a711ccb7250b36b186f9a636de8d0c0e12fc4951fd",
+          "cpu": "84befa47746689a1d53526a711ccb7250b36b186f9a636de8d0c0e12fc4951fd"
+        }
+      },
+      {
+        "id": "bayesian-gmm--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "bayesian-gmm--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "bayesian-gmm--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "16c9d28895045c08cc7fbdac8930186c527730815bc99c207bc79e5a40183c6c",
+          "cpu": "16c9d28895045c08cc7fbdac8930186c527730815bc99c207bc79e5a40183c6c"
+        }
+      },
+      {
+        "id": "meanshift--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "meanshift--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "meanshift--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "424f4b3b2fb3869ded4d8fb35169f93bddf7ff8df512700746cdc83c597c0feb",
+          "cpu": "424f4b3b2fb3869ded4d8fb35169f93bddf7ff8df512700746cdc83c597c0feb"
+        }
+      },
+      {
+        "id": "gmm--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gmm--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gmm--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "00dfc0849cace5e68ce4b4b3545ec6410be4b00f83e29601d8b26463cb1f1568",
+          "cpu": "00dfc0849cace5e68ce4b4b3545ec6410be4b00f83e29601d8b26463cb1f1568"
+        }
+      },
+      {
+        "id": "nearest-centroid--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "nearest-centroid--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "nearest-centroid--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "65823b334e442a4021b6b628e4b0a1574698e0b9acff80b6c20400a52daf05a9",
+          "cpu": "65823b334e442a4021b6b628e4b0a1574698e0b9acff80b6c20400a52daf05a9"
+        }
+      },
+      {
+        "id": "knn-imputer--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "knn-imputer--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "knn-imputer--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "6be74e4be662edbc1ab415c91dfe332bba86a9ff4b9c43950e3ccddcd19b905c",
+          "cpu": "6be74e4be662edbc1ab415c91dfe332bba86a9ff4b9c43950e3ccddcd19b905c"
+        }
+      },
+      {
+        "id": "ocsvm--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "ocsvm--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "ocsvm--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "0102f4b38d2870498d36e848e591d1b83aa5880c279f98973213085dd48f6c03",
+          "cpu": "0102f4b38d2870498d36e848e591d1b83aa5880c279f98973213085dd48f6c03"
+        }
+      },
+      {
+        "id": "maxabs-scaler--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "maxabs-scaler--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "maxabs-scaler--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "f3bb19a2d02cb1ef914f878aace653254a4b836afc8e61b609ea0d6ae9b33720",
+          "cpu": "f3bb19a2d02cb1ef914f878aace653254a4b836afc8e61b609ea0d6ae9b33720"
+        }
+      },
+      {
+        "id": "robust-scaler--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "robust-scaler--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "robust-scaler--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "5aaef9ce49c7df99cf072d879de8a9a903b9a1686df0199cfe262fbdb1a42fee",
+          "cpu": "5aaef9ce49c7df99cf072d879de8a9a903b9a1686df0199cfe262fbdb1a42fee"
+        }
+      },
+      {
+        "id": "variance-threshold--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "variance-threshold--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "variance-threshold--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "8c1a5928b8c6af57186228ff1f546cfa06ae98cf3e56d6875964b5837136bb7b",
+          "cpu": "8c1a5928b8c6af57186228ff1f546cfa06ae98cf3e56d6875964b5837136bb7b"
+        }
+      },
+      {
+        "id": "mean-squared-error--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "mean-squared-error--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "mean-squared-error--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "262c85baf1370afd0da456c0c3788ba99efac2c0bd83d2149ebb494d4bf1441b",
+          "cpu": "262c85baf1370afd0da456c0c3788ba99efac2c0bd83d2149ebb494d4bf1441b"
+        }
+      },
+      {
+        "id": "svgp--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "svgp--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "svgp--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "b78bc9f4df90180a80f7ae879e4d2b74971e8db5677e5639ae09209aceee7227",
+          "cpu": "b78bc9f4df90180a80f7ae879e4d2b74971e8db5677e5639ae09209aceee7227"
+        }
+      },
+      {
+        "id": "kernel-pca--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "kernel-pca--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "kernel-pca--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "0f09870d9914594f22f3dcc125304a65e984505a86a08e00488094efb10d15a9",
+          "cpu": "0f09870d9914594f22f3dcc125304a65e984505a86a08e00488094efb10d15a9"
+        }
+      },
+      {
+        "id": "additive-chi2--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "additive-chi2--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "additive-chi2--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "5ffcb191a8631cb58299e4b4d1704d00c1da8871c6dc915b8cedf2ae4d82ce07",
+          "cpu": "5ffcb191a8631cb58299e4b4d1704d00c1da8871c6dc915b8cedf2ae4d82ce07"
+        }
+      },
+      {
+        "id": "gaussian-rp--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gaussian-rp--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gaussian-rp--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "9500297c3accbf36f78f74f3ad8e42531f59aae774bfb4551c8deab56e51a640",
+          "cpu": "9500297c3accbf36f78f74f3ad8e42531f59aae774bfb4551c8deab56e51a640"
+        }
+      },
+      {
+        "id": "sparse-rp--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "sparse-rp--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "sparse-rp--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "cc22c858c240e8ac9d282ff83d44e446feb3e4ea76a527cf937229a42a5b4ed2",
+          "cpu": "cc22c858c240e8ac9d282ff83d44e446feb3e4ea76a527cf937229a42a5b4ed2"
+        }
+      },
+      {
+        "id": "var--taxi-hourly--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "var--taxi-hourly--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "var--taxi-hourly--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "637ea43442757a6461d97a6efd57f005846013038c5ace3e9aec3cb7c7bc37ae",
+          "cpu": "637ea43442757a6461d97a6efd57f005846013038c5ace3e9aec3cb7c7bc37ae"
+        }
+      },
+      {
+        "id": "prophet--taxi-hourly--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "prophet--taxi-hourly--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "prophet--taxi-hourly--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "43bce4da51f4b22630a8944e9891300949c710c7b8f0220f9c8724d21d814768",
+          "cpu": "43bce4da51f4b22630a8944e9891300949c710c7b8f0220f9c8724d21d814768"
+        }
+      },
+      {
+        "id": "autoarima--taxi-hourly--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "autoarima--taxi-hourly--cpu",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "autoarima--taxi-hourly--bits",
+        "status": "FAIL",
+        "digests": {
+          "hip": "2299e0af8d71975de603eee530ae61c2e21dac026e961c3258476265e337d9dd"
+        }
+      },
+      {
+        "id": "kpss--taxi-hourly--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "kpss--taxi-hourly--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "kpss--taxi-hourly--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "ac107938c7711fc867509ee763911c244ca170d995145b7e4aa60352aedb69aa",
+          "cpu": "ac107938c7711fc867509ee763911c244ca170d995145b7e4aa60352aedb69aa"
+        }
+      },
+      {
+        "id": "moe--synthetic--hip",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "moe--synthetic--cpu",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "moe--synthetic--bits",
+        "status": "FAIL",
+        "digests": {}
+      },
+      {
+        "id": "embedding--synthetic--hip",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "embedding--synthetic--cpu",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "embedding--synthetic--bits",
+        "status": "FAIL",
+        "digests": {}
+      },
+      {
+        "id": "layernorm--synthetic--hip",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "layernorm--synthetic--cpu",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "layernorm--synthetic--bits",
+        "status": "FAIL",
+        "digests": {}
+      },
+      {
+        "id": "batchnorm1d--synthetic--hip",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "batchnorm1d--synthetic--cpu",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "batchnorm1d--synthetic--bits",
+        "status": "FAIL",
+        "digests": {}
+      },
+      {
+        "id": "conv2d--synthetic--hip",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "conv2d--synthetic--cpu",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "conv2d--synthetic--bits",
+        "status": "FAIL",
+        "digests": {}
+      },
+      {
+        "id": "adam--synthetic--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "adam--synthetic--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "adam--synthetic--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "82e8de76f51ace5c6adef36b65163cb5952736a217955fe5151084b4738198f8",
+          "cpu": "82e8de76f51ace5c6adef36b65163cb5952736a217955fe5151084b4738198f8"
+        }
+      },
+      {
+        "id": "cross-entropy--synthetic--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "cross-entropy--synthetic--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "cross-entropy--synthetic--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "12084400c0f38ee8682079c2205098bcc7d64371182167946bde8eadc6340582",
+          "cpu": "12084400c0f38ee8682079c2205098bcc7d64371182167946bde8eadc6340582"
+        }
+      },
+      {
+        "id": "mamba3-forward--canonical-small--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "mamba3-forward--canonical-small--cpu",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "mamba3-forward--canonical-small--bits",
+        "status": "FAIL",
+        "digests": {
+          "hip": "95afeb8066d2c50dbb190217e3554d61fb28314e1f4473d48da75c43a23f4dd4"
+        }
+      },
+      {
+        "id": "transformer-forward--canonical-small--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "transformer-forward--canonical-small--cpu",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "transformer-forward--canonical-small--bits",
+        "status": "FAIL",
+        "digests": {
+          "hip": "fb2161c0ef8dc514b068dae7b8bca1d336d7d4be596d33ae5f53fcea0364af9f"
+        }
+      }
+    ],
+    "off": [
+      {
+        "id": "gbdt-reg--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gbdt-reg--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gbdt-reg--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "1a0fab289d846dc56f899d96ec254839f15ae2d9418d4d5597224c9d6e79c46b",
+          "cpu": "1a0fab289d846dc56f899d96ec254839f15ae2d9418d4d5597224c9d6e79c46b"
+        }
+      },
+      {
+        "id": "gbdt-clf--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gbdt-clf--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gbdt-clf--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "738c7937d260dfa8275d2e366e1e63c777f13a063185a0ccbd3d91c5991bfcaf",
+          "cpu": "738c7937d260dfa8275d2e366e1e63c777f13a063185a0ccbd3d91c5991bfcaf"
+        }
+      },
+      {
+        "id": "random-forest--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "random-forest--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "random-forest--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "7388e68ad081c5242eec17ae8ad3703c1b782272aad66ae5b0dfbdb479ab7ac8",
+          "cpu": "7388e68ad081c5242eec17ae8ad3703c1b782272aad66ae5b0dfbdb479ab7ac8"
+        }
+      },
+      {
+        "id": "decision-tree-clf--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "decision-tree-clf--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "decision-tree-clf--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "d1e42ff850a69d53d2b71a80b960c5068a7ab8316c538bf6ebc134a5edb65ad6",
+          "cpu": "d1e42ff850a69d53d2b71a80b960c5068a7ab8316c538bf6ebc134a5edb65ad6"
+        }
+      },
+      {
+        "id": "dart--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "dart--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "dart--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "ef30439733fbe4cc31973597239924d226096e47c5961e799275fc218441cb94",
+          "cpu": "ef30439733fbe4cc31973597239924d226096e47c5961e799275fc218441cb94"
+        }
+      },
+      {
+        "id": "dart-reg--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "dart-reg--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "dart-reg--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "38f8ee49145b4c0f05b2bd0655101a299cecf0abd4e7467039ad16b6308807da",
+          "cpu": "38f8ee49145b4c0f05b2bd0655101a299cecf0abd4e7467039ad16b6308807da"
+        }
+      },
+      {
+        "id": "sgd-clf--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "sgd-clf--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "sgd-clf--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "bfd397e1a36ca92ca9dbceed23f86ba296a41b012332107ed350e401128e19fe",
+          "cpu": "bfd397e1a36ca92ca9dbceed23f86ba296a41b012332107ed350e401128e19fe"
+        }
+      },
+      {
+        "id": "huber--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "huber--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "huber--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "07620c8c4df8153cf1048f96b74e3be2bfd33e0473f2b4b8854754888bb864e3",
+          "cpu": "07620c8c4df8153cf1048f96b74e3be2bfd33e0473f2b4b8854754888bb864e3"
+        }
+      },
+      {
+        "id": "poisson--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "poisson--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "poisson--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "dfe1d0dc9e9c34222ded80bcb3e97eccf46b5e0988c54ca67e55c26142032dec",
+          "cpu": "dfe1d0dc9e9c34222ded80bcb3e97eccf46b5e0988c54ca67e55c26142032dec"
+        }
+      },
+      {
+        "id": "lasso-cv--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "lasso-cv--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "lasso-cv--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "b52789e4d3970226612fe28dd8e0af087463bd5a04a29ed298a6b081b949efad",
+          "cpu": "b52789e4d3970226612fe28dd8e0af087463bd5a04a29ed298a6b081b949efad"
+        }
+      },
+      {
+        "id": "elasticnet--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "elasticnet--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "elasticnet--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "99d43d828bb4f4826b87f75ff3c743ed4257fc6b6c01487db9b40236a9111bdc",
+          "cpu": "99d43d828bb4f4826b87f75ff3c743ed4257fc6b6c01487db9b40236a9111bdc"
+        }
+      },
+      {
+        "id": "pca--istella--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "pca--istella--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "pca--istella--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "95b3370188a500f861e97dd4d75a34ab9114c65386cf994378524c868dc3b0f0",
+          "cpu": "95b3370188a500f861e97dd4d75a34ab9114c65386cf994378524c868dc3b0f0"
+        }
+      },
+      {
+        "id": "ols--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "ols--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "ols--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "b986e05a6a08acf04c58fcecdbaf9cfabd3812354de1b7f214df9a4691ffc8b0",
+          "cpu": "b986e05a6a08acf04c58fcecdbaf9cfabd3812354de1b7f214df9a4691ffc8b0"
+        }
+      },
+      {
+        "id": "kmeans--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "kmeans--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "kmeans--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "26521d86e77bcc6c0b9a6c95092469c45acc0470290dc608221db2be15d945d7",
+          "cpu": "26521d86e77bcc6c0b9a6c95092469c45acc0470290dc608221db2be15d945d7"
+        }
+      },
+      {
+        "id": "factor-analysis--istella--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "factor-analysis--istella--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "factor-analysis--istella--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "1e680dd8b89e96c3bac395a58ace745b8fb615e6d5441f58c5db9928cb013c84",
+          "cpu": "1e680dd8b89e96c3bac395a58ace745b8fb615e6d5441f58c5db9928cb013c84"
+        }
+      },
+      {
+        "id": "qr--istella--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "qr--istella--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "qr--istella--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "49afab7e05a1d204d64368f530bd76318f64116e821e234c19ff78f55dd48c1e",
+          "cpu": "49afab7e05a1d204d64368f530bd76318f64116e821e234c19ff78f55dd48c1e"
+        }
+      },
+      {
+        "id": "svd--istella--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "svd--istella--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "svd--istella--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "6d2fa169d8be33cb503eedbf59dcf750fcce929d8fe45ecd9e9960a147b7a1b5",
+          "cpu": "6d2fa169d8be33cb503eedbf59dcf750fcce929d8fe45ecd9e9960a147b7a1b5"
+        }
+      },
+      {
+        "id": "eigh--synthetic--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "eigh--synthetic--cpu",
+        "rc": 124,
+        "status": "FAIL"
+      },
+      {
+        "id": "eigh--synthetic--bits",
+        "status": "FAIL",
+        "digests": {
+          "hip": "f6560604fce405ea8b838a077d5e9397a11e922e550b2602f1123c2a3d6a11fd"
+        }
+      },
+      {
+        "id": "minibatch-kmeans--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "minibatch-kmeans--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "minibatch-kmeans--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "84befa47746689a1d53526a711ccb7250b36b186f9a636de8d0c0e12fc4951fd",
+          "cpu": "84befa47746689a1d53526a711ccb7250b36b186f9a636de8d0c0e12fc4951fd"
+        }
+      },
+      {
+        "id": "bayesian-gmm--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "bayesian-gmm--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "bayesian-gmm--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "51428781b348c29370b42899167341614e543752d842f3ea9f2e883f8970e1b6",
+          "cpu": "51428781b348c29370b42899167341614e543752d842f3ea9f2e883f8970e1b6"
+        }
+      },
+      {
+        "id": "meanshift--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "meanshift--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "meanshift--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "424f4b3b2fb3869ded4d8fb35169f93bddf7ff8df512700746cdc83c597c0feb",
+          "cpu": "424f4b3b2fb3869ded4d8fb35169f93bddf7ff8df512700746cdc83c597c0feb"
+        }
+      },
+      {
+        "id": "gmm--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gmm--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gmm--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "b20d3dd989f68c801fa8d6f4c63b10d09e9a7aaa435d6bae86749879af1a4805",
+          "cpu": "b20d3dd989f68c801fa8d6f4c63b10d09e9a7aaa435d6bae86749879af1a4805"
+        }
+      },
+      {
+        "id": "nearest-centroid--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "nearest-centroid--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "nearest-centroid--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "b03d97ae5e876bf4c84928646f474884142e1eb5a09f97154ebca2653dee22e2",
+          "cpu": "b03d97ae5e876bf4c84928646f474884142e1eb5a09f97154ebca2653dee22e2"
+        }
+      },
+      {
+        "id": "knn-imputer--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "knn-imputer--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "knn-imputer--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "6be74e4be662edbc1ab415c91dfe332bba86a9ff4b9c43950e3ccddcd19b905c",
+          "cpu": "6be74e4be662edbc1ab415c91dfe332bba86a9ff4b9c43950e3ccddcd19b905c"
+        }
+      },
+      {
+        "id": "ocsvm--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "ocsvm--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "ocsvm--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "0102f4b38d2870498d36e848e591d1b83aa5880c279f98973213085dd48f6c03",
+          "cpu": "0102f4b38d2870498d36e848e591d1b83aa5880c279f98973213085dd48f6c03"
+        }
+      },
+      {
+        "id": "maxabs-scaler--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "maxabs-scaler--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "maxabs-scaler--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "f3bb19a2d02cb1ef914f878aace653254a4b836afc8e61b609ea0d6ae9b33720",
+          "cpu": "f3bb19a2d02cb1ef914f878aace653254a4b836afc8e61b609ea0d6ae9b33720"
+        }
+      },
+      {
+        "id": "robust-scaler--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "robust-scaler--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "robust-scaler--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "5aaef9ce49c7df99cf072d879de8a9a903b9a1686df0199cfe262fbdb1a42fee",
+          "cpu": "5aaef9ce49c7df99cf072d879de8a9a903b9a1686df0199cfe262fbdb1a42fee"
+        }
+      },
+      {
+        "id": "variance-threshold--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "variance-threshold--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "variance-threshold--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "8c1a5928b8c6af57186228ff1f546cfa06ae98cf3e56d6875964b5837136bb7b",
+          "cpu": "8c1a5928b8c6af57186228ff1f546cfa06ae98cf3e56d6875964b5837136bb7b"
+        }
+      },
+      {
+        "id": "mean-squared-error--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "mean-squared-error--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "mean-squared-error--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "262c85baf1370afd0da456c0c3788ba99efac2c0bd83d2149ebb494d4bf1441b",
+          "cpu": "262c85baf1370afd0da456c0c3788ba99efac2c0bd83d2149ebb494d4bf1441b"
+        }
+      },
+      {
+        "id": "svgp--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "svgp--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "svgp--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "4da1849fe6d452c9256142fe3667270eebe852f37565f049e7419ea56b37012e",
+          "cpu": "4da1849fe6d452c9256142fe3667270eebe852f37565f049e7419ea56b37012e"
+        }
+      },
+      {
+        "id": "kernel-pca--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "kernel-pca--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "kernel-pca--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "0f09870d9914594f22f3dcc125304a65e984505a86a08e00488094efb10d15a9",
+          "cpu": "0f09870d9914594f22f3dcc125304a65e984505a86a08e00488094efb10d15a9"
+        }
+      },
+      {
+        "id": "additive-chi2--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "additive-chi2--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "additive-chi2--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "5ffcb191a8631cb58299e4b4d1704d00c1da8871c6dc915b8cedf2ae4d82ce07",
+          "cpu": "5ffcb191a8631cb58299e4b4d1704d00c1da8871c6dc915b8cedf2ae4d82ce07"
+        }
+      },
+      {
+        "id": "gaussian-rp--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gaussian-rp--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gaussian-rp--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "9500297c3accbf36f78f74f3ad8e42531f59aae774bfb4551c8deab56e51a640",
+          "cpu": "9500297c3accbf36f78f74f3ad8e42531f59aae774bfb4551c8deab56e51a640"
+        }
+      },
+      {
+        "id": "sparse-rp--taxi--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "sparse-rp--taxi--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "sparse-rp--taxi--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "cc22c858c240e8ac9d282ff83d44e446feb3e4ea76a527cf937229a42a5b4ed2",
+          "cpu": "cc22c858c240e8ac9d282ff83d44e446feb3e4ea76a527cf937229a42a5b4ed2"
+        }
+      },
+      {
+        "id": "var--taxi-hourly--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "var--taxi-hourly--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "var--taxi-hourly--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "637ea43442757a6461d97a6efd57f005846013038c5ace3e9aec3cb7c7bc37ae",
+          "cpu": "637ea43442757a6461d97a6efd57f005846013038c5ace3e9aec3cb7c7bc37ae"
+        }
+      },
+      {
+        "id": "prophet--taxi-hourly--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "prophet--taxi-hourly--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "prophet--taxi-hourly--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "2c8fe3de57b23c55a67bffebfcb7cfc46ea96c125452cf07223390a92954eb23",
+          "cpu": "2c8fe3de57b23c55a67bffebfcb7cfc46ea96c125452cf07223390a92954eb23"
+        }
+      },
+      {
+        "id": "autoarima--taxi-hourly--hip",
+        "rc": 124,
+        "status": "FAIL"
+      },
+      {
+        "id": "autoarima--taxi-hourly--cpu",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "autoarima--taxi-hourly--bits",
+        "status": "FAIL",
+        "digests": {}
+      },
+      {
+        "id": "kpss--taxi-hourly--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "kpss--taxi-hourly--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "kpss--taxi-hourly--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "3d76c336f0413dd059d4c381ab483d2bf6fb3373b26a4c5ec4cce407fbe915ea",
+          "cpu": "3d76c336f0413dd059d4c381ab483d2bf6fb3373b26a4c5ec4cce407fbe915ea"
+        }
+      },
+      {
+        "id": "moe--synthetic--hip",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "moe--synthetic--cpu",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "moe--synthetic--bits",
+        "status": "FAIL",
+        "digests": {}
+      },
+      {
+        "id": "embedding--synthetic--hip",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "embedding--synthetic--cpu",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "embedding--synthetic--bits",
+        "status": "FAIL",
+        "digests": {}
+      },
+      {
+        "id": "layernorm--synthetic--hip",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "layernorm--synthetic--cpu",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "layernorm--synthetic--bits",
+        "status": "FAIL",
+        "digests": {}
+      },
+      {
+        "id": "batchnorm1d--synthetic--hip",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "batchnorm1d--synthetic--cpu",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "batchnorm1d--synthetic--bits",
+        "status": "FAIL",
+        "digests": {}
+      },
+      {
+        "id": "conv2d--synthetic--hip",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "conv2d--synthetic--cpu",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "conv2d--synthetic--bits",
+        "status": "FAIL",
+        "digests": {}
+      },
+      {
+        "id": "adam--synthetic--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "adam--synthetic--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "adam--synthetic--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "82e8de76f51ace5c6adef36b65163cb5952736a217955fe5151084b4738198f8",
+          "cpu": "82e8de76f51ace5c6adef36b65163cb5952736a217955fe5151084b4738198f8"
+        }
+      },
+      {
+        "id": "cross-entropy--synthetic--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "cross-entropy--synthetic--cpu",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "cross-entropy--synthetic--bits",
+        "status": "PASS",
+        "digests": {
+          "hip": "12084400c0f38ee8682079c2205098bcc7d64371182167946bde8eadc6340582",
+          "cpu": "12084400c0f38ee8682079c2205098bcc7d64371182167946bde8eadc6340582"
+        }
+      },
+      {
+        "id": "mamba3-forward--canonical-small--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "mamba3-forward--canonical-small--cpu",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "mamba3-forward--canonical-small--bits",
+        "status": "FAIL",
+        "digests": {
+          "hip": "dbe4a33457b2f4d83af1d792482a01281834f490a8910587c92d7aa3b18c051c"
+        }
+      },
+      {
+        "id": "transformer-forward--canonical-small--hip",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "transformer-forward--canonical-small--cpu",
+        "rc": 1,
+        "status": "FAIL"
+      },
+      {
+        "id": "transformer-forward--canonical-small--bits",
+        "status": "FAIL",
+        "digests": {
+          "hip": "fb2161c0ef8dc514b068dae7b8bca1d336d7d4be596d33ae5f53fcea0364af9f"
+        }
+      }
+    ]
+  },
+  "opponents": "store only; never executed",
+  "worker": {
+    "path": "frozen source tools/identical_wave_worker.py",
+    "sha256": null
+  }
+}

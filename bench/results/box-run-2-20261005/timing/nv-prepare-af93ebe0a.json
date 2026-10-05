@@ -1,0 +1,456 @@
+{
+  "identity": {
+    "sha": "af93ebe0ab05676c550f02f68741261018c0751b",
+    "vendor": "nvidia",
+    "gpu_arch": "sm_89",
+    "plan_sha256": "a2fde2fca175210c597e478d3785e84fd45f8a42f4972991deaea65f9db65828",
+    "data_manifest_sha256": "08b39f9422842634895fba03008b1be7e1fc0d50361648e82aa4aec86628a7f9",
+    "neural_fixture_sha256": {
+      "mamba3-forward-small.npz": "3194cf74795006ecfa8d889052a457cad23a21127ca2e2fd16d244f1fb3d92c0",
+      "transformer-forward-small.npz": "16646ee3d0cc741f43606150dcccdb2024508cc90007744fbdf5ca294ee50aaa"
+    }
+  },
+  "phase": "prepare",
+  "status": "PASS",
+  "arms": {
+    "on": [
+      {
+        "id": "worktree",
+        "rc": 0
+      },
+      {
+        "id": "portable-math",
+        "rc": 0,
+        "reused": false
+      },
+      {
+        "id": "build_estimators_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_core_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_svm_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_estimators.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_svm.sh",
+        "rc": 0
+      },
+      {
+        "id": "build.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_solver_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_solver.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_gp_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_mixture_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_gp.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_mixture.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_gbdt_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_rf_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_metrics_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_rf.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_preprocessing.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_preprocessing_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_arima_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_arima.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_tsa.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_tsa_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_kernel_methods_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_metrics.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_gbdt.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_linear_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_kernel_methods.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_linear.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_neighbors_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_decomp_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_neighbors.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_cluster_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_prep_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_decomp.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_trees_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_cluster.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_sequence_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_prep.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_cnn_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_trees.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_embedding_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_embedding.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_training_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_sequence.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_transformer_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_training.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_cnn.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_mamba_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_transformer.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_linalg_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_mamba.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_linalg.sh",
+        "rc": 0
+      }
+    ],
+    "off": [
+      {
+        "id": "worktree",
+        "rc": 0
+      },
+      {
+        "id": "portable-math",
+        "rc": 0,
+        "reused": false
+      },
+      {
+        "id": "build_estimators_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_core_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_svm_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_svm.sh",
+        "rc": 0
+      },
+      {
+        "id": "build.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_solver_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_solver.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_gp_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_mixture_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_gp.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_mixture.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_rf.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_gbdt_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_rf_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_metrics_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_preprocessing.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_preprocessing_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_estimators.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_gbdt.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_arima.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_tsa_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_arima_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_tsa.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_kernel_methods_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_metrics.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_linear_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_kernel_methods.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_neighbors_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_linear.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_decomp_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_neighbors.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_cluster_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_prep_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_decomp.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_trees_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_cluster.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_sequence_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_prep.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_cnn_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_trees.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_embedding_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_embedding.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_training_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_sequence.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_transformer_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_training.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_x_cnn.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_mamba_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_linalg_host.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_mamba.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_transformer.sh",
+        "rc": 0
+      },
+      {
+        "id": "build_linalg.sh",
+        "rc": 0
+      }
+    ]
+  },
+  "opponents": "store only; never executed"
+}
