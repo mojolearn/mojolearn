@@ -3196,6 +3196,8 @@ def build_parser():
     p.add_argument("--no-smoke-gate", action="store_true",
                    help="start a full board without a SMOKE PASS for every planned race (recorded "
                         "in board.json as overridden)")
+    p.add_argument("--guarded-smoke-override-reason", default=None,
+                   help="explicit operator reason for skipping smoke on an artifact-guarded full run; runtime provenance remains mandatory")
     p.add_argument("--dry-run", action="store_true", help="print the plan and run nothing")
     p.add_argument("--render-only", action="store_true", help="re-render BOARD.md from board.json")
     p.add_argument("--tree-driver", default=os.path.join(REPO, "bench", "speed", "forest_speed_arm.py"),
@@ -3341,6 +3343,15 @@ def print_plan(vendor, modes, races, args, rows, data):
               % (sum(inf.values()), ", ".join("%s %d" % kv for kv in sorted(inf.items())) or "none"))
 
 
+def validate_guarded_smoke_override(args, artifact_identity):
+    reason = (args.guarded_smoke_override_reason or "").strip()
+    if args.guarded_smoke_override_reason is not None and (not reason or not args.no_smoke_gate or args.smoke):
+        raise SystemExit("bench_board: override reason requires a full run with --no-smoke-gate")
+    if artifact_identity and args.no_smoke_gate and not reason:
+        raise SystemExit("bench_board: guarded path comparison cannot bypass smoke without an explicit --guarded-smoke-override-reason")
+    return reason or None
+
+
 def main(argv=None):
     args = build_parser().parse_args(argv)
     if args.rounds < 1:
@@ -3473,8 +3484,7 @@ def main(argv=None):
         artifact_identity = _load_tool("bench_board_provenance").identity(args.artifact_manifest)
     except (OSError, ValueError) as exc:
         raise SystemExit("bench_board: artifact guard: " + str(exc))
-    if artifact_identity and args.no_smoke_gate:
-        raise SystemExit("bench_board: guarded path comparison cannot bypass smoke")
+    guarded_smoke_override = validate_guarded_smoke_override(args, artifact_identity)
     if artifact_identity and (vendor != "nvidia" or modes != ["identical"]):
         raise SystemExit("bench_board: guarded path comparison requires NVIDIA IDENTICAL only")
     gate = None
@@ -3574,7 +3584,8 @@ def main(argv=None):
                         "opponent_store": ctx["store_path"],
                         "retime_opponents": ctx["retime"],
                         "smoke_check": bool(args.smoke), "shard": args.shard,
-                        "smoke_gate": gate}
+                        "smoke_gate": gate,
+                        "guarded_smoke_override_reason": guarded_smoke_override}
     result["plan"] = [r["id"] for r in races]
     save_result(rpath, result)
     write_board(out, result)
