@@ -38,7 +38,7 @@ from fractions import Fraction
 
 import array as _array
 
-from ._training_impl import _F64_EPS, _LrTable, _lr_buffers, _lr_native, _lr_status
+from ._training_impl import _LrTable, _lr_buffers, _lr_native, _lr_status
 
 _F32_MIN_NORMAL_EXP = -126
 _F32_MAX_EXP = 127
