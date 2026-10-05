@@ -84,41 +84,13 @@ py-sklearn	py-numpy	apple-fast-purity2	debt	python/mojolearn/_mode.py	0	from skl
 # why: _fsum_exact: the exact big-integer sum fsum falls back to only when math.fsum meets a NaN, an infinity or an intermediate overflow; Mojo has no arbitrary-precision integer, owed as a Mojo NaN/inf classifier plus an exact wide accumulator
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_portable_math.py	0	for value in values:
 # why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	errs = [2.0 ** -43 + k * 2.0 ** -45 for k in range(count)]
-# why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	es = [(base + abs(v)) * 2.0 ** -50 for v in vs]
-# why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	es = [span * e + 8.0 * _F64_EPS * (peak + abs(v)) for v, e in zip(vs, ce)]
-# why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	es = [v * 2.0 ** -50 for v in vs]
-# why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	for _ in range(count):
-# why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	for a, b in zip(lo, hi)]
-# why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	for i, f in enumerate(vals):
-# why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	for k in range(_COS_F64_TERMS):
-# why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	1	for k in range(_COS_F64_TERMS):
-# why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	for k in range(terms):
 # why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	for terms in (24, 32, 48, 64):
 # why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	return [self._lr_at_slow(t) for t in range(t0, t1)]
-# why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	vs = [lo + span * (1.0 + c) / 2.0 for c in cs]
-# why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	vs = [peak * t / w for t in range(t0, b)]
-# why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	vs = [peak + d * k / span for k in range(k0, k1)]
 # why: per-optimizer-step learning rates from an lr_schedule (n_steps exact-rational lr_at calls) owed to a Mojo schedule table; lr_at needs multi-word fixed-point enclosures (DEVIATION 5540)
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_x_sequence_rnn.py	0	return np.asarray([self.lr_schedule.lr_at(t) for t in range(1, n_steps + 1)], dtype=np.float32)
-# why: lrs(n) and OneCycle _fill loop over optimizer steps in exact-rational/binary64 Python; owed to a Mojo port of the fixed-point enclosure (big-int Fraction fallback has no Mojo equivalent yet)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_x_sequence_sched.py	0	for k in range(count):
-# why: lrs(n) and OneCycle _fill loop over optimizer steps in exact-rational/binary64 Python; owed to a Mojo port of the fixed-point enclosure (big-int Fraction fallback has no Mojo equivalent yet)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_x_sequence_sched.py	1	for k in range(count):
 # why: lrs(n) and OneCycle _fill loop over optimizer steps in exact-rational/binary64 Python; owed to a Mojo port of the fixed-point enclosure (big-int Fraction fallback has no Mojo equivalent yet)
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_x_sequence_sched.py	0	return [self.lr_at(t) for t in range(1, int(n) + 1)]
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	module = _backend.load_host_module(_EXTENSION)
