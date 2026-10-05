@@ -1187,3 +1187,10 @@ Rows from board-quality-audit-2026-10-04 where FAST quality trailed the best opp
 | `FA_ITER_DEVICE` | factor-analysis / istella; taxi | lane/apple-fast-rec-ab3 @ 0ca521cc5 | afc_ab_def | istella 10.4 s -> ~1.95-2.0 s; taxi 358 -> 192 | HOLD-quality | same istella log-likelihood loss as FA_GRAM_ONCE (M3, full board, 1 run per arm, 2026-10-04); stays off |
 | `FA_ALL` | factor-analysis / istella; taxi | lane/apple-fast-rec-ab3 @ 0ca521cc5 | afc_ab_def | istella 10.4 s -> 9.54 s; taxi 358 -> 30.4 | HOLD-quality | same istella log-likelihood loss (M3, full board, 1 run per arm, 2026-10-04); stays off |
 
+
+## Small launch-bound inputs (lane/apple-fast-s-small, 2026-10-05, READY-AB)
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_KM_FAST_RBF_PIPE` | rbf-sampler / istella (kernel_methods/rbf_resident.mojo) | lane/apple-fast-s-small | (owed) | 57.1 -> (owed) | READY-AB | fit_transform pipelined over ~8 MiB row blocks: block k+1's X upload, GEMM and epilogue run on the GPU while the one host thread copies block k out of its pinned stage; main (STAGED) finishes the whole 88 MB upload + GEMM before the first stage copy. GEMM per row block (FAST: bits may move; quality checked by the A/B) |
+| (not written) host indicator for label-binarizer / multilabel-binarizer | label-binarizer taxi, multilabel-binarizer taxi | lane/apple-fast-s-small (dropped before push) | - | - | REFUSED-BY-HOOK | codes down + host writes of POS words into the zero-page output (skips the 1 GB device memset and the 1 GB pinned-stage download) is refused by tools/hooks no_host_routes (host-call / host-threads in GPU code). On Apple the dense output's floor is the single-thread write-combined copy-out (~3 GB/s) plus first-touch faults; no GPU-only lever left after POOL_ARENA / STAGED_OUT / LABEL_DIRECT. Needs an explicit hook allowance (host index map) to go further |
