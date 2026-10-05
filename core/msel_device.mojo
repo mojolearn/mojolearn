@@ -292,8 +292,8 @@ def device_scatter_rows(
     enqueue_fill(ctx, d_status, Int32(0))
     ctx.enqueue_function[_scatter_kernel](
         d_src.unsafe_ptr(), Int32(src_code), Int64(n_src), Int64(width),
-        store.bufs[idx_id].unsafe_ptr().bitcast[Int64](), Int64(n_dst),
-        store.bufs[dst_id].unsafe_ptr().bitcast[UInt64](), Int32(dst_code), d_status.unsafe_ptr(),
+        store.bufs[idx_id].unsafe_ptr().bitcast[Int64]().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin](), Int64(n_dst),
+        store.bufs[dst_id].unsafe_ptr().bitcast[UInt64]().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin](), Int32(dst_code), d_status.unsafe_ptr(),
         grid_dim=_grid(n_src * width), block_dim=MSEL_TPB,
     )
     var ok = _status(ctx, d_status) == 0

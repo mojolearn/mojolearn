@@ -1061,7 +1061,7 @@ def _seg_scan(ctx: DeviceContext, mut v: DeviceBuffer[DType.uint64], mut tmp: De
     var s = 1
     while s < n:
         ctx.enqueue_function[iso_seg_pass_kernel](
-            v.unsafe_ptr(), tmp.unsafe_ptr(), seg.unsafe_ptr(), Int64(n), Int64(s),
+            v.unsafe_ptr(), tmp.unsafe_ptr(), seg.unsafe_ptr().unsafe_mut_cast[True](), Int64(n), Int64(s),
             grid_dim=_blocks(n), block_dim=OPS_TPB,
         )
         _copy_head_u64(ctx, v, tmp, n)
