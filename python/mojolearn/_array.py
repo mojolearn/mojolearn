@@ -820,7 +820,7 @@ class Array:
             theirs = other._as_c()._values()
             bits = [1 if x == y else 0 for x, y in zip(mine, theirs)]
         elif isinstance(other, (int, float, bool)):
-            bits = [1 if x == other else 0 for x in mine]  # cpu-route: the refusal path and the test reference arm only
+            bits = [1 if x == other else 0 for x in mine]  # cpu-route: the differential test's reference arm only
         else:
             return NotImplemented
         return Array._owned(array.array("B", bits), self.shape, "<u1", "C")
@@ -908,14 +908,14 @@ class Array:
         if fast is not None:
             return fast
         self._no_reduce("min")
-        return min(self._reduce_values("min"))  # cpu-route: the refusal path and the test reference arm only
+        return min(self._reduce_values("min"))  # cpu-route: the differential test's reference arm only
 
     def max(self):
         fast = self._native_reduce(_REDUCE_MAX)
         if fast is not None:
             return fast
         self._no_reduce("max")
-        return max(self._reduce_values("max"))  # cpu-route: the refusal path and the test reference arm only
+        return max(self._reduce_values("max"))  # cpu-route: the differential test's reference arm only
 
     def sum(self):
         """Sequential accumulation: exact `int` for int dtypes, a Python
@@ -937,9 +937,9 @@ class Array:
             raise _rebuild("reduce_stat")
         values = self._values()
         if self.dtype in _INT:
-            return sum(values)  # cpu-route: the refusal path and the test reference arm only
+            return sum(values)  # cpu-route: the differential test's reference arm only
         acc = 0.0
-        for v in values:  # cpu-route: the refusal path and the test reference arm only
+        for v in values:  # cpu-route: the differential test's reference arm only
             acc += v
         return acc
 
@@ -953,7 +953,7 @@ class Array:
         values = self._as_c()._reduce_values("argmax")
         best = 0
         best_v = values[0]
-        for i in range(1, len(values)):  # cpu-route: the refusal path and the test reference arm only
+        for i in range(1, len(values)):  # cpu-route: the differential test's reference arm only
             v = values[i]
             if v > best_v:
                 best = i
