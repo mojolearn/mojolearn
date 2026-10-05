@@ -44,7 +44,9 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.gpu import block_dim, block_idx, thread_idx
 from checks.numerics import NUMERIC_FAST
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from std.ffi import _Global
+from core.device_pool import pool_give, pool_take
 from core.neural_context import neural_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
 
@@ -256,6 +258,113 @@ def chol_devio_check_kernel(a: MutPointer[Float32, MutAnyOrigin], bad: MutPointe
         bad[0] = Int32(1)
 
 
+# ---- lane/apple-fast-s-linalg (2026-10-04): CHOL_FAST_POOLIO, default OFF ----
+#: FAST + Apple only (`-D MOJOLEARN_CHOL_FAST_POOLIO`), on top of
+#: CHOL_FAST_DEVIO. What: DEVIO still makes, every fit at n = 8192, a FRESH
+#: 256 MB pinned host buffer (page faults), copies the caller's matrix into
+#: it on one host thread (`copy_f32`) and DMAs it up, and allocates the
+#: 256 MB device matrix and the ~256 MB potrf workspace fresh (GPU first-touch
+#: page faults). Here the caller's matrix goes up by the raw host-pointer
+#: copy (measured 1.6-2.4 ms per 64 MB on the M4, faster than the staged
+#: upload; x_decomp/device.mojo `_up_into`), the device matrix and workspace
+#: come from a named device pool (core/device_pool.mojo) and the download
+#: stage is one pinned host buffer kept between fits (grown when n grows).
+#: The NOSYNC redo re-uploads from the caller's matrix. `potrf_lower`
+#: unchanged: the same words. Expect: cholesky synthetic 261 -> ~200-235 ms.
+comptime CHOL_FAST_POOLIO = CHOL_FAST_DEVIO and is_defined["MOJOLEARN_CHOL_FAST_POOLIO"]()
+comptime _CHOL_POOL = "MojoCholFastPoolIO"
+
+
+struct _CholStage(Defaultable, Movable):
+    var buf: Optional[HostBuffer[DType.float32]]
+    var n: Int
+
+    def __init__(out self):
+        self.buf = Optional[HostBuffer[DType.float32]]()
+        self.n = 0
+
+
+comptime CHOL_STAGE = _Global[StorageType=_CholStage, name="MojoCholFastPoolIOStage", init_fn=_CholStage.__init__]
+
+
+def _chol_stage_ptr(ctx: DeviceContext, cells: Int) raises -> MutPointer[Float32, MutAnyOrigin]:
+    """The kept pinned download stage, at least `cells` floats."""
+    var slot = CHOL_STAGE.get_or_create_ptr()
+    if not slot[].buf or slot[].n < cells:
+        slot[].buf = Optional[HostBuffer[DType.float32]]()
+        slot[].buf = ctx.enqueue_create_host_buffer[DType.float32](cells)
+        slot[].n = cells
+        ctx.synchronize()
+    return MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(slot[].buf.value().unsafe_ptr()))
+
+
+def cholesky_factor_poolio(
+    ap: MutPointer[Float32, MutUntrackedOrigin],
+    lp: MutPointer[Float32, MutUntrackedOrigin],
+    sp: MutPointer[Float64, MutUntrackedOrigin],
+    n: Int,
+    jitter: Float32,
+) raises -> Int:
+    """`cholesky_factor_devio` with CHOL_FAST_POOLIO's IO (see above)."""
+    if n <= 0:
+        raise Error("cholesky: the matrix must have a positive dimension, got n=" + String(n))
+    chol_validate_jitter(jitter)
+    var nb = chol_nb_for(n, CHOL_NB_PINNED)
+    var cells = n * n
+    var ctx = _binding_ctx()
+    var da = pool_take[_CHOL_POOL](ctx, cells)
+    var ws = pool_take[_CHOL_POOL](ctx, chol_workspace_floats(n, nb))
+    var dbad = ctx.enqueue_create_buffer[DType.int32](1)
+    var hbad = ctx.enqueue_create_host_buffer[DType.int32](1)
+    var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
+    ctx.synchronize()
+    hbad.unsafe_ptr()[0] = Int32(0)
+    ctx.enqueue_copy(dst_buf=dbad, src_ptr=hbad.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=da, src_ptr=ap)
+    ctx.enqueue_function[chol_devio_check_kernel](
+        da.unsafe_ptr(), dbad.unsafe_ptr(), Int32(n), chol_sym_rel_tol(),
+        grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=hbad.unsafe_ptr(), src_buf=dbad)
+    ctx.synchronize()
+    if hbad.unsafe_ptr()[0] != Int32(0):
+        # the by-name refusal: the host validator on the caller's matrix
+        # (as DEVIO: a pass falls through to the factor)
+        var a = List[Float32](unsafe_uninit_length=cells)
+        copy_f32(ap, a.unsafe_ptr(), cells)
+        chol_validate_matrix(a, n, "the matrix")
+    var trace = IdentityTrace()
+    add_jitter(ctx, da, n, jitter, CHOL_ELEM_TPB)
+    var run = potrf_lower(
+        ctx, da, ws, n, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB, defer_ok=True
+    )
+    comptime if CHOL_FAST_NOSYNC:
+        if run.info != 0:
+            # the deferred route left a full (not partial) sweep: redo it
+            # with the per-panel reads for LAPACK's partial factor
+            ctx.enqueue_copy(dst_buf=da, src_ptr=ap)
+            add_jitter(ctx, da, n, jitter, CHOL_ELEM_TPB)
+            run = potrf_lower(ctx, da, ws, n, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
+    var logdet = Float32(0.0)
+    if run.info == 0:
+        logdet = chol_logdet(ctx, da, dwork, n, trace, CHOL_ELEM_TPB)
+    var stage = _chol_stage_ptr(ctx, cells)
+    ctx.enqueue_copy(dst_ptr=stage, src_buf=da)
+    ctx.synchronize()
+    copy_f32(stage, lp, cells)
+    sp.unsafe_store(0, Float64(run.info))
+    sp.unsafe_store(1, Float64(run.nb))
+    sp.unsafe_store(2, Float64(logdet))
+    sp.unsafe_store(3, Float64(jitter))
+    pool_give[_CHOL_POOL](da^)
+    pool_give[_CHOL_POOL](ws^)
+    _ = dbad^
+    _ = hbad^
+    _ = dwork^
+    _ = ctx^
+    return run.info
+
+
 def cholesky_factor_devio(
     ap: MutPointer[Float32, MutUntrackedOrigin],
     lp: MutPointer[Float32, MutUntrackedOrigin],
@@ -265,6 +374,8 @@ def cholesky_factor_devio(
 ) raises -> Int:
     """`cholesky_factor_host` + the binding's copies, FAST IO (see above):
     writes L into lp and info, nb, logdet, jitter into sp; returns info."""
+    comptime if CHOL_FAST_POOLIO:
+        return cholesky_factor_poolio(ap, lp, sp, n, jitter)
     if n <= 0:
         raise Error("cholesky: the matrix must have a positive dimension, got n=" + String(n))
     chol_validate_jitter(jitter)

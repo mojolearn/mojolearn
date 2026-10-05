@@ -15,9 +15,10 @@ from bindings.hostptr import f32_ptr, read_f32
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from x_cluster.device_ops import DeviceOps
+from core.device_scan import device_first_nonfinite
 from x_cluster.bisect_fast import BISECT_FAST_ZEROCOPY, bisect_entry_ptr
 from x_cluster.entries import ENTRY_BISECT, ENTRY_MINIBATCH, run_entry
-from x_cluster.minibatch_ptr import MBK_ZEROCOPY, minibatch_entry_ptr
+from x_cluster.minibatch_ptr import MBK_FAST_DEVSCAN, MBK_NONFINITE_MSG, MBK_ZEROCOPY, minibatch_entry_ptr
 from x_cluster.out import ClusterOut, py_floats, py_ints
 from x_cluster.tree_cut import PY2MOJO_CLUSTER
 
@@ -65,12 +66,33 @@ def call_binding(
     var x = read_f32(Int(py=x_addr), nx) if nx > 0 else List[Float32]()
     var a = read_f32(Int(py=a_addr), na) if na > 0 else List[Float32]()
     var ints = py_ints(ip)
+    # lane/apple-fast-s-linalg: Python skipped MiniBatchKMeans' host scan
+    # (ip[12] = 1) and the zero-copy path did not take the fit: scan X on the
+    # device (merge 2026-10-05: was a host walk, refused on the GPU route)
+    var scan_dev = False
+    comptime if MBK_FAST_DEVSCAN:
+        scan_dev = w == ENTRY_MINIBATCH and len(ints) > 12 and ints[12] != 0 and nx > 0
     var floats = py_floats(fp)
     var res = ClusterOut()
+    var bad = False
     with GILReleased(Python()):
         var ops = DeviceOps()
-        res = run_entry(ops, w, x, a, ints, floats)
+        if scan_dev:
+            var xd = ops.ctx.enqueue_create_buffer[DType.float32](nx)
+            ops.ctx.enqueue_copy(dst_buf=xd, src_ptr=x.unsafe_ptr())
+            bad = device_first_nonfinite(ops.ctx, xd, nx) >= 0
+            _ = xd^
+        if not bad:
+            res = run_entry(ops, w, x, a, ints, floats)
+    if bad:
+        raise Error(MBK_NONFINITE_MSG)
     return res.to_py()
+
+
+def mbk_devscan_binding() raises -> PythonObject:
+    """1 when MiniBatchKMeans' NaN/inf scan runs in this binding
+    (-D MOJOLEARN_MBK_FAST_DEVSCAN, x_cluster/minibatch_ptr.mojo), else 0."""
+    return PythonObject(1 if MBK_FAST_DEVSCAN else 0)
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -94,6 +116,7 @@ def PyInit__mojolearn_x_cluster() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_cluster")
         m.def_function[call_binding]("x_cluster_call")
         m.def_function[numeric_mode_binding]("x_cluster_numeric_mode")
+        m.def_function[mbk_devscan_binding]("x_cluster_mbk_devscan")
         m.def_function[vendor_binding]("x_cluster_vendor")
         m.def_function[py2mojo_binding]("x_cluster_py2mojo")
         return m.finalize()
