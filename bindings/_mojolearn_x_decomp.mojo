@@ -36,7 +36,8 @@ from x_decomp.fa_em import dsum_f32_py
 from x_decomp.chi2_dev import chi2_cdf_dev_py, chi2_quantile_dev_py
 from x_decomp.als_dev import als_fit_dev_py
 from x_decomp.mds_dev import mds_fit_dev_py
-from x_decomp.lle_iter_dev import lle_iterate_dev_py
+from x_decomp.lle_iter_dev import lle_iterate_dev_py, lle_gemm_ordered_py, lle_lu_ordered_py
+from gemm.afn_apple_fast import AFN_GEMM_APPLE
 from x_decomp.pls_dev import pls_fit_dev_py
 from x_decomp.lda_fit_dev import lda_fit_dev_py
 from x_decomp.dictl_dev import dict_learning_dev_py, minibatch_dev_py
@@ -145,6 +146,9 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[lda_fit_dev_py]("x_decomp_lda_fit")
         m.def_function[pls_fit_dev_py]("x_decomp_pls_fit")
         m.def_function[lle_iterate_dev_py]("x_decomp_lle_iterate")
+        comptime if AFN_GEMM_APPLE:
+            m.def_function[lle_gemm_ordered_py]("x_decomp_lle_gemm_ordered")
+            m.def_function[lle_lu_ordered_py]("x_decomp_lle_lu_ordered")
         m.def_function[mds_fit_dev_py]("x_decomp_mds_fit")
         m.def_function[als_fit_dev_py]("x_decomp_als_fit")
         m.def_function[chi2_cdf_dev_py]("x_decomp_chi2_cdf")
