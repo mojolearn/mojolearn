@@ -130,7 +130,7 @@ def lle_iterate_dev_py(
     return Python.tuple(st, e)
 
 
-def lle_gemm_ordered_py(a: PythonObject, b: PythonObject, out: PythonObject, p: PythonObject) raises -> PythonObject:
+def lle_gemm_ordered_py(a: PythonObject, b: PythonObject, output: PythonObject, p: PythonObject) raises -> PythonObject:
     """LLE's near-null construction/products through the existing ordered GPU cells."""
     var m = _n(p, 0)
     var kk = _n(p, 1)
@@ -141,7 +141,7 @@ def lle_gemm_ordered_py(a: PythonObject, b: PythonObject, out: PythonObject, p: 
         raise Error("x_decomp: LLE product shape out of range")
     var pa = _f(a)
     var pb = _f(b)
-    var po = _f(out)
+    var po = _f(output)
     with GILReleased(Python()):
         var k = DKit()
         var A = k.upload(mat_from(pa, kk if ta else m, m if ta else kk))
