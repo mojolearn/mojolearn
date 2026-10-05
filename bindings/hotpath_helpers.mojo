@@ -1051,6 +1051,10 @@ def ic_running_min_f64_binding(
     with GILReleased(Python()):
         for b in range(count):
             var v = -2.0 * Float64(lp.unsafe_load(b)) + pen
+            # lane cpu4-python: a NaN criterion is the canonical quiet NaN,
+            # as the device form (core/ic_min_device.mojo, soft binary64)
+            if v != v:
+                v = bitcast[DType.float64](UInt64(0x7FF8000000000000))
             ip.unsafe_store(b, v)
             if k == 0:
                 bp.unsafe_store(b, v)
