@@ -105,7 +105,14 @@ hence the gate. `-D MOJOLEARN_RF_BINS_COLUMN_MAJOR` turns it off."""
 
 comptime RF_BINS_ROW_MAJOR_WIDE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 """The wide-data half of the `RF_BINS_ROW_MAJOR` gate (`2k >= n_cols` with
-`n_cols > 64`): FAST only, see above."""
+`n_cols > 64`): FAST only, see above. Basis (lane apple-fast-no-narrow-2,
+2026-10-04, reviewed as a possible taxi/istella fit and kept): both terms
+are byte-traffic rules, not board sizes. `n_cols <= 64`: a row's uint8 bins
+are one 64-byte cache line, so row-major costs one line per row. Wider: a
+row-major tile fetches the whole row (n_cols bytes) to use the k sampled
+bins, while column-major reads each sampled column coalesced across rows
+with every fetched byte used; row-major is taken only when at least half of
+the bytes it fetches are used (`2k >= n_cols`)."""
 
 @fieldwise_init
 struct DatasetView[dtype: DType, label_dtype: DType](Copyable, Movable):
