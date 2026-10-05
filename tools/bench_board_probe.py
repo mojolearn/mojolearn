@@ -365,6 +365,11 @@ class MemProbe(object):
 
     # -- the round ----------------------------------------------------------
     def start(self):
+        # Registration only; actual hashes/selection are read at worker exit,
+        # after fit and inference timings, including lazily loaded bindings.
+        if os.environ.get("MOJOLEARN_BOARD_ARTIFACT_MANIFEST"):
+            import bench_board_provenance
+            bench_board_provenance.register_worker(self.library)
         try:
             self._reset_gpu()
             self._reset_host()
