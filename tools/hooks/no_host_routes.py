@@ -1075,6 +1075,11 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
 # min()/max() or array reduction method is a finding, unless the line carries
 # a reviewed `# glue: <reason of 3+ words>` (a loop over arguments, kwargs,
 # a handful of names, never over rows, features, classes or tokens).
+# A d- or k-sized walk over fitted metadata (per-feature category sizes,
+# per-class offsets: values the binding returned or the user passed, never
+# rows or tokens) carries `# small-loop(<bound>: <what>): <why>`, where the
+# bound names a variable of the line; an explicit CPU-only input step (text,
+# files, user callables) carries `# cpu-route: <reason>`.
 _GLUE = re.compile(r"#\s*glue:\s*(\S+\s+){2,}\S+")
 _PY_STR = re.compile(r"(?:[rbfuRBFU]{0,2})(\"[^\"\\\n]*(?:\\.[^\"\\\n]*)*\"|'[^'\\\n]*(?:\\.[^'\\\n]*)*')")
 _PY_FOR = re.compile(r"(^\s*(async\s+)?for\s|[\[({,]\s*.*?\bfor\s+[\w\s,()*]+?\s+in\b|\S\s+for\s+[\w\s,()*]+?\s+in\b)")
@@ -1122,9 +1127,14 @@ def _py_compute(lines):
         if re.match(r"(async\s+)?def\s", st):
             def_ind.append(ind)
             continue
-        if not def_ind or _GLUE.search(t):
+        if not def_ind or _GLUE.search(t) or _CPU_ROUTE.search(t):
             continue
         code = _PY_STR.sub('""', t.split("  #", 1)[0] if "  #" in t else t)
+        # a reviewed d- or k-sized walk names its bound, and the bound must
+        # appear in the line's code (as the Mojo small-loop note requires)
+        sm = _SMALL_LOOP.search(t)
+        if sm and re.search(r"\b" + re.escape(sm.group(1)) + r"\b", code):
+            continue
         if _PY_FOR.search(code):
             out.append(("py-data-loop", no, t))
         for m in _NP_CALL.finditer(code):
