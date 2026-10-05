@@ -648,7 +648,23 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
                     "opponents": list(opp),
                     "arms": list(ours) + list(opp),
                 })
+    for race in races:
+        unsupported = unsupported_our_arms(race)
+        if unsupported:
+            race["unsupported_arms"] = unsupported
     return enforce_gpu_only(races)
+
+
+def unsupported_our_arms(race):
+    """Public API capabilities, never benchmark-shape exceptions.
+
+    _linalg_impl._lowbit_binding calls require_identical() for BF16/INT8
+    on every shape. No FAST implementation is exposed by these APIs.
+    """
+    if race.get("family") != "neural" or race.get("lane") not in ("gemm-bf16", "gemm-int8"):
+        return {}
+    return {arm: "UNSUPPORTED(FAST low-bit API requires IDENTICAL: _lowbit_binding.require_identical)"
+            for arm, mode in race.get("our_arms", {}).items() if mode == "fast"}
 
 
 def plan_summary(races):
@@ -658,6 +674,7 @@ def plan_summary(races):
         f["races"] += 1
         f["cells"] += len(r["arms"])
     return {"races": len(races), "cells": sum(len(r["arms"]) for r in races),
+            "unsupported_races": sum(bool(r.get("our_arms")) and set(r["our_arms"]) <= set(unsupported_our_arms(r)) for r in races),
             "by_family": by_fam}
 
 
@@ -2322,6 +2339,11 @@ def run_race(ctx, race):
     if skipped:
         print("bench_board:   opponents not stored, not raced (ours-only default; "
               "--with-opponents races them): %s" % ", ".join(skipped), flush=True)
+    unsupported = unsupported_our_arms(race)
+    declared_race = race
+    if unsupported:
+        race = dict(race, arms=[a for a in race["arms"] if a not in unsupported],
+                    our_arms={a: m for a, m in race["our_arms"].items() if a not in unsupported})
     mark = len(HOST_MEMORY_KILLS)
     if ctx.get("artifact_identity"):
         import tempfile
@@ -2329,7 +2351,19 @@ def run_race(ctx, race):
         root = os.path.join(ctx["out"], "provenance")
         os.makedirs(root, exist_ok=True)
         ctx["receipt_dir"] = tempfile.mkdtemp(prefix="race-", dir=root)
-    rec = _run_race(ctx, race)
+    if race["arms"]:
+        rec = _run_race(ctx, race)
+    else:
+        rec = dict(id=race["id"], family=race["family"], lane=race["lane"], dataset=race["dataset"],
+                   rows=race["rows"], our_arms=declared_race["our_arms"], cells=[],
+                   started=now_utc(), finished=now_utc(), status="unsupported", rc=0,
+                   params_check="NOT APPLICABLE (public API unsupported)")
+    if unsupported:
+        rec["unsupported_arms"] = unsupported
+        for arm, reason in unsupported.items():
+            cell = base_cell(ctx, declared_race, arm, declared_race["our_arms"][arm])
+            cell["status"] = reason
+            rec["cells"].append(cell)
     if ctx.get("artifact_identity"):
         try:
             rows = _load_tool("bench_board_provenance").read_receipts(
@@ -2707,6 +2741,7 @@ def render_board(result):
     planned = result.get("plan") or []
     done = sum(1 for r in races.values() if r.get("status") == "done")
     failed = sum(1 for r in races.values() if r.get("status") == "failed")
+    unsupported = sum(1 for r in races.values() if r.get("status") == "unsupported")
     cells = all_cells(result)
     st = {}
     for c in cells:
@@ -2714,8 +2749,8 @@ def render_board(result):
         st[k] = st.get(k, 0) + 1
     L.append("## Coverage")
     L.append("")
-    L.append("Races: %d planned, %d done, %d failed, %d pending. Cells: %d (%s)."
-             % (len(planned), done, failed, max(0, len(planned) - done - failed), len(cells),
+    L.append("Races: %d planned, %d done, %d failed, %d unsupported, %d pending. Cells: %d (%s)."
+             % (len(planned), done, failed, unsupported, max(0, len(planned) - done - failed - unsupported), len(cells),
                 ", ".join("%s %d" % kv for kv in sorted(st.items())) or "none"))
     icov = INFER.coverage(races)
     if icov:
@@ -2950,6 +2985,15 @@ def smoke_verdict(race, rec, vendor):
     if rec is None:
         return [("-", "not run")]
     fails = []
+    unsupported = unsupported_our_arms(race)
+    all_unsupported = bool(race.get("our_arms")) and set(race["our_arms"]) <= set(unsupported)
+    if rec.get("status") == "unsupported" and all_unsupported:
+        cells = {c.get("arm"): c for c in rec.get("cells") or []}
+        if rec.get("unsupported_arms") != unsupported or any(
+                cells.get(a, {}).get("status") != reason or cells[a].get("median_ms") is not None
+                for a, reason in unsupported.items()):
+            return [("-", "missing explicit unsupported capability record")]
+        return []
     if rec.get("status") != "done":
         fails.append(("-", "status %s%s" % (rec.get("status"), (": " + str(rec.get("failure")))
                                             if rec.get("failure") else "")))
@@ -2967,6 +3011,8 @@ def smoke_verdict(race, rec, vendor):
             fails.append((arm, "no cell"))
             continue
         status = str(c.get("status"))
+        if arm in unsupported and status == unsupported[arm] and c.get("median_ms") is None:
+            continue
         why = _planned_refusal(vendor, key, arm)
         if why and status.startswith("REFUSED"):
             continue
@@ -2986,12 +3032,19 @@ def write_smoke(out, races, result, vendor, shard):
     for r in races:
         fails = smoke_verdict(r, result["races"].get(r["id"]), vendor)
         verdicts[smoke_key(r)] = {"id": r["id"], "pass": not fails,
+                                  "unsupported": unsupported_our_arms(r),
+                                  "eligible": not (bool(r.get("our_arms")) and set(r["our_arms"]) <= set(unsupported_our_arms(r))),
                                   "failures": [{"arm": a, "reason": w} for a, w in fails]}
     bad = sorted(k for k, v in verdicts.items() if not v["pass"])
+    unsupported_count = sum(not v["eligible"] for v in verdicts.values())
+    eligible_count = len(verdicts) - unsupported_count
     doc = {"schema": SMOKE_SCHEMA, "created": now_utc(), "commit": repo_commit(),
            "files_sha256": smoke_files_sha256(), "vendor": vendor, "shard": shard,
            "artifact_identity": (result.get("config") or {}).get("artifact_identity"),
-           "rows": SMOKE_ROWS, "total": len(verdicts), "passed": len(verdicts) - len(bad),
+           "modes": sorted({m for r in races for m in r.get("our_arms", {}).values()}),
+           "rows": SMOKE_ROWS, "total": len(verdicts), "eligible": eligible_count,
+           "unsupported": unsupported_count,
+           "passed": sum(v["pass"] and v["eligible"] for v in verdicts.values()),
            "races": verdicts}
     with open(os.path.join(out, "smoke.json"), "w") as fh:
         json.dump(doc, fh, indent=1, sort_keys=True)
@@ -3001,7 +3054,8 @@ def write_smoke(out, races, result, vendor, shard):
             for f in verdicts[k]["failures"]:
                 print("SMOKE-FAIL %s arm=%s %s" % (verdicts[k]["id"], f["arm"], f["reason"]), flush=True)
     else:
-        print("SMOKE PASS %d/%d" % (len(verdicts), len(verdicts)), flush=True)
+        print("SMOKE PASS %d/%d eligible (%d unsupported, %d planned)"
+              % (eligible_count, eligible_count, unsupported_count, len(verdicts)), flush=True)
     return len(bad)
 
 
@@ -3013,6 +3067,7 @@ def smoke_gate(out, vendor, races, extra_paths=(), artifact_identity=None):
     paths = list(extra_paths or ()) + sorted(glob.glob(os.path.abspath(out) + "-smoke*/smoke.json"))
     want = smoke_files_sha256()
     passed, seen = set(), []
+    wanted_modes = sorted({m for r in races for m in r.get("our_arms", {}).values()})
     for p in paths:
         try:
             with open(p) as fh:
@@ -3021,6 +3076,8 @@ def smoke_gate(out, vendor, races, extra_paths=(), artifact_identity=None):
             continue
         if doc.get("schema") != SMOKE_SCHEMA or doc.get("vendor") != vendor \
                 or doc.get("files_sha256") != want:
+            continue
+        if doc.get("modes") is not None and doc["modes"] != wanted_modes:
             continue
         if doc.get("artifact_identity") != artifact_identity:
             continue
@@ -3269,7 +3326,8 @@ def print_plan(vendor, modes, races, args, rows, data):
     print("")
     for fam, f in sorted(s["by_family"].items()):
         print("family %-10s races=%d cells=%d" % (fam, f["races"], f["cells"]))
-    print("TOTAL races=%d cells=%d" % (s["races"], s["cells"]))
+    print("TOTAL races=%d cells=%d eligible=%d unsupported=%d"
+          % (s["races"], s["cells"], s["races"] - s["unsupported_races"], s["unsupported_races"]))
     print("our CPU: never raced (the board races only our GPU)")
     print("memory: peak_host_mb and peak_gpu_mb per arm and cell (tools/bench_board_probe.py)")
     if not args.no_infer:
@@ -3561,7 +3619,7 @@ def main(argv=None):
     if args.smoke:
         return 1 if write_smoke(out, races, result, vendor, args.shard) else 0
     failed = [rid for rid, rec in result["races"].items()
-              if rid in result["plan"] and rec.get("status") != "done"]
+              if rid in result["plan"] and rec.get("status") not in ("done", "unsupported")]
     return 1 if failed else 0
 
 
