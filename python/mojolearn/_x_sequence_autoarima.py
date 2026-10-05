@@ -80,6 +80,41 @@ def _put(block, ids, rows):
                                       block.ctypes.data, block.shape[0])
 
 
+def _gather_block(src, offset, width, nrows, local, dst_addr):
+    """dst rows = src[offset:].reshape(nrows, width)[local], a byte gather
+    of float32 / int32 rows (the base binding's gather_rows_bytes)."""
+    if len(local):
+        ids = np.ascontiguousarray(local, dtype=np.int64)
+        _native("gather_rows_bytes")(src.ctypes.data + src.itemsize * offset, dst_addr, ids.ctypes.data,
+                                     nrows, len(ids), src.itemsize * width)
+
+
+def _adopt_search_fit(m, y, search_fit, trial, local):
+    """`m` (an unfitted ARIMA of grid row `trial`) fitted from the search's
+    fit block for the group positions `local`, through ARIMA._adopt_fit,
+    the same state `ARIMA.fit` sets (MOJOLEARN_ARIMA_FAST_SEARCH_REUSE)."""
+    from ._arima_impl import _series_major, _no_exog
+    from ._buffer import empty, addr
+    fit_f32, fit_i32, f_offs, nb, grouped_ll = search_fit
+    arr, b, n_obs, copied = _series_major(y, "y")
+    N = int(m.complexity_)
+    params = empty((b * N,), "<f4")
+    x = empty((b * N,), "<f4")
+    x0 = empty((b * N,), "<f4")
+    stats = empty((2 * b,), "<f4")
+    flags = empty((2 * b,), "<i4")
+    off = f_offs[trial]
+    _gather_block(fit_f32, off, N, nb, local, addr(params, name="params"))
+    _gather_block(fit_f32, off + nb * N, N, nb, local, addr(x, name="x"))
+    _gather_block(fit_f32, off + 2 * nb * N, N, nb, local, addr(x0, name="x0"))
+    sa, fa = addr(stats, name="stats"), addr(flags, name="flags")
+    _gather_block(grouped_ll, trial * nb, 1, nb, local, sa)
+    _gather_block(fit_f32, off + 3 * nb * N, 1, nb, local, sa + 4 * b)
+    _gather_block(fit_i32, 2 * nb * trial, 1, nb, local, fa)
+    _gather_block(fit_i32, 2 * nb * trial + nb, 1, nb, local, fa + 4 * b)
+    return m._adopt_fit(arr, copied, 2, b, n_obs, _no_exog(), 0, params, x, x0, stats, flags)
+
+
 def _options(name, value, lo, hi):
     """The reference's `_parse_sequence`: an int or an iterable, clipped to
     [lo, hi]; empty is refused."""
@@ -158,6 +193,10 @@ class AutoARIMA:
                               dtype=np.int64).reshape(-1)
         self.d_ = dser
         self.models, self._ids = [], []
+        # MOJOLEARN_ARIMA_FAST_SEARCH_REUSE: per chosen model, the search's
+        # fit block it can reuse (None when the search wrote none)
+        self._reuse = []
+        self._search_maxiter = int(maxiter)
         self.order_ = np.zeros((self.batch_size, 8), dtype=np.int64)
         self.ic_ = np.zeros(self.batch_size, dtype=np.float64)
         # the series of each d by the base binding (bincount, select, gather;
@@ -172,6 +211,7 @@ class AutoARIMA:
             k_opts = ([1 if d_ + D_ <= 1 else 0] if fit_intercept == "auto"
                       else _options("k", fit_intercept, 0, 1))
             orders, nb = [], len(ids)
+            search_fit = None
             best_ic = np.empty(nb, dtype=np.float64)
             best = np.empty(nb, dtype=np.int64)
             ic_k = np.empty(nb, dtype=np.float64)
@@ -187,8 +227,25 @@ class AutoARIMA:
                 if enabled is not None and enabled():
                     grouped_ll = np.empty((len(grid), nb), dtype=np.float32)
                     packed_grid = [v for p_, q_, _, _, k_ in grid for v in (p_, q_, k_)]  # glue: native order metadata arguments
-                    written = binding.arima_order_search(sub.ctypes.data, grouped_ll.ctypes.data,
-                                                         packed_grid, [nb, self.n_obs, d_, int(maxiter)])
+                    reuse_on = getattr(binding, "arima_search_reuse_enabled", None)
+                    if reuse_on is not None and reuse_on():
+                        # MOJOLEARN_ARIMA_FAST_SEARCH_REUSE: the search also
+                        # writes every order's fit block (fast_order_search
+                        # order_search_fit): f32 params, x, x0 (nb * N each)
+                        # and fx (nb) per order; i32 n_iter, retcode per order
+                        f_offs, off = [], 0
+                        for p_, q_, _, _, k_ in grid:  # glue: order metadata, block offsets
+                            f_offs.append(off)
+                            off += nb * (3 * (p_ + q_ + k_ + 1) + 1)
+                        fit_f32 = np.empty(max(off, 1), dtype=np.float32)
+                        fit_i32 = np.empty(max(2 * nb * len(grid), 1), dtype=np.int32)
+                        written = binding.arima_order_search_fit(
+                            sub.ctypes.data, grouped_ll.ctypes.data, fit_f32.ctypes.data,
+                            fit_i32.ctypes.data, packed_grid, [nb, self.n_obs, d_, int(maxiter)])
+                        search_fit = (fit_f32, fit_i32, f_offs, nb, grouped_ll)
+                    else:
+                        written = binding.arima_order_search(sub.ctypes.data, grouped_ll.ctypes.data,
+                                                             packed_grid, [nb, self.n_obs, d_, int(maxiter)])
                     if int(written) != grouped_ll.size:
                         raise RuntimeError("AutoARIMA: incomplete grouped likelihood output")
             for trial, (p_, q_, P_, Q_, k_) in enumerate(grid):  # glue: user order grid, not series or observations
@@ -217,9 +274,11 @@ class AutoARIMA:
             for i, (p_, q_, P_, Q_, s_, k_) in enumerate(orders):  # glue: tried orders, not series or observations
                 if not bcount[i]:
                     continue
-                chosen = _take(ids, _rows_where(bw, i, int(bcount[i])))
+                local = _rows_where(bw, i, int(bcount[i]))
+                chosen = _take(ids, local)
                 self.models.append(((p_, d_, q_), (P_, D_, Q_, s_), k_))
                 self._ids.append(chosen)
+                self._reuse.append(None if search_fit is None else (search_fit, i, local))
         self._fitted = [None] * len(self.models)
         return self
 
@@ -240,9 +299,16 @@ class AutoARIMA:
             raise RuntimeError("AutoARIMA: call search() before fit()")
         if h != 1e-8 or truncate or method != "ml":
             raise NotImplementedError("AutoARIMA.fit: method 'ml' with the default h only")
+        reuse = getattr(self, "_reuse", None) or [None] * len(self.models)
         for i, (order, sorder, k) in enumerate(self.models):  # glue: chosen order groups, at most the grid
-            self._fitted[i] = ARIMA(order=order, seasonal_order=sorder, trend="c" if k else "n",
-                                    maxiter=maxiter).fit(_take(self.endog, self._ids[i]))
+            m = ARIMA(order=order, seasonal_order=sorder, trend="c" if k else "n", maxiter=maxiter)
+            if reuse[i] is not None and int(maxiter) == self._search_maxiter:
+                # MOJOLEARN_ARIMA_FAST_SEARCH_REUSE: the search ran this order
+                # on these series with the fit's start, optimizer and maxiter,
+                # per series independently; adopt that optimum, no refit
+                self._fitted[i] = _adopt_search_fit(m, _take(self.endog, self._ids[i]), *reuse[i])
+            else:
+                self._fitted[i] = m.fit(_take(self.endog, self._ids[i]))
         return self
 
     def _gather(self, fn, width):
