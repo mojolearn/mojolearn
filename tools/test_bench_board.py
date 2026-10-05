@@ -1437,3 +1437,14 @@ def test_gpu_only_guard_refuses_cpu_races():
     with pytest.raises(SystemExit, match="our CPU never races"):
         bb.base_cell({"vendor": "nvidia"}, {"id": "x", "family": "algos", "lane": "pca"},
                      "ours-cpu", "identical")
+
+
+@pytest.mark.parametrize('quality', [{'error': 'host output empty'}, {'error': None},
+                                     {'error': '', 'relative_error_vs_own_host': 0.}])
+def test_smoke_explicit_quality_error_never_counts_as_evidence(quality):
+    race = next(r for r in bb.plan_races('amd', ['identical'], rows=2000)
+                if r['lane'] == 'gcn')
+    race = dict(race, arms=['ours'], opponents=[])
+    rec = {'status': 'done', 'params_check': 'MATCHED',
+           'cells': [{'arm': 'ours', 'status': 'ok', 'median_ms': 1., 'quality': quality}]}
+    assert any(reason.startswith('quality error:') for _, reason in bb.smoke_verdict(race, rec, 'amd'))
