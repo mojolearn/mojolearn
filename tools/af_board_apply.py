@@ -4,11 +4,11 @@
 """Apply A/B winners that became FAST defaults to the one M3 board, board.json, then
 re-render both pages and check them.
 
-    python3 tools/af_board_apply.py WINNERS.tsv [--board-dir DIR] [--page PATH] [--date YYYY-MM-DD]
+    python3 tools/af_board_apply.py WINNERS.tsv [--board-dir DIR] [--docs-dir DIR] [--date YYYY-MM-DD]
                                     [--dry-run] [--allow-quality-drop REASON]
 
 Laptop, text only. bench/results/bench_board/m3ultra-0834/board.json is the single source;
-docs/apple-fast/BOARD_M3_FAST.md and BOARD.md are generated from it by
+BOARD.md, docs/apple-fast/BOARD_M3_FAST.md and BOARD_M3_IDENTICAL.md are generated from it by
 tools/af_board_render.py and never edited by hand. WINNERS.tsv has a header row with columns
     lane  dataset  new_ms  quality  source  [family]
 quality is a short "metric=value" string; source names the evidence, e.g.
@@ -19,7 +19,7 @@ rounds=1), the quality (parsed, plus the text) and a `source` dict: tag, previou
 previous_quality, previous_hash, baseline_ms (kept from the first change, so "FAST before" stays
 the 0.8.34 value) and history (older sources). The race's fast_page status gets the source and
 one Q tag. Ratios are recomputed (tools/bench_board.add_ratios). A (lane, dataset) with no race
-becomes a fast_page extra race (family from the input, default "algos") with no opponent.
+becomes a board["extra_races"] race (family from the input, default "algos") with no opponent.
 
 Quality gate (CLAUDE.md: FAST passes only if quality does not go down). Before a row is applied,
 its new quality is compared (tools/af_quality.py, rel_tol 1e-3, abs_tol 1e-6) against the
@@ -32,7 +32,7 @@ reason goes into its status. Every applied row gets one status tag, replacing an
 
 A dated bullet listing this apply's changes goes first in board["fast_page"]["headline_history"];
 the headline itself is computed by the renderer. The apply then writes board.json, re-renders
-BOARD.md and the FAST page, and runs `tools/af_board_render.py --check`; a failed check exits 3.
+BOARD.md and both docs pages, and runs `tools/af_board_render.py --check`; a failed check exits 3.
 --dry-run prints the changed rows and the new headline only.
 """
 import argparse, json, os, re, sys, time
@@ -108,7 +108,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("tsv")
     ap.add_argument("--board-dir", default=R.BOARD_DIR)
-    ap.add_argument("--page", default=R.PAGE)
+    ap.add_argument("--docs-dir", default=R.DOCS)
     ap.add_argument("--date", default=time.strftime("%Y-%m-%d"))
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--allow-quality-drop", metavar="REASON", default=None,
@@ -119,7 +119,7 @@ def main():
     path = os.path.join(a.board_dir, "board.json")
     board = json.load(open(path))
     fp_top = board.setdefault("fast_page", {})
-    extra = fp_top.setdefault("extra_races", {})
+    extra = board.setdefault("extra_races", {})
     tl = [l for l in open(a.tsv).read().splitlines() if l.strip() and not l.startswith("#")]
     hdr = [h.strip() for h in tl[0].split("\t")]
     for n in ("lane", "dataset", "new_ms", "quality", "source"):
@@ -232,9 +232,9 @@ def main():
                                                 "updated_cells": len(changed)})
     with open(path, "w") as fh:
         json.dump(board, fh, indent=1)
-    R.write_all(a.board_dir, a.page, board)
-    print("wrote %s, BOARD.md, %s: %d rows changed, headline %s" % (path, a.page, len(changed), head))
-    bad = R.check(a.board_dir, a.page)
+    R.write_all(a.board_dir, a.docs_dir, board)
+    print("wrote %s and the three pages: %d rows changed, headline %s" % (path, len(changed), head))
+    bad = R.check(a.board_dir, a.docs_dir)
     for b in bad:
         print(b, file=sys.stderr)
     if bad:
