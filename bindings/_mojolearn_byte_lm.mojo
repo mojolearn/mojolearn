@@ -645,12 +645,12 @@ def _validate_slot_table(addresses: List[Int], cells: List[Int], n_inputs: Int) 
     built, as the eleven-slot form does."""
     if len(addresses) != len(cells):
         raise Error("byte LM: expected " + String(len(cells)) + " addresses")
-    for i in range(len(cells)):
+    for i in range(len(cells)):  # small-loop(cells: the call's address slots, at most a handful): checks slot sizes, no data
         var size_bytes = cells[i] * 4
         if addresses[i] <= 0 or addresses[i] % 4 != 0 or addresses[i] > Int(0x7FFFFFFFFFFFFFFF) - size_bytes:
             raise Error("byte LM: null/misaligned/overflowing span at address slot " + String(i))
-    for i in range(n_inputs, len(cells)):
-        for j in range(len(cells)):
+    for i in range(n_inputs, len(cells)):  # small-loop(cells: the call's address slots, at most a handful): checks output slot overlap, no data
+        for j in range(len(cells)):  # small-loop(cells: the call's address slots, at most a handful): pairs of slots for the overlap check, no data
             if j == i:
                 continue
             if (addresses[i] < addresses[j] + cells[j] * 4
@@ -662,7 +662,7 @@ def _read_addresses(addresses: PythonObject, count: Int) raises -> List[Int]:
     if len(addresses) != count:
         raise Error("byte LM: expected " + String(count) + " addresses")
     var addr = List[Int]()
-    for i in range(count):
+    for i in range(count):  # small-loop(count: the call's address slots or shards): reads the addresses, no data
         addr.append(Int(py=addresses[i]))
     return addr^
 
@@ -706,7 +706,7 @@ def _params_optimizer(params: PythonObject) raises -> OptimizerConfig:
 def _read_flags(address: Int, n_tensors: Int) raises -> List[Bool]:
     var flags_ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)
     var flags = List[Bool]()
-    for i in range(n_tensors):
+    for i in range(n_tensors):  # small-loop(n_tensors: one flag per parameter tensor): validates per tensor flags, not data
         var flag = flags_ptr.unsafe_load(i)
         if flag != 0 and flag != 1:
             raise Error("byte LM: momentum flags must be exactly 0 or 1")
@@ -715,11 +715,11 @@ def _read_flags(address: Int, n_tensors: Int) raises -> List[Bool]:
 
 
 def _read_ids(address: Int, count: Int) -> List[Int32]:
+    # lane cpu4-python: one memcpy of the caller's ids (the per-token append
+    # loop is gone); the List goes up as is (`afn_upload_ids`) and the range
+    # refusal is the device's (`byte_require_tokens_device`)
     var ids_ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)
-    var ids = List[Int32]()
-    for i in range(count):
-        ids.append(ids_ptr.unsafe_load(i))
-    return ids^
+    return list_i32(ids_ptr, count)
 
 
 def _write_flags(address: Int, flags: List[Bool]):
@@ -1192,7 +1192,7 @@ def byte_lm_session_info_binding(session: PythonObject) raises -> PythonObject:
     out.append(PythonObject(grad_step))
     out.append(PythonObject(1 if owner[].usable else 0))
     out.append(PythonObject(is_open))
-    for i in range(len(eager)):
+    for i in range(len(eager)):  # small-loop(eager: one entry per layer): reports per layer cell counts, no data
         out.append(PythonObject(eager[i]))
     return out
 
@@ -1457,16 +1457,16 @@ def byte_lm_parallel_step_binding(session: PythonObject, addresses: PythonObject
     var shape = owner[].trainers[0].config.copy()
     var n_ids = shape.batch * (shape.length + 1)
     var cells = List[Int]()
-    for i in range(count):
+    for i in range(count):  # small-loop(count: logical shards of the step): per shard slot sizes, no data
         cells.append(n_ids)
     _validate_slot_table(addr, cells, count)
     var shards = List[List[Int32]]()
-    for i in range(count):
+    for i in range(count):  # small-loop(count: logical shards of the step): one memcpy of each shard's ids, the device checks them
         shards.append(_read_ids(addr[i], n_ids))
     var losses = owner[].step(shards)
     var out = Python.list()
     try:
-        for i in range(len(losses)):
+        for i in range(len(losses)):  # small-loop(losses: one loss per shard): returns the shard losses
             out.append(PythonObject(losses[i]))
     except error:
         owner[].rollback()
@@ -1505,7 +1505,7 @@ def byte_lm_parallel_apply_gradient_binding(session: PythonObject, addresses: Py
     var addr = _read_addresses(addresses, 1)
     var cells: List[Int] = [n]
     _validate_slot_table(addr, cells, 1)
-    owner[].apply_gradient(_read_f32(addr[0], n))
+    owner[].apply_gradient(f32_ptr(addr[0]))  # lane cpu4-python: straight to the device
     return PythonObject(owner[].trainers[0].completed_steps)
 
 
@@ -1579,7 +1579,7 @@ def byte_lm_parallel_ownership_binding(session: PythonObject) raises -> PythonOb
     var owner = session.downcast_value_ptr[ByteParallelTrainer]()
     owner[].require_open()
     var out = Python.list()
-    for i in range(len(owner[].trainers)):
+    for i in range(len(owner[].trainers)):  # small-loop(trainers: one trainer per replica device): reports per replica ranges, no data
         ref b = owner[].trainers[i].buffers
         var row = Python.list()
         row.append(PythonObject(b.optimizer_first))
@@ -1616,12 +1616,12 @@ def byte_lm_parallel_fold_reset_binding(session: PythonObject, addresses: Python
     owner[].require_open()
     var n = owner[].trainers[0].config.n_total()
     if Int(py=addresses.__len__()) == 0:
-        owner[].fold_reset(List[Float32]())
+        owner[].fold_clear()
         return PythonObject(0)
     var addr = _read_addresses(addresses, 1)
     var cells: List[Int] = [n]
     _validate_slot_table(addr, cells, 1)
-    owner[].fold_reset(_read_f32(addr[0], n))
+    owner[].fold_reset(f32_ptr(addr[0]))  # lane cpu4-python: straight to the device
     return PythonObject(1)
 
 
@@ -1651,7 +1651,7 @@ def byte_lm_parallel_fold_add_binding(session: PythonObject, addresses: PythonOb
     var addr = _read_addresses(addresses, 1)
     var cells: List[Int] = [n]
     _validate_slot_table(addr, cells, 1)
-    owner[].fold_add(_read_f32(addr[0], n))
+    owner[].fold_add(f32_ptr(addr[0]))  # lane cpu4-python: straight to the device
     return PythonObject(0)
 
 
@@ -1700,7 +1700,7 @@ def byte_lm_model_pool_open_binding(session: PythonObject, addresses: PythonObje
     var flags = _read_flags(addr[3], cells[3])
     byte_validate_state(p, m, v, flags, completed, cfg_shape)
     var device_ids = List[Int]()
-    for i in range(Int(py=devices.__len__())):
+    for i in range(Int(py=devices.__len__())):  # small-loop(devices: the caller's device list): reads device ordinals, no data
         device_ids.append(Int(py=devices[i]))
     var owner = session.downcast_value_ptr[ByteModelPool]()
     # Retain the GIL: it is also the native object's exclusion lock.
@@ -1721,16 +1721,16 @@ def byte_lm_model_pool_step_binding(session: PythonObject, addresses: PythonObje
     var shape = owner[].config.copy()
     var n_ids = shape.batch * (shape.length + 1)
     var cells = List[Int]()
-    for i in range(count):
+    for i in range(count):  # small-loop(count: logical shards of the step): per shard slot sizes, no data
         cells.append(n_ids)
     _validate_slot_table(addr, cells, count)
     var shards = List[List[Int32]]()
-    for i in range(count):
+    for i in range(count):  # small-loop(count: logical shards of the step): one memcpy of each shard's ids, the device checks them
         shards.append(_read_ids(addr[i], n_ids))
     var losses = owner[].step(shards)
     try:
         var out = Python.list()
-        for i in range(len(losses)):
+        for i in range(len(losses)):  # small-loop(losses: one loss per shard): returns the shard losses
             out.append(PythonObject(losses[i]))
         return out
     except error:
@@ -1750,7 +1750,7 @@ def byte_lm_model_pool_export_binding(session: PythonObject, addresses: PythonOb
     var count = 1 if gradients else 4
     var addr = _read_addresses(addresses,count)
     var cells = List[Int]()
-    for i in range(count):
+    for i in range(count):  # small-loop(count: one or four exported arrays): per array slot sizes, no data
         cells.append(owner[].config.n_tensors() if i == 3 else n)
     _validate_slot_table(addr,cells,0)
     if gradients:
@@ -1779,7 +1779,7 @@ def byte_lm_model_pool_ownership_binding(session: PythonObject) raises -> Python
     var owner = session.downcast_value_ptr[ByteModelPool]()
     owner[].require_open()
     var out = Python.list()
-    for i in range(len(owner[].chunks)):
+    for i in range(len(owner[].chunks)):  # small-loop(chunks: one model chunk per device): reports per chunk ranges, no data
         ref chunk = owner[].chunks[i]
         var row = Python.list()
         row.append(PythonObject(chunk.owner))
@@ -1818,7 +1818,7 @@ def byte_lm_offload_open_binding(session: PythonObject, addresses: PythonObject,
     var flags = _read_flags(addr[3], cells[3])
     byte_validate_state(p, m, v, flags, completed, cfg_shape)
     var device_ids = List[Int]()
-    for i in range(Int(py=devices.__len__())):
+    for i in range(Int(py=devices.__len__())):  # small-loop(devices: the caller's device list): reads device ordinals, no data
         device_ids.append(Int(py=devices[i]))
     var owner = session.downcast_value_ptr[ByteOffloadedReplay]()
     # Retain the GIL: it is also the native object's exclusion lock.
@@ -1839,16 +1839,16 @@ def byte_lm_offload_step_binding(session: PythonObject, addresses: PythonObject,
     var shape = owner[].config.copy()
     var n_ids = shape.batch * (shape.length + 1)
     var cells = List[Int]()
-    for i in range(count):
+    for i in range(count):  # small-loop(count: logical shards of the step): per shard slot sizes, no data
         cells.append(n_ids)
     _validate_slot_table(addr, cells, count)
     var shards = List[List[Int32]]()
-    for i in range(count):
+    for i in range(count):  # small-loop(count: logical shards of the step): one memcpy of each shard's ids, the device checks them
         shards.append(_read_ids(addr[i], n_ids))
     var losses = owner[].step(shards)
     try:
         var out = Python.list()
-        for i in range(len(losses)):
+        for i in range(len(losses)):  # small-loop(losses: one loss per shard): returns the shard losses
             out.append(PythonObject(losses[i]))
         return out
     except error:
@@ -1868,7 +1868,7 @@ def byte_lm_offload_export_binding(session: PythonObject, addresses: PythonObjec
     var count = 1 if gradients else 4
     var addr = _read_addresses(addresses,count)
     var cells = List[Int]()
-    for i in range(count):
+    for i in range(count):  # small-loop(count: one or four exported arrays): per array slot sizes, no data
         cells.append(owner[].config.n_tensors() if i == 3 else n)
     _validate_slot_table(addr,cells,0)
     if gradients:

@@ -1015,7 +1015,7 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
     var n_fwd = len(tr.forward)
     var n_bwd = len(tr.backward)
     var n = n_fwd if n_fwd < n_bwd else n_bwd
-    for layer in range(n):
+    for layer in range(n):  # small-loop(n: layers): per layer eager cell counts, no data
         fwd_eager += len(tr.forward[layer].scores)
         fwd_eager += len(tr.forward[layer].masked)
         fwd_eager += len(tr.forward[layer].weights)
@@ -1042,7 +1042,7 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
     out.append(n_fwd)
     out.append(n_bwd)
     # Triples in layer order: actual launch statuses and current materialization.
-    for layer in range(n):
+    for layer in range(n):  # small-loop(n: layers): per layer eager cell counts, no data
         out.append(tr.forward[layer].attn_forward_status)
         out.append(tr.backward[layer].attn_backward_status)
         out.append(Int(tr.forward[layer].attn_materialized))
@@ -1050,10 +1050,10 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
     out.append(Int(BYTE_LM_RELEASE_EAGER))
     out.append(tr.released_eager_cells)
     out.append(Int(BYTE_LM_STICKY_EAGER))
-    for layer in range(n):
+    for layer in range(n):  # small-loop(n: layers): per layer eager cell counts, no data
         out.append(Int(tr.forward[layer].attn_prefer_eager))
     out.append(Int(ATTN_REPAIR_MASKED_TAIL))
-    for layer in range(n):
+    for layer in range(n):  # small-loop(n: layers): per layer eager cell counts, no data
         out.append(tr.backward[layer].attn_repaired)
     return out^
 

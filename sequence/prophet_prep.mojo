@@ -14,6 +14,8 @@ dependence across rows beyond the running checks."""
 from std.memory import bitcast
 from std.builtin.sort import sort
 from std.python import PythonObject
+from sequence.exec_trait import Exec
+from sequence.ops import Args, OP_PROPHET_PREP
 
 comptime F64P = MutPointer[Float64, MutUntrackedOrigin]
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -127,39 +129,56 @@ def prophet_days_py(addrs: PythonObject, ip: PythonObject) raises -> PythonObjec
     return PythonObject(status)
 
 
-def prophet_features_py(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+def prophet_features_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     """addrs = [days (N) float64, periods (ns) float64, t (N) float32 out,
     frac (N, max(ns, 1)) float32 out]; ip = [N, ns]; fp = [start, t_scale].
     t = (days - start) / t_scale; frac[i, s] = fmod(days, P) / P, + 1 when
-    negative; one rounding to float32 each. ns == 0 writes frac zeros."""
+    negative; one rounding to float32 each. ns == 0 writes frac zeros.
+    Lane cpu4-python: on the executor (`op_prophet_prep`, soft binary64 and
+    the exact integer fmod: the host float64 unit's IEEE results, the same
+    bits on every column), not a host loop over the rows."""
     if len(addrs) != 4 or len(ip) != 2 or len(fp) != 2:
         raise Error("prophet_features: requires 4 addresses, 2 integer and 2 float parameters")
     var N = Int(py=ip[0])
     var ns = Int(py=ip[1])
     if N < 1 or ns < 0:
         raise Error("prophet_features: N >= 1, ns >= 0")
-    var start = Float64(py=fp[0])
-    var scale = Float64(py=fp[1])
+    var start = bitcast[DType.uint64](Float64(py=fp[0]))
+    var scale = bitcast[DType.uint64](Float64(py=fp[1]))
     var days = _f64p(addrs[0], "days")
     var tsc = _f32p(addrs[2], "t")
     var frac = _f32p(addrs[3], "frac")
-    for i in range(N):
-        tsc[i] = Float32((days[i] - start) / scale)
-    if ns == 0:
-        for i in range(N):
-            frac[i] = 0
-        return PythonObject(0)
-    var per = _f64p(addrs[1], "periods")
-    for s in range(ns):
-        if not (per[s] > 0):
-            raise Error("prophet_features: periods must be positive")
-    for i in range(N):
-        for s in range(ns):
-            var P = per[s]
-            var c = fmod_exact64(days[i], P) / P
-            if c < 0:
-                c = c + 1.0
-            frac[i * ns + s] = Float32(c)
+    var cols = max(ns, 1)
+    var dper = ex.alloc(2 * cols)
+    if ns > 0:
+        var per = _f64p(addrs[1], "periods")
+        for s in range(ns):  # small-loop(ns: user seasonalities): checks each period once, no row data
+            if not (per[s] > 0):
+                raise Error("prophet_features: periods must be positive")
+        ex.upload(dper, F32P(unsafe_from_address=Int(py=addrs[1])), 2 * ns)
+    var ddays = ex.alloc(2 * N)
+    ex.upload(ddays, F32P(unsafe_from_address=Int(py=addrs[0])), 2 * N)
+    var dt = ex.alloc(N)
+    var df = ex.alloc(N * cols)
+    var a = Args()
+    a.p0 = ddays
+    a.p1 = dper
+    a.p2 = dt
+    a.p3 = df
+    a.i0 = N
+    a.i1 = ns
+    a.i2 = Int(start & UInt64(0xFFFF))
+    a.i3 = Int((start >> 16) & UInt64(0xFFFF))
+    a.i4 = Int((start >> 32) & UInt64(0xFFFF))
+    a.i5 = Int((start >> 48) & UInt64(0xFFFF))
+    a.i6 = Int(scale & UInt64(0xFFFF))
+    a.i7 = Int((scale >> 16) & UInt64(0xFFFF))
+    a.i8 = Int((scale >> 32) & UInt64(0xFFFF))
+    a.i9 = Int((scale >> 48) & UInt64(0xFFFF))
+    ex.launch[OP_PROPHET_PREP](a, N * (1 + cols))
+    ex.sync()
+    ex.download(tsc, dt, N)
+    ex.download(frac, df, N * cols)
     return PythonObject(0)
 
 

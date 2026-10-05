@@ -99,15 +99,15 @@ from core.hotpath_device import (
     device_encode_labels,
     device_gather_u64,
 )
-from core.label_rows_device import LRD_MAX_N, device_argmax_rows
+from core.label_rows_device import LRD_MAX_N, device_argmax_rows, device_argmax_last_f32
 from bindings.array_helpers import (
     nsum_f64_binding,
-    shard_topk_merge_f32_binding,
 )
+from core.shard_merge_device import device_shard_topk_merge_f32
+from core.rows_bytes_device import device_gather_rows_bytes, device_scatter_rows_bytes
+from core.ic_min_device import device_ic_running_min
 from bindings.hotpath_helpers import (
     next_combination_i64_binding,
-    ic_running_min_f64_binding,
-    ic_running_min_f32_binding,
     scale_shift_ftz_f32_binding,
     compact_notnan_f32_binding,
     gather_keep_neg_i32_binding,
@@ -115,7 +115,6 @@ from bindings.hotpath_helpers import (
     assign_fold_i64_binding,
     count_fold_hits_i64_binding,
     split_table_i32_binding,
-    scatter_rows_bytes_binding,
     epoch_order_i32_binding,
     adam_hyper_f64_binding,
     mean_std_f32_binding,
@@ -126,6 +125,7 @@ from bindings.hotpath_helpers import (
     weighted_draw_rows_i32_binding,
     group_fold_assign_i32_binding,
     strat_group_assign_i32_binding,
+    strat_group_plan_i32_binding,
 )
 # lane fam2-shared (2026-10-04): these eighteen helpers run on the device in
 # this binding (bindings/hotpath_device.mojo, same names and signatures; each
@@ -146,6 +146,7 @@ from bindings.hotpath_device import (
     fold_pair_f32_binding,
     threshold_labels_i64_binding,
     bincount_i64_binding,
+    bincount2_i32_binding,
     first_seen_i32_binding,
     strat_fold_assign_i32_binding,
     hpdev_try_cast_f64_to_f32,
@@ -1399,23 +1400,54 @@ def gather_rows_bytes_binding(
         return PythonObject(0)
     if Int(py=src_addr) == 0 or Int(py=dst_addr) == 0 or Int(py=indices_addr) == 0:
         raise Error("gather_rows_bytes: null buffer address")
-    var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=src_addr))
-    var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=dst_addr))
-    var idx = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=indices_addr))
-    var invalid = False
+    if ns > 2147483000 // width or no > 2147483000 // width:
+        raise Error("gather_rows_bytes: more bytes than the device gather holds")
+    # lane cpu4-python: on the device (core/rows_bytes_device.mojo; indices
+    # checked before any write, byte moves); the host walk is the host
+    # binding's column (bindings/host_helpers.mojo)
+    var sa = Int(py=src_addr)
+    var da = Int(py=dst_addr)
+    var ia = Int(py=indices_addr)
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var ok = False
     with GILReleased(Python()):
-        # Validate all indices before any output mutation.
-        for r in range(no):
-            var index = Int(idx.unsafe_load(r))
-            if index < 0 or index >= ns:
-                invalid = True
-                break
-        if not invalid:
-            for r in range(no):
-                var index = Int(idx.unsafe_load(r))
-                memcpy(dest=dst + r * width, src=src + index * width, count=width)
-    if invalid:
+        ok = device_gather_rows_bytes(ctx, sa, da, ia, ns, no, width)
+    if not ok:
         raise Error("gather_rows_bytes: row index out of bounds")
+    return PythonObject(0)
+
+
+def scatter_rows_bytes_binding(
+    src_addr: PythonObject, rows_addr: PythonObject, m: PythonObject, row_bytes: PythonObject,
+    dst_addr: PythonObject, dst_rows: PythonObject,
+) raises -> PythonObject:
+    """dst row rows[i] = src row i (row_bytes each) for the m int64 rows; a
+    row outside [0, dst_rows) raises before any write; a repeated row takes
+    the last source row naming it. On the device (lane cpu4-python,
+    core/rows_bytes_device.mojo); the host walk is the host binding's
+    column (bindings/hotpath_helpers.mojo)."""
+    var count = Int(py=m)
+    var width = Int(py=row_bytes)
+    var nd = Int(py=dst_rows)
+    if count < 0 or width < 0 or nd < 0:
+        raise Error("scatter_rows_bytes: dimensions must be non-negative")
+    if count == 0 or width == 0:
+        return PythonObject(0)
+    if nd == 0:
+        raise Error("scatter_rows_bytes: row index out of bounds")
+    if count > 2147483000 // width or nd > 2147483000 // width:
+        raise Error("scatter_rows_bytes: more bytes than the device scatter holds")
+    var sa = Int(py=src_addr)
+    var ra = Int(py=rows_addr)
+    var da = Int(py=dst_addr)
+    if sa == 0 or ra == 0 or da == 0:
+        raise Error("scatter_rows_bytes: null buffer address")
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var ok = False
+    with GILReleased(Python()):
+        ok = device_scatter_rows_bytes(ctx, sa, ra, count, width, da, nd)
+    if not ok:
+        raise Error("scatter_rows_bytes: row index out of bounds")
     return PythonObject(0)
 
 
@@ -1623,6 +1655,103 @@ def argmax_rows_f64_binding(
 ) raises -> PythonObject:
     """`_argmax_rows_device` over float64 scores."""
     return _argmax_rows_device("argmax_rows_f64", True, scores_addr, n_rows, n_cols, dst_addr)
+
+
+def shard_topk_merge_f32_binding(
+    table_addr: PythonObject, n_shards: PythonObject, n_queries: PythonObject, k: PythonObject,
+    out_dist_addr: PythonObject, out_idx_addr: PythonObject,
+) raises -> PythonObject:
+    """`shard_topk_merge_f32` (bindings/array_helpers.mojo's contract: 0, 1
+    a local id outside its shard, 2 fewer than k candidates) on the device
+    (lane cpu4-python, core/shard_merge_device.mojo); the host loop is the
+    host binding's column."""
+    var s_count = Int(py=n_shards)
+    var nq = Int(py=n_queries)
+    var kk = Int(py=k)
+    if s_count < 1 or nq < 0 or kk < 1:
+        raise Error("shard_topk_merge_f32: bad dimensions")
+    if nq == 0:
+        return PythonObject(0)
+    if Int(py=table_addr) == 0 or Int(py=out_dist_addr) == 0 or Int(py=out_idx_addr) == 0:
+        raise Error("shard_topk_merge_f32: null buffer address")
+    var tp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=table_addr))
+    var od = Int(py=out_dist_addr)
+    var oi = Int(py=out_idx_addr)
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var rc = 0
+    with GILReleased(Python()):
+        rc = device_shard_topk_merge_f32(ctx, tp, s_count, nq, kk, od, oi)
+    return PythonObject(rc)
+
+
+def _ic_running_min_device(
+    name: String, wide: Bool, llf_addr: PythonObject, n: PythonObject, penalty: PythonObject,
+    order: PythonObject, ic_addr: PythonObject, best_ic_addr: PythonObject, best_idx_addr: PythonObject,
+) raises -> PythonObject:
+    """`ic_running_min_f64` / `_f32` (bindings/hotpath_helpers.mojo's
+    contract) on the device (lane cpu4-python, core/ic_min_device.mojo);
+    the host walk is the host binding's column."""
+    var count = Int(py=n)
+    var k = Int(py=order)
+    if count < 1 or k < 0:
+        raise Error(name + ": n must be positive and order non-negative")
+    if count > 2147483000:
+        raise Error(name + ": more series than the device holds")
+    var la = Int(py=llf_addr)
+    var ia = Int(py=ic_addr)
+    var ba = Int(py=best_ic_addr)
+    var xa = Int(py=best_idx_addr)
+    if la == 0 or ia == 0 or ba == 0 or xa == 0:
+        raise Error(name + ": null buffer address")
+    var pen = Float64(py=penalty)
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    with GILReleased(Python()):
+        device_ic_running_min(ctx, wide, la, count, pen, k, ia, ba, xa)
+    return PythonObject(0)
+
+
+def ic_running_min_f64_binding(
+    llf_addr: PythonObject, n: PythonObject, penalty: PythonObject, order: PythonObject,
+    ic_addr: PythonObject, best_ic_addr: PythonObject, best_idx_addr: PythonObject,
+) raises -> PythonObject:
+    return _ic_running_min_device("ic_running_min_f64", True, llf_addr, n, penalty, order,
+                                  ic_addr, best_ic_addr, best_idx_addr)
+
+
+def ic_running_min_f32_binding(
+    llf_addr: PythonObject, n: PythonObject, penalty: PythonObject, order: PythonObject,
+    ic_addr: PythonObject, best_ic_addr: PythonObject, best_idx_addr: PythonObject,
+) raises -> PythonObject:
+    return _ic_running_min_device("ic_running_min_f32", False, llf_addr, n, penalty, order,
+                                  ic_addr, best_ic_addr, best_idx_addr)
+
+
+def argmax_last_rows_f32_binding(
+    logits_addr: PythonObject, dims: PythonObject, dst_addr: PythonObject,
+) raises -> PythonObject:
+    """dims = [b, l, v]: the first-max argmax (DEVIATION 2500's rule) of the
+    LAST position of each row of float32 logits `[b, l, v]` into int64
+    `dst[b]`, on the device (lane cpu4-python: the callers' host row gather
+    `gather_rows_bytes` before `argmax_rows_f32` is gone)."""
+    if len(dims) != 3:
+        raise Error("argmax_last_rows_f32: dims [b, l, v]")
+    var b = Int(py=dims[0])
+    var l = Int(py=dims[1])
+    var v = Int(py=dims[2])
+    if b < 0 or l < 1 or v < 1:
+        raise Error("argmax_last_rows_f32: b must be non-negative, l and v positive")
+    if b == 0:
+        return PythonObject(0)
+    if Int(py=logits_addr) == 0 or Int(py=dst_addr) == 0:
+        raise Error("argmax_last_rows_f32: null buffer address")
+    if b > LRD_MAX_N // l or v > LRD_MAX_N:
+        raise Error("argmax_last_rows_f32: more rows or columns than the device argmax holds")
+    var la = Int(py=logits_addr)
+    var da = Int(py=dst_addr)
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    with GILReleased(Python()):
+        device_argmax_last_f32(ctx, la, b, l, v, da)
+    return PythonObject(0)
 
 
 def kmeans_parallel_available_binding() raises -> PythonObject:
@@ -1841,6 +1970,8 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[weighted_draw_rows_i32_binding]("weighted_draw_rows_i32")
         m.def_function[group_fold_assign_i32_binding]("group_fold_assign_i32")
         m.def_function[strat_group_assign_i32_binding]("strat_group_assign_i32")
+        m.def_function[strat_group_plan_i32_binding]("strat_group_plan_i32")
+        m.def_function[bincount2_i32_binding]("bincount2_i32")
         m.def_function[strided_copy_bytes_binding]("strided_copy_bytes")
         m.def_function[check_lengths_i64_binding]("check_lengths_i64")
         m.def_function[ragged_rows_bytes_binding]("ragged_rows_bytes")
@@ -1849,6 +1980,7 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[gather_i64_binding]("gather_i64")
         m.def_function[gather_f64_binding]("gather_f64")
         m.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
+        m.def_function[argmax_last_rows_f32_binding]("argmax_last_rows_f32")
         m.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
         m.def_function[kmeans_parallel_available_binding]("kmeans_parallel_available")
         return m.finalize()

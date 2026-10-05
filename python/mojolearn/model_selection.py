@@ -1252,9 +1252,15 @@ class StratifiedGroupKFold(_KFoldBase):
         perm = _rng(self.random_state).permutation_rows([m])[0] if self.shuffle else None
         to_fold = array.array('i', bytes(4 * m))
         sizes = array.array('q', bytes(8 * self.n_splits))
-        bad = int(_native('strat_group_assign_i32')(
-            [_addr_ro(yenc), _addr_ro(gc.codes), perm.buffer_info()[0] if perm is not None else 0,
-             to_fold.buffer_info()[0], sizes.buffer_info()[0]], [n, k, m, self.n_splits]))
+        # lane cpu4-python: the group x class table over the rows is the
+        # device's 2-D bincount (`bincount2_i32`); only the group-level
+        # greedy plan (`strat_group_plan_i32`, sequential by definition like
+        # GroupKFold's) reads it
+        dist = array.array('q', bytes(8 * m * k))
+        _native('bincount2_i32')(_addr_ro(yenc), _addr_ro(gc.codes), [n, k, m], dist.buffer_info()[0])
+        bad = int(_native('strat_group_plan_i32')(  # cpu-route: sequential greedy fold plan over groups, not rows
+            [dist.buffer_info()[0], perm.buffer_info()[0] if perm is not None else 0,
+             to_fold.buffer_info()[0], sizes.buffer_info()[0]], [k, m, self.n_splits]))
         if bad:
             raise ValueError(f'n_splits={self.n_splits} cannot be greater than the number of members in '
                              'each class.')
