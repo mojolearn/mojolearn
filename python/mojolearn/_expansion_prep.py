@@ -4318,7 +4318,7 @@ def _multilabel_buffer(y, shape):
     if not int(Y._native_reduce(_REDUCE_INTEGRAL)):
         raise refuse
     lo, hi = Y.min(), Y.max()
-    hits = (Y == lo).sum() + ((Y == hi).sum() if hi != lo else 0)
+    hits = (Y == lo).sum() + ((Y == hi).sum() if hi != lo else 0)  # glue: native equality and native integer sums (Array helpers)
     if hits != Y.size:
         raise refuse
     return _x2d(Y.astype("<f4"), "y")
