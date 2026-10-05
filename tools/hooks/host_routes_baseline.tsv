@@ -208,87 +208,7 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	terms = [k.ew("add", k.ew("add", zero, ddt.cols(t, t + 1)), dcomp.rows(t, t + 1)) for t in range(nc)]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	if n == 0 or not (w.min() >= 0) or not (w.sum() > 0):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	Cs = [_pm.powr(10.0, -4 + 8 * i / (m - 1)) for i in range(m)] if m > 1 else [1e-4]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	Cs = [float(c) for c in self.Cs]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	[[ms[(l * grid + k) * folds:(l * grid + k + 1) * folds] for k in range(grid)] for l in range(L)], "<f4")
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	alphas = [float(v) for v in (self.alphas if hasattr(self.alphas, "__len__") else [self.alphas])]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	est.active_ = [int(v) for v in vals[d + 4:d + 4 + k]]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	est.alphas_ = Array.from_list([al[l * grid:(l + 1) * grid] for l in range(L)], "<f4")
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	est.mse_path_ = Array.from_list([ms[k * folds:(k + 1) * folds] for k in range(grid)], "<f4")
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	for i in range(A):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	fp = [est.eps, est.tol] + [float(r) for r in l1_ratios] + (values if explicit else [])
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	fp = [float(v) for v in fp]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	grid = [vals[off + f * nc:off + (f + 1) * nc] for f in range(folds)]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	if any(not 0 < r <= 1 for r in l1_ratios):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	if not alphas or any(not v > 0 for v in alphas):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	ip = [int(v) for v in ip]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	return [values[c * d:(c + 1) * d] for c in range(k)]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	self.l1_ratio_ = _enetcv_fit(self, X, y, [float(r) for r in ratios])
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	self.scores_ = {lab: Array.from_list(grid, "<f4") for lab in (labels[1:] if kp == 1 else labels)}
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	values = sorted((float(v) for v in alphas), reverse=True)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	best_c = Cs[min(range(nc), key=lambda i: abs(Cs[i] - vals[kp * d + kp]))]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	return min(l1_ratios, key=lambda r: abs(r - l1_best))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	values = sorted((float(v) for v in alphas), reverse=True)
-# why: O(classes)/O(outputs) epilogue after the device folds (per-class P/R/F, zero_division, averaging, confusion normalize, per-output regression finish, d2/brier class terms, ovo pair orchestration, StratifiedKFold class x fold offsets) plus the rare _FoldCurve edge cases (partial AUC past the last point, AP zero denominator); owed to x_metrics finish stages per family (pyglue-sweep A)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py	0	chosen = chosen + [v for v in present if v not in chosen]
-# why: O(classes)/O(outputs) epilogue after the device folds (per-class P/R/F, zero_division, averaging, confusion normalize, per-output regression finish, d2/brier class terms, ovo pair orchestration, StratifiedKFold class x fold offsets) plus the rare _FoldCurve edge cases (partial AUC past the last point, AP zero denominator); owed to x_metrics finish stages per family (pyglue-sweep A)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py	0	for c in range(m):
-# why: O(classes)/O(outputs) epilogue after the device folds (per-class P/R/F, zero_division, averaging, confusion normalize, per-output regression finish, d2/brier class terms, ovo pair orchestration, StratifiedKFold class x fold offsets) plus the rare _FoldCurve edge cases (partial AUC past the last point, AP zero denominator); owed to x_metrics finish stages per family (pyglue-sweep A)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py	0	for f in range(k):
-# why: O(classes)/O(outputs) epilogue after the device folds (per-class P/R/F, zero_division, averaging, confusion normalize, per-output regression finish, d2/brier class terms, ovo pair orchestration, StratifiedKFold class x fold offsets) plus the rare _FoldCurve edge cases (partial AUC past the last point, AP zero denominator); owed to x_metrics finish stages per family (pyglue-sweep A)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py	0	index = {c: i for i, c in enumerate(classes)}
-# why: O(classes)/O(outputs) epilogue after the device folds (per-class P/R/F, zero_division, averaging, confusion normalize, per-output regression finish, d2/brier class terms, ovo pair orchestration, StratifiedKFold class x fold offsets) plus the rare _FoldCurve edge cases (partial AUC past the last point, AP zero denominator); owed to x_metrics finish stages per family (pyglue-sweep A)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py	1	index = {c: i for i, c in enumerate(classes)}
-# why: O(classes)/O(outputs) epilogue after the device folds (per-class P/R/F, zero_division, averaging, confusion normalize, per-output regression finish, d2/brier class terms, ovo pair orchestration, StratifiedKFold class x fold offsets) plus the rare _FoldCurve edge cases (partial AUC past the last point, AP zero denominator); owed to x_metrics finish stages per family (pyglue-sweep A)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py	2	index = {c: i for i, c in enumerate(classes)}
-# why: O(classes)/O(outputs) epilogue after the device folds (per-class P/R/F, zero_division, averaging, confusion normalize, per-output regression finish, d2/brier class terms, ovo pair orchestration, StratifiedKFold class x fold offsets) plus the rare _FoldCurve edge cases (partial AUC past the last point, AP zero denominator); owed to x_metrics finish stages per family (pyglue-sweep A)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py	3	index = {c: i for i, c in enumerate(classes)}
-# why: O(classes)/O(outputs) epilogue after the device folds (per-class P/R/F, zero_division, averaging, confusion normalize, per-output regression finish, d2/brier class terms, ovo pair orchestration, StratifiedKFold class x fold offsets) plus the rare _FoldCurve edge cases (partial AUC past the last point, AP zero denominator); owed to x_metrics finish stages per family (pyglue-sweep A)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py	0	index = {c: i for i, c in enumerate(order)}
-# why: O(classes)/O(outputs) epilogue after the device folds (per-class P/R/F, zero_division, averaging, confusion normalize, per-output regression finish, d2/brier class terms, ovo pair orchestration, StratifiedKFold class x fold offsets) plus the rare _FoldCurve edge cases (partial AUC past the last point, AP zero denominator); owed to x_metrics finish stages per family (pyglue-sweep A)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py	0	index = {c: i for i, c in enumerate(uniq)}
-# why: O(classes)/O(outputs) epilogue after the device folds (per-class P/R/F, zero_division, averaging, confusion normalize, per-output regression finish, d2/brier class terms, ovo pair orchestration, StratifiedKFold class x fold offsets) plus the rare _FoldCurve edge cases (partial AUC past the last point, AP zero denominator); owed to x_metrics finish stages per family (pyglue-sweep A)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py	0	return list(labels) + [v for v in present if v not in chosen]
-# why: sorted() of the distinct class labels (k Python objects, str allowed) and k-sized sums; owed with the per-family class finish stages (pyglue-sweep A)
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py	0	classes = sorted(_label_set(lab))
-# why: sorted() of the distinct class labels (k Python objects, str allowed) and k-sized sums; owed with the per-family class finish stages (pyglue-sweep A)
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py	0	classes = sorted(classes)
-# why: sorted() of the distinct class labels (k Python objects, str allowed) and k-sized sums; owed with the per-family class finish stages (pyglue-sweep A)
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py	0	if classes != sorted(classes):
-# why: sorted() of the distinct class labels (k Python objects, str allowed) and k-sized sums; owed with the per-family class finish stages (pyglue-sweep A)
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py	1	if classes != sorted(classes):
-# why: sorted() of the distinct class labels (k Python objects, str allowed) and k-sized sums; owed with the per-family class finish stages (pyglue-sweep A)
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py	0	present = sorted(_label_set(true) | _label_set(pred))
-# why: sorted() of the distinct class labels (k Python objects, str allowed) and k-sized sums; owed with the per-family class finish stages (pyglue-sweep A)
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py	0	return a, b, sorted(_label_set(a)), sorted(_label_set(b))
-# why: sorted() of the distinct class labels (k Python objects, str allowed) and k-sized sums; owed with the per-family class finish stages (pyglue-sweep A)
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py	0	return true, kind, sorted(_label_set(true))
-# why: sorted() of the distinct class labels (k Python objects, str allowed) and k-sized sums; owed with the per-family class finish stages (pyglue-sweep A)
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py	0	return true, pred, kind, sorted(_label_set(true) | _label_set(pred)), w
-# why: sorted() of the distinct class labels (k Python objects, str allowed) and k-sized sums; owed with the per-family class finish stages (pyglue-sweep A)
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py	0	uniq = present if labels is None else sorted(_selected_labels(labels, kind, present))
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	Z = self._take_rows(X, [i * n // M for i in range(M)])
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -688,57 +608,17 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_gpc_impl.py	0	for
 # why: one-vs-rest dispatch: one gpc_fit/gpc_predict call per class column and per-class model bookkeeping (k-sized); owed: a multi-class gpc_fit/gpc_predict binding entry that takes all k columns in one call
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_gpc_impl.py	0	self.n_iter_ = [e.n_iter_ for e in fits]
 # why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	classes = [bool(classes_store[i]) for i in range(k)]
-# why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	classes = [py(classes_store[i]) for i in range(k)]
-# why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	code = {c: i for i, c in enumerate(classes)}
-# why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	1	code = {c: i for i, c in enumerate(classes)}
-# why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	else Array.from_list([float(c) for c in classes], "<f8"))
-# why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	for v in labels:
-# why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	if all(isinstance(c, numbers.Integral) and not is_bool(c) for c in classes):
-# why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	if all(isinstance(c, numbers.Real) and not is_bool(c) for c in classes):
-# why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	if all(isinstance(c, str) for c in classes):
-# why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	if kind == "int" or all(is_bool(c) for c in classes):
-# why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	return Array.from_list([float(c) for c in classes], "<f8")
 # why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	return Array.from_list([float(v) for v in values], "<f8")
 # why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	return Array.from_list([int(c) for c in classes], "<i8")
-# why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	return Array.from_list([int(v) for v in values], "<i8")
 # why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	return [bool(v) for v in values]
-# why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	return [float(v) for v in values]
-# why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	return [int(v) for v in classes.tolist()]
-# why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	return [int(v) for v in values]
-# why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	return [str(v) for v in flatten_labels(list(member))]
-# why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	return [str(v) for v in values]
-# why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	return classes, [code[v] for v in labels]
-# why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	table = (Array.from_list([int(c) for c in classes], "<i8") if kind == "int"
 # why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	values = [classes[int(c)] for c in codes]
 # why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
 py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	classes = sorted(dict.fromkeys(labels))
-# why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	classes = sorted(first)
-# why: k-sized (columns, singular values) sign flips, diagonal flags, triu zeroing and rank counts around the TSQR/Jacobi kernels; owed to x_decomp sign and count moves
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_linalg_impl.py	0	for i in range(1, r):
 # why: k-sized (columns, singular values) sign flips, diagonal flags, triu zeroing and rank counts around the TSQR/Jacobi kernels; owed to x_decomp sign and count moves
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_linalg_impl.py	0	for j in range(cols):
 # why: k-sized (columns, singular values) sign flips, diagonal flags, triu zeroing and rank counts around the TSQR/Jacobi kernels; owed to x_decomp sign and count moves
@@ -762,71 +642,13 @@ py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_linalg_impl.py	0	ord
 # why: k-sized (columns, singular values) sign flips, diagonal flags, triu zeroing and rank counts around the TSQR/Jacobi kernels; owed to x_decomp sign and count moves
 py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_linalg_impl.py	0	r = sum(1 for v in S.s if v > 0.0 and v > s0 * _SVD_NULL_RTOL)
 # why: the str/mixed-object label list route (n-sized dict encode of Python labels; the native encoder takes int buffers only), k-sized class tables of a Python callable and sorted() of class labels; owed to a Mojo byte-string label encoder (pyglue-sweep A)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_metrics_impl.py	0	all_labels = selected + [v for v in observed if v not in selected_set]
-# why: the str/mixed-object label list route (n-sized dict encode of Python labels; the native encoder takes int buffers only), k-sized class tables of a Python callable and sorted() of class labels; owed to a Mojo byte-string label encoder (pyglue-sweep A)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_metrics_impl.py	0	if any(label not in mapping for label in _label_set(true)):
-# why: the str/mixed-object label list route (n-sized dict encode of Python labels; the native encoder takes int buffers only), k-sized class tables of a Python callable and sorted() of class labels; owed to a Mojo byte-string label encoder (pyglue-sweep A)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_metrics_impl.py	0	mapping = {label: i for i, label in enumerate(labels)}
-# why: the str/mixed-object label list route (n-sized dict encode of Python labels; the native encoder takes int buffers only), k-sized class tables of a Python callable and sorted() of class labels; owed to a Mojo byte-string label encoder (pyglue-sweep A)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_metrics_impl.py	0	mapping = {label: i for i, label in enumerate(selected)}
-# why: the str/mixed-object label list route (n-sized dict encode of Python labels; the native encoder takes int buffers only), k-sized class tables of a Python callable and sorted() of class labels; owed to a Mojo byte-string label encoder (pyglue-sweep A)
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_metrics_impl.py	0	return Array.from_list([fn(v) for v in labels], "<i4")
 # why: the str/mixed-object label list route (n-sized dict encode of Python labels; the native encoder takes int buffers only), k-sized class tables of a Python callable and sorted() of class labels; owed to a Mojo byte-string label encoder (pyglue-sweep A)
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_metrics_impl.py	0	return [int(v) for v in labels], "integer"
 # why: the str/mixed-object label list route (n-sized dict encode of Python labels; the native encoder takes int buffers only), k-sized class tables of a Python callable and sorted() of class labels; owed to a Mojo byte-string label encoder (pyglue-sweep A)
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_metrics_impl.py	0	return [str(v) for v in labels], "string"
-# why: the str/mixed-object label list route (n-sized dict encode of Python labels; the native encoder takes int buffers only), k-sized class tables of a Python callable and sorted() of class labels; owed to a Mojo byte-string label encoder (pyglue-sweep A)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_metrics_impl.py	0	return _EncodedLabels([int(c) for c in classes], codes)
-# why: the str/mixed-object label list route (n-sized dict encode of Python labels; the native encoder takes int buffers only), k-sized class tables of a Python callable and sorted() of class labels; owed to a Mojo byte-string label encoder (pyglue-sweep A)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_metrics_impl.py	0	table = [fn(c) for c in labels.classes]
-# why: the str/mixed-object label list route (n-sized dict encode of Python labels; the native encoder takes int buffers only), k-sized class tables of a Python callable and sorted() of class labels; owed to a Mojo byte-string label encoder (pyglue-sweep A)
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_metrics_impl.py	0	classes = sorted(_label_set(true))
-# why: the str/mixed-object label list route (n-sized dict encode of Python labels; the native encoder takes int buffers only), k-sized class tables of a Python callable and sorted() of class labels; owed to a Mojo byte-string label encoder (pyglue-sweep A)
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_metrics_impl.py	0	return true, pred, kind, sorted(_label_set(true) | _label_set(pred))
-# why: the str/mixed-object label list route (n-sized dict encode of Python labels; the native encoder takes int buffers only), k-sized class tables of a Python callable and sorted() of class labels; owed to a Mojo byte-string label encoder (pyglue-sweep A)
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_metrics_impl.py	0	selected = _selected_labels(labels, kind, sorted(_label_set(true)))
 # why: apple-fast-purity2 left it: scikit-learn estimator tag classes (metadata for sklearn's checks); no data is touched
 py-sklearn	py-numpy	apple-fast-purity2	debt	python/mojolearn/_mode.py	0	from sklearn.utils import ClassifierTags, RegressorTags, Tags, TargetTags
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	env[name] = ','.join(ids[d] for d in group)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	env[name] = ','.join(str(d) for d in group)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	for group in groups:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	for name in DEVICE_COUNT_VARIABLES:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	for name in names:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	for start in range(0, len(requests), len(self._workers)):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	for worker in self._workers:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	for worker in sent:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	for worker, request in pairs:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	groups = [self.devices] if self.cooperative else [(d,) for d in self.devices]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	ids = [token.strip() for token in visible.split(',')]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	if (not self.devices or any(type(i) is not int or i < 0 for i in self.devices)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	if all(name in CPU_SINGLE_DEVICE_COOPERATIVE for name in names):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	if len({ids[d] for d in self.devices}) != len(self.devices):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	if max(self.devices) >= len(ids) or any(not ids[d] for d in self.devices):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	missing = [name for name in names if name not in CPU_OPERATIONS]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	names = sorted({request[0] for request in requests})
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	requests = [('cpu_reference', None, request) for request in requests]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	if max(self.devices) >= len(ids) or any(not ids[d] for d in self.devices):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/_parallel_pool.py	0	names = sorted({request[0] for request in requests})
 # why: _fsum_exact: the exact big-integer sum fsum falls back to only when math.fsum meets a NaN, an infinity or an intermediate overflow; Mojo has no arbitrary-precision integer, owed as a Mojo NaN/inf classifier plus an exact wide accumulator
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_portable_math.py	0	for value in values:
 # why: scale_gamma is the reference definition kept for tests only; no runtime path calls it since scale_gamma_x refuses instead of falling back
@@ -1496,42 +1318,6 @@ py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	yield gc.rows(gc.mapped(table), 1, sum(gc.counts[g] for g in combo))
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/causal_lm.py	0	for blk in self._blocks:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/causal_lm.py	0	for blk, st in zip(self._blocks, state.layers):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/causal_lm.py	0	for i in range(plan.n_layers):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/causal_lm.py	0	for i, blk in enumerate(self._blocks):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/causal_lm.py	1	for i, blk in enumerate(self._blocks):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/causal_lm.py	2	for i, blk in enumerate(self._blocks):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/causal_lm.py	0	for k in range(n_new): # decode steps: one native forward each, no per-row work
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/causal_lm.py	0	for key, name, rows in plan.layer_weights(i):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/causal_lm.py	0	for key, w in zip(blk._W_NAMES, blk._w):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/causal_lm.py	0	for name, a in ((plan.embed_name, embed), (plan.norm_name, norm), (plan.head_name, head)):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/causal_lm.py	0	for opt, value in plan.block_options.items():
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/causal_lm.py	0	for p in sig.parameters.values():
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/causal_lm.py	0	for ss in sessions:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/causal_lm.py	0	lm, [ss._native for ss in sessions],
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/causal_lm.py	0	missing = [n for n in need if n not in ckpt]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/causal_lm.py	0	names = dict((k, n) for k, n, _ in p.layer_weights(i))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/causal_lm.py	0	out["unused"] = [n for n in ckpt.names() if n not in need]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/causal_lm.py	0	return [cls(w, **kwargs) for w in layers]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/config.py	0	for _, name, _ in self.layer_weights(i):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/config.py	0	for field in ("attn_logit_softcapping", "final_logit_softcapping", "query_pre_attn_scalar"):
@@ -1545,26 +1331,6 @@ py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/config.py
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/config.py	0	for i in range(self.n_layers):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/config.py	0	for key, template, rows in self._layer_map:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/parallel_causal_lm.py	0	any(type(d) is not int or d < 0 for d in self.layer_devices)):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/parallel_causal_lm.py	0	for device in devices:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/parallel_causal_lm.py	0	for i, block in enumerate(self._blocks):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/parallel_causal_lm.py	0	for key, value in block.call('parameters', i).items():
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/parallel_causal_lm.py	0	for pool in set(getattr(self, '_pools', {}).values()):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/parallel_causal_lm.py	0	if not layer_devices or any(type(d) is not int or d != 0 for d in layer_devices):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/parallel_causal_lm.py	0	if not layer_devices or any(type(d) is not int or d < 0 for d in layer_devices):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/parallel_causal_lm.py	0	names = {k: n for k, n, _ in self.plan.layer_weights(i)}
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/parallel_causal_lm.py	0	return [_RemoteBlock(self, i, weights, kwargs) for i, weights in enumerate(layers)]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/parallel_causal_lm.py	0	self._worker_index = {device: i for i, device in enumerate(devices)}
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/safetensors.py	0	begin, end = (int(v) for v in entry["data_offsets"])
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
@@ -1583,8 +1349,6 @@ py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/safetenso
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/safetensors.py	0	for p in self._paths:
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/safetensors.py	0	for raw in payload:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/safetensors.py	0	for s in self.shape:
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/safetensors.py	0	for s in shape:
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
@@ -1622,13 +1386,7 @@ py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/tokenizer
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/tokenizer.py	0	for step in pre.get("pretokenizers", []):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/tokenizer.py	0	n_ranks, n_vocab, longest = (int(x) for x in self._m.vocab_info(handle))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/tokenizer.py	0	return [raw[a:b] for a, b in zip(out[:count - 1], out[1:count])]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/tokenizer.py	0	self.bos_ids = tuple(int(i) for i in bos_ids)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/tokenizer.py	0	self.eos_ids = tuple(int(i) for i in eos_ids)
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/neighbors.py	0	[int(c) for cl in self._classes_list for c in cl], "<i8"
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -1716,29 +1474,11 @@ host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	return _Entr
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/tokenizer.py	0	for b in range(256):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/tokenizer.py	0	for c in counts:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/tokenizer.py	0	for k in range(len(seqs)):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/tokenizer.py	0	for k, d in enumerate(docs):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/tokenizer.py	1	for k, d in enumerate(docs):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/tokenizer.py	0	for m in lengths:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/tokenizer.py	0	for name in _ABI:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/tokenizer.py	0	for name, kind in (("ValueError: ", ValueError), ("TypeError: ", TypeError)):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/tokenizer.py	0	if not all(hasattr(module, n) for n in ("bpe_train", "bpe_trained_sizes", "bpe_trained_copy")):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/tokenizer.py	0	n_tokens, arena_bytes, n_merges, n_ties, n_groups = (int(x) for x in module.bpe_trained_sizes(handle))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/tokenizer.py	0	return [b.decode("utf-8", errors) for b in self.decode_bytes_batch(batch)]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/tokenizer.py	0	cap = sum(map(len, seqs)) * self._max_token_bytes
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/tokenizer.py	0	if not 0 <= total <= n or sum(counts) != total:
 # why: CROSS-LANE (training/LM): ce_serial_fold over the n_rows per-row losses in one block (the LM loss value's pinned order); a multi-block fold changes the loss bits on every vendor and the host column together
 one-block-n	serial-gpu	UNOWNED	owed	training/checks/loss.mojo	0	ctx.enqueue_function[ce_serial_fold_kernel](
 host-call	host-import	PR#86	debt	x_linear/bayes.mojo	0	import x_linear/ops.mojo:par_rows
