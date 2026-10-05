@@ -2554,9 +2554,12 @@ def fit_ordered(
                     )
             comptime if IDN_ORD_STD_SCALE_DEVICE:
                 # d_sums = (noise sum, weight magnitude, gradient magnitude)
-                var sums_p = d_sums.unsafe_ptr()
+                # the same buffer is read (sums) and written (scale) by
+                # design; two untracked views pass the aliasing check (box-run-2).
+                var sums_p = d_sums.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+                var sums_w = d_sums.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
                 ctx.enqueue_function[_ord_std_scale_kernel](
-                    sums_p, Int32(0), Int32(1), sums_p, Int32(1),
+                    sums_p, Int32(0), Int32(1), sums_w, Int32(1),
                     Int32(ord_count), bitcast[DType.uint64](Float64(1e-100)),
                     bitcast[DType.uint64](ord_mult), opts.random_strength,
                     Int32(total), d_ss.unsafe_ptr(),
