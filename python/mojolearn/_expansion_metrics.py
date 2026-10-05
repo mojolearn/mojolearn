@@ -59,7 +59,7 @@ _OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wperc
             # (x_metrics/tail.mojo, cm_epi.mojo, reg_epi.mojo, rank_epi.mojo)
             off_diff=56, flag_scan=57, proba_rows=58, cm_epi=59, reg_epi=60, rank_epi=61, cl_epi=62,
             # lane cpu4-python: the curve arrays on the device (x_metrics/curve_out.mojo)
-            curve_out=63)
+            curve_out=63, auc_xy=67)
 _PARAMS = 14
 _NONE = -1
 
@@ -1940,13 +1940,27 @@ def _trapezoid(x, y):
     return _fsum(list(terms))
 
 
+#: terms per chunk of the device trapezoid sum (x_metrics/curve_out.mojo
+#: ax_chunk); the fold order is a function of n and this constant only
+_AX_CHUNK = 1024
+_AX_NEG, _AX_POS = 1, 2
+
+
+def _f64_words(a):
+    """A C-order Float64 Array's values as their Int32 word pairs (low
+    first), an Int32 Array over a copy of the bytes (no per-value Python)."""
+    store = array.array("i")
+    store.frombytes(a.tobytes())
+    return Array._owned(store, (len(store),), "<i4", "C")
+
+
 def auc(x, y):
-    """scikit-learn 1.9 `auc`: the trapezoid rule over a monotonic x (host
-    binary64, a correctly rounded `fsum`; a non-finite term's IEEE sum), in
-    the binding (x_metrics/epilogue.mojo auc_xy, lane py-misc-metrics) for
-    every input: a list or an integer buffer is converted to Float64 first
-    (lane apple-fast-py2mojo-core; the Python trapezoid route is gone, lane
-    pyglue-sweep)."""
+    """scikit-learn 1.9 `auc`: the trapezoid rule over a monotonic x, on
+    the device (lane cpu4-python: x_metrics/curve_out.mojo auc_xy; the host
+    column runs the same units): binary64 terms (x[i] - x[i-1]) * (y[i] +
+    y[i-1]) / 2, summed as a float-float in fixed chunks (the host fsum
+    left the route); a non-finite term's IEEE answer. A list or an integer
+    buffer is converted to Float64 first."""
     xa, ya = _auc_f64(x), _auc_f64(y)
     if xa is None:
         xa = Array.from_list(flatten_mo(x), "<f8")
@@ -1956,12 +1970,17 @@ def auc(x, y):
         raise ValueError("x and y must have the same length")
     if xa.size < 2:
         raise ValueError(f"At least 2 points are needed to compute area under curve, but x.shape = ({xa.size},)")
-    try:
-        return float(_binding(None).x_metrics_auc_xy(addr_ro(xa, name="x"), addr_ro(ya, name="y"), xa.size))
-    except Exception as exc:
-        if "non-monotonic" in str(exc):
-            raise ValueError(f"x is neither increasing nor decreasing : {xa.tolist()}.") from None
-        raise
+    n = xa.size
+    prog = _Prog()
+    X = prog.put_i32(_f64_words(xa))
+    Y = prog.put_i32(_f64_words(ya))
+    OUT = prog.want(prog.alloc(3), 3)
+    prog.stage("auc_xy", 1, n, X, Y, OUT, _AX_CHUNK)
+    _execute(prog, None)
+    flags = prog.ints(OUT + 2, 1)[0]
+    if (flags & _AX_NEG) and (flags & _AX_POS):
+        raise ValueError(f"x is neither increasing nor decreasing : {xa.tolist()}.")
+    return float(prog.words(OUT, 2, "d")[0])
 
 
 def _auc_f64(v):
