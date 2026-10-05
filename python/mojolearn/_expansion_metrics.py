@@ -471,12 +471,12 @@ def _pair(y_true, y_pred, sample_weight, caller):
     if len(true) > 2147483647:
         raise ValueError(f"mojolearn {caller}: at most INT32_MAX rows")
     w = _weights(sample_weight, len(true), caller)
-    return true, pred, kind, sorted(_label_set(true) | _label_set(pred)), w
+    return true, pred, kind, sorted(_label_set(true) | _label_set(pred)), w  # glue: sorts the distinct class labels
 
 
 def _codes(labels_seq, order):
     from ._metrics_impl import _label_map
-    index = {c: i for i, c in enumerate(order)}
+    index = {c: i for i, c in enumerate(order)}  # glue: class index table
     return _label_map(labels_seq, lambda v: index.get(v, -1))
 
 
@@ -612,7 +612,7 @@ def _label_order(labels, present):
     """`labels` then every present label not in it (sklearn's hstack with
     setdiff1d): the extra labels are counted and not reported."""
     chosen = set(labels)
-    return list(labels) + [v for v in present if v not in chosen]
+    return list(labels) + [v for v in present if v not in chosen]  # glue: appends the present class labels
 
 
 # ---------------------------------------------------------------------------
@@ -1015,7 +1015,7 @@ def class_likelihood_ratios(y_true, y_pred, *, labels=None, sample_weight=None,
         raise ValueError("replace_undefined_by must be np.nan, 1.0 or a dict")
     chosen = _selected_labels(labels, kind, present) if labels is not None else list(present)
     if len(chosen) == 1:
-        chosen = chosen + [v for v in present if v not in chosen]
+        chosen = chosen + [v for v in present if v not in chosen]  # glue: appends the present class labels
     k = len(chosen)
     if k > 4096:
         raise ValueError("mojolearn metrics: at most 4096 labels in a confusion matrix")
@@ -1051,7 +1051,7 @@ def classification_report(y_true, y_pred, *, labels=None, target_names=None, sam
     from ._metrics_impl import _classification_encoded, _label_set
     true, _ = _classification_encoded(y_true, "y_true")
     pred, _ = _classification_encoded(y_pred, "y_pred")
-    present = sorted(_label_set(true) | _label_set(pred))
+    present = sorted(_label_set(true) | _label_set(pred))  # glue: sorts the distinct class labels
     labels_given = labels is not None
     chosen = list(labels) if labels_given else present
     micro_is_accuracy = not labels_given or set(chosen) >= set(present)
@@ -1599,7 +1599,7 @@ def _targets(y_true, caller):
     from ._metrics_impl import _classification_encoded, _label_set
     _refuse_multilabel(y_true, "y_true", caller)
     true, kind = _classification_encoded(y_true, "y_true")
-    return true, kind, sorted(_label_set(true))
+    return true, kind, sorted(_label_set(true))  # glue: sorts the distinct class labels
 
 
 def _pos_label(pos_label, kind, classes, caller):
@@ -2187,14 +2187,14 @@ def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode, keep_flag
     k = s.shape[1]
     classes = present if labels is None else _selected_labels(labels, kind, present)
     if labels is not None:
-        if classes != sorted(classes):
+        if classes != sorted(classes):  # glue: checks the class labels are sorted
             raise ValueError("Parameter 'labels' must be ordered")
         if set(present) - set(classes):
             raise ValueError("'y_true' contains labels not in parameter 'labels'")
     if len(classes) != k:
         raise ValueError("Number of classes in y_true not equal to the number of columns in 'y_score'")
     w = _weights(sample_weight, n, caller)
-    index = {c: i for i, c in enumerate(classes)}
+    index = {c: i for i, c in enumerate(classes)}  # glue: class index table
     codes = _label_map(true, lambda v: index[v])
     # the class-major flags formed by the onehot unit inside the curve
     # program, the supports, scores and average by the tail's units in the
@@ -2368,7 +2368,7 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
     classes = present if labels is None else _selected_labels(labels, kind, present)
     if len(classes) != k:
         raise ValueError("Number of classes in y_true not equal to the number of columns in 'y_score'")
-    index = {c: i for i, c in enumerate(classes)}
+    index = {c: i for i, c in enumerate(classes)}  # glue: class index table
     return _ovo_native(true, index, s_check, len(true), k, numeric_mode, average)
 
 
@@ -2419,7 +2419,7 @@ def top_k_accuracy_score(y_true, y_score, *, k=2, normalize=True, sample_weight=
     binary = len(present) <= 2 and not (labels is not None and len(labels) > 2)
     classes = present if labels is None else _selected_labels(labels, kind, present)
     if labels is not None:
-        if classes != sorted(classes):
+        if classes != sorted(classes):  # glue: checks the class labels are sorted
             raise ValueError("Parameter 'labels' must be ordered.")
         if set(present) - set(classes):
             raise ValueError("'y_true' contains labels not in parameter 'labels'.")
@@ -2434,7 +2434,7 @@ def top_k_accuracy_score(y_true, y_score, *, k=2, normalize=True, sample_weight=
         _undefined_warning(f"'k' ({k}) greater than or equal to 'n_classes' ({len(classes)}) will result "
                            "in a perfect score and is therefore meaningless.")
     w = _weights(sample_weight, n, "top_k_accuracy_score")
-    index = {c: i for i, c in enumerate(classes)}
+    index = {c: i for i, c in enumerate(classes)}  # glue: class index table
     codes = _label_map(true, lambda v: index[v])
     prog = _Prog()
     if binary:
@@ -2548,11 +2548,11 @@ def _proba(y_true, y_proba, labels, pos_label, caller):
         classes = present if labels is None else _selected_labels(labels, kind, present)
         if labels is not None and set(present) - set(classes):
             raise ValueError("y_true contains values not belonging to the passed labels")
-        classes = sorted(classes)
+        classes = sorted(classes)  # glue: sorts the distinct class labels
         k = a.shape[1]
         if len(classes) != k:
             raise ValueError(f"y_true and y_proba contain different number of classes: {len(classes)} vs {k}")
-        index = {c: i for i, c in enumerate(classes)}
+        index = {c: i for i, c in enumerate(classes)}  # glue: class index table
         codes = _label_map(true, lambda v: index[v])
     if a.shape[0] != n:
         raise ValueError("y_true and y_proba have different numbers of rows")
@@ -2637,7 +2637,7 @@ def hinge_loss(y_true, pred_decision, *, labels=None, sample_weight=None, numeri
     from ._metrics_impl import _label_map, _selected_labels
     true, kind, present = _targets(y_true, "hinge_loss")
     n = len(true)
-    uniq = present if labels is None else sorted(_selected_labels(labels, kind, present))
+    uniq = present if labels is None else sorted(_selected_labels(labels, kind, present))  # glue: sorts the selected class labels
     s = _scores(pred_decision, n, "hinge_loss", name="pred_decision")
     w = _weights(sample_weight, n, "hinge_loss")
     prog = _Prog()
@@ -2648,7 +2648,7 @@ def hinge_loss(y_true, pred_decision, *, labels=None, sample_weight=None, numeri
             raise ValueError("Please include all labels in y_true or pass labels as third argument"
                              if labels is None else
                              "The shape of pred_decision is not consistent with the number of classes.")
-        index = {c: i for i, c in enumerate(uniq)}
+        index = {c: i for i, c in enumerate(uniq)}  # glue: class index table
         codes = _label_map(true, lambda v: index[v])
         S, Y = prog.put(s), prog.put_i32(codes)
         return float(_row_mean(S, s.shape[1], Y, n, "hinge_mc", w, numeric_mode, prog=prog))
@@ -2797,7 +2797,7 @@ def _clusterings(labels_true, labels_pred, caller):
     b, kb = _classification_encoded(labels_pred, "labels_pred")
     if len(a) != len(b):
         raise ValueError(f"mojolearn {caller}: labels_true and labels_pred must have the same length")
-    return a, b, sorted(_label_set(a)), sorted(_label_set(b))
+    return a, b, sorted(_label_set(a)), sorted(_label_set(b))  # glue: sorts the distinct cluster labels
 
 
 class _Contingency:
@@ -2938,7 +2938,7 @@ def _cluster_inputs(X, labels, caller):
     lab, _ = _classification_encoded(labels, "labels")
     if len(lab) != Xa.shape[0]:
         raise ValueError(f"mojolearn {caller}: X and labels have different numbers of rows")
-    classes = sorted(_label_set(lab))
+    classes = sorted(_label_set(lab))  # glue: sorts the distinct class labels
     if not 1 < len(classes) < Xa.shape[0]:
         raise ValueError(f"Number of labels is {len(classes)}. Valid values are 2 to n_samples - 1 (inclusive)")
     return Xa, _codes(lab, classes), len(classes)
@@ -3151,10 +3151,10 @@ def stratified_fold_rows(enc, counts, alloc, k, rng, numeric_mode=None):
                 raise AssertionError("stratified_fold_rows: the class permutations are not contiguous")
             at += counts[c]
     cum = []
-    for c in range(m):
+    for c in range(m):  # glue: fold by class offsets for the device code stage (m-sized: class count)
         acc = 0
         cum.append(0)
-        for f in range(k):
+        for f in range(k):  # glue: fold by class offsets for the device code stage (k-sized: fold count)
             acc += alloc[f][c]
             cum.append(acc)
     CUM = prog.put_i32(Array._owned(array.array("i", cum), (len(cum),), "<i4", "C"))

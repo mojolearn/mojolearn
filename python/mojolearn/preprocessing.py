@@ -63,7 +63,7 @@ def _refuse_inf(pr, st, d):
     """col_stats rows 3 and 4 (min and max over the non-NaN entries): an
     infinity is refused as the reference's `ensure_all_finite='allow-nan'`."""
     lo, hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
-    if any(math.isinf(v) for v in lo + hi):
+    if any(math.isinf(v) for v in lo + hi):  # glue: raises on an infinite per-column statistic
         raise ValueError('Scaler input contains infinity; only NaN may be missing')
 
 
@@ -179,15 +179,15 @@ def _seen(counts, weighted):
     feature saw the same count, else a per-feature vector (int64 counts,
     float32 weight sums)."""
     if weighted:
-        vals = [float(v) for v in counts]
+        vals = [float(v) for v in counts]  # glue: converts the device sample counts (counts-sized: per-column sample counts)
         return vals[0] if len(set(vals)) == 1 else Array.from_list(vals, "<f4")
-    vals = [int(v) for v in counts]
+    vals = [int(v) for v in counts]  # glue: converts the device sample counts (counts-sized: per-column sample counts)
     return vals[0] if len(set(vals)) == 1 else Array.from_list(vals, "<i8")
 
 
 def _per_feature(seen, d):
     if isinstance(seen, Array):
-        return [float(v) for v in seen.tolist()]
+        return [float(v) for v in seen.tolist()]  # glue: per-column sample counts of n_samples_seen_
     return [float(seen)] * d
 
 
@@ -633,10 +633,10 @@ class StandardScaler(_ScalerProtocol):
         self._binding(mode)
         count, mean, var, scale = _standard_stats(mode, values, weight)
         seen = count.tolist()
-        live = [c for c in range(d) if seen[c] != 0]
+        live = [c for c in range(d) if seen[c] != 0]  # glue: live column index list from device counts (d-sized: feature count)
         m, v, sc = mean.tolist(), var.tolist(), scale.tolist()
         if any(not (math.isfinite(m[c]) and math.isfinite(v[c]) and math.isfinite(sc[c])) or v[c] < 0 or sc[c] <= 0
-               for c in live):
+               for c in live):  # glue: raises on nonfinite device statistics (live-sized: live column indices)
             raise ValueError('StandardScaler statistics are nonfinite, variance negative, or scale nonpositive in Float32')
         self._keep(mean, var, scale, _seen(seen, weight is not None), d, mode)
         return self
@@ -664,7 +664,7 @@ class StandardScaler(_ScalerProtocol):
                     or getattr(self.n_samples_seen_, "dtype", None) == "<f4")
         old_n, new_n = _per_feature(self.n_samples_seen_, d), _per_feature(batch.n_samples_seen_, d)
         if self.mean_ is None:
-            total = [a + b for a, b in zip(old_n, new_n)]
+            total = [a + b for a, b in zip(old_n, new_n)]  # glue: merges per-column integer sample counts
             self.n_samples_seen_ = _seen(total, weighted)
             return self
         P = _prep()

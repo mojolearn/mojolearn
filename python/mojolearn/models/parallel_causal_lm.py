@@ -43,7 +43,7 @@ def _admit_route(layer_devices=()):
     layer is built or a checkpoint is read."""
     vendor = _backend.vendor()
     if vendor == 'metal':
-        if not layer_devices or any(type(d) is not int or d != 0 for d in layer_devices):
+        if not layer_devices or any(type(d) is not int or d != 0 for d in layer_devices):  # glue: validates the layer_devices argument
             raise ValueError('Metal ParallelCausalLM requires every layer owner to be device 0')
         return 'gpu'
     if vendor in ('cuda', 'hip'):
@@ -135,7 +135,7 @@ class ParallelCausalLM(CausalLM):
     def __init__(self, plan, weights, *, layer_devices, **kwargs):
         self.layer_devices = tuple(layer_devices)
         if (len(self.layer_devices) != plan.n_layers or
-                any(type(d) is not int or d < 0 for d in self.layer_devices)):
+                any(type(d) is not int or d < 0 for d in self.layer_devices)):  # glue: validates the layer_devices argument
             raise ValueError('layer_devices requires one nonnegative device index per layer')
         self.route = _admit_route(self.layer_devices)
         self._closed = False
@@ -144,11 +144,11 @@ class ParallelCausalLM(CausalLM):
             devices = tuple(dict.fromkeys(self.layer_devices))
             pool = DevicePool(devices)
             self._pools = dict.fromkeys(devices, pool)
-            self._worker_index = {device: i for i, device in enumerate(devices)}
+            self._worker_index = {device: i for i, device in enumerate(devices)}  # glue: worker index per device
             pool._start()
             # EVERY WORKER LEARNS THE ROUTE BEFORE IT BUILDS ANYTHING, so no
             # worker can silently take the GPU block classes on a host box.
-            for device in devices:
+            for device in devices:  # glue: starts one worker per device
                 self._rpc(device, 'route', self.route)
             super().__init__(plan, weights, device=self.route, **kwargs)
             self._rpc(self.layer_devices[0], 'tensors', {'embed': self._embed})
@@ -170,7 +170,7 @@ class ParallelCausalLM(CausalLM):
         if weight_format not in ('float32', 'bfloat16', 'int8'):
             raise ValueError('unsupported weight_format')
         layer_devices = tuple(layer_devices)
-        if not layer_devices or any(type(d) is not int or d < 0 for d in layer_devices):
+        if not layer_devices or any(type(d) is not int or d < 0 for d in layer_devices):  # glue: validates the layer_devices argument
             raise ValueError('layer_devices requires one nonnegative device index per layer')
         _admit_route(layer_devices)
         plan = plan_for(HFConfig.from_json(path))
@@ -186,7 +186,7 @@ class ParallelCausalLM(CausalLM):
                    numeric_profile=numeric_profile)
 
     def _make_blocks(self, cls, layers, kwargs):
-        return [_RemoteBlock(self, i, weights, kwargs) for i, weights in enumerate(layers)]
+        return [_RemoteBlock(self, i, weights, kwargs) for i, weights in enumerate(layers)]  # glue: one remote block per model layer
 
     def _rpc(self, device, operation, args):
         if self._closed:
@@ -209,15 +209,15 @@ class ParallelCausalLM(CausalLM):
         out = {self.plan.embed_name: self._embed, self.plan.norm_name: self._norm}
         if self.plan.head_name is not None:
             out[self.plan.head_name] = self._head
-        for i, block in enumerate(self._blocks):
-            names = {k: n for k, n, _ in self.plan.layer_weights(i)}
-            for key, value in block.call('parameters', i).items():
+        for i, block in enumerate(self._blocks):  # glue: walks the model layers
+            names = {k: n for k, n, _ in self.plan.layer_weights(i)}  # glue: names the weights of one layer
+            for key, value in block.call('parameters', i).items():  # glue: walks the named weights of one layer
                 out.setdefault(names[key], value)
         return out
 
     def close(self):
         self._closed = True
-        for pool in set(getattr(self, '_pools', {}).values()):
+        for pool in set(getattr(self, '_pools', {}).values()):  # glue: closes the device worker pools
             pool.close()
         self._pools = {}
 

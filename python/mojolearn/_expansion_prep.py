@@ -334,7 +334,7 @@ def _prep2_qselect(mode, nq):
 def _r3(name):
     """Whether the lane prep-apple3 change `name` is on."""
     def names(var):
-        v = [t.strip() for t in os.environ.get(var, "").replace("+", ",").split(",") if t.strip()]
+        v = [t.strip() for t in os.environ.get(var, "").replace("+", ",").split(",") if t.strip()]  # glue: parses an env var name list
         return set(_R3_NAMES) if "all" in v else set(v)
     off = names("MOJOLEARN_XPREP_R3_OFF")
     if name in off:
@@ -468,7 +468,7 @@ class _Prog:
         return off
 
     def put_list(self, values, inout=False):
-        flat = [float(v) for v in values] or [0.0]
+        flat = [float(v) for v in values] or [0.0]  # glue: packs a caller parameter list into the program buffer
         return self.put(Array._from_flat(flat, (len(flat),), "<f4"), inout=inout)
 
     def put_scalar(self, value):
@@ -477,7 +477,7 @@ class _Prog:
     def put_codes(self, codes):
         """int32 codes -> offset of their float values (an i2f stage)."""
         if not (isinstance(codes, Array) and codes.dtype == "<i4"):
-            codes = Array.from_list([int(c) for c in codes], "<i4")
+            codes = Array.from_list([int(c) for c in codes], "<i4")  # glue: packs caller code list into program buffer
         bits = self.alloc(codes.size)
         self._inputs.append((bits, codes, "i"))
         out = self.alloc(codes.size)
@@ -492,7 +492,7 @@ class _Prog:
 
     def put_ints(self, values):
         """int32 words (read by `ldi`) -> offset."""
-        codes = Array.from_list([int(v) for v in values] or [0], "<i4")
+        codes = Array.from_list([int(v) for v in values] or [0], "<i4")  # glue: packs caller int parameters into program buffer
         off = self.alloc(codes.size)
         self._inputs.append((off, codes, "i"))
         return off
@@ -500,7 +500,7 @@ class _Prog:
     def stage(self, op, total, *params):
         if len(params) > _PARAMS:
             raise ValueError("x_prep: too many stage parameters")
-        self._stages.append([_OPS[op], int(total)] + [v if isinstance(v, _Scratch) else int(v) for v in params]
+        self._stages.append([_OPS[op], int(total)] + [v if isinstance(v, _Scratch) else int(v) for v in params]  # glue: builds one stage parameter record
                             + [0] * (_PARAMS - len(params)))
 
     def run(self, mode):
@@ -531,7 +531,7 @@ class _Prog:
         spans = []
         direct = None
         gathered = []
-        for off, arr, _ in self._inputs:
+        for off, arr, _ in self._inputs:  # glue: walks the program input buffers once
             if not arr.size:
                 continue
             if isinstance(arr, _arena_io.DeviceRows):
@@ -565,9 +565,9 @@ class _Prog:
                 continue
             ctypes.memmove(base + 4 * off, addr_ro(arr, name="input"), 4 * arr.size)
             spans.append((off, off + arr.size, -1))
-        self._in_spans = [(lo, hi) for lo, hi, _ in spans if (lo, hi) not in self._inout]
+        self._in_spans = [(lo, hi) for lo, hi, _ in spans if (lo, hi) not in self._inout]  # glue: walks the program span records
         prog = array.array("i", [(v.off + (sbase if v.kind == "s" else obase)) if isinstance(v, _Scratch) else v
-                                 for s in self._stages for v in s] or [0])
+                                 for s in self._stages for v in s] or [0])  # glue: flattens the stage parameter records
         nst = len(self._stages)
         self._out, self._out_at = None, obase
         t_in = time.perf_counter() if prof else 0.0
@@ -576,7 +576,7 @@ class _Prog:
             # the inputs go up, the rest of the host arena starts zero on the
             # device, and everything but the inputs comes back
             ins = _arena_io.input_ranges(spans)
-            outs = _arena_io.output_ranges(_arena_io.complement(ins, ha) + [list(s) for s in self._inout])
+            outs = _arena_io.output_ranges(_arena_io.complement(ins, ha) + [list(s) for s in self._inout])  # glue: walks the program span records
             ia, oa = _arena_io.pack_ins(ins), _arena_io.pack_outs(outs)
             out, out_addr = _zero_words(on, self._out_code) if dev_out else (None, 0)
             try:
@@ -605,8 +605,8 @@ class _Prog:
             fn(self)
         if prof:
             # one line per program (the device's XPPHASE lines come in the same order)
-            inv = {v: k for k, v in _OPS.items()}
-            print("XPPROG ops=" + "+".join(inv.get(st[0], str(st[0])) for st in self._stages)
+            inv = {v: k for k, v in _OPS.items()}  # glue: debug print of stage names
+            print("XPPROG ops=" + "+".join(inv.get(st[0], str(st[0])) for st in self._stages)  # glue: debug print of stage names
                   + f" arena={ha} scratch={sc} out={on} dev_out={int(bool(dev_out))} ranges={int(run_ranges is not None)}"
                   + f" alloc_s={t_alloc - t_run:.4f} inputs_s={t_in - t_alloc:.4f}"
                   + f" call_s={time.perf_counter() - t_in:.4f}", flush=True)
@@ -617,7 +617,7 @@ class _Prog:
         runner, lane py-shared): a read of one is refused on every backend,
         so a program that reads an input after a stage wrote it fails loudly
         instead of reading the host's stale copy."""
-        for lo, hi in getattr(self, "_in_spans", ()):
+        for lo, hi in getattr(self, "_in_spans", ()):  # glue: walks the program span records
             if off < hi and lo < off + n:
                 raise AssertionError(f"x_prep: arena [{off}, {off + n}) was read but is an input, "
                                      "which never comes back")
@@ -625,7 +625,7 @@ class _Prog:
     def _read(self, off, shape, code):
         shape = tuple(shape) if isinstance(shape, (tuple, list)) else (int(shape),)
         n = 1
-        for s in shape:
+        for s in shape:  # glue: walks the shape tuple entries
             n *= s
         if isinstance(off, _Scratch):
             if off.kind != "o":
@@ -724,10 +724,10 @@ class _PrepBase:
     _parameters = ()
 
     def get_params(self, deep=True):
-        return {name: getattr(self, name) for name in self._parameters}
+        return {name: getattr(self, name) for name in self._parameters}  # glue: copies estimator keyword arguments
 
     def set_params(self, **params):
-        for k, v in params.items():
+        for k, v in params.items():  # glue: copies estimator keyword arguments
             if k not in self._parameters:
                 raise ValueError(f"mojolearn: invalid parameter {k!r} for {type(self).__name__}")
             setattr(self, k, v)
@@ -777,7 +777,7 @@ class RobustScaler(_PrepBase):
         self.unit_variance = unit_variance
 
     def fit(self, X, y=None):
-        lo, hi = (float(v) for v in self.quantile_range)
+        lo, hi = (float(v) for v in self.quantile_range)  # glue: unpacks the two quantile_range values
         if not 0 <= lo <= hi <= 100:
             raise ValueError(f"mojolearn: invalid quantile range {self.quantile_range!r}")
         if self.unit_variance and not 0 < lo < hi < 100:
@@ -926,7 +926,7 @@ def _fit_categories_cls2(mode, arr, bits):
         uo = pr.work(d * R)
         pr.stage("cat_zero", d * R, fl)
         pr.stage("cat_present", n * d, xo, n, d, R, fl, bad)
-        for c in range(d):
+        for c in range(d):  # glue: stages one device scan per column (d-sized: feature count)
             cnt, off = pr.work(nch), pr.work(nch)
             pr.stage("pres_count", nch, fl + c * R, R, ch, cnt)
             pr.stage("uniq_scan", 1, cnt, nch, off, co + c)
@@ -938,20 +938,20 @@ def _fit_categories_cls2(mode, arr, bits):
         pr.stage("sort_cols", d, xo, n, d, so, 1)
         ch = _label_chunk(n)
         nch = -(-n // ch)
-        for c in range(d):
+        for c in range(d):  # glue: stages one device scan per column (d-sized: feature count)
             cnt, off = pr.work(nch), pr.work(nch)
             pr.stage("uniq_count", nch, so + c * n, n, ch, cnt)
             pr.stage("uniq_scan", 1, cnt, nch, off, co + c)
             pr.stage("uniq_write", nch, so + c * n, n, ch, off, uo + c * n)
         pr.stage("cat_pack", n * d, uo, n, d, co, cap, pk)
     pr.run(mode)
-    if bad is not None and any(v != 0 for v in pr.get_i32(bad, (d,)).tolist()):
+    if bad is not None and any(v != 0 for v in pr.get_i32(bad, (d,)).tolist()):  # glue: reads the per-column overflow flags the device set (d-sized: feature count)
         return None
-    counts = [int(v) for v in pr.values(co, d)]
-    if sum(counts) > cap:
+    counts = [int(v) for v in pr.values(co, d)]  # glue: reads per-column category counts for slicing (d-sized: feature count)
+    if sum(counts) > cap:  # glue: capacity check before slicing outputs (counts-sized: per-column category counts)
         return None
     out, o = [], 0
-    for c in range(d):
+    for c in range(d):  # glue: slices the per-column category outputs (d-sized: feature count)
         out.append(pr.get(pk + o, counts[c]))
         o += counts[c]
     return out
@@ -984,7 +984,7 @@ def _fit_categories(mode, arr):
         # the count as a float at co[c]).
         ch = _label_chunk(n)
         nch = -(-n // ch)
-        for c in range(d):
+        for c in range(d):  # glue: stages one device scan per column (d-sized: feature count)
             cnt, off = pr.work(nch), pr.work(nch)
             pr.stage("uniq_count", nch, so + c * n, n, ch, cnt)
             pr.stage("uniq_scan", 1, cnt, nch, off, co + c)
@@ -992,8 +992,8 @@ def _fit_categories(mode, arr):
     else:
         pr.stage("unique_cols", d, so, n, d, uo, co)
     pr.run(mode)
-    counts = [int(v) for v in pr.values(co, d)]
-    return [pr.get(uo + c * n, counts[c]) for c in range(d)]
+    counts = [int(v) for v in pr.values(co, d)]  # glue: reads per-column category counts for slicing (d-sized: feature count)
+    return [pr.get(uo + c * n, counts[c]) for c in range(d)]  # glue: slices the per-column category outputs (d-sized: feature count)
 
 
 def _given_categories(categories, arr, mode, check_unknown, who):
@@ -1005,25 +1005,25 @@ def _given_categories(categories, arr, mode, check_unknown, who):
     if len(categories) != d:
         raise ValueError(f"mojolearn: {who} categories has {len(categories)} lists; X has {d} features")
     out = []
-    for j, cats in enumerate(categories):
-        vals = [float(v) for v in (cats.tolist() if hasattr(cats, "tolist") else cats)]
+    for j, cats in enumerate(categories):  # glue: validates the user categories argument (categories-sized: user category lists)
+        vals = [float(v) for v in (cats.tolist() if hasattr(cats, "tolist") else cats)]  # glue: converts the user categories argument (cats-sized: one user category list)
         f32 = array.array("f", vals)
-        nums = [v for v in f32 if v == v]
+        nums = [v for v in f32 if v == v]  # glue: validates the user categories argument (f32-sized: one user category list)
         if len(nums) < len(f32) - 1 or (len(nums) < len(f32) and f32[-1] == f32[-1]):
             raise ValueError(f"mojolearn: {who} categories[{j}]: nan must be the last category")
-        if nums != sorted(nums):
+        if nums != sorted(nums):  # glue: validates the user categories argument is sorted (nums-sized: one user category list)
             raise ValueError(f"mojolearn: {who} unsorted categories are not supported for numerical categories")
-        if any(a == b for a, b in zip(nums, nums[1:])):
+        if any(a == b for a, b in zip(nums, nums[1:])):  # glue: validates the user categories argument has no duplicates (nums-sized: one user category list)
             raise ValueError(f"mojolearn: {who} categories[{j}] has values equal in float32")
         if not f32:
             raise ValueError(f"mojolearn: {who} categories[{j}] is empty")
-        canon = [0.0 if v == 0 else v for v in nums] + ([float("nan")] if len(nums) < len(f32) else [])
+        canon = [0.0 if v == 0 else v for v in nums] + ([float("nan")] if len(nums) < len(f32) else [])  # glue: canonicalizes the user categories argument (nums-sized: one user category list)
         out.append(Array.from_list(canon, "<f4"))
     if check_unknown:
         pr = _Prog()
         _codes_neg = _codes(pr, arr, out)
         pr.run(mode)
-        bad = [j for j, v in enumerate(pr.values(_codes_neg[1], d)) if v > 0]
+        bad = [j for j, v in enumerate(pr.values(_codes_neg[1], d)) if v > 0]  # glue: reads the per-column unknown flags the device set (d-sized: feature count)
         if bad:
             raise ValueError(f"mojolearn: {who} found unknown categories in column(s) {bad} during fit")
     return out
@@ -1031,9 +1031,9 @@ def _given_categories(categories, arr, mode, check_unknown, who):
 
 def _category_block(pr, categories):
     """Every column's categories in one (d, kmax) block. Returns (offset, kmax)."""
-    kmax = max(c.size for c in categories)
+    kmax = max(c.size for c in categories)  # glue: largest category count for the program layout (categories-sized: per-column category arrays)
     block = [0.0] * (len(categories) * kmax)
-    for j, cats in enumerate(categories):
+    for j, cats in enumerate(categories):  # glue: stages per-column category tables (categories-sized: per-column category arrays)
         block[j * kmax:j * kmax + cats.size] = cats.tolist()
     return pr.put_list(block), kmax
 
@@ -1044,7 +1044,7 @@ def _codes(pr, arr, categories, *, device_only=False):
     n, d = arr.shape
     xo = pr.put(arr)
     uo, kmax = _category_block(pr, categories)
-    co = pr.put_list([c.size for c in categories])
+    co = pr.put_list([c.size for c in categories])  # glue: packs per-column category sizes (categories-sized: per-column category arrays)
     codes = pr.scratch(n * d) if device_only else pr.alloc(n * d)
     pr.stage("lookup", n * d, xo, n, d, uo, kmax, co, codes)
     if device_only:
@@ -1067,7 +1067,7 @@ def _inverse_codes(pr, arr, categories, missing, emv, unknown, ncat=None, back=N
     mo = pr.put_list(missing)
     eo = pr.put_scalar(emv)
     uo = pr.put_scalar(0.0 if unknown is None else unknown)
-    no = pr.put_list(ncat if ncat is not None else [c.size for c in categories])
+    no = pr.put_list(ncat if ncat is not None else [c.size for c in categories])  # glue: packs per-column category sizes (categories-sized: per-column category arrays)
     codes = pr.alloc(n * d)
     pr.stage("ord_inverse", n * d, xo, n, d, mo, eo, 0 if unknown is None else 1, uo, no, codes)
     if back is not None:
@@ -1130,32 +1130,32 @@ def _fit_infrequent(est, mode, arr, ignore_missing):
         inf = [i for i in range(k) if masks[j * kmax + i]] or None  # glue: the device mask as the fitted index list
         est._infrequent.append(inf)
         est._grouping.append(None if inf is None else maps[j * kmax:j * kmax + k])
-    est.infrequent_categories_ = [None if inf is None else Array.from_list([c.tolist()[i] for i in inf], "<f4")
-                                  for c, inf in zip(est.categories_, est._infrequent)]
+    est.infrequent_categories_ = [None if inf is None else Array.from_list([c.tolist()[i] for i in inf], "<f4")  # glue: slices fitted categories per column (inf-sized: infrequent category indices of one column)
+                                  for c, inf in zip(est.categories_, est._infrequent)]  # glue: walks fitted per-column category lists (categories_-sized: fitted per-column category lists)
 
 
 def _grouping_table(pr, grouping, inverse=False):
     """(MAP, MSTRIDE, NMAP) for remap_codes: category -> grouped code, or
     (inverse) grouped code -> category index with the infrequent code -> -3."""
     tables = []
-    for g in grouping:
+    for g in grouping:  # glue: builds the category grouping table (grouping-sized: per-column category groupings)
         if g is None:
             tables.append([])
         elif not inverse:
             tables.append(list(g))
         else:
-            nf = max(g)
+            nf = max(g)  # glue: largest group index of one column grouping (g-sized: one column grouping)
             back = [0] * (nf + 1)
-            for i, v in enumerate(g):
+            for i, v in enumerate(g):  # glue: inverts one column grouping table (g-sized: one column grouping)
                 if v < nf:
                     back[v] = i
             back[nf] = -3
             tables.append(back)
-    stride = max(1, max(len(t) for t in tables))
+    stride = max(1, max(len(t) for t in tables))  # glue: grouping table stride (tables-sized: per-column grouping tables)
     flat = []
-    for t in tables:
+    for t in tables:  # glue: pads the per-column grouping tables (tables-sized: per-column grouping tables)
         flat.extend(t + [0] * (stride - len(t)))
-    return pr.put_list(flat), stride, pr.put_list([len(t) for t in tables])
+    return pr.put_list(flat), stride, pr.put_list([len(t) for t in tables])  # glue: packs the grouping table lengths (tables-sized: per-column grouping tables)
 
 
 def _remap(pr, codes, n, d, table, neg):
@@ -1196,7 +1196,7 @@ def _block_argmax(pr, arr, widths, drops, check):
     n, W = arr.shape
     d = len(widths)
     xo = pr.put(arr)
-    so = pr.put_list([sum(widths[:j]) for j in range(d)])
+    so = pr.put_list([sum(widths[:j]) for j in range(d)])  # glue: prefix offsets of the per-column block widths (d-sized: feature count)
     wo = pr.put_list(widths)
     do = pr.put_list(drops) if drops is not None else _NONE
     codes = pr.alloc(n * d)
@@ -1205,7 +1205,7 @@ def _block_argmax(pr, arr, widths, drops, check):
 
 
 def _raise_unknown(pr, neg, d, who):
-    bad = [j for j, v in enumerate(pr.values(neg, d)) if v > 0]
+    bad = [j for j, v in enumerate(pr.values(neg, d)) if v > 0]  # glue: reads the per-column unknown flags the device set (d-sized: feature count)
     if bad:
         raise ValueError(f"mojolearn: {who} found unknown categories in column(s) {bad} during transform")
 
@@ -1249,19 +1249,19 @@ class OrdinalEncoder(_PrepBase):
         self.categories_ = (_fit_categories(mode, arr) if _is_auto(self.categories) else
                             _given_categories(self.categories, arr, mode, self.handle_unknown == "error",
                                               "OrdinalEncoder"))
-        self._missing = [c.size - 1 if c.size and _is_nan_value(c.tolist()[-1]) else -1 for c in self.categories_]
+        self._missing = [c.size - 1 if c.size and _is_nan_value(c.tolist()[-1]) else -1 for c in self.categories_]  # glue: per-column NaN category slot (categories_-sized: fitted per-column category arrays)
         self._infrequent = self._grouping = None
         if grouping:
             _fit_infrequent(self, mode, arr, True)
-        cards = [c.size - (1 if m >= 0 else 0) for c, m in zip(self.categories_, self._missing)]
+        cards = [c.size - (1 if m >= 0 else 0) for c, m in zip(self.categories_, self._missing)]  # glue: per-column category cardinalities (categories_-sized: fitted per-column category arrays)
         if grouping:
-            cards = [k if g is None else max(g) + 1 for k, g in zip(cards, self._grouping)]
+            cards = [k if g is None else max(g) + 1 for k, g in zip(cards, self._grouping)]  # glue: grouped per-column cardinalities (cards-sized: per-column category cardinalities)
         if self.handle_unknown == "use_encoded_value" and not _is_nan_value(self.unknown_value):
-            if any(0 <= self.unknown_value < k for k in cards):
+            if any(0 <= self.unknown_value < k for k in cards):  # glue: validates unknown_value against cardinalities (cards-sized: per-column category cardinalities)
                 raise ValueError(f"mojolearn: the used value for unknown_value {self.unknown_value} is one of the "
                                  "values already used for encoding the seen categories.")
-        if any(m >= 0 for m in self._missing) and not _is_nan_value(self.encoded_missing_value):
-            bad = [j for j, (k, m) in enumerate(zip(cards, self._missing))
+        if any(m >= 0 for m in self._missing) and not _is_nan_value(self.encoded_missing_value):  # glue: validates encoded_missing_value argument (_missing-sized: per-column NaN category slots)
+            bad = [j for j, (k, m) in enumerate(zip(cards, self._missing))  # glue: validates encoded_missing_value argument (cards-sized: per-column category cardinalities)
                    if m >= 0 and 0 <= self.encoded_missing_value < k]
             if bad:
                 raise ValueError(f"mojolearn: encoded_missing_value ({self.encoded_missing_value}) is already "
@@ -1283,7 +1283,7 @@ class OrdinalEncoder(_PrepBase):
             val = pr.put_scalar(self.unknown_value)
             src, out = out, pr.alloc(n * d)
             pr.stage("where_neg", n * d, src, n * d, val, out)
-        if any(m >= 0 for m in self._missing):
+        if any(m >= 0 for m in self._missing):  # glue: checks for a NaN category slot (_missing-sized: per-column NaN category slots)
             src, out = out, pr.alloc(n * d)
             pr.stage("where_code", n * d, codes, n, d, pr.put_list(self._missing),
                      pr.put_scalar(self.encoded_missing_value), src, out)
@@ -1301,7 +1301,7 @@ class OrdinalEncoder(_PrepBase):
         unknown = self.unknown_value if self.handle_unknown == "use_encoded_value" else None
         ncat = back = None
         if self._grouping is not None:
-            ncat = [c.size if g is None else max(g) + 1 for c, g in zip(self.categories_, self._grouping)]
+            ncat = [c.size if g is None else max(g) + 1 for c, g in zip(self.categories_, self._grouping)]  # glue: per-column grouped category counts (categories_-sized: fitted per-column category arrays)
             back = _grouping_table(pr, self._grouping, inverse=True)
         out, codes = _inverse_codes(pr, arr, self.categories_, self._missing, self.encoded_missing_value, unknown,
                                     ncat, back)
@@ -1362,8 +1362,8 @@ class OneHotEncoder(_PrepBase):
         return self
 
     def _grouped_sizes(self):
-        return [c.size if (self._grouping is None or g is None) else max(g) + 1
-                for c, g in zip(self.categories_, self._grouping or [None] * len(self.categories_))]
+        return [c.size if (self._grouping is None or g is None) else max(g) + 1  # glue: per-column grouped category counts (c-sized: fitted per-column category arrays)
+                for c, g in zip(self.categories_, self._grouping or [None] * len(self.categories_))]  # glue: per-column grouped category counts (categories_-sized: fitted per-column category arrays)
 
     def _set_drop_idx(self):
         """The reference's `_set_drop_idx`: `_drop_after` in grouped codes,
@@ -1375,20 +1375,20 @@ class OneHotEncoder(_PrepBase):
         elif self.drop == "first":
             after = [0] * len(sizes)
         elif self.drop == "if_binary":
-            after = [0 if k == 2 else None for k in sizes]
+            after = [0 if k == 2 else None for k in sizes]  # glue: drop index for binary columns (sizes-sized: per-column category counts)
         else:
             vals = list(self.drop.tolist() if hasattr(self.drop, "tolist") else self.drop)
             if len(vals) != len(sizes):
                 raise ValueError(f"mojolearn: `drop` should have length equal to the number of features "
                                  f"({len(sizes)}), got {len(vals)}")
             after, missing = [], []
-            for j, (v, cats) in enumerate(zip(vals, self.categories_)):
+            for j, (v, cats) in enumerate(zip(vals, self.categories_)):  # glue: validates the user drop argument (vals-sized: per-column drop arguments)
                 cl = cats.tolist()
                 if _is_nan_value(v):
                     hit = [cats.size - 1] if cl and _is_nan_value(cl[-1]) else []
                 else:
                     fv = array.array("f", [float(v)])[0]
-                    hit = [i for i, c in enumerate(cl) if c == fv]
+                    hit = [i for i, c in enumerate(cl) if c == fv]  # glue: finds the user drop category in its column (cl-sized: one column category list)
                 if not hit:
                     missing.append((j, v))
                     continue
@@ -1402,23 +1402,23 @@ class OneHotEncoder(_PrepBase):
             if missing:
                 raise ValueError("mojolearn: The following categories were supposed to be dropped, but were not "
                                  "found in the training data.\n" + "\n".join(
-                                     f"Category: {v}, Feature: {j}" for j, v in missing))
+                                     f"Category: {v}, Feature: {j}" for j, v in missing))  # glue: formats the drop error message (missing-sized: unknown drop entries)
         self._drop_after = after
         if after is None:
             self.drop_idx_ = None
         else:
-            self.drop_idx_ = [a if (a is None or g is None) else g.index(a) for a, g in zip(after, grouping)]
+            self.drop_idx_ = [a if (a is None or g is None) else g.index(a) for a, g in zip(after, grouping)]  # glue: maps drop indices through the grouping (after-sized: per-column drop indices)
 
     def _widths(self):
         drops = self._drop_after or [None] * len(self.categories_)
-        return [k - (0 if dr is None else 1) for k, dr in zip(self._grouped_sizes(), drops)], drops
+        return [k - (0 if dr is None else 1) for k, dr in zip(self._grouped_sizes(), drops)], drops  # glue: per-column one-hot block widths (drops-sized: per-column drop indices)
 
     def _unknown_to(self):
         """Per column, the grouped code an unknown value takes: the infrequent
         one under 'infrequent_if_exist' / 'warn' when the column has it, else -1."""
         if self._grouping is None or self.handle_unknown not in ("infrequent_if_exist", "warn"):
             return None
-        return [-1 if g is None else max(g) for g in self._grouping]
+        return [-1 if g is None else max(g) for g in self._grouping]  # glue: per-column infrequent slot (_grouping-sized: per-column category groupings)
 
     def transform(self, X):
         self._check_fitted()
@@ -1426,8 +1426,8 @@ class OneHotEncoder(_PrepBase):
         self._check_width(arr)
         n, d = arr.shape
         widths, drops = self._widths()
-        starts = [sum(widths[:j]) for j in range(d)]
-        W = sum(widths)
+        starts = [sum(widths[:j]) for j in range(d)]  # glue: prefix offsets of the per-column block widths (d-sized: feature count)
+        W = sum(widths)  # glue: total one-hot output width (widths-sized: per-column block widths)
         pr = _Prog()
         codes, neg = _codes(pr, arr, self.categories_)
         if self._grouping is not None:
@@ -1435,7 +1435,7 @@ class OneHotEncoder(_PrepBase):
             codes = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping),
                            _NONE if unk is None else pr.put_list(unk))
         so = pr.put_list(starts)
-        do = pr.put_list([-1 if dr is None else dr for dr in drops])
+        do = pr.put_list([-1 if dr is None else dr for dr in drops])  # glue: packs drop indices for the program (drops-sized: per-column drop indices)
         out = pr.output(n * W)
         pr.stage("onehot", n * d, codes, n, d, so, do, W, out)
         pr.run(self.numeric_mode_)
@@ -1443,7 +1443,7 @@ class OneHotEncoder(_PrepBase):
             _raise_unknown(pr, neg, d, "OneHotEncoder")
         elif self.handle_unknown == "warn" or (self.drop is not None and
                                                self.handle_unknown in ("ignore", "infrequent_if_exist")):
-            bad = [j for j, v in enumerate(pr.values(neg, d)) if v > 0]
+            bad = [j for j, v in enumerate(pr.values(neg, d)) if v > 0]  # glue: reads the per-column unknown flags the device set (d-sized: feature count)
             if bad:
                 import warnings
                 where = ("encoded as the infrequent category" if self.handle_unknown != "ignore"
@@ -1457,10 +1457,10 @@ class OneHotEncoder(_PrepBase):
         arr = _x2d(X)
         widths, drops = self._widths()
         n, W, d = arr.shape[0], arr.shape[1], len(widths)
-        if W != sum(widths):
+        if W != sum(widths):  # glue: validates the input width (widths-sized: per-column block widths)
             raise ValueError(f"mojolearn: X has {W} columns, expected {sum(widths)}")
         pr = _Prog()
-        codes = _block_argmax(pr, arr, widths, [-1 if dr is None else dr for dr in drops], True)
+        codes = _block_argmax(pr, arr, widths, [-1 if dr is None else dr for dr in drops], True)  # glue: packs drop indices for the program (drops-sized: per-column drop indices)
         grouped = codes
         if self._grouping is not None:
             codes = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping, inverse=True), _NONE)
@@ -1471,7 +1471,7 @@ class OneHotEncoder(_PrepBase):
         strict = [1.0 if (self.handle_unknown == "error" or (self.handle_unknown != "ignore"
                                                                and self._infrequent is not None
                                                                and self._infrequent[j] is not None)) else 0.0
-                  for j in range(d)]
+                  for j in range(d)]  # glue: slices the per-column decoded outputs (d-sized: feature count)
         staged = _bad_rows_stages(pr, grouped, n, d, -1, pr.put_list(strict))
         pr.run(self.numeric_mode_)
         bad = _bad_rows(pr, staged, 10)
@@ -1630,7 +1630,7 @@ def _target_arrays(y, target_type):
     except (TypeError, ValueError):
         return None
     kind = arr.dtype.lstrip("<>|=")[:1]
-    if arr.size == 0 or arr.size != max(arr.shape) or kind not in ("f", "i", "u"):
+    if arr.size == 0 or arr.size != max(arr.shape) or kind not in ("f", "i", "u"):  # glue: shape check of the target argument
         return None
     if kind == "f" and (arr.dtype not in ("<f4", "<f8") or not all_finite(arr)):
         return None
@@ -1720,7 +1720,7 @@ class TargetEncoder(_PrepBase):
             raise ValueError("mojolearn: X and y have different numbers of rows")
         cats = (_fit_categories(mode, arr) if _is_auto(self.categories) else
                 _given_categories(self.categories, arr, mode, False, "TargetEncoder"))
-        cmax = max(c.size for c in cats)
+        cmax = max(c.size for c in cats)  # glue: largest category count for the program layout (cats-sized: per-column category arrays)
         F = n_folds
         pr = _Prog()
         scratch = _target_scratch(mode)
@@ -1750,7 +1750,7 @@ class TargetEncoder(_PrepBase):
                 store = array.array("i", folds)
                 folds = Array._owned(store, (len(store),), "<i4", "C")
             fo = pr.put_codes(folds)
-        nco = pr.put_list([c.size for c in cats])
+        nco = pr.put_list([c.size for c in cats])  # glue: packs per-column category sizes (cats-sized: per-column category arrays)
         meta = pr.alloc(2 * (F + 1) * T)
         smo = pr.put_scalar(-1.0 if self.smooth == "auto" else float(self.smooth))
         enc = pr.alloc((F + 1) * d * cmax * T)
@@ -1799,7 +1799,7 @@ class TargetEncoder(_PrepBase):
         base = F * d * cmax * T
         self._enc = pr.get(enc + base, d * cmax * T)
         self._meta = pr.get(meta + 2 * F * T, 2 * T)
-        self.encodings_ = [pr.get(enc + base + (j * cmax) * T, cats[j].size * T) for j in range(d)]
+        self.encodings_ = [pr.get(enc + base + (j * cmax) * T, cats[j].size * T) for j in range(d)]  # glue: slices the per-column encodings outputs (d-sized: feature count)
         means = pr.values(meta + 2 * F * T, 2 * T)[0::2]
         self.target_mean_ = pr.get(meta + 2 * F * T, 1) if T == 1 else Array.from_list(means, "<f4")
         return pr.get(out, (n, d * T)) if apply_rows_folds else None
@@ -1980,19 +1980,19 @@ class SimpleImputer(_PrepBase):
             pr.stage("c2_imp_stats", d, st, src, d, 1 if self.keep_empty_features else 0, 1 if konst else 0, fv,
                      so2, fo2)
         pr.run(mode)
-        counts = [int(v) for v in pr.values(st, d)]
-        empty = [c == 0 for c in counts]
+        counts = [int(v) for v in pr.values(st, d)]  # glue: reads per-column non-missing counts (d-sized: feature count)
+        empty = [c == 0 for c in counts]  # glue: flags empty columns (counts-sized: per-column non-missing counts)
         if callable(self.strategy) and comp is not None:
             ncol = pr.get_i32(ctot, d).tolist()
-            return self._fit_callable(None, counts, mode, [pr.get(comp + j * n, ncol[j]) for j in range(d)], n, d)
+            return self._fit_callable(None, counts, mode, [pr.get(comp + j * n, ncol[j]) for j in range(d)], n, d)  # glue: slices the per-column compacted outputs (d-sized: feature count)
         if konst or any(empty):
             self.statistics_ = pr.get(so2, d)
             self._fill = pr.get(fo2, d)
         else:
             self.statistics_ = pr.get(src, d)
             self._fill = self.statistics_
-        self._keep = [j for j in range(d) if self.keep_empty_features or not empty[j]]
-        self._indicator = [j for j in range(d) if counts[j] < n] if self.add_indicator else []
+        self._keep = [j for j in range(d) if self.keep_empty_features or not empty[j]]  # glue: kept column index list (d-sized: feature count)
+        self._indicator = [j for j in range(d) if counts[j] < n] if self.add_indicator else []  # glue: indicator column index list (d-sized: feature count)
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
 
@@ -2008,8 +2008,8 @@ class SimpleImputer(_PrepBase):
             stats.append(float(self.strategy(kept[j])))
         self.statistics_ = Array.from_list(stats, "<f4")
         self._fill = self.statistics_
-        self._keep = [j for j in range(d) if self.keep_empty_features or stats[j] == stats[j]]
-        self._indicator = [j for j in range(d) if counts[j] < n] if self.add_indicator else []
+        self._keep = [j for j in range(d) if self.keep_empty_features or stats[j] == stats[j]]  # glue: kept column index list (d-sized: feature count)
+        self._indicator = [j for j in range(d) if counts[j] < n] if self.add_indicator else []  # glue: indicator column index list (d-sized: feature count)
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
 
@@ -2043,7 +2043,7 @@ def join_column_blocks(parts, ranges, n, d, mode=None):
     part in one program (word copies, on the device on a GPU install)."""
     pr = _Prog()
     out = pr.output(n * d)
-    for (start, end), part in zip(ranges, parts):
+    for (start, end), part in zip(ranges, parts):  # glue: stages one copy per column block (parts-sized: column block parts)
         w = end - start
         if w <= 0 or n <= 0:
             continue
@@ -2112,14 +2112,14 @@ class KBinsDiscretizer(_PrepBase):
             seed = (0 if self.random_state is None else int(self.random_state)) & 0xFFFFFFFFFFFFFFFF
             sub = ("w", seed, int(self.subsample), w)
             w = None
-        nb = [int(self.n_bins)] * d if isinstance(self.n_bins, numbers.Integral) else [int(b) for b in self.n_bins]
-        if len(nb) != d or min(nb) < 2:
+        nb = [int(self.n_bins)] * d if isinstance(self.n_bins, numbers.Integral) else [int(b) for b in self.n_bins]  # glue: converts the n_bins argument (nb-sized: per-column n_bins argument)
+        if len(nb) != d or min(nb) < 2:  # glue: validates the n_bins argument (nb-sized: per-column n_bins argument)
             raise ValueError("mojolearn: n_bins must be >= 2 per feature")
         if w is not None and strat not in (0, 1, 3, 4):
             raise ValueError("mojolearn: When fitting with strategy='quantile' and sample weights, quantile_method "
                              "should either be set to 'averaged_inverted_cdf' or 'inverted_cdf', got "
                              f"quantile_method='{self.quantile_method}' instead.")
-        nbmax = max(nb)
+        nbmax = max(nb)  # glue: largest bin count for the program layout (nb-sized: per-column n_bins argument)
         mode = _mode()
         pr = _Prog()
         xo = pr.put(arr)
@@ -2175,9 +2175,9 @@ class KBinsDiscretizer(_PrepBase):
                     _weighted_levels(pr, ug, ucnt, n, d, nb, 0, strat == 1, edges)
                 pr.stage("kbins_edges", d, so, n, d, nbo, nbmax, 11, stw, edges, ne, 0, 0)
         pr.run(mode)
-        counts = [int(v) for v in pr.values(ne, d)]
-        self.bin_edges_ = [pr.get(edges + j * (nbmax + 1), counts[j]) for j in range(d)]
-        self.n_bins_ = Array.from_list([c - 1 for c in counts], "<i8")
+        counts = [int(v) for v in pr.values(ne, d)]  # glue: reads per-column edge counts (d-sized: feature count)
+        self.bin_edges_ = [pr.get(edges + j * (nbmax + 1), counts[j]) for j in range(d)]  # glue: slices the per-column bin edges (d-sized: feature count)
+        self.n_bins_ = Array.from_list([c - 1 for c in counts], "<i8")  # glue: per-column bin counts from edge counts (counts-sized: per-column edge counts)
         self._edges = pr.get(edges, d * (nbmax + 1))
         self._ne = pr.get(ne, d)
         self._stride = nbmax + 1
@@ -2198,9 +2198,9 @@ class KBinsDiscretizer(_PrepBase):
         if self.encode == "ordinal":
             pr.run(self.numeric_mode_)
             return pr.get(codes, (n, d))
-        widths = [int(v) for v in self.n_bins_.tolist()]
-        W = sum(widths)
-        so = pr.put_list([sum(widths[:j]) for j in range(d)])
+        widths = [int(v) for v in self.n_bins_.tolist()]  # glue: reads fitted per-column bin counts (widths-sized: per-column bin counts)
+        W = sum(widths)  # glue: total one-hot output width (widths-sized: per-column bin counts)
+        so = pr.put_list([sum(widths[:j]) for j in range(d)])  # glue: prefix offsets of the per-column bin widths (d-sized: feature count)
         out = pr.output(n * W)
         pr.stage("onehot", n * d, codes, n, d, so, _NONE, W, out)
         pr.run(self.numeric_mode_)
@@ -2209,7 +2209,7 @@ class KBinsDiscretizer(_PrepBase):
     def inverse_transform(self, X):
         self._check_fitted()
         arr = _x2d(X)
-        widths = [int(v) for v in self.n_bins_.tolist()]
+        widths = [int(v) for v in self.n_bins_.tolist()]  # glue: reads fitted per-column bin counts (widths-sized: per-column bin counts)
         d = len(widths)
         n = arr.shape[0]
         pr = _Prog()
@@ -2221,7 +2221,7 @@ class KBinsDiscretizer(_PrepBase):
                      pr.put_scalar(0.0), pr.put_list(widths), codes)
             bad_code, why = -2, "hold codes that name no bin"
         else:
-            if arr.shape[1] != sum(widths):
+            if arr.shape[1] != sum(widths):  # glue: validates the input width (widths-sized: per-column bin counts)
                 raise ValueError(f"mojolearn: X has {arr.shape[1]} columns, expected {sum(widths)}")
             codes = _block_argmax(pr, arr, widths, None, True)
             bad_code, why = -1, "can not be inverted because they contain all zeros"
@@ -2567,13 +2567,13 @@ def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums, mode=None
 
 def _given_priors(values, K, who, check_sum=False):
     """A user prior list as floats, checked as the reference checks it."""
-    vals = [float(v) for v in (values.tolist() if hasattr(values, "tolist") else values)]
+    vals = [float(v) for v in (values.tolist() if hasattr(values, "tolist") else values)]  # glue: converts the user priors argument (vals-sized: user prior list)
     if len(vals) != K:
         raise ValueError(f"mojolearn: {who}: number of priors must match number of classes")
-    if any(v < 0 for v in vals):
+    if any(v < 0 for v in vals):  # glue: validates the user priors argument (vals-sized: user prior list)
         raise ValueError(f"mojolearn: {who}: priors must be non-negative")
-    if check_sum and abs(sum(vals) - 1.0) > 1e-8 * max(1.0, abs(sum(vals))) and \
-            abs(sum(vals) - 1.0) > 1e-5:
+    if (check_sum and abs(sum(vals) - 1.0) > 1e-8 * max(1.0, abs(sum(vals))) and  # glue: validates the user priors argument sums to one (vals-sized: user prior list)
+            abs(sum(vals) - 1.0) > 1e-5):  # glue: validates the user priors argument sums to one (vals-sized: user prior list)
         raise ValueError(f"mojolearn: {who}: the sum of the priors should be 1")
     return vals
 
@@ -2794,7 +2794,7 @@ def _csr_input(X):
     if not (hasattr(X, "tocsr") and hasattr(X, "nnz") and hasattr(X, "shape")):
         return None
     X = X.tocsr()
-    n, d = (int(v) for v in X.shape)
+    n, d = (int(v) for v in X.shape)  # glue: unpacks the two shape entries
     ip = _as_typed(X.indptr, "<i4", "C", 1, "indptr")[0]
     ix = _as_typed(X.indices, "<i4", "C", 1, "indices")[0]
     dv = _as_typed(X.data, "<f4", "C", 1, "data")[0]
@@ -2818,7 +2818,7 @@ def _csr_dense_x(pr, csr, mode):
 
 
 def _check_nonnegative(pr_values, who):
-    if any(v < 0 for v in pr_values):
+    if any(v < 0 for v in pr_values):  # glue: raises on a negative per-column minimum (pr_values-sized: per-column minimum statistics)
         raise ValueError(f"mojolearn: Negative values in data passed to {who}")
 
 
@@ -3177,7 +3177,7 @@ def _estimator_covs(est, arr, codes, K, who):
         pr.run(mode)
         cnt = pr.get_i32(tot, K).tolist()
         starts = [0] + list(itertools.accumulate(cnt))[:-1]
-        blocks = [pr.get(xg + starts[k] * d, (cnt[k], d)) for k in range(K)]
+        blocks = [pr.get(xg + starts[k] * d, (cnt[k], d)) for k in range(K)]  # glue: per-class row block views for the user estimator (K-sized: class count)
     else:
         blocks = [arr.copy()]
     out = []
@@ -3293,7 +3293,7 @@ class LinearDiscriminantAnalysis(_Classifier):
         gflag, gofs = 0, 0
         if self.priors is not None:
             pv = _given_priors(self.priors, K, "LinearDiscriminantAnalysis")
-            gflag, gofs = (2 if abs(sum(pv) - 1.0) > 1e-5 else 1), pr.put_list(pv)
+            gflag, gofs = (2 if abs(sum(pv) - 1.0) > 1e-5 else 1), pr.put_list(pv)  # glue: validates the user priors argument sums to one (pv-sized: user prior list)
         pr.stage("lda_prep", 1, cnt, mean, K, d, n, priors, xbar, gflag, gofs)
         pr.stage("center_rows", n * d, xo, n, d, mean, yo, _NONE, z)
         _cs(pr, mode, z, n, d, stz)
@@ -3314,8 +3314,8 @@ class LinearDiscriminantAnalysis(_Classifier):
         self.means_, self.priors_, self.xbar_ = pr.get(mean, (K, d)), pr.get(priors, K), pr.get(xbar, d)
         full = pr.get(scal, (d, d))
         self._scal_full = full
-        self.scalings_ = Array.from_list([row[:rank2] for row in full.tolist()], "<f4") if rank2 else \
-            Array((d, 0), "<f4")
+        # the rank columns as one strided copy in Mojo (Array.__getitem__)
+        self.scalings_ = full[:, :rank2] if rank2 else Array((d, 0), "<f4")
         self._coef, self._inter = pr.get(coef, (K, d)), pr.get(inter, K)
         if K == 2:
             self.coef_, self.intercept_ = pr.get(cd, (1, d)), pr.get(ci, 1)
@@ -3337,7 +3337,7 @@ class LinearDiscriminantAnalysis(_Classifier):
         gflag, gofs = 0, 0
         if self.priors is not None:
             pv = _given_priors(self.priors, K, "LinearDiscriminantAnalysis")
-            gflag, gofs = (2 if abs(sum(pv) - 1.0) > 1e-5 else 1), pr.put_list(pv)
+            gflag, gofs = (2 if abs(sum(pv) - 1.0) > 1e-5 else 1), pr.put_list(pv)  # glue: validates the user priors argument sums to one (pv-sized: user prior list)
         pr.stage("lda_prep", 1, cnt, mean, K, d, n, priors, xbar, gflag, gofs)
         eigen = self.solver == "eigen"
         est = self.covariance_estimator
@@ -3379,7 +3379,7 @@ class LinearDiscriminantAnalysis(_Classifier):
         pr.stage("da_intercept", K, mean, coef, priors, d, inter)
         cd, ci = _lda_binary(pr, coef, inter, K, d)
         pr.run(mode)
-        if eigen and min(pr.values(e, d)) <= 0:
+        if eigen and min(pr.values(e, d)) <= 0:  # glue: raises when the device reports a non-positive eigenvalue
             raise ValueError("mojolearn: the within-class covariance is not positive definite "
                              "(the reference's eigh(Sb, Sw) fails); set shrinkage")
         self.means_, self.priors_, self.xbar_ = pr.get(mean, (K, d)), pr.get(priors, K), pr.get(xbar, d)
@@ -3490,7 +3490,7 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         # run, before anything else is read or raised; an estimator fits per class inside the
         # build, so its check stays first (`_class_counts`, a p2m program)
         late = est is None
-        if not late and min(_class_counts(codes, K)) < 2:
+        if not late and min(_class_counts(codes, K)) < 2:  # glue: raises when a class count from the binding is below two
             raise ValueError("mojolearn: y has only 1 sample in a class, covariance is ill defined")
         pr = _Prog()
         xo = pr.put(arr)
@@ -3516,7 +3516,7 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         keep = pr.alloc(K * d * d) if (self.store_covariance and eigen) else None
         if keep is not None:
             one = pr.put_list([1.0])
-            for k in range(K):
+            for k in range(K):  # glue: stages one pooled covariance copy per class (K-sized: class count)
                 pr.stage("da_pool", d * d, cov + k * d * d, 1, d, one, keep + k * d * d, _NONE, _NONE)
         pr.stage("eigh", K, cov, d, d * d, ev, evec)
         pr.stage("qda_prep", K, ev, evec, K, d, reg, cnt, n, rot, logc, s2, gflag, gofs)
@@ -3524,19 +3524,19 @@ class QuadraticDiscriminantAnalysis(_Classifier):
             keep = pr.alloc(K * d * d)
             pr.stage("sym_fn", K * d * d, s2, evec, d, 2, keep)
         pr.run(mode)
-        if late and min(pr.values(cnt, K)) < 2:
+        if late and min(pr.values(cnt, K)) < 2:  # glue: raises when a class count from the binding is below two
             raise ValueError("mojolearn: y has only 1 sample in a class, covariance is ill defined")
         s2v = pr.values(s2, K * d)
-        for k in range(K):
-            if sum(1 for v in s2v[k * d:(k + 1) * d] if v > self.tol) < d:
+        for k in range(K):  # glue: rank check per class before raising (K-sized: class count)
+            if sum(1 for v in s2v[k * d:(k + 1) * d] if v > self.tol) < d:  # glue: counts device singular values above tol to raise (d-sized: feature count)
                 raise ValueError(f"mojolearn: the covariance matrix of class {self.classes_[k]!r} is not full "
                                  f"rank. Increase the value of `{'shrinkage' if eigen else 'reg_param'}` to "
                                  "reduce the collinearity.")
         if keep is not None:
-            self.covariance_ = [pr.get(keep + k * d * d, (d, d)) for k in range(K)]
+            self.covariance_ = [pr.get(keep + k * d * d, (d, d)) for k in range(K)]  # glue: per-class covariance views (K-sized: class count)
         self.means_, self.priors_ = pr.get(mean, (K, d)), pr.get(priors, K)
-        self.rotations_ = [pr.get(evec + k * d * d, (d, d)) for k in range(K)]
-        self.scalings_ = [pr.get(s2 + k * d, d) for k in range(K)]
+        self.rotations_ = [pr.get(evec + k * d * d, (d, d)) for k in range(K)]  # glue: per-class rotation views (K-sized: class count)
+        self.scalings_ = [pr.get(s2 + k * d, d) for k in range(K)]  # glue: per-class scaling views (K-sized: class count)
         self._rot, self._logc = pr.get(rot, K * d * d), pr.get(logc, K)
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
@@ -3771,7 +3771,7 @@ class PowerTransformer(_PrepBase):
                 if fam_pt:
                     bps, bpc, bss = pr.work(nb * d), pr.work(nb * d), pr.work(nb * d)
                     bpj, bmean, bcnt = pr.work(nb * d), pr.work(d), pr.work(d)
-                for k in range(_PT_EVALS):
+                for k in range(_PT_EVALS):  # glue: stages the fixed optimizer evaluations on the device (_PT_EVALS-sized: constant evaluation count)
                     # tiled: the device skips pt_map and fuses it into pt_fold (LG1 = 0 either way)
                     pr.stage("pt_map", n * d, xo, n, d, method, leval, tv, 0 if tiled else lg + 1)
                     if fam_pt:
@@ -3794,7 +3794,7 @@ class PowerTransformer(_PrepBase):
             _cs(pr, mode, tx, n, d, st2)
             pr.stage("std_params", d, st2, d, mean, scale)
         pr.run(mode)
-        if method == 1 and any(v <= 0 for v in pr.values(st + 3 * d, d)):
+        if method == 1 and any(v <= 0 for v in pr.values(st + 3 * d, d)):  # glue: raises on a non-positive per-column minimum (d-sized: feature count)
             raise ValueError("mojolearn: The Box-Cox transformation can only be applied to strictly positive data")
         self.lambdas_ = pr.get(lam, d)
         self._pt_anchor = pr.get(anchor, d) if centered and self.standardize else None
@@ -3878,14 +3878,14 @@ class PolynomialFeatures(_PrepBase):
         if isinstance(self.degree, numbers.Integral):
             lo, hi = 0, int(self.degree)
         else:
-            lo, hi = (int(v) for v in self.degree)
+            lo, hi = (int(v) for v in self.degree)  # glue: unpacks the two degree values
         if hi < 0 or lo < 0 or lo > hi:
             raise ValueError(f"mojolearn: invalid degree {self.degree!r}")
         comb = combinations if self.interaction_only else combinations_with_replacement
-        it = chain.from_iterable(comb(range(d), i) for i in range(max(1, lo), hi + 1))
+        it = chain.from_iterable(comb(range(d), i) for i in range(max(1, lo), hi + 1))  # glue: enumerates polynomial terms of feature indices (d-sized: feature count)
         if self.include_bias:
             it = chain(comb(range(d), 0), it)
-        return [tuple(c) for c in it]
+        return [tuple(c) for c in it]  # glue: materializes the polynomial term list (it-sized: polynomial terms of feature indices)
 
     def fit(self, X, y=None):
         if self.order not in ("C", "F"):
@@ -3893,7 +3893,7 @@ class PolynomialFeatures(_PrepBase):
         d = _x2d(X).shape[1]
         self._terms = self._combos(d)
         self.n_features_in_, self.n_output_features_ = d, len(self._terms)
-        self.powers_ = Array.from_list([[t.count(j) for j in range(d)] for t in self._terms] or [[0] * d], "<i8")
+        self.powers_ = Array.from_list([[t.count(j) for j in range(d)] for t in self._terms] or [[0] * d], "<i8")  # glue: powers_ table of the polynomial terms (d-sized: feature count)
         self.numeric_mode_ = _mode()
         return self
 
@@ -3903,7 +3903,7 @@ class PolynomialFeatures(_PrepBase):
         self._check_width(arr)
         n, d = arr.shape
         idx, start = [], [0]
-        for t in self._terms:
+        for t in self._terms:  # glue: flattens term index tables for the program (_terms-sized: polynomial terms of feature indices)
             idx.extend(t)
             start.append(len(idx))
         nout = len(self._terms)
@@ -4030,7 +4030,7 @@ class SplineTransformer(_PrepBase):
         self.sparse_output = sparse_output
 
     def _no_nan(self, pr, st, d, n):
-        if self.handle_missing == "error" and any(int(v) != n for v in pr.values(st, d)):
+        if self.handle_missing == "error" and any(int(v) != n for v in pr.values(st, d)):  # glue: raises on a NaN count from the device (d-sized: feature count)
             raise ValueError("mojolearn: Input X contains NaN values and `SplineTransformer` is configured to "
                              "error in this case (handle_missing='error'). To avoid this error, set "
                              "handle_missing='zeros' to encode missing values as splines with value 0 or ensure "
@@ -4074,15 +4074,15 @@ class SplineTransformer(_PrepBase):
         if not given and self.knots not in ("uniform", "quantile"):
             raise ValueError(f"mojolearn: invalid knots {self.knots!r}")
         if given:
-            rows = [[float(v) for v in (r.tolist() if hasattr(r, "tolist") else r)] for r in
+            rows = [[float(v) for v in (r.tolist() if hasattr(r, "tolist") else r)] for r in  # glue: converts the user knots argument (r-sized: user knots argument rows)
                     (self.knots.tolist() if hasattr(self.knots, "tolist") else self.knots)]
             nk = len(rows)
             if nk < 2:
                 raise ValueError("mojolearn: Number of knots, knots.shape[0], must be >= 2.")
-            if any(len(r) != d for r in rows):
+            if any(len(r) != d for r in rows):  # glue: validates the user knots argument (rows-sized: user knots argument rows)
                 raise ValueError("mojolearn: knots.shape[1] == n_features is violated.")
-            cols = [list(array.array("f", [r[c] for r in rows])) for c in range(d)]
-            if not all(b > a for col in cols for a, b in zip(col, col[1:])):
+            cols = [list(array.array("f", [r[c] for r in rows])) for c in range(d)]  # glue: transposes the user knots argument (d-sized: feature count)
+            if not all(b > a for col in cols for a, b in zip(col, col[1:])):  # glue: validates the user knots argument is sorted (cols-sized: user knots argument columns)
                 raise ValueError("mojolearn: knots must be sorted without duplicates.")
         else:
             nk = int(self.n_knots)
@@ -4111,7 +4111,7 @@ class SplineTransformer(_PrepBase):
             _cs(pr, mode, xo, n, d, st, var=False)
         uniform, kst = 0, st
         if given:
-            base = pr.put_list([v for col in cols for v in col])
+            base = pr.put_list([v for col in cols for v in col])  # glue: packs the user knots argument (cols-sized: user knots argument columns)
         elif self.knots == "quantile":
             base = pr.alloc(d * nk)
             if w is None:
@@ -4140,9 +4140,9 @@ class SplineTransformer(_PrepBase):
         self._knots = pr.get(knots, d * (nk + 2 * k))
         flat = pr.values(knots, d * (nk + 2 * k))
         wd = nk + 2 * k
-        self.bsplines_ = [Array.from_list(flat[c * wd:(c + 1) * wd], "<f4") for c in range(d)]
-        self._lo = [flat[c * wd + k] for c in range(d)]
-        self._hi = [flat[c * wd + k + nk - 1] for c in range(d)]
+        self.bsplines_ = [Array.from_list(flat[c * wd:(c + 1) * wd], "<f4") for c in range(d)]  # glue: per-column fitted spline knot views (d-sized: feature count)
+        self._lo = [flat[c * wd + k] for c in range(d)]  # glue: per-column fitted lower knot (d-sized: feature count)
+        self._hi = [flat[c * wd + k + nk - 1] for c in range(d)]  # glue: per-column fitted upper knot (d-sized: feature count)
         self._nk, self._k = nk, k
         self.n_features_out_ = W
         self.numeric_mode_, self.n_features_in_ = mode, d
@@ -4172,7 +4172,7 @@ class SplineTransformer(_PrepBase):
             self._no_nan(pr, st, d, n)
         if self.extrapolation == "error":
             lo, hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
-            if any(a < b for a, b in zip(lo, self._lo)) or any(a > b for a, b in zip(hi, self._hi)):
+            if any(a < b for a, b in zip(lo, self._lo)) or any(a > b for a, b in zip(hi, self._hi)):  # glue: raises when data leave the fitted knot range (lo-sized: per-column minimum statistics)
                 raise ValueError("mojolearn: X contains values beyond the limits of the knots")
         if fo is not None:
             return _p2m_f_get(pr, fo, n, W)
@@ -4252,7 +4252,7 @@ def _label_classes(mode, values):
         return classes, None
     cats = _fit_categories(mode, Array._from_flat(nums, (len(nums), 1), "<f4"))[0]
     ints = set(map(type, values)) == _INT_ONLY or all(isinstance(v, numbers.Integral) for v in values)
-    classes = [int(c) if ints else float(c) for c in cats.tolist()]
+    classes = [int(c) if ints else float(c) for c in cats.tolist()]  # glue: class list from the device categories (cats-sized: distinct class values)
     return classes, cats
 
 
@@ -4341,7 +4341,7 @@ def _label_buffer(y):
     except (TypeError, ValueError):
         return None
     spec = _LABEL_KIND.get(arr.dtype)
-    if spec is None or arr.size == 0 or arr.ndim < 1 or arr.size != max(arr.shape):
+    if spec is None or arr.size == 0 or arr.ndim < 1 or arr.size != max(arr.shape):  # glue: shape check of the label argument
         return None
     kind, wpe = spec
     nw = arr.size * wpe
@@ -4395,7 +4395,7 @@ def _label_classes_of(pr, lb, u, k):
     vals = cats.tolist()
     if not vals or vals[-1] != vals[-1]:
         return None
-    classes = [float(c) for c in vals] if lb.is_float else [int(c) for c in vals]
+    classes = [float(c) for c in vals] if lb.is_float else [int(c) for c in vals]  # glue: class list from the device categories (vals-sized: distinct class values)
     return classes, cats
 
 
@@ -4969,9 +4969,9 @@ class IterativeImputer(_PrepBase):
         def per(v):
             vals = list(v) if isinstance(v, (list, tuple)) or hasattr(v, "tolist") else [v] * d
             vals = vals.tolist() if hasattr(vals, "tolist") else vals
-            return [float(x) for x in vals]
+            return [float(x) for x in vals]  # glue: converts the min_value / max_value arguments (vals-sized: per-column bound arguments)
         lo, hi = per(self.min_value), per(self.max_value)
-        return [v for pair in zip(lo, hi) for v in pair]
+        return [v for pair in zip(lo, hi) for v in pair]  # glue: interleaves the bound arguments (lo-sized: per-column bound arguments)
 
     def _prepare(self, pr, arr, Xf, inout=False):
         """Arena: the filled block, its missing mask, the per-column bounds.
@@ -5033,7 +5033,7 @@ class IterativeImputer(_PrepBase):
         self._keep = list(self.initial_imputer_._keep)
         dk = len(self._keep)
         bounds = self._bounds(d)
-        self._bounds_k = [bounds[2 * c + h] for c in self._keep for h in (0, 1)]
+        self._bounds_k = [bounds[2 * c + h] for c in self._keep for h in (0, 1)]  # glue: per-kept-column bound arguments (_keep-sized: kept feature indices)
         # missing counts per kept column, and the tolerance scale, from the device
         pr = _Prog()
         xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
@@ -5060,7 +5060,7 @@ class IterativeImputer(_PrepBase):
                 pr.stage("c2_ii_ord", dk, missd, dk, pos, R, ordw, lens)
         pr.run(mode)
         scale = pr.values(sc, 1)[0]
-        self._indicator = [j for j, c in enumerate(pr.values(st, d)) if int(c) < n] if self.add_indicator else []
+        self._indicator = [j for j, c in enumerate(pr.values(st, d)) if int(c) < n] if self.add_indicator else []  # glue: indicator column index list from device counts (d-sized: feature count)
         ln = pr.get_i32(lens, R).tolist() if dk else [0] * R
         ow = pr.get_i32(ordw, R * dk).tolist() if dk else []
         orders = [ow[r * dk:r * dk + ln[r]] for r in range(rounds)]  # glue: the device's orders as control lists
@@ -5087,13 +5087,13 @@ class IterativeImputer(_PrepBase):
         # the reference checks convergence only without sample_posterior
         conv = not self.sample_posterior
         rowabs = None
-        for r in range(rounds):
+        for r in range(rounds):  # glue: drives the device imputation rounds (rounds-sized: imputation rounds)
             if orders[r] and conv:
                 pr.stage("ii_snapshot", n * dk, fo, prev, flag)
-            for j in orders[r]:
+            for j in orders[r]:  # glue: drives one device regression per feature (orders-sized: per-round feature orders)
                 coef, inter, means = pr.alloc(dk), pr.alloc(1), pr.alloc(dk)
                 nbl = corr.next(j) if corr is not None else None
-                nb1 = pr.put_list([1 if a in nbl else 0 for a in range(dk)]) + 1 if nbl is not None else 0
+                nb1 = pr.put_list([1 if a in nbl else 0 for a in range(dk)]) + 1 if nbl is not None else 0  # glue: neighbor-feature mask of one step (dk-sized: kept feature count)
                 pp = len(nbl) if nbl is not None else dk - 1
                 al = pr.alloc(2) if self.sample_posterior else -1
                 seq.append((j, coef, inter))
@@ -5121,10 +5121,10 @@ class IterativeImputer(_PrepBase):
         any_order = any(orders)
         done = (int(pr.values(niter, 1)[0]) if conv else rounds) if any_order else 0
         self.n_iter_ = done if any_order else min(1, rounds)
-        steps = sum(len(o) for o in orders[:done])
-        self.imputation_sequence_ = [(j, pr.get(c, dk), pr.get(i, 1)) for j, c, i in seq[:steps]]
+        steps = sum(len(o) for o in orders[:done])  # glue: count of finished imputation steps (orders-sized: per-round feature orders)
+        self.imputation_sequence_ = [(j, pr.get(c, dk), pr.get(i, 1)) for j, c, i in seq[:steps]]  # glue: fitted imputation sequence views (seq-sized: finished imputation steps)
         self._posterior = [(nbl, pr.get(sg, max(pp, 1) ** 2), pr.get(al, 2), pr.get(mn, dk))
-                           for nbl, sg, al, mn, pp in extra[:steps]]
+                           for nbl, sg, al, mn, pp in extra[:steps]]  # glue: fitted imputation sequence views (extra-sized: finished imputation steps)
         return self._with_indicator(arr, pr.get(fo, (n, dk)))
 
     def _with_indicator(self, arr, Xt):
@@ -5226,7 +5226,7 @@ class IterativeImputer(_PrepBase):
         `from_list([])`, a 0-column one its m empty rows, as before."""
         if m == 0:
             return Array.from_list([], "<f4"), (Array.from_list([], "<f4") if yo is not None else None)
-        X = pr.get(xo, (m, nc)) if nc else Array.from_list([[] for _ in range(m)], "<f4")
+        X = pr.get(xo, (m, nc)) if nc else Array((m, 0), "<f4")
         return X, (pr.get(yo, (m,)) if yo is not None else None)
 
     def _ii_put(self, Xt, Xm, rows, m, j, est, mode):
@@ -5322,18 +5322,18 @@ class IterativeImputer(_PrepBase):
             mode = self.numeric_mode_
             mask = self._mask_arr(arr)
             Xt = as_f32_c(Xf, name="X")[0].copy()
-            for j, nbl, est in self.imputation_sequence_:
+            for j, nbl, est in self.imputation_sequence_:  # glue: drives one device regression per step (imputation_sequence_-sized: fitted imputation steps)
                 _, _, Xm, rows, m = self._ii_take(Xt, mask, j, nbl, mode, fit=False)
                 Xt = self._ii_put(Xt, Xm, rows, m, j, est, mode)
             return self._with_indicator(arr, Xt)
         pr = _Prog()
         fo, mo, bo = self._prepare(pr, arr, Xf, inout=True)
         seed = self._rng & 0x7FFFFFFF
-        for s, (j, coef, inter) in enumerate(self.imputation_sequence_):
+        for s, (j, coef, inter) in enumerate(self.imputation_sequence_):  # glue: drives one device regression per step (imputation_sequence_-sized: fitted imputation steps)
             co, io = pr.put(coef), pr.put(inter)
             if self.sample_posterior:
                 nbl, sig, al, means = self._posterior[s]
-                nb1 = pr.put_list([1 if a in nbl else 0 for a in range(dk)]) + 1 if nbl is not None else 0
+                nb1 = pr.put_list([1 if a in nbl else 0 for a in range(dk)]) + 1 if nbl is not None else 0  # glue: neighbor-feature mask of one step (dk-sized: kept feature count)
                 key = pr.put_ints([seed, self._post_step])
                 self._post_step += 1
                 pr.stage("ii_post", n, fo, n, dk, mo, j, co, io, bo, _NONE, pr.put(means), pr.put(sig), pr.put(al),
@@ -5400,14 +5400,14 @@ class _SelectorMixin(_PrepBase):
     def get_support(self, indices=False):
         self._check_fitted()
         mask = list(self._mask)
-        return [j for j, m in enumerate(mask) if m] if indices else mask
+        return [j for j, m in enumerate(mask) if m] if indices else mask  # glue: support index list (mask-sized: feature support mask)
 
     def transform(self, X):
         self._check_fitted()
         arr = _x2d(X)
         self._check_width(arr)
         n, d = arr.shape
-        keep = [j for j, m in enumerate(self._mask) if m]
+        keep = [j for j, m in enumerate(self._mask) if m]  # glue: kept column index list (_mask-sized: feature support mask)
         if not keep:
             raise ValueError("mojolearn: no features were selected")
         pr = _Prog()
@@ -5475,7 +5475,7 @@ def _scores_classif(X, y, kind):
     else:
         pr.stage("f_classif", d, xo, n, d, yo, K, cnt, mean, sc, pv)
     pr.run(mode)
-    if kind == "chi2" and any(v < 0 for v in pr.values(st + 3 * d, d)):
+    if kind == "chi2" and any(v < 0 for v in pr.values(st + 3 * d, d)):  # glue: raises on a negative per-column minimum (d-sized: feature count)
         raise ValueError("mojolearn: Input X must be non-negative.")
     return pr.get(sc, d), pr.get(pv, d)
 
@@ -5591,12 +5591,12 @@ def _mi_discrete_mask(discrete_features, d):
     vals = discrete_features.tolist() if hasattr(discrete_features, "tolist") else list(discrete_features)
     if isinstance(vals, bool):
         return [vals] * d
-    if vals and all(isinstance(v, bool) for v in vals):
+    if vals and all(isinstance(v, bool) for v in vals):  # glue: validates the discrete_features argument (vals-sized: user discrete_features argument)
         if len(vals) != d:
             raise ValueError(f"mojolearn: discrete_features mask has {len(vals)} entries; X has {d} features")
         return list(vals)
     mask = [False] * d
-    for v in vals:
+    for v in vals:  # glue: converts the discrete_features argument (vals-sized: user discrete_features argument)
         if isinstance(v, bool) or not isinstance(v, numbers.Integral):
             raise ValueError("mojolearn: discrete_features must be 'auto', a bool, a bool mask or indices")
         j = int(v)
@@ -5634,8 +5634,8 @@ def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_s
     arr = _x2d(X)
     n, d = arr.shape
     mask = _mi_discrete_mask(discrete_features, d)
-    cont = [j for j in range(d) if not mask[j]]
-    disc = [j for j in range(d) if mask[j]]
+    cont = [j for j in range(d) if not mask[j]]  # glue: continuous column index list (d-sized: feature count)
+    disc = [j for j in range(d) if mask[j]]  # glue: discrete column index list (d-sized: feature count)
     mode = _mode()
     seed = 0 if random_state is None else int(random_state) & 0x3FFFFFFF
     pr = _Prog()
@@ -5645,7 +5645,7 @@ def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_s
         if codes.size != n:
             raise ValueError("mojolearn: X and y have different numbers of rows")
         counts = _class_counts(codes, len(classes))
-        if cont and max(counts) < 2:
+        if cont and max(counts) < 2:  # glue: raises when every class has one sample (counts-sized: class counts from the binding)
             raise ValueError("mojolearn: mutual_info: every class has one sample (the reference's "
                              "neighbour search over the classes with more than one finds 0 samples)")
         yo, lc = pr.put_codes(codes), pr.put_list(counts)
@@ -5680,8 +5680,8 @@ def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_s
         dd = len(disc)
         xd = _gather(arr, disc, mode)
         cats = _fit_categories(mode, xd)
-        kx = [c.size for c in cats]
-        kmax = max(kx)
+        kx = [c.size for c in cats]  # glue: per-column category counts (cats-sized: per-column category arrays)
+        kmax = max(kx)  # glue: largest category count for the program layout (kx-sized: per-column category counts)
         if not discrete_target and n in kx:
             raise ValueError(f"mojolearn: mutual_info: discrete feature {disc[kx.index(n)]} has one sample per "
                              "value (the reference's neighbour search finds 0 samples)")
@@ -5702,9 +5702,9 @@ def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_s
     if not disc:
         return pr.get(outc, d)
     vals = [0.0] * d
-    for j, v in zip(cont, pr.values(outc, len(cont)) if cont else []):
+    for j, v in zip(cont, pr.values(outc, len(cont)) if cont else []):  # glue: scatters device MI values to their columns (cont-sized: continuous column indices)
         vals[j] = v
-    for j, v in zip(disc, pr.values(outd, len(disc))):
+    for j, v in zip(disc, pr.values(outd, len(disc))):  # glue: scatters device MI values to their columns (disc-sized: discrete column indices)
         vals[j] = v
     return Array.from_list(vals, "<f4")
 
@@ -5826,11 +5826,11 @@ class RFE(_SelectorMixin):
             support = _mask_list(pr, sup, d)
             ranking = pr.get(rk, d)
             nsup = len([1 for v in support if v])  # glue: the support size (control)
-        features = [j for j in range(d) if support[j]]
+        features = [j for j in range(d) if support[j]]  # glue: support index list (d-sized: feature count)
         self.estimator_ = self._clone().fit(_gather(arr, features, mode), y, **fit_params)
         self._mask, self.support_ = support, list(support)
         self.ranking_ = ranking.astype("<i8")
-        self.n_features_ = sum(support)
+        self.n_features_ = sum(support)  # glue: count of selected features (support-sized: feature support mask)
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
 
@@ -5944,20 +5944,20 @@ class CategoricalNB(_DiscreteNB):
             pr.stage("class_log_prior", K, cnt if self.fit_prior else pr.put_list([1.0] * K), K, clp)
         pr.run(mode)
         lo, hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
-        if any(v < 0 for v in lo):
+        if any(v < 0 for v in lo):  # glue: raises on a negative category value (lo-sized: per-column minimum statistics)
             raise ValueError("mojolearn: Negative values in data passed to CategoricalNB (input X)")
-        ncat = [int(v) + 1 for v in hi]
+        ncat = [int(v) + 1 for v in hi]  # glue: per-column category counts for the program layout (hi-sized: per-column maximum statistics)
         if self.min_categories is not None:
             mc = self.min_categories
-            mcs = [int(v) for v in (mc.tolist() if hasattr(mc, "tolist") else mc)] \
-                if not isinstance(mc, numbers.Integral) else [int(mc)] * d
+            mcs = ([int(v) for v in (mc.tolist() if hasattr(mc, "tolist") else mc)]  # glue: converts the min_categories argument (mc-sized: min_categories argument)
+                   if not isinstance(mc, numbers.Integral) else [int(mc)] * d)
             if len(mcs) != d:
                 raise ValueError(f"mojolearn: 'min_categories' should have shape ({d},) when an array-like "
                                  f"is provided. Got {len(mcs)} entries instead.")
-            ncat = [max(a, b) for a, b in zip(ncat, mcs)]
+            ncat = [max(a, b) for a, b in zip(ncat, mcs)]  # glue: applies the min_categories argument (ncat-sized: per-column category counts)
         if merge:
-            ncat = [max(a, b) for a, b in zip(ncat, self.n_categories_.tolist())]
-        cmax = max(ncat)
+            ncat = [max(a, b) for a, b in zip(ncat, self.n_categories_.tolist())]  # glue: keeps fitted category counts on partial fit (ncat-sized: per-column category counts)
+        cmax = max(ncat)  # glue: largest category count for the program layout (ncat-sized: per-column category counts)
         q = _Prog()
         xo, yo = q.put(arr), _stage_partial_codes(q, codes, mode)
         no, co, a = q.put_list(ncat), q.put(pr.get(cnt, K)), q.put_scalar(self.alpha)
@@ -5992,11 +5992,11 @@ class CategoricalNB(_DiscreteNB):
         # each (feature, class) row read once (the same values)
         ccv, flv = q.values(cc, d * K * cmax), q.values(flp, d * K * cmax)
         self.category_count_ = [Array.from_list(
-            [ccv[(j * K + k) * cmax:(j * K + k) * cmax + ncat[j]] for k in range(K)], "<f4") for j in range(d)]
+            [ccv[(j * K + k) * cmax:(j * K + k) * cmax + ncat[j]] for k in range(K)], "<f4") for j in range(d)]  # glue: per-column per-class count views (d-sized: feature count)
         self.n_categories_ = Array.from_list(ncat, "<i8")
         self._flp, self._cmax = q.get(flp, d * K * cmax), cmax
         self.feature_log_prob_ = [Array.from_list(
-            [flv[(j * K + k) * cmax:(j * K + k) * cmax + ncat[j]] for k in range(K)], "<f4") for j in range(d)]
+            [flv[(j * K + k) * cmax:(j * K + k) * cmax + ncat[j]] for k in range(K)], "<f4") for j in range(d)]  # glue: per-column per-class log-prob views (d-sized: feature count)
         self.class_count_, self.class_log_prior_ = pr.get(cnt, K), pr.get(clp, K)
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
@@ -6011,8 +6011,8 @@ class CategoricalNB(_DiscreteNB):
 
     def _score_refusals(self, pr, d, st):
         ncat = self.n_categories_.tolist()
-        if any(v < 0 for v in pr.values(st + 3 * d, d)) or \
-                any(int(v) >= c for v, c in zip(pr.values(st + 4 * d, d), ncat)):
+        if (any(v < 0 for v in pr.values(st + 3 * d, d)) or  # glue: raises on a negative category value (d-sized: feature count)
+                any(int(v) >= c for v, c in zip(pr.values(st + 4 * d, d), ncat))):  # glue: raises on an unseen category value (ncat-sized: per-column category counts)
             raise IndexError("mojolearn: CategoricalNB got a category index outside the fitted range")
 
     def _jll_stages(self, pr, xo, n, d, out):

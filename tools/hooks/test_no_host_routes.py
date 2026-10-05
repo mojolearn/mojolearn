@@ -224,6 +224,11 @@ BLOCKED = [
      {PY: "def _pz6(arr):\n    return _native(\"all_finite_f32\")(arr._addr, arr.size)"}, "[py-native-host]"),
     ("GPU-path Python calls a native host helper as a binding attribute (py-native-host)",
      {PY: "def _pz7(b, w, n):\n    b.x_trees_samme_step(w, n)"}, "b.x_trees_samme_step(w, n)"),
+    ("Python small-loop note naming a bound the line does not use",
+     {PY: "def _pz9(X, d):\n    return [v * 2 for v in X]  # small-loop(d: feature count): one per feature"},
+     "[v * 2 for v in X]"),
+    ("Python cpu-route note whose reason is under three words",
+     {PY: "def _pz10(text):\n    return [ord(c) for c in text]  # cpu-route: fine"}, "[ord(c) for c in text]"),
     ("cpu-route note whose reason is under three words",
      {PY: "def _pz8(arr):\n    return _native(\"all_finite_f32\")(arr)  # cpu-route: fine"}, "[py-native-host]"),
     ("duplicating an existing debt line",
@@ -257,6 +262,10 @@ PASSES = [
            "        x, Int32(n),\n        grid_dim=(1, 1, 1), block_dim=(256, 1, 1),\n    )"}),
     ("a reviewed glue note on an argument loop",
      {PY: "def _qz1(params):\n    for k in params:  # glue: copies estimator keyword arguments\n        pass"}),
+    ("a reviewed Python small-loop note on a per-feature walk",
+     {PY: "def _qz8(widths, d):\n    return [sum(widths[:j]) for j in range(d)]  # small-loop(d: feature count): offsets of fitted widths"}),
+    ("a reviewed Python cpu-route note on a text input step",
+     {PY: "def _qz9(text):\n    return [ord(c) for c in text]  # cpu-route: text decoding before the runtime"}),
     ("scalar min/max and numpy allocation",
      {PY: "def _qz2(a, b):\n    return np.zeros(min(a, b) + max(a, 1))"}),
     ("a module-level table and a loop word in a string",
@@ -369,6 +378,10 @@ def test_native_host_exports_are_classified_by_code():
         assert name in ex, f"{name} loops on the host and must be a native host helper"
     for name in ("check_indices_i64", "unique_inverse", "cast_f64_to_f32"):
         assert name not in ex, f"{name} runs on the device and is not a native host helper"
+    # lane py-runtime: an export whose only loops carry a reviewed small-loop
+    # note (d-sized binary64 finishes Apple cannot run on the device)
+    for name in ("lm_means_finish", "lm_intercept"):
+        assert name not in ex, f"{name} loops only over a reviewed small bound"
 
 
 def test_owed_rules_never_enter_the_baseline():

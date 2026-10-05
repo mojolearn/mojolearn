@@ -209,8 +209,8 @@ class Tokenizer:
             if i in self._added_by_id:
                 raise ValueError(f"mojolearn.models.Tokenizer: added tokens {self._added_by_id[i]!r} and {content!r} share id {i}")
             self._added_by_id[i] = content
-        self.bos_ids = tuple(int(i) for i in bos_ids)
-        self.eos_ids = tuple(int(i) for i in eos_ids)
+        self.bos_ids = tuple(int(i) for i in bos_ids)  # glue: converts the bos id argument
+        self.eos_ids = tuple(int(i) for i in eos_ids)  # glue: converts the eos id argument
         self._m = _binding()
 
     def _special_buffers(self):
@@ -220,7 +220,7 @@ class Tokenizer:
 
     def _adopt(self, handle):
         self._handle = handle
-        n_ranks, n_vocab, longest = (int(x) for x in self._m.vocab_info(handle))
+        n_ranks, n_vocab, longest = (int(x) for x in self._m.vocab_info(handle))  # glue: unpacks three vocabulary sizes
         self._n_ranks, self._n_vocab, self._max_token_bytes = n_ranks, n_vocab, longest
 
     @classmethod

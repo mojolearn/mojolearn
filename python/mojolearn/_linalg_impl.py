@@ -1020,7 +1020,7 @@ def _triu(M, r):
     # a slice assignment per row (one C-level copy each) instead of a
     # Python store per zeroed cell (lane/neural-net-experiment)
     c = M.c
-    for i in range(1, r):
+    for i in range(1, r):  # glue: one C-level zero fill per row (r-sized: matrix rows)
         w = min(i, c)
         out[i * c:i * c + w] = _array.array("f", bytes(4 * w))
     return _M(out, r, c)
@@ -1122,26 +1122,18 @@ def _tsqr_release(b):
 def _qr_tsqr(a_arr, rows, cols):
     """`qr(a, 'reduced')` through the blocked TSQR: (Q, R), R's diagonal
     non-negative."""
-    import array as _array
-    from ._buffer import frombytes
     b = _xd_kit().b
     R = _tsqr_r(b, a_arr, rows, cols, True)
     try:
-        rs = _array.array("f")
-        rs.frombytes(R.tobytes())
-        sg = [-1.0 if rs[j * cols + j] < 0.0 else 1.0 for j in range(cols)]
-        for j in range(cols):
-            if sg[j] < 0.0:
-                rs[j * cols:(j + 1) * cols] = _array.array("f", [-v for v in rs[j * cols:(j + 1) * cols]])
-        d = _array.array("f", bytes(4 * cols * cols))
-        for j in range(cols):
-            d[j * cols + j] = sg[j]
-        C = frombytes(d.tobytes(), "<f4", (cols, cols))
+        # R's rows signed so its diagonal is non-negative, and C the
+        # diagonal of those signs, in Mojo (x_decomp/api.mojo r_signs_py)
+        C = empty((cols, cols), "<f4")
+        b.x_decomp_r_signs(addr(R, name="r"), addr(C, name="c"), [int(cols)])
     except BaseException:
         _tsqr_release(b)
         raise
     Q = _tsqr_q(b, C, rows, cols, cols)
-    return QRResult(Q, frombytes(rs.tobytes(), "<f4", (cols, cols)))
+    return QRResult(Q, R)
 
 
 def _svd_tsqr(a_arr, rows, cols):

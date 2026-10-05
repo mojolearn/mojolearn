@@ -222,7 +222,7 @@ class UMAP(NumericModeMixin):
                 # wide data: the SVD of Xc^T gives Xc's left vectors U (its
                 # Vt rows); Xc's right vectors are then U^T Xc / S
                 S, Ut = k.svd(Xc.T)
-                if not all(v > 0 for v in S.s[:nc]):
+                if not all(v > 0 for v in S.s[:nc]):  # glue: zero singular value check over nc components
                     raise ValueError("UMAP init='pca' found a zero singular value")
                 Vt = k.mm(Ut.rows(0, nc), Xc)
                 Vt = k.ew("div", Vt, S.take_cols(list(range(nc))).T)

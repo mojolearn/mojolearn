@@ -77,7 +77,7 @@ class MoEBlock:
         # base binding's counter-based normal_init_f32; lane pyglue-numeric:
         # numpy's Generator drew them in Python), one stream in this order
         stream = InitStream(random_state)
-        for name, shape in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),
+        for name, shape in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),  # glue: three named expert weight shapes
                             ("down_proj", (self.E, self.D, self.F))):
             a = np.empty(shape, np.float32)
             stream.fill_normal(a.ctypes.data, a.size, 0.0, 0.02)
@@ -109,7 +109,7 @@ class MoEBlock:
         ip = [T, self.D, self.F, self.E, self.k, int(self.norm_topk_prob)]
         if hasattr(b, "moe_weights_put"):
             # `want`, not `shape`: `shape` holds x's shape for the final reshape
-            for name, want in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),
+            for name, want in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),  # glue: checks three named expert weight shapes
                                ("down_proj", (self.E, self.D, self.F))):
                 if getattr(self, name).shape != want:
                     raise ValueError(f"MoEBlock: {name} has shape {getattr(self, name).shape}, expected {want}")
@@ -117,7 +117,7 @@ class MoEBlock:
             b.moe_forward([X.ctypes.data, X.ctypes.data, X.ctypes.data, X.ctypes.data, y.ctypes.data,
                            logits.ctypes.data, sel.ctypes.data, w.ctypes.data], ip + [h])
         else:
-            r, gu, dn = (np.ascontiguousarray(a) for a in (self.router, self.gate_up_proj, self.down_proj))
+            r, gu, dn = (np.ascontiguousarray(a) for a in (self.router, self.gate_up_proj, self.down_proj))  # glue: three contiguous weight buffers for the binding
             b.moe_forward([X.ctypes.data, r.ctypes.data, gu.ctypes.data, dn.ctypes.data, y.ctypes.data,
                            logits.ctypes.data, sel.ctypes.data, w.ctypes.data], ip)
         self.router_logits_ = logits

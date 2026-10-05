@@ -316,7 +316,7 @@ class _M:
             # lane cpu2-l8-decomp: at every size and in every mode
             return _dev_gather(self, _MV_TAKE_COLS, idx)
         out = array.array("f", [0.0]) * (self.r * w)
-        for t, j in enumerate(idx):
+        for t, j in enumerate(idx):  # glue: one C-level slice copy per selected column on the host matrix (idx-sized: selected column indices)
             out[t::w] = self.s[j::self.c]
         return _M(out, self.r, w)
 
@@ -602,7 +602,7 @@ class _Kit:
         if not self._res():
             return False
         big = False
-        for m in ms:
+        for m in ms:  # glue: walks the matrix arguments of one call
             if m is None:
                 continue
             if m._d is not None:
@@ -1635,7 +1635,7 @@ class IncrementalPCA(_Base):
         mb = self.n_components or 0
         dev = _ipca_dev_on(self._kit())
         start = 0
-        for _ in range(n // self.batch_size_):
+        for _ in range(n // self.batch_size_):  # glue: drives one device partial fit per batch (batch_size_-sized: minibatches)
             end = start + self.batch_size_
             if end + mb > n:
                 continue
@@ -1863,7 +1863,7 @@ class _RandomProjection(_Base):
             # (transform's device projection refuses a non-finite X);
             # DEVSCAN: the refusal as one device scan of X
             a = as_f32_c(X, ndim=2, name="X")[0]
-            if a.ndim != 2 or min(a.shape) == 0:
+            if a.ndim != 2 or min(a.shape) == 0:  # glue: shape check of the input argument
                 raise ValueError("X: a nonempty two-dimensional input is required")
             if cls2 & 2 and int(k.b.x_decomp_dev_first_nonfinite(addr_ro(a, name="X"), a.size)) >= 0:
                 raise ValueError("X: input must be finite; NaN/inf are unsupported")
@@ -2827,7 +2827,7 @@ class FactorAnalysis(_Base):
     def _psi_init(self, k, d):
         if self.noise_variance_init is None:
             return k.const(1.0, 1, d)
-        psi = _M.of([float(v) for v in self.noise_variance_init], 1, len(self.noise_variance_init))
+        psi = _M.of([float(v) for v in self.noise_variance_init], 1, len(self.noise_variance_init))  # glue: converts the noise_variance_init argument
         if psi.c != d:
             raise ValueError(f"noise_variance_init dimension does not match the number of features : {psi.c} != {d}")
         return psi
@@ -3250,7 +3250,7 @@ def _rsvd_core(k, A, n_components, n_oversamples, n_iter, power_iteration_normal
         raise ValueError("n_components must be in [1, min(n_samples, n_features)]")
     nr = min(nr, d, n)
     Q = k.rand(d, nr, _seed_of(random_state), 30, 1)
-    for _ in range(int(n_iter)):
+    for _ in range(int(n_iter)):  # glue: drives the fixed randomized-SVD power iterations on the device (n_iter-sized: power iterations)
         Q = _orthonormal_cols(k, k.mm(A, Q))
         Q = _orthonormal_cols(k, k.mm(A, Q, ta=True))
     Q = _orthonormal_cols(k, k.mm(A, Q))
@@ -4627,7 +4627,7 @@ class Isomap(_Base):
             im, sq = _knn_mats(k, Q, self._fit_X, self._knn, False, self._kind, self._pw)
             if self._kind == 0:
                 sq = k.ew("sqrt", sq)
-            for a in range(self._knn):
+            for a in range(self._knn):  # glue: one device gather-and-min step per neighbor rank (_knn-sized: neighbor ranks)
                 rows = k.take_rows(D, im, m=Q.r, ist=self._knn, ioff=a)
                 cand = k.ew("add", rows, sq.cols(a, a + 1))
                 G = cand if G is None else k.ew("min", G, cand)
@@ -4840,7 +4840,7 @@ class MDS(_Base):
         elif self.init == "classical_mds":
             starts = [ClassicalMDS(nc, metric="precomputed", numeric_mode=self.numeric_mode_).fit(Dis.out()).embedding_m_]
         elif self.init == "random":
-            starts = [k.rand(n, nc, seed, 70 + r, 0) for r in range(int(self.n_init))]
+            starts = [k.rand(n, nc, seed, 70 + r, 0) for r in range(int(self.n_init))]  # glue: draws one device start per restart (n_init-sized: random restarts)
         else:
             raise ValueError("init must be 'random', 'classical_mds' or an array")
         best = None

@@ -112,7 +112,7 @@ def _accepted_options(cls):
     constructor takes `**kwargs` and every option must be tried."""
     sig = inspect.signature(cls.__init__)
     names = set()
-    for p in sig.parameters.values():
+    for p in sig.parameters.values():  # glue: walks the block constructor signature parameters
         if p.kind is inspect.Parameter.VAR_KEYWORD:
             return None
         names.add(p.name)
@@ -124,7 +124,7 @@ def _block_kwargs(plan, cls):
     name for an option the live block cannot honor at the plan's value."""
     accepted = _accepted_options(cls)
     kwargs = {}
-    for opt, value in plan.block_options.items():
+    for opt, value in plan.block_options.items():  # glue: copies block keyword options
         default = INTERFACE_DEFAULTS[opt]
         if accepted is None or opt in accepted:
             if value != default:
@@ -353,7 +353,7 @@ class CausalLM:
                 raise UnsupportedModel(
                     f"mojolearn.models: model_type {plan.model_type!r}: {plan.head_name} has shape "
                     f"{tuple(head.shape)}, want ({self.vocab_size}, {self.d_model})")
-        for name, a in ((plan.embed_name, embed), (plan.norm_name, norm), (plan.head_name, head)):
+        for name, a in ((plan.embed_name, embed), (plan.norm_name, norm), (plan.head_name, head)):  # glue: three named top-level weights
             if name is not None and not all_finite(a):
                 raise ValueError(f"mojolearn.models.CausalLM: {name} is not finite")
         self._embed, self._norm, self._head = embed, norm, head
@@ -382,7 +382,7 @@ class CausalLM:
         self._block_class = cls
         self._block_kwargs = kwargs
         self._blocks = self._make_blocks(cls, layers, kwargs)
-        for i, blk in enumerate(self._blocks):
+        for i, blk in enumerate(self._blocks):  # glue: one native block per model layer
             if blk.weight_format != weight_format:
                 raise RuntimeError(
                     f"mojolearn.models.CausalLM: layer {i} reports weight_format {blk.weight_format!r}, asked {weight_format!r}")
@@ -396,7 +396,7 @@ class CausalLM:
             self._head_int15 = quantize_int15(self._head)
 
     def _make_blocks(self, cls, layers, kwargs):
-        return [cls(w, **kwargs) for w in layers]
+        return [cls(w, **kwargs) for w in layers]  # glue: builds one block per model layer
 
     # ------------------------------------------------------------ loading
     @classmethod
@@ -437,7 +437,7 @@ class CausalLM:
         "unused": [...]}` from the checkpoint, the projections packed when a
         low-bit format is asked."""
         need = plan.checkpoint_names()
-        missing = [n for n in need if n not in ckpt]
+        missing = [n for n in need if n not in ckpt]  # glue: checks the checkpoint weight names
         if missing:
             raise UnsupportedModel(
                 f"mojolearn.models: model_type {plan.model_type!r}: the checkpoint lacks {len(missing)} of the "
@@ -447,9 +447,9 @@ class CausalLM:
         if plan.head_name is not None:
             out["head"] = ckpt.read(plan.head_name)
         layers = []
-        for i in range(plan.n_layers):
+        for i in range(plan.n_layers):  # glue: reads weights per model layer
             w = {}
-            for key, name, rows in plan.layer_weights(i):
+            for key, name, rows in plan.layer_weights(i):  # glue: reads the named weights of one layer
                 info = ckpt.info(name)
                 packed = key in projections and weight_format != "float32"
                 if packed and weight_format == "bfloat16" and info.dtype == "BF16" and rows is None and len(info.shape) == 2:
@@ -465,7 +465,7 @@ class CausalLM:
                 w[key] = _lowbit.pack_one(a, weight_format, key) if packed else a
             layers.append(w)
         out["layers"] = layers
-        out["unused"] = [n for n in ckpt.names() if n not in need]
+        out["unused"] = [n for n in ckpt.names() if n not in need]  # glue: lists unused checkpoint weight names
         return out
 
     # ------------------------------------------------------------ surface
@@ -479,9 +479,9 @@ class CausalLM:
         out = {p.embed_name: self._embed, p.norm_name: self._norm}
         if p.head_name is not None:
             out[p.head_name] = self._head
-        for i, blk in enumerate(self._blocks):
-            names = dict((k, n) for k, n, _ in p.layer_weights(i))
-            for key, w in zip(blk._W_NAMES, blk._w):
+        for i, blk in enumerate(self._blocks):  # glue: walks the model layers
+            names = dict((k, n) for k, n, _ in p.layer_weights(i))  # glue: names the weights of one layer
+            for key, w in zip(blk._W_NAMES, blk._w):  # glue: walks the named weights of one layer
                 out.setdefault(names.get(key, f"layers.{i}.{key}"), w)
         return out
 
@@ -532,7 +532,7 @@ class CausalLM:
         self._check_positions(what, state, l)
         n, d = b * l, self.d_model
         x = self._prims.embedding(self._embed, ids.reshape((n,))).reshape((b, l, d))
-        for i, blk in enumerate(self._blocks):
+        for i, blk in enumerate(self._blocks):  # glue: drives one native forward per layer
             if state is None:
                 x = blk.forward(x)
             elif step:
@@ -568,7 +568,7 @@ class CausalLM:
             raise ValueError(
                 f"mojolearn CausalLM.allocate_state: max_tokens={smax} exceeds max_positions={self.max_positions}")
         layers = []
-        for blk in self._blocks:
+        for blk in self._blocks:  # glue: allocates native state per layer
             layers.append(blk.allocate_state(b, smax) if self.kind == "transformer" else blk.allocate_state(b))
         return CausalLMState(b, smax, layers, owner=self)
 
@@ -622,7 +622,7 @@ class CausalLM:
         nxt = _argmax_last(logits, b, l, self.vocab_size)
         new = empty((n_new, b), "<i4")
         at = addr(new, name="new ids")
-        for k in range(n_new):  # decode steps: one native forward each, no per-row work
+        for k in range(n_new):  # decode steps: one native forward each, no per-row work  # glue: drives one native forward per decode step
             memcopy(at + k * b * 4, addr_ro(nxt, name="next ids"), b * 4)
             if k == n_new - 1:
                 break
@@ -669,7 +669,7 @@ class CausalLM:
         sessions = []
         lm = ext.causal_lm_session_create()
         try:
-            for blk, st in zip(self._blocks, state.layers):
+            for blk, st in zip(self._blocks, state.layers):  # glue: walks the layer states
                 sessions.append(TransformerDecodeSession(blk, st))
             head = self._head
             if int15:
@@ -686,12 +686,12 @@ class CausalLM:
                     [b, self.vocab_size, self.d_model, float(self.norm_eps)])
             out = empty((b, n_new), "<i4")
             ext.causal_lm_session_run(
-                lm, [ss._native for ss in sessions],
+                lm, [ss._native for ss in sessions],  # glue: native session handles of the layers
                 [addr_ro(ids, name="ids"), addr(out, name="ids_out"),
                  0 if last_logits is None else addr(last_logits, name="last_logits")], [l, n_new, 0])
         finally:
             ext.causal_lm_session_close(lm)
-            for ss in sessions:
+            for ss in sessions:  # glue: closes the layer sessions
                 ss.discard()
         return _prompt_then_new(ids, b, l, n_new, addr_ro(out, name="ids_out"), False)
 
