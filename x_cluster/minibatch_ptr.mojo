@@ -46,8 +46,8 @@ comptime MBK_ZEROCOPY = (
     and not is_defined["MOJOLEARN_MBK_ZEROCOPY_OFF"]()
 )  # default since the M3 A/B (docstring above); MINIBATCH_FAST_DEV is required
 
-#: lane/apple-fast-s-linalg (2026-10-04), default OFF, FAST + Apple only
-#: (`-D MOJOLEARN_MBK_FAST_DEVSCAN`). What: MiniBatchKMeans.fit refuses NaN/inf
+#: lane/apple-fast-s-linalg (2026-10-04), FAST + Apple only (default since
+#: verdicts batch 6; rollback `-D MOJOLEARN_MBK_FAST_DEVSCAN_OFF`). What: MiniBatchKMeans.fit refuses NaN/inf
 #: with the base binding's `all_finite_f32` (python/mojolearn/_expansion_cluster.py
 #: `_f32`), a single-thread host loop with an early-exit branch over every
 #: value: 220 million floats (880 MB) at the board's istella 1M x 220, on the
@@ -57,7 +57,11 @@ comptime MBK_ZEROCOPY = (
 #: raises the same message; the binding's copying fallback scans its host
 #: list instead. Expect: minibatch-kmeans istella 145 -> ~80-110 ms (the host
 #: scan is ~1 cycle a float); no arithmetic change.
-comptime MBK_FAST_DEVSCAN = MBK_ZEROCOPY and is_defined["MOJOLEARN_MBK_FAST_DEVSCAN"]()
+#: MBK_FAST_DEVSCAN OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
+#: 2026-10-05, rab15-mbkdevscan): minibatch-kmeans istella 142.3 -> 83.5 ms,
+#: taxi 40.4 -> 37.2 ms, silhouette identical. KEEP: the FAST + Apple
+#: default; rollback -D MOJOLEARN_MBK_FAST_DEVSCAN_OFF.
+comptime MBK_FAST_DEVSCAN = MBK_ZEROCOPY and not is_defined["MOJOLEARN_MBK_FAST_DEVSCAN_OFF"]()
 #: the message Python maps back to its ValueError
 comptime MBK_NONFINITE_MSG = "mojolearn: X contains NaN or infinity"
 

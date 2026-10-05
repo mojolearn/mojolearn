@@ -49,8 +49,8 @@ from core.strided_walk import (
 comptime XTDZ_CO_MAX_CELLS = 1024
 #: Target threads per pass-1 block; `S = max(1, this // cells)` residues.
 comptime XTDZ_CO_BLOCK_TARGET = 256
-#: lane/apple-fast-s-linalg (2026-10-04), default OFF, FAST + Apple only
-#: (`-D MOJOLEARN_PCA_FAST_COLMEAN`). What: `column_mean_launch` takes the
+#: lane/apple-fast-s-linalg (2026-10-04), FAST + Apple only (default since
+#: verdicts batch 6; rollback `-D MOJOLEARN_PCA_FAST_COLMEAN_OFF`). What: `column_mean_launch` takes the
 #: coalesced two-pass form below under FAST too. Without it FAST runs
 #: `column_mean_kernel`, one block per column whose SIMD groups read one
 #: column at a stride of D floats (every load its own cache line, X re-read
@@ -60,8 +60,13 @@ comptime XTDZ_CO_BLOCK_TARGET = 256
 #: runs it on the whole 1M x 220 X every fit. Same chains, same fold, so the
 #: same bits (the coalesced form is `column_mean_kernel` bit for bit).
 #: Expect: pca istella 217.8 -> ~150-190 ms.
+#: PCA_FAST_COLMEAN OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
+#: 2026-10-05, rab20-pcacolmean): pca taxi 106.2 -> 85.0 ms, istella
+#: 215.4 -> 214.5 ms, digest same on taxi. KEEP: the FAST + Apple default;
+#: rollback -D MOJOLEARN_PCA_FAST_COLMEAN_OFF.
 comptime PCA_FAST_COLMEAN = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_PCA_FAST_COLMEAN"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_PCA_FAST_COLMEAN_OFF"]()
 )
 
 

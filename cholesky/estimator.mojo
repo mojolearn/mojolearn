@@ -258,8 +258,8 @@ def chol_devio_check_kernel(a: MutPointer[Float32, MutAnyOrigin], bad: MutPointe
         bad[0] = Int32(1)
 
 
-# ---- lane/apple-fast-s-linalg (2026-10-04): CHOL_FAST_POOLIO, default OFF ----
-#: FAST + Apple only (`-D MOJOLEARN_CHOL_FAST_POOLIO`), on top of
+# ---- lane/apple-fast-s-linalg (2026-10-04): CHOL_FAST_POOLIO ----
+#: FAST + Apple only (rollback `-D MOJOLEARN_CHOL_FAST_POOLIO_OFF`), on top of
 #: CHOL_FAST_DEVIO. What: DEVIO still makes, every fit at n = 8192, a FRESH
 #: 256 MB pinned host buffer (page faults), copies the caller's matrix into
 #: it on one host thread (`copy_f32`) and DMAs it up, and allocates the
@@ -271,7 +271,11 @@ def chol_devio_check_kernel(a: MutPointer[Float32, MutAnyOrigin], bad: MutPointe
 #: stage is one pinned host buffer kept between fits (grown when n grows).
 #: The NOSYNC redo re-uploads from the caller's matrix. `potrf_lower`
 #: unchanged: the same words. Expect: cholesky synthetic 261 -> ~200-235 ms.
-comptime CHOL_FAST_POOLIO = CHOL_FAST_DEVIO and is_defined["MOJOLEARN_CHOL_FAST_POOLIO"]()
+#: CHOL_FAST_POOLIO OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
+#: 2026-10-05, rab15-cholpoolio): cholesky 262.4 -> 228.1 ms, residual
+#: identical, digest same. KEEP: the FAST + Apple default; rollback
+#: -D MOJOLEARN_CHOL_FAST_POOLIO_OFF.
+comptime CHOL_FAST_POOLIO = CHOL_FAST_DEVIO and not is_defined["MOJOLEARN_CHOL_FAST_POOLIO_OFF"]()
 comptime _CHOL_POOL = "MojoCholFastPoolIO"
 
 

@@ -195,8 +195,8 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
         self.reassignment_ratio = reassignment_ratio
 
     def _devscan(self):
-        """lane/apple-fast-s-linalg MBK_FAST_DEVSCAN (default off, FAST +
-        Apple; x_cluster/minibatch_ptr.mojo): whether the binding scans X for
+        """lane/apple-fast-s-linalg MBK_FAST_DEVSCAN (FAST + Apple default, rollback _OFF;
+        x_cluster/minibatch_ptr.mojo): whether the binding scans X for
         NaN/inf itself (on the device copy), so the host scan is skipped."""
         try:
             return int(self._bind().x_cluster_mbk_devscan()) == 1
