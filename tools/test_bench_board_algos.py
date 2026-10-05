@@ -26,6 +26,22 @@ def _load(name):
 A = _load("bench_board_algos")
 bb = _load("bench_board")
 
+
+def test_kernel_pca_quality_without_opponents():
+    X = np.array([[0., 0.], [1., 0.], [0., 2.], [2., 3.]])
+    K = np.exp(-((X[:, None] - X[None, :]) ** 2).sum(2) / X.shape[1])
+    values, vectors = np.linalg.eigh(K)
+    Z = vectors * np.sqrt(np.maximum(values, 0))
+    q = A.quality("kernel-pca", {"Xq": X}, {"ours-fast": {"pred": Z}})
+    assert q["ours-fast"]["rbf_feature_distance_relative_stress"] < 1e-12
+    assert A._rbf_embedding_stress(X, Z + 7) < 1e-12
+    assert A._rbf_embedding_stress(X, np.zeros_like(Z)) == pytest.approx(1)
+    assert A._rbf_embedding_stress(X, Z * 2) == pytest.approx(3)
+    with pytest.raises(ValueError):
+        A._rbf_embedding_stress(X, Z * np.nan)
+    with pytest.raises(ValueError):
+        A._rbf_embedding_stress(X, Z[:-1])
+
 XLANES = {"linear", "cluster", "neighbors", "decomp", "prep", "sequence", "trees", "cnn", "ann",
           # the lanes of the public mojolearn.training, resample, model_selection and
           # embedding surfaces (2026-09-29)
