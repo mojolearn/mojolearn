@@ -200,3 +200,5 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-03T03:44:51Z	measurements/2026-10-03/main-b2f5fa7f2-verify-nv.tar.gz	c7661e3ce9b3f8f956c44ebf3689857c9b7887a90cdef6b833c790ff90b0143f	296574	e1cf2463f403	/root/lq/out/n0008
 2026-10-03T03:44:52Z	measurements/2026-10-03/main-b2f5fa7f2-verify-amd.tar.gz	618914f6800613616a0e078f0c86d7323f2d12b3df82c6325c2e1dd44b99e448	295009	mojolearn-steward-do-amd	/root/lq/out/a0161
 2026-10-03T19:20:19Z	measurements/2026-10-03/m3-apple-fast-mq.tar.gz	c9c4232fef2f61ef0cb34602097aa3f20689aa8ac2c825e653070132a9523702	8750385	ip-172-31-43-215.ec2.internal	/Users/ec2-user/mq
+2026-10-03T19:43:24Z	measurements/2026-10-03/m3-board-0834-cache-for-m2.tar	9de63c4a6ec855236a048a3eb06740791c8d040b536ab4b1d7b7db6d6cfd2d97	2782800806	ip-172-31-43-215.ec2.internal	/Users/ec2-user/board-0834
+2026-10-03T19:45:51Z	measurements/2026-10-03/m3-gbm-bench-for-m2.tar	2216e98ecd492904dcff34be42a5d2a65a570b77ea533c5aa908b960c4f989b9	394954084	ip-172-31-43-215.ec2.internal	/Users/ec2-user/datasets/gbm-bench
