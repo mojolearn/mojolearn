@@ -2025,8 +2025,11 @@ class _LrTable(object):
                                                 out.buffer_info()[0], ok.buffer_info()[0]))
         vals = out.tolist()
         if undecided:
-            for i in [j for j in range(n) if not ok[j]]:
-                vals[i] = self._lr_at_slow(t0 + i)
+            # the exact big-rational route for the steps the table left
+            # undecided (an owner decision: Mojo has no big rational)
+            for i, f in enumerate(vals):
+                if not ok[i]:
+                    vals[i] = self._lr_at_slow(t0 + i)
         return vals
 
     def lr_values(self, n):
