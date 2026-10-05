@@ -100,6 +100,7 @@ from arima.impl.fast_order_search import (
     order_search_fit, order_search_multi, ARIMA_FAST_SEARCH_REUSE, ARIMA_FAST_D_CONCURRENT,
     fast_search_mode, order_search_css, order_search_stepwise,
 )
+from arima.impl.fast_arima_quality import ndiffs_kpss
 from arima.impl.fast_order_state import ARIMA_ORDER_BATCH
 from arima.impl.tsa.arima_common import ARIMAOrder
 from core.identity_trace import IdentityTrace
@@ -226,10 +227,16 @@ def arima_order_search_multi_binding(y_addrs: PythonObject, out_addrs: PythonObj
     (fast_order_search.order_search_multi). y_addrs / out_addrs: one address
     per task; fit_addrs: [] or [f32_0, i32_0, f32_1, i32_1, ...]; grids: one
     flat (p, q, k) list per task; config: [nobs, maxiter, d_0, bs_0, d_1,
-    bs_1, ...]."""
+    bs_1, ...], optionally one more word: 0 turns off the
+    MOJOLEARN_ARIMA_FAST_ROOT_CHECK rejection (the final exact refit of the
+    chosen orders; absent = on, a search)."""
     var nt = len(y_addrs)
-    if nt < 1 or len(out_addrs) != nt or len(grids) != nt or len(config) != 2 + 2 * nt:
+    if nt < 1 or len(out_addrs) != nt or len(grids) != nt or (
+            len(config) != 2 + 2 * nt and len(config) != 3 + 2 * nt):
         raise Error("arima_order_search_multi: inconsistent task lists")
+    var root_check = True
+    if len(config) == 3 + 2 * nt:
+        root_check = Int(py=config[2 + 2 * nt]) != 0
     var want_fit = len(fit_addrs) > 0
     if want_fit and len(fit_addrs) != 2 * nt:
         raise Error("arima_order_search_multi: fit_addrs needs two addresses per task")
@@ -259,19 +266,40 @@ def arima_order_search_multi_binding(y_addrs: PythonObject, out_addrs: PythonObj
         task_orders.append(orders^)
     var written = 0
     with GILReleased(Python()):
-        written = order_search_multi(yps, ops, ffs, fis, task_orders, bss, nobs, maxiter, want_fit)
+        written = order_search_multi(yps, ops, ffs, fis, task_orders, bss, nobs, maxiter, want_fit,
+                                     root_check)
     return PythonObject(written)
 
 
 def arima_fast_search_mode_binding() raises -> PythonObject:
     """lane/apple-fast-arima-sf: `fast_search_mode` (bit 0
     MOJOLEARN_ARIMA_FAST_CSS_SEARCH, bit 1 MOJOLEARN_ARIMA_FAST_STEPWISE,
-    bit 2 the grouped final fit through `arima_order_search_multi`); 0 with
-    an identity trace on."""
+    bit 2 the grouped final fit through `arima_order_search_multi`, bit 3
+    MOJOLEARN_ARIMA_FAST_CONST_BOTH, bit 4 MOJOLEARN_ARIMA_FAST_ROOT_CHECK,
+    bit 5 MOJOLEARN_ARIMA_FAST_KPSS_D); 0 with an identity trace on."""
     var trace = IdentityTrace()
     if trace.enabled:
         return PythonObject(0)
     return PythonObject(fast_search_mode())
+
+
+def arima_ndiffs_kpss_binding(y_addr: PythonObject, out_addr: PythonObject,
+                               config: PythonObject) raises -> PythonObject:
+    """lane/apple-fast-arima-quality, MOJOLEARN_ARIMA_FAST_KPSS_D:
+    `ndiffs_kpss`, statsforecast's `ndiffs` d per series (int32 into
+    `out_addr`); `y_addr` (batch, nobs) float32 rows, `config` [batch, nobs,
+    d_max]. Returns `batch`."""
+    if len(config) != 3:
+        raise Error("arima_ndiffs_kpss: expected [batch,nobs,d_max]")
+    var bs = Int(py=config[0])
+    var nobs = Int(py=config[1])
+    var d_max = Int(py=config[2])
+    var yp = f32_ptr(Int(py=y_addr))
+    var op = i32_ptr(Int(py=out_addr))
+    var written = 0
+    with GILReleased(Python()):
+        written = ndiffs_kpss(yp, op, bs, nobs, d_max)
+    return PythonObject(written)
 
 
 def arima_order_search_css_binding(y_addr: PythonObject, out_addr: PythonObject,
@@ -666,6 +694,7 @@ def PyInit__mojolearn_arima() abi("C") -> PythonObject:
         m.def_function[arima_fast_search_mode_binding]("arima_fast_search_mode")
         m.def_function[arima_order_search_css_binding]("arima_order_search_css")
         m.def_function[arima_order_search_stepwise_binding]("arima_order_search_stepwise")
+        m.def_function[arima_ndiffs_kpss_binding]("arima_ndiffs_kpss")
         m.def_function[arima_predict_binding]("arima_predict")
         m.def_function[arima_forecast_binding]("arima_forecast")
         return m.finalize()

@@ -59,6 +59,7 @@ from arima.impl.batched_kalman import (
 )
 from arima.impl.estimate_x0 import estimate_x0_x
 from arima.impl.fast_eval_ws import FastEvalWS
+from arima.impl.fast_arima_quality import ARIMA_FAST_ROOT_CHECK, enqueue_root_check, quality_mode
 from arima.impl.fast_lbfgs_async import ASYNC_READ_EVERY, F_FX, I_ACTIVE, I_NITER, I_RETCODE
 from arima.impl.fast_order_state import ARIMA_ORDER_BATCH, OrderOptimizer
 from arima.impl.timeSeries.arima_helpers import batched_jones_transform
@@ -205,7 +206,8 @@ comptime SW_CELLS = 50
 def fast_search_mode() -> Int:
     """This build's FAST search switches, for the Python glue: bit 0
     ARIMA_FAST_CSS_SEARCH, bit 1 ARIMA_FAST_STEPWISE, bit 2 the grouped
-    final fit (`order_search_multi` with fit output) for chosen orders."""
+    final fit (`order_search_multi` with fit output) for chosen orders, bits
+    3..5 `fast_arima_quality.quality_mode` (CONST_BOTH, ROOT_CHECK, KPSS_D)."""
     var mode = 0
     comptime if ARIMA_FAST_CSS_SEARCH:
         mode |= 1
@@ -213,6 +215,9 @@ def fast_search_mode() -> Int:
         mode |= 2
     comptime if ARIMA_FAST_CSS_SEARCH or ARIMA_FAST_STEPWISE or ARIMA_FAST_D_CONCURRENT:
         mode |= 4
+    # lane/apple-fast-arima-quality: bit 3 ARIMA_FAST_CONST_BOTH, bit 4
+    # ARIMA_FAST_ROOT_CHECK, bit 5 ARIMA_FAST_KPSS_D (fast_arima_quality.mojo)
+    mode |= quality_mode()
     return mode
 
 
@@ -459,12 +464,16 @@ struct _SearchTask(Movable):
     var want_fit: Bool
     var fit_f32: Int
     var fit_i32: Int
+    var root_check: Bool
+    """ARIMA_FAST_ROOT_CHECK: reject this task's candidates whose fitted AR
+    or MA polynomial has a root of modulus < 1.01 (a search; False for the
+    final exact refit of chosen orders)."""
 
     def __init__(out self, var y: DeviceBuffer[DType.float32], var exog: DeviceBuffer[DType.float32],
                  var ykf: DeviceBuffer[DType.float32], var ll_all: DeviceBuffer[DType.float32],
                  var x0_flag: DeviceBuffer[DType.int32], var x0_flag_host: HostBuffer[DType.int32],
                  orders: List[ARIMAOrder], bs: Int, nobs: Int, nkf: Int,
-                 want_fit: Bool, fit_f32: Int, fit_i32: Int):
+                 want_fit: Bool, fit_f32: Int, fit_i32: Int, root_check: Bool = True):
         self.y = y^
         self.exog = exog^
         self.ykf = ykf^
@@ -478,6 +487,7 @@ struct _SearchTask(Movable):
         self.want_fit = want_fit
         self.fit_f32 = fit_f32
         self.fit_i32 = fit_i32
+        self.root_check = root_check
 
 
 def _search_tasks(ctx: DeviceContext, mut tasks: List[_SearchTask], hp: LBFGSParam) raises:
@@ -594,7 +604,17 @@ def _search_tasks(ctx: DeviceContext, mut tasks: List[_SearchTask], hp: LBFGSPar
             Int32(tk.bs), Int32(row[j]),
             grid_dim=((tk.bs + ORDER_TPB - 1) // ORDER_TPB, 1, 1), block_dim=(ORDER_TPB, 1, 1),
         )
+    # ARIMA_FAST_ROOT_CHECK: each candidate's fitted roots, its row -inf
+    # where a root has modulus < 1.01 (statsforecast `myarima`)
+    var root_keep = List[ARIMAParams]()
+    comptime if ARIMA_FAST_ROOT_CHECK:
+        for j in range(len(states)):  # small-loop(states: one optimizer per order): enqueues, no series data
+            ref tk = tasks[gtask[owner[j]]]
+            if tk.root_check:
+                ref state = states[j]
+                enqueue_root_check(ctx, state.order, tk.bs, state.x, tk.ll_all, row[j], root_keep)
     ctx.synchronize()
+    _ = root_keep^
     for j in range(len(states)):  # small-loop(states: one optimizer per order): device-to-caller copies
         ref tk = tasks[gtask[owner[j]]]
         if tk.want_fit:
@@ -769,7 +789,14 @@ def _order_search_core(
                         Int32(bs), Int32(ids[j]),
                         grid_dim=(ll_grid, 1, 1), block_dim=(ORDER_TPB, 1, 1),
                     )
+                # ARIMA_FAST_ROOT_CHECK: statsforecast `myarima`'s root rule
+                var root_keep = List[ARIMAParams]()
+                comptime if ARIMA_FAST_ROOT_CHECK:
+                    for j in range(len(states)):  # small-loop(states: one optimizer per order): enqueues, no series data
+                        ref state = states[j]
+                        enqueue_root_check(ctx, state.order, bs, state.x, ll_all, ids[j], root_keep)
                 ctx.synchronize()
+                _ = root_keep^
                 if want_fit:
                     for j in range(len(states)):  # small-loop(states: one optimizer per order): device-to-caller copies
                         _enqueue_fit_block(ctx, states[j], orders[ids[j]], bs, x0s[j], fit_f32, fit_i32,
@@ -897,7 +924,7 @@ def order_search_fit(
 def order_search_multi(
     y_ptrs: List[Int], out_ptrs: List[Int], fit_f32s: List[Int], fit_i32s: List[Int],
     task_orders: List[List[ARIMAOrder]], bss: List[Int], nobs: Int, maxiter: Int,
-    want_fit: Bool,
+    want_fit: Bool, root_check: Bool = True,
 ) raises -> Int:
     """ARIMA_FAST_D_CONCURRENT, and the grouped exact final fit of
     ARIMA_FAST_CSS_SEARCH / ARIMA_FAST_STEPWISE (one task per chosen order on
@@ -905,8 +932,10 @@ def order_search_multi(
     `order_search_fit`) for several same-d nonseasonal grids, one per task:
     its own series y_ptrs[t] (bss[t] x nobs), its own output out_ptrs[t] and
     fit buffers fit_f32s[t] / fit_i32s[t]; every group of every task in ONE
-    concurrent round loop (`_search_tasks`). Returns the total number of
-    log-likelihoods written."""
+    concurrent round loop (`_search_tasks`). `root_check`
+    (ARIMA_FAST_ROOT_CHECK builds): reject candidates by statsforecast's root
+    rule; the final exact refit of chosen orders passes False. Returns the
+    total number of log-likelihoods written."""
     comptime if not (ARIMA_FAST_D_CONCURRENT or ARIMA_FAST_CSS_SEARCH or ARIMA_FAST_STEPWISE):
         raise Error("AutoARIMA concurrent d groups were not compiled")
     else:
@@ -950,7 +979,7 @@ def order_search_multi(
             var ff = fit_f32s[t] if want_fit else 0
             var fi = fit_i32s[t] if want_fit else 0
             tasks.append(_SearchTask(y^, exog^, ykf^, ll_all^, x0_flag^, x0_flag_host^,
-                                     orders, bs, nobs, nkf, want_fit, ff, fi))
+                                     orders, bs, nobs, nkf, want_fit, ff, fi, root_check))
             total += len(orders) * bs
         ctx.synchronize()
         for t in range(nt):  # small-loop(tasks: AutoARIMA's d groups): one flag word each
@@ -1106,7 +1135,15 @@ def _run_orders(
             Int32(bs), Int32(j),
             grid_dim=(ll_grid, 1, 1), block_dim=(ORDER_TPB, 1, 1),
         )
+    # ARIMA_FAST_ROOT_CHECK: statsforecast `myarima`'s root rule on every
+    # candidate of the CSS search / stepwise step
+    var root_keep = List[ARIMAParams]()
+    comptime if ARIMA_FAST_ROOT_CHECK:
+        for j in range(len(states)):  # small-loop(states: one optimizer per grid order): enqueues, no series data
+            ref state = states[j]
+            enqueue_root_check(ctx, state.order, bs, state.x, ll_all, j, root_keep)
     ctx.synchronize()
+    _ = root_keep^
     _ = states^
     _ = live^
 

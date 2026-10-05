@@ -120,6 +120,19 @@ def _adopt_search_fit(m, y, search_fit, trial, local):
     return m._adopt_fit(arr, copied, 2, b, n_obs, _no_exog(), 0, params, x, x0, stats, flags)
 
 
+def _k_options(fit_intercept, d_, D_, const_both):
+    """The constant options of a d group. "auto": the constant when d + D <= 1
+    (cuML's rule); with MOJOLEARN_ARIMA_FAST_CONST_BOTH (`const_both`, bit 3
+    of `arima_fast_search_mode`) both 0 and 1 when d + D <= 1, statsforecast
+    `search_arima`'s `for K in range(max_K + 1)` (allowmean for d + D == 0,
+    allowdrift for d + D == 1), k innermost in the grid as there."""
+    if fit_intercept == "auto":
+        if d_ + D_ > 1:
+            return [0]
+        return [0, 1] if const_both else [1]
+    return _options("k", fit_intercept, 0, 1)
+
+
 def _options(name, value, lo, hi):
     """The reference's `_parse_sequence`: an int or an iterable, clipped to
     [lo, hi]; empty is refused."""
@@ -184,8 +197,20 @@ class AutoARIMA:
         P_opts = _options("P", P, 0, 4 if s else 0)
         Q_opts = _options("Q", Q, 0, 4 if s else 0)
         y = self.endog
+        fast_mode = self._fast_mode()
         if len(d_opts) == 1:
             dser = np.full(self.batch_size, d_opts[0], dtype=np.int64)
+        elif fast_mode & 32 and D_ == 0 and d_opts == list(range(len(d_opts))):
+            # MOJOLEARN_ARIMA_FAST_KPSS_D: statsforecast's `ndiffs` (KPSS
+            # level test, lags floor(3 sqrt(n) / 13), alpha 0.05, up to
+            # d_max) for every series in one device launch
+            # (fast_arima_quality.ndiffs_kpss). UNMEASURED as of 2026-10-05.
+            d32 = np.empty(self.batch_size, dtype=np.int32)
+            written = int(ARIMA()._extension().arima_ndiffs_kpss(
+                y.ctypes.data, d32.ctypes.data, [self.batch_size, self.n_obs, d_opts[-1]]))
+            if written != self.batch_size:
+                raise RuntimeError("AutoARIMA: incomplete ndiffs output")
+            dser = np.asarray(d32, dtype=np.int64)  # glue: widen the device's choice
         else:
             if d_opts != list(range(len(d_opts))):
                 raise NotImplementedError("AutoARIMA: a d option list must be 0, 1, ..., d_max")
@@ -214,9 +239,14 @@ class AutoARIMA:
         # MOJOLEARN_ARIMA_FAST_STEPWISE (bit 1), FAST + Apple builds only.
         # The CSS approximation follows statsforecast's `auto_arima_f` rule:
         # approximation = len(x) > 150 or season_length > 12.
-        fast_mode = self._fast_mode()
         css_on = bool(fast_mode & 1) and (self.n_obs > 150 or s > 12)
         stepwise_on = bool(fast_mode & 2)
+        # lane apple-fast-arima-quality: MOJOLEARN_ARIMA_FAST_CONST_BOTH (bit
+        # 3) every order with and without the constant in the same search
+        # call; MOJOLEARN_ARIMA_FAST_ROOT_CHECK (bit 4) is native (the
+        # searches reject roots of modulus < 1.01), read by _fit_grouped
+        const_both = bool(fast_mode & 8)
+        self._root_check = bool(fast_mode & 16)
         # the chosen orders then get ONE grouped exact fit (fit()); the
         # search wrote no reusable fit block
         self._final_grouped = False
@@ -226,14 +256,13 @@ class AutoARIMA:
         # one native call (fast_order_search.order_search_multi), stashed here
         # and read by the loop below in place of its own call
         pre = self._search_d_concurrent(y, dw, dcount, D_, p_opts, q_opts, P_opts, Q_opts,
-                                        fit_intercept, maxiter) if grouped_ok else {}
+                                        fit_intercept, maxiter, const_both) if grouped_ok else {}
         for d_ in range(3):  # glue: the three differencing orders d
             if not dcount[d_]:
                 continue
             ids = _rows_where(dw, d_, int(dcount[d_]))
             sub = _take(y, ids)
-            k_opts = ([1 if d_ + D_ <= 1 else 0] if fit_intercept == "auto"
-                      else _options("k", fit_intercept, 0, 1))
+            k_opts = _k_options(fit_intercept, d_, D_, const_both)
             orders, nb = [], len(ids)
             search_fit = None
             binding = ARIMA()._extension()
@@ -406,6 +435,11 @@ class AutoARIMA:
             fit_addrs += [fit_f32.ctypes.data, fit_i32.ctypes.data]
             grids.append([p_, q_, k_])
             config += [d_, nb]
+        if getattr(self, "_root_check", False):
+            # MOJOLEARN_ARIMA_FAST_ROOT_CHECK: the final exact refit of the
+            # chosen orders is not rejected (the search already applied
+            # statsforecast's root rule to every candidate)
+            config.append(0)
         written = int(binding.arima_order_search_multi(y_addrs, out_addrs, fit_addrs, grids, config))
         if written != len(self.endog):
             raise RuntimeError("AutoARIMA: incomplete grouped final fit output")
@@ -423,7 +457,7 @@ class AutoARIMA:
         return self
 
     def _search_d_concurrent(self, y, dw, dcount, D_, p_opts, q_opts, P_opts, Q_opts,
-                             fit_intercept, maxiter):
+                             fit_intercept, maxiter, const_both=False):
         """{d: (grouped_ll, search_fit)} for every d group, from ONE
         arima_order_search_multi call, when the binding was compiled with
         MOJOLEARN_ARIMA_FAST_D_CONCURRENT and more than one d group exists;
@@ -448,8 +482,7 @@ class AutoARIMA:
             ids = _rows_where(dw, d_, int(dcount[d_]))
             sub = _take(y, ids)
             nb = len(ids)
-            k_opts = ([1 if d_ + D_ <= 1 else 0] if fit_intercept == "auto"
-                      else _options("k", fit_intercept, 0, 1))
+            k_opts = _k_options(fit_intercept, d_, D_, const_both)
             grid = [o for o in itertools.product(p_opts, q_opts, P_opts, Q_opts, k_opts)  # glue: user order metadata
                     if o[0] + o[1] + o[2] + o[3] + o[4]]  # glue: user order options, no series data
             if not grid:
