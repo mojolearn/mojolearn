@@ -514,7 +514,13 @@ class NearestCentroid(_XNeighbors):
         self._op("p2m_class_counts", [(lab, 0), (nk, 1), (info, 1)], (n, C))
         counts = [int(v) for v in nk.tolist()]          # glue: the k class counts (priors, offsets)
         if self.priors == "empirical":
-            prior = [c / float(n) for c in counts]
+            # count / n per class in the base binding (lane py-runtime-b;
+            # the same binary64 words as the Python quotient)
+            from ._buffer import _native
+            pa = empty((C,), "<f8")
+            ca = Array.from_list(counts, "<i8")
+            _native("class_ratio_f64")(addr_ro(ca, name="counts"), C, n, 1, addr(pa, name="class_prior_"))
+            prior = pa.tolist()  # glue: k class priors for the checks below
         elif self.priors == "uniform":
             prior = [1.0 / C] * C
         else:
@@ -525,7 +531,7 @@ class NearestCentroid(_XNeighbors):
                 raise ValueError("priors must be non-negative")
             tot = math.fsum(prior)
             if not math.isclose(tot, 1.0, rel_tol=1e-5, abs_tol=1e-8):
-                prior = [p / tot for p in prior]
+                prior = [p / tot for p in prior]  # glue: the user priors argument rescaled to sum one (k sized)
         self.class_prior_ = Array.from_list(prior, "<f8")
         if self.metric == "euclidean":
             cent = _empty_out((C, d), "<f4")

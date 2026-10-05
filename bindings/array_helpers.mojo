@@ -182,6 +182,41 @@ def nsum_f64_binding(addr: PythonObject, n: PythonObject) raises -> PythonObject
     return PythonObject(total)
 
 
+def class_ratio_f64_binding(
+    counts_addr: PythonObject, k: PythonObject, n: PythonObject, mode: PythonObject, out_addr: PythonObject,
+) raises -> PythonObject:
+    """Per-class ratios of the k int64 class counts (lane py-runtime-b: the
+    Python list arithmetic of the class-weight and prior glue). mode 0:
+    scikit-learn's 'balanced' weight n / (k * count_c); mode 1: the
+    empirical prior count_c / n. Both operands are exact integers (below
+    2^53) and the quotient is one IEEE binary64 division, so the words are
+    Python's `int / int`. Returns the number of zero counts in mode 0 (the
+    caller raises Python's ZeroDivisionError; those cells are left 0)."""
+    var kk = Int(py=k)
+    var nn = Int(py=n)
+    var m = Int(py=mode)
+    if kk <= 0:
+        return PythonObject(0)
+    if m != 0 and m != 1:
+        raise Error("class_ratio_f64: mode is 0 (balanced) or 1 (prior)")
+    if m == 1 and nn == 0:
+        raise Error("class_ratio_f64: the prior of zero rows")
+    var cp = _addr_ptr[DType.int64](Int(py=counts_addr))
+    var op = _addr_ptr[DType.float64](Int(py=out_addr))
+    var zeros = 0
+    for c in range(kk):
+        var cnt = Int(cp.unsafe_load(c))
+        if m == 0:
+            if cnt == 0:
+                zeros += 1
+                op.unsafe_store(c, 0.0)
+            else:
+                op.unsafe_store(c, Float64(nn) / Float64(kk * cnt))
+        else:
+            op.unsafe_store(c, Float64(cnt) / Float64(nn))
+    return PythonObject(zeros)
+
+
 def shard_topk_merge_f32_host_binding(
     table_addr: PythonObject, n_shards: PythonObject, n_queries: PythonObject, k: PythonObject,
     out_dist_addr: PythonObject, out_idx_addr: PythonObject,

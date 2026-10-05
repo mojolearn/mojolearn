@@ -258,8 +258,12 @@ def _c_rows(binding, C, n_rows, sample_weight, class_weight=None, y=None, who="S
             cnt = zeros((len(classes),), "<i8")
             _native("bincount_i64")(addr_ro(codes, name="class codes"), 2, codes.shape[0], len(classes),
                                     addr(cnt, name="counts"), 0)
-            counts = cnt.tolist()
-            cw = [n_rows / (len(classes) * counts[k]) for k in range(len(classes))]
+            # n / (k * count) per class in the base binding (lane
+            # py-runtime-b; the same binary64 words as the Python quotient)
+            cwa = empty((len(classes),), "<f8")
+            if len(classes) and int(_native("class_ratio_f64")(addr_ro(cnt, name="counts"), len(classes), n_rows,
+                                                               0, addr(cwa, name="class_weight"))):
+                raise ZeroDivisionError("division by zero")
         else:
             cw = [1.0] * len(classes)
             for key, value in dict(class_weight).items():  # glue: user class_weight dict entries
@@ -269,7 +273,7 @@ def _c_rows(binding, C, n_rows, sample_weight, class_weight=None, y=None, who="S
                         f"which is not in y's classes {classes!r}"
                     )
                 cw[classes.index(key)] = float(value)
-        cwa = Array.from_list(cw, "<f8")
+            cwa = Array.from_list(cw, "<f8")
     out = empty((n_rows,), "<f4")
     if n_rows:
         binding.svc_pair_epilogue(
