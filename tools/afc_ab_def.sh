@@ -11,7 +11,8 @@
 # suffix of bindings/build_<binding>.sh (x_sequence, kernel_methods,
 # estimators, x_linear, ...; python/mojolearn/_mojolearn_<binding>.so), or
 # auto for a trees lane (gbdt-* -> gbdt, rf -> rf, et -> trees, iforest -> svm).
-# Env as afc_ab.sh (AFC_FAMILY, AFC_ARM). Builds under ~/afc-def/<tag>/
+# Env as afc_ab.sh (AFC_FAMILY, AFC_ARM); <dataset> may be a synthetic shape
+# s-r<rows>-f<features> as in afc_ab.sh. Builds under ~/afc-def/<tag>/
 # (AFC_SKIP_BUILD=1 reuses them); the race lines land in afc_ab.sh's
 # ~/mq/out/race-<tag>/race.log tagged env='AFC_DEF_ARM=A|B', and the
 # AFC-DEF-SUMMARY lines at the end give each arm's median of medians.
@@ -30,15 +31,24 @@ if [ "$BIND" = auto ]; then
 fi
 so=python/mojolearn/_mojolearn_$BIND.so; script=bindings/build_$BIND.sh
 [ "$BIND" = base ] && { so=python/mojolearn/_mojolearn.so; script=bindings/build.sh; }
-out=$HOME/afc-def/$TAG; mkdir -p "$out"
+# AFC_DEF_BUILD_TAG: share one pair of builds across several tags (a shape
+# sweep, tools/afc_shape_sweep.py): an arm's .so under ~/afc-def/<build tag>/
+# is reused when its stamp (head, binding, defines) matches, else rebuilt.
+out=$HOME/afc-def/${AFC_DEF_BUILD_TAG:-$TAG}; mkdir -p "$out"
 echo "AFC-DEF $TAG head=$(git rev-parse --short HEAD) bind=$BIND lane=$LANE ds=$DS A='$DA' B='$DB'"
 build() {  # $1 arm, $2 defines
   if [ "${AFC_SKIP_BUILD:-0}" = 1 ] && [ -f "$out/$1.so" ]; then return 0; fi
+  stamp="$(git rev-parse HEAD) $BIND $2"
+  if [ -n "${AFC_DEF_BUILD_TAG:-}" ] && [ -f "$out/$1.so" ] && [ "$(cat "$out/$1.stamp" 2>/dev/null)" = "$stamp" ]; then
+    echo "AFC-DEF-BUILD $TAG arm=$1 reused=$AFC_DEF_BUILD_TAG defines='$2'"; return 0
+  fi
+  rm -f "$out/$1.stamp"
   MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_MOJO_BUILD_FLAGS="$2" MOJOLEARN_SKIP_BUILD_GATE=1 \
     bash "$script" > "$out/build_$1.log" 2>&1
   rc=$?; echo "AFC-DEF-BUILD $TAG arm=$1 rc=$rc defines='$2'"
   [ $rc = 0 ] || { grep -m 5 -B 2 -A 8 -i error "$out/build_$1.log" | cut -c1-300; exit 1; }
   cp "$so" "$out/$1.so"
+  echo "$stamp" > "$out/$1.stamp"
 }
 build A "$DA"; build B "$DB"
 for r in $(seq 1 "$REPS"); do
