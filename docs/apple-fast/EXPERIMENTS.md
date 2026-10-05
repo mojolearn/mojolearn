@@ -1411,3 +1411,40 @@ M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05. KEEP rows are the FAS
 | `ARIMA_FAST_CSS_SEARCH` + `ARIMA_FAST_STEPWISE` | autoarima / synthetic, taxi-hourly | main a6ff25ff8 | rab26 | synthetic -36.3%, taxi -22.9% | DROPPED-quality | rmse 2.465 -> 5.702 and 75.71 -> 93.49; stay off |
 
 Pending (not applied): rab14-gathernarrow (missing arm); rab17-* (narrow round 2), rab18 (CTR re-measure), rab19 bgmm / dbscanccbatch / nbcatatomic / falivebuf: rerun after main builds again (both arms failed on broken main or the nn2 build).
+
+## IDENTICAL shared GEMM screening, 2026-10-05
+
+Base: `acbac52213651b3f1e2598309e3436d16d59272d` (latest `origin/main` at
+campaign creation). These reuse existing opt-in schedule arms. Production
+code and defaults are unchanged. `tools/identical_speed_ab.py` builds an
+unmodified baseline and each single-define candidate from one clean commit,
+records compiler/architecture/binary hashes, then runs one warmup and one
+synchronized sample per arm. All output words contribute to the A/B digest;
+18 correctness cases also compare every word against the flat reference.
+The 18 timing cases span NN/NT/TN, ordinary shapes and neighboring ragged
+shapes. Tiny/subnormal fixtures are correctness-only. Timing is GPU-only on
+NVIDIA/AMD; Apple runs `--identity-only`.
+
+| Define | Branch | Hypothesis | A/B tag | Before -> after | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| `MOJOLEARN_GEMM_ONE_PAGE` | `lane/identical-one-page-20261005` | Less shared memory may improve occupancy; trades away prefetch overlap | `one-page` | unmeasured | OPEN |
+| `MOJOLEARN_IDN_GEMM_GROUP_SLACK_2` | `lane/identical-group-slack2-20261005` | Fewer partial planes and less fold traffic | `group-slack2` | unmeasured | OPEN |
+| `MOJOLEARN_IDN_GEMM_GROUP_SLACK_8` | `lane/identical-group-slack8-20261005` | More independent groups for greater device occupancy | `group-slack8` | unmeasured | OPEN |
+| `MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY` | `lane/identical-body-tiles-20261005` | Count actual packed tiles when choosing groups (NVIDIA) | `body-tiles` | unmeasured | OPEN |
+| `MOJOLEARN_GEMM_KPACK_RPT4` | `lane/identical-packed64-20261005` | Lower register pressure with shorter packed tiles (NVIDIA) | `packed64` | unmeasured | OPEN |
+
+The common harness branch is `lane/identical-speed-ab-20261005`; each
+experiment branch records its selected profile in
+`experiments/identical_speed/selection.json`. Build and run commands are in
+`python tools/identical_speed_ab.py --help` and its module docstring.
+Build on a cheap machine with the same OS/CPU as the timing box, then copy
+the whole build directory to an exclusive GPU job. Do not rebuild on the
+timing GPU. A macOS cross-compile is preflight evidence only; the manifest
+refuses to execute its host binary on Linux.
+
+These are kernel screens, not end-to-end speed claims. A favorable single
+sample is a lead, not a statistically established win. Promotion requires
+both NVIDIA and AMD results, no material vendor regression, same-version
+identity on Apple and the host column, and end-to-end quality/performance
+on taxi + Istella or enwik8 + Pile GitHub as appropriate. No default flips
+are authorized by the synthetic screen alone.
