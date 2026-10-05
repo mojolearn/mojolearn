@@ -33,7 +33,7 @@ def compare(actual, reference):
     return {'relative_error_vs_own_host': max(errors)}
 
 
-def enrich(lane, inputs, outputs, quality, python, directory, timeout):
+def enrich(lane, inputs, outputs, quality, python, directory, timeout, *, fit_calls=1):
     """Only replace explicitly empty quality, never an existing quality error."""
     import numpy as np
     missing = [arm for arm in outputs if arm.startswith('ours') and quality.get(arm) == {}]
@@ -50,7 +50,7 @@ def enrich(lane, inputs, outputs, quality, python, directory, timeout):
     try:
         with (root / 'host.log').open('w') as log:
             result = subprocess.run([python, str(Path(__file__).resolve()), lane,
-                                     str(data), str(ref), str(receipt)],
+                                     str(data), str(ref), str(receipt), str(fit_calls)],
                                     env=env, stdout=log, stderr=subprocess.STDOUT, timeout=timeout)
         if result.returncode:
             raise ValueError('Own host reference failed; see ' + str(root / 'host.log'))
@@ -91,22 +91,31 @@ def host_binding_artifacts(modules=None):
     return sorted(rows, key=lambda row: row['module'])
 
 
+def run_reference(runner, fit_calls):
+    """Replay the same warmup/sample history for stateful in-place calls."""
+    if isinstance(fit_calls, bool) or not isinstance(fit_calls, int) or fit_calls < 1:
+        raise ValueError('Host reference fit_calls must be a positive integer')
+    for _ in range(fit_calls):
+        runner.fit()
+        runner.infer()
+    return runner.outputs()
+
+
 def main():
     import numpy as np
     import mojolearn as ml
     import bench_board_algos as board
-    lane, data, output, receipt = sys.argv[1:]
+    lane, data, output, receipt = sys.argv[1:5]
+    fit_calls = int(sys.argv[5]) if len(sys.argv) > 5 else 1
     if ml.vendor() != 'cpu' or ml.numeric_mode() != 'identical':
         raise RuntimeError('Reference must use our explicit IDENTICAL host column')
     with np.load(data, allow_pickle=False) as saved:
         inputs = {key: saved[key] for key in saved.files}
     runner = board.build(lane, 'ours', inputs)
-    runner.fit()
-    runner.infer()
-    np.savez(output, **runner.outputs())
+    np.savez(output, **run_reference(runner, fit_calls))
     bindings = host_binding_artifacts()
     Path(receipt).write_text(json.dumps({'vendor': ml.vendor(), 'numeric_mode': ml.numeric_mode(),
-                                        'lane': lane, 'bindings': bindings, 'timed': False}, indent=2) + '\n')
+                                        'lane': lane, 'bindings': bindings, 'timed': False, 'fit_calls': fit_calls}, indent=2) + '\n')
 
 
 if __name__ == '__main__':
