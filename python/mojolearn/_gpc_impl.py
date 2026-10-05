@@ -430,10 +430,10 @@ class GaussianProcessClassifier(NumericModeMixin):
             self.log_marginal_likelihood_value_ = only.log_marginal_likelihood_value_
         else:
             self.n_iter_ = [e.n_iter_ for e in fits]  # glue: iteration counts per class
-            total = 0.0
-            for e in fits:
-                total += e.log_marginal_likelihood_value_
-            self.log_marginal_likelihood_value_ = total / len(fits)
+            # the per-class values summed in storage order by the native
+            # reduction (lane py-runtime-b: was a Python accumulation)
+            lml = Array.from_list([float(e.log_marginal_likelihood_value_) for e in fits], "<f8")  # glue: one saved scalar per class
+            self.log_marginal_likelihood_value_ = float(lml.sum()) / len(fits)
 
     # -- prediction -------------------------------------------------------------
 

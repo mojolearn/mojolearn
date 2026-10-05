@@ -994,7 +994,7 @@ class KNeighborsClassifier(NearestNeighbors):
         counts = _serialize.exact(arrays, "class_counts", "<i8").tolist()
         if len(counts) != n_out or sum(counts) != len(classes):  # glue: class count check over the outputs
             raise ValueError(f"mojolearn: {path!r} classes and class_counts disagree with n_outputs")
-        rebuilt = [encode_labels(y_cols[i].tolist())[0] for i in range(n_out)]
+        rebuilt = [encode_labels(y_cols[i])[0] for i in range(n_out)]  # glue: one native encoding per output column
         off = 0
         for i, count in enumerate(counts):  # glue: saved class check per output
             saved = [int(c) for c in classes[off:off + count]]  # glue: saved class check per output

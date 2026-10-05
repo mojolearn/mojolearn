@@ -1030,95 +1030,25 @@ class KernelPCA(_XNeighbors):
 
 
 # ====================================================================== RandomState
-class _LegacyRandomState:
-    """numpy's legacy `RandomState(seed)` stream (MT19937 seeded by
-    init_genrand, what `check_random_state(int)` builds), in integers and
-    IEEE doubles only, so a sampler draws exactly scikit-learn's numbers on
-    every box and needs no NumPy. Python's `random.Random` IS MT19937 with
-    numpy's 53-bit double (`genrand_res53`); only the seeding differs, so the
-    state is set directly."""
-
-    def __init__(self, seed):
-        import random
-        if not isinstance(seed, int) or isinstance(seed, bool):
-            raise TypeError(f"{seed!r} cannot be used to seed a RandomState instance")
-        mt = [0] * 624
-        mt[0] = seed & 0xFFFFFFFF
-        for i in range(1, 624):
-            mt[i] = (1812433253 * (mt[i - 1] ^ (mt[i - 1] >> 30)) + i) & 0xFFFFFFFF
-        self._r = random.Random()
-        self._r.setstate((3, tuple(mt) + (624,), None))
-
-    def random_sample(self, count):
-        return [self._r.random() for _ in range(count)]
-
-    def uniform(self, low, high, count):
-        return [low + (high - low) * self._r.random() for _ in range(count)]
-
-    def randint(self, high, count):
-        """`randint(0, high, size)`, the legacy masked rejection draw."""
-        rng = high - 1
-        if rng == 0:
-            return [0] * count
-        mask = rng
-        for sh in (1, 2, 4, 8, 16):
-            mask |= mask >> sh
-        out = []
-        for _ in range(count):
-            while True:
-                v = self._r.getrandbits(32) & mask
-                if v <= rng:
-                    break
-            out.append(v)
-        return out
-
-
-def _random_state(seed):
-    """sklearn's check_random_state: an int seeds the legacy stream (drawn here
-    with no NumPy); a caller's numpy RandomState is drawn from directly; None
-    is numpy's global RandomState, as theirs (not reproducible, as theirs).
-    Every draw is an integer or an IEEE double from the same generator
-    sklearn would use, so the fitted parameters are theirs exactly."""
-    if isinstance(seed, int) and not isinstance(seed, bool):
-        return _LegacyRandomState(seed)
-    if seed is None:
-        from ._optional_numpy import require_numpy
-        np = require_numpy('_expansion_neighbors')
-        return _NumpyRandomState(np.random.mtrand._rand)
-    if hasattr(seed, "randint") and hasattr(seed, "random_sample") and hasattr(seed, "uniform"):
-        return _NumpyRandomState(seed)
-    raise ValueError(f"{seed!r} cannot be used to seed a numpy.random.RandomState instance")
-
-
 def _seed_word(seed):
     """The sketch samplers' seed (lane cpu2-l9-neighbors): an int as given;
     None (numpy's global RandomState) or a caller's numpy RandomState gives
     ONE draw, a word in [0, 2^31), and that word seeds the device
     counter-based generator exactly as an int random_state would. The
-    O(d * n_components) table is then drawn on the device, never in a Python
-    loop over the caller's generator. Not scikit-learn's numbers for those
-    two inputs (theirs are not reproducible for None either); the
-    distribution is the same. Anything else is refused as `_random_state`
-    refuses it."""
+    O(d * n_components) table is then drawn on the device. Not
+    scikit-learn's numbers for those two inputs (theirs are not reproducible
+    for None either); the distribution is the same. Anything else is
+    refused. (Lane py-runtime-b deleted the MT19937 Python stream that the
+    _OFF arms drew from.)"""
     if isinstance(seed, int) and not isinstance(seed, bool):
         return seed
-    return int(_random_state(seed).randint(1 << 31, 1)[0])
-
-
-class _NumpyRandomState:
-    """The `_LegacyRandomState` draws, from a numpy RandomState."""
-
-    def __init__(self, rs):
-        self._rs = rs
-
-    def random_sample(self, count):
-        return [float(v) for v in self._rs.random_sample(count)]  # glue: numpy RandomState draws converted to Python scalars
-
-    def uniform(self, low, high, count):
-        return [float(v) for v in self._rs.uniform(low, high, size=count)]  # glue: numpy RandomState draws converted to Python scalars
-
-    def randint(self, high, count):
-        return [int(v) for v in self._rs.randint(0, high, size=count)]  # glue: numpy RandomState draws converted to Python scalars
+    if seed is None:
+        from ._optional_numpy import require_numpy
+        np = require_numpy('_expansion_neighbors')
+        seed = np.random.mtrand._rand
+    elif not (hasattr(seed, "randint") and hasattr(seed, "random_sample") and hasattr(seed, "uniform")):
+        raise ValueError(f"{seed!r} cannot be used to seed a numpy.random.RandomState instance")
+    return int(seed.randint(0, 1 << 31, size=1)[0])
 
 
 # ====================================================================== PolynomialCountSketch
@@ -1163,11 +1093,15 @@ class PolynomialCountSketch(_XNeighbors):
             self.bitHash_ = bh
             self.n_features_in_ = d
             return self
-        rs = _random_state(seed)
-        idx = rs.randint(nc, deg * nf)
-        bits = [(-1, 1)[v] for v in rs.randint(2, deg * nf)]
-        self.indexHash_ = Array.from_list([idx[p * nf:(p + 1) * nf] for p in range(deg)], "<i4")
-        self.bitHash_ = Array.from_list([bits[p * nf:(p + 1) * nf] for p in range(deg)], "<i4")
+        if nf > 0:
+            # lane py-runtime-b: the MT19937 Python draw behind the _OFF
+            # define is deleted (no Python compute in the runtime); a binary
+            # without the device draw refuses
+            raise NotImplementedError(
+                "mojolearn PolynomialCountSketch: this binary lacks x_neighbors_kfeat_pcs_draw_idn "
+                "(rebuild without -D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF)")
+        self.indexHash_ = zeros((deg, 0), "<i4")
+        self.bitHash_ = zeros((deg, 0), "<i4")
         self.n_features_in_ = d
         return self
 
@@ -1322,15 +1256,14 @@ class SkewedChi2Sampler(_XNeighbors):
             self.random_offset_ = off
             self.n_features_in_ = d
             return self
-        rs = _random_state(seed)
-        u = rs.random_sample(d * nc)
-        z = Array.from_list([[math.pi / 2.0 * u[f * nc + c] for c in range(nc)] for f in range(d)], "<f4")
-        w = _empty_out((d, nc), "<f4")
-        self._op("skew_weights", [(z, 0), (w, 1)], (d * nc,))
-        self.random_weights_ = w
-        self.random_offset_ = Array.from_list(rs.uniform(0.0, 2.0 * math.pi, nc), "<f4")
-        self.n_features_in_ = d
-        return self
+        # lane py-runtime-b: the MT19937 Python draw (and pi/2 * u in Python)
+        # behind the _OFF defines is deleted; a binary with neither device
+        # draw, or an empty X / n_components < 1, refuses
+        if d < 1 or nc < 1:
+            raise ValueError("mojolearn SkewedChi2Sampler: X needs at least one feature and n_components >= 1")
+        raise NotImplementedError(
+            "mojolearn SkewedChi2Sampler: this binary lacks x_neighbors_kfeat_schi2_fit_idn "
+            "(rebuild without -D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF)")
 
     @property
     def random_weights_(self):
@@ -1769,24 +1702,24 @@ class PageRank(_XNeighbors):
         # lane/fam2-neighbors: the sum, the sign test and the n divisions by
         # the binding (`x_neighbors_unit_ff`, device kernels; registered in
         # IDENTICAL unless -D MOJOLEARN_IDN_XN_UNIT_DEV_OFF)
+        # (lane py-runtime-b: the Python fsum-and-divide route behind the
+        # _OFF define is deleted; that binary refuses a weight vector)
         unit_fn = getattr(self._bind(), "x_neighbors_unit_ff", None)
-        if unit_fn is not None:
-            wv = _f32_1d(v, what)
-            if wv.shape[0] != n:
-                raise ValueError(f"{what} must be n non-negative values, not all zero")
-            out = _empty_out((n,), "<f4")
-            uinfo = empty((2,), "<i4")
-            unit_fn([addr_ro(wv, name="xn_unit v"), addr(out, name="xn_unit out"),
-                     addr(uinfo, name="xn_unit info")], [n], [])
-            neg, zero = uinfo.tolist()
-            if neg or zero:
-                raise ValueError(f"{what} must be n non-negative values, not all zero")
-            return out
-        pv = [float(t) for t in (v.tolist() if hasattr(v, "tolist") else v)]
-        if len(pv) != n or any(t < 0 for t in pv) or math.fsum(pv) == 0:
+        if unit_fn is None:
+            raise NotImplementedError(
+                f"mojolearn PageRank {what}: this binary lacks x_neighbors_unit_ff "
+                "(rebuild without -D MOJOLEARN_IDN_XN_UNIT_DEV_OFF)")
+        wv = _f32_1d(v, what)
+        if wv.shape[0] != n:
             raise ValueError(f"{what} must be n non-negative values, not all zero")
-        tot = math.fsum(pv)
-        return Array.from_list([t / tot for t in pv], "<f4")
+        out = _empty_out((n,), "<f4")
+        uinfo = empty((2,), "<i4")
+        unit_fn([addr_ro(wv, name="xn_unit v"), addr(out, name="xn_unit out"),
+                 addr(uinfo, name="xn_unit info")], [n], [])
+        neg, zero = uinfo.tolist()
+        if neg or zero:
+            raise ValueError(f"{what} must be n non-negative values, not all zero")
+        return out
 
     def fit(self, A, y=None):
         A = _adjacency(A)
