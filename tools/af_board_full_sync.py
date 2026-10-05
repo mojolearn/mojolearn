@@ -31,6 +31,9 @@ from af_board_apply import Table
 EVID = os.path.expanduser("~/mojolearn-evidence")
 #: Board facts with no measurement behind them (orchestrator, 2026-10-04): an opponent never timed.
 OPPONENT_NOTES = {("quantile", "istella"): "sklearn-cpu: too slow to measure (216 s on taxi)"}
+#: Rows the page's Quality flags keep out of the faster count ("FAST quality under review").
+EXCLUDED = {("tweedie", "istella"): "FAST quality under review (r2 -24.4 vs sklearn -21.9)",
+            ("linearsvr", "istella"): "FAST quality under review (r2 -0.107 vs sklearn-cpu fill -0.026)"}
 PAGE_FROM = "docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)"
 
 
@@ -88,6 +91,13 @@ def main():
         g = lambda n: t.get(r, n)
         lane, ds, fam = g("lane"), g("dataset"), g("family")
         rid, rec = R.race_key(board, lane, ds)
+        if rec is not None and rec.get("family") != fam and rid in board["races"] and any(
+                t.get(o, "lane") == lane and t.get(o, "dataset") == ds and t.get(o, "family") == rec.get("family")
+                for o in t.rows if o is not r):
+            rid, rec = None, None  # the same lane under two drivers (linearsvr taxi): a race per family
+            rid2 = "%s/%s/%s/page" % (fam, lane, ds)
+            if rid2 in extra:
+                rid, rec = rid2, extra[rid2]
         if rec is None:
             rid = "%s/%s/%s/page" % (fam, lane, ds)
             rec = {"id": rid, "family": fam, "lane": lane, "dataset": ds, "cells": [],
@@ -96,10 +106,14 @@ def main():
             extra[rid] = rec
             stats["extra_races"] += 1
         status = g("status")
-        flip_note = "; ".join(x.strip() for x in g("flip").split(";") if x.strip() and not x.strip().startswith("FLIP"))
+        # a FLIP the page could not compute (no ratio before) is a hand note; keep it
+        flip_note = "; ".join(x.strip() for x in g("flip").split(";") if x.strip() and (
+            not x.strip().startswith("FLIP") or g("ratio before") == "-"))
         rec["fast_page"] = {"family": fam, "status": status}
         if flip_note:
             rec["fast_page"]["flip_note"] = flip_note
+        if (lane, ds) in EXCLUDED:
+            rec["fast_page"]["excluded"] = EXCLUDED[(lane, ds)]
         if (lane, ds) in OPPONENT_NOTES:
             rec["fast_page"]["opponent_note"] = OPPONENT_NOTES[(lane, ds)]
         fc = R.fast_cell(rec)
@@ -204,8 +218,10 @@ def main():
 
     new_text = R.render_page(board)
     report = diff_report(t, new_text, stats, n_opp_lines, log, lines[hi], a)
-    print("\n".join(report[:12]))
+    print("\n".join(report[:22]))
     if a.dry_run:
+        with open(os.path.join(EVID, "board-sync-dryrun.md"), "w") as fh:
+            fh.write("\n".join(report) + "\n")
         return
     shutil.copy2(path, os.path.join(a.board_dir, "board.before-fast-sync-%s.json" % a.date.replace("-", "")))
     with open(path, "w") as fh:
@@ -219,9 +235,9 @@ def main():
 def diff_report(t_old, new_text, stats, n_opp_lines, log, old_head, a):
     nl = new_text.split("\n")
     tn = Table(nl)
-    old = {(t_old.get(r, "lane"), t_old.get(r, "dataset")): r for r in t_old.rows}
-    new = {(tn.get(r, "lane"), tn.get(r, "dataset")): r for r in tn.rows}
-    cols = [c for c in t_old.cols if c not in ("lane", "dataset")]
+    old = {(t_old.get(r, "lane"), t_old.get(r, "dataset"), t_old.get(r, "family")): r for r in t_old.rows}
+    new = {(tn.get(r, "lane"), tn.get(r, "dataset"), tn.get(r, "family")): r for r in tn.rows}
+    cols = [c for c in t_old.cols if c not in ("lane", "dataset", "family")]
     changed, why_count = [], {}
     for k in sorted(set(old) & set(new)):
         diffs = [(c, t_old.get(old[k], c), tn.get(new[k], c)) for c in cols if t_old.get(old[k], c) != tn.get(new[k], c)]
@@ -254,13 +270,13 @@ def diff_report(t_old, new_text, stats, n_opp_lines, log, old_head, a):
            "board's best ok opponent (the page used a rounded TSV value or had '-'); ratios and flips recomputed "
            "from those; quality before = the 0.8.34 cell's quality where the page had '-'.", ""]
     rep += ["## Board kept over the page (%d)" % len(log), ""] + ["- " + x for x in log] + [""]
-    rep += ["## Changed rows (%d)" % len(changed), "", "| lane | dataset | column: old -> new |", "|---|---|---|"]
+    rep += ["## Changed rows (%d)" % len(changed), "", "| lane | dataset | family | column: old -> new |", "|---|---|---|---|"]
     for k, diffs in changed:
-        rep.append("| %s | %s | %s |" % (k[0], k[1], "; ".join("%s: %s -> %s" % (c, o[:60], n[:60]) for c, o, n in diffs)
+        rep.append("| %s | %s | %s | %s |" % (k[0], k[1], k[2], "; ".join("%s: %s -> %s" % (c, o[:60], n[:60]) for c, o, n in diffs)
                                          .replace("|", "/")))
     rep += ["", "## Rows only on the generated page (%d)" % len(only_new), "",
-            ", ".join("%s %s" % k for k in only_new), "", "## Rows only on the old page (%d)" % len(only_old), "",
-            ", ".join("%s %s" % k for k in only_old) or "none"]
+            ", ".join("%s %s (%s)" % k for k in only_new), "", "## Rows only on the old page (%d)" % len(only_old), "",
+            ", ".join("%s %s (%s)" % k for k in only_old) or "none"]
     return rep
 
 

@@ -118,6 +118,8 @@ def eligible(row):
     st = row["status"]
     if (row["rec"].get("fast_page") or {}).get("opponent_note"):
         return False  # opponent not measured (too slow); never a comparison
+    if (row["rec"].get("fast_page") or {}).get("excluded"):
+        return False
     return row["ra"] is not None and row["ra"] > 0 and "HOLD" not in st and "excluded" not in st.lower()
 
 
@@ -146,6 +148,8 @@ def rows_of(board):
             qo = best.get("quality_text") or fmt_q(best.get("quality"))
         if fp.get("status"):
             status = fp["status"]
+            if fp.get("excluded") and "excluded" not in status.lower():
+                status += "; excluded: " + fp["excluded"]
         elif fc is None:
             status = "no FAST cell"
         else:
