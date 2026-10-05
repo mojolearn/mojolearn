@@ -172,22 +172,22 @@ def scatter_rows_kernel(dst: F32Ptr, idx: I32Ptr, src: F32Ptr, m: Int32):
         dst.unsafe_store(Int(idx.unsafe_load(a)), src.unsafe_load(a))
 
 
-def logdet_sign_kernel(diag: F32Ptr, piv: I32Ptr, n: Int32, out: I32Ptr):
-    """`_slogdet`'s sign rule on the device: out[0] = 1 when a pivot is 0;
-    out[1] counts the negative pivots plus the row swaps (integer atomics,
-    exact). out zeroed before."""
+def logdet_sign_kernel(diag: F32Ptr, piv: I32Ptr, n: Int32, dst: I32Ptr):
+    """`_slogdet`'s sign rule on the device: dst[0] = 1 when a pivot is 0;
+    dst[1] counts the negative pivots plus the row swaps (integer atomics,
+    exact). dst zeroed before."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):
         var x = diag.unsafe_load(i)
         if x == Float32(0):
-            out.unsafe_store(0, Int32(1))
+            dst.unsafe_store(0, Int32(1))
         var c = Int32(0)
         if x < Float32(0):
             c += 1
         if Int(piv.unsafe_load(i)) != i:
             c += 1
         if c != Int32(0):
-            _ = Atomic.fetch_add(out.unsafe_offset(1), c)
+            _ = Atomic.fetch_add(dst.unsafe_offset(1), c)
 
 
 # ---- the resident matrix

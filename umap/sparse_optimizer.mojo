@@ -297,10 +297,10 @@ def optimize_sparse_layout_fast(
         ctx, initial, graph.offsets, graph.indices, graph.values, n_samples, True
     )
     var max_weight = g.max_weight
-    var g_first = g.first^
-    var g_offsets = g.offsets^
-    var g_tails = g.tails^
-    var g_weights = g.weights^
+    ref g_first = g.first
+    ref g_offsets = g.offsets
+    ref g_tails = g.tails
+    ref g_weights = g.weights
     var second = ctx.enqueue_create_buffer[DType.float32](len(initial))
     # the fused kernel is 2D/3D; other dimensions take the per-component
     # kernel, which reads the dimension at run time
@@ -349,10 +349,9 @@ def optimize_sparse_layout_fast(
         ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=second)
     ctx.synchronize()
     _ = second^
-    _ = g_first^
-    _ = g_offsets^
-    _ = g_tails^
-    _ = g_weights^
+    # refs into g, not moved-out fields: a partial move of g is refused
+    # (box-run-2 compile fix); g lives to here.
+    _ = g^
     return out^
 
 

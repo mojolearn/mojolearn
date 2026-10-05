@@ -214,7 +214,8 @@ def device_take_rows(
     var d_out = ctx.enqueue_create_buffer[DType.uint8](total)
     var d_status = ctx.enqueue_create_buffer[DType.int32](2)
     enqueue_fill(ctx, d_status, Int32(0))
-    var idx = store.bufs[idx_id].unsafe_ptr().bitcast[Int64]()
+    # the kernels declare idx mutable; the store hands out an immutable view (box-run-2 compile fix)
+    var idx = store.bufs[idx_id].unsafe_ptr().bitcast[Int64]().unsafe_mut_cast[True]()
     if row_bytes % 4 == 0:
         var w = row_bytes // 4
         ctx.enqueue_function[_take_words_kernel](

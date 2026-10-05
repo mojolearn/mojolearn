@@ -244,14 +244,14 @@ def _plan_curve_out(mut pl: Plan, r: IP, total: Int) raises:
     pl.emit(OP_CO_EMIT, n + 1, [kind, n, fps, tps, thr, cnt, _a(r, 7), _a(r, 8), B])
 
 
-def _plan_ff(mut pl: Plan, src: Int, m: Int, out: Int, mode: Int, x: Int):
+def _plan_ff(mut pl: Plan, src: Int, m: Int, dst: Int, mode: Int, x: Int):
     """The float-float fold of m records at src (x_metrics/contingency.mojo
-    ff_chunk, ff_fin) into the binary64 at out."""
+    ff_chunk, ff_fin) into the binary64 at dst."""
     var NC = (m + CT_CH - 1) // CT_CH
     var S = pl.alloc(FF_REC * NC)
     if NC > 0:
         pl.emit(OP_FF_CHUNK, NC, [src, m, S, CT_CH, NC])
-    pl.emit(OP_FF_FIN, 1, [S, NC, out, mode, x])
+    pl.emit(OP_FF_FIN, 1, [S, NC, dst, mode, x])
 
 
 def _plan_cont_stats(mut pl: Plan, r: IP, total: Int) raises:
