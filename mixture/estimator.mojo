@@ -1228,6 +1228,8 @@ def gaussian_mixture_fit(
         chol_elem_tpb, sabotage,
     )
     if pre.info != 0:
+        _record_gmm_failure(ctx, dx, resp, nk, means, cov, n, d, ncomp,
+                            0, pre, params.reg_covar)
         raise Error(_collapse_message(0, pre, params))
 
     var lower_bound = gmm_neg_inf()
@@ -1287,6 +1289,8 @@ def gaussian_mixture_fit(
             chol_elem_tpb, sabotage,
         )
         if p2.info != 0:
+            _record_gmm_failure(ctx, dx, resp, nk, means, cov, n, d, ncomp,
+                                it, p2, params.reg_covar)
             raise Error(_collapse_message(it, p2, params))
         if st_on:
             ctx.synchronize()
@@ -1382,6 +1386,42 @@ def _safe_log(v: Float32) -> Float32:
     if v == Float32(0.0):
         return bitcast[DType.float32](UInt32(0xFF800000))
     return ftz(identical_log(ftz(v)))
+
+
+def _record_gmm_failure(
+    ctx: DeviceContext,
+    x: DeviceBuffer[DType.float32],
+    resp: DeviceBuffer[DType.float32],
+    nk: DeviceBuffer[DType.float32],
+    means: DeviceBuffer[DType.float32],
+    cov: DeviceBuffer[DType.float32],
+    n: Int, d: Int, ncomp: Int, it: Int,
+    run: GmmMStepRun, reg_covar: Float32,
+) raises:
+    """Diagnostic capture AFTER the actual factorization has refused.
+
+    Unlike MOJOLEARN_IDENTITY_TRACE, this does not enable the fit's trace
+    object: FAST fused Cholesky dispatch requires that object to be disabled.
+    No queue drain, buffer change, or routing change occurs before the failure.
+    The original covariance and responsibilities let an offline diagnostic
+    distinguish covariance accumulation error from the pivot update's error.
+    This never changes the ridge, resets a component, or continues a fit.
+    """
+    var path = String(getenv("MOJOLEARN_GMM_FAILURE_TRACE"))
+    if path == "":
+        return
+    var failed = IdentityTrace.to_path(path, "gmm.failure")
+    failed.header(
+        "failure-only diagnostic n=" + String(n) + " d=" + String(d)
+        + " ncomp=" + String(ncomp) + " iteration=" + String(it)
+        + " component=" + String(run.failed_component)
+        + " info=" + String(run.info) + " reg_covar=" + gmm_hex32(reg_covar)
+    )
+    failed.record_device(ctx, "gmm.failure.input", x, n * d)
+    failed.record_device(ctx, "gmm.failure.resp", resp, n * ncomp)
+    failed.record_device(ctx, "gmm.failure.nk", nk, ncomp)
+    failed.record_device(ctx, "gmm.failure.means", means, ncomp * d)
+    failed.record_device(ctx, "gmm.failure.covariances", cov, ncomp * d * d)
 
 
 def _collapse_message(
