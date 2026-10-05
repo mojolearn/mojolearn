@@ -3453,7 +3453,11 @@ def _update_dict(k, D, Y, code, A=None, B=None, positive=False, seed=0, counter=
     # division (the same cell as the old host constant); the per-atom
     # used/unused decision is one word, read only when some atom is unused.
     Dm = k.copy(D)
-    zero_cols = []
+    # an unused atom's code column is zeroed as the atom is resampled (lane
+    # py-runtime-b: inside the atom loop, one FILL0 move each, on the one
+    # copy of code; the loop never reads code, so the same values as the
+    # separate pass over the zeroed columns after it)
+    code_out = None
     for j in range(nc):  # glue: sklearn's atom order, each atom a chain of kit cells on the resident D
         ajj = dg.cols(j, j + 1)
         if used == nc or k.word(ajj) > 1e-6:
@@ -3464,17 +3468,15 @@ def _update_dict(k, D, Y, code, A=None, B=None, positive=False, seed=0, counter=
             row = _resample_atom(k, Y, seed, c)
             if counter is not None:
                 counter[0] += 1
-            zero_cols.append(j)
+            if code_out is None:
+                code_out = k.copy(code)
+            k.fill0(code_out, j, code_out.c, code_out.r)
         if positive:
             row = k.ew("maxs", row, s=0.0)
         nrm = k.ew("sqrt", k.total(k.ew("sq", row)))
         row = k.ew("div", row, k.ew("maxs", nrm, s=1.0))
         k.place_rows(Dm, row, j)
-    if zero_cols:
-        code = k.copy(code)
-        for j in zero_cols:
-            k.fill0(code, j, code.c, code.r)
-    return Dm, code
+    return Dm, (code if code_out is None else code_out)
 
 
 def _cost(k, X, code, D, alpha):
