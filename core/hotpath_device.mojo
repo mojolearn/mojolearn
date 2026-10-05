@@ -30,6 +30,7 @@ from checks.numerics import ftz, portable_cosf
 from metrics.checks.pinned_sum import canonicalize_nan
 from checks.soft_f64 import (
     sf64_add,
+    sf64_div,
     sf64_floor,
     sf64_fma,
     sf64_from_f32,
@@ -281,6 +282,53 @@ def device_gather_u64(
     _ = d_d^
     _ = d_status^
     return ok
+
+
+# ===========================================================================
+# class_ratio_f64 (lane py-runtime-b)
+# ===========================================================================
+
+
+def _class_ratio_kernel(counts: _I64, k_: Int32, n_: Int64, mode: Int32, dst: _U64, status: _I32):
+    """One class per thread: mode 0, scikit-learn's 'balanced' weight
+    n / (k * count_c); mode 1, the prior count_c / n. Soft binary64 from
+    exact integers (< 2^53) and one correctly rounded division: the words of
+    Python's `int / int` and of the host column. A zero count (mode 0)
+    writes +0 and sets status[0]."""
+    var i = _tid()
+    if i < Int(k_):
+        var c = Int(counts.unsafe_load(i))
+        if mode == 0:
+            if c == 0:
+                status.unsafe_store(0, Int32(1))
+                dst.unsafe_store(i, UInt64(0))
+            else:
+                dst.unsafe_store(i, sf64_div(sf64_from_int(Int(n_)), sf64_from_int(Int(k_) * c)))
+        else:
+            dst.unsafe_store(i, sf64_div(sf64_from_int(c), sf64_from_int(Int(n_))))
+
+
+def device_class_ratio_f64(
+    ctx: DeviceContext, counts_addr: Int, k: Int, n: Int, mode: Int, dst_addr: Int,
+) raises -> Int:
+    """`class_ratio_f64` on the device: the k ratios into the float64 words
+    at `dst_addr`. Returns the number of zero-count flags raised (0 or 1)."""
+    var d_c = ctx.enqueue_create_buffer[DType.int64](k)
+    var d_d = ctx.enqueue_create_buffer[DType.uint64](k)
+    var d_status = ctx.enqueue_create_buffer[DType.int32](2)
+    enqueue_fill(ctx, d_status, Int32(0))
+    ctx.enqueue_copy(dst_buf=d_c, src_ptr=_I64(unsafe_from_address=counts_addr))
+    ctx.enqueue_function[_class_ratio_kernel](
+        d_c.unsafe_ptr(), Int32(k), Int64(n), Int32(mode), d_d.unsafe_ptr(), d_status.unsafe_ptr(),
+        grid_dim=_blocks(k), block_dim=HPD_TPB,
+    )
+    var zeros = _read_status(ctx, d_status, 0)
+    ctx.enqueue_copy(dst_ptr=_U64(unsafe_from_address=dst_addr), src_buf=d_d)
+    ctx.synchronize()
+    _ = d_c^
+    _ = d_d^
+    _ = d_status^
+    return zeros
 
 
 # ===========================================================================

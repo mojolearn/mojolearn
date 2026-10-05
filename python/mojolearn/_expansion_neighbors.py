@@ -62,8 +62,8 @@ def _f32(X, name="X"):
 def _feature_names_in(est, input_features):
     d = est.n_features_in_
     if input_features is None:
-        return [f"x{i}" for i in range(d)]
-    names = [str(v) for v in input_features]
+        return [f"x{i}" for i in range(d)]  # glue: feature names over the d columns
+    names = [str(v) for v in input_features]  # glue: feature names over the d columns
     if len(names) != d:
         raise ValueError(f"input_features should have length equal to number of features ({d}), got {len(names)}")
     return names
@@ -78,7 +78,7 @@ def _names_out(names):
 def _prefixed_names(est, count):
     """sklearn's ClassNamePrefixFeaturesOutMixin: `<classname lower><i>`."""
     base = type(est).__name__.lower()
-    return _names_out([f"{base}{i}" for i in range(count)])
+    return _names_out([f"{base}{i}" for i in range(count)])  # glue: feature names over the d columns
 
 
 def _accuracy(y_true, y_pred, sample_weight=None):
@@ -161,10 +161,10 @@ def _class_array(classes, codes):
     int64 Array, real classes a float64 Array (the native gather of
     `decode_labels`), other labels a list (`decode_labels`)."""
     from ._labels import decode_labels
-    if all(isinstance(v, (bool, int)) for v in classes):
+    if all(isinstance(v, (bool, int)) for v in classes):  # glue: type check over the k class labels
         return decode_labels([int(v) for v in classes], codes)   # glue: the k class values
-    if all(isinstance(v, (int, float)) for v in classes):
-        return decode_labels([float(v) for v in classes], codes)
+    if all(isinstance(v, (int, float)) for v in classes):  # glue: type check over the k class labels
+        return decode_labels([float(v) for v in classes], codes)  # glue: k class labels as floats
     return decode_labels(classes, codes)
 
 
@@ -226,8 +226,8 @@ class _XNeighbors(NumericModeMixin):
 
     def _op(self, name, bufs, ints=(), floats=()):
         addrs = [addr(a, name=f"xn_{name} output") if w else addr_ro(a, name=f"xn_{name} input")
-                 for a, w in bufs]
-        getattr(self._bind(), "xn_" + name)(addrs, [int(v) for v in ints], [float(v) for v in floats])
+                 for a, w in bufs]  # glue: buffer addresses and binding params
+        getattr(self._bind(), "xn_" + name)(addrs, [int(v) for v in ints], [float(v) for v in floats])  # glue: buffer addresses and binding params
 
     def _sqdist(self, A, B):
         n, d = A.shape
@@ -514,18 +514,24 @@ class NearestCentroid(_XNeighbors):
         self._op("p2m_class_counts", [(lab, 0), (nk, 1), (info, 1)], (n, C))
         counts = [int(v) for v in nk.tolist()]          # glue: the k class counts (priors, offsets)
         if self.priors == "empirical":
-            prior = [c / float(n) for c in counts]
+            # count / n per class in the base binding (lane py-runtime-b;
+            # the same binary64 words as the Python quotient)
+            from ._buffer import _native
+            pa = empty((C,), "<f8")
+            ca = Array.from_list(counts, "<i8")
+            _native("class_ratio_f64")(addr_ro(ca, name="counts"), C, n, 1, addr(pa, name="class_prior_"))
+            prior = pa.tolist()  # glue: k class priors for the checks below
         elif self.priors == "uniform":
             prior = [1.0 / C] * C
         else:
-            prior = [float(v) for v in (self.priors.tolist() if hasattr(self.priors, "tolist") else self.priors)]
+            prior = [float(v) for v in (self.priors.tolist() if hasattr(self.priors, "tolist") else self.priors)]  # glue: user priors argument checks
             if len(prior) != C:
                 raise ValueError("priors must have one entry per class")
-            if any(p < 0 for p in prior):
+            if any(p < 0 for p in prior):  # glue: user priors argument checks
                 raise ValueError("priors must be non-negative")
             tot = math.fsum(prior)
             if not math.isclose(tot, 1.0, rel_tol=1e-5, abs_tol=1e-8):
-                prior = [p / tot for p in prior]
+                prior = [p / tot for p in prior]  # glue: the user priors argument rescaled to sum one (k sized)
         self.class_prior_ = Array.from_list(prior, "<f8")
         if self.metric == "euclidean":
             cent = _empty_out((C, d), "<f4")
@@ -538,7 +544,7 @@ class NearestCentroid(_XNeighbors):
             # class's middle value(s) at its offset; offsets are the class
             # counts' prefix (integer bookkeeping over the classes)
             start = [0] * (C + 1)
-            for c in range(C):
+            for c in range(C):  # glue: class offsets prefix over k classes
                 start[c + 1] = start[c] + counts[c]
             p = 1
             while p < n:
@@ -595,7 +601,7 @@ class NearestCentroid(_XNeighbors):
 
     def _uniform(self):
         C = len(self.classes_)
-        return all(math.isclose(p, 1.0 / C, rel_tol=1e-5, abs_tol=1e-8) for p in self.class_prior_.tolist())
+        return all(math.isclose(p, 1.0 / C, rel_tol=1e-5, abs_tol=1e-8) for p in self.class_prior_.tolist())  # glue: uniform prior check over k classes
 
     def predict(self, X):
         Q = _f32(X)
@@ -1030,95 +1036,25 @@ class KernelPCA(_XNeighbors):
 
 
 # ====================================================================== RandomState
-class _LegacyRandomState:
-    """numpy's legacy `RandomState(seed)` stream (MT19937 seeded by
-    init_genrand, what `check_random_state(int)` builds), in integers and
-    IEEE doubles only, so a sampler draws exactly scikit-learn's numbers on
-    every box and needs no NumPy. Python's `random.Random` IS MT19937 with
-    numpy's 53-bit double (`genrand_res53`); only the seeding differs, so the
-    state is set directly."""
-
-    def __init__(self, seed):
-        import random
-        if not isinstance(seed, int) or isinstance(seed, bool):
-            raise TypeError(f"{seed!r} cannot be used to seed a RandomState instance")
-        mt = [0] * 624
-        mt[0] = seed & 0xFFFFFFFF
-        for i in range(1, 624):
-            mt[i] = (1812433253 * (mt[i - 1] ^ (mt[i - 1] >> 30)) + i) & 0xFFFFFFFF
-        self._r = random.Random()
-        self._r.setstate((3, tuple(mt) + (624,), None))
-
-    def random_sample(self, count):
-        return [self._r.random() for _ in range(count)]
-
-    def uniform(self, low, high, count):
-        return [low + (high - low) * self._r.random() for _ in range(count)]
-
-    def randint(self, high, count):
-        """`randint(0, high, size)`, the legacy masked rejection draw."""
-        rng = high - 1
-        if rng == 0:
-            return [0] * count
-        mask = rng
-        for sh in (1, 2, 4, 8, 16):
-            mask |= mask >> sh
-        out = []
-        for _ in range(count):
-            while True:
-                v = self._r.getrandbits(32) & mask
-                if v <= rng:
-                    break
-            out.append(v)
-        return out
-
-
-def _random_state(seed):
-    """sklearn's check_random_state: an int seeds the legacy stream (drawn here
-    with no NumPy); a caller's numpy RandomState is drawn from directly; None
-    is numpy's global RandomState, as theirs (not reproducible, as theirs).
-    Every draw is an integer or an IEEE double from the same generator
-    sklearn would use, so the fitted parameters are theirs exactly."""
-    if isinstance(seed, int) and not isinstance(seed, bool):
-        return _LegacyRandomState(seed)
-    if seed is None:
-        from ._optional_numpy import require_numpy
-        np = require_numpy('_expansion_neighbors')
-        return _NumpyRandomState(np.random.mtrand._rand)
-    if hasattr(seed, "randint") and hasattr(seed, "random_sample") and hasattr(seed, "uniform"):
-        return _NumpyRandomState(seed)
-    raise ValueError(f"{seed!r} cannot be used to seed a numpy.random.RandomState instance")
-
-
 def _seed_word(seed):
     """The sketch samplers' seed (lane cpu2-l9-neighbors): an int as given;
     None (numpy's global RandomState) or a caller's numpy RandomState gives
     ONE draw, a word in [0, 2^31), and that word seeds the device
     counter-based generator exactly as an int random_state would. The
-    O(d * n_components) table is then drawn on the device, never in a Python
-    loop over the caller's generator. Not scikit-learn's numbers for those
-    two inputs (theirs are not reproducible for None either); the
-    distribution is the same. Anything else is refused as `_random_state`
-    refuses it."""
+    O(d * n_components) table is then drawn on the device. Not
+    scikit-learn's numbers for those two inputs (theirs are not reproducible
+    for None either); the distribution is the same. Anything else is
+    refused. (Lane py-runtime-b deleted the MT19937 Python stream that the
+    _OFF arms drew from.)"""
     if isinstance(seed, int) and not isinstance(seed, bool):
         return seed
-    return int(_random_state(seed).randint(1 << 31, 1)[0])
-
-
-class _NumpyRandomState:
-    """The `_LegacyRandomState` draws, from a numpy RandomState."""
-
-    def __init__(self, rs):
-        self._rs = rs
-
-    def random_sample(self, count):
-        return [float(v) for v in self._rs.random_sample(count)]
-
-    def uniform(self, low, high, count):
-        return [float(v) for v in self._rs.uniform(low, high, size=count)]
-
-    def randint(self, high, count):
-        return [int(v) for v in self._rs.randint(0, high, size=count)]
+    if seed is None:
+        from ._optional_numpy import require_numpy
+        np = require_numpy('_expansion_neighbors')
+        seed = np.random.mtrand._rand
+    elif not (hasattr(seed, "randint") and hasattr(seed, "random_sample") and hasattr(seed, "uniform")):
+        raise ValueError(f"{seed!r} cannot be used to seed a numpy.random.RandomState instance")
+    return int(seed.randint(0, 1 << 31, size=1)[0])
 
 
 # ====================================================================== PolynomialCountSketch
@@ -1163,11 +1099,15 @@ class PolynomialCountSketch(_XNeighbors):
             self.bitHash_ = bh
             self.n_features_in_ = d
             return self
-        rs = _random_state(seed)
-        idx = rs.randint(nc, deg * nf)
-        bits = [(-1, 1)[v] for v in rs.randint(2, deg * nf)]
-        self.indexHash_ = Array.from_list([idx[p * nf:(p + 1) * nf] for p in range(deg)], "<i4")
-        self.bitHash_ = Array.from_list([bits[p * nf:(p + 1) * nf] for p in range(deg)], "<i4")
+        if nf > 0:
+            # lane py-runtime-b: the MT19937 Python draw behind the _OFF
+            # define is deleted (no Python compute in the runtime); a binary
+            # without the device draw refuses
+            raise NotImplementedError(
+                "mojolearn PolynomialCountSketch: this binary lacks x_neighbors_kfeat_pcs_draw_idn "
+                "(rebuild without -D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF)")
+        self.indexHash_ = zeros((deg, 0), "<i4")
+        self.bitHash_ = zeros((deg, 0), "<i4")
         self.n_features_in_ = d
         return self
 
@@ -1258,10 +1198,10 @@ class AdditiveChi2Sampler(_XNeighbors):
     def get_feature_names_out(self, input_features=None):
         names = _feature_names_in(self, input_features)
         base = type(self).__name__.lower()
-        out = [f"{base}_{nm}_sqrt" for nm in names]
-        for j in range(1, int(self.sample_steps)):
-            out += [f"{base}_{nm}_cos{j}" for nm in names]
-            out += [f"{base}_{nm}_sin{j}" for nm in names]
+        out = [f"{base}_{nm}_sqrt" for nm in names]  # glue: feature names over the d columns
+        for j in range(1, int(self.sample_steps)):  # glue: feature names over the d columns
+            out += [f"{base}_{nm}_cos{j}" for nm in names]  # glue: feature names over the d columns
+            out += [f"{base}_{nm}_sin{j}" for nm in names]  # glue: feature names over the d columns
         return _names_out(out)
 
 
@@ -1322,15 +1262,14 @@ class SkewedChi2Sampler(_XNeighbors):
             self.random_offset_ = off
             self.n_features_in_ = d
             return self
-        rs = _random_state(seed)
-        u = rs.random_sample(d * nc)
-        z = Array.from_list([[math.pi / 2.0 * u[f * nc + c] for c in range(nc)] for f in range(d)], "<f4")
-        w = _empty_out((d, nc), "<f4")
-        self._op("skew_weights", [(z, 0), (w, 1)], (d * nc,))
-        self.random_weights_ = w
-        self.random_offset_ = Array.from_list(rs.uniform(0.0, 2.0 * math.pi, nc), "<f4")
-        self.n_features_in_ = d
-        return self
+        # lane py-runtime-b: the MT19937 Python draw (and pi/2 * u in Python)
+        # behind the _OFF defines is deleted; a binary with neither device
+        # draw, or an empty X / n_components < 1, refuses
+        if d < 1 or nc < 1:
+            raise ValueError("mojolearn SkewedChi2Sampler: X needs at least one feature and n_components >= 1")
+        raise NotImplementedError(
+            "mojolearn SkewedChi2Sampler: this binary lacks x_neighbors_kfeat_schi2_fit_idn "
+            "(rebuild without -D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF)")
 
     @property
     def random_weights_(self):
@@ -1441,7 +1380,7 @@ class _LabelPropagationBase(_XNeighbors):
         if codes.size != n:
             raise ValueError("X and y have different numbers of rows")
         skip = next((i for i, c in enumerate(allc) if c == -1 and not isinstance(c, str)), -1)   # glue: scan over the k class labels
-        classes = [c for i, c in enumerate(allc) if i != skip]
+        classes = [c for i, c in enumerate(allc) if i != skip]  # glue: class labels without the unlabeled marker
         C = len(classes)
         ld = _empty_out((n, C), "<f4")
         ys = _empty_out((n, C), "<f4")
@@ -1497,7 +1436,7 @@ class _LabelPropagationBase(_XNeighbors):
         s = _empty_out((1,), "<f4")
         n_iter = 0
         converged = False
-        for it in range(int(self.max_iter)):
+        for it in range(int(self.max_iter)):  # glue: one device propagation step per iteration
             n_iter = it
             self._op("absdiff_sum", [(ld, 0), (prev, 0), (s, 1)], (n * C,))
             if s.tolist()[0] < float(self.tol):
@@ -1670,8 +1609,8 @@ class KNNImputer(_XNeighbors):
         # lane/neural-pass71 (2026-10-01): the column flags from one native
         # pass over the cells (xn_nan_cells), no list of the matrix
         cm = self._nan_cells(X, 1)[1]
-        self._valid = [cm[f] < n for f in range(d)]
-        self._miss_cols = [f for f in range(d) if cm[f] > 0]
+        self._valid = [cm[f] < n for f in range(d)]  # glue: column masks over the d features
+        self._miss_cols = [f for f in range(d) if cm[f] > 0]  # glue: column masks over the d features
         self._fit_X = X
         self.n_features_in_ = d
         return self
@@ -1698,7 +1637,7 @@ class KNNImputer(_XNeighbors):
                 self._op("knn_impute_cells" if _OLD_ITEMS else "knn_impute_tiled",
                          [(cells, 0), (X, 0), (self._fit_X, 0), (out, 1)],
                          (n, m, d, k, 1 if self.weights == "distance" else 0, nc))
-        keep = [f for f in range(d) if self._valid[f]]
+        keep = [f for f in range(d) if self._valid[f]]  # glue: column masks over the d features
         if self.keep_empty_features:
             if n and not all(self._valid):
                 flags = _i32([0 if v else 1 for v in self._valid], "flags")   # glue: d fit flags
@@ -1721,9 +1660,9 @@ class KNNImputer(_XNeighbors):
 
     def get_feature_names_out(self, input_features=None):
         names = _feature_names_in(self, input_features)
-        out = [nm for f, nm in enumerate(names) if self._valid[f] or self.keep_empty_features]
+        out = [nm for f, nm in enumerate(names) if self._valid[f] or self.keep_empty_features]  # glue: feature names over the d columns
         if self.add_indicator:
-            out += [f"missingindicator_{names[f]}" for f in self._miss_cols]
+            out += [f"missingindicator_{names[f]}" for f in self._miss_cols]  # glue: feature names over the d columns
         return _names_out(out)
 
 
@@ -1769,24 +1708,24 @@ class PageRank(_XNeighbors):
         # lane/fam2-neighbors: the sum, the sign test and the n divisions by
         # the binding (`x_neighbors_unit_ff`, device kernels; registered in
         # IDENTICAL unless -D MOJOLEARN_IDN_XN_UNIT_DEV_OFF)
+        # (lane py-runtime-b: the Python fsum-and-divide route behind the
+        # _OFF define is deleted; that binary refuses a weight vector)
         unit_fn = getattr(self._bind(), "x_neighbors_unit_ff", None)
-        if unit_fn is not None:
-            wv = _f32_1d(v, what)
-            if wv.shape[0] != n:
-                raise ValueError(f"{what} must be n non-negative values, not all zero")
-            out = _empty_out((n,), "<f4")
-            uinfo = empty((2,), "<i4")
-            unit_fn([addr_ro(wv, name="xn_unit v"), addr(out, name="xn_unit out"),
-                     addr(uinfo, name="xn_unit info")], [n], [])
-            neg, zero = uinfo.tolist()
-            if neg or zero:
-                raise ValueError(f"{what} must be n non-negative values, not all zero")
-            return out
-        pv = [float(t) for t in (v.tolist() if hasattr(v, "tolist") else v)]
-        if len(pv) != n or any(t < 0 for t in pv) or math.fsum(pv) == 0:
+        if unit_fn is None:
+            raise NotImplementedError(
+                f"mojolearn PageRank {what}: this binary lacks x_neighbors_unit_ff "
+                "(rebuild without -D MOJOLEARN_IDN_XN_UNIT_DEV_OFF)")
+        wv = _f32_1d(v, what)
+        if wv.shape[0] != n:
             raise ValueError(f"{what} must be n non-negative values, not all zero")
-        tot = math.fsum(pv)
-        return Array.from_list([t / tot for t in pv], "<f4")
+        out = _empty_out((n,), "<f4")
+        uinfo = empty((2,), "<i4")
+        unit_fn([addr_ro(wv, name="xn_unit v"), addr(out, name="xn_unit out"),
+                 addr(uinfo, name="xn_unit info")], [n], [])
+        neg, zero = uinfo.tolist()
+        if neg or zero:
+            raise ValueError(f"{what} must be n non-negative values, not all zero")
+        return out
 
     def fit(self, A, y=None):
         A = _adjacency(A)
@@ -2023,7 +1962,7 @@ class SVGP(_XNeighbors):
             Z = _f32(self.inducing_points, "inducing_points")
         else:
             M = min(int(self.n_inducing), n)
-            Z = self._take_rows(X, [i * n // M for i in range(M)])
+            Z = self._take_rows(X, [i * n // M for i in range(M)])  # glue: evenly spaced inducing row indices (M sized)
         M = Z.shape[0]
         # one resident device chain (lane/cgr-kernel, `xn_svgp_fit_ff`):
         # Kuu, then B = Kuf Kfu and b = Kuf y in float-float per Kfu row tile

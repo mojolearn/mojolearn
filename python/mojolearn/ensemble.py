@@ -2660,7 +2660,7 @@ class GradientBoosting(NumericModeMixin):
                 leaves[tree].append(bits)
         if declared_trees != len(counts) or any(
             len(values) != count * dim
-            for values, count, dim in zip(leaves, counts, dimensions)
+            for values, count, dim in zip(leaves, counts, dimensions)  # glue: leaf count check over the trees
         ):
             raise ValueError("mojolearn: incomplete tree metadata")
         return counts, leaves
@@ -2671,7 +2671,7 @@ class GradientBoosting(NumericModeMixin):
         Reads fitted or loaded model metadata; does not launch GPU work.
         """
         counts, _ = self._tree_metadata()
-        return Array.from_list([int(c) for c in counts], "<u4")
+        return Array.from_list([int(c) for c in counts], "<u4")  # glue: leaf counts per tree as words
 
     def get_leaf_values(self):
         """Return tree-major, leaf-major stored values as a float64 `Array`.
@@ -2908,7 +2908,7 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
                     "with at least one missing (or fewer than two codes)"
                 )
         source_set = set(self.sources)
-        for f in range(n_features):
+        for f in range(n_features):  # glue: constant-column check, one native stat per feature
             if f in source_set:
                 continue
             col = base + 4 * f * n_rows

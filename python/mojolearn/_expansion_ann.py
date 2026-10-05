@@ -69,9 +69,9 @@ class _AnnResident:
             prepare = native.x_ann_index_prepare
         except (ImportError, AttributeError):
             return None
-        attrs = tuple(getattr(self, a) for a, _dtype in self._SAVE_ARRAYS)
+        attrs = tuple(getattr(self, a) for a, _dtype in self._SAVE_ARRAYS)  # glue: saved array attributes by name
         key = (tuple((id(a), addr_ro(a, name=name), tuple(a.shape))
-                     for a, (name, _dtype) in zip(attrs, self._SAVE_ARRAYS)), id(native))
+                     for a, (name, _dtype) in zip(attrs, self._SAVE_ARRAYS)), id(native))  # glue: saved array attributes by name
         cached = self.__dict__.get("_resident")
         if cached is not None and cached[0] == key:
             return cached[1]
@@ -144,17 +144,17 @@ class _AnnSaved:
         from . import _serialize
         from ._array import Array
         from .decomposition import _saved_mode
-        missing = [a for a, _ in self._SAVE_ARRAYS if not hasattr(self, a)]
+        missing = [a for a, _ in self._SAVE_ARRAYS if not hasattr(self, a)]  # glue: saved array attributes by name
         if missing:
             raise RuntimeError(f"mojolearn {type(self).__name__}: call fit before save")
         arrays = {
             "format": self._SAVE_FORMAT,
             "estimator": type(self).__name__,
             "numeric_mode": _saved_mode(self),
-            "params": Array.from_list([self._save_param(p) for p in self._SAVE_PARAMS], "<i8"),
-            "fitted": Array.from_list([int(getattr(self, a)) for a in self._SAVE_FITTED], "<i8"),
+            "params": Array.from_list([self._save_param(p) for p in self._SAVE_PARAMS], "<i8"),  # glue: saved parameters by name
+            "fitted": Array.from_list([int(getattr(self, a)) for a in self._SAVE_FITTED], "<i8"),  # glue: saved parameters by name
         }
-        for attr, _dtype in self._SAVE_ARRAYS:
+        for attr, _dtype in self._SAVE_ARRAYS:  # glue: saved array attributes by name
             arrays[attr.rstrip("_")] = getattr(self, attr)
         return _serialize.write_npz(path, arrays)
 
@@ -168,11 +168,11 @@ class _AnnSaved:
         fitted = _serialize.exact(arrays, "fitted", "<i8")
         if params.size != len(cls._SAVE_PARAMS) or fitted.size != len(cls._SAVE_FITTED):
             raise ValueError(f"mojolearn: {path!r} does not hold {cls.__name__}'s parameters")
-        obj = cls(**{p: cls._load_param(p, int(params[i])) for i, p in enumerate(cls._SAVE_PARAMS)})
+        obj = cls(**{p: cls._load_param(p, int(params[i])) for i, p in enumerate(cls._SAVE_PARAMS)})  # glue: saved parameters by name
         _restore_mode(obj, arrays)
-        for i, a in enumerate(cls._SAVE_FITTED):
+        for i, a in enumerate(cls._SAVE_FITTED):  # glue: saved parameters by name
             setattr(obj, a, int(fitted[i]))
-        for attr, dtype in cls._SAVE_ARRAYS:
+        for attr, dtype in cls._SAVE_ARRAYS:  # glue: saved array attributes by name
             setattr(obj, attr, _serialize.exact(arrays, attr.rstrip("_"), dtype))
         return obj
 
@@ -239,7 +239,7 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     def fit(self, X, y=None):
         self._release_resident()
         x, _ = as_f32_c(X, ndim=2, name="X")
-        n, dim = (int(s) for s in x.shape)
+        n, dim = (int(s) for s in x.shape)  # glue: two shape integers of the input
         n_lists, pq_dim, pq_bits = self._p("n_lists"), self._p("pq_dim"), self._p("pq_bits")
         if not 1 <= pq_dim <= dim:
             raise ValueError(f"mojolearn IVFPQIndex: pq_dim must be in [1, {dim}], got {pq_dim}")
@@ -277,7 +277,7 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         if not hasattr(self, "codes_"):
             raise ValueError("mojolearn IVFPQIndex: call fit before search")
         q, _ = as_f32_c(queries, ndim=2, name="queries")
-        m, dim = (int(s) for s in q.shape)
+        m, dim = (int(s) for s in q.shape)  # glue: two shape integers of the input
         if dim != self.n_features_in_:
             raise ValueError(f"mojolearn IVFPQIndex: queries have {dim} features, the index has {self.n_features_in_}")
         k, n_probes = self._p("n_neighbors"), self._p("n_probes")
@@ -363,7 +363,7 @@ class TSNE(NumericModeMixin):
         from ._optional_numpy import require_numpy
         np = require_numpy('_expansion_ann')
         x, _ = as_f32_c(X, ndim=2, name="X")
-        n, d = (int(s) for s in x.shape)
+        n, d = (int(s) for s in x.shape)  # glue: two shape integers of the input
         if self.n_components != 2:
             raise ValueError("mojolearn TSNE: n_components must be 2 (the only arm implemented)")
         max_iter = _ann_int("TSNE", "max_iter", self.max_iter)
@@ -499,7 +499,7 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     def fit(self, X, y=None):
         self._release_resident()
         x, _ = as_f32_c(X, ndim=2, name="X")
-        n, d = (int(s) for s in x.shape)
+        n, d = (int(s) for s in x.shape)  # glue: two shape integers of the input
         kdeg = min(self._p("intermediate_graph_degree"), n - 1)
         deg = min(self._p("graph_degree"), kdeg)
         graph = empty((n * deg,), "<i4")
@@ -532,7 +532,7 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     def _search_k(self, queries, k):
         """The traversal, returning the first `k` itopk entries."""
         q, _ = as_f32_c(queries, ndim=2, name="queries")
-        m, d = (int(s) for s in q.shape)
+        m, d = (int(s) for s in q.shape)  # glue: two shape integers of the input
         if d != self.n_features_in_:
             raise ValueError(f"mojolearn CagraIndex: queries have {d} features, the index has {self.n_features_in_}")
         L = self._p("itopk_size")
@@ -626,7 +626,7 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     def fit(self, X, y=None):
         self._release_resident()
         x, _ = as_f32_c(X, ndim=2, name="X")
-        n, dim = (int(s) for s in x.shape)
+        n, dim = (int(s) for s in x.shape)  # glue: two shape integers of the input
         n_lists = self._p("n_lists")
         if not 1 <= n_lists <= n:
             raise ValueError(f"mojolearn IVFSQIndex: n_lists must be in [1, {n}], got {n_lists}")
@@ -655,7 +655,7 @@ class IVFSQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         if not hasattr(self, "codes_"):
             raise ValueError("mojolearn IVFSQIndex: call fit before search")
         q, _ = as_f32_c(queries, ndim=2, name="queries")
-        m, dim = (int(s) for s in q.shape)
+        m, dim = (int(s) for s in q.shape)  # glue: two shape integers of the input
         if dim != self.n_features_in_:
             raise ValueError(f"mojolearn IVFSQIndex: queries have {dim} features, the index has {self.n_features_in_}")
         k, n = self._p("n_neighbors"), self.n_rows_
@@ -724,7 +724,7 @@ class IVFRaBitQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     def fit(self, X, y=None):
         self._release_resident()
         x, _ = as_f32_c(X, ndim=2, name="X")
-        n, dim = (int(s) for s in x.shape)
+        n, dim = (int(s) for s in x.shape)  # glue: two shape integers of the input
         n_lists = self._p("n_lists")
         if not 1 <= n_lists <= n:
             raise ValueError(f"mojolearn IVFRaBitQIndex: n_lists must be in [1, {n}], got {n_lists}")
@@ -757,7 +757,7 @@ class IVFRaBitQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         if not hasattr(self, "codes_"):
             raise ValueError("mojolearn IVFRaBitQIndex: call fit before search")
         q, _ = as_f32_c(queries, ndim=2, name="queries")
-        m, dim = (int(s) for s in q.shape)
+        m, dim = (int(s) for s in q.shape)  # glue: two shape integers of the input
         if dim != self.n_features_in_:
             raise ValueError(f"mojolearn IVFRaBitQIndex: queries have {dim} features, the index has {self.n_features_in_}")
         k, n = self._p("n_neighbors"), self.n_rows_
@@ -804,7 +804,7 @@ def refine(dataset, queries, candidates, k, numeric_mode=None, metric="sqeuclide
     from . import _backend
     x, _ = as_f32_c(dataset, ndim=2, name="dataset")
     q, _ = as_f32_c(queries, ndim=2, name="queries")
-    n, d = (int(s) for s in x.shape)
+    n, d = (int(s) for s in x.shape)  # glue: two shape integers of the input
     m = int(q.shape[0])
     if int(q.shape[1]) != d:
         raise ValueError(f"mojolearn refine: queries have {q.shape[1]} features, the dataset has {d}")

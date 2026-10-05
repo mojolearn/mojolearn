@@ -55,16 +55,16 @@ def _vote(model, distances, indices, method):
         raise ValueError('unsupported reference-sharded vote')
     if not callable(getattr(native, 'knn_classify_neighbors', None)):
         raise ImportError('rebuild base binding for merged-neighbor classification')
-    counts = [len(c) for c in model._classes_list]
+    counts = [len(c) for c in model._classes_list]  # glue: class counts per output column
     labels = empty((nq, no), '<i4')
-    proba = empty((nq * sum(counts),), '<f4')
-    uniq = empty((sum(counts),), '<i4')
+    proba = empty((nq * sum(counts),), '<f4')  # glue: class counts per output column
+    uniq = empty((sum(counts),), '<i4')  # glue: class counts per output column
     native.knn_classify_neighbors(*args, addr(labels, name='labels'),
         addr(proba, name='probabilities'), addr(uniq, name='classes'),
         params + [int(method == 'predict_proba')] + counts, model._dist_params())
     offset = 0
     flat = uniq.tolist()
-    for count, expected in zip(counts, model._classes_list):
+    for count, expected in zip(counts, model._classes_list):  # glue: class set check per output column
         if flat[offset:offset+count] != expected:
             raise RuntimeError('native and fitted class sets differ')
         offset += count
@@ -73,7 +73,7 @@ def _vote(model, distances, indices, method):
         return labels if model.outputs_2d_ else labels.reshape((nq,))
     offset = 0
     result = []
-    for count in counts:
+    for count in counts:  # glue: class counts per output column
         result.append(proba[offset:offset+nq*count].reshape((nq, count)))
         offset += nq*count
     return result if model.outputs_2d_ else result[0]

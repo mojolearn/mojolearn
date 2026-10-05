@@ -113,9 +113,11 @@ def oci_nu_lo(nu: Float64) -> Float32:
 #: walked the n values in Python (fsum, the sign test, n divisions).
 #: Bits: an element can move in its last float32 bit (float-float quotient
 #: vs the binary64 one), device and host column together.
-#: -D MOJOLEARN_IDN_XN_UNIT_DEV_OFF (or MOJOLEARN_IDN_ALL_OFF) leaves the
-#: binding function unregistered and the glue keeps the Python walk.
-comptime XN_UNIT_DEV = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+#: Lane py-runtime-b: FAST registers it too (the Python walk is deleted:
+#: no Python compute in the runtime). In IDENTICAL, -D
+#: MOJOLEARN_IDN_XN_UNIT_DEV_OFF (or MOJOLEARN_IDN_ALL_OFF) leaves the binding
+#: function unregistered and PageRank refuses a caller vector.
+comptime XN_UNIT_DEV = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or not (
     is_defined["MOJOLEARN_IDN_XN_UNIT_DEV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
